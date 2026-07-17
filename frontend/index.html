@@ -2,8 +2,44 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ren2Hub</title>
+    <meta id="theme-color" name="theme-color" content="#f7fcfa" />
+    <meta
+      name="description"
+      content="One key for major AI models, with unified routing, billing, and observability."
+    />
+    <script>
+      ;(() => {
+        const root = document.documentElement
+        let preference = 'auto'
+        try {
+          const stored = localStorage.getItem('renren_theme_mode')
+          if (stored === 'light' || stored === 'dark' || stored === 'auto')
+            preference = stored
+        } catch {}
+
+        const systemDark = window.matchMedia(
+          '(prefers-color-scheme: dark)'
+        ).matches
+        const dark =
+          preference === 'dark' || (preference === 'auto' && systemDark)
+        root.classList.toggle('dark', dark)
+        root.classList.toggle('light', !dark)
+        root.dataset.theme = dark ? 'dark' : 'light'
+        root.style.colorScheme = dark ? 'dark' : 'light'
+        document
+          .querySelector('#theme-color')
+          ?.setAttribute('content', dark ? '#0a1310' : '#f7fcfa')
+      })()
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <title>RenRen AI · One Key, All Models</title>
   </head>
   <body>
     <div id="app"></div>

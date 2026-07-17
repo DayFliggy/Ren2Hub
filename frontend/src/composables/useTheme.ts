@@ -1,0 +1,84 @@
+import { computed, watch } from 'vue'
+import { useColorMode } from '@vueuse/core'
+
+export type ThemePreference = 'auto' | 'light' | 'dark'
+export type ResolvedTheme = Exclude<ThemePreference, 'auto'>
+
+export const THEME_STORAGE_KEY = 'renren_theme_mode'
+
+function isThemePreference(value: unknown): value is ThemePreference {
+  return value === 'auto' || value === 'light' || value === 'dark'
+}
+
+function clearInvalidStoredPreference() {
+  if (typeof window === 'undefined') return
+
+  try {
+    const storedPreference = window.localStorage.getItem(THEME_STORAGE_KEY)
+    if (storedPreference && !isThemePreference(storedPreference)) {
+      window.localStorage.removeItem(THEME_STORAGE_KEY)
+    }
+  } catch {
+    // VueUse falls back gracefully when storage is unavailable.
+  }
+}
+
+clearInvalidStoredPreference()
+
+const colorMode = useColorMode<ThemePreference>({
+  selector: 'html',
+  attribute: 'class',
+  initialValue: 'auto',
+  storageKey: THEME_STORAGE_KEY,
+  modes: {
+    auto: '',
+    light: 'light',
+    dark: 'dark',
+  },
+})
+
+const preference = computed<ThemePreference>({
+  get: () =>
+    isThemePreference(colorMode.store.value) ? colorMode.store.value : 'auto',
+  set: (value) => {
+    if (isThemePreference(value)) colorMode.store.value = value
+  },
+})
+
+const resolvedTheme = computed<ResolvedTheme>(() =>
+  colorMode.state.value === 'dark' ? 'dark' : 'light'
+)
+
+if (typeof document !== 'undefined') {
+  watch(
+    resolvedTheme,
+    (theme) => {
+      const root = document.documentElement
+      root.classList.toggle('dark', theme === 'dark')
+      root.classList.toggle('light', theme === 'light')
+      root.dataset.theme = theme
+      root.style.colorScheme = theme
+      document
+        .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+        ?.setAttribute('content', theme === 'dark' ? '#0A1310' : '#F7FCFA')
+    },
+    { immediate: true }
+  )
+}
+
+function setThemePreference(value: ThemePreference) {
+  preference.value = value
+}
+
+/**
+ * Shared application theme state. `preference` keeps the user's three-state
+ * selection, while `resolvedTheme` is always the light or dark value applied
+ * to the document root by VueUse.
+ */
+export function useTheme() {
+  return {
+    preference,
+    resolvedTheme,
+    setThemePreference,
+  }
+}

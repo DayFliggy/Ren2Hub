@@ -14,6 +14,9 @@ const router = createRouter({
       component: () => import('@/views/NotFoundView.vue'),
     },
   ],
+  scrollBehavior() {
+    return { top: 0 }
+  },
 })
 
 export default router

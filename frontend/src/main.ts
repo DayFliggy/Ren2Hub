@@ -14,6 +14,6 @@ app.use(pinia)
 app.use(router)
 app.use(i18n)
 
-useAppStore().initialize()
+void useAppStore().initialize()
 
 router.isReady().then(() => app.mount('#app'))
