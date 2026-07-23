@@ -58,14 +58,14 @@ export class UserChannel {
 
     while (remaining > 0 && !this.dead) {
       if (this.phase === 'establish') {
-        const left = Math.max(
-          0,
-          (1 - this.establishProgress) * this.timing.establishMs
-        )
+        // Guard the divisor like the fade phase does: a 0ms duration would make
+        // progress NaN, stall the phase, and spin this while-loop forever.
+        const establishMs = Math.max(1, this.timing.establishMs)
+        const left = Math.max(0, (1 - this.establishProgress) * establishMs)
         const consumed = Math.min(remaining, left)
         this.establishProgress = Math.min(
           1,
-          this.establishProgress + consumed / this.timing.establishMs
+          this.establishProgress + consumed / establishMs
         )
         remaining -= consumed
         if (this.establishProgress >= 1) this.phase = 'transmit'
@@ -73,14 +73,12 @@ export class UserChannel {
       }
 
       if (this.phase === 'transmit') {
-        const left = Math.max(
-          0,
-          (1 - this.transmitProgress) * this.timing.transmitMs
-        )
+        const transmitMs = Math.max(1, this.timing.transmitMs)
+        const left = Math.max(0, (1 - this.transmitProgress) * transmitMs)
         const consumed = Math.min(remaining, left)
         this.transmitProgress = Math.min(
           1,
-          this.transmitProgress + consumed / this.timing.transmitMs
+          this.transmitProgress + consumed / transmitMs
         )
         remaining -= consumed
         if (this.transmitProgress >= 1 && !this.arrived) {

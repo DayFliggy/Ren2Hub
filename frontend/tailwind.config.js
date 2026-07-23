@@ -56,6 +56,7 @@ export default {
           'Menlo',
           'monospace',
         ],
+        serif: ['Noto Serif SC', 'Songti SC', 'SimSun', 'serif'],
       },
       animation: {
         marquee: 'marquee 42s linear infinite',
@@ -64,6 +65,7 @@ export default {
         float: 'float 7s ease-in-out infinite',
         'fade-in': 'fadeIn 0.6s ease-out both',
         'rise-in': 'riseIn 0.7s cubic-bezier(0.2, 0.6, 0.2, 1) both',
+        'scale-in': 'scaleIn 0.24s cubic-bezier(0.2, 0.6, 0.2, 1) both',
         blink: 'blink 1s step-end infinite',
       },
       keyframes: {
@@ -86,6 +88,10 @@ export default {
         riseIn: {
           '0%': { opacity: '0', transform: 'translateY(20px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        scaleIn: {
+          '0%': { opacity: '0', transform: 'scale(0.96)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
         },
         blink: {
           '0%, 50%': { opacity: '1' },

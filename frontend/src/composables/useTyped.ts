@@ -32,6 +32,10 @@ export function useTyped(
   } = options
 
   const displayed = ref('')
+  /** 当前正在输入/删除的完整词（displayed 是它的前缀），供生长缩放计算进度。 */
+  const currentWord = ref('')
+  /** 打字/删除进行中为 true，停顿等待时为 false。供光标判断是否暂停闪烁。 */
+  const isTyping = ref(false)
   let wordIndex = 0
   let charIndex = 0
   let deleting = false
@@ -56,15 +60,18 @@ export function useTyped(
     }
 
     const current = words[wordIndex % words.length]
+    currentWord.value = current
 
     if (!deleting) {
       charIndex++
       displayed.value = current.slice(0, charIndex)
       if (charIndex >= current.length) {
         deleting = true
+        isTyping.value = false
         timer = window.setTimeout(tick, pauseAfterType)
         return
       }
+      isTyping.value = true
       timer = window.setTimeout(tick, typeSpeed)
     } else {
       charIndex--
@@ -72,9 +79,11 @@ export function useTyped(
       if (charIndex <= 0) {
         deleting = false
         wordIndex++
+        isTyping.value = false
         timer = window.setTimeout(tick, pauseAfterDelete)
         return
       }
+      isTyping.value = true
       timer = window.setTimeout(tick, deleteSpeed)
     }
   }
@@ -84,8 +93,10 @@ export function useTyped(
     wordIndex = 0
     charIndex = 0
     deleting = false
+    isTyping.value = false
 
     const words = toValue(wordsSource)
+    currentWord.value = words[0] ?? ''
     if (reduced || words.length === 0) {
       displayed.value = words[0] ?? ''
       return
@@ -112,5 +123,5 @@ export function useTyped(
     clearTimer()
   })
 
-  return { displayed }
+  return { displayed, currentWord, isTyping }
 }

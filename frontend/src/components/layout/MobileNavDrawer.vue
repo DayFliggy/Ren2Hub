@@ -70,10 +70,10 @@
                 >
                   <span
                     class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border"
-                    style="
-                      border-color: var(--status-success-soft);
-                      background: var(--status-success-soft);
-                    "
+                    :style="{
+                      borderColor: statusSoft,
+                      background: statusSoft,
+                    }"
                   >
                     <StatusDot />
                   </span>
@@ -83,9 +83,7 @@
                     }}</span>
                     <span
                       class="mt-0.5 block truncate text-xs text-[var(--text-tertiary)]"
-                      >{{
-                        online ? t('nav.operational') : t('nav.degraded')
-                      }}</span
+                      >{{ statusLabel }}</span
                     >
                   </span>
                 </div>
@@ -130,8 +128,8 @@
                 </a>
               </li>
               <li v-if="showPricing">
-                <a
-                  href="/pricing"
+                <RouterLink
+                  :to="{ name: 'models' }"
                   class="group flex min-h-14 items-center gap-3 rounded-2xl px-4 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
                   @click="close"
                 >
@@ -167,7 +165,7 @@
                   >
                     <path d="M9 6l6 6-6 6" />
                   </svg>
-                </a>
+                </RouterLink>
               </li>
             </ul>
           </nav>
@@ -177,7 +175,7 @@
             <p
               class="mt-4 font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--text-tertiary)]"
             >
-              Gateway / ready
+              {{ statusLabel }}
             </p>
           </div>
         </aside>
@@ -187,11 +185,11 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
-import StatusDot from '@/components/ui/StatusDot.vue'
-import ThemeSwitcher from '@/components/ui/ThemeSwitcher.vue'
+import StatusDot from '@/components/common/StatusDot.vue'
+import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import { useAppStore } from '@/stores'
 
 const props = defineProps<{
@@ -203,10 +201,23 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const { systemName, docsLink, showDocs, showPricing, online } =
+const { systemName, docsLink, showDocs, showPricing, phase } =
   storeToRefs(useAppStore())
 const panel = ref<HTMLElement | null>(null)
 const closeButton = ref<HTMLButtonElement | null>(null)
+
+const statusLabel = computed(() => {
+  if (phase.value === 'ready') return t('nav.operational')
+  if (phase.value === 'degraded') return t('nav.degraded')
+  if (phase.value === 'error') return t('nav.unavailable')
+  return t('nav.checking')
+})
+const statusSoft = computed(() => {
+  if (phase.value === 'ready') return 'var(--status-success-soft)'
+  if (phase.value === 'degraded') return 'var(--status-warning-soft)'
+  if (phase.value === 'error') return 'var(--status-danger-soft)'
+  return 'var(--surface-muted)'
+})
 
 function close() {
   emit('close')
@@ -252,7 +263,10 @@ function onKeydown(event: KeyboardEvent) {
   ) {
     event.preventDefault()
     last.focus()
-  } else if (!event.shiftKey && current === last) {
+  } else if (
+    !event.shiftKey &&
+    (current === last || !panel.value?.contains(current))
+  ) {
     event.preventDefault()
     first.focus()
   }

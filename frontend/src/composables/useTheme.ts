@@ -60,7 +60,7 @@ if (typeof document !== 'undefined') {
       root.style.colorScheme = theme
       document
         .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-        ?.setAttribute('content', theme === 'dark' ? '#0A1310' : '#F7FCFA')
+        ?.setAttribute('content', theme === 'dark' ? '#262A34' : '#F6F3EB')
     },
     { immediate: true }
   )

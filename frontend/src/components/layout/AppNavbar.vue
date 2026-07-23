@@ -13,10 +13,10 @@
       :aria-label="t('nav.navigation')"
     >
       <div class="flex min-w-0 items-center gap-2.5 sm:gap-4">
-        <a
-          href="/"
+        <RouterLink
+          :to="{ name: 'home' }"
           class="flex min-h-11 min-w-11 items-center justify-center gap-2.5 transition-transform hover:scale-[1.02] sm:justify-start"
-          :aria-label="`${systemName} home`"
+          :aria-label="`${systemName} ${t('nav.home')}`"
         >
           <img
             :src="logo"
@@ -27,7 +27,7 @@
             class="max-[359px]:hidden max-w-44 truncate whitespace-nowrap text-lg font-bold tracking-tight text-[var(--text-primary)]"
             >{{ systemName }}</span
           >
-        </a>
+        </RouterLink>
         <span
           class="hidden h-5 w-px bg-[var(--border-subtle)] lg:block"
           aria-hidden="true"
@@ -38,6 +38,7 @@
       <div class="flex shrink-0 items-center gap-2.5 md:gap-2">
         <span
           class="hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-[var(--text-secondary)] md:inline-flex"
+          :title="statusLabel"
         >
           <StatusDot />
           <span>{{ t('nav.status') }}</span>
@@ -51,17 +52,17 @@
         >
           {{ t('nav.docs') }}
         </a>
-        <a
+        <RouterLink
           v-if="showPricing"
-          href="/pricing"
+          :to="{ name: 'models' }"
           class="hidden rounded-full px-3 py-1.5 text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] md:inline-flex"
         >
           {{ t('nav.pricing') }}
-        </a>
+        </RouterLink>
         <LanguageSelector />
         <ThemeSwitcher class="hidden md:block" />
-        <a
-          :href="primaryHref"
+        <RouterLink
+          :to="isAuthenticated ? { name: 'dashboard' } : { name: 'sign-in' }"
           class="inline-flex h-11 w-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-[var(--accent)] px-0 text-sm font-semibold text-[var(--accent-contrast)] transition-all hover:bg-[var(--accent-hover)] hover:shadow-[0_10px_24px_var(--shadow-color)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] min-[420px]:w-auto min-[420px]:px-3 md:h-auto md:w-auto md:px-4 md:py-1.5"
           :aria-label="isAuthenticated ? t('nav.console') : t('nav.login')"
         >
@@ -79,7 +80,7 @@
           >
             <path d="M4.5 5.5h15v13h-15zM8.5 10l3 2.5-3 2.5M13 15h3" />
           </svg>
-        </a>
+        </RouterLink>
         <button
           ref="menuButton"
           type="button"
@@ -125,31 +126,44 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useScrolled } from '@/composables/useScrolled'
 import NotificationBadge from './NotificationBadge.vue'
-import MobileNavDrawer from './MobileNavDrawer.vue'
-import LanguageSelector from '@/components/ui/LanguageSelector.vue'
-import StatusDot from '@/components/ui/StatusDot.vue'
-import ThemeSwitcher from '@/components/ui/ThemeSwitcher.vue'
+// Mobile-only, fully v-if="open"-gated: kept out of the entry chunk so it loads
+// on first menu tap instead of gating the initial mount.
+const MobileNavDrawer = defineAsyncComponent(
+  () => import('./MobileNavDrawer.vue')
+)
+import LanguageSelector from '@/components/common/LanguageSelector.vue'
+import StatusDot from '@/components/common/StatusDot.vue'
+import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 const appStore = useAppStore()
-const {
-  systemName,
-  logo,
-  docsLink,
-  showDocs,
-  showPricing,
-  primaryHref,
-  isAuthenticated,
-} = storeToRefs(appStore)
+const { systemName, logo, docsLink, showDocs, showPricing, phase } =
+  storeToRefs(appStore)
+const { isAuthenticated } = storeToRefs(useAuthStore())
 const { scrolled } = useScrolled(20)
 const mobileMenuOpen = ref(false)
 const menuButton = ref<HTMLButtonElement | null>(null)
+
+const statusLabel = computed(() => {
+  if (phase.value === 'ready') return t('nav.operational')
+  if (phase.value === 'degraded') return t('nav.degraded')
+  if (phase.value === 'error') return t('nav.unavailable')
+  return t('nav.checking')
+})
 
 let scrollPosition = 0
 let savedBodyStyles: Record<string, string> | null = null

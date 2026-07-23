@@ -7,9 +7,10 @@ import { ArcPacket, Particle } from './sceneParts'
 import { arcAway } from './arc'
 import { landnessDeg } from './worldMask'
 import { loadIcon } from './iconLoader'
+import { canStartCanvasRequest } from './requestGate'
 import { getCanvasTheme, type CanvasTheme, type CanvasThemeName } from './theme'
-import { MODEL_NODES } from '@/data/models'
-import { MODEL_GEO, SOURCE_GEO } from '@/data/modelGeo'
+import { MODEL_NODES } from '@/constants/home/models'
+import { MODEL_GEO, SOURCE_GEO } from '@/constants/home/modelGeo'
 import type {
   SignalCapabilityId,
   SignalConsolePhase,
@@ -19,7 +20,7 @@ import type {
   SignalRequestSource,
   SignalRequestTrace,
   SignalRouteHop,
-} from '@/data/signalConsole'
+} from '@/constants/home/signalConsole'
 
 interface Ripple {
   x: number
@@ -68,6 +69,8 @@ interface RequestGroup {
   origin: SignalRequestOrigin
   users: UserNode[]
   channels: UserChannel[]
+  flylines: Flyline[]
+  packets: ArcPacket[]
   markers: ModelMarker[]
   hub: { x: number; y: number }
   preferredTargetIds: string[]
@@ -125,7 +128,12 @@ export class MapScene {
   private static readonly RESPOND_MS = 900
   private static readonly SETTLE_MS = 500
   private static readonly FRAME_MS = 1000 / 60
+  // Cap fixed-timestep catch-up so a tab resuming from background can't run a
+  // huge update loop (mirrors the 100ms deltaMs clamp in frame()).
+  private static readonly MAX_CATCHUP_STEPS = 4
   private static readonly EDGE_DWELL_MS = 500
+  private static readonly POINTER_COOLDOWN_MS = 450
+  private static readonly MAX_ACTIVE_GROUPS = 4
 
   private ctx: CanvasRenderingContext2D
   private w = 0
@@ -133,6 +141,8 @@ export class MapScene {
   private dpr = 1
   private t = 0
   private sceneTimeMs = 0
+  /** Sub-frame remainder carried by the fixed-timestep loop (see update()). */
+  private frameAccumulator = 0
   private reduced: boolean
   private theme: CanvasTheme
 
@@ -167,11 +177,13 @@ export class MapScene {
   private signalSequence = 0
   private requestSequence = 0
   private pointerProgrammeIndex = 0
+  private lastPointerRequestAt = Number.NEGATIVE_INFINITY
   private lastAutoTrafficKind?: AutoTrafficKind
   private autoNextAt = MapScene.INITIAL_IDLE_MS
 
   private raf = 0
   private running = false
+  private disposed = false
   private lastFrame = 0
 
   constructor(
@@ -179,13 +191,19 @@ export class MapScene {
     private readonly onSignalChange?: (snapshot: SignalConsoleSnapshot) => void,
     initialTheme: CanvasThemeName = 'dark'
   ) {
-    this.ctx = canvas.getContext('2d', { alpha: false })!
+    const ctx = canvas.getContext('2d', { alpha: false })
+    if (!ctx) throw new Error('MapScene: 2D canvas context unavailable')
+    this.ctx = ctx
     this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     this.theme = getCanvasTheme(initialTheme)
     this.map = new WorldMap(this.reduced, this.theme)
     this.rain = new CharRain(this.ctx, this.reduced)
     this.hub.setTheme(this.theme)
     this.resize()
+    // 立即绘制背景帧：点阵已在 setLayout 中建好，不必等图标加载——
+    // 消除 alpha:false 画布在 init 前的黑色闪烁。
+    this.map.draw(this.ctx)
+    this.rain.draw(this.theme)
   }
 
   setTheme(name: CanvasThemeName) {
@@ -208,6 +226,7 @@ export class MapScene {
     const imageById = new Map(
       MODEL_NODES.map((model, index) => [model.id, images[index]])
     )
+    if (this.disposed) return
     this.markers = MODEL_GEO.map((geo) => {
       const model = MODEL_NODES.find((candidate) => candidate.id === geo.id)
       return new ModelMarker(
@@ -219,7 +238,9 @@ export class MapScene {
       )
     })
     loadIcon('/logo.png')
-      .then((image) => this.hub.setLogo(image))
+      .then((image) => {
+        if (!this.disposed) this.hub.setLogo(image)
+      })
       .catch(() => {})
     this.placeMarkers()
     this.placeHub()
@@ -228,11 +249,14 @@ export class MapScene {
 
   private placeHub() {
     const radius = this.w < 640 ? 16 : 22
-    // On desktop the gateway becomes the hinge between telemetry, routing, and copy.
+    // On desktop the gateway becomes the hinge between telemetry, routing, and
+    // copy. On smaller screens it rises into the reserved stage strip above
+    // the frosted content card, so the routing story stays visible.
     const desktop = this.w >= 1024
+    const mobileHubY = this.h < 700 ? 0.16 : 0.21
     this.hub.setPos(
-      this.w * (desktop ? 0.43 : 0.33),
-      this.h * (desktop ? 0.52 : 0.5),
+      this.w * (desktop ? 0.43 : 0.5),
+      this.h * (desktop ? 0.52 : mobileHubY),
       radius
     )
     this.buildLinks()
@@ -335,6 +359,28 @@ export class MapScene {
     if (!active) this.resetEdgeBoost()
   }
 
+  /** 触摸拖拽转动地图（移动端下方空白区手势）：开始/跟手/释放(带惯性)。 */
+  beginMapDrag() {
+    this.map.beginDrag()
+  }
+
+  dragMapBy(dxPx: number) {
+    this.map.dragBy(dxPx)
+  }
+
+  endMapDrag(vxPxPerMs: number) {
+    this.map.endDrag(vxPxPerMs)
+  }
+
+  /** 触摸长按加速自转：factor=目标速度倍率（常态 16 / 沉浸 24），沿用巡航缓动。 */
+  beginBoost(factor: number) {
+    this.map.setPressBoost(factor)
+  }
+
+  endBoost() {
+    this.map.setPressBoost(0)
+  }
+
   /** Pointer requests are intentionally unthrottled and can overlap each other. */
   clickAt(mx: number, my: number) {
     const translatedX = mx - this.parallax.x * this.parallaxAmp
@@ -349,6 +395,7 @@ export class MapScene {
 
     const geo = this.map.unprojectRot(mx, my)
     if (landnessDeg(geo.lon, geo.lat) < 0.5) return
+    if (!this.canStartRequest('pointer')) return
     this.map.addGlow(mx, my)
     this.spawnRipple(mx, my, 1)
 
@@ -363,12 +410,25 @@ export class MapScene {
       label: `POINTER ${nearestSource.label}`,
       country: nearestSource.country,
     }
-    this.createGroup(
+    const group = this.createGroup(
       'pointer',
       [{ geo, source }],
       programme.targetIds,
       programme.latencyMs
     )
+    if (group) this.lastPointerRequestAt = this.sceneTimeMs
+  }
+
+  private canStartRequest(origin: SignalRequestOrigin): boolean {
+    const limit = this.reduced || this.w < 640 ? 2 : MapScene.MAX_ACTIVE_GROUPS
+    return canStartCanvasRequest({
+      activeRequests: this.groups.length,
+      maxActiveRequests: limit,
+      origin,
+      nowMs: this.sceneTimeMs,
+      lastPointerRequestAt: this.lastPointerRequestAt,
+      pointerCooldownMs: MapScene.POINTER_COOLDOWN_MS,
+    })
   }
 
   private advanceAutoProgramme() {
@@ -591,7 +651,12 @@ export class MapScene {
     plannedLatencyMs: number,
     options: CreateGroupOptions = {}
   ): RequestGroup | undefined {
-    if (!this.markers.length || !sourceEntries.length) return undefined
+    if (
+      !this.markers.length ||
+      !sourceEntries.length ||
+      !this.canStartRequest(origin)
+    )
+      return undefined
     const now = this.sceneTimeMs
     const timing = this.requestTiming(options.tempo ?? 1)
     const id = `${origin}-${++this.requestSequence}`
@@ -611,6 +676,8 @@ export class MapScene {
       origin,
       users: [],
       channels: [],
+      flylines: [],
+      packets: [],
       markers: [],
       hub: { x: this.hub.x, y: this.hub.y },
       preferredTargetIds: [...preferredTargetIds],
@@ -717,17 +784,17 @@ export class MapScene {
     for (const marker of selected) {
       const link = this.links.find((candidate) => candidate.mk === marker)
       if (link) link.activity = 1
-      this.flylines.push(
-        new Flyline(
-          group.hub,
-          { x: marker.x, y: marker.y },
-          () => marker.color,
-          group.timing.routeOutboundMs,
-          () => this.onOutboundArrived(group, marker),
-          centerX,
-          centerY
-        )
+      const flyline = new Flyline(
+        group.hub,
+        { x: marker.x, y: marker.y },
+        () => marker.color,
+        group.timing.routeOutboundMs,
+        () => this.onOutboundArrived(group, marker),
+        centerX,
+        centerY
       )
+      this.flylines.push(flyline)
+      group.flylines.push(flyline)
     }
   }
 
@@ -771,17 +838,17 @@ export class MapScene {
       hop.state = 'returning'
       const centerX = this.w / 2
       const centerY = this.h / 2
-      this.flylines.push(
-        new Flyline(
-          { x: marker.x, y: marker.y },
-          group.hub,
-          () => marker.color,
-          group.timing.routeReturnMs,
-          () => this.onReturnArrived(group, marker),
-          centerX,
-          centerY
-        )
+      const flyline = new Flyline(
+        { x: marker.x, y: marker.y },
+        group.hub,
+        () => marker.color,
+        group.timing.routeReturnMs,
+        () => this.onReturnArrived(group, marker),
+        centerX,
+        centerY
       )
+      this.flylines.push(flyline)
+      group.flylines.push(flyline)
       this.publishSignal()
     }
 
@@ -808,14 +875,14 @@ export class MapScene {
     // rolling metric only when that response visibly finishes.
     group.trace.latencyMs = group.plannedLatencyMs
     for (const user of group.users) {
-      this.packets.push(
-        new ArcPacket(
-          group.hub,
-          () => user.head(),
-          group.timing.respondMs,
-          () => user.release()
-        )
+      const packet = new ArcPacket(
+        group.hub,
+        () => user.head(),
+        group.timing.respondMs,
+        () => user.release()
       )
+      this.packets.push(packet)
+      group.packets.push(packet)
     }
   }
 
@@ -828,11 +895,19 @@ export class MapScene {
     this.latencyEventId += 1
   }
 
+  private terminateGroupArtifacts(group: RequestGroup) {
+    for (const channel of group.channels) channel.dead = true
+    for (const flyline of group.flylines) flyline.dead = true
+    for (const packet of group.packets) packet.dead = true
+    group.processingDueAt.clear()
+  }
+
   private completeGroup(group: RequestGroup) {
     if (!this.groups.includes(group)) return
     group.trace.completedAt = this.sceneTimeMs
     this.completedTraces.unshift(this.cloneTrace(group.trace))
     this.completedTraces = this.completedTraces.slice(0, 4)
+    this.terminateGroupArtifacts(group)
     this.groups = this.groups.filter((candidate) => candidate !== group)
 
     // Only automatic traffic owns the programme clock. User clicks may pile
@@ -1001,10 +1076,10 @@ export class MapScene {
   }
 
   private update(deltaMs: number) {
-    const frameScale = Math.max(0, deltaMs) / MapScene.FRAME_MS
-    this.sceneTimeMs += Math.max(0, deltaMs)
+    const clamped = Math.max(0, deltaMs)
+    const frameScale = clamped / MapScene.FRAME_MS
+    this.sceneTimeMs += clamped
     this.t += frameScale
-    this.map.update()
 
     const velocityX = this.mouse.active ? this.mouse.x - this.prevMouseX : 0
     const velocityY = this.mouse.active ? this.mouse.y - this.prevMouseY : 0
@@ -1017,7 +1092,27 @@ export class MapScene {
     )
     this.prevMouseX = this.mouse.x
     this.prevMouseY = this.mouse.y
-    this.hub.update(this.reduced)
+
+    // Fixed-timestep for the frame-count-based subsystems (globe rotation/breath,
+    // gateway hub, model markers, user nodes): their update() bodies advance a
+    // fixed amount per call, so we step them once per 60fps-equivalent slice and
+    // carry the sub-frame remainder — total steps then track wall-clock exactly,
+    // making their speed identical across 60/120/144/165/240Hz. At 60/120/240Hz
+    // frameScale≈1 → exactly one step per render (behaviour unchanged); on 144Hz
+    // (~48 gated fps) it averages 1.25 steps/render, restoring true 60fps speed.
+    // The ms-based subsystems below (channels/packets/flylines/particles) already
+    // consume deltaMs directly, so this realigns the two clocks.
+    this.frameAccumulator += frameScale
+    let steps = Math.floor(this.frameAccumulator)
+    this.frameAccumulator -= steps
+    if (steps > MapScene.MAX_CATCHUP_STEPS) steps = MapScene.MAX_CATCHUP_STEPS
+    for (let s = 0; s < steps; s++) {
+      this.map.update()
+      this.hub.update(this.reduced)
+      for (const marker of this.markers) marker.update()
+      for (const user of this.users) user.update()
+    }
+
     this.trackEdgeDwell()
 
     const targetParallaxX =
@@ -1028,31 +1123,39 @@ export class MapScene {
     this.parallax.x += (targetParallaxX - this.parallax.x) * smoothing
     this.parallax.y += (targetParallaxY - this.parallax.y) * smoothing
 
-    for (const marker of this.markers) {
-      marker.update()
-      marker.place(this.map, this.w, this.h)
-    }
+    for (const marker of this.markers) marker.place(this.map, this.w, this.h)
     for (const user of this.users) {
-      user.update()
       user.place(this.map, this.w, this.h)
     }
-    this.users = this.users.filter((user) => !user.dead)
+    for (let i = this.users.length - 1; i >= 0; i--) {
+      const user = this.users[i]
+      if (!user.dead) continue
+      for (const group of this.groups) {
+        if (group.users.includes(user)) this.terminateGroupArtifacts(group)
+      }
+      this.users.splice(i, 1)
+    }
 
     for (const channel of this.channels) channel.update(deltaMs)
-    this.channels = this.channels.filter((channel) => !channel.dead)
+    for (let i = this.channels.length - 1; i >= 0; i--)
+      if (this.channels[i].dead) this.channels.splice(i, 1)
     for (const packet of this.packets) packet.update(deltaMs)
-    this.packets = this.packets.filter((packet) => !packet.dead)
+    for (let i = this.packets.length - 1; i >= 0; i--)
+      if (this.packets[i].dead) this.packets.splice(i, 1)
     for (const flyline of this.flylines) flyline.update(deltaMs)
-    this.flylines = this.flylines.filter((flyline) => !flyline.dead)
+    for (let i = this.flylines.length - 1; i >= 0; i--)
+      if (this.flylines[i].dead) this.flylines.splice(i, 1)
     for (const particle of this.particles) particle.update(deltaMs)
-    this.particles = this.particles.filter((particle) => particle.life > 0)
+    for (let i = this.particles.length - 1; i >= 0; i--)
+      if (this.particles[i].life <= 0) this.particles.splice(i, 1)
 
     const rippleRate = 1 - Math.pow(1 - 0.05, frameScale)
     for (const ripple of this.ripples) {
       ripple.r += (ripple.max - ripple.r) * rippleRate
       ripple.life -= 0.014 * frameScale
     }
-    this.ripples = this.ripples.filter((ripple) => ripple.life > 0)
+    for (let i = this.ripples.length - 1; i >= 0; i--)
+      if (this.ripples[i].life <= 0) this.ripples.splice(i, 1)
     for (const link of this.links)
       link.activity = Math.max(0, link.activity - 0.006 * frameScale)
 
@@ -1137,12 +1240,13 @@ export class MapScene {
     // Preserve wall-clock duration exactly. Quantising the anchor here can
     // double-count time on displays whose rAF cadence sits near 60Hz.
     this.lastFrame = now
-    this.update(elapsed)
+    // Cap to ~6 frames so a background tab resuming doesn't teleport animations
+    this.update(Math.min(elapsed, 100))
     this.draw()
   }
 
   start() {
-    if (this.running) return
+    if (this.running || this.disposed) return
     this.running = true
     // Reset the wall-clock anchor on resume. `sceneTimeMs` remains untouched,
     // so document visibility/intersection pauses freeze instead of skipping.
@@ -1158,7 +1262,19 @@ export class MapScene {
   }
 
   dispose() {
+    if (this.disposed) return
+    this.disposed = true
     this.resetEdgeBoost()
     this.stop()
+    for (const group of this.groups) this.terminateGroupArtifacts(group)
+    this.groups = []
+    this.users = []
+    this.channels = []
+    this.flylines = []
+    this.packets = []
+    this.particles = []
+    this.ripples = []
+    this.completedTraces = []
+    this.latencySamples = []
   }
 }

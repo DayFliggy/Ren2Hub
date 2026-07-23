@@ -8,6 +8,14 @@ import { getCanvasTheme, withAlpha, type CanvasTheme } from './theme'
 export const LAT_TOP = 75
 export const LAT_BOT = -60
 
+// 移动端竖屏地图：高度占屏比 / 聚焦纬度(北纬模型带) / 舞台锚点高度(对齐枢纽 0.21h)
+const MOBILE_MAP_HEIGHT_RATIO = 0.5
+const MOBILE_FOCUS_LAT = 30
+const MOBILE_STAGE_Y_RATIO = 0.21
+
+// 惯性换算用单帧时长（60Hz 基准，与 MapScene.FRAME_MS 同值）
+const FRAME_MS = 1000 / 60
+
 // 鼠标照亮区内，陆地点阵就地变 ASCII 代码流的字符集（海洋改为平滑正弦流体波纹，不用字符）
 const CODE_GLYPHS = '{}()<>/;=01*&|:+'
 
@@ -141,10 +149,56 @@ export class WorldMap {
   private static readonly RECOVER_EASE = 0.014 // 离开边缘后用更长尾的减速曲线回落
   private scrollFactor = 1 // 当前速度系数（缓动逼近 target，使加/减/反向都平滑）
   private targetFactor = 1 // 目标：1 常速 / +BOOST 向东加速 / -BOOST 反向
+  private pressBoost = 0 // 长按加速自转的目标倍率（0=解除；常态 16 / 沉浸 24）
+  private dragging = false // 触摸拖拽中：暂停自转与边缘巡航，rot 弹簧跟随手指
+  private dragRotTarget: number | null = null // 拖拽跟手目标（累积，消抖+质量感）
+  private static readonly DRAG_FOLLOW = 0.35 // 跟手弹簧系数（~2 帧逼近，不肉）
+  // 拖拽惯性自旋（拨动球体手感）：独立于巡航的叠加通道；粘滞+库仑混合摩擦，
+  // 高速段快速衰减、低速段干脆停稳；巡航速度始终叠加在旁，衰减完无缝接管。
+  private spinVel = 0 // °/帧
+  private static readonly SPIN_FRICTION = 0.94 // 粘滞（比例）阻力
+  private static readonly SPIN_DECEL = 0.006 // 库仑（恒定）减速 °/帧²
+  private static readonly SPIN_MAX = 1.6 // 惯性初速上限（°/帧）
+  private static readonly SPIN_MIN = 0.004 // 低于此值停稳归零
+  private static readonly SPIN_GAIN = 0.6 // 松手末速 → 初速增益
 
   /** 边缘加速控制：dir=+1 右侧(继续向东)、-1 左侧(反向)、0 恢复常速。 */
   setEdgeBoost(dir: -1 | 0 | 1) {
     this.targetFactor = dir === 0 ? 1 : dir * WorldMap.BOOST
+  }
+
+  /** 触摸长按加速自转：factor=目标速度倍率（长按期间生效），0 解除回落常速。 */
+  setPressBoost(factor: number) {
+    this.pressBoost = factor
+  }
+
+  /** 触摸拖拽开始：自转/巡航暂停；按住正在自旋的球 → 停；弹簧从当前角起步。 */
+  beginDrag() {
+    this.dragging = true
+    this.spinVel = 0
+    this.dragRotTarget = this.rot
+  }
+
+  /** 跟手目标累积：手指右滑(+dx)大陆跟着向右；满宽一滑 ≈ 一个可见经度窗。 */
+  dragBy(dxPx: number) {
+    if (!this.dragging || this.dragRotTarget === null) return
+    this.dragRotTarget =
+      (this.dragRotTarget - dxPx * (360 / this.mw) + 360) % 360
+  }
+
+  /**
+   * 拖拽释放：末段速度换算成惯性自旋初速（reduced 下关闭），
+   * 之后每帧粘滞+库仑摩擦衰减，像拨动一颗真实球体。
+   */
+  endDrag(vxPxPerMs: number) {
+    this.dragging = false
+    this.dragRotTarget = null
+    if (this.reduced || !Number.isFinite(vxPxPerMs)) return
+    const raw = -vxPxPerMs * FRAME_MS * (360 / this.mw) * WorldMap.SPIN_GAIN
+    this.spinVel = Math.max(
+      -WorldMap.SPIN_MAX,
+      Math.min(WorldMap.SPIN_MAX, raw)
+    )
   }
 
   constructor(reduced = false, theme: CanvasTheme = getCanvasTheme('dark')) {
@@ -168,13 +222,24 @@ export class WorldMap {
     this.h = h
     this.step = w < 640 ? 2.4 : 1.5
     const mapAspect = 360 / (LAT_TOP - LAT_BOT)
-    // 放大并居中（过扫描）：整体更大更居中，两侧远洋边缘裁掉不影响主要陆地。
-    // SCALE=1.3 时可见经度约 ±138°，美西(-122)与中国东部(+122)均在视野内。
-    const SCALE = 1.3
-    this.mw = w * SCALE
-    this.mh = (w / mapAspect) * SCALE
+    if (w >= 1024 || h < w) {
+      // 桌面端 + 手机横屏：放大并居中（过扫描），两侧远洋边缘裁掉不影响主要陆地。
+      // SCALE=1.3 时可见经度约 ±138°，美西(-122)与中国东部(+122)均在视野内。
+      const SCALE = 1.3
+      this.mw = w * SCALE
+      this.mh = (w / mapAspect) * SCALE
+      this.my = (h - this.mh) / 2
+    } else {
+      // 移动端竖屏：地图高度改由屏高推导（按屏宽推导会缩成 ~22% 屏高的一条，
+      // 且垂直居中后正好被内容卡遮挡）。北纬 30° 模型密集带锚定到 21% 屏高，
+      // 与枢纽(MapScene 0.21h)、CSS 聚光(50% 26%) 对齐，内容聚焦卡片之上的舞台区。
+      this.mh = h * MOBILE_MAP_HEIGHT_RATIO
+      this.mw = this.mh * mapAspect
+      this.my =
+        h * MOBILE_STAGE_Y_RATIO -
+        ((LAT_TOP - MOBILE_FOCUS_LAT) / (LAT_TOP - LAT_BOT)) * this.mh
+    }
     this.mx = (w - this.mw) / 2
-    this.my = (h - this.mh) / 2
     this.bgGrad = null // 尺寸变化 → 背景渐变失效，draw 时按新高度重建
     this.buildDots()
   }
@@ -346,14 +411,30 @@ export class WorldMap {
     }
     this.flowWakes = this.flowWakes.filter((wake) => wake.life > 0)
     if (this.reduced) return
+    if (this.dragging) {
+      // 拖拽中：巡航暂停，rot 以最短角差弹簧逼近跟手目标（消抖且有质量感）
+      if (this.dragRotTarget !== null) {
+        let diff = this.dragRotTarget - this.rot
+        if (diff > 180) diff -= 360
+        else if (diff < -180) diff += 360
+        this.rot = (this.rot + diff * WorldMap.DRAG_FOLLOW + 360) % 360
+      }
+      return
+    }
     // 加速与减速都使用长尾缓动；左右换向仍会自然经过 0，不产生瞬时跳变。
+    const target = this.pressBoost !== 0 ? this.pressBoost : this.targetFactor
     const ease =
-      Math.abs(this.targetFactor) > 1
-        ? WorldMap.BOOST_EASE
-        : WorldMap.RECOVER_EASE
-    this.scrollFactor += (this.targetFactor - this.scrollFactor) * ease
+      Math.abs(target) > 1 ? WorldMap.BOOST_EASE : WorldMap.RECOVER_EASE
+    this.scrollFactor += (target - this.scrollFactor) * ease
     this.rot = (this.rot + WorldMap.SCROLL * this.scrollFactor) % 360
     if (this.rot < 0) this.rot += 360 // 反向时保持 rot ∈ [0,360)
+    // 拖拽惯性自旋：叠加在巡航之上，粘滞+库仑摩擦停稳后巡航无缝接管
+    if (this.spinVel !== 0) {
+      this.rot = (this.rot + this.spinVel + 360) % 360
+      this.spinVel *= WorldMap.SPIN_FRICTION
+      this.spinVel -= Math.sign(this.spinVel) * WorldMap.SPIN_DECEL
+      if (Math.abs(this.spinVel) < WorldMap.SPIN_MIN) this.spinVel = 0
+    }
   }
 
   draw(
@@ -379,15 +460,16 @@ export class WorldMap {
       ? 1
       : 0.85 + 0.15 * Math.sin(this.t * 0.012)
 
-    // Ambient field: desktop shifts its centre toward the gateway hinge.
+    // Ambient field: desktop shifts its centre toward the gateway hinge;
+    // mobile aligns with the hub/stage strip at the top (50% x, 21% y).
     const desktop = this.w >= 1024
     const fieldCx =
       this.w *
-      ((desktop ? 0.39 : 0.26) +
+      ((desktop ? 0.39 : 0.5) +
         (desktop ? 0.08 : 0.1) * Math.sin(this.t * 0.006))
     const fieldCy =
       this.h *
-      ((desktop ? 0.43 : 0.26) +
+      ((desktop ? 0.43 : 0.21) +
         (desktop ? 0.07 : 0.08) * Math.cos(this.t * 0.008))
     const fieldR = Math.min(this.w, this.h) * (desktop ? 0.32 : 0.28)
 
@@ -444,8 +526,18 @@ export class WorldMap {
         r = (1.2 + gain * 0.9) * (1 - 0.25 * d.edge)
         // 逐点查表着色（替代每点拼串）；涟漪命中时用其预染色
         if (tint) ctx.fillStyle = tint
-        else if (d.honey) ctx.fillStyle = lutAt(this.highlightLut, a + 0.1)
-        else ctx.fillStyle = lutAt(this.landLut, a)
+        else if (d.honey) {
+          // 星辉金点缀：夜间叠加逐点失谐的慢频明度呼吸（星星眨眼）；
+          // 日间保持焦糖稳定点亮，像账本上落下的批注戳。
+          let starAlpha = a + 0.1
+          if (this.theme.name === 'dark' && !this.reduced) {
+            starAlpha *=
+              0.55 +
+              0.45 *
+                Math.sin(this.t * (0.008 + (d.phase % 0.014)) + d.phase * 7)
+          }
+          ctx.fillStyle = lutAt(this.highlightLut, starAlpha)
+        } else ctx.fillStyle = lutAt(this.landLut, a)
       } else {
         a = 0.1 * breath + gain * 0.22
         r = 0.8

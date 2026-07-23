@@ -1,89 +1,49 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import { api } from '@/api/client'
+import { publicApi, type PublicStatus } from '@/api/public'
+import { safeExternalUrl, safeImageUrl } from '@/utils/safeUrl'
 
-interface ApiResponse<T> {
-  success: boolean
-  message?: string
-  data: T
-}
+export type PublicLoadState =
+  'idle' | 'loading' | 'ready' | 'degraded' | 'error'
 
-interface ModuleAccess {
+export interface ModuleAccess {
   enabled: boolean
   requireAuth: boolean
 }
 
-interface StatusData {
-  version?: string
-  system_name?: string
-  logo?: string
-  docs_link?: string
-  register_enabled?: boolean
-  user_agreement_enabled?: boolean
-  privacy_policy_enabled?: boolean
-  uptime_kuma_enabled?: boolean
-  HeaderNavModules?: unknown
-}
-
-interface PricingModel {
-  id: number
-}
-
-interface UptimeMonitor {
-  uptime: number
-  status: number
-}
-
-interface UptimeGroup {
-  monitors: UptimeMonitor[]
-}
-
-const DEFAULT_SYSTEM_NAME = 'RenRen AI'
+const DEFAULT_SYSTEM_NAME = 'Ren2Hub'
 const DEFAULT_LOGO = '/logo.png'
 
-function parseBoolean(value: unknown, fallback: boolean): boolean {
+export function parseBoolean(value: unknown, fallback: boolean): boolean {
   if (typeof value === 'boolean') return value
   if (value === 1 || value === '1' || value === 'true') return true
   if (value === 0 || value === '0' || value === 'false') return false
   return fallback
 }
 
-function parseModuleAccess(value: unknown): ModuleAccess {
-  if (value && typeof value === 'object') {
-    const record = value as Record<string, unknown>
-    return {
-      enabled: parseBoolean(record.enabled, true),
-      requireAuth: parseBoolean(record.requireAuth, false),
-    }
+export function parseModuleAccess(value: unknown): ModuleAccess {
+  if (!value || typeof value !== 'object') {
+    return { enabled: parseBoolean(value, true), requireAuth: false }
   }
-
-  return { enabled: parseBoolean(value, true), requireAuth: false }
+  const record = value as Record<string, unknown>
+  return {
+    enabled: parseBoolean(record.enabled, true),
+    requireAuth: parseBoolean(record.requireAuth, false),
+  }
 }
 
-function parseHeaderModules(value: unknown): Record<string, unknown> {
+export function parseHeaderModules(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object')
     return value as Record<string, unknown>
   if (typeof value !== 'string' || !value.trim()) return {}
-
   try {
-    const parsed = JSON.parse(value)
+    const parsed: unknown = JSON.parse(value)
     return parsed && typeof parsed === 'object'
       ? (parsed as Record<string, unknown>)
       : {}
-  } catch (error) {
-    console.error('Failed to parse HeaderNavModules:', error)
+  } catch {
     return {}
-  }
-}
-
-function getStoredUser(): Record<string, unknown> | null {
-  try {
-    const raw = window.localStorage.getItem('user')
-    return raw ? (JSON.parse(raw) as Record<string, unknown>) : null
-  } catch (error) {
-    console.error('Failed to restore user state:', error)
-    return null
   }
 }
 
@@ -94,36 +54,32 @@ function toPlainText(value: unknown): string {
 }
 
 export const useAppStore = defineStore('app', () => {
-  const initialized = ref(false)
-  const loading = ref(false)
-  const online = ref(false)
-  const status = ref<StatusData>({})
+  const phase = ref<PublicLoadState>('idle')
+  const statusReachable = ref(false)
+  const status = ref<PublicStatus>({})
   const notice = ref('')
   const modelCount = ref<number | null>(null)
   const uptimePercent = ref<number | null>(null)
-  const user = ref<Record<string, unknown> | null>(getStoredUser())
+  const lastError = ref<unknown>(null)
 
+  const initialized = computed(
+    () => phase.value === 'ready' || phase.value === 'degraded'
+  )
+  const loading = computed(() => phase.value === 'loading')
+  const online = computed(() => phase.value === 'ready')
   const systemName = computed(
     () => status.value.system_name?.trim() || DEFAULT_SYSTEM_NAME
   )
-  const logo = computed(() => status.value.logo?.trim() || DEFAULT_LOGO)
-  const docsLink = computed(() => status.value.docs_link?.trim() || '')
+  const logo = computed(() => safeImageUrl(status.value.logo) || DEFAULT_LOGO)
+  const docsLink = computed(() => safeExternalUrl(status.value.docs_link) || '')
   const version = computed(() => status.value.version?.trim() || '')
-  const isAuthenticated = computed(() => Boolean(user.value))
-  const primaryHref = computed(() =>
-    isAuthenticated.value ? '/dashboard' : '/sign-in'
-  )
   const headerModules = computed(() =>
     parseHeaderModules(status.value.HeaderNavModules)
   )
   const pricingAccess = computed(() =>
     parseModuleAccess(headerModules.value.pricing)
   )
-  const showPricing = computed(
-    () =>
-      pricingAccess.value.enabled &&
-      (!pricingAccess.value.requireAuth || isAuthenticated.value)
-  )
+  const showPricing = computed(() => pricingAccess.value.enabled)
   const showDocs = computed(
     () =>
       parseBoolean(headerModules.value.docs, true) && Boolean(docsLink.value)
@@ -140,73 +96,56 @@ export const useAppStore = defineStore('app', () => {
   const modelCountLabel = computed(() =>
     modelCount.value === null ? '--' : String(modelCount.value)
   )
-  const uptimeLabel = computed(() => {
-    if (uptimePercent.value !== null)
-      return `${uptimePercent.value.toFixed(2)}%`
-    return online.value ? 'ONLINE' : 'OFFLINE'
-  })
+  const uptimeLabel = computed(() =>
+    uptimePercent.value === null ? '--' : `${uptimePercent.value.toFixed(2)}%`
+  )
   const versionLabel = computed(() => version.value || '--')
 
   function applyBranding(): void {
-    document.title = `${systemName.value} · One Key, All Models`
-
+    document.title = `${systemName.value} | One Key, All Models`
+    const customLogo = safeImageUrl(status.value.logo)
+    if (!customLogo) return
     let favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
     if (!favicon) {
       favicon = document.createElement('link')
       favicon.rel = 'icon'
       document.head.append(favicon)
     }
-    favicon.href = logo.value
+    favicon.href = customLogo
   }
 
   async function initialize(): Promise<void> {
-    if (initialized.value || loading.value) return
-    loading.value = true
+    if (
+      phase.value === 'loading' ||
+      phase.value === 'ready' ||
+      phase.value === 'degraded'
+    ) {
+      return
+    }
 
+    phase.value = 'loading'
+    lastError.value = null
+    const controller = new AbortController()
     try {
-      const statusResponse =
-        await api.get<ApiResponse<StatusData>>('/api/status')
-      if (!statusResponse.data.success) {
-        throw new Error(
-          statusResponse.data.message || 'Status API returned an error'
-        )
-      }
-
-      status.value = statusResponse.data.data || {}
-      online.value = true
+      status.value = (await publicApi.status(controller.signal)) || {}
+      statusReachable.value = true
       applyBranding()
 
-      const requests = await Promise.allSettled([
-        api.get<ApiResponse<string>>('/api/notice'),
-        api.get<ApiResponse<PricingModel[]>>('/api/pricing'),
-        api.get<ApiResponse<UptimeGroup[]>>('/api/uptime/status'),
+      const summaries = await Promise.allSettled([
+        publicApi.notice(controller.signal),
+        publicApi.pricing(controller.signal),
+        publicApi.uptime(controller.signal),
       ])
+      const [noticeResult, pricingResult, uptimeResult] = summaries
 
-      const [noticeResult, pricingResult, uptimeResult] = requests
-
-      if (
-        noticeResult.status === 'fulfilled' &&
-        noticeResult.value.data.success
-      ) {
-        notice.value = toPlainText(noticeResult.value.data.data)
-      } else if (noticeResult.status === 'rejected') {
-        console.error('Failed to load notice:', noticeResult.reason)
+      if (noticeResult.status === 'fulfilled') {
+        notice.value = toPlainText(noticeResult.value)
       }
-
-      if (
-        pricingResult.status === 'fulfilled' &&
-        pricingResult.value.data.success
-      ) {
-        modelCount.value = pricingResult.value.data.data.length
-      } else if (pricingResult.status === 'rejected') {
-        console.error('Failed to load pricing summary:', pricingResult.reason)
+      if (pricingResult.status === 'fulfilled') {
+        modelCount.value = pricingResult.value.length
       }
-
-      if (
-        uptimeResult.status === 'fulfilled' &&
-        uptimeResult.value.data.success
-      ) {
-        const monitors = uptimeResult.value.data.data.flatMap(
+      if (uptimeResult.status === 'fulfilled') {
+        const monitors = uptimeResult.value.flatMap(
           (group) => group.monitors || []
         )
         const measured = monitors.filter((monitor) =>
@@ -218,28 +157,34 @@ export const useAppStore = defineStore('app', () => {
               measured.length) *
             100
         }
-      } else if (uptimeResult.status === 'rejected') {
-        console.error('Failed to load uptime summary:', uptimeResult.reason)
       }
+
+      phase.value = summaries.every((result) => result.status === 'fulfilled')
+        ? 'ready'
+        : 'degraded'
     } catch (error) {
-      online.value = false
-      console.error('Failed to initialize the application:', error)
-    } finally {
-      loading.value = false
-      initialized.value = true
+      statusReachable.value = false
+      lastError.value = error
+      phase.value = 'error'
     }
   }
 
+  async function retry(): Promise<void> {
+    if (phase.value !== 'error') return
+    await initialize()
+  }
+
   return {
+    phase,
     initialized,
     loading,
     online,
+    statusReachable,
+    lastError,
     notice,
     systemName,
     logo,
     docsLink,
-    isAuthenticated,
-    primaryHref,
     showPricing,
     showDocs,
     showAbout,
@@ -249,5 +194,6 @@ export const useAppStore = defineStore('app', () => {
     uptimeLabel,
     versionLabel,
     initialize,
+    retry,
   }
 })

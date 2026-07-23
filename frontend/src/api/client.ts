@@ -1,15 +1,5 @@
-import axios from 'axios'
+import { createApiClient, setUnauthorizedHandler } from './createClient'
+import { mockTransport } from './mock/transport'
 
-export const api = axios.create({
-  baseURL: '',
-  withCredentials: true,
-  headers: {
-    'Cache-Control': 'no-store',
-  },
-})
-
-api.interceptors.request.use((config) => {
-  const userId = window.localStorage.getItem('uid')
-  if (userId) config.headers.set('New-Api-User', userId)
-  return config
-})
+export const api = createApiClient(mockTransport)
+export { setUnauthorizedHandler }

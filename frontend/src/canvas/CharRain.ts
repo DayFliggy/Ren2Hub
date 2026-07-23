@@ -36,11 +36,9 @@ export class CharRain {
     ctx.textAlign = 'left'
     ctx.textBaseline = 'top'
     for (let i = 0; i < this.cols; i++) {
-      // 隔列稀疏（约 1/2 列）：极淡垫底，不与弧形字符粒子流抢戏
-      if (i % 2 === 0) {
-        this.drops[i] += this.speeds[i]
-        continue
-      }
+      // 隔列稀疏（约 1/2 列）：偶数列从不绘制，直接跳过。
+      // （原先仍对 drops[i] 累加，但该值永不被读取——纯死计算。）
+      if (i % 2 === 0) continue
       const rowY = this.drops[i] * FONT
       const ch = CHARS[Math.floor(Math.random() * CHARS.length)]
       const x = i * FONT
