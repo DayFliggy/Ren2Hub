@@ -89,13 +89,6 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="block w-full px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-muted)]"
-        @click="goto('home')"
-      >
-        {{ t('nav.home') }}
-      </button>
-      <button
-        type="button"
-        class="block w-full px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-muted)]"
         @click="goto('invite')"
       >
         {{ t('nav.rebate') }}

@@ -28,8 +28,9 @@ const inputAttrs = computed(() => {
 
 function onInput(e: Event) {
   const input = e.target as HTMLInputElement
+  const allowNegative = Number.isFinite(props.min) && Number(props.min) < 0
   const raw = input.value
-    .replace(/[^0-9.-]/g, '')
+    .replace(allowNegative ? /[^0-9.-]/g : /[^0-9.]/g, '')
     .replace(/(?!^)-/g, '')
     .replace(/(\..*)\./g, '$1')
   input.value = raw
@@ -47,7 +48,11 @@ function onInput(e: Event) {
 
   const minimum = Number.isFinite(props.min) ? props.min : undefined
   const maximum = Number.isFinite(props.max) ? props.max : undefined
-  model.value = Math.min(maximum ?? parsed, Math.max(minimum ?? parsed, parsed))
+  let bounded = parsed
+  if (minimum !== undefined) bounded = Math.max(minimum, bounded)
+  if (maximum !== undefined) bounded = Math.min(maximum, bounded)
+  if (bounded !== parsed) input.value = String(bounded)
+  model.value = bounded
 }
 </script>
 

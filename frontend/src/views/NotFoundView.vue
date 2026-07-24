@@ -5,18 +5,18 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <main
-    class="grid min-h-screen place-items-center bg-[var(--page-background)] px-6 text-center text-[var(--text-primary)]"
+  <div
+    class="flex min-h-screen flex-col items-center justify-center gap-6 px-4"
   >
-    <div>
-      <p class="font-mono text-sm font-semibold text-[var(--accent)]">404</p>
-      <h1 class="mt-3 text-3xl font-bold">{{ t('notFound.title') }}</h1>
-      <RouterLink
-        :to="{ name: 'home' }"
-        class="mt-6 inline-flex rounded-full bg-[var(--accent)] px-5 py-2.5 font-semibold text-[var(--accent-contrast)]"
-      >
-        {{ t('notFound.backHome') }}
-      </RouterLink>
-    </div>
-  </main>
+    <p class="text-7xl font-bold text-[var(--accent-text)]">404</p>
+    <p class="text-lg text-[var(--text-secondary)]">
+      {{ t('notFound.title') }}
+    </p>
+    <RouterLink
+      :to="{ name: 'home' }"
+      class="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--accent-contrast)] shadow-[0_6px_18px_var(--shadow-color)] transition-all focus-ring hover:bg-[var(--accent-hover)] active:bg-[var(--accent-active)]"
+    >
+      {{ t('notFound.backHome') }}
+    </RouterLink>
+  </div>
 </template>

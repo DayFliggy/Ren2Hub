@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -28,9 +28,13 @@ const ticket = ref<TicketMeta | null>(null)
 const messages = ref<TicketMessage[]>([])
 const loading = ref(true)
 const notFound = ref(false)
+const loadFailed = ref(false)
 const submitting = ref(false)
 const confirmClose = ref(false)
 const lightbox = ref({ open: false, url: '' })
+let loadController: AbortController | null = null
+let loadSequence = 0
+let mutationSequence = 0
 
 const ticketId = computed(() => Number(route.params.id))
 
@@ -40,63 +44,97 @@ const statusTone: Record<TicketStatus, 'warning' | 'info' | 'neutral'> = {
   closed: 'neutral',
 }
 
-async function load() {
+async function load(id = ticketId.value) {
+  const sequence = ++loadSequence
+  mutationSequence += 1
+  loadController?.abort()
+  loadController = null
+  ticket.value = null
+  messages.value = []
+  submitting.value = false
+  confirmClose.value = false
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    loading.value = false
+    notFound.value = true
+    return
+  }
+
+  const controller = new AbortController()
+  loadController = controller
   loading.value = true
   notFound.value = false
+  loadFailed.value = false
   try {
     const data = await api.get<{
       ticket: TicketMeta
       messages: TicketMessage[]
-    }>(`/api/ticket/${ticketId.value}`)
+    }>(`/api/ticket/${id}`, undefined, { signal: controller.signal })
+    if (sequence !== loadSequence) return
     ticket.value = data.ticket
     messages.value = data.messages
   } catch (error) {
+    if (controller.signal.aborted || sequence !== loadSequence) return
     if (error instanceof ApiError && error.business) notFound.value = true
-    else toast.error(error instanceof ApiError ? error.message : String(error))
+    else {
+      loadFailed.value = true
+      toast.error(error instanceof ApiError ? error.message : String(error))
+    }
   } finally {
-    loading.value = false
+    if (sequence === loadSequence) loading.value = false
   }
 }
 
 async function sendReply(payload: { content: string; images: string[] }) {
   if (!ticket.value || submitting.value) return
+  const id = ticket.value.id
+  const sequence = ++mutationSequence
   submitting.value = true
   try {
     const data = await api.post<{ message: TicketMessage }>(
-      `/api/ticket/${ticket.value.id}/reply`,
+      `/api/ticket/${id}/reply`,
       payload
     )
+    if (sequence !== mutationSequence || ticket.value?.id !== id) return
     messages.value.push(data.message)
     ticket.value.status = 'open'
     ticket.value.reply_count = messages.value.length
     ticket.value.updated = data.message.created
     toast.success(t('tickets.replied'))
   } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    if (sequence === mutationSequence) {
+      toast.error(error instanceof ApiError ? error.message : String(error))
+    }
   } finally {
-    submitting.value = false
+    if (sequence === mutationSequence) submitting.value = false
   }
 }
 
 async function changeStatus(next: 'open' | 'closed') {
-  if (!ticket.value) return
+  if (!ticket.value || submitting.value) return
+  const id = ticket.value.id
+  const sequence = ++mutationSequence
   submitting.value = true
   try {
     const data = await api.put<{ ticket: TicketMeta }>(
-      `/api/ticket/${ticket.value.id}/status`,
+      `/api/ticket/${id}/status`,
       { status: next }
     )
+    if (sequence !== mutationSequence || ticket.value?.id !== id) return
     ticket.value = data.ticket
     toast.success(
       next === 'closed' ? t('tickets.closed') : t('tickets.reopened')
     )
     // Refresh the thread to pick up the system note the backend appended.
-    await load()
+    await load(id)
   } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    if (sequence === mutationSequence) {
+      toast.error(error instanceof ApiError ? error.message : String(error))
+    }
   } finally {
-    submitting.value = false
-    confirmClose.value = false
+    if (sequence === mutationSequence) {
+      submitting.value = false
+      confirmClose.value = false
+    }
   }
 }
 
@@ -104,7 +142,9 @@ function openLightbox(url: string) {
   lightbox.value = { open: true, url }
 }
 
-onMounted(load)
+watch(ticketId, (id) => void load(id), { immediate: true })
+
+onBeforeUnmount(() => loadController?.abort())
 </script>
 
 <template>
@@ -140,6 +180,16 @@ onMounted(load)
       <div class="h-28 animate-pulse rounded-2xl bg-[var(--surface-muted)]" />
       <div class="h-48 animate-pulse rounded-2xl bg-[var(--surface-muted)]" />
     </div>
+
+    <!-- load failure -->
+    <ConsoleCard v-else-if="loadFailed">
+      <div class="flex flex-col items-center py-12 text-center">
+        <p class="text-[var(--text-secondary)]">{{ t('common.failed') }}</p>
+        <ConsoleButton class="mt-4" variant="secondary" @click="load()">
+          {{ t('common.retry') }}
+        </ConsoleButton>
+      </div>
+    </ConsoleCard>
 
     <!-- not found -->
     <ConsoleCard v-else-if="notFound || !ticket">

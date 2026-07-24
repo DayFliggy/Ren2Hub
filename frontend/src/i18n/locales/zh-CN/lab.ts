@@ -137,6 +137,8 @@ export default {
       skillCreate: '创建技能',
       marketPublic: '公开',
       marketPersonal: '个人',
+      filter: '筛选插件市场',
+      moreActions: '{name} 的更多操作',
       categoryFeatured: '精选',
       categoryProductivity: '生产力',
       categoryAi: 'AI 工具',

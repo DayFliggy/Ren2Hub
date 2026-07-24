@@ -16,6 +16,7 @@ export default {
     disabled: 'Disabled',
     viewMore: 'View more',
     loading: 'Loading…',
+    retry: 'Retry',
     tableRows: 'Table rows',
     none: 'No data',
     prevPage: 'Prev',

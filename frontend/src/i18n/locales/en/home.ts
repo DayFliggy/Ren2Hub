@@ -23,7 +23,13 @@ export default {
     operational: 'All systems operational',
     checking: 'Checking system status',
     degraded: 'Some status data is unavailable',
-    unavailable: 'System status unavailable',
+    unavailable: 'Connection unavailable',
+    telemetry: {
+      ready: 'READY',
+      degraded: 'DEGRADED',
+      unavailable: 'UNAVAILABLE',
+      checking: 'CHECKING',
+    },
   },
   notice: {
     badge: 'New',
@@ -113,7 +119,9 @@ export default {
       about: 'About',
     },
     rights: 'All rights reserved.',
-    copyright: '© 2026 RenRen AI. All rights reserved.',
+    copyright: '© 2026 DayFliggy. All rights reserved.',
+    designBy: 'Designed and developed by',
+    updated: 'Updated 2026.07.17',
     icp: 'For demonstration purposes only',
   },
 }

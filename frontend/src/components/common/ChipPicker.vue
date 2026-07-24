@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useId } from 'vue'
+import { computed, onBeforeUnmount, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -18,6 +18,7 @@ const model = defineModel<string[]>({ default: () => [] })
 const keyword = ref('')
 const open = ref(false)
 const inputId = useId()
+let blurTimer: number | undefined
 
 const filtered = computed(() => {
   const kw = keyword.value.toLowerCase()
@@ -38,10 +39,22 @@ function remove(option: string) {
 }
 
 function onBlur() {
-  window.setTimeout(() => {
+  if (blurTimer) window.clearTimeout(blurTimer)
+  blurTimer = window.setTimeout(() => {
+    blurTimer = undefined
     open.value = false
   }, 150)
 }
+
+function onFocus() {
+  if (blurTimer) window.clearTimeout(blurTimer)
+  blurTimer = undefined
+  open.value = true
+}
+
+onBeforeUnmount(() => {
+  if (blurTimer) window.clearTimeout(blurTimer)
+})
 </script>
 
 <template>
@@ -54,7 +67,7 @@ function onBlur() {
       :aria-label="placeholder"
       :placeholder="placeholder"
       class="h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
-      @focus="open = true"
+      @focus="onFocus"
       @blur="onBlur"
     />
 

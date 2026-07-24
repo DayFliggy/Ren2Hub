@@ -53,16 +53,17 @@ const activeConversationId = computed(() =>
   route.name === 'lab-chat-session' ? (route.params.id as string) : null
 )
 
-// Balance: remaining = quota - used_quota (quota units → dollars via formatQuota)
+// `quota` is the current wallet balance; `used_quota` is cumulative usage.
 const remaining = computed(() => {
   const u = auth.user
   if (!u) return null
-  return Math.max(0, u.quota - u.used_quota)
+  return Math.max(0, u.quota)
 })
 const remainingPct = computed(() => {
   const u = auth.user
-  if (!u || u.quota <= 0) return 0
-  return Math.min(100, ((u.quota - u.used_quota) / u.quota) * 100)
+  if (!u) return 0
+  const total = u.quota + u.used_quota
+  return total > 0 ? Math.min(100, (u.quota / total) * 100) : 0
 })
 
 function go(routeName: string) {

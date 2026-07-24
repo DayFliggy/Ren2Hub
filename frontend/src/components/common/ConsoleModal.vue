@@ -20,6 +20,7 @@ const widths = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-2xl' }
 
 const titleId = useId()
 const subtitleId = useId()
+const dialog = ref<HTMLElement | null>(null)
 const panel = ref<HTMLElement | null>(null)
 let previouslyFocused: HTMLElement | null = null
 let previousBodyOverflow = ''
@@ -35,7 +36,7 @@ function focusableEls(): HTMLElement[] {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (!props.open) return
+  if (!props.open || !isTopmostDialog()) return
   if (e.key === 'Escape') {
     e.preventDefault()
     emit('close')
@@ -60,6 +61,13 @@ function onKeydown(e: KeyboardEvent) {
       first.focus()
     }
   }
+}
+
+function isTopmostDialog(): boolean {
+  const dialogs = document.querySelectorAll<HTMLElement>(
+    '[role="dialog"][aria-modal="true"]'
+  )
+  return dialogs.item(dialogs.length - 1) === dialog.value
 }
 
 watch(
@@ -100,6 +108,7 @@ onBeforeUnmount(() => {
     <Transition name="modal">
       <div
         v-if="open"
+        ref="dialog"
         class="fixed inset-0 z-[90] flex items-center justify-center p-4"
         role="dialog"
         aria-modal="true"

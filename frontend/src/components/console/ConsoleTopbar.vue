@@ -61,7 +61,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
         <RouterLink
           :to="{ name: 'dashboard' }"
           class="flex items-center gap-2.5"
-          :aria-label="`RenRen AI ${t('nav.console')}`"
+          :aria-label="`RenRen AI ${t('nav.dashboard')}`"
         >
           <BrandMark class="h-8 w-8 rounded-lg" />
           <span
@@ -78,16 +78,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
 
       <!-- right actions -->
       <div class="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
-        <span
-          class="inline-flex h-7 items-center gap-1.5 rounded-full border border-[var(--status-warning-soft)] bg-[var(--status-warning-soft)] px-2 font-mono text-[10px] font-semibold text-[var(--status-warning-text)]"
-          :title="t('nav.demoModeHint')"
-        >
-          <span
-            class="h-1.5 w-1.5 rounded-full bg-[var(--status-warning)]"
-            aria-hidden="true"
-          />
-          {{ t('nav.demoMode') }}
-        </span>
         <button
           type="button"
           class="flex items-center gap-2 rounded-full bg-[var(--surface-muted)] py-2 pl-3.5 pr-3 text-sm text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-secondary)] focus-ring"
@@ -112,8 +102,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
             ⌘K
           </kbd>
         </button>
-        <LanguageSelector />
-        <ThemeSwitcher />
+        <LanguageSelector variant="console" />
+        <ThemeSwitcher variant="console" />
         <NotificationPanel />
         <div
           class="hidden h-6 w-px bg-[var(--border-default)] sm:mx-1 sm:block"

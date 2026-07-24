@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { onScopeDispose, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
@@ -38,6 +38,7 @@ export function useFarm() {
   const leaderPeriod = ref<LeaderPeriod>('week')
   const leaderLoading = ref(false)
   const leaderEntries = ref<LeaderEntry[]>([])
+  let leaderController: AbortController | null = null
 
   const rebateTiers = ref<RebateTier[]>([])
   const rebateState = ref<RebateState | null>(null)
@@ -70,20 +71,25 @@ export function useFarm() {
   }
 
   async function loadLeader(period: LeaderPeriod = leaderPeriod.value) {
+    leaderController?.abort()
+    const controller = new AbortController()
+    leaderController = controller
     leaderPeriod.value = period
     leaderLoading.value = true
     try {
       const data = await api.get<{
         entries: LeaderEntry[]
         period: LeaderPeriod
-      }>('/api/farm/leader', { period })
-      leaderEntries.value = data.entries
+      }>('/api/farm/leader', { period }, { signal: controller.signal })
+      if (leaderController === controller) leaderEntries.value = data.entries
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t('common.failed')
-      )
+      if (!controller.signal.aborted) {
+        toast.error(
+          error instanceof ApiError ? error.message : t('common.failed')
+        )
+      }
     } finally {
-      leaderLoading.value = false
+      if (leaderController === controller) leaderLoading.value = false
     }
   }
 
@@ -170,7 +176,9 @@ export function useFarm() {
       const res = await api.post<{
         catch: FishingState['last_catch']
         daily_left: number
+        coins: number
       }>('/api/farm/fish')
+      if (farmState.value) farmState.value.coins = res.coins
       if (fishing.value) {
         fishing.value.daily_left = res.daily_left
         fishing.value.last_catch = res.catch
@@ -199,6 +207,8 @@ export function useFarm() {
       acting.value = false
     }
   }
+
+  onScopeDispose(() => leaderController?.abort())
 
   return {
     loading,

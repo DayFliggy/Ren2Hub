@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 
@@ -34,6 +34,7 @@ const {
 const draft = ref('')
 // Local echo appended after send so the shell feels alive (prototype only).
 const localMessages = ref<ChatMessage[]>([])
+const pendingReplyTimers = new Set<number>()
 
 const greeting = computed(() => {
   const name = auth.user?.display_name || auth.user?.username || ''
@@ -60,6 +61,8 @@ const STARTER_ICONS: Record<string, string> = {
 }
 
 function sync() {
+  for (const timer of pendingReplyTimers) window.clearTimeout(timer)
+  pendingReplyTimers.clear()
   localMessages.value = []
   if (sessionId.value) void loadConvo(sessionId.value)
   else void loadLanding()
@@ -80,7 +83,8 @@ function send() {
   })
   draft.value = ''
   // Fixed assistant reply after a beat — no backend, just keeps the shell warm.
-  window.setTimeout(() => {
+  const timer = window.setTimeout(() => {
+    pendingReplyTimers.delete(timer)
     localMessages.value.push({
       id: base + 1,
       role: 'assistant',
@@ -88,6 +92,7 @@ function send() {
       createdAt: Math.floor(base / 1000) + 1,
     })
   }, 600)
+  pendingReplyTimers.add(timer)
 }
 
 function useStarter(desc: string) {
@@ -97,6 +102,11 @@ function useStarter(desc: string) {
 function pickModel(name: string) {
   draft.value = draft.value ? draft.value : t('lab.chat.tryModel', { name })
 }
+
+onBeforeUnmount(() => {
+  for (const timer of pendingReplyTimers) window.clearTimeout(timer)
+  pendingReplyTimers.clear()
+})
 </script>
 
 <template>

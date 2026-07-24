@@ -99,8 +99,15 @@ export function formatDuration(sec: number): string {
 }
 
 export function maskKey(key: string): string {
-  if (key.length <= 11) return key
-  return `${key.slice(0, 6)}••••${key.slice(-4)}`
+  const value = key.trim()
+  if (!value) return ''
+  if (value.length <= 4) return '•'.repeat(value.length)
+  if (value.length <= 11) {
+    const prefixLength = Math.min(3, Math.max(1, Math.floor(value.length / 3)))
+    const suffixLength = Math.min(2, Math.max(1, Math.floor(value.length / 4)))
+    return `${value.slice(0, prefixLength)}••••${value.slice(-suffixLength)}`
+  }
+  return `${value.slice(0, 6)}••••${value.slice(-4)}`
 }
 
 export function passwordStrength(pw: string): 0 | 1 | 2 | 3 {

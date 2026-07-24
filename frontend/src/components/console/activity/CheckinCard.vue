@@ -71,7 +71,7 @@ const weekLabel = computed(() => {
     <div
       class="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] px-5 py-4"
     >
-      <div class="flex items-center gap-2.5">
+      <div class="flex min-w-0 flex-1 items-center gap-2.5">
         <span
           class="flex size-8 shrink-0 items-center justify-center rounded-lg"
           style="background: var(--accent-soft)"
@@ -87,7 +87,7 @@ const weekLabel = computed(() => {
             <path :d="activity.icon" />
           </svg>
         </span>
-        <div>
+        <div class="min-w-0">
           <p class="text-sm font-bold tracking-wide text-[var(--text-primary)]">
             {{ t('activity.checkin.signInLabel') }}
             <span
@@ -101,7 +101,7 @@ const weekLabel = computed(() => {
         </div>
       </div>
 
-      <div class="flex shrink-0 items-center gap-2">
+      <div class="flex shrink-0 items-center gap-2 whitespace-nowrap">
         <!-- streak fire badge -->
         <span
           v-if="activity.checkin.streak > 0"

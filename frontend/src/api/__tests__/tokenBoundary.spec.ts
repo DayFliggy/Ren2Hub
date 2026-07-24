@@ -26,6 +26,7 @@ describe('token secret boundary', () => {
     const first = page.items[0]
     expect(first).toBeDefined()
     expect(first).toHaveProperty('key_preview')
+    expect(first.key_preview).toMatch(/^sk-[A-Za-z0-9]{3}••••[A-Za-z0-9]{4}$/)
     expect(first).not.toHaveProperty('key')
 
     const secret = await api.get<TokenSecretResponse>(

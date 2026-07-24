@@ -13,7 +13,9 @@ defineProps<{
 const emit = defineEmits<{ fish: [] }>()
 const { t } = useI18n()
 
-const rarityTone = (r: string) =>
+type RarityTone = 'accent' | 'success' | 'neutral'
+
+const rarityTone = (r: string): RarityTone =>
   r === 'legendary' ? 'accent' : r === 'rare' ? 'success' : 'neutral'
 </script>
 
@@ -39,7 +41,7 @@ const rarityTone = (r: string) =>
           +{{ (fishing.last_catch.quota / 500000).toFixed(4) }}$
         </p>
       </div>
-      <StatusChip :tone="rarityTone(fishing.last_catch.rarity) as any">
+      <StatusChip :tone="rarityTone(fishing.last_catch.rarity)">
         {{ t(`farm.fishing.rarity.${fishing.last_catch.rarity}`) }}
       </StatusChip>
     </div>

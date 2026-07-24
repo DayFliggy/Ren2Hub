@@ -5,6 +5,7 @@ import { api } from '@/api/console'
 import type { InviteInfo } from '@/types/console'
 import { ApiError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
+import { useAuthStore } from '@/stores/auth'
 import { QUOTA_PER_DOLLAR } from '@/utils/format'
 import { safeExternalUrl } from '@/utils/safeUrl'
 
@@ -16,6 +17,7 @@ import { safeExternalUrl } from '@/utils/safeUrl'
 export function useInvite() {
   const { t } = useI18n()
   const toast = useToast()
+  const auth = useAuthStore()
 
   const info = ref<InviteInfo | null>(null)
   const loading = ref(true)
@@ -113,7 +115,7 @@ export function useInvite() {
       toast.success(res.message)
       transferOpen.value = false
       transferDollars.value = null
-      load()
+      await Promise.all([auth.fetchSelf(), load()])
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : String(error))
     } finally {

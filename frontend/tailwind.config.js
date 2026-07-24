@@ -38,6 +38,8 @@ export default {
       },
       fontFamily: {
         sans: [
+          'Ren2Inter',
+          'Ren2NotoSansSC',
           'Inter',
           'system-ui',
           '-apple-system',
@@ -49,6 +51,7 @@ export default {
           'sans-serif',
         ],
         mono: [
+          'Ren2JetBrainsMono',
           'JetBrains Mono',
           'IBM Plex Mono',
           'ui-monospace',
@@ -56,7 +59,13 @@ export default {
           'Menlo',
           'monospace',
         ],
-        serif: ['Noto Serif SC', 'Songti SC', 'SimSun', 'serif'],
+        serif: [
+          'Ren2NotoSerifSC',
+          'Noto Serif SC',
+          'Songti SC',
+          'SimSun',
+          'serif',
+        ],
       },
       animation: {
         marquee: 'marquee 42s linear infinite',
@@ -90,8 +99,8 @@ export default {
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         scaleIn: {
-          '0%': { opacity: '0', transform: 'scale(0.96)' },
-          '100%': { opacity: '1', transform: 'scale(1)' },
+          '0%': { opacity: '0', transform: 'scale(0.96) translateY(8px)' },
+          '100%': { opacity: '1', transform: 'scale(1) translateY(0)' },
         },
         blink: {
           '0%, 50%': { opacity: '1' },

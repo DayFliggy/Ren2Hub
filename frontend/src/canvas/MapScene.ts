@@ -343,7 +343,32 @@ export class MapScene {
         )
       })
     }
-    for (const marker of this.markers) marker.place(this.map, this.w, this.h)
+    this.positionMarkers()
+  }
+
+  private positionMarkers() {
+    for (const marker of this.markers) {
+      marker.place(this.map, this.w, this.h)
+      if (marker.visible && this.markerIntersectsHeroCopy(marker)) {
+        marker.visible = false
+      }
+    }
+  }
+
+  private markerIntersectsHeroCopy(marker: ModelMarker): boolean {
+    if (this.w < 1024) return false
+    const margin = marker.r + 8
+    const x = marker.x + margin
+    const y = marker.y
+    const headlineZone =
+      x >= this.w * 0.68 &&
+      y + margin >= this.h * 0.2 &&
+      y - margin <= this.h * 0.49
+    const actionZone =
+      x >= this.w * 0.72 &&
+      y + margin >= this.h * 0.49 &&
+      y - margin <= this.h * 0.7
+    return headlineZone || actionZone
   }
 
   setMouse(x: number, y: number, active: boolean) {
@@ -386,7 +411,7 @@ export class MapScene {
     const translatedX = mx - this.parallax.x * this.parallaxAmp
     const translatedY = my - this.parallax.y * this.parallaxAmp
     for (const marker of this.markers) {
-      if (!marker.hit(translatedX, translatedY)) continue
+      if (!marker.visible || !marker.hit(translatedX, translatedY)) continue
       marker.glow = 1
       this.burst(marker.x, marker.y, marker.color)
       this.spawnRipple(marker.x, marker.y, 1, marker.color)
@@ -1123,7 +1148,7 @@ export class MapScene {
     this.parallax.x += (targetParallaxX - this.parallax.x) * smoothing
     this.parallax.y += (targetParallaxY - this.parallax.y) * smoothing
 
-    for (const marker of this.markers) marker.place(this.map, this.w, this.h)
+    this.positionMarkers()
     for (const user of this.users) {
       user.place(this.map, this.w, this.h)
     }
@@ -1165,8 +1190,11 @@ export class MapScene {
     if (this.mouse.active) {
       const mx = this.mouse.x - this.parallax.x * this.parallaxAmp
       const my = this.mouse.y - this.parallax.y * this.parallaxAmp
-      for (const marker of this.markers)
-        if (marker.hit(mx, my)) marker.glow = Math.max(marker.glow, 0.9)
+      for (const marker of this.markers) {
+        if (marker.visible && marker.hit(mx, my)) {
+          marker.glow = Math.max(marker.glow, 0.9)
+        }
+      }
       if (Math.hypot(mx - this.hub.x, my - this.hub.y) < this.hub.r + 14)
         this.hub.hover = Math.max(this.hub.hover, 0.9)
     }

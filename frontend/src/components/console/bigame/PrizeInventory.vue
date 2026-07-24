@@ -8,7 +8,9 @@ import type { PrizeRecord } from '@/types/bigame'
 defineProps<{ records: PrizeRecord[] }>()
 const { t } = useI18n()
 
-const rarityTone = (r: string) => {
+type RarityTone = 'accent' | 'warning' | 'success' | 'neutral'
+
+const rarityTone = (r: string): RarityTone => {
   if (r === 'legendary') return 'accent'
   if (r === 'epic') return 'warning'
   if (r === 'rare') return 'success'
@@ -54,7 +56,7 @@ const rarityTone = (r: string) => {
           {{ rec.prize_label }}
         </span>
 
-        <StatusChip :tone="rarityTone(rec.rarity) as any">
+        <StatusChip :tone="rarityTone(rec.rarity)">
           {{ rec.rarity }}
         </StatusChip>
 

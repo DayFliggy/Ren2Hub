@@ -12,9 +12,55 @@ html:not(.dark) .landing-shell::before {
 }
 
 html:not(.dark) .landing-shell .hero-title {
-  font-family: 'Songti SC', 'SimSun', serif;
+  font-family: 'Ren2NotoSerifSC', 'Songti SC', 'SimSun', serif;
   font-weight: 900;
   letter-spacing: 0;
+}
+
+.landing-shell {
+  font-family: 'Ren2Inter', 'Ren2NotoSansSC', system-ui, sans-serif;
+  --hero-copy-overlay: none;
+  --surface-overlay: rgba(246, 243, 235, 0.96);
+  --text-tertiary: #827e66;
+}
+
+html.dark .landing-shell {
+  --hero-copy-overlay:
+    radial-gradient(
+      720px 560px at 81% 51%,
+      rgba(22, 26, 40, 0.48) 0%,
+      rgba(22, 26, 40, 0.24) 56%,
+      transparent 78%
+    ),
+    linear-gradient(
+      90deg,
+      transparent 32%,
+      rgba(22, 26, 40, 0.06) 51%,
+      rgba(22, 26, 40, 0.38) 100%
+    );
+  --surface-overlay: rgba(30, 33, 44, 0.96);
+  --text-tertiary: #636e8a;
+}
+
+.mobile-nav-drawer {
+  font-family: 'Ren2Inter', 'Ren2NotoSansSC', system-ui, sans-serif;
+  --surface-overlay: rgba(246, 243, 235, 0.96);
+  --text-tertiary: #827e66;
+}
+
+html.dark .mobile-nav-drawer {
+  --surface-overlay: rgba(30, 33, 44, 0.96);
+  --text-tertiary: #636e8a;
+}
+
+.landing-shell :where(.hero-title, .hero-copy-glow) {
+  font-family: inherit;
+}
+
+.landing-shell .font-mono,
+.mobile-nav-drawer .font-mono {
+  font-family:
+    'Ren2JetBrainsMono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
 
 /* HomeView owns its scroll rail. Native chrome is removed rather than merely
@@ -90,8 +136,8 @@ html.hero-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
 }
 
 /* ===== 桌面 Hero 文字光晕 =====
-   The broad route-level scrim prevents node/copy collisions; this restrained
-   glyph glow keeps the serif face crisp over the remaining map texture. */
+   The light theme keeps the map transparent and lifts copy at glyph level;
+   the dark theme retains its restrained route-level scrim. */
 @media (min-width: 1024px) {
   html:not(.dark) .landing-shell .hero-copy-glow {
     text-shadow:
@@ -181,19 +227,6 @@ html.hero-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
   100% {
     opacity: 0;
   }
-}
-
-/* ===== 屏幕阅读器专用 ===== */
-.landing-shell .sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 /* ===== Hero Gateway Signal Rail ===== */
@@ -790,7 +823,7 @@ html.hero-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
 /* 移动端舞台聚光：枢纽上移至顶部舞台区，聚光中心同步上移（线性 scrim 不变）。
    光池下缘漫到下方直排内容区顶缘，与净底排版自然相接。 */
 @media (max-width: 1023px) {
-  .landing-shell :root {
+  .landing-shell {
     --hero-depth-overlay:
       radial-gradient(
         780px 560px at 50% 26%,
@@ -804,7 +837,7 @@ html.hero-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
         rgba(246, 243, 235, 0.42) 100%
       );
   }
-  .landing-shell html.dark {
+  html.dark .landing-shell {
     --hero-depth-overlay:
       radial-gradient(
         780px 560px at 50% 26%,

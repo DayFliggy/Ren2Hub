@@ -77,7 +77,7 @@ useEChart(
 
 <template>
   <ConsoleCard :title="t('dashboard.modelShare')">
-    <div class="grid items-center gap-4 sm:grid-cols-[200px_1fr]">
+    <div class="grid items-center gap-4 sm:grid-cols-[200px_minmax(0,1fr)]">
       <div
         ref="el"
         class="h-44 w-full"

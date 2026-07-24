@@ -72,7 +72,8 @@
             v-if="traceDrawerOpen"
             id="signal-trace-drawer"
             class="signal-console__trace-drawer"
-            aria-hidden="true"
+            role="region"
+            :aria-label="t('signalConsole.traceInspectorLabel')"
           >
             <p class="signal-console__trace-drawer-title">
               <span>TRACE INDEX</span>

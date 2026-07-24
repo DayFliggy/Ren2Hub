@@ -175,7 +175,7 @@
             <p
               class="mt-4 font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--text-tertiary)]"
             >
-              {{ statusLabel }}
+              Gateway / {{ statusCodeLabel }}
             </p>
           </div>
         </aside>
@@ -217,6 +217,12 @@ const statusSoft = computed(() => {
   if (phase.value === 'degraded') return 'var(--status-warning-soft)'
   if (phase.value === 'error') return 'var(--status-danger-soft)'
   return 'var(--surface-muted)'
+})
+const statusCodeLabel = computed(() => {
+  if (phase.value === 'ready') return t('nav.telemetry.ready')
+  if (phase.value === 'degraded') return t('nav.telemetry.degraded')
+  if (phase.value === 'error') return t('nav.telemetry.unavailable')
+  return t('nav.telemetry.checking')
 })
 
 function close() {
@@ -277,7 +283,8 @@ watch(
   (isOpen) => {
     if (!isOpen) return
     nextTick(() => closeButton.value?.focus())
-  }
+  },
+  { immediate: true }
 )
 </script>
 

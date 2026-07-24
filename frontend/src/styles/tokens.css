@@ -22,14 +22,14 @@
   --surface-table-header: #faf5ed;
   --surface-muted: rgba(192, 139, 87, 0.07);
   --surface-hover: rgba(192, 139, 87, 0.12);
-  --surface-overlay: rgba(246, 243, 235, 0.96);
+  --surface-overlay: #fbf6ec;
   --overlay-border: rgba(192, 139, 87, 0.2);
   --overlay-shadow:
     0 1px 2px rgba(56, 55, 43, 0.06), 0 16px 44px rgba(56, 55, 43, 0.14);
   --surface-footer: #38372b;
   --text-primary: #38372b;
   --text-secondary: #5c5946;
-  --text-tertiary: #827e66;
+  --text-tertiary: #6c6955;
   --text-inverse: #f6f3eb;
   --border-default: rgba(56, 55, 43, 0.14);
   --border-subtle: rgba(56, 55, 43, 0.08);
@@ -40,7 +40,7 @@
   --accent-hover: #c08b57;
   --accent-active: #a87643;
   --accent-soft: rgba(216, 152, 76, 0.16);
-  --accent-contrast: #38372b;
+  --accent-contrast: #403728;
   --signal: #74765a;
   --signal-rgb: 116 118 90;
   --signal-strong: #5c5e45;
@@ -123,9 +123,9 @@
     );
   --hero-vignette: inset 0 0 220px 60px rgba(56, 55, 43, 0.12);
   --drawer-backdrop: rgba(43, 42, 32, 0.42);
-  --scroll-track: #ece7d8;
-  --scroll-thumb: #c08b57;
-  --scroll-thumb-hover: #a87643;
+  --scroll-track: #f6f3eb;
+  --scroll-thumb: rgba(192, 139, 87, 0.28);
+  --scroll-thumb-hover: rgba(192, 139, 87, 0.52);
 
   /* Legacy Tailwind colour slots are aliases to the semantic theme. */
   --color-white: 255 253 248;
@@ -166,14 +166,14 @@ html.dark {
   --surface-table-header: #373b4c;
   --surface-muted: rgba(106, 140, 184, 0.07);
   --surface-hover: rgba(106, 140, 184, 0.12);
-  --surface-overlay: rgba(30, 33, 44, 0.96);
+  --surface-overlay: #343948;
   --overlay-border: rgba(152, 164, 192, 0.18);
   --overlay-shadow:
     0 1px 2px rgba(0, 4, 16, 0.5), 0 18px 48px rgba(0, 4, 16, 0.55);
   --surface-footer: #181b24;
   --text-primary: #dee3f0;
   --text-secondary: #98a4c0;
-  --text-tertiary: #636e8a;
+  --text-tertiary: #96a2bf;
   --text-inverse: #262a34;
   --border-default: rgba(152, 164, 192, 0.13);
   --border-subtle: rgba(152, 164, 192, 0.07);

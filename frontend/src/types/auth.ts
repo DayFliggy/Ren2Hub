@@ -9,3 +9,5 @@ export interface UserInfo {
   group: string
   admin_permissions?: string[]
 }
+
+export type UserProfilePatch = Partial<Pick<UserInfo, 'display_name' | 'email'>>

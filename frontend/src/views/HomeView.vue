@@ -148,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppNavbar from '@/components/layout/AppNavbar.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
@@ -162,10 +162,8 @@ import {
   INITIAL_SIGNAL_SNAPSHOT,
   type SignalConsoleSnapshot,
 } from '@/constants/home/signalConsole'
-import { useAppStore } from '@/stores'
 
 const { t } = useI18n()
-const appStore = useAppStore()
 
 const signalSnapshot = ref<SignalConsoleSnapshot>({
   ...INITIAL_SIGNAL_SNAPSHOT,
@@ -189,8 +187,4 @@ function exitImmersive() {
 }
 
 useHeroScrollChrome()
-
-onMounted(() => {
-  void appStore.initialize()
-})
 </script>

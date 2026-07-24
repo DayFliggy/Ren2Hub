@@ -11,11 +11,13 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { ApiError } from '@/api/types'
 import { sanitizeRedirect } from '@/router'
+import { useAppStore } from '@/stores'
 
 const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const app = useAppStore()
 const toast = useToast()
 
 const username = ref('')
@@ -116,7 +118,10 @@ async function submit() {
       </ConsoleButton>
     </form>
 
-    <p class="mt-6 text-center text-sm text-[var(--text-tertiary)]">
+    <p
+      v-if="app.registerEnabled"
+      class="mt-6 text-center text-sm text-[var(--text-tertiary)]"
+    >
       {{ t('auth.noAccount') }}
       <RouterLink
         :to="{ name: 'sign-up' }"

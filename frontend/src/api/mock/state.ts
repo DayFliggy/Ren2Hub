@@ -13,6 +13,7 @@ export interface MockRuntime {
   nextMessageId: number
   nextListingId: number
   marketSelfEarnings: number
+  redeemedCodes: Set<string>
 }
 
 export interface MockState {
@@ -48,6 +49,7 @@ export const mockRuntime: MockRuntime = {
   nextMessageId: 1_000,
   nextListingId: 5_000,
   marketSelfEarnings: 3_260_000,
+  redeemedCodes: new Set<string>(),
 }
 
 export function createMockState(): MockState {
@@ -71,6 +73,7 @@ export function createMockState(): MockState {
         nextMessageId: 1_000,
         nextListingId: 5_000,
         marketSelfEarnings: 3_260_000,
+        redeemedCodes: new Set<string>(),
       })
       data.resetMockDataCounters()
       state.latencyMs = defaultLatencyMs

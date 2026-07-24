@@ -19,8 +19,8 @@ import type {
   TokenSummary,
   TokenType,
 } from '@/types/console'
-import type { LeaderPeriod } from '@/types/farm'
 import type { CommunityCategory } from '@/types/lab'
+import { maskKey } from '@/utils/format'
 import {
   GROUPS,
   PLATFORM_CHANNEL_NAME,
@@ -85,6 +85,83 @@ import { getMockDelay, mockRuntime } from './state'
 
 type Ctx = RequestOptions & { headers: Record<string, string> }
 
+const TOKEN_TYPES: readonly TokenType[] = ['platform', 'auto', 'market']
+const MARKET_MODEL_TYPES: readonly MarketModelType[] = [
+  'chat',
+  'image',
+  'embedding',
+  'rerank',
+  'audio',
+  'video',
+]
+const LISTING_STATUSES: readonly ListingStatus[] = [
+  'active',
+  'reviewing',
+  'delisted',
+]
+const TICKET_CATEGORIES: readonly TicketCategory[] = [
+  'billing',
+  'api',
+  'model',
+  'account',
+  'other',
+]
+const TICKET_PRIORITIES: readonly TicketPriority[] = ['low', 'normal', 'high']
+const TOPUP_METHODS = ['epay', 'stripe', 'creem'] as const
+const MAX_TOPUP_AMOUNT = 100_000
+
+function oneOf<T extends string>(
+  value: string,
+  allowed: readonly T[]
+): value is T {
+  return (allowed as readonly string[]).includes(value)
+}
+
+function parseStringArray(
+  value: unknown,
+  maxItems: number,
+  maxLength = 256
+): string[] | null {
+  if (!Array.isArray(value) || value.length > maxItems) return null
+  const parsed: string[] = []
+  for (const item of value) {
+    if (typeof item !== 'string') return null
+    const normalized = item.trim()
+    if (!normalized || normalized.length > maxLength) return null
+    parsed.push(normalized)
+  }
+  return [...new Set(parsed)]
+}
+
+function parseTokenChannels(value: unknown): TokenChannel[] | null {
+  if (!Array.isArray(value) || value.length > 50) return null
+  const channels: TokenChannel[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
+    const channel = entry as Record<string, unknown>
+    const name = typeof channel.name === 'string' ? channel.name.trim() : ''
+    if (!name || name.length > 100 || typeof channel.enabled !== 'boolean') {
+      return null
+    }
+    const weight =
+      channel.weight === undefined ? undefined : Number(channel.weight)
+    if (weight !== undefined && (!Number.isFinite(weight) || weight <= 0)) {
+      return null
+    }
+    channels.push({ name, enabled: channel.enabled, weight })
+  }
+  return channels
+}
+
+function creditAccountQuota(amount: number): boolean {
+  const stored = readDemoUser()
+  if (!stored || !Number.isSafeInteger(amount) || amount <= 0) return false
+  const quota = stored.quota + amount
+  if (!Number.isSafeInteger(quota) || quota < 0) return false
+  writeDemoUser({ ...stored, quota })
+  return true
+}
+
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -122,8 +199,16 @@ function requireAuth(ctx: Ctx) {
 }
 
 function paginate<T>(items: T[], params: Record<string, unknown>) {
-  const page = Math.max(1, Number(params.page ?? 1))
-  const pageSize = Math.min(100, Math.max(1, Number(params.page_size ?? 10)))
+  const requestedPage = Number(params.page ?? 1)
+  const requestedPageSize = Number(params.page_size ?? 10)
+  const page =
+    Number.isFinite(requestedPage) && requestedPage > 0
+      ? Math.floor(requestedPage)
+      : 1
+  const pageSize =
+    Number.isFinite(requestedPageSize) && requestedPageSize > 0
+      ? Math.min(100, Math.floor(requestedPageSize))
+      : 10
   const start = (page - 1) * pageSize
   return {
     items: items.slice(start, start + pageSize),
@@ -175,7 +260,7 @@ function toTokenSummary(item: TokenItem): TokenSummary {
   const { key, ...summary } = withComputedChannels(item)
   return {
     ...summary,
-    key_preview: `${key.slice(0, 7)}...${key.slice(-4)}`,
+    key_preview: maskKey(key),
   }
 }
 
@@ -244,9 +329,29 @@ export async function dispatchMock<T>(
   }
   if (path === '/api/user/self' && method === 'PUT') {
     const stored = readDemoUser()!
-    const merged = { ...stored, ...body } as UserInfo
-    writeDemoUser(merged)
-    return ok({ user: merged, message: '资料已更新' }) as ApiResponse<T>
+    const next: UserInfo = { ...stored }
+    if (body.display_name !== undefined) {
+      if (typeof body.display_name !== 'string') {
+        return fail('显示名称格式不正确') as ApiResponse<T>
+      }
+      const displayName = body.display_name.trim()
+      if (!displayName || displayName.length > 64) {
+        return fail('显示名称长度为 1-64 字符') as ApiResponse<T>
+      }
+      next.display_name = displayName
+    }
+    if (body.email !== undefined) {
+      if (typeof body.email !== 'string') {
+        return fail('邮箱格式不正确') as ApiResponse<T>
+      }
+      const email = body.email.trim()
+      if (email.length > 254 || !/^\S+@\S+\.\S+$/.test(email)) {
+        return fail('邮箱格式不正确') as ApiResponse<T>
+      }
+      next.email = email
+    }
+    writeDemoUser(next)
+    return ok({ user: next, message: '资料已更新' }) as ApiResponse<T>
   }
   if (path === '/api/user/self/password' && method === 'PUT') {
     if (String(body.new_password ?? '').length < 8) {
@@ -257,7 +362,13 @@ export async function dispatchMock<T>(
 
   /* ---------------- dashboard & logs ---------------- */
   if (path === '/api/data/self' && method === 'GET') {
-    return ok({ ...dashboardStats, model_share: modelShare }) as ApiResponse<T>
+    const stored = readDemoUser()!
+    return ok({
+      ...dashboardStats,
+      quota: stored.quota,
+      used_quota: stored.used_quota,
+      model_share: modelShare,
+    }) as ApiResponse<T>
   }
   if (path === '/api/data/flow/self' && method === 'GET') {
     return ok(flowSeries) as ApiResponse<T>
@@ -295,11 +406,14 @@ export async function dispatchMock<T>(
   }
   if (path === '/api/token/' && method === 'POST') {
     const name = String(body.name ?? '').trim()
-    if (!name) return fail('令牌名称不能为空') as ApiResponse<T>
-    const type = String(body.type ?? 'platform') as TokenType
-    if (!['platform', 'auto', 'market'].includes(type)) {
+    if (!name || name.length > 64) {
+      return fail('令牌名称长度为 1-64 字符') as ApiResponse<T>
+    }
+    const rawType = String(body.type ?? 'platform')
+    if (!oneOf(rawType, TOKEN_TYPES)) {
       return fail('无效的令牌类型') as ApiResponse<T>
     }
+    const type = rawType
     // Custom key: optional; must be unique and follow the sk- prefix format.
     const customKey = String(body.key ?? '').trim()
     if (customKey) {
@@ -311,6 +425,48 @@ export async function dispatchMock<T>(
       if (tokens.some((t) => t.key === customKey)) {
         return fail('该密钥已存在，请更换') as ApiResponse<T>
       }
+    }
+    const modelLimits = parseStringArray(body.model_limits ?? [], 100)
+    const ipLimits = parseStringArray(body.ip_limits ?? [], 100)
+    const channels = parseTokenChannels(body.channels ?? [])
+    if (!modelLimits || !ipLimits || !channels) {
+      return fail('令牌限制配置格式不正确') as ApiResponse<T>
+    }
+    const remainQuota = Number(body.remain_quota ?? 0)
+    const rateLimit = Number(body.rate_limit ?? 0)
+    const expiredTime = Number(body.expired_time ?? -1)
+    if (!Number.isSafeInteger(remainQuota) || remainQuota < 0) {
+      return fail('令牌额度格式不正确') as ApiResponse<T>
+    }
+    if (!Number.isSafeInteger(rateLimit) || rateLimit < 0) {
+      return fail('速率限制格式不正确') as ApiResponse<T>
+    }
+    if (
+      !Number.isSafeInteger(expiredTime) ||
+      (expiredTime !== -1 && expiredTime <= 0)
+    ) {
+      return fail('过期时间格式不正确') as ApiResponse<T>
+    }
+    if (body.unlimited !== undefined && typeof body.unlimited !== 'boolean') {
+      return fail('无限额度配置格式不正确') as ApiResponse<T>
+    }
+    if (
+      body.load_balance !== undefined &&
+      typeof body.load_balance !== 'boolean'
+    ) {
+      return fail('负载均衡配置格式不正确') as ApiResponse<T>
+    }
+    const group = String(body.group ?? 'default').trim()
+    if (!group || group.length > 64) {
+      return fail('分组格式不正确') as ApiResponse<T>
+    }
+    let maxRatio: number | undefined
+    if (body.max_ratio !== undefined) {
+      const value = Number(body.max_ratio)
+      if (!Number.isFinite(value) || value <= 0 || value > 1_000) {
+        return fail('最高倍率格式不正确') as ApiResponse<T>
+      }
+      maxRatio = value
     }
     const item: TokenItem = {
       id: mockRuntime.nextTokenId++,
@@ -324,20 +480,16 @@ export async function dispatchMock<T>(
       type,
       status: 1,
       used_quota: 0,
-      remain_quota: Number(body.remain_quota ?? 0),
-      unlimited: Boolean(body.unlimited),
-      group: String(body.group ?? 'default'),
-      model_limits: (body.model_limits as string[]) ?? [],
-      ip_limits: (body.ip_limits as string[]) ?? [],
-      rate_limit: Math.max(0, Number(body.rate_limit ?? 0)),
-      max_ratio:
-        type === 'platform'
-          ? undefined
-          : Number(body.max_ratio ?? 0) || undefined,
-      load_balance: Boolean(body.load_balance),
-      channels:
-        type === 'auto' ? [] : ((body.channels as TokenChannel[]) ?? []),
-      expired_time: Number(body.expired_time ?? -1),
+      remain_quota: remainQuota,
+      unlimited: body.unlimited ?? false,
+      group,
+      model_limits: modelLimits,
+      ip_limits: ipLimits,
+      rate_limit: rateLimit,
+      max_ratio: type === 'platform' ? undefined : maxRatio,
+      load_balance: body.load_balance ?? false,
+      channels: type === 'auto' ? [] : channels,
+      expired_time: expiredTime,
       created_time: Math.floor(Date.now() / 1000),
     }
     tokens.unshift(item)
@@ -360,41 +512,89 @@ export async function dispatchMock<T>(
       if (body.channels !== undefined && item.type === 'auto') {
         return fail('自动令牌的渠道由系统计算，不可编辑') as ApiResponse<T>
       }
-      Object.assign(item, {
-        name: body.name !== undefined ? String(body.name) : item.name,
-        status:
-          body.status !== undefined ? (body.status as 1 | 2) : item.status,
-        remain_quota:
-          body.remain_quota !== undefined
-            ? Number(body.remain_quota)
-            : item.remain_quota,
-        unlimited:
-          body.unlimited !== undefined
-            ? Boolean(body.unlimited)
-            : item.unlimited,
-        group: body.group !== undefined ? String(body.group) : item.group,
-        model_limits: (body.model_limits as string[]) ?? item.model_limits,
-        ip_limits: (body.ip_limits as string[]) ?? item.ip_limits,
-        rate_limit:
-          body.rate_limit !== undefined
-            ? Math.max(0, Number(body.rate_limit))
-            : item.rate_limit,
-        max_ratio:
-          item.type === 'platform'
-            ? undefined
-            : body.max_ratio !== undefined
-              ? Number(body.max_ratio) || undefined
-              : item.max_ratio,
-        load_balance:
-          body.load_balance !== undefined
-            ? Boolean(body.load_balance)
-            : item.load_balance,
-        channels: (body.channels as TokenChannel[]) ?? item.channels,
-        expired_time:
-          body.expired_time !== undefined
-            ? Number(body.expired_time)
-            : item.expired_time,
-      })
+      const next: TokenItem = { ...item }
+      if (body.name !== undefined) {
+        const name = String(body.name).trim()
+        if (!name || name.length > 64) {
+          return fail('令牌名称长度为 1-64 字符') as ApiResponse<T>
+        }
+        next.name = name
+      }
+      if (body.status !== undefined) {
+        const status = Number(body.status)
+        if (status !== 1 && status !== 2) {
+          return fail('无效的令牌状态') as ApiResponse<T>
+        }
+        next.status = status
+      }
+      if (body.remain_quota !== undefined) {
+        const remainQuota = Number(body.remain_quota)
+        if (!Number.isSafeInteger(remainQuota) || remainQuota < 0) {
+          return fail('令牌额度格式不正确') as ApiResponse<T>
+        }
+        next.remain_quota = remainQuota
+      }
+      if (body.unlimited !== undefined) {
+        if (typeof body.unlimited !== 'boolean') {
+          return fail('无限额度配置格式不正确') as ApiResponse<T>
+        }
+        next.unlimited = body.unlimited
+      }
+      if (body.group !== undefined) {
+        const group = String(body.group).trim()
+        if (!group || group.length > 64) {
+          return fail('分组格式不正确') as ApiResponse<T>
+        }
+        next.group = group
+      }
+      if (body.model_limits !== undefined) {
+        const limits = parseStringArray(body.model_limits, 100)
+        if (!limits) return fail('模型限制格式不正确') as ApiResponse<T>
+        next.model_limits = limits
+      }
+      if (body.ip_limits !== undefined) {
+        const limits = parseStringArray(body.ip_limits, 100)
+        if (!limits) return fail('IP 限制格式不正确') as ApiResponse<T>
+        next.ip_limits = limits
+      }
+      if (body.rate_limit !== undefined) {
+        const rateLimit = Number(body.rate_limit)
+        if (!Number.isSafeInteger(rateLimit) || rateLimit < 0) {
+          return fail('速率限制格式不正确') as ApiResponse<T>
+        }
+        next.rate_limit = rateLimit
+      }
+      if (item.type === 'platform') {
+        next.max_ratio = undefined
+      } else if (body.max_ratio !== undefined) {
+        const maxRatio = Number(body.max_ratio)
+        if (!Number.isFinite(maxRatio) || maxRatio <= 0 || maxRatio > 1_000) {
+          return fail('最高倍率格式不正确') as ApiResponse<T>
+        }
+        next.max_ratio = maxRatio
+      }
+      if (body.load_balance !== undefined) {
+        if (typeof body.load_balance !== 'boolean') {
+          return fail('负载均衡配置格式不正确') as ApiResponse<T>
+        }
+        next.load_balance = body.load_balance
+      }
+      if (body.channels !== undefined) {
+        const channels = parseTokenChannels(body.channels)
+        if (!channels) return fail('渠道配置格式不正确') as ApiResponse<T>
+        next.channels = channels
+      }
+      if (body.expired_time !== undefined) {
+        const expiredTime = Number(body.expired_time)
+        if (
+          !Number.isSafeInteger(expiredTime) ||
+          (expiredTime !== -1 && expiredTime <= 0)
+        ) {
+          return fail('过期时间格式不正确') as ApiResponse<T>
+        }
+        next.expired_time = expiredTime
+      }
+      Object.assign(item, next)
       return ok({
         item: toTokenSummary(item),
         message: '令牌已更新',
@@ -406,12 +606,26 @@ export async function dispatchMock<T>(
     }
   }
   if (path === '/api/token/batch' && method === 'POST') {
-    const ids = (body.ids as number[]) ?? []
+    if (!Array.isArray(body.ids)) {
+      return fail('令牌 ID 列表格式不正确') as ApiResponse<T>
+    }
+    const ids = [
+      ...new Set(
+        body.ids.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0)
+      ),
+    ]
+    let deleted = 0
     ids.forEach((id) => {
       const idx = tokens.findIndex((t) => t.id === id)
-      if (idx >= 0) tokens.splice(idx, 1)
+      if (idx >= 0) {
+        tokens.splice(idx, 1)
+        deleted += 1
+      }
     })
-    return ok({ message: `已删除 ${ids.length} 个令牌` }) as ApiResponse<T>
+    return ok({
+      message: `已删除 ${deleted} 个令牌`,
+      deleted,
+    }) as ApiResponse<T>
   }
 
   /* ---------------- wallet & topup ---------------- */
@@ -424,15 +638,25 @@ export async function dispatchMock<T>(
   }
   if (path === '/api/user/topup' && method === 'POST') {
     const amount = Number(body.amount ?? 0)
-    if (!amount || amount < 1) return fail('充值金额至少 $1') as ApiResponse<T>
+    if (!Number.isFinite(amount) || amount < 1 || amount > MAX_TOPUP_AMOUNT) {
+      return fail(`充值金额需在 $1-$${MAX_TOPUP_AMOUNT} 之间`) as ApiResponse<T>
+    }
+    const paymentMethod = String(body.method ?? '')
+    if (!oneOf(paymentMethod, TOPUP_METHODS)) {
+      return fail('无效的支付方式') as ApiResponse<T>
+    }
+    const quota = Math.round(amount * 500_000)
+    if (!Number.isSafeInteger(quota)) {
+      return fail('充值金额超出安全范围') as ApiResponse<T>
+    }
     // Payment confirmation is server-callback driven on the real backend;
     // here we simulate a pending order that the records list later confirms.
     topupRecords.unshift({
       id: 1000 + topupRecords.length,
       trade_no: `T${Date.now()}`,
       amount,
-      money: amount * 500_000,
-      method: String(body.method ?? 'epay') as 'epay' | 'stripe' | 'creem',
+      money: quota,
+      method: paymentMethod,
       status: 'pending',
       created: Math.floor(Date.now() / 1000),
     })
@@ -442,20 +666,32 @@ export async function dispatchMock<T>(
     }) as ApiResponse<T>
   }
   if (path === '/api/user/topup/redeem' && method === 'POST') {
-    const code = String(body.code ?? '').trim()
-    if (code.length < 8) return fail('兑换码无效或已被使用') as ApiResponse<T>
+    const code = String(body.code ?? '')
+      .trim()
+      .toUpperCase()
+    if (
+      !/^[A-Z0-9-]{8,64}$/.test(code) ||
+      mockRuntime.redeemedCodes.has(code)
+    ) {
+      return fail('兑换码无效或已被使用') as ApiResponse<T>
+    }
+    const redeemedQuota = 5_000_000
+    if (!creditAccountQuota(redeemedQuota)) {
+      return fail('账户余额更新失败') as ApiResponse<T>
+    }
+    mockRuntime.redeemedCodes.add(code)
     topupRecords.unshift({
       id: 1000 + topupRecords.length,
       trade_no: `R${Date.now()}`,
       amount: 10,
-      money: 5_000_000,
+      money: redeemedQuota,
       method: 'redeem',
       status: 'success',
       created: Math.floor(Date.now() / 1000),
     })
     return ok({
       message: '兑换成功，$10 已入账',
-      quota: 5_000_000,
+      quota: redeemedQuota,
     }) as ApiResponse<T>
   }
 
@@ -491,8 +727,15 @@ export async function dispatchMock<T>(
   }
   if (path === '/api/invite/transfer' && method === 'POST') {
     const amount = Number(body.amount ?? 0)
-    if (amount <= 0 || amount > inviteInfo.transferable) {
+    if (
+      !Number.isSafeInteger(amount) ||
+      amount <= 0 ||
+      amount > inviteInfo.transferable
+    ) {
       return fail('转出额度超出可转余额') as ApiResponse<T>
+    }
+    if (!creditAccountQuota(amount)) {
+      return fail('账户余额更新失败') as ApiResponse<T>
     }
     inviteInfo.transferable -= amount
     return ok({ message: '已转入账户余额' }) as ApiResponse<T>
@@ -555,17 +798,32 @@ export async function dispatchMock<T>(
       return fail('标题长度为 1-100 字符') as ApiResponse<T>
     if (!content || content.length > 2000)
       return fail('描述长度为 1-2000 字符') as ApiResponse<T>
+    const rawCategory = String(body.category ?? 'other')
+    const rawPriority = String(body.priority ?? 'normal')
+    if (!oneOf(rawCategory, TICKET_CATEGORIES)) {
+      return fail('无效的工单分类') as ApiResponse<T>
+    }
+    if (!oneOf(rawPriority, TICKET_PRIORITIES)) {
+      return fail('无效的工单优先级') as ApiResponse<T>
+    }
+    const images = parseStringArray(body.images ?? [], 4, 2_048)
+    if (!images) return fail('工单图片格式不正确') as ApiResponse<T>
+    const modelId = body.model_id ? String(body.model_id).trim() : ''
+    const requestId = body.request_id ? String(body.request_id).trim() : ''
+    if (modelId.length > 128 || requestId.length > 128) {
+      return fail('模型或请求标识过长') as ApiResponse<T>
+    }
     const ts = Math.floor(Date.now() / 1000)
     const ticket: TicketItem = {
       id: mockRuntime.nextTicketId++,
       title,
-      category: String(body.category ?? 'other') as TicketCategory,
-      priority: String(body.priority ?? 'normal') as TicketPriority,
+      category: rawCategory,
+      priority: rawPriority,
       status: 'open',
       reply_count: 1,
       last_reply_role: 'user',
-      model_id: body.model_id ? String(body.model_id) : undefined,
-      request_id: body.request_id ? String(body.request_id) : undefined,
+      model_id: modelId || undefined,
+      request_id: requestId || undefined,
       created: ts,
       updated: ts,
       messages: [
@@ -573,7 +831,7 @@ export async function dispatchMock<T>(
           id: mockRuntime.nextMessageId++,
           role: 'user',
           content,
-          images: Array.isArray(body.images) ? (body.images as string[]) : [],
+          images,
           created: ts,
         },
       ],
@@ -602,11 +860,13 @@ export async function dispatchMock<T>(
       if (!content || content.length > 2000) {
         return fail('回复长度为 1-2000 字符') as ApiResponse<T>
       }
+      const images = parseStringArray(body.images ?? [], 4, 2_048)
+      if (!images) return fail('回复图片格式不正确') as ApiResponse<T>
       const message: TicketMessage = {
         id: mockRuntime.nextMessageId++,
         role: 'user',
         content,
-        images: Array.isArray(body.images) ? (body.images as string[]) : [],
+        images,
         created: Math.floor(Date.now() / 1000),
       }
       ticket.messages.push(message)
@@ -646,11 +906,15 @@ export async function dispatchMock<T>(
   }
   if (path === '/api/activity/checkin' && method === 'POST') {
     requireAuth(ctx)
-    const act = activities.find((a) => a.kind === 'checkin')
+    const id = Number(body.activity_id)
+    const act = activities.find((a) => a.kind === 'checkin' && a.id === id)
     if (!act || act.kind !== 'checkin')
       return fail('活动不存在') as ApiResponse<T>
     if (act.checkin.todayClaimed) return fail('今日已签到') as ApiResponse<T>
     const day = act.checkin.days[act.checkin.streak % act.checkin.days.length]
+    if (!creditAccountQuota(day.reward)) {
+      return fail('账户余额更新失败') as ApiResponse<T>
+    }
     day.done = true
     act.checkin.streak += 1
     act.checkin.todayClaimed = true
@@ -664,6 +928,8 @@ export async function dispatchMock<T>(
       todayEntry.claimed = true
       todayEntry.reward = day.reward
     }
+    activitySummary.claimable = Math.max(0, activitySummary.claimable - 1)
+    activitySummary.reward_earned += day.reward
     return ok({
       reward: day.reward,
       streak: act.checkin.streak,
@@ -681,7 +947,11 @@ export async function dispatchMock<T>(
         const task = act.newcomer.tasks.find((t) => t.id === taskId)
         if (!task) return fail('任务不存在') as ApiResponse<T>
         if (task.done) return fail('该任务已领取') as ApiResponse<T>
+        if (!creditAccountQuota(task.reward)) {
+          return fail('账户余额更新失败') as ApiResponse<T>
+        }
         task.done = true
+        activitySummary.reward_earned += task.reward
         return ok({
           message: '领取成功',
           reward: task.reward,
@@ -691,8 +961,14 @@ export async function dispatchMock<T>(
       const reward = act.newcomer.tasks
         .filter((t) => !t.done)
         .reduce((s, t) => s + t.reward, 0)
+      if (reward <= 0) return fail('暂无可领取奖励') as ApiResponse<T>
+      if (!creditAccountQuota(reward)) {
+        return fail('账户余额更新失败') as ApiResponse<T>
+      }
       act.newcomer.tasks.forEach((t) => (t.done = true))
       act.newcomer.claimed = true
+      activitySummary.claimable = Math.max(0, activitySummary.claimable - 1)
+      activitySummary.reward_earned += reward
       return ok({ message: '领取成功', reward }) as ApiResponse<T>
     }
 
@@ -801,25 +1077,44 @@ export async function dispatchMock<T>(
     if (!title || title.length > 60)
       return fail('商品名称长度为 1-60 字符') as ApiResponse<T>
     const priceUSD = Number(body.priceUSD ?? 0)
-    if (!(priceUSD > 0)) return fail('价格必须大于 0') as ApiResponse<T>
-    const models = Array.isArray(body.supportedModels)
-      ? (body.supportedModels as string[])
-      : []
-    if (models.length === 0)
+    if (!Number.isFinite(priceUSD) || priceUSD <= 0 || priceUSD > 1_000_000) {
+      return fail('价格需在 $0-$1,000,000 之间') as ApiResponse<T>
+    }
+    const models = parseStringArray(body.supportedModels, 100)
+    if (
+      !models ||
+      models.length === 0 ||
+      models.some((m) => !MODELS.includes(m))
+    ) {
       return fail('请至少选择一个支持模型') as ApiResponse<T>
+    }
+    const tags = parseStringArray(body.tags ?? [], 10, 32)
+    if (!tags) return fail('标签格式不正确') as ApiResponse<T>
+    const rawType = String(body.type ?? 'chat')
+    if (!oneOf(rawType, MARKET_MODEL_TYPES)) {
+      return fail('无效的供货类型') as ApiResponse<T>
+    }
+    const summary = String(body.summary ?? '').trim()
+    if (summary.length > 280) {
+      return fail('供货说明不能超过 280 字符') as ApiResponse<T>
+    }
+    const source = String(body.source ?? marketplaceChannels[0]).trim()
+    if (!marketplaceChannels.includes(source)) {
+      return fail('无效的渠道来源') as ApiResponse<T>
+    }
     const ts = Math.floor(Date.now() / 1000)
     const listing: MarketListing = {
       id: mockRuntime.nextListingId++,
       merchantId: 1,
       title,
-      summary: String(body.summary ?? '').trim(),
-      source: String(body.source ?? marketplaceChannels[0]),
+      summary,
+      source,
       availability: 99,
       supportedModels: models,
       qcScore: 95,
-      tags: Array.isArray(body.tags) ? (body.tags as string[]) : [],
+      tags,
       priceUSD,
-      type: String(body.type ?? 'chat') as MarketModelType,
+      type: rawType,
       listedAt: ts,
       rating: 0,
       reviewCount: 0,
@@ -843,6 +1138,9 @@ export async function dispatchMock<T>(
 
     if (listingIdMatch[2] === '/add' && method === 'POST') {
       // Buyer adds a listing to their manageable channel list (我的渠道).
+      if (listing.ownerUid != null || listing.status !== 'active') {
+        return fail('该供货当前不可添加') as ApiResponse<T>
+      }
       if (myChannels.some((c) => c.listingId === listing.id)) {
         return fail('该渠道已添加') as ApiResponse<T>
       }
@@ -858,29 +1156,78 @@ export async function dispatchMock<T>(
       return fail('无权操作该供货') as ApiResponse<T>
 
     if (method === 'PUT') {
-      Object.assign(listing, {
-        title: body.title !== undefined ? String(body.title) : listing.title,
-        summary:
-          body.summary !== undefined ? String(body.summary) : listing.summary,
-        source:
-          body.source !== undefined ? String(body.source) : listing.source,
-        supportedModels: Array.isArray(body.supportedModels)
-          ? (body.supportedModels as string[])
-          : listing.supportedModels,
-        tags: Array.isArray(body.tags) ? (body.tags as string[]) : listing.tags,
-        priceUSD:
-          body.priceUSD !== undefined
-            ? Number(body.priceUSD)
-            : listing.priceUSD,
-        type:
-          body.type !== undefined
-            ? (String(body.type) as MarketModelType)
-            : listing.type,
-        status:
-          body.status !== undefined
-            ? (String(body.status) as ListingStatus)
-            : listing.status,
-      })
+      const next: MarketListing = { ...listing }
+      if (body.title !== undefined) {
+        const title = String(body.title).trim()
+        if (!title || title.length > 60) {
+          return fail('商品名称长度为 1-60 字符') as ApiResponse<T>
+        }
+        next.title = title
+      }
+      if (body.summary !== undefined) {
+        const summary = String(body.summary).trim()
+        if (summary.length > 280) {
+          return fail('供货说明不能超过 280 字符') as ApiResponse<T>
+        }
+        next.summary = summary
+      }
+      if (body.source !== undefined) {
+        const source = String(body.source).trim()
+        if (!marketplaceChannels.includes(source)) {
+          return fail('无效的渠道来源') as ApiResponse<T>
+        }
+        next.source = source
+      }
+      if (body.supportedModels !== undefined) {
+        const models = parseStringArray(body.supportedModels, 100)
+        if (
+          !models ||
+          models.length === 0 ||
+          models.some((model) => !MODELS.includes(model))
+        ) {
+          return fail('请至少选择一个有效模型') as ApiResponse<T>
+        }
+        next.supportedModels = models
+        next.modelVendors = [
+          ...new Set(
+            models.map((model) => modelVendorMap[model]).filter(Boolean)
+          ),
+        ]
+      }
+      if (body.tags !== undefined) {
+        const tags = parseStringArray(body.tags, 10, 32)
+        if (!tags) return fail('标签格式不正确') as ApiResponse<T>
+        next.tags = tags
+      }
+      if (body.priceUSD !== undefined) {
+        const priceUSD = Number(body.priceUSD)
+        if (
+          !Number.isFinite(priceUSD) ||
+          priceUSD <= 0 ||
+          priceUSD > 1_000_000
+        ) {
+          return fail('价格需在 $0-$1,000,000 之间') as ApiResponse<T>
+        }
+        next.priceUSD = priceUSD
+      }
+      if (body.type !== undefined) {
+        const type = String(body.type)
+        if (!oneOf(type, MARKET_MODEL_TYPES)) {
+          return fail('无效的供货类型') as ApiResponse<T>
+        }
+        next.type = type
+      }
+      if (body.status !== undefined) {
+        const status = String(body.status)
+        if (!oneOf(status, LISTING_STATUSES)) {
+          return fail('无效的供货状态') as ApiResponse<T>
+        }
+        if (listing.status === 'reviewing' || status === 'reviewing') {
+          return fail('审核状态只能由平台更新') as ApiResponse<T>
+        }
+        next.status = status
+      }
+      Object.assign(listing, next)
       return ok({ listing, message: '供货已更新' }) as ApiResponse<T>
     }
 
@@ -894,6 +1241,9 @@ export async function dispatchMock<T>(
     if (mockRuntime.marketSelfEarnings <= 0)
       return fail('暂无可结算收益') as ApiResponse<T>
     const settled = mockRuntime.marketSelfEarnings
+    if (!creditAccountQuota(settled)) {
+      return fail('账户余额更新失败') as ApiResponse<T>
+    }
     mockRuntime.marketSelfEarnings = 0
     return ok({
       message: '收益已转入账户余额',
@@ -988,7 +1338,7 @@ export async function dispatchMock<T>(
     const title = String(body.title ?? '').trim()
     const amount = Number(body.amount ?? 0)
     if (!title) return fail('发票抬头不能为空') as ApiResponse<T>
-    if (!amount || amount < 200)
+    if (!Number.isFinite(amount) || amount < 200 || amount > 10_000_000)
       return fail('开票金额最低 200 元') as ApiResponse<T>
     const item = addInvoice({
       title,
@@ -1029,7 +1379,10 @@ export async function dispatchMock<T>(
   }
 
   if (path === '/api/farm/leader' && method === 'GET') {
-    const period = String(params.period ?? 'day') as LeaderPeriod
+    const period = String(params.period ?? 'day')
+    if (!oneOf(period, ['day', 'week', 'all'] as const)) {
+      return fail('无效的排行榜周期') as ApiResponse<T>
+    }
     return ok({ entries: leaderboard, period }) as ApiResponse<T>
   }
 
@@ -1101,9 +1454,11 @@ export async function dispatchMock<T>(
     const caught = pool[Math.floor(Math.random() * pool.length)]
     fishingState.daily_left -= 1
     fishingState.last_catch = caught
+    farmState.coins += caught.quota
     return ok({
       catch: fishingState.last_catch,
       daily_left: fishingState.daily_left,
+      coins: farmState.coins,
     }) as ApiResponse<T>
   }
 
@@ -1127,13 +1482,16 @@ export async function dispatchMock<T>(
     const SPIN_COST = 5
     if (gameWallet.balance < SPIN_COST)
       return fail('游戏币不足，无法转盘') as ApiResponse<T>
-    gameWallet.balance -= SPIN_COST
-    gameWallet.total_spent += SPIN_COST
     // Weighted random pick
     const totalWeight = spinPrizes.reduce((s, p) => s + p.weight, 0)
     let roll = Math.random() * totalWeight
     const prize =
       spinPrizes.find((p) => (roll -= p.weight) < 0) ?? spinPrizes[0]
+    if (prize.type === 'quota' && !creditAccountQuota(prize.value)) {
+      return fail('账户余额更新失败') as ApiResponse<T>
+    }
+    gameWallet.balance -= SPIN_COST
+    gameWallet.total_spent += SPIN_COST
     if (prize.type === 'coins') {
       gameWallet.balance += prize.value
       gameWallet.total_earned += prize.value
@@ -1155,8 +1513,6 @@ export async function dispatchMock<T>(
     const BOX_COST = 10
     if (gameWallet.balance < BOX_COST)
       return fail('游戏币不足，无法开盲盒') as ApiResponse<T>
-    gameWallet.balance -= BOX_COST
-    gameWallet.total_spent += BOX_COST
     // Pick rarity tier first by weight: common 70%, rare 20%, epic 8%, legendary 2%
     const rarityRoll = Math.random() * 100
     const rarity =
@@ -1171,6 +1527,11 @@ export async function dispatchMock<T>(
     const totalWeight = pool.reduce((s, p) => s + p.weight, 0)
     let roll = Math.random() * totalWeight
     const prize = pool.find((p) => (roll -= p.weight) < 0) ?? pool[0]
+    if (prize.type === 'quota' && !creditAccountQuota(prize.value)) {
+      return fail('账户余额更新失败') as ApiResponse<T>
+    }
+    gameWallet.balance -= BOX_COST
+    gameWallet.total_spent += BOX_COST
     if (prize.type === 'coins') {
       gameWallet.balance += prize.value
       gameWallet.total_earned += prize.value

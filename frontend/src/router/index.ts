@@ -6,6 +6,8 @@ import {
 
 import HomeView from '@/views/HomeView.vue'
 import { loadMessageDomain } from '@/i18n'
+import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
 
 const CONSOLE_ENTRY: RouteLocationRaw = { name: 'dashboard' }
 const CHUNK_RELOAD_KEY = 'ren2hub_chunk_reload'
@@ -220,9 +222,16 @@ router.beforeEach(async (to) => {
     await Promise.all([loadMessageDomain('console'), loadMessageDomain('lab')])
   }
 
+  if (to.name === 'sign-up') {
+    const app = useAppStore()
+    await app.initialize()
+    if (app.statusReachable && !app.registerEnabled) {
+      return { name: 'sign-in' }
+    }
+  }
+
   if (!to.meta.requiresAuth && !to.meta.guestOnly) return true
 
-  const { useAuthStore } = await import('@/stores/auth')
   const auth = useAuthStore()
   if (!auth.checked) await auth.fetchSelf()
 

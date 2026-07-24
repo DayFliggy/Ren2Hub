@@ -59,7 +59,9 @@ const options = computed<ContactOption[]>(() => [
     @click="open = false"
   />
 
-  <div class="fixed bottom-7 right-7 z-50 flex flex-col items-center gap-3">
+  <div
+    class="contact-float-ball fixed bottom-7 right-7 z-50 flex flex-col items-center gap-3"
+  >
     <!-- Contact options — animate in above the main button -->
     <Transition name="fab-stack">
       <div v-if="open" class="flex flex-col items-center gap-3">
@@ -229,6 +231,19 @@ const options = computed<ContactOption[]>(() => [
 </template>
 
 <style scoped>
+.contact-float-ball {
+  width: max-content;
+}
+
+@media (max-width: 480px) {
+  /* Keep the dashboard's recent-call rows readable on narrow screens. The
+     control remains available at the end of the page instead of covering data. */
+  .contact-float-ball {
+    position: static;
+    margin: 1rem 0 0 auto;
+  }
+}
+
 /* Stack enters from below, exits downward */
 .fab-stack-enter-active {
   transition:

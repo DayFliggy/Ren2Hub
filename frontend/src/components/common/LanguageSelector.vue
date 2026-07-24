@@ -3,7 +3,12 @@
     <button
       ref="trigger"
       type="button"
-      class="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--surface-muted)] text-sm text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] md:h-auto md:w-auto md:gap-1.5 md:px-3 md:py-1.5"
+      class="text-sm text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+      :class="
+        variant === 'console'
+          ? 'flex items-center gap-1.5 rounded-full px-3.5 py-2 font-medium hover:bg-[var(--surface-muted)]'
+          : 'flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border-subtle)] bg-[var(--surface-muted)] hover:border-[var(--border-strong)] md:h-auto md:w-auto md:gap-1.5 md:px-3 md:py-1.5'
+      "
       :aria-expanded="open"
       aria-haspopup="menu"
       aria-controls="language-selector-menu"
@@ -12,6 +17,19 @@
       @keydown="onTriggerKeydown"
     >
       <svg
+        v-if="variant === 'console'"
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        aria-hidden="true"
+      >
+        <path d="m5 8 6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6" />
+      </svg>
+      <svg
+        v-else
         width="16"
         height="16"
         viewBox="0 0 24 24"
@@ -25,8 +43,13 @@
           d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"
         />
       </svg>
-      <span class="hidden md:inline">{{ currentLabel }}</span>
+      <span
+        :class="variant === 'console' ? 'hidden sm:inline' : 'hidden md:inline'"
+      >
+        {{ currentLabel }}
+      </span>
       <svg
+        v-if="variant !== 'console'"
         width="12"
         height="12"
         viewBox="0 0 24 24"
@@ -52,7 +75,12 @@
         id="language-selector-menu"
         ref="menu"
         role="menu"
-        class="absolute right-0 z-[90] mt-2 w-40 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-overlay)] p-1 shadow-[0_24px_46px_var(--shadow-color)] backdrop-blur-xl"
+        class="absolute right-0 z-[90] overflow-hidden rounded-xl border bg-[var(--surface-overlay)] backdrop-blur-xl"
+        :class="
+          variant === 'console'
+            ? 'top-12 w-36 border-[var(--overlay-border)] py-1 shadow-[var(--overlay-shadow)] animate-scale-in'
+            : 'mt-2 w-40 border-[var(--border-subtle)] p-1 shadow-[0_24px_46px_var(--shadow-color)]'
+        "
         :aria-label="t('nav.language')"
         @keydown="onMenuKeydown"
         @focusout="onMenuFocusout"
@@ -61,16 +89,22 @@
           <button
             type="button"
             role="menuitemradio"
-            class="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--focus-ring)]"
+            class="flex w-full items-center text-left text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--focus-ring)]"
             :class="
-              loc.code === current
-                ? 'bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]'
+              variant === 'console'
+                ? loc.code === current
+                  ? 'justify-between px-4 py-2 font-semibold text-[var(--accent-text)]'
+                  : 'justify-between px-4 py-2 text-[var(--text-primary)] hover:bg-[var(--surface-muted)]'
+                : loc.code === current
+                  ? 'min-h-11 gap-2 rounded-lg px-3 py-2 bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                  : 'min-h-11 gap-2 rounded-lg px-3 py-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]'
             "
             :aria-checked="loc.code === current"
             @click="choose(loc.code)"
           >
-            <span aria-hidden="true">{{ loc.flag }}</span>
+            <span v-if="variant !== 'console'" aria-hidden="true">{{
+              loc.flag
+            }}</span>
             <span>{{ loc.name }}</span>
             <svg
               v-if="loc.code === current"
@@ -99,6 +133,10 @@ import { onClickOutside } from '@vueuse/core'
 import { availableLocales, getLocale, setLocale, type LocaleCode } from '@/i18n'
 
 const { t } = useI18n()
+const props = withDefaults(defineProps<{ variant?: 'landing' | 'console' }>(), {
+  variant: 'landing',
+})
+const variant = computed(() => props.variant)
 const root = ref<HTMLElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
 const menu = ref<HTMLElement | null>(null)

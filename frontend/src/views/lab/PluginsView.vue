@@ -153,6 +153,7 @@ function stub() {
               type="button"
               class="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--surface-muted)] focus-ring"
               :title="t('lab.plugins.manage')"
+              :aria-label="t('lab.plugins.manage')"
               @click="stub"
             >
               <svg
@@ -179,6 +180,7 @@ function stub() {
               class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl opacity-90 transition-opacity hover:opacity-100 focus-ring"
               :style="{ background: p.color }"
               :title="p.name"
+              :aria-label="p.name"
               @click="stub"
             >
               <svg
@@ -205,6 +207,7 @@ function stub() {
                 type="button"
                 class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl focus-ring"
                 :style="{ background: p.color }"
+                :aria-label="p.name"
                 @click="stub"
               >
                 <svg
@@ -389,7 +392,11 @@ function stub() {
             v-for="s in filteredSkills"
             :key="s.id"
             class="flex cursor-pointer flex-col rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 shadow-[var(--card-shadow)] transition-shadow hover:shadow-[var(--card-shadow-hover)]"
+            role="button"
+            tabindex="0"
             @click="stub"
+            @keydown.enter="stub"
+            @keydown.space.prevent="stub"
           >
             <div class="mb-2 flex items-start justify-between gap-3">
               <span
@@ -466,6 +473,7 @@ function stub() {
           <button
             type="button"
             class="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--surface-muted)] focus-ring"
+            :aria-label="t('lab.plugins.filter')"
             @click="stub"
           >
             <svg
@@ -500,14 +508,19 @@ function stub() {
               {{ group.label }}
             </h3>
             <div class="grid gap-3 sm:grid-cols-2">
-              <div
+              <article
                 v-for="p in group.items"
                 :key="p.id"
-                class="flex cursor-pointer items-center gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 shadow-[var(--card-shadow)] transition-shadow hover:shadow-[var(--card-shadow-hover)]"
-                @click="stub"
+                class="relative flex items-center gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 shadow-[var(--card-shadow)] transition-shadow hover:shadow-[var(--card-shadow-hover)]"
               >
+                <button
+                  type="button"
+                  class="absolute inset-0 cursor-pointer rounded-2xl focus-ring"
+                  :aria-label="p.name"
+                  @click="stub"
+                />
                 <span
-                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                  class="pointer-events-none flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
                   :style="{ background: p.color }"
                 >
                   <svg
@@ -521,7 +534,7 @@ function stub() {
                     <path :d="p.icon" />
                   </svg>
                 </span>
-                <div class="min-w-0 flex-1">
+                <div class="pointer-events-none min-w-0 flex-1">
                   <p
                     class="truncate text-sm font-semibold text-[var(--text-primary)]"
                   >
@@ -533,8 +546,9 @@ function stub() {
                 </div>
                 <button
                   type="button"
-                  class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--surface-muted)] focus-ring"
-                  @click.stop="stub"
+                  class="relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--surface-muted)] focus-ring"
+                  :aria-label="t('lab.plugins.moreActions', { name: p.name })"
+                  @click="stub"
                 >
                   <svg
                     width="14"
@@ -549,7 +563,7 @@ function stub() {
                     <circle cx="12" cy="19" r="1" />
                   </svg>
                 </button>
-              </div>
+              </article>
             </div>
           </section>
           <EmptyState

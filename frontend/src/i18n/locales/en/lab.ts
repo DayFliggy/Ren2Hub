@@ -139,6 +139,8 @@ export default {
       skillCreate: 'Create skill',
       marketPublic: 'Public',
       marketPersonal: 'Personal',
+      filter: 'Filter marketplace plugins',
+      moreActions: 'More actions for {name}',
       categoryFeatured: 'Featured',
       categoryProductivity: 'Productivity',
       categoryAi: 'AI tools',

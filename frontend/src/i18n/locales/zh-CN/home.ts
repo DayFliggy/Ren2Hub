@@ -23,7 +23,13 @@ export default {
     operational: '服务正常',
     checking: '正在检查系统状态',
     degraded: '部分状态数据暂不可用',
-    unavailable: '系统状态暂不可用',
+    unavailable: '连接异常',
+    telemetry: {
+      ready: 'READY',
+      degraded: 'DEGRADED',
+      unavailable: 'UNAVAILABLE',
+      checking: 'CHECKING',
+    },
   },
   notice: {
     badge: '最新',
@@ -109,7 +115,9 @@ export default {
       about: '关于',
     },
     rights: '保留所有权利。',
-    copyright: '© 2026 RenRen AI. 保留所有权利。',
+    copyright: '© 2026 DayFliggy. All rights reserved.',
+    designBy: '设计与开发由',
+    updated: '更新于 2026.07.17',
     icp: '本站点用于演示用途',
   },
 }

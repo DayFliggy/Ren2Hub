@@ -21,12 +21,19 @@ const auth = useAuthStore()
 const { stats, load: loadDash } = useDashboard()
 
 const sub = ref<CurrentSubscription | null>(null)
+const subscriptionLoading = ref(false)
+const subscriptionFailed = ref(false)
 
 async function loadSubscription() {
+  subscriptionLoading.value = true
+  subscriptionFailed.value = false
   try {
     sub.value = await api.get<CurrentSubscription>('/api/subscription/self')
   } catch (error) {
+    subscriptionFailed.value = true
     toast.error(error instanceof ApiError ? error.message : t('common.failed'))
+  } finally {
+    subscriptionLoading.value = false
   }
 }
 
@@ -172,7 +179,9 @@ const navItems = computed(() => [
         );
       "
     >
-      <div class="flex flex-wrap items-start gap-5">
+      <div
+        class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-4 sm:gap-5 md:grid-cols-[auto_minmax(0,1fr)_auto]"
+      >
         <!-- avatar -->
         <div
           class="flex size-16 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold shadow-[var(--card-shadow)]"
@@ -185,16 +194,18 @@ const navItems = computed(() => [
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <h2
-              class="text-2xl font-bold tracking-tight text-[var(--text-primary)]"
+              class="min-w-0 break-words text-xl font-bold tracking-tight text-[var(--text-primary)] sm:text-2xl"
             >
               {{ auth.user?.display_name || auth.user?.username }}
             </h2>
             <StatusChip :tone="roleChipTone">{{ roleName }}</StatusChip>
           </div>
-          <p class="mt-1 font-mono text-sm text-[var(--text-tertiary)]">
-            @{{ auth.user?.username }}
-            <span class="mx-1.5 opacity-40">·</span>
-            {{ memberNo }}
+          <p
+            class="mt-1 flex flex-wrap items-center gap-x-1.5 font-mono text-sm text-[var(--text-tertiary)]"
+          >
+            <span>@{{ auth.user?.username }}</span>
+            <span aria-hidden="true" class="opacity-40">·</span>
+            <span class="whitespace-nowrap">{{ memberNo }}</span>
           </p>
           <div class="mt-2.5 flex flex-wrap items-center gap-2">
             <span
@@ -226,7 +237,9 @@ const navItems = computed(() => [
         </div>
 
         <!-- right meta grid -->
-        <div class="grid grid-cols-2 gap-x-8 gap-y-3 text-right">
+        <div
+          class="col-span-2 grid grid-cols-2 gap-x-5 gap-y-3 text-left sm:grid-cols-4 md:col-span-1 md:grid-cols-2 md:gap-x-8 md:text-right"
+        >
           <div>
             <p
               class="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]"
@@ -272,11 +285,13 @@ const navItems = computed(() => [
 
       <!-- tier progress -->
       <div class="mt-5 border-t border-[var(--border-subtle)] pt-4">
-        <div class="mb-2 flex items-center justify-between text-xs">
+        <div
+          class="mb-2 flex flex-col items-start gap-2 text-xs sm:flex-row sm:items-center sm:justify-between"
+        >
           <span class="font-semibold text-[var(--text-primary)]">
             {{ tier.badge }} {{ tier.name }}
           </span>
-          <div class="flex items-center gap-3">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span v-if="tier.next" class="text-[var(--text-tertiary)]">
               {{ t('profile.progressToNext', { tier: tier.nextName }) }}
               <span class="ml-1 font-semibold text-[var(--accent-text)]"
@@ -336,6 +351,7 @@ const navItems = computed(() => [
         role="button"
         @click="router.push({ name: stat.route })"
         @keydown.enter="router.push({ name: stat.route })"
+        @keydown.space.prevent="router.push({ name: stat.route })"
       >
         <div class="flex items-start justify-between gap-3">
           <p class="text-xs text-[var(--text-tertiary)]">{{ stat.label }}</p>
@@ -575,18 +591,32 @@ const navItems = computed(() => [
                 },
                 {
                   label: t('profile.remainQuota'),
-                  value: formatQuota(sub?.remain_quota ?? 0),
+                  value: sub
+                    ? formatQuota(sub.remain_quota)
+                    : subscriptionLoading
+                      ? t('common.loading')
+                      : subscriptionFailed
+                        ? t('dashboard.unavailable')
+                        : '—',
                 },
                 { label: t('profile.concurrency'), value: '500 RPM' },
                 {
                   label: t('profile.quotaExpiry'),
-                  value: sub ? formatDate(sub.expire_time) : '—',
+                  value: sub
+                    ? formatDate(sub.expire_time)
+                    : subscriptionLoading
+                      ? t('common.loading')
+                      : subscriptionFailed
+                        ? t('dashboard.unavailable')
+                        : '—',
                 },
                 {
                   label: t('profile.autoRenew'),
-                  value: sub?.auto_renew
-                    ? t('common.enabled')
-                    : t('common.disabled'),
+                  value: sub
+                    ? sub.auto_renew
+                      ? t('profile.autoRenewOn')
+                      : t('profile.autoRenewOff')
+                    : '—',
                 },
               ]"
               :key="row.label"

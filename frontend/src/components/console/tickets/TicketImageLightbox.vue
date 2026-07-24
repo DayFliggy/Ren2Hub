@@ -13,7 +13,15 @@ let previouslyFocused: HTMLElement | null = null
 let previousBodyOverflow = ''
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') emit('close')
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    emit('close')
+    return
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault()
+    closeButton.value?.focus()
+  }
 }
 
 watch(

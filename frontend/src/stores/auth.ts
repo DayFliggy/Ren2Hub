@@ -4,7 +4,7 @@ import { defineStore } from 'pinia'
 import { clearDemoUser, readDemoUser, writeDemoUser } from '@/api/demoStorage'
 import { setUnauthorizedHandler } from '@/api/createClient'
 import { ApiError } from '@/api/types'
-import type { UserInfo } from '@/types/auth'
+import type { UserInfo, UserProfilePatch } from '@/types/auth'
 
 async function getAuthApi() {
   const { authApi } = await import('@/api/auth')
@@ -67,7 +67,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function updateProfile(patch: Partial<UserInfo>): Promise<void> {
+  async function updateProfile(patch: UserProfilePatch): Promise<void> {
     const api = await getAuthApi()
     const data = await api.updateProfile(patch)
     persist(data.user)

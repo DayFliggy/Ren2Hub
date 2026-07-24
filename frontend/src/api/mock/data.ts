@@ -1,7 +1,4 @@
 import { marketSources, marketTagPool } from '@/constants/console'
-import qc01 from '@/assets/mock/qc-01.webp'
-import qc02 from '@/assets/mock/qc-02.webp'
-import qc03 from '@/assets/mock/qc-03.webp'
 import type { UserInfo } from '@/types/auth'
 import type {
   TokenType,
@@ -1465,14 +1462,27 @@ function pickTags(count: number): string[] {
   return out
 }
 
-const QC_PREVIEWS = [qc01, qc02, qc03]
+function qcSvg(label: string, tone: string): string {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">` +
+    `<rect width="640" height="400" fill="#1f232e"/>` +
+    `<rect x="24" y="24" width="592" height="352" rx="12" fill="none" stroke="${tone}" stroke-width="2" stroke-dasharray="6 6"/>` +
+    `<polyline points="60,300 160,220 260,260 360,150 460,190 560,90" fill="none" stroke="${tone}" stroke-width="4" stroke-linecap="round"/>` +
+    `<text x="320" y="356" text-anchor="middle" font-family="monospace" font-size="22" fill="${tone}">${label}</text>` +
+    `</svg>`
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+}
+
+const QC_TONES = ['#d97a45', '#7aa2d9', '#7ad98f']
 /** Give roughly one in three listings 1-3 QC screenshots. */
 function seedQcImages(listingId: number): string[] | undefined {
   if (listingId % 3 !== 0) return undefined
   const count = 1 + (listingId % 2) + (listingId % 5 === 0 ? 1 : 0) // 1..3
-  return Array.from(
-    { length: count },
-    (_, index) => QC_PREVIEWS[(listingId + index) % QC_PREVIEWS.length]
+  return Array.from({ length: count }, (_, index) =>
+    qcSvg(
+      `QC 实测 #${listingId}-${index + 1} · 延迟采样`,
+      QC_TONES[index % QC_TONES.length]
+    )
   )
 }
 

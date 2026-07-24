@@ -11,6 +11,7 @@ import type {
   PrizeRecord,
 } from '@/types/bigame'
 import { useToast } from '@/composables/useToast'
+import { useAuthStore } from '@/stores/auth'
 
 /**
  * Bigame welfare system state + actions.
@@ -19,6 +20,7 @@ import { useToast } from '@/composables/useToast'
 export function useBigame() {
   const { t } = useI18n()
   const toast = useToast()
+  const auth = useAuthStore()
 
   const loading = ref(true)
   const spinning = ref(false)
@@ -66,6 +68,7 @@ export function useBigame() {
       const res = await api.post<{ prize: SpinPrize; wallet: GameWallet }>(
         '/api/bigame/spin'
       )
+      if (res.prize.type === 'quota') await auth.fetchSelf()
       wallet.value = res.wallet
       lastSpinPrize.value = res.prize
       records.value.unshift({
@@ -96,6 +99,7 @@ export function useBigame() {
       const res = await api.post<{ prize: BlindBoxPrize; wallet: GameWallet }>(
         '/api/bigame/box'
       )
+      if (res.prize.type === 'quota') await auth.fetchSelf()
       wallet.value = res.wallet
       lastBoxPrize.value = res.prize
       records.value.unshift({

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -16,8 +16,12 @@ const emit = defineEmits<{ openBox: [] }>()
 const { t } = useI18n()
 
 const isShaking = ref(false)
+let shakeTimer: number | undefined
 
-const rarityTone = (r: string) => {
+type StatusChipTone =
+  'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'accent'
+
+const rarityTone = (r: string): StatusChipTone => {
   if (r === 'legendary') return 'accent'
   if (r === 'epic') return 'warning'
   if (r === 'rare') return 'success'
@@ -34,11 +38,17 @@ const rarityGlow: Record<string, string> = {
 async function onOpen() {
   if (props.opening || props.balance < 10) return
   isShaking.value = true
-  setTimeout(() => {
+  if (shakeTimer) window.clearTimeout(shakeTimer)
+  shakeTimer = window.setTimeout(() => {
+    shakeTimer = undefined
     isShaking.value = false
   }, 600)
   emit('openBox')
 }
+
+onBeforeUnmount(() => {
+  if (shakeTimer) window.clearTimeout(shakeTimer)
+})
 </script>
 
 <template>
@@ -82,7 +92,7 @@ async function onOpen() {
         class="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-3 text-center animate-scale-in"
       >
         <div class="flex items-center justify-center gap-2">
-          <StatusChip :tone="rarityTone(lastPrize.rarity) as any">
+          <StatusChip :tone="rarityTone(lastPrize.rarity)">
             {{ t(`bigame.blindBox.rarity.${lastPrize.rarity}`) }}
           </StatusChip>
           <span class="font-bold text-[var(--text-primary)]">{{
@@ -102,7 +112,7 @@ async function onOpen() {
           }"
           :key="r"
         >
-          <StatusChip :tone="rarityTone(r) as any">{{ r }}</StatusChip>
+          <StatusChip :tone="rarityTone(r)">{{ r }}</StatusChip>
           <p class="mt-1 text-[var(--text-tertiary)]">{{ pct }}</p>
         </div>
       </div>

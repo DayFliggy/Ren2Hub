@@ -22,7 +22,7 @@ const auth = useAuthStore()
 /** Wallet balance available today, before any transfer-in. */
 const currentBalance = computed(() => {
   const u = auth.user
-  return u ? u.quota - u.used_quota : 0
+  return u?.quota ?? 0
 })
 
 const afterBalance = computed(() => currentBalance.value + props.transferable)

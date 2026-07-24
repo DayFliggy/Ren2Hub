@@ -75,7 +75,7 @@ function cellDark(idx: number) {
 
 <template>
   <section
-    class="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-6 shadow-[var(--card-shadow)]"
+    class="min-w-0 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-6 shadow-[var(--card-shadow)]"
   >
     <!-- badges -->
     <div class="flex flex-wrap items-center gap-2">
@@ -107,7 +107,7 @@ function cellDark(idx: number) {
 
     <div class="mt-6 grid gap-6 sm:grid-cols-[1fr_auto]">
       <!-- code + link + share -->
-      <div class="space-y-4">
+      <div class="min-w-0 space-y-4">
         <div>
           <p class="mb-1.5 text-xs text-[var(--text-tertiary)]">
             {{ t('invite.inviteCode') }}

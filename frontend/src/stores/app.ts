@@ -1,7 +1,8 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
 import { publicApi, type PublicStatus } from '@/api/public'
+import { useAuthStore } from '@/stores/auth'
 import { safeExternalUrl, safeImageUrl } from '@/utils/safeUrl'
 
 export type PublicLoadState =
@@ -12,7 +13,7 @@ export interface ModuleAccess {
   requireAuth: boolean
 }
 
-const DEFAULT_SYSTEM_NAME = 'Ren2Hub'
+const DEFAULT_SYSTEM_NAME = 'RenRen AI'
 const DEFAULT_LOGO = '/logo.png'
 
 export function parseBoolean(value: unknown, fallback: boolean): boolean {
@@ -54,6 +55,7 @@ function toPlainText(value: unknown): string {
 }
 
 export const useAppStore = defineStore('app', () => {
+  const auth = useAuthStore()
   const phase = ref<PublicLoadState>('idle')
   const statusReachable = ref(false)
   const status = ref<PublicStatus>({})
@@ -61,6 +63,7 @@ export const useAppStore = defineStore('app', () => {
   const modelCount = ref<number | null>(null)
   const uptimePercent = ref<number | null>(null)
   const lastError = ref<unknown>(null)
+  let initializationPromise: Promise<void> | null = null
 
   const initialized = computed(
     () => phase.value === 'ready' || phase.value === 'degraded'
@@ -79,7 +82,11 @@ export const useAppStore = defineStore('app', () => {
   const pricingAccess = computed(() =>
     parseModuleAccess(headerModules.value.pricing)
   )
-  const showPricing = computed(() => pricingAccess.value.enabled)
+  const showPricing = computed(
+    () =>
+      pricingAccess.value.enabled &&
+      (!pricingAccess.value.requireAuth || auth.isAuthenticated)
+  )
   const showDocs = computed(
     () =>
       parseBoolean(headerModules.value.docs, true) && Boolean(docsLink.value)
@@ -92,6 +99,9 @@ export const useAppStore = defineStore('app', () => {
   )
   const privacyPolicyEnabled = computed(() =>
     Boolean(status.value.privacy_policy_enabled)
+  )
+  const registerEnabled = computed(() =>
+    parseBoolean(status.value.register_enabled, true)
   )
   const modelCountLabel = computed(() =>
     modelCount.value === null ? '--' : String(modelCount.value)
@@ -114,26 +124,26 @@ export const useAppStore = defineStore('app', () => {
     favicon.href = customLogo
   }
 
-  async function initialize(): Promise<void> {
-    if (
-      phase.value === 'loading' ||
-      phase.value === 'ready' ||
-      phase.value === 'degraded'
-    ) {
-      return
-    }
-
+  async function runInitialization(): Promise<void> {
     phase.value = 'loading'
     lastError.value = null
+    modelCount.value = null
+    uptimePercent.value = null
     const controller = new AbortController()
     try {
       status.value = (await publicApi.status(controller.signal)) || {}
       statusReachable.value = true
       applyBranding()
 
+      const canLoadPricing =
+        pricingAccess.value.enabled &&
+        (!pricingAccess.value.requireAuth || auth.isAuthenticated)
+
       const summaries = await Promise.allSettled([
         publicApi.notice(controller.signal),
-        publicApi.pricing(controller.signal),
+        canLoadPricing
+          ? publicApi.pricing(controller.signal)
+          : Promise.resolve(null),
         publicApi.uptime(controller.signal),
       ])
       const [noticeResult, pricingResult, uptimeResult] = summaries
@@ -141,7 +151,10 @@ export const useAppStore = defineStore('app', () => {
       if (noticeResult.status === 'fulfilled') {
         notice.value = toPlainText(noticeResult.value)
       }
-      if (pricingResult.status === 'fulfilled') {
+      if (
+        pricingResult.status === 'fulfilled' &&
+        pricingResult.value !== null
+      ) {
         modelCount.value = pricingResult.value.length
       }
       if (uptimeResult.status === 'fulfilled') {
@@ -153,7 +166,10 @@ export const useAppStore = defineStore('app', () => {
         )
         if (measured.length > 0) {
           uptimePercent.value =
-            (measured.reduce((sum, monitor) => sum + monitor.uptime, 0) /
+            (measured.reduce(
+              (sum, monitor) => sum + Math.min(1, Math.max(0, monitor.uptime)),
+              0
+            ) /
               measured.length) *
             100
         }
@@ -168,6 +184,46 @@ export const useAppStore = defineStore('app', () => {
       phase.value = 'error'
     }
   }
+
+  function initialize(): Promise<void> {
+    if (phase.value === 'ready' || phase.value === 'degraded') {
+      return Promise.resolve()
+    }
+    if (initializationPromise) return initializationPromise
+
+    initializationPromise = runInitialization().finally(() => {
+      initializationPromise = null
+    })
+    return initializationPromise
+  }
+
+  watch(
+    [() => auth.isAuthenticated, initialized],
+    ([isAuthenticated, isInitialized]) => {
+      if (!pricingAccess.value.requireAuth) return
+      if (!isAuthenticated) {
+        modelCount.value = null
+        return
+      }
+      if (
+        !isInitialized ||
+        !pricingAccess.value.enabled ||
+        modelCount.value !== null
+      ) {
+        return
+      }
+
+      void publicApi.pricing().then(
+        (models) => {
+          modelCount.value = models.length
+        },
+        (error: unknown) => {
+          lastError.value = error
+          phase.value = 'degraded'
+        }
+      )
+    }
+  )
 
   async function retry(): Promise<void> {
     if (phase.value !== 'error') return
@@ -188,6 +244,7 @@ export const useAppStore = defineStore('app', () => {
     showPricing,
     showDocs,
     showAbout,
+    registerEnabled,
     userAgreementEnabled,
     privacyPolicyEnabled,
     modelCountLabel,

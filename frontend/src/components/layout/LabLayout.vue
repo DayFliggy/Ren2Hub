@@ -4,6 +4,7 @@ import { RouterView } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleTopbar from '@/components/console/ConsoleTopbar.vue'
+import LabNavStrip from '@/components/lab/LabNavStrip.vue'
 import LabSidebar from '@/components/lab/LabSidebar.vue'
 import '@/styles/console.css'
 
@@ -20,6 +21,7 @@ const soundEnabled = useStorage<boolean>('renren_lab_sound', true)
     <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
       <!-- original topbar, unchanged -->
       <ConsoleTopbar />
+      <LabNavStrip />
 
       <!-- page content (relative for floating toolbar) -->
       <div class="relative min-w-0 flex-1 overflow-hidden">

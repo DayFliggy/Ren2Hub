@@ -60,7 +60,7 @@ defineExpose({ collapsed })
       :to="{ name: 'dashboard' }"
       class="flex h-16 shrink-0 items-center border-b border-[var(--border-subtle)] transition-all"
       :class="collapsed ? 'justify-center px-0' : 'gap-2.5 px-6'"
-      :aria-label="`RenRen AI ${t('nav.console')}`"
+      :aria-label="`RenRen AI ${t('nav.dashboard')}`"
     >
       <BrandMark class="h-7 w-7 shrink-0 rounded-lg" />
       <span

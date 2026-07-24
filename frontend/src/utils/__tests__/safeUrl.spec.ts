@@ -31,10 +31,22 @@ describe('safe URL helpers', () => {
     expect(safeExternalUrl('data:text/html,hello')).toBeNull()
   })
 
-  it('accepts raster data images but rejects SVG data payloads', () => {
+  it('accepts raster data images and only allows inert SVG placeholders', () => {
     expect(safeImageUrl('data:image/png;base64,aGVsbG8=')).toContain(
       'image/png'
     )
+    const safeSvg =
+      'data:image/svg+xml;utf8,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%3E%3Crect%20width=%221%22%20height=%221%22%20fill=%22%23fff%22/%3E%3C/svg%3E'
+    expect(safeImageUrl(safeSvg)).toBe(safeSvg)
+    const gradientSvg = `data:image/svg+xml;utf8,${encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/></linearGradient></defs><rect width="1" height="1" fill="url(#g)"/><polyline points="0,1 1,0" fill="none" stroke="#fff" stroke-width="1"/></svg>'
+    )}`
+    expect(safeImageUrl(gradientSvg)).toBe(gradientSvg)
     expect(safeImageUrl('data:image/svg+xml,<svg onload=alert(1)>')).toBeNull()
+    expect(
+      safeImageUrl(
+        'data:image/svg+xml;utf8,%3Csvg%3E%3Cscript%3Ealert(1)%3C/script%3E%3C/svg%3E'
+      )
+    ).toBeNull()
   })
 })

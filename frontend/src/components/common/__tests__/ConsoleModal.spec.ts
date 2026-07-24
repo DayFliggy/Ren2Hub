@@ -1,4 +1,4 @@
-import { nextTick } from 'vue'
+import { defineComponent, nextTick, ref } from 'vue'
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 
@@ -26,5 +26,47 @@ describe('ConsoleModal', () => {
     await nextTick()
     expect(document.activeElement).toBe(trigger)
     wrapper.unmount()
+  })
+
+  it('only lets the topmost dialog handle Escape', async () => {
+    const trigger = document.createElement('button')
+    document.body.append(trigger)
+    trigger.focus()
+
+    const host = defineComponent({
+      components: { ConsoleModal },
+      setup() {
+        const outerOpen = ref(true)
+        const innerOpen = ref(true)
+        return { outerOpen, innerOpen }
+      },
+      template: `
+        <ConsoleModal :open="outerOpen" title="Outer" @close="outerOpen = false">
+          <button class="outer-action">Outer action</button>
+        </ConsoleModal>
+        <ConsoleModal :open="innerOpen" title="Inner" @close="innerOpen = false">
+          <button class="inner-action">Inner action</button>
+        </ConsoleModal>
+      `,
+    })
+    const wrapper = mount(host, { attachTo: document.body })
+    await nextTick()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await nextTick()
+    expect(wrapper.vm.innerOpen).toBe(false)
+    expect(wrapper.vm.outerOpen).toBe(true)
+    await new Promise((resolve) => window.setTimeout(resolve, 250))
+    expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1)
+    expect(document.body.style.overflow).toBe('hidden')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await nextTick()
+    expect(wrapper.vm.outerOpen).toBe(false)
+    expect(document.body.style.overflow).toBe('')
+    expect(document.activeElement).toBe(trigger)
+
+    wrapper.unmount()
+    trigger.remove()
   })
 })

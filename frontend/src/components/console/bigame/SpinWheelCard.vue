@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -18,8 +18,11 @@ const { t } = useI18n()
 // Wheel rotation state for animation
 const rotation = ref(0)
 const isAnimating = ref(false)
+let animationTimer: number | undefined
 
-const segmentAngle = computed(() => 360 / props.prizes.length)
+const segmentAngle = computed(() =>
+  props.prizes.length > 0 ? 360 / props.prizes.length : 0
+)
 
 // SVG arc path for one wheel slice. Kept in setup scope so the template
 // can call it directly (a separate <script> block isn't render-visible).
@@ -55,20 +58,30 @@ function segmentColor(token: string) {
 }
 
 async function onSpin() {
-  if (props.spinning || isAnimating.value) return
+  if (!canSpin.value) return
   isAnimating.value = true
   const spins = 5 + Math.floor(Math.random() * 5)
   const extraDeg = Math.floor(Math.random() * 360)
   rotation.value += spins * 360 + extraDeg
   emit('spin')
-  setTimeout(() => {
+  if (animationTimer) window.clearTimeout(animationTimer)
+  animationTimer = window.setTimeout(() => {
+    animationTimer = undefined
     isAnimating.value = false
   }, 3500)
 }
 
 const canSpin = computed(
-  () => props.balance >= 5 && !props.spinning && !isAnimating.value
+  () =>
+    props.prizes.length > 0 &&
+    props.balance >= 5 &&
+    !props.spinning &&
+    !isAnimating.value
 )
+
+onBeforeUnmount(() => {
+  if (animationTimer) window.clearTimeout(animationTimer)
+})
 </script>
 
 <template>

@@ -59,7 +59,7 @@ function create() {
 
 <template>
   <div class="subtle-scroll h-full overflow-y-auto">
-    <div class="mx-auto max-w-[1100px] px-4 py-8 sm:px-6">
+    <div class="mx-auto max-w-[1100px] px-4 pb-8 pt-14 sm:px-6">
       <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1
           class="text-2xl font-bold tracking-tight text-[var(--text-primary)]"
@@ -136,7 +136,11 @@ function create() {
           v-for="note in filtered"
           :key="note.id"
           class="group flex cursor-pointer flex-col rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5 shadow-[var(--card-shadow)] transition-shadow hover:shadow-[var(--card-shadow-hover)]"
+          role="button"
+          tabindex="0"
           @click="create"
+          @keydown.enter="create"
+          @keydown.space.prevent="create"
         >
           <h3
             class="mb-2 truncate text-sm font-semibold text-[var(--text-primary)]"

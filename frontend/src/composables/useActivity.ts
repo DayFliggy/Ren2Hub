@@ -5,6 +5,7 @@ import { api } from '@/api/console'
 import type { Activity, ActivitySummary } from '@/types/console'
 import { ApiError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
+import { useAuthStore } from '@/stores/auth'
 
 /**
  * Activity center state + actions. Owns loading, filtering and the
@@ -14,6 +15,7 @@ import { useToast } from '@/composables/useToast'
 export function useActivity() {
   const { t } = useI18n()
   const toast = useToast()
+  const auth = useAuthStore()
 
   const activities = ref<Activity[]>([])
   const summary = ref<ActivitySummary>({
@@ -57,7 +59,7 @@ export function useActivity() {
         { activity_id: id }
       )
       toast.success(t('activity.checkin.success', { reward: res.reward }))
-      await load()
+      await Promise.all([auth.fetchSelf(), load()])
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : String(error))
     } finally {
@@ -73,7 +75,7 @@ export function useActivity() {
         { activity_id: id, task_id: taskId }
       )
       toast.success(res.message || t('activity.claim.success'))
-      await load()
+      await Promise.all([auth.fetchSelf(), load()])
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : String(error))
     } finally {

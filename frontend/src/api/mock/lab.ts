@@ -16,14 +16,6 @@ import type {
   CommunityCategory,
   CommunityWork,
 } from '@/types/lab'
-import studio01 from '@/assets/mock/studio-01.webp'
-import studio02 from '@/assets/mock/studio-02.webp'
-import studio03 from '@/assets/mock/studio-03.webp'
-import studio04 from '@/assets/mock/studio-04.webp'
-import studio05 from '@/assets/mock/studio-05.webp'
-import studio06 from '@/assets/mock/studio-06.webp'
-import studio07 from '@/assets/mock/studio-07.webp'
-import studio08 from '@/assets/mock/studio-08.webp'
 
 /**
  * Mock data for the Alchemy Lab section (chat / studio / assets / notes /
@@ -54,15 +46,38 @@ function mulberry32(seed: number) {
 }
 const rand = mulberry32(20260722)
 
-const STUDIO_COVERS = [
-  studio01,
-  studio02,
-  studio03,
-  studio04,
-  studio05,
-  studio06,
-  studio07,
-  studio08,
+/** Deterministic placeholder art used by the reference Lab prototype. */
+function tileSvg(
+  from: string,
+  to: string,
+  w: number,
+  h: number,
+  glyph = ''
+): string {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
+    `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/>` +
+    `</linearGradient></defs>` +
+    `<rect width="${w}" height="${h}" fill="url(#g)"/>` +
+    (glyph
+      ? `<text x="${w / 2}" y="${h / 2}" text-anchor="middle" dominant-baseline="central" ` +
+        `font-family="system-ui,sans-serif" font-size="${Math.round(w * 0.14)}" ` +
+        `fill="rgba(255,255,255,.85)">${glyph}</text>`
+      : '') +
+    `</svg>`
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+}
+
+const GRADS: Array<[string, string]> = [
+  ['#d8984c', '#9d3017'],
+  ['#6a8cb8', '#364f72'],
+  ['#74765a', '#38372b'],
+  ['#e8a4c4', '#d484ae'],
+  ['#cfaf6b', '#a98c4e'],
+  ['#7aacdc', '#52709c'],
+  ['#7ec49a', '#52623d'],
+  ['#a08034', '#4a3c1a'],
 ]
 
 export const labModelPicks: LabModelPick[] = [
@@ -214,6 +229,7 @@ const STUDIO_PROMPTS = [
 
 export const studioGallery: StudioWork[] = STUDIO_PROMPTS.map((prompt, i) => {
   const kind: StudioKind = i % 4 === 3 ? 'video' : 'image'
+  const [from, to] = GRADS[i % GRADS.length]
   // Vary tile heights for a natural masonry rhythm.
   const shape = i % 3
   const width = 600
@@ -224,7 +240,7 @@ export const studioGallery: StudioWork[] = STUDIO_PROMPTS.map((prompt, i) => {
     prompt,
     model: kind === 'video' ? '视频 2.0' : '模型 4.5',
     ratio: shape === 1 ? '1:1' : '3:4',
-    cover: STUDIO_COVERS[i % STUDIO_COVERS.length],
+    cover: tileSvg(from, to, width, height, kind === 'video' ? '▶' : ''),
     width,
     height,
     duration: kind === 'video' ? [5, 8, 10][i % 3] : undefined,
@@ -333,6 +349,7 @@ const ASSET_SEED: Array<{
 ]
 
 export const assetItems: AssetItem[] = ASSET_SEED.map((seed, i) => {
+  const [from, to] = GRADS[i % GRADS.length]
   const isMedia = seed.kind === 'image' || seed.kind === 'video'
   return {
     id: i + 1,
@@ -340,7 +357,9 @@ export const assetItems: AssetItem[] = ASSET_SEED.map((seed, i) => {
     kind: seed.kind,
     source: seed.source,
     size: seed.size,
-    cover: isMedia ? STUDIO_COVERS[i % STUDIO_COVERS.length] : undefined,
+    cover: isMedia
+      ? tileSvg(from, to, 400, 400, seed.kind === 'video' ? '▶' : '')
+      : undefined,
     updatedAt: now - seed.daysAgo * DAY - Math.floor(rand() * HOUR * 6),
   }
 })
@@ -637,6 +656,7 @@ const COMMUNITY_SEED: Array<{
 ]
 
 export const communityWorks: CommunityWork[] = COMMUNITY_SEED.map((seed, i) => {
+  const [from, to] = GRADS[(i + 2) % GRADS.length]
   const shape = i % 3
   const width = 600
   const height = shape === 0 ? 760 : shape === 1 ? 600 : 840
@@ -645,7 +665,13 @@ export const communityWorks: CommunityWork[] = COMMUNITY_SEED.map((seed, i) => {
     title: seed.title,
     author: seed.author,
     category: seed.category,
-    cover: STUDIO_COVERS[(i + 2) % STUDIO_COVERS.length],
+    cover: tileSvg(
+      from,
+      to,
+      width,
+      height,
+      seed.category === 'video' ? '▶' : ''
+    ),
     width,
     height,
     likes: Math.floor(120 + rand() * 4800),

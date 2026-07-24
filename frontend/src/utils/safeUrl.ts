@@ -1,5 +1,76 @@
 const WEB_PROTOCOLS = new Set(['http:', 'https:'])
 const FALLBACK_ORIGIN = 'https://ren2hub.invalid'
+const SAFE_SVG_TAGS = new Set([
+  'svg',
+  'defs',
+  'lineargradient',
+  'stop',
+  'rect',
+  'polyline',
+  'text',
+])
+const SAFE_SVG_ATTRIBUTES = new Set([
+  'xmlns',
+  'width',
+  'height',
+  'viewbox',
+  'id',
+  'x',
+  'y',
+  'x1',
+  'y1',
+  'x2',
+  'y2',
+  'offset',
+  'stop-color',
+  'fill',
+  'font-family',
+  'font-size',
+  'text-anchor',
+  'dominant-baseline',
+  'rx',
+  'stroke',
+  'stroke-width',
+  'stroke-dasharray',
+  'stroke-linecap',
+  'points',
+])
+
+function isSafeSvgDataUri(value: string): boolean {
+  const prefix = 'data:image/svg+xml;utf8,'
+  if (!value.toLowerCase().startsWith(prefix)) return false
+  let markup: string
+  try {
+    markup = decodeURIComponent(value.slice(prefix.length))
+  } catch {
+    return false
+  }
+  if (markup.length > 100_000 || !/^\s*<svg\b[\s\S]*<\/svg>\s*$/i.test(markup))
+    return false
+  if (
+    /[<](?:script|style|foreignObject|iframe|image|use)\b|\bon[a-z-]+\s*=|(?:javascript:|url\s*\((?!#g\)))/i.test(
+      markup
+    )
+  )
+    return false
+
+  const tags = [...markup.matchAll(/<\/?([a-z][\w:-]*)\b/gi)]
+  if (tags.some((match) => !SAFE_SVG_TAGS.has(match[1].toLowerCase())))
+    return false
+  const openingTags = [
+    ...markup.matchAll(/<([a-z][\w:-]*)\b([^>]*?)(?:\/?)>/gi),
+  ]
+  for (const [, , attributes] of openingTags) {
+    for (const match of attributes.matchAll(
+      /([:\w-]+)\s*=\s*(['"])(.*?)\2/gi
+    )) {
+      const name = match[1].toLowerCase()
+      const value = match[3]
+      if (!SAFE_SVG_ATTRIBUTES.has(name) || /[<>]/.test(value)) return false
+    }
+  }
+  return true
+}
 
 function currentOrigin(): string {
   return typeof window === 'undefined'
@@ -71,6 +142,7 @@ export function safeImageUrl(
   ) {
     return candidate
   }
+  if (isSafeSvgDataUri(candidate)) return candidate
   const base = currentOrigin()
   const parsed = parseUrl(candidate, base)
   if (!parsed) return null

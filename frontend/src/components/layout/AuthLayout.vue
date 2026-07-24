@@ -65,8 +65,8 @@ const { t } = useI18n()
     <!-- form pane -->
     <div class="relative flex items-center justify-center px-4 py-10">
       <div class="absolute right-5 top-5 flex items-center gap-1">
-        <ThemeSwitcher />
-        <LanguageSelector />
+        <ThemeSwitcher variant="console" />
+        <LanguageSelector variant="console" />
       </div>
       <div class="w-full max-w-md">
         <div class="mb-8 flex items-center gap-2.5 lg:hidden">

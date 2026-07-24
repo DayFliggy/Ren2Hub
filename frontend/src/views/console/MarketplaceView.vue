@@ -208,9 +208,17 @@ onMounted(load)
           class="mb-0"
         />
       </div>
-      <p class="text-xs leading-relaxed text-[var(--accent-text)]">
-        {{ t('market.disclaimer') }}
-      </p>
+      <i18n-t
+        keypath="market.disclaimer"
+        tag="p"
+        class="text-xs leading-relaxed text-[var(--accent-text)]"
+      >
+        <template #platform>
+          <strong class="font-semibold">{{
+            t('market.disclaimerPlatform')
+          }}</strong>
+        </template>
+      </i18n-t>
     </div>
 
     <!-- primary toolbar: side + stats + health + currency -->

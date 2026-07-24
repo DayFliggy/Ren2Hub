@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { onScopeDispose, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/lab'
@@ -69,17 +69,27 @@ export function useLabConversation() {
   const reportError = useLoadErrorReporter()
   const loading = ref(true)
   const conversation = ref<ChatConversation | null>(null)
+  let loadController: AbortController | null = null
+
+  onScopeDispose(() => loadController?.abort())
 
   async function load(id: string) {
+    loadController?.abort()
+    const controller = new AbortController()
+    loadController = controller
     loading.value = true
+    conversation.value = null
     try {
-      conversation.value = await api.get<ChatConversation>(
-        `/api/lab/chat/conversation/${id}`
+      const data = await api.get<ChatConversation>(
+        `/api/lab/chat/conversation/${id}`,
+        undefined,
+        { signal: controller.signal }
       )
+      if (loadController === controller) conversation.value = data
     } catch (error) {
-      reportError(error)
+      if (!controller.signal.aborted) reportError(error)
     } finally {
-      loading.value = false
+      if (loadController === controller) loading.value = false
     }
   }
 
@@ -92,20 +102,29 @@ export function useLabStudio() {
   const loading = ref(true)
   const works = ref<StudioWork[]>([])
   const tools = ref<StudioTool[]>([])
+  let loadController: AbortController | null = null
+
+  onScopeDispose(() => loadController?.abort())
 
   async function load(kind?: StudioKind | 'all') {
+    loadController?.abort()
+    const controller = new AbortController()
+    loadController = controller
     loading.value = true
     try {
       const data = await api.get<{ works: StudioWork[]; tools: StudioTool[] }>(
         '/api/lab/studio',
-        kind && kind !== 'all' ? { kind } : undefined
+        kind && kind !== 'all' ? { kind } : undefined,
+        { signal: controller.signal }
       )
-      works.value = data.works
-      tools.value = data.tools
+      if (loadController === controller) {
+        works.value = data.works
+        tools.value = data.tools
+      }
     } catch (error) {
-      reportError(error)
+      if (!controller.signal.aborted) reportError(error)
     } finally {
-      loading.value = false
+      if (loadController === controller) loading.value = false
     }
   }
 
@@ -118,22 +137,31 @@ export function useLabAssets() {
   const loading = ref(true)
   const items = ref<AssetItem[]>([])
   const storage = ref<StorageInfo | null>(null)
+  let loadController: AbortController | null = null
+
+  onScopeDispose(() => loadController?.abort())
 
   async function load(kind = 'all') {
+    loadController?.abort()
+    const controller = new AbortController()
+    loadController = controller
     loading.value = true
     try {
       const data = await api.get<{ items: AssetItem[]; storage: StorageInfo }>(
         '/api/lab/assets',
         {
           kind,
-        }
+        },
+        { signal: controller.signal }
       )
-      items.value = data.items
-      storage.value = data.storage
+      if (loadController === controller) {
+        items.value = data.items
+        storage.value = data.storage
+      }
     } catch (error) {
-      reportError(error)
+      if (!controller.signal.aborted) reportError(error)
     } finally {
-      loading.value = false
+      if (loadController === controller) loading.value = false
     }
   }
 

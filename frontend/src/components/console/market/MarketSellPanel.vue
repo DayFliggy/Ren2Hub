@@ -13,6 +13,7 @@ import IconButton from '@/components/common/IconButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import ListingRating from './ListingRating.vue'
 import { useToast } from '@/composables/useToast'
+import { useAuthStore } from '@/stores/auth'
 import { formatDate, formatQuota } from '@/utils/format'
 
 defineProps<{
@@ -26,6 +27,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useToast()
+const auth = useAuthStore()
 
 interface SellStats {
   active: number
@@ -113,8 +115,8 @@ async function settle() {
   settling.value = true
   try {
     await api.post('/api/market/settle')
+    await Promise.all([auth.fetchSelf(), load()])
     toast.success(t('market.sell.settled'))
-    load()
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {

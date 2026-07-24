@@ -16,6 +16,7 @@ export default {
     disabled: '禁用',
     viewMore: '查看更多',
     loading: '加载中…',
+    retry: '重试',
     tableRows: '表格数据行',
     none: '暂无数据',
     prevPage: '上一页',
