@@ -17,17 +17,8 @@ import { safeExternalUrl } from '@/utils/safeUrl'
 
 const { t } = useI18n()
 
-const {
-  invoices,
-  total,
-  page,
-  pageSize,
-  loading,
-  submitting,
-  loadInvoices,
-  submitApplication,
-  goToPage,
-} = useInvoice()
+const { invoices, total, page, pageSize, loading, loadInvoices, goToPage } =
+  useInvoice()
 
 const form = reactive<InvoiceForm>({
   title: '',
@@ -36,17 +27,6 @@ const form = reactive<InvoiceForm>({
   email: '',
   note: '',
 })
-
-async function handleSubmit() {
-  const success = await submitApplication(form)
-  if (success) {
-    form.title = ''
-    form.tax_id = ''
-    form.amount = ''
-    form.email = ''
-    form.note = ''
-  }
-}
 
 /** Map invoice status → StatusChip tone */
 function statusTone(
@@ -77,13 +57,37 @@ onMounted(() => {
       <p class="mt-1 text-sm text-[var(--text-tertiary)]">
         {{ t('invoice.bannerDesc') }}
       </p>
+      <template #actions>
+        <div
+          id="invoice-contact-owner-note"
+          role="note"
+          class="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--status-info)] bg-[var(--status-info-soft)] px-4 text-sm font-semibold text-[var(--status-info-text)]"
+        >
+          <svg
+            width="17"
+            height="17"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path
+              d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"
+            />
+          </svg>
+          {{ t('invoice.contactOwner') }}
+        </div>
+      </template>
     </PageHero>
 
     <!-- ── Main two-column layout ── -->
     <div class="grid gap-6 lg:grid-cols-5">
       <!-- ── Left: application form (3 / 5) ── -->
       <ConsoleCard :title="t('invoice.formTitle')" class="lg:col-span-3">
-        <form class="space-y-5" @submit.prevent="handleSubmit">
+        <form class="space-y-5" @submit.prevent>
           <!-- 发票抬头 * -->
           <FormField :label="`${t('invoice.titleLabel')} *`">
             <TextInput
@@ -206,7 +210,14 @@ onMounted(() => {
           </FormField>
 
           <!-- Submit -->
-          <ConsoleButton type="submit" size="lg" block :loading="submitting">
+          <ConsoleButton
+            type="submit"
+            size="lg"
+            block
+            disabled
+            aria-describedby="invoice-contact-owner-note"
+            :title="t('invoice.contactOwner')"
+          >
             <svg
               width="18"
               height="18"

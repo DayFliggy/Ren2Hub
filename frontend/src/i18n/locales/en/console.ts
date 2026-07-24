@@ -864,7 +864,8 @@ export default {
     breadcrumb: ['Console', 'Invoice'],
     bannerTitle: 'Online Invoice',
     bannerDesc:
-      'Submit an invoice request with your company name, tax ID, and amount. Download the PDF once the admin issues it.',
+      'Contact the group owner to request an invoice. Issued PDFs remain available here.',
+    contactOwner: 'Contact the group owner',
     formTitle: 'Invoice Request',
     titleLabel: 'Invoice title',
     titlePlaceholder: 'Company name or individual name',
@@ -891,7 +892,8 @@ export default {
     download: 'Download PDF',
     rejectReason: 'Rejection reason',
     emptyTitle: 'No invoice requests yet',
-    emptyHint: 'Fill in the form on the left to submit your first request',
+    emptyHint:
+      'No invoice records yet. Contact the group owner to request one.',
     submitted: 'Request submitted. Pending admin review.',
     status: {
       pending: 'Pending',

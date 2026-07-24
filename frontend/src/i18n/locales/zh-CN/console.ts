@@ -856,8 +856,8 @@ export default {
     title: '在线开票',
     breadcrumb: ['控制台', '开票'],
     bannerTitle: '在线开票',
-    bannerDesc:
-      '填写抬头、税号与金额提交开票申请，管理员开具后可在此下载发票 PDF。',
+    bannerDesc: '如需开票请联系群主，管理员开具后可在此查看并下载发票 PDF。',
+    contactOwner: '联系群主可开',
     formTitle: '开票申请',
     titleLabel: '发票抬头',
     titlePlaceholder: '请输入发票抬头（公司名称或个人姓名）',
@@ -883,7 +883,7 @@ export default {
     download: '下载 PDF',
     rejectReason: '拒绝原因',
     emptyTitle: '暂无开票申请',
-    emptyHint: '填写左侧表单提交第一条开票申请',
+    emptyHint: '暂无开票记录，如需开票请联系群主',
     submitted: '申请已提交，等待管理员审核',
     status: {
       pending: '审核中',
