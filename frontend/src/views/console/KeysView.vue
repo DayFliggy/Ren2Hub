@@ -9,6 +9,7 @@ import type { TokenSummary } from '@/types/console'
 import KeyChannelsModal from '@/components/console/keys/KeyChannelsModal.vue'
 import KeyInlineChannels from '@/components/console/keys/KeyInlineChannels.vue'
 import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
+import KeyEndpointStrip from '@/components/console/keys/KeyEndpointStrip.vue'
 import KeyRevealModal from '@/components/console/keys/KeyRevealModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -217,9 +218,11 @@ onBeforeUnmount(() => {
 
 <template>
   <div @click.capture="captureClick">
-    <PageBreadcrumb
-      :crumbs="[t('keys.breadcrumb.0'), t('keys.breadcrumb.1')]"
-    />
+    <PageBreadcrumb :crumbs="[t('keys.breadcrumb.0'), t('keys.breadcrumb.1')]">
+      <template #action>
+        <KeyEndpointStrip />
+      </template>
+    </PageBreadcrumb>
     <ConsoleCard :padded="false">
       <!-- toolbar -->
       <div class="flex flex-wrap items-center gap-3 p-4">

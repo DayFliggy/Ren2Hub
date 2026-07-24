@@ -80,6 +80,14 @@ describe('mock API input boundaries', () => {
     }
   )
 
+  it('defaults an omitted token type to auto', async () => {
+    const created = await api.post<{ item: TokenSummary }>('/api/token/', {
+      name: 'default token',
+    })
+
+    expect(created.item.type).toBe('auto')
+  })
+
   it('keeps manual channels editable and auto channels read-only', async () => {
     const manual = await api.post<{ item: TokenSummary }>('/api/token/', {
       name: 'manual token',

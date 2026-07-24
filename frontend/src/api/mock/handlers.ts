@@ -409,7 +409,7 @@ export async function dispatchMock<T>(
     if (!name || name.length > 64) {
       return fail('令牌名称长度为 1-64 字符') as ApiResponse<T>
     }
-    const rawType = String(body.type ?? 'manual')
+    const rawType = String(body.type ?? 'auto')
     if (!oneOf(rawType, TOKEN_TYPES)) {
       return fail('无效的令牌类型') as ApiResponse<T>
     }
