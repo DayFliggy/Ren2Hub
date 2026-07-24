@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+
+import { vendorLogoMeta } from '@/constants/console'
 
 const props = withDefaults(
   defineProps<{
@@ -19,6 +21,17 @@ const palettes = [
   { bg: 'var(--status-danger-soft)', fg: 'var(--status-danger-text)' },
 ]
 
+const imageFailed = ref(false)
+const logo = computed(() => vendorLogoMeta[props.vendor])
+const showLogo = computed(() => logo.value != null && !imageFailed.value)
+
+watch(
+  () => props.vendor,
+  () => {
+    imageFailed.value = false
+  }
+)
+
 const swatch = computed(() => {
   let hash = 0
   for (let i = 0; i < props.vendor.length; i++) {
@@ -33,16 +46,28 @@ const initial = computed(() => props.vendor.trim().charAt(0).toUpperCase())
 
 <template>
   <span
-    class="inline-flex shrink-0 items-center justify-center rounded-xl font-bold"
+    class="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border-subtle)] font-bold"
     :style="{
       width: `${size}px`,
       height: `${size}px`,
-      background: swatch.bg,
+      background: showLogo
+        ? logo?.darkSurface
+          ? '#101114'
+          : 'var(--surface-solid)'
+        : swatch.bg,
       color: swatch.fg,
       fontSize: `${Math.round(size * 0.42)}px`,
     }"
     aria-hidden="true"
   >
-    {{ initial }}
+    <img
+      v-if="showLogo"
+      :src="logo?.src"
+      alt=""
+      class="h-[68%] w-[68%] object-contain"
+      :class="logo?.monochrome ? 'dark:invert' : undefined"
+      @error="imageFailed = true"
+    />
+    <template v-else>{{ initial }}</template>
   </span>
 </template>

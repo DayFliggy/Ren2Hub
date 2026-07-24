@@ -51,9 +51,10 @@ const channelsToken = ref<TokenSummary | null>(null)
 const expandedToken = ref<TokenSummary | null>(null)
 const revealTokenId = ref<number | null>(null)
 
-// Transient hint bubble anchored at the click point (single-click a row).
 const clickHint = ref<{ x: number; y: number } | null>(null)
+let clickTimer = 0
 let clickHintTimer = 0
+const lastClickPos = ref({ x: 0, y: 0 })
 
 const columns = computed<TableColumn[]>(() => [
   { key: 'name', label: t('keys.colName') },
@@ -145,25 +146,15 @@ function openEdit(row: TokenSummary) {
   formOpen.value = true
 }
 
-/* Single click = copy key + show hint bubble.
-   Double click = toggle inline channel-routing panel.
-   250ms timer prevents the copy firing on double-clicks. */
-let clickTimer = 0
-
-// Track the raw mouse position so we can anchor the hint bubble.
-const lastClickPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
-function captureClick(e: MouseEvent) {
-  lastClickPos.value = { x: e.clientX, y: e.clientY }
+function captureClick(event: MouseEvent) {
+  lastClickPos.value = { x: event.clientX, y: event.clientY }
 }
 
-function onRowClick(row: TokenSummary) {
+function onRowClick() {
   window.clearTimeout(clickTimer)
-  if (window.getSelection()?.toString()) return
   clickTimer = window.setTimeout(() => {
-    copyKey(row)
-    // Show hint bubble near the click point.
     window.clearTimeout(clickHintTimer)
-    clickHint.value = { x: lastClickPos.value.x, y: lastClickPos.value.y }
+    clickHint.value = { ...lastClickPos.value }
     clickHintTimer = window.setTimeout(() => {
       clickHint.value = null
     }, 1800)
@@ -172,6 +163,7 @@ function onRowClick(row: TokenSummary) {
 
 function onRowDblclick(row: TokenSummary) {
   window.clearTimeout(clickTimer)
+  clickHint.value = null
   // Toggle: double-click the same row again collapses the panel.
   expandedToken.value = expandedToken.value?.id === row.id ? null : row
 }
@@ -224,7 +216,6 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!-- click capture: track mouse position for hint bubble -->
   <div @click.capture="captureClick">
     <PageBreadcrumb
       :crumbs="[t('keys.breadcrumb.0'), t('keys.breadcrumb.1')]"
@@ -264,10 +255,6 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <p class="px-4 pb-3 text-xs text-[var(--text-tertiary)]">
-        {{ t('keys.rowHint') }}
-      </p>
-
       <DataTable
         v-model:selected="selected"
         :columns="columns"
@@ -281,9 +268,10 @@ onBeforeUnmount(() => {
         selectable
         checkbox-shape="round"
         row-clickable
+        row-dblclickable
         :empty-title="t('keys.emptyTitle')"
         :empty-hint="t('keys.emptyHint')"
-        @row-click="onRowClick($event as TokenSummary)"
+        @row-click="onRowClick"
         @row-dblclick="onRowDblclick($event as TokenSummary)"
       >
         <template #cell-name="{ row }">
@@ -369,7 +357,7 @@ onBeforeUnmount(() => {
         </template>
 
         <template #cell-actions="{ row }">
-          <!-- stop: action buttons must not trigger row copy / inline panel -->
+          <!-- Action buttons must not trigger the inline panel. -->
           <div
             class="flex items-center justify-end gap-1"
             @click.stop
@@ -556,7 +544,6 @@ onBeforeUnmount(() => {
       @cancel="closeDelete"
     />
 
-    <!-- click hint bubble: anchored to mouse position, above the click point -->
     <Transition
       enter-active-class="transition-all duration-150 ease-out"
       enter-from-class="opacity-0 scale-90"

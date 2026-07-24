@@ -25,6 +25,23 @@ export const vendorMeta: Record<string, string> = {
   智谱AI: 'GLM 系列与视觉生成',
 }
 
+export interface VendorLogoMeta {
+  src: string
+  monochrome?: boolean
+  darkSurface?: boolean
+}
+
+export const vendorLogoMeta: Record<string, VendorLogoMeta> = {
+  OpenAI: { src: '/models/openai.svg', monochrome: true },
+  Anthropic: { src: '/models/claude-color.svg' },
+  Google: { src: '/models/gemini-color.svg' },
+  DeepSeek: { src: '/models/deepseek-color.svg' },
+  阿里通义: { src: '/models/qwen-color.svg' },
+  xAI: { src: '/models/grok.svg', monochrome: true },
+  Moonshot: { src: '/models/kimi-color.svg', darkSurface: true },
+  智谱AI: { src: '/models/zhipu-color.svg' },
+}
+
 /** Platform-side upstream channels (also the channel pool for platform tokens). */
 export const marketSources = [
   'OpenAI 官方',

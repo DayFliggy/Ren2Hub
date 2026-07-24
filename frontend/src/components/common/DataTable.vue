@@ -31,8 +31,10 @@ const props = withDefaults(
     selected?: Array<string | number>
     /** Checkbox visual: default square native look, or round custom-drawn. */
     checkboxShape?: 'square' | 'round'
-    /** Emit row-click / row-dblclick on tbody rows (adds pointer cursor). */
+    /** Emit row-click on tbody rows. */
     rowClickable?: boolean
+    /** Emit row-dblclick on tbody rows without making single clicks actionable. */
+    rowDblclickable?: boolean
     emptyTitle?: string
     emptyHint?: string
     /** Skeleton row count while loading. Pass the page size so the loading
@@ -87,6 +89,10 @@ const checkboxClass = computed(() =>
     : 'h-4 w-4 accent-[var(--accent)]'
 )
 
+const rowInteractive = computed(
+  () => props.rowClickable || props.rowDblclickable
+)
+
 const allChecked = computed(
   () =>
     props.rows.length > 0 &&
@@ -114,10 +120,14 @@ function toggleRow(key: string | number) {
 }
 
 function activateRowFromKeyboard(event: KeyboardEvent, row: T) {
-  if (!props.rowClickable || event.target !== event.currentTarget) return
+  if (!rowInteractive.value || event.target !== event.currentTarget) return
   if (event.key !== 'Enter' && event.key !== ' ') return
   event.preventDefault()
-  emit('row-click', row)
+  if (props.rowDblclickable) {
+    emit('row-dblclick', row)
+  } else {
+    emit('row-click', row)
+  }
 }
 
 const alignClass = (align?: string) =>
@@ -467,10 +477,12 @@ onBeforeUnmount(() => {
             v-for="(row, index) in rows"
             :key="String(row[rowKey])"
             class="border-b border-[var(--border-subtle)] transition-colors last:border-0 hover:bg-[var(--surface-muted)]"
-            :class="rowClickable ? 'cursor-pointer select-none' : undefined"
-            :tabindex="rowClickable ? 0 : undefined"
+            :class="rowInteractive ? 'cursor-pointer select-none' : undefined"
+            :tabindex="rowInteractive ? 0 : undefined"
             @click="rowClickable && emit('row-click', row)"
-            @dblclick="rowClickable && emit('row-dblclick', row)"
+            @dblclick="
+              (rowClickable || rowDblclickable) && emit('row-dblclick', row)
+            "
             @keydown="activateRowFromKeyboard($event, row)"
           >
             <td v-if="selectable" class="px-3 py-3" @click.stop @dblclick.stop>

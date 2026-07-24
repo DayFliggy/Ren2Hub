@@ -162,8 +162,7 @@ export default {
     updated: '令牌已更新',
     deleted: '令牌已删除',
     copied: '密钥已复制',
-    rowHint: '单击复制密钥，双击展开渠道路由',
-    dblclickHint: '双击显示 渠道路由',
+    dblclickHint: '双击显示渠道路由',
     channels: {
       title: '渠道路由',
       add: '添加渠道',

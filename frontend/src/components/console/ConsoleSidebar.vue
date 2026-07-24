@@ -9,8 +9,6 @@ import {
   consoleNavTools,
 } from '@/constants/navigation/consoleNav'
 
-import BrandMark from './BrandMark.vue'
-
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
@@ -62,7 +60,12 @@ defineExpose({ collapsed })
       :class="collapsed ? 'justify-center px-0' : 'gap-2.5 px-6'"
       :aria-label="`RenRen AI ${t('nav.dashboard')}`"
     >
-      <BrandMark class="h-7 w-7 shrink-0 rounded-lg" />
+      <img
+        :src="'/logo.png'"
+        alt=""
+        aria-hidden="true"
+        class="h-7 w-7 shrink-0 object-contain"
+      />
       <span
         v-if="!collapsed"
         class="truncate text-lg font-bold tracking-tight text-[var(--text-primary)]"

@@ -163,7 +163,6 @@ export default {
     updated: 'Key updated',
     deleted: 'Key deleted',
     copied: 'Key copied',
-    rowHint: 'Click a row to copy the key, double-click to route channels',
     dblclickHint: 'Double-click for channel routing',
     channels: {
       title: 'Channel routing',

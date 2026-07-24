@@ -11,7 +11,6 @@ import {
 } from '@/constants/navigation/consoleNav'
 import { labEntryRoute, labRouteNames } from '@/constants/navigation/labNav'
 
-import BrandMark from './BrandMark.vue'
 import CommandPaletteModal from './CommandPaletteModal.vue'
 import NotificationPanel from './NotificationPanel.vue'
 import TopNavMenu from './TopNavMenu.vue'
@@ -63,7 +62,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
           class="flex items-center gap-2.5"
           :aria-label="`RenRen AI ${t('nav.dashboard')}`"
         >
-          <BrandMark class="h-8 w-8 rounded-lg" />
+          <img
+            :src="'/logo.png'"
+            alt=""
+            aria-hidden="true"
+            class="h-8 w-8 shrink-0 object-contain"
+          />
           <span
             class="hidden whitespace-nowrap text-lg font-bold tracking-tight text-[var(--text-primary)] sm:inline"
             >RenRen AI</span
