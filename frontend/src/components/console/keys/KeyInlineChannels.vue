@@ -54,7 +54,7 @@ watch(
     channels.value = token.channels.map((c) => ({ ...c }))
     loadBalance.value = token.load_balance
     showAdd.value = false
-    if (token.type === 'market') {
+    if (token.type === 'manual') {
       try {
         const data = await api.get<{ channels: MyChannel[] }>(
           '/api/market/my-channels'
@@ -75,12 +75,13 @@ watch(
 
 const candidates = computed<string[]>(() => {
   if (!props.token || readonly.value) return []
-  if (props.token.type === 'platform') return marketSources
   return [
     ...new Set(
-      myChannels.value
-        .filter((c) => c.status === 'active')
-        .map((c) => c.merchantName)
+      marketSources.concat(
+        myChannels.value
+          .filter((c) => c.status === 'active')
+          .map((c) => c.merchantName)
+      )
     ),
   ]
 })

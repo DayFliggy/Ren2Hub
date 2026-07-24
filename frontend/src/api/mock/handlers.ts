@@ -85,7 +85,7 @@ import { getMockDelay, mockRuntime } from './state'
 
 type Ctx = RequestOptions & { headers: Record<string, string> }
 
-const TOKEN_TYPES: readonly TokenType[] = ['platform', 'auto', 'market']
+const TOKEN_TYPES: readonly TokenType[] = ['manual', 'auto']
 const MARKET_MODEL_TYPES: readonly MarketModelType[] = [
   'chat',
   'image',
@@ -409,7 +409,7 @@ export async function dispatchMock<T>(
     if (!name || name.length > 64) {
       return fail('令牌名称长度为 1-64 字符') as ApiResponse<T>
     }
-    const rawType = String(body.type ?? 'platform')
+    const rawType = String(body.type ?? 'manual')
     if (!oneOf(rawType, TOKEN_TYPES)) {
       return fail('无效的令牌类型') as ApiResponse<T>
     }
@@ -486,7 +486,7 @@ export async function dispatchMock<T>(
       model_limits: modelLimits,
       ip_limits: ipLimits,
       rate_limit: rateLimit,
-      max_ratio: type === 'platform' ? undefined : maxRatio,
+      max_ratio: maxRatio,
       load_balance: body.load_balance ?? false,
       channels: type === 'auto' ? [] : channels,
       expired_time: expiredTime,
@@ -564,9 +564,7 @@ export async function dispatchMock<T>(
         }
         next.rate_limit = rateLimit
       }
-      if (item.type === 'platform') {
-        next.max_ratio = undefined
-      } else if (body.max_ratio !== undefined) {
+      if (body.max_ratio !== undefined) {
         const maxRatio = Number(body.max_ratio)
         if (!Number.isFinite(maxRatio) || maxRatio <= 0 || maxRatio > 1_000) {
           return fail('最高倍率格式不正确') as ApiResponse<T>

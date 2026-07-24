@@ -31,7 +31,7 @@ const { t } = useI18n()
 const toast = useToast()
 
 const form = reactive({
-  type: 'platform' as TokenType,
+  type: 'manual' as TokenType,
   name: '',
   customKey: '',
   model_limits: [] as string[],
@@ -57,7 +57,7 @@ watch(
   (open) => {
     if (!open) return
     const e = props.editing
-    form.type = e?.type ?? 'platform'
+    form.type = e?.type ?? 'manual'
     form.name = e?.name ?? ''
     form.customKey = ''
     form.model_limits = e?.model_limits ? [...e.model_limits] : []
@@ -82,23 +82,16 @@ watch(
 
 const typeCards = computed(() => [
   {
-    value: 'platform' as const,
-    title: t('keys.type.platform'),
-    desc: t('keys.type.platformDesc'),
+    value: 'manual' as const,
+    title: t('keys.type.manual'),
+    desc: t('keys.type.manualDesc'),
   },
   {
     value: 'auto' as const,
     title: t('keys.type.auto'),
     desc: t('keys.type.autoDesc'),
   },
-  {
-    value: 'market' as const,
-    title: t('keys.type.market'),
-    desc: t('keys.type.marketDesc'),
-  },
 ])
-
-const showMaxRatio = computed(() => form.type !== 'platform')
 
 /** Adaptive step size for the rate-limit stepper. */
 function rateLimitStepSize(value: number): number {
@@ -138,7 +131,7 @@ async function save() {
             .filter(Boolean)
         : [],
       rate_limit: vis.rateLimit ? (form.rateLimit ?? 0) : 0,
-      max_ratio: showMaxRatio.value ? (form.maxRatio ?? undefined) : undefined,
+      max_ratio: form.maxRatio ?? undefined,
       expired_time:
         vis.expiry && form.expireDate
           ? Math.floor(new Date(form.expireDate).getTime() / 1000)
@@ -171,10 +164,10 @@ async function save() {
     @close="emit('close')"
   >
     <div class="space-y-4 text-left">
-      <!-- token type: three selectable cards (fixed after creation) -->
+      <!-- Token type is fixed after creation. -->
       <FormField :label="t('keys.type.label')">
         <div
-          class="grid gap-2 sm:grid-cols-3"
+          class="grid gap-2 sm:grid-cols-2"
           role="radiogroup"
           :aria-label="t('keys.type.label')"
         >
@@ -378,11 +371,7 @@ async function save() {
           </button>
         </div>
       </div>
-      <FormField
-        v-if="showMaxRatio"
-        :label="t('keys.maxRatio')"
-        :hint="t('keys.maxRatioHint')"
-      >
+      <FormField :label="t('keys.maxRatio')" :hint="t('keys.maxRatioHint')">
         <AmountInput
           v-model="form.maxRatio"
           name="token-max-ratio"

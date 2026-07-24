@@ -30,7 +30,7 @@ const channels = ref<TokenChannel[]>([])
 const loadBalance = ref(false)
 const saving = ref(false)
 
-/** Market tokens pick from the user's added marketplace channels. */
+/** Manual tokens can also use the user's active marketplace channels. */
 const myChannels = ref<MyChannel[]>([])
 
 const readonly = computed(() => props.token?.type === 'auto')
@@ -41,7 +41,7 @@ watch(
     if (!open || !props.token) return
     channels.value = props.token.channels.map((c) => ({ ...c }))
     loadBalance.value = props.token.load_balance
-    if (props.token.type === 'market') {
+    if (props.token.type === 'manual') {
       try {
         const data = await api.get<{ channels: MyChannel[] }>(
           '/api/market/my-channels'
@@ -53,19 +53,22 @@ watch(
           error instanceof ApiError ? error.message : t('common.failed')
         )
       }
+    } else {
+      myChannels.value = []
     }
   }
 )
 
-/** Candidate pool by token type (auto has none — computed server-side). */
+/** Manual tokens combine official and user-added active channels. */
 const candidates = computed<string[]>(() => {
   if (!props.token || readonly.value) return []
-  if (props.token.type === 'platform') return marketSources
   return [
     ...new Set(
-      myChannels.value
-        .filter((c) => c.status === 'active')
-        .map((c) => c.merchantName)
+      marketSources.concat(
+        myChannels.value
+          .filter((c) => c.status === 'active')
+          .map((c) => c.merchantName)
+      )
     ),
   ]
 })

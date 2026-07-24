@@ -422,7 +422,7 @@ export const tokens: TokenItem[] = (
     ],
     [
       'Chatbox 客户端',
-      'platform',
+      'manual',
       1,
       'default',
       ['gpt-4o', 'gpt-4o-mini'],
@@ -435,7 +435,7 @@ export const tokens: TokenItem[] = (
     ],
     [
       'NextChat 网页端',
-      'platform',
+      'manual',
       1,
       'vip',
       [],
@@ -452,7 +452,7 @@ export const tokens: TokenItem[] = (
     ],
     [
       'CI 自动化测试',
-      'platform',
+      'manual',
       2,
       'default',
       ['deepseek-v3.2'],
@@ -465,7 +465,7 @@ export const tokens: TokenItem[] = (
     ],
     [
       'Claude Code 专用',
-      'market',
+      'manual',
       1,
       'vip',
       ['claude-sonnet-4.5', 'claude-opus-4.1'],
@@ -479,7 +479,7 @@ export const tokens: TokenItem[] = (
     ['临时调试', 'auto', 2, 'default', [], 100_000, false, 30, 1.2, false, []],
     [
       '团队共享',
-      'market',
+      'manual',
       1,
       'svip',
       [],
@@ -496,7 +496,7 @@ export const tokens: TokenItem[] = (
     ],
     [
       'LobeChat',
-      'platform',
+      'manual',
       1,
       'default',
       ['gpt-4o', 'gemini-2.5-pro'],

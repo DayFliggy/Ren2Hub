@@ -1,10 +1,9 @@
 /**
  * Token routing types:
- * - platform: routes through the platform's own upstream channels only
- * - auto:     the system computes the best channels across platform + market
- * - market:   routes through marketplace channels the user has added
+ * - manual: the user selects platform and marketplace channels
+ * - auto:   the system computes the best channels across both pools
  */
-export type TokenType = 'platform' | 'auto' | 'market'
+export type TokenType = 'manual' | 'auto'
 
 /** One upstream channel bound to a token; array order = routing priority. */
 export interface TokenChannel {
@@ -26,7 +25,7 @@ export interface TokenItem {
   model_limits: string[]
   ip_limits: string[]
   rate_limit: number // requests / minute, 0 = unlimited
-  max_ratio?: number // max accepted channel price ratio (auto / market only)
+  max_ratio?: number // max accepted channel price ratio
   load_balance: boolean
   channels: TokenChannel[] // order = priority (auto: computed server-side)
   expired_time: number // -1 = never

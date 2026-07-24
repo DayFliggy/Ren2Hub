@@ -72,7 +72,7 @@ const columns = computed<TableColumn[]>(() => [
 ])
 
 const typeTone = (type: TokenSummary['type']) =>
-  type === 'auto' ? 'info' : type === 'market' ? 'warning' : 'accent'
+  type === 'auto' ? 'info' : 'accent'
 
 let loadController: AbortController | null = null
 let loadSequence = 0

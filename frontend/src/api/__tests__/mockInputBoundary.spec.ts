@@ -65,8 +65,53 @@ describe('mock API input boundaries', () => {
     await expect(
       api.post('/api/token/', {
         name: 'invalid',
-        type: 'market',
+        type: 'manual',
         ...invalid,
+      })
+    ).rejects.toMatchObject({ business: true })
+  })
+
+  it.each(['platform', 'market'])(
+    'rejects the legacy %s token type',
+    async (type) => {
+      await expect(
+        api.post('/api/token/', { name: 'legacy token', type })
+      ).rejects.toMatchObject({ business: true })
+    }
+  )
+
+  it('keeps manual channels editable and auto channels read-only', async () => {
+    const manual = await api.post<{ item: TokenSummary }>('/api/token/', {
+      name: 'manual token',
+      type: 'manual',
+      channels: [{ name: 'OpenAI 官方', enabled: true }],
+    })
+    expect(manual.item).toMatchObject({
+      type: 'manual',
+      channels: [{ name: 'OpenAI 官方', enabled: true }],
+    })
+
+    const updated = await api.put<{ item: TokenSummary }>(
+      `/api/token/${manual.item.id}`,
+      { channels: [{ name: 'Azure 美东', enabled: true }] }
+    )
+    expect(updated.item.channels).toEqual([
+      { name: 'Azure 美东', enabled: true },
+    ])
+
+    const automatic = await api.post<{ item: TokenSummary }>('/api/token/', {
+      name: 'auto token',
+      type: 'auto',
+      channels: [{ name: 'submitted channel', enabled: true }],
+    })
+    expect(automatic.item.channels.length).toBeGreaterThan(0)
+    expect(automatic.item.channels).not.toContainEqual({
+      name: 'submitted channel',
+      enabled: true,
+    })
+    await expect(
+      api.put(`/api/token/${automatic.item.id}`, {
+        channels: [{ name: 'Azure 美东', enabled: true }],
       })
     ).rejects.toMatchObject({ business: true })
   })
