@@ -339,6 +339,16 @@ func replaceGroups(tx *gorm.DB, userID int, profile *model.UserRouteProfile, inp
 }
 
 func replaceGroupChildren(tx *gorm.DB, userID int, group *model.UserRouteGroup, input RouteGroupInput) error {
+	existingChannels := make(map[int]struct{})
+	if group.ID > 0 {
+		var existingEntries []model.UserRouteEntry
+		if err := tx.Where("group_id = ?", group.ID).Find(&existingEntries).Error; err != nil {
+			return err
+		}
+		for _, entry := range existingEntries {
+			existingChannels[entry.ChannelID] = struct{}{}
+		}
+	}
 	if err := tx.Where("group_id = ?", group.ID).Delete(&model.UserRouteEntry{}).Error; err != nil {
 		return err
 	}
@@ -365,7 +375,6 @@ func replaceGroupChildren(tx *gorm.DB, userID int, group *model.UserRouteGroup, 
 		return err
 	}
 	seenChannels := make(map[int]struct{}, len(input.Entries))
-	seenPositions := make(map[int]struct{}, len(input.Entries))
 	for _, item := range input.Entries {
 		entry := model.UserRouteEntry{
 			GroupID:   group.ID,
@@ -378,16 +387,17 @@ func replaceGroupChildren(tx *gorm.DB, userID int, group *model.UserRouteGroup, 
 		if _, duplicate := seenChannels[entry.ChannelID]; duplicate {
 			return fmt.Errorf("%w: duplicate channel in route group", ErrRouteProfileValidation)
 		}
-		if _, duplicate := seenPositions[entry.Position]; duplicate {
-			return fmt.Errorf("%w: duplicate entry position", ErrRouteProfileValidation)
-		}
 		seenChannels[entry.ChannelID] = struct{}{}
-		seenPositions[entry.Position] = struct{}{}
 		if err := entry.Validate(); err != nil {
 			return fmt.Errorf("%w: %v", ErrRouteProfileValidation, err)
 		}
 		if err := ensureRouteChannelEntitlement(tx, userID, entry.ChannelID, entry.Source); err != nil {
-			return err
+			// Existing entries may have become unavailable after they were saved.
+			// Keep them editable so the user can remove or disable them; new
+			// channel references must still pass the current authorization check.
+			if _, exists := existingChannels[entry.ChannelID]; !exists {
+				return err
+			}
 		}
 		if err := tx.Create(&entry).Error; err != nil {
 			return err

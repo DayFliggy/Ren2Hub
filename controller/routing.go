@@ -128,17 +128,17 @@ func PreviewRouteProfile(c *gin.Context) {
 	if !ok {
 		return
 	}
-	profile, err := service.GetUserRouteProfile(c.GetInt("id"), profileID)
+	var input service.RouteProfilePreviewInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		writeRoutePreviewBindingError(c)
+		return
+	}
+	preview, err := service.PreviewUserRouteProfile(c, c.GetInt("id"), profileID, input)
 	if err != nil {
 		writeRouteError(c, err)
 		return
 	}
-	channels, err := listEligibleRouteChannels(c.GetInt("id"))
-	if err != nil {
-		writeRouteError(c, err)
-		return
-	}
-	common.ApiSuccess(c, gin.H{"profile": profile, "eligible_channels": channels, "live_selection": false})
+	common.ApiSuccess(c, preview)
 }
 
 func ListEligibleRouteChannels(c *gin.Context) {
@@ -282,6 +282,14 @@ func writeRouteBindingError(c *gin.Context) {
 	c.JSON(http.StatusBadRequest, gin.H{
 		"success": false,
 		"message": "invalid route profile request",
+		"code":    "BAD_REQUEST",
+	})
+}
+
+func writeRoutePreviewBindingError(c *gin.Context) {
+	c.JSON(http.StatusBadRequest, gin.H{
+		"success": false,
+		"message": "invalid route preview request",
 		"code":    "BAD_REQUEST",
 	})
 }
