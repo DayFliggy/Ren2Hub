@@ -138,6 +138,13 @@ func candidateSupportsRequest(channel *Channel, requestPath string, requestModel
 	return config != nil && config.SupportsPathForModel(requestPath, requestModel)
 }
 
+// ChannelSupportsRequestPath is the shared path capability predicate used by
+// legacy routing and the shadow index. Keeping the legacy predicate as the
+// implementation prevents the shadow path from drifting from live routing.
+func ChannelSupportsRequestPath(channel *Channel, requestPath string, requestModel string) bool {
+	return candidateSupportsRequest(channel, requestPath, requestModel)
+}
+
 func chooseChannelCandidate(candidates []*Channel, retry int) (*Channel, error) {
 	if len(candidates) == 0 {
 		return nil, nil

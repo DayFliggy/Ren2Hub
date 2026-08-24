@@ -257,6 +257,9 @@ func migrateDB() error {
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
 	}
+	if err := prepareChannelCapabilityMigration(); err != nil {
+		return err
+	}
 
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -302,10 +305,14 @@ func migrateDB() error {
 		&UserRouteEntry{},
 		&RoutePolicy{},
 		&ChannelModelCapability{},
+		&ChannelCapabilitySnapshot{},
 		&UserChannelEntitlement{},
 		&ChannelHealth{},
 	)
 	if err != nil {
+		return err
+	}
+	if err := migrateChannelCapabilityIndexes(); err != nil {
 		return err
 	}
 	if err := BackfillTicketMessageRoles(); err != nil {
@@ -338,6 +345,9 @@ func migrateDB() error {
 func migrateDBFast() error {
 
 	var wg sync.WaitGroup
+	if err := prepareChannelCapabilityMigration(); err != nil {
+		return err
+	}
 
 	migrations := []struct {
 		model interface{}
@@ -384,6 +394,7 @@ func migrateDBFast() error {
 		{&UserRouteEntry{}, "UserRouteEntry"},
 		{&RoutePolicy{}, "RoutePolicy"},
 		{&ChannelModelCapability{}, "ChannelModelCapability"},
+		{&ChannelCapabilitySnapshot{}, "ChannelCapabilitySnapshot"},
 		{&UserChannelEntitlement{}, "UserChannelEntitlement"},
 		{&ChannelHealth{}, "ChannelHealth"},
 	}
@@ -409,6 +420,9 @@ func migrateDBFast() error {
 		if err != nil {
 			return err
 		}
+	}
+	if err := migrateChannelCapabilityIndexes(); err != nil {
+		return err
 	}
 	if err := BackfillTicketMessageRoles(); err != nil {
 		return fmt.Errorf("failed to backfill ticket message roles: %v", err)
@@ -616,6 +630,32 @@ PRIMARY KEY (` + "`id`" + `)
 		}
 	}
 	return nil
+}
+
+func migrateChannelCapabilityIndexes() error {
+	// PR #2 used this index name for a non-versioned uniqueness contract. Drop
+	// it explicitly because AutoMigrate does not remove obsolete indexes on all
+	// supported dialects. The replacement index is created from the struct tags.
+	if DB.Migrator().HasIndex(&ChannelModelCapability{}, "channel_model_capability_version") {
+		if err := DB.Migrator().DropIndex(&ChannelModelCapability{}, "channel_model_capability_version"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func prepareChannelCapabilityMigration() error {
+	if !DB.Migrator().HasTable(&ChannelModelCapability{}) ||
+		!DB.Migrator().HasIndex(&ChannelModelCapability{}, "channel_model_capability_version") {
+		return nil
+	}
+	if err := DB.Migrator().DropIndex(&ChannelModelCapability{}, "channel_model_capability_version"); err != nil {
+		return err
+	}
+	// Capability rows are a derived cache. PR-2 rows cannot be made active
+	// without a snapshot pointer, so discard them before AutoMigrate creates the
+	// versioned unique index; startup rebuild repopulates the current data.
+	return DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&ChannelModelCapability{}).Error
 }
 
 // migrateTokenModelLimitsToText migrates model_limits column from varchar(1024) to text

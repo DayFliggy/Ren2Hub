@@ -22,6 +22,7 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(modelUpdateHandler{})
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
+	service.RegisterSystemTaskHandler(routeCapabilityRefreshHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
@@ -149,6 +150,32 @@ func (asyncTaskPollHandler) NewPayload() any { return nil }
 
 func (asyncTaskPollHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	summary := service.RunTaskPollingOnce(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+}
+
+// routeCapabilityRefreshHandler fingerprints channel configuration and
+// publishes only changed capability snapshots. Its DB lease prevents multiple
+// masters from rebuilding the same snapshot concurrently.
+type routeCapabilityRefreshHandler struct{}
+
+func (routeCapabilityRefreshHandler) Type() string { return model.SystemTaskTypeRouteCapabilityRefresh }
+
+func (routeCapabilityRefreshHandler) Enabled() bool { return service.RouteCapabilityRefreshEnabled() }
+
+func (routeCapabilityRefreshHandler) Interval() time.Duration {
+	return service.RouteCapabilityRefreshInterval()
+}
+
+func (routeCapabilityRefreshHandler) NewPayload() any { return nil }
+
+func (routeCapabilityRefreshHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	refreshCtx, cancel := context.WithTimeout(ctx, service.RouteCapabilityRefreshTimeout())
+	defer cancel()
+	summary, err := service.RefreshStaleChannelCapabilities(refreshCtx, service.NewSystemTaskProgressReporter(task, runnerID))
+	if err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, summary, err)
+		return
+	}
 	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
 }
 

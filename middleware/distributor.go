@@ -35,6 +35,7 @@ type ModelRequest struct {
 func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var channel *model.Channel
+		selectGroup := ""
 		channelId, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
 		if err != nil {
@@ -107,7 +108,6 @@ func Distribute() func(c *gin.Context) {
 					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorModelNameRequired))
 					return
 				}
-				var selectGroup string
 				usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 				// check path is /pg/chat/completions
 				if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
@@ -198,6 +198,12 @@ func Distribute() func(c *gin.Context) {
 						}
 					}
 					if err != nil {
+						service.RecordLegacySelectionAndShadow(
+							c.Request.Context(),
+							service.BuildRouteShadowRequest(c, modelRequest.Model, c.Request.URL.Path, 0),
+							selectGroup,
+							0,
+						)
 						showGroup := usingGroup
 						if usingGroup == "auto" {
 							showGroup = fmt.Sprintf("auto(%s)", selectGroup)
@@ -212,6 +218,12 @@ func Distribute() func(c *gin.Context) {
 						return
 					}
 					if channel == nil {
+						service.RecordLegacySelectionAndShadow(
+							c.Request.Context(),
+							service.BuildRouteShadowRequest(c, modelRequest.Model, c.Request.URL.Path, 0),
+							selectGroup,
+							0,
+						)
 						if requiresNativeResponses {
 							abortWithOpenAiMessage(c, http.StatusServiceUnavailable, "remote Responses compaction requires an available native Responses channel", types.ErrorCodeModelNotFound)
 							return
@@ -227,6 +239,12 @@ func Distribute() func(c *gin.Context) {
 		if isCompactRequest {
 			selectedModel = compactPermissionModel
 		}
+		service.RecordLegacySelectionAndShadow(
+			c.Request.Context(),
+			service.BuildRouteShadowRequest(c, selectedModel, c.Request.URL.Path, 0),
+			selectGroup,
+			channel.Id,
+		)
 		SetupContextForSelectedChannel(c, channel, selectedModel)
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {

@@ -1,0 +1,550 @@
+package service
+
+import (
+	"context"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/modellab"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/gin-gonic/gin"
+)
+
+const (
+	ShadowRouteSource = "auto_lab"
+
+	ShadowReasonSameChannel          = "same_channel"
+	ShadowReasonDifferentPriority    = "different_priority"
+	ShadowReasonLegacyOnly           = "legacy_only"
+	ShadowReasonShadowOnly           = "shadow_only"
+	ShadowReasonUnknownCapability    = "unknown_capability"
+	ShadowReasonPathFilterDifference = "path_filter_difference"
+	ShadowReasonAbilityFilter        = "ability_filter_difference"
+	ShadowReasonTokenFilter          = "token_permission_difference"
+	ShadowReasonSnapshotStale        = "snapshot_stale"
+
+	ShadowFilterSnapshotUnavailable = "snapshot_unavailable"
+	ShadowFilterSnapshotStale       = "snapshot_stale"
+	ShadowFilterUnknownCapability   = "unknown_capability"
+	ShadowFilterUnsupported         = "unsupported_capability"
+	ShadowFilterChannelDisabled     = "channel_disabled"
+	ShadowFilterAbilityDisabled     = "ability_disabled"
+	ShadowFilterGroupForbidden      = "group_forbidden"
+	ShadowFilterTokenForbidden      = "token_model_forbidden"
+	ShadowFilterPathUnsupported     = "path_unsupported"
+	ShadowFilterPriceForbidden      = "price_forbidden"
+	ShadowFilterSecurityForbidden   = "security_forbidden"
+	ShadowFilterEntitlementRevoked  = "entitlement_revoked"
+	ShadowFilterMappingConflict     = "mapping_conflict"
+)
+
+type LegacySelectionTrace struct {
+	CandidateIDs      []int           `json:"candidate_ids,omitempty"`
+	PriorityLayers    map[int64][]int `json:"priority_layers,omitempty"`
+	FilteredReasons   map[string]int  `json:"filtered_reasons,omitempty"`
+	SelectedChannelID int             `json:"selected_channel_id,omitempty"`
+	SelectedGroup     string          `json:"selected_group,omitempty"`
+	RetryAttempt      int             `json:"retry_attempt"`
+	AffinityHit       bool            `json:"affinity_hit"`
+	AutoGroup         string          `json:"auto_group,omitempty"`
+}
+
+type RouteShadowRequest struct {
+	RequestID              string
+	UserID                 int
+	TokenID                int
+	RequestModel           string
+	NormalizedRequestModel string
+	RequestPath            string
+	EndpointType           string
+	UserGroup              string
+	TokenModelLimitEnabled bool
+	TokenModelLimit        map[string]bool
+	EntitledChannels       map[int]bool
+	PriceEligible          bool
+	SecurityAllowed        bool
+	SnapshotVersion        int64
+	Legacy                 LegacySelectionTrace
+}
+
+func BuildRouteShadowRequest(c *gin.Context, requestModel, requestPath string, retry int) RouteShadowRequest {
+	effectiveGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+	if effectiveGroup == "" || effectiveGroup == "auto" {
+		effectiveGroup = common.GetContextKeyString(c, constant.ContextKeyUserGroup)
+	}
+	request := RouteShadowRequest{
+		RequestID:       c.GetString(common.RequestIdKey),
+		UserID:          common.GetContextKeyInt(c, constant.ContextKeyUserId),
+		TokenID:         common.GetContextKeyInt(c, constant.ContextKeyTokenId),
+		RequestModel:    requestModel,
+		RequestPath:     requestPath,
+		UserGroup:       effectiveGroup,
+		EndpointType:    endpointTypeForRequestPath(requestPath),
+		PriceEligible:   true,
+		SecurityAllowed: true,
+		Legacy: LegacySelectionTrace{
+			RetryAttempt: retry,
+		},
+	}
+	request.NormalizedRequestModel = modellab.NormalizeModel(requestModel)
+	if _, ok := c.Get(ginKeyChannelAffinityLogInfo); ok {
+		request.Legacy.AffinityHit = true
+	}
+	request.Legacy.AutoGroup = common.GetContextKeyString(c, constant.ContextKeyAutoGroup)
+	request.TokenModelLimitEnabled = common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
+	if value, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit); ok {
+		request.TokenModelLimit, _ = value.(map[string]bool)
+	}
+	return request
+}
+
+type RouteShadowCandidate struct {
+	ChannelID       int    `json:"channel_id"`
+	RequestModel    string `json:"request_model"`
+	ActualModel     string `json:"actual_model"`
+	LabSlug         string `json:"lab_slug"`
+	Priority        int64  `json:"priority"`
+	Weight          int    `json:"weight"`
+	SnapshotVersion int64  `json:"snapshot_version"`
+	CatalogVersion  string `json:"catalog_version"`
+	FilterReason    string `json:"filter_reason,omitempty"`
+}
+
+type RouteShadowDecision struct {
+	Event                  string                 `json:"event"`
+	RequestID              string                 `json:"request_id"`
+	UserID                 int                    `json:"user_id"`
+	TokenID                int                    `json:"token_id"`
+	RouteSource            string                 `json:"route_source"`
+	RequestModel           string                 `json:"request_model"`
+	NormalizedRequestModel string                 `json:"normalized_request_model"`
+	ActualModel            string                 `json:"actual_model,omitempty"`
+	LabSlug                string                 `json:"lab_slug,omitempty"`
+	EndpointType           string                 `json:"endpoint_type,omitempty"`
+	CatalogVersion         string                 `json:"catalog_version,omitempty"`
+	SnapshotVersion        int64                  `json:"snapshot_version,omitempty"`
+	ShadowCandidates       []RouteShadowCandidate `json:"shadow_candidates"`
+	LegacyCandidateIDs     []int                  `json:"legacy_candidate_ids,omitempty"`
+	LegacyChannelID        int                    `json:"legacy_channel_id,omitempty"`
+	ShadowPreferredID      int                    `json:"shadow_preferred_channel_id,omitempty"`
+	LegacyTrace            LegacySelectionTrace   `json:"legacy_trace"`
+	FilterReasonCounts     map[string]int         `json:"filter_reason_counts,omitempty"`
+	DifferenceReasons      []string               `json:"difference_reasons,omitempty"`
+	HasUnknown             bool                   `json:"has_unknown"`
+	HasMixed               bool                   `json:"has_mixed"`
+	HasUnauthorized        bool                   `json:"has_unauthorized"`
+	RetryAttempt           int                    `json:"retry_attempt"`
+	GeneratedAt            int64                  `json:"generated_at"`
+}
+
+func SelectRouteShadow(request RouteShadowRequest) RouteShadowDecision {
+	request.RequestModel = strings.TrimSpace(request.RequestModel)
+	if request.NormalizedRequestModel == "" {
+		request.NormalizedRequestModel = modellab.NormalizeModel(request.RequestModel)
+	}
+	decision := RouteShadowDecision{
+		Event:                  "route_shadow_decision",
+		RequestID:              request.RequestID,
+		UserID:                 request.UserID,
+		TokenID:                request.TokenID,
+		RouteSource:            ShadowRouteSource,
+		RequestModel:           request.RequestModel,
+		NormalizedRequestModel: request.NormalizedRequestModel,
+		EndpointType:           request.EndpointType,
+		LegacyCandidateIDs:     append([]int(nil), request.Legacy.CandidateIDs...),
+		LegacyChannelID:        request.Legacy.SelectedChannelID,
+		LegacyTrace:            request.Legacy,
+		FilterReasonCounts:     make(map[string]int),
+		RetryAttempt:           request.Legacy.RetryAttempt,
+		GeneratedAt:            time.Now().UnixMilli(),
+	}
+	if request.NormalizedRequestModel == "" {
+		decision.DifferenceReasons = compareShadowDecision(decision)
+		return decision
+	}
+
+	decision.CatalogVersion = modellab.DefaultCatalog().Version
+
+	index, _ := routeCapabilityIndex.Load().(*capabilityIndex)
+	if index == nil {
+		decision.FilterReasonCounts[ShadowFilterSnapshotUnavailable]++
+		decision.DifferenceReasons = compareShadowDecision(decision)
+		return decision
+	}
+	for _, candidate := range index.ByRequestModel[request.NormalizedRequestModel] {
+		if candidate.Mixed {
+			decision.HasMixed = true
+		}
+		shadowCandidate := RouteShadowCandidate{
+			ChannelID:       candidate.Capability.ChannelID,
+			RequestModel:    candidate.Capability.RequestModel,
+			ActualModel:     candidate.Capability.ActualModel,
+			LabSlug:         candidate.Capability.LabSlug,
+			Priority:        candidate.Priority,
+			Weight:          candidate.Weight,
+			SnapshotVersion: candidate.Capability.SnapshotVersion,
+			CatalogVersion:  candidate.Capability.CatalogVersion,
+		}
+		if reason := shadowCandidateFilter(request, candidate); reason != "" {
+			shadowCandidate.FilterReason = reason
+			decision.FilterReasonCounts[reason]++
+			if reason == ShadowFilterUnknownCapability || reason == ShadowFilterMappingConflict {
+				decision.HasUnknown = true
+			}
+			if reason == ShadowFilterGroupForbidden || reason == ShadowFilterTokenForbidden || reason == ShadowFilterEntitlementRevoked {
+				decision.HasUnauthorized = true
+			}
+			decision.ShadowCandidates = append(decision.ShadowCandidates, shadowCandidate)
+			continue
+		}
+		decision.ShadowCandidates = append(decision.ShadowCandidates, shadowCandidate)
+	}
+	eligible := make([]RouteShadowCandidate, 0, len(decision.ShadowCandidates))
+	for _, candidate := range decision.ShadowCandidates {
+		if candidate.FilterReason == "" {
+			eligible = append(eligible, candidate)
+		}
+	}
+	sort.SliceStable(eligible, func(i, j int) bool {
+		if eligible[i].Priority != eligible[j].Priority {
+			return eligible[i].Priority > eligible[j].Priority
+		}
+		return eligible[i].ChannelID < eligible[j].ChannelID
+	})
+	if len(eligible) > 0 {
+		preferred := eligible[0]
+		decision.ShadowPreferredID = preferred.ChannelID
+		decision.ActualModel = preferred.ActualModel
+		decision.LabSlug = preferred.LabSlug
+		decision.CatalogVersion = preferred.CatalogVersion
+		decision.SnapshotVersion = preferred.SnapshotVersion
+	}
+	decision.DifferenceReasons = compareShadowDecision(decision)
+	return decision
+}
+
+func shadowCandidateFilter(request RouteShadowRequest, candidate indexedCapability) string {
+	if request.SnapshotVersion > 0 && candidate.Capability.SnapshotVersion != request.SnapshotVersion {
+		return ShadowFilterSnapshotStale
+	}
+	if candidate.Capability.State == model.RouteCapabilityStateConflict {
+		return ShadowFilterMappingConflict
+	}
+	if candidate.Capability.State == model.RouteCapabilityStateUnresolved || candidate.Capability.LabSlug == "" {
+		return ShadowFilterUnknownCapability
+	}
+	if candidate.Capability.State == model.RouteCapabilityStateUnsupported {
+		return ShadowFilterUnsupported
+	}
+	if candidate.ChannelStatus != common.ChannelStatusEnabled {
+		return ShadowFilterChannelDisabled
+	}
+	if len(candidate.AbilityGroups) == 0 {
+		return ShadowFilterAbilityDisabled
+	}
+	abilityAllowed := false
+	for _, group := range candidate.AbilityGroups {
+		if group == request.UserGroup || IsUserSelectableGroup(request.UserGroup, group) {
+			abilityAllowed = true
+			break
+		}
+	}
+	if !abilityAllowed {
+		return ShadowFilterGroupForbidden
+	}
+	if request.TokenModelLimitEnabled && !tokenAllowsShadowModel(request.TokenModelLimit, request.RequestModel) {
+		return ShadowFilterTokenForbidden
+	}
+	if request.EndpointType != "" && !stringListContains(decodeStringList(candidate.Capability.EndpointTypes), request.EndpointType) {
+		return ShadowFilterPathUnsupported
+	}
+	if candidate.ChannelType == constant.ChannelTypeAdvancedCustom {
+		if request.RequestPath != "" && (candidate.Advanced == nil || !candidate.Advanced.SupportsPathForModel(request.RequestPath, request.RequestModel)) {
+			return ShadowFilterPathUnsupported
+		}
+	}
+	if !request.PriceEligible {
+		return ShadowFilterPriceForbidden
+	}
+	if !request.SecurityAllowed {
+		return ShadowFilterSecurityForbidden
+	}
+	if request.EntitledChannels != nil {
+		if entitled, ok := request.EntitledChannels[candidate.Capability.ChannelID]; ok && !entitled {
+			return ShadowFilterEntitlementRevoked
+		}
+	}
+	return ""
+}
+
+func stringListContains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func tokenAllowsShadowModel(limit map[string]bool, modelName string) bool {
+	if len(limit) == 0 {
+		return false
+	}
+	if limit[modelName] {
+		return true
+	}
+	return limit[ratio_setting.FormatMatchingModelName(modelName)]
+}
+
+func compareShadowDecision(decision RouteShadowDecision) []string {
+	reasons := make([]string, 0, 4)
+	switch {
+	case decision.LegacyChannelID > 0 && decision.ShadowPreferredID == decision.LegacyChannelID:
+		reasons = append(reasons, ShadowReasonSameChannel)
+	case decision.LegacyChannelID > 0 && decision.ShadowPreferredID > 0:
+		legacyPriority, shadowPriority := priorityForChannel(decision.LegacyTrace, decision.LegacyChannelID), priorityForShadow(decision.ShadowCandidates, decision.ShadowPreferredID)
+		if legacyPriority != shadowPriority {
+			reasons = append(reasons, ShadowReasonDifferentPriority)
+		} else {
+			reasons = append(reasons, ShadowReasonShadowOnly)
+		}
+	case decision.LegacyChannelID > 0:
+		reasons = append(reasons, ShadowReasonLegacyOnly)
+	case decision.ShadowPreferredID > 0:
+		reasons = append(reasons, ShadowReasonShadowOnly)
+	}
+	if decision.FilterReasonCounts[ShadowFilterUnknownCapability] > 0 || decision.FilterReasonCounts[ShadowFilterMappingConflict] > 0 {
+		reasons = append(reasons, ShadowReasonUnknownCapability)
+	}
+	if decision.FilterReasonCounts[ShadowFilterPathUnsupported] > 0 {
+		reasons = append(reasons, ShadowReasonPathFilterDifference)
+	}
+	if decision.FilterReasonCounts[ShadowFilterAbilityDisabled] > 0 || decision.FilterReasonCounts[ShadowFilterGroupForbidden] > 0 {
+		reasons = append(reasons, ShadowReasonAbilityFilter)
+	}
+	if decision.FilterReasonCounts[ShadowFilterTokenForbidden] > 0 {
+		reasons = append(reasons, ShadowReasonTokenFilter)
+	}
+	if decision.FilterReasonCounts[ShadowFilterSnapshotStale] > 0 {
+		reasons = append(reasons, ShadowReasonSnapshotStale)
+	}
+	return reasons
+}
+
+func priorityForChannel(trace LegacySelectionTrace, channelID int) int64 {
+	for priority, channels := range trace.PriorityLayers {
+		for _, candidateID := range channels {
+			if candidateID == channelID {
+				return priority
+			}
+		}
+	}
+	return 0
+}
+
+func priorityForShadow(candidates []RouteShadowCandidate, channelID int) int64 {
+	for _, candidate := range candidates {
+		if candidate.ChannelID == channelID {
+			return candidate.Priority
+		}
+	}
+	return 0
+}
+
+func MaybeRecordLegacySelection(ctx context.Context, request RouteShadowRequest) {
+	if !routeShadowEnabled(request) {
+		return
+	}
+	decision := SelectRouteShadow(request)
+	observeShadowDecision(decision)
+	EnqueueRouteShadowDecision(ctx, decision)
+}
+
+// RecordLegacySelectionAndShadow is the integration boundary used by relay
+// selectors. Candidate tracing is deferred until after the feature gate, so a
+// disabled Shadow deployment has no extra database work.
+func RecordLegacySelectionAndShadow(ctx context.Context, request RouteShadowRequest, legacyGroup string, legacyChannelID int) {
+	if !routeShadowEnabled(request) {
+		return
+	}
+	request.Legacy = BuildLegacySelectionTrace(legacyGroup, request.RequestModel, request.RequestPath, request.Legacy.RetryAttempt, legacyChannelID)
+	request.Legacy.SelectedGroup = legacyGroup
+	if legacyGroup != "" && legacyGroup != "auto" {
+		request.UserGroup = legacyGroup
+	}
+	MaybeRecordLegacySelection(ctx, request)
+}
+
+func endpointTypeForRequestPath(requestPath string) string {
+	requestPath = strings.TrimSpace(requestPath)
+	switch {
+	case strings.HasPrefix(requestPath, "/v1/chat/completions"), strings.HasPrefix(requestPath, "/pg/chat/completions"):
+		return string(constant.EndpointTypeOpenAI)
+	case strings.HasPrefix(requestPath, "/v1/responses/compact"):
+		return string(constant.EndpointTypeOpenAIResponseCompact)
+	case strings.HasPrefix(requestPath, "/v1/responses"):
+		return string(constant.EndpointTypeOpenAIResponse)
+	case strings.HasPrefix(requestPath, "/v1/alpha/search"):
+		return string(constant.EndpointTypeOpenAIAlphaSearch)
+	case strings.HasPrefix(requestPath, "/v1/messages"):
+		return string(constant.EndpointTypeAnthropic)
+	case strings.HasPrefix(requestPath, "/v1/rerank"):
+		return string(constant.EndpointTypeJinaRerank)
+	case strings.HasPrefix(requestPath, "/v1/images/generations"):
+		return string(constant.EndpointTypeImageGeneration)
+	case strings.HasPrefix(requestPath, "/v1/embeddings"):
+		return string(constant.EndpointTypeEmbeddings)
+	case strings.HasPrefix(requestPath, "/v1beta/models"), strings.HasPrefix(requestPath, "/v1/models"):
+		return string(constant.EndpointTypeGemini)
+	default:
+		return ""
+	}
+}
+
+func routeShadowEnabled(request RouteShadowRequest) bool {
+	if !common.GetEnvOrDefaultBool("ROUTE_SHADOW_ENABLED", false) {
+		return false
+	}
+	if !allowlistMatches("ROUTE_SHADOW_USER_IDS", request.UserID) ||
+		!allowlistMatches("ROUTE_SHADOW_TOKEN_IDS", request.TokenID) {
+		return false
+	}
+	if !modelAllowlistMatches(request.RequestModel) {
+		return false
+	}
+	return true
+}
+
+func allowlistMatches(env string, value int) bool {
+	allowlist := strings.TrimSpace(common.GetEnvOrDefaultString(env, ""))
+	if allowlist == "" {
+		return true
+	}
+	for _, part := range strings.Split(allowlist, ",") {
+		if strings.TrimSpace(part) == fmtInt(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func modelAllowlistMatches(modelName string) bool {
+	allowlist := strings.TrimSpace(common.GetEnvOrDefaultString("ROUTE_SHADOW_MODELS", ""))
+	if allowlist == "" {
+		return true
+	}
+	normalized := modellab.NormalizeModel(modelName)
+	for _, part := range strings.Split(allowlist, ",") {
+		if modellab.NormalizeModel(strings.TrimSpace(part)) == normalized {
+			return true
+		}
+	}
+	return false
+}
+
+func fmtInt(value int) string {
+	if value == 0 {
+		return "0"
+	}
+	return strconv.Itoa(value)
+}
+
+type shadowMetrics struct {
+	Decisions         atomic.Uint64
+	Diffs             atomic.Uint64
+	Unknown           atomic.Uint64
+	Mixed             atomic.Uint64
+	Unauthorized      atomic.Uint64
+	SnapshotStale     atomic.Uint64
+	EventsDropped     atomic.Uint64
+	RefreshSuccess    atomic.Uint64
+	RefreshFailure    atomic.Uint64
+	SnapshotConflicts atomic.Uint64
+	mu                sync.Mutex
+	DiffReasons       map[string]uint64
+}
+
+var routeShadowMetrics = shadowMetrics{DiffReasons: make(map[string]uint64)}
+
+type RouteShadowMetricsSnapshot struct {
+	RouteShadowDecisionsTotal          uint64            `json:"route_shadow_decisions_total"`
+	RouteShadowDiffTotal               uint64            `json:"route_shadow_diff_total"`
+	RouteShadowUnknownTotal            uint64            `json:"route_shadow_unknown_total"`
+	RouteShadowMixedTotal              uint64            `json:"route_shadow_mixed_total"`
+	RouteShadowUnauthorizedTotal       uint64            `json:"route_shadow_unauthorized_candidate_total"`
+	RouteShadowSnapshotStaleTotal      uint64            `json:"route_shadow_snapshot_stale_total"`
+	RouteShadowEventDroppedTotal       uint64            `json:"route_shadow_event_dropped_total"`
+	RouteCapabilityRefreshSuccessTotal uint64            `json:"route_capability_refresh_success_total"`
+	RouteCapabilityRefreshFailureTotal uint64            `json:"route_capability_refresh_failure_total"`
+	RouteCapabilitySnapshotConflicts   uint64            `json:"route_capability_snapshot_version_conflict_total"`
+	RouteCapabilityRefreshLagSeconds   int64             `json:"route_capability_refresh_lag_seconds"`
+	DifferenceReasons                  map[string]uint64 `json:"difference_reasons,omitempty"`
+}
+
+func RouteShadowMetrics() RouteShadowMetricsSnapshot {
+	routeShadowMetrics.mu.Lock()
+	reasons := make(map[string]uint64, len(routeShadowMetrics.DiffReasons))
+	for key, value := range routeShadowMetrics.DiffReasons {
+		reasons[key] = value
+	}
+	routeShadowMetrics.mu.Unlock()
+	return RouteShadowMetricsSnapshot{
+		RouteShadowDecisionsTotal:          routeShadowMetrics.Decisions.Load(),
+		RouteShadowDiffTotal:               routeShadowMetrics.Diffs.Load(),
+		RouteShadowUnknownTotal:            routeShadowMetrics.Unknown.Load(),
+		RouteShadowMixedTotal:              routeShadowMetrics.Mixed.Load(),
+		RouteShadowUnauthorizedTotal:       routeShadowMetrics.Unauthorized.Load(),
+		RouteShadowSnapshotStaleTotal:      routeShadowMetrics.SnapshotStale.Load(),
+		RouteShadowEventDroppedTotal:       routeShadowMetrics.EventsDropped.Load(),
+		RouteCapabilityRefreshSuccessTotal: routeShadowMetrics.RefreshSuccess.Load(),
+		RouteCapabilityRefreshFailureTotal: routeShadowMetrics.RefreshFailure.Load(),
+		RouteCapabilitySnapshotConflicts:   routeShadowMetrics.SnapshotConflicts.Load(),
+		RouteCapabilityRefreshLagSeconds:   RouteCapabilityRefreshLagSeconds(),
+		DifferenceReasons:                  reasons,
+	}
+}
+
+func observeShadowDecision(decision RouteShadowDecision) {
+	routeShadowMetrics.Decisions.Add(1)
+	if shadowDecisionHasDifference(decision.DifferenceReasons) {
+		routeShadowMetrics.Diffs.Add(1)
+	}
+	if len(decision.DifferenceReasons) > 0 {
+		routeShadowMetrics.mu.Lock()
+		for _, reason := range decision.DifferenceReasons {
+			routeShadowMetrics.DiffReasons[reason]++
+		}
+		routeShadowMetrics.mu.Unlock()
+	}
+	if decision.HasUnknown {
+		routeShadowMetrics.Unknown.Add(1)
+	}
+	if decision.HasMixed {
+		routeShadowMetrics.Mixed.Add(1)
+	}
+	unauthorizedCandidates := decision.FilterReasonCounts[ShadowFilterGroupForbidden] +
+		decision.FilterReasonCounts[ShadowFilterTokenForbidden] +
+		decision.FilterReasonCounts[ShadowFilterEntitlementRevoked]
+	if unauthorizedCandidates > 0 {
+		routeShadowMetrics.Unauthorized.Add(uint64(unauthorizedCandidates))
+	}
+	if decision.FilterReasonCounts[ShadowFilterSnapshotStale] > 0 {
+		routeShadowMetrics.SnapshotStale.Add(1)
+	}
+}
+
+func shadowDecisionHasDifference(reasons []string) bool {
+	for _, reason := range reasons {
+		if reason != ShadowReasonSameChannel {
+			return true
+		}
+	}
+	return false
+}

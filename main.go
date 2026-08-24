@@ -110,6 +110,10 @@ func main() {
 
 		go model.SyncChannelCache(common.SyncFrequency)
 	}
+	if err := service.InitRouteCapabilityIndex(context.Background()); err != nil {
+		common.SysError(fmt.Sprintf("initial route capability index rebuild failed: %v", err))
+	}
+	service.RegisterRouteCapabilityRefreshHook()
 
 	// Restore the automatic pricing catalog from its local cache and start the
 	// refresh loop before pricing is warmed, so models that rely on the
