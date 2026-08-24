@@ -12,6 +12,7 @@ import (
 )
 
 var ErrCapabilitySnapshotConflict = errors.New("channel capability snapshot version conflict")
+var ErrCapabilitySnapshotNotFound = errors.New("channel capability snapshot not found")
 
 var capabilityRefreshHook struct {
 	sync.RWMutex
@@ -121,4 +122,57 @@ func MarkChannelCapabilityRefreshFailure(channelID int, sourceHash, catalogVersi
 		Where("channel_id = ? AND source_hash = ? AND catalog_version = ?", channelID, sourceHash, catalogVersion).
 		Updates(updates)
 	return result.Error
+}
+
+// FindActiveChannelCapabilities returns only rows fenced by the channel's
+// active snapshot pointer. Historical rows are retained for replay, but must
+// never leak into request-time catalog or candidate discovery queries.
+func FindActiveChannelCapabilities(ctx context.Context, channelIDs []int, requestModel, lab string) ([]ChannelModelCapability, error) {
+	if DB == nil {
+		return nil, errors.New("capability snapshot database is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if len(channelIDs) == 0 {
+		return []ChannelModelCapability{}, nil
+	}
+	query := DB.WithContext(ctx).Model(&ChannelModelCapability{}).
+		Joins("JOIN channel_capability_snapshots AS capability_snapshots ON capability_snapshots.channel_id = channel_model_capabilities.channel_id AND capability_snapshots.active_version = channel_model_capabilities.snapshot_version").
+		Where("channel_model_capabilities.channel_id IN ? AND capability_snapshots.active_version > 0", channelIDs)
+	if requestModel != "" {
+		query = query.Where("channel_model_capabilities.request_model = ?", requestModel)
+	}
+	if lab != "" {
+		query = query.Where("channel_model_capabilities.lab_slug = ?", lab)
+	}
+	var capabilities []ChannelModelCapability
+	if err := query.Order("channel_model_capabilities.request_model asc, channel_model_capabilities.channel_id asc").Find(&capabilities).Error; err != nil {
+		return nil, err
+	}
+	return capabilities, nil
+}
+
+// FindChannelCapabilitySnapshotVersion loads an immutable historical snapshot
+// for diagnostics or deterministic route-decision replay. It intentionally
+// does not consult the active pointer and must not be used for live routing.
+func FindChannelCapabilitySnapshotVersion(ctx context.Context, channelID int, snapshotVersion int64) ([]ChannelModelCapability, error) {
+	if DB == nil {
+		return nil, errors.New("capability snapshot database is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if channelID <= 0 || snapshotVersion <= 0 {
+		return nil, ErrCapabilitySnapshotNotFound
+	}
+	var capabilities []ChannelModelCapability
+	if err := DB.WithContext(ctx).Where("channel_id = ? AND snapshot_version = ?", channelID, snapshotVersion).
+		Order("request_model asc, id asc").Find(&capabilities).Error; err != nil {
+		return nil, err
+	}
+	if len(capabilities) == 0 {
+		return nil, ErrCapabilitySnapshotNotFound
+	}
+	return capabilities, nil
 }

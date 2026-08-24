@@ -3,11 +3,13 @@ package controller
 import (
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/modellab"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
@@ -23,15 +25,16 @@ type eligibleRouteChannel struct {
 }
 
 type routeCapabilityItem struct {
-	ID             int     `json:"id"`
-	ChannelID      int     `json:"channel_id"`
-	RequestModel   string  `json:"request_model"`
-	ActualModel    string  `json:"actual_model"`
-	LabSlug        string  `json:"lab_slug"`
-	Confidence     float64 `json:"confidence"`
-	Source         string  `json:"source"`
-	CatalogVersion string  `json:"catalog_version"`
-	State          string  `json:"state"`
+	ID              int     `json:"id"`
+	ChannelID       int     `json:"channel_id"`
+	RequestModel    string  `json:"request_model"`
+	ActualModel     string  `json:"actual_model"`
+	LabSlug         string  `json:"lab_slug"`
+	Confidence      float64 `json:"confidence"`
+	Source          string  `json:"source"`
+	CatalogVersion  string  `json:"catalog_version"`
+	SnapshotVersion int64   `json:"snapshot_version"`
+	State           string  `json:"state"`
 }
 
 func ListRouteProfiles(c *gin.Context) {
@@ -164,33 +167,44 @@ func ListRouteCatalog(c *gin.Context) {
 		channelIDs = append(channelIDs, channel.ID)
 	}
 	if len(channelIDs) == 0 {
-		common.ApiSuccess(c, gin.H{"catalog_version": "", "items": []routeCapabilityItem{}})
+		common.ApiSuccess(c, gin.H{"catalog_version": "", "catalog_versions": []string{}, "items": []routeCapabilityItem{}})
 		return
 	}
-	query := model.DB.Model(&model.ChannelModelCapability{}).Order("request_model asc, channel_id asc")
-	query = query.Where("channel_id IN ?", channelIDs)
-	if requestModel := strings.TrimSpace(c.Query("model")); requestModel != "" {
-		query = query.Where("request_model = ?", requestModel)
+	requestModel := strings.TrimSpace(c.Query("model"))
+	if requestModel != "" {
+		requestModel = modellab.NormalizeModel(requestModel)
 	}
-	if lab := strings.TrimSpace(c.Query("lab")); lab != "" {
-		query = query.Where("lab_slug = ?", lab)
-	}
-	var capabilities []model.ChannelModelCapability
-	if err := query.Find(&capabilities).Error; err != nil {
+	lab := strings.ToLower(strings.TrimSpace(c.Query("lab")))
+	capabilities, err := model.FindActiveChannelCapabilities(c, channelIDs, requestModel, lab)
+	if err != nil {
 		writeRouteError(c, err)
 		return
 	}
 	items := make([]routeCapabilityItem, 0, len(capabilities))
+	catalogVersions := make(map[string]struct{})
 	for _, capability := range capabilities {
+		if capability.CatalogVersion != "" {
+			catalogVersions[capability.CatalogVersion] = struct{}{}
+		}
 		items = append(items, routeCapabilityItem{
 			ID: capability.ID, ChannelID: capability.ChannelID,
 			RequestModel: capability.RequestModel, ActualModel: capability.ActualModel,
 			LabSlug: capability.LabSlug, Confidence: capability.Confidence,
 			Source: capability.Source, CatalogVersion: capability.CatalogVersion,
-			State: capability.State,
+			SnapshotVersion: capability.SnapshotVersion,
+			State:           capability.State,
 		})
 	}
-	common.ApiSuccess(c, gin.H{"catalog_version": "", "items": items})
+	versions := make([]string, 0, len(catalogVersions))
+	for version := range catalogVersions {
+		versions = append(versions, version)
+	}
+	sort.Strings(versions)
+	catalogVersion := ""
+	if len(versions) == 1 {
+		catalogVersion = versions[0]
+	}
+	common.ApiSuccess(c, gin.H{"catalog_version": catalogVersion, "catalog_versions": versions, "items": items})
 }
 
 func requireTokenPrivateRouting(c *gin.Context) bool {

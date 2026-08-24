@@ -44,10 +44,26 @@ func TestPublishChannelCapabilitySnapshotFencesAndRetainsRecentVersions(t *testi
 	require.NoError(t, db.Model(&ChannelModelCapability{}).Where("channel_id = ?", 7).Count(&count).Error)
 	assert.Equal(t, int64(3), count)
 
+	active, err := FindActiveChannelCapabilities(context.Background(), []int{7}, "gpt-5", "openai")
+	require.NoError(t, err)
+	require.Len(t, active, 1)
+	assert.Equal(t, int64(4), active[0].SnapshotVersion)
+
+	replay, err := FindChannelCapabilitySnapshotVersion(context.Background(), 7, 2)
+	require.NoError(t, err)
+	require.Len(t, replay, 1)
+	assert.Equal(t, int64(2), replay[0].SnapshotVersion)
+	_, err = FindChannelCapabilitySnapshotVersion(context.Background(), 7, 1)
+	assert.ErrorIs(t, err, ErrCapabilitySnapshotNotFound)
+
 	require.NoError(t, MarkChannelCapabilityRefreshFailure(7, "hash-4", "catalog-1"))
 	require.NoError(t, db.Where("channel_id = ?", 7).First(&snapshot).Error)
 	assert.Equal(t, int64(4), snapshot.ActiveVersion)
 	assert.Equal(t, RouteCapabilityRefreshFailed, snapshot.RefreshStatus)
+	active, err = FindActiveChannelCapabilities(context.Background(), []int{7}, "gpt-5", "openai")
+	require.NoError(t, err)
+	require.Len(t, active, 1)
+	assert.Equal(t, int64(4), active[0].SnapshotVersion)
 
 	require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), 7, "hash-5", "catalog-1", []ChannelModelCapability{{
 		RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical", State: RouteCapabilityStateEligible,
