@@ -14,6 +14,22 @@ import (
 var ErrCapabilitySnapshotConflict = errors.New("channel capability snapshot version conflict")
 var ErrCapabilitySnapshotNotFound = errors.New("channel capability snapshot not found")
 
+// ChannelCapabilitySnapshotFence identifies the active snapshot observed by a
+// refresher before it projects a channel. The complete tuple prevents an old
+// worker from publishing or recording failure details against a replacement
+// with coincidentally compatible version state.
+type ChannelCapabilitySnapshotFence struct {
+	ActiveVersion  int64
+	SourceHash     string
+	CatalogVersion string
+}
+
+func (f ChannelCapabilitySnapshotFence) matches(snapshot ChannelCapabilitySnapshot) bool {
+	return f.ActiveVersion == snapshot.ActiveVersion &&
+		f.SourceHash == snapshot.SourceHash &&
+		f.CatalogVersion == snapshot.CatalogVersion
+}
+
 var capabilityRefreshHook struct {
 	sync.RWMutex
 	fn func(channelID int)
@@ -35,10 +51,10 @@ func NotifyChannelCapabilityChanged(channelID int) {
 }
 
 // PublishChannelCapabilitySnapshot atomically writes a new immutable channel
-// snapshot and fences it into the active pointer. expectedActiveVersion is
-// read by the worker before projection; a stale worker therefore fails before
-// inserting rows for a newer snapshot.
-func PublishChannelCapabilitySnapshot(ctx context.Context, channelID int, expectedActiveVersion int64, sourceHash, catalogVersion string, capabilities []ChannelModelCapability) error {
+// snapshot and fences it into the active pointer. expected identifies the
+// active row read before projection, so a stale worker fails before inserting
+// rows for a newer snapshot.
+func PublishChannelCapabilitySnapshot(ctx context.Context, channelID int, expected ChannelCapabilitySnapshotFence, sourceHash, catalogVersion string, capabilities []ChannelModelCapability) error {
 	if DB == nil || channelID <= 0 {
 		return errors.New("capability snapshot database is unavailable")
 	}
@@ -50,6 +66,9 @@ func PublishChannelCapabilitySnapshot(ctx context.Context, channelID int, expect
 		var current ChannelCapabilitySnapshot
 		err := lockForUpdate(tx).Where("channel_id = ?", channelID).First(&current).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if expected != (ChannelCapabilitySnapshotFence{}) {
+				return ErrCapabilitySnapshotConflict
+			}
 			current = ChannelCapabilitySnapshot{
 				ChannelID:     channelID,
 				ActiveVersion: 0,
@@ -62,10 +81,10 @@ func PublishChannelCapabilitySnapshot(ctx context.Context, channelID int, expect
 			return err
 		}
 
-		oldVersion := current.ActiveVersion
-		if oldVersion != expectedActiveVersion {
+		if !expected.matches(current) {
 			return ErrCapabilitySnapshotConflict
 		}
+		oldVersion := current.ActiveVersion
 		nextVersion := oldVersion + 1
 		if nextVersion <= 0 {
 			return errors.New("capability snapshot version overflow")
@@ -86,7 +105,8 @@ func PublishChannelCapabilitySnapshot(ctx context.Context, channelID int, expect
 		}
 
 		result := tx.Model(&ChannelCapabilitySnapshot{}).
-			Where("id = ? AND channel_id = ? AND active_version = ?", current.ID, channelID, oldVersion).
+			Where("id = ? AND channel_id = ? AND active_version = ? AND source_hash = ? AND catalog_version = ?",
+				current.ID, channelID, oldVersion, expected.SourceHash, expected.CatalogVersion).
 			Updates(map[string]any{
 				"active_version":  nextVersion,
 				"catalog_version": catalogVersion,
@@ -109,9 +129,9 @@ func PublishChannelCapabilitySnapshot(ctx context.Context, channelID int, expect
 }
 
 // MarkChannelCapabilityRefreshFailure keeps the previous active version
-// readable while exposing a failed refresh only when the worker still owns
-// the active version it observed.
-func MarkChannelCapabilityRefreshFailure(channelID int, expectedActiveVersion int64, sourceHash, catalogVersion string) error {
+// readable while exposing a failed refresh only when the worker still owns the
+// active snapshot tuple it observed.
+func MarkChannelCapabilityRefreshFailure(channelID int, expected ChannelCapabilitySnapshotFence, sourceHash, catalogVersion string) error {
 	if DB == nil || channelID <= 0 {
 		return errors.New("capability snapshot database is unavailable")
 	}
@@ -124,20 +144,26 @@ func MarkChannelCapabilityRefreshFailure(channelID int, expectedActiveVersion in
 	}
 	// A refresh can finish after a newer snapshot has already won the CAS. The
 	// failure marker must only describe the snapshot that the failed attempt
-	// observed; otherwise an old worker can mark the newer active snapshot as
-	// failed without changing its version.
+	// observed; otherwise an old worker can mark a replacement snapshot failed.
 	result := DB.Model(&ChannelCapabilitySnapshot{}).
-		Where("channel_id = ? AND active_version = ?", channelID, expectedActiveVersion).
+		Where("channel_id = ? AND active_version = ? AND source_hash = ? AND catalog_version = ?",
+			channelID, expected.ActiveVersion, expected.SourceHash, expected.CatalogVersion).
 		Updates(updates)
-	return result.Error
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrCapabilitySnapshotConflict
+	}
+	return nil
 }
 
-// GetChannelCapabilitySnapshotVersion returns zero when a channel has not
-// published a snapshot yet. The value is only a fencing token; publication
-// still verifies it inside the transaction.
-func GetChannelCapabilitySnapshotVersion(ctx context.Context, channelID int) (int64, error) {
+// GetChannelCapabilitySnapshotFence returns the active tuple a refresher must
+// present when publishing or recording a failure. A channel without snapshots
+// returns the zero fence.
+func GetChannelCapabilitySnapshotFence(ctx context.Context, channelID int) (ChannelCapabilitySnapshotFence, error) {
 	if DB == nil {
-		return 0, errors.New("capability snapshot database is unavailable")
+		return ChannelCapabilitySnapshotFence{}, errors.New("capability snapshot database is unavailable")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -145,12 +171,16 @@ func GetChannelCapabilitySnapshotVersion(ctx context.Context, channelID int) (in
 	var snapshot ChannelCapabilitySnapshot
 	err := DB.WithContext(ctx).Where("channel_id = ?", channelID).First(&snapshot).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, nil
+		return ChannelCapabilitySnapshotFence{}, nil
 	}
 	if err != nil {
-		return 0, err
+		return ChannelCapabilitySnapshotFence{}, err
 	}
-	return snapshot.ActiveVersion, nil
+	return ChannelCapabilitySnapshotFence{
+		ActiveVersion:  snapshot.ActiveVersion,
+		SourceHash:     snapshot.SourceHash,
+		CatalogVersion: snapshot.CatalogVersion,
+	}, nil
 }
 
 // FindActiveChannelCapabilities returns only rows fenced by the channel's

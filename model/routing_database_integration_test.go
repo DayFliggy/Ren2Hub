@@ -62,15 +62,17 @@ func TestRoutingDatabaseIntegration(t *testing.T) {
 				CatalogVersion: "integration-catalog", ChannelStatus: common.ChannelStatusEnabled,
 				Priority: 10, ChannelType: 1, State: RouteCapabilityStateEligible,
 			}
-			require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), channelID, 0, "integration-hash-1", "integration-catalog", []ChannelModelCapability{capability}))
-			require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), channelID, 1, "integration-hash-2", "integration-catalog", []ChannelModelCapability{capability}))
+			initialFence := ChannelCapabilitySnapshotFence{}
+			require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), channelID, initialFence, "integration-hash-1", "integration-catalog", []ChannelModelCapability{capability}))
+			activeFence := ChannelCapabilitySnapshotFence{ActiveVersion: 1, SourceHash: "integration-hash-1", CatalogVersion: "integration-catalog"}
+			require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), channelID, activeFence, "integration-hash-2", "integration-catalog", []ChannelModelCapability{capability}))
 			active, err := FindActiveChannelCapabilities(context.Background(), []int{channelID}, "gpt-5", "openai")
 			require.NoError(t, err)
 			require.Len(t, active, 1)
 			assert.Equal(t, int64(2), active[0].SnapshotVersion)
 			_, err = FindChannelCapabilitySnapshotVersion(context.Background(), channelID, 1)
 			require.NoError(t, err)
-			assert.ErrorIs(t, PublishChannelCapabilitySnapshot(context.Background(), channelID, 1, "stale", "integration-catalog", []ChannelModelCapability{capability}), ErrCapabilitySnapshotConflict)
+			assert.ErrorIs(t, PublishChannelCapabilitySnapshot(context.Background(), channelID, activeFence, "stale", "integration-catalog", []ChannelModelCapability{capability}), ErrCapabilitySnapshotConflict)
 		})
 	}
 }
@@ -95,7 +97,7 @@ func TestRoutingDatabaseIntegrationSQLite(t *testing.T) {
 	require.NoError(t, migrateRoutingModels(db))
 	require.NoError(t, migrateChannelCapabilityIndexes())
 	require.True(t, db.Migrator().HasIndex(&ChannelModelCapability{}, "channel_model_capability_snapshot"))
-	require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), 991002, 0, "sqlite-hash", "sqlite-catalog", []ChannelModelCapability{{
+	require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), 991002, ChannelCapabilitySnapshotFence{}, "sqlite-hash", "sqlite-catalog", []ChannelModelCapability{{
 		RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical",
 		ChannelStatus: common.ChannelStatusEnabled, State: RouteCapabilityStateEligible,
 	}}))

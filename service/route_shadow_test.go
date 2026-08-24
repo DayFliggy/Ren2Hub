@@ -182,7 +182,7 @@ func TestReplayRouteShadowDecisionReadsHistoricalSnapshotOnly(t *testing.T) {
 	require.NoError(t, err)
 	groupsJSON, err := common.Marshal([]string{"default"})
 	require.NoError(t, err)
-	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), 77, 0, "replay-hash", "catalog-replay", []model.ChannelModelCapability{{
+	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), 77, model.ChannelCapabilitySnapshotFence{}, "replay-hash", "catalog-replay", []model.ChannelModelCapability{{
 		RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical", Confidence: 0.99,
 		AbilityGroups: string(groupsJSON), EndpointTypes: string(endpointJSON), ChannelStatus: common.ChannelStatusEnabled,
 		Priority: 20, Weight: 10, ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
@@ -226,7 +226,7 @@ func TestReplayRouteShadowDecisionRejectsLegacyCapabilityProjection(t *testing.T
 	require.NoError(t, err)
 	groupsJSON, err := common.Marshal([]string{"default"})
 	require.NoError(t, err)
-	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), 78, 0, "legacy-projection", "catalog-replay", []model.ChannelModelCapability{{
+	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), 78, model.ChannelCapabilitySnapshotFence{}, "legacy-projection", "catalog-replay", []model.ChannelModelCapability{{
 		RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical",
 		AbilityGroups: string(groupsJSON), EndpointTypes: string(endpointJSON), ChannelStatus: common.ChannelStatusEnabled,
 		Priority: 20, ChannelType: constant.ChannelTypeOpenAI, State: model.RouteCapabilityStateEligible,

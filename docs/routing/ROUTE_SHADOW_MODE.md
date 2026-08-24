@@ -30,7 +30,7 @@ ROUTE_SHADOW_MODELS=gpt-5,claude-opus-5
 - 渠道、Ability 或 Advanced Custom 配置变更时触发单渠道刷新。
 - `route_capability_refresh` SystemTask 按 fingerprint 扫描遗漏的外部变更。
 - 每个渠道用 CAS 发布 active snapshot；数据库保留当前版本和最近两个旧版本。
-- 发布必须携带读取到的 `expected_active_version`；CAS 竞争失败不插入新能力行。
+- 发布和失败标记必须携带读取到的 `active_version`、`source_hash`、`catalog_version`；CAS 竞争失败不插入新能力行或污染 active 快照。
 - 刷新失败记录失败 fingerprint 和时间，但不清空旧 active snapshot；旧 worker 不能把新 active snapshot 标记为失败。
 - 删除渠道后会从内存索引移除，但数据库快照保留用于诊断。
 

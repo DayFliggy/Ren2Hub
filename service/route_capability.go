@@ -157,18 +157,18 @@ func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(p
 			}
 			continue
 		}
-		expectedVersion, versionErr := model.GetChannelCapabilitySnapshotVersion(ctx, channel.Id)
-		if versionErr != nil {
+		expected, fenceErr := model.GetChannelCapabilitySnapshotFence(ctx, channel.Id)
+		if fenceErr != nil {
 			summary.Failed++
 			if firstErr == nil {
-				firstErr = versionErr
+				firstErr = fenceErr
 			}
-			observeCapabilityRefreshFailure(versionErr)
+			observeCapabilityRefreshFailure(fenceErr)
 			continue
 		}
 		publishStartedAt := time.Now()
-		if err := refreshOneChannelWithHash(ctx, channel, byChannel[channel.Id], catalog, hash, expectedVersion); err != nil {
-			markChannelCapabilityRefreshFailure(channel.Id, expectedVersion, hash, catalog.Version, err)
+		if err := refreshOneChannelWithHash(ctx, channel, byChannel[channel.Id], catalog, hash, expected); err != nil {
+			markChannelCapabilityRefreshFailure(channel.Id, expected, hash, catalog.Version, err)
 			summary.Failed++
 			observeCapabilityRefreshFailure(err)
 			if firstErr == nil {
@@ -203,13 +203,13 @@ func refreshOneChannel(ctx context.Context, channel *model.Channel, abilities []
 	if err != nil {
 		return err
 	}
-	expectedVersion, err := model.GetChannelCapabilitySnapshotVersion(ctx, channel.Id)
+	expected, err := model.GetChannelCapabilitySnapshotFence(ctx, channel.Id)
 	if err != nil {
 		return err
 	}
 	publishStartedAt := time.Now()
-	if err := refreshOneChannelWithHash(ctx, channel, abilities, catalog, hash, expectedVersion); err != nil {
-		markChannelCapabilityRefreshFailure(channel.Id, expectedVersion, hash, catalog.Version, err)
+	if err := refreshOneChannelWithHash(ctx, channel, abilities, catalog, hash, expected); err != nil {
+		markChannelCapabilityRefreshFailure(channel.Id, expected, hash, catalog.Version, err)
 		return err
 	}
 	observeCapabilityRefreshDurations(-1, time.Since(publishStartedAt))
@@ -219,21 +219,21 @@ func refreshOneChannel(ctx context.Context, channel *model.Channel, abilities []
 	return nil
 }
 
-func markChannelCapabilityRefreshFailure(channelID int, expectedVersion int64, sourceHash, catalogVersion string, refreshErr error) {
+func markChannelCapabilityRefreshFailure(channelID int, expected model.ChannelCapabilitySnapshotFence, sourceHash, catalogVersion string, refreshErr error) {
 	// A CAS loser must not change the status of the snapshot published by the
 	// winner. Other failures may expose the latest attempt as failed while the
 	// active capability rows remain intact.
 	if errors.Is(refreshErr, model.ErrCapabilitySnapshotConflict) {
 		return
 	}
-	// The caller records the attempt version before projection. A failed
-	// refresh with a different fingerprint must not change a newer active row.
-	_ = model.MarkChannelCapabilityRefreshFailure(channelID, expectedVersion, sourceHash, catalogVersion)
+	// The caller records the complete active tuple before projection. A failed
+	// refresh cannot change a snapshot replaced by another worker.
+	_ = model.MarkChannelCapabilityRefreshFailure(channelID, expected, sourceHash, catalogVersion)
 }
 
-func refreshOneChannelWithHash(ctx context.Context, channel *model.Channel, abilities []model.Ability, catalog *modellab.Catalog, sourceHash string, expectedVersion int64) error {
+func refreshOneChannelWithHash(ctx context.Context, channel *model.Channel, abilities []model.Ability, catalog *modellab.Catalog, sourceHash string, expected model.ChannelCapabilitySnapshotFence) error {
 	capabilities := projectChannelCapabilities(channel, abilities, catalog, sourceHash)
-	return model.PublishChannelCapabilitySnapshot(ctx, channel.Id, expectedVersion, sourceHash, catalog.Version, capabilities)
+	return model.PublishChannelCapabilitySnapshot(ctx, channel.Id, expected, sourceHash, catalog.Version, capabilities)
 }
 
 func channelCapabilitySnapshotMatches(channelID int, sourceHash, catalogVersion string) bool {
