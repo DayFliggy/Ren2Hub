@@ -118,7 +118,9 @@ func RefreshStaleChannelCapabilities(ctx context.Context, report func(processed,
 func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(processed, total int)) (CapabilityRefreshSummary, error) {
 	startedAt := time.Now()
 	defer func() {
-		capabilityRefreshLagSeconds.Store(int64(time.Since(startedAt).Seconds()))
+		scanDuration := time.Since(startedAt)
+		capabilityRefreshLagSeconds.Store(int64(scanDuration.Seconds()))
+		observeCapabilityRefreshDurations(scanDuration, -1)
 	}()
 	var channels []model.Channel
 	if err := model.DB.WithContext(ctx).Find(&channels).Error; err != nil {
@@ -155,14 +157,25 @@ func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(p
 			}
 			continue
 		}
-		if err := refreshOneChannelWithHash(ctx, channel, byChannel[channel.Id], catalog, hash); err != nil {
-			markChannelCapabilityRefreshFailure(channel.Id, hash, catalog.Version, err)
+		expectedVersion, versionErr := model.GetChannelCapabilitySnapshotVersion(ctx, channel.Id)
+		if versionErr != nil {
+			summary.Failed++
+			if firstErr == nil {
+				firstErr = versionErr
+			}
+			observeCapabilityRefreshFailure(versionErr)
+			continue
+		}
+		publishStartedAt := time.Now()
+		if err := refreshOneChannelWithHash(ctx, channel, byChannel[channel.Id], catalog, hash, expectedVersion); err != nil {
+			markChannelCapabilityRefreshFailure(channel.Id, expectedVersion, hash, catalog.Version, err)
 			summary.Failed++
 			observeCapabilityRefreshFailure(err)
 			if firstErr == nil {
 				firstErr = err
 			}
 		} else {
+			observeCapabilityRefreshDurations(-1, time.Since(publishStartedAt))
 			summary.Refreshed++
 			routeShadowMetrics.RefreshSuccess.Add(1)
 		}
@@ -190,29 +203,37 @@ func refreshOneChannel(ctx context.Context, channel *model.Channel, abilities []
 	if err != nil {
 		return err
 	}
-	if err := refreshOneChannelWithHash(ctx, channel, abilities, catalog, hash); err != nil {
-		markChannelCapabilityRefreshFailure(channel.Id, hash, catalog.Version, err)
+	expectedVersion, err := model.GetChannelCapabilitySnapshotVersion(ctx, channel.Id)
+	if err != nil {
 		return err
 	}
+	publishStartedAt := time.Now()
+	if err := refreshOneChannelWithHash(ctx, channel, abilities, catalog, hash, expectedVersion); err != nil {
+		markChannelCapabilityRefreshFailure(channel.Id, expectedVersion, hash, catalog.Version, err)
+		return err
+	}
+	observeCapabilityRefreshDurations(-1, time.Since(publishStartedAt))
 	if rebuild {
 		return RebuildRouteCapabilityIndex(ctx)
 	}
 	return nil
 }
 
-func markChannelCapabilityRefreshFailure(channelID int, sourceHash, catalogVersion string, refreshErr error) {
+func markChannelCapabilityRefreshFailure(channelID int, expectedVersion int64, sourceHash, catalogVersion string, refreshErr error) {
 	// A CAS loser must not change the status of the snapshot published by the
 	// winner. Other failures may expose the latest attempt as failed while the
 	// active capability rows remain intact.
 	if errors.Is(refreshErr, model.ErrCapabilitySnapshotConflict) {
 		return
 	}
-	_ = model.MarkChannelCapabilityRefreshFailure(channelID, sourceHash, catalogVersion)
+	// The caller records the attempt version before projection. A failed
+	// refresh with a different fingerprint must not change a newer active row.
+	_ = model.MarkChannelCapabilityRefreshFailure(channelID, expectedVersion, sourceHash, catalogVersion)
 }
 
-func refreshOneChannelWithHash(ctx context.Context, channel *model.Channel, abilities []model.Ability, catalog *modellab.Catalog, sourceHash string) error {
+func refreshOneChannelWithHash(ctx context.Context, channel *model.Channel, abilities []model.Ability, catalog *modellab.Catalog, sourceHash string, expectedVersion int64) error {
 	capabilities := projectChannelCapabilities(channel, abilities, catalog, sourceHash)
-	return model.PublishChannelCapabilitySnapshot(ctx, channel.Id, sourceHash, catalog.Version, capabilities)
+	return model.PublishChannelCapabilitySnapshot(ctx, channel.Id, expectedVersion, sourceHash, catalog.Version, capabilities)
 }
 
 func channelCapabilitySnapshotMatches(channelID int, sourceHash, catalogVersion string) bool {
@@ -241,27 +262,22 @@ func RebuildRouteCapabilityIndex(ctx context.Context) error {
 		return err
 	}
 	var channels []model.Channel
-	if err := model.DB.WithContext(ctx).Find(&channels).Error; err != nil {
+	if err := model.DB.WithContext(ctx).Select("id").Find(&channels).Error; err != nil {
 		return err
 	}
-	channelsByID := make(map[int]*model.Channel, len(channels))
-	for index := range channels {
-		channelsByID[channels[index].Id] = &channels[index]
+	channelExists := make(map[int]struct{}, len(channels))
+	for _, channel := range channels {
+		channelExists[channel.Id] = struct{}{}
 	}
 	index := &capabilityIndex{
 		ByRequestModel: make(map[string][]indexedCapability),
 		Generation:     uint64(time.Now().UnixNano()),
 	}
-	mixedByChannel := make(map[int]bool, len(channelsByID))
-	for channelID, channel := range channelsByID {
-		mixedByChannel[channelID] = modellab.Resolve(channel.Models, channel.GetModelMapping()).GroupSlug == modellab.GroupMixed
-	}
 	for _, capability := range capabilities {
 		if activeVersion[capability.ChannelID] != capability.SnapshotVersion {
 			continue
 		}
-		channel := channelsByID[capability.ChannelID]
-		if channel == nil {
+		if _, exists := channelExists[capability.ChannelID]; !exists {
 			continue
 		}
 		// AbilityGroups is part of the immutable capability row. Falling back
@@ -270,13 +286,13 @@ func RebuildRouteCapabilityIndex(ctx context.Context) error {
 		groups := decodeStringList(capability.AbilityGroups)
 		index.ByRequestModel[capability.RequestModel] = append(index.ByRequestModel[capability.RequestModel], indexedCapability{
 			Capability:    capability,
-			ChannelStatus: channel.Status,
-			Priority:      channel.GetPriority(),
-			Weight:        channel.GetWeight(),
+			ChannelStatus: capability.ChannelStatus,
+			Priority:      capability.Priority,
+			Weight:        capability.Weight,
 			AbilityGroups: append([]string(nil), groups...),
-			ChannelType:   channel.Type,
-			Advanced:      advancedCustomPathConfig(channel),
-			Mixed:         mixedByChannel[capability.ChannelID],
+			ChannelType:   capability.ChannelType,
+			Advanced:      advancedCustomPathConfigFromCapability(capability),
+			Mixed:         capability.IsMixed,
 		})
 	}
 	for requestModel := range index.ByRequestModel {
@@ -344,6 +360,7 @@ func projectChannelCapabilities(channel *model.Channel, abilities []model.Abilit
 	}
 	sort.Strings(requestModels)
 	result := make([]model.ChannelModelCapability, 0, len(requestModels))
+	isMixed := resolution.GroupSlug == modellab.GroupMixed
 	for _, requestModel := range requestModels {
 		matches := byRequest[requestModel].matches
 		sort.SliceStable(matches, func(i, j int) bool {
@@ -372,19 +389,25 @@ func projectChannelCapabilities(channel *model.Channel, abilities []model.Abilit
 		}
 		groupsJSON, _ := common.Marshal(abilityGroups[requestModel])
 		result = append(result, model.ChannelModelCapability{
-			ChannelID:        channel.Id,
-			RequestModel:     requestModel,
-			ActualModel:      chosen.RealModel,
-			LabSlug:          chosen.LabSlug,
-			Confidence:       chosen.Confidence,
-			Source:           source,
-			CatalogVersion:   resolution.CatalogVersion,
-			SourceHash:       sourceHash,
-			AbilityGroups:    string(groupsJSON),
-			EndpointTypes:    string(endpointJSON),
-			PathCapabilities: string(pathJSON),
-			State:            state,
-			UpdatedAt:        time.Now().Unix(),
+			ChannelID:         channel.Id,
+			RequestModel:      requestModel,
+			ActualModel:       chosen.RealModel,
+			LabSlug:           chosen.LabSlug,
+			Confidence:        chosen.Confidence,
+			Source:            source,
+			CatalogVersion:    resolution.CatalogVersion,
+			SourceHash:        sourceHash,
+			AbilityGroups:     string(groupsJSON),
+			EndpointTypes:     string(endpointJSON),
+			PathCapabilities:  string(pathJSON),
+			ChannelStatus:     channel.Status,
+			Priority:          channel.GetPriority(),
+			Weight:            channel.GetWeight(),
+			ChannelType:       channel.Type,
+			ProjectionVersion: model.ChannelCapabilityProjectionV1,
+			IsMixed:           isMixed,
+			State:             state,
+			UpdatedAt:         time.Now().Unix(),
 		})
 	}
 	if resolution.MappingError {
@@ -444,6 +467,25 @@ func advancedCustomPathConfig(channel *model.Channel) *dto.AdvancedCustomConfig 
 		})
 	}
 	return copyConfig
+}
+
+func advancedCustomPathConfigFromCapability(capability model.ChannelModelCapability) *dto.AdvancedCustomConfig {
+	if strings.TrimSpace(capability.PathCapabilities) == "" {
+		return nil
+	}
+	var paths []capabilityPath
+	if err := common.UnmarshalJsonStr(capability.PathCapabilities, &paths); err != nil || len(paths) == 0 {
+		return nil
+	}
+	config := &dto.AdvancedCustomConfig{Routes: make([]dto.AdvancedCustomRoute, 0, len(paths))}
+	for _, path := range paths {
+		config.Routes = append(config.Routes, dto.AdvancedCustomRoute{
+			IncomingPath: path.IncomingPath,
+			UpstreamPath: path.UpstreamPath,
+			Models:       append([]string(nil), path.Models...),
+		})
+	}
+	return config
 }
 
 type channelFingerprint struct {

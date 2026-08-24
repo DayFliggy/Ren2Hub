@@ -161,6 +161,94 @@ func TestShadowDisabledDoesNotRecordMetrics(t *testing.T) {
 	assert.Equal(t, before.RouteShadowEventDroppedTotal, after.RouteShadowEventDroppedTotal)
 }
 
+func TestReplayRouteShadowDecisionReadsHistoricalSnapshotOnly(t *testing.T) {
+	originalDB := model.DB
+	originalMainDB := common.MainDatabaseType()
+	originalLogDB := common.LogDatabaseType()
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	model.DB = db
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB = originalDB
+		common.SetDatabaseTypes(originalMainDB, originalLogDB)
+		sqlDB, closeErr := db.DB()
+		if closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelModelCapability{}, &model.ChannelCapabilitySnapshot{}))
+	endpointJSON, err := common.Marshal([]string{"openai"})
+	require.NoError(t, err)
+	groupsJSON, err := common.Marshal([]string{"default"})
+	require.NoError(t, err)
+	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), 77, 0, "replay-hash", "catalog-replay", []model.ChannelModelCapability{{
+		RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical", Confidence: 0.99,
+		AbilityGroups: string(groupsJSON), EndpointTypes: string(endpointJSON), ChannelStatus: common.ChannelStatusEnabled,
+		Priority: 20, Weight: 10, ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
+	}}))
+
+	decision := RouteShadowDecision{
+		Event: "route_shadow_decision", RequestID: "replay-request", UserID: 7, TokenID: 8,
+		RequestModel: "gpt-5", NormalizedRequestModel: "gpt-5", RequestPath: "/v1/chat/completions",
+		UserGroup: "default", EndpointType: string(constant.EndpointTypeOpenAI), SnapshotVersion: 1,
+		ShadowCandidates: []RouteShadowCandidate{{ChannelID: 77, RequestModel: "gpt-5", SnapshotVersion: 1, Priority: 20}},
+		LegacyTrace:      LegacySelectionTrace{CandidateIDs: []int{77}, SelectedChannelID: 77, SelectedGroup: "default"},
+	}
+	data, err := common.Marshal(decision)
+	require.NoError(t, err)
+
+	replayed, err := ReplayRouteShadowDecision(context.Background(), data)
+	require.NoError(t, err)
+	assert.Equal(t, 77, replayed.ShadowPreferredID)
+	assert.Equal(t, 77, replayed.LegacyChannelID)
+	assert.Equal(t, int64(1), replayed.SnapshotVersion)
+}
+
+func TestReplayRouteShadowDecisionRejectsLegacyCapabilityProjection(t *testing.T) {
+	originalDB := model.DB
+	originalMainDB := common.MainDatabaseType()
+	originalLogDB := common.LogDatabaseType()
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	model.DB = db
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB = originalDB
+		common.SetDatabaseTypes(originalMainDB, originalLogDB)
+		sqlDB, closeErr := db.DB()
+		if closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelModelCapability{}, &model.ChannelCapabilitySnapshot{}))
+	endpointJSON, err := common.Marshal([]string{"openai"})
+	require.NoError(t, err)
+	groupsJSON, err := common.Marshal([]string{"default"})
+	require.NoError(t, err)
+	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), 78, 0, "legacy-projection", "catalog-replay", []model.ChannelModelCapability{{
+		RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical",
+		AbilityGroups: string(groupsJSON), EndpointTypes: string(endpointJSON), ChannelStatus: common.ChannelStatusEnabled,
+		Priority: 20, ChannelType: constant.ChannelTypeOpenAI, State: model.RouteCapabilityStateEligible,
+	}}))
+	data, err := common.Marshal(RouteShadowDecision{
+		Event: "route_shadow_decision", RequestID: "legacy-projection-request", RequestModel: "gpt-5", NormalizedRequestModel: "gpt-5",
+		RequestPath: "/v1/chat/completions", UserGroup: "default", EndpointType: string(constant.EndpointTypeOpenAI), SnapshotVersion: 1,
+		ShadowCandidates: []RouteShadowCandidate{{ChannelID: 78, RequestModel: "gpt-5", SnapshotVersion: 1}},
+		LegacyTrace:      LegacySelectionTrace{SelectedChannelID: 78},
+	})
+	require.NoError(t, err)
+	_, err = ReplayRouteShadowDecision(context.Background(), data)
+	assert.ErrorIs(t, err, ErrRouteShadowReplayUnsupported)
+}
+
+func TestReplayRouteShadowDecisionRejectsIncompleteEvent(t *testing.T) {
+	data, err := common.Marshal(RouteShadowDecision{RequestID: "missing-path", RequestModel: "gpt-5", SnapshotVersion: 1})
+	require.NoError(t, err)
+	_, err = ReplayRouteShadowDecision(context.Background(), data)
+	assert.ErrorIs(t, err, ErrRouteShadowReplayInvalid)
+}
+
 func TestCapabilityRefreshPublishesActiveIndexAndHonorsAbilityChanges(t *testing.T) {
 	originalDB := model.DB
 	originalLogDB := model.LOG_DB

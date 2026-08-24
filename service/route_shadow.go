@@ -125,6 +125,8 @@ type RouteShadowDecision struct {
 	RouteSource            string                 `json:"route_source"`
 	RequestModel           string                 `json:"request_model"`
 	NormalizedRequestModel string                 `json:"normalized_request_model"`
+	RequestPath            string                 `json:"request_path"`
+	UserGroup              string                 `json:"user_group"`
 	ActualModel            string                 `json:"actual_model,omitempty"`
 	LabSlug                string                 `json:"lab_slug,omitempty"`
 	EndpointType           string                 `json:"endpoint_type,omitempty"`
@@ -145,6 +147,11 @@ type RouteShadowDecision struct {
 }
 
 func SelectRouteShadow(request RouteShadowRequest) RouteShadowDecision {
+	index, _ := routeCapabilityIndex.Load().(*capabilityIndex)
+	return selectRouteShadowWithIndex(request, index)
+}
+
+func selectRouteShadowWithIndex(request RouteShadowRequest, index *capabilityIndex) RouteShadowDecision {
 	request.RequestModel = strings.TrimSpace(request.RequestModel)
 	if request.NormalizedRequestModel == "" {
 		request.NormalizedRequestModel = modellab.NormalizeModel(request.RequestModel)
@@ -157,6 +164,8 @@ func SelectRouteShadow(request RouteShadowRequest) RouteShadowDecision {
 		RouteSource:            ShadowRouteSource,
 		RequestModel:           request.RequestModel,
 		NormalizedRequestModel: request.NormalizedRequestModel,
+		RequestPath:            request.RequestPath,
+		UserGroup:              request.UserGroup,
 		EndpointType:           request.EndpointType,
 		LegacyCandidateIDs:     append([]int(nil), request.Legacy.CandidateIDs...),
 		LegacyChannelID:        request.Legacy.SelectedChannelID,
@@ -172,7 +181,6 @@ func SelectRouteShadow(request RouteShadowRequest) RouteShadowDecision {
 
 	decision.CatalogVersion = modellab.DefaultCatalog().Version
 
-	index, _ := routeCapabilityIndex.Load().(*capabilityIndex)
 	if index == nil {
 		decision.FilterReasonCounts[ShadowFilterSnapshotUnavailable]++
 		decision.DifferenceReasons = compareShadowDecision(decision)
@@ -467,11 +475,27 @@ type shadowMetrics struct {
 	RefreshSuccess    atomic.Uint64
 	RefreshFailure    atomic.Uint64
 	SnapshotConflicts atomic.Uint64
+	EventAttempted    atomic.Uint64
+	EventWritten      atomic.Uint64
+	EventEncodeFailed atomic.Uint64
 	mu                sync.Mutex
 	DiffReasons       map[string]uint64
+	RefreshMu         sync.Mutex
+	RefreshScanMS     []int64
+	RefreshPublishMS  []int64
+	ModelMu           sync.Mutex
+	Models            map[string]shadowModelMetrics
 }
 
-var routeShadowMetrics = shadowMetrics{DiffReasons: make(map[string]uint64)}
+type shadowModelMetrics struct {
+	Decisions uint64
+	Resolved  uint64
+}
+
+var routeShadowMetrics = shadowMetrics{
+	DiffReasons: make(map[string]uint64),
+	Models:      make(map[string]shadowModelMetrics),
+}
 
 type RouteShadowMetricsSnapshot struct {
 	RouteShadowDecisionsTotal          uint64            `json:"route_shadow_decisions_total"`
@@ -485,6 +509,11 @@ type RouteShadowMetricsSnapshot struct {
 	RouteCapabilityRefreshFailureTotal uint64            `json:"route_capability_refresh_failure_total"`
 	RouteCapabilitySnapshotConflicts   uint64            `json:"route_capability_snapshot_version_conflict_total"`
 	RouteCapabilityRefreshLagSeconds   int64             `json:"route_capability_refresh_lag_seconds"`
+	RouteCapabilityRefreshScanP95MS    int64             `json:"route_capability_refresh_scan_p95_ms"`
+	RouteCapabilityRefreshPublishP95MS int64             `json:"route_capability_refresh_publish_p95_ms"`
+	RouteShadowEventAttemptedTotal     uint64            `json:"route_shadow_event_attempted_total"`
+	RouteShadowEventWrittenTotal       uint64            `json:"route_shadow_event_written_total"`
+	RouteShadowEventEncodeFailureTotal uint64            `json:"route_shadow_event_encode_failure_total"`
 	DifferenceReasons                  map[string]uint64 `json:"difference_reasons,omitempty"`
 }
 
@@ -507,8 +536,68 @@ func RouteShadowMetrics() RouteShadowMetricsSnapshot {
 		RouteCapabilityRefreshFailureTotal: routeShadowMetrics.RefreshFailure.Load(),
 		RouteCapabilitySnapshotConflicts:   routeShadowMetrics.SnapshotConflicts.Load(),
 		RouteCapabilityRefreshLagSeconds:   RouteCapabilityRefreshLagSeconds(),
+		RouteCapabilityRefreshScanP95MS:    routeCapabilityRefreshP95(true),
+		RouteCapabilityRefreshPublishP95MS: routeCapabilityRefreshP95(false),
+		RouteShadowEventAttemptedTotal:     routeShadowMetrics.EventAttempted.Load(),
+		RouteShadowEventWrittenTotal:       routeShadowMetrics.EventWritten.Load(),
+		RouteShadowEventEncodeFailureTotal: routeShadowMetrics.EventEncodeFailed.Load(),
 		DifferenceReasons:                  reasons,
 	}
+}
+
+func observeShadowEventAttempt() {
+	routeShadowMetrics.EventAttempted.Add(1)
+}
+
+func observeShadowEventWritten() {
+	routeShadowMetrics.EventWritten.Add(1)
+}
+
+func observeShadowEventEncodeFailure() {
+	routeShadowMetrics.EventEncodeFailed.Add(1)
+}
+
+func observeCapabilityRefreshDurations(scan, publish time.Duration) {
+	routeShadowMetrics.RefreshMu.Lock()
+	defer routeShadowMetrics.RefreshMu.Unlock()
+	const maxSamples = 256
+	if scan >= 0 {
+		routeShadowMetrics.RefreshScanMS = appendBoundedDuration(routeShadowMetrics.RefreshScanMS, scan, maxSamples)
+	}
+	if publish >= 0 {
+		routeShadowMetrics.RefreshPublishMS = appendBoundedDuration(routeShadowMetrics.RefreshPublishMS, publish, maxSamples)
+	}
+}
+
+func appendBoundedDuration(samples []int64, duration time.Duration, maxSamples int) []int64 {
+	samples = append(samples, duration.Milliseconds())
+	if len(samples) > maxSamples {
+		return samples[len(samples)-maxSamples:]
+	}
+	return samples
+}
+
+func routeCapabilityRefreshP95(scan bool) int64 {
+	routeShadowMetrics.RefreshMu.Lock()
+	var samples []int64
+	if scan {
+		samples = append(samples, routeShadowMetrics.RefreshScanMS...)
+	} else {
+		samples = append(samples, routeShadowMetrics.RefreshPublishMS...)
+	}
+	routeShadowMetrics.RefreshMu.Unlock()
+	if len(samples) == 0 {
+		return 0
+	}
+	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	index := (len(samples)*95 + 99) / 100
+	if index < 1 {
+		index = 1
+	}
+	if index > len(samples) {
+		index = len(samples)
+	}
+	return samples[index-1]
 }
 
 func observeShadowDecision(decision RouteShadowDecision) {
@@ -538,6 +627,26 @@ func observeShadowDecision(decision RouteShadowDecision) {
 	if decision.FilterReasonCounts[ShadowFilterSnapshotStale] > 0 {
 		routeShadowMetrics.SnapshotStale.Add(1)
 	}
+	if decision.NormalizedRequestModel != "" {
+		routeShadowMetrics.ModelMu.Lock()
+		stats := routeShadowMetrics.Models[decision.NormalizedRequestModel]
+		stats.Decisions++
+		if decision.LabSlug != "" && !decision.HasMixed {
+			stats.Resolved++
+		}
+		routeShadowMetrics.Models[decision.NormalizedRequestModel] = stats
+		routeShadowMetrics.ModelMu.Unlock()
+	}
+}
+
+func routeShadowModelMetrics() map[string]shadowModelMetrics {
+	routeShadowMetrics.ModelMu.Lock()
+	defer routeShadowMetrics.ModelMu.Unlock()
+	result := make(map[string]shadowModelMetrics, len(routeShadowMetrics.Models))
+	for modelName, stats := range routeShadowMetrics.Models {
+		result[modelName] = stats
+	}
+	return result
 }
 
 func shadowDecisionHasDifference(reasons []string) bool {

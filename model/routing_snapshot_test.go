@@ -31,7 +31,7 @@ func TestPublishChannelCapabilitySnapshotFencesAndRetainsRecentVersions(t *testi
 	require.NoError(t, db.AutoMigrate(&ChannelModelCapability{}, &ChannelCapabilitySnapshot{}))
 
 	for version := 1; version <= 4; version++ {
-		err := PublishChannelCapabilitySnapshot(context.Background(), 7, fmt.Sprintf("hash-%d", version), "catalog-1", []ChannelModelCapability{{
+		err := PublishChannelCapabilitySnapshot(context.Background(), 7, int64(version-1), fmt.Sprintf("hash-%d", version), "catalog-1", []ChannelModelCapability{{
 			RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical", State: RouteCapabilityStateEligible,
 		}})
 		require.NoError(t, err)
@@ -56,22 +56,30 @@ func TestPublishChannelCapabilitySnapshotFencesAndRetainsRecentVersions(t *testi
 	_, err = FindChannelCapabilitySnapshotVersion(context.Background(), 7, 1)
 	assert.ErrorIs(t, err, ErrCapabilitySnapshotNotFound)
 
-	require.NoError(t, MarkChannelCapabilityRefreshFailure(7, "hash-4", "catalog-1"))
+	require.NoError(t, MarkChannelCapabilityRefreshFailure(7, 4, "hash-4", "catalog-1"))
 	require.NoError(t, db.Where("channel_id = ?", 7).First(&snapshot).Error)
 	assert.Equal(t, int64(4), snapshot.ActiveVersion)
 	assert.Equal(t, RouteCapabilityRefreshFailed, snapshot.RefreshStatus)
+	assert.Equal(t, "hash-4", snapshot.LastFailedSourceHash)
+	assert.Equal(t, "catalog-1", snapshot.LastFailedCatalogVersion)
 	active, err = FindActiveChannelCapabilities(context.Background(), []int{7}, "gpt-5", "openai")
 	require.NoError(t, err)
 	require.Len(t, active, 1)
 	assert.Equal(t, int64(4), active[0].SnapshotVersion)
 
-	require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), 7, "hash-5", "catalog-1", []ChannelModelCapability{{
+	require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), 7, 4, "hash-5", "catalog-1", []ChannelModelCapability{{
 		RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical", State: RouteCapabilityStateEligible,
 	}}))
-	require.NoError(t, MarkChannelCapabilityRefreshFailure(7, "hash-4", "catalog-1"))
+	err = PublishChannelCapabilitySnapshot(context.Background(), 7, 4, "hash-stale", "catalog-1", []ChannelModelCapability{{
+		RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical", State: RouteCapabilityStateEligible,
+	}})
+	assert.ErrorIs(t, err, ErrCapabilitySnapshotConflict)
+	require.NoError(t, MarkChannelCapabilityRefreshFailure(7, 4, "stale-hash", "stale-catalog"))
 	require.NoError(t, db.Where("channel_id = ?", 7).First(&snapshot).Error)
 	assert.Equal(t, int64(5), snapshot.ActiveVersion)
 	assert.Equal(t, RouteCapabilityRefreshActive, snapshot.RefreshStatus)
+	assert.Equal(t, "hash-4", snapshot.LastFailedSourceHash)
+	assert.Equal(t, "catalog-1", snapshot.LastFailedCatalogVersion)
 }
 
 type legacyChannelModelCapability struct {

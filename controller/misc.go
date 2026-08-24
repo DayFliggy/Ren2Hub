@@ -39,7 +39,7 @@ func TestStatus(c *gin.Context) {
 		"success":              true,
 		"message":              "Server is running",
 		"http_stats":           httpStats,
-		"route_shadow_metrics": service.RouteShadowMetrics(),
+		"route_shadow_metrics": service.GetRouteShadowDiagnostics(c.Request.Context()),
 	})
 	return
 }

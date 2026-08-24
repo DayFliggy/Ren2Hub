@@ -57,6 +57,66 @@ jobs:
       - name: Test root and relaykit modules
         run: make test
 
+  routing-integration:
+    name: Routing migration integration (${{ matrix.database }})
+    if: github.event.action != 'closed' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: mysql
+            dsn: root:root@tcp(127.0.0.1:3306)/new_api?parseTime=true
+          - database: postgres
+            dsn: postgres://postgres:postgres@127.0.0.1:5432/new_api?sslmode=disable
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: new_api
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: new_api
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d new_api"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      GOWORK: 'off'
+      TEST_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
+      TEST_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: ${{ github.event.pull_request.base.repo.full_name }}
+          ref: ${{ github.event.action == 'closed' && github.event.pull_request.base.ref || github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            relaykit/go.sum
+
+      - name: Run routing migration integration
+        run: go test ./model -run '^TestRoutingDatabaseIntegration$' -timeout 60s -count=1
+
   frontend:
     name: Frontend typecheck and test
     if: github.event.action != 'closed' || github.event.pull_request.merged == true

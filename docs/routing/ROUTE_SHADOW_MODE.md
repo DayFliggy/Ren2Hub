@@ -30,7 +30,8 @@ ROUTE_SHADOW_MODELS=gpt-5,claude-opus-5
 - 渠道、Ability 或 Advanced Custom 配置变更时触发单渠道刷新。
 - `route_capability_refresh` SystemTask 按 fingerprint 扫描遗漏的外部变更。
 - 每个渠道用 CAS 发布 active snapshot；数据库保留当前版本和最近两个旧版本。
-- 刷新失败不清空旧 active snapshot；CAS 竞争失败不覆盖胜者状态。
+- 发布必须携带读取到的 `expected_active_version`；CAS 竞争失败不插入新能力行。
+- 刷新失败记录失败 fingerprint 和时间，但不清空旧 active snapshot；旧 worker 不能把新 active snapshot 标记为失败。
 - 删除渠道后会从内存索引移除，但数据库快照保留用于诊断。
 
 ## Shadow 决策
@@ -54,8 +55,14 @@ ROUTE_SHADOW_MODELS=gpt-5,claude-opus-5
 
 - Shadow 决策、差异、unknown、mixed 和未授权候选计数。
 - snapshot stale、快照版本冲突和事件丢弃计数。
-- 能力刷新成功/失败计数及刷新耗时。
+- 事件 attempted、written、encode failure 和 dropped 计数；日志完整率按 `written / (attempted - encode_failure)` 计算。
+- 能力刷新成功/失败计数、扫描 P95 和检测到变更到 active 发布 P95。
+- 最近 7 天 Relay 日志为分母的核心模型覆盖率和 Lab 解析率。
 - `difference_reasons` 是否都能解释新旧选择差异。
+
+## 决策重放
+
+内部 `ReplayRouteShadowDecision` 只接受已脱敏的 Shadow decision JSON。事件必须包含 request ID、请求模型、请求路径、用户组、legacy 轨迹和 snapshot version；重放只读取事件引用的历史 snapshot，不使用当前 active 内存索引，不执行上游请求，不创建账单，也不修改请求上下文。若快照早于当前能力投影版本或缺少静态渠道状态，重放会显式拒绝，不会以事件字段或实时渠道配置补全。
 
 ## 灰度检查
 

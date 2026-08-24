@@ -35,9 +35,10 @@ func NotifyChannelCapabilityChanged(channelID int) {
 }
 
 // PublishChannelCapabilitySnapshot atomically writes a new immutable channel
-// snapshot and fences it into the active pointer. The caller owns capability
-// projection; this function owns transaction, CAS, retention, and rollback.
-func PublishChannelCapabilitySnapshot(ctx context.Context, channelID int, sourceHash, catalogVersion string, capabilities []ChannelModelCapability) error {
+// snapshot and fences it into the active pointer. expectedActiveVersion is
+// read by the worker before projection; a stale worker therefore fails before
+// inserting rows for a newer snapshot.
+func PublishChannelCapabilitySnapshot(ctx context.Context, channelID int, expectedActiveVersion int64, sourceHash, catalogVersion string, capabilities []ChannelModelCapability) error {
 	if DB == nil || channelID <= 0 {
 		return errors.New("capability snapshot database is unavailable")
 	}
@@ -62,6 +63,9 @@ func PublishChannelCapabilitySnapshot(ctx context.Context, channelID int, source
 		}
 
 		oldVersion := current.ActiveVersion
+		if oldVersion != expectedActiveVersion {
+			return ErrCapabilitySnapshotConflict
+		}
 		nextVersion := oldVersion + 1
 		if nextVersion <= 0 {
 			return errors.New("capability snapshot version overflow")
@@ -105,23 +109,48 @@ func PublishChannelCapabilitySnapshot(ctx context.Context, channelID int, source
 }
 
 // MarkChannelCapabilityRefreshFailure keeps the previous active version
-// readable while exposing the latest failed refresh state to operators.
-func MarkChannelCapabilityRefreshFailure(channelID int, sourceHash, catalogVersion string) error {
+// readable while exposing a failed refresh only when the worker still owns
+// the active version it observed.
+func MarkChannelCapabilityRefreshFailure(channelID int, expectedActiveVersion int64, sourceHash, catalogVersion string) error {
 	if DB == nil || channelID <= 0 {
 		return errors.New("capability snapshot database is unavailable")
 	}
 	updates := map[string]any{
-		"refresh_status": RouteCapabilityRefreshFailed,
-		"updated_at":     common.GetTimestamp(),
+		"refresh_status":              RouteCapabilityRefreshFailed,
+		"last_failed_source_hash":     sourceHash,
+		"last_failed_catalog_version": catalogVersion,
+		"last_failed_at":              common.GetTimestamp(),
+		"updated_at":                  common.GetTimestamp(),
 	}
 	// A refresh can finish after a newer snapshot has already won the CAS. The
 	// failure marker must only describe the snapshot that the failed attempt
 	// observed; otherwise an old worker can mark the newer active snapshot as
 	// failed without changing its version.
 	result := DB.Model(&ChannelCapabilitySnapshot{}).
-		Where("channel_id = ? AND source_hash = ? AND catalog_version = ?", channelID, sourceHash, catalogVersion).
+		Where("channel_id = ? AND active_version = ?", channelID, expectedActiveVersion).
 		Updates(updates)
 	return result.Error
+}
+
+// GetChannelCapabilitySnapshotVersion returns zero when a channel has not
+// published a snapshot yet. The value is only a fencing token; publication
+// still verifies it inside the transaction.
+func GetChannelCapabilitySnapshotVersion(ctx context.Context, channelID int) (int64, error) {
+	if DB == nil {
+		return 0, errors.New("capability snapshot database is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var snapshot ChannelCapabilitySnapshot
+	err := DB.WithContext(ctx).Where("channel_id = ?", channelID).First(&snapshot).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return snapshot.ActiveVersion, nil
 }
 
 // FindActiveChannelCapabilities returns only rows fenced by the channel's

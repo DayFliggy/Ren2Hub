@@ -23,16 +23,19 @@ func initRouteShadowEventQueue() {
 		for decision := range routeShadowEventQueue.queue {
 			data, err := common.Marshal(decision)
 			if err != nil {
+				observeShadowEventEncodeFailure()
 				continue
 			}
 			requestContext := context.WithValue(context.Background(), common.RequestIdKey, decision.RequestID)
 			logger.LogInfo(requestContext, string(data))
+			observeShadowEventWritten()
 		}
 	}()
 }
 
 func EnqueueRouteShadowDecision(_ context.Context, decision RouteShadowDecision) {
 	routeShadowEventQueue.Do(initRouteShadowEventQueue)
+	observeShadowEventAttempt()
 	select {
 	case routeShadowEventQueue.queue <- decision:
 	default:

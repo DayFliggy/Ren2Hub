@@ -300,16 +300,11 @@ func migrateDB() error {
 		&TicketMessage{},
 		&TicketAttachment{},
 		&ActivityClaim{},
-		&UserRouteProfile{},
-		&UserRouteGroup{},
-		&UserRouteEntry{},
-		&RoutePolicy{},
-		&ChannelModelCapability{},
-		&ChannelCapabilitySnapshot{},
-		&UserChannelEntitlement{},
-		&ChannelHealth{},
 	)
 	if err != nil {
+		return err
+	}
+	if err := migrateRoutingModels(DB); err != nil {
 		return err
 	}
 	if err := migrateChannelCapabilityIndexes(); err != nil {
@@ -389,14 +384,6 @@ func migrateDBFast() error {
 		{&TicketMessage{}, "TicketMessage"},
 		{&TicketAttachment{}, "TicketAttachment"},
 		{&ActivityClaim{}, "ActivityClaim"},
-		{&UserRouteProfile{}, "UserRouteProfile"},
-		{&UserRouteGroup{}, "UserRouteGroup"},
-		{&UserRouteEntry{}, "UserRouteEntry"},
-		{&RoutePolicy{}, "RoutePolicy"},
-		{&ChannelModelCapability{}, "ChannelModelCapability"},
-		{&ChannelCapabilitySnapshot{}, "ChannelCapabilitySnapshot"},
-		{&UserChannelEntitlement{}, "UserChannelEntitlement"},
-		{&ChannelHealth{}, "ChannelHealth"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))
@@ -420,6 +407,9 @@ func migrateDBFast() error {
 		if err != nil {
 			return err
 		}
+	}
+	if err := migrateRoutingModels(DB); err != nil {
+		return err
 	}
 	if err := migrateChannelCapabilityIndexes(); err != nil {
 		return err
@@ -450,6 +440,22 @@ func migrateDBFast() error {
 	}
 	common.SysLog("database migrated")
 	return nil
+}
+
+func migrateRoutingModels(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("routing migration database is unavailable")
+	}
+	return db.AutoMigrate(
+		&UserRouteProfile{},
+		&UserRouteGroup{},
+		&UserRouteEntry{},
+		&RoutePolicy{},
+		&ChannelModelCapability{},
+		&ChannelCapabilitySnapshot{},
+		&UserChannelEntitlement{},
+		&ChannelHealth{},
+	)
 }
 
 func migrateLOGDB() error {
