@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/go-redis/redis/v8"
 )
@@ -13,9 +13,9 @@ type RouteRuntimeProbe func(context.Context) (RouteLeaseRuntimeState, error)
 
 // ExecuteWithConfiguredRouteLease owns one route attempt. The callback is
 // invoked only after the lease and runtime state pass; release is attempted on
-// every exit path. A missing policy, Redis outage, or stale runtime snapshot
-// therefore fails the new route without an implicit unlimited-concurrency
-// fallback.
+// every exit path and release failures are returned. A missing policy, Redis
+// outage, or stale runtime snapshot therefore fails the new route without an
+// implicit unlimited-concurrency fallback.
 func ExecuteWithConfiguredRouteLease(
 	ctx context.Context,
 	requestID string,
@@ -25,7 +25,7 @@ func ExecuteWithConfiguredRouteLease(
 	expected RouteLeaseRuntimeState,
 	probe RouteRuntimeProbe,
 	execute func(context.Context, RouteLease, model.ChannelRoutePolicy) error,
-) error {
+) (resultErr error) {
 	if probe == nil || execute == nil {
 		return ErrRouteLeaseRuntime
 	}
@@ -34,10 +34,15 @@ func ExecuteWithConfiguredRouteLease(
 		return err
 	}
 	defer func() {
-		if commonRedisClient := configuredRouteRedisClient(); commonRedisClient != nil {
-			_ = ReleaseRouteLease(context.Background(), commonRedisClient, lease)
+		releaseErr := ReleaseConfiguredRouteLease(context.Background(), lease)
+		if releaseErr != nil {
+			resultErr = errors.Join(resultErr, releaseErr)
 		}
 	}()
+	if !expected.PolicyEnabled || expected.PolicyVersion <= 0 ||
+		!policy.Enabled || expected.PolicyVersion != policy.Version {
+		return ErrRouteLeaseRuntime
+	}
 	current, err := probe(ctx)
 	if err != nil {
 		return err
@@ -94,13 +99,4 @@ func StartRouteLeaseRenewal(ctx context.Context, client *redis.Client, lease Rou
 		}
 	}()
 	return RouteLeaseRenewal{Done: done, Stop: cancel}
-}
-
-func configuredRouteRedisClient() *redis.Client {
-	// Kept in one function so coordinator tests and future dependency
-	// injection do not duplicate the global Redis selection rule.
-	if !common.RedisEnabled || common.RDB == nil {
-		return nil
-	}
-	return common.RDB
 }

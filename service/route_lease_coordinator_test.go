@@ -23,7 +23,10 @@ func TestExecuteWithConfiguredRouteLeaseRechecksAndReleases(t *testing.T) {
 	originalDB, originalRedisEnabled, originalRDB := model.DB, common.RedisEnabled, common.RDB
 	model.DB = db
 	common.RedisEnabled = true
-	common.RDB = redis.NewClient(&redis.Options{Addr: server.Addr()})
+	common.RDB = redis.NewClient(&redis.Options{
+		Addr: server.Addr(), MaxRetries: -1,
+		DialTimeout: 100 * time.Millisecond, ReadTimeout: 100 * time.Millisecond, WriteTimeout: 100 * time.Millisecond,
+	})
 	t.Cleanup(func() {
 		model.DB, common.RedisEnabled, common.RDB = originalDB, originalRedisEnabled, originalRDB
 		sqlDB, closeErr := db.DB()
@@ -39,9 +42,9 @@ func TestExecuteWithConfiguredRouteLeaseRechecksAndReleases(t *testing.T) {
 	executed := false
 	err = ExecuteWithConfiguredRouteLease(
 		context.Background(), "request-coordinator", 7, 10, 20, "gpt-5", time.Minute,
-		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 1, CapabilityVersion: 1},
+		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 1, CapabilityVersion: 1, PolicyEnabled: true, PolicyVersion: 1},
 		func(context.Context) (RouteLeaseRuntimeState, error) {
-			return RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 1, CapabilityVersion: 1}, nil
+			return RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 1, CapabilityVersion: 1, PolicyEnabled: true, PolicyVersion: 1}, nil
 		},
 		func(context.Context, RouteLease, model.ChannelRoutePolicy) error {
 			executed = true
@@ -54,9 +57,61 @@ func TestExecuteWithConfiguredRouteLeaseRechecksAndReleases(t *testing.T) {
 	executed = false
 	err = ExecuteWithConfiguredRouteLease(
 		context.Background(), "request-stale", 7, 10, 20, "gpt-5", time.Minute,
-		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 1, CapabilityVersion: 1},
+		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 1, CapabilityVersion: 1, PolicyEnabled: true, PolicyVersion: 1},
 		func(context.Context) (RouteLeaseRuntimeState, error) {
-			return RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 1}, nil
+			return RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 1, PolicyEnabled: true, PolicyVersion: 1}, nil
+		},
+		func(context.Context, RouteLease, model.ChannelRoutePolicy) error {
+			executed = true
+			return nil
+		},
+	)
+	assert.ErrorIs(t, err, ErrRouteLeaseRuntime)
+	assert.False(t, executed)
+
+	executed = false
+	err = ExecuteWithConfiguredRouteLease(
+		context.Background(), "request-release-disconnect", 7, 10, 20, "gpt-5", time.Minute,
+		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 1, CapabilityVersion: 1, PolicyEnabled: true, PolicyVersion: 1},
+		func(context.Context) (RouteLeaseRuntimeState, error) {
+			return RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 1, CapabilityVersion: 1, PolicyEnabled: true, PolicyVersion: 1}, nil
+		},
+		func(context.Context, RouteLease, model.ChannelRoutePolicy) error {
+			executed = true
+			server.Close()
+			return nil
+		},
+	)
+	assert.ErrorIs(t, err, ErrRouteLeaseUnavailable)
+	assert.True(t, executed)
+}
+
+func TestExecuteWithConfiguredRouteLeaseFencesAcquiredPolicyVersion(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	server := miniredis.RunT(t)
+	originalDB, originalRedisEnabled, originalRDB := model.DB, common.RedisEnabled, common.RDB
+	model.DB = db
+	common.RedisEnabled = true
+	common.RDB = redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() {
+		model.DB, common.RedisEnabled, common.RDB = originalDB, originalRedisEnabled, originalRDB
+		sqlDB, closeErr := db.DB()
+		if closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelRoutePolicy{}))
+	require.NoError(t, db.Create(&model.ChannelRoutePolicy{
+		ChannelID: 7, CanonicalModel: "gpt-5", MaxChannelConcurrency: 1, Enabled: true, Version: 2,
+	}).Error)
+
+	executed := false
+	err = ExecuteWithConfiguredRouteLease(
+		context.Background(), "request-policy-stale", 7, 10, 20, "gpt-5", time.Minute,
+		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 1, CapabilityVersion: 1, PolicyEnabled: true, PolicyVersion: 1},
+		func(context.Context) (RouteLeaseRuntimeState, error) {
+			return RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 1, CapabilityVersion: 1, PolicyEnabled: true, PolicyVersion: 2}, nil
 		},
 		func(context.Context, RouteLease, model.ChannelRoutePolicy) error {
 			executed = true

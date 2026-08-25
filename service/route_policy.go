@@ -172,7 +172,8 @@ func ReleaseConfiguredRouteLease(ctx context.Context, lease RouteLease) error {
 // missing capability snapshot remains version zero and is rejected by the
 // caller's expected snapshot comparison.
 func GetRouteRuntimeState(ctx context.Context, channelID int, requestModel string) (RouteLeaseRuntimeState, error) {
-	if model.DB == nil || channelID <= 0 {
+	canonicalModel := modellab.NormalizeModel(requestModel)
+	if model.DB == nil || channelID <= 0 || strings.TrimSpace(canonicalModel) == "" {
 		return RouteLeaseRuntimeState{}, ErrRouteLeaseRuntime
 	}
 	if ctx == nil {
@@ -188,8 +189,17 @@ func GetRouteRuntimeState(ctx context.Context, channelID int, requestModel strin
 	} else {
 		return RouteLeaseRuntimeState{}, err
 	}
+	policy, err := model.FindChannelRoutePolicy(ctx, channelID, canonicalModel)
+	if errors.Is(err, model.ErrChannelRoutePolicyNotFound) {
+		return RouteLeaseRuntimeState{}, ErrRoutePolicyNotFound
+	}
+	if err != nil {
+		return RouteLeaseRuntimeState{}, err
+	}
+	state.PolicyEnabled = policy.Enabled
+	state.PolicyVersion = policy.Version
 	var health model.ChannelHealth
-	err := model.DB.WithContext(ctx).Where("channel_id = ? AND model = ? AND key_scope = ?", channelID, modellab.NormalizeModel(requestModel), "").First(&health).Error
+	err = model.DB.WithContext(ctx).Where("channel_id = ? AND model = ? AND key_scope = ?", channelID, canonicalModel, "").First(&health).Error
 	if err == nil {
 		state.HealthEpoch = health.HealthEpoch
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {

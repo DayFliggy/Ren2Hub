@@ -128,10 +128,17 @@ type RouteLeaseRuntimeState struct {
 	ChannelEnabled    bool
 	HealthEpoch       int64
 	CapabilityVersion int64
+	PolicyEnabled     bool
+	PolicyVersion     int64
 }
 
 func RecheckRouteLeaseRuntime(expected, current RouteLeaseRuntimeState) error {
-	if !current.ChannelEnabled || expected.HealthEpoch != current.HealthEpoch || expected.CapabilityVersion != current.CapabilityVersion {
+	if !expected.ChannelEnabled || !current.ChannelEnabled ||
+		!expected.PolicyEnabled || !current.PolicyEnabled ||
+		expected.PolicyVersion <= 0 || current.PolicyVersion <= 0 ||
+		expected.PolicyVersion != current.PolicyVersion ||
+		expected.HealthEpoch != current.HealthEpoch ||
+		expected.CapabilityVersion != current.CapabilityVersion {
 		return ErrRouteLeaseRuntime
 	}
 	return nil

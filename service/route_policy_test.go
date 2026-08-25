@@ -166,6 +166,51 @@ func TestSaveChannelRoutePolicyRequiresVersionForExistingPolicy(t *testing.T) {
 	assert.ErrorIs(t, err, ErrRoutePolicyConflict)
 }
 
+func TestGetRouteRuntimeStateIncludesPolicyFence(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	originalDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = originalDB
+		sqlDB, closeErr := db.DB()
+		if closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(
+		&model.Channel{}, &model.ChannelCapabilitySnapshot{}, &model.ChannelHealth{}, &model.ChannelRoutePolicy{},
+	))
+	require.NoError(t, db.Create(&model.Channel{Id: 7, Key: "test-key", Status: common.ChannelStatusEnabled}).Error)
+	snapshot := model.ChannelCapabilitySnapshot{
+		ChannelID: 7, ActiveVersion: 3, CatalogVersion: "catalog-test", SourceHash: "source-test",
+	}
+	snapshot.Normalize(time.Now())
+	require.NoError(t, db.Create(&snapshot).Error)
+	require.NoError(t, db.Create(&model.ChannelRoutePolicy{
+		ChannelID: 7, CanonicalModel: "gpt-5", MaxChannelConcurrency: 1, Enabled: true, Version: 4,
+	}).Error)
+
+	state, err := GetRouteRuntimeState(context.Background(), 7, "Gpt-5")
+	require.NoError(t, err)
+	assert.True(t, state.ChannelEnabled)
+	assert.True(t, state.PolicyEnabled)
+	assert.Equal(t, int64(4), state.PolicyVersion)
+	assert.Equal(t, int64(3), state.CapabilityVersion)
+
+	require.NoError(t, db.Model(&model.ChannelRoutePolicy{}).
+		Where("channel_id = ? AND canonical_model = ?", 7, "gpt-5").
+		Updates(map[string]any{"enabled": false, "version": 5}).Error)
+	state, err = GetRouteRuntimeState(context.Background(), 7, "gpt-5")
+	require.NoError(t, err)
+	assert.False(t, state.PolicyEnabled)
+	assert.Equal(t, int64(5), state.PolicyVersion)
+	assert.ErrorIs(t, RecheckRouteLeaseRuntime(
+		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 1, CapabilityVersion: 3, PolicyEnabled: true, PolicyVersion: 4},
+		state,
+	), ErrRouteLeaseRuntime)
+}
+
 func TestRouteLiveGateRequiresPrivateRoutingCapability(t *testing.T) {
 	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "false")
 	t.Setenv("ROUTE_LIVE_ENABLED", "true")
