@@ -59,6 +59,7 @@ type RouteDecision struct {
 	Candidates           []RouteDecisionCandidate `json:"candidates"`
 	SelectedChannelID    int                      `json:"selected_channel_id,omitempty"`
 	RetryAttempt         int                      `json:"retry_attempt"`
+	SameResourceRetry    int                      `json:"same_resource_retry_attempt"`
 	FailoverAttempt      int                      `json:"failover_attempt"`
 	LeaseState           string                   `json:"lease_state,omitempty"`
 	FinalError           string                   `json:"final_error,omitempty"`

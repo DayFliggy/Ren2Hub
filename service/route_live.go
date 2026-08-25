@@ -19,6 +19,8 @@ var (
 	ErrLiveRouteCandidateInvalid   = errors.New("live route candidate failed final qualification")
 )
 
+const RouteFilterKeyUnavailable = "key_unavailable"
+
 // LiveRouteQualificationError identifies a mutable authorization or
 // capability fact that changed after selection. The reason is a stable
 // internal enum and never contains provider data or credentials.
@@ -316,15 +318,38 @@ func (selection LiveRouteSelection) AllowsPriceRatio(actualRatio float64) bool {
 }
 
 func (selection LiveRouteSelection) CandidateForAttempt(attempt int) (RouteDecisionCandidate, bool) {
-	if attempt < 0 || attempt >= len(selection.Attempts) {
-		return RouteDecisionCandidate{}, false
+	candidate, _, found := selection.CandidateAtOrAfter(attempt)
+	return candidate, found
+}
+
+func (selection LiveRouteSelection) CandidateAtOrAfter(attempt int) (RouteDecisionCandidate, int, bool) {
+	if attempt < 0 {
+		attempt = 0
 	}
 	for index := attempt; index < len(selection.Attempts); index++ {
 		if selection.Attempts[index].FilterReason == "" {
-			return selection.Attempts[index], true
+			return selection.Attempts[index], index, true
 		}
 	}
-	return RouteDecisionCandidate{}, false
+	return RouteDecisionCandidate{}, 0, false
+}
+
+func (selection LiveRouteSelection) NextCandidateForError(currentAttempt, currentChannelID int, class RouteErrorClassification, counters RouteRetryCounters) (RouteDecisionCandidate, int, bool) {
+	budget := DefaultRouteRetryBudget()
+	for index := currentAttempt + 1; index < len(selection.Attempts); index++ {
+		candidate := selection.Attempts[index]
+		if candidate.FilterReason != "" {
+			continue
+		}
+		relation := RouteRetryFailover
+		if candidate.ChannelID == currentChannelID {
+			relation = RouteRetrySameChannel
+		}
+		if budget.Allows(class, relation, counters) {
+			return candidate, index, true
+		}
+	}
+	return RouteDecisionCandidate{}, 0, false
 }
 
 // SelectLiveTokenRoute is the side-effect-free route source bridge used by a
@@ -468,6 +493,18 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 }
 
 func selectedRouteAttemptCandidates(result RouteSelectionResult) []RouteDecisionCandidate {
+	available := availableRouteAttemptCandidates(result)
+	attempts := make([]RouteDecisionCandidate, 0, len(available)*2)
+	for _, candidate := range available {
+		attempts = append(attempts, candidate)
+		if DefaultSameChannelAttempts > 0 {
+			attempts = append(attempts, candidate)
+		}
+	}
+	return attempts
+}
+
+func availableRouteAttemptCandidates(result RouteSelectionResult) []RouteDecisionCandidate {
 	attempts := make([]RouteDecisionCandidate, 0, len(result.Candidates))
 	for _, candidate := range result.Candidates {
 		for _, decisionCandidate := range result.Decision.Candidates {
@@ -481,18 +518,14 @@ func selectedRouteAttemptCandidates(result RouteSelectionResult) []RouteDecision
 }
 
 func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveRetryPolicy) []RouteDecisionCandidate {
-	available := selectedRouteAttemptCandidates(result)
+	available := availableRouteAttemptCandidates(result)
 	if len(available) == 0 {
 		return available
 	}
 	if policy.Mode == "" {
 		policy.Mode = model.RoutePolicyRetryNextChannel
 	}
-	maxAttempts := DefaultTotalAttempts
 	appendCandidate := func(attempts []RouteDecisionCandidate, candidate RouteDecisionCandidate) []RouteDecisionCandidate {
-		if len(attempts) >= maxAttempts {
-			return attempts
-		}
 		return append(attempts, candidate)
 	}
 	appendSameResource := func(attempts []RouteDecisionCandidate, candidate RouteDecisionCandidate) []RouteDecisionCandidate {
@@ -500,13 +533,16 @@ func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveR
 		if repetitions < 0 {
 			repetitions = 0
 		}
-		for index := 0; index <= repetitions && len(attempts) < maxAttempts; index++ {
+		if repetitions > DefaultSameChannelAttempts {
+			repetitions = DefaultSameChannelAttempts
+		}
+		for index := 0; index <= repetitions; index++ {
 			attempts = appendCandidate(attempts, candidate)
 		}
 		return attempts
 	}
 
-	attempts := make([]RouteDecisionCandidate, 0, maxAttempts)
+	attempts := make([]RouteDecisionCandidate, 0, DefaultTotalAttempts)
 	switch policy.Mode {
 	case model.RoutePolicyRetryNone:
 		return appendCandidate(attempts, available[0])
@@ -517,8 +553,11 @@ func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveR
 		if failovers < 0 {
 			failovers = 0
 		}
+		if failovers > DefaultFailoverAttempts {
+			failovers = DefaultFailoverAttempts
+		}
 		for index, candidate := range available {
-			if index > failovers || len(attempts) >= maxAttempts {
+			if index > failovers {
 				break
 			}
 			attempts = appendSameResource(attempts, candidate)
@@ -531,8 +570,11 @@ func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveR
 		if failovers < 0 {
 			failovers = 0
 		}
+		if failovers > DefaultFailoverAttempts {
+			failovers = DefaultFailoverAttempts
+		}
 		for index, candidate := range available {
-			if index > failovers || len(attempts) >= maxAttempts {
+			if index > failovers {
 				break
 			}
 			attempts = appendCandidate(attempts, candidate)
@@ -553,6 +595,19 @@ func applyLiveHealth(ctx context.Context, requestModel string, candidates []Rout
 		}
 		if !usable {
 			candidates[index].FilterReason = RouteCandidateFilterHealthUnavailable
+			candidates[index].HealthUsable = false
+			continue
+		}
+		channel, err := model.CacheGetChannel(candidates[index].ChannelID)
+		if err != nil {
+			return err
+		}
+		hasAvailableKey, err := RouteChannelHasAvailableKey(ctx, channel, requestModel, now)
+		if err != nil {
+			return err
+		}
+		if !hasAvailableKey {
+			candidates[index].FilterReason = RouteFilterKeyUnavailable
 			candidates[index].HealthUsable = false
 			continue
 		}

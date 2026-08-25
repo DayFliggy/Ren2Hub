@@ -53,15 +53,15 @@ func ClassifyRouteError(status int, providerCode, message string, streamStarted 
 	case strings.Contains(code, "invalid_api_key") || strings.Contains(code, "invalid_credential") ||
 		strings.Contains(code, "authentication_error") || strings.Contains(text, "invalid api key") ||
 		strings.Contains(text, "incorrect api key"):
-		return RouteErrorClassification{Class: RouteErrorKey, MarkKey: true}
+		return RouteErrorClassification{Class: RouteErrorKey, Retryable: true, Failoverable: true, MarkKey: true}
+	case status == 404 || strings.Contains(code, "model_not_found") || strings.Contains(code, "unsupported_model") || strings.Contains(text, "model not found"):
+		return RouteErrorClassification{Class: RouteErrorModel, Failoverable: true, MarkCapability: true}
 	case status == 400 || status == 422 || strings.Contains(code, "invalid_request"):
 		return RouteErrorClassification{Class: RouteErrorInput}
 	case status == 401:
-		return RouteErrorClassification{Class: RouteErrorKey, MarkKey: true}
+		return RouteErrorClassification{Class: RouteErrorKey, Retryable: true, Failoverable: true, MarkKey: true}
 	case status == 403 || strings.Contains(code, "permission"):
 		return RouteErrorClassification{Class: RouteErrorPermission}
-	case status == 404 || strings.Contains(code, "model_not_found") || strings.Contains(code, "unsupported_model") || strings.Contains(text, "model not found"):
-		return RouteErrorClassification{Class: RouteErrorModel, MarkCapability: true}
 	case status == 408 || status == 409 || status == 425 || status == 429 || status >= 500 || strings.Contains(code, "rate_limit") || strings.Contains(code, "timeout"):
 		return RouteErrorClassification{Class: RouteErrorTransient, Retryable: true, Failoverable: true, MarkChannelModel: true}
 	default:
@@ -86,6 +86,21 @@ type RouteRetryBudget struct {
 	TotalAttempts       int
 }
 
+type RouteRetryCounters struct {
+	SameKeyAttempts     int
+	SameChannelAttempts int
+	FailoverAttempts    int
+	TotalAttempts       int
+}
+
+type RouteRetryRelation string
+
+const (
+	RouteRetrySameKey     RouteRetryRelation = "same_key"
+	RouteRetrySameChannel RouteRetryRelation = "same_channel"
+	RouteRetryFailover    RouteRetryRelation = "failover"
+)
+
 const (
 	DefaultSameKeyAttempts     = 0
 	DefaultSameChannelAttempts = 1
@@ -104,17 +119,20 @@ func DefaultRouteRetryBudget() RouteRetryBudget {
 	}
 }
 
-func (b RouteRetryBudget) Allows(class RouteErrorClassification, sameKey, sameChannel bool, attempt int) bool {
-	if !class.Retryable || attempt >= b.TotalAttempts {
+func (b RouteRetryBudget) Allows(class RouteErrorClassification, relation RouteRetryRelation, counters RouteRetryCounters) bool {
+	if counters.TotalAttempts >= b.TotalAttempts {
 		return false
 	}
-	if sameKey {
-		return attempt < b.SameKeyAttempts
+	switch relation {
+	case RouteRetrySameKey:
+		return class.Retryable && counters.SameKeyAttempts < b.SameKeyAttempts
+	case RouteRetrySameChannel:
+		return class.Retryable && counters.SameChannelAttempts < b.SameChannelAttempts
+	case RouteRetryFailover:
+		return class.Failoverable && counters.FailoverAttempts < b.FailoverAttempts
+	default:
+		return false
 	}
-	if sameChannel {
-		return attempt < b.SameChannelAttempts
-	}
-	return attempt < b.FailoverAttempts
 }
 
 type RouteHealthPolicy struct {
@@ -124,6 +142,14 @@ type RouteHealthPolicy struct {
 
 func DefaultRouteHealthPolicy() RouteHealthPolicy {
 	return RouteHealthPolicy{FailureThreshold: 3, Cooldown: 30 * time.Second}
+}
+
+func routeKeyHealthPolicy() RouteHealthPolicy {
+	return RouteHealthPolicy{FailureThreshold: 1, Cooldown: 5 * time.Minute}
+}
+
+func routeCapabilityHealthPolicy() RouteHealthPolicy {
+	return RouteHealthPolicy{FailureThreshold: 1, Cooldown: 5 * time.Minute}
 }
 
 func (p RouteHealthPolicy) normalized() RouteHealthPolicy {
@@ -268,7 +294,11 @@ func ObserveLiveRouteError(ctx context.Context, channelID int, requestModel stri
 }
 
 func ObserveLiveRouteErrorForKey(ctx context.Context, channelID int, requestModel, key string, status int, providerCode, message string, streamStarted bool) error {
-	return observeLiveRouteError(ctx, channelID, requestModel, RouteKeyScope(key), status, providerCode, message, streamStarted)
+	keyScope := ""
+	if strings.TrimSpace(key) != "" {
+		keyScope = RouteKeyScope(key)
+	}
+	return observeLiveRouteError(ctx, channelID, requestModel, keyScope, status, providerCode, message, streamStarted)
 }
 
 func observeLiveRouteError(ctx context.Context, channelID int, requestModel, keyScope string, status int, providerCode, message string, streamStarted bool) error {
@@ -280,13 +310,14 @@ func observeLiveRouteError(ctx context.Context, channelID int, requestModel, key
 		if keyScope == "" {
 			return nil
 		}
-		_, err := persistRouteHealthFailure(ctx, channelID, requestModel, keyScope, DefaultRouteHealthPolicy(), time.Now())
+		_, err := persistRouteHealthFailure(ctx, channelID, requestModel, keyScope, routeKeyHealthPolicy(), time.Now())
+		return err
+	}
+	if classification.MarkCapability {
+		_, err := PersistRouteHealthFailure(ctx, channelID, requestModel, routeCapabilityHealthPolicy(), time.Now())
 		return err
 	}
 	if !classification.MarkChannelModel {
-		// Capability errors belong to the specific immutable capability and are
-		// handled by the next capability refresh. They must not open the whole
-		// channel/model circuit.
 		return nil
 	}
 	_, err := PersistRouteHealthFailure(ctx, channelID, requestModel, DefaultRouteHealthPolicy(), time.Now())
@@ -336,9 +367,81 @@ func ObserveLiveRouteSuccess(ctx context.Context, channelID int, requestModel st
 	return err
 }
 
+func ObserveLiveRouteSuccessForKey(ctx context.Context, channelID int, requestModel, key string, latencyMS, ttftMS int64) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ObserveLiveRouteSuccessWithMetrics(ctx, channelID, requestModel, latencyMS, ttftMS); err != nil {
+		return err
+	}
+	if strings.TrimSpace(key) == "" {
+		return nil
+	}
+	now := time.Now()
+	keyScope := RouteKeyScope(key)
+	var existing model.ChannelHealth
+	err := model.DB.WithContext(ctx).Where("channel_id = ? AND model = ? AND key_scope = ?", channelID, modellab.NormalizeModel(requestModel), keyScope).First(&existing).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, err = persistRouteHealthObservation(ctx, channelID, requestModel, keyScope, now, func(health model.ChannelHealth) model.ChannelHealth {
+		return ObserveRouteHealthSuccess(health, now)
+	})
+	return err
+}
+
 func ObserveLiveRouteSuccessWithMetrics(ctx context.Context, channelID int, requestModel string, latencyMS, ttftMS int64) error {
 	_, err := PersistRouteHealthSuccessWithMetrics(ctx, channelID, requestModel, time.Now(), latencyMS, ttftMS)
 	return err
+}
+
+func UnavailableRouteKeyIndexes(ctx context.Context, channel *model.Channel, requestModel string, now time.Time) (map[int]struct{}, error) {
+	excluded := make(map[int]struct{})
+	if channel == nil {
+		return excluded, nil
+	}
+	if model.DB == nil {
+		return nil, errors.New("route health database is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var healthRows []model.ChannelHealth
+	if err := model.DB.WithContext(ctx).
+		Where("channel_id = ? AND model = ? AND key_scope <> ?", channel.Id, modellab.NormalizeModel(requestModel), "").
+		Find(&healthRows).Error; err != nil {
+		return nil, err
+	}
+	byScope := make(map[string]model.ChannelHealth, len(healthRows))
+	for _, health := range healthRows {
+		byScope[health.KeyScope] = health
+	}
+	for index, key := range channel.GetKeys() {
+		health, found := byScope[RouteKeyScope(key)]
+		if found && !CanUseRouteHealth(health, now) {
+			excluded[index] = struct{}{}
+		}
+	}
+	return excluded, nil
+}
+
+func RouteChannelHasAvailableKey(ctx context.Context, channel *model.Channel, requestModel string, now time.Time) (bool, error) {
+	if channel == nil {
+		return false, nil
+	}
+	excluded, err := UnavailableRouteKeyIndexes(ctx, channel, requestModel, now)
+	if err != nil {
+		return false, err
+	}
+	for _, index := range channel.GetEnabledKeyIndexes() {
+		if _, unavailable := excluded[index]; !unavailable {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // RouteBackoff returns full-jitter delay for the local exponential backoff.

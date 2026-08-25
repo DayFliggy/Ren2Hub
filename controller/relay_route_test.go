@@ -9,6 +9,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
@@ -49,6 +50,137 @@ func TestLiveRouteFailoverAttemptCountsChannelChangesOnly(t *testing.T) {
 	assert.Equal(t, 0, liveRouteFailoverAttempt(selection, 1))
 	assert.Equal(t, 1, liveRouteFailoverAttempt(selection, 2))
 	assert.Equal(t, 2, liveRouteFailoverAttempt(selection, 3))
+}
+
+func TestBeginLiveRouteUpstreamAttemptTracksIndependentBudgetsAndKeys(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	common.SetContextKey(c, constant.ContextKeyChannelIsMultiKey, true)
+	common.SetContextKey(c, constant.ContextKeyChannelMultiKeyIndex, 0)
+	assert.Equal(t, 0, beginLiveRouteUpstreamAttempt(c, 11))
+
+	common.SetContextKey(c, constant.ContextKeyChannelMultiKeyIndex, 1)
+	assert.Equal(t, 1, beginLiveRouteUpstreamAttempt(c, 11))
+	assert.Equal(t, 2, beginLiveRouteUpstreamAttempt(c, 12))
+
+	counters := liveRouteRetryCounters(c)
+	assert.Equal(t, 3, counters.TotalAttempts)
+	assert.Equal(t, 0, counters.SameKeyAttempts)
+	assert.Equal(t, 1, counters.SameChannelAttempts)
+	assert.Equal(t, 1, counters.FailoverAttempts)
+	assert.Equal(t, map[int]struct{}{0: {}, 1: {}}, service.GetLiveRouteAttemptedKeyIndexes(c, 11))
+}
+
+func TestSetupContextLiveRetryUsesAnotherEnabledKey(t *testing.T) {
+	t.Setenv("ROUTE_LIVE_ENABLED", "true")
+	originalDB, originalMemoryCache := model.DB, common.MemoryCacheEnabled
+	originalDatabaseType := common.MainDatabaseType()
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	model.DB = db
+	common.MemoryCacheEnabled = false
+	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB = originalDB
+		common.MemoryCacheEnabled = originalMemoryCache
+		common.SetMainDatabaseType(originalDatabaseType)
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
+
+	first := model.Channel{
+		Id: 92011, Type: constant.ChannelTypeOpenAI, Key: "first-key\nsecond-key", Name: "multi-key", Status: common.ChannelStatusEnabled,
+		ChannelInfo: model.ChannelInfo{IsMultiKey: true, MultiKeyMode: constant.MultiKeyModeRandom},
+	}
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	selection := service.LiveRouteSelection{Source: service.RouteSourceAutoLab, Attempts: []service.RouteDecisionCandidate{
+		{ChannelID: first.Id}, {ChannelID: first.Id},
+	}}
+	c.Set("route_live_selection", selection)
+	require.Nil(t, middleware.SetupContextForSelectedChannel(c, &first, "gpt-test"))
+	initialKey := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
+	initialIndex := common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
+	beginLiveRouteUpstreamAttempt(c, first.Id)
+
+	require.Nil(t, middleware.SetupContextForSelectedChannel(c, &first, "gpt-test"))
+	assert.NotEqual(t, initialKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey))
+	assert.NotEqual(t, initialIndex, common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex))
+}
+
+func TestNextLiveRouteAttemptUsesErrorScope(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set("route_live_selection", service.LiveRouteSelection{
+		Source: service.RouteSourceAutoLab,
+		Attempts: []service.RouteDecisionCandidate{
+			{ChannelID: 11}, {ChannelID: 11}, {ChannelID: 12},
+		},
+	})
+	beginLiveRouteUpstreamAttempt(c, 11)
+
+	keyFailure := service.ClassifyRouteError(401, "invalid_api_key", "", false)
+	index, found := nextLiveRouteAttemptForError(c, 0, 11, keyFailure)
+	require.True(t, found)
+	assert.Equal(t, 1, index)
+
+	modelFailure := service.ClassifyRouteError(400, "unsupported_model", "", false)
+	index, found = nextLiveRouteAttemptForError(c, 0, 11, modelFailure)
+	require.True(t, found)
+	assert.Equal(t, 2, index)
+
+	committedStream := service.CanRouteFailover(keyFailure, true, true)
+	assert.False(t, committedStream)
+}
+
+func TestGetChannelSkipsExhaustedSingleKeyCandidate(t *testing.T) {
+	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
+	t.Setenv("ROUTE_LIVE_ENABLED", "true")
+	originalDB, originalMemoryCache := model.DB, common.MemoryCacheEnabled
+	originalDatabaseType := common.MainDatabaseType()
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	model.DB = db
+	common.MemoryCacheEnabled = false
+	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB = originalDB
+		common.MemoryCacheEnabled = originalMemoryCache
+		common.SetMainDatabaseType(originalDatabaseType)
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelHealth{}))
+
+	first := model.Channel{Id: 92101, Type: constant.ChannelTypeOpenAI, Key: "first-key", Name: "first", Status: common.ChannelStatusEnabled}
+	second := model.Channel{Id: 92102, Type: constant.ChannelTypeOpenAI, Key: "second-key", Name: "second", Status: common.ChannelStatusEnabled}
+	require.NoError(t, db.Create(&first).Error)
+	require.NoError(t, db.Create(&second).Error)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	c.Set("route_live_selection", service.LiveRouteSelection{
+		Source: service.RouteSourceAutoLab,
+		Attempts: []service.RouteDecisionCandidate{
+			{ChannelID: first.Id}, {ChannelID: first.Id}, {ChannelID: second.Id},
+		},
+	})
+	service.RecordLiveRouteAttemptedKey(c, first.Id, 0)
+	retry := 1
+	param := &service.RetryParam{Ctx: c, Retry: &retry}
+	info := &relaycommon.RelayInfo{
+		ChannelMeta:     &relaycommon.ChannelMeta{ChannelId: first.Id},
+		OriginModelName: "gpt-test",
+	}
+
+	selected, apiErr := getChannel(c, info, param)
+	require.Nil(t, apiErr)
+	require.NotNil(t, selected)
+	assert.Equal(t, second.Id, selected.Id)
+	assert.Equal(t, 2, param.GetRetry())
+	assert.Equal(t, "second-key", common.GetContextKeyString(c, constant.ContextKeyChannelKey))
 }
 
 func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *testing.T) {
@@ -136,4 +268,43 @@ func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *te
 	updated := updatedValue.(service.LiveRouteSelection)
 	assert.Equal(t, service.ShadowFilterAbilityDisabled, updated.Decision.Candidates[0].FilterReason)
 	assert.Equal(t, "qualification_failed", updated.Decision.LeaseState)
+}
+
+func TestReleaseRouteAttemptLeaseStopsRenewalAndRestoresParentContext(t *testing.T) {
+	originalRDB, originalRedisEnabled := common.RDB, common.RedisEnabled
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	common.RDB = client
+	common.RedisEnabled = true
+	t.Cleanup(func() {
+		common.RDB, common.RedisEnabled = originalRDB, originalRedisEnabled
+		_ = client.Close()
+	})
+
+	resources := []service.RouteLeaseResource{{Key: "route:lease:test:release-order", Capacity: 1}}
+	lease, err := service.AcquireRouteLease(context.Background(), client, "release-request", "release-lease", time.Minute, resources)
+	require.NoError(t, err)
+	lease.ChannelID = 31
+
+	type contextKey string
+	const parentKey contextKey = "parent"
+	parentContext := context.WithValue(context.Background(), parentKey, "preserved")
+	attemptContext, cancel := context.WithCancel(parentContext)
+	renewal := service.StartRouteLeaseRenewal(attemptContext, client, lease, time.Millisecond, time.Minute)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil).WithContext(attemptContext)
+	c.Set("route_live_lease", lease)
+	c.Set("route_live_lease_cancel", context.CancelFunc(cancel))
+	c.Set("route_live_lease_parent_context", parentContext)
+	c.Set("route_live_renewal", renewal)
+
+	releaseRouteAttemptLease(c)
+
+	assert.NoError(t, c.Request.Context().Err())
+	assert.Equal(t, "preserved", c.Request.Context().Value(parentKey))
+	assert.Equal(t, int64(0), client.ZCard(context.Background(), resources[0].Key).Val())
+	_, hasLease := c.Get("route_live_lease")
+	assert.True(t, hasLease)
+	assert.Nil(t, c.MustGet("route_live_lease"))
 }

@@ -17,9 +17,12 @@ import (
 func TestClassifyRouteErrorSeparatesKeyModelAndStreamFailures(t *testing.T) {
 	assert.Equal(t, RouteErrorKey, ClassifyRouteError(401, "", "", false).Class)
 	assert.True(t, ClassifyRouteError(401, "", "", false).MarkKey)
+	assert.True(t, ClassifyRouteError(401, "", "", false).Failoverable)
 	assert.Equal(t, RouteErrorKey, ClassifyRouteError(403, "invalid_api_key", "", false).Class)
 	assert.Equal(t, RouteErrorModel, ClassifyRouteError(404, "model_not_found", "", false).Class)
+	assert.Equal(t, RouteErrorModel, ClassifyRouteError(400, "unsupported_model", "", false).Class)
 	assert.True(t, ClassifyRouteError(404, "model_not_found", "", false).MarkCapability)
+	assert.True(t, ClassifyRouteError(404, "model_not_found", "", false).Failoverable)
 	assert.Equal(t, RouteErrorStreamStarted, ClassifyRouteError(502, "", "", true).Class)
 	assert.False(t, ClassifyRouteError(502, "", "", true).Failoverable)
 	assert.False(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), true, false))
@@ -52,10 +55,11 @@ func TestRouteHealthStateMachineUsesEpochAndCooldown(t *testing.T) {
 func TestDefaultRouteRetryBudgetSeparatesSameResourceAndFailover(t *testing.T) {
 	budget := DefaultRouteRetryBudget()
 	transient := ClassifyRouteError(503, "", "", false)
-	assert.False(t, budget.Allows(transient, true, true, 0))
-	assert.True(t, budget.Allows(transient, false, true, 0))
-	assert.True(t, budget.Allows(transient, false, false, 1))
-	assert.False(t, budget.Allows(transient, false, false, 3))
+	assert.False(t, budget.Allows(transient, RouteRetrySameKey, RouteRetryCounters{TotalAttempts: 1}))
+	assert.True(t, budget.Allows(transient, RouteRetrySameChannel, RouteRetryCounters{TotalAttempts: 1}))
+	assert.False(t, budget.Allows(transient, RouteRetrySameChannel, RouteRetryCounters{TotalAttempts: 2, SameChannelAttempts: 1}))
+	assert.True(t, budget.Allows(transient, RouteRetryFailover, RouteRetryCounters{TotalAttempts: 2, FailoverAttempts: 1}))
+	assert.False(t, budget.Allows(transient, RouteRetryFailover, RouteRetryCounters{TotalAttempts: 3}))
 	assert.Equal(t, 125*time.Millisecond, RouteBackoff(0, 0, time.Second, 0.5))
 	assert.Equal(t, time.Second, RouteBackoff(0, time.Second, 5*time.Second, 0.5))
 	assert.LessOrEqual(t, RouteBackoff(4, 10*time.Second, 100*time.Millisecond, 1), 100*time.Millisecond)
@@ -166,15 +170,35 @@ func TestObserveLiveRouteErrorKeepsKeyAndCapabilityScopesSeparate(t *testing.T) 
 
 	require.NoError(t, ObserveLiveRouteError(context.Background(), 3, "gpt-5", 404, "model_not_found", "", false))
 	var aggregate model.ChannelHealth
-	err = db.Where("channel_id = ? AND model = ? AND key_scope = ?", 3, "gpt-5", "").First(&aggregate).Error
-	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	require.NoError(t, db.Where("channel_id = ? AND model = ? AND key_scope = ?", 3, "gpt-5", "").First(&aggregate).Error)
+	assert.Equal(t, model.RouteHealthStateOpen, aggregate.State)
 
 	require.NoError(t, ObserveLiveRouteErrorForKey(context.Background(), 3, "gpt-5", "", 401, "", "", false))
-	err = db.Where("channel_id = ? AND model = ? AND key_scope = ?", 3, "gpt-5", "").First(&aggregate).Error
-	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	var keyHealthCount int64
+	require.NoError(t, db.Model(&model.ChannelHealth{}).Where("channel_id = ? AND model = ? AND key_scope <> ?", 3, "gpt-5", "").Count(&keyHealthCount).Error)
+	assert.Zero(t, keyHealthCount)
 
 	require.NoError(t, ObserveLiveRouteErrorForKey(context.Background(), 3, "gpt-5", "secret-key", 401, "", "", false))
 	var keyHealth model.ChannelHealth
 	require.NoError(t, db.Where("channel_id = ? AND model = ? AND key_scope = ?", 3, "gpt-5", RouteKeyScope("secret-key")).First(&keyHealth).Error)
-	assert.Equal(t, 1, keyHealth.FailureCount)
+	assert.Equal(t, model.RouteHealthStateOpen, keyHealth.State)
+
+	channel := &model.Channel{Id: 3, Key: "secret-key\nhealthy-key", ChannelInfo: model.ChannelInfo{IsMultiKey: true}}
+	excluded, err := UnavailableRouteKeyIndexes(context.Background(), channel, "gpt-5", time.Now())
+	require.NoError(t, err)
+	assert.Contains(t, excluded, 0)
+	assert.NotContains(t, excluded, 1)
+	singleKeyChannel := &model.Channel{Id: 3, Key: "secret-key"}
+	excluded, err = UnavailableRouteKeyIndexes(context.Background(), singleKeyChannel, "gpt-5", time.Now())
+	require.NoError(t, err)
+	assert.Contains(t, excluded, 0)
+
+	require.NoError(t, ObserveLiveRouteSuccessForKey(context.Background(), 3, "gpt-5", "secret-key", 20, 5))
+	excluded, err = UnavailableRouteKeyIndexes(context.Background(), channel, "gpt-5", time.Now())
+	require.NoError(t, err)
+	assert.NotContains(t, excluded, 0)
+
+	require.NoError(t, ObserveLiveRouteSuccessForKey(context.Background(), 3, "gpt-5", "healthy-key", 20, 5))
+	require.NoError(t, db.Model(&model.ChannelHealth{}).Where("channel_id = ? AND model = ? AND key_scope = ?", 3, "gpt-5", RouteKeyScope("healthy-key")).Count(&keyHealthCount).Error)
+	assert.Zero(t, keyHealthCount)
 }

@@ -227,6 +227,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if retryParam.GetRetry() > 0 {
 			releaseRouteAttemptLease(c)
 		}
+		if routeLiveSelectionActive(c) && liveRouteRetryCounters(c).TotalAttempts >= service.DefaultTotalAttempts {
+			break
+		}
 		if compactRetry == nil {
 			if retryParam.GetRetry() > relayRetryLimit(c) {
 				break
@@ -235,7 +238,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			compactRetry.prepare(retryParam, relayInfo)
 		}
 		if compactRetry == nil {
-			relayInfo.RetryIndex = retryParam.GetRetry()
+			if routeLiveSelectionActive(c) {
+				relayInfo.RetryIndex = liveRouteRetryCounters(c).TotalAttempts
+			} else {
+				relayInfo.RetryIndex = retryParam.GetRetry()
+			}
 		} else {
 			relayInfo.RetryIndex = len(c.GetStringSlice("use_channel"))
 		}
@@ -251,10 +258,16 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if leaseErr := acquireRouteAttemptLease(c, relayInfo, channel, retryParam.GetRetry()); leaseErr != nil {
 			if service.LiveRouteQualificationAllowsFailover(leaseErr) && !relayInfo.HasSendResponse() &&
 				retryParam.GetRetry() < relayRetryLimit(c) {
-				retryParam.IncreaseRetry()
-				continue
+				if nextAttempt, found := nextLiveRouteCandidateIndex(c, retryParam.GetRetry()); found {
+					retryParam.SetRetry(nextAttempt)
+					continue
+				}
 			}
-			newAPIError = types.NewError(leaseErr, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+			if service.LiveRouteQualificationAllowsFailover(leaseErr) && !relayInfo.HasSendResponse() {
+				newAPIError = types.NewError(service.ErrRouteSelectionUnavailable, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+			} else {
+				newAPIError = types.NewError(leaseErr, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+			}
 			break
 		}
 		addUsedChannel(c, channel.Id)
@@ -290,6 +303,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
+		if routeLiveSelectionActive(c) {
+			relayInfo.RetryIndex = beginLiveRouteUpstreamAttempt(c, channel.Id)
+		}
 		attemptStartedAt := time.Now()
 
 		switch relayFormat {
@@ -310,7 +326,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				if relayInfo.FirstResponseTime.After(attemptStartedAt) {
 					ttftMS = relayInfo.FirstResponseTime.Sub(attemptStartedAt).Milliseconds()
 				}
-				_ = service.ObserveLiveRouteSuccessWithMetrics(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), latencyMS, ttftMS)
+				_ = service.ObserveLiveRouteSuccessForKey(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), latencyMS, ttftMS)
 			}
 			relayInfo.LastError = nil
 			return
@@ -318,11 +334,16 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError
+		liveNextAttempt := -1
+		liveClassification := service.RouteErrorClassification{}
 		if routeLiveSelectionActive(c) {
 			_ = service.ObserveLiveRouteErrorForKey(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), newAPIError.StatusCode, string(newAPIError.GetErrorCode()), newAPIError.Error(), relayInfo.HasSendResponse())
-			classification := service.ClassifyRouteError(newAPIError.StatusCode, string(newAPIError.GetErrorCode()), newAPIError.Error(), relayInfo.HasSendResponse())
-			if !classification.Retryable || !service.CanRouteFailover(classification, relayInfo.IsStream, relayInfo.HasSendResponse()) {
-				break
+			liveClassification = service.ClassifyRouteError(newAPIError.StatusCode, string(newAPIError.GetErrorCode()), newAPIError.Error(), relayInfo.HasSendResponse())
+			streamCommitted := relayInfo.HasSendResponse() || relayFormat == types.RelayFormatOpenAIRealtime
+			if service.CanRouteFailover(liveClassification, streamCommitted, relayInfo.HasSendResponse()) {
+				if nextAttempt, found := nextLiveRouteAttemptForError(c, retryParam.GetRetry(), channel.Id, liveClassification); found {
+					liveNextAttempt = nextAttempt
+				}
 			}
 		}
 
@@ -331,7 +352,16 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if modelSemanticError {
 			channelError.AutoBan = false
 		}
+		if routeLiveSelectionActive(c) {
+			// Live routing isolates failures at key, capability, or channel/model
+			// scope. Reusing legacy AutoBan here would widen a scoped failure into
+			// a global Channel.Status change and bypass the new health state.
+			channelError.AutoBan = false
+		}
 		processChannelError(c, *channelError, newAPIError)
+		if routeLiveSelectionActive(c) && liveNextAttempt < 0 {
+			break
+		}
 
 		if compactRetry != nil {
 			retryClassBudget := compactRetry.remainingAttempts()
@@ -344,6 +374,13 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 
+		if routeLiveSelectionActive(c) {
+			if !waitForLiveRouteBackoff(c, relayInfo.RetryIndex, newAPIError.RetryAfter) {
+				break
+			}
+			retryParam.SetRetry(liveNextAttempt)
+			continue
+		}
 		if !shouldRetry(c, newAPIError, relayRetryLimit(c)-retryParam.GetRetry()) {
 			break
 		}
@@ -573,18 +610,32 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		if value, ok := c.Get("route_live_selection"); ok {
 			selection, valid := value.(service.LiveRouteSelection)
 			if valid && selection.Source != service.RouteSourceLegacy {
-				candidate, found := selection.CandidateForAttempt(retryParam.GetRetry())
-				if !found {
-					return nil, types.NewError(service.ErrRouteSelectionUnavailable, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+				for candidateIndex := retryParam.GetRetry(); candidateIndex < len(selection.Attempts); candidateIndex++ {
+					candidate, actualIndex, found := selection.CandidateAtOrAfter(candidateIndex)
+					if !found {
+						break
+					}
+					channel, err := model.CacheGetChannel(candidate.ChannelID)
+					if err != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
+						markLiveRouteCandidateFiltered(c, candidate.ChannelID, service.ShadowFilterChannelDisabled)
+						candidateIndex = actualIndex
+						continue
+					}
+					retryParam.SetRetry(actualIndex)
+					if actualIndex == 0 && info.ChannelId == channel.Id {
+						return channel, nil
+					}
+					if setupErr := middleware.SetupContextForSelectedChannel(c, channel, info.BillingModelName()); setupErr != nil {
+						if setupErr.GetErrorCode() == types.ErrorCodeChannelNoAvailableKey {
+							markLiveRouteCandidateFiltered(c, candidate.ChannelID, service.RouteFilterKeyUnavailable)
+							candidateIndex = actualIndex
+							continue
+						}
+						return nil, setupErr
+					}
+					return channel, nil
 				}
-				channel, err := model.CacheGetChannel(candidate.ChannelID)
-				if err != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
-					return nil, types.NewError(errors.New("live route channel is unavailable"), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-				}
-				if newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.BillingModelName()); newAPIError != nil {
-					return nil, newAPIError
-				}
-				return channel, nil
+				return nil, types.NewError(service.ErrRouteSelectionUnavailable, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 			}
 		}
 	}
@@ -712,14 +763,11 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 		}
 		return err
 	}
-	if setupErr := middleware.SetupContextForSelectedChannel(c, channel, info.BillingModelName()); setupErr != nil {
-		_ = service.ReleaseConfiguredRouteLease(context.Background(), lease)
-		return setupErr
-	}
 	c.Set("route_live_lease", lease)
 	markLiveRouteAttempt(c, channel.Id, service.RouteLeaseStateAcquired)
 	if info.IsStream {
-		leaseContext, cancel := context.WithCancel(c.Request.Context())
+		parentContext := c.Request.Context()
+		leaseContext, cancel := context.WithCancel(parentContext)
 		c.Request = c.Request.WithContext(leaseContext)
 		renewal := service.StartRouteLeaseRenewal(leaseContext, common.RDB, lease, 30*time.Second, routeAttemptLeaseTTL())
 		go func() {
@@ -731,6 +779,7 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 			}
 		}()
 		c.Set("route_live_lease_cancel", cancel)
+		c.Set("route_live_lease_parent_context", parentContext)
 		c.Set("route_live_renewal", renewal)
 	}
 	return nil
@@ -740,21 +789,12 @@ func releaseRouteAttemptLease(c *gin.Context) {
 	if c == nil {
 		return
 	}
-	value, ok := c.Get("route_live_lease")
-	if !ok {
-		return
-	}
-	lease, ok := value.(service.RouteLease)
-	if ok {
-		if err := service.ReleaseConfiguredRouteLease(context.Background(), lease); err != nil {
-			markLiveRouteAttempt(c, lease.ChannelID, service.RouteLeaseStateReleaseFailed)
-		} else {
-			markLiveRouteAttempt(c, lease.ChannelID, service.RouteLeaseStateReleased)
-		}
-	}
 	if renewalValue, exists := c.Get("route_live_renewal"); exists {
 		if renewal, valid := renewalValue.(service.RouteLeaseRenewal); valid && renewal.Stop != nil {
 			renewal.Stop()
+			if renewal.Done != nil {
+				<-renewal.Done
+			}
 		}
 		c.Set("route_live_renewal", nil)
 	}
@@ -763,6 +803,21 @@ func releaseRouteAttemptLease(c *gin.Context) {
 			cancel()
 		}
 		c.Set("route_live_lease_cancel", nil)
+	}
+	if parentValue, exists := c.Get("route_live_lease_parent_context"); exists && c.Request != nil {
+		if parentContext, valid := parentValue.(context.Context); valid && parentContext != nil {
+			c.Request = c.Request.WithContext(parentContext)
+		}
+		c.Set("route_live_lease_parent_context", nil)
+	}
+	value, ok := c.Get("route_live_lease")
+	lease, valid := value.(service.RouteLease)
+	if ok && valid {
+		if err := service.ReleaseConfiguredRouteLease(context.Background(), lease); err != nil {
+			markLiveRouteAttempt(c, lease.ChannelID, service.RouteLeaseStateReleaseFailed)
+		} else {
+			markLiveRouteAttempt(c, lease.ChannelID, service.RouteLeaseStateReleased)
+		}
 	}
 	c.Set("route_live_lease", nil)
 }
@@ -815,6 +870,85 @@ func markLiveRouteCandidateFiltered(c *gin.Context, channelID int, reason string
 
 func routeAttemptLeaseTTL() time.Duration {
 	return 2 * time.Minute
+}
+
+const (
+	liveRouteAttemptCountKey       = "route_live_attempt_count"
+	liveRouteSameKeyRetryCountKey  = "route_live_same_key_retry_count"
+	liveRouteSameRetryCountKey     = "route_live_same_resource_retry_count"
+	liveRouteFailoverCountKey      = "route_live_failover_count"
+	liveRoutePreviousChannelKey    = "route_live_previous_channel_id"
+	liveRoutePreviousKeyIndexKey   = "route_live_previous_key_index"
+	liveRouteHasPreviousAttemptKey = "route_live_has_previous_attempt"
+)
+
+func liveRouteRetryCounters(c *gin.Context) service.RouteRetryCounters {
+	if c == nil {
+		return service.RouteRetryCounters{}
+	}
+	return service.RouteRetryCounters{
+		SameKeyAttempts:     c.GetInt(liveRouteSameKeyRetryCountKey),
+		SameChannelAttempts: c.GetInt(liveRouteSameRetryCountKey),
+		FailoverAttempts:    c.GetInt(liveRouteFailoverCountKey),
+		TotalAttempts:       c.GetInt(liveRouteAttemptCountKey),
+	}
+}
+
+func beginLiveRouteUpstreamAttempt(c *gin.Context, channelID int) int {
+	counters := liveRouteRetryCounters(c)
+	keyIndex := 0
+	if common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey) {
+		keyIndex = common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
+	}
+	if c.GetBool(liveRouteHasPreviousAttemptKey) {
+		previousChannelID := c.GetInt(liveRoutePreviousChannelKey)
+		previousKeyIndex := c.GetInt(liveRoutePreviousKeyIndexKey)
+		switch {
+		case previousChannelID != channelID:
+			counters.FailoverAttempts++
+		case previousKeyIndex == keyIndex:
+			counters.SameKeyAttempts++
+		default:
+			counters.SameChannelAttempts++
+		}
+	}
+	retryIndex := counters.TotalAttempts
+	counters.TotalAttempts++
+	c.Set(liveRouteAttemptCountKey, counters.TotalAttempts)
+	c.Set(liveRouteSameKeyRetryCountKey, counters.SameKeyAttempts)
+	c.Set(liveRouteSameRetryCountKey, counters.SameChannelAttempts)
+	c.Set(liveRouteFailoverCountKey, counters.FailoverAttempts)
+	c.Set(liveRoutePreviousChannelKey, channelID)
+	c.Set(liveRoutePreviousKeyIndexKey, keyIndex)
+	c.Set(liveRouteHasPreviousAttemptKey, true)
+	service.RecordLiveRouteAttemptedKey(c, channelID, keyIndex)
+	return retryIndex
+}
+
+func nextLiveRouteCandidateIndex(c *gin.Context, currentAttempt int) (int, bool) {
+	if c == nil {
+		return 0, false
+	}
+	value, ok := c.Get("route_live_selection")
+	selection, valid := value.(service.LiveRouteSelection)
+	if !ok || !valid {
+		return 0, false
+	}
+	_, index, found := selection.CandidateAtOrAfter(currentAttempt + 1)
+	return index, found
+}
+
+func nextLiveRouteAttemptForError(c *gin.Context, currentAttempt, currentChannelID int, class service.RouteErrorClassification) (int, bool) {
+	if c == nil {
+		return 0, false
+	}
+	value, ok := c.Get("route_live_selection")
+	selection, valid := value.(service.LiveRouteSelection)
+	if !ok || !valid {
+		return 0, false
+	}
+	_, index, found := selection.NextCandidateForError(currentAttempt, currentChannelID, class, liveRouteRetryCounters(c))
+	return index, found
 }
 
 func relayRetryLimit(c *gin.Context) int {
@@ -887,8 +1021,12 @@ func finalizeLiveRouteDecision(c *gin.Context, info *relaycommon.RelayInfo, apiE
 		return
 	}
 	if info != nil {
-		selection.Decision.RetryAttempt = info.RetryIndex
-		selection.Decision.FailoverAttempt = liveRouteFailoverAttempt(selection, info.RetryIndex)
+		counters := liveRouteRetryCounters(c)
+		if counters.TotalAttempts > 0 {
+			selection.Decision.RetryAttempt = counters.TotalAttempts - 1
+		}
+		selection.Decision.SameResourceRetry = counters.SameChannelAttempts + counters.SameKeyAttempts
+		selection.Decision.FailoverAttempt = counters.FailoverAttempts
 	}
 	if apiErr != nil {
 		classification := service.ClassifyRouteError(apiErr.StatusCode, string(apiErr.GetErrorCode()), apiErr.Error(), info != nil && info.HasSendResponse())

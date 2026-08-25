@@ -136,6 +136,31 @@ func TestSelectLiveTokenRouteFiltersOpenChannelModelHealth(t *testing.T) {
 	assert.Equal(t, RouteCandidateFilterHealthUnavailable, selection.Decision.Candidates[0].FilterReason)
 }
 
+func TestSelectLiveTokenRouteFiltersChannelWhenEveryKeyIsIsolated(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	_, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{Name: "key-health", Enabled: true, Entries: []RouteEntryInput{{
+			ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true,
+		}}}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: channelID, Model: "gpt-test", KeyScope: RouteKeyScope("routing-channel-key"), State: model.RouteHealthStateOpen,
+		FailureCount: 1, CooldownUntil: time.Now().Add(time.Hour).Unix(), HealthEpoch: 2,
+	}).Error)
+
+	selection, err := SelectLiveTokenRoute(LiveRouteRequest{
+		Context: context.Background(), CapabilityEnabled: true, RequestID: "request-key-health",
+		UserID: userID, TokenID: tokenID, RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
+	})
+	assert.ErrorIs(t, err, ErrRouteSelectionUnavailable)
+	require.Len(t, selection.Decision.Candidates, 1)
+	assert.Equal(t, RouteFilterKeyUnavailable, selection.Decision.Candidates[0].FilterReason)
+}
+
 func TestRecheckLiveRouteCandidateRejectsAbilityDisabledAfterSelection(t *testing.T) {
 	db := setupRouteProfileTest(t)
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
@@ -322,13 +347,13 @@ func TestManualRouteAttemptsHonorPolicyWithoutExpandingSystemLimit(t *testing.T)
 		return ids
 	}
 	assert.Equal(t, []int{1}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{Mode: model.RoutePolicyRetryNone})))
-	assert.Equal(t, []int{1, 1, 1}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
+	assert.Equal(t, []int{1, 1}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
 		Mode: model.RoutePolicyRetrySameChannel, MaxSameResourceAttempts: 9,
 	})))
 	assert.Equal(t, []int{1, 2}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
 		Mode: model.RoutePolicyRetryNextChannel, MaxFailoverAttempts: 1,
 	})))
-	assert.Equal(t, []int{1, 1, 2}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
+	assert.Equal(t, []int{1, 1, 2, 2, 3, 3}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
 		Mode: model.RoutePolicyRetrySameThenNext, MaxSameResourceAttempts: 1, MaxFailoverAttempts: 2,
 	})))
 }
@@ -344,4 +369,36 @@ func TestCandidateForAttemptSkipsCandidatesInvalidatedDuringFinalRecheck(t *test
 	assert.Equal(t, 2, candidate.ChannelID)
 	assert.False(t, LiveRouteQualificationAllowsFailover(&LiveRouteQualificationError{Reason: ShadowFilterTokenForbidden}))
 	assert.True(t, LiveRouteQualificationAllowsFailover(&LiveRouteQualificationError{Reason: ShadowFilterSnapshotStale}))
+}
+
+func TestAutoRouteAttemptsSupportBoundedSameChannelAndFailoverChoices(t *testing.T) {
+	result := RouteSelectionResult{Candidates: []RouteSelectionCandidate{
+		{ChannelID: 1}, {ChannelID: 2}, {ChannelID: 3},
+	}, Decision: RouteDecision{Candidates: []RouteDecisionCandidate{
+		{ChannelID: 1}, {ChannelID: 2}, {ChannelID: 3},
+	}}}
+	selection := LiveRouteSelection{Attempts: selectedRouteAttemptCandidates(result)}
+	require.Equal(t, []RouteDecisionCandidate{
+		{ChannelID: 1}, {ChannelID: 1}, {ChannelID: 2}, {ChannelID: 2}, {ChannelID: 3}, {ChannelID: 3},
+	}, selection.Attempts)
+
+	transient := ClassifyRouteError(503, "", "", false)
+	candidate, index, found := selection.NextCandidateForError(0, 1, transient, RouteRetryCounters{TotalAttempts: 1})
+	require.True(t, found)
+	assert.Equal(t, 1, index)
+	assert.Equal(t, 1, candidate.ChannelID)
+
+	candidate, index, found = selection.NextCandidateForError(1, 1, transient, RouteRetryCounters{TotalAttempts: 2, SameChannelAttempts: 1})
+	require.True(t, found)
+	assert.Equal(t, 2, index)
+	assert.Equal(t, 2, candidate.ChannelID)
+
+	modelError := ClassifyRouteError(404, "model_not_found", "", false)
+	candidate, index, found = selection.NextCandidateForError(0, 1, modelError, RouteRetryCounters{TotalAttempts: 1})
+	require.True(t, found)
+	assert.Equal(t, 2, index)
+	assert.Equal(t, 2, candidate.ChannelID)
+
+	_, _, found = selection.NextCandidateForError(2, 2, transient, RouteRetryCounters{TotalAttempts: 3})
+	assert.False(t, found)
 }
