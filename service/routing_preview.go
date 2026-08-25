@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
 )
@@ -23,7 +21,6 @@ const (
 	RoutePreviewFilterEntryDisabled      = "entry_disabled"
 	RoutePreviewFilterChannelMissing     = "channel_not_found"
 	RoutePreviewFilterSourceUnsupported  = "source_unsupported"
-	RoutePreviewFilterMixedCapability    = "mixed_capability"
 )
 
 // RouteProfilePreviewInput is intentionally limited to request facts that are
@@ -35,20 +32,23 @@ type RouteProfilePreviewInput struct {
 }
 
 type RouteProfilePreview struct {
-	ProfileID           int                   `json:"profile_id"`
-	ProfileVersion      int64                 `json:"profile_version"`
-	RequestModel        string                `json:"request_model"`
-	NormalizedModel     string                `json:"normalized_model"`
-	Path                string                `json:"path"`
-	EndpointType        string                `json:"endpoint_type"`
-	ActiveGroup         *model.UserRouteGroup `json:"active_group,omitempty"`
-	Policy              *model.RoutePolicy    `json:"policy,omitempty"`
-	Entries             []RoutePreviewEntry   `json:"entries"`
-	CandidateChannelIDs []int                 `json:"candidate_channel_ids"`
-	SelectionMode       string                `json:"selection_mode"`
-	PreferredChannelID  int                   `json:"preferred_channel_id,omitempty"`
-	FilterReasonCounts  map[string]int        `json:"filter_reason_counts"`
-	LiveSelection       bool                  `json:"live_selection"`
+	ProfileID              int                   `json:"profile_id"`
+	ProfileVersion         int64                 `json:"profile_version"`
+	RequestModel           string                `json:"request_model"`
+	NormalizedModel        string                `json:"normalized_model"`
+	Path                   string                `json:"path"`
+	EndpointType           string                `json:"endpoint_type"`
+	ActiveGroup            *model.UserRouteGroup `json:"active_group,omitempty"`
+	Policy                 *model.RoutePolicy    `json:"policy,omitempty"`
+	Entries                []RoutePreviewEntry   `json:"entries"`
+	CandidateChannelIDs    []int                 `json:"candidate_channel_ids"`
+	SelectionMode          string                `json:"selection_mode"`
+	PreferredChannelID     int                   `json:"preferred_channel_id,omitempty"`
+	FilterReasonCounts     map[string]int        `json:"filter_reason_counts"`
+	HasMixed               bool                  `json:"has_mixed"`
+	RuntimeRecheckRequired bool                  `json:"runtime_recheck_required"`
+	RuntimeRecheckReasons  []string              `json:"runtime_recheck_reasons"`
+	LiveSelection          bool                  `json:"live_selection"`
 }
 
 type RoutePreviewEntry struct {
@@ -93,17 +93,19 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	}
 
 	preview := &RouteProfilePreview{
-		ProfileID:           view.Profile.ID,
-		ProfileVersion:      view.Profile.Version,
-		RequestModel:        input.Model,
-		NormalizedModel:     normalizedModel,
-		Path:                input.Path,
-		EndpointType:        endpointTypeForRequestPath(input.Path),
-		Entries:             make([]RoutePreviewEntry, 0),
-		CandidateChannelIDs: make([]int, 0),
-		SelectionMode:       RoutePreviewSelectionOrdered,
-		FilterReasonCounts:  make(map[string]int),
-		LiveSelection:       false,
+		ProfileID:              view.Profile.ID,
+		ProfileVersion:         view.Profile.Version,
+		RequestModel:           input.Model,
+		NormalizedModel:        normalizedModel,
+		Path:                   input.Path,
+		EndpointType:           endpointTypeForRequestPath(input.Path),
+		Entries:                make([]RoutePreviewEntry, 0),
+		CandidateChannelIDs:    make([]int, 0),
+		SelectionMode:          RoutePreviewSelectionOrdered,
+		FilterReasonCounts:     make(map[string]int),
+		RuntimeRecheckRequired: true,
+		RuntimeRecheckReasons:  []string{"price_qualification", "quota_qualification", "security_policy"},
+		LiveSelection:          false,
 	}
 	activeGroup := findActiveRouteGroup(view)
 	if activeGroup == nil {
@@ -153,6 +155,7 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 			Weight:       entry.Weight,
 			RequestModel: normalizedModel,
 		}
+		activeSnapshot := activeSnapshots[entry.ChannelID]
 		item.FilterReason = routePreviewFilterReason(routePreviewFilterInput{
 			Profile:         view.Profile,
 			Group:           group,
@@ -160,7 +163,7 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 			Channel:         channels[entry.ChannelID],
 			ChannelExists:   channels[entry.ChannelID].Id > 0,
 			Capability:      capabilityByChannel[entry.ChannelID],
-			SnapshotVersion: activeSnapshots[entry.ChannelID],
+			SnapshotVersion: activeSnapshot.ActiveVersion,
 			Ability:         abilities[entry.ChannelID],
 			Entitlement:     entitlements[entry.ChannelID],
 			Token:           token,
@@ -169,7 +172,10 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 			RequestPath:     input.Path,
 			EndpointType:    preview.EndpointType,
 		})
+		item.SnapshotVersion = activeSnapshot.ActiveVersion
+		item.CatalogVersion = activeSnapshot.CatalogVersion
 		if capability, ok := capabilityByChannel[entry.ChannelID]; ok {
+			preview.HasMixed = preview.HasMixed || capability.IsMixed
 			item.ActualModel = capability.ActualModel
 			item.LabSlug = capability.LabSlug
 			item.SnapshotVersion = capability.SnapshotVersion
@@ -252,8 +258,13 @@ func loadRoutePreviewChannels(ctx context.Context, channelIDs []int) (map[int]mo
 	return channels, nil
 }
 
-func loadRoutePreviewSnapshots(ctx context.Context, channelIDs []int) (map[int]int64, error) {
-	snapshots := make(map[int]int64, len(channelIDs))
+type routePreviewSnapshot struct {
+	ActiveVersion  int64
+	CatalogVersion string
+}
+
+func loadRoutePreviewSnapshots(ctx context.Context, channelIDs []int) (map[int]routePreviewSnapshot, error) {
+	snapshots := make(map[int]routePreviewSnapshot, len(channelIDs))
 	if len(channelIDs) == 0 {
 		return snapshots, nil
 	}
@@ -262,7 +273,10 @@ func loadRoutePreviewSnapshots(ctx context.Context, channelIDs []int) (map[int]i
 		return nil, err
 	}
 	for _, snapshot := range rows {
-		snapshots[snapshot.ChannelID] = snapshot.ActiveVersion
+		snapshots[snapshot.ChannelID] = routePreviewSnapshot{
+			ActiveVersion:  snapshot.ActiveVersion,
+			CatalogVersion: snapshot.CatalogVersion,
+		}
 	}
 	return snapshots, nil
 }
@@ -342,49 +356,32 @@ func routePreviewFilterReason(input routePreviewFilterInput) string {
 	if !input.ChannelExists {
 		return RoutePreviewFilterChannelMissing
 	}
-	if input.SnapshotVersion <= 0 {
-		return ShadowFilterSnapshotUnavailable
-	}
-	if input.Capability.ChannelID == 0 || input.Capability.SnapshotVersion != input.SnapshotVersion {
-		return ShadowFilterUnsupported
-	}
-	if input.Capability.State == model.RouteCapabilityStateConflict {
-		return ShadowFilterMappingConflict
-	}
-	if input.Capability.IsMixed {
-		return RoutePreviewFilterMixedCapability
-	}
-	if input.Capability.State == model.RouteCapabilityStateUnresolved || input.Capability.LabSlug == "" || input.Capability.Source == "unknown" {
-		return ShadowFilterUnknownCapability
-	}
-	if input.Capability.State == model.RouteCapabilityStateUnsupported || input.Capability.State == model.RouteCapabilityStateDisabled {
-		return ShadowFilterUnsupported
-	}
-	if input.Channel.Status != common.ChannelStatusEnabled {
-		return ShadowFilterChannelDisabled
-	}
-	if !input.Ability.Enabled {
-		return ShadowFilterAbilityDisabled
-	}
-	if !input.Ability.Allowed {
-		return ShadowFilterGroupForbidden
-	}
-	if input.Token.IsModelLimitsEnabled() && !tokenAllowsShadowModel(input.Token.GetModelLimitsMap(), input.RequestModel) {
-		return ShadowFilterTokenForbidden
-	}
-	if input.EndpointType == "" || !stringListContains(decodeStringList(input.Capability.EndpointTypes), input.EndpointType) {
-		return ShadowFilterPathUnsupported
-	}
-	if input.Capability.ChannelType == constant.ChannelTypeAdvancedCustom {
-		advanced := advancedCustomPathConfigFromCapability(input.Capability)
-		if advanced == nil || !advanced.SupportsPathForModel(input.RequestPath, input.RequestModel) {
-			return ShadowFilterPathUnsupported
-		}
-	}
-	if input.Entitlement.ID > 0 && (input.Entitlement.Status != model.RouteEntitlementStatusEnabled || input.Entitlement.RevokedAt > 0 || (input.Entitlement.ExpiresAt > 0 && input.Entitlement.ExpiresAt <= time.Now().Unix())) {
-		return ShadowFilterEntitlementRevoked
-	}
-	return ""
+	entitled := input.Entitlement.ID == 0 || entitlementIsActive(input.Entitlement)
+	result := filterRouteCapability(routeCapabilityFilterInput{
+		Capability:      input.Capability,
+		SnapshotVersion: input.SnapshotVersion,
+		ChannelStatus:   input.Channel.Status,
+		ChannelType:     input.Capability.ChannelType,
+		AbilityEnabled:  input.Ability.Enabled,
+		AbilityAllowed:  input.Ability.Allowed,
+		UserGroup:       "",
+		Token:           input.Token,
+		RequestModel:    input.RequestModel,
+		RequestPath:     input.RequestPath,
+		EndpointType:    input.EndpointType,
+		Entitled:        entitled,
+		PriceEligible:   true,
+		SecurityAllowed: true,
+		RequireSnapshot: true,
+		RequireEndpoint: true,
+	})
+	return result.Reason
+}
+
+func entitlementIsActive(entitlement model.UserChannelEntitlement) bool {
+	return entitlement.Status == model.RouteEntitlementStatusEnabled &&
+		entitlement.RevokedAt == 0 &&
+		(entitlement.ExpiresAt == 0 || entitlement.ExpiresAt > time.Now().Unix())
 }
 
 func sortRoutePreviewEntries(entries []RoutePreviewEntry, loadBalance bool) {

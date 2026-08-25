@@ -11,7 +11,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
@@ -239,57 +238,32 @@ func selectRouteShadowWithIndex(request RouteShadowRequest, index *capabilityInd
 }
 
 func shadowCandidateFilter(request RouteShadowRequest, candidate indexedCapability) string {
-	if request.SnapshotVersion > 0 && candidate.Capability.SnapshotVersion != request.SnapshotVersion {
-		return ShadowFilterSnapshotStale
-	}
-	if candidate.Capability.State == model.RouteCapabilityStateConflict {
-		return ShadowFilterMappingConflict
-	}
-	if candidate.Capability.State == model.RouteCapabilityStateUnresolved || candidate.Capability.LabSlug == "" {
-		return ShadowFilterUnknownCapability
-	}
-	if candidate.Capability.State == model.RouteCapabilityStateUnsupported {
-		return ShadowFilterUnsupported
-	}
-	if candidate.ChannelStatus != common.ChannelStatusEnabled {
-		return ShadowFilterChannelDisabled
-	}
-	if len(candidate.AbilityGroups) == 0 {
-		return ShadowFilterAbilityDisabled
-	}
-	abilityAllowed := false
-	for _, group := range candidate.AbilityGroups {
-		if group == request.UserGroup || IsUserSelectableGroup(request.UserGroup, group) {
-			abilityAllowed = true
-			break
-		}
-	}
-	if !abilityAllowed {
-		return ShadowFilterGroupForbidden
-	}
-	if request.TokenModelLimitEnabled && !tokenAllowsShadowModel(request.TokenModelLimit, request.RequestModel) {
-		return ShadowFilterTokenForbidden
-	}
-	if request.EndpointType != "" && !stringListContains(decodeStringList(candidate.Capability.EndpointTypes), request.EndpointType) {
-		return ShadowFilterPathUnsupported
-	}
-	if candidate.ChannelType == constant.ChannelTypeAdvancedCustom {
-		if request.RequestPath != "" && (candidate.Advanced == nil || !candidate.Advanced.SupportsPathForModel(request.RequestPath, request.RequestModel)) {
-			return ShadowFilterPathUnsupported
-		}
-	}
-	if !request.PriceEligible {
-		return ShadowFilterPriceForbidden
-	}
-	if !request.SecurityAllowed {
-		return ShadowFilterSecurityForbidden
-	}
+	entitled := true
 	if request.EntitledChannels != nil {
-		if entitled, ok := request.EntitledChannels[candidate.Capability.ChannelID]; ok && !entitled {
-			return ShadowFilterEntitlementRevoked
+		if value, ok := request.EntitledChannels[candidate.Capability.ChannelID]; ok {
+			entitled = value
 		}
 	}
-	return ""
+	result := filterRouteCapability(routeCapabilityFilterInput{
+		Capability:        candidate.Capability,
+		SnapshotVersion:   request.SnapshotVersion,
+		ChannelStatus:     candidate.ChannelStatus,
+		ChannelType:       candidate.ChannelType,
+		AbilityEnabled:    len(candidate.AbilityGroups) > 0,
+		AbilityAllowed:    false,
+		AbilityGroups:     candidate.AbilityGroups,
+		UserGroup:         request.UserGroup,
+		TokenLimitEnabled: request.TokenModelLimitEnabled,
+		TokenLimit:        request.TokenModelLimit,
+		RequestModel:      request.RequestModel,
+		RequestPath:       request.RequestPath,
+		EndpointType:      request.EndpointType,
+		Entitled:          entitled,
+		PriceEligible:     request.PriceEligible,
+		SecurityAllowed:   request.SecurityAllowed,
+		Advanced:          candidate.Advanced,
+	})
+	return result.Reason
 }
 
 func stringListContains(values []string, target string) bool {

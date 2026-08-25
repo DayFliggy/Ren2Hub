@@ -208,6 +208,128 @@ func TestRouteProfilePreviewUsesActiveGroupOrderAndSamePositionWeight(t *testing
 	assert.Equal(t, []int{secondChannelID, firstChannelID}, preview.CandidateChannelIDs)
 	assert.Empty(t, preview.FilterReasonCounts)
 	assert.False(t, preview.LiveSelection)
+	assert.True(t, preview.RuntimeRecheckRequired)
+	assert.Equal(t, []string{"price_qualification", "quota_qualification", "security_policy"}, preview.RuntimeRecheckReasons)
+}
+
+func TestRouteProfilePreviewKeepsResolvableMixedCapabilityEligible(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	require.NoError(t, db.Model(&model.ChannelModelCapability{}).
+		Where("channel_id = ?", channelID).Update("is_mixed", true).Error)
+
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "混合模型", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+
+	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []int{channelID}, preview.CandidateChannelIDs)
+	assert.True(t, preview.HasMixed)
+	assert.Zero(t, preview.FilterReasonCounts[ShadowFilterUnknownCapability])
+	assert.Empty(t, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+}
+
+func TestRouteProfilePreviewFiltersUnresolvedConflictingAndUnsupportedCapabilities(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, eligibleChannelID := seedRouteProfileFixture(t, db)
+	conflictChannelID := seedRoutePreviewChannel(t, db, eligibleChannelID+1)
+	unresolvedChannelID := seedRoutePreviewChannel(t, db, eligibleChannelID+2)
+	unsupportedChannelID := seedRoutePreviewChannel(t, db, eligibleChannelID+3)
+	publishRoutePreviewCapability(t, eligibleChannelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	publishRoutePreviewCapability(t, conflictChannelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateConflict)
+	publishRoutePreviewCapability(t, unresolvedChannelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateUnresolved)
+	publishRoutePreviewCapability(t, unsupportedChannelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateUnsupported)
+
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "能力过滤", Enabled: true,
+			Entries: []RouteEntryInput{
+				{ChannelID: eligibleChannelID, Source: model.RouteSourcePlatform, Enabled: true, Position: 0},
+				{ChannelID: conflictChannelID, Source: model.RouteSourcePlatform, Enabled: true, Position: 1},
+				{ChannelID: unresolvedChannelID, Source: model.RouteSourcePlatform, Enabled: true, Position: 2},
+				{ChannelID: unsupportedChannelID, Source: model.RouteSourcePlatform, Enabled: true, Position: 3},
+			},
+		}},
+	})
+	require.NoError(t, err)
+
+	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []int{eligibleChannelID}, preview.CandidateChannelIDs)
+	assert.Equal(t, ShadowFilterMappingConflict, findRoutePreviewEntry(t, preview, conflictChannelID).FilterReason)
+	assert.Equal(t, ShadowFilterUnknownCapability, findRoutePreviewEntry(t, preview, unresolvedChannelID).FilterReason)
+	assert.Equal(t, ShadowFilterUnsupported, findRoutePreviewEntry(t, preview, unsupportedChannelID).FilterReason)
+}
+
+func TestRouteProfilePreviewUsesOnlyActiveCapabilitySnapshot(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	firstFence, err := model.GetChannelCapabilitySnapshotFence(context.Background(), channelID)
+	require.NoError(t, err)
+	groupsJSON, err := common.Marshal([]string{"default"})
+	require.NoError(t, err)
+	endpointsJSON, err := common.Marshal([]string{string(constant.EndpointTypeOpenAI)})
+	require.NoError(t, err)
+	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, firstFence, "preview-source-new", "preview-catalog-new", []model.ChannelModelCapability{{
+		RequestModel: "gpt-test", ActualModel: "gpt-test-new", LabSlug: "openai", Source: "canonical", Confidence: 1,
+		AbilityGroups: string(groupsJSON), EndpointTypes: string(endpointsJSON), ChannelStatus: common.ChannelStatusEnabled,
+		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
+	}}))
+
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "当前快照", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	entry := findRoutePreviewEntry(t, preview, channelID)
+	assert.Equal(t, int64(2), entry.SnapshotVersion)
+	assert.Equal(t, "preview-catalog-new", entry.CatalogVersion)
+	assert.Equal(t, "gpt-test-new", entry.ActualModel)
+	assert.Equal(t, []int{channelID}, preview.CandidateChannelIDs)
+}
+
+func TestRouteProfilePreviewKeepsActiveSnapshotAfterRefreshFailure(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	fence, err := model.GetChannelCapabilitySnapshotFence(context.Background(), channelID)
+	require.NoError(t, err)
+	require.NoError(t, model.MarkChannelCapabilityRefreshFailure(channelID, fence, "failed-source", "failed-catalog"))
+
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "刷新失败保留旧快照", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []int{channelID}, preview.CandidateChannelIDs)
+	assert.Empty(t, findRoutePreviewEntry(t, preview, channelID).FilterReason)
 }
 
 func TestRouteProfilePreviewPreservesUnavailableEntriesWithReasons(t *testing.T) {
