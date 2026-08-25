@@ -25,6 +25,7 @@ type routeCapabilityFilterInput struct {
 	TokenLimitEnabled bool
 	TokenLimit        map[string]bool
 	RequestModel      string
+	NormalizedModel   string
 	RequestPath       string
 	EndpointType      string
 	Entitled          bool
@@ -58,18 +59,25 @@ func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilt
 		result.Reason = ShadowFilterSnapshotStale
 		return result
 	}
-	if input.Capability.State == model.RouteCapabilityStateConflict {
+	switch input.Capability.State {
+	case model.RouteCapabilityStateConflict:
 		result.Reason = ShadowFilterMappingConflict
 		return result
-	}
-	if input.Capability.State == model.RouteCapabilityStateUnresolved ||
-		strings.TrimSpace(input.Capability.LabSlug) == "" ||
-		strings.EqualFold(strings.TrimSpace(input.Capability.Source), "unknown") {
+	case "", model.RouteCapabilityStateUnresolved:
+		result.Reason = ShadowFilterUnknownCapability
+		return result
+	case model.RouteCapabilityStateUnsupported, model.RouteCapabilityStateDisabled:
+		result.Reason = ShadowFilterUnsupported
+		return result
+	case model.RouteCapabilityStateEligible:
+		// Continue with request-time authorization and path checks.
+	default:
 		result.Reason = ShadowFilterUnknownCapability
 		return result
 	}
-	if input.Capability.State == model.RouteCapabilityStateUnsupported || input.Capability.State == model.RouteCapabilityStateDisabled {
-		result.Reason = ShadowFilterUnsupported
+	if strings.TrimSpace(input.Capability.LabSlug) == "" ||
+		strings.EqualFold(strings.TrimSpace(input.Capability.Source), "unknown") {
+		result.Reason = ShadowFilterUnknownCapability
 		return result
 	}
 	if !input.AbilityEnabled {
@@ -94,9 +102,13 @@ func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilt
 			return result
 		}
 	}
+	modelName := input.NormalizedModel
+	if modelName == "" {
+		modelName = input.RequestModel
+	}
 	if (input.TokenLimitEnabled || input.Token.IsModelLimitsEnabled()) &&
-		!tokenAllowsShadowModel(input.TokenLimit, input.RequestModel) &&
-		!tokenAllowsShadowModel(input.Token.GetModelLimitsMap(), input.RequestModel) {
+		!tokenAllowsShadowModel(input.TokenLimit, modelName) &&
+		!tokenAllowsShadowModel(input.Token.GetModelLimitsMap(), modelName) {
 		result.Reason = ShadowFilterTokenForbidden
 		return result
 	}

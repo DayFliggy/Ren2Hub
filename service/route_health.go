@@ -41,6 +41,10 @@ func ClassifyRouteError(status int, providerCode, message string, streamStarted 
 	code := strings.ToLower(strings.TrimSpace(providerCode))
 	text := strings.ToLower(strings.TrimSpace(message))
 	switch {
+	case strings.Contains(code, "invalid_api_key") || strings.Contains(code, "invalid_credential") ||
+		strings.Contains(code, "authentication_error") || strings.Contains(text, "invalid api key") ||
+		strings.Contains(text, "incorrect api key"):
+		return RouteErrorClassification{Class: RouteErrorKey, MarkKey: true}
 	case status == 400 || status == 422 || strings.Contains(code, "invalid_request"):
 		return RouteErrorClassification{Class: RouteErrorInput}
 	case status == 401:
@@ -54,6 +58,16 @@ func ClassifyRouteError(status int, providerCode, message string, streamStarted 
 	default:
 		return RouteErrorClassification{Class: RouteErrorUnknown, Retryable: status >= 500, Failoverable: status >= 500, MarkChannelModel: status >= 500}
 	}
+}
+
+// CanRouteFailover is the final guard before a retry may switch resources.
+// Once a stream has started producing valid output, the caller must not
+// splice another provider response onto it.
+func CanRouteFailover(class RouteErrorClassification, streamStarted, hasValidOutput bool) bool {
+	if streamStarted || hasValidOutput {
+		return false
+	}
+	return class.Failoverable
 }
 
 type RouteRetryBudget struct {
@@ -123,8 +137,9 @@ func CanUseRouteHealth(health model.ChannelHealth, now time.Time) bool {
 	return false
 }
 
-// RouteBackoff returns full-jitter delay in [0, base]. Retry-After is a
-// provider upper bound and is clipped by the remaining request deadline.
+// RouteBackoff returns full-jitter delay for the local exponential backoff.
+// Retry-After is a provider lower bound; both are clipped by the remaining
+// request deadline.
 func RouteBackoff(attempt int, retryAfter, remaining time.Duration, random01 float64) time.Duration {
 	if attempt < 0 {
 		attempt = 0
@@ -133,12 +148,6 @@ func RouteBackoff(attempt int, retryAfter, remaining time.Duration, random01 flo
 	if base > DefaultRetryBackoffMax {
 		base = DefaultRetryBackoffMax
 	}
-	if retryAfter > base {
-		base = retryAfter
-	}
-	if remaining > 0 && base > remaining {
-		base = remaining
-	}
 	if random01 < 0 {
 		random01 = 0
 	}
@@ -146,6 +155,9 @@ func RouteBackoff(attempt int, retryAfter, remaining time.Duration, random01 flo
 		random01 = 1
 	}
 	delay := time.Duration(float64(base) * random01)
+	if retryAfter > 0 {
+		delay += retryAfter
+	}
 	if remaining > 0 && delay > remaining {
 		return remaining
 	}
@@ -156,7 +168,7 @@ func ObserveRouteHealthFailure(health model.ChannelHealth, policy RouteHealthPol
 	policy = policy.normalized()
 	health.Normalize(now)
 	health.FailureCount++
-	if health.FailureCount >= policy.FailureThreshold {
+	if health.State == model.RouteHealthStateHalfOpen || health.FailureCount >= policy.FailureThreshold {
 		health.State = model.RouteHealthStateOpen
 		health.CooldownUntil = now.Add(policy.Cooldown).Unix()
 		health.HealthEpoch++
@@ -167,10 +179,13 @@ func ObserveRouteHealthFailure(health model.ChannelHealth, policy RouteHealthPol
 
 func ObserveRouteHealthSuccess(health model.ChannelHealth, now time.Time) model.ChannelHealth {
 	health.Normalize(now)
+	stateChanged := health.State != model.RouteHealthStateClosed || health.FailureCount != 0 || health.CooldownUntil != 0
 	health.State = model.RouteHealthStateClosed
 	health.FailureCount = 0
 	health.CooldownUntil = 0
-	health.HealthEpoch++
+	if stateChanged {
+		health.HealthEpoch++
+	}
 	health.UpdatedAt = now.Unix()
 	return health
 }

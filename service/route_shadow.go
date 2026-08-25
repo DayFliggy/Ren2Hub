@@ -256,6 +256,7 @@ func shadowCandidateFilter(request RouteShadowRequest, candidate indexedCapabili
 		TokenLimitEnabled: request.TokenModelLimitEnabled,
 		TokenLimit:        request.TokenModelLimit,
 		RequestModel:      request.RequestModel,
+		NormalizedModel:   request.NormalizedRequestModel,
 		RequestPath:       request.RequestPath,
 		EndpointType:      request.EndpointType,
 		Entitled:          entitled,

@@ -158,6 +158,8 @@ for i = 1, #KEYS - 2 do
 end
 for i = 1, #KEYS - 2 do redis.call('ZADD', KEYS[i], expiry, lease_id) end
 redis.call('HSET', meta_key, 'lease_id', lease_id, 'request_id', request_id, 'expires_at', expiry)
+redis.call('HSET', meta_key, 'resource_count', #KEYS - 2)
+for i = 1, #KEYS - 2 do redis.call('HSET', meta_key, 'resource:' .. i, KEYS[i]) end
 redis.call('PEXPIRE', meta_key, ttl_ms)
 redis.call('SET', request_key, lease_id, 'PX', ttl_ms)
 return 1
@@ -169,6 +171,9 @@ local request_key = KEYS[#KEYS]
 local lease_id = ARGV[1]
 local request_id = ARGV[2]
 if redis.call('HGET', meta_key, 'lease_id') ~= lease_id or redis.call('HGET', meta_key, 'request_id') ~= request_id then return 0 end
+if redis.call('GET', request_key) ~= lease_id then return 0 end
+if tonumber(redis.call('HGET', meta_key, 'resource_count') or '0') ~= #KEYS - 2 then return 0 end
+for i = 1, #KEYS - 2 do if redis.call('HGET', meta_key, 'resource:' .. i) ~= KEYS[i] then return 0 end end
 for i = 1, #KEYS - 2 do redis.call('ZREM', KEYS[i], lease_id) end
 redis.call('DEL', meta_key)
 redis.call('DEL', request_key)
@@ -182,6 +187,9 @@ local lease_id = ARGV[1]
 local request_id = ARGV[2]
 local ttl_ms = tonumber(ARGV[3])
 if redis.call('HGET', meta_key, 'lease_id') ~= lease_id or redis.call('HGET', meta_key, 'request_id') ~= request_id then return 0 end
+if redis.call('GET', request_key) ~= lease_id then return 0 end
+if tonumber(redis.call('HGET', meta_key, 'resource_count') or '0') ~= #KEYS - 2 then return 0 end
+for i = 1, #KEYS - 2 do if redis.call('HGET', meta_key, 'resource:' .. i) ~= KEYS[i] then return 0 end end
 local now_parts = redis.call('TIME')
 local now_ms = tonumber(now_parts[1]) * 1000 + math.floor(tonumber(now_parts[2]) / 1000)
 redis.call('HSET', meta_key, 'expires_at', now_ms + ttl_ms)

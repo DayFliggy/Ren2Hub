@@ -47,7 +47,7 @@ func ScoreRouteCandidates(candidates []RouteScoreCandidate) []ScoredRouteCandida
 	result := make([]ScoredRouteCandidate, 0, len(candidates))
 	maxWeight := 0
 	for _, candidate := range candidates {
-		if candidate.Priority == priority && candidate.Weight > maxWeight {
+		if candidate.Priority == priority && candidate.HealthUsable && candidate.Weight > maxWeight {
 			maxWeight = candidate.Weight
 		}
 	}
@@ -79,6 +79,37 @@ func ScoreRouteCandidates(candidates []RouteScoreCandidate) []ScoredRouteCandida
 		return result[i].Candidate.ChannelID < result[j].Candidate.ChannelID
 	})
 	return result
+}
+
+// TopKRouteCandidates applies the bounded candidate budget used by the future
+// live selector. A caller may request fewer than three candidates, but never
+// more than the initial safety limit.
+func TopKRouteCandidates(candidates []RouteScoreCandidate, k int) []ScoredRouteCandidate {
+	if k <= 0 || k > 3 {
+		k = 3
+	}
+	scored := ScoreRouteCandidates(candidates)
+	if len(scored) > k {
+		return scored[:k]
+	}
+	return scored
+}
+
+// OrderManualRouteCandidates implements the user-owned ordering boundary. A
+// weight can affect presentation only inside one position layer and only when
+// the group explicitly enables load balancing.
+func OrderManualRouteCandidates(candidates []RouteScoreCandidate, loadBalance bool) []RouteScoreCandidate {
+	ordered := append([]RouteScoreCandidate(nil), candidates...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].Position != ordered[j].Position {
+			return ordered[i].Position < ordered[j].Position
+		}
+		if loadBalance && ordered[i].Weight != ordered[j].Weight {
+			return ordered[i].Weight > ordered[j].Weight
+		}
+		return ordered[i].ChannelID < ordered[j].ChannelID
+	})
+	return ordered
 }
 
 func StaticPriorityLayer(candidates []RouteScoreCandidate) []RouteScoreCandidate {

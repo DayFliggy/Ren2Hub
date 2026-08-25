@@ -407,6 +407,55 @@ func TestRouteProfilePreviewHonorsTokenModelAndPathRestrictions(t *testing.T) {
 	assert.Equal(t, ShadowFilterPathUnsupported, findRoutePreviewEntry(t, preview, channelID).FilterReason)
 }
 
+func TestRouteProfilePreviewUsesNormalizedModelForTokenLimits(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "规范化模型", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Updates(map[string]any{
+		"model_limits_enabled": true,
+		"model_limits":         "gpt-test",
+	}).Error)
+
+	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "ＧＰＴ-ＴＥＳＴ", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "gpt-test", preview.NormalizedModel)
+	assert.Equal(t, []int{channelID}, preview.CandidateChannelIDs)
+	assert.Empty(t, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+}
+
+func TestRouteProfilePreviewRejectsUnknownCapabilityState(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	require.NoError(t, db.Model(&model.ChannelModelCapability{}).
+		Where("channel_id = ?", channelID).Update("state", "future_state").Error)
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "未知状态", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+
+	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, preview.CandidateChannelIDs)
+	assert.Equal(t, ShadowFilterUnknownCapability, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+}
+
 func TestRouteProfilePreviewHandlesEmptyAndForeignProfiles(t *testing.T) {
 	db := setupRouteProfileTest(t)
 	userID, tokenID, _ := seedRouteProfileFixture(t, db)

@@ -137,6 +137,10 @@ func PreviewRouteProfile(c *gin.Context) {
 		writeRoutePreviewBindingError(c)
 		return
 	}
+	if strings.TrimSpace(input.Model) == "" || strings.TrimSpace(input.Path) == "" {
+		writeRoutePreviewBindingError(c)
+		return
+	}
 	preview, err := service.PreviewUserRouteProfile(c, c.GetInt("id"), profileID, input)
 	if err != nil {
 		writeRouteError(c, err)
@@ -232,7 +236,11 @@ func tokenPrivateRoutingEnabled() bool {
 func parseRouteProfileID(c *gin.Context) (int, bool) {
 	profileID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || profileID <= 0 {
-		writeRouteError(c, errors.New("invalid route profile id"))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "invalid route profile id",
+			"code":    "BAD_REQUEST",
+		})
 		return 0, false
 	}
 	return profileID, true

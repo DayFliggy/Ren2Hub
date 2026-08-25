@@ -11,10 +11,14 @@ import (
 func TestClassifyRouteErrorSeparatesKeyModelAndStreamFailures(t *testing.T) {
 	assert.Equal(t, RouteErrorKey, ClassifyRouteError(401, "", "", false).Class)
 	assert.True(t, ClassifyRouteError(401, "", "", false).MarkKey)
+	assert.Equal(t, RouteErrorKey, ClassifyRouteError(403, "invalid_api_key", "", false).Class)
 	assert.Equal(t, RouteErrorModel, ClassifyRouteError(404, "model_not_found", "", false).Class)
 	assert.True(t, ClassifyRouteError(404, "model_not_found", "", false).MarkCapability)
 	assert.Equal(t, RouteErrorStreamStarted, ClassifyRouteError(502, "", "", true).Class)
 	assert.False(t, ClassifyRouteError(502, "", "", true).Failoverable)
+	assert.False(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), true, false))
+	assert.False(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), false, true))
+	assert.True(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), false, false))
 }
 
 func TestRouteHealthStateMachineUsesEpochAndCooldown(t *testing.T) {
@@ -29,7 +33,12 @@ func TestRouteHealthStateMachineUsesEpochAndCooldown(t *testing.T) {
 	assert.False(t, CanUseRouteHealth(health, now))
 	health = EnterRouteHealthHalfOpen(health, time.Unix(1010, 0))
 	assert.Equal(t, model.RouteHealthStateHalfOpen, health.State)
-	health = ObserveRouteHealthSuccess(health, time.Unix(1011, 0))
+	health = ObserveRouteHealthFailure(health, policy, time.Unix(1011, 0))
+	assert.Equal(t, model.RouteHealthStateOpen, health.State)
+	assert.Equal(t, int64(1021), health.CooldownUntil)
+	health = EnterRouteHealthHalfOpen(health, time.Unix(1021, 0))
+	assert.Equal(t, model.RouteHealthStateHalfOpen, health.State)
+	health = ObserveRouteHealthSuccess(health, time.Unix(1022, 0))
 	assert.Equal(t, model.RouteHealthStateClosed, health.State)
 	assert.Equal(t, 0, health.FailureCount)
 }
@@ -42,5 +51,6 @@ func TestDefaultRouteRetryBudgetSeparatesSameResourceAndFailover(t *testing.T) {
 	assert.True(t, budget.Allows(transient, false, false, 1))
 	assert.False(t, budget.Allows(transient, false, false, 3))
 	assert.Equal(t, 125*time.Millisecond, RouteBackoff(0, 0, time.Second, 0.5))
+	assert.Equal(t, 1125*time.Millisecond, RouteBackoff(0, time.Second, 5*time.Second, 0.5))
 	assert.LessOrEqual(t, RouteBackoff(4, 10*time.Second, 100*time.Millisecond, 1), 100*time.Millisecond)
 }

@@ -42,6 +42,20 @@ func TestFrontendRoutingCapabilityRemainsDisabledUntilSelectorIsLive(t *testing.
 	assert.Equal(t, "disabled", routingCapabilityStatus())
 }
 
+func TestRoutingRejectsMalformedProfileIDAsBadRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Params = gin.Params{{Key: "id", Value: "not-an-id"}}
+
+	profileID, ok := parseRouteProfileID(c)
+
+	assert.False(t, ok)
+	assert.Zero(t, profileID)
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"code":"BAD_REQUEST"`)
+}
+
 func TestListEligibleRouteChannelsReportsOnlyActiveCapabilitySnapshot(t *testing.T) {
 	previousDB := model.DB
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
