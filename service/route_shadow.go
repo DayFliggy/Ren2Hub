@@ -744,7 +744,7 @@ func observeShadowDecision(decision RouteShadowDecision) {
 		routeShadowMetrics.ModelMu.Lock()
 		stats := routeShadowMetrics.Models[decision.NormalizedRequestModel]
 		stats.Decisions++
-		if decision.LabSlug != "" && !decision.HasMixed {
+		if decision.LabSlug != "" {
 			stats.Resolved++
 		}
 		routeShadowMetrics.Models[decision.NormalizedRequestModel] = stats
