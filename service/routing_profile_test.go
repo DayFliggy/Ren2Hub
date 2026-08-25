@@ -239,6 +239,35 @@ func TestRouteProfilePreviewKeepsResolvableMixedCapabilityEligible(t *testing.T)
 	assert.Empty(t, findRoutePreviewEntry(t, preview, channelID).FilterReason)
 }
 
+func TestRouteProfilePreviewIncludesChannelModelHealthSummary(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: channelID, Model: "gpt-test", KeyScope: "", State: model.RouteHealthStateOpen,
+		FailureCount: 3, CooldownUntil: 1_800_000_000, HealthEpoch: 4,
+		LastLatencyMS: 120, FirstTokenLatencyMS: 45, UpdatedAt: 1_700_000_100,
+	}).Error)
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "健康摘要", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+
+	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	entry := findRoutePreviewEntry(t, preview, channelID)
+	assert.Equal(t, RoutePreviewHealthSummary{
+		State: model.RouteHealthStateOpen, FailureCount: 3, CooldownUntil: 1_800_000_000,
+		HealthEpoch: 4, LastLatencyMS: 120, FirstTokenLatencyMS: 45, UpdatedAt: 1_700_000_100,
+	}, entry.Health)
+}
+
 func TestRouteProfilePreviewFiltersUnresolvedConflictingAndUnsupportedCapabilities(t *testing.T) {
 	db := setupRouteProfileTest(t)
 	userID, tokenID, eligibleChannelID := seedRouteProfileFixture(t, db)

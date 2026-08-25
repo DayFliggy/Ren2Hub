@@ -367,6 +367,12 @@ export default {
     runtimeRecheck: '价格、额度和安全资格将在实际请求时重新检查。',
     eligible: '可用',
     unknownLab: '未知 Lab',
+    healthState: {
+      closed: '健康',
+      open: '冷却中',
+      half_open: '探测中',
+    },
+    healthSummary: '失败 {failures} 次 · 延迟 {latency} ms',
     saved: '路由配置已保存',
     versionConflict: '配置已被其他请求更新，请重新加载。',
     versionConflictHint: '当前草稿基于旧版本，继续保存会被拒绝。',

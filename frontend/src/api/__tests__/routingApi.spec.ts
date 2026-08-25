@@ -111,6 +111,15 @@ describe('routing API contracts', () => {
           snapshot_version: 2,
           catalog_version: 'catalog-2',
           capability_state: 'eligible',
+          health: {
+            state: 'closed',
+            failure_count: 0,
+            cooldown_until: 0,
+            health_epoch: 1,
+            last_latency_ms: 12,
+            first_token_latency_ms: 4,
+            updated_at: 2,
+          },
           filter_reason: 'runtime_recheck_required',
         },
       ],
@@ -125,5 +134,60 @@ describe('routing API contracts', () => {
 
     expect(parsed.live_selection).toBe(false)
     expect(parsed.entries[0].filter_reason).toBe('runtime_recheck_required')
+    expect(parsed.entries[0].health.state).toBe('closed')
+  })
+
+  it('rejects unknown capability and health states', () => {
+    const response = {
+      profile_id: 1,
+      profile_version: 3,
+      request_model: 'gpt-5',
+      normalized_model: 'gpt-5',
+      path: '/v1/chat/completions',
+      endpoint_type: 'openai',
+      entries: [
+        {
+          entry_id: 9,
+          channel_id: 101,
+          position: 0,
+          weight: 100,
+          request_model: 'gpt-5',
+          actual_model: 'gpt-5',
+          lab_slug: 'gpt',
+          snapshot_version: 2,
+          catalog_version: 'catalog-2',
+          capability_state: 'future_state',
+          health: {
+            state: 'closed',
+            failure_count: 0,
+            cooldown_until: 0,
+            health_epoch: 1,
+            last_latency_ms: 0,
+            first_token_latency_ms: 0,
+            updated_at: 0,
+          },
+        },
+      ],
+      candidate_channel_ids: [],
+      selection_mode: 'ordered',
+      filter_reason_counts: {},
+      has_mixed: false,
+      runtime_recheck_required: true,
+      runtime_recheck_reasons: [],
+      live_selection: false,
+    }
+
+    const unknownHealth = structuredClone(response)
+    unknownHealth.entries[0].capability_state = 'eligible'
+    unknownHealth.entries[0].health.state = 'future_health'
+
+    for (const invalid of [response, unknownHealth]) {
+      try {
+        parseRoutePreview(invalid)
+        throw new Error('expected invalid response')
+      } catch (error) {
+        expect(error).toMatchObject({ code: 'INVALID_RESPONSE' })
+      }
+    }
   })
 })

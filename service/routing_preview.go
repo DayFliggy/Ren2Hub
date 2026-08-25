@@ -52,17 +52,31 @@ type RouteProfilePreview struct {
 }
 
 type RoutePreviewEntry struct {
-	EntryID         int    `json:"entry_id"`
-	ChannelID       int    `json:"channel_id"`
-	Position        int    `json:"position"`
-	Weight          int    `json:"weight"`
-	RequestModel    string `json:"request_model"`
-	ActualModel     string `json:"actual_model"`
-	LabSlug         string `json:"lab_slug"`
-	SnapshotVersion int64  `json:"snapshot_version"`
-	CatalogVersion  string `json:"catalog_version"`
-	CapabilityState string `json:"capability_state"`
-	FilterReason    string `json:"filter_reason,omitempty"`
+	EntryID         int                       `json:"entry_id"`
+	ChannelID       int                       `json:"channel_id"`
+	Position        int                       `json:"position"`
+	Weight          int                       `json:"weight"`
+	RequestModel    string                    `json:"request_model"`
+	ActualModel     string                    `json:"actual_model"`
+	LabSlug         string                    `json:"lab_slug"`
+	SnapshotVersion int64                     `json:"snapshot_version"`
+	CatalogVersion  string                    `json:"catalog_version"`
+	CapabilityState string                    `json:"capability_state"`
+	Health          RoutePreviewHealthSummary `json:"health"`
+	FilterReason    string                    `json:"filter_reason,omitempty"`
+}
+
+// RoutePreviewHealthSummary is the non-sensitive aggregate health state for
+// one channel and canonical request model. Key-scoped observations remain
+// internal and are intentionally not exposed through user routing APIs.
+type RoutePreviewHealthSummary struct {
+	State               string `json:"state"`
+	FailureCount        int    `json:"failure_count"`
+	CooldownUntil       int64  `json:"cooldown_until"`
+	HealthEpoch         int64  `json:"health_epoch"`
+	LastLatencyMS       int64  `json:"last_latency_ms"`
+	FirstTokenLatencyMS int64  `json:"first_token_latency_ms"`
+	UpdatedAt           int64  `json:"updated_at"`
 }
 
 type routePreviewAbility struct {
@@ -138,6 +152,10 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	if err != nil {
 		return nil, err
 	}
+	healthByChannel, err := loadRoutePreviewHealth(ctx, channelIDs, normalizedModel)
+	if err != nil {
+		return nil, err
+	}
 	capabilityByChannel := make(map[int]model.ChannelModelCapability, len(capabilities))
 	for _, capability := range capabilities {
 		capabilityByChannel[capability.ChannelID] = capability
@@ -154,6 +172,10 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 			Position:     entry.Position,
 			Weight:       entry.Weight,
 			RequestModel: normalizedModel,
+			Health:       defaultRoutePreviewHealthSummary(),
+		}
+		if health, ok := healthByChannel[entry.ChannelID]; ok {
+			item.Health = routePreviewHealthSummary(health)
 		}
 		activeSnapshot := activeSnapshots[entry.ChannelID]
 		item.FilterReason = routePreviewFilterReason(routePreviewFilterInput{
@@ -321,6 +343,49 @@ func loadRoutePreviewEntitlements(ctx context.Context, userID int, channelIDs []
 		entitlements[entitlement.ChannelID] = entitlement
 	}
 	return entitlements, nil
+}
+
+func loadRoutePreviewHealth(ctx context.Context, channelIDs []int, canonicalModel string) (map[int]model.ChannelHealth, error) {
+	healthByChannel := make(map[int]model.ChannelHealth, len(channelIDs))
+	if len(channelIDs) == 0 {
+		return healthByChannel, nil
+	}
+	var rows []model.ChannelHealth
+	if err := model.DB.WithContext(ctx).
+		Where("channel_id IN ? AND model = ? AND key_scope = ?", channelIDs, canonicalModel, "").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, health := range rows {
+		healthByChannel[health.ChannelID] = health
+	}
+	return healthByChannel, nil
+}
+
+func defaultRoutePreviewHealthSummary() RoutePreviewHealthSummary {
+	return RoutePreviewHealthSummary{
+		State:       model.RouteHealthStateClosed,
+		HealthEpoch: 1,
+	}
+}
+
+func routePreviewHealthSummary(health model.ChannelHealth) RoutePreviewHealthSummary {
+	summary := RoutePreviewHealthSummary{
+		State:               health.State,
+		FailureCount:        health.FailureCount,
+		CooldownUntil:       health.CooldownUntil,
+		HealthEpoch:         health.HealthEpoch,
+		LastLatencyMS:       health.LastLatencyMS,
+		FirstTokenLatencyMS: health.FirstTokenLatencyMS,
+		UpdatedAt:           health.UpdatedAt,
+	}
+	if summary.State == "" {
+		summary.State = model.RouteHealthStateClosed
+	}
+	if summary.HealthEpoch <= 0 {
+		summary.HealthEpoch = 1
+	}
+	return summary
 }
 
 type routePreviewFilterInput struct {

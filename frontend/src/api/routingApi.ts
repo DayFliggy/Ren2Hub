@@ -10,8 +10,11 @@ import {
 import type {
   EligibleRouteChannel,
   RouteCatalog,
+  RouteCapabilityState,
   RouteEntry,
   RouteGroup,
+  RouteHealthState,
+  RouteHealthSummary,
   RoutePolicy,
   RoutePreview,
   RouteProfileInput,
@@ -20,12 +23,52 @@ import type {
 
 const ROUTING_ENDPOINT = '/api/routing'
 
+const capabilityStates = new Set<RouteCapabilityState>([
+  'eligible',
+  'unresolved',
+  'unsupported',
+  'disabled',
+  'conflict',
+])
+
+const healthStates = new Set<RouteHealthState>(['closed', 'open', 'half_open'])
+
 function requiredNullableInteger(
   value: unknown,
   endpoint: string
 ): number | null {
   if (value === null || value === undefined) return null
   return requiredInteger(value, endpoint)
+}
+
+function parseCapabilityState(
+  value: unknown,
+  endpoint: string
+): RouteCapabilityState {
+  const state = requiredString(value, endpoint, false) as RouteCapabilityState
+  if (!capabilityStates.has(state)) invalidResponse(endpoint)
+  return state
+}
+
+function parseHealthSummary(
+  value: unknown,
+  endpoint: string
+): RouteHealthSummary {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const state = requiredString(value.state, endpoint, false) as RouteHealthState
+  if (!healthStates.has(state)) invalidResponse(endpoint)
+  return {
+    state,
+    failure_count: requiredInteger(value.failure_count, endpoint),
+    cooldown_until: requiredInteger(value.cooldown_until, endpoint),
+    health_epoch: requiredInteger(value.health_epoch, endpoint),
+    last_latency_ms: requiredInteger(value.last_latency_ms, endpoint),
+    first_token_latency_ms: requiredInteger(
+      value.first_token_latency_ms,
+      endpoint
+    ),
+    updated_at: requiredInteger(value.updated_at, endpoint),
+  }
 }
 
 function parsePolicy(value: unknown, endpoint: string): RoutePolicy {
@@ -145,7 +188,7 @@ function parseEligibleChannel(
     weight: requiredInteger(value.weight, endpoint),
     snapshot_version: requiredInteger(value.snapshot_version, endpoint),
     catalog_version: requiredString(value.catalog_version, endpoint),
-    capability_state: requiredString(value.capability_state, endpoint),
+    capability_state: parseCapabilityState(value.capability_state, endpoint),
     filter_reason:
       value.filter_reason === undefined
         ? undefined
@@ -179,7 +222,7 @@ function parseCatalog(value: unknown): RouteCatalog {
         source: requiredString(item.source, endpoint, false),
         catalog_version: requiredString(item.catalog_version, endpoint),
         snapshot_version: requiredInteger(item.snapshot_version, endpoint),
-        state: requiredString(item.state, endpoint, false),
+        state: parseCapabilityState(item.state, endpoint),
       }
     }),
   }
@@ -225,7 +268,11 @@ export function parseRoutePreview(value: unknown): RoutePreview {
         lab_slug: requiredString(entry.lab_slug, endpoint),
         snapshot_version: requiredInteger(entry.snapshot_version, endpoint),
         catalog_version: requiredString(entry.catalog_version, endpoint),
-        capability_state: requiredString(entry.capability_state, endpoint),
+        capability_state: parseCapabilityState(
+          entry.capability_state,
+          endpoint
+        ),
+        health: parseHealthSummary(entry.health, endpoint),
         filter_reason:
           entry.filter_reason === undefined
             ? undefined
