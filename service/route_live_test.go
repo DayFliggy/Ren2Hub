@@ -332,3 +332,16 @@ func TestManualRouteAttemptsHonorPolicyWithoutExpandingSystemLimit(t *testing.T)
 		Mode: model.RoutePolicyRetrySameThenNext, MaxSameResourceAttempts: 1, MaxFailoverAttempts: 2,
 	})))
 }
+
+func TestCandidateForAttemptSkipsCandidatesInvalidatedDuringFinalRecheck(t *testing.T) {
+	selection := LiveRouteSelection{Attempts: []RouteDecisionCandidate{
+		{ChannelID: 1, FilterReason: ShadowFilterChannelDisabled},
+		{ChannelID: 1, FilterReason: ShadowFilterChannelDisabled},
+		{ChannelID: 2},
+	}}
+	candidate, ok := selection.CandidateForAttempt(0)
+	require.True(t, ok)
+	assert.Equal(t, 2, candidate.ChannelID)
+	assert.False(t, LiveRouteQualificationAllowsFailover(&LiveRouteQualificationError{Reason: ShadowFilterTokenForbidden}))
+	assert.True(t, LiveRouteQualificationAllowsFailover(&LiveRouteQualificationError{Reason: ShadowFilterSnapshotStale}))
+}

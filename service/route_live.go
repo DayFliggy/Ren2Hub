@@ -45,6 +45,32 @@ func LiveRouteQualificationReason(err error) string {
 	return ""
 }
 
+// LiveRouteQualificationAllowsFailover distinguishes a stale or revoked
+// candidate from a request-wide authorization or infrastructure failure.
+// Only the former may consume the bounded next-candidate budget.
+func LiveRouteQualificationAllowsFailover(err error) bool {
+	switch LiveRouteQualificationReason(err) {
+	case ShadowFilterSnapshotUnavailable,
+		ShadowFilterSnapshotStale,
+		ShadowFilterUnknownCapability,
+		ShadowFilterUnsupported,
+		ShadowFilterChannelDisabled,
+		ShadowFilterAbilityDisabled,
+		ShadowFilterGroupForbidden,
+		ShadowFilterPathUnsupported,
+		ShadowFilterEntitlementRevoked,
+		ShadowFilterMappingConflict,
+		"configuration_stale",
+		"group_disabled",
+		"entry_missing",
+		"entry_disabled",
+		"source_unsupported":
+		return true
+	default:
+		return false
+	}
+}
+
 type LiveRouteCandidateQualificationRequest struct {
 	Context                  context.Context
 	RouteSource              RouteSource
@@ -293,7 +319,12 @@ func (selection LiveRouteSelection) CandidateForAttempt(attempt int) (RouteDecis
 	if attempt < 0 || attempt >= len(selection.Attempts) {
 		return RouteDecisionCandidate{}, false
 	}
-	return selection.Attempts[attempt], true
+	for index := attempt; index < len(selection.Attempts); index++ {
+		if selection.Attempts[index].FilterReason == "" {
+			return selection.Attempts[index], true
+		}
+	}
+	return RouteDecisionCandidate{}, false
 }
 
 // SelectLiveTokenRoute is the side-effect-free route source bridge used by a

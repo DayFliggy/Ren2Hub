@@ -249,6 +249,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		if leaseErr := acquireRouteAttemptLease(c, relayInfo, channel, retryParam.GetRetry()); leaseErr != nil {
+			if service.LiveRouteQualificationAllowsFailover(leaseErr) && !relayInfo.HasSendResponse() &&
+				retryParam.GetRetry() < relayRetryLimit(c) {
+				retryParam.IncreaseRetry()
+				continue
+			}
 			newAPIError = types.NewError(leaseErr, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 			break
 		}
@@ -794,6 +799,11 @@ func markLiveRouteCandidateFiltered(c *gin.Context, channelID int, reason string
 		if selection.Decision.Candidates[index].ChannelID == channelID && selection.Decision.Candidates[index].FilterReason == "" {
 			selection.Decision.Candidates[index].FilterReason = reason
 			selection.Decision.Candidates[index].LeaseState = "qualification_failed"
+		}
+	}
+	for index := range selection.Attempts {
+		if selection.Attempts[index].ChannelID == channelID {
+			selection.Attempts[index].FilterReason = reason
 		}
 	}
 	if selection.Decision.SelectedChannelID == channelID {
