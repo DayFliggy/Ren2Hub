@@ -371,6 +371,12 @@ export default {
       'Price, quota, and security qualification are checked again at request time.',
     eligible: 'Eligible',
     unknownLab: 'Unknown Lab',
+    healthState: {
+      closed: 'Healthy',
+      open: 'Cooling down',
+      half_open: 'Probe pending',
+    },
+    healthSummary: '{failures} failures · {latency} ms',
     saved: 'Routing profile saved',
     versionConflict: 'The profile changed elsewhere. Reload it before saving.',
     versionConflictHint:

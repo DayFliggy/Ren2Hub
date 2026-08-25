@@ -27,6 +27,7 @@ import type {
   EligibleRouteChannel,
   RouteEntry,
   RouteGroup,
+  RouteHealthState,
   RouteCatalog,
   RoutePolicy,
   RoutePreview,
@@ -297,6 +298,12 @@ function channelTone(
   if (!channel || channel.filter_reason) return 'danger'
   if (channel.capability_state !== 'eligible') return 'warning'
   return 'success'
+}
+
+function healthTone(state: RouteHealthState): 'success' | 'warning' | 'danger' {
+  if (state === 'closed') return 'success'
+  if (state === 'half_open') return 'warning'
+  return 'danger'
 }
 
 async function runPreview(): Promise<void> {
@@ -705,6 +712,22 @@ onMounted(() => void load())
                   snapshot {{ entry.snapshot_version }} ·
                   {{ entry.catalog_version || '-' }}
                 </p>
+                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <StatusChip :tone="healthTone(entry.health.state)">
+                    {{ t(`routing.healthState.${entry.health.state}`) }}
+                  </StatusChip>
+                  <span
+                    class="text-[var(--text-tertiary)]"
+                    data-testid="route-preview-health"
+                  >
+                    {{
+                      t('routing.healthSummary', {
+                        failures: entry.health.failure_count,
+                        latency: entry.health.last_latency_ms,
+                      })
+                    }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

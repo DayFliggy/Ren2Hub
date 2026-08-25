@@ -3,6 +3,7 @@ export type RouteGroupKind = 'manual' | 'auto_lab'
 export type RouteEntrySource = 'platform'
 export type RouteCapabilityState =
   'eligible' | 'unresolved' | 'unsupported' | 'disabled' | 'conflict'
+export type RouteHealthState = 'closed' | 'open' | 'half_open'
 
 export interface RoutePolicy {
   group_id: number
@@ -62,7 +63,7 @@ export interface EligibleRouteChannel {
   weight: number
   snapshot_version: number
   catalog_version: string
-  capability_state: RouteCapabilityState | string
+  capability_state: RouteCapabilityState
   filter_reason?: string
 }
 
@@ -76,7 +77,7 @@ export interface RouteCatalogItem {
   source: string
   catalog_version: string
   snapshot_version: number
-  state: RouteCapabilityState | string
+  state: RouteCapabilityState
 }
 
 export interface RouteCatalog {
@@ -95,8 +96,19 @@ export interface RoutePreviewEntry {
   lab_slug: string
   snapshot_version: number
   catalog_version: string
-  capability_state: RouteCapabilityState | string
+  capability_state: RouteCapabilityState
+  health: RouteHealthSummary
   filter_reason?: string
+}
+
+export interface RouteHealthSummary {
+  state: RouteHealthState
+  failure_count: number
+  cooldown_until: number
+  health_epoch: number
+  last_latency_ms: number
+  first_token_latency_ms: number
+  updated_at: number
 }
 
 export interface RoutePreview {
