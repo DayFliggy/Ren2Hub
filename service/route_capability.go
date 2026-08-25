@@ -50,15 +50,91 @@ var routeCapabilityIndex atomic.Value // *capabilityIndex
 var capabilityRefreshMu sync.Mutex
 var capabilityRefreshLagSeconds atomic.Int64
 
+type capabilityRefreshDispatcher struct {
+	mu      sync.Mutex
+	pending map[int]struct{}
+	queue   []int
+	running bool
+	refresh func(context.Context, int) error
+	timeout func() time.Duration
+	onError func(int, error)
+}
+
+func newCapabilityRefreshDispatcher(
+	refresh func(context.Context, int) error,
+	timeout func() time.Duration,
+	onError func(int, error),
+) *capabilityRefreshDispatcher {
+	return &capabilityRefreshDispatcher{
+		pending: make(map[int]struct{}),
+		refresh: refresh,
+		timeout: timeout,
+		onError: onError,
+	}
+}
+
+func (d *capabilityRefreshDispatcher) enqueue(channelID int) {
+	if d == nil || channelID <= 0 || d.refresh == nil || d.timeout == nil {
+		return
+	}
+	d.mu.Lock()
+	if _, exists := d.pending[channelID]; exists {
+		d.mu.Unlock()
+		return
+	}
+	d.pending[channelID] = struct{}{}
+	d.queue = append(d.queue, channelID)
+	if d.running {
+		d.mu.Unlock()
+		return
+	}
+	d.running = true
+	d.mu.Unlock()
+	go d.run()
+}
+
+func (d *capabilityRefreshDispatcher) run() {
+	for {
+		d.mu.Lock()
+		if len(d.queue) == 0 {
+			d.running = false
+			d.mu.Unlock()
+			return
+		}
+		channelID := d.queue[0]
+		d.queue = d.queue[1:]
+		delete(d.pending, channelID)
+		d.mu.Unlock()
+
+		ctx, cancel := context.WithTimeout(context.Background(), d.timeout())
+		err := d.refresh(ctx, channelID)
+		cancel()
+		if err != nil && d.onError != nil {
+			d.onError(channelID, err)
+		}
+	}
+}
+
+func (d *capabilityRefreshDispatcher) idle() bool {
+	if d == nil {
+		return true
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return !d.running && len(d.queue) == 0 && len(d.pending) == 0
+}
+
+var routeCapabilityRefreshDispatcher = newCapabilityRefreshDispatcher(
+	RefreshChannelCapabilitiesByID,
+	RouteCapabilityRefreshTimeout,
+	func(channelID int, err error) {
+		common.SysError(fmt.Sprintf("incremental route capability refresh failed: channel_id=%d error=%v", channelID, err))
+	},
+)
+
 func RegisterRouteCapabilityRefreshHook() {
 	model.SetChannelCapabilityRefreshHook(func(channelID int) {
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), RouteCapabilityRefreshTimeout())
-			defer cancel()
-			if err := RefreshChannelCapabilitiesByID(ctx, channelID); err != nil {
-				common.SysError(fmt.Sprintf("incremental route capability refresh failed: channel_id=%d error=%v", channelID, err))
-			}
-		}()
+		routeCapabilityRefreshDispatcher.enqueue(channelID)
 	})
 }
 
