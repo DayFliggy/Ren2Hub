@@ -12,7 +12,12 @@ ROUTE_CAPABILITY_REFRESH_TASK_ENABLED=true
 ROUTE_CAPABILITY_REFRESH_INTERVAL_SECONDS=30
 ROUTE_CAPABILITY_REFRESH_TIMEOUT_SECONDS=300
 ROUTE_SHADOW_EVENT_QUEUE_SIZE=1024
+TOKEN_PRIVATE_ROUTING_ENABLED=false
 ROUTE_LIVE_ENABLED=false
+ROUTE_LIVE_USER_IDS=
+ROUTE_LIVE_TOKEN_IDS=
+ROUTE_LIVE_MODELS=
+ROUTE_LIVE_INSTANCES=
 ROUTE_DECISION_EVENT_QUEUE_SIZE=1024
 ```
 
@@ -81,7 +86,9 @@ ROUTE_SHADOW_MODELS=gpt-5,claude-opus-5
 
 ## 受控 Live 入口
 
-`ROUTE_LIVE_ENABLED` 默认关闭。开启前必须为每个参与渠道和规范化模型配置启用的 `ChannelRoutePolicy`，否则新路由会 fail-closed，不会读取 `capacity_total/capacity_used` 作为并发上限，也不会静默回退 legacy。
+`TOKEN_PRIVATE_ROUTING_ENABLED` 和 `ROUTE_LIVE_ENABLED` 必须同时开启，默认均为关闭。开启前必须为每个参与渠道和规范化模型配置启用的 `ChannelRoutePolicy`，否则新路由会 fail-closed，不会读取 `capacity_total/capacity_used` 作为并发上限，也不会静默回退 legacy。
+
+live 路由可以使用 `ROUTE_LIVE_USER_IDS`、`ROUTE_LIVE_TOKEN_IDS`、`ROUTE_LIVE_MODELS` 和 `ROUTE_LIVE_INSTANCES` 缩小灰度范围；每个非空 allowlist 都必须匹配。它们与 Shadow 的 allowlist 完全独立，未配置时不额外限制已显式启用的 live 路由。
 
 管理员策略接口：
 

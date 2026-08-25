@@ -228,9 +228,7 @@ func requireTokenPrivateRouting(c *gin.Context) bool {
 }
 
 func tokenPrivateRoutingEnabled() bool {
-	// The data/API foundation is intentionally not live until a selector,
-	// billing invariants, and shadow rollout are implemented.
-	return false
+	return service.TokenPrivateRoutingEnabled()
 }
 
 func parseRouteProfileID(c *gin.Context) (int, bool) {

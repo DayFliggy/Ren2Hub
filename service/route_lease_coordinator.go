@@ -57,6 +57,12 @@ type RouteLeaseRenewal struct {
 }
 
 func StartRouteLeaseRenewal(ctx context.Context, client *redis.Client, lease RouteLease, interval, ttl time.Duration) RouteLeaseRenewal {
+	if client == nil {
+		done := make(chan error, 1)
+		done <- ErrRouteLeaseUnavailable
+		close(done)
+		return RouteLeaseRenewal{Done: done, Stop: func() {}}
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}

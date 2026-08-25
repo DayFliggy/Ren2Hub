@@ -9,6 +9,7 @@ type RouteScoreCandidate struct {
 	Weight            int
 	ErrorRate         float64
 	LatencyMS         float64
+	TTFTMS            float64
 	RateLimitHeadroom float64
 	QuotaHeadroom     float64
 	Sticky            bool
@@ -20,6 +21,7 @@ type RouteScoreBreakdown struct {
 	WeightScore    float64
 	ErrorScore     float64
 	LatencyScore   float64
+	TTFTScore      float64
 	RateLimitScore float64
 	QuotaScore     float64
 	StickyScore    float64
@@ -63,13 +65,14 @@ func ScoreRouteCandidates(candidates []RouteScoreCandidate) []ScoredRouteCandida
 			WeightScore:    float64(maxInt(candidate.Weight, 0)) / float64(maxWeight),
 			ErrorScore:     clamp01(1 - candidate.ErrorRate),
 			LatencyScore:   inverseLatencyScore(candidate.LatencyMS),
+			TTFTScore:      inverseLatencyScore(candidate.TTFTMS),
 			RateLimitScore: clamp01(candidate.RateLimitHeadroom),
 			QuotaScore:     clamp01(candidate.QuotaHeadroom),
 		}
 		if candidate.Sticky {
 			breakdown.StickyScore = 1
 		}
-		breakdown.Total = breakdown.WeightScore + breakdown.ErrorScore + breakdown.LatencyScore + breakdown.RateLimitScore + breakdown.QuotaScore + breakdown.StickyScore
+		breakdown.Total = breakdown.WeightScore + breakdown.ErrorScore + breakdown.LatencyScore + breakdown.TTFTScore + breakdown.RateLimitScore + breakdown.QuotaScore + breakdown.StickyScore
 		result = append(result, ScoredRouteCandidate{Candidate: candidate, Breakdown: breakdown})
 	}
 	sort.SliceStable(result, func(i, j int) bool {

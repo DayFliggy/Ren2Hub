@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"math"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -11,7 +12,10 @@ import (
 	"gorm.io/gorm"
 )
 
-var ErrLiveRouteProfileUnavailable = errors.New("live route profile is unavailable")
+var (
+	ErrLiveRouteProfileUnavailable = errors.New("live route profile is unavailable")
+	ErrRoutePriceRatioExceeded     = errors.New("route policy maximum price ratio exceeded")
+)
 
 // LiveRouteRequest contains request facts already established by legacy auth
 // and distribution middleware. It intentionally does not carry credentials,
@@ -33,6 +37,30 @@ type LiveRouteSelection struct {
 	Source   RouteSource
 	Decision RouteDecision
 	Attempts []RouteDecisionCandidate
+	// MaxRatio is a manual-profile admission ceiling. It is evaluated against
+	// the existing billing calculation at request time and never rewrites the
+	// selected channel, billing model, or group ratio.
+	MaxRatio float64
+	Retry    RouteLiveRetryPolicy
+}
+
+// RouteLiveRetryPolicy is the validated manual-policy subset used by the
+// relay attempt loop. It only narrows the system attempt budget; user-owned
+// configuration can never expand the guarded live-route maximum.
+type RouteLiveRetryPolicy struct {
+	Mode                    string
+	MaxSameResourceAttempts int
+	MaxFailoverAttempts     int
+}
+
+func (selection LiveRouteSelection) AllowsPriceRatio(actualRatio float64) bool {
+	if selection.Source != RouteSourceManual || selection.MaxRatio <= 0 {
+		return true
+	}
+	if math.IsNaN(actualRatio) || math.IsInf(actualRatio, 0) || actualRatio < 0 {
+		return false
+	}
+	return actualRatio <= selection.MaxRatio
 }
 
 func (selection LiveRouteSelection) CandidateForAttempt(attempt int) (RouteDecisionCandidate, bool) {
@@ -114,7 +142,15 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			RequestModel:         input.RequestModel,
 		})
 		selection.Decision = result.Decision
-		selection.Attempts = selectedRouteAttemptCandidates(result)
+		if preview.Policy != nil {
+			selection.MaxRatio = preview.Policy.MaxRatio
+			selection.Retry = RouteLiveRetryPolicy{
+				Mode:                    preview.Policy.RetryMode,
+				MaxSameResourceAttempts: preview.Policy.MaxSameResourceAttempts,
+				MaxFailoverAttempts:     preview.Policy.MaxFailoverAttempts,
+			}
+		}
+		selection.Attempts = manualRouteAttemptCandidates(result, selection.Retry)
 		return selection, selectErr
 	}
 
@@ -185,13 +221,74 @@ func selectedRouteAttemptCandidates(result RouteSelectionResult) []RouteDecision
 	return attempts
 }
 
+func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveRetryPolicy) []RouteDecisionCandidate {
+	available := selectedRouteAttemptCandidates(result)
+	if len(available) == 0 {
+		return available
+	}
+	if policy.Mode == "" {
+		policy.Mode = model.RoutePolicyRetryNextChannel
+	}
+	maxAttempts := DefaultTotalAttempts
+	appendCandidate := func(attempts []RouteDecisionCandidate, candidate RouteDecisionCandidate) []RouteDecisionCandidate {
+		if len(attempts) >= maxAttempts {
+			return attempts
+		}
+		return append(attempts, candidate)
+	}
+	appendSameResource := func(attempts []RouteDecisionCandidate, candidate RouteDecisionCandidate) []RouteDecisionCandidate {
+		repetitions := policy.MaxSameResourceAttempts
+		if repetitions < 0 {
+			repetitions = 0
+		}
+		for index := 0; index <= repetitions && len(attempts) < maxAttempts; index++ {
+			attempts = appendCandidate(attempts, candidate)
+		}
+		return attempts
+	}
+
+	attempts := make([]RouteDecisionCandidate, 0, maxAttempts)
+	switch policy.Mode {
+	case model.RoutePolicyRetryNone:
+		return appendCandidate(attempts, available[0])
+	case model.RoutePolicyRetrySameChannel:
+		return appendSameResource(attempts, available[0])
+	case model.RoutePolicyRetrySameThenNext:
+		failovers := policy.MaxFailoverAttempts
+		if failovers < 0 {
+			failovers = 0
+		}
+		for index, candidate := range available {
+			if index > failovers || len(attempts) >= maxAttempts {
+				break
+			}
+			attempts = appendSameResource(attempts, candidate)
+		}
+		return attempts
+	case model.RoutePolicyRetryNextChannel:
+		fallthrough
+	default:
+		failovers := policy.MaxFailoverAttempts
+		if failovers < 0 {
+			failovers = 0
+		}
+		for index, candidate := range available {
+			if index > failovers || len(attempts) >= maxAttempts {
+				break
+			}
+			attempts = appendCandidate(attempts, candidate)
+		}
+		return attempts
+	}
+}
+
 func applyLiveHealth(ctx context.Context, requestModel string, candidates []RouteSelectionCandidate) error {
 	now := time.Now()
 	for index := range candidates {
 		if candidates[index].FilterReason != "" {
 			continue
 		}
-		usable, _, err := RouteHealthUsable(ctx, candidates[index].ChannelID, requestModel, now)
+		usable, epoch, err := RouteHealthUsable(ctx, candidates[index].ChannelID, requestModel, now)
 		if err != nil {
 			return err
 		}
@@ -201,7 +298,8 @@ func applyLiveHealth(ctx context.Context, requestModel string, candidates []Rout
 			continue
 		}
 		candidates[index].HealthUsable = true
-		candidates[index].ErrorRate, candidates[index].LatencyMS, err = RouteHealthMetrics(ctx, candidates[index].ChannelID, requestModel)
+		candidates[index].HealthEpoch = epoch
+		candidates[index].ErrorRate, candidates[index].LatencyMS, candidates[index].TTFTMS, err = RouteHealthMetricsWithTTFT(ctx, candidates[index].ChannelID, requestModel)
 		if err != nil {
 			return err
 		}

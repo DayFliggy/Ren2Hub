@@ -15,6 +15,7 @@ func TestScoreRouteCandidatesNeverLetsDynamicScoreCrossPriority(t *testing.T) {
 	assert.Len(t, scored, 2)
 	assert.Equal(t, 3, scored[0].Candidate.ChannelID)
 	assert.Equal(t, int64(20), scored[0].Breakdown.PriorityLayer)
+	assert.GreaterOrEqual(t, scored[0].Breakdown.TTFTScore, 0.0)
 }
 
 func TestScoreRouteCandidatesUsesStableChannelTieBreakerAndHardHealthFilter(t *testing.T) {

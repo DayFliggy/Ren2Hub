@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	ShadowRouteSource = "auto_lab"
+	ShadowRouteSource               = "auto_lab"
+	RouteShadowQualificationVersion = 1
 
 	ShadowReasonSameChannel          = "same_channel"
 	ShadowReasonDifferentPriority    = "different_priority"
@@ -129,6 +130,13 @@ type RouteShadowDecision struct {
 	NormalizedRequestModel string                 `json:"normalized_request_model"`
 	RequestPath            string                 `json:"request_path"`
 	UserGroup              string                 `json:"user_group"`
+	TokenModelLimitEnabled bool                   `json:"token_model_limit_enabled,omitempty"`
+	TokenModelLimit        map[string]bool        `json:"token_model_limit,omitempty"`
+	EntitledChannels       map[int]bool           `json:"entitled_channels,omitempty"`
+	ChannelStatuses        map[int]int            `json:"channel_statuses,omitempty"`
+	PriceEligible          bool                   `json:"price_eligible"`
+	SecurityAllowed        bool                   `json:"security_allowed"`
+	QualificationVersion   int                    `json:"qualification_version,omitempty"`
 	ActualModel            string                 `json:"actual_model,omitempty"`
 	LabSlug                string                 `json:"lab_slug,omitempty"`
 	EndpointType           string                 `json:"endpoint_type,omitempty"`
@@ -169,6 +177,13 @@ func selectRouteShadowWithIndex(request RouteShadowRequest, index *capabilityInd
 		NormalizedRequestModel: request.NormalizedRequestModel,
 		RequestPath:            request.RequestPath,
 		UserGroup:              request.UserGroup,
+		TokenModelLimitEnabled: request.TokenModelLimitEnabled,
+		TokenModelLimit:        cloneStringBoolMap(request.TokenModelLimit),
+		EntitledChannels:       cloneBoolMap(request.EntitledChannels),
+		ChannelStatuses:        cloneIntMap(request.ChannelStatuses),
+		PriceEligible:          request.PriceEligible,
+		SecurityAllowed:        request.SecurityAllowed,
+		QualificationVersion:   RouteShadowQualificationVersion,
 		EndpointType:           request.EndpointType,
 		LegacyCandidateIDs:     append([]int(nil), request.Legacy.CandidateIDs...),
 		LegacyChannelID:        request.Legacy.SelectedChannelID,
@@ -242,6 +257,39 @@ func selectRouteShadowWithIndex(request RouteShadowRequest, index *capabilityInd
 	}
 	decision.DifferenceReasons = compareShadowDecision(decision)
 	return decision
+}
+
+func cloneBoolMap(values map[int]bool) map[int]bool {
+	if values == nil {
+		return nil
+	}
+	copyValues := make(map[int]bool, len(values))
+	for key, value := range values {
+		copyValues[key] = value
+	}
+	return copyValues
+}
+
+func cloneStringBoolMap(values map[string]bool) map[string]bool {
+	if values == nil {
+		return nil
+	}
+	copyValues := make(map[string]bool, len(values))
+	for key, value := range values {
+		copyValues[key] = value
+	}
+	return copyValues
+}
+
+func cloneIntMap(values map[int]int) map[int]int {
+	if values == nil {
+		return nil
+	}
+	copyValues := make(map[int]int, len(values))
+	for key, value := range values {
+		copyValues[key] = value
+	}
+	return copyValues
 }
 
 func shadowCandidateFilter(request RouteShadowRequest, candidate indexedCapability) string {
@@ -485,7 +533,11 @@ func allowlistMatches(env string, value int) bool {
 }
 
 func modelAllowlistMatches(modelName string) bool {
-	allowlist := strings.TrimSpace(common.GetEnvOrDefaultString("ROUTE_SHADOW_MODELS", ""))
+	return modelAllowlistMatchesForEnv("ROUTE_SHADOW_MODELS", modelName)
+}
+
+func modelAllowlistMatchesForEnv(env, modelName string) bool {
+	allowlist := strings.TrimSpace(common.GetEnvOrDefaultString(env, ""))
 	if allowlist == "" {
 		return true
 	}

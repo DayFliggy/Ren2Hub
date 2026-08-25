@@ -179,6 +179,15 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = types.NewError(priceErr, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
 			return
 		}
+		if !liveRoutePriceRatioAllowed(c, priceData.GroupRatioInfo.GroupRatio) {
+			newAPIError = types.NewErrorWithStatusCode(
+				service.ErrRoutePriceRatioExceeded,
+				types.ErrorCodeModelPriceError,
+				http.StatusForbidden,
+				types.ErrOptionWithSkipRetry(),
+			)
+			return
+		}
 
 		// common.SetContextKey(c, constant.ContextKeyTokenCountMeta, meta)
 
@@ -276,6 +285,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
+		attemptStartedAt := time.Now()
 
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:
@@ -290,7 +300,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		if newAPIError == nil {
 			if routeLiveSelectionActive(c) {
-				_ = service.ObserveLiveRouteSuccess(c.Request.Context(), channel.Id, relayInfo.BillingModelName())
+				latencyMS := time.Since(attemptStartedAt).Milliseconds()
+				ttftMS := int64(0)
+				if relayInfo.FirstResponseTime.After(attemptStartedAt) {
+					ttftMS = relayInfo.FirstResponseTime.Sub(attemptStartedAt).Milliseconds()
+				}
+				_ = service.ObserveLiveRouteSuccessWithMetrics(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), latencyMS, ttftMS)
 			}
 			relayInfo.LastError = nil
 			return
@@ -327,7 +342,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if !shouldRetry(c, newAPIError, relayRetryLimit(c)-retryParam.GetRetry()) {
 			break
 		}
-		if !waitForLiveRouteBackoff(c, retryParam.GetRetry()) {
+		if !waitForLiveRouteBackoff(c, retryParam.GetRetry(), newAPIError.RetryAfter) {
 			break
 		}
 		retryParam.IncreaseRetry()
@@ -657,6 +672,9 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 	if candidate.SnapshotVersion <= 0 || expected.CapabilityVersion != candidate.SnapshotVersion {
 		return service.ErrRouteLeaseRuntime
 	}
+	if candidate.HealthEpoch <= 0 || expected.HealthEpoch != candidate.HealthEpoch {
+		return service.ErrRouteLeaseRuntime
+	}
 	lease, _, err := service.AcquireConfiguredRouteLease(c.Request.Context(), info.RequestId, channel.Id, info.UserId, info.TokenId, info.BillingModelName(), routeAttemptLeaseTTL())
 	if err != nil {
 		return err
@@ -745,12 +763,17 @@ func routeAttemptLeaseTTL() time.Duration {
 
 func relayRetryLimit(c *gin.Context) int {
 	if routeLiveSelectionActive(c) {
+		if value, ok := c.Get("route_live_selection"); ok {
+			if selection, valid := value.(service.LiveRouteSelection); valid && len(selection.Attempts) > 0 {
+				return len(selection.Attempts) - 1
+			}
+		}
 		return service.DefaultTotalAttempts - 1
 	}
 	return common.RetryTimes
 }
 
-func waitForLiveRouteBackoff(c *gin.Context, attempt int) bool {
+func waitForLiveRouteBackoff(c *gin.Context, attempt int, retryAfter time.Duration) bool {
 	if !routeLiveSelectionActive(c) || c.Request == nil {
 		return true
 	}
@@ -762,7 +785,7 @@ func waitForLiveRouteBackoff(c *gin.Context, attempt int) bool {
 			return false
 		}
 	}
-	delay := service.RouteBackoff(attempt, 0, remaining, rand.Float64())
+	delay := service.RouteBackoff(attempt, retryAfter, remaining, rand.Float64())
 	if delay <= 0 {
 		return true
 	}
@@ -783,6 +806,19 @@ func routeLiveSelectionActive(c *gin.Context) bool {
 	value, ok := c.Get("route_live_selection")
 	selection, valid := value.(service.LiveRouteSelection)
 	return ok && valid && selection.Source != service.RouteSourceLegacy
+}
+
+// liveRoutePriceRatioAllowed applies a manual route policy as a final
+// admission ceiling after the established billing helper has calculated the
+// actual group ratio. It deliberately does not alter the billing calculation
+// or select a different group/channel.
+func liveRoutePriceRatioAllowed(c *gin.Context, actualRatio float64) bool {
+	if c == nil {
+		return true
+	}
+	value, ok := c.Get("route_live_selection")
+	selection, valid := value.(service.LiveRouteSelection)
+	return !ok || !valid || selection.AllowsPriceRatio(actualRatio)
 }
 
 func finalizeLiveRouteDecision(c *gin.Context, info *relaycommon.RelayInfo, apiErr *types.NewAPIError) {

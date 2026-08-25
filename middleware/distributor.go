@@ -131,15 +131,15 @@ func Distribute() func(c *gin.Context) {
 				// Live routing is deliberately behind an independent, default-off
 				// gate. Its selector is pure; Relay owns the per-attempt lease and
 				// retry lifecycle after this middleware stores the decision.
-				if service.RouteLiveRoutingEnabled() && !isCompactRequest && !requiresNativeResponses {
+				if !isCompactRequest && !requiresNativeResponses {
 					limitEnabled := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
 					var tokenLimit map[string]bool
 					if value, exists := common.GetContextKey(c, constant.ContextKeyTokenModelLimit); exists {
 						tokenLimit, _ = value.(map[string]bool)
 					}
-					liveSelection, liveErr := service.SelectLiveTokenRoute(service.LiveRouteRequest{
+					liveRequest := service.LiveRouteRequest{
 						Context:                c.Request.Context(),
-						CapabilityEnabled:      true,
+						CapabilityEnabled:      service.RouteLiveRoutingEnabled(),
 						RequestID:              c.GetString(common.RequestIdKey),
 						UserID:                 common.GetContextKeyInt(c, constant.ContextKeyUserId),
 						TokenID:                common.GetContextKeyInt(c, constant.ContextKeyTokenId),
@@ -148,20 +148,23 @@ func Distribute() func(c *gin.Context) {
 						UserGroup:              common.GetContextKeyString(c, constant.ContextKeyUserGroup),
 						TokenModelLimitEnabled: limitEnabled,
 						TokenModelLimit:        tokenLimit,
-					})
-					if liveErr != nil {
-						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, liveErr.Error(), types.ErrorCodeGetChannelFailed)
-						return
 					}
-					if liveSelection.Source != service.RouteSourceLegacy {
-						channel, liveErr = model.GetChannelById(liveSelection.Decision.SelectedChannelID, true)
-						if liveErr != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
-							abortWithOpenAiMessage(c, http.StatusServiceUnavailable, "live route channel is unavailable", types.ErrorCodeGetChannelFailed)
+					if service.RouteLiveRoutingEnabled() && service.RouteLiveRolloutMatches(liveRequest) {
+						liveSelection, liveErr := service.SelectLiveTokenRoute(liveRequest)
+						if liveErr != nil {
+							abortWithOpenAiMessage(c, http.StatusServiceUnavailable, liveErr.Error(), types.ErrorCodeGetChannelFailed)
 							return
 						}
-						selectGroup = usingGroup
-						liveRouteSelected = true
-						c.Set("route_live_selection", liveSelection)
+						if liveSelection.Source != service.RouteSourceLegacy {
+							channel, liveErr = model.GetChannelById(liveSelection.Decision.SelectedChannelID, true)
+							if liveErr != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
+								abortWithOpenAiMessage(c, http.StatusServiceUnavailable, "live route channel is unavailable", types.ErrorCodeGetChannelFailed)
+								return
+							}
+							selectGroup = usingGroup
+							liveRouteSelected = true
+							c.Set("route_live_selection", liveSelection)
+						}
 					}
 				}
 

@@ -20,7 +20,7 @@ import (
 )
 
 func TestRoutingAPIIsFailClosedByDefault(t *testing.T) {
-	t.Setenv("NEXT_TOKEN_PRIVATE_ROUTING_ENABLED", "false")
+	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "false")
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -39,6 +39,7 @@ func TestRoutingAPIIsFailClosedByDefault(t *testing.T) {
 }
 
 func TestFrontendRoutingCapabilityRemainsDisabledUntilSelectorIsLive(t *testing.T) {
+	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "false")
 	assert.Equal(t, "disabled", routingCapabilityStatus())
 }
 

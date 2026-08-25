@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -64,4 +65,78 @@ func TestRouteLeaseExpiresAndRuntimeRecheckFailsClosed(t *testing.T) {
 		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3},
 		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3},
 	))
+}
+
+func TestRouteLeaseConcurrentAcquisitionHonorsCapacity(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	resources := []RouteLeaseResource{{Key: "route:lease:test:concurrent", Capacity: 3}}
+
+	const attempts = 4
+	start := make(chan struct{})
+	type acquireResult struct {
+		lease RouteLease
+		err   error
+	}
+	results := make(chan acquireResult, attempts)
+
+	for index := 0; index < attempts; index++ {
+		go func(index int) {
+			<-start
+			lease, err := AcquireRouteLease(
+				context.Background(), client,
+				fmt.Sprintf("request-%d", index), fmt.Sprintf("lease-%d", index),
+				time.Minute, resources,
+			)
+			results <- acquireResult{lease: lease, err: err}
+		}(index)
+	}
+	close(start)
+
+	leases := make([]RouteLease, 0, 3)
+	capacityErrors := 0
+	otherErrors := make([]error, 0)
+	for index := 0; index < attempts; index++ {
+		result := <-results
+		if result.err == nil {
+			leases = append(leases, result.lease)
+			continue
+		}
+		if result.err == ErrRouteLeaseCapacity {
+			capacityErrors++
+			continue
+		}
+		otherErrors = append(otherErrors, result.err)
+	}
+
+	assert.Len(t, leases, 3)
+	assert.Equal(t, attempts-3, capacityErrors)
+	assert.Empty(t, otherErrors)
+	for _, lease := range leases {
+		require.NoError(t, ReleaseRouteLease(context.Background(), client, lease))
+	}
+}
+
+func TestRouteLeaseRenewExtendsLeaseAndRenewalReportsUnavailableRedis(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	resources := []RouteLeaseResource{{Key: "route:lease:test:renewal", Capacity: 1}}
+	now := time.Now()
+	server.SetTime(now)
+	lease, err := AcquireRouteLease(context.Background(), client, "request-renew", "lease-renew", time.Second, resources)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = ReleaseRouteLease(context.Background(), client, lease)
+	})
+	server.FastForward(900 * time.Millisecond)
+	_, err = RenewRouteLease(context.Background(), client, lease, time.Second)
+	require.NoError(t, err)
+	server.FastForward(200 * time.Millisecond)
+	_, err = AcquireRouteLease(context.Background(), client, "request-blocked", "lease-blocked", time.Minute, resources)
+	assert.ErrorIs(t, err, ErrRouteLeaseCapacity)
+
+	failedRenewal := StartRouteLeaseRenewal(context.Background(), nil, lease, time.Millisecond, time.Minute)
+	renewErr, ok := <-failedRenewal.Done
+	require.True(t, ok)
+	assert.ErrorIs(t, renewErr, ErrRouteLeaseUnavailable)
 }

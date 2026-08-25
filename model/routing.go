@@ -140,16 +140,17 @@ type UserChannelEntitlement struct {
 }
 
 type ChannelHealth struct {
-	ID            int    `json:"id"`
-	ChannelID     int    `json:"channel_id" gorm:"uniqueIndex:channel_health_scope;not null"`
-	Model         string `json:"model" gorm:"type:varchar(255);uniqueIndex:channel_health_scope;not null"`
-	KeyScope      string `json:"key_scope" gorm:"type:varchar(128);uniqueIndex:channel_health_scope;not null"`
-	State         string `json:"state" gorm:"type:varchar(32);index;not null"`
-	FailureCount  int    `json:"failure_count" gorm:"not null;default:0"`
-	CooldownUntil int64  `json:"cooldown_until" gorm:"bigint"`
-	HealthEpoch   int64  `json:"health_epoch" gorm:"not null;default:1"`
-	LastLatencyMS int64  `json:"last_latency_ms"`
-	UpdatedAt     int64  `json:"updated_at" gorm:"bigint;not null"`
+	ID                  int    `json:"id"`
+	ChannelID           int    `json:"channel_id" gorm:"uniqueIndex:channel_health_scope;not null"`
+	Model               string `json:"model" gorm:"type:varchar(255);uniqueIndex:channel_health_scope;not null"`
+	KeyScope            string `json:"key_scope" gorm:"type:varchar(128);uniqueIndex:channel_health_scope;not null"`
+	State               string `json:"state" gorm:"type:varchar(32);index;not null"`
+	FailureCount        int    `json:"failure_count" gorm:"not null;default:0"`
+	CooldownUntil       int64  `json:"cooldown_until" gorm:"bigint"`
+	HealthEpoch         int64  `json:"health_epoch" gorm:"not null;default:1"`
+	LastLatencyMS       int64  `json:"last_latency_ms"`
+	FirstTokenLatencyMS int64  `json:"first_token_latency_ms"`
+	UpdatedAt           int64  `json:"updated_at" gorm:"bigint;not null"`
 }
 
 // ChannelRoutePolicy is the configuration source for distributed admission

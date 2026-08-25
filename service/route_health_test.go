@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -56,8 +57,33 @@ func TestDefaultRouteRetryBudgetSeparatesSameResourceAndFailover(t *testing.T) {
 	assert.True(t, budget.Allows(transient, false, false, 1))
 	assert.False(t, budget.Allows(transient, false, false, 3))
 	assert.Equal(t, 125*time.Millisecond, RouteBackoff(0, 0, time.Second, 0.5))
-	assert.Equal(t, 1125*time.Millisecond, RouteBackoff(0, time.Second, 5*time.Second, 0.5))
+	assert.Equal(t, time.Second, RouteBackoff(0, time.Second, 5*time.Second, 0.5))
 	assert.LessOrEqual(t, RouteBackoff(4, 10*time.Second, 100*time.Millisecond, 1), 100*time.Millisecond)
+}
+
+func TestParseRetryAfterAndDeadlineClipping(t *testing.T) {
+	now := time.Date(2026, time.August, 25, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name  string
+		value string
+		want  time.Duration
+		ok    bool
+	}{
+		{name: "empty", value: "", ok: false},
+		{name: "seconds", value: "3", want: 3 * time.Second, ok: true},
+		{name: "http date", value: now.Add(2 * time.Second).Format(http.TimeFormat), want: 2 * time.Second, ok: true},
+		{name: "expired date", value: now.Add(-time.Second).Format(http.TimeFormat), ok: true},
+		{name: "negative", value: "-1", ok: false},
+		{name: "invalid", value: "not-a-date", ok: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := ParseRetryAfter(tt.value, now)
+			assert.Equal(t, tt.ok, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+	assert.Equal(t, 100*time.Millisecond, RouteBackoff(0, 3*time.Second, 100*time.Millisecond, 0))
 }
 
 func TestRouteHealthMetricsAndKeyScopeAreSeparated(t *testing.T) {
@@ -75,7 +101,7 @@ func TestRouteHealthMetricsAndKeyScopeAreSeparated(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
 	require.NoError(t, db.Create(&model.ChannelHealth{
 		ChannelID: 1, Model: "gpt-5", KeyScope: "", State: model.RouteHealthStateClosed,
-		FailureCount: 1, HealthEpoch: 1, LastLatencyMS: 240,
+		FailureCount: 1, HealthEpoch: 1, LastLatencyMS: 240, FirstTokenLatencyMS: 80,
 	}).Error)
 	require.NoError(t, db.Create(&model.ChannelHealth{
 		ChannelID: 1, Model: "gpt-5", KeyScope: RouteKeyScope("secret-key"), State: model.RouteHealthStateOpen,
@@ -85,6 +111,9 @@ func TestRouteHealthMetricsAndKeyScopeAreSeparated(t *testing.T) {
 	require.NoError(t, err)
 	assert.InDelta(t, 1.0/3.0, errorRate, 0.001)
 	assert.Equal(t, float64(240), latency)
+	_, _, ttft, err := RouteHealthMetricsWithTTFT(context.Background(), 1, "gpt-5")
+	require.NoError(t, err)
+	assert.Equal(t, float64(80), ttft)
 	assert.NotEqual(t, RouteKeyScope("secret-key"), "secret-key")
 }
 

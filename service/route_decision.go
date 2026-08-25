@@ -40,6 +40,7 @@ type RouteDecisionCandidate struct {
 	Position        int                  `json:"position"`
 	Weight          int                  `json:"weight"`
 	SnapshotVersion int64                `json:"snapshot_version,omitempty"`
+	HealthEpoch     int64                `json:"health_epoch,omitempty"`
 	CatalogVersion  string               `json:"catalog_version,omitempty"`
 	Score           *RouteScoreBreakdown `json:"score_breakdown,omitempty"`
 	LeaseState      string               `json:"lease_state,omitempty"`

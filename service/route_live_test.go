@@ -117,3 +117,40 @@ func TestSelectLiveTokenRouteFiltersOpenChannelModelHealth(t *testing.T) {
 	assert.Equal(t, created.Profile.Version, selection.Decision.ConfigurationVersion)
 	assert.Equal(t, RouteCandidateFilterHealthUnavailable, selection.Decision.Candidates[0].FilterReason)
 }
+
+func TestLiveRouteSelectionMaxRatioOnlyRestrictsManualRoutes(t *testing.T) {
+	manual := LiveRouteSelection{Source: RouteSourceManual, MaxRatio: 1.5}
+	assert.True(t, manual.AllowsPriceRatio(1.5))
+	assert.False(t, manual.AllowsPriceRatio(1.500001))
+	assert.False(t, manual.AllowsPriceRatio(-1))
+
+	auto := LiveRouteSelection{Source: RouteSourceAutoLab, MaxRatio: 1}
+	assert.True(t, auto.AllowsPriceRatio(3))
+	legacy := LiveRouteSelection{Source: RouteSourceLegacy, MaxRatio: 1}
+	assert.True(t, legacy.AllowsPriceRatio(3))
+}
+
+func TestManualRouteAttemptsHonorPolicyWithoutExpandingSystemLimit(t *testing.T) {
+	result := RouteSelectionResult{Candidates: []RouteSelectionCandidate{
+		{ChannelID: 1}, {ChannelID: 2}, {ChannelID: 3},
+	}, Decision: RouteDecision{Candidates: []RouteDecisionCandidate{
+		{ChannelID: 1}, {ChannelID: 2}, {ChannelID: 3},
+	}}}
+	channelIDs := func(attempts []RouteDecisionCandidate) []int {
+		ids := make([]int, 0, len(attempts))
+		for _, attempt := range attempts {
+			ids = append(ids, attempt.ChannelID)
+		}
+		return ids
+	}
+	assert.Equal(t, []int{1}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{Mode: model.RoutePolicyRetryNone})))
+	assert.Equal(t, []int{1, 1, 1}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
+		Mode: model.RoutePolicyRetrySameChannel, MaxSameResourceAttempts: 9,
+	})))
+	assert.Equal(t, []int{1, 2}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
+		Mode: model.RoutePolicyRetryNextChannel, MaxFailoverAttempts: 1,
+	})))
+	assert.Equal(t, []int{1, 1, 2}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
+		Mode: model.RoutePolicyRetrySameThenNext, MaxSameResourceAttempts: 1, MaxFailoverAttempts: 2,
+	})))
+}

@@ -188,5 +188,39 @@ func GetRouteRuntimeState(ctx context.Context, channelID int, requestModel strin
 }
 
 func RouteLiveRoutingEnabled() bool {
-	return common.GetEnvOrDefaultBool("ROUTE_LIVE_ENABLED", false)
+	return TokenPrivateRoutingEnabled() && common.GetEnvOrDefaultBool("ROUTE_LIVE_ENABLED", false)
+}
+
+// RouteLiveRolloutMatches applies the explicit rollout dimensions after the
+// global gates have been checked. Empty allowlists mean "all"; a non-empty
+// allowlist is an opt-in boundary for that dimension. This keeps a live route
+// rollout scoped without changing the legacy selector or capability defaults.
+func RouteLiveRolloutMatches(input LiveRouteRequest) bool {
+	if !allowlistMatches("ROUTE_LIVE_USER_IDS", input.UserID) ||
+		!allowlistMatches("ROUTE_LIVE_TOKEN_IDS", input.TokenID) ||
+		!modelAllowlistMatchesForEnv("ROUTE_LIVE_MODELS", input.RequestModel) {
+		return false
+	}
+	return rolloutStringAllowlistMatches("ROUTE_LIVE_INSTANCES", common.NodeName)
+}
+
+func rolloutStringAllowlistMatches(env, value string) bool {
+	allowlist := strings.TrimSpace(common.GetEnvOrDefaultString(env, ""))
+	if allowlist == "" {
+		return true
+	}
+	value = strings.TrimSpace(value)
+	for _, part := range strings.Split(allowlist, ",") {
+		if strings.TrimSpace(part) == value {
+			return true
+		}
+	}
+	return false
+}
+
+// TokenPrivateRoutingEnabled is the capability boundary shared by routing
+// APIs, navigation and request middleware. Both the capability and the live
+// gate are opt-in; an unset environment never enables private routing.
+func TokenPrivateRoutingEnabled() bool {
+	return common.GetEnvOrDefaultBool("TOKEN_PRIVATE_ROUTING_ENABLED", false)
 }

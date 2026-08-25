@@ -126,3 +126,37 @@ func TestSaveChannelRoutePolicyRequiresVersionForExistingPolicy(t *testing.T) {
 	})
 	assert.ErrorIs(t, err, ErrRoutePolicyConflict)
 }
+
+func TestRouteLiveGateRequiresPrivateRoutingCapability(t *testing.T) {
+	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "false")
+	t.Setenv("ROUTE_LIVE_ENABLED", "true")
+	assert.False(t, RouteLiveRoutingEnabled())
+
+	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
+	assert.True(t, RouteLiveRoutingEnabled())
+}
+
+func TestRouteLiveRolloutUsesDedicatedAllowlists(t *testing.T) {
+	originalNodeName := common.NodeName
+	common.NodeName = "route-test-instance"
+	t.Cleanup(func() { common.NodeName = originalNodeName })
+
+	input := LiveRouteRequest{UserID: 11, TokenID: 22, RequestModel: "Gpt-5"}
+	assert.True(t, RouteLiveRolloutMatches(input))
+
+	t.Setenv("ROUTE_SHADOW_MODELS", "other-model")
+	assert.True(t, RouteLiveRolloutMatches(input), "Shadow rollout must not affect live rollout")
+	t.Setenv("ROUTE_LIVE_USER_IDS", "12")
+	assert.False(t, RouteLiveRolloutMatches(input))
+	t.Setenv("ROUTE_LIVE_USER_IDS", "11")
+	t.Setenv("ROUTE_LIVE_TOKEN_IDS", "23")
+	assert.False(t, RouteLiveRolloutMatches(input))
+	t.Setenv("ROUTE_LIVE_TOKEN_IDS", "22")
+	t.Setenv("ROUTE_LIVE_MODELS", "claude-opus-5")
+	assert.False(t, RouteLiveRolloutMatches(input))
+	t.Setenv("ROUTE_LIVE_MODELS", "gpt-5")
+	t.Setenv("ROUTE_LIVE_INSTANCES", "another-instance")
+	assert.False(t, RouteLiveRolloutMatches(input))
+	t.Setenv("ROUTE_LIVE_INSTANCES", "route-test-instance")
+	assert.True(t, RouteLiveRolloutMatches(input))
+}

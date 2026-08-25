@@ -27,10 +27,12 @@ type RouteSelectionCandidate struct {
 	HealthUsable      bool
 	ErrorRate         float64
 	LatencyMS         float64
+	TTFTMS            float64
 	RateLimitHeadroom float64
 	QuotaHeadroom     float64
 	Sticky            bool
 	SnapshotVersion   int64
+	HealthEpoch       int64
 	CatalogVersion    string
 }
 
@@ -99,6 +101,7 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
 				Position: candidate.Position, Weight: candidate.Weight,
 				ErrorRate: candidate.ErrorRate, LatencyMS: candidate.LatencyMS,
+				TTFTMS:            candidate.TTFTMS,
 				RateLimitHeadroom: candidate.RateLimitHeadroom,
 				QuotaHeadroom:     candidate.QuotaHeadroom,
 				Sticky:            candidate.Sticky, HealthUsable: candidate.HealthUsable,
@@ -113,7 +116,8 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
 				Position: candidate.Position, Weight: candidate.Weight,
 				SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
-				Score: &candidateScore, LeaseState: RouteLeaseStateNotAttempted,
+				HealthEpoch: candidate.HealthEpoch,
+				Score:       &candidateScore, LeaseState: RouteLeaseStateNotAttempted,
 			})
 		}
 	}
@@ -129,7 +133,8 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
 				Position: candidate.Position, Weight: candidate.Weight,
 				SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
-				LeaseState: RouteLeaseStateNotAttempted,
+				HealthEpoch: candidate.HealthEpoch,
+				LeaseState:  RouteLeaseStateNotAttempted,
 			})
 		}
 	}
@@ -166,7 +171,8 @@ func appendRouteDecisionCandidates(decision *RouteDecision, candidates []RouteSe
 			ChannelID: candidate.ChannelID, FilterReason: candidate.FilterReason,
 			Priority: candidate.Priority, Position: candidate.Position, Weight: candidate.Weight,
 			SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
-			LeaseState: RouteLeaseStateNotAttempted,
+			HealthEpoch: candidate.HealthEpoch,
+			LeaseState:  RouteLeaseStateNotAttempted,
 		})
 	}
 }

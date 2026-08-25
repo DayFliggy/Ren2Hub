@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -223,14 +225,20 @@ func RouteHealthUsable(ctx context.Context, channelID int, requestModel string, 
 }
 
 func RouteHealthMetrics(ctx context.Context, channelID int, requestModel string) (errorRate, latencyMS float64, err error) {
+	errorRate, latencyMS, _, err = RouteHealthMetricsWithTTFT(ctx, channelID, requestModel)
+	return errorRate, latencyMS, err
+}
+
+func RouteHealthMetricsWithTTFT(ctx context.Context, channelID int, requestModel string) (errorRate, latencyMS, ttftMS float64, err error) {
 	health, err := LoadRouteHealth(ctx, channelID, requestModel)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	policy := DefaultRouteHealthPolicy()
 	errorRate = clamp01(float64(health.FailureCount) / float64(policy.FailureThreshold))
 	latencyMS = float64(health.LastLatencyMS)
-	return errorRate, latencyMS, nil
+	ttftMS = float64(health.FirstTokenLatencyMS)
+	return errorRate, latencyMS, ttftMS, nil
 }
 
 func PersistRouteHealthFailure(ctx context.Context, channelID int, requestModel string, policy RouteHealthPolicy, now time.Time) (model.ChannelHealth, error) {
@@ -240,7 +248,17 @@ func PersistRouteHealthFailure(ctx context.Context, channelID int, requestModel 
 }
 
 func PersistRouteHealthSuccess(ctx context.Context, channelID int, requestModel string, now time.Time) (model.ChannelHealth, error) {
+	return PersistRouteHealthSuccessWithMetrics(ctx, channelID, requestModel, now, 0, 0)
+}
+
+func PersistRouteHealthSuccessWithMetrics(ctx context.Context, channelID int, requestModel string, now time.Time, latencyMS, ttftMS int64) (model.ChannelHealth, error) {
 	return persistRouteHealthObservation(ctx, channelID, requestModel, "", now, func(health model.ChannelHealth) model.ChannelHealth {
+		if latencyMS >= 0 {
+			health.LastLatencyMS = latencyMS
+		}
+		if ttftMS > 0 {
+			health.FirstTokenLatencyMS = ttftMS
+		}
 		return ObserveRouteHealthSuccess(health, now)
 	})
 }
@@ -318,6 +336,11 @@ func ObserveLiveRouteSuccess(ctx context.Context, channelID int, requestModel st
 	return err
 }
 
+func ObserveLiveRouteSuccessWithMetrics(ctx context.Context, channelID int, requestModel string, latencyMS, ttftMS int64) error {
+	_, err := PersistRouteHealthSuccessWithMetrics(ctx, channelID, requestModel, time.Now(), latencyMS, ttftMS)
+	return err
+}
+
 // RouteBackoff returns full-jitter delay for the local exponential backoff.
 // Retry-After is a provider lower bound; both are clipped by the remaining
 // request deadline.
@@ -336,13 +359,39 @@ func RouteBackoff(attempt int, retryAfter, remaining time.Duration, random01 flo
 		random01 = 1
 	}
 	delay := time.Duration(float64(base) * random01)
-	if retryAfter > 0 {
-		delay += retryAfter
+	// Retry-After is the provider's minimum wait. Local full jitter may make
+	// the request wait longer, but it must never shorten that provider bound.
+	if retryAfter > delay {
+		delay = retryAfter
 	}
 	if remaining > 0 && delay > remaining {
 		return remaining
 	}
 	return delay
+}
+
+// ParseRetryAfter accepts the RFC 9110 delta-seconds and HTTP-date forms.
+// Invalid or negative values are ignored; the caller applies the remaining
+// request deadline as the final upper bound.
+func ParseRetryAfter(value string, now time.Time) (time.Duration, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
+		if seconds < 0 {
+			return 0, false
+		}
+		return time.Duration(seconds) * time.Second, true
+	}
+	when, err := http.ParseTime(value)
+	if err != nil {
+		return 0, false
+	}
+	if when.Before(now) {
+		return 0, true
+	}
+	return when.Sub(now), true
 }
 
 func ObserveRouteHealthFailure(health model.ChannelHealth, policy RouteHealthPolicy, now time.Time) model.ChannelHealth {
