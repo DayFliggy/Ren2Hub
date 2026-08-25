@@ -13,27 +13,29 @@ import (
 // manual preview and the automatic Shadow selector. Profile and Entry state
 // remain outside this filter because they do not exist in automatic routing.
 type routeCapabilityFilterInput struct {
-	Capability        model.ChannelModelCapability
-	SnapshotVersion   int64
-	ChannelStatus     int
-	ChannelType       int
-	AbilityEnabled    bool
-	AbilityAllowed    bool
-	AbilityGroups     []string
-	UserGroup         string
-	Token             model.Token
-	TokenLimitEnabled bool
-	TokenLimit        map[string]bool
-	RequestModel      string
-	NormalizedModel   string
-	RequestPath       string
-	EndpointType      string
-	Entitled          bool
-	PriceEligible     bool
-	SecurityAllowed   bool
-	Advanced          *dto.AdvancedCustomConfig
-	RequireSnapshot   bool
-	RequireEndpoint   bool
+	Capability               model.ChannelModelCapability
+	SnapshotVersion          int64
+	ChannelStatus            int
+	ChannelType              int
+	AbilityEnabled           bool
+	AbilityAllowed           bool
+	AbilityGroups            []string
+	UserGroup                string
+	Token                    model.Token
+	TokenLimitEnabled        bool
+	TokenLimit               map[string]bool
+	RequestModel             string
+	NormalizedModel          string
+	RequestPath              string
+	EndpointType             string
+	Entitled                 bool
+	PriceEligible            bool
+	PriceEligibilityKnown    bool
+	SecurityAllowed          bool
+	SecurityEligibilityKnown bool
+	Advanced                 *dto.AdvancedCustomConfig
+	RequireSnapshot          bool
+	RequireEndpoint          bool
 }
 
 type routeCapabilityFilterResult struct{ Reason string }
@@ -131,11 +133,11 @@ func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilt
 		result.Reason = ShadowFilterEntitlementRevoked
 		return result
 	}
-	if !input.PriceEligible {
+	if input.PriceEligibilityKnown && !input.PriceEligible {
 		result.Reason = ShadowFilterPriceForbidden
 		return result
 	}
-	if !input.SecurityAllowed {
+	if input.SecurityEligibilityKnown && !input.SecurityAllowed {
 		result.Reason = ShadowFilterSecurityForbidden
 		return result
 	}

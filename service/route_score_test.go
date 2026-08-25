@@ -27,6 +27,18 @@ func TestScoreRouteCandidatesUsesStableChannelTieBreakerAndHardHealthFilter(t *t
 	assert.Equal(t, []int{4, 5}, []int{scored[0].Candidate.ChannelID, scored[1].Candidate.ChannelID})
 }
 
+func TestScoreRouteCandidatesFallsBackAfterHealthFiltersHighestPriority(t *testing.T) {
+	scored := ScoreRouteCandidates([]RouteScoreCandidate{
+		{ChannelID: 1, Priority: 20, Weight: 100, HealthUsable: false},
+		{ChannelID: 2, Priority: 10, Weight: 1, HealthUsable: true},
+	})
+
+	if assert.Len(t, scored, 1) {
+		assert.Equal(t, 2, scored[0].Candidate.ChannelID)
+		assert.Equal(t, int64(10), scored[0].Breakdown.PriorityLayer)
+	}
+}
+
 func TestScoreRouteCandidatesIgnoresUnhealthyWeightAndBoundsTopK(t *testing.T) {
 	candidates := []RouteScoreCandidate{
 		{ChannelID: 1, Priority: 10, Weight: 100, HealthUsable: true},

@@ -18,8 +18,11 @@ import (
 )
 
 const (
-	ShadowRouteSource               = "auto_lab"
-	RouteShadowQualificationVersion = 1
+	ShadowRouteSource = "auto_lab"
+	// Version 2 distinguishes an uncomputed request-time qualification from
+	// an explicit allow or deny result. Shadow runs before billing and prompt
+	// inspection, so those facts must not be inferred as allowed.
+	RouteShadowQualificationVersion = 2
 
 	ShadowReasonSameChannel          = "same_channel"
 	ShadowReasonDifferentPriority    = "different_priority"
@@ -59,22 +62,24 @@ type LegacySelectionTrace struct {
 }
 
 type RouteShadowRequest struct {
-	RequestID              string
-	UserID                 int
-	TokenID                int
-	RequestModel           string
-	NormalizedRequestModel string
-	RequestPath            string
-	EndpointType           string
-	UserGroup              string
-	TokenModelLimitEnabled bool
-	TokenModelLimit        map[string]bool
-	EntitledChannels       map[int]bool
-	PriceEligible          bool
-	SecurityAllowed        bool
-	SnapshotVersion        int64
-	ChannelStatuses        map[int]int
-	Legacy                 LegacySelectionTrace
+	RequestID                string
+	UserID                   int
+	TokenID                  int
+	RequestModel             string
+	NormalizedRequestModel   string
+	RequestPath              string
+	EndpointType             string
+	UserGroup                string
+	TokenModelLimitEnabled   bool
+	TokenModelLimit          map[string]bool
+	EntitledChannels         map[int]bool
+	PriceEligible            bool
+	PriceEligibilityKnown    bool
+	SecurityAllowed          bool
+	SecurityEligibilityKnown bool
+	SnapshotVersion          int64
+	ChannelStatuses          map[int]int
+	Legacy                   LegacySelectionTrace
 }
 
 func BuildRouteShadowRequest(c *gin.Context, requestModel, requestPath string, retry int) RouteShadowRequest {
@@ -83,15 +88,13 @@ func BuildRouteShadowRequest(c *gin.Context, requestModel, requestPath string, r
 		effectiveGroup = common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 	}
 	request := RouteShadowRequest{
-		RequestID:       c.GetString(common.RequestIdKey),
-		UserID:          common.GetContextKeyInt(c, constant.ContextKeyUserId),
-		TokenID:         common.GetContextKeyInt(c, constant.ContextKeyTokenId),
-		RequestModel:    requestModel,
-		RequestPath:     requestPath,
-		UserGroup:       effectiveGroup,
-		EndpointType:    endpointTypeForRequestPath(requestPath),
-		PriceEligible:   true,
-		SecurityAllowed: true,
+		RequestID:    c.GetString(common.RequestIdKey),
+		UserID:       common.GetContextKeyInt(c, constant.ContextKeyUserId),
+		TokenID:      common.GetContextKeyInt(c, constant.ContextKeyTokenId),
+		RequestModel: requestModel,
+		RequestPath:  requestPath,
+		UserGroup:    effectiveGroup,
+		EndpointType: endpointTypeForRequestPath(requestPath),
 		Legacy: LegacySelectionTrace{
 			RetryAttempt: retry,
 		},
@@ -121,40 +124,44 @@ type RouteShadowCandidate struct {
 }
 
 type RouteShadowDecision struct {
-	Event                  string                 `json:"event"`
-	RequestID              string                 `json:"request_id"`
-	UserID                 int                    `json:"user_id"`
-	TokenID                int                    `json:"token_id"`
-	RouteSource            string                 `json:"route_source"`
-	RequestModel           string                 `json:"request_model"`
-	NormalizedRequestModel string                 `json:"normalized_request_model"`
-	RequestPath            string                 `json:"request_path"`
-	UserGroup              string                 `json:"user_group"`
-	TokenModelLimitEnabled bool                   `json:"token_model_limit_enabled,omitempty"`
-	TokenModelLimit        map[string]bool        `json:"token_model_limit,omitempty"`
-	EntitledChannels       map[int]bool           `json:"entitled_channels,omitempty"`
-	ChannelStatuses        map[int]int            `json:"channel_statuses,omitempty"`
-	PriceEligible          bool                   `json:"price_eligible"`
-	SecurityAllowed        bool                   `json:"security_allowed"`
-	QualificationVersion   int                    `json:"qualification_version,omitempty"`
-	ActualModel            string                 `json:"actual_model,omitempty"`
-	LabSlug                string                 `json:"lab_slug,omitempty"`
-	EndpointType           string                 `json:"endpoint_type,omitempty"`
-	CatalogVersion         string                 `json:"catalog_version,omitempty"`
-	SnapshotVersion        int64                  `json:"snapshot_version,omitempty"`
-	ShadowCandidates       []RouteShadowCandidate `json:"shadow_candidates"`
-	LegacyCandidateIDs     []int                  `json:"legacy_candidate_ids,omitempty"`
-	LegacyChannelID        int                    `json:"legacy_channel_id,omitempty"`
-	ShadowPreferredID      int                    `json:"shadow_preferred_channel_id,omitempty"`
-	LegacyTrace            LegacySelectionTrace   `json:"legacy_trace"`
-	FilterReasonCounts     map[string]int         `json:"filter_reason_counts,omitempty"`
-	DifferenceReasons      []string               `json:"difference_reasons,omitempty"`
-	HasUnknown             bool                   `json:"has_unknown"`
-	HasMappingConflict     bool                   `json:"has_mapping_conflict"`
-	HasMixed               bool                   `json:"has_mixed"`
-	HasUnauthorized        bool                   `json:"has_unauthorized"`
-	RetryAttempt           int                    `json:"retry_attempt"`
-	GeneratedAt            int64                  `json:"generated_at"`
+	Event                    string                 `json:"event"`
+	RequestID                string                 `json:"request_id"`
+	UserID                   int                    `json:"user_id"`
+	TokenID                  int                    `json:"token_id"`
+	RouteSource              string                 `json:"route_source"`
+	RequestModel             string                 `json:"request_model"`
+	NormalizedRequestModel   string                 `json:"normalized_request_model"`
+	RequestPath              string                 `json:"request_path"`
+	UserGroup                string                 `json:"user_group"`
+	TokenModelLimitEnabled   bool                   `json:"token_model_limit_enabled,omitempty"`
+	TokenModelLimit          map[string]bool        `json:"token_model_limit,omitempty"`
+	EntitledChannels         map[int]bool           `json:"entitled_channels,omitempty"`
+	ChannelStatuses          map[int]int            `json:"channel_statuses,omitempty"`
+	PriceEligible            bool                   `json:"price_eligible"`
+	PriceEligibilityKnown    bool                   `json:"price_eligibility_known"`
+	SecurityAllowed          bool                   `json:"security_allowed"`
+	SecurityEligibilityKnown bool                   `json:"security_eligibility_known"`
+	RuntimeRecheckRequired   bool                   `json:"runtime_recheck_required"`
+	RuntimeRecheckReasons    []string               `json:"runtime_recheck_reasons,omitempty"`
+	QualificationVersion     int                    `json:"qualification_version,omitempty"`
+	ActualModel              string                 `json:"actual_model,omitempty"`
+	LabSlug                  string                 `json:"lab_slug,omitempty"`
+	EndpointType             string                 `json:"endpoint_type,omitempty"`
+	CatalogVersion           string                 `json:"catalog_version,omitempty"`
+	SnapshotVersion          int64                  `json:"snapshot_version,omitempty"`
+	ShadowCandidates         []RouteShadowCandidate `json:"shadow_candidates"`
+	LegacyCandidateIDs       []int                  `json:"legacy_candidate_ids,omitempty"`
+	LegacyChannelID          int                    `json:"legacy_channel_id,omitempty"`
+	ShadowPreferredID        int                    `json:"shadow_preferred_channel_id,omitempty"`
+	LegacyTrace              LegacySelectionTrace   `json:"legacy_trace"`
+	FilterReasonCounts       map[string]int         `json:"filter_reason_counts,omitempty"`
+	DifferenceReasons        []string               `json:"difference_reasons,omitempty"`
+	HasUnknown               bool                   `json:"has_unknown"`
+	HasMappingConflict       bool                   `json:"has_mapping_conflict"`
+	HasMixed                 bool                   `json:"has_mixed"`
+	HasUnauthorized          bool                   `json:"has_unauthorized"`
+	RetryAttempt             int                    `json:"retry_attempt"`
+	GeneratedAt              int64                  `json:"generated_at"`
 }
 
 func SelectRouteShadow(request RouteShadowRequest) RouteShadowDecision {
@@ -167,30 +174,41 @@ func selectRouteShadowWithIndex(request RouteShadowRequest, index *capabilityInd
 	if request.NormalizedRequestModel == "" {
 		request.NormalizedRequestModel = modellab.NormalizeModel(request.RequestModel)
 	}
+	runtimeRecheckReasons := make([]string, 0, 2)
+	if !request.PriceEligibilityKnown {
+		runtimeRecheckReasons = append(runtimeRecheckReasons, "price_qualification")
+	}
+	if !request.SecurityEligibilityKnown {
+		runtimeRecheckReasons = append(runtimeRecheckReasons, "security_policy")
+	}
 	decision := RouteShadowDecision{
-		Event:                  "route_shadow_decision",
-		RequestID:              request.RequestID,
-		UserID:                 request.UserID,
-		TokenID:                request.TokenID,
-		RouteSource:            ShadowRouteSource,
-		RequestModel:           request.RequestModel,
-		NormalizedRequestModel: request.NormalizedRequestModel,
-		RequestPath:            request.RequestPath,
-		UserGroup:              request.UserGroup,
-		TokenModelLimitEnabled: request.TokenModelLimitEnabled,
-		TokenModelLimit:        cloneStringBoolMap(request.TokenModelLimit),
-		EntitledChannels:       cloneBoolMap(request.EntitledChannels),
-		ChannelStatuses:        cloneIntMap(request.ChannelStatuses),
-		PriceEligible:          request.PriceEligible,
-		SecurityAllowed:        request.SecurityAllowed,
-		QualificationVersion:   RouteShadowQualificationVersion,
-		EndpointType:           request.EndpointType,
-		LegacyCandidateIDs:     append([]int(nil), request.Legacy.CandidateIDs...),
-		LegacyChannelID:        request.Legacy.SelectedChannelID,
-		LegacyTrace:            request.Legacy,
-		FilterReasonCounts:     make(map[string]int),
-		RetryAttempt:           request.Legacy.RetryAttempt,
-		GeneratedAt:            time.Now().UnixMilli(),
+		Event:                    "route_shadow_decision",
+		RequestID:                request.RequestID,
+		UserID:                   request.UserID,
+		TokenID:                  request.TokenID,
+		RouteSource:              ShadowRouteSource,
+		RequestModel:             request.RequestModel,
+		NormalizedRequestModel:   request.NormalizedRequestModel,
+		RequestPath:              request.RequestPath,
+		UserGroup:                request.UserGroup,
+		TokenModelLimitEnabled:   request.TokenModelLimitEnabled,
+		TokenModelLimit:          cloneStringBoolMap(request.TokenModelLimit),
+		EntitledChannels:         cloneBoolMap(request.EntitledChannels),
+		ChannelStatuses:          cloneIntMap(request.ChannelStatuses),
+		PriceEligible:            request.PriceEligible,
+		PriceEligibilityKnown:    request.PriceEligibilityKnown,
+		SecurityAllowed:          request.SecurityAllowed,
+		SecurityEligibilityKnown: request.SecurityEligibilityKnown,
+		RuntimeRecheckRequired:   len(runtimeRecheckReasons) > 0,
+		RuntimeRecheckReasons:    runtimeRecheckReasons,
+		QualificationVersion:     RouteShadowQualificationVersion,
+		EndpointType:             request.EndpointType,
+		LegacyCandidateIDs:       append([]int(nil), request.Legacy.CandidateIDs...),
+		LegacyChannelID:          request.Legacy.SelectedChannelID,
+		LegacyTrace:              request.Legacy,
+		FilterReasonCounts:       make(map[string]int),
+		RetryAttempt:             request.Legacy.RetryAttempt,
+		GeneratedAt:              time.Now().UnixMilli(),
 	}
 	if request.NormalizedRequestModel == "" {
 		decision.DifferenceReasons = compareShadowDecision(decision)
@@ -304,24 +322,26 @@ func shadowCandidateFilter(request RouteShadowRequest, candidate indexedCapabili
 		channelStatus = status
 	}
 	result := filterRouteCapability(routeCapabilityFilterInput{
-		Capability:        candidate.Capability,
-		SnapshotVersion:   request.SnapshotVersion,
-		ChannelStatus:     channelStatus,
-		ChannelType:       candidate.ChannelType,
-		AbilityEnabled:    len(candidate.AbilityGroups) > 0,
-		AbilityAllowed:    false,
-		AbilityGroups:     candidate.AbilityGroups,
-		UserGroup:         request.UserGroup,
-		TokenLimitEnabled: request.TokenModelLimitEnabled,
-		TokenLimit:        request.TokenModelLimit,
-		RequestModel:      request.RequestModel,
-		NormalizedModel:   request.NormalizedRequestModel,
-		RequestPath:       request.RequestPath,
-		EndpointType:      request.EndpointType,
-		Entitled:          entitled,
-		PriceEligible:     request.PriceEligible,
-		SecurityAllowed:   request.SecurityAllowed,
-		Advanced:          candidate.Advanced,
+		Capability:               candidate.Capability,
+		SnapshotVersion:          request.SnapshotVersion,
+		ChannelStatus:            channelStatus,
+		ChannelType:              candidate.ChannelType,
+		AbilityEnabled:           len(candidate.AbilityGroups) > 0,
+		AbilityAllowed:           false,
+		AbilityGroups:            candidate.AbilityGroups,
+		UserGroup:                request.UserGroup,
+		TokenLimitEnabled:        request.TokenModelLimitEnabled,
+		TokenLimit:               request.TokenModelLimit,
+		RequestModel:             request.RequestModel,
+		NormalizedModel:          request.NormalizedRequestModel,
+		RequestPath:              request.RequestPath,
+		EndpointType:             request.EndpointType,
+		Entitled:                 entitled,
+		PriceEligible:            request.PriceEligible,
+		PriceEligibilityKnown:    request.PriceEligibilityKnown,
+		SecurityAllowed:          request.SecurityAllowed,
+		SecurityEligibilityKnown: request.SecurityEligibilityKnown,
+		Advanced:                 candidate.Advanced,
 	})
 	return result.Reason
 }

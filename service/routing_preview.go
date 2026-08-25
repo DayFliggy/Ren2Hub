@@ -371,10 +371,13 @@ func routePreviewFilterReason(input routePreviewFilterInput) string {
 		RequestPath:     input.RequestPath,
 		EndpointType:    input.EndpointType,
 		Entitled:        entitled,
-		PriceEligible:   true,
-		SecurityAllowed: true,
-		RequireSnapshot: true,
-		RequireEndpoint: true,
+		// Price, quota, and request-body security facts are not available to a
+		// configuration-only preview. The response exposes a runtime recheck
+		// requirement instead of treating this entry as fully qualified.
+		PriceEligibilityKnown:    false,
+		SecurityEligibilityKnown: false,
+		RequireSnapshot:          true,
+		RequireEndpoint:          true,
 	})
 	return result.Reason
 }
