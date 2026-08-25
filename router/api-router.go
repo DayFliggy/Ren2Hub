@@ -380,6 +380,18 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.POST("/batch", controller.DeleteTokenBatch)
 			tokenRoute.POST("/batch/keys", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.GetTokenKeysBatch)
 		}
+		routingRoute := apiRouter.Group("/routing")
+		routingRoute.Use(middleware.UserAuth())
+		{
+			routingRoute.GET("/catalog", controller.ListRouteCatalog)
+			routingRoute.GET("/eligible-channels", controller.ListEligibleRouteChannels)
+			routingRoute.GET("/profiles", controller.ListRouteProfiles)
+			routingRoute.POST("/profiles", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.CreateRouteProfile)
+			routingRoute.GET("/profiles/:id", controller.GetRouteProfile)
+			routingRoute.PUT("/profiles/:id", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.UpdateRouteProfile)
+			routingRoute.DELETE("/profiles/:id", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.DeleteRouteProfile)
+			routingRoute.POST("/profiles/:id/preview", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.PreviewRouteProfile)
+		}
 
 		usageRoute := apiRouter.Group("/usage")
 		usageRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())

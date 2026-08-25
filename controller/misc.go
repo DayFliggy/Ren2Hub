@@ -197,7 +197,7 @@ func getFrontendCapabilities(passkeyEnabled bool) map[string]string {
 		"two_factor":            "live",
 		"oauth_bindings":        "live",
 		"notifications":         "live",
-		"token_private_routing": "disabled",
+		"token_private_routing": routingCapabilityStatus(),
 		"marketplace":           "disabled",
 		"admin":                 "live",
 		"orders":                "live",
@@ -226,6 +226,13 @@ func getFrontendCapabilities(passkeyEnabled bool) map[string]string {
 	}
 
 	return capabilities
+}
+
+func routingCapabilityStatus() string {
+	if tokenPrivateRoutingEnabled() {
+		return "live"
+	}
+	return "disabled"
 }
 
 func GetNotice(c *gin.Context) {
