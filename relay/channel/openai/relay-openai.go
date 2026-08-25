@@ -143,9 +143,20 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			if err := processTokenData(info.RelayMode, data, &responseTextBuilder, &toolCount); err != nil {
 				logger.LogError(c, "error processing stream token data: "+err.Error())
 				sr.Error(err)
+			} else {
+				sr.MarkValidOutput()
 			}
 		}
 	})
+
+	// A scanner/adapter error is a failed upstream attempt even when the
+	// scanner reached EOF. Returning nil here would mark the channel healthy,
+	// settle billing, and suppress bounded failover. If output was already
+	// committed, the controller will retain the response boundary and refuse
+	// to splice another provider stream.
+	if info.StreamStatus != nil && info.StreamStatus.HasErrors() {
+		return nil, types.NewOpenAIError(fmt.Errorf("upstream stream processing failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
 
 	// 对音频模型，从倒数第二个stream data中提取usage信息
 	if isAudioModel && secondLastStreamData != "" {

@@ -12,6 +12,8 @@ ROUTE_CAPABILITY_REFRESH_TASK_ENABLED=true
 ROUTE_CAPABILITY_REFRESH_INTERVAL_SECONDS=30
 ROUTE_CAPABILITY_REFRESH_TIMEOUT_SECONDS=300
 ROUTE_SHADOW_EVENT_QUEUE_SIZE=1024
+ROUTE_SCORE_SHADOW_ENABLED=false
+ROUTE_SCORE_LIVE_ENABLED=false
 TOKEN_PRIVATE_ROUTING_ENABLED=false
 ROUTE_LIVE_ENABLED=false
 ROUTE_LIVE_USER_IDS=
@@ -59,6 +61,8 @@ ROUTE_SHADOW_MODELS=gpt-5,claude-opus-5
 ## 观测
 
 开启后会异步写入单行 JSON 事件 `route_shadow_decision`。事件只包含请求 ID、用户/Token ID、模型、Lab、版本、渠道 ID、过滤原因和差异原因，不包含 Key、Token 原文、Header Override、请求体或 Authorization。队列满时只丢弃观测事件，并增加丢弃计数，不影响请求。
+
+动态评分有独立的 `ROUTE_SCORE_SHADOW_ENABLED` 开关。开启后仅在自动 Lab 候选的同一 priority 层内计算 Weight、Error、Latency、TTFT、RateLimit、Quota、CircuitBreaker 和 Sticky 的 breakdown；静态首选和实际 legacy 选择不变。只有显式开启 `ROUTE_SCORE_LIVE_ENABLED` 且满足 Live 灰度条件时，评分结果才会参与新路由选择，两个开关默认均为关闭。
 
 管理员可通过 `/api/status/test` 查看 `route_shadow_metrics`。重点关注：
 

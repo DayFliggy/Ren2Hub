@@ -28,6 +28,7 @@ const (
 	RouteErrorTransient     RouteErrorClass = "provider_transient"
 	RouteErrorModel         RouteErrorClass = "model_capability"
 	RouteErrorStreamStarted RouteErrorClass = "stream_started"
+	RouteErrorAdmission     RouteErrorClass = "route_admission"
 	RouteErrorUnknown       RouteErrorClass = "unknown"
 )
 
@@ -50,6 +51,8 @@ func ClassifyRouteError(status int, providerCode, message string, streamStarted 
 	code := strings.ToLower(strings.TrimSpace(providerCode))
 	text := strings.ToLower(strings.TrimSpace(message))
 	switch {
+	case strings.Contains(code, "route_lease") || strings.Contains(code, "route_admission") || strings.Contains(text, "route lease"):
+		return RouteErrorClassification{Class: RouteErrorAdmission}
 	case strings.Contains(code, "invalid_api_key") || strings.Contains(code, "invalid_credential") ||
 		strings.Contains(code, "authentication_error") || strings.Contains(text, "invalid api key") ||
 		strings.Contains(text, "incorrect api key"):
@@ -321,18 +324,22 @@ func PersistRouteHealthSuccessWithMetrics(ctx context.Context, channelID int, re
 }
 
 func ObserveLiveRouteError(ctx context.Context, channelID int, requestModel string, status int, providerCode, message string, streamStarted bool) error {
-	return observeLiveRouteError(ctx, channelID, requestModel, "", status, providerCode, message, streamStarted)
+	return observeLiveRouteError(ctx, channelID, requestModel, "", status, providerCode, message, streamStarted, 0)
 }
 
 func ObserveLiveRouteErrorForKey(ctx context.Context, channelID int, requestModel, key string, status int, providerCode, message string, streamStarted bool) error {
+	return ObserveLiveRouteErrorForKeyWithRetryAfter(ctx, channelID, requestModel, key, status, providerCode, message, streamStarted, 0)
+}
+
+func ObserveLiveRouteErrorForKeyWithRetryAfter(ctx context.Context, channelID int, requestModel, key string, status int, providerCode, message string, streamStarted bool, retryAfter time.Duration) error {
 	keyScope := ""
 	if strings.TrimSpace(key) != "" {
 		keyScope = RouteKeyScope(key)
 	}
-	return observeLiveRouteError(ctx, channelID, requestModel, keyScope, status, providerCode, message, streamStarted)
+	return observeLiveRouteError(ctx, channelID, requestModel, keyScope, status, providerCode, message, streamStarted, retryAfter)
 }
 
-func observeLiveRouteError(ctx context.Context, channelID int, requestModel, keyScope string, status int, providerCode, message string, streamStarted bool) error {
+func observeLiveRouteError(ctx context.Context, channelID int, requestModel, keyScope string, status int, providerCode, message string, streamStarted bool, retryAfter time.Duration) error {
 	classification := ClassifyRouteError(status, providerCode, message, streamStarted)
 	if !classification.MarkChannelModel && !classification.MarkCapability && !classification.MarkKey {
 		return nil
@@ -341,17 +348,20 @@ func observeLiveRouteError(ctx context.Context, channelID int, requestModel, key
 		if keyScope == "" {
 			return nil
 		}
-		_, err := persistRouteHealthFailure(ctx, channelID, requestModel, keyScope, routeKeyHealthPolicy(), time.Now())
+		_, err := persistRouteHealthFailureWithRetryAfter(ctx, channelID, requestModel, keyScope, routeKeyHealthPolicy(), time.Now(), 0)
 		return err
 	}
 	if classification.MarkCapability {
-		_, err := PersistRouteHealthFailure(ctx, channelID, requestModel, routeCapabilityHealthPolicy(), time.Now())
+		_, err := persistRouteHealthFailureWithRetryAfter(ctx, channelID, requestModel, "", routeCapabilityHealthPolicy(), time.Now(), 0)
 		return err
 	}
 	if !classification.MarkChannelModel {
 		return nil
 	}
-	_, err := PersistRouteHealthFailure(ctx, channelID, requestModel, DefaultRouteHealthPolicy(), time.Now())
+	if classification.Class != RouteErrorTransient {
+		retryAfter = 0
+	}
+	_, err := persistRouteHealthFailureWithRetryAfter(ctx, channelID, requestModel, "", DefaultRouteHealthPolicy(), time.Now(), retryAfter)
 	return err
 }
 
@@ -361,8 +371,12 @@ func RouteKeyScope(key string) string {
 }
 
 func persistRouteHealthFailure(ctx context.Context, channelID int, requestModel, keyScope string, policy RouteHealthPolicy, now time.Time) (model.ChannelHealth, error) {
+	return persistRouteHealthFailureWithRetryAfter(ctx, channelID, requestModel, keyScope, policy, now, 0)
+}
+
+func persistRouteHealthFailureWithRetryAfter(ctx context.Context, channelID int, requestModel, keyScope string, policy RouteHealthPolicy, now time.Time, retryAfter time.Duration) (model.ChannelHealth, error) {
 	return persistRouteHealthObservation(ctx, channelID, requestModel, keyScope, now, func(health model.ChannelHealth) model.ChannelHealth {
-		return ObserveRouteHealthFailure(health, policy, now)
+		return ObserveRouteHealthFailureWithRetryAfter(health, policy, now, retryAfter)
 	})
 }
 
@@ -516,6 +530,10 @@ func ParseRetryAfter(value string, now time.Time) (time.Duration, bool) {
 		if seconds < 0 {
 			return 0, false
 		}
+		maxDurationSeconds := int64((time.Duration(1<<63 - 1)) / time.Second)
+		if seconds > maxDurationSeconds {
+			return 0, false
+		}
 		return time.Duration(seconds) * time.Second, true
 	}
 	when, err := http.ParseTime(value)
@@ -529,12 +547,22 @@ func ParseRetryAfter(value string, now time.Time) (time.Duration, bool) {
 }
 
 func ObserveRouteHealthFailure(health model.ChannelHealth, policy RouteHealthPolicy, now time.Time) model.ChannelHealth {
+	return ObserveRouteHealthFailureWithRetryAfter(health, policy, now, 0)
+}
+
+func ObserveRouteHealthFailureWithRetryAfter(health model.ChannelHealth, policy RouteHealthPolicy, now time.Time, retryAfter time.Duration) model.ChannelHealth {
 	policy = policy.normalized()
 	health.Normalize(now)
 	health.FailureCount++
-	if health.State == model.RouteHealthStateHalfOpen || health.FailureCount >= policy.FailureThreshold {
+	// A provider Retry-After is an explicit shared cooldown signal. It must
+	// fence concurrent requests even before the local consecutive-failure
+	// threshold is reached.
+	if health.State == model.RouteHealthStateHalfOpen || health.FailureCount >= policy.FailureThreshold || retryAfter > 0 {
 		health.State = model.RouteHealthStateOpen
 		health.CooldownUntil = now.Add(policy.Cooldown).Unix()
+		if retryAfter > policy.Cooldown {
+			health.CooldownUntil = now.Add(retryAfter).Unix()
+		}
 		health.HealthEpoch++
 	}
 	health.UpdatedAt = now.Unix()

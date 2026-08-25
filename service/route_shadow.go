@@ -158,6 +158,7 @@ type RouteShadowDecision struct {
 	ScoreShadowPreferredID   int                    `json:"score_shadow_preferred_channel_id,omitempty"`
 	ScoreShadowDifference    string                 `json:"score_shadow_difference,omitempty"`
 	ScoreShadowError         string                 `json:"score_shadow_error,omitempty"`
+	ScoreMetricsUnavailable  bool                   `json:"score_metrics_unavailable,omitempty"`
 	LegacyTrace              LegacySelectionTrace   `json:"legacy_trace"`
 	FilterReasonCounts       map[string]int         `json:"filter_reason_counts,omitempty"`
 	DifferenceReasons        []string               `json:"difference_reasons,omitempty"`
@@ -597,6 +598,9 @@ type shadowMetrics struct {
 	EventAttempted    atomic.Uint64
 	EventWritten      atomic.Uint64
 	EventEncodeFailed atomic.Uint64
+	ScoreDecisions    atomic.Uint64
+	ScoreDiffs        atomic.Uint64
+	ScoreUnavailable  atomic.Uint64
 	mu                sync.Mutex
 	DiffReasons       map[string]uint64
 	RefreshMu         sync.Mutex
@@ -633,6 +637,12 @@ type RouteShadowMetricsSnapshot struct {
 	RouteShadowEventAttemptedTotal     uint64            `json:"route_shadow_event_attempted_total"`
 	RouteShadowEventWrittenTotal       uint64            `json:"route_shadow_event_written_total"`
 	RouteShadowEventEncodeFailureTotal uint64            `json:"route_shadow_event_encode_failure_total"`
+	RouteScoreShadowDecisionsTotal     uint64            `json:"route_score_shadow_decisions_total"`
+	RouteScoreShadowDiffTotal          uint64            `json:"route_score_shadow_diff_total"`
+	RouteScoreShadowUnavailableTotal   uint64            `json:"route_score_shadow_metrics_unavailable_total"`
+	RouteLeaseAcquireFailureTotal      uint64            `json:"route_lease_acquire_failure_total"`
+	RouteLeaseRenewFailureTotal        uint64            `json:"route_lease_renew_failure_total"`
+	RouteLeaseReleaseFailureTotal      uint64            `json:"route_lease_release_failure_total"`
 	DifferenceReasons                  map[string]uint64 `json:"difference_reasons,omitempty"`
 }
 
@@ -660,6 +670,12 @@ func RouteShadowMetrics() RouteShadowMetricsSnapshot {
 		RouteShadowEventAttemptedTotal:     routeShadowMetrics.EventAttempted.Load(),
 		RouteShadowEventWrittenTotal:       routeShadowMetrics.EventWritten.Load(),
 		RouteShadowEventEncodeFailureTotal: routeShadowMetrics.EventEncodeFailed.Load(),
+		RouteScoreShadowDecisionsTotal:     routeShadowMetrics.ScoreDecisions.Load(),
+		RouteScoreShadowDiffTotal:          routeShadowMetrics.ScoreDiffs.Load(),
+		RouteScoreShadowUnavailableTotal:   routeShadowMetrics.ScoreUnavailable.Load(),
+		RouteLeaseAcquireFailureTotal:      RouteLeaseMetrics().AcquireFailures,
+		RouteLeaseRenewFailureTotal:        RouteLeaseMetrics().RenewFailures,
+		RouteLeaseReleaseFailureTotal:      RouteLeaseMetrics().ReleaseFailures,
 		DifferenceReasons:                  reasons,
 	}
 }
@@ -721,6 +737,15 @@ func routeCapabilityRefreshP95(scan bool) int64 {
 
 func observeShadowDecision(decision RouteShadowDecision) {
 	routeShadowMetrics.Decisions.Add(1)
+	if decision.ScoreShadowEnabled {
+		routeShadowMetrics.ScoreDecisions.Add(1)
+		if decision.ScoreShadowError != "" {
+			routeShadowMetrics.ScoreUnavailable.Add(1)
+		}
+		if decision.ScoreShadowDifference != "" && decision.ScoreShadowDifference != RouteScoreShadowSameChannel {
+			routeShadowMetrics.ScoreDiffs.Add(1)
+		}
+	}
 	if shadowDecisionHasDifference(decision.DifferenceReasons) {
 		routeShadowMetrics.Diffs.Add(1)
 	}

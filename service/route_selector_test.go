@@ -36,6 +36,7 @@ func TestSelectTokenRouteManualUsesActiveGroupPositionThenWeight(t *testing.T) {
 }
 
 func TestSelectTokenRouteAutoUsesPriorityLayerAndBoundedTopK(t *testing.T) {
+	t.Setenv("ROUTE_SCORE_SHADOW_ENABLED", "true")
 	result, err := SelectTokenRoute(RouteSelectionInput{
 		SourceInput: RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "auto_lab"},
 		TopK:        10,
@@ -59,6 +60,7 @@ func TestSelectTokenRouteAutoUsesPriorityLayerAndBoundedTopK(t *testing.T) {
 }
 
 func TestSelectTokenRouteKeepsStaticOrderUntilScoreLiveIsEnabled(t *testing.T) {
+	t.Setenv("ROUTE_SCORE_SHADOW_ENABLED", "true")
 	input := RouteSelectionInput{
 		SourceInput:  RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "auto_lab"},
 		TopK:         3,
@@ -82,6 +84,26 @@ func TestSelectTokenRouteKeepsStaticOrderUntilScoreLiveIsEnabled(t *testing.T) {
 	assert.Equal(t, 2, liveResult.Decision.SelectedChannelID)
 	assert.Equal(t, "live", liveResult.Decision.ScoringMode)
 	assert.True(t, liveResult.Decision.DynamicScoreApplied)
+}
+
+func TestSelectTokenRouteScoreShadowRetainsEveryStaticPriorityLayer(t *testing.T) {
+	t.Setenv("ROUTE_SCORE_SHADOW_ENABLED", "true")
+	result, err := SelectTokenRoute(RouteSelectionInput{
+		SourceInput: RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "auto_lab"},
+		TopK:        3,
+		AutoCandidates: []RouteSelectionCandidate{
+			{ChannelID: 30, Priority: 30, HealthUsable: true, ErrorRate: 1, ErrorRateKnown: true},
+			{ChannelID: 20, Priority: 20, HealthUsable: true, ErrorRate: 0, ErrorRateKnown: true},
+			{ChannelID: 10, Priority: 10, HealthUsable: true, ErrorRate: 0, ErrorRateKnown: true},
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []int{30, 20, 10}, channelIDs(result.Candidates))
+	assert.Equal(t, 30, result.Decision.SelectedChannelID)
+	assert.Equal(t, 30, result.Decision.StaticPreferredChannelID)
+	assert.Equal(t, 30, result.Decision.ScoredPreferredChannelID)
+	assert.Equal(t, "shadow", result.Decision.ScoringMode)
 }
 
 func TestSelectTokenRouteFailsClosedWhenManualGroupHasNoEligibleCandidate(t *testing.T) {

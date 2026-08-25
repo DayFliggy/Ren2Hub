@@ -30,6 +30,18 @@ func TestClassifyRouteErrorSeparatesKeyModelAndStreamFailures(t *testing.T) {
 	assert.True(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), false, false))
 }
 
+func TestClassifyRouteAdmissionFailureDoesNotAffectProviderHealth(t *testing.T) {
+	classification := ClassifyRouteError(http.StatusServiceUnavailable, RouteLeaseFailureCode, "route lease redis is unavailable", false)
+
+	assert.Equal(t, RouteErrorAdmission, classification.Class)
+	assert.False(t, classification.Retryable)
+	assert.False(t, classification.Failoverable)
+	assert.False(t, classification.MarkKey)
+	assert.False(t, classification.MarkCapability)
+	assert.False(t, classification.MarkChannelModel)
+	assert.False(t, CanRouteFailover(classification, false, false))
+}
+
 func TestRouteHealthStateMachineUsesEpochAndCooldown(t *testing.T) {
 	now := time.Unix(1000, 0)
 	policy := RouteHealthPolicy{FailureThreshold: 2, Cooldown: 10 * time.Second}
@@ -88,6 +100,16 @@ func TestParseRetryAfterAndDeadlineClipping(t *testing.T) {
 		})
 	}
 	assert.Equal(t, 100*time.Millisecond, RouteBackoff(0, 3*time.Second, 100*time.Millisecond, 0))
+}
+
+func TestRetryAfterOpensSharedChannelCooldownBeforeFailureThreshold(t *testing.T) {
+	now := time.Unix(1000, 0)
+	health := model.ChannelHealth{ChannelID: 5, Model: "gpt-5", KeyScope: ""}
+	health = ObserveRouteHealthFailureWithRetryAfter(health, RouteHealthPolicy{FailureThreshold: 3, Cooldown: 10 * time.Second}, now, 120*time.Second)
+
+	assert.Equal(t, model.RouteHealthStateOpen, health.State)
+	assert.Equal(t, int64(1120), health.CooldownUntil)
+	assert.False(t, CanUseRouteHealth(health, now.Add(time.Second)))
 }
 
 func TestRouteHealthMetricsAndKeyScopeAreSeparated(t *testing.T) {

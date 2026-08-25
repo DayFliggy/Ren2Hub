@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -107,4 +108,30 @@ func TestListEligibleRouteChannelsReportsOnlyActiveCapabilitySnapshot(t *testing
 	assert.Zero(t, byID[activeChannelID].FilterReason)
 	assert.Zero(t, byID[snapshotlessChannelID].SnapshotVersion)
 	assert.Equal(t, service.ShadowFilterSnapshotUnavailable, byID[snapshotlessChannelID].FilterReason)
+}
+
+func TestUpdateChannelRoutePolicyRejectsQueryBodyModelMismatch(t *testing.T) {
+	previousDB := model.DB
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelRoutePolicy{}))
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = previousDB
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.Create(&model.Channel{Id: 4201, Name: "route-policy-test", Key: "redacted-test-key", Status: common.ChannelStatusEnabled}).Error)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Params = gin.Params{{Key: "id", Value: "4201"}}
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/channel/4201/route-policy?model=gpt-test", strings.NewReader(`{"canonical_model":"claude-test","enabled":true,"max_channel_concurrency":1}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	UpdateChannelRoutePolicy(c)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"code":"MODEL_MISMATCH"`)
 }

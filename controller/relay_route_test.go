@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -38,6 +39,21 @@ func TestLiveRoutePriceRatioAllowedOnlyUsesManualPolicy(t *testing.T) {
 		MaxRatio: 1,
 	})
 	assert.True(t, liveRoutePriceRatioAllowed(ctx, 2))
+}
+
+func TestRelayResponseCommittedDoesNotTreatUnparsedFirstFrameAsOutput(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	info := &relaycommon.RelayInfo{StartTime: time.Now().Add(-time.Second)}
+	info.SetFirstResponseTime()
+
+	assert.False(t, relayResponseCommitted(c, info))
+	info.MarkValidOutput()
+	assert.True(t, relayResponseCommitted(c, info))
+
+	info = &relaycommon.RelayInfo{StartTime: time.Now().Add(-time.Second)}
+	_, _ = c.Writer.Write([]byte("response"))
+	assert.True(t, relayResponseCommitted(c, info))
 }
 
 func TestLiveRouteFailoverAttemptCountsChannelChangesOnly(t *testing.T) {
@@ -332,4 +348,16 @@ func TestReleaseRouteAttemptLeaseRecordsRenewalFailure(t *testing.T) {
 	updated := updatedValue.(service.LiveRouteSelection)
 	assert.Equal(t, service.RouteLeaseStateRenewalFailed, updated.Decision.Candidates[0].LeaseState)
 	assert.True(t, c.GetBool(liveRouteRenewalFailedKey))
+}
+
+func TestLiveRouteRenewalFailureIsAdmissionError(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set("route_live_renewal", service.RouteLeaseRenewal{
+		Failure: func() error { return service.ErrRouteLeaseUnavailable },
+	})
+
+	assert.True(t, liveRouteRenewalFailed(c))
+	classification := service.ClassifyRouteError(http.StatusServiceUnavailable, service.RouteLeaseFailureCode, service.ErrRouteLeaseUnavailable.Error(), false)
+	assert.Equal(t, service.RouteErrorAdmission, classification.Class)
+	assert.False(t, classification.Failoverable)
 }

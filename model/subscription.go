@@ -1423,24 +1423,31 @@ func RefundSubscriptionPreConsume(requestId string) error {
 		return errors.New("requestId is empty")
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
-		var record SubscriptionPreConsumeRecord
-		if err := lockForUpdate(tx).
-			Where("request_id = ?", requestId).First(&record).Error; err != nil {
-			return err
-		}
-		if record.Status == "refunded" {
-			return nil
-		}
-		if record.PreConsumed <= 0 {
-			record.Status = "refunded"
-			return tx.Save(&record).Error
-		}
-		if err := PostConsumeUserSubscriptionDelta(record.UserSubscriptionId, -record.PreConsumed); err != nil {
-			return err
-		}
+		return refundSubscriptionPreConsumeTx(tx, requestId)
+	})
+}
+
+func refundSubscriptionPreConsumeTx(tx *gorm.DB, requestId string) error {
+	if tx == nil {
+		return errors.New("subscription refund transaction is unavailable")
+	}
+	var record SubscriptionPreConsumeRecord
+	if err := lockForUpdate(tx).
+		Where("request_id = ?", requestId).First(&record).Error; err != nil {
+		return err
+	}
+	if record.Status == "refunded" {
+		return nil
+	}
+	if record.PreConsumed <= 0 {
 		record.Status = "refunded"
 		return tx.Save(&record).Error
-	})
+	}
+	if err := postConsumeUserSubscriptionDeltaTx(tx, record.UserSubscriptionId, -record.PreConsumed); err != nil {
+		return err
+	}
+	record.Status = "refunded"
+	return tx.Save(&record).Error
 }
 
 // ResetDueSubscriptions resets subscriptions whose next_reset_time has passed.

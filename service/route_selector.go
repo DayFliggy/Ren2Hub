@@ -101,38 +101,56 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 			result.Candidates = append(result.Candidates, byID[item.ChannelID])
 		}
 	} else {
-		scored := make([]RouteScoreCandidate, 0, len(eligible))
+		staticCandidates := make([]RouteScoreCandidate, 0, len(eligible))
 		byID := make(map[int]RouteSelectionCandidate, len(eligible))
 		for _, candidate := range eligible {
-			scored = append(scored, RouteScoreCandidate{
+			staticCandidates = append(staticCandidates, RouteScoreCandidate{
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
 				Position: candidate.Position, Weight: candidate.Weight,
-				ErrorRate: candidate.ErrorRate, ErrorRateKnown: candidate.ErrorRateKnown,
-				LatencyMS: candidate.LatencyMS, LatencyKnown: candidate.LatencyKnown,
-				TTFTMS: candidate.TTFTMS, TTFTKnown: candidate.TTFTKnown,
-				RateLimitHeadroom: candidate.RateLimitHeadroom,
-				RateLimitKnown:    candidate.RateLimitKnown,
-				QuotaHeadroom:     candidate.QuotaHeadroom,
-				QuotaKnown:        candidate.QuotaKnown,
-				Sticky:            candidate.Sticky, HealthUsable: candidate.HealthUsable,
+				HealthUsable: candidate.HealthUsable,
 			})
 			byID[candidate.ChannelID] = candidate
 		}
-		scoredCandidates := ScoreRouteCandidates(scored)
-		staticCandidates := StaticPriorityLayer(scored)
-		result.Decision.ScoringMode = "shadow"
+		staticCandidates = StaticPriorityLayer(staticCandidates)
+		orderedCandidates := make([]ScoredRouteCandidate, 0, len(staticCandidates))
+		for _, candidate := range staticCandidates {
+			orderedCandidates = append(orderedCandidates, ScoredRouteCandidate{Candidate: candidate})
+		}
+		result.Decision.ScoringMode = "off"
 		if len(staticCandidates) > 0 {
 			result.Decision.StaticPreferredChannelID = staticCandidates[0].ChannelID
 		}
-		if len(scoredCandidates) > 0 {
-			result.Decision.ScoredPreferredChannelID = scoredCandidates[0].Candidate.ChannelID
-		}
-		orderedCandidates := scoredCandidates
-		if !input.DynamicScoringEnabled {
-			orderedCandidates = scoredCandidatesInStaticOrder(staticCandidates, scoredCandidates)
+		if input.DynamicScoringEnabled || RouteScoreShadowEnabled() {
+			scored := make([]RouteScoreCandidate, 0, len(eligible))
+			for _, candidate := range eligible {
+				scored = append(scored, RouteScoreCandidate{
+					ChannelID: candidate.ChannelID, Priority: candidate.Priority,
+					Position: candidate.Position, Weight: candidate.Weight,
+					ErrorRate: candidate.ErrorRate, ErrorRateKnown: candidate.ErrorRateKnown,
+					LatencyMS: candidate.LatencyMS, LatencyKnown: candidate.LatencyKnown,
+					TTFTMS: candidate.TTFTMS, TTFTKnown: candidate.TTFTKnown,
+					RateLimitHeadroom: candidate.RateLimitHeadroom,
+					RateLimitKnown:    candidate.RateLimitKnown,
+					QuotaHeadroom:     candidate.QuotaHeadroom,
+					QuotaKnown:        candidate.QuotaKnown,
+					Sticky:            candidate.Sticky, HealthUsable: candidate.HealthUsable,
+				})
+			}
+			scoredCandidates := ScoreRouteCandidates(scored)
+			if len(scoredCandidates) > 0 {
+				result.Decision.ScoredPreferredChannelID = scoredCandidates[0].Candidate.ChannelID
+			}
+			if input.DynamicScoringEnabled {
+				result.Decision.ScoringMode = "live"
+				result.Decision.DynamicScoreApplied = true
+				orderedCandidates = scoredCandidates
+			} else {
+				result.Decision.ScoringMode = "shadow"
+				orderedCandidates = scoredCandidatesInStaticOrder(staticCandidates, scoredCandidates)
+			}
+			appendRouteDecisionCandidatesWithScores(&result.Decision, candidates, scoredCandidates)
 		} else {
-			result.Decision.ScoringMode = "live"
-			result.Decision.DynamicScoreApplied = true
+			appendRouteDecisionCandidates(&result.Decision, candidates)
 		}
 		limit := normalizedRouteTopK(input.TopK)
 		if len(orderedCandidates) > limit {
@@ -142,7 +160,6 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 			candidate := byID[scoredCandidate.Candidate.ChannelID]
 			result.Candidates = append(result.Candidates, candidate)
 		}
-		appendRouteDecisionCandidatesWithScores(&result.Decision, candidates, scoredCandidates)
 	}
 
 	if len(result.Candidates) == 0 {

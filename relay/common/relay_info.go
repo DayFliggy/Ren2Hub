@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -99,6 +100,7 @@ type RelayInfo struct {
 	TokenUnlimited    bool
 	StartTime         time.Time
 	FirstResponseTime time.Time
+	validOutput       atomic.Bool
 	isFirstResponse   bool
 	//SendLastReasoningResponse bool
 	IsStream               bool
@@ -900,6 +902,19 @@ func (info *RelayInfo) SetFirstResponseTime() {
 
 func (info *RelayInfo) HasSendResponse() bool {
 	return info.FirstResponseTime.After(info.StartTime)
+}
+
+// MarkValidOutput is set only after a stream adapter accepts a payload. It is
+// separate from FirstResponseTime because the latter is also used when an SSE
+// frame or websocket message is first observed, before parsing succeeds.
+func (info *RelayInfo) MarkValidOutput() {
+	if info != nil {
+		info.validOutput.Store(true)
+	}
+}
+
+func (info *RelayInfo) HasValidOutput() bool {
+	return info != nil && info.validOutput.Load()
 }
 
 type TaskRelayInfo struct {

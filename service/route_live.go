@@ -308,6 +308,32 @@ type RouteLiveRetryPolicy struct {
 	MaxFailoverAttempts     int
 }
 
+func (policy RouteLiveRetryPolicy) Budget() RouteRetryBudget {
+	if policy.Mode == "" {
+		return DefaultRouteRetryBudget()
+	}
+	sameChannel := policy.MaxSameResourceAttempts
+	if sameChannel < 0 {
+		sameChannel = 0
+	}
+	if sameChannel > DefaultSameChannelAttempts {
+		sameChannel = DefaultSameChannelAttempts
+	}
+	failover := policy.MaxFailoverAttempts
+	if failover < 0 {
+		failover = 0
+	}
+	if failover > DefaultFailoverAttempts {
+		failover = DefaultFailoverAttempts
+	}
+	return RouteRetryBudget{
+		SameKeyAttempts:     DefaultSameKeyAttempts,
+		SameChannelAttempts: sameChannel,
+		FailoverAttempts:    failover,
+		TotalAttempts:       DefaultTotalAttempts,
+	}
+}
+
 func (selection LiveRouteSelection) AllowsPriceRatio(actualRatio float64) bool {
 	if selection.Source != RouteSourceManual || selection.MaxRatio <= 0 {
 		return true
@@ -336,7 +362,7 @@ func (selection LiveRouteSelection) CandidateAtOrAfter(attempt int) (RouteDecisi
 }
 
 func (selection LiveRouteSelection) NextCandidateForError(currentAttempt, currentChannelID int, class RouteErrorClassification, counters RouteRetryCounters) (RouteDecisionCandidate, int, bool) {
-	budget := DefaultRouteRetryBudget()
+	budget := selection.Retry.Budget()
 	for index := currentAttempt + 1; index < len(selection.Attempts); index++ {
 		candidate := selection.Attempts[index]
 		if candidate.FilterReason != "" {
@@ -490,6 +516,11 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 	})
 	selection.Decision = result.Decision
 	selection.Attempts = selectedRouteAttemptCandidates(result)
+	selection.Retry = RouteLiveRetryPolicy{
+		Mode:                    "auto",
+		MaxSameResourceAttempts: DefaultSameChannelAttempts,
+		MaxFailoverAttempts:     DefaultFailoverAttempts,
+	}
 	if selectErr != nil {
 		return selection, selectErr
 	}
@@ -627,6 +658,16 @@ func applyLiveHealth(ctx context.Context, requestModel string, candidates []Rout
 		candidates[index].LatencyKnown = metrics.LatencyKnown
 		candidates[index].TTFTMS = metrics.TTFTMS
 		candidates[index].TTFTKnown = metrics.TTFTKnown
+		if RouteScoreLiveEnabled() {
+			runtimeMetrics, runtimeErr := LoadRouteScoreRuntimeMetrics(ctx, candidates[index].ChannelID, requestModel)
+			if runtimeErr != nil {
+				return runtimeErr
+			}
+			candidates[index].RateLimitHeadroom = runtimeMetrics.RateLimitHeadroom
+			candidates[index].RateLimitKnown = runtimeMetrics.RateLimitKnown
+			candidates[index].QuotaHeadroom = runtimeMetrics.QuotaHeadroom
+			candidates[index].QuotaKnown = runtimeMetrics.QuotaKnown
+		}
 	}
 	return nil
 }

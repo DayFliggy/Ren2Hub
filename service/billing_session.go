@@ -1,11 +1,13 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -14,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // ---------------------------------------------------------------------------
@@ -25,6 +28,7 @@ import (
 type BillingSession struct {
 	relayInfo        *relaycommon.RelayInfo
 	funding          FundingSource
+	recoveryID       string
 	preConsumedQuota int  // 实际预扣额度（信任用户可能为 0）
 	tokenConsumed    int  // 令牌额度实际扣减量
 	extraReserved    int  // 发送前补充预扣的额度（订阅退款时需要单独回滚）
@@ -37,6 +41,9 @@ type BillingSession struct {
 	tokenRefunded    bool
 	refundInProgress bool
 	refundErr        error
+	recoveryStop     chan struct{}
+	recoveryDone     chan struct{}
+	recoveryStopOnce sync.Once
 	mu               sync.Mutex
 }
 
@@ -50,13 +57,39 @@ func (s *BillingSession) Settle(actualQuota int) error {
 		return nil
 	}
 	delta := actualQuota - s.preConsumedQuota
+	if s.recoveryID != "" {
+		if err := model.UpdateBillingRecoverySettlement(s.recoveryID, int64(delta)); err != nil {
+			return err
+		}
+	}
 	if delta == 0 {
+		if s.recoveryID != "" {
+			if err := model.ApplyBillingRecoveryAdjustment(s.recoveryID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationSettle); err != nil {
+				return err
+			}
+			if err := model.ApplyBillingRecoveryAdjustment(s.recoveryID, model.BillingRecoveryComponentToken, model.BillingRecoveryOperationSettle); err != nil {
+				return err
+			}
+		}
 		s.settled = true
+		if s.recoveryID != "" {
+			if err := model.MarkBillingRecoverySettled(s.recoveryID); err != nil {
+				s.settled = false
+				return err
+			}
+		}
+		s.stopRecoveryHeartbeat()
 		return nil
 	}
 	// 1) 调整资金来源（仅在尚未提交时执行，防止重复调用）
 	if !s.fundingSettled {
-		if err := s.funding.Settle(delta); err != nil {
+		var err error
+		if s.recoveryID != "" {
+			err = model.ApplyBillingRecoveryAdjustment(s.recoveryID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationSettle)
+		} else {
+			err = s.funding.Settle(delta)
+		}
+		if err != nil {
 			return err
 		}
 		s.fundingSettled = true
@@ -64,7 +97,9 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	// 2) 调整令牌额度。资金结算成功后保留 fundingSettled=true；令牌
 	// 调整失败时不标记整个会话 settled，后续结算调用可以只重试令牌部分。
 	var tokenErr error
-	if !s.relayInfo.IsPlayground {
+	if s.recoveryID != "" {
+		tokenErr = model.ApplyBillingRecoveryAdjustment(s.recoveryID, model.BillingRecoveryComponentToken, model.BillingRecoveryOperationSettle)
+	} else if !s.relayInfo.IsPlayground {
 		if delta > 0 {
 			tokenErr = model.DecreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
 		} else {
@@ -81,6 +116,13 @@ func (s *BillingSession) Settle(actualQuota int) error {
 		s.relayInfo.SubscriptionPostDelta += int64(delta)
 	}
 	s.settled = true
+	if s.recoveryID != "" {
+		if err := model.MarkBillingRecoverySettled(s.recoveryID); err != nil {
+			s.settled = false
+			return err
+		}
+	}
+	s.stopRecoveryHeartbeat()
 	return nil
 }
 
@@ -99,6 +141,7 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	extraRefunded := s.extraRefunded
 	tokenRefunded := s.tokenRefunded
 	s.mu.Unlock()
+	s.stopRecoveryHeartbeat()
 
 	logger.LogInfo(c, fmt.Sprintf("用户 %d 请求失败, 返还预扣费（token_quota=%s, funding=%s）",
 		s.relayInfo.UserId,
@@ -114,22 +157,45 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	subscriptionId := s.relayInfo.SubscriptionId
 	funding := s.funding
 	var refundErr error
+	if s.recoveryID != "" {
+		if err := model.MarkBillingRecoveryRefundPending(s.recoveryID, nil); err != nil {
+			refundErr = fmt.Errorf("mark billing recovery pending: %w", err)
+		}
+	}
 	if !fundingRefunded && !fundingSettled {
-		if err := funding.Refund(); err != nil {
+		var err error
+		if refundErr == nil && s.recoveryID != "" {
+			err = model.ApplyBillingRecoveryAdjustment(s.recoveryID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationRefund)
+		} else if refundErr == nil {
+			err = funding.Refund()
+		}
+		if err != nil {
 			refundErr = fmt.Errorf("refund billing source: %w", err)
 		} else {
 			fundingRefunded = true
 		}
 	}
 	if refundErr == nil && !extraRefunded && extraReserved > 0 && funding.Source() == BillingSourceSubscription && subscriptionId > 0 {
-		if err := model.PostConsumeUserSubscriptionDelta(subscriptionId, -int64(extraReserved)); err != nil {
+		var err error
+		if s.recoveryID != "" {
+			err = model.ApplyBillingRecoveryAdjustment(s.recoveryID, model.BillingRecoveryComponentExtra, model.BillingRecoveryOperationRefund)
+		} else {
+			err = model.PostConsumeUserSubscriptionDelta(subscriptionId, -int64(extraReserved))
+		}
+		if err != nil {
 			refundErr = fmt.Errorf("refund subscription extra reserve: %w", err)
 		} else {
 			extraRefunded = true
 		}
 	}
 	if refundErr == nil && !tokenRefunded && tokenConsumed > 0 && !isPlayground {
-		if err := model.IncreaseTokenQuota(tokenId, tokenKey, tokenConsumed); err != nil {
+		var err error
+		if s.recoveryID != "" {
+			err = model.ApplyBillingRecoveryAdjustment(s.recoveryID, model.BillingRecoveryComponentToken, model.BillingRecoveryOperationRefund)
+		} else {
+			err = model.IncreaseTokenQuota(tokenId, tokenKey, tokenConsumed)
+		}
+		if err != nil {
 			refundErr = fmt.Errorf("refund token quota: %w", err)
 		} else {
 			tokenRefunded = true
@@ -153,6 +219,20 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	s.mu.Unlock()
 	if refundErr != nil {
 		common.SysLog("billing refund remains pending: " + refundErr.Error())
+	} else {
+		s.mu.Lock()
+		recoveryComplete := s.recoveryID != "" && s.refundComponentsCompleteLocked(isPlayground, tokenConsumed)
+		s.mu.Unlock()
+		if !recoveryComplete {
+			return
+		}
+		if err := model.MarkBillingRecoveryRefunded(s.recoveryID, nil); err != nil {
+			common.SysLog("billing recovery completion remains pending: " + err.Error())
+			s.mu.Lock()
+			s.refundErr = err
+			s.relayInfo.BillingRefundError = err
+			s.mu.Unlock()
+		}
 	}
 }
 
@@ -224,7 +304,74 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 	s.tokenConsumed += delta
 	s.extraReserved += delta
 	s.syncRelayInfo()
+	if s.recoveryID != "" {
+		if err := s.syncRecovery(); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func (s *BillingSession) syncRecovery() error {
+	if s == nil || s.recoveryID == "" {
+		return nil
+	}
+	fundingAmount := int64(0)
+	if wallet, ok := s.funding.(*WalletFunding); ok {
+		fundingAmount = int64(wallet.consumed)
+	} else if subscription, ok := s.funding.(*SubscriptionFunding); ok {
+		fundingAmount = subscription.preConsumed
+	}
+	subscriptionID := s.relayInfo.SubscriptionId
+	if subscription, ok := s.funding.(*SubscriptionFunding); ok {
+		subscriptionID = subscription.subscriptionId
+	}
+	tokenAmount := int64(0)
+	if !s.relayInfo.IsPlayground {
+		tokenAmount = int64(s.tokenConsumed)
+	}
+	return model.UpdateBillingRecoveryAmounts(s.recoveryID, subscriptionID, fundingAmount, int64(s.extraReserved), tokenAmount)
+}
+
+func (s *BillingSession) startRecoveryHeartbeat(ctx context.Context) {
+	if s == nil || s.recoveryID == "" || s.recoveryStop != nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.recoveryStop = make(chan struct{})
+	s.recoveryDone = make(chan struct{})
+	stop := s.recoveryStop
+	done := s.recoveryDone
+	requestID := s.recoveryID
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(BillingRecoveryHeartbeatInterval())
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-stop:
+				return
+			case <-ticker.C:
+				if err := model.TouchBillingRecovery(requestID); err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+					common.SysLog("billing recovery heartbeat failed: " + err.Error())
+				}
+			}
+		}
+	}()
+}
+
+func (s *BillingSession) stopRecoveryHeartbeat() {
+	if s == nil || s.recoveryStop == nil {
+		return
+	}
+	s.recoveryStopOnce.Do(func() { close(s.recoveryStop) })
+	if s.recoveryDone != nil {
+		<-s.recoveryDone
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -407,6 +554,9 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	if relayInfo == nil {
 		return nil, types.NewError(fmt.Errorf("relayInfo is nil"), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
+	if strings.TrimSpace(relayInfo.RequestId) == "" {
+		relayInfo.RequestId = common.NewRequestId()
+	}
 
 	pref := common.NormalizeBillingPreference(relayInfo.UserSetting.BillingPreference)
 
@@ -431,12 +581,23 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		relayInfo.UserQuota = userQuota
 
 		session := &BillingSession{
-			relayInfo: relayInfo,
-			funding:   &WalletFunding{userId: relayInfo.UserId},
+			relayInfo:  relayInfo,
+			funding:    &WalletFunding{userId: relayInfo.UserId},
+			recoveryID: relayInfo.RequestId,
+		}
+		if err := ensureBillingRecovery(session); err != nil {
+			return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 		}
 		if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
+			_ = model.MarkBillingRecoveryRefunded(session.recoveryID, apiErr.Err)
 			return nil, apiErr
 		}
+		if err := session.syncRecovery(); err != nil {
+			_ = model.MarkBillingRecoveryRefundPending(session.recoveryID, err)
+			session.Refund(c)
+			return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
+		session.startRecoveryHeartbeat(billingRecoveryContext(c))
 		return session, nil
 	}
 
@@ -446,7 +607,8 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 			subConsume = 1
 		}
 		session := &BillingSession{
-			relayInfo: relayInfo,
+			relayInfo:  relayInfo,
+			recoveryID: relayInfo.RequestId,
 			funding: &SubscriptionFunding{
 				requestId: relayInfo.RequestId,
 				userId:    relayInfo.UserId,
@@ -454,11 +616,21 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 				amount:    subConsume,
 			},
 		}
+		if err := ensureBillingRecovery(session); err != nil {
+			return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
 		// 必须传 subConsume 而非 preConsumedQuota，保证 SubscriptionFunding.amount、
 		// preConsume 参数和 FinalPreConsumedQuota 三者一致，避免订阅多扣费。
 		if apiErr := session.preConsume(c, int(subConsume)); apiErr != nil {
+			_ = model.MarkBillingRecoveryRefunded(session.recoveryID, apiErr.Err)
 			return nil, apiErr
 		}
+		if err := session.syncRecovery(); err != nil {
+			_ = model.MarkBillingRecoveryRefundPending(session.recoveryID, err)
+			session.Refund(c)
+			return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
+		session.startRecoveryHeartbeat(billingRecoveryContext(c))
 		return session, nil
 	}
 
@@ -503,4 +675,24 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		}
 		return session, nil
 	}
+}
+
+func ensureBillingRecovery(session *BillingSession) error {
+	if session == nil || session.relayInfo == nil || session.recoveryID == "" || session.funding == nil {
+		return errors.New("billing recovery request identity is unavailable")
+	}
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID: session.recoveryID,
+		UserID:    session.relayInfo.UserId,
+		TokenID:   session.relayInfo.TokenId,
+		Source:    session.funding.Source(),
+	})
+	return err
+}
+
+func billingRecoveryContext(c *gin.Context) context.Context {
+	if c != nil && c.Request != nil && c.Request.Context() != nil {
+		return c.Request.Context()
+	}
+	return context.Background()
 }
