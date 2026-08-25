@@ -40,11 +40,19 @@ func ScoreRouteCandidates(candidates []RouteScoreCandidate) []ScoredRouteCandida
 	if len(candidates) == 0 {
 		return []ScoredRouteCandidate{}
 	}
-	priority := candidates[0].Priority
-	for _, candidate := range candidates[1:] {
-		if candidate.Priority > priority {
+	var priority int64
+	foundHealthyCandidate := false
+	for _, candidate := range candidates {
+		if !candidate.HealthUsable {
+			continue
+		}
+		if !foundHealthyCandidate || candidate.Priority > priority {
 			priority = candidate.Priority
 		}
+		foundHealthyCandidate = true
+	}
+	if !foundHealthyCandidate {
+		return []ScoredRouteCandidate{}
 	}
 	result := make([]ScoredRouteCandidate, 0, len(candidates))
 	maxWeight := 0

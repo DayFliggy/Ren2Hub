@@ -55,7 +55,8 @@ func TestSelectRouteShadowUsesStaticPriorityAndHardFilters(t *testing.T) {
 		RequestModel:  "gpt-5",
 		UserGroup:     "default",
 		EndpointType:  "openai",
-		PriceEligible: true, SecurityAllowed: true,
+		PriceEligible: true, PriceEligibilityKnown: true,
+		SecurityAllowed: true, SecurityEligibilityKnown: true,
 		Legacy: LegacySelectionTrace{SelectedChannelID: 1, PriorityLayers: map[int64][]int{20: {1}}},
 	})
 
@@ -65,6 +66,29 @@ func TestSelectRouteShadowUsesStaticPriorityAndHardFilters(t *testing.T) {
 	assert.Equal(t, 1, decision.FilterReasonCounts[ShadowFilterUnknownCapability])
 	assert.True(t, decision.HasUnauthorized)
 	assert.True(t, decision.HasUnknown)
+
+	deferred := SelectRouteShadow(RouteShadowRequest{
+		RequestModel: "gpt-5", UserGroup: "default", EndpointType: "openai",
+	})
+	assert.Equal(t, 1, deferred.ShadowPreferredID)
+	assert.True(t, deferred.RuntimeRecheckRequired)
+	assert.ElementsMatch(t, []string{"price_qualification", "security_policy"}, deferred.RuntimeRecheckReasons)
+	assert.False(t, deferred.PriceEligibilityKnown)
+	assert.False(t, deferred.SecurityEligibilityKnown)
+
+	priceDenied := SelectRouteShadow(RouteShadowRequest{
+		RequestModel: "gpt-5", UserGroup: "default", EndpointType: "openai",
+		PriceEligibilityKnown: true, SecurityEligibilityKnown: true, SecurityAllowed: true,
+	})
+	assert.Zero(t, priceDenied.ShadowPreferredID)
+	assert.Equal(t, 1, priceDenied.FilterReasonCounts[ShadowFilterPriceForbidden])
+
+	securityDenied := SelectRouteShadow(RouteShadowRequest{
+		RequestModel: "gpt-5", UserGroup: "default", EndpointType: "openai",
+		PriceEligibilityKnown: true, PriceEligible: true, SecurityEligibilityKnown: true,
+	})
+	assert.Zero(t, securityDenied.ShadowPreferredID)
+	assert.Equal(t, 1, securityDenied.FilterReasonCounts[ShadowFilterSecurityForbidden])
 }
 
 func TestSelectRouteShadowStableTieBreakAndPathFilter(t *testing.T) {

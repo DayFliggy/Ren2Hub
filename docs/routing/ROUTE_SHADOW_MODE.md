@@ -54,6 +54,8 @@ ROUTE_SHADOW_MODELS=gpt-5,claude-opus-5
 
 自动 Shadow 只按 `Channel.priority` 降序，同 priority 按 `channel_id` 升序。`weight` 仅记录，不参与选择；用户 position、health score、capacity 和并发租约不在本阶段生效。`unknown`、映射冲突和不支持的能力只能作为被过滤项，不能成为 Shadow 首选渠道。
 
+价格、额度和请求正文安全检查依赖实际请求期的计费与安全链路，Shadow 与配置 Preview 不会伪造其通过结果。决策会标记 `runtime_recheck_required` 及对应原因；只有调用方提供了明确资格结果时，静态过滤器才会以 `price_forbidden` 或 `security_forbidden` 排除候选。Guarded Live 在真实选择后仍执行完整计费和安全复检。
+
 ## 观测
 
 开启后会异步写入单行 JSON 事件 `route_shadow_decision`。事件只包含请求 ID、用户/Token ID、模型、Lab、版本、渠道 ID、过滤原因和差异原因，不包含 Key、Token 原文、Header Override、请求体或 Authorization。队列满时只丢弃观测事件，并增加丢弃计数，不影响请求。

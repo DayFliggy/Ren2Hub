@@ -40,12 +40,14 @@ func ReplayRouteShadowDecision(ctx context.Context, data []byte) (RouteShadowDec
 	if len(stored.ShadowCandidates) == 0 {
 		return RouteShadowDecision{}, ErrRouteShadowReplayInvalid
 	}
-	// Events written before the qualification snapshot was versioned cannot
-	// distinguish an omitted qualification from an explicit denial. Preserve
-	// their historical static replay behavior; versioned events keep false.
-	if stored.QualificationVersion == 0 {
+	// Events written before version 2 cannot distinguish an omitted
+	// qualification from an explicit denial. Preserve their historical static
+	// replay behavior; version 2 carries the explicit known flags.
+	if stored.QualificationVersion < RouteShadowQualificationVersion {
 		stored.PriceEligible = true
+		stored.PriceEligibilityKnown = true
 		stored.SecurityAllowed = true
+		stored.SecurityEligibilityKnown = true
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -95,21 +97,23 @@ func ReplayRouteShadowDecision(ctx context.Context, data []byte) (RouteShadowDec
 	}
 
 	request := RouteShadowRequest{
-		RequestID:              stored.RequestID,
-		UserID:                 stored.UserID,
-		TokenID:                stored.TokenID,
-		RequestModel:           stored.RequestModel,
-		NormalizedRequestModel: normalized,
-		RequestPath:            stored.RequestPath,
-		EndpointType:           stored.EndpointType,
-		UserGroup:              stored.UserGroup,
-		TokenModelLimitEnabled: stored.TokenModelLimitEnabled,
-		TokenModelLimit:        stored.TokenModelLimit,
-		EntitledChannels:       stored.EntitledChannels,
-		ChannelStatuses:        stored.ChannelStatuses,
-		PriceEligible:          stored.PriceEligible,
-		SecurityAllowed:        stored.SecurityAllowed,
-		Legacy:                 stored.LegacyTrace,
+		RequestID:                stored.RequestID,
+		UserID:                   stored.UserID,
+		TokenID:                  stored.TokenID,
+		RequestModel:             stored.RequestModel,
+		NormalizedRequestModel:   normalized,
+		RequestPath:              stored.RequestPath,
+		EndpointType:             stored.EndpointType,
+		UserGroup:                stored.UserGroup,
+		TokenModelLimitEnabled:   stored.TokenModelLimitEnabled,
+		TokenModelLimit:          stored.TokenModelLimit,
+		EntitledChannels:         stored.EntitledChannels,
+		ChannelStatuses:          stored.ChannelStatuses,
+		PriceEligible:            stored.PriceEligible,
+		PriceEligibilityKnown:    stored.PriceEligibilityKnown,
+		SecurityAllowed:          stored.SecurityAllowed,
+		SecurityEligibilityKnown: stored.SecurityEligibilityKnown,
+		Legacy:                   stored.LegacyTrace,
 	}
 	return selectRouteShadowWithIndex(request, index), nil
 }

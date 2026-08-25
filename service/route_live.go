@@ -21,16 +21,20 @@ var (
 // and distribution middleware. It intentionally does not carry credentials,
 // body content, or channel configuration.
 type LiveRouteRequest struct {
-	Context                context.Context
-	CapabilityEnabled      bool
-	RequestID              string
-	UserID                 int
-	TokenID                int
-	RequestModel           string
-	RequestPath            string
-	UserGroup              string
-	TokenModelLimitEnabled bool
-	TokenModelLimit        map[string]bool
+	Context                  context.Context
+	CapabilityEnabled        bool
+	RequestID                string
+	UserID                   int
+	TokenID                  int
+	RequestModel             string
+	RequestPath              string
+	UserGroup                string
+	TokenModelLimitEnabled   bool
+	TokenModelLimit          map[string]bool
+	PriceEligibilityKnown    bool
+	PriceEligible            bool
+	SecurityEligibilityKnown bool
+	SecurityAllowed          bool
 }
 
 type LiveRouteSelection struct {
@@ -159,18 +163,20 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 		return selection, err
 	}
 	shadow := SelectRouteShadow(RouteShadowRequest{
-		UserID:                 input.UserID,
-		TokenID:                input.TokenID,
-		RequestModel:           input.RequestModel,
-		NormalizedRequestModel: modellab.NormalizeModel(input.RequestModel),
-		RequestPath:            input.RequestPath,
-		EndpointType:           endpointTypeForRequestPath(input.RequestPath),
-		UserGroup:              input.UserGroup,
-		TokenModelLimitEnabled: input.TokenModelLimitEnabled,
-		TokenModelLimit:        input.TokenModelLimit,
-		EntitledChannels:       entitlements,
-		PriceEligible:          true,
-		SecurityAllowed:        true,
+		UserID:                   input.UserID,
+		TokenID:                  input.TokenID,
+		RequestModel:             input.RequestModel,
+		NormalizedRequestModel:   modellab.NormalizeModel(input.RequestModel),
+		RequestPath:              input.RequestPath,
+		EndpointType:             endpointTypeForRequestPath(input.RequestPath),
+		UserGroup:                input.UserGroup,
+		TokenModelLimitEnabled:   input.TokenModelLimitEnabled,
+		TokenModelLimit:          input.TokenModelLimit,
+		EntitledChannels:         entitlements,
+		PriceEligible:            input.PriceEligible,
+		PriceEligibilityKnown:    input.PriceEligibilityKnown,
+		SecurityAllowed:          input.SecurityAllowed,
+		SecurityEligibilityKnown: input.SecurityEligibilityKnown,
 	})
 	statuses, err := liveRouteChannelStatuses(input.Context, shadow.ShadowCandidates)
 	if err != nil {
