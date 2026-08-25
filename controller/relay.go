@@ -85,7 +85,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	defer func() {
 		releaseRouteAttemptLease(c)
 		finalizeLiveRouteDecision(c, relayInfo, newAPIError)
-		if newAPIError != nil {
+		if newAPIError != nil && (relayInfo == nil || !relayInfo.HasSendResponse()) {
 			middleware.MarkRelayRequestFailed(c)
 			return
 		}
@@ -108,7 +108,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 
 	defer func() {
-		if newAPIError != nil {
+		if newAPIError != nil && (relayInfo == nil || !relayInfo.HasSendResponse()) {
 			logger.LogError(c, fmt.Sprintf("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
 			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
 			switch relayFormat {
@@ -320,6 +320,16 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		if newAPIError == nil {
+			if relayInfo.BillingSettlementError != nil {
+				// The upstream response may already be committed. Never emit a
+				// second protocol response or retry another provider after that
+				// boundary; retain the error on RelayInfo for recovery/observability.
+				logger.LogError(c, "billing settlement remains pending: "+relayInfo.BillingSettlementError.Error())
+				if !relayInfo.HasSendResponse() {
+					newAPIError = types.NewError(relayInfo.BillingSettlementError, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+				}
+				break
+			}
 			if routeLiveSelectionActive(c) {
 				latencyMS := time.Since(attemptStartedAt).Milliseconds()
 				ttftMS := int64(0)
@@ -1313,8 +1323,17 @@ func RelayTask(c *gin.Context) {
 	if taskErr == nil {
 		if settleErr := service.SettleBilling(c, relayInfo, result.Quota); settleErr != nil {
 			common.SysError("settle task billing error: " + settleErr.Error())
+			taskErr = service.TaskErrorWrapperLocal(settleErr, "settle_billing_failed", http.StatusInternalServerError)
+		} else {
+			service.LogTaskConsumption(c, relayInfo)
 		}
-		service.LogTaskConsumption(c, relayInfo)
+
+		if taskErr != nil {
+			// Billing is not committed, so the deferred failure path retains the
+			// reservation for refund/recovery and no successful task is inserted.
+			respondTaskError(c, taskErr)
+			return
+		}
 
 		task := model.InitTask(result.Platform, relayInfo)
 		task.PrivateData.UpstreamTaskID = result.UpstreamTaskID

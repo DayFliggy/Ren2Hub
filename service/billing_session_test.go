@@ -19,6 +19,37 @@ type recordingBillingFunding struct {
 	refundOnce   sync.Once
 }
 
+type retryableBillingFunding struct {
+	mu          sync.Mutex
+	settleCalls int
+	refundCalls int
+	settleFails int
+	refundFails int
+}
+
+func (f *retryableBillingFunding) Source() string       { return BillingSourceWallet }
+func (f *retryableBillingFunding) PreConsume(int) error { return nil }
+func (f *retryableBillingFunding) Settle(int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.settleCalls++
+	if f.settleFails > 0 {
+		f.settleFails--
+		return assert.AnError
+	}
+	return nil
+}
+func (f *retryableBillingFunding) Refund() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.refundCalls++
+	if f.refundFails > 0 {
+		f.refundFails--
+		return assert.AnError
+	}
+	return nil
+}
+
 func (f *recordingBillingFunding) Source() string { return BillingSourceWallet }
 
 func (f *recordingBillingFunding) PreConsume(int) error { return nil }
@@ -87,4 +118,38 @@ func TestBillingSessionRefundIsIssuedOnceAfterFinalFailure(t *testing.T) {
 		return refunds == 1
 	}, time.Second, 10*time.Millisecond)
 	assert.False(t, session.NeedsRefund())
+}
+
+func TestBillingSessionSettlementFailureCanBeRetriedWithoutRepeatingFunding(t *testing.T) {
+	funding := &retryableBillingFunding{settleFails: 1}
+	session := &BillingSession{
+		relayInfo:        &relaycommon.RelayInfo{IsPlayground: true},
+		funding:          funding,
+		preConsumedQuota: 100,
+	}
+	assert.Error(t, session.Settle(140))
+	assert.False(t, session.settled)
+	assert.NoError(t, session.Settle(140))
+	assert.True(t, session.settled)
+	funding.mu.Lock()
+	assert.Equal(t, 2, funding.settleCalls)
+	funding.mu.Unlock()
+}
+
+func TestBillingSessionRefundRetriesOnlyPendingComponents(t *testing.T) {
+	funding := &retryableBillingFunding{refundFails: 1}
+	session := &BillingSession{
+		relayInfo:        &relaycommon.RelayInfo{IsPlayground: true},
+		funding:          funding,
+		preConsumedQuota: 100,
+		tokenConsumed:    100,
+	}
+	ctx, _ := gin.CreateTestContext(nil)
+	session.Refund(ctx)
+	assert.True(t, session.NeedsRefund())
+	session.Refund(ctx)
+	assert.False(t, session.NeedsRefund())
+	funding.mu.Lock()
+	assert.Equal(t, 2, funding.refundCalls)
+	funding.mu.Unlock()
 }
