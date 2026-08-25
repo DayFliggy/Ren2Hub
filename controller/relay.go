@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -324,6 +325,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		if !shouldRetry(c, newAPIError, relayRetryLimit(c)-retryParam.GetRetry()) {
+			break
+		}
+		if !waitForLiveRouteBackoff(c, retryParam.GetRetry()) {
 			break
 		}
 		retryParam.IncreaseRetry()
@@ -744,6 +748,32 @@ func relayRetryLimit(c *gin.Context) int {
 		return service.DefaultTotalAttempts - 1
 	}
 	return common.RetryTimes
+}
+
+func waitForLiveRouteBackoff(c *gin.Context, attempt int) bool {
+	if !routeLiveSelectionActive(c) || c.Request == nil {
+		return true
+	}
+	ctx := c.Request.Context()
+	remaining := time.Duration(0)
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining = time.Until(deadline)
+		if remaining <= 0 {
+			return false
+		}
+	}
+	delay := service.RouteBackoff(attempt, 0, remaining, rand.Float64())
+	if delay <= 0 {
+		return true
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 func routeLiveSelectionActive(c *gin.Context) bool {
