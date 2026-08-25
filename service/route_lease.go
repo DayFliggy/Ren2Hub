@@ -22,6 +22,7 @@ const (
 	RouteLeaseStateAcquired      = "acquired"
 	RouteLeaseStateReleased      = "released"
 	RouteLeaseStateReleaseFailed = "release_failed"
+	RouteLeaseStateRenewalFailed = "renewal_failed"
 )
 
 const routeLeasePrefix = "route:lease:v1"

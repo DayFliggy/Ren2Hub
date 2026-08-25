@@ -805,6 +805,25 @@ func releaseRouteAttemptLease(c *gin.Context) {
 			if renewal.Done != nil {
 				<-renewal.Done
 			}
+			if renewal.Failure != nil && renewal.Failure() != nil {
+				channelID := c.GetInt("channel_id")
+				if leaseValue, exists := c.Get("route_live_lease"); exists {
+					if lease, valid := leaseValue.(service.RouteLease); valid {
+						channelID = lease.ChannelID
+					}
+				}
+				if channelID <= 0 {
+					if selectionValue, exists := c.Get("route_live_selection"); exists {
+						if selection, valid := selectionValue.(service.LiveRouteSelection); valid {
+							channelID = selection.Decision.SelectedChannelID
+							if channelID <= 0 && len(selection.Attempts) > 0 {
+								channelID = selection.Attempts[0].ChannelID
+							}
+						}
+					}
+				}
+				markLiveRouteAttempt(c, channelID, service.RouteLeaseStateRenewalFailed)
+			}
 		}
 		c.Set("route_live_renewal", nil)
 	}

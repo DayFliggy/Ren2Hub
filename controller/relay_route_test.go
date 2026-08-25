@@ -308,3 +308,28 @@ func TestReleaseRouteAttemptLeaseStopsRenewalAndRestoresParentContext(t *testing
 	assert.True(t, hasLease)
 	assert.Nil(t, c.MustGet("route_live_lease"))
 }
+
+func TestReleaseRouteAttemptLeaseRecordsRenewalFailure(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	selection := service.LiveRouteSelection{
+		Source: service.RouteSourceAutoLab,
+		Decision: service.RouteDecision{Candidates: []service.RouteDecisionCandidate{{
+			ChannelID: 31, LeaseState: service.RouteLeaseStateAcquired,
+		}}},
+		Attempts: []service.RouteDecisionCandidate{{ChannelID: 31}},
+	}
+	c.Set("route_live_selection", selection)
+	done := make(chan error)
+	close(done)
+	c.Set("route_live_renewal", service.RouteLeaseRenewal{
+		Done:    done,
+		Stop:    func() {},
+		Failure: func() error { return service.ErrRouteLeaseUnavailable },
+	})
+
+	releaseRouteAttemptLease(c)
+	updatedValue, ok := c.Get("route_live_selection")
+	require.True(t, ok)
+	updated := updatedValue.(service.LiveRouteSelection)
+	assert.Equal(t, service.RouteLeaseStateRenewalFailed, updated.Decision.Candidates[0].LeaseState)
+}
