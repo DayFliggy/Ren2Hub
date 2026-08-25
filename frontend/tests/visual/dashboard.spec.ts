@@ -377,11 +377,19 @@ test('all dashboard panels remain contained at compact width', async ({
 
   await page.getByRole('tab', { name: '自动路由', exact: true }).click()
   await waitForStablePage(page)
-  const vendorGroups = page.locator('[data-route-vendor]')
-  await expect(vendorGroups).toHaveCount(7)
-  const firstGroup = vendorGroups.first()
+  const routeGroups = page.locator('[data-route-group]')
+  await expect(routeGroups).toHaveCount(7)
+  const firstGroup = routeGroups.first()
+  await expect(firstGroup).toContainText('OpenAI')
+  await expect(firstGroup.locator('button[aria-expanded]')).toHaveAttribute(
+    'aria-expanded',
+    'false'
+  )
   await firstGroup.locator('button[aria-expanded]').click()
   await expect(firstGroup.locator('[data-route-channel]')).toHaveCount(7)
+  await expect(
+    firstGroup.locator('[data-route-channel]').first()
+  ).toContainText('OpenAI')
 
   await assertNoHorizontalOverflow(page)
   await assertInteractiveCentersVisible(page)

@@ -213,7 +213,7 @@ export default {
     autoRoute: {
       tabLabel: '自动路由',
       subtitle:
-        '按供应商分组，依延迟、健康度、倍率、额度等维度选出各组最优渠道',
+        '按实验室分组，依延迟、健康度、倍率、额度等维度选出各组最优渠道',
       refresh: '刷新',
       updated: '更新于 {time}',
       groupBest: '组内最优',

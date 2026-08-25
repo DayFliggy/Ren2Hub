@@ -213,7 +213,7 @@ export default {
     autoRoute: {
       tabLabel: 'Auto Route',
       subtitle:
-        'Channels are grouped by vendor; each group ranks its best channel by latency, health, cost, quota and more',
+        'Channels are grouped by model lab; each group ranks its best channel by latency, health, cost, quota and more',
       refresh: 'Refresh',
       updated: 'Updated {time}',
       groupBest: 'Group best',

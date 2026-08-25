@@ -16,7 +16,7 @@ onMounted(() => void load())
 
 <template>
   <div class="space-y-3 sm:space-y-4" data-auto-route-panel>
-    <!-- header card: explains the per-vendor optimum and hosts refresh -->
+    <!-- Header card: explains the per-lab optimum and hosts refresh. -->
     <div
       class="relative overflow-hidden rounded-xl border border-[var(--accent-soft)] bg-[var(--accent-soft)] px-4 py-3 sm:rounded-2xl"
     >
@@ -63,12 +63,14 @@ onMounted(() => void load())
       />
     </div>
 
-    <!-- vendor groups, each ranking its own optimum -->
+    <!-- Lab groups, each ranking its own optimum. -->
     <template v-else-if="vendorList.length">
       <VendorRouteGroup
         v-for="group in vendorList"
-        :key="group.vendor"
-        :vendor="group.vendor"
+        :key="group.groupSlug"
+        :group-slug="group.groupSlug"
+        :group-name="group.groupName"
+        :lab-matches="group.labMatches"
         :channels="group.channels"
         :active-count="group.activeCount"
         :monitor="group.monitor"

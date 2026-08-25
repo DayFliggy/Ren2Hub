@@ -3,7 +3,11 @@ import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from '@/api/console'
-import { buildVendorRouteList, useAutoRoute } from '@/composables/useAutoRoute'
+import {
+  buildRouteGroupList,
+  buildVendorRouteList,
+  useAutoRoute,
+} from '@/composables/useAutoRoute'
 import i18n from '@/i18n'
 import type { ChannelRoutingMetrics } from '@/utils/routeScore'
 
@@ -48,6 +52,31 @@ describe('buildVendorRouteList', () => {
     expect(unavailable.channels.every((item) => item.score === null)).toBe(true)
     expect(unavailable.monitor.state).toBe('down')
     expect(unavailable.monitor.availability).toBe(0)
+  })
+
+  it('groups by resolved lab and scores channels across suppliers', () => {
+    const groups = buildRouteGroupList([
+      channel(1, 'OpenAI', 1),
+      {
+        ...channel(2, 'Anthropic', 1),
+        lab_group_slug: 'shared',
+        lab_group_name: 'Shared Lab',
+        latency: 120,
+      },
+      {
+        ...channel(3, 'OpenAI', 1),
+        lab_group_slug: 'shared',
+        lab_group_name: 'Shared Lab',
+        latency: 900,
+      },
+    ])
+    const shared = groups.find((group) => group.groupSlug === 'shared')!
+
+    expect(shared.groupName).toBe('Shared Lab')
+    expect(shared.channels.map((item) => item.id)).toEqual([2, 3])
+    expect(shared.channels[0]!.score).toBeGreaterThan(
+      shared.channels[1]!.score!
+    )
   })
 
   it('loads the authenticated administrator routing contract', async () => {

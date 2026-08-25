@@ -4,6 +4,7 @@ import { CircleDollarSign, CircleOff, Crown, Timer } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
 import MiniRing from '@/components/console/dashboard/MiniRing.vue'
+import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import type { RouteChannelRow } from '@/composables/useAutoRoute'
 import { scoreBand, WEIGHTS } from '@/utils/routeScore'
 
@@ -92,11 +93,23 @@ const segments = computed(() => {
 
     <div class="min-w-0 flex-1 space-y-2">
       <div class="flex min-w-0 items-center justify-between gap-2">
-        <p
-          class="min-w-0 truncate text-sm font-medium text-[var(--text-primary)]"
-        >
-          {{ entry.name }}
-        </p>
+        <div class="flex min-w-0 items-center gap-1.5">
+          <VendorLogo :vendor="entry.supplier" :size="18" />
+          <div class="min-w-0">
+            <p
+              class="truncate text-sm font-medium text-[var(--text-primary)]"
+              :title="entry.name"
+            >
+              {{ entry.name }}
+            </p>
+            <p
+              class="truncate text-[10px] leading-tight text-[var(--text-tertiary)]"
+              :title="entry.supplier"
+            >
+              {{ entry.supplier }}
+            </p>
+          </div>
+        </div>
         <span class="flex shrink-0 items-center gap-2">
           <span
             class="flex items-center gap-1 text-[11px] tabular-nums text-[var(--text-tertiary)] sm:text-xs"

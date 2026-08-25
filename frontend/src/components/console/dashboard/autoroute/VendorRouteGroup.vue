@@ -5,20 +5,23 @@ import {
   CircleCheck,
   CircleHelp,
   CircleX,
+  Layers3,
   TriangleAlert,
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import ChannelScoreRow from './ChannelScoreRow.vue'
 import RouteHealthTimeline from './RouteHealthTimeline.vue'
 import type { RouteChannelRow } from '@/composables/useAutoRoute'
+import type { RouteLabMatch } from '@/utils/routeScore'
 import type { RouteHealthSummary } from '@/utils/routeHealth'
 import { scoreBand } from '@/utils/routeScore'
 
 const props = defineProps<{
-  vendor: string
+  groupSlug: string
+  groupName: string
+  labMatches: RouteLabMatch[]
   channels: RouteChannelRow[]
   activeCount: number
   monitor: RouteHealthSummary
@@ -57,7 +60,12 @@ const availabilityLabel = computed(() =>
 </script>
 
 <template>
-  <ConsoleCard :padded="false" data-route-vendor>
+  <ConsoleCard
+    :padded="false"
+    data-route-group
+    data-route-vendor
+    :data-route-group-slug="groupSlug"
+  >
     <div class="p-4 sm:p-5">
       <button
         type="button"
@@ -75,14 +83,18 @@ const availabilityLabel = computed(() =>
           >
             <component :is="stateMeta.icon" :size="17" aria-hidden="true" />
           </span>
-          <VendorLogo :vendor="vendor" :size="28" />
+          <span
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent-text)]"
+          >
+            <Layers3 :size="17" aria-hidden="true" />
+          </span>
         </span>
 
         <span class="min-w-0">
           <span
             class="block truncate text-sm font-semibold text-[var(--text-primary)]"
           >
-            {{ vendor }}
+            {{ groupName }}
           </span>
           <span
             class="mt-0.5 block truncate text-xs text-[var(--text-tertiary)]"
@@ -94,6 +106,18 @@ const availabilityLabel = computed(() =>
               })
             }}
             · {{ t(`dashboard.autoRoute.monitorState.${monitor.state}`) }}
+          </span>
+          <span
+            v-if="labMatches.length > 1"
+            class="mt-1 flex min-w-0 flex-wrap items-center gap-1"
+          >
+            <span
+              v-for="match in labMatches"
+              :key="match.slug"
+              class="max-w-full truncate rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--accent-text)]"
+            >
+              {{ match.name }}
+            </span>
           </span>
         </span>
 

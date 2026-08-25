@@ -3,7 +3,7 @@
  *
  * Each channel is evaluated on four persisted dimensions, each normalised to [0,1] within
  * the candidate set handed in by the caller, then combined into a single 0-100
- * score using fixed weights. The dashboard scores each vendor group separately,
+ * score using fixed weights. The dashboard scores each lab group separately,
  * so the result is an operational comparison of persisted channel metrics. It
  * does not attempt to reproduce the backend's group/model retry selector.
  *
@@ -20,6 +20,10 @@ export interface ChannelRoutingMetrics {
   id: number
   name: string
   supplier: string
+  /** Server-resolved channel-management group metadata. */
+  lab_group_slug?: string
+  lab_group_name?: string
+  lab_matches?: RouteLabMatch[]
   /** Average response latency in ms. 0 means untested — treated as worst case. */
   latency: number
   /** Upstream remaining balance (USD). */
@@ -32,6 +36,13 @@ export interface ChannelRoutingMetrics {
   status: 1 | 2 | 3
   /** Optional recent health history supplied by the routing API. */
   healthChecks?: RouteHealthCheck[]
+}
+
+export interface RouteLabMatch {
+  slug: string
+  name: string
+  confidence: number
+  source: string
 }
 
 export interface ScoreBreakdown {
@@ -127,7 +138,28 @@ export function scoreChannels(
     .sort((a, b) => b.score - a.score)
 }
 
-/** Group channels by supplier, preserving the input order inside each group. */
+/**
+ * Group channels by the same resolved lab key used by channel management.
+ * Older responses may not carry lab metadata, so supplier remains a stable
+ * compatibility fallback.
+ */
+export function groupByLabGroup<T extends ChannelRoutingMetrics>(
+  channels: T[]
+): Map<string, T[]> {
+  const map = new Map<string, T[]>()
+  for (const channel of channels) {
+    const key = channel.lab_group_slug || channel.supplier || 'unknown'
+    const existing = map.get(key)
+    if (existing) {
+      existing.push(channel)
+    } else {
+      map.set(key, [channel])
+    }
+  }
+  return map
+}
+
+/** Legacy supplier grouping retained for callers outside the dashboard. */
 export function groupByVendor<T extends { supplier: string }>(
   channels: T[]
 ): Map<string, T[]> {

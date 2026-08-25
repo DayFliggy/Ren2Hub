@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/modellab"
 	"github.com/gin-gonic/gin"
 )
 
@@ -94,14 +95,17 @@ type nextDashboardSystemStatus struct {
 }
 
 type nextAdminDashboardRoute struct {
-	ID       int     `json:"id"`
-	Name     string  `json:"name"`
-	Supplier string  `json:"supplier"`
-	Latency  int     `json:"latency"`
-	Quota    float64 `json:"quota"`
-	Weight   uint    `json:"weight"`
-	Priority int64   `json:"priority"`
-	Status   int     `json:"status"`
+	ID           int                 `json:"id"`
+	Name         string              `json:"name"`
+	Supplier     string              `json:"supplier"`
+	LabGroupSlug string              `json:"lab_group_slug"`
+	LabGroupName string              `json:"lab_group_name"`
+	LabMatches   []modellab.LabMatch `json:"lab_matches"`
+	Latency      int                 `json:"latency"`
+	Quota        float64             `json:"quota"`
+	Weight       uint                `json:"weight"`
+	Priority     int64               `json:"priority"`
+	Status       int                 `json:"status"`
 }
 
 func dashboardTimezoneOffset(c *gin.Context) (int, *time.Location, bool) {
@@ -360,7 +364,7 @@ func bytesToGBPointer(value uint64) *float64 {
 func NextGetAdminDashboardRoutes(c *gin.Context) {
 	channels := make([]model.Channel, 0)
 	if err := model.DB.Model(&model.Channel{}).
-		Select("id", "name", "type", "status", "weight", "priority", "response_time", "balance").
+		Select("id", "name", "type", "status", "weight", "priority", "response_time", "balance", "models", "model_mapping").
 		Order("priority DESC").Order("id ASC").Find(&channels).Error; err != nil {
 		common.ApiError(c, err)
 		return
@@ -375,10 +379,19 @@ func NextGetAdminDashboardRoutes(c *gin.Context) {
 		if channel.Weight != nil {
 			weight = *channel.Weight
 		}
+		labResolution := modellab.Resolve(channel.Models, channel.GetModelMapping())
 		routes = append(routes, nextAdminDashboardRoute{
-			ID: channel.Id, Name: channel.Name, Supplier: constant.GetChannelTypeName(channel.Type),
-			Latency: channel.ResponseTime, Quota: channel.Balance, Weight: weight,
-			Priority: priority, Status: channel.Status,
+			ID:           channel.Id,
+			Name:         channel.Name,
+			Supplier:     constant.GetChannelTypeName(channel.Type),
+			LabGroupSlug: labResolution.GroupSlug,
+			LabGroupName: labGroupName(labResolution),
+			LabMatches:   labResolution.Labs,
+			Latency:      channel.ResponseTime,
+			Quota:        channel.Balance,
+			Weight:       weight,
+			Priority:     priority,
+			Status:       channel.Status,
 		})
 	}
 	common.ApiSuccess(c, routes)

@@ -135,6 +135,11 @@ const VISUAL_ROUTE_CHANNELS = [
     id: index + 1,
     name: `OpenAI Route ${index + 1}`,
     supplier: 'OpenAI',
+    lab_group_slug: 'openai',
+    lab_group_name: 'OpenAI',
+    lab_matches: [
+      { slug: 'openai', name: 'OpenAI', confidence: 0.94, source: 'catalog' },
+    ],
     latency: 180 + index * 95,
     quota: 620 - index * 45,
     weight: 100 - index * 8,
@@ -146,6 +151,16 @@ const VISUAL_ROUTE_CHANNELS = [
       id: 20 + index,
       name: `${supplier} Route`,
       supplier,
+      lab_group_slug: supplier.toLowerCase().replace(/\s+/g, '-'),
+      lab_group_name: supplier,
+      lab_matches: [
+        {
+          slug: supplier.toLowerCase().replace(/\s+/g, '-'),
+          name: supplier,
+          confidence: 0.9,
+          source: 'catalog',
+        },
+      ],
       latency: 260 + index * 110,
       quota: 320 - index * 22,
       weight: 80 - index * 5,

@@ -271,7 +271,7 @@ func TestNextAdminDashboardRoutesExposeOnlyPersistedMetrics(t *testing.T) {
 	priority := int64(20)
 	weight := uint(30)
 	channel := model.Channel{
-		Name: "real-channel", Type: 1, Key: "secret", Status: common.ChannelStatusEnabled,
+		Name: "real-channel", Type: 1, Key: "secret", Models: "gpt-4.1", Status: common.ChannelStatusEnabled,
 		Priority: &priority, Weight: &weight, ResponseTime: 420, Balance: 12.5,
 	}
 	require.NoError(t, db.Create(&channel).Error)
@@ -285,6 +285,10 @@ func TestNextAdminDashboardRoutesExposeOnlyPersistedMetrics(t *testing.T) {
 	assert.InDelta(t, 12.5, routes[0].Quota, 0.001)
 	assert.Equal(t, weight, routes[0].Weight)
 	assert.Equal(t, priority, routes[0].Priority)
+	assert.Equal(t, "openai", routes[0].LabGroupSlug)
+	assert.Equal(t, "OpenAI", routes[0].LabGroupName)
+	require.Len(t, routes[0].LabMatches, 1)
+	assert.Equal(t, "openai", routes[0].LabMatches[0].Slug)
 
 	var raw nextTestResponse[[]map[string]interface{}]
 	recorder := performNextDashboardGet(t, "/api/next/admin/dashboard/routes", 99, common.RoleRootUser, NextGetAdminDashboardRoutes)
@@ -294,4 +298,29 @@ func TestNextAdminDashboardRoutesExposeOnlyPersistedMetrics(t *testing.T) {
 	assert.NotContains(t, raw.Data[0], "healthChecks")
 	assert.NotContains(t, raw.Data[0], "upstreamMult")
 	assert.NotContains(t, raw.Data[0], "channelMult")
+}
+
+func TestNextAdminDashboardRoutesExposeChannelManagementLabGroups(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.Channel{}))
+
+	channels := []model.Channel{
+		{Name: "openai-route", Type: 1, Key: "secret-1", Models: "openai/gpt-5", Status: common.ChannelStatusEnabled},
+		{Name: "mixed-route", Type: 1, Key: "secret-2", Models: "openai/gpt-5,anthropic/claude-opus-5", Status: common.ChannelStatusEnabled},
+		{Name: "unknown-route", Type: 1, Key: "secret-3", Models: "provider-specific", Status: common.ChannelStatusEnabled},
+	}
+	require.NoError(t, db.Create(&channels).Error)
+
+	routes := decodeNextResponse[[]nextAdminDashboardRoute](t, performNextDashboardGet(
+		t, "/api/next/admin/dashboard/routes", 99, common.RoleRootUser, NextGetAdminDashboardRoutes,
+	))
+	require.Len(t, routes, 3)
+	byName := make(map[string]nextAdminDashboardRoute, len(routes))
+	for _, route := range routes {
+		byName[route.Name] = route
+	}
+	assert.Equal(t, "openai", byName["openai-route"].LabGroupSlug)
+	assert.Equal(t, "mixed", byName["mixed-route"].LabGroupSlug)
+	assert.Equal(t, "unknown", byName["unknown-route"].LabGroupSlug)
+	assert.Equal(t, "Unknown / Provider-specific", byName["unknown-route"].LabGroupName)
 }

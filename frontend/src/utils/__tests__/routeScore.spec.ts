@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  groupByLabGroup,
   groupByVendor,
   scoreBand,
   scoreChannels,
@@ -124,5 +125,18 @@ describe('groupByVendor', () => {
     expect([...grouped.keys()].sort()).toEqual(['OpenAI', 'Other'])
     const openai = grouped.get('OpenAI')!
     expect(openai.map((c) => c.id)).toEqual([3, 1])
+  })
+})
+
+describe('groupByLabGroup', () => {
+  it('uses lab metadata and falls back to supplier for old responses', () => {
+    const grouped = groupByLabGroup([
+      makeChannel({ id: 1, supplier: 'OpenAI', lab_group_slug: 'shared' }),
+      makeChannel({ id: 2, supplier: 'Anthropic', lab_group_slug: 'shared' }),
+      makeChannel({ id: 3, supplier: '' }),
+    ])
+
+    expect([...grouped.keys()]).toEqual(['shared', 'unknown'])
+    expect(grouped.get('shared')!.map((channel) => channel.id)).toEqual([1, 2])
   })
 })

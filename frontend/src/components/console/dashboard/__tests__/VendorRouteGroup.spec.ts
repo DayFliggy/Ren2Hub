@@ -19,6 +19,8 @@ function makeChannel(
     id: 1,
     name: 'ch',
     supplier: 'OpenAI',
+    lab_group_slug: 'openai',
+    lab_group_name: 'OpenAI',
     latency: 300,
     quota: 100,
     weight: 10,
@@ -52,7 +54,9 @@ function render(
 ) {
   return mount(VendorRouteGroup, {
     props: {
-      vendor: 'OpenAI',
+      groupSlug: 'openai',
+      groupName: 'OpenAI',
+      labMatches: [],
       channels: overrides.channels ?? channels,
       activeCount: overrides.activeCount ?? channels.length,
       monitor: overrides.monitor ?? monitor,
@@ -66,6 +70,11 @@ describe('VendorRouteGroup', () => {
     const wrapper = render()
 
     expect(wrapper.attributes('data-route-vendor')).toBe('')
+    expect(wrapper.attributes('data-route-group')).toBe('')
+    expect(wrapper.text()).toContain('OpenAI')
+    expect(
+      wrapper.find('button[aria-expanded]').attributes('aria-expanded')
+    ).toBe('false')
     expect(wrapper.findAll('[data-route-health-cell]')).toHaveLength(6)
     expect(wrapper.text()).toContain('1h 100.00%')
     expect(wrapper.text()).toContain('Operational')
