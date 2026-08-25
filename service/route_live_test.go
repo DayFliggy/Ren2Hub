@@ -92,6 +92,23 @@ func TestSelectLiveTokenRouteMissingProfileKeepsLegacy(t *testing.T) {
 	assert.Empty(t, selection.Decision.SelectedChannelID)
 }
 
+func TestSelectLiveTokenRouteDisabledSkipsProfileLookup(t *testing.T) {
+	originalDB := model.DB
+	model.DB = nil
+	t.Cleanup(func() { model.DB = originalDB })
+
+	selection, err := SelectLiveTokenRoute(LiveRouteRequest{
+		CapabilityEnabled: false,
+		UserID:            1,
+		TokenID:           2,
+		RequestModel:      "gpt-test",
+		RequestPath:       "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, RouteSourceLegacy, selection.Source)
+	assert.Empty(t, selection.Decision.SelectedChannelID)
+}
+
 func TestSelectLiveTokenRouteFiltersOpenChannelModelHealth(t *testing.T) {
 	db := setupRouteProfileTest(t)
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
