@@ -688,6 +688,29 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 		_ = service.ReleaseConfiguredRouteLease(context.Background(), lease)
 		return err
 	}
+	if err := service.RecheckLiveRouteCandidate(service.LiveRouteCandidateQualificationRequest{
+		Context:                 c.Request.Context(),
+		RouteSource:             selection.Source,
+		UserID:                  info.UserId,
+		TokenID:                 info.TokenId,
+		ChannelID:               channel.Id,
+		RequestModel:            info.BillingModelName(),
+		RequestPath:             c.Request.URL.Path,
+		UserGroup:               info.UserGroup,
+		ExpectedSnapshotVersion: candidate.SnapshotVersion,
+		ExpectedCatalogVersion:  candidate.CatalogVersion,
+		ExpectedProfileVersion:  selection.Decision.ConfigurationVersion,
+	}); err != nil {
+		_ = service.ReleaseConfiguredRouteLease(context.Background(), lease)
+		if reason := service.LiveRouteQualificationReason(err); reason != "" {
+			markLiveRouteCandidateFiltered(c, channel.Id, reason)
+		}
+		return err
+	}
+	if setupErr := middleware.SetupContextForSelectedChannel(c, channel, info.BillingModelName()); setupErr != nil {
+		_ = service.ReleaseConfiguredRouteLease(context.Background(), lease)
+		return setupErr
+	}
 	c.Set("route_live_lease", lease)
 	markLiveRouteAttempt(c, channel.Id, service.RouteLeaseStateAcquired)
 	if info.IsStream {
@@ -749,10 +772,33 @@ func markLiveRouteAttempt(c *gin.Context, channelID int, state string) {
 		return
 	}
 	selection.Decision.SelectedChannelID = channelID
+	selection.Decision.LeaseState = state
 	for index := range selection.Decision.Candidates {
 		if selection.Decision.Candidates[index].ChannelID == channelID {
 			selection.Decision.Candidates[index].LeaseState = state
 		}
+	}
+	c.Set("route_live_selection", selection)
+}
+
+func markLiveRouteCandidateFiltered(c *gin.Context, channelID int, reason string) {
+	if c == nil || channelID <= 0 || reason == "" {
+		return
+	}
+	value, ok := c.Get("route_live_selection")
+	selection, valid := value.(service.LiveRouteSelection)
+	if !ok || !valid || selection.Source == service.RouteSourceLegacy {
+		return
+	}
+	for index := range selection.Decision.Candidates {
+		if selection.Decision.Candidates[index].ChannelID == channelID && selection.Decision.Candidates[index].FilterReason == "" {
+			selection.Decision.Candidates[index].FilterReason = reason
+			selection.Decision.Candidates[index].LeaseState = "qualification_failed"
+		}
+	}
+	if selection.Decision.SelectedChannelID == channelID {
+		selection.Decision.SelectedChannelID = 0
+		selection.Decision.LeaseState = "qualification_failed"
 	}
 	c.Set("route_live_selection", selection)
 }
@@ -832,13 +878,31 @@ func finalizeLiveRouteDecision(c *gin.Context, info *relaycommon.RelayInfo, apiE
 	}
 	if info != nil {
 		selection.Decision.RetryAttempt = info.RetryIndex
-		selection.Decision.FailoverAttempt = info.RetryIndex
+		selection.Decision.FailoverAttempt = liveRouteFailoverAttempt(selection, info.RetryIndex)
 	}
 	if apiErr != nil {
 		classification := service.ClassifyRouteError(apiErr.StatusCode, string(apiErr.GetErrorCode()), apiErr.Error(), info != nil && info.HasSendResponse())
 		selection.Decision.SetFinalError(classification.Class)
 	}
 	service.EnqueueRouteDecision(selection.Decision)
+}
+
+func liveRouteFailoverAttempt(selection service.LiveRouteSelection, attempt int) int {
+	if attempt <= 0 {
+		return 0
+	}
+	failovers := 0
+	previousChannelID := 0
+	for index, candidate := range selection.Attempts {
+		if index > attempt {
+			break
+		}
+		if previousChannelID != 0 && candidate.ChannelID != previousChannelID {
+			failovers++
+		}
+		previousChannelID = candidate.ChannelID
+	}
+	return failovers
 }
 
 func channelID(channel *model.Channel) int {

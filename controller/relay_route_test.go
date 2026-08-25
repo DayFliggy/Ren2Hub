@@ -26,3 +26,15 @@ func TestLiveRoutePriceRatioAllowedOnlyUsesManualPolicy(t *testing.T) {
 	})
 	assert.True(t, liveRoutePriceRatioAllowed(ctx, 2))
 }
+
+func TestLiveRouteFailoverAttemptCountsChannelChangesOnly(t *testing.T) {
+	selection := service.LiveRouteSelection{
+		Attempts: []service.RouteDecisionCandidate{
+			{ChannelID: 11}, {ChannelID: 11}, {ChannelID: 12}, {ChannelID: 13},
+		},
+	}
+	assert.Equal(t, 0, liveRouteFailoverAttempt(selection, 0))
+	assert.Equal(t, 0, liveRouteFailoverAttempt(selection, 1))
+	assert.Equal(t, 1, liveRouteFailoverAttempt(selection, 2))
+	assert.Equal(t, 2, liveRouteFailoverAttempt(selection, 3))
+}

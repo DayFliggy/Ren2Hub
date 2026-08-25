@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -133,6 +134,166 @@ func TestSelectLiveTokenRouteFiltersOpenChannelModelHealth(t *testing.T) {
 	assert.ErrorIs(t, err, ErrRouteSelectionUnavailable)
 	assert.Equal(t, created.Profile.Version, selection.Decision.ConfigurationVersion)
 	assert.Equal(t, RouteCandidateFilterHealthUnavailable, selection.Decision.Candidates[0].FilterReason)
+}
+
+func TestRecheckLiveRouteCandidateRejectsAbilityDisabledAfterSelection(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	_, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "live", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", channelID).Update("enabled", false).Error)
+
+	err = RecheckLiveRouteCandidate(LiveRouteCandidateQualificationRequest{
+		Context: context.Background(), RouteSource: RouteSourceManual,
+		UserID: userID, TokenID: tokenID, ChannelID: channelID,
+		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
+		UserGroup: "default", ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
+	})
+	assert.ErrorIs(t, err, ErrLiveRouteCandidateInvalid)
+	assert.Equal(t, ShadowFilterAbilityDisabled, LiveRouteQualificationReason(err))
+}
+
+func TestRecheckLiveRouteCandidateRejectsChangedGroupAndEntry(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "live", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", channelID).Update("group", "__no_access__").Error)
+	err = RecheckLiveRouteCandidate(LiveRouteCandidateQualificationRequest{
+		Context: context.Background(), RouteSource: RouteSourceManual,
+		UserID: userID, TokenID: tokenID, ChannelID: channelID,
+		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
+		ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
+		ExpectedProfileVersion: created.Profile.Version,
+	})
+	assert.Equal(t, ShadowFilterGroupForbidden, LiveRouteQualificationReason(err))
+
+	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", channelID).Update("group", "default").Error)
+	var entry model.UserRouteEntry
+	require.NoError(t, db.Where("group_id = ? AND channel_id = ?", *created.Profile.ActiveGroupID, channelID).First(&entry).Error)
+	require.NoError(t, db.Model(&entry).Update("enabled", false).Error)
+	err = RecheckLiveRouteCandidate(LiveRouteCandidateQualificationRequest{
+		Context: context.Background(), RouteSource: RouteSourceManual,
+		UserID: userID, TokenID: tokenID, ChannelID: channelID,
+		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
+		ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
+		ExpectedProfileVersion: created.Profile.Version,
+	})
+	assert.Equal(t, "entry_disabled", LiveRouteQualificationReason(err))
+}
+
+func TestRecheckLiveRouteCandidateRejectsCurrentPathCapability(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "live", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+	err = RecheckLiveRouteCandidate(LiveRouteCandidateQualificationRequest{
+		Context: context.Background(), RouteSource: RouteSourceManual,
+		UserID: userID, TokenID: tokenID, ChannelID: channelID,
+		RequestModel: "gpt-test", RequestPath: "/v1/messages",
+		ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
+		ExpectedProfileVersion: created.Profile.Version,
+	})
+	assert.Equal(t, ShadowFilterPathUnsupported, LiveRouteQualificationReason(err))
+}
+
+func TestRecheckLiveRouteCandidateUsesCurrentTokenAndEntitlement(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	_, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "live", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Updates(map[string]any{
+		"model_limits_enabled": true,
+		"model_limits":         "another-model",
+	}).Error)
+	qualification := LiveRouteCandidateQualificationRequest{
+		Context: context.Background(), RouteSource: RouteSourceManual,
+		UserID: userID, TokenID: tokenID, ChannelID: channelID,
+		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
+		UserGroup: "default", ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
+	}
+	err = RecheckLiveRouteCandidate(qualification)
+	assert.Equal(t, ShadowFilterTokenForbidden, LiveRouteQualificationReason(err))
+
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Updates(map[string]any{
+		"model_limits_enabled": false,
+		"model_limits":         "",
+	}).Error)
+	result := db.Model(&model.UserChannelEntitlement{}).
+		Where("user_id = ? AND channel_id = ? AND source = ?", userID, channelID, model.RouteSourcePlatform).
+		Updates(map[string]any{"status": model.RouteEntitlementStatusRevoked, "revoked_at": common.GetTimestamp()})
+	require.NoError(t, result.Error)
+	if result.RowsAffected == 0 {
+		require.NoError(t, db.Create(&model.UserChannelEntitlement{
+			UserID: userID, ChannelID: channelID, Source: model.RouteSourcePlatform,
+			Status: model.RouteEntitlementStatusRevoked, RevokedAt: common.GetTimestamp(),
+		}).Error)
+	}
+	err = RecheckLiveRouteCandidate(qualification)
+	assert.Equal(t, ShadowFilterEntitlementRevoked, LiveRouteQualificationReason(err))
+}
+
+func TestRecheckLiveRouteCandidateRejectsStaleActiveSnapshot(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	_, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "live", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+	groups, marshalErr := common.Marshal([]string{"default"})
+	require.NoError(t, marshalErr)
+	endpoints, marshalErr := common.Marshal([]string{string(constant.EndpointTypeOpenAI)})
+	require.NoError(t, marshalErr)
+	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, model.ChannelCapabilitySnapshotFence{
+		ActiveVersion: 1, SourceHash: fmt.Sprintf("preview-source-%d", channelID), CatalogVersion: "preview-catalog",
+	}, "preview-source-v2", "preview-catalog-v2", []model.ChannelModelCapability{{
+		RequestModel: "gpt-test", ActualModel: "gpt-test", LabSlug: "openai", Source: "canonical", Confidence: 1,
+		AbilityGroups: string(groups), EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
+		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
+	}}))
+
+	err = RecheckLiveRouteCandidate(LiveRouteCandidateQualificationRequest{
+		Context: context.Background(), RouteSource: RouteSourceManual,
+		UserID: userID, TokenID: tokenID, ChannelID: channelID,
+		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
+		UserGroup: "default", ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
+	})
+	assert.Equal(t, ShadowFilterSnapshotStale, LiveRouteQualificationReason(err))
 }
 
 func TestLiveRouteSelectionMaxRatioOnlyRestrictsManualRoutes(t *testing.T) {
