@@ -66,3 +66,18 @@ func TestRouteShadowDiagnosticsMarksEmptyLogWindowUnavailable(t *testing.T) {
 	assert.Zero(t, diagnostics.CoreModelRequestCount)
 	assert.Zero(t, diagnostics.CoreModelCoverage)
 }
+
+func TestObserveShadowDecisionCountsResolvedMixedCapability(t *testing.T) {
+	const normalizedModel = "shadow-mixed-resolution-metric"
+
+	before := routeShadowModelMetrics()[normalizedModel]
+	observeShadowDecision(RouteShadowDecision{
+		NormalizedRequestModel: normalizedModel,
+		LabSlug:                "openai",
+		HasMixed:               true,
+	})
+	after := routeShadowModelMetrics()[normalizedModel]
+
+	assert.Equal(t, before.Decisions+1, after.Decisions)
+	assert.Equal(t, before.Resolved+1, after.Resolved)
+}
