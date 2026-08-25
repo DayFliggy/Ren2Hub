@@ -34,6 +34,11 @@ export function requiredInteger(value: unknown, endpoint: string): number {
   return parsed
 }
 
+export function requiredBoolean(value: unknown, endpoint: string): boolean {
+  if (typeof value !== 'boolean') invalidResponse(endpoint)
+  return value
+}
+
 export function parsePage<T>(
   value: unknown,
   endpoint: string,

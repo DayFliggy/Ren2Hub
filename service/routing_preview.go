@@ -57,11 +57,11 @@ type RoutePreviewEntry struct {
 	Position        int    `json:"position"`
 	Weight          int    `json:"weight"`
 	RequestModel    string `json:"request_model"`
-	ActualModel     string `json:"actual_model,omitempty"`
-	LabSlug         string `json:"lab_slug,omitempty"`
-	SnapshotVersion int64  `json:"snapshot_version,omitempty"`
-	CatalogVersion  string `json:"catalog_version,omitempty"`
-	CapabilityState string `json:"capability_state,omitempty"`
+	ActualModel     string `json:"actual_model"`
+	LabSlug         string `json:"lab_slug"`
+	SnapshotVersion int64  `json:"snapshot_version"`
+	CatalogVersion  string `json:"catalog_version"`
+	CapabilityState string `json:"capability_state"`
 	FilterReason    string `json:"filter_reason,omitempty"`
 }
 

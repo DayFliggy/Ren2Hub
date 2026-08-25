@@ -1,0 +1,143 @@
+export type RouteMode = 'legacy' | 'manual' | 'auto_lab'
+export type RouteGroupKind = 'manual' | 'auto_lab'
+export type RouteEntrySource = 'platform'
+export type RouteCapabilityState =
+  'eligible' | 'unresolved' | 'unsupported' | 'disabled' | 'conflict'
+
+export interface RoutePolicy {
+  group_id: number
+  load_balance: boolean
+  max_ratio: number
+  retry_mode: string
+  max_same_resource_attempts: number
+  max_failover_attempts: number
+  sticky: boolean
+}
+
+export interface RouteEntry {
+  id: number
+  group_id: number
+  channel_id: number
+  source: RouteEntrySource
+  enabled: boolean
+  position: number
+  weight: number
+}
+
+export interface RouteGroup {
+  id: number
+  profile_id: number
+  name: string
+  kind: RouteGroupKind
+  enabled: boolean
+  position: number
+  entries: RouteEntry[]
+  policy: RoutePolicy
+}
+
+export interface RouteProfile {
+  id: number
+  user_id: number
+  token_id: number
+  mode: RouteMode
+  active_group_id: number | null
+  version: number
+  status: number
+  created_at: number
+  updated_at: number
+}
+
+export interface RouteProfileView {
+  profile: RouteProfile
+  groups: RouteGroup[]
+}
+
+export interface EligibleRouteChannel {
+  id: number
+  name: string
+  type: number
+  status: number
+  models: string
+  priority: number
+  weight: number
+  snapshot_version: number
+  catalog_version: string
+  capability_state: RouteCapabilityState | string
+  filter_reason?: string
+}
+
+export interface RouteCatalogItem {
+  id: number
+  channel_id: number
+  request_model: string
+  actual_model: string
+  lab_slug: string
+  confidence: number
+  source: string
+  catalog_version: string
+  snapshot_version: number
+  state: RouteCapabilityState | string
+}
+
+export interface RouteCatalog {
+  catalog_version: string
+  catalog_versions: string[]
+  items: RouteCatalogItem[]
+}
+
+export interface RoutePreviewEntry {
+  entry_id: number
+  channel_id: number
+  position: number
+  weight: number
+  request_model: string
+  actual_model: string
+  lab_slug: string
+  snapshot_version: number
+  catalog_version: string
+  capability_state: RouteCapabilityState | string
+  filter_reason?: string
+}
+
+export interface RoutePreview {
+  profile_id: number
+  profile_version: number
+  request_model: string
+  normalized_model: string
+  path: string
+  endpoint_type: string
+  active_group?: RouteGroup
+  policy?: RoutePolicy
+  entries: RoutePreviewEntry[]
+  candidate_channel_ids: number[]
+  selection_mode: 'ordered' | 'weighted'
+  preferred_channel_id?: number
+  filter_reason_counts: Record<string, number>
+  has_mixed: boolean
+  runtime_recheck_required: boolean
+  runtime_recheck_reasons: string[]
+  live_selection: false
+}
+
+export interface RouteProfileInput {
+  token_id?: number
+  mode: RouteMode
+  active_group_id?: number | null
+  version?: number
+  groups: Array<{
+    id?: number
+    name: string
+    kind?: RouteGroupKind
+    enabled: boolean
+    position: number
+    entries: Array<{
+      id?: number
+      channel_id: number
+      source: RouteEntrySource
+      enabled: boolean
+      position: number
+      weight: number
+    }>
+    policy: Omit<RoutePolicy, 'group_id'>
+  }>
+}

@@ -157,6 +157,18 @@ const router = createRouter({
           },
         },
         {
+          path: 'keys/:id/routing',
+          name: 'token-routing',
+          component: () => import('@/views/console/TokenRoutingView.vue'),
+          meta: {
+            wide: true,
+            noPageScroll: true,
+            protected: true,
+            feature: 'token_private_routing',
+            capability: 'token_private_routing',
+          },
+        },
+        {
           path: 'logs',
           name: 'logs',
           component: () => import('@/views/console/LogsView.vue'),

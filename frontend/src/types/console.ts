@@ -7,7 +7,7 @@ export type TokenType = 'manual' | 'auto'
 
 /** One upstream channel bound to a token; array order = routing priority. */
 export interface TokenChannel {
-  name: string
+  channel_id: number
   enabled: boolean
   weight?: number // load-balance weight (only meaningful when load_balance)
 }

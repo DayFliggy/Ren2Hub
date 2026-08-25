@@ -417,7 +417,7 @@ func deleteRouteGroup(tx *gorm.DB, groupID int) error {
 }
 
 func resolveActiveGroupID(requested *int, groupIDs map[int]int) (*int, error) {
-	if requested != nil && *requested > 0 {
+	if requested != nil {
 		if resolved, ok := groupIDs[*requested]; ok {
 			return &resolved, nil
 		}
