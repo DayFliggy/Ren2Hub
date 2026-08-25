@@ -256,15 +256,46 @@ func RouteHealthMetrics(ctx context.Context, channelID int, requestModel string)
 }
 
 func RouteHealthMetricsWithTTFT(ctx context.Context, channelID int, requestModel string) (errorRate, latencyMS, ttftMS float64, err error) {
-	health, err := LoadRouteHealth(ctx, channelID, requestModel)
+	metrics, err := RouteHealthScoringMetrics(ctx, channelID, requestModel)
 	if err != nil {
 		return 0, 0, 0, err
 	}
+	return metrics.ErrorRate, metrics.LatencyMS, metrics.TTFTMS, nil
+}
+
+type RouteHealthScoreMetrics struct {
+	ErrorRate      float64
+	ErrorRateKnown bool
+	LatencyMS      float64
+	LatencyKnown   bool
+	TTFTMS         float64
+	TTFTKnown      bool
+}
+
+// RouteHealthScoringMetrics keeps absence distinct from a measured perfect
+// value. A missing health row is neutral input for scoring, not zero latency
+// or a proven zero error rate.
+func RouteHealthScoringMetrics(ctx context.Context, channelID int, requestModel string) (RouteHealthScoreMetrics, error) {
+	health, err := LoadRouteHealth(ctx, channelID, requestModel)
+	if err != nil {
+		return RouteHealthScoreMetrics{}, err
+	}
+	return routeHealthScoreMetrics(health), nil
+}
+
+func routeHealthScoreMetrics(health model.ChannelHealth) RouteHealthScoreMetrics {
+	if health.ID == 0 {
+		return RouteHealthScoreMetrics{}
+	}
 	policy := DefaultRouteHealthPolicy()
-	errorRate = clamp01(float64(health.FailureCount) / float64(policy.FailureThreshold))
-	latencyMS = float64(health.LastLatencyMS)
-	ttftMS = float64(health.FirstTokenLatencyMS)
-	return errorRate, latencyMS, ttftMS, nil
+	return RouteHealthScoreMetrics{
+		ErrorRate:      clamp01(float64(health.FailureCount) / float64(policy.FailureThreshold)),
+		ErrorRateKnown: true,
+		LatencyMS:      float64(health.LastLatencyMS),
+		LatencyKnown:   health.LastLatencyMS > 0,
+		TTFTMS:         float64(health.FirstTokenLatencyMS),
+		TTFTKnown:      health.FirstTokenLatencyMS > 0,
+	}
 }
 
 func PersistRouteHealthFailure(ctx context.Context, channelID int, requestModel string, policy RouteHealthPolicy, now time.Time) (model.ChannelHealth, error) {

@@ -26,10 +26,15 @@ type RouteSelectionCandidate struct {
 	FilterReason      string
 	HealthUsable      bool
 	ErrorRate         float64
+	ErrorRateKnown    bool
 	LatencyMS         float64
+	LatencyKnown      bool
 	TTFTMS            float64
+	TTFTKnown         bool
 	RateLimitHeadroom float64
+	RateLimitKnown    bool
 	QuotaHeadroom     float64
+	QuotaKnown        bool
 	Sticky            bool
 	SnapshotVersion   int64
 	HealthEpoch       int64
@@ -37,15 +42,16 @@ type RouteSelectionCandidate struct {
 }
 
 type RouteSelectionInput struct {
-	SourceInput          RouteSourceInput
-	ManualGroupEnabled   bool
-	ManualLoadBalance    bool
-	ManualCandidates     []RouteSelectionCandidate
-	AutoCandidates       []RouteSelectionCandidate
-	TopK                 int
-	ConfigurationVersion int64
-	RequestID            string
-	RequestModel         string
+	SourceInput           RouteSourceInput
+	ManualGroupEnabled    bool
+	ManualLoadBalance     bool
+	ManualCandidates      []RouteSelectionCandidate
+	AutoCandidates        []RouteSelectionCandidate
+	TopK                  int
+	ConfigurationVersion  int64
+	RequestID             string
+	RequestModel          string
+	DynamicScoringEnabled bool
 }
 
 type RouteSelectionResult struct {
@@ -72,6 +78,7 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 		}
 		candidates = input.ManualCandidates
 	}
+	candidates = normalizeRouteSelectionCandidates(candidates)
 	eligible := eligibleRouteSelectionCandidates(candidates)
 	if len(eligible) == 0 {
 		appendRouteDecisionCandidates(&result.Decision, candidates)
@@ -100,26 +107,42 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 			scored = append(scored, RouteScoreCandidate{
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
 				Position: candidate.Position, Weight: candidate.Weight,
-				ErrorRate: candidate.ErrorRate, LatencyMS: candidate.LatencyMS,
-				TTFTMS:            candidate.TTFTMS,
+				ErrorRate: candidate.ErrorRate, ErrorRateKnown: candidate.ErrorRateKnown,
+				LatencyMS: candidate.LatencyMS, LatencyKnown: candidate.LatencyKnown,
+				TTFTMS: candidate.TTFTMS, TTFTKnown: candidate.TTFTKnown,
 				RateLimitHeadroom: candidate.RateLimitHeadroom,
+				RateLimitKnown:    candidate.RateLimitKnown,
 				QuotaHeadroom:     candidate.QuotaHeadroom,
+				QuotaKnown:        candidate.QuotaKnown,
 				Sticky:            candidate.Sticky, HealthUsable: candidate.HealthUsable,
 			})
 			byID[candidate.ChannelID] = candidate
 		}
-		for _, scoredCandidate := range TopKRouteCandidates(scored, input.TopK) {
-			candidate := byID[scoredCandidate.Candidate.ChannelID]
-			candidateScore := scoredCandidate.Breakdown
-			result.Candidates = append(result.Candidates, candidate)
-			result.Decision.Candidates = append(result.Decision.Candidates, RouteDecisionCandidate{
-				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
-				Position: candidate.Position, Weight: candidate.Weight,
-				SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
-				HealthEpoch: candidate.HealthEpoch,
-				Score:       &candidateScore, LeaseState: RouteLeaseStateNotAttempted,
-			})
+		scoredCandidates := ScoreRouteCandidates(scored)
+		staticCandidates := StaticPriorityLayer(scored)
+		result.Decision.ScoringMode = "shadow"
+		if len(staticCandidates) > 0 {
+			result.Decision.StaticPreferredChannelID = staticCandidates[0].ChannelID
 		}
+		if len(scoredCandidates) > 0 {
+			result.Decision.ScoredPreferredChannelID = scoredCandidates[0].Candidate.ChannelID
+		}
+		orderedCandidates := scoredCandidates
+		if !input.DynamicScoringEnabled {
+			orderedCandidates = scoredCandidatesInStaticOrder(staticCandidates, scoredCandidates)
+		} else {
+			result.Decision.ScoringMode = "live"
+			result.Decision.DynamicScoreApplied = true
+		}
+		limit := normalizedRouteTopK(input.TopK)
+		if len(orderedCandidates) > limit {
+			orderedCandidates = orderedCandidates[:limit]
+		}
+		for _, scoredCandidate := range orderedCandidates {
+			candidate := byID[scoredCandidate.Candidate.ChannelID]
+			result.Candidates = append(result.Candidates, candidate)
+		}
+		appendRouteDecisionCandidatesWithScores(&result.Decision, candidates, scoredCandidates)
 	}
 
 	if len(result.Candidates) == 0 {
@@ -146,9 +169,27 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 	return result, nil
 }
 
+func normalizeRouteSelectionCandidates(candidates []RouteSelectionCandidate) []RouteSelectionCandidate {
+	normalized := append([]RouteSelectionCandidate(nil), candidates...)
+	for index := range normalized {
+		if normalized[index].FilterReason == "" && !normalized[index].HealthUsable {
+			normalized[index].FilterReason = RouteCandidateFilterHealthUnavailable
+		}
+	}
+	return normalized
+}
+
 func appendRouteDecisionCandidates(decision *RouteDecision, candidates []RouteSelectionCandidate) {
+	appendRouteDecisionCandidatesWithScores(decision, candidates, nil)
+}
+
+func appendRouteDecisionCandidatesWithScores(decision *RouteDecision, candidates []RouteSelectionCandidate, scores []ScoredRouteCandidate) {
 	if decision == nil {
 		return
+	}
+	scoresByChannel := make(map[int]RouteScoreBreakdown, len(scores))
+	for _, scored := range scores {
+		scoresByChannel[scored.Candidate.ChannelID] = scored.Breakdown
 	}
 	seen := make(map[int]struct{}, len(decision.Candidates))
 	for _, candidate := range decision.Candidates {
@@ -167,14 +208,40 @@ func appendRouteDecisionCandidates(decision *RouteDecision, candidates []RouteSe
 			continue
 		}
 		seen[candidate.ChannelID] = struct{}{}
+		var score *RouteScoreBreakdown
+		if breakdown, exists := scoresByChannel[candidate.ChannelID]; exists {
+			breakdownCopy := breakdown
+			score = &breakdownCopy
+		}
 		decision.Candidates = append(decision.Candidates, RouteDecisionCandidate{
 			ChannelID: candidate.ChannelID, FilterReason: candidate.FilterReason,
 			Priority: candidate.Priority, Position: candidate.Position, Weight: candidate.Weight,
 			SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
 			HealthEpoch: candidate.HealthEpoch,
-			LeaseState:  RouteLeaseStateNotAttempted,
+			Score:       score, LeaseState: RouteLeaseStateNotAttempted,
 		})
 	}
+}
+
+func scoredCandidatesInStaticOrder(static []RouteScoreCandidate, scored []ScoredRouteCandidate) []ScoredRouteCandidate {
+	byID := make(map[int]ScoredRouteCandidate, len(scored))
+	for _, candidate := range scored {
+		byID[candidate.Candidate.ChannelID] = candidate
+	}
+	ordered := make([]ScoredRouteCandidate, 0, len(scored))
+	for _, candidate := range static {
+		if scoredCandidate, exists := byID[candidate.ChannelID]; exists {
+			ordered = append(ordered, scoredCandidate)
+		}
+	}
+	return ordered
+}
+
+func normalizedRouteTopK(k int) int {
+	if k <= 0 || k > 3 {
+		return 3
+	}
+	return k
 }
 
 func eligibleRouteSelectionCandidates(candidates []RouteSelectionCandidate) []RouteSelectionCandidate {

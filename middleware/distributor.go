@@ -150,6 +150,9 @@ func Distribute() func(c *gin.Context) {
 						TokenModelLimit:        tokenLimit,
 					}
 					if service.RouteLiveRoutingEnabled() && service.RouteLiveRolloutMatches(liveRequest) {
+						if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
+							liveRequest.PreferredChannelID = preferredChannelID
+						}
 						liveSelection, liveErr := service.SelectLiveTokenRoute(liveRequest)
 						if liveErr != nil {
 							abortWithOpenAiMessage(c, http.StatusServiceUnavailable, liveErr.Error(), types.ErrorCodeGetChannelFailed)
@@ -164,6 +167,9 @@ func Distribute() func(c *gin.Context) {
 							selectGroup = usingGroup
 							liveRouteSelected = true
 							c.Set("route_live_selection", liveSelection)
+							if liveRequest.PreferredChannelID == channel.Id {
+								service.MarkChannelAffinityUsed(c, usingGroup, channel.Id)
+							}
 						}
 					}
 				}

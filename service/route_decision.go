@@ -47,23 +47,27 @@ type RouteDecisionCandidate struct {
 }
 
 type RouteDecision struct {
-	Event                string                   `json:"event"`
-	RequestID            string                   `json:"request_id"`
-	RouteSource          RouteSource              `json:"route_source"`
-	ConfigurationVersion int64                    `json:"configuration_version,omitempty"`
-	RequestModel         string                   `json:"request_model"`
-	ActualModel          string                   `json:"actual_model,omitempty"`
-	LabSlug              string                   `json:"lab_slug,omitempty"`
-	CatalogVersion       string                   `json:"catalog_version,omitempty"`
-	SnapshotVersion      int64                    `json:"snapshot_version,omitempty"`
-	Candidates           []RouteDecisionCandidate `json:"candidates"`
-	SelectedChannelID    int                      `json:"selected_channel_id,omitempty"`
-	RetryAttempt         int                      `json:"retry_attempt"`
-	SameResourceRetry    int                      `json:"same_resource_retry_attempt"`
-	FailoverAttempt      int                      `json:"failover_attempt"`
-	LeaseState           string                   `json:"lease_state,omitempty"`
-	FinalError           string                   `json:"final_error,omitempty"`
-	GeneratedAt          int64                    `json:"generated_at"`
+	Event                    string                   `json:"event"`
+	RequestID                string                   `json:"request_id"`
+	RouteSource              RouteSource              `json:"route_source"`
+	ConfigurationVersion     int64                    `json:"configuration_version,omitempty"`
+	RequestModel             string                   `json:"request_model"`
+	ActualModel              string                   `json:"actual_model,omitempty"`
+	LabSlug                  string                   `json:"lab_slug,omitempty"`
+	CatalogVersion           string                   `json:"catalog_version,omitempty"`
+	SnapshotVersion          int64                    `json:"snapshot_version,omitempty"`
+	ScoringMode              string                   `json:"scoring_mode,omitempty"`
+	DynamicScoreApplied      bool                     `json:"dynamic_score_applied"`
+	StaticPreferredChannelID int                      `json:"static_preferred_channel_id,omitempty"`
+	ScoredPreferredChannelID int                      `json:"scored_preferred_channel_id,omitempty"`
+	Candidates               []RouteDecisionCandidate `json:"candidates"`
+	SelectedChannelID        int                      `json:"selected_channel_id,omitempty"`
+	RetryAttempt             int                      `json:"retry_attempt"`
+	SameResourceRetry        int                      `json:"same_resource_retry_attempt"`
+	FailoverAttempt          int                      `json:"failover_attempt"`
+	LeaseState               string                   `json:"lease_state,omitempty"`
+	FinalError               string                   `json:"final_error,omitempty"`
+	GeneratedAt              int64                    `json:"generated_at"`
 }
 
 func NewRouteDecision(requestID string, source RouteSource, model string, configurationVersion int64) RouteDecision {

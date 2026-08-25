@@ -112,15 +112,16 @@ func BuildRouteShadowRequest(c *gin.Context, requestModel, requestPath string, r
 }
 
 type RouteShadowCandidate struct {
-	ChannelID       int    `json:"channel_id"`
-	RequestModel    string `json:"request_model"`
-	ActualModel     string `json:"actual_model"`
-	LabSlug         string `json:"lab_slug"`
-	Priority        int64  `json:"priority"`
-	Weight          int    `json:"weight"`
-	SnapshotVersion int64  `json:"snapshot_version"`
-	CatalogVersion  string `json:"catalog_version"`
-	FilterReason    string `json:"filter_reason,omitempty"`
+	ChannelID       int                  `json:"channel_id"`
+	RequestModel    string               `json:"request_model"`
+	ActualModel     string               `json:"actual_model"`
+	LabSlug         string               `json:"lab_slug"`
+	Priority        int64                `json:"priority"`
+	Weight          int                  `json:"weight"`
+	SnapshotVersion int64                `json:"snapshot_version"`
+	CatalogVersion  string               `json:"catalog_version"`
+	FilterReason    string               `json:"filter_reason,omitempty"`
+	Score           *RouteScoreBreakdown `json:"score_breakdown,omitempty"`
 }
 
 type RouteShadowDecision struct {
@@ -153,6 +154,10 @@ type RouteShadowDecision struct {
 	LegacyCandidateIDs       []int                  `json:"legacy_candidate_ids,omitempty"`
 	LegacyChannelID          int                    `json:"legacy_channel_id,omitempty"`
 	ShadowPreferredID        int                    `json:"shadow_preferred_channel_id,omitempty"`
+	ScoreShadowEnabled       bool                   `json:"score_shadow_enabled"`
+	ScoreShadowPreferredID   int                    `json:"score_shadow_preferred_channel_id,omitempty"`
+	ScoreShadowDifference    string                 `json:"score_shadow_difference,omitempty"`
+	ScoreShadowError         string                 `json:"score_shadow_error,omitempty"`
 	LegacyTrace              LegacySelectionTrace   `json:"legacy_trace"`
 	FilterReasonCounts       map[string]int         `json:"filter_reason_counts,omitempty"`
 	DifferenceReasons        []string               `json:"difference_reasons,omitempty"`
@@ -429,6 +434,7 @@ func MaybeRecordLegacySelection(ctx context.Context, request RouteShadowRequest)
 	}
 	enrichShadowRequestCurrentState(ctx, &request)
 	decision := SelectRouteShadow(request)
+	AttachRouteScoreShadow(ctx, &decision)
 	observeShadowDecision(decision)
 	EnqueueRouteShadowDecision(ctx, decision)
 }

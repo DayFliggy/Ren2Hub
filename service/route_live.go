@@ -285,6 +285,7 @@ type LiveRouteRequest struct {
 	PriceEligible            bool
 	SecurityEligibilityKnown bool
 	SecurityAllowed          bool
+	PreferredChannelID       int
 }
 
 type LiveRouteSelection struct {
@@ -415,13 +416,14 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			return selection, err
 		}
 		result, selectErr := SelectTokenRoute(RouteSelectionInput{
-			SourceInput:          RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: profile.Mode},
-			ManualGroupEnabled:   preview.ActiveGroup != nil && preview.ActiveGroup.Enabled,
-			ManualLoadBalance:    preview.Policy != nil && preview.Policy.LoadBalance,
-			ManualCandidates:     candidates,
-			ConfigurationVersion: profile.Version,
-			RequestID:            input.RequestID,
-			RequestModel:         input.RequestModel,
+			SourceInput:           RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: profile.Mode},
+			ManualGroupEnabled:    preview.ActiveGroup != nil && preview.ActiveGroup.Enabled,
+			ManualLoadBalance:     preview.Policy != nil && preview.Policy.LoadBalance,
+			ManualCandidates:      candidates,
+			ConfigurationVersion:  profile.Version,
+			RequestID:             input.RequestID,
+			RequestModel:          input.RequestModel,
+			DynamicScoringEnabled: false,
 		})
 		selection.Decision = result.Decision
 		if preview.Policy != nil {
@@ -471,18 +473,20 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			Priority: candidate.Priority, Weight: candidate.Weight,
 			FilterReason: filterReason, HealthUsable: true,
 			SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
+			Sticky: candidate.ChannelID == input.PreferredChannelID && input.PreferredChannelID > 0,
 		})
 	}
 	if err := applyLiveHealth(input.Context, input.RequestModel, candidates); err != nil {
 		return selection, err
 	}
 	result, selectErr := SelectTokenRoute(RouteSelectionInput{
-		SourceInput:          RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: profile.Mode},
-		AutoCandidates:       candidates,
-		TopK:                 3,
-		ConfigurationVersion: profile.Version,
-		RequestID:            shadow.RequestID,
-		RequestModel:         input.RequestModel,
+		SourceInput:           RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: profile.Mode},
+		AutoCandidates:        candidates,
+		TopK:                  3,
+		ConfigurationVersion:  profile.Version,
+		RequestID:             shadow.RequestID,
+		RequestModel:          input.RequestModel,
+		DynamicScoringEnabled: RouteScoreLiveEnabled(),
 	})
 	selection.Decision = result.Decision
 	selection.Attempts = selectedRouteAttemptCandidates(result)
@@ -613,10 +617,16 @@ func applyLiveHealth(ctx context.Context, requestModel string, candidates []Rout
 		}
 		candidates[index].HealthUsable = true
 		candidates[index].HealthEpoch = epoch
-		candidates[index].ErrorRate, candidates[index].LatencyMS, candidates[index].TTFTMS, err = RouteHealthMetricsWithTTFT(ctx, candidates[index].ChannelID, requestModel)
-		if err != nil {
-			return err
+		metrics, metricsErr := RouteHealthScoringMetrics(ctx, candidates[index].ChannelID, requestModel)
+		if metricsErr != nil {
+			return metricsErr
 		}
+		candidates[index].ErrorRate = metrics.ErrorRate
+		candidates[index].ErrorRateKnown = metrics.ErrorRateKnown
+		candidates[index].LatencyMS = metrics.LatencyMS
+		candidates[index].LatencyKnown = metrics.LatencyKnown
+		candidates[index].TTFTMS = metrics.TTFTMS
+		candidates[index].TTFTKnown = metrics.TTFTKnown
 	}
 	return nil
 }
