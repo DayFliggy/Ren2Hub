@@ -171,7 +171,6 @@ func TestGetChannelSkipsExhaustedSingleKeyCandidate(t *testing.T) {
 	retry := 1
 	param := &service.RetryParam{Ctx: c, Retry: &retry}
 	info := &relaycommon.RelayInfo{
-		ChannelMeta:     &relaycommon.ChannelMeta{ChannelId: first.Id},
 		OriginModelName: "gpt-test",
 	}
 
@@ -332,4 +331,5 @@ func TestReleaseRouteAttemptLeaseRecordsRenewalFailure(t *testing.T) {
 	require.True(t, ok)
 	updated := updatedValue.(service.LiveRouteSelection)
 	assert.Equal(t, service.RouteLeaseStateRenewalFailed, updated.Decision.Candidates[0].LeaseState)
+	assert.True(t, c.GetBool(liveRouteRenewalFailedKey))
 }

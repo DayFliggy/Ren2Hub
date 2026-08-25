@@ -201,6 +201,12 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		info.PriceData.Quota = quota
 		noteTaskQuotaClamp(info, clamp)
 	}
+	if value, ok := c.Get("route_live_selection"); ok {
+		if selection, valid := value.(service.LiveRouteSelection); valid &&
+			!selection.AllowsPriceRatio(info.PriceData.GroupRatioInfo.GroupRatio) {
+			return nil, service.TaskErrorWrapperLocal(service.ErrRoutePriceRatioExceeded, "route_price_ratio_exceeded", http.StatusForbidden)
+		}
+	}
 
 	// 7. 预扣费（仅首次 — 重试时 info.Billing 已存在，跳过）
 	if info.Billing == nil && !info.PriceData.FreeModel {
