@@ -806,9 +806,9 @@ func markLiveRouteCandidateFiltered(c *gin.Context, channelID int, reason string
 			selection.Attempts[index].FilterReason = reason
 		}
 	}
+	selection.Decision.LeaseState = "qualification_failed"
 	if selection.Decision.SelectedChannelID == channelID {
 		selection.Decision.SelectedChannelID = 0
-		selection.Decision.LeaseState = "qualification_failed"
 	}
 	c.Set("route_live_selection", selection)
 }
