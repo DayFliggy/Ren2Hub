@@ -32,6 +32,11 @@ const (
 	RouteCapabilityStateUnresolved  = "unresolved"
 	RouteCapabilityStateUnsupported = "unsupported"
 	RouteCapabilityStateDisabled    = "disabled"
+	RouteCapabilityStateConflict    = "conflict"
+	RouteCapabilityRefreshActive    = "active"
+	RouteCapabilityRefreshBuilding  = "building"
+	RouteCapabilityRefreshFailed    = "failed"
+	ChannelCapabilityProjectionV1   = 1
 	RouteMaxPolicyWeight            = 1_000_000
 	RouteMaxPolicyRatio             = 1_000
 	RouteMaxRetryAttempts           = 3
@@ -82,18 +87,44 @@ type RoutePolicy struct {
 }
 
 type ChannelModelCapability struct {
-	ID               int     `json:"id"`
-	ChannelID        int     `json:"channel_id" gorm:"index;uniqueIndex:channel_model_capability_version;not null"`
-	RequestModel     string  `json:"request_model" gorm:"type:varchar(255);index;uniqueIndex:channel_model_capability_version;not null"`
-	ActualModel      string  `json:"actual_model" gorm:"type:varchar(255);uniqueIndex:channel_model_capability_version;not null"`
-	LabSlug          string  `json:"lab_slug" gorm:"type:varchar(64);index"`
-	Confidence       float64 `json:"confidence"`
-	Source           string  `json:"source" gorm:"type:varchar(64);not null"`
-	CatalogVersion   string  `json:"catalog_version" gorm:"type:varchar(128);uniqueIndex:channel_model_capability_version;not null"`
-	EndpointTypes    string  `json:"endpoint_types" gorm:"type:text"`
-	PathCapabilities string  `json:"path_capabilities" gorm:"type:text"`
-	State            string  `json:"state" gorm:"type:varchar(32);index;not null"`
-	UpdatedAt        int64   `json:"updated_at" gorm:"bigint;not null"`
+	ID                int     `json:"id"`
+	ChannelID         int     `json:"channel_id" gorm:"index;uniqueIndex:channel_model_capability_snapshot;not null"`
+	SnapshotVersion   int64   `json:"snapshot_version" gorm:"index;uniqueIndex:channel_model_capability_snapshot;not null;default:0"`
+	RequestModel      string  `json:"request_model" gorm:"type:varchar(255);index;uniqueIndex:channel_model_capability_snapshot;not null"`
+	ActualModel       string  `json:"actual_model" gorm:"type:varchar(255);not null"`
+	LabSlug           string  `json:"lab_slug" gorm:"type:varchar(64);index"`
+	Confidence        float64 `json:"confidence"`
+	Source            string  `json:"source" gorm:"type:varchar(64);not null"`
+	CatalogVersion    string  `json:"catalog_version" gorm:"type:varchar(128);not null"`
+	SourceHash        string  `json:"source_hash" gorm:"type:varchar(128);index;not null;default:''"`
+	AbilityGroups     string  `json:"ability_groups" gorm:"type:text"`
+	EndpointTypes     string  `json:"endpoint_types" gorm:"type:text"`
+	PathCapabilities  string  `json:"path_capabilities" gorm:"type:text"`
+	ChannelStatus     int     `json:"channel_status" gorm:"index"`
+	Priority          int64   `json:"priority"`
+	Weight            int     `json:"weight"`
+	ChannelType       int     `json:"channel_type"`
+	ProjectionVersion int     `json:"projection_version" gorm:"not null;default:0"`
+	IsMixed           bool    `json:"is_mixed"`
+	State             string  `json:"state" gorm:"type:varchar(32);index;not null"`
+	UpdatedAt         int64   `json:"updated_at" gorm:"bigint;not null"`
+}
+
+// ChannelCapabilitySnapshot fences a channel's immutable capability rows.
+// Only ActiveVersion participates in request-time routing; older versions are
+// retained briefly for diagnosis and deterministic decision replay.
+type ChannelCapabilitySnapshot struct {
+	ID                       int    `json:"id"`
+	ChannelID                int    `json:"channel_id" gorm:"uniqueIndex;not null"`
+	ActiveVersion            int64  `json:"active_version" gorm:"not null;default:0"`
+	CatalogVersion           string `json:"catalog_version" gorm:"type:varchar(128);not null"`
+	SourceHash               string `json:"source_hash" gorm:"type:varchar(128);not null"`
+	RefreshStatus            string `json:"refresh_status" gorm:"type:varchar(32);index;not null"`
+	RefreshedAt              int64  `json:"refreshed_at" gorm:"bigint;not null"`
+	LastFailedSourceHash     string `json:"last_failed_source_hash,omitempty" gorm:"type:varchar(128)"`
+	LastFailedCatalogVersion string `json:"last_failed_catalog_version,omitempty" gorm:"type:varchar(128)"`
+	LastFailedAt             int64  `json:"last_failed_at,omitempty" gorm:"bigint"`
+	UpdatedAt                int64  `json:"updated_at" gorm:"bigint;not null"`
 }
 
 type UserChannelEntitlement struct {
@@ -208,6 +239,18 @@ func (c *ChannelModelCapability) Normalize(now time.Time) {
 	}
 	if c.UpdatedAt == 0 {
 		c.UpdatedAt = now.Unix()
+	}
+}
+
+func (s *ChannelCapabilitySnapshot) Normalize(now time.Time) {
+	if s.RefreshStatus == "" {
+		s.RefreshStatus = RouteCapabilityRefreshActive
+	}
+	if s.RefreshedAt == 0 {
+		s.RefreshedAt = now.Unix()
+	}
+	if s.UpdatedAt == 0 {
+		s.UpdatedAt = now.Unix()
 	}
 }
 

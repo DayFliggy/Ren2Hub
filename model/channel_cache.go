@@ -265,6 +265,7 @@ func CacheGetChannelInfo(id int) (*ChannelInfo, error) {
 
 func CacheUpdateChannelStatus(id int, status int) {
 	if !common.MemoryCacheEnabled {
+		NotifyChannelCapabilityChanged(id)
 		return
 	}
 	channelSyncLock.Lock()
@@ -286,10 +287,14 @@ func CacheUpdateChannelStatus(id int, status int) {
 			}
 		}
 	}
+	NotifyChannelCapabilityChanged(id)
 }
 
 func CacheUpdateChannel(channel *Channel) {
 	if !common.MemoryCacheEnabled {
+		if channel != nil {
+			NotifyChannelCapabilityChanged(channel.Id)
+		}
 		return
 	}
 	channelSyncLock.Lock()
@@ -321,4 +326,5 @@ func CacheUpdateChannel(channel *Channel) {
 	// updatePricingLock while holding channelSyncLock would be an AB-BA deadlock.
 	channelSyncLock.Unlock()
 	InvalidatePricingCache()
+	NotifyChannelCapabilityChanged(channel.Id)
 }

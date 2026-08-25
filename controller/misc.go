@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -35,9 +36,10 @@ func TestStatus(c *gin.Context) {
 	// 获取HTTP统计信息
 	httpStats := middleware.GetStats()
 	c.JSON(http.StatusOK, gin.H{
-		"success":    true,
-		"message":    "Server is running",
-		"http_stats": httpStats,
+		"success":              true,
+		"message":              "Server is running",
+		"http_stats":           httpStats,
+		"route_shadow_metrics": service.GetRouteShadowDiagnostics(c.Request.Context()),
 	})
 	return
 }

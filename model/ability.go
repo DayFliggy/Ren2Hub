@@ -235,7 +235,11 @@ func (channel *Channel) AddAbilities(tx *gorm.DB) error {
 }
 
 func (channel *Channel) DeleteAbilities() error {
-	return DB.Where("channel_id = ?", channel.Id).Delete(&Ability{}).Error
+	err := DB.Where("channel_id = ?", channel.Id).Delete(&Ability{}).Error
+	if err == nil {
+		NotifyChannelCapabilityChanged(channel.Id)
+	}
+	return err
 }
 
 // UpdateAbilities updates abilities of this channel.
@@ -304,21 +308,42 @@ func (channel *Channel) UpdateAbilities(tx *gorm.DB) error {
 
 	// 如果是新创建的事务，需要提交
 	if isNewTx {
-		return tx.Commit().Error
+		if err := tx.Commit().Error; err != nil {
+			return err
+		}
+		NotifyChannelCapabilityChanged(channel.Id)
 	}
 
 	return nil
 }
 
 func UpdateAbilityStatus(channelId int, status bool) error {
-	return DB.Model(&Ability{}).Where("channel_id = ?", channelId).Select("enabled").Update("enabled", status).Error
+	err := DB.Model(&Ability{}).Where("channel_id = ?", channelId).Select("enabled").Update("enabled", status).Error
+	if err == nil {
+		NotifyChannelCapabilityChanged(channelId)
+	}
+	return err
 }
 
 func UpdateAbilityStatusByTag(tag string, status bool) error {
-	return DB.Model(&Ability{}).Where("tag = ?", tag).Select("enabled").Update("enabled", status).Error
+	var channelIDs []int
+	if err := DB.Model(&Ability{}).Where("tag = ?", tag).Distinct("channel_id").Pluck("channel_id", &channelIDs).Error; err != nil {
+		return err
+	}
+	err := DB.Model(&Ability{}).Where("tag = ?", tag).Select("enabled").Update("enabled", status).Error
+	if err == nil {
+		for _, channelID := range channelIDs {
+			NotifyChannelCapabilityChanged(channelID)
+		}
+	}
+	return err
 }
 
 func UpdateAbilityByTag(tag string, newTag *string, priority *int64, weight *uint) error {
+	var channelIDs []int
+	if err := DB.Model(&Ability{}).Where("tag = ?", tag).Distinct("channel_id").Pluck("channel_id", &channelIDs).Error; err != nil {
+		return err
+	}
 	ability := Ability{}
 	if newTag != nil {
 		ability.Tag = newTag
@@ -329,7 +354,13 @@ func UpdateAbilityByTag(tag string, newTag *string, priority *int64, weight *uin
 	if weight != nil {
 		ability.Weight = *weight
 	}
-	return DB.Model(&Ability{}).Where("tag = ?", tag).Updates(ability).Error
+	err := DB.Model(&Ability{}).Where("tag = ?", tag).Updates(ability).Error
+	if err == nil {
+		for _, channelID := range channelIDs {
+			NotifyChannelCapabilityChanged(channelID)
+		}
+	}
+	return err
 }
 
 var fixLock = sync.Mutex{}
@@ -387,5 +418,8 @@ func FixAbility() (int, int, error) {
 		}
 	}
 	InitChannelCache()
+	for _, channel := range channels {
+		NotifyChannelCapabilityChanged(channel.Id)
+	}
 	return successCount, failCount, nil
 }

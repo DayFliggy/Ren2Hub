@@ -36,6 +36,7 @@ type Resolution struct {
 	Models          []ModelMatch `json:"models"`
 	UnresolvedCount int          `json:"unresolved_count"`
 	CatalogVersion  string       `json:"catalog_version"`
+	MappingError    bool         `json:"mapping_error,omitempty"`
 }
 
 type hint struct {
@@ -83,8 +84,9 @@ func Resolve(models, modelMapping string) Resolution {
 }
 
 func ResolveWithCatalog(catalog *Catalog, models, modelMapping string) Resolution {
-	actualModels := actualModels(models, modelMapping)
 	result := Resolution{GroupSlug: GroupUnknown, CatalogVersion: catalog.Version}
+	actualModels, mappingErr := actualModels(models, modelMapping)
+	result.MappingError = mappingErr != nil
 	for _, actual := range actualModels {
 		result.Models = append(result.Models, matchModel(catalog, actual.input, actual.real))
 	}
@@ -122,10 +124,14 @@ func ResolveWithCatalog(catalog *Catalog, models, modelMapping string) Resolutio
 
 type actualModel struct{ input, real string }
 
-func actualModels(models, modelMapping string) []actualModel {
+func actualModels(models, modelMapping string) ([]actualModel, error) {
 	mapping := map[string]string{}
+	var mappingErr error
 	if strings.TrimSpace(modelMapping) != "" {
-		_ = common.UnmarshalJsonStr(modelMapping, &mapping)
+		mappingErr = common.UnmarshalJsonStr(modelMapping, &mapping)
+		if mappingErr != nil {
+			mapping = map[string]string{}
+		}
 	}
 	values := splitModels(models)
 	result := make([]actualModel, 0, len(values))
@@ -153,7 +159,13 @@ func actualModels(models, modelMapping string) []actualModel {
 		result = append(result, actualModel{input: input, real: strings.TrimSpace(realModel)})
 	}
 	sort.SliceStable(result, func(i, j int) bool { return result[i].input < result[j].input })
-	return result
+	return result, mappingErr
+}
+
+// NormalizeModel exposes the exact normalization used by model resolution so
+// capability indexes and request-time shadow decisions share one key.
+func NormalizeModel(value string) string {
+	return normalize(value)
 }
 
 func splitModels(models string) []string {

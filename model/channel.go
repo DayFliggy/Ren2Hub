@@ -506,7 +506,13 @@ func BatchInsertChannels(channels []Channel) error {
 			}
 		}
 	}
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	for _, channel := range channels {
+		NotifyChannelCapabilityChanged(channel.Id)
+	}
+	return nil
 }
 
 func BatchDeleteChannels(ids []int) (int64, error) {
@@ -533,6 +539,9 @@ func BatchDeleteChannels(ids []int) (int64, error) {
 	}
 	if err := tx.Commit().Error; err != nil {
 		return 0, err
+	}
+	for _, id := range ids {
+		NotifyChannelCapabilityChanged(id)
 	}
 	return deletedCount, nil
 }
@@ -583,6 +592,9 @@ func (channel *Channel) Insert() error {
 		return err
 	}
 	err = channel.AddAbilities(nil)
+	if err == nil {
+		NotifyChannelCapabilityChanged(channel.Id)
+	}
 	return err
 }
 
@@ -932,12 +944,30 @@ func updateChannelUsedQuota(id int, quota int) {
 }
 
 func DeleteChannelByStatus(status int64) (int64, error) {
+	var ids []int
+	if err := DB.Model(&Channel{}).Where("status = ?", status).Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
 	result := DB.Where("status = ?", status).Delete(&Channel{})
+	if result.Error == nil {
+		for _, id := range ids {
+			NotifyChannelCapabilityChanged(id)
+		}
+	}
 	return result.RowsAffected, result.Error
 }
 
 func DeleteDisabledChannel() (int64, error) {
+	var ids []int
+	if err := DB.Model(&Channel{}).Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
 	result := DB.Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Delete(&Channel{})
+	if result.Error == nil {
+		for _, id := range ids {
+			NotifyChannelCapabilityChanged(id)
+		}
+	}
 	return result.RowsAffected, result.Error
 }
 
@@ -1142,7 +1172,13 @@ func BatchSetChannelTag(ids []int, tag *string) error {
 	}
 
 	// 提交事务
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	for _, id := range ids {
+		NotifyChannelCapabilityChanged(id)
+	}
+	return nil
 }
 
 // CountAllChannels returns total channels in DB
