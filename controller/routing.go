@@ -255,11 +255,9 @@ func listEligibleRouteChannels(userID int) ([]eligibleRouteChannel, error) {
 	for _, channel := range channels {
 		channelIDs = append(channelIDs, channel.Id)
 	}
-	var snapshots []model.ChannelCapabilitySnapshot
-	if len(channelIDs) > 0 {
-		if err := model.DB.Where("channel_id IN ?", channelIDs).Find(&snapshots).Error; err != nil {
-			return nil, err
-		}
+	snapshots, err := model.FindActiveChannelCapabilitySnapshots(nil, channelIDs)
+	if err != nil {
+		return nil, err
 	}
 	snapshotByChannel := make(map[int]model.ChannelCapabilitySnapshot, len(snapshots))
 	for _, snapshot := range snapshots {

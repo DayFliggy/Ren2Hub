@@ -12,6 +12,8 @@ ROUTE_CAPABILITY_REFRESH_TASK_ENABLED=true
 ROUTE_CAPABILITY_REFRESH_INTERVAL_SECONDS=30
 ROUTE_CAPABILITY_REFRESH_TIMEOUT_SECONDS=300
 ROUTE_SHADOW_EVENT_QUEUE_SIZE=1024
+ROUTE_LIVE_ENABLED=false
+ROUTE_DECISION_EVENT_QUEUE_SIZE=1024
 ```
 
 Shadow 默认关闭。开启后可以用以下变量限制灰度范围，多个值使用英文逗号分隔：
@@ -76,3 +78,14 @@ ROUTE_SHADOW_MODELS=gpt-5,claude-opus-5
 6. 确认事件完整率、刷新延迟、未授权候选和副作用满足阶段退出门槛。
 
 任何异常都可以关闭 `ROUTE_SHADOW_ENABLED`。legacy selector 仍独立运行，不需要回滚数据库快照。
+
+## 受控 Live 入口
+
+`ROUTE_LIVE_ENABLED` 默认关闭。开启前必须为每个参与渠道和规范化模型配置启用的 `ChannelRoutePolicy`，否则新路由会 fail-closed，不会读取 `capacity_total/capacity_used` 作为并发上限，也不会静默回退 legacy。
+
+管理员策略接口：
+
+- `GET /api/channel/:id/route-policy?model=<model>`
+- `PUT /api/channel/:id/route-policy?model=<model>`
+
+策略更新使用版本校验；Redis 租约抢槽成功后会再次检查渠道状态、健康 epoch 和能力快照版本。每个上游尝试独立获取和释放租约，流式请求使用 TTL 续租。live route 失败只影响明确开启该开关的请求；默认关闭时 legacy 选择、重试、affinity 和计费保持原行为。

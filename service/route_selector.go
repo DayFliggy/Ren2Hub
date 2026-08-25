@@ -72,6 +72,7 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 	}
 	eligible := eligibleRouteSelectionCandidates(candidates)
 	if len(eligible) == 0 {
+		appendRouteDecisionCandidates(&result.Decision, candidates)
 		return result, ErrRouteSelectionUnavailable
 	}
 
@@ -111,25 +112,63 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 			result.Decision.Candidates = append(result.Decision.Candidates, RouteDecisionCandidate{
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
 				Position: candidate.Position, Weight: candidate.Weight,
+				SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
 				Score: &candidateScore, LeaseState: RouteLeaseStateNotAttempted,
 			})
 		}
 	}
 
 	if len(result.Candidates) == 0 {
-		return RouteSelectionResult{Decision: decision}, ErrRouteSelectionUnavailable
+		appendRouteDecisionCandidates(&result.Decision, candidates)
+		return result, ErrRouteSelectionUnavailable
 	}
+	appendRouteDecisionCandidates(&result.Decision, candidates)
 	if len(result.Decision.Candidates) == 0 {
 		for _, candidate := range result.Candidates {
 			result.Decision.Candidates = append(result.Decision.Candidates, RouteDecisionCandidate{
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
 				Position: candidate.Position, Weight: candidate.Weight,
+				SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
 				LeaseState: RouteLeaseStateNotAttempted,
 			})
 		}
 	}
 	result.Decision.SelectedChannelID = result.Candidates[0].ChannelID
+	result.Decision.ActualModel = result.Candidates[0].ActualModel
+	result.Decision.LabSlug = result.Candidates[0].LabSlug
+	result.Decision.CatalogVersion = result.Candidates[0].CatalogVersion
+	result.Decision.SnapshotVersion = result.Candidates[0].SnapshotVersion
 	return result, nil
+}
+
+func appendRouteDecisionCandidates(decision *RouteDecision, candidates []RouteSelectionCandidate) {
+	if decision == nil {
+		return
+	}
+	seen := make(map[int]struct{}, len(decision.Candidates))
+	for _, candidate := range decision.Candidates {
+		seen[candidate.ChannelID] = struct{}{}
+	}
+	for _, candidate := range candidates {
+		if candidate.ChannelID <= 0 {
+			continue
+		}
+		if _, exists := seen[candidate.ChannelID]; exists {
+			for index := range decision.Candidates {
+				if decision.Candidates[index].ChannelID == candidate.ChannelID && decision.Candidates[index].FilterReason == "" {
+					decision.Candidates[index].FilterReason = candidate.FilterReason
+				}
+			}
+			continue
+		}
+		seen[candidate.ChannelID] = struct{}{}
+		decision.Candidates = append(decision.Candidates, RouteDecisionCandidate{
+			ChannelID: candidate.ChannelID, FilterReason: candidate.FilterReason,
+			Priority: candidate.Priority, Position: candidate.Position, Weight: candidate.Weight,
+			SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
+			LeaseState: RouteLeaseStateNotAttempted,
+		})
+	}
 }
 
 func eligibleRouteSelectionCandidates(candidates []RouteSelectionCandidate) []RouteSelectionCandidate {

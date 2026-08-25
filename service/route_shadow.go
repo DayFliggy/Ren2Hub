@@ -11,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
@@ -28,6 +29,7 @@ const (
 	ShadowReasonAbilityFilter        = "ability_filter_difference"
 	ShadowReasonTokenFilter          = "token_permission_difference"
 	ShadowReasonSnapshotStale        = "snapshot_stale"
+	ShadowReasonMappingConflict      = "mapping_conflict"
 
 	ShadowFilterSnapshotUnavailable = "snapshot_unavailable"
 	ShadowFilterSnapshotStale       = "snapshot_stale"
@@ -70,6 +72,7 @@ type RouteShadowRequest struct {
 	PriceEligible          bool
 	SecurityAllowed        bool
 	SnapshotVersion        int64
+	ChannelStatuses        map[int]int
 	Legacy                 LegacySelectionTrace
 }
 
@@ -139,6 +142,7 @@ type RouteShadowDecision struct {
 	FilterReasonCounts     map[string]int         `json:"filter_reason_counts,omitempty"`
 	DifferenceReasons      []string               `json:"difference_reasons,omitempty"`
 	HasUnknown             bool                   `json:"has_unknown"`
+	HasMappingConflict     bool                   `json:"has_mapping_conflict"`
 	HasMixed               bool                   `json:"has_mixed"`
 	HasUnauthorized        bool                   `json:"has_unauthorized"`
 	RetryAttempt           int                    `json:"retry_attempt"`
@@ -202,8 +206,11 @@ func selectRouteShadowWithIndex(request RouteShadowRequest, index *capabilityInd
 		if reason := shadowCandidateFilter(request, candidate); reason != "" {
 			shadowCandidate.FilterReason = reason
 			decision.FilterReasonCounts[reason]++
-			if reason == ShadowFilterUnknownCapability || reason == ShadowFilterMappingConflict {
+			if reason == ShadowFilterUnknownCapability {
 				decision.HasUnknown = true
+			}
+			if reason == ShadowFilterMappingConflict {
+				decision.HasMappingConflict = true
 			}
 			if reason == ShadowFilterGroupForbidden || reason == ShadowFilterTokenForbidden || reason == ShadowFilterEntitlementRevoked {
 				decision.HasUnauthorized = true
@@ -244,10 +251,14 @@ func shadowCandidateFilter(request RouteShadowRequest, candidate indexedCapabili
 			entitled = value
 		}
 	}
+	channelStatus := candidate.ChannelStatus
+	if status, ok := request.ChannelStatuses[candidate.Capability.ChannelID]; ok {
+		channelStatus = status
+	}
 	result := filterRouteCapability(routeCapabilityFilterInput{
 		Capability:        candidate.Capability,
 		SnapshotVersion:   request.SnapshotVersion,
-		ChannelStatus:     candidate.ChannelStatus,
+		ChannelStatus:     channelStatus,
 		ChannelType:       candidate.ChannelType,
 		AbilityEnabled:    len(candidate.AbilityGroups) > 0,
 		AbilityAllowed:    false,
@@ -303,8 +314,11 @@ func compareShadowDecision(decision RouteShadowDecision) []string {
 	case decision.ShadowPreferredID > 0:
 		reasons = append(reasons, ShadowReasonShadowOnly)
 	}
-	if decision.FilterReasonCounts[ShadowFilterUnknownCapability] > 0 || decision.FilterReasonCounts[ShadowFilterMappingConflict] > 0 {
+	if decision.FilterReasonCounts[ShadowFilterUnknownCapability] > 0 {
 		reasons = append(reasons, ShadowReasonUnknownCapability)
+	}
+	if decision.FilterReasonCounts[ShadowFilterMappingConflict] > 0 {
+		reasons = append(reasons, ShadowReasonMappingConflict)
 	}
 	if decision.FilterReasonCounts[ShadowFilterPathUnsupported] > 0 {
 		reasons = append(reasons, ShadowReasonPathFilterDifference)
@@ -345,9 +359,61 @@ func MaybeRecordLegacySelection(ctx context.Context, request RouteShadowRequest)
 	if !routeShadowEnabled(request) {
 		return
 	}
+	enrichShadowRequestCurrentState(ctx, &request)
 	decision := SelectRouteShadow(request)
 	observeShadowDecision(decision)
 	EnqueueRouteShadowDecision(ctx, decision)
+}
+
+// enrichShadowRequestCurrentState adds only request-time status facts. The
+// capability index remains immutable and active-snapshot fenced, while a
+// channel disable or entitlement revocation takes effect without waiting for
+// the next capability refresh. This function is called only after the Shadow
+// feature gate, so disabled Shadow adds no database work to the hot path.
+func enrichShadowRequestCurrentState(ctx context.Context, request *RouteShadowRequest) {
+	if request == nil || model.DB == nil {
+		return
+	}
+	index, _ := routeCapabilityIndex.Load().(*capabilityIndex)
+	if index != nil {
+		ids := make([]int, 0)
+		seen := make(map[int]struct{})
+		for _, candidate := range index.ByRequestModel[request.NormalizedRequestModel] {
+			if candidate.Capability.ChannelID <= 0 {
+				continue
+			}
+			if _, exists := seen[candidate.Capability.ChannelID]; exists {
+				continue
+			}
+			seen[candidate.Capability.ChannelID] = struct{}{}
+			ids = append(ids, candidate.Capability.ChannelID)
+		}
+		if len(ids) > 0 {
+			var channels []model.Channel
+			if err := model.DB.WithContext(ctx).Select("id", "status").Where("id IN ?", ids).Find(&channels).Error; err == nil {
+				request.ChannelStatuses = make(map[int]int, len(channels))
+				for _, channel := range channels {
+					request.ChannelStatuses[channel.Id] = channel.Status
+				}
+			}
+		}
+	}
+	if request.UserID <= 0 {
+		return
+	}
+	var entitlements []model.UserChannelEntitlement
+	if err := model.DB.WithContext(ctx).Where("user_id = ? AND source = ?", request.UserID, model.RouteSourcePlatform).Find(&entitlements).Error; err != nil {
+		return
+	}
+	request.EntitledChannels = make(map[int]bool, len(entitlements))
+	for _, entitlement := range entitlements {
+		request.EntitledChannels[entitlement.ChannelID] = entitlementIsActiveForShadow(entitlement)
+	}
+}
+
+func entitlementIsActiveForShadow(entitlement model.UserChannelEntitlement) bool {
+	return entitlement.Status == model.RouteEntitlementStatusEnabled && entitlement.RevokedAt == 0 &&
+		(entitlement.ExpiresAt == 0 || entitlement.ExpiresAt > time.Now().Unix())
 }
 
 // RecordLegacySelectionAndShadow is the integration boundary used by relay

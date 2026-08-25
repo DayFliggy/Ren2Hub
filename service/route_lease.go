@@ -18,6 +18,12 @@ var (
 	ErrRouteLeaseRuntime     = errors.New("route lease runtime state changed")
 )
 
+const (
+	RouteLeaseStateAcquired      = "acquired"
+	RouteLeaseStateReleased      = "released"
+	RouteLeaseStateReleaseFailed = "release_failed"
+)
+
 const routeLeasePrefix = "route:lease:v1"
 
 type RouteLeaseResource struct {
@@ -28,6 +34,7 @@ type RouteLeaseResource struct {
 type RouteLease struct {
 	LeaseID   string
 	RequestID string
+	ChannelID int
 	Resources []RouteLeaseResource
 	ExpiresAt time.Time
 }

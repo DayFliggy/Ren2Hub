@@ -1,11 +1,16 @@
 package service
 
 import (
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/model"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestClassifyRouteErrorSeparatesKeyModelAndStreamFailures(t *testing.T) {
@@ -53,4 +58,94 @@ func TestDefaultRouteRetryBudgetSeparatesSameResourceAndFailover(t *testing.T) {
 	assert.Equal(t, 125*time.Millisecond, RouteBackoff(0, 0, time.Second, 0.5))
 	assert.Equal(t, 1125*time.Millisecond, RouteBackoff(0, time.Second, 5*time.Second, 0.5))
 	assert.LessOrEqual(t, RouteBackoff(4, 10*time.Second, 100*time.Millisecond, 1), 100*time.Millisecond)
+}
+
+func TestRouteHealthMetricsAndKeyScopeAreSeparated(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	originalDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = originalDB
+		sqlDB, closeErr := db.DB()
+		if closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: 1, Model: "gpt-5", KeyScope: "", State: model.RouteHealthStateClosed,
+		FailureCount: 1, HealthEpoch: 1, LastLatencyMS: 240,
+	}).Error)
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: 1, Model: "gpt-5", KeyScope: RouteKeyScope("secret-key"), State: model.RouteHealthStateOpen,
+		FailureCount: 3, HealthEpoch: 2,
+	}).Error)
+	errorRate, latency, err := RouteHealthMetrics(context.Background(), 1, "gpt-5")
+	require.NoError(t, err)
+	assert.InDelta(t, 1.0/3.0, errorRate, 0.001)
+	assert.Equal(t, float64(240), latency)
+	assert.NotEqual(t, RouteKeyScope("secret-key"), "secret-key")
+}
+
+func TestRouteHealthUsableAllowsOneHalfOpenProbe(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	originalDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = originalDB
+		sqlDB, closeErr := db.DB()
+		if closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: 2, Model: "gpt-5", KeyScope: "", State: model.RouteHealthStateOpen,
+		FailureCount: 3, CooldownUntil: 1000, HealthEpoch: 4,
+	}).Error)
+
+	usable, epoch, err := RouteHealthUsable(context.Background(), 2, "gpt-5", time.Unix(1000, 0))
+	require.NoError(t, err)
+	assert.True(t, usable)
+	assert.Equal(t, int64(5), epoch)
+
+	usable, epoch, err = RouteHealthUsable(context.Background(), 2, "gpt-5", time.Unix(1001, 0))
+	require.NoError(t, err)
+	assert.False(t, usable)
+	assert.Equal(t, int64(5), epoch)
+
+	var health model.ChannelHealth
+	require.NoError(t, db.Where("channel_id = ? AND model = ? AND key_scope = ?", 2, "gpt-5", "").First(&health).Error)
+	assert.Equal(t, model.RouteHealthStateHalfOpen, health.State)
+}
+
+func TestObserveLiveRouteErrorKeepsKeyAndCapabilityScopesSeparate(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	originalDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = originalDB
+		sqlDB, closeErr := db.DB()
+		if closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
+
+	require.NoError(t, ObserveLiveRouteError(context.Background(), 3, "gpt-5", 404, "model_not_found", "", false))
+	var aggregate model.ChannelHealth
+	err = db.Where("channel_id = ? AND model = ? AND key_scope = ?", 3, "gpt-5", "").First(&aggregate).Error
+	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+
+	require.NoError(t, ObserveLiveRouteErrorForKey(context.Background(), 3, "gpt-5", "", 401, "", "", false))
+	err = db.Where("channel_id = ? AND model = ? AND key_scope = ?", 3, "gpt-5", "").First(&aggregate).Error
+	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+
+	require.NoError(t, ObserveLiveRouteErrorForKey(context.Background(), 3, "gpt-5", "secret-key", 401, "", "", false))
+	var keyHealth model.ChannelHealth
+	require.NoError(t, db.Where("channel_id = ? AND model = ? AND key_scope = ?", 3, "gpt-5", RouteKeyScope("secret-key")).First(&keyHealth).Error)
+	assert.Equal(t, 1, keyHealth.FailureCount)
 }

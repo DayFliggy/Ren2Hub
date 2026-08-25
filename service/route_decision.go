@@ -34,13 +34,15 @@ func ResolveRouteSource(input RouteSourceInput) RouteSource {
 }
 
 type RouteDecisionCandidate struct {
-	ChannelID    int                  `json:"channel_id"`
-	FilterReason string               `json:"filter_reason,omitempty"`
-	Priority     int64                `json:"priority"`
-	Position     int                  `json:"position"`
-	Weight       int                  `json:"weight"`
-	Score        *RouteScoreBreakdown `json:"score_breakdown,omitempty"`
-	LeaseState   string               `json:"lease_state,omitempty"`
+	ChannelID       int                  `json:"channel_id"`
+	FilterReason    string               `json:"filter_reason,omitempty"`
+	Priority        int64                `json:"priority"`
+	Position        int                  `json:"position"`
+	Weight          int                  `json:"weight"`
+	SnapshotVersion int64                `json:"snapshot_version,omitempty"`
+	CatalogVersion  string               `json:"catalog_version,omitempty"`
+	Score           *RouteScoreBreakdown `json:"score_breakdown,omitempty"`
+	LeaseState      string               `json:"lease_state,omitempty"`
 }
 
 type RouteDecision struct {

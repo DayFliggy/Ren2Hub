@@ -74,3 +74,55 @@ func TestAcquireConfiguredRouteLeaseRequiresPolicyAndRedis(t *testing.T) {
 	_, _, err = AcquireConfiguredRouteLease(context.Background(), "request-2", 7, 10, 20, "gpt-5", time.Minute)
 	assert.ErrorIs(t, err, ErrRouteLeaseUnavailable)
 }
+
+func TestSaveChannelRoutePolicyUsesVersionCAS(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	originalDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = originalDB
+		sqlDB, closeErr := db.DB()
+		if closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelRoutePolicy{}))
+	created, err := SaveChannelRoutePolicy(model.ChannelRoutePolicy{
+		ChannelID: 11, CanonicalModel: "gpt-5", MaxChannelConcurrency: 4, Enabled: true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), created.Version)
+	updated, err := SaveChannelRoutePolicy(model.ChannelRoutePolicy{
+		ID: created.ID, ChannelID: 11, CanonicalModel: "gpt-5", MaxChannelConcurrency: 6, Enabled: true, Version: 1,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), updated.Version)
+	_, err = SaveChannelRoutePolicy(model.ChannelRoutePolicy{
+		ID: created.ID, ChannelID: 11, CanonicalModel: "gpt-5", MaxChannelConcurrency: 7, Enabled: true, Version: 1,
+	})
+	assert.ErrorIs(t, err, ErrRoutePolicyConflict)
+}
+
+func TestSaveChannelRoutePolicyRequiresVersionForExistingPolicy(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	originalDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = originalDB
+		sqlDB, closeErr := db.DB()
+		if closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelRoutePolicy{}))
+	require.NoError(t, db.Create(&model.ChannelRoutePolicy{
+		ChannelID: 13, CanonicalModel: "gpt-5", MaxChannelConcurrency: 2, Enabled: true, Version: 1,
+	}).Error)
+
+	_, err = SaveChannelRoutePolicy(model.ChannelRoutePolicy{
+		ChannelID: 13, CanonicalModel: "gpt-5", MaxChannelConcurrency: 3, Enabled: true,
+	})
+	assert.ErrorIs(t, err, ErrRoutePolicyConflict)
+}

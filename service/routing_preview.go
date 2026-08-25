@@ -268,8 +268,8 @@ func loadRoutePreviewSnapshots(ctx context.Context, channelIDs []int) (map[int]r
 	if len(channelIDs) == 0 {
 		return snapshots, nil
 	}
-	var rows []model.ChannelCapabilitySnapshot
-	if err := model.DB.WithContext(ctx).Where("channel_id IN ?", channelIDs).Find(&rows).Error; err != nil {
+	rows, err := model.FindActiveChannelCapabilitySnapshots(ctx, channelIDs)
+	if err != nil {
 		return nil, err
 	}
 	for _, snapshot := range rows {

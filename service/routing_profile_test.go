@@ -35,6 +35,7 @@ func setupRouteProfileTest(t *testing.T) *gorm.DB {
 		&model.UserRouteProfile{}, &model.UserRouteGroup{}, &model.UserRouteEntry{},
 		&model.RoutePolicy{}, &model.UserChannelEntitlement{},
 		&model.ChannelModelCapability{}, &model.ChannelCapabilitySnapshot{},
+		&model.ChannelHealth{},
 	))
 	t.Cleanup(func() {
 		model.DB = originalDB

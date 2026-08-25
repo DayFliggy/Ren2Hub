@@ -212,6 +212,27 @@ func FindActiveChannelCapabilities(ctx context.Context, channelIDs []int, reques
 	return capabilities, nil
 }
 
+// FindActiveChannelCapabilitySnapshots returns only channels with a usable
+// active pointer. The pointer row is separate from immutable capability rows;
+// callers must not infer the active version by scanning historical data.
+func FindActiveChannelCapabilitySnapshots(ctx context.Context, channelIDs []int) ([]ChannelCapabilitySnapshot, error) {
+	if DB == nil {
+		return nil, errors.New("capability snapshot database is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if len(channelIDs) == 0 {
+		return []ChannelCapabilitySnapshot{}, nil
+	}
+	var snapshots []ChannelCapabilitySnapshot
+	if err := DB.WithContext(ctx).Where("channel_id IN ? AND active_version > 0", channelIDs).
+		Order("channel_id asc").Find(&snapshots).Error; err != nil {
+		return nil, err
+	}
+	return snapshots, nil
+}
+
 // FindChannelCapabilitySnapshotVersion loads an immutable historical snapshot
 // for diagnostics or deterministic route-decision replay. It intentionally
 // does not consult the active pointer and must not be used for live routing.
