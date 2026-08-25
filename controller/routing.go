@@ -15,13 +15,17 @@ import (
 )
 
 type eligibleRouteChannel struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	Type     int    `json:"type"`
-	Status   int    `json:"status"`
-	Models   string `json:"models"`
-	Priority int64  `json:"priority"`
-	Weight   int    `json:"weight"`
+	ID              int    `json:"id"`
+	Name            string `json:"name"`
+	Type            int    `json:"type"`
+	Status          int    `json:"status"`
+	Models          string `json:"models"`
+	Priority        int64  `json:"priority"`
+	Weight          int    `json:"weight"`
+	SnapshotVersion int64  `json:"snapshot_version"`
+	CatalogVersion  string `json:"catalog_version"`
+	CapabilityState string `json:"capability_state"`
+	FilterReason    string `json:"filter_reason,omitempty"`
 }
 
 type routeCapabilityItem struct {
@@ -128,17 +132,21 @@ func PreviewRouteProfile(c *gin.Context) {
 	if !ok {
 		return
 	}
-	profile, err := service.GetUserRouteProfile(c.GetInt("id"), profileID)
+	var input service.RouteProfilePreviewInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		writeRoutePreviewBindingError(c)
+		return
+	}
+	if strings.TrimSpace(input.Model) == "" || strings.TrimSpace(input.Path) == "" {
+		writeRoutePreviewBindingError(c)
+		return
+	}
+	preview, err := service.PreviewUserRouteProfile(c, c.GetInt("id"), profileID, input)
 	if err != nil {
 		writeRouteError(c, err)
 		return
 	}
-	channels, err := listEligibleRouteChannels(c.GetInt("id"))
-	if err != nil {
-		writeRouteError(c, err)
-		return
-	}
-	common.ApiSuccess(c, gin.H{"profile": profile, "eligible_channels": channels, "live_selection": false})
+	common.ApiSuccess(c, preview)
 }
 
 func ListEligibleRouteChannels(c *gin.Context) {
@@ -220,15 +228,17 @@ func requireTokenPrivateRouting(c *gin.Context) bool {
 }
 
 func tokenPrivateRoutingEnabled() bool {
-	// The data/API foundation is intentionally not live until a selector,
-	// billing invariants, and shadow rollout are implemented.
-	return false
+	return service.TokenPrivateRoutingEnabled()
 }
 
 func parseRouteProfileID(c *gin.Context) (int, bool) {
 	profileID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || profileID <= 0 {
-		writeRouteError(c, errors.New("invalid route profile id"))
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "invalid route profile id",
+			"code":    "BAD_REQUEST",
+		})
 		return 0, false
 	}
 	return profileID, true
@@ -239,17 +249,60 @@ func listEligibleRouteChannels(userID int) ([]eligibleRouteChannel, error) {
 	if err := model.DB.Where("status = ?", common.ChannelStatusEnabled).Order("priority desc, id asc").Find(&channels).Error; err != nil {
 		return nil, err
 	}
+	channelIDs := make([]int, 0, len(channels))
+	for _, channel := range channels {
+		channelIDs = append(channelIDs, channel.Id)
+	}
+	snapshots, err := model.FindActiveChannelCapabilitySnapshots(nil, channelIDs)
+	if err != nil {
+		return nil, err
+	}
+	snapshotByChannel := make(map[int]model.ChannelCapabilitySnapshot, len(snapshots))
+	for _, snapshot := range snapshots {
+		snapshotByChannel[snapshot.ChannelID] = snapshot
+	}
+	capabilities, err := model.FindActiveChannelCapabilities(nil, channelIDs, "", "")
+	if err != nil {
+		return nil, err
+	}
+	capabilityByChannel := make(map[int][]model.ChannelModelCapability, len(capabilities))
+	for _, capability := range capabilities {
+		capabilityByChannel[capability.ChannelID] = append(capabilityByChannel[capability.ChannelID], capability)
+	}
 	items := make([]eligibleRouteChannel, 0, len(channels))
 	for _, channel := range channels {
 		if err := service.ValidatePlatformChannelEntitlement(userID, channel.Id); err != nil {
 			continue
 		}
-		items = append(items, eligibleRouteChannel{
+		item := eligibleRouteChannel{
 			ID: channel.Id, Name: channel.Name, Type: channel.Type, Status: channel.Status,
 			Models: channel.Models, Priority: channel.GetPriority(), Weight: channel.GetWeight(),
-		})
+		}
+		if snapshot, ok := snapshotByChannel[channel.Id]; ok && snapshot.ActiveVersion > 0 {
+			item.SnapshotVersion = snapshot.ActiveVersion
+			item.CatalogVersion = snapshot.CatalogVersion
+			activeCapabilities := capabilityByChannel[channel.Id]
+			if len(activeCapabilities) == 0 {
+				item.CapabilityState = model.RouteCapabilityStateUnresolved
+				item.FilterReason = service.ShadowFilterUnknownCapability
+			} else {
+				item.CapabilityState = routeCapabilityStateSummary(activeCapabilities)
+			}
+		} else {
+			item.FilterReason = service.ShadowFilterSnapshotUnavailable
+		}
+		items = append(items, item)
 	}
 	return items, nil
+}
+
+func routeCapabilityStateSummary(capabilities []model.ChannelModelCapability) string {
+	for _, capability := range capabilities {
+		if capability.State == model.RouteCapabilityStateEligible {
+			return model.RouteCapabilityStateEligible
+		}
+	}
+	return capabilities[0].State
 }
 
 func writeRouteError(c *gin.Context, err error) {
@@ -282,6 +335,14 @@ func writeRouteBindingError(c *gin.Context) {
 	c.JSON(http.StatusBadRequest, gin.H{
 		"success": false,
 		"message": "invalid route profile request",
+		"code":    "BAD_REQUEST",
+	})
+}
+
+func writeRoutePreviewBindingError(c *gin.Context) {
+	c.JSON(http.StatusBadRequest, gin.H{
+		"success": false,
+		"message": "invalid route preview request",
 		"code":    "BAD_REQUEST",
 	})
 }

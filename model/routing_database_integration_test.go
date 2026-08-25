@@ -53,6 +53,7 @@ func TestRoutingDatabaseIntegration(t *testing.T) {
 			require.NoError(t, migrateRoutingModels(db))
 			require.NoError(t, migrateChannelCapabilityIndexes())
 			require.True(t, db.Migrator().HasIndex(&ChannelModelCapability{}, "channel_model_capability_snapshot"))
+			require.True(t, db.Migrator().HasIndex(&ChannelRoutePolicy{}, "channel_route_policy_model"))
 
 			channelID := 991001
 			require.NoError(t, db.Where("channel_id = ?", channelID).Delete(&ChannelModelCapability{}).Error)
@@ -97,6 +98,7 @@ func TestRoutingDatabaseIntegrationSQLite(t *testing.T) {
 	require.NoError(t, migrateRoutingModels(db))
 	require.NoError(t, migrateChannelCapabilityIndexes())
 	require.True(t, db.Migrator().HasIndex(&ChannelModelCapability{}, "channel_model_capability_snapshot"))
+	require.True(t, db.Migrator().HasIndex(&ChannelRoutePolicy{}, "channel_route_policy_model"))
 	require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), 991002, ChannelCapabilitySnapshotFence{}, "sqlite-hash", "sqlite-catalog", []ChannelModelCapability{{
 		RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical",
 		ChannelStatus: common.ChannelStatusEnabled, State: RouteCapabilityStateEligible,

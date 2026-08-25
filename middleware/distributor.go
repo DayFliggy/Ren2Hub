@@ -36,6 +36,7 @@ func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var channel *model.Channel
 		selectGroup := ""
+		liveRouteSelected := false
 		channelId, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
 		if err != nil {
@@ -127,7 +128,47 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 
-				if !isCompactRequest {
+				// Live routing is deliberately behind an independent, default-off
+				// gate. Its selector is pure; Relay owns the per-attempt lease and
+				// retry lifecycle after this middleware stores the decision.
+				if !isCompactRequest && !requiresNativeResponses {
+					limitEnabled := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
+					var tokenLimit map[string]bool
+					if value, exists := common.GetContextKey(c, constant.ContextKeyTokenModelLimit); exists {
+						tokenLimit, _ = value.(map[string]bool)
+					}
+					liveRequest := service.LiveRouteRequest{
+						Context:                c.Request.Context(),
+						CapabilityEnabled:      service.RouteLiveRoutingEnabled(),
+						RequestID:              c.GetString(common.RequestIdKey),
+						UserID:                 common.GetContextKeyInt(c, constant.ContextKeyUserId),
+						TokenID:                common.GetContextKeyInt(c, constant.ContextKeyTokenId),
+						RequestModel:           modelRequest.Model,
+						RequestPath:            c.Request.URL.Path,
+						UserGroup:              common.GetContextKeyString(c, constant.ContextKeyUserGroup),
+						TokenModelLimitEnabled: limitEnabled,
+						TokenModelLimit:        tokenLimit,
+					}
+					if service.RouteLiveRoutingEnabled() && service.RouteLiveRolloutMatches(liveRequest) {
+						liveSelection, liveErr := service.SelectLiveTokenRoute(liveRequest)
+						if liveErr != nil {
+							abortWithOpenAiMessage(c, http.StatusServiceUnavailable, liveErr.Error(), types.ErrorCodeGetChannelFailed)
+							return
+						}
+						if liveSelection.Source != service.RouteSourceLegacy {
+							channel, liveErr = model.GetChannelById(liveSelection.Decision.SelectedChannelID, true)
+							if liveErr != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
+								abortWithOpenAiMessage(c, http.StatusServiceUnavailable, "live route channel is unavailable", types.ErrorCodeGetChannelFailed)
+								return
+							}
+							selectGroup = usingGroup
+							liveRouteSelected = true
+							c.Set("route_live_selection", liveSelection)
+						}
+					}
+				}
+
+				if !liveRouteSelected && !isCompactRequest {
 					if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
 						affinityUsable := false
 						preferred, err := model.CacheGetChannel(preferredChannelID)
@@ -239,12 +280,14 @@ func Distribute() func(c *gin.Context) {
 		if isCompactRequest {
 			selectedModel = compactPermissionModel
 		}
-		service.RecordLegacySelectionAndShadow(
-			c.Request.Context(),
-			service.BuildRouteShadowRequest(c, selectedModel, c.Request.URL.Path, 0),
-			selectGroup,
-			channel.Id,
-		)
+		if !liveRouteSelected {
+			service.RecordLegacySelectionAndShadow(
+				c.Request.Context(),
+				service.BuildRouteShadowRequest(c, selectedModel, c.Request.URL.Path, 0),
+				selectGroup,
+				channel.Id,
+			)
+		}
 		SetupContextForSelectedChannel(c, channel, selectedModel)
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {

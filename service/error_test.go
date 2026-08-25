@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -120,6 +121,23 @@ func TestRelayErrorHandlerKeepsOpenAIErrorMessage(t *testing.T) {
 
 	require.NotNil(t, newAPIError)
 	require.Equal(t, message, newAPIError.Error())
+}
+
+func TestRelayErrorHandlerPreservesRetryAfterAcrossErrorFormats(t *testing.T) {
+	for _, body := range []string{
+		"invalid JSON",
+		`{"message":"temporary"}`,
+		`{"error":{"message":"temporary","type":"server_error","code":"server_error"}}`,
+	} {
+		resp := &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Header:     http.Header{"Retry-After": []string{"3"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}
+		err := RelayErrorHandler(context.Background(), resp, false)
+		require.NotNil(t, err)
+		require.Equal(t, 3*time.Second, err.RetryAfter)
+	}
 }
 
 func TestRelayErrorHandlerKeepsInvalidJSONBodyInDebugLog(t *testing.T) {

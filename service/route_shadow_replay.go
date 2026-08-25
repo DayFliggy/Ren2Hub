@@ -40,6 +40,13 @@ func ReplayRouteShadowDecision(ctx context.Context, data []byte) (RouteShadowDec
 	if len(stored.ShadowCandidates) == 0 {
 		return RouteShadowDecision{}, ErrRouteShadowReplayInvalid
 	}
+	// Events written before the qualification snapshot was versioned cannot
+	// distinguish an omitted qualification from an explicit denial. Preserve
+	// their historical static replay behavior; versioned events keep false.
+	if stored.QualificationVersion == 0 {
+		stored.PriceEligible = true
+		stored.SecurityAllowed = true
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -96,8 +103,12 @@ func ReplayRouteShadowDecision(ctx context.Context, data []byte) (RouteShadowDec
 		RequestPath:            stored.RequestPath,
 		EndpointType:           stored.EndpointType,
 		UserGroup:              stored.UserGroup,
-		PriceEligible:          true,
-		SecurityAllowed:        true,
+		TokenModelLimitEnabled: stored.TokenModelLimitEnabled,
+		TokenModelLimit:        stored.TokenModelLimit,
+		EntitledChannels:       stored.EntitledChannels,
+		ChannelStatuses:        stored.ChannelStatuses,
+		PriceEligible:          stored.PriceEligible,
+		SecurityAllowed:        stored.SecurityAllowed,
 		Legacy:                 stored.LegacyTrace,
 	}
 	return selectRouteShadowWithIndex(request, index), nil

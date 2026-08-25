@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	ShadowRouteSource = "auto_lab"
+	ShadowRouteSource               = "auto_lab"
+	RouteShadowQualificationVersion = 1
 
 	ShadowReasonSameChannel          = "same_channel"
 	ShadowReasonDifferentPriority    = "different_priority"
@@ -29,6 +30,7 @@ const (
 	ShadowReasonAbilityFilter        = "ability_filter_difference"
 	ShadowReasonTokenFilter          = "token_permission_difference"
 	ShadowReasonSnapshotStale        = "snapshot_stale"
+	ShadowReasonMappingConflict      = "mapping_conflict"
 
 	ShadowFilterSnapshotUnavailable = "snapshot_unavailable"
 	ShadowFilterSnapshotStale       = "snapshot_stale"
@@ -71,6 +73,7 @@ type RouteShadowRequest struct {
 	PriceEligible          bool
 	SecurityAllowed        bool
 	SnapshotVersion        int64
+	ChannelStatuses        map[int]int
 	Legacy                 LegacySelectionTrace
 }
 
@@ -127,6 +130,13 @@ type RouteShadowDecision struct {
 	NormalizedRequestModel string                 `json:"normalized_request_model"`
 	RequestPath            string                 `json:"request_path"`
 	UserGroup              string                 `json:"user_group"`
+	TokenModelLimitEnabled bool                   `json:"token_model_limit_enabled,omitempty"`
+	TokenModelLimit        map[string]bool        `json:"token_model_limit,omitempty"`
+	EntitledChannels       map[int]bool           `json:"entitled_channels,omitempty"`
+	ChannelStatuses        map[int]int            `json:"channel_statuses,omitempty"`
+	PriceEligible          bool                   `json:"price_eligible"`
+	SecurityAllowed        bool                   `json:"security_allowed"`
+	QualificationVersion   int                    `json:"qualification_version,omitempty"`
 	ActualModel            string                 `json:"actual_model,omitempty"`
 	LabSlug                string                 `json:"lab_slug,omitempty"`
 	EndpointType           string                 `json:"endpoint_type,omitempty"`
@@ -140,6 +150,7 @@ type RouteShadowDecision struct {
 	FilterReasonCounts     map[string]int         `json:"filter_reason_counts,omitempty"`
 	DifferenceReasons      []string               `json:"difference_reasons,omitempty"`
 	HasUnknown             bool                   `json:"has_unknown"`
+	HasMappingConflict     bool                   `json:"has_mapping_conflict"`
 	HasMixed               bool                   `json:"has_mixed"`
 	HasUnauthorized        bool                   `json:"has_unauthorized"`
 	RetryAttempt           int                    `json:"retry_attempt"`
@@ -166,6 +177,13 @@ func selectRouteShadowWithIndex(request RouteShadowRequest, index *capabilityInd
 		NormalizedRequestModel: request.NormalizedRequestModel,
 		RequestPath:            request.RequestPath,
 		UserGroup:              request.UserGroup,
+		TokenModelLimitEnabled: request.TokenModelLimitEnabled,
+		TokenModelLimit:        cloneStringBoolMap(request.TokenModelLimit),
+		EntitledChannels:       cloneBoolMap(request.EntitledChannels),
+		ChannelStatuses:        cloneIntMap(request.ChannelStatuses),
+		PriceEligible:          request.PriceEligible,
+		SecurityAllowed:        request.SecurityAllowed,
+		QualificationVersion:   RouteShadowQualificationVersion,
 		EndpointType:           request.EndpointType,
 		LegacyCandidateIDs:     append([]int(nil), request.Legacy.CandidateIDs...),
 		LegacyChannelID:        request.Legacy.SelectedChannelID,
@@ -203,8 +221,11 @@ func selectRouteShadowWithIndex(request RouteShadowRequest, index *capabilityInd
 		if reason := shadowCandidateFilter(request, candidate); reason != "" {
 			shadowCandidate.FilterReason = reason
 			decision.FilterReasonCounts[reason]++
-			if reason == ShadowFilterUnknownCapability || reason == ShadowFilterMappingConflict {
+			if reason == ShadowFilterUnknownCapability {
 				decision.HasUnknown = true
+			}
+			if reason == ShadowFilterMappingConflict {
+				decision.HasMappingConflict = true
 			}
 			if reason == ShadowFilterGroupForbidden || reason == ShadowFilterTokenForbidden || reason == ShadowFilterEntitlementRevoked {
 				decision.HasUnauthorized = true
@@ -238,58 +259,71 @@ func selectRouteShadowWithIndex(request RouteShadowRequest, index *capabilityInd
 	return decision
 }
 
+func cloneBoolMap(values map[int]bool) map[int]bool {
+	if values == nil {
+		return nil
+	}
+	copyValues := make(map[int]bool, len(values))
+	for key, value := range values {
+		copyValues[key] = value
+	}
+	return copyValues
+}
+
+func cloneStringBoolMap(values map[string]bool) map[string]bool {
+	if values == nil {
+		return nil
+	}
+	copyValues := make(map[string]bool, len(values))
+	for key, value := range values {
+		copyValues[key] = value
+	}
+	return copyValues
+}
+
+func cloneIntMap(values map[int]int) map[int]int {
+	if values == nil {
+		return nil
+	}
+	copyValues := make(map[int]int, len(values))
+	for key, value := range values {
+		copyValues[key] = value
+	}
+	return copyValues
+}
+
 func shadowCandidateFilter(request RouteShadowRequest, candidate indexedCapability) string {
-	if request.SnapshotVersion > 0 && candidate.Capability.SnapshotVersion != request.SnapshotVersion {
-		return ShadowFilterSnapshotStale
-	}
-	if candidate.Capability.State == model.RouteCapabilityStateConflict {
-		return ShadowFilterMappingConflict
-	}
-	if candidate.Capability.State == model.RouteCapabilityStateUnresolved || candidate.Capability.LabSlug == "" {
-		return ShadowFilterUnknownCapability
-	}
-	if candidate.Capability.State == model.RouteCapabilityStateUnsupported {
-		return ShadowFilterUnsupported
-	}
-	if candidate.ChannelStatus != common.ChannelStatusEnabled {
-		return ShadowFilterChannelDisabled
-	}
-	if len(candidate.AbilityGroups) == 0 {
-		return ShadowFilterAbilityDisabled
-	}
-	abilityAllowed := false
-	for _, group := range candidate.AbilityGroups {
-		if group == request.UserGroup || IsUserSelectableGroup(request.UserGroup, group) {
-			abilityAllowed = true
-			break
-		}
-	}
-	if !abilityAllowed {
-		return ShadowFilterGroupForbidden
-	}
-	if request.TokenModelLimitEnabled && !tokenAllowsShadowModel(request.TokenModelLimit, request.RequestModel) {
-		return ShadowFilterTokenForbidden
-	}
-	if request.EndpointType != "" && !stringListContains(decodeStringList(candidate.Capability.EndpointTypes), request.EndpointType) {
-		return ShadowFilterPathUnsupported
-	}
-	if candidate.ChannelType == constant.ChannelTypeAdvancedCustom {
-		if request.RequestPath != "" && (candidate.Advanced == nil || !candidate.Advanced.SupportsPathForModel(request.RequestPath, request.RequestModel)) {
-			return ShadowFilterPathUnsupported
-		}
-	}
-	if !request.PriceEligible {
-		return ShadowFilterPriceForbidden
-	}
-	if !request.SecurityAllowed {
-		return ShadowFilterSecurityForbidden
-	}
+	entitled := true
 	if request.EntitledChannels != nil {
-		if entitled, ok := request.EntitledChannels[candidate.Capability.ChannelID]; ok && !entitled {
-			return ShadowFilterEntitlementRevoked
+		if value, ok := request.EntitledChannels[candidate.Capability.ChannelID]; ok {
+			entitled = value
 		}
 	}
-	return ""
+	channelStatus := candidate.ChannelStatus
+	if status, ok := request.ChannelStatuses[candidate.Capability.ChannelID]; ok {
+		channelStatus = status
+	}
+	result := filterRouteCapability(routeCapabilityFilterInput{
+		Capability:        candidate.Capability,
+		SnapshotVersion:   request.SnapshotVersion,
+		ChannelStatus:     channelStatus,
+		ChannelType:       candidate.ChannelType,
+		AbilityEnabled:    len(candidate.AbilityGroups) > 0,
+		AbilityAllowed:    false,
+		AbilityGroups:     candidate.AbilityGroups,
+		UserGroup:         request.UserGroup,
+		TokenLimitEnabled: request.TokenModelLimitEnabled,
+		TokenLimit:        request.TokenModelLimit,
+		RequestModel:      request.RequestModel,
+		NormalizedModel:   request.NormalizedRequestModel,
+		RequestPath:       request.RequestPath,
+		EndpointType:      request.EndpointType,
+		Entitled:          entitled,
+		PriceEligible:     request.PriceEligible,
+		SecurityAllowed:   request.SecurityAllowed,
+		Advanced:          candidate.Advanced,
+	})
+	return result.Reason
 }
 
 func stringListContains(values []string, target string) bool {
@@ -328,8 +362,11 @@ func compareShadowDecision(decision RouteShadowDecision) []string {
 	case decision.ShadowPreferredID > 0:
 		reasons = append(reasons, ShadowReasonShadowOnly)
 	}
-	if decision.FilterReasonCounts[ShadowFilterUnknownCapability] > 0 || decision.FilterReasonCounts[ShadowFilterMappingConflict] > 0 {
+	if decision.FilterReasonCounts[ShadowFilterUnknownCapability] > 0 {
 		reasons = append(reasons, ShadowReasonUnknownCapability)
+	}
+	if decision.FilterReasonCounts[ShadowFilterMappingConflict] > 0 {
+		reasons = append(reasons, ShadowReasonMappingConflict)
 	}
 	if decision.FilterReasonCounts[ShadowFilterPathUnsupported] > 0 {
 		reasons = append(reasons, ShadowReasonPathFilterDifference)
@@ -370,9 +407,61 @@ func MaybeRecordLegacySelection(ctx context.Context, request RouteShadowRequest)
 	if !routeShadowEnabled(request) {
 		return
 	}
+	enrichShadowRequestCurrentState(ctx, &request)
 	decision := SelectRouteShadow(request)
 	observeShadowDecision(decision)
 	EnqueueRouteShadowDecision(ctx, decision)
+}
+
+// enrichShadowRequestCurrentState adds only request-time status facts. The
+// capability index remains immutable and active-snapshot fenced, while a
+// channel disable or entitlement revocation takes effect without waiting for
+// the next capability refresh. This function is called only after the Shadow
+// feature gate, so disabled Shadow adds no database work to the hot path.
+func enrichShadowRequestCurrentState(ctx context.Context, request *RouteShadowRequest) {
+	if request == nil || model.DB == nil {
+		return
+	}
+	index, _ := routeCapabilityIndex.Load().(*capabilityIndex)
+	if index != nil {
+		ids := make([]int, 0)
+		seen := make(map[int]struct{})
+		for _, candidate := range index.ByRequestModel[request.NormalizedRequestModel] {
+			if candidate.Capability.ChannelID <= 0 {
+				continue
+			}
+			if _, exists := seen[candidate.Capability.ChannelID]; exists {
+				continue
+			}
+			seen[candidate.Capability.ChannelID] = struct{}{}
+			ids = append(ids, candidate.Capability.ChannelID)
+		}
+		if len(ids) > 0 {
+			var channels []model.Channel
+			if err := model.DB.WithContext(ctx).Select("id", "status").Where("id IN ?", ids).Find(&channels).Error; err == nil {
+				request.ChannelStatuses = make(map[int]int, len(channels))
+				for _, channel := range channels {
+					request.ChannelStatuses[channel.Id] = channel.Status
+				}
+			}
+		}
+	}
+	if request.UserID <= 0 {
+		return
+	}
+	var entitlements []model.UserChannelEntitlement
+	if err := model.DB.WithContext(ctx).Where("user_id = ? AND source = ?", request.UserID, model.RouteSourcePlatform).Find(&entitlements).Error; err != nil {
+		return
+	}
+	request.EntitledChannels = make(map[int]bool, len(entitlements))
+	for _, entitlement := range entitlements {
+		request.EntitledChannels[entitlement.ChannelID] = entitlementIsActiveForShadow(entitlement)
+	}
+}
+
+func entitlementIsActiveForShadow(entitlement model.UserChannelEntitlement) bool {
+	return entitlement.Status == model.RouteEntitlementStatusEnabled && entitlement.RevokedAt == 0 &&
+		(entitlement.ExpiresAt == 0 || entitlement.ExpiresAt > time.Now().Unix())
 }
 
 // RecordLegacySelectionAndShadow is the integration boundary used by relay
@@ -444,7 +533,11 @@ func allowlistMatches(env string, value int) bool {
 }
 
 func modelAllowlistMatches(modelName string) bool {
-	allowlist := strings.TrimSpace(common.GetEnvOrDefaultString("ROUTE_SHADOW_MODELS", ""))
+	return modelAllowlistMatchesForEnv("ROUTE_SHADOW_MODELS", modelName)
+}
+
+func modelAllowlistMatchesForEnv(env, modelName string) bool {
+	allowlist := strings.TrimSpace(common.GetEnvOrDefaultString(env, ""))
 	if allowlist == "" {
 		return true
 	}

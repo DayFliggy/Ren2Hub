@@ -42,6 +42,7 @@ const (
 	RouteMaxRetryAttempts           = 3
 	RouteMaxFailoverAttempts        = 3
 	RouteNameMaxLength              = 64
+	RouteMaxConcurrency             = 1_000_000
 )
 
 type UserRouteProfile struct {
@@ -139,17 +140,37 @@ type UserChannelEntitlement struct {
 }
 
 type ChannelHealth struct {
-	ID            int    `json:"id"`
-	ChannelID     int    `json:"channel_id" gorm:"uniqueIndex:channel_health_scope;not null"`
-	Model         string `json:"model" gorm:"type:varchar(255);uniqueIndex:channel_health_scope;not null"`
-	KeyScope      string `json:"key_scope" gorm:"type:varchar(128);uniqueIndex:channel_health_scope;not null"`
-	State         string `json:"state" gorm:"type:varchar(32);index;not null"`
-	FailureCount  int    `json:"failure_count" gorm:"not null;default:0"`
-	CooldownUntil int64  `json:"cooldown_until" gorm:"bigint"`
-	HealthEpoch   int64  `json:"health_epoch" gorm:"not null;default:1"`
-	LastLatencyMS int64  `json:"last_latency_ms"`
-	UpdatedAt     int64  `json:"updated_at" gorm:"bigint;not null"`
+	ID                  int    `json:"id"`
+	ChannelID           int    `json:"channel_id" gorm:"uniqueIndex:channel_health_scope;not null"`
+	Model               string `json:"model" gorm:"type:varchar(255);uniqueIndex:channel_health_scope;not null"`
+	KeyScope            string `json:"key_scope" gorm:"type:varchar(128);uniqueIndex:channel_health_scope;not null"`
+	State               string `json:"state" gorm:"type:varchar(32);index;not null"`
+	FailureCount        int    `json:"failure_count" gorm:"not null;default:0"`
+	CooldownUntil       int64  `json:"cooldown_until" gorm:"bigint"`
+	HealthEpoch         int64  `json:"health_epoch" gorm:"not null;default:1"`
+	LastLatencyMS       int64  `json:"last_latency_ms"`
+	FirstTokenLatencyMS int64  `json:"first_token_latency_ms"`
+	UpdatedAt           int64  `json:"updated_at" gorm:"bigint;not null"`
 }
+
+// ChannelRoutePolicy is the configuration source for distributed admission
+// control. It is intentionally separate from Channel.capacity_total and
+// Channel.capacity_used, which remain operational/display fields.
+type ChannelRoutePolicy struct {
+	ID                    int    `json:"id"`
+	ChannelID             int    `json:"channel_id" gorm:"uniqueIndex:channel_route_policy_model;not null"`
+	CanonicalModel        string `json:"canonical_model" gorm:"type:varchar(255);uniqueIndex:channel_route_policy_model;not null"`
+	MaxUserConcurrency    int    `json:"max_user_concurrency" gorm:"not null;default:0"`
+	MaxTokenConcurrency   int    `json:"max_token_concurrency" gorm:"not null;default:0"`
+	MaxChannelConcurrency int    `json:"max_channel_concurrency" gorm:"not null;default:0"`
+	Enabled               bool   `json:"enabled"`
+	Version               int64  `json:"version" gorm:"not null;default:1"`
+	UpdatedAt             int64  `json:"updated_at" gorm:"bigint;not null"`
+}
+
+var (
+	ErrInvalidChannelRoutePolicy = errors.New("invalid channel route policy")
+)
 
 func (p *UserRouteProfile) Normalize(now time.Time) {
 	if p.Mode == "" {
@@ -264,4 +285,30 @@ func (h *ChannelHealth) Normalize(now time.Time) {
 	if h.UpdatedAt == 0 {
 		h.UpdatedAt = now.Unix()
 	}
+}
+
+func (p *ChannelRoutePolicy) Normalize(now time.Time) {
+	if p.Version <= 0 {
+		p.Version = 1
+	}
+	p.CanonicalModel = strings.TrimSpace(p.CanonicalModel)
+	p.UpdatedAt = now.Unix()
+}
+
+func (p ChannelRoutePolicy) Validate() error {
+	if p.ChannelID <= 0 || strings.TrimSpace(p.CanonicalModel) == "" {
+		return ErrInvalidChannelRoutePolicy
+	}
+	if p.Version <= 0 {
+		return ErrInvalidChannelRoutePolicy
+	}
+	for _, capacity := range []int{p.MaxUserConcurrency, p.MaxTokenConcurrency, p.MaxChannelConcurrency} {
+		if capacity < 0 || capacity > RouteMaxConcurrency {
+			return ErrInvalidChannelRoutePolicy
+		}
+	}
+	if p.Enabled && p.MaxChannelConcurrency <= 0 {
+		return ErrInvalidChannelRoutePolicy
+	}
+	return nil
 }
