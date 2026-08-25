@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -14,10 +15,11 @@ import (
 )
 
 var (
-	ErrRoutePolicyNotFound = errors.New("channel route policy is not configured")
-	ErrRoutePolicyDisabled = errors.New("channel route policy is disabled")
-	ErrRoutePolicyInvalid  = errors.New("channel route policy is invalid")
-	ErrRoutePolicyConflict = errors.New("channel route policy version conflict")
+	ErrRoutePolicyNotFound         = errors.New("channel route policy is not configured")
+	ErrRoutePolicyDisabled         = errors.New("channel route policy is disabled")
+	ErrRoutePolicyInvalid          = errors.New("channel route policy is invalid")
+	ErrRoutePolicyConflict         = errors.New("channel route policy version conflict")
+	ErrRoutePolicyScopeUnavailable = errors.New("route scope concurrency limits are unavailable")
 )
 
 func SaveChannelRoutePolicy(input model.ChannelRoutePolicy) (model.ChannelRoutePolicy, error) {
@@ -101,22 +103,27 @@ func LoadEnabledChannelRoutePolicy(ctx context.Context, channelID int, requestMo
 	return policy, nil
 }
 
-// BuildRouteLeaseResources maps one enabled policy to the independent Redis
-// resource dimensions. A zero user/token limit means that dimension is not
-// bounded; the channel/model limit remains mandatory for an enabled policy.
-func BuildRouteLeaseResources(policy model.ChannelRoutePolicy, userID, tokenID int) ([]RouteLeaseResource, error) {
+// BuildRouteLeaseResources maps one enabled policy and the resolved shared
+// scope limits to Redis resources. A zero scope limit means no enabled policy
+// constrains that shared dimension; a zero on the selected policy alone never
+// bypasses a positive limit resolved from another policy.
+func BuildRouteLeaseResources(policy model.ChannelRoutePolicy, scopeLimits model.RouteScopeConcurrencyLimits, userID, tokenID int) ([]RouteLeaseResource, error) {
 	if err := policy.Validate(); err != nil || !policy.Enabled {
 		return nil, ErrRoutePolicyInvalid
 	}
 	if userID <= 0 || tokenID <= 0 {
 		return nil, ErrRoutePolicyInvalid
 	}
-	resources := make([]RouteLeaseResource, 0, 3)
-	if policy.MaxUserConcurrency > 0 {
-		resources = append(resources, RouteLeaseResource{Key: UserRouteLeaseKey(userID), Capacity: policy.MaxUserConcurrency})
+	if scopeLimits.MaxUserConcurrency < 0 || scopeLimits.MaxUserConcurrency > model.RouteMaxConcurrency ||
+		scopeLimits.MaxTokenConcurrency < 0 || scopeLimits.MaxTokenConcurrency > model.RouteMaxConcurrency {
+		return nil, ErrRoutePolicyScopeUnavailable
 	}
-	if policy.MaxTokenConcurrency > 0 {
-		resources = append(resources, RouteLeaseResource{Key: TokenRouteLeaseKey(tokenID), Capacity: policy.MaxTokenConcurrency})
+	resources := make([]RouteLeaseResource, 0, 3)
+	if scopeLimits.MaxUserConcurrency > 0 {
+		resources = append(resources, RouteLeaseResource{Key: UserRouteLeaseKey(userID), Capacity: scopeLimits.MaxUserConcurrency})
+	}
+	if scopeLimits.MaxTokenConcurrency > 0 {
+		resources = append(resources, RouteLeaseResource{Key: TokenRouteLeaseKey(tokenID), Capacity: scopeLimits.MaxTokenConcurrency})
 	}
 	resources = append(resources, RouteLeaseResource{
 		Key:      ChannelModelRouteLeaseKey(policy.ChannelID, policy.CanonicalModel),
@@ -137,7 +144,11 @@ func AcquireConfiguredRouteLease(ctx context.Context, requestID string, channelI
 		return RouteLease{}, policy, ErrRouteLeaseUnavailable
 	}
 	leaseID := uuid.NewString()
-	resources, err := BuildRouteLeaseResources(policy, userID, tokenID)
+	scopeLimits, err := model.FindEnabledRouteScopeConcurrencyLimits(ctx)
+	if err != nil {
+		return RouteLease{}, policy, fmt.Errorf("%w: %v", ErrRoutePolicyScopeUnavailable, err)
+	}
+	resources, err := BuildRouteLeaseResources(policy, scopeLimits, userID, tokenID)
 	if err != nil {
 		return RouteLease{}, policy, err
 	}

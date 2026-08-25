@@ -155,7 +155,10 @@ type ChannelHealth struct {
 
 // ChannelRoutePolicy is the configuration source for distributed admission
 // control. It is intentionally separate from Channel.capacity_total and
-// Channel.capacity_used, which remain operational/display fields.
+// Channel.capacity_used, which remain operational/display fields. User and
+// token limits use shared Redis keys, so their effective value is the smallest
+// positive limit across enabled policies; channel/model limits stay local to
+// this policy.
 type ChannelRoutePolicy struct {
 	ID                    int    `json:"id"`
 	ChannelID             int    `json:"channel_id" gorm:"uniqueIndex:channel_route_policy_model;not null"`
