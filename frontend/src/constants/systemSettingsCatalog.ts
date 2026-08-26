@@ -1,7 +1,13 @@
 import type { SystemSettingValue } from '@/composables/useSystemSettings'
 
 export type SystemSettingsDomainId =
-  'site' | 'auth' | 'billing' | 'models' | 'security' | 'content' | 'operations'
+  | 'site'
+  | 'auth'
+  | 'billing'
+  | 'models'
+  | 'security'
+  | 'content'
+  | 'operations'
 
 export type SystemSettingFieldKind =
   | 'boolean'
@@ -16,6 +22,9 @@ export type SystemSettingFieldKind =
   | 'key-value'
   | 'ratio'
   | 'select'
+  | 'role'
+  | 'amount-list'
+  | 'discount'
 
 export interface SystemSettingField {
   key: string
@@ -31,8 +40,16 @@ export interface SystemSettingsSection {
   title: string
   description: string
   fields: readonly SystemSettingField[]
+  /** Keys managed by a dedicated integration panel instead of generic fields. */
+  managedKeys?: readonly string[]
   integration?:
-    'custom-oauth' | 'performance' | 'channel-affinity' | 'waffo-pancake'
+    | 'custom-oauth'
+    | 'performance'
+    | 'channel-affinity'
+    | 'waffo-pancake'
+    | 'payment-compliance'
+    | 'operations-maintenance'
+    | 'ionet'
 }
 
 export interface SystemSettingsDomain {
@@ -47,35 +64,17 @@ const text = (
   label: string,
   defaultValue = '',
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'text',
-  defaultValue,
-})
+): SystemSettingField => ({ key, label, description, kind: 'text', defaultValue })
 const url = (
   key: string,
   label: string,
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'url',
-  defaultValue: '',
-})
+): SystemSettingField => ({ key, label, description, kind: 'url', defaultValue: '' })
 const secret = (
   key: string,
   label: string,
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'secret',
-  defaultValue: '',
-})
+): SystemSettingField => ({ key, label, description, kind: 'secret', defaultValue: '' })
 const secretTextarea = (
   key: string,
   label: string,
@@ -92,98 +91,60 @@ const number = (
   label: string,
   defaultValue = 0,
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'number',
-  defaultValue,
-})
+): SystemSettingField => ({ key, label, description, kind: 'number', defaultValue })
 const toggle = (
   key: string,
   label: string,
   defaultValue = false,
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'boolean',
-  defaultValue,
-})
+): SystemSettingField => ({ key, label, description, kind: 'boolean', defaultValue })
 const textarea = (
   key: string,
   label: string,
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'textarea',
-  defaultValue: '',
-})
+): SystemSettingField => ({ key, label, description, kind: 'textarea', defaultValue: '' })
 const json = (
   key: string,
   label: string,
   defaultValue = '{}',
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'json',
-  defaultValue,
-})
+): SystemSettingField => ({ key, label, description, kind: 'json', defaultValue })
 const list = (
   key: string,
   label: string,
   defaultValue = '[]',
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'list',
-  defaultValue,
-})
+): SystemSettingField => ({ key, label, description, kind: 'list', defaultValue })
 const keyValue = (
   key: string,
   label: string,
   defaultValue = '{}',
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'key-value',
-  defaultValue,
-})
+): SystemSettingField => ({ key, label, description, kind: 'key-value', defaultValue })
 const ratio = (
   key: string,
   label: string,
   defaultValue = '{}',
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'ratio',
-  defaultValue,
-})
+): SystemSettingField => ({ key, label, description, kind: 'ratio', defaultValue })
 const select = (
   key: string,
   label: string,
   defaultValue: string,
   options: ReadonlyArray<{ value: string; label: string }>,
   description?: string
-): SystemSettingField => ({
-  key,
-  label,
-  description,
-  kind: 'select',
-  defaultValue,
-  options,
-})
+): SystemSettingField => ({ key, label, description, kind: 'select', defaultValue, options })
+const role = (key: string, label: string): SystemSettingField =>
+  select(key, label, '0', [
+    { value: '0', label: '访客用户' },
+    { value: '1', label: '普通用户' },
+    { value: '10', label: '管理员' },
+    { value: '100', label: '根管理员' },
+  ])
+const amountList = (key: string, label: string, description?: string): SystemSettingField =>
+  ({ key, label, description, kind: 'amount-list', defaultValue: '[]' })
+const discount = (key: string, label: string, description?: string): SystemSettingField =>
+  ({ key, label, description, kind: 'discount', defaultValue: '{}' })
 
 export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
   {
@@ -197,17 +158,24 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         description: '站点名称、公开地址、品牌内容与法律文本。',
         fields: [
           text('SystemName', '系统名称'),
-          url(
-            'ServerAddress',
-            '服务器地址',
-            '用于 OAuth 回调、Webhook 与外部集成。'
-          ),
+          url('ServerAddress', '服务器地址', '用于 OAuth 回调、Webhook 与外部集成。'),
           url('Logo', 'Logo 地址'),
           textarea('Footer', '页脚内容'),
           textarea('About', '关于页面内容'),
           textarea('HomePageContent', '首页内容'),
           textarea('legal.user_agreement', '用户协议'),
           textarea('legal.privacy_policy', '隐私政策'),
+        ],
+      },
+      {
+        id: 'file-access',
+        title: '文件与媒体访问',
+        description: '控制文件和图片上传、下载所需的最低角色。',
+        fields: [
+          role('FileUploadPermission', '文件上传权限'),
+          role('FileDownloadPermission', '文件下载权限'),
+          role('ImageUploadPermission', '图片上传权限'),
+          role('ImageDownloadPermission', '图片下载权限'),
         ],
       },
       {
@@ -243,11 +211,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           toggle('EmailVerificationEnabled', '要求邮箱验证'),
           toggle('EmailDomainRestrictionEnabled', '限制注册邮箱域名'),
           toggle('EmailAliasRestrictionEnabled', '禁止邮箱别名'),
-          textarea(
-            'EmailDomainWhitelist',
-            '邮箱域名白名单',
-            '以逗号或换行分隔。'
-          ),
+          textarea('EmailDomainWhitelist', '邮箱域名白名单', '以逗号或换行分隔。'),
         ],
       },
       {
@@ -339,31 +303,19 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           number('QuotaForInvitee', '被邀请人奖励'),
           url('TopUpLink', '外部充值链接'),
           url('general_setting.docs_link', '文档链接'),
-          toggle(
-            'quota_setting.enable_free_model_pre_consume',
-            '免费模型预扣配额'
-          ),
+          toggle('quota_setting.enable_free_model_pre_consume', '免费模型预扣配额'),
           number('QuotaPerUnit', '每单位配额', 500000),
           number('USDExchangeRate', '美元汇率', 1),
           toggle('DisplayInCurrencyEnabled', '以货币显示配额'),
           toggle('DisplayTokenStatEnabled', '显示 Token 统计'),
-          select(
-            'general_setting.quota_display_type',
-            '配额显示类型',
-            'quota',
-            [
-              { value: 'quota', label: '配额' },
-              { value: 'USD', label: '美元' },
-              { value: 'TOKENS', label: 'Token' },
-              { value: 'custom', label: '自定义货币' },
-            ]
-          ),
+          select('general_setting.quota_display_type', '配额显示类型', 'quota', [
+            { value: 'quota', label: '配额' },
+            { value: 'USD', label: '美元' },
+            { value: 'TOKENS', label: 'Token' },
+            { value: 'custom', label: '自定义货币' },
+          ]),
           text('general_setting.custom_currency_symbol', '自定义货币符号', '¤'),
-          number(
-            'general_setting.custom_currency_exchange_rate',
-            '自定义货币汇率',
-            1
-          ),
+          number('general_setting.custom_currency_exchange_rate', '自定义货币汇率', 1),
         ],
       },
       {
@@ -388,6 +340,9 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           toggle('DefaultUseAutoGroup', '默认使用自动分组'),
           toggle('ExposeRatioEnabled', '公开倍率数据'),
           json('tool_price_setting.prices', '工具附加价格', '[]'),
+          json('billing_setting.billing_mode', '计费模式', '{}'),
+          json('billing_setting.billing_expr', '分层计费表达式', '{}'),
+          json('group_ratio_setting.group_special_usable_group', '特殊可用分组', '{}'),
         ],
       },
       {
@@ -424,13 +379,29 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           url('WaffoNotifyUrl', 'Waffo 通知地址'),
           url('WaffoReturnUrl', 'Waffo 返回地址'),
           json('WaffoPayMethods', 'Waffo 支付方式', '[]'),
+          amountList('payment_setting.amount_options', '充值金额选项', '仅允许正整数，保存时自动排序并去重。'),
+          discount('payment_setting.amount_discount', '充值金额折扣', '折扣范围为 0 到 1 之间（不含 0）。'),
+          secret('WaffoSandboxApiKey', 'Waffo 沙箱 API Key'),
+          secret('WaffoSandboxPrivateKey', 'Waffo 沙箱私钥'),
+          secretTextarea('WaffoSandboxPublicCert', 'Waffo 沙箱公钥证书'),
+          url('WaffoSubscriptionReturnUrl', 'Waffo 订阅返回地址'),
         ],
+        integration: 'payment-compliance',
       },
       {
         id: 'waffo-pancake',
         title: 'Waffo Pancake',
         description: '验证凭据、选择店铺与产品后，通过网关专用接口原子保存。',
         fields: [],
+        managedKeys: [
+          'WaffoPancakeMerchantID',
+          'WaffoPancakePrivateKey',
+          'WaffoPancakeReturnURL',
+          'WaffoPancakeStoreID',
+          'WaffoPancakeProductID',
+          'WaffoPancakeUnitPrice',
+          'WaffoPancakeMinTopUp',
+        ],
         integration: 'waffo-pancake',
       },
       {
@@ -463,14 +434,17 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           textarea('AutomaticDisableStatusCodes', '自动禁用状态码范围'),
           textarea('AutomaticRetryStatusCodes', '自动重试状态码范围'),
           toggle('monitor_setting.auto_test_channel_enabled', '自动测试渠道'),
-          number(
-            'monitor_setting.auto_test_channel_minutes',
-            '自动测试间隔（分钟）',
-            60
-          ),
+          number('monitor_setting.auto_test_channel_minutes', '自动测试间隔（分钟）', 60),
           toggle('global.pass_through_request_enabled', '透传请求模式'),
+          list('global.thinking_model_blacklist', '思考模型黑名单', '[]'),
+          json('global.chat_completions_to_responses_policy', 'Chat Completions 转 Responses 策略', '{}'),
           toggle('general_setting.ping_interval_enabled', '启用心跳检测'),
           number('general_setting.ping_interval_seconds', '心跳间隔（秒）', 60),
+          select('monitor_setting.channel_test_mode', '自动测试策略', 'scheduled_all', [
+            { value: 'scheduled_all', label: '定时测试全部渠道' },
+            { value: 'auto_ban_only', label: '仅测试自动禁用渠道' },
+            { value: 'passive_recovery', label: '被动恢复' },
+          ]),
         ],
       },
       {
@@ -479,15 +453,11 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         description: '同一用户优先复用成功渠道，并可查看或清空缓存。',
         fields: [
           toggle('channel_affinity_setting.enabled', '启用渠道亲和性'),
-          toggle(
-            'channel_affinity_setting.switch_on_success',
-            '成功后更新绑定'
-          ),
-          number(
-            'channel_affinity_setting.default_ttl_seconds',
-            '绑定有效期（秒）',
-            3600
-          ),
+          toggle('channel_affinity_setting.switch_on_success', '成功后更新绑定'),
+          number('channel_affinity_setting.default_ttl_seconds', '绑定有效期（秒）', 3600),
+          toggle('channel_affinity_setting.keep_on_channel_disabled', '渠道禁用后保留绑定'),
+          number('channel_affinity_setting.max_entries', '最大绑定条目', 100000),
+          json('channel_affinity_setting.rules', '亲和性规则', '[]'),
         ],
         integration: 'channel-affinity',
       },
@@ -499,7 +469,17 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           keyValue('gemini.safety_settings', 'Gemini 安全策略'),
           json('claude.default_max_tokens', 'Claude 默认 max_tokens'),
           toggle('claude.thinking_adapter_enabled', 'Claude 思考适配器'),
-          json('grok.reasoning_effort', 'Grok 推理强度策略'),
+          number('claude.thinking_adapter_budget_tokens_percentage', 'Claude 思考预算比例', 0.8),
+          json('claude.model_headers_settings', 'Claude 模型请求头覆盖', '{}'),
+          json('gemini.version_settings', 'Gemini 版本覆盖', '{}'),
+          list('gemini.supported_imagine_models', 'Gemini Imagine 模型', '[]'),
+          toggle('gemini.thinking_adapter_enabled', 'Gemini 思考适配器'),
+          number('gemini.thinking_adapter_budget_tokens_percentage', 'Gemini 思考预算比例', 0.6),
+          toggle('gemini.function_call_thought_signature_enabled', 'Gemini 函数调用思考签名'),
+          toggle('gemini.remove_function_response_id_enabled', '移除 Gemini 函数响应 ID'),
+          toggle('grok.violation_deduction_enabled', 'Grok 违规扣费'),
+          number('grok.violation_deduction_amount', 'Grok 违规扣费金额', 0.05),
+          list('qwen.sync_image_models', 'Qwen 图片模型', '[]'),
         ],
       },
       {
@@ -513,7 +493,10 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           url('auto_pricing.remote_url', '自动定价数据地址'),
           url('auto_pricing.hash_url', '自动定价校验地址'),
           toggle('auto_pricing.fuzzy_match_enabled', '启用模糊模型匹配'),
+          url('auto_pricing.models_dev_url', 'models.dev 数据地址'),
+          number('auto_pricing.check_interval_minutes', '自动定价检查间隔（分钟）', 60),
         ],
+        integration: 'ionet',
       },
     ],
   },
@@ -551,35 +534,21 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         title: 'SSRF 防护',
         description: '域名、IP 和端口访问规则。',
         fields: [
-          toggle(
-            'fetch_setting.enable_ssrf_protection',
-            '启用 SSRF 防护',
-            true
-          ),
+          toggle('fetch_setting.enable_ssrf_protection', '启用 SSRF 防护', true),
           toggle('fetch_setting.allow_private_ip', '允许私有 IP'),
           toggle('fetch_setting.domain_filter_mode', '域名白名单模式'),
           toggle('fetch_setting.ip_filter_mode', 'IP 白名单模式'),
           list('fetch_setting.domain_list', '域名规则', '[]'),
           list('fetch_setting.ip_list', 'IP / CIDR 规则', '[]'),
-          list(
-            'fetch_setting.allowed_ports',
-            '允许端口',
-            '["80", "443", "8080", "8443"]'
-          ),
-          toggle(
-            'fetch_setting.apply_ip_filter_for_domain',
-            '对域名解析结果应用 IP 规则',
-            true
-          ),
+          list('fetch_setting.allowed_ports', '允许端口', '["80", "443", "8080", "8443"]'),
+          toggle('fetch_setting.apply_ip_filter_for_domain', '对域名解析结果应用 IP 规则', true),
         ],
       },
       {
         id: 'token-limits',
         title: 'Token 限制',
         description: '用户 API Token 创建限制。',
-        fields: [
-          number('token_setting.max_user_tokens', '每位用户最大 Token 数'),
-        ],
+        fields: [number('token_setting.max_user_tokens', '每位用户最大 Token 数')],
       },
     ],
   },
@@ -673,11 +642,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         fields: [
           number('QuotaRemindThreshold', '配额提醒阈值', 1000),
           toggle('perf_metrics_setting.enabled', '启用性能指标', true),
-          number(
-            'perf_metrics_setting.flush_interval',
-            '指标落盘间隔（分钟）',
-            5
-          ),
+          number('perf_metrics_setting.flush_interval', '指标落盘间隔（分钟）', 5),
           select('perf_metrics_setting.bucket_time', '指标聚合粒度', 'hour', [
             { value: 'minute', label: '分钟' },
             { value: '5min', label: '5 分钟' },
@@ -693,10 +658,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         fields: [
           url('WorkerUrl', 'Worker URL'),
           secret('WorkerValidKey', 'Worker 验证密钥'),
-          toggle(
-            'WorkerAllowHttpImageRequestEnabled',
-            '允许 Worker 请求 HTTP 图片'
-          ),
+          toggle('WorkerAllowHttpImageRequestEnabled', '允许 Worker 请求 HTTP 图片'),
         ],
       },
       {
@@ -705,35 +667,22 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         description: '请求体磁盘缓存和资源阈值保护。',
         fields: [
           toggle('performance_setting.disk_cache_enabled', '启用磁盘缓存'),
-          number(
-            'performance_setting.disk_cache_threshold_mb',
-            '磁盘缓存阈值（MB）',
-            10
-          ),
-          number(
-            'performance_setting.disk_cache_max_size_mb',
-            '最大缓存（MB）',
-            1024
-          ),
+          number('performance_setting.disk_cache_threshold_mb', '磁盘缓存阈值（MB）', 10),
+          number('performance_setting.disk_cache_max_size_mb', '最大缓存（MB）', 1024),
           text('performance_setting.disk_cache_path', '缓存目录'),
           toggle('performance_setting.monitor_enabled', '启用资源监控'),
-          number(
-            'performance_setting.monitor_cpu_threshold',
-            'CPU 阈值（%）',
-            90
-          ),
-          number(
-            'performance_setting.monitor_memory_threshold',
-            '内存阈值（%）',
-            90
-          ),
-          number(
-            'performance_setting.monitor_disk_threshold',
-            '磁盘阈值（%）',
-            95
-          ),
+          number('performance_setting.monitor_cpu_threshold', 'CPU 阈值（%）', 90),
+          number('performance_setting.monitor_memory_threshold', '内存阈值（%）', 90),
+          number('performance_setting.monitor_disk_threshold', '磁盘阈值（%）', 95),
         ],
         integration: 'performance',
+      },
+      {
+        id: 'maintenance',
+        title: '系统维护',
+        description: '执行自动定价、倍率同步、系统任务和多实例维护操作。',
+        fields: [],
+        integration: 'operations-maintenance',
       },
     ],
   },

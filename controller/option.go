@@ -1,10 +1,10 @@
 package controller
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -156,6 +157,128 @@ type OptionBulkUpdateRequest struct {
 	Options map[string]any `json:"options"`
 }
 
+type OptionDescriptor struct {
+	Key          string `json:"key"`
+	ValueType    string `json:"value_type"`
+	DefaultValue any    `json:"default_value"`
+	Editor       string `json:"editor"`
+	Sensitive    bool   `json:"sensitive"`
+	Editable     bool   `json:"editable"`
+	Validator    string `json:"validator,omitempty"`
+}
+
+// optionDefaults is deliberately independent from the current OptionMap. The
+// catalog describes the operator contract, not the value currently persisted
+// in the database. Unknown legacy/plugin options still fall back to a neutral
+// value and remain visible to clients through rawOptions.
+var optionDefaults = map[string]any{
+	"PasswordLoginEnabled": true, "PasswordRegisterEnabled": true, "RegisterEnabled": true,
+	"DataExportEnabled": true, "DataExportInterval": 5, "DataExportDefaultTime": "hour",
+	"PreConsumedQuota": 500000, "QuotaPerUnit": 500000, "USDExchangeRate": 1.0,
+	"Price": 7.3, "MinTopUp": 1, "ChannelDisableThreshold": 5,
+	"monitor_setting.channel_test_mode":              "scheduled_all",
+	"auto_pricing.models_dev_url":                    "https://models.dev/api.json",
+	"billing_setting.billing_mode":                   map[string]any{},
+	"billing_setting.billing_expr":                   map[string]any{},
+	"group_ratio_setting.group_special_usable_group": map[string]any{},
+	"payment_setting.amount_options":                 []any{},
+	"payment_setting.amount_discount":                map[string]any{},
+	"global.thinking_model_blacklist":                []any{},
+	"global.chat_completions_to_responses_policy":    map[string]any{},
+	"gemini.version_settings":                        map[string]any{},
+	"gemini.supported_imagine_models":                []any{},
+	"claude.model_headers_settings":                  map[string]any{},
+	"qwen.sync_image_models":                         []any{},
+	"channel_affinity_setting.rules":                 []any{},
+}
+
+var optionValidators = map[string]string{
+	"billing_setting.billing_mode":      "billing-mode",
+	"billing_setting.billing_expr":      "billing-expression",
+	"payment_setting.amount_options":    "positive-amount-list",
+	"payment_setting.amount_discount":   "amount-discount",
+	"channel_affinity_setting.rules":    "channel-affinity-rules",
+	"monitor_setting.channel_test_mode": "channel-test-mode",
+}
+
+func optionDescriptorFor(key, value string) OptionDescriptor {
+	descriptor := OptionDescriptor{
+		Key:          key,
+		ValueType:    "string",
+		DefaultValue: value,
+		Editor:       "text",
+		Sensitive:    isSensitiveOptionKey(key),
+		Editable:     key != "CompletionRatioMeta" && !isPaymentComplianceOptionKey(key),
+		Validator:    optionValidators[key],
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "true" || trimmed == "false" {
+		descriptor.ValueType = "boolean"
+		descriptor.DefaultValue = trimmed == "true"
+		descriptor.Editor = "toggle"
+	} else if number, err := strconv.ParseFloat(trimmed, 64); trimmed != "" && err == nil {
+		descriptor.ValueType = "number"
+		descriptor.DefaultValue = number
+		descriptor.Editor = "number"
+	} else if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+		descriptor.ValueType = "json"
+		descriptor.Editor = "json"
+		var decoded any
+		if common.UnmarshalJsonStr(trimmed, &decoded) == nil {
+			descriptor.DefaultValue = decoded
+		}
+	}
+	if descriptor.Sensitive {
+		descriptor.Editor = "secret"
+		descriptor.DefaultValue = ""
+	}
+	if defaultValue, ok := optionDefaults[key]; ok {
+		descriptor.DefaultValue = defaultValue
+	}
+	switch {
+	case key == "payment_setting.amount_options":
+		descriptor.Editor = "amount-list"
+	case key == "payment_setting.amount_discount":
+		descriptor.Editor = "discount"
+	case key == "billing_setting.billing_mode" || key == "billing_setting.billing_expr":
+		descriptor.Editor = "billing-expression"
+	case key == "global.chat_completions_to_responses_policy":
+		descriptor.Editor = "conversion-policy"
+	case key == "channel_affinity_setting.rules":
+		descriptor.Editor = "channel-affinity-rules"
+	case strings.Contains(strings.ToLower(key), "ratio") || strings.Contains(strings.ToLower(key), "price"):
+		descriptor.Editor = "ratio"
+	case strings.Contains(strings.ToLower(key), "url") || strings.Contains(strings.ToLower(key), "address"):
+		descriptor.Editor = "url"
+	case key == "FileUploadPermission" || key == "FileDownloadPermission" || key == "ImageUploadPermission" || key == "ImageDownloadPermission":
+		descriptor.Editor = "role"
+	}
+	return descriptor
+}
+
+// GetOptionCatalog returns metadata for every persisted option. Sensitive
+// defaults are intentionally blank; their configured state is available from
+// /api/option/secret-status.
+func GetOptionCatalog(c *gin.Context) {
+	common.OptionMapRWMutex.RLock()
+	keys := make([]string, 0, len(common.OptionMap))
+	values := make(map[string]string, len(common.OptionMap))
+	for key, value := range common.OptionMap {
+		if key == "theme.frontend" {
+			continue
+		}
+		keys = append(keys, key)
+		values[key] = common.Interface2String(value)
+	}
+	common.OptionMapRWMutex.RUnlock()
+	sort.Strings(keys)
+	descriptors := make([]OptionDescriptor, 0, len(keys))
+	for _, key := range keys {
+		descriptors = append(descriptors, optionDescriptorFor(key, values[key]))
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": descriptors})
+}
+
 func normalizeOptionValue(value any) (string, error) {
 	switch typed := value.(type) {
 	case string:
@@ -196,17 +319,153 @@ func optionListPresent(snapshot map[string]string, key string) bool {
 
 func validateJSON(value string) error {
 	var decoded any
-	return json.Unmarshal([]byte(value), &decoded)
+	return common.UnmarshalJsonStr(value, &decoded)
 }
 
 func validateRatioMap(value string) error {
 	var ratios map[string]float64
-	return json.Unmarshal([]byte(value), &ratios)
+	return common.UnmarshalJsonStr(value, &ratios)
 }
 
 func validateNestedRatioMap(value string) error {
 	var ratios map[string]map[string]float64
-	return json.Unmarshal([]byte(value), &ratios)
+	return common.UnmarshalJsonStr(value, &ratios)
+}
+
+func validateStringMap(value string, name string) error {
+	var values map[string]string
+	if err := common.UnmarshalJsonStr(value, &values); err != nil || values == nil {
+		if err == nil {
+			err = fmt.Errorf("必须是 JSON 对象")
+		}
+		return fmt.Errorf("%s%s", name, ": "+err.Error())
+	}
+	return nil
+}
+
+func validateStringList(value string, name string) error {
+	var values []string
+	if err := common.UnmarshalJsonStr(value, &values); err != nil || values == nil {
+		if err == nil {
+			err = fmt.Errorf("必须是 JSON 数组")
+		}
+		return fmt.Errorf("%s%s", name, ": "+err.Error())
+	}
+	for _, item := range values {
+		if strings.TrimSpace(item) == "" {
+			return fmt.Errorf("%s: 不允许空字符串", name)
+		}
+	}
+	return nil
+}
+
+func validatePositiveIntList(value string, name string) error {
+	var values []int
+	if err := common.UnmarshalJsonStr(value, &values); err != nil || values == nil {
+		if err == nil {
+			err = fmt.Errorf("必须是 JSON 数组")
+		}
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	seen := make(map[int]struct{}, len(values))
+	for _, item := range values {
+		if item <= 0 {
+			return fmt.Errorf("%s: 金额必须为正整数", name)
+		}
+		if _, ok := seen[item]; ok {
+			return fmt.Errorf("%s: 金额不能重复", name)
+		}
+		seen[item] = struct{}{}
+	}
+	return nil
+}
+
+func validateDiscountMap(value string) error {
+	var values map[string]float64
+	if err := common.UnmarshalJsonStr(value, &values); err != nil || values == nil {
+		if err == nil {
+			err = fmt.Errorf("必须是 JSON 对象")
+		}
+		return fmt.Errorf("充值折扣: %w", err)
+	}
+	for amount, discount := range values {
+		parsed, err := strconv.Atoi(amount)
+		if err != nil || parsed <= 0 {
+			return fmt.Errorf("充值折扣金额必须为正整数: %s", amount)
+		}
+		if discount <= 0 || discount > 1 {
+			return fmt.Errorf("充值折扣必须大于 0 且不超过 1: %s", amount)
+		}
+	}
+	return nil
+}
+
+func validateChannelAffinityRules(value string) error {
+	var rules []operation_setting.ChannelAffinityRule
+	if err := common.UnmarshalJsonStr(value, &rules); err != nil || rules == nil {
+		if err == nil {
+			err = fmt.Errorf("必须是 JSON 数组")
+		}
+		return fmt.Errorf("渠道亲和性规则: %w", err)
+	}
+	for _, rule := range rules {
+		if strings.TrimSpace(rule.Name) == "" {
+			return fmt.Errorf("渠道亲和性规则名称不能为空")
+		}
+		if rule.TTLSeconds < 0 {
+			return fmt.Errorf("渠道亲和性规则 TTL 不能为负数")
+		}
+		for _, pattern := range append(append([]string{}, rule.ModelRegex...), rule.PathRegex...) {
+			if _, err := regexp.Compile(pattern); err != nil {
+				return fmt.Errorf("渠道亲和性规则正则无效: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+func validateChannelAffinitySettingValue(key, value string) error {
+	switch key {
+	case "channel_affinity_setting.max_entries":
+		if n, err := strconv.Atoi(strings.TrimSpace(value)); err != nil || n <= 0 {
+			return fmt.Errorf("渠道亲和性容量必须为正整数")
+		}
+	case "channel_affinity_setting.default_ttl_seconds":
+		if n, err := strconv.Atoi(strings.TrimSpace(value)); err != nil || n < 0 {
+			return fmt.Errorf("渠道亲和性 TTL 不能为负数")
+		}
+	case "channel_affinity_setting.rules":
+		return validateChannelAffinityRules(value)
+	}
+	return nil
+}
+
+func validateBillingSettingValue(key, value string) error {
+	if key == "billing_setting.billing_mode" {
+		var modes map[string]string
+		if err := common.UnmarshalJsonStr(value, &modes); err != nil || modes == nil {
+			return fmt.Errorf("计费模式必须是 JSON 对象")
+		}
+		for modelName, mode := range modes {
+			if mode != billing_setting.BillingModeRatio && mode != billing_setting.BillingModeTieredExpr {
+				return fmt.Errorf("模型 %q 的计费模式无效", modelName)
+			}
+		}
+		return nil
+	}
+	var expressions map[string]string
+	if err := common.UnmarshalJsonStr(value, &expressions); err != nil || expressions == nil {
+		return fmt.Errorf("计费表达式必须是 JSON 对象")
+	}
+	for modelName, expression := range expressions {
+		if strings.TrimSpace(expression) == "" {
+			return fmt.Errorf("模型 %q 的计费表达式不能为空", modelName)
+		}
+		if err := billing_setting.SmokeTestExpr(expression); err != nil {
+			return fmt.Errorf("模型 %q 的计费表达式无效: %w", modelName, err)
+		}
+	}
+	return nil
 }
 
 // validateOptionPatch is intentionally free of persistence and runtime side
@@ -269,6 +528,57 @@ func validateOptionPatch(values map[string]string) error {
 		case "GroupGroupRatio":
 			if err := validateNestedRatioMap(value); err != nil {
 				return err
+			}
+		case "group_ratio_setting.group_special_usable_group":
+			if err := validateJSON(value); err != nil {
+				return fmt.Errorf("特殊可用分组配置无效: %w", err)
+			}
+		case "billing_setting.billing_mode", "billing_setting.billing_expr":
+			if err := validateBillingSettingValue(key, value); err != nil {
+				return err
+			}
+		case "payment_setting.amount_options":
+			if err := validatePositiveIntList(value, "充值金额选项"); err != nil {
+				return err
+			}
+		case "payment_setting.amount_discount":
+			if err := validateDiscountMap(value); err != nil {
+				return err
+			}
+		case "global.thinking_model_blacklist", "gemini.supported_imagine_models", "qwen.sync_image_models":
+			if err := validateStringList(value, key); err != nil {
+				return err
+			}
+		case "global.chat_completions_to_responses_policy":
+			if err := validateJSON(value); err != nil {
+				return fmt.Errorf("Chat Completions 转 Responses 策略无效: %w", err)
+			}
+		case "gemini.version_settings", "claude.model_headers_settings":
+			if err := validateJSON(value); err != nil {
+				return fmt.Errorf("模型高级配置无效: %w", err)
+			}
+		case "gemini.thinking_adapter_budget_tokens_percentage", "claude.thinking_adapter_budget_tokens_percentage":
+			percentage, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+			if err != nil || percentage < 0.1 || percentage > 1 {
+				return fmt.Errorf("Token 预算比例必须在 0.1 到 1 之间")
+			}
+		case "grok.violation_deduction_amount":
+			amount, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+			if err != nil || amount < 0 {
+				return fmt.Errorf("Grok 违规扣费必须为非负数字")
+			}
+		case "channel_affinity_setting.max_entries", "channel_affinity_setting.default_ttl_seconds", "channel_affinity_setting.rules":
+			if err := validateChannelAffinitySettingValue(key, value); err != nil {
+				return err
+			}
+		case "monitor_setting.channel_test_mode":
+			if value != operation_setting.ChannelTestModeScheduledAll && value != operation_setting.ChannelTestModeAutoBanOnly && value != operation_setting.ChannelTestModePassiveRecovery {
+				return fmt.Errorf("自动测试策略无效")
+			}
+		case "FileUploadPermission", "FileDownloadPermission", "ImageUploadPermission", "ImageDownloadPermission":
+			role, err := strconv.Atoi(strings.TrimSpace(value))
+			if err != nil || !common.IsValidateRole(role) {
+				return fmt.Errorf("文件访问权限角色无效")
 			}
 		case "ModelRatio", "ModelPrice", "CompletionRatio", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "TopupGroupRatio":
 			if err := validateRatioMap(value); err != nil {

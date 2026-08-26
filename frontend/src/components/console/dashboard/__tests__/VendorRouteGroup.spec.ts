@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import VendorRouteGroup from '@/components/console/dashboard/autoroute/VendorRouteGroup.vue'
+import { labLogoVendor, vendorLogoMeta } from '@/constants/console'
 import type { RouteChannelRow } from '@/composables/useAutoRoute'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import type { RouteHealthSummary } from '@/utils/routeHealth'
@@ -47,6 +48,8 @@ const monitor: RouteHealthSummary = {
 
 function render(
   overrides: {
+    groupSlug?: string
+    groupName?: string
     channels?: RouteChannelRow[]
     activeCount?: number
     monitor?: RouteHealthSummary
@@ -54,8 +57,8 @@ function render(
 ) {
   return mount(VendorRouteGroup, {
     props: {
-      groupSlug: 'openai',
-      groupName: 'OpenAI',
+      groupSlug: overrides.groupSlug ?? 'openai',
+      groupName: overrides.groupName ?? 'OpenAI',
       labMatches: [],
       channels: overrides.channels ?? channels,
       activeCount: overrides.activeCount ?? channels.length,
@@ -66,6 +69,60 @@ function render(
 }
 
 describe('VendorRouteGroup', () => {
+  it('keeps the canonical lab slug logo mapping aligned with assets', () => {
+    const expected = {
+      openai: 'OpenAI',
+      anthropic: 'Anthropic',
+      google: 'Google',
+      deepseek: 'DeepSeek',
+      alibaba: 'Alibaba',
+      xai: 'xAI',
+      moonshotai: 'Moonshot AI',
+      zhipuai: 'Zhipu AI',
+      minimax: 'MiniMax',
+      mistral: 'Mistral',
+      tencent: 'Tencent',
+      'bytedance-seed': 'Bytedance Seed',
+    }
+
+    expect(labLogoVendor).toEqual(expected)
+    for (const vendor of Object.values(expected)) {
+      expect(vendorLogoMeta[vendor]).toBeDefined()
+    }
+  })
+
+  it('normalizes lab slugs before selecting a logo', () => {
+    const wrapper = render({ groupSlug: '  OPENAI  ' })
+
+    expect(wrapper.find('[data-route-lab-logo] img').attributes('src')).toBe(
+      '/models/openai.svg'
+    )
+  })
+
+  it('shows the mapped lab logo and keeps channel rows text-only', async () => {
+    const wrapper = render()
+
+    expect(wrapper.find('[data-route-lab-logo] img').attributes('src')).toBe(
+      '/models/openai.svg'
+    )
+    expect(wrapper.find('[data-route-lab-fallback]').exists()).toBe(false)
+
+    await wrapper.find('button[aria-expanded]').trigger('click')
+    expect(wrapper.findAll('[data-route-channel] img')).toHaveLength(0)
+    expect(wrapper.find('[data-route-channel]').text()).toContain('OpenAI')
+  })
+
+  it.each([
+    ['mixed', 'Mixed / Multi-Lab'],
+    ['unknown', 'Unknown / Provider-specific'],
+    ['custom-lab', 'Custom Lab'],
+  ])('uses the neutral icon for %s lab groups', (groupSlug, groupName) => {
+    const wrapper = render({ groupSlug, groupName })
+
+    expect(wrapper.find('[data-route-lab-logo]').exists()).toBe(false)
+    expect(wrapper.find('[data-route-lab-fallback]').exists()).toBe(true)
+  })
+
   it('shows six monitoring buckets and the group availability', () => {
     const wrapper = render()
 

@@ -317,6 +317,7 @@ func SetApiRouter(router *gin.Engine) {
 		optionRoute.Use(middleware.RootAuth())
 		{
 			optionRoute.GET("/", controller.GetOptions)
+			optionRoute.GET("/catalog", controller.GetOptionCatalog)
 			optionRoute.PUT("/", controller.UpdateOption)
 			optionRoute.PUT("/bulk", controller.UpdateOptionsBulk)
 			optionRoute.GET("/secret-status", controller.GetOptionSecretStatus)

@@ -11,6 +11,8 @@ import {
 import { useI18n } from 'vue-i18n'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import VendorLogo from '@/components/console/models/VendorLogo.vue'
+import { labLogoVendor } from '@/constants/console'
 import ChannelScoreRow from './ChannelScoreRow.vue'
 import RouteHealthTimeline from './RouteHealthTimeline.vue'
 import type { RouteChannelRow } from '@/composables/useAutoRoute'
@@ -29,6 +31,12 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const expanded = ref(false)
+
+const labLogo = computed(() => {
+  const slug = props.groupSlug.trim().toLowerCase()
+  if (slug === 'mixed' || slug === 'unknown') return null
+  return labLogoVendor[slug] ?? null
+})
 
 const bestScore = computed(
   () => props.channels.find((channel) => channel.score !== null)?.score ?? null
@@ -83,8 +91,16 @@ const availabilityLabel = computed(() =>
           >
             <component :is="stateMeta.icon" :size="17" aria-hidden="true" />
           </span>
+          <VendorLogo
+            v-if="labLogo"
+            :vendor="labLogo"
+            :size="28"
+            data-route-lab-logo
+          />
           <span
+            v-else
             class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent-text)]"
+            data-route-lab-fallback
           >
             <Layers3 :size="17" aria-hidden="true" />
           </span>

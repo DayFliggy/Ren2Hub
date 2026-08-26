@@ -106,11 +106,13 @@ func getWaffoPancakeBuyerEmail(user *model.User) string {
 // resolveWaffoPancakeAdminCreds). Only SaveWaffoPancake writes to OptionMap.
 
 type saveWaffoPancakeRequest struct {
-	MerchantID string `json:"merchant_id"`
-	PrivateKey string `json:"private_key"`
-	ReturnURL  string `json:"return_url"`
-	StoreID    string `json:"store_id"`
-	ProductID  string `json:"product_id"`
+	MerchantID string  `json:"merchant_id"`
+	PrivateKey string  `json:"private_key"`
+	ReturnURL  string  `json:"return_url"`
+	StoreID    string  `json:"store_id"`
+	ProductID  string  `json:"product_id"`
+	UnitPrice  float64 `json:"unit_price"`
+	MinTopUp   int     `json:"min_top_up"`
 }
 
 type createWaffoPancakePairRequest struct {
@@ -127,6 +129,12 @@ func SaveWaffoPancake(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "参数错误"})
 		return
 	}
+	if req.UnitPrice <= 0 {
+		req.UnitPrice = setting.WaffoPancakeUnitPrice
+	}
+	if req.MinTopUp <= 0 {
+		req.MinTopUp = setting.WaffoPancakeMinTopUp
+	}
 	if err := service.SaveWaffoPancakeConfig(
 		c.Request.Context(),
 		req.MerchantID,
@@ -134,6 +142,8 @@ func SaveWaffoPancake(c *gin.Context) {
 		req.ReturnURL,
 		req.StoreID,
 		req.ProductID,
+		req.UnitPrice,
+		req.MinTopUp,
 	); err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf(
 			"Waffo Pancake 保存配置失败 store_id=%q product_id=%q error=%q",

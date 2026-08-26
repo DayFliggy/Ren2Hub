@@ -15,6 +15,15 @@ export interface UpdateOptionRequest {
   value: string | boolean | number
 }
 
+export interface SystemOptionDescriptor {
+  key: string
+  value_type: 'string' | 'boolean' | 'number' | 'json'
+  default_value: unknown
+  editor: string
+  sensitive: boolean
+  editable: boolean
+}
+
 // ─── Parsed setting groups ─────────────────────────────────────────────────
 
 export interface SiteSettings {
@@ -98,6 +107,21 @@ export interface BillingSettings {
   'checkin_setting.max_quota': number
   Price: number
   MinTopUp: number
+  'billing_setting.billing_mode': string
+  'billing_setting.billing_expr': string
+  'group_ratio_setting.group_special_usable_group': string
+  'payment_setting.amount_options': string
+  'payment_setting.amount_discount': string
+  'payment_setting.compliance_confirmed': boolean
+  'payment_setting.compliance_terms_version': string
+  'payment_setting.compliance_confirmed_at': number
+  'payment_setting.compliance_confirmed_by': number
+  'WaffoSandboxApiKey': string
+  'WaffoSandboxPrivateKey': string
+  'WaffoSandboxPublicCert': string
+  WaffoSubscriptionReturnUrl: string
+  WaffoPancakeUnitPrice: number
+  WaffoPancakeMinTopUp: number
 }
 
 export interface ModelSettings {
@@ -106,16 +130,35 @@ export interface ModelSettings {
   AutomaticDisableChannelEnabled: boolean
   AutomaticEnableChannelEnabled: boolean
   'global.pass_through_request_enabled': boolean
+  'global.thinking_model_blacklist': string
+  'global.chat_completions_to_responses_policy': string
   'general_setting.ping_interval_enabled': boolean
   'general_setting.ping_interval_seconds': number
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
+  'monitor_setting.channel_test_mode': string
   'gemini.safety_settings': string
-  'claude.default_max_tokens': number
+  'gemini.version_settings': string
+  'gemini.supported_imagine_models': string
+  'gemini.thinking_adapter_enabled': boolean
+  'gemini.thinking_adapter_budget_tokens_percentage': number
+  'gemini.function_call_thought_signature_enabled': boolean
+  'gemini.remove_function_response_id_enabled': boolean
+  'claude.model_headers_settings': string
+  'claude.default_max_tokens': string
   'claude.thinking_adapter_enabled': boolean
+  'claude.thinking_adapter_budget_tokens_percentage': number
+  'grok.violation_deduction_enabled': boolean
+  'grok.violation_deduction_amount': number
+  'qwen.sync_image_models': string
   'channel_affinity_setting.enabled': boolean
   'channel_affinity_setting.switch_on_success': boolean
   'channel_affinity_setting.default_ttl_seconds': number
+  'channel_affinity_setting.keep_on_channel_disabled': boolean
+  'channel_affinity_setting.max_entries': number
+  'channel_affinity_setting.rules': string
+  'auto_pricing.models_dev_url': string
+  'auto_pricing.check_interval_minutes': number
 }
 
 export interface SecuritySettings {
@@ -127,7 +170,17 @@ export interface SecuritySettings {
   SensitiveWords: string
   'fetch_setting.enable_ssrf_protection': boolean
   'fetch_setting.allow_private_ip': boolean
+  'fetch_setting.domain_filter_mode': boolean
+  'fetch_setting.ip_filter_mode': boolean
+  'fetch_setting.domain_list': string
+  'fetch_setting.ip_list': string
+  'fetch_setting.allowed_ports': string
+  'fetch_setting.apply_ip_filter_for_domain': boolean
   'token_setting.max_user_tokens': number
+  FileUploadPermission: string
+  FileDownloadPermission: string
+  ImageUploadPermission: string
+  ImageDownloadPermission: string
 }
 
 export interface ContentSettings {
@@ -145,6 +198,8 @@ export interface ContentSettings {
   'console_setting.api_info': string
   'console_setting.faq_enabled': boolean
   'console_setting.faq': string
+  'console_setting.uptime_kuma_enabled': boolean
+  'console_setting.uptime_kuma_groups': string
 }
 
 export interface OperationsSettings {
@@ -255,6 +310,21 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   'general_setting.quota_display_type': 'quota',
   'general_setting.custom_currency_symbol': '¤',
   'general_setting.custom_currency_exchange_rate': 1,
+  'billing_setting.billing_mode': '{}',
+  'billing_setting.billing_expr': '{}',
+  'group_ratio_setting.group_special_usable_group': '{}',
+  'payment_setting.amount_options': '[]',
+  'payment_setting.amount_discount': '{}',
+  'payment_setting.compliance_confirmed': false,
+  'payment_setting.compliance_terms_version': '',
+  'payment_setting.compliance_confirmed_at': 0,
+  'payment_setting.compliance_confirmed_by': 0,
+  WaffoSandboxApiKey: '',
+  WaffoSandboxPrivateKey: '',
+  WaffoSandboxPublicCert: '',
+  WaffoSubscriptionReturnUrl: '',
+  WaffoPancakeUnitPrice: 1,
+  WaffoPancakeMinTopUp: 1,
   'quota_setting.enable_free_model_pre_consume': false,
   'checkin_setting.enabled': false,
   'checkin_setting.min_quota': 100,
@@ -267,16 +337,35 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   AutomaticDisableChannelEnabled: false,
   AutomaticEnableChannelEnabled: false,
   'global.pass_through_request_enabled': false,
+  'global.thinking_model_blacklist': '[]',
+  'global.chat_completions_to_responses_policy': '{}',
   'general_setting.ping_interval_enabled': false,
   'general_setting.ping_interval_seconds': 60,
   'monitor_setting.auto_test_channel_enabled': false,
   'monitor_setting.auto_test_channel_minutes': 60,
+  'monitor_setting.channel_test_mode': 'scheduled_all',
   'gemini.safety_settings': '',
-  'claude.default_max_tokens': 0,
+  'gemini.version_settings': '{}',
+  'gemini.supported_imagine_models': '[]',
+  'gemini.thinking_adapter_enabled': false,
+  'gemini.thinking_adapter_budget_tokens_percentage': 0.6,
+  'gemini.function_call_thought_signature_enabled': true,
+  'gemini.remove_function_response_id_enabled': true,
+  'claude.model_headers_settings': '{}',
+  'claude.default_max_tokens': '{}',
   'claude.thinking_adapter_enabled': false,
+  'claude.thinking_adapter_budget_tokens_percentage': 0.8,
+  'grok.violation_deduction_enabled': true,
+  'grok.violation_deduction_amount': 0.05,
+  'qwen.sync_image_models': '[]',
   'channel_affinity_setting.enabled': false,
   'channel_affinity_setting.switch_on_success': false,
   'channel_affinity_setting.default_ttl_seconds': 3600,
+  'channel_affinity_setting.keep_on_channel_disabled': false,
+  'channel_affinity_setting.max_entries': 100000,
+  'channel_affinity_setting.rules': '[]',
+  'auto_pricing.models_dev_url': 'https://models.dev/api.json',
+  'auto_pricing.check_interval_minutes': 60,
   // Security
   ModelRequestRateLimitEnabled: false,
   ModelRequestRateLimitCount: 60,
@@ -286,7 +375,17 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   SensitiveWords: '',
   'fetch_setting.enable_ssrf_protection': false,
   'fetch_setting.allow_private_ip': false,
+  'fetch_setting.domain_filter_mode': false,
+  'fetch_setting.ip_filter_mode': false,
+  'fetch_setting.domain_list': '[]',
+  'fetch_setting.ip_list': '[]',
+  'fetch_setting.allowed_ports': '["80", "443", "8080", "8443"]',
+  'fetch_setting.apply_ip_filter_for_domain': true,
   'token_setting.max_user_tokens': 0,
+  FileUploadPermission: '0',
+  FileDownloadPermission: '0',
+  ImageUploadPermission: '0',
+  ImageDownloadPermission: '0',
   // Content
   DataExportEnabled: true,
   DataExportInterval: 5,
@@ -302,6 +401,8 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   'console_setting.api_info': '',
   'console_setting.faq_enabled': false,
   'console_setting.faq': '',
+  'console_setting.uptime_kuma_enabled': false,
+  'console_setting.uptime_kuma_groups': '[]',
   // Operations
   DefaultCollapseSidebar: false,
   DemoSiteEnabled: false,

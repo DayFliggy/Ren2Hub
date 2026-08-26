@@ -158,7 +158,7 @@ async function saveAffinity() {
 
 // ── Claude ──────────────────────────────────────────────────────────────────
 const claude = reactive({
-  'claude.default_max_tokens': 0,
+  'claude.default_max_tokens': '{}',
   'claude.thinking_adapter_enabled': false,
 })
 const claudeSaving = reactive({ value: false })
@@ -173,7 +173,7 @@ const claudeDirty = computed(() => {
 async function saveClaude() {
   claudeSaving.value = true
   const s = settings.value
-  const patch: Record<string, boolean | number> = {}
+  const patch: Record<string, boolean | number | string> = {}
   if (claude['claude.default_max_tokens'] !== s['claude.default_max_tokens'])
     patch['claude.default_max_tokens'] = claude['claude.default_max_tokens']
   if (
@@ -373,7 +373,7 @@ onMounted(async () => {
           :model-value="String(claude['claude.default_max_tokens'])"
           type="number"
           @update:model-value="
-            claude['claude.default_max_tokens'] = Number($event) || 0
+            claude['claude.default_max_tokens'] = $event
           "
         />
       </div>
