@@ -349,7 +349,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		if newAPIError == nil {
-			if routeLiveSelectionActive(c) && liveRouteRenewalFailed(c) {
+			if routeLiveSelectionActive(c) && shouldFailLiveRouteAfterRenewalFailure(c, relayInfo) {
 				// A successful upstream response is not enough to commit a live
 				// attempt after its distributed admission lease was lost. The
 				// admission error is handled below without penalizing provider
@@ -988,6 +988,13 @@ func liveRouteRenewalFailed(c *gin.Context) bool {
 	return true
 }
 
+// shouldFailLiveRouteAfterRenewalFailure preserves an already committed
+// upstream response. The lease failure is still recorded by the common
+// release path, but it must not turn a delivered response into a refund.
+func shouldFailLiveRouteAfterRenewalFailure(c *gin.Context, info *relaycommon.RelayInfo) bool {
+	return liveRouteRenewalFailed(c) && !relayResponseCommitted(c, info)
+}
+
 func markLiveRouteAttempt(c *gin.Context, channelID int, state string) {
 	if c == nil || channelID <= 0 {
 		return
@@ -1093,7 +1100,7 @@ func beginLiveRouteUpstreamAttempt(c *gin.Context, channelID int) int {
 }
 
 func nextLiveRouteCandidateIndex(c *gin.Context, currentAttempt int) (int, bool) {
-	if c == nil {
+	if c == nil || (c.Request != nil && requestContextDone(c)) {
 		return 0, false
 	}
 	value, ok := c.Get("route_live_selection")
@@ -1106,7 +1113,7 @@ func nextLiveRouteCandidateIndex(c *gin.Context, currentAttempt int) (int, bool)
 }
 
 func nextLiveRouteAttemptForError(c *gin.Context, currentAttempt, currentChannelID int, class service.RouteErrorClassification) (int, bool) {
-	if c == nil {
+	if c == nil || (c.Request != nil && requestContextDone(c)) {
 		return 0, false
 	}
 	value, ok := c.Get("route_live_selection")

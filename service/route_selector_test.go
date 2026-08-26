@@ -35,6 +35,52 @@ func TestSelectTokenRouteManualUsesActiveGroupPositionThenWeight(t *testing.T) {
 	assert.Equal(t, 7, result.Decision.SelectedChannelID)
 }
 
+func TestSelectTokenRouteManualLoadBalanceUsesRequestStablePositiveWeight(t *testing.T) {
+	input := RouteSelectionInput{
+		SourceInput:        RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "manual"},
+		ManualGroupEnabled: true,
+		ManualLoadBalance:  true,
+		RequestID:          "manual-weighted-request",
+		ManualCandidates: []RouteSelectionCandidate{
+			{ChannelID: 10, Position: 0, Weight: 0, HealthUsable: true},
+			{ChannelID: 20, Position: 0, Weight: 1, HealthUsable: true},
+			{ChannelID: 30, Position: 0, Weight: 9, HealthUsable: true},
+			{ChannelID: 40, Position: 1, Weight: 100, HealthUsable: true},
+		},
+	}
+
+	first, err := SelectTokenRoute(input)
+	require.NoError(t, err)
+	replayed, err := SelectTokenRoute(input)
+	require.NoError(t, err)
+
+	assert.Contains(t, []int{20, 30}, first.Decision.SelectedChannelID)
+	assert.NotEqual(t, 10, first.Decision.SelectedChannelID, "zero weight must not win a weighted first attempt")
+	assert.Equal(t, first.Decision.SelectedChannelID, replayed.Decision.SelectedChannelID)
+	assert.Equal(t, 40, first.Candidates[len(first.Candidates)-1].ChannelID)
+}
+
+func TestSelectTokenRouteManualLoadBalanceTreatsAllZeroWeightsEqually(t *testing.T) {
+	input := RouteSelectionInput{
+		SourceInput:        RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "manual"},
+		ManualGroupEnabled: true,
+		ManualLoadBalance:  true,
+		RequestID:          "manual-zero-weight-request",
+		ManualCandidates: []RouteSelectionCandidate{
+			{ChannelID: 10, Position: 0, Weight: 0, HealthUsable: true},
+			{ChannelID: 20, Position: 0, Weight: 0, HealthUsable: true},
+		},
+	}
+
+	first, err := SelectTokenRoute(input)
+	require.NoError(t, err)
+	replayed, err := SelectTokenRoute(input)
+	require.NoError(t, err)
+
+	assert.Contains(t, []int{10, 20}, first.Decision.SelectedChannelID)
+	assert.Equal(t, first.Decision.SelectedChannelID, replayed.Decision.SelectedChannelID)
+}
+
 func TestSelectTokenRouteAutoUsesPriorityLayerAndBoundedTopK(t *testing.T) {
 	t.Setenv("ROUTE_SCORE_SHADOW_ENABLED", "true")
 	result, err := SelectTokenRoute(RouteSelectionInput{

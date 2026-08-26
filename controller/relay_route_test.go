@@ -229,6 +229,36 @@ func TestNextLiveRouteCandidateIndexAdvancesExactlyOnce(t *testing.T) {
 	assert.Equal(t, 2, next)
 }
 
+func TestLiveRouteCandidateAdvanceStopsWhenRequestIsCancelled(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	requestContext, cancel := context.WithCancel(context.Background())
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil).WithContext(requestContext)
+	c.Set("route_live_selection", service.LiveRouteSelection{
+		Source: service.RouteSourceAutoLab,
+		Attempts: []service.RouteDecisionCandidate{
+			{ChannelID: 101}, {ChannelID: 102},
+		},
+	})
+	cancel()
+
+	_, found := nextLiveRouteCandidateIndex(c, 0)
+	assert.False(t, found)
+	_, found = nextLiveRouteAttemptForError(c, 0, 101, service.ClassifyRouteError(http.StatusServiceUnavailable, "", "", false))
+	assert.False(t, found)
+}
+
+func TestLiveRouteRenewalFailureDoesNotFailCommittedResponse(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set("route_live_renewal", service.RouteLeaseRenewal{
+		Failure: func() error { return service.ErrRouteLeaseUnavailable },
+	})
+	info := &relaycommon.RelayInfo{StartTime: time.Now().Add(-time.Second)}
+	info.MarkValidOutput()
+
+	assert.False(t, shouldFailLiveRouteAfterRenewalFailure(c, info))
+	assert.True(t, liveRouteRenewalFailed(c))
+}
+
 func TestGetChannelSkipsExhaustedSingleKeyCandidate(t *testing.T) {
 	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
 	t.Setenv("ROUTE_LIVE_ENABLED", "true")
