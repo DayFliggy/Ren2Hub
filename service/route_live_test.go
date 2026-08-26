@@ -46,7 +46,7 @@ func TestSelectLiveTokenRouteAutoLabUsesActiveIndexAndCurrentChannelStatus(t *te
 	require.NoError(t, err)
 	capability := model.ChannelModelCapability{
 		ChannelID: channelID, SnapshotVersion: 1, RequestModel: "gpt-test", ActualModel: "gpt-test",
-		LabSlug: "openai", Source: "canonical", State: model.RouteCapabilityStateEligible,
+		LabSlug: "openai", Source: "canonical", Confidence: 1, State: model.RouteCapabilityStateEligible,
 		AbilityGroups: string(abilityGroups), ChannelStatus: common.ChannelStatusEnabled,
 		ChannelType: constant.ChannelTypeOpenAI, EndpointTypes: `[
   "openai"

@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   preview: vi.fn(),
+  remove: vi.fn(),
 }))
 
 vi.mock('@/api/routingApi', () => ({
@@ -304,5 +305,15 @@ describe('TokenRoutingView', () => {
     await buttonByText(view, 'Retry').trigger('click')
     await flushPromises()
     expect(mocks.profiles).toHaveBeenCalledTimes(2)
+  })
+
+  it('deletes an existing profile and clears the editor', async () => {
+    const view = await mountView()
+
+    await buttonByText(view, 'Delete profile').trigger('click')
+    await flushPromises()
+
+    expect(mocks.remove).toHaveBeenCalledWith(1)
+    expect(view.text()).toContain('Create routing profile')
   })
 })

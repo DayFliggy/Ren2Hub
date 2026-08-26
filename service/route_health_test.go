@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -174,6 +175,53 @@ func TestRouteHealthUsableAllowsOneHalfOpenProbe(t *testing.T) {
 	var health model.ChannelHealth
 	require.NoError(t, db.Where("channel_id = ? AND model = ? AND key_scope = ?", 2, "gpt-5", "").First(&health).Error)
 	assert.Equal(t, model.RouteHealthStateHalfOpen, health.State)
+}
+
+func TestRouteHealthUsableAllowsOnlyOneConcurrentHalfOpenProbe(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	originalDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = originalDB
+		sqlDB, closeErr := db.DB()
+		if closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: 21, Model: "gpt-5", KeyScope: "", State: model.RouteHealthStateOpen,
+		FailureCount: 3, CooldownUntil: 1000, HealthEpoch: 4,
+	}).Error)
+
+	type result struct {
+		usable bool
+		epoch  int64
+		err    error
+	}
+	results := make(chan result, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			usable, epoch, callErr := RouteHealthUsable(context.Background(), 21, "gpt-5", time.Unix(1000, 0))
+			results <- result{usable: usable, epoch: epoch, err: callErr}
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	usableCount := 0
+	for item := range results {
+		require.NoError(t, item.err)
+		if item.usable {
+			usableCount++
+			assert.Equal(t, int64(5), item.epoch)
+		}
+	}
+	assert.Equal(t, 1, usableCount)
 }
 
 func TestObserveLiveRouteErrorKeepsKeyAndCapabilityScopesSeparate(t *testing.T) {

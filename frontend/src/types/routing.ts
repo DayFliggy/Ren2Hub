@@ -1,6 +1,8 @@
 export type RouteMode = 'legacy' | 'manual' | 'auto_lab'
 export type RouteGroupKind = 'manual' | 'auto_lab'
 export type RouteEntrySource = 'platform'
+export type RouteRetryMode =
+  'none' | 'same_channel' | 'next_channel' | 'same_then_next'
 export type RouteCapabilityState =
   'eligible' | 'unresolved' | 'unsupported' | 'disabled' | 'conflict'
 export type RouteHealthState = 'closed' | 'open' | 'half_open'
@@ -9,7 +11,7 @@ export interface RoutePolicy {
   group_id: number
   load_balance: boolean
   max_ratio: number
-  retry_mode: string
+  retry_mode: RouteRetryMode
   max_same_resource_attempts: number
   max_failover_attempts: number
   sticky: boolean

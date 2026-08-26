@@ -21,6 +21,12 @@ var (
 
 const RouteFilterKeyUnavailable = "key_unavailable"
 
+// RouteLiveSelectionRequiredContextKey marks requests for which the live
+// rollout was evaluated. The relay may use the legacy source explicitly, but
+// a missing selection after this boundary is an internal routing failure and
+// must not silently bypass distributed admission control.
+const RouteLiveSelectionRequiredContextKey = "route_live_selection_required"
+
 // LiveRouteQualificationError identifies a mutable authorization or
 // capability fact that changed after selection. The reason is a stable
 // internal enum and never contains provider data or credentials.

@@ -343,6 +343,7 @@ export default {
     enabled: 'Enabled',
     activeGroup: 'Active group',
     removeGroup: 'Delete group',
+    removeProfile: 'Delete profile',
     addChannel: 'Add channel',
     selectChannel: 'Select an eligible channel',
     entriesTitle: 'Channel order',
@@ -378,6 +379,7 @@ export default {
     },
     healthSummary: '{failures} failures · {latency} ms',
     saved: 'Routing profile saved',
+    removed: 'Routing profile deleted',
     versionConflict: 'The profile changed elsewhere. Reload it before saving.',
     versionConflictHint:
       'This draft is based on an older profile version and cannot be saved.',

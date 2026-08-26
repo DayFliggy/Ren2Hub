@@ -57,7 +57,7 @@ func ClassifyRouteError(status int, providerCode, message string, streamStarted 
 		strings.Contains(code, "authentication_error") || strings.Contains(text, "invalid api key") ||
 		strings.Contains(text, "incorrect api key"):
 		return RouteErrorClassification{Class: RouteErrorKey, Retryable: true, Failoverable: true, MarkKey: true}
-	case status == 404 || strings.Contains(code, "model_not_found") || strings.Contains(code, "unsupported_model") || strings.Contains(text, "model not found"):
+	case strings.Contains(code, "model_not_found") || strings.Contains(code, "unsupported_model") || strings.Contains(code, "model_not_supported") || strings.Contains(code, "invalid_model") || strings.Contains(text, "model not found") || strings.Contains(text, "unsupported model") || strings.Contains(text, "invalid model"):
 		return RouteErrorClassification{Class: RouteErrorModel, Failoverable: true, MarkCapability: true}
 	case status == 400 || status == 422 || strings.Contains(code, "invalid_request"):
 		return RouteErrorClassification{Class: RouteErrorInput}
@@ -170,7 +170,10 @@ func CanUseRouteHealth(health model.ChannelHealth, now time.Time) bool {
 		return true
 	}
 	if health.State == model.RouteHealthStateHalfOpen {
-		return true
+		// A half-open route is only admitted by RouteHealthUsable, which
+		// atomically claims the single live probe. Pure Shadow/score reads must
+		// not make every concurrent request look usable.
+		return false
 	}
 	return health.CooldownUntil > 0 && health.CooldownUntil <= now.Unix()
 }

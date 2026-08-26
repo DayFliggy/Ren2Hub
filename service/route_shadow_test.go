@@ -26,7 +26,7 @@ func TestSelectRouteShadowUsesStaticPriorityAndHardFilters(t *testing.T) {
 			{
 				Capability: model.ChannelModelCapability{
 					ChannelID: 1, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai",
-					State: model.RouteCapabilityStateEligible, SnapshotVersion: 1,
+					Confidence: 1, State: model.RouteCapabilityStateEligible, SnapshotVersion: 1,
 					CatalogVersion: "catalog-1", EndpointTypes: string(endpointJSON),
 				},
 				ChannelStatus: common.ChannelStatusEnabled, Priority: 20, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI,
@@ -34,7 +34,7 @@ func TestSelectRouteShadowUsesStaticPriorityAndHardFilters(t *testing.T) {
 			{
 				Capability: model.ChannelModelCapability{
 					ChannelID: 2, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai",
-					State: model.RouteCapabilityStateEligible, SnapshotVersion: 1,
+					Confidence: 1, State: model.RouteCapabilityStateEligible, SnapshotVersion: 1,
 					CatalogVersion: "catalog-1", EndpointTypes: string(endpointJSON),
 				},
 				ChannelStatus: common.ChannelStatusEnabled, Priority: 30, AbilityGroups: []string{"restricted"}, ChannelType: constant.ChannelTypeOpenAI,
@@ -101,9 +101,9 @@ func TestSelectRouteShadowStableTieBreakAndPathFilter(t *testing.T) {
 	t.Cleanup(func() { routeCapabilityIndex.Store(oldIndex) })
 	routeCapabilityIndex.Store(&capabilityIndex{ByRequestModel: map[string][]indexedCapability{
 		"gpt-5": {
-			{Capability: model.ChannelModelCapability{ChannelID: 9, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON)}, ChannelStatus: common.ChannelStatusEnabled, Priority: 10, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI},
-			{Capability: model.ChannelModelCapability{ChannelID: 8, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON)}, ChannelStatus: common.ChannelStatusEnabled, Priority: 10, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI},
-			{Capability: model.ChannelModelCapability{ChannelID: 7, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON)}, ChannelStatus: common.ChannelStatusEnabled, Priority: 20, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeAdvancedCustom, Advanced: advanced},
+			{Capability: model.ChannelModelCapability{ChannelID: 9, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Confidence: 1, State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON)}, ChannelStatus: common.ChannelStatusEnabled, Priority: 10, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI},
+			{Capability: model.ChannelModelCapability{ChannelID: 8, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Confidence: 1, State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON)}, ChannelStatus: common.ChannelStatusEnabled, Priority: 10, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI},
+			{Capability: model.ChannelModelCapability{ChannelID: 7, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Confidence: 1, State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON)}, ChannelStatus: common.ChannelStatusEnabled, Priority: 20, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeAdvancedCustom, Advanced: advanced},
 		},
 	}})
 
@@ -124,7 +124,7 @@ func TestShadowUsesActualModelLabForMappedRequests(t *testing.T) {
 		"public-model": {{
 			Capability: model.ChannelModelCapability{
 				ChannelID: 41, RequestModel: "public-model", ActualModel: "anthropic/claude-opus-5", LabSlug: "anthropic",
-				State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON),
+				Confidence: 1, State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON),
 			},
 			ChannelStatus: common.ChannelStatusEnabled, Priority: 10, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI,
 		}},

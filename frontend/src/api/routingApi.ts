@@ -4,7 +4,7 @@ import {
   isRecord,
   requiredBoolean,
   requiredInteger,
-  requiredNumber,
+  requiredStrictNumber,
   requiredString,
 } from './contracts'
 import type {
@@ -19,6 +19,7 @@ import type {
   RoutePreview,
   RouteProfileInput,
   RouteProfileView,
+  RouteRetryMode,
 } from '@/types/routing'
 
 const ROUTING_ENDPOINT = '/api/routing'
@@ -29,6 +30,12 @@ const capabilityStates = new Set<RouteCapabilityState>([
   'unsupported',
   'disabled',
   'conflict',
+])
+const retryModes = new Set<RouteRetryMode>([
+  'none',
+  'same_channel',
+  'next_channel',
+  'same_then_next',
 ])
 
 const healthStates = new Set<RouteHealthState>(['closed', 'open', 'half_open'])
@@ -73,11 +80,13 @@ function parseHealthSummary(
 
 function parsePolicy(value: unknown, endpoint: string): RoutePolicy {
   if (!isRecord(value)) invalidResponse(endpoint)
+  const retryMode = requiredString(value.retry_mode, endpoint, false)
+  if (!retryModes.has(retryMode as RouteRetryMode)) invalidResponse(endpoint)
   return {
     group_id: requiredInteger(value.group_id, endpoint),
     load_balance: requiredBoolean(value.load_balance, endpoint),
-    max_ratio: requiredNumber(value.max_ratio, endpoint),
-    retry_mode: requiredString(value.retry_mode, endpoint, false),
+    max_ratio: requiredStrictNumber(value.max_ratio, endpoint),
+    retry_mode: retryMode as RouteRetryMode,
     max_same_resource_attempts: requiredInteger(
       value.max_same_resource_attempts,
       endpoint
@@ -184,7 +193,7 @@ function parseEligibleChannel(
     type: requiredInteger(value.type, endpoint),
     status: requiredInteger(value.status, endpoint),
     models: requiredString(value.models, endpoint),
-    priority: requiredNumber(value.priority, endpoint),
+    priority: requiredStrictNumber(value.priority, endpoint),
     weight: requiredInteger(value.weight, endpoint),
     snapshot_version: requiredInteger(value.snapshot_version, endpoint),
     catalog_version: requiredString(value.catalog_version, endpoint),
@@ -218,7 +227,7 @@ function parseCatalog(value: unknown): RouteCatalog {
         request_model: requiredString(item.request_model, endpoint, false),
         actual_model: requiredString(item.actual_model, endpoint),
         lab_slug: requiredString(item.lab_slug, endpoint),
-        confidence: requiredNumber(item.confidence, endpoint),
+        confidence: requiredStrictNumber(item.confidence, endpoint),
         source: requiredString(item.source, endpoint, false),
         catalog_version: requiredString(item.catalog_version, endpoint),
         snapshot_version: requiredInteger(item.snapshot_version, endpoint),

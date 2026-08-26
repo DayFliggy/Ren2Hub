@@ -26,25 +26,26 @@ import (
 // BillingSession 封装单次请求的预扣费/结算/退款生命周期。
 // 实现 relaycommon.BillingSettler 接口。
 type BillingSession struct {
-	relayInfo        *relaycommon.RelayInfo
-	funding          FundingSource
-	recoveryID       string
-	preConsumedQuota int  // 实际预扣额度（信任用户可能为 0）
-	tokenConsumed    int  // 令牌额度实际扣减量
-	extraReserved    int  // 发送前补充预扣的额度（订阅退款时需要单独回滚）
-	trusted          bool // 是否命中信任额度旁路
-	fundingSettled   bool // funding.Settle 已成功，资金来源已提交
-	settled          bool // Settle 全部完成（资金 + 令牌）
-	refunded         bool // 所有退款组件均已成功
-	fundingRefunded  bool
-	extraRefunded    bool
-	tokenRefunded    bool
-	refundInProgress bool
-	refundErr        error
-	recoveryStop     chan struct{}
-	recoveryDone     chan struct{}
-	recoveryStopOnce sync.Once
-	mu               sync.Mutex
+	relayInfo           *relaycommon.RelayInfo
+	funding             FundingSource
+	recoveryID          string
+	preConsumedQuota    int  // 实际预扣额度（信任用户可能为 0）
+	tokenConsumed       int  // 令牌额度实际扣减量
+	extraReserved       int  // 发送前补充预扣的额度（订阅退款时需要单独回滚）
+	trusted             bool // 是否命中信任额度旁路
+	fundingSettled      bool // funding.Settle 已成功，资金来源已提交
+	settled             bool // Settle 全部完成（资金 + 令牌）
+	refunded            bool // 所有退款组件均已成功
+	recoveryNeedsRefund bool // 预扣回滚失败，必须由 durable recovery 接管
+	fundingRefunded     bool
+	extraRefunded       bool
+	tokenRefunded       bool
+	refundInProgress    bool
+	refundErr           error
+	recoveryStop        chan struct{}
+	recoveryDone        chan struct{}
+	recoveryStopOnce    sync.Once
+	mu                  sync.Mutex
 }
 
 // Settle 根据实际消耗额度进行结算。
@@ -296,7 +297,21 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 		return err
 	}
 	if err := s.reserveToken(delta); err != nil {
-		s.rollbackFundingReserve(delta)
+		if rollbackErr := s.rollbackFundingReserve(delta); rollbackErr != nil {
+			// The token reservation did not commit, but the funding side may
+			// still be charged. Keep that delta in the session so Refund and
+			// durable recovery can continue from the actual state.
+			s.preConsumedQuota += delta
+			s.extraReserved += delta
+			s.syncRelayInfo()
+			s.recoveryNeedsRefund = true
+			common.SysLog("billing funding rollback remains pending: " + rollbackErr.Error())
+			if s.recoveryID != "" {
+				if syncErr := syncBillingRecoveryWithRetry(s); syncErr != nil {
+					common.SysLog("billing funding rollback recovery sync remains pending: " + syncErr.Error())
+				}
+			}
+		}
 		return err
 	}
 
@@ -305,11 +320,59 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 	s.extraReserved += delta
 	s.syncRelayInfo()
 	if s.recoveryID != "" {
-		if err := s.syncRecovery(); err != nil {
-			return err
+		if err := syncBillingRecoveryWithRetry(s); err != nil {
+			rollbackErr := s.rollbackReservedDelta(delta)
+			if syncErr := syncBillingRecoveryWithRetry(s); syncErr != nil {
+				common.SysLog("billing reserve rollback recovery sync remains pending: " + syncErr.Error())
+			}
+			if rollbackErr != nil {
+				s.recoveryNeedsRefund = true
+				common.SysLog("billing reserve rollback remains pending: " + rollbackErr.Error())
+			}
+			return errors.Join(err, rollbackErr)
 		}
 	}
 	return nil
+}
+
+func syncBillingRecoveryWithRetry(s *BillingSession) error {
+	if s == nil {
+		return errors.New("billing session is unavailable")
+	}
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if err := s.syncRecovery(); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		if attempt < 2 {
+			time.Sleep(time.Duration(attempt+1) * 50 * time.Millisecond)
+		}
+	}
+	return lastErr
+}
+
+func (s *BillingSession) rollbackReservedDelta(delta int) error {
+	if delta <= 0 {
+		return nil
+	}
+	var rollbackErr error
+	if !s.relayInfo.IsPlayground {
+		if err := model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta); err != nil {
+			rollbackErr = errors.Join(rollbackErr, fmt.Errorf("rollback token reserve: %w", err))
+		} else {
+			s.tokenConsumed -= delta
+		}
+	}
+	if err := s.rollbackFundingReserve(delta); err != nil {
+		rollbackErr = errors.Join(rollbackErr, err)
+	} else {
+		s.preConsumedQuota -= delta
+		s.extraReserved -= delta
+	}
+	s.syncRelayInfo()
+	return rollbackErr
 }
 
 func (s *BillingSession) syncRecovery() error {
@@ -405,10 +468,15 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 		// 预扣费失败，回滚令牌额度
 		if s.tokenConsumed > 0 && !s.relayInfo.IsPlayground {
 			if rollbackErr := model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, s.tokenConsumed); rollbackErr != nil {
+				s.recoveryNeedsRefund = true
 				common.SysLog(fmt.Sprintf("error rolling back token quota (userId=%d, tokenId=%d, amount=%d, fundingErr=%s): %s",
 					s.relayInfo.UserId, s.relayInfo.TokenId, s.tokenConsumed, err.Error(), rollbackErr.Error()))
+				if syncErr := s.syncRecovery(); syncErr != nil {
+					common.SysLog("error persisting token rollback recovery: " + syncErr.Error())
+				}
+			} else {
+				s.tokenConsumed = 0
 			}
-			s.tokenConsumed = 0
 		}
 		// TODO: model 层应定义哨兵错误（如 ErrNoActiveSubscription），用 errors.Is 替代字符串匹配
 		if errors.Is(err, ErrInsufficientWalletQuota) {
@@ -464,19 +532,20 @@ func (s *BillingSession) reserveFunding(delta int) error {
 	}
 }
 
-func (s *BillingSession) rollbackFundingReserve(delta int) {
+func (s *BillingSession) rollbackFundingReserve(delta int) error {
 	switch funding := s.funding.(type) {
 	case *WalletFunding:
 		if err := model.IncreaseUserQuota(funding.userId, delta, false); err != nil {
-			common.SysLog("error rolling back wallet funding reserve: " + err.Error())
+			return fmt.Errorf("rollback wallet funding reserve: %w", err)
 		} else {
 			funding.consumed -= delta
 		}
 	case *SubscriptionFunding:
 		if err := model.PostConsumeUserSubscriptionDelta(funding.subscriptionId, -int64(delta)); err != nil {
-			common.SysLog("error rolling back subscription funding reserve: " + err.Error())
+			return fmt.Errorf("rollback subscription funding reserve: %w", err)
 		}
 	}
+	return nil
 }
 
 func (s *BillingSession) reserveToken(delta int) error {
@@ -589,7 +658,11 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 			return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 		}
 		if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
-			_ = model.MarkBillingRecoveryRefunded(session.recoveryID, apiErr.Err)
+			if session.recoveryNeedsRefund {
+				_ = model.MarkBillingRecoveryRefundPending(session.recoveryID, apiErr.Err)
+			} else {
+				_ = model.MarkBillingRecoveryRefunded(session.recoveryID, apiErr.Err)
+			}
 			return nil, apiErr
 		}
 		if err := session.syncRecovery(); err != nil {
@@ -622,7 +695,11 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		// 必须传 subConsume 而非 preConsumedQuota，保证 SubscriptionFunding.amount、
 		// preConsume 参数和 FinalPreConsumedQuota 三者一致，避免订阅多扣费。
 		if apiErr := session.preConsume(c, int(subConsume)); apiErr != nil {
-			_ = model.MarkBillingRecoveryRefunded(session.recoveryID, apiErr.Err)
+			if session.recoveryNeedsRefund {
+				_ = model.MarkBillingRecoveryRefundPending(session.recoveryID, apiErr.Err)
+			} else {
+				_ = model.MarkBillingRecoveryRefunded(session.recoveryID, apiErr.Err)
+			}
 			return nil, apiErr
 		}
 		if err := session.syncRecovery(); err != nil {

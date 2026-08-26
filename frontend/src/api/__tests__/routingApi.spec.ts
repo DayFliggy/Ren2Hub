@@ -190,4 +190,20 @@ describe('routing API contracts', () => {
       }
     }
   })
+
+  it('rejects string numbers and unknown retry modes', () => {
+    const invalidPolicy = {
+      ...profileResponse(),
+      groups: [
+        {
+          ...profileResponse().groups[0],
+          policy: { ...policy, max_ratio: '1', retry_mode: 'future' },
+        },
+      ],
+    }
+
+    expect(() =>
+      parseRouteProfileView(invalidPolicy, '/api/routing/profiles')
+    ).toThrowError()
+  })
 })

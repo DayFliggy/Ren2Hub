@@ -776,6 +776,9 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 	}
 	value, ok := c.Get("route_live_selection")
 	if !ok {
+		if c.GetBool(service.RouteLiveSelectionRequiredContextKey) {
+			return service.ErrRouteSelectionUnavailable
+		}
 		return nil
 	}
 	selection, ok := value.(service.LiveRouteSelection)
@@ -1198,7 +1201,7 @@ func channelID(channel *model.Channel) int {
 }
 
 func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) bool {
-	if openaiErr == nil {
+	if openaiErr == nil || requestContextDone(c) {
 		return false
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
@@ -1563,7 +1566,7 @@ func respondTaskError(c *gin.Context, taskErr *taskdto.TaskError) {
 }
 
 func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *taskdto.TaskError, retryTimes int) bool {
-	if taskErr == nil {
+	if taskErr == nil || requestContextDone(c) {
 		return false
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
@@ -1602,4 +1605,8 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *taskdto.TaskEr
 		return false
 	}
 	return true
+}
+
+func requestContextDone(c *gin.Context) bool {
+	return c == nil || c.Request == nil || c.Request.Context().Err() != nil
 }

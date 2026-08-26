@@ -210,6 +210,23 @@ async function save(): Promise<void> {
   }
 }
 
+async function removeProfile(): Promise<void> {
+  if (!profileView.value || saving.value) return
+  saving.value = true
+  try {
+    await routingApi.remove(profileView.value.profile.id)
+    profileView.value = null
+    groups.value = []
+    activeGroupKey.value = ''
+    preview.value = null
+    toast.success(t('routing.removed'))
+  } catch (error) {
+    toast.error(error instanceof ApiError ? error.message : String(error))
+  } finally {
+    saving.value = false
+  }
+}
+
 function addGroup(): void {
   const group = newGroup(groups.value.length)
   groups.value = [...groups.value, group]
@@ -282,13 +299,20 @@ function dropEntry(target: RouteEntry): void {
   draggingEntry.value = null
 }
 
+function clearDraggingEntry(): void {
+  draggingEntry.value = null
+}
+
 function channelFor(entry: RouteEntry): EligibleRouteChannel | undefined {
   return channels.value.find((channel) => channel.id === entry.channel_id)
 }
 
 function capabilityFor(entry: RouteEntry) {
+  const requestedModel = model.value.trim()
   return catalog.value?.items.find(
-    (item) => item.channel_id === entry.channel_id
+    (item) =>
+      item.channel_id === entry.channel_id &&
+      (!requestedModel || item.request_model === requestedModel)
   )
 }
 
@@ -341,7 +365,20 @@ onMounted(() => void load())
             <ArrowLeft class="h-4 w-4" aria-hidden="true" />
             {{ t('common.back') }}
           </ConsoleButton>
-          <ConsoleButton :loading="saving" :disabled="loading" @click="save">
+          <ConsoleButton
+            v-if="profileView"
+            variant="secondary"
+            :disabled="loading || !!loadError || saving"
+            @click="removeProfile"
+          >
+            <Trash2 class="h-4 w-4" aria-hidden="true" />
+            {{ t('routing.removeProfile') }}
+          </ConsoleButton>
+          <ConsoleButton
+            :loading="saving"
+            :disabled="loading || !!loadError"
+            @click="save"
+          >
             <Save class="h-4 w-4" aria-hidden="true" />
             {{ t('common.save') }}
           </ConsoleButton>
@@ -496,6 +533,7 @@ onMounted(() => void load())
                       class="flex flex-wrap items-center gap-2 border p-3"
                       style="border-color: var(--border-subtle)"
                       @dragstart="draggingEntry = entry"
+                      @dragend="clearDraggingEntry"
                       @dragover.prevent
                       @drop="dropEntry(entry)"
                     >

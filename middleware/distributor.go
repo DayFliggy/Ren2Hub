@@ -150,6 +150,7 @@ func Distribute() func(c *gin.Context) {
 						TokenModelLimit:        tokenLimit,
 					}
 					if service.RouteLiveRoutingEnabled() && service.RouteLiveRolloutMatches(liveRequest) {
+						c.Set(service.RouteLiveSelectionRequiredContextKey, true)
 						if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
 							liveRequest.PreferredChannelID = preferredChannelID
 						}
@@ -170,6 +171,13 @@ func Distribute() func(c *gin.Context) {
 							if liveRequest.PreferredChannelID == channel.Id {
 								service.MarkChannelAffinityUsed(c, usingGroup, channel.Id)
 							}
+						}
+						// Preserve an explicit legacy decision when the live rollout
+						// matched but no private profile is active. Relay can then
+						// distinguish intentional legacy routing from a missing live
+						// selection and keep the lease boundary fail-closed.
+						if liveSelection.Source == service.RouteSourceLegacy {
+							c.Set("route_live_selection", liveSelection)
 						}
 					}
 				}
