@@ -1392,7 +1392,10 @@ func RelayTask(c *gin.Context) {
 		Retry:       common.GetPointer(0),
 	}
 
-	for ; retryParam.GetRetry() <= relayRetryLimit(c); retryParam.IncreaseRetry() {
+	for {
+		if retryParam.GetRetry() > relayRetryLimit(c) {
+			break
+		}
 		if retryParam.GetRetry() > 0 {
 			releaseRouteAttemptLease(c)
 			if routeLiveSelectionActive(c) && c.GetBool(liveRouteRenewalFailedKey) {
@@ -1499,6 +1502,7 @@ func RelayTask(c *gin.Context) {
 		if !shouldRetryTaskRelay(c, channel.Id, taskErr, common.RetryTimes-retryParam.GetRetry()) {
 			break
 		}
+		retryParam.IncreaseRetry()
 	}
 
 	useChannel := c.GetStringSlice("use_channel")

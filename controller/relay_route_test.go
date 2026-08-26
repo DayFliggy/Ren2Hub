@@ -150,6 +150,24 @@ func TestNextLiveRouteAttemptUsesErrorScope(t *testing.T) {
 	assert.False(t, committedStream)
 }
 
+func TestNextLiveRouteCandidateIndexAdvancesExactlyOnce(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set("route_live_selection", service.LiveRouteSelection{
+		Source: service.RouteSourceAutoLab,
+		Attempts: []service.RouteDecisionCandidate{
+			{ChannelID: 101}, {ChannelID: 102}, {ChannelID: 103},
+		},
+	})
+
+	next, found := nextLiveRouteCandidateIndex(c, 0)
+	require.True(t, found)
+	assert.Equal(t, 1, next)
+
+	next, found = nextLiveRouteCandidateIndex(c, next)
+	require.True(t, found)
+	assert.Equal(t, 2, next)
+}
+
 func TestGetChannelSkipsExhaustedSingleKeyCandidate(t *testing.T) {
 	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
 	t.Setenv("ROUTE_LIVE_ENABLED", "true")
