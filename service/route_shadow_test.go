@@ -213,9 +213,11 @@ func TestReplayRouteShadowDecisionReadsHistoricalSnapshotOnly(t *testing.T) {
 	}}))
 
 	decision := RouteShadowDecision{
-		Event: "route_shadow_decision", RequestID: "replay-request", UserID: 7, TokenID: 8,
+		Event: "route_shadow_decision", RouteSource: ShadowRouteSource, QualificationVersion: RouteShadowQualificationVersion,
+		RequestID: "replay-request", UserID: 7, TokenID: 8,
 		RequestModel: "gpt-5", NormalizedRequestModel: "gpt-5", RequestPath: "/v1/chat/completions",
 		UserGroup: "default", EndpointType: string(constant.EndpointTypeOpenAI), SnapshotVersion: 1,
+		PriceEligible: true, PriceEligibilityKnown: true, SecurityAllowed: true, SecurityEligibilityKnown: true,
 		ShadowCandidates: []RouteShadowCandidate{{ChannelID: 77, RequestModel: "gpt-5", SnapshotVersion: 1, Priority: 20}},
 		LegacyTrace:      LegacySelectionTrace{CandidateIDs: []int{77}, SelectedChannelID: 77, SelectedGroup: "default"},
 	}
@@ -256,8 +258,10 @@ func TestReplayRouteShadowDecisionRejectsLegacyCapabilityProjection(t *testing.T
 		Priority: 20, ChannelType: constant.ChannelTypeOpenAI, State: model.RouteCapabilityStateEligible,
 	}}))
 	data, err := common.Marshal(RouteShadowDecision{
-		Event: "route_shadow_decision", RequestID: "legacy-projection-request", RequestModel: "gpt-5", NormalizedRequestModel: "gpt-5",
+		Event: "route_shadow_decision", RouteSource: ShadowRouteSource, QualificationVersion: RouteShadowQualificationVersion,
+		RequestID: "legacy-projection-request", RequestModel: "gpt-5", NormalizedRequestModel: "gpt-5",
 		RequestPath: "/v1/chat/completions", UserGroup: "default", EndpointType: string(constant.EndpointTypeOpenAI), SnapshotVersion: 1,
+		PriceEligible: true, PriceEligibilityKnown: true, SecurityAllowed: true, SecurityEligibilityKnown: true,
 		ShadowCandidates: []RouteShadowCandidate{{ChannelID: 78, RequestModel: "gpt-5", SnapshotVersion: 1}},
 		LegacyTrace:      LegacySelectionTrace{SelectedChannelID: 78},
 	})
@@ -271,6 +275,29 @@ func TestReplayRouteShadowDecisionRejectsIncompleteEvent(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ReplayRouteShadowDecision(context.Background(), data)
 	assert.ErrorIs(t, err, ErrRouteShadowReplayInvalid)
+}
+
+func TestReplayRouteShadowDecisionRejectsUntrustedEnvelopeFields(t *testing.T) {
+	data := []byte(`{"event":"route_shadow_decision","route_source":"auto_lab","qualification_version":2,"request_id":"replay-request","request_model":"gpt-5","request_path":"/v1/chat/completions","user_group":"default","snapshot_version":1,"shadow_candidates":[{"channel_id":77,"snapshot_version":1}],"legacy_trace":{},"request_body":"sensitive"}`)
+	_, err := ReplayRouteShadowDecision(context.Background(), data)
+	assert.ErrorIs(t, err, ErrRouteShadowReplayInvalid)
+
+	data = []byte(`{"event":"other_event","route_source":"auto_lab","qualification_version":2,"request_id":"replay-request","request_model":"gpt-5","request_path":"/v1/chat/completions","user_group":"default","snapshot_version":1,"shadow_candidates":[{"channel_id":77,"snapshot_version":1}],"legacy_trace":{}}`)
+	_, err = ReplayRouteShadowDecision(context.Background(), data)
+	assert.ErrorIs(t, err, ErrRouteShadowReplayInvalid)
+}
+
+func TestReplayRouteShadowDecisionRejectsQualificationVersionsWithoutInference(t *testing.T) {
+	data, err := common.Marshal(RouteShadowDecision{
+		Event: "route_shadow_decision", RouteSource: ShadowRouteSource, QualificationVersion: 1,
+		RequestID: "old-qualification", RequestModel: "gpt-5", RequestPath: "/v1/chat/completions",
+		UserGroup: "default", SnapshotVersion: 1,
+		ShadowCandidates: []RouteShadowCandidate{{ChannelID: 77, SnapshotVersion: 1}},
+		LegacyTrace:      LegacySelectionTrace{CandidateIDs: []int{77}},
+	})
+	require.NoError(t, err)
+	_, err = ReplayRouteShadowDecision(context.Background(), data)
+	assert.ErrorIs(t, err, ErrRouteShadowReplayUnsupported)
 }
 
 func TestCapabilityRefreshPublishesActiveIndexAndHonorsAbilityChanges(t *testing.T) {

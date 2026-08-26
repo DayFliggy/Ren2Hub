@@ -2,8 +2,12 @@ package model
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/glebarez/sqlite"
@@ -87,6 +91,77 @@ func TestPublishChannelCapabilitySnapshotFencesAndRetainsRecentVersions(t *testi
 	assert.Equal(t, RouteCapabilityRefreshActive, snapshot.RefreshStatus)
 	assert.Equal(t, "hash-4", snapshot.LastFailedSourceHash)
 	assert.Equal(t, "catalog-1", snapshot.LastFailedCatalogVersion)
+}
+
+func TestPublishChannelCapabilitySnapshotConcurrentCASHasSingleWinner(t *testing.T) {
+	originalDB := DB
+	originalMainDB := common.MainDatabaseType()
+	originalLogDB := common.LogDatabaseType()
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s/routing.db?_journal_mode=WAL&_busy_timeout=10000", t.TempDir())), &gorm.Config{})
+	require.NoError(t, err)
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	DB = db
+	t.Cleanup(func() {
+		DB = originalDB
+		common.SetDatabaseTypes(originalMainDB, originalLogDB)
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(4)
+	require.NoError(t, db.AutoMigrate(&ChannelModelCapability{}, &ChannelCapabilitySnapshot{}))
+	initialCapability := []ChannelModelCapability{{RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical", State: RouteCapabilityStateEligible}}
+	require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), 71, ChannelCapabilitySnapshotFence{}, "hash-1", "catalog-1", initialCapability))
+	expected := ChannelCapabilitySnapshotFence{ActiveVersion: 1, SourceHash: "hash-1", CatalogVersion: "catalog-1"}
+
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var wg sync.WaitGroup
+	for index := 0; index < 2; index++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			<-start
+			capability := []ChannelModelCapability{{RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical", State: RouteCapabilityStateEligible}}
+			var result error
+			for attempt := 0; attempt < 20; attempt++ {
+				result = PublishChannelCapabilitySnapshot(context.Background(), 71, expected,
+					fmt.Sprintf("hash-%d", index+2), "catalog-1", capability)
+				if result == nil || errors.Is(result, ErrCapabilitySnapshotConflict) ||
+					(!strings.Contains(strings.ToLower(result.Error()), "locked") && !strings.Contains(strings.ToLower(result.Error()), "deadlock")) {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			results <- result
+		}(index)
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	successes, conflicts := 0, 0
+	for result := range results {
+		switch {
+		case result == nil:
+			successes++
+		case errors.Is(result, ErrCapabilitySnapshotConflict):
+			conflicts++
+		default:
+			t.Fatalf("unexpected concurrent publish error: %v", result)
+		}
+	}
+	assert.Equal(t, 1, successes)
+	assert.Equal(t, 1, conflicts)
+
+	var snapshot ChannelCapabilitySnapshot
+	require.NoError(t, db.Where("channel_id = ?", 71).First(&snapshot).Error)
+	assert.Equal(t, int64(2), snapshot.ActiveVersion)
+	var count int64
+	require.NoError(t, db.Model(&ChannelModelCapability{}).Where("channel_id = ?", 71).Count(&count).Error)
+	assert.Equal(t, int64(2), count)
 }
 
 type legacyChannelModelCapability struct {

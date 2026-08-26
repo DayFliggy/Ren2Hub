@@ -233,6 +233,7 @@ func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(p
 			}
 			continue
 		}
+		detectedAt := time.Now()
 		expected, fenceErr := model.GetChannelCapabilitySnapshotFence(ctx, channel.Id)
 		if fenceErr != nil {
 			summary.Failed++
@@ -252,6 +253,7 @@ func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(p
 			}
 		} else {
 			observeCapabilityRefreshDurations(-1, time.Since(publishStartedAt))
+			observeCapabilityRefreshDetectionToActive(time.Since(detectedAt))
 			summary.Refreshed++
 			routeShadowMetrics.RefreshSuccess.Add(1)
 		}
@@ -279,6 +281,7 @@ func refreshOneChannel(ctx context.Context, channel *model.Channel, abilities []
 	if err != nil {
 		return err
 	}
+	detectedAt := time.Now()
 	expected, err := model.GetChannelCapabilitySnapshotFence(ctx, channel.Id)
 	if err != nil {
 		return err
@@ -289,6 +292,7 @@ func refreshOneChannel(ctx context.Context, channel *model.Channel, abilities []
 		return err
 	}
 	observeCapabilityRefreshDurations(-1, time.Since(publishStartedAt))
+	observeCapabilityRefreshDetectionToActive(time.Since(detectedAt))
 	if rebuild {
 		return RebuildRouteCapabilityIndex(ctx)
 	}

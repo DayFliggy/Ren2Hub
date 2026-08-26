@@ -68,8 +68,8 @@ ROUTE_SHADOW_MODELS=gpt-5,claude-opus-5
 
 - Shadow 决策、差异、unknown、mixed 和未授权候选计数。
 - snapshot stale、快照版本冲突和事件丢弃计数。
-- 事件 attempted、written、encode failure 和 dropped 计数；日志完整率按 `written / (attempted - encode_failure)` 计算。
-- 能力刷新成功/失败计数、扫描 P95 和检测到变更到 active 发布 P95。
+- 事件 attempted、written、write failure、encode failure 和 dropped 计数；日志完整率按 `written / (attempted - encode_failure)` 计算，写入失败不计入 written。
+- 能力刷新成功/失败计数、扫描 P95、发布操作 P95 和检测到变更到 active 发布 P95。
 - 最近 7 天 Relay 日志为分母的核心模型覆盖率和 Lab 解析率。
 - `difference_reasons` 是否都能解释新旧选择差异。
 

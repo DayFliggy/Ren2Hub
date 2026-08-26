@@ -27,7 +27,10 @@ func initRouteShadowEventQueue() {
 				continue
 			}
 			requestContext := context.WithValue(context.Background(), common.RequestIdKey, decision.RequestID)
-			logger.LogInfo(requestContext, string(data))
+			if err := logger.TryLogInfo(requestContext, string(data)); err != nil {
+				observeShadowEventWriteFailure()
+				continue
+			}
 			observeShadowEventWritten()
 		}
 	}()
