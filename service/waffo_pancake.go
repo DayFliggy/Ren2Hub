@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/model"
@@ -388,11 +389,11 @@ func CreateWaffoPancakePrimaryPair(ctx context.Context, merchantID, privateKey, 
 // at the end of the configuration flow via model.UpdateOptionsBulk (single
 // DB transaction). A blank privateKey is treated as "keep current"
 // (Stripe-style API-secret UX) and is omitted from the bulk payload.
-func SaveWaffoPancakeConfig(ctx context.Context, merchantID, privateKey, returnURL, storeID, productID string) error {
+func SaveWaffoPancakeConfig(ctx context.Context, merchantID, privateKey, returnURL, storeID, productID string, unitPrice float64, minTopUp int) error {
 	merchantID = strings.TrimSpace(merchantID)
 	storeID = strings.TrimSpace(storeID)
 	productID = strings.TrimSpace(productID)
-	if merchantID == "" || storeID == "" || productID == "" {
+	if merchantID == "" || storeID == "" || productID == "" || unitPrice <= 0 || minTopUp <= 0 {
 		return fmt.Errorf("merchant id, store id, and product id are required to save")
 	}
 	values := map[string]string{
@@ -400,6 +401,8 @@ func SaveWaffoPancakeConfig(ctx context.Context, merchantID, privateKey, returnU
 		"WaffoPancakeReturnURL":  strings.TrimSpace(returnURL),
 		"WaffoPancakeStoreID":    storeID,
 		"WaffoPancakeProductID":  productID,
+		"WaffoPancakeUnitPrice":  strconv.FormatFloat(unitPrice, 'f', -1, 64),
+		"WaffoPancakeMinTopUp":   strconv.Itoa(minTopUp),
 	}
 	if pk := strings.TrimSpace(privateKey); pk != "" {
 		values["WaffoPancakePrivateKey"] = pk

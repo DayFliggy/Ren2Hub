@@ -6,6 +6,7 @@ import {
   SYSTEM_SETTINGS_DEFAULTS,
   type AllSystemSettings,
   type SystemOption,
+  type SystemOptionDescriptor,
 } from '@/types/systemSettings'
 
 export type SystemSettingValue = string | boolean | number
@@ -19,13 +20,19 @@ interface SecretStatusResponse {
 function castValue(
   key: string,
   raw: string,
-  defaults: AllSystemSettings
+  defaults: AllSystemSettings,
+  descriptors: SystemOptionDescriptor[] = []
 ): string | boolean | number {
-  const def = defaults[key as keyof AllSystemSettings]
-  if (typeof def === 'boolean') {
+  const descriptor = descriptors.find((item) => item.key === key)
+  const descriptorDefault = descriptor?.default_value
+  const def: string | number | boolean =
+    typeof descriptorDefault === 'string' || typeof descriptorDefault === 'number' || typeof descriptorDefault === 'boolean'
+      ? descriptorDefault
+      : defaults[key as keyof AllSystemSettings] as string | number | boolean
+  if (descriptor?.value_type === 'boolean' || typeof def === 'boolean') {
     return raw === 'true' || raw === '1'
   }
-  if (typeof def === 'number') {
+  if (descriptor?.value_type === 'number' || typeof def === 'number') {
     const n = Number(raw)
     return Number.isFinite(n) ? n : def
   }
@@ -35,13 +42,14 @@ function castValue(
 /** Merge a flat array of SystemOption into the typed settings object. */
 function parseOptions(
   options: SystemOption[],
-  defaults: AllSystemSettings
+  defaults: AllSystemSettings,
+  descriptors: SystemOptionDescriptor[] = []
 ): AllSystemSettings {
   const result = { ...defaults }
   for (const opt of options) {
     if (Object.prototype.hasOwnProperty.call(defaults, opt.key)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(result as any)[opt.key] = castValue(opt.key, opt.value, defaults)
+      ;(result as any)[opt.key] = castValue(opt.key, opt.value, defaults, descriptors)
     }
   }
   return result
@@ -51,6 +59,7 @@ function parseOptions(
 const _settings = ref<AllSystemSettings>({ ...SYSTEM_SETTINGS_DEFAULTS })
 const _rawOptions = ref<SystemSettingsRawOptions>({})
 const _configuredSecrets = ref<string[]>([])
+const _catalog = ref<SystemOptionDescriptor[]>([])
 const _loading = ref(false)
 const _loaded = ref(false)
 let _fetchPromise: Promise<void> | null = null
@@ -74,9 +83,16 @@ export function useSystemSettings() {
           raw[option.key] = option.value
         }
         _rawOptions.value = raw
+        try {
+          const catalog = await api.get<SystemOptionDescriptor[]>('/api/option/catalog')
+          _catalog.value = Array.isArray(catalog) ? catalog : []
+        } catch {
+          _catalog.value = []
+        }
         _settings.value = parseOptions(
           Array.isArray(data) ? data : [],
-          SYSTEM_SETTINGS_DEFAULTS
+          SYSTEM_SETTINGS_DEFAULTS,
+          _catalog.value
         )
         const secretStatus = await api.get<SecretStatusResponse>(
           '/api/option/secret-status'
@@ -138,9 +154,16 @@ export function useSystemSettings() {
     fallback: SystemSettingValue = ''
   ): SystemSettingValue {
     const value = _rawOptions.value[key]
-    if (value === undefined) return fallback
-    if (typeof fallback === 'boolean') return value === 'true' || value === '1'
-    if (typeof fallback === 'number') {
+    const descriptor = _catalog.value.find((item) => item.key === key)
+    if (value === undefined) {
+      const defaultValue = descriptor?.default_value
+      if (typeof defaultValue === 'boolean' || typeof defaultValue === 'number' || typeof defaultValue === 'string') {
+        return defaultValue
+      }
+      return fallback
+    }
+    if (descriptor?.value_type === 'boolean' || typeof fallback === 'boolean') return value === 'true' || value === '1'
+    if (descriptor?.value_type === 'number' || typeof fallback === 'number') {
       const parsed = Number(value)
       return Number.isFinite(parsed) ? parsed : fallback
     }
@@ -155,6 +178,7 @@ export function useSystemSettings() {
     settings: readonly(_settings),
     rawOptions: readonly(_rawOptions),
     configuredSecrets: readonly(_configuredSecrets),
+    catalog: readonly(_catalog),
     loading: readonly(_loading),
     loaded: readonly(_loaded),
     load,

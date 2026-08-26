@@ -7,6 +7,9 @@ import SysSettingsFormCard from '@/components/console/systemSettings/SysSettings
 import SystemSettingsMaintenanceActions from '@/components/console/systemSettings/SystemSettingsMaintenanceActions.vue'
 import SystemSettingsField from '@/components/console/systemSettings/SystemSettingsField.vue'
 import WaffoPancakePanel from '@/components/console/systemSettings/WaffoPancakePanel.vue'
+import PaymentCompliancePanel from '@/components/console/systemSettings/PaymentCompliancePanel.vue'
+import SystemSettingsOperationsPanel from '@/components/console/systemSettings/SystemSettingsOperationsPanel.vue'
+import IoNetConnectionPanel from '@/components/console/systemSettings/IoNetConnectionPanel.vue'
 import {
   getSystemSettingsDomain,
   type SystemSettingsDomainId,
@@ -187,6 +190,16 @@ onMounted(() => load())
         <WaffoPancakePanel
           v-else-if="activeSection.integration === 'waffo-pancake'"
           @saved="load(true)"
+        />
+        <PaymentCompliancePanel
+          v-else-if="activeSection.integration === 'payment-compliance'"
+          @confirmed="load(true)"
+        />
+        <SystemSettingsOperationsPanel
+          v-else-if="activeSection.integration === 'operations-maintenance'"
+        />
+        <IoNetConnectionPanel
+          v-else-if="activeSection.integration === 'ionet'"
         />
         <SystemSettingsMaintenanceActions
           v-else-if="activeSection.integration === 'channel-affinity'"
