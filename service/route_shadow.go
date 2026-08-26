@@ -599,6 +599,7 @@ type shadowMetrics struct {
 	EventWritten               atomic.Uint64
 	EventWriteFailed           atomic.Uint64
 	EventEncodeFailed          atomic.Uint64
+	AggregateWriteFailures     atomic.Uint64
 	ScoreDecisions             atomic.Uint64
 	ScoreDiffs                 atomic.Uint64
 	ScoreUnavailable           atomic.Uint64
@@ -641,6 +642,7 @@ type RouteShadowMetricsSnapshot struct {
 	RouteShadowEventWrittenTotal                 uint64            `json:"route_shadow_event_written_total"`
 	RouteShadowEventWriteFailureTotal            uint64            `json:"route_shadow_event_write_failure_total"`
 	RouteShadowEventEncodeFailureTotal           uint64            `json:"route_shadow_event_encode_failure_total"`
+	RouteShadowAggregateWriteFailureTotal        uint64            `json:"route_shadow_aggregate_write_failure_total"`
 	RouteScoreShadowDecisionsTotal               uint64            `json:"route_score_shadow_decisions_total"`
 	RouteScoreShadowDiffTotal                    uint64            `json:"route_score_shadow_diff_total"`
 	RouteScoreShadowUnavailableTotal             uint64            `json:"route_score_shadow_metrics_unavailable_total"`
@@ -676,6 +678,7 @@ func RouteShadowMetrics() RouteShadowMetricsSnapshot {
 		RouteShadowEventWrittenTotal:                 routeShadowMetrics.EventWritten.Load(),
 		RouteShadowEventWriteFailureTotal:            routeShadowMetrics.EventWriteFailed.Load(),
 		RouteShadowEventEncodeFailureTotal:           routeShadowMetrics.EventEncodeFailed.Load(),
+		RouteShadowAggregateWriteFailureTotal:        routeShadowMetrics.AggregateWriteFailures.Load(),
 		RouteScoreShadowDecisionsTotal:               routeShadowMetrics.ScoreDecisions.Load(),
 		RouteScoreShadowDiffTotal:                    routeShadowMetrics.ScoreDiffs.Load(),
 		RouteScoreShadowUnavailableTotal:             routeShadowMetrics.ScoreUnavailable.Load(),

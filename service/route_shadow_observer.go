@@ -26,6 +26,9 @@ func initRouteShadowEventQueue() {
 				observeShadowEventEncodeFailure()
 				continue
 			}
+			// The durable, cross-instance model counters are updated by the
+			// bounded observer worker, never on the request hot path.
+			recordRouteShadowAggregate(decision)
 			requestContext := context.WithValue(context.Background(), common.RequestIdKey, decision.RequestID)
 			if err := logger.TryLogInfo(requestContext, string(data)); err != nil {
 				observeShadowEventWriteFailure()

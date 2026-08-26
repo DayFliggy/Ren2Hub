@@ -135,3 +135,80 @@ func TestUpdateChannelRoutePolicyRejectsQueryBodyModelMismatch(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), `"code":"MODEL_MISMATCH"`)
 }
+
+func TestChannelRoutePolicyUpdateMapsVersionConflict(t *testing.T) {
+	previousDB := model.DB
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelRoutePolicy{}))
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = previousDB
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.Create(&model.Channel{Id: 4202, Name: "route-policy-conflict", Key: "redacted-test-key"}).Error)
+	require.NoError(t, db.Create(&model.ChannelRoutePolicy{
+		ChannelID: 4202, CanonicalModel: "gpt-test", MaxChannelConcurrency: 1, Enabled: true, Version: 1,
+	}).Error)
+	_, err = service.SaveChannelRoutePolicy(model.ChannelRoutePolicy{
+		ChannelID: 4202, CanonicalModel: "gpt-test", MaxChannelConcurrency: 2, Enabled: true, Version: 1,
+	})
+	require.NoError(t, err)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Params = gin.Params{{Key: "id", Value: "4202"}}
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/channel/4202/route-policy?model=gpt-test", strings.NewReader(`{"canonical_model":"gpt-test","enabled":true,"max_channel_concurrency":3,"version":1}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	UpdateChannelRoutePolicy(c)
+
+	assert.Equal(t, http.StatusConflict, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"code":"VERSION_CONFLICT"`)
+}
+
+func TestGetChannelRoutePolicyDoesNotExposeSensitiveChannelFields(t *testing.T) {
+	previousDB := model.DB
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelRoutePolicy{}))
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = previousDB
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.Create(&model.Channel{Id: 4203, Name: "route-policy-safe", Key: "redacted-test-key"}).Error)
+	require.NoError(t, db.Create(&model.ChannelRoutePolicy{
+		ChannelID: 4203, CanonicalModel: "gpt-test", MaxChannelConcurrency: 1, Enabled: true, Version: 1,
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Params = gin.Params{{Key: "id", Value: "4203"}}
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/4203/route-policy?model=gpt-test", nil)
+
+	GetChannelRoutePolicy(c)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	body := recorder.Body.String()
+	assert.Contains(t, body, `"canonical_model":"gpt-test"`)
+	assert.NotContains(t, body, `"key"`)
+	assert.NotContains(t, body, `"base_url"`)
+	assert.NotContains(t, body, `"header_override"`)
+}
+
+func TestChannelRoutePolicyRequiresModelQuery(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Params = gin.Params{{Key: "id", Value: "4204"}}
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/4204/route-policy", nil)
+
+	GetChannelRoutePolicy(c)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"code":"BAD_REQUEST"`)
+}

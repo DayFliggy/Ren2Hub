@@ -17,6 +17,8 @@ type RouteShadowDiagnosticsSnapshot struct {
 	CoreModelLabResolution  float64                    `json:"core_model_lab_resolution"`
 	CoreModels              []string                   `json:"core_models"`
 	CoverageDataUnavailable bool                       `json:"coverage_data_unavailable"`
+	ShadowDataUnavailable   bool                       `json:"shadow_data_unavailable"`
+	ShadowDataSource        string                     `json:"shadow_data_source"`
 }
 
 // RouteShadowDiagnostics calculates the PR-3A exit indicators from aggregate
@@ -43,7 +45,11 @@ func GetRouteShadowDiagnostics(ctx context.Context) RouteShadowDiagnosticsSnapsh
 	}
 	threshold := float64(total) * 0.95
 	var coreVolume int64
-	modelStats := routeShadowModelMetrics()
+	aggregate := loadRouteShadowAggregate(ctx, windowStart)
+	diagnostics.ShadowDataSource = "redis_hourly_aggregate"
+	if !aggregate.Available {
+		diagnostics.ShadowDataUnavailable = true
+	}
 	var resolved, decisions uint64
 	for _, item := range usage {
 		if float64(coreVolume) >= threshold {
@@ -51,7 +57,7 @@ func GetRouteShadowDiagnostics(ctx context.Context) RouteShadowDiagnosticsSnapsh
 		}
 		coreVolume += item.RequestCount
 		diagnostics.CoreModels = append(diagnostics.CoreModels, item.ModelName)
-		stats := modelStats[modellab.NormalizeModel(item.ModelName)]
+		stats := aggregate.Models[modellab.NormalizeModel(item.ModelName)]
 		if stats.Decisions > 0 {
 			decisions += stats.Decisions
 			resolved += stats.Resolved
@@ -62,7 +68,7 @@ func GetRouteShadowDiagnostics(ctx context.Context) RouteShadowDiagnosticsSnapsh
 	}
 	diagnostics.CoreModelRequestCount = coreVolume
 	diagnostics.CoreModelCoverage = float64(coreVolume) / float64(total)
-	if decisions > 0 {
+	if !diagnostics.ShadowDataUnavailable && decisions > 0 {
 		diagnostics.CoreModelLabResolution = float64(resolved) / float64(decisions)
 	}
 	return diagnostics
