@@ -56,6 +56,24 @@ export const vendorLogoMeta: Record<string, VendorLogoMeta> = {
   'Bytedance Seed': { src: '/models/doubao-color.svg' },
 }
 
+/** Brand metadata used by dashboard lab-group headers.
+ * Keep this keyed by the server-resolved slug so mixed/unknown groups can
+ * intentionally fall back to a neutral icon instead of a provider logo. */
+export const labLogoVendor: Record<string, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google',
+  deepseek: 'DeepSeek',
+  alibaba: 'Alibaba',
+  xai: 'xAI',
+  moonshotai: 'Moonshot AI',
+  zhipuai: 'Zhipu AI',
+  minimax: 'MiniMax',
+  mistral: 'Mistral',
+  tencent: 'Tencent',
+  'bytedance-seed': 'Bytedance Seed',
+}
+
 /** Platform-side upstream channels (also the channel pool for platform tokens). */
 export const marketSources = [
   'OpenAI 官方',

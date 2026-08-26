@@ -381,6 +381,13 @@ test('all dashboard panels remain contained at compact width', async ({
   await expect(routeGroups).toHaveCount(7)
   const firstGroup = routeGroups.first()
   await expect(firstGroup).toContainText('OpenAI')
+  await expect(firstGroup.locator('[data-route-lab-logo] img')).toHaveAttribute(
+    'src',
+    '/models/openai.svg'
+  )
+  await expect(
+    page.locator('[data-route-group-slug="azure"] [data-route-lab-fallback]')
+  ).toBeVisible()
   await expect(firstGroup.locator('button[aria-expanded]')).toHaveAttribute(
     'aria-expanded',
     'false'
@@ -390,6 +397,7 @@ test('all dashboard panels remain contained at compact width', async ({
   await expect(
     firstGroup.locator('[data-route-channel]').first()
   ).toContainText('OpenAI')
+  await expect(firstGroup.locator('[data-route-channel] img')).toHaveCount(0)
 
   await assertNoHorizontalOverflow(page)
   await assertInteractiveCentersVisible(page)
