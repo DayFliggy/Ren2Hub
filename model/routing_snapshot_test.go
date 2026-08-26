@@ -70,7 +70,7 @@ func TestPublishChannelCapabilitySnapshotFencesAndRetainsRecentVersions(t *testi
 	require.NoError(t, MarkChannelCapabilityRefreshFailure(7, expected, "hash-4", "catalog-1"))
 	require.NoError(t, db.Where("channel_id = ?", 7).First(&snapshot).Error)
 	assert.Equal(t, int64(4), snapshot.ActiveVersion)
-	assert.Equal(t, RouteCapabilityRefreshFailed, snapshot.RefreshStatus)
+	assert.Equal(t, RouteCapabilityRefreshActive, snapshot.RefreshStatus)
 	assert.Equal(t, "hash-4", snapshot.LastFailedSourceHash)
 	assert.Equal(t, "catalog-1", snapshot.LastFailedCatalogVersion)
 	active, err = FindActiveChannelCapabilities(context.Background(), []int{7}, "gpt-5", "openai")
@@ -162,6 +162,32 @@ func TestPublishChannelCapabilitySnapshotConcurrentCASHasSingleWinner(t *testing
 	var count int64
 	require.NoError(t, db.Model(&ChannelModelCapability{}).Where("channel_id = ?", 71).Count(&count).Error)
 	assert.Equal(t, int64(2), count)
+}
+
+func TestMarkChannelCapabilityRefreshFailureCreatesInitialFailureSnapshot(t *testing.T) {
+	originalDB := DB
+	originalMainDB := common.MainDatabaseType()
+	originalLogDB := common.LogDatabaseType()
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	DB = db
+	t.Cleanup(func() {
+		DB = originalDB
+		common.SetDatabaseTypes(originalMainDB, originalLogDB)
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&ChannelCapabilitySnapshot{}))
+
+	require.NoError(t, MarkChannelCapabilityRefreshFailure(88, ChannelCapabilitySnapshotFence{}, "failed-source", "catalog-1"))
+	var snapshot ChannelCapabilitySnapshot
+	require.NoError(t, db.Where("channel_id = ?", 88).First(&snapshot).Error)
+	assert.Zero(t, snapshot.ActiveVersion)
+	assert.Equal(t, RouteCapabilityRefreshFailed, snapshot.RefreshStatus)
+	assert.Equal(t, "failed-source", snapshot.LastFailedSourceHash)
+	assert.Equal(t, "catalog-1", snapshot.LastFailedCatalogVersion)
 }
 
 type legacyChannelModelCapability struct {

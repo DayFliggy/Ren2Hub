@@ -53,6 +53,9 @@ func ReplayRouteShadowDecision(ctx context.Context, data []byte) (RouteShadowDec
 	if len(stored.ShadowCandidates) == 0 {
 		return RouteShadowDecision{}, ErrRouteShadowReplayInvalid
 	}
+	if stored.ShadowPreferredID > 0 && !shadowReplayPreferredSnapshotMatches(stored) {
+		return RouteShadowDecision{}, ErrRouteShadowReplayInvalid
+	}
 	// Older events cannot distinguish an omitted qualification from an
 	// explicit denial. Never infer permission while replaying them.
 	if stored.QualificationVersion != RouteShadowQualificationVersion {
@@ -125,4 +128,14 @@ func ReplayRouteShadowDecision(ctx context.Context, data []byte) (RouteShadowDec
 		Legacy:                   stored.LegacyTrace,
 	}
 	return selectRouteShadowWithIndex(request, index), nil
+}
+
+func shadowReplayPreferredSnapshotMatches(decision RouteShadowDecision) bool {
+	for _, candidate := range decision.ShadowCandidates {
+		if candidate.ChannelID == decision.ShadowPreferredID &&
+			candidate.SnapshotVersion == decision.SnapshotVersion {
+			return true
+		}
+	}
+	return false
 }

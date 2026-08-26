@@ -333,6 +333,7 @@ function healthTone(state: RouteHealthState): 'success' | 'warning' | 'danger' {
 async function runPreview(): Promise<void> {
   if (!profileView.value || !model.value.trim() || !path.value.trim()) return
   loadingPreview.value = true
+  preview.value = null
   try {
     preview.value = await routingApi.preview(profileView.value.profile.id, {
       model: model.value.trim(),

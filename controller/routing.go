@@ -277,6 +277,7 @@ func listEligibleRouteChannels(userID int) ([]eligibleRouteChannel, error) {
 		item := eligibleRouteChannel{
 			ID: channel.Id, Name: channel.Name, Type: channel.Type, Status: channel.Status,
 			Models: channel.Models, Priority: channel.GetPriority(), Weight: channel.GetWeight(),
+			CapabilityState: model.RouteCapabilityStateUnresolved,
 		}
 		if snapshot, ok := snapshotByChannel[channel.Id]; ok && snapshot.ActiveVersion > 0 {
 			item.SnapshotVersion = snapshot.ActiveVersion

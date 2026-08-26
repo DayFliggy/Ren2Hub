@@ -292,6 +292,25 @@ describe('TokenRoutingView', () => {
     )
   })
 
+  it('clears a previous preview when the next preview fails', async () => {
+    const view = await mountView()
+
+    await view.get('input[placeholder="gpt-5"]').setValue('gpt-5')
+    await buttonByText(view, 'Run preview').trigger('click')
+    await flushPromises()
+    expect(view.find('[data-testid="route-preview-health"]').exists()).toBe(
+      true
+    )
+
+    mocks.preview.mockRejectedValueOnce(new ApiError('preview failed'))
+    await buttonByText(view, 'Run preview').trigger('click')
+    await flushPromises()
+
+    expect(view.find('[data-testid="route-preview-health"]').exists()).toBe(
+      false
+    )
+  })
+
   it('requires a reload after a version conflict', async () => {
     mocks.update.mockRejectedValueOnce(
       new ApiError('stale profile', { code: 'VERSION_CONFLICT' })

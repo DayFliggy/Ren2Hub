@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
@@ -88,6 +89,7 @@ func TestBeginLiveRouteUpstreamAttemptTracksIndependentBudgetsAndKeys(t *testing
 
 func TestSetupContextLiveRetryUsesAnotherEnabledKey(t *testing.T) {
 	t.Setenv("ROUTE_LIVE_ENABLED", "true")
+	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
 	originalDB, originalMemoryCache := model.DB, common.MemoryCacheEnabled
 	originalDatabaseType := common.MainDatabaseType()
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
@@ -124,6 +126,47 @@ func TestSetupContextLiveRetryUsesAnotherEnabledKey(t *testing.T) {
 	require.Nil(t, middleware.SetupContextForSelectedChannel(c, &first, "gpt-test"))
 	assert.NotEqual(t, initialKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey))
 	assert.NotEqual(t, initialIndex, common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex))
+}
+
+func TestSetupContextLiveRouteClaimsOnlyOneRecoveredKeyProbe(t *testing.T) {
+	t.Setenv("ROUTE_LIVE_ENABLED", "true")
+	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
+	originalDB, originalMemoryCache := model.DB, common.MemoryCacheEnabled
+	originalDatabaseType := common.MainDatabaseType()
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	model.DB = db
+	common.MemoryCacheEnabled = false
+	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB = originalDB
+		common.MemoryCacheEnabled = originalMemoryCache
+		common.SetMainDatabaseType(originalDatabaseType)
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
+
+	channel := model.Channel{Id: 92012, Type: constant.ChannelTypeOpenAI, Key: "recovering-key", Name: "single-key", Status: common.ChannelStatusEnabled}
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: channel.Id, Model: "gpt-test", KeyScope: service.RouteKeyScope("recovering-key"), State: model.RouteHealthStateOpen,
+		FailureCount: 1, CooldownUntil: time.Now().Add(-time.Second).Unix(), HealthEpoch: 4,
+	}).Error)
+
+	newContext := func() *gin.Context {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+		c.Set("route_live_selection", service.LiveRouteSelection{Source: service.RouteSourceAutoLab})
+		return c
+	}
+
+	first := newContext()
+	require.Nil(t, middleware.SetupContextForSelectedChannel(first, &channel, "gpt-test"))
+	second := newContext()
+	setupErr := middleware.SetupContextForSelectedChannel(second, &channel, "gpt-test")
+	require.NotNil(t, setupErr)
+	assert.Equal(t, types.ErrorCodeChannelNoAvailableKey, setupErr.GetErrorCode())
 }
 
 func TestNextLiveRouteAttemptUsesErrorScope(t *testing.T) {

@@ -40,7 +40,7 @@ ROUTE_SHADOW_MODELS=gpt-5,claude-opus-5
 - `route_capability_refresh` SystemTask 按 fingerprint 扫描遗漏的外部变更。
 - 每个渠道用 CAS 发布 active snapshot；数据库保留当前版本和最近两个旧版本。
 - 发布和失败标记必须携带读取到的 `active_version`、`source_hash`、`catalog_version`；CAS 竞争失败不插入新能力行或污染 active 快照。
-- 刷新失败记录失败 fingerprint 和时间，但不清空旧 active snapshot；旧 worker 不能把新 active snapshot 标记为失败。
+- 刷新失败记录失败 fingerprint 和时间，但不清空旧 active snapshot；旧 worker 不能把新 active snapshot 标记为失败。首次构建失败会留下 failed pointer，供刷新任务重试和诊断。
 - 删除渠道后会从内存索引移除，但数据库快照保留用于诊断。
 
 ## Shadow 决策
@@ -71,6 +71,7 @@ ROUTE_SHADOW_MODELS=gpt-5,claude-opus-5
 - 事件 attempted、written、write failure、encode failure 和 dropped 计数；日志完整率按 `written / (attempted - encode_failure)` 计算，写入失败不计入 written。
 - 能力刷新成功/失败计数、扫描 P95、发布操作 P95 和检测到变更到 active 发布 P95。
 - 最近 7 天 Relay 日志为分母的核心模型覆盖率和 Lab 解析率。
+- 核心模型列表中的每个模型都必须有 Redis Shadow 聚合；任一模型缺失决策数据时解析率显示为不可用，不能用局部数据证明退出门槛。
 - `difference_reasons` 是否都能解释新旧选择差异。
 
 ## 决策重放
@@ -95,6 +96,10 @@ ROUTE_SHADOW_MODELS=gpt-5,claude-opus-5
 `TOKEN_PRIVATE_ROUTING_ENABLED` 和 `ROUTE_LIVE_ENABLED` 必须同时开启，默认均为关闭。开启前必须为每个参与渠道和规范化模型配置启用的 `ChannelRoutePolicy`，否则新路由会 fail-closed，不会读取 `capacity_total/capacity_used` 作为并发上限，也不会静默回退 legacy。
 
 live 路由可以使用 `ROUTE_LIVE_USER_IDS`、`ROUTE_LIVE_TOKEN_IDS`、`ROUTE_LIVE_MODELS` 和 `ROUTE_LIVE_INSTANCES` 缩小灰度范围；每个非空 allowlist 都必须匹配。它们与 Shadow 的 allowlist 完全独立，未配置时不额外限制已显式启用的 live 路由。
+
+当前 Live 只覆盖由统一 Relay 或新任务提交控制器完整管理的请求。Midjourney、`/v1/responses/compact`、需要原生 Responses 压缩能力的请求，以及绑定原任务渠道的 `/v1/videos/:id/remix` 始终使用 legacy selector，不能写入 Live 决策或租约状态。多 Key 中已过冷却期的 Key 通过数据库 CAS 只放行一个 half-open 探针；其他并发请求会继续排除该 Key，直到探针成功关闭或失败重新冷却。
+
+评分中的 RateLimit 和 Quota 仅在运行时 telemetry 可用时参与计算；当前没有该 telemetry 时会明确标记为 unknown 并使用中性分，不得将缺失数据解释为空闲容量或配额。
 
 管理员策略接口：
 

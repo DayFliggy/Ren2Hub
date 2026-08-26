@@ -107,6 +107,7 @@ func TestListEligibleRouteChannelsReportsOnlyActiveCapabilitySnapshot(t *testing
 	assert.Equal(t, model.RouteCapabilityStateEligible, byID[activeChannelID].CapabilityState)
 	assert.Zero(t, byID[activeChannelID].FilterReason)
 	assert.Zero(t, byID[snapshotlessChannelID].SnapshotVersion)
+	assert.Equal(t, model.RouteCapabilityStateUnresolved, byID[snapshotlessChannelID].CapabilityState)
 	assert.Equal(t, service.ShadowFilterSnapshotUnavailable, byID[snapshotlessChannelID].FilterReason)
 }
 

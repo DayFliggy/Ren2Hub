@@ -182,7 +182,7 @@ export function parseRouteProfileView(
   }
 }
 
-function parseEligibleChannel(
+export function parseEligibleRouteChannel(
   value: unknown,
   endpoint: string
 ): EligibleRouteChannel {
@@ -364,7 +364,7 @@ export const routingApi = {
     const endpoint = `${ROUTING_ENDPOINT}/eligible-channels`
     const value = await api.get<unknown>(endpoint)
     if (!Array.isArray(value)) invalidResponse(endpoint)
-    return value.map((channel) => parseEligibleChannel(channel, endpoint))
+    return value.map((channel) => parseEligibleRouteChannel(channel, endpoint))
   },
   async catalog(model?: string): Promise<RouteCatalog> {
     const value = await api.get<unknown>(

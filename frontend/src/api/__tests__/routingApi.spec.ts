@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseRoutePreview, parseRouteProfileView } from '@/api/routingApi'
+import {
+  parseEligibleRouteChannel,
+  parseRoutePreview,
+  parseRouteProfileView,
+} from '@/api/routingApi'
 
 const policy = {
   id: 8,
@@ -54,6 +58,31 @@ function profileResponse() {
 }
 
 describe('routing API contracts', () => {
+  it('accepts snapshotless channels as unresolved without weakening state validation', () => {
+    const endpoint = '/api/routing/eligible-channels'
+    const parsed = parseEligibleRouteChannel(
+      {
+        id: 101,
+        name: 'Snapshotless channel',
+        type: 1,
+        status: 1,
+        models: 'gpt-5',
+        priority: 10,
+        weight: 1,
+        snapshot_version: 0,
+        catalog_version: '',
+        capability_state: 'unresolved',
+        filter_reason: 'snapshot_unavailable',
+      },
+      endpoint
+    )
+
+    expect(parsed.capability_state).toBe('unresolved')
+    expect(parsed.filter_reason).toBe('snapshot_unavailable')
+    expect(() =>
+      parseEligibleRouteChannel({ ...parsed, capability_state: '' }, endpoint)
+    ).toThrow()
+  })
   it('parses the backend aggregate group shape without exposing sensitive fields', () => {
     const parsed = parseRouteProfileView(
       { ...profileResponse(), key: 'must-not-leak' },

@@ -58,10 +58,12 @@ func GetRouteShadowDiagnostics(ctx context.Context) RouteShadowDiagnosticsSnapsh
 		coreVolume += item.RequestCount
 		diagnostics.CoreModels = append(diagnostics.CoreModels, item.ModelName)
 		stats := aggregate.Models[modellab.NormalizeModel(item.ModelName)]
-		if stats.Decisions > 0 {
-			decisions += stats.Decisions
-			resolved += stats.Resolved
+		if stats.Decisions == 0 {
+			diagnostics.ShadowDataUnavailable = true
+			continue
 		}
+		decisions += stats.Decisions
+		resolved += stats.Resolved
 	}
 	if len(diagnostics.CoreModels) > 1 {
 		sort.Strings(diagnostics.CoreModels)

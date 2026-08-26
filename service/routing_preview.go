@@ -167,12 +167,13 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	}
 	for _, entry := range activeGroup.Entries {
 		item := RoutePreviewEntry{
-			EntryID:      entry.ID,
-			ChannelID:    entry.ChannelID,
-			Position:     entry.Position,
-			Weight:       entry.Weight,
-			RequestModel: normalizedModel,
-			Health:       defaultRoutePreviewHealthSummary(),
+			EntryID:         entry.ID,
+			ChannelID:       entry.ChannelID,
+			Position:        entry.Position,
+			Weight:          entry.Weight,
+			RequestModel:    normalizedModel,
+			CapabilityState: model.RouteCapabilityStateUnresolved,
+			Health:          defaultRoutePreviewHealthSummary(),
 		}
 		if health, ok := healthByChannel[entry.ChannelID]; ok {
 			item.Health = routePreviewHealthSummary(health)

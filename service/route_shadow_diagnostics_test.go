@@ -107,6 +107,41 @@ func TestRouteShadowDiagnosticsDoesNotUseProcessLocalResolutionAsSevenDayEvidenc
 	assert.Zero(t, diagnostics.CoreModelLabResolution)
 }
 
+func TestRouteShadowDiagnosticsRequiresAggregateDataForEveryCoreModel(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	originalRedisEnabled, originalRDB := common.RedisEnabled, common.RDB
+	common.RedisEnabled, common.RDB = true, client
+	t.Cleanup(func() {
+		common.RedisEnabled, common.RDB = originalRedisEnabled, originalRDB
+		_ = client.Close()
+	})
+	originalLogDB := model.LOG_DB
+	originalLogType := common.LogDatabaseType()
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	model.LOG_DB = db
+	common.SetDatabaseTypes(common.MainDatabaseType(), common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.LOG_DB = originalLogDB
+		common.SetDatabaseTypes(common.MainDatabaseType(), originalLogType)
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.Log{}))
+	now := time.Now().Unix()
+	require.NoError(t, db.Create([]model.Log{
+		{CreatedAt: now, Type: model.LogTypeConsume, ModelName: "gpt-5"},
+		{CreatedAt: now, Type: model.LogTypeConsume, ModelName: "claude-opus-5"},
+	}).Error)
+	recordRouteShadowAggregate(RouteShadowDecision{NormalizedRequestModel: "gpt-5", LabSlug: "openai"})
+
+	diagnostics := GetRouteShadowDiagnostics(context.Background())
+	assert.True(t, diagnostics.ShadowDataUnavailable)
+	assert.Zero(t, diagnostics.CoreModelLabResolution)
+}
+
 func TestObserveShadowDecisionCountsResolvedMixedCapability(t *testing.T) {
 	const normalizedModel = "shadow-mixed-resolution-metric"
 

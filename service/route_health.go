@@ -179,6 +179,10 @@ func CanUseRouteHealth(health model.ChannelHealth, now time.Time) bool {
 }
 
 func LoadRouteHealth(ctx context.Context, channelID int, requestModel string) (model.ChannelHealth, error) {
+	return loadRouteHealthScope(ctx, channelID, requestModel, "")
+}
+
+func loadRouteHealthScope(ctx context.Context, channelID int, requestModel, keyScope string) (model.ChannelHealth, error) {
 	if model.DB == nil || channelID <= 0 {
 		return model.ChannelHealth{}, errors.New("route health database is unavailable")
 	}
@@ -186,20 +190,34 @@ func LoadRouteHealth(ctx context.Context, channelID int, requestModel string) (m
 		ctx = context.Background()
 	}
 	var health model.ChannelHealth
-	err := model.DB.WithContext(ctx).Where("channel_id = ? AND model = ? AND key_scope = ?", channelID, modellab.NormalizeModel(requestModel), "").First(&health).Error
+	err := model.DB.WithContext(ctx).Where("channel_id = ? AND model = ? AND key_scope = ?", channelID, modellab.NormalizeModel(requestModel), keyScope).First(&health).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		health = model.ChannelHealth{ChannelID: channelID, Model: modellab.NormalizeModel(requestModel), KeyScope: "", State: model.RouteHealthStateClosed, HealthEpoch: 1}
+		health = model.ChannelHealth{ChannelID: channelID, Model: modellab.NormalizeModel(requestModel), KeyScope: keyScope, State: model.RouteHealthStateClosed, HealthEpoch: 1}
 		return health, nil
 	}
 	return health, err
 }
 
 func RouteHealthUsable(ctx context.Context, channelID int, requestModel string, now time.Time) (bool, int64, error) {
+	return routeHealthScopeUsable(ctx, channelID, requestModel, "", now)
+}
+
+// RouteKeyHealthUsable atomically admits a recovered key's single half-open
+// probe. The stored scope is a hash, so this boundary never persists or logs
+// the credential itself.
+func RouteKeyHealthUsable(ctx context.Context, channelID int, requestModel, key string, now time.Time) (bool, int64, error) {
+	if strings.TrimSpace(key) == "" {
+		return false, 0, nil
+	}
+	return routeHealthScopeUsable(ctx, channelID, requestModel, RouteKeyScope(key), now)
+}
+
+func routeHealthScopeUsable(ctx context.Context, channelID int, requestModel, keyScope string, now time.Time) (bool, int64, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	for attempt := 0; attempt < 2; attempt++ {
-		health, err := LoadRouteHealth(ctx, channelID, requestModel)
+		health, err := loadRouteHealthScope(ctx, channelID, requestModel, keyScope)
 		if err != nil {
 			return false, 0, err
 		}

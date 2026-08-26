@@ -115,6 +115,35 @@ func TestSelectRouteShadowStableTieBreakAndPathFilter(t *testing.T) {
 	assert.Equal(t, 7, decision.ShadowPreferredID)
 }
 
+func TestSelectRouteShadowRejectsStaleOrMissingActiveSnapshot(t *testing.T) {
+	oldIndex, _ := routeCapabilityIndex.Load().(*capabilityIndex)
+	t.Cleanup(func() { routeCapabilityIndex.Store(oldIndex) })
+	routeCapabilityIndex.Store(&capabilityIndex{ByRequestModel: map[string][]indexedCapability{
+		"gpt-5": {{
+			Capability: model.ChannelModelCapability{
+				ChannelID: 51, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai",
+				Confidence: 1, State: model.RouteCapabilityStateEligible, SnapshotVersion: 2,
+			},
+			ChannelStatus: common.ChannelStatusEnabled, Priority: 10,
+			AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI,
+		}},
+	}})
+
+	stale := SelectRouteShadow(RouteShadowRequest{
+		RequestModel: "gpt-5", UserGroup: "default", PriceEligible: true, SecurityAllowed: true,
+		ActiveSnapshotVersions: map[int]int64{51: 1},
+	})
+	assert.Zero(t, stale.ShadowPreferredID)
+	assert.Equal(t, 1, stale.FilterReasonCounts[ShadowFilterSnapshotStale])
+
+	missing := SelectRouteShadow(RouteShadowRequest{
+		RequestModel: "gpt-5", UserGroup: "default", PriceEligible: true, SecurityAllowed: true,
+		ActiveSnapshotVersions: map[int]int64{},
+	})
+	assert.Zero(t, missing.ShadowPreferredID)
+	assert.Equal(t, 1, missing.FilterReasonCounts[ShadowFilterSnapshotUnavailable])
+}
+
 func TestShadowUsesActualModelLabForMappedRequests(t *testing.T) {
 	endpointJSON, err := common.Marshal([]string{"openai"})
 	require.NoError(t, err)
@@ -273,6 +302,20 @@ func TestReplayRouteShadowDecisionRejectsLegacyCapabilityProjection(t *testing.T
 func TestReplayRouteShadowDecisionRejectsIncompleteEvent(t *testing.T) {
 	data, err := common.Marshal(RouteShadowDecision{RequestID: "missing-path", RequestModel: "gpt-5", SnapshotVersion: 1})
 	require.NoError(t, err)
+	_, err = ReplayRouteShadowDecision(context.Background(), data)
+	assert.ErrorIs(t, err, ErrRouteShadowReplayInvalid)
+}
+
+func TestReplayRouteShadowDecisionRejectsPreferredCandidateSnapshotMismatch(t *testing.T) {
+	data, err := common.Marshal(RouteShadowDecision{
+		Event: "route_shadow_decision", RouteSource: ShadowRouteSource, QualificationVersion: RouteShadowQualificationVersion,
+		RequestID: "snapshot-mismatch", RequestModel: "gpt-5", RequestPath: "/v1/chat/completions",
+		UserGroup: "default", SnapshotVersion: 2, ShadowPreferredID: 77,
+		ShadowCandidates: []RouteShadowCandidate{{ChannelID: 77, RequestModel: "gpt-5", SnapshotVersion: 1}},
+		LegacyTrace:      LegacySelectionTrace{CandidateIDs: []int{77}},
+	})
+	require.NoError(t, err)
+
 	_, err = ReplayRouteShadowDecision(context.Background(), data)
 	assert.ErrorIs(t, err, ErrRouteShadowReplayInvalid)
 }

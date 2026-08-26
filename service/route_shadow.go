@@ -78,6 +78,7 @@ type RouteShadowRequest struct {
 	SecurityAllowed          bool
 	SecurityEligibilityKnown bool
 	SnapshotVersion          int64
+	ActiveSnapshotVersions   map[int]int64
 	ChannelStatuses          map[int]int
 	Legacy                   LegacySelectionTrace
 }
@@ -317,6 +318,12 @@ func cloneIntMap(values map[int]int) map[int]int {
 }
 
 func shadowCandidateFilter(request RouteShadowRequest, candidate indexedCapability) string {
+	expectedSnapshotVersion := request.SnapshotVersion
+	requireSnapshot := false
+	if request.ActiveSnapshotVersions != nil {
+		expectedSnapshotVersion = request.ActiveSnapshotVersions[candidate.Capability.ChannelID]
+		requireSnapshot = true
+	}
 	entitled := true
 	if request.EntitledChannels != nil {
 		if value, ok := request.EntitledChannels[candidate.Capability.ChannelID]; ok {
@@ -329,7 +336,7 @@ func shadowCandidateFilter(request RouteShadowRequest, candidate indexedCapabili
 	}
 	result := filterRouteCapability(routeCapabilityFilterInput{
 		Capability:               candidate.Capability,
-		SnapshotVersion:          request.SnapshotVersion,
+		SnapshotVersion:          expectedSnapshotVersion,
 		ChannelStatus:            channelStatus,
 		ChannelType:              candidate.ChannelType,
 		AbilityEnabled:           len(candidate.AbilityGroups) > 0,
@@ -348,6 +355,7 @@ func shadowCandidateFilter(request RouteShadowRequest, candidate indexedCapabili
 		SecurityAllowed:          request.SecurityAllowed,
 		SecurityEligibilityKnown: request.SecurityEligibilityKnown,
 		Advanced:                 candidate.Advanced,
+		RequireSnapshot:          requireSnapshot,
 	})
 	return result.Reason
 }
@@ -464,11 +472,20 @@ func enrichShadowRequestCurrentState(ctx context.Context, request *RouteShadowRe
 			ids = append(ids, candidate.Capability.ChannelID)
 		}
 		if len(ids) > 0 {
+			// An active-pointer lookup failure must fail closed for Shadow. Keep
+			// an explicit empty map so an old in-memory snapshot cannot appear
+			// eligible while the database state is unavailable.
+			request.ActiveSnapshotVersions = make(map[int]int64)
 			var channels []model.Channel
 			if err := model.DB.WithContext(ctx).Select("id", "status").Where("id IN ?", ids).Find(&channels).Error; err == nil {
 				request.ChannelStatuses = make(map[int]int, len(channels))
 				for _, channel := range channels {
 					request.ChannelStatuses[channel.Id] = channel.Status
+				}
+			}
+			if snapshots, err := model.FindActiveChannelCapabilitySnapshots(ctx, ids); err == nil {
+				for _, snapshot := range snapshots {
+					request.ActiveSnapshotVersions[snapshot.ChannelID] = snapshot.ActiveVersion
 				}
 			}
 		}
