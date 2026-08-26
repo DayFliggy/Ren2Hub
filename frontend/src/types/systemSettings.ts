@@ -116,9 +116,9 @@ export interface BillingSettings {
   'payment_setting.compliance_terms_version': string
   'payment_setting.compliance_confirmed_at': number
   'payment_setting.compliance_confirmed_by': number
-  'WaffoSandboxApiKey': string
-  'WaffoSandboxPrivateKey': string
-  'WaffoSandboxPublicCert': string
+  WaffoSandboxApiKey: string
+  WaffoSandboxPrivateKey: string
+  WaffoSandboxPublicCert: string
   WaffoSubscriptionReturnUrl: string
   WaffoPancakeUnitPrice: number
   WaffoPancakeMinTopUp: number

@@ -19,8 +19,12 @@ async function refresh() {
   try {
     const [pricing, taskList, task, nodes] = await Promise.all([
       api.get<Record<string, unknown>>('/api/auto_pricing/status'),
-      api.get<Array<Record<string, unknown>>>('/api/system-task/list', { limit: 20 }),
-      api.get<Record<string, unknown> | null>('/api/system-task/current', { type: 'log_cleanup' }),
+      api.get<Array<Record<string, unknown>>>('/api/system-task/list', {
+        limit: 20,
+      }),
+      api.get<Record<string, unknown> | null>('/api/system-task/current', {
+        type: 'log_cleanup',
+      }),
       api.get<Array<Record<string, unknown>>>('/api/system-info/instances'),
     ])
     pricingStatus.value = pricing
@@ -65,6 +69,11 @@ async function cleanupInstances() {
   }
 }
 
+function confirmCleanup() {
+  confirming.value = false
+  void cleanupInstances()
+}
+
 async function createCleanupTask() {
   try {
     const target = Math.floor(Date.now() / 1000) - 30 * 86400
@@ -82,27 +91,89 @@ onMounted(refresh)
 <template>
   <section class="operations-panel">
     <div class="operations-toolbar">
-      <ConsoleButton variant="ghost" size="sm" :loading="loading" @click="refresh">刷新状态</ConsoleButton>
-      <ConsoleButton variant="secondary" size="sm" :loading="syncing" @click="syncPricing">立即同步自动定价</ConsoleButton>
-      <ConsoleButton variant="secondary" size="sm" @click="syncRatios">同步上游倍率</ConsoleButton>
-      <ConsoleButton variant="secondary" size="sm" @click="createCleanupTask">创建日志清理任务</ConsoleButton>
-      <ConsoleButton variant="danger" size="sm" @click="confirming = true">清理过期实例</ConsoleButton>
+      <ConsoleButton
+        variant="ghost"
+        size="sm"
+        :loading="loading"
+        @click="refresh"
+        >刷新状态</ConsoleButton
+      >
+      <ConsoleButton
+        variant="secondary"
+        size="sm"
+        :loading="syncing"
+        @click="syncPricing"
+        >立即同步自动定价</ConsoleButton
+      >
+      <ConsoleButton variant="secondary" size="sm" @click="syncRatios"
+        >同步上游倍率</ConsoleButton
+      >
+      <ConsoleButton variant="secondary" size="sm" @click="createCleanupTask"
+        >创建日志清理任务</ConsoleButton
+      >
+      <ConsoleButton variant="danger" size="sm" @click="confirming = true"
+        >清理过期实例</ConsoleButton
+      >
     </div>
     <dl class="operations-summary">
-      <div><dt>自动定价</dt><dd>{{ pricingStatus?.status ?? pricingStatus?.state ?? '—' }}</dd></div>
-      <div><dt>当前任务</dt><dd>{{ currentTask ? (currentTask.status ?? '运行中') : '无' }}</dd></div>
-      <div><dt>任务记录</dt><dd>{{ tasks.length }}</dd></div>
-      <div><dt>实例数</dt><dd>{{ instances.length }}</dd></div>
+      <div>
+        <dt>自动定价</dt>
+        <dd>{{ pricingStatus?.status ?? pricingStatus?.state ?? '—' }}</dd>
+      </div>
+      <div>
+        <dt>当前任务</dt>
+        <dd>{{ currentTask ? (currentTask.status ?? '运行中') : '无' }}</dd>
+      </div>
+      <div>
+        <dt>任务记录</dt>
+        <dd>{{ tasks.length }}</dd>
+      </div>
+      <div>
+        <dt>实例数</dt>
+        <dd>{{ instances.length }}</dd>
+      </div>
     </dl>
   </section>
-  <ConfirmDialog :open="confirming" title="清理过期实例" message="仅删除已过期且不再上报心跳的实例。" confirm-text="确认清理" @cancel="confirming = false" @confirm="confirming = false; cleanupInstances()" />
+  <ConfirmDialog
+    :open="confirming"
+    title="清理过期实例"
+    message="仅删除已过期且不再上报心跳的实例。"
+    confirm-text="确认清理"
+    @cancel="confirming = false"
+    @confirm="confirmCleanup"
+  />
 </template>
 
 <style scoped>
-.operations-panel { margin-top: 1.5rem; border-top: 1px dashed var(--border-default); padding-top: 1rem; }
-.operations-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; }
-.operations-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-top: 1rem; }
-.operations-summary dt { font-size: .6875rem; color: var(--text-tertiary); }
-.operations-summary dd { margin-top: .125rem; font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
-@media (max-width: 767px) { .operations-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.operations-panel {
+  margin-top: 1.5rem;
+  border-top: 1px dashed var(--border-default);
+  padding-top: 1rem;
+}
+.operations-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.operations-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.operations-summary dt {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+.operations-summary dd {
+  margin-top: 0.125rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 767px) {
+  .operations-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 </style>

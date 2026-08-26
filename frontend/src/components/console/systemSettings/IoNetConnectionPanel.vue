@@ -21,10 +21,20 @@ async function testConnection() {
 
 <template>
   <div class="ionet-panel">
-    <ConsoleButton variant="secondary" size="sm" :loading="loading" @click="testConnection">测试 iONet 连接</ConsoleButton>
+    <ConsoleButton
+      variant="secondary"
+      size="sm"
+      :loading="loading"
+      @click="testConnection"
+      >测试 iONet 连接</ConsoleButton
+    >
   </div>
 </template>
 
 <style scoped>
-.ionet-panel { margin-top: 1.5rem; border-top: 1px dashed var(--border-default); padding-top: 1rem; }
+.ionet-panel {
+  margin-top: 1.5rem;
+  border-top: 1px dashed var(--border-default);
+  padding-top: 1rem;
+}
 </style>

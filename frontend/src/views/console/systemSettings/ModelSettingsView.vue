@@ -372,9 +372,7 @@ onMounted(async () => {
           :description="t('systemSettings.models.claudeDefaultMaxTokensDesc')"
           :model-value="String(claude['claude.default_max_tokens'])"
           type="number"
-          @update:model-value="
-            claude['claude.default_max_tokens'] = $event
-          "
+          @update:model-value="claude['claude.default_max_tokens'] = $event"
         />
       </div>
     </SysSettingsFormCard>

@@ -175,10 +175,24 @@ onMounted(async () => {
         <TextInput v-model="form.returnUrl" type="url" autocomplete="off" />
       </FormField>
       <FormField label="单位价格">
-        <TextInput :model-value="String(form.unitPrice)" type="number" min="0.0001" step="0.01" autocomplete="off" @update:model-value="form.unitPrice = Number($event)" />
+        <TextInput
+          :model-value="String(form.unitPrice)"
+          type="number"
+          min="0.0001"
+          step="0.01"
+          autocomplete="off"
+          @update:model-value="form.unitPrice = Number($event)"
+        />
       </FormField>
       <FormField label="最低充值金额">
-        <TextInput :model-value="String(form.minTopUp)" type="number" min="1" step="1" autocomplete="off" @update:model-value="form.minTopUp = Number($event)" />
+        <TextInput
+          :model-value="String(form.minTopUp)"
+          type="number"
+          min="1"
+          step="1"
+          autocomplete="off"
+          @update:model-value="form.minTopUp = Number($event)"
+        />
       </FormField>
     </div>
 

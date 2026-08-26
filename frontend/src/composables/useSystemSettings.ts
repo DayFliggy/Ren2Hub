@@ -26,9 +26,11 @@ function castValue(
   const descriptor = descriptors.find((item) => item.key === key)
   const descriptorDefault = descriptor?.default_value
   const def: string | number | boolean =
-    typeof descriptorDefault === 'string' || typeof descriptorDefault === 'number' || typeof descriptorDefault === 'boolean'
+    typeof descriptorDefault === 'string' ||
+    typeof descriptorDefault === 'number' ||
+    typeof descriptorDefault === 'boolean'
       ? descriptorDefault
-      : defaults[key as keyof AllSystemSettings] as string | number | boolean
+      : (defaults[key as keyof AllSystemSettings] as string | number | boolean)
   if (descriptor?.value_type === 'boolean' || typeof def === 'boolean') {
     return raw === 'true' || raw === '1'
   }
@@ -49,7 +51,12 @@ function parseOptions(
   for (const opt of options) {
     if (Object.prototype.hasOwnProperty.call(defaults, opt.key)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(result as any)[opt.key] = castValue(opt.key, opt.value, defaults, descriptors)
+      ;(result as any)[opt.key] = castValue(
+        opt.key,
+        opt.value,
+        defaults,
+        descriptors
+      )
     }
   }
   return result
@@ -84,7 +91,9 @@ export function useSystemSettings() {
         }
         _rawOptions.value = raw
         try {
-          const catalog = await api.get<SystemOptionDescriptor[]>('/api/option/catalog')
+          const catalog = await api.get<SystemOptionDescriptor[]>(
+            '/api/option/catalog'
+          )
           _catalog.value = Array.isArray(catalog) ? catalog : []
         } catch {
           _catalog.value = []
@@ -157,12 +166,17 @@ export function useSystemSettings() {
     const descriptor = _catalog.value.find((item) => item.key === key)
     if (value === undefined) {
       const defaultValue = descriptor?.default_value
-      if (typeof defaultValue === 'boolean' || typeof defaultValue === 'number' || typeof defaultValue === 'string') {
+      if (
+        typeof defaultValue === 'boolean' ||
+        typeof defaultValue === 'number' ||
+        typeof defaultValue === 'string'
+      ) {
         return defaultValue
       }
       return fallback
     }
-    if (descriptor?.value_type === 'boolean' || typeof fallback === 'boolean') return value === 'true' || value === '1'
+    if (descriptor?.value_type === 'boolean' || typeof fallback === 'boolean')
+      return value === 'true' || value === '1'
     if (descriptor?.value_type === 'number' || typeof fallback === 'number') {
       const parsed = Number(value)
       return Number.isFinite(parsed) ? parsed : fallback
