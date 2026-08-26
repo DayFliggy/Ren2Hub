@@ -114,6 +114,7 @@ func main() {
 		common.SysError(fmt.Sprintf("initial route capability index rebuild failed: %v", err))
 	}
 	service.RegisterRouteCapabilityRefreshHook()
+	service.StartRouteShadowObservation()
 
 	// Restore the automatic pricing catalog from its local cache and start the
 	// refresh loop before pricing is warmed, so models that rely on the

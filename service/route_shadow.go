@@ -445,6 +445,7 @@ func MaybeRecordLegacySelection(ctx context.Context, request RouteShadowRequest)
 	decision := SelectRouteShadow(request)
 	AttachRouteScoreShadow(ctx, &decision)
 	observeShadowDecision(decision)
+	recordRouteShadowAggregate(decision)
 	EnqueueRouteShadowDecision(ctx, decision)
 }
 
@@ -745,6 +746,7 @@ func observeCapabilityRefreshDetectionToActive(duration time.Duration) {
 		duration,
 		256,
 	)
+	recordCapabilityRefreshObservation(true, duration, nil)
 }
 
 func appendBoundedDuration(samples []int64, duration time.Duration, maxSamples int) []int64 {

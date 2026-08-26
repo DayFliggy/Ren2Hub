@@ -276,6 +276,7 @@ func observeCapabilityRefreshFailure(err error) {
 	if errors.Is(err, model.ErrCapabilitySnapshotConflict) {
 		routeShadowMetrics.SnapshotConflicts.Add(1)
 	}
+	recordCapabilityRefreshObservation(false, 0, err)
 }
 
 func refreshOneChannel(ctx context.Context, channel *model.Channel, abilities []model.Ability, catalog *modellab.Catalog, rebuild bool) error {

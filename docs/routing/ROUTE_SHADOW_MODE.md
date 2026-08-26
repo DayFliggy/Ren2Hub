@@ -12,6 +12,7 @@ ROUTE_CAPABILITY_REFRESH_TASK_ENABLED=true
 ROUTE_CAPABILITY_REFRESH_INTERVAL_SECONDS=30
 ROUTE_CAPABILITY_REFRESH_TIMEOUT_SECONDS=300
 ROUTE_SHADOW_EVENT_QUEUE_SIZE=1024
+ROUTE_SHADOW_OBSERVATION_QUEUE_SIZE=2048
 ROUTE_SCORE_SHADOW_ENABLED=false
 ROUTE_SCORE_LIVE_ENABLED=false
 TOKEN_PRIVATE_ROUTING_ENABLED=false
@@ -62,16 +63,18 @@ ROUTE_SHADOW_MODELS=gpt-5,claude-opus-5
 
 开启后会异步写入单行 JSON 事件 `route_shadow_decision`。事件只包含请求 ID、用户/Token ID、模型、Lab、版本、渠道 ID、过滤原因和差异原因，不包含 Key、Token 原文、Header Override、请求体或 Authorization。队列满时只丢弃观测事件，并增加丢弃计数，不影响请求。
 
+验收指标同时写入主库的小时聚合表。聚合只保留 boot UUID、小时、规范化模型和计数/延迟桶，不保存完整决策、渠道、用户、Token、请求体或凭据。Shadow 开启后，每个实例会为当前小时写入一个零值全局心跳，用于区分空闲小时和缺失证据；实例重启后会封存前序实例的已结束小时。日志队列和聚合队列均为有界异步队列：日志队列积压会降低事件完整率，聚合队列积压、聚合写入失败或晚到数据会将该小时标记为可能缺失。未封存或可能缺失的小时不能作为验收证据。已封存数据保留 14 天，诊断只读取最近 7 天的完整小时窗口，不依赖 Redis 或进程内计数。
+
 动态评分有独立的 `ROUTE_SCORE_SHADOW_ENABLED` 开关。开启后仅在自动 Lab 候选的同一 priority 层内计算 Weight、Error、Latency、TTFT、RateLimit、Quota、CircuitBreaker 和 Sticky 的 breakdown；静态首选和实际 legacy 选择不变。只有显式开启 `ROUTE_SCORE_LIVE_ENABLED` 且满足 Live 灰度条件时，评分结果才会参与新路由选择，两个开关默认均为关闭。
 
 管理员可通过 `/api/status/test` 查看 `route_shadow_metrics`。重点关注：
 
 - Shadow 决策、差异、unknown、mixed 和未授权候选计数。
 - snapshot stale、快照版本冲突和事件丢弃计数。
-- 事件 attempted、written、write failure、encode failure 和 dropped 计数；日志完整率按 `written / (attempted - encode_failure)` 计算，写入失败不计入 written。
-- 能力刷新成功/失败计数、扫描 P95、发布操作 P95 和检测到变更到 active 发布 P95。
-- 最近 7 天 Relay 日志为分母的核心模型覆盖率和 Lab 解析率。
-- 核心模型列表中的每个模型都必须有 Redis Shadow 聚合；任一模型缺失决策数据时解析率显示为不可用，不能用局部数据证明退出门槛。
+- `metrics` 是当前进程观测；`durable` 是跨实例、跨重启的验收真相。事件完整率按 `event_submitted / (event_attempted - event_encode_failed)` 计算，提交失败和 dropped 均会降低完整率。
+- `durable.refresh_lag_p95_ms` 使用 fingerprint 发现到 active snapshot 发布的持久化直方图；无样本时显示为不可用，不能按 0ms 解释。
+- 核心模型由最近 7 个完整日的 Relay 聚合选取；`core_model_coverage` 表示核心模型占 Relay 流量的比例，`core_model_shadow_coverage` 表示这些模型的 Shadow 初始决策数与 Relay 请求数之比。
+- `core_model_lab_resolution` 按 `resolved / (resolved + unresolved + conflict)` 计算，解析在权限、路径等后续过滤之前记账。未封存、缺失或可能丢失的任何核心模型数据都会使 Shadow 诊断不可用。
 - `difference_reasons` 是否都能解释新旧选择差异。
 
 ## 决策重放
