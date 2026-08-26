@@ -42,6 +42,24 @@ func TestLiveRoutePriceRatioAllowedOnlyUsesManualPolicy(t *testing.T) {
 	assert.True(t, liveRoutePriceRatioAllowed(ctx, 2))
 }
 
+func TestLiveRouteRuntimeQualificationRequiresPriceAndSecurityFacts(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	_, qualified := liveRouteRuntimeQualificationForRequest(c)
+	assert.False(t, qualified)
+
+	markLiveRouteSecurityQualified(c)
+	_, qualified = liveRouteRuntimeQualificationForRequest(c)
+	assert.False(t, qualified)
+
+	markLiveRoutePriceQualified(c)
+	facts, qualified := liveRouteRuntimeQualificationForRequest(c)
+	assert.True(t, qualified)
+	assert.True(t, facts.PriceEligibilityKnown)
+	assert.True(t, facts.PriceEligible)
+	assert.True(t, facts.SecurityEligibilityKnown)
+	assert.True(t, facts.SecurityAllowed)
+}
+
 func TestRelayResponseCommittedDoesNotTreatUnparsedFirstFrameAsOutput(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -330,6 +348,8 @@ func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *te
 			ChannelID: channelID, SnapshotVersion: 1, CatalogVersion: "lease-catalog", HealthEpoch: 1,
 		}},
 	})
+	markLiveRouteSecurityQualified(c)
+	markLiveRoutePriceQualified(c)
 	info := &relaycommon.RelayInfo{RequestId: "lease-qualification-request", UserId: userID, TokenId: token.Id, UserGroup: "default", OriginModelName: "gpt-test"}
 
 	err = acquireRouteAttemptLease(c, info, &channel, 0)

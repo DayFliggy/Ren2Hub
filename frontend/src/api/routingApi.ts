@@ -160,26 +160,86 @@ export function parseRouteProfileView(
   ) {
     invalidResponse(endpoint)
   }
-  const mode = requiredString(value.profile.mode, endpoint, false)
+  const mode = requiredString(
+    value.profile.mode,
+    endpoint,
+    false
+  ) as RouteProfileView['profile']['mode']
   if (mode !== 'legacy' && mode !== 'manual' && mode !== 'auto_lab')
     invalidResponse(endpoint)
-  return {
-    profile: {
-      id: requiredInteger(value.profile.id, endpoint),
-      user_id: requiredInteger(value.profile.user_id, endpoint),
-      token_id: requiredInteger(value.profile.token_id, endpoint),
-      mode,
-      active_group_id: requiredNullableInteger(
-        value.profile.active_group_id,
-        endpoint
-      ),
-      version: requiredInteger(value.profile.version, endpoint),
-      status: requiredInteger(value.profile.status, endpoint),
-      created_at: requiredInteger(value.profile.created_at, endpoint),
-      updated_at: requiredInteger(value.profile.updated_at, endpoint),
-    },
-    groups: value.groups.map((group) => parseGroup(group, endpoint)),
+  const profile = {
+    id: requiredInteger(value.profile.id, endpoint),
+    user_id: requiredInteger(value.profile.user_id, endpoint),
+    token_id: requiredInteger(value.profile.token_id, endpoint),
+    mode,
+    active_group_id: requiredNullableInteger(
+      value.profile.active_group_id,
+      endpoint
+    ),
+    version: requiredInteger(value.profile.version, endpoint),
+    status: requiredInteger(value.profile.status, endpoint),
+    created_at: requiredInteger(value.profile.created_at, endpoint),
+    updated_at: requiredInteger(value.profile.updated_at, endpoint),
   }
+  const groups = value.groups.map((group) => parseGroup(group, endpoint))
+  validateRouteProfileView({ profile, groups }, endpoint)
+  return { profile, groups }
+}
+
+function validateRouteProfileView(
+  view: RouteProfileView,
+  endpoint: string
+): void {
+  const groupIDs = new Set<number>()
+  const entryIDs = new Set<number>()
+  const channelIDs = new Set<number>()
+  for (const group of view.groups) {
+    if (
+      group.id <= 0 ||
+      group.profile_id !== view.profile.id ||
+      group.policy.group_id !== group.id ||
+      groupIDs.has(group.id)
+    ) {
+      invalidResponse(endpoint)
+    }
+    groupIDs.add(group.id)
+    for (let index = 0; index < group.entries.length; index += 1) {
+      const entry = group.entries[index]
+      if (
+        entry.id <= 0 ||
+        entry.group_id !== group.id ||
+        entryIDs.has(entry.id) ||
+        channelIDs.has(entry.channel_id) ||
+        (index > 0 &&
+          compareRouteEntries(
+            group.entries[index - 1],
+            entry,
+            group.policy.load_balance
+          ) > 0)
+      ) {
+        invalidResponse(endpoint)
+      }
+      entryIDs.add(entry.id)
+      channelIDs.add(entry.channel_id)
+    }
+  }
+  if (
+    view.profile.active_group_id !== null &&
+    !groupIDs.has(view.profile.active_group_id)
+  ) {
+    invalidResponse(endpoint)
+  }
+}
+
+function compareRouteEntries(
+  left: RouteEntry,
+  right: RouteEntry,
+  loadBalance: boolean
+): number {
+  if (left.position !== right.position) return left.position - right.position
+  if (loadBalance && left.weight !== right.weight)
+    return right.weight - left.weight
+  return left.channel_id - right.channel_id
 }
 
 export function parseEligibleRouteChannel(
@@ -192,7 +252,7 @@ export function parseEligibleRouteChannel(
     name: requiredString(value.name, endpoint, false),
     type: requiredInteger(value.type, endpoint),
     status: requiredInteger(value.status, endpoint),
-    models: requiredString(value.models, endpoint),
+    request_models: parseStringArray(value.request_models, endpoint),
     priority: requiredStrictNumber(value.priority, endpoint),
     weight: requiredInteger(value.weight, endpoint),
     snapshot_version: requiredInteger(value.snapshot_version, endpoint),
@@ -329,6 +389,11 @@ function parseIntegerArray(value: unknown, endpoint: string): number[] {
   return value.map((item) => requiredInteger(item, endpoint))
 }
 
+function parseStringArray(value: unknown, endpoint: string): string[] {
+  if (!Array.isArray(value)) invalidResponse(endpoint)
+  return value.map((item) => requiredString(item, endpoint, false))
+}
+
 export const routingApi = {
   async profiles(): Promise<RouteProfileView[]> {
     const endpoint = `${ROUTING_ENDPOINT}/profiles`
@@ -375,12 +440,14 @@ export const routingApi = {
   },
   async preview(
     id: number,
-    input: { model: string; path: string }
+    input: { model: string; path: string },
+    signal?: AbortSignal
   ): Promise<RoutePreview> {
     return parseRoutePreview(
       await api.post<unknown>(
         `${ROUTING_ENDPOINT}/profiles/${id}/preview`,
-        input
+        input,
+        signal ? { signal } : undefined
       )
     )
   },

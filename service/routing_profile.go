@@ -256,16 +256,22 @@ func loadRouteProfileView(db *gorm.DB, profile *model.UserRouteProfile) (*RouteP
 	}
 	views := make([]RouteGroupView, 0, len(groups))
 	for _, group := range groups {
-		var entries []model.UserRouteEntry
-		if err := db.Where("group_id = ?", group.ID).Order("position asc, id asc").Find(&entries).Error; err != nil {
-			return nil, err
-		}
 		var policy model.RoutePolicy
 		if err := db.Where("group_id = ?", group.ID).First(&policy).Error; err != nil {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, err
 			}
 			policy = defaultRoutePolicy(group.ID)
+		}
+		var entries []model.UserRouteEntry
+		entryQuery := db.Where("group_id = ?", group.ID).Order("position asc")
+		if policy.LoadBalance {
+			entryQuery = entryQuery.Order("weight desc, channel_id asc, id asc")
+		} else {
+			entryQuery = entryQuery.Order("channel_id asc, id asc")
+		}
+		if err := entryQuery.Find(&entries).Error; err != nil {
+			return nil, err
 		}
 		views = append(views, RouteGroupView{Group: group, Entries: entries, Policy: policy})
 	}
@@ -275,6 +281,15 @@ func loadRouteProfileView(db *gorm.DB, profile *model.UserRouteProfile) (*RouteP
 func replaceGroups(tx *gorm.DB, userID int, profile *model.UserRouteProfile, inputs []RouteGroupInput, existingProfile *model.UserRouteProfile) (map[int]int, error) {
 	if profile.Mode != model.RouteModeManual && len(inputs) > 0 {
 		return nil, fmt.Errorf("%w: only manual profiles can contain user groups", ErrRouteProfileValidation)
+	}
+	seenChannelIDs := make(map[int]struct{})
+	for _, group := range inputs {
+		for _, entry := range group.Entries {
+			if _, duplicate := seenChannelIDs[entry.ChannelID]; duplicate {
+				return nil, fmt.Errorf("%w: duplicate channel in route profile", ErrRouteProfileValidation)
+			}
+			seenChannelIDs[entry.ChannelID] = struct{}{}
+		}
 	}
 	existing := make(map[int]model.UserRouteGroup)
 	if existingProfile != nil {

@@ -292,6 +292,28 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 	if delta <= 0 {
 		return nil
 	}
+	if s.recoveryID != "" {
+		appliedDelta, err := model.ReserveBillingRecovery(s.recoveryID, int64(targetQuota), int64(delta), s.relayInfo.TokenUnlimited)
+		if err != nil {
+			return err
+		}
+		if appliedDelta <= 0 {
+			return nil
+		}
+		delta = int(appliedDelta)
+		if wallet, ok := s.funding.(*WalletFunding); ok {
+			wallet.consumed += delta
+		}
+		s.preConsumedQuota += delta
+		if !s.relayInfo.IsPlayground {
+			s.tokenConsumed += delta
+		}
+		if s.funding.Source() == BillingSourceSubscription {
+			s.extraReserved += delta
+		}
+		s.syncRelayInfo()
+		return nil
+	}
 
 	if err := s.reserveFunding(delta); err != nil {
 		return err
@@ -453,6 +475,37 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 		logger.LogInfo(c, fmt.Sprintf("用户 %d 额度充足, 信任且不需要预扣费 (funding=%s)", s.relayInfo.UserId, s.funding.Source()))
 	} else if effectiveQuota > 0 {
 		logger.LogInfo(c, fmt.Sprintf("用户 %d 需要预扣费 %s (funding=%s)", s.relayInfo.UserId, logger.FormatQuota(effectiveQuota), s.funding.Source()))
+	}
+	if s.recoveryID != "" && s.funding.Source() == BillingSourceWallet {
+		err := model.PreConsumeWalletBillingRecovery(s.recoveryID, int64(effectiveQuota), s.relayInfo.TokenUnlimited)
+		if errors.Is(err, model.ErrBillingRecoveryTokenQuota) {
+			return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+		}
+		if errors.Is(err, model.ErrBillingRecoveryFundingQuota) {
+			err = ErrInsufficientWalletQuota
+		}
+		if err != nil {
+			if errors.Is(err, ErrInsufficientWalletQuota) {
+				userQuota, quotaErr := model.GetUserQuota(s.relayInfo.UserId, false)
+				if quotaErr != nil {
+					userQuota = 0
+				}
+				return types.NewErrorWithStatusCode(
+					fmt.Errorf("用户额度不足, 剩余额度: %s", logger.FormatQuota(userQuota)),
+					types.ErrorCodeInsufficientUserQuota, http.StatusForbidden,
+					types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+			}
+			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
+		if wallet, ok := s.funding.(*WalletFunding); ok {
+			wallet.consumed = effectiveQuota
+		}
+		if !s.relayInfo.IsPlayground {
+			s.tokenConsumed = effectiveQuota
+		}
+		s.preConsumedQuota = effectiveQuota
+		s.syncRelayInfo()
+		return nil
 	}
 
 	// ---- 1) 预扣令牌额度 ----
@@ -658,11 +711,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 			return nil, types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 		}
 		if apiErr := session.preConsume(c, preConsumedQuota); apiErr != nil {
-			if session.recoveryNeedsRefund {
-				_ = model.MarkBillingRecoveryRefundPending(session.recoveryID, apiErr.Err)
-			} else {
-				_ = model.MarkBillingRecoveryRefunded(session.recoveryID, apiErr.Err)
-			}
+			recordBillingPreConsumeFailure(session, apiErr.Err)
 			return nil, apiErr
 		}
 		if err := session.syncRecovery(); err != nil {
@@ -695,11 +744,7 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 		// 必须传 subConsume 而非 preConsumedQuota，保证 SubscriptionFunding.amount、
 		// preConsume 参数和 FinalPreConsumedQuota 三者一致，避免订阅多扣费。
 		if apiErr := session.preConsume(c, int(subConsume)); apiErr != nil {
-			if session.recoveryNeedsRefund {
-				_ = model.MarkBillingRecoveryRefundPending(session.recoveryID, apiErr.Err)
-			} else {
-				_ = model.MarkBillingRecoveryRefunded(session.recoveryID, apiErr.Err)
-			}
+			recordBillingPreConsumeFailure(session, apiErr.Err)
 			return nil, apiErr
 		}
 		if err := session.syncRecovery(); err != nil {
@@ -759,12 +804,28 @@ func ensureBillingRecovery(session *BillingSession) error {
 		return errors.New("billing recovery request identity is unavailable")
 	}
 	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
-		RequestID: session.recoveryID,
-		UserID:    session.relayInfo.UserId,
-		TokenID:   session.relayInfo.TokenId,
-		Source:    session.funding.Source(),
+		RequestID:     session.recoveryID,
+		UserID:        session.relayInfo.UserId,
+		TokenID:       session.relayInfo.TokenId,
+		Source:        session.funding.Source(),
+		TokenRequired: !session.relayInfo.IsPlayground && session.relayInfo.TokenId > 0,
 	})
 	return err
+}
+
+func recordBillingPreConsumeFailure(session *BillingSession, cause error) {
+	if session == nil || session.recoveryID == "" {
+		return
+	}
+	if session.recoveryNeedsRefund {
+		if err := model.MarkBillingRecoveryRefundPending(session.recoveryID, cause); err != nil {
+			common.SysLog("billing recovery refund handoff failed: " + err.Error())
+		}
+		return
+	}
+	if err := model.AbortPreparedBillingRecovery(session.recoveryID, cause); err != nil {
+		common.SysLog("billing recovery pre-consume abort failed: " + err.Error())
+	}
 }
 
 func billingRecoveryContext(c *gin.Context) context.Context {

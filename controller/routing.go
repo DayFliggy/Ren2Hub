@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"sort"
@@ -15,17 +16,17 @@ import (
 )
 
 type eligibleRouteChannel struct {
-	ID              int    `json:"id"`
-	Name            string `json:"name"`
-	Type            int    `json:"type"`
-	Status          int    `json:"status"`
-	Models          string `json:"models"`
-	Priority        int64  `json:"priority"`
-	Weight          int    `json:"weight"`
-	SnapshotVersion int64  `json:"snapshot_version"`
-	CatalogVersion  string `json:"catalog_version"`
-	CapabilityState string `json:"capability_state"`
-	FilterReason    string `json:"filter_reason,omitempty"`
+	ID              int      `json:"id"`
+	Name            string   `json:"name"`
+	Type            int      `json:"type"`
+	Status          int      `json:"status"`
+	RequestModels   []string `json:"request_models"`
+	Priority        int64    `json:"priority"`
+	Weight          int      `json:"weight"`
+	SnapshotVersion int64    `json:"snapshot_version"`
+	CatalogVersion  string   `json:"catalog_version"`
+	CapabilityState string   `json:"capability_state"`
+	FilterReason    string   `json:"filter_reason,omitempty"`
 }
 
 type routeCapabilityItem struct {
@@ -188,9 +189,18 @@ func ListRouteCatalog(c *gin.Context) {
 		writeRouteError(c, err)
 		return
 	}
+	capabilityAccess, err := service.FindUserRouteCapabilityAccess(c, c.GetInt("id"), capabilities)
+	if err != nil {
+		writeRouteError(c, err)
+		return
+	}
 	items := make([]routeCapabilityItem, 0, len(capabilities))
 	catalogVersions := make(map[string]struct{})
 	for _, capability := range capabilities {
+		access := capabilityAccess[capability.ID]
+		if !access.Enabled || !access.Allowed {
+			continue
+		}
 		if capability.CatalogVersion != "" {
 			catalogVersions[capability.CatalogVersion] = struct{}{}
 		}
@@ -265,9 +275,15 @@ func listEligibleRouteChannels(userID int) ([]eligibleRouteChannel, error) {
 	if err != nil {
 		return nil, err
 	}
+	capabilityAccess, err := service.FindUserRouteCapabilityAccess(context.Background(), userID, capabilities)
+	if err != nil {
+		return nil, err
+	}
 	capabilityByChannel := make(map[int][]model.ChannelModelCapability, len(capabilities))
+	accessByChannel := make(map[int][]service.RouteCapabilityUserAccess, len(capabilities))
 	for _, capability := range capabilities {
 		capabilityByChannel[capability.ChannelID] = append(capabilityByChannel[capability.ChannelID], capability)
+		accessByChannel[capability.ChannelID] = append(accessByChannel[capability.ChannelID], capabilityAccess[capability.ID])
 	}
 	items := make([]eligibleRouteChannel, 0, len(channels))
 	for _, channel := range channels {
@@ -276,18 +292,38 @@ func listEligibleRouteChannels(userID int) ([]eligibleRouteChannel, error) {
 		}
 		item := eligibleRouteChannel{
 			ID: channel.Id, Name: channel.Name, Type: channel.Type, Status: channel.Status,
-			Models: channel.Models, Priority: channel.GetPriority(), Weight: channel.GetWeight(),
+			RequestModels: []string{}, Priority: channel.GetPriority(), Weight: channel.GetWeight(),
 			CapabilityState: model.RouteCapabilityStateUnresolved,
 		}
 		if snapshot, ok := snapshotByChannel[channel.Id]; ok && snapshot.ActiveVersion > 0 {
 			item.SnapshotVersion = snapshot.ActiveVersion
 			item.CatalogVersion = snapshot.CatalogVersion
 			activeCapabilities := capabilityByChannel[channel.Id]
+			activeAccess := accessByChannel[channel.Id]
+			visibleCapabilities := make([]model.ChannelModelCapability, 0, len(activeCapabilities))
+			hasEnabledCapability := false
+			for index, capability := range activeCapabilities {
+				access := activeAccess[index]
+				if access.Enabled {
+					hasEnabledCapability = true
+				}
+				if access.Enabled && access.Allowed {
+					visibleCapabilities = append(visibleCapabilities, capability)
+					item.RequestModels = append(item.RequestModels, capability.RequestModel)
+				}
+			}
 			if len(activeCapabilities) == 0 {
 				item.CapabilityState = model.RouteCapabilityStateUnresolved
 				item.FilterReason = service.ShadowFilterUnknownCapability
+			} else if len(visibleCapabilities) == 0 {
+				item.CapabilityState = model.RouteCapabilityStateDisabled
+				if hasEnabledCapability {
+					item.FilterReason = service.ShadowFilterGroupForbidden
+				} else {
+					item.FilterReason = service.ShadowFilterAbilityDisabled
+				}
 			} else {
-				item.CapabilityState = routeCapabilityStateSummary(activeCapabilities)
+				item.CapabilityState = routeCapabilityStateSummary(visibleCapabilities)
 			}
 		} else {
 			item.FilterReason = service.ShadowFilterSnapshotUnavailable

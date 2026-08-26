@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -23,6 +23,7 @@ import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
+import { useLatestRequest } from '@/composables/useLatestRequest'
 import type {
   EligibleRouteChannel,
   RouteEntry,
@@ -56,6 +57,7 @@ const loadError = ref('')
 const conflict = ref(false)
 const draggingEntry = ref<RouteEntry | null>(null)
 const activeGroupKey = ref('')
+const previewRequest = useLatestRequest()
 
 const activeGroup = computed(() => {
   return (
@@ -71,7 +73,12 @@ const activeEntryIds = computed(
 )
 
 const availableChannels = computed(() =>
-  channels.value.filter((channel) => !activeEntryIds.value.has(channel.id))
+  channels.value.filter(
+    (channel) =>
+      !activeEntryIds.value.has(channel.id) &&
+      channel.capability_state === 'eligible' &&
+      !channel.filter_reason
+  )
 )
 
 function defaultPolicy(groupId = 0): RoutePolicy {
@@ -104,6 +111,7 @@ function newGroup(position: number): RouteGroup {
 }
 
 function setView(view: RouteProfileView): void {
+  invalidatePreview()
   profileView.value = view
   groups.value = view.groups.map((group) => ({
     ...group,
@@ -119,6 +127,7 @@ function setView(view: RouteProfileView): void {
 }
 
 async function load(): Promise<void> {
+  invalidatePreview()
   loading.value = true
   loadError.value = ''
   try {
@@ -191,6 +200,7 @@ function input(): RouteProfileInput {
 
 async function save(): Promise<void> {
   if (saving.value || !tokenId.value) return
+  invalidatePreview()
   saving.value = true
   try {
     const next = profileView.value
@@ -212,13 +222,13 @@ async function save(): Promise<void> {
 
 async function removeProfile(): Promise<void> {
   if (!profileView.value || saving.value) return
+  invalidatePreview()
   saving.value = true
   try {
     await routingApi.remove(profileView.value.profile.id)
     profileView.value = null
     groups.value = []
     activeGroupKey.value = ''
-    preview.value = null
     toast.success(t('routing.removed'))
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
@@ -308,12 +318,25 @@ function channelFor(entry: RouteEntry): EligibleRouteChannel | undefined {
 }
 
 function capabilityFor(entry: RouteEntry) {
-  const requestedModel = model.value.trim()
+  const requestedModel = normalizeRouteModel(model.value)
   return catalog.value?.items.find(
     (item) =>
       item.channel_id === entry.channel_id &&
-      (!requestedModel || item.request_model === requestedModel)
+      (!requestedModel ||
+        normalizeRouteModel(item.request_model) === requestedModel)
   )
+}
+
+function normalizeRouteModel(value: string): string {
+  let normalized = value.normalize('NFKC').trim().toLowerCase()
+  for (;;) {
+    const previous = normalized
+    normalized = normalized.replace(/@default$/, '')
+    for (const suffix of [':free', ':thinking', ':low', ':medium', ':high']) {
+      normalized = normalized.replace(new RegExp(`${suffix}$`), '')
+    }
+    if (normalized === previous) return normalized
+  }
 }
 
 function channelTone(
@@ -332,24 +355,44 @@ function healthTone(state: RouteHealthState): 'success' | 'warning' | 'danger' {
 
 async function runPreview(): Promise<void> {
   if (!profileView.value || !model.value.trim() || !path.value.trim()) return
+  const profileID = profileView.value.profile.id
   loadingPreview.value = true
   preview.value = null
-  try {
-    preview.value = await routingApi.preview(profileView.value.profile.id, {
-      model: model.value.trim(),
-      path: path.value.trim(),
-    })
-  } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
-  } finally {
-    loadingPreview.value = false
+  const result = await previewRequest.run((signal) =>
+    routingApi.preview(
+      profileID,
+      {
+        model: model.value.trim(),
+        path: path.value.trim(),
+      },
+      signal
+    )
+  )
+  if (result.stale) return
+  loadingPreview.value = false
+  if (result.ok) {
+    preview.value = result.value
+  } else {
+    toast.error(
+      result.error instanceof ApiError
+        ? result.error.message
+        : String(result.error)
+    )
   }
 }
 
 function reloadAfterConflict(): void {
+  invalidatePreview()
   void load()
-  preview.value = null
 }
+
+function invalidatePreview(): void {
+  previewRequest.cancel()
+  preview.value = null
+  loadingPreview.value = false
+}
+
+watch([model, path], invalidatePreview)
 
 onMounted(() => void load())
 </script>

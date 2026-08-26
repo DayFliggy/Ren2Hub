@@ -162,6 +162,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			return
 		}
 	}
+	if routeLiveSelectionActive(c) {
+		markLiveRouteSecurityQualified(c)
+	}
 
 	tokens, err := service.EstimateRequestToken(c, meta, relayInfo)
 	if err != nil {
@@ -188,12 +191,15 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			)
 			return
 		}
+		if routeLiveSelectionActive(c) {
+			markLiveRoutePriceQualified(c)
+		}
 
 		// common.SetContextKey(c, constant.ContextKeyTokenCountMeta, meta)
 
 		if priceData.FreeModel {
 			logger.LogInfo(c, fmt.Sprintf("模型 %s 免费，跳过预扣费", relayInfo.OriginModelName))
-		} else {
+		} else if !routeLiveSelectionActive(c) {
 			newAPIError = service.PreConsumeBilling(c, priceData.QuotaToPreConsume, relayInfo)
 			if newAPIError != nil {
 				return
@@ -287,6 +293,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			}
 			break
 		}
+		if compactRetry == nil && routeLiveSelectionActive(c) && relayInfo.Billing == nil && !relayInfo.PriceData.FreeModel {
+			newAPIError = service.PreConsumeBilling(c, relayInfo.PriceData.QuotaToPreConsume, relayInfo)
+			if newAPIError != nil {
+				break
+			}
+		}
 		addUsedChannel(c, channel.Id)
 		if compactRetry != nil {
 			compactRetry.recordAttempt(c, channel.Id)
@@ -362,7 +374,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				if relayInfo.FirstResponseTime.After(attemptStartedAt) {
 					ttftMS = relayInfo.FirstResponseTime.Sub(attemptStartedAt).Milliseconds()
 				}
-				_ = service.ObserveLiveRouteSuccessForKey(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), latencyMS, ttftMS)
+				if healthErr := service.ObserveLiveRouteSuccessForKey(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), latencyMS, ttftMS); healthErr != nil {
+					recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
+				}
 			}
 			relayInfo.LastError = nil
 			return
@@ -377,7 +391,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			classificationCode := string(newAPIError.GetErrorCode())
 			if !errors.Is(newAPIError, service.ErrRouteLeaseUnavailable) &&
 				!errors.Is(newAPIError, service.ErrRouteLeaseRuntime) {
-				_ = service.ObserveLiveRouteErrorForKeyWithRetryAfter(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), newAPIError.StatusCode, classificationCode, newAPIError.Error(), streamResponseCommitted, newAPIError.RetryAfter)
+				if healthErr := service.ObserveLiveRouteErrorForKeyWithRetryAfter(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), newAPIError.StatusCode, classificationCode, newAPIError.Error(), streamResponseCommitted, newAPIError.RetryAfter); healthErr != nil {
+					recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
+				}
 			}
 			liveClassification = service.ClassifyRouteError(newAPIError.StatusCode, string(newAPIError.GetErrorCode()), newAPIError.Error(), relayInfo.HasValidOutput())
 			responseCommitted := c.Writer != nil && c.Writer.Written()
@@ -799,33 +815,39 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 	if candidate.HealthEpoch <= 0 || expected.HealthEpoch != candidate.HealthEpoch {
 		return service.ErrRouteLeaseRuntime
 	}
+	qualification, qualified := liveRouteRuntimeQualificationForRequest(c)
+	if !qualified {
+		return &service.LiveRouteQualificationError{Reason: "runtime_qualification_unavailable"}
+	}
 	lease, _, err := service.AcquireConfiguredRouteLease(c.Request.Context(), info.RequestId, channel.Id, info.UserId, info.TokenId, info.BillingModelName(), routeAttemptLeaseTTL())
 	if err != nil {
 		return err
 	}
 	current, err := service.GetRouteRuntimeState(c.Request.Context(), channel.Id, info.BillingModelName())
 	if err != nil {
-		_ = service.ReleaseConfiguredRouteLease(context.Background(), lease)
-		return err
+		return releaseUncommittedRouteLease(c, lease, err)
 	}
 	if err := service.RecheckRouteLeaseRuntime(expected, current); err != nil {
-		_ = service.ReleaseConfiguredRouteLease(context.Background(), lease)
-		return err
+		return releaseUncommittedRouteLease(c, lease, err)
 	}
 	if err := service.RecheckLiveRouteCandidate(service.LiveRouteCandidateQualificationRequest{
-		Context:                 c.Request.Context(),
-		RouteSource:             selection.Source,
-		UserID:                  info.UserId,
-		TokenID:                 info.TokenId,
-		ChannelID:               channel.Id,
-		RequestModel:            info.BillingModelName(),
-		RequestPath:             c.Request.URL.Path,
-		UserGroup:               info.UserGroup,
-		ExpectedSnapshotVersion: candidate.SnapshotVersion,
-		ExpectedCatalogVersion:  candidate.CatalogVersion,
-		ExpectedProfileVersion:  selection.Decision.ConfigurationVersion,
+		Context:                  c.Request.Context(),
+		RouteSource:              selection.Source,
+		UserID:                   info.UserId,
+		TokenID:                  info.TokenId,
+		ChannelID:                channel.Id,
+		RequestModel:             info.BillingModelName(),
+		RequestPath:              c.Request.URL.Path,
+		UserGroup:                info.UserGroup,
+		ExpectedSnapshotVersion:  candidate.SnapshotVersion,
+		ExpectedCatalogVersion:   candidate.CatalogVersion,
+		ExpectedProfileVersion:   selection.Decision.ConfigurationVersion,
+		PriceEligibilityKnown:    qualification.PriceEligibilityKnown,
+		PriceEligible:            qualification.PriceEligible,
+		SecurityEligibilityKnown: qualification.SecurityEligibilityKnown,
+		SecurityAllowed:          qualification.SecurityAllowed,
 	}); err != nil {
-		_ = service.ReleaseConfiguredRouteLease(context.Background(), lease)
+		err = releaseUncommittedRouteLease(c, lease, err)
 		if reason := service.LiveRouteQualificationReason(err); reason != "" {
 			markLiveRouteCandidateFiltered(c, channel.Id, reason)
 		}
@@ -833,12 +855,10 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 	}
 	current, err = service.GetRouteRuntimeState(c.Request.Context(), channel.Id, info.BillingModelName())
 	if err != nil {
-		_ = service.ReleaseConfiguredRouteLease(context.Background(), lease)
-		return err
+		return releaseUncommittedRouteLease(c, lease, err)
 	}
 	if err := service.RecheckRouteLeaseRuntime(expected, current); err != nil {
-		_ = service.ReleaseConfiguredRouteLease(context.Background(), lease)
-		return err
+		return releaseUncommittedRouteLease(c, lease, err)
 	}
 	c.Set("route_live_lease", lease)
 	markLiveRouteAttempt(c, channel.Id, service.RouteLeaseStateAcquired)
@@ -913,12 +933,40 @@ func releaseRouteAttemptLease(c *gin.Context) {
 	lease, valid := value.(service.RouteLease)
 	if ok && valid {
 		if err := service.ReleaseConfiguredRouteLease(context.Background(), lease); err != nil {
-			markLiveRouteAttempt(c, lease.ChannelID, service.RouteLeaseStateReleaseFailed)
+			recordLiveRouteGovernanceFailure(c, lease.ChannelID, "lease_release_failed", err)
 		} else {
 			markLiveRouteAttempt(c, lease.ChannelID, service.RouteLeaseStateReleased)
 		}
 	}
 	c.Set("route_live_lease", nil)
+}
+
+func releaseUncommittedRouteLease(c *gin.Context, lease service.RouteLease, cause error) error {
+	if releaseErr := service.ReleaseConfiguredRouteLease(context.Background(), lease); releaseErr != nil {
+		recordLiveRouteGovernanceFailure(c, lease.ChannelID, "lease_release_failed", releaseErr)
+		return errors.Join(cause, fmt.Errorf("release uncommitted live route lease: %w", releaseErr))
+	}
+	markLiveRouteAttempt(c, lease.ChannelID, service.RouteLeaseStateReleased)
+	return cause
+}
+
+func recordLiveRouteGovernanceFailure(c *gin.Context, channelID int, code string, err error) {
+	if err != nil {
+		common.SysError(fmt.Sprintf("live route governance update failed (channel=%d, code=%s): %v", channelID, code, err))
+	}
+	if code == "lease_release_failed" {
+		markLiveRouteAttempt(c, channelID, service.RouteLeaseStateReleaseFailed)
+	}
+	if c == nil {
+		return
+	}
+	value, ok := c.Get("route_live_selection")
+	selection, valid := value.(service.LiveRouteSelection)
+	if !ok || !valid || selection.Source == service.RouteSourceLegacy {
+		return
+	}
+	selection.Decision.SetFinalError(service.RouteErrorClass(code))
+	c.Set("route_live_selection", selection)
 }
 
 func liveRouteRenewalFailed(c *gin.Context) bool {
@@ -1128,6 +1176,49 @@ func liveRoutePriceRatioAllowed(c *gin.Context, actualRatio float64) bool {
 	value, ok := c.Get("route_live_selection")
 	selection, valid := value.(service.LiveRouteSelection)
 	return !ok || !valid || selection.AllowsPriceRatio(actualRatio)
+}
+
+const liveRouteRuntimeQualificationContextKey = "route_live_runtime_qualification"
+
+type liveRouteRuntimeQualification struct {
+	PriceEligibilityKnown    bool
+	PriceEligible            bool
+	SecurityEligibilityKnown bool
+	SecurityAllowed          bool
+}
+
+func markLiveRouteSecurityQualified(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	qualification, _ := c.Get(liveRouteRuntimeQualificationContextKey)
+	facts, _ := qualification.(liveRouteRuntimeQualification)
+	facts.SecurityEligibilityKnown = true
+	facts.SecurityAllowed = true
+	c.Set(liveRouteRuntimeQualificationContextKey, facts)
+}
+
+func markLiveRoutePriceQualified(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	qualification, _ := c.Get(liveRouteRuntimeQualificationContextKey)
+	facts, _ := qualification.(liveRouteRuntimeQualification)
+	facts.PriceEligibilityKnown = true
+	facts.PriceEligible = true
+	c.Set(liveRouteRuntimeQualificationContextKey, facts)
+}
+
+func liveRouteRuntimeQualificationForRequest(c *gin.Context) (liveRouteRuntimeQualification, bool) {
+	if c == nil {
+		return liveRouteRuntimeQualification{}, false
+	}
+	value, found := c.Get(liveRouteRuntimeQualificationContextKey)
+	facts, valid := value.(liveRouteRuntimeQualification)
+	if !found || !valid || !facts.PriceEligibilityKnown || !facts.SecurityEligibilityKnown {
+		return liveRouteRuntimeQualification{}, false
+	}
+	return facts, true
 }
 
 func finalizeLiveRouteDecision(c *gin.Context, info *relaycommon.RelayInfo, apiErr *types.NewAPIError) {
@@ -1458,7 +1549,9 @@ func RelayTask(c *gin.Context) {
 				taskErr = service.TaskErrorWrapperLocal(service.ErrRouteLeaseUnavailable, service.RouteLeaseFailureCode, http.StatusServiceUnavailable)
 			} else {
 				if routeLiveSelectionActive(c) {
-					_ = service.ObserveLiveRouteSuccessForKey(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), time.Since(attemptStartedAt).Milliseconds(), 0)
+					if healthErr := service.ObserveLiveRouteSuccessForKey(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), time.Since(attemptStartedAt).Milliseconds(), 0); healthErr != nil {
+						recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
+					}
 				}
 				break
 			}
@@ -1475,7 +1568,9 @@ func RelayTask(c *gin.Context) {
 			}
 			classification := service.ClassifyRouteError(taskErr.StatusCode, taskErr.Code, taskErr.Message, false)
 			if taskErr.Code != service.RouteLeaseFailureCode {
-				_ = service.ObserveLiveRouteErrorForKey(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), taskErr.StatusCode, taskErr.Code, taskErr.Message, false)
+				if healthErr := service.ObserveLiveRouteErrorForKey(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), taskErr.StatusCode, taskErr.Code, taskErr.Message, false); healthErr != nil {
+					recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
+				}
 			}
 			if service.CanRouteFailover(classification, false, false) {
 				if nextAttempt, found := nextLiveRouteAttemptForError(c, retryParam.GetRetry(), channel.Id, classification); found {

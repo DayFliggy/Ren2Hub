@@ -101,7 +101,7 @@ const channels: EligibleRouteChannel[] = [
     name: 'Primary channel',
     type: 1,
     status: 1,
-    models: 'gpt-5',
+    request_models: ['gpt-5'],
     priority: 1,
     weight: 1,
     snapshot_version: 1,
@@ -113,7 +113,7 @@ const channels: EligibleRouteChannel[] = [
     name: 'Backup channel',
     type: 1,
     status: 1,
-    models: 'gpt-5',
+    request_models: ['gpt-5'],
     priority: 1,
     weight: 1,
     snapshot_version: 1,
@@ -282,10 +282,14 @@ describe('TokenRoutingView', () => {
     await buttonByText(view, 'Run preview').trigger('click')
     await flushPromises()
 
-    expect(mocks.preview).toHaveBeenCalledWith(1, {
-      model: 'gpt-5',
-      path: '/v1/chat/completions',
-    })
+    expect(mocks.preview).toHaveBeenCalledWith(
+      1,
+      {
+        model: 'gpt-5',
+        path: '/v1/chat/completions',
+      },
+      expect.any(AbortSignal)
+    )
     expect(view.text()).toContain('Cooling down')
     expect(view.get('[data-testid="route-preview-health"]').text()).toContain(
       '3 failures'
@@ -334,5 +338,27 @@ describe('TokenRoutingView', () => {
 
     expect(mocks.remove).toHaveBeenCalledWith(1)
     expect(view.text()).toContain('Create routing profile')
+  })
+
+  it('does not apply a preview that resolves after the profile is deleted', async () => {
+    let resolvePreview: (value: RoutePreview) => void = () => undefined
+    mocks.preview.mockImplementationOnce(
+      () =>
+        new Promise<RoutePreview>((resolve) => {
+          resolvePreview = resolve
+        })
+    )
+    const view = await mountView()
+
+    await view.get('input[placeholder="gpt-5"]').setValue('gpt-5')
+    await buttonByText(view, 'Run preview').trigger('click')
+    await buttonByText(view, 'Delete profile').trigger('click')
+    resolvePreview(preview)
+    await flushPromises()
+
+    expect(view.text()).toContain('Create routing profile')
+    expect(view.find('[data-testid="route-preview-health"]').exists()).toBe(
+      false
+    )
   })
 })

@@ -178,6 +178,13 @@ func CanUseRouteHealth(health model.ChannelHealth, now time.Time) bool {
 	return health.CooldownUntil > 0 && health.CooldownUntil <= now.Unix()
 }
 
+// RouteHealthReadOnlyUsable evaluates a stored health row without claiming a
+// half-open probe or writing state. Preview and Shadow callers must use this
+// boundary; only RouteHealthUsable may admit a live probe.
+func RouteHealthReadOnlyUsable(health model.ChannelHealth, now time.Time) bool {
+	return CanUseRouteHealth(health, now)
+}
+
 func LoadRouteHealth(ctx context.Context, channelID int, requestModel string) (model.ChannelHealth, error) {
 	return loadRouteHealthScope(ctx, channelID, requestModel, "")
 }
@@ -508,6 +515,13 @@ func RouteChannelHasAvailableKey(ctx context.Context, channel *model.Channel, re
 		}
 	}
 	return false, nil
+}
+
+// RouteChannelHasReadOnlyAvailableKey is the non-mutating counterpart used by
+// preview surfaces. An expired open cooldown may be displayed as available;
+// the actual relay still atomically claims its half-open probe.
+func RouteChannelHasReadOnlyAvailableKey(ctx context.Context, channel *model.Channel, requestModel string, now time.Time) (bool, error) {
+	return RouteChannelHasAvailableKey(ctx, channel, requestModel, now)
 }
 
 // RouteBackoff returns full-jitter delay for the local exponential backoff.

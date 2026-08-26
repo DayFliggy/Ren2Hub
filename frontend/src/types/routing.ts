@@ -60,7 +60,7 @@ export interface EligibleRouteChannel {
   name: string
   type: number
   status: number
-  models: string
+  request_models: string[]
   priority: number
   weight: number
   snapshot_version: number

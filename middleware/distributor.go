@@ -315,15 +315,22 @@ func Distribute() func(c *gin.Context) {
 
 // liveRouteRequestSupported limits the live selector to requests whose
 // controller owns the unified lease, retry, health, decision and billing
-// lifecycle. Midjourney uses a separate submit/fetch path, and video remix is
-// deliberately pinned to the original task's channel. Selecting a private
-// route for either would make the recorded decision diverge from execution.
+// lifecycle. Task submit/fetch protocols keep their legacy execution path
+// until their pricing and security rechecks are unified with Relay. Selecting
+// a private route for either would make the recorded decision diverge from
+// execution.
 func liveRouteRequestSupported(c *gin.Context, isCompactRequest, requiresNativeResponses bool) bool {
 	if c == nil || c.Request == nil || isCompactRequest || requiresNativeResponses {
 		return false
 	}
 	path := c.Request.URL.Path
-	return !strings.Contains(path, "/mj/") && !strings.HasSuffix(path, "/remix")
+	if strings.Contains(path, "/mj/") || strings.HasSuffix(path, "/remix") {
+		return false
+	}
+	return !strings.HasPrefix(path, "/suno/") &&
+		!strings.HasPrefix(path, "/kling/") &&
+		!strings.HasPrefix(path, "/jimeng/") &&
+		!strings.HasPrefix(path, "/v1/videos")
 }
 
 // requestRequiresNativeResponses inspects only the protocol markers needed for

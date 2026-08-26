@@ -20,8 +20,8 @@ func TestLiveRouteRequestSupportedKeepsNonUnifiedProtocolsOnLegacyRouting(t *tes
 		want                    bool
 	}{
 		{name: "chat", path: "/v1/chat/completions", want: true},
-		{name: "task submit", path: "/suno/submit/generate", want: true},
-		{name: "video submit", path: "/v1/videos", want: true},
+		{name: "task submit", path: "/suno/submit/generate", want: false},
+		{name: "video submit", path: "/v1/videos", want: false},
 		{name: "responses compact", path: "/v1/responses/compact", compact: true, want: false},
 		{name: "native responses", path: "/v1/responses", requiresNativeResponses: true, want: false},
 		{name: "midjourney submit", path: "/mj/submit/imagine", want: false},
