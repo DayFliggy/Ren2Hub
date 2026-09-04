@@ -22,9 +22,10 @@ describe('system settings catalog', () => {
 
   it('maps each option key to one visible administration section', () => {
     const keys = SYSTEM_SETTINGS_DOMAINS.flatMap((domain) =>
-      domain.sections.flatMap((section) =>
-        section.fields.map((field) => field.key)
-      )
+      domain.sections.flatMap((section) => [
+        ...section.fields.map((field) => field.key),
+        ...(section.managedKeys ?? []),
+      ])
     )
 
     expect(new Set(keys).size).toBe(keys.length)
@@ -32,6 +33,13 @@ describe('system settings catalog', () => {
     expect(keys).toContain('ModelRequestRateLimitGroup')
     expect(keys).toContain('WorkerAllowHttpImageRequestEnabled')
     expect(keys).toContain('perf_metrics_setting.retention_days')
+    expect(keys).toContain('billing_setting.billing_expr')
+    expect(keys).toContain('payment_setting.amount_discount')
+    expect(keys).toContain('channel_affinity_setting.rules')
+    expect(keys).toContain('global.chat_completions_to_responses_policy')
+    expect(keys).toContain('FileUploadPermission')
+    expect(keys).not.toContain('grok.reasoning_effort')
+    expect(keys).toContain('WaffoPancakeUnitPrice')
   })
 
   it('uses structured editors for pricing, lists, and Waffo Pancake setup', () => {

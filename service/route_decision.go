@@ -58,6 +58,7 @@ type RouteDecision struct {
 	SnapshotVersion          int64                    `json:"snapshot_version,omitempty"`
 	ScoringMode              string                   `json:"scoring_mode,omitempty"`
 	DynamicScoreApplied      bool                     `json:"dynamic_score_applied"`
+	ScoreMetricsUnavailable  bool                     `json:"score_metrics_unavailable,omitempty"`
 	StaticPreferredChannelID int                      `json:"static_preferred_channel_id,omitempty"`
 	ScoredPreferredChannelID int                      `json:"scored_preferred_channel_id,omitempty"`
 	Candidates               []RouteDecisionCandidate `json:"candidates"`

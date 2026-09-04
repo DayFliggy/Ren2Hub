@@ -41,7 +41,7 @@ func GetChannelRoutePolicy(c *gin.Context) {
 }
 
 func UpdateChannelRoutePolicy(c *gin.Context) {
-	channelID, _, ok := parseChannelRoutePolicyParams(c)
+	channelID, modelName, ok := parseChannelRoutePolicyParams(c)
 	if !ok {
 		return
 	}
@@ -51,6 +51,13 @@ func UpdateChannelRoutePolicy(c *gin.Context) {
 		return
 	}
 	canonical := modellab.NormalizeModel(input.CanonicalModel)
+	if canonical != "" && canonical != modelName {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "code": "MODEL_MISMATCH"})
+		return
+	}
+	if canonical == "" {
+		canonical = modelName
+	}
 	if canonical == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "code": "BAD_REQUEST"})
 		return

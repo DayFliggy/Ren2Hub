@@ -54,6 +54,7 @@ func TestRoutingDatabaseIntegration(t *testing.T) {
 			require.NoError(t, migrateChannelCapabilityIndexes())
 			require.True(t, db.Migrator().HasIndex(&ChannelModelCapability{}, "channel_model_capability_snapshot"))
 			require.True(t, db.Migrator().HasIndex(&ChannelRoutePolicy{}, "channel_route_policy_model"))
+			require.True(t, db.Migrator().HasIndex(&RouteShadowHourlyObservation{}, "route_shadow_hourly_observation"))
 
 			channelID := 991001
 			require.NoError(t, db.Where("channel_id = ?", channelID).Delete(&ChannelModelCapability{}).Error)
@@ -74,6 +75,23 @@ func TestRoutingDatabaseIntegration(t *testing.T) {
 			_, err = FindChannelCapabilitySnapshotVersion(context.Background(), channelID, 1)
 			require.NoError(t, err)
 			assert.ErrorIs(t, PublishChannelCapabilitySnapshot(context.Background(), channelID, activeFence, "stale", "integration-catalog", []ChannelModelCapability{capability}), ErrCapabilitySnapshotConflict)
+
+			hour := int64(1_700_000_000)
+			deltas := []RouteShadowHourlyObservation{
+				{HourStart: hour, InstanceID: "integration-a", Scope: RouteShadowObservationGlobal, ShadowDecisions: 2, EventAttempted: 2},
+				{HourStart: hour, InstanceID: "integration-a", Scope: RouteShadowObservationModel, ModelName: "gpt-5", ShadowInitialDecisions: 2, CapabilityResolved: 2},
+			}
+			require.NoError(t, UpsertRouteShadowHourlyObservations(context.Background(), deltas))
+			require.NoError(t, UpsertRouteShadowHourlyObservations(context.Background(), deltas))
+			observations, err := ListRouteShadowHourlyObservations(context.Background(), hour, hour+3600)
+			require.NoError(t, err)
+			require.Len(t, observations, 2)
+			byScope := make(map[string]RouteShadowHourlyObservation, len(observations))
+			for _, observation := range observations {
+				byScope[observation.Scope] = observation
+			}
+			assert.Equal(t, int64(4), byScope[RouteShadowObservationGlobal].ShadowDecisions)
+			assert.Equal(t, int64(4), byScope[RouteShadowObservationModel].ShadowInitialDecisions)
 		})
 	}
 }
@@ -99,6 +117,7 @@ func TestRoutingDatabaseIntegrationSQLite(t *testing.T) {
 	require.NoError(t, migrateChannelCapabilityIndexes())
 	require.True(t, db.Migrator().HasIndex(&ChannelModelCapability{}, "channel_model_capability_snapshot"))
 	require.True(t, db.Migrator().HasIndex(&ChannelRoutePolicy{}, "channel_route_policy_model"))
+	require.True(t, db.Migrator().HasIndex(&RouteShadowHourlyObservation{}, "route_shadow_hourly_observation"))
 	require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), 991002, ChannelCapabilitySnapshotFence{}, "sqlite-hash", "sqlite-catalog", []ChannelModelCapability{{
 		RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical",
 		ChannelStatus: common.ChannelStatusEnabled, State: RouteCapabilityStateEligible,

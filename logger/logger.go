@@ -77,6 +77,13 @@ func LogInfo(ctx context.Context, msg string) {
 	logHelper(ctx, loggerINFO, msg)
 }
 
+// TryLogInfo is the error-reporting variant used by bounded asynchronous
+// observers whose delivery metrics must distinguish an accepted write from a
+// failed sink operation.
+func TryLogInfo(ctx context.Context, msg string) error {
+	return logHelper(ctx, loggerINFO, msg)
+}
+
 func LogWarn(ctx context.Context, msg string) {
 	logHelper(ctx, loggerWarn, msg)
 }
@@ -94,7 +101,7 @@ func LogDebug(ctx context.Context, msg string, args ...any) {
 	}
 }
 
-func logHelper(ctx context.Context, level string, msg string) {
+func logHelper(ctx context.Context, level string, msg string) error {
 	var id any = "SYSTEM"
 	if ctx != nil {
 		if requestID := ctx.Value(common.RequestIdKey); requestID != nil {
@@ -107,7 +114,7 @@ func logHelper(ctx context.Context, level string, msg string) {
 	if level == loggerINFO {
 		writer = gin.DefaultWriter
 	}
-	_, _ = fmt.Fprintf(writer, "[%s] %v | %s | %s \n", level, now.Format("2006/01/02 - 15:04:05"), id, msg)
+	_, err := fmt.Fprintf(writer, "[%s] %v | %s | %s \n", level, now.Format("2006/01/02 - 15:04:05"), id, msg)
 	common.LogWriterMu.RUnlock()
 	logCount++ // we don't need accurate count, so no lock here
 	if logCount > maxLogCount && !setupLogWorking {
@@ -117,6 +124,7 @@ func logHelper(ctx context.Context, level string, msg string) {
 			SetupLogger()
 		})
 	}
+	return err
 }
 
 func LogQuota(quota int) string {

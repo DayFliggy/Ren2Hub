@@ -398,7 +398,13 @@ func runGoAwayAfterFirstRequestServer(ln net.Listener) <-chan h2ServerResult {
 	resCh := make(chan h2ServerResult, 1)
 	go func() {
 		res := h2ServerResult{}
-		defer func() { resCh <- res }()
+		var drainingConnections []net.Conn
+		defer func() {
+			for _, conn := range drainingConnections {
+				_ = conn.Close()
+			}
+			resCh <- res
+		}()
 
 		for attempt := 0; attempt < 2; attempt++ {
 			conn, framer, err := acceptH2TestConnection(ln)
@@ -416,12 +422,15 @@ func runGoAwayAfterFirstRequestServer(ln net.Listener) <-chan h2ServerResult {
 			res.attemptBodies = append(res.attemptBodies, body)
 
 			if attempt == 0 {
-				err = framer.WriteGoAway(0, http2.ErrCodeNo, nil)
-				conn.Close()
-				if err != nil {
+				if err := framer.WriteGoAway(0, http2.ErrCodeNo, nil); err != nil {
+					conn.Close()
 					res.err = err
 					return
 				}
+				// Keep the connection alive until the client sees GOAWAY and
+				// retries. Closing immediately can turn the control frame into a
+				// TCP reset on Windows before the HTTP/2 reader processes it.
+				drainingConnections = append(drainingConnections, conn)
 				continue
 			}
 

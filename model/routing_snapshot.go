@@ -135,27 +135,52 @@ func MarkChannelCapabilityRefreshFailure(channelID int, expected ChannelCapabili
 	if DB == nil || channelID <= 0 {
 		return errors.New("capability snapshot database is unavailable")
 	}
-	updates := map[string]any{
-		"refresh_status":              RouteCapabilityRefreshFailed,
-		"last_failed_source_hash":     sourceHash,
-		"last_failed_catalog_version": catalogVersion,
-		"last_failed_at":              common.GetTimestamp(),
-		"updated_at":                  common.GetTimestamp(),
-	}
-	// A refresh can finish after a newer snapshot has already won the CAS. The
-	// failure marker must only describe the snapshot that the failed attempt
-	// observed; otherwise an old worker can mark a replacement snapshot failed.
-	result := DB.Model(&ChannelCapabilitySnapshot{}).
-		Where("channel_id = ? AND active_version = ? AND source_hash = ? AND catalog_version = ?",
-			channelID, expected.ActiveVersion, expected.SourceHash, expected.CatalogVersion).
-		Updates(updates)
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected != 1 {
-		return ErrCapabilitySnapshotConflict
-	}
-	return nil
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var current ChannelCapabilitySnapshot
+		err := lockForUpdate(tx).Where("channel_id = ?", channelID).First(&current).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if expected != (ChannelCapabilitySnapshotFence{}) {
+				return ErrCapabilitySnapshotConflict
+			}
+			current = ChannelCapabilitySnapshot{
+				ChannelID:     channelID,
+				RefreshStatus: RouteCapabilityRefreshBuilding,
+			}
+			if err := tx.Create(&current).Error; err != nil {
+				return ErrCapabilitySnapshotConflict
+			}
+		} else if err != nil {
+			return err
+		}
+		if !expected.matches(current) {
+			return ErrCapabilitySnapshotConflict
+		}
+		updates := map[string]any{
+			"last_failed_source_hash":     sourceHash,
+			"last_failed_catalog_version": catalogVersion,
+			"last_failed_at":              common.GetTimestamp(),
+			"updated_at":                  common.GetTimestamp(),
+		}
+		if expected.ActiveVersion <= 0 {
+			// A first build has no readable capability rows. Expose its failure so
+			// callers can distinguish it from a channel that has never refreshed.
+			updates["refresh_status"] = RouteCapabilityRefreshFailed
+		}
+		// A refresh can finish after a newer snapshot has already won the CAS. The
+		// failure marker must only describe the snapshot that the failed attempt
+		// observed; otherwise an old worker can mark a replacement snapshot failed.
+		result := tx.Model(&ChannelCapabilitySnapshot{}).
+			Where("id = ? AND channel_id = ? AND active_version = ? AND source_hash = ? AND catalog_version = ?",
+				current.ID, channelID, expected.ActiveVersion, expected.SourceHash, expected.CatalogVersion).
+			Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrCapabilitySnapshotConflict
+		}
+		return nil
+	})
 }
 
 // GetChannelCapabilitySnapshotFence returns the active tuple a refresher must
@@ -198,7 +223,7 @@ func FindActiveChannelCapabilities(ctx context.Context, channelIDs []int, reques
 	}
 	query := DB.WithContext(ctx).Model(&ChannelModelCapability{}).
 		Joins("JOIN channel_capability_snapshots AS capability_snapshots ON capability_snapshots.channel_id = channel_model_capabilities.channel_id AND capability_snapshots.active_version = channel_model_capabilities.snapshot_version").
-		Where("channel_model_capabilities.channel_id IN ? AND capability_snapshots.active_version > 0", channelIDs)
+		Where("channel_model_capabilities.channel_id IN ? AND capability_snapshots.active_version > 0 AND capability_snapshots.refresh_status = ?", channelIDs, RouteCapabilityRefreshActive)
 	if requestModel != "" {
 		query = query.Where("channel_model_capabilities.request_model = ?", requestModel)
 	}
@@ -226,7 +251,7 @@ func FindActiveChannelCapabilitySnapshots(ctx context.Context, channelIDs []int)
 		return []ChannelCapabilitySnapshot{}, nil
 	}
 	var snapshots []ChannelCapabilitySnapshot
-	if err := DB.WithContext(ctx).Where("channel_id IN ? AND active_version > 0", channelIDs).
+	if err := DB.WithContext(ctx).Where("channel_id IN ? AND active_version > 0 AND refresh_status = ?", channelIDs, RouteCapabilityRefreshActive).
 		Order("channel_id asc").Find(&snapshots).Error; err != nil {
 		return nil, err
 	}

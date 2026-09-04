@@ -45,6 +45,7 @@ type BillingRecovery struct {
 	FundingAmount     int64  `json:"funding_amount" gorm:"not null;default:0"`
 	ExtraAmount       int64  `json:"extra_amount" gorm:"not null;default:0"`
 	TokenAmount       int64  `json:"token_amount" gorm:"not null;default:0"`
+	TokenRequired     bool   `json:"token_required" gorm:"not null;default:false"`
 	SettlementDelta   int64  `json:"settlement_delta" gorm:"not null;default:0"`
 	PreConsumeState   string `json:"pre_consume_state" gorm:"type:varchar(16);index:billing_recovery_pending_scan,priority:2;not null;default:'prepared'"`
 	FundingRefund     string `json:"funding_refund" gorm:"type:varchar(16);not null;default:'pending'"`
@@ -117,6 +118,7 @@ type BillingRecoveryInput struct {
 	Source        string
 	FundingAmount int64
 	TokenAmount   int64
+	TokenRequired bool
 }
 
 func EnsureBillingRecovery(input BillingRecoveryInput) (*BillingRecovery, error) {
@@ -142,7 +144,7 @@ func EnsureBillingRecovery(input BillingRecoveryInput) (*BillingRecovery, error)
 	}
 	recovery = BillingRecovery{
 		RequestID: input.RequestID, UserID: input.UserID, TokenID: input.TokenID,
-		Source: input.Source, FundingAmount: input.FundingAmount, TokenAmount: input.TokenAmount,
+		Source: input.Source, FundingAmount: input.FundingAmount, TokenAmount: input.TokenAmount, TokenRequired: input.TokenRequired,
 	}
 	if err := DB.Create(&recovery).Error; err != nil {
 		if lookupErr := DB.Where("request_id = ?", input.RequestID).First(&recovery).Error; lookupErr == nil {
@@ -154,7 +156,7 @@ func EnsureBillingRecovery(input BillingRecoveryInput) (*BillingRecovery, error)
 }
 
 func reconcileBillingRecoveryInput(recovery *BillingRecovery, input BillingRecoveryInput) (*BillingRecovery, error) {
-	if recovery == nil || recovery.UserID != input.UserID || recovery.TokenID != input.TokenID {
+	if recovery == nil || recovery.UserID != input.UserID || recovery.TokenID != input.TokenID || recovery.TokenRequired != input.TokenRequired {
 		return nil, errors.New("billing recovery request identity conflict")
 	}
 	if recovery.Source == input.Source {
@@ -170,7 +172,7 @@ func reconcileBillingRecoveryInput(recovery *BillingRecovery, input BillingRecov
 		if err := lockForUpdate(tx).Where("request_id = ?", input.RequestID).First(&current).Error; err != nil {
 			return err
 		}
-		if current.UserID != input.UserID || current.TokenID != input.TokenID || !billingRecoveryIsReusable(current) {
+		if current.UserID != input.UserID || current.TokenID != input.TokenID || current.TokenRequired != input.TokenRequired || !billingRecoveryIsReusable(current) {
 			return errors.New("billing recovery request identity conflict")
 		}
 		if err := tx.Model(&current).Updates(map[string]any{
@@ -199,9 +201,9 @@ func billingRecoveryIsReusable(recovery BillingRecovery) bool {
 		recovery.FundingAmount == 0 && recovery.ExtraAmount == 0 && recovery.TokenAmount == 0
 }
 
-// AbortPreparedBillingRecovery records a failed pre-consume attempt that did
-// not reserve any balance. It can subsequently be rebound to a different
-// funding source for the same request, but is not eligible for recovery.
+// AbortPreparedBillingRecovery closes an attempt which never reserved a
+// balance. It is intentionally distinct from a refund: no completed amount is
+// claimed and the same request may still use the configured fallback source.
 func AbortPreparedBillingRecovery(requestID string, lastError error) error {
 	if DB == nil || strings.TrimSpace(requestID) == "" {
 		return errors.New("invalid billing recovery abort")
@@ -237,21 +239,35 @@ func UpdateBillingRecoveryAmounts(requestID string, subscriptionID int, fundingA
 	if fundingAmount < 0 || extraAmount < 0 || tokenAmount < 0 {
 		return errors.New("billing recovery amounts cannot be negative")
 	}
-	result := DB.Model(&BillingRecovery{}).Where("request_id = ?", requestID).Updates(map[string]any{
-		"subscription_id":   subscriptionID,
-		"funding_amount":    fundingAmount,
-		"extra_amount":      extraAmount,
-		"token_amount":      tokenAmount,
-		"pre_consume_state": BillingRecoveryPreConsumeCommitted,
-		"updated_at":        common.GetTimestamp(),
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var recovery BillingRecovery
+		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
+			return err
+		}
+		// A late session sync must never rewrite the amounts that a completed
+		// settlement or refund has already fenced with durable adjustments.
+		if recovery.Status != BillingRecoveryStatusActive ||
+			(recovery.PreConsumeState != BillingRecoveryPreConsumePrepared && recovery.PreConsumeState != BillingRecoveryPreConsumeCommitted) {
+			return ErrBillingRecoveryStateConflict
+		}
+		result := tx.Model(&BillingRecovery{}).
+			Where("request_id = ? AND status = ?", requestID, BillingRecoveryStatusActive).
+			Updates(map[string]any{
+				"subscription_id":   subscriptionID,
+				"funding_amount":    fundingAmount,
+				"extra_amount":      extraAmount,
+				"token_amount":      tokenAmount,
+				"pre_consume_state": BillingRecoveryPreConsumeCommitted,
+				"updated_at":        common.GetTimestamp(),
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrBillingRecoveryStateConflict
+		}
+		return nil
 	})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected != 1 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
 }
 
 func UpdateBillingRecoverySettlement(requestID string, delta int64) error {
@@ -323,17 +339,20 @@ func MarkBillingRecoveryRefundPending(requestID string, lastError error) error {
 			"attempts":   gorm.Expr("attempts + 1"),
 			"updated_at": common.GetTimestamp(),
 		}
+		// Subscription pre-consume has its own transaction. A process can
+		// stop after it succeeds but before the session persists the amounts.
+		// Only a still-consumed record proves that a refund is required.
 		if recovery.Source == "subscription" && recovery.PreConsumeState == BillingRecoveryPreConsumePrepared {
 			var record SubscriptionPreConsumeRecord
 			err := tx.Where("request_id = ?", requestID).First(&record).Error
-			if err == nil {
+			if err == nil && record.Status == "consumed" {
 				updates["subscription_id"] = record.UserSubscriptionId
 				updates["funding_amount"] = record.PreConsumed
-				if recovery.TokenID > 0 {
+				if recovery.TokenRequired {
 					updates["token_amount"] = record.PreConsumed
 				}
 				updates["pre_consume_state"] = BillingRecoveryPreConsumeCommitted
-			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
 		}
@@ -345,25 +364,23 @@ func MarkBillingRecoverySettled(requestID string) error {
 	if DB == nil || strings.TrimSpace(requestID) == "" {
 		return errors.New("invalid billing recovery settlement completion")
 	}
-	result := DB.Model(&BillingRecovery{}).Where("request_id = ? AND status IN ?", requestID, []string{BillingRecoveryStatusSettlementPending, BillingRecoveryStatusSettled}).Updates(map[string]any{
-		"status":     BillingRecoveryStatusSettled,
-		"last_error": "",
-		"updated_at": common.GetTimestamp(),
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var recovery BillingRecovery
+		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
+			return err
+		}
+		if recovery.Status == BillingRecoveryStatusSettled {
+			return nil
+		}
+		if recovery.Status != BillingRecoveryStatusSettlementPending || !BillingRecoverySettlementComplete(recovery) {
+			return ErrBillingRecoveryStateConflict
+		}
+		return tx.Model(&BillingRecovery{}).Where("request_id = ?", requestID).Updates(map[string]any{
+			"status":     BillingRecoveryStatusSettled,
+			"last_error": "",
+			"updated_at": common.GetTimestamp(),
+		}).Error
 	})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 1 {
-		return nil
-	}
-	var recovery BillingRecovery
-	if err := DB.Select("status").Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
-		return err
-	}
-	if recovery.Status == BillingRecoveryStatusSettled {
-		return nil
-	}
-	return ErrBillingRecoveryStateConflict
 }
 
 func MarkBillingRecoveryRefunded(requestID string, lastError error) error {
@@ -382,10 +399,7 @@ func MarkBillingRecoveryRefunded(requestID string, lastError error) error {
 		if recovery.Status == BillingRecoveryStatusRefunded {
 			return nil
 		}
-		if recovery.Status != BillingRecoveryStatusRefundPending {
-			return ErrBillingRecoveryStateConflict
-		}
-		if !BillingRecoveryRefundComplete(recovery) {
+		if recovery.Status != BillingRecoveryStatusRefundPending || !BillingRecoveryRefundComplete(recovery) {
 			return ErrBillingRecoveryStateConflict
 		}
 		return tx.Model(&BillingRecovery{}).Where("request_id = ?", requestID).Updates(map[string]any{
@@ -404,13 +418,7 @@ func ListStaleBillingRecoveries(cutoff int64, limit int) ([]BillingRecovery, err
 		limit = 100
 	}
 	var rows []BillingRecovery
-	// Subscription pre-consume and recovery hydration are separate transactions.
-	// A process crash between them leaves a consumed subscription record while
-	// the recovery row is still prepared, so include that durable evidence in
-	// the stale scan. Wallet pre-consume is recorded atomically in the recovery
-	// transaction and therefore remains committed-only here.
 	err := DB.Where("status IN ? AND updated_at < ?", []string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending}, cutoff).
-		Where("(pre_consume_state = ? OR (pre_consume_state = ? AND source = ? AND EXISTS (SELECT 1 FROM subscription_pre_consume_records AS spr WHERE spr.request_id = billing_recoveries.request_id AND spr.status IN ?)))", BillingRecoveryPreConsumeCommitted, BillingRecoveryPreConsumePrepared, "subscription", []string{"consumed", "refunded"}).
 		Order("updated_at asc").Limit(limit).Find(&rows).Error
 	return rows, err
 }
@@ -433,15 +441,27 @@ func BillingRecoveryRefundComplete(recovery BillingRecovery) bool {
 	return true
 }
 
-// PreConsumeWalletBillingRecovery reserves wallet and token quota while
-// recording the exact completed amounts in the same transaction.
-func PreConsumeWalletBillingRecovery(requestID string, quota int64, tokenUnlimited, skipToken bool) error {
+// PreConsumeWalletBillingRecovery records wallet and token changes in the
+// same transaction. TokenRequired is persisted with the request, preventing a
+// later recovery from guessing whether a playground request charged a token.
+func PreConsumeWalletBillingRecovery(requestID string, quota int64, tokenUnlimited bool) error {
 	if DB == nil || strings.TrimSpace(requestID) == "" || quota < 0 {
 		return errors.New("invalid billing recovery wallet pre-consume")
 	}
-	var userID, tokenID int
-	var tokenKey string
+	var mutation *billingRecoveryQuotaMutation
+	if quota > 0 {
+		var err error
+		mutation, err = beginBillingRecoveryQuotaMutation(requestID, true, true)
+		if err != nil {
+			return err
+		}
+	}
 	err := DB.Transaction(func(tx *gorm.DB) error {
+		if mutation != nil {
+			if err := mutation.applyPendingDeltas(tx); err != nil {
+				return err
+			}
+		}
 		var recovery BillingRecovery
 		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
 			return err
@@ -450,12 +470,12 @@ func PreConsumeWalletBillingRecovery(requestID string, quota int64, tokenUnlimit
 			return ErrBillingRecoveryStateConflict
 		}
 		if recovery.PreConsumeState == BillingRecoveryPreConsumeCommitted {
-			if recovery.FundingAmount == quota && (skipToken || recovery.TokenAmount == quota) {
+			if recovery.FundingAmount == quota && (!recovery.TokenRequired || recovery.TokenAmount == quota) {
 				return nil
 			}
 			return ErrBillingRecoveryStateConflict
 		}
-		if !skipToken && recovery.TokenID > 0 && quota > 0 {
+		if recovery.TokenRequired && recovery.TokenID > 0 && quota > 0 {
 			query := tx.Model(&Token{}).Where("id = ?", recovery.TokenID)
 			if !tokenUnlimited {
 				query = query.Where("remain_quota >= ?", quota)
@@ -471,11 +491,6 @@ func PreConsumeWalletBillingRecovery(requestID string, quota int64, tokenUnlimit
 			if result.RowsAffected != 1 {
 				return ErrBillingRecoveryTokenQuota
 			}
-			var token Token
-			if err := tx.Select("key").Where("id = ?", recovery.TokenID).First(&token).Error; err != nil {
-				return err
-			}
-			tokenID, tokenKey = recovery.TokenID, token.Key
 		}
 		if quota > 0 {
 			result := tx.Model(&User{}).Where("id = ? AND quota >= ?", recovery.UserID, quota).Update("quota", gorm.Expr("quota - ?", quota))
@@ -485,10 +500,9 @@ func PreConsumeWalletBillingRecovery(requestID string, quota int64, tokenUnlimit
 			if result.RowsAffected != 1 {
 				return ErrBillingRecoveryFundingQuota
 			}
-			userID = recovery.UserID
 		}
 		tokenAmount := int64(0)
-		if !skipToken && recovery.TokenID > 0 {
+		if recovery.TokenRequired {
 			tokenAmount = quota
 		}
 		return tx.Model(&BillingRecovery{}).Where("request_id = ?", requestID).Updates(map[string]any{
@@ -498,32 +512,32 @@ func PreConsumeWalletBillingRecovery(requestID string, quota int64, tokenUnlimit
 			"updated_at":        common.GetTimestamp(),
 		}).Error
 	})
+	if mutation != nil {
+		mutation.release(err == nil)
+	}
 	if err != nil {
 		return err
-	}
-	if userID > 0 {
-		if err := invalidateUserCache(userID); err != nil {
-			return err
-		}
-	}
-	if tokenID > 0 && tokenKey != "" {
-		return invalidateTokenCacheForMutation(tokenKey)
 	}
 	return nil
 }
 
-// ReserveBillingRecovery applies a supplemental reservation and records its
-// recoverable amounts in one transaction. It returns the amount applied by
-// this call; a duplicate request that already reached targetQuota returns 0.
+// ReserveBillingRecovery extends a committed reservation. The durable row is
+// locked before calculating the delta, so stale in-memory sessions cannot
+// repeat an already committed supplementary pre-consume.
 func ReserveBillingRecovery(requestID string, targetQuota, delta int64, tokenUnlimited bool) (int64, error) {
 	if DB == nil || strings.TrimSpace(requestID) == "" || targetQuota <= 0 || delta <= 0 {
 		return 0, errors.New("invalid billing recovery reservation")
 	}
 	reservationComponent := fmt.Sprintf("reserve:%d", targetQuota)
-	var userID, tokenID int
-	var tokenKey string
 	var appliedDelta int64
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	mutation, err := beginBillingRecoveryQuotaMutation(requestID, true, true)
+	if err != nil {
+		return 0, err
+	}
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		if err := mutation.applyPendingDeltas(tx); err != nil {
+			return err
+		}
 		var recovery BillingRecovery
 		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
 			return err
@@ -539,8 +553,8 @@ func ReserveBillingRecovery(requestID string, targetQuota, delta int64, tokenUnl
 		if expectedDelta <= 0 {
 			return nil
 		}
-		// The caller's delta is only a hint from its in-memory session. The
-		// durable recovery row is authoritative after the row lock is held.
+		// The caller's delta is only a hint. Persisted amounts under the row
+		// lock are authoritative after a restart or duplicate request.
 		delta = expectedDelta
 		var marker BillingRecoveryAdjustment
 		markerErr := tx.Where("request_id = ? AND component = ? AND operation = ?", requestID, reservationComponent, BillingRecoveryOperationReserve).First(&marker).Error
@@ -561,17 +575,19 @@ func ReserveBillingRecovery(requestID string, targetQuota, delta int64, tokenUnl
 			}
 			updates["extra_amount"] = gorm.Expr("extra_amount + ?", delta)
 		} else {
-			result := tx.Model(&User{}).Where("id = ? AND quota >= ?", recovery.UserID, delta).Update("quota", gorm.Expr("quota - ?", delta))
+			// Match the existing supplemental-wallet behavior: a later reserve
+			// may carry a balance negative, while the initial pre-consume stays
+			// guarded by the quota check above.
+			result := tx.Model(&User{}).Where("id = ?", recovery.UserID).Update("quota", gorm.Expr("quota - ?", delta))
 			if result.Error != nil {
 				return result.Error
 			}
 			if result.RowsAffected != 1 {
-				return ErrBillingRecoveryFundingQuota
+				return gorm.ErrRecordNotFound
 			}
 			updates["funding_amount"] = gorm.Expr("funding_amount + ?", delta)
-			userID = recovery.UserID
 		}
-		if recovery.TokenID > 0 {
+		if recovery.TokenRequired && recovery.TokenID > 0 {
 			query := tx.Model(&Token{}).Where("id = ?", recovery.TokenID)
 			if !tokenUnlimited {
 				query = query.Where("remain_quota >= ?", delta)
@@ -585,13 +601,8 @@ func ReserveBillingRecovery(requestID string, targetQuota, delta int64, tokenUnl
 				return result.Error
 			}
 			if result.RowsAffected != 1 {
-				return errors.New("token quota is not enough")
+				return ErrBillingRecoveryTokenQuota
 			}
-			var token Token
-			if err := tx.Select("key").Where("id = ?", recovery.TokenID).First(&token).Error; err != nil {
-				return err
-			}
-			tokenID, tokenKey = recovery.TokenID, token.Key
 			updates["token_amount"] = gorm.Expr("token_amount + ?", delta)
 		}
 		if err := tx.Model(&BillingRecovery{}).Where("request_id = ?", requestID).Updates(updates).Error; err != nil {
@@ -605,18 +616,9 @@ func ReserveBillingRecovery(requestID string, targetQuota, delta int64, tokenUnl
 			Amount:    delta,
 		}).Error
 	})
+	mutation.release(err == nil)
 	if err != nil {
 		return 0, err
-	}
-	if userID > 0 {
-		if err := invalidateUserCache(userID); err != nil {
-			return 0, err
-		}
-	}
-	if tokenID > 0 && tokenKey != "" {
-		if err := invalidateTokenCacheForMutation(tokenKey); err != nil {
-			return 0, err
-		}
 	}
 	return appliedDelta, nil
 }
@@ -633,9 +635,18 @@ func ApplyBillingRecoveryAdjustment(requestID, component, operation string) erro
 	if operation != BillingRecoveryOperationSettle && operation != BillingRecoveryOperationRefund {
 		return errors.New("invalid billing recovery operation")
 	}
-	var userID, tokenID int
-	var tokenKey string
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	mutation, err := beginBillingRecoveryQuotaMutation(
+		requestID,
+		component == BillingRecoveryComponentFunding,
+		component == BillingRecoveryComponentToken,
+	)
+	if err != nil {
+		return err
+	}
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		if err := mutation.applyPendingDeltas(tx); err != nil {
+			return err
+		}
 		var recovery BillingRecovery
 		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
 			return err
@@ -683,32 +694,139 @@ func ApplyBillingRecoveryAdjustment(requestID, component, operation string) erro
 		if operation == BillingRecoveryOperationSettle && component == BillingRecoveryComponentToken {
 			amount = recovery.SettlementDelta
 		}
-		if err := applyBillingRecoveryEffect(tx, recovery, component, operation, amount, &tokenKey); err != nil {
+		if err := applyBillingRecoveryEffect(tx, recovery, component, operation, amount); err != nil {
 			return err
 		}
 		if err := tx.Create(&BillingRecoveryAdjustment{RequestID: requestID, Component: component, Operation: operation, Amount: amount}).Error; err != nil {
 			return err
 		}
-		userID, tokenID = recovery.UserID, recovery.TokenID
 		return updateBillingRecoveryComponentState(tx, requestID, component, operation)
 	})
+	mutation.release(err == nil)
 	if err != nil {
 		return err
 	}
-	if userID > 0 && component == BillingRecoveryComponentFunding && operation == BillingRecoveryOperationRefund {
-		if cacheErr := invalidateUserCache(userID); cacheErr != nil {
-			return cacheErr
+	return nil
+}
+
+// billingRecoveryQuotaMutation closes the cache path for the selected
+// resources and owns their pending batch deltas until the recovery transaction
+// commits. This prevents the database fallback path from observing a balance
+// that has already been reserved in Redis but not yet flushed to the database.
+type billingRecoveryQuotaMutation struct {
+	userID            int
+	tokenID           int
+	userPendingDelta  int
+	tokenPendingDelta int
+	batchLocked       bool
+	unlockResources   func()
+}
+
+func beginBillingRecoveryQuotaMutation(requestID string, fenceUser, fenceToken bool) (*billingRecoveryQuotaMutation, error) {
+	if DB == nil || strings.TrimSpace(requestID) == "" {
+		return nil, errors.New("billing recovery database is unavailable")
+	}
+	var recovery BillingRecovery
+	if err := DB.Select("user_id", "token_id", "token_required", "source").Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
+		return nil, err
+	}
+	mutation := &billingRecoveryQuotaMutation{}
+	if fenceUser && recovery.Source == "wallet" {
+		mutation.userID = recovery.UserID
+	}
+	if fenceToken && recovery.TokenRequired && recovery.TokenID > 0 {
+		mutation.tokenID = recovery.TokenID
+	}
+	mutation.unlockResources = lockQuotaMutationResources(mutation.userID, mutation.tokenID)
+	if common.RedisEnabled && mutation.userID > 0 {
+		if err := invalidateUserQuotaCacheForMutation(mutation.userID); err != nil {
+			mutation.release(false)
+			return nil, err
 		}
 	}
-	if tokenID > 0 && component == BillingRecoveryComponentToken && tokenKey != "" {
-		if cacheErr := invalidateTokenCacheForMutation(tokenKey); cacheErr != nil {
-			return cacheErr
+	if common.RedisEnabled && mutation.tokenID > 0 {
+		var token Token
+		if err := DB.Select("key").Where("id = ?", mutation.tokenID).First(&token).Error; err != nil {
+			mutation.release(false)
+			return nil, err
+		}
+		if err := invalidateTokenCacheForMutation(token.Key); err != nil {
+			mutation.release(false)
+			return nil, err
+		}
+	}
+	// The Redis fence prevents new cache reservations before this process waits
+	// for an in-flight batch flush. Holding the batch lock only for the drain
+	// and durable transaction avoids turning a Redis outage into a global batch
+	// updater stall.
+	quotaBatchMutationLock.Lock()
+	mutation.batchLocked = true
+	mutation.userPendingDelta = takePendingQuotaDelta(BatchUpdateTypeUserQuota, mutation.userID)
+	mutation.tokenPendingDelta = takePendingQuotaDelta(BatchUpdateTypeTokenQuota, mutation.tokenID)
+	return mutation, nil
+}
+
+func takePendingQuotaDelta(type_, id int) int {
+	if id <= 0 {
+		return 0
+	}
+	batchUpdateLocks[type_].Lock()
+	defer batchUpdateLocks[type_].Unlock()
+	delta := batchUpdateStores[type_][id]
+	delete(batchUpdateStores[type_], id)
+	return delta
+}
+
+func (m *billingRecoveryQuotaMutation) applyPendingDeltas(tx *gorm.DB) error {
+	if m == nil {
+		return nil
+	}
+	if m.userPendingDelta != 0 {
+		result := tx.Model(&User{}).Where("id = ?", m.userID).Update("quota", gorm.Expr("quota + ?", m.userPendingDelta))
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+	}
+	if m.tokenPendingDelta != 0 {
+		result := tx.Model(&Token{}).Where("id = ?", m.tokenID).Updates(map[string]any{
+			"remain_quota":  gorm.Expr("remain_quota + ?", m.tokenPendingDelta),
+			"used_quota":    gorm.Expr("used_quota - ?", m.tokenPendingDelta),
+			"accessed_time": common.GetTimestamp(),
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
 		}
 	}
 	return nil
 }
 
-func applyBillingRecoveryEffect(tx *gorm.DB, recovery BillingRecovery, component, operation string, amount int64, tokenKey *string) error {
+func (m *billingRecoveryQuotaMutation) release(committed bool) {
+	if m == nil {
+		return
+	}
+	if !committed {
+		if m.userPendingDelta != 0 {
+			addNewRecord(BatchUpdateTypeUserQuota, m.userID, m.userPendingDelta)
+		}
+		if m.tokenPendingDelta != 0 {
+			addNewRecord(BatchUpdateTypeTokenQuota, m.tokenID, m.tokenPendingDelta)
+		}
+	}
+	if m.batchLocked {
+		quotaBatchMutationLock.Unlock()
+	}
+	if m.unlockResources != nil {
+		m.unlockResources()
+	}
+}
+
+func applyBillingRecoveryEffect(tx *gorm.DB, recovery BillingRecovery, component, operation string, amount int64) error {
 	if component == BillingRecoveryComponentToken && recovery.TokenID <= 0 {
 		return nil
 	}
@@ -723,9 +841,15 @@ func applyBillingRecoveryEffect(tx *gorm.DB, recovery BillingRecovery, component
 	case BillingRecoveryComponentFunding:
 		if recovery.Source == "subscription" {
 			if operation == BillingRecoveryOperationRefund {
-				return refundBillingRecoverySubscriptionPreConsumeTx(tx, recovery.RequestID)
+				err := refundBillingRecoverySubscriptionPreConsumeTx(tx, recovery.RequestID)
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil
+				}
+				return err
 			}
-			return applySubscriptionDeltaTx(tx, recovery.SubscriptionID, amount*sign)
+			// Subscription pre-consume is already charged. Settlement applies
+			// its signed delta directly, unlike the inverse wallet-balance edit.
+			return applySubscriptionDeltaTx(tx, recovery.SubscriptionID, amount)
 		}
 		result := tx.Model(&User{}).Where("id = ?", recovery.UserID).Update("quota", gorm.Expr("quota + ?", amount*sign))
 		if result.Error != nil {
@@ -737,11 +861,6 @@ func applyBillingRecoveryEffect(tx *gorm.DB, recovery BillingRecovery, component
 	case BillingRecoveryComponentExtra:
 		return applySubscriptionDeltaTx(tx, recovery.SubscriptionID, -amount)
 	case BillingRecoveryComponentToken:
-		var token Token
-		if err := tx.Select("id", "key").Where("id = ?", recovery.TokenID).First(&token).Error; err != nil {
-			return err
-		}
-		*tokenKey = token.Key
 		result := tx.Model(&Token{}).Where("id = ?", recovery.TokenID).Updates(map[string]any{
 			"remain_quota":  gorm.Expr("remain_quota + ?", amount*sign),
 			"used_quota":    gorm.Expr("used_quota - ?", amount*sign),

@@ -1,9 +1,12 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -20,12 +23,21 @@ var ErrRouteShadowReplayUnsupported = errors.New("route shadow replay requires a
 // effects.
 func ReplayRouteShadowDecision(ctx context.Context, data []byte) (RouteShadowDecision, error) {
 	var stored RouteShadowDecision
-	if err := common.Unmarshal(data, &stored); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&stored); err != nil {
 		return RouteShadowDecision{}, fmt.Errorf("%w: %v", ErrRouteShadowReplayInvalid, err)
 	}
-	var envelope map[string]any
-	if err := common.Unmarshal(data, &envelope); err != nil {
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return RouteShadowDecision{}, ErrRouteShadowReplayInvalid
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(data, &envelope); err != nil {
 		return RouteShadowDecision{}, fmt.Errorf("%w: %v", ErrRouteShadowReplayInvalid, err)
+	}
+	if stored.Event != "route_shadow_decision" || stored.RouteSource != ShadowRouteSource {
+		return RouteShadowDecision{}, ErrRouteShadowReplayInvalid
 	}
 	if strings.TrimSpace(stored.RequestID) == "" ||
 		strings.TrimSpace(stored.RequestModel) == "" ||
@@ -34,20 +46,20 @@ func ReplayRouteShadowDecision(ctx context.Context, data []byte) (RouteShadowDec
 		stored.SnapshotVersion <= 0 {
 		return RouteShadowDecision{}, ErrRouteShadowReplayInvalid
 	}
-	if _, ok := envelope["legacy_trace"]; !ok {
+	legacyTrace, ok := envelope["legacy_trace"]
+	if !ok || string(bytes.TrimSpace(legacyTrace)) == "null" {
 		return RouteShadowDecision{}, ErrRouteShadowReplayInvalid
 	}
 	if len(stored.ShadowCandidates) == 0 {
 		return RouteShadowDecision{}, ErrRouteShadowReplayInvalid
 	}
-	// Events written before version 2 cannot distinguish an omitted
-	// qualification from an explicit denial. Preserve their historical static
-	// replay behavior; version 2 carries the explicit known flags.
-	if stored.QualificationVersion < RouteShadowQualificationVersion {
-		stored.PriceEligible = true
-		stored.PriceEligibilityKnown = true
-		stored.SecurityAllowed = true
-		stored.SecurityEligibilityKnown = true
+	if stored.ShadowPreferredID > 0 && !shadowReplayPreferredSnapshotMatches(stored) {
+		return RouteShadowDecision{}, ErrRouteShadowReplayInvalid
+	}
+	// Older events cannot distinguish an omitted qualification from an
+	// explicit denial. Never infer permission while replaying them.
+	if stored.QualificationVersion != RouteShadowQualificationVersion {
+		return RouteShadowDecision{}, ErrRouteShadowReplayUnsupported
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -116,4 +128,14 @@ func ReplayRouteShadowDecision(ctx context.Context, data []byte) (RouteShadowDec
 		Legacy:                   stored.LegacyTrace,
 	}
 	return selectRouteShadowWithIndex(request, index), nil
+}
+
+func shadowReplayPreferredSnapshotMatches(decision RouteShadowDecision) bool {
+	for _, candidate := range decision.ShadowCandidates {
+		if candidate.ChannelID == decision.ShadowPreferredID &&
+			candidate.SnapshotVersion == decision.SnapshotVersion {
+			return true
+		}
+	}
+	return false
 }

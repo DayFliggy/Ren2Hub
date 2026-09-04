@@ -305,8 +305,12 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 			wallet.consumed += delta
 		}
 		s.preConsumedQuota += delta
-		s.tokenConsumed += delta
-		s.extraReserved += delta
+		if !s.relayInfo.IsPlayground {
+			s.tokenConsumed += delta
+		}
+		if s.funding.Source() == BillingSourceSubscription {
+			s.extraReserved += delta
+		}
 		s.syncRelayInfo()
 		return nil
 	}
@@ -473,7 +477,7 @@ func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIErro
 		logger.LogInfo(c, fmt.Sprintf("用户 %d 需要预扣费 %s (funding=%s)", s.relayInfo.UserId, logger.FormatQuota(effectiveQuota), s.funding.Source()))
 	}
 	if s.recoveryID != "" && s.funding.Source() == BillingSourceWallet {
-		err := model.PreConsumeWalletBillingRecovery(s.recoveryID, int64(effectiveQuota), s.relayInfo.TokenUnlimited, s.relayInfo.IsPlayground)
+		err := model.PreConsumeWalletBillingRecovery(s.recoveryID, int64(effectiveQuota), s.relayInfo.TokenUnlimited)
 		if errors.Is(err, model.ErrBillingRecoveryTokenQuota) {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
 		}
@@ -800,10 +804,11 @@ func ensureBillingRecovery(session *BillingSession) error {
 		return errors.New("billing recovery request identity is unavailable")
 	}
 	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
-		RequestID: session.recoveryID,
-		UserID:    session.relayInfo.UserId,
-		TokenID:   session.relayInfo.TokenId,
-		Source:    session.funding.Source(),
+		RequestID:     session.recoveryID,
+		UserID:        session.relayInfo.UserId,
+		TokenID:       session.relayInfo.TokenId,
+		Source:        session.funding.Source(),
+		TokenRequired: !session.relayInfo.IsPlayground && session.relayInfo.TokenId > 0,
 	})
 	return err
 }

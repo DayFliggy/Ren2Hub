@@ -16,6 +16,9 @@ export type SystemSettingFieldKind =
   | 'key-value'
   | 'ratio'
   | 'select'
+  | 'role'
+  | 'amount-list'
+  | 'discount'
 
 export interface SystemSettingField {
   key: string
@@ -31,8 +34,16 @@ export interface SystemSettingsSection {
   title: string
   description: string
   fields: readonly SystemSettingField[]
+  /** Keys managed by a dedicated integration panel instead of generic fields. */
+  managedKeys?: readonly string[]
   integration?:
-    'custom-oauth' | 'performance' | 'channel-affinity' | 'waffo-pancake'
+    | 'custom-oauth'
+    | 'performance'
+    | 'channel-affinity'
+    | 'waffo-pancake'
+    | 'payment-compliance'
+    | 'operations-maintenance'
+    | 'ionet'
 }
 
 export interface SystemSettingsDomain {
@@ -184,6 +195,35 @@ const select = (
   defaultValue,
   options,
 })
+const role = (key: string, label: string): SystemSettingField =>
+  select(key, label, '0', [
+    { value: '0', label: '访客用户' },
+    { value: '1', label: '普通用户' },
+    { value: '10', label: '管理员' },
+    { value: '100', label: '根管理员' },
+  ])
+const amountList = (
+  key: string,
+  label: string,
+  description?: string
+): SystemSettingField => ({
+  key,
+  label,
+  description,
+  kind: 'amount-list',
+  defaultValue: '[]',
+})
+const discount = (
+  key: string,
+  label: string,
+  description?: string
+): SystemSettingField => ({
+  key,
+  label,
+  description,
+  kind: 'discount',
+  defaultValue: '{}',
+})
 
 export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
   {
@@ -208,6 +248,17 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           textarea('HomePageContent', '首页内容'),
           textarea('legal.user_agreement', '用户协议'),
           textarea('legal.privacy_policy', '隐私政策'),
+        ],
+      },
+      {
+        id: 'file-access',
+        title: '文件与媒体访问',
+        description: '控制文件和图片上传、下载所需的最低角色。',
+        fields: [
+          role('FileUploadPermission', '文件上传权限'),
+          role('FileDownloadPermission', '文件下载权限'),
+          role('ImageUploadPermission', '图片上传权限'),
+          role('ImageDownloadPermission', '图片下载权限'),
         ],
       },
       {
@@ -388,6 +439,13 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           toggle('DefaultUseAutoGroup', '默认使用自动分组'),
           toggle('ExposeRatioEnabled', '公开倍率数据'),
           json('tool_price_setting.prices', '工具附加价格', '[]'),
+          json('billing_setting.billing_mode', '计费模式', '{}'),
+          json('billing_setting.billing_expr', '分层计费表达式', '{}'),
+          json(
+            'group_ratio_setting.group_special_usable_group',
+            '特殊可用分组',
+            '{}'
+          ),
         ],
       },
       {
@@ -424,13 +482,37 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           url('WaffoNotifyUrl', 'Waffo 通知地址'),
           url('WaffoReturnUrl', 'Waffo 返回地址'),
           json('WaffoPayMethods', 'Waffo 支付方式', '[]'),
+          amountList(
+            'payment_setting.amount_options',
+            '充值金额选项',
+            '仅允许正整数，保存时自动排序并去重。'
+          ),
+          discount(
+            'payment_setting.amount_discount',
+            '充值金额折扣',
+            '折扣范围为 0 到 1 之间（不含 0）。'
+          ),
+          secret('WaffoSandboxApiKey', 'Waffo 沙箱 API Key'),
+          secret('WaffoSandboxPrivateKey', 'Waffo 沙箱私钥'),
+          secretTextarea('WaffoSandboxPublicCert', 'Waffo 沙箱公钥证书'),
+          url('WaffoSubscriptionReturnUrl', 'Waffo 订阅返回地址'),
         ],
+        integration: 'payment-compliance',
       },
       {
         id: 'waffo-pancake',
         title: 'Waffo Pancake',
         description: '验证凭据、选择店铺与产品后，通过网关专用接口原子保存。',
         fields: [],
+        managedKeys: [
+          'WaffoPancakeMerchantID',
+          'WaffoPancakePrivateKey',
+          'WaffoPancakeReturnURL',
+          'WaffoPancakeStoreID',
+          'WaffoPancakeProductID',
+          'WaffoPancakeUnitPrice',
+          'WaffoPancakeMinTopUp',
+        ],
         integration: 'waffo-pancake',
       },
       {
@@ -469,8 +551,24 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             60
           ),
           toggle('global.pass_through_request_enabled', '透传请求模式'),
+          list('global.thinking_model_blacklist', '思考模型黑名单', '[]'),
+          json(
+            'global.chat_completions_to_responses_policy',
+            'Chat Completions 转 Responses 策略',
+            '{}'
+          ),
           toggle('general_setting.ping_interval_enabled', '启用心跳检测'),
           number('general_setting.ping_interval_seconds', '心跳间隔（秒）', 60),
+          select(
+            'monitor_setting.channel_test_mode',
+            '自动测试策略',
+            'scheduled_all',
+            [
+              { value: 'scheduled_all', label: '定时测试全部渠道' },
+              { value: 'auto_ban_only', label: '仅测试自动禁用渠道' },
+              { value: 'passive_recovery', label: '被动恢复' },
+            ]
+          ),
         ],
       },
       {
@@ -488,6 +586,16 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             '绑定有效期（秒）',
             3600
           ),
+          toggle(
+            'channel_affinity_setting.keep_on_channel_disabled',
+            '渠道禁用后保留绑定'
+          ),
+          number(
+            'channel_affinity_setting.max_entries',
+            '最大绑定条目',
+            100000
+          ),
+          json('channel_affinity_setting.rules', '亲和性规则', '[]'),
         ],
         integration: 'channel-affinity',
       },
@@ -499,7 +607,31 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           keyValue('gemini.safety_settings', 'Gemini 安全策略'),
           json('claude.default_max_tokens', 'Claude 默认 max_tokens'),
           toggle('claude.thinking_adapter_enabled', 'Claude 思考适配器'),
-          json('grok.reasoning_effort', 'Grok 推理强度策略'),
+          number(
+            'claude.thinking_adapter_budget_tokens_percentage',
+            'Claude 思考预算比例',
+            0.8
+          ),
+          json('claude.model_headers_settings', 'Claude 模型请求头覆盖', '{}'),
+          json('gemini.version_settings', 'Gemini 版本覆盖', '{}'),
+          list('gemini.supported_imagine_models', 'Gemini Imagine 模型', '[]'),
+          toggle('gemini.thinking_adapter_enabled', 'Gemini 思考适配器'),
+          number(
+            'gemini.thinking_adapter_budget_tokens_percentage',
+            'Gemini 思考预算比例',
+            0.6
+          ),
+          toggle(
+            'gemini.function_call_thought_signature_enabled',
+            'Gemini 函数调用思考签名'
+          ),
+          toggle(
+            'gemini.remove_function_response_id_enabled',
+            '移除 Gemini 函数响应 ID'
+          ),
+          toggle('grok.violation_deduction_enabled', 'Grok 违规扣费'),
+          number('grok.violation_deduction_amount', 'Grok 违规扣费金额', 0.05),
+          list('qwen.sync_image_models', 'Qwen 图片模型', '[]'),
         ],
       },
       {
@@ -513,7 +645,14 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           url('auto_pricing.remote_url', '自动定价数据地址'),
           url('auto_pricing.hash_url', '自动定价校验地址'),
           toggle('auto_pricing.fuzzy_match_enabled', '启用模糊模型匹配'),
+          url('auto_pricing.models_dev_url', 'models.dev 数据地址'),
+          number(
+            'auto_pricing.check_interval_minutes',
+            '自动定价检查间隔（分钟）',
+            60
+          ),
         ],
+        integration: 'ionet',
       },
     ],
   },
@@ -734,6 +873,13 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           ),
         ],
         integration: 'performance',
+      },
+      {
+        id: 'maintenance',
+        title: '系统维护',
+        description: '执行自动定价、倍率同步、系统任务和多实例维护操作。',
+        fields: [],
+        integration: 'operations-maintenance',
       },
     ],
   },

@@ -81,7 +81,7 @@ type RoutePreviewHealthSummary struct {
 	UpdatedAt           int64  `json:"updated_at"`
 }
 
-type routePreviewAbility struct {
+type RouteCapabilityUserAccess struct {
 	Enabled bool
 	Allowed bool
 }
@@ -146,7 +146,7 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	if err != nil {
 		return nil, err
 	}
-	abilities, err := loadRoutePreviewAbilities(ctx, channelIDs, normalizedModel, userID, input.EffectiveGroup)
+	abilityAccess, err := FindUserRouteCapabilityAccess(ctx, userID, capabilities)
 	if err != nil {
 		return nil, err
 	}
@@ -167,16 +167,19 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	if err := model.DB.WithContext(ctx).Where("id = ? AND user_id = ?", view.Profile.TokenID, userID).First(&token).Error; err != nil {
 		return nil, err
 	}
+	now := time.Now()
 	for _, entry := range activeGroup.Entries {
 		item := RoutePreviewEntry{
-			EntryID:      entry.ID,
-			ChannelID:    entry.ChannelID,
-			Position:     entry.Position,
-			Weight:       entry.Weight,
-			RequestModel: normalizedModel,
-			Health:       defaultRoutePreviewHealthSummary(),
+			EntryID:         entry.ID,
+			ChannelID:       entry.ChannelID,
+			Position:        entry.Position,
+			Weight:          entry.Weight,
+			RequestModel:    normalizedModel,
+			CapabilityState: model.RouteCapabilityStateUnresolved,
+			Health:          defaultRoutePreviewHealthSummary(),
 		}
-		if health, ok := healthByChannel[entry.ChannelID]; ok {
+		health := healthByChannel[entry.ChannelID]
+		if health.ID != 0 {
 			item.Health = routePreviewHealthSummary(health)
 		}
 		activeSnapshot := activeSnapshots[entry.ChannelID]
@@ -188,7 +191,7 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 			ChannelExists:   channels[entry.ChannelID].Id > 0,
 			Capability:      capabilityByChannel[entry.ChannelID],
 			SnapshotVersion: activeSnapshot.ActiveVersion,
-			Ability:         abilities[entry.ChannelID],
+			Ability:         abilityAccess[capabilityByChannel[entry.ChannelID].ID],
 			Entitlement:     entitlements[entry.ChannelID],
 			Token:           token,
 			RequestModel:    input.Model,
@@ -196,16 +199,16 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 			RequestPath:     input.Path,
 			EndpointType:    preview.EndpointType,
 		})
-		if item.FilterReason == "" && !routePreviewHealthUsable(item.Health) {
+		if item.FilterReason == "" && !RouteHealthReadOnlyUsable(health, now) {
 			item.FilterReason = RouteCandidateFilterHealthUnavailable
 		}
 		if item.FilterReason == "" {
 			channel := channels[entry.ChannelID]
-			keyUsable, keyErr := RouteChannelHasAvailableKey(ctx, &channel, normalizedModel, time.Now())
+			hasAvailableKey, keyErr := RouteChannelHasReadOnlyAvailableKey(ctx, &channel, normalizedModel, now)
 			if keyErr != nil {
 				return nil, keyErr
 			}
-			if !keyUsable {
+			if !hasAvailableKey {
 				item.FilterReason = RouteFilterKeyUnavailable
 			}
 		}
@@ -318,33 +321,56 @@ func loadRoutePreviewSnapshots(ctx context.Context, channelIDs []int) (map[int]r
 	return snapshots, nil
 }
 
-func loadRoutePreviewAbilities(ctx context.Context, channelIDs []int, requestModel string, userID int, effectiveGroup string) (map[int]routePreviewAbility, error) {
-	access := make(map[int]routePreviewAbility, len(channelIDs))
-	if len(channelIDs) == 0 {
+// FindUserRouteCapabilityAccess applies current Ability.enabled and user-group
+// authorization to immutable capability rows. The snapshot describes what a
+// channel could serve when refreshed; the live Ability table remains the
+// authority for whether this user may see or select that request model.
+func FindUserRouteCapabilityAccess(ctx context.Context, userID int, capabilities []model.ChannelModelCapability) (map[int]RouteCapabilityUserAccess, error) {
+	access := make(map[int]RouteCapabilityUserAccess, len(capabilities))
+	if len(capabilities) == 0 {
 		return access, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	var user model.User
 	if err := model.DB.WithContext(ctx).Select("id", "group").Where("id = ?", userID).First(&user).Error; err != nil {
 		return nil, err
 	}
-	effectiveGroup = strings.TrimSpace(effectiveGroup)
-	if effectiveGroup == "" {
-		effectiveGroup = user.Group
+	capabilityIDsByChannelModel := make(map[int]map[string][]int, len(capabilities))
+	channelIDs := make([]int, 0, len(capabilities))
+	seenChannels := make(map[int]struct{}, len(capabilities))
+	for _, capability := range capabilities {
+		requestModel := modellab.NormalizeModel(capability.RequestModel)
+		if capability.ID <= 0 || capability.ChannelID <= 0 || requestModel == "" {
+			continue
+		}
+		if _, exists := capabilityIDsByChannelModel[capability.ChannelID]; !exists {
+			capabilityIDsByChannelModel[capability.ChannelID] = make(map[string][]int)
+		}
+		capabilityIDsByChannelModel[capability.ChannelID][requestModel] = append(capabilityIDsByChannelModel[capability.ChannelID][requestModel], capability.ID)
+		if _, exists := seenChannels[capability.ChannelID]; !exists {
+			seenChannels[capability.ChannelID] = struct{}{}
+			channelIDs = append(channelIDs, capability.ChannelID)
+		}
 	}
 	var rows []model.Ability
 	if err := model.DB.WithContext(ctx).Where("channel_id IN ?", channelIDs).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	for _, ability := range rows {
-		if modellab.NormalizeModel(ability.Model) != requestModel || !ability.Enabled {
+		capabilityIDs := capabilityIDsByChannelModel[ability.ChannelId][modellab.NormalizeModel(ability.Model)]
+		if len(capabilityIDs) == 0 || !ability.Enabled {
 			continue
 		}
-		value := access[ability.ChannelId]
-		value.Enabled = true
-		if ability.Group == effectiveGroup || IsUserSelectableGroup(effectiveGroup, ability.Group) {
-			value.Allowed = true
+		for _, capabilityID := range capabilityIDs {
+			value := access[capabilityID]
+			value.Enabled = true
+			if ability.Group == user.Group || IsUserSelectableGroup(user.Group, ability.Group) {
+				value.Allowed = true
+			}
+			access[capabilityID] = value
 		}
-		access[ability.ChannelId] = value
 	}
 	return access, nil
 }
@@ -422,7 +448,7 @@ type routePreviewFilterInput struct {
 	ChannelExists   bool
 	Capability      model.ChannelModelCapability
 	SnapshotVersion int64
-	Ability         routePreviewAbility
+	Ability         RouteCapabilityUserAccess
 	Entitlement     model.UserChannelEntitlement
 	Token           model.Token
 	RequestModel    string
@@ -447,7 +473,8 @@ func routePreviewFilterReason(input routePreviewFilterInput) string {
 	if !input.ChannelExists {
 		return RoutePreviewFilterChannelMissing
 	}
-	if !routeTokenUsable(input.Token) {
+	if input.Token.Status != common.TokenStatusEnabled ||
+		(input.Token.ExpiredTime != -1 && input.Token.ExpiredTime <= common.GetTimestamp()) {
 		return ShadowFilterTokenForbidden
 	}
 	entitled := input.Entitlement.ID == 0 || entitlementIsActive(input.Entitlement)

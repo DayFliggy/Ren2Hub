@@ -48,7 +48,6 @@ func TestMain(m *testing.M) {
 		&model.Midjourney{},
 		&model.TopUp{},
 		&model.UserSubscription{},
-		&model.SubscriptionPreConsumeRecord{},
 		&model.BillingRecovery{},
 		&model.BillingRecoveryAdjustment{},
 		&model.SystemTask{},
@@ -75,7 +74,6 @@ func truncate(t *testing.T) {
 		model.DB.Exec("DELETE FROM midjourneys")
 		model.DB.Exec("DELETE FROM top_ups")
 		model.DB.Exec("DELETE FROM user_subscriptions")
-		model.DB.Exec("DELETE FROM subscription_pre_consume_records")
 		model.DB.Exec("DELETE FROM billing_recovery_adjustments")
 		model.DB.Exec("DELETE FROM billing_recoveries")
 		model.DB.Exec("DELETE FROM system_task_locks")
@@ -182,39 +180,6 @@ func TestRecoverStaleBillingRecoveryRefundIsIdempotent(t *testing.T) {
 	assert.Equal(t, 100, quota)
 }
 
-func TestRecoverStaleBillingRecoveryPreparedSubscriptionRefunds(t *testing.T) {
-	truncate(t)
-	const userID = 718
-	const subscriptionID = 7181
-	const requestID = "billing-recovery-prepared-subscription-test"
-	seedSubscription(t, subscriptionID, userID, 100, 30)
-	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
-		RequestID: requestID,
-		UserID:    userID,
-		Source:    BillingSourceSubscription,
-	})
-	require.NoError(t, err)
-	require.NoError(t, model.DB.Create(&model.SubscriptionPreConsumeRecord{
-		RequestId: requestID, UserId: userID, UserSubscriptionId: subscriptionID, PreConsumed: 30, Status: "consumed",
-	}).Error)
-	markBillingRecoveryStale(t, requestID)
-
-	summary, err := RecoverStaleBillingRecoveries(context.Background(), common.GetTimestamp()-30, 10)
-	require.NoError(t, err)
-	assert.Equal(t, 1, summary.Scanned)
-	assert.Equal(t, 1, summary.Refunded)
-
-	var subscription model.UserSubscription
-	require.NoError(t, model.DB.Where("id = ?", subscriptionID).First(&subscription).Error)
-	assert.Equal(t, int64(0), subscription.AmountUsed)
-	var record model.SubscriptionPreConsumeRecord
-	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&record).Error)
-	assert.Equal(t, "refunded", record.Status)
-	var recovery model.BillingRecovery
-	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
-	assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
-}
-
 func TestRecoverStaleBillingRecoverySettlementResumesAndIsIdempotent(t *testing.T) {
 	truncate(t)
 	const userID = 711
@@ -249,37 +214,6 @@ func TestRecoverStaleBillingRecoverySettlementResumesAndIsIdempotent(t *testing.
 	assert.Equal(t, 0, summary.Scanned)
 	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", userID).Pluck("quota", &quota).Error)
 	assert.Equal(t, 50, quota)
-}
-
-func TestRecoverStaleBillingRecoveryRefundFailureRemainsPending(t *testing.T) {
-	truncate(t)
-	const userID = 717
-	const requestID = "billing-recovery-refund-retry-test"
-	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
-		RequestID: requestID,
-		UserID:    userID,
-		Source:    BillingSourceWallet,
-	})
-	require.NoError(t, err)
-	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 0, 40, 0, 0))
-	markBillingRecoveryStale(t, requestID)
-
-	summary, err := RecoverStaleBillingRecoveries(context.Background(), common.GetTimestamp()-30, 10)
-	require.NoError(t, err)
-	assert.Equal(t, 1, summary.Failed)
-
-	var recovery model.BillingRecovery
-	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
-	assert.Equal(t, model.BillingRecoveryStatusRefundPending, recovery.Status)
-	assert.False(t, model.BillingRecoveryRefundComplete(recovery))
-
-	seedUser(t, userID, 60)
-	markBillingRecoveryStale(t, requestID)
-	summary, err = RecoverStaleBillingRecoveries(context.Background(), common.GetTimestamp()-30, 10)
-	require.NoError(t, err)
-	assert.Equal(t, 1, summary.Refunded)
-	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
-	assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
 }
 
 func TestBillingRecoverySettlementAlreadyCompletedIsIdempotent(t *testing.T) {

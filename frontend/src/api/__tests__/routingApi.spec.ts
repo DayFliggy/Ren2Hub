@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseRoutePreview, parseRouteProfileView } from '@/api/routingApi'
+import {
+  parseEligibleRouteChannel,
+  parseRoutePreview,
+  parseRouteProfileView,
+} from '@/api/routingApi'
 
 const policy = {
   id: 8,
@@ -54,6 +58,31 @@ function profileResponse() {
 }
 
 describe('routing API contracts', () => {
+  it('accepts snapshotless channels as unresolved without weakening state validation', () => {
+    const endpoint = '/api/routing/eligible-channels'
+    const parsed = parseEligibleRouteChannel(
+      {
+        id: 101,
+        name: 'Snapshotless channel',
+        type: 1,
+        status: 1,
+        request_models: [],
+        priority: 10,
+        weight: 1,
+        snapshot_version: 0,
+        catalog_version: '',
+        capability_state: 'unresolved',
+        filter_reason: 'snapshot_unavailable',
+      },
+      endpoint
+    )
+
+    expect(parsed.capability_state).toBe('unresolved')
+    expect(parsed.filter_reason).toBe('snapshot_unavailable')
+    expect(() =>
+      parseEligibleRouteChannel({ ...parsed, capability_state: '' }, endpoint)
+    ).toThrow()
+  })
   it('parses the backend aggregate group shape without exposing sensitive fields', () => {
     const parsed = parseRouteProfileView(
       { ...profileResponse(), key: 'must-not-leak' },
@@ -253,6 +282,113 @@ describe('routing API contracts', () => {
       } catch (error) {
         expect(error).toMatchObject({ code: 'INVALID_RESPONSE' })
       }
+    }
+  })
+
+  it('rejects string numbers and unknown retry modes', () => {
+    const invalidPolicy = {
+      ...profileResponse(),
+      groups: [
+        {
+          ...profileResponse().groups[0],
+          policy: { ...policy, max_ratio: '1', retry_mode: 'future' },
+        },
+      ],
+    }
+
+    expect(() =>
+      parseRouteProfileView(invalidPolicy, '/api/routing/profiles')
+    ).toThrowError()
+  })
+
+  it('rejects malformed aggregate ownership, uniqueness, and ordering', () => {
+    const secondGroup = {
+      group: {
+        id: 5,
+        profile_id: 1,
+        name: 'Secondary',
+        kind: 'manual',
+        enabled: true,
+        position: 1,
+      },
+      entries: [{ ...entry, id: 10, group_id: 5, channel_id: 102 }],
+      policy: { ...policy, group_id: 5 },
+    }
+    const invalidResponses = [
+      {
+        ...profileResponse(),
+        groups: [
+          {
+            ...profileResponse().groups[0],
+            group: { ...profileResponse().groups[0].group, profile_id: 2 },
+          },
+        ],
+      },
+      {
+        ...profileResponse(),
+        groups: [
+          {
+            ...profileResponse().groups[0],
+            entries: [{ ...entry, group_id: 5 }],
+          },
+        ],
+      },
+      {
+        ...profileResponse(),
+        groups: [
+          {
+            ...profileResponse().groups[0],
+            policy: { ...policy, group_id: 5 },
+          },
+        ],
+      },
+      {
+        profile: { ...profileResponse().profile, active_group_id: 5 },
+        groups: [profileResponse().groups[0]],
+      },
+      {
+        ...profileResponse(),
+        groups: [
+          profileResponse().groups[0],
+          { ...secondGroup, group: { ...secondGroup.group, id: 4 } },
+        ],
+      },
+      {
+        ...profileResponse(),
+        groups: [
+          profileResponse().groups[0],
+          {
+            ...secondGroup,
+            entries: [{ ...entry, id: 9, group_id: 5, channel_id: 102 }],
+          },
+        ],
+      },
+      {
+        ...profileResponse(),
+        groups: [
+          profileResponse().groups[0],
+          { ...secondGroup, entries: [{ ...entry, id: 10, group_id: 5 }] },
+        ],
+      },
+      {
+        ...profileResponse(),
+        groups: [
+          {
+            ...profileResponse().groups[0],
+            policy: { ...policy, load_balance: true },
+            entries: [
+              { ...entry, id: 10, channel_id: 102, position: 0, weight: 10 },
+              { ...entry, id: 9, channel_id: 101, position: 0, weight: 100 },
+            ],
+          },
+        ],
+      },
+    ]
+
+    for (const invalid of invalidResponses) {
+      expect(() =>
+        parseRouteProfileView(invalid, '/api/routing/profiles')
+      ).toThrowError()
     }
   })
 })

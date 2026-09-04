@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Plus, Trash2 } from 'lucide-vue-next'
-import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
-import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import type { SystemSettingValue } from '@/composables/useSystemSettings'
 import type { SystemSettingField } from '@/constants/systemSettingsCatalog'
@@ -23,6 +21,8 @@ const jsonError = ref('')
 const structuredError = ref('')
 const listEntries = ref<string[]>([])
 const mapEntries = ref<Array<{ key: string; value: string }>>([])
+const amountEntries = ref<number[]>([])
+const discountEntries = ref<Array<{ amount: string; discount: string }>>([])
 
 const textValue = computed({
   get: () => String(props.modelValue ?? ''),
@@ -61,10 +61,16 @@ function formatJson() {
 
 function parseStructuredValue() {
   const value = String(props.modelValue ?? '')
-  if (!['list', 'key-value', 'ratio'].includes(props.field.kind)) return
+  if (
+    !['list', 'key-value', 'ratio', 'amount-list', 'discount'].includes(
+      props.field.kind
+    )
+  )
+    return
   try {
     const parsed = JSON.parse(
-      value || (props.field.kind === 'list' ? '[]' : '{}')
+      value ||
+        (['list', 'amount-list'].includes(props.field.kind) ? '[]' : '{}')
     )
     if (props.field.kind === 'list') {
       if (
@@ -74,6 +80,19 @@ function parseStructuredValue() {
         throw new Error('列表只能包含文本项')
       }
       listEntries.value = parsed
+    } else if (props.field.kind === 'amount-list') {
+      if (
+        !Array.isArray(parsed) ||
+        !parsed.every((item) => Number.isInteger(item) && item > 0)
+      )
+        throw new Error('金额必须是正整数列表')
+      amountEntries.value = [...new Set(parsed)].sort((a, b) => a - b)
+    } else if (props.field.kind === 'discount') {
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object')
+        throw new Error('折扣必须是对象')
+      discountEntries.value = Object.entries(parsed).map(
+        ([amount, discount]) => ({ amount, discount: String(discount) })
+      )
     } else {
       if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
         throw new Error('键值表必须是对象')
@@ -159,6 +178,63 @@ function removeMapEntry(index: number) {
   emitMap()
 }
 
+function emitAmounts() {
+  const values = [
+    ...new Set(
+      amountEntries.value
+        .map(Number)
+        .filter((value) => Number.isInteger(value) && value > 0)
+    ),
+  ].sort((a, b) => a - b)
+  amountEntries.value = values
+  emit('update:modelValue', JSON.stringify(values))
+}
+
+function updateAmountEntry(index: number, value: string | number) {
+  amountEntries.value[index] = Number(value)
+  emitAmounts()
+}
+
+function removeAmountEntry(index: number) {
+  amountEntries.value.splice(index, 1)
+  emitAmounts()
+}
+
+function addAmountEntry() {
+  amountEntries.value.push(1)
+  emitAmounts()
+}
+
+function emitDiscounts() {
+  const next: Record<string, number> = {}
+  for (const entry of discountEntries.value) {
+    const amount = Number(entry.amount)
+    const discountValue = Number(entry.discount)
+    if (
+      !Number.isInteger(amount) ||
+      amount <= 0 ||
+      !Number.isFinite(discountValue) ||
+      discountValue <= 0 ||
+      discountValue > 1
+    ) {
+      structuredError.value = '金额须为正整数，折扣范围为 0 到 1（不含 0）。'
+      return
+    }
+    if (next[String(amount)] !== undefined) {
+      structuredError.value = '金额不能重复。'
+      return
+    }
+    next[String(amount)] = discountValue
+  }
+  structuredError.value = ''
+  emit('update:modelValue', JSON.stringify(next))
+}
+
+function removeDiscountEntry(index: number) {
+  discountEntries.value.splice(index, 1)
+  emitDiscounts()
+}
+
 watch(() => [props.field.kind, props.modelValue], parseStructuredValue, {
   immediate: true,
 })
@@ -186,25 +262,18 @@ watch(() => [props.field.kind, props.modelValue], parseStructuredValue, {
     :class="[
       'settings-field-control',
       {
-        'settings-field-wide': ['json', 'list', 'key-value', 'ratio'].includes(
-          field.kind
-        ),
+        'settings-field-wide': [
+          'json',
+          'list',
+          'key-value',
+          'ratio',
+          'amount-list',
+          'discount',
+        ].includes(field.kind),
       },
     ]"
   >
     <div v-if="field.kind === 'json'" class="settings-json-editor">
-      <div class="mb-1.5 flex items-center justify-between">
-        <span class="font-mono text-xs text-[var(--text-tertiary)]"
-          >JSON Format</span
-        >
-        <button
-          type="button"
-          class="focus-ring text-xs font-semibold text-[var(--accent-text)] hover:underline"
-          @click="formatJson"
-        >
-          格式化 JSON
-        </button>
-      </div>
       <textarea
         :value="textValue"
         rows="8"
@@ -232,25 +301,111 @@ watch(() => [props.field.kind, props.modelValue], parseStructuredValue, {
         />
         <button
           type="button"
-          class="settings-structured-icon focus-ring"
+          class="settings-structured-icon"
           title="删除条目"
           aria-label="删除条目"
           @click="removeListEntry(index)"
         >
-          <Trash2 :size="14" aria-hidden="true" />
+          <Trash2 :size="15" aria-hidden="true" />
         </button>
       </div>
-      <ConsoleButton
+      <button
         type="button"
-        size="sm"
-        variant="secondary"
-        class="mt-1 w-fit"
+        class="settings-structured-add"
         title="添加条目"
+        aria-label="添加条目"
         @click="addListEntry"
       >
-        <Plus :size="14" class="mr-1" aria-hidden="true" />
-        添加条目
-      </ConsoleButton>
+        <Plus :size="16" aria-hidden="true" />
+      </button>
+    </div>
+
+    <div
+      v-else-if="field.kind === 'amount-list'"
+      class="settings-structured-editor"
+    >
+      <p v-if="structuredError" class="settings-json-error">
+        {{ structuredError }}
+      </p>
+      <div
+        v-for="(_, index) in amountEntries"
+        :key="index"
+        class="settings-structured-row"
+      >
+        <TextInput
+          :model-value="String(amountEntries[index])"
+          type="number"
+          min="1"
+          @update:model-value="updateAmountEntry(index, $event)"
+        />
+        <button
+          type="button"
+          class="settings-structured-icon"
+          title="删除条目"
+          aria-label="删除条目"
+          @click="removeAmountEntry(index)"
+        >
+          <Trash2 :size="15" aria-hidden="true" />
+        </button>
+      </div>
+      <button
+        type="button"
+        class="settings-structured-add"
+        title="添加金额"
+        aria-label="添加金额"
+        @click="addAmountEntry"
+      >
+        <Plus :size="16" aria-hidden="true" />
+      </button>
+    </div>
+
+    <div
+      v-else-if="field.kind === 'discount'"
+      class="settings-structured-editor"
+    >
+      <p v-if="structuredError" class="settings-json-error">
+        {{ structuredError }}
+      </p>
+      <div
+        v-for="(_, index) in discountEntries"
+        :key="index"
+        class="settings-structured-row settings-structured-pair"
+      >
+        <TextInput
+          v-model="discountEntries[index].amount"
+          type="number"
+          min="1"
+          placeholder="金额"
+          @change="emitDiscounts"
+        />
+        <TextInput
+          v-model="discountEntries[index].discount"
+          type="number"
+          min="0.0001"
+          max="1"
+          step="0.01"
+          placeholder="折扣"
+          @change="emitDiscounts"
+        />
+        <button
+          type="button"
+          class="settings-structured-icon"
+          title="删除条目"
+          aria-label="删除条目"
+          @click="removeDiscountEntry(index)"
+        >
+          <Trash2 :size="15" aria-hidden="true" />
+        </button>
+      </div>
+      <button
+        type="button"
+        class="settings-structured-add"
+        title="添加折扣"
+        aria-label="添加折扣"
+        @click="discountEntries.push({ amount: '', discount: '1' })"
+      >
+        <Plus :size="16" aria-hidden="true" />
+      </button>
     </div>
 
     <div
@@ -280,63 +435,55 @@ watch(() => [props.field.kind, props.modelValue], parseStructuredValue, {
         />
         <button
           type="button"
-          class="settings-structured-icon focus-ring"
+          class="settings-structured-icon"
           title="删除条目"
           aria-label="删除条目"
           @click="removeMapEntry(index)"
         >
-          <Trash2 :size="14" aria-hidden="true" />
+          <Trash2 :size="15" aria-hidden="true" />
         </button>
       </div>
-      <ConsoleButton
+      <button
         type="button"
-        size="sm"
-        variant="secondary"
-        class="mt-1 w-fit"
+        class="settings-structured-add"
         title="添加条目"
+        aria-label="添加条目"
         @click="addMapEntry"
       >
-        <Plus :size="14" class="mr-1" aria-hidden="true" />
-        添加条目
-      </ConsoleButton>
+        <Plus :size="16" aria-hidden="true" />
+      </button>
     </div>
 
-    <div
+    <textarea
       v-else-if="field.kind === 'textarea' || field.kind === 'secret-textarea'"
-      class="space-y-1.5"
+      v-model="textValue"
+      rows="5"
+      class="settings-textarea"
+      :autocomplete="field.kind === 'secret-textarea' ? 'new-password' : 'off'"
+    />
+
+    <p
+      v-if="field.kind === 'secret-textarea' && secretConfigured"
+      class="settings-secret-status"
     >
-      <textarea
-        v-model="textValue"
-        rows="5"
-        class="settings-textarea"
-        :autocomplete="
-          field.kind === 'secret-textarea' ? 'new-password' : 'off'
-        "
-      />
-      <div
-        v-if="field.kind === 'secret-textarea' && secretConfigured"
-        class="mt-1 flex items-center gap-1.5"
+      已配置。留空不会覆盖现有凭据。
+    </p>
+
+    <select
+      v-else-if="field.kind === 'select' || field.kind === 'role'"
+      v-model="textValue"
+      class="settings-select"
+    >
+      <option
+        v-for="option in field.options"
+        :key="option.value"
+        :value="option.value"
       >
-        <StatusChip tone="success" class="text-xs">已配置</StatusChip>
-        <span class="text-xs text-[var(--text-tertiary)]"
-          >留空不会覆盖现有凭据</span
-        >
-      </div>
-    </div>
+        {{ option.label }}
+      </option>
+    </select>
 
-    <div v-else-if="field.kind === 'select'" class="relative">
-      <select v-model="textValue" class="settings-select focus-ring">
-        <option
-          v-for="option in field.options"
-          :key="option.value"
-          :value="option.value"
-        >
-          {{ option.label }}
-        </option>
-      </select>
-    </div>
-
-    <div v-else class="space-y-1.5">
+    <div v-else class="space-y-1">
       <TextInput
         v-model="textValue"
         :type="
@@ -350,15 +497,12 @@ watch(() => [props.field.kind, props.modelValue], parseStructuredValue, {
         "
         :autocomplete="field.kind === 'secret' ? 'new-password' : 'off'"
       />
-      <div
+      <p
         v-if="field.kind === 'secret' && secretConfigured"
-        class="mt-1 flex items-center gap-1.5"
+        class="settings-secret-status"
       >
-        <StatusChip tone="success" class="text-xs">已配置</StatusChip>
-        <span class="text-xs text-[var(--text-tertiary)]"
-          >留空不会覆盖现有凭据</span
-        >
-      </div>
+        已配置。留空不会覆盖现有凭据。
+      </p>
     </div>
   </FormField>
 </template>
@@ -370,39 +514,37 @@ watch(() => [props.field.kind, props.modelValue], parseStructuredValue, {
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
-  padding: 0.875rem 1rem;
-  border-radius: 0.75rem;
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-table-header);
-  transition: all 0.15s ease;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.75rem 0;
 }
-.settings-field-toggle:hover {
-  background: var(--surface-hover);
+.settings-field-toggle:last-child {
+  border-bottom: 0;
 }
 .settings-field-title {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-primary);
 }
-.settings-field-description {
+.settings-field-description,
+.settings-secret-status {
   margin-top: 0.25rem;
   font-size: 0.75rem;
   line-height: 1.5;
   color: var(--text-tertiary);
+}
+.settings-secret-status {
+  color: var(--signal);
 }
 .settings-textarea,
 .settings-json-textarea,
 .settings-select {
   width: 100%;
   border: 1.5px solid var(--border-default);
-  border-radius: 0.75rem;
-  background: var(--surface-solid);
+  border-radius: var(--sketch-border-radius-sm);
+  background: transparent;
   color: var(--text-primary);
   font: inherit;
   outline: none;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
 }
 .settings-textarea,
 .settings-json-textarea {
@@ -412,15 +554,12 @@ watch(() => [props.field.kind, props.modelValue], parseStructuredValue, {
   line-height: 1.6;
 }
 .settings-json-textarea {
-  font-family:
-    'Ren2JetBrainsMono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo,
-    monospace;
-  font-size: 0.8125rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
 }
 .settings-select {
   height: 2.75rem;
-  padding: 0 0.875rem;
-  cursor: pointer;
+  padding: 0 0.75rem;
 }
 .settings-textarea:focus,
 .settings-json-textarea:focus,
@@ -431,36 +570,42 @@ watch(() => [props.field.kind, props.modelValue], parseStructuredValue, {
 .settings-json-error {
   margin-top: 0.375rem;
   font-size: 0.75rem;
-  color: var(--status-danger-text);
+  color: var(--danger);
 }
 .settings-structured-editor {
   display: grid;
-  gap: 0.625rem;
+  gap: 0.5rem;
 }
 .settings-structured-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 2.5rem;
+  grid-template-columns: minmax(0, 1fr) 2.25rem;
   gap: 0.5rem;
   align-items: center;
 }
 .settings-structured-pair {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.5rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.25rem;
 }
-.settings-structured-icon {
+.settings-structured-icon,
+.settings-structured-add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
   border: 1px solid var(--border-default);
-  border-radius: 0.625rem;
-  background: var(--surface-solid);
-  color: var(--text-tertiary);
-  transition: all 0.15s ease;
+  border-radius: var(--sketch-border-radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
 }
-.settings-structured-icon:hover {
-  border-color: var(--status-danger);
-  color: var(--status-danger-text);
-  background: var(--status-danger-soft);
+.settings-structured-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+.settings-structured-add {
+  width: 2.25rem;
+  height: 2rem;
+}
+.settings-structured-icon:hover,
+.settings-structured-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 </style>

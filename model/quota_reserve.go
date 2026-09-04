@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
@@ -15,9 +16,34 @@ const (
 	cacheQuotaInsufficient cacheQuotaResult = iota
 	cacheQuotaOK
 	cacheQuotaMiss
+	cacheQuotaFenced
 )
 
+const quotaMutationFenceSeconds = 10
+
+func getUserQuotaMutationFenceKey(userID int) string {
+	return fmt.Sprintf("quota:user:fence:%d", userID)
+}
+
+// invalidateUserQuotaCacheForMutation prevents cache-backed reservations from
+// observing a balance while a database-only accounting transaction is active.
+// The fence intentionally outlives the transaction so delayed cache fills
+// cannot revive the pre-mutation quota snapshot.
+func invalidateUserQuotaCacheForMutation(userID int) error {
+	if !common.RedisEnabled || userID <= 0 {
+		return nil
+	}
+	ctx := context.Background()
+	if err := common.RDB.Set(ctx, getUserQuotaMutationFenceKey(userID), 1, quotaMutationFenceSeconds*time.Second).Err(); err != nil {
+		return err
+	}
+	return common.RDB.Del(ctx, getUserCacheKey(userID)).Err()
+}
+
 const userQuotaReserveScript = `
+if redis.call('EXISTS', KEYS[2]) == 1 then
+  return -2
+end
 if tonumber(redis.call('HGET', KEYS[1], 'Id') or '0') ~= tonumber(ARGV[2])
   or tonumber(redis.call('HGET', KEYS[1], 'CacheSchema') or '0') ~= tonumber(ARGV[3])
   or redis.call('HEXISTS', KEYS[1], 'Quota') == 0 then
@@ -31,6 +57,9 @@ redis.call('HINCRBY', KEYS[1], 'Quota', -tonumber(ARGV[1]))
 return 1`
 
 const userQuotaDeltaScript = `
+if redis.call('EXISTS', KEYS[2]) == 1 then
+  return -2
+end
 if tonumber(redis.call('HGET', KEYS[1], 'Id') or '0') ~= tonumber(ARGV[2])
   or tonumber(redis.call('HGET', KEYS[1], 'CacheSchema') or '0') ~= tonumber(ARGV[3])
   or redis.call('HEXISTS', KEYS[1], 'Quota') == 0 then
@@ -40,6 +69,9 @@ redis.call('HINCRBY', KEYS[1], 'Quota', tonumber(ARGV[1]))
 return 1`
 
 const tokenQuotaReserveScript = `
+if redis.call('EXISTS', KEYS[2]) == 1 then
+  return -2
+end
 if tonumber(redis.call('HGET', KEYS[1], 'Id') or '0') ~= tonumber(ARGV[2])
   or redis.call('HEXISTS', KEYS[1], 'RemainQuota') == 0
   or redis.call('HEXISTS', KEYS[1], 'UsedQuota') == 0 then
@@ -55,6 +87,9 @@ redis.call('HSET', KEYS[1], 'AccessedTime', ARGV[3])
 return 1`
 
 const tokenQuotaDeltaScript = `
+if redis.call('EXISTS', KEYS[2]) == 1 then
+  return -2
+end
 if tonumber(redis.call('HGET', KEYS[1], 'Id') or '0') ~= tonumber(ARGV[2])
   or redis.call('HEXISTS', KEYS[1], 'RemainQuota') == 0
   or redis.call('HEXISTS', KEYS[1], 'UsedQuota') == 0 then
@@ -74,6 +109,8 @@ func quotaResultFromLua(result int, err error) (cacheQuotaResult, error) {
 		return cacheQuotaOK, nil
 	case 0:
 		return cacheQuotaInsufficient, nil
+	case -2:
+		return cacheQuotaFenced, nil
 	default:
 		return cacheQuotaMiss, nil
 	}
@@ -81,25 +118,25 @@ func quotaResultFromLua(result int, err error) (cacheQuotaResult, error) {
 
 func cacheTryReserveUserQuota(userID int, amount int64) (cacheQuotaResult, error) {
 	result, err := common.RDB.Eval(context.Background(), userQuotaReserveScript,
-		[]string{getUserCacheKey(userID)}, amount, userID, userCacheSchemaVersion).Int()
+		[]string{getUserCacheKey(userID), getUserQuotaMutationFenceKey(userID)}, amount, userID, userCacheSchemaVersion).Int()
 	return quotaResultFromLua(result, err)
 }
 
 func cacheApplyUserQuotaDelta(userID int, delta int64) (cacheQuotaResult, error) {
 	result, err := common.RDB.Eval(context.Background(), userQuotaDeltaScript,
-		[]string{getUserCacheKey(userID)}, delta, userID, userCacheSchemaVersion).Int()
+		[]string{getUserCacheKey(userID), getUserQuotaMutationFenceKey(userID)}, delta, userID, userCacheSchemaVersion).Int()
 	return quotaResultFromLua(result, err)
 }
 
 func cacheTryReserveTokenQuota(id int, key string, amount int64) (cacheQuotaResult, error) {
 	result, err := common.RDB.Eval(context.Background(), tokenQuotaReserveScript,
-		[]string{getTokenCacheKey(key)}, amount, id, common.GetTimestamp()).Int()
+		[]string{getTokenCacheKey(key), getTokenCacheFenceKey(key)}, amount, id, common.GetTimestamp()).Int()
 	return quotaResultFromLua(result, err)
 }
 
 func cacheApplyTokenQuotaDelta(id int, key string, delta int64) (cacheQuotaResult, error) {
 	result, err := common.RDB.Eval(context.Background(), tokenQuotaDeltaScript,
-		[]string{getTokenCacheKey(key)}, delta, id, common.GetTimestamp()).Int()
+		[]string{getTokenCacheKey(key), getTokenCacheFenceKey(key)}, delta, id, common.GetTimestamp()).Int()
 	return quotaResultFromLua(result, err)
 }
 
@@ -169,6 +206,8 @@ func TryReserveUserQuota(id int, quota int) (bool, error) {
 	if quota == 0 {
 		return true, nil
 	}
+	unlock := lockQuotaMutationResources(id, 0)
+	defer unlock()
 	if !common.RedisEnabled {
 		return reserveUserQuotaDB(id, quota)
 	}
@@ -179,7 +218,7 @@ func TryReserveUserQuota(id int, quota int) (bool, error) {
 			result, err = cacheTryReserveUserQuota(id, int64(quota))
 		}
 	}
-	if err != nil || result == cacheQuotaMiss {
+	if err != nil || result == cacheQuotaMiss || result == cacheQuotaFenced {
 		if err != nil {
 			common.SysLog("user quota cache reserve unavailable, falling back to database: " + err.Error())
 		}
@@ -210,6 +249,8 @@ func TryReserveTokenQuota(id int, key string, quota int, unlimited bool) (bool, 
 	if unlimited {
 		return true, DecreaseTokenQuota(id, key, quota)
 	}
+	unlock := lockQuotaMutationResources(0, id)
+	defer unlock()
 	if !common.RedisEnabled {
 		return reserveTokenQuotaDB(id, quota)
 	}
@@ -220,7 +261,7 @@ func TryReserveTokenQuota(id int, key string, quota int, unlimited bool) (bool, 
 			result, err = cacheTryReserveTokenQuota(id, key, int64(quota))
 		}
 	}
-	if err != nil || result == cacheQuotaMiss {
+	if err != nil || result == cacheQuotaMiss || result == cacheQuotaFenced {
 		if err != nil {
 			common.SysLog("token quota cache reserve unavailable, falling back to database: " + err.Error())
 		}

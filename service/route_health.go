@@ -27,6 +27,7 @@ const (
 	RouteErrorTransient     RouteErrorClass = "provider_transient"
 	RouteErrorModel         RouteErrorClass = "model_capability"
 	RouteErrorStreamStarted RouteErrorClass = "stream_started"
+	RouteErrorAdmission     RouteErrorClass = "route_admission"
 	RouteErrorUnknown       RouteErrorClass = "unknown"
 )
 
@@ -49,11 +50,13 @@ func ClassifyRouteError(status int, providerCode, message string, streamStarted 
 	code := strings.ToLower(strings.TrimSpace(providerCode))
 	text := strings.ToLower(strings.TrimSpace(message))
 	switch {
+	case strings.Contains(code, "route_lease") || strings.Contains(code, "route_admission") || strings.Contains(text, "route lease"):
+		return RouteErrorClassification{Class: RouteErrorAdmission}
 	case strings.Contains(code, "invalid_api_key") || strings.Contains(code, "invalid_credential") ||
 		strings.Contains(code, "authentication_error") || strings.Contains(text, "invalid api key") ||
 		strings.Contains(text, "incorrect api key"):
 		return RouteErrorClassification{Class: RouteErrorKey, Retryable: true, Failoverable: true, MarkKey: true}
-	case strings.Contains(code, "model_not_found") || strings.Contains(code, "unsupported_model") || strings.Contains(text, "model not found"):
+	case strings.Contains(code, "model_not_found") || strings.Contains(code, "unsupported_model") || strings.Contains(code, "model_not_supported") || strings.Contains(code, "invalid_model") || strings.Contains(text, "model not found") || strings.Contains(text, "unsupported model") || strings.Contains(text, "invalid model"):
 		return RouteErrorClassification{Class: RouteErrorModel, Failoverable: true, MarkCapability: true}
 	case status == 400 || status == 422 || strings.Contains(code, "invalid_request"):
 		return RouteErrorClassification{Class: RouteErrorInput}
@@ -166,12 +169,19 @@ func CanUseRouteHealth(health model.ChannelHealth, now time.Time) bool {
 		return true
 	}
 	if health.State == model.RouteHealthStateHalfOpen {
-		// A half-open row is already owned by the request that atomically
-		// claimed the probe. Treating it as generally usable would let another
-		// request select the same failed resource before that probe finishes.
+		// A half-open route is only admitted by RouteHealthUsable, which
+		// atomically claims the single live probe. Pure Shadow/score reads must
+		// not make every concurrent request look usable.
 		return false
 	}
 	return health.CooldownUntil > 0 && health.CooldownUntil <= now.Unix()
+}
+
+// RouteHealthReadOnlyUsable evaluates a stored health row without claiming a
+// half-open probe or writing state. Preview and Shadow callers must use this
+// boundary; only RouteHealthUsable may admit a live probe.
+func RouteHealthReadOnlyUsable(health model.ChannelHealth, now time.Time) bool {
+	return CanUseRouteHealth(health, now)
 }
 
 func LoadRouteHealth(ctx context.Context, channelID int, requestModel string) (model.ChannelHealth, error) {
@@ -198,12 +208,12 @@ func RouteHealthUsable(ctx context.Context, channelID int, requestModel string, 
 	return routeHealthScopeUsable(ctx, channelID, requestModel, "", now)
 }
 
-// RouteKeyHealthUsable atomically claims a due half-open probe for one
-// channel key. It is called only after a key has been selected, so competing
-// requests cannot all use the same recovered key as a probe.
+// RouteKeyHealthUsable atomically admits a recovered key's single half-open
+// probe. The stored scope is a hash, so this boundary never persists or logs
+// the credential itself.
 func RouteKeyHealthUsable(ctx context.Context, channelID int, requestModel, key string, now time.Time) (bool, int64, error) {
 	if strings.TrimSpace(key) == "" {
-		return false, 0, errors.New("route key is required")
+		return false, 0, nil
 	}
 	return routeHealthScopeUsable(ctx, channelID, requestModel, RouteKeyScope(key), now)
 }
@@ -341,18 +351,22 @@ func PersistRouteHealthSuccessWithMetrics(ctx context.Context, channelID int, re
 }
 
 func ObserveLiveRouteError(ctx context.Context, channelID int, requestModel string, status int, providerCode, message string, streamStarted bool) error {
-	return observeLiveRouteError(ctx, channelID, requestModel, "", status, providerCode, message, streamStarted)
+	return observeLiveRouteError(ctx, channelID, requestModel, "", status, providerCode, message, streamStarted, 0)
 }
 
 func ObserveLiveRouteErrorForKey(ctx context.Context, channelID int, requestModel, key string, status int, providerCode, message string, streamStarted bool) error {
+	return ObserveLiveRouteErrorForKeyWithRetryAfter(ctx, channelID, requestModel, key, status, providerCode, message, streamStarted, 0)
+}
+
+func ObserveLiveRouteErrorForKeyWithRetryAfter(ctx context.Context, channelID int, requestModel, key string, status int, providerCode, message string, streamStarted bool, retryAfter time.Duration) error {
 	keyScope := ""
 	if strings.TrimSpace(key) != "" {
 		keyScope = RouteKeyScope(key)
 	}
-	return observeLiveRouteError(ctx, channelID, requestModel, keyScope, status, providerCode, message, streamStarted)
+	return observeLiveRouteError(ctx, channelID, requestModel, keyScope, status, providerCode, message, streamStarted, retryAfter)
 }
 
-func observeLiveRouteError(ctx context.Context, channelID int, requestModel, keyScope string, status int, providerCode, message string, streamStarted bool) error {
+func observeLiveRouteError(ctx context.Context, channelID int, requestModel, keyScope string, status int, providerCode, message string, streamStarted bool, retryAfter time.Duration) error {
 	classification := ClassifyRouteError(status, providerCode, message, streamStarted)
 	if !classification.MarkChannelModel && !classification.MarkCapability && !classification.MarkKey {
 		return nil
@@ -361,17 +375,20 @@ func observeLiveRouteError(ctx context.Context, channelID int, requestModel, key
 		if keyScope == "" {
 			return nil
 		}
-		_, err := persistRouteHealthFailure(ctx, channelID, requestModel, keyScope, routeKeyHealthPolicy(), time.Now())
+		_, err := persistRouteHealthFailureWithRetryAfter(ctx, channelID, requestModel, keyScope, routeKeyHealthPolicy(), time.Now(), 0)
 		return err
 	}
 	if classification.MarkCapability {
-		_, err := PersistRouteHealthFailure(ctx, channelID, requestModel, routeCapabilityHealthPolicy(), time.Now())
+		_, err := persistRouteHealthFailureWithRetryAfter(ctx, channelID, requestModel, "", routeCapabilityHealthPolicy(), time.Now(), 0)
 		return err
 	}
 	if !classification.MarkChannelModel {
 		return nil
 	}
-	_, err := PersistRouteHealthFailure(ctx, channelID, requestModel, DefaultRouteHealthPolicy(), time.Now())
+	if classification.Class != RouteErrorTransient {
+		retryAfter = 0
+	}
+	_, err := persistRouteHealthFailureWithRetryAfter(ctx, channelID, requestModel, "", DefaultRouteHealthPolicy(), time.Now(), retryAfter)
 	return err
 }
 
@@ -381,8 +398,12 @@ func RouteKeyScope(key string) string {
 }
 
 func persistRouteHealthFailure(ctx context.Context, channelID int, requestModel, keyScope string, policy RouteHealthPolicy, now time.Time) (model.ChannelHealth, error) {
+	return persistRouteHealthFailureWithRetryAfter(ctx, channelID, requestModel, keyScope, policy, now, 0)
+}
+
+func persistRouteHealthFailureWithRetryAfter(ctx context.Context, channelID int, requestModel, keyScope string, policy RouteHealthPolicy, now time.Time, retryAfter time.Duration) (model.ChannelHealth, error) {
 	return persistRouteHealthObservation(ctx, channelID, requestModel, keyScope, now, func(health model.ChannelHealth) model.ChannelHealth {
-		return ObserveRouteHealthFailure(health, policy, now)
+		return ObserveRouteHealthFailureWithRetryAfter(health, policy, now, retryAfter)
 	})
 }
 
@@ -495,6 +516,13 @@ func RouteChannelHasAvailableKey(ctx context.Context, channel *model.Channel, re
 	return false, nil
 }
 
+// RouteChannelHasReadOnlyAvailableKey is the non-mutating counterpart used by
+// preview surfaces. An expired open cooldown may be displayed as available;
+// the actual relay still atomically claims its half-open probe.
+func RouteChannelHasReadOnlyAvailableKey(ctx context.Context, channel *model.Channel, requestModel string, now time.Time) (bool, error) {
+	return RouteChannelHasAvailableKey(ctx, channel, requestModel, now)
+}
+
 // RouteBackoff returns full-jitter delay for the local exponential backoff.
 // Retry-After is a provider lower bound; both are clipped by the remaining
 // request deadline.
@@ -536,6 +564,10 @@ func ParseRetryAfter(value string, now time.Time) (time.Duration, bool) {
 		if seconds < 0 {
 			return 0, false
 		}
+		maxDurationSeconds := int64((time.Duration(1<<63 - 1)) / time.Second)
+		if seconds > maxDurationSeconds {
+			return 0, false
+		}
 		return time.Duration(seconds) * time.Second, true
 	}
 	when, err := http.ParseTime(value)
@@ -549,12 +581,22 @@ func ParseRetryAfter(value string, now time.Time) (time.Duration, bool) {
 }
 
 func ObserveRouteHealthFailure(health model.ChannelHealth, policy RouteHealthPolicy, now time.Time) model.ChannelHealth {
+	return ObserveRouteHealthFailureWithRetryAfter(health, policy, now, 0)
+}
+
+func ObserveRouteHealthFailureWithRetryAfter(health model.ChannelHealth, policy RouteHealthPolicy, now time.Time, retryAfter time.Duration) model.ChannelHealth {
 	policy = policy.normalized()
 	health.Normalize(now)
 	health.FailureCount++
-	if health.State == model.RouteHealthStateHalfOpen || health.FailureCount >= policy.FailureThreshold {
+	// A provider Retry-After is an explicit shared cooldown signal. It must
+	// fence concurrent requests even before the local consecutive-failure
+	// threshold is reached.
+	if health.State == model.RouteHealthStateHalfOpen || health.FailureCount >= policy.FailureThreshold || retryAfter > 0 {
 		health.State = model.RouteHealthStateOpen
 		health.CooldownUntil = now.Add(policy.Cooldown).Unix()
+		if retryAfter > policy.Cooldown {
+			health.CooldownUntil = now.Add(retryAfter).Unix()
+		}
 		health.HealthEpoch++
 	}
 	health.UpdatedAt = now.Unix()

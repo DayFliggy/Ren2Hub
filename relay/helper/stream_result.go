@@ -8,8 +8,10 @@ import (
 // to record soft errors, signal fatal stops, or mark normal completion.
 // StreamScannerHandler checks IsStopped() after each callback invocation.
 type StreamResult struct {
-	status  *relaycommon.StreamStatus
-	stopped bool
+	status      *relaycommon.StreamStatus
+	stopped     bool
+	hadError    bool
+	validOutput bool
 }
 
 func newStreamResult(status *relaycommon.StreamStatus) *StreamResult {
@@ -23,6 +25,7 @@ func (r *StreamResult) Error(err error) {
 		return
 	}
 	r.status.RecordError(err.Error())
+	r.hadError = true
 }
 
 // Stop records a fatal error and marks the stream to stop after this chunk.
@@ -46,7 +49,26 @@ func (r *StreamResult) IsStopped() bool {
 	return r.stopped
 }
 
+// MarkValidOutput allows an adapter to explicitly mark a parsed payload. The
+// scanner also marks a payload when the callback completes without an error,
+// preserving compatibility with adapters that do not need custom validation.
+func (r *StreamResult) MarkValidOutput() {
+	if r != nil {
+		r.validOutput = true
+	}
+}
+
+func (r *StreamResult) HasValidOutput() bool {
+	return r != nil && r.validOutput
+}
+
+func (r *StreamResult) HasError() bool {
+	return r != nil && r.hadError
+}
+
 // reset clears the per-chunk stopped flag so the object can be reused.
 func (r *StreamResult) reset() {
 	r.stopped = false
+	r.hadError = false
+	r.validOutput = false
 }

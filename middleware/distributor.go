@@ -131,9 +131,7 @@ func Distribute() func(c *gin.Context) {
 				// Live routing is deliberately behind an independent, default-off
 				// gate. Its selector is pure; Relay owns the per-attempt lease and
 				// retry lifecycle after this middleware stores the decision.
-				if !isCompactRequest && !requiresNativeResponses &&
-					service.RouteLiveRequestSupported(c.Request.URL.Path) &&
-					service.RouteLiveTokenGroupSupported(usingGroup) {
+				if liveRouteRequestSupported(c, isCompactRequest, requiresNativeResponses) {
 					limitEnabled := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
 					var tokenLimit map[string]bool
 					if value, exists := common.GetContextKey(c, constant.ContextKeyTokenModelLimit); exists {
@@ -155,6 +153,7 @@ func Distribute() func(c *gin.Context) {
 						TokenModelLimit:        tokenLimit,
 					}
 					if service.RouteLiveRoutingEnabled() && service.RouteLiveRolloutMatches(liveRequest) {
+						c.Set(service.RouteLiveSelectionRequiredContextKey, true)
 						if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
 							liveRequest.PreferredChannelID = preferredChannelID
 						}
@@ -175,6 +174,13 @@ func Distribute() func(c *gin.Context) {
 							if liveRequest.PreferredChannelID == channel.Id {
 								service.MarkChannelAffinityUsed(c, usingGroup, channel.Id)
 							}
+						}
+						// Preserve an explicit legacy decision when the live rollout
+						// matched but no private profile is active. Relay can then
+						// distinguish intentional legacy routing from a missing live
+						// selection and keep the lease boundary fail-closed.
+						if liveSelection.Source == service.RouteSourceLegacy {
+							c.Set("route_live_selection", liveSelection)
 						}
 					}
 				}
@@ -308,6 +314,26 @@ func Distribute() func(c *gin.Context) {
 			service.RecordChannelAffinity(c, channel.Id)
 		}
 	}
+}
+
+// liveRouteRequestSupported limits the live selector to requests whose
+// controller owns the unified lease, retry, health, decision and billing
+// lifecycle. Task submit/fetch protocols keep their legacy execution path
+// until their pricing and security rechecks are unified with Relay. Selecting
+// a private route for either would make the recorded decision diverge from
+// execution.
+func liveRouteRequestSupported(c *gin.Context, isCompactRequest, requiresNativeResponses bool) bool {
+	if c == nil || c.Request == nil || isCompactRequest || requiresNativeResponses {
+		return false
+	}
+	path := c.Request.URL.Path
+	if strings.Contains(path, "/mj/") || strings.HasSuffix(path, "/remix") {
+		return false
+	}
+	return !strings.HasPrefix(path, "/suno/") &&
+		!strings.HasPrefix(path, "/kling/") &&
+		!strings.HasPrefix(path, "/jimeng/") &&
+		!strings.HasPrefix(path, "/v1/videos")
 }
 
 // requestRequiresNativeResponses inspects only the protocol markers needed for
@@ -629,26 +655,44 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	common.SetContextKey(c, constant.ContextKeyChannelModelMapping, channel.GetModelMapping())
 	common.SetContextKey(c, constant.ContextKeyChannelStatusCodeMapping, channel.GetStatusCodeMapping())
 
+	liveRouteActive := liveRouteSelectionActive(c)
 	excludedKeyIndexes := service.GetRouteAttemptedKeyIndexes(c, channel.Id)
-	if service.RouteLiveRoutingEnabled() {
-		if _, liveRoute := c.Get("route_live_selection"); liveRoute {
-			unavailable, err := service.UnavailableRouteKeyIndexes(c.Request.Context(), channel, modelName, time.Now())
-			if err != nil {
-				return types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+	if liveRouteActive {
+		unavailable, err := service.UnavailableRouteKeyIndexes(c.Request.Context(), channel, modelName, time.Now())
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+		if len(unavailable) > 0 {
+			if excludedKeyIndexes == nil {
+				excludedKeyIndexes = make(map[int]struct{}, len(unavailable))
 			}
-			if len(unavailable) > 0 {
-				if excludedKeyIndexes == nil {
-					excludedKeyIndexes = make(map[int]struct{}, len(unavailable))
-				}
-				for keyIndex := range unavailable {
-					excludedKeyIndexes[keyIndex] = struct{}{}
-				}
+			for keyIndex := range unavailable {
+				excludedKeyIndexes[keyIndex] = struct{}{}
 			}
 		}
 	}
-	key, index, newAPIError := channel.GetNextEnabledKeyExcluding(excludedKeyIndexes)
-	if newAPIError != nil {
-		return newAPIError
+	var key string
+	var index int
+	for {
+		var newAPIError *types.NewAPIError
+		key, index, newAPIError = channel.GetNextEnabledKeyExcluding(excludedKeyIndexes)
+		if newAPIError != nil {
+			return newAPIError
+		}
+		if !liveRouteActive {
+			break
+		}
+		usable, _, err := service.RouteKeyHealthUsable(c.Request.Context(), channel.Id, modelName, key, time.Now())
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+		if usable {
+			break
+		}
+		if excludedKeyIndexes == nil {
+			excludedKeyIndexes = make(map[int]struct{})
+		}
+		excludedKeyIndexes[index] = struct{}{}
 	}
 	if service.RouteLiveRoutingEnabled() {
 		if _, liveRoute := c.Get("route_live_selection"); liveRoute {
@@ -704,6 +748,15 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 		c.Set("bot_id", channel.Other)
 	}
 	return nil
+}
+
+func liveRouteSelectionActive(c *gin.Context) bool {
+	if c == nil || !service.RouteLiveRoutingEnabled() {
+		return false
+	}
+	value, exists := c.Get("route_live_selection")
+	selection, valid := value.(service.LiveRouteSelection)
+	return exists && valid && selection.Source != service.RouteSourceLegacy
 }
 
 // extractModelNameFromGeminiPath 从 Gemini API URL 路径中提取模型名

@@ -40,6 +40,8 @@ const form = reactive({
   returnUrl: '',
   storeId: '',
   productId: '',
+  unitPrice: 1,
+  minTopUp: 1,
 })
 
 const selectedStore = computed(() =>
@@ -54,6 +56,8 @@ function syncForm() {
   form.returnUrl = String(rawValue('WaffoPancakeReturnURL', ''))
   form.storeId = String(rawValue('WaffoPancakeStoreID', ''))
   form.productId = String(rawValue('WaffoPancakeProductID', ''))
+  form.unitPrice = Number(rawValue('WaffoPancakeUnitPrice', 1)) || 1
+  form.minTopUp = Number(rawValue('WaffoPancakeMinTopUp', 1)) || 1
 }
 
 function ensureProductBelongsToStore() {
@@ -84,6 +88,8 @@ async function saveConfiguration(loadCatalogAfterSave = false) {
       return_url: form.returnUrl,
       store_id: form.storeId,
       product_id: form.productId,
+      unit_price: form.unitPrice,
+      min_top_up: form.minTopUp,
     })
     form.privateKey = ''
     emit('saved')
@@ -167,6 +173,26 @@ onMounted(async () => {
       </FormField>
       <FormField label="返回地址" class="sm:col-span-2">
         <TextInput v-model="form.returnUrl" type="url" autocomplete="off" />
+      </FormField>
+      <FormField label="单位价格">
+        <TextInput
+          :model-value="String(form.unitPrice)"
+          type="number"
+          min="0.0001"
+          step="0.01"
+          autocomplete="off"
+          @update:model-value="form.unitPrice = Number($event)"
+        />
+      </FormField>
+      <FormField label="最低充值金额">
+        <TextInput
+          :model-value="String(form.minTopUp)"
+          type="number"
+          min="1"
+          step="1"
+          autocomplete="off"
+          @update:model-value="form.minTopUp = Number($event)"
+        />
       </FormField>
     </div>
 

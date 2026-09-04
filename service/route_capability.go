@@ -233,6 +233,7 @@ func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(p
 			}
 			continue
 		}
+		detectedAt := time.Now()
 		expected, fenceErr := model.GetChannelCapabilitySnapshotFence(ctx, channel.Id)
 		if fenceErr != nil {
 			summary.Failed++
@@ -244,7 +245,9 @@ func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(p
 		}
 		publishStartedAt := time.Now()
 		if err := refreshOneChannelWithHash(ctx, channel, byChannel[channel.Id], catalog, hash, expected); err != nil {
-			markChannelCapabilityRefreshFailure(channel.Id, expected, hash, catalog.Version, err)
+			if markerErr := markChannelCapabilityRefreshFailure(channel.Id, expected, hash, catalog.Version, err); markerErr != nil {
+				err = errors.Join(err, markerErr)
+			}
 			summary.Failed++
 			observeCapabilityRefreshFailure(err)
 			if firstErr == nil {
@@ -252,6 +255,7 @@ func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(p
 			}
 		} else {
 			observeCapabilityRefreshDurations(-1, time.Since(publishStartedAt))
+			observeCapabilityRefreshDetectionToActive(time.Since(detectedAt))
 			summary.Refreshed++
 			routeShadowMetrics.RefreshSuccess.Add(1)
 		}
@@ -272,6 +276,7 @@ func observeCapabilityRefreshFailure(err error) {
 	if errors.Is(err, model.ErrCapabilitySnapshotConflict) {
 		routeShadowMetrics.SnapshotConflicts.Add(1)
 	}
+	recordCapabilityRefreshObservation(false, 0, err)
 }
 
 func refreshOneChannel(ctx context.Context, channel *model.Channel, abilities []model.Ability, catalog *modellab.Catalog, rebuild bool) error {
@@ -279,32 +284,39 @@ func refreshOneChannel(ctx context.Context, channel *model.Channel, abilities []
 	if err != nil {
 		return err
 	}
+	detectedAt := time.Now()
 	expected, err := model.GetChannelCapabilitySnapshotFence(ctx, channel.Id)
 	if err != nil {
 		return err
 	}
 	publishStartedAt := time.Now()
 	if err := refreshOneChannelWithHash(ctx, channel, abilities, catalog, hash, expected); err != nil {
-		markChannelCapabilityRefreshFailure(channel.Id, expected, hash, catalog.Version, err)
+		if markerErr := markChannelCapabilityRefreshFailure(channel.Id, expected, hash, catalog.Version, err); markerErr != nil {
+			return errors.Join(err, markerErr)
+		}
 		return err
 	}
 	observeCapabilityRefreshDurations(-1, time.Since(publishStartedAt))
+	observeCapabilityRefreshDetectionToActive(time.Since(detectedAt))
 	if rebuild {
 		return RebuildRouteCapabilityIndex(ctx)
 	}
 	return nil
 }
 
-func markChannelCapabilityRefreshFailure(channelID int, expected model.ChannelCapabilitySnapshotFence, sourceHash, catalogVersion string, refreshErr error) {
+func markChannelCapabilityRefreshFailure(channelID int, expected model.ChannelCapabilitySnapshotFence, sourceHash, catalogVersion string, refreshErr error) error {
 	// A CAS loser must not change the status of the snapshot published by the
-	// winner. Other failures may expose the latest attempt as failed while the
-	// active capability rows remain intact.
+	// winner. Existing active rows remain active; the model layer records the
+	// failed source separately so a failed refresh cannot hide usable data.
 	if errors.Is(refreshErr, model.ErrCapabilitySnapshotConflict) {
-		return
+		return nil
 	}
 	// The caller records the complete active tuple before projection. A failed
 	// refresh cannot change a snapshot replaced by another worker.
-	_ = model.MarkChannelCapabilityRefreshFailure(channelID, expected, sourceHash, catalogVersion)
+	if err := model.MarkChannelCapabilityRefreshFailure(channelID, expected, sourceHash, catalogVersion); err != nil {
+		return fmt.Errorf("record channel capability refresh failure: %w", err)
+	}
+	return nil
 }
 
 func refreshOneChannelWithHash(ctx context.Context, channel *model.Channel, abilities []model.Ability, catalog *modellab.Catalog, sourceHash string, expected model.ChannelCapabilitySnapshotFence) error {
@@ -326,7 +338,7 @@ func RebuildRouteCapabilityIndex(ctx context.Context) error {
 		return err
 	}
 	var snapshots []model.ChannelCapabilitySnapshot
-	if err := model.DB.WithContext(ctx).Where("active_version > ?", 0).Find(&snapshots).Error; err != nil {
+	if err := model.DB.WithContext(ctx).Where("active_version > ? AND refresh_status = ?", 0, model.RouteCapabilityRefreshActive).Find(&snapshots).Error; err != nil {
 		return err
 	}
 	activeVersion := make(map[int]int64, len(snapshots))

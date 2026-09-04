@@ -460,6 +460,7 @@ func migrateRoutingModels(db *gorm.DB) error {
 		&UserChannelEntitlement{},
 		&ChannelHealth{},
 		&ChannelRoutePolicy{},
+		&RouteShadowHourlyObservation{},
 	)
 }
 

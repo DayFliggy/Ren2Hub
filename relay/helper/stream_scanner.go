@@ -217,6 +217,9 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				ExtendWriteDeadline(c)
 				dataHandler(data, sr)
 			}()
+			if sr.HasValidOutput() || !sr.HasError() {
+				info.MarkValidOutput()
+			}
 			if sr.IsStopped() {
 				return
 			}

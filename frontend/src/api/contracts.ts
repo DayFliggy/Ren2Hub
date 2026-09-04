@@ -33,6 +33,12 @@ export function requiredNumber(value: unknown, endpoint: string): number {
   return parsed
 }
 
+export function requiredStrictNumber(value: unknown, endpoint: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value))
+    invalidResponse(endpoint)
+  return value
+}
+
 export function requiredInteger(value: unknown, endpoint: string): number {
   const parsed = requiredNumber(value, endpoint)
   if (!Number.isSafeInteger(parsed)) invalidResponse(endpoint)

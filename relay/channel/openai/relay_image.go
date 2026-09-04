@@ -264,6 +264,7 @@ func openaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 	if info != nil {
 		info.SetFirstResponseTime()
+		info.MarkValidOutput()
 	}
 
 	validUsage := service.ValidUsage(&usageResp.Usage)

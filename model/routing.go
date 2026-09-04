@@ -37,6 +37,8 @@ const (
 	RouteCapabilityRefreshBuilding  = "building"
 	RouteCapabilityRefreshFailed    = "failed"
 	ChannelCapabilityProjectionV1   = 1
+	RouteShadowObservationGlobal    = "global"
+	RouteShadowObservationModel     = "model"
 	RouteMaxPolicyWeight            = 1_000_000
 	RouteMaxPolicyRatio             = 1_000
 	RouteMaxRetryAttempts           = 3
@@ -169,6 +171,50 @@ type ChannelRoutePolicy struct {
 	Enabled               bool   `json:"enabled"`
 	Version               int64  `json:"version" gorm:"not null;default:1"`
 	UpdatedAt             int64  `json:"updated_at" gorm:"bigint;not null"`
+}
+
+// RouteShadowHourlyObservation stores only low-cardinality Shadow acceptance
+// counters. It deliberately excludes request, user, token, channel, and
+// credential identifiers; InstanceID is a boot-scoped UUID.
+type RouteShadowHourlyObservation struct {
+	ID                     int    `json:"id"`
+	HourStart              int64  `json:"hour_start" gorm:"uniqueIndex:route_shadow_hourly_observation;not null"`
+	InstanceID             string `json:"instance_id" gorm:"type:varchar(96);uniqueIndex:route_shadow_hourly_observation;not null"`
+	Scope                  string `json:"scope" gorm:"type:varchar(16);uniqueIndex:route_shadow_hourly_observation;not null"`
+	ModelName              string `json:"model_name" gorm:"type:varchar(255);uniqueIndex:route_shadow_hourly_observation;not null;default:''"`
+	SealedAt               int64  `json:"sealed_at" gorm:"bigint;not null;default:0"`
+	DataLossPossible       bool   `json:"data_loss_possible" gorm:"not null;default:false"`
+	ShadowDecisions        int64  `json:"shadow_decisions" gorm:"not null;default:0"`
+	ShadowInitialDecisions int64  `json:"shadow_initial_decisions" gorm:"not null;default:0"`
+	ShadowDiffs            int64  `json:"shadow_diffs" gorm:"not null;default:0"`
+	CapabilityResolved     int64  `json:"capability_resolved" gorm:"not null;default:0"`
+	CapabilityUnresolved   int64  `json:"capability_unresolved" gorm:"not null;default:0"`
+	MappingConflict        int64  `json:"mapping_conflict" gorm:"not null;default:0"`
+	UnknownFiltered        int64  `json:"unknown_filtered" gorm:"not null;default:0"`
+	UnknownAdmitted        int64  `json:"unknown_admitted" gorm:"not null;default:0"`
+	MixedDecisions         int64  `json:"mixed_decisions" gorm:"not null;default:0"`
+	UnauthorizedFiltered   int64  `json:"unauthorized_filtered" gorm:"not null;default:0"`
+	UnauthorizedAdmitted   int64  `json:"unauthorized_admitted" gorm:"not null;default:0"`
+	SnapshotStale          int64  `json:"snapshot_stale" gorm:"not null;default:0"`
+	EventAttempted         int64  `json:"event_attempted" gorm:"not null;default:0"`
+	EventEnqueued          int64  `json:"event_enqueued" gorm:"not null;default:0"`
+	EventDropped           int64  `json:"event_dropped" gorm:"not null;default:0"`
+	EventEncodeFailed      int64  `json:"event_encode_failed" gorm:"not null;default:0"`
+	EventSubmitted         int64  `json:"event_submitted" gorm:"not null;default:0"`
+	EventWriteFailed       int64  `json:"event_write_failed" gorm:"not null;default:0"`
+	RefreshSuccess         int64  `json:"refresh_success" gorm:"not null;default:0"`
+	RefreshFailure         int64  `json:"refresh_failure" gorm:"not null;default:0"`
+	SnapshotConflict       int64  `json:"snapshot_conflict" gorm:"not null;default:0"`
+	RefreshLagCount        int64  `json:"refresh_lag_count" gorm:"not null;default:0"`
+	RefreshLagLE1S         int64  `json:"refresh_lag_le_1s" gorm:"column:refresh_lag_le_1s;not null;default:0"`
+	RefreshLagLE5S         int64  `json:"refresh_lag_le_5s" gorm:"column:refresh_lag_le_5s;not null;default:0"`
+	RefreshLagLE15S        int64  `json:"refresh_lag_le_15s" gorm:"column:refresh_lag_le_15s;not null;default:0"`
+	RefreshLagLE30S        int64  `json:"refresh_lag_le_30s" gorm:"column:refresh_lag_le_30s;not null;default:0"`
+	RefreshLagLE60S        int64  `json:"refresh_lag_le_60s" gorm:"column:refresh_lag_le_60s;not null;default:0"`
+	RefreshLagLE120S       int64  `json:"refresh_lag_le_120s" gorm:"column:refresh_lag_le_120s;not null;default:0"`
+	RefreshLagLE300S       int64  `json:"refresh_lag_le_300s" gorm:"column:refresh_lag_le_300s;not null;default:0"`
+	RefreshLagGT300S       int64  `json:"refresh_lag_gt_300s" gorm:"column:refresh_lag_gt_300s;not null;default:0"`
+	UpdatedAt              int64  `json:"updated_at" gorm:"bigint;not null"`
 }
 
 var (

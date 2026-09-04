@@ -40,6 +40,8 @@ type routeCapabilityFilterInput struct {
 
 type routeCapabilityFilterResult struct{ Reason string }
 
+const routeCapabilityMinimumConfidence = 0.9
+
 // filterRouteCapability is the shared static qualification boundary. It does
 // not perform billing, quota reservation, health changes, or live selection.
 func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilterResult {
@@ -79,6 +81,10 @@ func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilt
 	}
 	if strings.TrimSpace(input.Capability.LabSlug) == "" ||
 		strings.EqualFold(strings.TrimSpace(input.Capability.Source), "unknown") {
+		result.Reason = ShadowFilterUnknownCapability
+		return result
+	}
+	if input.Capability.Confidence < routeCapabilityMinimumConfidence {
 		result.Reason = ShadowFilterUnknownCapability
 		return result
 	}

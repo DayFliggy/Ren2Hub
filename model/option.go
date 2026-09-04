@@ -291,8 +291,19 @@ func UpdateOptionsBulk(values map[string]string) error {
 	if err != nil {
 		return err
 	}
+	// Keep a copy so a runtime update failure cannot leave OptionMap partially
+	// applied after the database transaction has committed.
+	common.OptionMapRWMutex.RLock()
+	previous := make(map[string]string, len(common.OptionMap))
+	for key, value := range common.OptionMap {
+		previous[key] = value
+	}
+	common.OptionMapRWMutex.RUnlock()
 	for k, v := range values {
 		if err := updateOptionMap(k, v); err != nil {
+			common.OptionMapRWMutex.Lock()
+			common.OptionMap = previous
+			common.OptionMapRWMutex.Unlock()
 			return err
 		}
 	}

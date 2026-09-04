@@ -26,7 +26,7 @@ func TestSelectRouteShadowUsesStaticPriorityAndHardFilters(t *testing.T) {
 			{
 				Capability: model.ChannelModelCapability{
 					ChannelID: 1, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai",
-					State: model.RouteCapabilityStateEligible, SnapshotVersion: 1,
+					Confidence: 1, State: model.RouteCapabilityStateEligible, SnapshotVersion: 1,
 					CatalogVersion: "catalog-1", EndpointTypes: string(endpointJSON),
 				},
 				ChannelStatus: common.ChannelStatusEnabled, Priority: 20, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI,
@@ -34,7 +34,7 @@ func TestSelectRouteShadowUsesStaticPriorityAndHardFilters(t *testing.T) {
 			{
 				Capability: model.ChannelModelCapability{
 					ChannelID: 2, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai",
-					State: model.RouteCapabilityStateEligible, SnapshotVersion: 1,
+					Confidence: 1, State: model.RouteCapabilityStateEligible, SnapshotVersion: 1,
 					CatalogVersion: "catalog-1", EndpointTypes: string(endpointJSON),
 				},
 				ChannelStatus: common.ChannelStatusEnabled, Priority: 30, AbilityGroups: []string{"restricted"}, ChannelType: constant.ChannelTypeOpenAI,
@@ -101,9 +101,9 @@ func TestSelectRouteShadowStableTieBreakAndPathFilter(t *testing.T) {
 	t.Cleanup(func() { routeCapabilityIndex.Store(oldIndex) })
 	routeCapabilityIndex.Store(&capabilityIndex{ByRequestModel: map[string][]indexedCapability{
 		"gpt-5": {
-			{Capability: model.ChannelModelCapability{ChannelID: 9, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON)}, ChannelStatus: common.ChannelStatusEnabled, Priority: 10, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI},
-			{Capability: model.ChannelModelCapability{ChannelID: 8, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON)}, ChannelStatus: common.ChannelStatusEnabled, Priority: 10, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI},
-			{Capability: model.ChannelModelCapability{ChannelID: 7, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON)}, ChannelStatus: common.ChannelStatusEnabled, Priority: 20, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeAdvancedCustom, Advanced: advanced},
+			{Capability: model.ChannelModelCapability{ChannelID: 9, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Confidence: 1, State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON)}, ChannelStatus: common.ChannelStatusEnabled, Priority: 10, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI},
+			{Capability: model.ChannelModelCapability{ChannelID: 8, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Confidence: 1, State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON)}, ChannelStatus: common.ChannelStatusEnabled, Priority: 10, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI},
+			{Capability: model.ChannelModelCapability{ChannelID: 7, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Confidence: 1, State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON)}, ChannelStatus: common.ChannelStatusEnabled, Priority: 20, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeAdvancedCustom, Advanced: advanced},
 		},
 	}})
 
@@ -115,6 +115,35 @@ func TestSelectRouteShadowStableTieBreakAndPathFilter(t *testing.T) {
 	assert.Equal(t, 7, decision.ShadowPreferredID)
 }
 
+func TestSelectRouteShadowRejectsStaleOrMissingActiveSnapshot(t *testing.T) {
+	oldIndex, _ := routeCapabilityIndex.Load().(*capabilityIndex)
+	t.Cleanup(func() { routeCapabilityIndex.Store(oldIndex) })
+	routeCapabilityIndex.Store(&capabilityIndex{ByRequestModel: map[string][]indexedCapability{
+		"gpt-5": {{
+			Capability: model.ChannelModelCapability{
+				ChannelID: 51, RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai",
+				Confidence: 1, State: model.RouteCapabilityStateEligible, SnapshotVersion: 2,
+			},
+			ChannelStatus: common.ChannelStatusEnabled, Priority: 10,
+			AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI,
+		}},
+	}})
+
+	stale := SelectRouteShadow(RouteShadowRequest{
+		RequestModel: "gpt-5", UserGroup: "default", PriceEligible: true, SecurityAllowed: true,
+		ActiveSnapshotVersions: map[int]int64{51: 1},
+	})
+	assert.Zero(t, stale.ShadowPreferredID)
+	assert.Equal(t, 1, stale.FilterReasonCounts[ShadowFilterSnapshotStale])
+
+	missing := SelectRouteShadow(RouteShadowRequest{
+		RequestModel: "gpt-5", UserGroup: "default", PriceEligible: true, SecurityAllowed: true,
+		ActiveSnapshotVersions: map[int]int64{},
+	})
+	assert.Zero(t, missing.ShadowPreferredID)
+	assert.Equal(t, 1, missing.FilterReasonCounts[ShadowFilterSnapshotUnavailable])
+}
+
 func TestShadowUsesActualModelLabForMappedRequests(t *testing.T) {
 	endpointJSON, err := common.Marshal([]string{"openai"})
 	require.NoError(t, err)
@@ -124,7 +153,7 @@ func TestShadowUsesActualModelLabForMappedRequests(t *testing.T) {
 		"public-model": {{
 			Capability: model.ChannelModelCapability{
 				ChannelID: 41, RequestModel: "public-model", ActualModel: "anthropic/claude-opus-5", LabSlug: "anthropic",
-				State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON),
+				Confidence: 1, State: model.RouteCapabilityStateEligible, EndpointTypes: string(endpointJSON),
 			},
 			ChannelStatus: common.ChannelStatusEnabled, Priority: 10, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI,
 		}},
@@ -213,9 +242,11 @@ func TestReplayRouteShadowDecisionReadsHistoricalSnapshotOnly(t *testing.T) {
 	}}))
 
 	decision := RouteShadowDecision{
-		Event: "route_shadow_decision", RequestID: "replay-request", UserID: 7, TokenID: 8,
+		Event: "route_shadow_decision", RouteSource: ShadowRouteSource, QualificationVersion: RouteShadowQualificationVersion,
+		RequestID: "replay-request", UserID: 7, TokenID: 8,
 		RequestModel: "gpt-5", NormalizedRequestModel: "gpt-5", RequestPath: "/v1/chat/completions",
 		UserGroup: "default", EndpointType: string(constant.EndpointTypeOpenAI), SnapshotVersion: 1,
+		PriceEligible: true, PriceEligibilityKnown: true, SecurityAllowed: true, SecurityEligibilityKnown: true,
 		ShadowCandidates: []RouteShadowCandidate{{ChannelID: 77, RequestModel: "gpt-5", SnapshotVersion: 1, Priority: 20}},
 		LegacyTrace:      LegacySelectionTrace{CandidateIDs: []int{77}, SelectedChannelID: 77, SelectedGroup: "default"},
 	}
@@ -256,8 +287,10 @@ func TestReplayRouteShadowDecisionRejectsLegacyCapabilityProjection(t *testing.T
 		Priority: 20, ChannelType: constant.ChannelTypeOpenAI, State: model.RouteCapabilityStateEligible,
 	}}))
 	data, err := common.Marshal(RouteShadowDecision{
-		Event: "route_shadow_decision", RequestID: "legacy-projection-request", RequestModel: "gpt-5", NormalizedRequestModel: "gpt-5",
+		Event: "route_shadow_decision", RouteSource: ShadowRouteSource, QualificationVersion: RouteShadowQualificationVersion,
+		RequestID: "legacy-projection-request", RequestModel: "gpt-5", NormalizedRequestModel: "gpt-5",
 		RequestPath: "/v1/chat/completions", UserGroup: "default", EndpointType: string(constant.EndpointTypeOpenAI), SnapshotVersion: 1,
+		PriceEligible: true, PriceEligibilityKnown: true, SecurityAllowed: true, SecurityEligibilityKnown: true,
 		ShadowCandidates: []RouteShadowCandidate{{ChannelID: 78, RequestModel: "gpt-5", SnapshotVersion: 1}},
 		LegacyTrace:      LegacySelectionTrace{SelectedChannelID: 78},
 	})
@@ -271,6 +304,43 @@ func TestReplayRouteShadowDecisionRejectsIncompleteEvent(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ReplayRouteShadowDecision(context.Background(), data)
 	assert.ErrorIs(t, err, ErrRouteShadowReplayInvalid)
+}
+
+func TestReplayRouteShadowDecisionRejectsPreferredCandidateSnapshotMismatch(t *testing.T) {
+	data, err := common.Marshal(RouteShadowDecision{
+		Event: "route_shadow_decision", RouteSource: ShadowRouteSource, QualificationVersion: RouteShadowQualificationVersion,
+		RequestID: "snapshot-mismatch", RequestModel: "gpt-5", RequestPath: "/v1/chat/completions",
+		UserGroup: "default", SnapshotVersion: 2, ShadowPreferredID: 77,
+		ShadowCandidates: []RouteShadowCandidate{{ChannelID: 77, RequestModel: "gpt-5", SnapshotVersion: 1}},
+		LegacyTrace:      LegacySelectionTrace{CandidateIDs: []int{77}},
+	})
+	require.NoError(t, err)
+
+	_, err = ReplayRouteShadowDecision(context.Background(), data)
+	assert.ErrorIs(t, err, ErrRouteShadowReplayInvalid)
+}
+
+func TestReplayRouteShadowDecisionRejectsUntrustedEnvelopeFields(t *testing.T) {
+	data := []byte(`{"event":"route_shadow_decision","route_source":"auto_lab","qualification_version":2,"request_id":"replay-request","request_model":"gpt-5","request_path":"/v1/chat/completions","user_group":"default","snapshot_version":1,"shadow_candidates":[{"channel_id":77,"snapshot_version":1}],"legacy_trace":{},"request_body":"sensitive"}`)
+	_, err := ReplayRouteShadowDecision(context.Background(), data)
+	assert.ErrorIs(t, err, ErrRouteShadowReplayInvalid)
+
+	data = []byte(`{"event":"other_event","route_source":"auto_lab","qualification_version":2,"request_id":"replay-request","request_model":"gpt-5","request_path":"/v1/chat/completions","user_group":"default","snapshot_version":1,"shadow_candidates":[{"channel_id":77,"snapshot_version":1}],"legacy_trace":{}}`)
+	_, err = ReplayRouteShadowDecision(context.Background(), data)
+	assert.ErrorIs(t, err, ErrRouteShadowReplayInvalid)
+}
+
+func TestReplayRouteShadowDecisionRejectsQualificationVersionsWithoutInference(t *testing.T) {
+	data, err := common.Marshal(RouteShadowDecision{
+		Event: "route_shadow_decision", RouteSource: ShadowRouteSource, QualificationVersion: 1,
+		RequestID: "old-qualification", RequestModel: "gpt-5", RequestPath: "/v1/chat/completions",
+		UserGroup: "default", SnapshotVersion: 1,
+		ShadowCandidates: []RouteShadowCandidate{{ChannelID: 77, SnapshotVersion: 1}},
+		LegacyTrace:      LegacySelectionTrace{CandidateIDs: []int{77}},
+	})
+	require.NoError(t, err)
+	_, err = ReplayRouteShadowDecision(context.Background(), data)
+	assert.ErrorIs(t, err, ErrRouteShadowReplayUnsupported)
 }
 
 func TestCapabilityRefreshPublishesActiveIndexAndHonorsAbilityChanges(t *testing.T) {

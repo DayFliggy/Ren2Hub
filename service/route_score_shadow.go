@@ -37,18 +37,28 @@ func AttachRouteScoreShadow(ctx context.Context, decision *RouteShadowDecision) 
 			return
 		}
 		metrics := routeHealthScoreMetrics(health)
+		runtimeMetrics, metricsErr := LoadRouteScoreRuntimeMetrics(ctx, candidate.ChannelID, decision.NormalizedRequestModel)
+		if metricsErr != nil {
+			decision.ScoreShadowError = RouteScoreShadowMetricsUnavailable
+			decision.ScoreMetricsUnavailable = true
+			return
+		}
 		scoreCandidates = append(scoreCandidates, RouteScoreCandidate{
-			ChannelID:      candidate.ChannelID,
-			Priority:       candidate.Priority,
-			Weight:         candidate.Weight,
-			ErrorRate:      metrics.ErrorRate,
-			ErrorRateKnown: metrics.ErrorRateKnown,
-			LatencyMS:      metrics.LatencyMS,
-			LatencyKnown:   metrics.LatencyKnown,
-			TTFTMS:         metrics.TTFTMS,
-			TTFTKnown:      metrics.TTFTKnown,
-			Sticky:         decision.LegacyTrace.AffinityHit && candidate.ChannelID == decision.LegacyChannelID,
-			HealthUsable:   CanUseRouteHealth(health, now),
+			ChannelID:         candidate.ChannelID,
+			Priority:          candidate.Priority,
+			Weight:            candidate.Weight,
+			ErrorRate:         metrics.ErrorRate,
+			ErrorRateKnown:    metrics.ErrorRateKnown,
+			LatencyMS:         metrics.LatencyMS,
+			LatencyKnown:      metrics.LatencyKnown,
+			TTFTMS:            metrics.TTFTMS,
+			TTFTKnown:         metrics.TTFTKnown,
+			RateLimitHeadroom: runtimeMetrics.RateLimitHeadroom,
+			RateLimitKnown:    runtimeMetrics.RateLimitKnown,
+			QuotaHeadroom:     runtimeMetrics.QuotaHeadroom,
+			QuotaKnown:        runtimeMetrics.QuotaKnown,
+			Sticky:            decision.LegacyTrace.AffinityHit && candidate.ChannelID == decision.LegacyChannelID,
+			HealthUsable:      CanUseRouteHealth(health, now),
 		})
 	}
 	scored := ScoreRouteCandidates(scoreCandidates)

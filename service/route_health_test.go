@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,6 +33,18 @@ func TestClassifyRouteErrorSeparatesKeyModelAndStreamFailures(t *testing.T) {
 	assert.False(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), true, false))
 	assert.False(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), false, true))
 	assert.True(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), false, false))
+}
+
+func TestClassifyRouteAdmissionFailureDoesNotAffectProviderHealth(t *testing.T) {
+	classification := ClassifyRouteError(http.StatusServiceUnavailable, RouteLeaseFailureCode, "route lease redis is unavailable", false)
+
+	assert.Equal(t, RouteErrorAdmission, classification.Class)
+	assert.False(t, classification.Retryable)
+	assert.False(t, classification.Failoverable)
+	assert.False(t, classification.MarkKey)
+	assert.False(t, classification.MarkCapability)
+	assert.False(t, classification.MarkChannelModel)
+	assert.False(t, CanRouteFailover(classification, false, false))
 }
 
 func TestRouteHealthStateMachineUsesEpochAndCooldown(t *testing.T) {
@@ -92,6 +105,16 @@ func TestParseRetryAfterAndDeadlineClipping(t *testing.T) {
 		})
 	}
 	assert.Equal(t, 100*time.Millisecond, RouteBackoff(0, 3*time.Second, 100*time.Millisecond, 0))
+}
+
+func TestRetryAfterOpensSharedChannelCooldownBeforeFailureThreshold(t *testing.T) {
+	now := time.Unix(1000, 0)
+	health := model.ChannelHealth{ChannelID: 5, Model: "gpt-5", KeyScope: ""}
+	health = ObserveRouteHealthFailureWithRetryAfter(health, RouteHealthPolicy{FailureThreshold: 3, Cooldown: 10 * time.Second}, now, 120*time.Second)
+
+	assert.Equal(t, model.RouteHealthStateOpen, health.State)
+	assert.Equal(t, int64(1120), health.CooldownUntil)
+	assert.False(t, CanUseRouteHealth(health, now.Add(time.Second)))
 }
 
 func TestRouteHealthMetricsAndKeyScopeAreSeparated(t *testing.T) {
@@ -158,7 +181,7 @@ func TestRouteHealthUsableAllowsOneHalfOpenProbe(t *testing.T) {
 	assert.Equal(t, model.RouteHealthStateHalfOpen, health.State)
 }
 
-func TestRouteKeyHealthUsableClaimsOneHalfOpenProbe(t *testing.T) {
+func TestRouteHealthUsableAllowsOnlyOneConcurrentHalfOpenProbe(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
 	require.NoError(t, err)
 	originalDB := model.DB
@@ -171,22 +194,85 @@ func TestRouteKeyHealthUsableClaimsOneHalfOpenProbe(t *testing.T) {
 		}
 	})
 	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
-	keyScope := RouteKeyScope("probe-key")
 	require.NoError(t, db.Create(&model.ChannelHealth{
-		ChannelID: 4, Model: "gpt-5", KeyScope: keyScope, State: model.RouteHealthStateOpen,
-		FailureCount: 1, CooldownUntil: 1000, HealthEpoch: 7,
+		ChannelID: 21, Model: "gpt-5", KeyScope: "", State: model.RouteHealthStateOpen,
+		FailureCount: 3, CooldownUntil: 1000, HealthEpoch: 4,
 	}).Error)
 
-	usable, epoch, err := RouteKeyHealthUsable(context.Background(), 4, "gpt-5", "probe-key", time.Unix(1000, 0))
-	require.NoError(t, err)
-	assert.True(t, usable)
-	assert.Equal(t, int64(8), epoch)
+	type result struct {
+		usable bool
+		epoch  int64
+		err    error
+	}
+	results := make(chan result, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			usable, epoch, callErr := RouteHealthUsable(context.Background(), 21, "gpt-5", time.Unix(1000, 0))
+			results <- result{usable: usable, epoch: epoch, err: callErr}
+		}()
+	}
+	wg.Wait()
+	close(results)
 
-	usable, epoch, err = RouteKeyHealthUsable(context.Background(), 4, "gpt-5", "probe-key", time.Unix(1001, 0))
+	usableCount := 0
+	for item := range results {
+		require.NoError(t, item.err)
+		if item.usable {
+			usableCount++
+			assert.Equal(t, int64(5), item.epoch)
+		}
+	}
+	assert.Equal(t, 1, usableCount)
+}
+
+func TestRouteKeyHealthUsableAllowsOnlyOneConcurrentHalfOpenProbe(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
 	require.NoError(t, err)
-	assert.False(t, usable)
-	assert.Equal(t, int64(8), epoch)
-	assert.False(t, CanUseRouteHealth(model.ChannelHealth{State: model.RouteHealthStateHalfOpen}, time.Unix(1001, 0)))
+	originalDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = originalDB
+		sqlDB, closeErr := db.DB()
+		if closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: 22, Model: "gpt-5", KeyScope: RouteKeyScope("recovering-key"), State: model.RouteHealthStateOpen,
+		FailureCount: 1, CooldownUntil: 1000, HealthEpoch: 4,
+	}).Error)
+
+	type result struct {
+		usable bool
+		epoch  int64
+		err    error
+	}
+	results := make(chan result, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			usable, epoch, callErr := RouteKeyHealthUsable(context.Background(), 22, "gpt-5", "recovering-key", time.Unix(1000, 0))
+			results <- result{usable: usable, epoch: epoch, err: callErr}
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	usableCount := 0
+	for item := range results {
+		require.NoError(t, item.err)
+		if item.usable {
+			usableCount++
+			assert.Equal(t, int64(5), item.epoch)
+		}
+	}
+	assert.Equal(t, 1, usableCount)
 }
 
 func TestObserveLiveRouteErrorKeepsKeyAndCapabilityScopesSeparate(t *testing.T) {

@@ -23,6 +23,7 @@ import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
+import { useLatestRequest } from '@/composables/useLatestRequest'
 import type {
   EligibleRouteChannel,
   RouteEntry,
@@ -57,8 +58,7 @@ const loadError = ref('')
 const conflict = ref(false)
 const draggingEntry = ref<RouteEntry | null>(null)
 const activeGroupKey = ref('')
-let loadRequestSerial = 0
-let previewRequestSerial = 0
+const previewRequest = useLatestRequest()
 
 const activeGroup = computed(() => {
   return (
@@ -87,7 +87,12 @@ const canEdit = computed(
 const canSave = computed(() => canEdit.value)
 
 const availableChannels = computed(() =>
-  channels.value.filter((channel) => !activeEntryIds.value.has(channel.id))
+  channels.value.filter(
+    (channel) =>
+      !activeEntryIds.value.has(channel.id) &&
+      channel.capability_state === 'eligible' &&
+      !channel.filter_reason
+  )
 )
 
 function defaultPolicy(groupId = 0): RoutePolicy {
@@ -136,8 +141,7 @@ function setView(view: RouteProfileView): void {
 }
 
 async function load(): Promise<void> {
-  const requestSerial = ++loadRequestSerial
-  const requestedTokenID = tokenId.value
+  invalidatePreview()
   loading.value = true
   loadError.value = ''
   invalidatePreview()
@@ -231,9 +235,8 @@ function input(): RouteProfileInput {
 }
 
 async function save(): Promise<void> {
-  if (!canSave.value) return
-  const requestedTokenID = tokenId.value
-  const requestedLoadSerial = loadRequestSerial
+  if (saving.value || !tokenId.value) return
+  invalidatePreview()
   saving.value = true
   try {
     const next = profileView.value
@@ -266,36 +269,19 @@ async function save(): Promise<void> {
 }
 
 async function removeProfile(): Promise<void> {
-  const current = profileView.value
-  if (!current || !canEdit.value) return
-  const requestedTokenID = tokenId.value
-  const requestedLoadSerial = loadRequestSerial
-  deletingProfile.value = true
-  draggingEntry.value = null
+  if (!profileView.value || saving.value) return
+  invalidatePreview()
+  saving.value = true
   try {
-    await routingApi.remove(current.profile.id)
-    if (
-      requestedTokenID !== tokenId.value ||
-      requestedLoadSerial !== loadRequestSerial
-    ) {
-      return
-    }
-    invalidatePreview()
+    await routingApi.remove(profileView.value.profile.id)
     profileView.value = null
     groups.value = []
     activeGroupKey.value = ''
-    preview.value = null
-    conflict.value = false
+    toast.success(t('routing.removed'))
   } catch (error) {
-    if (
-      requestedTokenID !== tokenId.value ||
-      requestedLoadSerial !== loadRequestSerial
-    ) {
-      return
-    }
     toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
-    deletingProfile.value = false
+    saving.value = false
   }
 }
 
@@ -383,6 +369,10 @@ function clearDraggingEntry(): void {
   draggingEntry.value = null
 }
 
+function clearDraggingEntry(): void {
+  draggingEntry.value = null
+}
+
 function channelFor(entry: RouteEntry): EligibleRouteChannel | undefined {
   return channels.value.find((channel) => channel.id === entry.channel_id)
 }
@@ -400,13 +390,25 @@ function normalizeRouteModel(value: string): string {
 }
 
 function capabilityFor(entry: RouteEntry) {
-  const requestModel = normalizeRouteModel(model.value)
-  if (!requestModel) return undefined
+  const requestedModel = normalizeRouteModel(model.value)
   return catalog.value?.items.find(
     (item) =>
       item.channel_id === entry.channel_id &&
-      item.request_model === requestModel
+      (!requestedModel ||
+        normalizeRouteModel(item.request_model) === requestedModel)
   )
+}
+
+function normalizeRouteModel(value: string): string {
+  let normalized = value.normalize('NFKC').trim().toLowerCase()
+  for (;;) {
+    const previous = normalized
+    normalized = normalized.replace(/@default$/, '')
+    for (const suffix of [':free', ':thinking', ':low', ':medium', ':high']) {
+      normalized = normalized.replace(new RegExp(`${suffix}$`), '')
+    }
+    if (normalized === previous) return normalized
+  }
 }
 
 function channelTone(
@@ -424,18 +426,30 @@ function healthTone(state: RouteHealthState): 'success' | 'warning' | 'danger' {
 }
 
 async function runPreview(): Promise<void> {
-  if (
-    !profileView.value ||
-    !model.value.trim() ||
-    !path.value.trim() ||
-    loadingPreview.value
-  )
-    return
-  const requestSerial = ++previewRequestSerial
+  if (!profileView.value || !model.value.trim() || !path.value.trim()) return
   const profileID = profileView.value.profile.id
-  const input = {
-    model: model.value.trim(),
-    path: path.value.trim(),
+  loadingPreview.value = true
+  preview.value = null
+  const result = await previewRequest.run((signal) =>
+    routingApi.preview(
+      profileID,
+      {
+        model: model.value.trim(),
+        path: path.value.trim(),
+      },
+      signal
+    )
+  )
+  if (result.stale) return
+  loadingPreview.value = false
+  if (result.ok) {
+    preview.value = result.value
+  } else {
+    toast.error(
+      result.error instanceof ApiError
+        ? result.error.message
+        : String(result.error)
+    )
   }
   loadingPreview.value = true
   preview.value = null
@@ -464,17 +478,17 @@ function invalidatePreview(): void {
 }
 
 function reloadAfterConflict(): void {
+  invalidatePreview()
   void load()
 }
 
-watch(groups, invalidatePreview, { deep: true })
+function invalidatePreview(): void {
+  previewRequest.cancel()
+  preview.value = null
+  loadingPreview.value = false
+}
+
 watch([model, path], invalidatePreview)
-watch(
-  () => route.params.id,
-  () => {
-    void load()
-  }
-)
 
 onMounted(() => void load())
 </script>
@@ -491,7 +505,20 @@ onMounted(() => void load())
             <ArrowLeft class="h-4 w-4" aria-hidden="true" />
             {{ t('common.back') }}
           </ConsoleButton>
-          <ConsoleButton :loading="saving" :disabled="!canSave" @click="save">
+          <ConsoleButton
+            v-if="profileView"
+            variant="secondary"
+            :disabled="loading || !!loadError || saving"
+            @click="removeProfile"
+          >
+            <Trash2 class="h-4 w-4" aria-hidden="true" />
+            {{ t('routing.removeProfile') }}
+          </ConsoleButton>
+          <ConsoleButton
+            :loading="saving"
+            :disabled="loading || !!loadError"
+            @click="save"
+          >
             <Save class="h-4 w-4" aria-hidden="true" />
             {{ t('common.save') }}
           </ConsoleButton>

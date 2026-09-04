@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -175,6 +176,31 @@ func TestRouteProfileKeepsMultipleNewGroups(t *testing.T) {
 	assert.Equal(t, "备用线路", created.Groups[1].Group.Name)
 }
 
+func TestRouteProfileRejectsDuplicateChannelAcrossGroups(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+
+	_, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{
+			{
+				Name: "primary", Enabled: true, Position: 0,
+				Entries: []RouteEntryInput{{
+					ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true,
+				}},
+			},
+			{
+				Name: "saved preset", Enabled: true, Position: 1,
+				Entries: []RouteEntryInput{{
+					ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true,
+				}},
+			},
+		},
+	})
+
+	assert.ErrorIs(t, err, ErrRouteProfileValidation)
+}
+
 func TestRouteProfilePreviewUsesActiveGroupOrderAndSamePositionWeight(t *testing.T) {
 	db := setupRouteProfileTest(t)
 	userID, tokenID, firstChannelID := seedRouteProfileFixture(t, db)
@@ -197,6 +223,10 @@ func TestRouteProfilePreviewUsesActiveGroupOrderAndSamePositionWeight(t *testing
 		},
 	})
 	require.NoError(t, err)
+	require.Len(t, created.Groups, 2)
+	require.Len(t, created.Groups[0].Entries, 2)
+	assert.Equal(t, secondChannelID, created.Groups[0].Entries[0].ChannelID)
+	assert.Equal(t, firstChannelID, created.Groups[0].Entries[1].ChannelID)
 
 	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
 		Model: "gpt-test", Path: "/v1/chat/completions",
@@ -283,6 +313,63 @@ func TestRouteProfilePreviewIncludesChannelModelHealthSummary(t *testing.T) {
 	entry = findRoutePreviewEntry(t, preview, channelID)
 	assert.Empty(t, preview.CandidateChannelIDs)
 	assert.Equal(t, RouteFilterKeyUnavailable, entry.FilterReason)
+}
+
+func TestRouteProfilePreviewFiltersDisabledTokenAndUnavailableHealth(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{Name: "资格", Enabled: true, Entries: []RouteEntryInput{{
+			ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true,
+		}}}},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Update("status", common.TokenStatusDisabled).Error)
+	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, ShadowFilterTokenForbidden, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Update("status", common.TokenStatusEnabled).Error)
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: channelID, Model: "gpt-test", KeyScope: "", State: model.RouteHealthStateOpen,
+		FailureCount: 3, CooldownUntil: time.Now().Add(time.Minute).Unix(), HealthEpoch: 2,
+	}).Error)
+	preview, err = PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, RouteCandidateFilterHealthUnavailable, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+}
+
+func TestRouteProfilePreviewFiltersChannelWhenEveryKeyIsUnavailable(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	channel := model.Channel{}
+	require.NoError(t, db.First(&channel, "id = ?", channelID).Error)
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: channelID, Model: "gpt-test", KeyScope: RouteKeyScope(channel.Key), State: model.RouteHealthStateOpen,
+		FailureCount: 1, CooldownUntil: time.Now().Add(time.Minute).Unix(), HealthEpoch: 2,
+	}).Error)
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{Name: "Key 健康", Enabled: true, Entries: []RouteEntryInput{{
+			ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true,
+		}}}},
+	})
+	require.NoError(t, err)
+
+	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, preview.CandidateChannelIDs)
+	assert.Equal(t, RouteFilterKeyUnavailable, findRoutePreviewEntry(t, preview, channelID).FilterReason)
 }
 
 func TestRouteProfilePreviewFiltersUnresolvedConflictingAndUnsupportedCapabilities(t *testing.T) {
@@ -595,6 +682,75 @@ func TestRouteProfileUpdateKeepsExistingRevokedEntryForRemoval(t *testing.T) {
 		}},
 	})
 	assert.True(t, errors.Is(err, ErrRouteProfileValidation))
+}
+
+func TestRouteProfilePreviewUsesUnresolvedStateForMissingSnapshot(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "missing snapshot", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+
+	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	entry := findRoutePreviewEntry(t, preview, channelID)
+	assert.Equal(t, model.RouteCapabilityStateUnresolved, entry.CapabilityState)
+	assert.Equal(t, ShadowFilterSnapshotUnavailable, entry.FilterReason)
+}
+
+func TestRouteProfileUpdateCannotModifyOrDeleteSystemAutoLabGroups(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "manual", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+	manual := created.Groups[0].Group
+	auto := model.UserRouteGroup{ProfileID: created.Profile.ID, Name: "system lab", Kind: model.RouteGroupKindAutoLab, Enabled: true, Position: 1}
+	require.NoError(t, db.Create(&auto).Error)
+
+	_, err = UpdateUserRouteProfile(created.Profile.ID, RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual, Version: created.Profile.Version,
+		ActiveGroupID: &manual.ID,
+		Groups: []RouteGroupInput{{
+			ID: auto.ID, Name: "tampered", Kind: model.RouteGroupKindManual, Enabled: false, Position: 0,
+		}},
+	})
+	assert.ErrorIs(t, err, ErrRouteProfileForbidden)
+
+	updated, err := UpdateUserRouteProfile(created.Profile.ID, RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual, Version: created.Profile.Version,
+		ActiveGroupID: &manual.ID,
+		Groups: []RouteGroupInput{{
+			ID: manual.ID, Name: "manual updated", Enabled: true, Position: 0,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+	assert.Len(t, updated.Groups, 2)
+	var stored model.UserRouteGroup
+	require.NoError(t, db.Where("id = ?", auto.ID).First(&stored).Error)
+	assert.Equal(t, model.RouteGroupKindAutoLab, stored.Kind)
+	assert.Equal(t, "system lab", stored.Name)
+	assert.ErrorIs(t, DeleteUserRouteProfile(userID, created.Profile.ID), ErrRouteProfileForbidden)
+}
+
+func TestDuplicateRouteProfileErrorsAreNormalized(t *testing.T) {
+	assert.True(t, isDuplicateRouteProfileError(errors.New("UNIQUE constraint failed: user_route_profiles.token_id")))
+	assert.True(t, isDuplicateRouteProfileError(errors.New("duplicate key value violates unique constraint")))
+	assert.True(t, isDuplicateRouteProfileError(errors.New("Duplicate entry for key token_id")))
+	assert.False(t, isDuplicateRouteProfileError(errors.New("database unavailable")))
 }
 
 func TestDeleteRouteProfileCascadesChildren(t *testing.T) {

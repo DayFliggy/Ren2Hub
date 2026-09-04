@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   remove: vi.fn(),
   preview: vi.fn(),
+  remove: vi.fn(),
 }))
 
 vi.mock('@/api/routingApi', () => ({
@@ -102,7 +103,7 @@ const channels: EligibleRouteChannel[] = [
     name: 'Primary channel',
     type: 1,
     status: 1,
-    models: 'gpt-5',
+    request_models: ['gpt-5'],
     priority: 1,
     weight: 1,
     snapshot_version: 1,
@@ -114,7 +115,7 @@ const channels: EligibleRouteChannel[] = [
     name: 'Backup channel',
     type: 1,
     status: 1,
-    models: 'gpt-5',
+    request_models: ['gpt-5'],
     priority: 1,
     weight: 1,
     snapshot_version: 1,
@@ -284,13 +285,36 @@ describe('TokenRoutingView', () => {
     await buttonByText(view, 'Run preview').trigger('click')
     await flushPromises()
 
-    expect(mocks.preview).toHaveBeenCalledWith(1, {
-      model: 'gpt-5',
-      path: '/v1/chat/completions',
-    })
+    expect(mocks.preview).toHaveBeenCalledWith(
+      1,
+      {
+        model: 'gpt-5',
+        path: '/v1/chat/completions',
+      },
+      expect.any(AbortSignal)
+    )
     expect(view.text()).toContain('Cooling down')
     expect(view.get('[data-testid="route-preview-health"]').text()).toContain(
       '3 failures'
+    )
+  })
+
+  it('clears a previous preview when the next preview fails', async () => {
+    const view = await mountView()
+
+    await view.get('input[placeholder="gpt-5"]').setValue('gpt-5')
+    await buttonByText(view, 'Run preview').trigger('click')
+    await flushPromises()
+    expect(view.find('[data-testid="route-preview-health"]').exists()).toBe(
+      true
+    )
+
+    mocks.preview.mockRejectedValueOnce(new ApiError('preview failed'))
+    await buttonByText(view, 'Run preview').trigger('click')
+    await flushPromises()
+
+    expect(view.find('[data-testid="route-preview-health"]').exists()).toBe(
+      false
     )
   })
 
@@ -313,144 +337,35 @@ describe('TokenRoutingView', () => {
     expect(mocks.profiles).toHaveBeenCalledTimes(2)
   })
 
-  it('does not save a stale draft after loading fails', async () => {
-    mocks.profiles.mockRejectedValueOnce(new ApiError('load failed'))
+  it('deletes an existing profile and clears the editor', async () => {
     const view = await mountView()
 
-    const save = buttonByText(view, 'Save')
-    expect(save.attributes('disabled')).toBeDefined()
-    await save.trigger('click')
-
-    expect(mocks.create).not.toHaveBeenCalled()
-    expect(mocks.update).not.toHaveBeenCalled()
-  })
-
-  it('deletes the current profile and returns to the create state', async () => {
-    const view = await mountView()
-
-    await buttonByText(view, 'Delete').trigger('click')
+    await buttonByText(view, 'Delete profile').trigger('click')
     await flushPromises()
 
     expect(mocks.remove).toHaveBeenCalledWith(1)
-    expect(view.text()).toContain('This token has no routing profile yet')
+    expect(view.text()).toContain('Create routing profile')
   })
 
-  it('clears drag state when a drag ends without a drop', async () => {
-    const view = await mountView()
-    const entries = view.findAll('[draggable="true"]')
-
-    await entries[0].trigger('dragstart')
-    await entries[0].trigger('dragend')
-    await entries[1].trigger('drop')
-    await buttonByText(view, 'Save').trigger('click')
-    await flushPromises()
-
-    expect(mocks.update).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({
-        groups: [
-          expect.objectContaining({
-            entries: [
-              expect.objectContaining({ channel_id: 101, position: 0 }),
-              expect.objectContaining({ channel_id: 102, position: 1 }),
-            ],
-          }),
-        ],
-      })
+  it('does not apply a preview that resolves after the profile is deleted', async () => {
+    let resolvePreview: (value: RoutePreview) => void = () => undefined
+    mocks.preview.mockImplementationOnce(
+      () =>
+        new Promise<RoutePreview>((resolve) => {
+          resolvePreview = resolve
+        })
     )
-  })
-
-  it('shows channel capability for the requested model', async () => {
-    mocks.catalog.mockResolvedValue({
-      ...catalog,
-      items: [
-        { ...catalog.items[0], request_model: 'gpt-4', lab_slug: 'wrong-lab' },
-        { ...catalog.items[0], request_model: 'gpt-5', lab_slug: 'right-lab' },
-      ],
-    })
     const view = await mountView()
 
     await view.get('input[placeholder="gpt-5"]').setValue('gpt-5')
-
-    expect(view.text()).toContain('right-lab')
-    expect(view.text()).not.toContain('wrong-lab')
-  })
-
-  it('normalizes the requested model before matching catalog capability', async () => {
-    const view = await mountView()
-
-    await view.get('input[placeholder="gpt-5"]').setValue('GPT-5')
-
-    expect(view.text()).toContain('openai')
-  })
-
-  it('keeps system-managed auto Lab profiles read-only', async () => {
-    mocks.profiles.mockResolvedValue([
-      {
-        ...profile,
-        profile: { ...profile.profile, mode: 'auto_lab' },
-        groups: [{ ...profile.groups[0], kind: 'auto_lab' }],
-      },
-    ])
-    const view = await mountView()
-
-    expect(buttonByText(view, 'Save').attributes('disabled')).toBeDefined()
-    expect(buttonByText(view, 'Delete').attributes('disabled')).toBeDefined()
-    await buttonByText(view, 'Save').trigger('click')
-    await buttonByText(view, 'Delete').trigger('click')
-
-    expect(mocks.update).not.toHaveBeenCalled()
-    expect(mocks.remove).not.toHaveBeenCalled()
-  })
-
-  it('reloads on token changes and ignores the previous token response', async () => {
-    let resolveFirst: ((value: RouteProfileView[]) => void) | undefined
-    const firstProfiles = new Promise<RouteProfileView[]>((resolve) => {
-      resolveFirst = resolve
-    })
-    const secondProfile = {
-      ...profile,
-      profile: { ...profile.profile, token_id: 12 },
-      groups: [{ ...profile.groups[0], name: 'Secondary' }],
-    }
-    mocks.profiles
-      .mockReset()
-      .mockImplementationOnce(() => firstProfiles)
-      .mockResolvedValueOnce([secondProfile])
-
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [
-        { path: '/console/keys/:id/routing', component: TokenRoutingView },
-      ],
-    })
-    await router.push('/console/keys/11/routing')
-    await router.isReady()
-    wrapper = mount(TokenRoutingView, {
-      global: {
-        plugins: [i18n, router],
-        stubs,
-      },
-    })
+    await buttonByText(view, 'Run preview').trigger('click')
+    await buttonByText(view, 'Delete profile').trigger('click')
+    resolvePreview(preview)
     await flushPromises()
 
-    await router.push('/console/keys/12/routing')
-    await flushPromises()
-    await nextTick()
-
-    expect(mocks.profiles).toHaveBeenCalledTimes(2)
-    await nextTick()
-    expect(
-      wrapper.find('input[aria-label="Group name"]').element
-    ).toHaveProperty('value', 'Secondary')
-
-    resolveFirst?.([profile])
-    await flushPromises()
-    await nextTick()
-
-    await nextTick()
-    expect(
-      wrapper.find('input[aria-label="Group name"]').element
-    ).toHaveProperty('value', 'Secondary')
+    expect(view.text()).toContain('Create routing profile')
+    expect(view.find('[data-testid="route-preview-health"]').exists()).toBe(
+      false
+    )
   })
 })

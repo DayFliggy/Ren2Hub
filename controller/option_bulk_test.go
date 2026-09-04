@@ -134,3 +134,25 @@ func TestGetOptionSecretStatusNeverReturnsSecretValues(t *testing.T) {
 	assert.True(t, payload.Success)
 	assert.Equal(t, []string{"GitHubClientSecret", "SMTPToken", "WaffoPublicCert"}, payload.Data.Configured)
 }
+
+func TestValidateOptionPatchAcceptsNewStructuredSettings(t *testing.T) {
+	withOptionMap(t, map[string]string{})
+	err := validateOptionPatch(map[string]string{
+		"billing_setting.billing_mode":      `{"gpt-4":"ratio"}`,
+		"billing_setting.billing_expr":      `{"gpt-4":"p + c"}`,
+		"payment_setting.amount_options":    `[10,20]`,
+		"payment_setting.amount_discount":   `{"100":0.9}`,
+		"global.thinking_model_blacklist":   `["kimi-k2-thinking"]`,
+		"channel_affinity_setting.rules":    `[{"name":"codex","model_regex":["^gpt-"],"path_regex":["/v1/responses"],"ttl_seconds":0}]`,
+		"monitor_setting.channel_test_mode": "passive_recovery",
+		"FileUploadPermission":              "10",
+	})
+	require.NoError(t, err)
+}
+
+func TestValidateOptionPatchRejectsInvalidStructuredSettings(t *testing.T) {
+	withOptionMap(t, map[string]string{})
+	assert.Error(t, validateOptionPatch(map[string]string{"payment_setting.amount_discount": `{"100":1.2}`}))
+	assert.Error(t, validateOptionPatch(map[string]string{"monitor_setting.channel_test_mode": "invalid"}))
+	assert.Error(t, validateOptionPatch(map[string]string{"FileUploadPermission": "2"}))
+}

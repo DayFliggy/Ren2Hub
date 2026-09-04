@@ -115,18 +115,28 @@ func recoverOneBillingRecovery(ctx context.Context, requestID string) (string, e
 }
 
 func recoverBillingSettlement(recovery model.BillingRecovery) (string, error) {
+	current, err := loadBillingRecovery(recovery.RequestID)
+	if err != nil {
+		return recovery.Status, err
+	}
+	recovery = current
 	if recovery.FundingSettlement != model.BillingRecoveryStateCompleted {
 		if err := model.ApplyBillingRecoveryAdjustment(recovery.RequestID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationSettle); err != nil {
 			return recovery.Status, err
 		}
 	}
+	current, err = loadBillingRecovery(recovery.RequestID)
+	if err != nil {
+		return recovery.Status, err
+	}
+	recovery = current
 	if recovery.TokenSettlement != model.BillingRecoveryStateCompleted {
 		if err := model.ApplyBillingRecoveryAdjustment(recovery.RequestID, model.BillingRecoveryComponentToken, model.BillingRecoveryOperationSettle); err != nil {
 			return recovery.Status, err
 		}
 	}
-	var current model.BillingRecovery
-	if err := model.DB.Where("request_id = ?", recovery.RequestID).First(&current).Error; err != nil {
+	current, err = loadBillingRecovery(recovery.RequestID)
+	if err != nil {
 		return recovery.Status, err
 	}
 	if !model.BillingRecoverySettlementComplete(current) {
@@ -142,8 +152,8 @@ func recoverBillingRefund(recovery model.BillingRecovery) (string, error) {
 	if err := model.MarkBillingRecoveryRefundPending(recovery.RequestID, nil); err != nil {
 		return recovery.Status, err
 	}
-	var current model.BillingRecovery
-	if err := model.DB.Where("request_id = ?", recovery.RequestID).First(&current).Error; err != nil {
+	current, err := loadBillingRecovery(recovery.RequestID)
+	if err != nil {
 		return model.BillingRecoveryStatusRefundPending, err
 	}
 	recovery = current
@@ -152,17 +162,28 @@ func recoverBillingRefund(recovery model.BillingRecovery) (string, error) {
 			return model.BillingRecoveryStatusRefundPending, err
 		}
 	}
+	current, err = loadBillingRecovery(recovery.RequestID)
+	if err != nil {
+		return model.BillingRecoveryStatusRefundPending, err
+	}
+	recovery = current
 	if recovery.ExtraAmount > 0 && recovery.ExtraRefund != model.BillingRecoveryStateCompleted {
 		if err := model.ApplyBillingRecoveryAdjustment(recovery.RequestID, model.BillingRecoveryComponentExtra, model.BillingRecoveryOperationRefund); err != nil {
 			return model.BillingRecoveryStatusRefundPending, err
 		}
 	}
+	current, err = loadBillingRecovery(recovery.RequestID)
+	if err != nil {
+		return model.BillingRecoveryStatusRefundPending, err
+	}
+	recovery = current
 	if recovery.TokenAmount > 0 && recovery.TokenRefund != model.BillingRecoveryStateCompleted {
 		if err := model.ApplyBillingRecoveryAdjustment(recovery.RequestID, model.BillingRecoveryComponentToken, model.BillingRecoveryOperationRefund); err != nil {
 			return model.BillingRecoveryStatusRefundPending, err
 		}
 	}
-	if err := model.DB.Where("request_id = ?", recovery.RequestID).First(&current).Error; err != nil {
+	current, err = loadBillingRecovery(recovery.RequestID)
+	if err != nil {
 		return model.BillingRecoveryStatusRefundPending, err
 	}
 	if !model.BillingRecoveryRefundComplete(current) {
@@ -172,4 +193,13 @@ func recoverBillingRefund(recovery model.BillingRecovery) (string, error) {
 		return current.Status, err
 	}
 	return model.BillingRecoveryStatusRefunded, nil
+}
+
+func loadBillingRecovery(requestID string) (model.BillingRecovery, error) {
+	var recovery model.BillingRecovery
+	if model.DB == nil {
+		return recovery, errors.New("billing recovery database is unavailable")
+	}
+	err := model.DB.Where("request_id = ?", requestID).First(&recovery).Error
+	return recovery, err
 }

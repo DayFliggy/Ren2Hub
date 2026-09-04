@@ -127,6 +127,9 @@ func CreateUserRouteProfile(input RouteProfileInput) (*RouteProfileView, error) 
 			return fmt.Errorf("%w: %v", ErrRouteProfileValidation, err)
 		}
 		if err := tx.Create(&profile).Error; err != nil {
+			if isDuplicateRouteProfileError(err) {
+				return ErrRouteProfileAlreadyExists
+			}
 			return err
 		}
 		groupIDs, err := replaceGroups(tx, input.UserID, &profile, input.Groups, nil)
@@ -222,6 +225,11 @@ func DeleteUserRouteProfile(userID, profileID int) error {
 		if err := tx.Where("profile_id = ?", profile.ID).Find(&groups).Error; err != nil {
 			return err
 		}
+		for _, group := range groups {
+			if group.Kind == model.RouteGroupKindAutoLab {
+				return fmt.Errorf("%w: auto lab groups are system-owned", ErrRouteProfileForbidden)
+			}
+		}
 		groupIDs := make([]int, 0, len(groups))
 		for _, group := range groups {
 			groupIDs = append(groupIDs, group.ID)
@@ -248,16 +256,22 @@ func loadRouteProfileView(db *gorm.DB, profile *model.UserRouteProfile) (*RouteP
 	}
 	views := make([]RouteGroupView, 0, len(groups))
 	for _, group := range groups {
-		var entries []model.UserRouteEntry
-		if err := db.Where("group_id = ?", group.ID).Order("position asc, id asc").Find(&entries).Error; err != nil {
-			return nil, err
-		}
 		var policy model.RoutePolicy
 		if err := db.Where("group_id = ?", group.ID).First(&policy).Error; err != nil {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, err
 			}
 			policy = defaultRoutePolicy(group.ID)
+		}
+		var entries []model.UserRouteEntry
+		entryQuery := db.Where("group_id = ?", group.ID).Order("position asc")
+		if policy.LoadBalance {
+			entryQuery = entryQuery.Order("weight desc, channel_id asc, id asc")
+		} else {
+			entryQuery = entryQuery.Order("channel_id asc, id asc")
+		}
+		if err := entryQuery.Find(&entries).Error; err != nil {
+			return nil, err
 		}
 		views = append(views, RouteGroupView{Group: group, Entries: entries, Policy: policy})
 	}
@@ -267,6 +281,15 @@ func loadRouteProfileView(db *gorm.DB, profile *model.UserRouteProfile) (*RouteP
 func replaceGroups(tx *gorm.DB, userID int, profile *model.UserRouteProfile, inputs []RouteGroupInput, existingProfile *model.UserRouteProfile) (map[int]int, error) {
 	if profile.Mode != model.RouteModeManual && len(inputs) > 0 {
 		return nil, fmt.Errorf("%w: only manual profiles can contain user groups", ErrRouteProfileValidation)
+	}
+	seenChannelIDs := make(map[int]struct{})
+	for _, group := range inputs {
+		for _, entry := range group.Entries {
+			if _, duplicate := seenChannelIDs[entry.ChannelID]; duplicate {
+				return nil, fmt.Errorf("%w: duplicate channel in route profile", ErrRouteProfileValidation)
+			}
+			seenChannelIDs[entry.ChannelID] = struct{}{}
+		}
 	}
 	existing := make(map[int]model.UserRouteGroup)
 	if existingProfile != nil {
@@ -301,8 +324,12 @@ func replaceGroups(tx *gorm.DB, userID int, profile *model.UserRouteProfile, inp
 			return nil, fmt.Errorf("%w: %v", ErrRouteProfileValidation, err)
 		}
 		if input.ID > 0 {
-			if _, ok := existing[input.ID]; !ok {
+			existingGroup, ok := existing[input.ID]
+			if !ok {
 				return nil, ErrRouteProfileForbidden
+			}
+			if existingGroup.Kind == model.RouteGroupKindAutoLab {
+				return nil, fmt.Errorf("%w: auto lab groups are system-owned", ErrRouteProfileForbidden)
 			}
 			if _, duplicate := seenIDs[input.ID]; duplicate {
 				return nil, fmt.Errorf("%w: duplicate route group", ErrRouteProfileValidation)
@@ -326,8 +353,11 @@ func replaceGroups(tx *gorm.DB, userID int, profile *model.UserRouteProfile, inp
 		}
 	}
 	if existingProfile != nil {
-		for id := range existing {
+		for id, group := range existing {
 			if _, keep := seenIDs[id]; keep {
+				continue
+			}
+			if group.Kind == model.RouteGroupKindAutoLab {
 				continue
 			}
 			if err := deleteRouteGroup(tx, id); err != nil {
@@ -336,6 +366,19 @@ func replaceGroups(tx *gorm.DB, userID int, profile *model.UserRouteProfile, inp
 		}
 	}
 	return groupIDs, nil
+}
+
+func isDuplicateRouteProfileError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "duplicate key") ||
+		strings.Contains(message, "duplicate entry") ||
+		strings.Contains(message, "unique constraint")
 }
 
 func replaceGroupChildren(tx *gorm.DB, userID int, group *model.UserRouteGroup, input RouteGroupInput) error {
