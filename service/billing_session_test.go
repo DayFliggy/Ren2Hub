@@ -165,10 +165,11 @@ func TestBillingSessionReservePersistsRecoveryAmountsWithReservation(t *testing.
 	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", tokenID).Update("used_quota", 40).Error)
 
 	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
-		RequestID: requestID,
-		UserID:    userID,
-		TokenID:   tokenID,
-		Source:    BillingSourceWallet,
+		RequestID:     requestID,
+		UserID:        userID,
+		TokenID:       tokenID,
+		Source:        BillingSourceWallet,
+		TokenRequired: true,
 	})
 	require.NoError(t, err)
 	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 0, 40, 0, 40))

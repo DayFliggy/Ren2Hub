@@ -4,6 +4,7 @@ import {
   isRecord,
   requiredBoolean,
   requiredInteger,
+  requiredStrictInteger,
   requiredStrictNumber,
   requiredString,
 } from './contracts'
@@ -39,13 +40,6 @@ const retryModes = new Set<RouteRetryMode>([
 ])
 
 const healthStates = new Set<RouteHealthState>(['closed', 'open', 'half_open'])
-
-const retryModes = new Set([
-  'none',
-  'same_channel',
-  'next_channel',
-  'same_then_next',
-])
 
 function requiredNullableInteger(
   value: unknown,
@@ -94,7 +88,7 @@ function parsePolicy(value: unknown, endpoint: string): RoutePolicy {
     load_balance: requiredBoolean(value.load_balance, endpoint),
     max_ratio: requiredStrictNumber(value.max_ratio, endpoint),
     retry_mode: retryMode as RouteRetryMode,
-    max_same_resource_attempts: requiredInteger(
+    max_same_resource_attempts: requiredStrictInteger(
       value.max_same_resource_attempts,
       endpoint
     ),
@@ -177,66 +171,18 @@ export function parseRouteProfileView(
   if (mode !== 'legacy' && mode !== 'manual' && mode !== 'auto_lab')
     invalidResponse(endpoint)
   const profile = {
-    id: requiredInteger(value.profile.id, endpoint),
-    user_id: requiredInteger(value.profile.user_id, endpoint),
-    token_id: requiredInteger(value.profile.token_id, endpoint),
+    id: requiredStrictInteger(value.profile.id, endpoint),
+    user_id: requiredStrictInteger(value.profile.user_id, endpoint),
+    token_id: requiredStrictInteger(value.profile.token_id, endpoint),
     mode,
     active_group_id: requiredNullableInteger(
       value.profile.active_group_id,
       endpoint
     ),
-    version: requiredInteger(value.profile.version, endpoint),
-    status: requiredInteger(value.profile.status, endpoint),
-    created_at: requiredInteger(value.profile.created_at, endpoint),
-    updated_at: requiredInteger(value.profile.updated_at, endpoint),
-  }
-  const groups = value.groups.map((group) => parseGroup(group, endpoint))
-  validateRouteProfileView({ profile, groups }, endpoint)
-  return { profile, groups }
-}
-
-function validateRouteProfileView(
-  view: RouteProfileView,
-  endpoint: string
-): void {
-  const groupIDs = new Set<number>()
-  const entryIDs = new Set<number>()
-  const channelIDs = new Set<number>()
-  for (const group of view.groups) {
-    if (
-      group.id <= 0 ||
-      group.profile_id !== view.profile.id ||
-      group.policy.group_id !== group.id ||
-      groupIDs.has(group.id)
-    ) {
-      invalidResponse(endpoint)
-    }
-    groupIDs.add(group.id)
-    for (let index = 0; index < group.entries.length; index += 1) {
-      const entry = group.entries[index]
-      if (
-        entry.id <= 0 ||
-        entry.group_id !== group.id ||
-        entryIDs.has(entry.id) ||
-        channelIDs.has(entry.channel_id) ||
-        (index > 0 &&
-          compareRouteEntries(
-            group.entries[index - 1],
-            entry,
-            group.policy.load_balance
-          ) > 0)
-      ) {
-        invalidResponse(endpoint)
-      }
-      entryIDs.add(entry.id)
-      channelIDs.add(entry.channel_id)
-    }
-  }
-  if (
-    view.profile.active_group_id !== null &&
-    !groupIDs.has(view.profile.active_group_id)
-  ) {
-    invalidResponse(endpoint)
+    version: requiredStrictInteger(value.profile.version, endpoint),
+    status: requiredStrictInteger(value.profile.status, endpoint),
+    created_at: requiredStrictInteger(value.profile.created_at, endpoint),
+    updated_at: requiredStrictInteger(value.profile.updated_at, endpoint),
   }
   const groups = value.groups.map((group) => parseGroup(group, endpoint))
   assertRouteProfileInvariants(profile, groups, endpoint)
@@ -250,6 +196,8 @@ function assertRouteProfileInvariants(
 ): void {
   const groupIDs = new Set<number>()
   const groupPositions = new Set<number>()
+  const entryIDs = new Set<number>()
+  const channelIDs = new Set<number>()
   let previousPosition = -1
   let previousID = -1
   for (const group of groups) {
@@ -266,7 +214,14 @@ function assertRouteProfileInvariants(
     groupPositions.add(group.position)
     previousPosition = group.position
     previousID = group.id
-    assertRouteEntryInvariants(group.entries, group.id, false, endpoint)
+    assertRouteEntryInvariants(
+      group.entries,
+      group.id,
+      group.policy.load_balance,
+      endpoint,
+      entryIDs,
+      channelIDs
+    )
   }
   if (
     profile.active_group_id !== null &&
@@ -280,18 +235,23 @@ function assertRouteEntryInvariants(
   entries: RouteEntry[],
   groupID: number,
   loadBalance: boolean,
-  endpoint: string
+  endpoint: string,
+  globalEntryIDs?: Set<number>,
+  globalChannelIDs?: Set<number>
 ): void {
   const entryIDs = new Set<number>()
   const channelIDs = new Set<number>()
   let previousPosition = -1
   let previousWeight = Number.POSITIVE_INFINITY
+  let previousChannelID = -1
   let previousID = -1
   for (const entry of entries) {
     if (
       entry.group_id !== groupID ||
       entryIDs.has(entry.id) ||
       channelIDs.has(entry.channel_id) ||
+      globalEntryIDs?.has(entry.id) ||
+      globalChannelIDs?.has(entry.channel_id) ||
       entry.position < 0 ||
       entry.weight < 0
     ) {
@@ -303,15 +263,21 @@ function assertRouteEntryInvariants(
         invalidResponse(endpoint)
       if (
         (!loadBalance || entry.weight === previousWeight) &&
-        entry.id <= previousID
+        (loadBalance
+          ? entry.channel_id < previousChannelID ||
+            (entry.channel_id === previousChannelID && entry.id <= previousID)
+          : entry.id <= previousID)
       ) {
         invalidResponse(endpoint)
       }
     }
     entryIDs.add(entry.id)
     channelIDs.add(entry.channel_id)
+    globalEntryIDs?.add(entry.id)
+    globalChannelIDs?.add(entry.channel_id)
     previousPosition = entry.position
     previousWeight = entry.weight
+    previousChannelID = entry.channel_id
     previousID = entry.id
   }
 }
@@ -327,17 +293,6 @@ function isPositionOrdered(
     (position > previousPosition ||
       (position === previousPosition && id > previousID))
   )
-}
-
-function compareRouteEntries(
-  left: RouteEntry,
-  right: RouteEntry,
-  loadBalance: boolean
-): number {
-  if (left.position !== right.position) return left.position - right.position
-  if (loadBalance && left.weight !== right.weight)
-    return right.weight - left.weight
-  return left.channel_id - right.channel_id
 }
 
 export function parseEligibleRouteChannel(

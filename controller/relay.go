@@ -382,7 +382,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			return
 		}
 
-		if routeLiveSelectionActive(c) && relayInfo.HasSendResponse() && liveRouteLeaseRenewalFailed(c) {
+		if routeLiveSelectionActive(c) && relayInfo.HasSendResponse() && liveRouteRenewalFailed(c) {
 			// The client has already received a valid protocol response. A
 			// subsequent renewal failure must stop further work, but it must not
 			// rewrite that completed response as an upstream/channel failure.
@@ -840,7 +840,6 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 	if err := service.RecheckRouteLeaseRuntime(expected, current); err != nil {
 		return releaseUncommittedRouteLease(c, lease, err)
 	}
-	priceEligibilityKnown, priceEligible, securityEligibilityKnown, securityAllowed := liveRouteQualificationFacts(c, info)
 	if err := service.RecheckLiveRouteCandidate(service.LiveRouteCandidateQualificationRequest{
 		Context:                  c.Request.Context(),
 		RouteSource:              selection.Source,
@@ -858,7 +857,6 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 		SecurityEligibilityKnown: qualification.SecurityEligibilityKnown,
 		SecurityAllowed:          qualification.SecurityAllowed,
 	}); err != nil {
-		err = releaseUncommittedRouteLease(c, lease, err)
 		if reason := service.LiveRouteQualificationReason(err); reason != "" {
 			markLiveRouteCandidateFiltered(c, channel.Id, reason)
 		}
@@ -893,18 +891,6 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 	c.Set("route_live_lease_parent_context", parentContext)
 	c.Set("route_live_renewal", renewal)
 	return nil
-}
-
-// liveRouteQualificationFacts carries only request facts already established
-// before the attempt. Pricing has completed for the selected channel at this
-// point; sensitive-input enforcement has either rejected the request or
-// allowed it. Both facts are rechecked after the lease is acquired so an
-// incomplete qualification can never be treated as an implicit allow.
-func liveRouteQualificationFacts(c *gin.Context, info *relaycommon.RelayInfo) (bool, bool, bool, bool) {
-	if c == nil || info == nil {
-		return false, false, false, false
-	}
-	return true, liveRoutePriceRatioAllowed(c, info.PriceData.GroupRatioInfo.GroupRatio), true, true
 }
 
 func releaseRejectedRouteAttemptLease(c *gin.Context, lease service.RouteLease, cause error) error {

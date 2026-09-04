@@ -28,6 +28,11 @@ import (
 
 func RelayMidjourneyImage(c *gin.Context) {
 	taskId := c.Param("id")
+	expiresAt, err := strconv.ParseInt(strings.TrimSpace(c.Query("exp")), 10, 64)
+	if err != nil || !service.ValidateMidjourneyImageURL(taskId, expiresAt, c.Query("sig"), time.Now()) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "midjourney_image_access_denied"})
+		return
+	}
 	midjourneyTask := model.GetByOnlyMJId(taskId)
 	if midjourneyTask == nil {
 		c.JSON(400, gin.H{
@@ -89,6 +94,7 @@ func RelayMidjourneyImage(c *gin.Context) {
 	}
 	// 设置响应的内容类型
 	c.Writer.Header().Set("Content-Type", contentType)
+	c.Writer.Header().Set("Cache-Control", "private, max-age=300")
 	// 将图片流式传输到响应体
 	_, err = io.Copy(c.Writer, resp.Body)
 	if err != nil {
@@ -150,9 +156,9 @@ func coverMidjourneyTaskDto(c *gin.Context, originTask *model.Midjourney) (midjo
 	midjourneyTask.FinishTime = originTask.FinishTime
 	midjourneyTask.ImageUrl = ""
 	if originTask.ImageUrl != "" && setting.MjForwardUrlEnabled {
-		midjourneyTask.ImageUrl = system_setting.ServerAddress + "/mj/image/" + originTask.MjId
+		midjourneyTask.ImageUrl = service.BuildMidjourneyImageURL(system_setting.ServerAddress, originTask.MjId)
 		if originTask.Status != "SUCCESS" {
-			midjourneyTask.ImageUrl += "?rand=" + strconv.FormatInt(time.Now().UnixNano(), 10)
+			midjourneyTask.ImageUrl += "&rand=" + strconv.FormatInt(time.Now().UnixNano(), 10)
 		}
 	} else {
 		midjourneyTask.ImageUrl = originTask.ImageUrl

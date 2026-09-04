@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -479,7 +478,12 @@ func TestLiveRouteLeaseRenewalFailureIsDetectableWithoutProviderError(t *testing
 	c.Set("route_live_renewal", service.RouteLeaseRenewal{
 		Failure: func() error { return service.ErrRouteLeaseUnavailable },
 	})
-	assert.True(t, liveRouteLeaseRenewalFailed(c))
+	assert.True(t, liveRouteRenewalFailed(c))
+	// Once observed, the failure is latched for the request so a cleared
+	// renewal object cannot reopen a retry path after capacity was lost.
 	c.Set("route_live_renewal", service.RouteLeaseRenewal{})
-	assert.False(t, liveRouteLeaseRenewalFailed(c))
+	assert.True(t, liveRouteRenewalFailed(c))
+	c2, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c2.Set("route_live_renewal", service.RouteLeaseRenewal{})
+	assert.False(t, liveRouteRenewalFailed(c2))
 }

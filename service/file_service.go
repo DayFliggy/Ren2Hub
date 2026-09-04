@@ -512,6 +512,13 @@ func detectHEIF(data []byte) string {
 	}
 }
 
+const (
+	// HEIF metadata is normally only a few levels deep. Keep parsing bounded so
+	// attacker-controlled container nesting cannot exhaust the Go stack or CPU.
+	maxHEIFBoxDepth = 64
+	maxHEIFBoxCount = 1 << 20
+)
+
 // parseHEIFDimensions parses ISOBMFF box tree to find the ispe box
 // and extract image width/height. Returns (width, height, ok).
 func parseHEIFDimensions(data []byte) (int, int, bool) {
@@ -523,23 +530,8 @@ func parseHEIFDimensions(data []byte) (int, int, bool) {
 	// Walk top-level boxes to find "meta"
 	offset := 0
 	for offset+8 <= size {
-		boxSize := int(binary.BigEndian.Uint32(data[offset : offset+4]))
-		boxType := string(data[offset+4 : offset+8])
-		headerLen := 8
-
-		if boxSize == 1 {
-			// 64-bit extended size
-			if offset+16 > size {
-				break
-			}
-			boxSize = int(binary.BigEndian.Uint64(data[offset+8 : offset+16]))
-			headerLen = 16
-		} else if boxSize == 0 {
-			// box extends to end of data
-			boxSize = size - offset
-		}
-
-		if boxSize < headerLen || offset+boxSize > size {
+		boxSize, headerLen, boxType, ok := readHEIFBox(data, offset)
+		if !ok {
 			break
 		}
 
@@ -556,34 +548,76 @@ func parseHEIFDimensions(data []byte) (int, int, bool) {
 	return 0, 0, false
 }
 
-// findISPE recursively searches for the ispe box within container boxes.
+type heifBoxRange struct {
+	data  []byte
+	depth int
+}
+
+// readHEIFBox validates an ISOBMFF box header and returns its bounded size.
+func readHEIFBox(data []byte, offset int) (int, int, string, bool) {
+	if offset < 0 || len(data)-offset < 8 {
+		return 0, 0, "", false
+	}
+
+	boxSize := uint64(binary.BigEndian.Uint32(data[offset : offset+4]))
+	headerLen := 8
+	if boxSize == 1 {
+		if len(data)-offset < 16 {
+			return 0, 0, "", false
+		}
+		boxSize = binary.BigEndian.Uint64(data[offset+8 : offset+16])
+		headerLen = 16
+	} else if boxSize == 0 {
+		boxSize = uint64(len(data) - offset)
+	}
+
+	remaining := uint64(len(data) - offset)
+	if boxSize < uint64(headerLen) || boxSize > remaining {
+		return 0, 0, "", false
+	}
+	return int(boxSize), headerLen, string(data[offset+4 : offset+8]), true
+}
+
+// findISPE iteratively searches for the ispe box within container boxes.
 // Path: meta -> iprp -> ipco -> ispe
 func findISPE(data []byte) (int, int, bool) {
-	offset := 0
-	size := len(data)
-	for offset+8 <= size {
-		boxSize := int(binary.BigEndian.Uint32(data[offset : offset+4]))
-		boxType := string(data[offset+4 : offset+8])
-		if boxSize < 8 || offset+boxSize > size {
-			break
-		}
-		content := data[offset+8 : offset+boxSize]
-		switch boxType {
-		case "iprp", "ipco":
-			if w, h, ok := findISPE(content); ok {
-				return w, h, true
+	stack := []heifBoxRange{{data: data}}
+	boxCount := 0
+	for len(stack) > 0 {
+		last := len(stack) - 1
+		current := stack[last]
+		stack = stack[:last]
+		for offset := 0; offset+8 <= len(current.data); {
+			boxCount++
+			if boxCount > maxHEIFBoxCount {
+				return 0, 0, false
 			}
-		case "ispe":
-			// ispe is a full box: 4 bytes version/flags, then 4 bytes width, 4 bytes height
-			if len(content) >= 12 {
-				w := int(binary.BigEndian.Uint32(content[4:8]))
-				h := int(binary.BigEndian.Uint32(content[8:12]))
-				if w > 0 && h > 0 {
-					return w, h, true
+			boxSize, headerLen, boxType, ok := readHEIFBox(current.data, offset)
+			if !ok {
+				break
+			}
+			content := current.data[offset+headerLen : offset+boxSize]
+			switch boxType {
+			case "iprp", "ipco":
+				if current.depth >= maxHEIFBoxDepth {
+					return 0, 0, false
+				}
+				stack = append(stack, heifBoxRange{
+					data:  content,
+					depth: current.depth + 1,
+				})
+			case "ispe":
+				// ispe is a full box: 4 bytes version/flags, then 4 bytes width, 4 bytes height
+				if len(content) >= 12 {
+					w := int(binary.BigEndian.Uint32(content[4:8]))
+					h := int(binary.BigEndian.Uint32(content[8:12]))
+					if w > 0 && h > 0 {
+						return w, h, true
+					}
 				}
 			}
+			offset += boxSize
 		}
-		offset += boxSize
 	}
 	return 0, 0, false
 }

@@ -146,7 +146,7 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	if err != nil {
 		return nil, err
 	}
-	abilityAccess, err := FindUserRouteCapabilityAccess(ctx, userID, capabilities)
+	abilityAccess, err := FindUserRouteCapabilityAccessForGroup(ctx, userID, capabilities, input.EffectiveGroup)
 	if err != nil {
 		return nil, err
 	}
@@ -326,6 +326,13 @@ func loadRoutePreviewSnapshots(ctx context.Context, channelIDs []int) (map[int]r
 // channel could serve when refreshed; the live Ability table remains the
 // authority for whether this user may see or select that request model.
 func FindUserRouteCapabilityAccess(ctx context.Context, userID int, capabilities []model.ChannelModelCapability) (map[int]RouteCapabilityUserAccess, error) {
+	return FindUserRouteCapabilityAccessForGroup(ctx, userID, capabilities, "")
+}
+
+// FindUserRouteCapabilityAccessForGroup applies ability authorization using an
+// already-resolved request group when one is available. Empty groups preserve
+// the account's primary-group behavior used by configuration endpoints.
+func FindUserRouteCapabilityAccessForGroup(ctx context.Context, userID int, capabilities []model.ChannelModelCapability, effectiveGroup string) (map[int]RouteCapabilityUserAccess, error) {
 	access := make(map[int]RouteCapabilityUserAccess, len(capabilities))
 	if len(capabilities) == 0 {
 		return access, nil
@@ -336,6 +343,10 @@ func FindUserRouteCapabilityAccess(ctx context.Context, userID int, capabilities
 	var user model.User
 	if err := model.DB.WithContext(ctx).Select("id", "group").Where("id = ?", userID).First(&user).Error; err != nil {
 		return nil, err
+	}
+	effectiveGroup = strings.TrimSpace(effectiveGroup)
+	if effectiveGroup == "" {
+		effectiveGroup = user.Group
 	}
 	capabilityIDsByChannelModel := make(map[int]map[string][]int, len(capabilities))
 	channelIDs := make([]int, 0, len(capabilities))
@@ -366,7 +377,7 @@ func FindUserRouteCapabilityAccess(ctx context.Context, userID int, capabilities
 		for _, capabilityID := range capabilityIDs {
 			value := access[capabilityID]
 			value.Enabled = true
-			if ability.Group == user.Group || IsUserSelectableGroup(user.Group, ability.Group) {
+			if ability.Group == effectiveGroup || IsUserSelectableGroup(effectiveGroup, ability.Group) {
 				value.Allowed = true
 			}
 			access[capabilityID] = value

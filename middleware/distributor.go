@@ -694,27 +694,6 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 		}
 		excludedKeyIndexes[index] = struct{}{}
 	}
-	if service.RouteLiveRoutingEnabled() {
-		if _, liveRoute := c.Get("route_live_selection"); liveRoute {
-			for {
-				usable, _, healthErr := service.RouteKeyHealthUsable(c.Request.Context(), channel.Id, modelName, key, time.Now())
-				if healthErr != nil {
-					return types.NewError(healthErr, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-				}
-				if usable {
-					break
-				}
-				if excludedKeyIndexes == nil {
-					excludedKeyIndexes = make(map[int]struct{})
-				}
-				excludedKeyIndexes[index] = struct{}{}
-				key, index, newAPIError = channel.GetNextEnabledKeyExcluding(excludedKeyIndexes)
-				if newAPIError != nil {
-					return newAPIError
-				}
-			}
-		}
-	}
 	if channel.ChannelInfo.IsMultiKey {
 		common.SetContextKey(c, constant.ContextKeyChannelIsMultiKey, true)
 		common.SetContextKey(c, constant.ContextKeyChannelMultiKeyIndex, index)

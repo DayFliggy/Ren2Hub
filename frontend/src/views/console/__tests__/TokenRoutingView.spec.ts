@@ -8,7 +8,6 @@ import {
   vi,
 } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { nextTick } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { ApiError } from '@/api/types'
@@ -29,7 +28,6 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   remove: vi.fn(),
   preview: vi.fn(),
-  remove: vi.fn(),
 }))
 
 vi.mock('@/api/routingApi', () => ({

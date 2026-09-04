@@ -58,6 +58,7 @@ const loadError = ref('')
 const conflict = ref(false)
 const draggingEntry = ref<RouteEntry | null>(null)
 const activeGroupKey = ref('')
+let loadRequestSerial = 0
 const previewRequest = useLatestRequest()
 
 const activeGroup = computed(() => {
@@ -141,10 +142,11 @@ function setView(view: RouteProfileView): void {
 }
 
 async function load(): Promise<void> {
+  const requestSerial = ++loadRequestSerial
+  const requestedTokenID = tokenId.value
   invalidatePreview()
   loading.value = true
   loadError.value = ''
-  invalidatePreview()
   profileView.value = null
   groups.value = []
   channels.value = []
@@ -235,7 +237,9 @@ function input(): RouteProfileInput {
 }
 
 async function save(): Promise<void> {
-  if (saving.value || !tokenId.value) return
+  if (!canSave.value) return
+  const requestedTokenID = tokenId.value
+  const requestedLoadSerial = loadRequestSerial
   invalidatePreview()
   saving.value = true
   try {
@@ -269,19 +273,37 @@ async function save(): Promise<void> {
 }
 
 async function removeProfile(): Promise<void> {
-  if (!profileView.value || saving.value) return
+  const current = profileView.value
+  if (!current || !canEdit.value) return
+  const requestedTokenID = tokenId.value
+  const requestedLoadSerial = loadRequestSerial
   invalidatePreview()
-  saving.value = true
+  deletingProfile.value = true
+  draggingEntry.value = null
   try {
-    await routingApi.remove(profileView.value.profile.id)
+    await routingApi.remove(current.profile.id)
+    if (
+      requestedTokenID !== tokenId.value ||
+      requestedLoadSerial !== loadRequestSerial
+    ) {
+      return
+    }
+    invalidatePreview()
     profileView.value = null
     groups.value = []
     activeGroupKey.value = ''
-    toast.success(t('routing.removed'))
+    preview.value = null
+    conflict.value = false
   } catch (error) {
+    if (
+      requestedTokenID !== tokenId.value ||
+      requestedLoadSerial !== loadRequestSerial
+    ) {
+      return
+    }
     toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
-    saving.value = false
+    deletingProfile.value = false
   }
 }
 
@@ -369,10 +391,6 @@ function clearDraggingEntry(): void {
   draggingEntry.value = null
 }
 
-function clearDraggingEntry(): void {
-  draggingEntry.value = null
-}
-
 function channelFor(entry: RouteEntry): EligibleRouteChannel | undefined {
   return channels.value.find((channel) => channel.id === entry.channel_id)
 }
@@ -397,18 +415,6 @@ function capabilityFor(entry: RouteEntry) {
       (!requestedModel ||
         normalizeRouteModel(item.request_model) === requestedModel)
   )
-}
-
-function normalizeRouteModel(value: string): string {
-  let normalized = value.normalize('NFKC').trim().toLowerCase()
-  for (;;) {
-    const previous = normalized
-    normalized = normalized.replace(/@default$/, '')
-    for (const suffix of [':free', ':thinking', ':low', ':medium', ':high']) {
-      normalized = normalized.replace(new RegExp(`${suffix}$`), '')
-    }
-    if (normalized === previous) return normalized
-  }
 }
 
 function channelTone(
@@ -451,30 +457,6 @@ async function runPreview(): Promise<void> {
         : String(result.error)
     )
   }
-  loadingPreview.value = true
-  preview.value = null
-  try {
-    const result = await routingApi.preview(profileID, input)
-    if (
-      requestSerial === previewRequestSerial &&
-      model.value.trim() === input.model &&
-      path.value.trim() === input.path
-    ) {
-      preview.value = result
-    }
-  } catch (error) {
-    if (requestSerial === previewRequestSerial) {
-      toast.error(error instanceof ApiError ? error.message : String(error))
-    }
-  } finally {
-    if (requestSerial === previewRequestSerial) loadingPreview.value = false
-  }
-}
-
-function invalidatePreview(): void {
-  previewRequestSerial++
-  preview.value = null
-  loadingPreview.value = false
 }
 
 function reloadAfterConflict(): void {
@@ -489,6 +471,12 @@ function invalidatePreview(): void {
 }
 
 watch([model, path], invalidatePreview)
+watch(
+  () => route.params.id,
+  () => {
+    void load()
+  }
+)
 
 onMounted(() => void load())
 </script>
@@ -505,20 +493,7 @@ onMounted(() => void load())
             <ArrowLeft class="h-4 w-4" aria-hidden="true" />
             {{ t('common.back') }}
           </ConsoleButton>
-          <ConsoleButton
-            v-if="profileView"
-            variant="secondary"
-            :disabled="loading || !!loadError || saving"
-            @click="removeProfile"
-          >
-            <Trash2 class="h-4 w-4" aria-hidden="true" />
-            {{ t('routing.removeProfile') }}
-          </ConsoleButton>
-          <ConsoleButton
-            :loading="saving"
-            :disabled="loading || !!loadError"
-            @click="save"
-          >
+          <ConsoleButton :loading="saving" :disabled="!canSave" @click="save">
             <Save class="h-4 w-4" aria-hidden="true" />
             {{ t('common.save') }}
           </ConsoleButton>
@@ -530,7 +505,7 @@ onMounted(() => void load())
             @click="removeProfile"
           >
             <Trash2 class="h-4 w-4" aria-hidden="true" />
-            {{ t('common.delete') }}
+            {{ t('routing.removeProfile') }}
           </ConsoleButton>
         </div>
       </template>
