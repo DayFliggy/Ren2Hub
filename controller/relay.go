@@ -700,7 +700,12 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 						continue
 					}
 					retryParam.SetRetry(actualIndex)
-					if actualIndex == 0 && info.ChannelId == channel.Id {
+					// The middleware has already installed the first Live channel in
+					// the request context, while RelayInfo.ChannelMeta is initialized
+					// only after request validation. Reading the promoted ChannelId
+					// field here would dereference a nil ChannelMeta on the first
+					// attempt.
+					if actualIndex == 0 && common.GetContextKeyInt(c, constant.ContextKeyChannelId) == channel.Id {
 						return channel, nil
 					}
 					if setupErr := middleware.SetupContextForSelectedChannel(c, channel, info.BillingModelName()); setupErr != nil {

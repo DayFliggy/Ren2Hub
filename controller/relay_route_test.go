@@ -307,6 +307,46 @@ func TestGetChannelSkipsExhaustedSingleKeyCandidate(t *testing.T) {
 	assert.Equal(t, "second-key", common.GetContextKeyString(c, constant.ContextKeyChannelKey))
 }
 
+func TestGetChannelLiveFirstCandidateDoesNotRequireChannelMeta(t *testing.T) {
+	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
+	t.Setenv("ROUTE_LIVE_ENABLED", "true")
+	originalDB, originalMemoryCache := model.DB, common.MemoryCacheEnabled
+	originalDatabaseType := common.MainDatabaseType()
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	model.DB = db
+	common.MemoryCacheEnabled = false
+	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB = originalDB
+		common.MemoryCacheEnabled = originalMemoryCache
+		common.SetMainDatabaseType(originalDatabaseType)
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.Channel{}))
+
+	channel := model.Channel{Id: 92103, Type: constant.ChannelTypeOpenAI, Key: "first-key", Name: "first-live", Status: common.ChannelStatusEnabled}
+	require.NoError(t, db.Create(&channel).Error)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	common.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)
+	c.Set("route_live_selection", service.LiveRouteSelection{
+		Source:   service.RouteSourceManual,
+		Attempts: []service.RouteDecisionCandidate{{ChannelID: channel.Id}},
+	})
+	param := &service.RetryParam{Ctx: c, Retry: common.GetPointer(0)}
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-test"}
+
+	selected, apiErr := getChannel(c, info, param)
+	require.Nil(t, apiErr)
+	require.NotNil(t, selected)
+	assert.Equal(t, channel.Id, selected.Id)
+	assert.Equal(t, 0, param.GetRetry())
+}
+
 func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *testing.T) {
 	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
 	t.Setenv("ROUTE_LIVE_ENABLED", "true")
