@@ -105,6 +105,11 @@ func TestUserAuthAllowsOpaqueDottedPAT(t *testing.T) {
 	assert.Equal(t, user.Id, body.ID)
 }
 
+func TestTokenPseudoAutoGroupBypassesLiteralGroupAuthorization(t *testing.T) {
+	assert.True(t, tokenGroupCanUseUserGroups("default", "auto"))
+	assert.False(t, tokenGroupCanUseUserGroups("default", "missing-group"))
+}
+
 func TestUserAuthNeverFallsBackForRecognizedInvalidInternalJWT(t *testing.T) {
 	setupDashboardAuthMiddlewareTest(t)
 	identity := service.AuthIdentity{UserID: 42, SessionID: "session-42", UserAuthVersion: 1, SessionVersion: 1}

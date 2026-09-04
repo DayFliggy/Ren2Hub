@@ -131,7 +131,7 @@ func Distribute() func(c *gin.Context) {
 				// Live routing is deliberately behind an independent, default-off
 				// gate. Its selector is pure; Relay owns the per-attempt lease and
 				// retry lifecycle after this middleware stores the decision.
-				if liveRouteRequestSupported(c, isCompactRequest, requiresNativeResponses) {
+				if liveRouteRequestSupported(c, isCompactRequest, requiresNativeResponses) && service.RouteLiveTokenGroupSupported(usingGroup) {
 					limitEnabled := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
 					var tokenLimit map[string]bool
 					if value, exists := common.GetContextKey(c, constant.ContextKeyTokenModelLimit); exists {
