@@ -131,21 +131,26 @@ func Distribute() func(c *gin.Context) {
 				// Live routing is deliberately behind an independent, default-off
 				// gate. Its selector is pure; Relay owns the per-attempt lease and
 				// retry lifecycle after this middleware stores the decision.
-				if !isCompactRequest && !requiresNativeResponses {
+				if !isCompactRequest && !requiresNativeResponses &&
+					service.RouteLiveRequestSupported(c.Request.URL.Path) &&
+					service.RouteLiveTokenGroupSupported(usingGroup) {
 					limitEnabled := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
 					var tokenLimit map[string]bool
 					if value, exists := common.GetContextKey(c, constant.ContextKeyTokenModelLimit); exists {
 						tokenLimit, _ = value.(map[string]bool)
 					}
 					liveRequest := service.LiveRouteRequest{
-						Context:                c.Request.Context(),
-						CapabilityEnabled:      service.RouteLiveRoutingEnabled(),
-						RequestID:              c.GetString(common.RequestIdKey),
-						UserID:                 common.GetContextKeyInt(c, constant.ContextKeyUserId),
-						TokenID:                common.GetContextKeyInt(c, constant.ContextKeyTokenId),
-						RequestModel:           modelRequest.Model,
-						RequestPath:            c.Request.URL.Path,
-						UserGroup:              common.GetContextKeyString(c, constant.ContextKeyUserGroup),
+						Context:           c.Request.Context(),
+						CapabilityEnabled: service.RouteLiveRoutingEnabled(),
+						RequestID:         c.GetString(common.RequestIdKey),
+						UserID:            common.GetContextKeyInt(c, constant.ContextKeyUserId),
+						TokenID:           common.GetContextKeyInt(c, constant.ContextKeyTokenId),
+						RequestModel:      modelRequest.Model,
+						RequestPath:       c.Request.URL.Path,
+						// TokenAuth has already resolved the effective group. Reusing
+						// the broader account group here could let a group-bound token
+						// select a channel that legacy routing would deny.
+						UserGroup:              usingGroup,
 						TokenModelLimitEnabled: limitEnabled,
 						TokenModelLimit:        tokenLimit,
 					}
@@ -644,6 +649,27 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	key, index, newAPIError := channel.GetNextEnabledKeyExcluding(excludedKeyIndexes)
 	if newAPIError != nil {
 		return newAPIError
+	}
+	if service.RouteLiveRoutingEnabled() {
+		if _, liveRoute := c.Get("route_live_selection"); liveRoute {
+			for {
+				usable, _, healthErr := service.RouteKeyHealthUsable(c.Request.Context(), channel.Id, modelName, key, time.Now())
+				if healthErr != nil {
+					return types.NewError(healthErr, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+				}
+				if usable {
+					break
+				}
+				if excludedKeyIndexes == nil {
+					excludedKeyIndexes = make(map[int]struct{})
+				}
+				excludedKeyIndexes[index] = struct{}{}
+				key, index, newAPIError = channel.GetNextEnabledKeyExcluding(excludedKeyIndexes)
+				if newAPIError != nil {
+					return newAPIError
+				}
+			}
+		}
 	}
 	if channel.ChannelInfo.IsMultiKey {
 		common.SetContextKey(c, constant.ContextKeyChannelIsMultiKey, true)

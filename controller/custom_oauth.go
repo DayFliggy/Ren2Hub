@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -208,8 +209,19 @@ func FetchCustomOAuthDiscovery(c *gin.Context) {
 		return
 	}
 
+	const maxDiscoveryDocumentBytes = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDiscoveryDocumentBytes+1))
+	if err != nil {
+		common.ApiErrorMsg(c, "读取 Discovery 配置失败")
+		return
+	}
+	if len(body) > maxDiscoveryDocumentBytes {
+		common.ApiErrorMsg(c, "Discovery 配置过大")
+		return
+	}
+
 	var discovery map[string]any
-	if err = common.DecodeJson(resp.Body, &discovery); err != nil {
+	if err = common.Unmarshal(body, &discovery); err != nil {
 		common.ApiErrorMsg(c, "解析 Discovery 配置失败: "+err.Error())
 		return
 	}

@@ -82,6 +82,16 @@ export const useAuthStore = defineStore('auth', () => {
     if (sid) publishAuthSessionEvent(kind, sid)
   }
 
+  function invalidateLocalSession(publish = true): void {
+    const bundle = getAuthBundle()
+    if (!bundle && user.value === null && checked.value) return
+    const sid = bundle?.session.sid
+    clearAuthBundle()
+    persist(null)
+    checked.value = true
+    if (publish) publishCurrentSession('signed_out', sid)
+  }
+
   async function login(
     username: string,
     password: string,
@@ -111,14 +121,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout(): Promise<void> {
     const api = await getAuthApi()
-    const sid = getAuthBundle()?.session.sid
     try {
       await api.logout()
     } finally {
-      clearAuthBundle()
-      persist(null)
-      checked.value = true
-      publishCurrentSession('signed_out', sid)
+      invalidateLocalSession()
     }
   }
 
@@ -139,8 +145,7 @@ export const useAuthStore = defineStore('auth', () => {
       return true
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
-        persist(null)
-        checked.value = true
+        invalidateLocalSession(publish)
         return false
       }
 
@@ -167,15 +172,11 @@ export const useAuthStore = defineStore('auth', () => {
   async function deleteAccount(): Promise<void> {
     const api = await getAuthApi()
     await api.deleteSelf()
-    clearAuthBundle()
-    persist(null)
-    checked.value = true
+    invalidateLocalSession()
   }
 
   setApiUnauthorizedHandler(() => {
-    clearAuthBundle()
-    persist(null)
-    checked.value = true
+    invalidateLocalSession()
   })
 
   subscribeAuthSessionEvents((event) => {
@@ -211,6 +212,7 @@ export const useAuthStore = defineStore('auth', () => {
     updateProfile,
     changePassword,
     deleteAccount,
+    invalidateLocalSession,
     persist,
   }
 })

@@ -155,6 +155,7 @@ describe('capability route guard', () => {
       '/console/subscription',
       '/console/plan-management',
       '/console/invoice',
+      '/console/keys/11/routing',
       '/console/farm',
       '/console/bigame',
       '/lab/chat',

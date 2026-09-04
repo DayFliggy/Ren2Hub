@@ -118,10 +118,12 @@ func getImageToken(c *gin.Context, fileMeta *types.FileMeta, model string, strea
 		ceilDiv := func(a, b int) int { return (a + b - 1) / b }
 		rawPatchesW := ceilDiv(width, 32)
 		rawPatchesH := ceilDiv(height, 32)
-		rawPatches := rawPatchesW * rawPatchesH
-		if rawPatches > 1536 {
+		// Compare against the cap before multiplying. HEIF dimensions are
+		// uint32 values and their product can overflow a 64-bit int.
+		exceedsPatchCap := rawPatchesW > 1536/rawPatchesH
+		if exceedsPatchCap {
 			// scale down
-			area := float64(width * height)
+			area := float64(width) * float64(height)
 			r := math.Sqrt(float64(32*32*1536) / area)
 			wScaled := float64(width) * r
 			hScaled := float64(height) * r
@@ -143,7 +145,7 @@ func getImageToken(c *gin.Context, fileMeta *types.FileMeta, model string, strea
 			return int(math.Round(float64(imageTokens) * multiplier)), nil
 		}
 		// below cap
-		imageTokens := rawPatches
+		imageTokens := rawPatchesW * rawPatchesH
 		return int(math.Round(float64(imageTokens) * multiplier)), nil
 	}
 

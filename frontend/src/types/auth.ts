@@ -37,6 +37,15 @@ export interface LoginSession {
   expires_at: number
 }
 
+export interface LoginSessionRevokeResult {
+  revoked_sid: string
+  current: boolean
+}
+
+export interface LoginSessionBulkRevokeResult {
+  revoked_count: number
+}
+
 export interface AuthTokenRotation {
   access_token: string
   token_type: 'Bearer'

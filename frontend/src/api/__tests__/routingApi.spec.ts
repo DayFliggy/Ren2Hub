@@ -89,6 +89,71 @@ describe('routing API contracts', () => {
     }
   })
 
+  it('requires a persisted policy for every profile group', () => {
+    const source = profileResponse()
+    const withoutPolicy = {
+      ...source,
+      groups: source.groups.map(({ policy: _policy, ...group }) => group),
+    }
+
+    expect(() =>
+      parseRouteProfileView(withoutPolicy, '/api/routing/profiles')
+    ).toThrow('Invalid API response')
+  })
+
+  it('accepts profile entries ordered by persisted id when positions tie', () => {
+    const source = profileResponse()
+    const entries = [
+      { ...entry, id: 9, channel_id: 202, position: 0 },
+      { ...entry, id: 10, channel_id: 101, position: 0 },
+    ]
+
+    expect(
+      parseRouteProfileView(
+        {
+          ...source,
+          groups: [{ ...source.groups[0], entries }],
+        },
+        '/api/routing/profiles'
+      ).groups[0].entries.map((item) => item.channel_id)
+    ).toEqual([202, 101])
+  })
+
+  it('rejects numeric strings and unknown retry modes', () => {
+    const numericString = {
+      ...profileResponse(),
+      profile: { ...profileResponse().profile, id: '1' },
+    }
+    const numericStringRatio = {
+      ...profileResponse(),
+      groups: [
+        {
+          ...profileResponse().groups[0],
+          policy: { ...policy, max_ratio: '1' },
+        },
+      ],
+    }
+    const unknownRetryMode = {
+      ...profileResponse(),
+      groups: [
+        {
+          ...profileResponse().groups[0],
+          policy: { ...policy, retry_mode: 'future_mode' },
+        },
+      ],
+    }
+
+    for (const invalid of [
+      numericString,
+      numericStringRatio,
+      unknownRetryMode,
+    ]) {
+      expect(() =>
+        parseRouteProfileView(invalid, '/api/routing/profiles')
+      ).toThrow('Invalid API response')
+    }
+  })
+
   it('requires preview to remain non-live and preserves filter details', () => {
     const parsed = parseRoutePreview({
       profile_id: 1,

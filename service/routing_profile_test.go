@@ -266,6 +266,23 @@ func TestRouteProfilePreviewIncludesChannelModelHealthSummary(t *testing.T) {
 		State: model.RouteHealthStateOpen, FailureCount: 3, CooldownUntil: 1_800_000_000,
 		HealthEpoch: 4, LastLatencyMS: 120, FirstTokenLatencyMS: 45, UpdatedAt: 1_700_000_100,
 	}, entry.Health)
+	assert.Empty(t, preview.CandidateChannelIDs)
+	assert.Equal(t, RouteCandidateFilterHealthUnavailable, entry.FilterReason)
+
+	require.NoError(t, db.Model(&model.ChannelHealth{}).
+		Where("channel_id = ? AND model = ? AND key_scope = ?", channelID, "gpt-test", "").
+		Updates(map[string]any{"state": model.RouteHealthStateClosed, "cooldown_until": 0}).Error)
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: channelID, Model: "gpt-test", KeyScope: RouteKeyScope("routing-channel-key"),
+		State: model.RouteHealthStateOpen, FailureCount: 1, CooldownUntil: common.GetTimestamp() + 60,
+	}).Error)
+	preview, err = PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	entry = findRoutePreviewEntry(t, preview, channelID)
+	assert.Empty(t, preview.CandidateChannelIDs)
+	assert.Equal(t, RouteFilterKeyUnavailable, entry.FilterReason)
 }
 
 func TestRouteProfilePreviewFiltersUnresolvedConflictingAndUnsupportedCapabilities(t *testing.T) {
@@ -435,6 +452,38 @@ func TestRouteProfilePreviewHonorsTokenModelAndPathRestrictions(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, ShadowFilterPathUnsupported, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+}
+
+func TestRouteProfilePreviewRejectsDisabledOrExpiredToken(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name: "令牌状态", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
+		}},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Update("status", common.TokenStatusDisabled).Error)
+	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, preview.CandidateChannelIDs)
+	assert.Equal(t, ShadowFilterTokenForbidden, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Updates(map[string]any{
+		"status": common.TokenStatusEnabled, "expired_time": common.GetTimestamp() - 1,
+	}).Error)
+	preview, err = PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, preview.CandidateChannelIDs)
+	assert.Equal(t, ShadowFilterTokenForbidden, findRoutePreviewEntry(t, preview, channelID).FilterReason)
 }
 
 func TestRouteProfilePreviewUsesNormalizedModelForTokenLimits(t *testing.T) {

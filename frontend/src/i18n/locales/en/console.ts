@@ -1913,6 +1913,55 @@ export default {
     securityProofCodeHint:
       'Confirm this sensitive action with your current 2FA code.',
     securityProofCodeRequired: 'Enter the current six-digit 2FA code first.',
+    accessToken: 'Access token',
+    accessTokenTitle: 'Personal access token',
+    accessTokenDesc:
+      'Use this token for API authentication. Keep it secure and never share it.',
+    manageAccessToken: 'Manage token',
+    accessTokenModalSubtitle:
+      'Access tokens are shown only once after generation.',
+    accessTokenValue: 'Access token',
+    accessTokenShownOnce:
+      'Copy and store this token now. It cannot be viewed again after this window is closed.',
+    accessTokenEmpty:
+      'For security, existing access tokens cannot be displayed. Regenerate only when you need a new one.',
+    regenerateAccessToken: 'Regenerate token',
+    regenerateAccessTokenConfirmTitle: 'Regenerate access token?',
+    regenerateAccessTokenConfirm:
+      'This immediately invalidates the existing access token. Any applications or scripts using it will stop working. The new token is shown only once.',
+    accessTokenGenerated: 'Access token generated',
+    accessTokenGeneratedAndCopied: 'Access token generated and copied',
+    accessTokenCopied: 'Access token copied',
+    accessTokenCopyFailed:
+      'Unable to copy automatically. Copy and store it securely.',
+    loginSessions: 'Login sessions',
+    loginSessionsDesc:
+      'Review and sign out devices currently using your account.',
+    revokeOtherSessions: 'Sign out other sessions',
+    revokeOtherSessionsConfirmTitle: 'Sign out other sessions?',
+    revokeOtherSessionsConfirm:
+      'Every other device will lose access immediately. This device will remain signed in.',
+    noActiveSessions: 'No active login sessions',
+    currentSession: 'Current',
+    signOutCurrent: 'Sign out this device',
+    revokeSession: 'Revoke',
+    signOutCurrentConfirmTitle: 'Sign out this device?',
+    revokeSessionConfirmTitle: 'Revoke session?',
+    revokeSessionConfirm:
+      'This session will lose access immediately and must sign in again.',
+    sessionRevoked: 'Login session revoked',
+    otherSessionsRevoked: 'Other login sessions signed out',
+    sessionIpMethod: 'IP: {ip} · Method: {method}',
+    sessionActivity: 'Last active {time} · Expires {expires}',
+    unknown: 'Unknown',
+    unknownDevice: 'Unknown device',
+    browser: 'Browser',
+    loginMethodPassword: 'Password',
+    loginMethodTwoFA: 'Two-factor authentication',
+    loginMethodPasskey: 'Passkey',
+    loginMethodWeChat: 'WeChat',
+    loginMethodTelegram: 'Telegram',
+    loginMethodOAuth: 'OAuth',
     authSources: 'Authentication sources',
     boundCount: '{count} / {total} linked',
     bindingEmail: 'Email',

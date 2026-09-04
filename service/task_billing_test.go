@@ -48,6 +48,9 @@ func TestMain(m *testing.M) {
 		&model.Midjourney{},
 		&model.TopUp{},
 		&model.UserSubscription{},
+		&model.SubscriptionPreConsumeRecord{},
+		&model.BillingRecovery{},
+		&model.BillingRecoveryAdjustment{},
 		&model.SystemTask{},
 		&model.SystemTaskLock{},
 	); err != nil {
@@ -72,6 +75,9 @@ func truncate(t *testing.T) {
 		model.DB.Exec("DELETE FROM midjourneys")
 		model.DB.Exec("DELETE FROM top_ups")
 		model.DB.Exec("DELETE FROM user_subscriptions")
+		model.DB.Exec("DELETE FROM subscription_pre_consume_records")
+		model.DB.Exec("DELETE FROM billing_recovery_adjustments")
+		model.DB.Exec("DELETE FROM billing_recoveries")
 		model.DB.Exec("DELETE FROM system_task_locks")
 		model.DB.Exec("DELETE FROM system_tasks")
 	})
@@ -129,6 +135,281 @@ func seedChargedAccounting(t *testing.T, userID, channelID, tokenID, quota, requ
 		require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", tokenID).
 			Update("used_quota", quota).Error)
 	}
+}
+
+func markBillingRecoveryStale(t *testing.T, requestID string) {
+	t.Helper()
+	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).
+		Where("request_id = ?", requestID).
+		Update("updated_at", common.GetTimestamp()-3600).Error)
+}
+
+func TestRecoverStaleBillingRecoveryRefundIsIdempotent(t *testing.T) {
+	truncate(t)
+	const userID = 710
+	const requestID = "billing-recovery-refund-test"
+	seedUser(t, userID, 60)
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID: requestID,
+		UserID:    userID,
+		TokenID:   0,
+		Source:    BillingSourceWallet,
+	})
+	require.NoError(t, err)
+	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 0, 40, 0, 0))
+	markBillingRecoveryStale(t, requestID)
+
+	summary, err := RecoverStaleBillingRecoveries(context.Background(), common.GetTimestamp()-30, 10)
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.Scanned)
+	assert.Equal(t, 1, summary.Refunded)
+
+	var quota int
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", userID).Pluck("quota", &quota).Error)
+	assert.Equal(t, 100, quota)
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
+	assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
+	var adjustments int64
+	require.NoError(t, model.DB.Model(&model.BillingRecoveryAdjustment{}).
+		Where("request_id = ?", requestID).Count(&adjustments).Error)
+	assert.Equal(t, int64(1), adjustments)
+
+	summary, err = RecoverStaleBillingRecoveries(context.Background(), common.GetTimestamp()-30, 10)
+	require.NoError(t, err)
+	assert.Equal(t, 0, summary.Scanned)
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", userID).Pluck("quota", &quota).Error)
+	assert.Equal(t, 100, quota)
+}
+
+func TestRecoverStaleBillingRecoveryPreparedSubscriptionRefunds(t *testing.T) {
+	truncate(t)
+	const userID = 718
+	const subscriptionID = 7181
+	const requestID = "billing-recovery-prepared-subscription-test"
+	seedSubscription(t, subscriptionID, userID, 100, 30)
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID: requestID,
+		UserID:    userID,
+		Source:    BillingSourceSubscription,
+	})
+	require.NoError(t, err)
+	require.NoError(t, model.DB.Create(&model.SubscriptionPreConsumeRecord{
+		RequestId: requestID, UserId: userID, UserSubscriptionId: subscriptionID, PreConsumed: 30, Status: "consumed",
+	}).Error)
+	markBillingRecoveryStale(t, requestID)
+
+	summary, err := RecoverStaleBillingRecoveries(context.Background(), common.GetTimestamp()-30, 10)
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.Scanned)
+	assert.Equal(t, 1, summary.Refunded)
+
+	var subscription model.UserSubscription
+	require.NoError(t, model.DB.Where("id = ?", subscriptionID).First(&subscription).Error)
+	assert.Equal(t, int64(0), subscription.AmountUsed)
+	var record model.SubscriptionPreConsumeRecord
+	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&record).Error)
+	assert.Equal(t, "refunded", record.Status)
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
+	assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
+}
+
+func TestRecoverStaleBillingRecoverySettlementResumesAndIsIdempotent(t *testing.T) {
+	truncate(t)
+	const userID = 711
+	const requestID = "billing-recovery-settlement-test"
+	seedUser(t, userID, 60)
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID: requestID,
+		UserID:    userID,
+		TokenID:   0,
+		Source:    BillingSourceWallet,
+	})
+	require.NoError(t, err)
+	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 0, 40, 0, 0))
+	require.NoError(t, model.UpdateBillingRecoverySettlement(requestID, 10))
+	markBillingRecoveryStale(t, requestID)
+
+	summary, err := RecoverStaleBillingRecoveries(context.Background(), common.GetTimestamp()-30, 10)
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.Scanned)
+	assert.Equal(t, 1, summary.Settled)
+
+	var quota int
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", userID).Pluck("quota", &quota).Error)
+	assert.Equal(t, 50, quota)
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
+	assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
+	assert.True(t, model.BillingRecoverySettlementComplete(recovery))
+
+	summary, err = RecoverStaleBillingRecoveries(context.Background(), common.GetTimestamp()-30, 10)
+	require.NoError(t, err)
+	assert.Equal(t, 0, summary.Scanned)
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", userID).Pluck("quota", &quota).Error)
+	assert.Equal(t, 50, quota)
+}
+
+func TestRecoverStaleBillingRecoveryRefundFailureRemainsPending(t *testing.T) {
+	truncate(t)
+	const userID = 717
+	const requestID = "billing-recovery-refund-retry-test"
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID: requestID,
+		UserID:    userID,
+		Source:    BillingSourceWallet,
+	})
+	require.NoError(t, err)
+	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 0, 40, 0, 0))
+	markBillingRecoveryStale(t, requestID)
+
+	summary, err := RecoverStaleBillingRecoveries(context.Background(), common.GetTimestamp()-30, 10)
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.Failed)
+
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
+	assert.Equal(t, model.BillingRecoveryStatusRefundPending, recovery.Status)
+	assert.False(t, model.BillingRecoveryRefundComplete(recovery))
+
+	seedUser(t, userID, 60)
+	markBillingRecoveryStale(t, requestID)
+	summary, err = RecoverStaleBillingRecoveries(context.Background(), common.GetTimestamp()-30, 10)
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.Refunded)
+	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
+	assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
+}
+
+func TestBillingRecoverySettlementAlreadyCompletedIsIdempotent(t *testing.T) {
+	truncate(t)
+	const userID = 716
+	const requestID = "billing-recovery-settled-race-test"
+	seedUser(t, userID, 100)
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID: requestID,
+		UserID:    userID,
+		Source:    BillingSourceWallet,
+	})
+	require.NoError(t, err)
+	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 0, 40, 0, 0))
+	require.NoError(t, model.UpdateBillingRecoverySettlement(requestID, 10))
+	require.NoError(t, model.ApplyBillingRecoveryAdjustment(requestID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationSettle))
+	require.NoError(t, model.ApplyBillingRecoveryAdjustment(requestID, model.BillingRecoveryComponentToken, model.BillingRecoveryOperationSettle))
+	require.NoError(t, model.MarkBillingRecoverySettled(requestID))
+
+	// A late online Settle must not overwrite the settled delta or report a
+	// false state conflict after the recovery worker completed the request.
+	require.NoError(t, model.UpdateBillingRecoverySettlement(requestID, 999))
+	require.NoError(t, model.MarkBillingRecoverySettled(requestID))
+
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
+	assert.Equal(t, int64(10), recovery.SettlementDelta)
+	assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
+}
+
+func TestBillingRecoveryStateFencePreventsSettlementRefundRace(t *testing.T) {
+	truncate(t)
+	const userID = 712
+	const requestID = "billing-recovery-state-fence-test"
+	seedUser(t, userID, 100)
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID: requestID,
+		UserID:    userID,
+		TokenID:   0,
+		Source:    BillingSourceWallet,
+	})
+	require.NoError(t, err)
+	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 0, 40, 0, 0))
+	require.NoError(t, model.UpdateBillingRecoverySettlement(requestID, 10))
+
+	err = model.MarkBillingRecoveryRefundPending(requestID, nil)
+	assert.ErrorIs(t, err, model.ErrBillingRecoveryStateConflict)
+	require.NoError(t, model.UpdateBillingRecoverySettlement(requestID, 10))
+
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
+	assert.Equal(t, model.BillingRecoveryStatusSettlementPending, recovery.Status)
+}
+
+func TestBillingRecoveryRefundFencePreventsSettlementAfterRefundStarts(t *testing.T) {
+	truncate(t)
+	const userID = 713
+	const requestID = "billing-recovery-refund-fence-test"
+	seedUser(t, userID, 60)
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID: requestID,
+		UserID:    userID,
+		TokenID:   0,
+		Source:    BillingSourceWallet,
+	})
+	require.NoError(t, err)
+	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 0, 40, 0, 0))
+	require.NoError(t, model.MarkBillingRecoveryRefundPending(requestID, nil))
+
+	assert.ErrorIs(t, model.UpdateBillingRecoverySettlement(requestID, 10), model.ErrBillingRecoveryStateConflict)
+	require.NoError(t, model.ApplyBillingRecoveryAdjustment(requestID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationRefund))
+	require.NoError(t, model.MarkBillingRecoveryRefunded(requestID, nil))
+
+	var quota int
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", userID).Pluck("quota", &quota).Error)
+	assert.Equal(t, 100, quota)
+	assert.NoError(t, model.ApplyBillingRecoveryAdjustment(requestID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationRefund))
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", userID).Pluck("quota", &quota).Error)
+	assert.Equal(t, 100, quota)
+}
+
+func TestBillingRecoveryPlaygroundTokenSettlementCreatesMarkerWithoutTokenLookup(t *testing.T) {
+	truncate(t)
+	const userID = 714
+	const requestID = "billing-recovery-playground-token-marker-test"
+	seedUser(t, userID, 60)
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID: requestID,
+		UserID:    userID,
+		TokenID:   0,
+		Source:    BillingSourceWallet,
+	})
+	require.NoError(t, err)
+	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 0, 40, 0, 0))
+	require.NoError(t, model.UpdateBillingRecoverySettlement(requestID, 10))
+	require.NoError(t, model.ApplyBillingRecoveryAdjustment(requestID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationSettle))
+	require.NoError(t, model.ApplyBillingRecoveryAdjustment(requestID, model.BillingRecoveryComponentToken, model.BillingRecoveryOperationSettle))
+
+	var marker model.BillingRecoveryAdjustment
+	require.NoError(t, model.DB.Where("request_id = ? AND component = ? AND operation = ?", requestID, model.BillingRecoveryComponentToken, model.BillingRecoveryOperationSettle).First(&marker).Error)
+	assert.Equal(t, int64(10), marker.Amount)
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
+	assert.True(t, model.BillingRecoverySettlementComplete(recovery))
+}
+
+func TestBillingRecoveryTokenSettlementUsesDeltaNotPreConsumedAmount(t *testing.T) {
+	truncate(t)
+	const userID = 715
+	const tokenID = 7151
+	const requestID = "billing-recovery-token-delta-test"
+	seedUser(t, userID, 100)
+	seedToken(t, tokenID, userID, "token-delta-test-key", 60)
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID:   requestID,
+		UserID:      userID,
+		TokenID:     tokenID,
+		Source:      BillingSourceWallet,
+		TokenAmount: 40,
+	})
+	require.NoError(t, err)
+	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 0, 40, 0, 40))
+	require.NoError(t, model.UpdateBillingRecoverySettlement(requestID, 10))
+	require.NoError(t, model.ApplyBillingRecoveryAdjustment(requestID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationSettle))
+	require.NoError(t, model.ApplyBillingRecoveryAdjustment(requestID, model.BillingRecoveryComponentToken, model.BillingRecoveryOperationSettle))
+
+	var token model.Token
+	require.NoError(t, model.DB.Select("remain_quota", "used_quota").Where("id = ?", tokenID).First(&token).Error)
+	assert.Equal(t, 50, token.RemainQuota)
+	assert.Equal(t, 10, token.UsedQuota)
 }
 
 func makeTask(userId, channelId, quota, tokenId int, billingSource string, subscriptionId int) *model.Task {

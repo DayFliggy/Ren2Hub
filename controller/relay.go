@@ -342,6 +342,16 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			return
 		}
 
+		if routeLiveSelectionActive(c) && relayInfo.HasSendResponse() && liveRouteLeaseRenewalFailed(c) {
+			// The client has already received a valid protocol response. A
+			// subsequent renewal failure must stop further work, but it must not
+			// rewrite that completed response as an upstream/channel failure.
+			markLiveRouteAttempt(c, channel.Id, service.RouteLeaseStateRenewalFailed)
+			relayInfo.LastError = nil
+			newAPIError = nil
+			return
+		}
+
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError
 		liveNextAttempt := -1
@@ -405,7 +415,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		retryLogStr := fmt.Sprintf("重试：%s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
 		logger.LogInfo(c, retryLogStr)
 	}
-	if newAPIError != nil {
+	if newAPIError != nil && !relayInfo.HasSendResponse() {
 		gopool.Go(func() {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
 		})
@@ -747,31 +757,36 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 	}
 	current, err := service.GetRouteRuntimeState(c.Request.Context(), channel.Id, info.BillingModelName())
 	if err != nil {
-		_ = service.ReleaseConfiguredRouteLease(context.Background(), lease)
-		return err
+		return releaseRejectedRouteAttemptLease(c, lease, err)
 	}
 	if err := service.RecheckRouteLeaseRuntime(expected, current); err != nil {
-		_ = service.ReleaseConfiguredRouteLease(context.Background(), lease)
-		return err
+		return releaseRejectedRouteAttemptLease(c, lease, err)
 	}
+	priceEligibilityKnown, priceEligible, securityEligibilityKnown, securityAllowed := liveRouteQualificationFacts(c, info)
 	if err := service.RecheckLiveRouteCandidate(service.LiveRouteCandidateQualificationRequest{
-		Context:                 c.Request.Context(),
-		RouteSource:             selection.Source,
-		UserID:                  info.UserId,
-		TokenID:                 info.TokenId,
-		ChannelID:               channel.Id,
-		RequestModel:            info.BillingModelName(),
-		RequestPath:             c.Request.URL.Path,
-		UserGroup:               info.UserGroup,
-		ExpectedSnapshotVersion: candidate.SnapshotVersion,
-		ExpectedCatalogVersion:  candidate.CatalogVersion,
-		ExpectedProfileVersion:  selection.Decision.ConfigurationVersion,
+		Context:      c.Request.Context(),
+		RouteSource:  selection.Source,
+		UserID:       info.UserId,
+		TokenID:      info.TokenId,
+		ChannelID:    channel.Id,
+		RequestModel: info.BillingModelName(),
+		RequestPath:  c.Request.URL.Path,
+		// Recheck against the group that TokenAuth/distribution actually
+		// selected for this request. The account's primary group may be broader
+		// than a token-bound or explicitly selected effective group.
+		UserGroup:                info.UsingGroup,
+		ExpectedSnapshotVersion:  candidate.SnapshotVersion,
+		ExpectedCatalogVersion:   candidate.CatalogVersion,
+		ExpectedProfileVersion:   selection.Decision.ConfigurationVersion,
+		PriceEligibilityKnown:    priceEligibilityKnown,
+		PriceEligible:            priceEligible,
+		SecurityEligibilityKnown: securityEligibilityKnown,
+		SecurityAllowed:          securityAllowed,
 	}); err != nil {
-		_ = service.ReleaseConfiguredRouteLease(context.Background(), lease)
 		if reason := service.LiveRouteQualificationReason(err); reason != "" {
 			markLiveRouteCandidateFiltered(c, channel.Id, reason)
 		}
-		return err
+		return releaseRejectedRouteAttemptLease(c, lease, err)
 	}
 	c.Set("route_live_lease", lease)
 	markLiveRouteAttempt(c, channel.Id, service.RouteLeaseStateAcquired)
@@ -793,6 +808,27 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 		c.Set("route_live_renewal", renewal)
 	}
 	return nil
+}
+
+// liveRouteQualificationFacts carries only request facts already established
+// before the attempt. Pricing has completed for the selected channel at this
+// point; sensitive-input enforcement has either rejected the request or
+// allowed it. Both facts are rechecked after the lease is acquired so an
+// incomplete qualification can never be treated as an implicit allow.
+func liveRouteQualificationFacts(c *gin.Context, info *relaycommon.RelayInfo) (bool, bool, bool, bool) {
+	if c == nil || info == nil {
+		return false, false, false, false
+	}
+	return true, liveRoutePriceRatioAllowed(c, info.PriceData.GroupRatioInfo.GroupRatio), true, true
+}
+
+func releaseRejectedRouteAttemptLease(c *gin.Context, lease service.RouteLease, cause error) error {
+	releaseErr := service.ReleaseConfiguredRouteLease(context.Background(), lease)
+	if releaseErr == nil {
+		return cause
+	}
+	markLiveRouteAttempt(c, lease.ChannelID, service.RouteLeaseStateReleaseFailed)
+	return errors.Join(cause, fmt.Errorf("release rejected route lease: %w", releaseErr))
 }
 
 func releaseRouteAttemptLease(c *gin.Context) {
@@ -849,6 +885,15 @@ func releaseRouteAttemptLease(c *gin.Context) {
 		}
 	}
 	c.Set("route_live_lease", nil)
+}
+
+func liveRouteLeaseRenewalFailed(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	value, exists := c.Get("route_live_renewal")
+	renewal, valid := value.(service.RouteLeaseRenewal)
+	return exists && valid && renewal.Failure != nil && renewal.Failure() != nil
 }
 
 func markLiveRouteAttempt(c *gin.Context, channelID int, state string) {
@@ -1057,7 +1102,7 @@ func finalizeLiveRouteDecision(c *gin.Context, info *relaycommon.RelayInfo, apiE
 		selection.Decision.SameResourceRetry = counters.SameChannelAttempts + counters.SameKeyAttempts
 		selection.Decision.FailoverAttempt = counters.FailoverAttempts
 	}
-	if apiErr != nil {
+	if apiErr != nil && (info == nil || !info.HasSendResponse()) {
 		classification := service.ClassifyRouteError(apiErr.StatusCode, string(apiErr.GetErrorCode()), apiErr.Error(), info != nil && info.HasSendResponse())
 		selection.Decision.SetFinalError(classification.Class)
 	}

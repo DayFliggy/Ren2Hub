@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"testing"
@@ -38,6 +39,38 @@ func TestLiveRoutePriceRatioAllowedOnlyUsesManualPolicy(t *testing.T) {
 		MaxRatio: 1,
 	})
 	assert.True(t, liveRoutePriceRatioAllowed(ctx, 2))
+}
+
+func TestLiveRouteQualificationFactsUseCalculatedPriceAndEstablishedSecurity(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set("route_live_selection", service.LiveRouteSelection{
+		Source:   service.RouteSourceManual,
+		MaxRatio: 1.5,
+	})
+	info := &relaycommon.RelayInfo{}
+	info.PriceData.GroupRatioInfo.GroupRatio = 2
+	priceKnown, priceEligible, securityKnown, securityAllowed := liveRouteQualificationFacts(c, info)
+	assert.True(t, priceKnown)
+	assert.False(t, priceEligible)
+	assert.True(t, securityKnown)
+	assert.True(t, securityAllowed)
+}
+
+func TestReleaseRejectedRouteAttemptLeaseReturnsReleaseFailure(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set("route_live_selection", service.LiveRouteSelection{
+		Source:   service.RouteSourceManual,
+		Decision: service.RouteDecision{Candidates: []service.RouteDecisionCandidate{{ChannelID: 71}}},
+	})
+	cause := errors.New("qualification rejected")
+	err := releaseRejectedRouteAttemptLease(c, service.RouteLease{
+		LeaseID: "lease", RequestID: "request", ChannelID: 71,
+		Resources: []service.RouteLeaseResource{{Key: "route:lease:test", Capacity: 1}},
+	}, cause)
+	assert.ErrorIs(t, err, cause)
+	assert.ErrorIs(t, err, service.ErrRouteLeaseUnavailable)
+	selection := c.MustGet("route_live_selection").(service.LiveRouteSelection)
+	assert.Equal(t, service.RouteLeaseStateReleaseFailed, selection.Decision.LeaseState)
 }
 
 func TestLiveRouteFailoverAttemptCountsChannelChangesOnly(t *testing.T) {
@@ -254,7 +287,7 @@ func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *te
 			ChannelID: channelID, SnapshotVersion: 1, CatalogVersion: "lease-catalog", HealthEpoch: 1,
 		}},
 	})
-	info := &relaycommon.RelayInfo{RequestId: "lease-qualification-request", UserId: userID, TokenId: token.Id, UserGroup: "default", OriginModelName: "gpt-test"}
+	info := &relaycommon.RelayInfo{RequestId: "lease-qualification-request", UserId: userID, TokenId: token.Id, UserGroup: "default", UsingGroup: "default", OriginModelName: "gpt-test"}
 
 	err = acquireRouteAttemptLease(c, info, &channel, 0)
 	assert.ErrorIs(t, err, service.ErrLiveRouteCandidateInvalid)
@@ -332,4 +365,14 @@ func TestReleaseRouteAttemptLeaseRecordsRenewalFailure(t *testing.T) {
 	require.True(t, ok)
 	updated := updatedValue.(service.LiveRouteSelection)
 	assert.Equal(t, service.RouteLeaseStateRenewalFailed, updated.Decision.Candidates[0].LeaseState)
+}
+
+func TestLiveRouteLeaseRenewalFailureIsDetectableWithoutProviderError(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set("route_live_renewal", service.RouteLeaseRenewal{
+		Failure: func() error { return service.ErrRouteLeaseUnavailable },
+	})
+	assert.True(t, liveRouteLeaseRenewalFailed(c))
+	c.Set("route_live_renewal", service.RouteLeaseRenewal{})
+	assert.False(t, liveRouteLeaseRenewalFailed(c))
 }

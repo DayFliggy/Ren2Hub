@@ -1,3 +1,8 @@
+import type {
+  LoginSession,
+  LoginSessionBulkRevokeResult,
+  LoginSessionRevokeResult,
+} from '@/types/auth'
 import { ApiError, type PageResult } from './types'
 
 export function invalidResponse(endpoint: string): never {
@@ -34,6 +39,22 @@ export function requiredInteger(value: unknown, endpoint: string): number {
   return parsed
 }
 
+export function requiredStrictNumber(value: unknown, endpoint: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    invalidResponse(endpoint)
+  }
+  return value
+}
+
+export function requiredStrictInteger(
+  value: unknown,
+  endpoint: string
+): number {
+  const parsed = requiredStrictNumber(value, endpoint)
+  if (!Number.isSafeInteger(parsed)) invalidResponse(endpoint)
+  return parsed
+}
+
 export function requiredBoolean(value: unknown, endpoint: string): boolean {
   if (typeof value !== 'boolean') invalidResponse(endpoint)
   return value
@@ -62,4 +83,57 @@ export function parseStringArray(value: unknown, endpoint: string): string[] {
     invalidResponse(endpoint)
   }
   return [...value]
+}
+
+export function parseAccessToken(
+  value: unknown,
+  endpoint = '/api/user/token'
+): string {
+  return requiredString(value, endpoint, false)
+}
+
+export function parseLoginSession(
+  value: unknown,
+  endpoint = '/api/user/sessions'
+): LoginSession {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  return {
+    sid: requiredString(value.sid, endpoint, false),
+    current: requiredBoolean(value.current, endpoint),
+    login_method: requiredString(value.login_method, endpoint),
+    ip: requiredString(value.ip, endpoint),
+    user_agent: requiredString(value.user_agent, endpoint),
+    created_at: requiredStrictNumber(value.created_at, endpoint),
+    last_active_at: requiredStrictNumber(value.last_active_at, endpoint),
+    expires_at: requiredStrictNumber(value.expires_at, endpoint),
+  }
+}
+
+export function parseLoginSessions(
+  value: unknown,
+  endpoint = '/api/user/sessions'
+): LoginSession[] {
+  if (!Array.isArray(value)) invalidResponse(endpoint)
+  return value.map((item) => parseLoginSession(item, endpoint))
+}
+
+export function parseLoginSessionRevokeResult(
+  value: unknown,
+  endpoint = '/api/user/sessions/:sid'
+): LoginSessionRevokeResult {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  return {
+    revoked_sid: requiredString(value.revoked_sid, endpoint, false),
+    current: requiredBoolean(value.current, endpoint),
+  }
+}
+
+export function parseLoginSessionBulkRevokeResult(
+  value: unknown,
+  endpoint = '/api/user/sessions/revoke-others'
+): LoginSessionBulkRevokeResult {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const revokedCount = requiredStrictInteger(value.revoked_count, endpoint)
+  if (revokedCount < 0) invalidResponse(endpoint)
+  return { revoked_count: revokedCount }
 }

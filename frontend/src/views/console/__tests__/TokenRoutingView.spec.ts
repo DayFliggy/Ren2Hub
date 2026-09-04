@@ -8,6 +8,7 @@ import {
   vi,
 } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { ApiError } from '@/api/types'
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   catalog: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  remove: vi.fn(),
   preview: vi.fn(),
 }))
 
@@ -215,6 +217,7 @@ beforeEach(() => {
   mocks.eligibleChannels.mockResolvedValue(channels)
   mocks.catalog.mockResolvedValue(catalog)
   mocks.update.mockResolvedValue(profile)
+  mocks.remove.mockResolvedValue(undefined)
   mocks.preview.mockResolvedValue(preview)
 })
 
@@ -301,8 +304,153 @@ describe('TokenRoutingView', () => {
     await flushPromises()
 
     expect(view.text()).toContain('cannot be saved')
+    expect(buttonByText(view, 'Save').attributes('disabled')).toBeDefined()
+    expect(buttonByText(view, 'Delete').attributes('disabled')).toBeDefined()
+    await buttonByText(view, 'Delete').trigger('click')
+    expect(mocks.remove).not.toHaveBeenCalled()
     await buttonByText(view, 'Retry').trigger('click')
     await flushPromises()
     expect(mocks.profiles).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not save a stale draft after loading fails', async () => {
+    mocks.profiles.mockRejectedValueOnce(new ApiError('load failed'))
+    const view = await mountView()
+
+    const save = buttonByText(view, 'Save')
+    expect(save.attributes('disabled')).toBeDefined()
+    await save.trigger('click')
+
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
+
+  it('deletes the current profile and returns to the create state', async () => {
+    const view = await mountView()
+
+    await buttonByText(view, 'Delete').trigger('click')
+    await flushPromises()
+
+    expect(mocks.remove).toHaveBeenCalledWith(1)
+    expect(view.text()).toContain('This token has no routing profile yet')
+  })
+
+  it('clears drag state when a drag ends without a drop', async () => {
+    const view = await mountView()
+    const entries = view.findAll('[draggable="true"]')
+
+    await entries[0].trigger('dragstart')
+    await entries[0].trigger('dragend')
+    await entries[1].trigger('drop')
+    await buttonByText(view, 'Save').trigger('click')
+    await flushPromises()
+
+    expect(mocks.update).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        groups: [
+          expect.objectContaining({
+            entries: [
+              expect.objectContaining({ channel_id: 101, position: 0 }),
+              expect.objectContaining({ channel_id: 102, position: 1 }),
+            ],
+          }),
+        ],
+      })
+    )
+  })
+
+  it('shows channel capability for the requested model', async () => {
+    mocks.catalog.mockResolvedValue({
+      ...catalog,
+      items: [
+        { ...catalog.items[0], request_model: 'gpt-4', lab_slug: 'wrong-lab' },
+        { ...catalog.items[0], request_model: 'gpt-5', lab_slug: 'right-lab' },
+      ],
+    })
+    const view = await mountView()
+
+    await view.get('input[placeholder="gpt-5"]').setValue('gpt-5')
+
+    expect(view.text()).toContain('right-lab')
+    expect(view.text()).not.toContain('wrong-lab')
+  })
+
+  it('normalizes the requested model before matching catalog capability', async () => {
+    const view = await mountView()
+
+    await view.get('input[placeholder="gpt-5"]').setValue('GPT-5')
+
+    expect(view.text()).toContain('openai')
+  })
+
+  it('keeps system-managed auto Lab profiles read-only', async () => {
+    mocks.profiles.mockResolvedValue([
+      {
+        ...profile,
+        profile: { ...profile.profile, mode: 'auto_lab' },
+        groups: [{ ...profile.groups[0], kind: 'auto_lab' }],
+      },
+    ])
+    const view = await mountView()
+
+    expect(buttonByText(view, 'Save').attributes('disabled')).toBeDefined()
+    expect(buttonByText(view, 'Delete').attributes('disabled')).toBeDefined()
+    await buttonByText(view, 'Save').trigger('click')
+    await buttonByText(view, 'Delete').trigger('click')
+
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(mocks.remove).not.toHaveBeenCalled()
+  })
+
+  it('reloads on token changes and ignores the previous token response', async () => {
+    let resolveFirst: ((value: RouteProfileView[]) => void) | undefined
+    const firstProfiles = new Promise<RouteProfileView[]>((resolve) => {
+      resolveFirst = resolve
+    })
+    const secondProfile = {
+      ...profile,
+      profile: { ...profile.profile, token_id: 12 },
+      groups: [{ ...profile.groups[0], name: 'Secondary' }],
+    }
+    mocks.profiles
+      .mockReset()
+      .mockImplementationOnce(() => firstProfiles)
+      .mockResolvedValueOnce([secondProfile])
+
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/console/keys/:id/routing', component: TokenRoutingView },
+      ],
+    })
+    await router.push('/console/keys/11/routing')
+    await router.isReady()
+    wrapper = mount(TokenRoutingView, {
+      global: {
+        plugins: [i18n, router],
+        stubs,
+      },
+    })
+    await flushPromises()
+
+    await router.push('/console/keys/12/routing')
+    await flushPromises()
+    await nextTick()
+
+    expect(mocks.profiles).toHaveBeenCalledTimes(2)
+    await nextTick()
+    expect(
+      wrapper.find('input[aria-label="Group name"]').element
+    ).toHaveProperty('value', 'Secondary')
+
+    resolveFirst?.([profile])
+    await flushPromises()
+    await nextTick()
+
+    await nextTick()
+    expect(
+      wrapper.find('input[aria-label="Group name"]').element
+    ).toHaveProperty('value', 'Secondary')
   })
 })

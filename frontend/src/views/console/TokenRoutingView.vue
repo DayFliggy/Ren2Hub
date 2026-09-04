@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -51,11 +51,14 @@ const selectedChannelId = ref('')
 const preview = ref<RoutePreview | null>(null)
 const loading = ref(true)
 const saving = ref(false)
+const deletingProfile = ref(false)
 const loadingPreview = ref(false)
 const loadError = ref('')
 const conflict = ref(false)
 const draggingEntry = ref<RouteEntry | null>(null)
 const activeGroupKey = ref('')
+let loadRequestSerial = 0
+let previewRequestSerial = 0
 
 const activeGroup = computed(() => {
   return (
@@ -69,6 +72,19 @@ const activeEntryIds = computed(
   () =>
     new Set(activeGroup.value?.entries.map((entry) => entry.channel_id) ?? [])
 )
+
+const canEdit = computed(
+  () =>
+    !loading.value &&
+    !loadError.value &&
+    !conflict.value &&
+    !saving.value &&
+    !deletingProfile.value &&
+    (!profileView.value || profileView.value.profile.mode === 'manual') &&
+    Boolean(tokenId.value)
+)
+
+const canSave = computed(() => canEdit.value)
 
 const availableChannels = computed(() =>
   channels.value.filter((channel) => !activeEntryIds.value.has(channel.id))
@@ -104,6 +120,7 @@ function newGroup(position: number): RouteGroup {
 }
 
 function setView(view: RouteProfileView): void {
+  invalidatePreview()
   profileView.value = view
   groups.value = view.groups.map((group) => ({
     ...group,
@@ -119,18 +136,36 @@ function setView(view: RouteProfileView): void {
 }
 
 async function load(): Promise<void> {
+  const requestSerial = ++loadRequestSerial
+  const requestedTokenID = tokenId.value
   loading.value = true
   loadError.value = ''
+  invalidatePreview()
+  profileView.value = null
+  groups.value = []
+  channels.value = []
+  catalog.value = null
+  preview.value = null
+  draggingEntry.value = null
+  activeGroupKey.value = ''
+  selectedChannelId.value = ''
+  conflict.value = false
   try {
     const [profiles, eligible, capabilityCatalog] = await Promise.all([
       routingApi.profiles(),
       routingApi.eligibleChannels(),
       routingApi.catalog(),
     ])
+    if (
+      requestSerial !== loadRequestSerial ||
+      requestedTokenID !== tokenId.value
+    ) {
+      return
+    }
     channels.value = eligible
     catalog.value = capabilityCatalog
     const existing = profiles.find(
-      (item) => item.profile.token_id === tokenId.value
+      (item) => item.profile.token_id === requestedTokenID
     )
     if (existing) setView(existing)
     else {
@@ -139,9 +174,15 @@ async function load(): Promise<void> {
       activeGroupKey.value = ''
     }
   } catch (error) {
+    if (
+      requestSerial !== loadRequestSerial ||
+      requestedTokenID !== tokenId.value
+    ) {
+      return
+    }
     loadError.value = error instanceof ApiError ? error.message : String(error)
   } finally {
-    loading.value = false
+    if (requestSerial === loadRequestSerial) loading.value = false
   }
 }
 
@@ -178,7 +219,7 @@ function input(): RouteProfileInput {
     ...(profileView.value
       ? { version: profileView.value.profile.version }
       : { token_id: tokenId.value }),
-    mode: 'manual',
+    mode: profileView.value?.profile.mode ?? 'manual',
     active_group_id:
       active && active.id > 0
         ? active.id
@@ -190,15 +231,29 @@ function input(): RouteProfileInput {
 }
 
 async function save(): Promise<void> {
-  if (saving.value || !tokenId.value) return
+  if (!canSave.value) return
+  const requestedTokenID = tokenId.value
+  const requestedLoadSerial = loadRequestSerial
   saving.value = true
   try {
     const next = profileView.value
       ? await routingApi.update(profileView.value.profile.id, input())
       : await routingApi.create(input())
+    if (
+      requestedTokenID !== tokenId.value ||
+      requestedLoadSerial !== loadRequestSerial
+    ) {
+      return
+    }
     setView(next)
     toast.success(t('routing.saved'))
   } catch (error) {
+    if (
+      requestedTokenID !== tokenId.value ||
+      requestedLoadSerial !== loadRequestSerial
+    ) {
+      return
+    }
     if (error instanceof ApiError && error.code === 'VERSION_CONFLICT') {
       conflict.value = true
       toast.warning(t('routing.versionConflict'))
@@ -210,13 +265,49 @@ async function save(): Promise<void> {
   }
 }
 
+async function removeProfile(): Promise<void> {
+  const current = profileView.value
+  if (!current || !canEdit.value) return
+  const requestedTokenID = tokenId.value
+  const requestedLoadSerial = loadRequestSerial
+  deletingProfile.value = true
+  draggingEntry.value = null
+  try {
+    await routingApi.remove(current.profile.id)
+    if (
+      requestedTokenID !== tokenId.value ||
+      requestedLoadSerial !== loadRequestSerial
+    ) {
+      return
+    }
+    invalidatePreview()
+    profileView.value = null
+    groups.value = []
+    activeGroupKey.value = ''
+    preview.value = null
+    conflict.value = false
+  } catch (error) {
+    if (
+      requestedTokenID !== tokenId.value ||
+      requestedLoadSerial !== loadRequestSerial
+    ) {
+      return
+    }
+    toast.error(error instanceof ApiError ? error.message : String(error))
+  } finally {
+    deletingProfile.value = false
+  }
+}
+
 function addGroup(): void {
+  if (!canEdit.value) return
   const group = newGroup(groups.value.length)
   groups.value = [...groups.value, group]
   if (!activeGroupKey.value) activeGroupKey.value = groupKey(group)
 }
 
 function removeGroup(group: RouteGroup): void {
+  if (!canEdit.value) return
   const currentActive = activeGroup.value
   const next = groups.value.filter((item) => item !== group)
   next.forEach((item, index) => (item.position = index))
@@ -229,10 +320,12 @@ function removeGroup(group: RouteGroup): void {
 }
 
 function activateGroup(group: RouteGroup): void {
+  if (!canEdit.value) return
   activeGroupKey.value = groupKey(group)
 }
 
 function addChannel(): void {
+  if (!canEdit.value) return
   const group = activeGroup.value
   const channelId = Number(selectedChannelId.value)
   if (!group || !channelId || activeEntryIds.value.has(channelId)) return
@@ -250,6 +343,7 @@ function addChannel(): void {
 }
 
 function removeEntry(entry: RouteEntry): void {
+  if (!canEdit.value) return
   const group = activeGroup.value
   if (!group) return
   group.entries = group.entries
@@ -258,6 +352,7 @@ function removeEntry(entry: RouteEntry): void {
 }
 
 function moveEntry(entry: RouteEntry, offset: number): void {
+  if (!canEdit.value) return
   const group = activeGroup.value
   if (!group) return
   const index = group.entries.indexOf(entry)
@@ -269,16 +364,22 @@ function moveEntry(entry: RouteEntry, offset: number): void {
 }
 
 function dropEntry(target: RouteEntry): void {
-  if (draggingEntry.value === null || draggingEntry.value === target) return
+  if (!canEdit.value) return
+  const dragged = draggingEntry.value
+  draggingEntry.value = null
+  if (dragged === null || dragged === target) return
   const group = activeGroup.value
   if (!group) return
-  const from = group.entries.indexOf(draggingEntry.value)
+  const from = group.entries.indexOf(dragged)
   const to = group.entries.indexOf(target)
   if (from < 0 || to < 0) return
   const entries = [...group.entries]
   const [moved] = entries.splice(from, 1)
   entries.splice(to, 0, moved)
   group.entries = entries.map((item, position) => ({ ...item, position }))
+}
+
+function clearDraggingEntry(): void {
   draggingEntry.value = null
 }
 
@@ -286,9 +387,25 @@ function channelFor(entry: RouteEntry): EligibleRouteChannel | undefined {
   return channels.value.find((channel) => channel.id === entry.channel_id)
 }
 
+function normalizeRouteModel(value: string): string {
+  let normalized = value.trim().normalize('NFKC').toLowerCase()
+  for (;;) {
+    const previous = normalized
+    normalized = normalized.replace(/@default$/, '')
+    for (const suffix of [':free', ':thinking', ':low', ':medium', ':high']) {
+      normalized = normalized.replace(new RegExp(`${suffix}$`), '')
+    }
+    if (normalized === previous) return normalized
+  }
+}
+
 function capabilityFor(entry: RouteEntry) {
+  const requestModel = normalizeRouteModel(model.value)
+  if (!requestModel) return undefined
   return catalog.value?.items.find(
-    (item) => item.channel_id === entry.channel_id
+    (item) =>
+      item.channel_id === entry.channel_id &&
+      item.request_model === requestModel
   )
 }
 
@@ -307,24 +424,57 @@ function healthTone(state: RouteHealthState): 'success' | 'warning' | 'danger' {
 }
 
 async function runPreview(): Promise<void> {
-  if (!profileView.value || !model.value.trim() || !path.value.trim()) return
-  loadingPreview.value = true
-  try {
-    preview.value = await routingApi.preview(profileView.value.profile.id, {
-      model: model.value.trim(),
-      path: path.value.trim(),
-    })
-  } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
-  } finally {
-    loadingPreview.value = false
+  if (
+    !profileView.value ||
+    !model.value.trim() ||
+    !path.value.trim() ||
+    loadingPreview.value
+  )
+    return
+  const requestSerial = ++previewRequestSerial
+  const profileID = profileView.value.profile.id
+  const input = {
+    model: model.value.trim(),
+    path: path.value.trim(),
   }
+  loadingPreview.value = true
+  preview.value = null
+  try {
+    const result = await routingApi.preview(profileID, input)
+    if (
+      requestSerial === previewRequestSerial &&
+      model.value.trim() === input.model &&
+      path.value.trim() === input.path
+    ) {
+      preview.value = result
+    }
+  } catch (error) {
+    if (requestSerial === previewRequestSerial) {
+      toast.error(error instanceof ApiError ? error.message : String(error))
+    }
+  } finally {
+    if (requestSerial === previewRequestSerial) loadingPreview.value = false
+  }
+}
+
+function invalidatePreview(): void {
+  previewRequestSerial++
+  preview.value = null
+  loadingPreview.value = false
 }
 
 function reloadAfterConflict(): void {
   void load()
-  preview.value = null
 }
+
+watch(groups, invalidatePreview, { deep: true })
+watch([model, path], invalidatePreview)
+watch(
+  () => route.params.id,
+  () => {
+    void load()
+  }
+)
 
 onMounted(() => void load())
 </script>
@@ -341,9 +491,19 @@ onMounted(() => void load())
             <ArrowLeft class="h-4 w-4" aria-hidden="true" />
             {{ t('common.back') }}
           </ConsoleButton>
-          <ConsoleButton :loading="saving" :disabled="loading" @click="save">
+          <ConsoleButton :loading="saving" :disabled="!canSave" @click="save">
             <Save class="h-4 w-4" aria-hidden="true" />
             {{ t('common.save') }}
+          </ConsoleButton>
+          <ConsoleButton
+            v-if="profileView"
+            variant="danger"
+            :loading="deletingProfile"
+            :disabled="!canEdit"
+            @click="removeProfile"
+          >
+            <Trash2 class="h-4 w-4" aria-hidden="true" />
+            {{ t('common.delete') }}
           </ConsoleButton>
         </div>
       </template>
@@ -385,7 +545,12 @@ onMounted(() => void load())
     <template v-else>
       <ConsoleCard :title="t('routing.groupsTitle')">
         <template #action>
-          <ConsoleButton variant="secondary" size="sm" @click="addGroup">
+          <ConsoleButton
+            variant="secondary"
+            size="sm"
+            :disabled="!canEdit"
+            @click="addGroup"
+          >
             <Plus class="h-4 w-4" aria-hidden="true" />
             {{ t('routing.addGroup') }}
           </ConsoleButton>
@@ -413,11 +578,16 @@ onMounted(() => void load())
                 class="min-w-40 flex-1 border-0 border-b bg-transparent px-1 py-2 text-sm font-semibold text-[var(--text-primary)] focus:outline-none"
                 style="border-color: var(--border-default)"
                 :aria-label="t('routing.groupName')"
+                :disabled="!canEdit"
               />
               <label
                 class="flex items-center gap-2 text-sm text-[var(--text-secondary)]"
               >
-                <input v-model="group.enabled" type="checkbox" />
+                <input
+                  v-model="group.enabled"
+                  type="checkbox"
+                  :disabled="!canEdit"
+                />
                 {{ t('routing.enabled') }}
               </label>
               <label
@@ -427,6 +597,7 @@ onMounted(() => void load())
                   :checked="activeGroup === group"
                   type="radio"
                   name="active-route-group"
+                  :disabled="!canEdit"
                   @change="activateGroup(group)"
                 />
                 {{ t('routing.activeGroup') }}
@@ -436,6 +607,7 @@ onMounted(() => void load())
                 class="text-[var(--status-danger-text)] hover:opacity-70"
                 :aria-label="t('routing.removeGroup')"
                 :title="t('routing.removeGroup')"
+                :disabled="!canEdit"
                 @click="removeGroup(group)"
               >
                 <Trash2 class="h-4 w-4" aria-hidden="true" />
@@ -451,6 +623,7 @@ onMounted(() => void load())
                     v-model="selectedChannelId"
                     class="h-10 w-full border bg-transparent px-3 text-sm text-[var(--text-primary)]"
                     style="border-color: var(--border-default)"
+                    :disabled="!canEdit"
                   >
                     <option value="">{{ t('routing.selectChannel') }}</option>
                     <option
@@ -464,7 +637,7 @@ onMounted(() => void load())
                 </FormField>
                 <ConsoleButton
                   variant="secondary"
-                  :disabled="!selectedChannelId"
+                  :disabled="!canEdit || !selectedChannelId"
                   @click="addChannel"
                 >
                   <Plus class="h-4 w-4" aria-hidden="true" />
@@ -492,10 +665,11 @@ onMounted(() => void load())
                     <div
                       v-for="entry in group.entries"
                       :key="entry.id || `new-entry-${entry.channel_id}`"
-                      draggable="true"
+                      :draggable="canEdit"
                       class="flex flex-wrap items-center gap-2 border p-3"
                       style="border-color: var(--border-subtle)"
                       @dragstart="draggingEntry = entry"
+                      @dragend="clearDraggingEntry"
                       @dragover.prevent
                       @drop="dropEntry(entry)"
                     >
@@ -544,12 +718,17 @@ onMounted(() => void load())
                           max="1000000"
                           class="w-20 border bg-transparent px-2 py-1 text-sm"
                           style="border-color: var(--border-default)"
+                          :disabled="!canEdit"
                         />
                       </label>
                       <label
                         class="flex items-center gap-1 text-xs text-[var(--text-secondary)]"
                       >
-                        <input v-model="entry.enabled" type="checkbox" />
+                        <input
+                          v-model="entry.enabled"
+                          type="checkbox"
+                          :disabled="!canEdit"
+                        />
                         {{ t('routing.enabled') }}
                       </label>
                       <button
@@ -557,6 +736,7 @@ onMounted(() => void load())
                         class="p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                         :aria-label="t('routing.moveUp')"
                         :title="t('routing.moveUp')"
+                        :disabled="!canEdit"
                         @click="moveEntry(entry, -1)"
                       >
                         <ArrowUp class="h-4 w-4" aria-hidden="true" />
@@ -566,6 +746,7 @@ onMounted(() => void load())
                         class="p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                         :aria-label="t('routing.moveDown')"
                         :title="t('routing.moveDown')"
+                        :disabled="!canEdit"
                         @click="moveEntry(entry, 1)"
                       >
                         <ArrowDown class="h-4 w-4" aria-hidden="true" />
@@ -575,6 +756,7 @@ onMounted(() => void load())
                         class="p-1 text-[var(--status-danger-text)]"
                         :aria-label="t('routing.removeEntry')"
                         :title="t('routing.removeEntry')"
+                        :disabled="!canEdit"
                         @click="removeEntry(entry)"
                       >
                         <Trash2 class="h-4 w-4" aria-hidden="true" />
@@ -596,13 +778,18 @@ onMounted(() => void load())
                     <input
                       v-model="group.policy.load_balance"
                       type="checkbox"
+                      :disabled="!canEdit"
                     />
                   </label>
                   <label
                     class="flex items-center justify-between gap-3 text-sm text-[var(--text-secondary)]"
                   >
                     {{ t('routing.sticky') }}
-                    <input v-model="group.policy.sticky" type="checkbox" />
+                    <input
+                      v-model="group.policy.sticky"
+                      type="checkbox"
+                      :disabled="!canEdit"
+                    />
                   </label>
                   <label
                     class="flex items-center justify-between gap-3 text-sm text-[var(--text-secondary)]"
@@ -616,6 +803,7 @@ onMounted(() => void load())
                       step="0.01"
                       class="w-24 border bg-transparent px-2 py-1 text-sm text-[var(--text-primary)]"
                       style="border-color: var(--border-default)"
+                      :disabled="!canEdit"
                     />
                   </label>
                   <label class="block text-sm text-[var(--text-secondary)]">
@@ -624,6 +812,7 @@ onMounted(() => void load())
                       v-model="group.policy.retry_mode"
                       class="mt-1 h-9 w-full border bg-transparent px-2 text-sm text-[var(--text-primary)]"
                       style="border-color: var(--border-default)"
+                      :disabled="!canEdit"
                     >
                       <option value="none">none</option>
                       <option value="same_channel">same_channel</option>
@@ -643,7 +832,7 @@ onMounted(() => void load())
           <p class="text-sm text-[var(--text-tertiary)]">
             {{ t('routing.createHint') }}
           </p>
-          <ConsoleButton @click="save">
+          <ConsoleButton :disabled="!canSave" @click="save">
             <Save class="h-4 w-4" aria-hidden="true" />
             {{ t('routing.createProfile') }}
           </ConsoleButton>
@@ -661,7 +850,7 @@ onMounted(() => void load())
             class="mt-4"
             variant="secondary"
             :loading="loadingPreview"
-            :disabled="!model.trim() || !path.trim()"
+            :disabled="loadingPreview || !model.trim() || !path.trim()"
             @click="runPreview"
           >
             <RefreshCw class="h-4 w-4" aria-hidden="true" />

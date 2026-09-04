@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -152,4 +153,56 @@ func TestBillingSessionRefundRetriesOnlyPendingComponents(t *testing.T) {
 	funding.mu.Lock()
 	assert.Equal(t, 2, funding.refundCalls)
 	funding.mu.Unlock()
+}
+
+func TestBillingSessionReservePersistsRecoveryAmountsWithReservation(t *testing.T) {
+	truncate(t)
+	const userID = 801
+	const tokenID = 801
+	const requestID = "billing-reserve-atomic-test"
+	seedUser(t, userID, 60)
+	seedToken(t, tokenID, userID, "billing-reserve-atomic-key", 60)
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", tokenID).Update("used_quota", 40).Error)
+
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID: requestID,
+		UserID:    userID,
+		TokenID:   tokenID,
+		Source:    BillingSourceWallet,
+	})
+	require.NoError(t, err)
+	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 0, 40, 0, 40))
+
+	session := &BillingSession{
+		relayInfo:        &relaycommon.RelayInfo{UserId: userID, TokenId: tokenID, TokenKey: "billing-reserve-atomic-key"},
+		funding:          &WalletFunding{userId: userID, consumed: 40},
+		recoveryID:       requestID,
+		preConsumedQuota: 40,
+		tokenConsumed:    40,
+	}
+	require.NoError(t, session.Reserve(70))
+	require.NoError(t, session.Reserve(70))
+	require.NoError(t, session.Reserve(90))
+
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
+	assert.Equal(t, int64(90), recovery.FundingAmount)
+	assert.Equal(t, int64(90), recovery.TokenAmount)
+	assert.Equal(t, int64(0), recovery.ExtraAmount)
+	assert.Equal(t, 90, session.GetPreConsumedQuota())
+
+	var marker model.BillingRecoveryAdjustment
+	require.NoError(t, model.DB.Where("request_id = ? AND component = ? AND operation = ?", requestID, "reserve:70", model.BillingRecoveryOperationReserve).First(&marker).Error)
+	assert.Equal(t, int64(30), marker.Amount)
+	var nextMarker model.BillingRecoveryAdjustment
+	require.NoError(t, model.DB.Where("request_id = ? AND component = ? AND operation = ?", requestID, "reserve:90", model.BillingRecoveryOperationReserve).First(&nextMarker).Error)
+	assert.Equal(t, int64(20), nextMarker.Amount)
+
+	var user model.User
+	var token model.Token
+	require.NoError(t, model.DB.Select("quota").Where("id = ?", userID).First(&user).Error)
+	require.NoError(t, model.DB.Select("remain_quota", "used_quota").Where("id = ?", tokenID).First(&token).Error)
+	assert.Equal(t, 10, user.Quota)
+	assert.Equal(t, 10, token.RemainQuota)
+	assert.Equal(t, 90, token.UsedQuota)
 }

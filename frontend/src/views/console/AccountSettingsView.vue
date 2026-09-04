@@ -11,6 +11,7 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import AccountSecurityPanel from '@/components/console/AccountSecurityPanel.vue'
+import LoginSessionsPanel from '@/components/console/LoginSessionsPanel.vue'
 import PageHero from '@/components/console/PageHero.vue'
 import PreferencesNotificationsPanel from '@/components/console/PreferencesNotificationsPanel.vue'
 import { useToast } from '@/composables/useToast'
@@ -109,6 +110,8 @@ async function deleteAccount(): Promise<void> {
       />
       <PreferencesNotificationsPanel :is-admin="auth.isAdmin" />
     </div>
+
+    <LoginSessionsPanel />
 
     <ConsoleModal
       :open="profileOpen"

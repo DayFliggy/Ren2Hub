@@ -19,6 +19,10 @@ func TestClassifyRouteErrorSeparatesKeyModelAndStreamFailures(t *testing.T) {
 	assert.True(t, ClassifyRouteError(401, "", "", false).MarkKey)
 	assert.True(t, ClassifyRouteError(401, "", "", false).Failoverable)
 	assert.Equal(t, RouteErrorKey, ClassifyRouteError(403, "invalid_api_key", "", false).Class)
+	ordinaryNotFound := ClassifyRouteError(404, "", "route not found", false)
+	assert.Equal(t, RouteErrorUnknown, ordinaryNotFound.Class)
+	assert.False(t, ordinaryNotFound.MarkCapability)
+	assert.False(t, ordinaryNotFound.MarkChannelModel)
 	assert.Equal(t, RouteErrorModel, ClassifyRouteError(404, "model_not_found", "", false).Class)
 	assert.Equal(t, RouteErrorModel, ClassifyRouteError(400, "unsupported_model", "", false).Class)
 	assert.True(t, ClassifyRouteError(404, "model_not_found", "", false).MarkCapability)
@@ -154,6 +158,37 @@ func TestRouteHealthUsableAllowsOneHalfOpenProbe(t *testing.T) {
 	assert.Equal(t, model.RouteHealthStateHalfOpen, health.State)
 }
 
+func TestRouteKeyHealthUsableClaimsOneHalfOpenProbe(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	originalDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = originalDB
+		sqlDB, closeErr := db.DB()
+		if closeErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
+	keyScope := RouteKeyScope("probe-key")
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: 4, Model: "gpt-5", KeyScope: keyScope, State: model.RouteHealthStateOpen,
+		FailureCount: 1, CooldownUntil: 1000, HealthEpoch: 7,
+	}).Error)
+
+	usable, epoch, err := RouteKeyHealthUsable(context.Background(), 4, "gpt-5", "probe-key", time.Unix(1000, 0))
+	require.NoError(t, err)
+	assert.True(t, usable)
+	assert.Equal(t, int64(8), epoch)
+
+	usable, epoch, err = RouteKeyHealthUsable(context.Background(), 4, "gpt-5", "probe-key", time.Unix(1001, 0))
+	require.NoError(t, err)
+	assert.False(t, usable)
+	assert.Equal(t, int64(8), epoch)
+	assert.False(t, CanUseRouteHealth(model.ChannelHealth{State: model.RouteHealthStateHalfOpen}, time.Unix(1001, 0)))
+}
+
 func TestObserveLiveRouteErrorKeepsKeyAndCapabilityScopesSeparate(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
 	require.NoError(t, err)
@@ -167,6 +202,11 @@ func TestObserveLiveRouteErrorKeepsKeyAndCapabilityScopesSeparate(t *testing.T) 
 		}
 	})
 	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
+
+	require.NoError(t, ObserveLiveRouteError(context.Background(), 3, "gpt-5", 404, "", "route not found", false))
+	var healthCount int64
+	require.NoError(t, db.Model(&model.ChannelHealth{}).Where("channel_id = ? AND model = ?", 3, "gpt-5").Count(&healthCount).Error)
+	assert.Zero(t, healthCount)
 
 	require.NoError(t, ObserveLiveRouteError(context.Background(), 3, "gpt-5", 404, "model_not_found", "", false))
 	var aggregate model.ChannelHealth

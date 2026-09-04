@@ -13,7 +13,6 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // RouteErrorClass is deliberately independent from provider-specific error
@@ -54,7 +53,7 @@ func ClassifyRouteError(status int, providerCode, message string, streamStarted 
 		strings.Contains(code, "authentication_error") || strings.Contains(text, "invalid api key") ||
 		strings.Contains(text, "incorrect api key"):
 		return RouteErrorClassification{Class: RouteErrorKey, Retryable: true, Failoverable: true, MarkKey: true}
-	case status == 404 || strings.Contains(code, "model_not_found") || strings.Contains(code, "unsupported_model") || strings.Contains(text, "model not found"):
+	case strings.Contains(code, "model_not_found") || strings.Contains(code, "unsupported_model") || strings.Contains(text, "model not found"):
 		return RouteErrorClassification{Class: RouteErrorModel, Failoverable: true, MarkCapability: true}
 	case status == 400 || status == 422 || strings.Contains(code, "invalid_request"):
 		return RouteErrorClassification{Class: RouteErrorInput}
@@ -167,12 +166,19 @@ func CanUseRouteHealth(health model.ChannelHealth, now time.Time) bool {
 		return true
 	}
 	if health.State == model.RouteHealthStateHalfOpen {
-		return true
+		// A half-open row is already owned by the request that atomically
+		// claimed the probe. Treating it as generally usable would let another
+		// request select the same failed resource before that probe finishes.
+		return false
 	}
 	return health.CooldownUntil > 0 && health.CooldownUntil <= now.Unix()
 }
 
 func LoadRouteHealth(ctx context.Context, channelID int, requestModel string) (model.ChannelHealth, error) {
+	return loadRouteHealthScope(ctx, channelID, requestModel, "")
+}
+
+func loadRouteHealthScope(ctx context.Context, channelID int, requestModel, keyScope string) (model.ChannelHealth, error) {
 	if model.DB == nil || channelID <= 0 {
 		return model.ChannelHealth{}, errors.New("route health database is unavailable")
 	}
@@ -180,20 +186,34 @@ func LoadRouteHealth(ctx context.Context, channelID int, requestModel string) (m
 		ctx = context.Background()
 	}
 	var health model.ChannelHealth
-	err := model.DB.WithContext(ctx).Where("channel_id = ? AND model = ? AND key_scope = ?", channelID, modellab.NormalizeModel(requestModel), "").First(&health).Error
+	err := model.DB.WithContext(ctx).Where("channel_id = ? AND model = ? AND key_scope = ?", channelID, modellab.NormalizeModel(requestModel), keyScope).First(&health).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		health = model.ChannelHealth{ChannelID: channelID, Model: modellab.NormalizeModel(requestModel), KeyScope: "", State: model.RouteHealthStateClosed, HealthEpoch: 1}
+		health = model.ChannelHealth{ChannelID: channelID, Model: modellab.NormalizeModel(requestModel), KeyScope: keyScope, State: model.RouteHealthStateClosed, HealthEpoch: 1}
 		return health, nil
 	}
 	return health, err
 }
 
 func RouteHealthUsable(ctx context.Context, channelID int, requestModel string, now time.Time) (bool, int64, error) {
+	return routeHealthScopeUsable(ctx, channelID, requestModel, "", now)
+}
+
+// RouteKeyHealthUsable atomically claims a due half-open probe for one
+// channel key. It is called only after a key has been selected, so competing
+// requests cannot all use the same recovered key as a probe.
+func RouteKeyHealthUsable(ctx context.Context, channelID int, requestModel, key string, now time.Time) (bool, int64, error) {
+	if strings.TrimSpace(key) == "" {
+		return false, 0, errors.New("route key is required")
+	}
+	return routeHealthScopeUsable(ctx, channelID, requestModel, RouteKeyScope(key), now)
+}
+
+func routeHealthScopeUsable(ctx context.Context, channelID int, requestModel, keyScope string, now time.Time) (bool, int64, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	for attempt := 0; attempt < 2; attempt++ {
-		health, err := LoadRouteHealth(ctx, channelID, requestModel)
+		health, err := loadRouteHealthScope(ctx, channelID, requestModel, keyScope)
 		if err != nil {
 			return false, 0, err
 		}
@@ -376,7 +396,7 @@ func persistRouteHealthObservation(ctx context.Context, channelID int, requestMo
 	modelName := modellab.NormalizeModel(requestModel)
 	var health model.ChannelHealth
 	err := model.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		err := model.LockForUpdate(tx).
 			Where("channel_id = ? AND model = ? AND key_scope = ?", channelID, modelName, keyScope).
 			First(&health).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {

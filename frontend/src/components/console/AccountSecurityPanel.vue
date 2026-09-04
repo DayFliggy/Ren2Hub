@@ -2,6 +2,7 @@
 import {
   AlertTriangle,
   AtSign,
+  Copy,
   Github,
   KeyRound,
   Link2,
@@ -16,7 +17,7 @@ import {
   Trash2,
   UserRound,
 } from 'lucide-vue-next'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -32,6 +33,7 @@ import type { SettingsBinding, SettingsBindingId } from '@/types/settings'
 import type { UserInfo } from '@/types/auth'
 
 import SettingsSectionHeading from './SettingsSectionHeading.vue'
+import { authApi } from '@/api/auth'
 import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
 import { applyAuthRotation, parseAuthRotation } from '@/api/authSession'
@@ -73,6 +75,10 @@ const publicStatus = ref<PublicStatus | null>(null)
 const oauthPopup = ref<Window | null>(null)
 const oauthProvider = ref('')
 const oauthState = ref('')
+const accessToken = ref('')
+const accessTokenOpen = ref(false)
+const accessTokenConfirmOpen = ref(false)
+const generatingAccessToken = ref(false)
 
 const bindingMeta: Record<
   Exclude<SettingsBindingId, `custom:${number}`>,
@@ -535,6 +541,45 @@ async function copyBackupCodes(): Promise<void> {
   }
 }
 
+async function copyAccessToken(notify = true): Promise<boolean> {
+  if (!accessToken.value) return false
+  try {
+    await navigator.clipboard.writeText(accessToken.value)
+    if (notify) toast.success(t('settings.accessTokenCopied'))
+    return true
+  } catch {
+    if (notify) toast.error(t('settings.accessTokenCopyFailed'))
+    return false
+  }
+}
+
+async function generateAccessToken(): Promise<void> {
+  if (generatingAccessToken.value) return
+  generatingAccessToken.value = true
+  try {
+    accessToken.value = await authApi.generateAccessToken()
+    accessTokenConfirmOpen.value = false
+    const copied = await copyAccessToken(false)
+    toast.success(
+      copied
+        ? t('settings.accessTokenGeneratedAndCopied')
+        : t('settings.accessTokenGenerated')
+    )
+    if (!copied) toast.error(t('settings.accessTokenCopyFailed'))
+  } catch (error) {
+    toast.error(error instanceof ApiError ? error.message : String(error))
+  } finally {
+    generatingAccessToken.value = false
+  }
+}
+
+function closeAccessToken(): void {
+  if (generatingAccessToken.value) return
+  accessTokenOpen.value = false
+  accessTokenConfirmOpen.value = false
+  accessToken.value = ''
+}
+
 function openBinding(binding: SettingsBinding): void {
   if (binding.bound && binding.id.startsWith('custom:')) {
     unbindTarget.value = binding.id
@@ -650,14 +695,24 @@ function handleOAuthMessage(event: MessageEvent<unknown>): void {
     })
 }
 
+function closeOAuthPopup(): void {
+  oauthPopup.value?.close()
+  oauthPopup.value = null
+}
+
 onMounted(() => {
   window.addEventListener('message', handleOAuthMessage)
+  window.addEventListener('beforeunload', closeOAuthPopup)
   void loadSecurity()
 })
 
-onMounted(() => {
-  // The popup callback route posts its result back to this settings page.
-  window.addEventListener('beforeunload', () => oauthPopup.value?.close())
+onBeforeUnmount(() => {
+  window.removeEventListener('message', handleOAuthMessage)
+  window.removeEventListener('beforeunload', closeOAuthPopup)
+  closeOAuthPopup()
+  accessToken.value = ''
+  accessTokenOpen.value = false
+  accessTokenConfirmOpen.value = false
 })
 </script>
 
@@ -879,6 +934,41 @@ onMounted(() => {
     <section class="border-t border-[var(--border-subtle)]">
       <SettingsSectionHeading
         index="04"
+        :icon="KeyRound"
+        :title="t('settings.accessToken')"
+      />
+      <div class="border-t border-[var(--border-subtle)] px-5 py-5 sm:px-6">
+        <div
+          class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+        >
+          <div class="flex min-w-0 items-start gap-3">
+            <span class="settings-icon-tile"
+              ><KeyRound :size="19" aria-hidden="true"
+            /></span>
+            <div class="min-w-0">
+              <p class="font-semibold text-[var(--text-primary)]">
+                {{ t('settings.accessTokenTitle') }}
+              </p>
+              <p class="mt-1 text-sm text-[var(--text-tertiary)]">
+                {{ t('settings.accessTokenDesc') }}
+              </p>
+            </div>
+          </div>
+          <ConsoleButton
+            variant="secondary"
+            size="sm"
+            class="w-full sm:w-auto"
+            @click="accessTokenOpen = true"
+          >
+            {{ t('settings.manageAccessToken') }}
+          </ConsoleButton>
+        </div>
+      </div>
+    </section>
+
+    <section class="border-t border-[var(--border-subtle)]">
+      <SettingsSectionHeading
+        index="05"
         :icon="Link2"
         :title="t('settings.authSources')"
       >
@@ -929,7 +1019,7 @@ onMounted(() => {
 
     <section class="border-t border-[var(--status-danger-soft)]">
       <SettingsSectionHeading
-        index="05"
+        index="06"
         :icon="AlertTriangle"
         :title="t('settings.dangerTitle')"
         danger
@@ -994,6 +1084,80 @@ onMounted(() => {
       </div>
     </template>
   </ConsoleModal>
+
+  <ConsoleModal
+    :open="accessTokenOpen"
+    :title="t('settings.accessTokenTitle')"
+    :subtitle="t('settings.accessTokenModalSubtitle')"
+    size="md"
+    :close-disabled="generatingAccessToken"
+    @close="closeAccessToken"
+  >
+    <div v-if="accessToken" class="space-y-3">
+      <FormField :label="t('settings.accessTokenValue')">
+        <div class="flex items-end gap-2">
+          <TextInput
+            v-model="accessToken"
+            readonly
+            class="min-w-0 flex-1"
+            aria-label="access-token"
+          />
+          <ConsoleButton
+            variant="secondary"
+            size="sm"
+            class="shrink-0"
+            @click="copyAccessToken()"
+          >
+            <Copy :size="15" aria-hidden="true" />
+            {{ t('common.copy') }}
+          </ConsoleButton>
+        </div>
+      </FormField>
+      <div class="settings-context-callout">
+        <KeyRound :size="18" aria-hidden="true" />
+        <p>{{ t('settings.accessTokenShownOnce') }}</p>
+      </div>
+    </div>
+    <div v-else class="settings-context-callout">
+      <KeyRound :size="18" aria-hidden="true" />
+      <p>{{ t('settings.accessTokenEmpty') }}</p>
+    </div>
+    <template #footer>
+      <div class="grid grid-cols-2 gap-3">
+        <ConsoleButton
+          variant="secondary"
+          size="lg"
+          :disabled="generatingAccessToken"
+          @click="closeAccessToken"
+        >
+          {{ t('common.close') }}
+        </ConsoleButton>
+        <ConsoleButton
+          size="lg"
+          :loading="generatingAccessToken"
+          :disabled="generatingAccessToken"
+          @click="accessTokenConfirmOpen = true"
+        >
+          <RefreshCw
+            v-if="!generatingAccessToken"
+            :size="16"
+            aria-hidden="true"
+          />
+          {{ t('settings.regenerateAccessToken') }}
+        </ConsoleButton>
+      </div>
+    </template>
+  </ConsoleModal>
+
+  <ConfirmDialog
+    :open="accessTokenConfirmOpen"
+    :title="t('settings.regenerateAccessTokenConfirmTitle')"
+    :message="t('settings.regenerateAccessTokenConfirm')"
+    :confirm-text="t('settings.regenerateAccessToken')"
+    :loading="generatingAccessToken"
+    @confirm="generateAccessToken"
+    @cancel="accessTokenConfirmOpen = false"
+  />
 
   <ConfirmDialog
     :open="passkeyRemoveOpen"

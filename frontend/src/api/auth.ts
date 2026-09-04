@@ -1,12 +1,21 @@
 import type {
   AuthBundle,
   AuthTokenRotation,
+  LoginSession,
+  LoginSessionBulkRevokeResult,
+  LoginSessionRevokeResult,
   LoginResponse,
   UserInfo,
   UserProfilePatch,
 } from '@/types/auth'
 
 import { api } from './client'
+import {
+  parseAccessToken,
+  parseLoginSessionBulkRevokeResult,
+  parseLoginSessionRevokeResult,
+  parseLoginSessions,
+} from './contracts'
 import { ApiError } from './types'
 import {
   clearAuthBundleIfCurrent,
@@ -132,5 +141,22 @@ export const authApi = {
       password,
     })
     return parseAuthRotation(value) ?? invalidAuthResponse('/api/user/self')
+  },
+  async generateAccessToken(): Promise<string> {
+    return parseAccessToken(await api.get<unknown>('/api/user/token'))
+  },
+  async getLoginSessions(): Promise<LoginSession[]> {
+    return parseLoginSessions(await api.get<unknown>('/api/user/sessions'))
+  },
+  async revokeLoginSession(sid: string): Promise<LoginSessionRevokeResult> {
+    const value = await api.delete<unknown>(
+      `/api/user/sessions/${encodeURIComponent(sid)}`
+    )
+    return parseLoginSessionRevokeResult(value)
+  },
+  async revokeOtherLoginSessions(): Promise<LoginSessionBulkRevokeResult> {
+    return parseLoginSessionBulkRevokeResult(
+      await api.post<unknown>('/api/user/sessions/revoke-others')
+    )
   },
 }

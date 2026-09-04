@@ -148,8 +148,11 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 	}
 
 	var user model.User
-	if err := model.DB.WithContext(ctx).Select("id", "group").Where("id = ?", input.UserID).First(&user).Error; err != nil {
+	if err := model.DB.WithContext(ctx).Select("id", "status", "group").Where("id = ?", input.UserID).First(&user).Error; err != nil {
 		return err
+	}
+	if user.Status != common.UserStatusEnabled {
+		return &LiveRouteQualificationError{Reason: ShadowFilterTokenForbidden}
 	}
 	var token model.Token
 	if err := model.DB.WithContext(ctx).Where("id = ? AND user_id = ?", input.TokenID, input.UserID).First(&token).Error; err != nil {
@@ -158,12 +161,25 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 		}
 		return err
 	}
-	if token.Status != common.TokenStatusEnabled || (token.ExpiredTime != -1 && token.ExpiredTime <= common.GetTimestamp()) {
+	if !routeTokenUsable(token) {
 		return &LiveRouteQualificationError{Reason: ShadowFilterTokenForbidden}
 	}
-	// The authenticated context is an input to selection, but the current user
-	// record is authoritative at the final execution boundary.
-	input.UserGroup = user.Group
+	// Keep the effective group established by TokenAuth/distribution. The
+	// account's primary group is only used to validate that this effective
+	// group remains permitted after mutable state is re-read.
+	effectiveGroup := strings.TrimSpace(input.UserGroup)
+	tokenGroup := strings.TrimSpace(token.Group)
+	if effectiveGroup == "" || tokenGroup == "auto" {
+		return &LiveRouteQualificationError{Reason: ShadowFilterGroupForbidden}
+	}
+	if tokenGroup != "" {
+		if tokenGroup != effectiveGroup || !IsUserSelectableGroup(user.Group, tokenGroup) {
+			return &LiveRouteQualificationError{Reason: ShadowFilterGroupForbidden}
+		}
+	} else if effectiveGroup != user.Group && !IsUserSelectableGroup(user.Group, effectiveGroup) {
+		return &LiveRouteQualificationError{Reason: ShadowFilterGroupForbidden}
+	}
+	input.UserGroup = effectiveGroup
 
 	var profile model.UserRouteProfile
 	if err := model.DB.WithContext(ctx).Where("user_id = ? AND token_id = ?", input.UserID, input.TokenID).First(&profile).Error; err != nil {
@@ -299,6 +315,24 @@ type LiveRouteSelection struct {
 	Retry    RouteLiveRetryPolicy
 }
 
+// RouteLiveTokenGroupSupported keeps live routing fail-closed while the
+// legacy auto-group sequence still owns its own per-request group resolution.
+// A concrete Token.Group is safe to pass through the unified candidate filter;
+// an "auto" token remains on the legacy selector until that sequence is part
+// of the live attempt lifecycle.
+func RouteLiveTokenGroupSupported(group string) bool {
+	group = strings.TrimSpace(group)
+	return group != "" && group != "auto"
+}
+
+// RouteLiveRequestSupported excludes task and provider-specific request paths
+// until they share Relay's lease, runtime recheck, retry, billing, and decision
+// finalization lifecycle. The legacy selector remains the explicit fallback
+// for those paths rather than storing a live selection that cannot be closed.
+func RouteLiveRequestSupported(path string) bool {
+	return endpointTypeForRequestPath(path) != ""
+}
+
 // RouteLiveRetryPolicy is the validated manual-policy subset used by the
 // relay attempt loop. It only narrows the system attempt budget; user-owned
 // configuration can never expand the guarded live-route maximum.
@@ -397,8 +431,9 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 	var candidates []RouteSelectionCandidate
 	if source == RouteSourceManual {
 		preview, previewErr := PreviewUserRouteProfile(input.Context, input.UserID, profile.ID, RouteProfilePreviewInput{
-			Model: input.RequestModel,
-			Path:  input.RequestPath,
+			Model:          input.RequestModel,
+			Path:           input.RequestPath,
+			EffectiveGroup: input.UserGroup,
 		})
 		if previewErr != nil {
 			return selection, previewErr

@@ -23,6 +23,7 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
 	service.RegisterSystemTaskHandler(routeCapabilityRefreshHandler{})
+	service.RegisterSystemTaskHandler(billingRecoveryHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
@@ -172,6 +173,31 @@ func (routeCapabilityRefreshHandler) Run(ctx context.Context, task *model.System
 	refreshCtx, cancel := context.WithTimeout(ctx, service.RouteCapabilityRefreshTimeout())
 	defer cancel()
 	summary, err := service.RefreshStaleChannelCapabilities(refreshCtx, service.NewSystemTaskProgressReporter(task, runnerID))
+	if err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, summary, err)
+		return
+	}
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+}
+
+// billingRecoveryHandler resumes accounting effects that were committed
+// before a process or request failed. The stale cutoff prevents an active
+// request heartbeat from being reclaimed while it is still running.
+type billingRecoveryHandler struct{}
+
+func (billingRecoveryHandler) Type() string { return model.SystemTaskTypeBillingRecovery }
+
+func (billingRecoveryHandler) Enabled() bool { return service.BillingRecoveryTaskEnabled() }
+
+func (billingRecoveryHandler) Interval() time.Duration {
+	return service.BillingRecoveryTaskInterval()
+}
+
+func (billingRecoveryHandler) NewPayload() any { return nil }
+
+func (billingRecoveryHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	cutoff := common.GetTimestamp() - int64(service.BillingRecoveryStaleAfter()/time.Second)
+	summary, err := service.RecoverStaleBillingRecoveries(ctx, cutoff, service.BillingRecoveryBatchLimit())
 	if err != nil {
 		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, summary, err)
 		return

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
 )
@@ -27,8 +28,9 @@ const (
 // needed for a static manual-route preview. It never selects or reserves a
 // live channel.
 type RouteProfilePreviewInput struct {
-	Model string `json:"model"`
-	Path  string `json:"path"`
+	Model          string `json:"model"`
+	Path           string `json:"path"`
+	EffectiveGroup string `json:"-"`
 }
 
 type RouteProfilePreview struct {
@@ -144,7 +146,7 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	if err != nil {
 		return nil, err
 	}
-	abilities, err := loadRoutePreviewAbilities(ctx, channelIDs, normalizedModel, userID)
+	abilities, err := loadRoutePreviewAbilities(ctx, channelIDs, normalizedModel, userID, input.EffectiveGroup)
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +196,19 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 			RequestPath:     input.Path,
 			EndpointType:    preview.EndpointType,
 		})
+		if item.FilterReason == "" && !routePreviewHealthUsable(item.Health) {
+			item.FilterReason = RouteCandidateFilterHealthUnavailable
+		}
+		if item.FilterReason == "" {
+			channel := channels[entry.ChannelID]
+			keyUsable, keyErr := RouteChannelHasAvailableKey(ctx, &channel, normalizedModel, time.Now())
+			if keyErr != nil {
+				return nil, keyErr
+			}
+			if !keyUsable {
+				item.FilterReason = RouteFilterKeyUnavailable
+			}
+		}
 		item.SnapshotVersion = activeSnapshot.ActiveVersion
 		item.CatalogVersion = activeSnapshot.CatalogVersion
 		if capability, ok := capabilityByChannel[entry.ChannelID]; ok {
@@ -303,7 +318,7 @@ func loadRoutePreviewSnapshots(ctx context.Context, channelIDs []int) (map[int]r
 	return snapshots, nil
 }
 
-func loadRoutePreviewAbilities(ctx context.Context, channelIDs []int, requestModel string, userID int) (map[int]routePreviewAbility, error) {
+func loadRoutePreviewAbilities(ctx context.Context, channelIDs []int, requestModel string, userID int, effectiveGroup string) (map[int]routePreviewAbility, error) {
 	access := make(map[int]routePreviewAbility, len(channelIDs))
 	if len(channelIDs) == 0 {
 		return access, nil
@@ -311,6 +326,10 @@ func loadRoutePreviewAbilities(ctx context.Context, channelIDs []int, requestMod
 	var user model.User
 	if err := model.DB.WithContext(ctx).Select("id", "group").Where("id = ?", userID).First(&user).Error; err != nil {
 		return nil, err
+	}
+	effectiveGroup = strings.TrimSpace(effectiveGroup)
+	if effectiveGroup == "" {
+		effectiveGroup = user.Group
 	}
 	var rows []model.Ability
 	if err := model.DB.WithContext(ctx).Where("channel_id IN ?", channelIDs).Find(&rows).Error; err != nil {
@@ -322,7 +341,7 @@ func loadRoutePreviewAbilities(ctx context.Context, channelIDs []int, requestMod
 		}
 		value := access[ability.ChannelId]
 		value.Enabled = true
-		if ability.Group == user.Group || IsUserSelectableGroup(user.Group, ability.Group) {
+		if ability.Group == effectiveGroup || IsUserSelectableGroup(effectiveGroup, ability.Group) {
 			value.Allowed = true
 		}
 		access[ability.ChannelId] = value
@@ -388,6 +407,13 @@ func routePreviewHealthSummary(health model.ChannelHealth) RoutePreviewHealthSum
 	return summary
 }
 
+// routePreviewHealthUsable is deliberately read-only. A live request is the
+// only path allowed to claim a half-open probe, while Preview must show the
+// same unavailable state without changing health ownership.
+func routePreviewHealthUsable(health RoutePreviewHealthSummary) bool {
+	return health.State == "" || health.State == model.RouteHealthStateClosed
+}
+
 type routePreviewFilterInput struct {
 	Profile         model.UserRouteProfile
 	Group           model.UserRouteGroup
@@ -421,6 +447,9 @@ func routePreviewFilterReason(input routePreviewFilterInput) string {
 	if !input.ChannelExists {
 		return RoutePreviewFilterChannelMissing
 	}
+	if !routeTokenUsable(input.Token) {
+		return ShadowFilterTokenForbidden
+	}
 	entitled := input.Entitlement.ID == 0 || entitlementIsActive(input.Entitlement)
 	result := filterRouteCapability(routeCapabilityFilterInput{
 		Capability:      input.Capability,
@@ -445,6 +474,11 @@ func routePreviewFilterReason(input routePreviewFilterInput) string {
 		RequireEndpoint:          true,
 	})
 	return result.Reason
+}
+
+func routeTokenUsable(token model.Token) bool {
+	return token.Status == common.TokenStatusEnabled &&
+		(token.ExpiredTime == -1 || token.ExpiredTime > common.GetTimestamp())
 }
 
 func entitlementIsActive(entitlement model.UserChannelEntitlement) bool {
