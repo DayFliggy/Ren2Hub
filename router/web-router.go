@@ -68,7 +68,6 @@ func isBackendWebRequest(requestPath string) bool {
 
 func SetWebRouter(router *gin.Engine, assets WebAssets) {
 	nextFS := common.EmbedFolder(assets.NextBuildFS, "frontend/embed-dist")
-	nextStatic := static.Serve("/next", nextFS)
 	publicStatic := static.Serve("/", nextFS)
 	nextReady := nextBuildReady(assets.NextIndexPage)
 
@@ -81,31 +80,19 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 			return
 		}
 		// HTML must use the injected index below; only static files bypass rate limiting.
-		if (!isWebStaticRequest(path) && path != "/next/") || isBackendWebRequest(path) || isRetiredWebRequest(path) {
+		if !isWebStaticRequest(path) || isBackendWebRequest(path) || isRetiredWebRequest(path) {
 			c.Next()
 			return
 		}
-		if path == "/next/" {
-			if !nextReady {
-				c.Next()
-				return
-			}
-			c.Header("Cache-Control", "no-cache")
-			c.Abort()
-			c.Data(http.StatusOK, "text/html; charset=utf-8", assets.NextIndexPage)
+		if strings.HasPrefix(path, "/next/assets/") {
+			c.Redirect(http.StatusTemporaryRedirect, strings.TrimPrefix(path, "/next"))
 			return
 		}
-		if strings.HasPrefix(path, "/next/") {
-			if strings.HasPrefix(path, "/next/assets/") {
-				c.Header("Cache-Control", "public, max-age=31536000, immutable")
-			}
-			nextStatic(c)
-			return
-		}
+		c.Header("Cache-Control", "public, max-age=31536000, immutable")
 		publicStatic(c)
 	})
 	router.Use(middleware.GlobalWebRateLimit())
-	router.GET("/next/", func(c *gin.Context) {
+	router.GET("/", func(c *gin.Context) {
 		if !nextReady {
 			c.String(http.StatusServiceUnavailable, "next frontend build is unavailable")
 			return
@@ -122,19 +109,31 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 			controller.RelayNotFound(c)
 			return
 		}
-		if path == "/next" {
-			c.Redirect(http.StatusTemporaryRedirect, "/next/")
-			return
-		}
-		if strings.HasPrefix(path, "/next/") {
-			if !nextReady {
-				c.String(http.StatusServiceUnavailable, "next frontend build is unavailable")
+		if path == "/next" || path == "/next/" || strings.HasPrefix(path, "/next/") {
+			if strings.HasPrefix(path, "/next/assets/") {
+				c.Redirect(http.StatusTemporaryRedirect, strings.TrimPrefix(path, "/next"))
 				return
 			}
+			legacyPath := strings.TrimPrefix(strings.TrimPrefix(path, "/next"), "/")
+			if legacyPath == "" {
+				legacyPath = "/"
+			} else {
+				legacyPath = "/" + legacyPath
+			}
+			if c.Request.URL.RawQuery != "" {
+				legacyPath += "?" + c.Request.URL.RawQuery
+			}
+			c.Redirect(http.StatusTemporaryRedirect, legacyPath)
+			return
+		}
+		if !nextReady {
+			c.String(http.StatusServiceUnavailable, "frontend build is unavailable")
+			return
+		}
+		if c.Request.URL.Path == "/" || !isWebStaticRequest(path) {
 			c.Data(http.StatusOK, "text/html; charset=utf-8", assets.NextIndexPage)
 			return
 		}
-		target := "/next" + c.Request.URL.RequestURI()
-		c.Redirect(http.StatusTemporaryRedirect, target)
+		controller.RelayNotFound(c)
 	})
 }

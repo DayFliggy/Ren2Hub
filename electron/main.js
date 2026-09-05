@@ -401,9 +401,9 @@ function createWindow() {
     icon: path.join(__dirname, 'icon.png')
   });
 
-  mainWindow.loadURL(`http://127.0.0.1:${loadPort}/next/`);
+  mainWindow.loadURL(`http://127.0.0.1:${loadPort}/`);
   
-  console.log(`Loading from: http://127.0.0.1:${loadPort}/next/`);
+  console.log(`Loading from: http://127.0.0.1:${loadPort}/`);
 
   if (isDev) {
     mainWindow.webContents.openDevTools();

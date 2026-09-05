@@ -23,8 +23,8 @@ for (const entry of entries) {
   if (!asset.startsWith(source + sep) || !(await stat(asset)).isFile()) {
     throw new Error('Vue entry asset is missing or outside dist')
   }
-  if (!index.includes(`/next/${entry.file}`)) {
-    throw new Error('Vue entry HTML must reference the /next/ production assets')
+  if (!index.includes(`/${entry.file}`)) {
+    throw new Error('Vue entry HTML must reference the root production assets')
   }
 }
 

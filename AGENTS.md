@@ -35,7 +35,7 @@ types/         — Type definitions (relay formats, file sources, errors)
 i18n/          — Backend internationalization (go-i18n, en/zh)
 oauth/         — OAuth provider implementations
 pkg/           — Internal packages (cachex, ionet)
-frontend/      — The only web application, served under `/next/`; Docker builds it and Go embeds `frontend/embed-dist`
+frontend/      — The only web application, served at `/`; Docker builds it and Go embeds `frontend/embed-dist`
   src/api/         — Real public HTTP client plus stateful mock Console/Lab transport
   src/canvas/      — Landing-page routing scene and animation engine
   src/charts/      — ECharts adapters
@@ -154,7 +154,7 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
   - All user-facing text must use Vue I18n. Keep `common` and `home` suitable for the initial bundle and add domain text to the matching lazy locale module.
   - All enabled routes use real same-origin HTTP endpoints. Browser auth uses a short-lived Bearer access token plus the HttpOnly refresh cookie; server authorization remains authoritative.
   - `/api/status.frontend_capabilities` is the source of truth for Vue module availability. Disabled modules must remain fail-closed in navigation and route guards; do not call placeholder endpoints for them.
-  - `frontend/` is mounted at `/next/`. Keep Vite `base`, router history, Go SPA fallback, immutable asset caching, and root-to-`/next` redirects aligned.
+  - `frontend/` is mounted at `/`. Keep Vite `base`, router history, Go SPA fallback, immutable asset caching, and legacy `/next` redirects aligned.
   - Use semantic CSS tokens from `src/styles/tokens.css`; preserve light/dark parity and reduced-motion behavior.
   - Abort or sequence-guard route/filter requests that can overlap, and clear timers/listeners on scope disposal.
   - Validate in this order when applicable: `bun run test:run`, `bun run typecheck`, `bun run lint`, `bun run format:check`, then `bun run build`.

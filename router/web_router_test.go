@@ -37,12 +37,12 @@ func TestVueWebRouting(t *testing.T) {
 		code int
 		body string
 	}{
-		{"/", http.StatusTemporaryRedirect, ""},
-		{"/models", http.StatusTemporaryRedirect, ""},
-		{"/next", http.StatusMovedPermanently, ""},
-		{"/next/", http.StatusOK, "next-index"},
-		{"/next/console/keys", http.StatusOK, "next-index"},
-		{"/next/assets/app.js", http.StatusOK, "next-asset"},
+		{"/", http.StatusOK, "next-index"},
+		{"/models", http.StatusOK, "next-index"},
+		{"/next", http.StatusTemporaryRedirect, ""},
+		{"/next/", http.StatusTemporaryRedirect, ""},
+		{"/console/keys", http.StatusOK, "next-index"},
+		{"/next/assets/app.js", http.StatusTemporaryRedirect, ""},
 		{"/logo.png", http.StatusOK, "logo"},
 		{"/playground", http.StatusNotFound, ""},
 		{"/next/chat/123", http.StatusNotFound, ""},
@@ -59,13 +59,13 @@ func TestVueWebRouting(t *testing.T) {
 }
 
 func TestVueWebPreservesQueryOnRedirect(t *testing.T) {
-	recorder := serveWebRequest(t, testWebAssets("next-index"), "/usage-logs?tab=drawing")
+	recorder := serveWebRequest(t, testWebAssets("next-index"), "/next/usage-logs?tab=drawing")
 	require.Equal(t, http.StatusTemporaryRedirect, recorder.Code)
-	require.Equal(t, "/next/usage-logs?tab=drawing", recorder.Header().Get("Location"))
+	require.Equal(t, "/usage-logs?tab=drawing", recorder.Header().Get("Location"))
 }
 
 func TestVuePlaceholderIsUnavailable(t *testing.T) {
 	index := `<meta name="ren2hub-next-build" content="placeholder">`
-	recorder := serveWebRequest(t, testWebAssets(index), "/next/")
+	recorder := serveWebRequest(t, testWebAssets(index), "/")
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 }

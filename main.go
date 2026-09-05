@@ -39,7 +39,7 @@ import (
 	_ "net/http/pprof"
 )
 
-// frontend/embed-dist is the only application served below /next/.
+// frontend/embed-dist is the only embedded application served at the web root.
 // Release builds replace the checked-in placeholder with the Vite output.
 //
 //go:embed frontend/embed-dist

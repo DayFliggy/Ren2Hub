@@ -40,7 +40,7 @@ npm run dev-app
 
 This will:
 - Use the Go backend on port 3000
-- Use the Vue Vite development server at `http://localhost:5175/next/`
+- Use the Vue Vite development server at `http://localhost:5175/`
 - Open an Electron window with DevTools enabled
 - Create a system tray icon (menu bar on macOS)
 - Store database in `../data/new-api.db`

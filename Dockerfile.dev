@@ -1,5 +1,5 @@
 # Backend-only build for frontend development
-# Uses the checked-in Vue placeholder; open the Vite dev server at /next/.
+# Uses the checked-in Vue placeholder; open the Vite dev server at /.
 
 FROM golang:1.26.1-alpine AS builder
 
