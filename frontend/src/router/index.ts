@@ -1,6 +1,7 @@
 import {
   createRouter,
   createWebHistory,
+  type LocationQuery,
   type RouteLocationRaw,
 } from 'vue-router'
 
@@ -15,6 +16,14 @@ import { adminRoutes } from '@/router/adminRoutes'
 
 const CONSOLE_ENTRY: RouteLocationRaw = { name: 'dashboard' }
 const CHUNK_RELOAD_KEY = 'ren2hub_chunk_reload'
+
+function legacyConsoleRedirect(name: string) {
+  return (to: { query: LocationQuery; hash: string }): RouteLocationRaw => ({
+    name,
+    query: to.query,
+    hash: to.hash,
+  })
+}
 
 export function sanitizeSetupRedirect(value: unknown): string | null {
   if (
@@ -115,6 +124,21 @@ const router = createRouter({
       redirect: (to) => ({ name: 'sign-up', query: to.query }),
     },
     { path: '/dashboard', redirect: { name: 'dashboard' } },
+    { path: '/wallet', redirect: legacyConsoleRedirect('wallet') },
+    { path: '/channels', redirect: legacyConsoleRedirect('channels') },
+    {
+      path: '/system-settings',
+      redirect: legacyConsoleRedirect('system-settings-site'),
+    },
+    { path: '/usage-logs', redirect: legacyConsoleRedirect('logs') },
+    {
+      path: '/usage-logs/drawing',
+      redirect: legacyConsoleRedirect('logs-drawing'),
+    },
+    {
+      path: '/usage-logs/tasks',
+      redirect: legacyConsoleRedirect('logs-tasks'),
+    },
     ...publicRoutes,
     {
       path: '/console',

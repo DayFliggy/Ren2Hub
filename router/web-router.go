@@ -81,8 +81,18 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 			return
 		}
 		// HTML must use the injected index below; only static files bypass rate limiting.
-		if !isWebStaticRequest(path) || isBackendWebRequest(path) || isRetiredWebRequest(path) {
+		if (!isWebStaticRequest(path) && path != "/next/") || isBackendWebRequest(path) || isRetiredWebRequest(path) {
 			c.Next()
+			return
+		}
+		if path == "/next/" {
+			if !nextReady {
+				c.Next()
+				return
+			}
+			c.Header("Cache-Control", "no-cache")
+			c.Abort()
+			c.Data(http.StatusOK, "text/html; charset=utf-8", assets.NextIndexPage)
 			return
 		}
 		if strings.HasPrefix(path, "/next/") {
@@ -104,7 +114,11 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 			controller.RelayNotFound(c)
 			return
 		}
-		if path == "/next" || strings.HasPrefix(path, "/next/") {
+		if path == "/next" {
+			c.Redirect(http.StatusTemporaryRedirect, "/next/")
+			return
+		}
+		if strings.HasPrefix(path, "/next/") {
 			if !nextReady {
 				c.String(http.StatusServiceUnavailable, "next frontend build is unavailable")
 				return
