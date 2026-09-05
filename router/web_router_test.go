@@ -13,9 +13,10 @@ import (
 func testWebAssets(index string) WebAssets {
 	return WebAssets{
 		NextBuildFS: fstest.MapFS{
-			"frontend/embed-dist/index.html":    {Data: []byte(index)},
-			"frontend/embed-dist/assets/app.js": {Data: []byte("next-asset")},
-			"frontend/embed-dist/logo.png":      {Data: []byte("logo")},
+			"frontend/embed-dist/index.html":                                   {Data: []byte(index)},
+			"frontend/embed-dist/assets/app.js":                                {Data: []byte("next-asset")},
+			"frontend/embed-dist/assets/_plugin-vue_export-helper-BDNMzG2s.js": {Data: []byte("helper")},
+			"frontend/embed-dist/logo.png":                                     {Data: []byte("logo")},
 		},
 		NextIndexPage: []byte(index),
 	}
@@ -43,6 +44,7 @@ func TestVueWebRouting(t *testing.T) {
 		{"/next/", http.StatusTemporaryRedirect, ""},
 		{"/console/keys", http.StatusOK, "next-index"},
 		{"/next/assets/app.js", http.StatusTemporaryRedirect, ""},
+		{"/assets/_plugin-vue_export-helper-BDNMzG2s.js", http.StatusOK, "helper"},
 		{"/logo.png", http.StatusOK, "logo"},
 		{"/playground", http.StatusNotFound, ""},
 		{"/next/chat/123", http.StatusNotFound, ""},

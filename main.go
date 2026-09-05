@@ -42,7 +42,9 @@ import (
 // frontend/embed-dist is the only embedded application served at the web root.
 // Release builds replace the checked-in placeholder with the Vite output.
 //
-//go:embed frontend/embed-dist
+// `all:` keeps Vite chunks beginning with `_` (for example the Vue export
+// helper) in the embedded filesystem. The default pattern omits them.
+//go:embed all:frontend/embed-dist
 var nextBuildFS embed.FS
 
 //go:embed frontend/embed-dist/index.html
