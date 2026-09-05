@@ -39,7 +39,7 @@ func TestVueWebRouting(t *testing.T) {
 	}{
 		{"/", http.StatusTemporaryRedirect, ""},
 		{"/models", http.StatusTemporaryRedirect, ""},
-		{"/next", http.StatusTemporaryRedirect, ""},
+		{"/next", http.StatusMovedPermanently, ""},
 		{"/next/", http.StatusOK, "next-index"},
 		{"/next/console/keys", http.StatusOK, "next-index"},
 		{"/next/assets/app.js", http.StatusOK, "next-asset"},
