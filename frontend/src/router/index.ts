@@ -10,6 +10,8 @@ import { loadMessageDomain } from '@/i18n'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import { useSetupStore } from '@/stores/setup'
+import { publicRoutes } from '@/router/publicRoutes'
+import { adminRoutes } from '@/router/adminRoutes'
 
 const CONSOLE_ENTRY: RouteLocationRaw = { name: 'dashboard' }
 const CHUNK_RELOAD_KEY = 'ren2hub_chunk_reload'
@@ -46,7 +48,12 @@ export function sanitizeRedirect(value: unknown): string | null {
     const url = new URL(value, window.location.origin)
     if (url.origin !== window.location.origin) return null
     const pathname = url.pathname.replace(/^\/next(?=\/|$)/, '') || '/'
-    if (!/^(\/(console|lab))(\/|$)/.test(pathname)) return null
+    if (
+      !/^(\/(console|lab|pricing|rankings|about|privacy-policy|user-agreement))(\/|$)/.test(
+        pathname
+      )
+    )
+      return null
     return `${pathname}${url.search}${url.hash}`
   } catch {
     return null
@@ -108,13 +115,14 @@ const router = createRouter({
       redirect: (to) => ({ name: 'sign-up', query: to.query }),
     },
     { path: '/dashboard', redirect: { name: 'dashboard' } },
-    { path: '/pricing', redirect: { name: 'models' } },
+    ...publicRoutes,
     {
       path: '/console',
       component: () => import('@/components/layout/ConsoleLayout.vue'),
       meta: { requiresAuth: true, topNav: 'console' },
       children: [
         { path: '', redirect: { name: 'dashboard' } },
+        ...adminRoutes,
         {
           path: 'dashboard',
           name: 'dashboard',

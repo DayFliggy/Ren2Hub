@@ -9,7 +9,6 @@ This is an AI API gateway/proxy built with Go. It aggregates 40+ upstream AI pro
 ## Tech Stack
 
 - **Backend**: Go 1.22+, Gin web framework, GORM v2 ORM
-- **React compatibility frontend (`web/`)**: React 19, TypeScript, Rsbuild, Base UI, Tailwind CSS
 - **Primary Vue frontend (`frontend/`)**: Vue 3.5, Vite 8, TypeScript, Pinia, Vue Router, Vue I18n, Tailwind CSS, ECharts, Axios, Vitest
 - **Databases**: SQLite, MySQL, PostgreSQL (all three must be supported)
 - **Cache**: Redis (go-redis) + in-memory cache
@@ -36,9 +35,7 @@ types/         — Type definitions (relay formats, file sources, errors)
 i18n/          — Backend internationalization (go-i18n, en/zh)
 oauth/         — OAuth provider implementations
 pkg/           — Internal packages (cachex, ionet)
-web/           — React compatibility frontend embedded as the Vue-disabled fallback
-  src/i18n/    — Frontend internationalization (i18next, en/zh/zh-TW/fr/ru/ja/vi)
-frontend/      — Primary Vue application served under `/next/`; Docker builds it and Go embeds `frontend/embed-dist`
+frontend/      — The only web application, served under `/next/`; Docker builds it and Go embeds `frontend/embed-dist`
   src/api/         — Real public HTTP client plus stateful mock Console/Lab transport
   src/canvas/      — Landing-page routing scene and animation engine
   src/charts/      — ECharts adapters
@@ -60,14 +57,6 @@ frontend/      — Primary Vue application served under `/next/`; Docker builds 
 
 - Library: `nicksnyder/go-i18n/v2`
 - Languages: en, zh
-
-### Frontend (`web/src/i18n/`)
-
-- Library: `i18next` + `react-i18next` + `i18next-browser-languagedetector`
-- Languages: en (base), zh (fallback), zh-TW, fr, ru, ja, vi
-- Translation files: `web/src/i18n/locales/{lang}.json` — flat JSON, keys are English source strings
-- Usage: `useTranslation()` hook, call `t('English key')` in components
-- CLI tools: `bun run i18n:sync` (from `web/`)
 
 ### Vue Frontend (`frontend/src/i18n/`)
 
@@ -158,8 +147,7 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
   - `bun install` for dependency installation
   - `bun run dev` for development server
   - `bun run build` for production build
-  - Run commands from the frontend directory they target; do not share lockfiles or dependency trees between `web/` and `frontend/`.
-- For `web/`, UI text must use `i18next`/`react-i18next` and the flat JSON locales in `web/src/i18n/locales/{lang}.json`. Follow `web/AGENTS.md` for its React-specific conventions and checks.
+  - Run commands from `frontend/`; use its Bun lockfile and Vite scripts.
 - For `frontend/`:
   - Use Vue SFCs with `<script setup lang="ts">`, Composition API, and typed props/emits.
   - Keep navigation definitions, API contracts, validation, and cross-route state single-sourced. Do not duplicate route menus or permission rules in components.

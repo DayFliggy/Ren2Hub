@@ -9,7 +9,7 @@ let serverProcess;
 let tray = null;
 let serverErrorLogs = [];
 const PORT = 3000;
-const DEV_FRONTEND_PORT = 5173; // Rsbuild dev server port
+const DEV_FRONTEND_PORT = 5175; // Vue Vite dev server port
 
 // 保存日志到文件并打开
 function saveAndOpenErrorLog() {
@@ -235,14 +235,14 @@ function startServer() {
       console.log('Development mode: skipping server startup');
       console.log('Please make sure you have started:');
       console.log('  1. Go backend: go run main.go (port 3000)');
-      console.log('  2. Frontend dev server: make dev-web (port 5173)');
+      console.log('  2. Frontend dev server: make dev-web (port 5175)');
       console.log('');
       console.log('Checking if servers are running...');
       
       // First check if both servers are accessible
       checkServerAvailability(DEV_FRONTEND_PORT)
         .then(() => {
-          console.log('✓ Frontend dev server is accessible on port 5173');
+      console.log('✓ Frontend dev server is accessible on port 5175');
           resolve();
         })
         .catch((err) => {
@@ -401,9 +401,9 @@ function createWindow() {
     icon: path.join(__dirname, 'icon.png')
   });
 
-  mainWindow.loadURL(`http://127.0.0.1:${loadPort}`);
+  mainWindow.loadURL(`http://127.0.0.1:${loadPort}/next/`);
   
-  console.log(`Loading from: http://127.0.0.1:${loadPort}`);
+  console.log(`Loading from: http://127.0.0.1:${loadPort}/next/`);
 
   if (isDev) {
     mainWindow.webContents.openDevTools();

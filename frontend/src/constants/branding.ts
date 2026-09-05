@@ -3,7 +3,7 @@
  *
  * The logo is imported as a module asset so Vite fingerprints it and prefixes
  * the configured `base` (`/next/`). A bare `/logo.png` string would resolve
- * against the server root, where `web/dist` (the React frontend) is served —
+ * against the server root, where the Vue application is served —
  * i.e. this frontend would render the other frontend's logo.
  */
 import brandLogoUrl from '@/assets/brand/logo.png'

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -128,8 +127,7 @@ func GetStatus(c *gin.Context) {
 		"user_agreement_enabled":      legalSetting.UserAgreement != "",
 		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
 		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,
-		// Additive capability metadata for the Vue client. Existing React fields
-		// remain unchanged and continue to drive the legacy application.
+		// Module capabilities are authoritative; the Vue application is always available.
 		"next_frontend_enabled": frontendCapabilities["next_frontend"] != "disabled",
 		"frontend_capabilities": frontendCapabilities,
 	}
@@ -212,9 +210,6 @@ func getFrontendCapabilities(passkeyEnabled bool) map[string]string {
 		"bigame":                "disabled",
 	}
 
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("NEXT_FRONTEND_ENABLED")), "false") {
-		capabilities["next_frontend"] = "disabled"
-	}
 	if !common.PasswordLoginEnabled {
 		capabilities["login"] = "disabled"
 	}

@@ -26,6 +26,9 @@ export interface SystemSettingField {
   description?: string
   kind: SystemSettingFieldKind
   defaultValue: SystemSettingValue
+  min?: number
+  max?: number
+  integer?: boolean
   options?: ReadonlyArray<{ value: string; label: string }>
 }
 
@@ -433,7 +436,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           ratio('TopupGroupRatio', '充值分组倍率'),
           ratio('GroupRatio', '分组倍率'),
           json('GroupGroupRatio', '组间倍率'),
-          list('UserUsableGroups', '用户可用分组', '[]'),
+          keyValue('UserUsableGroups', '用户可用分组'),
           json('AutoGroups', '自动分组规则', '[]'),
           number('MaxTokenAutoGroups', '自动分组 Token 阈值'),
           toggle('DefaultUseAutoGroup', '默认使用自动分组'),
@@ -744,7 +747,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
       {
         id: 'console-content',
         title: '控制台内容',
-        description: '公告、API 地址、FAQ、可用性面板和聊天预设。',
+        description: '公告、API 地址、FAQ 和可用性面板。',
         fields: [
           toggle('console_setting.announcements_enabled', '显示公告'),
           json('console_setting.announcements', '公告列表', '[]'),
@@ -754,7 +757,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           json('console_setting.faq', 'FAQ 列表', '[]'),
           toggle('console_setting.uptime_kuma_enabled', '显示 Uptime Kuma'),
           json('console_setting.uptime_kuma_groups', 'Uptime Kuma 分组', '[]'),
-          json('Chats', '聊天预设', '{}'),
         ],
       },
       {

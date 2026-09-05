@@ -41,6 +41,7 @@ const activeSection = computed(() => {
 })
 
 const draft = reactive<Record<string, SystemSettingValue>>({})
+const draftValid = reactive<Record<string, boolean>>({})
 const saving = reactive({ value: false })
 
 function readField(key: string, fallback: SystemSettingValue) {
@@ -52,6 +53,7 @@ function syncDraft() {
   if (!section) return
   for (const field of section.fields) {
     draft[field.key] = readField(field.key, field.defaultValue)
+    draftValid[field.key] = true
   }
 }
 
@@ -94,6 +96,10 @@ function normalizeRoute() {
 async function saveSection() {
   const section = activeSection.value
   if (!section || !dirty.value) return
+  if (section.fields.some((field) => draftValid[field.key] === false)) {
+    toast.error('请先修正无效配置。')
+    return
+  }
   const patch: Record<string, SystemSettingValue> = {}
 
   for (const field of section.fields) {
@@ -181,6 +187,7 @@ onMounted(() => load())
               (field.kind === 'secret' || field.kind === 'secret-textarea') &&
               isSecretConfigured(field.key)
             "
+            @validity="draftValid[field.key] = $event"
           />
         </div>
 

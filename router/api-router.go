@@ -157,7 +157,7 @@ func SetApiRouter(router *gin.Engine) {
 		}
 
 		// Stable contracts for the primary Vue frontend. The existing /api
-		// routes above remain compatible with the embedded React fallback.
+		// Routes above remain compatible with existing API clients.
 		nextRoute := apiRouter.Group("/next")
 		nextRoute.Use(middleware.UserAuth())
 		{
@@ -174,7 +174,7 @@ func SetApiRouter(router *gin.Engine) {
 				// Dual endpoint with POST /api/user/aff_transfer; both delegate
 				// to user.TransferAffQuotaToQuota, so only the request/response
 				// shapes differ. Reuse the same user limiter scope so callers
-				// cannot alternate between the React and Vue routes.
+				// Keep API routing independent from browser application routes.
 				inviteRoute.POST("/transfer", middleware.UserCriticalRateLimit("aff-transfer"), controller.NextTransferInviteQuota)
 			}
 			activityRoute := nextRoute.Group("/activity")

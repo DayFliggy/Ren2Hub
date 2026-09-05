@@ -7,11 +7,7 @@ export interface ConsoleNavItem {
   name: string
   labelKey: string
   route?: string
-  /**
-   * Same-origin absolute path rendered as a plain full-page link. Used for
-   * explicit compatibility entries into the legacy React console, which the
-   * Go router serves for whitelisted paths (see router/web-router.go).
-   */
+  /** Same-origin absolute path for a non-SPA compatibility endpoint. */
   href?: string
   icon: string
   disabled?: boolean

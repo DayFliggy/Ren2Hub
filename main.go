@@ -39,15 +39,8 @@ import (
 	_ "net/http/pprof"
 )
 
-//go:embed web/dist
-var buildFS embed.FS
-
-//go:embed web/dist/index.html
-var indexPage []byte
-
-// frontend/embed-dist is the primary Vue application served below /next/.
-// Web routes default to this application while it is enabled. Docker replaces
-// the checked-in placeholder with the Vite output.
+// frontend/embed-dist is the only application served below /next/.
+// Release builds replace the checked-in placeholder with the Vite output.
 //
 //go:embed frontend/embed-dist
 var nextBuildFS embed.FS
@@ -216,8 +209,6 @@ func main() {
 
 	// 设置路由
 	router.SetRouter(server, router.WebAssets{
-		BuildFS:       buildFS,
-		IndexPage:     indexPage,
 		NextBuildFS:   nextBuildFS,
 		NextIndexPage: nextIndexPage,
 	})
@@ -276,8 +267,7 @@ func InjectUmamiAnalytics() {
 	}
 	analyticsInjectBuilder.WriteString("<!--Umami QuantumNous-->\n")
 	analyticsInject := []byte(analyticsInjectBuilder.String())
-	placeholder := []byte("<!--umami-->\n")
-	indexPage = bytes.ReplaceAll(indexPage, placeholder, analyticsInject)
+	nextIndexPage = bytes.Replace(nextIndexPage, []byte("</head>"), append(analyticsInject, []byte("</head>")...), 1)
 }
 
 func InjectGoogleAnalytics() {
@@ -299,8 +289,7 @@ func InjectGoogleAnalytics() {
 	}
 	analyticsInjectBuilder.WriteString("<!--Google Analytics QuantumNous-->\n")
 	analyticsInject := []byte(analyticsInjectBuilder.String())
-	placeholder := []byte("<!--Google Analytics-->\n")
-	indexPage = bytes.ReplaceAll(indexPage, placeholder, analyticsInject)
+	nextIndexPage = bytes.Replace(nextIndexPage, []byte("</head>"), append(analyticsInject, []byte("</head>")...), 1)
 }
 
 func InitResources() error {

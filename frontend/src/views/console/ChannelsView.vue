@@ -7,7 +7,6 @@ import {
   ArrowUpNarrowWide,
   ChevronDown,
   ChevronRight,
-  ExternalLink,
   LoaderCircle,
   Pencil,
   Plus,
@@ -581,15 +580,6 @@ function openCreate() {
   formOpen.value = true
 }
 
-/**
- * Full-page jump to the legacy React channel console, which still owns the
- * advanced surface (multi-key management, tags, Codex usage, Ollama, upstream
- * model updates). The Go router whitelists /channels while Vue is enabled.
- */
-function openLegacyChannels() {
-  window.location.assign('/channels')
-}
-
 function openEdit(channel: AdminChannel) {
   if (!canMutate.value || !canWrite.value) return
   editing.value = channel
@@ -718,14 +708,6 @@ async function runBulkStatus(
             {{ t('channels.resultCount', { count: total }) }}
           </span>
           <div class="flex items-center gap-2">
-            <ConsoleButton
-              variant="secondary"
-              size="sm"
-              @click="openLegacyChannels"
-            >
-              <ExternalLink :size="14" />
-              {{ t('channels.advancedLegacy') }}
-            </ConsoleButton>
             <ConsoleButton
               variant="secondary"
               size="sm"

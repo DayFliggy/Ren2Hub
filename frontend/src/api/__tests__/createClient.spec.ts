@@ -6,6 +6,29 @@ import type { ApiTransport } from '@/api/transport'
 import { ApiError } from '@/api/types'
 
 describe('API client request scope', () => {
+  it.each(['post', 'put', 'patch', 'delete'] as const)(
+    'accepts an acknowledged %s mutation without a response body',
+    async (method) => {
+      const client = createApiClient({
+        request: vi.fn().mockResolvedValue({ success: true, message: '' }),
+      } as unknown as ApiTransport)
+      await expect(client[method]('/api/option/bulk')).resolves.toBeUndefined()
+    }
+  )
+
+  it('preserves stable business error codes', async () => {
+    const client = createApiClient({
+      request: vi.fn().mockResolvedValue({
+        success: false,
+        code: 'INVALID_OPTION',
+        message: 'Invalid option',
+      }),
+    } as unknown as ApiTransport)
+    await expect(client.put('/api/option/bulk')).rejects.toMatchObject({
+      business: true,
+      code: 'INVALID_OPTION',
+    })
+  })
   it('forwards PATCH bodies through the transport', async () => {
     const request = vi.fn().mockResolvedValue({
       success: true,

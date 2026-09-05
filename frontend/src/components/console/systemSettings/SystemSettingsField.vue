@@ -1,478 +1,245 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Plus, Trash2 } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
-import FormField from '@/components/common/FormField.vue'
-import TextInput from '@/components/common/TextInput.vue'
 import type { SystemSettingValue } from '@/composables/useSystemSettings'
 import type { SystemSettingField } from '@/constants/systemSettingsCatalog'
+import { SETTINGS_RECORD_EDITORS } from '@/constants/settingsEditors'
+import { validateSetting } from '@/utils/settingValidation'
+import editorMessages from '@/i18n/settingsEditor'
+import SettingsCollectionEditor from './SettingsCollectionEditor.vue'
 
 const props = defineProps<{
   field: SystemSettingField
   modelValue: SystemSettingValue
   secretConfigured?: boolean
 }>()
-
 const emit = defineEmits<{
   'update:modelValue': [value: SystemSettingValue]
+  validity: [valid: boolean]
 }>()
-
-const jsonError = ref('')
-const structuredError = ref('')
-const listEntries = ref<string[]>([])
-const mapEntries = ref<Array<{ key: string; value: string }>>([])
-const amountEntries = ref<number[]>([])
-const discountEntries = ref<Array<{ amount: string; discount: string }>>([])
-
-const textValue = computed({
-  get: () => String(props.modelValue ?? ''),
-  set: (value: string) => {
-    if (props.field.kind === 'number') {
-      const parsed = Number(value)
-      emit('update:modelValue', Number.isFinite(parsed) ? parsed : 0)
-      return
-    }
-    emit('update:modelValue', value)
-  },
-})
-
-function updateJson(value: string) {
+const { t } = useI18n({ useScope: 'local', messages: editorMessages })
+const schema = computed(() => SETTINGS_RECORD_EDITORS[props.field.key])
+const entries = ref<Array<{ key: string; value: string }>>([])
+const rawMode = ref(false)
+const draftError = ref('')
+const map = computed(() =>
+  ['key-value', 'ratio', 'discount'].includes(props.field.kind)
+)
+const structured = computed(
+  () => map.value || ['list', 'amount-list'].includes(props.field.kind)
+)
+const isSecret = computed(() =>
+  ['secret', 'secret-textarea'].includes(props.field.kind)
+)
+const inputType = computed(() =>
+  isSecret.value
+    ? 'password'
+    : props.field.kind === 'number'
+      ? 'number'
+      : props.field.kind === 'url'
+        ? 'url'
+        : 'text'
+)
+const validation = computed(() =>
+  validateSetting(props.field, props.modelValue)
+)
+function syncStructuredEntries(value: SystemSettingValue) {
+  if (!structured.value || schema.value) return
   try {
-    const parsed = JSON.parse(value)
-    jsonError.value = ''
-    emit('update:modelValue', JSON.stringify(parsed, null, 2))
-  } catch {
-    jsonError.value = '请输入有效的 JSON 数据。'
-    emit('update:modelValue', value)
-  }
-}
-
-function formatJson() {
-  try {
-    emit(
-      'update:modelValue',
-      JSON.stringify(JSON.parse(textValue.value), null, 2)
-    )
-    jsonError.value = ''
-  } catch {
-    jsonError.value = '请输入有效的 JSON 数据。'
-  }
-}
-
-function parseStructuredValue() {
-  const value = String(props.modelValue ?? '')
-  if (
-    !['list', 'key-value', 'ratio', 'amount-list', 'discount'].includes(
-      props.field.kind
-    )
-  )
-    return
-  try {
-    const parsed = JSON.parse(
-      value ||
-        (['list', 'amount-list'].includes(props.field.kind) ? '[]' : '{}')
-    )
-    if (props.field.kind === 'list') {
+    const parsed: unknown = JSON.parse(String(value))
+    if (map.value) {
       if (
-        !Array.isArray(parsed) ||
-        !parsed.every((item) => typeof item === 'string')
-      ) {
-        throw new Error('列表只能包含文本项')
-      }
-      listEntries.value = parsed
-    } else if (props.field.kind === 'amount-list') {
-      if (
-        !Array.isArray(parsed) ||
-        !parsed.every((item) => Number.isInteger(item) && item > 0)
+        parsed === null ||
+        typeof parsed !== 'object' ||
+        Array.isArray(parsed)
       )
-        throw new Error('金额必须是正整数列表')
-      amountEntries.value = [...new Set(parsed)].sort((a, b) => a - b)
-    } else if (props.field.kind === 'discount') {
-      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object')
-        throw new Error('折扣必须是对象')
-      discountEntries.value = Object.entries(parsed).map(
-        ([amount, discount]) => ({ amount, discount: String(discount) })
-      )
-    } else {
-      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-        throw new Error('键值表必须是对象')
-      }
-      const entries = Object.entries(parsed)
-      if (
-        props.field.kind === 'ratio' &&
-        entries.some(
-          ([, entry]) => typeof entry !== 'number' || !Number.isFinite(entry)
-        )
-      ) {
-        throw new Error('倍率值必须是有限数字')
-      }
-      if (
-        props.field.kind === 'key-value' &&
-        entries.some(([, entry]) => typeof entry !== 'string')
-      ) {
-        throw new Error('键值表的值必须是文本')
-      }
-      mapEntries.value = entries.map(([key, entry]) => ({
+        throw new Error('Expected an object')
+      entries.value = Object.entries(parsed).map(([key, item]) => ({
         key,
-        value: String(entry),
+        value:
+          typeof item === 'string' || typeof item === 'number'
+            ? String(item)
+            : JSON.stringify(item),
+      }))
+    } else {
+      if (!Array.isArray(parsed)) throw new Error('Expected an array')
+      entries.value = parsed.map((item) => ({
+        key: '',
+        value:
+          typeof item === 'string' || typeof item === 'number'
+            ? String(item)
+            : JSON.stringify(item),
       }))
     }
-    structuredError.value = ''
-  } catch (error) {
-    listEntries.value = []
-    mapEntries.value = []
-    structuredError.value =
-      error instanceof Error ? error.message : '配置格式不正确'
+    rawMode.value = false
+    draftError.value = ''
+  } catch {
+    entries.value = []
+    rawMode.value = true
+    draftError.value = 'invalidJson'
   }
 }
-
-function emitList() {
-  emit('update:modelValue', JSON.stringify(listEntries.value))
-}
-
-function emitMap() {
-  const next: Record<string, string | number> = {}
-  const keys = new Set<string>()
-  for (const entry of mapEntries.value) {
-    const key = entry.key.trim()
-    if (!key) {
-      structuredError.value = '键名不能为空。'
-      return
-    }
-    if (keys.has(key)) {
-      structuredError.value = '键名不能重复。'
-      return
-    }
-    keys.add(key)
-    if (props.field.kind === 'ratio') {
-      const value = Number(entry.value)
-      if (!Number.isFinite(value)) {
-        structuredError.value = '倍率值必须是有限数字。'
-        return
-      }
-      next[key] = value
-    } else {
-      next[key] = entry.value
-    }
-  }
-  structuredError.value = ''
-  emit('update:modelValue', JSON.stringify(next))
-}
-
-function addListEntry() {
-  listEntries.value.push('')
-  emitList()
-}
-
-function removeListEntry(index: number) {
-  listEntries.value.splice(index, 1)
-  emitList()
-}
-
-function addMapEntry() {
-  mapEntries.value.push({ key: '', value: '' })
-}
-
-function removeMapEntry(index: number) {
-  mapEntries.value.splice(index, 1)
-  emitMap()
-}
-
-function emitAmounts() {
-  const values = [
-    ...new Set(
-      amountEntries.value
-        .map(Number)
-        .filter((value) => Number.isInteger(value) && value > 0)
-    ),
-  ].sort((a, b) => a - b)
-  amountEntries.value = values
-  emit('update:modelValue', JSON.stringify(values))
-}
-
-function updateAmountEntry(index: number, value: string | number) {
-  amountEntries.value[index] = Number(value)
-  emitAmounts()
-}
-
-function removeAmountEntry(index: number) {
-  amountEntries.value.splice(index, 1)
-  emitAmounts()
-}
-
-function addAmountEntry() {
-  amountEntries.value.push(1)
-  emitAmounts()
-}
-
-function emitDiscounts() {
-  const next: Record<string, number> = {}
-  for (const entry of discountEntries.value) {
-    const amount = Number(entry.amount)
-    const discountValue = Number(entry.discount)
-    if (
-      !Number.isInteger(amount) ||
-      amount <= 0 ||
-      !Number.isFinite(discountValue) ||
-      discountValue <= 0 ||
-      discountValue > 1
-    ) {
-      structuredError.value = '金额须为正整数，折扣范围为 0 到 1（不含 0）。'
-      return
-    }
-    if (next[String(amount)] !== undefined) {
-      structuredError.value = '金额不能重复。'
-      return
-    }
-    next[String(amount)] = discountValue
-  }
-  structuredError.value = ''
-  emit('update:modelValue', JSON.stringify(next))
-}
-
-function removeDiscountEntry(index: number) {
-  discountEntries.value.splice(index, 1)
-  emitDiscounts()
-}
-
-watch(() => [props.field.kind, props.modelValue], parseStructuredValue, {
+watch(
+  [() => props.modelValue, structured, map],
+  ([value]) => syncStructuredEntries(value),
+  { immediate: true }
+)
+watch(validation, (value) => emit('validity', value === null), {
   immediate: true,
 })
+
+function publish(value: SystemSettingValue) {
+  draftError.value = ''
+  emit('update:modelValue', value)
+  emit('validity', validateSetting(props.field, value) === null)
+}
+function scalar(value: string) {
+  publish(
+    props.field.kind === 'number' &&
+      value.trim() &&
+      Number.isFinite(Number(value))
+      ? Number(value)
+      : value
+  )
+}
+function publishEntries() {
+  draftError.value = ''
+  if (map.value) {
+    const keys = entries.value.map((entry) => entry.key.trim())
+    if (keys.some((key) => !key)) {
+      draftError.value = 'required'
+      return
+    }
+    if (new Set(keys).size !== keys.length) {
+      draftError.value = 'duplicate'
+      return
+    }
+    const pairs = entries.value.map((entry) => [
+      entry.key.trim(),
+      props.field.kind === 'key-value'
+        ? entry.value
+        : entry.value.trim() && Number.isFinite(Number(entry.value))
+          ? Number(entry.value)
+          : entry.value,
+    ])
+    publish(JSON.stringify(Object.fromEntries(pairs)))
+  } else
+    publish(
+      JSON.stringify(
+        entries.value.map((entry) =>
+          props.field.kind === 'amount-list' &&
+          entry.value.trim() &&
+          Number.isFinite(Number(entry.value))
+            ? Number(entry.value)
+            : entry.value
+        )
+      )
+    )
+}
+function add() {
+  entries.value.push({ key: '', value: '' })
+  publishEntries()
+}
+function remove(index: number) {
+  entries.value.splice(index, 1)
+  publishEntries()
+}
 </script>
 
 <template>
-  <div v-if="field.kind === 'boolean'" class="settings-field-toggle">
-    <div class="min-w-0 flex-1">
-      <p class="settings-field-title">{{ field.label }}</p>
-      <p v-if="field.description" class="settings-field-description">
-        {{ field.description }}
-      </p>
-    </div>
-    <ConsoleToggle
-      :model-value="Boolean(modelValue)"
-      :label="field.label"
-      @update:model-value="emit('update:modelValue', $event)"
-    />
-  </div>
-
-  <FormField
-    v-else
-    :label="field.label"
-    :hint="field.description"
-    :class="[
-      'settings-field-control',
-      {
-        'settings-field-wide': [
-          'json',
-          'list',
-          'key-value',
-          'ratio',
-          'amount-list',
-          'discount',
-        ].includes(field.kind),
-      },
-    ]"
+  <div
+    class="settings-field-control"
+    :class="{
+      'settings-field-wide': structured || schema || field.kind === 'json',
+      'settings-field-toggle': field.kind === 'boolean',
+    }"
   >
-    <div v-if="field.kind === 'json'" class="settings-json-editor">
-      <textarea
-        :value="textValue"
-        rows="8"
-        spellcheck="false"
-        class="settings-json-textarea"
-        @input="updateJson(($event.target as HTMLTextAreaElement).value)"
-        @blur="formatJson"
-      />
-      <p v-if="jsonError" class="settings-json-error">{{ jsonError }}</p>
-    </div>
-
-    <div v-else-if="field.kind === 'list'" class="settings-structured-editor">
-      <p v-if="structuredError" class="settings-json-error">
-        {{ structuredError }}
-      </p>
-      <div
-        v-for="(_, index) in listEntries"
-        :key="index"
-        class="settings-structured-row"
-      >
-        <TextInput
-          v-model="listEntries[index]"
-          autocomplete="off"
-          @change="emitList"
-        />
-        <button
-          type="button"
-          class="settings-structured-icon"
-          title="删除条目"
-          aria-label="删除条目"
-          @click="removeListEntry(index)"
-        >
-          <Trash2 :size="15" aria-hidden="true" />
-        </button>
-      </div>
-      <button
-        type="button"
-        class="settings-structured-add"
-        title="添加条目"
-        aria-label="添加条目"
-        @click="addListEntry"
-      >
-        <Plus :size="16" aria-hidden="true" />
-      </button>
-    </div>
-
-    <div
-      v-else-if="field.kind === 'amount-list'"
-      class="settings-structured-editor"
+    <label
+      v-if="field.kind !== 'boolean'"
+      :for="`setting-${field.key}`"
+      class="settings-field-title"
+      >{{ field.label }}</label
     >
-      <p v-if="structuredError" class="settings-json-error">
-        {{ structuredError }}
-      </p>
-      <div
-        v-for="(_, index) in amountEntries"
-        :key="index"
-        class="settings-structured-row"
-      >
-        <TextInput
-          :model-value="String(amountEntries[index])"
-          type="number"
-          min="1"
-          @update:model-value="updateAmountEntry(index, $event)"
-        />
-        <button
-          type="button"
-          class="settings-structured-icon"
-          title="删除条目"
-          aria-label="删除条目"
-          @click="removeAmountEntry(index)"
-        >
-          <Trash2 :size="15" aria-hidden="true" />
-        </button>
-      </div>
-      <button
-        type="button"
-        class="settings-structured-add"
-        title="添加金额"
-        aria-label="添加金额"
-        @click="addAmountEntry"
-      >
-        <Plus :size="16" aria-hidden="true" />
-      </button>
-    </div>
-
-    <div
-      v-else-if="field.kind === 'discount'"
-      class="settings-structured-editor"
-    >
-      <p v-if="structuredError" class="settings-json-error">
-        {{ structuredError }}
-      </p>
-      <div
-        v-for="(_, index) in discountEntries"
-        :key="index"
-        class="settings-structured-row settings-structured-pair"
-      >
-        <TextInput
-          v-model="discountEntries[index].amount"
-          type="number"
-          min="1"
-          placeholder="金额"
-          @change="emitDiscounts"
-        />
-        <TextInput
-          v-model="discountEntries[index].discount"
-          type="number"
-          min="0.0001"
-          max="1"
-          step="0.01"
-          placeholder="折扣"
-          @change="emitDiscounts"
-        />
-        <button
-          type="button"
-          class="settings-structured-icon"
-          title="删除条目"
-          aria-label="删除条目"
-          @click="removeDiscountEntry(index)"
-        >
-          <Trash2 :size="15" aria-hidden="true" />
-        </button>
-      </div>
-      <button
-        type="button"
-        class="settings-structured-add"
-        title="添加折扣"
-        aria-label="添加折扣"
-        @click="discountEntries.push({ amount: '', discount: '1' })"
-      >
-        <Plus :size="16" aria-hidden="true" />
-      </button>
-    </div>
-
-    <div
-      v-else-if="field.kind === 'key-value' || field.kind === 'ratio'"
-      class="settings-structured-editor"
-    >
-      <p v-if="structuredError" class="settings-json-error">
-        {{ structuredError }}
-      </p>
-      <div
-        v-for="(_, index) in mapEntries"
-        :key="index"
-        class="settings-structured-row settings-structured-pair"
-      >
-        <TextInput
-          v-model="mapEntries[index].key"
-          placeholder="键名"
-          autocomplete="off"
-          @change="emitMap"
-        />
-        <TextInput
-          v-model="mapEntries[index].value"
-          :type="field.kind === 'ratio' ? 'number' : 'text'"
-          :placeholder="field.kind === 'ratio' ? '倍率' : '值'"
-          autocomplete="off"
-          @change="emitMap"
-        />
-        <button
-          type="button"
-          class="settings-structured-icon"
-          title="删除条目"
-          aria-label="删除条目"
-          @click="removeMapEntry(index)"
-        >
-          <Trash2 :size="15" aria-hidden="true" />
-        </button>
-      </div>
-      <button
-        type="button"
-        class="settings-structured-add"
-        title="添加条目"
-        aria-label="添加条目"
-        @click="addMapEntry"
-      >
-        <Plus :size="16" aria-hidden="true" />
-      </button>
-    </div>
-
-    <textarea
-      v-else-if="field.kind === 'textarea' || field.kind === 'secret-textarea'"
-      v-model="textValue"
-      rows="5"
-      class="settings-textarea"
-      :autocomplete="field.kind === 'secret-textarea' ? 'new-password' : 'off'"
+    <ConsoleToggle
+      v-if="field.kind === 'boolean'"
+      :model-value="modelValue === true"
+      :label="field.label"
+      @update:model-value="publish"
     />
-
-    <p
-      v-if="field.kind === 'secret-textarea' && secretConfigured"
-      class="settings-secret-status"
-    >
-      已配置。留空不会覆盖现有凭据。
-    </p>
-
+    <SettingsCollectionEditor
+      v-else-if="schema"
+      :model-value="String(modelValue)"
+      :schema="schema"
+      @update:model-value="publish"
+    />
+    <template v-else-if="structured && !rawMode">
+      <div
+        v-for="(entry, index) in entries"
+        :key="index"
+        class="settings-structured-row"
+        :class="{ 'settings-structured-pair': map }"
+      >
+        <input
+          v-if="map"
+          v-model="entry.key"
+          class="settings-input"
+          :aria-label="`${field.label} ${t('editor.key')} ${index + 1}`"
+          :placeholder="t('editor.key')"
+          @input="publishEntries"
+        />
+        <input
+          v-model="entry.value"
+          class="settings-input"
+          :type="
+            ['ratio', 'discount', 'amount-list'].includes(field.kind)
+              ? 'number'
+              : 'text'
+          "
+          :aria-label="`${field.label} ${t('editor.value')} ${index + 1}`"
+          :placeholder="t('editor.value')"
+          @input="publishEntries"
+        />
+        <button
+          type="button"
+          class="settings-icon focus-ring"
+          :title="t('editor.remove')"
+          :aria-label="t('editor.remove')"
+          @click="remove(index)"
+        >
+          ×
+        </button>
+      </div>
+      <button
+        type="button"
+        class="settings-icon focus-ring"
+        :title="t('editor.add')"
+        :aria-label="t('editor.add')"
+        @click="add"
+      >
+        +
+      </button>
+    </template>
+    <textarea
+      v-else-if="
+        ['json', 'textarea', 'secret-textarea'].includes(field.kind) || rawMode
+      "
+      :id="`setting-${field.key}`"
+      :value="String(modelValue)"
+      :aria-invalid="draftError ? true : undefined"
+      class="settings-input settings-textarea"
+      :class="{ 'font-mono': field.kind === 'json' || rawMode }"
+      rows="5"
+      :autocomplete="isSecret ? 'new-password' : 'off'"
+      @input="scalar(($event.target as HTMLTextAreaElement).value)"
+    />
     <select
-      v-else-if="field.kind === 'select' || field.kind === 'role'"
-      v-model="textValue"
-      class="settings-select"
+      v-else-if="field.options"
+      :id="`setting-${field.key}`"
+      class="settings-input"
+      :value="String(modelValue)"
+      :aria-invalid="draftError ? true : undefined"
+      @change="scalar(($event.target as HTMLSelectElement).value)"
     >
       <option
         v-for="option in field.options"
@@ -482,130 +249,97 @@ watch(() => [props.field.kind, props.modelValue], parseStructuredValue, {
         {{ option.label }}
       </option>
     </select>
-
-    <div v-else class="space-y-1">
-      <TextInput
-        v-model="textValue"
-        :type="
-          field.kind === 'secret'
-            ? 'password'
-            : field.kind === 'number'
-              ? 'number'
-              : field.kind === 'url'
-                ? 'url'
-                : 'text'
-        "
-        :autocomplete="field.kind === 'secret' ? 'new-password' : 'off'"
-      />
-      <p
-        v-if="field.kind === 'secret' && secretConfigured"
-        class="settings-secret-status"
-      >
-        已配置。留空不会覆盖现有凭据。
-      </p>
-    </div>
-  </FormField>
+    <input
+      v-else
+      :id="`setting-${field.key}`"
+      class="settings-input"
+      :type="inputType"
+      :value="modelValue"
+      :min="field.min"
+      :max="field.max"
+      :step="field.integer ? 1 : 'any'"
+      :aria-invalid="draftError ? true : undefined"
+      :autocomplete="isSecret ? 'new-password' : 'off'"
+      @input="scalar(($event.target as HTMLInputElement).value)"
+    />
+    <p v-if="draftError || validation" role="alert" class="settings-error">
+      {{ t(`editor.${draftError || validation}`) }}
+    </p>
+    <p v-if="isSecret && secretConfigured" class="settings-hint">
+      {{ t('editor.configured') }}
+    </p>
+  </div>
 </template>
 
 <style scoped>
-.settings-field-toggle {
-  display: flex;
-  min-height: 4rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  border-bottom: 1px solid var(--border-subtle);
-  padding: 0.75rem 0;
-}
-.settings-field-toggle:last-child {
-  border-bottom: 0;
+.settings-field-control {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
 }
 .settings-field-title {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
-.settings-field-description,
-.settings-secret-status {
-  margin-top: 0.25rem;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: var(--text-tertiary);
+.settings-field-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 1px solid var(--outline-variant);
+  padding: 0.75rem 0;
 }
-.settings-secret-status {
-  color: var(--signal);
-}
-.settings-textarea,
-.settings-json-textarea,
-.settings-select {
+.settings-input {
   width: 100%;
-  border: 1.5px solid var(--border-default);
-  border-radius: var(--sketch-border-radius-sm);
-  background: transparent;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--outline);
+  border-radius: var(--shape-control);
+  background: var(--surface-container);
   color: var(--text-primary);
-  font: inherit;
-  outline: none;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.875rem;
 }
-.settings-textarea,
-.settings-json-textarea {
-  min-height: 8rem;
+.settings-input:focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.settings-textarea {
   resize: vertical;
-  padding: 0.75rem 1rem;
-  line-height: 1.6;
-}
-.settings-json-textarea {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
-}
-.settings-select {
-  height: 2.75rem;
-  padding: 0 0.75rem;
-}
-.settings-textarea:focus,
-.settings-json-textarea:focus,
-.settings-select:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-.settings-json-error {
-  margin-top: 0.375rem;
-  font-size: 0.75rem;
-  color: var(--danger);
-}
-.settings-structured-editor {
-  display: grid;
-  gap: 0.5rem;
+  line-height: 1.5;
 }
 .settings-structured-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 2.25rem;
+  grid-template-columns: minmax(0, 1fr) 44px;
   gap: 0.5rem;
-  align-items: center;
 }
 .settings-structured-pair {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.25rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
 }
-.settings-structured-icon,
-.settings-structured-add {
+.settings-icon {
   display: inline-flex;
+  width: 44px;
+  height: 44px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-default);
-  border-radius: var(--sketch-border-radius-sm);
-  background: transparent;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-control);
+  font-size: 1.25rem;
+}
+.settings-icon:hover {
+  background: var(--state-hover-layer);
+}
+.settings-error,
+.settings-hint {
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+.settings-error {
+  color: var(--status-danger-text);
+}
+.settings-hint {
   color: var(--text-secondary);
-}
-.settings-structured-icon {
-  width: 2.25rem;
-  height: 2.25rem;
-}
-.settings-structured-add {
-  width: 2.25rem;
-  height: 2rem;
-}
-.settings-structured-icon:hover,
-.settings-structured-add:hover {
-  border-color: var(--accent);
-  color: var(--accent);
 }
 </style>

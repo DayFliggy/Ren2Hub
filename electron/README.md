@@ -14,7 +14,9 @@ cp ../new-api-macos ../new-api
 ```
 
 **Option B: Build from source (requires Go)**
-TODO
+From the repository root, run `make build-web` followed by `go build -o new-api .`
+(`new-api.exe` on Windows). `make build-web` builds Vue and validates and copies
+its production assets into `frontend/embed-dist` before Go embeds them.
 
 ### 2. Electron Dependencies
 ```bash
@@ -27,7 +29,7 @@ npm install
 Start the backend, the frontend, and Electron in separate terminals:
 ```bash
 # Repository root
-go run main.go
+go run .
 
 # Repository root
 make dev-web
@@ -38,7 +40,7 @@ npm run dev-app
 
 This will:
 - Use the Go backend on port 3000
-- Use the Rsbuild frontend development server on port 5173
+- Use the Vue Vite development server at `http://localhost:5175/next/`
 - Open an Electron window with DevTools enabled
 - Create a system tray icon (menu bar on macOS)
 - Store database in `../data/new-api.db`

@@ -33,9 +33,10 @@ jobs:
         env:
           CI: ""
         run: |
-          cd web
+          cd frontend
           bun install --frozen-lockfile
-          DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$VERSION bun run build
+          bun run build
+          bun ../scripts/prepare-frontend-embed.mjs
           cd ..
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -83,9 +84,10 @@ jobs:
           CI: ""
           NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
-          cd web
+          cd frontend
           bun install --frozen-lockfile
-          DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$VERSION bun run build
+          bun run build
+          bun ../scripts/prepare-frontend-embed.mjs
           cd ..
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -130,9 +132,10 @@ jobs:
         env:
           CI: ""
         run: |
-          cd web
+          cd frontend
           bun install --frozen-lockfile
-          DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$VERSION bun run build
+          bun run build
+          bun ../scripts/prepare-frontend-embed.mjs
           cd ..
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0

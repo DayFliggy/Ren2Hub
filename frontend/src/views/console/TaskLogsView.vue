@@ -46,8 +46,7 @@ const endDate = ref('')
 
 const failureRow = ref<RelayTaskLogItem | null>(null)
 
-// Mirrors the platform filter of the React usage-logs page; the backend
-// accepts any value, so an unlisted platform still renders via fallbacks.
+// The backend accepts any value, so an unlisted platform still renders via fallbacks.
 const platformOptions = computed<SelectOption[]>(() => [
   { value: 'suno', label: 'suno' },
   { value: 'kling', label: 'kling' },

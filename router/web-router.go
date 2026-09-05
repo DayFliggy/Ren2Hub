@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io/fs"
 	"net/http"
-	"os"
 	pathpkg "path"
 	"strings"
 
@@ -16,89 +15,96 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// WebAssets holds the embedded dashboard frontend assets.
+// WebAssets holds the embedded Vue application.
 type WebAssets struct {
-	BuildFS       fs.FS
-	IndexPage     []byte
 	NextBuildFS   fs.FS
 	NextIndexPage []byte
 }
 
 const nextPlaceholderMarker = `name="ren2hub-next-build" content="placeholder"`
 
-func nextFrontendEnabled() bool {
-	return !strings.EqualFold(strings.TrimSpace(os.Getenv("NEXT_FRONTEND_ENABLED")), "false")
-}
-
 func nextBuildReady(indexPage []byte) bool {
 	return len(indexPage) > 0 && !bytes.Contains(indexPage, []byte(nextPlaceholderMarker))
 }
 
-func isNextStaticRequest(requestPath string) bool {
-	if strings.HasPrefix(requestPath, "/next/assets/") {
+func isWebStaticRequest(requestPath string) bool {
+	if strings.HasPrefix(requestPath, "/next/assets/") || strings.HasPrefix(requestPath, "/assets/") {
 		return true
 	}
-	relative := strings.TrimPrefix(requestPath, "/next/")
-	return relative != requestPath && pathpkg.Ext(relative) != ""
+	// Model identifiers may contain dots; only known asset extensions are files.
+	switch strings.ToLower(pathpkg.Ext(requestPath)) {
+	case ".js", ".mjs", ".css", ".map", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".avif", ".woff", ".woff2", ".ttf", ".otf", ".mp4", ".webm", ".mp3", ".wav", ".json", ".txt", ".xml", ".webmanifest":
+		return true
+	}
+	return false
 }
 
-// legacyConsolePathPrefixes are explicit compatibility entries into the
-// embedded React console while the Vue frontend is enabled. These pages
-// (root-only system settings, advanced channel management, and site-wide
-// drawing/task logs) have no Vue counterpart yet, so matching requests serve
-// the React SPA instead of redirecting to /next. Both frontends share the
-// same-origin refresh cookie, so the session carries over.
-var legacyConsolePathPrefixes = []string{
-	"/system-settings",
-	"/channels",
-	"/usage-logs",
-}
-
-func isLegacyConsoleRequest(requestPath string) bool {
-	for _, prefix := range legacyConsolePathPrefixes {
-		if requestPath == prefix || strings.HasPrefix(requestPath, prefix+"/") {
+func isRetiredWebRequest(requestPath string) bool {
+	path := strings.TrimPrefix(requestPath, "/next/")
+	if path != requestPath {
+		path = "/" + path
+	}
+	path = strings.TrimPrefix(path, "/console/")
+	if path != requestPath && !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	for _, prefix := range []string{"/playground", "/chat", "/chat2link", "/chat-presets", "/system-settings/content/chat-presets"} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
 			return true
 		}
 	}
 	return false
 }
 
+func isBackendWebRequest(requestPath string) bool {
+	for _, prefix := range []string{"/api", "/v1", "/v1beta", "/mj", "/pg", "/suno", "/kling", "/jimeng"} {
+		if requestPath == prefix || strings.HasPrefix(requestPath, prefix+"/") {
+			return true
+		}
+	}
+	parts := strings.Split(strings.Trim(requestPath, "/"), "/")
+	return len(parts) > 1 && parts[1] == "mj"
+}
+
 func SetWebRouter(router *gin.Engine, assets WebAssets) {
-	frontendFS := common.EmbedFolder(assets.BuildFS, "web/dist")
-	nextEnabled := nextFrontendEnabled()
+	nextFS := common.EmbedFolder(assets.NextBuildFS, "frontend/embed-dist")
+	nextStatic := static.Serve("/next", nextFS)
+	publicStatic := static.Serve("/", nextFS)
 	nextReady := nextBuildReady(assets.NextIndexPage)
 
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.Cache())
 	router.Use(func(c *gin.Context) {
-		if nextEnabled && strings.HasPrefix(c.Request.URL.Path, "/next/assets/") {
-			c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		path := c.Request.URL.Path
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+			c.Next()
+			return
 		}
-		c.Next()
+		// HTML must use the injected index below; only static files bypass rate limiting.
+		if !isWebStaticRequest(path) || isBackendWebRequest(path) || isRetiredWebRequest(path) {
+			c.Next()
+			return
+		}
+		if strings.HasPrefix(path, "/next/") {
+			if strings.HasPrefix(path, "/next/assets/") {
+				c.Header("Cache-Control", "public, max-age=31536000, immutable")
+			}
+			nextStatic(c)
+			return
+		}
+		publicStatic(c)
 	})
-	router.Use(static.Serve("/", frontendFS))
-	if nextEnabled {
-		nextFS := common.EmbedFolder(assets.NextBuildFS, "frontend/embed-dist")
-		router.Use(static.Serve("/next", nextFS))
-	}
 	router.Use(middleware.GlobalWebRateLimit())
 	router.NoRoute(func(c *gin.Context) {
 		c.Set(middleware.RouteTagKey, "web")
+		c.Header("Cache-Control", "no-cache")
 		path := c.Request.URL.Path
-		if strings.HasPrefix(path, "/v1") || strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/mj") || strings.HasPrefix(path, "/pg") || strings.HasPrefix(path, "/assets") {
+		if isBackendWebRequest(path) || isWebStaticRequest(path) || isRetiredWebRequest(path) ||
+			(c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead) {
 			controller.RelayNotFound(c)
 			return
 		}
 		if path == "/next" || strings.HasPrefix(path, "/next/") {
-			if !nextEnabled {
-				controller.RelayNotFound(c)
-				return
-			}
-			if isNextStaticRequest(path) {
-				controller.RelayNotFound(c)
-				return
-			}
-			c.Header("Cache-Control", "no-cache")
 			if !nextReady {
 				c.String(http.StatusServiceUnavailable, "next frontend build is unavailable")
 				return
@@ -106,17 +112,7 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 			c.Data(http.StatusOK, "text/html; charset=utf-8", assets.NextIndexPage)
 			return
 		}
-		if nextEnabled && (c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead) {
-			c.Header("Cache-Control", "no-cache")
-			if isLegacyConsoleRequest(path) {
-				c.Data(http.StatusOK, "text/html; charset=utf-8", assets.IndexPage)
-				return
-			}
-			target := "/next" + c.Request.URL.RequestURI()
-			c.Redirect(http.StatusTemporaryRedirect, target)
-			return
-		}
-		c.Header("Cache-Control", "no-cache")
-		c.Data(http.StatusOK, "text/html; charset=utf-8", assets.IndexPage)
+		target := "/next" + c.Request.URL.RequestURI()
+		c.Redirect(http.StatusTemporaryRedirect, target)
 	})
 }

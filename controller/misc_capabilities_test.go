@@ -16,7 +16,6 @@ func TestFrontendCapabilitiesAreFlatStatuses(t *testing.T) {
 	})
 	common.PasswordLoginEnabled = true
 	common.RegisterEnabled = true
-	t.Setenv("NEXT_FRONTEND_ENABLED", "true")
 
 	capabilities := getFrontendCapabilities(true)
 	require.Equal(t, "live", capabilities["next_frontend"])
@@ -47,10 +46,9 @@ func TestFrontendCapabilitiesHonorBackendSwitches(t *testing.T) {
 	})
 	common.PasswordLoginEnabled = false
 	common.RegisterEnabled = false
-	t.Setenv("NEXT_FRONTEND_ENABLED", "false")
 
 	capabilities := getFrontendCapabilities(false)
-	require.Equal(t, "disabled", capabilities["next_frontend"])
+	require.Equal(t, "live", capabilities["next_frontend"])
 	require.Equal(t, "disabled", capabilities["login"])
 	require.Equal(t, "disabled", capabilities["registration"])
 	require.Equal(t, "disabled", capabilities["passkey"])

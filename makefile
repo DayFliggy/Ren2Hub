@@ -1,6 +1,6 @@
-WEB_DIR = ./web
+WEB_DIR = ./frontend
 API_DIR = .
-DEV_WEB_PORT ?= 5173
+DEV_WEB_PORT ?= 5175
 DEV_COMPOSE_FILE = docker-compose.dev.yml
 DEV_POSTGRES_SERVICE = postgres
 DEV_API_SERVICE = new-api
@@ -15,13 +15,14 @@ all: build-all-web start-api
 build-web:
 	@echo "Building web frontend..."
 	@cd $(WEB_DIR) && bun install --frozen-lockfile
-	@cd $(WEB_DIR) && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$$(cat ../VERSION) bun run build
+	@cd $(WEB_DIR) && bun run build
+	@bun scripts/prepare-frontend-embed.mjs
 
 build-all-web: build-web
 
 start-api:
 	@echo "Starting api dev server..."
-	@cd $(API_DIR) && go run main.go &
+	@cd $(API_DIR) && go run . &
 
 dev-api:
 	@echo "Starting api services (docker)..."
@@ -33,18 +34,15 @@ dev-api-rebuild:
 
 dev-web:
 	@echo "Starting web frontend dev server..."
-	@echo "Web frontend: http://localhost:$(DEV_WEB_PORT)"
+	@echo "Web frontend: http://localhost:$(DEV_WEB_PORT)/next/"
 	@cd $(WEB_DIR) && bun install
 	@cd $(WEB_DIR) && bun run dev -- --host 0.0.0.0 --port $(DEV_WEB_PORT)
 
 dev: dev-api dev-web
 
-# The main package embeds the ignored web/dist output and is covered after build-web.
 test:
 	@echo "Testing root Go module..."
-	@root_module=$$(GOWORK=off go list -m); \
-		root_packages=$$(GOWORK=off go list -e ./... | grep -vxF "$$root_module"); \
-		GOWORK=off go test -timeout 60s $$root_packages
+	@GOWORK=off go test -timeout 60s ./...
 	@echo "Testing relaykit Go module..."
 	@cd relaykit && GOWORK=off go test -timeout 60s ./...
 

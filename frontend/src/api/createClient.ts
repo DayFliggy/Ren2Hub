@@ -82,13 +82,16 @@ export function createApiClient(
         const payload = envelope as unknown as {
           success?: boolean
           message?: string
+          code?: string
           data?: unknown
         }
         if (
           !payload ||
           typeof payload !== 'object' ||
           typeof payload.success !== 'boolean' ||
-          (payload.success && !Object.hasOwn(payload, 'data'))
+          (payload.success &&
+            method === 'GET' &&
+            !Object.hasOwn(payload, 'data'))
         ) {
           throw new ApiError('Invalid API response envelope', {
             status: 502,
@@ -99,6 +102,7 @@ export function createApiClient(
           throw new ApiError(envelope.message || 'Request failed', {
             status: 200,
             business: true,
+            code: typeof payload.code === 'string' ? payload.code : undefined,
           })
         }
         return envelope.data
