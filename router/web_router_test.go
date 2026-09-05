@@ -58,7 +58,7 @@ func TestVueWebRouting(t *testing.T) {
 	}
 }
 
-func TestVueWebPreservesQueryOnRedirect(t *testing.T) {
+func TestRootWebPreservesQueryOnLegacyRedirect(t *testing.T) {
 	recorder := serveWebRequest(t, testWebAssets("next-index"), "/next/usage-logs?tab=drawing")
 	require.Equal(t, http.StatusTemporaryRedirect, recorder.Code)
 	require.Equal(t, "/usage-logs?tab=drawing", recorder.Header().Get("Location"))
