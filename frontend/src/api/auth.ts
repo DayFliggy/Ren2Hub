@@ -92,6 +92,12 @@ export const authApi = {
     ),
   resetPassword: (email: string) =>
     api.get<unknown>('/api/reset_password', { email }),
+  async confirmPasswordReset(email: string, token: string): Promise<string> {
+    const value = await api.post<unknown>('/api/user/reset', { email, token })
+    if (typeof value !== 'string' || !value)
+      return invalidAuthResponse('/api/user/reset')
+    return value
+  },
   refreshSession,
   async logout(): Promise<void> {
     const snapshot = getAuthSessionSnapshot()

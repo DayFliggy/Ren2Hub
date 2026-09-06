@@ -131,7 +131,7 @@
               </li>
               <li v-if="showPricing">
                 <RouterLink
-                  :to="{ name: 'models' }"
+                  :to="{ name: 'pricing' }"
                   class="group flex min-h-14 items-center gap-3 rounded-2xl px-4 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
                   @click="close"
                 >

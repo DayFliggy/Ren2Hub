@@ -27,76 +27,76 @@ interface Scenario {
 
 const darkScenarios: Scenario[] = [
   { name: 'home', path: '/' },
-  { name: 'login', path: '/auth/sign-in', authenticated: false },
-  { name: 'sign-up', path: '/auth/sign-up', authenticated: false },
-  { name: 'dashboard', path: '/console/dashboard' },
+  { name: 'login', path: '/sign-in', authenticated: false },
+  { name: 'sign-up', path: '/sign-up', authenticated: false },
+  { name: 'dashboard', path: '/dashboard' },
   {
     name: 'dashboard-stats',
-    path: '/console/dashboard',
+    path: '/dashboard',
     selectTabByName: '统计数据',
   },
   {
     name: 'dashboard-auto-route',
-    path: '/console/dashboard',
+    path: '/dashboard',
     selectTabByName: '自动路由',
   },
-  { name: 'models', path: '/console/models' },
-  { name: 'keys', path: '/console/keys' },
+  { name: 'models', path: '/models' },
+  { name: 'keys', path: '/keys' },
   {
     name: 'keys-create-modal',
-    path: '/console/keys',
+    path: '/keys',
     openModalByButton: '创建令牌',
   },
-  { name: 'subscription', path: '/console/subscription' },
-  { name: 'plan-management', path: '/console/plan-management' },
-  { name: 'logs', path: '/console/logs' },
+  { name: 'subscription', path: '/subscription' },
+  { name: 'plan-management', path: '/plan-management' },
+  { name: 'logs', path: '/usage-logs' },
   {
     name: 'logs-usage-details',
-    path: '/console/logs',
+    path: '/usage-logs',
     openUsageDetails: true,
   },
   {
     name: 'logs-detail-dialog',
-    path: '/console/logs',
+    path: '/usage-logs',
     openLogDetails: true,
   },
   { name: 'lab-chat', path: '/lab/chat' },
-  { name: 'activity', path: '/console/activity' },
-  { name: 'invite', path: '/console/invite' },
+  { name: 'activity', path: '/activity' },
+  { name: 'invite', path: '/invite' },
   {
     name: 'users-affiliate-modal',
-    path: '/console/users',
+    path: '/users',
     openModalByButton: '配置邀请码',
   },
-  { name: 'farm', path: '/console/farm' },
+  { name: 'farm', path: '/farm' },
 ]
 
 const lightScenarios: Scenario[] = [
   { name: 'home', path: '/' },
-  { name: 'login', path: '/auth/sign-in', authenticated: false },
-  { name: 'sign-up', path: '/auth/sign-up', authenticated: false },
-  { name: 'dashboard', path: '/console/dashboard' },
+  { name: 'login', path: '/sign-in', authenticated: false },
+  { name: 'sign-up', path: '/sign-up', authenticated: false },
+  { name: 'dashboard', path: '/dashboard' },
   {
     name: 'dashboard-stats',
-    path: '/console/dashboard',
+    path: '/dashboard',
     selectTabByName: '统计数据',
   },
   {
     name: 'dashboard-auto-route',
-    path: '/console/dashboard',
+    path: '/dashboard',
     selectTabByName: '自动路由',
   },
-  { name: 'models', path: '/console/models' },
+  { name: 'models', path: '/models' },
   // Both plan surfaces carry new bespoke geometry (storefront cards, ledger
   // rows with disabled row actions), so the pencil rendering is worth pinning.
-  { name: 'subscription', path: '/console/subscription' },
-  { name: 'plan-management', path: '/console/plan-management' },
-  { name: 'logs', path: '/console/logs' },
-  { name: 'activity', path: '/console/activity' },
-  { name: 'invite', path: '/console/invite' },
+  { name: 'subscription', path: '/subscription' },
+  { name: 'plan-management', path: '/plan-management' },
+  { name: 'logs', path: '/usage-logs' },
+  { name: 'activity', path: '/activity' },
+  { name: 'invite', path: '/invite' },
   {
     name: 'users-affiliate-modal',
-    path: '/console/users',
+    path: '/users',
     openModalByButton: '配置邀请码',
   },
 ]
@@ -165,7 +165,7 @@ async function auditScenario(
     await expect(dialog.locator('[data-log-detail-empty]')).toBeEmpty()
     await waitForStablePage(page)
   }
-  if (scenario.path === '/console/logs') {
+  if (scenario.path === '/usage-logs') {
     expect(
       await page
         .locator('[data-log-cost]:visible')
@@ -184,7 +184,7 @@ async function auditScenario(
     await assertHomeNavbarInitialState(page)
     await freezeAndInspectHomeCanvas(page)
   }
-  if (scenario.path === '/console/dashboard') {
+  if (scenario.path === '/dashboard') {
     const brandLinks = page.locator('[data-console-brand-link]')
     await expect(brandLinks).toHaveCount(2)
     await expect(brandLinks.nth(0)).toHaveAttribute('aria-current', 'false')
@@ -232,7 +232,7 @@ for (const name of [
 test('dark wide logs keeps a balanced content width', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 900 })
   await configureStablePage(page, { theme: 'dark', authenticated: true })
-  await page.goto('/console/logs', { waitUntil: 'domcontentloaded' })
+  await page.goto('/usage-logs', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
 
   const logPage = page.locator('[data-log-page]')
@@ -269,7 +269,7 @@ test('dark wide logs keeps a balanced content width', async ({ page }) => {
 test('dark wide keys matches the balanced content width', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 900 })
   await configureStablePage(page, { theme: 'dark', authenticated: true })
-  await page.goto('/console/keys', { waitUntil: 'domcontentloaded' })
+  await page.goto('/keys', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
 
   const keyPage = page.locator('[data-key-page]')

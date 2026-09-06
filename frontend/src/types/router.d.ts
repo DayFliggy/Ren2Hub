@@ -18,5 +18,6 @@ declare module 'vue-router' {
     topNav?: 'activities' | 'dashboard' | 'console' | 'alchemy'
     setupRoute?: boolean
     setupError?: boolean
+    messageDomain?: 'auth' | 'console' | 'lab'
   }
 }

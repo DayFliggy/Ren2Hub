@@ -257,7 +257,7 @@ test.describe('setup wizard', () => {
       })
     })
 
-    await page.goto('/console/models', { waitUntil: 'domcontentloaded' })
+    await page.goto('/models', { waitUntil: 'domcontentloaded' })
     await expect(page).toHaveURL(/\/setup\/error/)
     reachable = true
     await page.getByRole('button', { name: '重试状态检查' }).click()
@@ -292,11 +292,11 @@ test.describe('setup wizard', () => {
       })
     })
 
-    await page.goto('/console/models', { waitUntil: 'domcontentloaded' })
+    await page.goto('/models', { waitUntil: 'domcontentloaded' })
     await expect(page).toHaveURL(/\/setup\/error/)
     reachable = true
     await page.getByRole('button', { name: '重试状态检查' }).click()
 
-    await expect(page).toHaveURL(/\/console\/models$/)
+    await expect(page).toHaveURL(/\/models$/)
   })
 })

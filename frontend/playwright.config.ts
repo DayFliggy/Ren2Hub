@@ -17,7 +17,7 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL,
-    channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome',
+    channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
     locale: 'zh-CN',
     timezoneId: 'Asia/Shanghai',
     reducedMotion: 'reduce',

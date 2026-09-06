@@ -1,5 +1,8 @@
 export default {
   auth: {
+    resetConfirm: 'Confirm password reset',
+    resetInvalid: 'The reset link is invalid or incomplete.',
+    resetCompleted: 'Password reset. Keep your new password before signing in.',
     signInTitle: 'Welcome back',
     signInSubtitle: 'Sign in to continue to the Ren2Hub console',
     signUpTitle: 'Create account',

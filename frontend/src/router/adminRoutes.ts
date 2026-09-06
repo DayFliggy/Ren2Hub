@@ -2,36 +2,41 @@ import type { RouteRecordRaw } from 'vue-router'
 
 export const adminRoutes: RouteRecordRaw[] = [
   {
-    path: 'admin/models',
+    path: '/models/metadata',
     name: 'models-admin',
     component: () => import('@/views/admin/ModelManagementView.vue'),
     props: { section: 'models' },
-    meta: { requiresAdmin: true },
+    meta: { requiresAdmin: true, feature: 'admin', protected: true },
   },
   {
-    path: 'admin/vendors',
+    path: '/models/vendors',
     name: 'vendors-admin',
     component: () => import('@/views/admin/ModelManagementView.vue'),
     props: { section: 'vendors' },
-    meta: { requiresAdmin: true },
+    meta: { requiresAdmin: true, feature: 'admin', protected: true },
   },
   {
-    path: 'admin/prefill-groups',
+    path: '/models/prefill-groups',
     name: 'prefill-admin',
     component: () => import('@/views/admin/ModelManagementView.vue'),
     props: { section: 'groups' },
-    meta: { requiresAdmin: true },
+    meta: { requiresAdmin: true, feature: 'admin', protected: true },
   },
   {
-    path: 'admin/deployments',
+    path: '/models/deployments',
     name: 'deployments-admin',
     component: () => import('@/views/admin/DeploymentsView.vue'),
-    meta: { requiresAdmin: true },
+    meta: { requiresAdmin: true, feature: 'admin', protected: true },
   },
   {
-    path: 'admin/system-info',
+    path: '/system-info',
     name: 'system-info',
     component: () => import('@/views/admin/SystemManagementView.vue'),
-    meta: { requiresAdmin: true, requiresRoot: true },
+    meta: {
+      requiresAdmin: true,
+      requiresRoot: true,
+      feature: 'admin',
+      protected: true,
+    },
   },
 ]

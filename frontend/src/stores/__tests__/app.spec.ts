@@ -182,6 +182,6 @@ describe('public application state', () => {
     expect(store.featureStatus('passkey', 'live')).toBe('disabled')
     expect(store.featureStatus('unknown', 'disabled')).toBe('disabled')
     expect(store.isFeatureEnabled('passkey')).toBe(false)
-    expect(store.isFeatureEnabled('unknown')).toBe(true)
+    expect(store.isFeatureEnabled('unknown')).toBe(false)
   })
 })

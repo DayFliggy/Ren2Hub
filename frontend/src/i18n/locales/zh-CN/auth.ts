@@ -1,5 +1,8 @@
 export default {
   auth: {
+    resetConfirm: '确认重置密码',
+    resetInvalid: '重置链接无效或不完整。',
+    resetCompleted: '密码已重置。请妥善保存新密码后登录。',
     signInTitle: '欢迎回来',
     signInSubtitle: '登录以继续使用 Ren2Hub 控制台',
     signUpTitle: '创建账户',

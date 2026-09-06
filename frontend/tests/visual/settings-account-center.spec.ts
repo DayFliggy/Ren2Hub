@@ -20,7 +20,7 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await page.setViewportSize(viewport)
       await configureStablePage(page, { theme, authenticated: true })
 
-      await page.goto('/console/settings', { waitUntil: 'domcontentloaded' })
+      await page.goto('/settings', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
       await expect(
         page.getByRole('heading', { name: '登录与账户', exact: true })
@@ -58,7 +58,7 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await page.waitForTimeout(100)
       await assertInteractiveCentersVisible(page)
 
-      await page.goto('/console/profile', { waitUntil: 'domcontentloaded' })
+      await page.goto('/profile', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
       await expect(
         page.getByRole('heading', { name: '会员中心', exact: true })

@@ -42,6 +42,22 @@ beforeEach(clearAuthBundle)
 afterEach(() => vi.restoreAllMocks())
 
 describe('authentication API', () => {
+  it('confirms reset links through the existing API and validates the generated password', async () => {
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValue('example-generated-password')
+    await expect(
+      authApi.confirmPasswordReset('reset@example.com', 'example-code')
+    ).resolves.toBe('example-generated-password')
+    expect(post).toHaveBeenCalledWith('/api/user/reset', {
+      email: 'reset@example.com',
+      token: 'example-code',
+    })
+    post.mockResolvedValue({ password: 'unexpected shape' })
+    await expect(
+      authApi.confirmPasswordReset('reset@example.com', 'example-code')
+    ).rejects.toThrow('Invalid authentication response')
+  })
   it('sends Turnstile tokens in request headers', async () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue(bundle)
 

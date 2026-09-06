@@ -9,7 +9,7 @@ import {
 
 test.beforeEach(async ({ page }) => {
   await configureStablePage(page, { theme: 'dark', authenticated: true })
-  await page.goto('/console/dashboard', { waitUntil: 'domcontentloaded' })
+  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
 })
 

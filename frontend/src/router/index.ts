@@ -1,7 +1,6 @@
 import {
   createRouter,
   createWebHistory,
-  type LocationQuery,
   type RouteLocationRaw,
 } from 'vue-router'
 
@@ -13,17 +12,11 @@ import { useAuthStore } from '@/stores/auth'
 import { useSetupStore } from '@/stores/setup'
 import { publicRoutes } from '@/router/publicRoutes'
 import { adminRoutes } from '@/router/adminRoutes'
+import { canonicalLegacyPath } from '@/router/legacyRoutes'
+import { navigationError, navigationPending } from '@/router/navigationState'
 
 const CONSOLE_ENTRY: RouteLocationRaw = { name: 'dashboard' }
 const CHUNK_RELOAD_KEY = 'ren2hub_chunk_reload'
-
-function legacyConsoleRedirect(name: string) {
-  return (to: { query: LocationQuery; hash: string }): RouteLocationRaw => ({
-    name,
-    query: to.query,
-    hash: to.hash,
-  })
-}
 
 export function sanitizeSetupRedirect(value: unknown): string | null {
   if (
@@ -36,7 +29,7 @@ export function sanitizeSetupRedirect(value: unknown): string | null {
   try {
     const url = new URL(value, window.location.origin)
     if (url.origin !== window.location.origin) return null
-    const pathname = url.pathname.replace(/^\/next(?=\/|$)/, '') || '/'
+    const pathname = canonicalLegacyPath(url.pathname, url.searchParams)
     if (pathname === '/setup/error') return null
     return `${pathname}${url.search}${url.hash}`
   } catch {
@@ -56,11 +49,14 @@ export function sanitizeRedirect(value: unknown): string | null {
   try {
     const url = new URL(value, window.location.origin)
     if (url.origin !== window.location.origin) return null
-    const pathname = url.pathname.replace(/^\/next(?=\/|$)/, '') || '/'
+    const pathname = canonicalLegacyPath(url.pathname, url.searchParams)
+    const target = router.resolve(pathname)
     if (
-      !/^(\/(console|lab|pricing|rankings|about|privacy-policy|user-agreement))(\/|$)/.test(
-        pathname
-      )
+      !target.matched.length ||
+      target.name === 'not-found' ||
+      target.meta.guestOnly ||
+      target.meta.setupRoute ||
+      target.meta.setupError
     )
       return null
     return `${pathname}${url.search}${url.hash}`
@@ -80,28 +76,39 @@ const router = createRouter({
     },
     { path: '/home', redirect: { name: 'home' } },
     {
-      path: '/auth/sign-in',
+      path: '/sign-in',
       name: 'sign-in',
       component: () => import('@/views/auth/SignInView.vue'),
-      meta: { public: true, guestOnly: true },
+      meta: { public: true, guestOnly: true, messageDomain: 'auth' },
     },
     {
-      path: '/auth/sign-up',
+      path: '/sign-up',
       name: 'sign-up',
       component: () => import('@/views/auth/SignUpView.vue'),
-      meta: { public: true, guestOnly: true, feature: 'registration' },
+      meta: {
+        public: true,
+        guestOnly: true,
+        feature: 'registration',
+        messageDomain: 'auth',
+      },
     },
     {
-      path: '/auth/reset',
+      path: '/forgot-password',
       name: 'reset',
       component: () => import('@/views/auth/ResetPasswordView.vue'),
-      meta: { public: true, guestOnly: true },
+      meta: { public: true, guestOnly: true, messageDomain: 'auth' },
+    },
+    {
+      path: '/reset',
+      name: 'reset-confirm',
+      component: () => import('@/views/auth/ResetPasswordConfirmView.vue'),
+      meta: { public: true, messageDomain: 'auth' },
     },
     {
       path: '/oauth/:provider',
       name: 'oauth-callback',
       component: () => import('@/views/auth/OAuthCallbackView.vue'),
-      meta: { public: true },
+      meta: { public: true, messageDomain: 'auth' },
     },
     {
       path: '/setup',
@@ -115,46 +122,22 @@ const router = createRouter({
       component: () => import('@/views/setup/SetupErrorView.vue'),
       meta: { public: true, setupError: true },
     },
-    {
-      path: '/sign-in',
-      redirect: (to) => ({ name: 'sign-in', query: to.query }),
-    },
-    {
-      path: '/sign-up',
-      redirect: (to) => ({ name: 'sign-up', query: to.query }),
-    },
-    { path: '/dashboard', redirect: { name: 'dashboard' } },
-    { path: '/wallet', redirect: legacyConsoleRedirect('wallet') },
-    { path: '/channels', redirect: legacyConsoleRedirect('channels') },
-    {
-      path: '/system-settings',
-      redirect: legacyConsoleRedirect('system-settings-site'),
-    },
-    { path: '/usage-logs', redirect: legacyConsoleRedirect('logs') },
-    {
-      path: '/usage-logs/drawing',
-      redirect: legacyConsoleRedirect('logs-drawing'),
-    },
-    {
-      path: '/usage-logs/tasks',
-      redirect: legacyConsoleRedirect('logs-tasks'),
-    },
     ...publicRoutes,
     {
       path: '/console',
       component: () => import('@/components/layout/ConsoleLayout.vue'),
-      meta: { requiresAuth: true, topNav: 'console' },
+      meta: { requiresAuth: true, topNav: 'console', messageDomain: 'console' },
       children: [
         { path: '', redirect: { name: 'dashboard' } },
         ...adminRoutes,
         {
-          path: 'dashboard',
+          path: '/dashboard',
           name: 'dashboard',
           component: () => import('@/views/console/DashboardView.vue'),
           meta: { topNav: 'dashboard', feature: 'dashboard_basic' },
         },
         {
-          path: 'activity',
+          path: '/activity',
           name: 'activity',
           component: () => import('@/views/console/ActivityView.vue'),
           meta: {
@@ -163,13 +146,13 @@ const router = createRouter({
           },
         },
         {
-          path: 'models',
+          path: '/models',
           name: 'models',
           component: () => import('@/views/console/ModelsView.vue'),
           meta: { feature: 'user_models' },
         },
         {
-          path: 'market',
+          path: '/market',
           name: 'market',
           component: () => import('@/views/console/MarketplaceView.vue'),
           meta: {
@@ -179,7 +162,7 @@ const router = createRouter({
           },
         },
         {
-          path: 'keys',
+          path: '/keys',
           name: 'keys',
           component: () => import('@/views/console/KeysView.vue'),
           meta: {
@@ -189,7 +172,7 @@ const router = createRouter({
           },
         },
         {
-          path: 'keys/:id/routing',
+          path: '/keys/:id/routing',
           name: 'token-routing',
           component: () => import('@/views/console/TokenRoutingView.vue'),
           meta: {
@@ -201,13 +184,13 @@ const router = createRouter({
           },
         },
         {
-          path: 'logs',
+          path: '/usage-logs',
           name: 'logs',
           component: () => import('@/views/console/LogsView.vue'),
           meta: { wide: true, noPageScroll: true, feature: 'logs' },
         },
         {
-          path: 'logs/drawing',
+          path: '/usage-logs/drawing',
           name: 'logs-drawing',
           component: () => import('@/views/console/DrawingLogsView.vue'),
           meta: {
@@ -218,7 +201,7 @@ const router = createRouter({
           },
         },
         {
-          path: 'logs/tasks',
+          path: '/usage-logs/task',
           name: 'logs-tasks',
           component: () => import('@/views/console/TaskLogsView.vue'),
           meta: {
@@ -229,7 +212,7 @@ const router = createRouter({
           },
         },
         {
-          path: 'logs/operations',
+          path: '/usage-logs/operations',
           name: 'logs-operations',
           component: () => import('@/views/console/OperationLogsView.vue'),
           meta: {
@@ -241,7 +224,7 @@ const router = createRouter({
           },
         },
         {
-          path: 'channels',
+          path: '/channels',
           name: 'channels',
           component: () => import('@/views/console/ChannelsView.vue'),
           meta: {
@@ -252,7 +235,7 @@ const router = createRouter({
           },
         },
         {
-          path: 'ticket-management/:id?',
+          path: '/ticket-management/:id?',
           name: 'ticket-management',
           component: () => import('@/views/console/AdminTicketsView.vue'),
           meta: {
@@ -263,7 +246,7 @@ const router = createRouter({
           },
         },
         {
-          path: 'users',
+          path: '/users',
           name: 'users',
           component: () => import('@/views/console/UsersView.vue'),
           meta: {
@@ -274,7 +257,7 @@ const router = createRouter({
           },
         },
         {
-          path: 'redemption',
+          path: '/redemption-codes',
           name: 'redemption',
           component: () => import('@/views/console/RedemptionView.vue'),
           meta: {
@@ -285,7 +268,7 @@ const router = createRouter({
           },
         },
         {
-          path: 'plan-management',
+          path: '/plan-management',
           name: 'plan-management',
           component: () => import('@/views/console/PlanManagementView.vue'),
           meta: {
@@ -297,7 +280,7 @@ const router = createRouter({
           },
         },
         {
-          path: 'orders',
+          path: '/orders',
           name: 'orders',
           component: () => import('@/views/console/OrdersView.vue'),
           meta: {
@@ -308,7 +291,7 @@ const router = createRouter({
           },
         },
         {
-          path: 'tickets',
+          path: '/tickets',
           name: 'tickets',
           component: () => import('@/views/console/TicketsView.vue'),
           meta: {
@@ -317,43 +300,43 @@ const router = createRouter({
           },
         },
         {
-          path: 'tickets/:id',
+          path: '/tickets/:id',
           name: 'ticket-detail',
           component: () => import('@/views/console/TicketDetailView.vue'),
           meta: { nav: 'tickets', feature: 'tickets' },
         },
         {
-          path: 'wallet',
+          path: '/wallet',
           name: 'wallet',
           component: () => import('@/views/console/WalletView.vue'),
           meta: { feature: 'wallet' },
         },
         {
-          path: 'subscription',
+          path: '/subscription',
           name: 'subscription',
           component: () => import('@/views/console/SubscriptionView.vue'),
           meta: { protected: true, feature: 'subscription_balance' },
         },
         {
-          path: 'invite',
+          path: '/invite',
           name: 'invite',
           component: () => import('@/views/console/InviteView.vue'),
           meta: { feature: 'invites' },
         },
         {
-          path: 'invoice',
+          path: '/invoice',
           name: 'invoice',
           component: () => import('@/views/console/InvoiceView.vue'),
           meta: { protected: true, feature: 'invoices' },
         },
         {
-          path: 'settings',
+          path: '/settings',
           name: 'settings',
           component: () => import('@/views/console/AccountSettingsView.vue'),
           meta: { feature: 'profile' },
         },
         {
-          path: 'system-settings',
+          path: '/system-settings',
           name: 'system-settings',
           redirect: {
             name: 'system-settings-site',
@@ -421,13 +404,13 @@ const router = createRouter({
           ],
         },
         {
-          path: 'profile',
+          path: '/profile',
           name: 'profile',
           component: () => import('@/views/console/AccountCenterView.vue'),
           meta: { feature: 'profile' },
         },
         {
-          path: 'farm',
+          path: '/farm',
           name: 'farm',
           component: () => import('@/views/console/FarmView.vue'),
           meta: {
@@ -437,7 +420,7 @@ const router = createRouter({
           },
         },
         {
-          path: 'bigame',
+          path: '/bigame',
           name: 'bigame',
           component: () => import('@/views/console/BigameView.vue'),
           meta: {
@@ -456,6 +439,7 @@ const router = createRouter({
         topNav: 'alchemy',
         protected: true,
         feature: 'lab',
+        messageDomain: 'lab',
       },
       children: [
         { path: '', redirect: { name: 'lab-chat' } },
@@ -505,6 +489,10 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  const query = new URL(to.fullPath, window.location.origin).searchParams
+  const canonical = canonicalLegacyPath(to.path, query)
+  if (canonical !== to.path)
+    return { path: canonical, query: to.query, hash: to.hash }
   if (to.meta.setupError) {
     await loadMessageDomain('setup')
     return true
@@ -527,12 +515,10 @@ router.beforeEach(async (to) => {
     }
   }
 
-  if (to.path.startsWith('/auth/')) {
-    await loadMessageDomain('auth')
-  } else if (to.path.startsWith('/console')) {
-    await loadMessageDomain('console')
-  } else if (to.path.startsWith('/lab')) {
+  if (to.meta.messageDomain === 'lab') {
     await Promise.all([loadMessageDomain('console'), loadMessageDomain('lab')])
+  } else if (to.meta.messageDomain) {
+    await loadMessageDomain(to.meta.messageDomain)
   }
 
   if (to.meta.feature || to.name === 'sign-up') {
@@ -540,11 +526,7 @@ router.beforeEach(async (to) => {
     await app.initialize()
     const featureUnavailable =
       to.meta.feature &&
-      ((to.meta.protected && !app.statusReachable) ||
-        !app.isFeatureEnabled(
-          to.meta.feature,
-          to.meta.protected ? 'disabled' : 'live'
-        ))
+      (!app.statusReachable || !app.isFeatureEnabled(to.meta.feature))
     if (featureUnavailable) {
       return to.name === 'dashboard' ? { name: 'home' } : CONSOLE_ENTRY
     }
@@ -562,7 +544,7 @@ router.beforeEach(async (to) => {
     return {
       name: 'sign-in',
       query: {
-        redirect: sanitizeRedirect(to.fullPath) ?? '/console/dashboard',
+        redirect: sanitizeRedirect(to.fullPath) ?? '/dashboard',
       },
     }
   }
@@ -582,19 +564,32 @@ router.beforeEach(async (to) => {
 })
 
 router.onError((error) => {
+  navigationError.value = true
+  navigationPending.value = false
+  console.error('[router] Navigation failed', error)
   const chunkFailed =
     /Failed to fetch dynamically imported module|Importing a module script failed/i.test(
       error.message
     )
-  if (!chunkFailed || window.sessionStorage.getItem(CHUNK_RELOAD_KEY) === '1')
-    return
-
-  window.sessionStorage.setItem(CHUNK_RELOAD_KEY, '1')
-  window.location.reload()
+  try {
+    if (!chunkFailed || window.sessionStorage.getItem(CHUNK_RELOAD_KEY) === '1')
+      return
+    window.sessionStorage.setItem(CHUNK_RELOAD_KEY, '1')
+    window.location.reload()
+  } catch {
+    // Storage may be unavailable; the visible error state still allows retry.
+  }
 })
 
-router.afterEach(() => {
-  window.sessionStorage.removeItem(CHUNK_RELOAD_KEY)
+router.afterEach((_to, _from, failure) => {
+  navigationPending.value = false
+  if (failure) return
+  navigationError.value = false
+  try {
+    window.sessionStorage.removeItem(CHUNK_RELOAD_KEY)
+  } catch {
+    // Storage is optional for navigation.
+  }
 })
 
 export default router

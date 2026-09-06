@@ -39,7 +39,7 @@ for (const theme of ['light', 'dark'] as const) {
             }),
           })
       )
-      await page.goto('/console/dashboard', { waitUntil: 'domcontentloaded' })
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
 
       const card = page.locator('[data-token-trend-card]')
@@ -53,7 +53,7 @@ for (const theme of ['light', 'dark'] as const) {
 
 test('token trend mounts a non-empty ECharts canvas', async ({ page }) => {
   await configureStablePage(page, { theme: 'dark', authenticated: true })
-  await page.goto('/console/dashboard', { waitUntil: 'domcontentloaded' })
+  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
 
   const card = page.locator('[data-token-trend-card]')

@@ -14,7 +14,7 @@ for (const theme of THEMES) {
     page,
   }) => {
     await configureStablePage(page, { theme })
-    await page.goto('/console/dashboard')
+    await page.goto('/dashboard')
     await waitForStablePage(page)
 
     const heading = page.locator('[data-handdrawn="page-hero"] h1')
@@ -49,7 +49,7 @@ test('a long display name keeps the underline on each wrapped line', async ({
   page,
 }) => {
   await configureStablePage(page, { theme: 'light' })
-  await page.goto('/console/dashboard')
+  await page.goto('/dashboard')
   await waitForStablePage(page)
 
   const accent = page.locator(

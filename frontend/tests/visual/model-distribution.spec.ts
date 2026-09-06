@@ -12,7 +12,7 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
     page,
   }) => {
     await configureStablePage(page, { theme, authenticated: true })
-    await page.goto('/console/dashboard', { waitUntil: 'domcontentloaded' })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
     await waitForStablePage(page)
 
     const card = page.locator('[data-model-distribution-table]').locator('..')

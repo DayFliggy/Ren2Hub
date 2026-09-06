@@ -1,5 +1,10 @@
 export default {
   nav: {
+    modelMetadata: 'Model metadata',
+    vendors: 'Vendors',
+    prefillGroups: 'Prefill groups',
+    deployments: 'Deployments',
+    systemInfo: 'System instances',
     dashboard: 'Dashboard',
     keys: 'Tokens',
     logs: 'Logs',

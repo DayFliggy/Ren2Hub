@@ -123,7 +123,7 @@ export const useAppStore = defineStore('app', () => {
 
   function featureStatus(
     feature: string | undefined,
-    fallback: FeatureStatus = 'live'
+    fallback: FeatureStatus = 'disabled'
   ): FeatureStatus {
     if (!feature) return fallback
     return status.value.frontend_capabilities?.[feature] ?? fallback
@@ -131,7 +131,7 @@ export const useAppStore = defineStore('app', () => {
 
   function isFeatureEnabled(
     feature: string | undefined,
-    fallback: FeatureStatus = 'live'
+    fallback: FeatureStatus = 'disabled'
   ): boolean {
     return featureStatus(feature, fallback) !== 'disabled'
   }

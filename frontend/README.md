@@ -31,11 +31,15 @@ bun run build
 生产访问前缀为 `/`，下列路径是 Vue Router 内部路径：
 
 - `/`：公开首页
-- `/auth/*`：真实注册、登录、OAuth 回调与会话恢复页面
-- `/console/*`：真实后端控制台；页面访问由 capability 与角色共同约束
+- `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`：认证与密码重置
+- `/oauth/:provider`：现有 OAuth 绑定回调
+- `/dashboard`、`/keys`、`/wallet`、`/usage-logs/*`、`/profile`：用户控制台
+- `/channels`、`/users`、`/models/metadata`、`/system-settings/*`：管理控制台
 - `/lab/*`：炼金室预留路由；后端 capability 未启用时拒绝访问
 
-`/home`、`/sign-in`、`/sign-up`、`/dashboard` 和 `/pricing` 仅作为兼容重定向。受保护页面会将匿名访问者送到 `/auth/sign-in`，并只接受 `/console/*` 或 `/lab/*` 作为登录后跳转目标。
+旧 `/next/*`、`/console/*`、`/auth/*` 和 NewAPI 历史书签统一转换为根路径并保留 query/hash。匿名访问转到 `/sign-in`，登录回跳由实际路由记录校验。页面使用相同 Console 布局；布局与语言包由 metadata 指定，不依赖 URL 前缀。
+
+`/api/next/*` 是已有业务 API 门面，保留接口契约；`/api/models` 和 `/api/models/` 的不同语义也保留。Playground、Chat、Chat2Link、Chat Presets 及旧前缀变体返回 404。详细矩阵与验证边界见 [路由约定](./ROUTING.md)。
 
 ## 源码结构
 

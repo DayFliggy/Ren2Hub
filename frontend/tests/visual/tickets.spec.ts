@@ -18,7 +18,7 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
     test(`${theme} ${viewport.name} user tickets`, async ({ page }) => {
       await page.setViewportSize(viewport)
       await configureStablePage(page, { theme, authenticated: true })
-      await page.goto('/console/tickets', { waitUntil: 'domcontentloaded' })
+      await page.goto('/tickets', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
 
       await expect(
@@ -38,7 +38,7 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
         .click()
       await waitForStablePage(page)
 
-      await expect(page).toHaveURL(/\/console\/tickets\/1$/)
+      await expect(page).toHaveURL(/\/tickets\/1$/)
       await expect(page.getByText('客服', { exact: true })).toBeVisible()
       await assertNoHorizontalOverflow(page)
       await assertInteractiveCentersVisible(page)
@@ -49,7 +49,7 @@ for (const theme of ['light', 'dark'] as const satisfies VisualTheme[]) {
     }, testInfo) => {
       await page.setViewportSize(viewport)
       await configureStablePage(page, { theme, authenticated: true })
-      await page.goto('/console/ticket-management/1', {
+      await page.goto('/ticket-management/1', {
         waitUntil: 'domcontentloaded',
       })
       await waitForStablePage(page)

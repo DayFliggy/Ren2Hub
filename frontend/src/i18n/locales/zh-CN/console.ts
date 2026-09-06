@@ -1,5 +1,10 @@
 export default {
   nav: {
+    modelMetadata: '模型元数据',
+    vendors: '供应商',
+    prefillGroups: '预填充组',
+    deployments: '模型部署',
+    systemInfo: '系统实例',
     dashboard: '仪表盘',
     keys: '令牌',
     logs: '日志',

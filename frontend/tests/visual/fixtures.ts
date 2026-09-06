@@ -191,6 +191,7 @@ export async function configureStablePage(
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.addInitScript(
     ({ fixedNow, selectedTheme, timeStepMs }) => {
+      if (window !== window.top) return
       const nativeGetContext = HTMLCanvasElement.prototype.getContext
       Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
         configurable: true,
@@ -247,6 +248,39 @@ export async function configureStablePage(
   )
 
   const responses = new Map<string, unknown>([
+    ['/api/models/search', { page: 1, page_size: 20, total: 0, items: [] }],
+    ['/api/vendors/search', { page: 1, page_size: 20, total: 0, items: [] }],
+    ['/api/prefill_group/', []],
+    [
+      '/api/deployments/settings',
+      { enabled: false, configured: false, can_connect: false },
+    ],
+    ['/api/system-info/instances', []],
+    ['/api/system-task/list', []],
+    ['/api/option/', []],
+    ['/api/option/catalog', []],
+    ['/api/option/secret-status', { configured: [] }],
+    [
+      '/api/deployments/search',
+      { page: 1, page_size: 20, total: 0, items: [] },
+    ],
+    ['/api/user/sessions', []],
+    ['/api/mj/self', { page: 1, page_size: 10, total: 0, items: [] }],
+    ['/api/task/self', { page: 1, page_size: 10, total: 0, items: [] }],
+    ['/api/about', 'Ren2Hub'],
+    ['/api/privacy-policy', 'Privacy policy'],
+    ['/api/user-agreement', 'User agreement'],
+    [
+      '/api/rankings',
+      {
+        models: [],
+        vendors: [],
+        top_movers: [],
+        top_droppers: [],
+        models_history: [],
+        vendor_share_history: [],
+      },
+    ],
     [
       '/api/setup',
       {
@@ -1017,7 +1051,9 @@ export async function configureStablePage(
   await page.route('**/api/user/auth/refresh*', (route) => {
     const pagePath = new URL(page.url()).pathname
     const shouldAuthenticate = routeAwareAuth
-      ? !pagePath.startsWith('/auth/')
+      ? !['/sign-in', '/sign-up', '/forgot-password', '/reset'].includes(
+          pagePath
+        )
       : authenticated
     if (!shouldAuthenticate) {
       return route.fulfill({
@@ -1064,7 +1100,18 @@ export async function configureStablePage(
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ success: true, message: '', data }),
+        body: JSON.stringify({
+          success: true,
+          message: '',
+          data,
+          ...(path === '/api/pricing'
+            ? {
+                group_ratio: { default: 1, vip: 1 },
+                usable_group: { default: 'Default', vip: 'VIP' },
+                supported_endpoint: {},
+              }
+            : {}),
+        }),
       })
     )
   }
@@ -1078,7 +1125,10 @@ export function isExpectedGuestRefreshConsoleMessage(
     return false
   }
   const pagePath = new URL(page.url()).pathname
-  if (!pagePath.startsWith('/auth/')) return false
+  if (
+    !['/sign-in', '/sign-up', '/forgot-password', '/reset'].includes(pagePath)
+  )
+    return false
   const sourceUrl = message.location().url
   return !sourceUrl || sourceUrl.includes('/api/user/auth/refresh')
 }

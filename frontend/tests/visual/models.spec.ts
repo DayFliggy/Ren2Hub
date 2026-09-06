@@ -16,7 +16,7 @@ for (const theme of ['light', 'dark'] as const) {
     }) => {
       await page.setViewportSize(viewport)
       await configureStablePage(page, { theme, authenticated: true })
-      await page.goto('/console/models', { waitUntil: 'domcontentloaded' })
+      await page.goto('/models', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
 
       const gptCard = page.locator('[data-model-name="gpt-4.1"]')
@@ -67,7 +67,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`${theme} list keeps cache prices in details`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await configureStablePage(page, { theme, authenticated: true })
-    await page.goto('/console/models', { waitUntil: 'domcontentloaded' })
+    await page.goto('/models', { waitUntil: 'domcontentloaded' })
     await waitForStablePage(page)
 
     await page.getByRole('button', { name: '列表视图' }).click()

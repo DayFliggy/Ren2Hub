@@ -28,6 +28,19 @@ for (const entry of entries) {
   }
 }
 
+for (const entry of Object.values(manifest)) {
+  for (const reference of [...(entry.imports ?? []), ...(entry.dynamicImports ?? [])]) {
+    if (!Object.hasOwn(manifest, reference)) throw new Error(`Missing Vue manifest dependency: ${reference}`)
+  }
+  for (const file of [entry.file, ...(entry.css ?? []), ...(entry.assets ?? [])]) {
+    if (typeof file !== 'string') throw new Error('Invalid Vue manifest asset')
+    const asset = resolve(source, file)
+    if (!asset.startsWith(source + sep) || !(await stat(asset)).isFile()) {
+      throw new Error(`Missing Vue production asset: ${file}`)
+    }
+  }
+}
+
 await rm(destination, { recursive: true, force: true })
 await cp(source, destination, { recursive: true })
 console.log('Vue production assets prepared for Go embed')

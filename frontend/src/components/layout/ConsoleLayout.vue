@@ -14,12 +14,7 @@ const maxWidth = computed(() =>
   route.meta.wide ? 'max-w-[1400px]' : 'max-w-[1200px]'
 )
 const noPageScroll = computed(() => Boolean(route.meta.noPageScroll))
-const featureStatus = computed(() =>
-  app.featureStatus(
-    route.meta.feature,
-    route.meta.protected ? 'disabled' : 'live'
-  )
-)
+const featureStatus = computed(() => app.featureStatus(route.meta.feature))
 const isDisabled = computed(() => featureStatus.value === 'disabled')
 
 const isScrolling = ref(false)

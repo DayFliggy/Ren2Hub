@@ -170,7 +170,7 @@ for (const theme of [
       )
       await configureStablePage(page, { theme, authenticated: true })
       const releaseTests = await configureChannels(page)
-      await page.goto('/console/channels', { waitUntil: 'domcontentloaded' })
+      await page.goto('/channels', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
 
       const navigation =

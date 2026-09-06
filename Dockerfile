@@ -34,6 +34,7 @@ RUN go mod download
 
 COPY . .
 COPY --from=frontend-builder /build/frontend/embed-dist ./frontend/embed-dist
+RUN go test -timeout 60s -run '^TestProductionEmbeddedAssetGraph$' .
 RUN version="${APP_VERSION:-$(cat VERSION)}" \
     && test -n "$version" \
     && go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$version'" -o new-api

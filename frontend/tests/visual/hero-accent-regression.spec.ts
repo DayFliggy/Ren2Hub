@@ -6,7 +6,7 @@ import { configureStablePage, waitForStablePage } from './fixtures'
 // the same component contract but is intentionally capability-disabled.
 test('wallet hero keeps the ampersand swash accent', async ({ page }) => {
   await configureStablePage(page, { theme: 'light' })
-  await page.goto('/console/wallet')
+  await page.goto('/wallet')
   await waitForStablePage(page)
 
   const heading = page.locator('[data-handdrawn="page-hero"] h1').first()
