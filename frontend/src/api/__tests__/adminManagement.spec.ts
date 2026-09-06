@@ -1,72 +1,100 @@
 import { describe, expect, it } from 'vitest'
 import {
-  parseDeploymentContainer,
-  parseDeploymentPrice,
   parseModelMetadata,
   parsePrefillGroup,
   parseSyncPreview,
-  parseSystemTask,
 } from '../adminManagement'
+import { appendModelNames } from '@/utils/modelEndpoints'
 
 describe('admin management contracts', () => {
-  it('parses model metadata and preserves enriched arrays', () => {
-    expect(
-      parseModelMetadata({
-        id: 1,
-        model_name: 'gpt-test',
-        vendor_id: 2,
-        status: 1,
-        sync_official: 1,
-        name_rule: 0,
-        bound_channels: [{ name: 'primary', type: 1 }],
-        enable_groups: ['fast'],
-        matched_models: [],
-      }).model_name
-    ).toBe('gpt-test')
+  it('preserves enriched model fields and missing timestamps', () => {
+    const row = parseModelMetadata({
+      id: 1,
+      model_name: 'gpt-test',
+      vendor_id: 2,
+      status: 1,
+      sync_official: 0,
+      name_rule: 1,
+      bound_channels: [{ name: 'primary', type: 1 }],
+      enable_groups: ['fast'],
+      matched_models: ['gpt-test-1'],
+      matched_count: 1,
+      quota_types: [0, 1],
+      created_time: 100,
+    })
+    expect(row).toMatchObject({
+      matched_count: 1,
+      matched_models: ['gpt-test-1'],
+      quota_types: [0, 1],
+      created_time: 100,
+      updated_time: null,
+      sync_official: 0,
+    })
+    expect(() => parseModelMetadata({ ...row, quota_types: ['0'] })).toThrow()
   })
-  it('normalizes JSON prefill items', () => {
+  it('normalizes legacy model/tag arrays and endpoint JSON strings', () => {
+    for (const type of ['model', 'tag']) {
+      for (const items of [['a', 'b'], '["a","b"]'])
+        expect(
+          parsePrefillGroup({ id: 1, name: 'fast', type, items }).items
+        ).toEqual(['a', 'b'])
+    }
+    const endpoint = {
+      openai: { path: '/v1/chat/completions', method: 'POST' },
+    }
     expect(
-      parsePrefillGroup({
-        id: 1,
-        name: 'fast',
-        type: 'model',
-        items: '["a","b"]',
-      }).items
-    ).toEqual(['a', 'b'])
+      JSON.parse(
+        parsePrefillGroup({
+          id: 2,
+          name: 'endpoints',
+          type: 'endpoint',
+          items: JSON.stringify(endpoint),
+        }).items as string
+      )
+    ).toEqual(endpoint)
+    expect(
+      JSON.parse(
+        parsePrefillGroup({
+          id: 2,
+          name: 'endpoints',
+          type: 'endpoint',
+          items: ['openai'],
+        }).items as string
+      )
+    ).toEqual(['openai'])
   })
-  it('rejects malformed sync fields and deployment prices', () => {
-    expect(() => parseSyncPreview({ missing: [1], conflicts: [] })).toThrow()
+  it('rejects malformed groups and sync fields without an empty fallback', () => {
+    for (const items of ['{', '{"openai":{"path":true,"method":"POST"}}'])
+      expect(() =>
+        parsePrefillGroup({ id: 1, name: 'bad', type: 'endpoint', items })
+      ).toThrow()
     expect(() =>
-      parseDeploymentPrice({
-        estimated_cost: -1,
-        currency: 'usdc',
-        estimation_valid: true,
-        price_breakdown: { hourly_rate: 1 },
-      })
+      parsePrefillGroup({ id: 1, name: 'bad', type: 'model', items: '{}' })
     ).toThrow()
+    expect(() => parseSyncPreview({ missing: [1], conflicts: [] })).toThrow()
   })
-  it('parses deployment event and task state payloads', () => {
-    expect(
-      parseDeploymentContainer({
-        container_id: 'c',
-        device_id: 'd',
-        status: 'running',
-        hardware: 'gpu',
-        uptime_percent: 99,
-        gpus_per_container: 1,
-        public_url: '',
-        events: [],
-      }).status
-    ).toBe('running')
-    expect(
-      parseSystemTask({
-        task_id: 't',
-        type: 'log_cleanup',
-        status: 'running',
-        created_at: 1,
-        updated_at: 2,
-        state: { progress: 20, processed: 2, total: 10 },
-      }).progress
-    ).toBe(20)
+  it('normalizes endpoint formats already accepted by the backend', () => {
+    const group = parsePrefillGroup({
+      id: 1,
+      name: 'legacy endpoints',
+      type: 'endpoint',
+      items: JSON.stringify({
+        openai: '/v1/chat/completions',
+        anthropic: { path: '/v1/messages' },
+        'openai-response': { path: '/v1/responses', method: 'post' },
+      }),
+    })
+    expect(JSON.parse(group.items as string)).toEqual({
+      openai: { path: '/v1/chat/completions', method: 'POST' },
+      anthropic: { path: '/v1/messages', method: 'POST' },
+      'openai-response': { path: '/v1/responses', method: 'POST' },
+    })
+  })
+  it('appends prefill models once while preserving existing order', () => {
+    const existing = ['b', 'a']
+    const result = appendModelNames(existing, ['a', 'c', 'c', ' b ', 'd'])
+    expect(result).toEqual(['b', 'a', 'c', 'd'])
+    expect(appendModelNames(result, ['c', 'a', 'd'])).toEqual(result)
+    expect(existing).toEqual(['b', 'a'])
   })
 })

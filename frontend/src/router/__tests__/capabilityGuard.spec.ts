@@ -211,7 +211,6 @@ describe('capability route guard', () => {
       '/models/metadata',
       '/models/vendors',
       '/models/prefill-groups',
-      '/models/deployments',
       '/system-info',
     ]) {
       await router.push(path)
@@ -226,9 +225,52 @@ describe('capability route guard', () => {
       '/console/playground',
       '/system-settings/content/chat-presets',
       '/console/setting?tab=chats',
+      '/models/deployments',
+      '/deployment',
+      '/admin/deployments',
+      '/console/models/deployments',
+      '/next/console/admin/deployments/1',
+      '/next/deployment',
     ]) {
       await router.push(path)
       expect(router.currentRoute.value.name, path).toBe('status-404')
+    }
+  })
+
+  it('opens consolidated model managers from bookmarks without losing query or hash', async () => {
+    useAuthStore().user!.role = 10
+    for (const [source, manage] of [
+      ['/models/vendors', 'vendors'],
+      ['/models/prefill-groups', 'prefill-groups'],
+      ['/next/console/admin/vendors', 'vendors'],
+      ['/console/admin/prefill-groups', 'prefill-groups'],
+    ]) {
+      await router.push(`${source}?q=alpha&p=2&manage=other#details`)
+      expect(router.currentRoute.value.path).toBe('/models/metadata')
+      expect(router.currentRoute.value.query).toEqual({
+        q: 'alpha',
+        p: '2',
+        manage,
+      })
+      expect(router.currentRoute.value.hash).toBe('#details')
+    }
+  })
+
+  it('redirects the former mixed deployment settings to automatic pricing', async () => {
+    useAuthStore().user!.role = 100
+    for (const path of [
+      '/system-settings/models/deployment',
+      '/next/console/system-settings/models/model-deployment',
+      '/console/setting?tab=model-deployment',
+    ]) {
+      await router.push(
+        `${path}${path.includes('?') ? '&' : '?'}audit=1#pricing`
+      )
+      expect(router.currentRoute.value.path).toBe(
+        '/system-settings/models/auto-pricing'
+      )
+      expect(router.currentRoute.value.query.audit).toBe('1')
+      expect(router.currentRoute.value.hash).toBe('#pricing')
     }
   })
 })

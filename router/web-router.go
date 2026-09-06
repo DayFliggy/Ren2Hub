@@ -27,7 +27,11 @@ const nextPlaceholderMarker = `name="ren2hub-next-build" content="placeholder"`
 
 var immutableWebAsset = regexp.MustCompile(`^/assets/[^/]+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$`)
 
-var retiredWebPathPrefixes = []string{"/playground", "/chat", "/chat2link", "/chat-presets", "/system-settings/content/chat", "/system-settings/content/chats", "/system-settings/content/chat-presets"}
+var retiredWebPathPrefixes = []string{
+	"/playground", "/chat", "/chat2link", "/chat-presets",
+	"/models/deployments", "/deployment", "/admin/deployments",
+	"/system-settings/content/chat", "/system-settings/content/chats", "/system-settings/content/chat-presets",
+}
 
 func nextBuildReady(indexPage []byte) bool {
 	return len(indexPage) > 0 && !bytes.Contains(indexPage, []byte(nextPlaceholderMarker))

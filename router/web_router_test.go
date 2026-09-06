@@ -116,9 +116,15 @@ func TestVueWebFallbackBoundaries(t *testing.T) {
 				"/playground", "/playground/", "/chat/", "/chat/123", "/chat2link/", "/chat2link/123", "/chat-presets", "/chat-presets/",
 				"/console/chat-presets", "/next/chat/123", "/next/console/playground",
 				"/system-settings/content/chat-presets", "/next/console/system-settings/content/chat-presets",
+				"/models/deployments", "/models/deployments/1", "/deployment", "/deployment/", "/admin/deployments",
+				"/console/models/deployments", "/console/deployment", "/console/admin/deployments/1",
+				"/next/models/deployments", "/next/deployment", "/next/admin/deployments",
+				"/next/console/models/deployments", "/next/console/deployment", "/next/console/admin/deployments",
+				"/api/deployments", "/api/deployments/", "/api/deployments/settings", "/api/deployments/settings/test-connection",
+				"/api/deployments/123", "/api/deployments/123/logs", "/api/deployments/123/containers",
 				"/.vite/manifest.json", "/next/.vite/manifest.json", "/assets/.hidden.js",
 			} {
-				for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost} {
+				for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodDelete} {
 					t.Run(method+path, func(t *testing.T) {
 						recorder := serveWebRequest(engine, method, path)
 						require.Equal(t, http.StatusNotFound, recorder.Code)

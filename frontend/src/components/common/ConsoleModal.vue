@@ -34,6 +34,7 @@ const props = withDefaults(
     ariaLabel?: string
     size?: 'sm' | 'md' | 'lg' | 'xl'
     closeDisabled?: boolean
+    presentation?: 'modal' | 'drawer'
   }>(),
   {
     title: '',
@@ -41,6 +42,7 @@ const props = withDefaults(
     ariaLabel: '',
     size: 'md',
     closeDisabled: false,
+    presentation: 'modal',
   }
 )
 
@@ -161,7 +163,12 @@ onBeforeUnmount(() => {
       <div
         v-if="open"
         ref="dialog"
-        class="fixed inset-0 z-[90] flex items-center justify-center p-4"
+        class="fixed inset-0 z-[90] flex"
+        :class="
+          presentation === 'drawer'
+            ? 'items-stretch justify-end'
+            : 'items-center justify-center p-4'
+        "
         role="dialog"
         aria-modal="true"
         :aria-labelledby="title ? titleId : undefined"
@@ -182,7 +189,10 @@ onBeforeUnmount(() => {
             border-radius: var(--shape-overlay);
             box-shadow: var(--overlay-shadow);
           "
-          :class="widths[size]"
+          :class="[
+            widths[size],
+            { 'console-drawer-panel': presentation === 'drawer' },
+          ]"
         >
           <!-- Decorative gold-line top accent -->
           <div
@@ -200,7 +210,10 @@ onBeforeUnmount(() => {
           />
           <header
             v-if="title || subtitle"
-            class="shrink-0 px-6 pt-5 text-center"
+            class="shrink-0 px-6 pt-5"
+            :class="
+              presentation === 'drawer' ? 'pb-5 text-left' : 'text-center'
+            "
           >
             <h2
               :id="titleId"
@@ -216,10 +229,20 @@ onBeforeUnmount(() => {
               {{ subtitle }}
             </p>
           </header>
-          <div class="subtle-scroll min-h-0 overflow-y-auto px-6 py-5">
+          <div
+            class="subtle-scroll min-h-0 overflow-y-auto px-6 py-5"
+            :class="{ 'flex-1': presentation === 'drawer' }"
+          >
             <slot />
           </div>
-          <footer v-if="$slots.footer" class="shrink-0 px-6 pb-6">
+          <footer
+            v-if="$slots.footer"
+            class="shrink-0 px-6 pb-6"
+            :class="{
+              'border-t border-[var(--border-subtle)] pt-5':
+                presentation === 'drawer',
+            }"
+          >
             <slot name="footer" />
           </footer>
         </div>
@@ -229,6 +252,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.console-drawer-panel[data-handdrawn='modal'] {
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0 !important;
+}
 .modal-enter-active,
 .modal-leave-active {
   transition: opacity 0.2s ease;

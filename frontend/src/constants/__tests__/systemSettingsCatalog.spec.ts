@@ -61,4 +61,24 @@ describe('system settings catalog', () => {
     ).toBe('list')
     expect(waffoPancake?.integration).toBe('waffo-pancake')
   })
+
+  it('preserves automatic pricing without editable deployment settings', () => {
+    const sections = SYSTEM_SETTINGS_DOMAINS.flatMap(
+      (domain) => domain.sections
+    )
+    const pricing = sections.find((section) => section.id === 'auto-pricing')
+    expect(pricing?.fields.map((field) => field.key)).toEqual([
+      'auto_pricing.enabled',
+      'auto_pricing.remote_url',
+      'auto_pricing.hash_url',
+      'auto_pricing.fuzzy_match_enabled',
+      'auto_pricing.models_dev_url',
+      'auto_pricing.check_interval_minutes',
+    ])
+    expect(
+      sections
+        .flatMap((section) => section.fields)
+        .some((field) => field.key.startsWith('model_deployment.'))
+    ).toBe(false)
+  })
 })

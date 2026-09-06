@@ -9,7 +9,6 @@ import SystemSettingsField from '@/components/console/systemSettings/SystemSetti
 import WaffoPancakePanel from '@/components/console/systemSettings/WaffoPancakePanel.vue'
 import PaymentCompliancePanel from '@/components/console/systemSettings/PaymentCompliancePanel.vue'
 import SystemSettingsOperationsPanel from '@/components/console/systemSettings/SystemSettingsOperationsPanel.vue'
-import IoNetConnectionPanel from '@/components/console/systemSettings/IoNetConnectionPanel.vue'
 import {
   getSystemSettingsDomain,
   type SystemSettingsDomainId,
@@ -204,9 +203,6 @@ onMounted(() => load())
         />
         <SystemSettingsOperationsPanel
           v-else-if="activeSection.integration === 'operations-maintenance'"
-        />
-        <IoNetConnectionPanel
-          v-else-if="activeSection.integration === 'ionet'"
         />
         <SystemSettingsMaintenanceActions
           v-else-if="activeSection.integration === 'channel-affinity'"

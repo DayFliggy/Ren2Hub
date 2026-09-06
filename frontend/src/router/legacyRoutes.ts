@@ -24,12 +24,10 @@ const aliases: Record<string, string> = {
   '/usage-logs/tasks': '/usage-logs/task',
   '/midjourney': '/usage-logs/drawing',
   '/task': '/usage-logs/task',
-  '/deployment': '/models/deployments',
   '/admin/models': '/models/metadata',
   '/models/models': '/models/metadata',
   '/admin/vendors': '/models/vendors',
   '/admin/prefill-groups': '/models/prefill-groups',
-  '/admin/deployments': '/models/deployments',
   '/admin/system-info': '/system-info',
 }
 
@@ -42,7 +40,7 @@ const settingsTabs: Record<string, string> = {
   ratio: 'billing/pricing',
   ratelimit: 'security/rate-limit',
   models: 'models/routing',
-  'model-deployment': 'models/deployment',
+  'model-deployment': 'models/auto-pricing',
   performance: 'operations/performance',
   system: 'site/system-info',
   other: 'site/system-info',
@@ -58,7 +56,8 @@ const settingsSections: Record<string, string> = {
   'models/claude': 'models/vendor',
   'models/grok': 'models/vendor',
   'models/channel-affinity': 'models/affinity',
-  'models/model-deployment': 'models/deployment',
+  'models/model-deployment': 'models/auto-pricing',
+  'models/deployment': 'models/auto-pricing',
   'site/header-navigation': 'site/navigation',
   'site/sidebar-modules': 'site/navigation',
   'content/dashboard': 'content/console-content',
@@ -94,6 +93,7 @@ export function canonicalLegacyPath(
   }
   if (
     /^\/(playground|chat|chat2link|chat-presets)(\/|$)/.test(path) ||
+    /^\/(models\/deployments|deployment|admin\/deployments)(\/|$)/.test(path) ||
     /^\/system-settings\/content\/(chat|chats|chat-presets)(\/|$)/.test(path)
   )
     return '/404'

@@ -20,9 +20,12 @@ export const VISUAL_ROUTES: VisualRoute[] = [
     name: `status-${status}`,
     path: `/${status}`,
   })),
-  ...['metadata', 'vendors', 'prefill-groups', 'deployments'].map(
-    (section) => ({ name: section, path: `/models/${section}` })
-  ),
+  { name: 'metadata', path: '/models/metadata' },
+  { name: 'vendors', path: '/models/metadata?manage=vendors' },
+  {
+    name: 'prefill-groups',
+    path: '/models/metadata?manage=prefill-groups',
+  },
   { name: 'system-info', path: '/system-info' },
   ...[
     'site',

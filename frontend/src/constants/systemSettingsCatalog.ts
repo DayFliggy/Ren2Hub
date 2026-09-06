@@ -46,7 +46,6 @@ export interface SystemSettingsSection {
     | 'waffo-pancake'
     | 'payment-compliance'
     | 'operations-maintenance'
-    | 'ionet'
 }
 
 export interface SystemSettingsDomain {
@@ -638,12 +637,10 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         ],
       },
       {
-        id: 'deployment',
-        title: '模型部署与自动定价',
-        description: 'iONet 部署和自动定价同步参数。',
+        id: 'auto-pricing',
+        title: '自动定价',
+        description: '自动定价数据源、模型匹配和同步参数。',
         fields: [
-          toggle('model_deployment.ionet.enabled', '启用 iONet 部署'),
-          secret('model_deployment.ionet.api_key', 'iONet API Key'),
           toggle('auto_pricing.enabled', '启用自动定价'),
           url('auto_pricing.remote_url', '自动定价数据地址'),
           url('auto_pricing.hash_url', '自动定价校验地址'),
@@ -655,7 +652,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             60
           ),
         ],
-        integration: 'ionet',
       },
     ],
   },

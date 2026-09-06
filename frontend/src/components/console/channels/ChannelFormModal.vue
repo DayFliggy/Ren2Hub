@@ -4,14 +4,20 @@ import {
   ChevronDown,
   ChevronUp,
   KeyRound,
+  Plus,
+  RefreshCw,
   Settings,
   Shapes,
   X,
 } from 'lucide-vue-next'
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError } from '@/api/types'
+import { metadataApi, type PrefillGroup } from '@/api/adminManagement'
+import { appendModelNames } from '@/utils/modelEndpoints'
+import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
@@ -46,6 +52,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useToast()
+const app = useAppStore()
+const auth = useAuthStore()
 const saving = ref(false)
 const advancedOpen = ref(false)
 
@@ -151,17 +159,59 @@ const modelTags = computed(() =>
     .filter(Boolean)
 )
 const modelInput = ref('')
+const prefillGroups = ref<PrefillGroup[]>([])
+const prefillId = ref('')
+const prefillLoading = ref(false)
+const prefillError = ref('')
+let prefillRequest: AbortController | null = null
+const canUsePrefill = computed(
+  () => auth.isAdmin && app.isFeatureEnabled('admin')
+)
+
+async function loadPrefillGroups() {
+  prefillRequest?.abort()
+  if (!props.open || !canUsePrefill.value) return
+  const request = new AbortController()
+  prefillRequest = request
+  prefillLoading.value = true
+  prefillError.value = ''
+  try {
+    const rows = await metadataApi.groups(request.signal, 'model')
+    if (!request.signal.aborted)
+      prefillGroups.value = rows.filter((row) => row.type === 'model')
+  } catch (cause) {
+    if (!request.signal.aborted)
+      prefillError.value =
+        cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    if (prefillRequest === request) prefillLoading.value = false
+  }
+}
+function appendPrefillGroup() {
+  const group = prefillGroups.value.find(
+    (row) => row.id === Number(prefillId.value)
+  )
+  if (!group || group.type !== 'model') return
+  form.models = appendModelNames(modelTags.value, group.items).join(',')
+}
+watch(
+  [() => props.open, canUsePrefill],
+  () => {
+    prefillRequest?.abort()
+    prefillId.value = ''
+    prefillGroups.value = []
+    if (props.open && canUsePrefill.value) void loadPrefillGroups()
+  },
+  { immediate: true }
+)
+onBeforeUnmount(() => prefillRequest?.abort())
 
 function addModelTag(value: string) {
   const tags = value
     .split(',')
     .map((m) => m.trim())
     .filter(Boolean)
-  const existing = new Set(modelTags.value)
-  form.models = [
-    ...modelTags.value,
-    ...tags.filter((t) => !existing.has(t)),
-  ].join(',')
+  form.models = appendModelNames(modelTags.value, tags).join(',')
   modelInput.value = ''
 }
 
@@ -631,6 +681,67 @@ async function submit() {
                 @keydown="onModelInputKeydown"
                 @blur="modelInput.trim() && addModelTag(modelInput)"
               />
+            </div>
+
+            <div v-if="canUsePrefill" class="mt-3 grid gap-2">
+              <label
+                class="text-sm text-[var(--text-secondary)]"
+                for="channel-prefill-group"
+                >{{ t('channels.prefillGroups') }}</label
+              >
+              <div class="flex flex-wrap items-center gap-2">
+                <select
+                  id="channel-prefill-group"
+                  v-model="prefillId"
+                  :disabled="prefillLoading || saving"
+                  class="min-w-0 flex-1 channel-form-input"
+                >
+                  <option value="">
+                    {{
+                      prefillLoading
+                        ? t('common.loading')
+                        : t('channels.selectPrefillGroup')
+                    }}
+                  </option>
+                  <option
+                    v-for="group in prefillGroups"
+                    :key="group.id"
+                    :value="String(group.id)"
+                  >
+                    {{ group.name }}
+                  </option>
+                </select>
+                <ConsoleButton
+                  variant="secondary"
+                  :disabled="!prefillId || saving || prefillLoading"
+                  @click="appendPrefillGroup"
+                  ><Plus :size="16" />{{
+                    t('channels.appendPrefillGroup')
+                  }}</ConsoleButton
+                >
+                <ConsoleButton
+                  v-if="prefillError"
+                  variant="ghost"
+                  :loading="prefillLoading"
+                  @click="loadPrefillGroups"
+                  ><RefreshCw :size="16" />{{
+                    t('common.retry')
+                  }}</ConsoleButton
+                >
+              </div>
+              <p
+                v-if="prefillError"
+                role="alert"
+                class="text-sm text-[var(--status-danger)]"
+              >
+                {{ prefillError }}
+              </p>
+              <p
+                v-else-if="!prefillLoading && !prefillGroups.length"
+                class="text-sm text-[var(--text-secondary)]"
+              >
+                {{ t('channels.noPrefillGroups') }}
+              </p>
             </div>
 
             <!-- Quick actions -->

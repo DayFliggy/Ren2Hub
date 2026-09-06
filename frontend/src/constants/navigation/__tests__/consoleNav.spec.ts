@@ -21,9 +21,6 @@ describe('console navigation', () => {
       'order-management',
       'system-settings',
       'models-admin',
-      'vendors-admin',
-      'prefill-admin',
-      'deployments-admin',
       'system-info',
     ])
     expect(adminGroup?.items[0]).toEqual(

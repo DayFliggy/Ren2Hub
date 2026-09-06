@@ -177,9 +177,6 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
       },
       ...[
         ['models-admin', 'nav.modelMetadata'],
-        ['vendors-admin', 'nav.vendors'],
-        ['prefill-admin', 'nav.prefillGroups'],
-        ['deployments-admin', 'nav.deployments'],
         ['system-info', 'nav.systemInfo'],
       ].map(([route, labelKey]) => ({
         name: route!,

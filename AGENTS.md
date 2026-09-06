@@ -34,7 +34,7 @@ constant/      — Constants (API types, channel types, context keys)
 types/         — Type definitions (relay formats, file sources, errors)
 i18n/          — Backend internationalization (go-i18n, en/zh)
 oauth/         — OAuth provider implementations
-pkg/           — Internal packages (cachex, ionet)
+pkg/           — Internal packages (cachex, billingexpr)
 frontend/      — The only web application, served at `/`; Docker builds it and Go embeds `frontend/embed-dist`
   src/api/         — Real public HTTP client plus stateful mock Console/Lab transport
   src/canvas/      — Landing-page routing scene and animation engine

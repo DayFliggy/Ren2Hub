@@ -1,12 +1,11 @@
 import { api } from './client'
+import { parseModelEndpoints } from '@/utils/modelEndpoints'
 import {
   invalidResponse,
   isRecord,
   parsePage,
   parseStringArray,
-  requiredBoolean,
   requiredStrictInteger,
-  requiredStrictNumber,
   requiredString,
 } from './contracts'
 
@@ -24,6 +23,10 @@ export interface ModelMetadata {
   bound_channels: { name: string; type: number }[]
   enable_groups: string[]
   matched_models: string[]
+  matched_count: number
+  quota_types: number[]
+  created_time: number | null
+  updated_time: number | null
 }
 export interface ModelVendor {
   id: number
@@ -32,19 +35,32 @@ export interface ModelVendor {
   icon: string
   status: number
 }
-export interface PrefillGroup {
+interface PrefillBase {
   id: number
   name: string
-  type: 'model' | 'tag' | 'endpoint'
-  items: string[]
   description: string
 }
+export type PrefillGroup = PrefillBase &
+  (
+    | { type: 'model' | 'tag'; items: string[] }
+    | { type: 'endpoint'; items: string }
+  )
 export type ModelInput = Omit<
   ModelMetadata,
-  'id' | 'bound_channels' | 'enable_groups' | 'matched_models'
+  | 'id'
+  | 'bound_channels'
+  | 'enable_groups'
+  | 'matched_models'
+  | 'matched_count'
+  | 'quota_types'
+  | 'created_time'
+  | 'updated_time'
 > & { id?: number }
 export type VendorInput = Omit<ModelVendor, 'id'> & { id?: number }
-export type PrefillInput = Omit<PrefillGroup, 'id'> & { id?: number }
+export type PrefillInput = Omit<PrefillBase, 'id'> & { id?: number } & (
+    | { type: 'model' | 'tag'; items: string[] }
+    | { type: 'endpoint'; items: string }
+  )
 
 function record(value: unknown, endpoint: string): Record<string, unknown> {
   if (!isRecord(value)) invalidResponse(endpoint)
@@ -99,6 +115,23 @@ export function parseModelMetadata(
     }),
     enable_groups: parseStringArray(row.enable_groups ?? [], endpoint),
     matched_models: parseStringArray(row.matched_models ?? [], endpoint),
+    matched_count:
+      row.matched_count == null
+        ? 0
+        : requiredStrictInteger(row.matched_count, endpoint),
+    quota_types: array(row.quota_types ?? [], endpoint, (item) => {
+      const quota = requiredStrictInteger(item, endpoint)
+      if (quota !== 0 && quota !== 1) invalidResponse(endpoint)
+      return quota
+    }),
+    created_time:
+      row.created_time == null
+        ? null
+        : requiredStrictInteger(row.created_time, endpoint),
+    updated_time:
+      row.updated_time == null
+        ? null
+        : requiredStrictInteger(row.updated_time, endpoint),
   }
 }
 export function parseModelVendor(
@@ -129,13 +162,23 @@ export function parsePrefillGroup(
       invalidResponse(endpoint)
     }
   }
-  return {
+  const base = {
     id: requiredStrictInteger(row.id, endpoint),
     name: requiredString(row.name, endpoint, false),
-    type: row.type,
-    items: parseStringArray(items, endpoint),
     description: optionalText(row.description, endpoint),
   }
+  if (row.type === 'endpoint') {
+    try {
+      return {
+        ...base,
+        type: 'endpoint',
+        items: JSON.stringify(parseModelEndpoints(items), null, 2),
+      }
+    } catch {
+      invalidResponse(endpoint)
+    }
+  }
+  return { ...base, type: row.type, items: parseStringArray(items, endpoint) }
 }
 
 export interface SyncPreview {
@@ -188,10 +231,19 @@ export interface SyncResult {
 export const metadataApi = {
   async models(params: Record<string, unknown>, signal?: AbortSignal) {
     const endpoint = '/api/models/search'
-    return parsePage(
-      await api.get(endpoint, params, { signal }),
-      endpoint,
-      parseModelMetadata
+    const data = record(await api.get(endpoint, params, { signal }), endpoint)
+    const vendor_counts: Record<string, number> = {}
+    for (const [id, count] of Object.entries(
+      record(data.vendor_counts ?? {}, endpoint)
+    ))
+      vendor_counts[id] = requiredStrictInteger(count, endpoint)
+    return { ...parsePage(data, endpoint, parseModelMetadata), vendor_counts }
+  },
+  async model(id: number, signal?: AbortSignal) {
+    const endpoint = `/api/models/${id}`
+    return parseModelMetadata(
+      await api.get(endpoint, undefined, { signal }),
+      endpoint
     )
   },
   async vendors(params: Record<string, unknown> = {}, signal?: AbortSignal) {
@@ -211,10 +263,10 @@ export const metadataApi = {
       if (!page.items.length) invalidResponse('/api/vendors/search')
     }
   },
-  async groups(signal?: AbortSignal) {
+  async groups(signal?: AbortSignal, type?: PrefillGroup['type']) {
     const endpoint = '/api/prefill_group/'
     return array(
-      await api.get(endpoint, undefined, { signal }),
+      (await api.get(endpoint, type ? { type } : undefined, { signal })) ?? [],
       endpoint,
       parsePrefillGroup
     )
@@ -225,8 +277,13 @@ export const metadataApi = {
       '/api/models/missing'
     )
   },
-  saveModel: (input: ModelInput) =>
-    input.id ? api.put('/api/models/', input) : api.post('/api/models/', input),
+  async saveModel(input: ModelInput): Promise<ModelMetadata> {
+    return parseModelMetadata(
+      input.id
+        ? await api.put('/api/models/', input)
+        : await api.post('/api/models/', input)
+    )
+  },
   saveVendor: (input: VendorInput) =>
     input.id
       ? api.put('/api/vendors/', input)
@@ -266,438 +323,4 @@ export const metadataApi = {
       skipped_models: parseStringArray(data.skipped_models ?? [], endpoint),
     }
   },
-}
-
-export interface Deployment {
-  id: string
-  deployment_name: string
-  status: string
-  hardware_name: string
-  hardware_quantity: number
-  compute_minutes_remaining: number
-  completed_percent: number
-}
-export interface DeploymentConfig {
-  image_url: string
-  traffic_port: number
-  entrypoint: string[]
-  env_variables: Record<string, string>
-}
-export interface DeploymentDetail extends Deployment {
-  amount_paid: number
-  brand_name: string
-  total_containers: number
-  total_gpus: number
-  locations: { id: number; name: string }[]
-  container_config: DeploymentConfig
-}
-export interface DeploymentContainer {
-  container_id: string
-  device_id: string
-  status: string
-  hardware: string
-  uptime_percent: number
-  gpus_per_container: number
-  public_url: string
-  events: { time: number; message: string }[]
-}
-export interface Hardware {
-  id: number
-  name: string
-  max_gpus: number
-  available: boolean
-  hourly_rate: number
-}
-export interface DeploymentLocation {
-  id: number
-  name: string
-}
-export interface Replica {
-  location_id: number
-  location_name: string
-  available_count: number
-}
-export interface DeploymentPrice {
-  estimated_cost: number
-  currency: string
-  estimation_valid: boolean
-  hourly_rate: number
-}
-export interface DeploymentQuoteInput {
-  hardware_id: number
-  location_ids: number[]
-  gpus_per_container: number
-  duration_hours: number
-  replica_count: number
-  currency: string
-}
-export interface DeploymentCreateInput extends Omit<
-  DeploymentQuoteInput,
-  'replica_count' | 'currency'
-> {
-  resource_private_name: string
-  container_config: Omit<DeploymentConfig, 'image_url'> & {
-    replica_count: number
-    args: string[]
-    secret_env_variables?: Record<string, string>
-  }
-  registry_config: {
-    image_url: string
-    registry_username?: string
-    registry_secret?: string
-  }
-}
-export function parseDeployment(
-  value: unknown,
-  endpoint = '/api/deployments/'
-): Deployment {
-  const row = record(value, endpoint)
-  return {
-    id: requiredString(row.id, endpoint, false),
-    deployment_name: requiredString(row.deployment_name, endpoint),
-    status: requiredString(row.status, endpoint, false),
-    hardware_name: requiredString(row.hardware_name, endpoint),
-    hardware_quantity: requiredStrictInteger(
-      row.hardware_quantity ?? row.total_gpus,
-      endpoint
-    ),
-    compute_minutes_remaining: requiredStrictInteger(
-      row.compute_minutes_remaining,
-      endpoint
-    ),
-    completed_percent: requiredStrictNumber(row.completed_percent, endpoint),
-  }
-}
-export function parseDeploymentContainer(
-  value: unknown,
-  endpoint = '/api/deployments/:id/containers'
-): DeploymentContainer {
-  const row = record(value, endpoint)
-  return {
-    container_id: requiredString(row.container_id, endpoint, false),
-    device_id: requiredString(row.device_id, endpoint),
-    status: requiredString(row.status, endpoint),
-    hardware: requiredString(row.hardware, endpoint),
-    uptime_percent: requiredStrictNumber(row.uptime_percent, endpoint),
-    gpus_per_container: requiredStrictInteger(row.gpus_per_container, endpoint),
-    public_url: requiredString(row.public_url, endpoint),
-    events: array(row.events ?? [], endpoint, (item) => {
-      const event = record(item, endpoint)
-      return {
-        time: requiredStrictNumber(event.time, endpoint),
-        message: requiredString(event.message, endpoint),
-      }
-    }),
-  }
-}
-export function parseDeploymentPrice(
-  value: unknown,
-  endpoint = '/api/deployments/price-estimation'
-): DeploymentPrice {
-  const data = record(value, endpoint)
-  const breakdown = record(data.price_breakdown, endpoint)
-  const price = {
-    estimated_cost: requiredStrictNumber(data.estimated_cost, endpoint),
-    currency: requiredString(data.currency, endpoint, false),
-    estimation_valid: requiredBoolean(data.estimation_valid, endpoint),
-    hourly_rate: requiredStrictNumber(breakdown.hourly_rate, endpoint),
-  }
-  if (price.estimated_cost < 0 || price.hourly_rate < 0)
-    invalidResponse(endpoint)
-  return price
-}
-
-const deploymentPath = (id: string) =>
-  `/api/deployments/${encodeURIComponent(id)}`
-export const deploymentsApi = {
-  async settings(signal?: AbortSignal) {
-    const endpoint = '/api/deployments/settings'
-    const data = record(
-      await api.get(endpoint, undefined, { signal }),
-      endpoint
-    )
-    return {
-      enabled: requiredBoolean(data.enabled, endpoint),
-      configured: requiredBoolean(data.configured, endpoint),
-      can_connect: requiredBoolean(data.can_connect, endpoint),
-    }
-  },
-  async list(params: Record<string, unknown>, signal?: AbortSignal) {
-    const endpoint = '/api/deployments/search'
-    return parsePage(
-      await api.get(endpoint, params, { signal }),
-      endpoint,
-      parseDeployment
-    )
-  },
-  async detail(id: string, signal?: AbortSignal): Promise<DeploymentDetail> {
-    const endpoint = deploymentPath(id)
-    const row = record(await api.get(endpoint, undefined, { signal }), endpoint)
-    const config = record(row.container_config, endpoint)
-    const env = record(config.env_variables ?? {}, endpoint)
-    const variables: Record<string, string> = {}
-    for (const [key, value] of Object.entries(env))
-      variables[key] = requiredString(value, endpoint)
-    return {
-      ...parseDeployment(row, endpoint),
-      amount_paid: requiredStrictNumber(row.amount_paid, endpoint),
-      brand_name: requiredString(row.brand_name, endpoint),
-      total_containers: requiredStrictInteger(row.total_containers, endpoint),
-      total_gpus: requiredStrictInteger(row.total_gpus, endpoint),
-      locations: array(row.locations ?? [], endpoint, (item) => {
-        const location = record(item, endpoint)
-        return {
-          id: requiredStrictInteger(location.id, endpoint),
-          name: requiredString(location.name, endpoint),
-        }
-      }),
-      container_config: {
-        image_url: requiredString(config.image_url, endpoint),
-        traffic_port: requiredStrictInteger(config.traffic_port, endpoint),
-        entrypoint: parseStringArray(config.entrypoint ?? [], endpoint),
-        env_variables: variables,
-      },
-    }
-  },
-  async hardware(signal?: AbortSignal) {
-    const endpoint = '/api/deployments/hardware-types'
-    const data = record(
-      await api.get(endpoint, undefined, { signal }),
-      endpoint
-    )
-    return array(data.hardware_types, endpoint, (item) => {
-      const hardware = record(item, endpoint)
-      return {
-        id: requiredStrictInteger(hardware.id, endpoint),
-        name: requiredString(hardware.name, endpoint),
-        max_gpus: requiredStrictInteger(hardware.max_gpus, endpoint),
-        available: requiredBoolean(hardware.available, endpoint),
-        hourly_rate: requiredStrictNumber(hardware.hourly_rate, endpoint),
-      }
-    })
-  },
-  async locations(signal?: AbortSignal) {
-    const endpoint = '/api/deployments/locations'
-    const data = record(
-      await api.get(endpoint, undefined, { signal }),
-      endpoint
-    )
-    return array(data.locations, endpoint, (item) => {
-      const location = record(item, endpoint)
-      return {
-        id: requiredStrictInteger(location.id, endpoint),
-        name: requiredString(location.name, endpoint),
-      }
-    })
-  },
-  async replicas(
-    hardware_id: number,
-    gpu_count: number,
-    signal?: AbortSignal
-  ): Promise<Replica[]> {
-    const endpoint = '/api/deployments/available-replicas'
-    const data = record(
-      await api.get(endpoint, { hardware_id, gpu_count }, { signal }),
-      endpoint
-    )
-    return array(data.replicas ?? [], endpoint, (item) => {
-      const replica = record(item, endpoint)
-      return {
-        location_id: requiredStrictInteger(replica.location_id, endpoint),
-        location_name: requiredString(replica.location_name, endpoint),
-        available_count: requiredStrictInteger(
-          replica.available_count,
-          endpoint
-        ),
-      }
-    })
-  },
-  async quote(input: DeploymentQuoteInput, signal?: AbortSignal) {
-    return parseDeploymentPrice(
-      await api.post(
-        '/api/deployments/price-estimation',
-        {
-          ...input,
-          duration_type: 'hour',
-          duration_qty: input.duration_hours,
-          hardware_qty: input.gpus_per_container,
-        },
-        { signal }
-      )
-    )
-  },
-  async checkName(name: string, signal?: AbortSignal) {
-    const endpoint = '/api/deployments/check-name'
-    const data = record(await api.get(endpoint, { name }, { signal }), endpoint)
-    return requiredBoolean(data.available, endpoint)
-  },
-  async containers(id: string, signal?: AbortSignal) {
-    const endpoint = `${deploymentPath(id)}/containers`
-    const data = record(
-      await api.get(endpoint, undefined, { signal }),
-      endpoint
-    )
-    return array(data.containers, endpoint, parseDeploymentContainer)
-  },
-  async container(id: string, containerId: string, signal?: AbortSignal) {
-    const endpoint = `${deploymentPath(id)}/containers/${encodeURIComponent(containerId)}`
-    return parseDeploymentContainer(
-      await api.get(endpoint, undefined, { signal }),
-      endpoint
-    )
-  },
-  async logs(
-    id: string,
-    params: Record<string, unknown>,
-    signal?: AbortSignal
-  ) {
-    const endpoint = `${deploymentPath(id)}/logs`
-    return requiredString(await api.get(endpoint, params, { signal }), endpoint)
-  },
-  create: (input: DeploymentCreateInput) =>
-    api.post('/api/deployments/', input),
-  update: (
-    id: string,
-    input: Partial<DeploymentConfig> & {
-      args?: string[]
-      registry_username?: string
-      registry_secret?: string
-      secret_env_variables?: Record<string, string>
-    }
-  ) => api.put(deploymentPath(id), input),
-  rename: (id: string, name: string) =>
-    api.put(`${deploymentPath(id)}/name`, { name }),
-  extend: (id: string, duration_hours: number) =>
-    api.post(`${deploymentPath(id)}/extend`, { duration_hours }),
-  delete: (id: string) => api.delete(deploymentPath(id)),
-}
-
-export interface SystemInstance {
-  node_name: string
-  status: 'online' | 'stale'
-  last_seen_at: number
-  started_at: number
-  version: string
-  hostname: string
-  master: boolean
-  cpu: number | null
-  memory: number | null
-  storage: number | null
-}
-export interface SystemTask {
-  task_id: string
-  type: string
-  status: string
-  created_at: number
-  updated_at: number
-  error: string
-  locked_by: string
-  progress: number | null
-  processed: number | null
-  total: number | null
-  deleted_count: number | null
-}
-export function parseSystemTask(
-  value: unknown,
-  endpoint = '/api/system-task/list'
-): SystemTask {
-  const row = record(value, endpoint)
-  const state = row.state == null ? {} : record(row.state, endpoint)
-  const result = row.result == null ? {} : record(row.result, endpoint)
-  const status = requiredString(row.status, endpoint, false)
-  if (!['pending', 'running', 'succeeded', 'failed'].includes(status))
-    invalidResponse(endpoint)
-  return {
-    task_id: requiredString(row.task_id, endpoint, false),
-    type: requiredString(row.type, endpoint, false),
-    status,
-    created_at: requiredStrictInteger(row.created_at, endpoint),
-    updated_at: requiredStrictInteger(row.updated_at, endpoint),
-    error: optionalText(row.error, endpoint),
-    locked_by: optionalText(row.locked_by, endpoint),
-    progress:
-      state.progress == null
-        ? null
-        : requiredStrictNumber(state.progress, endpoint),
-    processed:
-      state.processed == null
-        ? null
-        : requiredStrictInteger(state.processed, endpoint),
-    total:
-      state.total == null ? null : requiredStrictInteger(state.total, endpoint),
-    deleted_count:
-      result.deleted_count == null
-        ? null
-        : requiredStrictInteger(result.deleted_count, endpoint),
-  }
-}
-export const systemManagementApi = {
-  async instances(signal?: AbortSignal): Promise<SystemInstance[]> {
-    const endpoint = '/api/system-info/instances'
-    return array(
-      await api.get(endpoint, undefined, { signal }),
-      endpoint,
-      (item) => {
-        const row = record(item, endpoint)
-        if (row.status !== 'online' && row.status !== 'stale')
-          invalidResponse(endpoint)
-        const info = record(row.info ?? {}, endpoint)
-        const runtime = record(info.runtime ?? {}, endpoint)
-        const host = record(info.host ?? {}, endpoint)
-        const role = record(info.role ?? {}, endpoint)
-        const resources = record(info.resources ?? {}, endpoint)
-        const cpu = record(resources.cpu ?? {}, endpoint)
-        const memory = record(resources.memory ?? {}, endpoint)
-        const storage = record(resources.storage ?? {}, endpoint)
-        return {
-          node_name: requiredString(row.node_name, endpoint, false),
-          status: row.status,
-          last_seen_at: requiredStrictInteger(row.last_seen_at, endpoint),
-          started_at: requiredStrictInteger(row.started_at, endpoint),
-          version: optionalText(runtime.version, endpoint),
-          hostname: optionalText(host.hostname, endpoint),
-          master:
-            role.is_master === undefined
-              ? false
-              : requiredBoolean(role.is_master, endpoint),
-          cpu:
-            cpu.usage_percent == null
-              ? null
-              : requiredStrictNumber(cpu.usage_percent, endpoint),
-          memory:
-            memory.usage_percent == null
-              ? null
-              : requiredStrictNumber(memory.usage_percent, endpoint),
-          storage:
-            storage.used_percent == null
-              ? null
-              : requiredStrictNumber(storage.used_percent, endpoint),
-        }
-      }
-    )
-  },
-  async tasks(limit: number, signal?: AbortSignal) {
-    return array(
-      (await api.get('/api/system-task/list', { limit }, { signal })) ?? [],
-      '/api/system-task/list',
-      parseSystemTask
-    )
-  },
-  async task(taskId: string, signal?: AbortSignal) {
-    return parseSystemTask(
-      await api.get(
-        `/api/system-task/${encodeURIComponent(taskId)}`,
-        undefined,
-        { signal }
-      )
-    )
-  },
-  deleteStale: (name?: string) =>
-    api.delete(
-      name
-        ? `/api/system-info/instances/${encodeURIComponent(name)}`
-        : '/api/system-info/stale-instances'
-    ),
-  cleanup: (target: number) =>
-    api.post(`/api/system-task/log-cleanup?target_timestamp=${target}`),
 }

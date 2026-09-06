@@ -5,28 +5,25 @@ export const adminRoutes: RouteRecordRaw[] = [
     path: '/models/metadata',
     name: 'models-admin',
     component: () => import('@/views/admin/ModelManagementView.vue'),
-    props: { section: 'models' },
     meta: { requiresAdmin: true, feature: 'admin', protected: true },
   },
   {
     path: '/models/vendors',
     name: 'vendors-admin',
-    component: () => import('@/views/admin/ModelManagementView.vue'),
-    props: { section: 'vendors' },
-    meta: { requiresAdmin: true, feature: 'admin', protected: true },
+    redirect: (to) => ({
+      path: '/models/metadata',
+      query: { ...to.query, manage: 'vendors' },
+      hash: to.hash,
+    }),
   },
   {
     path: '/models/prefill-groups',
     name: 'prefill-admin',
-    component: () => import('@/views/admin/ModelManagementView.vue'),
-    props: { section: 'groups' },
-    meta: { requiresAdmin: true, feature: 'admin', protected: true },
-  },
-  {
-    path: '/models/deployments',
-    name: 'deployments-admin',
-    component: () => import('@/views/admin/DeploymentsView.vue'),
-    meta: { requiresAdmin: true, feature: 'admin', protected: true },
+    redirect: (to) => ({
+      path: '/models/metadata',
+      query: { ...to.query, manage: 'prefill-groups' },
+      hash: to.hash,
+    }),
   },
   {
     path: '/system-info',
