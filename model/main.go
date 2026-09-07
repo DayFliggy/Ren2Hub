@@ -450,7 +450,7 @@ func migrateRoutingModels(db *gorm.DB) error {
 	if db == nil {
 		return fmt.Errorf("routing migration database is unavailable")
 	}
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&UserRouteProfile{},
 		&UserRouteGroup{},
 		&UserRouteEntry{},
@@ -459,9 +459,13 @@ func migrateRoutingModels(db *gorm.DB) error {
 		&ChannelCapabilitySnapshot{},
 		&UserChannelEntitlement{},
 		&ChannelHealth{},
-		&ChannelRoutePolicy{},
-		&RouteShadowHourlyObservation{},
-	)
+	); err != nil {
+		return err
+	}
+	return db.Model(&UserRouteProfile{}).Where("mode = ?", "legacy").Updates(map[string]any{
+		"mode": RouteModeAutoLab, "active_group_id": nil,
+		"version": gorm.Expr("version + ?", 1), "updated_at": time.Now().Unix(),
+	}).Error
 }
 
 func migrateLOGDB() error {

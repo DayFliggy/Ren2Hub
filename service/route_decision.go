@@ -5,9 +5,9 @@ import "time"
 type RouteSource string
 
 const (
-	RouteSourceLegacy  RouteSource = "legacy"
-	RouteSourceManual  RouteSource = "manual"
-	RouteSourceAutoLab RouteSource = "auto_lab"
+	RouteSourceUnavailable RouteSource = "unavailable"
+	RouteSourceManual      RouteSource = "manual"
+	RouteSourceAutoLab     RouteSource = "auto_lab"
 )
 
 type RouteSourceInput struct {
@@ -17,11 +17,14 @@ type RouteSourceInput struct {
 }
 
 // ResolveRouteSource is the only route-mode precedence rule. It is pure so
-// middleware, preview, and the future live selector cannot disagree about
+// middleware, preview, and the request selector cannot disagree about
 // which source owns a request.
 func ResolveRouteSource(input RouteSourceInput) RouteSource {
-	if !input.CapabilityEnabled || !input.HasProfile {
-		return RouteSourceLegacy
+	if !input.CapabilityEnabled {
+		return RouteSourceUnavailable
+	}
+	if !input.HasProfile {
+		return RouteSourceAutoLab
 	}
 	switch input.ProfileMode {
 	case "manual":
@@ -29,12 +32,13 @@ func ResolveRouteSource(input RouteSourceInput) RouteSource {
 	case "auto_lab":
 		return RouteSourceAutoLab
 	default:
-		return RouteSourceLegacy
+		return RouteSourceUnavailable
 	}
 }
 
 type RouteDecisionCandidate struct {
 	ChannelID       int                  `json:"channel_id"`
+	RequestModel    string               `json:"request_model,omitempty"`
 	FilterReason    string               `json:"filter_reason,omitempty"`
 	Priority        int64                `json:"priority"`
 	Position        int                  `json:"position"`

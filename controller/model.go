@@ -2,7 +2,6 @@ package controller
 
 import (
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -210,42 +209,6 @@ func projectModelEndpointTypesForToken(modelName string, tokenModelLimit map[str
 	return projected, true
 }
 
-type modelListGroups struct {
-	userGroup   string
-	tokenGroup  string
-	ownerGroups []string
-}
-
-func getModelListGroups(c *gin.Context) (modelListGroups, error) {
-	tokenGroup := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
-	userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
-	if userGroup == "" && (tokenGroup == "" || tokenGroup == "auto") {
-		var err error
-		userGroup, err = model.GetUserGroup(c.GetInt("id"), false)
-		if err != nil {
-			return modelListGroups{}, err
-		}
-	}
-
-	if tokenGroup == "auto" {
-		return modelListGroups{
-			userGroup:   userGroup,
-			tokenGroup:  tokenGroup,
-			ownerGroups: service.GetRequestAutoGroups(c, userGroup),
-		}, nil
-	}
-
-	group := userGroup
-	if tokenGroup != "" {
-		group = tokenGroup
-	}
-	return modelListGroups{
-		userGroup:   userGroup,
-		tokenGroup:  tokenGroup,
-		ownerGroups: []string{group},
-	}, nil
-}
-
 func ListModels(c *gin.Context, modelType int) {
 	acceptUnsetRatioModel := operation_setting.SelfUseModeEnabled
 	if !acceptUnsetRatioModel {
@@ -259,15 +222,11 @@ func ListModels(c *gin.Context, modelType int) {
 	}
 
 	userModelNames := make([]string, 0)
-	groups, err := getModelListGroups(c)
+	models, err := service.AvailableRouteModels(c.Request.Context(), c.GetInt("id"), common.GetContextKeyInt(c, constant.ContextKeyTokenId))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "get user group failed",
-		})
+		common.ApiError(c, err)
 		return
 	}
-	ownerGroups := groups.ownerGroups
 	modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
 	var tokenModelLimit map[string]bool
 	if modelLimitEnable {
@@ -279,7 +238,6 @@ func ListModels(c *gin.Context, modelType int) {
 			tokenModelLimit = map[string]bool{}
 		}
 	}
-	models := service.GetGroupsEnabledModels(ownerGroups)
 	endpointTypesByModel := make(map[string][]constant.EndpointType, len(models))
 	for _, modelName := range models {
 		endpointTypes := model.GetModelSupportEndpointTypes(modelName)
@@ -297,10 +255,7 @@ func ListModels(c *gin.Context, modelType int) {
 		endpointTypesByModel[modelName] = endpointTypes
 	}
 
-	ownerByModel := map[string]string{}
-	if len(ownerGroups) > 0 {
-		ownerByModel = getPreferredModelOwners(userModelNames, ownerGroups)
-	}
+	ownerByModel := getPreferredModelOwners(userModelNames, nil)
 	userOpenAiModels := make([]dto.OpenAIModels, 0, len(userModelNames))
 	for _, modelName := range userModelNames {
 		userOpenAiModels = append(userOpenAiModels, buildOpenAIModelWithEndpointTypes(modelName, ownerByModel, endpointTypesByModel[modelName]))

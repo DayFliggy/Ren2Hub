@@ -73,8 +73,8 @@ func TokenRouteLeaseKey(tokenID int) string {
 	return fmt.Sprintf("%s:token:%d", routeLeasePrefix, tokenID)
 }
 
-func ChannelModelRouteLeaseKey(channelID int, canonicalModel string) string {
-	return fmt.Sprintf("%s:channel:%d:model:%s", routeLeasePrefix, channelID, canonicalModel)
+func ChannelRouteLeaseKey(channelID int) string {
+	return fmt.Sprintf("%s:channel:%d", routeLeasePrefix, channelID)
 }
 
 func AcquireRouteLease(ctx context.Context, client *redis.Client, requestID, leaseID string, ttl time.Duration, resources []RouteLeaseResource) (RouteLease, error) {
@@ -166,15 +166,14 @@ type RouteLeaseRuntimeState struct {
 	ChannelEnabled    bool
 	HealthEpoch       int64
 	CapabilityVersion int64
-	PolicyEnabled     bool
-	PolicyVersion     int64
+	Capacity          int
+	ChannelRatio      float64
 }
 
 func RecheckRouteLeaseRuntime(expected, current RouteLeaseRuntimeState) error {
 	if !expected.ChannelEnabled || !current.ChannelEnabled ||
-		!expected.PolicyEnabled || !current.PolicyEnabled ||
-		expected.PolicyVersion <= 0 || current.PolicyVersion <= 0 ||
-		expected.PolicyVersion != current.PolicyVersion ||
+		expected.Capacity <= 0 || expected.Capacity != current.Capacity ||
+		expected.ChannelRatio <= 0 || expected.ChannelRatio != current.ChannelRatio ||
 		expected.HealthEpoch != current.HealthEpoch ||
 		expected.CapabilityVersion != current.CapabilityVersion {
 		return ErrRouteLeaseRuntime

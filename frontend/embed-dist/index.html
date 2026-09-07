@@ -2,11 +2,55 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="ren2hub-next-build" content="placeholder" />
+    <link rel="icon" type="image/png" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ren2Hub</title>
+    <meta id="theme-color" name="theme-color" content="#F6F3EB" />
+    <meta
+      name="description"
+      content="One key for major AI models, with unified routing, billing, and observability."
+    />
+    <script>
+      ;(() => {
+        const root = document.documentElement
+        let preference = 'auto'
+        try {
+          const current = localStorage.getItem('ren2hub_theme_mode')
+          const stored =
+            current === null
+              ? localStorage.getItem('renren_theme_mode')
+              : current
+          if (stored === 'light' || stored === 'dark' || stored === 'auto')
+            preference = stored
+        } catch {}
+
+        const systemDark = window.matchMedia(
+          '(prefers-color-scheme: dark)'
+        ).matches
+        const dark =
+          preference === 'dark' || (preference === 'auto' && systemDark)
+        root.classList.toggle('dark', dark)
+        root.classList.toggle('light', !dark)
+        root.dataset.theme = dark ? 'dark' : 'light'
+        root.style.colorScheme = dark ? 'dark' : 'light'
+        document
+          .querySelector('#theme-color')
+          ?.setAttribute('content', dark ? '#262A34' : '#F6F3EB')
+      })()
+    </script>
+    <title>Ren2Hub | One Key, All Models</title>
+    <script type="module" crossorigin src="/assets/index-BQh26NLX.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-DK3Fl9T5.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-i18n-gOSevShE.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-vue-tKUiO-i_.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-misc-Dyb3kbSl.js">
+    <link rel="modulepreload" crossorigin href="/assets/client-DWLFbGRo.js">
+    <link rel="modulepreload" crossorigin href="/assets/auth-CW3bn151.js">
+    <link rel="modulepreload" crossorigin href="/assets/public-ixOjUIJY.js">
+    <link rel="modulepreload" crossorigin href="/assets/branding-D4AO7YL5.js">
+    <link rel="modulepreload" crossorigin href="/assets/safeUrl-D7EGmCbx.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-DYP3Etdi.css">
   </head>
   <body>
-    <p>The next frontend has not been built.</p>
+    <div id="app"></div>
   </body>
 </html>

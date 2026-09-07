@@ -1332,7 +1332,6 @@ func TestApplyParamOverrideConditionByUserAndGPTModel(t *testing.T) {
 func TestApplyParamOverrideConditionByGroupContext(t *testing.T) {
 	info := &RelayInfo{
 		UserGroup:  "vip",
-		TokenGroup: "premium",
 		UsingGroup: "priority-route",
 	}
 	ctx := BuildParamOverrideContext(info)
@@ -1348,11 +1347,6 @@ func TestApplyParamOverrideConditionByGroupContext(t *testing.T) {
 						"path":  "user_group",
 						"mode":  "full",
 						"value": "vip",
-					},
-					map[string]interface{}{
-						"path":  "token_group",
-						"mode":  "full",
-						"value": "premium",
 					},
 					map[string]interface{}{
 						"path":  "using_group",

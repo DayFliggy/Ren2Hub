@@ -1,15 +1,12 @@
 package service
 
 import (
-	"net/http/httptest"
 	"testing"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -76,143 +73,4 @@ func TestNativeResponsesCapability(t *testing.T) {
 		}},
 	}})
 	require.False(t, ChannelSupportsNativeResponses(channel, "gpt-5"))
-}
-
-func TestNativeResponsesChannelSelectionFiltersConvertedChannels(t *testing.T) {
-	db := setupChannelSelectAutoGroupsTest(t)
-	const modelName = "remote-compaction-model"
-	createChannelSelectAutoGroupsChannel(t, db, 2205, "default", modelName)
-	createChannelSelectAutoGroupsChannel(t, db, 2206, "default", modelName)
-	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 2206).Update("type", constant.ChannelTypeGemini).Error)
-	model.InitChannelCache()
-
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	retry := 0
-	param := &RetryParam{
-		Ctx:         ctx,
-		TokenGroup:  "default",
-		ModelName:   modelName,
-		RequestPath: "/v1/responses",
-		Retry:       &retry,
-	}
-	selected, _, err := CacheGetRandomSatisfiedChannelWithFilter(param, func(channel *model.Channel, _ map[string]bool) bool {
-		return ChannelSupportsNativeResponses(channel, modelName)
-	})
-	require.NoError(t, err)
-	require.NotNil(t, selected)
-	require.Equal(t, 2205, selected.Id)
-
-	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 2205).Update("type", constant.ChannelTypeGemini).Error)
-	model.InitChannelCache()
-	selected, _, err = CacheGetRandomSatisfiedChannelWithFilter(param, func(channel *model.Channel, _ map[string]bool) bool {
-		return ChannelSupportsNativeResponses(channel, modelName)
-	})
-	require.NoError(t, err)
-	require.Nil(t, selected)
-}
-
-func TestCompactChannelSelectionExcludesUsedSingleKeyChannel(t *testing.T) {
-	db := setupChannelSelectAutoGroupsTest(t)
-	const (
-		channelID = 2201
-		modelName = "compact-single-key-model"
-	)
-	createChannelSelectAutoGroupsChannel(t, db, channelID, "default", modelName)
-	model.InitChannelCache()
-
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	retry := 0
-	param := &RetryParam{
-		Ctx:         ctx,
-		TokenGroup:  "default",
-		RequestPath: "/v1/responses/compact",
-		Retry:       &retry,
-	}
-
-	selected, _, err := CacheGetRandomSatisfiedCompactChannel(param, modelName, relaycommon.CompactAttemptBase)
-	require.NoError(t, err)
-	require.NotNil(t, selected)
-	require.Equal(t, channelID, selected.Id)
-
-	SetCompactAttemptedKeyIndexes(ctx, CompactAttemptedKeyIndexes{
-		channelID: {0: {}},
-	})
-	selected, _, err = CacheGetRandomSatisfiedCompactChannel(param, modelName, relaycommon.CompactAttemptBase)
-	require.NoError(t, err)
-	require.Nil(t, selected)
-}
-
-func TestCompactChannelSelectionAllowsEachMultiKeyOncePerStage(t *testing.T) {
-	db := setupChannelSelectAutoGroupsTest(t)
-	const (
-		channelID = 2202
-		modelName = "compact-multi-key-model"
-	)
-	createChannelSelectAutoGroupsChannel(t, db, channelID, "default", modelName)
-	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", channelID).Updates(map[string]any{
-		"key": "key-one\nkey-disabled\nkey-three",
-		"channel_info": model.ChannelInfo{
-			IsMultiKey: true,
-			MultiKeyStatusList: map[int]int{
-				1: common.ChannelStatusAutoDisabled,
-			},
-		},
-	}).Error)
-	model.InitChannelCache()
-
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	retry := 0
-	param := &RetryParam{
-		Ctx:         ctx,
-		TokenGroup:  "default",
-		RequestPath: "/v1/responses/compact",
-		Retry:       &retry,
-	}
-
-	SetCompactAttemptedKeyIndexes(ctx, CompactAttemptedKeyIndexes{
-		channelID: {0: {}},
-	})
-	selected, _, err := CacheGetRandomSatisfiedCompactChannel(param, modelName, relaycommon.CompactAttemptBase)
-	require.NoError(t, err)
-	require.NotNil(t, selected)
-	require.Equal(t, channelID, selected.Id)
-
-	SetCompactAttemptedKeyIndexes(ctx, CompactAttemptedKeyIndexes{
-		channelID: {0: {}, 2: {}},
-	})
-	selected, _, err = CacheGetRandomSatisfiedCompactChannel(param, modelName, relaycommon.CompactAttemptBase)
-	require.NoError(t, err)
-	require.Nil(t, selected)
-}
-
-func TestCompactAutoGroupCanRestartFromFirstGroupForBaseStage(t *testing.T) {
-	db := setupChannelSelectAutoGroupsTest(t)
-	const modelName = "gpt-compact-auto-stage-model"
-	createChannelSelectAutoGroupsChannel(t, db, 2203, "vip", modelName)
-	createChannelSelectAutoGroupsChannel(t, db, 2204, "default", modelName)
-	model.InitChannelCache()
-
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
-	common.SetContextKey(ctx, constant.ContextKeyTokenAutoGroups, []string{"vip", "default"})
-	common.SetContextKey(ctx, constant.ContextKeyTokenCrossGroupRetry, true)
-	retry := 0
-	param := &RetryParam{
-		Ctx:         ctx,
-		TokenGroup:  "auto",
-		RequestPath: "/v1/responses/compact",
-		Retry:       &retry,
-	}
-
-	selected, _, err := CacheGetRandomSatisfiedCompactChannel(param, modelName, relaycommon.CompactAttemptExact)
-	require.NoError(t, err)
-	require.Nil(t, selected)
-
-	ResetCompactAutoGroupSelection(ctx)
-	param.SetRetry(0)
-	selected, selectedGroup, err := CacheGetRandomSatisfiedCompactChannel(param, modelName, relaycommon.CompactAttemptBase)
-	require.NoError(t, err)
-	require.NotNil(t, selected)
-	require.Equal(t, 2203, selected.Id)
-	require.Equal(t, "vip", selectedGroup)
 }

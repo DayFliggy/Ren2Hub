@@ -70,7 +70,6 @@ export interface PricingModelContract {
   completion_ratio: number
   cache_ratio: number | null
   create_cache_ratio: number | null
-  enable_groups: string[]
   supported_endpoint_types: string[]
   billing_mode: string
 }
@@ -88,12 +87,9 @@ export function parsePricingModels(value: unknown): PricingModelContract[] {
   return value.map((item) => {
     if (!isRecord(item)) invalidResponse(endpoint)
     const endpoints = item.supported_endpoint_types ?? []
-    const groups = item.enable_groups ?? []
     if (
       !Array.isArray(endpoints) ||
-      endpoints.some((entry) => typeof entry !== 'string') ||
-      !Array.isArray(groups) ||
-      groups.some((entry) => typeof entry !== 'string')
+      endpoints.some((entry) => typeof entry !== 'string')
     ) {
       invalidResponse(endpoint)
     }
@@ -118,7 +114,6 @@ export function parsePricingModels(value: unknown): PricingModelContract[] {
       completion_ratio: requiredNumber(item.completion_ratio ?? 0, endpoint),
       cache_ratio: cacheRatio,
       create_cache_ratio: createCacheRatio,
-      enable_groups: [...groups],
       supported_endpoint_types: [...endpoints],
       billing_mode: requiredString(item.billing_mode ?? '', endpoint),
     }
@@ -163,7 +158,8 @@ export function parseLogStat(value: unknown): LogStatContract {
 
 function parseToken(value: unknown, endpoint: string): TokenSummary {
   if (!isRecord(value)) invalidResponse(endpoint)
-  const group = requiredString(value.group ?? '', endpoint)
+  const type = requiredString(value.type, endpoint)
+  if (type !== 'auto' && type !== 'manual') invalidResponse(endpoint)
   const allowIps = value.allow_ips
   if (
     allowIps !== undefined &&
@@ -177,8 +173,7 @@ function parseToken(value: unknown, endpoint: string): TokenSummary {
     id: requiredInteger(value.id, endpoint),
     name: requiredString(value.name, endpoint, false),
     key_preview: requiredString(value.key, endpoint),
-    group,
-    type: group === 'auto' ? 'auto' : 'manual',
+    type,
     status: requiredInteger(value.status, endpoint) === 1 ? 1 : 2,
     used_quota: requiredInteger(value.used_quota, endpoint),
     remain_quota: requiredInteger(value.remain_quota, endpoint),

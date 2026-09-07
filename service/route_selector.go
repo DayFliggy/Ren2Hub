@@ -68,8 +68,8 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 	source := ResolveRouteSource(input.SourceInput)
 	decision := NewRouteDecision(input.RequestID, source, input.RequestModel, input.ConfigurationVersion)
 	result := RouteSelectionResult{Decision: decision, Candidates: []RouteSelectionCandidate{}}
-	if source == RouteSourceLegacy {
-		return result, nil
+	if source == RouteSourceUnavailable {
+		return result, ErrRouteSelectionUnavailable
 	}
 
 	candidates := input.AutoCandidates
@@ -121,7 +121,7 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 		if len(staticCandidates) > 0 {
 			result.Decision.StaticPreferredChannelID = staticCandidates[0].ChannelID
 		}
-		if input.DynamicScoringEnabled || RouteScoreShadowEnabled() {
+		if input.DynamicScoringEnabled {
 			scored := make([]RouteScoreCandidate, 0, len(eligible))
 			for _, candidate := range eligible {
 				scored = append(scored, RouteScoreCandidate{
@@ -141,14 +141,9 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 			if len(scoredCandidates) > 0 {
 				result.Decision.ScoredPreferredChannelID = scoredCandidates[0].Candidate.ChannelID
 			}
-			if input.DynamicScoringEnabled {
-				result.Decision.ScoringMode = "live"
-				result.Decision.DynamicScoreApplied = true
-				orderedCandidates = scoredCandidates
-			} else {
-				result.Decision.ScoringMode = "shadow"
-				orderedCandidates = scoredCandidatesInStaticOrder(staticCandidates, scoredCandidates)
-			}
+			result.Decision.ScoringMode = "live"
+			result.Decision.DynamicScoreApplied = true
+			orderedCandidates = scoredCandidates
 			appendRouteDecisionCandidatesWithScores(&result.Decision, candidates, scoredCandidates)
 		} else {
 			appendRouteDecisionCandidates(&result.Decision, candidates)
@@ -296,26 +291,13 @@ func appendRouteDecisionCandidatesWithScores(decision *RouteDecision, candidates
 		}
 		decision.Candidates = append(decision.Candidates, RouteDecisionCandidate{
 			ChannelID: candidate.ChannelID, FilterReason: candidate.FilterReason,
-			Priority: candidate.Priority, Position: candidate.Position, Weight: candidate.Weight,
+			RequestModel: candidate.RequestModel,
+			Priority:     candidate.Priority, Position: candidate.Position, Weight: candidate.Weight,
 			SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
 			HealthEpoch: candidate.HealthEpoch,
 			Score:       score, LeaseState: RouteLeaseStateNotAttempted,
 		})
 	}
-}
-
-func scoredCandidatesInStaticOrder(static []RouteScoreCandidate, scored []ScoredRouteCandidate) []ScoredRouteCandidate {
-	byID := make(map[int]ScoredRouteCandidate, len(scored))
-	for _, candidate := range scored {
-		byID[candidate.Candidate.ChannelID] = candidate
-	}
-	ordered := make([]ScoredRouteCandidate, 0, len(scored))
-	for _, candidate := range static {
-		if scoredCandidate, exists := byID[candidate.ChannelID]; exists {
-			ordered = append(ordered, scoredCandidate)
-		}
-	}
-	return ordered
 }
 
 func normalizedRouteTopK(k int) int {

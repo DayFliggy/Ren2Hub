@@ -335,7 +335,8 @@ func replaceGroups(tx *gorm.DB, userID int, profile *model.UserRouteProfile, inp
 				return nil, fmt.Errorf("%w: duplicate route group", ErrRouteProfileValidation)
 			}
 			seenIDs[input.ID] = struct{}{}
-			if err := tx.Model(&model.UserRouteGroup{}).Where("id = ? AND profile_id = ?", input.ID, profile.ID).Updates(&group).Error; err != nil {
+			if err := tx.Model(&model.UserRouteGroup{}).Where("id = ? AND profile_id = ?", input.ID, profile.ID).
+				Updates(map[string]any{"name": group.Name, "enabled": group.Enabled, "position": group.Position}).Error; err != nil {
 				return nil, err
 			}
 		} else if err := tx.Create(&group).Error; err != nil {
@@ -481,7 +482,7 @@ func validateRouteProfileInput(input RouteProfileInput, update bool) error {
 	if input.UserID <= 0 || (!update && input.TokenID <= 0) {
 		return ErrRouteProfileForbidden
 	}
-	if input.Mode != model.RouteModeManual && input.Mode != model.RouteModeAutoLab && input.Mode != model.RouteModeLegacy {
+	if input.Mode != model.RouteModeManual && input.Mode != model.RouteModeAutoLab {
 		return fmt.Errorf("%w: invalid route profile mode", ErrRouteProfileValidation)
 	}
 	if update && input.Version <= 0 {
@@ -514,24 +515,6 @@ func ensureRouteChannelEntitlement(tx *gorm.DB, userID, channelID int, source st
 	}
 	if channel.Status != common.ChannelStatusEnabled {
 		return fmt.Errorf("%w: channel is disabled", ErrRouteProfileValidation)
-	}
-	var userGroup string
-	if err := tx.Model(&model.User{}).Where("id = ?", userID).Pluck("group", &userGroup).Error; err != nil {
-		return err
-	}
-	var abilities []model.Ability
-	if err := tx.Where("channel_id = ? AND enabled = ?", channelID, true).Find(&abilities).Error; err != nil {
-		return err
-	}
-	abilityAllowed := false
-	for _, ability := range abilities {
-		if ability.Group == userGroup || IsUserSelectableGroup(userGroup, ability.Group) {
-			abilityAllowed = true
-			break
-		}
-	}
-	if !abilityAllowed {
-		return fmt.Errorf("%w: channel has no model ability for user group", ErrRouteProfileValidation)
 	}
 	var entitlement model.UserChannelEntitlement
 	err := tx.Where("user_id = ? AND channel_id = ? AND source = ?", userID, channelID, source).First(&entitlement).Error

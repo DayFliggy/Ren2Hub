@@ -5,7 +5,6 @@ import { useI18n } from 'vue-i18n'
 import { ArrowLeft, Check, Copy } from 'lucide-vue-next'
 import { useClipboard } from '@vueuse/core'
 import {
-  catalogGroupRatio,
   catalogPrices,
   publicCatalogApi,
   type CatalogModel,
@@ -35,9 +34,6 @@ const keyword = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const vendor = ref(
   typeof route.query.vendor === 'string' ? route.query.vendor : ''
 )
-const group = ref(
-  typeof route.query.group === 'string' ? route.query.group : ''
-)
 const unit = ref(route.query.tokenUnit === 'K' ? 'K' : 'M')
 const page = ref(1)
 const pageSize = ref(20)
@@ -53,12 +49,6 @@ const unitOptions = computed(() => [
   { value: 'M', label: t('publicPage.million') },
   { value: 'K', label: t('publicPage.thousand') },
 ])
-const groupOptions = computed(() =>
-  Object.entries(catalog.value?.usableGroups ?? {}).map(([value, label]) => ({
-    value,
-    label: label ? `${value} · ${label}` : value,
-  }))
-)
 const vendorName = (model: CatalogModel) =>
   catalog.value?.vendors.find((entry) => entry.id === model.vendor_id)?.name ||
   model.owner_by
@@ -80,8 +70,6 @@ const billingMode = (model: CatalogModel) =>
     : model.quota_type === 1
       ? 'request'
       : 'token'
-const ratio = (model: CatalogModel) =>
-  catalog.value ? catalogGroupRatio(catalog.value, model, group.value) : null
 const filtered = computed(() =>
   (catalog.value?.models ?? []).filter((model) => {
     const search = keyword.value.trim().toLowerCase()
@@ -91,8 +79,7 @@ const filtered = computed(() =>
           .toLowerCase()
           .includes(search)) &&
       (!vendor.value || vendorName(model) === vendor.value) &&
-      (!billing.value || billingMode(model) === billing.value) &&
-      ratio(model) !== null
+      (!billing.value || billingMode(model) === billing.value)
     )
   })
 )
@@ -109,10 +96,17 @@ const money = (value: number) =>
     maximumFractionDigits: 8,
   }).format(value)
 const prices = (model: CatalogModel) => {
-  const multiplier = ratio(model)
-  return multiplier === null
-    ? []
-    : catalogPrices(model, multiplier, unit.value === 'K' ? 'K' : 'M')
+  const tokenUnit = unit.value === 'K' ? 'K' : 'M'
+  const maximum = catalogPrices(model, model.channel_ratio_max, tokenUnit)
+  return catalogPrices(model, model.channel_ratio_min, tokenUnit).map(
+    (price, index) => ({
+      ...price,
+      formatted:
+        price.value === maximum[index]?.value
+          ? money(price.value)
+          : `${money(price.value)} - ${money(maximum[index]!.value)}`,
+    })
+  )
 }
 const detailEndpoints = computed(() =>
   (detail.value?.supported_endpoint_types ?? []).map((name) => ({
@@ -120,7 +114,7 @@ const detailEndpoints = computed(() =>
     ...catalog.value?.endpoints[name],
   }))
 )
-watch([keyword, vendor, billing, group, pageSize], () => {
+watch([keyword, vendor, billing, pageSize], () => {
   page.value = 1
 })
 
@@ -134,8 +128,6 @@ async function load() {
     const result = await publicCatalogApi.pricing(request.signal)
     if (request.signal.aborted) return
     catalog.value = result
-    if (!(group.value in result.usableGroups))
-      group.value = Object.keys(result.usableGroups)[0] ?? ''
   } catch (cause) {
     if (!request.signal.aborted)
       error.value =
@@ -161,7 +153,7 @@ onScopeDispose(() => controller?.abort())
     <template #actions>
       <RouterLink
         v-if="detailId"
-        :to="{ name: 'pricing', query: { group, tokenUnit: unit } }"
+        :to="{ name: 'pricing', query: { tokenUnit: unit } }"
         class="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--accent-text)]"
         ><ArrowLeft :size="16" />{{ t('publicPage.pricing') }}</RouterLink
       >
@@ -202,12 +194,6 @@ onScopeDispose(() => controller?.abort())
           :prefix-label="t('publicPage.billing')"
         />
         <FilterSelect
-          v-model="group"
-          :options="groupOptions"
-          :label="t('publicPage.group')"
-          :prefix-label="t('publicPage.group')"
-        />
-        <FilterSelect
           v-model="unit"
           :options="unitOptions"
           :label="t('publicPage.unit')"
@@ -216,11 +202,7 @@ onScopeDispose(() => controller?.abort())
           t('publicPage.usd')
         }}</span>
       </div>
-      <EmptyState
-        v-if="!groupOptions.length"
-        :title="t('publicPage.noGroup')"
-      />
-      <template v-else-if="detailId">
+      <template v-if="detailId">
         <EmptyState v-if="!detail" :title="t('publicPage.detailMissing')" />
         <article v-else class="space-y-8">
           <div class="flex items-start gap-4">
@@ -264,12 +246,6 @@ onScopeDispose(() => controller?.abort())
                   >{{ detail.billing_expr }}</pre>
               </details></template
             >
-            <p
-              v-else-if="ratio(detail) === null"
-              class="text-sm text-[var(--text-secondary)]"
-            >
-              {{ t('publicPage.unknownPrice') }}
-            </p>
             <dl
               v-else
               class="grid grid-cols-2 gap-x-8 gap-y-5 border-y border-[var(--border-subtle)] py-5 sm:grid-cols-3 lg:grid-cols-4"
@@ -278,12 +254,14 @@ onScopeDispose(() => controller?.abort())
                 <dt class="text-xs text-[var(--text-secondary)]">
                   {{ t(`publicPage.${price.key}`) }}
                 </dt>
-                <dd class="mt-2 font-mono text-lg">{{ money(price.value) }}</dd>
+                <dd class="mt-2 break-words font-mono text-sm">
+                  {{ price.formatted }}
+                </dd>
               </div>
             </dl>
             <p class="mt-4 break-words text-xs text-[var(--text-tertiary)]">
-              {{ t('publicPage.availableGroups') }}:
-              {{ detail.enable_groups.join(', ') }}
+              {{ t('publicPage.channelRatio') }}:
+              {{ detail.channel_ratio_min }} - {{ detail.channel_ratio_max }}
             </p>
           </section>
           <section v-if="detailEndpoints.length">
@@ -337,7 +315,7 @@ onScopeDispose(() => controller?.abort())
                     :to="{
                       name: 'pricing-model',
                       params: { modelId: model.model_name },
-                      query: { group, tokenUnit: unit },
+                      query: { tokenUnit: unit },
                     }"
                     class="break-words font-medium text-[var(--accent-text)]"
                     >{{ model.model_name }}</RouterLink
@@ -358,10 +336,10 @@ onScopeDispose(() => controller?.abort())
                   }}
                 </td>
                 <td class="whitespace-nowrap font-mono">
-                  {{ prices(model)[0] ? money(prices(model)[0]!.value) : '--' }}
+                  {{ prices(model)[0]?.formatted ?? '--' }}
                 </td>
                 <td class="whitespace-nowrap font-mono">
-                  {{ prices(model)[1] ? money(prices(model)[1]!.value) : '--' }}
+                  {{ prices(model)[1]?.formatted ?? '--' }}
                 </td>
               </tr>
             </tbody>

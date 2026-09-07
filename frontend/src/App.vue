@@ -2,7 +2,7 @@
 import { RouterView } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { RefreshCw } from 'lucide-vue-next'
-import { navigationError, navigationPending } from '@/router/navigationState'
+import { navigationError } from '@/router/navigationState'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 
 import AppErrorBoundary from '@/components/common/AppErrorBoundary.vue'
@@ -28,13 +28,6 @@ function reload() {
       <ConsoleButton @click="reload"
         ><RefreshCw :size="18" />{{ t('common.retry') }}</ConsoleButton
       >
-    </main>
-    <main
-      v-else-if="navigationPending"
-      role="status"
-      class="flex min-h-screen items-center justify-center bg-[var(--page-background)] p-6 text-[var(--text-primary)]"
-    >
-      {{ t('common.loading') }}
     </main>
     <RouterView v-else />
   </AppErrorBoundary>

@@ -19,22 +19,22 @@ import (
 
 // WebAssets holds the embedded Vue application.
 type WebAssets struct {
-	NextBuildFS   fs.FS
-	NextIndexPage []byte
+	BuildFS   fs.FS
+	IndexPage []byte
 }
 
-const nextPlaceholderMarker = `name="ren2hub-next-build" content="placeholder"`
+const frontendPlaceholderMarker = `name="ren2hub-frontend-build" content="placeholder"`
 
 var immutableWebAsset = regexp.MustCompile(`^/assets/[^/]+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$`)
 
 var retiredWebPathPrefixes = []string{
-	"/playground", "/chat", "/chat2link", "/chat-presets",
+	"/next", "/playground", "/chat", "/chat2link", "/chat-presets",
 	"/models/deployments", "/deployment", "/admin/deployments",
 	"/system-settings/content/chat", "/system-settings/content/chats", "/system-settings/content/chat-presets",
 }
 
-func nextBuildReady(indexPage []byte) bool {
-	return len(indexPage) > 0 && !bytes.Contains(indexPage, []byte(nextPlaceholderMarker))
+func frontendBuildReady(indexPage []byte) bool {
+	return len(indexPage) > 0 && !bytes.Contains(indexPage, []byte(frontendPlaceholderMarker))
 }
 
 func isWebStaticRequest(requestPath string) bool {
@@ -78,12 +78,12 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 		frontendBaseURL = ""
 		common.SysLog("FRONTEND_BASE_URL is ignored on master node")
 	}
-	buildFS, err := fs.Sub(assets.NextBuildFS, "frontend/embed-dist")
+	buildFS, err := fs.Sub(assets.BuildFS, "frontend/embed-dist")
 	if err != nil {
 		panic(err)
 	}
 	publicStatic := http.FileServer(http.FS(buildFS))
-	nextReady := nextBuildReady(assets.NextIndexPage)
+	frontendReady := frontendBuildReady(assets.IndexPage)
 	webRateLimit := middleware.GlobalWebRateLimit()
 
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -91,10 +91,6 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 		c.Set(middleware.RouteTagKey, "web")
 		c.Header("Cache-Control", "no-cache")
 		requestPath := c.Request.URL.Path
-		legacy := requestPath == "/next" || strings.HasPrefix(requestPath, "/next/")
-		if legacy {
-			requestPath = strings.TrimPrefix(requestPath, "/next")
-		}
 		blockedPath := isBackendWebRequest(requestPath) || isRetiredWebRequest(requestPath) || strings.Contains(requestPath, "/.")
 		// Keep redirect paths relative to the frontend origin and classify traversal before fallback.
 		requestPath = pathpkg.Clean("/" + strings.TrimLeft(requestPath, "/"))
@@ -116,7 +112,7 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 				return
 			}
 		}
-		if legacy || frontendBaseURL != "" {
+		if frontendBaseURL != "" {
 			target := (&url.URL{Path: requestPath, RawQuery: c.Request.URL.RawQuery}).String()
 			c.Redirect(http.StatusTemporaryRedirect, frontendBaseURL+target)
 			return
@@ -132,7 +128,7 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 			publicStatic.ServeHTTP(c.Writer, c.Request)
 			return
 		}
-		if !nextReady {
+		if !frontendReady {
 			c.String(http.StatusServiceUnavailable, "frontend build is unavailable")
 			return
 		}
@@ -141,11 +137,11 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 			c.Status(http.StatusOK)
 			return
 		}
-		c.Data(http.StatusOK, "text/html; charset=utf-8", assets.NextIndexPage)
+		c.Data(http.StatusOK, "text/html; charset=utf-8", assets.IndexPage)
 	}
 	// Exact web roots prevent Gin's relay wildcard from issuing a trailing-slash
 	// redirect before the fallback runs; API trailing-slash behavior stays intact.
-	for _, path := range []string{"/", "/next", "/next/", "/assets", "/assets/"} {
+	for _, path := range []string{"/", "/assets", "/assets/"} {
 		router.Any(path, serveWeb)
 	}
 	for _, path := range retiredWebPathPrefixes {

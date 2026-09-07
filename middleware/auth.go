@@ -8,14 +8,12 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -456,36 +454,12 @@ func TokenAuth() func(c *gin.Context) {
 
 		userCache.WriteContext(c)
 
-		userGroup := userCache.Group
-		tokenGroup := token.Group
-		if tokenGroup != "" {
-			// "auto" is a pseudo-group resolved later into the token's filtered
-			// concrete group list. It must not be authorized as a literal group.
-			if !tokenGroupCanUseUserGroups(userGroup, tokenGroup) {
-				abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("无权访问 %s 分组", tokenGroup))
-				return
-			}
-			// check group in common.GroupRatio
-			if !ratio_setting.ContainsGroupRatio(tokenGroup) {
-				if tokenGroup != "auto" {
-					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("分组 %s 已被弃用", tokenGroup))
-					return
-				}
-			}
-			userGroup = tokenGroup
-		}
-		common.SetContextKey(c, constant.ContextKeyUsingGroup, userGroup)
-
 		err = SetupContextForToken(c, token, parts...)
 		if err != nil {
 			return
 		}
 		c.Next()
 	}
-}
-
-func tokenGroupCanUseUserGroups(userGroup, tokenGroup string) bool {
-	return tokenGroup == "auto" || service.GroupInUserUsableGroups(userGroup, tokenGroup)
 }
 
 func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) error {
@@ -505,18 +479,6 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 		c.Set("token_model_limit", token.GetModelLimitsMap())
 	} else {
 		c.Set("token_model_limit_enabled", false)
-	}
-	common.SetContextKey(c, constant.ContextKeyTokenGroup, token.Group)
-	common.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)
-	if token.AutoGroups != "" {
-		autoGroups, err := token.GetAutoGroups()
-		if err != nil {
-			common.SysError(fmt.Sprintf("failed to parse auto groups for token %d: %v", token.Id, err))
-			autoGroups = []string{}
-			common.SetContextKey(c, constant.ContextKeyTokenAutoGroups, autoGroups)
-		} else if len(autoGroups) > 0 {
-			common.SetContextKey(c, constant.ContextKeyTokenAutoGroups, autoGroups)
-		}
 	}
 	if len(parts) > 1 {
 		if model.IsAdmin(token.UserId) {

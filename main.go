@@ -44,11 +44,12 @@ import (
 //
 // `all:` keeps Vite chunks beginning with `_` (for example the Vue export
 // helper) in the embedded filesystem. The default pattern omits them.
+//
 //go:embed all:frontend/embed-dist
-var nextBuildFS embed.FS
+var frontendBuildFS embed.FS
 
 //go:embed frontend/embed-dist/index.html
-var nextIndexPage []byte
+var frontendIndexPage []byte
 
 func main() {
 	startTime := time.Now()
@@ -109,7 +110,6 @@ func main() {
 		common.SysError(fmt.Sprintf("initial route capability index rebuild failed: %v", err))
 	}
 	service.RegisterRouteCapabilityRefreshHook()
-	service.StartRouteShadowObservation()
 
 	// Restore the automatic pricing catalog from its local cache and start the
 	// refresh loop before pricing is warmed, so models that rely on the
@@ -211,8 +211,8 @@ func main() {
 
 	// 设置路由
 	router.SetRouter(server, router.WebAssets{
-		NextBuildFS:   nextBuildFS,
-		NextIndexPage: nextIndexPage,
+		BuildFS:   frontendBuildFS,
+		IndexPage: frontendIndexPage,
 	})
 	var port = os.Getenv("PORT")
 	if port == "" {
@@ -269,7 +269,7 @@ func InjectUmamiAnalytics() {
 	}
 	analyticsInjectBuilder.WriteString("<!--Umami QuantumNous-->\n")
 	analyticsInject := []byte(analyticsInjectBuilder.String())
-	nextIndexPage = bytes.Replace(nextIndexPage, []byte("</head>"), append(analyticsInject, []byte("</head>")...), 1)
+	frontendIndexPage = bytes.Replace(frontendIndexPage, []byte("</head>"), append(analyticsInject, []byte("</head>")...), 1)
 }
 
 func InjectGoogleAnalytics() {
@@ -291,7 +291,7 @@ func InjectGoogleAnalytics() {
 	}
 	analyticsInjectBuilder.WriteString("<!--Google Analytics QuantumNous-->\n")
 	analyticsInject := []byte(analyticsInjectBuilder.String())
-	nextIndexPage = bytes.Replace(nextIndexPage, []byte("</head>"), append(analyticsInject, []byte("</head>")...), 1)
+	frontendIndexPage = bytes.Replace(frontendIndexPage, []byte("</head>"), append(analyticsInject, []byte("</head>")...), 1)
 }
 
 func InitResources() error {

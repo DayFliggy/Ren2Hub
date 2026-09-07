@@ -379,7 +379,7 @@ func TestBuildTestLogOtherInjectsTieredInfo(t *testing.T) {
 		ChannelMeta: &relaycommon.ChannelMeta{},
 	}
 	priceData := types.PriceData{
-		GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
+		ChannelRatio: 1,
 	}
 	usage := &dto.Usage{
 		PromptTokensDetails: dto.InputTokenDetails{

@@ -108,11 +108,11 @@ func TestModelPriceHelperTieredPreConsumeMaxTokensFallback(t *testing.T) {
 			expected:  2250,
 		},
 		{
-			// free group (ratio 0) stays zero; fallback is gated on non-zero group ratio.
-			name:      "free group stays zero without fallback",
+			// Retired group pricing must not grant free requests.
+			name:      "former free group uses the channel price",
 			group:     "free",
 			maxTokens: 0,
-			expected:  0,
+			expected:  62940,
 		},
 	}
 

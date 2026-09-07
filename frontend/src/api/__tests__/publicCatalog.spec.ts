@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { catalogPrices, parseRankings } from '@/api/publicCatalog'
 
 describe('public catalog contracts', () => {
-  it('renders token and per-call price calculations with the selected group ratio', () => {
+  it('renders token and per-call prices with the channel ratio', () => {
     const prices = catalogPrices(
       {
         model_name: 'demo',
@@ -18,7 +18,8 @@ describe('public catalog contracts', () => {
         completion_ratio: 3,
         cache_ratio: 0.5,
         create_cache_ratio: null,
-        enable_groups: ['default'],
+        channel_ratio_min: 1.5,
+        channel_ratio_max: 2,
         supported_endpoint_types: [],
         billing_mode: '',
         billing_expr: '',

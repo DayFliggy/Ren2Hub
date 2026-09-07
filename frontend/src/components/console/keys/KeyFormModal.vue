@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, reactive, ref, useId, watch } from 'vue'
-import { getActivePinia } from 'pinia'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
@@ -14,7 +13,6 @@ import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
-import { useAuthStore } from '@/stores/auth'
 import { QUOTA_PER_DOLLAR } from '@/utils/format'
 
 const props = defineProps<{
@@ -31,12 +29,10 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useToast()
-const auth = getActivePinia() ? useAuthStore() : null
 
 const form = reactive({
   type: 'auto' as TokenType,
   name: '',
-  customKey: '',
   model_limits: [] as string[],
   quotaDollars: null as number | null,
   unlimited: false,
@@ -59,7 +55,6 @@ watch(
     const e = props.editing
     form.type = e?.type ?? 'auto'
     form.name = e?.name ?? ''
-    form.customKey = ''
     form.model_limits = e?.model_limits ? [...e.model_limits] : []
     form.quotaDollars =
       e && !e.unlimited ? e.remain_quota / QUOTA_PER_DOLLAR : null
@@ -93,7 +88,6 @@ const typeCards = computed(() => [
 
 const advancedConfiguredCount = computed(() => {
   let count = 0
-  if (!props.editing && form.customKey.trim()) count++
   if (form.model_limits.length > 0) count++
   if (form.ipText.trim()) count++
   return count
@@ -124,13 +118,8 @@ async function save() {
       payload.model_limits_enabled = form.model_limits.length > 0
       payload.model_limits = form.model_limits.join(',')
       payload.allow_ips = form.ipText.trim()
-      payload.group =
-        form.type === 'auto'
-          ? 'auto'
-          : (props.editing?.group ?? auth?.user?.group ?? 'default')
       delete payload.unlimited
       delete payload.ip_limits
-      delete payload.type
     }
     if (props.editing) {
       payload.id = props.editing.id
@@ -138,7 +127,6 @@ async function save() {
       toast.success(t('keys.updated'))
     } else {
       payload.type = form.type
-      if (form.customKey.trim()) payload.key = form.customKey.trim()
       await api.post('/api/token/', payload)
       toast.success(t('keys.created'))
     }
@@ -161,7 +149,10 @@ async function save() {
   >
     <div class="space-y-4 text-left">
       <!-- Token type is fixed after creation. -->
-      <FormField :label="t('keys.type.label')">
+      <fieldset class="min-w-0">
+        <legend class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]">
+          {{ t('keys.type.label') }}
+        </legend>
         <div
           class="grid gap-2 sm:grid-cols-2"
           role="radiogroup"
@@ -198,7 +189,7 @@ async function save() {
             >
           </button>
         </div>
-      </FormField>
+      </fieldset>
 
       <FormField :label="t('keys.nameLabel')">
         <TextInput
@@ -327,18 +318,6 @@ async function save() {
           :id="advancedSectionId"
           class="space-y-4 border-t border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-4"
         >
-          <FormField
-            v-if="!editing"
-            :label="t('keys.customKey')"
-            :hint="t('keys.customKeyHint')"
-          >
-            <TextInput
-              v-model="form.customKey"
-              name="token-custom-key"
-              placeholder="sk-…"
-            />
-          </FormField>
-
           <FormField :label="t('keys.modelsLabel')">
             <ChipPicker
               v-model="form.model_limits"

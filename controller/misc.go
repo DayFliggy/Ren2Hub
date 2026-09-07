@@ -14,7 +14,6 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -35,10 +34,9 @@ func TestStatus(c *gin.Context) {
 	// 获取HTTP统计信息
 	httpStats := middleware.GetStats()
 	c.JSON(http.StatusOK, gin.H{
-		"success":              true,
-		"message":              "Server is running",
-		"http_stats":           httpStats,
-		"route_shadow_metrics": service.GetRouteShadowDiagnostics(c.Request.Context()),
+		"success":    true,
+		"message":    "Server is running",
+		"http_stats": httpStats,
 	})
 	return
 }
@@ -96,7 +94,6 @@ func GetStatus(c *gin.Context) {
 		"password_login_enabled":          common.PasswordLoginEnabled,
 		"password_register_enabled":       common.PasswordRegisterEnabled,
 		"affiliate_registration_required": common.AffiliateRegistrationRequired,
-		"default_use_auto_group":          setting.DefaultUseAutoGroup,
 
 		"usd_exchange_rate": operation_setting.USDExchangeRate,
 		"price":             operation_setting.Price,
@@ -127,9 +124,7 @@ func GetStatus(c *gin.Context) {
 		"user_agreement_enabled":      legalSetting.UserAgreement != "",
 		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
 		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,
-		// Module capabilities are authoritative; the Vue application is always available.
-		"next_frontend_enabled": frontendCapabilities["next_frontend"] != "disabled",
-		"frontend_capabilities": frontendCapabilities,
+		"frontend_capabilities":       frontendCapabilities,
 	}
 
 	// 根据启用状态注入可选内容
@@ -181,12 +176,11 @@ func GetStatus(c *gin.Context) {
 
 func getFrontendCapabilities(passkeyEnabled bool) map[string]string {
 	capabilities := map[string]string{
-		"next_frontend":         "live",
 		"login":                 "live",
 		"refresh":               "live",
 		"logout":                "live",
 		"profile":               "live",
-		"legacy_token":          "live",
+		"api_tokens":            "live",
 		"user_models":           "live",
 		"logs":                  "live",
 		"dashboard_basic":       "live",
@@ -197,7 +191,7 @@ func getFrontendCapabilities(passkeyEnabled bool) map[string]string {
 		"two_factor":            "live",
 		"oauth_bindings":        "live",
 		"notifications":         "live",
-		"token_private_routing": routingCapabilityStatus(),
+		"token_private_routing": "live",
 		"marketplace":           "disabled",
 		"admin":                 "live",
 		"orders":                "live",
@@ -223,13 +217,6 @@ func getFrontendCapabilities(passkeyEnabled bool) map[string]string {
 	}
 
 	return capabilities
-}
-
-func routingCapabilityStatus() string {
-	if tokenPrivateRoutingEnabled() {
-		return "live"
-	}
-	return "disabled"
 }
 
 func GetNotice(c *gin.Context) {

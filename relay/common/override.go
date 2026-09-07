@@ -2108,7 +2108,6 @@ func BuildParamOverrideContext(info *RelayInfo) map[string]interface{} {
 	ctx := make(map[string]interface{})
 	ctx["user_id"] = info.UserId
 	ctx["user_group"] = info.UserGroup
-	ctx["token_group"] = info.TokenGroup
 	ctx["using_group"] = info.UsingGroup
 	if info.ChannelMeta != nil && info.ChannelMeta.UpstreamModelName != "" {
 		ctx["model"] = info.ChannelMeta.UpstreamModelName

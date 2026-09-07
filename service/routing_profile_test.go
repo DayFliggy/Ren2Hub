@@ -31,6 +31,8 @@ func setupRouteProfileTest(t *testing.T) *gorm.DB {
 	common.RedisEnabled = false
 	model.DB = db
 	model.LOG_DB = db
+	resetRouteCapabilityIndexForTest()
+	t.Cleanup(resetRouteCapabilityIndexForTest)
 	require.NoError(t, db.AutoMigrate(
 		&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{},
 		&model.UserRouteProfile{}, &model.UserRouteGroup{}, &model.UserRouteEntry{},
@@ -73,6 +75,7 @@ func publishRoutePreviewCapability(t *testing.T, channelID int, endpointTypes []
 		AbilityGroups: string(groups), EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
 		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: state,
 	}}))
+	require.NoError(t, RebuildRouteCapabilityIndex(context.Background()))
 }
 
 func findRoutePreviewEntry(t *testing.T, preview *RouteProfilePreview, channelID int) RoutePreviewEntry {
@@ -90,7 +93,7 @@ func seedRouteProfileFixture(t *testing.T, db *gorm.DB) (int, int, int) {
 	t.Helper()
 	user := &model.User{Id: 701, Username: "routing-user", Password: "password", Status: common.UserStatusEnabled, Group: "default"}
 	require.NoError(t, db.Create(user).Error)
-	token := &model.Token{UserId: user.Id, Key: "routing-token", Name: "routing-token", Status: common.TokenStatusEnabled, Group: "default", ExpiredTime: -1, UnlimitedQuota: true}
+	token := &model.Token{UserId: user.Id, Key: "routing-token", Name: "routing-token", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true}
 	require.NoError(t, db.Create(token).Error)
 	channel := &model.Channel{Id: 7011, Key: "routing-channel-key", Name: "routing-channel", Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default"}
 	require.NoError(t, db.Create(channel).Error)
@@ -150,6 +153,65 @@ func TestRouteProfileCreateUpdateAndVersionConflict(t *testing.T) {
 	updatedInput.Version = created.Profile.Version
 	_, err = UpdateUserRouteProfile(created.Profile.ID, updatedInput)
 	assert.True(t, errors.Is(err, ErrRouteProfileConflict))
+}
+
+func TestRouteProfileUpdatePersistsDisabledAndZeroPosition(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID:  userID,
+		TokenID: tokenID,
+		Mode:    model.RouteModeManual,
+		Groups: []RouteGroupInput{{
+			Name:     "待调整线路",
+			Enabled:  true,
+			Position: 3,
+			Entries: []RouteEntryInput{{
+				ChannelID: channelID,
+				Source:    model.RouteSourcePlatform,
+				Enabled:   true,
+				Position:  2,
+			}},
+		}},
+	})
+	require.NoError(t, err)
+
+	updated, err := UpdateUserRouteProfile(created.Profile.ID, RouteProfileInput{
+		UserID:        userID,
+		TokenID:       tokenID,
+		Mode:          model.RouteModeManual,
+		Version:       created.Profile.Version,
+		ActiveGroupID: created.Profile.ActiveGroupID,
+		Groups: []RouteGroupInput{{
+			ID:       created.Groups[0].Group.ID,
+			Name:     created.Groups[0].Group.Name,
+			Enabled:  false,
+			Position: 0,
+			Entries: []RouteEntryInput{{
+				ChannelID: channelID,
+				Source:    model.RouteSourcePlatform,
+				Enabled:   false,
+				Position:  0,
+			}},
+		}},
+	})
+	require.NoError(t, err)
+	require.Len(t, updated.Groups, 1)
+	assert.False(t, updated.Groups[0].Group.Enabled)
+	assert.Zero(t, updated.Groups[0].Group.Position)
+	require.Len(t, updated.Groups[0].Entries, 1)
+	assert.False(t, updated.Groups[0].Entries[0].Enabled)
+	assert.Zero(t, updated.Groups[0].Entries[0].Position)
+
+	reloaded, err := GetUserRouteProfile(userID, created.Profile.ID)
+	require.NoError(t, err)
+	require.Len(t, reloaded.Groups, 1)
+	assert.False(t, reloaded.Groups[0].Group.Enabled)
+	assert.Zero(t, reloaded.Groups[0].Group.Position)
+	require.Len(t, reloaded.Groups[0].Entries, 1)
+	assert.False(t, reloaded.Groups[0].Entries[0].Enabled)
+	assert.Zero(t, reloaded.Groups[0].Entries[0].Position)
 }
 
 func TestRouteProfileKeepsMultipleNewGroups(t *testing.T) {
@@ -265,7 +327,7 @@ func TestRouteProfilePreviewKeepsResolvableMixedCapabilityEligible(t *testing.T)
 	require.NoError(t, err)
 	assert.Equal(t, []int{channelID}, preview.CandidateChannelIDs)
 	assert.True(t, preview.HasMixed)
-	assert.Zero(t, preview.FilterReasonCounts[ShadowFilterUnknownCapability])
+	assert.Zero(t, preview.FilterReasonCounts[RouteFilterUnknownCapability])
 	assert.Empty(t, findRoutePreviewEntry(t, preview, channelID).FilterReason)
 }
 
@@ -332,7 +394,7 @@ func TestRouteProfilePreviewFiltersDisabledTokenAndUnavailableHealth(t *testing.
 		Model: "gpt-test", Path: "/v1/chat/completions",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, ShadowFilterTokenForbidden, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+	assert.Equal(t, RouteFilterTokenForbidden, findRoutePreviewEntry(t, preview, channelID).FilterReason)
 
 	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Update("status", common.TokenStatusEnabled).Error)
 	require.NoError(t, db.Create(&model.ChannelHealth{
@@ -402,9 +464,9 @@ func TestRouteProfilePreviewFiltersUnresolvedConflictingAndUnsupportedCapabiliti
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []int{eligibleChannelID}, preview.CandidateChannelIDs)
-	assert.Equal(t, ShadowFilterMappingConflict, findRoutePreviewEntry(t, preview, conflictChannelID).FilterReason)
-	assert.Equal(t, ShadowFilterUnknownCapability, findRoutePreviewEntry(t, preview, unresolvedChannelID).FilterReason)
-	assert.Equal(t, ShadowFilterUnsupported, findRoutePreviewEntry(t, preview, unsupportedChannelID).FilterReason)
+	assert.Equal(t, RouteFilterMappingConflict, findRoutePreviewEntry(t, preview, conflictChannelID).FilterReason)
+	assert.Equal(t, RouteFilterUnknownCapability, findRoutePreviewEntry(t, preview, unresolvedChannelID).FilterReason)
+	assert.Equal(t, RouteFilterUnsupported, findRoutePreviewEntry(t, preview, unsupportedChannelID).FilterReason)
 }
 
 func TestRouteProfilePreviewUsesOnlyActiveCapabilitySnapshot(t *testing.T) {
@@ -503,10 +565,10 @@ func TestRouteProfilePreviewPreservesUnavailableEntriesWithReasons(t *testing.T)
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []int{availableChannelID}, preview.CandidateChannelIDs)
-	assert.Equal(t, ShadowFilterChannelDisabled, findRoutePreviewEntry(t, preview, disabledChannelID).FilterReason)
-	assert.Equal(t, ShadowFilterEntitlementRevoked, findRoutePreviewEntry(t, preview, revokedChannelID).FilterReason)
-	assert.Equal(t, ShadowFilterAbilityDisabled, findRoutePreviewEntry(t, preview, abilityDisabledChannelID).FilterReason)
-	assert.Equal(t, ShadowFilterSnapshotUnavailable, findRoutePreviewEntry(t, preview, missingSnapshotChannelID).FilterReason)
+	assert.Equal(t, RouteFilterChannelDisabled, findRoutePreviewEntry(t, preview, disabledChannelID).FilterReason)
+	assert.Equal(t, RouteFilterEntitlementRevoked, findRoutePreviewEntry(t, preview, revokedChannelID).FilterReason)
+	assert.Equal(t, RouteFilterAbilityDisabled, findRoutePreviewEntry(t, preview, abilityDisabledChannelID).FilterReason)
+	assert.Equal(t, RouteFilterSnapshotUnavailable, findRoutePreviewEntry(t, preview, missingSnapshotChannelID).FilterReason)
 }
 
 func TestRouteProfilePreviewHonorsTokenModelAndPathRestrictions(t *testing.T) {
@@ -531,14 +593,14 @@ func TestRouteProfilePreviewHonorsTokenModelAndPathRestrictions(t *testing.T) {
 		Model: "gpt-test", Path: "/v1/chat/completions",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, ShadowFilterTokenForbidden, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+	assert.Equal(t, RouteFilterTokenForbidden, findRoutePreviewEntry(t, preview, channelID).FilterReason)
 
 	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Update("model_limits_enabled", false).Error)
 	preview, err = PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
 		Model: "gpt-test", Path: "/v1/messages",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, ShadowFilterPathUnsupported, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+	assert.Equal(t, RouteFilterPathUnsupported, findRoutePreviewEntry(t, preview, channelID).FilterReason)
 }
 
 func TestRouteProfilePreviewRejectsDisabledOrExpiredToken(t *testing.T) {
@@ -560,7 +622,7 @@ func TestRouteProfilePreviewRejectsDisabledOrExpiredToken(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Empty(t, preview.CandidateChannelIDs)
-	assert.Equal(t, ShadowFilterTokenForbidden, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+	assert.Equal(t, RouteFilterTokenForbidden, findRoutePreviewEntry(t, preview, channelID).FilterReason)
 
 	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Updates(map[string]any{
 		"status": common.TokenStatusEnabled, "expired_time": common.GetTimestamp() - 1,
@@ -570,7 +632,7 @@ func TestRouteProfilePreviewRejectsDisabledOrExpiredToken(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Empty(t, preview.CandidateChannelIDs)
-	assert.Equal(t, ShadowFilterTokenForbidden, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+	assert.Equal(t, RouteFilterTokenForbidden, findRoutePreviewEntry(t, preview, channelID).FilterReason)
 }
 
 func TestRouteProfilePreviewUsesNormalizedModelForTokenLimits(t *testing.T) {
@@ -619,7 +681,7 @@ func TestRouteProfilePreviewRejectsUnknownCapabilityState(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Empty(t, preview.CandidateChannelIDs)
-	assert.Equal(t, ShadowFilterUnknownCapability, findRoutePreviewEntry(t, preview, channelID).FilterReason)
+	assert.Equal(t, RouteFilterUnknownCapability, findRoutePreviewEntry(t, preview, channelID).FilterReason)
 }
 
 func TestRouteProfilePreviewHandlesEmptyAndForeignProfiles(t *testing.T) {
@@ -660,7 +722,7 @@ func TestRouteProfileUpdateKeepsExistingRevokedEntryForRemoval(t *testing.T) {
 	}).Error)
 	require.NoError(t, db.Create(&model.Token{
 		Id: tokenID + 1, UserId: userID, Key: "routing-second-token", Name: "routing-second-token",
-		Status: common.TokenStatusEnabled, Group: "default", ExpiredTime: -1, UnlimitedQuota: true,
+		Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true,
 	}).Error)
 
 	updated, err := UpdateUserRouteProfile(created.Profile.ID, RouteProfileInput{
@@ -702,7 +764,7 @@ func TestRouteProfilePreviewUsesUnresolvedStateForMissingSnapshot(t *testing.T) 
 	require.NoError(t, err)
 	entry := findRoutePreviewEntry(t, preview, channelID)
 	assert.Equal(t, model.RouteCapabilityStateUnresolved, entry.CapabilityState)
-	assert.Equal(t, ShadowFilterSnapshotUnavailable, entry.FilterReason)
+	assert.Equal(t, RouteFilterSnapshotUnavailable, entry.FilterReason)
 }
 
 func TestRouteProfileUpdateCannotModifyOrDeleteSystemAutoLabGroups(t *testing.T) {

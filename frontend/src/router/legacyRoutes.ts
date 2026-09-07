@@ -75,7 +75,6 @@ export function canonicalLegacyPath(
   path: string,
   query: URLSearchParams
 ): string {
-  path = path.replace(/^\/next(?=\/|$)/, '') || '/'
   if (path.startsWith('//') || path.includes('\\')) return '/404'
   path = path.replace(/^\/console\//, '/').replace(/\/+$/, '') || '/'
   path = aliases[path] ?? path
@@ -92,7 +91,7 @@ export function canonicalLegacyPath(
     path = `/system-settings/${settingsSections[section]}`
   }
   if (
-    /^\/(playground|chat|chat2link|chat-presets)(\/|$)/.test(path) ||
+    /^\/(next|playground|chat|chat2link|chat-presets)(\/|$)/.test(path) ||
     /^\/(models\/deployments|deployment|admin\/deployments)(\/|$)/.test(path) ||
     /^\/system-settings\/content\/(chat|chats|chat-presets)(\/|$)/.test(path)
   )

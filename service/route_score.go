@@ -2,8 +2,6 @@ package service
 
 import (
 	"sort"
-
-	"github.com/QuantumNous/new-api/common"
 )
 
 type RouteScoreCandidate struct {
@@ -186,14 +184,6 @@ func StaticPriorityLayer(candidates []RouteScoreCandidate) []RouteScoreCandidate
 		return result[i].ChannelID < result[j].ChannelID
 	})
 	return result
-}
-
-func RouteScoreShadowEnabled() bool {
-	return common.GetEnvOrDefaultBool("ROUTE_SCORE_SHADOW_ENABLED", false)
-}
-
-func RouteScoreLiveEnabled() bool {
-	return RouteScoreShadowEnabled() && common.GetEnvOrDefaultBool("ROUTE_SCORE_LIVE_ENABLED", false)
 }
 
 func inverseLatencyScore(latency float64) float64 {

@@ -31,7 +31,7 @@ function advancedTrigger(): HTMLButtonElement {
 }
 
 describe('KeyFormModal', () => {
-  it('defaults new tokens to auto and keeps advanced values while collapsed', async () => {
+  it('defaults new tokens to auto and keeps advanced restrictions hidden until expanded', async () => {
     const wrapper = mountForm()
     const typeOptions = [...document.body.querySelectorAll('[role="radio"]')]
 
@@ -44,22 +44,8 @@ describe('KeyFormModal', () => {
 
     advancedTrigger().click()
     await nextTick()
-    const customKey = document.querySelector<HTMLInputElement>(
-      '[name="token-custom-key"]'
-    )!
-    customKey.value = 'sk-custom-value'
-    customKey.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    advancedTrigger().click()
-    await nextTick()
-    advancedTrigger().click()
-    await nextTick()
-
-    expect(
-      document.querySelector<HTMLInputElement>('[name="token-custom-key"]')
-        ?.value
-    ).toBe('sk-custom-value')
+    expect(document.querySelector('[name="token-custom-key"]')).toBeNull()
+    expect(document.querySelector('[name="token-ip-limits"]')).not.toBeNull()
     wrapper.unmount()
   })
 

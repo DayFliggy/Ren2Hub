@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -26,34 +27,7 @@ type Token struct {
 	ModelLimits        string         `json:"model_limits" gorm:"type:text"`
 	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
 	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
-	Group              string         `json:"group" gorm:"default:''"`
-	CrossGroupRetry    bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
-	AutoGroups         string         `json:"-" gorm:"type:text"`
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
-}
-
-func (token *Token) GetAutoGroups() ([]string, error) {
-	if token.AutoGroups == "" {
-		return nil, nil
-	}
-	var groups []string
-	if err := common.UnmarshalJsonStr(token.AutoGroups, &groups); err != nil {
-		return nil, err
-	}
-	return groups, nil
-}
-
-func (token *Token) SetAutoGroups(groups []string) error {
-	if len(groups) == 0 {
-		token.AutoGroups = ""
-		return nil
-	}
-	data, err := common.Marshal(groups)
-	if err != nil {
-		return err
-	}
-	token.AutoGroups = string(data)
-	return nil
 }
 
 func (token *Token) Clean() {
@@ -306,6 +280,20 @@ func (token *Token) Insert() error {
 	return err
 }
 
+func (token *Token) InsertWithRouteMode(mode string) error {
+	if mode != RouteModeManual && mode != RouteModeAutoLab {
+		return errors.New("invalid token route mode")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(token).Error; err != nil {
+			return err
+		}
+		profile := UserRouteProfile{UserID: token.UserId, TokenID: token.Id, Mode: mode}
+		profile.Normalize(time.Now())
+		return tx.Create(&profile).Error
+	})
+}
+
 // Update Make sure your token's fields is completed, because this will update non-zero values
 func (token *Token) Update() (err error) {
 	// 写库前失效缓存并设置 fence，防止并发读者把过期快照重新写回缓存。
@@ -313,7 +301,7 @@ func (token *Token) Update() (err error) {
 		common.SysLog("failed to invalidate token cache before update: " + cacheErr.Error())
 	}
 	return DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
-		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry", "auto_groups").Updates(token).Error
+		"model_limits_enabled", "model_limits", "allow_ips").Updates(token).Error
 }
 
 func (token *Token) SelectUpdate() (err error) {

@@ -18,7 +18,7 @@ Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`�
 ## 兼容边界
 
 - `src/router/legacyRoutes.ts` 集中转换旧书签、日志 tab 和设置 section，守卫保留 query/hash。未知页面落入 404，不将未知控制台路径当作首页。
-- Go 对 `/next` 做同源路径规范化，避免重复斜杠变成站外重定向。`/next` 仅为旧 Web 书签兼容入口。
+- `/next` 和 `/next/*` 已退休：Go 返回 HTTP 404，Vue 内部导航进入 404 页面，不再转换旧书签。
 - `/api`、`/api/next`、Relay 和 `/dashboard/billing` 是后端命名空间，缺失接口返回 JSON 404。绝不清理 API 尾斜杠：`/api/models` 是用户目录，`/api/models/` 是管理 metadata。
 - 已退出的 Playground、Chat、Chat2Link、Chat Presets 及旧前缀路径由 Go 返回 404；Vue 内部导航也拒绝进入。
 - 缺失 capability 按禁用处理；后端不可达时不挂载业务页面。服务端鉴权仍为最终权限边界。
@@ -27,7 +27,7 @@ Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`�
 
 2026-09-06 的运行镜像 `bc69bf23` 引用 `_plugin-vue_export-helper-BDNMzG2s.js`，该请求实际返回 404，浏览器 `#app` 为空。Go 默认 embed 忽略下划线文件；此前的 `5d8d4a13` 已添加 `all:`，但当时运行镜像尚未包含该提交。
 
-`prepare-frontend-embed.mjs` 校验完整 manifest 依赖和文件，`TestProductionEmbeddedAssetGraph` 检查最终 Go 嵌入资源，Docker 冷构建执行该测试。只检查 index 或入口 JS 的 HTTP 200 不构成页面恢复证据。初次导航会显示加载状态；导航失败会显示错误和重试入口。
+`prepare-frontend-embed.mjs` 校验完整 manifest 依赖和文件，`TestProductionEmbeddedAssetGraph` 检查最终 Go 嵌入资源，Docker 冷构建执行该测试。只检查 index 或入口 JS 的 HTTP 200 不构成页面恢复证据。初次导航不显示全屏加载提示，初始化检查完成后挂载页面；导航失败会显示错误和重试入口。
 
 Playwright 路由用例可在真正 Go 构建上运行：准备 embed 后启动本地独立测试实例，设置 `PLAYWRIGHT_PORT`，运行 `test:visual`。`PLAYWRIGHT_THEME=light` 选择浅色。测试夹具只模拟 API，HTML、模块与字体由实际二进制服务；生产恢复还必须用真实 API 的浏览器冒烟验证。
 

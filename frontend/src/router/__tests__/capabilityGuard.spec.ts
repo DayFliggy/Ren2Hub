@@ -39,7 +39,7 @@ beforeEach(async () => {
       logs: 'live',
       admin: 'live',
       wallet: 'live',
-      legacy_token: 'live',
+      api_tokens: 'live',
       profile: 'live',
       registration: 'live',
     },
@@ -103,7 +103,7 @@ describe('capability route guard', () => {
     expect(sanitizeSetupRedirect('/setup/error')).toBeNull()
     expect(sanitizeSetupRedirect('/auth/sign-in')).toBe('/sign-in')
     expect(sanitizeSetupRedirect('/next/console/dashboard?tab=1')).toBe(
-      '/dashboard?tab=1'
+      '/404?tab=1'
     )
   })
 
@@ -127,7 +127,7 @@ describe('capability route guard', () => {
     await router.push('/console/logs/operations')
 
     expect(router.currentRoute.value.name).toBe('dashboard')
-  })
+  }, 15000)
 
   it('keeps system settings root-only even for ordinary administrators', async () => {
     const auth = useAuthStore()
@@ -182,7 +182,7 @@ describe('capability route guard', () => {
     for (const [source, target] of [
       ['/console/token', '/keys'],
       ['/console/wallet', '/wallet'],
-      ['/next/console/logs/drawing', '/usage-logs/drawing'],
+      ['/console/logs/drawing', '/usage-logs/drawing'],
       ['/usage-logs?tab=tasks', '/usage-logs/task?tab=tasks'],
       ['/console/personal', '/profile'],
     ]) {
@@ -196,7 +196,7 @@ describe('capability route guard', () => {
     expect(sanitizeRedirect('/wallet?topup=success#records')).toBe(
       '/wallet?topup=success#records'
     )
-    expect(sanitizeRedirect('/next/console/token')).toBe('/keys')
+    expect(sanitizeRedirect('/next/console/token')).toBe('/404')
     expect(sanitizeRedirect('/next//evil.example')).toBe('/404')
     expect(sanitizeRedirect('//evil.example')).toBeNull()
   })
@@ -220,6 +220,12 @@ describe('capability route guard', () => {
 
   it('never revives retired pages through old prefixes or settings sections', async () => {
     for (const path of [
+      '/next',
+      '/next/',
+      '/next/keys',
+      '/next/console/admin/vendors',
+      '/next/assets/app.js',
+      '/console/next/keys',
       '/chat',
       '/next/console/chat/1',
       '/console/playground',
@@ -242,7 +248,7 @@ describe('capability route guard', () => {
     for (const [source, manage] of [
       ['/models/vendors', 'vendors'],
       ['/models/prefill-groups', 'prefill-groups'],
-      ['/next/console/admin/vendors', 'vendors'],
+      ['/console/admin/vendors', 'vendors'],
       ['/console/admin/prefill-groups', 'prefill-groups'],
     ]) {
       await router.push(`${source}?q=alpha&p=2&manage=other#details`)
@@ -260,7 +266,7 @@ describe('capability route guard', () => {
     useAuthStore().user!.role = 100
     for (const path of [
       '/system-settings/models/deployment',
-      '/next/console/system-settings/models/model-deployment',
+      '/console/system-settings/models/model-deployment',
       '/console/setting?tab=model-deployment',
     ]) {
       await router.push(

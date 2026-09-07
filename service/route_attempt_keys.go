@@ -1,6 +1,20 @@
 package service
 
-import "github.com/gin-gonic/gin"
+import (
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/gin-gonic/gin"
+)
+
+func RequestRouteAttemptedKeys(c *gin.Context, stage relaycommon.CompactAttemptStage) map[int]map[int]struct{} {
+	if stage != relaycommon.CompactAttemptNone {
+		value, _ := c.Get(compactAttemptedKeysContextKey)
+		attempted, _ := value.(CompactAttemptedKeyIndexes)
+		return attempted
+	}
+	value, _ := c.Get(liveRouteAttemptedKeysContextKey)
+	attempted, _ := value.(LiveRouteAttemptedKeyIndexes)
+	return attempted
+}
 
 const liveRouteAttemptedKeysContextKey = "live_route_attempted_key_indexes"
 
@@ -39,17 +53,8 @@ func GetLiveRouteAttemptedKeyIndexes(c *gin.Context, channelID int) map[int]stru
 }
 
 func GetRouteAttemptedKeyIndexes(c *gin.Context, channelID int) map[int]struct{} {
-	compact := GetCompactAttemptedKeyIndexes(c, channelID)
-	live := GetLiveRouteAttemptedKeyIndexes(c, channelID)
-	if len(compact) == 0 && len(live) == 0 {
-		return nil
+	if CompactStageFromContext(c) != relaycommon.CompactAttemptNone {
+		return GetCompactAttemptedKeyIndexes(c, channelID)
 	}
-	combined := make(map[int]struct{}, len(compact)+len(live))
-	for index := range compact {
-		combined[index] = struct{}{}
-	}
-	for index := range live {
-		combined[index] = struct{}{}
-	}
-	return combined
+	return GetLiveRouteAttemptedKeyIndexes(c, channelID)
 }

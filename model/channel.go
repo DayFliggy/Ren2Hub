@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"slices"
 	"strings"
@@ -85,6 +86,21 @@ type ChannelInfo struct {
 	MultiKeyDisabledTime   map[int]int64         `json:"multi_key_disabled_time,omitempty"`   // key禁用时间列表，key index -> time
 	MultiKeyPollingIndex   int                   `json:"multi_key_polling_index"`             // 多Key模式下轮询的key索引
 	MultiKeyMode           constant.MultiKeyMode `json:"multi_key_mode"`
+}
+
+// RoutingSettings shares the Vue channel fields with admission and billing.
+func (channel *Channel) RoutingSettings() (int, float64, error) {
+	capacity, ratio := channel.CapacityTotal, channel.ChannelRatio
+	if capacity == 0 {
+		capacity = DefaultChannelCapacityTotal
+	}
+	if ratio == 0 {
+		ratio = DefaultChannelRatio
+	}
+	if capacity < 1 || capacity > MaxChannelCapacityTotal || ratio <= 0 || ratio > MaxChannelRatio || math.IsNaN(ratio) || math.IsInf(ratio, 0) {
+		return 0, 0, errors.New("invalid channel capacity or price ratio")
+	}
+	return capacity, ratio, nil
 }
 
 type ChannelSortOptions struct {
@@ -338,17 +354,6 @@ func (channel *Channel) GetModels() []string {
 		return []string{}
 	}
 	return strings.Split(strings.Trim(channel.Models, ","), ",")
-}
-
-func (channel *Channel) GetGroups() []string {
-	if channel.Group == "" {
-		return []string{}
-	}
-	groups := strings.Split(strings.Trim(channel.Group, ","), ",")
-	for i, group := range groups {
-		groups[i] = strings.TrimSpace(group)
-	}
-	return groups
 }
 
 func (channel *Channel) GetOtherInfo() map[string]interface{} {

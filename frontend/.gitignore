@@ -1,5 +1,7 @@
 node_modules/
 dist/
+embed-dist/*
+!embed-dist/index.html
 output/
 tmp/
 *.local

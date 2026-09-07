@@ -48,6 +48,10 @@ func VideoProxy(c *gin.Context) {
 		videoProxyError(c, http.StatusNotFound, "invalid_request_error", "Task not found")
 		return
 	}
+	if err := service.TokenModelPermissionError(c, service.StoredTaskModelName(task)); err != nil {
+		videoProxyError(c, err.StatusCode, "permission_error", err.Error())
+		return
+	}
 
 	if task.Status != model.TaskStatusSuccess {
 		videoProxyError(c, http.StatusBadRequest, "invalid_request_error",

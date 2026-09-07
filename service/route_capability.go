@@ -146,7 +146,7 @@ type CapabilityRefreshSummary struct {
 }
 
 // InitRouteCapabilityIndex performs the startup rebuild and publishes the
-// immutable in-memory active snapshot used by Shadow mode.
+// immutable in-memory active snapshot used by the unified live selector.
 func InitRouteCapabilityIndex(ctx context.Context) error {
 	_, err := refreshAllChannels(ctx, false, nil)
 	return err
@@ -174,11 +174,6 @@ func RefreshChannelCapabilitiesByID(ctx context.Context, channelID int) error {
 	}
 	catalog := modellab.DefaultCatalog()
 	err := refreshOneChannel(ctx, &channel, abilities, catalog, true)
-	if err != nil {
-		observeCapabilityRefreshFailure(err)
-	} else {
-		routeShadowMetrics.RefreshSuccess.Add(1)
-	}
 	return err
 }
 
@@ -196,7 +191,6 @@ func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(p
 	defer func() {
 		scanDuration := time.Since(startedAt)
 		capabilityRefreshLagSeconds.Store(int64(scanDuration.Seconds()))
-		observeCapabilityRefreshDurations(scanDuration, -1)
 	}()
 	var channels []model.Channel
 	if err := model.DB.WithContext(ctx).Find(&channels).Error; err != nil {
@@ -233,31 +227,24 @@ func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(p
 			}
 			continue
 		}
-		detectedAt := time.Now()
 		expected, fenceErr := model.GetChannelCapabilitySnapshotFence(ctx, channel.Id)
 		if fenceErr != nil {
 			summary.Failed++
 			if firstErr == nil {
 				firstErr = fenceErr
 			}
-			observeCapabilityRefreshFailure(fenceErr)
 			continue
 		}
-		publishStartedAt := time.Now()
 		if err := refreshOneChannelWithHash(ctx, channel, byChannel[channel.Id], catalog, hash, expected); err != nil {
 			if markerErr := markChannelCapabilityRefreshFailure(channel.Id, expected, hash, catalog.Version, err); markerErr != nil {
 				err = errors.Join(err, markerErr)
 			}
 			summary.Failed++
-			observeCapabilityRefreshFailure(err)
 			if firstErr == nil {
 				firstErr = err
 			}
 		} else {
-			observeCapabilityRefreshDurations(-1, time.Since(publishStartedAt))
-			observeCapabilityRefreshDetectionToActive(time.Since(detectedAt))
 			summary.Refreshed++
-			routeShadowMetrics.RefreshSuccess.Add(1)
 		}
 		if report != nil {
 			report(index+1, len(channels))
@@ -271,33 +258,21 @@ func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(p
 	return summary, firstErr
 }
 
-func observeCapabilityRefreshFailure(err error) {
-	routeShadowMetrics.RefreshFailure.Add(1)
-	if errors.Is(err, model.ErrCapabilitySnapshotConflict) {
-		routeShadowMetrics.SnapshotConflicts.Add(1)
-	}
-	recordCapabilityRefreshObservation(false, 0, err)
-}
-
 func refreshOneChannel(ctx context.Context, channel *model.Channel, abilities []model.Ability, catalog *modellab.Catalog, rebuild bool) error {
 	hash, err := channelCapabilityFingerprint(channel, abilities)
 	if err != nil {
 		return err
 	}
-	detectedAt := time.Now()
 	expected, err := model.GetChannelCapabilitySnapshotFence(ctx, channel.Id)
 	if err != nil {
 		return err
 	}
-	publishStartedAt := time.Now()
 	if err := refreshOneChannelWithHash(ctx, channel, abilities, catalog, hash, expected); err != nil {
 		if markerErr := markChannelCapabilityRefreshFailure(channel.Id, expected, hash, catalog.Version, err); markerErr != nil {
 			return errors.Join(err, markerErr)
 		}
 		return err
 	}
-	observeCapabilityRefreshDurations(-1, time.Since(publishStartedAt))
-	observeCapabilityRefreshDetectionToActive(time.Since(detectedAt))
 	if rebuild {
 		return RebuildRouteCapabilityIndex(ctx)
 	}
@@ -426,20 +401,6 @@ func projectChannelCapabilities(channel *model.Channel, abilities []model.Abilit
 	}
 
 	paths := buildCapabilityPaths(channel)
-	endpointTypes := make(map[string]struct{})
-	for _, matchGroup := range byRequest {
-		for _, match := range matchGroup.matches {
-			for _, endpoint := range endpointTypesForModel(channel, match) {
-				endpointTypes[string(endpoint)] = struct{}{}
-			}
-		}
-	}
-	endpointList := make([]string, 0, len(endpointTypes))
-	for endpoint := range endpointTypes {
-		endpointList = append(endpointList, endpoint)
-	}
-	sort.Strings(endpointList)
-	endpointJSON, _ := common.Marshal(endpointList)
 	pathJSON, _ := common.Marshal(paths)
 
 	requestModels := make([]string, 0, len(byRequest))
@@ -472,10 +433,19 @@ func projectChannelCapabilities(channel *model.Channel, abilities []model.Abilit
 		source := chosen.Source
 		if conflict {
 			state = model.RouteCapabilityStateConflict
-		} else if chosen.LabSlug == "" || chosen.Source == "unknown" {
-			state = model.RouteCapabilityStateUnresolved
+		} else if chosen.LabSlug == "" || chosen.Source == "unknown" || chosen.Confidence < routeCapabilityMinimumConfidence {
+			// The configured model is an explicit capability even when the
+			// vendor catalog cannot identify its lab. Do not guess a vendor.
+			chosen.LabSlug = "custom"
+			chosen.Confidence = 1
+			source = "channel_configuration"
 		}
 		groupsJSON, _ := common.Marshal(abilityGroups[requestModel])
+		modelEndpoints, marshalErr := common.Marshal(endpointTypesForModel(channel, chosen))
+		if marshalErr != nil {
+			common.SysError("encode model endpoints: " + marshalErr.Error())
+			state = model.RouteCapabilityStateUnsupported
+		}
 		result = append(result, model.ChannelModelCapability{
 			ChannelID:         channel.Id,
 			RequestModel:      requestModel,
@@ -486,7 +456,7 @@ func projectChannelCapabilities(channel *model.Channel, abilities []model.Abilit
 			CatalogVersion:    resolution.CatalogVersion,
 			SourceHash:        sourceHash,
 			AbilityGroups:     string(groupsJSON),
-			EndpointTypes:     string(endpointJSON),
+			EndpointTypes:     string(modelEndpoints),
 			PathCapabilities:  string(pathJSON),
 			ChannelStatus:     channel.Status,
 			Priority:          channel.GetPriority(),
@@ -518,7 +488,37 @@ func endpointTypesForModel(channel *model.Channel, match modellab.ModelMatch) []
 		endpoints = append(endpoints, config.SupportedEndpointTypesForModel(match.RealModel)...)
 		return endpoints
 	}
-	return common.GetEndpointTypesByChannelType(channel.Type, match.RealModel)
+	endpoints := common.GetEndpointTypesByChannelType(channel.Type, match.RealModel)
+	switch channel.Type {
+	case constant.ChannelTypeMidjourney, constant.ChannelTypeMidjourneyPlus:
+		return []constant.EndpointType{constant.EndpointTypeMidjourney}
+	case constant.ChannelTypeSunoAPI:
+		return []constant.EndpointType{constant.EndpointTypeSuno}
+	case constant.ChannelTypeSora, constant.ChannelTypeKling, constant.ChannelTypeJimeng, constant.ChannelTypeVidu, constant.ChannelTypeDoubaoVideo:
+		return []constant.EndpointType{constant.EndpointTypeOpenAIVideo}
+	}
+	// Text protocols are accepted through RelayKit conversion. The native
+	// Responses constraint is checked separately for opaque compaction state.
+	endpoints = append(endpoints, constant.EndpointTypeOpenAI, constant.EndpointTypeOpenAIResponse,
+		constant.EndpointTypeAnthropic, constant.EndpointTypeGemini, constant.EndpointTypeEmbeddings)
+	apiType, _ := common.ChannelType2APIType(channel.Type)
+	switch apiType {
+	case constant.APITypeOpenAI, constant.APITypeOpenRouter, constant.APITypeXinference:
+		endpoints = append(endpoints, constant.EndpointTypeAudio, constant.EndpointTypeRealtime, constant.EndpointTypeImageGeneration, constant.EndpointTypeJinaRerank)
+	case constant.APITypeSiliconFlow:
+		endpoints = append(endpoints, constant.EndpointTypeAudio, constant.EndpointTypeImageGeneration, constant.EndpointTypeJinaRerank)
+	case constant.APITypeMiniMax, constant.APITypeVolcEngine:
+		endpoints = append(endpoints, constant.EndpointTypeAudio)
+	case constant.APITypeCloudflare:
+		endpoints = append(endpoints, constant.EndpointTypeAudio, constant.EndpointTypeImageGeneration, constant.EndpointTypeJinaRerank)
+	case constant.APITypeCohere, constant.APITypeAli, constant.APITypeMoonshot:
+		endpoints = append(endpoints, constant.EndpointTypeJinaRerank)
+	}
+	switch channel.Type {
+	case constant.ChannelTypeOpenAI, constant.ChannelTypeAli, constant.ChannelTypeGemini, constant.ChannelTypeVertexAi, constant.ChannelTypeMiniMax, constant.ChannelTypeVolcEngine:
+		endpoints = append(endpoints, constant.EndpointTypeOpenAIVideo)
+	}
+	return endpoints
 }
 
 func buildCapabilityPaths(channel *model.Channel) []capabilityPath {

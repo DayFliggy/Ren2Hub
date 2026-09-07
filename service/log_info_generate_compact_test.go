@@ -16,7 +16,7 @@ func TestGenerateTextOtherInfoStoresCompactResponseObjectUnderAdminInfo(t *testi
 		ChannelMeta:           &relaycommon.ChannelMeta{},
 	}
 
-	other := GenerateTextOtherInfo(ctx, info, 1, 1, 1, 0, 1, 0, -1)
+	other := GenerateTextOtherInfo(ctx, info, 1, 1, 1, 0, 1, 0)
 	adminInfo, ok := other["admin_info"].(map[string]interface{})
 	require.True(t, ok)
 	require.Equal(t, "compatible.compaction", adminInfo["compact_response_object"])

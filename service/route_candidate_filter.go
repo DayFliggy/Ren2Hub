@@ -10,7 +10,7 @@ import (
 )
 
 // routeCapabilityFilterInput contains only request-time facts shared by the
-// manual preview and the automatic Shadow selector. Profile and Entry state
+// manual preview and the unified request selector. Profile and Entry state
 // remain outside this filter because they do not exist in automatic routing.
 type routeCapabilityFilterInput struct {
 	Capability               model.ChannelModelCapability
@@ -18,9 +18,6 @@ type routeCapabilityFilterInput struct {
 	ChannelStatus            int
 	ChannelType              int
 	AbilityEnabled           bool
-	AbilityAllowed           bool
-	AbilityGroups            []string
-	UserGroup                string
 	Token                    model.Token
 	TokenLimitEnabled        bool
 	TokenLimit               map[string]bool
@@ -48,81 +45,69 @@ func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilt
 	result := routeCapabilityFilterResult{}
 
 	if input.ChannelStatus != common.ChannelStatusEnabled {
-		result.Reason = ShadowFilterChannelDisabled
+		result.Reason = RouteFilterChannelDisabled
 		return result
 	}
 	if input.RequireSnapshot && input.SnapshotVersion <= 0 {
-		result.Reason = ShadowFilterSnapshotUnavailable
+		result.Reason = RouteFilterSnapshotUnavailable
 		return result
 	}
 	if input.Capability.ChannelID == 0 {
-		result.Reason = ShadowFilterUnknownCapability
+		result.Reason = RouteFilterUnknownCapability
 		return result
 	}
 	if input.SnapshotVersion > 0 && input.Capability.SnapshotVersion != input.SnapshotVersion {
-		result.Reason = ShadowFilterSnapshotStale
+		result.Reason = RouteFilterSnapshotStale
 		return result
 	}
 	switch input.Capability.State {
 	case model.RouteCapabilityStateConflict:
-		result.Reason = ShadowFilterMappingConflict
+		result.Reason = RouteFilterMappingConflict
 		return result
 	case "", model.RouteCapabilityStateUnresolved:
-		result.Reason = ShadowFilterUnknownCapability
+		result.Reason = RouteFilterUnknownCapability
 		return result
 	case model.RouteCapabilityStateUnsupported, model.RouteCapabilityStateDisabled:
-		result.Reason = ShadowFilterUnsupported
+		result.Reason = RouteFilterUnsupported
 		return result
 	case model.RouteCapabilityStateEligible:
 		// Continue with request-time authorization and path checks.
 	default:
-		result.Reason = ShadowFilterUnknownCapability
+		result.Reason = RouteFilterUnknownCapability
 		return result
 	}
 	if strings.TrimSpace(input.Capability.LabSlug) == "" ||
 		strings.EqualFold(strings.TrimSpace(input.Capability.Source), "unknown") {
-		result.Reason = ShadowFilterUnknownCapability
+		result.Reason = RouteFilterUnknownCapability
 		return result
 	}
 	if input.Capability.Confidence < routeCapabilityMinimumConfidence {
-		result.Reason = ShadowFilterUnknownCapability
+		result.Reason = RouteFilterUnknownCapability
 		return result
 	}
 	if !input.AbilityEnabled {
-		result.Reason = ShadowFilterAbilityDisabled
+		result.Reason = RouteFilterAbilityDisabled
 		return result
-	}
-	if !input.AbilityAllowed {
-		if len(input.AbilityGroups) > 0 {
-			allowed := false
-			for _, group := range input.AbilityGroups {
-				if group == input.UserGroup || IsUserSelectableGroup(input.UserGroup, group) {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				result.Reason = ShadowFilterGroupForbidden
-				return result
-			}
-		} else {
-			result.Reason = ShadowFilterGroupForbidden
-			return result
-		}
 	}
 	modelName := input.NormalizedModel
 	if modelName == "" {
 		modelName = input.RequestModel
 	}
 	if (input.TokenLimitEnabled || input.Token.IsModelLimitsEnabled()) &&
-		!tokenAllowsShadowModel(input.TokenLimit, modelName) &&
-		!tokenAllowsShadowModel(input.Token.GetModelLimitsMap(), modelName) {
-		result.Reason = ShadowFilterTokenForbidden
+		!tokenAllowsRouteModel(input.TokenLimit, modelName) &&
+		!tokenAllowsRouteModel(input.Token.GetModelLimitsMap(), modelName) {
+		result.Reason = RouteFilterTokenForbidden
 		return result
 	}
 	if (input.RequireEndpoint && input.EndpointType == "") ||
 		(input.EndpointType != "" && !stringListContains(decodeStringList(input.Capability.EndpointTypes), input.EndpointType)) {
-		result.Reason = ShadowFilterPathUnsupported
+		result.Reason = RouteFilterPathUnsupported
+		return result
+	}
+	if input.EndpointType == string(constant.EndpointTypeAudio) &&
+		(input.ChannelType == constant.ChannelTypeMiniMax || input.ChannelType == constant.ChannelTypeVolcEngine) &&
+		input.RequestPath != "/v1/audio/speech" {
+		result.Reason = RouteFilterPathUnsupported
 		return result
 	}
 	if input.ChannelType == constant.ChannelTypeAdvancedCustom {
@@ -131,20 +116,20 @@ func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilt
 			advanced = advancedCustomPathConfigFromCapability(input.Capability)
 		}
 		if advanced == nil || !advanced.SupportsPathForModel(input.RequestPath, input.RequestModel) {
-			result.Reason = ShadowFilterPathUnsupported
+			result.Reason = RouteFilterPathUnsupported
 			return result
 		}
 	}
 	if !input.Entitled {
-		result.Reason = ShadowFilterEntitlementRevoked
+		result.Reason = RouteFilterEntitlementRevoked
 		return result
 	}
 	if input.PriceEligibilityKnown && !input.PriceEligible {
-		result.Reason = ShadowFilterPriceForbidden
+		result.Reason = RouteFilterPriceForbidden
 		return result
 	}
 	if input.SecurityEligibilityKnown && !input.SecurityAllowed {
-		result.Reason = ShadowFilterSecurityForbidden
+		result.Reason = RouteFilterSecurityForbidden
 		return result
 	}
 	return result

@@ -14,7 +14,6 @@ export interface PublicStatus {
   uptime_kuma_enabled?: boolean
   HeaderNavModules?: unknown
   frontend_capabilities?: FrontendCapabilities
-  next_frontend_enabled?: boolean
   turnstile_check?: boolean
   turnstile_site_key?: string
   start_time?: number
@@ -88,7 +87,6 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     'user_agreement_enabled',
     'privacy_policy_enabled',
     'uptime_kuma_enabled',
-    'next_frontend_enabled',
     'turnstile_check',
     'github_oauth',
     'discord_oauth',

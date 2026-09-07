@@ -7,14 +7,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSelectTokenRouteKeepsLegacyFallbackWhenCapabilityIsDisabled(t *testing.T) {
+func TestSelectTokenRouteRejectsDisabledCapability(t *testing.T) {
 	result, err := SelectTokenRoute(RouteSelectionInput{
 		SourceInput:        RouteSourceInput{CapabilityEnabled: false, HasProfile: true, ProfileMode: "manual"},
 		ManualGroupEnabled: true,
 		ManualCandidates:   []RouteSelectionCandidate{{ChannelID: 1, HealthUsable: true}},
 	})
-	require.NoError(t, err)
-	assert.Equal(t, RouteSourceLegacy, result.Decision.RouteSource)
+	require.ErrorIs(t, err, ErrRouteSelectionUnavailable)
+	assert.Equal(t, RouteSourceUnavailable, result.Decision.RouteSource)
 	assert.Empty(t, result.Candidates)
 }
 
@@ -82,10 +82,10 @@ func TestSelectTokenRouteManualLoadBalanceTreatsAllZeroWeightsEqually(t *testing
 }
 
 func TestSelectTokenRouteAutoUsesPriorityLayerAndBoundedTopK(t *testing.T) {
-	t.Setenv("ROUTE_SCORE_SHADOW_ENABLED", "true")
 	result, err := SelectTokenRoute(RouteSelectionInput{
-		SourceInput: RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "auto_lab"},
-		TopK:        10,
+		DynamicScoringEnabled: true,
+		SourceInput:           RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "auto_lab"},
+		TopK:                  10,
 		AutoCandidates: []RouteSelectionCandidate{
 			{ChannelID: 3, Priority: 20, Weight: 1, HealthUsable: true, ErrorRate: .1},
 			{ChannelID: 2, Priority: 20, Weight: 3, HealthUsable: true, ErrorRate: .0},
@@ -96,8 +96,8 @@ func TestSelectTokenRouteAutoUsesPriorityLayerAndBoundedTopK(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []int{2, 3, 1}, channelIDs(result.Candidates))
 	assert.Equal(t, 2, result.Decision.SelectedChannelID)
-	assert.Equal(t, "shadow", result.Decision.ScoringMode)
-	assert.False(t, result.Decision.DynamicScoreApplied)
+	assert.Equal(t, "live", result.Decision.ScoringMode)
+	assert.True(t, result.Decision.DynamicScoreApplied)
 	for _, candidate := range result.Decision.Candidates {
 		if candidate.FilterReason == "" {
 			assert.NotNil(t, candidate.Score)
@@ -105,8 +105,7 @@ func TestSelectTokenRouteAutoUsesPriorityLayerAndBoundedTopK(t *testing.T) {
 	}
 }
 
-func TestSelectTokenRouteKeepsStaticOrderUntilScoreLiveIsEnabled(t *testing.T) {
-	t.Setenv("ROUTE_SCORE_SHADOW_ENABLED", "true")
+func TestSelectTokenRouteScoringRespectsObservedHealth(t *testing.T) {
 	input := RouteSelectionInput{
 		SourceInput:  RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "auto_lab"},
 		TopK:         3,
@@ -121,7 +120,7 @@ func TestSelectTokenRouteKeepsStaticOrderUntilScoreLiveIsEnabled(t *testing.T) {
 	assert.Equal(t, []int{1, 2}, channelIDs(shadowResult.Candidates))
 	assert.Equal(t, 1, shadowResult.Decision.SelectedChannelID)
 	assert.Equal(t, 1, shadowResult.Decision.StaticPreferredChannelID)
-	assert.Equal(t, 2, shadowResult.Decision.ScoredPreferredChannelID)
+	assert.Zero(t, shadowResult.Decision.ScoredPreferredChannelID)
 
 	input.DynamicScoringEnabled = true
 	liveResult, err := SelectTokenRoute(input)
@@ -130,26 +129,6 @@ func TestSelectTokenRouteKeepsStaticOrderUntilScoreLiveIsEnabled(t *testing.T) {
 	assert.Equal(t, 2, liveResult.Decision.SelectedChannelID)
 	assert.Equal(t, "live", liveResult.Decision.ScoringMode)
 	assert.True(t, liveResult.Decision.DynamicScoreApplied)
-}
-
-func TestSelectTokenRouteScoreShadowRetainsEveryStaticPriorityLayer(t *testing.T) {
-	t.Setenv("ROUTE_SCORE_SHADOW_ENABLED", "true")
-	result, err := SelectTokenRoute(RouteSelectionInput{
-		SourceInput: RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "auto_lab"},
-		TopK:        3,
-		AutoCandidates: []RouteSelectionCandidate{
-			{ChannelID: 30, Priority: 30, HealthUsable: true, ErrorRate: 1, ErrorRateKnown: true},
-			{ChannelID: 20, Priority: 20, HealthUsable: true, ErrorRate: 0, ErrorRateKnown: true},
-			{ChannelID: 10, Priority: 10, HealthUsable: true, ErrorRate: 0, ErrorRateKnown: true},
-		},
-	})
-
-	require.NoError(t, err)
-	assert.Equal(t, []int{30, 20, 10}, channelIDs(result.Candidates))
-	assert.Equal(t, 30, result.Decision.SelectedChannelID)
-	assert.Equal(t, 30, result.Decision.StaticPreferredChannelID)
-	assert.Equal(t, 30, result.Decision.ScoredPreferredChannelID)
-	assert.Equal(t, "shadow", result.Decision.ScoringMode)
 }
 
 func TestSelectTokenRouteFailsClosedWhenManualGroupHasNoEligibleCandidate(t *testing.T) {

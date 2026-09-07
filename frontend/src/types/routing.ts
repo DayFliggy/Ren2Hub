@@ -1,4 +1,4 @@
-export type RouteMode = 'legacy' | 'manual' | 'auto_lab'
+export type RouteMode = 'manual' | 'auto_lab'
 export type RouteGroupKind = 'manual' | 'auto_lab'
 export type RouteEntrySource = 'platform'
 export type RouteRetryMode =

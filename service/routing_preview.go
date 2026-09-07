@@ -344,10 +344,6 @@ func FindUserRouteCapabilityAccessForGroup(ctx context.Context, userID int, capa
 	if err := model.DB.WithContext(ctx).Select("id", "group").Where("id = ?", userID).First(&user).Error; err != nil {
 		return nil, err
 	}
-	effectiveGroup = strings.TrimSpace(effectiveGroup)
-	if effectiveGroup == "" {
-		effectiveGroup = user.Group
-	}
 	capabilityIDsByChannelModel := make(map[int]map[string][]int, len(capabilities))
 	channelIDs := make([]int, 0, len(capabilities))
 	seenChannels := make(map[int]struct{}, len(capabilities))
@@ -377,9 +373,7 @@ func FindUserRouteCapabilityAccessForGroup(ctx context.Context, userID int, capa
 		for _, capabilityID := range capabilityIDs {
 			value := access[capabilityID]
 			value.Enabled = true
-			if ability.Group == effectiveGroup || IsUserSelectableGroup(effectiveGroup, ability.Group) {
-				value.Allowed = true
-			}
+			value.Allowed = true
 			access[capabilityID] = value
 		}
 	}
@@ -486,7 +480,7 @@ func routePreviewFilterReason(input routePreviewFilterInput) string {
 	}
 	if input.Token.Status != common.TokenStatusEnabled ||
 		(input.Token.ExpiredTime != -1 && input.Token.ExpiredTime <= common.GetTimestamp()) {
-		return ShadowFilterTokenForbidden
+		return RouteFilterTokenForbidden
 	}
 	entitled := input.Entitlement.ID == 0 || entitlementIsActive(input.Entitlement)
 	result := filterRouteCapability(routeCapabilityFilterInput{
@@ -495,8 +489,6 @@ func routePreviewFilterReason(input routePreviewFilterInput) string {
 		ChannelStatus:   input.Channel.Status,
 		ChannelType:     input.Channel.Type,
 		AbilityEnabled:  input.Ability.Enabled,
-		AbilityAllowed:  input.Ability.Allowed,
-		UserGroup:       "",
 		Token:           input.Token,
 		RequestModel:    input.RequestModel,
 		NormalizedModel: input.NormalizedModel,

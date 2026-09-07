@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -26,7 +25,6 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -74,8 +72,6 @@ func geminiRelayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewA
 func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	requestId := c.GetString(common.RequestIdKey)
-	//group := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
-	//originalModel := common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
 
 	var (
 		newAPIError *types.NewAPIError
@@ -174,39 +170,6 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	relayInfo.SetEstimatePromptTokens(tokens)
 
-	// Compact pricing depends on the selected channel's model mapping. Defer
-	// pricing and pre-consume until the attempt model has been resolved.
-	if relayInfo.RelayMode != relayconstant.RelayModeResponsesCompact {
-		priceData, priceErr := helper.ModelPriceHelper(c, relayInfo, tokens, meta)
-		if priceErr != nil {
-			newAPIError = types.NewError(priceErr, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
-			return
-		}
-		if !liveRoutePriceRatioAllowed(c, priceData.GroupRatioInfo.GroupRatio) {
-			newAPIError = types.NewErrorWithStatusCode(
-				service.ErrRoutePriceRatioExceeded,
-				types.ErrorCodeModelPriceError,
-				http.StatusForbidden,
-				types.ErrOptionWithSkipRetry(),
-			)
-			return
-		}
-		if routeLiveSelectionActive(c) {
-			markLiveRoutePriceQualified(c)
-		}
-
-		// common.SetContextKey(c, constant.ContextKeyTokenCountMeta, meta)
-
-		if priceData.FreeModel {
-			logger.LogInfo(c, fmt.Sprintf("模型 %s 免费，跳过预扣费", relayInfo.OriginModelName))
-		} else if !routeLiveSelectionActive(c) {
-			newAPIError = service.PreConsumeBilling(c, priceData.QuotaToPreConsume, relayInfo)
-			if newAPIError != nil {
-				return
-			}
-		}
-	}
-
 	defer func() {
 		// Only return quota if downstream failed and quota was actually pre-consumed
 		if newAPIError != nil {
@@ -219,18 +182,15 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}()
 
 	retryParam := &service.RetryParam{
-		Ctx:         c,
-		TokenGroup:  relayInfo.TokenGroup,
-		ModelName:   relayInfo.BillingModelName(),
-		RequestPath: c.Request.URL.Path,
-		Retry:       common.GetPointer(0),
+		Ctx:   c,
+		Retry: common.GetPointer(0),
 	}
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
 	compactRetry := newCompactRetryState(relayInfo)
 
 	for {
-		if retryParam.GetRetry() > 0 {
+		if liveRouteRetryCounters(c).TotalAttempts > 0 {
 			releaseRouteAttemptLease(c)
 			if routeLiveSelectionActive(c) && c.GetBool(liveRouteRenewalFailedKey) {
 				break
@@ -264,8 +224,21 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			}
 			break
 		}
-		if routeLiveSelectionActive(c) && !liveRoutePriceRatioAllowed(c, relayInfo.PriceData.GroupRatioInfo.GroupRatio) {
-			markLiveRouteCandidateFiltered(c, channel.Id, service.ShadowFilterPriceForbidden)
+		relayInfo.InitChannelMeta(c)
+		if compactRetry != nil {
+			if err := helper.ConfigureCompactAttempt(c, relayInfo); err != nil {
+				newAPIError = types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
+				break
+			}
+			common.SetContextKey(c, constant.ContextKeyOriginalModel, relayInfo.BillingModelName())
+		}
+		if _, err := helper.ModelPriceHelper(c, relayInfo, tokens, meta); err != nil {
+			newAPIError = types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
+			break
+		}
+		markLiveRoutePriceQualified(c)
+		if routeLiveSelectionActive(c) && !liveRoutePriceRatioAllowed(c, relayInfo.PriceData.ChannelRatio) {
+			markLiveRouteCandidateFiltered(c, channel.Id, service.RouteFilterPriceForbidden)
 			if nextAttempt, found := nextLiveRouteCandidateIndex(c, retryParam.GetRetry()); found {
 				retryParam.SetRetry(nextAttempt)
 				continue
@@ -279,6 +252,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		if leaseErr := acquireRouteAttemptLease(c, relayInfo, channel, retryParam.GetRetry()); leaseErr != nil {
+			if errors.Is(leaseErr, service.ErrRouteLeaseCapacity) {
+				markLiveRouteCandidateFiltered(c, channel.Id, "capacity_exhausted")
+			}
 			if service.LiveRouteQualificationAllowsFailover(leaseErr) && !relayResponseCommitted(c, relayInfo) &&
 				retryParam.GetRetry() < relayRetryLimit(c) {
 				if nextAttempt, found := nextLiveRouteCandidateIndex(c, retryParam.GetRetry()); found {
@@ -287,38 +263,19 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				}
 			}
 			if service.LiveRouteQualificationAllowsFailover(leaseErr) && !relayResponseCommitted(c, relayInfo) {
-				newAPIError = types.NewError(service.ErrRouteSelectionUnavailable, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+				newAPIError = types.NewErrorWithStatusCode(service.ErrRouteSelectionUnavailable, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
 			} else {
-				newAPIError = types.NewError(leaseErr, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+				newAPIError = types.NewErrorWithStatusCode(leaseErr, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
 			}
 			break
 		}
-		if compactRetry == nil && routeLiveSelectionActive(c) && relayInfo.Billing == nil && !relayInfo.PriceData.FreeModel {
-			newAPIError = service.PreConsumeBilling(c, relayInfo.PriceData.QuotaToPreConsume, relayInfo)
-			if newAPIError != nil {
-				break
-			}
+		if billingErr := service.PrepareBillingForSelectedModel(c, relayInfo); billingErr != nil {
+			newAPIError = billingErr
+			break
 		}
 		addUsedChannel(c, channel.Id)
 		if compactRetry != nil {
 			compactRetry.recordAttempt(c, channel.Id)
-			relayInfo.InitChannelMeta(c)
-			if err := helper.ConfigureCompactAttempt(c, relayInfo); err != nil {
-				newAPIError = types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
-				break
-			}
-			common.SetContextKey(c, constant.ContextKeyOriginalModel, relayInfo.BillingModelName())
-			if _, err := helper.ModelPriceHelper(c, relayInfo, tokens, meta); err != nil {
-				newAPIError = types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
-				break
-			}
-			if billingErr := service.PrepareBillingForSelectedModel(c, relayInfo); billingErr != nil {
-				newAPIError = billingErr
-				break
-			}
-		} else if billingErr := service.PrepareTieredBillingForSelectedGroup(c, relayInfo); billingErr != nil {
-			newAPIError = billingErr
-			break
 		}
 
 		bodyStorage, bodyErr := common.GetBodyStorage(c)
@@ -374,7 +331,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				if relayInfo.FirstResponseTime.After(attemptStartedAt) {
 					ttftMS = relayInfo.FirstResponseTime.Sub(attemptStartedAt).Milliseconds()
 				}
-				if healthErr := service.ObserveLiveRouteSuccessForKey(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), latencyMS, ttftMS); healthErr != nil {
+				if healthErr := service.ObserveLiveRouteSuccessForKey(c.Request.Context(), channel.Id, relayInfo.RouteCapabilityModel, common.GetContextKeyString(c, constant.ContextKeyChannelKey), latencyMS, ttftMS); healthErr != nil {
 					recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
 				}
 			}
@@ -401,7 +358,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			classificationCode := string(newAPIError.GetErrorCode())
 			if !errors.Is(newAPIError, service.ErrRouteLeaseUnavailable) &&
 				!errors.Is(newAPIError, service.ErrRouteLeaseRuntime) {
-				if healthErr := service.ObserveLiveRouteErrorForKeyWithRetryAfter(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), newAPIError.StatusCode, classificationCode, newAPIError.Error(), streamResponseCommitted, newAPIError.RetryAfter); healthErr != nil {
+				if healthErr := service.ObserveLiveRouteErrorForKeyWithRetryAfter(c.Request.Context(), channel.Id, relayInfo.RouteCapabilityModel, common.GetContextKeyString(c, constant.ContextKeyChannelKey), newAPIError.StatusCode, classificationCode, newAPIError.Error(), streamResponseCommitted, newAPIError.RetryAfter); healthErr != nil {
 					recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
 				}
 			}
@@ -427,16 +384,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			channelError.AutoBan = false
 		}
 		processChannelError(c, *channelError, newAPIError)
-		if routeLiveSelectionActive(c) && liveNextAttempt < 0 {
+		if compactRetry == nil && routeLiveSelectionActive(c) && liveNextAttempt < 0 {
 			break
 		}
 
 		if compactRetry != nil {
-			retryClassBudget := compactRetry.remainingAttempts()
-			if retryClassBudget < 1 {
-				retryClassBudget = 1
-			}
-			if compactRetry.advance(c, relayInfo, newAPIError, shouldRetry(c, newAPIError, retryClassBudget)) {
+			if compactRetry.advance(c, relayInfo, newAPIError, !relayResponseCommitted(c, relayInfo) && (liveClassification.Retryable || liveClassification.Failoverable || modelSemanticError)) {
 				continue
 			}
 			break
@@ -449,13 +402,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			retryParam.SetRetry(liveNextAttempt)
 			continue
 		}
-		if !shouldRetry(c, newAPIError, relayRetryLimit(c)-retryParam.GetRetry()) {
-			break
-		}
-		if !waitForLiveRouteBackoff(c, retryParam.GetRetry(), newAPIError.RetryAfter) {
-			break
-		}
-		retryParam.IncreaseRetry()
+		break
 	}
 
 	useChannel := c.GetStringSlice("use_channel")
@@ -535,7 +482,7 @@ func newCompactRetryState(info *relaycommon.RelayInfo) *compactRetryState {
 	if info == nil || info.RelayMode != relayconstant.RelayModeResponsesCompact {
 		return nil
 	}
-	totalAttempts := common.RetryTimes + 1
+	totalAttempts := service.DefaultTotalAttempts
 	if totalAttempts < 1 {
 		totalAttempts = 1
 	}
@@ -551,7 +498,7 @@ func newCompactRetryState(info *relaycommon.RelayInfo) *compactRetryState {
 	state := &compactRetryState{
 		stage:       stage,
 		exactBudget: (2*totalAttempts + 2) / 3,
-		baseBudget:  (totalAttempts + 2) / 3,
+		baseBudget:  totalAttempts - (2*totalAttempts+2)/3,
 		attemptedKeys: map[relaycommon.CompactAttemptStage]service.CompactAttemptedKeyIndexes{
 			relaycommon.CompactAttemptExact: {},
 			relaycommon.CompactAttemptBase:  {},
@@ -566,7 +513,6 @@ func newCompactRetryState(info *relaycommon.RelayInfo) *compactRetryState {
 func (s *compactRetryState) prepare(param *service.RetryParam, info *relaycommon.RelayInfo) {
 	info.CompactAttemptStage = s.stage
 	info.UpstreamAttemptModel = ""
-	info.IsModelMapped = false
 	service.SetCompactAttemptedKeyIndexes(param.Ctx, s.attemptedKeys[s.stage])
 	if s.stage == relaycommon.CompactAttemptExact {
 		param.SetRetry(s.exactAttempts)
@@ -614,7 +560,6 @@ func (s *compactRetryState) switchToBase(c *gin.Context, info *relaycommon.Relay
 	info.CompactAttemptStage = s.stage
 	info.UpstreamAttemptModel = ""
 	service.SetCompactStage(c, s.stage)
-	service.ResetCompactAutoGroupSelection(c)
 	service.SetCompactAttemptedKeyIndexes(c, s.attemptedKeys[s.stage])
 	return true
 }
@@ -671,156 +616,96 @@ func isCompactModelSemanticError(apiErr *types.NewAPIError) bool {
 }
 
 func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service.RetryParam) (*model.Channel, *types.NewAPIError) {
-	if info.ChannelMeta == nil && !routeLiveSelectionActive(c) {
-		autoBan := c.GetBool("auto_ban")
-		autoBanInt := 1
-		if !autoBan {
-			autoBanInt = 0
-		}
-		return &model.Channel{
-			Id:      c.GetInt("channel_id"),
-			Type:    c.GetInt("channel_type"),
-			Name:    c.GetString("channel_name"),
-			AutoBan: &autoBanInt,
-		}, nil
-	}
-	if service.RouteLiveRoutingEnabled() {
+	if info.RelayMode == relayconstant.RelayModeResponsesCompact {
+		specificChannelID := 0
 		if value, ok := c.Get("route_live_selection"); ok {
 			selection, valid := value.(service.LiveRouteSelection)
-			if valid && selection.Source != service.RouteSourceLegacy {
-				for candidateIndex := retryParam.GetRetry(); candidateIndex < len(selection.Attempts); candidateIndex++ {
-					candidate, actualIndex, found := selection.CandidateAtOrAfter(candidateIndex)
-					if !found {
-						break
-					}
-					channel, err := model.CacheGetChannel(candidate.ChannelID)
-					if err != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
-						markLiveRouteCandidateFiltered(c, candidate.ChannelID, service.ShadowFilterChannelDisabled)
-						candidateIndex = actualIndex
-						continue
-					}
-					retryParam.SetRetry(actualIndex)
-					// The middleware has already installed the first Live channel in
-					// the request context, while RelayInfo.ChannelMeta is initialized
-					// only after request validation. Reading the promoted ChannelId
-					// field here would dereference a nil ChannelMeta on the first
-					// attempt.
-					if actualIndex == 0 && common.GetContextKeyInt(c, constant.ContextKeyChannelId) == channel.Id {
-						return channel, nil
-					}
-					if setupErr := middleware.SetupContextForSelectedChannel(c, channel, info.BillingModelName()); setupErr != nil {
-						if setupErr.GetErrorCode() == types.ErrorCodeChannelNoAvailableKey {
-							markLiveRouteCandidateFiltered(c, candidate.ChannelID, service.RouteFilterKeyUnavailable)
-							candidateIndex = actualIndex
-							continue
-						}
-						return nil, setupErr
-					}
-					return channel, nil
-				}
+			if valid {
+				specificChannelID = selection.SpecificChannelID
+			}
+		}
+		channel, err := middleware.SelectRequestChannel(c, ratio_setting.WithCompactModelSuffix(info.RequestedModel), specificChannelID, info.CompactAttemptStage)
+		retryParam.SetRetry(0)
+		if err == nil && info.LastError != nil && liveRouteRetryCounters(c).TotalAttempts > 0 {
+			value, _ := c.Get("route_live_selection")
+			selection := value.(service.LiveRouteSelection)
+			classification := service.ClassifyRouteError(info.LastError.StatusCode, string(info.LastError.GetErrorCode()), info.LastError.Error(), false)
+			if info.CompactAttemptStage == relaycommon.CompactAttemptBase && isCompactModelSemanticError(info.LastError) {
+				classification.Retryable = true
+			}
+			candidate, index, found := selection.NextCandidateForError(-1, c.GetInt(liveRoutePreviousChannelKey), classification, liveRouteRetryCounters(c))
+			if !found {
 				return nil, types.NewError(service.ErrRouteSelectionUnavailable, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 			}
-		}
-	}
-	if info.ChannelMeta == nil {
-		autoBan := c.GetBool("auto_ban")
-		autoBanInt := 1
-		if !autoBan {
-			autoBanInt = 0
-		}
-		return &model.Channel{
-			Id:      c.GetInt("channel_id"),
-			Type:    c.GetInt("channel_type"),
-			Name:    c.GetString("channel_name"),
-			AutoBan: &autoBanInt,
-		}, nil
-	}
-	if info.RelayMode == relayconstant.RelayModeResponsesCompact {
-		if _, specific := c.Get("specific_channel_id"); specific {
-			channel, err := model.CacheGetChannel(info.ChannelId)
-			if err != nil {
-				return nil, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+			retryParam.SetRetry(index)
+			if candidate.ChannelID != channel.Id {
+				var loadErr error
+				channel, loadErr = model.GetChannelById(candidate.ChannelID, true)
+				if loadErr != nil {
+					return nil, types.NewError(loadErr, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+				}
+				err = middleware.SetupContextForSelectedChannel(c, channel, ratio_setting.WithCompactModelSuffix(info.RequestedModel))
 			}
-			if newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.BillingModelName()); newAPIError != nil {
-				return nil, newAPIError
-			}
-			return channel, nil
 		}
-		channel, selectGroup, err := service.CacheGetRandomSatisfiedCompactChannel(retryParam, info.RequestedModel, info.CompactAttemptStage)
-		service.RecordLegacySelectionAndShadow(
-			c.Request.Context(),
-			service.BuildRouteShadowRequest(c, info.RequestedModel, retryParam.RequestPath, retryParam.GetRetry()),
-			selectGroup,
-			channelID(channel),
-		)
-		if err != nil {
-			return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的 compact 可用渠道失败（retry）: %s", selectGroup, info.RequestedModel, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-		}
-		if channel == nil {
-			return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的 compact 可用渠道不存在（retry）", selectGroup, info.RequestedModel), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-		}
-		info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
-		if newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.BillingModelName()); newAPIError != nil {
-			return nil, newAPIError
-		}
-		return channel, nil
-	}
-
-	var channel *model.Channel
-	var selectGroup string
-	var err error
-	if common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired) {
-		channel, selectGroup, err = service.CacheGetRandomSatisfiedChannelWithFilter(retryParam, func(candidate *model.Channel, _ map[string]bool) bool {
-			return service.ChannelSupportsNativeResponses(candidate, info.OriginModelName)
-		})
-	} else {
-		channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(retryParam)
-	}
-	service.RecordLegacySelectionAndShadow(
-		c.Request.Context(),
-		service.BuildRouteShadowRequest(c, info.OriginModelName, retryParam.RequestPath, retryParam.GetRetry()),
-		selectGroup,
-		channelID(channel),
-	)
-	if err != nil {
-		return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", selectGroup, info.OriginModelName, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-	}
-	if channel == nil {
-		if common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired) {
-			return nil, types.NewError(errors.New("remote Responses compaction requires an available native Responses channel"), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-		}
-		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
-	}
-
-	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
-
-	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
-	if newAPIError != nil {
-		return nil, newAPIError
-	}
-	return channel, nil
-}
-
-func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, channel *model.Channel, attempt int) error {
-	if c == nil || info == nil || channel == nil || !service.RouteLiveRoutingEnabled() {
-		return nil
+		return channel, err
 	}
 	value, ok := c.Get("route_live_selection")
 	if !ok {
-		if c.GetBool(service.RouteLiveSelectionRequiredContextKey) {
-			return service.ErrRouteSelectionUnavailable
+		return nil, types.NewError(service.ErrRouteSelectionUnavailable, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+	}
+	selection, valid := value.(service.LiveRouteSelection)
+	if !valid || selection.Source == service.RouteSourceUnavailable {
+		return nil, types.NewError(service.ErrRouteSelectionUnavailable, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+	}
+	for candidateIndex := retryParam.GetRetry(); candidateIndex < len(selection.Attempts); candidateIndex++ {
+		candidate, actualIndex, found := selection.CandidateAtOrAfter(candidateIndex)
+		if !found {
+			break
 		}
-		return nil
+		channel, err := model.GetChannelById(candidate.ChannelID, true)
+		if err != nil {
+			return nil, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+		if channel.Status != common.ChannelStatusEnabled {
+			markLiveRouteCandidateFiltered(c, candidate.ChannelID, service.RouteFilterChannelDisabled)
+			candidateIndex = actualIndex
+			continue
+		}
+		retryParam.SetRetry(actualIndex)
+		if actualIndex == 0 && common.GetContextKeyInt(c, constant.ContextKeyChannelId) == channel.Id {
+			return channel, nil
+		}
+		if setupErr := middleware.SetupContextForSelectedChannel(c, channel, info.BillingModelName()); setupErr != nil {
+			if setupErr.GetErrorCode() == types.ErrorCodeChannelNoAvailableKey {
+				markLiveRouteCandidateFiltered(c, candidate.ChannelID, service.RouteFilterKeyUnavailable)
+				candidateIndex = actualIndex
+				continue
+			}
+			return nil, setupErr
+		}
+		return channel, nil
+	}
+	return nil, types.NewError(service.ErrRouteSelectionUnavailable, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+}
+
+func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, channel *model.Channel, attempt int) error {
+	if c == nil || info == nil || channel == nil {
+		return service.ErrRouteSelectionUnavailable
+	}
+	value, ok := c.Get("route_live_selection")
+	if !ok {
+		return service.ErrRouteSelectionUnavailable
 	}
 	selection, ok := value.(service.LiveRouteSelection)
-	if !ok || selection.Source == service.RouteSourceLegacy {
-		return nil
+	if !ok || selection.Source == service.RouteSourceUnavailable {
+		return service.ErrRouteSelectionUnavailable
 	}
 	candidate, ok := selection.CandidateForAttempt(attempt)
 	if !ok || candidate.ChannelID != channel.Id {
 		return service.ErrRouteSelectionUnavailable
 	}
-	expected, err := service.GetRouteRuntimeState(c.Request.Context(), channel.Id, info.BillingModelName())
+	info.RouteCapabilityModel = candidate.RequestModel
+	expected, err := service.GetRouteRuntimeState(c.Request.Context(), channel.Id, info.RouteCapabilityModel)
 	if err != nil {
 		return err
 	}
@@ -830,15 +715,21 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 	if candidate.HealthEpoch <= 0 || expected.HealthEpoch != candidate.HealthEpoch {
 		return service.ErrRouteLeaseRuntime
 	}
+	if expected.ChannelRatio != info.PriceData.ChannelRatio {
+		return service.ErrRouteLeaseRuntime
+	}
 	qualification, qualified := liveRouteRuntimeQualificationForRequest(c)
 	if !qualified {
 		return &service.LiveRouteQualificationError{Reason: "runtime_qualification_unavailable"}
 	}
-	lease, _, err := service.AcquireConfiguredRouteLease(c.Request.Context(), info.RequestId, channel.Id, info.UserId, info.TokenId, info.BillingModelName(), routeAttemptLeaseTTL())
+	lease, admittedChannel, err := service.AcquireConfiguredRouteLease(c.Request.Context(), info.RequestId, channel.Id, info.UserId, info.TokenId, info.BillingModelName(), routeAttemptLeaseTTL())
 	if err != nil {
 		return err
 	}
-	current, err := service.GetRouteRuntimeState(c.Request.Context(), channel.Id, info.BillingModelName())
+	if admittedChannel.CapacityTotal != expected.Capacity || admittedChannel.ChannelRatio != expected.ChannelRatio {
+		return releaseUncommittedRouteLease(c, lease, service.ErrRouteLeaseRuntime)
+	}
+	current, err := service.GetRouteRuntimeState(c.Request.Context(), channel.Id, info.RouteCapabilityModel)
 	if err != nil {
 		return releaseUncommittedRouteLease(c, lease, err)
 	}
@@ -851,9 +742,11 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 		UserID:                   info.UserId,
 		TokenID:                  info.TokenId,
 		ChannelID:                channel.Id,
-		RequestModel:             info.BillingModelName(),
+		RequestModel:             candidate.RequestModel,
+		PermissionModel:          info.BillingModelName(),
+		IsPlayground:             info.IsPlayground,
+		SpecificChannelID:        selection.SpecificChannelID,
 		RequestPath:              c.Request.URL.Path,
-		UserGroup:                info.UserGroup,
 		ExpectedSnapshotVersion:  candidate.SnapshotVersion,
 		ExpectedCatalogVersion:   candidate.CatalogVersion,
 		ExpectedProfileVersion:   selection.Decision.ConfigurationVersion,
@@ -867,7 +760,7 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 		}
 		return releaseRejectedRouteAttemptLease(c, lease, err)
 	}
-	current, err = service.GetRouteRuntimeState(c.Request.Context(), channel.Id, info.BillingModelName())
+	current, err = service.GetRouteRuntimeState(c.Request.Context(), channel.Id, info.RouteCapabilityModel)
 	if err != nil {
 		return releaseUncommittedRouteLease(c, lease, err)
 	}
@@ -881,7 +774,16 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 	// alive for every Live attempt; short requests stop the renewal in the
 	// common release path before the first tick.
 	parentContext := c.Request.Context()
-	leaseContext, cancel := context.WithCancel(parentContext)
+	if err := parentContext.Err(); err != nil {
+		return releaseRejectedRouteAttemptLease(c, lease, err)
+	}
+	attemptContext := parentContext
+	if info.RelayFormat == types.RelayFormatMjProxy {
+		// NewAPI completes accepted MJ submissions after the client disconnects.
+		// Keep that lifecycle under our timeout and lease-loss cancellation.
+		attemptContext = context.WithoutCancel(parentContext)
+	}
+	leaseContext, cancel := context.WithCancel(attemptContext)
 	c.Request = c.Request.WithContext(leaseContext)
 	renewal := service.StartRouteLeaseRenewal(leaseContext, common.RDB, lease, 30*time.Second, routeAttemptLeaseTTL())
 	go func() {
@@ -985,7 +887,7 @@ func recordLiveRouteGovernanceFailure(c *gin.Context, channelID int, code string
 	}
 	value, ok := c.Get("route_live_selection")
 	selection, valid := value.(service.LiveRouteSelection)
-	if !ok || !valid || selection.Source == service.RouteSourceLegacy {
+	if !ok || !valid || selection.Source == service.RouteSourceUnavailable {
 		return
 	}
 	selection.Decision.SetFinalError(service.RouteErrorClass(code))
@@ -1024,7 +926,7 @@ func markLiveRouteAttempt(c *gin.Context, channelID int, state string) {
 	}
 	value, ok := c.Get("route_live_selection")
 	selection, valid := value.(service.LiveRouteSelection)
-	if !ok || !valid || selection.Source == service.RouteSourceLegacy {
+	if !ok || !valid || selection.Source == service.RouteSourceUnavailable {
 		return
 	}
 	selection.Decision.SelectedChannelID = channelID
@@ -1043,7 +945,7 @@ func markLiveRouteCandidateFiltered(c *gin.Context, channelID int, reason string
 	}
 	value, ok := c.Get("route_live_selection")
 	selection, valid := value.(service.LiveRouteSelection)
-	if !ok || !valid || selection.Source == service.RouteSourceLegacy {
+	if !ok || !valid || selection.Source == service.RouteSourceUnavailable {
 		return
 	}
 	for index := range selection.Decision.Candidates {
@@ -1187,12 +1089,12 @@ func waitForLiveRouteBackoff(c *gin.Context, attempt int, retryAfter time.Durati
 }
 
 func routeLiveSelectionActive(c *gin.Context) bool {
-	if c == nil || !service.RouteLiveRoutingEnabled() {
+	if c == nil {
 		return false
 	}
 	value, ok := c.Get("route_live_selection")
 	selection, valid := value.(service.LiveRouteSelection)
-	return ok && valid && selection.Source != service.RouteSourceLegacy
+	return ok && valid && selection.Source != service.RouteSourceUnavailable
 }
 
 // liveRoutePriceRatioAllowed applies a manual route policy as a final
@@ -1321,38 +1223,6 @@ func channelID(channel *model.Channel) int {
 	return channel.Id
 }
 
-func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) bool {
-	if openaiErr == nil || requestContextDone(c) {
-		return false
-	}
-	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
-		return false
-	}
-	if types.IsChannelError(openaiErr) {
-		return true
-	}
-	if types.IsSkipRetryError(openaiErr) {
-		return false
-	}
-	if retryTimes <= 0 {
-		return false
-	}
-	if _, ok := c.Get("specific_channel_id"); ok {
-		return false
-	}
-	code := openaiErr.StatusCode
-	if code >= 200 && code < 300 {
-		return false
-	}
-	if code < 100 || code > 599 {
-		return true
-	}
-	if operation_setting.IsAlwaysSkipRetryCode(openaiErr.GetErrorCode()) {
-		return false
-	}
-	return operation_setting.ShouldRetryByStatusCode(code)
-}
-
 func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.NewAPIError) {
 	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, common.LocalLogPreview(err.Error())))
 	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
@@ -1400,6 +1270,24 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 
 }
 
+// admitMediaRouteAttempt is called after provider validation and pricing.
+func admitMediaRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, attempt int) error {
+	if !liveRoutePriceRatioAllowed(c, info.PriceData.ChannelRatio) {
+		return service.ErrRoutePriceRatioExceeded
+	}
+	channel, err := model.GetChannelById(common.GetContextKeyInt(c, constant.ContextKeyChannelId), true)
+	if err != nil {
+		return err
+	}
+	markLiveRouteSecurityQualified(c)
+	markLiveRoutePriceQualified(c)
+	if err := acquireRouteAttemptLease(c, info, channel, attempt); err != nil {
+		return err
+	}
+	info.RetryIndex = beginLiveRouteUpstreamAttempt(c, channel.Id)
+	return nil
+}
+
 func RelayMidjourney(c *gin.Context) {
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatMjProxy, nil, nil)
 
@@ -1413,6 +1301,38 @@ func RelayMidjourney(c *gin.Context) {
 	}
 
 	var mjErr *taskdto.MidjourneyResponse
+	var admissionErr error
+	admitted := false
+	startedAt := time.Now()
+	relayInfo.BeforeUpstream = func() error {
+		admissionErr = admitMediaRouteAttempt(c, relayInfo, 0)
+		admitted = admissionErr == nil
+		return admissionErr
+	}
+	defer func() {
+		apiErr := relayInfo.LastError
+		if apiErr == nil && mjErr != nil && !isSuccessfulMidjourneyResponse(mjErr) {
+			status := http.StatusBadRequest
+			if mjErr.Code == 30 {
+				status = http.StatusTooManyRequests
+			}
+			apiErr = types.NewErrorWithStatusCode(fmt.Errorf("%s", mjErr.Description), types.ErrorCodeBadResponseStatusCode, status)
+		}
+		if admitted {
+			key := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
+			var healthErr error
+			if apiErr == nil {
+				healthErr = service.ObserveLiveRouteSuccessForKey(c.Request.Context(), relayInfo.ChannelId, relayInfo.RouteCapabilityModel, key, time.Since(startedAt).Milliseconds(), 0)
+			} else {
+				healthErr = service.ObserveLiveRouteErrorForKey(c.Request.Context(), relayInfo.ChannelId, relayInfo.RouteCapabilityModel, key, apiErr.StatusCode, string(apiErr.GetErrorCode()), apiErr.Error(), relayResponseCommitted(c, relayInfo))
+			}
+			if healthErr != nil {
+				recordLiveRouteGovernanceFailure(c, relayInfo.ChannelId, "health_observation_failed", healthErr)
+			}
+		}
+		releaseRouteAttemptLease(c)
+		finalizeLiveRouteDecision(c, relayInfo, apiErr)
+	}()
 	switch relayInfo.RelayMode {
 	case relayconstant.RelayModeMidjourneyNotify:
 		mjErr = relay.RelayMidjourneyNotify(c)
@@ -1425,12 +1345,22 @@ func RelayMidjourney(c *gin.Context) {
 	default:
 		mjErr = relay.RelayMidjourneySubmit(c, relayInfo)
 	}
-	//err = relayMidjourneySubmit(c, relayMode)
-	log.Println(mjErr)
 	if mjErr != nil {
 		statusCode := http.StatusBadRequest
+		if c.Writer.Status() >= http.StatusBadRequest {
+			statusCode = c.Writer.Status()
+		}
+		if admissionErr != nil {
+			statusCode = http.StatusServiceUnavailable
+			if errors.Is(admissionErr, service.ErrRoutePriceRatioExceeded) || errors.Is(admissionErr, service.ErrLiveRouteCandidateInvalid) {
+				statusCode = http.StatusForbidden
+			}
+		}
+		if strings.EqualFold(strings.TrimSpace(mjErr.Description), "token_model_forbidden") {
+			statusCode = http.StatusForbidden
+		}
 		if mjErr.Code == 30 {
-			mjErr.Result = "当前分组负载已饱和，请稍后再试，或升级账户以提升服务质量。"
+			mjErr.Result = "当前渠道负载已满，请稍后再试。"
 			statusCode = http.StatusTooManyRequests
 		}
 		c.JSON(statusCode, gin.H{
@@ -1441,6 +1371,10 @@ func RelayMidjourney(c *gin.Context) {
 		channelId := c.GetInt("channel_id")
 		logger.LogError(c, fmt.Sprintf("relay error (channel #%d, status code %d): %s", channelId, statusCode, fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result)))
 	}
+}
+
+func isSuccessfulMidjourneyResponse(response *taskdto.MidjourneyResponse) bool {
+	return response != nil && (response.Code == 1 || response.Code == 21 || response.Code == 22)
 }
 
 func RelayNotImplemented(c *gin.Context) {
@@ -1498,6 +1432,14 @@ func RelayTask(c *gin.Context) {
 		return
 	}
 
+	if locked, ok := relayInfo.LockedChannel.(*model.Channel); ok && locked != nil {
+		if _, routeErr := middleware.SelectRequestChannel(c, relayInfo.OriginModelName, locked.Id, relaycommon.CompactAttemptNone); routeErr != nil {
+			respondTaskError(c, service.TaskErrorFromAPIError(routeErr))
+			return
+		}
+		relayInfo.InitChannelMeta(c)
+	}
+
 	var result *relay.TaskSubmitResult
 	var taskErr *taskdto.TaskError
 	defer func() {
@@ -1509,11 +1451,8 @@ func RelayTask(c *gin.Context) {
 	}()
 
 	retryParam := &service.RetryParam{
-		Ctx:         c,
-		TokenGroup:  relayInfo.TokenGroup,
-		ModelName:   relayInfo.OriginModelName,
-		RequestPath: c.Request.URL.Path,
-		Retry:       common.GetPointer(0),
+		Ctx:   c,
+		Retry: common.GetPointer(0),
 	}
 
 	for {
@@ -1526,37 +1465,16 @@ func RelayTask(c *gin.Context) {
 				break
 			}
 		}
-		var channel *model.Channel
-
-		if lockedCh, ok := relayInfo.LockedChannel.(*model.Channel); ok && lockedCh != nil {
-			channel = lockedCh
-			if retryParam.GetRetry() > 0 {
-				if setupErr := middleware.SetupContextForSelectedChannel(c, channel, relayInfo.OriginModelName); setupErr != nil {
-					taskErr = service.TaskErrorWrapperLocal(setupErr.Err, "setup_locked_channel_failed", http.StatusInternalServerError)
-					break
-				}
-			}
-		} else {
-			var channelErr *types.NewAPIError
-			channel, channelErr = getChannel(c, relayInfo, retryParam)
-			if channelErr != nil {
-				logger.LogError(c, channelErr.Error())
-				taskErr = service.TaskErrorWrapperLocal(channelErr.Err, "get_channel_failed", http.StatusInternalServerError)
-				break
-			}
-		}
-		if leaseErr := acquireRouteAttemptLease(c, relayInfo, channel, retryParam.GetRetry()); leaseErr != nil {
-			if routeLiveSelectionActive(c) && service.LiveRouteQualificationAllowsFailover(leaseErr) &&
-				retryParam.GetRetry() < relayRetryLimit(c) {
-				if nextAttempt, found := nextLiveRouteCandidateIndex(c, retryParam.GetRetry()); found {
-					retryParam.SetRetry(nextAttempt)
-					continue
-				}
-			}
-			taskErr = service.TaskErrorWrapperLocal(leaseErr, "route_lease_failed", http.StatusServiceUnavailable)
+		channel, channelErr := getChannel(c, relayInfo, retryParam)
+		if channelErr != nil {
+			taskErr = service.TaskErrorWrapperLocal(channelErr, "get_channel_failed", http.StatusServiceUnavailable)
 			break
 		}
-
+		var admissionErr error
+		relayInfo.BeforeUpstream = func() error {
+			admissionErr = admitMediaRouteAttempt(c, relayInfo, retryParam.GetRetry())
+			return admissionErr
+		}
 		addUsedChannel(c, channel.Id)
 		bodyStorage, bodyErr := common.GetBodyStorage(c)
 		if bodyErr != nil {
@@ -1568,18 +1486,25 @@ func RelayTask(c *gin.Context) {
 			break
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
-		if routeLiveSelectionActive(c) {
-			relayInfo.RetryIndex = beginLiveRouteUpstreamAttempt(c, channel.Id)
-		}
 
 		attemptStartedAt := time.Now()
 		result, taskErr = relay.RelayTaskSubmit(c, relayInfo)
+		if admissionErr != nil {
+			if service.LiveRouteQualificationAllowsFailover(admissionErr) {
+				markLiveRouteCandidateFiltered(c, channel.Id, "admission_failed")
+				if nextAttempt, found := nextLiveRouteCandidateIndex(c, retryParam.GetRetry()); found {
+					retryParam.SetRetry(nextAttempt)
+					continue
+				}
+			}
+			break
+		}
 		if taskErr == nil {
-			if routeLiveSelectionActive(c) && liveRouteRenewalFailed(c) {
+			if routeLiveSelectionActive(c) && shouldFailLiveRouteAfterRenewalFailure(c, relayInfo) {
 				taskErr = service.TaskErrorWrapperLocal(service.ErrRouteLeaseUnavailable, service.RouteLeaseFailureCode, http.StatusServiceUnavailable)
 			} else {
 				if routeLiveSelectionActive(c) {
-					if healthErr := service.ObserveLiveRouteSuccessForKey(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), time.Since(attemptStartedAt).Milliseconds(), 0); healthErr != nil {
+					if healthErr := service.ObserveLiveRouteSuccessForKey(c.Request.Context(), channel.Id, relayInfo.RouteCapabilityModel, common.GetContextKeyString(c, constant.ContextKeyChannelKey), time.Since(attemptStartedAt).Milliseconds(), 0); healthErr != nil {
 						recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
 					}
 				}
@@ -1589,7 +1514,7 @@ func RelayTask(c *gin.Context) {
 
 		if routeLiveSelectionActive(c) {
 			if taskErr.Code == "route_price_ratio_exceeded" {
-				markLiveRouteCandidateFiltered(c, channel.Id, service.ShadowFilterPriceForbidden)
+				markLiveRouteCandidateFiltered(c, channel.Id, service.RouteFilterPriceForbidden)
 				if nextAttempt, found := nextLiveRouteCandidateIndex(c, retryParam.GetRetry()); found {
 					retryParam.SetRetry(nextAttempt)
 					continue
@@ -1597,12 +1522,12 @@ func RelayTask(c *gin.Context) {
 				break
 			}
 			classification := service.ClassifyRouteError(taskErr.StatusCode, taskErr.Code, taskErr.Message, false)
-			if taskErr.Code != service.RouteLeaseFailureCode {
-				if healthErr := service.ObserveLiveRouteErrorForKey(c.Request.Context(), channel.Id, relayInfo.BillingModelName(), common.GetContextKeyString(c, constant.ContextKeyChannelKey), taskErr.StatusCode, taskErr.Code, taskErr.Message, false); healthErr != nil {
+			if !taskErr.LocalError && taskErr.Code != service.RouteLeaseFailureCode {
+				if healthErr := service.ObserveLiveRouteErrorForKey(c.Request.Context(), channel.Id, relayInfo.RouteCapabilityModel, common.GetContextKeyString(c, constant.ContextKeyChannelKey), taskErr.StatusCode, taskErr.Code, taskErr.Message, false); healthErr != nil {
 					recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
 				}
 			}
-			if service.CanRouteFailover(classification, false, false) {
+			if !taskErr.LocalError && service.CanRouteFailover(classification, relayResponseCommitted(c, relayInfo), false) {
 				if nextAttempt, found := nextLiveRouteAttemptForError(c, retryParam.GetRetry(), channel.Id, classification); found {
 					if !waitForLiveRouteBackoff(c, retryParam.GetRetry(), 0) {
 						break
@@ -1627,10 +1552,7 @@ func RelayTask(c *gin.Context) {
 		if routeLiveSelectionActive(c) {
 			break
 		}
-		if !shouldRetryTaskRelay(c, channel.Id, taskErr, common.RetryTimes-retryParam.GetRetry()) {
-			break
-		}
-		retryParam.IncreaseRetry()
+		break
 	}
 
 	useChannel := c.GetStringSlice("use_channel")
@@ -1663,7 +1585,7 @@ func RelayTask(c *gin.Context) {
 		task.PrivateData.NodeName = common.NodeName
 		task.PrivateData.BillingContext = &model.TaskBillingContext{
 			ModelPrice:      relayInfo.PriceData.ModelPrice,
-			GroupRatio:      relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+			GroupRatio:      relayInfo.PriceData.ChannelRatio,
 			ModelRatio:      relayInfo.PriceData.ModelRatio,
 			OtherRatios:     relayInfo.PriceData.OtherRatios(),
 			OriginModelName: relayInfo.OriginModelName,
@@ -1688,48 +1610,6 @@ func respondTaskError(c *gin.Context, taskErr *taskdto.TaskError) {
 		taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
 	}
 	c.JSON(taskErr.StatusCode, taskErr)
-}
-
-func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *taskdto.TaskError, retryTimes int) bool {
-	if taskErr == nil || requestContextDone(c) {
-		return false
-	}
-	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
-		return false
-	}
-	if retryTimes <= 0 {
-		return false
-	}
-	if _, ok := c.Get("specific_channel_id"); ok {
-		return false
-	}
-	if taskErr.StatusCode == http.StatusTooManyRequests {
-		return true
-	}
-	if taskErr.StatusCode == 307 {
-		return true
-	}
-	if taskErr.StatusCode/100 == 5 {
-		// 超时不重试
-		if operation_setting.IsAlwaysSkipRetryStatusCode(taskErr.StatusCode) {
-			return false
-		}
-		return true
-	}
-	if taskErr.StatusCode == http.StatusBadRequest {
-		return false
-	}
-	if taskErr.StatusCode == 408 {
-		// azure处理超时不重试
-		return false
-	}
-	if taskErr.LocalError {
-		return false
-	}
-	if taskErr.StatusCode/100 == 2 {
-		return false
-	}
-	return true
 }
 
 func requestContextDone(c *gin.Context) bool {

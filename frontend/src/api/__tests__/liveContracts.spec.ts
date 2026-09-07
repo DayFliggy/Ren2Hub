@@ -37,7 +37,6 @@ function pricingResponse(overrides: Record<string, unknown> = {}) {
     cache_ratio: 0.25,
     owner_by: 'OpenAI',
     supported_endpoint_types: ['chat'],
-    enable_groups: ['default'],
     ...overrides,
   }
 }
@@ -115,7 +114,7 @@ describe('live API contracts', () => {
     expectInvalidResponse(() => parseLogStat({ quota: 500 }))
   })
 
-  it('preserves backend token groups and safely normalizes legacy fields', () => {
+  it('uses the route type returned by the backend and normalizes token limits', () => {
     const page = parseTokenPage({
       page: 1,
       page_size: 20,
@@ -125,7 +124,7 @@ describe('live API contracts', () => {
           id: 7,
           name: 'vip-key',
           key: 'sk-12**********7890',
-          group: 'vip',
+          type: 'manual',
           status: 1,
           used_quota: 120,
           remain_quota: 880,
@@ -140,7 +139,6 @@ describe('live API contracts', () => {
     })
 
     expect(page.items[0]).toMatchObject({
-      group: 'vip',
       type: 'manual',
       model_limits: ['gpt-4o', 'claude-3-7-sonnet'],
       ip_limits: ['127.0.0.1', '10.0.0.1'],

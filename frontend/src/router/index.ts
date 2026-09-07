@@ -13,7 +13,7 @@ import { useSetupStore } from '@/stores/setup'
 import { publicRoutes } from '@/router/publicRoutes'
 import { adminRoutes } from '@/router/adminRoutes'
 import { canonicalLegacyPath } from '@/router/legacyRoutes'
-import { navigationError, navigationPending } from '@/router/navigationState'
+import { navigationError } from '@/router/navigationState'
 
 const CONSOLE_ENTRY: RouteLocationRaw = { name: 'dashboard' }
 const CHUNK_RELOAD_KEY = 'ren2hub_chunk_reload'
@@ -168,7 +168,7 @@ const router = createRouter({
           meta: {
             wide: true,
             noPageScroll: true,
-            feature: 'legacy_token',
+            feature: 'api_tokens',
           },
         },
         {
@@ -515,12 +515,6 @@ router.beforeEach(async (to) => {
     }
   }
 
-  if (to.meta.messageDomain === 'lab') {
-    await Promise.all([loadMessageDomain('console'), loadMessageDomain('lab')])
-  } else if (to.meta.messageDomain) {
-    await loadMessageDomain(to.meta.messageDomain)
-  }
-
   if (to.meta.feature || to.name === 'sign-up') {
     const app = useAppStore()
     await app.initialize()
@@ -533,6 +527,12 @@ router.beforeEach(async (to) => {
     if (to.name === 'sign-up' && app.statusReachable && !app.registerEnabled) {
       return { name: 'sign-in' }
     }
+  }
+
+  if (to.meta.messageDomain === 'lab') {
+    await Promise.all([loadMessageDomain('console'), loadMessageDomain('lab')])
+  } else if (to.meta.messageDomain) {
+    await loadMessageDomain(to.meta.messageDomain)
   }
 
   if (!to.meta.requiresAuth && !to.meta.guestOnly) return true
@@ -565,7 +565,6 @@ router.beforeEach(async (to) => {
 
 router.onError((error) => {
   navigationError.value = true
-  navigationPending.value = false
   console.error('[router] Navigation failed', error)
   const chunkFailed =
     /Failed to fetch dynamically imported module|Importing a module script failed/i.test(
@@ -582,7 +581,6 @@ router.onError((error) => {
 })
 
 router.afterEach((_to, _from, failure) => {
-  navigationPending.value = false
   if (failure) return
   navigationError.value = false
   try {

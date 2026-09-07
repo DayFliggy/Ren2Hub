@@ -53,8 +53,6 @@ func TestRoutingDatabaseIntegration(t *testing.T) {
 			require.NoError(t, migrateRoutingModels(db))
 			require.NoError(t, migrateChannelCapabilityIndexes())
 			require.True(t, db.Migrator().HasIndex(&ChannelModelCapability{}, "channel_model_capability_snapshot"))
-			require.True(t, db.Migrator().HasIndex(&ChannelRoutePolicy{}, "channel_route_policy_model"))
-			require.True(t, db.Migrator().HasIndex(&RouteShadowHourlyObservation{}, "route_shadow_hourly_observation"))
 
 			channelID := 991001
 			require.NoError(t, db.Where("channel_id = ?", channelID).Delete(&ChannelModelCapability{}).Error)
@@ -76,22 +74,6 @@ func TestRoutingDatabaseIntegration(t *testing.T) {
 			require.NoError(t, err)
 			assert.ErrorIs(t, PublishChannelCapabilitySnapshot(context.Background(), channelID, activeFence, "stale", "integration-catalog", []ChannelModelCapability{capability}), ErrCapabilitySnapshotConflict)
 
-			hour := int64(1_700_000_000)
-			deltas := []RouteShadowHourlyObservation{
-				{HourStart: hour, InstanceID: "integration-a", Scope: RouteShadowObservationGlobal, ShadowDecisions: 2, EventAttempted: 2},
-				{HourStart: hour, InstanceID: "integration-a", Scope: RouteShadowObservationModel, ModelName: "gpt-5", ShadowInitialDecisions: 2, CapabilityResolved: 2},
-			}
-			require.NoError(t, UpsertRouteShadowHourlyObservations(context.Background(), deltas))
-			require.NoError(t, UpsertRouteShadowHourlyObservations(context.Background(), deltas))
-			observations, err := ListRouteShadowHourlyObservations(context.Background(), hour, hour+3600)
-			require.NoError(t, err)
-			require.Len(t, observations, 2)
-			byScope := make(map[string]RouteShadowHourlyObservation, len(observations))
-			for _, observation := range observations {
-				byScope[observation.Scope] = observation
-			}
-			assert.Equal(t, int64(4), byScope[RouteShadowObservationGlobal].ShadowDecisions)
-			assert.Equal(t, int64(4), byScope[RouteShadowObservationModel].ShadowInitialDecisions)
 		})
 	}
 }
@@ -116,8 +98,6 @@ func TestRoutingDatabaseIntegrationSQLite(t *testing.T) {
 	require.NoError(t, migrateRoutingModels(db))
 	require.NoError(t, migrateChannelCapabilityIndexes())
 	require.True(t, db.Migrator().HasIndex(&ChannelModelCapability{}, "channel_model_capability_snapshot"))
-	require.True(t, db.Migrator().HasIndex(&ChannelRoutePolicy{}, "channel_route_policy_model"))
-	require.True(t, db.Migrator().HasIndex(&RouteShadowHourlyObservation{}, "route_shadow_hourly_observation"))
 	require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), 991002, ChannelCapabilitySnapshotFence{}, "sqlite-hash", "sqlite-catalog", []ChannelModelCapability{{
 		RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical",
 		ChannelStatus: common.ChannelStatusEnabled, State: RouteCapabilityStateEligible,
@@ -126,4 +106,42 @@ func TestRoutingDatabaseIntegrationSQLite(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, active, 1)
 	assert.Equal(t, int64(1), active[0].SnapshotVersion)
+}
+
+func TestMigrateRoutingModelsConvertsLegacyProfiles(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:routing-legacy-migration?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	require.NoError(t, db.AutoMigrate(&UserRouteProfile{}))
+	activeGroupID := 77
+	legacy := UserRouteProfile{
+		UserID: 11, TokenID: 22, Mode: "legacy", ActiveGroupID: &activeGroupID,
+		Version: 4, Status: RouteProfileStatusEnabled, CreatedAt: 100, UpdatedAt: 200,
+	}
+	manual := UserRouteProfile{
+		UserID: 12, TokenID: 23, Mode: RouteModeManual, ActiveGroupID: &activeGroupID,
+		Version: 8, Status: RouteProfileStatusEnabled, CreatedAt: 100, UpdatedAt: 300,
+	}
+	require.NoError(t, db.Create(&legacy).Error)
+	require.NoError(t, db.Create(&manual).Error)
+
+	require.NoError(t, migrateRoutingModels(db))
+
+	var migrated UserRouteProfile
+	require.NoError(t, db.First(&migrated, legacy.ID).Error)
+	assert.Equal(t, RouteModeAutoLab, migrated.Mode)
+	assert.Nil(t, migrated.ActiveGroupID)
+	assert.Equal(t, int64(5), migrated.Version)
+	assert.Greater(t, migrated.UpdatedAt, int64(200))
+
+	var unchanged UserRouteProfile
+	require.NoError(t, db.First(&unchanged, manual.ID).Error)
+	assert.Equal(t, RouteModeManual, unchanged.Mode)
+	require.NotNil(t, unchanged.ActiveGroupID)
+	assert.Equal(t, activeGroupID, *unchanged.ActiveGroupID)
+	assert.Equal(t, int64(8), unchanged.Version)
+	assert.Equal(t, int64(300), unchanged.UpdatedAt)
 }

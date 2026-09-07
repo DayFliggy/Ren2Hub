@@ -9,7 +9,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +29,6 @@ func TestSelectLiveTokenRouteManualUsesOnlyActiveGroup(t *testing.T) {
 	selection, err := SelectLiveTokenRoute(LiveRouteRequest{
 		Context: context.Background(), CapabilityEnabled: true, RequestID: "request-manual",
 		UserID: userID, TokenID: tokenID, RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
-		UserGroup: "default",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, RouteSourceManual, selection.Source)
@@ -38,18 +36,9 @@ func TestSelectLiveTokenRouteManualUsesOnlyActiveGroup(t *testing.T) {
 	assert.Equal(t, created.Profile.Version, selection.Decision.ConfigurationVersion)
 }
 
-func TestSelectLiveTokenRouteManualUsesEffectiveTokenGroup(t *testing.T) {
+func TestSelectLiveTokenRouteIgnoresFormerBusinessGroupRestrictions(t *testing.T) {
 	db := setupRouteProfileTest(t)
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
-	originalSpecialGroups := ratio_setting.GetGroupRatioSetting().GroupSpecialUsableGroup.ReadAll()
-	t.Cleanup(func() {
-		specialGroups := ratio_setting.GetGroupRatioSetting().GroupSpecialUsableGroup
-		specialGroups.Clear()
-		specialGroups.AddAll(originalSpecialGroups)
-	})
-	specialGroups := ratio_setting.GetGroupRatioSetting().GroupSpecialUsableGroup
-	specialGroups.Clear()
-	specialGroups.Set("vip", map[string]string{"-:default": ""})
 	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
 	created, err := CreateUserRouteProfile(RouteProfileInput{
 		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
@@ -60,28 +49,17 @@ func TestSelectLiveTokenRouteManualUsesEffectiveTokenGroup(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Update("group", "vip").Error)
+	require.NoError(t, db.Model(&model.User{}).Where("id = ?", userID).Update("group", "vip").Error)
 	selection, err := SelectLiveTokenRoute(LiveRouteRequest{
 		Context: context.Background(), CapabilityEnabled: true, RequestID: "request-token-group",
 		UserID: userID, TokenID: tokenID, RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
-		UserGroup: "vip",
 	})
-	assert.ErrorIs(t, err, ErrRouteSelectionUnavailable)
+	require.NoError(t, err)
 	assert.Equal(t, RouteSourceManual, selection.Source)
-	assert.Zero(t, selection.Decision.SelectedChannelID)
+	assert.Equal(t, channelID, selection.Decision.SelectedChannelID)
 	assert.Equal(t, created.Profile.Version, selection.Decision.ConfigurationVersion)
 	require.Len(t, selection.Decision.Candidates, 1)
-	assert.Equal(t, ShadowFilterGroupForbidden, selection.Decision.Candidates[0].FilterReason)
-}
-
-func TestLiveRouteOnlyAcceptsConcreteTokenGroupsAndRelayPaths(t *testing.T) {
-	assert.True(t, RouteLiveTokenGroupSupported("default"))
-	assert.False(t, RouteLiveTokenGroupSupported(""))
-	assert.False(t, RouteLiveTokenGroupSupported("auto"))
-	assert.True(t, RouteLiveRequestSupported("/v1/chat/completions"))
-	assert.True(t, RouteLiveRequestSupported("/v1/messages"))
-	assert.False(t, RouteLiveRequestSupported("/mj/submit/imagine"))
-	assert.False(t, RouteLiveRequestSupported("/suno/submit/generate"))
+	assert.Empty(t, selection.Decision.Candidates[0].FilterReason)
 }
 
 func TestSelectLiveTokenRouteAutoLabUsesActiveIndexAndCurrentChannelStatus(t *testing.T) {
@@ -113,7 +91,6 @@ func TestSelectLiveTokenRouteAutoLabUsesActiveIndexAndCurrentChannelStatus(t *te
 	selection, err := SelectLiveTokenRoute(LiveRouteRequest{
 		Context: context.Background(), CapabilityEnabled: true, RequestID: "request-auto",
 		UserID: userID, TokenID: tokenID, RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
-		UserGroup: "default",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, RouteSourceAutoLab, selection.Source)
@@ -123,24 +100,24 @@ func TestSelectLiveTokenRouteAutoLabUsesActiveIndexAndCurrentChannelStatus(t *te
 	_, err = SelectLiveTokenRoute(LiveRouteRequest{
 		Context: context.Background(), CapabilityEnabled: true, RequestID: "request-auto-disabled",
 		UserID: userID, TokenID: tokenID, RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
-		UserGroup: "default",
 	})
 	assert.ErrorIs(t, err, ErrRouteSelectionUnavailable)
 }
 
-func TestSelectLiveTokenRouteMissingProfileKeepsLegacy(t *testing.T) {
+func TestSelectLiveTokenRouteMissingProfileUsesAutomaticRouting(t *testing.T) {
 	db := setupRouteProfileTest(t)
-	userID, tokenID, _ := seedRouteProfileFixture(t, db)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
 	selection, err := SelectLiveTokenRoute(LiveRouteRequest{
 		Context: context.Background(), CapabilityEnabled: true, UserID: userID, TokenID: tokenID,
 		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, RouteSourceLegacy, selection.Source)
-	assert.Empty(t, selection.Decision.SelectedChannelID)
+	assert.Equal(t, RouteSourceAutoLab, selection.Source)
+	assert.Equal(t, channelID, selection.Decision.SelectedChannelID)
 }
 
-func TestSelectLiveTokenRouteDisabledSkipsProfileLookup(t *testing.T) {
+func TestSelectLiveTokenRouteDisabledRejectsRequest(t *testing.T) {
 	originalDB := model.DB
 	model.DB = nil
 	t.Cleanup(func() { model.DB = originalDB })
@@ -152,8 +129,8 @@ func TestSelectLiveTokenRouteDisabledSkipsProfileLookup(t *testing.T) {
 		RequestModel:      "gpt-test",
 		RequestPath:       "/v1/chat/completions",
 	})
-	require.NoError(t, err)
-	assert.Equal(t, RouteSourceLegacy, selection.Source)
+	require.ErrorIs(t, err, ErrLiveRouteProfileUnavailable)
+	assert.Equal(t, RouteSourceUnavailable, selection.Source)
 	assert.Empty(t, selection.Decision.SelectedChannelID)
 }
 
@@ -226,10 +203,10 @@ func TestRecheckLiveRouteCandidateRejectsAbilityDisabledAfterSelection(t *testin
 		Context: context.Background(), RouteSource: RouteSourceManual,
 		UserID: userID, TokenID: tokenID, ChannelID: channelID,
 		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
-		UserGroup: "default", ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
+		ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog", ExpectedProfileVersion: 1,
 	})
 	assert.ErrorIs(t, err, ErrLiveRouteCandidateInvalid)
-	assert.Equal(t, ShadowFilterAbilityDisabled, LiveRouteQualificationReason(err))
+	assert.Equal(t, RouteFilterAbilityDisabled, LiveRouteQualificationReason(err))
 }
 
 func TestRecheckLiveRouteCandidateRejectsChangedGroupAndEntry(t *testing.T) {
@@ -250,11 +227,10 @@ func TestRecheckLiveRouteCandidateRejectsChangedGroupAndEntry(t *testing.T) {
 		Context: context.Background(), RouteSource: RouteSourceManual,
 		UserID: userID, TokenID: tokenID, ChannelID: channelID,
 		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
-		UserGroup:               "default",
 		ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
 		ExpectedProfileVersion: created.Profile.Version,
 	})
-	assert.Equal(t, ShadowFilterGroupForbidden, LiveRouteQualificationReason(err))
+	require.NoError(t, err)
 
 	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", channelID).Update("group", "default").Error)
 	var entry model.UserRouteEntry
@@ -264,37 +240,10 @@ func TestRecheckLiveRouteCandidateRejectsChangedGroupAndEntry(t *testing.T) {
 		Context: context.Background(), RouteSource: RouteSourceManual,
 		UserID: userID, TokenID: tokenID, ChannelID: channelID,
 		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
-		UserGroup:               "default",
 		ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
 		ExpectedProfileVersion: created.Profile.Version,
 	})
 	assert.Equal(t, "entry_disabled", LiveRouteQualificationReason(err))
-}
-
-func TestRecheckLiveRouteCandidateRejectsTokenGroupChangedAfterSelection(t *testing.T) {
-	db := setupRouteProfileTest(t)
-	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
-	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
-	created, err := CreateUserRouteProfile(RouteProfileInput{
-		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
-		Groups: []RouteGroupInput{{
-			Name: "live", Enabled: true,
-			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}},
-		}},
-	})
-	require.NoError(t, err)
-
-	// Selection ran while the token belonged to default. Changing it before
-	// final qualification must not fall back to the account's broader group.
-	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Update("group", "__changed_group__").Error)
-	err = RecheckLiveRouteCandidate(LiveRouteCandidateQualificationRequest{
-		Context: context.Background(), RouteSource: RouteSourceManual,
-		UserID: userID, TokenID: tokenID, ChannelID: channelID,
-		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
-		UserGroup: "default", ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
-		ExpectedProfileVersion: created.Profile.Version,
-	})
-	assert.Equal(t, ShadowFilterGroupForbidden, LiveRouteQualificationReason(err))
 }
 
 func TestRecheckLiveRouteCandidateRejectsDisabledUserAfterSelection(t *testing.T) {
@@ -315,9 +264,9 @@ func TestRecheckLiveRouteCandidateRejectsDisabledUserAfterSelection(t *testing.T
 		Context: context.Background(), RouteSource: RouteSourceManual,
 		UserID: userID, TokenID: tokenID, ChannelID: channelID,
 		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
-		UserGroup: "default", ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
+		ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
 	})
-	assert.Equal(t, ShadowFilterTokenForbidden, LiveRouteQualificationReason(err))
+	assert.Equal(t, RouteFilterTokenForbidden, LiveRouteQualificationReason(err))
 }
 
 func TestRecheckLiveRouteCandidateRejectsCurrentPathCapability(t *testing.T) {
@@ -336,11 +285,10 @@ func TestRecheckLiveRouteCandidateRejectsCurrentPathCapability(t *testing.T) {
 		Context: context.Background(), RouteSource: RouteSourceManual,
 		UserID: userID, TokenID: tokenID, ChannelID: channelID,
 		RequestModel: "gpt-test", RequestPath: "/v1/messages",
-		UserGroup:               "default",
 		ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
 		ExpectedProfileVersion: created.Profile.Version,
 	})
-	assert.Equal(t, ShadowFilterPathUnsupported, LiveRouteQualificationReason(err))
+	assert.Equal(t, RouteFilterPathUnsupported, LiveRouteQualificationReason(err))
 }
 
 func TestRecheckLiveRouteCandidateUsesCurrentTokenAndEntitlement(t *testing.T) {
@@ -364,10 +312,10 @@ func TestRecheckLiveRouteCandidateUsesCurrentTokenAndEntitlement(t *testing.T) {
 		Context: context.Background(), RouteSource: RouteSourceManual,
 		UserID: userID, TokenID: tokenID, ChannelID: channelID,
 		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
-		UserGroup: "default", ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
+		ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog", ExpectedProfileVersion: 1,
 	}
 	err = RecheckLiveRouteCandidate(qualification)
-	assert.Equal(t, ShadowFilterTokenForbidden, LiveRouteQualificationReason(err))
+	assert.Equal(t, RouteFilterTokenForbidden, LiveRouteQualificationReason(err))
 
 	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Updates(map[string]any{
 		"model_limits_enabled": false,
@@ -384,7 +332,7 @@ func TestRecheckLiveRouteCandidateUsesCurrentTokenAndEntitlement(t *testing.T) {
 		}).Error)
 	}
 	err = RecheckLiveRouteCandidate(qualification)
-	assert.Equal(t, ShadowFilterEntitlementRevoked, LiveRouteQualificationReason(err))
+	assert.Equal(t, RouteFilterEntitlementRevoked, LiveRouteQualificationReason(err))
 }
 
 func TestRecheckLiveRouteCandidateRejectsStaleActiveSnapshot(t *testing.T) {
@@ -415,9 +363,9 @@ func TestRecheckLiveRouteCandidateRejectsStaleActiveSnapshot(t *testing.T) {
 		Context: context.Background(), RouteSource: RouteSourceManual,
 		UserID: userID, TokenID: tokenID, ChannelID: channelID,
 		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
-		UserGroup: "default", ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
+		ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
 	})
-	assert.Equal(t, ShadowFilterSnapshotStale, LiveRouteQualificationReason(err))
+	assert.Equal(t, RouteFilterSnapshotStale, LiveRouteQualificationReason(err))
 }
 
 func TestLiveRouteSelectionMaxRatioOnlyRestrictsManualRoutes(t *testing.T) {
@@ -428,7 +376,7 @@ func TestLiveRouteSelectionMaxRatioOnlyRestrictsManualRoutes(t *testing.T) {
 
 	auto := LiveRouteSelection{Source: RouteSourceAutoLab, MaxRatio: 1}
 	assert.True(t, auto.AllowsPriceRatio(3))
-	legacy := LiveRouteSelection{Source: RouteSourceLegacy, MaxRatio: 1}
+	legacy := LiveRouteSelection{Source: RouteSourceUnavailable, MaxRatio: 1}
 	assert.True(t, legacy.AllowsPriceRatio(3))
 }
 
@@ -459,15 +407,15 @@ func TestManualRouteAttemptsHonorPolicyWithoutExpandingSystemLimit(t *testing.T)
 
 func TestCandidateForAttemptSkipsCandidatesInvalidatedDuringFinalRecheck(t *testing.T) {
 	selection := LiveRouteSelection{Attempts: []RouteDecisionCandidate{
-		{ChannelID: 1, FilterReason: ShadowFilterChannelDisabled},
-		{ChannelID: 1, FilterReason: ShadowFilterChannelDisabled},
+		{ChannelID: 1, FilterReason: RouteFilterChannelDisabled},
+		{ChannelID: 1, FilterReason: RouteFilterChannelDisabled},
 		{ChannelID: 2},
 	}}
 	candidate, ok := selection.CandidateForAttempt(0)
 	require.True(t, ok)
 	assert.Equal(t, 2, candidate.ChannelID)
-	assert.False(t, LiveRouteQualificationAllowsFailover(&LiveRouteQualificationError{Reason: ShadowFilterTokenForbidden}))
-	assert.True(t, LiveRouteQualificationAllowsFailover(&LiveRouteQualificationError{Reason: ShadowFilterSnapshotStale}))
+	assert.False(t, LiveRouteQualificationAllowsFailover(&LiveRouteQualificationError{Reason: RouteFilterTokenForbidden}))
+	assert.True(t, LiveRouteQualificationAllowsFailover(&LiveRouteQualificationError{Reason: RouteFilterSnapshotStale}))
 }
 
 func TestAutoRouteAttemptsSupportBoundedSameChannelAndFailoverChoices(t *testing.T) {

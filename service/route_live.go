@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"gorm.io/gorm"
 )
 
@@ -21,10 +22,8 @@ var (
 
 const RouteFilterKeyUnavailable = "key_unavailable"
 
-// RouteLiveSelectionRequiredContextKey marks requests for which the live
-// rollout was evaluated. The relay may use the legacy source explicitly, but
-// a missing selection after this boundary is an internal routing failure and
-// must not silently bypass distributed admission control.
+// RouteLiveSelectionRequiredContextKey marks requests that require a route
+// decision and distributed admission before upstream execution.
 const RouteLiveSelectionRequiredContextKey = "route_live_selection_required"
 
 // LiveRouteQualificationError identifies a mutable authorization or
@@ -57,17 +56,19 @@ func LiveRouteQualificationReason(err error) string {
 // candidate from a request-wide authorization or infrastructure failure.
 // Only the former may consume the bounded next-candidate budget.
 func LiveRouteQualificationAllowsFailover(err error) bool {
+	if errors.Is(err, ErrRouteLeaseCapacity) {
+		return true
+	}
 	switch LiveRouteQualificationReason(err) {
-	case ShadowFilterSnapshotUnavailable,
-		ShadowFilterSnapshotStale,
-		ShadowFilterUnknownCapability,
-		ShadowFilterUnsupported,
-		ShadowFilterChannelDisabled,
-		ShadowFilterAbilityDisabled,
-		ShadowFilterGroupForbidden,
-		ShadowFilterPathUnsupported,
-		ShadowFilterEntitlementRevoked,
-		ShadowFilterMappingConflict,
+	case RouteFilterSnapshotUnavailable,
+		RouteFilterSnapshotStale,
+		RouteFilterUnknownCapability,
+		RouteFilterUnsupported,
+		RouteFilterChannelDisabled,
+		RouteFilterAbilityDisabled,
+		RouteFilterPathUnsupported,
+		RouteFilterEntitlementRevoked,
+		RouteFilterMappingConflict,
 		"configuration_stale",
 		"group_disabled",
 		"entry_missing",
@@ -80,6 +81,9 @@ func LiveRouteQualificationAllowsFailover(err error) bool {
 }
 
 type LiveRouteCandidateQualificationRequest struct {
+	IsPlayground             bool
+	SpecificChannelID        int
+	PermissionModel          string
 	Context                  context.Context
 	RouteSource              RouteSource
 	UserID                   int
@@ -87,7 +91,6 @@ type LiveRouteCandidateQualificationRequest struct {
 	ChannelID                int
 	RequestModel             string
 	RequestPath              string
-	UserGroup                string
 	ExpectedSnapshotVersion  int64
 	ExpectedCatalogVersion   string
 	ExpectedProfileVersion   int64
@@ -102,7 +105,7 @@ type LiveRouteCandidateQualificationRequest struct {
 // execution. It re-reads mutable authorization and capability facts instead
 // of trusting the selector snapshot or the request-time channel cache.
 func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) error {
-	if model.DB == nil || input.UserID <= 0 || input.TokenID <= 0 || input.ChannelID <= 0 {
+	if model.DB == nil || input.UserID <= 0 || input.ChannelID <= 0 {
 		return ErrLiveRouteProfileUnavailable
 	}
 	ctx := input.Context
@@ -112,13 +115,13 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 	requestModel := strings.TrimSpace(input.RequestModel)
 	normalizedModel := modellab.NormalizeModel(requestModel)
 	if normalizedModel == "" {
-		return &LiveRouteQualificationError{Reason: ShadowFilterUnknownCapability}
+		return &LiveRouteQualificationError{Reason: RouteFilterUnknownCapability}
 	}
 
 	var channel model.Channel
 	if err := model.DB.WithContext(ctx).Where("id = ?", input.ChannelID).First(&channel).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return &LiveRouteQualificationError{Reason: ShadowFilterChannelDisabled}
+			return &LiveRouteQualificationError{Reason: RouteFilterChannelDisabled}
 		}
 		return err
 	}
@@ -128,11 +131,11 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 		return err
 	}
 	if len(activeSnapshots) == 0 || activeSnapshots[0].ActiveVersion <= 0 {
-		return &LiveRouteQualificationError{Reason: ShadowFilterSnapshotUnavailable}
+		return &LiveRouteQualificationError{Reason: RouteFilterSnapshotUnavailable}
 	}
 	activeSnapshot := activeSnapshots[0]
 	if input.ExpectedSnapshotVersion <= 0 || activeSnapshot.ActiveVersion != input.ExpectedSnapshotVersion {
-		return &LiveRouteQualificationError{Reason: ShadowFilterSnapshotStale}
+		return &LiveRouteQualificationError{Reason: RouteFilterSnapshotStale}
 	}
 
 	capabilities, err := model.FindActiveChannelCapabilities(ctx, []int{input.ChannelID}, normalizedModel, "")
@@ -147,88 +150,83 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 		}
 	}
 	if capability.ChannelID == 0 {
-		return &LiveRouteQualificationError{Reason: ShadowFilterUnknownCapability}
+		return &LiveRouteQualificationError{Reason: RouteFilterUnknownCapability}
 	}
 	if input.ExpectedCatalogVersion != "" && capability.CatalogVersion != input.ExpectedCatalogVersion {
-		return &LiveRouteQualificationError{Reason: ShadowFilterSnapshotStale}
+		return &LiveRouteQualificationError{Reason: RouteFilterSnapshotStale}
 	}
 
 	var user model.User
-	if err := model.DB.WithContext(ctx).Select("id", "status", "group").Where("id = ?", input.UserID).First(&user).Error; err != nil {
+	if err := model.DB.WithContext(ctx).Select("id", "status").Where("id = ?", input.UserID).First(&user).Error; err != nil {
 		return err
 	}
 	if user.Status != common.UserStatusEnabled {
-		return &LiveRouteQualificationError{Reason: ShadowFilterTokenForbidden}
+		return &LiveRouteQualificationError{Reason: RouteFilterTokenForbidden}
 	}
 	var token model.Token
-	if err := model.DB.WithContext(ctx).Where("id = ? AND user_id = ?", input.TokenID, input.UserID).First(&token).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return &LiveRouteQualificationError{Reason: ShadowFilterTokenForbidden}
+	if input.TokenID > 0 {
+		if err := model.DB.WithContext(ctx).Where("id = ? AND user_id = ?", input.TokenID, input.UserID).First(&token).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return &LiveRouteQualificationError{Reason: RouteFilterTokenForbidden}
+			}
+			return err
 		}
-		return err
-	}
-	if !routeTokenUsable(token) {
-		return &LiveRouteQualificationError{Reason: ShadowFilterTokenForbidden}
-	}
-	// Keep the effective group established by TokenAuth/distribution. The
-	// account's primary group is only used to validate that this effective
-	// group remains permitted after mutable state is re-read.
-	effectiveGroup := strings.TrimSpace(input.UserGroup)
-	tokenGroup := strings.TrimSpace(token.Group)
-	if effectiveGroup == "" || tokenGroup == "auto" {
-		return &LiveRouteQualificationError{Reason: ShadowFilterGroupForbidden}
-	}
-	if tokenGroup != "" {
-		if tokenGroup != effectiveGroup || !IsUserSelectableGroup(user.Group, tokenGroup) {
-			return &LiveRouteQualificationError{Reason: ShadowFilterGroupForbidden}
+		if !routeTokenUsable(token) {
+			return &LiveRouteQualificationError{Reason: RouteFilterTokenForbidden}
 		}
-	} else if effectiveGroup != user.Group && !IsUserSelectableGroup(user.Group, effectiveGroup) {
-		return &LiveRouteQualificationError{Reason: ShadowFilterGroupForbidden}
+	} else if !input.IsPlayground {
+		return &LiveRouteQualificationError{Reason: RouteFilterTokenForbidden}
 	}
-	input.UserGroup = effectiveGroup
 
-	var profile model.UserRouteProfile
-	if err := model.DB.WithContext(ctx).Where("user_id = ? AND token_id = ?", input.UserID, input.TokenID).First(&profile).Error; err != nil {
+	if input.SpecificChannelID > 0 {
+		if input.ChannelID != input.SpecificChannelID {
+			return &LiveRouteQualificationError{Reason: "origin_channel_mismatch"}
+		}
+	} else if input.TokenID > 0 {
+		var profile model.UserRouteProfile
+		err := model.DB.WithContext(ctx).Where("user_id = ? AND token_id = ?", input.UserID, input.TokenID).First(&profile).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return &LiveRouteQualificationError{Reason: "profile_missing"}
-		}
-		return err
-	}
-	if profile.Status != model.RouteProfileStatusEnabled {
-		return &LiveRouteQualificationError{Reason: "profile_disabled"}
-	}
-	if input.ExpectedProfileVersion > 0 && profile.Version != input.ExpectedProfileVersion {
-		return &LiveRouteQualificationError{Reason: "configuration_stale"}
-	}
-	if input.RouteSource == RouteSourceManual {
-		if profile.Mode != model.RouteModeManual || profile.ActiveGroupID == nil {
-			return &LiveRouteQualificationError{Reason: "active_group_missing"}
-		}
-		var group model.UserRouteGroup
-		if err := model.DB.WithContext(ctx).Where("id = ? AND profile_id = ?", *profile.ActiveGroupID, profile.ID).First(&group).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return &LiveRouteQualificationError{Reason: "active_group_missing"}
+			if input.RouteSource != RouteSourceAutoLab || input.ExpectedProfileVersion != 0 {
+				return &LiveRouteQualificationError{Reason: "profile_missing"}
 			}
+		} else if err != nil {
 			return err
-		}
-		if !group.Enabled {
-			return &LiveRouteQualificationError{Reason: "group_disabled"}
-		}
-		var entry model.UserRouteEntry
-		if err := model.DB.WithContext(ctx).Where("group_id = ? AND channel_id = ?", group.ID, input.ChannelID).First(&entry).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return &LiveRouteQualificationError{Reason: "entry_missing"}
+		} else {
+			if profile.Status != model.RouteProfileStatusEnabled {
+				return &LiveRouteQualificationError{Reason: "profile_disabled"}
 			}
-			return err
+			if profile.Version != input.ExpectedProfileVersion {
+				return &LiveRouteQualificationError{Reason: "configuration_stale"}
+			}
+			if string(input.RouteSource) != profile.Mode {
+				return &LiveRouteQualificationError{Reason: "profile_mode_mismatch"}
+			}
+			if input.RouteSource == RouteSourceManual {
+				if profile.ActiveGroupID == nil {
+					return &LiveRouteQualificationError{Reason: "active_group_missing"}
+				}
+				var group model.UserRouteGroup
+				if err := model.DB.WithContext(ctx).Where("id = ? AND profile_id = ?", *profile.ActiveGroupID, profile.ID).First(&group).Error; err != nil {
+					if errors.Is(err, gorm.ErrRecordNotFound) {
+						return &LiveRouteQualificationError{Reason: "active_group_missing"}
+					}
+					return err
+				}
+				if !group.Enabled {
+					return &LiveRouteQualificationError{Reason: "group_disabled"}
+				}
+				var entry model.UserRouteEntry
+				if err := model.DB.WithContext(ctx).Where("group_id = ? AND channel_id = ?", group.ID, input.ChannelID).First(&entry).Error; err != nil {
+					if errors.Is(err, gorm.ErrRecordNotFound) {
+						return &LiveRouteQualificationError{Reason: "entry_missing"}
+					}
+					return err
+				}
+				if entry.Source != model.RouteSourcePlatform || !entry.Enabled {
+					return &LiveRouteQualificationError{Reason: "entry_disabled"}
+				}
+			}
 		}
-		if entry.Source != model.RouteSourcePlatform {
-			return &LiveRouteQualificationError{Reason: "source_unsupported"}
-		}
-		if !entry.Enabled {
-			return &LiveRouteQualificationError{Reason: "entry_disabled"}
-		}
-	} else if input.RouteSource == RouteSourceAutoLab && profile.Mode != model.RouteModeAutoLab {
-		return &LiveRouteQualificationError{Reason: "profile_mode_mismatch"}
 	}
 
 	var abilities []model.Ability
@@ -236,21 +234,12 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 		return err
 	}
 	abilityEnabled := false
-	abilityAllowed := false
-	abilityGroups := make([]string, 0, len(abilities))
-	seenGroups := make(map[string]struct{}, len(abilities))
 	for _, ability := range abilities {
 		if modellab.NormalizeModel(ability.Model) != normalizedModel || !ability.Enabled {
 			continue
 		}
 		abilityEnabled = true
-		if _, exists := seenGroups[ability.Group]; !exists {
-			abilityGroups = append(abilityGroups, ability.Group)
-			seenGroups[ability.Group] = struct{}{}
-		}
-		if ability.Group == input.UserGroup || IsUserSelectableGroup(input.UserGroup, ability.Group) {
-			abilityAllowed = true
-		}
+		break
 	}
 
 	var entitlement model.UserChannelEntitlement
@@ -259,20 +248,21 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 		return entitlementErr
 	}
 	entitled := errors.Is(entitlementErr, gorm.ErrRecordNotFound) || entitlementIsActive(entitlement)
+	permissionModel := normalizedModel
+	if input.PermissionModel != "" {
+		permissionModel = modellab.NormalizeModel(input.PermissionModel)
+	}
 	filterResult := filterRouteCapability(routeCapabilityFilterInput{
 		Capability:               capability,
 		SnapshotVersion:          activeSnapshot.ActiveVersion,
 		ChannelStatus:            channel.Status,
 		ChannelType:              channel.Type,
 		AbilityEnabled:           abilityEnabled,
-		AbilityAllowed:           abilityAllowed,
-		AbilityGroups:            abilityGroups,
-		UserGroup:                input.UserGroup,
 		Token:                    token,
 		TokenLimitEnabled:        token.ModelLimitsEnabled,
 		TokenLimit:               token.GetModelLimitsMap(),
 		RequestModel:             requestModel,
-		NormalizedModel:          normalizedModel,
+		NormalizedModel:          permissionModel,
 		RequestPath:              input.RequestPath,
 		EndpointType:             endpointTypeForRequestPath(input.RequestPath),
 		Entitled:                 entitled,
@@ -289,10 +279,16 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 	return nil
 }
 
-// LiveRouteRequest contains request facts already established by legacy auth
+// LiveRouteRequest contains request facts already established by auth
 // and distribution middleware. It intentionally does not carry credentials,
 // body content, or channel configuration.
 type LiveRouteRequest struct {
+	ExcludedChannelIDs       map[int]string
+	SpecificChannelID        int
+	IsPlayground             bool
+	NativeResponsesRequired  bool
+	CompactStage             relaycommon.CompactAttemptStage
+	ExcludedKeyIndexes       map[int]map[int]struct{}
 	Context                  context.Context
 	CapabilityEnabled        bool
 	RequestID                string
@@ -300,7 +296,6 @@ type LiveRouteRequest struct {
 	TokenID                  int
 	RequestModel             string
 	RequestPath              string
-	UserGroup                string
 	TokenModelLimitEnabled   bool
 	TokenModelLimit          map[string]bool
 	PriceEligibilityKnown    bool
@@ -311,32 +306,16 @@ type LiveRouteRequest struct {
 }
 
 type LiveRouteSelection struct {
-	Source   RouteSource
-	Decision RouteDecision
-	Attempts []RouteDecisionCandidate
+	CompactStage      relaycommon.CompactAttemptStage
+	SpecificChannelID int
+	Source            RouteSource
+	Decision          RouteDecision
+	Attempts          []RouteDecisionCandidate
 	// MaxRatio is a manual-profile admission ceiling. It is evaluated against
 	// the existing billing calculation at request time and never rewrites the
 	// selected channel, billing model, or group ratio.
 	MaxRatio float64
 	Retry    RouteLiveRetryPolicy
-}
-
-// RouteLiveTokenGroupSupported keeps live routing fail-closed while the
-// legacy auto-group sequence still owns its own per-request group resolution.
-// A concrete Token.Group is safe to pass through the unified candidate filter;
-// an "auto" token remains on the legacy selector until that sequence is part
-// of the live attempt lifecycle.
-func RouteLiveTokenGroupSupported(group string) bool {
-	group = strings.TrimSpace(group)
-	return group != "" && group != "auto"
-}
-
-// RouteLiveRequestSupported excludes task and provider-specific request paths
-// until they share Relay's lease, runtime recheck, retry, billing, and decision
-// finalization lifecycle. The legacy selector remains the explicit fallback
-// for those paths rather than storing a live selection that cannot be closed.
-func RouteLiveRequestSupported(path string) bool {
-	return endpointTypeForRequestPath(path) != ""
 }
 
 // RouteLiveRetryPolicy is the validated manual-policy subset used by the
@@ -402,6 +381,9 @@ func (selection LiveRouteSelection) CandidateAtOrAfter(attempt int) (RouteDecisi
 }
 
 func (selection LiveRouteSelection) NextCandidateForError(currentAttempt, currentChannelID int, class RouteErrorClassification, counters RouteRetryCounters) (RouteDecisionCandidate, int, bool) {
+	if selection.Retry.Mode == model.RoutePolicyRetryNone {
+		return RouteDecisionCandidate{}, 0, false
+	}
 	budget := selection.Retry.Budget()
 	for index := currentAttempt + 1; index < len(selection.Attempts); index++ {
 		candidate := selection.Attempts[index]
@@ -412,160 +394,17 @@ func (selection LiveRouteSelection) NextCandidateForError(currentAttempt, curren
 		if candidate.ChannelID == currentChannelID {
 			relation = RouteRetrySameChannel
 		}
+		if selection.Retry.Mode == model.RoutePolicyRetrySameChannel && relation != RouteRetrySameChannel {
+			continue
+		}
+		if selection.Retry.Mode == model.RoutePolicyRetryNextChannel && relation != RouteRetryFailover {
+			continue
+		}
 		if budget.Allows(class, relation, counters) {
 			return candidate, index, true
 		}
 	}
 	return RouteDecisionCandidate{}, 0, false
-}
-
-// SelectLiveTokenRoute is the side-effect-free route source bridge used by a
-// future middleware integration. A missing or disabled profile preserves the
-// legacy route; an enabled profile with no safe candidate fails closed.
-func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
-	selection := LiveRouteSelection{Source: RouteSourceLegacy}
-	if !input.CapabilityEnabled || input.UserID <= 0 || input.TokenID <= 0 {
-		selection.Decision = NewRouteDecision("", RouteSourceLegacy, input.RequestModel, 0)
-		return selection, nil
-	}
-	if input.Context == nil {
-		input.Context = context.Background()
-	}
-	if model.DB == nil {
-		return selection, ErrLiveRouteProfileUnavailable
-	}
-	var profile model.UserRouteProfile
-	err := model.DB.WithContext(input.Context).
-		Where("user_id = ? AND token_id = ?", input.UserID, input.TokenID).
-		First(&profile).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		selection.Decision = NewRouteDecision("", RouteSourceLegacy, input.RequestModel, 0)
-		return selection, nil
-	}
-	if err != nil {
-		return selection, err
-	}
-	if profile.Status != model.RouteProfileStatusEnabled {
-		selection.Decision = NewRouteDecision("", RouteSourceLegacy, input.RequestModel, profile.Version)
-		return selection, nil
-	}
-	source := ResolveRouteSource(RouteSourceInput{
-		CapabilityEnabled: true,
-		HasProfile:        true,
-		ProfileMode:       profile.Mode,
-	})
-	selection.Source = source
-	if source == RouteSourceLegacy {
-		selection.Decision = NewRouteDecision("", source, input.RequestModel, profile.Version)
-		return selection, nil
-	}
-
-	var candidates []RouteSelectionCandidate
-	if source == RouteSourceManual {
-		preview, previewErr := PreviewUserRouteProfile(input.Context, input.UserID, profile.ID, RouteProfilePreviewInput{
-			Model:          input.RequestModel,
-			Path:           input.RequestPath,
-			EffectiveGroup: input.UserGroup,
-		})
-		if previewErr != nil {
-			return selection, previewErr
-		}
-		for _, entry := range preview.Entries {
-			candidates = append(candidates, RouteSelectionCandidate{
-				ChannelID: entry.ChannelID, RequestModel: entry.RequestModel,
-				ActualModel: entry.ActualModel, LabSlug: entry.LabSlug,
-				Position: entry.Position, Weight: entry.Weight,
-				FilterReason: entry.FilterReason, HealthUsable: true,
-				SnapshotVersion: entry.SnapshotVersion, CatalogVersion: entry.CatalogVersion,
-			})
-		}
-		if err := applyLiveHealth(input.Context, input.RequestModel, candidates); err != nil {
-			return selection, err
-		}
-		result, selectErr := SelectTokenRoute(RouteSelectionInput{
-			SourceInput:           RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: profile.Mode},
-			ManualGroupEnabled:    preview.ActiveGroup != nil && preview.ActiveGroup.Enabled,
-			ManualLoadBalance:     preview.Policy != nil && preview.Policy.LoadBalance,
-			ManualCandidates:      candidates,
-			ConfigurationVersion:  profile.Version,
-			RequestID:             input.RequestID,
-			RequestModel:          input.RequestModel,
-			DynamicScoringEnabled: false,
-		})
-		selection.Decision = result.Decision
-		if preview.Policy != nil {
-			selection.MaxRatio = preview.Policy.MaxRatio
-			selection.Retry = RouteLiveRetryPolicy{
-				Mode:                    preview.Policy.RetryMode,
-				MaxSameResourceAttempts: preview.Policy.MaxSameResourceAttempts,
-				MaxFailoverAttempts:     preview.Policy.MaxFailoverAttempts,
-			}
-		}
-		selection.Attempts = manualRouteAttemptCandidates(result, selection.Retry)
-		return selection, selectErr
-	}
-
-	entitlements, err := liveRouteEntitlements(input.Context, input.UserID)
-	if err != nil {
-		return selection, err
-	}
-	shadow := SelectRouteShadow(RouteShadowRequest{
-		UserID:                   input.UserID,
-		TokenID:                  input.TokenID,
-		RequestModel:             input.RequestModel,
-		NormalizedRequestModel:   modellab.NormalizeModel(input.RequestModel),
-		RequestPath:              input.RequestPath,
-		EndpointType:             endpointTypeForRequestPath(input.RequestPath),
-		UserGroup:                input.UserGroup,
-		TokenModelLimitEnabled:   input.TokenModelLimitEnabled,
-		TokenModelLimit:          input.TokenModelLimit,
-		EntitledChannels:         entitlements,
-		PriceEligible:            input.PriceEligible,
-		PriceEligibilityKnown:    input.PriceEligibilityKnown,
-		SecurityAllowed:          input.SecurityAllowed,
-		SecurityEligibilityKnown: input.SecurityEligibilityKnown,
-	})
-	statuses, err := liveRouteChannelStatuses(input.Context, shadow.ShadowCandidates)
-	if err != nil {
-		return selection, err
-	}
-	for _, candidate := range shadow.ShadowCandidates {
-		filterReason := candidate.FilterReason
-		if filterReason == "" && statuses[candidate.ChannelID] != common.ChannelStatusEnabled {
-			filterReason = ShadowFilterChannelDisabled
-		}
-		candidates = append(candidates, RouteSelectionCandidate{
-			ChannelID: candidate.ChannelID, RequestModel: candidate.RequestModel,
-			ActualModel: candidate.ActualModel, LabSlug: candidate.LabSlug,
-			Priority: candidate.Priority, Weight: candidate.Weight,
-			FilterReason: filterReason, HealthUsable: true,
-			SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
-			Sticky: candidate.ChannelID == input.PreferredChannelID && input.PreferredChannelID > 0,
-		})
-	}
-	if err := applyLiveHealth(input.Context, input.RequestModel, candidates); err != nil {
-		return selection, err
-	}
-	result, selectErr := SelectTokenRoute(RouteSelectionInput{
-		SourceInput:           RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: profile.Mode},
-		AutoCandidates:        candidates,
-		TopK:                  3,
-		ConfigurationVersion:  profile.Version,
-		RequestID:             shadow.RequestID,
-		RequestModel:          input.RequestModel,
-		DynamicScoringEnabled: RouteScoreLiveEnabled(),
-	})
-	selection.Decision = result.Decision
-	selection.Attempts = selectedRouteAttemptCandidates(result)
-	selection.Retry = RouteLiveRetryPolicy{
-		Mode:                    "auto",
-		MaxSameResourceAttempts: DefaultSameChannelAttempts,
-		MaxFailoverAttempts:     DefaultFailoverAttempts,
-	}
-	if selectErr != nil {
-		return selection, selectErr
-	}
-	return selection, nil
 }
 
 func selectedRouteAttemptCandidates(result RouteSelectionResult) []RouteDecisionCandidate {
@@ -659,12 +498,13 @@ func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveR
 	}
 }
 
-func applyLiveHealth(ctx context.Context, requestModel string, candidates []RouteSelectionCandidate) error {
+func applyLiveHealth(ctx context.Context, candidates []RouteSelectionCandidate) error {
 	now := time.Now()
 	for index := range candidates {
 		if candidates[index].FilterReason != "" {
 			continue
 		}
+		requestModel := candidates[index].RequestModel
 		usable, epoch, err := RouteHealthUsable(ctx, candidates[index].ChannelID, requestModel, now)
 		if err != nil {
 			return err
@@ -699,7 +539,7 @@ func applyLiveHealth(ctx context.Context, requestModel string, candidates []Rout
 		candidates[index].LatencyKnown = metrics.LatencyKnown
 		candidates[index].TTFTMS = metrics.TTFTMS
 		candidates[index].TTFTKnown = metrics.TTFTKnown
-		if RouteScoreLiveEnabled() {
+		{
 			runtimeMetrics, runtimeErr := LoadRouteScoreRuntimeMetrics(ctx, candidates[index].ChannelID, requestModel)
 			if runtimeErr != nil {
 				return runtimeErr
@@ -711,33 +551,6 @@ func applyLiveHealth(ctx context.Context, requestModel string, candidates []Rout
 		}
 	}
 	return nil
-}
-
-func liveRouteChannelStatuses(ctx context.Context, candidates []RouteShadowCandidate) (map[int]int, error) {
-	ids := make([]int, 0, len(candidates))
-	seen := make(map[int]struct{}, len(candidates))
-	for _, candidate := range candidates {
-		if candidate.ChannelID <= 0 {
-			continue
-		}
-		if _, exists := seen[candidate.ChannelID]; exists {
-			continue
-		}
-		seen[candidate.ChannelID] = struct{}{}
-		ids = append(ids, candidate.ChannelID)
-	}
-	statuses := make(map[int]int, len(ids))
-	if len(ids) == 0 {
-		return statuses, nil
-	}
-	var channels []model.Channel
-	if err := model.DB.WithContext(ctx).Select("id", "status").Where("id IN ?", ids).Find(&channels).Error; err != nil {
-		return nil, err
-	}
-	for _, channel := range channels {
-		statuses[channel.Id] = channel.Status
-	}
-	return statuses, nil
 }
 
 func liveRouteEntitlements(ctx context.Context, userID int) (map[int]bool, error) {

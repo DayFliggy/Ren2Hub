@@ -6,12 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestResolveRouteSourceFailsClosedToLegacy(t *testing.T) {
-	assert.Equal(t, RouteSourceLegacy, ResolveRouteSource(RouteSourceInput{}))
-	assert.Equal(t, RouteSourceLegacy, ResolveRouteSource(RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "legacy"}))
+func TestResolveRouteSourceUsesAutomaticDefaultAndRejectsInvalidModes(t *testing.T) {
+	assert.Equal(t, RouteSourceUnavailable, ResolveRouteSource(RouteSourceInput{}))
+	assert.Equal(t, RouteSourceAutoLab, ResolveRouteSource(RouteSourceInput{CapabilityEnabled: true}))
+	assert.Equal(t, RouteSourceUnavailable, ResolveRouteSource(RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "legacy"}))
 	assert.Equal(t, RouteSourceManual, ResolveRouteSource(RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "manual"}))
 	assert.Equal(t, RouteSourceAutoLab, ResolveRouteSource(RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "auto_lab"}))
-	assert.Equal(t, RouteSourceLegacy, ResolveRouteSource(RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "future"}))
+	assert.Equal(t, RouteSourceUnavailable, ResolveRouteSource(RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "future"}))
 }
 
 func TestRouteDecisionKeepsExplainabilityFields(t *testing.T) {

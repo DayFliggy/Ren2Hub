@@ -80,7 +80,7 @@ test('consume logs keep operation types in the separate admin view', async ({
   await expect(page.getByRole('option', { name: '登录' })).toHaveCount(0)
 
   await page.getByRole('link', { name: '操作日志' }).click()
-  await expect(page).toHaveURL(/\/logs\/operations$/)
+  await expect(page).toHaveURL(/\/usage-logs\/operations$/)
 })
 
 test('operation logs expose loading and empty states', async ({ page }) => {

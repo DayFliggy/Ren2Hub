@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,188 +18,56 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestDistributeAllowsCompactSuffixOnRegularResponsesEndpoint(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	previousDB := model.DB
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}))
-	model.DB = db
-	t.Cleanup(func() { model.DB = previousDB })
-	require.NoError(t, db.Create(&model.Channel{
-		Id:     1,
-		Type:   constant.ChannelTypeOpenAI,
-		Status: common.ChannelStatusEnabled,
-		Name:   "regular-responses",
-		Key:    "test-key",
-		Models: "gpt-5-openai-compact",
-		Group:  "default",
-	}).Error)
-
-	called := false
-	router := gin.New()
-	router.POST("/v1/responses", func(c *gin.Context) {
-		common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, "1")
-		c.Next()
-	}, Distribute(), func(c *gin.Context) {
-		called = true
-		require.Equal(t, "gpt-5-openai-compact", common.GetContextKeyString(c, constant.ContextKeyOriginalModel))
-		c.Status(http.StatusNoContent)
-	})
-
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5-openai-compact","input":"hello"}`))
-	request.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(recorder, request)
-
-	require.Equal(t, http.StatusNoContent, recorder.Code)
-	require.True(t, called)
-}
-
-func TestDistributeNonGPTCompactUsesBaseSpecificChannel(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	previousDB := model.DB
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}))
-	model.DB = db
-	t.Cleanup(func() { model.DB = previousDB })
-	require.NoError(t, db.Create(&model.Channel{
-		Id:     4,
-		Type:   constant.ChannelTypeOpenAI,
-		Status: common.ChannelStatusEnabled,
-		Name:   "non-gpt-compact-base",
-		Key:    "test-key",
-		Models: "claude-3-5-sonnet",
-		Group:  "default",
-	}).Error)
-
-	called := false
-	router := gin.New()
-	router.POST("/v1/responses/compact", func(c *gin.Context) {
-		common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, "4")
-		c.Next()
-	}, Distribute(), func(c *gin.Context) {
-		called = true
-		require.Equal(t, "claude-3-5-sonnet", common.GetContextKeyString(c, constant.ContextKeyOriginalModel))
-		require.Equal(t, relaycommon.CompactAttemptBase, service.CompactStageFromContext(c))
-		c.Status(http.StatusNoContent)
-	})
-
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/v1/responses/compact", strings.NewReader(`{"model":"claude-3-5-sonnet-openai-compact","input":"hello"}`))
-	request.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(recorder, request)
-
-	require.Equal(t, http.StatusNoContent, recorder.Code)
-	require.True(t, called)
-}
-
-func TestDistributeNonGPTCompactRejectsSuffixOnlySpecificChannel(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	previousDB := model.DB
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}))
-	model.DB = db
-	t.Cleanup(func() { model.DB = previousDB })
-	require.NoError(t, db.Create(&model.Channel{
-		Id:     5,
-		Type:   constant.ChannelTypeOpenAI,
-		Status: common.ChannelStatusEnabled,
-		Name:   "non-gpt-compact-suffix-only",
-		Key:    "test-key",
-		Models: "claude-3-5-sonnet-openai-compact",
-		Group:  "default",
-	}).Error)
-
-	router := gin.New()
-	router.POST("/v1/responses/compact", func(c *gin.Context) {
-		common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, "5")
-		c.Next()
-	}, Distribute(), func(c *gin.Context) {
-		t.Fatal("suffix-only non-GPT channel must not reach relay")
-	})
-
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/v1/responses/compact", strings.NewReader(`{"model":"claude-3-5-sonnet-openai-compact","input":"hello"}`))
-	request.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(recorder, request)
-
-	require.Equal(t, http.StatusBadRequest, recorder.Code)
-}
-
-func TestDistributeRejectsRemoteCompactionOnNonNativeSpecificChannel(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	previousDB := model.DB
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}))
-	model.DB = db
-	t.Cleanup(func() { model.DB = previousDB })
-	require.NoError(t, db.Create(&model.Channel{
-		Id:     2,
-		Type:   constant.ChannelTypeGemini,
-		Status: common.ChannelStatusEnabled,
-		Name:   "converted-responses",
-		Key:    "test-key",
-		Models: "gpt-5",
-		Group:  "default",
-	}).Error)
-
-	router := gin.New()
-	router.POST("/v1/responses", func(c *gin.Context) {
-		common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, "2")
-		c.Next()
-	}, Distribute(), func(c *gin.Context) {
-		t.Fatal("non-native channel must be rejected before the relay handler")
-	})
-
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5","input":[{"type":"compaction_trigger"}]}`))
-	request.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(recorder, request)
-
-	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "native Responses")
-}
-
-func TestDistributeMarksRemoteCompactionForNativeChannel(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	previousDB := model.DB
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}))
-	model.DB = db
-	t.Cleanup(func() { model.DB = previousDB })
-	require.NoError(t, db.Create(&model.Channel{
-		Id:     3,
-		Type:   constant.ChannelTypeOpenAI,
-		Status: common.ChannelStatusEnabled,
-		Name:   "native-responses",
-		Key:    "test-key",
-		Models: "gpt-5",
-		Group:  "default",
-	}).Error)
-
-	called := false
-	router := gin.New()
-	router.POST("/v1/responses", func(c *gin.Context) {
-		common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, "3")
-		c.Next()
-	}, Distribute(), func(c *gin.Context) {
-		called = true
-		require.True(t, common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired))
-		c.Status(http.StatusNoContent)
-	})
-
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"gpt-5","context_management":{"compact_threshold":1000},"input":"hello"}`))
-	request.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(recorder, request)
-
-	require.Equal(t, http.StatusNoContent, recorder.Code)
-	require.True(t, called)
+func TestDistributeCompactAndNativeResponsesUseUnifiedRouting(t *testing.T) {
+	for _, test := range []struct {
+		name, path, model, body string
+		channelType, status     int
+		stage                   relaycommon.CompactAttemptStage
+		native                  bool
+	}{
+		{"regular suffix", "/v1/responses", "gpt-5-openai-compact", `{"model":"gpt-5-openai-compact","input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptNone, false},
+		{"non GPT base", "/v1/responses/compact", "claude-3-5-sonnet", `{"model":"claude-3-5-sonnet-openai-compact","input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptBase, false},
+		{"non GPT suffix only", "/v1/responses/compact", "claude-3-5-sonnet-openai-compact", `{"model":"claude-3-5-sonnet-openai-compact","input":"hello"}`, constant.ChannelTypeOpenAI, 503, relaycommon.CompactAttemptNone, false},
+		{"opaque state rejects conversion", "/v1/responses", "gpt-5", `{"model":"gpt-5","input":[{"type":"compaction_trigger"}]}`, constant.ChannelTypeGemini, 503, relaycommon.CompactAttemptNone, false},
+		{"native compaction", "/v1/responses", "gpt-5", `{"model":"gpt-5","context_management":{"compact_threshold":1000},"input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptNone, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			previousDB, previousRedis, previousCache := model.DB, common.RedisEnabled, common.MemoryCacheEnabled
+			db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+			require.NoError(t, err)
+			model.DB, common.RedisEnabled, common.MemoryCacheEnabled = db, false, false
+			t.Cleanup(func() {
+				model.DB, common.RedisEnabled, common.MemoryCacheEnabled = previousDB, previousRedis, previousCache
+				sqlDB, err := db.DB()
+				require.NoError(t, err)
+				require.NoError(t, sqlDB.Close())
+			})
+			require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.UserChannelEntitlement{}, &model.ChannelCapabilitySnapshot{}, &model.ChannelModelCapability{}, &model.ChannelHealth{}))
+			channel := &model.Channel{Id: 1, Type: test.channelType, Status: common.ChannelStatusEnabled, Name: test.name, Key: "test-key", Models: test.model, Group: "retired-group"}
+			require.NoError(t, db.Create(channel).Error)
+			require.NoError(t, channel.AddAbilities(db))
+			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
+			called := false
+			router := gin.New()
+			router.POST(test.path, func(c *gin.Context) {
+				common.SetContextKey(c, constant.ContextKeyUserId, 1)
+				common.SetContextKey(c, constant.ContextKeyTokenId, 2)
+				common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, "1")
+			}, Distribute(), func(c *gin.Context) {
+				called = true
+				require.Equal(t, test.stage, service.CompactStageFromContext(c))
+				require.Equal(t, test.native, common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired))
+				require.True(t, c.GetBool(service.RouteLiveSelectionRequiredContextKey))
+				c.Status(http.StatusNoContent)
+			})
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
+			request.Header.Set("Content-Type", "application/json")
+			router.ServeHTTP(recorder, request)
+			require.Equal(t, test.status, recorder.Code, recorder.Body.String())
+			require.Equal(t, test.status == 204, called)
+		})
+	}
 }
 
 func TestRequestRequiresNativeResponsesDetectsCompactionItem(t *testing.T) {

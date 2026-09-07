@@ -99,12 +99,3 @@ func TestOrderManualRouteCandidatesKeepsPositionAheadOfWeight(t *testing.T) {
 	ordered = OrderManualRouteCandidates(ordered, false)
 	assert.Equal(t, []int{7, 8, 9}, []int{ordered[0].ChannelID, ordered[1].ChannelID, ordered[2].ChannelID})
 }
-
-func TestRouteScoreLiveGateRequiresShadowGate(t *testing.T) {
-	t.Setenv("ROUTE_SCORE_SHADOW_ENABLED", "false")
-	t.Setenv("ROUTE_SCORE_LIVE_ENABLED", "true")
-	assert.False(t, RouteScoreLiveEnabled())
-
-	t.Setenv("ROUTE_SCORE_SHADOW_ENABLED", "true")
-	assert.True(t, RouteScoreLiveEnabled())
-}

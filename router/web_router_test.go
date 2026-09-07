@@ -14,7 +14,7 @@ import (
 
 func testWebAssets(index string) WebAssets {
 	return WebAssets{
-		NextBuildFS: fstest.MapFS{
+		BuildFS: fstest.MapFS{
 			"frontend/embed-dist/index.html":                                   {Data: []byte(index)},
 			"frontend/embed-dist/assets/app.js":                                {Data: []byte("asset")},
 			"frontend/embed-dist/assets/app-AbCd1234.js":                       {Data: []byte("hashed-asset")},
@@ -22,7 +22,7 @@ func testWebAssets(index string) WebAssets {
 			"frontend/embed-dist/logo.png":                                     {Data: []byte("logo")},
 			"frontend/embed-dist/.vite/manifest.json":                          {Data: []byte(`{"private":"manifest"}`)},
 		},
-		NextIndexPage: []byte(index),
+		IndexPage: []byte(index),
 	}
 }
 
@@ -79,36 +79,14 @@ func TestVueWebRouting(t *testing.T) {
 	}
 }
 
-func TestVueLegacyRedirects(t *testing.T) {
-	engine := newWebTestRouter(t, testWebAssets("vue-index"), "", true)
-	for _, test := range []struct{ path, location string }{
-		{"/next", "/"},
-		{"/next/", "/"},
-		{"/next/usage-logs?tab=drawing&model=a%2Fb", "/usage-logs?tab=drawing&model=a%2Fb"},
-		{"/next/console/keys", "/console/keys"},
-		{"/next/assets/app.js?v=2", "/assets/app.js?v=2"},
-		{"/next/logo.png", "/logo.png"},
-		{"/next//example.com", "/example.com"},
-		{"/next/%2F%2Fexample.com", "/example.com"},
-		{"/next/console/a%3Fb", "/console/a%3Fb"},
-	} {
-		for _, method := range []string{http.MethodGet, http.MethodHead} {
-			t.Run(method+test.path, func(t *testing.T) {
-				recorder := serveWebRequest(engine, method, test.path)
-				require.Equal(t, http.StatusTemporaryRedirect, recorder.Code)
-				assert.Equal(t, test.location, recorder.Header().Get("Location"))
-				assert.NotContains(t, recorder.Body.String(), "invalid_request_error")
-				assert.Equal(t, "no-cache", recorder.Header().Get("Cache-Control"))
-			})
-		}
-	}
-}
-
 func TestVueWebFallbackBoundaries(t *testing.T) {
 	for _, frontendBaseURL := range []string{"", "https://frontend.example"} {
 		t.Run(frontendBaseURL, func(t *testing.T) {
 			engine := newWebTestRouter(t, testWebAssets("vue-index"), frontendBaseURL, false)
 			for _, path := range []string{
+				"/next", "/next/", "/next/keys", "/next/usage-logs?tab=drawing&model=a%2Fb",
+				"/next/assets/app.js?v=2", "/next/logo.png", "/next//example.com", "/next/%2F%2Fexample.com",
+				"/next/console/a%3Fb", "/next/../keys", "/console/next", "/console/next/keys",
 				"/api/missing", "/api/user/epay/missing", "/api/stripe/missing", "/api/oauth/missing/callback",
 				"/api/../models", "/v1/missing", "/v1beta/missing", "/mj/missing", "/fast/mj/missing",
 				"/pg/missing", "/suno/missing", "/kling/v1/missing", "/jimeng/missing",
@@ -191,7 +169,7 @@ func TestVueExternalFrontend(t *testing.T) {
 
 func TestVueRegisteredBackendRoutesKeepAuthentication(t *testing.T) {
 	engine := newWebTestRouter(t, testWebAssets("vue-index"), "https://frontend.example", false)
-	for _, path := range []string{"/api/user/self", "/v1/models", "/dashboard/billing/usage", "/v1/videos/test/content"} {
+	for _, path := range []string{"/api/user/self", "/api/next/wallet/config", "/v1/models", "/dashboard/billing/usage", "/v1/videos/test/content"} {
 		recorder := serveWebRequest(engine, http.MethodGet, path)
 		assert.Equal(t, http.StatusUnauthorized, recorder.Code, path)
 		assert.Empty(t, recorder.Header().Get("Location"), path)
@@ -200,7 +178,7 @@ func TestVueRegisteredBackendRoutesKeepAuthentication(t *testing.T) {
 }
 
 func TestVuePlaceholderIsUnavailable(t *testing.T) {
-	index := `<meta name="ren2hub-next-build" content="placeholder">`
+	index := `<meta name="ren2hub-frontend-build" content="placeholder">`
 	engine := newWebTestRouter(t, testWebAssets(index), "", true)
 	for _, path := range []string{"/", "/console/keys"} {
 		recorder := serveWebRequest(engine, http.MethodGet, path)

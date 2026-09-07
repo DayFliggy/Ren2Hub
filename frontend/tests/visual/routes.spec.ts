@@ -16,33 +16,76 @@ const viewports = [
   { name: 'mobile', width: 390, height: 844 },
 ] as const
 
-const ROUTE_SMOKE_TIMEOUT = 120_000
+const ROUTE_SMOKE_TIMEOUT = 300_000
 
-test('initial navigation displays loading while setup is pending', async ({
-  page,
-}) => {
-  await configureStablePage(page, { theme: 'light', authenticated: false })
-  let release!: () => void
-  const pending = new Promise<void>((resolve) => {
-    release = resolve
+for (const viewport of [viewports[0], viewports[2]]) {
+  test(`retired next prefix opens only the error page at ${viewport.name}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize(viewport)
+    await configureStablePage(page, { theme: 'light', authenticated: true })
+    for (const path of ['/next', '/next/', '/next/keys']) {
+      await page.goto(path, { waitUntil: 'domcontentloaded' })
+      await expect(page).toHaveURL(/\/404$/)
+      await expect(page.getByText('页面不存在', { exact: true })).toBeVisible()
+      await expect(page.locator('[data-key-page]')).toHaveCount(0)
+    }
+    await assertNoHorizontalOverflow(page)
+    await page.screenshot({
+      path: testInfo.outputPath('retired-next.png'),
+      fullPage: true,
+    })
+    await page.goto('/keys', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('[data-key-page]')).toBeVisible()
   })
-  await page.route('**/api/setup?*', async (route) => {
-    await pending
-    await route.fulfill({
-      json: {
-        success: true,
-        data: { status: true, root_init: true, database_type: 'sqlite' },
-      },
+}
+
+for (const viewport of [viewports[0], viewports[2]]) {
+  test(`initial navigation has no loading screen at ${viewport.name}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize(viewport)
+    await configureStablePage(page, {
+      theme: process.env.PLAYWRIGHT_THEME === 'dark' ? 'dark' : 'light',
+      authenticated: false,
+    })
+    let release!: () => void
+    let started!: () => void
+    const setupStarted = new Promise<void>((resolve) => {
+      started = resolve
+    })
+    const pending = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await page.route('**/api/setup?*', async (route) => {
+      started()
+      await pending
+      await route.fulfill({
+        json: {
+          success: true,
+          data: { status: true, root_init: true, database_type: 'sqlite' },
+        },
+      })
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    try {
+      await setupStarted
+      await expect(page.locator('#app')).toBeAttached()
+      await expect(page.locator('#app > main[role="status"]')).toHaveCount(0)
+      await expect(page.locator('.app-navbar')).toHaveCount(0)
+    } finally {
+      release()
+    }
+    await expect(page.locator('.app-navbar')).toBeVisible()
+    await waitForStablePage(page)
+    await freezeAndInspectHomeCanvas(page)
+    await assertNoHorizontalOverflow(page)
+    await page.screenshot({
+      path: testInfo.outputPath(`home-${viewport.name}.png`),
+      fullPage: true,
     })
   })
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  try {
-    await expect(page.getByRole('status')).toHaveText('加载中…')
-  } finally {
-    release()
-  }
-  await expect(page.locator('.app-navbar')).toBeVisible()
-})
+}
 
 test('failed lazy navigation displays an accessible retry state', async ({
   page,
@@ -100,6 +143,15 @@ for (const viewport of viewports) {
         await page.goto(route.path, { waitUntil: 'domcontentloaded' })
         await waitForStablePage(page)
         if (route.path === '/') await freezeAndInspectHomeCanvas(page)
+        if (route.path.includes('manage=')) {
+          await expect(
+            page.locator('[role="dialog"][aria-modal="true"]')
+          ).toBeVisible()
+          await page.getByRole('button', { name: '关闭', exact: true }).click()
+          await expect(
+            page.locator('[role="dialog"][aria-modal="true"]')
+          ).toHaveCount(0)
+        }
         if (runtimeErrors.length > 0) {
           routeFailures.push(`${route.path}: ${runtimeErrors.join(' | ')}`)
           return
@@ -115,6 +167,7 @@ for (const viewport of viewports) {
 test('deferred module entry points are disabled and routes fail closed', async ({
   page,
 }) => {
+  test.setTimeout(120_000)
   await page.setViewportSize({ width: 1440, height: 900 })
   await configureStablePage(page, { theme: 'dark', authenticated: true })
 

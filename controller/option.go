@@ -176,20 +176,19 @@ var optionDefaults = map[string]any{
 	"DataExportEnabled": true, "DataExportInterval": 5, "DataExportDefaultTime": "hour",
 	"PreConsumedQuota": 500000, "QuotaPerUnit": 500000, "USDExchangeRate": 1.0,
 	"Price": 7.3, "MinTopUp": 1, "ChannelDisableThreshold": 5,
-	"monitor_setting.channel_test_mode":              "scheduled_all",
-	"auto_pricing.models_dev_url":                    "https://models.dev/api.json",
-	"billing_setting.billing_mode":                   map[string]any{},
-	"billing_setting.billing_expr":                   map[string]any{},
-	"group_ratio_setting.group_special_usable_group": map[string]any{},
-	"payment_setting.amount_options":                 []any{},
-	"payment_setting.amount_discount":                map[string]any{},
-	"global.thinking_model_blacklist":                []any{},
-	"global.chat_completions_to_responses_policy":    map[string]any{},
-	"gemini.version_settings":                        map[string]any{},
-	"gemini.supported_imagine_models":                []any{},
-	"claude.model_headers_settings":                  map[string]any{},
-	"qwen.sync_image_models":                         []any{},
-	"channel_affinity_setting.rules":                 []any{},
+	"monitor_setting.channel_test_mode":           "scheduled_all",
+	"auto_pricing.models_dev_url":                 "https://models.dev/api.json",
+	"billing_setting.billing_mode":                map[string]any{},
+	"billing_setting.billing_expr":                map[string]any{},
+	"payment_setting.amount_options":              []any{},
+	"payment_setting.amount_discount":             map[string]any{},
+	"global.thinking_model_blacklist":             []any{},
+	"global.chat_completions_to_responses_policy": map[string]any{},
+	"gemini.version_settings":                     map[string]any{},
+	"gemini.supported_imagine_models":             []any{},
+	"claude.model_headers_settings":               map[string]any{},
+	"qwen.sync_image_models":                      []any{},
+	"channel_affinity_setting.rules":              []any{},
 }
 
 var optionValidators = map[string]string{
@@ -324,11 +323,6 @@ func validateJSON(value string) error {
 
 func validateRatioMap(value string) error {
 	var ratios map[string]float64
-	return common.UnmarshalJsonStr(value, &ratios)
-}
-
-func validateNestedRatioMap(value string) error {
-	var ratios map[string]map[string]float64
 	return common.UnmarshalJsonStr(value, &ratios)
 }
 
@@ -525,14 +519,6 @@ func validateOptionPatch(values map[string]string) error {
 			if err := ratio_setting.CheckGroupRatio(value); err != nil {
 				return err
 			}
-		case "GroupGroupRatio":
-			if err := validateNestedRatioMap(value); err != nil {
-				return err
-			}
-		case "group_ratio_setting.group_special_usable_group":
-			if err := validateJSON(value); err != nil {
-				return fmt.Errorf("特殊可用分组配置无效: %w", err)
-			}
 		case "billing_setting.billing_mode", "billing_setting.billing_expr":
 			if err := validateBillingSettingValue(key, value); err != nil {
 				return err
@@ -620,7 +606,7 @@ func validateOptionPatch(values map[string]string) error {
 			if err := console_setting.ValidateConsoleSettings(value, "UptimeKumaGroups"); err != nil {
 				return err
 			}
-		case "Chats", "AutoGroups", "UserUsableGroups", "PayMethods", "WaffoPayMethods":
+		case "Chats", "PayMethods", "WaffoPayMethods":
 			if err := validateJSON(value); err != nil {
 				return err
 			}

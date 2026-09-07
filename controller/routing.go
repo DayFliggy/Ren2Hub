@@ -43,9 +43,6 @@ type routeCapabilityItem struct {
 }
 
 func ListRouteProfiles(c *gin.Context) {
-	if !requireTokenPrivateRouting(c) {
-		return
-	}
 	profiles, err := service.ListUserRouteProfiles(c.GetInt("id"))
 	if err != nil {
 		writeRouteError(c, err)
@@ -55,9 +52,6 @@ func ListRouteProfiles(c *gin.Context) {
 }
 
 func CreateRouteProfile(c *gin.Context) {
-	if !requireTokenPrivateRouting(c) {
-		return
-	}
 	var input service.RouteProfileInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		writeRouteBindingError(c)
@@ -73,9 +67,6 @@ func CreateRouteProfile(c *gin.Context) {
 }
 
 func GetRouteProfile(c *gin.Context) {
-	if !requireTokenPrivateRouting(c) {
-		return
-	}
 	profileID, ok := parseRouteProfileID(c)
 	if !ok {
 		return
@@ -89,9 +80,6 @@ func GetRouteProfile(c *gin.Context) {
 }
 
 func UpdateRouteProfile(c *gin.Context) {
-	if !requireTokenPrivateRouting(c) {
-		return
-	}
 	profileID, ok := parseRouteProfileID(c)
 	if !ok {
 		return
@@ -111,9 +99,6 @@ func UpdateRouteProfile(c *gin.Context) {
 }
 
 func DeleteRouteProfile(c *gin.Context) {
-	if !requireTokenPrivateRouting(c) {
-		return
-	}
 	profileID, ok := parseRouteProfileID(c)
 	if !ok {
 		return
@@ -126,9 +111,6 @@ func DeleteRouteProfile(c *gin.Context) {
 }
 
 func PreviewRouteProfile(c *gin.Context) {
-	if !requireTokenPrivateRouting(c) {
-		return
-	}
 	profileID, ok := parseRouteProfileID(c)
 	if !ok {
 		return
@@ -151,9 +133,6 @@ func PreviewRouteProfile(c *gin.Context) {
 }
 
 func ListEligibleRouteChannels(c *gin.Context) {
-	if !requireTokenPrivateRouting(c) {
-		return
-	}
 	channels, err := listEligibleRouteChannels(c.GetInt("id"))
 	if err != nil {
 		writeRouteError(c, err)
@@ -163,9 +142,6 @@ func ListEligibleRouteChannels(c *gin.Context) {
 }
 
 func ListRouteCatalog(c *gin.Context) {
-	if !requireTokenPrivateRouting(c) {
-		return
-	}
 	eligibleChannels, err := listEligibleRouteChannels(c.GetInt("id"))
 	if err != nil {
 		writeRouteError(c, err)
@@ -223,22 +199,6 @@ func ListRouteCatalog(c *gin.Context) {
 		catalogVersion = versions[0]
 	}
 	common.ApiSuccess(c, gin.H{"catalog_version": catalogVersion, "catalog_versions": versions, "items": items})
-}
-
-func requireTokenPrivateRouting(c *gin.Context) bool {
-	if tokenPrivateRoutingEnabled() {
-		return true
-	}
-	c.JSON(http.StatusForbidden, gin.H{
-		"success": false,
-		"message": "token private routing is disabled",
-		"code":    "feature_disabled",
-	})
-	return false
-}
-
-func tokenPrivateRoutingEnabled() bool {
-	return service.TokenPrivateRoutingEnabled()
 }
 
 func parseRouteProfileID(c *gin.Context) (int, bool) {
@@ -301,12 +261,8 @@ func listEligibleRouteChannels(userID int) ([]eligibleRouteChannel, error) {
 			activeCapabilities := capabilityByChannel[channel.Id]
 			activeAccess := accessByChannel[channel.Id]
 			visibleCapabilities := make([]model.ChannelModelCapability, 0, len(activeCapabilities))
-			hasEnabledCapability := false
 			for index, capability := range activeCapabilities {
 				access := activeAccess[index]
-				if access.Enabled {
-					hasEnabledCapability = true
-				}
 				if access.Enabled && access.Allowed {
 					visibleCapabilities = append(visibleCapabilities, capability)
 					item.RequestModels = append(item.RequestModels, capability.RequestModel)
@@ -314,19 +270,15 @@ func listEligibleRouteChannels(userID int) ([]eligibleRouteChannel, error) {
 			}
 			if len(activeCapabilities) == 0 {
 				item.CapabilityState = model.RouteCapabilityStateUnresolved
-				item.FilterReason = service.ShadowFilterUnknownCapability
+				item.FilterReason = service.RouteFilterUnknownCapability
 			} else if len(visibleCapabilities) == 0 {
 				item.CapabilityState = model.RouteCapabilityStateDisabled
-				if hasEnabledCapability {
-					item.FilterReason = service.ShadowFilterGroupForbidden
-				} else {
-					item.FilterReason = service.ShadowFilterAbilityDisabled
-				}
+				item.FilterReason = service.RouteFilterAbilityDisabled
 			} else {
 				item.CapabilityState = routeCapabilityStateSummary(visibleCapabilities)
 			}
 		} else {
-			item.FilterReason = service.ShadowFilterSnapshotUnavailable
+			item.FilterReason = service.RouteFilterSnapshotUnavailable
 		}
 		items = append(items, item)
 	}

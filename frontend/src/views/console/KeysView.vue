@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 
 import { api } from '@/api/console'
 import { parseTokenPage, parseUserModels } from '@/api/liveContracts'
@@ -23,10 +24,15 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
+import { useAppStore } from '@/stores'
 import { formatDate, formatQuota } from '@/utils/format'
 
 const { t } = useI18n()
 const toast = useToast()
+const app = useAppStore()
+const routingEnabled = computed(() =>
+  app.isFeatureEnabled('token_private_routing')
+)
 
 const rows = ref<TokenSummary[]>([])
 const total = ref(0)
@@ -354,6 +360,32 @@ onBeforeUnmount(() => {
             @click.stop
             @dblclick.stop
           >
+            <RouterLink
+              v-if="routingEnabled"
+              :to="{
+                name: 'token-routing',
+                params: { id: (row as TokenSummary).id },
+              }"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring"
+              :aria-label="t('keys.routing')"
+              :title="t('keys.routing')"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="6" cy="5" r="2" />
+                <circle cx="18" cy="19" r="2" />
+                <path d="M8 5h3a4 4 0 0 1 4 4v6a4 4 0 0 0 4 4" />
+              </svg>
+            </RouterLink>
             <IconButton
               :label="t('keys.editKey')"
               @click="openEdit(row as TokenSummary)"
@@ -452,6 +484,7 @@ onBeforeUnmount(() => {
           :view-key="copyKey"
           :edit-key="openEdit"
           :delete-key="(row) => (deleting = row)"
+          :routing-enabled="routingEnabled"
         />
         <div data-key-mobile-pagination :aria-busy="loading">
           <TablePagination

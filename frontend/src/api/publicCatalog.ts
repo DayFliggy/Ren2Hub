@@ -3,7 +3,6 @@ import { httpTransport, publicHttpTransport } from './httpTransport'
 import {
   invalidResponse,
   isRecord,
-  parseStringArray,
   requiredStrictInteger,
   requiredStrictNumber,
   requiredString,
@@ -14,6 +13,8 @@ import { ApiError } from './types'
 export type PublicDocument = 'about' | 'privacy-policy' | 'user-agreement'
 export type RankingPeriod = 'today' | 'week' | 'month' | 'year'
 export interface CatalogModel extends PricingModelContract {
+  channel_ratio_min: number
+  channel_ratio_max: number
   billing_expr: string
   image_ratio: number | null
   audio_ratio: number | null
@@ -22,9 +23,6 @@ export interface CatalogModel extends PricingModelContract {
 export interface PricingCatalog {
   models: CatalogModel[]
   vendors: { id: number; name: string; description: string }[]
-  groupRatios: Record<string, number>
-  usableGroups: Record<string, string>
-  autoGroups: string[]
   endpoints: Record<string, { path: string; method: string }>
 }
 export interface RankedModel {
@@ -112,8 +110,13 @@ export function parsePricingCatalog(value: unknown): PricingCatalog {
       nonNegative(raw[key], endpoint)
     for (const ratio of [model.cache_ratio, model.create_cache_ratio])
       if (ratio !== null) nonNegative(ratio, endpoint)
+    const minimum = nonNegative(raw.channel_ratio_min, endpoint)
+    const maximum = nonNegative(raw.channel_ratio_max, endpoint)
+    if (minimum <= 0 || maximum < minimum) invalidResponse(endpoint)
     return {
       ...model,
+      channel_ratio_min: minimum,
+      channel_ratio_max: maximum,
       billing_expr: requiredString(raw.billing_expr ?? '', endpoint),
       image_ratio:
         raw.image_ratio == null ? null : nonNegative(raw.image_ratio, endpoint),
@@ -125,12 +128,7 @@ export function parsePricingCatalog(value: unknown): PricingCatalog {
           : nonNegative(raw.audio_completion_ratio, endpoint),
     }
   })
-  if (
-    !isRecord(value.group_ratio) ||
-    !isRecord(value.usable_group) ||
-    !isRecord(value.supported_endpoint)
-  )
-    invalidResponse(endpoint)
+  if (!isRecord(value.supported_endpoint)) invalidResponse(endpoint)
   return {
     models,
     vendors: records(value.vendors ?? [], endpoint).map((vendor) => ({
@@ -138,19 +136,6 @@ export function parsePricingCatalog(value: unknown): PricingCatalog {
       name: requiredString(vendor.name, endpoint, false),
       description: requiredString(vendor.description ?? '', endpoint),
     })),
-    groupRatios: Object.fromEntries(
-      Object.entries(value.group_ratio).map(([key, ratio]) => [
-        key,
-        nonNegative(ratio, endpoint),
-      ])
-    ),
-    usableGroups: Object.fromEntries(
-      Object.entries(value.usable_group).map(([key, description]) => [
-        key,
-        requiredString(description, endpoint),
-      ])
-    ),
-    autoGroups: parseStringArray(value.auto_groups ?? [], endpoint),
     endpoints: Object.fromEntries(
       Object.entries(value.supported_endpoint).map(([key, info]) => {
         if (!isRecord(info)) invalidResponse(endpoint)
@@ -235,39 +220,16 @@ function parseMovers(value: unknown): RankingMover[] {
   }))
 }
 
-export function catalogGroupRatio(
-  catalog: PricingCatalog,
-  model: CatalogModel,
-  group: string
-): number | null {
-  if (group === 'auto') {
-    const ratios = catalog.autoGroups
-      .filter(
-        (name) =>
-          model.enable_groups.includes(name) ||
-          model.enable_groups.includes('all')
-      )
-      .map((name) => catalog.groupRatios[name])
-      .filter((ratio): ratio is number => ratio !== undefined)
-    return ratios.length ? Math.min(...ratios) : null
-  }
-  if (
-    !model.enable_groups.includes(group) &&
-    !model.enable_groups.includes('all')
-  )
-    return null
-  return catalog.groupRatios[group] ?? null
-}
-
 export function catalogPrices(
   model: CatalogModel,
-  groupRatio: number,
+  channelRatio: number,
   unit: 'M' | 'K'
 ) {
   if (model.billing_mode === 'tiered_expr') return []
   if (model.quota_type === 1)
-    return [{ key: 'request', value: model.model_price * groupRatio }]
-  const input = (model.model_ratio * 2 * groupRatio) / (unit === 'K' ? 1000 : 1)
+    return [{ key: 'request', value: model.model_price * channelRatio }]
+  const input =
+    (model.model_ratio * 2 * channelRatio) / (unit === 'K' ? 1000 : 1)
   const prices = [
     { key: 'input', value: input },
     { key: 'output', value: input * model.completion_ratio },

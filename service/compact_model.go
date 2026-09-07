@@ -3,7 +3,6 @@ package service
 import (
 	"strings"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modelmapping"
@@ -36,61 +35,6 @@ func GetCompactAttemptedKeyIndexes(c *gin.Context, channelID int) map[int]struct
 		return nil
 	}
 	return attempted[channelID]
-}
-
-func CacheGetRandomSatisfiedCompactChannel(
-	param *RetryParam,
-	requestedModel string,
-	stage relaycommon.CompactAttemptStage,
-) (*model.Channel, string, error) {
-	requestedModel = ratio_setting.CompactBaseModelName(requestedModel)
-	if !ratio_setting.IsGPTCompactBaseModel(requestedModel) {
-		stage = relaycommon.CompactAttemptBase
-	}
-	logicalModel := ratio_setting.WithCompactModelSuffix(requestedModel)
-	param.ModelName = logicalModel
-	return cacheGetRandomSatisfiedChannel(param, func(group string, _ int) (*model.Channel, error) {
-		return model.GetRandomSatisfiedChannelForModels(
-			group,
-			[]string{logicalModel, requestedModel},
-			0,
-			param.RequestPath,
-			requestedModel,
-			func(channel *model.Channel, abilityModels map[string]bool) bool {
-				if !compactChannelSupportsStage(channel, abilityModels, requestedModel, logicalModel, stage) {
-					return false
-				}
-				attempted := GetCompactAttemptedKeyIndexes(param.Ctx, channel.Id)
-				for _, keyIndex := range channel.GetEnabledKeyIndexes() {
-					if _, used := attempted[keyIndex]; !used {
-						return true
-					}
-				}
-				return false
-			},
-		)
-	})
-}
-
-func PreferredChannelCompactStage(channel *model.Channel, group, requestedModel string) relaycommon.CompactAttemptStage {
-	requestedModel = ratio_setting.CompactBaseModelName(requestedModel)
-	if channel == nil || !channelSupportsCompactEndpoint(channel, requestedModel) {
-		return relaycommon.CompactAttemptNone
-	}
-	logicalModel := ratio_setting.WithCompactModelSuffix(requestedModel)
-	exactAbility := model.IsChannelEnabledForGroupModel(group, logicalModel, channel.Id)
-	baseAbility := model.IsChannelEnabledForGroupModel(group, requestedModel, channel.Id)
-	abilityModels := map[string]bool{
-		logicalModel:   exactAbility,
-		requestedModel: baseAbility,
-	}
-	if ratio_setting.IsGPTCompactBaseModel(requestedModel) && compactChannelSupportsStage(channel, abilityModels, requestedModel, logicalModel, relaycommon.CompactAttemptExact) {
-		return relaycommon.CompactAttemptExact
-	}
-	if compactChannelSupportsStage(channel, abilityModels, requestedModel, logicalModel, relaycommon.CompactAttemptBase) {
-		return relaycommon.CompactAttemptBase
-	}
-	return relaycommon.CompactAttemptNone
 }
 
 func SpecificChannelCompactStage(channel *model.Channel, requestedModel string) relaycommon.CompactAttemptStage {
@@ -193,9 +137,4 @@ func SetCompactStage(c *gin.Context, stage relaycommon.CompactAttemptStage) {
 
 func CompactStageFromContext(c *gin.Context) relaycommon.CompactAttemptStage {
 	return relaycommon.CompactAttemptStage(c.GetString(string(constant.ContextKeyCompactStage)))
-}
-
-func ResetCompactAutoGroupSelection(c *gin.Context) {
-	common.SetContextKey(c, constant.ContextKeyAutoGroupIndex, 0)
-	common.SetContextKey(c, constant.ContextKeyAutoGroupRetryIndex, 0)
 }

@@ -57,28 +57,28 @@ func TestRouteLeaseExpiresAndRuntimeRecheckFailsClosed(t *testing.T) {
 	require.NoError(t, err)
 
 	err = RecheckRouteLeaseRuntime(
-		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3, PolicyEnabled: true, PolicyVersion: 4},
-		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 3, CapabilityVersion: 3, PolicyEnabled: true, PolicyVersion: 4},
+		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3, Capacity: 4, ChannelRatio: 1},
+		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 3, CapabilityVersion: 3, Capacity: 4, ChannelRatio: 1},
 	)
 	assert.ErrorIs(t, err, ErrRouteLeaseRuntime)
 	assert.NoError(t, RecheckRouteLeaseRuntime(
-		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3, PolicyEnabled: true, PolicyVersion: 4},
-		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3, PolicyEnabled: true, PolicyVersion: 4},
+		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3, Capacity: 4, ChannelRatio: 1},
+		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3, Capacity: 4, ChannelRatio: 1},
 	))
 }
 
-func TestRouteLeaseRuntimeRecheckFencesPolicyState(t *testing.T) {
+func TestRouteLeaseRuntimeRecheckFencesChannelSettings(t *testing.T) {
 	expected := RouteLeaseRuntimeState{
 		ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3,
-		PolicyEnabled: true, PolicyVersion: 4,
+		Capacity: 4, ChannelRatio: 1,
 	}
 	tests := []struct {
 		name    string
 		current RouteLeaseRuntimeState
 	}{
-		{name: "disabled", current: RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3, PolicyVersion: 4}},
-		{name: "version changed", current: RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3, PolicyEnabled: true, PolicyVersion: 5}},
-		{name: "version missing", current: RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3, PolicyEnabled: true}},
+		{name: "disabled", current: RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3, ChannelRatio: 1}},
+		{name: "capacity changed", current: RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3, Capacity: 5, ChannelRatio: 1}},
+		{name: "ratio missing", current: RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 2, CapabilityVersion: 3, Capacity: 4}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

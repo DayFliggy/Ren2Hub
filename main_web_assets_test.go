@@ -11,10 +11,10 @@ import (
 
 // Run after prepare-frontend-embed to test what the binary actually embeds.
 func TestProductionEmbeddedAssetGraph(t *testing.T) {
-	if bytes.Contains(nextIndexPage, []byte(`content="placeholder"`)) {
+	if bytes.Contains(frontendIndexPage, []byte(`content="placeholder"`)) {
 		t.Skip("build frontend and prepare embed assets for production verification")
 	}
-	embedded, err := fs.Sub(nextBuildFS, "frontend/embed-dist")
+	embedded, err := fs.Sub(frontendBuildFS, "frontend/embed-dist")
 	require.NoError(t, err)
 	content, err := fs.ReadFile(embedded, ".vite/manifest.json")
 	require.NoError(t, err)

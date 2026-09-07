@@ -40,36 +40,18 @@ const claudeCacheCreation1hMultiplier = 6 / 3.75
 
 // defaultTieredPreConsumeMaxTokens is the fallback completion-token estimate
 // used for tiered expression pre-consume when the client omits max_tokens, so
-// the pre-consumed quota still reflects a plausible output cost in paid groups.
+// the pre-consumed quota still reflects a plausible output cost on paid channels.
 const defaultTieredPreConsumeMaxTokens = 8192
 
-// HandleGroupRatio checks for "auto_group" in the context and updates the group ratio and relayInfo.UsingGroup if present
-func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) hosttypes.GroupRatioInfo {
-	groupRatioInfo := hosttypes.GroupRatioInfo{
-		GroupRatio:        1.0, // default ratio
-		GroupSpecialRatio: -1,
+// HandleChannelRatio reads the selected channel's price multiplier. Account
+// and token groups no longer affect relay pricing.
+func HandleChannelRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) float64 {
+	ratio := 1.0
+	if value, exists := ctx.Get("channel_ratio"); exists {
+		ratio, _ = value.(float64)
 	}
-
-	// check auto group
-	autoGroup, exists := ctx.Get("auto_group")
-	if exists {
-		logger.LogDebug(ctx, "final group: %s", autoGroup)
-		relayInfo.UsingGroup = autoGroup.(string)
-	}
-
-	// check user group special ratio
-	userGroupRatio, ok := ratio_setting.GetGroupGroupRatio(relayInfo.UserGroup, relayInfo.UsingGroup)
-	if ok {
-		// user group special ratio
-		groupRatioInfo.GroupSpecialRatio = userGroupRatio
-		groupRatioInfo.GroupRatio = userGroupRatio
-		groupRatioInfo.HasSpecialRatio = true
-	} else {
-		// normal group ratio
-		groupRatioInfo.GroupRatio = ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
-	}
-
-	return groupRatioInfo
+	relayInfo.UsingGroup = ""
+	return ratio
 }
 
 func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (hosttypes.PriceData, error) {
@@ -86,11 +68,11 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	info.ModelPricingSource = pricingSource
 	modelPrice, usePrice := ratio_setting.GetModelPrice(pricingModel, false)
 
-	groupRatioInfo := HandleGroupRatio(c, info)
+	channelRatio := HandleChannelRatio(c, info)
 
 	// Check if this model uses tiered_expr billing
 	if billing_setting.GetBillingMode(pricingModel) == billing_setting.BillingModeTieredExpr {
-		return modelPriceHelperTiered(c, info, pricingModel, promptTokens, meta, groupRatioInfo)
+		return modelPriceHelperTiered(c, info, pricingModel, promptTokens, meta, channelRatio)
 	}
 	info.TieredBillingSnapshot = nil
 	info.BillingRequestInput = nil
@@ -132,7 +114,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		imageRatio, _ = ratio_setting.GetImageRatio(pricingModel)
 		audioRatio = ratio_setting.GetAudioRatio(pricingModel)
 		audioCompletionRatio = ratio_setting.GetAudioCompletionRatio(pricingModel)
-		ratio := modelRatio * groupRatioInfo.GroupRatio
+		ratio := modelRatio * channelRatio
 		quota, err := common.QuotaFromFloatStrict(float64(preConsumedTokens) * ratio)
 		if err != nil {
 			return hosttypes.PriceData{}, err
@@ -147,7 +129,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	// check if free model pre-consume is disabled
 	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
 		// if model price or ratio is 0, do not pre-consume quota
-		if groupRatioInfo.GroupRatio == 0 {
+		if channelRatio == 0 {
 			preConsumedQuota = 0
 			freeModel = true
 		} else if usePrice {
@@ -168,7 +150,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		ModelPrice:           modelPrice,
 		ModelRatio:           modelRatio,
 		CompletionRatio:      completionRatio,
-		GroupRatioInfo:       groupRatioInfo,
+		ChannelRatio:         channelRatio,
 		UsePrice:             usePrice,
 		CacheRatio:           cacheRatio,
 		ImageRatio:           imageRatio,
@@ -183,7 +165,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		for name, ratio := range meta.BillingRatios {
 			priceData.AddOtherRatio(name, ratio)
 		}
-		quotaToPreConsume := priceData.ApplyOtherRatiosToFloat(modelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
+		quotaToPreConsume := priceData.ApplyOtherRatiosToFloat(modelPrice * common.QuotaPerUnit * channelRatio)
 		quota, err := common.QuotaFromFloatStrict(quotaToPreConsume)
 		if err != nil {
 			return hosttypes.PriceData{}, err
@@ -200,7 +182,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 
 // ModelPriceHelperPerCall 按次/按量计费的 PriceHelper (MJ、Task)
 func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hosttypes.PriceData, error) {
-	groupRatioInfo := HandleGroupRatio(c, info)
+	channelRatio := HandleChannelRatio(c, info)
 
 	modelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)
 	usePrice := success
@@ -230,12 +212,12 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hostt
 
 	if usePrice {
 		var err error
-		quota, err = common.QuotaFromFloatStrict(modelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
+		quota, err = common.QuotaFromFloatStrict(modelPrice * common.QuotaPerUnit * channelRatio)
 		if err != nil {
 			return hosttypes.PriceData{}, err
 		}
 		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-			if groupRatioInfo.GroupRatio == 0 || modelPrice == 0 {
+			if channelRatio == 0 || modelPrice == 0 {
 				quota = 0
 				freeModel = true
 			}
@@ -243,13 +225,13 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hostt
 	} else {
 		// 按量计费：以模型倍率的一半作为预扣额度
 		var err error
-		quota, err = common.QuotaFromFloatStrict(modelRatio / 2 * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
+		quota, err = common.QuotaFromFloatStrict(modelRatio / 2 * common.QuotaPerUnit * channelRatio)
 		if err != nil {
 			return hosttypes.PriceData{}, err
 		}
 		modelPrice = -1
 		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-			if groupRatioInfo.GroupRatio == 0 || modelRatio == 0 {
+			if channelRatio == 0 || modelRatio == 0 {
 				quota = 0
 				freeModel = true
 			}
@@ -257,12 +239,12 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hostt
 	}
 
 	priceData := hosttypes.PriceData{
-		FreeModel:      freeModel,
-		ModelPrice:     modelPrice,
-		ModelRatio:     modelRatio,
-		UsePrice:       usePrice,
-		Quota:          quota,
-		GroupRatioInfo: groupRatioInfo,
+		FreeModel:    freeModel,
+		ModelPrice:   modelPrice,
+		ModelRatio:   modelRatio,
+		UsePrice:     usePrice,
+		Quota:        quota,
+		ChannelRatio: channelRatio,
 	}
 	return priceData, nil
 }
@@ -306,14 +288,14 @@ func HasExplicitModelBillingConfig(modelName string) bool {
 	return ok && strings.TrimSpace(expr) != ""
 }
 
-func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, pricingModel string, promptTokens int, meta *types.TokenCountMeta, groupRatioInfo hosttypes.GroupRatioInfo) (hosttypes.PriceData, error) {
+func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, pricingModel string, promptTokens int, meta *types.TokenCountMeta, channelRatio float64) (hosttypes.PriceData, error) {
 	exprStr, ok := billing_setting.GetBillingExpr(pricingModel)
 	if !ok {
 		return hosttypes.PriceData{}, fmt.Errorf("model %s is configured as tiered_expr but has no billing expression", info.BillingModelName())
 	}
 
 	estimatedCompletionTokens := meta.MaxTokens
-	if estimatedCompletionTokens == 0 && groupRatioInfo.GroupRatio != 0 {
+	if estimatedCompletionTokens == 0 && channelRatio != 0 {
 		estimatedCompletionTokens = defaultTieredPreConsumeMaxTokens
 	}
 
@@ -333,14 +315,14 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, pricing
 
 	// Expression coefficients are $/1M tokens prices; convert to quota the same way per-call billing does.
 	quotaBeforeGroup := rawCost / 1_000_000 * common.QuotaPerUnit
-	preConsumedQuota, err := billingexpr.QuotaRoundStrict(quotaBeforeGroup * groupRatioInfo.GroupRatio)
+	preConsumedQuota, err := billingexpr.QuotaRoundStrict(quotaBeforeGroup * channelRatio)
 	if err != nil {
 		return hosttypes.PriceData{}, err
 	}
 
 	freeModel := false
 	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-		if groupRatioInfo.GroupRatio == 0 {
+		if channelRatio == 0 {
 			preConsumedQuota = 0
 			freeModel = true
 		}
@@ -352,7 +334,7 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, pricing
 		ModelName:                 info.BillingModelName(),
 		ExprString:                exprStr,
 		ExprHash:                  exprHash,
-		GroupRatio:                groupRatioInfo.GroupRatio,
+		GroupRatio:                channelRatio,
 		EstimatedPromptTokens:     promptTokens,
 		EstimatedCompletionTokens: estimatedCompletionTokens,
 		EstimatedQuotaBeforeGroup: quotaBeforeGroup,
@@ -366,11 +348,11 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, pricing
 
 	priceData := hosttypes.PriceData{
 		FreeModel:         freeModel,
-		GroupRatioInfo:    groupRatioInfo,
+		ChannelRatio:      channelRatio,
 		QuotaToPreConsume: preConsumedQuota,
 	}
 
-	logger.LogDebug(c, "model_price_helper_tiered result: model=%s pricing_model=%s source=%s preConsume=%d quotaBeforeGroup=%.2f groupRatio=%.2f tier=%s", info.BillingModelName(), pricingModel, info.ModelPricingSource, preConsumedQuota, quotaBeforeGroup, groupRatioInfo.GroupRatio, trace.MatchedTier)
+	logger.LogDebug(c, "model_price_helper_tiered result: model=%s pricing_model=%s source=%s preConsume=%d quotaBeforeRatio=%.2f channelRatio=%.2f tier=%s", info.BillingModelName(), pricingModel, info.ModelPricingSource, preConsumedQuota, quotaBeforeGroup, channelRatio, trace.MatchedTier)
 
 	info.PriceData = priceData
 	return priceData, nil

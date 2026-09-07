@@ -1,5 +1,14 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 import { api } from '@/api/console'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
@@ -28,7 +37,7 @@ const backendTokens = tokens.map((token) => ({
   id: token.id,
   name: token.name,
   key: token.key_preview,
-  group: token.type,
+  type: token.type,
   status: token.status,
   used_quota: token.used_quota,
   remain_quota: token.remain_quota,
@@ -45,6 +54,10 @@ let wrapper: VueWrapper | null = null
 beforeAll(async () => {
   await loadMessageDomain('console')
   await setLocale('zh-CN')
+})
+
+beforeEach(() => {
+  setActivePinia(createPinia())
 })
 
 afterEach(() => {
@@ -76,7 +89,10 @@ describe('KeysView mobile loading contract', () => {
 
     wrapper = mount(KeysView, {
       attachTo: document.body,
-      global: { plugins: [i18n] },
+      global: {
+        plugins: [i18n],
+        stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      },
     })
     await flushPromises()
 

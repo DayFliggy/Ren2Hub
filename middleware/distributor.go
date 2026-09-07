@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -29,311 +28,120 @@ import (
 
 type ModelRequest struct {
 	Model string `json:"model"`
-	Group string `json:"group,omitempty"`
 }
 
 func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		var channel *model.Channel
-		selectGroup := ""
-		liveRouteSelected := false
-		channelId, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
-		modelRequest, shouldSelectChannel, err := getModelRequest(c)
+		request, selectChannel, err := getModelRequest(c)
 		if err != nil {
-			abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
+			abortWithOpenAiMessage(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		isCompactRequest := strings.HasPrefix(c.Request.URL.Path, "/v1/responses/compact")
-		requiresNativeResponses := !isCompactRequest &&
+		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
+		if !selectChannel {
+			c.Next()
+			return
+		}
+		if request.Model == "" {
+			abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorModelNameRequired))
+			return
+		}
+		if strings.HasPrefix(c.Request.URL.Path, "/pg/") {
+			user, err := model.GetUserCache(c.GetInt("id"))
+			if err != nil {
+				abortWithOpenAiMessage(c, http.StatusInternalServerError, err.Error())
+				return
+			}
+			user.WriteContext(c)
+		}
+		if err := service.TokenModelPermissionError(c, request.Model); err != nil {
+			abortWithOpenAiMessage(c, err.StatusCode, err.Error(), err.GetErrorCode())
+			return
+		}
+		specificChannelID := 0
+		if value, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
+			id, err := strconv.Atoi(fmt.Sprint(value))
+			if err != nil || id <= 0 {
+				abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
+				return
+			}
+			specificChannelID = id
+		}
+		stage := relaycommon.CompactAttemptNone
+		if strings.HasPrefix(c.Request.URL.Path, "/v1/responses/compact") {
+			stage = relaycommon.CompactAttemptBase
+			if ratio_setting.IsGPTCompactBaseModel(ratio_setting.CompactBaseModelName(request.Model)) {
+				stage = relaycommon.CompactAttemptExact
+			}
+		}
+		requiresNative := stage == relaycommon.CompactAttemptNone &&
 			relayconstant.Path2RelayMode(c.Request.URL.Path) == relayconstant.RelayModeResponses &&
 			requestRequiresNativeResponses(c)
-		common.SetContextKey(c, constant.ContextKeyResponsesNativeRequired, requiresNativeResponses)
-		compactRequestedModel := ratio_setting.CompactBaseModelName(modelRequest.Model)
-		compactPermissionModel := ratio_setting.WithCompactModelSuffix(compactRequestedModel)
-		if ok {
-			id, err := strconv.Atoi(channelId.(string))
-			if err != nil {
-				abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
-				return
-			}
-			channel, err = model.GetChannelById(id, true)
-			if err != nil {
-				abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
-				return
-			}
-			if channel.Status != common.ChannelStatusEnabled {
-				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
-				return
-			}
-			if requiresNativeResponses && !service.ChannelSupportsNativeResponses(channel, modelRequest.Model) {
-				abortWithOpenAiMessage(c, http.StatusBadRequest, "remote Responses compaction requires a native Responses channel")
-				return
-			}
-			if isCompactRequest {
-				stage := service.SpecificChannelCompactStage(channel, compactRequestedModel)
-				if stage == relaycommon.CompactAttemptNone {
-					abortWithOpenAiMessage(c, http.StatusBadRequest, "The specified channel does not support /v1/responses/compact")
-					return
-				}
-				service.SetCompactStage(c, stage)
-			}
-		} else {
-			// Select a channel for the user
-			// check token model mapping
-			modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
-			if modelLimitEnable {
-				s, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
-				if !ok {
-					// token model limit is empty, all models are not allowed
-					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenNoModelAccess))
-					return
-				}
-				var tokenModelLimit map[string]bool
-				tokenModelLimit, ok = s.(map[string]bool)
-				if !ok {
-					tokenModelLimit = map[string]bool{}
-				}
-				permissionModel := modelRequest.Model
-				if isCompactRequest {
-					permissionModel = compactPermissionModel
-				}
-				matchName := ratio_setting.FormatMatchingModelName(permissionModel) // match gpts & thinking-*
-				if _, ok := tokenModelLimit[matchName]; !ok {
-					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": modelRequest.Model}))
-					return
-				}
-			}
-
-			if shouldSelectChannel {
-				if modelRequest.Model == "" {
-					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorModelNameRequired))
-					return
-				}
-				usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
-				// check path is /pg/chat/completions
-				if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
-					playgroundRequest := &dto.PlayGroundRequest{}
-					err = common.UnmarshalBodyReusable(c, playgroundRequest)
-					if err != nil {
-						abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidPlayground, map[string]any{"Error": err.Error()}))
-						return
-					}
-					if playgroundRequest.Group != "" {
-						if !service.GroupInUserUsableGroups(usingGroup, playgroundRequest.Group) && playgroundRequest.Group != usingGroup {
-							abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
-							return
-						}
-						usingGroup = playgroundRequest.Group
-						common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
-					}
-				}
-
-				// Live routing is deliberately behind an independent, default-off
-				// gate. Its selector is pure; Relay owns the per-attempt lease and
-				// retry lifecycle after this middleware stores the decision.
-				if liveRouteRequestSupported(c, isCompactRequest, requiresNativeResponses) && service.RouteLiveTokenGroupSupported(usingGroup) {
-					limitEnabled := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
-					var tokenLimit map[string]bool
-					if value, exists := common.GetContextKey(c, constant.ContextKeyTokenModelLimit); exists {
-						tokenLimit, _ = value.(map[string]bool)
-					}
-					liveRequest := service.LiveRouteRequest{
-						Context:           c.Request.Context(),
-						CapabilityEnabled: service.RouteLiveRoutingEnabled(),
-						RequestID:         c.GetString(common.RequestIdKey),
-						UserID:            common.GetContextKeyInt(c, constant.ContextKeyUserId),
-						TokenID:           common.GetContextKeyInt(c, constant.ContextKeyTokenId),
-						RequestModel:      modelRequest.Model,
-						RequestPath:       c.Request.URL.Path,
-						// TokenAuth has already resolved the effective group. Reusing
-						// the broader account group here could let a group-bound token
-						// select a channel that legacy routing would deny.
-						UserGroup:              usingGroup,
-						TokenModelLimitEnabled: limitEnabled,
-						TokenModelLimit:        tokenLimit,
-					}
-					if service.RouteLiveRoutingEnabled() && service.RouteLiveRolloutMatches(liveRequest) {
-						c.Set(service.RouteLiveSelectionRequiredContextKey, true)
-						if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
-							liveRequest.PreferredChannelID = preferredChannelID
-						}
-						liveSelection, liveErr := service.SelectLiveTokenRoute(liveRequest)
-						if liveErr != nil {
-							abortWithOpenAiMessage(c, http.StatusServiceUnavailable, liveErr.Error(), types.ErrorCodeGetChannelFailed)
-							return
-						}
-						if liveSelection.Source != service.RouteSourceLegacy {
-							channel, liveErr = model.GetChannelById(liveSelection.Decision.SelectedChannelID, true)
-							if liveErr != nil || channel == nil || channel.Status != common.ChannelStatusEnabled {
-								abortWithOpenAiMessage(c, http.StatusServiceUnavailable, "live route channel is unavailable", types.ErrorCodeGetChannelFailed)
-								return
-							}
-							selectGroup = usingGroup
-							liveRouteSelected = true
-							c.Set("route_live_selection", liveSelection)
-							if liveRequest.PreferredChannelID == channel.Id {
-								service.MarkChannelAffinityUsed(c, usingGroup, channel.Id)
-							}
-						}
-						// Preserve an explicit legacy decision when the live rollout
-						// matched but no private profile is active. Relay can then
-						// distinguish intentional legacy routing from a missing live
-						// selection and keep the lease boundary fail-closed.
-						if liveSelection.Source == service.RouteSourceLegacy {
-							c.Set("route_live_selection", liveSelection)
-						}
-					}
-				}
-
-				if !liveRouteSelected && !isCompactRequest {
-					if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
-						affinityUsable := false
-						preferred, err := model.CacheGetChannel(preferredChannelID)
-						if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled &&
-							channelSupportsRequestPath(preferred, c.Request.URL.Path, modelRequest.Model) &&
-							(!requiresNativeResponses || service.ChannelSupportsNativeResponses(preferred, modelRequest.Model)) {
-							if usingGroup == "auto" {
-								userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
-								autoGroups := service.GetRequestAutoGroups(c, userGroup)
-								for _, g := range autoGroups {
-									if model.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) {
-										selectGroup = g
-										common.SetContextKey(c, constant.ContextKeyAutoGroup, g)
-										channel = preferred
-										affinityUsable = true
-										service.MarkChannelAffinityUsed(c, g, preferred.Id)
-										break
-									}
-								}
-							} else if model.IsChannelEnabledForGroupModel(usingGroup, modelRequest.Model, preferred.Id) {
-								channel = preferred
-								selectGroup = usingGroup
-								affinityUsable = true
-								service.MarkChannelAffinityUsed(c, usingGroup, preferred.Id)
-							}
-						}
-						if !affinityUsable && !service.ShouldKeepChannelAffinityOnChannelDisabled() {
-							service.ClearCurrentChannelAffinityCache(c)
-						}
-					}
-				}
-
-				if channel == nil {
-					retryParam := &service.RetryParam{
-						Ctx:         c,
-						ModelName:   modelRequest.Model,
-						TokenGroup:  usingGroup,
-						RequestPath: c.Request.URL.Path,
-						Retry:       common.GetPointer(0),
-					}
-					if isCompactRequest {
-						initialStage := relaycommon.CompactAttemptBase
-						if ratio_setting.IsGPTCompactBaseModel(compactRequestedModel) {
-							initialStage = relaycommon.CompactAttemptExact
-						}
-						channel, selectGroup, err = service.CacheGetRandomSatisfiedCompactChannel(retryParam, compactRequestedModel, initialStage)
-						if err == nil && channel == nil {
-							if initialStage == relaycommon.CompactAttemptBase {
-								service.SetCompactStage(c, relaycommon.CompactAttemptBase)
-							} else {
-								service.ResetCompactAutoGroupSelection(c)
-								retryParam.SetRetry(0)
-								channel, selectGroup, err = service.CacheGetRandomSatisfiedCompactChannel(retryParam, compactRequestedModel, relaycommon.CompactAttemptBase)
-								if channel != nil {
-									service.SetCompactStage(c, relaycommon.CompactAttemptBase)
-								}
-							}
-						} else if channel != nil {
-							service.SetCompactStage(c, initialStage)
-						}
-					} else {
-						if requiresNativeResponses {
-							channel, selectGroup, err = service.CacheGetRandomSatisfiedChannelWithFilter(retryParam, func(candidate *model.Channel, _ map[string]bool) bool {
-								return service.ChannelSupportsNativeResponses(candidate, modelRequest.Model)
-							})
-						} else {
-							channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(retryParam)
-						}
-					}
-					if err != nil {
-						service.RecordLegacySelectionAndShadow(
-							c.Request.Context(),
-							service.BuildRouteShadowRequest(c, modelRequest.Model, c.Request.URL.Path, 0),
-							selectGroup,
-							0,
-						)
-						showGroup := usingGroup
-						if usingGroup == "auto" {
-							showGroup = fmt.Sprintf("auto(%s)", selectGroup)
-						}
-						message := i18n.T(c, i18n.MsgDistributorGetChannelFailed, map[string]any{"Group": showGroup, "Model": modelRequest.Model, "Error": err.Error()})
-						// 如果错误，但是渠道不为空，说明是数据库一致性问题
-						//if channel != nil {
-						//	common.SysError(fmt.Sprintf("渠道不存在：%d", channel.Id))
-						//	message = "数据库一致性已被破坏，请联系管理员"
-						//}
-						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, message, types.ErrorCodeModelNotFound)
-						return
-					}
-					if channel == nil {
-						service.RecordLegacySelectionAndShadow(
-							c.Request.Context(),
-							service.BuildRouteShadowRequest(c, modelRequest.Model, c.Request.URL.Path, 0),
-							selectGroup,
-							0,
-						)
-						if requiresNativeResponses {
-							abortWithOpenAiMessage(c, http.StatusServiceUnavailable, "remote Responses compaction requires an available native Responses channel", types.ErrorCodeModelNotFound)
-							return
-						}
-						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
-						return
-					}
-				}
-			}
+		common.SetContextKey(c, constant.ContextKeyResponsesNativeRequired, requiresNative)
+		_, routeErr := SelectRequestChannel(c, request.Model, specificChannelID, stage)
+		if routeErr != nil && stage == relaycommon.CompactAttemptExact && errors.Is(routeErr, service.ErrRouteSelectionUnavailable) {
+			_, routeErr = SelectRequestChannel(c, request.Model, specificChannelID, relaycommon.CompactAttemptBase)
 		}
-		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
-		selectedModel := modelRequest.Model
-		if isCompactRequest {
-			selectedModel = compactPermissionModel
-		}
-		if !liveRouteSelected {
-			service.RecordLegacySelectionAndShadow(
-				c.Request.Context(),
-				service.BuildRouteShadowRequest(c, selectedModel, c.Request.URL.Path, 0),
-				selectGroup,
-				channel.Id,
-			)
-		}
-		if setupErr := SetupContextForSelectedChannel(c, channel, selectedModel); liveRouteSelected && setupErr != nil {
-			abortWithOpenAiMessage(c, setupErr.StatusCode, setupErr.Error(), setupErr.GetErrorCode())
+		if routeErr != nil {
+			abortWithOpenAiMessage(c, routeErr.StatusCode, routeErr.Error(), routeErr.GetErrorCode())
 			return
 		}
 		c.Next()
-		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
-			service.RecordChannelAffinity(c, channel.Id)
+		if c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
+			service.RecordChannelAffinity(c, common.GetContextKeyInt(c, constant.ContextKeyChannelId))
 		}
 	}
 }
 
-// liveRouteRequestSupported limits the live selector to requests whose
-// controller owns the unified lease, retry, health, decision and billing
-// lifecycle. Task submit/fetch protocols keep their legacy execution path
-// until their pricing and security rechecks are unified with Relay. Selecting
-// a private route for either would make the recorded decision diverge from
-// execution.
-func liveRouteRequestSupported(c *gin.Context, isCompactRequest, requiresNativeResponses bool) bool {
-	if c == nil || c.Request == nil || isCompactRequest || requiresNativeResponses {
-		return false
+// SelectRequestChannel also handles protocol stages and origin-bound task
+// continuations. All callers produce the same decision and admission contract.
+func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID int, stage relaycommon.CompactAttemptStage) (*model.Channel, *types.NewAPIError) {
+	value, _ := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
+	limits, _ := value.(map[string]bool)
+	input := service.LiveRouteRequest{
+		Context: c.Request.Context(), CapabilityEnabled: true,
+		RequestID:    c.GetString(common.RequestIdKey),
+		UserID:       common.GetContextKeyInt(c, constant.ContextKeyUserId),
+		TokenID:      common.GetContextKeyInt(c, constant.ContextKeyTokenId),
+		RequestModel: modelName, RequestPath: c.Request.URL.Path,
+		SpecificChannelID: specificChannelID, CompactStage: stage,
+		IsPlayground:            strings.HasPrefix(c.Request.URL.Path, "/pg/"),
+		NativeResponsesRequired: common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired),
+		TokenModelLimitEnabled:  common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled),
+		TokenModelLimit:         limits,
+		ExcludedKeyIndexes:      service.RequestRouteAttemptedKeys(c, stage),
 	}
-	path := c.Request.URL.Path
-	if strings.Contains(path, "/mj/") || strings.HasSuffix(path, "/remix") {
-		return false
+	if stage != relaycommon.CompactAttemptNone {
+		input.ExcludedChannelIDs = make(map[int]string)
+		if previous, ok := c.Get("route_live_selection"); ok {
+			if selection, valid := previous.(service.LiveRouteSelection); valid && selection.CompactStage == stage {
+				for _, candidate := range selection.Decision.Candidates {
+					if candidate.FilterReason != "" {
+						input.ExcludedChannelIDs[candidate.ChannelID] = candidate.FilterReason
+					}
+				}
+			}
+		}
 	}
-	return !strings.HasPrefix(path, "/suno/") &&
-		!strings.HasPrefix(path, "/kling/") &&
-		!strings.HasPrefix(path, "/jimeng/") &&
-		!strings.HasPrefix(path, "/v1/videos")
+	if preferred, ok := service.GetPreferredChannelByAffinity(c, modelName, ""); ok {
+		input.PreferredChannelID = preferred
+	}
+	c.Set(service.RouteLiveSelectionRequiredContextKey, true)
+	selection, err := service.SelectLiveTokenRoute(input)
+	if err != nil {
+		return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
+	}
+	channel, err := model.GetChannelById(selection.Decision.SelectedChannelID, true)
+	if err != nil {
+		return nil, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+	}
+	c.Set("route_live_selection", selection)
+	c.Set("route_request_model", modelName)
+	service.SetCompactStage(c, stage)
+	if setupErr := SetupContextForSelectedChannel(c, channel, modelName); setupErr != nil {
+		return nil, setupErr
+	}
+	return channel, nil
 }
 
 // requestRequiresNativeResponses inspects only the protocol markers needed for
@@ -353,24 +161,10 @@ func requestRequiresNativeResponses(c *gin.Context) bool {
 		return false
 	}
 	var request dto.OpenAIResponsesRequest
-	if err := json.Unmarshal(body, &request); err != nil {
+	if err := common.Unmarshal(body, &request); err != nil {
 		return false
 	}
 	return request.RequiresNativeResponses()
-}
-
-// channelSupportsRequestPath reports whether a channel can serve the request path.
-// Only Advanced Custom (type 58) channels are path-checked; all other channel types
-// always pass. A type-58 channel is usable only when one of its routes matches.
-func channelSupportsRequestPath(channel *model.Channel, requestPath string, requestModel string) bool {
-	if channel == nil {
-		return false
-	}
-	if channel.Type != constant.ChannelTypeAdvancedCustom {
-		return true
-	}
-	config := channel.GetOtherSettings().AdvancedCustom
-	return config != nil && config.SupportsPathForModel(requestPath, requestModel)
 }
 
 // getModelFromRequest 从请求中读取模型信息
@@ -413,10 +207,6 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	group, err := getJSONStringValue(values[1], "group")
-	if err != nil {
-		return nil, err
-	}
 
 	if _, seekErr := storage.Seek(0, io.SeekStart); seekErr != nil {
 		return nil, seekErr
@@ -425,7 +215,6 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 
 	return &ModelRequest{
 		Model: model,
-		Group: group,
 	}, nil
 }
 
@@ -595,8 +384,6 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			return nil, false, err
 		}
 		modelRequest.Model = req.Model
-		modelRequest.Group = req.Group
-		common.SetContextKey(c, constant.ContextKeyTokenGroup, modelRequest.Group)
 	}
 
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/responses/compact") && modelRequest.Model != "" {
@@ -653,6 +440,11 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	}
 	common.SetContextKey(c, constant.ContextKeyChannelAutoBan, channel.GetAutoBan())
 	common.SetContextKey(c, constant.ContextKeyChannelModelMapping, channel.GetModelMapping())
+	_, ratio, settingsErr := channel.RoutingSettings()
+	if settingsErr != nil {
+		return types.NewError(settingsErr, types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+	}
+	c.Set("channel_ratio", ratio)
 	common.SetContextKey(c, constant.ContextKeyChannelStatusCodeMapping, channel.GetStatusCodeMapping())
 
 	liveRouteActive := liveRouteSelectionActive(c)
@@ -730,12 +522,12 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 }
 
 func liveRouteSelectionActive(c *gin.Context) bool {
-	if c == nil || !service.RouteLiveRoutingEnabled() {
+	if c == nil {
 		return false
 	}
 	value, exists := c.Get("route_live_selection")
 	selection, valid := value.(service.LiveRouteSelection)
-	return exists && valid && selection.Source != service.RouteSourceLegacy
+	return exists && valid && selection.Source != service.RouteSourceUnavailable
 }
 
 // extractModelNameFromGeminiPath 从 Gemini API URL 路径中提取模型名

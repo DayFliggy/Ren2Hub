@@ -421,7 +421,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
       },
       {
         id: 'pricing',
-        title: '模型与分组定价',
+        title: '模型定价',
         description: '所有倍率字段均使用受校验的结构化 JSON 编辑器。',
         fields: [
           ratio('ModelPrice', '模型价格'),
@@ -433,21 +433,10 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           ratio('AudioRatio', '音频倍率'),
           ratio('AudioCompletionRatio', '音频补全倍率'),
           ratio('TopupGroupRatio', '充值分组倍率'),
-          ratio('GroupRatio', '分组倍率'),
-          json('GroupGroupRatio', '组间倍率'),
-          keyValue('UserUsableGroups', '用户可用分组'),
-          json('AutoGroups', '自动分组规则', '[]'),
-          number('MaxTokenAutoGroups', '自动分组 Token 阈值'),
-          toggle('DefaultUseAutoGroup', '默认使用自动分组'),
           toggle('ExposeRatioEnabled', '公开倍率数据'),
           json('tool_price_setting.prices', '工具附加价格', '[]'),
           json('billing_setting.billing_mode', '计费模式', '{}'),
           json('billing_setting.billing_expr', '分层计费表达式', '{}'),
-          json(
-            'group_ratio_setting.group_special_usable_group',
-            '特殊可用分组',
-            '{}'
-          ),
         ],
       },
       {

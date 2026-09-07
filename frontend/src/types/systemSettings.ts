@@ -109,7 +109,6 @@ export interface BillingSettings {
   MinTopUp: number
   'billing_setting.billing_mode': string
   'billing_setting.billing_expr': string
-  'group_ratio_setting.group_special_usable_group': string
   'payment_setting.amount_options': string
   'payment_setting.amount_discount': string
   'payment_setting.compliance_confirmed': boolean
@@ -312,7 +311,6 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   'general_setting.custom_currency_exchange_rate': 1,
   'billing_setting.billing_mode': '{}',
   'billing_setting.billing_expr': '{}',
-  'group_ratio_setting.group_special_usable_group': '{}',
   'payment_setting.amount_options': '[]',
   'payment_setting.amount_discount': '{}',
   'payment_setting.compliance_confirmed': false,

@@ -106,8 +106,6 @@ func TestBeginLiveRouteUpstreamAttemptTracksIndependentBudgetsAndKeys(t *testing
 }
 
 func TestSetupContextLiveRetryUsesAnotherEnabledKey(t *testing.T) {
-	t.Setenv("ROUTE_LIVE_ENABLED", "true")
-	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
 	originalDB, originalMemoryCache := model.DB, common.MemoryCacheEnabled
 	originalDatabaseType := common.MainDatabaseType()
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
@@ -147,8 +145,6 @@ func TestSetupContextLiveRetryUsesAnotherEnabledKey(t *testing.T) {
 }
 
 func TestSetupContextLiveRouteClaimsOnlyOneRecoveredKeyProbe(t *testing.T) {
-	t.Setenv("ROUTE_LIVE_ENABLED", "true")
-	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
 	originalDB, originalMemoryCache := model.DB, common.MemoryCacheEnabled
 	originalDatabaseType := common.MainDatabaseType()
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
@@ -260,8 +256,6 @@ func TestLiveRouteRenewalFailureDoesNotFailCommittedResponse(t *testing.T) {
 }
 
 func TestGetChannelSkipsExhaustedSingleKeyCandidate(t *testing.T) {
-	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
-	t.Setenv("ROUTE_LIVE_ENABLED", "true")
 	originalDB, originalMemoryCache := model.DB, common.MemoryCacheEnabled
 	originalDatabaseType := common.MainDatabaseType()
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
@@ -308,8 +302,6 @@ func TestGetChannelSkipsExhaustedSingleKeyCandidate(t *testing.T) {
 }
 
 func TestGetChannelLiveFirstCandidateDoesNotRequireChannelMeta(t *testing.T) {
-	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
-	t.Setenv("ROUTE_LIVE_ENABLED", "true")
 	originalDB, originalMemoryCache := model.DB, common.MemoryCacheEnabled
 	originalDatabaseType := common.MainDatabaseType()
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
@@ -348,8 +340,6 @@ func TestGetChannelLiveFirstCandidateDoesNotRequireChannelMeta(t *testing.T) {
 }
 
 func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *testing.T) {
-	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
-	t.Setenv("ROUTE_LIVE_ENABLED", "true")
 	originalDB, originalRDB, originalRedisEnabled := model.DB, common.RDB, common.RedisEnabled
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
 	require.NoError(t, err)
@@ -369,14 +359,14 @@ func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *te
 		&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{},
 		&model.UserRouteProfile{}, &model.UserRouteGroup{}, &model.UserRouteEntry{},
 		&model.UserChannelEntitlement{}, &model.ChannelModelCapability{},
-		&model.ChannelCapabilitySnapshot{}, &model.ChannelHealth{}, &model.ChannelRoutePolicy{},
+		&model.ChannelCapabilitySnapshot{}, &model.ChannelHealth{},
 	))
 
 	const userID = 9101
 	const channelID = 91011
 	user := model.User{Id: userID, Username: "lease-qualification-user", Password: "password", Status: common.UserStatusEnabled, Group: "default"}
 	require.NoError(t, db.Create(&user).Error)
-	token := model.Token{UserId: userID, Key: "lease-qualification-token", Name: "lease-qualification-token", Status: common.TokenStatusEnabled, Group: "default", ExpiredTime: -1, UnlimitedQuota: true}
+	token := model.Token{UserId: userID, Key: "lease-qualification-token", Name: "lease-qualification-token", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true}
 	require.NoError(t, db.Create(&token).Error)
 	channel := model.Channel{Id: channelID, Type: constant.ChannelTypeOpenAI, Key: "lease-qualification-key", Name: "lease-qualification-channel", Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default"}
 	require.NoError(t, db.Create(&channel).Error)
@@ -388,10 +378,6 @@ func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *te
 	require.NoError(t, db.Create(&group).Error)
 	require.NoError(t, db.Create(&model.UserRouteEntry{GroupID: group.ID, ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}).Error)
 	require.NoError(t, db.Model(&profile).Update("active_group_id", group.ID).Error)
-	require.NoError(t, db.Create(&model.ChannelRoutePolicy{
-		ChannelID: channelID, CanonicalModel: "gpt-test", MaxUserConcurrency: 1,
-		MaxTokenConcurrency: 1, MaxChannelConcurrency: 1, Enabled: true, Version: 1,
-	}).Error)
 	groups, err := common.Marshal([]string{"default"})
 	require.NoError(t, err)
 	endpoints, err := common.Marshal([]string{string(constant.EndpointTypeOpenAI)})
@@ -411,28 +397,29 @@ func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *te
 		Decision: service.RouteDecision{
 			ConfigurationVersion: 1,
 			Candidates: []service.RouteDecisionCandidate{{
-				ChannelID: channelID, SnapshotVersion: 1, CatalogVersion: "lease-catalog", HealthEpoch: 1,
+				ChannelID: channelID, RequestModel: "gpt-test", SnapshotVersion: 1, CatalogVersion: "lease-catalog", HealthEpoch: 1,
 			}},
 		},
 		Attempts: []service.RouteDecisionCandidate{{
-			ChannelID: channelID, SnapshotVersion: 1, CatalogVersion: "lease-catalog", HealthEpoch: 1,
+			ChannelID: channelID, RequestModel: "gpt-test", SnapshotVersion: 1, CatalogVersion: "lease-catalog", HealthEpoch: 1,
 		}},
 	})
 	markLiveRouteSecurityQualified(c)
 	markLiveRoutePriceQualified(c)
 	info := &relaycommon.RelayInfo{RequestId: "lease-qualification-request", UserId: userID, TokenId: token.Id, UserGroup: "default", OriginModelName: "gpt-test"}
+	info.PriceData.ChannelRatio = 1
 
 	err = acquireRouteAttemptLease(c, info, &channel, 0)
 	assert.ErrorIs(t, err, service.ErrLiveRouteCandidateInvalid)
 	assert.Equal(t, int64(0), client.ZCard(context.Background(), service.UserRouteLeaseKey(userID)).Val())
 	assert.Equal(t, int64(0), client.ZCard(context.Background(), service.TokenRouteLeaseKey(token.Id)).Val())
-	assert.Equal(t, int64(0), client.ZCard(context.Background(), service.ChannelModelRouteLeaseKey(channelID, "gpt-test")).Val())
+	assert.Equal(t, int64(0), client.ZCard(context.Background(), service.ChannelRouteLeaseKey(channelID)).Val())
 	_, hasLease := c.Get("route_live_lease")
 	assert.False(t, hasLease)
 	updatedValue, ok := c.Get("route_live_selection")
 	require.True(t, ok)
 	updated := updatedValue.(service.LiveRouteSelection)
-	assert.Equal(t, service.ShadowFilterAbilityDisabled, updated.Decision.Candidates[0].FilterReason)
+	assert.Equal(t, service.RouteFilterAbilityDisabled, updated.Decision.Candidates[0].FilterReason)
 	assert.Equal(t, "qualification_failed", updated.Decision.LeaseState)
 }
 

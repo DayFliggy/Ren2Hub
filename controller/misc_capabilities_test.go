@@ -18,10 +18,9 @@ func TestFrontendCapabilitiesAreFlatStatuses(t *testing.T) {
 	common.RegisterEnabled = true
 
 	capabilities := getFrontendCapabilities(true)
-	require.Equal(t, "live", capabilities["next_frontend"])
-	require.Equal(t, "live", capabilities["legacy_token"])
+	require.Equal(t, "live", capabilities["api_tokens"])
 	require.Equal(t, "live", capabilities["two_factor"])
-	require.Equal(t, "disabled", capabilities["token_private_routing"])
+	require.Equal(t, "live", capabilities["token_private_routing"])
 	for _, feature := range []string{
 		"subscription_balance",
 		"marketplace",
@@ -48,7 +47,6 @@ func TestFrontendCapabilitiesHonorBackendSwitches(t *testing.T) {
 	common.RegisterEnabled = false
 
 	capabilities := getFrontendCapabilities(false)
-	require.Equal(t, "live", capabilities["next_frontend"])
 	require.Equal(t, "disabled", capabilities["login"])
 	require.Equal(t, "disabled", capabilities["registration"])
 	require.Equal(t, "disabled", capabilities["passkey"])

@@ -16,231 +16,55 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestBuildRouteLeaseResourcesUsesSharedScopeLimits(t *testing.T) {
-	resources, err := BuildRouteLeaseResources(model.ChannelRoutePolicy{
-		ChannelID:             7,
-		CanonicalModel:        "gpt-5",
-		MaxUserConcurrency:    3,
-		MaxTokenConcurrency:   2,
-		MaxChannelConcurrency: 8,
-		Enabled:               true,
-		Version:               1,
-	}, model.RouteScopeConcurrencyLimits{MaxUserConcurrency: 3, MaxTokenConcurrency: 2}, 10, 20)
-	require.NoError(t, err)
-	assert.Equal(t, []RouteLeaseResource{
-		{Key: UserRouteLeaseKey(10), Capacity: 3},
-		{Key: TokenRouteLeaseKey(20), Capacity: 2},
-		{Key: ChannelModelRouteLeaseKey(7, "gpt-5"), Capacity: 8},
-	}, resources)
-}
-
-func TestBuildRouteLeaseResourcesFailsClosedForDisabledOrInvalidPolicy(t *testing.T) {
-	_, err := BuildRouteLeaseResources(model.ChannelRoutePolicy{
-		ChannelID: 7, CanonicalModel: "gpt-5", MaxChannelConcurrency: 8, Version: 1,
-	}, model.RouteScopeConcurrencyLimits{}, 10, 20)
-	assert.ErrorIs(t, err, ErrRoutePolicyInvalid)
-
-	_, err = BuildRouteLeaseResources(model.ChannelRoutePolicy{
-		ChannelID: 7, CanonicalModel: "gpt-5", Enabled: true, Version: 1,
-	}, model.RouteScopeConcurrencyLimits{}, 10, 20)
-	assert.ErrorIs(t, err, ErrRoutePolicyInvalid)
-}
-
-func TestAcquireConfiguredRouteLeaseRequiresPolicyAndRedis(t *testing.T) {
+func setupChannelAdmissionTest(t *testing.T) *gorm.DB {
+	t.Helper()
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
 	require.NoError(t, err)
-	originalDB, originalRedisEnabled, originalRDB := model.DB, common.RedisEnabled, common.RDB
-	model.DB = db
-	server := miniredis.RunT(t)
-	common.RedisEnabled = true
-	common.RDB = redis.NewClient(&redis.Options{Addr: server.Addr()})
+	originalDB, originalEnabled, originalRDB := model.DB, common.RedisEnabled, common.RDB
+	client := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
+	model.DB, common.RedisEnabled, common.RDB = db, true, client
 	t.Cleanup(func() {
-		model.DB, common.RedisEnabled, common.RDB = originalDB, originalRedisEnabled, originalRDB
-		sqlDB, closeErr := db.DB()
-		if closeErr == nil {
-			_ = sqlDB.Close()
-		}
+		model.DB, common.RedisEnabled, common.RDB = originalDB, originalEnabled, originalRDB
+		require.NoError(t, client.Close())
+		sqlDB, err := db.DB()
+		require.NoError(t, err)
+		require.NoError(t, sqlDB.Close())
 	})
-	require.NoError(t, db.AutoMigrate(&model.ChannelRoutePolicy{}))
-	policy := model.ChannelRoutePolicy{ChannelID: 7, CanonicalModel: "gpt-5", MaxChannelConcurrency: 1, Enabled: true, Version: 1}
-	require.NoError(t, db.Create(&policy).Error)
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelCapabilitySnapshot{}, &model.ChannelHealth{}))
+	return db
+}
 
-	lease, _, err := AcquireConfiguredRouteLease(context.Background(), "request-1", 7, 10, 20, "Gpt-5", time.Minute)
+func TestChannelAdmissionSharesCapacityAcrossModelsAndUsers(t *testing.T) {
+	db := setupChannelAdmissionTest(t)
+	require.NoError(t, db.Create(&model.Channel{Id: 7, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: 1.5}).Error)
+	ctx := context.Background()
+	first, channel, err := AcquireConfiguredRouteLease(ctx, "first", 7, 10, 20, "gpt-5", time.Minute)
 	require.NoError(t, err)
-	assert.NotEmpty(t, lease.LeaseID)
-	assert.NoError(t, ReleaseRouteLease(context.Background(), common.RDB, lease))
-
+	assert.Equal(t, 1.5, channel.ChannelRatio)
+	_, _, err = AcquireConfiguredRouteLease(ctx, "second", 7, 11, 21, "claude-sonnet-4", time.Minute)
+	assert.ErrorIs(t, err, ErrRouteLeaseCapacity)
+	require.NoError(t, ReleaseConfiguredRouteLease(ctx, first))
+	second, _, err := AcquireConfiguredRouteLease(ctx, "second", 7, 11, 21, "claude-sonnet-4", time.Minute)
+	require.NoError(t, err)
+	require.NoError(t, ReleaseConfiguredRouteLease(ctx, second))
 	common.RedisEnabled = false
-	_, _, err = AcquireConfiguredRouteLease(context.Background(), "request-2", 7, 10, 20, "gpt-5", time.Minute)
+	_, _, err = AcquireConfiguredRouteLease(ctx, "offline", 7, 10, 20, "gpt-5", time.Minute)
 	assert.ErrorIs(t, err, ErrRouteLeaseUnavailable)
 }
 
-func TestAcquireConfiguredRouteLeaseUsesSmallestSharedScopeLimit(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+func TestChannelAdmissionRechecksCapacityPriceAndStatus(t *testing.T) {
+	db := setupChannelAdmissionTest(t)
+	require.NoError(t, db.Create(&model.Channel{Id: 7, Status: common.ChannelStatusEnabled, CapacityTotal: 3, ChannelRatio: 1.5}).Error)
+	ctx := context.Background()
+	expected, err := GetRouteRuntimeState(ctx, 7, "gpt-5")
 	require.NoError(t, err)
-	originalDB, originalRedisEnabled, originalRDB := model.DB, common.RedisEnabled, common.RDB
-	model.DB = db
-	server := miniredis.RunT(t)
-	common.RedisEnabled = true
-	common.RDB = redis.NewClient(&redis.Options{Addr: server.Addr()})
-	t.Cleanup(func() {
-		model.DB, common.RedisEnabled, common.RDB = originalDB, originalRedisEnabled, originalRDB
-		sqlDB, closeErr := db.DB()
-		if closeErr == nil {
-			_ = sqlDB.Close()
-		}
-	})
-	require.NoError(t, db.AutoMigrate(&model.ChannelRoutePolicy{}))
-	require.NoError(t, db.Create(&model.ChannelRoutePolicy{
-		ChannelID: 7, CanonicalModel: "gpt-5", MaxUserConcurrency: 1, MaxTokenConcurrency: 1,
-		MaxChannelConcurrency: 2, Enabled: true, Version: 1,
-	}).Error)
-	require.NoError(t, db.Create(&model.ChannelRoutePolicy{
-		ChannelID: 8, CanonicalModel: "gpt-5", MaxUserConcurrency: 5, MaxTokenConcurrency: 5,
-		MaxChannelConcurrency: 2, Enabled: true, Version: 1,
-	}).Error)
-
-	first, _, err := AcquireConfiguredRouteLease(context.Background(), "request-low", 7, 10, 20, "gpt-5", time.Minute)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = ReleaseRouteLease(context.Background(), common.RDB, first) })
-	_, _, err = AcquireConfiguredRouteLease(context.Background(), "request-high", 8, 10, 20, "gpt-5", time.Minute)
-	assert.ErrorIs(t, err, ErrRouteLeaseCapacity)
-
-	require.NoError(t, ReleaseRouteLease(context.Background(), common.RDB, first))
-	second, _, err := AcquireConfiguredRouteLease(context.Background(), "request-high-after-release", 8, 10, 20, "gpt-5", time.Minute)
-	require.NoError(t, err)
-	assert.Contains(t, second.Resources, RouteLeaseResource{Key: UserRouteLeaseKey(10), Capacity: 1})
-	assert.Contains(t, second.Resources, RouteLeaseResource{Key: TokenRouteLeaseKey(20), Capacity: 1})
-	require.NoError(t, ReleaseRouteLease(context.Background(), common.RDB, second))
-}
-
-func TestSaveChannelRoutePolicyUsesVersionCAS(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
-	require.NoError(t, err)
-	originalDB := model.DB
-	model.DB = db
-	t.Cleanup(func() {
-		model.DB = originalDB
-		sqlDB, closeErr := db.DB()
-		if closeErr == nil {
-			_ = sqlDB.Close()
-		}
-	})
-	require.NoError(t, db.AutoMigrate(&model.ChannelRoutePolicy{}))
-	created, err := SaveChannelRoutePolicy(model.ChannelRoutePolicy{
-		ChannelID: 11, CanonicalModel: "gpt-5", MaxChannelConcurrency: 4, Enabled: true,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), created.Version)
-	updated, err := SaveChannelRoutePolicy(model.ChannelRoutePolicy{
-		ID: created.ID, ChannelID: 11, CanonicalModel: "gpt-5", MaxChannelConcurrency: 6, Enabled: true, Version: 1,
-	})
-	require.NoError(t, err)
-	assert.Equal(t, int64(2), updated.Version)
-	_, err = SaveChannelRoutePolicy(model.ChannelRoutePolicy{
-		ID: created.ID, ChannelID: 11, CanonicalModel: "gpt-5", MaxChannelConcurrency: 7, Enabled: true, Version: 1,
-	})
-	assert.ErrorIs(t, err, ErrRoutePolicyConflict)
-}
-
-func TestSaveChannelRoutePolicyRequiresVersionForExistingPolicy(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
-	require.NoError(t, err)
-	originalDB := model.DB
-	model.DB = db
-	t.Cleanup(func() {
-		model.DB = originalDB
-		sqlDB, closeErr := db.DB()
-		if closeErr == nil {
-			_ = sqlDB.Close()
-		}
-	})
-	require.NoError(t, db.AutoMigrate(&model.ChannelRoutePolicy{}))
-	require.NoError(t, db.Create(&model.ChannelRoutePolicy{
-		ChannelID: 13, CanonicalModel: "gpt-5", MaxChannelConcurrency: 2, Enabled: true, Version: 1,
-	}).Error)
-
-	_, err = SaveChannelRoutePolicy(model.ChannelRoutePolicy{
-		ChannelID: 13, CanonicalModel: "gpt-5", MaxChannelConcurrency: 3, Enabled: true,
-	})
-	assert.ErrorIs(t, err, ErrRoutePolicyConflict)
-}
-
-func TestGetRouteRuntimeStateIncludesPolicyFence(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
-	require.NoError(t, err)
-	originalDB := model.DB
-	model.DB = db
-	t.Cleanup(func() {
-		model.DB = originalDB
-		sqlDB, closeErr := db.DB()
-		if closeErr == nil {
-			_ = sqlDB.Close()
-		}
-	})
-	require.NoError(t, db.AutoMigrate(
-		&model.Channel{}, &model.ChannelCapabilitySnapshot{}, &model.ChannelHealth{}, &model.ChannelRoutePolicy{},
-	))
-	require.NoError(t, db.Create(&model.Channel{Id: 7, Key: "test-key", Status: common.ChannelStatusEnabled}).Error)
-	snapshot := model.ChannelCapabilitySnapshot{
-		ChannelID: 7, ActiveVersion: 3, CatalogVersion: "catalog-test", SourceHash: "source-test",
+	for _, update := range []map[string]any{{"capacity_total": 2}, {"capacity_total": 3, "channel_ratio": 2.0}} {
+		require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 7).Updates(update).Error)
+		current, err := GetRouteRuntimeState(ctx, 7, "gpt-5")
+		require.NoError(t, err)
+		assert.ErrorIs(t, RecheckRouteLeaseRuntime(expected, current), ErrRouteLeaseRuntime)
 	}
-	snapshot.Normalize(time.Now())
-	require.NoError(t, db.Create(&snapshot).Error)
-	require.NoError(t, db.Create(&model.ChannelRoutePolicy{
-		ChannelID: 7, CanonicalModel: "gpt-5", MaxChannelConcurrency: 1, Enabled: true, Version: 4,
-	}).Error)
-
-	state, err := GetRouteRuntimeState(context.Background(), 7, "Gpt-5")
-	require.NoError(t, err)
-	assert.True(t, state.ChannelEnabled)
-	assert.True(t, state.PolicyEnabled)
-	assert.Equal(t, int64(4), state.PolicyVersion)
-	assert.Equal(t, int64(3), state.CapabilityVersion)
-
-	require.NoError(t, db.Model(&model.ChannelRoutePolicy{}).
-		Where("channel_id = ? AND canonical_model = ?", 7, "gpt-5").
-		Updates(map[string]any{"enabled": false, "version": 5}).Error)
-	state, err = GetRouteRuntimeState(context.Background(), 7, "gpt-5")
-	require.NoError(t, err)
-	assert.False(t, state.PolicyEnabled)
-	assert.Equal(t, int64(5), state.PolicyVersion)
-	assert.ErrorIs(t, RecheckRouteLeaseRuntime(
-		RouteLeaseRuntimeState{ChannelEnabled: true, HealthEpoch: 1, CapabilityVersion: 3, PolicyEnabled: true, PolicyVersion: 4},
-		state,
-	), ErrRouteLeaseRuntime)
-}
-
-func TestRouteLiveGateRequiresPrivateRoutingCapability(t *testing.T) {
-	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "false")
-	t.Setenv("ROUTE_LIVE_ENABLED", "true")
-	assert.False(t, RouteLiveRoutingEnabled())
-
-	t.Setenv("TOKEN_PRIVATE_ROUTING_ENABLED", "true")
-	assert.True(t, RouteLiveRoutingEnabled())
-}
-
-func TestRouteLiveRolloutUsesDedicatedAllowlists(t *testing.T) {
-	originalNodeName := common.NodeName
-	common.NodeName = "route-test-instance"
-	t.Cleanup(func() { common.NodeName = originalNodeName })
-
-	input := LiveRouteRequest{UserID: 11, TokenID: 22, RequestModel: "Gpt-5"}
-	assert.True(t, RouteLiveRolloutMatches(input))
-
-	t.Setenv("ROUTE_SHADOW_MODELS", "other-model")
-	assert.True(t, RouteLiveRolloutMatches(input), "Shadow rollout must not affect live rollout")
-	t.Setenv("ROUTE_LIVE_USER_IDS", "12")
-	assert.False(t, RouteLiveRolloutMatches(input))
-	t.Setenv("ROUTE_LIVE_USER_IDS", "11")
-	t.Setenv("ROUTE_LIVE_TOKEN_IDS", "23")
-	assert.False(t, RouteLiveRolloutMatches(input))
-	t.Setenv("ROUTE_LIVE_TOKEN_IDS", "22")
-	t.Setenv("ROUTE_LIVE_MODELS", "claude-opus-5")
-	assert.False(t, RouteLiveRolloutMatches(input))
-	t.Setenv("ROUTE_LIVE_MODELS", "gpt-5")
-	t.Setenv("ROUTE_LIVE_INSTANCES", "another-instance")
-	assert.False(t, RouteLiveRolloutMatches(input))
-	t.Setenv("ROUTE_LIVE_INSTANCES", "route-test-instance")
-	assert.True(t, RouteLiveRolloutMatches(input))
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 7).Update("status", common.ChannelStatusManuallyDisabled).Error)
+	_, _, err = AcquireConfiguredRouteLease(ctx, "disabled", 7, 10, 20, "gpt-5", time.Minute)
+	assert.ErrorIs(t, err, ErrRouteLeaseRuntime)
 }

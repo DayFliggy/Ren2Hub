@@ -168,8 +168,7 @@ export function parseRouteProfileView(
     endpoint,
     false
   ) as RouteProfileView['profile']['mode']
-  if (mode !== 'legacy' && mode !== 'manual' && mode !== 'auto_lab')
-    invalidResponse(endpoint)
+  if (mode !== 'manual' && mode !== 'auto_lab') invalidResponse(endpoint)
   const profile = {
     id: requiredStrictInteger(value.profile.id, endpoint),
     user_id: requiredStrictInteger(value.profile.user_id, endpoint),

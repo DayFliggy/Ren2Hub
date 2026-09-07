@@ -5,27 +5,33 @@ import {
   Pencil,
   Power,
   PowerOff,
+  Route,
   Trash2,
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 
 import IconButton from '@/components/common/IconButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import type { TokenSummary } from '@/types/console'
 import { formatDate, formatQuota } from '@/utils/format'
 
-defineProps<{
-  tokens: TokenSummary[]
-  selectedIds: Array<string | number>
-  allSelected: boolean
-  toggleAllSelected: () => void
-  toggleSelected: (token: TokenSummary) => void
-  isToggling: (token: TokenSummary) => boolean
-  toggleStatus: (token: TokenSummary) => void | Promise<void>
-  viewKey: (token: TokenSummary) => void
-  editKey: (token: TokenSummary) => void
-  deleteKey: (token: TokenSummary) => void
-}>()
+withDefaults(
+  defineProps<{
+    tokens: TokenSummary[]
+    selectedIds: Array<string | number>
+    allSelected: boolean
+    toggleAllSelected: () => void
+    toggleSelected: (token: TokenSummary) => void
+    isToggling: (token: TokenSummary) => boolean
+    toggleStatus: (token: TokenSummary) => void | Promise<void>
+    viewKey: (token: TokenSummary) => void
+    editKey: (token: TokenSummary) => void
+    deleteKey: (token: TokenSummary) => void
+    routingEnabled?: boolean
+  }>(),
+  { routingEnabled: false }
+)
 
 const { t } = useI18n()
 </script>
@@ -135,6 +141,15 @@ const { t } = useI18n()
         <footer
           class="mt-4 flex items-center justify-end gap-1 border-t border-[var(--border-subtle)] pt-3"
         >
+          <RouterLink
+            v-if="routingEnabled"
+            :to="{ name: 'token-routing', params: { id: token.id } }"
+            class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring sm:h-8 sm:w-8"
+            :aria-label="t('keys.routing')"
+            :title="t('keys.routing')"
+          >
+            <Route :size="16" />
+          </RouterLink>
           <IconButton :label="t('keys.viewKey')" @click="viewKey(token)">
             <Eye :size="16" />
           </IconButton>

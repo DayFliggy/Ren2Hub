@@ -203,17 +203,21 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}
 	if value, ok := c.Get("route_live_selection"); ok {
 		if selection, valid := value.(service.LiveRouteSelection); valid &&
-			!selection.AllowsPriceRatio(info.PriceData.GroupRatioInfo.GroupRatio) {
+			!selection.AllowsPriceRatio(info.PriceData.ChannelRatio) {
 			return nil, service.TaskErrorWrapperLocal(service.ErrRoutePriceRatioExceeded, "route_price_ratio_exceeded", http.StatusForbidden)
 		}
 	}
 
-	// 7. 预扣费（仅首次 — 重试时 info.Billing 已存在，跳过）
-	if info.Billing == nil && !info.PriceData.FreeModel {
-		info.ForcePreConsume = true
-		if apiErr := service.PreConsumeBilling(c, info.PriceData.Quota, info); apiErr != nil {
-			return nil, service.TaskErrorFromAPIError(apiErr)
+	// 7. Admission precedes billing; retries reserve any price increase.
+	if info.BeforeUpstream != nil {
+		if err := info.BeforeUpstream(); err != nil {
+			return nil, service.TaskErrorWrapperLocal(err, "route_lease_failed", http.StatusServiceUnavailable)
 		}
+	}
+	info.ForcePreConsume = true
+	info.PriceData.QuotaToPreConsume = info.PriceData.Quota
+	if apiErr := service.PrepareBillingForSelectedModel(c, info); apiErr != nil {
+		return nil, service.TaskErrorFromAPIError(apiErr)
 	}
 
 	// 8. 构建请求体
@@ -228,6 +232,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		return nil, service.TaskErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
 	if resp != nil && resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
 		responseBody, _ := io.ReadAll(resp.Body)
 		return nil, service.TaskErrorWrapper(fmt.Errorf("%s", string(responseBody)), "fail_to_fetch_task", resp.StatusCode)
 	}
@@ -322,6 +327,10 @@ func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
 	return
 }
 
+func taskModelName(task *model.Task) string {
+	return service.StoredTaskModelName(task)
+}
+
 func sunoFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.TaskError) {
 	userId := c.GetInt("id")
 	var condition = struct {
@@ -341,6 +350,9 @@ func sunoFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.Ta
 			return
 		}
 		for _, task := range taskModels {
+			if err := service.TokenModelPermissionError(c, taskModelName(task)); err != nil {
+				return nil, service.TaskErrorFromAPIError(err)
+			}
 			tasks = append(tasks, TaskModel2Dto(task))
 		}
 	} else {
@@ -367,6 +379,9 @@ func sunoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dt
 		return
 	}
 
+	if err := service.TokenModelPermissionError(c, taskModelName(originTask)); err != nil {
+		return nil, service.TaskErrorFromAPIError(err)
+	}
 	respBody, err = common.Marshal(dto.TaskResponse[any]{
 		Code: "success",
 		Data: TaskModel2Dto(originTask),
@@ -392,6 +407,9 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 	}
 
 	isOpenAIVideoAPI := strings.HasPrefix(c.Request.RequestURI, "/v1/videos/")
+	if err := service.TokenModelPermissionError(c, taskModelName(originTask)); err != nil {
+		return nil, service.TaskErrorFromAPIError(err)
+	}
 
 	// Gemini/Vertex 支持实时查询：用户 fetch 时直接从上游拉取最新状态
 	if realtimeResp := tryRealtimeFetch(originTask, isOpenAIVideoAPI); len(realtimeResp) > 0 {

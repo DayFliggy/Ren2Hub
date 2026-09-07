@@ -8,7 +8,7 @@ This is an AI API gateway/proxy built with Go. It aggregates 40+ upstream AI pro
 
 ## Tech Stack
 
-- **Backend**: Go 1.22+, Gin web framework, GORM v2 ORM
+- **Backend**: Go 1.25.1+, Gin web framework, GORM v2 ORM
 - **Primary Vue frontend (`frontend/`)**: Vue 3.5, Vite 8, TypeScript, Pinia, Vue Router, Vue I18n, Tailwind CSS, ECharts, Axios, Vitest
 - **Databases**: SQLite, MySQL, PostgreSQL (all three must be supported)
 - **Cache**: Redis (go-redis) + in-memory cache
@@ -36,7 +36,7 @@ i18n/          — Backend internationalization (go-i18n, en/zh)
 oauth/         — OAuth provider implementations
 pkg/           — Internal packages (cachex, billingexpr)
 frontend/      — The only web application, served at `/`; Docker builds it and Go embeds `frontend/embed-dist`
-  src/api/         — Real public HTTP client plus stateful mock Console/Lab transport
+  src/api/         — Same-origin HTTP transport, authentication, and validated API contracts
   src/canvas/      — Landing-page routing scene and animation engine
   src/charts/      — ECharts adapters
   src/components/  — common, home, auth, console, lab, and layout components
@@ -44,7 +44,7 @@ frontend/      — The only web application, served at `/`; Docker builds it and
   src/constants/   — Home data and shared navigation definitions
   src/i18n/        — Vue I18n setup and domain-split locale modules
   src/router/      — Route definitions, lazy domains, and access guards
-  src/stores/      — Cross-route Pinia state (application and demo auth)
+  src/stores/      — Cross-route Pinia state (application, real authentication, setup)
   src/styles/      — Fonts, semantic tokens, base, home, and console styles
   src/types/       — API and domain contracts
   src/utils/       — Formatting and URL-safety helpers
@@ -143,7 +143,7 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
 
 ### Frontend Rules
 
-- Use `bun` as the package manager and script runner in both frontend directories:
+- Use `bun` as the package manager and script runner in `frontend/`:
   - `bun install` for dependency installation
   - `bun run dev` for development server
   - `bun run build` for production build
@@ -154,7 +154,7 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
   - All user-facing text must use Vue I18n. Keep `common` and `home` suitable for the initial bundle and add domain text to the matching lazy locale module.
   - All enabled routes use real same-origin HTTP endpoints. Browser auth uses a short-lived Bearer access token plus the HttpOnly refresh cookie; server authorization remains authoritative.
   - `/api/status.frontend_capabilities` is the source of truth for Vue module availability. Disabled modules must remain fail-closed in navigation and route guards; do not call placeholder endpoints for them.
-  - `frontend/` is mounted at `/`. Keep Vite `base`, router history, Go SPA fallback, immutable asset caching, and legacy `/next` redirects aligned.
+  - `frontend/` is mounted at `/`. Keep Vite `base`, router history, Go SPA fallback, and immutable asset caching aligned. The retired `/next` Web prefix must return 404; `/api/next/*` remains a business API namespace.
   - Use semantic CSS tokens from `src/styles/tokens.css`; preserve light/dark parity and reduced-motion behavior.
   - Abort or sequence-guard route/filter requests that can overlap, and clear timers/listeners on scope disposal.
   - Validate in this order when applicable: `bun run test:run`, `bun run typecheck`, `bun run lint`, `bun run format:check`, then `bun run build`.

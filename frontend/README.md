@@ -2,7 +2,7 @@
 
 该目录是 Ren2Hub 唯一的 Vue 3 Web 前端。
 
-- Vue 应用直接挂载在网站根路径 `/`；旧 `/next/*` 书签会重定向到对应根路径。
+- Vue 应用直接挂载在网站根路径 `/`；旧 `/next` 和 `/next/*` 入口已移除，返回 404。
 - 本地构建产物输出到 `frontend/dist/`；Docker 构建会把它复制到 `frontend/embed-dist/`，再由 Go `embed` 打入最终二进制。
 - 首页、认证与已启用的 Console 模块统一调用同源真实后端 API。
 - 后端通过 `/api/status.frontend_capabilities` 声明模块状态；未启用模块必须保持禁用并由路由守卫 fail-closed。
@@ -37,7 +37,7 @@ bun run build
 - `/channels`、`/users`、`/models/metadata`、`/system-settings/*`：管理控制台
 - `/lab/*`：炼金室预留路由；后端 capability 未启用时拒绝访问
 
-旧 `/next/*`、`/console/*`、`/auth/*` 和 NewAPI 历史书签统一转换为根路径并保留 query/hash。匿名访问转到 `/sign-in`，登录回跳由实际路由记录校验。页面使用相同 Console 布局；布局与语言包由 metadata 指定，不依赖 URL 前缀。
+旧 `/console/*`、`/auth/*` 和 NewAPI 历史书签统一转换为根路径并保留 query/hash。`/next` 前缀不再转换或加载业务页面。匿名访问转到 `/sign-in`，登录回跳由实际路由记录校验。页面使用相同 Console 布局；布局与语言包由 metadata 指定，不依赖 URL 前缀。
 
 `/api/next/*` 是已有业务 API 门面，保留接口契约；`/api/models` 和 `/api/models/` 的不同语义也保留。Playground、Chat、Chat2Link、Chat Presets 及旧前缀变体返回 404。详细矩阵与验证边界见 [路由约定](./ROUTING.md)。
 

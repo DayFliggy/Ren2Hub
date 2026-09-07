@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -26,11 +25,10 @@ func TestCompactRetryBudgetAndStageTransition(t *testing.T) {
 	}
 	state := newCompactRetryState(info)
 	ctx, _ := gin.CreateTestContext(nil)
-	require.Equal(t, 3, state.exactBudget)
-	require.Equal(t, 2, state.baseBudget)
+	require.Equal(t, 2, state.exactBudget)
+	require.Equal(t, 1, state.baseBudget)
 
 	state.recordAttempt(ctx, 17)
-	common.SetContextKey(ctx, constant.ContextKeyAutoGroupIndex, 2)
 	modelError := types.WithOpenAIError(types.OpenAIError{
 		Message: "The requested model does not exist",
 		Type:    "invalid_request_error",
@@ -39,11 +37,8 @@ func TestCompactRetryBudgetAndStageTransition(t *testing.T) {
 	}, http.StatusBadRequest)
 	require.True(t, state.advance(ctx, info, modelError, false))
 	require.Equal(t, relaycommon.CompactAttemptBase, state.stage)
-	require.Equal(t, 4, state.baseBudget)
+	require.Equal(t, 2, state.baseBudget)
 	require.Empty(t, service.GetCompactAttemptedKeyIndexes(ctx, 17))
-	groupIndex, exists := common.GetContextKey(ctx, constant.ContextKeyAutoGroupIndex)
-	require.True(t, exists)
-	require.Equal(t, 0, groupIndex)
 
 	for attempt := 1; attempt <= state.baseBudget; attempt++ {
 		state.recordAttempt(ctx, 17)
@@ -61,8 +56,8 @@ func TestCompactRetryTransfersAllExactBudgetWhenStartingAtBase(t *testing.T) {
 		RelayMode:           relayconstant.RelayModeResponsesCompact,
 		CompactAttemptStage: relaycommon.CompactAttemptBase,
 	})
-	require.Equal(t, 3, state.exactBudget)
-	require.Equal(t, 5, state.baseBudget)
+	require.Equal(t, 2, state.exactBudget)
+	require.Equal(t, 3, state.baseBudget)
 }
 
 func TestCompactModelSemanticErrorDoesNotMatchOrdinaryParameter400(t *testing.T) {

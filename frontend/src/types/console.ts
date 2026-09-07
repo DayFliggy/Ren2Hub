@@ -15,8 +15,6 @@ export interface TokenChannel {
 export interface TokenItem {
   id: number
   name: string
-  /** Real backend routing group; preserved verbatim on edit. */
-  group?: string
   key: string
   type: TokenType
   status: 1 | 2 // 1 enabled · 2 disabled

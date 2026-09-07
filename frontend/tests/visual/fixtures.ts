@@ -292,15 +292,13 @@ export async function configureStablePage(
         register_enabled: true,
         affiliate_registration_required: false,
         HeaderNavModules: { docs: true, pricing: { enabled: true } },
-        next_frontend_enabled: true,
         frontend_capabilities: {
-          next_frontend: 'live',
           registration: 'live',
           login: 'live',
           refresh: 'live',
           logout: 'live',
           profile: 'live',
-          legacy_token: 'live',
+          api_tokens: 'live',
           user_models: 'live',
           logs: 'live',
           dashboard_basic: 'live',
@@ -316,7 +314,7 @@ export async function configureStablePage(
           invites: 'live',
           activity: 'live',
           subscription_balance: 'disabled',
-          token_private_routing: 'disabled',
+          token_private_routing: 'live',
           marketplace: 'disabled',
           invoices: 'disabled',
           lab: 'disabled',
@@ -342,7 +340,8 @@ export async function configureStablePage(
           completion_ratio: 4,
           cache_ratio: 0.25,
           create_cache_ratio: 1.25,
-          enable_groups: ['default', 'vip'],
+          channel_ratio_min: 0.8,
+          channel_ratio_max: 1.2,
           supported_endpoint_types: ['openai'],
           billing_mode: 'token',
         },
@@ -359,7 +358,8 @@ export async function configureStablePage(
           completion_ratio: 5,
           cache_ratio: 0.1,
           create_cache_ratio: 0,
-          enable_groups: ['default', 'vip'],
+          channel_ratio_min: 1,
+          channel_ratio_max: 1,
           supported_endpoint_types: ['openai'],
           billing_mode: 'token',
         },
@@ -376,7 +376,8 @@ export async function configureStablePage(
           completion_ratio: 4,
           cache_ratio: null,
           create_cache_ratio: null,
-          enable_groups: ['default', 'vip'],
+          channel_ratio_min: 1,
+          channel_ratio_max: 1.5,
           supported_endpoint_types: ['openai'],
           billing_mode: 'token',
         },
@@ -457,7 +458,7 @@ export async function configureStablePage(
             id: 7,
             name: 'Production key',
             key: 'sk-vis************2026',
-            group: 'vip',
+            type: 'auto',
             status: 1,
             used_quota: 285_000,
             remain_quota: 4_715_000,
@@ -1098,8 +1099,11 @@ export async function configureStablePage(
           data,
           ...(path === '/api/pricing'
             ? {
-                group_ratio: { default: 1, vip: 1 },
-                usable_group: { default: 'Default', vip: 'VIP' },
+                vendors: [
+                  { id: 1, name: 'OpenAI', description: '' },
+                  { id: 2, name: 'Anthropic', description: '' },
+                  { id: 3, name: 'Google', description: '' },
+                ],
                 supported_endpoint: {},
               }
             : {}),
@@ -1126,7 +1130,7 @@ export function isExpectedGuestRefreshConsoleMessage(
 }
 
 export async function waitForStablePage(page: Page): Promise<void> {
-  await page.locator('#app > *').first().waitFor({ state: 'visible' })
+  await page.locator('#app > :visible').first().waitFor({ state: 'visible' })
   expect(
     await page.evaluate(
       () => matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -1256,6 +1260,8 @@ export async function assertInteractiveCentersVisible(
       'button:not([disabled]), a[href], input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), [role="button"]:not([aria-disabled="true"])'
     return Array.from(document.querySelectorAll<HTMLElement>(selector))
       .filter((element) => {
+        const details = element.closest('details')
+        if (details && !details.open) return false
         const rect = element.getBoundingClientRect()
         const style = getComputedStyle(element)
         return (
