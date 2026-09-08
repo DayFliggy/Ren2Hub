@@ -62,9 +62,10 @@ frontend/      — The only web application, served at `/`; Docker builds it and
 
 - Library: `vue-i18n`
 - Languages: zh-CN and en
-- `common` and `home` are loaded with the initial bundle; `auth`, `console`, and `lab` are merged lazily by route domain.
-- Translation files: `frontend/src/i18n/locales/{en,zh-CN}/{common,auth,console,lab,home}.ts`
+- `common` and `home` are loaded with the initial bundle; `auth`, `console`, `lab`, and `setup` are merged lazily by route domain.
+- Translation files: `frontend/src/i18n/locales/{en,zh-CN}/{common,auth,console,lab,home,setup}.ts`; some features maintain paired messages in shared TypeScript modules under `frontend/src/i18n/`.
 - User-facing strings in Vue components must use `useI18n()` and stable translation keys.
+- For translation work, follow `.agents/skills/i18n-translate/SKILL.md` and edit the existing Vue message source. React/Next.js and shadcn/ui skills apply only when the target code actually uses those libraries; they do not gate ordinary Vue work.
 
 ## Rules
 
