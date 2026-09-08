@@ -1,6 +1,6 @@
 # AGENTS.md — Project Conventions for new-api
 
-DO NOT send optional commentary
+When working inside RenAI-Workspace, follow the enclosing `AGENTS.md` for autonomy, clarification, approval, writing style, delegation, and completion. This file adds application-specific constraints. Keep progress updates limited to material findings, decisions, and blockers.
 
 ## Overview
 
@@ -131,6 +131,8 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
 
 **Backend test quality:** Backend tests must protect real behavior, API contracts, billing/accounting invariants, data compatibility, or regression paths.
 
+- Match the test scope to affected behavior and risk. Documentation-only changes do not require backend builds or runtime suites. Preserve required checks for affected database, billing, security, protocol, and independent-module boundaries.
+- Reuse successful results for unchanged code and conditions. Repeat or expand tests only when relevant edits, failures, or unresolved concerns justify it.
 - Do not add tests that only improve coverage numbers, prove that code happens to run, or lock in implementation details without a user-visible or cross-module contract.
 - Avoid fake fuzz/stress/smoke/performance tests built from random inputs, large loop counts, sleeps, timing comparisons, or log-only assertions.
 - Avoid duplicate tests that exercise the same branch with different names but no new invariant.
@@ -158,8 +160,8 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
   - `frontend/` is mounted at `/`. Keep Vite `base`, router history, Go SPA fallback, and immutable asset caching aligned. The retired `/next` Web prefix must return 404; `/api/next/*` remains a business API namespace.
   - Use semantic CSS tokens from `src/styles/tokens.css`; preserve light/dark parity and reduced-motion behavior.
   - Abort or sequence-guard route/filter requests that can overlap, and clear timers/listeners on scope disposal.
-  - Validate in this order when applicable: `bun run test:run`, `bun run typecheck`, `bun run lint`, `bun run format:check`, then `bun run build`.
-  - Verify UI changes with Playwright at desktop and mobile sizes, in both light and dark themes for affected surfaces. Check overflow, focus/keyboard behavior, loading/error/empty states, and image failures.
+  - Select checks for the affected behavior, in this order when applicable: targeted Vitest cases (`bun run test:run -- <test-file>`), `bun run typecheck`, `bun run lint`, `bun run format:check`, then `bun run build`. Run the full frontend test suite when shared behavior, configuration, broad changes, or unresolved regressions require it. This is an order for applicable checks, not a requirement to run every category for documentation-only edits.
+  - Verify affected UI surfaces with Playwright at desktop and mobile sizes, in both light and dark themes. Focus on the changed layout, interaction, message rendering, and relevant error or empty states; retain keyboard/focus, overflow, and image-failure checks where affected. Expand to the full browser suite when shared layout, routing, themes, or common components warrant it. Reuse passing results for unchanged code and conditions.
 
 ### Project Governance
 
