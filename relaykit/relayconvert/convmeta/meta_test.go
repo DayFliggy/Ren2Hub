@@ -19,6 +19,7 @@ func TestValuesTypedNilMetaIsSafe(t *testing.T) {
 	assert.Zero(t, meta.GetChannelType())
 	assert.False(t, meta.GetIsStream())
 	assert.Empty(t, meta.GetReasoningEffort())
+	assert.Nil(t, ReasoningStateOf(meta))
 	assert.Zero(t, meta.GetEstimatePromptTokens())
 	assert.Zero(t, meta.GetSendResponseCount())
 
@@ -36,3 +37,4 @@ func TestValuesTypedNilMetaIsSafe(t *testing.T) {
 	assert.Empty(t, UpstreamModelName(meta))
 	assert.Zero(t, ChannelTypeOf(meta))
 }
+

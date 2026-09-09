@@ -106,7 +106,10 @@ type GeneralOpenAIRequest struct {
 	ReturnRelatedQuestions *bool           `json:"return_related_questions,omitempty"`
 	SearchMode             json.RawMessage `json:"search_mode,omitempty"`
 	// Minimax
-	ReasoningSplit json.RawMessage `json:"reasoning_split,omitempty"`
+	ReasoningSplit      json.RawMessage `json:"reasoning_split,omitempty"`
+	ThinkingTokenBudget json.RawMessage `json:"thinking_token_budget,omitempty"`
+	// Internal conversion state is never serialized upstream.
+	ReasoningConversion *ReasoningConversionState `json:"-"`
 }
 
 func (r GeneralOpenAIRequest) MarshalJSON() ([]byte, error) {
@@ -265,6 +268,7 @@ type FunctionRequest struct {
 	Name        string `json:"name"`
 	Parameters  any    `json:"parameters,omitempty"`
 	Arguments   string `json:"arguments,omitempty"`
+	Strict      *bool  `json:"strict,omitempty"`
 }
 
 type StreamOptions struct {
@@ -310,6 +314,7 @@ type Message struct {
 	Reasoning        *string         `json:"reasoning,omitempty"`
 	ToolCalls        json.RawMessage `json:"tool_calls,omitempty"`
 	ToolCallId       string          `json:"tool_call_id,omitempty"`
+	Annotations      json.RawMessage `json:"annotations,omitempty"`
 	parsedContent    []MediaContent
 	//parsedStringContent *string
 }
@@ -906,6 +911,8 @@ type OpenAIResponsesRequest struct {
 	ThinkingBudget json.RawMessage `json:"thinking_budget,omitempty"`
 	// perplexity
 	Preset json.RawMessage `json:"preset,omitempty"`
+	// Internal conversion state is never serialized upstream.
+	ReasoningConversion *ReasoningConversionState `json:"-"`
 }
 
 // HasCompactionTrigger reports whether the Responses input contains the
