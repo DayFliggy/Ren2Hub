@@ -231,7 +231,7 @@ relayconvert.SetMediaResolver(relayconvert.MediaResolver{
 RelayKit 必须始终保持独立可构建。修改模块后，在 `relaykit` 目录运行：
 
 ```bash
-GOWORK=off go test ./...
+GOWORK=off go test -timeout 60s ./...
 GOWORK=off go build ./...
 ```
 
@@ -248,3 +248,30 @@ RelayKit 当前使用 `v0.x` 版本。公开 API 和 DTO 仍可能在小版本�
 ## 许可证
 
 RelayKit 是 new-api 项目的一部分，遵循项目根目录中的 [GNU Affero General Public License v3.0](../LICENSE)。
+
+
+## Ren2Hub 转换语义升级
+
+本轮工具、推理和流式转换参考本地 NewAPI `bdef117505247769268b209665fb3ad7554c3da7` 的 RelayKit，按协议语义移植。保留 Ren2Hub 原有 compaction 检测及回归测试，没有移植供应账号池、宿主配置、通知、价格模型或额外依赖。
+
+`convmeta.Options.ToolLossPolicy` 接受 `allow`、`safe`、`strict`：零值按 `allow` 处理；`safe` 拒绝请求执行语义损失，`strict` 拒绝全部已报告请求损失。响应与流式转换只报告损失，不因该策略重新拒绝。非法 JSON、非法函数参数和不可表达的状态引用仍返回错误。
+
+宿主实现 `prefer_safe` 时，首先以 `safe` 转换合格候选；只有在已有路由政策允许且请求预算仍可用时，才以 `allow` 尝试兼容候选。`safe_only` 不执行后一步。每次尝试使用独立的转换上下文，避免失败候选的推理信息进入后续调用。
+
+请求及响应结果增加 `Diagnostics` 和 `DiagnosticsTruncated`，最多返回 32 条不同诊断。请求策略判断发生在截断之前；流式状态的 `Diagnostics()` 和 `DiagnosticsTruncated()` 在没有输出事件时仍可读取。旧的 `googleSearch`、`codeExecution`、`urlContext` 函数名别名会产生执行语义变化诊断，安全模式拒绝，兼容模式保留既有映射。
+
+原生 Responses 的 compaction 标记、加密 compaction 内容、`previous_response_id`、`conversation`、`context_management` 不允许转换到其他协议。选择 `allow` 也不能绕过该边界。原生路径保留这些字段。
+
+宿主接入需要处理以下接口变化：
+
+- `dto.GeminiThinkingConfig.IncludeThoughts` 改为 `*bool`，区分未设置和显式 `false`。
+- `ApplyGeminiThinkingConfig` 返回 `error`；调用者必须检查。`ApplyGeminiThinkingConfigChecked` 提供相同的显式错误接口。
+- `ResponseOpenAI2Gemini`、`StreamResponseOpenAI2Gemini` 返回 `(*dto.GeminiChatResponse, error)`，不再把非法参数包装成另一个可执行参数对象。分片参数使用 `NewResponseStreamState` 和 `ConvertStreamResponseChunk`，不要逐片调用无状态函数。Gemini 的原子函数参数缓冲最多 8 MiB。
+- 名称后缀由宿主入口解析为 `dto.ReasoningConversionState`；`convmeta.Values.ReasoningConversion` 或可选的 `ReasoningState()` 方法传入该状态。显式协议参数与后缀冲突会明确报错。`ParseOpenAIReasoningEffortFromModelSuffix` 可选接收保护真实模型名称的回调，原单参数调用仍可编译。
+- 新建 Responses 流时设置 `EmitSequenceNumber: true`。设置 `RequireTerminal: true` 后，缺少源协议终止事件的 EOF 返回 `ErrIncompleteStream`；`SawTerminalEvent()` 只报告源协议证据，不将目标转换器合成的结束事件当成上游成功。宿主应在正常结束时才调用 Finalize，网络错误直接进入统一错误处理。
+
+Claude 与 Gemini 的托管工具流提供 `ClaudeHostedStreamBridge`、`GeminiHostedStreamBridge`。转换到 Responses 时，宿主须让 Claude bridge 先消费托管工具帧并跳过普通转换，Gemini bridge 收集 grounding 查询并在 Responses 状态完成前生成工具项；这两个桥接器不自动挂到普通文本转换循环。每条流使用独立 bridge，不能跨请求复用。普通软亲和、有状态续接绑定及网络重试仍由宿主负责。
+
+usage 保留供应商原始计数快照，新增 `MergeUsageNonZero` 等合并入口，避免晚到的空 usage 抹掉前面的计数。Chat 缓存输入转 Claude 时扣除已缓存前缀，原始账务快照继续保留；宿主结算应优先读取该快照，不能把转换后的展示数字再次当成原始供应商计数。
+
+本模块的单元测试和 golden 矩阵覆盖 DTO、转换与协议状态，不替代宿主请求链、真实 SDK、渠道计费或网络故障的集成验收。

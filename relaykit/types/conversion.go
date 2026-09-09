@@ -37,7 +37,8 @@ const (
 )
 
 type ConversionLossError struct {
-	Diagnostics []ConversionDiagnostic
+	Diagnostics          []ConversionDiagnostic
+	DiagnosticsTruncated bool
 }
 
 func (e *ConversionLossError) Error() string {
@@ -54,6 +55,9 @@ func (e *ConversionLossError) Error() string {
 			message = fmt.Sprintf("%s: %s", diagnostic.Path, message)
 		}
 		messages = append(messages, message)
+	}
+	if e.DiagnosticsTruncated {
+		messages = append(messages, "additional conversion diagnostics omitted")
 	}
 	return "conversion would lose protocol semantics: " + strings.Join(messages, "; ")
 }
@@ -78,5 +82,35 @@ func RejectConversionLoss(policy ConversionLossPolicy, diagnostics []ConversionD
 	if len(rejected) == 0 {
 		return nil
 	}
-	return &ConversionLossError{Diagnostics: rejected}
+	bounded, truncated := LimitConversionDiagnostics(rejected)
+	return &ConversionLossError{Diagnostics: bounded, DiagnosticsTruncated: truncated}
+}
+
+// MaxConversionDiagnostics bounds diagnostics retained for one request/stream.
+const MaxConversionDiagnostics = 32
+
+// LimitConversionDiagnostics runs after request-policy evaluation: truncation
+// must never hide a semantic error from safe or strict conversion policies.
+func LimitConversionDiagnostics(diagnostics []ConversionDiagnostic) ([]ConversionDiagnostic, bool) {
+	type key struct {
+		code, path string
+		severity   ConversionDiagnosticSeverity
+		from, to   RelayFormat
+	}
+	seen := make(map[key]struct{})
+	bounded := make([]ConversionDiagnostic, 0, min(len(diagnostics), MaxConversionDiagnostics))
+	truncated := false
+	for _, d := range diagnostics {
+		k := key{d.Code, d.Path, d.Severity, d.From, d.To}
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		if len(bounded) >= MaxConversionDiagnostics {
+			truncated = true
+			continue
+		}
+		seen[k] = struct{}{}
+		bounded = append(bounded, d)
+	}
+	return bounded, truncated
 }

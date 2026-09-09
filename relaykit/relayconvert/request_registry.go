@@ -36,13 +36,14 @@ type RequestStep struct {
 }
 
 type RequestResult struct {
-	Value       any
-	From        types.RelayFormat
-	To          types.RelayFormat
-	Converter   string
-	Quality     RequestConverterQuality
-	Steps       []RequestStep
-	Diagnostics []types.ConversionDiagnostic
+	Value                any
+	From                 types.RelayFormat
+	To                   types.RelayFormat
+	Converter            string
+	Quality              RequestConverterQuality
+	Steps                []RequestStep
+	Diagnostics          []types.ConversionDiagnostic
+	DiagnosticsTruncated bool
 }
 
 type RequestConverterSpec struct {
@@ -277,14 +278,16 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 	if err == nil {
 		err = types.RejectConversionLoss(policy, diagnostics)
 	}
+	diagnostics, truncated := types.LimitConversionDiagnostics(diagnostics)
 	if err != nil {
 		return &RequestResult{
-			Value:       current,
-			From:        from,
-			To:          target,
-			Quality:     quality,
-			Steps:       steps,
-			Diagnostics: diagnostics,
+			Value:                current,
+			From:                 from,
+			To:                   target,
+			Quality:              quality,
+			Steps:                steps,
+			Diagnostics:          diagnostics,
+			DiagnosticsTruncated: truncated,
 		}, err
 	}
 	if info != nil {
@@ -301,13 +304,14 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 		converter = strings.Join(converters, ",")
 	}
 	return &RequestResult{
-		Value:       current,
-		From:        from,
-		To:          target,
-		Converter:   converter,
-		Quality:     quality,
-		Steps:       steps,
-		Diagnostics: diagnostics,
+		Value:                current,
+		From:                 from,
+		To:                   target,
+		Converter:            converter,
+		Quality:              quality,
+		Steps:                steps,
+		Diagnostics:          diagnostics,
+		DiagnosticsTruncated: truncated,
 	}, nil
 }
 

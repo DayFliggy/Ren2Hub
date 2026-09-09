@@ -25,7 +25,7 @@ func TestResponseOpenAI2GeminiMapsTextToolFinishReasonAndUsage(t *testing.T) {
 		},
 	})
 
-	resp := ResponseOpenAI2Gemini(&dto.OpenAITextResponse{
+	resp, err := ResponseOpenAI2Gemini(&dto.OpenAITextResponse{
 		Model: "gpt-test",
 		Choices: []dto.OpenAITextResponseChoice{
 			{
@@ -40,6 +40,7 @@ func TestResponseOpenAI2GeminiMapsTextToolFinishReasonAndUsage(t *testing.T) {
 			TotalTokens:      16,
 		},
 	}, nil)
+	require.NoError(t, err)
 
 	assert.Equal(t, 11, resp.UsageMetadata.PromptTokenCount)
 	assert.Equal(t, 5, resp.UsageMetadata.CandidatesTokenCount)
@@ -64,7 +65,7 @@ func TestResponseOpenAI2GeminiMapsTextToolFinishReasonAndUsage(t *testing.T) {
 }
 
 func TestStreamResponseOpenAI2GeminiMapsToolCallFinishReasonAndUsage(t *testing.T) {
-	resp := StreamResponseOpenAI2Gemini(&dto.ChatCompletionsStreamResponse{
+	resp, err := StreamResponseOpenAI2Gemini(&dto.ChatCompletionsStreamResponse{
 		Choices: []dto.ChatCompletionsStreamResponseChoice{
 			{
 				Index:        1,
@@ -88,6 +89,7 @@ func TestStreamResponseOpenAI2GeminiMapsToolCallFinishReasonAndUsage(t *testing.
 			TotalTokens:      21,
 		},
 	}, &convmeta.Values{})
+	require.NoError(t, err)
 
 	require.NotNil(t, resp)
 	assert.Equal(t, 13, resp.UsageMetadata.PromptTokenCount)
