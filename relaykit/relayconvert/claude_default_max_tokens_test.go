@@ -88,7 +88,7 @@ func TestClaudeDefaultMaxTokensPresence(t *testing.T) {
 // "-thinking" request without max_tokens must keep converting even when no
 // DefaultMaxTokens hook is configured.
 func TestClaudeThinkingAdapterSatisfiesMaxTokensWithoutCallback(t *testing.T) {
-	meta := &convmeta.Values{Options: &convmeta.Options{
+	meta := &convmeta.Values{ReasoningConversion: &dto.ReasoningConversionState{Mode: "enabled"}, Options: &convmeta.Options{
 		Claude: convmeta.ClaudeOptions{
 			ThinkingAdapterEnabled:                true,
 			ThinkingAdapterBudgetTokensPercentage: 0.8,

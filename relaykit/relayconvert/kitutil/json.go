@@ -84,3 +84,5 @@ func Any2Type[T any](data any) (T, error) {
 	}
 	return res, nil
 }
+
+func Valid(data []byte) bool { return json.Valid(data) }

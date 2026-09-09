@@ -59,7 +59,14 @@ func (e *ConversionLossError) Error() string {
 }
 
 func RejectConversionLoss(policy ConversionLossPolicy, diagnostics []ConversionDiagnostic) error {
-	if policy == ConversionLossPolicyAllow || len(diagnostics) == 0 {
+	switch policy {
+	case "", ConversionLossPolicyAllow:
+		return nil
+	case ConversionLossPolicySafe, ConversionLossPolicyStrict:
+	default:
+		return fmt.Errorf("unsupported conversion loss policy %q", policy)
+	}
+	if len(diagnostics) == 0 {
 		return nil
 	}
 	rejected := make([]ConversionDiagnostic, 0, len(diagnostics))

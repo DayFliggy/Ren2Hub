@@ -233,7 +233,10 @@ func OptionsOf(m Meta) *Options {
 	if m == nil {
 		return &Options{}
 	}
-	return m.ConvOptions()
+	if options := m.ConvOptions(); options != nil {
+		return options
+	}
+	return &Options{}
 }
 
 // ReasoningStateOf is a nil-safe reader for Meta.ReasoningState.
