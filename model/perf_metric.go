@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"time"
 
 	"gorm.io/gorm"
@@ -30,7 +31,19 @@ func UpsertPerfMetric(metric *PerfMetric) error {
 	if metric == nil || metric.RequestCount == 0 {
 		return nil
 	}
-	return DB.Clauses(clause.OnConflict{
+	return upsertPerfMetric(DB, metric)
+}
+
+func FlushPerfMetric(ctx context.Context, operationID string, metric *PerfMetric) error {
+	return ApplyFlushOperation(ctx, operationID, func(tx *gorm.DB) error {
+		copy := *metric
+		copy.Id = 0
+		return upsertPerfMetric(tx, &copy)
+	})
+}
+
+func upsertPerfMetric(tx *gorm.DB, metric *PerfMetric) error {
+	return tx.Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "model_name"},
 			{Name: "group"},

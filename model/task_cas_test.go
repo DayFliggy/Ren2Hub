@@ -47,6 +47,8 @@ func TestMain(m *testing.M) {
 		&Log{},
 		&Channel{},
 		&QuotaData{},
+		&FlushOperation{},
+		&FlushOperation{},
 		&Ability{},
 		&TopUp{},
 		&SubscriptionPlan{},

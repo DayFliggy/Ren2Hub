@@ -1,9 +1,11 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
@@ -761,6 +763,15 @@ func beginBillingRecoveryQuotaMutation(requestID string, fenceUser, fenceToken b
 	// updater stall.
 	quotaBatchMutationLock.Lock()
 	mutation.batchLocked = true
+	// Resolve an earlier frozen batch before taking newer cache deltas. Its
+	// commit acknowledgement may have been lost; the receipt prevents replay.
+	flushCtx, cancelFlush := context.WithTimeout(context.Background(), 5*time.Second)
+	flushErr := flushPendingQuotaBatchLocked(flushCtx)
+	cancelFlush()
+	if flushErr != nil {
+		mutation.release(false)
+		return nil, flushErr
+	}
 	mutation.userPendingDelta = takePendingQuotaDelta(BatchUpdateTypeUserQuota, mutation.userID)
 	mutation.tokenPendingDelta = takePendingQuotaDelta(BatchUpdateTypeTokenQuota, mutation.tokenID)
 	return mutation, nil

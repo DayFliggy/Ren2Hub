@@ -1,14 +1,15 @@
 package model
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 
-	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
 )
 
@@ -76,10 +77,22 @@ func init() {
 }
 
 func InitBatchUpdater() {
-	gopool.Go(func() {
+	modelBackground.Go(func(ctx context.Context) {
+		interval := time.Duration(common.BatchUpdateInterval) * time.Second
+		if interval <= 0 {
+			interval = time.Second
+		}
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
 		for {
-			time.Sleep(time.Duration(common.BatchUpdateInterval) * time.Second)
-			batchUpdate()
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := FlushBatchUpdates(ctx); err != nil {
+					common.SysError("batch update failed: " + err.Error())
+				}
+			}
 		}
 	})
 }
@@ -94,70 +107,80 @@ func addNewRecord(type_ int, id int, value int) {
 	}
 }
 
+type quotaFlushBatch struct {
+	id     string
+	stores []map[int]int
+}
+
+var pendingQuotaFlush *quotaFlushBatch
+
 func batchUpdate() {
+	if err := FlushBatchUpdates(context.Background()); err != nil {
+		common.SysError("batch update failed: " + err.Error())
+	}
+}
+func FlushBatchUpdates(ctx context.Context) error {
 	quotaBatchMutationLock.Lock()
 	defer quotaBatchMutationLock.Unlock()
-
-	// check if there's any data to update
-	hasData := false
-	for i := 0; i < BatchUpdateTypeCount; i++ {
-		batchUpdateLocks[i].Lock()
-		if len(batchUpdateStores[i]) > 0 {
-			hasData = true
-			batchUpdateLocks[i].Unlock()
-			break
-		}
-		batchUpdateLocks[i].Unlock()
+	if err := flushPendingQuotaBatchLocked(ctx); err != nil {
+		return err
 	}
-
-	if !hasData {
-		return
-	}
-
-	common.SysLog("batch update started")
 	stores := make([]map[int]int, BatchUpdateTypeCount)
-	for i := 0; i < BatchUpdateTypeCount; i++ {
+	hasData := false
+	for i := range stores {
 		batchUpdateLocks[i].Lock()
 		stores[i] = batchUpdateStores[i]
 		batchUpdateStores[i] = make(map[int]int)
+		hasData = hasData || len(stores[i]) != 0
 		batchUpdateLocks[i].Unlock()
 	}
+	if !hasData {
+		return nil
+	}
+	pendingQuotaFlush = &quotaFlushBatch{id: common.GetUUID(), stores: stores}
+	return flushPendingQuotaBatchLocked(ctx)
+}
 
-	for i, store := range stores {
-		if i == BatchUpdateTypeUserQuota || i == BatchUpdateTypeUsedQuota || i == BatchUpdateTypeRequestCount {
-			continue
-		}
-		for key, value := range store {
-			switch i {
-			case BatchUpdateTypeTokenQuota:
-				err := increaseTokenQuota(key, value)
-				if err != nil {
-					common.SysLog("failed to batch update token quota: " + err.Error())
+// Caller holds quotaBatchMutationLock. Recovery resolves any frozen batch
+// before extracting newer deltas, even after an ambiguous commit failure.
+func flushPendingQuotaBatchLocked(ctx context.Context) error {
+	if pendingQuotaFlush == nil {
+		return nil
+	}
+	batch := pendingQuotaFlush
+	err := ApplyFlushOperation(ctx, batch.id, func(tx *gorm.DB) error {
+		for kind, store := range batch.stores {
+			for id, delta := range store {
+				if delta == 0 {
+					continue
 				}
-			case BatchUpdateTypeChannelUsedQuota:
-				updateChannelUsedQuota(key, value)
+				var result *gorm.DB
+				switch kind {
+				case BatchUpdateTypeUserQuota:
+					result = tx.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota + ?", delta))
+				case BatchUpdateTypeUsedQuota:
+					result = tx.Model(&User{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", delta))
+				case BatchUpdateTypeRequestCount:
+					result = tx.Model(&User{}).Where("id = ?", id).Update("request_count", gorm.Expr("request_count + ?", delta))
+				case BatchUpdateTypeTokenQuota:
+					result = tx.Unscoped().Model(&Token{}).Where("id = ?", id).Updates(map[string]any{"remain_quota": gorm.Expr("remain_quota + ?", delta), "used_quota": gorm.Expr("used_quota - ?", delta), "accessed_time": common.GetTimestamp()})
+				case BatchUpdateTypeChannelUsedQuota:
+					result = tx.Model(&Channel{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", delta))
+				}
+				if result.Error != nil {
+					return result.Error
+				}
+				if result.RowsAffected != 1 {
+					return fmt.Errorf("batch resource missing: kind=%d id=%d", kind, id)
+				}
 			}
 		}
+		return nil
+	})
+	if err == nil {
+		pendingQuotaFlush = nil
 	}
-
-	userQuotaStore := stores[BatchUpdateTypeUserQuota]
-	usedQuotaStore := stores[BatchUpdateTypeUsedQuota]
-	requestCountStore := stores[BatchUpdateTypeRequestCount]
-
-	userIDs := make(map[int]struct{}, len(userQuotaStore)+len(usedQuotaStore)+len(requestCountStore))
-	for key := range userQuotaStore {
-		userIDs[key] = struct{}{}
-	}
-	for key := range usedQuotaStore {
-		userIDs[key] = struct{}{}
-	}
-	for key := range requestCountStore {
-		userIDs[key] = struct{}{}
-	}
-	for key := range userIDs {
-		updateUserQuotaUsedQuotaAndRequestCount(key, userQuotaStore[key], usedQuotaStore[key], requestCountStore[key])
-	}
-	common.SysLog("batch update finished")
+	return err
 }
 
 func RecordExist(err error) (bool, error) {

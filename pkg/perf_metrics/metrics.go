@@ -10,19 +10,25 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/lifecycle"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/perf_metrics_setting"
 )
 
 var hotBuckets sync.Map
+var bucketsMu sync.Mutex
+var metricWorkers lifecycle.Workers
 
 // seriesSchema is a stable client cache/schema marker. Do not change it when
 // hiding fields or making response-only privacy hardening changes.
 const seriesSchema = "dbcd0a3c01b55203"
 
 func Init() {
-	go flushLoop()
+	metricWorkers.Go(flushLoop)
 }
+
+// Stop waits for periodic writes; call Flush after all producers have exited.
+func Stop(ctx context.Context) error { return metricWorkers.Stop(ctx) }
 
 func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens int64) {
 	if info == nil {
@@ -71,12 +77,19 @@ func Record(sample Sample) {
 		group:    sample.Group,
 		bucketTs: bucketStart(time.Now().Unix()),
 	}
+	bucketsMu.Lock()
 	actual, _ := hotBuckets.LoadOrStore(key, &atomicBucket{})
 	actual.(*atomicBucket).add(sample)
+	bucketsMu.Unlock()
 	recordRedis(key, sample)
 }
 
 func Query(params QueryParams) (QueryResult, error) {
+	flushMu.Lock()
+	defer flushMu.Unlock()
+	if err := resolvePendingMetrics(context.Background()); err != nil {
+		return QueryResult{}, err
+	}
 	if params.Hours <= 0 {
 		params.Hours = 24
 	}
@@ -123,6 +136,11 @@ func Query(params QueryParams) (QueryResult, error) {
 }
 
 func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
+	flushMu.Lock()
+	defer flushMu.Unlock()
+	if err := resolvePendingMetrics(context.Background()); err != nil {
+		return SummaryAllResult{}, err
+	}
 	if hours <= 0 {
 		hours = 24
 	}
