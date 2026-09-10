@@ -305,13 +305,28 @@ func refreshOneChannelWithHash(ctx context.Context, channel *model.Channel, abil
 	return model.PublishChannelCapabilitySnapshot(ctx, channel.Id, expected, sourceHash, catalog.Version, capabilities)
 }
 
+// channelCapabilitySnapshotMatches decides whether the scheduled fingerprint
+// scan may skip a channel. A stale projection shape must never be skipped:
+// the source fingerprint does not change when the projection changes, so
+// without this check an upgraded build would leave every channel on rows the
+// request path rejects, taking the whole channel offline.
 func channelCapabilitySnapshotMatches(channelID int, sourceHash, catalogVersion string) bool {
 	var snapshot model.ChannelCapabilitySnapshot
 	if err := model.DB.Where("channel_id = ?", channelID).First(&snapshot).Error; err != nil {
 		return false
 	}
-	return snapshot.RefreshStatus == model.RouteCapabilityRefreshActive &&
-		snapshot.SourceHash == sourceHash && snapshot.CatalogVersion == catalogVersion
+	if snapshot.RefreshStatus != model.RouteCapabilityRefreshActive ||
+		snapshot.SourceHash != sourceHash || snapshot.CatalogVersion != catalogVersion {
+		return false
+	}
+	var staleProjections int64
+	if err := model.DB.Model(&model.ChannelModelCapability{}).
+		Where("channel_id = ? AND snapshot_version = ? AND projection_version <> ?",
+			channelID, snapshot.ActiveVersion, model.ChannelCapabilityProjectionCurrent).
+		Count(&staleProjections).Error; err != nil {
+		return false
+	}
+	return staleProjections == 0
 }
 
 func RebuildRouteCapabilityIndex(ctx context.Context) error {
@@ -342,11 +357,20 @@ func RebuildRouteCapabilityIndex(ctx context.Context) error {
 		ByRequestModel: make(map[string][]indexedCapability),
 		Generation:     uint64(time.Now().UnixNano()),
 	}
+	staleProjections := 0
 	for _, capability := range capabilities {
 		if activeVersion[capability.ChannelID] != capability.SnapshotVersion {
 			continue
 		}
 		if _, exists := channelExists[capability.ChannelID]; !exists {
+			continue
+		}
+		// A row projected by an older build no longer describes the same facts
+		// as the current shape. Refuse it here instead of routing on fields
+		// that may be absent, and surface the count so the operator can see
+		// that a reprojection is pending rather than silently losing channels.
+		if capability.ProjectionVersion != model.ChannelCapabilityProjectionCurrent {
+			staleProjections++
 			continue
 		}
 		index.ByRequestModel[capability.RequestModel] = append(index.ByRequestModel[capability.RequestModel], indexedCapability{
@@ -371,6 +395,9 @@ func RebuildRouteCapabilityIndex(ctx context.Context) error {
 		})
 	}
 	routeCapabilityIndex.Store(index)
+	if staleProjections > 0 {
+		common.SysError(fmt.Sprintf("route capability index skipped %d rows below projection version %d; a capability refresh is required before those channels can route", staleProjections, model.ChannelCapabilityProjectionCurrent))
+	}
 	return nil
 }
 
@@ -457,7 +484,7 @@ func projectChannelCapabilities(channel *model.Channel, abilities []model.Abilit
 			Priority:          channel.GetPriority(),
 			Weight:            channel.GetWeight(),
 			ChannelType:       channel.Type,
-			ProjectionVersion: model.ChannelCapabilityProjectionV1,
+			ProjectionVersion: model.ChannelCapabilityProjectionCurrent,
 			IsMixed:           isMixed,
 			State:             state,
 			UpdatedAt:         time.Now().Unix(),

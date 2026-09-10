@@ -65,14 +65,14 @@ func TestListEligibleRouteChannelsReportsOnlyActiveCapabilitySnapshot(t *testing
 	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), activeChannelID, model.ChannelCapabilitySnapshotFence{}, "eligible-source", "eligible-catalog", []model.ChannelModelCapability{{
 		RequestModel: "gpt-test", ActualModel: "gpt-test", LabSlug: "openai", Source: "canonical", Confidence: 1,
 		AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
-		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
+		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionCurrent, State: model.RouteCapabilityStateEligible,
 	}}))
 	activeFence, err := model.GetChannelCapabilitySnapshotFence(context.Background(), activeChannelID)
 	require.NoError(t, err)
 	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), activeChannelID, activeFence, "eligible-source-v2", "eligible-catalog-v2", []model.ChannelModelCapability{{
 		RequestModel: "gpt-test-v2", ActualModel: "gpt-test-v2", LabSlug: "openai", Source: "canonical", Confidence: 1,
 		AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
-		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
+		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionCurrent, State: model.RouteCapabilityStateEligible,
 	}}))
 	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", activeChannelID).Update("model", "gpt-test-v2").Error)
 
@@ -117,8 +117,8 @@ func TestRouteCatalogFiltersCapabilitiesWithoutCurrentModelAbility(t *testing.T)
 	endpoints, err := common.Marshal([]string{string(constant.EndpointTypeOpenAI)})
 	require.NoError(t, err)
 	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, model.ChannelCapabilitySnapshotFence{}, "catalog-access-source", "catalog-access-v1", []model.ChannelModelCapability{
-		{RequestModel: "gpt-hidden", ActualModel: "gpt-hidden", LabSlug: "openai", Source: "canonical", Confidence: 1, AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled, ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible},
-		{RequestModel: "gpt-visible", ActualModel: "gpt-visible", LabSlug: "openai", Source: "canonical", Confidence: 1, AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled, ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible},
+		{RequestModel: "gpt-hidden", ActualModel: "gpt-hidden", LabSlug: "openai", Source: "canonical", Confidence: 1, AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled, ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionCurrent, State: model.RouteCapabilityStateEligible},
+		{RequestModel: "gpt-visible", ActualModel: "gpt-visible", LabSlug: "openai", Source: "canonical", Confidence: 1, AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled, ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionCurrent, State: model.RouteCapabilityStateEligible},
 	}))
 
 	recorder := httptest.NewRecorder()

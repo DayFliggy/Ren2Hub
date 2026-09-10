@@ -350,7 +350,7 @@ func TestRecheckLiveRouteCandidateRejectsStaleActiveSnapshot(t *testing.T) {
 	}, "preview-source-v2", "preview-catalog-v2", []model.ChannelModelCapability{{
 		RequestModel: "gpt-test", ActualModel: "gpt-test", LabSlug: "openai", Source: "canonical", Confidence: 1,
 		AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
-		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
+		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionCurrent, State: model.RouteCapabilityStateEligible,
 	}}))
 
 	err = RecheckLiveRouteCandidate(LiveRouteCandidateQualificationRequest{

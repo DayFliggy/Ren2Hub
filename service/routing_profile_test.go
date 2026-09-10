@@ -71,7 +71,7 @@ func publishRoutePreviewCapability(t *testing.T, channelID int, endpointTypes []
 	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, model.ChannelCapabilitySnapshotFence{}, fmt.Sprintf("preview-source-%d", channelID), "preview-catalog", []model.ChannelModelCapability{{
 		RequestModel: "gpt-test", ActualModel: "gpt-test", LabSlug: "openai", Source: "canonical", Confidence: 1,
 		AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
-		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: state,
+		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionCurrent, State: state,
 	}}))
 	require.NoError(t, RebuildRouteCapabilityIndex(context.Background()))
 }
@@ -478,7 +478,7 @@ func TestRouteProfilePreviewUsesOnlyActiveCapabilitySnapshot(t *testing.T) {
 	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, firstFence, "preview-source-new", "preview-catalog-new", []model.ChannelModelCapability{{
 		RequestModel: "gpt-test", ActualModel: "gpt-test-new", LabSlug: "openai", Source: "canonical", Confidence: 1,
 		AbilityEnabled: true, EndpointTypes: string(endpointsJSON), ChannelStatus: common.ChannelStatusEnabled,
-		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
+		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionCurrent, State: model.RouteCapabilityStateEligible,
 	}}))
 
 	created, err := CreateUserRouteProfile(RouteProfileInput{

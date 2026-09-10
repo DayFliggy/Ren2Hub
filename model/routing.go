@@ -36,12 +36,18 @@ const (
 	RouteCapabilityRefreshBuilding  = "building"
 	RouteCapabilityRefreshFailed    = "failed"
 	ChannelCapabilityProjectionV1   = 1
-	RouteMaxPolicyWeight            = 1_000_000
-	RouteMaxPolicyRatio             = 1_000
-	RouteMaxRetryAttempts           = 3
-	RouteMaxFailoverAttempts        = 3
-	RouteNameMaxLength              = 64
-	RouteMaxConcurrency             = 1_000_000
+	ChannelCapabilityProjectionV2   = 2
+	// ChannelCapabilityProjectionCurrent is the only projection shape the
+	// request path accepts. V2 replaced the ability_groups list with an
+	// explicit AbilityEnabled state, so a V1 row no longer describes the same
+	// facts and must be reprojected before it can select a channel.
+	ChannelCapabilityProjectionCurrent = ChannelCapabilityProjectionV2
+	RouteMaxPolicyWeight               = 1_000_000
+	RouteMaxPolicyRatio                = 1_000
+	RouteMaxRetryAttempts              = 3
+	RouteMaxFailoverAttempts           = 3
+	RouteNameMaxLength                 = 64
+	RouteMaxConcurrency                = 1_000_000
 )
 
 type UserRouteProfile struct {
