@@ -15,6 +15,12 @@ func SetRelayRouter(router *gin.Engine) {
 	router.Use(middleware.DecompressRequestMiddleware())
 	router.Use(middleware.BodyStorageCleanup()) // 清理请求体存储
 	router.Use(middleware.StatsMiddleware())
+	// A user admission lease must be released on every exit path. Gin applies
+	// engine middleware only to routes registered after the Use call, so every
+	// router that mounts a generation or submission entry registers this
+	// itself rather than relying on SetRouter ordering. The cleanup is a no-op
+	// for requests that never acquired admission, so double registration
+	// across routers is harmless.
 	router.Use(middleware.UserAdmissionCleanup())
 	// https://platform.openai.com/docs/api-reference/introduction
 	modelsRouter := router.Group("/v1/models")

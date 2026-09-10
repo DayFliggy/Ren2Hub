@@ -8,6 +8,12 @@ import (
 )
 
 func SetVideoRouter(router *gin.Engine) {
+	// Registered here as well as in SetRelayRouter: these routes may be mounted
+	// on an engine that never called SetRelayRouter (integration tests do this),
+	// and Gin's engine middleware is not retroactive. Releasing admission twice
+	// is a no-op, whereas missing it holds the lease until its TTL expires.
+	router.Use(middleware.UserAdmissionCleanup())
+
 	// Video proxy: accepts either session auth (dashboard) or token auth (API clients)
 	videoProxyRouter := router.Group("/v1")
 	videoProxyRouter.Use(middleware.RouteTag("relay"))
