@@ -28,6 +28,21 @@ func ApplyReasoning(ctx context.Context, req *dto.ClaudeRequest, info convmeta.M
 	}
 	if preserveSuffix {
 		suffix = reasoning.Intent{}
+	} else if crossProtocol && suffix.IsEmpty() {
+		// A cross-protocol source carries reasoning strength only in the model
+		// name when the caller supplied no conversion state. Anthropic rejects
+		// the suffixed name, so the tail is resolved here instead of being
+		// forwarded verbatim. Native Claude requests keep the passthrough
+		// below, because a Claude-compatible proxy may define its own suffix.
+		trimmed, parsed, found, err := reasoning.ParseClaudeModelSuffix(baseModel, opts.Claude.ThinkingAdapterEnabled)
+		if err != nil {
+			return err
+		}
+		if found {
+			baseModel = trimmed
+			capabilityModel = trimmed
+			suffix = parsed
+		}
 	}
 	// A native Claude request without a host modifier is already in the target
 	// protocol, including Claude-compatible proxies that keep native controls
