@@ -36,7 +36,7 @@ func setupMetricFlush(t *testing.T) {
 
 func TestFlushIncludesCurrentBucketAndRetriesWithoutDuplicating(t *testing.T) {
 	setupMetricFlush(t)
-	Record(Sample{Model: "model", Group: "default", Success: true, LatencyMs: 50, HasTtft: true, TtftMs: 10, OutputTokens: 4, GenerationMs: 40})
+	Record(Sample{Model: "model", Success: true, LatencyMs: 50, HasTtft: true, TtftMs: 10, OutputTokens: 4, GenerationMs: 40})
 	injected := errors.New("metric storage unavailable")
 	require.NoError(t, model.DB.Callback().Create().Before("gorm:create").Register("fail_metric", func(tx *gorm.DB) {
 		if tx.Statement.Table == "perf_metrics" {
@@ -44,7 +44,7 @@ func TestFlushIncludesCurrentBucketAndRetriesWithoutDuplicating(t *testing.T) {
 		}
 	}))
 	require.ErrorIs(t, Flush(context.Background()), injected)
-	Record(Sample{Model: "model", Group: "default", LatencyMs: 20})
+	Record(Sample{Model: "model", LatencyMs: 20})
 	require.NoError(t, model.DB.Callback().Create().Remove("fail_metric"))
 	require.NoError(t, Flush(context.Background()))
 	require.NoError(t, Flush(context.Background()))
@@ -62,12 +62,12 @@ func TestFlushIncludesCurrentBucketAndRetriesWithoutDuplicating(t *testing.T) {
 func TestQueryResolvesLostFlushAcknowledgementWithoutDoubleCounting(t *testing.T) {
 	setupMetricFlush(t)
 	ts := bucketStart(time.Now().Unix())
-	key := bucketKey{model: "model", group: "default", bucketTs: ts}
-	metric := &model.PerfMetric{ModelName: "model", Group: "default", BucketTs: ts, RequestCount: 1, SuccessCount: 1, TotalLatencyMs: 50}
+	key := bucketKey{model: "model", bucketTs: ts}
+	metric := &model.PerfMetric{ModelName: "model", BucketTs: ts, RequestCount: 1, SuccessCount: 1, TotalLatencyMs: 50}
 	require.NoError(t, model.FlushPerfMetric(context.Background(), "lost-ack", metric))
 	pendingFlush[key] = &metricFlush{id: "lost-ack", metric: metric}
-	Record(Sample{Model: "model", Group: "default", Success: true, LatencyMs: 30})
-	result, err := QuerySummaryAll(1, nil)
+	Record(Sample{Model: "model", Success: true, LatencyMs: 30})
+	result, err := QuerySummaryAll(1)
 	require.NoError(t, err)
 	require.Len(t, result.Models, 1)
 	assert.Equal(t, int64(2), result.Models[0].RequestCount)

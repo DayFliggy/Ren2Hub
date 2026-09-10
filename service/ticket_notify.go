@@ -7,11 +7,10 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	serviceauthz "github.com/QuantumNous/new-api/service/authz"
-	"github.com/bytedance/gopkg/util/gopool"
 )
 
 func NotifyNewTicket(ticket model.Ticket) {
-	gopool.Go(func() {
+	common.GoDeferred(func() {
 		NotifyRootUser(
 			dto.NotifyTypeTicketUpdate,
 			fmt.Sprintf("New ticket #%d", ticket.ID),
@@ -21,7 +20,7 @@ func NotifyNewTicket(ticket model.Ticket) {
 }
 
 func NotifyTicketUserReply(ticket model.Ticket) {
-	gopool.Go(func() {
+	common.GoDeferred(func() {
 		if ticket.AssigneeID == nil {
 			notifyRootAboutTicketReply(ticket)
 			return
@@ -36,13 +35,13 @@ func NotifyTicketUserReply(ticket model.Ticket) {
 }
 
 func NotifyTicketSupportReply(ticket model.Ticket) {
-	gopool.Go(func() {
+	common.GoDeferred(func() {
 		notifyTicketUser(ticket.UserID, ticket.ID, "Support replied to your ticket", ticket.Title)
 	})
 }
 
 func NotifyTicketAssignment(ticket model.Ticket, assigneeID int) {
-	gopool.Go(func() {
+	common.GoDeferred(func() {
 		agent, ok := getEligibleTicketAgent(assigneeID)
 		if !ok {
 			return

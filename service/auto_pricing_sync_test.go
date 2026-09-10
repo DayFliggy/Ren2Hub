@@ -138,7 +138,7 @@ func TestSyncInvalidatesPricingCacheOnlyWhenCatalogChanges(t *testing.T) {
 		Name:   "auto-pricing-cache-test",
 	}).Error)
 	require.NoError(t, model.DB.Create(&model.Ability{
-		Group:     "default",
+
 		Model:     "probe-model",
 		ChannelId: channelID,
 		Enabled:   true,

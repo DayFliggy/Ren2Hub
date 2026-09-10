@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -81,12 +82,11 @@ func ReloadPolicy() error {
 // snapshot refreshed afterwards. Without this loop other instances in a
 // multi-node deployment would keep serving stale permissions (including not
 // honoring a revoked grant) until restart. Mirrors model.SyncOptions polling.
-func StartPolicySync(frequency int) {
+func StartPolicySync(ctx context.Context, frequency int) {
 	if frequency <= 0 {
 		return
 	}
-	for {
-		time.Sleep(time.Duration(frequency) * time.Second)
+	for common.WaitBackground(ctx, time.Duration(frequency)*time.Second) {
 		if err := ReloadPolicy(); err != nil {
 			common.SysError("failed to reload authz policy: " + err.Error())
 		}

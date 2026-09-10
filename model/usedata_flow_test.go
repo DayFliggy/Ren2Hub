@@ -26,11 +26,11 @@ func TestGetFlowQuotaDataUsesQuotaDataRoleSpecificDimensions(t *testing.T) {
 	seedFlowLookupData(t)
 
 	seedFlowQuotaData(t, QuotaData{
-		UserID:    1,
-		Username:  "alice",
-		NodeName:  "node-a",
-		TokenID:   11,
-		UseGroup:  "vip",
+		UserID:   1,
+		Username: "alice",
+		NodeName: "node-a",
+		TokenID:  11,
+
 		ModelName: "gpt-a",
 		ChannelID: 1,
 		CreatedAt: 1000,
@@ -39,11 +39,11 @@ func TestGetFlowQuotaDataUsesQuotaDataRoleSpecificDimensions(t *testing.T) {
 		TokenUsed: 40,
 	})
 	seedFlowQuotaData(t, QuotaData{
-		UserID:    1,
-		Username:  "alice",
-		NodeName:  "node-a",
-		TokenID:   11,
-		UseGroup:  "vip",
+		UserID:   1,
+		Username: "alice",
+		NodeName: "node-a",
+		TokenID:  11,
+
 		ModelName: "gpt-a",
 		ChannelID: 1,
 		CreatedAt: 1100,
@@ -52,11 +52,11 @@ func TestGetFlowQuotaDataUsesQuotaDataRoleSpecificDimensions(t *testing.T) {
 		TokenUsed: 20,
 	})
 	seedFlowQuotaData(t, QuotaData{
-		UserID:    1,
-		Username:  "alice",
-		NodeName:  "node-a",
-		TokenID:   11,
-		UseGroup:  "vip",
+		UserID:   1,
+		Username: "alice",
+		NodeName: "node-a",
+		TokenID:  11,
+
 		ModelName: "gpt-a",
 		ChannelID: 2,
 		CreatedAt: 1200,
@@ -65,11 +65,11 @@ func TestGetFlowQuotaDataUsesQuotaDataRoleSpecificDimensions(t *testing.T) {
 		TokenUsed: 10,
 	})
 	seedFlowQuotaData(t, QuotaData{
-		UserID:    2,
-		Username:  "bob",
-		NodeName:  "node-b",
-		TokenID:   22,
-		UseGroup:  "default",
+		UserID:   2,
+		Username: "bob",
+		NodeName: "node-b",
+		TokenID:  22,
+
 		ModelName: "gpt-b",
 		ChannelID: 1,
 		CreatedAt: 1300,
@@ -86,6 +86,11 @@ func TestGetFlowQuotaDataUsesQuotaDataRoleSpecificDimensions(t *testing.T) {
 		Quota:     999,
 		TokenUsed: 999,
 	})
+	newRows,err:=GetFlowQuotaData(1400,1400,"",1,common.RoleCommonUser)
+	require.NoError(t,err)
+	require.Len(t,newRows,1)
+	require.Equal(t,999,newRows[0].Quota)
+	require.NoError(t,DB.Where("model_name = ?","legacy").Delete(&QuotaData{}).Error)
 
 	rootRows, err := GetFlowQuotaData(900, 2000, "", 0, common.RoleRootUser)
 	require.NoError(t, err)
@@ -93,12 +98,12 @@ func TestGetFlowQuotaDataUsesQuotaDataRoleSpecificDimensions(t *testing.T) {
 	// Token 11 was soft-deleted, so its name is intentionally left empty for the
 	// frontend to render a localized "deleted (id)" label instead.
 	require.Equal(t, FlowQuotaData{
-		UserID:      1,
-		Username:    "alice",
-		NodeName:    "node-a",
-		TokenID:     11,
-		TokenName:   "",
-		UseGroup:    "vip",
+		UserID:    1,
+		Username:  "alice",
+		NodeName:  "node-a",
+		TokenID:   11,
+		TokenName: "",
+
 		ChannelID:   1,
 		ChannelName: "east",
 		ModelName:   "gpt-a",
@@ -117,7 +122,6 @@ func TestGetFlowQuotaDataUsesQuotaDataRoleSpecificDimensions(t *testing.T) {
 	require.Empty(t, adminRows[0].TokenName)
 	require.Empty(t, adminRows[0].NodeName)
 	require.Equal(t, "alice", adminRows[0].Username)
-	require.Equal(t, "vip", adminRows[0].UseGroup)
 	require.Equal(t, "east", adminRows[0].ChannelName)
 	require.Equal(t, 150, adminRows[0].Quota)
 
@@ -128,11 +132,10 @@ func TestGetFlowQuotaDataUsesQuotaDataRoleSpecificDimensions(t *testing.T) {
 	require.Equal(t, 0, selfRows[0].ChannelID)
 	require.Empty(t, selfRows[0].ChannelName)
 	require.Empty(t, selfRows[0].TokenName)
-	require.Equal(t, "vip", selfRows[0].UseGroup)
 	require.Equal(t, 175, selfRows[0].Quota)
 }
 
-func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
+func TestLogQuotaDataMergesSameUserTokenChannelNodeHour(t *testing.T) {
 	truncateTables(t)
 	CacheQuotaDataLock.Lock()
 	CacheQuotaData = make(map[string]*QuotaData)
@@ -143,7 +146,7 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 		Username:  "alice",
 		ModelName: "gpt-a",
 		CreatedAt: 3661,
-		UseGroup:  "vip",
+
 		TokenID:   11,
 		ChannelID: 1,
 		NodeName:  "node-a",
@@ -155,7 +158,7 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 		Username:  "alice",
 		ModelName: "gpt-a",
 		CreatedAt: 3700,
-		UseGroup:  "vip",
+
 		TokenID:   11,
 		ChannelID: 1,
 		NodeName:  "node-a",
@@ -167,7 +170,7 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 		Username:  "alice",
 		ModelName: "gpt-a",
 		CreatedAt: 3700,
-		UseGroup:  "default",
+
 		TokenID:   11,
 		ChannelID: 1,
 		NodeName:  "node-a",
@@ -179,15 +182,12 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 
 	var rows []QuotaData
 	require.NoError(t, DB.Order("quota DESC").Find(&rows).Error)
-	require.Len(t, rows, 2)
+	require.Len(t, rows, 1)
 	require.Equal(t, int64(3600), rows[0].CreatedAt)
-	require.Equal(t, "vip", rows[0].UseGroup)
 	require.Equal(t, 11, rows[0].TokenID)
 	require.Equal(t, 1, rows[0].ChannelID)
 	require.Equal(t, "node-a", rows[0].NodeName)
-	require.Equal(t, 2, rows[0].Count)
-	require.Equal(t, 150, rows[0].Quota)
-	require.Equal(t, 60, rows[0].TokenUsed)
-	require.Equal(t, "default", rows[1].UseGroup)
-	require.Equal(t, 25, rows[1].Quota)
+	require.Equal(t, 3, rows[0].Count)
+	require.Equal(t, 175, rows[0].Quota)
+	require.Equal(t, 70, rows[0].TokenUsed)
 }

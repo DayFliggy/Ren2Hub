@@ -116,7 +116,7 @@ func InitAutoPricing() {
 	if loadAutoPricingFromDisk() {
 		common.SysLog("auto pricing catalog restored from local cache")
 	}
-	go runAutoPricingRefreshLoop()
+	common.BackgroundWorkers.Go(runAutoPricingRefreshLoop)
 }
 
 func SyncAutoPricingOnce(ctx context.Context, force bool) error {
@@ -492,20 +492,26 @@ func recordAutoPricingSync(errMessage, source string) {
 	}
 }
 
-func runAutoPricingRefreshLoop() {
-	time.Sleep(10 * time.Second)
-	for {
+func runAutoPricingRefreshLoop(ctx context.Context) {
+	if !common.WaitBackground(ctx, 10*time.Second) {
+		return
+	}
+	for ctx.Err() == nil {
 		setting := ratio_setting.GetAutoPricingSetting()
 		if setting.Enabled {
-			if err := SyncAutoPricingOnce(context.Background(), false); err != nil {
+			if err := SyncAutoPricingOnce(ctx, false); err != nil {
 				common.SysError("auto pricing sync failed: " + err.Error())
 			}
 		}
 		if !ratio_setting.GetAutoPricingSetting().Enabled {
-			time.Sleep(time.Minute)
+			if !common.WaitBackground(ctx, time.Minute) {
+				return
+			}
 			continue
 		}
-		time.Sleep(time.Duration(ratio_setting.GetAutoPricingSetting().EffectiveCheckIntervalMinutes()) * time.Minute)
+		if !common.WaitBackground(ctx, time.Duration(ratio_setting.GetAutoPricingSetting().EffectiveCheckIntervalMinutes())*time.Minute) {
+			return
+		}
 	}
 }
 

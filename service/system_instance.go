@@ -12,8 +12,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-
-	"github.com/bytedance/gopkg/util/gopool"
 )
 
 const systemInstanceReportInterval = 30 * time.Second
@@ -64,12 +62,17 @@ type SystemInstanceStorageMetrics struct {
 
 func StartSystemInstanceReporter() {
 	systemInstanceReporterOnce.Do(func() {
-		gopool.Go(func() {
+		common.BackgroundWorkers.Go(func(ctx context.Context) {
 			reportSystemInstanceWithLog()
 
 			ticker := time.NewTicker(systemInstanceReportInterval)
 			defer ticker.Stop()
-			for range ticker.C {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
 				reportSystemInstanceWithLog()
 			}
 		})

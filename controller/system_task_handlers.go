@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -193,7 +194,12 @@ func (billingRecoveryHandler) NewPayload() any { return nil }
 func (billingRecoveryHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	cutoff := common.GetTimestamp() - int64(service.BillingRecoveryStaleAfter().Seconds())
 	summary, err := service.RecoverStaleBillingRecoveries(ctx, cutoff, service.BillingRecoveryBatchLimit())
-	finishSystemTaskHandler(task, runnerID, resultStatus(summary), summary, err)
+	async, asyncErr := service.RecoverTaskSettlements(ctx, service.BillingRecoveryBatchLimit())
+	status := resultStatus(summary)
+	if err != nil || asyncErr != nil || async.Failed > 0 {
+		status = model.SystemTaskStatusFailed
+	}
+	finishSystemTaskHandler(task, runnerID, status, map[string]any{"requests": summary, "async_tasks": async}, errors.Join(err, asyncErr))
 }
 
 func resultStatus(summary service.BillingRecoverySummary) model.SystemTaskStatus {

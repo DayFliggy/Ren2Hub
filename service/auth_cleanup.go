@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -16,14 +17,15 @@ func StartAuthArtifactCleanup() {
 	if !common.IsMasterNode {
 		return
 	}
-	go func() {
+	common.BackgroundWorkers.Go(func(ctx context.Context) {
+		if ctx.Err() != nil {
+			return
+		}
 		cleanupAuthArtifacts()
-		ticker := time.NewTicker(authArtifactCleanupInterval)
-		defer ticker.Stop()
-		for range ticker.C {
+		for common.WaitBackground(ctx, authArtifactCleanupInterval) {
 			cleanupAuthArtifacts()
 		}
-	}()
+	})
 }
 
 func cleanupAuthArtifacts() {

@@ -88,7 +88,7 @@ func flushBuckets(ctx context.Context, includeCurrent bool) error {
 			return true
 		}
 		pending := &metricFlush{id: common.GetUUID(), metric: &model.PerfMetric{
-			ModelName: k.model, Group: k.group, BucketTs: k.bucketTs,
+			ModelName: k.model, BucketTs: k.bucketTs,
 			RequestCount: drained.requestCount, SuccessCount: drained.successCount,
 			TotalLatencyMs: drained.totalLatencyMs, TtftSumMs: drained.ttftSumMs,
 			TtftCount: drained.ttftCount, OutputTokens: drained.outputTokens, GenerationMs: drained.generationMs,
