@@ -45,7 +45,7 @@ const inputAttrs = computed(() => {
     </div>
     <input
       :id="inputId"
-      v-model="model"
+      :value="model"
       :type="type"
       :placeholder="placeholder"
       :autocomplete="autocomplete"
@@ -57,6 +57,7 @@ const inputAttrs = computed(() => {
         $slots.icon ? 'pl-10' : 'pl-4',
         readonly ? 'cursor-not-allowed opacity-60' : '',
       ]"
+      @input="model = ($event.target as HTMLInputElement).value"
     />
   </div>
 </template>

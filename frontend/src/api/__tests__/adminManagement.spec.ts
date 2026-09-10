@@ -16,7 +16,6 @@ describe('admin management contracts', () => {
       sync_official: 0,
       name_rule: 1,
       bound_channels: [{ name: 'primary', type: 1 }],
-      enable_groups: ['fast'],
       matched_models: ['gpt-test-1'],
       matched_count: 1,
       quota_types: [0, 1],

@@ -13,7 +13,6 @@ const model = {
   sync_official: 1,
   name_rule: 1,
   bound_channels: [{ name: 'primary', type: 1 }],
-  enable_groups: ['default', 'vip'],
   quota_types: [0],
   matched_models: ['gpt-local-1', 'gpt-local-2'],
   matched_count: 2,

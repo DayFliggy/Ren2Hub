@@ -161,9 +161,6 @@ export interface ModelSettings {
 }
 
 export interface SecuritySettings {
-  ModelRequestRateLimitEnabled: boolean
-  ModelRequestRateLimitCount: number
-  ModelRequestRateLimitDurationMinutes: number
   CheckSensitiveEnabled: boolean
   CheckSensitiveOnPromptEnabled: boolean
   SensitiveWords: string
@@ -365,9 +362,6 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   'auto_pricing.models_dev_url': 'https://models.dev/api.json',
   'auto_pricing.check_interval_minutes': 60,
   // Security
-  ModelRequestRateLimitEnabled: false,
-  ModelRequestRateLimitCount: 60,
-  ModelRequestRateLimitDurationMinutes: 1,
   CheckSensitiveEnabled: false,
   CheckSensitiveOnPromptEnabled: false,
   SensitiveWords: '',

@@ -47,6 +47,33 @@ function expectInvalidResponse(parse: () => unknown): void {
 }
 
 describe('subscription contracts', () => {
+  it('preserves account class targets and the purchase snapshot separately', () => {
+    const plan = toPlan(
+      parseBackendPlan({
+        ...basePlan,
+        upgrade_account_class: 'premium',
+        downgrade_account_class: 'default',
+      })
+    )
+    expect(plan).toMatchObject({
+      upgrade_account_class: 'premium',
+      downgrade_account_class: 'default',
+    })
+    const entitlement = toEntitlement(
+      parseBackendSubscription({
+        ...baseSubscription,
+        upgrade_account_class: 'premium',
+        downgrade_account_class: '',
+        previous_account_class: 'partner',
+      }),
+      plan
+    )
+    expect(entitlement).toMatchObject({
+      upgrade_account_class: 'premium',
+      downgrade_account_class: '',
+      previous_account_class: 'partner',
+    })
+  })
   it('keeps plan duration and quota reset periods distinct', () => {
     const annual = toPlan(parseBackendPlan(basePlan))
     expect(annual.term).toEqual({ value: 1, unit: 'year' })

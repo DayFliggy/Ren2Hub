@@ -1,4 +1,28 @@
 export default {
+  accountClasses: {
+    concurrency: 'Concurrency',
+    limits: 'Effective limits',
+    title: 'Account classes',
+    accountClass: 'Account class',
+    code: 'Code',
+    name: 'Display name',
+    defaultConcurrency: 'Default concurrency',
+    defaultRPM: 'Default RPM',
+    topupMultiplier: 'Top-up multiplier',
+    concurrencyOverride: 'Concurrency override',
+    rpmOverride: 'RPM override',
+    inherit: 'Inherit class limit',
+    unlimited: 'Unlimited (0)',
+    effective: 'Effective limit: {value}',
+    policyVersion: 'Policy version: {version}',
+    create: 'Create account class',
+    edit: 'Edit account class',
+    remove: 'Delete account class',
+    deleteMessage: 'Delete account class "{name}"?',
+    empty: 'No account classes',
+    invalid:
+      'Enter valid names, non-negative integer limits and a positive top-up multiplier.',
+  },
   nav: {
     modelMetadata: 'Model metadata',
     vendors: 'Vendors',

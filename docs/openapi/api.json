@@ -2,7 +2,7 @@
   "openapi": "3.0.1",
   "info": {
     "title": "后台管理接口",
-    "description": "",
+    "description": "当前源码 B1-B3 契约：账号分类承接账号与充值语义；渠道倍率决定 Relay 计价。数据库切换必须先通过离线迁移版本门禁。用户 FIFO、渠道 RPM/TPM、全请求三次生成调用预算及安全转换分阶段策略仍属后续实现，不作为本版能力承诺。",
     "version": "1.0.0"
   },
   "tags": [
@@ -826,31 +826,6 @@
         ]
       }
     },
-    "/api/user/groups": {
-      "get": {
-        "summary": "获取用户分组列表",
-        "deprecated": false,
-        "description": "🔓 无需鉴权",
-        "tags": [
-          "用户登陆注册"
-        ],
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "成功",
-            "headers": {}
-          }
-        },
-        "security": [
-          {
-            "Combination343": []
-          },
-          {
-            "Combination1243": []
-          }
-        ]
-      }
-    },
     "/api/user/passkey/login/begin": {
       "post": {
         "summary": "开始Passkey登录",
@@ -1316,31 +1291,6 @@
         "security": []
       }
     },
-    "/api/user/self/groups": {
-      "get": {
-        "summary": "获取当前用户分组",
-        "deprecated": false,
-        "description": "🔐 需要登录（User权限）",
-        "tags": [
-          "用户管理"
-        ],
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "成功",
-            "headers": {}
-          }
-        },
-        "security": [
-          {
-            "Combination343": []
-          },
-          {
-            "Combination1243": []
-          }
-        ]
-      }
-    },
     "/api/user/self": {
       "get": {
         "summary": "获取当前用户信息",
@@ -1774,7 +1724,7 @@
       "get": {
         "summary": "获取所有用户",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）",
+        "description": "👨‍💼 需要管理员权限（Admin）\n\n管理接口拒绝已退役的路由字段；不设置旧字段在线兼容期。该规则不对推理 SDK 请求启用全局未知字段拒绝。",
         "tags": [
           "用户管理"
         ],
@@ -1802,6 +1752,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1816,7 +1776,7 @@
       "post": {
         "summary": "创建用户",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）",
+        "description": "👨‍💼 需要管理员权限（Admin）\n\n管理接口拒绝已退役的路由字段；不设置旧字段在线兼容期。该规则不对推理 SDK 请求启用全局未知字段拒绝。",
         "tags": [
           "用户管理"
         ],
@@ -1834,6 +1794,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1848,7 +1818,7 @@
       "put": {
         "summary": "更新用户",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）",
+        "description": "👨‍💼 需要管理员权限（Admin）\n\n管理接口拒绝已退役的路由字段；不设置旧字段在线兼容期。该规则不对推理 SDK 请求启用全局未知字段拒绝。",
         "tags": [
           "用户管理"
         ],
@@ -1866,6 +1836,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1907,7 +1887,7 @@
       "get": {
         "summary": "搜索用户",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）",
+        "description": "👨‍💼 需要管理员权限（Admin）\n\n管理接口拒绝已退役的路由字段；不设置旧字段在线兼容期。该规则不对推理 SDK 请求启用全局未知字段拒绝。",
         "tags": [
           "用户管理"
         ],
@@ -1922,9 +1902,9 @@
             }
           },
           {
-            "name": "group",
+            "name": "account_class",
             "in": "query",
-            "description": "",
+            "description": "账号分类代码",
             "required": false,
             "schema": {
               "type": "string"
@@ -1935,6 +1915,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2620,7 +2610,7 @@
       "get": {
         "summary": "获取所有渠道",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）",
+        "description": "👨‍💼 需要管理员权限（Admin）\n\n管理接口拒绝已退役的路由字段；不设置旧字段在线兼容期。该规则不对推理 SDK 请求启用全局未知字段拒绝。",
         "tags": [
           "渠道管理"
         ],
@@ -2684,6 +2674,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2698,7 +2698,7 @@
       "post": {
         "summary": "添加渠道",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）",
+        "description": "👨‍💼 需要管理员权限（Admin）\n\n管理接口拒绝已退役的路由字段；不设置旧字段在线兼容期。该规则不对推理 SDK 请求启用全局未知字段拒绝。",
         "tags": [
           "渠道管理"
         ],
@@ -2729,6 +2729,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2743,7 +2753,7 @@
       "put": {
         "summary": "更新渠道",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）",
+        "description": "👨‍💼 需要管理员权限（Admin）\n\n管理接口拒绝已退役的路由字段；不设置旧字段在线兼容期。该规则不对推理 SDK 请求启用全局未知字段拒绝。",
         "tags": [
           "渠道管理"
         ],
@@ -2761,6 +2771,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2784,15 +2804,6 @@
         "parameters": [
           {
             "name": "keyword",
-            "in": "query",
-            "description": "",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "group",
             "in": "query",
             "description": "",
             "required": false,
@@ -3614,7 +3625,7 @@
       "get": {
         "summary": "获取所有令牌",
         "deprecated": false,
-        "description": "🔐 需要登录（User权限）",
+        "description": "🔐 需要登录（User权限）\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
         "tags": [
           "令牌管理"
         ],
@@ -3642,6 +3653,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3656,7 +3677,7 @@
       "post": {
         "summary": "创建令牌",
         "deprecated": false,
-        "description": "🔐 需要登录（User权限）",
+        "description": "🔐 需要登录（User权限）\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
         "tags": [
           "令牌管理"
         ],
@@ -3674,6 +3695,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3688,7 +3719,7 @@
       "put": {
         "summary": "更新令牌",
         "deprecated": false,
-        "description": "🔐 需要登录（User权限）",
+        "description": "🔐 需要登录（User权限）\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
         "tags": [
           "令牌管理"
         ],
@@ -3706,6 +3737,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3722,7 +3763,7 @@
       "get": {
         "summary": "搜索令牌",
         "deprecated": false,
-        "description": "🔐 需要登录（User权限）",
+        "description": "🔐 需要登录（User权限）\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
         "tags": [
           "令牌管理"
         ],
@@ -3741,6 +3782,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3757,7 +3808,7 @@
       "get": {
         "summary": "获取指定令牌",
         "deprecated": false,
-        "description": "🔐 需要登录（User权限）",
+        "description": "🔐 需要登录（User权限）\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
         "tags": [
           "令牌管理"
         ],
@@ -3777,6 +3828,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3791,7 +3852,7 @@
       "delete": {
         "summary": "删除令牌",
         "deprecated": false,
-        "description": "🔐 需要登录（User权限）",
+        "description": "🔐 需要登录（User权限）\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
         "tags": [
           "令牌管理"
         ],
@@ -3811,6 +3872,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3827,7 +3898,7 @@
       "post": {
         "summary": "批量删除令牌",
         "deprecated": false,
-        "description": "🔐 需要登录（User权限）",
+        "description": "🔐 需要登录（User权限）\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
         "tags": [
           "令牌管理"
         ],
@@ -3853,6 +3924,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4143,7 +4224,7 @@
       "get": {
         "summary": "获取所有日志",
         "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）",
+        "description": "👨‍💼 需要管理员权限（Admin）\n\n管理接口拒绝已退役的路由字段；不设置旧字段在线兼容期。该规则不对推理 SDK 请求启用全局未知字段拒绝。",
         "tags": [
           "日志"
         ],
@@ -4171,6 +4252,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4260,7 +4351,10 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["success", "data"],
+                  "required": [
+                    "success",
+                    "data"
+                  ],
                   "properties": {
                     "success": {
                       "type": "boolean",
@@ -4490,31 +4584,6 @@
         "description": "🔐 需要登录（User权限）",
         "tags": [
           "数据统计"
-        ],
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "成功",
-            "headers": {}
-          }
-        },
-        "security": [
-          {
-            "Combination343": []
-          },
-          {
-            "Combination1243": []
-          }
-        ]
-      }
-    },
-    "/api/group/": {
-      "get": {
-        "summary": "获取所有分组",
-        "deprecated": false,
-        "description": "👨‍💼 需要管理员权限（Admin）",
-        "tags": [
-          "分组"
         ],
         "parameters": [],
         "responses": {
@@ -5171,7 +5240,7 @@
       "get": {
         "summary": "获取系统选项",
         "deprecated": false,
-        "description": "👑 需要超级管理员权限（Root）。已退役的 theme.frontend 不在列表中返回。",
+        "description": "👑 需要超级管理员权限（Root）。已退役的 theme.frontend 不在列表中返回。\n\n管理接口拒绝已退役的路由字段；不设置旧字段在线兼容期。该规则不对推理 SDK 请求启用全局未知字段拒绝。",
         "tags": [
           "系统设置"
         ],
@@ -5180,6 +5249,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5194,7 +5273,7 @@
       "put": {
         "summary": "更新系统选项",
         "deprecated": false,
-        "description": "👑 需要超级管理员权限（Root）。兼容期内 theme.frontend=default 可幂等写入，其他主题值会被拒绝。",
+        "description": "👑 需要超级管理员权限（Root）。兼容期内 theme.frontend=default 可幂等写入，其他主题值会被拒绝。\n\n管理接口拒绝已退役的路由字段；不设置旧字段在线兼容期。该规则不对推理 SDK 请求启用全局未知字段拒绝。",
         "tags": [
           "系统设置"
         ],
@@ -5203,6 +5282,16 @@
           "200": {
             "description": "成功",
             "headers": {}
+          },
+          "400": {
+            "description": "退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5289,6 +5378,980 @@
           }
         ]
       }
+    },
+    "/api/account-classes": {
+      "get": {
+        "summary": "获取账号分类目录",
+        "description": "Admin 可读。默认分类 default 始终保留。\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
+        "tags": [
+          "用户管理"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 success 判断业务结果；校验失败返回 success=false。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AccountClass"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "创建账号分类",
+        "description": "仅 Root；代码必须唯一，不静默合并。新分类政策版本为 1。\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
+        "tags": [
+          "用户管理"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 success 判断业务结果；校验失败返回 success=false。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "policy_version": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountClassCreate"
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "更新账号分类",
+        "description": "仅 Root；code 位于 JSON 正文且不可修改，policy_version 必须匹配当前版本。更新后返回递增版本。\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
+        "tags": [
+          "用户管理"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 success 判断业务结果；校验失败返回 success=false。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "policy_version": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountClass"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "删除账号分类",
+        "description": "仅 Root；默认分类以及被用户、订阅计划或订阅快照引用的分类不能删除。\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
+        "tags": [
+          "用户管理"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 success 判断业务结果；校验失败返回 success=false。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/user/limits": {
+      "get": {
+        "summary": "获取当前用户有效限额",
+        "description": "已认证用户。返回配置解析结果及用户/分类政策版本；不表示分布式 FIFO 准入已经实现。\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
+        "tags": [
+          "用户管理"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 success 判断业务结果；校验失败返回 success=false。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/EffectiveUserLimits"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/next/admin/users": {
+      "get": {
+        "summary": "分页获取管理用户",
+        "description": "Admin；返回账号分类、覆盖值、有效限额及当前政策版本。\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
+        "tags": [
+          "用户管理"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 success 判断业务结果；校验失败返回 success=false。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/AdminUser"
+                          }
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "page": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "page_size": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "role_counts": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "status_counts": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "p",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort_order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "创建管理用户",
+        "description": "Admin；只能创建低于自身角色的用户。省略分类使用 default，省略覆盖值继承分类。\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
+        "tags": [
+          "用户管理"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 success 判断业务结果；校验失败返回 success=false。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AdminUser"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUserCreate"
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "更新管理用户",
+        "description": "Admin；只能修改低于自身角色的用户。必须提交 account_class 与当前 policy_version；null 继承，0 不限，负数拒绝。\n退役路由字段返回 HTTP 400、code=retired_field；请求中的其他扩展字段不因此被全局拒绝。",
+        "tags": [
+          "用户管理"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 success 判断业务结果；校验失败返回 success=false。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AdminUser"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "管理退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUserUpdate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/perf-metrics": {
+      "get": {
+        "summary": "查询模型性能时序",
+        "description": "由定价页面可见性控制访问。按模型和时间桶聚合，不接受旧分组筛选。当前结果尚无渠道归属。",
+        "tags": [
+          "模型"
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 success 判断业务结果；校验失败返回 success=false。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PerfMetrics"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "model",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hours",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/perf-metrics/summary": {
+      "get": {
+        "summary": "获取模型性能汇总",
+        "description": "由定价页面可见性控制访问。累计原始计数和总量后计算均值，不返回旧组维度。",
+        "tags": [
+          "模型"
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 success 判断业务结果；校验失败返回 success=false。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "models": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/PerfModelSummary"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "退役字段被拒绝。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetiredFieldError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "hours",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/subscription/plans": {
+      "get": {
+        "summary": "获取可购买订阅计划",
+        "description": "已认证用户；支付配置未满足现有启用条件时返回空目录，不因文档新增而启用前端产品。",
+        "tags": [
+          "订阅"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 success 判断业务结果；校验失败返回 success=false。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "plan": {
+                            "$ref": "#/components/schemas/SubscriptionPlan"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/subscription/self": {
+      "get": {
+        "summary": "获取当前用户订阅",
+        "description": "已认证用户；分类快照按现有恢复规则使用，不授予模型权限或决定 Relay 价格。",
+        "tags": [
+          "订阅"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看 success 判断业务结果；校验失败返回 success=false。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "billing_preference": {
+                          "type": "string"
+                        },
+                        "subscriptions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "subscription": {
+                                "$ref": "#/components/schemas/UserSubscription"
+                              }
+                            }
+                          }
+                        },
+                        "all_subscriptions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "subscription": {
+                                "$ref": "#/components/schemas/UserSubscription"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/subscription/admin/plans": {
+      "get": {
+        "summary": "获取管理订阅计划",
+        "description": "Admin；保留既有支付配置和产品启用条件。",
+        "tags": [
+          "订阅"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "检查 success 判断业务结果。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "plan": {
+                            "$ref": "#/components/schemas/SubscriptionPlan"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "创建订阅计划",
+        "description": "Admin；分类目标只能引用已有分类。价格、订阅时长和配额沿用现有校验。",
+        "tags": [
+          "订阅"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "检查 success 判断业务结果。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SubscriptionPlan"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "plan": {
+                    "$ref": "#/components/schemas/SubscriptionPlan"
+                  }
+                },
+                "required": [
+                  "plan"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/subscription/admin/plans/{id}": {
+      "put": {
+        "summary": "更新订阅计划",
+        "description": "Admin；upgrade_account_class 与 downgrade_account_class 替代旧分类字段。当前订阅恢复使用保存的实例快照。",
+        "tags": [
+          "订阅"
+        ],
+        "security": [
+          {
+            "Combination343": []
+          },
+          {
+            "Combination1243": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "检查 success 判断业务结果。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "plan": {
+                    "$ref": "#/components/schemas/SubscriptionPlan"
+                  }
+                },
+                "required": [
+                  "plan"
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5366,6 +6429,10 @@
           },
           "created_at": {
             "type": "integer"
+          },
+          "other": {
+            "type": "string",
+            "description": "JSON 编码的账务明细，当前渠道倍率使用 channel_ratio；迁移保留历史倍率说明。未知明细字段可保留。"
           }
         }
       },
@@ -5390,9 +6457,6 @@
           "email": {
             "type": "string"
           },
-          "group": {
-            "type": "string"
-          },
           "quota": {
             "type": "integer"
           },
@@ -5401,6 +6465,31 @@
           },
           "request_count": {
             "type": "integer"
+          },
+          "account_class": {
+            "type": "string",
+            "description": "账号分类代码，不授予渠道或模型权限。",
+            "default": "default"
+          },
+          "concurrency_override": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "nullable": true,
+            "description": "null 继承账号分类；0 不限；正整数限制。"
+          },
+          "rpm_override": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "nullable": true,
+            "description": "null 继承账号分类；0 不限；正整数限制。"
+          },
+          "policy_version": {
+            "type": "integer",
+            "minimum": 1,
+            "format": "int64",
+            "description": "用户政策版本；修改时提交读取到的版本，冲突返回失败。"
           }
         }
       },
@@ -5422,9 +6511,6 @@
           "models": {
             "type": "string"
           },
-          "groups": {
-            "type": "string"
-          },
           "priority": {
             "type": "integer"
           },
@@ -5436,6 +6522,21 @@
           },
           "tag": {
             "type": "string"
+          },
+          "capacity_total": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 20,
+            "description": "渠道所有模型共享的并发容量。",
+            "maximum": 1000000
+          },
+          "channel_ratio": {
+            "type": "number",
+            "minimum": 0,
+            "default": 1,
+            "description": "冻结在请求计费中的渠道倍率。",
+            "exclusiveMinimum": true,
+            "maximum": 1000
           }
         }
       },
@@ -5465,6 +6566,25 @@
           },
           "unlimited_quota": {
             "type": "boolean"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "manual"
+            ],
+            "readOnly": true,
+            "description": "当前路由类型；私有路由配置由 /api/routing 管理。"
+          },
+          "model_limits_enabled": {
+            "type": "boolean"
+          },
+          "model_limits": {
+            "type": "string"
+          },
+          "allow_ips": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -5493,6 +6613,657 @@
             "type": "integer"
           }
         }
+      },
+      "AccountClass": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "不可变分类代码；更新通过 JSON 正文、删除通过 query 传递，不作为路径段。",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "description": "显示名称",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "default_concurrency": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "default": 5,
+            "description": "0 不限"
+          },
+          "default_rpm": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "default": 0,
+            "description": "0 不限"
+          },
+          "topup_multiplier": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "default": 1,
+            "description": "有限正数，只影响充值。"
+          },
+          "policy_version": {
+            "type": "integer",
+            "minimum": 1,
+            "format": "int64",
+            "description": "分类政策版本；更新时提交读取到的版本。"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "default_concurrency",
+          "default_rpm",
+          "topup_multiplier",
+          "policy_version"
+        ]
+      },
+      "EffectiveUserLimits": {
+        "type": "object",
+        "properties": {
+          "account_class": {
+            "type": "string"
+          },
+          "effective_concurrency": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "effective_rpm": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "policy_version": {
+            "type": "integer",
+            "minimum": 1,
+            "format": "int64"
+          },
+          "class_policy_version": {
+            "type": "integer",
+            "minimum": 1,
+            "format": "int64"
+          }
+        },
+        "required": [
+          "account_class",
+          "effective_concurrency",
+          "effective_rpm",
+          "policy_version",
+          "class_policy_version"
+        ]
+      },
+      "RetiredFieldError": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "retired_field"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "code",
+          "message"
+        ]
+      },
+      "AccountClassCreate": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "不可变分类代码；更新通过 JSON 正文、删除通过 query 传递，不作为路径段。",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "description": "显示名称",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "default_concurrency": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "default": 5,
+            "description": "0 不限"
+          },
+          "default_rpm": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "default": 0,
+            "description": "0 不限"
+          },
+          "topup_multiplier": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "default": 1,
+            "description": "有限正数，只影响充值。"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "default_concurrency",
+          "default_rpm",
+          "topup_multiplier"
+        ]
+      },
+      "AdminUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "username": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "email": {
+            "type": "string"
+          },
+          "quota": {
+            "type": "integer"
+          },
+          "used_quota": {
+            "type": "integer"
+          },
+          "request_count": {
+            "type": "integer"
+          },
+          "account_class": {
+            "type": "string",
+            "description": "账号分类代码，不授予渠道或模型权限。",
+            "default": "default"
+          },
+          "concurrency_override": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "nullable": true,
+            "description": "null 继承账号分类；0 不限；正整数限制。"
+          },
+          "rpm_override": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "nullable": true,
+            "description": "null 继承账号分类；0 不限；正整数限制。"
+          },
+          "policy_version": {
+            "type": "integer",
+            "minimum": 1,
+            "format": "int64",
+            "description": "用户政策版本；修改时提交读取到的版本，冲突返回失败。"
+          },
+          "effective_concurrency": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "effective_rpm": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "invited_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "affiliate_quota": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "inviter_id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "created_time": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "last_login_time": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "display_name",
+          "role",
+          "status",
+          "email",
+          "quota",
+          "used_quota",
+          "request_count",
+          "account_class",
+          "concurrency_override",
+          "rpm_override",
+          "policy_version",
+          "effective_concurrency",
+          "effective_rpm",
+          "invited_count",
+          "affiliate_quota",
+          "inviter_id",
+          "created_time",
+          "last_login_time"
+        ]
+      },
+      "AdminUserCreate": {
+        "type": "object",
+        "properties": {
+          "account_class": {
+            "type": "string",
+            "description": "账号分类代码，不授予渠道或模型权限。",
+            "default": "default"
+          },
+          "concurrency_override": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "nullable": true,
+            "description": "null 继承账号分类；0 不限；正整数限制。"
+          },
+          "rpm_override": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "nullable": true,
+            "description": "null 继承账号分类；0 不限；正整数限制。"
+          },
+          "policy_version": {
+            "type": "integer",
+            "minimum": 1,
+            "format": "int64",
+            "description": "用户政策版本；修改时提交读取到的版本，冲突返回失败。"
+          },
+          "username": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "role": {
+            "type": "integer",
+            "enum": [
+              1,
+              10
+            ]
+          },
+          "status": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ]
+          }
+        },
+        "required": [
+          "username",
+          "password",
+          "role",
+          "status"
+        ]
+      },
+      "AdminUserUpdate": {
+        "type": "object",
+        "properties": {
+          "account_class": {
+            "type": "string",
+            "description": "账号分类代码，不授予渠道或模型权限。",
+            "default": "default"
+          },
+          "concurrency_override": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "nullable": true,
+            "description": "null 继承账号分类；0 不限；正整数限制。"
+          },
+          "rpm_override": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "nullable": true,
+            "description": "null 继承账号分类；0 不限；正整数限制。"
+          },
+          "policy_version": {
+            "type": "integer",
+            "minimum": 1,
+            "format": "int64",
+            "description": "用户政策版本；修改时提交读取到的版本，冲突返回失败。"
+          },
+          "username": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "role": {
+            "type": "integer",
+            "enum": [
+              1,
+              10
+            ]
+          },
+          "status": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ]
+          },
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "role",
+          "account_class",
+          "policy_version"
+        ]
+      },
+      "PerfBucketPoint": {
+        "type": "object",
+        "properties": {
+          "ts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "avg_ttft_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "avg_latency_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "success_rate": {
+            "type": "number"
+          },
+          "avg_tps": {
+            "type": "number"
+          }
+        }
+      },
+      "PerfMetrics": {
+        "type": "object",
+        "properties": {
+          "model_name": {
+            "type": "string"
+          },
+          "series_schema": {
+            "type": "string",
+            "enum": [
+              "model-bucket-v2"
+            ]
+          },
+          "avg_ttft_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "avg_latency_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "success_rate": {
+            "type": "number"
+          },
+          "avg_tps": {
+            "type": "number"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PerfBucketPoint"
+            }
+          }
+        }
+      },
+      "PerfModelSummary": {
+        "type": "object",
+        "properties": {
+          "model_name": {
+            "type": "string"
+          },
+          "avg_latency_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "success_rate": {
+            "type": "number"
+          },
+          "avg_tps": {
+            "type": "number"
+          },
+          "recent_success_rates": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "SubscriptionPlan": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string"
+          },
+          "subtitle": {
+            "type": "string"
+          },
+          "price_amount": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "duration_unit": {
+            "type": "string"
+          },
+          "duration_value": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "custom_seconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "sort_order": {
+            "type": "integer"
+          },
+          "allow_balance_pay": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "allow_wallet_overflow": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "total_amount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "quota_reset_period": {
+            "type": "string"
+          },
+          "quota_reset_custom_seconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "upgrade_account_class": {
+            "type": "string",
+            "description": "购买后的分类；空字符串不修改。"
+          },
+          "downgrade_account_class": {
+            "type": "string",
+            "description": "到期时明确恢复目标；空字符串使用原恢复规则。"
+          },
+          "max_purchase_per_user": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "stripe_price_id": {
+            "type": "string"
+          },
+          "creem_product_id": {
+            "type": "string"
+          },
+          "waffo_pancake_product_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "integer"
+          }
+        }
+      },
+      "UserSubscription": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "user_id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "plan_id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "amount_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "amount_used": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "start_time": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end_time": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "last_reset_time": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "next_reset_time": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string"
+          },
+          "upgrade_account_class": {
+            "type": "string",
+            "description": "购买后的分类；空字符串不修改。"
+          },
+          "downgrade_account_class": {
+            "type": "string",
+            "description": "到期时明确恢复目标；空字符串使用原恢复规则。"
+          },
+          "previous_account_class": {
+            "type": "string",
+            "description": "购买前分类快照；不同于明确到期目标。"
+          }
+        }
+      },
+      "TaskBillingContext": {
+        "description": "任务内部冻结计费快照的脱敏结构；不是向用户返回 PrivateData 的承诺。",
+        "type": "object",
+        "properties": {
+          "billing_multiplier": {
+            "type": "number",
+            "minimum": 0,
+            "description": "历史零值必须显式保留，结算不读取当前渠道倍率补值。"
+          },
+          "multiplier_source": {
+            "type": "string",
+            "description": "新任务为 channel；历史来源无法证明时为 historical_snapshot。"
+          },
+          "model_price": {
+            "type": "number"
+          },
+          "model_ratio": {
+            "type": "number"
+          },
+          "other_ratios": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "origin_model_name": {
+            "type": "string"
+          },
+          "per_call_billing": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "billing_multiplier",
+          "multiplier_source"
+        ]
       }
     },
     "responses": {

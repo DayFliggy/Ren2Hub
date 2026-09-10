@@ -432,7 +432,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           ratio('ImageRatio', '图像倍率'),
           ratio('AudioRatio', '音频倍率'),
           ratio('AudioCompletionRatio', '音频补全倍率'),
-          ratio('TopupGroupRatio', '充值分组倍率'),
           toggle('ExposeRatioEnabled', '公开倍率数据'),
           json('tool_price_setting.prices', '工具附加价格', '[]'),
           json('billing_setting.billing_mode', '计费模式', '{}'),
@@ -647,20 +646,8 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
   {
     id: 'security',
     titleKey: 'systemSettings.tabs.security',
-    defaultSection: 'rate-limit',
+    defaultSection: 'sensitive',
     sections: [
-      {
-        id: 'rate-limit',
-        title: '请求限流',
-        description: '全局模型请求限流与按分组策略。',
-        fields: [
-          toggle('ModelRequestRateLimitEnabled', '启用请求限流'),
-          number('ModelRequestRateLimitCount', '时间窗口请求上限', 60),
-          number('ModelRequestRateLimitSuccessCount', '成功请求上限'),
-          number('ModelRequestRateLimitDurationMinutes', '限流窗口（分钟）', 1),
-          json('ModelRequestRateLimitGroup', '分组限流规则', '{}'),
-        ],
-      },
       {
         id: 'sensitive',
         title: '敏感内容',

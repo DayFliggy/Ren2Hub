@@ -351,8 +351,6 @@ async function submit() {
   saving.value = true
   try {
     if (modelMappingTab.value === 'visual') syncJsonFromRows()
-    // Group is deliberately absent: creation falls back to the backend
-    // default group, edits preserve the stored value untouched.
     const base: AdminChannelUpdateInput = {
       name: form.name.trim(),
       type: form.type,

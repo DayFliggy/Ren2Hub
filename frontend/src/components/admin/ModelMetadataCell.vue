@@ -53,8 +53,6 @@ const items = computed(() => {
       return props.row.bound_channels.map(
         (channel) => `${channel.name} (${channel.type})`
       )
-    case 'enable_groups':
-      return props.row.enable_groups
     case 'quota_types':
       return props.row.quota_types.map((type) =>
         type === 0 ? t('usage') : type === 1 ? t('perCall') : String(type)

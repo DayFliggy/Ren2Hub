@@ -124,6 +124,24 @@ const { t, locale } = useI18n()
           </div>
         </header>
         <dl class="mt-4 grid min-w-0 grid-cols-2 gap-x-4 gap-y-4 text-xs">
+          <div class="min-w-0">
+            <dt class="text-[var(--text-tertiary)]">
+              {{ t('accountClasses.accountClass') }}
+            </dt>
+            <dd class="mt-1.5 break-words">{{ user.account_class }}</dd>
+          </div>
+          <div class="min-w-0">
+            <dt class="text-[var(--text-tertiary)]">
+              {{ t('accountClasses.limits') }}
+            </dt>
+            <dd class="mt-1.5">
+              {{ t('accountClasses.concurrency') }}:
+              {{ user.effective_concurrency || t('accountClasses.unlimited') }}
+            </dd>
+            <dd>
+              RPM: {{ user.effective_rpm || t('accountClasses.unlimited') }}
+            </dd>
+          </div>
           <div v-if="visibleFields.includes('role')" class="min-w-0">
             <dt class="text-[var(--text-tertiary)]">{{ t('users.role') }}</dt>
             <dd class="mt-1.5">

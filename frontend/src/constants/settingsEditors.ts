@@ -127,7 +127,6 @@ export const SETTINGS_RECORD_EDITORS: Record<string, RecordEditorSchema> = {
         defaultValue: 3600,
       },
       { key: 'skip_retry_on_failure', kind: 'boolean', defaultValue: false },
-      { key: 'include_using_group', kind: 'boolean', defaultValue: true },
       { key: 'include_model_name', kind: 'boolean', defaultValue: true },
       { key: 'include_rule_name', kind: 'boolean', defaultValue: true },
       { key: 'param_override_template', kind: 'json', defaultValue: {} },

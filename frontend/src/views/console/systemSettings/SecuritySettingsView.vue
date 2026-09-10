@@ -11,41 +11,6 @@ const { t } = useI18n()
 const toast = useToast()
 const { settings, load, saveOptions } = useSystemSettings()
 
-// ── Rate Limit ──────────────────────────────────────────────────────────────
-const rate = reactive({
-  ModelRequestRateLimitEnabled: false,
-  ModelRequestRateLimitCount: 60,
-  ModelRequestRateLimitDurationMinutes: 1,
-})
-const rateSaving = reactive({ value: false })
-const rateDirty = computed(() => {
-  const s = settings.value
-  return (
-    rate.ModelRequestRateLimitEnabled !== s.ModelRequestRateLimitEnabled ||
-    rate.ModelRequestRateLimitCount !== s.ModelRequestRateLimitCount ||
-    rate.ModelRequestRateLimitDurationMinutes !==
-      s.ModelRequestRateLimitDurationMinutes
-  )
-})
-async function saveRate() {
-  rateSaving.value = true
-  const s = settings.value
-  const patch: Record<string, boolean | number> = {}
-  if (rate.ModelRequestRateLimitEnabled !== s.ModelRequestRateLimitEnabled)
-    patch.ModelRequestRateLimitEnabled = rate.ModelRequestRateLimitEnabled
-  if (rate.ModelRequestRateLimitCount !== s.ModelRequestRateLimitCount)
-    patch.ModelRequestRateLimitCount = rate.ModelRequestRateLimitCount
-  if (
-    rate.ModelRequestRateLimitDurationMinutes !==
-    s.ModelRequestRateLimitDurationMinutes
-  )
-    patch.ModelRequestRateLimitDurationMinutes =
-      rate.ModelRequestRateLimitDurationMinutes
-  const ok = await saveOptions(patch)
-  rateSaving.value = false
-  if (ok) toast.success(t('systemSettings.saved'))
-}
-
 // ── Sensitive Words ─────────────────────────────────────────────────────────
 const sensitive = reactive({
   CheckSensitiveEnabled: false,
@@ -126,12 +91,6 @@ async function saveSsrf() {
 onMounted(async () => {
   await load()
   const s = settings.value
-  Object.assign(rate, {
-    ModelRequestRateLimitEnabled: s.ModelRequestRateLimitEnabled,
-    ModelRequestRateLimitCount: s.ModelRequestRateLimitCount,
-    ModelRequestRateLimitDurationMinutes:
-      s.ModelRequestRateLimitDurationMinutes,
-  })
   Object.assign(sensitive, {
     CheckSensitiveEnabled: s.CheckSensitiveEnabled,
     CheckSensitiveOnPromptEnabled: s.CheckSensitiveOnPromptEnabled,
@@ -148,41 +107,6 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-6">
-    <!-- Rate Limiting -->
-    <SysSettingsFormCard
-      :title="t('systemSettings.security.rateLimit')"
-      :saving="rateSaving.value"
-      :dirty="rateDirty"
-      @save="saveRate"
-    >
-      <div class="divide-y divide-[var(--border-subtle)]">
-        <SysToggleRow
-          v-model="rate.ModelRequestRateLimitEnabled"
-          :label="t('systemSettings.security.rateLimitEnabled')"
-          :description="t('systemSettings.security.rateLimitEnabledDesc')"
-        />
-      </div>
-      <div class="mt-4 grid gap-4 sm:grid-cols-2">
-        <SysInputRow
-          :label="t('systemSettings.security.rateLimitCount')"
-          :description="t('systemSettings.security.rateLimitCountDesc')"
-          :model-value="String(rate.ModelRequestRateLimitCount)"
-          type="number"
-          @update:model-value="
-            rate.ModelRequestRateLimitCount = Number($event) || 60
-          "
-        />
-        <SysInputRow
-          :label="t('systemSettings.security.rateLimitDuration')"
-          :model-value="String(rate.ModelRequestRateLimitDurationMinutes)"
-          type="number"
-          @update:model-value="
-            rate.ModelRequestRateLimitDurationMinutes = Number($event) || 1
-          "
-        />
-      </div>
-    </SysSettingsFormCard>
-
     <!-- Sensitive Words -->
     <SysSettingsFormCard
       :title="t('systemSettings.security.sensitiveWords')"

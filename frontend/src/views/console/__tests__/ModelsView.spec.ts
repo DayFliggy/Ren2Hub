@@ -52,7 +52,6 @@ describe('ModelsView live boundary', () => {
           create_cache_ratio: 1.25,
           owner_by: 'OpenAI',
           supported_endpoint_types: ['chat'],
-          enable_groups: ['default'],
         },
       ])
       .mockResolvedValueOnce({ models: [] })

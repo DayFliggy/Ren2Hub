@@ -89,8 +89,7 @@ export interface AdminChannelCreateInput {
   // Credentials
   key: string
   base_url: string
-  // Models (no group: creation uses the backend default routing group,
-  // edits preserve the stored value verbatim)
+  // Models
   models: string
   model_mapping: string
   // Routing
@@ -141,6 +140,12 @@ export type AdminUserSortBy =
 export type AdminUserSortOrder = 'asc' | 'desc'
 
 export interface AdminUser extends Record<string, unknown> {
+  account_class: string
+  concurrency_override: number | null
+  rpm_override: number | null
+  effective_concurrency: number
+  effective_rpm: number
+  policy_version: number
   id: number
   username: string
   display_name: string
@@ -160,6 +165,9 @@ export interface AdminUser extends Record<string, unknown> {
 }
 
 export interface AdminUserCreateInput {
+  account_class: string
+  concurrency_override: number | null
+  rpm_override: number | null
   username: string
   display_name: string
   email: string
@@ -173,6 +181,7 @@ export type AdminUserUpdateInput = Omit<
   AdminUserCreateInput,
   'status' | 'password'
 > & {
+  policy_version: number
   password?: string
 }
 
@@ -469,7 +478,7 @@ interface PlanBase {
    * AdminChannel.id. null = no exclusive channel.
    */
   exclusive_channel_id: number | null
-  /** Billing multiplier; replaces the retired per-group ratio. undefined = 1.0 */
+  /** Plan billing multiplier. undefined = 1.0 */
   ratio?: number
   /** Whether the real backend permits wallet-balance purchase. */
   balance_pay_enabled?: boolean
@@ -484,6 +493,8 @@ export interface TrafficPlan extends PlanBase {
 }
 
 export interface SubscriptionPlan extends PlanBase {
+  upgrade_account_class?: string
+  downgrade_account_class?: string
   kind: 'subscription'
   /** Settlement period, e.g. { value: 1, unit: 'day' }. */
   period: Duration
@@ -492,7 +503,7 @@ export interface SubscriptionPlan extends PlanBase {
   period_quota: number
   /** Total subscription length, e.g. { value: 3, unit: 'month' }. */
   term: Duration
-  /** Requests allowed per period; replaces the retired per-group RPM. */
+  /** Requests allowed per period. */
   rate_limit?: number
 }
 
@@ -958,6 +969,9 @@ export interface TrafficEntitlement {
 
 /** The caller's single active subscription, if any. */
 export interface SubscriptionEntitlement {
+  upgrade_account_class?: string
+  downgrade_account_class?: string
+  previous_account_class?: string
   plan_id: number
   name: string
   meter: SubscriptionMeter

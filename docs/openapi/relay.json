@@ -2,7 +2,7 @@
   "openapi": "3.0.1",
   "info": {
     "title": "AI模型接口",
-    "description": "",
+    "description": "当前源码 B1-B3 契约：账号分类承接账号与充值语义；渠道倍率决定 Relay 计价。数据库切换必须先通过离线迁移版本门禁。用户 FIFO、渠道 RPM/TPM、全请求三次生成调用预算及安全转换分阶段策略仍属后续实现，不作为本版能力承诺。",
     "version": "1.0.0"
   },
   "tags": [
@@ -285,26 +285,26 @@
         ]
       }
     },
-	    "/v1/responses/compact": {
-	      "post": {
-	        "summary": "压缩对话 (OpenAI Responses API)",
-	        "deprecated": false,
-	        "description": "OpenAI Responses API，用于对长对话进行 compaction。",
-	        "operationId": "compactResponse",
+    "/v1/responses/compact": {
+      "post": {
+        "summary": "压缩对话 (OpenAI Responses API)",
+        "deprecated": false,
+        "description": "OpenAI Responses API，用于对长对话进行 compaction。",
+        "operationId": "compactResponse",
         "tags": [
           "OpenAI格式(Responses)"
         ],
         "parameters": [],
-	        "requestBody": {
-	          "content": {
-	            "application/json": {
-	              "schema": {
-	                "$ref": "#/components/schemas/ResponsesCompactionRequest"
-	              }
-	            }
-	          },
-	          "required": true
-	        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResponsesCompactionRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "成功压缩对话",
@@ -3170,9 +3170,9 @@
           }
         }
       },
-	      "ResponsesCompactionResponse": {
-	        "type": "object",
-	        "properties": {
+      "ResponsesCompactionResponse": {
+        "type": "object",
+        "properties": {
           "id": {
             "type": "string"
           },
@@ -3197,44 +3197,44 @@
             "type": "object",
             "properties": {}
           }
-	        }
-	      },
-	      "ResponsesCompactionRequest": {
-	        "type": "object",
-	        "required": [
-	          "model"
-	        ],
-	        "properties": {
-	          "model": {
-	            "type": "string"
-	          },
-	          "input": {
-	            "description": "输入内容，可以是字符串或消息数组",
-	            "oneOf": [
-	              {
-	                "type": "string"
-	              },
-	              {
-	                "type": "array",
-	                "items": {
-	                  "type": "object",
-	                  "properties": {}
-	                }
-	              }
-	            ]
-	          },
-	          "instructions": {
-	            "type": "string"
-	          },
-	          "previous_response_id": {
-	            "type": "string"
-	          }
-	        }
-	      },
-	      "ResponsesStreamResponse": {
-	        "type": "object",
-	        "properties": {
-	          "type": {
+        }
+      },
+      "ResponsesCompactionRequest": {
+        "type": "object",
+        "required": [
+          "model"
+        ],
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "input": {
+            "description": "输入内容，可以是字符串或消息数组",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            ]
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "previous_response_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ResponsesStreamResponse": {
+        "type": "object",
+        "properties": {
+          "type": {
             "type": "string"
           },
           "response": {
@@ -4471,9 +4471,6 @@
           "email": {
             "type": "string"
           },
-          "group": {
-            "type": "string"
-          },
           "quota": {
             "type": "integer"
           },
@@ -4482,6 +4479,31 @@
           },
           "request_count": {
             "type": "integer"
+          },
+          "account_class": {
+            "type": "string",
+            "description": "账号分类代码，不授予渠道或模型权限。",
+            "default": "default"
+          },
+          "concurrency_override": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "nullable": true,
+            "description": "null 继承账号分类；0 不限；正整数限制。"
+          },
+          "rpm_override": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "nullable": true,
+            "description": "null 继承账号分类；0 不限；正整数限制。"
+          },
+          "policy_version": {
+            "type": "integer",
+            "minimum": 1,
+            "format": "int64",
+            "description": "用户政策版本；修改时提交读取到的版本，冲突返回失败。"
           }
         }
       },
@@ -4503,9 +4525,6 @@
           "models": {
             "type": "string"
           },
-          "groups": {
-            "type": "string"
-          },
           "priority": {
             "type": "integer"
           },
@@ -4517,6 +4536,21 @@
           },
           "tag": {
             "type": "string"
+          },
+          "capacity_total": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 20,
+            "description": "渠道所有模型共享的并发容量。",
+            "maximum": 1000000
+          },
+          "channel_ratio": {
+            "type": "number",
+            "minimum": 0,
+            "default": 1,
+            "description": "冻结在请求计费中的渠道倍率。",
+            "exclusiveMinimum": true,
+            "maximum": 1000
           }
         }
       },
@@ -4546,6 +4580,25 @@
           },
           "unlimited_quota": {
             "type": "boolean"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "manual"
+            ],
+            "readOnly": true,
+            "description": "当前路由类型；私有路由配置由 /api/routing 管理。"
+          },
+          "model_limits_enabled": {
+            "type": "boolean"
+          },
+          "model_limits": {
+            "type": "string"
+          },
+          "allow_ips": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -4592,8 +4645,134 @@
           },
           "created_at": {
             "type": "integer"
+          },
+          "other": {
+            "type": "string",
+            "description": "JSON 编码的账务明细，当前渠道倍率使用 channel_ratio；迁移保留历史倍率说明。未知明细字段可保留。"
           }
         }
+      },
+      "AccountClass": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "不可变分类代码；更新通过 JSON 正文、删除通过 query 传递，不作为路径段。",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "description": "显示名称",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "default_concurrency": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000,
+            "default": 5,
+            "description": "0 不限"
+          },
+          "default_rpm": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000,
+            "default": 0,
+            "description": "0 不限"
+          },
+          "topup_multiplier": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "default": 1,
+            "description": "有限正数，只影响充值。"
+          },
+          "policy_version": {
+            "type": "integer",
+            "minimum": 1,
+            "format": "int64",
+            "description": "分类政策版本；更新时提交读取到的版本。"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "default_concurrency",
+          "default_rpm",
+          "topup_multiplier",
+          "policy_version"
+        ]
+      },
+      "EffectiveUserLimits": {
+        "type": "object",
+        "properties": {
+          "account_class": {
+            "type": "string"
+          },
+          "effective_concurrency": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "effective_rpm": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "policy_version": {
+            "type": "integer",
+            "minimum": 1,
+            "format": "int64"
+          },
+          "class_policy_version": {
+            "type": "integer",
+            "minimum": 1,
+            "format": "int64"
+          }
+        },
+        "required": [
+          "account_class",
+          "effective_concurrency",
+          "effective_rpm",
+          "policy_version",
+          "class_policy_version"
+        ]
+      },
+      "TaskBillingContext": {
+        "description": "任务内部冻结计费快照的脱敏结构；不是向用户返回 PrivateData 的承诺。",
+        "type": "object",
+        "properties": {
+          "billing_multiplier": {
+            "type": "number",
+            "minimum": 0,
+            "description": "历史零值必须显式保留，结算不读取当前渠道倍率补值。"
+          },
+          "multiplier_source": {
+            "type": "string",
+            "description": "新任务为 channel；历史来源无法证明时为 historical_snapshot。"
+          },
+          "model_price": {
+            "type": "number"
+          },
+          "model_ratio": {
+            "type": "number"
+          },
+          "other_ratios": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "origin_model_name": {
+            "type": "string"
+          },
+          "per_call_billing": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "billing_multiplier",
+          "multiplier_source"
+        ]
       }
     },
     "responses": {},

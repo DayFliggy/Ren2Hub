@@ -72,7 +72,6 @@ const fields = [
   'tags',
   'endpoints',
   'bound_channels',
-  'enable_groups',
   'quota_types',
   'sync_official',
   'created_time',

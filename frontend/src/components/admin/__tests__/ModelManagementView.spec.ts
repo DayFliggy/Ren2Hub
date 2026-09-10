@@ -24,7 +24,6 @@ const rows = [1, 2].map((id) => ({
   sync_official: 1,
   name_rule: 0,
   bound_channels: [],
-  enable_groups: [],
   matched_models: [],
   matched_count: 0,
   quota_types: [],

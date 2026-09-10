@@ -9,7 +9,10 @@ export interface UserInfo {
   used_quota: number
   request_count: number
   created_at: number
-  group?: string
+  account_class?: string
+  concurrency_override?: number | null
+  rpm_override?: number | null
+  policy_version?: number
   github_id?: string
   discord_id?: string
   oidc_id?: string

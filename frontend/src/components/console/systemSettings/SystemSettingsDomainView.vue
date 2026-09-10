@@ -9,6 +9,7 @@ import SystemSettingsField from '@/components/console/systemSettings/SystemSetti
 import WaffoPancakePanel from '@/components/console/systemSettings/WaffoPancakePanel.vue'
 import PaymentCompliancePanel from '@/components/console/systemSettings/PaymentCompliancePanel.vue'
 import SystemSettingsOperationsPanel from '@/components/console/systemSettings/SystemSettingsOperationsPanel.vue'
+import AccountClassesPanel from '@/components/console/systemSettings/AccountClassesPanel.vue'
 import {
   getSystemSettingsDomain,
   type SystemSettingsDomainId,
@@ -213,6 +214,10 @@ onMounted(() => load())
           kind="performance"
         />
       </SysSettingsFormCard>
+      <AccountClassesPanel
+        v-if="domain === 'billing' && activeSection.id === 'pricing'"
+        class="mt-6"
+      />
     </div>
   </div>
 </template>

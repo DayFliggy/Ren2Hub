@@ -30,7 +30,8 @@ describe('system settings catalog', () => {
 
     expect(new Set(keys).size).toBe(keys.length)
     expect(keys).toContain('HeaderNavModules')
-    expect(keys).toContain('ModelRequestRateLimitGroup')
+    expect(keys).not.toContain('ModelRequestRateLimitGroup')
+    expect(keys).not.toContain('TopupGroupRatio')
     expect(keys).toContain('WorkerAllowHttpImageRequestEnabled')
     expect(keys).toContain('perf_metrics_setting.retention_days')
     expect(keys).toContain('billing_setting.billing_expr')

@@ -25,6 +25,8 @@ import type {
 } from '@/types/console'
 
 interface BackendPlan {
+  upgrade_account_class?: string
+  downgrade_account_class?: string
   id: number
   title: string
   price_amount: number
@@ -41,6 +43,9 @@ interface BackendPlan {
 }
 
 interface BackendSubscription {
+  upgrade_account_class?: string
+  downgrade_account_class?: string
+  previous_account_class?: string
   id: number
   plan_id: number
   amount_total: number
@@ -104,6 +109,8 @@ export function toPlan(raw: BackendPlan): SubscriptionPlan {
     period_quota: raw.total_amount ?? 0,
     term,
     balance_pay_enabled: raw.allow_balance_pay !== false,
+    upgrade_account_class: raw.upgrade_account_class ?? '',
+    downgrade_account_class: raw.downgrade_account_class ?? '',
   }
 }
 
@@ -129,6 +136,9 @@ export function toEntitlement(
     period_end: raw.next_reset_time || raw.end_time,
     expire_time: raw.end_time,
     auto_renew: false,
+    upgrade_account_class: raw.upgrade_account_class ?? '',
+    downgrade_account_class: raw.downgrade_account_class ?? '',
+    previous_account_class: raw.previous_account_class ?? '',
     accent: plan?.accent ?? { token: 'accent' },
   }
 }
@@ -160,6 +170,14 @@ export function parseBackendPlan(value: unknown): BackendPlan {
       endpoint
     ),
     allow_balance_pay: allowBalancePay as boolean | undefined,
+    upgrade_account_class: requiredString(
+      value.upgrade_account_class ?? '',
+      endpoint
+    ),
+    downgrade_account_class: requiredString(
+      value.downgrade_account_class ?? '',
+      endpoint
+    ),
   }
 }
 
@@ -176,6 +194,18 @@ export function parseBackendSubscription(value: unknown): BackendSubscription {
     last_reset_time: requiredInteger(value.last_reset_time, endpoint),
     next_reset_time: requiredInteger(value.next_reset_time, endpoint),
     status: requiredString(value.status, endpoint, false),
+    upgrade_account_class: requiredString(
+      value.upgrade_account_class ?? '',
+      endpoint
+    ),
+    downgrade_account_class: requiredString(
+      value.downgrade_account_class ?? '',
+      endpoint
+    ),
+    previous_account_class: requiredString(
+      value.previous_account_class ?? '',
+      endpoint
+    ),
   }
 }
 

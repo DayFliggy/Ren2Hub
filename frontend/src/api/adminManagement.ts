@@ -21,7 +21,6 @@ export interface ModelMetadata {
   sync_official: number
   name_rule: number
   bound_channels: { name: string; type: number }[]
-  enable_groups: string[]
   matched_models: string[]
   matched_count: number
   quota_types: number[]
@@ -49,7 +48,6 @@ export type ModelInput = Omit<
   ModelMetadata,
   | 'id'
   | 'bound_channels'
-  | 'enable_groups'
   | 'matched_models'
   | 'matched_count'
   | 'quota_types'
@@ -113,7 +111,6 @@ export function parseModelMetadata(
         type: requiredStrictInteger(channel.type, endpoint),
       }
     }),
-    enable_groups: parseStringArray(row.enable_groups ?? [], endpoint),
     matched_models: parseStringArray(row.matched_models ?? [], endpoint),
     matched_count:
       row.matched_count == null

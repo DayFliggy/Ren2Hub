@@ -16,7 +16,10 @@ const VISUAL_USER = {
   used_quota: 2_985_211,
   request_count: 32_132,
   created_at: Math.floor((FIXED_NOW - 37 * DAY_MS) / 1000),
-  group: 'vip',
+  account_class: 'vip',
+  concurrency_override: null,
+  rpm_override: null,
+  policy_version: 1,
 }
 
 const VISUAL_START_TIME = Math.floor(
@@ -251,6 +254,27 @@ export async function configureStablePage(
     ['/api/models/search', { page: 1, page_size: 20, total: 0, items: [] }],
     ['/api/vendors/search', { page: 1, page_size: 20, total: 0, items: [] }],
     ['/api/prefill_group/', []],
+    [
+      '/api/account-classes',
+      [
+        {
+          code: 'default',
+          name: '默认',
+          default_concurrency: 5,
+          default_rpm: 0,
+          topup_multiplier: 1,
+          policy_version: 1,
+        },
+        {
+          code: 'vip',
+          name: 'VIP',
+          default_concurrency: 5,
+          default_rpm: 60,
+          topup_multiplier: 1.2,
+          policy_version: 4,
+        },
+      ],
+    ],
     ['/api/system-info/instances', []],
     ['/api/system-task/list', []],
     ['/api/option/', []],
@@ -527,7 +551,7 @@ export async function configureStablePage(
             params: {
               username:
                 'administrator.with.an.extremely.long.account.name@example.test',
-              changed_fields: ['status', 'group', 'quota'],
+              changed_fields: ['status', 'account_class', 'quota'],
             },
             content: 'Updated user account',
             actor: {
@@ -728,6 +752,12 @@ export async function configureStablePage(
           {
             id: 42,
             username: 'visual.member',
+            account_class: 'default',
+            concurrency_override: 0,
+            rpm_override: null,
+            effective_concurrency: 0,
+            effective_rpm: 0,
+            policy_version: 7,
             display_name: 'Visual Member',
             email: 'visual.member@example.test',
             role: 1,

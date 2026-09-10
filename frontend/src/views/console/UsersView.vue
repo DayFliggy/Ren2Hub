@@ -184,6 +184,11 @@ const allColumns = computed<
   Array<TableColumn & { optional?: AdminUserOptionalField }>
 >(() => [
   { key: 'user', label: t('users.user'), width: '220px' },
+  {
+    key: 'accountClass',
+    label: t('accountClasses.accountClass'),
+    width: '180px',
+  },
   { key: 'id', label: t('users.id'), width: '72px', optional: 'id' },
   {
     key: 'status',
@@ -589,6 +594,25 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
             </div>
           </template>
 
+          <template #cell-accountClass="{ row }">
+            <p class="break-words text-sm">
+              {{ (row as AdminUser).account_class }}
+            </p>
+            <p class="mt-1 text-xs text-[var(--text-tertiary)]">
+              {{ t('accountClasses.concurrency') }}:
+              {{
+                (row as AdminUser).effective_concurrency ||
+                t('accountClasses.unlimited')
+              }}
+            </p>
+            <p class="text-xs text-[var(--text-tertiary)]">
+              RPM:
+              {{
+                (row as AdminUser).effective_rpm ||
+                t('accountClasses.unlimited')
+              }}
+            </p>
+          </template>
           <template #cell-id="{ row }">
             <span
               class="display-number font-mono text-xs text-[var(--text-secondary)]"
