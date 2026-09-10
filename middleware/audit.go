@@ -8,7 +8,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 
-	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 )
 
@@ -184,7 +183,7 @@ func finishAdminAudit(c *gin.Context, writer *auditResponseWriter) {
 		auditInfo["params"] = routeParams
 	}
 
-	gopool.Go(func() {
+	common.GoDeferred(func() {
 		model.RecordOperationAuditLog(operatorId, content, ip, action, opParams, adminInfo, auditInfo)
 	})
 }

@@ -123,7 +123,7 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 			}
 		}
 	}
-	if preferred, ok := service.GetPreferredChannelByAffinity(c, modelName, ""); ok {
+	if preferred, ok := service.GetPreferredChannelByAffinity(c, modelName); ok {
 		input.PreferredChannelID = preferred
 	}
 	c.Set(service.RouteLiveSelectionRequiredContextKey, true)

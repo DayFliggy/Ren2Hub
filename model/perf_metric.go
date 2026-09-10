@@ -11,9 +11,8 @@ import (
 // PerfMetric stores aggregated relay performance metrics for the model square.
 type PerfMetric struct {
 	Id             int    `json:"id" gorm:"primaryKey"`
-	ModelName      string `json:"model_name" gorm:"size:128;uniqueIndex:idx_perf_model_group_bucket,priority:1"`
-	Group          string `json:"group" gorm:"column:group;size:64;uniqueIndex:idx_perf_model_group_bucket,priority:2"`
-	BucketTs       int64  `json:"bucket_ts" gorm:"uniqueIndex:idx_perf_model_group_bucket,priority:3;index:idx_perf_bucket_ts"`
+	ModelName      string `json:"model_name" gorm:"size:128;uniqueIndex:idx_perf_model_bucket,priority:1"`
+	BucketTs       int64  `json:"bucket_ts" gorm:"uniqueIndex:idx_perf_model_bucket,priority:2;index:idx_perf_bucket_ts"`
 	RequestCount   int64  `json:"-" gorm:"default:0"`
 	SuccessCount   int64  `json:"-" gorm:"default:0"`
 	TotalLatencyMs int64  `json:"-" gorm:"default:0"`
@@ -46,7 +45,6 @@ func upsertPerfMetric(tx *gorm.DB, metric *PerfMetric) error {
 	return tx.Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "model_name"},
-			{Name: "group"},
 			{Name: "bucket_ts"},
 		},
 		DoUpdates: clause.Assignments(map[string]interface{}{
@@ -61,13 +59,10 @@ func upsertPerfMetric(tx *gorm.DB, metric *PerfMetric) error {
 	}).Create(metric).Error
 }
 
-func GetPerfMetrics(modelName string, group string, startTs int64, endTs int64) ([]PerfMetric, error) {
+func GetPerfMetrics(modelName string, startTs int64, endTs int64) ([]PerfMetric, error) {
 	var metrics []PerfMetric
 	query := DB.Model(&PerfMetric{}).
 		Where("model_name = ? AND bucket_ts >= ? AND bucket_ts <= ?", modelName, startTs, endTs)
-	if group != "" {
-		query = query.Where(commonGroupCol+" = ?", group)
-	}
 	err := query.Order("bucket_ts ASC").Find(&metrics).Error
 	return metrics, err
 }
@@ -91,17 +86,11 @@ type PerfMetricSummaryBucket struct {
 	GenerationMs   int64  `json:"generation_ms"`
 }
 
-func GetPerfMetricsSummaryAll(startTs int64, endTs int64, groups []string) ([]PerfMetricSummary, error) {
+func GetPerfMetricsSummaryAll(startTs int64, endTs int64) ([]PerfMetricSummary, error) {
 	var summaries []PerfMetricSummary
 	query := DB.Model(&PerfMetric{}).
 		Select("model_name, SUM(request_count) as request_count, SUM(success_count) as success_count, SUM(total_latency_ms) as total_latency_ms, SUM(output_tokens) as output_tokens, SUM(generation_ms) as generation_ms").
 		Where("bucket_ts >= ? AND bucket_ts <= ?", startTs, endTs)
-	if groups != nil {
-		if len(groups) == 0 {
-			return summaries, nil
-		}
-		query = query.Where(commonGroupCol+" IN ?", groups)
-	}
 	err := query.
 		Group("model_name").
 		Having("SUM(request_count) > 0").
@@ -109,17 +98,11 @@ func GetPerfMetricsSummaryAll(startTs int64, endTs int64, groups []string) ([]Pe
 	return summaries, err
 }
 
-func GetPerfMetricsSummaryBucketsAll(startTs int64, endTs int64, groups []string) ([]PerfMetricSummaryBucket, error) {
+func GetPerfMetricsSummaryBucketsAll(startTs int64, endTs int64) ([]PerfMetricSummaryBucket, error) {
 	var summaries []PerfMetricSummaryBucket
 	query := DB.Model(&PerfMetric{}).
 		Select("model_name, bucket_ts, SUM(request_count) as request_count, SUM(success_count) as success_count, SUM(total_latency_ms) as total_latency_ms, SUM(output_tokens) as output_tokens, SUM(generation_ms) as generation_ms").
 		Where("bucket_ts >= ? AND bucket_ts <= ?", startTs, endTs)
-	if groups != nil {
-		if len(groups) == 0 {
-			return summaries, nil
-		}
-		query = query.Where(commonGroupCol+" IN ?", groups)
-	}
 	err := query.
 		Group("model_name, bucket_ts").
 		Having("SUM(request_count) > 0").

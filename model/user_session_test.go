@@ -66,14 +66,14 @@ func setupUserSessionTest(t *testing.T) {
 func createUserSessionTestUser(t *testing.T, userID int, authVersion int64) {
 	t.Helper()
 	user := User{
-		Id:          userID,
-		Username:    fmt.Sprintf("user-session-%d", userID),
-		Password:    "unused",
-		Status:      common.UserStatusEnabled,
-		Role:        common.RoleCommonUser,
-		Group:       "default",
-		AffCode:     fmt.Sprintf("session-aff-%d", userID),
-		AuthVersion: authVersion,
+		Id:           userID,
+		Username:     fmt.Sprintf("user-session-%d", userID),
+		Password:     "unused",
+		Status:       common.UserStatusEnabled,
+		Role:         common.RoleCommonUser,
+		AccountClass: "default",
+		AffCode:      fmt.Sprintf("session-aff-%d", userID),
+		AuthVersion:  authVersion,
 	}
 	require.NoError(t, DB.Create(&user).Error)
 	t.Cleanup(func() { _ = DB.Unscoped().Delete(&User{}, userID).Error })
@@ -587,13 +587,13 @@ func TestUserSessionGrowthQueryIndexesExist(t *testing.T) {
 
 func TestUserBaseIncludesAuthorizationFields(t *testing.T) {
 	user := User{
-		Id:          42,
-		Username:    "cache-user",
-		Role:        common.RoleAdminUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "vip",
-		Quota:       123,
-		AuthVersion: 7,
+		Id:           42,
+		Username:     "cache-user",
+		Role:         common.RoleAdminUser,
+		Status:       common.UserStatusEnabled,
+		AccountClass: "vip",
+		Quota:        123,
+		AuthVersion:  7,
 	}
 	base := user.ToBaseUser()
 	assert.Equal(t, user.Role, base.Role)
@@ -604,12 +604,15 @@ func TestUserBaseIncludesAuthorizationFields(t *testing.T) {
 
 func TestUserUpdateBumpsAuthVersionOnlyForAuthorizationChanges(t *testing.T) {
 	setupUserSessionTest(t)
+	require.NoError(t, InitializeAccountClasses(DB))
+	require.NoError(t, DB.Create(&AccountClass{Code: "vip", Name: "vip", DefaultConcurrency: 5, TopupMultiplier: 1, PolicyVersion: 1}).Error)
+	t.Cleanup(func() { DB.Where("code = ?", "vip").Delete(&AccountClass{}) })
 	user := &User{
-		Username: "auth-version-user",
-		Password: "hashed-placeholder",
-		Role:     common.RoleCommonUser,
-		Status:   common.UserStatusEnabled,
-		Group:    "default",
+		Username:     "auth-version-user",
+		Password:     "hashed-placeholder",
+		Role:         common.RoleCommonUser,
+		Status:       common.UserStatusEnabled,
+		AccountClass: "default",
 	}
 	require.NoError(t, DB.Create(user).Error)
 	t.Cleanup(func() { _ = DB.Unscoped().Delete(&User{}, user.Id).Error })
@@ -619,25 +622,26 @@ func TestUserUpdateBumpsAuthVersionOnlyForAuthorizationChanges(t *testing.T) {
 	require.NoError(t, user.Update(false))
 	assert.Equal(t, int64(1), user.AuthVersion)
 
-	user.Group = "vip"
+	user.AccountClass = "vip"
 	require.NoError(t, user.Update(false))
-	assert.Equal(t, int64(2), user.AuthVersion)
+	assert.Equal(t, int64(1), user.AuthVersion)
+	assert.Equal(t, int64(2), user.PolicyVersion)
 
 	user.Role = common.RoleAdminUser
 	require.NoError(t, user.Update(false))
-	assert.Equal(t, int64(3), user.AuthVersion)
+	assert.Equal(t, int64(2), user.AuthVersion)
 }
 
 func TestPasswordResetBumpsAuthVersionAndRevokesSessions(t *testing.T) {
 	setupUserSessionTest(t)
 	now := time.Now().Unix()
 	user := &User{
-		Username: "password-reset-user",
-		Password: "old-hash",
-		Email:    "password-reset@example.com",
-		Role:     common.RoleCommonUser,
-		Status:   common.UserStatusEnabled,
-		Group:    "default",
+		Username:     "password-reset-user",
+		Password:     "old-hash",
+		Email:        "password-reset@example.com",
+		Role:         common.RoleCommonUser,
+		Status:       common.UserStatusEnabled,
+		AccountClass: "default",
 	}
 	require.NoError(t, DB.Create(user).Error)
 	t.Cleanup(func() { _ = DB.Unscoped().Delete(&User{}, user.Id).Error })

@@ -19,15 +19,18 @@ import (
 
 func TestSubscriptionGroupTransitionsPreserveAuthVersionAndSessions(t *testing.T) {
 	truncateTables(t)
+	require.NoError(t, InitializeAccountClasses(DB))
+	require.NoError(t, DB.Create(&AccountClass{Code: "pro", Name: "pro", DefaultConcurrency: 5, TopupMultiplier: 1, PolicyVersion: 1}).Error)
+	t.Cleanup(func() { DB.Where("code = ?", "pro").Delete(&AccountClass{}) })
 	useUserCacheMiniRedis(t)
 	now := time.Now().Unix()
 	user := User{
-		Username:    "subscription-auth-user",
-		Password:    "unused-password-hash",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
-		AuthVersion: 1,
+		Username:     "subscription-auth-user",
+		Password:     "unused-password-hash",
+		Role:         common.RoleCommonUser,
+		Status:       common.UserStatusEnabled,
+		AccountClass: "default",
+		AuthVersion:  1,
 	}
 	require.NoError(t, DB.Create(&user).Error)
 	require.NoError(t, CreateUserSession(&UserSession{
@@ -43,46 +46,46 @@ func TestSubscriptionGroupTransitionsPreserveAuthVersionAndSessions(t *testing.T
 	}))
 	require.NoError(t, populateUserCache(user))
 	plan := &SubscriptionPlan{
-		Title:         "Upgraded",
-		DurationUnit:  SubscriptionDurationMonth,
-		DurationValue: 1,
-		TotalAmount:   100,
-		UpgradeGroup:  "pro",
-		Enabled:       true,
+		Title:               "Upgraded",
+		DurationUnit:        SubscriptionDurationMonth,
+		DurationValue:       1,
+		TotalAmount:         100,
+		UpgradeAccountClass: "pro",
+		Enabled:             true,
 	}
 	require.NoError(t, DB.Create(plan).Error)
 
 	subscription, err := CreateUserSubscriptionFromPlanTx(DB, user.Id, plan, "test")
 	require.NoError(t, err)
-	require.Equal(t, "default", subscription.PrevUserGroup)
-	require.NoError(t, RefreshUserGroupCache(user.Id))
+	require.Equal(t, "default", subscription.PreviousAccountClass)
+	require.NoError(t, RefreshUserAccountClassCache(user.Id))
 
 	var updated User
 	require.NoError(t, DB.First(&updated, user.Id).Error)
-	assert.Equal(t, "pro", updated.Group)
+	assert.Equal(t, "pro", updated.AccountClass)
 	assert.EqualValues(t, 1, updated.AuthVersion)
 	var session UserSession
 	require.NoError(t, DB.First(&session, "sid = ?", "subscription-auth-session").Error)
 	assert.Equal(t, UserSessionStatusActive, session.Status)
 	cached, err := GetUserCache(user.Id)
 	require.NoError(t, err)
-	assert.Equal(t, "pro", cached.Group)
+	assert.Equal(t, "pro", cached.AccountClass)
 	assert.EqualValues(t, 1, cached.AuthVersion)
 
 	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
-		target, err := downgradeUserGroupForSubscriptionTx(tx, subscription, now+1)
+		target, err := downgradeUserAccountClassForSubscriptionTx(tx, subscription, now+1)
 		assert.Equal(t, "default", target)
 		return err
 	}))
-	require.NoError(t, RefreshUserGroupCache(user.Id))
+	require.NoError(t, RefreshUserAccountClassCache(user.Id))
 	require.NoError(t, DB.First(&updated, user.Id).Error)
-	assert.Equal(t, "default", updated.Group)
+	assert.Equal(t, "default", updated.AccountClass)
 	assert.EqualValues(t, 1, updated.AuthVersion)
 	require.NoError(t, DB.First(&session, "sid = ?", "subscription-auth-session").Error)
 	assert.Equal(t, UserSessionStatusActive, session.Status)
 	cached, err = GetUserCache(user.Id)
 	require.NoError(t, err)
-	assert.Equal(t, "default", cached.Group)
+	assert.Equal(t, "default", cached.AccountClass)
 }
 
 func TestSubscriptionGroupCacheRefreshFailureDoesNotChangeCommittedResult(t *testing.T) {
@@ -93,6 +96,8 @@ func TestSubscriptionGroupCacheRefreshFailureDoesNotChangeCommittedResult(t *tes
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
 	DB, LOG_DB = db, db
+	require.NoError(t, InitializeAccountClasses(db))
+	require.NoError(t, db.Create(&AccountClass{Code: "pro", Name: "pro", DefaultConcurrency: 5, TopupMultiplier: 1, PolicyVersion: 1}).Error)
 	require.NoError(t, db.AutoMigrate(&User{}, &SubscriptionPlan{}, &UserSubscription{}))
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
@@ -104,21 +109,21 @@ func TestSubscriptionGroupCacheRefreshFailureDoesNotChangeCommittedResult(t *tes
 	})
 
 	user := User{
-		Username:    "subscription-cache-failure",
-		Password:    "unused-password-hash",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
-		AuthVersion: 1,
+		Username:     "subscription-cache-failure",
+		Password:     "unused-password-hash",
+		Role:         common.RoleCommonUser,
+		Status:       common.UserStatusEnabled,
+		AccountClass: "default",
+		AuthVersion:  1,
 	}
 	require.NoError(t, DB.Create(&user).Error)
 	plan := &SubscriptionPlan{
-		Title:         "Cache failure plan",
-		DurationUnit:  SubscriptionDurationMonth,
-		DurationValue: 1,
-		TotalAmount:   100,
-		UpgradeGroup:  "pro",
-		Enabled:       true,
+		Title:               "Cache failure plan",
+		DurationUnit:        SubscriptionDurationMonth,
+		DurationValue:       1,
+		TotalAmount:         100,
+		UpgradeAccountClass: "pro",
+		Enabled:             true,
 	}
 	require.NoError(t, DB.Create(plan).Error)
 	InvalidateSubscriptionPlanCache(plan.Id)
@@ -142,7 +147,7 @@ func TestSubscriptionGroupCacheRefreshFailureDoesNotChangeCommittedResult(t *tes
 
 	var updated User
 	require.NoError(t, DB.First(&updated, user.Id).Error)
-	assert.Equal(t, "pro", updated.Group)
+	assert.Equal(t, "pro", updated.AccountClass)
 	assert.EqualValues(t, 1, updated.AuthVersion)
 	var subscription UserSubscription
 	require.NoError(t, DB.Where("user_id = ?", user.Id).First(&subscription).Error)

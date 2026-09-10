@@ -129,8 +129,8 @@ func channelOwnerName(channelType int) string {
 	return strings.ToLower(constant.GetChannelTypeName(channelType))
 }
 
-func getPreferredModelOwners(modelNames []string, groups []string) map[string]string {
-	channelTypes, err := model.GetPreferredModelOwnerChannelTypes(modelNames, groups)
+func getPreferredModelOwners(modelNames []string) map[string]string {
+	channelTypes, err := model.GetPreferredModelOwnerChannelTypes(modelNames)
 	if err != nil {
 		common.SysLog(fmt.Sprintf("GetPreferredModelOwnerChannelTypes error: %v", err))
 		return map[string]string{}
@@ -255,7 +255,7 @@ func ListModels(c *gin.Context, modelType int) {
 		endpointTypesByModel[modelName] = endpointTypes
 	}
 
-	ownerByModel := getPreferredModelOwners(userModelNames, nil)
+	ownerByModel := getPreferredModelOwners(userModelNames)
 	userOpenAiModels := make([]dto.OpenAIModels, 0, len(userModelNames))
 	for _, modelName := range userModelNames {
 		userOpenAiModels = append(userOpenAiModels, buildOpenAIModelWithEndpointTypes(modelName, ownerByModel, endpointTypesByModel[modelName]))

@@ -37,7 +37,7 @@ func TestGetNextEnabledKeyExcludingPollingSkipsAttemptedAndDisabledKeys(t *testi
 		Name:   "polling-key-exclusion",
 		Status: common.ChannelStatusEnabled,
 		Key:    "key-zero\nkey-disabled\nkey-two",
-		Group:  "default",
+
 		Models: "polling-key-model",
 		ChannelInfo: ChannelInfo{
 			IsMultiKey:           true,
@@ -50,7 +50,7 @@ func TestGetNextEnabledKeyExcludingPollingSkipsAttemptedAndDisabledKeys(t *testi
 	}
 	require.NoError(t, DB.Create(channel).Error)
 	require.NoError(t, DB.Create(&Ability{
-		Group:     "default",
+
 		Model:     "polling-key-model",
 		ChannelId: channel.Id,
 		Enabled:   true,

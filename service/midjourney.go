@@ -106,9 +106,11 @@ func RefundMidjourneyQuota(ctx context.Context, task *model.Midjourney, reason s
 	}
 
 	if task.TokenId > 0 {
-		tokenKey := resolveTokenKey(ctx, task.TokenId, task.MjId)
-		if tokenKey != "" {
-			if err := model.IncreaseTokenQuota(task.TokenId, tokenKey, quota); err != nil {
+		token, err := model.GetTokenById(task.TokenId)
+		if err != nil {
+			logger.LogWarn(ctx, fmt.Sprintf("获取 Midjourney 退款令牌失败 task %s: %s", task.MjId, err.Error()))
+		} else {
+			if err := model.IncreaseTokenQuota(task.TokenId, token.Key, quota); err != nil {
 				logger.LogWarn(ctx, fmt.Sprintf("退还 Midjourney 令牌额度失败 task %s: %s", task.MjId, err.Error()))
 			}
 		}
@@ -273,7 +275,7 @@ func ConvertSimpleChangeParams(content string) *dto.MidjourneyRequest {
 	return changeParams
 }
 
-func DoMidjourneyHttpRequest(c *gin.Context, timeout time.Duration, fullRequestURL string) (*dto.MidjourneyResponseWithStatusCode, []byte, error) {
+func DoMidjourneyHttpRequest(c *gin.Context, timeout time.Duration, fullRequestURL string, startCall func() (func(*http.Response, error), error)) (*dto.MidjourneyResponseWithStatusCode, []byte, error) {
 	var nullBytes []byte
 	//var requestBody io.Reader
 	//requestBody = c.Request.Body
@@ -322,7 +324,22 @@ func DoMidjourneyHttpRequest(c *gin.Context, timeout time.Duration, fullRequestU
 		req.Header.Set("mj-api-secret", auth)
 	}
 	defer cancel()
-	resp, err := GetHttpClient().Do(req)
+	if req.URL.Host == "" || (req.URL.Scheme != "http" && req.URL.Scheme != "https") {
+		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "invalid_request_url", http.StatusInternalServerError), nullBytes, fmt.Errorf("invalid Midjourney upstream URL")
+	}
+	var finish func(*http.Response, error)
+	if startCall != nil {
+		finish, err = startCall()
+		if err != nil {
+			return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "upstream_call_budget_exhausted", http.StatusServiceUnavailable), nullBytes, err
+		}
+	}
+	client := *GetHttpClient()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := client.Do(req)
+	if finish != nil {
+		finish(resp, err)
+	}
 	if err != nil {
 		common.SysLog("do request failed: " + err.Error())
 		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "do_request_failed", http.StatusInternalServerError), nullBytes, err

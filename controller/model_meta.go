@@ -206,7 +206,6 @@ func enrichModels(models []*model.Model) {
 				}
 			}
 			mm.BoundChannels = chs
-			mm.EnableGroups = model.GetModelEnableGroups(mm.ModelName)
 			mm.QuotaTypes = model.GetModelQuotaTypes(mm.ModelName)
 		}
 	}
@@ -221,7 +220,6 @@ func enrichModels(models []*model.Model) {
 	// 为全部规则模型收集匹配名集合、端点并集、分组并集、配额集合
 	matchedNamesByIdx := make(map[int][]string)
 	endpointSetByIdx := make(map[int]map[constant.EndpointType]struct{})
-	groupSetByIdx := make(map[int]map[string]struct{})
 	quotaSetByIdx := make(map[int]map[int]struct{})
 
 	for _, p := range pricings {
@@ -248,15 +246,6 @@ func enrichModels(models []*model.Model) {
 			}
 			for _, et := range p.SupportedEndpointTypes {
 				es[et] = struct{}{}
-			}
-
-			gs := groupSetByIdx[idx]
-			if gs == nil {
-				gs = make(map[string]struct{})
-				groupSetByIdx[idx] = gs
-			}
-			for _, g := range p.EnableGroup {
-				gs[g] = struct{}{}
 			}
 
 			qs := quotaSetByIdx[idx]
@@ -294,15 +283,6 @@ func enrichModels(models []*model.Model) {
 			if b, err := json.Marshal(eps); err == nil {
 				mm.Endpoints = string(b)
 			}
-		}
-
-		// 分组并集
-		if gs, ok := groupSetByIdx[idx]; ok {
-			groups := make([]string, 0, len(gs))
-			for g := range gs {
-				groups = append(groups, g)
-			}
-			mm.EnableGroups = groups
 		}
 
 		// 配额类型集合（保持去重并排序）

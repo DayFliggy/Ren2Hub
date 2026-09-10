@@ -364,13 +364,13 @@ func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *te
 
 	const userID = 9101
 	const channelID = 91011
-	user := model.User{Id: userID, Username: "lease-qualification-user", Password: "password", Status: common.UserStatusEnabled, Group: "default"}
+	user := model.User{Id: userID, Username: "lease-qualification-user", Password: "password", Status: common.UserStatusEnabled, AccountClass: "default"}
 	require.NoError(t, db.Create(&user).Error)
 	token := model.Token{UserId: userID, Key: "lease-qualification-token", Name: "lease-qualification-token", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true}
 	require.NoError(t, db.Create(&token).Error)
-	channel := model.Channel{Id: channelID, Type: constant.ChannelTypeOpenAI, Key: "lease-qualification-key", Name: "lease-qualification-channel", Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default"}
+	channel := model.Channel{Id: channelID, Type: constant.ChannelTypeOpenAI, Key: "lease-qualification-key", Name: "lease-qualification-channel", Status: common.ChannelStatusEnabled, Models: "gpt-test"}
 	require.NoError(t, db.Create(&channel).Error)
-	require.NoError(t, db.Create(&model.Ability{ChannelId: channelID, Group: "default", Model: "gpt-test", Enabled: true}).Error)
+	require.NoError(t, db.Create(&model.Ability{ChannelId: channelID, Model: "gpt-test", Enabled: true}).Error)
 	profile := model.UserRouteProfile{UserID: userID, TokenID: token.Id, Mode: model.RouteModeManual, Version: 1, Status: model.RouteProfileStatusEnabled}
 	profile.Normalize(time.Now())
 	require.NoError(t, db.Create(&profile).Error)
@@ -378,13 +378,11 @@ func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *te
 	require.NoError(t, db.Create(&group).Error)
 	require.NoError(t, db.Create(&model.UserRouteEntry{GroupID: group.ID, ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}).Error)
 	require.NoError(t, db.Model(&profile).Update("active_group_id", group.ID).Error)
-	groups, err := common.Marshal([]string{"default"})
-	require.NoError(t, err)
 	endpoints, err := common.Marshal([]string{string(constant.EndpointTypeOpenAI)})
 	require.NoError(t, err)
 	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, model.ChannelCapabilitySnapshotFence{}, "lease-source", "lease-catalog", []model.ChannelModelCapability{{
 		RequestModel: "gpt-test", ActualModel: "gpt-test", LabSlug: "openai", Source: "canonical", Confidence: 1,
-		AbilityGroups: string(groups), EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
+		AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
 		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
 	}}))
 	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", channelID).Update("enabled", false).Error)
@@ -406,7 +404,7 @@ func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *te
 	})
 	markLiveRouteSecurityQualified(c)
 	markLiveRoutePriceQualified(c)
-	info := &relaycommon.RelayInfo{RequestId: "lease-qualification-request", UserId: userID, TokenId: token.Id, UserGroup: "default", OriginModelName: "gpt-test"}
+	info := &relaycommon.RelayInfo{RequestId: "lease-qualification-request", UserId: userID, TokenId: token.Id, UserAccountClass: "default", OriginModelName: "gpt-test"}
 	info.PriceData.ChannelRatio = 1
 
 	err = acquireRouteAttemptLease(c, info, &channel, 0)

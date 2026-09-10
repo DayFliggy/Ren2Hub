@@ -8,7 +8,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -191,16 +190,16 @@ func AdminCreateSubscriptionPlan(c *gin.Context) {
 		common.ApiErrorMsg(c, "总额度不能为负数")
 		return
 	}
-	req.Plan.UpgradeGroup = strings.TrimSpace(req.Plan.UpgradeGroup)
-	if req.Plan.UpgradeGroup != "" {
-		if _, ok := ratio_setting.GetGroupRatioCopy()[req.Plan.UpgradeGroup]; !ok {
+	req.Plan.UpgradeAccountClass = strings.TrimSpace(req.Plan.UpgradeAccountClass)
+	if req.Plan.UpgradeAccountClass != "" {
+		if _, err := model.GetAccountClass(c.Request.Context(), req.Plan.UpgradeAccountClass); err != nil {
 			common.ApiErrorMsg(c, "升级分组不存在")
 			return
 		}
 	}
-	req.Plan.DowngradeGroup = strings.TrimSpace(req.Plan.DowngradeGroup)
-	if req.Plan.DowngradeGroup != "" {
-		if _, ok := ratio_setting.GetGroupRatioCopy()[req.Plan.DowngradeGroup]; !ok {
+	req.Plan.DowngradeAccountClass = strings.TrimSpace(req.Plan.DowngradeAccountClass)
+	if req.Plan.DowngradeAccountClass != "" {
+		if _, err := model.GetAccountClass(c.Request.Context(), req.Plan.DowngradeAccountClass); err != nil {
 			common.ApiErrorMsg(c, "降级分组不存在")
 			return
 		}
@@ -265,16 +264,16 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 		common.ApiErrorMsg(c, "总额度不能为负数")
 		return
 	}
-	req.Plan.UpgradeGroup = strings.TrimSpace(req.Plan.UpgradeGroup)
-	if req.Plan.UpgradeGroup != "" {
-		if _, ok := ratio_setting.GetGroupRatioCopy()[req.Plan.UpgradeGroup]; !ok {
+	req.Plan.UpgradeAccountClass = strings.TrimSpace(req.Plan.UpgradeAccountClass)
+	if req.Plan.UpgradeAccountClass != "" {
+		if _, err := model.GetAccountClass(c.Request.Context(), req.Plan.UpgradeAccountClass); err != nil {
 			common.ApiErrorMsg(c, "升级分组不存在")
 			return
 		}
 	}
-	req.Plan.DowngradeGroup = strings.TrimSpace(req.Plan.DowngradeGroup)
-	if req.Plan.DowngradeGroup != "" {
-		if _, ok := ratio_setting.GetGroupRatioCopy()[req.Plan.DowngradeGroup]; !ok {
+	req.Plan.DowngradeAccountClass = strings.TrimSpace(req.Plan.DowngradeAccountClass)
+	if req.Plan.DowngradeAccountClass != "" {
+		if _, err := model.GetAccountClass(c.Request.Context(), req.Plan.DowngradeAccountClass); err != nil {
 			common.ApiErrorMsg(c, "降级分组不存在")
 			return
 		}
@@ -286,6 +285,9 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 	}
 
 	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := model.LockAccountClassReferences(tx, req.Plan.UpgradeAccountClass, req.Plan.DowngradeAccountClass); err != nil {
+			return err
+		}
 		// update plan (allow zero values updates with map)
 		updateMap := map[string]interface{}{
 			"title":                      req.Plan.Title,
@@ -302,8 +304,8 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 			"waffo_pancake_product_id":   req.Plan.WaffoPancakeProductId,
 			"max_purchase_per_user":      req.Plan.MaxPurchasePerUser,
 			"total_amount":               req.Plan.TotalAmount,
-			"upgrade_group":              req.Plan.UpgradeGroup,
-			"downgrade_group":            req.Plan.DowngradeGroup,
+			"upgrade_account_class":      req.Plan.UpgradeAccountClass,
+			"downgrade_account_class":    req.Plan.DowngradeAccountClass,
 			"quota_reset_period":         req.Plan.QuotaResetPeriod,
 			"quota_reset_custom_seconds": req.Plan.QuotaResetCustomSeconds,
 			"updated_at":                 common.GetTimestamp(),

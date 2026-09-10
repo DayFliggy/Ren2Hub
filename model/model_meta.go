@@ -36,7 +36,6 @@ type Model struct {
 	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index;uniqueIndex:uk_model_name_delete_at,priority:2"`
 
 	BoundChannels []BoundChannel `json:"bound_channels,omitempty" gorm:"-"`
-	EnableGroups  []string       `json:"enable_groups,omitempty" gorm:"-"`
 	QuotaTypes    []int          `json:"quota_types,omitempty" gorm:"-"`
 	NameRule      int            `json:"name_rule" gorm:"default:0"`
 
@@ -152,7 +151,7 @@ func normalizeLookupValues(values []string) []string {
 	return normalized
 }
 
-func GetPreferredModelOwnerChannelTypes(modelNames []string, groups []string) (map[string]int, error) {
+func GetPreferredModelOwnerChannelTypes(modelNames []string) (map[string]int, error) {
 	result := make(map[string]int)
 	modelNames = normalizeLookupValues(modelNames)
 	if len(modelNames) == 0 {
@@ -172,11 +171,6 @@ func GetPreferredModelOwnerChannelTypes(modelNames []string, groups []string) (m
 		Order("COALESCE(abilities.priority, 0) DESC").
 		Order("abilities.weight DESC").
 		Order("abilities.channel_id ASC")
-
-	groups = normalizeLookupValues(groups)
-	if len(groups) > 0 {
-		query = query.Where("abilities."+commonGroupCol+" IN ?", groups)
-	}
 
 	if err := query.Scan(&rows).Error; err != nil {
 		return nil, err

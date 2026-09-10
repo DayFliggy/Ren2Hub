@@ -57,22 +57,20 @@ func seedRoutePreviewChannel(t *testing.T, db *gorm.DB, channelID int) int {
 	t.Helper()
 	channel := &model.Channel{
 		Id: channelID, Key: fmt.Sprintf("routing-preview-key-%d", channelID), Name: fmt.Sprintf("routing-preview-%d", channelID),
-		Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default",
+		Status: common.ChannelStatusEnabled, Models: "gpt-test",
 	}
 	require.NoError(t, db.Create(channel).Error)
-	require.NoError(t, db.Create(&model.Ability{Group: "default", Model: "gpt-test", ChannelId: channelID, Enabled: true}).Error)
+	require.NoError(t, db.Create(&model.Ability{Model: "gpt-test", ChannelId: channelID, Enabled: true}).Error)
 	return channelID
 }
 
 func publishRoutePreviewCapability(t *testing.T, channelID int, endpointTypes []string, state string) {
 	t.Helper()
-	groups, err := common.Marshal([]string{"default"})
-	require.NoError(t, err)
 	endpoints, err := common.Marshal(endpointTypes)
 	require.NoError(t, err)
 	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, model.ChannelCapabilitySnapshotFence{}, fmt.Sprintf("preview-source-%d", channelID), "preview-catalog", []model.ChannelModelCapability{{
 		RequestModel: "gpt-test", ActualModel: "gpt-test", LabSlug: "openai", Source: "canonical", Confidence: 1,
-		AbilityGroups: string(groups), EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
+		AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
 		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: state,
 	}}))
 	require.NoError(t, RebuildRouteCapabilityIndex(context.Background()))
@@ -91,13 +89,13 @@ func findRoutePreviewEntry(t *testing.T, preview *RouteProfilePreview, channelID
 
 func seedRouteProfileFixture(t *testing.T, db *gorm.DB) (int, int, int) {
 	t.Helper()
-	user := &model.User{Id: 701, Username: "routing-user", Password: "password", Status: common.UserStatusEnabled, Group: "default"}
+	user := &model.User{Id: 701, Username: "routing-user", Password: "password", Status: common.UserStatusEnabled, AccountClass: "default"}
 	require.NoError(t, db.Create(user).Error)
 	token := &model.Token{UserId: user.Id, Key: "routing-token", Name: "routing-token", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true}
 	require.NoError(t, db.Create(token).Error)
-	channel := &model.Channel{Id: 7011, Key: "routing-channel-key", Name: "routing-channel", Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default"}
+	channel := &model.Channel{Id: 7011, Key: "routing-channel-key", Name: "routing-channel", Status: common.ChannelStatusEnabled, Models: "gpt-test"}
 	require.NoError(t, db.Create(channel).Error)
-	require.NoError(t, db.Create(&model.Ability{Group: "default", Model: "gpt-test", ChannelId: channel.Id, Enabled: true}).Error)
+	require.NoError(t, db.Create(&model.Ability{Model: "gpt-test", ChannelId: channel.Id, Enabled: true}).Error)
 	return user.Id, token.Id, channel.Id
 }
 
@@ -475,13 +473,11 @@ func TestRouteProfilePreviewUsesOnlyActiveCapabilitySnapshot(t *testing.T) {
 	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
 	firstFence, err := model.GetChannelCapabilitySnapshotFence(context.Background(), channelID)
 	require.NoError(t, err)
-	groupsJSON, err := common.Marshal([]string{"default"})
-	require.NoError(t, err)
 	endpointsJSON, err := common.Marshal([]string{string(constant.EndpointTypeOpenAI)})
 	require.NoError(t, err)
 	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, firstFence, "preview-source-new", "preview-catalog-new", []model.ChannelModelCapability{{
 		RequestModel: "gpt-test", ActualModel: "gpt-test-new", LabSlug: "openai", Source: "canonical", Confidence: 1,
-		AbilityGroups: string(groupsJSON), EndpointTypes: string(endpointsJSON), ChannelStatus: common.ChannelStatusEnabled,
+		AbilityEnabled: true, EndpointTypes: string(endpointsJSON), ChannelStatus: common.ChannelStatusEnabled,
 		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
 	}}))
 

@@ -13,15 +13,15 @@ func insertUsersForPaginationTest(t *testing.T, total int) {
 	t.Helper()
 	for id := 1; id <= total; id++ {
 		user := &User{
-			Id:          id,
-			Username:    fmt.Sprintf("user%02d", id),
-			Password:    "password123",
-			DisplayName: fmt.Sprintf("User %02d", id),
-			Email:       fmt.Sprintf("user%02d@example.com", id),
-			Role:        common.RoleCommonUser,
-			Status:      common.UserStatusEnabled,
-			Group:       "default",
-			AffCode:     fmt.Sprintf("aff%02d", id),
+			Id:           id,
+			Username:     fmt.Sprintf("user%02d", id),
+			Password:     "password123",
+			DisplayName:  fmt.Sprintf("User %02d", id),
+			Email:        fmt.Sprintf("user%02d@example.com", id),
+			Role:         common.RoleCommonUser,
+			Status:       common.UserStatusEnabled,
+			AccountClass: "default",
+			AffCode:      fmt.Sprintf("aff%02d", id),
 		}
 		require.NoError(t, DB.Create(user).Error)
 	}

@@ -582,9 +582,9 @@ func TestComposeTieredTextQuotaKeepsToolCallSurcharges(t *testing.T) {
 			},
 		},
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
-			BillingMode:               "tiered_expr",
-			GroupRatio:                1,
-			EstimatedQuotaBeforeGroup: 1000,
+			BillingMode:                    "tiered_expr",
+			ChannelRatio:                   1,
+			EstimatedQuotaBeforeMultiplier: 1000,
 		},
 		StartTime: time.Now(),
 	}
@@ -597,8 +597,8 @@ func TestComposeTieredTextQuotaKeepsToolCallSurcharges(t *testing.T) {
 
 	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
 	quota := composeTieredTextQuota(relayInfo, summary, 1000, &billingexpr.TieredResult{
-		ActualQuotaBeforeGroup: 1000,
-		ActualQuotaAfterGroup:  1000,
+		ActualQuotaBeforeMultiplier: 1000,
+		ActualQuotaAfterMultiplier:  1000,
 	})
 
 	require.Equal(t, int64(13000), summary.ToolCallSurchargeQuota.Round(0).IntPart())
@@ -619,9 +619,9 @@ func TestComposeTieredTextQuotaFallbackKeepsToolCallSurcharges(t *testing.T) {
 			ChannelRatio:    1.25,
 		},
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
-			BillingMode:               "tiered_expr",
-			GroupRatio:                1.25,
-			EstimatedQuotaBeforeGroup: 1000,
+			BillingMode:                    "tiered_expr",
+			ChannelRatio:                   1.25,
+			EstimatedQuotaBeforeMultiplier: 1000,
 		},
 		StartTime: time.Now(),
 	}
@@ -653,9 +653,9 @@ func TestComposeTieredTextQuotaErrorFallbackUsesPreConsumedQuota(t *testing.T) {
 			ChannelRatio:    1.25,
 		},
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
-			BillingMode:               "tiered_expr",
-			GroupRatio:                1.25,
-			EstimatedQuotaBeforeGroup: 1000,
+			BillingMode:                    "tiered_expr",
+			ChannelRatio:                   1.25,
+			EstimatedQuotaBeforeMultiplier: 1000,
 		},
 		StartTime: time.Now(),
 	}
@@ -670,7 +670,7 @@ func TestComposeTieredTextQuotaErrorFallbackUsesPreConsumedQuota(t *testing.T) {
 
 	// tieredResult=nil simulates a settlement error where TryTieredSettle
 	// falls back to FinalPreConsumedQuota (2000), which differs from
-	// EstimatedQuotaBeforeGroup * GroupRatio (1250).
+	// EstimatedQuotaBeforeMultiplier * ChannelRatio (1250).
 	preConsumedFallback := 2000
 	quota := composeTieredTextQuota(relayInfo, summary, preConsumedFallback, nil)
 
@@ -682,7 +682,7 @@ func TestComposeTieredTextQuotaErrorFallbackUsesPreConsumedQuota(t *testing.T) {
 // settlement both saturates the quota and records the clamp on RelayInfo, so
 // every consume path (text, audio, WSS) can surface it under admin_info.
 func TestTryTieredSettleRecordsClampOnOverflow(t *testing.T) {
-	// exprOutput = p * 1e9; quotaBeforeGroup = p*1e9 / 1e6 * 5e5 far exceeds
+	// exprOutput = p * 1e9; quotaBeforeMultiplier = p*1e9 / 1e6 * 5e5 far exceeds
 	// MaxInt32 and must saturate.
 	exprStr := `tier("base", p * 1000000000)`
 	relayInfo := &relaycommon.RelayInfo{
@@ -691,7 +691,7 @@ func TestTryTieredSettleRecordsClampOnOverflow(t *testing.T) {
 			BillingMode:  "tiered_expr",
 			ExprString:   exprStr,
 			ExprHash:     billingexpr.ExprHashString(exprStr),
-			GroupRatio:   1,
+			ChannelRatio: 1,
 			QuotaPerUnit: 500_000,
 		},
 	}
@@ -715,7 +715,7 @@ func TestTryTieredSettleNoClampInRange(t *testing.T) {
 			BillingMode:  "tiered_expr",
 			ExprString:   exprStr,
 			ExprHash:     billingexpr.ExprHashString(exprStr),
-			GroupRatio:   1,
+			ChannelRatio: 1,
 			QuotaPerUnit: 500_000,
 		},
 	}
@@ -773,8 +773,8 @@ func TestCalculateTextToolCallSurchargeGeneralizedBuiltInTools(t *testing.T) {
 		},
 	}
 	summary := &textQuotaSummary{
-		ModelName:  "o1",
-		GroupRatio: 1,
+		ModelName:    "o1",
+		ChannelRatio: 1,
 	}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
@@ -808,8 +808,8 @@ func TestCalculateTextToolCallSurchargeKeepsSearchPreviewFallbackWithCustomFunct
 		},
 	}
 	summary := &textQuotaSummary{
-		ModelName:  relayInfo.OriginModelName,
-		GroupRatio: 1,
+		ModelName:    relayInfo.OriginModelName,
+		ChannelRatio: 1,
 	}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
@@ -833,8 +833,8 @@ func TestCalculateTextToolCallSurchargeDoesNotInferSearchForResponses(t *testing
 		},
 	}
 	summary := &textQuotaSummary{
-		ModelName:  relayInfo.OriginModelName,
-		GroupRatio: 1,
+		ModelName:    relayInfo.OriginModelName,
+		ChannelRatio: 1,
 	}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
@@ -856,7 +856,7 @@ func TestCalculateTextToolCallSurchargeMergesSameNameAndPrice(t *testing.T) {
 			},
 		},
 	}
-	summary := &textQuotaSummary{ModelName: relayInfo.OriginModelName, GroupRatio: 1}
+	summary := &textQuotaSummary{ModelName: relayInfo.OriginModelName, ChannelRatio: 1}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
 
@@ -939,7 +939,7 @@ func TestCalculateTextToolCallSurchargeGeminiGoogleSearch(t *testing.T) {
 	ctx.Set("gemini_google_search_call", true)
 
 	relayInfo := &relaycommon.RelayInfo{OriginModelName: "gemini-2.5-flash"}
-	summary := &textQuotaSummary{ModelName: "gemini-2.5-flash", GroupRatio: 1}
+	summary := &textQuotaSummary{ModelName: "gemini-2.5-flash", ChannelRatio: 1}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
 	expected := decimal.NewFromFloat(14.0 / 1000).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
@@ -965,7 +965,7 @@ func TestCalculateTextToolCallSurchargeImageGenerationDefaultPrice(t *testing.T)
 			},
 		},
 	}
-	summary := &textQuotaSummary{ModelName: "gpt-5.1", GroupRatio: 1.5}
+	summary := &textQuotaSummary{ModelName: "gpt-5.1", ChannelRatio: 1.5}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
 	expected := decimal.NewFromFloat(150.0).
@@ -996,7 +996,7 @@ func TestCalculateTextToolCallSurchargeImageGenerationExplicitZeroDisables(t *te
 			},
 		},
 	}
-	summary := &textQuotaSummary{ModelName: "gpt-5.1", GroupRatio: 1}
+	summary := &textQuotaSummary{ModelName: "gpt-5.1", ChannelRatio: 1}
 
 	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
 	assert.True(t, surcharge.IsZero())

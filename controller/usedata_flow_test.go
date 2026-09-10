@@ -25,11 +25,11 @@ func setupFlowControllerTestDB(t *testing.T) {
 	require.NoError(t, model.DB.Create(&model.Token{Id: 11, UserId: 1, Key: "sk-primary", Name: "primary"}).Error)
 	require.NoError(t, model.DB.Create(&model.Token{Id: 22, UserId: 2, Key: "sk-backup", Name: "backup"}).Error)
 	require.NoError(t, model.DB.Create(&model.QuotaData{
-		UserID:    1,
-		Username:  "alice",
-		NodeName:  "node-a",
-		TokenID:   11,
-		UseGroup:  "default",
+		UserID:   1,
+		Username: "alice",
+		NodeName: "node-a",
+		TokenID:  11,
+
 		ChannelID: 1,
 		ModelName: "gpt-a",
 		CreatedAt: 1100,
@@ -38,11 +38,11 @@ func setupFlowControllerTestDB(t *testing.T) {
 		TokenUsed: 40,
 	}).Error)
 	require.NoError(t, model.DB.Create(&model.QuotaData{
-		UserID:    2,
-		Username:  "bob",
-		NodeName:  "node-b",
-		TokenID:   22,
-		UseGroup:  "vip",
+		UserID:   2,
+		Username: "bob",
+		NodeName: "node-b",
+		TokenID:  22,
+
 		ChannelID: 1,
 		ModelName: "gpt-b",
 		CreatedAt: 1200,
@@ -74,7 +74,6 @@ func TestGetAllFlowQuotaDatesUsesAdminDimensions(t *testing.T) {
 	payload := decodeFlowQuotaResponse(t, recorder)
 	require.Len(t, payload.Data, 1)
 	require.Equal(t, "bob", payload.Data[0].Username)
-	require.Equal(t, "vip", payload.Data[0].UseGroup)
 	require.Equal(t, "east", payload.Data[0].ChannelName)
 	require.Empty(t, payload.Data[0].TokenName)
 	require.Empty(t, payload.Data[0].NodeName)
@@ -95,7 +94,6 @@ func TestGetAllFlowQuotaDatesUsesRootDimensions(t *testing.T) {
 	require.Equal(t, "alice", payload.Data[0].Username)
 	require.Equal(t, "node-a", payload.Data[0].NodeName)
 	require.Equal(t, "primary", payload.Data[0].TokenName)
-	require.Equal(t, "default", payload.Data[0].UseGroup)
 	require.Equal(t, "east", payload.Data[0].ChannelName)
 }
 
@@ -113,7 +111,6 @@ func TestGetUserFlowQuotaDatesRestrictsToAuthenticatedUser(t *testing.T) {
 	require.Len(t, payload.Data, 1)
 	require.Empty(t, payload.Data[0].Username)
 	require.Equal(t, "primary", payload.Data[0].TokenName)
-	require.Equal(t, "default", payload.Data[0].UseGroup)
 	require.Empty(t, payload.Data[0].ChannelName)
 }
 

@@ -86,14 +86,10 @@ func formatWaffoAmount(amount float64, currency string) string {
 // getWaffoPayMoney converts the user-facing amount to USD for Waffo payment.
 // Waffo only accepts USD, so this function handles the conversion from different
 // display types (USD/CNY/TOKENS) to the actual USD amount to charge.
-func getWaffoPayMoney(amount float64, group string) float64 {
+func getWaffoPayMoney(amount float64, topupMultiplier float64) float64 {
 	originalAmount := amount
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
 		amount = amount / common.QuotaPerUnit
-	}
-	topupGroupRatio := common.GetTopupGroupRatio(group)
-	if topupGroupRatio == 0 {
-		topupGroupRatio = 1
 	}
 	discount := 1.0
 	if ds, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(originalAmount)]; ok {
@@ -101,7 +97,7 @@ func getWaffoPayMoney(amount float64, group string) float64 {
 			discount = ds
 		}
 	}
-	return amount * setting.WaffoUnitPrice * topupGroupRatio * discount
+	return amount * setting.WaffoUnitPrice * topupMultiplier * discount
 }
 
 type WaffoPayRequest struct {
@@ -128,13 +124,13 @@ func RequestWaffoAmount(c *gin.Context) {
 		return
 	}
 
-	group, err := model.GetUserGroup(id, true)
+	topupMultiplier, err := model.GetUserTopupMultiplier(id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取账号分类失败"})
 		return
 	}
 
-	payMoney := getWaffoPayMoney(float64(req.Amount), group)
+	payMoney := getWaffoPayMoney(float64(req.Amount), topupMultiplier)
 	if payMoney <= 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
@@ -202,8 +198,12 @@ func RequestWaffoPay(c *gin.Context) {
 	}
 	// resolvedPayMethodType/Name 为空时，Waffo 自动选择支付方式
 
-	group, _ := model.GetUserGroup(id, true)
-	payMoney := getWaffoPayMoney(float64(req.Amount), group)
+	topupMultiplier, err := model.GetUserTopupMultiplier(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	payMoney := getWaffoPayMoney(float64(req.Amount), topupMultiplier)
 	if payMoney < 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return

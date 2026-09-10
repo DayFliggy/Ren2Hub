@@ -44,6 +44,45 @@ func TestRouteLeaseAcquireReleaseRenewAndOwnership(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRouteLeaseRequestAndAttemptsHaveIndependentOwnership(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	ctx := context.Background()
+	user, err := AcquireScopedRouteLease(ctx, client, RouteLeaseOwner{RequestID: "shared", Scope: RouteLeaseScopeRequest}, "user", time.Minute,
+		[]RouteLeaseResource{{Key: UserRouteLeaseKey(1), Capacity: 1}})
+	require.NoError(t, err)
+	first, err := AcquireScopedRouteLease(ctx, client, RouteLeaseOwner{RequestID: "shared", Scope: RouteLeaseScopeAttempt, AttemptSequence: 1}, "attempt-1", time.Minute,
+		[]RouteLeaseResource{{Key: ChannelRouteLeaseKey(1), Capacity: 1}})
+	require.NoError(t, err)
+	require.NoError(t, ReleaseRouteLease(ctx, client, first))
+	_, err = RenewRouteLease(ctx, client, user, time.Minute)
+	require.NoError(t, err)
+	second, err := AcquireScopedRouteLease(ctx, client, RouteLeaseOwner{RequestID: "shared", Scope: RouteLeaseScopeAttempt, AttemptSequence: 2}, "attempt-2", time.Minute,
+		[]RouteLeaseResource{{Key: ChannelRouteLeaseKey(1), Capacity: 1}})
+	require.NoError(t, err)
+	assert.Equal(t, user.RequestID, second.RequestID)
+	assert.ErrorIs(t, ReleaseRouteLease(ctx, client, first), ErrRouteLeaseOwnership)
+	assert.Equal(t, int64(1), client.ZCard(ctx, UserRouteLeaseKey(1)).Val())
+	assert.Equal(t, int64(1), client.ZCard(ctx, ChannelRouteLeaseKey(1)).Val())
+	require.NoError(t, ReleaseRouteLease(ctx, client, second))
+	require.NoError(t, ReleaseRouteLease(ctx, client, user))
+}
+
+func TestRouteLeaseUnlimitedStillCountsExistingRequests(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	ctx := context.Background()
+	lease, err := AcquireRouteLease(ctx, client, "unlimited-request", "active", time.Minute,
+		[]RouteLeaseResource{{Key: UserRouteLeaseKey(1), Capacity: 0}})
+	require.NoError(t, err)
+	_, err = AcquireRouteLease(ctx, client, "limited-request", "waiting", time.Minute,
+		[]RouteLeaseResource{{Key: UserRouteLeaseKey(1), Capacity: 1}})
+	assert.ErrorIs(t, err, ErrRouteLeaseCapacity)
+	require.NoError(t, ReleaseRouteLease(ctx, client, lease))
+}
+
 func TestRouteLeaseExpiresAndRuntimeRecheckFailsClosed(t *testing.T) {
 	server := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: server.Addr()})

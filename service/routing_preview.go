@@ -341,7 +341,7 @@ func FindUserRouteCapabilityAccessForGroup(ctx context.Context, userID int, capa
 		ctx = context.Background()
 	}
 	var user model.User
-	if err := model.DB.WithContext(ctx).Select("id", "group").Where("id = ?", userID).First(&user).Error; err != nil {
+	if err := model.DB.WithContext(ctx).Select("id", "account_class").Where("id = ?", userID).First(&user).Error; err != nil {
 		return nil, err
 	}
 	capabilityIDsByChannelModel := make(map[int]map[string][]int, len(capabilities))

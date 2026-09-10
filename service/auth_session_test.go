@@ -51,12 +51,12 @@ func setupAuthSessionTestDB(t *testing.T) *model.User {
 		_ = sqlDB.Close()
 	})
 	user := &model.User{
-		Username:    "session-user",
-		Password:    "unused-password-hash",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
-		AuthVersion: 1,
+		Username:     "session-user",
+		Password:     "unused-password-hash",
+		Role:         common.RoleCommonUser,
+		Status:       common.UserStatusEnabled,
+		AccountClass: "default",
+		AuthVersion:  1,
 	}
 	require.NoError(t, db.Create(user).Error)
 	return user

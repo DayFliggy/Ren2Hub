@@ -38,17 +38,17 @@ func TestChannelAdmissionSharesCapacityAcrossModelsAndUsers(t *testing.T) {
 	db := setupChannelAdmissionTest(t)
 	require.NoError(t, db.Create(&model.Channel{Id: 7, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: 1.5}).Error)
 	ctx := context.Background()
-	first, channel, err := AcquireConfiguredRouteLease(ctx, "first", 7, 10, 20, "gpt-5", time.Minute)
+	first, channel, err := AcquireConfiguredRouteLease(ctx, RouteLeaseOwner{RequestID: "first", Scope: RouteLeaseScopeAttempt, AttemptSequence: 1}, 7, 10, 20, "gpt-5", time.Minute)
 	require.NoError(t, err)
 	assert.Equal(t, 1.5, channel.ChannelRatio)
-	_, _, err = AcquireConfiguredRouteLease(ctx, "second", 7, 11, 21, "claude-sonnet-4", time.Minute)
+	_, _, err = AcquireConfiguredRouteLease(ctx, RouteLeaseOwner{RequestID: "second", Scope: RouteLeaseScopeAttempt, AttemptSequence: 1}, 7, 11, 21, "claude-sonnet-4", time.Minute)
 	assert.ErrorIs(t, err, ErrRouteLeaseCapacity)
 	require.NoError(t, ReleaseConfiguredRouteLease(ctx, first))
-	second, _, err := AcquireConfiguredRouteLease(ctx, "second", 7, 11, 21, "claude-sonnet-4", time.Minute)
+	second, _, err := AcquireConfiguredRouteLease(ctx, RouteLeaseOwner{RequestID: "second", Scope: RouteLeaseScopeAttempt, AttemptSequence: 2}, 7, 11, 21, "claude-sonnet-4", time.Minute)
 	require.NoError(t, err)
 	require.NoError(t, ReleaseConfiguredRouteLease(ctx, second))
 	common.RedisEnabled = false
-	_, _, err = AcquireConfiguredRouteLease(ctx, "offline", 7, 10, 20, "gpt-5", time.Minute)
+	_, _, err = AcquireConfiguredRouteLease(ctx, RouteLeaseOwner{RequestID: "offline", Scope: RouteLeaseScopeAttempt, AttemptSequence: 1}, 7, 10, 20, "gpt-5", time.Minute)
 	assert.ErrorIs(t, err, ErrRouteLeaseUnavailable)
 }
 
@@ -65,6 +65,6 @@ func TestChannelAdmissionRechecksCapacityPriceAndStatus(t *testing.T) {
 		assert.ErrorIs(t, RecheckRouteLeaseRuntime(expected, current), ErrRouteLeaseRuntime)
 	}
 	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 7).Update("status", common.ChannelStatusManuallyDisabled).Error)
-	_, _, err = AcquireConfiguredRouteLease(ctx, "disabled", 7, 10, 20, "gpt-5", time.Minute)
+	_, _, err = AcquireConfiguredRouteLease(ctx, RouteLeaseOwner{RequestID: "disabled", Scope: RouteLeaseScopeAttempt, AttemptSequence: 1}, 7, 10, 20, "gpt-5", time.Minute)
 	assert.ErrorIs(t, err, ErrRouteLeaseRuntime)
 }

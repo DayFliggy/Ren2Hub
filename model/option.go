@@ -1,7 +1,7 @@
 package model
 
 import (
-	"errors"
+	"context"
 	"strconv"
 	"strings"
 	"time"
@@ -117,7 +117,6 @@ func InitOptionMap() {
 	common.OptionMap["WaffoPancakeMinTopUp"] = strconv.Itoa(setting.WaffoPancakeMinTopUp)
 	common.OptionMap["WaffoPancakeStoreID"] = setting.WaffoPancakeStoreID
 	common.OptionMap["WaffoPancakeProductID"] = setting.WaffoPancakeProductID
-	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
 	common.OptionMap["PayMethods"] = operation_setting.PayMethods2JsonString()
 	common.OptionMap["GitHubClientId"] = ""
@@ -141,15 +140,10 @@ func InitOptionMap() {
 	common.OptionMap["AffiliateActivatedAt"] = strconv.FormatInt(common.AffiliateActivatedAt, 10)
 	common.OptionMap["QuotaRemindThreshold"] = strconv.Itoa(common.QuotaRemindThreshold)
 	common.OptionMap["PreConsumedQuota"] = strconv.Itoa(common.PreConsumedQuota)
-	common.OptionMap["ModelRequestRateLimitCount"] = strconv.Itoa(setting.ModelRequestRateLimitCount)
-	common.OptionMap["ModelRequestRateLimitDurationMinutes"] = strconv.Itoa(setting.ModelRequestRateLimitDurationMinutes)
-	common.OptionMap["ModelRequestRateLimitSuccessCount"] = strconv.Itoa(setting.ModelRequestRateLimitSuccessCount)
-	common.OptionMap["ModelRequestRateLimitGroup"] = setting.ModelRequestRateLimitGroup2JSONString()
 	common.OptionMap["ModelRatio"] = ratio_setting.ModelRatio2JSONString()
 	common.OptionMap["ModelPrice"] = ratio_setting.ModelPrice2JSONString()
 	common.OptionMap["CacheRatio"] = ratio_setting.CacheRatio2JSONString()
 	common.OptionMap["CreateCacheRatio"] = ratio_setting.CreateCacheRatio2JSONString()
-	common.OptionMap["GroupRatio"] = ratio_setting.GroupRatio2JSONString()
 	common.OptionMap["CompletionRatio"] = ratio_setting.CompletionRatio2JSONString()
 	common.OptionMap["ImageRatio"] = ratio_setting.ImageRatio2JSONString()
 	common.OptionMap["AudioRatio"] = ratio_setting.AudioRatio2JSONString()
@@ -170,7 +164,6 @@ func InitOptionMap() {
 	common.OptionMap["CheckSensitiveEnabled"] = strconv.FormatBool(setting.CheckSensitiveEnabled)
 	common.OptionMap["DemoSiteEnabled"] = strconv.FormatBool(operation_setting.DemoSiteEnabled)
 	common.OptionMap["SelfUseModeEnabled"] = strconv.FormatBool(operation_setting.SelfUseModeEnabled)
-	common.OptionMap["ModelRequestRateLimitEnabled"] = strconv.FormatBool(setting.ModelRequestRateLimitEnabled)
 	common.OptionMap["CheckSensitiveOnPromptEnabled"] = strconv.FormatBool(setting.CheckSensitiveOnPromptEnabled)
 	common.OptionMap["StopOnSensitiveEnabled"] = strconv.FormatBool(setting.StopOnSensitiveEnabled)
 	common.OptionMap["SensitiveWords"] = setting.SensitiveWordsToString()
@@ -220,9 +213,8 @@ func loadOptionsFromDatabase() {
 	}
 }
 
-func SyncOptions(frequency int) {
-	for {
-		time.Sleep(time.Duration(frequency) * time.Second)
+func SyncOptions(ctx context.Context, frequency int) {
+	for common.WaitBackground(ctx, time.Duration(frequency)*time.Second) {
 		common.SysLog("syncing options from database")
 		loadOptionsFromDatabase()
 	}
@@ -233,7 +225,10 @@ func validateOptionValue(key string, value string) error {
 		return operation_setting.ValidateToolPricesJSON(value)
 	}
 	if retiredRoutingOption(key) {
-		return errors.New("obsolete routing option")
+		return &common.RetiredRoutingFieldError{Path: key}
+	}
+	if key == "channel_affinity_setting.rules" {
+		return common.ValidateRoutingRuleJSON([]byte(value))
 	}
 	return nil
 }
@@ -312,6 +307,11 @@ func updateOptionMap(key string, value string) (err error) {
 		delete(common.OptionMap, key)
 		common.OptionMapRWMutex.Unlock()
 		return nil
+	}
+	if key == "channel_affinity_setting.rules" {
+		if err := common.ValidateRoutingRuleJSON([]byte(value)); err != nil {
+			return err
+		}
 	}
 	common.OptionMapRWMutex.Lock()
 	defer common.OptionMapRWMutex.Unlock()
@@ -409,8 +409,6 @@ func updateOptionMap(key string, value string) (err error) {
 			operation_setting.SelfUseModeEnabled = boolValue
 		case "CheckSensitiveOnPromptEnabled":
 			setting.CheckSensitiveOnPromptEnabled = boolValue
-		case "ModelRequestRateLimitEnabled":
-			setting.ModelRequestRateLimitEnabled = boolValue
 		case "StopOnSensitiveEnabled":
 			setting.StopOnSensitiveEnabled = boolValue
 		case "SMTPSSLEnabled":
@@ -527,8 +525,6 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.WaffoPancakeUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "WaffoPancakeMinTopUp":
 		setting.WaffoPancakeMinTopUp, _ = strconv.Atoi(value)
-	case "TopupGroupRatio":
-		err = common.UpdateTopupGroupRatioByJSONString(value)
 	case "GitHubClientId":
 		common.GitHubClientId = value
 	case "GitHubClientSecret":
@@ -579,14 +575,6 @@ func updateOptionMap(key string, value string) (err error) {
 		common.QuotaRemindThreshold, _ = strconv.Atoi(value)
 	case "PreConsumedQuota":
 		common.PreConsumedQuota, _ = strconv.Atoi(value)
-	case "ModelRequestRateLimitCount":
-		setting.ModelRequestRateLimitCount, _ = strconv.Atoi(value)
-	case "ModelRequestRateLimitDurationMinutes":
-		setting.ModelRequestRateLimitDurationMinutes, _ = strconv.Atoi(value)
-	case "ModelRequestRateLimitSuccessCount":
-		setting.ModelRequestRateLimitSuccessCount, _ = strconv.Atoi(value)
-	case "ModelRequestRateLimitGroup":
-		err = setting.UpdateModelRequestRateLimitGroupByJSONString(value)
 	case "RetryTimes":
 		common.RetryTimes, _ = strconv.Atoi(value)
 	case "DataExportInterval":
@@ -595,8 +583,6 @@ func updateOptionMap(key string, value string) (err error) {
 		common.DataExportDefaultTime = value
 	case "ModelRatio":
 		err = ratio_setting.UpdateModelRatioByJSONString(value)
-	case "GroupRatio":
-		err = ratio_setting.UpdateGroupRatioByJSONString(value)
 	case "CompletionRatio":
 		err = ratio_setting.UpdateCompletionRatioByJSONString(value)
 	case "ModelPrice":

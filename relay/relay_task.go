@@ -158,6 +158,13 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if taskErr := adaptor.ValidateRequestAndSetAction(c, info); taskErr != nil {
 		return nil, taskErr
 	}
+	if err := channel.AfterBasicValidation(c); err != nil {
+		status := http.StatusServiceUnavailable
+		if errors.Is(err, service.ErrUserRPM) || errors.Is(err, service.ErrUserQueueFull) || errors.Is(err, service.ErrUserQueueTimeout) {
+			status = http.StatusTooManyRequests
+		}
+		return nil, service.TaskErrorWrapperLocal(err, "user_admission_failed", status)
+	}
 
 	// 2. 确定模型名称
 	modelName := info.OriginModelName
@@ -579,7 +586,6 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 		TaskID:     task.TaskID,
 		Platform:   string(task.Platform),
 		UserId:     task.UserId,
-		Group:      task.Group,
 		ChannelId:  task.ChannelId,
 		Quota:      task.Quota,
 		Action:     task.Action,

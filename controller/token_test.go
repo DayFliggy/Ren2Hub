@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/QuantumNous/new-api/common"
@@ -27,6 +28,36 @@ type tokenAPIResponse struct {
 	Success bool            `json:"success"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data"`
+}
+
+func TestTokenManagementRejectsRetiredRoutingFields(t *testing.T) {
+	for _, test := range []struct {
+		name, method, target, body string
+		handler                    gin.HandlerFunc
+	}{
+		{"list", http.MethodGet, "/api/token/?group=", "", GetAllTokens},
+		{"search", http.MethodGet, "/api/token/search?auto_groups=vip", "", SearchTokens},
+		{"get", http.MethodGet, "/api/token/1?CrossGroupRetry=false", "", GetToken},
+		{"key", http.MethodPost, "/api/token/1/key", `{"group":"vip"}`, GetTokenKey},
+		{"create", http.MethodPost, "/api/token/", `{"name":"retired","group":null}`, AddToken},
+		{"create-auto", http.MethodPost, "/api/token/", `{"name":"retired","AutoGroups":[]}`, AddToken},
+		{"update", http.MethodPut, "/api/token/", `{"id":1,"cross_group_retry":false}`, UpdateToken},
+		{"delete", http.MethodDelete, "/api/token/1?group=vip", "", DeleteToken},
+		{"delete-batch", http.MethodPost, "/api/token/batch", `{"ids":[1],"Group":"vip"}`, DeleteTokenBatch},
+		{"keys-batch", http.MethodPost, "/api/token/batch/keys", `{"ids":[1],"groups":[]}`, GetTokenKeysBatch},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := performNextAdminJSON(t, test.method, test.target, test.body, test.handler)
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			var response struct {
+				Success bool   `json:"success"`
+				Code    string `json:"code"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			assert.False(t, response.Success)
+			assert.Equal(t, "retired_field", response.Code)
+		})
+	}
 }
 
 type tokenPageResponse struct {
@@ -482,8 +513,7 @@ func TestUpdateTokenMasksKeyInResponse(t *testing.T) {
 		"unlimited_quota":      true,
 		"model_limits_enabled": false,
 		"model_limits":         "",
-		"group":                "default",
-		"cross_group_retry":    false,
+		"type":                 "auto",
 	}
 
 	ctx, recorder := newAuthenticatedContext(t, http.MethodPut, "/api/token/", body, 1)

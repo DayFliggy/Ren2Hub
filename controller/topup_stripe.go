@@ -53,15 +53,15 @@ func (*StripeAdaptor) RequestAmount(c *gin.Context, req *StripePayRequest) {
 		return
 	}
 	id := c.GetInt("id")
-	group, err := model.GetUserGroup(id, true)
+	topupMultiplier, err := model.GetUserTopupMultiplier(id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取账号分类失败"})
 		return
 	}
-	if rejectInvalidCreditedQuota(c, id, getStripeCreditedQuota(req.Amount, group)) {
+	if rejectInvalidCreditedQuota(c, id, getStripeCreditedQuota(req.Amount, topupMultiplier)) {
 		return
 	}
-	payMoney := getStripePayMoney(float64(req.Amount), group)
+	payMoney := getStripePayMoney(float64(req.Amount), topupMultiplier)
 	if payMoney <= 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
@@ -99,7 +99,12 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "用户不存在"})
 		return
 	}
-	chargedMoney := GetChargedAmount(float64(req.Amount), *user)
+	topupMultiplier, err := model.GetUserTopupMultiplier(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	chargedMoney := float64(req.Amount) * topupMultiplier
 	if rejectInvalidCreditedQuota(c, id,
 		decimal.NewFromFloat(chargedMoney).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
 	) {
@@ -408,35 +413,18 @@ func genStripeLink(referenceId string, customerId string, email string, amount i
 	return result.URL, nil
 }
 
-func GetChargedAmount(count float64, user model.User) float64 {
-	topUpGroupRatio := common.GetTopupGroupRatio(user.Group)
-	if topUpGroupRatio == 0 {
-		topUpGroupRatio = 1
-	}
-
-	return count * topUpGroupRatio
-}
-
-func getStripeCreditedQuota(amount int64, group string) decimal.Decimal {
-	topUpGroupRatio := common.GetTopupGroupRatio(group)
-	if topUpGroupRatio == 0 {
-		topUpGroupRatio = 1
-	}
+func getStripeCreditedQuota(amount int64, topupMultiplier float64) decimal.Decimal {
 	return decimal.NewFromInt(amount).
-		Mul(decimal.NewFromFloat(topUpGroupRatio)).
+		Mul(decimal.NewFromFloat(topupMultiplier)).
 		Mul(decimal.NewFromFloat(common.QuotaPerUnit))
 }
 
-func getStripePayMoney(amount float64, group string) float64 {
+func getStripePayMoney(amount float64, topupMultiplier float64) float64 {
 	originalAmount := amount
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
 		amount = amount / common.QuotaPerUnit
 	}
 	// Using float64 for monetary calculations is acceptable here due to the small amounts involved
-	topupGroupRatio := common.GetTopupGroupRatio(group)
-	if topupGroupRatio == 0 {
-		topupGroupRatio = 1
-	}
 	// apply optional preset discount by the original request amount (if configured), default 1.0
 	discount := 1.0
 	if ds, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(originalAmount)]; ok {
@@ -444,7 +432,7 @@ func getStripePayMoney(amount float64, group string) float64 {
 			discount = ds
 		}
 	}
-	payMoney := amount * setting.StripeUnitPrice * topupGroupRatio * discount
+	payMoney := amount * setting.StripeUnitPrice * topupMultiplier * discount
 	return payMoney
 }
 

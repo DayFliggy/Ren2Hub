@@ -55,11 +55,11 @@ func TestSaveStatusStateFromSingleKeySnapshotPreservesUnownedColumns(t *testing.
 	setupChannelStatusTest(t)
 
 	channel := Channel{
-		Name:        "single-key-status",
-		Key:         "original-key",
-		Status:      common.ChannelStatusEnabled,
-		Models:      "original-model",
-		Group:       "default",
+		Name:   "single-key-status",
+		Key:    "original-key",
+		Status: common.ChannelStatusEnabled,
+		Models: "original-model",
+
 		UsedQuota:   100,
 		ChannelInfo: ChannelInfo{},
 	}

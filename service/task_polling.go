@@ -65,14 +65,18 @@ func sweepTimedOutTasks(ctx context.Context) {
 		task.FinishTime = now
 		if isLegacy {
 			task.FailReason = legacyReason
-			// 旧系统任务明确不退款，随终态 CAS 一并清掉 quota，
-			// 避免留下可再次退款的计费状态。
-			task.Quota = 0
+			task.BillingState = "reconciliation_required"
 		} else {
 			task.FailReason = reason
 		}
 
-		won, err := task.UpdateWithStatus(oldStatus)
+		var won bool
+		var err error
+		if isLegacy {
+			won, err = task.UpdateWithStatus(oldStatus)
+		} else {
+			won, err = completeTaskTransition(ctx, task, oldStatus, taskSettlementInput(task, 0, true, reason, nil))
+		}
 		if err != nil {
 			logger.LogError(ctx, fmt.Sprintf("sweepTimedOutTasks CAS update error for task %s: %v", task.TaskID, err))
 			continue
@@ -82,9 +86,6 @@ func sweepTimedOutTasks(ctx context.Context) {
 			continue
 		}
 		timedOutCount++
-		if !isLegacy && task.Quota != 0 {
-			RefundTaskQuota(ctx, task, reason)
-		}
 	}
 
 	if timedOutCount > 0 {
@@ -297,14 +298,21 @@ func updateSunoTasks(ctx context.Context, channelId int, taskIds []string, taskM
 		}
 		task.Data = responseItem.Data
 
-		// 持久化走 CAS，防止重叠轮询/sweep/多实例/持久化失败重试导致重复退款或覆盖终态。
-		won, err := task.UpdateWithStatus(prevStatus)
+		var won bool
+		var err error
+		if isFailure || task.Status == model.TaskStatusSuccess {
+			finalQuota := task.Quota
+			if isFailure {
+				finalQuota = 0
+			}
+			won, err = completeTaskTransition(ctx, task, prevStatus, taskSettlementInput(task, finalQuota, isFailure, task.FailReason, nil))
+		} else {
+			won, err = task.UpdateWithStatus(prevStatus)
+		}
 		if err != nil {
 			logger.LogError(ctx, fmt.Sprintf("UpdateSunoTask task %s error: %v", task.TaskID, err))
 		} else if !won {
 			logger.LogWarn(ctx, fmt.Sprintf("Task %s CAS lost or no-op update, skip billing", task.TaskID))
-		} else if isFailure && prevStatus != model.TaskStatusFailure && task.Quota != 0 {
-			RefundTaskQuota(ctx, task, task.FailReason)
 		}
 	}
 	return nil
@@ -517,10 +525,6 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		}
 	}
 
-	shouldRefund := false
-	shouldSettle := false
-	quota := task.Quota
-
 	task.Status = model.TaskStatus(taskResult.Status)
 	switch taskResult.Status {
 	case model.TaskStatusSubmitted:
@@ -547,7 +551,6 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			// No URL from adaptor — construct proxy URL using public task ID
 			task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
 		}
-		shouldSettle = true
 	case model.TaskStatusFailure:
 		logger.LogJson(ctx, fmt.Sprintf("Task %s failed", taskId), task)
 		task.Status = model.TaskStatusFailure
@@ -558,9 +561,6 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		task.FailReason = taskResult.Reason
 		logger.LogInfo(ctx, fmt.Sprintf("Task %s failed: %s", task.TaskID, task.FailReason))
 		taskResult.Progress = taskcommon.ProgressComplete
-		if quota != 0 {
-			shouldRefund = true
-		}
 	default:
 		return fmt.Errorf("unknown task status %s for task %s", taskResult.Status, task.TaskID)
 	}
@@ -570,15 +570,19 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 
 	isDone := task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure
 	if isDone && snap.Status != task.Status {
-		won, err := task.UpdateWithStatus(snap.Status)
+		input := taskSettlementInput(task, 0, true, task.FailReason, nil)
+		if task.Status == model.TaskStatusSuccess {
+			var err error
+			input, err = taskCompletionBilling(adaptor, task, taskResult)
+			if err != nil {
+				return err
+			}
+		}
+		won, err := completeTaskTransition(ctx, task, snap.Status, input)
 		if err != nil {
-			logger.LogError(ctx, fmt.Sprintf("UpdateWithStatus failed for task %s: %s", task.TaskID, err.Error()))
-			shouldRefund = false
-			shouldSettle = false
+			return fmt.Errorf("complete task %s: %w", task.TaskID, err)
 		} else if !won {
 			logger.LogWarn(ctx, fmt.Sprintf("Task %s CAS lost or no-op update, skip billing", task.TaskID))
-			shouldRefund = false
-			shouldSettle = false
 		}
 	} else if !snap.Equal(task.Snapshot()) {
 		if _, err := task.UpdateWithStatus(snap.Status); err != nil {
@@ -587,13 +591,6 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	} else {
 		// No changes, skip update
 		logger.LogDebug(ctx, "No update needed for task %s", task.TaskID)
-	}
-
-	if shouldSettle {
-		settleTaskBillingOnComplete(ctx, adaptor, task, taskResult)
-	}
-	if shouldRefund {
-		RefundTaskQuota(ctx, task, task.FailReason)
 	}
 
 	return nil
@@ -633,26 +630,28 @@ func truncateBase64(s string) string {
 	return s[:maxKeep] + "..."
 }
 
-// settleTaskBillingOnComplete 任务完成时的统一计费调整。
+// taskCompletionBilling freezes the final amount before the terminal CAS.
 // 优先级：1. adaptor.AdjustBillingOnComplete 返回正数 → 使用 adaptor 计算的额度
 //
 //  2. taskResult.TotalTokens > 0 → 按 token 重算
 //  3. 都不满足 → 保持预扣额度不变
-func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo) {
+func taskCompletionBilling(adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo) (model.TaskSettlementInput, error) {
 	// 0. 按次计费的任务不做差额结算
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling {
-		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 按次计费，跳过差额结算", task.TaskID))
-		return
+		return taskSettlementInput(task, task.Quota, false, "按次计费", nil), nil
 	}
 	// 1. 优先让 adaptor 决定最终额度
 	if actualQuota := adaptor.AdjustBillingOnComplete(task, taskResult); actualQuota > 0 {
-		RecalculateTaskQuota(ctx, task, actualQuota, "adaptor计费调整")
-		return
+		return taskSettlementInput(task, actualQuota, false, "adaptor计费调整", nil), nil
 	}
 	// 2. 回退到 token 重算
 	if taskResult.TotalTokens > 0 {
-		RecalculateTaskQuotaByTokens(ctx, task, taskResult.TotalTokens)
-		return
+		quota, clamp, err := taskQuotaByTokens(task, taskResult.TotalTokens)
+		if err != nil {
+			return model.TaskSettlementInput{}, err
+		}
+		return taskSettlementInput(task, quota, false, "token重算", clamp), nil
 	}
 	// 3. 无调整，保持预扣额度
+	return taskSettlementInput(task, task.Quota, false, "保持提交时计费", nil), nil
 }

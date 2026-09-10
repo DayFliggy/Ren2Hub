@@ -37,12 +37,12 @@ func TestUserAuthFenceRollbackExpiresAndRecovers(t *testing.T) {
 	server := useUserCacheMiniRedis(t)
 
 	user := User{
-		Username:    "auth-fence-rollback",
-		Password:    "password",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
-		AuthVersion: 1,
+		Username:     "auth-fence-rollback",
+		Password:     "password",
+		Role:         common.RoleCommonUser,
+		Status:       common.UserStatusEnabled,
+		AccountClass: "default",
+		AuthVersion:  1,
 	}
 	require.NoError(t, DB.Create(&user).Error)
 	require.NoError(t, populateUserCache(user))
@@ -79,7 +79,7 @@ func TestPendingUserAuthFenceRejectsStaleCacheWrite(t *testing.T) {
 	require.NoError(t, SetUserAuthVersionFence(userID, 2))
 
 	err := writeUserCache(&UserBase{
-		Id: userID, Group: "default", Username: "stale", AuthVersion: 1,
+		Id: userID, AccountClass: "default", Username: "stale", AuthVersion: 1,
 	}, true)
 
 	assert.ErrorIs(t, err, ErrUserAuthCachePending)
@@ -90,28 +90,28 @@ func TestUserAuthFieldUpdateRejectsVersionMismatch(t *testing.T) {
 	useUserCacheMiniRedis(t)
 	const userID = 4202
 	require.NoError(t, writeUserCache(&UserBase{
-		Id: userID, Group: "current", Username: "cached", AuthVersion: 3,
+		Id: userID, AccountClass: "current", Username: "cached", AuthVersion: 3,
 	}, true))
 
-	err := updateUserCacheFieldAtVersion(userID, "Group", "stale", 2)
+	err := updateUserCacheFieldAtVersion(userID, "AccountClass", "stale", 2)
 
 	assert.ErrorIs(t, err, ErrUserAuthCachePending)
-	group, err := common.RDB.HGet(t.Context(), getUserCacheKey(userID), "Group").Result()
+	group, err := common.RDB.HGet(t.Context(), getUserCacheKey(userID), "AccountClass").Result()
 	require.NoError(t, err)
 	assert.Equal(t, "current", group)
 }
 
-func TestRefreshUserGroupCacheRepairsDelayedSameVersionWrite(t *testing.T) {
+func TestRefreshUserAccountClassCacheRepairsDelayedSameVersionWrite(t *testing.T) {
 	truncateTables(t)
 	useUserCacheMiniRedis(t)
 
 	user := User{
-		Username:    "delayed-group-refresh",
-		Password:    "password",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
-		AuthVersion: 1,
+		Username:     "delayed-group-refresh",
+		Password:     "password",
+		Role:         common.RoleCommonUser,
+		Status:       common.UserStatusEnabled,
+		AccountClass: "default",
+		AuthVersion:  1,
 	}
 	require.NoError(t, DB.Create(&user).Error)
 	require.NoError(t, populateUserCache(user))
@@ -132,22 +132,22 @@ func TestRefreshUserGroupCacheRepairsDelayedSameVersionWrite(t *testing.T) {
 
 	delayedResult := make(chan error, 1)
 	go func() {
-		delayedResult <- RefreshUserGroupCache(user.Id)
+		delayedResult <- RefreshUserAccountClassCache(user.Id)
 	}()
 	<-firstSnapshotRead
 
-	require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).Update("group", "pro").Error)
-	require.NoError(t, RefreshUserGroupCache(user.Id))
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).Updates(map[string]any{"account_class": "pro", "policy_version": 2}).Error)
+	require.NoError(t, RefreshUserAccountClassCache(user.Id))
 	cached, err := cacheGetUserBase(user.Id)
 	require.NoError(t, err)
-	assert.Equal(t, "pro", cached.Group)
+	assert.Equal(t, "pro", cached.AccountClass)
 	assert.EqualValues(t, 1, cached.AuthVersion)
 
 	close(releaseDelayedRefresh)
 	require.NoError(t, <-delayedResult)
 	cached, err = cacheGetUserBase(user.Id)
 	require.NoError(t, err)
-	assert.Equal(t, "pro", cached.Group)
+	assert.Equal(t, "pro", cached.AccountClass)
 	assert.EqualValues(t, 1, cached.AuthVersion)
 }
 
@@ -156,12 +156,12 @@ func TestCommittedUserAuthVersionPermanentlyRejectsDelayedCacheFill(t *testing.T
 	server := useUserCacheMiniRedis(t)
 
 	user := User{
-		Username:    "auth-fence-commit",
-		Password:    "password",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
-		AuthVersion: 1,
+		Username:     "auth-fence-commit",
+		Password:     "password",
+		Role:         common.RoleCommonUser,
+		Status:       common.UserStatusEnabled,
+		AccountClass: "default",
+		AuthVersion:  1,
 	}
 	require.NoError(t, DB.Create(&user).Error)
 	require.NoError(t, populateUserCache(user))

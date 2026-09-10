@@ -34,7 +34,7 @@ func TestTaskReadsHonorTokenModelLimitsAcrossProtocols(t *testing.T) {
 			require.NoError(t, db.Create(user).Error)
 			token := &model.Token{UserId: user.Id, Key: "taskscopetestkey", Name: "scope", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true, ModelLimitsEnabled: true, ModelLimits: "gpt-4o-mini"}
 			require.NoError(t, db.Create(token).Error)
-			channel := &model.Channel{Type: constant.ChannelTypeMidjourney, Status: common.ChannelStatusEnabled, Key: "test-key", Name: "scope", Models: "mj_imagine", Group: "default"}
+			channel := &model.Channel{Type: constant.ChannelTypeMidjourney, Status: common.ChannelStatusEnabled, Key: "test-key", Name: "scope", Models: "mj_imagine"}
 			require.NoError(t, db.Create(channel).Error)
 			require.NoError(t, db.Create(&model.Task{UserId: user.Id, TaskID: "task-scope", Platform: constant.TaskPlatformSuno, Action: "music", Status: model.TaskStatusSuccess, Properties: model.Properties{OriginModelName: "sora-2"}}).Error)
 			require.NoError(t, db.Create(&model.Midjourney{UserId: user.Id, MjId: "task-scope", Action: constant.MjActionImagine, Prompt: "protected", ChannelId: channel.Id, Status: "SUCCESS"}).Error)

@@ -43,7 +43,7 @@ func TestDistributeCompactAndNativeResponsesUseUnifiedRouting(t *testing.T) {
 				require.NoError(t, sqlDB.Close())
 			})
 			require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.UserChannelEntitlement{}, &model.ChannelCapabilitySnapshot{}, &model.ChannelModelCapability{}, &model.ChannelHealth{}))
-			channel := &model.Channel{Id: 1, Type: test.channelType, Status: common.ChannelStatusEnabled, Name: test.name, Key: "test-key", Models: test.model, Group: "retired-group"}
+			channel := &model.Channel{Id: 1, Type: test.channelType, Status: common.ChannelStatusEnabled, Name: test.name, Key: "test-key", Models: test.model}
 			require.NoError(t, db.Create(channel).Error)
 			require.NoError(t, channel.AddAbilities(db))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))

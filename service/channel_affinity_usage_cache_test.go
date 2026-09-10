@@ -20,14 +20,13 @@ func channelAffinityStatsTestKey(t *testing.T) (string, string) {
 	return fmt.Sprintf("rule_%d", sequence), fmt.Sprintf("fp_%d", sequence)
 }
 
-func buildChannelAffinityStatsContextForTest(ruleName, usingGroup, keyFP string) *gin.Context {
+func buildChannelAffinityStatsContextForTest(ruleName, keyFP string) *gin.Context {
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)
 	setChannelAffinityContext(ctx, channelAffinityMeta{
-		CacheKey:       fmt.Sprintf("test:%s:%s:%s", ruleName, usingGroup, keyFP),
+		CacheKey:       fmt.Sprintf("test:%s:%s", ruleName, keyFP),
 		TTLSeconds:     600,
 		RuleName:       ruleName,
-		UsingGroup:     usingGroup,
 		KeyFingerprint: keyFP,
 	})
 	return ctx
@@ -35,8 +34,7 @@ func buildChannelAffinityStatsContextForTest(ruleName, usingGroup, keyFP string)
 
 func TestObserveChannelAffinityUsageCacheByRelayFormat_ClaudeMode(t *testing.T) {
 	ruleName, keyFP := channelAffinityStatsTestKey(t)
-	usingGroup := "default"
-	ctx := buildChannelAffinityStatsContextForTest(ruleName, usingGroup, keyFP)
+	ctx := buildChannelAffinityStatsContextForTest(ruleName, keyFP)
 
 	usage := &dto.Usage{
 		PromptTokens:     100,
@@ -48,7 +46,7 @@ func TestObserveChannelAffinityUsageCacheByRelayFormat_ClaudeMode(t *testing.T) 
 	}
 
 	ObserveChannelAffinityUsageCacheByRelayFormat(ctx, usage, types.RelayFormatClaude)
-	stats := GetChannelAffinityUsageCacheStats(ruleName, usingGroup, keyFP)
+	stats := GetChannelAffinityUsageCacheStats(ruleName, keyFP)
 
 	require.EqualValues(t, 1, stats.Total)
 	require.EqualValues(t, 1, stats.Hit)
@@ -61,8 +59,7 @@ func TestObserveChannelAffinityUsageCacheByRelayFormat_ClaudeMode(t *testing.T) 
 
 func TestObserveChannelAffinityUsageCacheByRelayFormat_MixedMode(t *testing.T) {
 	ruleName, keyFP := channelAffinityStatsTestKey(t)
-	usingGroup := "default"
-	ctx := buildChannelAffinityStatsContextForTest(ruleName, usingGroup, keyFP)
+	ctx := buildChannelAffinityStatsContextForTest(ruleName, keyFP)
 
 	openAIUsage := &dto.Usage{
 		PromptTokens: 100,
@@ -79,7 +76,7 @@ func TestObserveChannelAffinityUsageCacheByRelayFormat_MixedMode(t *testing.T) {
 
 	ObserveChannelAffinityUsageCacheByRelayFormat(ctx, openAIUsage, types.RelayFormatOpenAI)
 	ObserveChannelAffinityUsageCacheByRelayFormat(ctx, claudeUsage, types.RelayFormatClaude)
-	stats := GetChannelAffinityUsageCacheStats(ruleName, usingGroup, keyFP)
+	stats := GetChannelAffinityUsageCacheStats(ruleName, keyFP)
 
 	require.EqualValues(t, 2, stats.Total)
 	require.EqualValues(t, 2, stats.Hit)
@@ -90,8 +87,7 @@ func TestObserveChannelAffinityUsageCacheByRelayFormat_MixedMode(t *testing.T) {
 
 func TestObserveChannelAffinityUsageCacheByRelayFormat_UnsupportedModeKeepsEmpty(t *testing.T) {
 	ruleName, keyFP := channelAffinityStatsTestKey(t)
-	usingGroup := "default"
-	ctx := buildChannelAffinityStatsContextForTest(ruleName, usingGroup, keyFP)
+	ctx := buildChannelAffinityStatsContextForTest(ruleName, keyFP)
 
 	usage := &dto.Usage{
 		PromptTokens: 100,
@@ -101,7 +97,7 @@ func TestObserveChannelAffinityUsageCacheByRelayFormat_UnsupportedModeKeepsEmpty
 	}
 
 	ObserveChannelAffinityUsageCacheByRelayFormat(ctx, usage, types.RelayFormatGemini)
-	stats := GetChannelAffinityUsageCacheStats(ruleName, usingGroup, keyFP)
+	stats := GetChannelAffinityUsageCacheStats(ruleName, keyFP)
 
 	require.EqualValues(t, 1, stats.Total)
 	require.EqualValues(t, 1, stats.Hit)

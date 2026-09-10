@@ -41,13 +41,11 @@ func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
 	req.ContentLength = 0
 	req.Header.Set("Content-Type", "application/json")
 	ctx.Request = req
-	ctx.Set("group", "default")
 
 	info := &relaycommon.RelayInfo{
-		OriginModelName: "tiered-test-model",
-		UserGroup:       "default",
-		UsingGroup:      "default",
-		RequestHeaders:  map[string]string{"Content-Type": "application/json"},
+		OriginModelName:  "tiered-test-model",
+		UserAccountClass: "default",
+		RequestHeaders:   map[string]string{"Content-Type": "application/json"},
 		BillingRequestInput: &billingexpr.RequestInput{
 			Headers: map[string]string{"Content-Type": "application/json"},
 			Body:    []byte(`{"stream":true}`),
@@ -78,41 +76,40 @@ func TestModelPriceHelperTieredPreConsumeMaxTokensFallback(t *testing.T) {
 	})
 
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode":    `{"tiered-fallback-model":"tiered_expr"}`,
-		"billing_setting.billing_expr":    `{"tiered-fallback-model":"tier(\"base\", p * 3 + c * 15)"}`,
-		"group_ratio_setting.group_ratio": `{"default":1,"free":0}`,
+		"billing_setting.billing_mode": `{"tiered-fallback-model":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"tiered-fallback-model":"tier(\"base\", p * 3 + c * 15)"}`,
 	}))
 
 	const promptTokens = 1000
 
 	cases := []struct {
-		name      string
-		group     string
-		maxTokens int
-		expected  int
+		name         string
+		accountClass string
+		maxTokens    int
+		expected     int
 	}{
 		{
-			// max_tokens omitted in a paid group -> fall back to 8192 completion tokens.
+			// Omitted max_tokens uses the configured completion-token fallback.
 			// p*3 + c*15 = 1000*3 + 8192*15 = 125880 -> /1e6 * 500000 = 62940
-			name:      "non-free group falls back to 8192 completion tokens",
-			group:     "default",
-			maxTokens: 0,
-			expected:  62940,
+			name:         "paid channel falls back to 8192 completion tokens",
+			accountClass: "default",
+			maxTokens:    0,
+			expected:     62940,
 		},
 		{
 			// explicit max_tokens is used verbatim, no fallback.
 			// 1000*3 + 100*15 = 4500 -> /1e6 * 500000 = 2250
-			name:      "explicit max_tokens is used verbatim",
-			group:     "default",
-			maxTokens: 100,
-			expected:  2250,
+			name:         "explicit max_tokens is used verbatim",
+			accountClass: "default",
+			maxTokens:    100,
+			expected:     2250,
 		},
 		{
-			// Retired group pricing must not grant free requests.
-			name:      "former free group uses the channel price",
-			group:     "free",
-			maxTokens: 0,
-			expected:  62940,
+			// Account classification must not change the channel price.
+			name:         "another account class uses the same channel price",
+			accountClass: "free",
+			maxTokens:    0,
+			expected:     62940,
 		},
 	}
 
@@ -123,13 +120,11 @@ func TestModelPriceHelperTieredPreConsumeMaxTokensFallback(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 			req.Header.Set("Content-Type", "application/json")
 			ctx.Request = req
-			ctx.Set("group", tc.group)
 
 			info := &relaycommon.RelayInfo{
-				OriginModelName: "tiered-fallback-model",
-				UserGroup:       tc.group,
-				UsingGroup:      tc.group,
-				RequestHeaders:  map[string]string{"Content-Type": "application/json"},
+				OriginModelName:  "tiered-fallback-model",
+				UserAccountClass: tc.accountClass,
+				RequestHeaders:   map[string]string{"Content-Type": "application/json"},
 				BillingRequestInput: &billingexpr.RequestInput{
 					Headers: map[string]string{"Content-Type": "application/json"},
 					Body:    []byte(`{}`),
@@ -156,19 +151,16 @@ func TestModelPriceHelperTieredRejectsPreConsumeOverflow(t *testing.T) {
 	})
 
 	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode":    `{"tiered-overflow-model":"tiered_expr"}`,
-		"billing_setting.billing_expr":    `{"tiered-overflow-model":"tier(\"overflow\", p * 1000000000000000)"}`,
-		"group_ratio_setting.group_ratio": `{"default":1}`,
+		"billing_setting.billing_mode": `{"tiered-overflow-model":"tiered_expr"}`,
+		"billing_setting.billing_expr": `{"tiered-overflow-model":"tier(\"overflow\", p * 1000000000000000)"}`,
 	}))
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-	ctx.Set("group", "default")
 	info := &relaycommon.RelayInfo{
-		OriginModelName: "tiered-overflow-model",
-		UserGroup:       "default",
-		UsingGroup:      "default",
+		OriginModelName:  "tiered-overflow-model",
+		UserAccountClass: "default",
 		BillingRequestInput: &billingexpr.RequestInput{
 			Body: []byte(`{}`),
 		},
@@ -227,11 +219,9 @@ func TestModelPriceHelperRequestBillingRatiosOnlyApplyToFixedPrice(t *testing.T)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-			ctx.Set("group", "default")
 			info := &relaycommon.RelayInfo{
-				OriginModelName: tt.model,
-				UserGroup:       "default",
-				UsingGroup:      "default",
+				OriginModelName:  tt.model,
+				UserAccountClass: "default",
 			}
 			meta := &types.TokenCountMeta{
 				ImagePriceRatio: 3,
@@ -250,11 +240,9 @@ func TestModelPriceHelperRequestBillingRatiosOnlyApplyToFixedPrice(t *testing.T)
 
 	newInfo := func(model string) (*gin.Context, *relaycommon.RelayInfo) {
 		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-		ctx.Set("group", "default")
 		return ctx, &relaycommon.RelayInfo{
-			OriginModelName: model,
-			UserGroup:       "default",
-			UsingGroup:      "default",
+			OriginModelName:  model,
+			UserAccountClass: "default",
 		}
 	}
 	meta := &types.TokenCountMeta{BillingRatios: map[string]float64{"n": 3}}
@@ -290,14 +278,12 @@ func TestCompactPricingUsesOneInheritedBaseMode(t *testing.T) {
 	require.NoError(t, ratio_setting.UpdateCompletionRatioByJSONString(`{"compact-base":3}`))
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
 	info := &relaycommon.RelayInfo{
 		RelayMode:           relayconstant.RelayModeResponsesCompact,
 		OriginModelName:     "compact-base",
 		RequestedModel:      "compact-base",
 		LogicalBillingModel: "compact-base",
-		UserGroup:           "default",
-		UsingGroup:          "default",
+		UserAccountClass:    "default",
 	}
 
 	priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
@@ -322,13 +308,11 @@ func TestCompactPricingWildcardPrecedesBaseFixedPrice(t *testing.T) {
 	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"gpt-*-openai-compact":0.1,"gpt-compact-base":0.2}`))
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
 	info := &relaycommon.RelayInfo{
 		RelayMode:           relayconstant.RelayModeResponsesCompact,
 		OriginModelName:     "gpt-compact-base",
 		LogicalBillingModel: "gpt-compact-base-openai-compact",
-		UserGroup:           "default",
-		UsingGroup:          "default",
+		UserAccountClass:    "default",
 	}
 
 	priceData, err := ModelPriceHelper(ctx, info, 0, &types.TokenCountMeta{})
@@ -354,13 +338,11 @@ func TestCompactPricingInheritsBaseTieredExpressionAsSingleMode(t *testing.T) {
 	}))
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
 	info := &relaycommon.RelayInfo{
 		RelayMode:           relayconstant.RelayModeResponsesCompact,
 		OriginModelName:     "compact-tiered-base",
 		LogicalBillingModel: "compact-tiered-base",
-		UserGroup:           "default",
-		UsingGroup:          "default",
+		UserAccountClass:    "default",
 	}
 
 	priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{MaxTokens: 100})
@@ -389,11 +371,9 @@ func TestRegularResponsesNonGPTCompactSuffixUsesBasePricingIdentity(t *testing.T
 	}`))
 
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
 	info := &relaycommon.RelayInfo{
-		OriginModelName: "regular-base-openai-compact",
-		UserGroup:       "default",
-		UsingGroup:      "default",
+		OriginModelName:  "regular-base-openai-compact",
+		UserAccountClass: "default",
 	}
 
 	priceData, err := ModelPriceHelper(ctx, info, 0, &types.TokenCountMeta{})

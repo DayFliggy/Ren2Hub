@@ -14,7 +14,6 @@ import (
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/pricing_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	"github.com/QuantumNous/new-api/types"
 )
 
 type Pricing struct {
@@ -33,7 +32,6 @@ type Pricing struct {
 	ImageRatio             *float64                `json:"image_ratio,omitempty"`
 	AudioRatio             *float64                `json:"audio_ratio,omitempty"`
 	AudioCompletionRatio   *float64                `json:"audio_completion_ratio,omitempty"`
-	EnableGroup            []string                `json:"-"`
 	ChannelRatioMin        float64                 `json:"channel_ratio_min"`
 	ChannelRatioMax        float64                 `json:"channel_ratio_max"`
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
@@ -59,9 +57,8 @@ var (
 	updatePricingLock    sync.Mutex
 
 	// 缓存映射：模型名 -> 启用分组 / 计费类型
-	modelEnableGroups     = make(map[string][]string)
-	modelQuotaTypeMap     = make(map[string]int)
-	modelEnableGroupsLock = sync.RWMutex{}
+	modelQuotaTypeMap        = make(map[string]int)
+	modelPricingMetadataLock = sync.RWMutex{}
 )
 
 var (
@@ -264,18 +261,13 @@ func updatePricing() {
 		})
 	}
 
-	modelGroupsMap := make(map[string]*types.Set[string])
+	enabledModels := make(map[string]bool)
 
 	for _, ability := range enableAbilities {
 		if strings.HasSuffix(ability.Model, ratio_setting.CompactModelSuffix) && !ratio_setting.IsVirtualCompactModelName(ability.Model) {
 			continue
 		}
-		groups, ok := modelGroupsMap[ability.Model]
-		if !ok {
-			groups = types.NewSet[string]()
-			modelGroupsMap[ability.Model] = groups
-		}
-		groups.Add(ability.Group)
+		enabledModels[ability.Model] = true
 	}
 
 	//这里使用切片而不是Set，因为一个模型可能支持多个端点类型，并且第一个端点是优先使用端点
@@ -338,19 +330,10 @@ func updatePricing() {
 	}
 	for _, baseModel := range compactBaseModels {
 		compactModel := ratio_setting.WithCompactModelSuffix(baseModel)
-		compactGroups, ok := modelGroupsMap[compactModel]
-		if !ok {
-			compactGroups = types.NewSet[string]()
-			modelGroupsMap[compactModel] = compactGroups
-		}
-		if baseGroups := modelGroupsMap[baseModel]; baseGroups != nil {
-			for _, group := range baseGroups.Items() {
-				compactGroups.Add(group)
-			}
-		}
+		enabledModels[compactModel] = true
 		modelSupportEndpointTypes[compactModel] = []constant.EndpointType{constant.EndpointTypeOpenAIResponseCompact}
 	}
-	for modelName := range modelGroupsMap {
+	for modelName := range enabledModels {
 		if ratio_setting.IsVirtualCompactModelName(modelName) {
 			modelSupportEndpointTypes[modelName] = []constant.EndpointType{constant.EndpointTypeOpenAIResponseCompact}
 		}
@@ -396,10 +379,9 @@ func updatePricing() {
 	}
 
 	pricingMap = make([]Pricing, 0)
-	for model, groups := range modelGroupsMap {
+	for model := range enabledModels {
 		pricing := Pricing{
 			ModelName:              model,
-			EnableGroup:            groups.Items(),
 			SupportedEndpointTypes: modelSupportEndpointTypes[model],
 		}
 
@@ -464,14 +446,12 @@ func updatePricing() {
 	}
 
 	// 刷新缓存映射，供高并发快速查询
-	modelEnableGroupsLock.Lock()
-	modelEnableGroups = make(map[string][]string)
+	modelPricingMetadataLock.Lock()
 	modelQuotaTypeMap = make(map[string]int)
 	for _, p := range pricingMap {
-		modelEnableGroups[p.ModelName] = p.EnableGroup
 		modelQuotaTypeMap[p.ModelName] = p.QuotaType
 	}
-	modelEnableGroupsLock.Unlock()
+	modelPricingMetadataLock.Unlock()
 
 	lastGetPricingTime = time.Now()
 }

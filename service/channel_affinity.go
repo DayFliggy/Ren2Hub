@@ -26,8 +26,8 @@ const (
 	ginKeyChannelAffinityLogInfo    = "channel_affinity_log_info"
 	ginKeyChannelAffinitySkipRetry  = "channel_affinity_skip_retry_on_failure"
 
-	channelAffinityCacheNamespace           = "new-api:channel_affinity:v1"
-	channelAffinityUsageCacheStatsNamespace = "new-api:channel_affinity_usage_cache_stats:v1"
+	channelAffinityCacheNamespace           = "new-api:channel_affinity:v2"
+	channelAffinityUsageCacheStatsNamespace = "new-api:channel_affinity_usage_cache_stats:v2"
 )
 
 var (
@@ -51,14 +51,12 @@ type channelAffinityMeta struct {
 	KeySourcePath  string
 	KeyHint        string
 	KeyFingerprint string
-	UsingGroup     string
 	ModelName      string
 	RequestPath    string
 }
 
 type ChannelAffinityStatsContext struct {
 	RuleName       string
-	UsingGroup     string
 	KeyFingerprint string
 	TTLSeconds     int64
 }
@@ -168,16 +166,6 @@ func GetChannelAffinityCacheStats() ChannelAffinityCacheStats {
 		}
 		if rule.IncludeModelName {
 			if len(parts) < 3 {
-				unknown++
-				continue
-			}
-		}
-		if rule.IncludeUsingGroup {
-			minParts := 3
-			if rule.IncludeModelName {
-				minParts = 4
-			}
-			if len(parts) < minParts {
 				unknown++
 				continue
 			}
@@ -334,16 +322,13 @@ func extractChannelAffinityValue(c *gin.Context, src operation_setting.ChannelAf
 	}
 }
 
-func buildChannelAffinityCacheKeySuffix(rule operation_setting.ChannelAffinityRule, modelName string, usingGroup string, affinityValue string) string {
+func buildChannelAffinityCacheKeySuffix(rule operation_setting.ChannelAffinityRule, modelName string, affinityValue string) string {
 	parts := make([]string, 0, 4)
 	if rule.IncludeRuleName && rule.Name != "" {
 		parts = append(parts, rule.Name)
 	}
 	if rule.IncludeModelName && modelName != "" {
 		parts = append(parts, modelName)
-	}
-	if rule.IncludeUsingGroup && usingGroup != "" {
-		parts = append(parts, usingGroup)
 	}
 	parts = append(parts, affinityValue)
 	return strings.Join(parts, ":")
@@ -394,7 +379,6 @@ func GetChannelAffinityStatsContext(c *gin.Context) (ChannelAffinityStatsContext
 	}
 	ruleName := strings.TrimSpace(meta.RuleName)
 	keyFp := strings.TrimSpace(meta.KeyFingerprint)
-	usingGroup := strings.TrimSpace(meta.UsingGroup)
 	if ruleName == "" || keyFp == "" {
 		return ChannelAffinityStatsContext{}, false
 	}
@@ -404,7 +388,6 @@ func GetChannelAffinityStatsContext(c *gin.Context) (ChannelAffinityStatsContext
 	}
 	return ChannelAffinityStatsContext{
 		RuleName:       ruleName,
-		UsingGroup:     usingGroup,
 		KeyFingerprint: keyFp,
 		TTLSeconds:     ttlSeconds,
 	}, true
@@ -517,7 +500,6 @@ func appendChannelAffinityTemplateAdminInfo(c *gin.Context, meta channelAffinity
 	c.Set(ginKeyChannelAffinityLogInfo, map[string]interface{}{
 		"reason":            meta.RuleName,
 		"rule_name":         meta.RuleName,
-		"using_group":       meta.UsingGroup,
 		"model":             meta.ModelName,
 		"request_path":      meta.RequestPath,
 		"key_source":        meta.KeySourceType,
@@ -547,7 +529,7 @@ func ApplyChannelAffinityOverrideTemplate(c *gin.Context, paramOverride map[stri
 	return mergedParam, true
 }
 
-func GetPreferredChannelByAffinity(c *gin.Context, modelName string, usingGroup string) (int, bool) {
+func GetPreferredChannelByAffinity(c *gin.Context, modelName string) (int, bool) {
 	setting := operation_setting.GetChannelAffinitySetting()
 	if setting == nil || !setting.Enabled {
 		return 0, false
@@ -591,7 +573,7 @@ func GetPreferredChannelByAffinity(c *gin.Context, modelName string, usingGroup 
 		if ttlSeconds <= 0 {
 			ttlSeconds = setting.DefaultTTLSeconds
 		}
-		cacheKeySuffix := buildChannelAffinityCacheKeySuffix(rule, modelName, usingGroup, affinityValue)
+		cacheKeySuffix := buildChannelAffinityCacheKeySuffix(rule, modelName, affinityValue)
 		cacheKeyFull := channelAffinityCacheNamespace + ":" + cacheKeySuffix
 		setChannelAffinityContext(c, channelAffinityMeta{
 			CacheKey:       cacheKeyFull,
@@ -604,7 +586,6 @@ func GetPreferredChannelByAffinity(c *gin.Context, modelName string, usingGroup 
 			KeySourcePath:  strings.TrimSpace(usedSource.Path),
 			KeyHint:        buildChannelAffinityKeyHint(affinityValue),
 			KeyFingerprint: affinityFingerprint(affinityValue),
-			UsingGroup:     usingGroup,
 			ModelName:      modelName,
 			RequestPath:    path,
 		})
@@ -673,7 +654,7 @@ func ShouldKeepChannelAffinityOnChannelDisabled() bool {
 	return setting.KeepOnChannelDisabled
 }
 
-func MarkChannelAffinityUsed(c *gin.Context, selectedGroup string, channelID int) {
+func MarkChannelAffinityUsed(c *gin.Context, channelID int) {
 	if c == nil || channelID <= 0 {
 		return
 	}
@@ -683,18 +664,16 @@ func MarkChannelAffinityUsed(c *gin.Context, selectedGroup string, channelID int
 	}
 	c.Set(ginKeyChannelAffinitySkipRetry, meta.SkipRetry)
 	info := map[string]interface{}{
-		"reason":         meta.RuleName,
-		"rule_name":      meta.RuleName,
-		"using_group":    meta.UsingGroup,
-		"selected_group": selectedGroup,
-		"model":          meta.ModelName,
-		"request_path":   meta.RequestPath,
-		"channel_id":     channelID,
-		"key_source":     meta.KeySourceType,
-		"key_key":        meta.KeySourceKey,
-		"key_path":       meta.KeySourcePath,
-		"key_hint":       meta.KeyHint,
-		"key_fp":         meta.KeyFingerprint,
+		"reason":       meta.RuleName,
+		"rule_name":    meta.RuleName,
+		"model":        meta.ModelName,
+		"request_path": meta.RequestPath,
+		"channel_id":   channelID,
+		"key_source":   meta.KeySourceType,
+		"key_key":      meta.KeySourceKey,
+		"key_path":     meta.KeySourcePath,
+		"key_hint":     meta.KeyHint,
+		"key_fp":       meta.KeyFingerprint,
 	}
 	c.Set(ginKeyChannelAffinityLogInfo, info)
 }
@@ -741,7 +720,6 @@ func RecordChannelAffinity(c *gin.Context, channelID int) {
 
 type ChannelAffinityUsageCacheStats struct {
 	RuleName            string `json:"rule_name"`
-	UsingGroup          string `json:"using_group"`
 	KeyFingerprint      string `json:"key_fp"`
 	CachedTokenRateMode string `json:"cached_token_rate_mode"`
 
@@ -787,16 +765,14 @@ func ObserveChannelAffinityUsageCacheFromContext(c *gin.Context, usage *dto.Usag
 	observeChannelAffinityUsageCache(statsCtx, usage, cachedTokenRateMode)
 }
 
-func GetChannelAffinityUsageCacheStats(ruleName, usingGroup, keyFp string) ChannelAffinityUsageCacheStats {
+func GetChannelAffinityUsageCacheStats(ruleName, keyFp string) ChannelAffinityUsageCacheStats {
 	ruleName = strings.TrimSpace(ruleName)
-	usingGroup = strings.TrimSpace(usingGroup)
 	keyFp = strings.TrimSpace(keyFp)
 
-	entryKey := channelAffinityUsageCacheEntryKey(ruleName, usingGroup, keyFp)
+	entryKey := channelAffinityUsageCacheEntryKey(ruleName, keyFp)
 	if entryKey == "" {
 		return ChannelAffinityUsageCacheStats{
 			RuleName:       ruleName,
-			UsingGroup:     usingGroup,
 			KeyFingerprint: keyFp,
 		}
 	}
@@ -806,14 +782,12 @@ func GetChannelAffinityUsageCacheStats(ruleName, usingGroup, keyFp string) Chann
 	if err != nil || !found {
 		return ChannelAffinityUsageCacheStats{
 			RuleName:       ruleName,
-			UsingGroup:     usingGroup,
 			KeyFingerprint: keyFp,
 		}
 	}
 	return ChannelAffinityUsageCacheStats{
 		CachedTokenRateMode:  v.CachedTokenRateMode,
 		RuleName:             ruleName,
-		UsingGroup:           usingGroup,
 		KeyFingerprint:       keyFp,
 		Hit:                  v.Hit,
 		Total:                v.Total,
@@ -828,7 +802,7 @@ func GetChannelAffinityUsageCacheStats(ruleName, usingGroup, keyFp string) Chann
 }
 
 func observeChannelAffinityUsageCache(statsCtx ChannelAffinityStatsContext, usage *dto.Usage, cachedTokenRateMode string) {
-	entryKey := channelAffinityUsageCacheEntryKey(statsCtx.RuleName, statsCtx.UsingGroup, statsCtx.KeyFingerprint)
+	entryKey := channelAffinityUsageCacheEntryKey(statsCtx.RuleName, statsCtx.KeyFingerprint)
 	if entryKey == "" {
 		return
 	}
@@ -900,14 +874,13 @@ func cachedTokenRateModeByRelayFormat(relayFormat types.RelayFormat) string {
 	}
 }
 
-func channelAffinityUsageCacheEntryKey(ruleName, usingGroup, keyFp string) string {
+func channelAffinityUsageCacheEntryKey(ruleName, keyFp string) string {
 	ruleName = strings.TrimSpace(ruleName)
-	usingGroup = strings.TrimSpace(usingGroup)
 	keyFp = strings.TrimSpace(keyFp)
 	if ruleName == "" || keyFp == "" {
 		return ""
 	}
-	return ruleName + "\n" + usingGroup + "\n" + keyFp
+	return ruleName + "\n" + keyFp
 }
 
 func usageCacheSignals(usage *dto.Usage) (hit bool, cachedTokens int64, promptCacheHitTokens int64) {

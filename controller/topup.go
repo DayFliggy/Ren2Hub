@@ -147,7 +147,7 @@ func GetEpayClient() *epay.Client {
 	return withUrl
 }
 
-func getPayMoney(amount int64, group string) float64 {
+func getPayMoney(amount int64, topupMultiplier float64) float64 {
 	dAmount := decimal.NewFromInt(amount)
 	// 充值金额以“展示类型”为准：
 	// - USD/CNY: 前端传 amount 为金额单位；TOKENS: 前端传 tokens，需要换成 USD 金额
@@ -156,12 +156,7 @@ func getPayMoney(amount int64, group string) float64 {
 		dAmount = dAmount.Div(dQuotaPerUnit)
 	}
 
-	topupGroupRatio := common.GetTopupGroupRatio(group)
-	if topupGroupRatio == 0 {
-		topupGroupRatio = 1
-	}
-
-	dTopupGroupRatio := decimal.NewFromFloat(topupGroupRatio)
+	dTopupMultiplier := decimal.NewFromFloat(topupMultiplier)
 	dPrice := decimal.NewFromFloat(operation_setting.Price)
 	// apply optional preset discount by the original request amount (if configured), default 1.0
 	discount := 1.0
@@ -172,7 +167,7 @@ func getPayMoney(amount int64, group string) float64 {
 	}
 	dDiscount := decimal.NewFromFloat(discount)
 
-	payMoney := dAmount.Mul(dPrice).Mul(dTopupGroupRatio).Mul(dDiscount)
+	payMoney := dAmount.Mul(dPrice).Mul(dTopupMultiplier).Mul(dDiscount)
 
 	return payMoney.InexactFloat64()
 }
@@ -227,11 +222,11 @@ func createEpayTopUpOrder(c *gin.Context, userID int, amount int64, method strin
 		return nil, &epayOrderError{Code: "VALIDATION_ERROR", Message: err.Error()}
 	}
 
-	group, err := model.GetUserGroup(userID, true)
+	topupMultiplier, err := model.GetUserTopupMultiplier(userID)
 	if err != nil {
-		return nil, &epayOrderError{Code: "INTERNAL_ERROR", Message: "获取用户分组失败"}
+		return nil, &epayOrderError{Code: "INTERNAL_ERROR", Message: "获取账号分类失败"}
 	}
-	payMoney := getPayMoney(amount, group)
+	payMoney := getPayMoney(amount, topupMultiplier)
 	if payMoney < 0.01 {
 		return nil, &epayOrderError{Code: "VALIDATION_ERROR", Message: "充值金额过低"}
 	}
@@ -534,12 +529,12 @@ func RequestAmount(c *gin.Context) {
 	if rejectInvalidTopUpQuota(c, id, req.Amount) {
 		return
 	}
-	group, err := model.GetUserGroup(id, true)
+	topupMultiplier, err := model.GetUserTopupMultiplier(id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取账号分类失败"})
 		return
 	}
-	payMoney := getPayMoney(req.Amount, group)
+	payMoney := getPayMoney(req.Amount, topupMultiplier)
 	if payMoney <= 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return

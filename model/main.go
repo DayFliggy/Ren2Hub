@@ -180,6 +180,10 @@ func InitDB() (err error) {
 			db = db.Debug()
 		}
 		DB = db
+		freshRoutingSchema := !db.Migrator().HasTable("users")
+		if err := preflightRoutingDatabases(db); err != nil {
+			return err
+		}
 		// MySQL charset/collation startup check: ensure Chinese-capable charset
 		if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
 			if err := checkMySQLChineseSupport(DB); err != nil {
@@ -202,6 +206,9 @@ func InitDB() (err error) {
 		}
 		common.SysLog("database migration started")
 		err = migrateDB()
+		if err == nil && freshRoutingSchema {
+			err = completeFreshRoutingSchema(db, "main")
+		}
 		return err
 	} else {
 		common.FatalLog(err)
@@ -224,6 +231,10 @@ func InitLogDB() (err error) {
 			db = db.Debug()
 		}
 		LOG_DB = db
+		freshRoutingSchema := !db.Migrator().HasTable("logs")
+		if err := requireRoutingSchema(db, "log"); err != nil {
+			return err
+		}
 		// If log DB is MySQL, also ensure Chinese-capable charset
 		if common.UsingLogDatabase(common.DatabaseTypeMySQL) {
 			if err := checkMySQLChineseSupport(LOG_DB); err != nil {
@@ -243,6 +254,9 @@ func InitLogDB() (err error) {
 		}
 		common.SysLog("database migration started")
 		err = migrateLOGDB()
+		if err == nil && freshRoutingSchema {
+			err = completeFreshRoutingSchema(db, "log")
+		}
 		return err
 	} else {
 		common.FatalLog(err)
@@ -251,6 +265,9 @@ func InitLogDB() (err error) {
 }
 
 func migrateDB() error {
+	if err := InitializeAccountClasses(DB); err != nil {
+		return err
+	}
 	// Migrate price_amount column from float/double to decimal for existing tables
 	migrateSubscriptionPlanPriceAmount()
 	// Migrate model_limits column from varchar to text for existing tables
@@ -276,7 +293,10 @@ func migrateDB() error {
 		&Midjourney{},
 		&TopUp{},
 		&QuotaData{},
+		&FlushOperation{},
 		&Task{},
+		&TaskSettlement{},
+		&TaskSettlementLogReceipt{},
 		&Model{},
 		&Vendor{},
 		&PrefillGroup{},
@@ -340,6 +360,9 @@ func migrateDB() error {
 }
 
 func migrateDBFast() error {
+	if err := InitializeAccountClasses(DB); err != nil {
+		return err
+	}
 
 	var wg sync.WaitGroup
 	if err := prepareChannelCapabilityMigration(); err != nil {
@@ -364,7 +387,10 @@ func migrateDBFast() error {
 		{&Midjourney{}, "Midjourney"},
 		{&TopUp{}, "TopUp"},
 		{&QuotaData{}, "QuotaData"},
+		{&FlushOperation{}, "FlushOperation"},
 		{&Task{}, "Task"},
+		{&TaskSettlement{}, "TaskSettlement"},
+		{&TaskSettlementLogReceipt{}, "TaskSettlementLogReceipt"},
 		{&Model{}, "Model"},
 		{&Vendor{}, "Vendor"},
 		{&PrefillGroup{}, "PrefillGroup"},
@@ -472,7 +498,7 @@ func migrateLOGDB() error {
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		return migrateClickHouseLogDB()
 	}
-	return LOG_DB.AutoMigrate(&Log{})
+	return LOG_DB.AutoMigrate(&Log{}, &TaskSettlementLogReceipt{})
 }
 
 func migrateClickHouseLogDB() error {
@@ -524,7 +550,6 @@ CREATE TABLE IF NOT EXISTS logs (
 	is_stream UInt8 DEFAULT 0,
 	channel_id Int32 DEFAULT 0,
 	token_id Int32 DEFAULT 0,
-	`+"`group`"+` String DEFAULT '',
 	ip String DEFAULT '',
 	request_id String DEFAULT '',
 	upstream_request_id String DEFAULT '',
@@ -592,8 +617,8 @@ func ensureSubscriptionPlanTableSQLite() error {
 ` + "`creem_product_id`" + ` varchar(128) DEFAULT '',
 ` + "`waffo_pancake_product_id`" + ` varchar(128) DEFAULT '',
 ` + "`max_purchase_per_user`" + ` integer DEFAULT 0,
-` + "`upgrade_group`" + ` varchar(64) DEFAULT '',
-` + "`downgrade_group`" + ` varchar(64) DEFAULT '',
+` + "`upgrade_account_class`" + ` varchar(64) DEFAULT '',
+` + "`downgrade_account_class`" + ` varchar(64) DEFAULT '',
 ` + "`total_amount`" + ` bigint NOT NULL DEFAULT 0,
 ` + "`quota_reset_period`" + ` varchar(16) DEFAULT 'never',
 ` + "`quota_reset_custom_seconds`" + ` bigint DEFAULT 0,
@@ -629,8 +654,8 @@ PRIMARY KEY (` + "`id`" + `)
 		{Name: "creem_product_id", DDL: "`creem_product_id` varchar(128) DEFAULT ''"},
 		{Name: "waffo_pancake_product_id", DDL: "`waffo_pancake_product_id` varchar(128) DEFAULT ''"},
 		{Name: "max_purchase_per_user", DDL: "`max_purchase_per_user` integer DEFAULT 0"},
-		{Name: "upgrade_group", DDL: "`upgrade_group` varchar(64) DEFAULT ''"},
-		{Name: "downgrade_group", DDL: "`downgrade_group` varchar(64) DEFAULT ''"},
+		{Name: "upgrade_account_class", DDL: "`upgrade_account_class` varchar(64) DEFAULT ''"},
+		{Name: "downgrade_account_class", DDL: "`downgrade_account_class` varchar(64) DEFAULT ''"},
 		{Name: "total_amount", DDL: "`total_amount` bigint NOT NULL DEFAULT 0"},
 		{Name: "quota_reset_period", DDL: "`quota_reset_period` varchar(16) DEFAULT 'never'"},
 		{Name: "quota_reset_custom_seconds", DDL: "`quota_reset_custom_seconds` bigint DEFAULT 0"},

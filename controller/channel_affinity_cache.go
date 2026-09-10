@@ -60,8 +60,10 @@ func ClearChannelAffinityCache(c *gin.Context) {
 }
 
 func GetChannelAffinityUsageCacheStats(c *gin.Context) {
+	if rejectRetiredManagementFields(c, "using_group") {
+		return
+	}
 	ruleName := strings.TrimSpace(c.Query("rule_name"))
-	usingGroup := strings.TrimSpace(c.Query("using_group"))
 	keyFp := strings.TrimSpace(c.Query("key_fp"))
 
 	if ruleName == "" {
@@ -79,7 +81,7 @@ func GetChannelAffinityUsageCacheStats(c *gin.Context) {
 		return
 	}
 
-	stats := service.GetChannelAffinityUsageCacheStats(ruleName, usingGroup, keyFp)
+	stats := service.GetChannelAffinityUsageCacheStats(ruleName, keyFp)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

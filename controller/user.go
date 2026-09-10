@@ -263,6 +263,7 @@ func Register(c *gin.Context) {
 	}
 	affCode := user.AffCode // 注册请求中的 aff_code 是邀请人的邀请码。
 	cleanUser := model.User{
+		AccountClass: user.AccountClass, ConcurrencyOverride: user.ConcurrencyOverride, RPMOverride: user.RPMOverride,
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.Username,
@@ -332,8 +333,11 @@ func GetAllUsers(c *gin.Context) {
 }
 
 func SearchUsers(c *gin.Context) {
+	if rejectRetiredManagementFields(c, "group") {
+		return
+	}
 	keyword := c.Query("keyword")
-	group := c.Query("group")
+	group := c.Query("account_class")
 	var role *int
 	if roleStr := c.Query("role"); roleStr != "" {
 		if parsed, err := strconv.Atoi(roleStr); err == nil {
@@ -490,32 +494,35 @@ func buildSelfUserData(user *model.User) map[string]interface{} {
 	permissions := calculateUserPermissions(user.Role)
 	permissions["admin_permissions"] = authz.Capabilities(user.Id, user.Role)
 	return map[string]interface{}{
-		"id":                user.Id,
-		"username":          user.Username,
-		"display_name":      user.DisplayName,
-		"role":              user.Role,
-		"status":            user.Status,
-		"email":             user.Email,
-		"github_id":         user.GitHubId,
-		"discord_id":        user.DiscordId,
-		"oidc_id":           user.OidcId,
-		"wechat_id":         user.WeChatId,
-		"telegram_id":       user.TelegramId,
-		"group":             user.Group,
-		"quota":             user.Quota,
-		"used_quota":        user.UsedQuota,
-		"request_count":     user.RequestCount,
-		"created_at":        user.CreatedAt,
-		"aff_code":          user.AffCode,
-		"aff_count":         user.AffCount,
-		"aff_quota":         user.AffQuota,
-		"aff_history_quota": user.AffHistoryQuota,
-		"inviter_id":        user.InviterId,
-		"linux_do_id":       user.LinuxDOId,
-		"setting":           user.Setting,
-		"stripe_customer":   user.StripeCustomer,
-		"sidebar_modules":   userSetting.SidebarModules, // 正确提取sidebar_modules字段
-		"permissions":       permissions,
+		"id":                   user.Id,
+		"username":             user.Username,
+		"display_name":         user.DisplayName,
+		"role":                 user.Role,
+		"status":               user.Status,
+		"email":                user.Email,
+		"github_id":            user.GitHubId,
+		"discord_id":           user.DiscordId,
+		"oidc_id":              user.OidcId,
+		"wechat_id":            user.WeChatId,
+		"telegram_id":          user.TelegramId,
+		"account_class":        user.AccountClass,
+		"concurrency_override": user.ConcurrencyOverride,
+		"rpm_override":         user.RPMOverride,
+		"policy_version":       user.PolicyVersion,
+		"quota":                user.Quota,
+		"used_quota":           user.UsedQuota,
+		"request_count":        user.RequestCount,
+		"created_at":           user.CreatedAt,
+		"aff_code":             user.AffCode,
+		"aff_count":            user.AffCount,
+		"aff_quota":            user.AffQuota,
+		"aff_history_quota":    user.AffHistoryQuota,
+		"inviter_id":           user.InviterId,
+		"linux_do_id":          user.LinuxDOId,
+		"setting":              user.Setting,
+		"stripe_customer":      user.StripeCustomer,
+		"sidebar_modules":      userSetting.SidebarModules, // 正确提取sidebar_modules字段
+		"permissions":          permissions,
 	}
 }
 
@@ -623,6 +630,9 @@ func GetUserModels(c *gin.Context) {
 }
 
 func UpdateUser(c *gin.Context) {
+	if rejectRetiredManagementFields(c, "group") {
+		return
+	}
 	var updatedUser model.User
 	err := common.DecodeJson(c.Request.Body, &updatedUser)
 	if err != nil || updatedUser.Id == 0 {
@@ -961,6 +971,9 @@ func DeleteSelf(c *gin.Context) {
 }
 
 func CreateUser(c *gin.Context) {
+	if rejectRetiredManagementFields(c, "group") {
+		return
+	}
 	var user model.User
 	err := common.DecodeJson(c.Request.Body, &user)
 	user.Username = strings.TrimSpace(user.Username)

@@ -73,7 +73,7 @@ func TestPasskeyRegisterFinishRejectsMissingOrWrongProofWithoutConsumingFlow(t *
 
 	user := &model.User{
 		Username: "passkey-proof-user", Password: "password-placeholder", Role: common.RoleCommonUser,
-		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+		Status: common.UserStatusEnabled, AccountClass: "default", AuthVersion: 1,
 	}
 	require.NoError(t, db.Create(user).Error)
 	require.NoError(t, db.Create(&model.TwoFA{UserId: user.Id, Secret: "totp-secret", IsEnabled: true}).Error)

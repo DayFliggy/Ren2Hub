@@ -73,6 +73,7 @@ func newAwsClient(c *gin.Context, info *relaycommon.RelayInfo) (*bedrockruntime.
 		apiKey := awsSecret[0]
 		region := awsSecret[1]
 		client = bedrockruntime.New(bedrockruntime.Options{
+			RetryMaxAttempts:        1,
 			Region:                  region,
 			BearerAuthTokenProvider: bearer.StaticTokenProvider{Token: bearer.Token{Value: apiKey}},
 			HTTPClient:              httpClient,
@@ -82,9 +83,10 @@ func newAwsClient(c *gin.Context, info *relaycommon.RelayInfo) (*bedrockruntime.
 		sk := awsSecret[1]
 		region := awsSecret[2]
 		client = bedrockruntime.New(bedrockruntime.Options{
-			Region:      region,
-			Credentials: aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(ak, sk, "")),
-			HTTPClient:  httpClient,
+			RetryMaxAttempts: 1,
+			Region:           region,
+			Credentials:      aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(ak, sk, "")),
+			HTTPClient:       httpClient,
 		})
 	default:
 		return nil, errors.New("invalid aws secret key")
@@ -232,7 +234,12 @@ func awsHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types
 	ctx, cancel := newAwsInvokeContext(requestContext)
 	defer cancel()
 
+	finish, beginErr := channel.BeginUpstreamCall(c, info)
+	if beginErr != nil {
+		return types.NewError(beginErr, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry()), nil
+	}
 	awsResp, err := a.AwsClient.InvokeModel(ctx, a.AwsReq.(*bedrockruntime.InvokeModelInput))
+	finish(nil, err)
 	if err != nil {
 		return newAwsInvokeError(requestContext, err, "InvokeModel"), nil
 	}
@@ -262,7 +269,12 @@ func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (
 	ctx, cancel := newAwsInvokeContext(requestContext)
 	defer cancel()
 
+	finish, beginErr := channel.BeginUpstreamCall(c, info)
+	if beginErr != nil {
+		return types.NewError(beginErr, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry()), nil
+	}
 	awsResp, err := a.AwsClient.InvokeModelWithResponseStream(ctx, a.AwsReq.(*bedrockruntime.InvokeModelWithResponseStreamInput))
+	finish(nil, err)
 	if err != nil {
 		return newAwsInvokeError(requestContext, err, "InvokeModelWithResponseStream"), nil
 	}
@@ -320,7 +332,12 @@ func handleNovaRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) 
 	ctx, cancel := newAwsInvokeContext(requestContext)
 	defer cancel()
 
+	finish, beginErr := channel.BeginUpstreamCall(c, info)
+	if beginErr != nil {
+		return types.NewError(beginErr, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry()), nil
+	}
 	awsResp, err := a.AwsClient.InvokeModel(ctx, a.AwsReq.(*bedrockruntime.InvokeModelInput))
+	finish(nil, err)
 	if err != nil {
 		return newAwsInvokeError(requestContext, err, "InvokeModel"), nil
 	}

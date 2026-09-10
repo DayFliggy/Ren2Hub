@@ -17,6 +17,7 @@ const (
 	cacheQuotaOK
 	cacheQuotaMiss
 	cacheQuotaFenced
+	cacheQuotaSettlementPending
 )
 
 const quotaMutationFenceSeconds = 10
@@ -49,6 +50,9 @@ if tonumber(redis.call('HGET', KEYS[1], 'Id') or '0') ~= tonumber(ARGV[2])
   or redis.call('HEXISTS', KEYS[1], 'Quota') == 0 then
   return -1
 end
+if tonumber(redis.call('HGET', KEYS[1], 'SettlementVersion') or '0') ~= tonumber(redis.call('GET', KEYS[3]) or '0') then
+  return -3
+end
 local quota = tonumber(redis.call('HGET', KEYS[1], 'Quota'))
 if quota == nil or quota < tonumber(ARGV[1]) then
   return 0
@@ -76,6 +80,9 @@ if tonumber(redis.call('HGET', KEYS[1], 'Id') or '0') ~= tonumber(ARGV[2])
   or redis.call('HEXISTS', KEYS[1], 'RemainQuota') == 0
   or redis.call('HEXISTS', KEYS[1], 'UsedQuota') == 0 then
   return -1
+end
+if tonumber(redis.call('HGET', KEYS[1], 'SettlementVersion') or '0') ~= tonumber(redis.call('GET', KEYS[3]) or '0') then
+  return -3
 end
 local remain = tonumber(redis.call('HGET', KEYS[1], 'RemainQuota'))
 if remain == nil or remain < tonumber(ARGV[1]) then
@@ -111,6 +118,8 @@ func quotaResultFromLua(result int, err error) (cacheQuotaResult, error) {
 		return cacheQuotaInsufficient, nil
 	case -2:
 		return cacheQuotaFenced, nil
+	case -3:
+		return cacheQuotaSettlementPending, nil
 	default:
 		return cacheQuotaMiss, nil
 	}
@@ -118,7 +127,7 @@ func quotaResultFromLua(result int, err error) (cacheQuotaResult, error) {
 
 func cacheTryReserveUserQuota(userID int, amount int64) (cacheQuotaResult, error) {
 	result, err := common.RDB.Eval(context.Background(), userQuotaReserveScript,
-		[]string{getUserCacheKey(userID), getUserQuotaMutationFenceKey(userID)}, amount, userID, userCacheSchemaVersion).Int()
+		[]string{getUserCacheKey(userID), getUserQuotaMutationFenceKey(userID), taskSettlementVersionKey("user", userID)}, amount, userID, userCacheSchemaVersion).Int()
 	return quotaResultFromLua(result, err)
 }
 
@@ -130,7 +139,7 @@ func cacheApplyUserQuotaDelta(userID int, delta int64) (cacheQuotaResult, error)
 
 func cacheTryReserveTokenQuota(id int, key string, amount int64) (cacheQuotaResult, error) {
 	result, err := common.RDB.Eval(context.Background(), tokenQuotaReserveScript,
-		[]string{getTokenCacheKey(key), getTokenCacheFenceKey(key)}, amount, id, common.GetTimestamp()).Int()
+		[]string{getTokenCacheKey(key), getTokenCacheFenceKey(key), taskSettlementVersionKey("token", id)}, amount, id, common.GetTimestamp()).Int()
 	return quotaResultFromLua(result, err)
 }
 
@@ -213,15 +222,35 @@ func TryReserveUserQuota(id int, quota int) (bool, error) {
 	}
 
 	result, err := cacheTryReserveUserQuota(id, int64(quota))
+	if err != nil {
+		return false, err
+	}
+	if result == cacheQuotaSettlementPending {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := reconcileTaskQuotaCache(ctx, "user", id); err != nil {
+			return false, err
+		}
+		result, err = cacheTryReserveUserQuota(id, int64(quota))
+		if err != nil {
+			return false, err
+		}
+		if result == cacheQuotaSettlementPending {
+			return false, ErrTaskQuotaCachePending
+		}
+	}
 	if err == nil && result == cacheQuotaMiss {
 		if _, hydrateErr := GetUserCache(id); hydrateErr == nil {
 			result, err = cacheTryReserveUserQuota(id, int64(quota))
 		}
 	}
-	if err != nil || result == cacheQuotaMiss || result == cacheQuotaFenced {
-		if err != nil {
-			common.SysLog("user quota cache reserve unavailable, falling back to database: " + err.Error())
-		}
+	if err != nil {
+		return false, err
+	}
+	if result == cacheQuotaSettlementPending {
+		return false, ErrTaskQuotaCachePending
+	}
+	if result == cacheQuotaMiss || result == cacheQuotaFenced {
 		return reserveUserQuotaDB(id, quota)
 	}
 	if result == cacheQuotaInsufficient {
@@ -256,15 +285,35 @@ func TryReserveTokenQuota(id int, key string, quota int, unlimited bool) (bool, 
 	}
 
 	result, err := cacheTryReserveTokenQuota(id, key, int64(quota))
+	if err != nil {
+		return false, err
+	}
+	if result == cacheQuotaSettlementPending {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := reconcileTaskQuotaCache(ctx, "token", id); err != nil {
+			return false, err
+		}
+		result, err = cacheTryReserveTokenQuota(id, key, int64(quota))
+		if err != nil {
+			return false, err
+		}
+		if result == cacheQuotaSettlementPending {
+			return false, ErrTaskQuotaCachePending
+		}
+	}
 	if err == nil && result == cacheQuotaMiss {
 		if _, hydrateErr := GetTokenByKey(key, true); hydrateErr == nil {
 			result, err = cacheTryReserveTokenQuota(id, key, int64(quota))
 		}
 	}
-	if err != nil || result == cacheQuotaMiss || result == cacheQuotaFenced {
-		if err != nil {
-			common.SysLog("token quota cache reserve unavailable, falling back to database: " + err.Error())
-		}
+	if err != nil {
+		return false, err
+	}
+	if result == cacheQuotaSettlementPending {
+		return false, ErrTaskQuotaCachePending
+	}
+	if result == cacheQuotaMiss || result == cacheQuotaFenced {
 		return reserveTokenQuotaDB(id, quota)
 	}
 	if result == cacheQuotaInsufficient {

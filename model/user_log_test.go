@@ -38,7 +38,7 @@ func TestGetUserLogsExcludesOperationLogTypes(t *testing.T) {
 	logs = append(logs, Log{UserId: 8, Type: LogTypeConsume, Content: "other user", CreatedAt: 200})
 	require.NoError(t, db.Create(&logs).Error)
 
-	items, total, err := GetUserLogs(7, LogTypeUnknown, 0, 0, "", "", 0, 10, "", "", "", "")
+	items, total, err := GetUserLogs(7, LogTypeUnknown, 0, 0, "", "", 0, 10, "", "", "")
 	require.NoError(t, err)
 	assert.Equal(t, int64(4), total)
 	require.Len(t, items, 4)
@@ -47,26 +47,26 @@ func TestGetUserLogsExcludesOperationLogTypes(t *testing.T) {
 		[]int{items[0].Type, items[1].Type, items[2].Type, items[3].Type},
 	)
 
-	items, total, err = GetUserLogs(7, LogTypeUnknown, 0, 0, "", "", 1, 2, "", "", "", "")
+	items, total, err = GetUserLogs(7, LogTypeUnknown, 0, 0, "", "", 1, 2, "", "", "")
 	require.NoError(t, err)
 	assert.Equal(t, int64(4), total)
 	require.Len(t, items, 2)
 	assert.Equal(t, []int{LogTypeError, LogTypeConsume}, []int{items[0].Type, items[1].Type})
 
-	items, total, err = GetUserLogs(7, LogTypeUnknown, 105, 105, "model-5", "", 0, 10, "", "", "", "")
+	items, total, err = GetUserLogs(7, LogTypeUnknown, 105, 105, "model-5", "", 0, 10, "", "", "")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), total)
 	require.Len(t, items, 1)
 	assert.Equal(t, LogTypeError, items[0].Type)
 
-	items, total, err = GetUserLogs(7, LogTypeConsume, 0, 0, "", "", 0, 10, "", "", "", "")
+	items, total, err = GetUserLogs(7, LogTypeConsume, 0, 0, "", "", 0, 10, "", "", "")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), total)
 	require.Len(t, items, 1)
 	assert.Equal(t, LogTypeConsume, items[0].Type)
 
 	for _, logType := range []int{LogTypeManage, LogTypeSystem, LogTypeLogin, 99} {
-		items, total, err = GetUserLogs(7, logType, 0, 0, "", "", 0, 10, "", "", "", "")
+		items, total, err = GetUserLogs(7, logType, 0, 0, "", "", 0, 10, "", "", "")
 		require.NoError(t, err)
 		assert.Zero(t, total)
 		assert.Empty(t, items)

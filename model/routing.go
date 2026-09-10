@@ -97,7 +97,7 @@ type ChannelModelCapability struct {
 	Source            string  `json:"source" gorm:"type:varchar(64);not null"`
 	CatalogVersion    string  `json:"catalog_version" gorm:"type:varchar(128);not null"`
 	SourceHash        string  `json:"source_hash" gorm:"type:varchar(128);index;not null;default:''"`
-	AbilityGroups     string  `json:"ability_groups" gorm:"type:text"`
+	AbilityEnabled    bool    `json:"ability_enabled"`
 	EndpointTypes     string  `json:"endpoint_types" gorm:"type:text"`
 	PathCapabilities  string  `json:"path_capabilities" gorm:"type:text"`
 	ChannelStatus     int     `json:"channel_status" gorm:"index"`

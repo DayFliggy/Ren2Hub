@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -498,9 +499,8 @@ func UpdateAllChannelsBalance(c *gin.Context) {
 	return
 }
 
-func AutomaticallyUpdateChannels(frequency int) {
-	for {
-		time.Sleep(time.Duration(frequency) * time.Minute)
+func AutomaticallyUpdateChannels(ctx context.Context, frequency int) {
+	for common.WaitBackground(ctx, time.Duration(frequency)*time.Minute) {
 		common.SysLog("updating all channels")
 		_ = updateAllChannelsBalance()
 		common.SysLog("channels update done")

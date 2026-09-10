@@ -59,12 +59,12 @@ func performHeaderNavRequest(t *testing.T, handler gin.HandlerFunc, authenticate
 		})
 		accessToken = "header-nav-pat"
 		user := model.User{
-			Username:    "tester",
-			Password:    "unused-password-hash",
-			Role:        common.RoleCommonUser,
-			Status:      common.UserStatusEnabled,
-			Group:       "default",
-			AuthVersion: 1,
+			Username:     "tester",
+			Password:     "unused-password-hash",
+			Role:         common.RoleCommonUser,
+			Status:       common.UserStatusEnabled,
+			AccountClass: "default",
+			AuthVersion:  1,
 		}
 		user.SetAccessToken(accessToken)
 		require.NoError(t, db.Create(&user).Error)

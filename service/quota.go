@@ -17,8 +17,6 @@ import (
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 
-	"github.com/bytedance/gopkg/util/gopool"
-
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 )
@@ -35,7 +33,7 @@ type QuotaInfo struct {
 	UsePrice      bool
 	ModelPrice    float64
 	ModelRatio    float64
-	GroupRatio    float64
+	ChannelRatio  float64
 }
 
 func hasCustomModelRatio(modelName string, currentRatio float64) bool {
@@ -50,9 +48,9 @@ func calculateAudioQuota(info QuotaInfo) (int, *common.QuotaClamp) {
 	if info.UsePrice {
 		modelPrice := decimal.NewFromFloat(info.ModelPrice)
 		quotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		groupRatio := decimal.NewFromFloat(info.GroupRatio)
+		channelRatio := decimal.NewFromFloat(info.ChannelRatio)
 
-		quota := modelPrice.Mul(quotaPerUnit).Mul(groupRatio)
+		quota := modelPrice.Mul(quotaPerUnit).Mul(channelRatio)
 		return common.QuotaFromDecimalChecked(quota)
 	}
 
@@ -60,9 +58,9 @@ func calculateAudioQuota(info QuotaInfo) (int, *common.QuotaClamp) {
 	audioRatio := decimal.NewFromFloat(ratio_setting.GetAudioRatio(info.ModelName))
 	audioCompletionRatio := decimal.NewFromFloat(ratio_setting.GetAudioCompletionRatio(info.ModelName))
 
-	groupRatio := decimal.NewFromFloat(info.GroupRatio)
+	channelRatio := decimal.NewFromFloat(info.ChannelRatio)
 	modelRatio := decimal.NewFromFloat(info.ModelRatio)
-	ratio := groupRatio.Mul(modelRatio)
+	ratio := channelRatio.Mul(modelRatio)
 
 	inputTextTokens := decimal.NewFromInt(int64(info.InputDetails.TextTokens))
 	outputTextTokens := decimal.NewFromInt(int64(info.OutputDetails.TextTokens))
@@ -105,7 +103,7 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 	audioInputTokens := usage.InputTokenDetails.AudioTokens
 	audioOutTokens := usage.OutputTokenDetails.AudioTokens
 	modelRatio, _, _ := ratio_setting.GetModelRatio(modelName)
-	actualGroupRatio := relayInfo.PriceData.ChannelRatio
+	actualChannelRatio := relayInfo.PriceData.ChannelRatio
 
 	quotaInfo := QuotaInfo{
 		InputDetails: TokenDetails{
@@ -116,10 +114,10 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 			TextTokens:  textOutTokens,
 			AudioTokens: audioOutTokens,
 		},
-		ModelName:  modelName,
-		UsePrice:   relayInfo.UsePrice,
-		ModelRatio: modelRatio,
-		GroupRatio: actualGroupRatio,
+		ModelName:    modelName,
+		UsePrice:     relayInfo.UsePrice,
+		ModelRatio:   modelRatio,
+		ChannelRatio: actualChannelRatio,
 	}
 
 	quota, clamp := calculateAudioQuota(quotaInfo)
@@ -167,7 +165,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	audioCompletionRatio := decimal.NewFromFloat(ratio_setting.GetAudioCompletionRatio(modelName))
 
 	modelRatio := relayInfo.PriceData.ModelRatio
-	groupRatio := relayInfo.PriceData.ChannelRatio
+	channelRatio := relayInfo.PriceData.ChannelRatio
 	modelPrice := relayInfo.PriceData.ModelPrice
 	usePrice := relayInfo.PriceData.UsePrice
 
@@ -180,10 +178,10 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 			TextTokens:  textOutTokens,
 			AudioTokens: audioOutTokens,
 		},
-		ModelName:  modelName,
-		UsePrice:   usePrice,
-		ModelRatio: modelRatio,
-		GroupRatio: groupRatio,
+		ModelName:    modelName,
+		UsePrice:     usePrice,
+		ModelRatio:   modelRatio,
+		ChannelRatio: channelRatio,
 	}
 
 	quota, clamp := calculateAudioQuota(quotaInfo)
@@ -196,9 +194,9 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	var logContent string
 	if !usePrice {
 		logContent = fmt.Sprintf("模型倍率 %.2f，补全倍率 %.2f，音频倍率 %.2f，音频补全倍率 %.2f，渠道倍率 %.2f",
-			modelRatio, completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), groupRatio)
+			modelRatio, completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), channelRatio)
 	} else {
-		logContent = fmt.Sprintf("模型价格 %.2f，渠道倍率 %.2f", modelPrice, groupRatio)
+		logContent = fmt.Sprintf("模型价格 %.2f，渠道倍率 %.2f", modelPrice, channelRatio)
 	}
 
 	// record all the consume log even if quota is 0
@@ -222,7 +220,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	if extraContent != "" {
 		logContent += ", " + extraContent
 	}
-	other := GenerateWssOtherInfo(ctx, relayInfo, usage, modelRatio, groupRatio,
+	other := GenerateWssOtherInfo(ctx, relayInfo, usage, modelRatio, channelRatio,
 		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice)
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
@@ -239,7 +237,6 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		TokenId:          relayInfo.TokenId,
 		UseTimeSeconds:   int(useTimeSeconds),
 		IsStream:         relayInfo.IsStream,
-		Group:            relayInfo.UsingGroup,
 		Other:            other,
 	})
 }
@@ -290,7 +287,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	audioCompletionRatio := decimal.NewFromFloat(ratio_setting.GetAudioCompletionRatio(relayInfo.OriginModelName))
 
 	modelRatio := relayInfo.PriceData.ModelRatio
-	groupRatio := relayInfo.PriceData.ChannelRatio
+	channelRatio := relayInfo.PriceData.ChannelRatio
 	modelPrice := relayInfo.PriceData.ModelPrice
 	usePrice := relayInfo.PriceData.UsePrice
 
@@ -303,10 +300,10 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 			TextTokens:  textOutTokens,
 			AudioTokens: audioOutTokens,
 		},
-		ModelName:  relayInfo.OriginModelName,
-		UsePrice:   usePrice,
-		ModelRatio: modelRatio,
-		GroupRatio: groupRatio,
+		ModelName:    relayInfo.OriginModelName,
+		UsePrice:     usePrice,
+		ModelRatio:   modelRatio,
+		ChannelRatio: channelRatio,
 	}
 
 	quota, clamp := calculateAudioQuota(quotaInfo)
@@ -319,9 +316,9 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	var logContent string
 	if !usePrice {
 		logContent = fmt.Sprintf("模型倍率 %.2f，补全倍率 %.2f，音频倍率 %.2f，音频补全倍率 %.2f，渠道倍率 %.2f",
-			modelRatio, completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), groupRatio)
+			modelRatio, completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), channelRatio)
 	} else {
-		logContent = fmt.Sprintf("模型价格 %.2f，渠道倍率 %.2f", modelPrice, groupRatio)
+		logContent = fmt.Sprintf("模型价格 %.2f，渠道倍率 %.2f", modelPrice, channelRatio)
 	}
 
 	// record all the consume log even if quota is 0
@@ -345,7 +342,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	if extraContent != "" {
 		logContent += ", " + extraContent
 	}
-	other := GenerateAudioOtherInfo(ctx, relayInfo, usage, modelRatio, groupRatio,
+	other := GenerateAudioOtherInfo(ctx, relayInfo, usage, modelRatio, channelRatio,
 		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice)
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
@@ -362,10 +359,9 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		TokenId:          relayInfo.TokenId,
 		UseTimeSeconds:   int(useTimeSeconds),
 		IsStream:         relayInfo.IsStream,
-		Group:            relayInfo.UsingGroup,
 		Other:            other,
 	})
-	gopool.Go(func() {
+	common.GoDeferred(func() {
 		perfmetrics.RecordRelaySample(relayInfo, true, int64(usage.CompletionTokens))
 	})
 }
@@ -451,7 +447,7 @@ func postConsumeQuotaWithResult(relayInfo *relaycommon.RelayInfo, quota int, pre
 }
 
 func checkAndSendQuotaNotify(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQuota int) {
-	gopool.Go(func() {
+	common.GoDeferred(func() {
 		userSetting := relayInfo.UserSetting
 		threshold := common.QuotaRemindThreshold
 		if userSetting.QuotaWarningThreshold != 0 {
@@ -499,7 +495,7 @@ func checkAndSendQuotaNotify(relayInfo *relaycommon.RelayInfo, quota int, preCon
 }
 
 func checkAndSendSubscriptionQuotaNotify(relayInfo *relaycommon.RelayInfo) {
-	gopool.Go(func() {
+	common.GoDeferred(func() {
 		if relayInfo == nil {
 			return
 		}

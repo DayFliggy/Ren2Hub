@@ -31,14 +31,14 @@ type capabilityPath struct {
 }
 
 type indexedCapability struct {
-	Capability    model.ChannelModelCapability
-	ChannelStatus int
-	Priority      int64
-	Weight        int
-	AbilityGroups []string
-	ChannelType   int
-	Advanced      *dto.AdvancedCustomConfig
-	Mixed         bool
+	Capability     model.ChannelModelCapability
+	ChannelStatus  int
+	Priority       int64
+	Weight         int
+	AbilityEnabled bool
+	ChannelType    int
+	Advanced       *dto.AdvancedCustomConfig
+	Mixed          bool
 }
 
 type capabilityIndex struct {
@@ -90,13 +90,19 @@ func (d *capabilityRefreshDispatcher) enqueue(channelID int) {
 	}
 	d.running = true
 	d.mu.Unlock()
-	go d.run()
+	if !common.BackgroundWorkers.Go(d.run) {
+		d.mu.Lock()
+		d.running = false
+		d.pending = make(map[int]struct{})
+		d.queue = nil
+		d.mu.Unlock()
+	}
 }
 
-func (d *capabilityRefreshDispatcher) run() {
+func (d *capabilityRefreshDispatcher) run(parent context.Context) {
 	for {
 		d.mu.Lock()
-		if len(d.queue) == 0 {
+		if len(d.queue) == 0 || parent.Err() != nil {
 			d.running = false
 			d.mu.Unlock()
 			return
@@ -106,7 +112,7 @@ func (d *capabilityRefreshDispatcher) run() {
 		delete(d.pending, channelID)
 		d.mu.Unlock()
 
-		ctx, cancel := context.WithTimeout(context.Background(), d.timeout())
+		ctx, cancel := context.WithTimeout(parent, d.timeout())
 		err := d.refresh(ctx, channelID)
 		cancel()
 		if err != nil && d.onError != nil {
@@ -343,19 +349,15 @@ func RebuildRouteCapabilityIndex(ctx context.Context) error {
 		if _, exists := channelExists[capability.ChannelID]; !exists {
 			continue
 		}
-		// AbilityGroups is part of the immutable capability row. Falling back
-		// to the live Ability table here would let a later edit change an old
-		// snapshot during replay or after an unrelated index rebuild.
-		groups := decodeStringList(capability.AbilityGroups)
 		index.ByRequestModel[capability.RequestModel] = append(index.ByRequestModel[capability.RequestModel], indexedCapability{
-			Capability:    capability,
-			ChannelStatus: capability.ChannelStatus,
-			Priority:      capability.Priority,
-			Weight:        capability.Weight,
-			AbilityGroups: append([]string(nil), groups...),
-			ChannelType:   capability.ChannelType,
-			Advanced:      advancedCustomPathConfigFromCapability(capability),
-			Mixed:         capability.IsMixed,
+			Capability:     capability,
+			ChannelStatus:  capability.ChannelStatus,
+			Priority:       capability.Priority,
+			Weight:         capability.Weight,
+			AbilityEnabled: capability.AbilityEnabled,
+			ChannelType:    capability.ChannelType,
+			Advanced:       advancedCustomPathConfigFromCapability(capability),
+			Mixed:          capability.IsMixed,
 		})
 	}
 	for requestModel := range index.ByRequestModel {
@@ -388,16 +390,10 @@ func projectChannelCapabilities(channel *model.Channel, abilities []model.Abilit
 		}
 		byRequest[requestModel].matches = append(byRequest[requestModel].matches, match)
 	}
-	abilityGroups := make(map[string][]string)
+	abilityEnabled := make(map[string]bool)
 	for _, ability := range abilities {
-		if !ability.Enabled {
-			continue
-		}
 		key := modellab.NormalizeModel(ability.Model)
-		abilityGroups[key] = append(abilityGroups[key], ability.Group)
-	}
-	for key := range abilityGroups {
-		abilityGroups[key] = sortedUniqueStrings(abilityGroups[key])
+		abilityEnabled[key] = abilityEnabled[key] || ability.Enabled
 	}
 
 	paths := buildCapabilityPaths(channel)
@@ -440,7 +436,6 @@ func projectChannelCapabilities(channel *model.Channel, abilities []model.Abilit
 			chosen.Confidence = 1
 			source = "channel_configuration"
 		}
-		groupsJSON, _ := common.Marshal(abilityGroups[requestModel])
 		modelEndpoints, marshalErr := common.Marshal(endpointTypesForModel(channel, chosen))
 		if marshalErr != nil {
 			common.SysError("encode model endpoints: " + marshalErr.Error())
@@ -455,7 +450,7 @@ func projectChannelCapabilities(channel *model.Channel, abilities []model.Abilit
 			Source:            source,
 			CatalogVersion:    resolution.CatalogVersion,
 			SourceHash:        sourceHash,
-			AbilityGroups:     string(groupsJSON),
+			AbilityEnabled:    abilityEnabled[requestModel],
 			EndpointTypes:     string(modelEndpoints),
 			PathCapabilities:  string(pathJSON),
 			ChannelStatus:     channel.Status,
@@ -581,7 +576,6 @@ type channelFingerprint struct {
 	Models    string
 	Mapping   string
 	Type      int
-	Group     string
 	Priority  int64
 	Weight    int
 	Advanced  []capabilityPath
@@ -590,7 +584,6 @@ type channelFingerprint struct {
 
 type abilityFingerprint struct {
 	Model   string
-	Group   string
 	Enabled bool
 }
 
@@ -603,7 +596,6 @@ func channelCapabilityFingerprint(channel *model.Channel, abilities []model.Abil
 		Models:   channel.Models,
 		Mapping:  channel.GetModelMapping(),
 		Type:     channel.Type,
-		Group:    channel.Group,
 		Priority: channel.GetPriority(),
 		Weight:   channel.GetWeight(),
 		Advanced: buildCapabilityPaths(channel),
@@ -611,7 +603,6 @@ func channelCapabilityFingerprint(channel *model.Channel, abilities []model.Abil
 	for _, ability := range abilities {
 		fingerprint.Abilities = append(fingerprint.Abilities, abilityFingerprint{
 			Model:   ability.Model,
-			Group:   ability.Group,
 			Enabled: ability.Enabled,
 		})
 	}
@@ -619,9 +610,6 @@ func channelCapabilityFingerprint(channel *model.Channel, abilities []model.Abil
 		left, right := fingerprint.Abilities[i], fingerprint.Abilities[j]
 		if left.Model != right.Model {
 			return left.Model < right.Model
-		}
-		if left.Group != right.Group {
-			return left.Group < right.Group
 		}
 		return !left.Enabled && right.Enabled
 	})

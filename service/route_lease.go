@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -27,7 +28,18 @@ const (
 	RouteLeaseFailureCode        = "route_lease_failed"
 )
 
-const routeLeasePrefix = "route:lease:v1"
+const routeLeasePrefix = "route:lease:v2"
+
+const (
+	RouteLeaseScopeRequest = "request"
+	RouteLeaseScopeAttempt = "attempt"
+)
+
+type RouteLeaseOwner struct {
+	RequestID       string
+	Scope           string
+	AttemptSequence int
+}
 
 var routeLeaseMetrics struct {
 	AcquireFailures atomic.Uint64
@@ -58,11 +70,13 @@ type RouteLeaseResource struct {
 }
 
 type RouteLease struct {
-	LeaseID   string
-	RequestID string
-	ChannelID int
-	Resources []RouteLeaseResource
-	ExpiresAt time.Time
+	LeaseID         string
+	RequestID       string
+	ChannelID       int
+	Resources       []RouteLeaseResource
+	ExpiresAt       time.Time
+	Scope           string
+	AttemptSequence int
 }
 
 func UserRouteLeaseKey(userID int) string {
@@ -78,6 +92,16 @@ func ChannelRouteLeaseKey(channelID int) string {
 }
 
 func AcquireRouteLease(ctx context.Context, client *redis.Client, requestID, leaseID string, ttl time.Duration, resources []RouteLeaseResource) (RouteLease, error) {
+	return AcquireScopedRouteLease(ctx, client, RouteLeaseOwner{RequestID: requestID, Scope: RouteLeaseScopeRequest}, leaseID, ttl, resources)
+}
+
+func AcquireScopedRouteLease(ctx context.Context, client *redis.Client, owner RouteLeaseOwner, leaseID string, ttl time.Duration, resources []RouteLeaseResource) (RouteLease, error) {
+	requestID := owner.RequestID
+	if (owner.Scope != RouteLeaseScopeRequest && owner.Scope != RouteLeaseScopeAttempt) ||
+		(owner.Scope == RouteLeaseScopeRequest && owner.AttemptSequence != 0) ||
+		(owner.Scope == RouteLeaseScopeAttempt && owner.AttemptSequence <= 0) {
+		return RouteLease{}, ErrRouteLeaseOwnership
+	}
 	if client == nil || strings.TrimSpace(requestID) == "" || strings.TrimSpace(leaseID) == "" || ttl <= 0 || len(resources) == 0 {
 		routeLeaseMetrics.AcquireFailures.Add(1)
 		return RouteLease{}, ErrRouteLeaseUnavailable
@@ -86,7 +110,7 @@ func AcquireRouteLease(ctx context.Context, client *redis.Client, requestID, lea
 	args := make([]interface{}, 0, 3+len(resources))
 	seenResources := make(map[string]struct{}, len(resources))
 	for _, resource := range resources {
-		if strings.TrimSpace(resource.Key) == "" || resource.Capacity <= 0 {
+		if strings.TrimSpace(resource.Key) == "" || resource.Capacity < 0 {
 			routeLeaseMetrics.AcquireFailures.Add(1)
 			return RouteLease{}, ErrRouteLeaseUnavailable
 		}
@@ -99,7 +123,7 @@ func AcquireRouteLease(ctx context.Context, client *redis.Client, requestID, lea
 		args = append(args, resource.Capacity)
 	}
 	metaKey := routeLeaseMetaKey(leaseID)
-	requestKey := routeLeaseRequestKey(requestID)
+	requestKey := routeLeaseOwnerKey(owner)
 	keys = append(keys, metaKey, requestKey)
 	args = append(args, leaseID, requestID, ttl.Milliseconds())
 	result, err := routeLeaseAcquireScript.Run(ctx, client, keys, args...).Int()
@@ -115,7 +139,7 @@ func AcquireRouteLease(ctx context.Context, client *redis.Client, requestID, lea
 		routeLeaseMetrics.AcquireFailures.Add(1)
 		return RouteLease{}, ErrRouteLeaseCapacity
 	}
-	return RouteLease{LeaseID: leaseID, RequestID: requestID, Resources: resources, ExpiresAt: time.Now().Add(ttl)}, nil
+	return RouteLease{LeaseID: leaseID, RequestID: requestID, Resources: resources, ExpiresAt: time.Now().Add(ttl), Scope: owner.Scope, AttemptSequence: owner.AttemptSequence}, nil
 }
 
 func ReleaseRouteLease(ctx context.Context, client *redis.Client, lease RouteLease) error {
@@ -127,7 +151,7 @@ func ReleaseRouteLease(ctx context.Context, client *redis.Client, lease RouteLea
 	for _, resource := range lease.Resources {
 		keys = append(keys, resource.Key)
 	}
-	keys = append(keys, routeLeaseMetaKey(lease.LeaseID), routeLeaseRequestKey(lease.RequestID))
+	keys = append(keys, routeLeaseMetaKey(lease.LeaseID), routeLeaseOwnerKey(lease.owner()))
 	result, err := routeLeaseReleaseScript.Run(ctx, client, keys, lease.LeaseID, lease.RequestID).Int()
 	if err != nil {
 		routeLeaseMetrics.ReleaseFailures.Add(1)
@@ -149,7 +173,7 @@ func RenewRouteLease(ctx context.Context, client *redis.Client, lease RouteLease
 	for _, resource := range lease.Resources {
 		keys = append(keys, resource.Key)
 	}
-	keys = append(keys, routeLeaseMetaKey(lease.LeaseID), routeLeaseRequestKey(lease.RequestID))
+	keys = append(keys, routeLeaseMetaKey(lease.LeaseID), routeLeaseOwnerKey(lease.owner()))
 	result, err := routeLeaseRenewScript.Run(ctx, client, keys, lease.LeaseID, lease.RequestID, ttl.Milliseconds()).Int()
 	if err != nil {
 		routeLeaseMetrics.RenewFailures.Add(1)
@@ -186,7 +210,19 @@ func routeLeaseMetaKey(leaseID string) string {
 }
 
 func routeLeaseRequestKey(requestID string) string {
-	return fmt.Sprintf("%s:request:%s", routeLeasePrefix, requestID)
+	return routeLeaseOwnerKey(RouteLeaseOwner{RequestID: requestID, Scope: RouteLeaseScopeRequest})
+}
+
+func (lease RouteLease) owner() RouteLeaseOwner {
+	scope := lease.Scope
+	if scope == "" {
+		scope = RouteLeaseScopeRequest
+	}
+	return RouteLeaseOwner{RequestID: lease.RequestID, Scope: scope, AttemptSequence: lease.AttemptSequence}
+}
+
+func routeLeaseOwnerKey(owner RouteLeaseOwner) string {
+	return fmt.Sprintf("%s:owner:%s:%s:%d", routeLeasePrefix, base64.RawURLEncoding.EncodeToString([]byte(owner.RequestID)), owner.Scope, owner.AttemptSequence)
 }
 
 var routeLeaseAcquireScript = redis.NewScript(`
@@ -205,7 +241,7 @@ for i = 1, #KEYS - 2 do
   local expired = redis.call('ZRANGEBYSCORE', KEYS[i], '-inf', now_ms)
   for _, member in ipairs(expired) do redis.call('ZREM', KEYS[i], member) end
   local capacity = tonumber(ARGV[i])
-  if redis.call('ZCARD', KEYS[i]) >= capacity then return -1 end
+  if capacity > 0 and redis.call('ZCARD', KEYS[i]) >= capacity then return -1 end
 end
 for i = 1, #KEYS - 2 do redis.call('ZADD', KEYS[i], expiry, lease_id) end
 redis.call('HSET', meta_key, 'lease_id', lease_id, 'request_id', request_id, 'expires_at', expiry)

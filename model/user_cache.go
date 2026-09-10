@@ -1,8 +1,10 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -11,23 +13,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const userCacheSchemaVersion = 2
+const userCacheSchemaVersion = 3
 
 type UserBase struct {
-	Id          int    `json:"id"`
-	Group       string `json:"group"`
-	Email       string `json:"email"`
-	Quota       int    `json:"quota"`
-	Status      int    `json:"status"`
-	Role        int    `json:"role"`
-	Username    string `json:"username"`
-	Setting     string `json:"setting"`
-	AuthVersion int64  `json:"-"`
-	CacheSchema int    `json:"-"`
+	Id                int    `json:"id"`
+	AccountClass      string `json:"account_class"`
+	Email             string `json:"email"`
+	Quota             int    `json:"quota"`
+	Status            int    `json:"status"`
+	Role              int    `json:"role"`
+	Username          string `json:"username"`
+	Setting           string `json:"setting"`
+	AuthVersion       int64  `json:"-"`
+	PolicyVersion     int64  `json:"-"`
+	SettlementVersion int64  `json:"-"`
+	CacheSchema       int    `json:"-"`
 }
 
 func (user *UserBase) WriteContext(c *gin.Context) {
-	common.SetContextKey(c, constant.ContextKeyUserGroup, user.Group)
+	common.SetContextKey(c, constant.ContextKeyUserAccountClass, user.AccountClass)
 	common.SetContextKey(c, constant.ContextKeyUserQuota, user.Quota)
 	common.SetContextKey(c, constant.ContextKeyUserStatus, user.Status)
 	common.SetContextKey(c, constant.ContextKeyUserEmail, user.Email)
@@ -91,6 +95,9 @@ func GetUserCache(userId int) (*UserBase, error) {
 	if err == nil {
 		return userCache, nil
 	}
+	if errors.Is(err, ErrTaskQuotaCachePending) {
+		return nil, err
+	}
 
 	// Redis misses and read failures both fall back to the shared database. A
 	// version fence newer than the database is the one exception: allowing that
@@ -105,7 +112,7 @@ func GetUserCache(userId int) (*UserBase, error) {
 			return nil, ErrUserAuthCachePending
 		}
 		if err := populateUserCache(*user); err != nil {
-			if errors.Is(err, ErrUserAuthCachePending) {
+			if errors.Is(err, ErrUserAuthCachePending) || errors.Is(err, ErrTaskQuotaCachePending) {
 				return nil, err
 			}
 			common.SysLog("failed to synchronously populate user cache: " + err.Error())
@@ -133,6 +140,24 @@ func cacheGetUserBase(userId int) (*UserBase, error) {
 	}
 	if floor > userCache.AuthVersion {
 		return nil, ErrUserAuthCachePending
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	current, err := taskSettlementCacheCurrent(ctx, "user", userId, userCache.SettlementVersion)
+	if err != nil {
+		return nil, err
+	}
+	if !current {
+		if err := reconcileTaskQuotaCache(ctx, "user", userId); err != nil {
+			return nil, errors.Join(ErrTaskQuotaCachePending, err)
+		}
+		if err := common.RedisHGetObj(getUserCacheKey(userId), &userCache); err != nil {
+			return nil, err
+		}
+		current, err = taskSettlementCacheCurrent(ctx, "user", userId, userCache.SettlementVersion)
+		if err != nil || !current {
+			return nil, errors.Join(ErrTaskQuotaCachePending, err)
+		}
 	}
 	return &userCache, nil
 }
@@ -165,12 +190,12 @@ func syncCreditUserQuotaCache(userId int, quota int, operation string) {
 }
 
 // Helper functions to get individual fields if needed
-func getUserGroupCache(userId int) (string, error) {
+func getUserAccountClassCache(userId int) (string, error) {
 	cache, err := GetUserCache(userId)
 	if err != nil {
 		return "", err
 	}
-	return cache.Group, nil
+	return cache.AccountClass, nil
 }
 
 func getUserQuotaCache(userId int) (int, error) {
@@ -197,9 +222,9 @@ func getUserSettingCache(userId int) (dto.UserSetting, error) {
 	return cache.GetSetting(), nil
 }
 
-// RefreshUserGroupCache writes the database-authoritative group into an
+// RefreshUserAccountClassCache writes the database-authoritative account class into an
 // existing user hash without changing the user's authentication version.
-func RefreshUserGroupCache(userId int) error {
+func RefreshUserAccountClassCache(userId int) error {
 	if !common.RedisEnabled {
 		return nil
 	}
@@ -207,23 +232,25 @@ func RefreshUserGroupCache(userId int) error {
 		return fmt.Errorf("invalid user id")
 	}
 	var authoritative User
-	if err := DB.Select("id", "auth_version", commonGroupCol).Where("id = ?", userId).First(&authoritative).Error; err != nil {
+	if err := DB.Where("id = ?", userId).First(&authoritative).Error; err != nil {
 		return err
 	}
-	// Group transitions intentionally keep the same authentication version. A
-	// refresh that read the previous group can therefore arrive after a newer
+	// AccountClass transitions intentionally keep the same authentication version. A
+	// refresh that read the previous account class can therefore arrive after a newer
 	// refresh and still pass the auth-version fence. Re-read after every write
-	// and repair the cache when the authoritative group changed in between.
+	// and repair the cache when the authoritative account class changed in between.
 	for range 3 {
-		if err := updateUserCacheFieldAtVersion(userId, "Group", authoritative.Group, authoritative.AuthVersion); err != nil {
-			return err
+		if err := writeUserCache(authoritative.ToBaseUser(), false); err != nil {
+			if !errors.Is(err, ErrUserAuthCachePending) {
+				return err
+			}
 		}
 
 		var verified User
-		if err := DB.Select("id", "auth_version", commonGroupCol).Where("id = ?", userId).First(&verified).Error; err != nil {
+		if err := DB.Where("id = ?", userId).First(&verified).Error; err != nil {
 			return err
 		}
-		if verified.AuthVersion == authoritative.AuthVersion && verified.Group == authoritative.Group {
+		if verified.AuthVersion == authoritative.AuthVersion && verified.PolicyVersion == authoritative.PolicyVersion {
 			return nil
 		}
 		authoritative = verified
@@ -232,10 +259,10 @@ func RefreshUserGroupCache(userId int) error {
 	// Preserve the freshest snapshot observed even when the row was too busy to
 	// stabilize within the bounded retries. Returning an error lets best-effort
 	// callers emit an operation-specific warning.
-	if err := updateUserCacheFieldAtVersion(userId, "Group", authoritative.Group, authoritative.AuthVersion); err != nil {
+	if err := writeUserCache(authoritative.ToBaseUser(), false); err != nil {
 		return err
 	}
-	return fmt.Errorf("user group changed repeatedly during cache refresh")
+	return fmt.Errorf("user account class changed repeatedly during cache refresh")
 }
 
 func updateUserEmailCache(userId int, email string) error {

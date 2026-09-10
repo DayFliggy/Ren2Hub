@@ -49,7 +49,7 @@ func TestSelectLiveTokenRouteIgnoresFormerBusinessGroupRestrictions(t *testing.T
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, db.Model(&model.User{}).Where("id = ?", userID).Update("group", "vip").Error)
+	require.NoError(t, db.Model(&model.User{}).Where("id = ?", userID).Update("account_class", "vip").Error)
 	selection, err := SelectLiveTokenRoute(LiveRouteRequest{
 		Context: context.Background(), CapabilityEnabled: true, RequestID: "request-token-group",
 		UserID: userID, TokenID: tokenID, RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
@@ -67,12 +67,10 @@ func TestSelectLiveTokenRouteAutoLabUsesActiveIndexAndCurrentChannelStatus(t *te
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
 	channel := model.Channel{}
 	require.NoError(t, db.First(&channel, "id = ?", channelID).Error)
-	abilityGroups, err := common.Marshal([]string{"default"})
-	require.NoError(t, err)
 	capability := model.ChannelModelCapability{
 		ChannelID: channelID, SnapshotVersion: 1, RequestModel: "gpt-test", ActualModel: "gpt-test",
 		LabSlug: "openai", Source: "canonical", Confidence: 1, State: model.RouteCapabilityStateEligible,
-		AbilityGroups: string(abilityGroups), ChannelStatus: common.ChannelStatusEnabled,
+		AbilityEnabled: true, ChannelStatus: common.ChannelStatusEnabled,
 		ChannelType: constant.ChannelTypeOpenAI, EndpointTypes: `[
   "openai"
 ]`, Priority: 20, Weight: 10,
@@ -81,11 +79,11 @@ func TestSelectLiveTokenRouteAutoLabUsesActiveIndexAndCurrentChannelStatus(t *te
 	routeCapabilityIndex.Store(&capabilityIndex{
 		ByRequestModel: map[string][]indexedCapability{"gpt-test": {{
 			Capability: capability, ChannelStatus: common.ChannelStatusEnabled,
-			Priority: 20, Weight: 10, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI,
+			Priority: 20, Weight: 10, AbilityEnabled: true, ChannelType: constant.ChannelTypeOpenAI,
 		}}},
 	})
 	t.Cleanup(resetRouteCapabilityIndexForTest)
-	_, err = CreateUserRouteProfile(RouteProfileInput{UserID: userID, TokenID: tokenID, Mode: model.RouteModeAutoLab})
+	_, err := CreateUserRouteProfile(RouteProfileInput{UserID: userID, TokenID: tokenID, Mode: model.RouteModeAutoLab})
 	require.NoError(t, err)
 
 	selection, err := SelectLiveTokenRoute(LiveRouteRequest{
@@ -222,7 +220,6 @@ func TestRecheckLiveRouteCandidateRejectsChangedGroupAndEntry(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", channelID).Update("group", "__no_access__").Error)
 	err = RecheckLiveRouteCandidate(LiveRouteCandidateQualificationRequest{
 		Context: context.Background(), RouteSource: RouteSourceManual,
 		UserID: userID, TokenID: tokenID, ChannelID: channelID,
@@ -232,7 +229,6 @@ func TestRecheckLiveRouteCandidateRejectsChangedGroupAndEntry(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", channelID).Update("group", "default").Error)
 	var entry model.UserRouteEntry
 	require.NoError(t, db.Where("group_id = ? AND channel_id = ?", *created.Profile.ActiveGroupID, channelID).First(&entry).Error)
 	require.NoError(t, db.Model(&entry).Update("enabled", false).Error)
@@ -347,15 +343,13 @@ func TestRecheckLiveRouteCandidateRejectsStaleActiveSnapshot(t *testing.T) {
 		}},
 	})
 	require.NoError(t, err)
-	groups, marshalErr := common.Marshal([]string{"default"})
-	require.NoError(t, marshalErr)
 	endpoints, marshalErr := common.Marshal([]string{string(constant.EndpointTypeOpenAI)})
 	require.NoError(t, marshalErr)
 	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, model.ChannelCapabilitySnapshotFence{
 		ActiveVersion: 1, SourceHash: fmt.Sprintf("preview-source-%d", channelID), CatalogVersion: "preview-catalog",
 	}, "preview-source-v2", "preview-catalog-v2", []model.ChannelModelCapability{{
 		RequestModel: "gpt-test", ActualModel: "gpt-test", LabSlug: "openai", Source: "canonical", Confidence: 1,
-		AbilityGroups: string(groups), EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
+		AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
 		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
 	}}))
 

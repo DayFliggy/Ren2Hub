@@ -34,7 +34,7 @@ func loadRouteChannel(ctx context.Context, channelID int) (model.Channel, error)
 
 // AcquireConfiguredRouteLease uses the same channel capacity edited in Vue.
 // A channel has one shared pool across all of its models.
-func AcquireConfiguredRouteLease(ctx context.Context, requestID string, channelID, userID, tokenID int, requestModel string, ttl time.Duration) (RouteLease, model.Channel, error) {
+func AcquireConfiguredRouteLease(ctx context.Context, owner RouteLeaseOwner, channelID, userID, tokenID int, requestModel string, ttl time.Duration) (RouteLease, model.Channel, error) {
 	channel, err := loadRouteChannel(ctx, channelID)
 	if err != nil {
 		return RouteLease{}, channel, err
@@ -45,8 +45,11 @@ func AcquireConfiguredRouteLease(ctx context.Context, requestID string, channelI
 	if !common.RedisEnabled || common.RDB == nil {
 		return RouteLease{}, channel, ErrRouteLeaseUnavailable
 	}
+	if owner.Scope != RouteLeaseScopeAttempt {
+		return RouteLease{}, channel, ErrRouteLeaseOwnership
+	}
 	resources := []RouteLeaseResource{{Key: ChannelRouteLeaseKey(channelID), Capacity: channel.CapacityTotal}}
-	lease, err := AcquireRouteLease(ctx, common.RDB, requestID, uuid.NewString(), ttl, resources)
+	lease, err := AcquireScopedRouteLease(ctx, common.RDB, owner, uuid.NewString(), ttl, resources)
 	if err != nil {
 		return RouteLease{}, channel, err
 	}

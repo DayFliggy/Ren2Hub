@@ -76,7 +76,7 @@ func TestMidjourneyAcceptedSubmissionSurvivesClientCancellation(t *testing.T) {
 			require.NoError(t, db.Create(user).Error)
 			token := &model.Token{UserId: user.Id, Key: "mjcancelsafekey", Name: "cancel-safe", Status: common.TokenStatusEnabled, ExpiredTime: -1, RemainQuota: 1_000_000}
 			require.NoError(t, db.Create(token).Error)
-			channel := &model.Channel{Type: constant.ChannelTypeMidjourney, Name: "cancel-safe-upstream", Status: common.ChannelStatusEnabled, Key: "upstream-key", BaseURL: &upstream.URL, Models: test.model, Group: "default", CapacityTotal: 1, ChannelRatio: 2}
+			channel := &model.Channel{Type: constant.ChannelTypeMidjourney, Name: "cancel-safe-upstream", Status: common.ChannelStatusEnabled, Key: "upstream-key", BaseURL: &upstream.URL, Models: test.model, CapacityTotal: 1, ChannelRatio: 2}
 			require.NoError(t, db.Create(channel).Error)
 			require.NoError(t, channel.AddAbilities(db))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))

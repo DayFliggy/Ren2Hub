@@ -16,8 +16,10 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/execution"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/relay"
+	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -27,7 +29,6 @@ import (
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
-	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/samber/lo"
 
 	"github.com/gin-gonic/gin"
@@ -70,6 +71,8 @@ func geminiRelayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewA
 }
 
 func Relay(c *gin.Context, relayFormat types.RelayFormat) {
+	executionState := relaychannel.RequestExecution(c, execution.Generation)
+	defer finalizeRequestExecution(c, executionState)
 
 	requestId := c.GetString(common.RequestIdKey)
 
@@ -93,23 +96,17 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 	}()
 
-	if relayFormat == types.RelayFormatOpenAIRealtime {
-		var err error
-		ws, err = upgrader.Upgrade(c.Writer, c.Request, nil)
-		if err != nil {
-			helper.WssError(c, ws, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry()).ToOpenAIError())
-			return
-		}
-		defer ws.Close()
-	}
-
 	defer func() {
 		if newAPIError != nil && !relayResponseCommitted(c, relayInfo) {
 			logger.LogError(c, fmt.Sprintf("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
 			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
 			switch relayFormat {
 			case types.RelayFormatOpenAIRealtime:
-				helper.WssError(c, ws, newAPIError.ToOpenAIError())
+				if ws == nil {
+					c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError()})
+				} else {
+					helper.WssError(c, ws, newAPIError.ToOpenAIError())
+				}
 			case types.RelayFormatClaude:
 				c.JSON(newAPIError.StatusCode, gin.H{
 					"type":  "error",
@@ -132,6 +129,22 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = types.NewError(err, types.ErrorCodeInvalidRequest)
 		}
 		return
+	}
+	if relayFormat == types.RelayFormatOpenAIRealtime && (!websocket.IsWebSocketUpgrade(c.Request) || strings.TrimSpace(c.Query("model")) == "") {
+		newAPIError = types.NewError(fmt.Errorf("valid websocket upgrade and model are required"), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+		return
+	}
+	if admissionErr := service.StartRequestUserAdmission(c); admissionErr != nil {
+		newAPIError = userAdmissionAPIError(admissionErr)
+		return
+	}
+	if relayFormat == types.RelayFormatOpenAIRealtime {
+		ws, err = upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			newAPIError = types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+			return
+		}
+		defer ws.Close()
 	}
 
 	relayInfo, err = relaycommon.GenRelayInfo(c, relayFormat, request, ws)
@@ -188,6 +201,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
 	compactRetry := newCompactRetryState(relayInfo)
+	c.Set(relaychannel.BeforeCallContextKey, func(call execution.Call) {
+		beginLiveRouteUpstreamAttempt(c, relayInfo.ChannelId)
+		if compactRetry != nil {
+			compactRetry.recordAttempt(c, relayInfo.ChannelId)
+		}
+	})
 
 	for {
 		if liveRouteRetryCounters(c).TotalAttempts > 0 {
@@ -196,7 +215,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				break
 			}
 		}
-		if routeLiveSelectionActive(c) && liveRouteRetryCounters(c).TotalAttempts >= service.DefaultTotalAttempts {
+		if executionState.CallCount() >= execution.MaxCalls {
 			break
 		}
 		if compactRetry == nil {
@@ -225,6 +244,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		relayInfo.InitChannelMeta(c)
+		if _, err := relaychannel.CheckExecutionCandidate(c, relayInfo); err != nil {
+			newAPIError = types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+			break
+		}
 		if compactRetry != nil {
 			if err := helper.ConfigureCompactAttempt(c, relayInfo); err != nil {
 				newAPIError = types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
@@ -274,9 +297,6 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		addUsedChannel(c, channel.Id)
-		if compactRetry != nil {
-			compactRetry.recordAttempt(c, channel.Id)
-		}
 
 		bodyStorage, bodyErr := common.GetBodyStorage(c)
 		if bodyErr != nil {
@@ -289,9 +309,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
-		if routeLiveSelectionActive(c) {
-			relayInfo.RetryIndex = beginLiveRouteUpstreamAttempt(c, channel.Id)
-		}
+		callsBefore := executionState.CallCount()
 		attemptStartedAt := time.Now()
 
 		switch relayFormat {
@@ -351,6 +369,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError
+		if executionState.CallCount() == callsBefore || requestContextDone(c) {
+			// Local construction/conversion failures and client cancellation
+			// do not represent failed supplier generation calls.
+			break
+		}
 		liveNextAttempt := -1
 		liveClassification := service.RouteErrorClassification{}
 		if routeLiveSelectionActive(c) {
@@ -411,7 +434,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		logger.LogInfo(c, retryLogStr)
 	}
 	if newAPIError != nil && !relayInfo.HasSendResponse() {
-		gopool.Go(func() {
+		common.GoDeferred(func() {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
 		})
 	}
@@ -722,7 +745,10 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 	if !qualified {
 		return &service.LiveRouteQualificationError{Reason: "runtime_qualification_unavailable"}
 	}
-	lease, admittedChannel, err := service.AcquireConfiguredRouteLease(c.Request.Context(), info.RequestId, channel.Id, info.UserId, info.TokenId, info.BillingModelName(), routeAttemptLeaseTTL())
+	leaseSequence := c.GetInt("route_channel_admission_sequence") + 1
+	c.Set("route_channel_admission_sequence", leaseSequence)
+	owner := service.RouteLeaseOwner{RequestID: info.RequestId, Scope: service.RouteLeaseScopeAttempt, AttemptSequence: leaseSequence}
+	lease, admittedChannel, err := service.AcquireConfiguredRouteLease(c.Request.Context(), owner, channel.Id, info.UserId, info.TokenId, info.BillingModelName(), routeAttemptLeaseTTL())
 	if err != nil {
 		return err
 	}
@@ -1228,7 +1254,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
 	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
 	if service.ShouldDisableChannel(err) && channelError.AutoBan {
-		gopool.Go(func() {
+		common.GoDeferred(func() {
 			service.DisableChannel(channelError, err.ErrorWithStatusCode())
 		})
 	}
@@ -1239,7 +1265,6 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		tokenName := c.GetString("token_name")
 		modelName := c.GetString("original_model")
 		tokenId := c.GetInt("token_id")
-		userGroup := c.GetString("group")
 		channelId := c.GetInt("channel_id")
 		other := make(map[string]interface{})
 		if c.Request != nil && c.Request.URL != nil {
@@ -1265,13 +1290,17 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			startTime = time.Now()
 		}
 		useTimeSeconds := int(time.Since(startTime).Seconds())
-		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), userGroup, other)
+		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, common.GetContextKeyBool(c, constant.ContextKeyIsStream), other)
 	}
 
 }
 
 // admitMediaRouteAttempt is called after provider validation and pricing.
 func admitMediaRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, attempt int) error {
+	if err := service.StartRequestUserAdmission(c); err != nil {
+		c.Status(userAdmissionAPIError(err).StatusCode)
+		return err
+	}
 	if !liveRoutePriceRatioAllowed(c, info.PriceData.ChannelRatio) {
 		return service.ErrRoutePriceRatioExceeded
 	}
@@ -1284,8 +1313,28 @@ func admitMediaRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, attempt
 	if err := acquireRouteAttemptLease(c, info, channel, attempt); err != nil {
 		return err
 	}
-	info.RetryIndex = beginLiveRouteUpstreamAttempt(c, channel.Id)
 	return nil
+}
+
+func userAdmissionAPIError(err error) *types.NewAPIError {
+	status := http.StatusServiceUnavailable
+	if errors.Is(err, service.ErrUserRPM) || errors.Is(err, service.ErrUserQueueFull) || errors.Is(err, service.ErrUserQueueTimeout) {
+		status = http.StatusTooManyRequests
+	}
+	return types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, status, types.ErrOptionWithSkipRetry())
+}
+
+func finalizeRequestExecution(c *gin.Context, request *execution.Request) {
+	if c.Writer != nil && c.Writer.Written() {
+		request.Commit()
+	}
+	request.End()
+	data, err := common.Marshal(request.Snapshot())
+	if err != nil {
+		logger.LogError(c, "request execution diagnostics encode failed: "+err.Error())
+		return
+	}
+	logger.LogInfo(c, "request execution: "+string(data))
 }
 
 func RelayMidjourney(c *gin.Context) {
@@ -1298,6 +1347,23 @@ func RelayMidjourney(c *gin.Context) {
 			"code":        4,
 		})
 		return
+	}
+	class := execution.Submission
+	switch relayInfo.RelayMode {
+	case relayconstant.RelayModeMidjourneyNotify, relayconstant.RelayModeMidjourneyTaskFetch, relayconstant.RelayModeMidjourneyTaskFetchByCondition, relayconstant.RelayModeMidjourneyTaskImageSeed:
+		class = execution.TaskQuery
+	}
+	executionState := relaychannel.RequestExecution(c, class)
+	defer finalizeRequestExecution(c, executionState)
+	if class == execution.Submission {
+		c.Set(relaychannel.BasicValidatedContextKey, func() error {
+			err := service.StartRequestUserAdmission(c)
+			if err != nil {
+				c.Status(userAdmissionAPIError(err).StatusCode)
+			}
+			return err
+		})
+		c.Set(relaychannel.BeforeCallContextKey, func(execution.Call) { beginLiveRouteUpstreamAttempt(c, relayInfo.ChannelId) })
 	}
 
 	var mjErr *taskdto.MidjourneyResponse
@@ -1318,7 +1384,7 @@ func RelayMidjourney(c *gin.Context) {
 			}
 			apiErr = types.NewErrorWithStatusCode(fmt.Errorf("%s", mjErr.Description), types.ErrorCodeBadResponseStatusCode, status)
 		}
-		if admitted {
+		if admitted && executionState.CallCount() > 0 && !requestContextDone(c) {
 			key := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
 			var healthErr error
 			if apiErr == nil {
@@ -1402,6 +1468,8 @@ func RelayNotFound(c *gin.Context) {
 }
 
 func RelayTaskFetch(c *gin.Context) {
+	executionState := relaychannel.RequestExecution(c, execution.TaskQuery)
+	defer finalizeRequestExecution(c, executionState)
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, &taskdto.TaskError{
@@ -1417,6 +1485,8 @@ func RelayTaskFetch(c *gin.Context) {
 }
 
 func RelayTask(c *gin.Context) {
+	executionState := relaychannel.RequestExecution(c, execution.Submission)
+	defer finalizeRequestExecution(c, executionState)
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, &taskdto.TaskError{
@@ -1442,6 +1512,8 @@ func RelayTask(c *gin.Context) {
 
 	var result *relay.TaskSubmitResult
 	var taskErr *taskdto.TaskError
+	c.Set(relaychannel.BasicValidatedContextKey, func() error { return service.StartRequestUserAdmission(c) })
+	c.Set(relaychannel.BeforeCallContextKey, func(execution.Call) { beginLiveRouteUpstreamAttempt(c, relayInfo.ChannelId) })
 	defer func() {
 		releaseRouteAttemptLease(c)
 		finalizeLiveTaskRouteDecision(c, taskErr)
@@ -1456,6 +1528,9 @@ func RelayTask(c *gin.Context) {
 	}
 
 	for {
+		if executionState.CallCount() >= execution.MaxCalls {
+			break
+		}
 		if retryParam.GetRetry() > relayRetryLimit(c) {
 			break
 		}
@@ -1468,6 +1543,11 @@ func RelayTask(c *gin.Context) {
 		channel, channelErr := getChannel(c, relayInfo, retryParam)
 		if channelErr != nil {
 			taskErr = service.TaskErrorWrapperLocal(channelErr, "get_channel_failed", http.StatusServiceUnavailable)
+			break
+		}
+		relayInfo.InitChannelMeta(c)
+		if _, err := relaychannel.CheckExecutionCandidate(c, relayInfo); err != nil {
+			taskErr = service.TaskErrorWrapperLocal(err, "candidate_check_failed", http.StatusServiceUnavailable)
 			break
 		}
 		var admissionErr error
@@ -1488,6 +1568,7 @@ func RelayTask(c *gin.Context) {
 		c.Request.Body = io.NopCloser(bodyStorage)
 
 		attemptStartedAt := time.Now()
+		callsBefore := executionState.CallCount()
 		result, taskErr = relay.RelayTaskSubmit(c, relayInfo)
 		if admissionErr != nil {
 			if service.LiveRouteQualificationAllowsFailover(admissionErr) {
@@ -1522,7 +1603,7 @@ func RelayTask(c *gin.Context) {
 				break
 			}
 			classification := service.ClassifyRouteError(taskErr.StatusCode, taskErr.Code, taskErr.Message, false)
-			if !taskErr.LocalError && taskErr.Code != service.RouteLeaseFailureCode {
+			if executionState.CallCount() > callsBefore && !requestContextDone(c) && !taskErr.LocalError && taskErr.Code != service.RouteLeaseFailureCode {
 				if healthErr := service.ObserveLiveRouteErrorForKey(c.Request.Context(), channel.Id, relayInfo.RouteCapabilityModel, common.GetContextKeyString(c, constant.ContextKeyChannelKey), taskErr.StatusCode, taskErr.Code, taskErr.Message, false); healthErr != nil {
 					recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
 				}
@@ -1584,12 +1665,13 @@ func RelayTask(c *gin.Context) {
 		task.PrivateData.TokenId = relayInfo.TokenId
 		task.PrivateData.NodeName = common.NodeName
 		task.PrivateData.BillingContext = &model.TaskBillingContext{
-			ModelPrice:      relayInfo.PriceData.ModelPrice,
-			GroupRatio:      relayInfo.PriceData.ChannelRatio,
-			ModelRatio:      relayInfo.PriceData.ModelRatio,
-			OtherRatios:     relayInfo.PriceData.OtherRatios(),
-			OriginModelName: relayInfo.OriginModelName,
-			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
+			ModelPrice:        relayInfo.PriceData.ModelPrice,
+			BillingMultiplier: relayInfo.PriceData.ChannelRatio,
+			MultiplierSource:  "channel",
+			ModelRatio:        relayInfo.PriceData.ModelRatio,
+			OtherRatios:       relayInfo.PriceData.OtherRatios(),
+			OriginModelName:   relayInfo.OriginModelName,
+			PerCallBilling:    common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
 		}
 		task.Quota = result.Quota
 		task.Data = result.TaskData

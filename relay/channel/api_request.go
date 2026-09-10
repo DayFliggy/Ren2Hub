@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"golang.org/x/net/http/httpguts"
 )
 
 // ApplyUpstreamBodyMetadata restores metadata that net/http cannot infer from
@@ -392,7 +394,16 @@ func DoWssRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 		targetHeader.Set(key, value)
 	}
 	targetHeader.Set("Content-Type", c.Request.Header.Get("Content-Type"))
-	targetConn, _, err := websocket.DefaultDialer.DialContext(c.Request.Context(), fullRequestURL, targetHeader)
+	parsedURL, err := url.Parse(fullRequestURL)
+	if err != nil || parsedURL.Host == "" || (parsedURL.Scheme != "ws" && parsedURL.Scheme != "wss") {
+		return nil, fmt.Errorf("invalid upstream websocket URL")
+	}
+	finish, err := BeginUpstreamCall(c, info)
+	if err != nil {
+		return nil, err
+	}
+	targetConn, response, err := websocket.DefaultDialer.DialContext(c.Request.Context(), fullRequestURL, targetHeader)
+	finish(response, err)
 	if err != nil {
 		return nil, fmt.Errorf("dial failed to %s: %w", common.SanitizeURLForLog(fullRequestURL), err)
 	}
@@ -498,6 +509,22 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	// transparent stream retries.
 	relayClient := *client
 	relayClient.CheckRedirect = keepUpstreamRedirectResponse
+	if req == nil || req.URL == nil || req.URL.Host == "" || (req.URL.Scheme != "http" && req.URL.Scheme != "https") {
+		return nil, fmt.Errorf("invalid upstream HTTP request")
+	}
+	if err := req.Context().Err(); err != nil {
+		return nil, err
+	}
+	for name, values := range req.Header {
+		if !httpguts.ValidHeaderFieldName(name) {
+			return nil, fmt.Errorf("invalid upstream header name")
+		}
+		for _, value := range values {
+			if !httpguts.ValidHeaderFieldValue(value) {
+				return nil, fmt.Errorf("invalid upstream header value")
+			}
+		}
+	}
 	if common2.DebugEnabled && req != nil && req.URL != nil {
 		policy := service.NormalizeHTTPTransportPolicy(info.ChannelSetting)
 		logger.LogDebug(c, fmt.Sprintf(
@@ -509,6 +536,10 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		))
 	}
 
+	finish, err := BeginUpstreamCall(c, info)
+	if err != nil {
+		return nil, err
+	}
 	var stopPinger context.CancelFunc
 	var pingerDone <-chan struct{}
 	if info.IsStream {
@@ -530,6 +561,7 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	}
 
 	resp, err := relayClient.Do(req)
+	finish(resp, err)
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())
 		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("upstream error: do request failed"))
@@ -553,8 +585,12 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		c.Set(common2.UpstreamRequestIdKey, upID)
 	}
 
-	_ = req.Body.Close()
-	_ = c.Request.Body.Close()
+	if req.Body != nil {
+		_ = req.Body.Close()
+	}
+	if c.Request.Body != nil {
+		_ = c.Request.Body.Close()
+	}
 	return resp, nil
 }
 

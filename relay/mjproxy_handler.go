@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -208,6 +209,9 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 	if swapFaceRequest.SourceBase64 == "" || swapFaceRequest.TargetBase64 == "" {
 		return service.MidjourneyErrorWrapper(constant.MjRequestError, "sour_base64_and_target_base64_is_required")
 	}
+	if err := relaychannel.AfterBasicValidation(c); err != nil {
+		return &dto.MidjourneyResponse{Code: 4, Description: err.Error()}
+	}
 	modelName := service.CovertMjpActionToModelName(constant.MjActionSwapFace)
 
 	priceData, err := helper.ModelPriceHelperPerCall(c, info)
@@ -241,7 +245,7 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 			return &dto.MidjourneyResponse{Code: 4, Description: err.Error()}
 		}
 	}
-	mjResp, _, err := service.DoMidjourneyHttpRequest(c, time.Second*60, fullRequestURL)
+	mjResp, _, err := service.DoMidjourneyHttpRequest(c, time.Second*60, fullRequestURL, func() (func(*http.Response, error), error) { return relaychannel.BeginUpstreamCall(c, info) })
 	if err != nil {
 		return &mjResp.Response
 	}
@@ -293,7 +297,6 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 			Quota:     midjourneyTask.Quota,
 			Content:   logContent,
 			TokenId:   midjourneyTask.TokenId,
-			Group:     info.UsingGroup,
 			Other:     other,
 		})
 		model.UpdateUserUsedQuotaAndRequestCount(info.UserId, midjourneyTask.Quota)
@@ -333,7 +336,7 @@ func RelayMidjourneyTaskImageSeed(c *gin.Context) *dto.MidjourneyResponse {
 
 	requestURL := getMjRequestPath(c.Request.URL.String())
 	fullRequestURL := fmt.Sprintf("%s%s", channel.GetBaseURL(), requestURL)
-	midjResponseWithStatus, _, err := service.DoMidjourneyHttpRequest(c, time.Second*30, fullRequestURL)
+	midjResponseWithStatus, _, err := service.DoMidjourneyHttpRequest(c, time.Second*30, fullRequestURL, nil)
 	if err != nil {
 		return &midjResponseWithStatus.Response
 	}
@@ -524,6 +527,9 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 		//}
 	}
 
+	if err := relaychannel.AfterBasicValidation(c); err != nil {
+		return &dto.MidjourneyResponse{Code: 4, Description: err.Error()}
+	}
 	if midjRequest.Action == constant.MjActionInPaint || midjRequest.Action == constant.MjActionCustomZoom {
 		consumeQuota = false
 	}
@@ -568,7 +574,7 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 			return &dto.MidjourneyResponse{Code: 4, Description: err.Error()}
 		}
 	}
-	midjResponseWithStatus, responseBody, err := service.DoMidjourneyHttpRequest(c, time.Second*60, fullRequestURL)
+	midjResponseWithStatus, responseBody, err := service.DoMidjourneyHttpRequest(c, time.Second*60, fullRequestURL, func() (func(*http.Response, error), error) { return relaychannel.BeginUpstreamCall(c, relayInfo) })
 	if err != nil {
 		return &midjResponseWithStatus.Response
 	}
@@ -674,7 +680,6 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 			Quota:     midjourneyTask.Quota,
 			Content:   logContent,
 			TokenId:   midjourneyTask.TokenId,
-			Group:     relayInfo.UsingGroup,
 			Other:     other,
 		})
 		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, midjourneyTask.Quota)

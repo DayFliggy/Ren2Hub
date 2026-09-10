@@ -223,12 +223,12 @@ func TestSecurityFactorMutationsAdvanceUserAuthVersion(t *testing.T) {
 	truncateTables(t)
 
 	user := User{
-		Username:    "security-factor-version-user",
-		Password:    "password",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
-		AuthVersion: 1,
+		Username:     "security-factor-version-user",
+		Password:     "password",
+		Role:         common.RoleCommonUser,
+		Status:       common.UserStatusEnabled,
+		AccountClass: "default",
+		AuthVersion:  1,
 	}
 	require.NoError(t, DB.Create(&user).Error)
 	twoFA := TwoFA{UserId: user.Id, Secret: "secret", IsEnabled: false}

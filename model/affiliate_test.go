@@ -34,6 +34,7 @@ func setupAffiliateTest(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&User{}, &AffiliateLedger{}, &Option{}))
+	require.NoError(t,InitializeAccountClasses(db))
 	DB = db
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
 	common.AffiliateEnabled = true

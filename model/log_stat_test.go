@@ -55,7 +55,7 @@ func TestSumUsedQuotaForUserScopesFilteredAndRateStatsByUserId(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&logs).Error)
 
-	stat, err := SumUsedQuotaForUser(7, LogTypeUnknown, 0, 0, "", "", 0, "")
+	stat, err := SumUsedQuotaForUser(7, LogTypeUnknown, 0, 0, "", "", 0)
 	require.NoError(t, err)
 	assert.Equal(t, 350, stat.Quota)
 	assert.Equal(t, 1, stat.Rpm)

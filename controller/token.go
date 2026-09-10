@@ -24,6 +24,10 @@ type tokenResponse struct {
 	Type string `json:"type"`
 }
 
+func rejectRetiredTokenRoutingFields(c *gin.Context) bool {
+	return rejectRetiredManagementFields(c, "group", "Group", "groups", "Groups", "auto_groups", "AutoGroups", "cross_group_retry", "CrossGroupRetry")
+}
+
 func buildMaskedTokenResponses(tokens []*model.Token) ([]*tokenResponse, error) {
 	ids := make([]int, 0, len(tokens))
 	for _, token := range tokens {
@@ -67,6 +71,9 @@ func writeTokenResponse(c *gin.Context, token *model.Token) {
 }
 
 func GetAllTokens(c *gin.Context) {
+	if rejectRetiredTokenRoutingFields(c) {
+		return
+	}
 	userId := c.GetInt("id")
 	pageInfo := common.GetPageQuery(c)
 	tokens, err := model.GetAllUserTokens(userId, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
@@ -86,6 +93,9 @@ func GetAllTokens(c *gin.Context) {
 }
 
 func SearchTokens(c *gin.Context) {
+	if rejectRetiredTokenRoutingFields(c) {
+		return
+	}
 	userId := c.GetInt("id")
 	keyword := c.Query("keyword")
 	token := c.Query("token")
@@ -108,6 +118,9 @@ func SearchTokens(c *gin.Context) {
 }
 
 func GetToken(c *gin.Context) {
+	if rejectRetiredTokenRoutingFields(c) {
+		return
+	}
 	id, err := strconv.Atoi(c.Param("id"))
 	userId := c.GetInt("id")
 	if err != nil {
@@ -123,6 +136,9 @@ func GetToken(c *gin.Context) {
 }
 
 func GetTokenKey(c *gin.Context) {
+	if rejectRetiredTokenRoutingFields(c) {
+		return
+	}
 	id, err := strconv.Atoi(c.Param("id"))
 	userId := c.GetInt("id")
 	if err != nil {
@@ -210,6 +226,9 @@ func GetTokenUsage(c *gin.Context) {
 }
 
 func AddToken(c *gin.Context) {
+	if rejectRetiredTokenRoutingFields(c) {
+		return
+	}
 	request := tokenRequest{}
 	err := c.ShouldBindJSON(&request)
 	if err != nil {
@@ -285,6 +304,9 @@ func AddToken(c *gin.Context) {
 }
 
 func DeleteToken(c *gin.Context) {
+	if rejectRetiredTokenRoutingFields(c) {
+		return
+	}
 	id, _ := strconv.Atoi(c.Param("id"))
 	userId := c.GetInt("id")
 	err := model.DeleteTokenById(id, userId)
@@ -299,6 +321,9 @@ func DeleteToken(c *gin.Context) {
 }
 
 func UpdateToken(c *gin.Context) {
+	if rejectRetiredTokenRoutingFields(c) {
+		return
+	}
 	userId := c.GetInt("id")
 	statusOnly := c.Query("status_only")
 	request := tokenRequest{}
@@ -364,6 +389,9 @@ type TokenBatch struct {
 }
 
 func DeleteTokenBatch(c *gin.Context) {
+	if rejectRetiredTokenRoutingFields(c) {
+		return
+	}
 	tokenBatch := TokenBatch{}
 	if err := c.ShouldBindJSON(&tokenBatch); err != nil || len(tokenBatch.Ids) == 0 {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
@@ -383,6 +411,9 @@ func DeleteTokenBatch(c *gin.Context) {
 }
 
 func GetTokenKeysBatch(c *gin.Context) {
+	if rejectRetiredTokenRoutingFields(c) {
+		return
+	}
 	tokenBatch := TokenBatch{}
 	if err := c.ShouldBindJSON(&tokenBatch); err != nil || len(tokenBatch.Ids) == 0 {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)

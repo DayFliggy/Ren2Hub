@@ -50,7 +50,7 @@ func insertPricingEndpointChannel(t *testing.T, channelID int, channelType int, 
 func insertPricingEndpointAbility(t *testing.T, channelID int, modelName string) {
 	t.Helper()
 	require.NoError(t, DB.Create(&Ability{
-		Group:     "default",
+
 		Model:     modelName,
 		ChannelId: channelID,
 		Enabled:   true,
@@ -227,7 +227,7 @@ func TestPricingAddsGPTCompactVariantWithBaseMetadataAndResolvedPrice(t *testing
 	}).Error)
 	insertPricingEndpointChannel(t, 205, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointAbility(t, 205, "gpt-pricing-base")
-	require.NoError(t, DB.Create(&Ability{Group: "vip", Model: "gpt-pricing-base-openai-compact", ChannelId: 205, Enabled: true}).Error)
+	require.NoError(t, DB.Create(&Ability{Model: "gpt-pricing-base-openai-compact", ChannelId: 205, Enabled: true}).Error)
 	insertPricingEndpointAbility(t, 205, "claude-pricing-base-openai-compact")
 
 	InitChannelCache()
@@ -250,7 +250,6 @@ func TestPricingAddsGPTCompactVariantWithBaseMetadataAndResolvedPrice(t *testing
 	require.Equal(t, "chat", compact.Tags)
 	require.Equal(t, 90, compact.VendorID)
 	require.Equal(t, "OpenAI Test", compact.OwnerBy)
-	require.ElementsMatch(t, []string{"default", "vip"}, compact.EnableGroup)
 	require.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAIResponseCompact}, compact.SupportedEndpointTypes)
 	require.Equal(t, 1, compact.QuotaType)
 	require.Equal(t, 0.1, compact.ModelPrice)

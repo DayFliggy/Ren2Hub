@@ -172,11 +172,11 @@ type SubscriptionPlan struct {
 	// Max purchases per user (0 = unlimited)
 	MaxPurchasePerUser int `json:"max_purchase_per_user" gorm:"type:int;default:0"`
 
-	// Upgrade user group after purchase (empty = no change)
-	UpgradeGroup string `json:"upgrade_group" gorm:"type:varchar(64);default:''"`
+	// Upgrade user account class after purchase (empty = no change)
+	UpgradeAccountClass string `json:"upgrade_account_class" gorm:"type:varchar(64);default:''"`
 
-	// Downgrade user group on expiry (empty = revert to the group held before purchase)
-	DowngradeGroup string `json:"downgrade_group" gorm:"type:varchar(64);default:''"`
+	// Downgrade user account class on expiry (empty = revert to the account class held before purchase)
+	DowngradeAccountClass string `json:"downgrade_account_class" gorm:"type:varchar(64);default:''"`
 
 	// Total quota (amount in quota units, 0 = unlimited)
 	TotalAmount int64 `json:"total_amount" gorm:"type:bigint;not null;default:0"`
@@ -193,7 +193,7 @@ func (p *SubscriptionPlan) BeforeCreate(tx *gorm.DB) error {
 	now := common.GetTimestamp()
 	p.CreatedAt = now
 	p.UpdatedAt = now
-	return nil
+	return LockAccountClassReferences(tx, p.UpgradeAccountClass, p.DowngradeAccountClass)
 }
 
 func (p *SubscriptionPlan) BeforeUpdate(tx *gorm.DB) error {
@@ -268,11 +268,11 @@ type UserSubscription struct {
 	LastResetTime int64 `json:"last_reset_time" gorm:"type:bigint;default:0"`
 	NextResetTime int64 `json:"next_reset_time" gorm:"type:bigint;default:0;index"`
 
-	UpgradeGroup  string `json:"upgrade_group" gorm:"type:varchar(64);default:''"`
-	PrevUserGroup string `json:"prev_user_group" gorm:"type:varchar(64);default:''"`
+	UpgradeAccountClass  string `json:"upgrade_account_class" gorm:"type:varchar(64);default:''"`
+	PreviousAccountClass string `json:"previous_account_class" gorm:"type:varchar(64);default:''"`
 
-	// Downgrade target group on expiry (snapshot from plan; empty = revert to PrevUserGroup)
-	DowngradeGroup string `json:"downgrade_group" gorm:"type:varchar(64);default:''"`
+	// Downgrade target account class on expiry (snapshot from plan; empty = revert to PreviousAccountClass)
+	DowngradeAccountClass string `json:"downgrade_account_class" gorm:"type:varchar(64);default:''"`
 
 	// Whether wallet fallback is allowed after this subscription's quota is exhausted (snapshot from plan)
 	AllowWalletOverflow bool `json:"allow_wallet_overflow"`
@@ -424,37 +424,37 @@ func CountUserSubscriptionsByPlan(userId int, planId int) (int64, error) {
 	return count, nil
 }
 
-func getUserGroupByIdTx(tx *gorm.DB, userId int) (string, error) {
+func getUserAccountClassByIdTx(tx *gorm.DB, userId int) (string, error) {
 	if userId <= 0 {
 		return "", errors.New("invalid userId")
 	}
 	if tx == nil {
 		tx = DB
 	}
-	var group string
-	if err := lockForUpdate(tx).Model(&User{}).Where("id = ?", userId).Select(commonGroupCol).Find(&group).Error; err != nil {
+	var accountClass string
+	if err := lockForUpdate(tx).Model(&User{}).Where("id = ?", userId).Select("account_class").Find(&accountClass).Error; err != nil {
 		return "", err
 	}
-	return group, nil
+	return accountClass, nil
 }
 
-func downgradeUserGroupForSubscriptionTx(tx *gorm.DB, sub *UserSubscription, now int64) (string, error) {
+func downgradeUserAccountClassForSubscriptionTx(tx *gorm.DB, sub *UserSubscription, now int64) (string, error) {
 	if tx == nil || sub == nil {
 		return "", errors.New("invalid downgrade args")
 	}
-	downgradeGroup := strings.TrimSpace(sub.DowngradeGroup)
-	upgradeGroup := strings.TrimSpace(sub.UpgradeGroup)
+	downgradeClass := strings.TrimSpace(sub.DowngradeAccountClass)
+	upgradeClass := strings.TrimSpace(sub.UpgradeAccountClass)
 	// Nothing to do if neither an explicit downgrade target nor an upgrade snapshot exists.
-	if downgradeGroup == "" && upgradeGroup == "" {
+	if downgradeClass == "" && upgradeClass == "" {
 		return "", nil
 	}
-	currentGroup, err := getUserGroupByIdTx(tx, sub.UserId)
+	currentClass, err := getUserAccountClassByIdTx(tx, sub.UserId)
 	if err != nil {
 		return "", err
 	}
-	// If another active upgraded subscription exists, keep the current group.
+	// If another active upgraded subscription exists, keep the current account class.
 	var activeSub UserSubscription
-	activeQuery := tx.Where("user_id = ? AND status = ? AND end_time > ? AND id <> ? AND upgrade_group <> ''",
+	activeQuery := tx.Where("user_id = ? AND status = ? AND end_time > ? AND id <> ? AND upgrade_account_class <> ''",
 		sub.UserId, "active", now, sub.Id).
 		Order("end_time desc, id desc").
 		Limit(1).
@@ -462,21 +462,20 @@ func downgradeUserGroupForSubscriptionTx(tx *gorm.DB, sub *UserSubscription, now
 	if activeQuery.Error == nil && activeQuery.RowsAffected > 0 {
 		return "", nil
 	}
-	// Determine the downgrade target: an explicit downgrade group takes precedence,
-	// otherwise revert to the group held before purchase (legacy behavior).
-	target := downgradeGroup
+	// Determine the downgrade target: an explicit downgrade account class takes precedence,
+	// otherwise revert to the account class held before purchase (legacy behavior).
+	target := downgradeClass
 	if target == "" {
 		// Legacy behavior: only revert when the subscription actually elevated the user.
-		if currentGroup != upgradeGroup {
+		if currentClass != upgradeClass {
 			return "", nil
 		}
-		target = strings.TrimSpace(sub.PrevUserGroup)
+		target = strings.TrimSpace(sub.PreviousAccountClass)
 	}
-	if target == "" || target == currentGroup {
+	if target == "" || target == currentClass {
 		return "", nil
 	}
-	if err := tx.Model(&User{}).Where("id = ?", sub.UserId).
-		Update("group", target).Error; err != nil {
+	if err := updateUserAccountClassTx(tx, sub.UserId, target); err != nil {
 		return "", err
 	}
 	return target, nil
@@ -491,6 +490,9 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 	}
 	if userId <= 0 {
 		return nil, errors.New("invalid user id")
+	}
+	if err := LockAccountClassReferences(tx, plan.UpgradeAccountClass, plan.DowngradeAccountClass); err != nil {
+		return nil, err
 	}
 	if plan.MaxPurchasePerUser > 0 {
 		var count int64
@@ -515,17 +517,16 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 	if nextReset > 0 {
 		lastReset = now.Unix()
 	}
-	upgradeGroup := strings.TrimSpace(plan.UpgradeGroup)
-	prevGroup := ""
-	if upgradeGroup != "" {
-		currentGroup, err := getUserGroupByIdTx(tx, userId)
+	upgradeClass := strings.TrimSpace(plan.UpgradeAccountClass)
+	previousClass := ""
+	if upgradeClass != "" {
+		currentClass, err := getUserAccountClassByIdTx(tx, userId)
 		if err != nil {
 			return nil, err
 		}
-		if currentGroup != upgradeGroup {
-			prevGroup = currentGroup
-			if err := tx.Model(&User{}).Where("id = ?", userId).
-				Update("group", upgradeGroup).Error; err != nil {
+		if currentClass != upgradeClass {
+			previousClass = currentClass
+			if err := updateUserAccountClassTx(tx, userId, upgradeClass); err != nil {
 				return nil, err
 			}
 		}
@@ -535,22 +536,22 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 		allowWalletOverflow = *plan.AllowWalletOverflow
 	}
 	sub := &UserSubscription{
-		UserId:              userId,
-		PlanId:              plan.Id,
-		AmountTotal:         plan.TotalAmount,
-		AmountUsed:          0,
-		StartTime:           now.Unix(),
-		EndTime:             endUnix,
-		Status:              "active",
-		Source:              source,
-		LastResetTime:       lastReset,
-		NextResetTime:       nextReset,
-		UpgradeGroup:        upgradeGroup,
-		PrevUserGroup:       prevGroup,
-		DowngradeGroup:      strings.TrimSpace(plan.DowngradeGroup),
-		AllowWalletOverflow: allowWalletOverflow,
-		CreatedAt:           common.GetTimestamp(),
-		UpdatedAt:           common.GetTimestamp(),
+		UserId:                userId,
+		PlanId:                plan.Id,
+		AmountTotal:           plan.TotalAmount,
+		AmountUsed:            0,
+		StartTime:             now.Unix(),
+		EndTime:               endUnix,
+		Status:                "active",
+		Source:                source,
+		LastResetTime:         lastReset,
+		NextResetTime:         nextReset,
+		UpgradeAccountClass:   upgradeClass,
+		PreviousAccountClass:  previousClass,
+		DowngradeAccountClass: strings.TrimSpace(plan.DowngradeAccountClass),
+		AllowWalletOverflow:   allowWalletOverflow,
+		CreatedAt:             common.GetTimestamp(),
+		UpdatedAt:             common.GetTimestamp(),
 	}
 	if err := tx.Create(sub).Error; err != nil {
 		return nil, err
@@ -558,9 +559,9 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 	return sub, nil
 }
 
-func refreshSubscriptionUserGroupCache(userId int, operation string) {
-	if err := RefreshUserGroupCache(userId); err != nil {
-		common.SysError(fmt.Sprintf("failed to refresh user group cache after %s for user %d: %v", operation, userId, err))
+func refreshSubscriptionUserAccountClassCache(userId int, operation string) {
+	if err := RefreshUserAccountClassCache(userId); err != nil {
+		common.SysError(fmt.Sprintf("failed to refresh user account class cache after %s for user %d: %v", operation, userId, err))
 	}
 }
 
@@ -579,7 +580,7 @@ func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedP
 	var logPlanTitle string
 	var logMoney float64
 	var logPaymentMethod string
-	var upgradeGroup string
+	var upgradeClass string
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var order SubscriptionOrder
 		if err := lockForUpdate(tx).Where(refCol+" = ?", tradeNo).First(&order).Error; err != nil {
@@ -611,8 +612,8 @@ func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedP
 		if err != nil {
 			return err
 		}
-		if subscription.PrevUserGroup != "" {
-			upgradeGroup = strings.TrimSpace(subscription.UpgradeGroup)
+		if subscription.PreviousAccountClass != "" {
+			upgradeClass = strings.TrimSpace(subscription.UpgradeAccountClass)
 		}
 		if err := upsertSubscriptionTopUpTx(tx, &order); err != nil {
 			return err
@@ -649,8 +650,8 @@ func CompleteSubscriptionOrder(tradeNo string, providerPayload string, expectedP
 	if err != nil {
 		return err
 	}
-	if upgradeGroup != "" && logUserId > 0 {
-		refreshSubscriptionUserGroupCache(logUserId, "subscription payment completion")
+	if upgradeClass != "" && logUserId > 0 {
+		refreshSubscriptionUserAccountClassCache(logUserId, "subscription payment completion")
 	}
 	if logUserId > 0 {
 		msg := fmt.Sprintf("订阅购买成功，套餐: %s，支付金额: %.2f，支付方式: %s", logPlanTitle, logMoney, logPaymentMethod)
@@ -735,7 +736,7 @@ func AdminBindSubscription(userId int, planId int, sourceNote string) (string, e
 	if err != nil {
 		return "", err
 	}
-	groupChanged := false
+	classChanged := false
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		// 与 CompleteSubscriptionOrder 一致：先锁用户行，再做购买次数检查。
 		var userRow User
@@ -744,16 +745,16 @@ func AdminBindSubscription(userId int, planId int, sourceNote string) (string, e
 		}
 		subscription, err := CreateUserSubscriptionFromPlanTx(tx, userId, plan, "admin")
 		if err == nil {
-			groupChanged = subscription.PrevUserGroup != ""
+			classChanged = subscription.PreviousAccountClass != ""
 		}
 		return err
 	})
 	if err != nil {
 		return "", err
 	}
-	if groupChanged {
-		refreshSubscriptionUserGroupCache(userId, "admin subscription creation")
-		return fmt.Sprintf("用户分组将升级到 %s", plan.UpgradeGroup), nil
+	if classChanged {
+		refreshSubscriptionUserAccountClassCache(userId, "admin subscription creation")
+		return fmt.Sprintf("用户账号分类将升级到 %s", plan.UpgradeAccountClass), nil
 	}
 	return "", nil
 }
@@ -780,7 +781,7 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) error {
 	var logPlanTitle string
 	var logMoney float64
 	var chargedQuota int
-	var upgradeGroup string
+	var upgradeClass string
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		plan, err := getSubscriptionPlanByIdTx(tx, planId)
 		if err != nil {
@@ -841,8 +842,8 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) error {
 		logPlanTitle = plan.Title
 		logMoney = plan.PriceAmount
 		chargedQuota = requiredQuota
-		if subscription.PrevUserGroup != "" {
-			upgradeGroup = strings.TrimSpace(subscription.UpgradeGroup)
+		if subscription.PreviousAccountClass != "" {
+			upgradeClass = strings.TrimSpace(subscription.UpgradeAccountClass)
 		}
 		return nil
 	})
@@ -855,8 +856,8 @@ func PurchaseSubscriptionWithBalance(userId int, planId int) error {
 			common.SysLog("failed to decrease user quota cache after subscription balance purchase: " + err.Error())
 		}
 	}
-	if upgradeGroup != "" {
-		refreshSubscriptionUserGroupCache(userId, "subscription balance purchase")
+	if upgradeClass != "" {
+		refreshSubscriptionUserAccountClassCache(userId, "subscription balance purchase")
 	}
 	msg := fmt.Sprintf("使用余额购买订阅成功，套餐: %s，支付金额: %.2f，扣除额度: %d", logPlanTitle, logMoney, chargedQuota)
 	RecordLog(userId, LogTypeTopup, msg)
@@ -948,8 +949,8 @@ func AdminInvalidateUserSubscription(userSubscriptionId int) (string, error) {
 		return "", errors.New("invalid userSubscriptionId")
 	}
 	now := common.GetTimestamp()
-	cacheGroup := ""
-	downgradeGroup := ""
+	cacheClass := ""
+	downgradeClass := ""
 	var userId int
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var sub UserSubscription
@@ -965,24 +966,24 @@ func AdminInvalidateUserSubscription(userSubscriptionId int) (string, error) {
 		}).Error; err != nil {
 			return err
 		}
-		target, err := downgradeUserGroupForSubscriptionTx(tx, &sub, now)
+		target, err := downgradeUserAccountClassForSubscriptionTx(tx, &sub, now)
 		if err != nil {
 			return err
 		}
 		if target != "" {
-			cacheGroup = target
-			downgradeGroup = target
+			cacheClass = target
+			downgradeClass = target
 		}
 		return nil
 	})
 	if err != nil {
 		return "", err
 	}
-	if cacheGroup != "" && userId > 0 {
-		refreshSubscriptionUserGroupCache(userId, "admin subscription update")
+	if cacheClass != "" && userId > 0 {
+		refreshSubscriptionUserAccountClassCache(userId, "admin subscription update")
 	}
-	if downgradeGroup != "" {
-		return fmt.Sprintf("用户分组将回退到 %s", downgradeGroup), nil
+	if downgradeClass != "" {
+		return fmt.Sprintf("用户账号分类将回退到 %s", downgradeClass), nil
 	}
 	return "", nil
 }
@@ -993,8 +994,8 @@ func AdminDeleteUserSubscription(userSubscriptionId int) (string, error) {
 		return "", errors.New("invalid userSubscriptionId")
 	}
 	now := common.GetTimestamp()
-	cacheGroup := ""
-	downgradeGroup := ""
+	cacheClass := ""
+	downgradeClass := ""
 	var userId int
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var sub UserSubscription
@@ -1003,13 +1004,13 @@ func AdminDeleteUserSubscription(userSubscriptionId int) (string, error) {
 			return err
 		}
 		userId = sub.UserId
-		target, err := downgradeUserGroupForSubscriptionTx(tx, &sub, now)
+		target, err := downgradeUserAccountClassForSubscriptionTx(tx, &sub, now)
 		if err != nil {
 			return err
 		}
 		if target != "" {
-			cacheGroup = target
-			downgradeGroup = target
+			cacheClass = target
+			downgradeClass = target
 		}
 		if err := tx.Where("id = ?", userSubscriptionId).Delete(&UserSubscription{}).Error; err != nil {
 			return err
@@ -1019,11 +1020,11 @@ func AdminDeleteUserSubscription(userSubscriptionId int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if cacheGroup != "" && userId > 0 {
-		refreshSubscriptionUserGroupCache(userId, "admin subscription deletion")
+	if cacheClass != "" && userId > 0 {
+		refreshSubscriptionUserAccountClassCache(userId, "admin subscription deletion")
 	}
-	if downgradeGroup != "" {
-		return fmt.Sprintf("用户分组将回退到 %s", downgradeGroup), nil
+	if downgradeClass != "" {
+		return fmt.Sprintf("用户账号分类将回退到 %s", downgradeClass), nil
 	}
 	return "", nil
 }
@@ -1155,7 +1156,7 @@ type SubscriptionPreConsumeResult struct {
 	AmountUsedAfter    int64
 }
 
-// ExpireDueSubscriptions marks expired subscriptions and handles group downgrade.
+// ExpireDueSubscriptions marks expired subscriptions and handles account class downgrade.
 func ExpireDueSubscriptions(limit int) (int, error) {
 	if limit <= 0 {
 		limit = 200
@@ -1179,7 +1180,7 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 		}
 	}
 	for userId := range userIds {
-		cacheGroup := ""
+		cacheClass := ""
 		err := DB.Transaction(func(tx *gorm.DB) error {
 			res := tx.Model(&UserSubscription{}).
 				Where("user_id = ? AND status = ? AND end_time > 0 AND end_time <= ?", userId, "active", now).
@@ -1192,9 +1193,9 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 			}
 			expiredCount += int(res.RowsAffected)
 
-			// If there's an active upgraded subscription, keep current group.
+			// If there's an active upgraded subscription, keep current account class.
 			var activeSub UserSubscription
-			activeQuery := tx.Where("user_id = ? AND status = ? AND end_time > ? AND upgrade_group <> ''",
+			activeQuery := tx.Where("user_id = ? AND status = ? AND end_time > ? AND upgrade_account_class <> ''",
 				userId, "active", now).
 				Order("end_time desc, id desc").
 				Limit(1).
@@ -1203,10 +1204,10 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 				return nil
 			}
 
-			// Find the most recently expired subscription that defines a group transition
+			// Find the most recently expired subscription that defines a account class transition
 			// (an explicit downgrade target or an upgrade snapshot to revert).
 			var lastExpired UserSubscription
-			expiredQuery := tx.Where("user_id = ? AND status = ? AND (downgrade_group <> '' OR upgrade_group <> '')",
+			expiredQuery := tx.Where("user_id = ? AND status = ? AND (downgrade_account_class <> '' OR upgrade_account_class <> '')",
 				userId, "expired").
 				Order("end_time desc, id desc").
 				Limit(1).
@@ -1214,40 +1215,39 @@ func ExpireDueSubscriptions(limit int) (int, error) {
 			if expiredQuery.Error != nil || expiredQuery.RowsAffected == 0 {
 				return nil
 			}
-			currentGroup, err := getUserGroupByIdTx(tx, userId)
+			currentClass, err := getUserAccountClassByIdTx(tx, userId)
 			if err != nil {
 				return err
 			}
-			// An explicit downgrade group takes precedence; otherwise revert to the
-			// group held before purchase (legacy behavior, only when the subscription
+			// An explicit downgrade account class takes precedence; otherwise revert to the
+			// account class held before purchase (legacy behavior, only when the subscription
 			// actually elevated the user).
-			target := strings.TrimSpace(lastExpired.DowngradeGroup)
+			target := strings.TrimSpace(lastExpired.DowngradeAccountClass)
 			if target == "" {
-				upgradeGroup := strings.TrimSpace(lastExpired.UpgradeGroup)
-				prevGroup := strings.TrimSpace(lastExpired.PrevUserGroup)
-				if upgradeGroup == "" || prevGroup == "" {
+				upgradeClass := strings.TrimSpace(lastExpired.UpgradeAccountClass)
+				previousClass := strings.TrimSpace(lastExpired.PreviousAccountClass)
+				if upgradeClass == "" || previousClass == "" {
 					return nil
 				}
-				if currentGroup != upgradeGroup {
+				if currentClass != upgradeClass {
 					return nil
 				}
-				target = prevGroup
+				target = previousClass
 			}
-			if target == "" || target == currentGroup {
+			if target == "" || target == currentClass {
 				return nil
 			}
-			if err := tx.Model(&User{}).Where("id = ?", userId).
-				Update("group", target).Error; err != nil {
+			if err := updateUserAccountClassTx(tx, userId, target); err != nil {
 				return err
 			}
-			cacheGroup = target
+			cacheClass = target
 			return nil
 		})
 		if err != nil {
 			return expiredCount, err
 		}
-		if cacheGroup != "" {
-			refreshSubscriptionUserGroupCache(userId, "subscription expiration")
+		if cacheClass != "" {
+			refreshSubscriptionUserAccountClassCache(userId, "subscription expiration")
 		}
 	}
 	return expiredCount, nil

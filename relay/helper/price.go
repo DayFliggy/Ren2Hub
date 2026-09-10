@@ -23,8 +23,8 @@ import (
 func modelPriceNotConfiguredError(modelName string, userId int) error {
 	if model.IsAdmin(userId) {
 		return fmt.Errorf(
-			"模型 %s 的价格未配置。请前往「系统设置 → 运营设置」开启自用模式，或在「系统设置 → 分组与模型定价设置」中为该模型配置价格；"+
-				"Model %s price not configured. Go to System Settings → Operation Settings to enable self-use mode, or configure the model price in System Settings → Group & Model Pricing.",
+			"模型 %s 的价格未配置。请前往「系统设置 → 运营设置」开启自用模式，或在「系统设置 → 模型定价设置」中为该模型配置价格；"+
+				"Model %s price not configured. Go to System Settings → Operation Settings to enable self-use mode, or configure the model price in System Settings → Model Pricing.",
 			modelName, modelName,
 		)
 	}
@@ -43,14 +43,12 @@ const claudeCacheCreation1hMultiplier = 6 / 3.75
 // the pre-consumed quota still reflects a plausible output cost on paid channels.
 const defaultTieredPreConsumeMaxTokens = 8192
 
-// HandleChannelRatio reads the selected channel's price multiplier. Account
-// and token groups no longer affect relay pricing.
-func HandleChannelRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) float64 {
+// HandleChannelRatio reads the selected channel's price multiplier.
+func HandleChannelRatio(ctx *gin.Context) float64 {
 	ratio := 1.0
 	if value, exists := ctx.Get("channel_ratio"); exists {
 		ratio, _ = value.(float64)
 	}
-	relayInfo.UsingGroup = ""
 	return ratio
 }
 
@@ -68,7 +66,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	info.ModelPricingSource = pricingSource
 	modelPrice, usePrice := ratio_setting.GetModelPrice(pricingModel, false)
 
-	channelRatio := HandleChannelRatio(c, info)
+	channelRatio := HandleChannelRatio(c)
 
 	// Check if this model uses tiered_expr billing
 	if billing_setting.GetBillingMode(pricingModel) == billing_setting.BillingModeTieredExpr {
@@ -182,7 +180,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 
 // ModelPriceHelperPerCall 按次/按量计费的 PriceHelper (MJ、Task)
 func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hosttypes.PriceData, error) {
-	channelRatio := HandleChannelRatio(c, info)
+	channelRatio := HandleChannelRatio(c)
 
 	modelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)
 	usePrice := success
@@ -314,8 +312,8 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, pricing
 	}
 
 	// Expression coefficients are $/1M tokens prices; convert to quota the same way per-call billing does.
-	quotaBeforeGroup := rawCost / 1_000_000 * common.QuotaPerUnit
-	preConsumedQuota, err := billingexpr.QuotaRoundStrict(quotaBeforeGroup * channelRatio)
+	quotaBeforeMultiplier := rawCost / 1_000_000 * common.QuotaPerUnit
+	preConsumedQuota, err := billingexpr.QuotaRoundStrict(quotaBeforeMultiplier * channelRatio)
 	if err != nil {
 		return hosttypes.PriceData{}, err
 	}
@@ -330,18 +328,18 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, pricing
 
 	exprHash := billingexpr.ExprHashString(exprStr)
 	snapshot := &billingexpr.BillingSnapshot{
-		BillingMode:               billing_setting.BillingModeTieredExpr,
-		ModelName:                 info.BillingModelName(),
-		ExprString:                exprStr,
-		ExprHash:                  exprHash,
-		GroupRatio:                channelRatio,
-		EstimatedPromptTokens:     promptTokens,
-		EstimatedCompletionTokens: estimatedCompletionTokens,
-		EstimatedQuotaBeforeGroup: quotaBeforeGroup,
-		EstimatedQuotaAfterGroup:  preConsumedQuota,
-		EstimatedTier:             trace.MatchedTier,
-		QuotaPerUnit:              common.QuotaPerUnit,
-		ExprVersion:               billingexpr.ExprVersion(exprStr),
+		BillingMode:                    billing_setting.BillingModeTieredExpr,
+		ModelName:                      info.BillingModelName(),
+		ExprString:                     exprStr,
+		ExprHash:                       exprHash,
+		ChannelRatio:                   channelRatio,
+		EstimatedPromptTokens:          promptTokens,
+		EstimatedCompletionTokens:      estimatedCompletionTokens,
+		EstimatedQuotaBeforeMultiplier: quotaBeforeMultiplier,
+		EstimatedQuotaAfterMultiplier:  preConsumedQuota,
+		EstimatedTier:                  trace.MatchedTier,
+		QuotaPerUnit:                   common.QuotaPerUnit,
+		ExprVersion:                    billingexpr.ExprVersion(exprStr),
 	}
 	info.TieredBillingSnapshot = snapshot
 	info.BillingRequestInput = &requestInput
@@ -352,7 +350,7 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, pricing
 		QuotaToPreConsume: preConsumedQuota,
 	}
 
-	logger.LogDebug(c, "model_price_helper_tiered result: model=%s pricing_model=%s source=%s preConsume=%d quotaBeforeRatio=%.2f channelRatio=%.2f tier=%s", info.BillingModelName(), pricingModel, info.ModelPricingSource, preConsumedQuota, quotaBeforeGroup, channelRatio, trace.MatchedTier)
+	logger.LogDebug(c, "model_price_helper_tiered result: model=%s pricing_model=%s source=%s preConsume=%d quotaBeforeRatio=%.2f channelRatio=%.2f tier=%s", info.BillingModelName(), pricingModel, info.ModelPricingSource, preConsumedQuota, quotaBeforeMultiplier, channelRatio, trace.MatchedTier)
 
 	info.PriceData = priceData
 	return priceData, nil

@@ -38,13 +38,13 @@ func RequestWaffoPancakeAmount(c *gin.Context) {
 		return
 	}
 
-	group, err := model.GetUserGroup(id, true)
+	topupMultiplier, err := model.GetUserTopupMultiplier(id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取账号分类失败"})
 		return
 	}
 
-	payMoney := getWaffoPancakePayMoney(req.Amount, group)
+	payMoney := getWaffoPancakePayMoney(req.Amount, topupMultiplier)
 	if payMoney <= 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return
@@ -52,15 +52,10 @@ func RequestWaffoPancakeAmount(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": fmt.Sprintf("%.2f", payMoney)})
 }
 
-func getWaffoPancakePayMoney(amount int64, group string) float64 {
+func getWaffoPancakePayMoney(amount int64, topupMultiplier float64) float64 {
 	dAmount := decimal.NewFromInt(amount)
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
 		dAmount = dAmount.Div(decimal.NewFromFloat(common.QuotaPerUnit))
-	}
-
-	topupGroupRatio := common.GetTopupGroupRatio(group)
-	if topupGroupRatio == 0 {
-		topupGroupRatio = 1
 	}
 
 	discount := 1.0
@@ -70,7 +65,7 @@ func getWaffoPancakePayMoney(amount int64, group string) float64 {
 
 	payMoney := dAmount.
 		Mul(decimal.NewFromFloat(setting.WaffoPancakeUnitPrice)).
-		Mul(decimal.NewFromFloat(topupGroupRatio)).
+		Mul(decimal.NewFromFloat(topupMultiplier)).
 		Mul(decimal.NewFromFloat(discount))
 
 	return payMoney.InexactFloat64()
@@ -376,13 +371,13 @@ func RequestWaffoPancakePay(c *gin.Context) {
 		return
 	}
 
-	group, err := model.GetUserGroup(id, true)
+	topupMultiplier, err := model.GetUserTopupMultiplier(id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取用户分组失败"})
+		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "获取账号分类失败"})
 		return
 	}
 
-	payMoney := getWaffoPancakePayMoney(req.Amount, group)
+	payMoney := getWaffoPancakePayMoney(req.Amount, topupMultiplier)
 	if payMoney < 0.01 {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "充值金额过低"})
 		return

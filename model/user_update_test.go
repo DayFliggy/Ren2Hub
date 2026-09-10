@@ -30,13 +30,13 @@ func setupUserUpdateTestState(t *testing.T) {
 func createUserBindTestUser(t *testing.T) User {
 	t.Helper()
 	user := User{
-		Username:    "bind-test-user",
-		Password:    "unused-password-hash",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
-		AuthVersion: 1,
-		AffCode:     "bind-test-aff-code",
+		Username:     "bind-test-user",
+		Password:     "unused-password-hash",
+		Role:         common.RoleCommonUser,
+		Status:       common.UserStatusEnabled,
+		AccountClass: "default",
+		AuthVersion:  1,
+		AffCode:      "bind-test-aff-code",
 	}
 	require.NoError(t, DB.Create(&user).Error)
 	return user
@@ -295,7 +295,7 @@ func TestUpdateUserBindColumnOnlyTouchesTheBindingColumn(t *testing.T) {
 	require.NoError(t, DB.Model(&User{}).Where("id = ?", user.Id).Updates(map[string]interface{}{
 		"role":         common.RoleAdminUser,
 		"status":       common.UserStatusEnabled,
-		"group":        "vip",
+		"account_class":        "vip",
 		"auth_version": gorm.Expr("auth_version + ?", 1),
 	}).Error)
 
@@ -306,7 +306,7 @@ func TestUpdateUserBindColumnOnlyTouchesTheBindingColumn(t *testing.T) {
 	assert.Equal(t, "gh-12345", reloaded.GitHubId)
 	assert.Equal(t, common.RoleAdminUser, reloaded.Role)
 	assert.Equal(t, common.UserStatusEnabled, reloaded.Status)
-	assert.Equal(t, "vip", reloaded.Group)
+	assert.Equal(t, "vip", reloaded.AccountClass)
 	assert.EqualValues(t, 2, reloaded.AuthVersion)
 }
 
@@ -329,7 +329,7 @@ func TestUpdateUserBindColumnRejectsNonWhitelistedColumns(t *testing.T) {
 
 	user := createUserBindTestUser(t)
 	for _, column := range []string{
-		"role", "status", "group", "quota", "username", "password", "id",
+		"role", "status", "account_class", "quota", "username", "password", "id",
 		"auth_version", "access_token", "email",
 	} {
 		assert.Error(t, UpdateUserBindColumn(user.Id, column, "1"), "column %s must be rejected", column)

@@ -176,7 +176,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Set("channel", channel.Type)
 	c.Set("base_url", channel.GetBaseURL())
-	group, _ := model.GetUserGroup(testUserID, false)
+	group, _ := model.GetUserAccountClass(testUserID, false)
 	c.Set("group", group)
 
 	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, testModel)
@@ -529,7 +529,6 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		Content:          "模型测试",
 		UseTimeSeconds:   int(consumedTime),
 		IsStream:         info.IsStream,
-		Group:            info.UsingGroup,
 		Other:            other,
 	})
 	common.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
@@ -913,7 +912,7 @@ func TestChannel(c *gin.Context) {
 	}
 	tok := time.Now()
 	milliseconds := tok.Sub(tik).Milliseconds()
-	go channel.UpdateResponseTime(milliseconds)
+	common.GoDeferred(func() { channel.UpdateResponseTime(milliseconds) })
 	consumedTime := float64(milliseconds) / 1000.0
 	if result.newAPIError != nil {
 		c.JSON(http.StatusOK, gin.H{

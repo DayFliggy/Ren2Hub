@@ -98,11 +98,12 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 				_, _ = io.WriteString(w, test.upstreamResponse)
 			}))
 			defer upstream.Close()
-			user := &model.User{Username: "routing-smoke", Password: "test-password", Status: common.UserStatusEnabled, Group: "retired-denied-group", Quota: 1_000_000}
+			require.NoError(t, db.Create(&model.AccountClass{Code: "routing-smoke", Name: "Routing smoke", DefaultConcurrency: 5, TopupMultiplier: 1, PolicyVersion: 1}).Error)
+			user := &model.User{Username: "routing-smoke", Password: "test-password", Status: common.UserStatusEnabled, AccountClass: "routing-smoke", Quota: 1_000_000}
 			require.NoError(t, db.Create(user).Error)
 			token := &model.Token{UserId: user.Id, Key: "routingsmokelocalkey", Name: "smoke", Status: common.TokenStatusEnabled, ExpiredTime: -1, RemainQuota: 1_000_000}
 			require.NoError(t, db.Create(token).Error)
-			channel := &model.Channel{Type: test.channelType, Name: "local upstream", Status: common.ChannelStatusEnabled, Key: "test-upstream-key", BaseURL: &upstream.URL, Models: test.models, Group: "unrelated-channel-group", CapacityTotal: 1, ChannelRatio: 2}
+			channel := &model.Channel{Type: test.channelType, Name: "local upstream", Status: common.ChannelStatusEnabled, Key: "test-upstream-key", BaseURL: &upstream.URL, Models: test.models, CapacityTotal: 1, ChannelRatio: 2}
 			require.NoError(t, db.Create(channel).Error)
 			require.NoError(t, channel.AddAbilities(db))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
@@ -121,7 +122,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			assert.Equal(t, test.quota, user.UsedQuota)
 			assert.Equal(t, int64(0), client.ZCard(context.Background(), service.ChannelRouteLeaseKey(channel.Id)).Val())
 			if test.name == "chat" {
-				held, _, err := service.AcquireConfiguredRouteLease(context.Background(), "occupied", channel.Id, user.Id, token.Id, test.models, time.Minute)
+				held, _, err := service.AcquireConfiguredRouteLease(context.Background(), service.RouteLeaseOwner{RequestID: "occupied", Scope: service.RouteLeaseScopeAttempt, AttemptSequence: 1}, channel.Id, user.Id, token.Id, test.models, time.Minute)
 				require.NoError(t, err)
 				for _, failure := range []string{"capacity", "redis"} {
 					if failure == "redis" {
@@ -144,7 +145,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 				require.NoError(t, db.First(&task).Error)
 				assert.Equal(t, channel.Id, task.ChannelId)
 				require.NotNil(t, task.PrivateData.BillingContext)
-				assert.Equal(t, 2.0, task.PrivateData.BillingContext.GroupRatio)
+				assert.Equal(t, 2.0, task.PrivateData.BillingContext.BillingMultiplier)
 			}
 		})
 	}

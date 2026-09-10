@@ -95,8 +95,7 @@ type RelayInfo struct {
 	TokenId              int
 	TokenKey             string
 	UserId               int
-	UsingGroup           string // 兼容历史日志与覆盖模板；统一路由不会用它授权、选渠或计费。
-	UserGroup            string // 用户所在分组
+	UserAccountClass     string // 用户所在分组
 	TokenUnlimited       bool
 	StartTime            time.Time
 	FirstResponseTime    time.Time
@@ -298,8 +297,8 @@ func (info *RelayInfo) ToString() string {
 	fmt.Fprintf(b, "FinalPreConsumedQuota: %d, ", info.FinalPreConsumedQuota)
 
 	// User & token info (mask secrets)
-	fmt.Fprintf(b, "User{ Id: %d, Email: %q, Group: %q, UsingGroup: %q, Quota: %d }, ",
-		info.UserId, common.MaskEmail(info.UserEmail), info.UserGroup, info.UsingGroup, info.UserQuota)
+	fmt.Fprintf(b, "User{ Id: %d, Email: %q, AccountClass: %q, Quota: %d }, ",
+		info.UserId, common.MaskEmail(info.UserEmail), info.UserAccountClass, info.UserQuota)
 	fmt.Fprintf(b, "Token{ Id: %d, Unlimited: %t, Key: ***masked*** }, ", info.TokenId, info.TokenUnlimited)
 
 	// Time info
@@ -529,12 +528,11 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		Request:         request,
 		ReasoningEffort: reasoningEffort,
 
-		RequestId:  reqId,
-		UserId:     common.GetContextKeyInt(c, constant.ContextKeyUserId),
-		UsingGroup: common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
-		UserGroup:  common.GetContextKeyString(c, constant.ContextKeyUserGroup),
-		UserQuota:  common.GetContextKeyInt(c, constant.ContextKeyUserQuota),
-		UserEmail:  common.GetContextKeyString(c, constant.ContextKeyUserEmail),
+		RequestId:        reqId,
+		UserId:           common.GetContextKeyInt(c, constant.ContextKeyUserId),
+		UserAccountClass: common.GetContextKeyString(c, constant.ContextKeyUserAccountClass),
+		UserQuota:        common.GetContextKeyInt(c, constant.ContextKeyUserQuota),
+		UserEmail:        common.GetContextKeyString(c, constant.ContextKeyUserEmail),
 
 		OriginModelName: common.GetContextKeyString(c, constant.ContextKeyOriginalModel),
 

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -13,7 +14,6 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
-	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -395,6 +395,9 @@ func validateDiscountMap(value string) error {
 }
 
 func validateChannelAffinityRules(value string) error {
+	if err := common.ValidateRoutingRuleJSON([]byte(value)); err != nil {
+		return err
+	}
 	var rules []operation_setting.ChannelAffinityRule
 	if err := common.UnmarshalJsonStr(value, &rules); err != nil || rules == nil {
 		if err == nil {
@@ -468,6 +471,9 @@ func validateBillingSettingValue(key, value string) error {
 func validateOptionPatch(values map[string]string) error {
 	snapshot := optionSnapshot(values)
 	for key, value := range values {
+		if model.IsRetiredRoutingOption(key) {
+			return &common.RetiredRoutingFieldError{Path: key}
+		}
 		if key == "" {
 			return fmt.Errorf("配置项名称不能为空")
 		}
@@ -515,10 +521,6 @@ func validateOptionPatch(values map[string]string) error {
 			if value != "default" {
 				return fmt.Errorf("Classic 前端已移除，主题只能设置为 default")
 			}
-		case "GroupRatio":
-			if err := ratio_setting.CheckGroupRatio(value); err != nil {
-				return err
-			}
 		case "billing_setting.billing_mode", "billing_setting.billing_expr":
 			if err := validateBillingSettingValue(key, value); err != nil {
 				return err
@@ -550,7 +552,7 @@ func validateOptionPatch(values map[string]string) error {
 			}
 		case "grok.violation_deduction_amount":
 			amount, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
-			if err != nil || amount < 0 {
+			if err != nil || amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
 				return fmt.Errorf("Grok 违规扣费必须为非负数字")
 			}
 		case "channel_affinity_setting.max_entries", "channel_affinity_setting.default_ttl_seconds", "channel_affinity_setting.rules":
@@ -566,7 +568,7 @@ func validateOptionPatch(values map[string]string) error {
 			if err != nil || !common.IsValidateRole(role) {
 				return fmt.Errorf("文件访问权限角色无效")
 			}
-		case "ModelRatio", "ModelPrice", "CompletionRatio", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "TopupGroupRatio":
+		case "ModelRatio", "ModelPrice", "CompletionRatio", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio":
 			if err := validateRatioMap(value); err != nil {
 				return err
 			}
@@ -580,10 +582,6 @@ func validateOptionPatch(values map[string]string) error {
 			}
 		case operation_setting.ToolPriceOptionKey:
 			if err := operation_setting.ValidateToolPricesJSON(value); err != nil {
-				return err
-			}
-		case "ModelRequestRateLimitGroup":
-			if err := setting.CheckModelRequestRateLimitGroup(value); err != nil {
 				return err
 			}
 		case "AutomaticDisableStatusCodes", "AutomaticRetryStatusCodes":
@@ -641,6 +639,11 @@ func validateOptionPatch(values map[string]string) error {
 }
 
 func writeOptionValidationError(c *gin.Context, err error) {
+	var retired *common.RetiredRoutingFieldError
+	if errors.As(err, &retired) {
+		rejectRetiredManagementField(c, retired.Path)
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 }
 
@@ -652,6 +655,10 @@ func UpdateOption(c *gin.Context) {
 			"success": false,
 			"message": "无效的参数",
 		})
+		return
+	}
+	if model.IsRetiredRoutingOption(option.Key) {
+		rejectRetiredManagementField(c, option.Key)
 		return
 	}
 	normalizedValue, err := normalizeOptionValue(option.Value)
@@ -805,15 +812,6 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
-	case "GroupRatio":
-		err = ratio_setting.CheckGroupRatio(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
 	case "gemini.safety_settings":
 		err = model_setting.ValidateGeminiSafetySettings(option.Value.(string))
 		if err != nil {
@@ -874,15 +872,6 @@ func UpdateOption(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "缓存创建倍率设置失败: " + err.Error(),
-			})
-			return
-		}
-	case "ModelRequestRateLimitGroup":
-		err = setting.CheckModelRequestRateLimitGroup(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
 			})
 			return
 		}
@@ -970,6 +959,10 @@ func UpdateOptionsBulk(c *gin.Context) {
 
 	values := make(map[string]string, len(request.Options))
 	for key, value := range request.Options {
+		if model.IsRetiredRoutingOption(key) {
+			rejectRetiredManagementField(c, key)
+			return
+		}
 		normalizedValue, err := normalizeOptionValue(value)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{

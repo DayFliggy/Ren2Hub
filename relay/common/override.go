@@ -144,6 +144,13 @@ func ApplyParamOverride(jsonData []byte, paramOverride map[string]interface{}, c
 	if len(paramOverride) == 0 {
 		return jsonData, nil
 	}
+	serialized, err := common.Marshal(paramOverride)
+	if err != nil {
+		return nil, err
+	}
+	if err := common.ValidateRoutingRuleJSON(serialized); err != nil {
+		return nil, err
+	}
 	auditRecorder := getParamOverrideAuditRecorder(conditionContext)
 
 	// 尝试断言为操作格式
@@ -2095,9 +2102,7 @@ func mergeObjects(data []byte, path string, value interface{}, keepOrigin bool) 
 //   - upstream_model/model：始终为通道映射后的上游模型名。
 //   - original_model：请求最初指定的模型名。
 //   - user_id：已认证用户 ID。
-//   - user_group：用户所属分组。
-//   - token_group：令牌指定的分组；未指定时回退为用户分组。
-//   - using_group：当前实际使用的分组，自动跨分组重试时可能变化。
+//   - account_class：用户账号分类。
 //   - request_path：请求路径
 //   - is_channel_test：是否为渠道测试请求（同 is_test）。
 func BuildParamOverrideContext(info *RelayInfo) map[string]interface{} {
@@ -2107,8 +2112,7 @@ func BuildParamOverrideContext(info *RelayInfo) map[string]interface{} {
 
 	ctx := make(map[string]interface{})
 	ctx["user_id"] = info.UserId
-	ctx["user_group"] = info.UserGroup
-	ctx["using_group"] = info.UsingGroup
+	ctx["account_class"] = info.UserAccountClass
 	if info.ChannelMeta != nil && info.ChannelMeta.UpstreamModelName != "" {
 		ctx["model"] = info.ChannelMeta.UpstreamModelName
 		ctx["upstream_model"] = info.ChannelMeta.UpstreamModelName

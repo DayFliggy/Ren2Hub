@@ -51,7 +51,7 @@ func TestNextAdminUserCreateAndUpdateReturnPersistedContract(t *testing.T) {
 		t,
 		http.MethodPut,
 		"/api/next/admin/users",
-		`{"id":`+strconv.Itoa(created.ID)+`,"username":"managed-user","display_name":"Operator","email":"operator@example.com","role":10}`,
+		`{"id":`+strconv.Itoa(created.ID)+`,"username":"managed-user","display_name":"Operator","email":"operator@example.com","role":10,"account_class":"default","policy_version":1,"concurrency_override":null,"rpm_override":null}`,
 		NextUpdateAdminUser,
 	))
 	assert.Equal(t, "Operator", updated.DisplayName)
@@ -62,6 +62,34 @@ func TestNextAdminUserCreateAndUpdateReturnPersistedContract(t *testing.T) {
 	require.NoError(t, db.First(&stored, created.ID).Error)
 	assert.Equal(t, common.RoleAdminUser, stored.Role)
 	assert.Greater(t, stored.AuthVersion, int64(1))
+}
+
+func TestNextAdminUserManagementRejectsRetiredRoutingFields(t *testing.T) {
+	for _, test := range []struct {
+		name, method, target, body string
+		handler                    gin.HandlerFunc
+	}{
+		{"list", http.MethodGet, "/api/next/admin/users?group=vip", "", NextListAdminUsers},
+		{"create", http.MethodPost, "/api/next/admin/users", `{"username":"retired","group":"vip"}`, NextCreateAdminUser},
+		{"update", http.MethodPut, "/api/next/admin/users", `{"id":1,"Group":null}`, NextUpdateAdminUser},
+		{"update-limits", http.MethodPut, "/api/next/admin/users", `{"id":1,"ModelRequestRateLimitGroup":{}}`, NextUpdateAdminUser},
+		{"quota", http.MethodPost, "/api/next/admin/users/quota", `{"id":1,"delta":100,"user_group_ratio":2}`, NextAdminUserQuota},
+		{"status", http.MethodPost, "/api/next/admin/users/1/status", `{"status":2,"group":"vip"}`, NextAdminUserStatus},
+		{"status-batch", http.MethodPost, "/api/next/admin/users/status/batch", `{"ids":[1],"status":2,"groups":[]}`, NextAdminUserStatusBatch},
+		{"delete-batch", http.MethodPost, "/api/next/admin/users/delete/batch", `{"ids":[1],"group_ratio":1}`, NextDeleteAdminUsersBatch},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := performNextAdminJSON(t, test.method, test.target, test.body, test.handler)
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			var response struct {
+				Success bool   `json:"success"`
+				Code    string `json:"code"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			assert.False(t, response.Success)
+			assert.Equal(t, "retired_field", response.Code)
+		})
+	}
 }
 
 func TestNextAdminBatchDeleteUsesExistingResources(t *testing.T) {

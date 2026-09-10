@@ -36,6 +36,8 @@ func TestMain(m *testing.M) {
 
 	if err := db.AutoMigrate(
 		&Task{},
+		&TaskSettlement{},
+		&TaskSettlementLogReceipt{},
 		&User{},
 		&UserSession{},
 		&AuthFlow{},
@@ -47,7 +49,6 @@ func TestMain(m *testing.M) {
 		&Log{},
 		&Channel{},
 		&QuotaData{},
-		&FlushOperation{},
 		&FlushOperation{},
 		&Ability{},
 		&TopUp{},
@@ -64,6 +65,9 @@ func TestMain(m *testing.M) {
 		panic("failed to migrate: " + err.Error())
 	}
 
+	if err := InitializeAccountClasses(db); err != nil {
+		panic(err)
+	}
 	os.Exit(m.Run())
 }
 
@@ -71,6 +75,8 @@ func truncateTables(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
 		DB.Exec("DELETE FROM tasks")
+		DB.Exec("DELETE FROM task_settlements")
+		DB.Exec("DELETE FROM task_settlement_log_receipts")
 		DB.Exec("DELETE FROM auth_flows")
 		DB.Exec("DELETE FROM external_identity_claims")
 		DB.Exec("DELETE FROM user_sessions")

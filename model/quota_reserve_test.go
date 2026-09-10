@@ -13,14 +13,14 @@ import (
 func createReserveTestUser(t *testing.T, quota int) User {
 	t.Helper()
 	user := User{
-		Username:    "reserve-user-" + common.GetRandomString(6),
-		Password:    "unused-password-hash",
-		Role:        common.RoleCommonUser,
-		Status:      common.UserStatusEnabled,
-		Group:       "default",
-		AuthVersion: 1,
-		Quota:       quota,
-		AffCode:     "reserve-aff-" + common.GetRandomString(8),
+		Username:     "reserve-user-" + common.GetRandomString(6),
+		Password:     "unused-password-hash",
+		Role:         common.RoleCommonUser,
+		Status:       common.UserStatusEnabled,
+		AccountClass: "default",
+		AuthVersion:  1,
+		Quota:        quota,
+		AffCode:      "reserve-aff-" + common.GetRandomString(8),
 	}
 	require.NoError(t, DB.Create(&user).Error)
 	return user
@@ -139,7 +139,7 @@ func TestRedisBatchReserveNeverFallsBackToStaleDatabaseBalance(t *testing.T) {
 	assert.Equal(t, 7, reloadedToken.UsedQuota)
 }
 
-func TestReserveFallsBackToDatabaseWhenRedisIsUnavailable(t *testing.T) {
+func TestReserveRejectsWhenRedisIsUnavailable(t *testing.T) {
 	truncateTables(t)
 	resetBatchUpdateTestState(t)
 	server := useUserCacheMiniRedis(t)
@@ -148,16 +148,16 @@ func TestReserveFallsBackToDatabaseWhenRedisIsUnavailable(t *testing.T) {
 	require.NoError(t, populateUserCache(user))
 	server.Close()
 
-	// Redis 故障时降级为数据库条件更新：服务保持可用且不会超扣。
+	// The database can lag cache reservations from another instance.
 	reserved, err := TryReserveUserQuota(user.Id, 5)
-	require.NoError(t, err)
-	assert.True(t, reserved)
-	assert.Equal(t, 15, getUserQuotaFromDB(t, user.Id))
+	require.Error(t, err)
+	assert.False(t, reserved)
+	assert.Equal(t, 20, getUserQuotaFromDB(t, user.Id))
 
 	reserved, err = TryReserveUserQuota(user.Id, 16)
-	require.NoError(t, err)
+	require.Error(t, err)
 	assert.False(t, reserved)
-	assert.Equal(t, 15, getUserQuotaFromDB(t, user.Id))
+	assert.Equal(t, 20, getUserQuotaFromDB(t, user.Id))
 }
 
 func TestSynchronousReserveCompensatesCacheWhenPersistenceFails(t *testing.T) {

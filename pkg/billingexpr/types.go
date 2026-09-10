@@ -45,27 +45,27 @@ type TraceResult struct {
 // BillingSnapshot captures billing state at pre-consume time. It is fully
 // serializable and contains no compiled program pointers.
 type BillingSnapshot struct {
-	BillingMode               string  `json:"billing_mode"`
-	ModelName                 string  `json:"model_name"`
-	ExprString                string  `json:"expr_string"`
-	ExprHash                  string  `json:"expr_hash"`
-	GroupRatio                float64 `json:"group_ratio"` // Compatibility field containing the selected channel ratio.
-	EstimatedPromptTokens     int     `json:"estimated_prompt_tokens"`
-	EstimatedCompletionTokens int     `json:"estimated_completion_tokens"`
-	EstimatedQuotaBeforeGroup float64 `json:"estimated_quota_before_group"`
-	EstimatedQuotaAfterGroup  int     `json:"estimated_quota_after_group"`
-	EstimatedTier             string  `json:"estimated_tier"`
-	QuotaPerUnit              float64 `json:"quota_per_unit"`
-	ExprVersion               int     `json:"expr_version"`
+	BillingMode                    string  `json:"billing_mode"`
+	ModelName                      string  `json:"model_name"`
+	ExprString                     string  `json:"expr_string"`
+	ExprHash                       string  `json:"expr_hash"`
+	ChannelRatio                   float64 `json:"channel_ratio"` // Compatibility field containing the selected channel ratio.
+	EstimatedPromptTokens          int     `json:"estimated_prompt_tokens"`
+	EstimatedCompletionTokens      int     `json:"estimated_completion_tokens"`
+	EstimatedQuotaBeforeMultiplier float64 `json:"estimated_quota_before_multiplier"`
+	EstimatedQuotaAfterMultiplier  int     `json:"estimated_quota_after_multiplier"`
+	EstimatedTier                  string  `json:"estimated_tier"`
+	QuotaPerUnit                   float64 `json:"quota_per_unit"`
+	ExprVersion                    int     `json:"expr_version"`
 }
 
 // TieredResult holds everything needed after running tiered settlement.
 type TieredResult struct {
-	ActualQuotaBeforeGroup float64            `json:"actual_quota_before_group"`
-	ActualQuotaAfterGroup  int                `json:"actual_quota_after_group"`
-	MatchedTier            string             `json:"matched_tier"`
-	RequestRules           []RequestRuleTrace `json:"request_rules,omitempty"`
-	CrossedTier            bool               `json:"crossed_tier"`
+	ActualQuotaBeforeMultiplier float64            `json:"actual_quota_before_multiplier"`
+	ActualQuotaAfterMultiplier  int                `json:"actual_quota_after_multiplier"`
+	MatchedTier                 string             `json:"matched_tier"`
+	RequestRules                []RequestRuleTrace `json:"request_rules,omitempty"`
+	CrossedTier                 bool               `json:"crossed_tier"`
 	// Clamp records an int32 saturation event during quota conversion so the
 	// caller can surface it on the consume log for admin auditing. Nil when no
 	// clamping occurred. Not serialized: the marker is attached separately via

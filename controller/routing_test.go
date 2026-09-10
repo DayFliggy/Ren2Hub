@@ -52,28 +52,26 @@ func TestListEligibleRouteChannelsReportsOnlyActiveCapabilitySnapshot(t *testing
 	const userID = 4101
 	const activeChannelID = 41011
 	const snapshotlessChannelID = 41012
-	require.NoError(t, db.Create(&model.User{Id: userID, Username: "routing-eligible-user", Password: "password", Status: common.UserStatusEnabled, Group: "default"}).Error)
+	require.NoError(t, db.Create(&model.User{Id: userID, Username: "routing-eligible-user", Password: "password", Status: common.UserStatusEnabled, AccountClass: "default"}).Error)
 	for _, channelID := range []int{activeChannelID, snapshotlessChannelID} {
 		require.NoError(t, db.Create(&model.Channel{
 			Id: channelID, Key: fmt.Sprintf("routing-eligible-key-%d", channelID), Name: fmt.Sprintf("routing-eligible-%d", channelID),
-			Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default",
+			Status: common.ChannelStatusEnabled, Models: "gpt-test",
 		}).Error)
-		require.NoError(t, db.Create(&model.Ability{ChannelId: channelID, Group: "default", Model: "gpt-test", Enabled: true}).Error)
+		require.NoError(t, db.Create(&model.Ability{ChannelId: channelID, Model: "gpt-test", Enabled: true}).Error)
 	}
-	groups, err := common.Marshal([]string{"default"})
-	require.NoError(t, err)
 	endpoints, err := common.Marshal([]string{string(constant.EndpointTypeOpenAI)})
 	require.NoError(t, err)
 	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), activeChannelID, model.ChannelCapabilitySnapshotFence{}, "eligible-source", "eligible-catalog", []model.ChannelModelCapability{{
 		RequestModel: "gpt-test", ActualModel: "gpt-test", LabSlug: "openai", Source: "canonical", Confidence: 1,
-		AbilityGroups: string(groups), EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
+		AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
 		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
 	}}))
 	activeFence, err := model.GetChannelCapabilitySnapshotFence(context.Background(), activeChannelID)
 	require.NoError(t, err)
 	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), activeChannelID, activeFence, "eligible-source-v2", "eligible-catalog-v2", []model.ChannelModelCapability{{
 		RequestModel: "gpt-test-v2", ActualModel: "gpt-test-v2", LabSlug: "openai", Source: "canonical", Confidence: 1,
-		AbilityGroups: string(groups), EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
+		AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
 		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
 	}}))
 	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", activeChannelID).Update("model", "gpt-test-v2").Error)
@@ -112,17 +110,15 @@ func TestRouteCatalogFiltersCapabilitiesWithoutCurrentModelAbility(t *testing.T)
 
 	const userID = 4201
 	const channelID = 42011
-	require.NoError(t, db.Create(&model.User{Id: userID, Username: "catalog-access-user", Password: "password", Status: common.UserStatusEnabled, Group: "default"}).Error)
-	require.NoError(t, db.Create(&model.Channel{Id: channelID, Key: "catalog-access-key", Name: "catalog-access", Status: common.ChannelStatusEnabled, Models: "gpt-visible,gpt-hidden", Group: "default"}).Error)
-	require.NoError(t, db.Create(&model.Ability{ChannelId: channelID, Group: "default", Model: "gpt-visible", Enabled: true}).Error)
-	require.NoError(t, db.Create(&model.Ability{ChannelId: channelID, Group: "default", Model: "gpt-hidden", Enabled: false}).Error)
-	groups, err := common.Marshal([]string{"default"})
-	require.NoError(t, err)
+	require.NoError(t, db.Create(&model.User{Id: userID, Username: "catalog-access-user", Password: "password", Status: common.UserStatusEnabled, AccountClass: "default"}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: channelID, Key: "catalog-access-key", Name: "catalog-access", Status: common.ChannelStatusEnabled, Models: "gpt-visible,gpt-hidden"}).Error)
+	require.NoError(t, db.Create(&model.Ability{ChannelId: channelID, Model: "gpt-visible", Enabled: true}).Error)
+	require.NoError(t, db.Create(&model.Ability{ChannelId: channelID, Model: "gpt-hidden", Enabled: false}).Error)
 	endpoints, err := common.Marshal([]string{string(constant.EndpointTypeOpenAI)})
 	require.NoError(t, err)
 	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, model.ChannelCapabilitySnapshotFence{}, "catalog-access-source", "catalog-access-v1", []model.ChannelModelCapability{
-		{RequestModel: "gpt-hidden", ActualModel: "gpt-hidden", LabSlug: "openai", Source: "canonical", Confidence: 1, AbilityGroups: string(groups), EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled, ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible},
-		{RequestModel: "gpt-visible", ActualModel: "gpt-visible", LabSlug: "openai", Source: "canonical", Confidence: 1, AbilityGroups: string(groups), EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled, ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible},
+		{RequestModel: "gpt-hidden", ActualModel: "gpt-hidden", LabSlug: "openai", Source: "canonical", Confidence: 1, AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled, ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible},
+		{RequestModel: "gpt-visible", ActualModel: "gpt-visible", LabSlug: "openai", Source: "canonical", Confidence: 1, AbilityEnabled: true, EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled, ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible},
 	}))
 
 	recorder := httptest.NewRecorder()

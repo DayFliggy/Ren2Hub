@@ -86,7 +86,9 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			}
 		}
 		if request.GenerationConfig.ThinkingConfig == nil {
-			relayconvert.ApplyGeminiThinkingConfig(request, info)
+			if err := relayconvert.ApplyGeminiThinkingConfig(request, info); err != nil {
+				return types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+			}
 		}
 	}
 

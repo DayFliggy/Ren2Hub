@@ -136,43 +136,6 @@ func TestValidateChannelCapacityRatioBounds(t *testing.T) {
 	}
 }
 
-func TestValidateChannelNormalizesEmptyGroupOnAdd(t *testing.T) {
-	base := func() *model.Channel {
-		return &model.Channel{
-			Name:   "group-test",
-			Type:   constant.ChannelTypeOpenAI,
-			Key:    "sk-test",
-			Models: "gpt-4o",
-		}
-	}
-
-	t.Run("empty group defaults on add", func(t *testing.T) {
-		channel := base()
-		require.NoError(t, validateChannel(channel, true))
-		assert.Equal(t, "default", channel.Group)
-	})
-
-	t.Run("blank group defaults on add", func(t *testing.T) {
-		channel := base()
-		channel.Group = "  "
-		require.NoError(t, validateChannel(channel, true))
-		assert.Equal(t, "default", channel.Group)
-	})
-
-	t.Run("custom group preserved on add", func(t *testing.T) {
-		channel := base()
-		channel.Group = "vip"
-		require.NoError(t, validateChannel(channel, true))
-		assert.Equal(t, "vip", channel.Group)
-	})
-
-	t.Run("update keeps empty group as unset", func(t *testing.T) {
-		channel := base()
-		require.NoError(t, validateChannel(channel, false))
-		assert.Empty(t, channel.Group)
-	})
-}
-
 // The next frontend rejects success envelopes without a data key, so channel
 // creation must echo the created count as data.
 func TestAddChannelSuccessEnvelopeIncludesData(t *testing.T) {
@@ -259,11 +222,11 @@ func TestCopyChannelRejectsInvalidLegacyProxySettings(t *testing.T) {
 	require.NoError(t, err)
 	setting := string(settingBytes)
 	origin := &model.Channel{
-		Type:    constant.ChannelTypeOpenAI,
-		Name:    "legacy proxy channel",
-		Key:     "test-key",
-		Models:  "gpt-test",
-		Group:   "default",
+		Type:   constant.ChannelTypeOpenAI,
+		Name:   "legacy proxy channel",
+		Key:    "test-key",
+		Models: "gpt-test",
+
 		Setting: &setting,
 	}
 	require.NoError(t, db.Create(origin).Error)
@@ -345,7 +308,7 @@ func TestSettleTestQuotaUsesTieredBilling(t *testing.T) {
 			BillingMode:   "tiered_expr",
 			ExprString:    `param("stream") == true ? tier("stream", p * 3) : tier("base", p * 2)`,
 			ExprHash:      billingexpr.ExprHashString(`param("stream") == true ? tier("stream", p * 3) : tier("base", p * 2)`),
-			GroupRatio:    1,
+			ChannelRatio:  1,
 			EstimatedTier: "stream",
 			QuotaPerUnit:  common.QuotaPerUnit,
 			ExprVersion:   1,

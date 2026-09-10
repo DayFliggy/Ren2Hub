@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -18,33 +19,52 @@ import (
 )
 
 type nextAdminUserDTO struct {
-	ID             int    `json:"id"`
-	Username       string `json:"username"`
-	DisplayName    string `json:"display_name"`
-	Email          string `json:"email"`
-	Role           int    `json:"role"`
-	Status         int    `json:"status"`
-	Quota          int    `json:"quota"`
-	UsedQuota      int    `json:"used_quota"`
-	RequestCount   int    `json:"request_count"`
-	InvitedCount   int    `json:"invited_count"`
-	AffiliateQuota int    `json:"affiliate_quota"`
-	InviterID      int    `json:"inviter_id"`
-	CreatedTime    int64  `json:"created_time"`
-	LastLoginTime  int64  `json:"last_login_time"`
+	EffectiveConcurrency int    `json:"effective_concurrency"`
+	EffectiveRPM         int    `json:"effective_rpm"`
+	AccountClass         string `json:"account_class"`
+	ConcurrencyOverride  *int   `json:"concurrency_override"`
+	RPMOverride          *int   `json:"rpm_override"`
+	PolicyVersion        int64  `json:"policy_version"`
+	ID                   int    `json:"id"`
+	Username             string `json:"username"`
+	DisplayName          string `json:"display_name"`
+	Email                string `json:"email"`
+	Role                 int    `json:"role"`
+	Status               int    `json:"status"`
+	Quota                int    `json:"quota"`
+	UsedQuota            int    `json:"used_quota"`
+	RequestCount         int    `json:"request_count"`
+	InvitedCount         int    `json:"invited_count"`
+	AffiliateQuota       int    `json:"affiliate_quota"`
+	InviterID            int    `json:"inviter_id"`
+	CreatedTime          int64  `json:"created_time"`
+	LastLoginTime        int64  `json:"last_login_time"`
 }
 
 type nextAdminUserWriteRequest struct {
-	ID          int    `json:"id"`
-	Username    string `json:"username"`
-	DisplayName string `json:"display_name"`
-	Email       string `json:"email"`
-	Password    string `json:"password"`
-	Role        int    `json:"role"`
-	Status      int    `json:"status"`
+	AccountClass        string `json:"account_class"`
+	ConcurrencyOverride *int   `json:"concurrency_override"`
+	RPMOverride         *int   `json:"rpm_override"`
+	PolicyVersion       int64  `json:"policy_version"`
+	ID                  int    `json:"id"`
+	Username            string `json:"username"`
+	DisplayName         string `json:"display_name"`
+	Email               string `json:"email"`
+	Password            string `json:"password"`
+	Role                int    `json:"role"`
+	Status              int    `json:"status"`
 }
 
 func validateNextAdminUserWrite(request *nextAdminUserWriteRequest, creating bool) error {
+	if creating && request.AccountClass == "" {
+		request.AccountClass = model.DefaultAccountClass
+	}
+	if !creating && (request.AccountClass == "" || request.PolicyVersion < 1) {
+		return errors.New("account_class and policy_version are required")
+	}
+	if err := model.ValidateUserLimits(&model.User{ConcurrencyOverride: request.ConcurrencyOverride, RPMOverride: request.RPMOverride}); err != nil {
+		return err
+	}
 	request.Username = strings.TrimSpace(request.Username)
 	request.DisplayName = strings.TrimSpace(request.DisplayName)
 	request.Email = model.NormalizeEmail(request.Email)
@@ -70,17 +90,39 @@ func validateNextAdminUserWrite(request *nextAdminUserWriteRequest, creating boo
 	})
 }
 
-func buildNextAdminUserDTO(user *model.User) nextAdminUserDTO {
+func rejectRetiredUserRoutingFields(c *gin.Context) bool {
+	return rejectRetiredManagementFields(c, "group", "Group", "groups", "Groups", "group_ratio", "GroupRatio", "user_group_ratio", "UserGroupRatio", "ModelRequestRateLimitEnabled", "ModelRequestRateLimitCount", "ModelRequestRateLimitSuccessCount", "ModelRequestRateLimitDurationMinutes", "ModelRequestRateLimitGroup")
+}
+
+func buildNextAdminUserDTO(user *model.User) (nextAdminUserDTO, error) {
+	limits, err := model.ResolveUserLimits(context.Background(), user.Id)
+	if err != nil {
+		return nextAdminUserDTO{}, err
+	}
 	return nextAdminUserDTO{
+		EffectiveConcurrency: limits.Concurrency, EffectiveRPM: limits.RPM,
+		AccountClass: user.AccountClass, ConcurrencyOverride: user.ConcurrencyOverride, RPMOverride: user.RPMOverride, PolicyVersion: user.PolicyVersion,
 		ID: user.Id, Username: user.Username, DisplayName: user.DisplayName,
 		Email: user.Email, Role: user.Role, Status: user.Status, Quota: user.Quota,
 		UsedQuota: user.UsedQuota, RequestCount: user.RequestCount,
 		InvitedCount: user.AffCount, AffiliateQuota: user.AffQuota,
 		InviterID: user.InviterId, CreatedTime: user.CreatedAt, LastLoginTime: user.LastLoginAt,
+	}, nil
+}
+
+func writeNextAdminUser(c *gin.Context, user *model.User) {
+	dto, err := buildNextAdminUserDTO(user)
+	if err != nil {
+		common.ApiError(c, err)
+		return
 	}
+	common.ApiSuccess(c, dto)
 }
 
 func NextCreateAdminUser(c *gin.Context) {
+	if rejectRetiredUserRoutingFields(c) {
+		return
+	}
 	var request nextAdminUserWriteRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		nextBusinessError(c, "invalid user input", "VALIDATION_ERROR")
@@ -98,6 +140,7 @@ func NextCreateAdminUser(c *gin.Context) {
 		request.DisplayName = request.Username
 	}
 	user := &model.User{
+		AccountClass: request.AccountClass, ConcurrencyOverride: request.ConcurrencyOverride, RPMOverride: request.RPMOverride, PolicyVersion: request.PolicyVersion,
 		Username: request.Username, DisplayName: request.DisplayName, Email: request.Email,
 		Password: request.Password, Role: request.Role, Status: request.Status,
 	}
@@ -111,10 +154,13 @@ func NextCreateAdminUser(c *gin.Context) {
 	recordManageAuditFor(c, user.Id, "user.create", map[string]interface{}{
 		"username": user.Username, "role": user.Role, "status": user.Status,
 	})
-	common.ApiSuccess(c, buildNextAdminUserDTO(user))
+	writeNextAdminUser(c, user)
 }
 
 func NextUpdateAdminUser(c *gin.Context) {
+	if rejectRetiredUserRoutingFields(c) {
+		return
+	}
 	var request nextAdminUserWriteRequest
 	if err := c.ShouldBindJSON(&request); err != nil || request.ID <= 0 {
 		nextBusinessError(c, "invalid user input", "VALIDATION_ERROR")
@@ -138,6 +184,7 @@ func NextUpdateAdminUser(c *gin.Context) {
 		request.Status = original.Status
 	}
 	user := &model.User{
+		AccountClass: request.AccountClass, ConcurrencyOverride: request.ConcurrencyOverride, RPMOverride: request.RPMOverride, PolicyVersion: request.PolicyVersion,
 		Id: request.ID, Username: request.Username, DisplayName: request.DisplayName,
 		Email: request.Email, Password: request.Password, Role: request.Role, Status: request.Status,
 	}
@@ -173,10 +220,13 @@ func NextUpdateAdminUser(c *gin.Context) {
 	recordManageAuditFor(c, user.Id, "user.update", map[string]interface{}{
 		"username": user.Username, "role": user.Role, "status": user.Status,
 	})
-	common.ApiSuccess(c, buildNextAdminUserDTO(user))
+	writeNextAdminUser(c, user)
 }
 
 func NextDeleteAdminUsersBatch(c *gin.Context) {
+	if rejectRetiredUserRoutingFields(c) {
+		return
+	}
 	var request struct {
 		IDs []int `json:"ids"`
 	}
@@ -207,6 +257,9 @@ func NextDeleteAdminUsersBatch(c *gin.Context) {
 }
 
 func NextListAdminUsers(c *gin.Context) {
+	if rejectRetiredUserRoutingFields(c) {
+		return
+	}
 	pageInfo := common.GetPageQuery(c)
 	keyword := strings.TrimSpace(c.Query("keyword"))
 	baseQuery := func() *gorm.DB {
@@ -284,7 +337,12 @@ func NextListAdminUsers(c *gin.Context) {
 	}
 	items := make([]nextAdminUserDTO, 0, len(users))
 	for _, user := range users {
-		items = append(items, buildNextAdminUserDTO(user))
+		dto, err := buildNextAdminUserDTO(user)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		items = append(items, dto)
 	}
 	common.ApiSuccess(c, gin.H{
 		"items": items, "total": total, "page": pageInfo.GetPage(),
@@ -293,6 +351,9 @@ func NextListAdminUsers(c *gin.Context) {
 }
 
 func NextAdminUserStatus(c *gin.Context) {
+	if rejectRetiredUserRoutingFields(c) {
+		return
+	}
 	var request struct {
 		Status int `json:"status"`
 	}
@@ -311,10 +372,13 @@ func NextAdminUserStatus(c *gin.Context) {
 		return
 	}
 	recordManageAudit(c, "user.status_update", map[string]interface{}{"id": id, "status": request.Status})
-	common.ApiSuccess(c, buildNextAdminUserDTO(&result.Users[0]))
+	writeNextAdminUser(c, &result.Users[0])
 }
 
 func NextAdminUserQuota(c *gin.Context) {
+	if rejectRetiredUserRoutingFields(c) {
+		return
+	}
 	var request struct {
 		ID    int `json:"id"`
 		Delta int `json:"delta"`
@@ -329,10 +393,13 @@ func NextAdminUserQuota(c *gin.Context) {
 		return
 	}
 	recordManageAudit(c, "user.quota_adjust", map[string]interface{}{"id": request.ID, "delta": request.Delta})
-	common.ApiSuccess(c, buildNextAdminUserDTO(user))
+	writeNextAdminUser(c, user)
 }
 
 func NextAdminUserStatusBatch(c *gin.Context) {
+	if rejectRetiredUserRoutingFields(c) {
+		return
+	}
 	var request struct {
 		IDs    []int `json:"ids"`
 		Status int   `json:"status"`

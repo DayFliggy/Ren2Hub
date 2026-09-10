@@ -108,7 +108,7 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			filtered := filterRouteCapability(routeCapabilityFilterInput{
 				Capability: capability, SnapshotVersion: capability.SnapshotVersion,
 				ChannelStatus: channel.Status, ChannelType: channel.Type,
-				AbilityEnabled: len(indexed.AbilityGroups) > 0,
+				AbilityEnabled: indexed.AbilityEnabled,
 				RequestModel:   input.RequestModel, NormalizedModel: modellab.NormalizeModel(input.RequestModel),
 				TokenLimitEnabled: input.TokenModelLimitEnabled, TokenLimit: input.TokenModelLimit,
 				RequestPath: input.RequestPath, EndpointType: endpointTypeForRequestPath(input.RequestPath),

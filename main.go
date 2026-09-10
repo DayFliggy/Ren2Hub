@@ -74,13 +74,6 @@ func main() {
 
 	kitutil.Debug.Store(common.DebugEnabled)
 
-	defer func() {
-		err := model.CloseDB()
-		if err != nil {
-			common.FatalLog("failed to close database: " + err.Error())
-		}
-	}()
-
 	if common.RedisEnabled {
 		// for compatibility with old versions
 		common.MemoryCacheEnabled = true
@@ -104,7 +97,7 @@ func main() {
 			model.InitChannelCache()
 		}()
 
-		go model.SyncChannelCache(common.SyncFrequency)
+		common.BackgroundWorkers.Go(func(ctx context.Context) { model.SyncChannelCache(ctx, common.SyncFrequency) })
 	}
 	if err := service.InitRouteCapabilityIndex(context.Background()); err != nil {
 		common.SysError(fmt.Sprintf("initial route capability index rebuild failed: %v", err))
@@ -121,20 +114,20 @@ func main() {
 	model.GetPricing()
 
 	// 热更新配置
-	go model.SyncOptions(common.SyncFrequency)
+	common.BackgroundWorkers.Go(func(ctx context.Context) { model.SyncOptions(ctx, common.SyncFrequency) })
 
 	// 周期性重载授权策略，保证多节点/多 master 部署下权限变更能传播到每个实例
-	go authz.StartPolicySync(common.SyncFrequency)
+	common.BackgroundWorkers.Go(func(ctx context.Context) { authz.StartPolicySync(ctx, common.SyncFrequency) })
 
 	// 数据看板
-	go model.UpdateQuotaData()
+	model.UpdateQuotaData()
 
 	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_UPDATE_FREQUENCY"))
 		if err != nil {
 			common.FatalLog("failed to parse CHANNEL_UPDATE_FREQUENCY: " + err.Error())
 		}
-		go controller.AutomaticallyUpdateChannels(frequency)
+		common.BackgroundWorkers.Go(func(ctx context.Context) { controller.AutomaticallyUpdateChannels(ctx, frequency) })
 	}
 
 	// Codex credential auto-refresh check every 10 minutes, refresh when expires within 1 day
@@ -187,6 +180,17 @@ func main() {
 
 	// Initialize HTTP server
 	server := gin.New()
+	server.ContextWithFallback = true
+	server.Use(func(c *gin.Context) {
+		ctx, done, accepted := applicationRequests.Begin(c.Request.Context())
+		if !accepted {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "server_draining", "message": "server is shutting down"}})
+			return
+		}
+		defer done()
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	})
 	if err := middleware.ConfigureTrustedProxies(server); err != nil {
 		common.FatalLog("failed to configure trusted proxies: " + err.Error())
 		return
@@ -243,14 +247,15 @@ func main() {
 	shutdownTimeout := time.Duration(common.GetEnvOrDefault("SHUTDOWN_TIMEOUT_SECONDS", 120)) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		common.SysError(fmt.Sprintf("server forced to shutdown: %v", err))
+	if err := drainApplication(ctx, srv); err != nil {
+		common.SysError("shutdown drain failed: " + err.Error())
+		os.Exit(1)
 	}
-	// 内存中的看板数据保存入库，避免重启丢失未落库数据 (issue #5679)
-	if common.DataExportEnabled {
-		model.SaveQuotaDataCache()
+	if err := model.CloseDB(); err != nil {
+		common.FatalLog("failed to close database: " + err.Error())
+		return
 	}
-	common.SysLog("server exited")
+	common.SysLog("server drained and exited")
 }
 
 func InjectUmamiAnalytics() {

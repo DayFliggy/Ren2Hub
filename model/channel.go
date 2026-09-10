@@ -50,7 +50,6 @@ type Channel struct {
 	Balance            float64 `json:"balance"` // in USD
 	BalanceUpdatedTime int64   `json:"balance_updated_time" gorm:"bigint"`
 	Models             string  `json:"models"`
-	Group              string  `json:"group" gorm:"type:varchar(64);default:'default'"`
 	UsedQuota          int64   `json:"used_quota" gorm:"bigint;default:0"`
 	ModelMapping       *string `json:"model_mapping" gorm:"type:text"`
 	//MaxInputTokens     *int    `json:"max_input_tokens" gorm:"default:0"`
@@ -161,38 +160,6 @@ func resolveChannelSortOptions(idSort bool, sortOptions []ChannelSortOptions) Ch
 	options := sortOptions[0]
 	options.IDSort = options.IDSort || idSort
 	return options
-}
-
-func NormalizeChannelGroupFilter(group string) string {
-	group = strings.TrimSpace(group)
-	if group == "" || strings.EqualFold(group, "all") || strings.EqualFold(group, "null") {
-		return ""
-	}
-	return group
-}
-
-func channelGroupFilterCondition() string {
-	if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
-		return `CONCAT(',', ` + commonGroupCol + `, ',') LIKE ? ESCAPE '!'`
-	}
-	return `(',' || ` + commonGroupCol + ` || ',') LIKE ? ESCAPE '!'`
-}
-
-func channelGroupFilterPattern(group string) string {
-	group = strings.NewReplacer(
-		"!", "!!",
-		"%", "!%",
-		"_", "!_",
-	).Replace(group)
-	return "%," + group + ",%"
-}
-
-func ApplyChannelGroupFilter(query *gorm.DB, group string) *gorm.DB {
-	group = NormalizeChannelGroupFilter(group)
-	if group == "" {
-		return query
-	}
-	return query.Where(channelGroupFilterCondition(), channelGroupFilterPattern(group))
 }
 
 // Value implements driver.Valuer interface
@@ -438,7 +405,7 @@ func GetChannelsByTag(tag string, idSort bool, selectAll bool, sortOptions ...Ch
 	return channels, err
 }
 
-func SearchChannels(keyword string, group string, model string, idSort bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
+func SearchChannels(keyword string, model string, idSort bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
 	var channels []*Channel
 	modelsCol := "`models`"
 
@@ -461,7 +428,7 @@ func SearchChannels(keyword string, group string, model string, idSort bool, sor
 	// 构造WHERE子句
 	whereClause := "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
 	args := []any{common.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%", "%" + model + "%"}
-	baseQuery = ApplyChannelGroupFilter(baseQuery.Where(whereClause, args...), group)
+	baseQuery = baseQuery.Where(whereClause, args...)
 
 	// 执行查询
 	err := order.Apply(baseQuery).Find(&channels).Error
@@ -877,7 +844,7 @@ func DisableChannelByTag(tag string) error {
 	return err
 }
 
-func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *string, group *string, priority *int64, weight *uint, paramOverride *string, headerOverride *string) error {
+func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *string, priority *int64, weight *uint, paramOverride *string, headerOverride *string) error {
 	updateData := Channel{}
 	shouldReCreateAbilities := false
 	updatedTag := tag
@@ -892,10 +859,6 @@ func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *
 	if models != nil && *models != "" {
 		shouldReCreateAbilities = true
 		updateData.Models = *models
-	}
-	if group != nil && *group != "" {
-		shouldReCreateAbilities = true
-		updateData.Group = *group
 	}
 	if priority != nil {
 		updateData.Priority = priority
@@ -992,7 +955,7 @@ func GetPaginatedChannelTags(query *gorm.DB, offset int, limit int) ([]*string, 
 	return tags, err
 }
 
-func SearchTags(keyword string, group string, model string, idSort bool) ([]*string, error) {
+func SearchTags(keyword string, model string, idSort bool) ([]*string, error) {
 	var tags []*string
 	modelsCol := "`models`"
 
@@ -1018,7 +981,7 @@ func SearchTags(keyword string, group string, model string, idSort bool) ([]*str
 	// 构造WHERE子句
 	whereClause := "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
 	args := []any{common.String2Int(keyword), "%" + keyword + "%", keyword, "%" + keyword + "%", "%" + model + "%"}
-	baseQuery = ApplyChannelGroupFilter(baseQuery.Where(whereClause, args...), group)
+	baseQuery = baseQuery.Where(whereClause, args...)
 
 	subQuery := baseQuery.
 		Select("tag").

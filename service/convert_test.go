@@ -33,7 +33,8 @@ func TestResponseConverterFacades(t *testing.T) {
 	require.NotNil(t, claudeResp)
 	assert.Equal(t, "message", claudeResp.Type)
 
-	geminiResp := ResponseOpenAI2Gemini(chatResp, &relaycommon.RelayInfo{})
+	geminiResp, err := ResponseOpenAI2Gemini(chatResp, &relaycommon.RelayInfo{})
+	require.NoError(t, err)
 	require.NotNil(t, geminiResp)
 	require.Len(t, geminiResp.Candidates, 1)
 }
@@ -60,7 +61,8 @@ func TestStreamResponseConverterFacades(t *testing.T) {
 	claudeResponses := StreamResponseOpenAI2Claude(streamResp, info)
 	require.NotEmpty(t, claudeResponses)
 
-	geminiResp := StreamResponseOpenAI2Gemini(streamResp, &relaycommon.RelayInfo{})
+	geminiResp, err := StreamResponseOpenAI2Gemini(streamResp, &relaycommon.RelayInfo{})
+	require.NoError(t, err)
 	require.NotNil(t, geminiResp)
 	require.Len(t, geminiResp.Candidates, 1)
 }
@@ -103,7 +105,8 @@ func TestStreamResponseConverterFacadesAcceptTypedNilRelayInfo(t *testing.T) {
 	require.NotEmpty(t, claudeResponses)
 	assert.Equal(t, "content_block_start", claudeResponses[0].Type)
 
-	geminiResp := StreamResponseOpenAI2Gemini(streamResp, info)
+	geminiResp, err := StreamResponseOpenAI2Gemini(streamResp, info)
+	require.NoError(t, err)
 	require.NotNil(t, geminiResp)
 	require.Len(t, geminiResp.Candidates, 1)
 	assert.Zero(t, geminiResp.UsageMetadata.PromptTokenCount)
