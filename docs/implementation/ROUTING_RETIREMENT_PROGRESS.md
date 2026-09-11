@@ -3,7 +3,7 @@
 基线：Ren2Hub d1a69b1d5fe30dddbac2dca4a0d42cc8e05ba8b7。
 工作树：tmp/ren2hub-routing-implementation，分支 codex/routing-retirement。
 依据：用户确认的《旧路由清退与分批改造计划（二次审计修订版）》。
-更新：2026-09-11，按实际源码与测试结果校订，替换此前滞后的状态表。
+更新：2026-09-11，完成 B8/B9/B10 实现、前后端契约审计与最终本地验证；真实环境验收仍单独列明。
 
 ## 状态
 
@@ -13,13 +13,13 @@
 | B1 | 账号分类与继承限额 | 已提交 | 分类继承、显式不限、版本冲突、充值倍率及用户准入定向测试通过 |
 | B2 | 旧路由运行路径清退 | 已提交 | 渠道、能力、定价、私有组与退休字段拒绝定向测试通过 |
 | B3 | 数据迁移、异步账务幂等 | 已提交 | 单元与夹具测试通过；真实数据库迁移矩阵未运行 |
-| B4 | 请求与调用生命周期 | 部分完成 | `pkg/execution` 预算账本已接入 relay；统一取消与释放未完成 |
-| B5 | 分布式准入与速率 | 用户侧已完成 | 用户并发／队列／RPM 定向测试通过；渠道 RPM／TPM 未实现 |
-| B6 | 协议转换与能力要求 | 部分完成 | RelayKit 转换、诊断与损失策略通过；`RequestRequirements` 未建立 |
-| B7 | 调度与健康探针 | 未开始 | 未运行 |
-| B8 | 流式提交边界 | 未开始 | 未运行 |
-| B9 | 粘性与续接绑定 | 未开始 | 未运行 |
-| B10 | 接口、UI、隔离验收 | 未开始 | 未运行 |
+| B4 | 请求与调用生命周期 | 已完成（本地） | `pkg/execution` 预算账本、取消、租约与释放路径定向测试通过 |
+| B5 | 分布式准入与速率 | 已完成（本地） | 渠道 RPM/TPM、TPM 输入估算、输出上界、usage 结算与 Compact 拒绝定向测试通过 |
+| B6 | 协议转换与能力要求 | 已完成（本地） | `RequestRequirements`、四协议转换、能力过滤与损失策略定向测试通过 |
+| B7 | 调度与健康探针 | 已完成（本地） | EWMA、优先级层、Sticky、有界候选与健康租约定向测试通过 |
+| B8 | 流式提交边界 | 已完成（本地） | 首次有意义内容、提交前失败、超时、panic、取消、缓冲上限、写失败关闭上游与 trailing write 定向测试通过 |
+| B9 | 粘性与续接绑定 | 已完成（本地） | Sticky 排序、精确/可重建亲和、重复凭据、禁用渠道与重试边界定向测试通过 |
+| B10 | 接口、UI、隔离验收 | 实现完成（本地） | 诊断接口、OpenAPI、前端、模拟器和验收脚本已实现；真实矩阵与停机验收未运行 |
 
 ## 已提交
 
@@ -31,22 +31,39 @@
 - 8996a57f6：B3 离线迁移工具四阶段、启动门禁与任务结算 CAS。
 - 7b27b63d9：B2 后端旧分组清退与启动接线。
 - 9829a0f27：B1／B2 的 Vue 与契约文档切换。
+- 18cac6756：完成 B4—B10 本地实现与二次审计修复，覆盖调用预算、渠道 RPM/TPM、能力要求、调度健康、流式提交边界、亲和绑定、诊断接口、前端和隔离验收工具。
 
 B1—B3 按计划构成同一次数据与接口切换，中间状态不作为发布版本。Go 编译磁盘上全部文件，因此单个切片无法在后续切片未提交时独立构建；构建与测试结果记在系列末尾切片。
 
+## 二次审计修复
+
+- 终止元数据、角色帧和任意 `metadata.text/url` 不再触发流提交；首内容计时从首个事件到达后开始。
+- OpenAI 当前有效帧在提交前实际写入，避免角色帧后首个文本帧因延迟一帧而丢失。
+- TTS 流式响应头进入预提交缓冲，空内容、解析失败和缓冲超限不会提前形成 HTTP 200；上游头不会覆盖 SSE 控制头。
+- Responses、Chat/Responses 转换、Claude、Gemini、Baidu、Dify 和 xAI 在扫描或客户端写失败后返回错误并跳过尾帧与 finalize；客户端写失败会关闭上游响应体。
+- 每次上游候选重试重置流输出阻断和 SSE 头状态，避免首个候选失败污染后续候选。
+
 ## 验证结果
 
-系列全部应用后：根模块 `GOWORK=off go build`、`go vet`、`go test -timeout 60s ./...` 通过；RelayKit 在 `GOWORK=off` 下构建、vet 与测试通过；前端 typecheck、lint、format:check 与 127 文件 592 项单测通过。
+本轮实际执行并通过：
 
-未运行：真实数据库迁移矩阵（SQLite／MySQL 5.7 与 8.0／PostgreSQL 15／ClickHouse）、Playwright UI 矩阵、服务器停启验收。
+- 根模块：`go test -timeout 60s ./...`、`go vet ./...`、`go build ./...`。
+- RelayKit：`GOWORK=off go test -timeout 60s ./...`、`go vet ./...`、`go build ./...`。
+- 前端：`bun run test:run`（127 个文件、598 项）、`bun run typecheck`、`bun run lint`、`bun run format:check`、`bun run build`。
+- 前端 Playwright 渠道对话框：明暗主题与桌面/移动 4 项通过。
+- OpenAPI 两份 JSON 已解析，并核对 `omitempty` 字段、评分明细和诊断响应结构。
+- 离线路由模拟器与诊断 controller 定向测试通过；`git diff --check` 通过。
+- B8 二次审计后重新执行根模块全量测试、`go vet` 和 `go build`；新增当前文本帧提交、TTS 头延迟、attempt 重置和客户端写失败关闭上游回归测试。
+
+未运行：真实数据库迁移矩阵（SQLite／MySQL 5.7 与 8.0／PostgreSQL 15／ClickHouse）、服务器停启验收。验收脚本已加固，但不能替代真实运行证据。
 
 ## 已知缺口
 
-- `ChannelCapabilityProjectionV1` 未升版，但 `ability_groups` 已替换为 `AbilityEnabled`，投影语义已变而版本号未动。
-- 自动初选 `TopK` 仍为 3，计划要求 7；准入探测 64 与发送 3 的边界随 B7 落实。
-- 渠道 RPM／TPM 预算缺失，含 TPM 输入估算与 usage 校正、无法确定安全上界时排除候选。
-- `RequestRequirements` 未建立，请求特征尚未单一来源化供候选过滤、预览与转换共用。
-- `RouteLeaseMetrics`、`RouteDecisionEventsDropped`、`RouteCapabilityRefreshLagSeconds` 三个计数器无调用方，诊断未经接口暴露（属 B10）。
+- `ChannelCapabilityProjectionV1` 已由 V2 取代；索引只接受当前投影版本，旧快照会被拒绝并等待刷新。
+- 自动初选 `TopK=7`，准入探测上限 64，实际发送上限 3；三者边界已在 B7/B10 诊断中固定暴露。
+- 真实数据库矩阵、Playwright 全量 UI 矩阵和服务器停机验收尚未执行。
+- 路由决策最近记录为进程内有界缓冲；进程重启后不保留历史，队列满时丢弃计数通过诊断接口暴露。
+- 评分运行时指标当前没有默认 provider，诊断会标记 `route_score_metrics_unavailable`；这属于显式降级，不会改变硬资格判断。
 
 ## 约束
 
