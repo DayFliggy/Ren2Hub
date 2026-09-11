@@ -7,7 +7,6 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"gorm.io/gorm"
 )
 
@@ -67,14 +66,8 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 	if index == nil {
 		return selection, ErrRouteSelectionUnavailable
 	}
-	models := []string{modellab.NormalizeModel(input.RequestModel)}
-	if input.CompactStage != relaycommon.CompactAttemptNone {
-		base := ratio_setting.CompactBaseModelName(input.RequestModel)
-		models = []string{modellab.NormalizeModel(base)}
-		if input.CompactStage == relaycommon.CompactAttemptExact {
-			models = append([]string{modellab.NormalizeModel(ratio_setting.WithCompactModelSuffix(base))}, models...)
-		}
-	}
+	requirements := NewRequestRequirements(input.RequestModel, input.RequestPath, input.NativeResponsesRequired, input.CompactStage)
+	models := requirements.CandidateLookupModels(modellab.NormalizeModel)
 	entitlements, err := liveRouteEntitlements(input.Context, input.UserID)
 	if err != nil {
 		return selection, err
@@ -111,7 +104,7 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 				AbilityEnabled: indexed.AbilityEnabled,
 				RequestModel:   input.RequestModel, NormalizedModel: modellab.NormalizeModel(input.RequestModel),
 				TokenLimitEnabled: input.TokenModelLimitEnabled, TokenLimit: input.TokenModelLimit,
-				RequestPath: input.RequestPath, EndpointType: endpointTypeForRequestPath(input.RequestPath),
+				RequestPath: requirements.RequestPath, EndpointType: requirements.EndpointType,
 				Entitled: entitled, RequireSnapshot: true, RequireEndpoint: true,
 				Advanced: indexed.Advanced,
 			})
@@ -128,22 +121,23 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 					candidate.FilterReason = "entry_disabled"
 				}
 			}
-			if input.NativeResponsesRequired && !ChannelSupportsNativeResponses(channel, input.RequestModel) {
-				candidate.FilterReason = RouteFilterPathUnsupported
-			}
-			if input.CompactStage != relaycommon.CompactAttemptNone {
-				base := ratio_setting.CompactBaseModelName(input.RequestModel)
-				abilities := make(map[string]bool)
+			// Protocol and Compact capability come from the shared requirements
+			// so the manual preview cannot reach a different verdict. Ability
+			// rows are loaded only for Compact, where stage support depends on
+			// which model variants the channel enables.
+			var abilityModels map[string]bool
+			if requirements.CompactStage != relaycommon.CompactAttemptNone {
 				var rows []model.Ability
 				if err := model.DB.WithContext(input.Context).Where(&model.Ability{ChannelId: channel.Id, Enabled: true}).Find(&rows).Error; err != nil {
 					return selection, err
 				}
+				abilityModels = make(map[string]bool, len(rows))
 				for _, row := range rows {
-					abilities[row.Model] = true
+					abilityModels[row.Model] = true
 				}
-				if !compactChannelSupportsStage(channel, abilities, base, ratio_setting.WithCompactModelSuffix(base), input.CompactStage) {
-					candidate.FilterReason = RouteFilterPathUnsupported
-				}
+			}
+			if reason := requirements.ChannelMeetsRequirements(channel, abilityModels); reason != "" {
+				candidate.FilterReason = reason
 			}
 			hasKey := false
 			for _, keyIndex := range channel.GetEnabledKeyIndexes() {

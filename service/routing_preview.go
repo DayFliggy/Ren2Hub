@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 )
 
 const (
@@ -108,13 +109,19 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 		return nil, fmt.Errorf("%w: manual route profile is required", ErrRouteProfileValidation)
 	}
 
+	// A preview must judge candidates by the same requirements a real request
+	// uses. The Compact stage is derived from the path here exactly as the
+	// distributor derives it, so a Compact preview no longer reports channels
+	// that a real Compact request would reject.
+	requirements := NewRequestRequirements(input.Model, input.Path, false, CompactStageForRequest(input.Path, input.Model))
+
 	preview := &RouteProfilePreview{
 		ProfileID:              view.Profile.ID,
 		ProfileVersion:         view.Profile.Version,
 		RequestModel:           input.Model,
 		NormalizedModel:        normalizedModel,
 		Path:                   input.Path,
-		EndpointType:           endpointTypeForRequestPath(input.Path),
+		EndpointType:           requirements.EndpointType,
 		Entries:                make([]RoutePreviewEntry, 0),
 		CandidateChannelIDs:    make([]int, 0),
 		SelectionMode:          RoutePreviewSelectionOrdered,
@@ -162,6 +169,21 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	for _, capability := range capabilities {
 		capabilityByChannel[capability.ChannelID] = capability
 	}
+	// Compact stage support depends on which model variants a channel enables,
+	// so the ability rows are loaded only for a Compact preview.
+	previewAbilityModels := make(map[int]map[string]bool)
+	if requirements.CompactStage != relaycommon.CompactAttemptNone && len(channelIDs) > 0 {
+		var rows []model.Ability
+		if err := model.DB.WithContext(ctx).Where("channel_id IN ? AND enabled = ?", channelIDs, true).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if previewAbilityModels[row.ChannelId] == nil {
+				previewAbilityModels[row.ChannelId] = make(map[string]bool)
+			}
+			previewAbilityModels[row.ChannelId][row.Model] = true
+		}
+	}
 
 	var token model.Token
 	if err := model.DB.WithContext(ctx).Where("id = ? AND user_id = ?", view.Profile.TokenID, userID).First(&token).Error; err != nil {
@@ -196,8 +218,8 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 			Token:           token,
 			RequestModel:    input.Model,
 			NormalizedModel: normalizedModel,
-			RequestPath:     input.Path,
-			EndpointType:    preview.EndpointType,
+			Requirements:    requirements,
+			AbilityModels:   previewAbilityModels[entry.ChannelID],
 		})
 		if item.FilterReason == "" && !RouteHealthReadOnlyUsable(health, now) {
 			item.FilterReason = RouteCandidateFilterHealthUnavailable
@@ -458,8 +480,13 @@ type routePreviewFilterInput struct {
 	Token           model.Token
 	RequestModel    string
 	NormalizedModel string
-	RequestPath     string
-	EndpointType    string
+	// Requirements carries the protocol and Compact facts the request path
+	// checks. Sharing it keeps a preview from reporting a candidate as usable
+	// that the request path would reject for an unsupported protocol path.
+	Requirements RequestRequirements
+	// AbilityModels lists the channel's enabled ability models and is consulted
+	// only for Compact stage support.
+	AbilityModels map[string]bool
 }
 
 func routePreviewFilterReason(input routePreviewFilterInput) string {
@@ -492,8 +519,8 @@ func routePreviewFilterReason(input routePreviewFilterInput) string {
 		Token:           input.Token,
 		RequestModel:    input.RequestModel,
 		NormalizedModel: input.NormalizedModel,
-		RequestPath:     input.RequestPath,
-		EndpointType:    input.EndpointType,
+		RequestPath:     input.Requirements.RequestPath,
+		EndpointType:    input.Requirements.EndpointType,
 		Entitled:        entitled,
 		// Price, quota, and request-body security facts are not available to a
 		// configuration-only preview. The response exposes a runtime recheck
@@ -503,7 +530,13 @@ func routePreviewFilterReason(input routePreviewFilterInput) string {
 		RequireSnapshot:          true,
 		RequireEndpoint:          true,
 	})
-	return result.Reason
+	if result.Reason != "" {
+		return result.Reason
+	}
+	// The same protocol and Compact verdict the request path applies. Without
+	// it a preview would show a candidate as usable that a real request rejects.
+	channel := input.Channel
+	return input.Requirements.ChannelMeetsRequirements(&channel, input.AbilityModels)
 }
 
 func routeTokenUsable(token model.Token) bool {
