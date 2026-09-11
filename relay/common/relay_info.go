@@ -79,13 +79,15 @@ type ChannelMeta struct {
 
 type TokenCountMeta struct {
 	//promptTokens int
-	estimatePromptTokens int
+	estimatePromptTokens          int
+	estimateAdmissionPromptTokens int
 	// estimateOutputCeiling is the effective output limit for this request:
 	// the client's max-tokens family field, or the provider default applied in
 	// its place. It is separate from the input estimate because a TPM
 	// reservation must cover both halves before the call is sent, while
 	// billing only ever charges observed usage.
-	estimateOutputCeiling int
+	estimateOutputCeiling      int
+	estimateOutputCeilingKnown bool
 }
 
 type CompactAttemptStage string
@@ -307,6 +309,7 @@ func (info *RelayInfo) ToString() string {
 		fmt.Fprintf(b, "UpstreamAttemptModel: %q, ", info.UpstreamAttemptModel)
 	}
 	fmt.Fprintf(b, "EstimatePromptTokens: %d, ", info.estimatePromptTokens)
+	fmt.Fprintf(b, "EstimateAdmissionPromptTokens: %d, ", info.estimateAdmissionPromptTokens)
 	fmt.Fprintf(b, "ShouldIncludeUsage: %t, ", info.ShouldIncludeUsage)
 	fmt.Fprintf(b, "DisablePing: %t, ", info.DisablePing)
 	fmt.Fprintf(b, "SendResponseCount: %d, ", info.SendResponseCount)
@@ -570,7 +573,8 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		},
 		TokenCountMeta: TokenCountMeta{
 			//promptTokens: common.GetContextKeyInt(c, constant.ContextKeyPromptTokens),
-			estimatePromptTokens: common.GetContextKeyInt(c, constant.ContextKeyEstimatedTokens),
+			estimatePromptTokens:          common.GetContextKeyInt(c, constant.ContextKeyEstimatedTokens),
+			estimateAdmissionPromptTokens: common.GetContextKeyInt(c, constant.ContextKeyEstimatedTokens),
 		},
 	}
 	if info.RelayMode == relayconstant.RelayModeResponsesCompact {
@@ -761,6 +765,7 @@ func (info *RelayInfo) SetEstimatePromptTokens(promptTokens int) {
 		return
 	}
 	info.estimatePromptTokens = promptTokens
+	info.estimateAdmissionPromptTokens = promptTokens
 }
 
 func (info *RelayInfo) GetEstimatePromptTokens() int {
@@ -775,6 +780,85 @@ func (info *RelayInfo) SetEstimateOutputCeiling(outputTokens int) {
 		return
 	}
 	info.estimateOutputCeiling = outputTokens
+	info.estimateOutputCeilingKnown = outputTokens > 0
+}
+
+// ResetAttemptTokenCeiling prevents a converted limit from one candidate from
+// being reused by a later passthrough or provider-specific attempt.
+func (info *RelayInfo) ResetAttemptTokenCeiling() {
+	if info == nil {
+		return
+	}
+	info.estimateOutputCeiling = 0
+	info.estimateOutputCeilingKnown = false
+	info.estimateAdmissionPromptTokens = info.estimatePromptTokens
+	switch info.RelayMode {
+	case relayconstant.RelayModeEmbeddings, relayconstant.RelayModeModerations, relayconstant.RelayModeRerank:
+		info.estimateOutputCeilingKnown = true
+	}
+}
+
+// UpdateEstimateOutputCeilingFromJSON replaces the client-side estimate with
+// the limit present in the final outbound JSON. Adaptor conversion and channel
+// parameter overrides may rename, add, raise, or remove the original limit, so
+// only this final representation is safe for a channel TPM reservation.
+func (info *RelayInfo) UpdateEstimateOutputCeilingFromJSON(data []byte) {
+	if info == nil {
+		return
+	}
+	info.estimateOutputCeiling = 0
+	info.estimateOutputCeilingKnown = false
+	if len(data) > info.estimateAdmissionPromptTokens {
+		// The serialized body conservatively includes injected prompts and
+		// converted tool schemas that the original DTO did not. Keep this TPM
+		// admission estimate separate from the tokenizer value used by billing
+		// fallbacks when an upstream omits usage.
+		info.estimateAdmissionPromptTokens = len(data)
+	}
+	if !gjson.ValidBytes(data) {
+		return
+	}
+
+	paths := [...]string{
+		"max_tokens",
+		"max_completion_tokens",
+		"max_output_tokens",
+		"max_tokens_to_sample",
+		"maxTokens",
+		"maxOutputTokens",
+		"max_new_tokens",
+		"generationConfig.maxOutputTokens",
+		"generation_config.max_output_tokens",
+		"inferenceConfig.maxTokens",
+		"parameters.max_new_tokens",
+		"parameter.chat.max_tokens",
+		"options.num_predict",
+	}
+	maxInt := uint64(^uint(0) >> 1)
+	var ceiling uint64
+	for _, path := range paths {
+		value := gjson.GetBytes(data, path)
+		if !value.Exists() || value.Type != gjson.Number {
+			continue
+		}
+		parsed, err := strconv.ParseUint(value.Raw, 10, 64)
+		if err != nil || parsed == 0 || parsed > maxInt {
+			continue
+		}
+		if parsed > ceiling {
+			ceiling = parsed
+		}
+	}
+	if ceiling > 0 {
+		info.estimateOutputCeiling = int(ceiling)
+		info.estimateOutputCeilingKnown = true
+	}
+	if !info.estimateOutputCeilingKnown {
+		switch info.RelayMode {
+		case relayconstant.RelayModeEmbeddings, relayconstant.RelayModeModerations, relayconstant.RelayModeRerank:
+			info.estimateOutputCeilingKnown = true
+		}
+	}
 }
 
 // EstimateTokenCeiling is the upper bound a rate budget must reserve before the
@@ -782,10 +866,14 @@ func (info *RelayInfo) SetEstimateOutputCeiling(outputTokens int) {
 // 0 when the output ceiling is unknown, so a caller enforcing TPM can refuse
 // the candidate rather than reserve an arbitrary amount.
 func (info *RelayInfo) EstimateTokenCeiling() int {
-	if info == nil || info.estimateOutputCeiling <= 0 {
+	if info == nil || !info.estimateOutputCeilingKnown || info.estimateAdmissionPromptTokens < 0 {
 		return 0
 	}
-	return info.estimatePromptTokens + info.estimateOutputCeiling
+	maxInt := int(^uint(0) >> 1)
+	if info.estimateAdmissionPromptTokens > maxInt-info.estimateOutputCeiling {
+		return maxInt
+	}
+	return info.estimateAdmissionPromptTokens + info.estimateOutputCeiling
 }
 
 // ---------------------------------------------------------------------------

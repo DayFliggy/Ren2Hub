@@ -14,6 +14,16 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const streamOutputBlockedContextKey = "stream_output_blocked"
+
+func streamOutputBlocked(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	blocked, _ := c.Get(streamOutputBlockedContextKey)
+	return blocked == true
+}
+
 func FlushWriter(c *gin.Context) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -44,7 +54,7 @@ func requestContextDone(c *gin.Context) bool {
 
 func SetEventStreamHeaders(c *gin.Context) {
 	// 检查是否已经设置过头部
-	if _, exists := c.Get("event_stream_headers_set"); exists {
+	if value, exists := c.Get("event_stream_headers_set"); exists && value == true {
 		return
 	}
 
@@ -58,58 +68,70 @@ func SetEventStreamHeaders(c *gin.Context) {
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 }
 
-func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
-	if requestContextDone(c) {
-		return nil
-	}
-
-	jsonData, err := common.Marshal(resp)
-	if err != nil {
-		common.SysError("error marshalling stream response: " + err.Error())
-	} else {
-		c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-		c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonData)})
-	}
-	_ = FlushWriter(c)
-	return nil
-}
-
-func ClaudeChunkData(c *gin.Context, resp dto.ClaudeResponse, data string) {
-	if requestContextDone(c) {
+// ResetStreamAttemptState clears flags that belong to one upstream attempt.
+// A retry must install fresh SSE headers and write through a new commit gate.
+func ResetStreamAttemptState(c *gin.Context) {
+	if c == nil {
 		return
 	}
+	c.Set(streamOutputBlockedContextKey, false)
+	c.Set("event_stream_headers_set", false)
+}
 
-	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s\n", data)})
-	_ = FlushWriter(c)
+func ClaudeData(c *gin.Context, resp dto.ClaudeResponse) error {
+	jsonData, err := common.Marshal(resp)
+	if err != nil {
+		return fmt.Errorf("marshal stream response: %w", err)
+	}
+	return writeStreamFrame(c, fmt.Sprintf("event: %s\ndata: %s\n\n", resp.Type, jsonData))
+}
+
+func ClaudeChunkData(c *gin.Context, resp dto.ClaudeResponse, data string) error {
+	return writeStreamFrame(c, fmt.Sprintf("event: %s\ndata: %s\n\n", resp.Type, data))
 }
 
 func ResponseChunkData(c *gin.Context, resp dto.ResponsesStreamResponse, data string) error {
-	if requestContextDone(c) {
-		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
-	}
-
-	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("event: %s\n", resp.Type)})
-	c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s", data)})
-	return FlushWriter(c)
+	return writeStreamFrame(c, fmt.Sprintf("event: %s\ndata: %s\n\n", resp.Type, data))
 }
 
 func StringData(c *gin.Context, str string) error {
 	if c == nil || c.Writer == nil {
 		return errors.New("context or writer is nil")
 	}
+	if streamOutputBlocked(c) {
+		return errors.New("stream output is blocked after abnormal termination")
+	}
 
 	if requestContextDone(c) {
 		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
 	}
 
-	c.Render(-1, common.CustomEvent{Data: "data: " + str})
+	return writeStreamFrame(c, "data: "+str+"\n\n")
+}
+
+func writeStreamFrame(c *gin.Context, frame string) error {
+	if c == nil || c.Writer == nil {
+		return errors.New("context or writer is nil")
+	}
+	if streamOutputBlocked(c) {
+		return errors.New("stream output is blocked after abnormal termination")
+	}
+	if requestContextDone(c) {
+		return fmt.Errorf("request context done: %w", c.Request.Context().Err())
+	}
+	SetEventStreamHeaders(c)
+	if _, err := c.Writer.Write([]byte(frame)); err != nil {
+		return fmt.Errorf("write stream frame: %w", err)
+	}
 	return FlushWriter(c)
 }
 
 func PingData(c *gin.Context) error {
 	if c == nil || c.Writer == nil {
 		return errors.New("context or writer is nil")
+	}
+	if streamOutputBlocked(c) {
+		return errors.New("stream output is blocked after abnormal termination")
 	}
 
 	if requestContextDone(c) {
@@ -133,8 +155,8 @@ func ObjectData(c *gin.Context, object interface{}) error {
 	return StringData(c, string(jsonData))
 }
 
-func Done(c *gin.Context) {
-	_ = StringData(c, "[DONE]")
+func Done(c *gin.Context) error {
+	return StringData(c, "[DONE]")
 }
 
 func WssString(c *gin.Context, ws *websocket.Conn, str string) error {

@@ -43,20 +43,20 @@ for spec in sqlite postgres:9.6 postgres:15-bookworm mysql:5.7.8 mysql:8.0 click
       continue
     fi
     if [[ "$spec" == clickhouse/* ]]; then
-      docker run -d --name "$db_name" --label "$owned_label" --network "$network" --network-alias database \
+      docker run -d --name "$db_name" --label "$owned_label" --network "$network" --network-alias database --cpus 1.5 \
         --memory 1280m --memory-swap 1280m -e CLICKHOUSE_DB=acceptance -e CLICKHOUSE_USER=acceptance -e CLICKHOUSE_PASSWORD=synthetic-test-only -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 \
         "$spec" > /dev/null
       log_dsn='clickhouse://acceptance:synthetic-test-only@database:9000/acceptance'
       test_pattern='^TestRoutingAcceptanceClickHouse$'
       probe=(clickhouse-client --user acceptance --password synthetic-test-only --query 'SELECT 1')
     elif [[ "$spec" == postgres:* ]]; then
-      docker run -d --name "$db_name" --label "$owned_label" --network "$network" --network-alias database \
+      docker run -d --name "$db_name" --label "$owned_label" --network "$network" --network-alias database --cpus 1.5 \
         --memory 768m --memory-swap 768m -e POSTGRES_DB=acceptance -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_PASSWORD=synthetic-test-only \
         "$spec" > /dev/null
       dsn='postgres://postgres:synthetic-test-only@database:5432/acceptance?sslmode=disable'
       probe=(pg_isready -U postgres -d acceptance)
     else
-      docker run -d --name "$db_name" --label "$owned_label" --network "$network" --network-alias database \
+      docker run -d --name "$db_name" --label "$owned_label" --network "$network" --network-alias database --cpus 1.5 \
         --memory 1024m --memory-swap 1024m -e MYSQL_DATABASE=acceptance -e MYSQL_ALLOW_EMPTY_PASSWORD=yes -e MYSQL_ROOT_HOST=% \
         "$spec" --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --innodb-buffer-pool-size=67108864 > /dev/null
       dsn='root@tcp(database:3306)/acceptance?charset=utf8mb4&parseTime=true'
@@ -75,7 +75,7 @@ for spec in sqlite postgres:9.6 postgres:15-bookworm mysql:5.7.8 mysql:8.0 click
       continue
     fi
   fi
-  if docker run --rm --name "$test_name" --label "$owned_label" --network "$network" --memory 768m --memory-swap 768m \
+  if docker run --rm --name "$test_name" --label "$owned_label" --network "$network" --cpus 1.5 --memory 768m --memory-swap 768m \
     -e REN2HUB_ISOLATED_ACCEPTANCE=synthetic-empty-database -e REN2HUB_ACCEPTANCE_DSN="$dsn" -e REN2HUB_ACCEPTANCE_LOG_DSN="$log_dsn" \
     "$image" -test.run "$test_pattern" -test.timeout 60s -test.v > "$report_dir/$name.log" 2>&1; then
     printf '%s\tPASS\t%s\n' "$spec" "$spec" >> "$report_dir/results.tsv"

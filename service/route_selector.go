@@ -2,8 +2,9 @@ package service
 
 import (
 	"errors"
-	"hash/fnv"
 	"sort"
+
+	"github.com/QuantumNous/new-api/pkg/execution"
 )
 
 var ErrRouteSelectionUnavailable = errors.New("no eligible route candidate")
@@ -18,6 +19,7 @@ const (
 // the shared static qualification boundary and is never silently discarded.
 type RouteSelectionCandidate struct {
 	ChannelID         int
+	ChannelTPM        int
 	RequestModel      string
 	ActualModel       string
 	LabSlug           string
@@ -40,6 +42,7 @@ type RouteSelectionCandidate struct {
 	SnapshotVersion   int64
 	HealthEpoch       int64
 	CatalogVersion    string
+	CompatibilityTier int
 }
 
 type RouteSelectionInput struct {
@@ -58,6 +61,9 @@ type RouteSelectionInput struct {
 type RouteSelectionResult struct {
 	Decision   RouteDecision
 	Candidates []RouteSelectionCandidate
+	// ReserveCandidates are considered only after the initial TopK is exhausted.
+	// Both slices together fit the request's distinct-candidate probe budget.
+	ReserveCandidates []RouteSelectionCandidate
 }
 
 // SelectTokenRoute applies the route-source precedence once and keeps the
@@ -93,7 +99,9 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 			ordered = append(ordered, RouteScoreCandidate{
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
 				Position: candidate.Position, Weight: candidate.Weight,
-				HealthUsable: candidate.HealthUsable,
+				CompatibilityTier: candidate.CompatibilityTier,
+				Sticky:            candidate.Sticky,
+				HealthUsable:      candidate.HealthUsable,
 			})
 			byID[candidate.ChannelID] = candidate
 		}
@@ -108,7 +116,8 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 			staticCandidates = append(staticCandidates, RouteScoreCandidate{
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
 				Position: candidate.Position, Weight: candidate.Weight,
-				HealthUsable: candidate.HealthUsable,
+				CompatibilityTier: candidate.CompatibilityTier,
+				HealthUsable:      candidate.HealthUsable,
 			})
 			byID[candidate.ChannelID] = candidate
 		}
@@ -127,7 +136,8 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 				scored = append(scored, RouteScoreCandidate{
 					ChannelID: candidate.ChannelID, Priority: candidate.Priority,
 					Position: candidate.Position, Weight: candidate.Weight,
-					ErrorRate: candidate.ErrorRate, ErrorRateKnown: candidate.ErrorRateKnown,
+					CompatibilityTier: candidate.CompatibilityTier,
+					ErrorRate:         candidate.ErrorRate, ErrorRateKnown: candidate.ErrorRateKnown,
 					LatencyMS: candidate.LatencyMS, LatencyKnown: candidate.LatencyKnown,
 					TTFTMS: candidate.TTFTMS, TTFTKnown: candidate.TTFTKnown,
 					RateLimitHeadroom: candidate.RateLimitHeadroom,
@@ -143,19 +153,27 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 			}
 			result.Decision.ScoringMode = "live"
 			result.Decision.DynamicScoreApplied = true
-			orderedCandidates = scoredCandidates
+			orderedCandidates = weightedRouteCandidateOrder(scoredCandidates, input.RequestID, false)
 			appendRouteDecisionCandidatesWithScores(&result.Decision, candidates, scoredCandidates)
 		} else {
 			appendRouteDecisionCandidates(&result.Decision, candidates)
+			orderedCandidates = weightedRouteCandidateOrder(orderedCandidates, input.RequestID, false)
 		}
 		limit := normalizedRouteTopK(input.TopK)
-		if len(orderedCandidates) > limit {
-			orderedCandidates = orderedCandidates[:limit]
+		if len(orderedCandidates) > execution.MaxCandidates {
+			orderedCandidates = orderedCandidates[:execution.MaxCandidates]
 		}
-		for _, scoredCandidate := range orderedCandidates {
+		for index, scoredCandidate := range orderedCandidates {
 			candidate := byID[scoredCandidate.Candidate.ChannelID]
-			result.Candidates = append(result.Candidates, candidate)
+			if index < limit {
+				result.Candidates = append(result.Candidates, candidate)
+			} else {
+				result.ReserveCandidates = append(result.ReserveCandidates, candidate)
+			}
 		}
+	}
+	if len(result.Candidates) > execution.MaxCandidates {
+		result.Candidates = result.Candidates[:execution.MaxCandidates]
 	}
 
 	if len(result.Candidates) == 0 {
@@ -167,6 +185,7 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 		for _, candidate := range result.Candidates {
 			result.Decision.Candidates = append(result.Decision.Candidates, RouteDecisionCandidate{
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
+				ChannelTPM:   candidate.ChannelTPM,
 				RequestModel: candidate.RequestModel, ActualModel: candidate.ActualModel,
 				Position: candidate.Position, Weight: candidate.Weight,
 				SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
@@ -184,66 +203,22 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 }
 
 // orderManualRouteCandidatesForSelection keeps the user-owned position
-// boundary intact. When load balancing is enabled, only the first eligible
-// position layer uses a request-stable weighted choice for the first attempt;
-// all later candidates retain a deterministic order for bounded failover.
+// boundary intact. Every position layer is sampled without replacement so
+// both initial selection and failover honor the same weights.
 func orderManualRouteCandidatesForSelection(candidates []RouteScoreCandidate, loadBalance bool, requestID string) []RouteScoreCandidate {
 	ordered := OrderManualRouteCandidates(candidates, loadBalance)
 	if !loadBalance || len(ordered) < 2 || requestID == "" {
 		return ordered
 	}
 
-	firstLayerEnd := 1
-	for firstLayerEnd < len(ordered) && ordered[firstLayerEnd].Position == ordered[0].Position {
-		firstLayerEnd++
+	scored := make([]ScoredRouteCandidate, 0, len(ordered))
+	for _, candidate := range ordered {
+		scored = append(scored, ScoredRouteCandidate{Candidate: candidate})
 	}
-	if firstLayerEnd < 2 {
-		return ordered
+	for index, candidate := range weightedRouteCandidateOrder(scored, requestID, true) {
+		ordered[index] = candidate.Candidate
 	}
-
-	selectedIndex := weightedManualCandidateIndex(ordered[:firstLayerEnd], requestID)
-	if selectedIndex == 0 {
-		return ordered
-	}
-	selected := ordered[selectedIndex]
-	copy(ordered[1:selectedIndex+1], ordered[:selectedIndex])
-	ordered[0] = selected
 	return ordered
-}
-
-// weightedManualCandidateIndex chooses from one manual position layer without
-// introducing process-local randomness. Request IDs are already unique at the
-// relay boundary, so the FNV bucket yields repeatable decisions for a given
-// request while distributing independent requests according to their weights.
-func weightedManualCandidateIndex(candidates []RouteScoreCandidate, requestID string) int {
-	if len(candidates) < 2 || requestID == "" {
-		return 0
-	}
-
-	hasher := fnv.New64a()
-	_, _ = hasher.Write([]byte(requestID))
-	var total uint64
-	for _, candidate := range candidates {
-		if candidate.Weight > 0 {
-			total += uint64(candidate.Weight)
-		}
-	}
-	if total == 0 {
-		return int(hasher.Sum64() % uint64(len(candidates)))
-	}
-
-	bucket := hasher.Sum64() % total
-	var accumulated uint64
-	for index, candidate := range candidates {
-		if candidate.Weight <= 0 {
-			continue
-		}
-		accumulated += uint64(candidate.Weight)
-		if bucket < accumulated {
-			return index
-		}
-	}
-	return 0
 }
 
 func normalizeRouteSelectionCandidates(candidates []RouteSelectionCandidate) []RouteSelectionCandidate {
@@ -292,8 +267,9 @@ func appendRouteDecisionCandidatesWithScores(decision *RouteDecision, candidates
 		}
 		decision.Candidates = append(decision.Candidates, RouteDecisionCandidate{
 			ChannelID: candidate.ChannelID, FilterReason: candidate.FilterReason,
+			ChannelTPM:   candidate.ChannelTPM,
 			RequestModel: candidate.RequestModel, ActualModel: candidate.ActualModel,
-			Priority:     candidate.Priority, Position: candidate.Position, Weight: candidate.Weight,
+			Priority: candidate.Priority, Position: candidate.Position, Weight: candidate.Weight,
 			SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
 			HealthEpoch: candidate.HealthEpoch,
 			Score:       score, LeaseState: RouteLeaseStateNotAttempted,
@@ -335,6 +311,9 @@ func eligibleRouteSelectionCandidates(candidates []RouteSelectionCandidate) []Ro
 // changing the source-specific selector semantics.
 func SortRouteSelectionCandidates(candidates []RouteSelectionCandidate) {
 	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].CompatibilityTier != candidates[j].CompatibilityTier {
+			return candidates[i].CompatibilityTier < candidates[j].CompatibilityTier
+		}
 		if candidates[i].Priority != candidates[j].Priority {
 			return candidates[i].Priority > candidates[j].Priority
 		}

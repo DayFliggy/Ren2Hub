@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/cachex"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -26,13 +28,13 @@ const (
 	ginKeyChannelAffinityLogInfo    = "channel_affinity_log_info"
 	ginKeyChannelAffinitySkipRetry  = "channel_affinity_skip_retry_on_failure"
 
-	channelAffinityCacheNamespace           = "new-api:channel_affinity:v2"
+	channelAffinityCacheNamespace           = "new-api:channel_affinity:v3"
 	channelAffinityUsageCacheStatsNamespace = "new-api:channel_affinity_usage_cache_stats:v2"
 )
 
 var (
 	channelAffinityCacheOnce sync.Once
-	channelAffinityCache     *cachex.HybridCache[int]
+	channelAffinityCache     *cachex.HybridCache[channelAffinityBinding]
 
 	channelAffinityUsageCacheStatsOnce  sync.Once
 	channelAffinityUsageCacheStatsCache *cachex.HybridCache[ChannelAffinityUsageCacheCounters]
@@ -53,6 +55,18 @@ type channelAffinityMeta struct {
 	KeyFingerprint string
 	ModelName      string
 	RequestPath    string
+	UserID         int
+	TokenID        int
+	Binding        channelAffinityBinding
+	BindingUsed    bool
+	ExactBinding   bool
+}
+
+type channelAffinityBinding struct {
+	UserID                int    `json:"user_id"`
+	TokenID               int    `json:"token_id"`
+	ChannelID             int    `json:"channel_id"`
+	CredentialFingerprint string `json:"credential_fp"`
 }
 
 type ChannelAffinityStatsContext struct {
@@ -76,7 +90,7 @@ type ChannelAffinityCacheStats struct {
 	CacheAlgo     string         `json:"cache_algo"`
 }
 
-func getChannelAffinityCache() *cachex.HybridCache[int] {
+func getChannelAffinityCache() *cachex.HybridCache[channelAffinityBinding] {
 	channelAffinityCacheOnce.Do(func() {
 		setting := operation_setting.GetChannelAffinitySetting()
 		capacity := setting.MaxEntries
@@ -88,15 +102,15 @@ func getChannelAffinityCache() *cachex.HybridCache[int] {
 			defaultTTLSeconds = 3600
 		}
 
-		channelAffinityCache = cachex.NewHybridCache[int](cachex.HybridCacheConfig[int]{
+		channelAffinityCache = cachex.NewHybridCache[channelAffinityBinding](cachex.HybridCacheConfig[channelAffinityBinding]{
 			Namespace: cachex.Namespace(channelAffinityCacheNamespace),
 			Redis:     common.RDB,
 			RedisEnabled: func() bool {
 				return common.RedisEnabled && common.RDB != nil
 			},
-			RedisCodec: cachex.IntCodec{},
-			Memory: func() *hot.HotCache[string, int] {
-				return hot.NewHotCache[string, int](hot.LRU, capacity).
+			RedisCodec: cachex.JSONCodec[channelAffinityBinding]{},
+			Memory: func() *hot.HotCache[string, channelAffinityBinding] {
+				return hot.NewHotCache[string, channelAffinityBinding](hot.LRU, capacity).
 					WithTTL(time.Duration(defaultTTLSeconds) * time.Second).
 					WithJanitor().
 					Build()
@@ -322,16 +336,35 @@ func extractChannelAffinityValue(c *gin.Context, src operation_setting.ChannelAf
 	}
 }
 
-func buildChannelAffinityCacheKeySuffix(rule operation_setting.ChannelAffinityRule, modelName string, affinityValue string) string {
-	parts := make([]string, 0, 4)
+func buildChannelAffinityCacheKeySuffix(rule operation_setting.ChannelAffinityRule, modelName string, affinityValue string, userID, tokenID int) string {
+	parts := make([]string, 0, 8)
 	if rule.IncludeRuleName && rule.Name != "" {
 		parts = append(parts, rule.Name)
 	}
 	if rule.IncludeModelName && modelName != "" {
 		parts = append(parts, modelName)
 	}
+	parts = append(parts, "user", strconv.Itoa(userID), "token", strconv.Itoa(tokenID))
 	parts = append(parts, affinityValue)
 	return strings.Join(parts, ":")
+}
+
+func channelAffinityRequestIdentity(c *gin.Context) (int, int, bool) {
+	if c == nil {
+		return 0, 0, false
+	}
+	userID := common.GetContextKeyInt(c, constant.ContextKeyUserId)
+	if userID <= 0 {
+		return 0, 0, false
+	}
+	return userID, common.GetContextKeyInt(c, constant.ContextKeyTokenId), true
+}
+
+func channelAffinityCredentialFingerprint(key string) string {
+	if key == "" {
+		return ""
+	}
+	return common.Sha1([]byte(key))
 }
 
 func setChannelAffinityContext(c *gin.Context, meta channelAffinityMeta) {
@@ -534,6 +567,10 @@ func GetPreferredChannelByAffinity(c *gin.Context, modelName string) (int, bool)
 	if setting == nil || !setting.Enabled {
 		return 0, false
 	}
+	userID, tokenID, identified := channelAffinityRequestIdentity(c)
+	if !identified {
+		return 0, false
+	}
 	path := ""
 	if c != nil && c.Request != nil && c.Request.URL != nil {
 		path = c.Request.URL.Path
@@ -573,9 +610,9 @@ func GetPreferredChannelByAffinity(c *gin.Context, modelName string) (int, bool)
 		if ttlSeconds <= 0 {
 			ttlSeconds = setting.DefaultTTLSeconds
 		}
-		cacheKeySuffix := buildChannelAffinityCacheKeySuffix(rule, modelName, affinityValue)
+		cacheKeySuffix := buildChannelAffinityCacheKeySuffix(rule, modelName, affinityValue, userID, tokenID)
 		cacheKeyFull := channelAffinityCacheNamespace + ":" + cacheKeySuffix
-		setChannelAffinityContext(c, channelAffinityMeta{
+		meta := channelAffinityMeta{
 			CacheKey:       cacheKeyFull,
 			TTLSeconds:     ttlSeconds,
 			RuleName:       rule.Name,
@@ -588,20 +625,65 @@ func GetPreferredChannelByAffinity(c *gin.Context, modelName string) (int, bool)
 			KeyFingerprint: affinityFingerprint(affinityValue),
 			ModelName:      modelName,
 			RequestPath:    path,
-		})
+			UserID:         userID,
+			TokenID:        tokenID,
+			ExactBinding:   rule.SkipRetryOnFailure || common.GetContextKeyBool(c, constant.ContextKeyRequestContinuation),
+		}
+		setChannelAffinityContext(c, meta)
 
 		cache := getChannelAffinityCache()
-		channelID, found, err := cache.Get(cacheKeySuffix)
+		binding, found, err := cache.Get(cacheKeySuffix)
 		if err != nil {
 			common.SysError(fmt.Sprintf("channel affinity cache get failed: key=%s, err=%v", cacheKeyFull, err))
 			return 0, false
 		}
-		if found {
-			return channelID, true
+		if found && binding.UserID == userID && binding.TokenID == tokenID && binding.ChannelID > 0 && binding.CredentialFingerprint != "" {
+			meta.Binding = binding
+			setChannelAffinityContext(c, meta)
+			return binding.ChannelID, true
 		}
 		return 0, false
 	}
 	return 0, false
+}
+
+// ChannelAffinityRequiresExactBinding reports whether moving a cached affinity
+// to another channel or credential would lose provider-side continuation state.
+// The existing skip-retry rule is the operator's explicit declaration that the
+// affinity context cannot be safely rebuilt; native opaque Responses state is
+// exact-bound regardless of that configurable rule.
+func ChannelAffinityRequiresExactBinding(c *gin.Context) bool {
+	meta, ok := getChannelAffinityMeta(c)
+	return ok && meta.Binding.ChannelID > 0 && (meta.ExactBinding || meta.SkipRetry)
+}
+
+// ResolveChannelAffinityCredential returns the exact enabled credential bound
+// to the current affinity hit. The fingerprint, rather than the key index,
+// keeps the identity stable if a multi-key channel is reordered.
+func ResolveChannelAffinityCredential(c *gin.Context, channel *model.Channel, excluded map[int]struct{}) (string, int, bool, bool) {
+	meta, ok := getChannelAffinityMeta(c)
+	if !ok || !meta.BindingUsed || channel == nil || meta.Binding.ChannelID != channel.Id || meta.Binding.CredentialFingerprint == "" {
+		return "", 0, false, false
+	}
+
+	keys := channel.GetKeys()
+	enabled := make(map[int]struct{}, len(keys))
+	for _, index := range channel.GetEnabledKeyIndexes() {
+		enabled[index] = struct{}{}
+	}
+	for index, key := range keys {
+		if channelAffinityCredentialFingerprint(key) != meta.Binding.CredentialFingerprint {
+			continue
+		}
+		if _, ok := enabled[index]; !ok {
+			continue
+		}
+		if _, skip := excluded[index]; skip {
+			continue
+		}
+		return key, index, true, true
+	}
+	return "", 0, true, false
 }
 
 func ShouldSkipRetryAfterChannelAffinityFailure(c *gin.Context) bool {
@@ -659,10 +741,12 @@ func MarkChannelAffinityUsed(c *gin.Context, channelID int) {
 		return
 	}
 	meta, ok := getChannelAffinityMeta(c)
-	if !ok {
+	if !ok || meta.Binding.ChannelID != channelID {
 		return
 	}
-	c.Set(ginKeyChannelAffinitySkipRetry, meta.SkipRetry)
+	meta.BindingUsed = true
+	setChannelAffinityContext(c, meta)
+	c.Set(ginKeyChannelAffinitySkipRetry, meta.SkipRetry || meta.ExactBinding)
 	info := map[string]interface{}{
 		"reason":       meta.RuleName,
 		"rule_name":    meta.RuleName,
@@ -690,7 +774,7 @@ func AppendChannelAffinityAdminInfo(c *gin.Context, adminInfo map[string]interfa
 }
 
 func RecordChannelAffinity(c *gin.Context, channelID int) {
-	if channelID <= 0 {
+	if c == nil || channelID <= 0 {
 		return
 	}
 	setting := operation_setting.GetChannelAffinitySetting()
@@ -706,6 +790,14 @@ func RecordChannelAffinity(c *gin.Context, channelID int) {
 	if !ok {
 		return
 	}
+	meta, ok := getChannelAffinityMeta(c)
+	if !ok || meta.UserID <= 0 {
+		return
+	}
+	credentialFingerprint := channelAffinityCredentialFingerprint(common.GetContextKeyString(c, constant.ContextKeyChannelKey))
+	if credentialFingerprint == "" {
+		return
+	}
 	if ttlSeconds <= 0 {
 		ttlSeconds = setting.DefaultTTLSeconds
 	}
@@ -713,7 +805,13 @@ func RecordChannelAffinity(c *gin.Context, channelID int) {
 		ttlSeconds = 3600
 	}
 	cache := getChannelAffinityCache()
-	if err := cache.SetWithTTL(cacheKey, channelID, time.Duration(ttlSeconds)*time.Second); err != nil {
+	binding := channelAffinityBinding{
+		UserID:                meta.UserID,
+		TokenID:               meta.TokenID,
+		ChannelID:             channelID,
+		CredentialFingerprint: credentialFingerprint,
+	}
+	if err := cache.SetWithTTL(cacheKey, binding, time.Duration(ttlSeconds)*time.Second); err != nil {
 		common.SysError(fmt.Sprintf("channel affinity cache set failed: key=%s, err=%v", cacheKey, err))
 	}
 }

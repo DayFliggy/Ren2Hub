@@ -65,6 +65,8 @@ export interface AdminChannel extends Record<string, unknown> {
   // Capacity & ratio fields (Phase A backend fields)
   capacity_used: number
   capacity_total: number
+  channel_rpm: number
+  channel_tpm: number
   channel_ratio: number
   upstream_ratio: number
   used_quota: number
@@ -97,6 +99,8 @@ export interface AdminChannelCreateInput {
   weight: number
   // Capacity & ratio
   capacity_total: number
+  channel_rpm: number
+  channel_tpm: number
   channel_ratio: number
 }
 

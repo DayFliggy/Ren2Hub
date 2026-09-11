@@ -278,6 +278,12 @@ const allColumns = computed<
     optional: 'capacity',
   },
   {
+    key: 'rateLimits',
+    label: t('channels.rateLimits'),
+    width: '172px',
+    optional: 'rateLimits',
+  },
+  {
     key: 'usage',
     label: t('channels.usageAndRatio'),
     width: '158px',
@@ -1202,6 +1208,76 @@ async function runBulkStatus(
                 channelFromRow(row as AdminChannelTableRow).capacity_total
               "
             />
+          </template>
+          <template #cell-rateLimits="{ row }">
+            <div class="space-y-1 text-xs">
+              <div class="flex items-center gap-1.5">
+                <span class="w-9 text-[var(--text-tertiary)]">{{
+                  t('channels.rpmShort')
+                }}</span>
+                <ChannelInlineNumber
+                  v-if="canWrite"
+                  :value="
+                    channelFromRow(row as AdminChannelTableRow).channel_rpm
+                  "
+                  :max="10000000"
+                  width-class="w-[82px]"
+                  :label="
+                    t('channels.channelRpmFor', {
+                      name: channelFromRow(row as AdminChannelTableRow).name,
+                    })
+                  "
+                  :busy="
+                    isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
+                  "
+                  :commit="
+                    (value) =>
+                      updateNumber(
+                        channelFromRow(row as AdminChannelTableRow),
+                        'channel_rpm',
+                        value
+                      )
+                  "
+                />
+                <span v-else class="tabular-nums">{{
+                  channelFromRow(row as AdminChannelTableRow).channel_rpm ||
+                  t('channels.unlimited')
+                }}</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-9 text-[var(--text-tertiary)]">{{
+                  t('channels.tpmShort')
+                }}</span>
+                <ChannelInlineNumber
+                  v-if="canWrite"
+                  :value="
+                    channelFromRow(row as AdminChannelTableRow).channel_tpm
+                  "
+                  :max="10000000000"
+                  width-class="w-[82px]"
+                  :label="
+                    t('channels.channelTpmFor', {
+                      name: channelFromRow(row as AdminChannelTableRow).name,
+                    })
+                  "
+                  :busy="
+                    isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
+                  "
+                  :commit="
+                    (value) =>
+                      updateNumber(
+                        channelFromRow(row as AdminChannelTableRow),
+                        'channel_tpm',
+                        value
+                      )
+                  "
+                />
+                <span v-else class="tabular-nums">{{
+                  channelFromRow(row as AdminChannelTableRow).channel_tpm ||
+                  t('channels.unlimited')
+                }}</span>
+              </div>
+            </div>
           </template>
           <template #cell-usage="{ row }">
             <div class="space-y-0.5 text-xs">

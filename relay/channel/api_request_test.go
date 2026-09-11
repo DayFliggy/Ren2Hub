@@ -1,14 +1,26 @@
 package channel
 
 import (
+	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestProcessHeaderOverride_ChannelTestSkipsPassthroughRules(t *testing.T) {
 	t.Parallel()
@@ -190,4 +202,87 @@ func TestProcessHeaderOverride_PassHeadersTemplateSetsRuntimeHeaders(t *testing.
 	require.Equal(t, "Codex CLI", upstreamReq.Header.Get("Originator"))
 	require.Equal(t, "sess-123", upstreamReq.Header.Get("Session_id"))
 	require.Empty(t, upstreamReq.Header.Get("X-Codex-Beta-Features"))
+}
+
+func TestDoWithResponseHeaderTimeout(t *testing.T) {
+	t.Parallel()
+
+	client := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		<-req.Context().Done()
+		return nil, req.Context().Err()
+	})}
+	req, err := http.NewRequest(http.MethodPost, "https://example.com/v1/responses", nil)
+	require.NoError(t, err)
+
+	startedAt := time.Now()
+	resp, err := doWithResponseHeaderTimeout(client, req, 25*time.Millisecond)
+
+	require.Nil(t, resp)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, context.DeadlineExceeded))
+	require.Contains(t, err.Error(), "response_header")
+	require.Less(t, time.Since(startedAt), time.Second)
+}
+
+func TestDoWithResponseHeaderTimeoutKeepsStreamAliveUntilBodyClose(t *testing.T) {
+	t.Parallel()
+
+	requestContext := make(chan context.Context, 1)
+	client := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		requestContext <- req.Context()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("stream body")),
+			Request:    req,
+		}, nil
+	})}
+	req, err := http.NewRequest(http.MethodPost, "https://example.com/v1/responses", nil)
+	require.NoError(t, err)
+
+	resp, err := doWithResponseHeaderTimeout(client, req, 25*time.Millisecond)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	ctx := <-requestContext
+	time.Sleep(50 * time.Millisecond)
+	require.NoError(t, ctx.Err(), "response-header timer must stop after headers arrive")
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, "stream body", string(body))
+	require.NoError(t, resp.Body.Close())
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
+}
+
+func TestDoRequestStreamFailureDoesNotPolluteResponseHeaders(t *testing.T) {
+	service.InitHttpClient()
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		writer.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	oldTimeoutProvider := responseHeaderTimeoutProvider
+	responseHeaderTimeoutProvider = func() time.Duration { return 25 * time.Millisecond }
+	t.Cleanup(func() { responseHeaderTimeoutProvider = oldTimeoutProvider })
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{
+		IsStream:    true,
+		ChannelMeta: &relaycommon.ChannelMeta{ChannelId: 991},
+	}
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, upstream.URL, nil)
+	require.NoError(t, err)
+
+	resp, err := doRequest(c, req, info)
+
+	require.Nil(t, resp)
+	require.Error(t, err)
+	require.False(t, c.Writer.Written())
+	for _, name := range []string{"Content-Type", "Cache-Control", "Connection", "Transfer-Encoding", "X-Accel-Buffering"} {
+		require.Empty(t, recorder.Header().Get(name), name)
+	}
 }

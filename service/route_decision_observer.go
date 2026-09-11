@@ -16,6 +16,13 @@ var routeDecisionEventQueue struct {
 
 var routeDecisionEventsDropped atomic.Uint64
 
+const recentRouteDecisionLimit = 100
+
+var recentRouteDecisions struct {
+	sync.RWMutex
+	items []RouteDecision
+}
+
 func initRouteDecisionEventQueue() {
 	size := common.GetEnvOrDefault("ROUTE_DECISION_EVENT_QUEUE_SIZE", 1024)
 	if size < 1 {
@@ -24,6 +31,14 @@ func initRouteDecisionEventQueue() {
 	routeDecisionEventQueue.queue = make(chan RouteDecision, size)
 	go func() {
 		for decision := range routeDecisionEventQueue.queue {
+			recentRouteDecisions.Lock()
+			if len(recentRouteDecisions.items) >= recentRouteDecisionLimit {
+				copy(recentRouteDecisions.items, recentRouteDecisions.items[1:])
+				recentRouteDecisions.items[len(recentRouteDecisions.items)-1] = decision
+			} else {
+				recentRouteDecisions.items = append(recentRouteDecisions.items, decision)
+			}
+			recentRouteDecisions.Unlock()
 			data, err := common.Marshal(decision)
 			if err != nil {
 				continue
@@ -47,4 +62,22 @@ func EnqueueRouteDecision(decision RouteDecision) {
 
 func RouteDecisionEventsDropped() uint64 {
 	return routeDecisionEventsDropped.Load()
+}
+
+func RecentRouteDecisions(limit int) []RouteDecision {
+	if limit <= 0 || limit > recentRouteDecisionLimit {
+		limit = recentRouteDecisionLimit
+	}
+	recentRouteDecisions.RLock()
+	defer recentRouteDecisions.RUnlock()
+	if limit > len(recentRouteDecisions.items) {
+		limit = len(recentRouteDecisions.items)
+	}
+	start := len(recentRouteDecisions.items) - limit
+	result := make([]RouteDecision, limit)
+	copy(result, recentRouteDecisions.items[start:])
+	for left, right := 0, len(result)-1; left < right; left, right = left+1, right-1 {
+		result[left], result[right] = result[right], result[left]
+	}
+	return result
 }

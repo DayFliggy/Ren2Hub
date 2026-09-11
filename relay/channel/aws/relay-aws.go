@@ -234,11 +234,13 @@ func awsHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types
 	ctx, cancel := newAwsInvokeContext(requestContext)
 	defer cancel()
 
+	input := a.AwsReq.(*bedrockruntime.InvokeModelInput)
+	info.UpdateEstimateOutputCeilingFromJSON(input.Body)
 	finish, beginErr := channel.BeginUpstreamCall(c, info)
 	if beginErr != nil {
 		return types.NewError(beginErr, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry()), nil
 	}
-	awsResp, err := a.AwsClient.InvokeModel(ctx, a.AwsReq.(*bedrockruntime.InvokeModelInput))
+	awsResp, err := a.AwsClient.InvokeModel(ctx, input)
 	finish(nil, err)
 	if err != nil {
 		return newAwsInvokeError(requestContext, err, "InvokeModel"), nil
@@ -269,11 +271,13 @@ func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (
 	ctx, cancel := newAwsInvokeContext(requestContext)
 	defer cancel()
 
+	input := a.AwsReq.(*bedrockruntime.InvokeModelWithResponseStreamInput)
+	info.UpdateEstimateOutputCeilingFromJSON(input.Body)
 	finish, beginErr := channel.BeginUpstreamCall(c, info)
 	if beginErr != nil {
 		return types.NewError(beginErr, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry()), nil
 	}
-	awsResp, err := a.AwsClient.InvokeModelWithResponseStream(ctx, a.AwsReq.(*bedrockruntime.InvokeModelWithResponseStreamInput))
+	awsResp, err := a.AwsClient.InvokeModelWithResponseStream(ctx, input)
 	finish(nil, err)
 	if err != nil {
 		return newAwsInvokeError(requestContext, err, "InvokeModelWithResponseStream"), nil
@@ -321,7 +325,12 @@ streamLoop:
 	}
 
 	_ = stream.Close()
-	claude.HandleStreamFinalResponse(c, info, claudeInfo)
+	if err := claude.HandleStreamFinalResponse(c, info, claudeInfo); err != nil {
+		if requestContext.Err() != nil {
+			return nil, claudeInfo.Usage
+		}
+		return types.NewError(err, types.ErrorCodeBadResponse), nil
+	}
 	return nil, claudeInfo.Usage
 }
 
@@ -332,11 +341,13 @@ func handleNovaRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) 
 	ctx, cancel := newAwsInvokeContext(requestContext)
 	defer cancel()
 
+	input := a.AwsReq.(*bedrockruntime.InvokeModelInput)
+	info.UpdateEstimateOutputCeilingFromJSON(input.Body)
 	finish, beginErr := channel.BeginUpstreamCall(c, info)
 	if beginErr != nil {
 		return types.NewError(beginErr, types.ErrorCodeDoRequestFailed, types.ErrOptionWithSkipRetry()), nil
 	}
-	awsResp, err := a.AwsClient.InvokeModel(ctx, a.AwsReq.(*bedrockruntime.InvokeModelInput))
+	awsResp, err := a.AwsClient.InvokeModel(ctx, input)
 	finish(nil, err)
 	if err != nil {
 		return newAwsInvokeError(requestContext, err, "InvokeModel"), nil

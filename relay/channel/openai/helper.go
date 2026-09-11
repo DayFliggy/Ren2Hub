@@ -52,7 +52,9 @@ func handleClaudeFormat(c *gin.Context, data string, info *relaycommon.RelayInfo
 		return fmt.Errorf("expected Claude stream responses, got %T", result.Value)
 	}
 	for _, resp := range claudeResponses {
-		helper.ClaudeData(c, *resp)
+		if err := helper.ClaudeData(c, *resp); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -85,9 +87,7 @@ func handleGeminiFormat(c *gin.Context, data string, info *relaycommon.RelayInfo
 	}
 
 	// send gemini format response
-	c.Render(-1, common.CustomEvent{Data: "data: " + string(geminiResponseStr)})
-	_ = helper.FlushWriter(c)
-	return nil
+	return helper.StringData(c, string(geminiResponseStr))
 }
 
 func ProcessStreamResponse(streamResponse dto.ChatCompletionsStreamResponse, responseTextBuilder *strings.Builder, toolCount *int) error {
@@ -161,46 +161,47 @@ func handleLastResponse(lastStreamData string, responseId *string, createAt *int
 
 func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStreamData string,
 	responseId string, createAt int64, model string, systemFingerprint string,
-	usage *dto.Usage, containStreamUsage bool) {
+	usage *dto.Usage, containStreamUsage bool) error {
 
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:
 		if info.ShouldIncludeUsage && !containStreamUsage {
 			response := helper.GenerateFinalUsageResponse(responseId, createAt, model, *usage)
 			response.SetSystemFingerprint(systemFingerprint)
-			helper.ObjectData(c, response)
+			if err := helper.ObjectData(c, response); err != nil {
+				return err
+			}
 		}
-		helper.Done(c)
+		return helper.Done(c)
 
 	case types.RelayFormatClaude:
 		var streamResponse dto.ChatCompletionsStreamResponse
 		if err := common.Unmarshal(common.StringToByteSlice(lastStreamData), &streamResponse); err != nil {
-			common.SysLog("error unmarshalling stream response: " + err.Error())
-			return
+			return fmt.Errorf("unmarshal final Claude stream response: %w", err)
 		}
 
 		info.ClaudeConvertInfo.Usage = usage
 
 		result, err := relayconvert.ConvertStreamResponse(c, info, types.RelayFormatClaude, &streamResponse)
 		if err != nil {
-			common.SysLog("error converting Claude stream response: " + err.Error())
-			return
+			return fmt.Errorf("convert final Claude stream response: %w", err)
 		}
 		claudeResponses, ok := result.Value.([]*dto.ClaudeResponse)
 		if !ok {
-			common.SysLog(fmt.Sprintf("expected Claude stream responses, got %T", result.Value))
-			return
+			return fmt.Errorf("expected Claude stream responses, got %T", result.Value)
 		}
 		for _, resp := range claudeResponses {
-			_ = helper.ClaudeData(c, *resp)
+			if err := helper.ClaudeData(c, *resp); err != nil {
+				return err
+			}
 		}
 		info.ClaudeConvertInfo.Done = true
+		return nil
 
 	case types.RelayFormatGemini:
 		var streamResponse dto.ChatCompletionsStreamResponse
 		if err := common.Unmarshal(common.StringToByteSlice(lastStreamData), &streamResponse); err != nil {
-			common.SysLog("error unmarshalling stream response: " + err.Error())
-			return
+			return fmt.Errorf("unmarshal final Gemini stream response: %w", err)
 		}
 
 		// 这里处理的是 openai 最后一个流响应，其 delta 为空，有 finish_reason 字段
@@ -210,35 +211,32 @@ func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStream
 
 		result, err := relayconvert.ConvertStreamResponse(c, info, types.RelayFormatGemini, &streamResponse)
 		if err != nil {
-			common.SysLog("error converting Gemini stream response: " + err.Error())
-			return
+			return fmt.Errorf("convert final Gemini stream response: %w", err)
 		}
 		geminiResponse, ok := result.Value.(*dto.GeminiChatResponse)
 		if !ok {
-			common.SysLog(fmt.Sprintf("expected Gemini stream response, got %T", result.Value))
-			return
+			return fmt.Errorf("expected Gemini stream response, got %T", result.Value)
 		}
 
 		// openai 流响应开头的空数据
 		if geminiResponse == nil {
-			return
+			return nil
 		}
 
 		geminiResponseStr, err := common.Marshal(geminiResponse)
 		if err != nil {
-			common.SysLog("error marshalling gemini response: " + err.Error())
-			return
+			return fmt.Errorf("marshal final Gemini stream response: %w", err)
 		}
 
 		// 发送最终的 Gemini 响应
-		c.Render(-1, common.CustomEvent{Data: "data: " + string(geminiResponseStr)})
-		_ = helper.FlushWriter(c)
+		return helper.StringData(c, string(geminiResponseStr))
 	}
+	return nil
 }
 
-func sendResponsesStreamData(c *gin.Context, streamResponse dto.ResponsesStreamResponse, data string) {
+func sendResponsesStreamData(c *gin.Context, streamResponse dto.ResponsesStreamResponse, data string) error {
 	if data == "" {
-		return
+		return nil
 	}
-	_ = helper.ResponseChunkData(c, streamResponse, data)
+	return helper.ResponseChunkData(c, streamResponse, data)
 }

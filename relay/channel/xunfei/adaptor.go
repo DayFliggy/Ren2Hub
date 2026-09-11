@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -73,7 +74,20 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error) {
-	// xunfei's request is not http request, so we don't need to do anything here
+	if requestBody == nil {
+		return nil, errors.New("request body is nil")
+	}
+	data, err := io.ReadAll(requestBody)
+	if err != nil {
+		return nil, err
+	}
+	var request dto.GeneralOpenAIRequest
+	if err := common.Unmarshal(data, &request); err != nil {
+		return nil, err
+	}
+	a.request = &request
+	// Xunfei sends over its own websocket in DoResponse; retain a dummy HTTP
+	// response so the shared handler reaches that transport.
 	dummyResp := &http.Response{}
 	dummyResp.StatusCode = http.StatusOK
 	return dummyResp, nil

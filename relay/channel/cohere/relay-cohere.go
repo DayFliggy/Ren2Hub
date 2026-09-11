@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -229,6 +230,7 @@ func cohereRerankHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	}
 	usage := dto.Usage{}
 	if cohereResp.Meta.BilledUnits.InputTokens == 0 {
+		common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
 		usage.PromptTokens = info.GetEstimatePromptTokens()
 		usage.CompletionTokens = 0
 		usage.TotalTokens = info.GetEstimatePromptTokens()

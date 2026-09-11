@@ -214,6 +214,7 @@ func xunfeiMakeRequest(c *gin.Context, info *relaycommon.RelayInfo, textRequest 
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	info.UpdateEstimateOutputCeilingFromJSON(data)
 	parsedURL, err := url.Parse(authUrl)
 	if err != nil || parsedURL.Host == "" || (parsedURL.Scheme != "ws" && parsedURL.Scheme != "wss") {
 		return nil, nil, nil, fmt.Errorf("invalid Xunfei upstream websocket URL")

@@ -451,6 +451,8 @@ type nextAdminChannelDTO struct {
 	Status        int                   `json:"status"`
 	Priority      int64                 `json:"priority"`
 	Weight        uint                  `json:"weight"`
+	ChannelRPM    int                   `json:"channel_rpm"`
+	ChannelTPM    int                   `json:"channel_tpm"`
 	UsedQuota     int64                 `json:"used_quota"`
 	ChannelRatio  float64               `json:"channel_ratio"`
 	Balance       float64               `json:"balance"`
@@ -513,6 +515,7 @@ func buildNextAdminChannelDTO(channel *model.Channel) nextAdminChannelDTO {
 	return nextAdminChannelDTO{
 		ID: channel.Id, Name: channel.Name, Type: channel.Type, Supplier: constant.GetChannelTypeName(channel.Type),
 		Status: channel.Status, Priority: priority, Weight: weight,
+		ChannelRPM: channel.ChannelRPM, ChannelTPM: channel.ChannelTPM,
 		UsedQuota: channel.UsedQuota, ChannelRatio: channelRatio, Balance: channel.Balance,
 		UpstreamRatio: upstreamRatio, CapacityTotal: capacityTotal, CapacityUsed: channel.CapacityUsed,
 		ResponseTime: channel.ResponseTime, TestTime: channel.TestTime,

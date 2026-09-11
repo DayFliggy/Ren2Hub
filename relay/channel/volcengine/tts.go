@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -143,6 +145,7 @@ func getContentTypeByEncoding(encoding string) string {
 }
 
 func handleTTSResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, encoding string) (usage any, err *types.NewAPIError) {
+	common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
 		return nil, types.NewErrorWithStatusCode(
@@ -197,6 +200,7 @@ func generateRequestID() string {
 }
 
 func handleTTSWebSocketResponse(c *gin.Context, requestURL string, volcRequest VolcengineTTSRequest, info *relaycommon.RelayInfo, encoding string) (usage any, err *types.NewAPIError) {
+	common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
 	_, token, parseErr := parseVolcengineAuth(info.ApiKey)
 	if parseErr != nil {
 		return nil, types.NewErrorWithStatusCode(

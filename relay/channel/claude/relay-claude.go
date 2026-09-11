@@ -116,7 +116,9 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 			}
 		}
 		countClaudeStreamBillableTools(c, info, &claudeResponse)
-		helper.ClaudeChunkData(c, claudeResponse, data)
+		if err := helper.ClaudeChunkData(c, claudeResponse, data); err != nil {
+			return types.NewError(err, types.ErrorCodeBadResponse)
+		}
 	} else if info.RelayFormat == types.RelayFormatOpenAI {
 		response := StreamResponseClaude2OpenAI(&claudeResponse)
 
@@ -128,7 +130,7 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 
 		err = helper.ObjectData(c, response)
 		if err != nil {
-			logger.LogError(c, "send_stream_response_failed: "+err.Error())
+			return types.NewError(err, types.ErrorCodeBadResponse)
 		}
 	}
 	return nil
@@ -151,7 +153,7 @@ func countClaudeStreamBillableTools(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 }
 
-func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, claudeInfo *ClaudeResponseInfo) {
+func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, claudeInfo *ClaudeResponseInfo) error {
 	if claudeInfo.Usage.PromptTokens == 0 {
 		//上游出错
 	}
@@ -185,11 +187,12 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 			response := helper.GenerateFinalUsageResponse(claudeInfo.ResponseId, claudeInfo.Created, info.UpstreamModelName, openAIUsage)
 			err := helper.ObjectData(c, response)
 			if err != nil {
-				common.SysLog("send final response failed: " + err.Error())
+				return err
 			}
 		}
-		helper.Done(c)
+		return helper.Done(c)
 	}
+	return nil
 }
 
 func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {
@@ -214,7 +217,9 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 		return nil, types.NewOpenAIError(fmt.Errorf("upstream stream processing failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
 	}
 
-	HandleStreamFinalResponse(c, info, claudeInfo)
+	if err := HandleStreamFinalResponse(c, info, claudeInfo); err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
 	return claudeInfo.Usage, nil
 }
 

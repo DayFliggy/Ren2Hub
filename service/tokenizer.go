@@ -10,6 +10,7 @@ import (
 
 // tokenEncoderMap won't grow after initialization
 var defaultTokenEncoder tokenizer.Codec
+var defaultTokenEncoderOnce sync.Once
 
 // tokenEncoderMap is used to store token encoders for different models
 var tokenEncoderMap = make(map[string]tokenizer.Codec)
@@ -18,12 +19,15 @@ var tokenEncoderMap = make(map[string]tokenizer.Codec)
 var tokenEncoderMutex sync.RWMutex
 
 func InitTokenEncoders() {
-	common.SysLog("initializing token encoders")
-	defaultTokenEncoder = codec.NewCl100kBase()
-	common.SysLog("token encoders initialized")
+	defaultTokenEncoderOnce.Do(func() {
+		common.SysLog("initializing token encoders")
+		defaultTokenEncoder = codec.NewCl100kBase()
+		common.SysLog("token encoders initialized")
+	})
 }
 
 func getTokenEncoder(model string) tokenizer.Codec {
+	InitTokenEncoders()
 	// First, try to get the encoder from cache with read lock
 	tokenEncoderMutex.RLock()
 	if encoder, exists := tokenEncoderMap[model]; exists {

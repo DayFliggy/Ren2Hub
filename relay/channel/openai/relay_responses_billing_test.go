@@ -109,6 +109,35 @@ func TestOaiResponsesHandlerDeclaredToolsWithoutOutputCountZero(t *testing.T) {
 	assert.Equal(t, 0, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolFileSearch].CallCount)
 }
 
+func TestOaiResponsesStreamHandlerMarksSynthesizedUsageAsLocal(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\ndata: {\"type\":\"response.done\",\"response\":{\"status\":\"completed\"}}\n\ndata: [DONE]\n\n"
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5", ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5"}}
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	usage, apiErr := OaiResponsesStreamHandler(c, info, resp)
+	require.Nil(t, apiErr)
+	require.NotNil(t, usage)
+	assert.True(t, common.GetContextKeyBool(c, constant.ContextKeyLocalCountTokens))
+}
+
+func TestOaiResponsesStreamHandlerMarksPromptOnlyUsageAsLocal(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\ndata: {\"type\":\"response.done\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":12}}}\n\ndata: [DONE]\n\n"
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{OriginModelName: "gpt-5", ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5"}}
+	resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": []string{"text/event-stream"}}}
+
+	_, apiErr := OaiResponsesStreamHandler(c, info, resp)
+	require.Nil(t, apiErr)
+	assert.True(t, common.GetContextKeyBool(c, constant.ContextKeyLocalCountTokens))
+}
+
 func TestOaiResponsesHandlerCountsCompletedImageGenerationOutputs(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

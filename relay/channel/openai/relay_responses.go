@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -91,10 +92,13 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		var streamResponse dto.ResponsesStreamResponse
 		if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
 			logger.LogError(c, "failed to unmarshal stream response: "+err.Error())
-			sr.Error(err)
+			sr.Stop(err)
 			return
 		}
-		sendResponsesStreamData(c, streamResponse, data)
+		if err := sendResponsesStreamData(c, streamResponse, data); err != nil {
+			sr.Stop(err)
+			return
+		}
 		switch streamResponse.Type {
 		case "response.completed", "response.done":
 			if streamResponse.Response != nil {
@@ -157,6 +161,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			}
 		}
 	})
+	if info.StreamStatus != nil && info.StreamStatus.HasErrors() {
+		return nil, types.NewOpenAIError(fmt.Errorf("upstream stream processing failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
 
 	if usage.CompletionTokens == 0 {
 		// 计算输出文本的 token 数量
@@ -165,11 +172,19 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			// 非正常结束，使用输出文本的 token 数量
 			completionTokens := service.CountTextToken(tempStr, info.UpstreamModelName)
 			usage.CompletionTokens = completionTokens
+			common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
 		}
 	}
 
 	if usage.PromptTokens == 0 && usage.CompletionTokens != 0 {
 		usage.PromptTokens = info.GetEstimatePromptTokens()
+		common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
+	}
+	if usage.PromptTokens != 0 && usage.CompletionTokens == 0 && usage.TotalTokens == 0 {
+		// A prompt-only Responses usage record is incomplete for a generation
+		// attempt. Keep the TPM reservation until a complete upstream usage is
+		// available rather than treating the prompt count as the whole request.
+		common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
 	}
 
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens

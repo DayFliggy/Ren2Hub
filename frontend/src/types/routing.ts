@@ -63,6 +63,8 @@ export interface EligibleRouteChannel {
   request_models: string[]
   priority: number
   weight: number
+  channel_rpm: number
+  channel_tpm: number
   snapshot_version: number
   catalog_version: string
   capability_state: RouteCapabilityState
@@ -86,6 +88,96 @@ export interface RouteCatalog {
   catalog_version: string
   catalog_versions: string[]
   items: RouteCatalogItem[]
+}
+
+export interface RouteLeaseMetrics {
+  route_lease_acquire_failure_total: number
+  route_lease_renew_failure_total: number
+  route_lease_release_failure_total: number
+}
+
+export type RouteDiagnosticWarningCode =
+  | 'route_lease_failures'
+  | 'route_decision_events_dropped'
+  | 'capability_refresh_lagging'
+  | 'route_score_metrics_unavailable'
+
+export interface RouteDiagnosticLimits {
+  candidate_top_k: number
+  candidate_probe_limit: number
+  total_send_attempts: number
+  max_precommit_events: number
+  max_precommit_bytes: number
+}
+
+export interface RouteScoreBreakdown {
+  priority_layer: number
+  weight_score: number
+  error_score: number
+  error_known: boolean
+  latency_score: number
+  latency_known: boolean
+  ttft_score: number
+  ttft_known: boolean
+  rate_limit_score: number
+  rate_limit_known: boolean
+  quota_score: number
+  quota_known: boolean
+  circuit_breaker_score: number
+  sticky_score: number
+  total: number
+}
+
+export interface RouteDecisionCandidate {
+  channel_id: number
+  request_model?: string
+  actual_model?: string
+  filter_reason?: string
+  priority: number
+  position: number
+  weight: number
+  snapshot_version?: number
+  health_epoch?: number
+  catalog_version?: string
+  lease_state?: string
+  score_breakdown?: RouteScoreBreakdown
+}
+
+export interface RouteDecision {
+  event: 'route_decision'
+  request_id: string
+  route_source: 'unavailable' | RouteMode
+  configuration_version?: number
+  request_model: string
+  actual_model?: string
+  lab_slug?: string
+  catalog_version?: string
+  snapshot_version?: number
+  scoring_mode?: 'off' | 'live'
+  dynamic_score_applied: boolean
+  score_metrics_unavailable?: boolean
+  static_preferred_channel_id?: number
+  scored_preferred_channel_id?: number
+  candidates: RouteDecisionCandidate[]
+  selected_channel_id?: number
+  retry_attempt: number
+  same_resource_retry_attempt: number
+  failover_attempt: number
+  lease_state?: string
+  final_error?: string
+  generated_at: number
+}
+
+export interface RoutingDiagnostics {
+  lease_metrics: RouteLeaseMetrics
+  decision_events_dropped: number
+  capability_refresh_lag_seconds: number
+  score_metrics_available: boolean
+  degraded: boolean
+  warnings: RouteDiagnosticWarningCode[]
+  limits: RouteDiagnosticLimits
+  recent_decisions: RouteDecision[]
+  generated_at: number
 }
 
 export interface RoutePreviewEntry {

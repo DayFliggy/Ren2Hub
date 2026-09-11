@@ -3,6 +3,7 @@ package helper
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -53,6 +55,25 @@ func buildSSEBody(n int) string {
 	}
 	b.WriteString("data: [DONE]\n")
 	return b.String()
+}
+
+type failingStreamResponseWriter struct {
+	gin.ResponseWriter
+	err error
+}
+
+func (w *failingStreamResponseWriter) Write(_ []byte) (int, error) {
+	return 0, w.err
+}
+
+type closeTrackingReader struct {
+	io.Reader
+	closed atomic.Bool
+}
+
+func (r *closeTrackingReader) Close() error {
+	r.closed.Store(true)
+	return nil
 }
 
 // ---------- Basic correctness ----------
@@ -401,7 +422,7 @@ func TestStreamScannerHandler_StreamStatus_EOFWithoutDone(t *testing.T) {
 
 	var b strings.Builder
 	for i := 0; i < 5; i++ {
-		fmt.Fprintf(&b, "data: {\"id\":%d}\n", i)
+		fmt.Fprintf(&b, "data: {\"id\":%d,\"choices\":[{\"delta\":{\"content\":\"token_%d\"}}]}\n", i, i)
 	}
 	c, resp, info := setupStreamTest(t, strings.NewReader(b.String()))
 
@@ -570,4 +591,497 @@ func TestStreamScannerHandler_StreamStatus_ReplacesPreInitialized(t *testing.T) 
 
 	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
 	assert.Equal(t, 0, info.StreamStatus.TotalErrorCount())
+}
+
+func TestIsMeaningfulStreamPayload(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		data string
+		want bool
+	}{
+		{name: "response metadata", data: `{"type":"response.created","response":{"id":"resp_1","model":"gpt-5"}}`, want: false},
+		{name: "metadata text does not commit", data: `{"type":"response.created","metadata":{"text":"tag","url":"https://example.com"}}`, want: false},
+		{name: "assistant role", data: `{"choices":[{"delta":{"role":"assistant"}}]}`, want: false},
+		{name: "text delta", data: `{"choices":[{"delta":{"content":"hello"}}]}`, want: true},
+		{name: "tool call", data: `{"choices":[{"delta":{"tool_calls":[{"id":"call_1","type":"function"}]}}]}`, want: true},
+		{name: "finish reason", data: `{"choices":[{"delta":{},"finish_reason":"stop"}]}`, want: false},
+		{name: "responses completed", data: `{"type":"response.completed","response":{"status":"completed"}}`, want: false},
+		{name: "claude message stop", data: `{"type":"message_stop"}`, want: false},
+		{name: "partial image", data: `{"type":"image_generation.partial_image","partial_image_b64":"image-bytes"}`, want: true},
+		{name: "dify message end", data: `{"event":"message_end","conversation_id":"conv_1"}`, want: false},
+		{name: "plain payload", data: "hello", want: true},
+		{name: "invalid json", data: "{", want: false},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, test.want, isMeaningfulStreamPayload(test.data))
+		})
+	}
+}
+
+func TestStreamScannerHandler_MetadataFailureDoesNotCommit(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	SetEventStreamHeaders(c)
+	resp := &http.Response{Body: io.NopCloser(strings.NewReader(
+		"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n" +
+			"data: invalid-json\n",
+	))}
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+	stagedReportedWritten := false
+
+	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+		require.NoError(t, StringData(c, data))
+		stagedReportedWritten = c.Writer.Written()
+		if data == "invalid-json" {
+			sr.Stop(errors.New("invalid upstream event"))
+		}
+	})
+
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
+	assert.False(t, info.HasValidOutput())
+	assert.False(t, stagedReportedWritten)
+	assert.False(t, c.Writer.Written())
+	assert.Empty(t, recorder.Header())
+	assert.Empty(t, recorder.Body.String())
+
+	c.JSON(http.StatusBadGateway, gin.H{"error": "upstream failed"})
+	assert.Equal(t, "application/json; charset=utf-8", recorder.Header().Get("Content-Type"))
+	assert.JSONEq(t, `{"error":"upstream failed"}`, recorder.Body.String())
+}
+
+func TestStreamScannerHandler_BlocksTrailingDoneAfterFailure(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: io.NopCloser(strings.NewReader("data: invalid-json\n"))}, info, func(data string, sr *StreamResult) {
+		require.NoError(t, StringData(c, data))
+		sr.Stop(errors.New("invalid upstream event"))
+	})
+	Done(c)
+
+	assert.False(t, info.HasValidOutput())
+	assert.Empty(t, recorder.Body.String())
+	assert.False(t, c.Writer.Written())
+}
+
+func TestStreamScannerHandler_BlocksAllTrailingSSEWritesAfterFailure(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: io.NopCloser(strings.NewReader("data: invalid-json\n"))}, info, func(data string, sr *StreamResult) {
+		sr.Stop(errors.New("invalid upstream event"))
+	})
+
+	assert.Error(t, ClaudeData(c, dto.ClaudeResponse{Type: "message_stop"}))
+	ClaudeChunkData(c, dto.ClaudeResponse{Type: "message_stop"}, `{"type":"message_stop"}`)
+	assert.Error(t, ResponseChunkData(c, dto.ResponsesStreamResponse{Type: "response.completed"}, `{"type":"response.completed"}`))
+	assert.Error(t, PingData(c))
+	assert.Empty(t, recorder.Body.String())
+	assert.False(t, c.Writer.Written())
+}
+
+func TestResetStreamAttemptStateAllowsFreshStreamWrites(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: io.NopCloser(strings.NewReader("data: invalid-json\n"))}, info, func(data string, sr *StreamResult) {
+		sr.Stop(errors.New("invalid upstream event"))
+	})
+	require.Error(t, StringData(c, `{"choices":[{"delta":{"content":"blocked"}}]}`))
+
+	ResetStreamAttemptState(c)
+	require.NoError(t, StringData(c, `{"choices":[{"delta":{"content":"retry"}}]}`))
+	assert.Contains(t, recorder.Body.String(), "retry")
+	assert.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
+}
+
+func TestStreamScannerHandler_WriteFailureStopsAndClosesUpstream(t *testing.T) {
+	writeErr := errors.New("client write failed")
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Writer = &failingStreamResponseWriter{ResponseWriter: c.Writer, err: writeErr}
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	body := &closeTrackingReader{Reader: strings.NewReader("data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\ndata: {\"choices\":[{\"delta\":{\"content\":\"later\"}}]}\n")}
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: body}, info, func(data string, sr *StreamResult) {
+		if err := StringData(c, data); err != nil {
+			sr.Stop(err)
+		}
+	})
+
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+	require.Error(t, info.StreamStatus.EndError)
+	assert.ErrorIs(t, info.StreamStatus.EndError, writeErr)
+	assert.True(t, body.closed.Load())
+	assert.Empty(t, recorder.Body.String())
+}
+
+func TestStreamScannerHandler_DoneWithoutContentIsFailure(t *testing.T) {
+	c, resp, info := setupStreamTest(t, strings.NewReader("data: {\"event\":\"message_end\"}\n"))
+
+	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+		sr.Done()
+	})
+
+	require.NotNil(t, info.StreamStatus)
+	assert.True(t, info.StreamStatus.HasErrors())
+	assert.False(t, info.HasValidOutput())
+}
+
+func TestStreamScannerHandler_TerminalMetadataDoesNotCommit(t *testing.T) {
+	tests := []string{
+		`{"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		`{"type":"response.completed","response":{"status":"completed"}}`,
+		`{"type":"message_stop"}`,
+	}
+	for _, terminal := range tests {
+		terminal := terminal
+		t.Run(terminal, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+			resp := &http.Response{Body: io.NopCloser(strings.NewReader("data: " + terminal + "\ndata: [DONE]\n"))}
+			info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+			StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+				require.NoError(t, StringData(c, data))
+			})
+
+			assert.False(t, info.HasValidOutput())
+			assert.True(t, info.StreamStatus.HasErrors())
+			assert.False(t, c.Writer.Written())
+			assert.Empty(t, recorder.Body.String())
+		})
+	}
+}
+
+func TestStreamScannerHandler_ContentCommitsBufferedMetadata(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	resp := &http.Response{Body: io.NopCloser(strings.NewReader(
+		"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n" +
+			"data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n" +
+			"data: [DONE]\n",
+	))}
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+		require.NoError(t, StringData(c, data))
+	})
+
+	body := recorder.Body.String()
+	assert.Contains(t, body, "response.created")
+	assert.Contains(t, body, "hello")
+	assert.True(t, info.HasValidOutput())
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+}
+
+func TestStreamScannerHandler_DoesNotPingBeforeContent(t *testing.T) {
+	setting := operation_setting.GetGeneralSetting()
+	oldEnabled := setting.PingIntervalEnabled
+	oldSeconds := setting.PingIntervalSeconds
+	setting.PingIntervalEnabled = true
+	setting.PingIntervalSeconds = 1
+	t.Cleanup(func() {
+		setting.PingIntervalEnabled = oldEnabled
+		setting.PingIntervalSeconds = oldSeconds
+	})
+
+	oldPolicyProvider := streamTimeoutPolicyProvider
+	streamTimeoutPolicyProvider = func() streamTimeoutPolicy {
+		return streamTimeoutPolicy{
+			FirstEvent:   3 * time.Second,
+			FirstContent: 2 * time.Second,
+			Idle:         3 * time.Second,
+			Total:        3 * time.Second,
+		}
+	}
+	t.Cleanup(func() { streamTimeoutPolicyProvider = oldPolicyProvider })
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+	go func() {
+		_, _ = fmt.Fprint(pw, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n")
+		time.Sleep(1200 * time.Millisecond)
+		_, _ = fmt.Fprint(pw, "data: invalid-json\n")
+	}()
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: pr}, info, func(data string, sr *StreamResult) {
+		require.NoError(t, StringData(c, data))
+		if data == "invalid-json" {
+			sr.Stop(errors.New("invalid upstream event"))
+		}
+	})
+
+	assert.Empty(t, recorder.Body.String())
+	assert.False(t, info.HasValidOutput())
+}
+
+func TestStreamScannerHandler_PrecommitEventLimitFailsWithoutMetadataLeak(t *testing.T) {
+	var body strings.Builder
+	for i := 0; i <= maxPrecommitEvents; i++ {
+		fmt.Fprintf(&body, "data: {\"type\":\"response.created\",\"sequence_number\":%d}\n", i)
+	}
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: io.NopCloser(strings.NewReader(body.String()))}, info, func(data string, sr *StreamResult) {
+		require.NoError(t, StringData(c, data))
+	})
+
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
+	assert.ErrorIs(t, info.StreamStatus.EndError, errPrecommitBufferExceeded)
+	assert.True(t, info.HasValidOutput(), "terminal overflow response must lock out failover")
+	assert.Equal(t, http.StatusBadGateway, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "stream_buffer_overflow")
+	assert.NotContains(t, recorder.Body.String(), "response.created")
+}
+
+func TestStreamScannerHandler_AllowsExactlyPrecommitEventLimit(t *testing.T) {
+	var body strings.Builder
+	for i := 0; i < maxPrecommitEvents; i++ {
+		fmt.Fprintf(&body, "data: {\"type\":\"response.created\",\"sequence_number\":%d}\n", i)
+	}
+	body.WriteString("data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n")
+	body.WriteString("data: [DONE]\n")
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: io.NopCloser(strings.NewReader(body.String()))}, info, func(data string, sr *StreamResult) {
+		require.NoError(t, StringData(c, data))
+	})
+
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+	assert.False(t, info.StreamStatus.HasErrors())
+	assert.True(t, info.HasValidOutput())
+	assert.Contains(t, recorder.Body.String(), "hello")
+}
+
+func TestStreamScannerHandler_PrecommitByteLimitFails(t *testing.T) {
+	payload := strings.Repeat("x", maxPrecommitBytes)
+	body := "data: {\"type\":\"response.created\",\"id\":\"" + payload + "\"}\n"
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: io.NopCloser(strings.NewReader(body))}, info, func(data string, sr *StreamResult) {})
+
+	require.NotNil(t, info.StreamStatus)
+	assert.ErrorIs(t, info.StreamStatus.EndError, errPrecommitBufferExceeded)
+	assert.True(t, info.HasValidOutput())
+	assert.Contains(t, recorder.Body.String(), "stream_buffer_overflow")
+}
+
+func TestStreamScannerHandler_FirstContentTimeoutDiscardsMetadata(t *testing.T) {
+	oldPolicyProvider := streamTimeoutPolicyProvider
+	streamTimeoutPolicyProvider = func() streamTimeoutPolicy {
+		return streamTimeoutPolicy{
+			FirstEvent:   time.Second,
+			FirstContent: 50 * time.Millisecond,
+			Idle:         time.Second,
+			Total:        time.Second,
+		}
+	}
+	t.Cleanup(func() { streamTimeoutPolicyProvider = oldPolicyProvider })
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+	go func() {
+		_, _ = fmt.Fprint(pw, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n")
+	}()
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: pr}, info, func(data string, sr *StreamResult) {
+		require.NoError(t, StringData(c, data))
+	})
+
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonTimeout, info.StreamStatus.EndReason)
+	require.Error(t, info.StreamStatus.EndError)
+	assert.Contains(t, info.StreamStatus.EndError.Error(), "first_content")
+	assert.False(t, info.HasValidOutput())
+	assert.Empty(t, recorder.Body.String())
+}
+
+func TestStreamScannerHandler_FirstContentTimeoutStartsAfterFirstEvent(t *testing.T) {
+	oldPolicyProvider := streamTimeoutPolicyProvider
+	streamTimeoutPolicyProvider = func() streamTimeoutPolicy {
+		return streamTimeoutPolicy{
+			FirstEvent:   150 * time.Millisecond,
+			FirstContent: 100 * time.Millisecond,
+			Idle:         500 * time.Millisecond,
+			Total:        time.Second,
+		}
+	}
+	t.Cleanup(func() { streamTimeoutPolicyProvider = oldPolicyProvider })
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+	go func() {
+		time.Sleep(120 * time.Millisecond)
+		_, _ = fmt.Fprint(pw, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n")
+		time.Sleep(70 * time.Millisecond)
+		_, _ = fmt.Fprint(pw, "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\ndata: [DONE]\n")
+	}()
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: pr}, info, func(data string, sr *StreamResult) {
+		require.NoError(t, StringData(c, data))
+	})
+
+	assert.True(t, info.HasValidOutput())
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+	assert.Contains(t, recorder.Body.String(), "hello")
+}
+
+func TestStreamScannerHandler_FirstEventTimeout(t *testing.T) {
+	oldPolicyProvider := streamTimeoutPolicyProvider
+	streamTimeoutPolicyProvider = func() streamTimeoutPolicy {
+		return streamTimeoutPolicy{
+			FirstEvent:   50 * time.Millisecond,
+			FirstContent: time.Second,
+			Idle:         time.Second,
+			Total:        time.Second,
+		}
+	}
+	t.Cleanup(func() { streamTimeoutPolicyProvider = oldPolicyProvider })
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: pr}, info, func(data string, sr *StreamResult) {})
+
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonTimeout, info.StreamStatus.EndReason)
+	require.Error(t, info.StreamStatus.EndError)
+	assert.Contains(t, info.StreamStatus.EndError.Error(), "first_event")
+	assert.False(t, info.HasValidOutput())
+	assert.Empty(t, recorder.Body.String())
+}
+
+func TestStreamScannerHandler_IdleTimeoutAfterCommitKeepsSingleResponse(t *testing.T) {
+	oldPolicyProvider := streamTimeoutPolicyProvider
+	streamTimeoutPolicyProvider = func() streamTimeoutPolicy {
+		return streamTimeoutPolicy{
+			FirstEvent:   time.Second,
+			FirstContent: time.Second,
+			Idle:         50 * time.Millisecond,
+			Total:        time.Second,
+		}
+	}
+	t.Cleanup(func() { streamTimeoutPolicyProvider = oldPolicyProvider })
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+	go func() {
+		_, _ = fmt.Fprint(pw, "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n")
+	}()
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: pr}, info, func(data string, sr *StreamResult) {
+		require.NoError(t, StringData(c, data))
+	})
+
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonTimeout, info.StreamStatus.EndReason)
+	require.Error(t, info.StreamStatus.EndError)
+	assert.Contains(t, info.StreamStatus.EndError.Error(), "idle")
+	assert.True(t, info.HasValidOutput())
+	assert.Equal(t, 1, strings.Count(recorder.Body.String(), "hello"))
+}
+
+func TestStreamScannerHandler_TotalTimeout(t *testing.T) {
+	oldPolicyProvider := streamTimeoutPolicyProvider
+	streamTimeoutPolicyProvider = func() streamTimeoutPolicy {
+		return streamTimeoutPolicy{
+			FirstEvent:   time.Second,
+			FirstContent: time.Second,
+			Idle:         time.Second,
+			Total:        50 * time.Millisecond,
+		}
+	}
+	t.Cleanup(func() { streamTimeoutPolicyProvider = oldPolicyProvider })
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	info := &relaycommon.RelayInfo{DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{}}
+
+	StreamScannerHandler(c, &http.Response{Body: pr}, info, func(data string, sr *StreamResult) {})
+
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonTimeout, info.StreamStatus.EndReason)
+	require.Error(t, info.StreamStatus.EndError)
+	assert.Contains(t, info.StreamStatus.EndError.Error(), "total")
+	assert.False(t, info.HasValidOutput())
+	assert.Empty(t, recorder.Body.String())
 }

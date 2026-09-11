@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   parseEligibleRouteChannel,
+  parseRoutingDiagnostics,
   parseRoutePreview,
   parseRouteProfileView,
 } from '@/api/routingApi'
@@ -69,6 +70,8 @@ describe('routing API contracts', () => {
         request_models: [],
         priority: 10,
         weight: 1,
+        channel_rpm: 0,
+        channel_tpm: 0,
         snapshot_version: 0,
         catalog_version: '',
         capability_state: 'unresolved',
@@ -80,8 +83,155 @@ describe('routing API contracts', () => {
     expect(parsed.capability_state).toBe('unresolved')
     expect(parsed.filter_reason).toBe('snapshot_unavailable')
     expect(() =>
+      parseEligibleRouteChannel({ ...parsed, channel_rpm: '0' }, endpoint)
+    ).toThrow()
+    expect(() =>
       parseEligibleRouteChannel({ ...parsed, capability_state: '' }, endpoint)
     ).toThrow()
+  })
+
+  it('strictly parses routing diagnostics and recent candidate attempts', () => {
+    const parsed = parseRoutingDiagnostics({
+      lease_metrics: {
+        route_lease_acquire_failure_total: 2,
+        route_lease_renew_failure_total: 1,
+        route_lease_release_failure_total: 0,
+      },
+      decision_events_dropped: 3,
+      capability_refresh_lag_seconds: 12,
+      score_metrics_available: true,
+      degraded: true,
+      warnings: ['route_lease_failures'],
+      limits: {
+        candidate_top_k: 10,
+        candidate_probe_limit: 20,
+        total_send_attempts: 4,
+        max_precommit_events: 256,
+        max_precommit_bytes: 1048576,
+      },
+      recent_decisions: [
+        {
+          event: 'route_decision',
+          request_id: 'req-1',
+          route_source: 'manual',
+          configuration_version: 3,
+          request_model: 'gpt-5',
+          actual_model: 'gpt-5-2025',
+          lab_slug: 'openai',
+          catalog_version: 'catalog-2',
+          snapshot_version: 2,
+          scoring_mode: 'live',
+          dynamic_score_applied: true,
+          score_metrics_unavailable: true,
+          static_preferred_channel_id: 101,
+          scored_preferred_channel_id: 101,
+          candidates: [
+            {
+              channel_id: 101,
+              request_model: 'gpt-5',
+              actual_model: 'gpt-5-2025',
+              priority: -10,
+              position: 0,
+              weight: 100,
+              snapshot_version: 2,
+              health_epoch: 4,
+              catalog_version: 'catalog-2',
+              lease_state: 'acquired',
+              score_breakdown: {
+                priority_layer: 10,
+                weight_score: 1,
+                error_score: 0.9,
+                error_known: true,
+                latency_score: 0.8,
+                latency_known: true,
+                ttft_score: 0.7,
+                ttft_known: true,
+                rate_limit_score: 0.6,
+                rate_limit_known: true,
+                quota_score: 0.5,
+                quota_known: true,
+                circuit_breaker_score: 1,
+                sticky_score: 0,
+                total: 5.5,
+              },
+            },
+          ],
+          selected_channel_id: 101,
+          retry_attempt: 1,
+          same_resource_retry_attempt: 0,
+          failover_attempt: 1,
+          lease_state: 'released',
+          generated_at: 1_700_000_000_000,
+        },
+      ],
+      generated_at: 1_700_000_001,
+    })
+
+    expect(parsed.lease_metrics.route_lease_acquire_failure_total).toBe(2)
+    expect(parsed.recent_decisions[0].candidates[0]).toMatchObject({
+      channel_id: 101,
+      priority: -10,
+      lease_state: 'acquired',
+      score_breakdown: { total: 5.5 },
+    })
+    expect(parsed.recent_decisions[0]).toMatchObject({
+      event: 'route_decision',
+      configuration_version: 3,
+      scoring_mode: 'live',
+      dynamic_score_applied: true,
+      score_metrics_unavailable: true,
+    })
+  })
+
+  it('rejects malformed routing diagnostics instead of coercing counters', () => {
+    const response = {
+      lease_metrics: {
+        route_lease_acquire_failure_total: 0,
+        route_lease_renew_failure_total: 0,
+        route_lease_release_failure_total: 0,
+      },
+      decision_events_dropped: 0,
+      capability_refresh_lag_seconds: 0,
+      score_metrics_available: true,
+      degraded: false,
+      warnings: [],
+      limits: {
+        candidate_top_k: 10,
+        candidate_probe_limit: 20,
+        total_send_attempts: 4,
+        max_precommit_events: 256,
+        max_precommit_bytes: 1048576,
+      },
+      recent_decisions: [],
+      generated_at: 1,
+    }
+
+    expect(() =>
+      parseRoutingDiagnostics({ ...response, decision_events_dropped: '0' })
+    ).toThrow('Invalid API response')
+    expect(() =>
+      parseRoutingDiagnostics({ ...response, warnings: ['future_warning'] })
+    ).toThrow('Invalid API response')
+    expect(() =>
+      parseRoutingDiagnostics({
+        ...response,
+        recent_decisions: [
+          {
+            request_id: 'req-invalid',
+            route_source: 'manual',
+            request_model: 'gpt-5',
+            candidates: [
+              { channel_id: 101, priority: 1, position: 0, weight: 1 },
+            ],
+            selected_channel_id: 999,
+            retry_attempt: 0,
+            same_resource_retry_attempt: 0,
+            failover_attempt: 0,
+            generated_at: 1,
+          },
+        ],
+      })
+    ).toThrow('Invalid API response')
   })
   it('parses the backend aggregate group shape without exposing sensitive fields', () => {
     const parsed = parseRouteProfileView(

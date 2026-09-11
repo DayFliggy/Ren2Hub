@@ -83,7 +83,9 @@ func sendStreamData(c *gin.Context, info *relaycommon.RelayInfo, data string, fo
 				response.Choices[j].Delta.Reasoning = nil
 			}
 			info.ThinkingContentInfo.SendLastThinkingContent = true
-			helper.ObjectData(c, response)
+			if err := helper.ObjectData(c, response); err != nil {
+				return err
+			}
 		}
 
 		// Convert reasoning content to regular content if any
@@ -118,6 +120,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var toolCount int
 	var usage = &dto.Usage{}
 	var lastStreamData string
+	var lastStreamDataWritten bool
 	var secondLastStreamData string // 存储倒数第二个stream data，用于音频模型
 	seenStreamToolCalls := make(map[string]struct{})
 	var streamFunctionCallNames []string
@@ -126,10 +129,11 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	isAudioModel := strings.Contains(strings.ToLower(model), "audio")
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
-		if lastStreamData != "" {
+		if lastStreamData != "" && !lastStreamDataWritten {
 			if err := HandleStreamFormat(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
 				common.SysLog("error handling stream format: " + err.Error())
-				sr.Error(err)
+				sr.Stop(err)
+				return
 			}
 		}
 		if len(data) > 0 {
@@ -139,11 +143,18 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			}
 
 			lastStreamData = data
+			lastStreamDataWritten = false
 			collectStreamFunctionCallNames(data, seenStreamToolCalls, &streamFunctionCallNames)
 			if err := processTokenData(info.RelayMode, data, &responseTextBuilder, &toolCount); err != nil {
 				logger.LogError(c, "error processing stream token data: "+err.Error())
-				sr.Error(err)
-			} else {
+				sr.Stop(err)
+			} else if helper.IsMeaningfulStreamPayload(data) {
+				if err := HandleStreamFormat(c, info, data, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
+					common.SysLog("error handling stream format: " + err.Error())
+					sr.Stop(err)
+					return
+				}
+				lastStreamDataWritten = true
 				sr.MarkValidOutput()
 			}
 		}
@@ -184,7 +195,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	}
 
 	if info.RelayFormat == types.RelayFormatOpenAI {
-		if shouldSendLastResp {
+		if shouldSendLastResp && !lastStreamDataWritten {
 			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
 		}
 	}
@@ -200,7 +211,9 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		info.CountBillableToolCall(dto.BuildInCallFunctionCall, name)
 	}
 
-	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
+	if err := HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage); err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
 
 	return usage, nil
 }
@@ -297,6 +310,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 			TotalTokens:      info.GetEstimatePromptTokens() + completionTokens,
 		}
 		usageModified = true
+		common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
 	}
 
 	applyUsagePostProcessing(info, &simpleResponse.Usage, responseBody)

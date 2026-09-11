@@ -7,6 +7,7 @@ export const ADMIN_CHANNEL_OPTIONAL_FIELDS = [
   'priority',
   'weight',
   'capacity',
+  'rateLimits',
   'usage',
   'upstream',
   'response',
@@ -26,10 +27,10 @@ export const ADMIN_CHANNEL_DEFAULT_VISIBLE_FIELDS: AdminChannelOptionalField[] =
       field !== 'rowUpstreamAction'
   )
 
-// v2: defaults changed (priority/weight hidden, row test action shown), so a
-// new key lets the new defaults take effect on browsers with stored settings.
+// Version the key when defaults change so existing stored settings do not hide
+// newly introduced operational fields.
 export const ADMIN_CHANNEL_VISIBLE_FIELDS_STORAGE_KEY =
-  'ren2hub_admin_channel_visible_fields_v2'
+  'ren2hub_admin_channel_visible_fields_v3'
 
 export function sanitizeAdminChannelVisibleFields(
   fields: readonly string[]

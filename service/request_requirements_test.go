@@ -34,6 +34,65 @@ func TestPreviewAndRequestPathAgreeOnNativeResponsesSupport(t *testing.T) {
 	}
 }
 
+func TestRequestRequirementFeaturesFromJSONCapturesSemanticRequirements(t *testing.T) {
+	features := RequestRequirementFeaturesFromJSON([]byte(`{
+		"previous_response_id":"resp_123",
+		"input":[{"role":"user","content":[
+			{"type":"input_text","text":"describe"},
+			{"type":"input_image","image_url":"data:image/png;base64,AA=="}
+		]}],
+		"tools":[{"type":"function","name":"lookup"},{"type":"web_search_preview"}],
+		"text":{"format":{"type":"json_schema","name":"answer"}},
+		"reasoning":{"effort":"high"}
+	}`))
+
+	assert.Equal(t, []string{"image", "text"}, features.InputModalities)
+	assert.Equal(t, []string{"function", "web_search_preview"}, features.ToolTypes)
+	assert.True(t, features.StructuredOutput)
+	assert.True(t, features.Reasoning)
+	assert.True(t, features.Continuation)
+}
+
+func TestRequestRequirementFeaturesFromJSONUnderstandsGeminiShapes(t *testing.T) {
+	features := RequestRequirementFeaturesFromJSON([]byte(`{
+		"contents":[{"parts":[{"text":"hello"},{"inlineData":{"mimeType":"audio/wav","data":"AA=="}}]}],
+		"tools":[{"functionDeclarations":[{"name":"lookup"}]},{"codeExecution":{}}],
+		"generationConfig":{"responseMimeType":"application/json","thinkingConfig":{"thinkingBudget":32}}
+	}`))
+
+	assert.Equal(t, []string{"audio", "text"}, features.InputModalities)
+	assert.Equal(t, []string{"code_execution", "function"}, features.ToolTypes)
+	assert.True(t, features.StructuredOutput)
+	assert.True(t, features.Reasoning)
+	assert.False(t, features.Continuation)
+}
+
+func TestRequestRequirementFeaturesFromJSONLeavesInvalidBodyToNormalValidation(t *testing.T) {
+	assert.Equal(t, RequestRequirementFeatures{}, RequestRequirementFeaturesFromJSON([]byte(`{"input":`)))
+}
+
+func TestRequestRequirementFeaturesFromJSONDoesNotTreatToolSchemaFormatAsOutputFormat(t *testing.T) {
+	features := RequestRequirementFeaturesFromJSON([]byte(`{
+		"messages":[{"role":"user","content":"hello"}],
+		"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"format":{"type":"string"}}}}}]
+	}`))
+
+	assert.Equal(t, []string{"text"}, features.InputModalities)
+	assert.Equal(t, []string{"function"}, features.ToolTypes)
+	assert.False(t, features.StructuredOutput)
+}
+
+func TestRequestRequirementFeaturesFromJSONCapturesRootProtocolState(t *testing.T) {
+	features := RequestRequirementFeaturesFromJSON([]byte(`{
+		"conversation":{"id":"conv_123"},
+		"container":"container_123",
+		"output_format":{"type":"json_schema"}
+	}`))
+
+	assert.True(t, features.Continuation)
+	assert.True(t, features.StructuredOutput)
+}
+
 // A Compact request looks up its exact variant before the base model, while
 // every other protocol resolves exactly one model. Sharing this ordering keeps
 // candidate discovery identical across callers.
@@ -122,4 +181,72 @@ func TestPreviewRejectsChannelThatCannotServeCompact(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, preview.CandidateChannelIDs)
 	assert.Equal(t, 1, preview.FilterReasonCounts[RouteFilterPathUnsupported])
+}
+
+func TestPreviewInputCarriesTheSameSemanticFeatureShape(t *testing.T) {
+	input := RouteProfilePreviewInput{
+		Model:            "gpt-test",
+		Path:             "/v1/responses",
+		InputModalities:  []string{"image", "text"},
+		ToolTypes:        []string{"function"},
+		StructuredOutput: true,
+		Reasoning:        true,
+		Continuation:     true,
+	}
+	requirements := NewRequestRequirementsWithFeatures(
+		input.Model,
+		input.Path,
+		false,
+		CompactStageForRequest(input.Path, input.Model),
+		RequestRequirementFeatures{
+			InputModalities:  input.InputModalities,
+			ToolTypes:        input.ToolTypes,
+			StructuredOutput: input.StructuredOutput,
+			Reasoning:        input.Reasoning,
+			Continuation:     input.Continuation,
+		},
+	)
+
+	assert.Equal(t, input.InputModalities, requirements.InputModalities)
+	assert.Equal(t, input.ToolTypes, requirements.ToolTypes)
+	assert.True(t, requirements.StructuredOutput)
+	assert.True(t, requirements.Reasoning)
+	assert.True(t, requirements.Continuation)
+}
+
+func TestRequestRequirementsCarryStreamMode(t *testing.T) {
+	requirements := NewRequestRequirementsWithStream(
+		"gpt-test",
+		"/v1/chat/completions",
+		false,
+		relaycommon.CompactAttemptNone,
+		true,
+		RequestRequirementFeatures{},
+	)
+
+	assert.True(t, requirements.StreamMode)
+}
+
+func TestRequestRequirementsPreferNativeProtocolCandidates(t *testing.T) {
+	tests := []struct {
+		name        string
+		path        string
+		channelType int
+		wantTier    int
+	}{
+		{name: "OpenAI chat native", path: "/v1/chat/completions", channelType: constant.ChannelTypeOpenAI, wantTier: 0},
+		{name: "OpenAI chat through Claude conversion", path: "/v1/chat/completions", channelType: constant.ChannelTypeAnthropic, wantTier: 1},
+		{name: "Claude messages native", path: "/v1/messages", channelType: constant.ChannelTypeAnthropic, wantTier: 0},
+		{name: "Claude messages through OpenAI conversion", path: "/v1/messages", channelType: constant.ChannelTypeOpenAI, wantTier: 1},
+		{name: "Gemini native", path: "/v1beta/models/gemini-2.5-flash:generateContent", channelType: constant.ChannelTypeGemini, wantTier: 0},
+		{name: "Responses native", path: "/v1/responses", channelType: constant.ChannelTypeOpenAI, wantTier: 0},
+		{name: "Responses through Gemini conversion", path: "/v1/responses", channelType: constant.ChannelTypeGemini, wantTier: 1},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			requirements := NewRequestRequirements("gpt-test", test.path, false, relaycommon.CompactAttemptNone)
+			assert.Equal(t, test.wantTier, requirements.CandidateCompatibilityTier(&model.Channel{Type: test.channelType}))
+		})
+	}
 }

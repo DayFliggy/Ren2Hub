@@ -5,6 +5,8 @@ const props = defineProps<{
   value: number
   label: string
   busy: boolean
+  max?: number
+  widthClass?: string
   commit: (value: number) => Promise<boolean>
 }>()
 
@@ -28,7 +30,7 @@ async function commitDraft() {
   if (
     !Number.isSafeInteger(value) ||
     value < 0 ||
-    value > 1_000_000 ||
+    value > (props.max ?? 1_000_000) ||
     value === props.value
   ) {
     draft.value = String(props.value)
@@ -56,11 +58,12 @@ function onKeydown(event: KeyboardEvent) {
     type="number"
     inputmode="numeric"
     min="0"
-    max="1000000"
+    :max="max ?? 1000000"
     step="1"
     :aria-label="label"
     :disabled="busy"
-    class="h-8 w-[72px] rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2 text-center font-mono text-xs tabular-nums text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus-ring disabled:cursor-wait disabled:opacity-60"
+    class="h-8 rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2 text-center font-mono text-xs tabular-nums text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus-ring disabled:cursor-wait disabled:opacity-60"
+    :class="widthClass ?? 'w-[72px]'"
     @blur="commitDraft"
     @keydown="onKeydown"
   />

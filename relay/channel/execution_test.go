@@ -2,6 +2,7 @@ package channel
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -62,4 +63,21 @@ func TestCandidateCheckRejectsUninitializedMetadataWithoutPanic(t *testing.T) {
 	_, err := CheckExecutionCandidate(nil, &relaycommon.RelayInfo{})
 	require.Error(t, err)
 	require.Zero(t, RequestExecution(c, execution.Submission).CallCount())
+}
+
+func TestBeforeCallAdmissionFailureDoesNotConsumeApplicationCallBudget(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	state := RequestExecution(c, execution.Generation)
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelId: 7}}
+	wantErr := errors.New("rate admission refused")
+	diagnosticCalled := false
+	c.Set(BeforeCallAdmissionContextKey, func() error { return wantErr })
+	c.Set(BeforeCallContextKey, func(execution.Call) { diagnosticCalled = true })
+
+	_, err := BeginUpstreamCall(c, info)
+
+	require.ErrorIs(t, err, wantErr)
+	require.Zero(t, state.CallCount())
+	require.False(t, diagnosticCalled)
 }

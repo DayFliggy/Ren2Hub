@@ -305,6 +305,47 @@ func TestUsageBillingPathForLog(t *testing.T) {
 	}))
 }
 
+func TestRecordObservedTotalTokensRejectsLocalEstimate(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	usage := &dto.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15}
+	common.SetContextKey(ctx, constant.ContextKeyLocalCountTokens, true)
+
+	recordObservedTotalTokens(ctx, usage, usage.TotalTokens)
+
+	_, exists := common.GetContextKey(ctx, constant.ContextKeyObservedTotalTokens)
+	assert.False(t, exists)
+
+	common.SetContextKey(ctx, constant.ContextKeyLocalCountTokens, false)
+	recordObservedTotalTokens(ctx, usage, usage.TotalTokens)
+	observed, exists := common.GetContextKey(ctx, constant.ContextKeyObservedTotalTokens)
+	require.True(t, exists)
+	assert.Equal(t, 15, observed)
+}
+
+func TestRecordObservedTotalTokensRejectsEmptyUsage(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+
+	recordObservedTotalTokens(ctx, &dto.Usage{}, 400)
+
+	value, exists := common.GetContextKey(ctx, constant.ContextKeyObservedTotalTokens)
+	assert.False(t, exists)
+	assert.Nil(t, value)
+}
+
+func TestRecordObservedTotalTokensRejectsEstimatedBillingUsage(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	usage := &dto.Usage{
+		PromptTokens: 10,
+		TotalTokens:  10,
+		BillingUsage: &dto.BillingUsage{Estimated: true},
+	}
+
+	recordObservedTotalTokens(ctx, usage, usage.TotalTokens)
+
+	_, exists := common.GetContextKey(ctx, constant.ContextKeyObservedTotalTokens)
+	assert.False(t, exists)
+}
+
 func TestAppendUsageBillingPathForLogWritesAdminInfo(t *testing.T) {
 	other := map[string]interface{}{
 		"admin_info": map[string]interface{}{},

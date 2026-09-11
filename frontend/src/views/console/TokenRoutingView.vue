@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowLeft,
   ArrowUp,
@@ -24,12 +25,14 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
 import { useLatestRequest } from '@/composables/useLatestRequest'
+import { useAuthStore } from '@/stores/auth'
 import type {
   EligibleRouteChannel,
   RouteEntry,
   RouteGroup,
   RouteHealthState,
   RouteCatalog,
+  RoutingDiagnostics,
   RoutePolicy,
   RoutePreview,
   RouteProfileInput,
@@ -40,12 +43,14 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const auth = useAuthStore()
 
 const tokenId = computed(() => Number(route.params.id))
 const profileView = ref<RouteProfileView | null>(null)
 const groups = ref<RouteGroup[]>([])
 const channels = ref<EligibleRouteChannel[]>([])
 const catalog = ref<RouteCatalog | null>(null)
+const diagnostics = ref<RoutingDiagnostics | null>(null)
 const model = ref('')
 const path = ref('/v1/chat/completions')
 const selectedChannelId = ref('')
@@ -55,6 +60,7 @@ const saving = ref(false)
 const deletingProfile = ref(false)
 const loadingPreview = ref(false)
 const loadError = ref('')
+const diagnosticsError = ref('')
 const conflict = ref(false)
 const draggingEntry = ref<RouteEntry | null>(null)
 const activeGroupKey = ref('')
@@ -147,21 +153,36 @@ async function load(): Promise<void> {
   invalidatePreview()
   loading.value = true
   loadError.value = ''
+  diagnosticsError.value = ''
   profileView.value = null
   groups.value = []
   channels.value = []
   catalog.value = null
+  diagnostics.value = null
   preview.value = null
   draggingEntry.value = null
   activeGroupKey.value = ''
   selectedChannelId.value = ''
   conflict.value = false
   try {
-    const [profiles, eligible, capabilityCatalog] = await Promise.all([
-      routingApi.profiles(),
-      routingApi.eligibleChannels(),
-      routingApi.catalog(),
-    ])
+    const diagnosticsRequest = auth.isAdmin
+      ? routingApi.diagnostics().then(
+          (data) => ({ data, error: '' }),
+          (error: unknown) => ({
+            data: null,
+            error: error instanceof ApiError ? error.message : String(error),
+          })
+        )
+      : Promise.resolve({ data: null, error: '' })
+    const [[profiles, eligible, capabilityCatalog], routeDiagnostics] =
+      await Promise.all([
+        Promise.all([
+          routingApi.profiles(),
+          routingApi.eligibleChannels(),
+          routingApi.catalog(),
+        ]),
+        diagnosticsRequest,
+      ])
     if (
       requestSerial !== loadRequestSerial ||
       requestedTokenID !== tokenId.value
@@ -170,6 +191,8 @@ async function load(): Promise<void> {
     }
     channels.value = eligible
     catalog.value = capabilityCatalog
+    diagnostics.value = routeDiagnostics.data
+    diagnosticsError.value = routeDiagnostics.error
     const existing = profiles.find(
       (item) => item.profile.token_id === requestedTokenID
     )
@@ -545,6 +568,261 @@ onMounted(() => void load())
       </ConsoleButton>
     </div>
     <template v-else>
+      <div
+        v-if="diagnosticsError"
+        role="alert"
+        class="flex items-start gap-3 border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-4 text-sm text-[var(--status-warning-text)]"
+        data-testid="routing-diagnostics-error"
+      >
+        <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <div class="min-w-0">
+          <p class="font-semibold">{{ t('routing.diagnosticsUnavailable') }}</p>
+          <p class="mt-1 break-words">{{ diagnosticsError }}</p>
+        </div>
+      </div>
+      <div
+        v-if="diagnostics?.degraded"
+        role="alert"
+        class="flex items-start gap-3 border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-4 text-sm text-[var(--status-warning-text)]"
+        data-testid="routing-degraded-alert"
+      >
+        <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <div class="min-w-0">
+          <p class="font-semibold">{{ t('routing.diagnosticsDegraded') }}</p>
+          <ul
+            v-if="diagnostics.warnings.length"
+            class="mt-1 list-disc space-y-1 pl-5"
+          >
+            <li v-for="warning in diagnostics.warnings" :key="warning">
+              {{ t(`routing.warningCodes.${warning}`) }}
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <ConsoleCard v-if="diagnostics" :title="t('routing.diagnosticsTitle')">
+        <template #action>
+          <StatusChip :tone="diagnostics?.degraded ? 'warning' : 'success'">
+            {{
+              diagnostics?.degraded
+                ? t('routing.diagnosticsDegradedStatus')
+                : t('routing.diagnosticsHealthy')
+            }}
+          </StatusChip>
+        </template>
+        <template v-if="diagnostics">
+          <dl
+            class="grid gap-px overflow-hidden border border-[var(--border-subtle)] bg-[var(--border-subtle)] sm:grid-cols-2 lg:grid-cols-5"
+            data-testid="routing-diagnostics"
+          >
+            <div class="bg-[var(--surface-solid)] p-3">
+              <dt class="text-xs text-[var(--text-tertiary)]">
+                {{ t('routing.leaseAcquireFailures') }}
+              </dt>
+              <dd
+                class="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--text-primary)]"
+              >
+                {{
+                  diagnostics.lease_metrics.route_lease_acquire_failure_total
+                }}
+              </dd>
+            </div>
+            <div class="bg-[var(--surface-solid)] p-3">
+              <dt class="text-xs text-[var(--text-tertiary)]">
+                {{ t('routing.leaseRenewFailures') }}
+              </dt>
+              <dd
+                class="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--text-primary)]"
+              >
+                {{ diagnostics.lease_metrics.route_lease_renew_failure_total }}
+              </dd>
+            </div>
+            <div class="bg-[var(--surface-solid)] p-3">
+              <dt class="text-xs text-[var(--text-tertiary)]">
+                {{ t('routing.leaseReleaseFailures') }}
+              </dt>
+              <dd
+                class="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--text-primary)]"
+              >
+                {{
+                  diagnostics.lease_metrics.route_lease_release_failure_total
+                }}
+              </dd>
+            </div>
+            <div class="bg-[var(--surface-solid)] p-3">
+              <dt class="text-xs text-[var(--text-tertiary)]">
+                {{ t('routing.decisionEventsDropped') }}
+              </dt>
+              <dd
+                class="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--text-primary)]"
+              >
+                {{ diagnostics.decision_events_dropped }}
+              </dd>
+            </div>
+            <div class="bg-[var(--surface-solid)] p-3">
+              <dt class="text-xs text-[var(--text-tertiary)]">
+                {{ t('routing.capabilityRefreshLag') }}
+              </dt>
+              <dd
+                class="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--text-primary)]"
+              >
+                {{
+                  t('routing.seconds', {
+                    count: diagnostics.capability_refresh_lag_seconds,
+                  })
+                }}
+              </dd>
+            </div>
+          </dl>
+
+          <div class="mt-4 flex flex-wrap gap-2 text-xs">
+            <StatusChip
+              :tone="
+                diagnostics.score_metrics_available ? 'success' : 'warning'
+              "
+            >
+              {{
+                diagnostics.score_metrics_available
+                  ? t('routing.scoreMetricsAvailable')
+                  : t('routing.scoreMetricsUnavailable')
+              }}
+            </StatusChip>
+            <span class="text-[var(--text-tertiary)]">
+              {{
+                t('routing.diagnosticLimits', {
+                  topK: diagnostics.limits.candidate_top_k,
+                  probe: diagnostics.limits.candidate_probe_limit,
+                  attempts: diagnostics.limits.total_send_attempts,
+                  events: diagnostics.limits.max_precommit_events,
+                  bytes: diagnostics.limits.max_precommit_bytes,
+                })
+              }}
+            </span>
+          </div>
+
+          <div v-if="diagnostics.recent_decisions.length" class="mt-5">
+            <h3 class="text-sm font-semibold text-[var(--text-primary)]">
+              {{ t('routing.recentDecisions') }}
+            </h3>
+            <div
+              class="mt-3 max-h-[42rem] space-y-3 overflow-y-auto pr-1"
+              data-testid="routing-recent-decisions"
+            >
+              <article
+                v-for="decision in diagnostics.recent_decisions"
+                :key="`${decision.request_id}-${decision.generated_at}`"
+                class="border border-[var(--border-subtle)] p-3"
+              >
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="min-w-0">
+                    <p
+                      class="truncate font-mono text-xs text-[var(--text-primary)]"
+                    >
+                      {{ decision.request_id }}
+                    </p>
+                    <p class="mt-1 text-xs text-[var(--text-tertiary)]">
+                      {{ decision.request_model }}
+                      <template v-if="decision.actual_model">
+                        → {{ decision.actual_model }}
+                      </template>
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap gap-1.5">
+                    <StatusChip tone="info">{{
+                      decision.route_source
+                    }}</StatusChip>
+                    <StatusChip
+                      v-if="decision.selected_channel_id"
+                      tone="success"
+                    >
+                      {{
+                        t('routing.selectedChannel', {
+                          id: decision.selected_channel_id,
+                        })
+                      }}
+                    </StatusChip>
+                    <StatusChip v-if="decision.final_error" tone="danger">
+                      {{ decision.final_error }}
+                    </StatusChip>
+                  </div>
+                </div>
+                <p class="mt-2 text-xs text-[var(--text-tertiary)]">
+                  {{
+                    t('routing.retrySummary', {
+                      retry: decision.retry_attempt,
+                      same: decision.same_resource_retry_attempt,
+                      failover: decision.failover_attempt,
+                    })
+                  }}
+                </p>
+                <ol class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  <li
+                    v-for="(candidate, index) in decision.candidates"
+                    :key="`${candidate.channel_id}-${index}`"
+                    class="border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-2.5 text-xs"
+                  >
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="font-semibold text-[var(--text-primary)]">
+                        {{
+                          t('routing.attemptChannel', {
+                            attempt: index + 1,
+                            id: candidate.channel_id,
+                          })
+                        }}
+                      </span>
+                      <StatusChip
+                        :tone="candidate.filter_reason ? 'danger' : 'neutral'"
+                      >
+                        {{
+                          candidate.filter_reason ||
+                          candidate.lease_state ||
+                          t('routing.candidateReady')
+                        }}
+                      </StatusChip>
+                    </div>
+                    <p class="mt-1 text-[var(--text-tertiary)]">
+                      {{
+                        candidate.actual_model ||
+                        candidate.request_model ||
+                        decision.request_model
+                      }}
+                    </p>
+                    <p class="mt-1 text-[var(--text-tertiary)]">
+                      {{
+                        t('routing.candidateDetails', {
+                          priority: candidate.priority,
+                          position: candidate.position,
+                          weight: candidate.weight,
+                        })
+                      }}
+                    </p>
+                    <p
+                      v-if="candidate.score_breakdown"
+                      class="mt-1 text-[var(--text-tertiary)]"
+                    >
+                      {{
+                        t('routing.candidateScore', {
+                          score: candidate.score_breakdown.total.toFixed(3),
+                        })
+                      }}
+                    </p>
+                    <p class="mt-1 text-[var(--text-tertiary)]">
+                      {{
+                        t('routing.candidateVersions', {
+                          snapshot: candidate.snapshot_version ?? '-',
+                          health: candidate.health_epoch ?? '-',
+                          catalog: candidate.catalog_version || '-',
+                        })
+                      }}
+                    </p>
+                  </li>
+                </ol>
+              </article>
+            </div>
+          </div>
+        </template>
+      </ConsoleCard>
+
       <ConsoleCard :title="t('routing.groupsTitle')">
         <template #action>
           <ConsoleButton

@@ -217,8 +217,10 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			streamErr = types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
 			return false
 		}
-		c.Render(-1, common.CustomEvent{Data: "data: " + string(geminiResponseStr)})
-		_ = helper.FlushWriter(c)
+		if err := helper.StringData(c, string(geminiResponseStr)); err != nil {
+			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
+			return false
+		}
 		return true
 	}
 
@@ -276,7 +278,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		var streamResp dto.ResponsesStreamResponse
 		if err := common.UnmarshalJsonStr(data, &streamResp); err != nil {
 			logger.LogError(c, "failed to unmarshal responses stream event: "+err.Error())
-			sr.Error(err)
+			sr.Stop(err)
 			return
 		}
 
@@ -310,6 +312,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	if streamErr != nil {
 		return nil, streamErr
 	}
+	if info.StreamStatus != nil && info.StreamStatus.HasErrors() {
+		return nil, types.NewOpenAIError(fmt.Errorf("upstream stream processing failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
 
 	usage := state.Usage()
 	if usage == nil || usage.TotalTokens == 0 {
@@ -336,7 +341,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	}
 
 	if info.RelayFormat == types.RelayFormatOpenAI {
-		helper.Done(c)
+		if err := helper.Done(c); err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
+		}
 	}
 	return usage, nil
 }

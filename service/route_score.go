@@ -1,7 +1,11 @@
 package service
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"math"
 	"sort"
+	"strconv"
 )
 
 type RouteScoreCandidate struct {
@@ -9,6 +13,7 @@ type RouteScoreCandidate struct {
 	Priority          int64
 	Position          int
 	Weight            int
+	CompatibilityTier int
 	ErrorRate         float64
 	ErrorRateKnown    bool
 	LatencyMS         float64
@@ -46,6 +51,52 @@ type ScoredRouteCandidate struct {
 	Breakdown RouteScoreBreakdown
 }
 
+// An exponential race produces a weighted permutation without replacement.
+// Deriving each draw from request and channel identity also makes replay and
+// input reordering produce the same plan, including every failover position.
+func weightedRouteCandidateOrder(candidates []ScoredRouteCandidate, requestID string, manual bool) []ScoredRouteCandidate {
+	ordered := append([]ScoredRouteCandidate(nil), candidates...)
+	if requestID == "" {
+		return ordered
+	}
+	draws := make(map[int]float64, len(ordered))
+	for _, candidate := range ordered {
+		digest := sha256.Sum256([]byte(requestID + "\x00" + strconv.Itoa(candidate.Candidate.ChannelID)))
+		uniform := (float64(binary.BigEndian.Uint64(digest[:8])>>11) + 0.5) / (1 << 53)
+		weight := float64(maxInt(candidate.Candidate.Weight, 1))
+		if !manual && candidate.Breakdown.Total > 0 {
+			// WeightScore is already part of Total. Remove it before applying the
+			// configured channel weight as the sampling weight, otherwise weight
+			// is counted twice and dominates live health metrics quadratically.
+			weight *= candidate.Breakdown.Total - candidate.Breakdown.WeightScore
+		}
+		draws[candidate.Candidate.ChannelID] = -math.Log(uniform) / weight
+	}
+	sort.SliceStable(ordered, func(i, j int) bool {
+		left, right := ordered[i].Candidate, ordered[j].Candidate
+		if left.CompatibilityTier != right.CompatibilityTier {
+			return left.CompatibilityTier < right.CompatibilityTier
+		}
+		if manual && left.Position != right.Position {
+			return left.Position < right.Position
+		}
+		if !manual && left.Priority != right.Priority {
+			return left.Priority > right.Priority
+		}
+		if left.Sticky != right.Sticky {
+			return left.Sticky
+		}
+		if (left.Weight > 0) != (right.Weight > 0) {
+			return left.Weight > 0
+		}
+		if draws[left.ChannelID] != draws[right.ChannelID] {
+			return draws[left.ChannelID] < draws[right.ChannelID]
+		}
+		return left.ChannelID < right.ChannelID
+	})
+	return ordered
+}
+
 const unknownRouteMetricScore = 0.5
 
 // ScoreRouteCandidates preserves every healthy static layer in descending
@@ -56,46 +107,55 @@ func ScoreRouteCandidates(candidates []RouteScoreCandidate) []ScoredRouteCandida
 	if len(candidates) == 0 {
 		return []ScoredRouteCandidate{}
 	}
-	layers := make(map[int64][]RouteScoreCandidate)
-	priorities := make([]int64, 0)
+	tiers := make(map[int]map[int64][]RouteScoreCandidate)
+	tierValues := make([]int, 0)
 	for _, candidate := range candidates {
 		if !candidate.HealthUsable {
 			continue
 		}
-		if _, exists := layers[candidate.Priority]; !exists {
-			priorities = append(priorities, candidate.Priority)
+		if _, exists := tiers[candidate.CompatibilityTier]; !exists {
+			tiers[candidate.CompatibilityTier] = make(map[int64][]RouteScoreCandidate)
+			tierValues = append(tierValues, candidate.CompatibilityTier)
 		}
-		layers[candidate.Priority] = append(layers[candidate.Priority], candidate)
+		tiers[candidate.CompatibilityTier][candidate.Priority] = append(tiers[candidate.CompatibilityTier][candidate.Priority], candidate)
 	}
-	if len(priorities) == 0 {
+	if len(tierValues) == 0 {
 		return []ScoredRouteCandidate{}
 	}
-	sort.Slice(priorities, func(i, j int) bool { return priorities[i] > priorities[j] })
+	sort.Ints(tierValues)
 	result := make([]ScoredRouteCandidate, 0, len(candidates))
-	for _, priority := range priorities {
-		layer := layers[priority]
-		maxWeight := 0
-		for _, candidate := range layer {
-			if candidate.Weight > maxWeight {
-				maxWeight = candidate.Weight
+	for _, tier := range tierValues {
+		layers := tiers[tier]
+		priorities := make([]int64, 0, len(layers))
+		for priority := range layers {
+			priorities = append(priorities, priority)
+		}
+		sort.Slice(priorities, func(i, j int) bool { return priorities[i] > priorities[j] })
+		for _, priority := range priorities {
+			layer := layers[priority]
+			maxWeight := 0
+			for _, candidate := range layer {
+				if candidate.Weight > maxWeight {
+					maxWeight = candidate.Weight
+				}
 			}
-		}
-		if maxWeight <= 0 {
-			maxWeight = 1
-		}
-		for _, candidate := range layer {
-			breakdown := scoreRouteCandidate(candidate, maxWeight)
-			result = append(result, ScoredRouteCandidate{Candidate: candidate, Breakdown: breakdown})
-		}
-		start := len(result) - len(layer)
-		sort.SliceStable(result[start:], func(i, j int) bool {
-			left := result[start+i]
-			right := result[start+j]
-			if left.Breakdown.Total != right.Breakdown.Total {
-				return left.Breakdown.Total > right.Breakdown.Total
+			if maxWeight <= 0 {
+				maxWeight = 1
 			}
-			return left.Candidate.ChannelID < right.Candidate.ChannelID
-		})
+			for _, candidate := range layer {
+				breakdown := scoreRouteCandidate(candidate, maxWeight)
+				result = append(result, ScoredRouteCandidate{Candidate: candidate, Breakdown: breakdown})
+			}
+			start := len(result) - len(layer)
+			sort.SliceStable(result[start:], func(i, j int) bool {
+				left := result[start+i]
+				right := result[start+j]
+				if left.Breakdown.Total != right.Breakdown.Total {
+					return left.Breakdown.Total > right.Breakdown.Total
+				}
+				return left.Candidate.ChannelID < right.Candidate.ChannelID
+			})
+		}
 	}
 	return result
 }
@@ -157,8 +217,14 @@ func TopKRouteCandidates(candidates []RouteScoreCandidate, k int) []ScoredRouteC
 func OrderManualRouteCandidates(candidates []RouteScoreCandidate, loadBalance bool) []RouteScoreCandidate {
 	ordered := append([]RouteScoreCandidate(nil), candidates...)
 	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].CompatibilityTier != ordered[j].CompatibilityTier {
+			return ordered[i].CompatibilityTier < ordered[j].CompatibilityTier
+		}
 		if ordered[i].Position != ordered[j].Position {
 			return ordered[i].Position < ordered[j].Position
+		}
+		if ordered[i].Sticky != ordered[j].Sticky {
+			return ordered[i].Sticky
 		}
 		if loadBalance && ordered[i].Weight != ordered[j].Weight {
 			return ordered[i].Weight > ordered[j].Weight
@@ -176,6 +242,9 @@ func StaticPriorityLayer(candidates []RouteScoreCandidate) []RouteScoreCandidate
 		}
 	}
 	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].CompatibilityTier != result[j].CompatibilityTier {
+			return result[i].CompatibilityTier < result[j].CompatibilityTier
+		}
 		if result[i].Priority != result[j].Priority {
 			return result[i].Priority > result[j].Priority
 		}

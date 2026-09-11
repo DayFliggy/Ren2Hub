@@ -54,7 +54,7 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 		manualEnabled, loadBalance = true, group.Policy.LoadBalance
 		selection.MaxRatio = group.Policy.MaxRatio
 		selection.Retry = RouteLiveRetryPolicy{Mode: group.Policy.RetryMode, MaxSameResourceAttempts: group.Policy.MaxSameResourceAttempts, MaxFailoverAttempts: group.Policy.MaxFailoverAttempts}
-		if !group.Policy.Sticky {
+		if !group.Policy.Sticky && !input.RequirePreferredChannel {
 			input.PreferredChannelID = 0
 		}
 		for _, entry := range group.Entries {
@@ -67,6 +67,9 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 		return selection, ErrRouteSelectionUnavailable
 	}
 	requirements := NewRequestRequirements(input.RequestModel, input.RequestPath, input.NativeResponsesRequired, input.CompactStage)
+	if input.Requirements != nil {
+		requirements = *input.Requirements
+	}
 	models := requirements.CandidateLookupModels(modellab.NormalizeModel)
 	entitlements, err := liveRouteEntitlements(input.Context, input.UserID)
 	if err != nil {
@@ -77,6 +80,9 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 	for _, lookupModel := range models {
 		for _, indexed := range index.ByRequestModel[lookupModel] {
 			capability := indexed.Capability
+			if input.RequirePreferredChannel && capability.ChannelID != input.PreferredChannelID {
+				continue
+			}
 			if input.SpecificChannelID > 0 && capability.ChannelID != input.SpecificChannelID {
 				continue
 			}
@@ -109,11 +115,12 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 				Advanced: indexed.Advanced,
 			})
 			candidate := RouteSelectionCandidate{
-				ChannelID: channel.Id, RequestModel: capability.RequestModel, ActualModel: capability.ActualModel,
+				ChannelID: channel.Id, ChannelTPM: channel.ChannelTPM, RequestModel: capability.RequestModel, ActualModel: capability.ActualModel,
 				LabSlug:  capability.LabSlug,
 				Priority: channel.GetPriority(), Weight: channel.GetWeight(),
 				SnapshotVersion: capability.SnapshotVersion, CatalogVersion: capability.CatalogVersion,
 				FilterReason: filtered.Reason, HealthUsable: true, Sticky: channel.Id == input.PreferredChannelID,
+				CompatibilityTier: requirements.CandidateCompatibilityTier(channel),
 			}
 			if inManual {
 				candidate.Position, candidate.Weight = entry.Position, entry.Weight

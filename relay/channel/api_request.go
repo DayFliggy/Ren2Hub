@@ -13,15 +13,12 @@ import (
 	"time"
 
 	common2 "github.com/QuantumNous/new-api/common"
+	appconstant "github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
-	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
-
-	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"golang.org/x/net/http/httpguts"
@@ -413,79 +410,58 @@ func DoWssRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	return targetConn, nil
 }
 
-func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) (context.CancelFunc, <-chan struct{}) {
-	pingerCtx, stopPinger := context.WithCancel(context.Background())
-	done := make(chan struct{})
-
-	gopool.Go(func() {
-		defer close(done)
-		defer func() {
-			// 增加panic恢复处理
-			if r := recover(); r != nil {
-				logger.LogDebug(c, "SSE ping goroutine panic recovered: %v", r)
-			}
-			logger.LogDebug(c, "SSE ping goroutine stopped")
-		}()
-
-		if pingInterval <= 0 {
-			pingInterval = helper.DefaultPingInterval
-		}
-
-		ticker := time.NewTicker(pingInterval)
-		// 确保在任何情况下都清理ticker
-		defer func() {
-			ticker.Stop()
-			logger.LogDebug(c, "SSE ping ticker stopped")
-		}()
-
-		var pingMutex sync.Mutex
-		logger.LogDebug(c, "SSE ping goroutine started")
-
-		// 增加超时控制，防止goroutine长时间运行
-		maxPingDuration := 120 * time.Minute // 最大ping持续时间
-		pingTimeout := time.NewTimer(maxPingDuration)
-		defer pingTimeout.Stop()
-
-		for {
-			select {
-			// 发送 ping 数据
-			case <-ticker.C:
-				if err := sendPingData(c, &pingMutex); err != nil {
-					logger.LogDebug(c, "SSE ping error, stopping goroutine: %s", err.Error())
-					return
-				}
-			// 收到退出信号
-			case <-pingerCtx.Done():
-				return
-			// request 结束
-			case <-c.Request.Context().Done():
-				return
-			// 超时保护，防止goroutine无限运行
-			case <-pingTimeout.C:
-				logger.LogDebug(c, "SSE ping goroutine timeout, stopping")
-				return
-			}
-		}
-	})
-
-	return stopPinger, done
+type cancelOnCloseBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
 }
 
-func sendPingData(c *gin.Context, mutex *sync.Mutex) error {
-	mutex.Lock()
-	defer mutex.Unlock()
+func (b *cancelOnCloseBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
+}
 
-	// Bound the write so a slow client cannot block this goroutine forever;
-	// doRequest's defer waits for the pinger to exit before returning.
-	helper.ExtendWriteDeadline(c)
-	err := helper.PingData(c)
-	if err != nil {
-		logger.LogError(c, "SSE ping error: "+err.Error())
-		return err
+var responseHeaderTimeoutProvider = func() time.Duration {
+	if common2.RelayTimeout > 0 {
+		return time.Duration(common2.RelayTimeout) * time.Second
+	}
+	if appconstant.StreamingTimeout > 0 {
+		return time.Duration(appconstant.StreamingTimeout) * time.Second
+	}
+	return 5 * time.Minute
+}
+
+func doWithResponseHeaderTimeout(client *http.Client, req *http.Request, timeout time.Duration) (*http.Response, error) {
+	if timeout <= 0 {
+		return client.Do(req)
 	}
 
-	logger.LogDebug(c, "SSE ping data sent")
-	return nil
+	requestCtx, cancel := context.WithCancel(req.Context())
+	timedRequest := req.Clone(requestCtx)
+	timedOut := make(chan struct{})
+	timer := time.AfterFunc(timeout, func() {
+		close(timedOut)
+		cancel()
+	})
+	resp, err := client.Do(timedRequest)
+	if !timer.Stop() {
+		cancel()
+		<-timedOut
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		return nil, fmt.Errorf("upstream response_header timeout: %w", context.DeadlineExceeded)
+	}
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	if resp == nil || resp.Body == nil {
+		cancel()
+		return resp, nil
+	}
+	resp.Body = &cancelOnCloseBody{ReadCloser: resp.Body, cancel: cancel}
+	return resp, nil
 }
 
 func DoRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http.Response, error) {
@@ -535,32 +511,27 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 			policy.String(),
 		))
 	}
+	if req.GetBody != nil {
+		body, bodyErr := req.GetBody()
+		if bodyErr != nil {
+			return nil, fmt.Errorf("reopen upstream request body: %w", bodyErr)
+		}
+		data, readErr := io.ReadAll(body)
+		closeErr := body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("read upstream request body for admission: %w", readErr)
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("close upstream request body snapshot: %w", closeErr)
+		}
+		info.UpdateEstimateOutputCeilingFromJSON(data)
+	}
 
 	finish, err := BeginUpstreamCall(c, info)
 	if err != nil {
 		return nil, err
 	}
-	var stopPinger context.CancelFunc
-	var pingerDone <-chan struct{}
-	if info.IsStream {
-		helper.SetEventStreamHeaders(c)
-		// 处理流式请求的 ping 保活
-		generalSettings := operation_setting.GetGeneralSetting()
-		if generalSettings.PingIntervalEnabled && !info.DisablePing {
-			pingInterval := time.Duration(generalSettings.PingIntervalSeconds) * time.Second
-			stopPinger, pingerDone = startPingKeepAlive(c, pingInterval)
-			// 使用defer确保在任何情况下都能停止ping goroutine
-			defer func() {
-				if stopPinger != nil {
-					stopPinger()
-					<-pingerDone
-					logger.LogDebug(c, "SSE ping goroutine stopped by defer")
-				}
-			}()
-		}
-	}
-
-	resp, err := relayClient.Do(req)
+	resp, err := doWithResponseHeaderTimeout(&relayClient, req, responseHeaderTimeoutProvider())
 	finish(resp, err)
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())

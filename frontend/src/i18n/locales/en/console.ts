@@ -404,6 +404,40 @@ export default {
       half_open: 'Probe pending',
     },
     healthSummary: '{failures} failures · {latency} ms',
+    diagnosticsTitle: 'Routing diagnostics',
+    diagnosticsHealthy: 'Healthy',
+    diagnosticsDegradedStatus: 'Degraded',
+    diagnosticsDegraded: 'Routing is operating in a degraded state.',
+    diagnosticsUnavailable: 'Routing diagnostics are temporarily unavailable',
+    leaseAcquireFailures: 'Lease acquisition failures',
+    leaseRenewFailures: 'Lease renewal failures',
+    leaseReleaseFailures: 'Lease release failures',
+    decisionEventsDropped: 'Decision events dropped',
+    capabilityRefreshLag: 'Capability refresh lag',
+    seconds: '{count} s',
+    scoreMetricsAvailable: 'Live scoring metrics available',
+    scoreMetricsUnavailable: 'Live scoring metrics unavailable',
+    diagnosticLimits:
+      'Limits: top {topK}, probe {probe}, send attempts {attempts}, precommit {events} events / {bytes} bytes',
+    recentDecisions: 'Recent candidate attempts',
+    selectedChannel: 'Selected #{id}',
+    retrySummary: 'Retry {retry} · same resource {same} · failover {failover}',
+    attemptChannel: 'Attempt {attempt} · channel #{id}',
+    candidateReady: 'Ready',
+    candidateDetails:
+      'Priority {priority} · position {position} · weight {weight}',
+    candidateScore: 'Score {score}',
+    candidateVersions:
+      'Snapshot {snapshot} · health epoch {health} · catalog {catalog}',
+    warningCodes: {
+      route_lease_failures: 'One or more route lease operations failed.',
+      route_decision_events_dropped:
+        'Some routing decision events were dropped before logging.',
+      capability_refresh_lagging:
+        'The channel capability index is refreshing slower than expected.',
+      route_score_metrics_unavailable:
+        'Live route scoring metrics are currently unavailable.',
+    },
     saved: 'Routing profile saved',
     removed: 'Routing profile deleted',
     versionConflict: 'The profile changed elsewhere. Reload it before saving.',
@@ -775,6 +809,7 @@ export default {
     priority: 'Priority',
     weight: 'Weight',
     capacity: 'Capacity',
+    rateLimits: 'Rate limits',
     usage: 'Usage',
     usageAndRatio: 'Usage / channel ratio',
     channelRatio: 'Channel ratio',
@@ -798,6 +833,11 @@ export default {
     statusAutoDisabled: 'Auto disabled',
     priorityFor: 'Priority for {name}',
     weightFor: 'Weight for {name}',
+    channelRpmFor: 'RPM limit for {name}',
+    channelTpmFor: 'TPM limit for {name}',
+    rpmShort: 'RPM',
+    tpmShort: 'TPM',
+    unlimited: 'Unlimited',
     notTested: 'Untested',
     testedAt: 'Last tested: {time}',
     testChannel: 'Test response',
@@ -883,7 +923,8 @@ export default {
     sectionModels: 'Models',
     sectionModelsDesc: 'Published models and model remapping rules.',
     sectionAdvanced: 'Advanced settings',
-    sectionAdvancedDesc: 'Routing priority, weight and capacity ratios.',
+    sectionAdvancedDesc:
+      'Routing priority, weight, capacity, rate and price limits.',
     // Basic section
     enabledLabel: 'Enabled',
     enabledDesc: 'Enable or disable this channel',
@@ -926,6 +967,11 @@ export default {
     // Advanced section
     channelRatioHint: 'Channel billing ratio. 1.0 = normal, 0.5 = half price.',
     capacityTotalHint: 'Maximum concurrent request capacity for this channel.',
+    channelRpm: 'Requests per minute (RPM)',
+    channelRpmHint:
+      'Maximum requests accepted per minute. Set 0 for unlimited.',
+    channelTpm: 'Tokens per minute (TPM)',
+    channelTpmHint: 'Maximum reserved tokens per minute. Set 0 for unlimited.',
     saveChannel: 'Save channel',
     deleteTitle: 'Delete channel',
     deleteMessage: 'Delete “{name}”? This action cannot be undone.',

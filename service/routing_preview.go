@@ -29,9 +29,14 @@ const (
 // needed for a static manual-route preview. It never selects or reserves a
 // live channel.
 type RouteProfilePreviewInput struct {
-	Model          string `json:"model"`
-	Path           string `json:"path"`
-	EffectiveGroup string `json:"-"`
+	Model            string   `json:"model"`
+	Path             string   `json:"path"`
+	InputModalities  []string `json:"input_modalities,omitempty"`
+	ToolTypes        []string `json:"tool_types,omitempty"`
+	StructuredOutput bool     `json:"structured_output,omitempty"`
+	Reasoning        bool     `json:"reasoning,omitempty"`
+	Continuation     bool     `json:"continuation,omitempty"`
+	EffectiveGroup   string   `json:"-"`
 }
 
 type RouteProfilePreview struct {
@@ -113,7 +118,19 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	// uses. The Compact stage is derived from the path here exactly as the
 	// distributor derives it, so a Compact preview no longer reports channels
 	// that a real Compact request would reject.
-	requirements := NewRequestRequirements(input.Model, input.Path, false, CompactStageForRequest(input.Path, input.Model))
+	requirements := NewRequestRequirementsWithFeatures(
+		input.Model,
+		input.Path,
+		false,
+		CompactStageForRequest(input.Path, input.Model),
+		RequestRequirementFeatures{
+			InputModalities:  input.InputModalities,
+			ToolTypes:        input.ToolTypes,
+			StructuredOutput: input.StructuredOutput,
+			Reasoning:        input.Reasoning,
+			Continuation:     input.Continuation,
+		},
+	)
 
 	preview := &RouteProfilePreview{
 		ProfileID:              view.Profile.ID,

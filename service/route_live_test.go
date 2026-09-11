@@ -443,3 +443,23 @@ func TestAutoRouteAttemptsSupportBoundedSameChannelAndFailoverChoices(t *testing
 	_, _, found = selection.NextCandidateForError(2, 2, transient, RouteRetryCounters{TotalAttempts: 3})
 	assert.False(t, found)
 }
+
+func TestAutoRouteAttemptsIncludeAdmissionReserveCandidates(t *testing.T) {
+	result := RouteSelectionResult{
+		Candidates:        []RouteSelectionCandidate{{ChannelID: 1}},
+		ReserveCandidates: []RouteSelectionCandidate{{ChannelID: 2}, {ChannelID: 3}},
+		Decision: RouteDecision{Candidates: []RouteDecisionCandidate{
+			{ChannelID: 1}, {ChannelID: 2}, {ChannelID: 3},
+		}},
+	}
+
+	assert.Equal(t, []int{1, 1, 2, 2, 3, 3}, channelIDsFromAttempts(selectedRouteAttemptCandidates(result)))
+}
+
+func channelIDsFromAttempts(attempts []RouteDecisionCandidate) []int {
+	ids := make([]int, 0, len(attempts))
+	for _, attempt := range attempts {
+		ids = append(ids, attempt.ChannelID)
+	}
+	return ids
+}

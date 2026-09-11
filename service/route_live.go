@@ -303,11 +303,13 @@ type LiveRouteRequest struct {
 	SecurityEligibilityKnown bool
 	SecurityAllowed          bool
 	PreferredChannelID       int
+	RequirePreferredChannel  bool
 	// StreamMode isolates load samples. A streaming and a non-streaming call to
 	// the same model have different latency profiles, so they must not be
 	// smoothed together. It is derived once while the body is parsed so
 	// selection and observation share one bucket.
-	StreamMode bool
+	StreamMode   bool
+	Requirements *RequestRequirements
 }
 
 type LiveRouteSelection struct {
@@ -425,8 +427,9 @@ func selectedRouteAttemptCandidates(result RouteSelectionResult) []RouteDecision
 }
 
 func availableRouteAttemptCandidates(result RouteSelectionResult) []RouteDecisionCandidate {
-	attempts := make([]RouteDecisionCandidate, 0, len(result.Candidates))
-	for _, candidate := range result.Candidates {
+	available := append(append([]RouteSelectionCandidate(nil), result.Candidates...), result.ReserveCandidates...)
+	attempts := make([]RouteDecisionCandidate, 0, len(available))
+	for _, candidate := range available {
 		for _, decisionCandidate := range result.Decision.Candidates {
 			if decisionCandidate.ChannelID == candidate.ChannelID && decisionCandidate.FilterReason == "" {
 				attempts = append(attempts, decisionCandidate)
@@ -534,20 +537,8 @@ func applyLiveHealth(ctx context.Context, candidates []RouteSelectionCandidate, 
 		}
 		candidates[index].HealthUsable = true
 		candidates[index].HealthEpoch = epoch
-		metrics, metricsErr := RouteHealthScoringMetrics(ctx, candidates[index].ChannelID, requestModel)
-		if metricsErr != nil {
-			return metricsErr
-		}
-		candidates[index].ErrorRate = metrics.ErrorRate
-		candidates[index].ErrorRateKnown = metrics.ErrorRateKnown
-		candidates[index].LatencyMS = metrics.LatencyMS
-		candidates[index].LatencyKnown = metrics.LatencyKnown
-		candidates[index].TTFTMS = metrics.TTFTMS
-		candidates[index].TTFTKnown = metrics.TTFTKnown
-		// Smoothed samples describe sustained behaviour, so they take
-		// precedence over the single most recent observation kept on the health
-		// row. A sample that has expired leaves the health value in place
-		// rather than downgrading the candidate to unknown.
+		// Health rows gate admission; only scoped, unexpired load samples rank
+		// candidates. An old health observation must not revive an expired EWMA.
 		load, loadErr := LoadRouteLoadSample(ctx, RouteLoadScope{
 			ChannelID:   candidates[index].ChannelID,
 			ActualModel: candidates[index].ActualModel,
@@ -557,15 +548,9 @@ func applyLiveHealth(ctx context.Context, candidates []RouteSelectionCandidate, 
 		if loadErr != nil {
 			return loadErr
 		}
-		if load.LatencyKnown {
-			candidates[index].LatencyMS, candidates[index].LatencyKnown = load.LatencyMS, true
-		}
-		if load.TTFTKnown {
-			candidates[index].TTFTMS, candidates[index].TTFTKnown = load.TTFTMS, true
-		}
-		if load.ErrorRateKnown {
-			candidates[index].ErrorRate, candidates[index].ErrorRateKnown = load.ErrorRate, true
-		}
+		candidates[index].LatencyMS, candidates[index].LatencyKnown = load.LatencyMS, load.LatencyKnown
+		candidates[index].TTFTMS, candidates[index].TTFTKnown = load.TTFTMS, load.TTFTKnown
+		candidates[index].ErrorRate, candidates[index].ErrorRateKnown = load.ErrorRate, load.ErrorRateKnown
 		{
 			runtimeMetrics, runtimeErr := LoadRouteScoreRuntimeMetrics(ctx, candidates[index].ChannelID, requestModel)
 			if runtimeErr != nil {

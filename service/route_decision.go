@@ -38,6 +38,7 @@ func ResolveRouteSource(input RouteSourceInput) RouteSource {
 
 type RouteDecisionCandidate struct {
 	ChannelID    int    `json:"channel_id"`
+	ChannelTPM   int    `json:"-"`
 	RequestModel string `json:"request_model,omitempty"`
 	// ActualModel is the upstream model this candidate resolves to. Load samples
 	// are keyed by it, so the attempt that observes a call must use the same

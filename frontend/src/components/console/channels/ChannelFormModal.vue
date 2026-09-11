@@ -100,6 +100,8 @@ const form = reactive({
   priority: 0,
   weight: 0,
   capacityTotal: 20,
+  channelRpm: 0,
+  channelTpm: 0,
   channelRatio: 1,
 })
 
@@ -297,6 +299,12 @@ const valid = computed(
     Number.isSafeInteger(form.capacityTotal) &&
     form.capacityTotal >= minimumCapacity.value &&
     form.capacityTotal <= 1_000_000 &&
+    Number.isSafeInteger(form.channelRpm) &&
+    form.channelRpm >= 0 &&
+    form.channelRpm <= 10_000_000 &&
+    Number.isSafeInteger(form.channelTpm) &&
+    form.channelTpm >= 0 &&
+    form.channelTpm <= 10_000_000_000 &&
     Number.isFinite(form.channelRatio) &&
     form.channelRatio > 0 &&
     form.channelRatio <= 1000
@@ -320,6 +328,8 @@ watch(
     form.priority = ch?.priority ?? 0
     form.weight = ch?.weight ?? 0
     form.capacityTotal = ch?.capacity_total ?? 20
+    form.channelRpm = ch?.channel_rpm ?? 0
+    form.channelTpm = ch?.channel_tpm ?? 0
     form.channelRatio = ch?.channel_ratio ?? 1
     // parse mapping
     modelMappingJson.value = form.modelMapping
@@ -360,6 +370,8 @@ async function submit() {
       priority: Number(form.priority),
       weight: Number(form.weight),
       capacity_total: Number(form.capacityTotal),
+      channel_rpm: Number(form.channelRpm),
+      channel_tpm: Number(form.channelTpm),
       channel_ratio: Number(form.channelRatio),
     }
 
@@ -977,6 +989,36 @@ async function submit() {
                   >×</span
                 >
               </div>
+            </FormField>
+            <FormField
+              :label="t('channels.channelRpm')"
+              :hint="t('channels.channelRpmHint')"
+            >
+              <input
+                v-model.number="form.channelRpm"
+                type="number"
+                min="0"
+                max="10000000"
+                step="1"
+                name="admin-channel-rpm"
+                :aria-label="t('channels.channelRpm')"
+                class="channel-form-number focus-ring"
+              />
+            </FormField>
+            <FormField
+              :label="t('channels.channelTpm')"
+              :hint="t('channels.channelTpmHint')"
+            >
+              <input
+                v-model.number="form.channelTpm"
+                type="number"
+                min="0"
+                max="10000000000"
+                step="1"
+                name="admin-channel-tpm"
+                :aria-label="t('channels.channelTpm')"
+                class="channel-form-number focus-ring"
+              />
             </FormField>
           </div>
         </div>

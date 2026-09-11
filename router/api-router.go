@@ -386,6 +386,7 @@ func SetApiRouter(router *gin.Engine) {
 		routingRoute := apiRouter.Group("/routing")
 		routingRoute.Use(middleware.UserAuth())
 		{
+			routingRoute.GET("/diagnostics", middleware.AdminAuth(), controller.GetRouteDiagnostics)
 			routingRoute.GET("/catalog", controller.ListRouteCatalog)
 			routingRoute.GET("/eligible-channels", controller.ListEligibleRouteChannels)
 			routingRoute.GET("/profiles", controller.ListRouteProfiles)

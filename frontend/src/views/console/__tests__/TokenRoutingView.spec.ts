@@ -17,17 +17,24 @@ import type {
   RouteCatalog,
   RoutePreview,
   RouteProfileView,
+  RoutingDiagnostics,
 } from '@/types/routing'
 import TokenRoutingView from '@/views/console/TokenRoutingView.vue'
 
 const mocks = vi.hoisted(() => ({
+  isAdmin: true,
   profiles: vi.fn(),
   eligibleChannels: vi.fn(),
   catalog: vi.fn(),
+  diagnostics: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
   preview: vi.fn(),
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ isAdmin: mocks.isAdmin }),
 }))
 
 vi.mock('@/api/routingApi', () => ({
@@ -104,6 +111,8 @@ const channels: EligibleRouteChannel[] = [
     request_models: ['gpt-5'],
     priority: 1,
     weight: 1,
+    channel_rpm: 1200,
+    channel_tpm: 800000,
     snapshot_version: 1,
     catalog_version: 'catalog-1',
     capability_state: 'eligible',
@@ -116,6 +125,8 @@ const channels: EligibleRouteChannel[] = [
     request_models: ['gpt-5'],
     priority: 1,
     weight: 1,
+    channel_rpm: 800,
+    channel_tpm: 500000,
     snapshot_version: 1,
     catalog_version: 'catalog-1',
     capability_state: 'eligible',
@@ -181,6 +192,71 @@ const preview: RoutePreview = {
   live_selection: false,
 }
 
+const diagnostics: RoutingDiagnostics = {
+  lease_metrics: {
+    route_lease_acquire_failure_total: 2,
+    route_lease_renew_failure_total: 1,
+    route_lease_release_failure_total: 0,
+  },
+  decision_events_dropped: 3,
+  capability_refresh_lag_seconds: 12,
+  score_metrics_available: false,
+  degraded: true,
+  warnings: ['route_lease_failures'],
+  limits: {
+    candidate_top_k: 10,
+    candidate_probe_limit: 20,
+    total_send_attempts: 4,
+    max_precommit_events: 256,
+    max_precommit_bytes: 1048576,
+  },
+  recent_decisions: [
+    {
+      event: 'route_decision',
+      request_id: 'req-1',
+      route_source: 'manual',
+      request_model: 'gpt-5',
+      actual_model: 'gpt-5-2025',
+      dynamic_score_applied: false,
+      candidates: [
+        {
+          channel_id: 101,
+          request_model: 'gpt-5',
+          actual_model: 'gpt-5-2025',
+          priority: 10,
+          position: 0,
+          weight: 100,
+          lease_state: 'acquired',
+          score_breakdown: {
+            priority_layer: 10,
+            weight_score: 1,
+            error_score: 0.9,
+            error_known: true,
+            latency_score: 0.8,
+            latency_known: true,
+            ttft_score: 0.7,
+            ttft_known: true,
+            rate_limit_score: 0.6,
+            rate_limit_known: true,
+            quota_score: 0.5,
+            quota_known: true,
+            circuit_breaker_score: 1,
+            sticky_score: 0,
+            total: 5.5,
+          },
+        },
+      ],
+      selected_channel_id: 101,
+      retry_attempt: 1,
+      same_resource_retry_attempt: 0,
+      failover_attempt: 1,
+      lease_state: 'released',
+      generated_at: 1_700_000_000_000,
+    },
+  ],
+  generated_at: 1_700_000_001,
+}
+
 const stubs = {
   PageBreadcrumb: { template: '<div><slot name="action" /></div>' },
   ConsoleCard: {
@@ -212,9 +288,11 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.isAdmin = true
   mocks.profiles.mockResolvedValue([profile])
   mocks.eligibleChannels.mockResolvedValue(channels)
   mocks.catalog.mockResolvedValue(catalog)
+  mocks.diagnostics.mockResolvedValue(diagnostics)
   mocks.update.mockResolvedValue(profile)
   mocks.remove.mockResolvedValue(undefined)
   mocks.preview.mockResolvedValue(preview)
@@ -253,6 +331,46 @@ function buttonByText(view: VueWrapper, text: string) {
 }
 
 describe('TokenRoutingView', () => {
+  it('does not request global diagnostics for a non-admin user', async () => {
+    mocks.isAdmin = false
+    const view = await mountView()
+
+    expect(mocks.diagnostics).not.toHaveBeenCalled()
+    expect(view.find('[data-testid="routing-diagnostics"]').exists()).toBe(
+      false
+    )
+  })
+
+  it('renders degraded diagnostics and recent candidate attempts', async () => {
+    const view = await mountView()
+
+    expect(mocks.diagnostics).toHaveBeenCalledOnce()
+    expect(view.get('[data-testid="routing-degraded-alert"]').text()).toContain(
+      'degraded state'
+    )
+    expect(view.get('[data-testid="routing-diagnostics"]').text()).toContain(
+      '12 s'
+    )
+    expect(
+      view.get('[data-testid="routing-recent-decisions"]').text()
+    ).toContain('Attempt 1 · channel #101')
+    expect(view.text()).toContain('Score 5.500')
+  })
+
+  it('keeps route configuration available when diagnostics fail', async () => {
+    mocks.diagnostics.mockRejectedValue(
+      new ApiError('diagnostics unavailable', { status: 503 })
+    )
+
+    const view = await mountView()
+
+    expect(
+      view.get('[data-testid="routing-diagnostics-error"]').text()
+    ).toContain('diagnostics unavailable')
+    expect(view.text()).toContain('Primary')
+    expect(view.text()).not.toContain('Retry loading')
+  })
+
   it('saves reordered entries by stable channel id', async () => {
     const view = await mountView()
 

@@ -16,7 +16,8 @@ import type {
   AdminChannelUpdateInput,
 } from '@/types/console'
 
-type ChannelAction = 'priority' | 'weight' | 'status' | 'balance'
+type ChannelAction =
+  'priority' | 'weight' | 'channel_rpm' | 'channel_tpm' | 'status' | 'balance'
 type ChannelCrudAction = 'create' | 'edit' | 'delete'
 type ChannelBatchScope = 'page' | 'supplier'
 type ChannelBulkAction = 'delete' | 'enable' | 'disable' | 'reset'
@@ -269,7 +270,7 @@ export function useAdminChannels() {
 
   function updateNumber(
     channel: AdminChannel,
-    field: 'priority' | 'weight',
+    field: 'priority' | 'weight' | 'channel_rpm' | 'channel_tpm',
     value: number
   ): Promise<boolean> {
     return runChannelAction(

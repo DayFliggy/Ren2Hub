@@ -179,8 +179,18 @@ func getImageToken(c *gin.Context, fileMeta *types.FileMeta, model string, strea
 }
 
 func EstimateRequestToken(c *gin.Context, meta *types.TokenCountMeta, info *relaycommon.RelayInfo) (int, error) {
+	return estimateRequestToken(c, meta, info, false)
+}
+
+// EstimateRequestTokenForAdmission always calculates the input estimate. A
+// channel TPM limit cannot inherit the optional token-count display switch.
+func EstimateRequestTokenForAdmission(c *gin.Context, meta *types.TokenCountMeta, info *relaycommon.RelayInfo) (int, error) {
+	return estimateRequestToken(c, meta, info, true)
+}
+
+func estimateRequestToken(c *gin.Context, meta *types.TokenCountMeta, info *relaycommon.RelayInfo, required bool) (int, error) {
 	// 是否统计token
-	if !constant.CountToken {
+	if !required && !constant.CountToken {
 		return 0, nil
 	}
 

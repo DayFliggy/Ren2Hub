@@ -84,7 +84,7 @@ const props = defineProps<{
   isRowBusy: (id: number) => boolean
   updateNumber: (
     channel: AdminChannel,
-    field: 'priority' | 'weight',
+    field: 'priority' | 'weight' | 'channel_rpm' | 'channel_tpm',
     value: number
   ) => Promise<boolean>
   toggleStatus: (channel: AdminChannel) => Promise<boolean>
@@ -380,6 +380,63 @@ function responseDisplay(channel: AdminChannel): {
                   <span v-else class="tabular-nums text-[var(--text-primary)]">
                     {{ channel.weight }}
                   </span>
+                </dd>
+              </div>
+              <div v-if="visibleFields.includes('rateLimits')" class="min-w-0">
+                <dt class="text-[var(--text-tertiary)]">
+                  {{ t('channels.rateLimits') }}
+                </dt>
+                <dd class="mt-1 space-y-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-8 text-[var(--text-tertiary)]">{{
+                      t('channels.rpmShort')
+                    }}</span>
+                    <ChannelInlineNumber
+                      v-if="canWrite"
+                      :value="channel.channel_rpm"
+                      :max="10000000"
+                      width-class="w-[82px]"
+                      :label="
+                        t('channels.channelRpmFor', { name: channel.name })
+                      "
+                      :busy="isRowBusy(channel.id)"
+                      :commit="
+                        (value) => updateNumber(channel, 'channel_rpm', value)
+                      "
+                    />
+                    <span
+                      v-else
+                      class="tabular-nums text-[var(--text-primary)]"
+                      >{{
+                        channel.channel_rpm || t('channels.unlimited')
+                      }}</span
+                    >
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-8 text-[var(--text-tertiary)]">{{
+                      t('channels.tpmShort')
+                    }}</span>
+                    <ChannelInlineNumber
+                      v-if="canWrite"
+                      :value="channel.channel_tpm"
+                      :max="10000000000"
+                      width-class="w-[82px]"
+                      :label="
+                        t('channels.channelTpmFor', { name: channel.name })
+                      "
+                      :busy="isRowBusy(channel.id)"
+                      :commit="
+                        (value) => updateNumber(channel, 'channel_tpm', value)
+                      "
+                    />
+                    <span
+                      v-else
+                      class="tabular-nums text-[var(--text-primary)]"
+                      >{{
+                        channel.channel_tpm || t('channels.unlimited')
+                      }}</span
+                    >
+                  </div>
                 </dd>
               </div>
               <div v-if="visibleFields.includes('usage')" class="min-w-0">

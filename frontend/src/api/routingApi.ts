@@ -12,10 +12,14 @@ import type {
   EligibleRouteChannel,
   RouteCatalog,
   RouteCapabilityState,
+  RouteDecision,
+  RouteDiagnosticWarningCode,
   RouteEntry,
   RouteGroup,
   RouteHealthState,
   RouteHealthSummary,
+  RouteScoreBreakdown,
+  RoutingDiagnostics,
   RoutePolicy,
   RoutePreview,
   RouteProfileInput,
@@ -40,6 +44,12 @@ const retryModes = new Set<RouteRetryMode>([
 ])
 
 const healthStates = new Set<RouteHealthState>(['closed', 'open', 'half_open'])
+const diagnosticWarningCodes = new Set<RouteDiagnosticWarningCode>([
+  'route_lease_failures',
+  'route_decision_events_dropped',
+  'capability_refresh_lagging',
+  'route_score_metrics_unavailable',
+])
 
 function requiredNullableInteger(
   value: unknown,
@@ -299,6 +309,16 @@ export function parseEligibleRouteChannel(
   endpoint: string
 ): EligibleRouteChannel {
   if (!isRecord(value)) invalidResponse(endpoint)
+  const channelRPM = requiredStrictInteger(value.channel_rpm, endpoint)
+  const channelTPM = requiredStrictInteger(value.channel_tpm, endpoint)
+  if (
+    channelRPM < 0 ||
+    channelRPM > 10_000_000 ||
+    channelTPM < 0 ||
+    channelTPM > 10_000_000_000
+  ) {
+    invalidResponse(endpoint)
+  }
   return {
     id: requiredInteger(value.id, endpoint),
     name: requiredString(value.name, endpoint, false),
@@ -307,6 +327,8 @@ export function parseEligibleRouteChannel(
     request_models: parseStringArray(value.request_models, endpoint),
     priority: requiredStrictNumber(value.priority, endpoint),
     weight: requiredInteger(value.weight, endpoint),
+    channel_rpm: channelRPM,
+    channel_tpm: channelTPM,
     snapshot_version: requiredInteger(value.snapshot_version, endpoint),
     catalog_version: requiredString(value.catalog_version, endpoint),
     capability_state: parseCapabilityState(value.capability_state, endpoint),
@@ -347,6 +369,264 @@ function parseCatalog(value: unknown): RouteCatalog {
       }
     }),
   }
+}
+
+function optionalString(value: unknown, endpoint: string): string | undefined {
+  return value === undefined
+    ? undefined
+    : requiredString(value, endpoint, false)
+}
+
+function optionalPositiveInteger(
+  value: unknown,
+  endpoint: string
+): number | undefined {
+  if (value === undefined) return undefined
+  const parsed = requiredStrictInteger(value, endpoint)
+  if (parsed <= 0) invalidResponse(endpoint)
+  return parsed
+}
+
+function optionalBoolean(
+  value: unknown,
+  endpoint: string
+): boolean | undefined {
+  return value === undefined ? undefined : requiredBoolean(value, endpoint)
+}
+
+function parseRouteScoreBreakdown(
+  value: unknown,
+  endpoint: string
+): RouteScoreBreakdown {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  return {
+    priority_layer: requiredStrictInteger(value.priority_layer, endpoint),
+    weight_score: requiredStrictNumber(value.weight_score, endpoint),
+    error_score: requiredStrictNumber(value.error_score, endpoint),
+    error_known: requiredBoolean(value.error_known, endpoint),
+    latency_score: requiredStrictNumber(value.latency_score, endpoint),
+    latency_known: requiredBoolean(value.latency_known, endpoint),
+    ttft_score: requiredStrictNumber(value.ttft_score, endpoint),
+    ttft_known: requiredBoolean(value.ttft_known, endpoint),
+    rate_limit_score: requiredStrictNumber(value.rate_limit_score, endpoint),
+    rate_limit_known: requiredBoolean(value.rate_limit_known, endpoint),
+    quota_score: requiredStrictNumber(value.quota_score, endpoint),
+    quota_known: requiredBoolean(value.quota_known, endpoint),
+    circuit_breaker_score: requiredStrictNumber(
+      value.circuit_breaker_score,
+      endpoint
+    ),
+    sticky_score: requiredStrictNumber(value.sticky_score, endpoint),
+    total: requiredStrictNumber(value.total, endpoint),
+  }
+}
+
+function parseRouteDecision(value: unknown, endpoint: string): RouteDecision {
+  if (!isRecord(value) || !Array.isArray(value.candidates)) {
+    invalidResponse(endpoint)
+  }
+  const routeSource = requiredString(value.route_source, endpoint, false)
+  if (
+    routeSource !== 'unavailable' &&
+    routeSource !== 'manual' &&
+    routeSource !== 'auto_lab'
+  ) {
+    invalidResponse(endpoint)
+  }
+  const event = requiredString(value.event, endpoint, false)
+  if (event !== 'route_decision') invalidResponse(endpoint)
+  const scoringMode = optionalString(value.scoring_mode, endpoint)
+  if (
+    scoringMode !== undefined &&
+    scoringMode !== 'off' &&
+    scoringMode !== 'live'
+  ) {
+    invalidResponse(endpoint)
+  }
+  const candidates = value.candidates.map((candidate) => {
+    if (!isRecord(candidate)) invalidResponse(endpoint)
+    const channelID = requiredStrictInteger(candidate.channel_id, endpoint)
+    const priority = requiredStrictInteger(candidate.priority, endpoint)
+    const position = requiredStrictInteger(candidate.position, endpoint)
+    const weight = requiredStrictInteger(candidate.weight, endpoint)
+    if (channelID <= 0 || position < 0 || weight < 0) {
+      invalidResponse(endpoint)
+    }
+    return {
+      channel_id: channelID,
+      request_model: optionalString(candidate.request_model, endpoint),
+      actual_model: optionalString(candidate.actual_model, endpoint),
+      filter_reason: optionalString(candidate.filter_reason, endpoint),
+      priority,
+      position,
+      weight,
+      snapshot_version: optionalPositiveInteger(
+        candidate.snapshot_version,
+        endpoint
+      ),
+      health_epoch: optionalPositiveInteger(candidate.health_epoch, endpoint),
+      catalog_version: optionalString(candidate.catalog_version, endpoint),
+      lease_state: optionalString(candidate.lease_state, endpoint),
+      score_breakdown:
+        candidate.score_breakdown === undefined
+          ? undefined
+          : parseRouteScoreBreakdown(candidate.score_breakdown, endpoint),
+    }
+  })
+  const selectedChannelID = optionalPositiveInteger(
+    value.selected_channel_id,
+    endpoint
+  )
+  if (
+    selectedChannelID !== undefined &&
+    !candidates.some((candidate) => candidate.channel_id === selectedChannelID)
+  ) {
+    invalidResponse(endpoint)
+  }
+  const retryAttempt = requiredStrictInteger(value.retry_attempt, endpoint)
+  const sameResourceRetryAttempt = requiredStrictInteger(
+    value.same_resource_retry_attempt,
+    endpoint
+  )
+  const failoverAttempt = requiredStrictInteger(
+    value.failover_attempt,
+    endpoint
+  )
+  const generatedAt = requiredStrictInteger(value.generated_at, endpoint)
+  if (
+    retryAttempt < 0 ||
+    sameResourceRetryAttempt < 0 ||
+    failoverAttempt < 0 ||
+    generatedAt <= 0
+  ) {
+    invalidResponse(endpoint)
+  }
+  return {
+    event,
+    request_id: requiredString(value.request_id, endpoint, false),
+    route_source: routeSource,
+    configuration_version: optionalPositiveInteger(
+      value.configuration_version,
+      endpoint
+    ),
+    request_model: requiredString(value.request_model, endpoint, false),
+    actual_model: optionalString(value.actual_model, endpoint),
+    lab_slug: optionalString(value.lab_slug, endpoint),
+    catalog_version: optionalString(value.catalog_version, endpoint),
+    snapshot_version: optionalPositiveInteger(value.snapshot_version, endpoint),
+    scoring_mode: scoringMode,
+    dynamic_score_applied: requiredBoolean(
+      value.dynamic_score_applied,
+      endpoint
+    ),
+    score_metrics_unavailable: optionalBoolean(
+      value.score_metrics_unavailable,
+      endpoint
+    ),
+    static_preferred_channel_id: optionalPositiveInteger(
+      value.static_preferred_channel_id,
+      endpoint
+    ),
+    scored_preferred_channel_id: optionalPositiveInteger(
+      value.scored_preferred_channel_id,
+      endpoint
+    ),
+    candidates,
+    selected_channel_id: selectedChannelID,
+    retry_attempt: retryAttempt,
+    same_resource_retry_attempt: sameResourceRetryAttempt,
+    failover_attempt: failoverAttempt,
+    lease_state: optionalString(value.lease_state, endpoint),
+    final_error: optionalString(value.final_error, endpoint),
+    generated_at: generatedAt,
+  }
+}
+
+export function parseRoutingDiagnostics(value: unknown): RoutingDiagnostics {
+  const endpoint = `${ROUTING_ENDPOINT}/diagnostics`
+  if (
+    !isRecord(value) ||
+    !isRecord(value.lease_metrics) ||
+    !Array.isArray(value.warnings) ||
+    !isRecord(value.limits) ||
+    !Array.isArray(value.recent_decisions)
+  ) {
+    invalidResponse(endpoint)
+  }
+  const diagnostics: RoutingDiagnostics = {
+    lease_metrics: {
+      route_lease_acquire_failure_total: requiredStrictInteger(
+        value.lease_metrics.route_lease_acquire_failure_total,
+        endpoint
+      ),
+      route_lease_renew_failure_total: requiredStrictInteger(
+        value.lease_metrics.route_lease_renew_failure_total,
+        endpoint
+      ),
+      route_lease_release_failure_total: requiredStrictInteger(
+        value.lease_metrics.route_lease_release_failure_total,
+        endpoint
+      ),
+    },
+    decision_events_dropped: requiredStrictInteger(
+      value.decision_events_dropped,
+      endpoint
+    ),
+    capability_refresh_lag_seconds: requiredStrictInteger(
+      value.capability_refresh_lag_seconds,
+      endpoint
+    ),
+    score_metrics_available: requiredBoolean(
+      value.score_metrics_available,
+      endpoint
+    ),
+    degraded: requiredBoolean(value.degraded, endpoint),
+    warnings: value.warnings.map((warning) => {
+      const code = requiredString(
+        warning,
+        endpoint,
+        false
+      ) as RouteDiagnosticWarningCode
+      if (!diagnosticWarningCodes.has(code)) invalidResponse(endpoint)
+      return code
+    }),
+    limits: {
+      candidate_top_k: requiredStrictInteger(
+        value.limits.candidate_top_k,
+        endpoint
+      ),
+      candidate_probe_limit: requiredStrictInteger(
+        value.limits.candidate_probe_limit,
+        endpoint
+      ),
+      total_send_attempts: requiredStrictInteger(
+        value.limits.total_send_attempts,
+        endpoint
+      ),
+      max_precommit_events: requiredStrictInteger(
+        value.limits.max_precommit_events,
+        endpoint
+      ),
+      max_precommit_bytes: requiredStrictInteger(
+        value.limits.max_precommit_bytes,
+        endpoint
+      ),
+    },
+    recent_decisions: value.recent_decisions.map((decision) =>
+      parseRouteDecision(decision, endpoint)
+    ),
+    generated_at: requiredStrictInteger(value.generated_at, endpoint),
+  }
+  if (
+    Object.values(diagnostics.lease_metrics).some((count) => count < 0) ||
+    diagnostics.decision_events_dropped < 0 ||
+    diagnostics.capability_refresh_lag_seconds < 0 ||
+    diagnostics.generated_at <= 0 ||
+    Object.values(diagnostics.limits).some((limit) => limit <= 0)
+  ) {
+    invalidResponse(endpoint)
+  }
+  return diagnostics
 }
 
 export function parseRoutePreview(value: unknown): RoutePreview {
@@ -520,6 +800,16 @@ function parseStringArray(value: unknown, endpoint: string): string[] {
 }
 
 export const routingApi = {
+  async diagnostics(signal?: AbortSignal): Promise<RoutingDiagnostics> {
+    const endpoint = `${ROUTING_ENDPOINT}/diagnostics`
+    return parseRoutingDiagnostics(
+      await api.get<unknown>(
+        endpoint,
+        undefined,
+        signal ? { signal } : undefined
+      )
+    )
+  },
   async profiles(): Promise<RouteProfileView[]> {
     const endpoint = `${ROUTING_ENDPOINT}/profiles`
     const value = await api.get<unknown>(endpoint)

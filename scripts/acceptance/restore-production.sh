@@ -5,8 +5,10 @@ manifest=${1:?manifest required}
 failed=0
 for role in postgres redis app; do
   record=$(awk -F '\t' -v role="$role" '$1==role {print}' "$manifest")
-  IFS=$'\t' read -r saved_role container_id image_id was_running <<< "$record"
-  [[ "$saved_role" == "$role" && "$container_id" =~ ^[a-f0-9]{64}$ ]] || exit 2
+  IFS=$'\t' read -r saved_role container_name container_id image_id was_running restart_policy <<< "$record"
+  [[ "$saved_role" == "$role" && "$container_name" == "/ren2hub"* && "$container_id" =~ ^[a-f0-9]{64}$ && -n "$restart_policy" ]] || exit 2
+  [[ "$(docker inspect -f '{{.Name}}' "$container_id")" == "$container_name" ]] || { printf 'RESTORE_FAILED role=%s name_changed\n' "$role"; failed=1; continue; }
+  [[ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "$container_id")" == "$restart_policy" ]] || { printf 'RESTORE_FAILED role=%s restart_policy_changed\n' "$role"; failed=1; continue; }
   if [[ "$(docker inspect -f '{{.Image}}' "$container_id")" != "$image_id" ]]; then
     printf 'RESTORE_FAILED role=%s image_changed\n' "$role"
     failed=1

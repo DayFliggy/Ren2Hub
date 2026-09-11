@@ -30,6 +30,8 @@ type ModelRequest struct {
 	Model string `json:"model"`
 }
 
+const requestRequirementFeaturesContextKey = "request_requirement_features"
+
 func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		request, selectChannel, err := getModelRequest(c)
@@ -98,6 +100,16 @@ func Distribute() func(c *gin.Context) {
 func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID int, stage relaycommon.CompactAttemptStage) (*model.Channel, *types.NewAPIError) {
 	value, _ := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
 	limits, _ := value.(map[string]bool)
+	featureValue, _ := c.Get(requestRequirementFeaturesContextKey)
+	requirementFeatures, _ := featureValue.(service.RequestRequirementFeatures)
+	requirements := service.NewRequestRequirementsWithStream(
+		modelName,
+		c.Request.URL.Path,
+		common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired),
+		stage,
+		common.GetContextKeyBool(c, constant.ContextKeyRequestStreamMode),
+		requirementFeatures,
+	)
 	input := service.LiveRouteRequest{
 		Context: c.Request.Context(), CapabilityEnabled: true,
 		RequestID:    c.GetString(common.RequestIdKey),
@@ -111,6 +123,7 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 		TokenModelLimitEnabled:  common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled),
 		TokenModelLimit:         limits,
 		ExcludedKeyIndexes:      service.RequestRouteAttemptedKeys(c, stage),
+		Requirements:            &requirements,
 	}
 	if stage != relaycommon.CompactAttemptNone {
 		input.ExcludedChannelIDs = make(map[int]string)
@@ -124,13 +137,20 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 			}
 		}
 	}
-	if preferred, ok := service.GetPreferredChannelByAffinity(c, modelName); ok {
-		input.PreferredChannelID = preferred
+	preferredChannelID, affinityHit := service.GetPreferredChannelByAffinity(c, modelName)
+	if affinityHit {
+		input.PreferredChannelID = preferredChannelID
+		input.RequirePreferredChannel = service.ChannelAffinityRequiresExactBinding(c)
 	}
 	c.Set(service.RouteLiveSelectionRequiredContextKey, true)
 	selection, err := service.SelectLiveTokenRoute(input)
 	if err != nil {
 		return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
+	}
+	if affinityHit {
+		if affinityErr := enforceSelectedChannelAffinity(c, preferredChannelID, selection.Decision.SelectedChannelID); affinityErr != nil {
+			return nil, affinityErr
+		}
 	}
 	channel, err := model.GetChannelById(selection.Decision.SelectedChannelID, true)
 	if err != nil {
@@ -139,10 +159,69 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 	c.Set("route_live_selection", selection)
 	c.Set("route_request_model", modelName)
 	service.SetCompactStage(c, stage)
-	if setupErr := SetupContextForSelectedChannel(c, channel, modelName); setupErr != nil {
+	return setupInitialRouteChannel(c, selection, channel, modelName)
+}
+
+func setupInitialRouteChannel(c *gin.Context, selection service.LiveRouteSelection, channel *model.Channel, modelName string) (*model.Channel, *types.NewAPIError) {
+	setupErr := SetupContextForSelectedChannel(c, channel, modelName)
+	if setupErr == nil {
+		return channel, nil
+	}
+	if setupErr.GetErrorCode() != types.ErrorCodeChannelNoAvailableKey ||
+		types.IsSkipRetryError(setupErr) || service.ChannelAffinityRequiresExactBinding(c) {
 		return nil, setupErr
 	}
-	return channel, nil
+	keepDisabledBinding := channel.Status != common.ChannelStatusEnabled && service.ShouldKeepChannelAffinityOnChannelDisabled()
+	if !keepDisabledBinding {
+		service.ClearCurrentChannelAffinityCache(c)
+	}
+
+	seen := map[int]struct{}{channel.Id: {}}
+	for _, candidate := range selection.Attempts {
+		if _, exists := seen[candidate.ChannelID]; exists || candidate.FilterReason != "" {
+			continue
+		}
+		seen[candidate.ChannelID] = struct{}{}
+		next, err := model.GetChannelById(candidate.ChannelID, true)
+		if err != nil || next.Status != common.ChannelStatusEnabled {
+			continue
+		}
+		selection.Decision.SelectedChannelID = candidate.ChannelID
+		selection.Decision.ActualModel = candidate.ActualModel
+		selection.Decision.CatalogVersion = candidate.CatalogVersion
+		selection.Decision.SnapshotVersion = candidate.SnapshotVersion
+		c.Set("route_live_selection", selection)
+		if nextErr := SetupContextForSelectedChannel(c, next, modelName); nextErr == nil {
+			return next, nil
+		} else if nextErr.GetErrorCode() != types.ErrorCodeChannelNoAvailableKey || types.IsSkipRetryError(nextErr) {
+			return nil, nextErr
+		}
+	}
+	return nil, setupErr
+}
+
+func enforceSelectedChannelAffinity(c *gin.Context, preferredChannelID, selectedChannelID int) *types.NewAPIError {
+	if selectedChannelID == preferredChannelID {
+		service.MarkChannelAffinityUsed(c, preferredChannelID)
+		return nil
+	}
+	if service.ChannelAffinityRequiresExactBinding(c) {
+		return types.NewErrorWithStatusCode(
+			errors.New("bound continuation channel is unavailable"),
+			types.ErrorCodeChannelNoAvailableKey,
+			http.StatusServiceUnavailable,
+			types.ErrOptionWithSkipRetry(),
+		)
+	}
+	keepDisabledBinding := false
+	if model.DB != nil {
+		preferred, err := model.GetChannelById(preferredChannelID, true)
+		keepDisabledBinding = err == nil && preferred.Status != common.ChannelStatusEnabled && service.ShouldKeepChannelAffinityOnChannelDisabled()
+	}
+	if !keepDisabledBinding {
+		service.ClearCurrentChannelAffinityCache(c)
+	}
+	return nil
 }
 
 // requestRequiresNativeResponses inspects only the protocol markers needed for
@@ -202,6 +281,9 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 	if !gjson.ValidBytes(requestBody) {
 		return nil, errors.New("invalid JSON request body")
 	}
+	features := service.RequestRequirementFeaturesFromJSON(requestBody)
+	c.Set(requestRequirementFeaturesContextKey, features)
+	common.SetContextKey(c, constant.ContextKeyRequestContinuation, features.Continuation)
 
 	values := gjson.GetManyBytes(requestBody, "model", "group", "stream")
 	model, err := getJSONStringValue(values[0], "model")
@@ -468,28 +550,47 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 			}
 		}
 	}
-	var key string
-	var index int
-	for {
-		var newAPIError *types.NewAPIError
-		key, index, newAPIError = channel.GetNextEnabledKeyExcluding(excludedKeyIndexes)
-		if newAPIError != nil {
-			return newAPIError
-		}
-		if !liveRouteActive {
-			break
-		}
+	key, index, affinityCredentialBound, affinityCredentialAvailable := service.ResolveChannelAffinityCredential(c, channel, excludedKeyIndexes)
+	if affinityCredentialAvailable && liveRouteActive {
 		usable, _, err := service.RouteKeyHealthUsable(c.Request.Context(), channel.Id, modelName, key, time.Now())
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 		}
-		if usable {
-			break
+		affinityCredentialAvailable = usable
+	}
+	if affinityCredentialBound && !affinityCredentialAvailable {
+		if service.ChannelAffinityRequiresExactBinding(c) {
+			return types.NewErrorWithStatusCode(
+				errors.New("bound continuation credential is unavailable"),
+				types.ErrorCodeChannelNoAvailableKey,
+				http.StatusServiceUnavailable,
+				types.ErrOptionWithSkipRetry(),
+			)
 		}
-		if excludedKeyIndexes == nil {
-			excludedKeyIndexes = make(map[int]struct{})
+		service.ClearCurrentChannelAffinityCache(c)
+	}
+	if !affinityCredentialAvailable {
+		for {
+			var newAPIError *types.NewAPIError
+			key, index, newAPIError = channel.GetNextEnabledKeyExcluding(excludedKeyIndexes)
+			if newAPIError != nil {
+				return newAPIError
+			}
+			if !liveRouteActive {
+				break
+			}
+			usable, _, err := service.RouteKeyHealthUsable(c.Request.Context(), channel.Id, modelName, key, time.Now())
+			if err != nil {
+				return types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+			}
+			if usable {
+				break
+			}
+			if excludedKeyIndexes == nil {
+				excludedKeyIndexes = make(map[int]struct{})
+			}
+			excludedKeyIndexes[index] = struct{}{}
 		}
-		excludedKeyIndexes[index] = struct{}{}
 	}
 	if channel.ChannelInfo.IsMultiKey {
 		common.SetContextKey(c, constant.ContextKeyChannelIsMultiKey, true)

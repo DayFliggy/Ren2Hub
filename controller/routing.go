@@ -7,10 +7,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/execution"
 	"github.com/QuantumNous/new-api/pkg/modellab"
+	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
@@ -23,10 +26,32 @@ type eligibleRouteChannel struct {
 	RequestModels   []string `json:"request_models"`
 	Priority        int64    `json:"priority"`
 	Weight          int      `json:"weight"`
+	ChannelRPM      int      `json:"channel_rpm"`
+	ChannelTPM      int      `json:"channel_tpm"`
 	SnapshotVersion int64    `json:"snapshot_version"`
 	CatalogVersion  string   `json:"catalog_version"`
 	CapabilityState string   `json:"capability_state"`
 	FilterReason    string   `json:"filter_reason,omitempty"`
+}
+
+type routeDiagnosticLimits struct {
+	CandidateTopK      int `json:"candidate_top_k"`
+	CandidateProbe     int `json:"candidate_probe_limit"`
+	TotalSendAttempts  int `json:"total_send_attempts"`
+	MaxPrecommitEvents int `json:"max_precommit_events"`
+	MaxPrecommitBytes  int `json:"max_precommit_bytes"`
+}
+
+type routeDiagnostics struct {
+	LeaseMetrics                service.RouteLeaseMetricsSnapshot `json:"lease_metrics"`
+	DecisionEventsDropped       uint64                            `json:"decision_events_dropped"`
+	CapabilityRefreshLagSeconds int64                             `json:"capability_refresh_lag_seconds"`
+	ScoreMetricsAvailable       bool                              `json:"score_metrics_available"`
+	Degraded                    bool                              `json:"degraded"`
+	Warnings                    []string                          `json:"warnings"`
+	Limits                      routeDiagnosticLimits             `json:"limits"`
+	RecentDecisions             []service.RouteDecision           `json:"recent_decisions"`
+	GeneratedAt                 int64                             `json:"generated_at"`
 }
 
 type routeCapabilityItem struct {
@@ -49,6 +74,44 @@ func ListRouteProfiles(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, profiles)
+}
+
+func GetRouteDiagnostics(c *gin.Context) {
+	leaseMetrics := service.RouteLeaseMetrics()
+	dropped := service.RouteDecisionEventsDropped()
+	refreshLag := service.RouteCapabilityRefreshLagSeconds()
+	scoreMetricsAvailable := service.RouteScoreMetricsAvailable()
+	warnings := make([]string, 0, 4)
+	if leaseMetrics.AcquireFailures > 0 || leaseMetrics.RenewFailures > 0 || leaseMetrics.ReleaseFailures > 0 {
+		warnings = append(warnings, "route_lease_failures")
+	}
+	if dropped > 0 {
+		warnings = append(warnings, "route_decision_events_dropped")
+	}
+	if refreshLag > int64((2 * service.RouteCapabilityRefreshInterval()).Seconds()) {
+		warnings = append(warnings, "capability_refresh_lagging")
+	}
+	if !scoreMetricsAvailable {
+		warnings = append(warnings, "route_score_metrics_unavailable")
+	}
+	streamLimits := helper.CurrentStreamCommitLimits()
+	common.ApiSuccess(c, routeDiagnostics{
+		LeaseMetrics:                leaseMetrics,
+		DecisionEventsDropped:       dropped,
+		CapabilityRefreshLagSeconds: refreshLag,
+		ScoreMetricsAvailable:       scoreMetricsAvailable,
+		Degraded:                    len(warnings) > 0,
+		Warnings:                    warnings,
+		Limits: routeDiagnosticLimits{
+			CandidateTopK:      service.DefaultRouteCandidateTopK,
+			CandidateProbe:     execution.MaxCandidates,
+			TotalSendAttempts:  service.DefaultTotalAttempts,
+			MaxPrecommitEvents: streamLimits.MaxPrecommitEvents,
+			MaxPrecommitBytes:  streamLimits.MaxPrecommitBytes,
+		},
+		RecentDecisions: service.RecentRouteDecisions(100),
+		GeneratedAt:     time.Now().UnixMilli(),
+	})
 }
 
 func CreateRouteProfile(c *gin.Context) {
@@ -253,6 +316,7 @@ func listEligibleRouteChannels(userID int) ([]eligibleRouteChannel, error) {
 		item := eligibleRouteChannel{
 			ID: channel.Id, Name: channel.Name, Type: channel.Type, Status: channel.Status,
 			RequestModels: []string{}, Priority: channel.GetPriority(), Weight: channel.GetWeight(),
+			ChannelRPM: channel.ChannelRPM, ChannelTPM: channel.ChannelTPM,
 			CapabilityState: model.RouteCapabilityStateUnresolved,
 		}
 		if snapshot, ok := snapshotByChannel[channel.Id]; ok && snapshot.ActiveVersion > 0 {

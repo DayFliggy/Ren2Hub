@@ -15,6 +15,7 @@ import (
 
 const executionContextKey = "request_execution"
 const BeforeCallContextKey = "request_execution_before_call"
+const BeforeCallAdmissionContextKey = "request_execution_before_call_admission"
 const BasicValidatedContextKey = "request_execution_basic_validated"
 
 func AfterBasicValidation(c *gin.Context) error {
@@ -83,6 +84,13 @@ func BeginUpstreamCall(c *gin.Context, info *relaycommon.RelayInfo) (func(*http.
 	candidate, err := CheckExecutionCandidate(c, info)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+	}
+	if value, ok := c.Get(BeforeCallAdmissionContextKey); ok {
+		if admit, valid := value.(func() error); valid {
+			if err := admit(); err != nil {
+				return nil, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+			}
+		}
 	}
 	call, err := request.BeginCall(c.Request.Context(), candidate.ID)
 	if err != nil {

@@ -6352,6 +6352,32 @@
           }
         }
       }
+    },
+    "/api/routing/diagnostics": {
+      "get": {
+        "summary": "获取路由诊断",
+        "description": "返回路由租约、能力刷新、评分可用性、硬限制与最近决策。仅管理员可访问。",
+        "tags": [
+          "路由"
+        ],
+        "security": [
+          {
+            "AccessToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteDiagnosticsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6537,6 +6563,20 @@
             "description": "冻结在请求计费中的渠道倍率。",
             "exclusiveMinimum": true,
             "maximum": 1000
+          },
+          "channel_rpm": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000,
+            "default": 0,
+            "description": "??????????0 ?????"
+          },
+          "channel_tpm": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000000,
+            "default": 0,
+            "description": "????? Token ???0 ?????"
           }
         }
       },
@@ -7263,6 +7303,338 @@
         "required": [
           "billing_multiplier",
           "multiplier_source"
+        ]
+      },
+      "RouteLeaseMetrics": {
+        "type": "object",
+        "properties": {
+          "route_lease_acquire_failure_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "route_lease_renew_failure_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "route_lease_release_failure_total": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "route_lease_acquire_failure_total",
+          "route_lease_renew_failure_total",
+          "route_lease_release_failure_total"
+        ]
+      },
+      "RouteScoreBreakdown": {
+        "type": "object",
+        "properties": {
+          "priority_layer": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "weight_score": {
+            "type": "number",
+            "format": "double"
+          },
+          "error_score": {
+            "type": "number",
+            "format": "double"
+          },
+          "error_known": {
+            "type": "boolean"
+          },
+          "latency_score": {
+            "type": "number",
+            "format": "double"
+          },
+          "latency_known": {
+            "type": "boolean"
+          },
+          "ttft_score": {
+            "type": "number",
+            "format": "double"
+          },
+          "ttft_known": {
+            "type": "boolean"
+          },
+          "rate_limit_score": {
+            "type": "number",
+            "format": "double"
+          },
+          "rate_limit_known": {
+            "type": "boolean"
+          },
+          "quota_score": {
+            "type": "number",
+            "format": "double"
+          },
+          "quota_known": {
+            "type": "boolean"
+          },
+          "circuit_breaker_score": {
+            "type": "number",
+            "format": "double"
+          },
+          "sticky_score": {
+            "type": "number",
+            "format": "double"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "required": [
+          "priority_layer",
+          "weight_score",
+          "error_score",
+          "error_known",
+          "latency_score",
+          "latency_known",
+          "ttft_score",
+          "ttft_known",
+          "rate_limit_score",
+          "rate_limit_known",
+          "quota_score",
+          "quota_known",
+          "circuit_breaker_score",
+          "sticky_score",
+          "total"
+        ]
+      },
+      "RouteDecisionCandidate": {
+        "type": "object",
+        "properties": {
+          "channel_id": {
+            "type": "integer"
+          },
+          "request_model": {
+            "type": "string"
+          },
+          "actual_model": {
+            "type": "string"
+          },
+          "filter_reason": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "weight": {
+            "type": "integer"
+          },
+          "snapshot_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "health_epoch": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "catalog_version": {
+            "type": "string"
+          },
+          "score_breakdown": {
+            "$ref": "#/components/schemas/RouteScoreBreakdown"
+          },
+          "lease_state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel_id",
+          "priority",
+          "position",
+          "weight"
+        ]
+      },
+      "RouteDecision": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "route_source": {
+            "type": "string"
+          },
+          "configuration_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "request_model": {
+            "type": "string"
+          },
+          "actual_model": {
+            "type": "string"
+          },
+          "lab_slug": {
+            "type": "string"
+          },
+          "catalog_version": {
+            "type": "string"
+          },
+          "snapshot_version": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scoring_mode": {
+            "type": "string"
+          },
+          "dynamic_score_applied": {
+            "type": "boolean"
+          },
+          "score_metrics_unavailable": {
+            "type": "boolean"
+          },
+          "static_preferred_channel_id": {
+            "type": "integer"
+          },
+          "scored_preferred_channel_id": {
+            "type": "integer"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RouteDecisionCandidate"
+            }
+          },
+          "selected_channel_id": {
+            "type": "integer"
+          },
+          "retry_attempt": {
+            "type": "integer"
+          },
+          "same_resource_retry_attempt": {
+            "type": "integer"
+          },
+          "failover_attempt": {
+            "type": "integer"
+          },
+          "lease_state": {
+            "type": "string"
+          },
+          "final_error": {
+            "type": "string"
+          },
+          "generated_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "event",
+          "request_id",
+          "route_source",
+          "request_model",
+          "dynamic_score_applied",
+          "candidates",
+          "retry_attempt",
+          "same_resource_retry_attempt",
+          "failover_attempt",
+          "generated_at"
+        ]
+      },
+      "RouteDiagnostics": {
+        "type": "object",
+        "properties": {
+          "lease_metrics": {
+            "$ref": "#/components/schemas/RouteLeaseMetrics"
+          },
+          "decision_events_dropped": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "capability_refresh_lag_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "score_metrics_available": {
+            "type": "boolean"
+          },
+          "degraded": {
+            "type": "boolean"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "candidate_top_k": {
+                "type": "integer"
+              },
+              "candidate_probe_limit": {
+                "type": "integer"
+              },
+              "total_send_attempts": {
+                "type": "integer"
+              },
+              "max_precommit_events": {
+                "type": "integer"
+              },
+              "max_precommit_bytes": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_top_k",
+              "candidate_probe_limit",
+              "total_send_attempts",
+              "max_precommit_events",
+              "max_precommit_bytes"
+            ]
+          },
+          "recent_decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RouteDecision"
+            }
+          },
+          "generated_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "lease_metrics",
+          "decision_events_dropped",
+          "capability_refresh_lag_seconds",
+          "score_metrics_available",
+          "degraded",
+          "warnings",
+          "limits",
+          "recent_decisions",
+          "generated_at"
+        ]
+      },
+      "RouteDiagnosticsResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/RouteDiagnostics"
+          }
+        },
+        "required": [
+          "success",
+          "data"
         ]
       }
     },

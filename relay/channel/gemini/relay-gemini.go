@@ -140,8 +140,7 @@ func handleFinalStream(c *gin.Context, info *relaycommon.RelayInfo, resp *dto.Ch
 	if err != nil {
 		return fmt.Errorf("failed to marshal stream response: %w", err)
 	}
-	openai.HandleFinalResponse(c, info, string(streamData), resp.Id, resp.Created, resp.Model, resp.GetSystemFingerprint(), resp.Usage, false)
-	return nil
+	return openai.HandleFinalResponse(c, info, string(streamData), resp.Id, resp.Created, resp.Model, resp.GetSystemFingerprint(), resp.Usage, false)
 }
 
 func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response, callback func(data string, geminiResponse *dto.GeminiChatResponse) bool) (*dto.Usage, *types.NewAPIError) {
@@ -186,6 +185,9 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			sr.Stop(fmt.Errorf("gemini callback stopped"))
 		}
 	})
+	if info.StreamStatus != nil && info.StreamStatus.HasErrors() {
+		return nil, types.NewOpenAIError(fmt.Errorf("upstream stream processing failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
 
 	if !hasBillableUsageMetadata {
 		if info.ReceivedResponseCount > 0 {
@@ -265,9 +267,8 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 					emptyResponse.Choices[0].Delta.ToolCalls = copiedToolCalls
 				}
 				finishReason = constant.FinishReasonToolCalls
-				err := handleStream(c, info, emptyResponse)
-				if err != nil {
-					logger.LogError(c, err.Error())
+				if err := handleStream(c, info, emptyResponse); err != nil {
+					return false
 				}
 
 				response.ClearToolCalls()
@@ -275,20 +276,20 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 					response.Choices[0].FinishReason = nil
 				}
 			} else {
-				err := handleStream(c, info, emptyResponse)
-				if err != nil {
-					logger.LogError(c, err.Error())
+				if err := handleStream(c, info, emptyResponse); err != nil {
+					return false
 				}
 			}
 		}
 
-		err := handleStream(c, info, response)
-		if err != nil {
-			logger.LogError(c, err.Error())
+		if err := handleStream(c, info, response); err != nil {
+			return false
 		}
 		if isStop {
 			if info.RelayFormat != types.RelayFormatClaude {
-				_ = handleStream(c, info, helper.GenerateStopResponse(id, createAt, info.UpstreamModelName, finishReason))
+				if err := handleStream(c, info, helper.GenerateStopResponse(id, createAt, info.UpstreamModelName, finishReason)); err != nil {
+					return false
+				}
 			}
 		}
 		return true

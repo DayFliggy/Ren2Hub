@@ -3,8 +3,10 @@ package common
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -43,6 +45,83 @@ func TestRelayInfoGetFinalRequestRelayFormatFallsBackToRelayFormat(t *testing.T)
 func TestRelayInfoGetFinalRequestRelayFormatNilReceiver(t *testing.T) {
 	var info *RelayInfo
 	require.Equal(t, types.RelayFormat(""), info.GetFinalRequestRelayFormat())
+}
+
+func TestUpdateEstimateOutputCeilingFromFinalOutboundJSON(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+		want    int
+	}{
+		{name: "OpenAI chat override", payload: `{"max_tokens":200,"max_completion_tokens":900}`, want: 1000},
+		{name: "OpenAI responses", payload: `{"max_output_tokens":800}`, want: 900},
+		{name: "Claude messages", payload: `{"max_tokens":700}`, want: 800},
+		{name: "Gemini native", payload: `{"generationConfig":{"maxOutputTokens":600}}`, want: 700},
+		{name: "AWS Nova", payload: `{"inferenceConfig":{"maxTokens":500}}`, want: 600},
+		{name: "removed limit becomes unknown", payload: `{"model":"gpt-5"}`, want: 0},
+		{name: "invalid limit becomes unknown", payload: `{"max_tokens":"900"}`, want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &RelayInfo{}
+			info.SetEstimatePromptTokens(100)
+			info.SetEstimateOutputCeiling(50)
+
+			info.UpdateEstimateOutputCeilingFromJSON([]byte(tt.payload))
+
+			assert.Equal(t, tt.want, info.EstimateTokenCeiling())
+		})
+	}
+}
+
+func TestParamOverrideOutputLimitFeedsFinalTokenCeiling(t *testing.T) {
+	info := &RelayInfo{ChannelMeta: &ChannelMeta{ParamOverride: map[string]interface{}{
+		"max_completion_tokens": 900,
+	}}}
+	info.SetEstimatePromptTokens(100)
+	info.SetEstimateOutputCeiling(200)
+
+	out, err := ApplyParamOverrideWithRelayInfo([]byte(`{"model":"gpt-5","max_tokens":200}`), info)
+	require.NoError(t, err)
+	info.UpdateEstimateOutputCeilingFromJSON(out)
+
+	assert.Equal(t, 1000, info.EstimateTokenCeiling())
+}
+
+func TestAttemptTokenCeilingDoesNotLeakAcrossCandidates(t *testing.T) {
+	info := &RelayInfo{RelayMode: relayconstant.RelayModeChatCompletions}
+	info.SetEstimatePromptTokens(100)
+	info.UpdateEstimateOutputCeilingFromJSON([]byte(`{"max_tokens":512}`))
+	require.GreaterOrEqual(t, info.EstimateTokenCeiling(), 612)
+
+	info.ResetAttemptTokenCeiling()
+	info.UpdateEstimateOutputCeilingFromJSON([]byte(`{"model":"gpt-5"}`))
+	assert.Zero(t, info.EstimateTokenCeiling())
+}
+
+func TestFinalBodyAdmissionEstimateDoesNotChangeBillingFallbackEstimate(t *testing.T) {
+	info := &RelayInfo{RelayMode: relayconstant.RelayModeChatCompletions}
+	info.SetEstimatePromptTokens(10)
+	payload := []byte(`{"max_tokens":50,"messages":"` + strings.Repeat("x", 10_000) + `"}`)
+
+	info.UpdateEstimateOutputCeilingFromJSON(payload)
+
+	assert.Equal(t, 10, info.GetEstimatePromptTokens())
+	assert.Equal(t, len(payload)+50, info.EstimateTokenCeiling())
+
+	info.ResetAttemptTokenCeiling()
+	smallPayload := []byte(`{"max_tokens":50}`)
+	info.UpdateEstimateOutputCeilingFromJSON(smallPayload)
+	assert.Equal(t, len(smallPayload)+50, info.EstimateTokenCeiling())
+}
+
+func TestInputOnlyAttemptUsesKnownZeroOutputCeiling(t *testing.T) {
+	info := &RelayInfo{RelayMode: relayconstant.RelayModeEmbeddings}
+	info.SetEstimatePromptTokens(120)
+	info.ResetAttemptTokenCeiling()
+
+	assert.Equal(t, 120, info.EstimateTokenCeiling())
 }
 
 func TestRelayInfoMetaTypedNilReceiver(t *testing.T) {

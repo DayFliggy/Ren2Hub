@@ -149,6 +149,9 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
+		if data, bytesErr := storage.Bytes(); bytesErr == nil {
+			info.UpdateEstimateOutputCeilingFromJSON(data)
+		}
 		requestBody = common.NewReplayableBodyReader(storage)
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
@@ -180,6 +183,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 			}
 		}
+		info.UpdateEstimateOutputCeilingFromJSON(jsonData)
 
 		if info.RelayMode == relayconstant.RelayModeResponsesCompact {
 			logger.LogDebug(c, "compact request metadata: %s", compactRequestDebugSummary(info, jsonData))

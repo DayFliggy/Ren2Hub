@@ -8,6 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
@@ -17,8 +20,15 @@ import (
 func buildChannelAffinityTemplateContextForTest(meta channelAffinityMeta) *gin.Context {
 	rec := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(rec)
+	common.SetContextKey(ctx, constant.ContextKeyUserId, 101)
+	common.SetContextKey(ctx, constant.ContextKeyTokenId, 202)
 	setChannelAffinityContext(ctx, meta)
 	return ctx
+}
+
+func setChannelAffinityTestIdentity(ctx *gin.Context, userID, tokenID int) {
+	common.SetContextKey(ctx, constant.ContextKeyUserId, userID)
+	common.SetContextKey(ctx, constant.ContextKeyTokenId, tokenID)
 }
 
 func TestApplyChannelAffinityOverrideTemplate_NoTemplate(t *testing.T) {
@@ -201,10 +211,15 @@ func TestGetPreferredChannelByAffinity_RequestHeaderKeySource(t *testing.T) {
 	}
 
 	affinityValue := fmt.Sprintf("header-hit-%d", time.Now().UnixNano())
-	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(rule, "gpt-5", affinityValue)
+	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(rule, "gpt-5", affinityValue, 101, 202)
 
 	cache := getChannelAffinityCache()
-	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, 9528, time.Minute))
+	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, channelAffinityBinding{
+		UserID:                101,
+		TokenID:               202,
+		ChannelID:             9528,
+		CredentialFingerprint: channelAffinityCredentialFingerprint("header-key"),
+	}, time.Minute))
 	t.Cleanup(func() {
 		_, _ = cache.DeleteMany([]string{cacheKeySuffix})
 	})
@@ -220,6 +235,7 @@ func TestGetPreferredChannelByAffinity_RequestHeaderKeySource(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(rec)
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 	ctx.Request.Header.Set("X-Affinity-Key", affinityValue)
+	setChannelAffinityTestIdentity(ctx, 101, 202)
 
 	channelID, found := GetPreferredChannelByAffinity(ctx, "gpt-5")
 	require.True(t, found)
@@ -238,7 +254,12 @@ func TestClearCurrentChannelAffinityCache(t *testing.T) {
 	cacheKeySuffix := fmt.Sprintf("codex cli trace:default:clear-current-%d", time.Now().UnixNano())
 	cacheKeyFull := channelAffinityCacheNamespace + ":" + cacheKeySuffix
 	cache := getChannelAffinityCache()
-	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, 9527, time.Minute))
+	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, channelAffinityBinding{
+		UserID:                101,
+		TokenID:               202,
+		ChannelID:             9527,
+		CredentialFingerprint: channelAffinityCredentialFingerprint("clear-key"),
+	}, time.Minute))
 	t.Cleanup(func() {
 		_, _ = cache.DeleteMany([]string{cacheKeySuffix})
 	})
@@ -276,10 +297,15 @@ func TestChannelAffinityHitCodexTemplatePassHeadersEffective(t *testing.T) {
 	require.NotNil(t, codexRule)
 
 	affinityValue := fmt.Sprintf("pc-hit-%d", time.Now().UnixNano())
-	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(*codexRule, "gpt-5", affinityValue)
+	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(*codexRule, "gpt-5", affinityValue, 101, 202)
 
 	cache := getChannelAffinityCache()
-	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, 9527, time.Minute))
+	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, channelAffinityBinding{
+		UserID:                101,
+		TokenID:               202,
+		ChannelID:             9527,
+		CredentialFingerprint: channelAffinityCredentialFingerprint("codex-key"),
+	}, time.Minute))
 	t.Cleanup(func() {
 		_, _ = cache.DeleteMany([]string{cacheKeySuffix})
 	})
@@ -288,6 +314,7 @@ func TestChannelAffinityHitCodexTemplatePassHeadersEffective(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(rec)
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(fmt.Sprintf(`{"prompt_cache_key":"%s"}`, affinityValue)))
 	ctx.Request.Header.Set("Content-Type", "application/json")
+	setChannelAffinityTestIdentity(ctx, 101, 202)
 
 	channelID, found := GetPreferredChannelByAffinity(ctx, "gpt-5")
 	require.True(t, found)
@@ -327,4 +354,153 @@ func TestChannelAffinityHitCodexTemplatePassHeadersEffective(t *testing.T) {
 	require.False(t, exists)
 	_, exists = info.RuntimeHeadersOverride["x-codex-turn-metadata"]
 	require.False(t, exists)
+}
+
+func TestChannelAffinityCacheIsIsolatedByUserAndToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rule := operation_setting.ChannelAffinityRule{
+		Name:             "identity-isolation",
+		ModelRegex:       []string{"^gpt-5$"},
+		PathRegex:        []string{"/v1/responses"},
+		KeySources:       []operation_setting.ChannelAffinityKeySource{{Type: "request_header", Key: "X-Affinity-Key"}},
+		IncludeRuleName:  true,
+		IncludeModelName: true,
+	}
+	affinityValue := fmt.Sprintf("isolated-%d", time.Now().UnixNano())
+	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(rule, "gpt-5", affinityValue, 11, 21)
+	cache := getChannelAffinityCache()
+	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, channelAffinityBinding{
+		UserID:                11,
+		TokenID:               21,
+		ChannelID:             31,
+		CredentialFingerprint: channelAffinityCredentialFingerprint("credential-31"),
+	}, time.Minute))
+	t.Cleanup(func() { _, _ = cache.DeleteMany([]string{cacheKeySuffix}) })
+
+	setting := operation_setting.GetChannelAffinitySetting()
+	originalRules := setting.Rules
+	setting.Rules = append([]operation_setting.ChannelAffinityRule{rule}, originalRules...)
+	t.Cleanup(func() { setting.Rules = originalRules })
+
+	newContext := func(userID, tokenID int) *gin.Context {
+		rec := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(rec)
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+		ctx.Request.Header.Set("X-Affinity-Key", affinityValue)
+		setChannelAffinityTestIdentity(ctx, userID, tokenID)
+		return ctx
+	}
+
+	channelID, found := GetPreferredChannelByAffinity(newContext(11, 21), "gpt-5")
+	require.True(t, found)
+	require.Equal(t, 31, channelID)
+
+	_, found = GetPreferredChannelByAffinity(newContext(12, 21), "gpt-5")
+	require.False(t, found)
+	_, found = GetPreferredChannelByAffinity(newContext(11, 22), "gpt-5")
+	require.False(t, found)
+}
+
+func TestRecordChannelAffinityBindsCredentialAcrossMultiKeyReorder(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rule := operation_setting.ChannelAffinityRule{
+		Name:             "credential-binding",
+		ModelRegex:       []string{"^gpt-5$"},
+		PathRegex:        []string{"/v1/responses"},
+		KeySources:       []operation_setting.ChannelAffinityKeySource{{Type: "request_header", Key: "X-Affinity-Key"}},
+		IncludeRuleName:  true,
+		IncludeModelName: true,
+	}
+	setting := operation_setting.GetChannelAffinitySetting()
+	originalRules := setting.Rules
+	setting.Rules = append([]operation_setting.ChannelAffinityRule{rule}, originalRules...)
+	t.Cleanup(func() { setting.Rules = originalRules })
+
+	affinityValue := fmt.Sprintf("credential-%d", time.Now().UnixNano())
+	newContext := func() *gin.Context {
+		rec := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(rec)
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+		ctx.Request.Header.Set("X-Affinity-Key", affinityValue)
+		setChannelAffinityTestIdentity(ctx, 41, 51)
+		return ctx
+	}
+
+	recordContext := newContext()
+	_, found := GetPreferredChannelByAffinity(recordContext, "gpt-5")
+	require.False(t, found)
+	common.SetContextKey(recordContext, constant.ContextKeyChannelKey, "credential-b")
+	RecordChannelAffinity(recordContext, 61)
+	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(rule, "gpt-5", affinityValue, 41, 51)
+	t.Cleanup(func() { _, _ = getChannelAffinityCache().DeleteMany([]string{cacheKeySuffix}) })
+
+	hitContext := newContext()
+	channelID, found := GetPreferredChannelByAffinity(hitContext, "gpt-5")
+	require.True(t, found)
+	require.Equal(t, 61, channelID)
+	MarkChannelAffinityUsed(hitContext, channelID)
+
+	channel := &model.Channel{
+		Id:   61,
+		Key:  "credential-b\ncredential-a",
+		Keys: []string{"credential-b", "credential-a"},
+		ChannelInfo: model.ChannelInfo{
+			IsMultiKey: true,
+			MultiKeyStatusList: map[int]int{
+				0: common.ChannelStatusEnabled,
+				1: common.ChannelStatusEnabled,
+			},
+		},
+	}
+	key, index, bound, available := ResolveChannelAffinityCredential(hitContext, channel, nil)
+	require.True(t, bound)
+	require.True(t, available)
+	require.Equal(t, "credential-b", key)
+	require.Equal(t, 0, index)
+}
+
+func TestResolveChannelAffinityCredentialReportsUnavailableBinding(t *testing.T) {
+	ctx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{
+		Binding: channelAffinityBinding{
+			UserID:                101,
+			TokenID:               202,
+			ChannelID:             71,
+			CredentialFingerprint: channelAffinityCredentialFingerprint("credential-b"),
+		},
+		BindingUsed: true,
+		SkipRetry:   true,
+	})
+	channel := &model.Channel{
+		Id:   71,
+		Key:  "credential-a\ncredential-b",
+		Keys: []string{"credential-a", "credential-b"},
+		ChannelInfo: model.ChannelInfo{
+			IsMultiKey: true,
+			MultiKeyStatusList: map[int]int{
+				0: common.ChannelStatusEnabled,
+				1: common.ChannelStatusManuallyDisabled,
+			},
+		},
+	}
+
+	_, _, bound, available := ResolveChannelAffinityCredential(ctx, channel, nil)
+	require.True(t, bound)
+	require.False(t, available)
+	require.True(t, ChannelAffinityRequiresExactBinding(ctx))
+}
+
+func TestChannelAffinityRequiresExactBindingForOpaqueNativeState(t *testing.T) {
+	ctx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{
+		Binding: channelAffinityBinding{
+			UserID:                101,
+			TokenID:               202,
+			ChannelID:             81,
+			CredentialFingerprint: channelAffinityCredentialFingerprint("credential-a"),
+		},
+		ExactBinding: true,
+	})
+
+	require.True(t, ChannelAffinityRequiresExactBinding(ctx))
 }

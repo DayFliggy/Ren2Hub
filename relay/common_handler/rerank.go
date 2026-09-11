@@ -25,6 +25,7 @@ func RerankHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	logger.LogDebug(c, "reranker response body: %s", responseBody)
 	var jinaResp dto.RerankResponse
 	if info.ChannelType == constant.ChannelTypeXinference {
+		common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
 		var xinRerankResponse xinference.XinRerankResponse
 		err = common.Unmarshal(responseBody, &xinRerankResponse)
 		if err != nil {

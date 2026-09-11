@@ -198,7 +198,7 @@ func TestNextAdminChannelsApplyRealFiltersAndCounts(t *testing.T) {
 	db := setupManageUserTestDB(t)
 	require.NoError(t, db.AutoMigrate(&model.Channel{}))
 	channels := []model.Channel{
-		{Name: "alpha-openai", Type: 1, Key: "key-alpha", Models: "gpt-4o", Status: common.ChannelStatusEnabled},
+		{Name: "alpha-openai", Type: 1, Key: "key-alpha", Models: "gpt-4o", Status: common.ChannelStatusEnabled, ChannelRPM: 120, ChannelTPM: 45_000},
 		{Name: "alpha-disabled", Type: 3, Key: "key-disabled", Models: "claude", Status: common.ChannelStatusManuallyDisabled},
 		{Name: "beta-openai", Type: 1, Key: "key-beta", Models: "gpt-4o-mini", Status: common.ChannelStatusEnabled},
 	}
@@ -214,6 +214,8 @@ func TestNextAdminChannelsApplyRealFiltersAndCounts(t *testing.T) {
 	))
 	require.Len(t, page.Items, 1)
 	assert.Equal(t, "alpha-openai", page.Items[0].Name)
+	assert.Equal(t, 120, page.Items[0].ChannelRPM)
+	assert.Equal(t, 45_000, page.Items[0].ChannelTPM)
 	assert.Equal(t, 1, page.Total)
 	assert.Equal(t, 1, page.TypeCounts["1"])
 	assert.NotContains(t, page.TypeCounts, "3")

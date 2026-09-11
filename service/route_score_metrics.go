@@ -46,6 +46,12 @@ func SetRouteScoreMetricProvider(provider RouteScoreMetricProvider) func() {
 	}
 }
 
+func RouteScoreMetricsAvailable() bool {
+	routeScoreMetricProvider.RLock()
+	defer routeScoreMetricProvider.RUnlock()
+	return routeScoreMetricProvider.provider != nil
+}
+
 func LoadRouteScoreRuntimeMetrics(ctx context.Context, channelID int, requestModel string) (RouteScoreRuntimeMetrics, error) {
 	routeScoreMetricProvider.RLock()
 	provider := routeScoreMetricProvider.provider

@@ -30,6 +30,8 @@ function setup() {
     weight: 0,
     capacity_total: 20,
     capacity_used: 0,
+    channel_rpm: 1200,
+    channel_tpm: 800000,
     channel_ratio: 1,
   } as AdminChannel
   const wrapper = mount(ChannelFormModal, {
@@ -65,6 +67,28 @@ beforeEach(() => {
   ])
 })
 describe('channel model prefill integration', () => {
+  it('loads and saves channel RPM and TPM budgets', async () => {
+    const { wrapper, save } = setup()
+    await flushPromises()
+
+    const rpm = wrapper.get('input[name="admin-channel-rpm"]')
+    const tpm = wrapper.get('input[name="admin-channel-tpm"]')
+    expect((rpm.element as HTMLInputElement).value).toBe('1200')
+    expect((tpm.element as HTMLInputElement).value).toBe('800000')
+    await rpm.setValue('2400')
+    await tpm.setValue('1600000')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('channels.saveChannel'))!
+      .trigger('click')
+    await flushPromises()
+
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({ channel_rpm: 2400, channel_tpm: 1600000 })
+    )
+    wrapper.unmount()
+  })
+
   it('appends once to the draft and only persists on channel save', async () => {
     const { wrapper, save, editing } = setup()
     await flushPromises()
