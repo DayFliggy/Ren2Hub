@@ -142,4 +142,6 @@ var channelNonSensitiveFields = map[string]struct{}{
 	"multi_key_mode":      {},
 	"capacity_total":      {},
 	"channel_ratio":       {},
+	"channel_rpm":         {},
+	"channel_tpm":         {},
 }

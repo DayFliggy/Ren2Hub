@@ -31,6 +31,11 @@ const (
 	DefaultChannelRatio         = float64(1)
 	MaxChannelCapacityTotal     = 1_000_000
 	MaxChannelRatio             = float64(1000)
+	// RPM and TPM default to 0, meaning unlimited. Unlike capacity, a stored
+	// zero is a real setting rather than "unset", so it is never normalized to
+	// a default. The upper bounds only keep admin input sane.
+	MaxChannelRPM = 10_000_000
+	MaxChannelTPM = 10_000_000_000
 )
 
 type Channel struct {
@@ -67,6 +72,12 @@ type Channel struct {
 	CapacityTotal int     `json:"capacity_total" gorm:"default:20"`
 	CapacityUsed  int     `json:"capacity_used" gorm:"default:0"`
 	UpstreamRatio float64 `json:"upstream_ratio" gorm:"default:1"`
+	// Per-channel rate budgets. 0 means unlimited. RPM counts one unit per
+	// upstream send, so a capacity rejection never consumes send budget. TPM
+	// reserves an estimated input plus the effective output ceiling and is
+	// corrected against real usage after the call completes.
+	ChannelRPM int `json:"channel_rpm" gorm:"not null;default:0"`
+	ChannelTPM int `json:"channel_tpm" gorm:"not null;default:0"`
 
 	// add after v0.8.5
 	ChannelInfo ChannelInfo `json:"channel_info" gorm:"type:json"`
@@ -100,6 +111,18 @@ func (channel *Channel) RoutingSettings() (int, float64, error) {
 		return 0, 0, errors.New("invalid channel capacity or price ratio")
 	}
 	return capacity, ratio, nil
+}
+
+// RateBudgets returns the channel's requests-per-minute and tokens-per-minute
+// budgets. Zero means unlimited, so a stored zero is returned unchanged rather
+// than normalized. An out-of-range value is an error instead of a silent clamp,
+// because a wrong budget either blocks traffic or lets it through unmetered.
+func (channel *Channel) RateBudgets() (int, int, error) {
+	if channel.ChannelRPM < 0 || channel.ChannelRPM > MaxChannelRPM ||
+		channel.ChannelTPM < 0 || channel.ChannelTPM > MaxChannelTPM {
+		return 0, 0, errors.New("invalid channel rate budget")
+	}
+	return channel.ChannelRPM, channel.ChannelTPM, nil
 }
 
 type ChannelSortOptions struct {

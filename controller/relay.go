@@ -182,6 +182,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 
 	relayInfo.SetEstimatePromptTokens(tokens)
+	// The output ceiling comes from the same meta the pricing path uses. When
+	// the client omitted a max-tokens field it stays 0, and a TPM-enabled
+	// candidate refuses the request instead of reserving a guessed amount.
+	relayInfo.SetEstimateOutputCeiling(meta.MaxTokens)
 
 	defer func() {
 		// Only return quota if downstream failed and quota was actually pre-consumed
@@ -793,6 +797,17 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 	if err := service.RecheckRouteLeaseRuntime(expected, current); err != nil {
 		return releaseUncommittedRouteLease(c, lease, err)
 	}
+	// The rate budget is charged after the capacity lease is held and only for
+	// an attempt that is about to send, so a capacity rejection never consumes
+	// send budget. A refused reservation releases the lease it was guarding.
+	if err := reserveAttemptRateBudget(c, info, admittedChannel); err != nil {
+		if errors.Is(err, service.ErrChannelRPM) || errors.Is(err, service.ErrChannelTPM) {
+			markLiveRouteCandidateFiltered(c, channel.Id, "rate_budget_exhausted")
+		} else if errors.Is(err, service.ErrChannelTPMUnbounded) {
+			markLiveRouteCandidateFiltered(c, channel.Id, "token_ceiling_unknown")
+		}
+		return releaseRejectedRouteAttemptLease(c, lease, err)
+	}
 	c.Set("route_live_lease", lease)
 	markLiveRouteAttempt(c, channel.Id, service.RouteLeaseStateAcquired)
 	// A Live attempt can outlive the normal HTTP response window (Realtime,
@@ -839,6 +854,11 @@ func releaseRouteAttemptLease(c *gin.Context) {
 	if c == nil {
 		return
 	}
+	// The rate reservation is settled on the same teardown path as the capacity
+	// lease so every exit — success, error, cancel and failover — accounts for
+	// it exactly once. A send is evidenced by a recorded upstream call, not by
+	// the presence of a response, because a stream can fail after committing.
+	releaseAttemptRateBudget(c)
 	if renewalValue, exists := c.Get("route_live_renewal"); exists {
 		if renewal, valid := renewalValue.(service.RouteLeaseRenewal); valid && renewal.Stop != nil {
 			renewal.Stop()
@@ -1005,7 +1025,92 @@ const (
 	liveRoutePreviousKeyIndexKey   = "route_live_previous_key_index"
 	liveRouteHasPreviousAttemptKey = "route_live_has_previous_attempt"
 	liveRouteRenewalFailedKey      = "route_live_renewal_failed"
+	liveRouteRateReservationKey    = "route_live_rate_reservation"
 )
+
+// attemptRateReservation pairs a rate reservation with the upstream call count
+// observed when it was taken. A later increase is the evidence that this
+// attempt actually sent, which decides whether the reservation is corrected
+// against usage or handed back in full.
+type attemptRateReservation struct {
+	reservation    service.ChannelRateReservation
+	callsAtReserve int
+}
+
+// reserveAttemptRateBudget charges the channel's RPM/TPM window for one
+// upstream send. The reservation is stored on the request so the release path
+// can correct it against observed usage or hand it back when the send never
+// happened.
+func reserveAttemptRateBudget(c *gin.Context, info *relaycommon.RelayInfo, channel model.Channel) error {
+	rpm, tpm, err := channel.RateBudgets()
+	if err != nil {
+		return err
+	}
+	budget := service.ChannelRateBudget{RPM: rpm, TPM: tpm}
+	reservation, err := service.ReserveChannelRateBudget(c.Request.Context(), channel.Id, budget, info.EstimateTokenCeiling())
+	if err != nil {
+		return err
+	}
+	if !reservation.RPMCounted && reservation.ReservedTokens == 0 {
+		return nil
+	}
+	// A previous attempt's usage must not settle this reservation.
+	common.SetContextKey(c, constant.ContextKeyObservedTotalTokens, nil)
+	c.Set(liveRouteRateReservationKey, attemptRateReservation{
+		reservation:    reservation,
+		callsAtReserve: relaychannel.RequestExecution(c, execution.Generation).CallCount(),
+	})
+	return nil
+}
+
+// releaseAttemptRateBudget settles the window against what the upstream
+// actually consumed. An attempt that never sent returns its full reservation,
+// including the request counter. Unknown usage after a send leaves the
+// reservation standing: silently freeing window capacity that was really
+// consumed would let the next minute overspend.
+func releaseAttemptRateBudget(c *gin.Context) {
+	value, exists := c.Get(liveRouteRateReservationKey)
+	if !exists {
+		return
+	}
+	held, valid := value.(attemptRateReservation)
+	c.Set(liveRouteRateReservationKey, nil)
+	if !valid {
+		return
+	}
+	sent := relaychannel.RequestExecution(c, execution.Generation).CallCount() > held.callsAtReserve
+	observed := observedAttemptTokens(c)
+	common.SetContextKey(c, constant.ContextKeyObservedTotalTokens, nil)
+	if sent && observed < 0 {
+		return
+	}
+	cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var err error
+	if sent {
+		err = service.SettleChannelRateBudget(cleanup, held.reservation, observed)
+	} else {
+		err = service.ReleaseChannelRateBudget(cleanup, held.reservation, false)
+	}
+	if err != nil {
+		common.SysError(fmt.Sprintf("channel rate budget settle failed (channel=%d): %v", held.reservation.ChannelID, err))
+	}
+}
+
+// observedAttemptTokens returns the upstream-reported total for this attempt,
+// or -1 when no usage was reported. Billing writes the value, so an estimate
+// never reaches the rate window.
+func observedAttemptTokens(c *gin.Context) int {
+	value, ok := common.GetContextKey(c, constant.ContextKeyObservedTotalTokens)
+	if !ok {
+		return -1
+	}
+	tokens, valid := value.(int)
+	if !valid {
+		return -1
+	}
+	return tokens
+}
 
 func liveRouteRetryCounters(c *gin.Context) service.RouteRetryCounters {
 	if c == nil {

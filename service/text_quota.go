@@ -405,6 +405,13 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 
 	adminRejectReason := common.GetContextKeyString(ctx, constant.ContextKeyAdminRejectReason)
 	summary := calculateTextQuotaSummary(ctx, relayInfo, billingUsage)
+	if originUsage != nil {
+		// Record the authoritative total so a channel rate reservation can be
+		// corrected against real consumption. Only a reported usage counts: an
+		// estimate-derived total would let the window free capacity that the
+		// upstream actually used.
+		common.SetContextKey(ctx, constant.ContextKeyObservedTotalTokens, summary.TotalTokens)
+	}
 
 	var tieredResult *billingexpr.TieredResult
 	tieredBillingApplied := false

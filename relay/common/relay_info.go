@@ -80,6 +80,12 @@ type ChannelMeta struct {
 type TokenCountMeta struct {
 	//promptTokens int
 	estimatePromptTokens int
+	// estimateOutputCeiling is the effective output limit for this request:
+	// the client's max-tokens family field, or the provider default applied in
+	// its place. It is separate from the input estimate because a TPM
+	// reservation must cover both halves before the call is sent, while
+	// billing only ever charges observed usage.
+	estimateOutputCeiling int
 }
 
 type CompactAttemptStage string
@@ -752,6 +758,24 @@ func (info *RelayInfo) GetEstimatePromptTokens() int {
 		return 0
 	}
 	return info.estimatePromptTokens
+}
+
+func (info *RelayInfo) SetEstimateOutputCeiling(outputTokens int) {
+	if info == nil || outputTokens < 0 {
+		return
+	}
+	info.estimateOutputCeiling = outputTokens
+}
+
+// EstimateTokenCeiling is the upper bound a rate budget must reserve before the
+// upstream call: the input estimate plus the effective output limit. It returns
+// 0 when the output ceiling is unknown, so a caller enforcing TPM can refuse
+// the candidate rather than reserve an arbitrary amount.
+func (info *RelayInfo) EstimateTokenCeiling() int {
+	if info == nil || info.estimateOutputCeiling <= 0 {
+		return 0
+	}
+	return info.estimatePromptTokens + info.estimateOutputCeiling
 }
 
 // ---------------------------------------------------------------------------

@@ -6,6 +6,11 @@ const (
 	ContextKeyTokenCountMeta  ContextKey = "token_count_meta"
 	ContextKeyPromptTokens    ContextKey = "prompt_tokens"
 	ContextKeyEstimatedTokens ContextKey = "estimated_tokens"
+	// ContextKeyObservedTotalTokens is the token total the upstream actually
+	// reported for the current attempt. It is written where billing settles,
+	// the one place that already holds authoritative usage, so a rate budget
+	// can correct its reservation instead of trusting the estimate.
+	ContextKeyObservedTotalTokens ContextKey = "observed_total_tokens"
 
 	ContextKeyOriginalModel    ContextKey = "original_model"
 	ContextKeyRequestStartTime ContextKey = "request_start_time"

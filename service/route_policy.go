@@ -18,11 +18,14 @@ func loadRouteChannel(ctx context.Context, channelID int) (model.Channel, error)
 		return model.Channel{}, ErrRouteLeaseRuntime
 	}
 	var channel model.Channel
-	if err := model.DB.WithContext(ctx).Select("id", "status", "capacity_total", "channel_ratio").First(&channel, channelID).Error; err != nil {
+	if err := model.DB.WithContext(ctx).Select("id", "status", "capacity_total", "channel_ratio", "channel_rpm", "channel_tpm").First(&channel, channelID).Error; err != nil {
 		return channel, err
 	}
 	capacity, ratio, err := channel.RoutingSettings()
 	if err != nil {
+		return channel, err
+	}
+	if _, _, err := channel.RateBudgets(); err != nil {
 		return channel, err
 	}
 	channel.CapacityTotal, channel.ChannelRatio = capacity, ratio
