@@ -37,8 +37,13 @@ func ResolveRouteSource(input RouteSourceInput) RouteSource {
 }
 
 type RouteDecisionCandidate struct {
-	ChannelID       int                  `json:"channel_id"`
-	RequestModel    string               `json:"request_model,omitempty"`
+	ChannelID    int    `json:"channel_id"`
+	RequestModel string `json:"request_model,omitempty"`
+	// ActualModel is the upstream model this candidate resolves to. Load samples
+	// are keyed by it, so the attempt that observes a call must use the same
+	// value the selector scored; deriving it separately would split one
+	// channel's samples across buckets that never accumulate.
+	ActualModel     string               `json:"actual_model,omitempty"`
 	FilterReason    string               `json:"filter_reason,omitempty"`
 	Priority        int64                `json:"priority"`
 	Position        int                  `json:"position"`

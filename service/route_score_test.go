@@ -43,20 +43,27 @@ func TestScoreRouteCandidatesFallsBackAfterHealthFiltersHighestPriority(t *testi
 }
 
 func TestScoreRouteCandidatesIgnoresUnhealthyWeightAndBoundsTopK(t *testing.T) {
+	// More healthy candidates than the budget, so the bound actually clamps.
+	// With only as many candidates as the limit the assertion would pass
+	// regardless of the limit and stop protecting anything.
 	candidates := []RouteScoreCandidate{
-		{ChannelID: 1, Priority: 10, Weight: 100, HealthUsable: true},
 		{ChannelID: 2, Priority: 10, Weight: 1000, HealthUsable: false},
-		{ChannelID: 3, Priority: 10, Weight: 50, HealthUsable: true},
-		{ChannelID: 4, Priority: 10, Weight: 25, HealthUsable: true},
 	}
+	for id := range DefaultRouteCandidateTopK + 2 {
+		candidates = append(candidates, RouteScoreCandidate{
+			ChannelID: 100 + id, Priority: 10, Weight: 100 - id, HealthUsable: true,
+		})
+	}
+
 	scored := TopKRouteCandidates(candidates, 99)
-	if len(scored) != 3 {
-		t.Fatalf("expected bounded top-k, got %d", len(scored))
-	}
+	require.Len(t, scored, DefaultRouteCandidateTopK)
 	assert.Equal(t, 1.0, scored[0].Breakdown.WeightScore)
 	for _, candidate := range scored {
-		assert.NotEqual(t, 2, candidate.Candidate.ChannelID)
+		assert.NotEqual(t, 2, candidate.Candidate.ChannelID, "an unhealthy candidate must never be scored")
 	}
+
+	// A caller may still ask for fewer than the budget.
+	assert.Len(t, TopKRouteCandidates(candidates, 2), 2)
 }
 
 func TestScoreRouteCandidatesTreatsUnknownMetricsAsNeutralAndExplicit(t *testing.T) {

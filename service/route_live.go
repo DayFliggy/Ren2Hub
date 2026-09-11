@@ -303,6 +303,11 @@ type LiveRouteRequest struct {
 	SecurityEligibilityKnown bool
 	SecurityAllowed          bool
 	PreferredChannelID       int
+	// StreamMode isolates load samples. A streaming and a non-streaming call to
+	// the same model have different latency profiles, so they must not be
+	// smoothed together. It is derived once while the body is parsed so
+	// selection and observation share one bucket.
+	StreamMode bool
 }
 
 type LiveRouteSelection struct {
@@ -498,7 +503,7 @@ func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveR
 	}
 }
 
-func applyLiveHealth(ctx context.Context, candidates []RouteSelectionCandidate) error {
+func applyLiveHealth(ctx context.Context, candidates []RouteSelectionCandidate, protocol string, streamMode bool) error {
 	now := time.Now()
 	for index := range candidates {
 		if candidates[index].FilterReason != "" {
@@ -539,6 +544,28 @@ func applyLiveHealth(ctx context.Context, candidates []RouteSelectionCandidate) 
 		candidates[index].LatencyKnown = metrics.LatencyKnown
 		candidates[index].TTFTMS = metrics.TTFTMS
 		candidates[index].TTFTKnown = metrics.TTFTKnown
+		// Smoothed samples describe sustained behaviour, so they take
+		// precedence over the single most recent observation kept on the health
+		// row. A sample that has expired leaves the health value in place
+		// rather than downgrading the candidate to unknown.
+		load, loadErr := LoadRouteLoadSample(ctx, RouteLoadScope{
+			ChannelID:   candidates[index].ChannelID,
+			ActualModel: candidates[index].ActualModel,
+			Protocol:    protocol,
+			Stream:      streamMode,
+		})
+		if loadErr != nil {
+			return loadErr
+		}
+		if load.LatencyKnown {
+			candidates[index].LatencyMS, candidates[index].LatencyKnown = load.LatencyMS, true
+		}
+		if load.TTFTKnown {
+			candidates[index].TTFTMS, candidates[index].TTFTKnown = load.TTFTMS, true
+		}
+		if load.ErrorRateKnown {
+			candidates[index].ErrorRate, candidates[index].ErrorRateKnown = load.ErrorRate, true
+		}
 		{
 			runtimeMetrics, runtimeErr := LoadRouteScoreRuntimeMetrics(ctx, candidates[index].ChannelID, requestModel)
 			if runtimeErr != nil {

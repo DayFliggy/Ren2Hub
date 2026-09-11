@@ -107,6 +107,7 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 		SpecificChannelID: specificChannelID, CompactStage: stage,
 		IsPlayground:            strings.HasPrefix(c.Request.URL.Path, "/pg/"),
 		NativeResponsesRequired: common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired),
+		StreamMode:              common.GetContextKeyBool(c, constant.ContextKeyRequestStreamMode),
 		TokenModelLimitEnabled:  common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled),
 		TokenModelLimit:         limits,
 		ExcludedKeyIndexes:      service.RequestRouteAttemptedKeys(c, stage),
@@ -202,11 +203,15 @@ func getModelFromJSONBody(c *gin.Context) (*ModelRequest, error) {
 		return nil, errors.New("invalid JSON request body")
 	}
 
-	values := gjson.GetManyBytes(requestBody, "model", "group")
+	values := gjson.GetManyBytes(requestBody, "model", "group", "stream")
 	model, err := getJSONStringValue(values[0], "model")
 	if err != nil {
 		return nil, err
 	}
+	// Recorded here because this is the only place the body is already parsed
+	// for routing. Scoring and load observation must read the same value, or a
+	// channel's samples would split across two buckets and never accumulate.
+	common.SetContextKey(c, constant.ContextKeyRequestStreamMode, values[2].Type == gjson.True)
 
 	if _, seekErr := storage.Seek(0, io.SeekStart); seekErr != nil {
 		return nil, seekErr

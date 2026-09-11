@@ -32,6 +32,13 @@ type RequestRequirements struct {
 	CompactBaseModel string
 }
 
+// RouteEndpointTypeForPath exposes the endpoint-type derivation so callers
+// outside this package can label an observation with the same protocol the
+// selector scored with.
+func RouteEndpointTypeForPath(requestPath string) string {
+	return endpointTypeForRequestPath(requestPath)
+}
+
 // CompactStageForRequest derives the initial Compact stage from the request
 // path and model, the same way the distributor does before its first attempt.
 // A retry may narrow Exact to Base, so the request path passes its own stage

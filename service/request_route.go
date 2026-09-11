@@ -159,12 +159,12 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			}
 		}
 	}
-	if err := applyLiveHealth(input.Context, candidates); err != nil {
+	if err := applyLiveHealth(input.Context, candidates, requirements.EndpointType, input.StreamMode); err != nil {
 		return selection, err
 	}
 	result, err := SelectTokenRoute(RouteSelectionInput{
 		SourceInput: sourceInput, ManualGroupEnabled: manualEnabled, ManualLoadBalance: loadBalance,
-		ManualCandidates: candidates, AutoCandidates: candidates, TopK: 3,
+		ManualCandidates: candidates, AutoCandidates: candidates, TopK: DefaultRouteCandidateTopK,
 		ConfigurationVersion: profile.Version, RequestID: input.RequestID, RequestModel: input.RequestModel,
 		DynamicScoringEnabled: selection.Source == RouteSourceAutoLab,
 	})

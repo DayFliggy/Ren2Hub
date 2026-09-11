@@ -167,6 +167,7 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 		for _, candidate := range result.Candidates {
 			result.Decision.Candidates = append(result.Decision.Candidates, RouteDecisionCandidate{
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
+				RequestModel: candidate.RequestModel, ActualModel: candidate.ActualModel,
 				Position: candidate.Position, Weight: candidate.Weight,
 				SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
 				HealthEpoch: candidate.HealthEpoch,
@@ -291,7 +292,7 @@ func appendRouteDecisionCandidatesWithScores(decision *RouteDecision, candidates
 		}
 		decision.Candidates = append(decision.Candidates, RouteDecisionCandidate{
 			ChannelID: candidate.ChannelID, FilterReason: candidate.FilterReason,
-			RequestModel: candidate.RequestModel,
+			RequestModel: candidate.RequestModel, ActualModel: candidate.ActualModel,
 			Priority:     candidate.Priority, Position: candidate.Position, Weight: candidate.Weight,
 			SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
 			HealthEpoch: candidate.HealthEpoch,
@@ -300,9 +301,16 @@ func appendRouteDecisionCandidatesWithScores(decision *RouteDecision, candidates
 	}
 }
 
+// DefaultRouteCandidateTopK bounds how many candidates automatic routing plans
+// per request. It is deliberately larger than the send budget: a candidate may
+// be refused by admission (capacity, rate budget, stale qualification) without
+// ever reaching an upstream, so the plan needs room to fail over while
+// DefaultTotalAttempts still caps actual sends.
+const DefaultRouteCandidateTopK = 7
+
 func normalizedRouteTopK(k int) int {
-	if k <= 0 || k > 3 {
-		return 3
+	if k <= 0 || k > DefaultRouteCandidateTopK {
+		return DefaultRouteCandidateTopK
 	}
 	return k
 }

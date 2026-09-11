@@ -98,15 +98,25 @@ const (
 
 type RelayInfo struct {
 	RouteCapabilityModel string
-	TokenId              int
-	TokenKey             string
-	UserId               int
-	UserAccountClass     string // 用户所在分组
-	TokenUnlimited       bool
-	StartTime            time.Time
-	FirstResponseTime    time.Time
-	validOutput          atomic.Bool
-	isFirstResponse      bool
+	// RouteActualModel is the upstream model the selected candidate resolved
+	// to. Load samples are keyed by it, so it is carried from the decision
+	// rather than re-derived: UpstreamModelName reflects model mapping and can
+	// differ, which would split one channel's samples across buckets.
+	RouteActualModel string
+	// RouteStreamMode is the stream flag the selector scored with. Recorded so
+	// an observation lands in the same bucket the candidate was ranked in.
+	RouteStreamMode bool
+	// RouteProtocol is the endpoint type the selector scored with.
+	RouteProtocol     string
+	TokenId           int
+	TokenKey          string
+	UserId            int
+	UserAccountClass  string // 用户所在分组
+	TokenUnlimited    bool
+	StartTime         time.Time
+	FirstResponseTime time.Time
+	validOutput       atomic.Bool
+	isFirstResponse   bool
 	//SendLastReasoningResponse bool
 	IsStream               bool
 	IsGeminiBatchEmbedding bool

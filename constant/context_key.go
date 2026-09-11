@@ -11,6 +11,12 @@ const (
 	// the one place that already holds authoritative usage, so a rate budget
 	// can correct its reservation instead of trusting the estimate.
 	ContextKeyObservedTotalTokens ContextKey = "observed_total_tokens"
+	// ContextKeyRequestStreamMode records whether the client asked for a
+	// streaming response. It is derived once while the body is parsed for
+	// routing, because candidate scoring and load observation must agree on the
+	// value: a mismatch would split one channel's samples into two buckets that
+	// never accumulate.
+	ContextKeyRequestStreamMode ContextKey = "request_stream_mode"
 
 	ContextKeyOriginalModel    ContextKey = "original_model"
 	ContextKeyRequestStartTime ContextKey = "request_start_time"

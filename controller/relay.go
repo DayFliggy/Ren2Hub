@@ -356,6 +356,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				if healthErr := service.ObserveLiveRouteSuccessForKey(c.Request.Context(), channel.Id, relayInfo.RouteCapabilityModel, common.GetContextKeyString(c, constant.ContextKeyChannelKey), latencyMS, ttftMS); healthErr != nil {
 					recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
 				}
+				observeAttemptLoad(c, relayInfo, latencyMS, ttftMS, false)
 			}
 			relayInfo.LastError = nil
 			return
@@ -388,6 +389,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				if healthErr := service.ObserveLiveRouteErrorForKeyWithRetryAfter(c.Request.Context(), channel.Id, relayInfo.RouteCapabilityModel, common.GetContextKeyString(c, constant.ContextKeyChannelKey), newAPIError.StatusCode, classificationCode, newAPIError.Error(), streamResponseCommitted, newAPIError.RetryAfter); healthErr != nil {
 					recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
 				}
+				observeAttemptLoad(c, relayInfo, 0, 0, true)
 			}
 			liveClassification = service.ClassifyRouteError(newAPIError.StatusCode, string(newAPIError.GetErrorCode()), newAPIError.Error(), relayInfo.HasValidOutput())
 			responseCommitted := c.Writer != nil && c.Writer.Written()
@@ -732,6 +734,11 @@ func acquireRouteAttemptLease(c *gin.Context, info *relaycommon.RelayInfo, chann
 		return service.ErrRouteSelectionUnavailable
 	}
 	info.RouteCapabilityModel = candidate.RequestModel
+	// Carry the scope the selector scored with so an observation lands in the
+	// same bucket the candidate was ranked in.
+	info.RouteActualModel = candidate.ActualModel
+	info.RouteProtocol = service.RouteEndpointTypeForPath(c.Request.URL.Path)
+	info.RouteStreamMode = common.GetContextKeyBool(c, constant.ContextKeyRequestStreamMode)
 	expected, err := service.GetRouteRuntimeState(c.Request.Context(), channel.Id, info.RouteCapabilityModel)
 	if err != nil {
 		return err
@@ -1061,6 +1068,31 @@ func reserveAttemptRateBudget(c *gin.Context, info *relaycommon.RelayInfo, chann
 		callsAtReserve: relaychannel.RequestExecution(c, execution.Generation).CallCount(),
 	})
 	return nil
+}
+
+// observeAttemptLoad folds a finished attempt into the smoothed load samples
+// used for ranking. The scope is taken from the decision rather than re-derived
+// so an observation lands in the bucket the candidate was scored in. Ranking
+// data is best-effort: a failure here degrades ordering, never correctness.
+func observeAttemptLoad(c *gin.Context, info *relaycommon.RelayInfo, latencyMS, ttftMS int64, failed bool) {
+	if info == nil || info.RouteActualModel == "" {
+		return
+	}
+	scope := service.RouteLoadScope{
+		ChannelID:   info.ChannelId,
+		ActualModel: info.RouteActualModel,
+		Protocol:    info.RouteProtocol,
+		Stream:      info.RouteStreamMode,
+	}
+	var err error
+	if failed {
+		err = service.ObserveRouteLoadError(c.Request.Context(), scope)
+	} else {
+		err = service.ObserveRouteLoadSuccess(c.Request.Context(), scope, latencyMS, ttftMS)
+	}
+	if err != nil {
+		common.SysError(fmt.Sprintf("route load observation failed (channel=%d): %v", scope.ChannelID, err))
+	}
 }
 
 // releaseAttemptRateBudget settles the window against what the upstream
@@ -1500,6 +1532,7 @@ func RelayMidjourney(c *gin.Context) {
 			if healthErr != nil {
 				recordLiveRouteGovernanceFailure(c, relayInfo.ChannelId, "health_observation_failed", healthErr)
 			}
+			observeAttemptLoad(c, relayInfo, time.Since(startedAt).Milliseconds(), 0, apiErr != nil)
 		}
 		releaseRouteAttemptLease(c)
 		finalizeLiveRouteDecision(c, relayInfo, apiErr)
@@ -1693,6 +1726,7 @@ func RelayTask(c *gin.Context) {
 					if healthErr := service.ObserveLiveRouteSuccessForKey(c.Request.Context(), channel.Id, relayInfo.RouteCapabilityModel, common.GetContextKeyString(c, constant.ContextKeyChannelKey), time.Since(attemptStartedAt).Milliseconds(), 0); healthErr != nil {
 						recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
 					}
+					observeAttemptLoad(c, relayInfo, time.Since(attemptStartedAt).Milliseconds(), 0, false)
 				}
 				break
 			}
@@ -1712,6 +1746,7 @@ func RelayTask(c *gin.Context) {
 				if healthErr := service.ObserveLiveRouteErrorForKey(c.Request.Context(), channel.Id, relayInfo.RouteCapabilityModel, common.GetContextKeyString(c, constant.ContextKeyChannelKey), taskErr.StatusCode, taskErr.Code, taskErr.Message, false); healthErr != nil {
 					recordLiveRouteGovernanceFailure(c, channel.Id, "health_observation_failed", healthErr)
 				}
+				observeAttemptLoad(c, relayInfo, 0, 0, true)
 			}
 			if !taskErr.LocalError && service.CanRouteFailover(classification, relayResponseCommitted(c, relayInfo), false) {
 				if nextAttempt, found := nextLiveRouteAttemptForError(c, retryParam.GetRetry(), channel.Id, classification); found {

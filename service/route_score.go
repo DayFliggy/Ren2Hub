@@ -139,13 +139,11 @@ func scoreRouteCandidate(candidate RouteScoreCandidate, maxWeight int) RouteScor
 	return breakdown
 }
 
-// TopKRouteCandidates applies the bounded candidate budget used by the future
-// live selector. A caller may request fewer than three candidates, but never
-// more than the initial safety limit.
+// TopKRouteCandidates scores candidates and applies the shared candidate
+// budget. It is the scoring-only counterpart of the selector's own bound, so
+// both use one limit rather than two hardcoded numbers.
 func TopKRouteCandidates(candidates []RouteScoreCandidate, k int) []ScoredRouteCandidate {
-	if k <= 0 || k > 3 {
-		k = 3
-	}
+	k = normalizedRouteTopK(k)
 	scored := ScoreRouteCandidates(candidates)
 	if len(scored) > k {
 		return scored[:k]
