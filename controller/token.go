@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -47,6 +48,9 @@ func buildMaskedTokenResponses(tokens []*model.Token) ([]*tokenResponse, error) 
 			continue
 		}
 		masked := *token
+		if masked.ConversionPolicy == "" {
+			masked.ConversionPolicy = string(types.ConversionLossPolicySafe)
+		}
 		masked.Key = token.GetMaskedKey()
 		tokenType := "auto"
 		if modes[token.Id] == model.RouteModeManual {
@@ -217,6 +221,13 @@ func AddToken(c *gin.Context) {
 		return
 	}
 	token := request.Token
+	if token.ConversionPolicy == "" {
+		token.ConversionPolicy = string(types.ConversionLossPolicySafe)
+	}
+	if !validTokenConversionPolicy(token.ConversionPolicy) {
+		common.ApiError(c, fmt.Errorf("invalid conversion_policy"))
+		return
+	}
 	if len(token.Name) > 50 {
 		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
 		return
@@ -265,6 +276,7 @@ func AddToken(c *gin.Context) {
 		ModelLimitsEnabled: token.ModelLimitsEnabled,
 		ModelLimits:        token.ModelLimits,
 		AllowIps:           token.AllowIps,
+		ConversionPolicy:   token.ConversionPolicy,
 	}
 	mode := model.RouteModeAutoLab
 	if request.Type == "manual" {
@@ -349,6 +361,13 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.ModelLimitsEnabled = token.ModelLimitsEnabled
 		cleanToken.ModelLimits = token.ModelLimits
 		cleanToken.AllowIps = token.AllowIps
+		if token.ConversionPolicy != "" {
+			if !validTokenConversionPolicy(token.ConversionPolicy) {
+				common.ApiError(c, fmt.Errorf("invalid conversion_policy"))
+				return
+			}
+			cleanToken.ConversionPolicy = token.ConversionPolicy
+		}
 
 	}
 	err = cleanToken.Update()
@@ -357,6 +376,10 @@ func UpdateToken(c *gin.Context) {
 		return
 	}
 	writeTokenResponse(c, cleanToken)
+}
+
+func validTokenConversionPolicy(policy string) bool {
+	return policy == string(types.ConversionLossPolicySafe) || policy == string(types.ConversionLossPolicyAllow) || policy == string(types.ConversionLossPolicyStrict)
 }
 
 type TokenBatch struct {

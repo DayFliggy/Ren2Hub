@@ -114,6 +114,7 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 		case "response.completed", "response.done", "response.incomplete":
 			finalResponse = streamResp.Response
 			if streamResp.Type == "response.incomplete" {
+				streamErr = types.NewOpenAIError(fmt.Errorf("upstream responses stream is incomplete"), types.ErrorCodeBadResponse, http.StatusBadGateway)
 				if finalResponse == nil {
 					finalResponse = &dto.OpenAIResponsesResponse{}
 				}
@@ -134,21 +135,31 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 			break
 		}
 	}
-	if streamErr != nil {
-		return nil, streamErr
-	}
 	if err := scanner.Err(); err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
+		streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
 	}
 	if finalResponse == nil {
 		finalResponse = &dto.OpenAIResponsesResponse{
 			ID:        helper.GetResponseID(c),
 			CreatedAt: int(time.Now().Unix()),
 			Model:     info.UpstreamModelName,
-			Status:    []byte(`"completed"`),
+			Status:    []byte(`"incomplete"`),
+		}
+		if streamErr == nil {
+			streamErr = types.NewOpenAIError(io.ErrUnexpectedEOF, types.ErrorCodeBadResponse, http.StatusBadGateway)
 		}
 	}
 	accumulator.SupplementResponseOutput(finalResponse)
+	if streamErr != nil {
+		usage := service.ResponseText2Usage(c, service.ExtractOutputTextFromResponses(finalResponse), info.UpstreamModelName, info.GetEstimatePromptTokens())
+		if len(finalResponse.Output) == 0 {
+			usage = &dto.Usage{}
+		}
+		if finalResponse.Usage != nil {
+			usage = relayconvert.UsageFromResponsesUsage(finalResponse.Usage)
+		}
+		return usage, streamErr
+	}
 
 	chatResult, err := relayconvert.ConvertResponse(c, info, types.RelayFormatOpenAI, finalResponse)
 	if err != nil {
@@ -280,7 +291,10 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			return
 		}
 
-		if streamResp.Type == "response.error" || streamResp.Type == "response.failed" {
+		if streamResp.Type == "response.error" || streamResp.Type == "response.failed" || streamResp.Type == "response.incomplete" || streamResp.Type == "response.cancelled" || streamResp.Type == "response.canceled" {
+			if streamResp.Response != nil && streamResp.Response.Usage != nil {
+				state.SetUsage(relayconvert.UsageFromResponsesUsage(streamResp.Response.Usage))
+			}
 			if streamResp.Response != nil {
 				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
 					streamErr = types.WithOpenAIError(*oaiErr, http.StatusInternalServerError)
@@ -307,12 +321,8 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		}
 	})
 
-	if streamErr != nil {
-		return nil, streamErr
-	}
-
 	usage := state.Usage()
-	if usage == nil || usage.TotalTokens == 0 {
+	if (usage == nil || usage.TotalTokens == 0) && state.UsageText() != "" {
 		usage = service.ResponseText2Usage(c, state.UsageText(), info.UpstreamModelName, info.GetEstimatePromptTokens())
 		state.SetUsage(usage)
 	}
@@ -320,14 +330,12 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	if info.RelayFormat == types.RelayFormatClaude && info.ClaudeConvertInfo != nil {
 		info.ClaudeConvertInfo.Usage = usage
 	}
-	finalResults, err := relayconvert.FinalizeStreamResponse(c, info, state)
-	if err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
+	finalErr := helper.FinalizeConvertedStream(c, info, state)
+	if streamErr != nil {
+		return usage, streamErr
 	}
-	for _, result := range finalResults {
-		if !sendStreamResult(result) {
-			return nil, streamErr
-		}
+	if finalErr != nil {
+		return usage, finalErr
 	}
 	if info.RelayFormat == types.RelayFormatOpenAI && info.ShouldIncludeUsage && usage != nil {
 		if err := helper.ObjectData(c, helper.GenerateFinalUsageResponse(responseId, createAt, info.UpstreamModelName, *usage)); err != nil {

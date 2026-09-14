@@ -43,6 +43,9 @@ func TestPublishChannelCapabilitySnapshotFencesAndRetainsRecentVersions(t *testi
 			RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical", State: RouteCapabilityStateEligible,
 		}})
 		require.NoError(t, err)
+		require.NoError(t, PublishChannelCapabilitySnapshot(context.Background(), 7, expected, fmt.Sprintf("hash-%d", version), "catalog-1", []ChannelModelCapability{{
+			RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical", State: RouteCapabilityStateEligible,
+		}}), "an identical publication from another instance must not advance the version")
 	}
 
 	var snapshot ChannelCapabilitySnapshot

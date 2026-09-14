@@ -68,7 +68,8 @@ type TaskAdaptor interface {
 	BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error)
 
 	DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (*http.Response, error)
-	DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (taskID string, taskData []byte, err *taskdto.TaskError)
+	// DoResponse parses the accepted job without committing a client response.
+	DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (taskID string, taskData []byte, clientResponse any, err *taskdto.TaskError)
 
 	GetModelList() []string
 	GetChannelName() string

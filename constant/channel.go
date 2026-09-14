@@ -58,7 +58,7 @@ const (
 	ChannelTypeAdvancedCustom = 58
 	ChannelTypeSub2API        = 59
 	ChannelTypeNewAPI         = 60
-	ChannelTypeDummy          // this one is only for count, do not add any channel after this
+	ChannelTypeDummy          = ChannelTypeNewAPI + 1 // exclusive upper bound; append new channels before this
 
 )
 

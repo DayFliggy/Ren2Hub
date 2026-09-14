@@ -67,27 +67,28 @@ func buildLiteralLogContainsCondition(column string, keyword string) (string, st
 }
 
 type Log struct {
-	Id                int    `json:"id" gorm:"index:idx_created_at_id,priority:2;index:idx_user_id_id,priority:2"`
-	UserId            int    `json:"user_id" gorm:"index;index:idx_user_id_id,priority:1;index:idx_user_created_at,priority:1"`
-	CreatedAt         int64  `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:1;index:idx_created_at_type;index:idx_user_created_at,priority:2"`
-	Type              int    `json:"type" gorm:"index:idx_created_at_type"`
-	Content           string `json:"content"`
-	Username          string `json:"username" gorm:"index;index:index_username_model_name,priority:2;default:''"`
-	TokenName         string `json:"token_name" gorm:"index;default:''"`
-	ModelName         string `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
-	Quota             int    `json:"quota" gorm:"default:0"`
-	PromptTokens      int    `json:"prompt_tokens" gorm:"default:0"`
-	CompletionTokens  int    `json:"completion_tokens" gorm:"default:0"`
-	UseTime           int    `json:"use_time" gorm:"default:0"`
-	IsStream          bool   `json:"is_stream"`
-	ChannelId         int    `json:"channel" gorm:"index"`
-	ChannelName       string `json:"channel_name" gorm:"->"`
-	TokenId           int    `json:"token_id" gorm:"default:0;index"`
-	Group             string `json:"group" gorm:"index"`
-	Ip                string `json:"ip" gorm:"index;default:''"`
-	RequestId         string `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
-	UpstreamRequestId string `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
-	Other             string `json:"other"`
+	Id                int     `json:"id" gorm:"index:idx_created_at_id,priority:2;index:idx_user_id_id,priority:2"`
+	UserId            int     `json:"user_id" gorm:"index;index:idx_user_id_id,priority:1;index:idx_user_created_at,priority:1"`
+	CreatedAt         int64   `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:1;index:idx_created_at_type;index:idx_user_created_at,priority:2"`
+	Type              int     `json:"type" gorm:"index:idx_created_at_type"`
+	Content           string  `json:"content"`
+	Username          string  `json:"username" gorm:"index;index:index_username_model_name,priority:2;default:''"`
+	TokenName         string  `json:"token_name" gorm:"index;default:''"`
+	ModelName         string  `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
+	Quota             int     `json:"quota" gorm:"default:0"`
+	PromptTokens      int     `json:"prompt_tokens" gorm:"default:0"`
+	CompletionTokens  int     `json:"completion_tokens" gorm:"default:0"`
+	UseTime           int     `json:"use_time" gorm:"default:0"`
+	IsStream          bool    `json:"is_stream"`
+	ChannelId         int     `json:"channel" gorm:"index"`
+	ChannelName       string  `json:"channel_name" gorm:"->"`
+	TokenId           int     `json:"token_id" gorm:"default:0;index"`
+	Group             string  `json:"group" gorm:"index"`
+	Ip                string  `json:"ip" gorm:"index;default:''"`
+	RequestId         string  `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
+	BillingRequestID  *string `json:"-" gorm:"type:varchar(128);uniqueIndex:idx_logs_billing_request_id"`
+	UpstreamRequestId string  `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
+	Other             string  `json:"other"`
 }
 
 // don't use iota, avoid change log type value
@@ -121,6 +122,9 @@ func ensureLogRequestId(log *Log) {
 
 func createLog(log *Log) error {
 	ensureLogRequestId(log)
+	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		return LOG_DB.Omit("BillingRequestID").Create(log).Error
+	}
 	return LOG_DB.Create(log).Error
 }
 
@@ -441,11 +445,36 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		return
 	}
 	logger.LogInfo(c, fmt.Sprintf("record consume log: userId=%d, params=%s", userId, common.GetJsonString(params)))
+	log, err := BuildConsumeLog(c, userId, params)
+	if err != nil {
+		logger.LogError(c, "failed to build consume log: "+err.Error())
+		return
+	}
+	err = createLog(log)
+	if err != nil {
+		logger.LogError(c, "failed to record log: "+err.Error())
+	}
+	if common.DataExportEnabled {
+		LogQuotaData(QuotaDataLogParams{
+			UserID: userId, Username: log.Username, ModelName: params.ModelName,
+			Quota: params.Quota, CreatedAt: log.CreatedAt,
+			TokenUsed: params.PromptTokens + params.CompletionTokens,
+			UseGroup:  params.Group, TokenID: params.TokenId,
+			ChannelID: params.ChannelId, NodeName: common.NodeName,
+		})
+	}
+}
+
+// BuildConsumeLog captures request-scoped metadata before background recovery.
+func BuildConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) (*Log, error) {
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
 	createdAt := common.GetTimestamp()
-	otherStr := common.MapToJsonStr(params.Other)
+	otherData, err := common.Marshal(params.Other)
+	if err != nil {
+		return nil, err
+	}
 	// 判断是否需要记录 IP
 	needRecordIp := false
 	if settingMap, err := GetUserSetting(userId, false); err == nil {
@@ -453,7 +482,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 			needRecordIp = true
 		}
 	}
-	log := &Log{
+	return &Log{
 		UserId:           userId,
 		Username:         username,
 		CreatedAt:        createdAt,
@@ -477,26 +506,8 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		}(),
 		RequestId:         requestId,
 		UpstreamRequestId: upstreamRequestId,
-		Other:             otherStr,
-	}
-	err := createLog(log)
-	if err != nil {
-		logger.LogError(c, "failed to record log: "+err.Error())
-	}
-	if common.DataExportEnabled {
-		LogQuotaData(QuotaDataLogParams{
-			UserID:    userId,
-			Username:  username,
-			ModelName: params.ModelName,
-			Quota:     params.Quota,
-			CreatedAt: createdAt,
-			TokenUsed: params.PromptTokens + params.CompletionTokens,
-			UseGroup:  params.Group,
-			TokenID:   params.TokenId,
-			ChannelID: params.ChannelId,
-			NodeName:  common.NodeName,
-		})
-	}
+		Other:             string(otherData),
+	}, nil
 }
 
 type RecordTaskBillingLogParams struct {

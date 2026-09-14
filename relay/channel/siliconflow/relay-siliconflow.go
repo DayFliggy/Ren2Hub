@@ -1,11 +1,12 @@
 package siliconflow
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
@@ -20,26 +21,30 @@ func siliconflowRerankHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 	}
 	service.CloseResponseBodyGracefully(resp)
 	var siliconflowResp SFRerankResponse
-	err = json.Unmarshal(responseBody, &siliconflowResp)
+	err = common.Unmarshal(responseBody, &siliconflowResp)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+	}
+	if err := helper.ValidateRerankResponse(responseBody, len(info.Documents)); err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 	usage := &dto.Usage{
 		PromptTokens:     siliconflowResp.Meta.Tokens.InputTokens,
 		CompletionTokens: siliconflowResp.Meta.Tokens.OutputTokens,
 		TotalTokens:      siliconflowResp.Meta.Tokens.InputTokens + siliconflowResp.Meta.Tokens.OutputTokens,
+		UsageSource:      "provider",
+	}
+	if err := helper.ValidateVectorUsage(usage); err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 	rerankResp := &dto.RerankResponse{
 		Results: siliconflowResp.Results,
 		Usage:   *usage,
 	}
 
-	jsonResponse, err := json.Marshal(rerankResp)
+	jsonResponse, err := common.Marshal(rerankResp)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
-	c.Writer.Header().Set("Content-Type", "application/json")
-	c.Writer.WriteHeader(resp.StatusCode)
-	service.IOCopyBytesGracefully(c, resp, jsonResponse)
-	return usage, nil
+	return usage, helper.WriteVectorResponse(c, resp, info, jsonResponse)
 }

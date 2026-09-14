@@ -1,12 +1,15 @@
 package convmeta
 
+import "github.com/QuantumNous/new-api/relaykit/types"
+
 // Options is the per-request snapshot of host configuration that converters
 // consult. The host fills it from its settings system when constructing the
 // Meta (see relaycommon.RelayInfo.ConvOptions); relaykit users fill it
-// directly. Zero value = every adaptation disabled, no defaults applied.
+// directly. The zero value disables optional adaptations and uses safe conversion.
 type Options struct {
-	Claude ClaudeOptions
-	Gemini GeminiOptions
+	Claude           ClaudeOptions
+	Gemini           GeminiOptions
+	ConversionPolicy types.ConversionLossPolicy
 
 	// OpenRouterDialect marks the upstream as OpenRouter's OpenAI-compatible
 	// surface, which accepts extra fields (reasoning config, cache_control on
@@ -18,6 +21,13 @@ type Options struct {
 	// suffix must be kept on the outgoing model name (host blacklist lookup).
 	// Nil means "never preserve".
 	PreserveThinkingSuffix func(modelName string) bool
+}
+
+func (o *Options) EffectiveConversionPolicy() types.ConversionLossPolicy {
+	if o == nil || o.ConversionPolicy == "" {
+		return types.ConversionLossPolicySafe
+	}
+	return o.ConversionPolicy
 }
 
 type ClaudeOptions struct {
@@ -45,8 +55,8 @@ type GeminiOptions struct {
 	// ThinkingAdapterBudgetTokensPercentage sizes thinkingBudget as a fraction
 	// of maxOutputTokens when the adapter fires.
 	ThinkingAdapterBudgetTokensPercentage float64
-	// FunctionCallThoughtSignatureEnabled attaches thoughtSignature bypass
-	// values to function-call parts.
+	// Deprecated: retained for source compatibility. Converters never synthesize
+	// provider-owned thought signatures, regardless of this value.
 	FunctionCallThoughtSignatureEnabled bool
 	// SupportsImagine reports whether the model supports image generation
 	// (switches response modalities). Nil means "never".

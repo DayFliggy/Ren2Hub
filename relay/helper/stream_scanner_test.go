@@ -109,6 +109,8 @@ func TestStreamScannerHandler_1000Chunks(t *testing.T) {
 	var count atomic.Int64
 	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
 		count.Add(1)
+		sr.MarkValidOutput()
+		require.NoError(t, StringData(c, data))
 	})
 
 	assert.Equal(t, int64(numChunks), count.Load())
@@ -129,6 +131,7 @@ func TestStreamScannerHandler_OrderPreserved(t *testing.T) {
 		mu.Lock()
 		received = append(received, data)
 		mu.Unlock()
+		require.NoError(t, StringData(c, data))
 	})
 
 	require.Equal(t, numChunks, len(received))
@@ -192,6 +195,8 @@ func TestStreamScannerHandler_SkipsNonDataLines(t *testing.T) {
 	var count atomic.Int64
 	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
 		count.Add(1)
+		sr.MarkValidOutput()
+		require.NoError(t, StringData(c, data))
 	})
 
 	assert.Equal(t, int64(100), count.Load())
@@ -242,6 +247,7 @@ func TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns(t *testing.T)
 	go func() {
 		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
 			count.Add(1)
+			sr.MarkValidOutput()
 			_ = StringData(c, data)
 			if data == "first" {
 				close(firstHandled)
@@ -285,6 +291,62 @@ func TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns(t *testing.T)
 
 // ---------- Ping tests ----------
 
+func TestStreamScannerHandler_BufferedConversionDoesNotCommitPrelude(t *testing.T) {
+	const role = `{"choices":[{"delta":{"role":"assistant"}}]}`
+	const tool = `{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{"}}]}}]}`
+	for _, sendOutput := range []bool{false, true} {
+		t.Run(fmt.Sprintf("output=%t", sendOutput), func(t *testing.T) {
+			body := "data: " + role + "\ndata: " + tool + "\n"
+			if sendOutput {
+				body += "data: " + tool + "\ndata: [DONE]\n"
+			}
+			c, resp, info := setupStreamTest(t, strings.NewReader(body))
+			calls := 0
+			StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+				calls++
+				assert.False(t, c.Writer.Written(), "metadata and buffered arguments must remain uncommitted")
+				if calls == 1 || calls == 3 {
+					require.NoError(t, StringData(c, data))
+				}
+			})
+			assert.Equal(t, sendOutput, c.Writer.Written())
+			assert.Equal(t, sendOutput, info.HasValidOutput())
+			assert.Equal(t, sendOutput, info.StreamStatus.IsNormalEnd())
+		})
+	}
+}
+
+func TestStreamScannerHandler_EmptyConversionCannotStartHeartbeat(t *testing.T) {
+	settings := operation_setting.GetGeneralSetting()
+	previousEnabled, previousSeconds := settings.PingIntervalEnabled, settings.PingIntervalSeconds
+	settings.PingIntervalEnabled, settings.PingIntervalSeconds = true, 1
+	t.Cleanup(func() { settings.PingIntervalEnabled, settings.PingIntervalSeconds = previousEnabled, previousSeconds })
+	ctx, cancel := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+	defer cancel()
+	reader, writer := io.Pipe()
+	t.Cleanup(func() { _ = reader.Close(); _ = writer.Close() })
+	go func() {
+		_, _ = io.WriteString(writer, "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0}]}}]}\n")
+	}()
+	c, resp, info := setupStreamTest(t, reader)
+	c.Request = c.Request.WithContext(ctx)
+	resp.Body = reader
+	StreamScannerHandler(c, resp, info, func(string, *StreamResult) {})
+	assert.Equal(t, 1, info.ReceivedResponseCount)
+	assert.False(t, c.Writer.Written(), "heartbeat must not commit a converter with no client events")
+	assert.False(t, info.HasValidOutput())
+	assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+}
+
+func TestStreamScannerHandler_BufferedSemanticFramesHavePreludeLimit(t *testing.T) {
+	body := strings.Repeat("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0}]}}]}\n", MaxStreamPreludeEvents+2)
+	c, resp, info := setupStreamTest(t, strings.NewReader(body))
+	StreamScannerHandler(c, resp, info, func(string, *StreamResult) {})
+	assert.Equal(t, MaxStreamPreludeEvents+1, info.ReceivedResponseCount)
+	assert.False(t, c.Writer.Written())
+	assert.Contains(t, info.StreamStatus.Err().Error(), "prelude exceeds")
+}
+
 func TestStreamScannerHandler_PingSentDuringSlowUpstream(t *testing.T) {
 	setting := operation_setting.GetGeneralSetting()
 	oldEnabled := setting.PingIntervalEnabled
@@ -318,6 +380,8 @@ func TestStreamScannerHandler_PingSentDuringSlowUpstream(t *testing.T) {
 	go func() {
 		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
 			count.Add(1)
+			sr.MarkValidOutput()
+			_ = StringData(c, data)
 		})
 		close(done)
 	}()
@@ -409,7 +473,8 @@ func TestStreamScannerHandler_StreamStatus_EOFWithoutDone(t *testing.T) {
 
 	require.NotNil(t, info.StreamStatus)
 	assert.Equal(t, relaycommon.StreamEndReasonEOF, info.StreamStatus.EndReason)
-	assert.True(t, info.StreamStatus.IsNormalEnd())
+	assert.False(t, info.StreamStatus.IsNormalEnd())
+	assert.ErrorIs(t, info.StreamStatus.Err(), io.ErrUnexpectedEOF)
 }
 
 func TestStreamScannerHandler_StreamStatus_HandlerStop(t *testing.T) {
@@ -499,9 +564,9 @@ func TestStreamScannerHandler_StreamStatus_SoftErrors(t *testing.T) {
 	})
 
 	require.NotNil(t, info.StreamStatus)
-	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+	assert.Equal(t, relaycommon.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
 	assert.True(t, info.StreamStatus.HasErrors())
-	assert.Equal(t, 10, info.StreamStatus.TotalErrorCount())
+	assert.Equal(t, 1, info.StreamStatus.TotalErrorCount())
 }
 
 func TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk(t *testing.T) {
@@ -516,8 +581,8 @@ func TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk(t *testing.T) 
 	})
 
 	require.NotNil(t, info.StreamStatus)
-	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
-	assert.Equal(t, 10, info.StreamStatus.TotalErrorCount())
+	assert.Equal(t, relaycommon.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
+	assert.Equal(t, 2, info.StreamStatus.TotalErrorCount())
 }
 
 func TestStreamScannerHandler_StreamStatus_ErrorThenStop(t *testing.T) {

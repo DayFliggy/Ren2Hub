@@ -138,7 +138,7 @@ func appendParamOverrideInfo(relayInfo *relaycommon.RelayInfo, other map[string]
 }
 
 func appendStreamStatus(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
-	if relayInfo == nil || other == nil || !relayInfo.IsStream || relayInfo.StreamStatus == nil {
+	if relayInfo == nil || other == nil || relayInfo.StreamStatus == nil {
 		return
 	}
 	ss := relayInfo.StreamStatus

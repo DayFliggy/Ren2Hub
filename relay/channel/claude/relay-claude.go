@@ -1,7 +1,6 @@
 package claude
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -129,6 +128,31 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		err = helper.ObjectData(c, response)
 		if err != nil {
 			logger.LogError(c, "send_stream_response_failed: "+err.Error())
+			return types.NewError(err, types.ErrorCodeBadResponse)
+		}
+	} else {
+		FormatClaudeResponseInfo(&claudeResponse, nil, claudeInfo)
+		countClaudeStreamBillableTools(c, info, &claudeResponse)
+		value, exists := c.Get("claude_response_stream_state")
+		var state *relayconvert.ResponseStreamState
+		if exists {
+			state, _ = value.(*relayconvert.ResponseStreamState)
+		}
+		if state == nil {
+			state, err = relayconvert.NewResponseStreamState(types.RelayFormatClaude, info.RelayFormat, relayconvert.ResponseStreamOptions{ID: claudeInfo.ResponseId, Model: info.UpstreamModelName, Created: claudeInfo.Created, IncludeUsage: info.ShouldIncludeUsage})
+			if err != nil {
+				return types.NewError(err, types.ErrorCodeBadResponse)
+			}
+			c.Set("claude_response_stream_state", state)
+		}
+		results, err := relayconvert.ConvertStreamResponseChunk(c, info, state, &claudeResponse)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeBadResponse)
+		}
+		for _, result := range results {
+			if err := helper.WriteConvertedStreamResult(c, result); err != nil {
+				return types.NewError(err, types.ErrorCodeBadResponse)
+			}
 		}
 	}
 	return nil
@@ -155,7 +179,7 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 	if claudeInfo.Usage.PromptTokens == 0 {
 		//上游出错
 	}
-	if claudeInfo.Usage.CompletionTokens == 0 || !claudeInfo.Done {
+	if (claudeInfo.Usage.CompletionTokens == 0 || !claudeInfo.Done) && claudeInfo.ResponseText.Len() > 0 {
 		if common.DebugEnabled {
 			common.SysLog("claude response usage is not complete, maybe upstream error")
 		}
@@ -164,6 +188,7 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 		if claudeInfo.Usage.CompletionTokens == 0 ||
 			(!claudeInfo.Done && fallback.CompletionTokens > claudeInfo.Usage.CompletionTokens) {
 			claudeInfo.Usage.CompletionTokens = fallback.CompletionTokens
+			claudeInfo.Usage.UsageSource = "estimated_partial"
 		}
 		if claudeInfo.Usage.PromptTokens == 0 {
 			claudeInfo.Usage.PromptTokens = fallback.PromptTokens
@@ -177,6 +202,9 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 		claudeInfo.Usage.BillingUsage = dto.NewClaudeMessagesBillingUsage(buildMessageDeltaPatchUsage(nil, claudeInfo))
 	}
 
+	if info.StreamStatus != nil && !info.StreamStatus.IsNormalEnd() {
+		return
+	}
 	if info.RelayFormat == types.RelayFormatClaude {
 		//
 	} else if info.RelayFormat == types.RelayFormatOpenAI {
@@ -193,6 +221,7 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 }
 
 func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {
+	c.Set("claude_response_stream_state", nil)
 	claudeInfo := &ClaudeResponseInfo{
 		ResponseId:   helper.GetResponseID(c),
 		Created:      common.GetTimestamp(),
@@ -207,14 +236,21 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 			sr.Stop(err)
 		}
 	})
-	if err != nil {
-		return nil, err
-	}
-	if info.StreamStatus != nil && info.StreamStatus.HasErrors() {
-		return nil, types.NewOpenAIError(fmt.Errorf("upstream stream processing failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
-	}
-
 	HandleStreamFinalResponse(c, info, claudeInfo)
+	if value, ok := c.Get("claude_response_stream_state"); ok {
+		if state, ok := value.(*relayconvert.ResponseStreamState); ok && state != nil {
+			state.SetUsage(relayconvert.UsageFromClaudeUsage(claudeInfo.Usage))
+			if finalErr := helper.FinalizeConvertedStream(c, info, state); err == nil {
+				err = finalErr
+			}
+		}
+	}
+	if err != nil {
+		return claudeInfo.Usage, err
+	}
+	if streamErr := helper.StreamError(info); streamErr != nil {
+		return claudeInfo.Usage, streamErr
+	}
 	return claudeInfo.Usage, nil
 }
 
@@ -253,6 +289,15 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		}
 	case types.RelayFormatClaude:
 		responseData = data
+	default:
+		converted, convertErr := relayconvert.ConvertResponse(c, info, info.RelayFormat, &claudeResponse)
+		if convertErr != nil {
+			return types.NewError(convertErr, types.ErrorCodeBadResponseBody)
+		}
+		responseData, err = common.Marshal(converted.Value)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeBadResponseBody)
+		}
 	}
 
 	if claudeResponse.Usage != nil && claudeResponse.Usage.ServerToolUse != nil && claudeResponse.Usage.ServerToolUse.WebSearchRequests > 0 {

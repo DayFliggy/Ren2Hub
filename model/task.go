@@ -2,8 +2,10 @@ package model
 
 import (
 	"bytes"
+	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -86,28 +88,44 @@ type Properties struct {
 }
 
 func (m *Properties) Scan(val interface{}) error {
-	bytesValue, _ := val.([]byte)
-	if len(bytesValue) == 0 {
-		*m = Properties{}
+	*m = Properties{}
+	switch value := val.(type) {
+	case nil:
 		return nil
+	case []byte:
+		if len(value) == 0 {
+			return nil
+		}
+		return common.Unmarshal(value, m)
+	case string:
+		if value == "" {
+			return nil
+		}
+		return common.UnmarshalJsonStr(value, m)
+	default:
+		return fmt.Errorf("unsupported task properties database value %T", val)
 	}
-	return common.Unmarshal(bytesValue, m)
 }
 
 func (m Properties) Value() (driver.Value, error) {
 	if m == (Properties{}) {
 		return nil, nil
 	}
-	return common.Marshal(m)
+	data, err := common.Marshal(m)
+	return string(data), err
 }
 
 type TaskPrivateData struct {
 	// Key remains only to read tasks created before credential references were
 	// introduced. New tasks must resolve credentials from their channel.
-	Key             string `json:"key,omitempty"`
-	ChannelKeyIndex int    `json:"channel_key_index,omitempty"`
-	UpstreamTaskID  string `json:"upstream_task_id,omitempty"` // 上游真实 task ID
-	ResultURL       string `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
+	Key                 string `json:"key,omitempty"`
+	ChannelKeyIndex     int    `json:"channel_key_index,omitempty"`
+	CredentialVersion   int    `json:"credential_version,omitempty"`
+	CredentialID        string `json:"credential_id,omitempty"`
+	EndpointID          string `json:"endpoint_id,omitempty"`
+	UpstreamTaskID      string `json:"upstream_task_id,omitempty"` // 上游真实 task ID
+	SubmissionRequestID string `json:"submission_request_id,omitempty"`
+	ResultURL           string `json:"result_url,omitempty"` // 任务成功后的结果 URL（视频地址等）
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
 	BillingSource  string              `json:"billing_source,omitempty"`  // "wallet" 或 "subscription"
 	SubscriptionId int                 `json:"subscription_id,omitempty"` // 订阅 ID，用于订阅退款
@@ -151,18 +169,31 @@ func GenerateTaskID() string {
 }
 
 func (p *TaskPrivateData) Scan(val interface{}) error {
-	bytesValue, _ := val.([]byte)
-	if len(bytesValue) == 0 {
+	*p = TaskPrivateData{}
+	switch value := val.(type) {
+	case nil:
 		return nil
+	case []byte:
+		if len(value) == 0 {
+			return nil
+		}
+		return common.Unmarshal(value, p)
+	case string:
+		if value == "" {
+			return nil
+		}
+		return common.UnmarshalJsonStr(value, p)
+	default:
+		return fmt.Errorf("unsupported task private data database value %T", val)
 	}
-	return common.Unmarshal(bytesValue, p)
 }
 
 func (p TaskPrivateData) Value() (driver.Value, error) {
 	if (p == TaskPrivateData{}) {
 		return nil, nil
 	}
-	return common.Marshal(p)
+	data, err := common.Marshal(p)
+	return string(data), err
 }
 
 // SyncTaskQueryParams 用于包含所有搜索条件的结构体，可以根据需求添加更多字段
@@ -180,7 +211,7 @@ type SyncTaskQueryParams struct {
 
 func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) *Task {
 	properties := Properties{}
-	privateData := TaskPrivateData{}
+	privateData := TaskPrivateData{CredentialVersion: 1}
 	if relayInfo != nil && relayInfo.ChannelMeta != nil {
 		privateData.ChannelKeyIndex = relayInfo.ChannelMeta.ChannelMultiKeyIndex
 		if relayInfo.UpstreamModelName != "" {
@@ -214,17 +245,47 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 	return t
 }
 
-// ResolveTaskChannelKey obtains a task credential from the channel at use time.
-// The persisted key is an explicit compatibility fallback for historical tasks
-// only; tasks created by InitTask never write a channel key to the database.
-func ResolveTaskChannelKey(channel *Channel, task *Task) string {
+// BindCredential runs before submission so later channel edits cannot change
+// the owner recorded for an accepted upstream task.
+func (p *TaskPrivateData) BindCredential(ctx context.Context, channel *Channel, key string) error {
+	if channel == nil || channel.Status != common.ChannelStatusEnabled {
+		return ErrGatewayStateUnavailable
+	}
+	credential, err := EnsureGatewayCredential(ctx, channel.Id, key)
+	if err != nil {
+		return err
+	}
+	_, index, err := ResolveGatewayCredential(ctx, channel, credential.ID)
+	if err != nil {
+		return err
+	}
+	p.Key = ""
+	p.ChannelKeyIndex = index
+	p.CredentialVersion = 1
+	p.CredentialID = credential.ID
+	p.EndpointID = channel.GatewayEndpointID()
+	return nil
+}
+
+// ResolveTaskCredential keeps pre-binding task records readable while every
+// versioned record fails closed if its original credential or endpoint changed.
+func ResolveTaskCredential(ctx context.Context, channel *Channel, task *Task) (string, int, error) {
+	if task != nil && (task.PrivateData.CredentialVersion != 0 || task.PrivateData.CredentialID != "" || task.PrivateData.EndpointID != "") {
+		binding := task.PrivateData
+		if channel == nil || task.ChannelId != channel.Id || channel.Status != common.ChannelStatusEnabled ||
+			binding.CredentialVersion != 1 || binding.CredentialID == "" || binding.EndpointID != channel.GatewayEndpointID() {
+			return "", 0, ErrGatewayStateUnavailable
+		}
+		key, index, err := ResolveGatewayCredential(ctx, channel, binding.CredentialID)
+		return strings.TrimSpace(key), index, err
+	}
 	if task != nil {
 		if legacyKey := strings.TrimSpace(task.PrivateData.Key); legacyKey != "" {
-			return legacyKey
+			return legacyKey, task.PrivateData.ChannelKeyIndex, nil
 		}
 	}
 	if channel == nil {
-		return ""
+		return "", 0, ErrGatewayStateUnavailable
 	}
 
 	keyIndex := 0
@@ -233,9 +294,20 @@ func ResolveTaskChannelKey(channel *Channel, task *Task) string {
 	}
 	keys := channel.GetKeys()
 	if keyIndex < 0 || keyIndex >= len(keys) {
-		return ""
+		return "", 0, ErrGatewayStateUnavailable
 	}
-	return strings.TrimSpace(keys[keyIndex])
+	key := strings.TrimSpace(keys[keyIndex])
+	if key == "" {
+		return "", 0, ErrGatewayStateUnavailable
+	}
+	return key, keyIndex, nil
+}
+
+// ResolveTaskChannelKey is the compatibility entry point for task polling and
+// result downloads, where an empty credential already means unavailable.
+func ResolveTaskChannelKey(channel *Channel, task *Task) string {
+	key, _, _ := ResolveTaskCredential(context.Background(), channel, task)
+	return key
 }
 
 func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQueryParams) []*Task {
@@ -457,7 +529,7 @@ func (t *Task) UpdateWithStatus(fromStatus TaskStatus) (bool, error) {
 // WARNING: This function has NO CAS (Compare-And-Swap) guard — it will overwrite
 // any concurrent status changes. DO NOT use in billing/quota lifecycle flows
 // (e.g., timeout, success, failure transitions that trigger refunds or settlements).
-// For status transitions that involve billing, use Task.UpdateWithStatus() instead.
+// For terminal transitions involving billing, use PersistTaskCompletion instead.
 func TaskBulkUpdateByID(ids []int64, params map[string]any) error {
 	if len(ids) == 0 {
 		return nil

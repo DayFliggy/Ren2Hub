@@ -52,6 +52,26 @@ func TestGeneralOpenAIRequestPreserveExplicitZeroValues(t *testing.T) {
 	require.True(t, gjson.GetBytes(encoded, "return_related_questions").Exists())
 }
 
+func TestChatOutputLimitUsesFieldPresence(t *testing.T) {
+	for _, test := range []struct {
+		body string
+		want uint
+	}{
+		{`{}`, 0},
+		{`{"max_tokens":8}`, 8},
+		{`{"max_tokens":8,"max_completion_tokens":null}`, 8},
+		{`{"max_tokens":8,"max_completion_tokens":0}`, 0},
+		{`{"max_tokens":8,"max_completion_tokens":2}`, 2},
+	} {
+		t.Run(test.body, func(t *testing.T) {
+			var request GeneralOpenAIRequest
+			require.NoError(t, kitutil.Unmarshal([]byte(test.body), &request))
+			assert.Equal(t, test.want, request.GetMaxTokens())
+			assert.Equal(t, int(test.want), request.GetTokenCountMeta().MaxTokens)
+		})
+	}
+}
+
 func TestGeneralOpenAIRequestPreserveQwenThinkingBudget(t *testing.T) {
 	raw := []byte(`{
 		"model":"qwen-plus",

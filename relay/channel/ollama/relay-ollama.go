@@ -1,6 +1,7 @@
 package ollama
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,23 +24,34 @@ func toOllamaResponseFormat(responseFormat *dto.ResponseFormat) (any, error) {
 		return nil, nil
 	}
 	switch responseFormat.Type {
+	case "", "text":
+		return nil, nil
 	case "json", "json_object":
 		return "json", nil
 	case "json_schema":
 		if len(responseFormat.JsonSchema) == 0 {
-			return nil, nil
+			return nil, fmt.Errorf("ollama response_format.json_schema is required")
 		}
 		var jsonSchema dto.FormatJsonSchema
 		if err := common.Unmarshal(responseFormat.JsonSchema, &jsonSchema); err != nil {
 			return nil, fmt.Errorf("invalid ollama response format: %w", err)
 		}
-		return jsonSchema.Schema, nil
+		switch jsonSchema.Schema.(type) {
+		case map[string]any, bool:
+			return jsonSchema.Schema, nil
+		default:
+			return nil, fmt.Errorf("ollama response_format.json_schema.schema must be an object or boolean")
+		}
 	default:
-		return nil, nil
+		return nil, fmt.Errorf("unsupported ollama response format %q", responseFormat.Type)
 	}
 }
 
 func openAIChatToOllamaChat(c *gin.Context, r *dto.GeneralOpenAIRequest) (*OllamaChatRequest, error) {
+	messages, parts, err := prepareOllamaMessages(r.Messages)
+	if err != nil {
+		return nil, err
+	}
 	think := r.Think
 	if len(think) == 0 {
 		effort := r.ReasoningEffort
@@ -99,8 +111,8 @@ func openAIChatToOllamaChat(c *gin.Context, r *dto.GeneralOpenAIRequest) (*Ollam
 	if r.Seed != nil {
 		chatReq.Options["seed"] = int(lo.FromPtr(r.Seed))
 	}
-	if mt := r.GetMaxTokens(); mt != 0 {
-		chatReq.Options["num_predict"] = int(mt)
+	if r.MaxTokens != nil || r.MaxCompletionTokens != nil {
+		chatReq.Options["num_predict"] = r.GetMaxTokens()
 	}
 
 	if r.Stop != nil {
@@ -120,86 +132,40 @@ func openAIChatToOllamaChat(c *gin.Context, r *dto.GeneralOpenAIRequest) (*Ollam
 		}
 	}
 
-	if len(r.Tools) > 0 {
-		chatReq.Tools = lo.Map(r.Tools, func(tool dto.ToolCallRequest, _ int) OllamaTool {
-			return OllamaTool{
+	if len(r.Tools) > 0 && r.ToolChoice != "none" {
+		tools := make([]OllamaTool, 0, len(r.Tools))
+		for index, tool := range r.Tools {
+			if tool.Type != "function" || strings.TrimSpace(tool.Function.Name) == "" {
+				return nil, fmt.Errorf("ollama tools[%d] must name a function", index)
+			}
+			tools = append(tools, OllamaTool{
 				Type: "function",
 				Function: OllamaToolFunction{
 					Name:        tool.Function.Name,
 					Description: tool.Function.Description,
 					Parameters:  tool.Function.Parameters,
 				},
-			}
-		})
+			})
+		}
+		chatReq.Tools = tools
 	}
 
-	chatReq.Messages = make([]OllamaChatMessage, 0, len(r.Messages))
-	toolNamesByCallID := make(map[string]string)
-	for _, m := range r.Messages {
-		var textBuilder strings.Builder
-		var images []string
-		if m.IsStringContent() {
-			textBuilder.WriteString(m.StringContent())
-		} else {
-			parts := m.ParseContent()
-			for _, part := range parts {
-				if part.Type == dto.ContentTypeImageURL {
-					source := part.ToFileSource()
-					if source != nil {
-						base64Data, _, err := service.GetBase64Data(c, source, "fetch image for ollama chat")
-						if err != nil {
-							return nil, err
-						}
-						if base64Data != "" {
-							images = append(images, base64Data)
-						}
-					}
-				} else if part.Type == dto.ContentTypeText {
-					textBuilder.WriteString(part.Text)
-				}
+	chatReq.Messages = messages
+	// Validate all history and content before the first media download.
+	for index, content := range parts {
+		for _, part := range content {
+			if part.Type != dto.ContentTypeImageURL {
+				continue
 			}
-		}
-		cm := OllamaChatMessage{Role: m.Role, Content: textBuilder.String()}
-		if len(images) > 0 {
-			cm.Images = images
-		}
-		if m.Role == "assistant" {
-			if reasoning, ok := lo.Coalesce(m.ReasoningContent, m.Reasoning); ok {
-				thinking, err := common.Marshal(*reasoning)
-				if err != nil {
-					return nil, fmt.Errorf("marshal ollama thinking: %w", err)
-				}
-				cm.Thinking = thinking
+			base64Data, mimeType, err := service.GetBase64Data(c, part.ToFileSource(), "fetch image for ollama chat")
+			if err != nil {
+				return nil, err
 			}
-		}
-		if m.Role == "tool" {
-			cm.ToolCallID = m.ToolCallId
-			cm.ToolName = lo.CoalesceOrEmpty(lo.FromPtr(m.Name), toolNamesByCallID[m.ToolCallId])
-		}
-		if m.ToolCalls != nil && len(m.ToolCalls) > 0 {
-			parsed := m.ParseToolCalls()
-			if len(parsed) > 0 {
-				calls := make([]OllamaToolCall, 0, len(parsed))
-				for _, tc := range parsed {
-					var args interface{}
-					if tc.Function.Arguments != "" {
-						_ = common.Unmarshal([]byte(tc.Function.Arguments), &args)
-					}
-					if args == nil {
-						args = map[string]any{}
-					}
-					oc := OllamaToolCall{ID: tc.ID}
-					oc.Function.Name = tc.Function.Name
-					oc.Function.Arguments = args
-					calls = append(calls, oc)
-					if tc.ID != "" {
-						toolNamesByCallID[tc.ID] = tc.Function.Name
-					}
-				}
-				cm.ToolCalls = calls
+			if base64Data == "" || !strings.HasPrefix(mimeType, "image/") {
+				return nil, fmt.Errorf("ollama messages[%d] image must contain image data", index)
 			}
+			chatReq.Messages[index].Images = append(chatReq.Messages[index].Images, base64Data)
 		}
-		chatReq.Messages = append(chatReq.Messages, cm)
 	}
 	return chatReq, nil
 }
@@ -257,8 +223,8 @@ func openAIToGenerate(c *gin.Context, r *dto.GeneralOpenAIRequest) (*OllamaGener
 	if r.Seed != nil {
 		gen.Options["seed"] = int(lo.FromPtr(r.Seed))
 	}
-	if mt := r.GetMaxTokens(); mt != 0 {
-		gen.Options["num_predict"] = int(mt)
+	if r.MaxTokens != nil || r.MaxCompletionTokens != nil {
+		gen.Options["num_predict"] = r.GetMaxTokens()
 	}
 	if r.Stop != nil {
 		switch v := r.Stop.(type) {
@@ -320,15 +286,29 @@ func ollamaEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 	if oResp.Error != "" {
 		return nil, types.NewOpenAIError(fmt.Errorf("ollama error: %s", oResp.Error), types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	var raw struct {
+		Embeddings []json.RawMessage `json:"embeddings"`
+	}
+	if err := common.Unmarshal(body, &raw); err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	}
+	if err := helper.ValidateEmbeddingVectors(raw.Embeddings, helper.EmbeddingInputCount(info.Request)); err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	}
 	data := make([]dto.OpenAIEmbeddingResponseItem, 0, len(oResp.Embeddings))
 	for i, emb := range oResp.Embeddings {
 		data = append(data, dto.OpenAIEmbeddingResponseItem{Index: i, Object: "embedding", Embedding: emb})
 	}
-	usage := &dto.Usage{PromptTokens: oResp.PromptEvalCount, CompletionTokens: 0, TotalTokens: oResp.PromptEvalCount}
+	usage := &dto.Usage{PromptTokens: oResp.PromptEvalCount, CompletionTokens: 0, TotalTokens: oResp.PromptEvalCount, UsageSource: "provider"}
+	if err := helper.ValidateVectorUsage(usage); err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	}
 	embResp := &dto.OpenAIEmbeddingResponse{Object: "list", Data: data, Model: info.UpstreamModelName, Usage: *usage}
-	out, _ := common.Marshal(embResp)
-	service.IOCopyBytesGracefully(c, resp, out)
-	return usage, nil
+	out, err := common.Marshal(embResp)
+	if err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	}
+	return usage, helper.WriteVectorResponse(c, resp, info, out)
 }
 
 func FetchOllamaModels(baseURL, apiKey string) ([]OllamaModel, error) {

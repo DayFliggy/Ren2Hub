@@ -464,15 +464,8 @@ func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveR
 	case model.RoutePolicyRetrySameChannel:
 		return appendSameResource(attempts, available[0])
 	case model.RoutePolicyRetrySameThenNext:
-		failovers := policy.MaxFailoverAttempts
-		if failovers < 0 {
-			failovers = 0
-		}
-		if failovers > DefaultFailoverAttempts {
-			failovers = DefaultFailoverAttempts
-		}
 		for index, candidate := range available {
-			if index > failovers {
+			if index > 0 && policy.MaxFailoverAttempts <= 0 {
 				break
 			}
 			attempts = appendSameResource(attempts, candidate)
@@ -481,15 +474,8 @@ func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveR
 	case model.RoutePolicyRetryNextChannel:
 		fallthrough
 	default:
-		failovers := policy.MaxFailoverAttempts
-		if failovers < 0 {
-			failovers = 0
-		}
-		if failovers > DefaultFailoverAttempts {
-			failovers = DefaultFailoverAttempts
-		}
 		for index, candidate := range available {
-			if index > failovers {
+			if index > 0 && policy.MaxFailoverAttempts <= 0 {
 				break
 			}
 			attempts = appendCandidate(attempts, candidate)
@@ -498,29 +484,62 @@ func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveR
 	}
 }
 
-func applyLiveHealth(ctx context.Context, candidates []RouteSelectionCandidate) error {
+func applyLiveHealth(ctx context.Context, candidates []RouteSelectionCandidate, channels map[int]*model.Channel, attemptedKeys map[int]map[int]struct{}) error {
 	now := time.Now()
+	type scopeKey struct {
+		channelID int
+		model     string
+		key       string
+	}
+	channelIDs := make([]int, 0, len(channels))
+	for channelID := range channels {
+		channelIDs = append(channelIDs, channelID)
+	}
+	modelNames := make([]string, 0)
+	seenModels := make(map[string]bool)
+	for _, candidate := range candidates {
+		if !seenModels[candidate.RequestModel] {
+			seenModels[candidate.RequestModel] = true
+			modelNames = append(modelNames, candidate.RequestModel)
+		}
+	}
+	var rows []model.ChannelHealth
+	if len(channelIDs) > 0 && len(modelNames) > 0 {
+		if err := model.DB.WithContext(ctx).Where("channel_id IN ? AND model IN ?", channelIDs, modelNames).Find(&rows).Error; err != nil {
+			return err
+		}
+	}
+	healthByScope := make(map[scopeKey]model.ChannelHealth, len(rows))
+	for _, health := range rows {
+		healthByScope[scopeKey{health.ChannelID, health.Model, health.KeyScope}] = health
+	}
+	eligibleChannels := make(map[int]*model.Channel)
 	for index := range candidates {
 		if candidates[index].FilterReason != "" {
 			continue
 		}
 		requestModel := candidates[index].RequestModel
-		usable, epoch, err := RouteHealthUsable(ctx, candidates[index].ChannelID, requestModel, now)
-		if err != nil {
-			return err
-		}
-		if !usable {
+		health := healthByScope[scopeKey{candidates[index].ChannelID, requestModel, ""}]
+		if !RouteHealthReadOnlyUsable(health, now) {
 			candidates[index].FilterReason = RouteCandidateFilterHealthUnavailable
 			candidates[index].HealthUsable = false
 			continue
 		}
-		channel, err := model.CacheGetChannel(candidates[index].ChannelID)
-		if err != nil {
-			return err
-		}
-		hasAvailableKey, err := RouteChannelHasAvailableKey(ctx, channel, requestModel, now)
-		if err != nil {
-			return err
+		channel := channels[candidates[index].ChannelID]
+		hasAvailableKey := false
+		keys := channel.GetKeys()
+		for _, keyIndex := range channel.GetEnabledKeyIndexes() {
+			if _, used := attemptedKeys[channel.Id][keyIndex]; used {
+				continue
+			}
+			var keyHealth model.ChannelHealth
+			if keyIndex < len(keys) {
+				keyHealth = healthByScope[scopeKey{channel.Id, requestModel, RouteKeyScope(keys[keyIndex])}]
+			}
+			if RouteHealthReadOnlyUsable(keyHealth, now) {
+				hasAvailableKey = true
+				break
+			}
 		}
 		if !hasAvailableKey {
 			candidates[index].FilterReason = RouteFilterKeyUnavailable
@@ -528,27 +547,22 @@ func applyLiveHealth(ctx context.Context, candidates []RouteSelectionCandidate) 
 			continue
 		}
 		candidates[index].HealthUsable = true
-		candidates[index].HealthEpoch = epoch
-		metrics, metricsErr := RouteHealthScoringMetrics(ctx, candidates[index].ChannelID, requestModel)
-		if metricsErr != nil {
-			return metricsErr
-		}
+		candidates[index].HealthEpoch = max(health.HealthEpoch, 1)
+		metrics := routeHealthScoreMetrics(health)
 		candidates[index].ErrorRate = metrics.ErrorRate
 		candidates[index].ErrorRateKnown = metrics.ErrorRateKnown
 		candidates[index].LatencyMS = metrics.LatencyMS
 		candidates[index].LatencyKnown = metrics.LatencyKnown
 		candidates[index].TTFTMS = metrics.TTFTMS
 		candidates[index].TTFTKnown = metrics.TTFTKnown
-		{
-			runtimeMetrics, runtimeErr := LoadRouteScoreRuntimeMetrics(ctx, candidates[index].ChannelID, requestModel)
-			if runtimeErr != nil {
-				return runtimeErr
-			}
-			candidates[index].RateLimitHeadroom = runtimeMetrics.RateLimitHeadroom
-			candidates[index].RateLimitKnown = runtimeMetrics.RateLimitKnown
-			candidates[index].QuotaHeadroom = runtimeMetrics.QuotaHeadroom
-			candidates[index].QuotaKnown = runtimeMetrics.QuotaKnown
-		}
+		eligibleChannels[channel.Id] = channel
+	}
+	loads, err := LoadRouteChannelLoads(ctx, eligibleChannels)
+	if err != nil {
+		return err
+	}
+	for index := range candidates {
+		candidates[index].LoadRatio = loads[candidates[index].ChannelID]
 	}
 	return nil
 }

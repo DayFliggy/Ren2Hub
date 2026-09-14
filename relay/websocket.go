@@ -20,27 +20,39 @@ func WssHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.
 		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
 	}
 	adaptor.Init(info)
-	//var requestBody io.Reader
-	//firstWssRequest, _ := c.Get("first_wss_request")
-	//requestBody = bytes.NewBuffer(firstWssRequest.([]byte))
-
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 	resp, err := adaptor.DoRequest(c, info, nil)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeDoRequestFailed)
 	}
 
-	if resp != nil {
-		info.TargetWs = resp.(*websocket.Conn)
-		defer info.TargetWs.Close()
+	upstream, ok := resp.(*websocket.Conn)
+	if !ok || upstream == nil {
+		return types.NewError(fmt.Errorf("upstream realtime connection is missing"), types.ErrorCodeBadResponse, types.ErrOptionWithSkipRetry())
 	}
+	info.TargetWs = upstream
+	info.UpstreamAccepted = true
+	defer upstream.Close()
 
 	usage, newAPIError := adaptor.DoResponse(c, nil, info)
+	if realtimeUsage, ok := usage.(*dto.RealtimeUsage); ok && realtimeUsage != nil {
+		// Input accepted by a session is not delivered output. A failed or empty
+		// session refunds its reservation even if local input estimates exist.
+		if !info.HasValidOutput() {
+			realtimeUsage = &dto.RealtimeUsage{}
+		}
+		source := "estimated"
+		if info.ResponseUsage != nil {
+			source = info.ResponseUsage.UsageSource
+		}
+		info.CaptureResponseUsage(&dto.Usage{PromptTokens: realtimeUsage.InputTokens, CompletionTokens: realtimeUsage.OutputTokens,
+			TotalTokens: realtimeUsage.TotalTokens, PromptTokensDetails: realtimeUsage.InputTokenDetails,
+			CompletionTokenDetails: realtimeUsage.OutputTokenDetails, UsageSource: source}, "realtime", []string{"realtime usage: " + source})
+	}
 	if newAPIError != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
 	}
-	service.PostWssConsumeQuota(c, info, info.UpstreamModelName, usage.(*dto.RealtimeUsage), "")
 	return nil
 }

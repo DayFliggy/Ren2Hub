@@ -1,8 +1,90 @@
 package helper
 
 import (
+	"fmt"
+	"net/http"
+
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/gin-gonic/gin"
 )
+
+func StreamError(info *relaycommon.RelayInfo) *types.NewAPIError {
+	if info == nil || info.StreamStatus == nil {
+		return nil
+	}
+	if err := info.StreamStatus.Err(); err != nil {
+		return types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
+	return nil
+}
+
+func StreamOutcome(info *relaycommon.RelayInfo) relayconvert.StreamOutcome {
+	if info != nil && info.StreamStatus != nil {
+		if info.StreamStatus.IsNormalEnd() {
+			return relayconvert.StreamOutcomeCompleted
+		}
+		if info.StreamStatus.EndReason == relaycommon.StreamEndReasonClientGone {
+			return relayconvert.StreamOutcomeCancelled
+		}
+	}
+	return relayconvert.StreamOutcomeFailed
+}
+
+func WriteConvertedStreamResult(c *gin.Context, result relayconvert.ResponseResult) (err error) {
+	eventType := ""
+	defer func() {
+		if err == nil && (eventType == "error" || eventType == "response.failed" || eventType == "response.incomplete") {
+			c.Set("gateway_stream_error_sent", true)
+		}
+	}()
+	switch value := result.Value.(type) {
+	case relayconvert.ChatToResponsesStreamEvent:
+		eventType = value.Type
+		body, err := common.Marshal(value.Payload)
+		if err != nil {
+			return err
+		}
+		return ResponseChunkData(c, dto.ResponsesStreamResponse{Type: value.Type}, string(body))
+	case *dto.ResponsesStreamResponse:
+		eventType = value.Type
+		body, err := common.Marshal(value)
+		if err != nil {
+			return err
+		}
+		return ResponseChunkData(c, *value, string(body))
+	case *dto.ClaudeResponse:
+		eventType = value.Type
+		return ClaudeData(c, *value)
+	case dto.ClaudeResponse:
+		eventType = value.Type
+		return ClaudeData(c, value)
+	case nil:
+		return fmt.Errorf("converted stream response is nil")
+	default:
+		return ObjectData(c, value)
+	}
+}
+
+func FinalizeConvertedStream(c *gin.Context, info *relaycommon.RelayInfo, state *relayconvert.ResponseStreamState) *types.NewAPIError {
+	outcome := StreamOutcome(info)
+	if outcome != relayconvert.StreamOutcomeCompleted && !c.Writer.Written() {
+		return StreamError(info)
+	}
+	results, err := relayconvert.FinalizeStreamResponseWithOutcome(c, info, state, outcome)
+	if err != nil {
+		return types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
+	for _, result := range results {
+		if err := WriteConvertedStreamResult(c, result); err != nil {
+			return types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
+		}
+	}
+	return StreamError(info)
+}
 
 // StreamResult is passed to each dataHandler invocation, providing methods
 // to record soft errors, signal fatal stops, or mark normal completion.
@@ -12,6 +94,7 @@ type StreamResult struct {
 	stopped     bool
 	hadError    bool
 	validOutput bool
+	eventName   string
 }
 
 func newStreamResult(status *relaycommon.StreamStatus) *StreamResult {
@@ -32,6 +115,7 @@ func (r *StreamResult) Error(err error) {
 func (r *StreamResult) Stop(err error) {
 	if err != nil {
 		r.status.RecordError(err.Error())
+		r.hadError = true
 	}
 	r.status.SetEndReason(relaycommon.StreamEndReasonHandlerStop, err)
 	r.stopped = true
@@ -49,9 +133,7 @@ func (r *StreamResult) IsStopped() bool {
 	return r.stopped
 }
 
-// MarkValidOutput allows an adapter to explicitly mark a parsed payload. The
-// scanner also marks a payload when the callback completes without an error,
-// preserving compatibility with adapters that do not need custom validation.
+// MarkValidOutput marks semantic output, not a parsed prelude or usage frame.
 func (r *StreamResult) MarkValidOutput() {
 	if r != nil {
 		r.validOutput = true
@@ -65,6 +147,9 @@ func (r *StreamResult) HasValidOutput() bool {
 func (r *StreamResult) HasError() bool {
 	return r != nil && r.hadError
 }
+
+// EventName is the SSE event field associated with this data frame.
+func (r *StreamResult) EventName() string { return r.eventName }
 
 // reset clears the per-chunk stopped flag so the object can be reused.
 func (r *StreamResult) reset() {

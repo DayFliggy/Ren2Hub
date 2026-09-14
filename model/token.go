@@ -28,6 +28,7 @@ type Token struct {
 	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
 	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
+	ConversionPolicy   string         `json:"conversion_policy" gorm:"type:varchar(16);default:'safe'"`
 }
 
 func (token *Token) Clean() {
@@ -301,7 +302,7 @@ func (token *Token) Update() (err error) {
 		common.SysLog("failed to invalidate token cache before update: " + cacheErr.Error())
 	}
 	return DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
-		"model_limits_enabled", "model_limits", "allow_ips").Updates(token).Error
+		"model_limits_enabled", "model_limits", "allow_ips", "conversion_policy").Updates(token).Error
 }
 
 func (token *Token) SelectUpdate() (err error) {

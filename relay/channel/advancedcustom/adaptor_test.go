@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -240,6 +241,46 @@ func TestAdaptorSwitchesGeminiGenerateContentURLForStream(t *testing.T) {
 	assert.Equal(t, "sse", parsedURL.Query().Get("alt"))
 	assert.Equal(t, "1", parsedURL.Query().Get("existing"))
 	assert.Equal(t, "sk-test", parsedURL.Query().Get("key"))
+}
+
+func TestAdaptorNativeGeminiStreamURLPreservesRouteQuery(t *testing.T) {
+	for _, test := range []struct {
+		name, operation, expectedOperation, alt string
+		format                                  types.RelayFormat
+		stream                                  bool
+	}{
+		{"native_json", "generateContent", "generateContent", "configured", types.RelayFormatGemini, false},
+		{"native_stream", "generateContent", "streamGenerateContent", "sse", types.RelayFormatGemini, true},
+		{"explicit_stream", "streamGenerateContent", "streamGenerateContent", "sse", types.RelayFormatGemini, true},
+		{"other_protocol", "generateContent", "generateContent", "configured", types.RelayFormatOpenAI, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			incoming := "/v1beta/models/{model}:generateContent"
+			if test.format == types.RelayFormatOpenAI {
+				incoming = "/v1/chat/completions"
+			}
+			info := advancedCustomRelayInfo(&dto.AdvancedCustomConfig{Routes: []dto.AdvancedCustomRoute{{
+				IncomingPath: incoming,
+				UpstreamPath: "https://custom.example/models/{model}:" + test.operation + "?existing=1&alt=configured",
+				Converter:    relayconvert.ConverterNone,
+				Auth:         &dto.AdvancedCustomRouteAuth{Type: dto.AdvancedCustomAuthTypeQuery, Name: "key", Value: "{api_key}"},
+			}}})
+			info.RelayFormat, info.IsStream = test.format, test.stream
+			info.UpstreamModelName = "gemini-mapped"
+			info.RequestURLPath = strings.Replace(incoming, "{model}", "gemini-input", 1)
+			if test.stream && test.format == types.RelayFormatGemini {
+				info.RequestURLPath = strings.Replace(info.RequestURLPath, ":generateContent", ":streamGenerateContent", 1)
+			}
+			requestURL, err := (&Adaptor{}).GetRequestURL(info)
+			require.NoError(t, err)
+			parsed, err := url.Parse(requestURL)
+			require.NoError(t, err)
+			assert.Equal(t, "/models/gemini-mapped:"+test.expectedOperation, parsed.Path)
+			assert.Equal(t, "1", parsed.Query().Get("existing"))
+			assert.Equal(t, test.alt, parsed.Query().Get("alt"))
+			assert.Equal(t, "sk-test", parsed.Query().Get("key"))
+		})
+	}
 }
 
 func TestAdaptorMatchesGeminiIncomingPathTemplate(t *testing.T) {
@@ -577,7 +618,7 @@ func TestAdaptorResponsesToGeminiUsesResponsesBridge(t *testing.T) {
 	assert.NotContains(t, got, `"candidates"`)
 }
 
-func TestAdaptorResponsesToGeminiAddsThoughtSignatureForFunctionCallHistory(t *testing.T) {
+func TestAdaptorResponsesToGeminiDoesNotSynthesizeThoughtSignature(t *testing.T) {
 	geminiSettings := model_setting.GetGeminiSettings()
 	originalThoughtSignatureEnabled := geminiSettings.FunctionCallThoughtSignatureEnabled
 	geminiSettings.FunctionCallThoughtSignatureEnabled = true
@@ -632,7 +673,7 @@ func TestAdaptorResponsesToGeminiAddsThoughtSignatureForFunctionCallHistory(t *t
 	require.Len(t, geminiReq.Contents, 3)
 	require.Len(t, geminiReq.Contents[1].Parts, 1)
 	require.NotNil(t, geminiReq.Contents[1].Parts[0].FunctionCall)
-	assert.NotEmpty(t, geminiReq.Contents[1].Parts[0].ThoughtSignature)
+	assert.Empty(t, geminiReq.Contents[1].Parts[0].ThoughtSignature, "legacy settings cannot synthesize provider state")
 	require.Len(t, geminiReq.Contents[2].Parts, 1)
 	require.NotNil(t, geminiReq.Contents[2].Parts[0].FunctionResponse)
 	assert.Empty(t, geminiReq.Contents[2].Parts[0].ThoughtSignature)

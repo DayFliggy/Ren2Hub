@@ -2,6 +2,7 @@ package vertex
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,7 +14,6 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 
-	"github.com/QuantumNous/new-api/constant"
 	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/channel"
 	geminitask "github.com/QuantumNous/new-api/relay/channel/task/gemini"
@@ -78,7 +78,7 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *taskdto.TaskError) {
 	// Use the standard validation method for TaskSubmitReq
-	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionTextGenerate)
+	return geminitask.ValidateVeoRequest(c, info)
 }
 
 // BuildRequestURL constructs the upstream URL.
@@ -124,66 +124,12 @@ func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info
 
 // EstimateBilling returns OtherRatios based on durationSeconds and resolution.
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
-	v, ok := c.Get("task_request")
-	if !ok {
-		return nil
-	}
-	req := v.(relaycommon.TaskSubmitReq)
-
-	seconds := geminitask.ResolveVeoDuration(req.Metadata, req.Duration, req.Seconds)
-	resolution := geminitask.ResolveVeoResolution(req.Metadata, req.Size)
-	resRatio := geminitask.VeoResolutionRatio(info.UpstreamModelName, resolution)
-
-	return map[string]float64{
-		"seconds":    float64(seconds),
-		"resolution": resRatio,
-	}
+	return geminitask.EstimateVeoBilling(c, info)
 }
 
 // BuildRequestBody converts request into Vertex specific format.
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
-	v, ok := c.Get("task_request")
-	if !ok {
-		return nil, fmt.Errorf("request not found in context")
-	}
-	req := v.(relaycommon.TaskSubmitReq)
-
-	instance := geminitask.VeoInstance{Prompt: req.Prompt}
-	if img := geminitask.ExtractMultipartImage(c, info); img != nil {
-		instance.Image = img
-	} else if len(req.Images) > 0 {
-		if parsed := geminitask.ParseImageInput(req.Images[0]); parsed != nil {
-			instance.Image = parsed
-			info.Action = constant.TaskActionGenerate
-		}
-	}
-
-	params := &geminitask.VeoParameters{}
-	if err := taskcommon.UnmarshalMetadata(req.Metadata, params); err != nil {
-		return nil, fmt.Errorf("unmarshal metadata failed: %w", err)
-	}
-	if params.DurationSeconds == 0 && req.Duration > 0 {
-		params.DurationSeconds = req.Duration
-	}
-	if params.Resolution == "" && req.Size != "" {
-		params.Resolution = geminitask.SizeToVeoResolution(req.Size)
-	}
-	if params.AspectRatio == "" && req.Size != "" {
-		params.AspectRatio = geminitask.SizeToVeoAspectRatio(req.Size)
-	}
-	params.Resolution = strings.ToLower(params.Resolution)
-	params.SampleCount = 1
-
-	body := geminitask.VeoRequestPayload{
-		Instances:  []geminitask.VeoInstance{instance},
-		Parameters: params,
-	}
-
-	data, err := common.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	return bytes.NewReader(data), nil
+	return geminitask.BuildVeoRequestBody(c)
 }
 
 // DoRequest delegates to common helper.
@@ -192,19 +138,19 @@ func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, req
 }
 
 // DoResponse handles upstream response, returns taskID etc.
-func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (taskID string, taskData []byte, taskErr *taskdto.TaskError) {
+func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (taskID string, taskData []byte, clientResponse any, taskErr *taskdto.TaskError) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+		return "", nil, nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
 	}
 	_ = resp.Body.Close()
 
 	var s submitResponse
 	if err := common.Unmarshal(responseBody, &s); err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "unmarshal_response_failed", http.StatusInternalServerError)
+		return "", nil, nil, service.TaskErrorWrapper(err, "unmarshal_response_failed", http.StatusInternalServerError)
 	}
 	if strings.TrimSpace(s.Name) == "" {
-		return "", nil, service.TaskErrorWrapper(fmt.Errorf("missing operation name"), "invalid_response", http.StatusInternalServerError)
+		return "", nil, nil, service.TaskErrorWrapper(fmt.Errorf("missing operation name"), "invalid_response", http.StatusInternalServerError)
 	}
 	localID := taskcommon.EncodeLocalTaskID(s.Name)
 	ov := dto.NewOpenAIVideo()
@@ -212,8 +158,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	ov.TaskID = info.PublicTaskID
 	ov.CreatedAt = time.Now().Unix()
 	ov.Model = info.OriginModelName
-	c.JSON(http.StatusOK, ov)
-	return localID, responseBody, nil
+	return localID, responseBody, ov, nil
 }
 
 func (a *TaskAdaptor) GetModelList() []string {
@@ -244,6 +189,10 @@ func buildFetchOperationURL(baseURL, upstreamName string) (string, error) {
 
 // FetchTask fetch task status
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
+	return a.FetchTaskWithContext(context.Background(), baseUrl, key, body, proxy)
+}
+
+func (a *TaskAdaptor) FetchTaskWithContext(ctx context.Context, baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
 	taskID, ok := body["task_id"].(string)
 	if !ok {
 		return nil, fmt.Errorf("invalid task_id")
@@ -265,11 +214,11 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	if err := common.Unmarshal([]byte(key), adc); err != nil {
 		return nil, fmt.Errorf("failed to decode credentials: %w", err)
 	}
-	token, err := vertexcore.AcquireAccessToken(*adc, proxy)
+	token, err := vertexcore.AcquireAccessTokenWithContext(ctx, *adc, proxy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire access token: %w", err)
 	}
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -290,6 +239,9 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		return nil, fmt.Errorf("unmarshal operation response failed: %w", err)
 	}
 	ti := &relaycommon.TaskInfo{}
+	if op.Name != "" {
+		ti.TaskID = taskcommon.EncodeLocalTaskID(op.Name)
+	}
 	if op.Error.Message != "" {
 		ti.Status = model.TaskStatusFailure
 		ti.Reason = op.Error.Message

@@ -1,26 +1,12 @@
 package service
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
-	"github.com/QuantumNous/new-api/logger"
-	"github.com/QuantumNous/new-api/model"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
-	"github.com/QuantumNous/new-api/setting"
-
-	"github.com/gin-gonic/gin"
 )
 
 func CovertMjpActionToModelName(mjAction string) string {
@@ -29,113 +15,6 @@ func CovertMjpActionToModelName(mjAction string) string {
 		modelName = "swap_face"
 	}
 	return modelName
-}
-
-// PrepareMidjourneyTaskBilling sets the durable refund marker before the task is inserted.
-func PrepareMidjourneyTaskBilling(relayInfo *relaycommon.RelayInfo, task *model.Midjourney, quota int, shouldBill bool) (bool, error) {
-	if task == nil {
-		return false, errors.New("Midjourney task is nil")
-	}
-	task.Quota = 0
-	task.TokenId = 0
-	task.BillingChannelId = 0
-	if !shouldBill {
-		return false, nil
-	}
-	if relayInfo == nil {
-		return false, errors.New("relay info is nil")
-	}
-	if quota < 0 {
-		return false, errors.New("quota cannot be negative")
-	}
-	if relayInfo.BillingSource == BillingSourceSubscription {
-		return false, errors.New("legacy Midjourney billing does not support subscriptions")
-	}
-
-	task.Quota = quota
-	task.BillingChannelId = task.ChannelId
-	if relayInfo.ChannelMeta != nil && relayInfo.ChannelId > 0 {
-		task.BillingChannelId = relayInfo.ChannelId
-	}
-	return true, nil
-}
-
-// SettleMidjourneyTaskBilling charges a persisted legacy task and records the applied stages.
-func SettleMidjourneyTaskBilling(relayInfo *relaycommon.RelayInfo, task *model.Midjourney, prepared bool) (bool, error) {
-	if !prepared {
-		return false, nil
-	}
-	if relayInfo == nil {
-		return false, errors.New("relay info is nil")
-	}
-	if task == nil || task.Id == 0 {
-		return false, errors.New("Midjourney task must be persisted before billing")
-	}
-
-	result, billingErr := postConsumeQuotaWithResult(relayInfo, task.Quota, 0, true)
-	if !result.FundingApplied {
-		task.Quota = 0
-		task.TokenId = 0
-		task.BillingChannelId = 0
-		if updateErr := task.UpdateBillingState(); updateErr != nil {
-			return false, errors.Join(billingErr, fmt.Errorf("clear Midjourney billing state: %w", updateErr))
-		}
-		return false, billingErr
-	}
-
-	task.TokenId = 0
-	if result.TokenApplied {
-		task.TokenId = relayInfo.TokenId
-	}
-	if updateErr := task.UpdateBillingState(); updateErr != nil {
-		return true, errors.Join(billingErr, fmt.Errorf("update Midjourney billing state: %w", updateErr))
-	}
-	return true, billingErr
-}
-
-// RefundMidjourneyQuota reverses every accounting element recorded for a billed legacy task.
-func RefundMidjourneyQuota(ctx context.Context, task *model.Midjourney, reason string) bool {
-	quota := task.Quota
-	if quota == 0 {
-		return true
-	}
-
-	if err := model.IncreaseUserQuota(task.UserId, quota, false); err != nil {
-		logger.LogWarn(ctx, fmt.Sprintf("退还 Midjourney 用户额度失败 task %s: %s", task.MjId, err.Error()))
-		return false
-	}
-
-	if task.TokenId > 0 {
-		tokenKey := resolveTokenKey(ctx, task.TokenId, task.MjId)
-		if tokenKey != "" {
-			if err := model.IncreaseTokenQuota(task.TokenId, tokenKey, quota); err != nil {
-				logger.LogWarn(ctx, fmt.Sprintf("退还 Midjourney 令牌额度失败 task %s: %s", task.MjId, err.Error()))
-			}
-		}
-	}
-
-	billingChannelId := task.GetBillingChannelId()
-	model.UpdateUserUsedQuota(task.UserId, -quota)
-	model.UpdateChannelUsedQuota(billingChannelId, -quota)
-	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
-		UserId:    task.UserId,
-		LogType:   model.LogTypeRefund,
-		Content:   "",
-		ChannelId: billingChannelId,
-		ModelName: CovertMjpActionToModelName(task.Action),
-		Quota:     quota,
-		TokenId:   task.TokenId,
-		Other: map[string]interface{}{
-			"task_id": task.MjId,
-			"reason":  reason,
-		},
-	})
-
-	task.Quota = 0
-	if err := task.UpdateBillingState(); err != nil {
-		logger.LogError(ctx, fmt.Sprintf("Midjourney 退款成功但清除 quota 失败 task %s: %s", task.MjId, err.Error()))
-	}
-	return true
 }
 
 func GetMjRequestModel(relayMode int, midjRequest *dto.MidjourneyRequest) (string, *dto.MidjourneyResponse, bool) {
@@ -193,7 +72,13 @@ func CoverPlusActionToNormalAction(midjRequest *dto.MidjourneyRequest) *dto.Midj
 	}
 	splits := strings.Split(customId, "::")
 	var action string
+	if len(splits) < 2 || splits[0] != "MJ" {
+		return MidjourneyErrorWrapper(constant.MjRequestError, "invalid_custom_id")
+	}
 	if splits[1] == "JOB" {
+		if len(splits) < 3 {
+			return MidjourneyErrorWrapper(constant.MjRequestError, "invalid_custom_id")
+		}
 		action = splits[2]
 	} else {
 		action = splits[1]
@@ -203,6 +88,9 @@ func CoverPlusActionToNormalAction(midjRequest *dto.MidjourneyRequest) *dto.Midj
 		return MidjourneyErrorWrapper(constant.MjRequestError, "unknown_action")
 	}
 	if strings.Contains(action, "upsample") {
+		if len(splits) < 4 {
+			return MidjourneyErrorWrapper(constant.MjRequestError, "invalid_custom_id")
+		}
 		index, err := strconv.Atoi(splits[3])
 		if err != nil {
 			return MidjourneyErrorWrapper(constant.MjRequestError, "index_parse_failed")
@@ -212,6 +100,9 @@ func CoverPlusActionToNormalAction(midjRequest *dto.MidjourneyRequest) *dto.Midj
 	} else if strings.Contains(action, "variation") {
 		midjRequest.Index = 1
 		if action == "variation" {
+			if len(splits) < 4 {
+				return MidjourneyErrorWrapper(constant.MjRequestError, "invalid_custom_id")
+			}
 			index, err := strconv.Atoi(splits[3])
 			if err != nil {
 				return MidjourneyErrorWrapper(constant.MjRequestError, "index_parse_failed")
@@ -245,7 +136,7 @@ func CoverPlusActionToNormalAction(midjRequest *dto.MidjourneyRequest) *dto.Midj
 }
 
 func ConvertSimpleChangeParams(content string) *dto.MidjourneyRequest {
-	split := strings.Split(content, " ")
+	split := strings.Fields(content)
 	if len(split) != 2 {
 		return nil
 	}
@@ -254,13 +145,17 @@ func ConvertSimpleChangeParams(content string) *dto.MidjourneyRequest {
 	changeParams := &dto.MidjourneyRequest{}
 	changeParams.TaskId = split[0]
 
+	if action == "r" {
+		changeParams.Action = "REROLL"
+		return changeParams
+	}
+	if len(action) != 2 {
+		return nil
+	}
 	if action[0] == 'u' {
 		changeParams.Action = "UPSCALE"
 	} else if action[0] == 'v' {
 		changeParams.Action = "VARIATION"
-	} else if action == "r" {
-		changeParams.Action = "REROLL"
-		return changeParams
 	} else {
 		return nil
 	}
@@ -271,98 +166,4 @@ func ConvertSimpleChangeParams(content string) *dto.MidjourneyRequest {
 	}
 	changeParams.Index = index
 	return changeParams
-}
-
-func DoMidjourneyHttpRequest(c *gin.Context, timeout time.Duration, fullRequestURL string) (*dto.MidjourneyResponseWithStatusCode, []byte, error) {
-	var nullBytes []byte
-	//var requestBody io.Reader
-	//requestBody = c.Request.Body
-	// read request body to json, delete accountFilter and notifyHook
-	var mapResult map[string]interface{}
-	// if get request, no need to read request body
-	if c.Request.Method != "GET" {
-		err := json.NewDecoder(c.Request.Body).Decode(&mapResult)
-		if err != nil {
-			return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "read_request_body_failed", http.StatusInternalServerError), nullBytes, err
-		}
-		if !setting.MjAccountFilterEnabled {
-			delete(mapResult, "accountFilter")
-		}
-		if !setting.MjNotifyEnabled {
-			delete(mapResult, "notifyHook")
-		}
-		//req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
-		// make new request with mapResult
-	}
-	if setting.MjModeClearEnabled {
-		if prompt, ok := mapResult["prompt"].(string); ok {
-			prompt = strings.Replace(prompt, "--fast", "", -1)
-			prompt = strings.Replace(prompt, "--relax", "", -1)
-			prompt = strings.Replace(prompt, "--turbo", "", -1)
-
-			mapResult["prompt"] = prompt
-		}
-	}
-	reqBody, err := json.Marshal(mapResult)
-	if err != nil {
-		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "marshal_request_body_failed", http.StatusInternalServerError), nullBytes, err
-	}
-	req, err := http.NewRequest(c.Request.Method, fullRequestURL, strings.NewReader(string(reqBody)))
-	if err != nil {
-		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "create_request_failed", http.StatusInternalServerError), nullBytes, err
-	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
-	// 使用带有超时的 context 创建新的请求
-	req = req.WithContext(ctx)
-	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
-	req.Header.Set("Accept", c.Request.Header.Get("Accept"))
-	auth := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
-	if auth != "" {
-		auth = strings.TrimPrefix(auth, "Bearer ")
-		req.Header.Set("mj-api-secret", auth)
-	}
-	defer cancel()
-	resp, err := GetHttpClient().Do(req)
-	if err != nil {
-		common.SysLog("do request failed: " + err.Error())
-		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "do_request_failed", http.StatusInternalServerError), nullBytes, err
-	}
-	statusCode := resp.StatusCode
-	//if statusCode != 200  {
-	//	return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "bad_response_status_code", statusCode), nullBytes, nil
-	//}
-	err = req.Body.Close()
-	if err != nil {
-		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "close_request_body_failed", statusCode), nullBytes, err
-	}
-	err = c.Request.Body.Close()
-	if err != nil {
-		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "close_request_body_failed", statusCode), nullBytes, err
-	}
-	var midjResponse dto.MidjourneyResponse
-	var midjourneyUploadsResponse dto.MidjourneyUploadResponse
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "read_response_body_failed", statusCode), nullBytes, err
-	}
-	CloseResponseBodyGracefully(resp)
-	logger.LogDebug(c, "midjourney response body: %s", responseBody)
-	if len(responseBody) == 0 {
-		return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "empty_response_body", statusCode), responseBody, nil
-	} else {
-		err = json.Unmarshal(responseBody, &midjResponse)
-		if err != nil {
-			err2 := json.Unmarshal(responseBody, &midjourneyUploadsResponse)
-			if err2 != nil {
-				return MidjourneyErrorWithStatusCodeWrapper(constant.MjErrorUnknown, "unmarshal_response_body_failed", statusCode), responseBody, err
-			}
-		}
-	}
-	//for k, v := range resp.Header {
-	//	c.Writer.Header().Set(k, v[0])
-	//}
-	return &dto.MidjourneyResponseWithStatusCode{
-		StatusCode: statusCode,
-		Response:   midjResponse,
-	}, responseBody, nil
 }

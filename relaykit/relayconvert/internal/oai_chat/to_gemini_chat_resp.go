@@ -1,6 +1,9 @@
 package oaichat
 
 import (
+	"fmt"
+	"slices"
+
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
@@ -75,6 +78,7 @@ func ResponseOpenAI2Gemini(openAIResponse *dto.OpenAITextResponse, info convmeta
 
 			part := dto.GeminiPart{
 				FunctionCall: &dto.FunctionCall{
+					ID:           toolCall.ID,
 					FunctionName: toolCall.Function.Name,
 					Arguments:    args,
 				},
@@ -91,6 +95,16 @@ func ResponseOpenAI2Gemini(openAIResponse *dto.OpenAITextResponse, info convmeta
 
 // StreamResponseOpenAI2Gemini 将 OpenAI 流式响应转换为 Gemini 格式
 func StreamResponseOpenAI2Gemini(openAIResponse *dto.ChatCompletionsStreamResponse, info convmeta.Meta) *dto.GeminiChatResponse {
+	return StreamResponseOpenAI2GeminiWithState(openAIResponse, info, GeminiStreamState(info))
+}
+
+func StreamResponseOpenAI2GeminiWithState(openAIResponse *dto.ChatCompletionsStreamResponse, info convmeta.Meta, state *convmeta.GeminiConvertInfo) *dto.GeminiChatResponse {
+	if state.Err != nil {
+		return nil
+	}
+	if state.Tools == nil {
+		state.Tools = make(map[[2]int]*convmeta.GeminiToolCall)
+	}
 	// 检查是否有实际内容或结束标志
 	hasContent := false
 	hasFinishReason := false
@@ -98,7 +112,7 @@ func StreamResponseOpenAI2Gemini(openAIResponse *dto.ChatCompletionsStreamRespon
 		if len(choice.Delta.GetContentString()) > 0 || (choice.Delta.ToolCalls != nil && len(choice.Delta.ToolCalls) > 0) {
 			hasContent = true
 		}
-		if choice.FinishReason != nil {
+		if choice.FinishReason != nil && *choice.FinishReason != "" {
 			hasFinishReason = true
 		}
 	}
@@ -139,7 +153,7 @@ func StreamResponseOpenAI2Gemini(openAIResponse *dto.ChatCompletionsStreamRespon
 		}
 
 		// 设置结束原因
-		if choice.FinishReason != nil {
+		if choice.FinishReason != nil && *choice.FinishReason != "" {
 			var finishReason string
 			switch *choice.FinishReason {
 			case "stop":
@@ -165,40 +179,67 @@ func StreamResponseOpenAI2Gemini(openAIResponse *dto.ChatCompletionsStreamRespon
 		// 处理工具调用
 		if choice.Delta.ToolCalls != nil {
 			for _, toolCall := range choice.Delta.ToolCalls {
-				// 解析参数
-				var args map[string]interface{}
-				if toolCall.Function.Arguments != "" {
-					if err := kitutil.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
-						args = map[string]interface{}{"arguments": toolCall.Function.Arguments}
-					}
-				} else {
-					args = make(map[string]interface{})
+				index := 0
+				if toolCall.Index != nil {
+					index = *toolCall.Index
 				}
-
-				part := dto.GeminiPart{
-					FunctionCall: &dto.FunctionCall{
-						FunctionName: toolCall.Function.Name,
-						Arguments:    args,
-					},
+				key := [2]int{choice.Index, index}
+				tool := state.Tools[key]
+				if tool == nil {
+					tool = &convmeta.GeminiToolCall{}
+					state.Tools[key] = tool
 				}
-				content.Parts = append(content.Parts, part)
-			}
-		} else {
-			// 处理文本内容
-			textContent := choice.Delta.GetContentString()
-			if textContent != "" {
-				part := dto.GeminiPart{
-					Text: textContent,
+				if toolCall.ID != "" {
+					tool.ID = toolCall.ID
 				}
-				content.Parts = append(content.Parts, part)
+				if toolCall.Function.Name != "" {
+					tool.Name += toolCall.Function.Name
+				}
+				tool.Arguments += toolCall.Function.Arguments
 			}
 		}
+		if textContent := choice.Delta.GetContentString(); textContent != "" {
+			content.Parts = append(content.Parts, dto.GeminiPart{Text: textContent})
+		}
 
+		if choice.FinishReason != nil && *choice.FinishReason != "" {
+			indexes := make([]int, 0, len(state.Tools))
+			for key := range state.Tools {
+				if key[0] == choice.Index {
+					indexes = append(indexes, key[1])
+				}
+			}
+			slices.Sort(indexes)
+			for _, index := range indexes {
+				tool := state.Tools[[2]int{choice.Index, index}]
+				if tool.Emitted {
+					continue
+				}
+				args := map[string]any{}
+				if tool.Name == "" || (tool.Arguments != "" && kitutil.Unmarshal([]byte(tool.Arguments), &args) != nil) || args == nil {
+					state.Err = fmt.Errorf("invalid streamed tool call at choice %d index %d", choice.Index, index)
+					return nil
+				}
+				content.Parts = append(content.Parts, dto.GeminiPart{FunctionCall: &dto.FunctionCall{ID: tool.ID, FunctionName: tool.Name, Arguments: args}})
+				tool.Emitted = true
+			}
+		}
 		candidate.Content = content
 		geminiResponse.Candidates = append(geminiResponse.Candidates, candidate)
 	}
 
 	return geminiResponse
+}
+
+func GeminiStreamState(info convmeta.Meta) *convmeta.GeminiConvertInfo {
+	if provider, ok := info.(interface {
+		EnsureGeminiConvertInfo() *convmeta.GeminiConvertInfo
+	}); ok {
+		if state := provider.EnsureGeminiConvertInfo(); state != nil {
+			return state
+		}
+	}
+	return &convmeta.GeminiConvertInfo{}
 }
 
 func geminiBillingMetadataFromOpenAIUsage(usage *dto.Usage) (dto.GeminiUsageMetadata, bool) {

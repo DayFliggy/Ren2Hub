@@ -94,7 +94,7 @@ func init() {
 		openAIModelsMap[aiModel.Id] = aiModel
 	}
 	channelId2Models = make(map[int][]string)
-	for i := 1; i <= constant.ChannelTypeDummy; i++ {
+	for i := 1; i < constant.ChannelTypeDummy; i++ {
 		apiType, success := common.ChannelType2APIType(i)
 		if !success || apiType == constant.APITypeAIProxyLibrary {
 			continue
@@ -113,7 +113,8 @@ func init() {
 
 func channelOwnerName(channelType int) string {
 	apiType, success := common.ChannelType2APIType(channelType)
-	if !success {
+	// A shared OpenAI transport does not change the configured provider identity.
+	if !success || (apiType == constant.APITypeOpenAI && channelType != constant.ChannelTypeOpenAI) {
 		return strings.ToLower(constant.GetChannelTypeName(channelType))
 	}
 	adaptor := relay.GetAdaptor(apiType)

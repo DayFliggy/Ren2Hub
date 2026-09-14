@@ -28,7 +28,8 @@ func TestClassifyRouteErrorSeparatesKeyModelAndStreamFailures(t *testing.T) {
 	assert.Equal(t, RouteErrorModel, ClassifyRouteError(400, "unsupported_model", "", false).Class)
 	assert.True(t, ClassifyRouteError(404, "model_not_found", "", false).MarkCapability)
 	assert.True(t, ClassifyRouteError(404, "model_not_found", "", false).Failoverable)
-	assert.Equal(t, RouteErrorStreamStarted, ClassifyRouteError(502, "", "", true).Class)
+	assert.Equal(t, RouteErrorTransient, ClassifyRouteError(502, "", "", true).Class)
+	assert.True(t, ClassifyRouteError(502, "", "", true).MarkChannelModel)
 	assert.False(t, ClassifyRouteError(502, "", "", true).Failoverable)
 	assert.False(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), true, false))
 	assert.False(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), false, true))
@@ -166,15 +167,12 @@ func TestRouteHealthUsableAllowsOneHalfOpenProbe(t *testing.T) {
 		FailureCount: 3, CooldownUntil: 1000, HealthEpoch: 4,
 	}).Error)
 
-	usable, epoch, err := RouteHealthUsable(context.Background(), 2, "gpt-5", time.Unix(1000, 0))
+	attempt, err := acquireRouteAttemptHealthAt(context.Background(), 2, "gpt-5", "", "first", time.Minute, time.Unix(1000, 0))
 	require.NoError(t, err)
-	assert.True(t, usable)
-	assert.Equal(t, int64(5), epoch)
+	assert.Equal(t, int64(5), attempt.Scopes[0].Epoch)
 
-	usable, epoch, err = RouteHealthUsable(context.Background(), 2, "gpt-5", time.Unix(1001, 0))
-	require.NoError(t, err)
-	assert.False(t, usable)
-	assert.Equal(t, int64(5), epoch)
+	_, err = acquireRouteAttemptHealthAt(context.Background(), 2, "gpt-5", "", "second", time.Minute, time.Unix(1001, 0))
+	require.ErrorIs(t, err, ErrRouteHealthUnavailable)
 
 	var health model.ChannelHealth
 	require.NoError(t, db.Where("channel_id = ? AND model = ? AND key_scope = ?", 2, "gpt-5", "").First(&health).Error)
@@ -206,12 +204,16 @@ func TestRouteHealthUsableAllowsOnlyOneConcurrentHalfOpenProbe(t *testing.T) {
 	}
 	results := make(chan result, 2)
 	var wg sync.WaitGroup
-	for range 2 {
+	for index := range 2 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			usable, epoch, callErr := RouteHealthUsable(context.Background(), 21, "gpt-5", time.Unix(1000, 0))
-			results <- result{usable: usable, epoch: epoch, err: callErr}
+			attempt, callErr := acquireRouteAttemptHealthAt(context.Background(), 21, "gpt-5", "", fmt.Sprint(index), time.Minute, time.Unix(1000, 0))
+			epoch := int64(0)
+			if callErr == nil {
+				epoch = attempt.Scopes[0].Epoch
+			}
+			results <- result{usable: callErr == nil, epoch: epoch, err: callErr}
 		}()
 	}
 	wg.Wait()
@@ -219,10 +221,12 @@ func TestRouteHealthUsableAllowsOnlyOneConcurrentHalfOpenProbe(t *testing.T) {
 
 	usableCount := 0
 	for item := range results {
-		require.NoError(t, item.err)
 		if item.usable {
+			require.NoError(t, item.err)
 			usableCount++
 			assert.Equal(t, int64(5), item.epoch)
+		} else {
+			require.ErrorIs(t, item.err, ErrRouteHealthUnavailable)
 		}
 	}
 	assert.Equal(t, 1, usableCount)
@@ -253,12 +257,16 @@ func TestRouteKeyHealthUsableAllowsOnlyOneConcurrentHalfOpenProbe(t *testing.T) 
 	}
 	results := make(chan result, 2)
 	var wg sync.WaitGroup
-	for range 2 {
+	for index := range 2 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			usable, epoch, callErr := RouteKeyHealthUsable(context.Background(), 22, "gpt-5", "recovering-key", time.Unix(1000, 0))
-			results <- result{usable: usable, epoch: epoch, err: callErr}
+			attempt, callErr := acquireRouteAttemptHealthAt(context.Background(), 22, "gpt-5", "recovering-key", fmt.Sprint(index), time.Minute, time.Unix(1000, 0))
+			epoch := int64(0)
+			if callErr == nil {
+				epoch = attempt.Scopes[1].Epoch
+			}
+			results <- result{usable: callErr == nil, epoch: epoch, err: callErr}
 		}()
 	}
 	wg.Wait()
@@ -266,10 +274,12 @@ func TestRouteKeyHealthUsableAllowsOnlyOneConcurrentHalfOpenProbe(t *testing.T) 
 
 	usableCount := 0
 	for item := range results {
-		require.NoError(t, item.err)
 		if item.usable {
+			require.NoError(t, item.err)
 			usableCount++
 			assert.Equal(t, int64(5), item.epoch)
+		} else {
+			require.ErrorIs(t, item.err, ErrRouteHealthUnavailable)
 		}
 	}
 	assert.Equal(t, 1, usableCount)

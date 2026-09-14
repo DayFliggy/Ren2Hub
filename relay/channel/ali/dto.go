@@ -1,9 +1,9 @@
 package ali
 
 import (
+	"fmt"
 	"strings"
 
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
@@ -100,52 +100,55 @@ type AliOutput struct {
 	} `json:"choices,omitempty"`
 }
 
-func (o *AliOutput) ChoicesToOpenAIImageDate(c *gin.Context, responseFormat string) []dto.ImageData {
+func (o *AliOutput) ChoicesToOpenAIImageDate(c *gin.Context, responseFormat string) ([]dto.ImageData, error) {
 	var imageData []dto.ImageData
-	if len(o.Choices) > 0 {
-		for _, choice := range o.Choices {
-			var data dto.ImageData
-			for _, content := range choice.Message.Content {
-				if content.Image != "" {
-					if strings.HasPrefix(content.Image, "http") {
-						var b64Json string
-						if responseFormat == "b64_json" {
-							_, b64, err := service.GetImageFromUrl(content.Image)
-							if err != nil {
-								logger.LogError(c, "get_image_data_failed: "+err.Error())
-								continue
-							}
-							b64Json = b64
-						}
-						data.Url = content.Image
-						data.B64Json = b64Json
-					} else {
-						data.B64Json = content.Image
+	for _, choice := range o.Choices {
+		start := len(imageData)
+		var prompts []string
+		for _, content := range choice.Message.Content {
+			if content.Text != "" {
+				prompts = append(prompts, content.Text)
+			}
+		}
+		for _, content := range choice.Message.Content {
+			if content.Image == "" {
+				continue
+			}
+			data := dto.ImageData{RevisedPrompt: strings.Join(prompts, "\n")}
+			if strings.HasPrefix(content.Image, "https://") || strings.HasPrefix(content.Image, "http://") {
+				data.Url = content.Image
+				if responseFormat == "b64_json" {
+					_, b64, err := service.GetImageFromUrlWithContext(c.Request.Context(), content.Image)
+					if err != nil {
+						return nil, fmt.Errorf("download Ali image: %w", err)
 					}
-				} else if content.Text != "" {
-					data.RevisedPrompt = content.Text
+					data.B64Json = b64
 				}
+			} else {
+				data.B64Json = content.Image
 			}
 			imageData = append(imageData, data)
 		}
+		if len(imageData) == start {
+			return nil, fmt.Errorf("Ali image choice has no image")
+		}
 	}
-
-	return imageData
+	return imageData, nil
 }
 
-func (o *AliOutput) ResultToOpenAIImageDate(c *gin.Context, responseFormat string) []dto.ImageData {
+func (o *AliOutput) ResultToOpenAIImageDate(c *gin.Context, responseFormat string) ([]dto.ImageData, error) {
 	var imageData []dto.ImageData
 	for _, data := range o.Results {
-		var b64Json string
-		if responseFormat == "b64_json" {
-			_, b64, err := service.GetImageFromUrl(data.Url)
+		if data.Code != "" || data.Message != "" {
+			return nil, fmt.Errorf("Ali image result failed: %s %s", data.Code, data.Message)
+		}
+		b64Json := data.B64Image
+		if responseFormat == "b64_json" && b64Json == "" {
+			_, b64, err := service.GetImageFromUrlWithContext(c.Request.Context(), data.Url)
 			if err != nil {
-				logger.LogError(c, "get_image_data_failed: "+err.Error())
-				continue
+				return nil, fmt.Errorf("download Ali image: %w", err)
 			}
 			b64Json = b64
-		} else {
-			b64Json = data.B64Image
 		}
 
 		imageData = append(imageData, dto.ImageData{
@@ -154,7 +157,7 @@ func (o *AliOutput) ResultToOpenAIImageDate(c *gin.Context, responseFormat strin
 			RevisedPrompt: "",
 		})
 	}
-	return imageData
+	return imageData, nil
 }
 
 type AliResponse struct {

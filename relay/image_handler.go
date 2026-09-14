@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 
@@ -32,6 +33,9 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	if err != nil {
 		return types.NewError(fmt.Errorf("failed to copy request to ImageRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
+	// ImageRequest.MarshalJSON intentionally omits Extra. Preserve these
+	// read-only provider fields for the adaptor that owns their semantics.
+	request.Extra = maps.Clone(imageReq.Extra)
 
 	err = helper.ModelMappedHelper(c, info, request)
 	if err != nil {
@@ -46,12 +50,14 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 
 	var requestBody io.Reader
 
-	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
-		storage, err := common.GetBodyStorage(c)
+	passThrough := model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled
+	if passThrough && strings.Contains(c.ContentType(), "application/json") {
+		body, closer, err := relaycommon.NativeRequestBody(c, info, request)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		requestBody = common.NewReplayableBodyReader(storage)
+		defer closer.Close()
+		requestBody = body
 	} else {
 		convertedRequest, err := adaptor.ConvertImageRequest(c, info, *request)
 		if err != nil {
@@ -89,32 +95,39 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
+	info.UpstreamSideEffecting = true
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 	}
-	var httpResp *http.Response
-	if resp != nil {
-		httpResp = resp.(*http.Response)
-		info.IsStream = info.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
-		if httpResp.StatusCode != http.StatusOK {
-			if httpResp.StatusCode == http.StatusCreated && info.ApiType == constant.APITypeReplicate {
-				// replicate channel returns 201 Created when using Prefer: wait, treat it as success.
-				httpResp.StatusCode = http.StatusOK
-			} else {
-				newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
-				// reset status code 重置状态码
-				service.ResetStatusCode(newAPIError, statusCodeMappingStr)
-				return newAPIError
-			}
+	httpResp, ok := resp.(*http.Response)
+	if !ok || httpResp == nil || httpResp.Body == nil {
+		return types.NewOpenAIError(fmt.Errorf("invalid image upstream response"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
+	info.IsStream = info.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
+	if httpResp.StatusCode != http.StatusOK {
+		if httpResp.StatusCode == http.StatusCreated && info.ApiType == constant.APITypeReplicate {
+			// Replicate returns 201 Created when using Prefer: wait.
+			httpResp.StatusCode = http.StatusOK
+		} else {
+			newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
+			service.ResetStatusCode(newAPIError, statusCodeMappingStr)
+			return newAPIError
 		}
 	}
 
-	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	responseUsage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	usage, ok := responseUsage.(*dto.Usage)
+	if ok && usage != nil {
+		info.CaptureResponseUsage(usage, "text", nil)
+	}
 	if newAPIError != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
+	}
+	if !ok || usage == nil {
+		return types.NewOpenAIError(fmt.Errorf("invalid image response usage"), types.ErrorCodeBadResponse, http.StatusBadGateway)
 	}
 
 	imageN := uint(1)
@@ -122,11 +135,12 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		imageN = *request.N
 	}
 
-	if usage.(*dto.Usage).TotalTokens == 0 {
-		usage.(*dto.Usage).TotalTokens = 1
+	if usage.TotalTokens == 0 {
+		usage.TotalTokens = 1
+		usage.UsageSource = "estimated"
 	}
-	if usage.(*dto.Usage).PromptTokens == 0 {
-		usage.(*dto.Usage).PromptTokens = 1
+	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 {
+		usage.PromptTokens = 1
 	}
 
 	quality := request.Quality
@@ -146,6 +160,6 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		logContent = append(logContent, fmt.Sprintf("生成数量 %d", imageN))
 	}
 
-	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), logContent)
+	info.CaptureResponseUsage(usage, "text", logContent)
 	return nil
 }

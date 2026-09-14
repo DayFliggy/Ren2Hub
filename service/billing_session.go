@@ -34,6 +34,7 @@ type BillingSession struct {
 	extraReserved       int  // 发送前补充预扣的额度（订阅退款时需要单独回滚）
 	trusted             bool // 是否命中信任额度旁路
 	fundingSettled      bool // funding.Settle 已成功，资金来源已提交
+	settlementStarted   bool // final usage is known; failures must resume settlement
 	settled             bool // Settle 全部完成（资金 + 令牌）
 	refunded            bool // 所有退款组件均已成功
 	recoveryNeedsRefund bool // 预扣回滚失败，必须由 durable recovery 接管
@@ -57,6 +58,10 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	if s.settled {
 		return nil
 	}
+	if actualQuota < 0 {
+		return errors.New("billing settlement quota cannot be negative")
+	}
+	s.settlementStarted = true
 	delta := actualQuota - s.preConsumedQuota
 	if s.recoveryID != "" {
 		if err := model.UpdateBillingRecoverySettlement(s.recoveryID, int64(delta)); err != nil {
@@ -112,9 +117,12 @@ func (s *BillingSession) Settle(actualQuota int) error {
 			return tokenErr
 		}
 	}
+	if tokenErr != nil {
+		return tokenErr
+	}
 	// 3) 更新 relayInfo 上的订阅 PostDelta（用于日志）
 	if s.funding.Source() == BillingSourceSubscription {
-		s.relayInfo.SubscriptionPostDelta += int64(delta)
+		s.relayInfo.SubscriptionPostDelta = int64(delta)
 	}
 	s.settled = true
 	if s.recoveryID != "" {
@@ -132,7 +140,7 @@ func (s *BillingSession) Settle(actualQuota int) error {
 // 已完成的组件。
 func (s *BillingSession) Refund(c *gin.Context) {
 	s.mu.Lock()
-	if s.settled || s.refunded || s.refundInProgress || !s.needsRefundLocked() {
+	if s.settled || s.settlementStarted || s.refunded || s.refundInProgress || !s.needsRefundLocked() {
 		s.mu.Unlock()
 		return
 	}
@@ -245,7 +253,7 @@ func (s *BillingSession) NeedsRefund() bool {
 }
 
 func (s *BillingSession) needsRefundLocked() bool {
-	if s.settled || s.refunded {
+	if s.settled || s.settlementStarted || s.refunded {
 		return false
 	}
 	if !s.fundingSettled && !s.fundingRefunded {
@@ -293,23 +301,26 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 		return nil
 	}
 	if s.recoveryID != "" {
-		appliedDelta, err := model.ReserveBillingRecovery(s.recoveryID, int64(targetQuota), int64(delta), s.relayInfo.TokenUnlimited)
+		reserve := model.ReserveBillingRecovery
+		if s.relayInfo.RelayFormat == types.RelayFormatOpenAIRealtime {
+			reserve = model.ReserveRealtimeBillingRecovery
+		}
+		_, err := reserve(s.recoveryID, int64(targetQuota), int64(delta), s.relayInfo.TokenUnlimited)
 		if err != nil {
 			return err
 		}
-		if appliedDelta <= 0 {
-			return nil
+		recovery, err := loadBillingRecovery(s.recoveryID)
+		if err != nil {
+			return err
 		}
-		delta = int(appliedDelta)
 		if wallet, ok := s.funding.(*WalletFunding); ok {
-			wallet.consumed += delta
+			wallet.consumed = int(recovery.FundingAmount)
 		}
-		s.preConsumedQuota += delta
-		if !s.relayInfo.IsPlayground {
-			s.tokenConsumed += delta
-		}
+		s.preConsumedQuota = int(recovery.FundingAmount)
+		s.tokenConsumed = int(recovery.TokenAmount)
 		if s.funding.Source() == BillingSourceSubscription {
-			s.extraReserved += delta
+			s.extraReserved = int(recovery.ExtraAmount)
+			s.preConsumedQuota += s.extraReserved
 		}
 		s.syncRelayInfo()
 		return nil
@@ -614,7 +625,7 @@ func (s *BillingSession) reserveToken(delta int) error {
 // shouldTrust 统一信任额度检查，适用于钱包和订阅。
 func (s *BillingSession) shouldTrust(c *gin.Context) bool {
 	// 异步任务（ForcePreConsume=true）必须预扣全额，不允许信任旁路
-	if s.relayInfo.ForcePreConsume {
+	if s.relayInfo.ForcePreConsume || s.relayInfo.RelayFormat == types.RelayFormatOpenAIRealtime {
 		return false
 	}
 

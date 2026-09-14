@@ -35,6 +35,7 @@ type ChatToResponsesStreamState struct {
 	outputOrder       []chatToResponsesOutputRef
 	text              strings.Builder
 	reasoning         strings.Builder
+	nextSequence      int
 }
 
 type chatToResponsesStreamTool struct {
@@ -67,6 +68,9 @@ func NewChatToResponsesStreamState(id string, model string) *ChatToResponsesStre
 func ChatCompletionsStreamChunkToResponsesEvents(chunk *dto.ChatCompletionsStreamResponse, state *ChatToResponsesStreamState) ([]ChatToResponsesStreamEvent, error) {
 	if chunk == nil || state == nil {
 		return nil, nil
+	}
+	if state.finalized {
+		return nil, fmt.Errorf("Responses stream is already finalized")
 	}
 	if state.ID == "" {
 		state.ID = chunk.Id
@@ -108,7 +112,7 @@ func ChatCompletionsStreamChunkToResponsesEvents(chunk *dto.ChatCompletionsStrea
 			events = append(events, state.doneDeltaEvents()...)
 		}
 	}
-	return events, nil
+	return state.sequence(events), nil
 }
 
 func FinalizeChatCompletionsStreamToResponses(state *ChatToResponsesStreamState) []ChatToResponsesStreamEvent {
@@ -126,7 +130,31 @@ func FinalizeChatCompletionsStreamToResponses(state *ChatToResponsesStreamState)
 		Type:     eventType,
 		Response: resp,
 	}))
+	return state.sequence(events)
+}
+
+func (s *ChatToResponsesStreamState) sequence(events []ChatToResponsesStreamEvent) []ChatToResponsesStreamEvent {
+	for i := range events {
+		sequence := s.nextSequence
+		s.nextSequence++
+		events[i].Payload.SequenceNumber = &sequence
+	}
 	return events
+}
+
+func (s *ChatToResponsesStreamState) EndAbnormally(outcome string) []ChatToResponsesStreamEvent {
+	if s == nil || s.finalized {
+		return nil
+	}
+	s.status = outcome
+	s.finalized = true
+	events := s.doneDeltaEvents()
+	response := s.finalResponse()
+	if outcome == "failed" {
+		response.Error = map[string]any{"code": "upstream_stream_error", "message": "upstream stream ended unexpectedly"}
+	}
+	events = append(events, responsesStreamEvent("response."+outcome, dto.ResponsesStreamResponse{Type: "response." + outcome, Response: response}))
+	return s.sequence(events)
 }
 
 func (s *ChatToResponsesStreamState) UsageText() string {
@@ -152,6 +180,10 @@ func (s *ChatToResponsesStreamState) appendTextDelta(delta string) []ChatToRespo
 				Content: []dto.ResponsesOutputContent{},
 			},
 		}))
+		events = append(events, responsesStreamEvent("response.content_part.added", dto.ResponsesStreamResponse{
+			Type: "response.content_part.added", OutputIndex: intPtr(s.textOutputIndex), ContentIndex: intPtr(0), ItemID: s.messageID(),
+			Part: outputTextPart(""),
+		}))
 	}
 	s.text.WriteString(delta)
 	events = append(events, responsesStreamEvent(responsesEventOutputTextDelta, dto.ResponsesStreamResponse{
@@ -176,8 +208,12 @@ func (s *ChatToResponsesStreamState) appendReasoningDelta(delta string) []ChatTo
 				Type:    responsesOutputTypeReasoning,
 				ID:      s.reasoningID(),
 				Status:  "in_progress",
-				Content: []dto.ResponsesOutputContent{},
+				Summary: []dto.ResponsesReasoningSummaryPart{},
 			},
+		}))
+		events = append(events, responsesStreamEvent("response.reasoning_summary_part.added", dto.ResponsesStreamResponse{
+			Type: "response.reasoning_summary_part.added", OutputIndex: intPtr(s.reasoningIndex), SummaryIndex: intPtr(0), ItemID: s.reasoningID(),
+			Part: &dto.ResponsesReasoningSummaryPart{Type: "summary_text", Text: ""},
 		}))
 	}
 	s.reasoning.WriteString(delta)
@@ -251,6 +287,11 @@ func (s *ChatToResponsesStreamState) doneDeltaEvents() []ChatToResponsesStreamEv
 			OutputIndex:  intPtr(s.textOutputIndex),
 			ContentIndex: intPtr(0),
 			ItemID:       s.messageID(),
+			Text:         stringPtr(s.text.String()),
+		}))
+		events = append(events, responsesStreamEvent("response.content_part.done", dto.ResponsesStreamResponse{
+			Type: "response.content_part.done", OutputIndex: intPtr(s.textOutputIndex), ContentIndex: intPtr(0), ItemID: s.messageID(),
+			Part: outputTextPart(s.text.String()),
 		}))
 		events = append(events, responsesStreamEvent(responsesEventOutputItemDone, dto.ResponsesStreamResponse{
 			Type:        responsesEventOutputItemDone,
@@ -265,10 +306,11 @@ func (s *ChatToResponsesStreamState) doneDeltaEvents() []ChatToResponsesStreamEv
 			OutputIndex:  intPtr(s.reasoningIndex),
 			SummaryIndex: intPtr(0),
 			ItemID:       s.reasoningID(),
-			Part: &dto.ResponsesReasoningSummaryPart{
-				Type: "summary_text",
-				Text: s.reasoning.String(),
-			},
+			Text:         stringPtr(s.reasoning.String()),
+		}))
+		events = append(events, responsesStreamEvent("response.reasoning_summary_part.done", dto.ResponsesStreamResponse{
+			Type: "response.reasoning_summary_part.done", OutputIndex: intPtr(s.reasoningIndex), SummaryIndex: intPtr(0), ItemID: s.reasoningID(),
+			Part: &dto.ResponsesReasoningSummaryPart{Type: "summary_text", Text: s.reasoning.String()},
 		}))
 		events = append(events, responsesStreamEvent(responsesEventOutputItemDone, dto.ResponsesStreamResponse{
 			Type:        responsesEventOutputItemDone,
@@ -285,6 +327,8 @@ func (s *ChatToResponsesStreamState) doneDeltaEvents() []ChatToResponsesStreamEv
 			Type:        responsesEventFunctionArgsDone,
 			OutputIndex: intPtr(tool.OutputIndex),
 			ItemID:      tool.ID,
+			Arguments:   stringPtr(tool.Arguments.String()),
+			Name:        tool.Name,
 		}))
 		events = append(events, responsesStreamEvent(responsesEventOutputItemDone, dto.ResponsesStreamResponse{
 			Type:        responsesEventOutputItemDone,
@@ -361,7 +405,7 @@ func (s *ChatToResponsesStreamState) sortedTools() []*chatToResponsesStreamTool 
 }
 
 func (s *ChatToResponsesStreamState) outputStatus() string {
-	if s.status == "incomplete" {
+	if s.status == "incomplete" || s.status == "failed" {
 		return "incomplete"
 	}
 	return "completed"
@@ -396,7 +440,7 @@ func (s *ChatToResponsesStreamState) reasoningOutput(status string) *dto.Respons
 		Type:   responsesOutputTypeReasoning,
 		ID:     s.reasoningID(),
 		Status: status,
-		Content: []dto.ResponsesOutputContent{
+		Summary: []dto.ResponsesReasoningSummaryPart{
 			{
 				Type: "summary_text",
 				Text: s.reasoning.String(),
@@ -414,4 +458,11 @@ func (s *ChatToResponsesStreamState) toolOutput(tool *chatToResponsesStreamTool,
 		Name:      tool.Name,
 		Arguments: chatArgumentsRawMessage(tool.Arguments.String()),
 	}
+}
+
+func stringPtr(value string) *string { return &value }
+
+func outputTextPart(text string) *dto.ResponsesReasoningSummaryPart {
+	annotations := []any{}
+	return &dto.ResponsesReasoningSummaryPart{Type: "output_text", Text: text, Annotations: &annotations}
 }

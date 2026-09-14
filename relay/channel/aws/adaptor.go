@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
-	"github.com/QuantumNous/new-api/relay/channel"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -18,24 +17,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type ClientMode int
-
-const (
-	ClientModeApiKey ClientMode = iota + 1
-	ClientModeAKSK
-)
-
 type Adaptor struct {
-	ClientMode ClientMode
 	AwsClient  *bedrockruntime.Client
 	AwsModelId string
 	AwsReq     any
 	IsNova     bool
 }
 
-func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dto.GeminiChatRequest) (any, error) {
-	//TODO implement me
-	return nil, errors.New("not implemented")
+func (a *Adaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeminiChatRequest) (any, error) {
+	result, err := service.ConvertRequest(c, info, types.RelayFormatClaude, request)
+	if err != nil {
+		return nil, err
+	}
+	claudeRequest, ok := result.Value.(*dto.ClaudeRequest)
+	if !ok {
+		return nil, fmt.Errorf("expected Claude request, got %T", result.Value)
+	}
+	return a.ConvertClaudeRequest(c, info, claudeRequest)
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ClaudeRequest) (any, error) {
@@ -89,25 +87,13 @@ func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 }
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	if info.ChannelOtherSettings.AwsKeyType == dto.AwsKeyTypeApiKey {
-		awsModelId := getAwsModelID(info.UpstreamModelName)
-		a.ClientMode = ClientModeApiKey
-		awsSecret := strings.Split(info.ApiKey, "|")
-		if len(awsSecret) != 2 {
-			return "", errors.New("invalid aws api key, should be in format of <api-key>|<region>")
-		}
-		return fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com/model/%s/converse", awsModelId, awsSecret[1]), nil
-	} else {
-		a.ClientMode = ClientModeAKSK
-		return "", nil
-	}
+	// Both credential modes use the SDK for endpoint, authentication and
+	// event-stream decoding. DoRequest does not use the generic HTTP sender.
+	return "", nil
 }
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *relaycommon.RelayInfo) error {
 	claude.CommonClaudeHeadersOperation(c, req, info)
-	if a.ClientMode == ClientModeApiKey {
-		req.Set("Authorization", "Bearer "+info.ApiKey)
-	}
 	return nil
 }
 
@@ -117,7 +103,13 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	}
 	// 检查是否为Nova模型
 	if isNovaModel(request.Model) {
+		if err := service.ValidateRequestProjection(info, constant.APITypeAws, request); err != nil {
+			return nil, err
+		}
 		novaReq := convertToNovaRequest(request)
+		if len(novaReq.Messages) == 0 || novaReq.Messages[0].Role != "user" {
+			return nil, errors.New("Nova requires a text conversation starting with a user message")
+		}
 		a.IsNova = true
 		return novaReq, nil
 	}
@@ -145,31 +137,29 @@ func (a *Adaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.Rela
 }
 
 func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.OpenAIResponsesRequest) (any, error) {
-	// TODO implement me
-	return nil, errors.New("not implemented")
+	result, err := service.ConvertRequest(c, info, types.RelayFormatClaude, &request)
+	if err != nil {
+		return nil, err
+	}
+	claudeRequest, ok := result.Value.(*dto.ClaudeRequest)
+	if !ok {
+		return nil, fmt.Errorf("expected Claude request, got %T", result.Value)
+	}
+	return a.ConvertClaudeRequest(c, info, claudeRequest)
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error) {
-	if a.ClientMode == ClientModeApiKey {
-		return channel.DoApiRequest(a, c, info, requestBody)
-	} else {
-		return doAwsClientRequest(c, info, a, requestBody)
-	}
+	return doAwsClientRequest(c, info, a, requestBody)
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
-	if a.ClientMode == ClientModeApiKey {
-		claudeAdaptor := claude.Adaptor{}
-		usage, err = claudeAdaptor.DoResponse(c, resp, info)
+	if a.IsNova {
+		err, usage = handleNovaRequest(c, info, a)
 	} else {
-		if a.IsNova {
-			err, usage = handleNovaRequest(c, info, a)
+		if info.IsStream {
+			err, usage = awsStreamHandler(c, info, a)
 		} else {
-			if info.IsStream {
-				err, usage = awsStreamHandler(c, info, a)
-			} else {
-				err, usage = awsHandler(c, info, a)
-			}
+			err, usage = awsHandler(c, info, a)
 		}
 	}
 	return

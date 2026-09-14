@@ -356,9 +356,14 @@ func responsesRequestToolsToChat(raw json.RawMessage) ([]dto.ToolCallRequest, er
 	for _, tool := range tools {
 		toolType := strings.TrimSpace(kitutil.Interface2String(tool["type"]))
 		if toolType == "function" {
+			var strict *bool
+			if value, ok := tool["strict"].(bool); ok {
+				strict = &value
+			}
 			out = append(out, dto.ToolCallRequest{
 				Type: "function",
 				Function: dto.FunctionRequest{
+					Strict:      strict,
 					Name:        strings.TrimSpace(kitutil.Interface2String(tool["name"])),
 					Description: kitutil.Interface2String(tool["description"]),
 					Parameters:  tool["parameters"],
@@ -449,6 +454,19 @@ func RequestTextToChatResponseFormat(raw json.RawMessage) (*dto.ResponseFormat, 
 
 func responsesImagePartToChatImageURL(part map[string]any) any {
 	if imageURL, ok := part["image_url"]; ok {
+		if detail, present := part["detail"]; present {
+			switch source := imageURL.(type) {
+			case string:
+				return map[string]any{"url": source, "detail": detail}
+			case map[string]any:
+				image := make(map[string]any, len(source)+1)
+				for key, value := range source {
+					image[key] = value
+				}
+				image["detail"] = detail
+				return image
+			}
+		}
 		return imageURL
 	}
 	imageURL := map[string]any{}

@@ -13,7 +13,6 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
@@ -144,7 +143,7 @@ func TestSetupContextLiveRetryUsesAnotherEnabledKey(t *testing.T) {
 	assert.NotEqual(t, initialIndex, common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex))
 }
 
-func TestSetupContextLiveRouteClaimsOnlyOneRecoveredKeyProbe(t *testing.T) {
+func TestRecoveredKeyProbeIsClaimedOnlyAtSend(t *testing.T) {
 	originalDB, originalMemoryCache := model.DB, common.MemoryCacheEnabled
 	originalDatabaseType := common.MainDatabaseType()
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
@@ -178,9 +177,17 @@ func TestSetupContextLiveRouteClaimsOnlyOneRecoveredKeyProbe(t *testing.T) {
 	first := newContext()
 	require.Nil(t, middleware.SetupContextForSelectedChannel(first, &channel, "gpt-test"))
 	second := newContext()
-	setupErr := middleware.SetupContextForSelectedChannel(second, &channel, "gpt-test")
-	require.NotNil(t, setupErr)
-	assert.Equal(t, types.ErrorCodeChannelNoAvailableKey, setupErr.GetErrorCode())
+	require.Nil(t, middleware.SetupContextForSelectedChannel(second, &channel, "gpt-test"))
+	firstInfo := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelId: channel.Id}, RouteCapabilityModel: "gpt-test"}
+	secondInfo := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelId: channel.Id}, RouteCapabilityModel: "gpt-test"}
+	state := &routeAttemptHealthState{}
+	first.Set("route_live_health", state)
+	require.NoError(t, prepareLiveRouteSend(first, firstInfo, state, "attempt-first", nil))
+	assert.Equal(t, 1, liveRouteRetryCounters(first).TotalAttempts)
+	require.ErrorIs(t, prepareLiveRouteSend(second, secondInfo, &routeAttemptHealthState{}, "attempt-second", nil), service.ErrRouteHealthUnavailable)
+	assert.Zero(t, liveRouteRetryCounters(second).TotalAttempts)
+	releaseRouteAttemptLease(first)
+	require.NoError(t, prepareLiveRouteSend(second, secondInfo, &routeAttemptHealthState{}, "attempt-second", nil))
 }
 
 func TestNextLiveRouteAttemptUsesErrorScope(t *testing.T) {

@@ -101,7 +101,10 @@ func GeminiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, r
 			streamErr = types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
 			return false
 		}
-		helper.ResponseChunkData(c, dto.ResponsesStreamResponse{Type: event.Type}, string(data))
+		if err := helper.ResponseChunkData(c, dto.ResponsesStreamResponse{Type: event.Type}, string(data)); err != nil {
+			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
+			return false
+		}
 		return true
 	}
 	sendChunk := func(chunk *dto.ChatCompletionsStreamResponse) bool {
@@ -163,28 +166,18 @@ func GeminiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, r
 		}
 		return true
 	})
+	if usage != nil {
+		state.SetUsage(usage)
+	}
+	finalErr := helper.FinalizeConvertedStream(c, info, state)
 	if streamAPIError != nil {
 		return usage, streamAPIError
 	}
 	if streamErr != nil {
-		return nil, streamErr
+		return usage, streamErr
 	}
-
-	if usage != nil {
-		state.SetUsage(usage)
-	}
-	finalResults, err := relayconvert.FinalizeStreamResponse(c, info, state)
-	if err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
-	}
-	for _, result := range finalResults {
-		event, ok := result.Value.(relayconvert.ChatToResponsesStreamEvent)
-		if !ok {
-			return nil, types.NewOpenAIError(fmt.Errorf("expected OAI responses stream event, got %T", result.Value), types.ErrorCodeBadResponse, http.StatusInternalServerError)
-		}
-		if !sendEvent(event) {
-			return nil, streamErr
-		}
+	if finalErr != nil {
+		return usage, finalErr
 	}
 	return usage, nil
 }

@@ -9,6 +9,7 @@
           },
           {
             "functionCall": {
+              "id": "toolu_abc",
               "name": "get_weather",
               "args": {
                 "city": "Paris"

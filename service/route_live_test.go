@@ -9,12 +9,28 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/alicebob/miniredis/v2"
+	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+func useRoutePlanningRedis(t *testing.T) *miniredis.Miniredis {
+	t.Helper()
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr(), MaxRetries: -1})
+	previous, enabled := common.RDB, common.RedisEnabled
+	common.RDB, common.RedisEnabled = client, true
+	t.Cleanup(func() {
+		require.NoError(t, client.Close())
+		common.RDB, common.RedisEnabled = previous, enabled
+	})
+	return server
+}
+
 func TestSelectLiveTokenRouteManualUsesOnlyActiveGroup(t *testing.T) {
 	db := setupRouteProfileTest(t)
+	useRoutePlanningRedis(t)
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
 	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
 	created, err := CreateUserRouteProfile(RouteProfileInput{
@@ -38,6 +54,7 @@ func TestSelectLiveTokenRouteManualUsesOnlyActiveGroup(t *testing.T) {
 
 func TestSelectLiveTokenRouteIgnoresFormerBusinessGroupRestrictions(t *testing.T) {
 	db := setupRouteProfileTest(t)
+	useRoutePlanningRedis(t)
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
 	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
 	created, err := CreateUserRouteProfile(RouteProfileInput{
@@ -64,6 +81,7 @@ func TestSelectLiveTokenRouteIgnoresFormerBusinessGroupRestrictions(t *testing.T
 
 func TestSelectLiveTokenRouteAutoLabUsesActiveIndexAndCurrentChannelStatus(t *testing.T) {
 	db := setupRouteProfileTest(t)
+	useRoutePlanningRedis(t)
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
 	channel := model.Channel{}
 	require.NoError(t, db.First(&channel, "id = ?", channelID).Error)
@@ -106,6 +124,7 @@ func TestSelectLiveTokenRouteAutoLabUsesActiveIndexAndCurrentChannelStatus(t *te
 
 func TestSelectLiveTokenRouteMissingProfileUsesAutomaticRouting(t *testing.T) {
 	db := setupRouteProfileTest(t)
+	useRoutePlanningRedis(t)
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
 	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
 	selection, err := SelectLiveTokenRoute(LiveRouteRequest{
@@ -136,6 +155,7 @@ func TestSelectLiveTokenRouteDisabledRejectsRequest(t *testing.T) {
 
 func TestSelectLiveTokenRouteFiltersOpenChannelModelHealth(t *testing.T) {
 	db := setupRouteProfileTest(t)
+	useRoutePlanningRedis(t)
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
 	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
 	created, err := CreateUserRouteProfile(RouteProfileInput{
@@ -162,6 +182,7 @@ func TestSelectLiveTokenRouteFiltersOpenChannelModelHealth(t *testing.T) {
 
 func TestSelectLiveTokenRouteFiltersChannelWhenEveryKeyIsIsolated(t *testing.T) {
 	db := setupRouteProfileTest(t)
+	useRoutePlanningRedis(t)
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
 	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
 	_, err := CreateUserRouteProfile(RouteProfileInput{
@@ -397,7 +418,7 @@ func TestManualRouteAttemptsHonorPolicyWithoutExpandingSystemLimit(t *testing.T)
 	assert.Equal(t, []int{1, 1}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
 		Mode: model.RoutePolicyRetrySameChannel, MaxSameResourceAttempts: 9,
 	})))
-	assert.Equal(t, []int{1, 2}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
+	assert.Equal(t, []int{1, 2, 3}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
 		Mode: model.RoutePolicyRetryNextChannel, MaxFailoverAttempts: 1,
 	})))
 	assert.Equal(t, []int{1, 1, 2, 2, 3, 3}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{

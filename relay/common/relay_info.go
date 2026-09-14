@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -14,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -29,6 +31,7 @@ type ThinkingContentInfo struct {
 	IsFirstThinkingContent  bool
 	SendLastThinkingContent bool
 	HasSentThinkingContent  bool
+	OpenThinkingChoices     map[int]bool
 }
 
 const (
@@ -91,17 +94,24 @@ const (
 )
 
 type RelayInfo struct {
-	RouteCapabilityModel string
-	TokenId              int
-	TokenKey             string
-	UserId               int
-	UsingGroup           string // 兼容历史日志与覆盖模板；统一路由不会用它授权、选渠或计费。
-	UserGroup            string // 用户所在分组
-	TokenUnlimited       bool
-	StartTime            time.Time
-	FirstResponseTime    time.Time
-	validOutput          atomic.Bool
-	isFirstResponse      bool
+	ConversionPolicy        types.ConversionLossPolicy
+	ConversionPlan          *relayconvert.ConversionPlan
+	RequestRequirements     *relayconvert.RequestRequirements
+	ConversionDiagnostics   []types.ConversionDiagnostic
+	ResponseUsage           *dto.Usage
+	ResponseUsageKind       string
+	ResponseUsageLogContent []string
+	RouteCapabilityModel    string
+	TokenId                 int
+	TokenKey                string
+	UserId                  int
+	UsingGroup              string // 兼容历史日志与覆盖模板；统一路由不会用它授权、选渠或计费。
+	UserGroup               string // 用户所在分组
+	TokenUnlimited          bool
+	StartTime               time.Time
+	FirstResponseTime       time.Time
+	validOutput             atomic.Bool
+	isFirstResponse         bool
 	//SendLastReasoningResponse bool
 	IsStream               bool
 	IsGeminiBatchEmbedding bool
@@ -141,6 +151,13 @@ type RelayInfo struct {
 	ForcePreConsume bool
 	// BeforeUpstream admits a validated media request before billing or sending.
 	BeforeUpstream func() error `json:"-"`
+	// BeforeSend runs after conversion and immediately before provider I/O.
+	BeforeSend            func(io.Reader) error `json:"-"`
+	DeferBillingToSend    bool                  `json:"-"`
+	UpstreamSent          bool                  `json:"-"`
+	UpstreamAccepted      bool                  `json:"-"`
+	UpstreamRejected      bool                  `json:"-"`
+	UpstreamSideEffecting bool                  `json:"-"`
 	// Billing 是计费会话，封装了预扣费/结算/退款的统一生命周期。
 	// 免费渠道可为 nil；重试切换到收费渠道时会在发送前创建。
 	Billing BillingSettler
@@ -197,7 +214,8 @@ type RelayInfo struct {
 	// 若为空，调用 GetFinalRequestRelayFormat 会回退到 RequestConversionChain 的最后一项或 RelayFormat。
 	FinalRequestRelayFormat types.RelayFormat
 
-	StreamStatus *StreamStatus
+	StreamStatus       *StreamStatus
+	GeminiConvertState *convmeta.GeminiConvertInfo
 
 	// convOptions caches the converter settings snapshot (see ConvOptions).
 	convOptions *convmeta.Options
@@ -271,6 +289,34 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	if info.Request != nil {
 		info.Request.SetModelName(info.OriginModelName)
 	}
+}
+
+// ResetAttemptState discards an uncommitted provider attempt while retaining
+// the logical request's admission, pricing policy and billing session.
+func (info *RelayInfo) ResetAttemptState() error {
+	if info.HasValidOutput() {
+		return errors.New("cannot reset an attempt after output delivery")
+	}
+	info.SendResponseCount, info.ReceivedResponseCount = 0, 0
+	info.UpstreamSideEffecting = false
+	info.UpstreamSent, info.UpstreamAccepted, info.UpstreamRejected = false, false, false
+	info.StreamStatus, info.GeminiConvertState = nil, nil
+	info.ClaudeConvertInfo = &ClaudeConvertInfo{LastMessagesType: LastMessageTypeNone}
+	info.FirstResponseTime = info.StartTime.Add(-time.Second)
+	info.isFirstResponse = true
+	info.ThinkingContentInfo = ThinkingContentInfo{IsFirstThinkingContent: true}
+	info.ResponseUsage, info.ResponseUsageLogContent, info.ResponseUsageKind = nil, nil, ""
+	info.RuntimeHeadersOverride, info.UseRuntimeHeadersOverride = nil, false
+	info.RequestConversionChain, info.FinalRequestRelayFormat = nil, ""
+	info.InitRequestConversionChain()
+	if info.ResponsesUsageInfo != nil {
+		for _, tool := range info.BuiltInTools {
+			if tool != nil {
+				tool.CallCount = 0
+			}
+		}
+	}
+	return nil
 }
 
 func (info *RelayInfo) ToString() string {
@@ -877,7 +923,6 @@ func (info *RelayInfo) ConvOptions() *convmeta.Options {
 		Gemini: convmeta.GeminiOptions{
 			ThinkingAdapterEnabled:                geminiSettings.ThinkingAdapterEnabled,
 			ThinkingAdapterBudgetTokensPercentage: geminiSettings.ThinkingAdapterBudgetTokensPercentage,
-			FunctionCallThoughtSignatureEnabled:   geminiSettings.FunctionCallThoughtSignatureEnabled,
 			SupportsImagine:                       model_setting.IsGeminiModelSupportImagine,
 			SafetySetting:                         model_setting.GetGeminiSafetySetting,
 		},
@@ -885,9 +930,51 @@ func (info *RelayInfo) ConvOptions() *convmeta.Options {
 		PreserveThinkingSuffix: model_setting.ShouldPreserveThinkingSuffix,
 	}
 	if info != nil {
+		options.ConversionPolicy = info.ConversionPolicy
 		info.convOptions = options
 	}
 	return options
+}
+
+func (info *RelayInfo) EnsureGeminiConvertInfo() *convmeta.GeminiConvertInfo {
+	if info == nil {
+		return &convmeta.GeminiConvertInfo{}
+	}
+	if info.GeminiConvertState == nil {
+		info.GeminiConvertState = &convmeta.GeminiConvertInfo{}
+	}
+	return info.GeminiConvertState
+}
+
+func (info *RelayInfo) PrepareUpstreamSend(body ...io.Reader) error {
+	if info == nil || info.UpstreamSent {
+		return nil
+	}
+	if info.BeforeSend != nil {
+		var payload io.Reader
+		if len(body) > 0 {
+			payload = body[0]
+		}
+		if err := info.BeforeSend(payload); err != nil {
+			return err
+		}
+	}
+	info.UpstreamSent = true
+	return nil
+}
+
+func (info *RelayInfo) CaptureResponseUsage(usage *dto.Usage, kind string, content []string) {
+	if info == nil || usage == nil {
+		return
+	}
+	info.ResponseUsage = usage
+	if usage.BillingUsage != nil && usage.BillingUsage.Estimated {
+		info.ResponseUsage.UsageSource = "estimated"
+	} else if info.ResponseUsage.UsageSource == "" {
+		info.ResponseUsage.UsageSource = "provider"
+	}
+	info.ResponseUsageKind = kind
+	info.ResponseUsageLogContent = content
 }
 
 func (info *RelayInfo) SetFirstResponseTime() {
@@ -970,28 +1057,28 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 			t.Duration = durationInt
 		} else {
 			var durationStr string
-			if err := common.Unmarshal(aux.Duration, &durationStr); err == nil && durationStr != "" {
-				if v, err := strconv.Atoi(durationStr); err == nil {
-					t.Duration = v
-				}
+			if err := common.Unmarshal(aux.Duration, &durationStr); err != nil {
+				return fmt.Errorf("duration must be an integer or integer string")
 			}
+			value, err := strconv.Atoi(durationStr)
+			if err != nil {
+				return fmt.Errorf("duration must be an integer or integer string")
+			}
+			t.Duration = value
 		}
 	}
 
 	if len(aux.Metadata) > 0 {
 		var metadataStr string
 		if err := common.Unmarshal(aux.Metadata, &metadataStr); err == nil && metadataStr != "" {
-			var metadataObj map[string]interface{}
-			if err := common.Unmarshal([]byte(metadataStr), &metadataObj); err == nil {
-				t.Metadata = metadataObj
-				return nil
-			}
+			aux.Metadata = []byte(metadataStr)
 		}
 
 		var metadataObj map[string]interface{}
-		if err := common.Unmarshal(aux.Metadata, &metadataObj); err == nil {
-			t.Metadata = metadataObj
+		if err := common.Unmarshal(aux.Metadata, &metadataObj); err != nil {
+			return fmt.Errorf("metadata must contain a JSON object")
 		}
+		t.Metadata = metadataObj
 	}
 
 	return nil

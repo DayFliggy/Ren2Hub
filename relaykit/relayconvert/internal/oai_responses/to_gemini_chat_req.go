@@ -42,10 +42,10 @@ func OpenAIResponsesRequestToGeminiChat(c context.Context, req *dto.OpenAIRespon
 			Temperature: req.Temperature,
 		},
 	}
-	if req.TopP != nil && *req.TopP > 0 {
+	if req.TopP != nil {
 		geminiRequest.GenerationConfig.TopP = kitutil.GetPointer(*req.TopP)
 	}
-	if req.MaxOutputTokens != nil && *req.MaxOutputTokens > 0 {
+	if req.MaxOutputTokens != nil {
 		geminiRequest.GenerationConfig.MaxOutputTokens = kitutil.GetPointer(*req.MaxOutputTokens)
 	}
 
@@ -131,7 +131,6 @@ func OpenAIResponsesRequestToGeminiChat(c context.Context, req *dto.OpenAIRespon
 			if err != nil {
 				return nil, err
 			}
-			sharedgemini.AttachFunctionCallThoughtSignature(opts, &part)
 			if callID != "" {
 				callNames[callID] = part.FunctionCall.FunctionName
 			}
@@ -252,6 +251,7 @@ func responsesFunctionCallItemToGeminiPart(item map[string]any) (dto.GeminiPart,
 	callID := CallID(item)
 	return dto.GeminiPart{
 		FunctionCall: &dto.FunctionCall{
+			ID:           callID,
 			FunctionName: name,
 			Arguments:    ObjectValue(item["arguments"], "arguments"),
 		},
@@ -266,6 +266,7 @@ func responsesFunctionOutputItemToGeminiPart(item map[string]any, callNames map[
 	}
 	return dto.GeminiPart{
 		FunctionResponse: &dto.GeminiFunctionResponse{
+			ID:       []byte(fmt.Sprintf("%q", callID)),
 			Name:     name,
 			Response: GeminiResponseMap(item["output"]),
 		},

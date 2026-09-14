@@ -1,10 +1,12 @@
 package aws
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -76,6 +78,7 @@ func newAwsClient(c *gin.Context, info *relaycommon.RelayInfo) (*bedrockruntime.
 			Region:                  region,
 			BearerAuthTokenProvider: bearer.StaticTokenProvider{Token: bearer.Token{Value: apiKey}},
 			HTTPClient:              httpClient,
+			Retryer:                 aws.NopRetryer{},
 		})
 	case 3:
 		ak := awsSecret[0]
@@ -85,6 +88,7 @@ func newAwsClient(c *gin.Context, info *relaycommon.RelayInfo) (*bedrockruntime.
 			Region:      region,
 			Credentials: aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(ak, sk, "")),
 			HTTPClient:  httpClient,
+			Retryer:     aws.NopRetryer{},
 		})
 	default:
 		return nil, errors.New("invalid aws secret key")
@@ -142,7 +146,11 @@ func doAwsClientRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor,
 		a.AwsReq = awsReq
 		return nil, nil
 	} else {
-		awsClaudeReq, err := formatRequest(requestBody, requestHeader)
+		preparedBody, err := io.ReadAll(requestBody)
+		if err != nil {
+			return nil, types.NewError(err, types.ErrorCodeReadRequestBodyFailed)
+		}
+		awsClaudeReq, err := formatRequest(bytes.NewReader(preparedBody), requestHeader)
 		if err != nil {
 			return nil, types.NewError(errors.Wrap(err, "format aws request fail"), types.ErrorCodeBadRequestBody)
 		}
@@ -153,7 +161,7 @@ func doAwsClientRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor,
 				Accept:      aws.String("application/json"),
 				ContentType: aws.String("application/json"),
 			}
-			awsReq.Body, err = buildAwsRequestBody(c, info, awsClaudeReq)
+			awsReq.Body, err = buildAwsRequestBody(info, preparedBody, awsClaudeReq)
 			if err != nil {
 				return nil, types.NewError(errors.Wrap(err, "marshal aws request fail"), types.ErrorCodeBadRequestBody)
 			}
@@ -165,7 +173,7 @@ func doAwsClientRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor,
 				Accept:      aws.String("application/json"),
 				ContentType: aws.String("application/json"),
 			}
-			awsReq.Body, err = buildAwsRequestBody(c, info, awsClaudeReq)
+			awsReq.Body, err = buildAwsRequestBody(info, preparedBody, awsClaudeReq)
 			if err != nil {
 				return nil, types.NewError(errors.Wrap(err, "marshal aws request fail"), types.ErrorCodeBadRequestBody)
 			}
@@ -176,22 +184,22 @@ func doAwsClientRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor,
 }
 
 // buildAwsRequestBody prepares the payload for AWS requests, applying passthrough rules when enabled.
-func buildAwsRequestBody(c *gin.Context, info *relaycommon.RelayInfo, awsClaudeReq any) ([]byte, error) {
+func buildAwsRequestBody(info *relaycommon.RelayInfo, preparedBody []byte, awsClaudeReq *AwsClaudeRequest) ([]byte, error) {
 	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
-		storage, err := common.GetBodyStorage(c)
-		if err != nil {
-			return nil, errors.Wrap(err, "get request body for pass-through fail")
-		}
-		body, err := storage.Bytes()
-		if err != nil {
-			return nil, errors.Wrap(err, "get request body bytes fail")
-		}
-		var data map[string]interface{}
-		if err := common.Unmarshal(body, &data); err != nil {
+		var data map[string]json.RawMessage
+		if err := common.Unmarshal(preparedBody, &data); err != nil {
 			return nil, errors.Wrap(err, "pass-through unmarshal request body fail")
 		}
 		delete(data, "model")
 		delete(data, "stream")
+		version, err := common.Marshal(awsClaudeReq.AnthropicVersion)
+		if err != nil {
+			return nil, err
+		}
+		data["anthropic_version"] = version
+		if len(awsClaudeReq.AnthropicBeta) > 0 {
+			data["anthropic_beta"] = awsClaudeReq.AnthropicBeta
+		}
 		return common.Marshal(data)
 	}
 	return common.Marshal(awsClaudeReq)
@@ -232,10 +240,14 @@ func awsHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types
 	ctx, cancel := newAwsInvokeContext(requestContext)
 	defer cancel()
 
+	if err := info.PrepareUpstreamSend(bytes.NewReader(a.AwsReq.(*bedrockruntime.InvokeModelInput).Body)); err != nil {
+		return types.NewError(err, types.ErrorCodeGetChannelFailed), nil
+	}
 	awsResp, err := a.AwsClient.InvokeModel(ctx, a.AwsReq.(*bedrockruntime.InvokeModelInput))
 	if err != nil {
 		return newAwsInvokeError(requestContext, err, "InvokeModel"), nil
 	}
+	info.UpstreamAccepted = true
 
 	claudeInfo := &claude.ClaudeResponseInfo{
 		ResponseId:   helper.GetResponseID(c),
@@ -262,55 +274,49 @@ func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (
 	ctx, cancel := newAwsInvokeContext(requestContext)
 	defer cancel()
 
+	if err := info.PrepareUpstreamSend(bytes.NewReader(a.AwsReq.(*bedrockruntime.InvokeModelWithResponseStreamInput).Body)); err != nil {
+		return types.NewError(err, types.ErrorCodeGetChannelFailed), nil
+	}
 	awsResp, err := a.AwsClient.InvokeModelWithResponseStream(ctx, a.AwsReq.(*bedrockruntime.InvokeModelWithResponseStreamInput))
 	if err != nil {
 		return newAwsInvokeError(requestContext, err, "InvokeModelWithResponseStream"), nil
 	}
+	info.UpstreamAccepted = true
 	stream := awsResp.GetStream()
 	defer stream.Close()
 
-	claudeInfo := &claude.ClaudeResponseInfo{
-		ResponseId:   helper.GetResponseID(c),
-		Created:      common.GetTimestamp(),
-		Model:        info.UpstreamModelName,
-		ResponseText: strings.Builder{},
-		Usage:        &dto.Usage{},
-	}
-
-	events := stream.Events()
-streamLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			break streamLoop
-		case event, ok := <-events:
-			if !ok {
-				break streamLoop
-			}
-			if ctx.Err() != nil {
-				break streamLoop
-			}
-
-			switch v := event.(type) {
-			case *bedrockruntimeTypes.ResponseStreamMemberChunk:
-				info.SetFirstResponseTime()
-				respErr := claude.HandleStreamResponseData(c, info, claudeInfo, string(v.Value.Bytes))
-				if respErr != nil {
-					return respErr, nil
+	reader, writer := io.Pipe()
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		defer writer.Close()
+		for {
+			select {
+			case <-ctx.Done():
+				_ = writer.CloseWithError(ctx.Err())
+				return
+			case event, ok := <-stream.Events():
+				if !ok {
+					_ = writer.CloseWithError(stream.Err())
+					return
 				}
-			case *bedrockruntimeTypes.UnknownUnionMember:
-				fmt.Println("unknown tag:", v.Tag)
-				return types.NewError(errors.New("unknown response type"), types.ErrorCodeInvalidRequest), nil
-			default:
-				fmt.Println("union is nil or unknown type")
-				return types.NewError(errors.New("nil or unknown response type"), types.ErrorCodeInvalidRequest), nil
+				chunk, ok := event.(*bedrockruntimeTypes.ResponseStreamMemberChunk)
+				if !ok {
+					_ = writer.CloseWithError(fmt.Errorf("unsupported Bedrock stream event %T", event))
+					return
+				}
+				if _, err := fmt.Fprintf(writer, "data: %s\n\n", chunk.Value.Bytes); err != nil {
+					return
+				}
 			}
 		}
-	}
-
+	}()
+	usage, streamErr := claude.ClaudeStreamHandler(c, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: reader}, info)
+	cancel()
+	_ = reader.Close()
 	_ = stream.Close()
-	claude.HandleStreamFinalResponse(c, info, claudeInfo)
-	return nil, claudeInfo.Usage
+	<-finished
+	return streamErr, usage
 }
 
 // Nova模型处理函数
@@ -320,10 +326,14 @@ func handleNovaRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) 
 	ctx, cancel := newAwsInvokeContext(requestContext)
 	defer cancel()
 
+	if err := info.PrepareUpstreamSend(bytes.NewReader(a.AwsReq.(*bedrockruntime.InvokeModelInput).Body)); err != nil {
+		return types.NewError(err, types.ErrorCodeGetChannelFailed), nil
+	}
 	awsResp, err := a.AwsClient.InvokeModel(ctx, a.AwsReq.(*bedrockruntime.InvokeModelInput))
 	if err != nil {
 		return newAwsInvokeError(requestContext, err, "InvokeModel"), nil
 	}
+	info.UpstreamAccepted = true
 
 	// 解析Nova响应
 	var novaResp struct {
@@ -341,8 +351,15 @@ func handleNovaRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) 
 		} `json:"usage"`
 	}
 
-	if err := json.Unmarshal(awsResp.Body, &novaResp); err != nil {
+	if err := common.Unmarshal(awsResp.Body, &novaResp); err != nil {
 		return types.NewError(errors.Wrap(err, "unmarshal nova response"), types.ErrorCodeBadResponseBody), nil
+	}
+	if len(novaResp.Output.Message.Content) == 0 || novaResp.Usage.InputTokens < 0 || novaResp.Usage.OutputTokens < 0 || novaResp.Usage.TotalTokens < 0 || novaResp.Usage.InputTokens > math.MaxInt-novaResp.Usage.OutputTokens {
+		return types.NewOpenAIError(errors.New("invalid nova output or usage"), types.ErrorCodeBadResponseBody, http.StatusBadGateway), nil
+	}
+	var text strings.Builder
+	for _, content := range novaResp.Output.Message.Content {
+		text.WriteString(content.Text)
 	}
 
 	// 构造OpenAI格式响应
@@ -355,11 +372,12 @@ func handleNovaRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) 
 			Index: 0,
 			Message: dto.Message{
 				Role:    "assistant",
-				Content: novaResp.Output.Message.Content[0].Text,
+				Content: text.String(),
 			},
 			FinishReason: "stop",
 		}},
 		Usage: dto.Usage{
+			UsageSource:      "provider",
 			PromptTokens:     novaResp.Usage.InputTokens,
 			CompletionTokens: novaResp.Usage.OutputTokens,
 			TotalTokens:      novaResp.Usage.TotalTokens,

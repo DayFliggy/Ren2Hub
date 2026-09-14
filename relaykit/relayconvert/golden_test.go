@@ -29,15 +29,19 @@ var updateGolden = flag.Bool("update", false, "update golden files")
 // convert without network access.
 func TestMain(m *testing.M) {
 	flag.Parse()
-	SetMediaResolver(MediaResolver{
+	SetMediaResolver(goldenMediaResolver())
+	os.Exit(m.Run())
+}
+
+func goldenMediaResolver() MediaResolver {
+	return MediaResolver{
 		GetBase64Data: func(c context.Context, source types.FileSource, reason ...string) (string, string, error) {
 			return "aGVsbG8=", "image/png", nil
 		},
 		DecodeBase64FileData: func(base64String string) (string, string, error) {
 			return "aGVsbG8=", "image/png", nil
 		},
-	})
-	os.Exit(m.Run())
+	}
 }
 
 const goldenDir = "testdata/golden"
@@ -132,7 +136,7 @@ func fixtureRequests() map[types.RelayFormat]any {
 				{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "aGVsbG8="}}
 			]},
 			{"role": "assistant", "content": [
-				{"type": "thinking", "thinking": "Let me look.", "signature": "sig"},
+				{"type": "thinking", "thinking": "Let me look."},
 				{"type": "tool_use", "id": "toolu_abc", "name": "get_weather", "input": {"city": "Paris"}}
 			]},
 			{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_abc", "content": "15 degrees"}]}
@@ -318,8 +322,15 @@ func TestGoldenRequestConversionMatrix(t *testing.T) {
 			}
 			name := fmt.Sprintf("request/%s_to_%s", from, to)
 			t.Run(name, func(t *testing.T) {
-				result, err := ConvertRequest(nil, goldenInfo(), to, deepCopyFixture(t, requests[from]))
+				info := goldenInfo()
+				if from == types.RelayFormatClaude {
+					info.(*convmeta.Values).Options.ConversionPolicy = types.ConversionLossPolicyAllow
+				}
+				result, err := ConvertRequest(nil, info, to, deepCopyFixture(t, requests[from]))
 				require.NoError(t, err)
+				if from == types.RelayFormatClaude {
+					require.Contains(t, fmt.Sprint(result.Diagnostics), "reasoning_controls_not_portable")
+				}
 				checkGolden(t, name, marshalGolden(t, result.Value))
 			})
 		}

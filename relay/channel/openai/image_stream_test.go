@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,8 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -83,6 +86,8 @@ func TestOpenaiImageStreamHandlerForwardsSSEAndUsage(t *testing.T) {
 		`event: image_generation.partial_image`,
 		`data: {"type":"image_generation.partial_image","b64_json":"partial"}`,
 		``,
+		`data: {"type":"image_generation.completed","b64_json":"final"}`,
+		``,
 		`data: {"usage":{"input_tokens":3,"output_tokens":4,"total_tokens":7,"input_tokens_details":{"image_tokens":2,"text_tokens":1}}}`,
 		``,
 		`data: [DONE]`,
@@ -105,7 +110,7 @@ func TestOpenaiImageStreamHandlerForwardsSSEAndUsage(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), `data: {"usage":{"input_tokens":3,"output_tokens":4,"total_tokens":7,"input_tokens_details":{"image_tokens":2,"text_tokens":1}}}`)
 	require.Contains(t, recorder.Body.String(), `data: [DONE]`)
 	require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
-	require.Equal(t, 3.0, info.PriceData.OtherRatios()["n"], "streams without completed events keep the requested count")
+	require.Equal(t, 1.0, info.PriceData.OtherRatios()["n"])
 }
 
 func TestOpenaiImageStreamHandlerUsesCompletedEventCount(t *testing.T) {
@@ -215,12 +220,9 @@ func newDisconnectingImageStream(t *testing.T, sseBody, disconnectAfter string) 
 	return c, recorder, resp, info
 }
 
-// TestOpenaiImageStreamHandlerClientDisconnectKeepsRequestedCount guards the
-// billing invariant: completed-event counting must not lower the charge when
-// the client aborts the stream. Upstream already generated (and charged for)
-// all requested images, so a disconnect after the first completed event keeps
-// the requested n instead of dropping it to 1.
-func TestOpenaiImageStreamHandlerClientDisconnectKeepsRequestedCount(t *testing.T) {
+// A completed image delivered before cancellation is billed once; the unused
+// requested output count must be refunded.
+func TestOpenaiImageStreamHandlerClientDisconnectBillsDeliveredCount(t *testing.T) {
 	oldMode := gin.Mode()
 	gin.SetMode(gin.TestMode)
 	t.Cleanup(func() { gin.SetMode(oldMode) })
@@ -236,7 +238,7 @@ func TestOpenaiImageStreamHandlerClientDisconnectKeepsRequestedCount(t *testing.
 
 	usage, err := OpenaiImageStreamHandler(c, info, resp)
 
-	require.Nil(t, err)
+	require.NotNil(t, err)
 	require.NotNil(t, usage)
 	require.NotNil(t, info.StreamStatus)
 	// A client abort surfaces as client_gone (main-loop ctx watch) or
@@ -245,7 +247,7 @@ func TestOpenaiImageStreamHandlerClientDisconnectKeepsRequestedCount(t *testing.
 		[]relaycommon.StreamEndReason{relaycommon.StreamEndReasonClientGone, relaycommon.StreamEndReasonHandlerStop},
 		info.StreamStatus.EndReason)
 	require.Contains(t, recorder.Body.String(), `"b64_json":"first"`)
-	require.Equal(t, 3.0, info.PriceData.OtherRatios()["n"], "client abort must not reduce the billed image count")
+	require.Equal(t, 1.0, info.PriceData.OtherRatios()["n"], "client abort must not charge undelivered requested images")
 }
 
 // TestOpenaiImageStreamHandlerClientDisconnectRaisesCount covers the other
@@ -273,7 +275,7 @@ func TestOpenaiImageStreamHandlerClientDisconnectRaisesCount(t *testing.T) {
 
 	usage, err := OpenaiImageStreamHandler(c, info, resp)
 
-	require.Nil(t, err)
+	require.NotNil(t, err)
 	require.NotNil(t, usage)
 	require.NotNil(t, info.StreamStatus)
 	require.Contains(t,
@@ -333,12 +335,6 @@ func TestOpenaiImageHandlerUsesPositiveActualCountForFixedPrice(t *testing.T) {
 			wantCount: 2,
 		},
 		{
-			name:      "empty data keeps requested count",
-			body:      `{"data":[]}`,
-			usePrice:  true,
-			wantCount: 3,
-		},
-		{
 			name:      "ratio billing ignores data length",
 			body:      `{"data":[{"b64_json":"first"},{"b64_json":"second"}]}`,
 			usePrice:  false,
@@ -377,7 +373,7 @@ func TestOpenaiImageHandlersReturnJSONError(t *testing.T) {
 		usage, err := OpenaiImageHandler(c, info, resp)
 		require.Nil(t, usage)
 		require.NotNil(t, err)
-		require.Equal(t, http.StatusOK, err.StatusCode)
+		require.Equal(t, http.StatusBadGateway, err.StatusCode)
 		oaiError := err.ToOpenAIError()
 		require.Equal(t, "content moderation failed", oaiError.Message)
 		require.Equal(t, "upstream_error", oaiError.Type)
@@ -391,7 +387,7 @@ func TestOpenaiImageHandlersReturnJSONError(t *testing.T) {
 		usage, err := OpenaiImageStreamHandler(c, info, resp)
 		require.Nil(t, usage)
 		require.NotNil(t, err)
-		require.Equal(t, http.StatusOK, err.StatusCode)
+		require.Equal(t, http.StatusBadGateway, err.StatusCode)
 		require.Equal(t, "content moderation failed", err.ToOpenAIError().Message)
 		require.Empty(t, recorder.Body.String())
 	})
@@ -410,9 +406,7 @@ func TestOpenaiImageHandlersReturnJSONError(t *testing.T) {
 	})
 }
 
-// TestOpenaiImageStreamHandlerRecordsUpstreamErrorEvent verifies that an error
-// event inside the SSE stream is recorded as a soft error while the payload is
-// still forwarded to the client.
+// The controller owns the single error termination after the handler returns.
 func TestOpenaiImageStreamHandlerRecordsUpstreamErrorEvent(t *testing.T) {
 	oldMode := gin.Mode()
 	gin.SetMode(gin.TestMode)
@@ -434,16 +428,76 @@ func TestOpenaiImageStreamHandlerRecordsUpstreamErrorEvent(t *testing.T) {
 	c, recorder, resp, info := newImageTestContext(t, body, "text/event-stream", true)
 
 	usage, err := OpenaiImageStreamHandler(c, info, resp)
-	require.Nil(t, err)
+	require.NotNil(t, err)
 	require.NotNil(t, usage)
 	require.NotNil(t, info.StreamStatus)
-	require.Equal(t, relaycommon.StreamEndReasonEOF, info.StreamStatus.EndReason)
+	require.Equal(t, relaycommon.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
 	require.True(t, info.StreamStatus.HasErrors())
 	require.Equal(t, 1, info.StreamStatus.TotalErrorCount())
 	require.Contains(t, info.StreamStatus.Errors[0].Message, "INTERNAL_ERROR")
-	// The scanner strips the upstream "event: error" line; the event name is
-	// rebuilt from the JSON "type" field (upstream_error). The error message
-	// is still forwarded in the data: payload (stream ID 77).
-	require.Contains(t, recorder.Body.String(), `event: upstream_error`)
-	require.Contains(t, recorder.Body.String(), `stream ID 77`)
+	require.NotContains(t, recorder.Body.String(), `event: upstream_error`)
+	require.NotContains(t, recorder.Body.String(), `data: [DONE]`)
+}
+
+func TestOpenaiImageHandlersRejectInvalidPayloadBeforeCommit(t *testing.T) {
+	for index, body := range []string{
+		`{}`, `{"data":[]}`, `{"data":[{}]}`, `{"data":[{"b64_json":false}]}`,
+		`{"data":[{"b64_json":"image"}],"usage":{"input_tokens":-1}}`,
+		`{"data":[{"b64_json":"image"}],"usage":{"input_tokens":2147483647,"output_tokens":1}}`,
+		`{"data":[{"b64_json":"image"}],"usage":{"input_tokens":3,"output_tokens":4,"total_tokens":6}}`,
+		`{"data":[{"b64_json":"image"}],"usage":{"input_tokens":3,"input_tokens_details":{"text_tokens":2,"image_tokens":2}}}`,
+		`{"data":[{"b64_json":"image"}],"usage":{"input_tokens":3,"input_tokens_details":{"cached_tokens":4}}}`,
+	} {
+		for _, stream := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%d_stream_%v", index, stream), func(t *testing.T) {
+				c, recorder, resp, info := newImageTestContext(t, body, "application/json", stream)
+				var apiErr *types.NewAPIError
+				if stream {
+					_, apiErr = OpenaiImageStreamHandler(c, info, resp)
+				} else {
+					_, apiErr = OpenaiImageHandler(c, info, resp)
+				}
+				require.NotNil(t, apiErr)
+				require.Equal(t, http.StatusBadGateway, apiErr.StatusCode)
+				require.Empty(t, recorder.Body.String())
+				require.False(t, info.HasValidOutput())
+			})
+		}
+	}
+}
+
+func TestOpenaiImageStreamRejectsInvalidTermination(t *testing.T) {
+	for index, body := range []string{
+		"data: [DONE]\n\n",
+		"data: {broken}\n\n",
+		"data: {\"type\":\"image_generation.completed\"}\n\n",
+		"data: {\"type\":\"image_generation.completed\",\"b64_json\":\"image\",\"usage\":{\"output_tokens\":-1}}\n\n",
+		"data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"partial\"}\n\ndata: [DONE]\n\n",
+	} {
+		t.Run(fmt.Sprint(index), func(t *testing.T) {
+			c, recorder, resp, info := newImageTestContext(t, body, "text/event-stream", true)
+			info.PriceData.UsePrice = true
+			info.PriceData.AddOtherRatio("n", 3)
+			_, err := OpenaiImageStreamHandler(c, info, resp)
+			require.NotNil(t, err)
+			require.NotContains(t, recorder.Body.String(), "data: [DONE]")
+			if index == 4 {
+				require.True(t, info.HasValidOutput())
+				require.Equal(t, 1.0, info.PriceData.OtherRatios()["n"])
+			} else {
+				require.False(t, info.HasValidOutput())
+			}
+		})
+	}
+}
+
+func TestOpenaiImageFirstPayloadCanExceedPreludeLimit(t *testing.T) {
+	image := strings.Repeat("a", helper.MaxStreamPreludeBytes+1)
+	body := "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"" + image + "\"}\n\n"
+	c, recorder, resp, info := newImageTestContext(t, body, "text/event-stream", true)
+	_, err := OpenaiImageStreamHandler(c, info, resp)
+	require.Nil(t, err)
+	require.True(t, info.HasValidOutput())
+	require.Contains(t, recorder.Body.String(), image)
+	require.Equal(t, 1, strings.Count(recorder.Body.String(), "data: [DONE]"))
 }

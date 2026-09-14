@@ -1,7 +1,6 @@
 package channel
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,18 +8,14 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	common2 "github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
-	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 
-	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
@@ -311,6 +306,20 @@ func applyHeaderOverrideToRequest(req *http.Request, headerOverride map[string]s
 }
 
 func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody io.Reader) (*http.Response, error) {
+	req, err := BuildApiRequest(a, c, info, requestBody)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := doRequest(c, req, info)
+	if err != nil {
+		return nil, fmt.Errorf("do request failed: %w", err)
+	}
+	return resp, nil
+}
+
+// BuildApiRequest resolves and validates the final endpoint and headers without
+// sending. Adaptors with prerequisite uploads must validate these before I/O.
+func BuildApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody io.Reader) (*http.Request, error) {
 	fullRequestURL, err := a.GetRequestURL(info)
 	if err != nil {
 		return nil, fmt.Errorf("get request url failed: %w", err)
@@ -332,12 +341,12 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	if err != nil {
 		return nil, err
 	}
+	expectedHeaders := req.Header.Clone()
 	applyHeaderOverrideToRequest(req, headerOverride)
-	resp, err := doRequest(c, req, info)
-	if err != nil {
-		return nil, fmt.Errorf("do request failed: %w", err)
+	if err := service.ValidateGatewayHTTPIdentity(c, info, req, expectedHeaders, headerOverride); err != nil {
+		return nil, err
 	}
-	return resp, nil
+	return req, nil
 }
 
 func DoFormRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody io.Reader) (*http.Response, error) {
@@ -364,7 +373,11 @@ func DoFormRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBod
 	if err != nil {
 		return nil, err
 	}
+	expectedHeaders := req.Header.Clone()
 	applyHeaderOverrideToRequest(req, headerOverride)
+	if err := service.ValidateGatewayHTTPIdentity(c, info, req, expectedHeaders, headerOverride); err != nil {
+		return nil, err
+	}
 	resp, err := doRequest(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)
@@ -388,10 +401,22 @@ func DoWssRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	if err != nil {
 		return nil, err
 	}
+	expectedHeaders := targetHeader.Clone()
 	for key, value := range headerOverride {
 		targetHeader.Set(key, value)
 	}
+	identityRequest, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, fullRequestURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	identityRequest.Header = targetHeader
+	if err := service.ValidateGatewayHTTPIdentity(c, info, identityRequest, expectedHeaders, headerOverride); err != nil {
+		return nil, err
+	}
 	targetHeader.Set("Content-Type", c.Request.Header.Get("Content-Type"))
+	if err := info.PrepareUpstreamSend(requestBody); err != nil {
+		return nil, err
+	}
 	targetConn, _, err := websocket.DefaultDialer.DialContext(c.Request.Context(), fullRequestURL, targetHeader)
 	if err != nil {
 		return nil, fmt.Errorf("dial failed to %s: %w", common.SanitizeURLForLog(fullRequestURL), err)
@@ -400,81 +425,6 @@ func DoWssRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	//all, err := io.ReadAll(requestBody)
 	//err = service.WssString(c, targetConn, string(all))
 	return targetConn, nil
-}
-
-func startPingKeepAlive(c *gin.Context, pingInterval time.Duration) (context.CancelFunc, <-chan struct{}) {
-	pingerCtx, stopPinger := context.WithCancel(context.Background())
-	done := make(chan struct{})
-
-	gopool.Go(func() {
-		defer close(done)
-		defer func() {
-			// 增加panic恢复处理
-			if r := recover(); r != nil {
-				logger.LogDebug(c, "SSE ping goroutine panic recovered: %v", r)
-			}
-			logger.LogDebug(c, "SSE ping goroutine stopped")
-		}()
-
-		if pingInterval <= 0 {
-			pingInterval = helper.DefaultPingInterval
-		}
-
-		ticker := time.NewTicker(pingInterval)
-		// 确保在任何情况下都清理ticker
-		defer func() {
-			ticker.Stop()
-			logger.LogDebug(c, "SSE ping ticker stopped")
-		}()
-
-		var pingMutex sync.Mutex
-		logger.LogDebug(c, "SSE ping goroutine started")
-
-		// 增加超时控制，防止goroutine长时间运行
-		maxPingDuration := 120 * time.Minute // 最大ping持续时间
-		pingTimeout := time.NewTimer(maxPingDuration)
-		defer pingTimeout.Stop()
-
-		for {
-			select {
-			// 发送 ping 数据
-			case <-ticker.C:
-				if err := sendPingData(c, &pingMutex); err != nil {
-					logger.LogDebug(c, "SSE ping error, stopping goroutine: %s", err.Error())
-					return
-				}
-			// 收到退出信号
-			case <-pingerCtx.Done():
-				return
-			// request 结束
-			case <-c.Request.Context().Done():
-				return
-			// 超时保护，防止goroutine无限运行
-			case <-pingTimeout.C:
-				logger.LogDebug(c, "SSE ping goroutine timeout, stopping")
-				return
-			}
-		}
-	})
-
-	return stopPinger, done
-}
-
-func sendPingData(c *gin.Context, mutex *sync.Mutex) error {
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	// Bound the write so a slow client cannot block this goroutine forever;
-	// doRequest's defer waits for the pinger to exit before returning.
-	helper.ExtendWriteDeadline(c)
-	err := helper.PingData(c)
-	if err != nil {
-		logger.LogError(c, "SSE ping error: "+err.Error())
-		return err
-	}
-
-	logger.LogDebug(c, "SSE ping data sent")
-	return nil
 }
 
 func DoRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http.Response, error) {
@@ -509,26 +459,18 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		))
 	}
 
-	var stopPinger context.CancelFunc
-	var pingerDone <-chan struct{}
-	if info.IsStream {
-		helper.SetEventStreamHeaders(c)
-		// 处理流式请求的 ping 保活
-		generalSettings := operation_setting.GetGeneralSetting()
-		if generalSettings.PingIntervalEnabled && !info.DisablePing {
-			pingInterval := time.Duration(generalSettings.PingIntervalSeconds) * time.Second
-			stopPinger, pingerDone = startPingKeepAlive(c, pingInterval)
-			// 使用defer确保在任何情况下都能停止ping goroutine
-			defer func() {
-				if stopPinger != nil {
-					stopPinger()
-					<-pingerDone
-					logger.LogDebug(c, "SSE ping goroutine stopped by defer")
-				}
-			}()
+	// Heartbeats start only after semantic output commits in the stream scanner.
+	var budgetBody io.ReadCloser
+	if info.BeforeSend != nil && req.GetBody != nil {
+		budgetBody, err = req.GetBody()
+		if err != nil {
+			return nil, types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
+		defer budgetBody.Close()
 	}
-
+	if err := info.PrepareUpstreamSend(budgetBody); err != nil {
+		return nil, err
+	}
 	resp, err := relayClient.Do(req)
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())
@@ -537,6 +479,7 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	if resp == nil {
 		return nil, errors.New("resp is nil")
 	}
+	info.UpstreamAccepted = resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices
 	if common2.DebugEnabled {
 		policy := service.NormalizeHTTPTransportPolicy(info.ChannelSetting)
 		logger.LogDebug(c, fmt.Sprintf(

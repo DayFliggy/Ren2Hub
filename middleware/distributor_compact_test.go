@@ -12,8 +12,10 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -32,12 +34,14 @@ func TestDistributeCompactAndNativeResponsesUseUnifiedRouting(t *testing.T) {
 		{"native compaction", "/v1/responses", "gpt-5", `{"model":"gpt-5","context_management":{"compact_threshold":1000},"input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptNone, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			previousDB, previousRedis, previousCache := model.DB, common.RedisEnabled, common.MemoryCacheEnabled
+			previousDB, previousRedis, previousCache, previousRDB := model.DB, common.RedisEnabled, common.MemoryCacheEnabled, common.RDB
+			client := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
 			db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 			require.NoError(t, err)
-			model.DB, common.RedisEnabled, common.MemoryCacheEnabled = db, false, false
+			model.DB, common.RedisEnabled, common.MemoryCacheEnabled, common.RDB = db, true, false, client
 			t.Cleanup(func() {
-				model.DB, common.RedisEnabled, common.MemoryCacheEnabled = previousDB, previousRedis, previousCache
+				model.DB, common.RedisEnabled, common.MemoryCacheEnabled, common.RDB = previousDB, previousRedis, previousCache, previousRDB
+				require.NoError(t, client.Close())
 				sqlDB, err := db.DB()
 				require.NoError(t, err)
 				require.NoError(t, sqlDB.Close())

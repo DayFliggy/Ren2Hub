@@ -39,8 +39,6 @@ var SafetySettingCategories = []string{
 	"HARM_CATEGORY_DANGEROUS_CONTENT",
 }
 
-const ThoughtSignatureBypassValue = "context_engineering_is_the_way_to_go"
-
 const (
 	pro25MinBudget       = 128
 	pro25MaxBudget       = 32768
@@ -48,38 +46,6 @@ const (
 	flash25LiteMinBudget = 512
 	flash25LiteMaxBudget = 24576
 )
-
-func ShouldAttachThoughtSignature(opts *convmeta.Options) bool {
-	return opts != nil && opts.Gemini.FunctionCallThoughtSignatureEnabled
-}
-
-func AttachThoughtSignatureBypass(opts *convmeta.Options, part *dto.GeminiPart) bool {
-	if part == nil || len(part.ThoughtSignature) > 0 || !ShouldAttachThoughtSignature(opts) {
-		return false
-	}
-	part.ThoughtSignature = []byte(strconv.Quote(ThoughtSignatureBypassValue))
-	return true
-}
-
-func AttachFunctionCallThoughtSignature(opts *convmeta.Options, part *dto.GeminiPart) bool {
-	if part == nil || !HasFunctionCallContent(part.FunctionCall) {
-		return false
-	}
-	return AttachThoughtSignatureBypass(opts, part)
-}
-
-func AttachFirstTextThoughtSignature(opts *convmeta.Options, parts []dto.GeminiPart) bool {
-	if !ShouldAttachThoughtSignature(opts) {
-		return false
-	}
-	for i := range parts {
-		if parts[i].Text != "" && len(parts[i].ThoughtSignature) == 0 {
-			parts[i].ThoughtSignature = []byte(strconv.Quote(ThoughtSignatureBypassValue))
-			return true
-		}
-	}
-	return false
-}
 
 func ApplyThinkingConfig(geminiRequest *dto.GeminiChatRequest, info convmeta.Meta, oaiRequest ...dto.GeneralOpenAIRequest) {
 	opts := convmeta.OptionsOf(info)

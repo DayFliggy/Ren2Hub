@@ -34,12 +34,13 @@ type RequestStep struct {
 }
 
 type RequestResult struct {
-	Value     any
-	From      types.RelayFormat
-	To        types.RelayFormat
-	Converter string
-	Quality   RequestConverterQuality
-	Steps     []RequestStep
+	Value       any
+	From        types.RelayFormat
+	To          types.RelayFormat
+	Converter   string
+	Quality     RequestConverterQuality
+	Steps       []RequestStep
+	Diagnostics []types.ConversionDiagnostic
 }
 
 type RequestConverterSpec struct {
@@ -236,7 +237,18 @@ func executeRequestSpec(c context.Context, info convmeta.Meta, from types.RelayF
 }
 
 func executeRequestSteps(c context.Context, info convmeta.Meta, from types.RelayFormat, target types.RelayFormat, request any, converter string, quality RequestConverterQuality, specs []RequestConverterSpec) (*RequestResult, error) {
-	current := request
+	requirements, err := AnalyzeRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	plan, err := PlanConversion(requirements, target, convmeta.OptionsOf(info).EffectiveConversionPolicy())
+	if err != nil {
+		return &RequestResult{From: from, To: target, Diagnostics: plan.Diagnostics}, err
+	}
+	current, err := preparePortableTools(request, target)
+	if err != nil {
+		return nil, err
+	}
 	steps := make([]RequestStep, 0, len(specs))
 	for _, spec := range specs {
 		var err error
@@ -260,13 +272,17 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 	if converter == "" {
 		converter = strings.Join(converters, ",")
 	}
+	if err := attachPortableSearch(current, requirements); err != nil {
+		return nil, err
+	}
 	return &RequestResult{
-		Value:     current,
-		From:      from,
-		To:        target,
-		Converter: converter,
-		Quality:   quality,
-		Steps:     steps,
+		Value:       current,
+		From:        from,
+		To:          target,
+		Converter:   converter,
+		Quality:     quality,
+		Steps:       steps,
+		Diagnostics: plan.Diagnostics,
 	}, nil
 }
 

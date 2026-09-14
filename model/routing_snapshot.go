@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var ErrCapabilitySnapshotConflict = errors.New("channel capability snapshot version conflict")
@@ -63,24 +64,15 @@ func PublishChannelCapabilitySnapshot(ctx context.Context, channelID int, expect
 	}
 
 	return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var current ChannelCapabilitySnapshot
-		err := lockForUpdate(tx).Where("channel_id = ?", channelID).First(&current).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if expected != (ChannelCapabilitySnapshotFence{}) {
-				return ErrCapabilitySnapshotConflict
-			}
-			current = ChannelCapabilitySnapshot{
-				ChannelID:     channelID,
-				ActiveVersion: 0,
-				RefreshStatus: RouteCapabilityRefreshBuilding,
-			}
-			if err := tx.Create(&current).Error; err != nil {
-				return ErrCapabilitySnapshotConflict
-			}
-		} else if err != nil {
+		current, err := lockChannelCapabilitySnapshot(tx, channelID, expected)
+		if err != nil {
 			return err
 		}
 
+		if current.ActiveVersion > 0 && current.RefreshStatus == RouteCapabilityRefreshActive &&
+			current.SourceHash == sourceHash && current.CatalogVersion == catalogVersion {
+			return nil
+		}
 		if !expected.matches(current) {
 			return ErrCapabilitySnapshotConflict
 		}
@@ -136,20 +128,8 @@ func MarkChannelCapabilityRefreshFailure(channelID int, expected ChannelCapabili
 		return errors.New("capability snapshot database is unavailable")
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
-		var current ChannelCapabilitySnapshot
-		err := lockForUpdate(tx).Where("channel_id = ?", channelID).First(&current).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if expected != (ChannelCapabilitySnapshotFence{}) {
-				return ErrCapabilitySnapshotConflict
-			}
-			current = ChannelCapabilitySnapshot{
-				ChannelID:     channelID,
-				RefreshStatus: RouteCapabilityRefreshBuilding,
-			}
-			if err := tx.Create(&current).Error; err != nil {
-				return ErrCapabilitySnapshotConflict
-			}
-		} else if err != nil {
+		current, err := lockChannelCapabilitySnapshot(tx, channelID, expected)
+		if err != nil {
 			return err
 		}
 		if !expected.matches(current) {
@@ -181,6 +161,23 @@ func MarkChannelCapabilityRefreshFailure(channelID int, expected ChannelCapabili
 		}
 		return nil
 	})
+}
+
+func lockChannelCapabilitySnapshot(tx *gorm.DB, channelID int, expected ChannelCapabilitySnapshotFence) (ChannelCapabilitySnapshot, error) {
+	if expected == (ChannelCapabilitySnapshotFence{}) {
+		// Establish the unique row before reading it. Concurrent first publishers
+		// then serialize on that row instead of racing a missing-row read/insert.
+		initial := ChannelCapabilitySnapshot{ChannelID: channelID, RefreshStatus: RouteCapabilityRefreshBuilding}
+		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "channel_id"}}, DoNothing: true}).Create(&initial).Error; err != nil {
+			return ChannelCapabilitySnapshot{}, err
+		}
+	}
+	var current ChannelCapabilitySnapshot
+	err := lockForUpdate(tx).Where("channel_id = ?", channelID).First(&current).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = ErrCapabilitySnapshotConflict
+	}
+	return current, err
 }
 
 // GetChannelCapabilitySnapshotFence returns the active tuple a refresher must

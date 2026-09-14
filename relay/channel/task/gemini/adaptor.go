@@ -1,7 +1,7 @@
 package gemini
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
@@ -20,7 +19,6 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
 )
 
 // ============================
@@ -42,7 +40,7 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *taskdto.TaskError) {
-	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionTextGenerate)
+	return ValidateVeoRequest(c, info)
 }
 
 // BuildRequestURL constructs the Gemini API predictLongRunning endpoint for Veo.
@@ -68,51 +66,7 @@ func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info
 
 // BuildRequestBody converts request into the Veo predictLongRunning format.
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
-	v, ok := c.Get("task_request")
-	if !ok {
-		return nil, fmt.Errorf("request not found in context")
-	}
-	req, ok := v.(relaycommon.TaskSubmitReq)
-	if !ok {
-		return nil, fmt.Errorf("unexpected task_request type")
-	}
-
-	instance := VeoInstance{Prompt: req.Prompt}
-	if img := ExtractMultipartImage(c, info); img != nil {
-		instance.Image = img
-	} else if len(req.Images) > 0 {
-		if parsed := ParseImageInput(req.Images[0]); parsed != nil {
-			instance.Image = parsed
-			info.Action = constant.TaskActionGenerate
-		}
-	}
-
-	params := &VeoParameters{}
-	if err := taskcommon.UnmarshalMetadata(req.Metadata, params); err != nil {
-		return nil, errors.Wrap(err, "unmarshal metadata failed")
-	}
-	if params.DurationSeconds == 0 && req.Duration > 0 {
-		params.DurationSeconds = req.Duration
-	}
-	if params.Resolution == "" && req.Size != "" {
-		params.Resolution = SizeToVeoResolution(req.Size)
-	}
-	if params.AspectRatio == "" && req.Size != "" {
-		params.AspectRatio = SizeToVeoAspectRatio(req.Size)
-	}
-	params.Resolution = strings.ToLower(params.Resolution)
-	params.SampleCount = 1
-
-	body := VeoRequestPayload{
-		Instances:  []VeoInstance{instance},
-		Parameters: params,
-	}
-
-	data, err := common.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	return bytes.NewReader(data), nil
+	return BuildVeoRequestBody(c)
 }
 
 // DoRequest delegates to common helper.
@@ -121,19 +75,19 @@ func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, req
 }
 
 // DoResponse handles upstream response, returns taskID etc.
-func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (taskID string, taskData []byte, taskErr *taskdto.TaskError) {
+func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (taskID string, taskData []byte, clientResponse any, taskErr *taskdto.TaskError) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+		return "", nil, nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
 	}
 	_ = resp.Body.Close()
 
 	var s submitResponse
 	if err := common.Unmarshal(responseBody, &s); err != nil {
-		return "", nil, service.TaskErrorWrapper(err, "unmarshal_response_failed", http.StatusInternalServerError)
+		return "", nil, nil, service.TaskErrorWrapper(err, "unmarshal_response_failed", http.StatusInternalServerError)
 	}
 	if strings.TrimSpace(s.Name) == "" {
-		return "", nil, service.TaskErrorWrapper(fmt.Errorf("missing operation name"), "invalid_response", http.StatusInternalServerError)
+		return "", nil, nil, service.TaskErrorWrapper(fmt.Errorf("missing operation name"), "invalid_response", http.StatusInternalServerError)
 	}
 	taskID = taskcommon.EncodeLocalTaskID(s.Name)
 	ov := dto.NewOpenAIVideo()
@@ -141,8 +95,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	ov.TaskID = info.PublicTaskID
 	ov.CreatedAt = time.Now().Unix()
 	ov.Model = info.OriginModelName
-	c.JSON(http.StatusOK, ov)
-	return taskID, responseBody, nil
+	return taskID, responseBody, ov, nil
 }
 
 func (a *TaskAdaptor) GetModelList() []string {
@@ -160,27 +113,15 @@ func (a *TaskAdaptor) GetChannelName() string {
 
 // EstimateBilling returns OtherRatios based on durationSeconds and resolution.
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
-	v, ok := c.Get("task_request")
-	if !ok {
-		return nil
-	}
-	req, ok := v.(relaycommon.TaskSubmitReq)
-	if !ok {
-		return nil
-	}
-
-	seconds := ResolveVeoDuration(req.Metadata, req.Duration, req.Seconds)
-	resolution := ResolveVeoResolution(req.Metadata, req.Size)
-	resRatio := VeoResolutionRatio(info.UpstreamModelName, resolution)
-
-	return map[string]float64{
-		"seconds":    float64(seconds),
-		"resolution": resRatio,
-	}
+	return EstimateVeoBilling(c, info)
 }
 
 // FetchTask polls task status via the Gemini operations GET endpoint.
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
+	return a.FetchTaskWithContext(context.Background(), baseUrl, key, body, proxy)
+}
+
+func (a *TaskAdaptor) FetchTaskWithContext(ctx context.Context, baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
 	taskID, ok := body["task_id"].(string)
 	if !ok {
 		return nil, fmt.Errorf("invalid task_id")
@@ -194,7 +135,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	version := model_setting.GetGeminiVersionSetting("default")
 	url := fmt.Sprintf("%s/%s/%s", baseUrl, version, upstreamName)
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -216,6 +157,9 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	}
 
 	ti := &relaycommon.TaskInfo{}
+	if op.Name != "" {
+		ti.TaskID = taskcommon.EncodeLocalTaskID(op.Name)
+	}
 
 	if op.Error.Message != "" {
 		ti.Status = model.TaskStatusFailure
@@ -232,8 +176,6 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 
 	ti.Status = model.TaskStatusSuccess
 	ti.Progress = "100%"
-
-	ti.TaskID = taskcommon.EncodeLocalTaskID(op.Name)
 
 	if len(op.Response.GenerateVideoResponse.GeneratedVideos) > 0 {
 		if uri := op.Response.GenerateVideoResponse.GeneratedVideos[0].Video.URI; uri != "" {

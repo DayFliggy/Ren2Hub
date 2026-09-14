@@ -37,10 +37,10 @@ func OpenAIResponsesRequestToClaudeMessages(c context.Context, info convmeta.Met
 		TopP:        req.TopP,
 		Stream:      req.Stream,
 	}
-	if req.MaxOutputTokens != nil && *req.MaxOutputTokens > 0 {
+	if req.MaxOutputTokens != nil {
 		claudeRequest.MaxTokens = kitutil.GetPointer(*req.MaxOutputTokens)
 	}
-	if claudeRequest.MaxTokens == nil || *claudeRequest.MaxTokens == 0 {
+	if claudeRequest.MaxTokens == nil {
 		if defaultMaxTokens, configured := convmeta.OptionsOf(info).Claude.DefaultMaxTokensFor(req.Model); configured {
 			value := uint(defaultMaxTokens)
 			claudeRequest.MaxTokens = &value
@@ -132,6 +132,7 @@ func responsesFunctionDeclarationsToClaudeTools(functions []dto.FunctionRequest)
 	tools := make([]any, 0, len(functions))
 	for _, function := range functions {
 		tools = append(tools, &dto.Tool{
+			Strict:      function.Strict,
 			Name:        function.Name,
 			Description: function.Description,
 			InputSchema: responsesFunctionParametersToClaudeInputSchema(function.Parameters),

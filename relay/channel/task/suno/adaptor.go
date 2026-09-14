@@ -38,8 +38,7 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
 	action := strings.ToUpper(c.Param("action"))
 
-	var sunoRequest *dto.SunoSubmitReq
-	err := common.UnmarshalBodyReusable(c, &sunoRequest)
+	sunoRequest, err := ParseRequest(c)
 	if err != nil {
 		taskErr = service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 		return
@@ -50,17 +49,35 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		return
 	}
 
-	//if sunoRequest.ContinueClipId != "" {
-	//	if sunoRequest.TaskID == "" {
-	//		taskErr = service.TaskErrorWrapperLocal(fmt.Errorf("task id is empty"), "invalid_request", http.StatusBadRequest)
-	//		return
-	//	}
-	//	info.OriginTaskID = sunoRequest.TaskID
-	//}
-
 	info.Action = action
-	c.Set("task_request", sunoRequest)
 	return nil
+}
+
+// ParseRequest keeps one validated DTO for pre-routing ownership checks and
+// upstream submission. The original public task ID remains unchanged here.
+func ParseRequest(c *gin.Context) (*dto.SunoSubmitReq, error) {
+	if value, exists := c.Get("task_request"); exists {
+		if request, ok := value.(*dto.SunoSubmitReq); ok && request != nil {
+			return request, nil
+		}
+	}
+	var request *dto.SunoSubmitReq
+	if err := common.UnmarshalBodyReusable(c, &request); err != nil {
+		return nil, err
+	}
+	if request == nil {
+		return nil, fmt.Errorf("request body must be an object")
+	}
+	if request.TaskID != "" || request.ContinueClipId != "" {
+		if strings.TrimSpace(request.TaskID) == "" || strings.TrimSpace(request.ContinueClipId) == "" {
+			return nil, fmt.Errorf("task_id and continue_clip_id are required together")
+		}
+		if !strings.EqualFold(c.Param("action"), constant.SunoActionMusic) {
+			return nil, fmt.Errorf("continuation requires the music action")
+		}
+	}
+	c.Set("task_request", request)
+	return request, nil
 }
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
@@ -77,11 +94,18 @@ func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info
 }
 
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
-	sunoRequest, ok := c.Get("task_request")
-	if !ok {
-		return nil, fmt.Errorf("task_request not found in context")
+	sunoRequest, err := ParseRequest(c)
+	if err != nil {
+		return nil, err
 	}
-	data, err := common.Marshal(sunoRequest)
+	request := *sunoRequest
+	if request.ContinueClipId != "" {
+		if info.OriginTaskID == "" || info.LockedChannel == nil {
+			return nil, fmt.Errorf("continuation task ownership was not resolved")
+		}
+		request.TaskID = info.OriginTaskID
+	}
+	data, err := common.Marshal(request)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +116,7 @@ func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, req
 	return channel.DoTaskApiRequest(a, c, info, requestBody)
 }
 
-func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (taskID string, taskData []byte, taskErr *dto.TaskError) {
+func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (taskID string, taskData []byte, clientResponse any, taskErr *dto.TaskError) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		taskErr = service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
@@ -115,9 +139,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		Message: sunoResponse.Message,
 		Data:    info.PublicTaskID,
 	}
-	c.JSON(http.StatusOK, publicResponse)
-
-	return sunoResponse.Data, nil, nil
+	return sunoResponse.Data, responseBody, publicResponse, nil
 }
 
 func (a *TaskAdaptor) GetModelList() []string {

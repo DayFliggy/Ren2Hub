@@ -37,14 +37,14 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
-	// 解析extra到SFImageRequest里，以填入SiliconFlow特殊字段。若失败重建一个空的。
+	// Provider extensions are validated, never silently dropped on parse failure.
 	sfRequest := &SFImageRequest{}
 	extra, err := common.Marshal(request.Extra)
-	if err == nil {
-		err = common.Unmarshal(extra, sfRequest)
-		if err != nil {
-			sfRequest = &SFImageRequest{}
-		}
+	if err != nil {
+		return nil, err
+	}
+	if err := common.Unmarshal(extra, sfRequest); err != nil {
+		return nil, fmt.Errorf("invalid image provider fields: %w", err)
 	}
 
 	sfRequest.Model = request.Model

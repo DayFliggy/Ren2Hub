@@ -134,6 +134,9 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
+	if err := relaycommon.ApplyChannelSystemPrompt(c, info, request); err != nil {
+		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	}
 
 	adaptor := GetAdaptor(info.ApiType)
 	if adaptor == nil {
@@ -145,11 +148,12 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	// Compact must always marshal the selected attempt model. Raw pass-through
 	// would keep the client's base model and defeat exact-model dispatch.
 	if passThroughBody && info.RelayMode != relayconstant.RelayModeResponsesCompact {
-		storage, err := common.GetBodyStorage(c)
+		body, closer, err := relaycommon.NativeRequestBody(c, info, request)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
-		requestBody = common.NewReplayableBodyReader(storage)
+		defer closer.Close()
+		requestBody = body
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
 		if err != nil {
@@ -217,6 +221,9 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	}
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	if observed, ok := usage.(*dto.Usage); ok {
+		info.CaptureResponseUsage(observed, "text", nil)
+	}
 	if newAPIError != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
@@ -225,14 +232,14 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 
 	usageDto := usage.(*dto.Usage)
 	if info.RelayMode == relayconstant.RelayModeResponsesCompact {
-		service.PostTextConsumeQuota(c, info, usageDto, nil)
+		info.CaptureResponseUsage(usageDto, "text", nil)
 		return nil
 	}
 
 	if strings.HasPrefix(info.OriginModelName, "gpt-4o-audio") {
-		service.PostAudioConsumeQuota(c, info, usageDto, "")
+		info.CaptureResponseUsage(usageDto, "audio", nil)
 	} else {
-		service.PostTextConsumeQuota(c, info, usageDto, nil)
+		info.CaptureResponseUsage(usageDto, "text", nil)
 	}
 	return nil
 }

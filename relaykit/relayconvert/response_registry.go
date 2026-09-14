@@ -86,6 +86,7 @@ type ResponseStreamState struct {
 	specs      []ResponseConverterSpec
 	stepStates []any
 	usage      *dto.Usage
+	finalized  bool
 }
 
 const (
@@ -302,6 +303,9 @@ func ConvertStreamResponseChunk(c context.Context, info convmeta.Meta, state *Re
 	if state == nil {
 		return nil, errors.New("response stream state is required")
 	}
+	if state.finalized {
+		return nil, errors.New("response stream is already finalized")
+	}
 	from, err := inferResponseRelayFormat(response)
 	if err != nil {
 		return nil, err
@@ -324,9 +328,17 @@ func ConvertStreamResponseChunk(c context.Context, info convmeta.Meta, state *Re
 }
 
 func FinalizeStreamResponse(c context.Context, info convmeta.Meta, state *ResponseStreamState) ([]ResponseResult, error) {
+	return FinalizeStreamResponseWithOutcome(c, info, state, StreamOutcomeCompleted)
+}
+
+func finalizeStreamResponse(c context.Context, info convmeta.Meta, state *ResponseStreamState) ([]ResponseResult, error) {
 	if state == nil {
 		return nil, errors.New("response stream state is required")
 	}
+	if state.finalized {
+		return nil, nil
+	}
+	state.finalized = true
 	if state.From == state.To {
 		return nil, nil
 	}
@@ -892,6 +904,9 @@ func convertOAIChatResponseToClaudeMessages(_ context.Context, info convmeta.Met
 	if err != nil {
 		return nil, nil, err
 	}
+	if len(chatResponse.Choices) > 1 || (len(chatResponse.Choices) == 1 && chatResponse.Choices[0].Index != 0) {
+		return nil, nil, errors.New("Claude response conversion cannot represent multiple choices")
+	}
 	return ResponseOpenAI2Claude(chatResponse, info), UsageFromChatUsage(&chatResponse.Usage), nil
 }
 
@@ -899,6 +914,9 @@ func convertOAIChatStreamResponseToClaudeMessages(_ context.Context, info convme
 	chatResponse, err := asOAIChatStreamResponse(response)
 	if err != nil {
 		return nil, nil, err
+	}
+	if len(chatResponse.Choices) > 1 || (len(chatResponse.Choices) == 1 && chatResponse.Choices[0].Index != 0) {
+		return nil, nil, errors.New("Claude stream conversion cannot represent multiple choices")
 	}
 	return StreamResponseOpenAI2Claude(chatResponse, info), canonicalUsageFromResponse(chatResponse), nil
 }
@@ -925,7 +943,42 @@ func convertOAIChatStreamResponseToGeminiChat(_ context.Context, info convmeta.M
 	if err != nil {
 		return nil, nil, err
 	}
-	return StreamResponseOpenAI2Gemini(chatResponse, info), canonicalUsageFromResponse(chatResponse), nil
+	state := oaichat.GeminiStreamState(info)
+	converted := oaichat.StreamResponseOpenAI2GeminiWithState(chatResponse, info, state)
+	return converted, canonicalUsageFromResponse(chatResponse), state.Err
+}
+
+func newOAIChatToGeminiStreamState(_ ResponseStreamOptions) any {
+	return &convmeta.GeminiConvertInfo{}
+}
+
+func convertOAIChatStreamChunkToGeminiChat(_ context.Context, info convmeta.Meta, response any, state any) ([]any, *dto.Usage, error) {
+	chatResponse, err := asOAIChatStreamResponse(response)
+	if err != nil {
+		return nil, nil, err
+	}
+	streamState, ok := state.(*convmeta.GeminiConvertInfo)
+	if !ok || streamState == nil {
+		return nil, nil, errors.New("OpenAI chat to Gemini stream state is required")
+	}
+	converted := oaichat.StreamResponseOpenAI2GeminiWithState(chatResponse, info, streamState)
+	return streamValuesFromAny(converted), canonicalUsageFromResponse(chatResponse), streamState.Err
+}
+
+func finalizeOAIChatStreamResponseToGeminiChat(_ context.Context, _ convmeta.Meta, state any) ([]any, *dto.Usage, error) {
+	streamState, ok := state.(*convmeta.GeminiConvertInfo)
+	if !ok || streamState == nil {
+		return nil, nil, errors.New("OpenAI chat to Gemini stream state is required")
+	}
+	if streamState.Err != nil {
+		return nil, nil, streamState.Err
+	}
+	for key, tool := range streamState.Tools {
+		if !tool.Emitted {
+			return nil, nil, fmt.Errorf("incomplete streamed tool call at choice %d index %d", key[0], key[1])
+		}
+	}
+	return nil, nil, nil
 }
 
 func convertClaudeMessagesResponseToOAIChat(_ context.Context, _ convmeta.Meta, response any) (any, *dto.Usage, error) {

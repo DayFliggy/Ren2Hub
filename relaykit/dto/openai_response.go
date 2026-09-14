@@ -123,7 +123,7 @@ type ToolCallResponse struct {
 	// Index is not nil only in chat completion chunk object
 	Index    *int             `json:"index,omitempty"`
 	ID       string           `json:"id,omitempty"`
-	Type     any              `json:"type"`
+	Type     any              `json:"type,omitempty"`
 	Function FunctionResponse `json:"function"`
 }
 
@@ -325,17 +325,18 @@ type IncompleteDetails struct {
 }
 
 type ResponsesOutput struct {
-	Type      string                   `json:"type"`
-	ID        string                   `json:"id"`
-	Status    string                   `json:"status"`
-	Role      string                   `json:"role"`
-	Content   []ResponsesOutputContent `json:"content"`
-	Quality   string                   `json:"quality"`
-	Size      string                   `json:"size"`
-	Result    string                   `json:"result,omitempty"`
-	CallId    string                   `json:"call_id,omitempty"`
-	Name      string                   `json:"name,omitempty"`
-	Arguments json.RawMessage          `json:"arguments,omitempty"`
+	Type      string                          `json:"type"`
+	ID        string                          `json:"id"`
+	Status    string                          `json:"status"`
+	Role      string                          `json:"role"`
+	Content   []ResponsesOutputContent        `json:"content"`
+	Summary   []ResponsesReasoningSummaryPart `json:"summary,omitempty"`
+	Quality   string                          `json:"quality"`
+	Size      string                          `json:"size"`
+	Result    string                          `json:"result,omitempty"`
+	CallId    string                          `json:"call_id,omitempty"`
+	Name      string                          `json:"name,omitempty"`
+	Arguments json.RawMessage                 `json:"arguments,omitempty"`
 }
 
 // ArgumentsString returns function call arguments in the string form expected by Chat Completions.
@@ -358,8 +359,9 @@ type ResponsesOutputContent struct {
 }
 
 type ResponsesReasoningSummaryPart struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type        string `json:"type"`
+	Text        string `json:"text"`
+	Annotations *[]any `json:"annotations,omitempty"`
 }
 
 const (
@@ -384,10 +386,16 @@ const (
 
 // ResponsesStreamResponse 用于处理 /v1/responses 流式响应
 type ResponsesStreamResponse struct {
-	Type     string                   `json:"type"`
-	Response *OpenAIResponsesResponse `json:"response,omitempty"`
-	Delta    string                   `json:"delta,omitempty"`
-	Item     *ResponsesOutput         `json:"item,omitempty"`
+	Type           string                   `json:"type"`
+	Response       *OpenAIResponsesResponse `json:"response,omitempty"`
+	Delta          string                   `json:"delta,omitempty"`
+	Item           *ResponsesOutput         `json:"item,omitempty"`
+	SequenceNumber *int                     `json:"sequence_number,omitempty"`
+	Text           *string                  `json:"text,omitempty"`
+	Arguments      *string                  `json:"arguments,omitempty"`
+	Name           string                   `json:"name,omitempty"`
+	Code           string                   `json:"code,omitempty"`
+	Message        string                   `json:"message,omitempty"`
 	// - response.function_call_arguments.delta
 	// - response.function_call_arguments.done
 	OutputIndex  *int                           `json:"output_index,omitempty"`

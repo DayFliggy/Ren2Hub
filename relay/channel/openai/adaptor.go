@@ -27,6 +27,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/common_handler"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -122,13 +123,12 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		}
 		// https://learn.microsoft.com/en-us/azure/cognitive-services/openai/chatgpt-quickstart?pivots=rest-api&tabs=command-line#rest-api
 		requestURL := strings.Split(info.RequestURLPath, "?")[0]
+		if (info.RelayFormat == types.RelayFormatClaude || info.RelayFormat == types.RelayFormatGemini) &&
+			info.RelayMode != relayconstant.RelayModeResponses && info.RelayMode != relayconstant.RelayModeResponsesCompact {
+			requestURL = "/v1/chat/completions"
+		}
 		requestURL = fmt.Sprintf("%s?api-version=%s", requestURL, apiVersion)
 		task := strings.TrimPrefix(requestURL, "/v1/")
-
-		if info.RelayFormat == types.RelayFormatClaude {
-			task = strings.TrimPrefix(task, "messages")
-			task = "chat/completions" + task
-		}
 
 		// 特殊处理 responses API（包含 compact）
 		if info.RelayMode == relayconstant.RelayModeResponses || info.RelayMode == relayconstant.RelayModeResponsesCompact {
@@ -189,17 +189,6 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, header *http.Header, info *
 	if info.ChannelType == constant.ChannelTypeOpenAI && "" != info.Organization {
 		header.Set("OpenAI-Organization", info.Organization)
 	}
-	// 检查 Header Override 是否已设置 Authorization，如果已设置则跳过默认设置
-	// 这样可以避免在 Header Override 应用时被覆盖（虽然 Header Override 会在之后应用，但这里作为额外保护）
-	hasAuthOverride := false
-	if len(info.HeadersOverride) > 0 {
-		for k := range info.HeadersOverride {
-			if strings.EqualFold(k, "Authorization") {
-				hasAuthOverride = true
-				break
-			}
-		}
-	}
 	if info.RelayMode == relayconstant.RelayModeRealtime {
 		// OpenAI 已下线 Realtime Beta API,GA 模型收到 beta 标识会以 beta_api_shape_disabled 拒绝;
 		// 仅对遗留 preview 模型保留 beta 标识
@@ -221,14 +210,10 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, header *http.Header, info *
 			if legacyRealtimeBeta {
 				header.Set("openai-beta", "realtime=v1")
 			}
-			if !hasAuthOverride {
-				header.Set("Authorization", "Bearer "+info.ApiKey)
-			}
-		}
-	} else {
-		if !hasAuthOverride {
 			header.Set("Authorization", "Bearer "+info.ApiKey)
 		}
+	} else {
+		header.Set("Authorization", "Bearer "+info.ApiKey)
 	}
 	if info.ChannelType == constant.ChannelTypeOpenRouter {
 		if header.Get("HTTP-Referer") == "" {
@@ -638,6 +623,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 		err, usage = OpenaiRealtimeHandler(c, info)
 	case relayconstant.RelayModeAudioSpeech:
 		usage = OpenaiTTSHandler(c, resp, info)
+		err = helper.StreamError(info)
 	case relayconstant.RelayModeAudioTranslation:
 		fallthrough
 	case relayconstant.RelayModeAudioTranscription:

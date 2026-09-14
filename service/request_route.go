@@ -79,6 +79,46 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 	if err != nil {
 		return selection, err
 	}
+	channelIDs := make([]int, 0)
+	seenChannels := make(map[int]bool)
+	for _, lookupModel := range models {
+		for _, indexed := range index.ByRequestModel[lookupModel] {
+			channelID := indexed.Capability.ChannelID
+			if input.SpecificChannelID > 0 && channelID != input.SpecificChannelID {
+				continue
+			}
+			if _, manual := entries[channelID]; selection.Source == RouteSourceManual && !manual {
+				continue
+			}
+			if !seenChannels[channelID] {
+				seenChannels[channelID] = true
+				channelIDs = append(channelIDs, channelID)
+			}
+		}
+	}
+	var channelRows []model.Channel
+	if len(channelIDs) > 0 {
+		if err := model.DB.WithContext(input.Context).Where("id IN ?", channelIDs).Find(&channelRows).Error; err != nil {
+			return selection, err
+		}
+	}
+	channels := make(map[int]*model.Channel, len(channelRows))
+	for row := range channelRows {
+		channels[channelRows[row].Id] = &channelRows[row]
+	}
+	compactAbilities := make(map[int]map[string]bool)
+	if input.CompactStage != relaycommon.CompactAttemptNone && len(channelIDs) > 0 {
+		var abilities []model.Ability
+		if err := model.DB.WithContext(input.Context).Where("channel_id IN ? AND enabled = ?", channelIDs, true).Find(&abilities).Error; err != nil {
+			return selection, err
+		}
+		for _, ability := range abilities {
+			if compactAbilities[ability.ChannelId] == nil {
+				compactAbilities[ability.ChannelId] = make(map[string]bool)
+			}
+			compactAbilities[ability.ChannelId][ability.Model] = true
+		}
+	}
 	candidates := make([]RouteSelectionCandidate, 0)
 	byChannel := make(map[int]int)
 	for _, lookupModel := range models {
@@ -94,12 +134,9 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			if previous, exists := byChannel[capability.ChannelID]; exists && candidates[previous].FilterReason == "" {
 				continue
 			}
-			channel, err := model.GetChannelById(capability.ChannelID, true)
-			if err != nil {
-				if errors.Is(err, gorm.ErrRecordNotFound) {
-					continue
-				}
-				return selection, err
+			channel := channels[capability.ChannelID]
+			if channel == nil {
+				continue
 			}
 			entitled, exists := entitlements[channel.Id]
 			if !exists {
@@ -133,15 +170,7 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			}
 			if input.CompactStage != relaycommon.CompactAttemptNone {
 				base := ratio_setting.CompactBaseModelName(input.RequestModel)
-				abilities := make(map[string]bool)
-				var rows []model.Ability
-				if err := model.DB.WithContext(input.Context).Where(&model.Ability{ChannelId: channel.Id, Enabled: true}).Find(&rows).Error; err != nil {
-					return selection, err
-				}
-				for _, row := range rows {
-					abilities[row.Model] = true
-				}
-				if !compactChannelSupportsStage(channel, abilities, base, ratio_setting.WithCompactModelSuffix(base), input.CompactStage) {
+				if !compactChannelSupportsStage(channel, compactAbilities[channel.Id], base, ratio_setting.WithCompactModelSuffix(base), input.CompactStage) {
 					candidate.FilterReason = RouteFilterPathUnsupported
 				}
 			}
@@ -165,12 +194,12 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			}
 		}
 	}
-	if err := applyLiveHealth(input.Context, candidates); err != nil {
+	if err := applyLiveHealth(input.Context, candidates, channels, input.ExcludedKeyIndexes); err != nil {
 		return selection, err
 	}
 	result, err := SelectTokenRoute(RouteSelectionInput{
 		SourceInput: sourceInput, ManualGroupEnabled: manualEnabled, ManualLoadBalance: loadBalance,
-		ManualCandidates: candidates, AutoCandidates: candidates, TopK: 3,
+		ManualCandidates: candidates, AutoCandidates: candidates, TopK: MaxRouteCandidateChannels,
 		ConfigurationVersion: profile.Version, RequestID: input.RequestID, RequestModel: input.RequestModel,
 		DynamicScoringEnabled: selection.Source == RouteSourceAutoLab,
 	})

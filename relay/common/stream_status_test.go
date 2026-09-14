@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestStreamStatus_SetEndReason_FirstWins(t *testing.T) {
+func TestStreamStatus_SetEndReason_FailureOverridesCompletion(t *testing.T) {
 	t.Parallel()
 	s := NewStreamStatus()
 
@@ -16,8 +16,8 @@ func TestStreamStatus_SetEndReason_FirstWins(t *testing.T) {
 	s.SetEndReason(StreamEndReasonTimeout, nil)
 	s.SetEndReason(StreamEndReasonClientGone, fmt.Errorf("context canceled"))
 
-	assert.Equal(t, StreamEndReasonDone, s.EndReason)
-	assert.Nil(t, s.EndError)
+	assert.Equal(t, StreamEndReasonClientGone, s.EndReason)
+	assert.Error(t, s.EndError)
 }
 
 func TestStreamStatus_SetEndReason_WithError(t *testing.T) {
@@ -135,8 +135,8 @@ func TestStreamStatus_IsNormalEnd(t *testing.T) {
 		normal bool
 	}{
 		{StreamEndReasonDone, true},
-		{StreamEndReasonEOF, true},
-		{StreamEndReasonHandlerStop, true},
+		{StreamEndReasonEOF, false},
+		{StreamEndReasonHandlerStop, false},
 		{StreamEndReasonTimeout, false},
 		{StreamEndReasonClientGone, false},
 		{StreamEndReasonScannerErr, false},

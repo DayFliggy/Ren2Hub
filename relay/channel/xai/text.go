@@ -67,11 +67,14 @@ func xAIStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		}
 	})
 
-	if !containStreamUsage {
+	if !containStreamUsage && (responseTextBuilder.Len() > 0 || toolCount > 0 || helper.StreamError(info) == nil) {
 		usage = service.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
 		usage.CompletionTokens += toolCount * 7
 	}
 
+	if streamErr := helper.StreamError(info); streamErr != nil {
+		return usage, streamErr
+	}
 	helper.Done(c)
 	service.CloseResponseBodyGracefully(resp)
 	return usage, nil

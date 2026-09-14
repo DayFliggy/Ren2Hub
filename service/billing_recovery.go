@@ -107,8 +107,22 @@ func recoverOneBillingRecovery(ctx context.Context, requestID string) (string, e
 	switch recovery.Status {
 	case model.BillingRecoveryStatusSettlementPending:
 		return recoverBillingSettlement(recovery)
-	case model.BillingRecoveryStatusActive, model.BillingRecoveryStatusRefundPending:
+	case model.BillingRecoveryStatusActive:
+		if recovery.ConsumptionState == model.BillingRecoveryStateCollecting {
+			var consumption model.BillingConsumption
+			if err := common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &consumption); err != nil {
+				return recovery.Status, err
+			}
+			if err := model.PrepareBillingRecoveryConsumption(recovery.RequestID, consumption); err != nil {
+				return recovery.Status, err
+			}
+			return recoverBillingSettlement(recovery)
+		}
 		return recoverBillingRefund(recovery)
+	case model.BillingRecoveryStatusRefundPending:
+		return recoverBillingRefund(recovery)
+	case model.BillingRecoveryStatusSettled:
+		return recovery.Status, model.ApplyBillingRecoveryConsumption(recovery.RequestID)
 	default:
 		return recovery.Status, nil
 	}
@@ -145,7 +159,7 @@ func recoverBillingSettlement(recovery model.BillingRecovery) (string, error) {
 	if err := model.MarkBillingRecoverySettled(current.RequestID); err != nil {
 		return current.Status, err
 	}
-	return model.BillingRecoveryStatusSettled, nil
+	return model.BillingRecoveryStatusSettled, model.ApplyBillingRecoveryConsumption(current.RequestID)
 }
 
 func recoverBillingRefund(recovery model.BillingRecovery) (string, error) {

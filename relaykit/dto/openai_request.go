@@ -142,13 +142,7 @@ func (r *GeneralOpenAIRequest) GetTokenCountMeta() *types.TokenCountMeta {
 		texts = append(texts, inputs...)
 	}
 
-	maxTokens := lo.FromPtrOr(r.MaxTokens, uint(0))
-	maxCompletionTokens := lo.FromPtrOr(r.MaxCompletionTokens, uint(0))
-	if maxCompletionTokens > maxTokens {
-		tokenCountMeta.MaxTokens = int(maxCompletionTokens)
-	} else {
-		tokenCountMeta.MaxTokens = int(maxTokens)
-	}
+	tokenCountMeta.MaxTokens = int(r.GetMaxTokens())
 
 	for _, message := range r.Messages {
 		tokenCountMeta.MessagesCount++
@@ -261,6 +255,7 @@ type ToolCallRequest struct {
 }
 
 type FunctionRequest struct {
+	Strict      *bool  `json:"strict,omitempty"`
 	Description string `json:"description,omitempty"`
 	Name        string `json:"name"`
 	Parameters  any    `json:"parameters,omitempty"`
@@ -275,9 +270,8 @@ type StreamOptions struct {
 }
 
 func (r *GeneralOpenAIRequest) GetMaxTokens() uint {
-	maxCompletionTokens := lo.FromPtrOr(r.MaxCompletionTokens, uint(0))
-	if maxCompletionTokens != 0 {
-		return maxCompletionTokens
+	if r.MaxCompletionTokens != nil {
+		return *r.MaxCompletionTokens
 	}
 	return lo.FromPtrOr(r.MaxTokens, uint(0))
 }
@@ -496,26 +490,16 @@ func (m *Message) SetToolCalls(toolCalls any) {
 }
 
 func (m *Message) StringContent() string {
-	switch m.Content.(type) {
-	case string:
-		return m.Content.(string)
-	case []any:
-		var contentStr string
-		for _, contentItem := range m.Content.([]any) {
-			contentMap, ok := contentItem.(map[string]any)
-			if !ok {
-				continue
-			}
-			if contentMap["type"] == ContentTypeText {
-				if subStr, ok := contentMap["text"].(string); ok {
-					contentStr += subStr
-				}
-			}
-		}
-		return contentStr
+	if content, ok := m.Content.(string); ok {
+		return content
 	}
-
-	return ""
+	var text strings.Builder
+	for _, part := range m.ParseContent() {
+		if part.Type == ContentTypeText {
+			text.WriteString(part.Text)
+		}
+	}
+	return text.String()
 }
 
 func (m *Message) SetNullContent() {
@@ -544,6 +528,9 @@ func (m *Message) IsStringContent() bool {
 func (m *Message) ParseContent() []MediaContent {
 	if m.Content == nil {
 		return nil
+	}
+	if content, ok := m.Content.([]MediaContent); ok {
+		return content
 	}
 	if len(m.parsedContent) > 0 {
 		return m.parsedContent
@@ -596,9 +583,7 @@ func (m *Message) ParseContent() []MediaContent {
 
 		case ContentTypeImageURL:
 			imageUrl := contentItem["image_url"]
-			temp := &MessageImageUrl{
-				Detail: "high",
-			}
+			temp := &MessageImageUrl{}
 			switch v := imageUrl.(type) {
 			case string:
 				temp.Url = v
@@ -943,7 +928,8 @@ func (r OpenAIResponsesRequest) hasInputItemType(wanted string) bool {
 // RequiresNativeResponses reports whether the request uses protocol state
 // that cannot be represented by Chat Completions or other converted APIs.
 func (r OpenAIResponsesRequest) RequiresNativeResponses() bool {
-	return r.HasCompactionTrigger() || r.HasCompactionItem() || rawResponsesJSONPresent(r.ContextManagement)
+	return r.HasCompactionTrigger() || r.HasCompactionItem() || rawResponsesJSONPresent(r.ContextManagement) ||
+		strings.TrimSpace(r.PreviousResponseID) != "" || rawResponsesJSONPresent(r.Conversation) || rawResponsesJSONPresent(r.Prompt)
 }
 
 func rawResponsesJSONPresent(raw json.RawMessage) bool {

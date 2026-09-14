@@ -21,14 +21,13 @@ import (
 type RouteErrorClass string
 
 const (
-	RouteErrorInput         RouteErrorClass = "input"
-	RouteErrorPermission    RouteErrorClass = "permission"
-	RouteErrorKey           RouteErrorClass = "key"
-	RouteErrorTransient     RouteErrorClass = "provider_transient"
-	RouteErrorModel         RouteErrorClass = "model_capability"
-	RouteErrorStreamStarted RouteErrorClass = "stream_started"
-	RouteErrorAdmission     RouteErrorClass = "route_admission"
-	RouteErrorUnknown       RouteErrorClass = "unknown"
+	RouteErrorInput      RouteErrorClass = "input"
+	RouteErrorPermission RouteErrorClass = "permission"
+	RouteErrorKey        RouteErrorClass = "key"
+	RouteErrorTransient  RouteErrorClass = "provider_transient"
+	RouteErrorModel      RouteErrorClass = "model_capability"
+	RouteErrorAdmission  RouteErrorClass = "route_admission"
+	RouteErrorUnknown    RouteErrorClass = "unknown"
 )
 
 type RouteErrorClassification struct {
@@ -44,14 +43,20 @@ type RouteErrorClassification struct {
 // parsing. Status, provider code, and a short message are the only inputs; no
 // request body or credential is ever retained.
 func ClassifyRouteError(status int, providerCode, message string, streamStarted bool) RouteErrorClassification {
-	if streamStarted {
-		return RouteErrorClassification{Class: RouteErrorStreamStarted}
+	if strings.HasPrefix(providerCode, "route_lease") || strings.HasPrefix(providerCode, "route_admission") {
+		return RouteErrorClassification{Class: RouteErrorAdmission}
 	}
+	classification := classifyProviderRouteError(status, providerCode, message)
+	if streamStarted {
+		classification.Retryable, classification.Failoverable = false, false
+	}
+	return classification
+}
+
+func classifyProviderRouteError(status int, providerCode, message string) RouteErrorClassification {
 	code := strings.ToLower(strings.TrimSpace(providerCode))
 	text := strings.ToLower(strings.TrimSpace(message))
 	switch {
-	case strings.Contains(code, "route_lease") || strings.Contains(code, "route_admission") || strings.Contains(text, "route lease"):
-		return RouteErrorClassification{Class: RouteErrorAdmission}
 	case strings.Contains(code, "invalid_api_key") || strings.Contains(code, "invalid_credential") ||
 		strings.Contains(code, "authentication_error") || strings.Contains(text, "invalid api key") ||
 		strings.Contains(text, "incorrect api key"):
@@ -169,17 +174,16 @@ func CanUseRouteHealth(health model.ChannelHealth, now time.Time) bool {
 		return true
 	}
 	if health.State == model.RouteHealthStateHalfOpen {
-		// A half-open route is only admitted by RouteHealthUsable, which
-		// atomically claims the single live probe. Pure Shadow/score reads must
-		// not make every concurrent request look usable.
-		return false
+		if health.ProbeExpiresAt > 0 {
+			return health.ProbeExpiresAt <= now.UnixMilli()
+		}
+		return health.CooldownUntil <= now.Unix()
 	}
-	return health.CooldownUntil > 0 && health.CooldownUntil <= now.Unix()
+	return health.State == model.RouteHealthStateOpen && health.CooldownUntil <= now.Unix()
 }
 
-// RouteHealthReadOnlyUsable evaluates a stored health row without claiming a
-// half-open probe or writing state. Preview and Shadow callers must use this
-// boundary; only RouteHealthUsable may admit a live probe.
+// RouteHealthReadOnlyUsable never claims a probe. Actual admitted attempts use
+// AcquireRouteAttemptHealth to fence recovery with an owner and expiry.
 func RouteHealthReadOnlyUsable(health model.ChannelHealth, now time.Time) bool {
 	return CanUseRouteHealth(health, now)
 }
@@ -205,79 +209,17 @@ func loadRouteHealthScope(ctx context.Context, channelID int, requestModel, keyS
 }
 
 func RouteHealthUsable(ctx context.Context, channelID int, requestModel string, now time.Time) (bool, int64, error) {
-	return routeHealthScopeUsable(ctx, channelID, requestModel, "", now)
+	health, err := LoadRouteHealth(ctx, channelID, requestModel)
+	return RouteHealthReadOnlyUsable(health, now), health.HealthEpoch, err
 }
 
-// RouteKeyHealthUsable atomically admits a recovered key's single half-open
-// probe. The stored scope is a hash, so this boundary never persists or logs
-// the credential itself.
+// RouteKeyHealthUsable checks availability without claiming a recovery probe.
 func RouteKeyHealthUsable(ctx context.Context, channelID int, requestModel, key string, now time.Time) (bool, int64, error) {
 	if strings.TrimSpace(key) == "" {
 		return false, 0, nil
 	}
-	return routeHealthScopeUsable(ctx, channelID, requestModel, RouteKeyScope(key), now)
-}
-
-func routeHealthScopeUsable(ctx context.Context, channelID int, requestModel, keyScope string, now time.Time) (bool, int64, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	for attempt := 0; attempt < 2; attempt++ {
-		health, err := loadRouteHealthScope(ctx, channelID, requestModel, keyScope)
-		if err != nil {
-			return false, 0, err
-		}
-		if health.State == "" || health.State == model.RouteHealthStateClosed {
-			return true, health.HealthEpoch, nil
-		}
-		if health.State == model.RouteHealthStateHalfOpen {
-			if health.CooldownUntil > now.Unix() {
-				// A half-open row is owned by the request that atomically
-				// transitioned it from open. Other requests wait for that
-				// probe instead of creating an unbounded stampede.
-				return false, health.HealthEpoch, nil
-			}
-			// A crashed or cancelled probe must not leave a route stuck in
-			// half-open forever. Re-arm it as open before the next loop
-			// iteration tries to claim a fresh probe.
-			result := model.DB.WithContext(ctx).Model(&model.ChannelHealth{}).
-				Where("id = ? AND state = ? AND cooldown_until > 0 AND cooldown_until <= ?", health.ID, model.RouteHealthStateHalfOpen, now.Unix()).
-				Updates(map[string]any{
-					"state":          model.RouteHealthStateOpen,
-					"cooldown_until": 0,
-					"health_epoch":   gorm.Expr("health_epoch + 1"),
-					"updated_at":     now.Unix(),
-				})
-			if result.Error != nil {
-				return false, health.HealthEpoch, result.Error
-			}
-			if result.RowsAffected != 1 {
-				return false, health.HealthEpoch, nil
-			}
-			continue
-		}
-		if health.State != model.RouteHealthStateOpen || health.CooldownUntil <= 0 || health.CooldownUntil > now.Unix() {
-			return false, health.HealthEpoch, nil
-		}
-
-		probeUntil := now.Add(DefaultRouteHealthPolicy().Cooldown).Unix()
-		result := model.DB.WithContext(ctx).Model(&model.ChannelHealth{}).
-			Where("id = ? AND state = ? AND cooldown_until > 0 AND cooldown_until <= ?", health.ID, model.RouteHealthStateOpen, now.Unix()).
-			Updates(map[string]any{
-				"state":          model.RouteHealthStateHalfOpen,
-				"cooldown_until": probeUntil,
-				"health_epoch":   gorm.Expr("health_epoch + 1"),
-				"updated_at":     now.Unix(),
-			})
-		if result.Error != nil {
-			return false, health.HealthEpoch, result.Error
-		}
-		if result.RowsAffected == 1 {
-			return true, health.HealthEpoch + 1, nil
-		}
-		return false, health.HealthEpoch, nil
-	}
-	return false, 0, nil
+	health, err := loadRouteHealthScope(ctx, channelID, requestModel, RouteKeyScope(key))
+	return RouteHealthReadOnlyUsable(health, now), health.HealthEpoch, err
 }
 
 func RouteHealthMetrics(ctx context.Context, channelID int, requestModel string) (errorRate, latencyMS float64, err error) {
@@ -593,12 +535,14 @@ func ObserveRouteHealthFailureWithRetryAfter(health model.ChannelHealth, policy 
 	// threshold is reached.
 	if health.State == model.RouteHealthStateHalfOpen || health.FailureCount >= policy.FailureThreshold || retryAfter > 0 {
 		health.State = model.RouteHealthStateOpen
-		health.CooldownUntil = now.Add(policy.Cooldown).Unix()
+		cooldownUntil := now.Add(policy.Cooldown).Unix()
 		if retryAfter > policy.Cooldown {
-			health.CooldownUntil = now.Add(retryAfter).Unix()
+			cooldownUntil = now.Add(retryAfter).Unix()
 		}
-		health.HealthEpoch++
+		health.CooldownUntil = max(health.CooldownUntil, cooldownUntil)
 	}
+	health.ProbeOwner, health.ProbeExpiresAt = "", 0
+	health.HealthEpoch++
 	health.UpdatedAt = now.Unix()
 	return health
 }
@@ -609,6 +553,7 @@ func ObserveRouteHealthSuccess(health model.ChannelHealth, now time.Time) model.
 	health.State = model.RouteHealthStateClosed
 	health.FailureCount = 0
 	health.CooldownUntil = 0
+	health.ProbeOwner, health.ProbeExpiresAt = "", 0
 	if stateChanged {
 		health.HealthEpoch++
 	}

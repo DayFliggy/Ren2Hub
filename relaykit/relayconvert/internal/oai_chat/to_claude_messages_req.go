@@ -32,25 +32,18 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 	claudeTools := make([]any, 0, len(textRequest.Tools))
 
 	for _, tool := range textRequest.Tools {
-		if params, ok := tool.Function.Parameters.(map[string]any); ok {
-			claudeTool := dto.Tool{
-				Name:        tool.Function.Name,
-				Description: tool.Function.Description,
-			}
-			claudeTool.InputSchema = make(map[string]interface{})
-			if params["type"] != nil {
-				claudeTool.InputSchema["type"] = params["type"].(string)
-			}
-			claudeTool.InputSchema["properties"] = params["properties"]
-			claudeTool.InputSchema["required"] = params["required"]
-			for key, value := range params {
-				if key == "type" || key == "properties" || key == "required" {
-					continue
-				}
-				claudeTool.InputSchema[key] = value
-			}
-			claudeTools = append(claudeTools, &claudeTool)
+		params, ok := tool.Function.Parameters.(map[string]any)
+		if tool.Function.Parameters == nil {
+			params, ok = map[string]any{"type": "object", "properties": map[string]any{}}, true
 		}
+		if !ok {
+			return nil, fmt.Errorf("function %q parameters must be an object", tool.Function.Name)
+		}
+		claudeTool := dto.Tool{Strict: tool.Function.Strict, Name: tool.Function.Name, Description: tool.Function.Description, InputSchema: make(map[string]any)}
+		for key, value := range params {
+			claudeTool.InputSchema[key] = value
+		}
+		claudeTools = append(claudeTools, &claudeTool)
 	}
 
 	if textRequest.WebSearchOptions != nil {
@@ -105,8 +98,8 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 	if len(claudeTools) > 0 {
 		claudeRequest.Tools = claudeTools
 	}
-	if maxTokens := textRequest.GetMaxTokens(); maxTokens > 0 {
-		claudeRequest.MaxTokens = kitutil.GetPointer(maxTokens)
+	if textRequest.MaxTokens != nil || textRequest.MaxCompletionTokens != nil {
+		claudeRequest.MaxTokens = kitutil.GetPointer(textRequest.GetMaxTokens())
 	}
 	if textRequest.TopP != nil {
 		claudeRequest.TopP = kitutil.GetPointer(*textRequest.TopP)
@@ -125,7 +118,7 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 		}
 	}
 
-	if claudeRequest.MaxTokens == nil || *claudeRequest.MaxTokens == 0 {
+	if claudeRequest.MaxTokens == nil {
 		if defaultMaxTokens, configured := opts.Claude.DefaultMaxTokensFor(textRequest.Model); configured {
 			value := uint(defaultMaxTokens)
 			claudeRequest.MaxTokens = &value
@@ -163,8 +156,11 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 			claudeRequest.TopP = nil
 			claudeRequest.TopK = nil
 		} else {
-			if claudeRequest.MaxTokens == nil || *claudeRequest.MaxTokens < 1280 {
+			if claudeRequest.MaxTokens == nil {
 				claudeRequest.MaxTokens = kitutil.GetPointer[uint](1280)
+			}
+			if *claudeRequest.MaxTokens < 1280 {
+				return nil, fmt.Errorf("max_tokens must be at least 1280 for the thinking adapter")
 			}
 
 			claudeRequest.Thinking = &dto.Thinking{

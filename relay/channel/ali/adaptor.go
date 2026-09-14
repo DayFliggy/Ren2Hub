@@ -90,6 +90,8 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 }
 
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
+	a.IsSyncImageModel = isSyncImageModel(info.UpstreamModelName) &&
+		(info.RelayMode != constant.RelayModeImagesEdits || !isWanModel(info.UpstreamModelName))
 }
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
@@ -182,10 +184,8 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
+	a.Init(info)
 	if info.RelayMode == constant.RelayModeImagesGenerations {
-		if isSyncImageModel(info.UpstreamModelName) {
-			a.IsSyncImageModel = true
-		}
 		aliRequest, err := oaiImage2AliImageRequest(info, request, a.IsSyncImageModel)
 		if err != nil {
 			return nil, fmt.Errorf("convert image request to async ali image request failed: %w", err)
@@ -194,13 +194,6 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 	} else if info.RelayMode == constant.RelayModeImagesEdits {
 		if isOldWanModel(info.UpstreamModelName) {
 			return oaiFormEdit2WanxImageEdit(c, info, request)
-		}
-		if isSyncImageModel(info.UpstreamModelName) {
-			if isWanModel(info.UpstreamModelName) {
-				a.IsSyncImageModel = false
-			} else {
-				a.IsSyncImageModel = true
-			}
 		}
 		// ali image edit https://bailian.console.aliyun.com/?tab=api#/api/?type=model&url=2976416
 		// 如果用户使用表单，则需要解析表单数据

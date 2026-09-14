@@ -1,5 +1,10 @@
 package model
 
+import (
+	"context"
+	"github.com/QuantumNous/new-api/common"
+)
+
 type Midjourney struct {
 	Id          int    `json:"id"`
 	Code        int    `json:"code"`
@@ -26,6 +31,9 @@ type Midjourney struct {
 
 	TokenId          int `json:"-" gorm:"default:0"`
 	BillingChannelId int `json:"-" gorm:"default:0"`
+	// The original task table remains the owner of Midjourney jobs. No raw key
+	// is written here; private metadata references the stable credential.
+	PrivateData TaskPrivateData `json:"-" gorm:"type:json"`
 }
 
 // TaskQueryParams 用于包含所有搜索条件的结构体，可以根据需求添加更多字段
@@ -93,15 +101,11 @@ func GetAllTasks(startIdx int, num int, queryParams TaskQueryParams) []*Midjourn
 	return tasks
 }
 
-func GetAllUnFinishTasks() []*Midjourney {
+func GetAllUnFinishTasks(ctx context.Context) ([]*Midjourney, error) {
 	var tasks []*Midjourney
-	var err error
-	// get all tasks progress is not 100%
-	err = DB.Where("progress != ?", "100%").Find(&tasks).Error
-	if err != nil {
-		return nil
-	}
-	return tasks
+	// Only an explicit provider terminal status ends polling.
+	err := DB.WithContext(ctx).Where("status IS NULL OR status NOT IN ?", []string{"SUCCESS", "FAILURE"}).Find(&tasks).Error
+	return tasks, err
 }
 
 // HasUnfinishedMidjourneyTasks reports whether at least one Midjourney task is
@@ -111,40 +115,22 @@ func GetAllUnFinishTasks() []*Midjourney {
 func HasUnfinishedMidjourneyTasks() bool {
 	var id int
 	err := DB.Model(&Midjourney{}).
-		Where("progress != ?", "100%").
+		Where("status IS NULL OR status NOT IN ?", []string{"SUCCESS", "FAILURE"}).
 		Limit(1).
 		Pluck("id", &id).Error
-	return err == nil && id != 0
+	if err != nil {
+		common.SysError("query unfinished Midjourney tasks: " + err.Error())
+		return false
+	}
+	return id != 0
 }
 
 func GetByOnlyMJId(mjId string) *Midjourney {
-	var mj *Midjourney
-	var err error
-	err = DB.Where("mj_id = ?", mjId).First(&mj).Error
-	if err != nil {
+	var rows []Midjourney
+	if err := DB.Where("mj_id = ?", mjId).Limit(2).Find(&rows).Error; err != nil || len(rows) != 1 {
 		return nil
 	}
-	return mj
-}
-
-func GetByMJId(userId int, mjId string) *Midjourney {
-	var mj *Midjourney
-	var err error
-	err = DB.Where("user_id = ? and mj_id = ?", userId, mjId).First(&mj).Error
-	if err != nil {
-		return nil
-	}
-	return mj
-}
-
-func GetByMJIds(userId int, mjIds []string) []*Midjourney {
-	var mj []*Midjourney
-	var err error
-	err = DB.Where("user_id = ? and mj_id in (?)", userId, mjIds).Find(&mj).Error
-	if err != nil {
-		return nil
-	}
-	return mj
+	return &rows[0]
 }
 
 func GetMjByuId(id int) *Midjourney {
@@ -157,26 +143,10 @@ func GetMjByuId(id int) *Midjourney {
 	return mj
 }
 
-func UpdateProgress(id int, progress string) error {
-	return DB.Model(&Midjourney{}).Where("id = ?", id).Update("progress", progress).Error
-}
-
 func (midjourney *Midjourney) Insert() error {
 	var err error
 	err = DB.Create(midjourney).Error
 	return err
-}
-
-func (midjourney *Midjourney) Update() error {
-	var err error
-	err = DB.Save(midjourney).Error
-	return err
-}
-
-func (midjourney *Midjourney) UpdateBillingState() error {
-	return DB.Model(midjourney).
-		Select("quota", "token_id", "billing_channel_id").
-		Updates(midjourney).Error
 }
 
 func (midjourney *Midjourney) GetBillingChannelId() int {
@@ -184,31 +154,6 @@ func (midjourney *Midjourney) GetBillingChannelId() int {
 		return midjourney.BillingChannelId
 	}
 	return midjourney.ChannelId
-}
-
-// UpdateWithStatus performs a conditional UPDATE guarded by fromStatus (CAS).
-// Returns (true, nil) if this caller won the update, (false, nil) if
-// another process already moved the task out of fromStatus.
-// UpdateWithStatus performs a conditional UPDATE guarded by fromStatus (CAS).
-// Uses Model().Select("*").Updates() to avoid GORM Save()'s INSERT fallback.
-func (midjourney *Midjourney) UpdateWithStatus(fromStatus string) (bool, error) {
-	result := DB.Model(midjourney).Where("status = ?", fromStatus).Select("*").Updates(midjourney)
-	if result.Error != nil {
-		return false, result.Error
-	}
-	return result.RowsAffected > 0, nil
-}
-
-func MjBulkUpdate(mjIds []string, params map[string]any) error {
-	return DB.Model(&Midjourney{}).
-		Where("mj_id in (?)", mjIds).
-		Updates(params).Error
-}
-
-func MjBulkUpdateByTaskIds(taskIDs []int, params map[string]any) error {
-	return DB.Model(&Midjourney{}).
-		Where("id in (?)", taskIDs).
-		Updates(params).Error
 }
 
 // CountAllTasks returns total midjourney tasks for admin query

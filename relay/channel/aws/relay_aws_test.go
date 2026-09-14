@@ -437,7 +437,8 @@ func TestAwsStreamHandlerStopsAtClientCancellationAndKeepsPartialBillingUsage(t 
 	}
 
 	require.ErrorIs(t, upstreamContext.Err(), context.Canceled)
-	require.Nil(t, result.err)
+	require.NotNil(t, result.err)
+	assert.Contains(t, result.err.Error(), "context canceled")
 	require.NotNil(t, result.usage)
 	require.NotNil(t, result.usage.BillingUsage)
 	require.NotNil(t, result.usage.BillingUsage.ClaudeUsage)

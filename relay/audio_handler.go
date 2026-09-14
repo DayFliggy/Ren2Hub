@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -19,8 +21,16 @@ func AudioHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	info.InitChannelMeta(c)
 
 	audioReq, ok := info.Request.(*dto.AudioRequest)
-	if !ok {
+	if !ok || audioReq == nil {
 		return types.NewError(errors.New("invalid request type"), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+	}
+	if info.RelayMode == relayconstant.RelayModeAudioSpeech {
+		if strings.TrimSpace(audioReq.Input) == "" || strings.TrimSpace(audioReq.Voice) == "" {
+			return types.NewErrorWithStatusCode(errors.New("input and voice are required"), types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		if audioReq.StreamFormat != "" && audioReq.StreamFormat != "sse" && audioReq.StreamFormat != "audio" {
+			return types.NewErrorWithStatusCode(errors.New("invalid stream_format"), types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
 	}
 
 	request, err := common.DeepCopy(audioReq)
@@ -50,27 +60,35 @@ func AudioHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	}
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
-	var httpResp *http.Response
-	if resp != nil {
-		httpResp = resp.(*http.Response)
-		if httpResp.StatusCode != http.StatusOK {
-			newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
-			// reset status code 重置状态码
-			service.ResetStatusCode(newAPIError, statusCodeMappingStr)
-			return newAPIError
-		}
+	httpResp, ok := resp.(*http.Response)
+	if !ok || httpResp == nil || httpResp.Body == nil {
+		return types.NewOpenAIError(errors.New("invalid audio upstream response"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
+	if httpResp.StatusCode != http.StatusOK {
+		newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
+		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
+		return newAPIError
 	}
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	observed, usageOK := usage.(*dto.Usage)
+	if usageOK && observed != nil {
+		kind := "text"
+		if observed.CompletionTokenDetails.AudioTokens > 0 || observed.PromptTokensDetails.AudioTokens > 0 {
+			kind = "audio"
+		}
+		info.CaptureResponseUsage(observed, kind, nil)
+	}
+	if newAPIError == nil {
+		newAPIError = helper.StreamError(info)
+	}
 	if newAPIError != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
 	}
-	if usage.(*dto.Usage).CompletionTokenDetails.AudioTokens > 0 || usage.(*dto.Usage).PromptTokensDetails.AudioTokens > 0 {
-		service.PostAudioConsumeQuota(c, info, usage.(*dto.Usage), "")
-	} else {
-		service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
+	if !usageOK || observed == nil {
+		return types.NewOpenAIError(errors.New("audio adapter returned no usage"), types.ErrorCodeBadResponse, http.StatusBadGateway)
 	}
 
 	return nil

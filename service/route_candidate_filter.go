@@ -6,7 +6,9 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/relaycapability"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
 // routeCapabilityFilterInput contains only request-time facts shared by the
@@ -104,11 +106,13 @@ func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilt
 		result.Reason = RouteFilterPathUnsupported
 		return result
 	}
-	if input.EndpointType == string(constant.EndpointTypeAudio) &&
-		(input.ChannelType == constant.ChannelTypeMiniMax || input.ChannelType == constant.ChannelTypeVolcEngine) &&
-		input.RequestPath != "/v1/audio/speech" {
-		result.Reason = RouteFilterPathUnsupported
-		return result
+	if input.EndpointType == string(constant.EndpointTypeAudio) {
+		apiType, _ := common.ChannelType2APIType(input.ChannelType)
+		definition, _ := relaycapability.Describe(apiType, input.RequestModel)
+		if surface, found := definition.Resolve(types.RelayFormatOpenAIAudio); found && !surface.SupportsPath(input.RequestPath) {
+			result.Reason = RouteFilterPathUnsupported
+			return result
+		}
 	}
 	if input.ChannelType == constant.ChannelTypeAdvancedCustom {
 		advanced := input.Advanced

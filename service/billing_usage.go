@@ -9,6 +9,7 @@ import (
 const (
 	usageBillingPathLocal              = "local"
 	usageBillingPathUpstream           = "upstream"
+	usageBillingPathMixed              = "upstream_and_local"
 	usageBillingPathOpenAI             = "billing-usage-openai"
 	usageBillingPathOpenAIEstimated    = "billing-usage-openai-estimated"
 	usageBillingPathAnthropic          = "billing-usage-anthropic"
@@ -25,6 +26,14 @@ func effectiveBillingUsage(usage *dto.Usage) *dto.Usage {
 }
 
 func usageBillingPathForLog(isLocalCountTokens bool, usage *dto.Usage) string {
+	if usage != nil {
+		switch usage.UsageSource {
+		case "estimated":
+			return usageBillingPathLocal
+		case "provider_and_estimated":
+			return usageBillingPathMixed
+		}
+	}
 	effectiveUsage, ok := usageFromBillingUsage(usage)
 	if !ok {
 		if isLocalCountTokens {

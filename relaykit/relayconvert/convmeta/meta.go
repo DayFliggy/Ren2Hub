@@ -57,9 +57,22 @@ type ClaudeConvertInfo struct {
 	Usage            *dto.Usage
 	FinishReason     string
 	Done             bool
+	MessageStarted   bool
 
 	ToolCallBaseIndex      int
 	ToolCallMaxIndexOffset int
+}
+
+type GeminiToolCall struct {
+	ID        string
+	Name      string
+	Arguments string
+	Emitted   bool
+}
+
+type GeminiConvertInfo struct {
+	Tools map[[2]int]*GeminiToolCall
+	Err   error
 }
 
 const (
@@ -72,6 +85,7 @@ const (
 // Values is a plain-struct Meta implementation for tests and non-RelayInfo
 // hosts (the relaykit-native entry point).
 type Values struct {
+	GeminiState          *GeminiConvertInfo
 	OriginModelName      string
 	UpstreamModelName    string
 	ChannelMetaAttached  bool
@@ -154,6 +168,16 @@ func (v *Values) EnsureClaudeConvertInfo() *ClaudeConvertInfo {
 		v.ClaudeConvertInfo = &ClaudeConvertInfo{LastMessagesType: LastMessageTypeNone}
 	}
 	return v.ClaudeConvertInfo
+}
+
+func (v *Values) EnsureGeminiConvertInfo() *GeminiConvertInfo {
+	if v == nil {
+		return &GeminiConvertInfo{}
+	}
+	if v.GeminiState == nil {
+		v.GeminiState = &GeminiConvertInfo{}
+	}
+	return v.GeminiState
 }
 
 func (v *Values) GetSendResponseCount() int {

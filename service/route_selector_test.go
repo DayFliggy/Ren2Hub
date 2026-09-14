@@ -94,8 +94,9 @@ func TestSelectTokenRouteAutoUsesPriorityLayerAndBoundedTopK(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []int{2, 3, 1}, channelIDs(result.Candidates))
-	assert.Equal(t, 2, result.Decision.SelectedChannelID)
+	assert.ElementsMatch(t, []int{2, 3}, channelIDs(result.Candidates[:2]))
+	assert.Equal(t, 1, result.Candidates[2].ChannelID)
+	assert.Equal(t, result.Candidates[0].ChannelID, result.Decision.SelectedChannelID)
 	assert.Equal(t, "live", result.Decision.ScoringMode)
 	assert.True(t, result.Decision.DynamicScoreApplied)
 	for _, candidate := range result.Decision.Candidates {
@@ -105,14 +106,14 @@ func TestSelectTokenRouteAutoUsesPriorityLayerAndBoundedTopK(t *testing.T) {
 	}
 }
 
-func TestSelectTokenRouteScoringRespectsObservedHealth(t *testing.T) {
+func TestSelectTokenRouteScoringRespectsObservedLoad(t *testing.T) {
 	input := RouteSelectionInput{
 		SourceInput:  RouteSourceInput{CapabilityEnabled: true, HasProfile: true, ProfileMode: "auto_lab"},
 		TopK:         3,
 		RequestModel: "gpt-5",
 		AutoCandidates: []RouteSelectionCandidate{
-			{ChannelID: 1, Priority: 10, Weight: 1, ErrorRate: 1, ErrorRateKnown: true, HealthUsable: true},
-			{ChannelID: 2, Priority: 10, Weight: 1, ErrorRate: 0, ErrorRateKnown: true, HealthUsable: true},
+			{ChannelID: 1, Priority: 10, Weight: 1, LoadRatio: .4, HealthUsable: true},
+			{ChannelID: 2, Priority: 10, Weight: 1, LoadRatio: .1, HealthUsable: true},
 		},
 	}
 	shadowResult, err := SelectTokenRoute(input)

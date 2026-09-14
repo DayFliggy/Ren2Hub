@@ -192,6 +192,9 @@ func main() {
 		return
 	}
 	server.Use(gin.CustomRecovery(func(c *gin.Context, err any) {
+		if err == http.ErrAbortHandler {
+			panic(err)
+		}
 		common.SysLog(fmt.Sprintf("panic detected: %v", err))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{

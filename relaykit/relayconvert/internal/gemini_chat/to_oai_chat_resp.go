@@ -2,6 +2,7 @@ package geminichat
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -83,8 +84,8 @@ func ResponseGeminiChat2OpenAI(id string, created int64, response *dto.GeminiCha
 		Created: created,
 		Choices: make([]dto.OpenAITextResponseChoice, 0, len(response.Candidates)),
 	}
-	isToolCall := false
 	for _, candidate := range response.Candidates {
+		isToolCall := false
 		choice := dto.OpenAITextResponseChoice{
 			Index: int(candidate.Index),
 			Message: dto.Message{
@@ -173,7 +174,7 @@ func ResponseGeminiChat2OpenAI(id string, created int64, response *dto.GeminiCha
 				choice.FinishReason = types.FinishReasonContentFilter
 			}
 		}
-		if isToolCall {
+		if isToolCall && choice.FinishReason == types.FinishReasonStop {
 			choice.FinishReason = types.FinishReasonToolCalls
 		}
 
@@ -269,7 +270,7 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 		} else {
 			choice.Delta.SetContentString(content.String())
 		}
-		if isTools {
+		if isTools && choice.FinishReason == nil {
 			choice.FinishReason = &types.FinishReasonToolCalls
 		}
 		choices = append(choices, choice)
@@ -283,11 +284,16 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 }
 
 type GeminiToChatStreamState struct {
-	id            string
-	created       int64
+	id          string
+	created     int64
+	choices     map[int]*geminiToChatChoiceState
+	latestUsage *dto.Usage
+}
+
+type geminiToChatChoiceState struct {
 	sawToolCall   bool
 	finishEmitted bool
-	latestUsage   *dto.Usage
+	nextToolIndex int
 }
 
 func NewGeminiToChatStreamState(id string, created int64) *GeminiToChatStreamState {
@@ -298,21 +304,17 @@ func NewGeminiToChatStreamState(id string, created int64) *GeminiToChatStreamSta
 	if created == 0 {
 		created = kitutil.GetTimestamp()
 	}
-	return &GeminiToChatStreamState{id: id, created: created}
+	return &GeminiToChatStreamState{id: id, created: created, choices: make(map[int]*geminiToChatChoiceState)}
 }
 
 func (s *GeminiToChatStreamState) ConvertChunk(geminiResponse *dto.GeminiChatResponse, model string, usage *dto.Usage) []*dto.ChatCompletionsStreamResponse {
 	if s == nil || geminiResponse == nil {
 		return nil
 	}
-	hasNonStopFinish := false
-	for _, candidate := range geminiResponse.Candidates {
-		if candidate.FinishReason != nil && *candidate.FinishReason != "" && *candidate.FinishReason != "STOP" {
-			hasNonStopFinish = true
-			break
-		}
+	if s.choices == nil {
+		s.choices = make(map[int]*geminiToChatChoiceState)
 	}
-	response, isStop := StreamResponseGeminiChat2OpenAI(geminiResponse)
+	response, _ := StreamResponseGeminiChat2OpenAI(geminiResponse)
 	if response == nil {
 		return nil
 	}
@@ -321,38 +323,60 @@ func (s *GeminiToChatStreamState) ConvertChunk(geminiResponse *dto.GeminiChatRes
 	response.Model = model
 	response.Usage = usage
 
-	if response.IsToolCall() {
-		s.sawToolCall = true
-		if !hasNonStopFinish {
-			for i := range response.Choices {
-				if response.Choices[i].FinishReason != nil && *response.Choices[i].FinishReason == types.FinishReasonToolCalls {
-					response.Choices[i].FinishReason = nil
-				}
-			}
-		}
-	}
 	if usage != nil {
 		s.latestUsage = usage
 	}
-	for _, choice := range response.Choices {
-		if choice.FinishReason != nil && *choice.FinishReason != "" {
-			s.finishEmitted = true
-			break
-		}
-	}
-
 	responses := []*dto.ChatCompletionsStreamResponse{response}
-	if isStop && !s.finishEmitted {
-		responses = append(responses, s.terminalChunk(model))
+	for i := range response.Choices {
+		choice := &response.Choices[i]
+		state := s.choices[choice.Index]
+		if state == nil {
+			state = &geminiToChatChoiceState{}
+			s.choices[choice.Index] = state
+		}
+		finish := ""
+		if geminiResponse.Candidates[i].FinishReason != nil {
+			finish = *geminiResponse.Candidates[i].FinishReason
+		}
+		if len(choice.Delta.ToolCalls) > 0 {
+			state.sawToolCall = true
+			for j := range choice.Delta.ToolCalls {
+				choice.Delta.ToolCalls[j].SetIndex(state.nextToolIndex)
+				state.nextToolIndex++
+			}
+			if finish == "" || finish == "STOP" {
+				choice.FinishReason = nil
+			}
+		}
+		if choice.FinishReason != nil && *choice.FinishReason != "" {
+			state.finishEmitted = true
+		}
+		if finish == "STOP" && !state.finishEmitted {
+			responses = append(responses, s.terminalChunk(model, choice.Index))
+		}
 	}
 	return responses
 }
 
 func (s *GeminiToChatStreamState) Finalize(model string) []*dto.ChatCompletionsStreamResponse {
-	if s == nil || s.finishEmitted {
+	if s == nil {
 		return nil
 	}
-	return []*dto.ChatCompletionsStreamResponse{s.terminalChunk(model)}
+	if len(s.choices) == 0 {
+		s.choices = map[int]*geminiToChatChoiceState{0: {}}
+	}
+	indexes := make([]int, 0, len(s.choices))
+	for index, choice := range s.choices {
+		if !choice.finishEmitted {
+			indexes = append(indexes, index)
+		}
+	}
+	slices.Sort(indexes)
+	responses := make([]*dto.ChatCompletionsStreamResponse, 0, len(indexes))
+	for _, index := range indexes {
+		responses = append(responses, s.terminalChunk(model, index))
+	}
+	return responses
 }
 
 func (s *GeminiToChatStreamState) Usage() *dto.Usage {
@@ -362,12 +386,13 @@ func (s *GeminiToChatStreamState) Usage() *dto.Usage {
 	return s.latestUsage
 }
 
-func (s *GeminiToChatStreamState) terminalChunk(model string) *dto.ChatCompletionsStreamResponse {
+func (s *GeminiToChatStreamState) terminalChunk(model string, index int) *dto.ChatCompletionsStreamResponse {
+	state := s.choices[index]
 	finishReason := types.FinishReasonStop
-	if s.sawToolCall {
+	if state.sawToolCall {
 		finishReason = types.FinishReasonToolCalls
 	}
-	s.finishEmitted = true
+	state.finishEmitted = true
 	return &dto.ChatCompletionsStreamResponse{
 		Id:      s.id,
 		Object:  "chat.completion.chunk",
@@ -375,6 +400,7 @@ func (s *GeminiToChatStreamState) terminalChunk(model string) *dto.ChatCompletio
 		Model:   model,
 		Choices: []dto.ChatCompletionsStreamResponseChoice{
 			{
+				Index:        index,
 				Delta:        dto.ChatCompletionsStreamResponseChoiceDelta{},
 				FinishReason: &finishReason,
 			},
@@ -388,8 +414,12 @@ func geminiResponseToolCall(item *dto.GeminiPart) *dto.ToolCallResponse {
 	if err != nil {
 		return nil
 	}
+	id := item.FunctionCall.ID
+	if id == "" {
+		id = fmt.Sprintf("call_%s", kitutil.GetUUID())
+	}
 	return &dto.ToolCallResponse{
-		ID:   fmt.Sprintf("call_%s", kitutil.GetUUID()),
+		ID:   id,
 		Type: "function",
 		Function: dto.FunctionResponse{
 			Arguments: string(argsBytes),

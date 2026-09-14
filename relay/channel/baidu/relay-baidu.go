@@ -12,12 +12,12 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/samber/lo"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,23 +29,23 @@ var baiduTokenStore sync.Map
 func requestOpenAI2Baidu(request dto.GeneralOpenAIRequest) *BaiduChatRequest {
 	baiduRequest := BaiduChatRequest{
 		Temperature:    request.Temperature,
-		TopP:           lo.FromPtrOr(request.TopP, 0),
-		PenaltyScore:   lo.FromPtrOr(request.FrequencyPenalty, 0),
-		Stream:         lo.FromPtrOr(request.Stream, false),
+		TopP:           request.TopP,
+		PenaltyScore:   request.FrequencyPenalty,
+		Stream:         request.Stream,
 		DisableSearch:  false,
 		EnableCitation: false,
 		UserId:         request.User,
 	}
-	if request.GetMaxTokens() != 0 {
-		maxTokens := int(request.GetMaxTokens())
-		if request.GetMaxTokens() == 1 {
-			maxTokens = 2
-		}
-		baiduRequest.MaxOutputTokens = &maxTokens
+	baiduRequest.MaxOutputTokens = request.MaxTokens
+	if request.MaxCompletionTokens != nil {
+		baiduRequest.MaxOutputTokens = request.MaxCompletionTokens
 	}
 	for _, message := range request.Messages {
 		if message.Role == "system" {
-			baiduRequest.System = message.StringContent()
+			if baiduRequest.System != "" {
+				baiduRequest.System += "\n\n"
+			}
+			baiduRequest.System += message.StringContent()
 		} else {
 			baiduRequest.Messages = append(baiduRequest.Messages, BaiduMessage{
 				Role:    message.Role,
@@ -80,6 +80,9 @@ func streamResponseBaidu2OpenAI(baiduResponse *BaiduChatStreamResponse) *dto.Cha
 	choice.Delta.SetContentString(baiduResponse.Result)
 	if baiduResponse.IsEnd {
 		choice.FinishReason = &constant.FinishReasonStop
+		if baiduResponse.IsTruncated {
+			choice.FinishReason = &constant.FinishReasonLength
+		}
 	}
 	response := dto.ChatCompletionsStreamResponse{
 		Id:      baiduResponse.Id,
@@ -115,7 +118,10 @@ func embeddingResponseBaidu2OpenAI(response *BaiduEmbeddingResponse) *dto.OpenAI
 }
 
 func baiduStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*types.NewAPIError, *dto.Usage) {
-	usage := &dto.Usage{}
+	var usage *dto.Usage
+	var responseText strings.Builder
+	responseID, created := helper.GetResponseID(c), common.GetTimestamp()
+	sentRole := false
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		var baiduResponse BaiduChatStreamResponse
 		if err := common.Unmarshal([]byte(data), &baiduResponse); err != nil {
@@ -123,18 +129,45 @@ func baiduStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 			sr.Error(err)
 			return
 		}
+		if baiduResponse.ErrorCode != 0 {
+			sr.Stop(fmt.Errorf("baidu generation failed: %s", baiduResponse.ErrorMsg))
+			return
+		}
+		if baiduResponse.Usage.TotalTokens < 0 || baiduResponse.Usage.PromptTokens < 0 || baiduResponse.Usage.TotalTokens < baiduResponse.Usage.PromptTokens {
+			sr.Stop(fmt.Errorf("invalid baidu token usage"))
+			return
+		}
 		if baiduResponse.Usage.TotalTokens != 0 {
-			usage.TotalTokens = baiduResponse.Usage.TotalTokens
-			usage.PromptTokens = baiduResponse.Usage.PromptTokens
-			usage.CompletionTokens = baiduResponse.Usage.TotalTokens - baiduResponse.Usage.PromptTokens
+			usage = &dto.Usage{TotalTokens: baiduResponse.Usage.TotalTokens, PromptTokens: baiduResponse.Usage.PromptTokens,
+				CompletionTokens: baiduResponse.Usage.TotalTokens - baiduResponse.Usage.PromptTokens, UsageSource: "provider"}
 		}
 		response := streamResponseBaidu2OpenAI(&baiduResponse)
+		response.Id, response.Created, response.Model = responseID, created, info.UpstreamModelName
+		if !sentRole {
+			response.Choices[0].Delta.Role = "assistant"
+			sentRole = true
+		}
+		if baiduResponse.IsEnd {
+			sr.Done()
+		}
+		if baiduResponse.Result != "" {
+			responseText.WriteString(baiduResponse.Result)
+			sr.MarkValidOutput()
+		}
 		if err := helper.ObjectData(c, response); err != nil {
 			common.SysLog("error sending stream response: " + err.Error())
 			sr.Error(err)
 		}
 	})
-	service.CloseResponseBodyGracefully(resp)
+	if usage == nil {
+		usage = service.ResponseText2Usage(c, responseText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
+	}
+	if err := helper.StreamError(info); err != nil {
+		return err, usage
+	}
+	if err := openai.HandleFinalResponse(c, info, "", responseID, created, info.UpstreamModelName, "", usage, false); err != nil {
+		return types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway), usage
+	}
 	return nil, usage
 }
 
@@ -170,22 +203,26 @@ func baiduEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *ht
 		return types.NewError(err, types.ErrorCodeBadResponseBody), nil
 	}
 	service.CloseResponseBodyGracefully(resp)
-	err = json.Unmarshal(responseBody, &baiduResponse)
+	err = common.Unmarshal(responseBody, &baiduResponse)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeBadResponseBody), nil
 	}
 	if baiduResponse.ErrorMsg != "" {
 		return types.NewError(fmt.Errorf("%s", baiduResponse.ErrorMsg), types.ErrorCodeBadResponseBody), nil
 	}
+	if err := helper.ValidateEmbeddingResponse(responseBody, helper.EmbeddingInputCount(info.Request)); err != nil {
+		return types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway), nil
+	}
+	if err := helper.ValidateVectorUsage(&baiduResponse.Usage); err != nil {
+		return types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway), nil
+	}
+	baiduResponse.Usage.UsageSource = "provider"
 	fullTextResponse := embeddingResponseBaidu2OpenAI(&baiduResponse)
-	jsonResponse, err := json.Marshal(fullTextResponse)
+	jsonResponse, err := common.Marshal(fullTextResponse)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeBadResponseBody), nil
 	}
-	c.Writer.Header().Set("Content-Type", "application/json")
-	c.Writer.WriteHeader(resp.StatusCode)
-	_, err = c.Writer.Write(jsonResponse)
-	return nil, &fullTextResponse.Usage
+	return helper.WriteVectorResponse(c, resp, info, jsonResponse), &fullTextResponse.Usage
 }
 
 func getBaiduAccessToken(apiKey string) (string, error) {

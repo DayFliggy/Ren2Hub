@@ -115,7 +115,12 @@ func responsesRequestFunctionDeclarations(raw []byte) ([]dto.FunctionRequest, er
 		if name == "" {
 			continue
 		}
+		var strict *bool
+		if value, ok := tool["strict"].(bool); ok {
+			strict = &value
+		}
 		functions = append(functions, dto.FunctionRequest{
+			Strict:      strict,
 			Name:        name,
 			Description: kitutil.Interface2String(tool["description"]),
 			Parameters:  tool["parameters"],

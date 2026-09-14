@@ -22,13 +22,13 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 		},
 	}
 
-	if textRequest.TopP != nil && *textRequest.TopP > 0 {
+	if textRequest.TopP != nil {
 		geminiRequest.GenerationConfig.TopP = kitutil.GetPointer(*textRequest.TopP)
 	}
-	if maxTokens := textRequest.GetMaxTokens(); maxTokens > 0 {
-		geminiRequest.GenerationConfig.MaxOutputTokens = kitutil.GetPointer(maxTokens)
+	if textRequest.MaxTokens != nil || textRequest.MaxCompletionTokens != nil {
+		geminiRequest.GenerationConfig.MaxOutputTokens = kitutil.GetPointer(textRequest.GetMaxTokens())
 	}
-	if textRequest.Seed != nil && *textRequest.Seed != 0 {
+	if textRequest.Seed != nil {
 		geminiRequest.GenerationConfig.Seed = kitutil.GetPointer(int64(*textRequest.Seed))
 	}
 
@@ -269,6 +269,7 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 			functionResp := &dto.GeminiFunctionResponse{
 				Name:     name,
 				Response: contentMap,
+				ID:       []byte(fmt.Sprintf("%q", message.ToolCallId)),
 			}
 
 			*parts = append(*parts, dto.GeminiPart{
@@ -281,8 +282,6 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 		content := dto.GeminiChatContent{
 			Role: message.Role,
 		}
-		shouldAttachThoughtSignature := (message.Role == "assistant" || message.Role == "model") && sharedgemini.ShouldAttachThoughtSignature(opts)
-		signatureAttached := false
 		if message.ToolCalls != nil {
 			for _, call := range message.ParseToolCalls() {
 				args := map[string]interface{}{}
@@ -293,12 +292,10 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 				}
 				toolCall := dto.GeminiPart{
 					FunctionCall: &dto.FunctionCall{
+						ID:           call.ID,
 						FunctionName: call.Function.Name,
 						Arguments:    args,
 					},
-				}
-				if shouldAttachThoughtSignature && !signatureAttached && sharedgemini.AttachFunctionCallThoughtSignature(opts, &toolCall) {
-					signatureAttached = true
 				}
 				parts = append(parts, toolCall)
 				toolCallIDs[call.ID] = call.Function.Name
@@ -350,9 +347,6 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 							Data:     base64String,
 						},
 					}
-					if shouldAttachThoughtSignature {
-						sharedgemini.AttachThoughtSignatureBypass(opts, &imgPart)
-					}
 					parts = append(parts, imgPart)
 					text = text[closeIdx+1:]
 				}
@@ -382,10 +376,6 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 					},
 				})
 			}
-		}
-
-		if shouldAttachThoughtSignature && !signatureAttached && len(parts) > 0 {
-			sharedgemini.AttachFirstTextThoughtSignature(opts, parts)
 		}
 
 		content.Parts = parts

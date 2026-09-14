@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -14,10 +15,12 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
+	"github.com/QuantumNous/new-api/relay/channel/task/suno"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
@@ -27,15 +30,29 @@ type TaskSubmitResult struct {
 	TaskData       []byte
 	Platform       constant.TaskPlatform
 	Quota          int
-	//PerCallPrice   types.PriceData
+	ClientResponse any
+	Credential     model.TaskPrivateData
 }
 
 // ResolveOriginTask 处理基于已有任务的提交（remix / continuation）：
 // 查找原始任务、从中提取模型名称、将渠道锁定到原始任务的渠道
-// （通过 info.LockedChannel，重试时复用同一渠道并轮换 key），
+// （通过 info.LockedChannel，始终使用原凭据身份），
 // 以及提取 OtherRatios（时长、分辨率）。
 // 该函数在控制器的重试循环之前调用一次，其结果通过 info 字段和上下文持久化。
 func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
+	var sunoRequest *dto.SunoSubmitReq
+	if c.GetString("platform") == string(constant.TaskPlatformSuno) {
+		request, err := suno.ParseRequest(c)
+		if err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		adaptor := &suno.TaskAdaptor{}
+		if taskErr := adaptor.ValidateRequestAndSetAction(c, info); taskErr != nil {
+			return taskErr
+		}
+		sunoRequest = request
+		info.OriginTaskID = sunoRequest.TaskID
+	}
 	// 检测 remix action
 	path := c.Request.URL.Path
 	if strings.Contains(path, "/v1/videos/") && strings.HasSuffix(path, "/remix") {
@@ -61,7 +78,39 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 		return service.TaskErrorWrapper(err, "get_origin_task_failed", http.StatusInternalServerError)
 	}
 	if !exist {
+		if sunoRequest != nil {
+			return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnknown, "task_not_exist", http.StatusBadRequest)
+		}
 		return service.TaskErrorWrapperLocal(errors.New("task_origin_not_exist"), "task_not_exist", http.StatusBadRequest)
+	}
+	if originTask.PrivateData.TokenId > 0 && originTask.PrivateData.TokenId != info.TokenId {
+		return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnknown, "task_not_exist", http.StatusBadRequest)
+	}
+	if sunoRequest != nil {
+		if originTask.PrivateData.TokenId != info.TokenId || originTask.PrivateData.TokenId <= 0 ||
+			originTask.Platform != constant.TaskPlatformSuno || !strings.EqualFold(originTask.Action, constant.SunoActionMusic) {
+			return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnknown, "task_not_exist", http.StatusBadRequest)
+		}
+		if originTask.Status != model.TaskStatusSuccess {
+			return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnavailable, "task_state_unavailable", http.StatusServiceUnavailable)
+		}
+		var songs []dto.SunoSong
+		if err := common.Unmarshal(originTask.Data, &songs); err != nil {
+			return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnavailable, "task_state_unavailable", http.StatusServiceUnavailable)
+		}
+		found := false
+		for _, song := range songs {
+			if song.ID == sunoRequest.ContinueClipId {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnknown, "task_not_exist", http.StatusBadRequest)
+		}
+		if originTask.PrivateData.CredentialVersion != 1 || originTask.PrivateData.CredentialID == "" || originTask.PrivateData.EndpointID == "" {
+			return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnavailable, "task_state_unavailable", http.StatusServiceUnavailable)
+		}
 	}
 
 	// 从原始任务推导模型名称
@@ -79,31 +128,20 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 		}
 	}
 
-	// 锁定到原始任务的渠道（重试时复用同一渠道，轮换 key）
+	// Selection still rechecks token/model permission, then pins the task owner.
 	ch, err := model.GetChannelById(originTask.ChannelId, true)
 	if err != nil {
+		if sunoRequest != nil {
+			return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnavailable, "task_state_unavailable", http.StatusServiceUnavailable)
+		}
 		return service.TaskErrorWrapperLocal(err, "channel_not_found", http.StatusBadRequest)
 	}
 	if ch.Status != common.ChannelStatusEnabled {
-		return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task is disabled"), "task_channel_disable", http.StatusBadRequest)
+		return service.TaskErrorWrapperLocal(model.ErrGatewayStateUnavailable, "task_state_unavailable", http.StatusServiceUnavailable)
 	}
 	info.LockedChannel = ch
-
-	if originTask.ChannelId != info.ChannelId {
-		key, _, newAPIError := ch.GetNextEnabledKey()
-		if newAPIError != nil {
-			return service.TaskErrorWrapper(newAPIError, "channel_no_available_key", newAPIError.StatusCode)
-		}
-		common.SetContextKey(c, constant.ContextKeyChannelKey, key)
-		common.SetContextKey(c, constant.ContextKeyChannelType, ch.Type)
-		common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, ch.GetBaseURL())
-		common.SetContextKey(c, constant.ContextKeyChannelId, originTask.ChannelId)
-
-		info.ChannelBaseUrl = ch.GetBaseURL()
-		info.ChannelId = originTask.ChannelId
-		info.ChannelType = ch.Type
-		info.ApiKey = key
-	}
+	c.Set("gateway_origin_task", originTask)
+	info.OriginTaskID = originTask.GetUpstreamTaskID()
 
 	// 提取 remix 参数（时长、分辨率 → OtherRatios）
 	if info.Action == constant.TaskActionRemix {
@@ -144,6 +182,11 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 // 控制器负责 defer Refund 和成功后 Settle。
 func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitResult, *dto.TaskError) {
 	info.InitChannelMeta(c)
+	selectedChannel, channelErr := model.GetChannelById(info.ChannelId, true)
+	if channelErr != nil || selectedChannel.GetBaseURL() != info.ChannelBaseUrl {
+		return nil, service.TaskErrorWrapperLocal(model.ErrGatewayStateUnavailable, "task_state_unavailable", http.StatusServiceUnavailable)
+	}
+	endpointID := selectedChannel.GatewayEndpointID()
 
 	// 1. 确定 platform → 创建适配器 → 验证请求
 	platform := constant.TaskPlatform(c.GetString("platform"))
@@ -208,7 +251,12 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		}
 	}
 
-	// 7. Admission precedes billing; retries reserve any price increase.
+	requestBody, err := adaptor.BuildRequestBody(c, info)
+	if err != nil {
+		return nil, service.TaskErrorWrapperLocal(err, "build_request_failed", http.StatusBadRequest)
+	}
+
+	// Admission precedes billing; retries reserve any price increase.
 	if info.BeforeUpstream != nil {
 		if err := info.BeforeUpstream(); err != nil {
 			return nil, service.TaskErrorWrapperLocal(err, "route_lease_failed", http.StatusServiceUnavailable)
@@ -216,23 +264,54 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}
 	info.ForcePreConsume = true
 	info.PriceData.QuotaToPreConsume = info.PriceData.Quota
-	if apiErr := service.PrepareBillingForSelectedModel(c, info); apiErr != nil {
-		return nil, service.TaskErrorFromAPIError(apiErr)
-	}
+	info.DeferBillingToSend = true
 
-	// 8. 构建请求体
-	requestBody, err := adaptor.BuildRequestBody(c, info)
-	if err != nil {
-		return nil, service.TaskErrorWrapper(err, "build_request_failed", http.StatusInternalServerError)
+	var credential model.TaskPrivateData
+	beforeSend := info.BeforeSend
+	info.BeforeSend = func(body io.Reader) error {
+		ch, err := model.GetChannelById(info.ChannelId, true)
+		if err != nil {
+			return err
+		}
+		if ch.GatewayEndpointID() != endpointID {
+			return model.ErrGatewayStateUnavailable
+		}
+		boundKey, _, err := service.ValidateGatewayStateOwner(c, ch.Id)
+		if err != nil {
+			return err
+		}
+		if boundKey != "" && boundKey != info.ApiKey {
+			return model.ErrGatewayStateUnavailable
+		}
+		if err := credential.BindCredential(c.Request.Context(), ch, info.ApiKey); err != nil {
+			return err
+		}
+		if beforeSend != nil {
+			return beforeSend(body)
+		}
+		if err := service.PrepareBillingForSelectedModel(c, info); err != nil {
+			return err
+		}
+		return nil
 	}
-
-	// 9. 发送请求
+	info.UpstreamSideEffecting = true
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
+		if !info.UpstreamSent {
+			var apiErr *types.NewAPIError
+			if errors.As(err, &apiErr) {
+				return nil, service.TaskErrorFromAPIError(apiErr)
+			}
+			return nil, service.TaskErrorWrapperLocal(err, "request_preparation_failed", http.StatusServiceUnavailable)
+		}
 		return nil, service.TaskErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
-	if resp != nil && resp.StatusCode != http.StatusOK {
-		defer resp.Body.Close()
+	if resp == nil {
+		return nil, service.TaskErrorWrapper(errors.New("empty upstream response"), "invalid_response", http.StatusBadGateway)
+	}
+	defer resp.Body.Close()
+	info.UpstreamAccepted = resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300
+	if !info.UpstreamAccepted {
 		responseBody, _ := io.ReadAll(resp.Body)
 		return nil, service.TaskErrorWrapper(fmt.Errorf("%s", string(responseBody)), "fail_to_fetch_task", resp.StatusCode)
 	}
@@ -246,9 +325,16 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	c.Header("X-New-Api-Other-Ratios", string(ratiosJSON))
 
 	// 11. 解析响应
-	upstreamTaskID, taskData, taskErr := adaptor.DoResponse(c, resp, info)
+	upstreamTaskID, taskData, clientResponse, taskErr := adaptor.DoResponse(c, resp, info)
 	if taskErr != nil {
+		taskErr.LocalError = false
+		if taskErr.StatusCode < 400 || taskErr.StatusCode > 599 {
+			taskErr.StatusCode = http.StatusBadGateway
+		}
 		return nil, taskErr
+	}
+	if strings.TrimSpace(upstreamTaskID) == "" || clientResponse == nil {
+		return nil, service.TaskErrorWrapper(errors.New("accepted task response is incomplete"), "invalid_response", http.StatusBadGateway)
 	}
 
 	// 11. 提交后计费调整：让适配器根据上游实际返回调整 OtherRatios
@@ -267,6 +353,8 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		TaskData:       taskData,
 		Platform:       platform,
 		Quota:          finalQuota,
+		ClientResponse: clientResponse,
+		Credential:     credential,
 	}, nil
 }
 
@@ -470,7 +558,11 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		return nil
 	}
 
-	resp, err := adaptor.FetchTask(baseURL, channelModel.Key, map[string]any{
+	key, _, err := model.ResolveTaskCredential(context.Background(), channelModel, task)
+	if err != nil {
+		return nil
+	}
+	resp, err := adaptor.FetchTask(baseURL, key, map[string]any{
 		"task_id": task.GetUpstreamTaskID(),
 		"action":  task.Action,
 	}, proxy)
@@ -488,9 +580,8 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		return nil
 	}
 
-	snap := task.Snapshot()
-
-	// 将上游最新状态更新到 task
+	// This read may enrich the client response, but only the polling lifecycle
+	// persists terminal status together with its billing transition.
 	if ti.Status != "" {
 		task.Status = model.TaskStatus(ti.Status)
 	}
@@ -504,10 +595,6 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	} else if task.Status == model.TaskStatusSuccess {
 		// No URL from adaptor — construct proxy URL using public task ID
 		task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
-	}
-
-	if !snap.Equal(task.Snapshot()) {
-		_, _ = task.UpdateWithStatus(snap.Status)
 	}
 
 	// OpenAI Video API 由调用者的 ConvertToOpenAIVideo 分支处理

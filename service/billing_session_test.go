@@ -130,11 +130,40 @@ func TestBillingSessionSettlementFailureCanBeRetriedWithoutRepeatingFunding(t *t
 	}
 	assert.Error(t, session.Settle(140))
 	assert.False(t, session.settled)
+	ctx, _ := gin.CreateTestContext(nil)
+	session.Refund(ctx)
+	assert.False(t, session.NeedsRefund(), "known final usage must resume settlement after an accounting error")
+	assert.Zero(t, funding.refundCalls)
 	assert.NoError(t, session.Settle(140))
 	assert.True(t, session.settled)
 	funding.mu.Lock()
 	assert.Equal(t, 2, funding.settleCalls)
 	funding.mu.Unlock()
+}
+
+func TestBillingSessionReserveReloadsAnAlreadyExtendedReservation(t *testing.T) {
+	truncate(t)
+	seedUser(t, 809, 60)
+	seedToken(t, 809, 809, "stale-billing-session", 60)
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID: "stale-billing-session", UserID: 809, TokenID: 809, Source: BillingSourceWallet, TokenRequired: true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, model.UpdateBillingRecoveryAmounts("stale-billing-session", 0, 40, 0, 40))
+	_, err = model.ReserveBillingRecovery("stale-billing-session", 70, 30, false)
+	require.NoError(t, err)
+	session := &BillingSession{
+		relayInfo: &relaycommon.RelayInfo{UserId: 809, TokenId: 809},
+		funding:   &WalletFunding{userId: 809, consumed: 40}, recoveryID: "stale-billing-session",
+		preConsumedQuota: 40, tokenConsumed: 40,
+	}
+	require.NoError(t, session.Reserve(90))
+	assert.Equal(t, 90, session.GetPreConsumedQuota())
+	assert.Equal(t, 90, session.tokenConsumed)
+	require.NoError(t, session.Settle(100))
+	var user model.User
+	require.NoError(t, model.DB.First(&user, 809).Error)
+	assert.Zero(t, user.Quota)
 }
 
 func TestBillingSessionRefundRetriesOnlyPendingComponents(t *testing.T) {

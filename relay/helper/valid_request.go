@@ -59,8 +59,25 @@ func GetAndValidateRequest(c *gin.Context, format types.RelayFormat) (request dt
 
 func GetAndValidAudioRequest(c *gin.Context, relayMode int) (*dto.AudioRequest, error) {
 	audioRequest := &dto.AudioRequest{}
-	err := common.UnmarshalBodyReusable(c, audioRequest)
-	if err != nil {
+	if strings.Contains(c.ContentType(), "multipart/form-data") {
+		// Multipart represents scalars as strings. Decode stream explicitly so
+		// planning sees the same boolean that is later sent to the provider.
+		var fields struct {
+			dto.AudioRequest
+			Stream string `json:"stream"`
+		}
+		if err := common.UnmarshalBodyReusable(c, &fields); err != nil {
+			return nil, err
+		}
+		audioRequest = &fields.AudioRequest
+		if fields.Stream != "" {
+			stream, err := strconv.ParseBool(fields.Stream)
+			if err != nil {
+				return nil, errors.New("stream must be a boolean")
+			}
+			audioRequest.Stream = &stream
+		}
+	} else if err := common.UnmarshalBodyReusable(c, audioRequest); err != nil {
 		return nil, err
 	}
 	switch relayMode {
@@ -80,8 +97,8 @@ func GetAndValidAudioRequest(c *gin.Context, relayMode int) (*dto.AudioRequest, 
 }
 
 func GetAndValidateRerankRequest(c *gin.Context) (*dto.RerankRequest, error) {
-	var rerankRequest *dto.RerankRequest
-	err := common.UnmarshalBodyReusable(c, &rerankRequest)
+	rerankRequest := &dto.RerankRequest{}
+	err := common.UnmarshalBodyReusable(c, rerankRequest)
 	if err != nil {
 		logger.LogError(c, fmt.Sprintf("getAndValidateTextRequest failed: %s", err.Error()))
 		return nil, types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
@@ -97,8 +114,8 @@ func GetAndValidateRerankRequest(c *gin.Context) (*dto.RerankRequest, error) {
 }
 
 func GetAndValidateEmbeddingRequest(c *gin.Context, relayMode int) (*dto.EmbeddingRequest, error) {
-	var embeddingRequest *dto.EmbeddingRequest
-	err := common.UnmarshalBodyReusable(c, &embeddingRequest)
+	embeddingRequest := &dto.EmbeddingRequest{}
+	err := common.UnmarshalBodyReusable(c, embeddingRequest)
 	if err != nil {
 		logger.LogError(c, fmt.Sprintf("getAndValidateTextRequest failed: %s", err.Error()))
 		return nil, types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())

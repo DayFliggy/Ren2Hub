@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMidjourneyAcceptedSubmissionSurvivesClientCancellation(t *testing.T) {
+func TestMidjourneyUnknownAcceptanceCancellation(t *testing.T) {
 	service.InitHttpClient()
 	for _, test := range []struct {
 		name, path, model, body string
@@ -85,6 +85,7 @@ func TestMidjourneyAcceptedSubmissionSurvivesClientCancellation(t *testing.T) {
 			engine.Use(middleware.RequestId())
 			SetRelayRouter(engine)
 			requestContext, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			request := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body)).WithContext(requestContext)
 			request.Header.Set("Content-Type", "application/json")
 			request.Header.Set("Authorization", "Bearer "+token.Key)
@@ -102,6 +103,7 @@ func TestMidjourneyAcceptedSubmissionSurvivesClientCancellation(t *testing.T) {
 				t.Fatal("upstream acceptance timed out")
 			}
 			cancel()
+			assert.Eventually(t, upstreamCancelled.Load, 2*time.Second, 10*time.Millisecond)
 			close(release)
 			select {
 			case <-handlerDone:
@@ -109,17 +111,16 @@ func TestMidjourneyAcceptedSubmissionSurvivesClientCancellation(t *testing.T) {
 				t.Fatal("relay did not finish after client cancellation")
 			}
 
-			assert.False(t, upstreamCancelled.Load())
-			assert.Equal(t, http.StatusOK, response.Code, response.Body.String())
-			require.NoError(t, db.First(user, user.Id).Error)
-			require.NoError(t, db.First(token, token.Id).Error)
-			assert.Equal(t, 999_000, user.Quota)
-			assert.Equal(t, 1_000, user.UsedQuota)
-			assert.Equal(t, 999_000, token.RemainQuota)
-			assert.Equal(t, 1_000, token.UsedQuota)
+			assert.True(t, upstreamCancelled.Load())
+			assert.Equal(t, http.StatusBadGateway, response.Code, response.Body.String())
+			require.Eventually(t, func() bool {
+				return db.First(user, user.Id).Error == nil && db.First(token, token.Id).Error == nil && user.Quota == 1_000_000 && token.RemainQuota == 1_000_000
+			}, time.Second, 10*time.Millisecond)
+			assert.Zero(t, user.UsedQuota)
+			assert.Zero(t, token.UsedQuota)
 			var taskCount int64
 			require.NoError(t, db.Model(&model.Midjourney{}).Count(&taskCount).Error)
-			assert.Equal(t, int64(1), taskCount)
+			assert.Zero(t, taskCount)
 			assert.Equal(t, int64(0), redisClient.ZCard(context.Background(), service.ChannelRouteLeaseKey(channel.Id)).Val())
 		})
 	}

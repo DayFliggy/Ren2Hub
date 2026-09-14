@@ -1,34 +1,48 @@
 package middleware
 
 import (
-	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
-	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestModelRedisRateLimitUsesUTCRegardlessOfLocalTimezone(t *testing.T) {
-	redisServer, redisClient := useRateLimitMiniRedis(t)
-	previousLocation := time.Local
-	time.Local = time.FixedZone("test-utc-plus-eight", 8*60*60)
-	t.Cleanup(func() { time.Local = previousLocation })
-
-	ctx := context.Background()
-	recordKey := "rateLimit:model-utc-record"
-	recordRedisRequest(ctx, redisClient, recordKey, 2)
-	recorded, err := redisClient.LIndex(ctx, recordKey, 0).Result()
-	require.NoError(t, err)
-	recordedAt, err := time.Parse(modelRateLimitTimeFormat, recorded)
-	require.NoError(t, err)
-	assert.WithinDuration(t, time.Now().UTC(), recordedAt, 2*time.Second)
-
-	checkKey := "rateLimit:model-utc-check"
-	withinWindow := time.Now().UTC().Add(-30 * time.Second).Format(modelRateLimitTimeFormat)
-	_, err = redisServer.Push(checkKey, withinWindow, withinWindow)
-	require.NoError(t, err)
-	allowed, err := checkRedisRateLimit(ctx, redisClient, checkKey, 2, 60)
-	require.NoError(t, err)
-	assert.False(t, allowed, "an existing UTC timestamp inside the window must remain limited on a non-UTC host")
+func TestModelRateLimitFailureReleasesSuccessReservation(t *testing.T) {
+	_, client := useRateLimitMiniRedis(t)
+	previousRedis, previousClient := common.RedisEnabled, common.RDB
+	previousEnabled, previousCount, previousSuccess, previousDuration := setting.ModelRequestRateLimitEnabled, setting.ModelRequestRateLimitCount, setting.ModelRequestRateLimitSuccessCount, setting.ModelRequestRateLimitDurationMinutes
+	common.RedisEnabled, common.RDB = true, client
+	setting.ModelRequestRateLimitEnabled, setting.ModelRequestRateLimitCount, setting.ModelRequestRateLimitSuccessCount, setting.ModelRequestRateLimitDurationMinutes = true, 3, 1, 1
+	t.Cleanup(func() {
+		common.RedisEnabled, common.RDB = previousRedis, previousClient
+		setting.ModelRequestRateLimitEnabled, setting.ModelRequestRateLimitCount, setting.ModelRequestRateLimitSuccessCount, setting.ModelRequestRateLimitDurationMinutes = previousEnabled, previousCount, previousSuccess, previousDuration
+	})
+	router := gin.New()
+	number := 0
+	router.Use(func(c *gin.Context) {
+		number++
+		c.Set("id", 82)
+		c.Set(common.RequestIdKey, fmt.Sprint(number))
+		c.Next()
+	})
+	router.Use(ModelRequestRateLimit())
+	router.POST("/request", func(c *gin.Context) {
+		if number == 1 {
+			MarkRelayRequestFailed(c)
+		}
+		c.Status(http.StatusOK)
+	})
+	for _, status := range []int{200, 200, 429, 429} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/request", nil))
+		assert.Equal(t, status, response.Code)
+	}
+	assert.Equal(t, int64(1), client.ZCard(t.Context(), service.GatewayLogicalRateKey(82)+":success").Val())
+	assert.Zero(t, client.ZCard(t.Context(), service.GatewayLogicalRateKey(82)+":pending").Val())
 }

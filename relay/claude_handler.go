@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -112,29 +111,8 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 	}
 
-	if info.ChannelSetting.SystemPrompt != "" {
-		if request.System == nil {
-			request.SetStringSystem(info.ChannelSetting.SystemPrompt)
-		} else if info.ChannelSetting.SystemPromptOverride {
-			common.SetContextKey(c, constant.ContextKeySystemPromptOverride, true)
-			if request.IsStringSystem() {
-				existing := strings.TrimSpace(request.GetStringSystem())
-				if existing == "" {
-					request.SetStringSystem(info.ChannelSetting.SystemPrompt)
-				} else {
-					request.SetStringSystem(info.ChannelSetting.SystemPrompt + "\n" + existing)
-				}
-			} else {
-				systemContents := request.ParseSystem()
-				newSystem := dto.ClaudeMediaMessage{Type: dto.ContentTypeText}
-				newSystem.SetText(info.ChannelSetting.SystemPrompt)
-				if len(systemContents) == 0 {
-					request.System = []dto.ClaudeMediaMessage{newSystem}
-				} else {
-					request.System = append([]dto.ClaudeMediaMessage{newSystem}, systemContents...)
-				}
-			}
-		}
+	if err := relaycommon.ApplyChannelSystemPrompt(c, info, request); err != nil {
+		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 	}
 
 	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled &&
@@ -150,21 +128,23 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 
 		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, openAIRequest)
+		info.CaptureResponseUsage(usage, "text", nil)
 		if newApiErr != nil {
 			return newApiErr
 		}
 
-		service.PostTextConsumeQuota(c, info, usage, nil)
+		info.CaptureResponseUsage(usage, "text", nil)
 		return nil
 	}
 
 	var requestBody io.Reader
 	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
-		storage, err := common.GetBodyStorage(c)
+		body, closer, err := relaycommon.NativeRequestBody(c, info, request)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		requestBody = common.NewReplayableBodyReader(storage)
+		defer closer.Close()
+		requestBody = body
 	} else {
 		convertedRequest, err := adaptor.ConvertClaudeRequest(c, info, request)
 		if err != nil {
@@ -219,12 +199,15 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	}
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	if observed, ok := usage.(*dto.Usage); ok {
+		info.CaptureResponseUsage(observed, "text", nil)
+	}
 	if newAPIError != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
 	}
 
-	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
+	info.CaptureResponseUsage(usage.(*dto.Usage), "text", nil)
 	return nil
 }

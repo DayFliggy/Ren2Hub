@@ -20,6 +20,28 @@ func BuildMidjourneyImageURL(baseURL, mjID string) string {
 		"?exp=" + strconv.FormatInt(expiresAt, 10) + "&sig=" + url.QueryEscape(signature)
 }
 
+// Row capabilities use a separate signature domain so existing provider-ID
+// capabilities cannot be reinterpreted as access to another local task row.
+func BuildMidjourneyTaskImageURL(baseURL string, taskID int) string {
+	identifier := strconv.Itoa(taskID)
+	expiresAt := time.Now().Add(MidjourneyImageURLLifetime).Unix()
+	signature := midjourneyTaskImageSignature(identifier, expiresAt)
+	return strings.TrimRight(baseURL, "/") + "/mj/image/" + identifier +
+		"?v=2&exp=" + strconv.FormatInt(expiresAt, 10) + "&sig=" + url.QueryEscape(signature)
+}
+
+func midjourneyTaskImageSignature(identifier string, expiresAt int64) string {
+	return common.GenerateHMACWithKey([]byte("midjourney-image-v2:"+common.SessionSecret), fmt.Sprintf("%s:%d", identifier, expiresAt))
+}
+
+func ValidateMidjourneyTaskImageURL(identifier string, expiresAt int64, signature string, now time.Time) bool {
+	id, err := strconv.Atoi(identifier)
+	if err != nil || id <= 0 || expiresAt <= now.Unix() || signature == "" {
+		return false
+	}
+	return hmac.Equal([]byte(midjourneyTaskImageSignature(identifier, expiresAt)), []byte(signature))
+}
+
 func MidjourneyImageURLSignature(mjID string, expiresAt int64) string {
 	payload := fmt.Sprintf("%s:%d", mjID, expiresAt)
 	return common.GenerateHMACWithKey([]byte("midjourney-image-v1:"+common.SessionSecret), payload)

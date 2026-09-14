@@ -309,6 +309,9 @@ func migrateDB() error {
 	if err := migrateRoutingModels(DB); err != nil {
 		return err
 	}
+	if err := migrateGatewayDefaults(DB); err != nil {
+		return err
+	}
 	if err := migrateChannelCapabilityIndexes(); err != nil {
 		return err
 	}
@@ -415,6 +418,9 @@ func migrateDBFast() error {
 	if err := migrateRoutingModels(DB); err != nil {
 		return err
 	}
+	if err := migrateGatewayDefaults(DB); err != nil {
+		return err
+	}
 	if err := migrateChannelCapabilityIndexes(); err != nil {
 		return err
 	}
@@ -459,6 +465,8 @@ func migrateRoutingModels(db *gorm.DB) error {
 		&ChannelCapabilitySnapshot{},
 		&UserChannelEntitlement{},
 		&ChannelHealth{},
+		&GatewayCredential{},
+		&GatewayStateBinding{},
 	); err != nil {
 		return err
 	}

@@ -38,3 +38,18 @@ func TestBuildMidjourneyImageURLContainsEscapedCapability(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ValidateMidjourneyImageURL("mj-task-1", expiresAt, parsed.Query().Get("sig"), time.Now()))
 }
+
+func TestMidjourneyRowImageCapabilityCannotReuseLegacySignature(t *testing.T) {
+	parsed, err := url.Parse(BuildMidjourneyTaskImageURL("https://example.test", 17))
+	require.NoError(t, err)
+	require.Equal(t, "/mj/image/17", parsed.Path)
+	require.Equal(t, "2", parsed.Query().Get("v"))
+	expiry, err := strconv.ParseInt(parsed.Query().Get("exp"), 10, 64)
+	require.NoError(t, err)
+	signature := parsed.Query().Get("sig")
+	require.True(t, ValidateMidjourneyTaskImageURL("17", expiry, signature, time.Now()))
+	require.False(t, ValidateMidjourneyImageURL("17", expiry, signature, time.Now()))
+	require.False(t, ValidateMidjourneyTaskImageURL("18", expiry, signature, time.Now()))
+	require.False(t, ValidateMidjourneyTaskImageURL("17", expiry, MidjourneyImageURLSignature("17", expiry), time.Now()))
+	require.False(t, ValidateMidjourneyTaskImageURL("17", expiry, signature, time.Unix(expiry, 0)))
+}

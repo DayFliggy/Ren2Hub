@@ -14,7 +14,9 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay/channel/task/suno"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -59,6 +61,18 @@ func Distribute() func(c *gin.Context) {
 			return
 		}
 		specificChannelID := 0
+		stateOwner, stateErr := service.ResolveGatewayRequestState(c)
+		if stateErr != nil {
+			if !errors.Is(stateErr, model.ErrGatewayStateUnknown) {
+				logger.LogError(c, fmt.Sprintf("gateway state lookup failed: %v", stateErr))
+			}
+			abortWithOpenAiMessage(c, service.GatewayStateHTTPStatus(stateErr), service.GatewayStatePublicMessage(stateErr), "state_unavailable")
+			return
+		}
+		if stateOwner != nil {
+			c.Set(service.GatewayStateContextKey, stateOwner)
+			specificChannelID = stateOwner.ChannelID
+		}
 		if value, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
 			id, err := strconv.Atoi(fmt.Sprint(value))
 			if err != nil || id <= 0 {
@@ -66,6 +80,10 @@ func Distribute() func(c *gin.Context) {
 				return
 			}
 			specificChannelID = id
+		}
+		if stateOwner != nil && specificChannelID != stateOwner.ChannelID {
+			abortWithOpenAiMessage(c, http.StatusBadRequest, model.ErrGatewayStateUnknown.Error(), "state_unavailable")
+			return
 		}
 		stage := relaycommon.CompactAttemptNone
 		if strings.HasPrefix(c.Request.URL.Path, "/v1/responses/compact") {
@@ -266,6 +284,11 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			relayMode == relayconstant.RelayModeSunoFetchByID {
 			shouldSelectChannel = false
 		} else {
+			request, err := suno.ParseRequest(c)
+			if err != nil {
+				return nil, false, err
+			}
+			shouldSelectChannel = request.TaskID == ""
 			modelName := service.CoverTaskActionToModelName(constant.TaskPlatformSuno, c.Param("action"))
 			modelRequest.Model = modelName
 		}
@@ -465,7 +488,18 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	}
 	var key string
 	var index int
+	boundKey, boundIndex, stateErr := service.ValidateGatewayStateOwner(c, channel.Id)
+	if stateErr != nil {
+		return types.NewErrorWithStatusCode(stateErr, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
+	}
 	for {
+		if boundKey != "" {
+			if _, unavailable := excludedKeyIndexes[boundIndex]; unavailable {
+				return types.NewErrorWithStatusCode(model.ErrGatewayStateUnavailable, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
+			}
+			key, index = boundKey, boundIndex
+			break
+		}
 		var newAPIError *types.NewAPIError
 		key, index, newAPIError = channel.GetNextEnabledKeyExcluding(excludedKeyIndexes)
 		if newAPIError != nil {

@@ -17,7 +17,7 @@ type RouteLeaseRenewal struct {
 	Failure func() error
 }
 
-func StartRouteLeaseRenewal(ctx context.Context, client *redis.Client, lease RouteLease, interval, ttl time.Duration) RouteLeaseRenewal {
+func StartRouteLeaseRenewal(ctx context.Context, client *redis.Client, lease RouteLease, interval, ttl time.Duration, renewOwned ...func(context.Context) error) RouteLeaseRenewal {
 	if client == nil {
 		done := make(chan error, 1)
 		done <- ErrRouteLeaseUnavailable
@@ -36,6 +36,20 @@ func StartRouteLeaseRenewal(ctx context.Context, client *redis.Client, lease Rou
 	if ttl <= 0 {
 		ttl = time.Minute
 	}
+	return startRouteRenewal(ctx, interval, func(ctx context.Context) error {
+		if _, err := RenewRouteLease(ctx, client, lease, ttl); err != nil {
+			return err
+		}
+		for _, renew := range renewOwned {
+			if err := renew(ctx); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func startRouteRenewal(ctx context.Context, interval time.Duration, renew func(context.Context) error) RouteLeaseRenewal {
 	child, cancel := context.WithCancel(ctx)
 	done := make(chan error, 1)
 	var failureMu sync.RWMutex
@@ -54,7 +68,10 @@ func StartRouteLeaseRenewal(ctx context.Context, client *redis.Client, lease Rou
 			case <-child.Done():
 				return
 			case <-ticker.C:
-				if _, err := RenewRouteLease(child, client, lease, ttl); err != nil {
+				if err := renew(child); err != nil {
+					if child.Err() != nil {
+						return
+					}
 					failureMu.Lock()
 					failureErr = err
 					failureMu.Unlock()

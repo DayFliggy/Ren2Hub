@@ -5,7 +5,6 @@ import (
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
-	sharedgemini "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/shared/gemini"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/stretchr/testify/assert"
@@ -229,6 +228,12 @@ func TestConvertRequestResponsesToGeminiAppliesResponsesPreprocess(t *testing.T)
 
 	result, err := ConvertRequest(nil, info, types.RelayFormatGemini, req)
 
+	require.Error(t, err)
+	var loss *types.ConversionLossError
+	require.ErrorAs(t, err, &loss)
+	require.NotEmpty(t, result.Diagnostics)
+	info.Options = &convmeta.Options{ConversionPolicy: types.ConversionLossPolicyAllow}
+	result, err = ConvertRequest(nil, info, types.RelayFormatGemini, req)
 	require.NoError(t, err)
 	geminiReq, ok := result.Value.(*dto.GeminiChatRequest)
 	require.True(t, ok)
@@ -251,7 +256,7 @@ func TestConvertRequestResponsesToGeminiAppliesResponsesPreprocess(t *testing.T)
 
 func TestConvertRequestResponsesToGeminiUsesDirectConverter(t *testing.T) {
 	info := &convmeta.Values{
-		Options:             &convmeta.Options{Gemini: convmeta.GeminiOptions{FunctionCallThoughtSignatureEnabled: true}},
+		Options:             &convmeta.Options{ConversionPolicy: types.ConversionLossPolicyAllow, Gemini: convmeta.GeminiOptions{FunctionCallThoughtSignatureEnabled: true}},
 		ConversionChain:     []types.RelayFormat{types.RelayFormatOpenAIResponses},
 		ChannelMetaAttached: true,
 		UpstreamModelName:   "gemini-test",
@@ -368,9 +373,7 @@ func TestConvertRequestResponsesToGeminiUsesDirectConverter(t *testing.T) {
 	require.NotNil(t, functionCall)
 	assert.Equal(t, "lookup", functionCall.FunctionName)
 	assert.Equal(t, map[string]any{"q": "x"}, functionCall.Arguments)
-	var thoughtSignature string
-	require.NoError(t, kitutil.Unmarshal(geminiReq.Contents[0].Parts[0].ThoughtSignature, &thoughtSignature))
-	assert.Equal(t, sharedgemini.ThoughtSignatureBypassValue, thoughtSignature)
+	assert.Empty(t, geminiReq.Contents[0].Parts[0].ThoughtSignature, "allow cannot synthesize a provider signature")
 	assert.Equal(t, "I will call.", geminiReq.Contents[0].Parts[1].Text)
 
 	assert.Equal(t, "user", geminiReq.Contents[1].Role)
@@ -415,7 +418,7 @@ func TestConvertRequestResponsesToGeminiSkipsThoughtSignatureWhenDisabled(t *tes
 	assert.Empty(t, geminiReq.Contents[0].Parts[0].ThoughtSignature)
 }
 
-func TestConvertRequestOpenAIChatToGeminiAddsThoughtSignatureForAdvancedCustom(t *testing.T) {
+func TestConvertRequestOpenAIChatToGeminiDoesNotSynthesizeThoughtSignature(t *testing.T) {
 	assistantMessage := dto.Message{Role: "assistant", Content: ""}
 	assistantMessage.SetToolCalls([]dto.ToolCallRequest{
 		{
@@ -461,14 +464,13 @@ func TestConvertRequestOpenAIChatToGeminiAddsThoughtSignatureForAdvancedCustom(t
 	assert.Equal(t, "model", geminiReq.Contents[1].Role)
 	require.Len(t, geminiReq.Contents[1].Parts, 1)
 	require.NotNil(t, geminiReq.Contents[1].Parts[0].FunctionCall)
-	var thoughtSignature string
-	require.NoError(t, kitutil.Unmarshal(geminiReq.Contents[1].Parts[0].ThoughtSignature, &thoughtSignature))
-	assert.Equal(t, sharedgemini.ThoughtSignatureBypassValue, thoughtSignature)
+	assert.Empty(t, geminiReq.Contents[1].Parts[0].ThoughtSignature, "a legacy option cannot fabricate provider state")
 }
 
 func TestConvertRequestResponsesToClaudeUsesDirectConverter(t *testing.T) {
 	info := &convmeta.Values{
 		ConversionChain: []types.RelayFormat{types.RelayFormatOpenAIResponses},
+		Options:         &convmeta.Options{ConversionPolicy: types.ConversionLossPolicyAllow},
 	}
 	stream := true
 	parallelToolCalls := false
@@ -521,6 +523,8 @@ func TestConvertRequestResponsesToClaudeUsesDirectConverter(t *testing.T) {
 	result, err := ConvertRequest(nil, info, types.RelayFormatClaude, req)
 
 	require.NoError(t, err)
+	require.NotEmpty(t, result.Diagnostics)
+	assert.Equal(t, "reasoning_controls_not_portable", result.Diagnostics[0].Code)
 	claudeReq, ok := result.Value.(*dto.ClaudeRequest)
 	require.True(t, ok)
 	assert.Equal(t, requestConverterResponsesToClaude, result.Converter)

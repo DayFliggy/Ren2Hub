@@ -64,10 +64,11 @@ type Channel struct {
 	HeaderOverride    *string `json:"header_override" gorm:"type:text"`
 	Remark            *string `json:"remark" gorm:"type:varchar(255)" validate:"max=255"`
 	// Capacity and ratio fields (added for Vue frontend channel management)
-	ChannelRatio  float64 `json:"channel_ratio" gorm:"default:1"`
-	CapacityTotal int     `json:"capacity_total" gorm:"default:20"`
-	CapacityUsed  int     `json:"capacity_used" gorm:"default:0"`
-	UpstreamRatio float64 `json:"upstream_ratio" gorm:"default:1"`
+	ChannelRatio           float64 `json:"channel_ratio" gorm:"default:1"`
+	CapacityTotal          int     `json:"capacity_total" gorm:"default:20"`
+	CapacityUsed           int     `json:"capacity_used" gorm:"default:0"`
+	UpstreamRatio          float64 `json:"upstream_ratio" gorm:"default:1"`
+	GatewayIdentityVersion int64   `json:"-" gorm:"default:0"`
 
 	// add after v0.8.5
 	ChannelInfo ChannelInfo `json:"channel_info" gorm:"type:json"`
@@ -197,13 +198,23 @@ func ApplyChannelGroupFilter(query *gorm.DB, group string) *gorm.DB {
 
 // Value implements driver.Valuer interface
 func (c ChannelInfo) Value() (driver.Value, error) {
-	return common.Marshal(&c)
+	data, err := common.Marshal(&c)
+	return string(data), err
 }
 
 // Scan implements sql.Scanner interface
 func (c *ChannelInfo) Scan(value interface{}) error {
-	bytesValue, _ := value.([]byte)
-	return common.Unmarshal(bytesValue, c)
+	switch data := value.(type) {
+	case []byte:
+		return common.Unmarshal(data, c)
+	case string:
+		return common.UnmarshalJsonStr(data, c)
+	case nil:
+		*c = ChannelInfo{}
+		return nil
+	default:
+		return fmt.Errorf("unsupported channel info database value %T", value)
+	}
 }
 
 func (channel *Channel) GetKeys() []string {
@@ -642,12 +653,31 @@ func (channel *Channel) Update() error {
 			}
 		}
 	}
-	var err error
-	err = DB.Model(channel).Updates(channel).Error
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var previous Channel
+		if err := lockForUpdate(tx).First(&previous, channel.Id).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(channel).Omit("gateway_identity_version").Updates(channel).Error; err != nil {
+			return err
+		}
+		var updated Channel
+		if err := tx.First(&updated, channel.Id).Error; err != nil {
+			return err
+		}
+		if previous.GatewayEndpointID() != updated.GatewayEndpointID() || !slices.Equal(previous.gatewayCredentialSet(), updated.gatewayCredentialSet()) {
+			if err := tx.Model(&Channel{}).Where("id = ?", channel.Id).Update("gateway_identity_version", gorm.Expr("COALESCE(gateway_identity_version, 0) + 1")).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	DB.Model(channel).First(channel, "id = ?", channel.Id)
+	if err := DB.Model(channel).First(channel, "id = ?", channel.Id).Error; err != nil {
+		return err
+	}
 	err = channel.UpdateAbilities(nil)
 	return err
 }

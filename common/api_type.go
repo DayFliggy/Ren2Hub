@@ -5,7 +5,10 @@ import "github.com/QuantumNous/new-api/constant"
 func ChannelType2APIType(channelType int) (int, bool) {
 	apiType := -1
 	switch channelType {
-	case constant.ChannelTypeOpenAI:
+	case constant.ChannelTypeOpenAI, constant.ChannelTypeAzure, constant.ChannelTypeOpenAIMax,
+		constant.ChannelTypeOhMyGPT, constant.ChannelTypeCustom, constant.ChannelTypeAILS,
+		constant.ChannelTypeAIProxy, constant.ChannelTypeAPI2GPT, constant.ChannelTypeAIGC2D,
+		constant.ChannelType360, constant.ChannelTypeFastGPT, constant.ChannelTypeLingYiWanWu:
 		apiType = constant.APITypeOpenAI
 	case constant.ChannelTypeAnthropic:
 		apiType = constant.APITypeAnthropic

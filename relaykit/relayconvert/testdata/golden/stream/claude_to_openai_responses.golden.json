@@ -25,7 +25,8 @@
           "usage": null,
           "user": null,
           "metadata": null
-        }
+        },
+        "sequence_number": 0
       }
     },
     {
@@ -41,7 +42,23 @@
           "quality": "",
           "size": ""
         },
+        "sequence_number": 1,
         "output_index": 0
+      }
+    },
+    {
+      "Type": "response.content_part.added",
+      "Payload": {
+        "type": "response.content_part.added",
+        "sequence_number": 2,
+        "output_index": 0,
+        "content_index": 0,
+        "item_id": "stream_fixed_msg_0",
+        "part": {
+          "type": "output_text",
+          "text": "",
+          "annotations": []
+        }
       }
     },
     {
@@ -49,6 +66,7 @@
       "Payload": {
         "type": "response.output_text.delta",
         "delta": "Hello world",
+        "sequence_number": 3,
         "output_index": 0,
         "content_index": 0,
         "item_id": "stream_fixed_msg_0"
@@ -58,9 +76,26 @@
       "Type": "response.output_text.done",
       "Payload": {
         "type": "response.output_text.done",
+        "sequence_number": 4,
+        "text": "Hello world",
         "output_index": 0,
         "content_index": 0,
         "item_id": "stream_fixed_msg_0"
+      }
+    },
+    {
+      "Type": "response.content_part.done",
+      "Payload": {
+        "type": "response.content_part.done",
+        "sequence_number": 5,
+        "output_index": 0,
+        "content_index": 0,
+        "item_id": "stream_fixed_msg_0",
+        "part": {
+          "type": "output_text",
+          "text": "Hello world",
+          "annotations": []
+        }
       }
     },
     {
@@ -82,6 +117,7 @@
           "quality": "",
           "size": ""
         },
+        "sequence_number": 6,
         "output_index": 0
       }
     },
@@ -161,7 +197,8 @@
           },
           "user": null,
           "metadata": null
-        }
+        },
+        "sequence_number": 7
       }
     }
   ],

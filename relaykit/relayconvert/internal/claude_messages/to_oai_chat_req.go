@@ -84,6 +84,7 @@ func ClaudeMessagesRequestToOpenAIChat(claudeRequest dto.ClaudeRequest, info con
 		openAITool := dto.ToolCallRequest{
 			Type: "function",
 			Function: dto.FunctionRequest{
+				Strict:      claudeTool.Strict,
 				Name:        claudeTool.Name,
 				Description: claudeTool.Description,
 				Parameters:  claudeTool.InputSchema,
@@ -92,6 +93,26 @@ func ClaudeMessagesRequestToOpenAIChat(claudeRequest dto.ClaudeRequest, info con
 		openAITools = append(openAITools, openAITool)
 	}
 	openAIRequest.Tools = openAITools
+	if claudeRequest.ToolChoice != nil {
+		choice, err := kitutil.Any2Type[dto.ClaudeToolChoice](claudeRequest.ToolChoice)
+		if err != nil {
+			return nil, fmt.Errorf("invalid Claude tool choice: %w", err)
+		}
+		switch choice.Type {
+		case "auto", "none":
+			openAIRequest.ToolChoice = choice.Type
+		case "any":
+			openAIRequest.ToolChoice = "required"
+		case "tool":
+			openAIRequest.ToolChoice = map[string]any{"type": "function", "function": map[string]any{"name": choice.Name}}
+		default:
+			return nil, fmt.Errorf("unsupported Claude tool choice %q", choice.Type)
+		}
+		if choice.DisableParallelToolUse {
+			value := false
+			openAIRequest.ParallelTooCalls = &value
+		}
+	}
 
 	openAIMessages := make([]dto.Message, 0)
 	if claudeRequest.System != nil {
@@ -157,7 +178,17 @@ func ClaudeMessagesRequestToOpenAIChat(claudeRequest dto.ClaudeRequest, info con
 					}
 					mediaMessages = append(mediaMessages, message)
 				case "image":
-					imageData := fmt.Sprintf("data:%s;base64,%s", mediaMsg.Source.MediaType, mediaMsg.Source.Data)
+					if mediaMsg.Source == nil {
+						return nil, fmt.Errorf("Claude image source is missing")
+					}
+					imageData := mediaMsg.Source.Url
+					if imageData == "" {
+						data, ok := mediaMsg.Source.Data.(string)
+						if !ok || data == "" || !strings.HasPrefix(mediaMsg.Source.MediaType, "image/") {
+							return nil, fmt.Errorf("Claude image source is invalid")
+						}
+						imageData = fmt.Sprintf("data:%s;base64,%s", mediaMsg.Source.MediaType, data)
+					}
 					mediaMessage := dto.MediaContent{
 						Type:     "image_url",
 						ImageUrl: &dto.MessageImageUrl{Url: imageData},
@@ -197,7 +228,7 @@ func ClaudeMessagesRequestToOpenAIChat(claudeRequest dto.ClaudeRequest, info con
 			if len(toolCalls) > 0 {
 				openAIMessage.SetToolCalls(toolCalls)
 			}
-			if len(mediaMessages) > 0 && len(toolCalls) == 0 {
+			if len(mediaMessages) > 0 {
 				openAIMessage.SetMediaContent(mediaMessages)
 			}
 		}

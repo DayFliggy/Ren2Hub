@@ -1,7 +1,11 @@
 package service
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"math"
 	"sort"
+	"strconv"
 )
 
 type RouteScoreCandidate struct {
@@ -21,24 +25,21 @@ type RouteScoreCandidate struct {
 	QuotaKnown        bool
 	Sticky            bool
 	HealthUsable      bool
+	LoadRatio         float64
 }
 
 type RouteScoreBreakdown struct {
-	PriorityLayer       int64   `json:"priority_layer"`
-	WeightScore         float64 `json:"weight_score"`
-	ErrorScore          float64 `json:"error_score"`
-	ErrorKnown          bool    `json:"error_known"`
-	LatencyScore        float64 `json:"latency_score"`
-	LatencyKnown        bool    `json:"latency_known"`
-	TTFTScore           float64 `json:"ttft_score"`
-	TTFTKnown           bool    `json:"ttft_known"`
-	RateLimitScore      float64 `json:"rate_limit_score"`
-	RateLimitKnown      bool    `json:"rate_limit_known"`
-	QuotaScore          float64 `json:"quota_score"`
-	QuotaKnown          bool    `json:"quota_known"`
-	CircuitBreakerScore float64 `json:"circuit_breaker_score"`
-	StickyScore         float64 `json:"sticky_score"`
-	Total               float64 `json:"total"`
+	PriorityLayer     int64    `json:"priority_layer"`
+	EffectiveWeight   int      `json:"effective_weight"`
+	LoadRatio         float64  `json:"load_ratio"`
+	LoadBucket        int      `json:"load_bucket"`
+	Sticky            bool     `json:"sticky"`
+	SelectionRank     float64  `json:"selection_rank"`
+	ErrorRate         *float64 `json:"error_rate,omitempty"`
+	LatencyMS         *float64 `json:"latency_ms,omitempty"`
+	TTFTMS            *float64 `json:"ttft_ms,omitempty"`
+	RateLimitHeadroom *float64 `json:"rate_limit_headroom,omitempty"`
+	QuotaHeadroom     *float64 `json:"quota_headroom,omitempty"`
 }
 
 type ScoredRouteCandidate struct {
@@ -46,111 +47,69 @@ type ScoredRouteCandidate struct {
 	Breakdown RouteScoreBreakdown
 }
 
-const unknownRouteMetricScore = 0.5
+// OrderAutoRouteCandidates keeps priority and ten-percent load buckets hard.
+// Weighted rendezvous gives each request a stable permutation without shared
+// random state; a zero configured weight still receives a minimum share of one.
+func OrderAutoRouteCandidates(candidates []RouteScoreCandidate, requestID string) []ScoredRouteCandidate {
+	ordered := ScoreRouteCandidates(candidates)
+	for index := range ordered {
+		candidate := ordered[index].Candidate
+		digest := sha256.Sum256([]byte(requestID + ":" + strconv.Itoa(candidate.ChannelID)))
+		uniform := (float64(binary.BigEndian.Uint64(digest[:8])>>11) + 1) / (float64(uint64(1)<<53) + 1)
+		ordered[index].Breakdown.SelectionRank = -math.Log(uniform) / float64(ordered[index].Breakdown.EffectiveWeight)
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		left, right := ordered[i], ordered[j]
+		if left.Candidate.Priority != right.Candidate.Priority {
+			return left.Candidate.Priority > right.Candidate.Priority
+		}
+		if left.Breakdown.LoadBucket != right.Breakdown.LoadBucket {
+			return left.Breakdown.LoadBucket < right.Breakdown.LoadBucket
+		}
+		if left.Candidate.Sticky != right.Candidate.Sticky {
+			return left.Candidate.Sticky
+		}
+		if left.Breakdown.SelectionRank != right.Breakdown.SelectionRank {
+			return left.Breakdown.SelectionRank < right.Breakdown.SelectionRank
+		}
+		return left.Candidate.ChannelID < right.Candidate.ChannelID
+	})
+	return ordered
+}
 
-// ScoreRouteCandidates preserves every healthy static layer in descending
-// Ren2Hub priority order and applies dynamic scoring only inside each layer.
-// Lower layers therefore remain available for bounded failover, while no
-// dynamic metric can overtake an administrator-defined priority boundary.
+// ScoreRouteCandidates attaches raw observations in static priority order.
+// Only OrderAutoRouteCandidates applies load buckets and weighted selection;
+// latency and health samples are observations, not additive routing scores.
 func ScoreRouteCandidates(candidates []RouteScoreCandidate) []ScoredRouteCandidate {
-	if len(candidates) == 0 {
-		return []ScoredRouteCandidate{}
-	}
-	layers := make(map[int64][]RouteScoreCandidate)
-	priorities := make([]int64, 0)
-	for _, candidate := range candidates {
-		if !candidate.HealthUsable {
-			continue
-		}
-		if _, exists := layers[candidate.Priority]; !exists {
-			priorities = append(priorities, candidate.Priority)
-		}
-		layers[candidate.Priority] = append(layers[candidate.Priority], candidate)
-	}
-	if len(priorities) == 0 {
-		return []ScoredRouteCandidate{}
-	}
-	sort.Slice(priorities, func(i, j int) bool { return priorities[i] > priorities[j] })
 	result := make([]ScoredRouteCandidate, 0, len(candidates))
-	for _, priority := range priorities {
-		layer := layers[priority]
-		maxWeight := 0
-		for _, candidate := range layer {
-			if candidate.Weight > maxWeight {
-				maxWeight = candidate.Weight
-			}
-		}
-		if maxWeight <= 0 {
-			maxWeight = 1
-		}
-		for _, candidate := range layer {
-			breakdown := scoreRouteCandidate(candidate, maxWeight)
-			result = append(result, ScoredRouteCandidate{Candidate: candidate, Breakdown: breakdown})
-		}
-		start := len(result) - len(layer)
-		sort.SliceStable(result[start:], func(i, j int) bool {
-			left := result[start+i]
-			right := result[start+j]
-			if left.Breakdown.Total != right.Breakdown.Total {
-				return left.Breakdown.Total > right.Breakdown.Total
-			}
-			return left.Candidate.ChannelID < right.Candidate.ChannelID
-		})
+	for _, candidate := range StaticPriorityLayer(candidates) {
+		result = append(result, ScoredRouteCandidate{Candidate: candidate, Breakdown: scoreRouteCandidate(candidate)})
 	}
 	return result
 }
 
-func scoreRouteCandidate(candidate RouteScoreCandidate, maxWeight int) RouteScoreBreakdown {
+func scoreRouteCandidate(candidate RouteScoreCandidate) RouteScoreBreakdown {
 	breakdown := RouteScoreBreakdown{
-		PriorityLayer:       candidate.Priority,
-		WeightScore:         float64(maxInt(candidate.Weight, 0)) / float64(maxWeight),
-		ErrorScore:          unknownRouteMetricScore,
-		LatencyScore:        unknownRouteMetricScore,
-		TTFTScore:           unknownRouteMetricScore,
-		RateLimitScore:      unknownRouteMetricScore,
-		QuotaScore:          unknownRouteMetricScore,
-		CircuitBreakerScore: 1,
+		PriorityLayer: candidate.Priority, EffectiveWeight: max(candidate.Weight, 1),
+		LoadRatio: candidate.LoadRatio, LoadBucket: int(math.Floor(max(candidate.LoadRatio, 0) * 10)),
+		Sticky: candidate.Sticky,
 	}
 	if candidate.ErrorRateKnown {
-		breakdown.ErrorKnown = true
-		breakdown.ErrorScore = clamp01(1 - candidate.ErrorRate)
+		breakdown.ErrorRate = &candidate.ErrorRate
 	}
 	if candidate.LatencyKnown {
-		breakdown.LatencyKnown = true
-		breakdown.LatencyScore = inverseLatencyScore(candidate.LatencyMS)
+		breakdown.LatencyMS = &candidate.LatencyMS
 	}
 	if candidate.TTFTKnown {
-		breakdown.TTFTKnown = true
-		breakdown.TTFTScore = inverseLatencyScore(candidate.TTFTMS)
+		breakdown.TTFTMS = &candidate.TTFTMS
 	}
 	if candidate.RateLimitKnown {
-		breakdown.RateLimitKnown = true
-		breakdown.RateLimitScore = clamp01(candidate.RateLimitHeadroom)
+		breakdown.RateLimitHeadroom = &candidate.RateLimitHeadroom
 	}
 	if candidate.QuotaKnown {
-		breakdown.QuotaKnown = true
-		breakdown.QuotaScore = clamp01(candidate.QuotaHeadroom)
+		breakdown.QuotaHeadroom = &candidate.QuotaHeadroom
 	}
-	if candidate.Sticky {
-		breakdown.StickyScore = 1
-	}
-	breakdown.Total = breakdown.WeightScore + breakdown.ErrorScore + breakdown.LatencyScore + breakdown.TTFTScore +
-		breakdown.RateLimitScore + breakdown.QuotaScore + breakdown.CircuitBreakerScore + breakdown.StickyScore
 	return breakdown
-}
-
-// TopKRouteCandidates applies the bounded candidate budget used by the future
-// live selector. A caller may request fewer than three candidates, but never
-// more than the initial safety limit.
-func TopKRouteCandidates(candidates []RouteScoreCandidate, k int) []ScoredRouteCandidate {
-	if k <= 0 || k > 3 {
-		k = 3
-	}
-	scored := ScoreRouteCandidates(candidates)
-	if len(scored) > k {
-		return scored[:k]
-	}
-	return scored
 }
 
 // OrderManualRouteCandidates implements the user-owned ordering boundary. A
@@ -186,13 +145,6 @@ func StaticPriorityLayer(candidates []RouteScoreCandidate) []RouteScoreCandidate
 	return result
 }
 
-func inverseLatencyScore(latency float64) float64 {
-	if latency <= 0 {
-		return 1
-	}
-	return clamp01(1000 / (1000 + latency))
-}
-
 func clamp01(value float64) float64 {
 	if value < 0 {
 		return 0
@@ -201,11 +153,4 @@ func clamp01(value float64) float64 {
 		return 1
 	}
 	return value
-}
-
-func maxInt(left, right int) int {
-	if left > right {
-		return left
-	}
-	return right
 }

@@ -68,7 +68,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 				&model.ChannelCapabilitySnapshot{}, &model.ChannelModelCapability{}, &model.ChannelHealth{},
 				&model.BillingRecovery{}, &model.BillingRecoveryAdjustment{},
 				&model.SubscriptionPlan{}, &model.UserSubscription{}, &model.SubscriptionPreConsumeRecord{},
-				&model.Log{}, &model.Task{}, &model.Midjourney{},
+				&model.Log{}, &model.QuotaData{}, &model.Task{}, &model.Midjourney{},
 			))
 			previousRDB, previousMemory := common.RDB, common.MemoryCacheEnabled
 			previousPrices := ratio_setting.ModelPrice2JSONString()

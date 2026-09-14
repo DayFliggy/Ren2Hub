@@ -147,8 +147,11 @@ const MaxTaskDurationSeconds = 3600
 
 func validateTaskDurationBounds(req TaskSubmitReq) *dto.TaskError {
 	seconds := req.Duration
-	if seconds == 0 && req.Seconds != "" {
-		seconds, _ = strconv.Atoi(req.Seconds)
+	if req.Seconds != "" {
+		parsed, err := strconv.Atoi(req.Seconds)
+		if err != nil || parsed < 1 || parsed > MaxTaskDurationSeconds {
+			return createTaskError(fmt.Errorf("seconds must be between 1 and %d", MaxTaskDurationSeconds), "invalid_seconds", http.StatusBadRequest, true)
+		}
 	}
 	if seconds < 0 || seconds > MaxTaskDurationSeconds {
 		return createTaskError(fmt.Errorf("seconds must be between 1 and %d", MaxTaskDurationSeconds), "invalid_seconds", http.StatusBadRequest, true)
@@ -173,9 +176,7 @@ func validateMultipartTaskRequest(c *gin.Context, info *RelayInfo, action string
 	}
 
 	if durationStr := formData.Get("seconds"); durationStr != "" {
-		if duration, err := strconv.Atoi(durationStr); err == nil {
-			req.Duration = duration
-		}
+		req.Seconds = durationStr
 	}
 
 	if images := formData["images"]; len(images) > 0 {
@@ -275,6 +276,7 @@ func isKnownTaskField(field string) bool {
 		"images":          true,
 		"size":            true,
 		"duration":        true,
+		"seconds":         true,
 		"input_reference": true, // Sora 特有字段
 	}
 	return knownFields[field]

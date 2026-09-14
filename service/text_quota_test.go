@@ -22,6 +22,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDeliveredPerCallStreamChargesOnceWithoutTokenUsage(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &relaycommon.RelayInfo{OriginModelName: "test", PriceData: hosttypes.PriceData{UsePrice: true, ModelPrice: .001, ChannelRatio: 1}}
+	before := calculateTextQuotaSummary(c, info, &dto.Usage{})
+	assert.Zero(t, before.Quota)
+	info.MarkValidOutput()
+	after := calculateTextQuotaSummary(c, info, &dto.Usage{})
+	assert.Equal(t, common.QuotaFromFloat(.001*common.QuotaPerUnit), after.Quota)
+}
+
 func TestCalculateTextQuotaSummaryUnifiedForClaudeSemantic(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -278,6 +288,8 @@ func TestCalculateTextQuotaSummaryUsesOpenAIBillingUsageBeforeTopLevelUsage(t *t
 }
 
 func TestUsageBillingPathForLog(t *testing.T) {
+	require.Equal(t, usageBillingPathLocal, usageBillingPathForLog(false, &dto.Usage{UsageSource: "estimated"}))
+	require.Equal(t, usageBillingPathMixed, usageBillingPathForLog(false, &dto.Usage{UsageSource: "provider_and_estimated"}))
 	require.Equal(t, usageBillingPathAnthropic, usageBillingPathForLog(true, &dto.Usage{
 		BillingUsage: dto.NewClaudeMessagesBillingUsage(&dto.ClaudeUsage{InputTokens: 1}),
 	}))

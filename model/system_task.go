@@ -23,6 +23,7 @@ const (
 	SystemTaskTypeAsyncTaskPoll          = "async_task_poll"
 	SystemTaskTypeRouteCapabilityRefresh = "route_capability_refresh"
 	SystemTaskTypeBillingRecovery        = "billing_recovery"
+	SystemTaskTypeGatewayStateCleanup    = "gateway_state_cleanup"
 )
 
 var ErrSystemTaskLockLost = errors.New("system task lock lost")

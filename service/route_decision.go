@@ -1,6 +1,9 @@
 package service
 
-import "time"
+import (
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"time"
+)
 
 type RouteSource string
 
@@ -51,28 +54,38 @@ type RouteDecisionCandidate struct {
 }
 
 type RouteDecision struct {
-	Event                    string                   `json:"event"`
-	RequestID                string                   `json:"request_id"`
-	RouteSource              RouteSource              `json:"route_source"`
-	ConfigurationVersion     int64                    `json:"configuration_version,omitempty"`
-	RequestModel             string                   `json:"request_model"`
-	ActualModel              string                   `json:"actual_model,omitempty"`
-	LabSlug                  string                   `json:"lab_slug,omitempty"`
-	CatalogVersion           string                   `json:"catalog_version,omitempty"`
-	SnapshotVersion          int64                    `json:"snapshot_version,omitempty"`
-	ScoringMode              string                   `json:"scoring_mode,omitempty"`
-	DynamicScoreApplied      bool                     `json:"dynamic_score_applied"`
-	ScoreMetricsUnavailable  bool                     `json:"score_metrics_unavailable,omitempty"`
-	StaticPreferredChannelID int                      `json:"static_preferred_channel_id,omitempty"`
-	ScoredPreferredChannelID int                      `json:"scored_preferred_channel_id,omitempty"`
-	Candidates               []RouteDecisionCandidate `json:"candidates"`
-	SelectedChannelID        int                      `json:"selected_channel_id,omitempty"`
-	RetryAttempt             int                      `json:"retry_attempt"`
-	SameResourceRetry        int                      `json:"same_resource_retry_attempt"`
-	FailoverAttempt          int                      `json:"failover_attempt"`
-	LeaseState               string                   `json:"lease_state,omitempty"`
-	FinalError               string                   `json:"final_error,omitempty"`
-	GeneratedAt              int64                    `json:"generated_at"`
+	Event                    string                       `json:"event"`
+	RequestID                string                       `json:"request_id"`
+	RouteSource              RouteSource                  `json:"route_source"`
+	ConfigurationVersion     int64                        `json:"configuration_version,omitempty"`
+	RequestModel             string                       `json:"request_model"`
+	ActualModel              string                       `json:"actual_model,omitempty"`
+	LabSlug                  string                       `json:"lab_slug,omitempty"`
+	CatalogVersion           string                       `json:"catalog_version,omitempty"`
+	SnapshotVersion          int64                        `json:"snapshot_version,omitempty"`
+	ScoringMode              string                       `json:"scoring_mode,omitempty"`
+	DynamicScoreApplied      bool                         `json:"dynamic_score_applied"`
+	ScoreMetricsUnavailable  bool                         `json:"score_metrics_unavailable,omitempty"`
+	StaticPreferredChannelID int                          `json:"static_preferred_channel_id,omitempty"`
+	ScoredPreferredChannelID int                          `json:"scored_preferred_channel_id,omitempty"`
+	Candidates               []RouteDecisionCandidate     `json:"candidates"`
+	SelectedChannelID        int                          `json:"selected_channel_id,omitempty"`
+	RetryAttempt             int                          `json:"retry_attempt"`
+	SameResourceRetry        int                          `json:"same_resource_retry_attempt"`
+	FailoverAttempt          int                          `json:"failover_attempt"`
+	LeaseState               string                       `json:"lease_state,omitempty"`
+	FinalError               string                       `json:"final_error,omitempty"`
+	RejectionOrigin          AttemptOrigin                `json:"rejection_origin,omitempty"`
+	GeneratedAt              int64                        `json:"generated_at"`
+	ScannedCandidates        int                          `json:"scanned_candidates"`
+	UpstreamAttempts         int                          `json:"upstream_attempts"`
+	WaitMS                   int64                        `json:"wait_ms"`
+	PlanID                   string                       `json:"plan_id,omitempty"`
+	ConversionDiagnostics    []types.ConversionDiagnostic `json:"conversion_diagnostics,omitempty"`
+	UsageSource              string                       `json:"usage_source,omitempty"`
+	TokenBudget              int64                        `json:"token_budget,omitempty"`
+	TokenBudgetSource        string                       `json:"token_budget_source,omitempty"`
+	HealthEpoch              int64                        `json:"health_epoch,omitempty"`
 }
 
 func NewRouteDecision(requestID string, source RouteSource, model string, configurationVersion int64) RouteDecision {

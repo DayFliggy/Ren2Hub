@@ -43,7 +43,6 @@ func TestConvertOpenAIResponsesRequestToGeminiFunctionToolAndChoice(t *testing.T
 					},
 				},
 			},
-			{"type": "custom", "name": "freeform"},
 		}),
 		ToolChoice: mustGeminiRawMessage(t, map[string]any{
 			"type": "function",
@@ -103,8 +102,8 @@ func TestConvertOpenAIResponsesRequestToGeminiFunctionCallConversation(t *testin
 	assert.Equal(t, map[string]interface{}{"ok": true}, got.Contents[1].Parts[0].FunctionResponse.Response)
 }
 
-func TestConvertOpenAIResponsesRequestToGeminiSkipsCustomToolCalls(t *testing.T) {
-	got := mustConvertResponsesToGemini(t, dto.OpenAIResponsesRequest{
+func TestConvertOpenAIResponsesRequestToGeminiRejectsCustomToolCalls(t *testing.T) {
+	request := dto.OpenAIResponsesRequest{
 		Model: "gemini-test",
 		Input: mustGeminiRawMessage(t, []map[string]any{
 			{
@@ -138,19 +137,10 @@ func TestConvertOpenAIResponsesRequestToGeminiSkipsCustomToolCalls(t *testing.T)
 			{"type": "custom", "name": "apply_patch"},
 			{"type": "unknown", "name": "unknown"},
 		}),
-	})
-
-	assert.Empty(t, got.GetTools())
-	require.Len(t, got.Contents, 2)
-	assert.Equal(t, "model", got.Contents[0].Role)
-	require.Len(t, got.Contents[0].Parts, 1)
-	assert.Equal(t, "before custom", got.Contents[0].Parts[0].Text)
-	assert.Nil(t, got.Contents[0].Parts[0].FunctionCall)
-
-	assert.Equal(t, "user", got.Contents[1].Role)
-	require.Len(t, got.Contents[1].Parts, 1)
-	assert.Equal(t, "next turn", got.Contents[1].Parts[0].Text)
-	assert.Nil(t, got.Contents[1].Parts[0].FunctionResponse)
+	}
+	_, err := (&Adaptor{}).ConvertOpenAIResponsesRequest(nil, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: request.Model}}, request)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot preserve")
 }
 
 func mustConvertResponsesToGemini(t *testing.T, req dto.OpenAIResponsesRequest) *dto.GeminiChatRequest {

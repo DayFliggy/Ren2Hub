@@ -84,6 +84,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	var responseTextBuilder strings.Builder
 	imageCounter := &relaycommon.ImageGenerationCallCounter{}
 	imageCommitted := false
+	var streamErr *types.NewAPIError
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 
@@ -94,7 +95,22 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			sr.Error(err)
 			return
 		}
-		sendResponsesStreamData(c, streamResponse, data)
+		if streamResponse.Response != nil && streamResponse.Response.Usage != nil {
+			observed := streamResponse.Response.Usage
+			usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens = observed.InputTokens, observed.OutputTokens, observed.TotalTokens
+			if observed.InputTokensDetails != nil {
+				usage.PromptTokensDetails.CachedTokens = observed.InputTokensDetails.CachedTokens
+				usage.PromptTokensDetails.CacheWriteTokens = observed.InputTokensDetails.CacheWriteTokens
+			}
+		}
+		failed := streamResponse.Type == "error" || streamResponse.Type == "response.failed" || streamResponse.Type == "response.incomplete" || streamResponse.Type == "response.cancelled" || streamResponse.Type == "response.canceled"
+		if !failed || c.Writer.Written() {
+			sendResponsesStreamData(c, streamResponse, data)
+		}
+		if failed {
+			streamErr = types.NewOpenAIError(fmt.Errorf("upstream responses stream ended: %s", streamResponse.Type), types.ErrorCodeBadResponse, http.StatusBadGateway)
+			sr.Stop(streamErr)
+		}
 		switch streamResponse.Type {
 		case "response.completed", "response.done":
 			if streamResponse.Response != nil {
@@ -165,6 +181,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			// 非正常结束，使用输出文本的 token 数量
 			completionTokens := service.CountTextToken(tempStr, info.UpstreamModelName)
 			usage.CompletionTokens = completionTokens
+			usage.UsageSource = "estimated_partial"
 		}
 	}
 
@@ -174,5 +191,8 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 
-	return usage, nil
+	if streamErr != nil {
+		return usage, streamErr
+	}
+	return usage, helper.StreamError(info)
 }

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -97,30 +96,8 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 	adaptor.Init(info)
 
-	if info.ChannelSetting.SystemPrompt != "" {
-		if request.SystemInstructions == nil {
-			request.SystemInstructions = &dto.GeminiChatContent{
-				Parts: []dto.GeminiPart{
-					{Text: info.ChannelSetting.SystemPrompt},
-				},
-			}
-		} else if len(request.SystemInstructions.Parts) == 0 {
-			request.SystemInstructions.Parts = []dto.GeminiPart{{Text: info.ChannelSetting.SystemPrompt}}
-		} else if info.ChannelSetting.SystemPromptOverride {
-			common.SetContextKey(c, constant.ContextKeySystemPromptOverride, true)
-			merged := false
-			for i := range request.SystemInstructions.Parts {
-				if request.SystemInstructions.Parts[i].Text == "" {
-					continue
-				}
-				request.SystemInstructions.Parts[i].Text = info.ChannelSetting.SystemPrompt + "\n" + request.SystemInstructions.Parts[i].Text
-				merged = true
-				break
-			}
-			if !merged {
-				request.SystemInstructions.Parts = append([]dto.GeminiPart{{Text: info.ChannelSetting.SystemPrompt}}, request.SystemInstructions.Parts...)
-			}
-		}
+	if err := relaycommon.ApplyChannelSystemPrompt(c, info, request); err != nil {
+		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 	}
 
 	// Clean up empty system instruction
@@ -139,11 +116,12 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 	var requestBody io.Reader
 	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
-		storage, err := common.GetBodyStorage(c)
+		body, closer, err := relaycommon.NativeRequestBody(c, info, request)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		requestBody = common.NewReplayableBodyReader(storage)
+		defer closer.Close()
+		requestBody = body
 	} else {
 		// 使用 ConvertGeminiRequest 转换请求格式
 		convertedRequest, err := adaptor.ConvertGeminiRequest(c, info, request)
@@ -195,13 +173,16 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		}
 	}
 
-	usage, openaiErr := adaptor.DoResponse(c, resp.(*http.Response), info)
+	usage, openaiErr := adaptor.DoResponse(c, httpResp, info)
+	if observed, ok := usage.(*dto.Usage); ok {
+		info.CaptureResponseUsage(observed, "text", nil)
+	}
 	if openaiErr != nil {
 		service.ResetStatusCode(openaiErr, statusCodeMappingStr)
 		return openaiErr
 	}
 
-	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
+	info.CaptureResponseUsage(usage.(*dto.Usage), "text", nil)
 	return nil
 }
 
@@ -296,11 +277,14 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo) (newAPI
 	}
 
 	usage, openaiErr := adaptor.DoResponse(c, resp.(*http.Response), info)
+	if observed, ok := usage.(*dto.Usage); ok {
+		info.CaptureResponseUsage(observed, "text", nil)
+	}
 	if openaiErr != nil {
 		service.ResetStatusCode(openaiErr, statusCodeMappingStr)
 		return openaiErr
 	}
 
-	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
+	info.CaptureResponseUsage(usage.(*dto.Usage), "text", nil)
 	return nil
 }

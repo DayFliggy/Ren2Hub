@@ -56,26 +56,12 @@ func NativeGeminiEmbeddingHandler(c *gin.Context, resp *http.Response, info *rel
 	}
 
 	logger.LogDebug(c, "Gemini native embedding response body: %s", responseBody)
-
-	usage := service.ResponseText2Usage(c, "", info.UpstreamModelName, info.GetEstimatePromptTokens())
-
-	if info.IsGeminiBatchEmbedding {
-		var geminiResponse dto.GeminiBatchEmbeddingResponse
-		err = common.Unmarshal(responseBody, &geminiResponse)
-		if err != nil {
-			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
-		}
-	} else {
-		var geminiResponse dto.GeminiEmbeddingResponse
-		err = common.Unmarshal(responseBody, &geminiResponse)
-		if err != nil {
-			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
-		}
+	if err := helper.ValidateGeminiEmbeddingResponse(responseBody, helper.EmbeddingInputCount(info.Request), info.IsGeminiBatchEmbedding); err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 
-	service.IOCopyBytesGracefully(c, resp, responseBody)
-
-	return usage, nil
+	usage := service.ResponseText2Usage(c, "", info.UpstreamModelName, info.GetEstimatePromptTokens())
+	return usage, helper.WriteVectorResponse(c, resp, info, responseBody)
 }
 
 func GeminiTextGenerationStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {

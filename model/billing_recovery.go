@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -30,34 +31,42 @@ const (
 	BillingRecoveryOperationReserve = "reserve"
 	BillingRecoveryStatePending     = "pending"
 	BillingRecoveryStateCompleted   = "completed"
+	BillingRecoveryStateUnprepared  = "unprepared"
+	BillingRecoveryStateWriting     = "writing"
+	BillingRecoveryStateCollecting  = "collecting"
 )
 
 // BillingRecovery is the durable state for a request's pre-consume and
-// settlement components. It contains identifiers and amounts only; token
+// settlement components and the sanitized consumption log snapshot. Token
 // keys, headers, request bodies, and provider credentials are never stored.
 type BillingRecovery struct {
-	ID                int64  `json:"id" gorm:"primaryKey"`
-	RequestID         string `json:"request_id" gorm:"type:varchar(128);uniqueIndex;not null"`
-	UserID            int    `json:"user_id" gorm:"index;not null"`
-	TokenID           int    `json:"token_id" gorm:"index;not null"`
-	SubscriptionID    int    `json:"subscription_id" gorm:"index"`
-	Source            string `json:"source" gorm:"type:varchar(32);not null"`
-	FundingAmount     int64  `json:"funding_amount" gorm:"not null;default:0"`
-	ExtraAmount       int64  `json:"extra_amount" gorm:"not null;default:0"`
-	TokenAmount       int64  `json:"token_amount" gorm:"not null;default:0"`
-	TokenRequired     bool   `json:"token_required" gorm:"not null;default:false"`
-	SettlementDelta   int64  `json:"settlement_delta" gorm:"not null;default:0"`
-	PreConsumeState   string `json:"pre_consume_state" gorm:"type:varchar(16);index:billing_recovery_pending_scan,priority:2;not null;default:'prepared'"`
-	FundingRefund     string `json:"funding_refund" gorm:"type:varchar(16);not null;default:'pending'"`
-	ExtraRefund       string `json:"extra_refund" gorm:"type:varchar(16);not null;default:'pending'"`
-	TokenRefund       string `json:"token_refund" gorm:"type:varchar(16);not null;default:'pending'"`
-	FundingSettlement string `json:"funding_settlement" gorm:"type:varchar(16);not null;default:'pending'"`
-	TokenSettlement   string `json:"token_settlement" gorm:"type:varchar(16);not null;default:'pending'"`
-	Status            string `json:"status" gorm:"type:varchar(32);index;index:billing_recovery_pending_scan,priority:1;not null"`
-	Attempts          int    `json:"attempts" gorm:"not null;default:0"`
-	LastError         string `json:"last_error" gorm:"type:text"`
-	CreatedAt         int64  `json:"created_at" gorm:"bigint;index"`
-	UpdatedAt         int64  `json:"updated_at" gorm:"bigint;index;index:billing_recovery_pending_scan,priority:3"`
+	ID                    int64  `json:"id" gorm:"primaryKey"`
+	RequestID             string `json:"request_id" gorm:"type:varchar(128);uniqueIndex;not null"`
+	UserID                int    `json:"user_id" gorm:"index;not null"`
+	TokenID               int    `json:"token_id" gorm:"index;not null"`
+	SubscriptionID        int    `json:"subscription_id" gorm:"index"`
+	Source                string `json:"source" gorm:"type:varchar(32);not null"`
+	FundingAmount         int64  `json:"funding_amount" gorm:"not null;default:0"`
+	ExtraAmount           int64  `json:"extra_amount" gorm:"not null;default:0"`
+	TokenAmount           int64  `json:"token_amount" gorm:"not null;default:0"`
+	TokenRequired         bool   `json:"token_required" gorm:"not null;default:false"`
+	SettlementDelta       int64  `json:"settlement_delta" gorm:"not null;default:0"`
+	PreConsumeState       string `json:"pre_consume_state" gorm:"type:varchar(16);index:billing_recovery_pending_scan,priority:2;not null;default:'prepared'"`
+	FundingRefund         string `json:"funding_refund" gorm:"type:varchar(16);not null;default:'pending'"`
+	ExtraRefund           string `json:"extra_refund" gorm:"type:varchar(16);not null;default:'pending'"`
+	TokenRefund           string `json:"token_refund" gorm:"type:varchar(16);not null;default:'pending'"`
+	FundingSettlement     string `json:"funding_settlement" gorm:"type:varchar(16);not null;default:'pending'"`
+	TokenSettlement       string `json:"token_settlement" gorm:"type:varchar(16);not null;default:'pending'"`
+	Status                string `json:"status" gorm:"type:varchar(32);index;index:billing_recovery_pending_scan,priority:1;not null"`
+	Attempts              int    `json:"attempts" gorm:"not null;default:0"`
+	LastError             string `json:"last_error" gorm:"type:text"`
+	ConsumptionSnapshot   string `json:"-" gorm:"type:text"`
+	ConsumptionState      string `json:"consumption_state" gorm:"type:varchar(16);index"`
+	ConsumptionStatistics string `json:"consumption_statistics" gorm:"type:varchar(16)"`
+	ConsumptionLog        string `json:"consumption_log" gorm:"type:varchar(16)"`
+	ConsumptionError      string `json:"consumption_error" gorm:"type:text"`
+	CreatedAt             int64  `json:"created_at" gorm:"bigint;index"`
+	UpdatedAt             int64  `json:"updated_at" gorm:"bigint;index;index:billing_recovery_pending_scan,priority:3"`
 }
 
 // BillingRecoveryAdjustment is the idempotency fence for one accounting
@@ -250,6 +259,10 @@ func UpdateBillingRecoveryAmounts(requestID string, subscriptionID int, fundingA
 			(recovery.PreConsumeState != BillingRecoveryPreConsumePrepared && recovery.PreConsumeState != BillingRecoveryPreConsumeCommitted) {
 			return ErrBillingRecoveryStateConflict
 		}
+		if recovery.PreConsumeState == BillingRecoveryPreConsumeCommitted && recovery.SubscriptionID == subscriptionID &&
+			recovery.FundingAmount == fundingAmount && recovery.ExtraAmount == extraAmount && recovery.TokenAmount == tokenAmount {
+			return nil
+		}
 		result := tx.Model(&BillingRecovery{}).
 			Where("request_id = ? AND status = ?", requestID, BillingRecoveryStatusActive).
 			Updates(map[string]any{
@@ -274,28 +287,31 @@ func UpdateBillingRecoverySettlement(requestID string, delta int64) error {
 	if DB == nil || strings.TrimSpace(requestID) == "" {
 		return errors.New("invalid billing recovery settlement")
 	}
-	result := DB.Model(&BillingRecovery{}).Where("request_id = ? AND status IN ?", requestID, []string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending}).Updates(map[string]any{
-		"settlement_delta": delta,
-		"status":           BillingRecoveryStatusSettlementPending,
-		"updated_at":       common.GetTimestamp(),
-	})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected != 1 {
+	return DB.Transaction(func(tx *gorm.DB) error {
 		var recovery BillingRecovery
-		if err := DB.Select("status").Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
+		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
 			return err
 		}
-		// A recovery worker may have completed the exact same settlement
-		// between the caller's attempts. Do not overwrite its durable delta;
-		// the adjustment markers remain the source of truth.
 		if recovery.Status == BillingRecoveryStatusSettled {
+			// Completion is the durable fence; a late caller may carry a stale
+			// computed delta and must observe success without rewriting it.
 			return nil
 		}
-		return ErrBillingRecoveryStateConflict
-	}
-	return nil
+		if recovery.Status == BillingRecoveryStatusSettlementPending {
+			if recovery.SettlementDelta != delta {
+				return ErrBillingRecoveryStateConflict
+			}
+			return nil
+		}
+		if recovery.Status != BillingRecoveryStatusActive {
+			return ErrBillingRecoveryStateConflict
+		}
+		return tx.Model(&recovery).Updates(map[string]any{
+			"settlement_delta": delta,
+			"status":           BillingRecoveryStatusSettlementPending,
+			"updated_at":       common.GetTimestamp(),
+		}).Error
+	})
 }
 
 func TouchBillingRecovery(requestID string) error {
@@ -309,7 +325,15 @@ func TouchBillingRecovery(requestID string) error {
 		return result.Error
 	}
 	if result.RowsAffected != 1 {
-		return gorm.ErrRecordNotFound
+		// MySQL reports zero changed rows when a heartbeat repeats within the
+		// same second. Existence in a renewable state is the relevant condition.
+		var count int64
+		if err := DB.Model(&BillingRecovery{}).Where("request_id = ? AND status IN ?", requestID, []string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending}).Count(&count).Error; err != nil {
+			return err
+		}
+		if count != 1 {
+			return gorm.ErrRecordNotFound
+		}
 	}
 	return nil
 }
@@ -331,6 +355,9 @@ func MarkBillingRecoveryRefundPending(requestID string, lastError error) error {
 			return nil
 		}
 		if recovery.Status != BillingRecoveryStatusActive && recovery.Status != BillingRecoveryStatusRefundPending {
+			return ErrBillingRecoveryStateConflict
+		}
+		if recovery.ConsumptionState == BillingRecoveryStateCollecting {
 			return ErrBillingRecoveryStateConflict
 		}
 		updates := map[string]any{
@@ -418,9 +445,30 @@ func ListStaleBillingRecoveries(cutoff int64, limit int) ([]BillingRecovery, err
 		limit = 100
 	}
 	var rows []BillingRecovery
-	err := DB.Where("status IN ? AND updated_at < ?", []string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending}, cutoff).
+	err := staleBillingRecoveries(DB, cutoff).
 		Order("updated_at asc").Limit(limit).Find(&rows).Error
 	return rows, err
+}
+
+func staleBillingRecoveries(db *gorm.DB, cutoff int64) *gorm.DB {
+	return db.Model(&BillingRecovery{}).Where("(status IN ? OR (status = ? AND consumption_state IN ?)) AND updated_at < ?",
+		[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending},
+		BillingRecoveryStatusSettled, []string{BillingRecoveryStatePending, BillingRecoveryStateUnprepared}, cutoff)
+}
+
+type BillingRecoveryBacklog struct {
+	Pending       int64 `json:"pending"`
+	OldestUpdated int64 `json:"oldest_updated_at"`
+}
+
+func ReadBillingRecoveryBacklog(ctx context.Context, cutoff int64) (BillingRecoveryBacklog, error) {
+	var backlog BillingRecoveryBacklog
+	if DB == nil {
+		return backlog, errors.New("billing recovery database is unavailable")
+	}
+	err := staleBillingRecoveries(DB.WithContext(ctx), cutoff).
+		Select("COUNT(*) AS pending, COALESCE(MIN(updated_at), 0) AS oldest_updated").Scan(&backlog).Error
+	return backlog, err
 }
 
 func BillingRecoverySettlementComplete(recovery BillingRecovery) bool {
@@ -525,6 +573,15 @@ func PreConsumeWalletBillingRecovery(requestID string, quota int64, tokenUnlimit
 // locked before calculating the delta, so stale in-memory sessions cannot
 // repeat an already committed supplementary pre-consume.
 func ReserveBillingRecovery(requestID string, targetQuota, delta int64, tokenUnlimited bool) (int64, error) {
+	return reserveBillingRecovery(requestID, targetQuota, delta, tokenUnlimited, false)
+}
+
+// Realtime sessions must stop extending their reservation when funds run out.
+func ReserveRealtimeBillingRecovery(requestID string, targetQuota, delta int64, tokenUnlimited bool) (int64, error) {
+	return reserveBillingRecovery(requestID, targetQuota, delta, tokenUnlimited, true)
+}
+
+func reserveBillingRecovery(requestID string, targetQuota, delta int64, tokenUnlimited, requireFundingQuota bool) (int64, error) {
 	if DB == nil || strings.TrimSpace(requestID) == "" || targetQuota <= 0 || delta <= 0 {
 		return 0, errors.New("invalid billing recovery reservation")
 	}
@@ -578,11 +635,18 @@ func ReserveBillingRecovery(requestID string, targetQuota, delta int64, tokenUnl
 			// Match the existing supplemental-wallet behavior: a later reserve
 			// may carry a balance negative, while the initial pre-consume stays
 			// guarded by the quota check above.
-			result := tx.Model(&User{}).Where("id = ?", recovery.UserID).Update("quota", gorm.Expr("quota - ?", delta))
+			query := tx.Model(&User{}).Where("id = ?", recovery.UserID)
+			if requireFundingQuota {
+				query = query.Where("quota >= ?", delta)
+			}
+			result := query.Update("quota", gorm.Expr("quota - ?", delta))
 			if result.Error != nil {
 				return result.Error
 			}
 			if result.RowsAffected != 1 {
+				if requireFundingQuota {
+					return ErrBillingRecoveryFundingQuota
+				}
 				return gorm.ErrRecordNotFound
 			}
 			updates["funding_amount"] = gorm.Expr("funding_amount + ?", delta)
@@ -693,6 +757,9 @@ func ApplyBillingRecoveryAdjustment(requestID, component, operation string) erro
 		}
 		if operation == BillingRecoveryOperationSettle && component == BillingRecoveryComponentToken {
 			amount = recovery.SettlementDelta
+		}
+		if component == BillingRecoveryComponentToken && !recovery.TokenRequired {
+			amount = 0
 		}
 		if err := applyBillingRecoveryEffect(tx, recovery, component, operation, amount); err != nil {
 			return err

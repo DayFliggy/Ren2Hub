@@ -66,6 +66,9 @@ func RefreshCodexChannelCredential(ctx context.Context, channelID int, opts Code
 	if err != nil {
 		return nil, nil, err
 	}
+	if refreshedAccount, known := ExtractCodexAccountIDFromJWT(res.AccessToken); known && strings.TrimSpace(oauthKey.AccountID) != "" && refreshedAccount != strings.TrimSpace(oauthKey.AccountID) {
+		return nil, nil, errors.New("codex oauth refresh returned a different account")
+	}
 
 	oauthKey.AccessToken = res.AccessToken
 	oauthKey.RefreshToken = res.RefreshToken
@@ -91,9 +94,10 @@ func RefreshCodexChannelCredential(ctx context.Context, channelID int, opts Code
 		return nil, nil, err
 	}
 
-	if err := model.DB.Model(&model.Channel{}).Where("id = ?", ch.Id).Update("key", string(encoded)).Error; err != nil {
+	if err := model.RefreshGatewayCredential(ctx, ch, string(encoded)); err != nil {
 		return nil, nil, err
 	}
+	ch.Key = string(encoded)
 
 	if opts.ResetCaches {
 		model.InitChannelCache()

@@ -313,6 +313,9 @@ func (m *Message) Unmarshal(data []byte) error {
 
 	m.Version = VersionBits(versionAndHeaderSize >> 4)
 	m.HeaderSize = HeaderSizeBits(versionAndHeaderSize & 0b00001111)
+	if m.Version != Version1 || m.HeaderSize < HeaderSize4 {
+		return fmt.Errorf("invalid VolcEngine protocol header")
+	}
 
 	_, err = buf.ReadByte()
 	if err != nil {
@@ -324,7 +327,7 @@ func (m *Message) Unmarshal(data []byte) error {
 		return err
 	}
 
-	m.Serialization = SerializationBits(serializationCompression & 0b11110000)
+	m.Serialization = SerializationBits(serializationCompression >> 4)
 	m.Compression = CompressionBits(serializationCompression & 0b00001111)
 
 	headerSize := 4 * int(m.HeaderSize)
@@ -333,6 +336,10 @@ func (m *Message) Unmarshal(data []byte) error {
 		if n, err := buf.Read(make([]byte, paddingSize)); err != nil || n < paddingSize {
 			return fmt.Errorf("insufficient header bytes: expected %d, got %d", paddingSize, n)
 		}
+	}
+	// The audio ACK consists only of the header; it has no sequence or payload.
+	if m.MsgType == MsgTypeAudioOnlyServer && m.MsgTypeFlag == MsgTypeFlagNoSeq && buf.Len() == 0 {
+		return nil
 	}
 
 	readers, err := m.readers()
@@ -495,6 +502,9 @@ func (m *Message) readPayload(buf *bytes.Buffer) error {
 	var size uint32
 	if err := binary.Read(buf, binary.BigEndian, &size); err != nil {
 		return err
+	}
+	if uint64(size) > uint64(buf.Len()) {
+		return io.ErrUnexpectedEOF
 	}
 
 	if size > 0 {

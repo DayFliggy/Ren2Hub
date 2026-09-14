@@ -2,14 +2,22 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
+	"github.com/QuantumNous/new-api/pkg/relaycapability"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 )
 
 const (
@@ -22,50 +30,55 @@ const (
 	RoutePreviewFilterEntryDisabled      = "entry_disabled"
 	RoutePreviewFilterChannelMissing     = "channel_not_found"
 	RoutePreviewFilterSourceUnsupported  = "source_unsupported"
+	RoutePreviewFilterConversion         = "conversion_unavailable"
 )
 
 // RouteProfilePreviewInput is intentionally limited to request facts that are
 // needed for a static manual-route preview. It never selects or reserves a
 // live channel.
 type RouteProfilePreviewInput struct {
-	Model          string `json:"model"`
-	Path           string `json:"path"`
-	EffectiveGroup string `json:"-"`
+	Model   string          `json:"model"`
+	Path    string          `json:"path"`
+	Request json.RawMessage `json:"request,omitempty"`
 }
 
 type RouteProfilePreview struct {
-	ProfileID              int                   `json:"profile_id"`
-	ProfileVersion         int64                 `json:"profile_version"`
-	RequestModel           string                `json:"request_model"`
-	NormalizedModel        string                `json:"normalized_model"`
-	Path                   string                `json:"path"`
-	EndpointType           string                `json:"endpoint_type"`
-	ActiveGroup            *model.UserRouteGroup `json:"active_group,omitempty"`
-	Policy                 *model.RoutePolicy    `json:"policy,omitempty"`
-	Entries                []RoutePreviewEntry   `json:"entries"`
-	CandidateChannelIDs    []int                 `json:"candidate_channel_ids"`
-	SelectionMode          string                `json:"selection_mode"`
-	PreferredChannelID     int                   `json:"preferred_channel_id,omitempty"`
-	FilterReasonCounts     map[string]int        `json:"filter_reason_counts"`
-	HasMixed               bool                  `json:"has_mixed"`
-	RuntimeRecheckRequired bool                  `json:"runtime_recheck_required"`
-	RuntimeRecheckReasons  []string              `json:"runtime_recheck_reasons"`
-	LiveSelection          bool                  `json:"live_selection"`
+	ProfileID              int                              `json:"profile_id"`
+	ProfileVersion         int64                            `json:"profile_version"`
+	RequestModel           string                           `json:"request_model"`
+	NormalizedModel        string                           `json:"normalized_model"`
+	Path                   string                           `json:"path"`
+	EndpointType           string                           `json:"endpoint_type"`
+	ActiveGroup            *model.UserRouteGroup            `json:"active_group,omitempty"`
+	Policy                 *model.RoutePolicy               `json:"policy,omitempty"`
+	Entries                []RoutePreviewEntry              `json:"entries"`
+	CandidateChannelIDs    []int                            `json:"candidate_channel_ids"`
+	SelectionMode          string                           `json:"selection_mode"`
+	PreferredChannelID     int                              `json:"preferred_channel_id,omitempty"`
+	FilterReasonCounts     map[string]int                   `json:"filter_reason_counts"`
+	HasMixed               bool                             `json:"has_mixed"`
+	RuntimeRecheckRequired bool                             `json:"runtime_recheck_required"`
+	RuntimeRecheckReasons  []string                         `json:"runtime_recheck_reasons"`
+	LiveSelection          bool                             `json:"live_selection"`
+	RequestRequirements    relayconvert.RequestRequirements `json:"request_requirements"`
+	ConversionPolicy       types.ConversionLossPolicy       `json:"conversion_policy"`
 }
 
 type RoutePreviewEntry struct {
-	EntryID         int                       `json:"entry_id"`
-	ChannelID       int                       `json:"channel_id"`
-	Position        int                       `json:"position"`
-	Weight          int                       `json:"weight"`
-	RequestModel    string                    `json:"request_model"`
-	ActualModel     string                    `json:"actual_model"`
-	LabSlug         string                    `json:"lab_slug"`
-	SnapshotVersion int64                     `json:"snapshot_version"`
-	CatalogVersion  string                    `json:"catalog_version"`
-	CapabilityState string                    `json:"capability_state"`
-	Health          RoutePreviewHealthSummary `json:"health"`
-	FilterReason    string                    `json:"filter_reason,omitempty"`
+	EntryID         int                          `json:"entry_id"`
+	ChannelID       int                          `json:"channel_id"`
+	Position        int                          `json:"position"`
+	Weight          int                          `json:"weight"`
+	RequestModel    string                       `json:"request_model"`
+	ActualModel     string                       `json:"actual_model"`
+	LabSlug         string                       `json:"lab_slug"`
+	SnapshotVersion int64                        `json:"snapshot_version"`
+	CatalogVersion  string                       `json:"catalog_version"`
+	CapabilityState string                       `json:"capability_state"`
+	Health          RoutePreviewHealthSummary    `json:"health"`
+	FilterReason    string                       `json:"filter_reason,omitempty"`
+	ConversionPlan  *relayconvert.ConversionPlan `json:"conversion_plan,omitempty"`
+	Diagnostics     []types.ConversionDiagnostic `json:"diagnostics"`
 }
 
 // RoutePreviewHealthSummary is the non-sensitive aggregate health state for
@@ -107,6 +120,21 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	if view.Profile.Mode != model.RouteModeManual {
 		return nil, fmt.Errorf("%w: manual route profile is required", ErrRouteProfileValidation)
 	}
+	var token model.Token
+	if err := model.DB.WithContext(ctx).Where("id = ? AND user_id = ?", view.Profile.TokenID, userID).First(&token).Error; err != nil {
+		return nil, err
+	}
+	conversionPolicy := types.ConversionLossPolicy(token.ConversionPolicy)
+	if conversionPolicy == "" {
+		conversionPolicy = types.ConversionLossPolicySafe
+	}
+	if err := conversionPolicy.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: invalid token conversion policy", ErrRouteProfileValidation)
+	}
+	requirements, err := analyzeRoutePreviewRequest(input)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrRouteProfileValidation, err)
+	}
 
 	preview := &RouteProfilePreview{
 		ProfileID:              view.Profile.ID,
@@ -122,6 +150,11 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 		RuntimeRecheckRequired: true,
 		RuntimeRecheckReasons:  []string{"price_qualification", "quota_qualification", "security_policy"},
 		LiveSelection:          false,
+		RequestRequirements:    requirements,
+		ConversionPolicy:       conversionPolicy,
+	}
+	if requirements.NativeRequired {
+		preview.RuntimeRecheckReasons = append(preview.RuntimeRecheckReasons, "state_ownership")
 	}
 	activeGroup := findActiveRouteGroup(view)
 	if activeGroup == nil {
@@ -146,7 +179,7 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	if err != nil {
 		return nil, err
 	}
-	abilityAccess, err := FindUserRouteCapabilityAccessForGroup(ctx, userID, capabilities, input.EffectiveGroup)
+	abilityAccess, err := FindUserRouteCapabilityAccess(ctx, userID, capabilities)
 	if err != nil {
 		return nil, err
 	}
@@ -163,10 +196,6 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 		capabilityByChannel[capability.ChannelID] = capability
 	}
 
-	var token model.Token
-	if err := model.DB.WithContext(ctx).Where("id = ? AND user_id = ?", view.Profile.TokenID, userID).First(&token).Error; err != nil {
-		return nil, err
-	}
 	now := time.Now()
 	for _, entry := range activeGroup.Entries {
 		item := RoutePreviewEntry{
@@ -177,6 +206,7 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 			RequestModel:    normalizedModel,
 			CapabilityState: model.RouteCapabilityStateUnresolved,
 			Health:          defaultRoutePreviewHealthSummary(),
+			Diagnostics:     make([]types.ConversionDiagnostic, 0),
 		}
 		health := healthByChannel[entry.ChannelID]
 		if health.ID != 0 {
@@ -222,6 +252,21 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 			item.CatalogVersion = capability.CatalogVersion
 			item.CapabilityState = capability.State
 		}
+		if item.FilterReason == "" {
+			channel := channels[entry.ChannelID]
+			plan, planErr := PlanChannelConversion(requirements, &channel, input.Path, item.ActualModel, conversionPolicy)
+			item.ConversionPlan = &plan
+			item.Diagnostics = append(item.Diagnostics, plan.Diagnostics...)
+			if planErr != nil {
+				item.FilterReason = RoutePreviewFilterConversion
+				if len(item.Diagnostics) == 0 {
+					item.Diagnostics = append(item.Diagnostics, types.ConversionDiagnostic{
+						Code: RoutePreviewFilterConversion, Message: planErr.Error(),
+						Severity: types.ConversionDiagnosticError, From: requirements.Format, To: plan.To,
+					})
+				}
+			}
+		}
 		if item.FilterReason != "" {
 			preview.FilterReasonCounts[item.FilterReason]++
 		}
@@ -252,6 +297,179 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	}
 	preview.PreferredChannelID = topLayer[0].ChannelID
 	return preview, nil
+}
+
+func analyzeRoutePreviewRequest(input RouteProfilePreviewInput) (relayconvert.RequestRequirements, error) {
+	var request any
+	switch constant.EndpointType(endpointTypeForRequestPath(input.Path)) {
+	case constant.EndpointTypeOpenAI:
+		request = &dto.GeneralOpenAIRequest{}
+	case constant.EndpointTypeAnthropic:
+		request = &dto.ClaudeRequest{}
+	case constant.EndpointTypeGemini:
+		request = &dto.GeminiChatRequest{}
+	case constant.EndpointTypeOpenAIResponse:
+		request = &dto.OpenAIResponsesRequest{}
+	case constant.EndpointTypeOpenAIResponseCompact:
+		request = &dto.OpenAIResponsesCompactionRequest{}
+	case constant.EndpointTypeEmbeddings:
+		request = &dto.EmbeddingRequest{}
+	case constant.EndpointTypeJinaRerank:
+		request = &dto.RerankRequest{}
+	case constant.EndpointTypeImageGeneration:
+		request = &dto.ImageRequest{}
+	case constant.EndpointTypeAudio:
+		request = &dto.AudioRequest{}
+	default:
+		return relayconvert.RequestRequirements{}, fmt.Errorf("request path does not support conversion preview")
+	}
+	payload := input.Request
+	if len(payload) == 0 {
+		payload = json.RawMessage(`{}`)
+	}
+	if len(payload) > 1024*1024 {
+		return relayconvert.RequestRequirements{}, fmt.Errorf("request sample exceeds 1 MiB")
+	}
+	var object map[string]json.RawMessage
+	if err := common.Unmarshal(payload, &object); err != nil || object == nil {
+		return relayconvert.RequestRequirements{}, fmt.Errorf("request sample must be a JSON object")
+	}
+	if err := common.Unmarshal(payload, request); err != nil {
+		return relayconvert.RequestRequirements{}, fmt.Errorf("request sample does not match the request protocol")
+	}
+	requirements, err := relayconvert.AnalyzeRequestJSON(request, payload)
+	if err != nil {
+		return requirements, err
+	}
+	if requirements.Model != "" && modellab.NormalizeModel(requirements.Model) != modellab.NormalizeModel(input.Model) {
+		return requirements, fmt.Errorf("request sample model must match the preview model")
+	}
+	requirements.Model = input.Model
+	if requirements.Format == types.RelayFormatGemini {
+		requirements.Stream = strings.Contains(input.Path, ":streamGenerateContent")
+	}
+	return requirements, nil
+}
+
+// PlanChannelConversion resolves the same read-only host surface for preview
+// and execution. It does not initialize credentials, download media or debit.
+func PlanChannelConversion(requirements relayconvert.RequestRequirements, channel *model.Channel, path, actualModel string, policy types.ConversionLossPolicy) (relayconvert.ConversionPlan, error) {
+	plan := relayconvert.ConversionPlan{From: requirements.Format, Policy: policy}
+	apiType, registered := common.ChannelType2APIType(channel.Type)
+	if !registered {
+		return plan, fmt.Errorf("channel has no registered request adaptor")
+	}
+	definition, found := relaycapability.DescribeForCredentials(apiType, actualModel, channel.GetKeys(), channel.GetOtherSettings())
+	if !found {
+		return plan, fmt.Errorf("channel has no registered request adaptor")
+	}
+	surface, supported := definition.Resolve(requirements.Format)
+	if apiType == constant.APITypeAdvancedCustom {
+		config := channel.GetOtherSettings().AdvancedCustom
+		if config == nil {
+			return plan, fmt.Errorf("custom channel has no configured routes")
+		}
+		route, matched := config.MatchPathForModel(strings.Split(path, "?")[0], requirements.Model)
+		if !matched {
+			return plan, fmt.Errorf("custom channel does not implement this request path")
+		}
+		surface = relaycapability.Surface{Incoming: requirements.Format, Target: requirements.Format, Native: true, Stream: true}
+		if route.Converter != "" && route.Converter != relayconvert.ConverterNone {
+			spec, exists := relayconvert.LookupRequestConverter(route.Converter)
+			if !exists || spec.From != requirements.Format || !dto.IsAdvancedCustomConverterAllowed(route.Converter) {
+				return plan, fmt.Errorf("custom channel conversion does not support this request protocol")
+			}
+			surface.Target, surface.Native = spec.To, false
+		}
+		supported = true
+	}
+	if !supported {
+		return plan, fmt.Errorf("channel does not implement %s requests", requirements.Format)
+	}
+	if !surface.SupportsPath(path) {
+		return plan, fmt.Errorf("channel does not implement this request path")
+	}
+	if requirements.Format == types.RelayFormatClaude && apiType == constant.APITypeVolcEngine {
+		if _, native := constant.ChannelSpecialBases[channel.GetBaseURL()]; native {
+			surface.Target, surface.Native = types.RelayFormatClaude, true
+		}
+	}
+	if requirements.Format == types.RelayFormatClaude && apiType == constant.APITypeAli {
+		for _, pattern := range strings.Split(common.GetEnvOrDefaultString("ALI_ANTHROPIC_MESSAGES_MODELS", "qwen,deepseek-v4,kimi,glm,minimax-m"), ",") {
+			if pattern = strings.ToLower(strings.TrimSpace(pattern)); pattern != "" && strings.Contains(strings.ToLower(actualModel), pattern) {
+				surface.Target, surface.Native = types.RelayFormatClaude, true
+				break
+			}
+		}
+	}
+	passthrough := model_setting.GetGlobalSettings().PassThroughRequestEnabled || channel.GetSetting().PassThroughBodyEnabled
+	if (requirements.Format == types.RelayFormatOpenAI || requirements.Format == types.RelayFormatClaude) && !passthrough &&
+		ShouldChatCompletionsUseResponsesGlobal(channel.Id, channel.Type, requirements.Model) {
+		if _, supported := definition.Resolve(types.RelayFormatOpenAIResponses); !supported {
+			return plan, fmt.Errorf("configured Responses upgrade is not implemented by selected channel")
+		}
+		surface.Target, surface.Native = types.RelayFormatOpenAIResponses, false
+	}
+	if passthrough && !surface.Native {
+		plan.To = surface.Target
+		return plan, fmt.Errorf("raw request passthrough requires a native protocol surface")
+	}
+	if requirements.NativeRequired && !surface.Native {
+		plan.To = surface.Target
+		plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{
+			Code: "native_state_required", Path: strings.Join(requirements.NativeState, ","),
+			Message: "provider-owned state requires a native protocol surface", Severity: types.ConversionDiagnosticError,
+			From: requirements.Format, To: surface.Target,
+		})
+		return plan, &types.ConversionLossError{Diagnostics: plan.Diagnostics}
+	}
+	if slices.Contains(requirements.NativeState, "prompt") && !relaycapability.SupportsReferenceDomain(channel.Type, surface.Target, "openai_prompt") {
+		plan.To = surface.Target
+		plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{
+			Code: "reference_domain_unsupported", Path: "prompt", Message: "channel does not implement the OpenAI prompt reference domain",
+			Severity: types.ConversionDiagnosticError, From: requirements.Format, To: surface.Target,
+		})
+		return plan, &types.ConversionLossError{Diagnostics: plan.Diagnostics}
+	}
+	if passthrough && surface.Native {
+		requirements.Diagnostics = slices.DeleteFunc(slices.Clone(requirements.Diagnostics), func(diagnostic types.ConversionDiagnostic) bool {
+			return diagnostic.Code == "unknown_request_field"
+		})
+	}
+	plan, err := relayconvert.PlanConversion(requirements, surface.Target, policy)
+	if err != nil {
+		return plan, err
+	}
+	plan.StreamSupported = plan.StreamSupported && surface.Stream
+	plan.Native = plan.Native && surface.Native
+	if apiType == constant.APITypeVertexAi && surface.Target == types.RelayFormatGemini &&
+		model_setting.GetGeminiSettings().RemoveFunctionResponseIdEnabled {
+		diagnostics, projectionErr := requirements.ToolIdentity.CheckNameOnly(requirements.Format, plan.Policy)
+		plan.Diagnostics = append(plan.Diagnostics, diagnostics...)
+		if projectionErr != nil {
+			return plan, projectionErr
+		}
+	}
+	if surface.TextProjection != nil {
+		plan.RequestProjection = surface.TextProjection.ID
+		if channel.GetSetting().SystemPrompt != "" && !slices.Contains(surface.TextProjection.Roles, (&dto.GeneralOpenAIRequest{Model: actualModel}).GetSystemRoleName()) {
+			plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{
+				Code: "channel_system_prompt_unsupported", Path: "channel.system_prompt",
+				Message: "selected projection cannot preserve the channel system prompt", Severity: types.ConversionDiagnosticError,
+				From: requirements.Format, To: surface.Target,
+			})
+			return plan, &types.ConversionLossError{Diagnostics: plan.Diagnostics}
+		}
+		diagnostics, projectionErr := surface.TextProjection.Check(requirements, plan.Policy)
+		plan.Diagnostics = append(plan.Diagnostics, diagnostics...)
+		if projectionErr != nil {
+			return plan, projectionErr
+		}
+	}
+	if requirements.Stream && !plan.StreamSupported && (requirements.Operation == "text" || requirements.Operation == "audio") {
+		return plan, fmt.Errorf("channel does not implement streaming responses for this request")
+	}
+	return plan, nil
 }
 
 func findActiveRouteGroup(view *RouteProfileView) *RouteGroupView {
@@ -321,18 +539,10 @@ func loadRoutePreviewSnapshots(ctx context.Context, channelIDs []int) (map[int]r
 	return snapshots, nil
 }
 
-// FindUserRouteCapabilityAccess applies current Ability.enabled and user-group
-// authorization to immutable capability rows. The snapshot describes what a
-// channel could serve when refreshed; the live Ability table remains the
-// authority for whether this user may see or select that request model.
+// FindUserRouteCapabilityAccess checks current model availability against
+// immutable capability rows. Retired Ability groups do not authorize models;
+// callers enforce Token scope and channel entitlement separately.
 func FindUserRouteCapabilityAccess(ctx context.Context, userID int, capabilities []model.ChannelModelCapability) (map[int]RouteCapabilityUserAccess, error) {
-	return FindUserRouteCapabilityAccessForGroup(ctx, userID, capabilities, "")
-}
-
-// FindUserRouteCapabilityAccessForGroup applies ability authorization using an
-// already-resolved request group when one is available. Empty groups preserve
-// the account's primary-group behavior used by configuration endpoints.
-func FindUserRouteCapabilityAccessForGroup(ctx context.Context, userID int, capabilities []model.ChannelModelCapability, effectiveGroup string) (map[int]RouteCapabilityUserAccess, error) {
 	access := make(map[int]RouteCapabilityUserAccess, len(capabilities))
 	if len(capabilities) == 0 {
 		return access, nil
@@ -341,7 +551,7 @@ func FindUserRouteCapabilityAccessForGroup(ctx context.Context, userID int, capa
 		ctx = context.Background()
 	}
 	var user model.User
-	if err := model.DB.WithContext(ctx).Select("id", "group").Where("id = ?", userID).First(&user).Error; err != nil {
+	if err := model.DB.WithContext(ctx).Select("id").Where("id = ?", userID).First(&user).Error; err != nil {
 		return nil, err
 	}
 	capabilityIDsByChannelModel := make(map[int]map[string][]int, len(capabilities))
@@ -436,13 +646,6 @@ func routePreviewHealthSummary(health model.ChannelHealth) RoutePreviewHealthSum
 		summary.HealthEpoch = 1
 	}
 	return summary
-}
-
-// routePreviewHealthUsable is deliberately read-only. A live request is the
-// only path allowed to claim a half-open probe, while Preview must show the
-// same unavailable state without changing health ownership.
-func routePreviewHealthUsable(health RoutePreviewHealthSummary) bool {
-	return health.State == "" || health.State == model.RouteHealthStateClosed
 }
 
 type routePreviewFilterInput struct {

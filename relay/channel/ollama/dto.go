@@ -28,8 +28,8 @@ type OllamaTool struct {
 type OllamaToolCall struct {
 	ID       string `json:"id,omitempty"`
 	Function struct {
-		Name      string      `json:"name"`
-		Arguments interface{} `json:"arguments"`
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments"`
 	} `json:"function"`
 }
 

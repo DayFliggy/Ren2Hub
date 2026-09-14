@@ -25,8 +25,9 @@ type GeminiSettings struct {
 	SupportedImagineModels                []string          `json:"supported_imagine_models"`
 	ThinkingAdapterEnabled                bool              `json:"thinking_adapter_enabled"`
 	ThinkingAdapterBudgetTokensPercentage float64           `json:"thinking_adapter_budget_tokens_percentage"`
-	FunctionCallThoughtSignatureEnabled   bool              `json:"function_call_thought_signature_enabled"`
-	RemoveFunctionResponseIdEnabled       bool              `json:"remove_function_response_id_enabled"`
+	// Deprecated: accepted when loading old configuration, but never used to create signatures.
+	FunctionCallThoughtSignatureEnabled bool `json:"function_call_thought_signature_enabled"`
+	RemoveFunctionResponseIdEnabled     bool `json:"remove_function_response_id_enabled"`
 }
 
 // 默认配置
@@ -49,7 +50,6 @@ var defaultGeminiSettings = GeminiSettings{
 	},
 	ThinkingAdapterEnabled:                false,
 	ThinkingAdapterBudgetTokensPercentage: 0.6,
-	FunctionCallThoughtSignatureEnabled:   true,
 	RemoveFunctionResponseIdEnabled:       true,
 }
 

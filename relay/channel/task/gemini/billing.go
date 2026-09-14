@@ -1,86 +1,57 @@
 package gemini
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 )
 
-// ParseVeoDurationSeconds extracts durationSeconds from metadata.
-// Returns 8 (Veo default) when not specified or invalid.
-func ParseVeoDurationSeconds(metadata map[string]any) int {
-	if metadata == nil {
-		return 8
-	}
-	v, ok := metadata["durationSeconds"]
-	if !ok {
-		return 8
-	}
-	switch n := v.(type) {
-	case float64:
-		if int(n) > 0 {
-			return int(n)
+// ResolveVeoParameters produces the same bounded values for pricing and wire
+// output. Explicit invalid values never become an implicit provider default.
+func ResolveVeoParameters(req relaycommon.TaskSubmitReq) (*VeoParameters, error) {
+	params := &VeoParameters{DurationSeconds: req.Duration, SampleCount: 1, Resolution: SizeToVeoResolution(req.Size)}
+	if params.DurationSeconds == 0 && req.Seconds != "" {
+		seconds, err := strconv.Atoi(req.Seconds)
+		if err != nil {
+			return nil, fmt.Errorf("invalid Veo seconds")
 		}
-	case int:
-		if n > 0 {
-			return n
-		}
+		params.DurationSeconds = seconds
+	} else if params.DurationSeconds == 0 {
+		params.DurationSeconds = 8
 	}
-	return 8
-}
-
-// ParseVeoResolution extracts resolution from metadata.
-// Returns "720p" when not specified.
-func ParseVeoResolution(metadata map[string]any) string {
-	if metadata == nil {
-		return "720p"
-	}
-	v, ok := metadata["resolution"]
-	if !ok {
-		return "720p"
-	}
-	if s, ok := v.(string); ok && s != "" {
-		return strings.ToLower(s)
-	}
-	return "720p"
-}
-
-// ResolveVeoDuration returns the effective duration in seconds.
-// Priority: metadata["durationSeconds"] > stdDuration > stdSeconds > default (8).
-// The result is capped because it is used as a billing multiplier and the
-// metadata path bypasses standard request validation.
-func ResolveVeoDuration(metadata map[string]any, stdDuration int, stdSeconds string) int {
-	if metadata != nil {
-		if _, exists := metadata["durationSeconds"]; exists {
-			if d := ParseVeoDurationSeconds(metadata); d > 0 {
-				return min(d, relaycommon.MaxTaskDurationSeconds)
+	seen := make(map[string]bool)
+	for field := range req.Metadata {
+		name := strings.ToLower(field)
+		switch name {
+		case "durationseconds", "samplecount", "resolution":
+			if seen[name] {
+				return nil, fmt.Errorf("duplicate Veo parameter aliases: %s", name)
 			}
+			seen[name] = true
 		}
 	}
-	if stdDuration > 0 {
-		return min(stdDuration, relaycommon.MaxTaskDurationSeconds)
+	if err := taskcommon.UnmarshalMetadata(req.Metadata, params); err != nil {
+		return nil, fmt.Errorf("invalid Veo metadata: %w", err)
 	}
-	if s, err := strconv.Atoi(stdSeconds); err == nil && s > 0 {
-		return min(s, relaycommon.MaxTaskDurationSeconds)
+	if params.DurationSeconds < 1 || params.DurationSeconds > relaycommon.MaxTaskDurationSeconds {
+		return nil, fmt.Errorf("Veo durationSeconds must be between 1 and %d", relaycommon.MaxTaskDurationSeconds)
 	}
-	return 8
-}
-
-// ResolveVeoResolution returns the effective resolution string (lowercase).
-// Priority: metadata["resolution"] > SizeToVeoResolution(stdSize) > default ("720p").
-func ResolveVeoResolution(metadata map[string]any, stdSize string) string {
-	if metadata != nil {
-		if _, exists := metadata["resolution"]; exists {
-			if r := ParseVeoResolution(metadata); r != "" {
-				return r
-			}
-		}
+	if params.SampleCount != 1 {
+		return nil, fmt.Errorf("Veo task submission supports one output")
 	}
-	if stdSize != "" {
-		return SizeToVeoResolution(stdSize)
+	params.Resolution = strings.ToLower(strings.TrimSpace(params.Resolution))
+	switch params.Resolution {
+	case "720p", "1080p", "4k":
+	default:
+		return nil, fmt.Errorf("unsupported Veo resolution")
 	}
-	return "720p"
+	if params.AspectRatio == "" && req.Size != "" {
+		params.AspectRatio = SizeToVeoAspectRatio(req.Size)
+	}
+	return params, nil
 }
 
 // SizeToVeoResolution converts a "WxH" size string to a Veo resolution label.

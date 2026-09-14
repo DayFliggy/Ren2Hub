@@ -147,6 +147,8 @@ type ChannelHealth struct {
 	FailureCount        int    `json:"failure_count" gorm:"not null;default:0"`
 	CooldownUntil       int64  `json:"cooldown_until" gorm:"bigint"`
 	HealthEpoch         int64  `json:"health_epoch" gorm:"not null;default:1"`
+	ProbeOwner          string `json:"-" gorm:"type:varchar(128)"`
+	ProbeExpiresAt      int64  `json:"-" gorm:"bigint"`
 	LastLatencyMS       int64  `json:"last_latency_ms"`
 	FirstTokenLatencyMS int64  `json:"first_token_latency_ms"`
 	UpdatedAt           int64  `json:"updated_at" gorm:"bigint;not null"`

@@ -13,9 +13,14 @@ type CfRequest struct {
 }
 
 type CfAudioResponse struct {
-	Result CfSTTResult `json:"result"`
+	Result  *CfSTTResult `json:"result"`
+	Success *bool        `json:"success"`
+	Errors  []struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"errors"`
 }
 
 type CfSTTResult struct {
-	Text string `json:"text"`
+	Text *string `json:"text"`
 }

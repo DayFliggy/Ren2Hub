@@ -43,6 +43,9 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
+	if err := relaycommon.ApplyChannelSystemPrompt(c, info, request); err != nil {
+		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	}
 
 	includeUsage := true
 	// 判断用户是否需要返回使用情况
@@ -75,8 +78,8 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
 		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
-		applySystemPromptIfNeeded(c, info, request)
 		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, request)
+		info.CaptureResponseUsage(usage, "text", nil)
 		if newApiErr != nil {
 			return newApiErr
 		}
@@ -85,9 +88,9 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		var containsAudioRatios = ratio_setting.ContainsAudioRatio(info.OriginModelName) || ratio_setting.ContainsAudioCompletionRatio(info.OriginModelName)
 
 		if containAudioTokens && containsAudioRatios {
-			service.PostAudioConsumeQuota(c, info, usage, "")
+			info.CaptureResponseUsage(usage, "audio", nil)
 		} else {
-			service.PostTextConsumeQuota(c, info, usage, nil)
+			info.CaptureResponseUsage(usage, "text", nil)
 		}
 		return nil
 	}
@@ -95,64 +98,18 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	var requestBody io.Reader
 
 	if passThroughGlobal || info.ChannelSetting.PassThroughBodyEnabled {
-		storage, err := common.GetBodyStorage(c)
+		body, closer, err := relaycommon.NativeRequestBody(c, info, request)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		if common.DebugEnabled {
-			if debugBytes, bErr := storage.Bytes(); bErr == nil {
-				logger.LogDebug(c, "requestBody: %s", debugBytes)
-			}
-		}
-		requestBody = common.NewReplayableBodyReader(storage)
+		defer closer.Close()
+		requestBody = body
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIRequest(c, info, request)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
-
-		if info.ChannelSetting.SystemPrompt != "" {
-			// 如果有系统提示，则将其添加到请求中
-			request, ok := convertedRequest.(*dto.GeneralOpenAIRequest)
-			if ok {
-				containSystemPrompt := false
-				for _, message := range request.Messages {
-					if message.Role == request.GetSystemRoleName() {
-						containSystemPrompt = true
-						break
-					}
-				}
-				if !containSystemPrompt {
-					// 如果没有系统提示，则添加系统提示
-					systemMessage := dto.Message{
-						Role:    request.GetSystemRoleName(),
-						Content: info.ChannelSetting.SystemPrompt,
-					}
-					request.Messages = append([]dto.Message{systemMessage}, request.Messages...)
-				} else if info.ChannelSetting.SystemPromptOverride {
-					common.SetContextKey(c, constant.ContextKeySystemPromptOverride, true)
-					// 如果有系统提示，且允许覆盖，则拼接到前面
-					for i, message := range request.Messages {
-						if message.Role == request.GetSystemRoleName() {
-							if message.IsStringContent() {
-								request.Messages[i].SetStringContent(info.ChannelSetting.SystemPrompt + "\n" + message.StringContent())
-							} else {
-								contents := message.ParseContent()
-								contents = append([]dto.MediaContent{
-									{
-										Type: dto.ContentTypeText,
-										Text: info.ChannelSetting.SystemPrompt,
-									},
-								}, contents...)
-								request.Messages[i].Content = contents
-							}
-							break
-						}
-					}
-				}
-			}
-		}
 
 		jsonData, err := common.Marshal(convertedRequest)
 		if err != nil {
@@ -204,6 +161,9 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	}
 
 	usage, newApiErr := adaptor.DoResponse(c, httpResp, info)
+	if observed, ok := usage.(*dto.Usage); ok {
+		info.CaptureResponseUsage(observed, "text", nil)
+	}
 	if newApiErr != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newApiErr, statusCodeMappingStr)
@@ -214,9 +174,9 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	var containsAudioRatios = ratio_setting.ContainsAudioRatio(info.OriginModelName) || ratio_setting.ContainsAudioCompletionRatio(info.OriginModelName)
 
 	if containAudioTokens && containsAudioRatios {
-		service.PostAudioConsumeQuota(c, info, usage.(*dto.Usage), "")
+		info.CaptureResponseUsage(usage.(*dto.Usage), "audio", nil)
 	} else {
-		service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
+		info.CaptureResponseUsage(usage.(*dto.Usage), "text", nil)
 	}
 	return nil
 }

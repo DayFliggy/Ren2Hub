@@ -27,7 +27,7 @@ const (
 	RouteLeaseFailureCode        = "route_lease_failed"
 )
 
-const routeLeasePrefix = "route:lease:v1"
+const routeLeasePrefix = "route:lease:v2"
 
 var routeLeaseMetrics struct {
 	AcquireFailures atomic.Uint64

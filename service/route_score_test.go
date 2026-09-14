@@ -3,6 +3,7 @@ package service
 import (
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,9 +15,9 @@ func TestScoreRouteCandidatesNeverLetsDynamicScoreCrossPriority(t *testing.T) {
 		{ChannelID: 3, Priority: 20, Weight: 10, ErrorRate: 0, HealthUsable: true},
 	})
 	require.Len(t, scored, 3)
-	assert.Equal(t, 3, scored[0].Candidate.ChannelID)
+	assert.Equal(t, 1, scored[0].Candidate.ChannelID)
 	assert.Equal(t, int64(20), scored[0].Breakdown.PriorityLayer)
-	assert.Equal(t, 1, scored[1].Candidate.ChannelID)
+	assert.Equal(t, 3, scored[1].Candidate.ChannelID)
 	assert.Equal(t, 2, scored[2].Candidate.ChannelID)
 	assert.Equal(t, int64(10), scored[2].Breakdown.PriorityLayer)
 }
@@ -42,47 +43,51 @@ func TestScoreRouteCandidatesFallsBackAfterHealthFiltersHighestPriority(t *testi
 	}
 }
 
-func TestScoreRouteCandidatesIgnoresUnhealthyWeightAndBoundsTopK(t *testing.T) {
+func TestScoreRouteCandidatesIgnoresUnhealthyCandidates(t *testing.T) {
 	candidates := []RouteScoreCandidate{
 		{ChannelID: 1, Priority: 10, Weight: 100, HealthUsable: true},
 		{ChannelID: 2, Priority: 10, Weight: 1000, HealthUsable: false},
 		{ChannelID: 3, Priority: 10, Weight: 50, HealthUsable: true},
 		{ChannelID: 4, Priority: 10, Weight: 25, HealthUsable: true},
 	}
-	scored := TopKRouteCandidates(candidates, 99)
-	if len(scored) != 3 {
-		t.Fatalf("expected bounded top-k, got %d", len(scored))
-	}
-	assert.Equal(t, 1.0, scored[0].Breakdown.WeightScore)
+	scored := ScoreRouteCandidates(candidates)
+	require.Len(t, scored, 3)
+	assert.Equal(t, 100, scored[0].Breakdown.EffectiveWeight)
 	for _, candidate := range scored {
 		assert.NotEqual(t, 2, candidate.Candidate.ChannelID)
 	}
 }
 
-func TestScoreRouteCandidatesTreatsUnknownMetricsAsNeutralAndExplicit(t *testing.T) {
+func TestRouteDiagnosticsDistinguishUnknownAndMeasuredZero(t *testing.T) {
 	scored := ScoreRouteCandidates([]RouteScoreCandidate{{
 		ChannelID: 1, Priority: 10, Weight: 1, HealthUsable: true,
 	}})
 	require.Len(t, scored, 1)
 	breakdown := scored[0].Breakdown
-	assert.False(t, breakdown.ErrorKnown)
-	assert.False(t, breakdown.LatencyKnown)
-	assert.False(t, breakdown.TTFTKnown)
-	assert.False(t, breakdown.RateLimitKnown)
-	assert.False(t, breakdown.QuotaKnown)
-	assert.Equal(t, unknownRouteMetricScore, breakdown.ErrorScore)
-	assert.Equal(t, unknownRouteMetricScore, breakdown.LatencyScore)
-	assert.Equal(t, unknownRouteMetricScore, breakdown.RateLimitScore)
+	encoded, err := common.Marshal(breakdown)
+	require.NoError(t, err)
+	var fields map[string]any
+	require.NoError(t, common.Unmarshal(encoded, &fields))
+	for _, name := range []string{"error_rate", "latency_ms", "ttft_ms", "rate_limit_headroom", "quota_headroom", "total"} {
+		assert.NotContains(t, fields, name)
+	}
+	scored = ScoreRouteCandidates([]RouteScoreCandidate{{ChannelID: 1, HealthUsable: true, ErrorRateKnown: true, LatencyKnown: true}})
+	require.Len(t, scored, 1)
+	encoded, err = common.Marshal(scored[0].Breakdown)
+	require.NoError(t, err)
+	require.NoError(t, common.Unmarshal(encoded, &fields))
+	assert.Equal(t, float64(0), fields["error_rate"])
+	assert.Equal(t, float64(0), fields["latency_ms"])
 }
 
-func TestScoreRouteCandidatesUsesKnownMetricsOnlyInsidePriorityLayer(t *testing.T) {
+func TestScoreRouteCandidatesKeepsMetricsObservational(t *testing.T) {
 	scored := ScoreRouteCandidates([]RouteScoreCandidate{
 		{ChannelID: 1, Priority: 10, Weight: 1, ErrorRate: 1, ErrorRateKnown: true, HealthUsable: true},
 		{ChannelID: 2, Priority: 10, Weight: 1, ErrorRate: 0, ErrorRateKnown: true, HealthUsable: true},
 		{ChannelID: 3, Priority: 5, Weight: 100, ErrorRate: 0, ErrorRateKnown: true, Sticky: true, HealthUsable: true},
 	})
 	require.Len(t, scored, 3)
-	assert.Equal(t, []int{2, 1, 3}, []int{
+	assert.Equal(t, []int{1, 2, 3}, []int{
 		scored[0].Candidate.ChannelID,
 		scored[1].Candidate.ChannelID,
 		scored[2].Candidate.ChannelID,

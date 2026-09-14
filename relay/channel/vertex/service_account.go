@@ -1,7 +1,9 @@
 package vertex
 
 import (
+	"context"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -38,12 +40,10 @@ var Cache = asynccache.NewAsyncCache(asynccache.Options{
 })
 
 func getAccessToken(a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
-	var cacheKey string
-	if info.ChannelIsMultiKey {
-		cacheKey = fmt.Sprintf("access-token-%d-%d", info.ChannelId, info.ChannelMultiKeyIndex)
-	} else {
-		cacheKey = fmt.Sprintf("access-token-%d", info.ChannelId)
-	}
+	// A slot can hold another account after key replacement or reordering.
+	// The selected credential, not its mutable position, owns the cached token.
+	credentialDigest := sha256.Sum256([]byte(strings.TrimSpace(info.ApiKey)))
+	cacheKey := fmt.Sprintf("access-token-v2-%d-%x", info.ChannelId, credentialDigest)
 	val, err := Cache.Get(cacheKey)
 	if err == nil {
 		return val.(string), nil
@@ -57,9 +57,8 @@ func getAccessToken(a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to exchange JWT for access token: %w", err)
 	}
-	if err := Cache.SetDefault(cacheKey, newToken); err {
-		return newToken, nil
-	}
+	// Get caches its miss as an error; replace that entry with the acquired token.
+	Cache.GetOrSet(cacheKey, newToken)
 	return newToken, nil
 }
 
@@ -135,14 +134,18 @@ func exchangeJwtForAccessToken(signedJWT string, info *relaycommon.RelayInfo) (s
 }
 
 func AcquireAccessToken(creds Credentials, proxy string) (string, error) {
+	return AcquireAccessTokenWithContext(context.Background(), creds, proxy)
+}
+
+func AcquireAccessTokenWithContext(ctx context.Context, creds Credentials, proxy string) (string, error) {
 	signedJWT, err := createSignedJWT(creds.ClientEmail, creds.PrivateKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to create signed JWT: %w", err)
 	}
-	return exchangeJwtForAccessTokenWithProxy(signedJWT, proxy)
+	return exchangeJwtForAccessTokenWithProxyContext(ctx, signedJWT, proxy)
 }
 
-func exchangeJwtForAccessTokenWithProxy(signedJWT string, proxy string) (string, error) {
+func exchangeJwtForAccessTokenWithProxyContext(ctx context.Context, signedJWT string, proxy string) (string, error) {
 	authURL := "https://www.googleapis.com/oauth2/v4/token"
 	data := url.Values{}
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
@@ -159,7 +162,12 @@ func exchangeJwtForAccessTokenWithProxy(signedJWT string, proxy string) (string,
 		client = service.GetHttpClient()
 	}
 
-	resp, err := client.PostForm(authURL, data)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, authURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}

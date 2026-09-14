@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
+	"github.com/QuantumNous/new-api/pkg/relaycapability"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"gorm.io/gorm"
 )
@@ -148,7 +149,7 @@ type CapabilityRefreshSummary struct {
 // InitRouteCapabilityIndex performs the startup rebuild and publishes the
 // immutable in-memory active snapshot used by the unified live selector.
 func InitRouteCapabilityIndex(ctx context.Context) error {
-	_, err := refreshAllChannels(ctx, false, nil)
+	_, err := refreshAllChannels(ctx, true, nil)
 	return err
 }
 
@@ -488,7 +489,7 @@ func endpointTypesForModel(channel *model.Channel, match modellab.ModelMatch) []
 		endpoints = append(endpoints, config.SupportedEndpointTypesForModel(match.RealModel)...)
 		return endpoints
 	}
-	endpoints := common.GetEndpointTypesByChannelType(channel.Type, match.RealModel)
+	var endpoints []constant.EndpointType
 	switch channel.Type {
 	case constant.ChannelTypeMidjourney, constant.ChannelTypeMidjourneyPlus:
 		return []constant.EndpointType{constant.EndpointTypeMidjourney}
@@ -497,22 +498,9 @@ func endpointTypesForModel(channel *model.Channel, match modellab.ModelMatch) []
 	case constant.ChannelTypeSora, constant.ChannelTypeKling, constant.ChannelTypeJimeng, constant.ChannelTypeVidu, constant.ChannelTypeDoubaoVideo:
 		return []constant.EndpointType{constant.EndpointTypeOpenAIVideo}
 	}
-	// Text protocols are accepted through RelayKit conversion. The native
-	// Responses constraint is checked separately for opaque compaction state.
-	endpoints = append(endpoints, constant.EndpointTypeOpenAI, constant.EndpointTypeOpenAIResponse,
-		constant.EndpointTypeAnthropic, constant.EndpointTypeGemini, constant.EndpointTypeEmbeddings)
 	apiType, _ := common.ChannelType2APIType(channel.Type)
-	switch apiType {
-	case constant.APITypeOpenAI, constant.APITypeOpenRouter, constant.APITypeXinference:
-		endpoints = append(endpoints, constant.EndpointTypeAudio, constant.EndpointTypeRealtime, constant.EndpointTypeImageGeneration, constant.EndpointTypeJinaRerank)
-	case constant.APITypeSiliconFlow:
-		endpoints = append(endpoints, constant.EndpointTypeAudio, constant.EndpointTypeImageGeneration, constant.EndpointTypeJinaRerank)
-	case constant.APITypeMiniMax, constant.APITypeVolcEngine:
-		endpoints = append(endpoints, constant.EndpointTypeAudio)
-	case constant.APITypeCloudflare:
-		endpoints = append(endpoints, constant.EndpointTypeAudio, constant.EndpointTypeImageGeneration, constant.EndpointTypeJinaRerank)
-	case constant.APITypeCohere, constant.APITypeAli, constant.APITypeMoonshot:
-		endpoints = append(endpoints, constant.EndpointTypeJinaRerank)
+	if definition, found := relaycapability.DescribeForCredentials(apiType, match.RealModel, channel.GetKeys(), channel.GetOtherSettings()); found {
+		endpoints = definition.EndpointTypes()
 	}
 	switch channel.Type {
 	case constant.ChannelTypeOpenAI, constant.ChannelTypeAli, constant.ChannelTypeGemini, constant.ChannelTypeVertexAi, constant.ChannelTypeMiniMax, constant.ChannelTypeVolcEngine:
@@ -577,15 +565,17 @@ func advancedCustomPathConfigFromCapability(capability model.ChannelModelCapabil
 }
 
 type channelFingerprint struct {
-	Status    int
-	Models    string
-	Mapping   string
-	Type      int
-	Group     string
-	Priority  int64
-	Weight    int
-	Advanced  []capabilityPath
-	Abilities []abilityFingerprint
+	AdaptorContract string `json:"adaptor_contract"`
+	Status          int
+	Models          string
+	Mapping         string
+	Type            int
+	Group           string
+	Priority        int64
+	Weight          int
+	Advanced        []capabilityPath
+	Abilities       []abilityFingerprint
+	VertexKeyType   dto.VertexKeyType `json:"vertex_key_type,omitempty"`
 }
 
 type abilityFingerprint struct {
@@ -599,14 +589,18 @@ func channelCapabilityFingerprint(channel *model.Channel, abilities []model.Abil
 		return "", errors.New("channel is required")
 	}
 	fingerprint := channelFingerprint{
-		Status:   channel.Status,
-		Models:   channel.Models,
-		Mapping:  channel.GetModelMapping(),
-		Type:     channel.Type,
-		Group:    channel.Group,
-		Priority: channel.GetPriority(),
-		Weight:   channel.GetWeight(),
-		Advanced: buildCapabilityPaths(channel),
+		AdaptorContract: "host-capabilities-v11",
+		Status:          channel.Status,
+		Models:          channel.Models,
+		Mapping:         channel.GetModelMapping(),
+		Type:            channel.Type,
+		Group:           channel.Group,
+		Priority:        channel.GetPriority(),
+		Weight:          channel.GetWeight(),
+		Advanced:        buildCapabilityPaths(channel),
+	}
+	if channel.Type == constant.ChannelTypeVertexAi {
+		fingerprint.VertexKeyType = channel.GetOtherSettings().VertexKeyType
 	}
 	for _, ability := range abilities {
 		fingerprint.Abilities = append(fingerprint.Abilities, abilityFingerprint{

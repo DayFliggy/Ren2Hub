@@ -59,7 +59,7 @@ func VideoProxy(c *gin.Context) {
 		return
 	}
 
-	channel, err := model.CacheGetChannel(task.ChannelId)
+	channel, err := model.GetChannelById(task.ChannelId, true)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to get channel for task %s: %s", taskID, err.Error()))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to retrieve channel information")
@@ -93,23 +93,27 @@ func VideoProxy(c *gin.Context) {
 		return
 	}
 
+	var taskKey string
 	switch channel.Type {
-	case constant.ChannelTypeGemini:
-		apiKey := model.ResolveTaskChannelKey(channel, task)
-		if apiKey == "" {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("No available channel key for Gemini task %s", taskID))
-			videoProxyError(c, http.StatusBadGateway, "server_error", "API key is unavailable for this task")
+	case constant.ChannelTypeGemini, constant.ChannelTypeVertexAi, constant.ChannelTypeOpenAI, constant.ChannelTypeSora:
+		taskKey, _, err = model.ResolveTaskCredential(ctx, channel, task)
+		if err != nil {
+			videoProxyError(c, http.StatusServiceUnavailable, "task_state_unavailable", "The original task credential is unavailable")
 			return
 		}
-		videoURL, err = getGeminiVideoURL(channel, task, apiKey)
+	}
+
+	switch channel.Type {
+	case constant.ChannelTypeGemini:
+		videoURL, err = getGeminiVideoURL(ctx, channel, task, taskKey)
 		if err != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to resolve Gemini video URL for task %s: %s", taskID, err.Error()))
 			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to resolve Gemini video URL")
 			return
 		}
-		req.Header.Set("x-goog-api-key", apiKey)
+		req.Header.Set("x-goog-api-key", taskKey)
 	case constant.ChannelTypeVertexAi:
-		videoURL, err = getVertexVideoURL(channel, task)
+		videoURL, err = getVertexVideoURL(ctx, channel, task, taskKey)
 		if err != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to resolve Vertex video URL for task %s: %s", taskID, err.Error()))
 			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to resolve Vertex video URL")
@@ -117,7 +121,7 @@ func VideoProxy(c *gin.Context) {
 		}
 	case constant.ChannelTypeOpenAI, constant.ChannelTypeSora:
 		videoURL = fmt.Sprintf("%s/v1/videos/%s/content", baseURL, task.GetUpstreamTaskID())
-		req.Header.Set("Authorization", "Bearer "+channel.Key)
+		req.Header.Set("Authorization", "Bearer "+taskKey)
 	default:
 		// Video URL is stored in PrivateData.ResultURL (fallback to FailReason for old data)
 		videoURL = task.GetResultURL()

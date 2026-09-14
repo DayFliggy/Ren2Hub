@@ -9,6 +9,7 @@ import (
 var ErrRouteSelectionUnavailable = errors.New("no eligible route candidate")
 
 const (
+	MaxRouteCandidateChannels             = 64
 	RouteCandidateFilterHealthUnavailable = "health_unavailable"
 	RouteLeaseStateNotAttempted           = "not_attempted"
 )
@@ -40,6 +41,7 @@ type RouteSelectionCandidate struct {
 	SnapshotVersion   int64
 	HealthEpoch       int64
 	CatalogVersion    string
+	LoadRatio         float64
 }
 
 type RouteSelectionInput struct {
@@ -93,11 +95,14 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 			ordered = append(ordered, RouteScoreCandidate{
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
 				Position: candidate.Position, Weight: candidate.Weight,
-				HealthUsable: candidate.HealthUsable,
+				HealthUsable: candidate.HealthUsable, Sticky: candidate.Sticky,
 			})
 			byID[candidate.ChannelID] = candidate
 		}
 		ordered = orderManualRouteCandidatesForSelection(ordered, input.ManualLoadBalance, input.RequestID)
+		if len(ordered) > MaxRouteCandidateChannels {
+			ordered = ordered[:MaxRouteCandidateChannels]
+		}
 		for _, item := range ordered {
 			result.Candidates = append(result.Candidates, byID[item.ChannelID])
 		}
@@ -135,9 +140,10 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 					QuotaHeadroom:     candidate.QuotaHeadroom,
 					QuotaKnown:        candidate.QuotaKnown,
 					Sticky:            candidate.Sticky, HealthUsable: candidate.HealthUsable,
+					LoadRatio: candidate.LoadRatio,
 				})
 			}
-			scoredCandidates := ScoreRouteCandidates(scored)
+			scoredCandidates := OrderAutoRouteCandidates(scored, input.RequestID)
 			if len(scoredCandidates) > 0 {
 				result.Decision.ScoredPreferredChannelID = scoredCandidates[0].Candidate.ChannelID
 			}
@@ -188,6 +194,18 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 // all later candidates retain a deterministic order for bounded failover.
 func orderManualRouteCandidatesForSelection(candidates []RouteScoreCandidate, loadBalance bool, requestID string) []RouteScoreCandidate {
 	ordered := OrderManualRouteCandidates(candidates, loadBalance)
+	if len(ordered) > 1 {
+		for index, candidate := range ordered {
+			if candidate.Position != ordered[0].Position {
+				break
+			}
+			if candidate.Sticky {
+				copy(ordered[1:index+1], ordered[:index])
+				ordered[0] = candidate
+				return ordered
+			}
+		}
+	}
 	if !loadBalance || len(ordered) < 2 || requestID == "" {
 		return ordered
 	}
@@ -301,8 +319,8 @@ func appendRouteDecisionCandidatesWithScores(decision *RouteDecision, candidates
 }
 
 func normalizedRouteTopK(k int) int {
-	if k <= 0 || k > 3 {
-		return 3
+	if k <= 0 || k > MaxRouteCandidateChannels {
+		return MaxRouteCandidateChannels
 	}
 	return k
 }

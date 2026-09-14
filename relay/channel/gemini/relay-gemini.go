@@ -140,8 +140,7 @@ func handleFinalStream(c *gin.Context, info *relaycommon.RelayInfo, resp *dto.Ch
 	if err != nil {
 		return fmt.Errorf("failed to marshal stream response: %w", err)
 	}
-	openai.HandleFinalResponse(c, info, string(streamData), resp.Id, resp.Created, resp.Model, resp.GetSystemFingerprint(), resp.Usage, false)
-	return nil
+	return openai.HandleFinalResponse(c, info, string(streamData), resp.Id, resp.Created, resp.Model, resp.GetSystemFingerprint(), resp.Usage, false)
 }
 
 func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response, callback func(data string, geminiResponse *dto.GeminiChatResponse) bool) (*dto.Usage, *types.NewAPIError) {
@@ -188,7 +187,7 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	})
 
 	if !hasBillableUsageMetadata {
-		if info.ReceivedResponseCount > 0 {
+		if responseText.Len() > 0 || imageCount > 0 {
 			usage = service.ResponseText2Usage(c, responseText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
 		} else {
 			usage = &dto.Usage{}
@@ -203,7 +202,7 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		patchGeminiZeroCompletionUsage(c, info, usage, responseText.String(), imageCount)
 	}
 
-	return usage, nil
+	return usage, helper.StreamError(info)
 }
 
 func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
@@ -396,6 +395,9 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 	if readErr != nil {
 		return nil, types.NewOpenAIError(readErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	if err := helper.ValidateGeminiEmbeddingResponse(responseBody, helper.EmbeddingInputCount(info.Request), true); err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	}
 
 	var geminiResponse dto.GeminiBatchEmbeddingResponse
 	if jsonErr := common.Unmarshal(responseBody, &geminiResponse); jsonErr != nil {
@@ -430,8 +432,7 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 		return nil, types.NewOpenAIError(jsonErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 
-	service.IOCopyBytesGracefully(c, resp, jsonResponse)
-	return usage, nil
+	return usage, helper.WriteVectorResponse(c, resp, info, jsonResponse)
 }
 
 func GeminiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
@@ -465,15 +466,6 @@ func GeminiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 		})
 	}
 
-	jsonResponse, jsonErr := common.Marshal(openAIResponse)
-	if jsonErr != nil {
-		return nil, types.NewError(jsonErr, types.ErrorCodeBadResponseBody)
-	}
-
-	c.Writer.Header().Set("Content-Type", "application/json")
-	c.Writer.WriteHeader(resp.StatusCode)
-	_, _ = c.Writer.Write(jsonResponse)
-
 	// https://github.com/google-gemini/cookbook/blob/719a27d752aac33f39de18a8d3cb42a70874917e/quickstarts/Counting_Tokens.ipynb
 	// each image has fixed 258 tokens
 	const imageTokens = 258
@@ -483,9 +475,10 @@ func GeminiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 		PromptTokens:     imageTokens * generatedImages, // each generated image has fixed 258 tokens
 		CompletionTokens: 0,                             // image generation does not calculate completion tokens
 		TotalTokens:      imageTokens * generatedImages,
+		UsageSource:      "estimated",
 	}
 
-	return usage, nil
+	return openai.DeliverConvertedImage(c, info, resp, &openAIResponse, usage)
 }
 
 type GeminiModelsResponse struct {

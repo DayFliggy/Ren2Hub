@@ -24,6 +24,7 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
 	service.RegisterSystemTaskHandler(routeCapabilityRefreshHandler{})
 	service.RegisterSystemTaskHandler(billingRecoveryHandler{})
+	service.RegisterSystemTaskHandler(gatewayStateCleanupHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
@@ -130,8 +131,12 @@ func (midjourneyPollHandler) Interval() time.Duration { return 15 * time.Second 
 func (midjourneyPollHandler) NewPayload() any { return nil }
 
 func (midjourneyPollHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
-	summary := runMidjourneyTaskUpdateOnce(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
-	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+	summary, err := runMidjourneyTaskUpdateOnce(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
+	status := model.SystemTaskStatusSucceeded
+	if err != nil {
+		status = model.SystemTaskStatusFailed
+	}
+	finishSystemTaskHandler(task, runnerID, status, summary, err)
 }
 
 // asyncTaskPollHandler runs one async-task (Suno/video) polling pass per
@@ -181,6 +186,23 @@ func (routeCapabilityRefreshHandler) Run(ctx context.Context, task *model.System
 }
 
 type billingRecoveryHandler struct{}
+
+type gatewayStateCleanupHandler struct{}
+
+func (gatewayStateCleanupHandler) Type() string            { return model.SystemTaskTypeGatewayStateCleanup }
+func (gatewayStateCleanupHandler) Enabled() bool           { return true }
+func (gatewayStateCleanupHandler) Interval() time.Duration { return 5 * time.Minute }
+func (gatewayStateCleanupHandler) NewPayload() any         { return nil }
+func (gatewayStateCleanupHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	deleted, err := model.DeleteExpiredGatewayStates(ctx, time.Now().Unix(), 1000)
+	status := model.SystemTaskStatusSucceeded
+	if err != nil {
+		status = model.SystemTaskStatusFailed
+	}
+	finishSystemTaskHandler(task, runnerID, status, map[string]int64{"deleted": deleted}, err)
+}
 
 func (billingRecoveryHandler) Type() string { return model.SystemTaskTypeBillingRecovery }
 

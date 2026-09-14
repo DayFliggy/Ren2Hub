@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/channel/xinference"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
@@ -23,6 +24,9 @@ func RerankHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 	service.CloseResponseBodyGracefully(resp)
 	logger.LogDebug(c, "reranker response body: %s", responseBody)
+	if err := helper.ValidateRerankResponse(responseBody, len(info.Documents)); err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	}
 	var jinaResp dto.RerankResponse
 	if info.ChannelType == constant.ChannelTypeXinference {
 		var xinRerankResponse xinference.XinRerankResponse
@@ -58,6 +62,7 @@ func RerankHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 			Usage: dto.Usage{
 				PromptTokens: info.GetEstimatePromptTokens(),
 				TotalTokens:  info.GetEstimatePromptTokens(),
+				UsageSource:  "estimated",
 			},
 		}
 	} else {
@@ -65,10 +70,21 @@ func RerankHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		if err != nil {
 			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 		}
-		jinaResp.Usage.PromptTokens = jinaResp.Usage.TotalTokens
+		if err := helper.ValidateVectorUsage(&jinaResp.Usage); err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+		}
+		jinaResp.Usage.UsageSource = "provider"
+		if jinaResp.Usage.TotalTokens == 0 {
+			jinaResp.Usage.TotalTokens = jinaResp.Usage.PromptTokens + jinaResp.Usage.CompletionTokens
+		}
+		if jinaResp.Usage.PromptTokens == 0 {
+			jinaResp.Usage.PromptTokens = jinaResp.Usage.TotalTokens - jinaResp.Usage.CompletionTokens
+		}
 	}
 
-	c.Writer.Header().Set("Content-Type", "application/json")
-	c.JSON(http.StatusOK, jinaResp)
-	return &jinaResp.Usage, nil
+	jsonResponse, err := common.Marshal(jinaResp)
+	if err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+	}
+	return &jinaResp.Usage, helper.WriteVectorResponse(c, resp, info, jsonResponse)
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
 	sharedclaude "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/shared/claude"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -80,6 +81,14 @@ func TestClaudeDefaultMaxTokensPresence(t *testing.T) {
 				require.NotNil(t, got.MaxTokens)
 				assert.Equal(t, clientMaxTokens, *got.MaxTokens)
 			})
+
+			t.Run("client zero wins", func(t *testing.T) {
+				clientMaxTokens := uint(0)
+				got, err := converter.convert(t, claudeDefaultsMeta(func(string) int { return 512 }), &clientMaxTokens)
+				require.NoError(t, err)
+				require.NotNil(t, got.MaxTokens)
+				assert.Zero(t, *got.MaxTokens)
+			})
 		})
 	}
 }
@@ -103,6 +112,20 @@ func TestClaudeThinkingAdapterSatisfiesMaxTokensWithoutCallback(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got.MaxTokens)
 	assert.Equal(t, uint(1280), *got.MaxTokens)
+}
+
+func TestClaudeThinkingAdapterRejectsInsufficientExplicitLimit(t *testing.T) {
+	meta := &convmeta.Values{Options: &convmeta.Options{
+		Claude: convmeta.ClaudeOptions{ThinkingAdapterEnabled: true, ThinkingAdapterBudgetTokensPercentage: 0.8},
+	}}
+	for _, limit := range []uint{0, 1, 1279} {
+		got, err := OpenAIChatRequestToClaudeMessages(context.Background(), meta, dto.GeneralOpenAIRequest{
+			Model: "claude-test-thinking", MaxTokens: &limit,
+			Messages: []dto.Message{{Role: "user", Content: "hello"}},
+		})
+		require.ErrorContains(t, err, "max_tokens")
+		require.Nil(t, got)
+	}
 }
 
 func TestOpenAIChatRequestToClaudeMessagesOmitsEmptyTools(t *testing.T) {
@@ -164,7 +187,17 @@ func TestOpenAIChatRequestToClaudeMessagesOmitsEmptyTools(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := OpenAIChatRequestToClaudeMessages(context.Background(), &convmeta.Values{}, test.request)
+			meta := &convmeta.Values{}
+			if test.request.WebSearchOptions != nil {
+				meta.Options = &convmeta.Options{ConversionPolicy: types.ConversionLossPolicyAllow}
+				requirements, err := AnalyzeRequest(test.request)
+				require.NoError(t, err)
+				plan, err := PlanConversion(requirements, types.RelayFormatClaude, types.ConversionLossPolicyAllow)
+				require.NoError(t, err)
+				require.NotEmpty(t, plan.Diagnostics)
+				assert.Equal(t, "unsupported_tool_semantics", plan.Diagnostics[0].Code)
+			}
+			got, err := OpenAIChatRequestToClaudeMessages(context.Background(), meta, test.request)
 			require.NoError(t, err)
 
 			body, err := kitutil.Marshal(got)

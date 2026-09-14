@@ -6,10 +6,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,8 +91,11 @@ func TestListModelsSupportsOpenAIAndGeminiAuthentication(t *testing.T) {
 	}
 }
 
+var relayTestTokenEncoders sync.Once
+
 func setupRelayRouterTestDB(t *testing.T) {
 	t.Helper()
+	relayTestTokenEncoders.Do(service.InitTokenEncoders)
 
 	gin.SetMode(gin.TestMode)
 	originalIsMasterNode := common.IsMasterNode
@@ -107,7 +112,7 @@ func setupRelayRouterTestDB(t *testing.T) {
 	require.NoError(t, os.Setenv("SQL_DSN", "local"))
 	require.NoError(t, model.InitDB())
 	model.LOG_DB = model.DB
-	require.NoError(t, model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.Ability{}, &model.Channel{}, &model.UserChannelEntitlement{}, &model.UserRouteProfile{}))
+	require.NoError(t, model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.Ability{}, &model.Channel{}, &model.UserChannelEntitlement{}, &model.UserRouteProfile{}, &model.Option{}, &model.GatewayCredential{}, &model.GatewayStateBinding{}))
 
 	t.Cleanup(func() {
 		if sqlDB, err := model.DB.DB(); err == nil {

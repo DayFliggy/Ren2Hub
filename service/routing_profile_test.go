@@ -57,7 +57,7 @@ func seedRoutePreviewChannel(t *testing.T, db *gorm.DB, channelID int) int {
 	t.Helper()
 	channel := &model.Channel{
 		Id: channelID, Key: fmt.Sprintf("routing-preview-key-%d", channelID), Name: fmt.Sprintf("routing-preview-%d", channelID),
-		Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default",
+		Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default",
 	}
 	require.NoError(t, db.Create(channel).Error)
 	require.NoError(t, db.Create(&model.Ability{Group: "default", Model: "gpt-test", ChannelId: channelID, Enabled: true}).Error)
@@ -95,7 +95,7 @@ func seedRouteProfileFixture(t *testing.T, db *gorm.DB) (int, int, int) {
 	require.NoError(t, db.Create(user).Error)
 	token := &model.Token{UserId: user.Id, Key: "routing-token", Name: "routing-token", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true}
 	require.NoError(t, db.Create(token).Error)
-	channel := &model.Channel{Id: 7011, Key: "routing-channel-key", Name: "routing-channel", Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default"}
+	channel := &model.Channel{Id: 7011, Type: constant.ChannelTypeOpenAI, Key: "routing-channel-key", Name: "routing-channel", Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default"}
 	require.NoError(t, db.Create(channel).Error)
 	require.NoError(t, db.Create(&model.Ability{Group: "default", Model: "gpt-test", ChannelId: channel.Id, Enabled: true}).Error)
 	return user.Id, token.Id, channel.Id
@@ -569,6 +569,30 @@ func TestRouteProfilePreviewPreservesUnavailableEntriesWithReasons(t *testing.T)
 	assert.Equal(t, RouteFilterEntitlementRevoked, findRoutePreviewEntry(t, preview, revokedChannelID).FilterReason)
 	assert.Equal(t, RouteFilterAbilityDisabled, findRoutePreviewEntry(t, preview, abilityDisabledChannelID).FilterReason)
 	assert.Equal(t, RouteFilterSnapshotUnavailable, findRoutePreviewEntry(t, preview, missingSnapshotChannelID).FilterReason)
+}
+
+func TestRouteProfilePreviewIgnoresRetiredAbilityGroups(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{Name: "private", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}}}},
+	})
+	require.NoError(t, err)
+	require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", channelID).Update("group", "retired-channel-group").Error)
+	preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+		Model: "gpt-test", Path: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []int{channelID}, preview.CandidateChannelIDs)
+	require.NoError(t, RecheckLiveRouteCandidate(LiveRouteCandidateQualificationRequest{
+		Context: context.Background(), RouteSource: RouteSourceManual,
+		UserID: userID, TokenID: tokenID, ChannelID: channelID,
+		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
+		ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog", ExpectedProfileVersion: created.Profile.Version,
+	}))
 }
 
 func TestRouteProfilePreviewHonorsTokenModelAndPathRestrictions(t *testing.T) {
