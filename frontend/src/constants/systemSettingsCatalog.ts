@@ -613,10 +613,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             0.6
           ),
           toggle(
-            'gemini.function_call_thought_signature_enabled',
-            'Gemini 函数调用思考签名'
-          ),
-          toggle(
             'gemini.remove_function_response_id_enabled',
             '移除 Gemini 函数响应 ID'
           ),

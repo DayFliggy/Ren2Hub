@@ -2,6 +2,7 @@
 import { useStorage } from '@vueuse/core'
 import {
   Activity,
+  Gauge,
   AlertTriangle,
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
@@ -22,6 +23,8 @@ import { useI18n } from 'vue-i18n'
 
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
+import ConsoleModal from '@/components/common/ConsoleModal.vue'
+import GatewayChannelPanel from '@/components/console/gateway/GatewayChannelPanel.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import CapacityMeter from '@/components/common/CapacityMeter.vue'
 import DataTable, { type TableColumn } from '@/components/common/DataTable.vue'
@@ -153,6 +156,7 @@ const {
 
 const formOpen = ref(false)
 const editing = ref<AdminChannel | null>(null)
+const runtimeChannel = ref<AdminChannel | null>(null)
 const deleting = ref<DeleteTarget | null>(null)
 const testing = ref<AdminChannel | null>(null)
 const pickingGroup = ref<SupplierGroup | null>(null)
@@ -1317,6 +1321,13 @@ async function runBulkStatus(
           <template #cell-actions="{ row }">
             <div class="flex items-center justify-end gap-0.5">
               <IconButton
+                :label="t('gateway.channelRuntime')"
+                @click="
+                  runtimeChannel = channelFromRow(row as AdminChannelTableRow)
+                "
+                ><Gauge :size="15"
+              /></IconButton>
+              <IconButton
                 v-if="canWrite"
                 :label="t('channels.editChannel')"
                 :disabled="
@@ -1446,6 +1457,7 @@ async function runBulkStatus(
             :refresh-balance="refreshBalance"
             :open-test="openTest"
             :edit-channel="openEdit"
+            :show-runtime="(channel) => (runtimeChannel = channel)"
             :delete-channel="requestDelete"
           />
           <TablePagination
@@ -1459,6 +1471,18 @@ async function runBulkStatus(
       </template>
     </ConsoleCard>
 
+    <ConsoleModal
+      :open="runtimeChannel !== null"
+      :title="runtimeChannel?.name ?? t('gateway.channelRuntime')"
+      size="lg"
+      @close="runtimeChannel = null"
+    >
+      <GatewayChannelPanel
+        v-if="runtimeChannel"
+        :key="runtimeChannel.id"
+        :channel-id="runtimeChannel.id"
+      />
+    </ConsoleModal>
     <ChannelFormModal
       :open="formOpen"
       :editing="editing"

@@ -27,6 +27,14 @@ const entry = {
   weight: 100,
 }
 
+const requestRequirements = {
+  format: 'openai',
+  model: 'gpt-5',
+  stream: false,
+  operation: 'text',
+  native_required: false,
+}
+
 function profileResponse() {
   return {
     profile: {
@@ -215,6 +223,7 @@ describe('routing API contracts', () => {
             updated_at: 2,
           },
           filter_reason: 'runtime_recheck_required',
+          diagnostics: [],
         },
       ],
       candidate_channel_ids: [],
@@ -224,6 +233,8 @@ describe('routing API contracts', () => {
       runtime_recheck_required: true,
       runtime_recheck_reasons: ['price_qualification'],
       live_selection: false,
+      request_requirements: requestRequirements,
+      conversion_policy: 'safe',
     })
 
     expect(parsed.live_selection).toBe(false)
@@ -251,6 +262,7 @@ describe('routing API contracts', () => {
           snapshot_version: 2,
           catalog_version: 'catalog-2',
           capability_state: 'future_state',
+          diagnostics: [],
           health: {
             state: 'closed',
             failure_count: 0,
@@ -269,6 +281,8 @@ describe('routing API contracts', () => {
       runtime_recheck_required: true,
       runtime_recheck_reasons: [],
       live_selection: false,
+      request_requirements: requestRequirements,
+      conversion_policy: 'safe',
     }
 
     const unknownHealth = structuredClone(response)
@@ -283,6 +297,109 @@ describe('routing API contracts', () => {
         expect(error).toMatchObject({ code: 'INVALID_RESPONSE' })
       }
     }
+  })
+
+  it('preserves conversion losses and rejects executable plans that violate token policy', () => {
+    const diagnostic = {
+      code: 'serial_tools_not_portable',
+      path: 'parallel_tool_calls',
+      message: 'Gemini conversion cannot enforce serial tool execution',
+      severity: 'error',
+      from: 'openai',
+      to: 'gemini',
+    }
+    const response = {
+      profile_id: 1,
+      profile_version: 3,
+      request_model: 'gpt-5',
+      normalized_model: 'gpt-5',
+      path: '/v1/chat/completions',
+      endpoint_type: 'openai',
+      request_requirements: {
+        ...requestRequirements,
+        features: ['serial_tools'],
+      },
+      conversion_policy: 'safe',
+      entries: [
+        {
+          entry_id: 9,
+          channel_id: 101,
+          position: 0,
+          weight: 100,
+          request_model: 'gpt-5',
+          actual_model: 'gemini-model',
+          lab_slug: 'google',
+          snapshot_version: 2,
+          catalog_version: 'catalog-2',
+          capability_state: 'eligible',
+          health: {
+            state: 'closed',
+            failure_count: 0,
+            cooldown_until: 0,
+            health_epoch: 1,
+            last_latency_ms: 0,
+            first_token_latency_ms: 0,
+            updated_at: 0,
+          },
+          filter_reason: 'conversion_unavailable',
+          diagnostics: [diagnostic],
+          conversion_plan: {
+            from: 'openai',
+            to: 'gemini',
+            native: false,
+            policy: 'safe',
+            stream_supported: true,
+            request_converter: 'openai_to_gemini',
+            response_converter: 'gemini_to_openai',
+            steps: [
+              { converter: 'openai_to_gemini', from: 'openai', to: 'gemini' },
+            ],
+            diagnostics: [diagnostic],
+          },
+        },
+      ],
+      candidate_channel_ids: [] as number[],
+      selection_mode: 'ordered',
+      filter_reason_counts: { conversion_unavailable: 1 },
+      has_mixed: false,
+      runtime_recheck_required: true,
+      runtime_recheck_reasons: ['quota_qualification'],
+      live_selection: false,
+    }
+    const parsed = parseRoutePreview(response)
+    expect(parsed.entries[0].diagnostics[0]).toEqual(diagnostic)
+    expect(parsed.request_requirements.features).toEqual(['serial_tools'])
+    expect(parsed.entries[0].conversion_plan?.steps).toHaveLength(1)
+
+    const projection = structuredClone(response)
+    Object.assign(projection.entries[0].conversion_plan, {
+      request_projection: 'coze_text',
+    })
+    expect(
+      parseRoutePreview(projection).entries[0].conversion_plan
+        ?.request_projection
+    ).toBe('coze_text')
+
+    const bypass = structuredClone(response)
+    bypass.entries[0].filter_reason = ''
+    bypass.candidate_channel_ids = [101]
+    expect(() => parseRoutePreview(bypass)).toThrow('Invalid API response')
+
+    const policyMismatch = structuredClone(response)
+    policyMismatch.entries[0].conversion_plan.policy = 'allow'
+    expect(() => parseRoutePreview(policyMismatch)).toThrow(
+      'Invalid API response'
+    )
+
+    const unknownSeverity = structuredClone(response)
+    unknownSeverity.entries[0].diagnostics[0].severity = 'silent'
+    expect(() => parseRoutePreview(unknownSeverity)).toThrow(
+      'Invalid API response'
+    )
+
+    bypass.conversion_policy = 'allow'
+    bypass.entries[0].conversion_plan.policy = 'allow'
+    expect(parseRoutePreview(bypass).candidate_channel_ids).toEqual([101])
   })
 
   it('rejects string numbers and unknown retry modes', () => {

@@ -161,12 +161,14 @@ function remove(index: number) {
       class="settings-field-title"
       >{{ field.label }}</label
     >
-    <ConsoleToggle
-      v-if="field.kind === 'boolean'"
-      :model-value="modelValue === true"
-      :label="field.label"
-      @update:model-value="publish"
-    />
+    <div v-if="field.kind === 'boolean'" class="settings-boolean-row">
+      <span class="settings-field-title">{{ field.label }}</span>
+      <ConsoleToggle
+        :model-value="modelValue === true"
+        :label="field.label"
+        @update:model-value="publish"
+      />
+    </div>
     <SettingsCollectionEditor
       v-else-if="schema"
       :model-value="String(modelValue)"
@@ -301,6 +303,16 @@ function remove(index: number) {
   color: var(--text-primary);
   padding: 0.65rem 0.75rem;
   font-size: 0.875rem;
+}
+.settings-boolean-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.settings-boolean-row .settings-field-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .settings-input:focus {
   outline: 2px solid var(--focus-ring);

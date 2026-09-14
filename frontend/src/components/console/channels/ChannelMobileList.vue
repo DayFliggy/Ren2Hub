@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   Activity,
+  Gauge,
   ChevronDown,
   ChevronRight,
   LoaderCircle,
@@ -91,6 +92,7 @@ const props = defineProps<{
   refreshBalance: (channel: AdminChannel) => Promise<boolean>
   openTest: (channel: AdminChannel) => void
   editChannel: (channel: AdminChannel) => void
+  showRuntime: (channel: AdminChannel) => void
   deleteChannel: (channel: AdminChannel) => void
 }>()
 
@@ -457,9 +459,13 @@ function responseDisplay(channel: AdminChannel): {
             </dl>
 
             <footer
-              v-if="canOperate || canWrite || canSensitiveWrite"
               class="mt-4 flex items-center justify-end gap-1 border-t border-[var(--border-subtle)] pt-3"
             >
+              <IconButton
+                :label="t('gateway.channelRuntime')"
+                @click="showRuntime(channel)"
+                ><Gauge :size="16"
+              /></IconButton>
               <IconButton
                 v-if="canWrite"
                 :label="t('channels.editChannel')"

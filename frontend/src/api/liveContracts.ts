@@ -18,6 +18,7 @@ import {
   requiredString,
 } from './contracts'
 import type { PageResult } from './types'
+import { parseConversionPolicy } from './gateway'
 
 export interface UsageRow {
   model_name: string
@@ -156,7 +157,7 @@ export function parseLogStat(value: unknown): LogStatContract {
   }
 }
 
-function parseToken(value: unknown, endpoint: string): TokenSummary {
+export function parseToken(value: unknown, endpoint: string): TokenSummary {
   if (!isRecord(value)) invalidResponse(endpoint)
   const type = requiredString(value.type, endpoint)
   if (type !== 'auto' && type !== 'manual') invalidResponse(endpoint)
@@ -174,6 +175,7 @@ function parseToken(value: unknown, endpoint: string): TokenSummary {
     name: requiredString(value.name, endpoint, false),
     key_preview: requiredString(value.key, endpoint),
     type,
+    conversion_policy: parseConversionPolicy(value.conversion_policy ?? 'safe'),
     status: requiredInteger(value.status, endpoint) === 1 ? 1 : 2,
     used_quota: requiredInteger(value.used_quota, endpoint),
     remain_quota: requiredInteger(value.remain_quota, endpoint),

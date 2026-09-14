@@ -13,7 +13,7 @@ vi.mock('@/api/adminManagement', () => ({
   metadataApi: { groups: mocks.groups },
 }))
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ isAdmin: mocks.isAdmin }),
+  useAuthStore: () => ({ isAdmin: mocks.isAdmin, hasPermission: () => false }),
 }))
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({ isFeatureEnabled: () => mocks.enabled }),

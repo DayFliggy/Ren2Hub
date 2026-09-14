@@ -1,3 +1,5 @@
+import type { ConversionPolicy } from './gateway'
+
 export type RouteMode = 'manual' | 'auto_lab'
 export type RouteGroupKind = 'manual' | 'auto_lab'
 export type RouteEntrySource = 'platform'
@@ -88,6 +90,40 @@ export interface RouteCatalog {
   items: RouteCatalogItem[]
 }
 
+export interface RouteConversionDiagnostic {
+  code: string
+  path?: string
+  message: string
+  severity: 'warning' | 'error'
+  from: string
+  to: string
+}
+
+export interface RouteRequestRequirements {
+  format: string
+  model: string
+  stream: boolean
+  operation: string
+  features: string[]
+  native_required: boolean
+  native_state: string[]
+  tools: Array<{ type: string; path: string; configured: boolean }>
+  diagnostics: RouteConversionDiagnostic[]
+}
+
+export interface RouteConversionPlan {
+  from: string
+  to: string
+  native: boolean
+  policy: ConversionPolicy
+  request_converter?: string
+  request_projection?: string
+  response_converter?: string
+  stream_supported: boolean
+  steps: Array<{ converter: string; from: string; to: string }>
+  diagnostics: RouteConversionDiagnostic[]
+}
+
 export interface RoutePreviewEntry {
   entry_id: number
   channel_id: number
@@ -101,6 +137,8 @@ export interface RoutePreviewEntry {
   capability_state: RouteCapabilityState
   health: RouteHealthSummary
   filter_reason?: string
+  conversion_plan?: RouteConversionPlan
+  diagnostics: RouteConversionDiagnostic[]
 }
 
 export interface RouteHealthSummary {
@@ -131,6 +169,8 @@ export interface RoutePreview {
   runtime_recheck_required: boolean
   runtime_recheck_reasons: string[]
   live_selection: false
+  request_requirements: RouteRequestRequirements
+  conversion_policy: RouteConversionPlan['policy']
 }
 
 export interface RouteProfileInput {

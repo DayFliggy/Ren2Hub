@@ -160,6 +160,16 @@ const preview: RoutePreview = {
       snapshot_version: 1,
       catalog_version: 'catalog-1',
       capability_state: 'eligible',
+      diagnostics: [],
+      conversion_plan: {
+        from: 'openai',
+        to: 'openai',
+        native: true,
+        policy: 'safe',
+        stream_supported: true,
+        steps: [],
+        diagnostics: [],
+      },
       health: {
         state: 'open',
         failure_count: 3,
@@ -179,6 +189,18 @@ const preview: RoutePreview = {
   runtime_recheck_required: true,
   runtime_recheck_reasons: ['price_qualification'],
   live_selection: false,
+  conversion_policy: 'safe',
+  request_requirements: {
+    format: 'openai',
+    model: 'gpt-5',
+    stream: false,
+    operation: 'text',
+    features: [],
+    native_required: false,
+    native_state: [],
+    tools: [],
+    diagnostics: [],
+  },
 }
 
 const stubs = {
@@ -314,6 +336,76 @@ describe('TokenRoutingView', () => {
     expect(view.find('[data-testid="route-preview-health"]').exists()).toBe(
       false
     )
+  })
+
+  it('sends the request sample and renders blocked conversion diagnostics', async () => {
+    const blocked = structuredClone(preview)
+    blocked.request_requirements.stream = true
+    blocked.request_requirements.features = ['serial_tools']
+    blocked.candidate_channel_ids = []
+    delete blocked.preferred_channel_id
+    blocked.entries[0].filter_reason = 'conversion_unavailable'
+    blocked.entries[0].conversion_plan = {
+      from: 'openai',
+      to: 'gemini',
+      native: false,
+      policy: 'safe',
+      stream_supported: true,
+      diagnostics: [],
+      steps: [{ converter: 'openai_to_gemini', from: 'openai', to: 'gemini' }],
+    }
+    blocked.entries[0].diagnostics = [
+      {
+        code: 'serial_tools_not_portable',
+        path: 'parallel_tool_calls',
+        message: 'Gemini conversion cannot enforce serial tool execution',
+        severity: 'error',
+        from: 'openai',
+        to: 'gemini',
+      },
+    ]
+    mocks.preview.mockResolvedValueOnce(blocked)
+    const view = await mountView()
+    await view.get('input[placeholder="gpt-5"]').setValue('gpt-5')
+    await view
+      .get('[data-testid="route-preview-request"]')
+      .setValue('{"stream":true,"parallel_tool_calls":false}')
+    await buttonByText(view, 'Run preview').trigger('click')
+    await flushPromises()
+    expect(mocks.preview).toHaveBeenCalledWith(
+      1,
+      {
+        model: 'gpt-5',
+        path: '/v1/chat/completions',
+        request: { stream: true, parallel_tool_calls: false },
+      },
+      expect.any(AbortSignal)
+    )
+    expect(
+      view.get('[data-testid="route-preview-requirements"]').text()
+    ).toContain('Streaming')
+    expect(
+      view.get('[data-testid="route-preview-conversion"]').text()
+    ).toContain('openai_to_gemini')
+    expect(
+      view.get('[data-testid="route-preview-diagnostics"]').text()
+    ).toContain('parallel_tool_calls')
+    expect(view.text()).toContain('Conversion unavailable')
+    await view.get('[data-testid="route-preview-request"]').setValue('{}')
+    expect(view.find('[data-testid="route-preview-conversion"]').exists()).toBe(
+      false
+    )
+  })
+
+  it('rejects invalid request samples before calling the preview endpoint', async () => {
+    const view = await mountView()
+    await view.get('input[placeholder="gpt-5"]').setValue('gpt-5')
+    for (const sample of ['{', 'null', '[]', 'true']) {
+      await view.get('[data-testid="route-preview-request"]').setValue(sample)
+      await buttonByText(view, 'Run preview').trigger('click')
+      await flushPromises()
+    }
+    expect(mocks.preview).not.toHaveBeenCalled()
   })
 
   it('requires a reload after a version conflict', async () => {

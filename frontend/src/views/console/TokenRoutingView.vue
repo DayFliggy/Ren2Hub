@@ -24,6 +24,8 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
 import { useLatestRequest } from '@/composables/useLatestRequest'
+import GatewayUserPanel from '@/components/console/gateway/GatewayUserPanel.vue'
+import TokenGatewayPolicy from '@/components/console/gateway/TokenGatewayPolicy.vue'
 import type {
   EligibleRouteChannel,
   RouteEntry,
@@ -48,6 +50,7 @@ const channels = ref<EligibleRouteChannel[]>([])
 const catalog = ref<RouteCatalog | null>(null)
 const model = ref('')
 const path = ref('/v1/chat/completions')
+const requestSample = ref('')
 const selectedChannelId = ref('')
 const preview = ref<RoutePreview | null>(null)
 const loading = ref(true)
@@ -433,6 +436,20 @@ function healthTone(state: RouteHealthState): 'success' | 'warning' | 'danger' {
 
 async function runPreview(): Promise<void> {
   if (!profileView.value || !model.value.trim() || !path.value.trim()) return
+  preview.value = null
+  let request: Record<string, unknown> | undefined
+  if (requestSample.value.trim()) {
+    try {
+      const sample: unknown = JSON.parse(requestSample.value)
+      if (!sample || typeof sample !== 'object' || Array.isArray(sample)) {
+        throw new Error('invalid request sample')
+      }
+      request = sample as Record<string, unknown>
+    } catch {
+      toast.error(t('routing.requestSampleInvalid'))
+      return
+    }
+  }
   const profileID = profileView.value.profile.id
   loadingPreview.value = true
   preview.value = null
@@ -442,6 +459,7 @@ async function runPreview(): Promise<void> {
       {
         model: model.value.trim(),
         path: path.value.trim(),
+        ...(request ? { request } : {}),
       },
       signal
     )
@@ -470,7 +488,7 @@ function invalidatePreview(): void {
   loadingPreview.value = false
 }
 
-watch([model, path], invalidatePreview)
+watch([model, path, requestSample], invalidatePreview)
 watch(
   () => route.params.id,
   () => {
@@ -520,6 +538,8 @@ onMounted(() => void load())
       </p>
     </header>
 
+    <GatewayUserPanel />
+    <TokenGatewayPolicy :token-id="tokenId" />
     <div
       v-if="conflict"
       class="flex items-center justify-between gap-4 border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-4 text-sm"
@@ -643,7 +663,7 @@ onMounted(() => void load())
                   @click="addChannel"
                 >
                   <Plus class="h-4 w-4" aria-hidden="true" />
-                  {{ t('common.add') }}
+                  {{ t('routing.addChannel') }}
                 </ConsoleButton>
               </div>
 
@@ -848,6 +868,16 @@ onMounted(() => void load())
               <TextInput v-model="path" placeholder="/v1/chat/completions" />
             </FormField>
           </div>
+          <FormField class="mt-4" :label="t('routing.requestSample')">
+            <textarea
+              v-model="requestSample"
+              data-testid="route-preview-request"
+              rows="4"
+              spellcheck="false"
+              class="w-full resize-y border bg-transparent p-3 font-mono text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+              style="border-color: var(--border-default)"
+            />
+          </FormField>
           <ConsoleButton
             class="mt-4"
             variant="secondary"
@@ -878,11 +908,78 @@ onMounted(() => void load())
                 >{{ t('routing.runtimeRecheck') }}</span
               >
             </div>
+            <dl
+              class="grid gap-3 text-xs sm:grid-cols-3"
+              data-testid="route-preview-requirements"
+            >
+              <div>
+                <dt class="text-[var(--text-tertiary)]">
+                  {{ t('routing.requestProtocol') }}
+                </dt>
+                <dd class="mt-1 break-words text-[var(--text-primary)]">
+                  {{ preview.request_requirements.format }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-[var(--text-tertiary)]">
+                  {{ t('routing.conversionPolicy') }}
+                </dt>
+                <dd class="mt-1 text-[var(--text-primary)]">
+                  {{ preview.conversion_policy }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-[var(--text-tertiary)]">
+                  {{ t('routing.responseMode') }}
+                </dt>
+                <dd class="mt-1 text-[var(--text-primary)]">
+                  {{
+                    t(
+                      preview.request_requirements.stream
+                        ? 'routing.streamResponse'
+                        : 'routing.completeResponse'
+                    )
+                  }}
+                </dd>
+              </div>
+              <div
+                v-if="
+                  preview.request_requirements.features.length ||
+                  preview.request_requirements.tools.length
+                "
+                class="sm:col-span-3"
+              >
+                <dt class="text-[var(--text-tertiary)]">
+                  {{ t('routing.requestFeatures') }}
+                </dt>
+                <dd class="mt-1 break-words text-[var(--text-primary)]">
+                  {{
+                    [
+                      ...preview.request_requirements.features,
+                      ...preview.request_requirements.tools.map(
+                        (tool) => tool.type
+                      ),
+                    ].join(', ')
+                  }}
+                </dd>
+              </div>
+              <div
+                v-if="preview.request_requirements.native_required"
+                class="sm:col-span-3"
+              >
+                <dt class="text-[var(--text-tertiary)]">
+                  {{ t('routing.nativeState') }}
+                </dt>
+                <dd class="mt-1 break-all text-[var(--text-primary)]">
+                  {{ preview.request_requirements.native_state.join(', ') }}
+                </dd>
+              </div>
+            </dl>
             <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <div
                 v-for="entry in preview.entries"
                 :key="entry.entry_id"
-                class="border p-3"
+                class="min-w-0 border p-3"
                 style="border-color: var(--border-subtle)"
               >
                 <div class="flex items-center justify-between gap-2">
@@ -892,9 +989,85 @@ onMounted(() => void load())
                   <StatusChip
                     :tone="entry.filter_reason ? 'danger' : 'success'"
                   >
-                    {{ entry.filter_reason || t('routing.eligible') }}
+                    {{
+                      entry.filter_reason === 'conversion_unavailable'
+                        ? t('routing.conversionUnavailable')
+                        : entry.filter_reason || t('routing.eligible')
+                    }}
                   </StatusChip>
                 </div>
+                <div
+                  v-if="entry.conversion_plan"
+                  class="mt-3 border-t pt-3 text-xs"
+                  style="border-color: var(--border-subtle)"
+                  data-testid="route-preview-conversion"
+                >
+                  <p class="break-words text-[var(--text-primary)]">
+                    {{ entry.conversion_plan.from }} →
+                    {{
+                      entry.conversion_plan.to ||
+                      t('routing.protocolUnavailable')
+                    }}
+                  </p>
+                  <p
+                    v-if="entry.conversion_plan.to"
+                    class="mt-1 text-[var(--text-tertiary)]"
+                  >
+                    {{
+                      t(
+                        entry.conversion_plan.native
+                          ? 'routing.nativeProtocol'
+                          : 'routing.convertedProtocol'
+                      )
+                    }}
+                  </p>
+                  <ol
+                    v-if="entry.conversion_plan.steps.length"
+                    class="mt-2 space-y-1 text-[var(--text-tertiary)]"
+                  >
+                    <li
+                      v-for="(step, index) in entry.conversion_plan.steps"
+                      :key="`${index}:${step.converter}`"
+                      class="break-all"
+                    >
+                      {{ step.converter }}
+                    </li>
+                  </ol>
+                  <p
+                    v-if="entry.conversion_plan.request_projection"
+                    class="mt-2 break-all text-[var(--text-tertiary)]"
+                  >
+                    {{ entry.conversion_plan.request_projection }}
+                  </p>
+                </div>
+                <ul
+                  v-if="entry.diagnostics.length"
+                  class="mt-3 space-y-2 text-xs"
+                  data-testid="route-preview-diagnostics"
+                >
+                  <li
+                    v-for="(diagnostic, index) in entry.diagnostics"
+                    :key="`${index}:${diagnostic.code}`"
+                    class="break-words"
+                  >
+                    <StatusChip
+                      :tone="
+                        diagnostic.severity === 'error' ? 'danger' : 'warning'
+                      "
+                      >{{
+                        t(`routing.diagnosticSeverity.${diagnostic.severity}`)
+                      }}</StatusChip
+                    >
+                    <span
+                      v-if="diagnostic.path"
+                      class="ml-1 break-all text-[var(--text-secondary)]"
+                      >{{ diagnostic.path }}</span
+                    >
+                    <p class="mt-1 text-[var(--text-secondary)]">
+                      {{ diagnostic.message }}
+                    </p>
+                  </li>
+                </ul>
                 <p class="mt-2 text-xs text-[var(--text-tertiary)]">
                   {{ entry.lab_slug || t('routing.unknownLab') }} ·
                   {{ entry.actual_model || entry.request_model }}

@@ -23,6 +23,7 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
+import GatewayChannelPanel from '@/components/console/gateway/GatewayChannelPanel.vue'
 import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import { useToast } from '@/composables/useToast'
 import {
@@ -985,6 +986,11 @@ async function submit() {
       </section>
     </div>
 
+    <GatewayChannelPanel
+      v-if="open && editing && auth.hasPermission('channel', 'read')"
+      :key="editing.id"
+      :channel-id="editing.id"
+    />
     <template #footer>
       <div class="grid grid-cols-2 gap-3">
         <ConsoleButton

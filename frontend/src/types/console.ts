@@ -17,6 +17,7 @@ export interface TokenItem {
   name: string
   key: string
   type: TokenType
+  conversion_policy?: import('@/types/gateway').ConversionPolicy
   status: 1 | 2 // 1 enabled · 2 disabled
   used_quota: number
   remain_quota: number

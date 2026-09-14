@@ -18,6 +18,9 @@ import type {
   RouteHealthSummary,
   RoutePolicy,
   RoutePreview,
+  RouteConversionDiagnostic,
+  RouteConversionPlan,
+  RouteRequestRequirements,
   RouteProfileInput,
   RouteProfileView,
   RouteRetryMode,
@@ -362,6 +365,14 @@ export function parseRoutePreview(value: unknown): RoutePreview {
   if (selectionMode !== 'ordered' && selectionMode !== 'weighted')
     invalidResponse(endpoint)
   if (value.live_selection !== false) invalidResponse(endpoint)
+  const conversionPolicy = parseConversionPolicy(
+    value.conversion_policy,
+    endpoint
+  )
+  const requirements = parseRequestRequirements(
+    value.request_requirements,
+    endpoint
+  )
   const activeGroup =
     value.active_group === undefined
       ? undefined
@@ -386,8 +397,33 @@ export function parseRoutePreview(value: unknown): RoutePreview {
         entry.filter_reason === undefined
           ? undefined
           : requiredString(entry.filter_reason, endpoint),
+      conversion_plan:
+        entry.conversion_plan === undefined
+          ? undefined
+          : parseConversionPlan(entry.conversion_plan, endpoint),
+      diagnostics: parseConversionDiagnostics(entry.diagnostics, endpoint),
     }
   })
+  for (const entry of entries) {
+    if (
+      (entry.conversion_plan &&
+        (entry.conversion_plan.policy !== conversionPolicy ||
+          entry.conversion_plan.from !== requirements.format ||
+          (entry.conversion_plan.native &&
+            entry.conversion_plan.from !== entry.conversion_plan.to))) ||
+      (!entry.filter_reason &&
+        (!entry.conversion_plan ||
+          !entry.conversion_plan.to ||
+          (requirements.stream && !entry.conversion_plan.stream_supported) ||
+          entry.diagnostics.some(
+            (diagnostic) =>
+              diagnostic.code === 'native_state_required' ||
+              conversionPolicy === 'strict' ||
+              (conversionPolicy === 'safe' && diagnostic.severity === 'error')
+          )))
+    )
+      invalidResponse(endpoint)
+  }
   const candidateChannelIDs = parseIntegerArray(
     value.candidate_channel_ids,
     endpoint
@@ -431,6 +467,109 @@ export function parseRoutePreview(value: unknown): RoutePreview {
       requiredString(reason, endpoint, false)
     ),
     live_selection: false,
+    request_requirements: requirements,
+    conversion_policy: conversionPolicy,
+  }
+}
+
+function parseConversionPolicy(
+  value: unknown,
+  endpoint: string
+): RouteConversionPlan['policy'] {
+  if (value !== 'safe' && value !== 'allow' && value !== 'strict')
+    invalidResponse(endpoint)
+  return value
+}
+
+function parseConversionDiagnostics(
+  value: unknown,
+  endpoint: string
+): RouteConversionDiagnostic[] {
+  if (!Array.isArray(value)) invalidResponse(endpoint)
+  return value.map((item) => {
+    if (
+      !isRecord(item) ||
+      (item.severity !== 'warning' && item.severity !== 'error')
+    )
+      invalidResponse(endpoint)
+    return {
+      code: requiredString(item.code, endpoint, false),
+      path:
+        item.path === undefined
+          ? undefined
+          : requiredString(item.path, endpoint),
+      message: requiredString(item.message, endpoint, false),
+      severity: item.severity,
+      from: requiredString(item.from, endpoint),
+      to: requiredString(item.to, endpoint),
+    }
+  })
+}
+
+function parseRequestRequirements(
+  value: unknown,
+  endpoint: string
+): RouteRequestRequirements {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const tools = value.tools === undefined ? [] : value.tools
+  if (!Array.isArray(tools)) invalidResponse(endpoint)
+  return {
+    format: requiredString(value.format, endpoint, false),
+    model: requiredString(value.model, endpoint, false),
+    stream: requiredBoolean(value.stream, endpoint),
+    operation: requiredString(value.operation, endpoint, false),
+    features: parseStringArray(value.features ?? [], endpoint),
+    native_required: requiredBoolean(value.native_required, endpoint),
+    native_state: parseStringArray(value.native_state ?? [], endpoint),
+    tools: tools.map((tool) => {
+      if (!isRecord(tool)) invalidResponse(endpoint)
+      return {
+        type: requiredString(tool.type, endpoint, false),
+        path: requiredString(tool.path, endpoint, false),
+        configured:
+          tool.configured === undefined
+            ? false
+            : requiredBoolean(tool.configured, endpoint),
+      }
+    }),
+    diagnostics: parseConversionDiagnostics(value.diagnostics ?? [], endpoint),
+  }
+}
+
+function parseConversionPlan(
+  value: unknown,
+  endpoint: string
+): RouteConversionPlan {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const steps = value.steps === undefined ? [] : value.steps
+  if (!Array.isArray(steps)) invalidResponse(endpoint)
+  return {
+    from: requiredString(value.from, endpoint, false),
+    to: requiredString(value.to, endpoint),
+    native: requiredBoolean(value.native, endpoint),
+    policy: parseConversionPolicy(value.policy, endpoint),
+    request_converter:
+      value.request_converter === undefined
+        ? undefined
+        : requiredString(value.request_converter, endpoint, false),
+    response_converter:
+      value.response_converter === undefined
+        ? undefined
+        : requiredString(value.response_converter, endpoint, false),
+    request_projection:
+      value.request_projection === undefined
+        ? undefined
+        : requiredString(value.request_projection, endpoint, false),
+    stream_supported: requiredBoolean(value.stream_supported, endpoint),
+    steps: steps.map((step) => {
+      if (!isRecord(step)) invalidResponse(endpoint)
+      return {
+        converter: requiredString(step.converter, endpoint, false),
+        from: requiredString(step.from, endpoint, false),
+        to: requiredString(step.to, endpoint, false),
+      }
+    }),
+    diagnostics: parseConversionDiagnostics(value.diagnostics ?? [], endpoint),
   }
 }
 
@@ -565,7 +704,7 @@ export const routingApi = {
   },
   async preview(
     id: number,
-    input: { model: string; path: string },
+    input: { model: string; path: string; request?: Record<string, unknown> },
     signal?: AbortSignal
   ): Promise<RoutePreview> {
     return parseRoutePreview(

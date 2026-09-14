@@ -14,6 +14,9 @@ import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
 import { QUOTA_PER_DOLLAR } from '@/utils/format'
+import GatewayUserPanel from '@/components/console/gateway/GatewayUserPanel.vue'
+import ConversionPolicySelect from '@/components/console/gateway/ConversionPolicySelect.vue'
+import type { ConversionPolicy } from '@/types/gateway'
 
 const props = defineProps<{
   open: boolean
@@ -32,6 +35,7 @@ const toast = useToast()
 
 const form = reactive({
   type: 'auto' as TokenType,
+  conversion_policy: 'safe' as ConversionPolicy,
   name: '',
   model_limits: [] as string[],
   quotaDollars: null as number | null,
@@ -54,6 +58,7 @@ watch(
     if (!open) return
     const e = props.editing
     form.type = e?.type ?? 'auto'
+    form.conversion_policy = e?.conversion_policy ?? 'safe'
     form.name = e?.name ?? ''
     form.model_limits = e?.model_limits ? [...e.model_limits] : []
     form.quotaDollars =
@@ -99,6 +104,7 @@ async function save() {
   try {
     const payload: Record<string, unknown> = {
       name: form.name,
+      conversion_policy: form.conversion_policy,
       model_limits: form.model_limits,
       unlimited: form.unlimited,
       remain_quota: form.unlimited
@@ -198,6 +204,10 @@ async function save() {
           :placeholder="t('keys.namePlaceholder')"
         />
       </FormField>
+      <ConversionPolicySelect
+        v-model="form.conversion_policy"
+        :disabled="saving"
+      />
 
       <!-- expiry: toggle-hidden -->
       <div
@@ -340,6 +350,7 @@ async function save() {
       </section>
     </div>
 
+    <GatewayUserPanel v-if="open" />
     <template #footer>
       <ConsoleButton
         size="lg"

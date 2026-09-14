@@ -7,6 +7,7 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
+import GatewayUserPanel from '@/components/console/gateway/GatewayUserPanel.vue'
 import {
   ADMIN_USER_ASSIGNABLE_ROLES,
   adminUserRoleLabelKey,
@@ -213,6 +214,16 @@ async function submit() {
       </div>
     </div>
 
+    <GatewayUserPanel
+      v-if="
+        open &&
+        editing &&
+        (operatorLevel >= 100 || editing.role < operatorLevel)
+      "
+      :key="editing.id"
+      :user-id="editing.id"
+      editable
+    />
     <template #footer>
       <div class="grid grid-cols-2 gap-3">
         <ConsoleButton
