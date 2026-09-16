@@ -40,6 +40,9 @@ const defaultFields = [
   { key: 'wait_ms', label: 'wait_ms', max: 5000 },
   { key: 'user_queue_size', label: 'queue_size', max: 20 },
   { key: 'channel_queue_size', label: 'channelQueue', max: 10000 },
+  { key: 'total_queue_size', label: 'totalQueue', max: 100000 },
+  { key: 'retry_budget_percent', label: 'retryPercent', max: 100, min: 1 },
+  { key: 'retry_budget_burst', label: 'retryBurst', max: 10000, min: 1 },
 ] as const
 const rateFields = ['rpm', 'tpm'] as const
 const dirty = computed(
@@ -223,6 +226,10 @@ watch(
     <form v-if="draft" class="space-y-5" @submit.prevent="save">
       <fieldset :disabled="saving || conflict" class="min-w-0 space-y-5">
         <template v-if="!channelId">
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="draft.retry_budget_enabled" type="checkbox" />
+            {{ t('gateway.retryEnabled') }}
+          </label>
           <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <GatewayNumber
               v-for="field in defaultFields"
@@ -230,6 +237,7 @@ watch(
               v-model="draft[field.key]"
               :label="t(`gateway.${field.label}`)"
               :max="field.max"
+              :min="'min' in field ? field.min : 0"
             />
           </div>
           <div class="space-y-4 border-t border-[var(--border-subtle)] pt-4">

@@ -35,10 +35,10 @@ func TestGatewayTextReachesFourthAvailableCandidate(t *testing.T) {
 			var base model.Channel
 			require.NoError(t, model.DB.Where("models = ?", test.model).First(&base).Error)
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("models = ?", test.model).Update("status", common.ChannelStatusManuallyDisabled).Error)
-			var held []service.RouteLease
+			var held []*service.Permit
 			defer func() {
 				for _, lease := range held {
-					require.NoError(t, service.ReleaseRouteLease(context.Background(), common.RDB, lease))
+					lease.Release()
 				}
 			}()
 			for index := 1; index <= 4; index++ {
@@ -49,8 +49,7 @@ func TestGatewayTextReachesFourthAvailableCandidate(t *testing.T) {
 				require.NoError(t, model.DB.Create(&channel).Error)
 				require.NoError(t, channel.AddAbilities(model.DB))
 				if index < 4 {
-					lease, err := service.AcquireRouteLease(context.Background(), common.RDB, channel.Name, channel.Name, time.Minute,
-						[]service.RouteLeaseResource{{Key: service.ChannelRouteLeaseKey(channel.Id), Capacity: 1}})
+					lease, _, err := service.AcquireGatewayChannelPermit(context.Background(), channel.Name, channel.Id, false, nil)
 					require.NoError(t, err)
 					held = append(held, lease)
 				}

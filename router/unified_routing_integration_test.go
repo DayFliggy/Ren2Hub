@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -72,7 +71,8 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			))
 			previousRDB, previousMemory := common.RDB, common.MemoryCacheEnabled
 			previousPrices := ratio_setting.ModelPrice2JSONString()
-			client := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
+			redisServer := miniredis.RunT(t)
+			client := redis.NewClient(&redis.Options{Addr: redisServer.Addr(), MaxRetries: -1})
 			common.RDB, common.RedisEnabled, common.MemoryCacheEnabled = client, true, false
 			t.Cleanup(func() {
 				common.RDB, common.MemoryCacheEnabled = previousRDB, previousMemory
@@ -119,21 +119,25 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			assert.Equal(t, int32(test.calls), calls.Load(), response.Body.String())
 			require.NoError(t, db.First(user, user.Id).Error)
 			assert.Equal(t, test.quota, user.UsedQuota)
-			assert.Equal(t, int64(0), client.ZCard(context.Background(), service.ChannelRouteLeaseKey(channel.Id)).Val())
+			assert.Equal(t, int64(0), service.ReadGatewayAdmissionRuntime(service.ChannelAdmissionKey(channel.Id)).InFlight)
 			if test.name == "chat" {
-				held, _, err := service.AcquireConfiguredRouteLease(context.Background(), "occupied", channel.Id, user.Id, token.Id, test.models, time.Minute)
+				held, _, err := service.AcquireGatewayChannelPermit(context.Background(), "occupied", channel.Id, false, nil)
 				require.NoError(t, err)
 				for _, failure := range []string{"capacity", "redis"} {
 					if failure == "redis" {
-						require.NoError(t, service.ReleaseConfiguredRouteLease(context.Background(), held))
-						common.RedisEnabled = false
+						held.Release()
+						redisServer.Close()
 					}
 					blocked := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
 					blocked.Header.Set("Content-Type", "application/json")
 					blocked.Header.Set("Authorization", "Bearer "+token.Key)
 					blockedResponse := httptest.NewRecorder()
 					engine.ServeHTTP(blockedResponse, blocked)
-					assert.Equal(t, http.StatusServiceUnavailable, blockedResponse.Code, failure)
+					want := http.StatusTooManyRequests
+					if failure == "redis" {
+						want = http.StatusServiceUnavailable
+					}
+					assert.Equal(t, want, blockedResponse.Code, failure)
 					assert.Equal(t, int32(1), calls.Load(), failure)
 					require.NoError(t, db.First(user, user.Id).Error)
 					assert.Equal(t, test.quota, user.UsedQuota, failure)

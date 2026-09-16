@@ -77,7 +77,7 @@ func TestGatewayAliAsyncImageAcceptance(t *testing.T) {
 			}
 			assert.EqualValues(t, wantCreates, creates.Load(), "accepted or unknown creation must not replay after failure")
 			assert.EqualValues(t, wantPolls, polls.Load())
-			awaitRealtimeLeasesReleased(t)
+			awaitGatewayPermitsReleased(t)
 			var user model.User
 			var token model.Token
 			require.NoError(t, model.DB.First(&user, 1).Error)

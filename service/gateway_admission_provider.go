@@ -41,21 +41,21 @@ func gatewayProviderRateKeys(reservation GatewayProviderRateReservation) []strin
 
 func ReserveGatewayProviderRate(ctx context.Context, client *redis.Client, scopes []GatewayProviderRateScope, estimatedTokens int64) (GatewayProviderRateReservation, error) {
 	if client == nil || len(scopes) == 0 || len(scopes) > 3 || estimatedTokens < 0 || estimatedTokens > 1_000_000_000 {
-		return GatewayProviderRateReservation{}, ErrRouteLeaseUnavailable
+		return GatewayProviderRateReservation{}, ErrGatewayStorageUnavailable
 	}
 	seen := make(map[string]bool)
 	reservation := GatewayProviderRateReservation{ID: uuid.NewString(), Scopes: append([]GatewayProviderRateScope(nil), scopes...), EstimatedTokens: estimatedTokens}
-	args := []any{reservation.ID, estimatedTokens, GatewayLeaseTTL.Milliseconds()}
+	args := []any{reservation.ID, estimatedTokens, GatewayReservationTTL.Milliseconds()}
 	for _, scope := range scopes {
 		if scope.ID == "" || len(scope.ID) > 512 || seen[scope.ID] || scope.RPM < 0 || scope.TPM < 0 || scope.RPM > 1_000_000_000 || scope.TPM > 1_000_000_000 {
-			return GatewayProviderRateReservation{}, ErrRouteLeaseRuntime
+			return GatewayProviderRateReservation{}, ErrAdmissionRuntime
 		}
 		seen[scope.ID] = true
 		args = append(args, scope.RPM, scope.TPM)
 	}
 	result, err := gatewayProviderReserveScript.Run(ctx, client, gatewayProviderRateKeys(reservation), args...).Int()
 	if err != nil {
-		return GatewayProviderRateReservation{}, errors.Join(ErrRouteLeaseUnavailable, err)
+		return GatewayProviderRateReservation{}, errors.Join(ErrGatewayStorageUnavailable, err)
 	}
 	if result != 1 {
 		return GatewayProviderRateReservation{}, ErrGatewayProviderRateLimit
@@ -65,11 +65,11 @@ func ReserveGatewayProviderRate(ctx context.Context, client *redis.Client, scope
 
 func RenewGatewayProviderRate(ctx context.Context, client *redis.Client, reservation GatewayProviderRateReservation) error {
 	if client == nil || reservation.ID == "" || len(reservation.Scopes) == 0 {
-		return ErrRouteLeaseUnavailable
+		return ErrGatewayStorageUnavailable
 	}
-	result, err := gatewayProviderRenewScript.Run(ctx, client, gatewayProviderRateKeys(reservation), reservation.ID, GatewayLeaseTTL.Milliseconds()).Int()
+	result, err := gatewayProviderRenewScript.Run(ctx, client, gatewayProviderRateKeys(reservation), reservation.ID, GatewayReservationTTL.Milliseconds()).Int()
 	if err != nil {
-		return errors.Join(ErrRouteLeaseUnavailable, err)
+		return errors.Join(ErrGatewayStorageUnavailable, err)
 	}
 	if result != 1 {
 		return ErrGatewayReservationLost
@@ -81,7 +81,7 @@ func RenewGatewayProviderRate(ctx context.Context, client *redis.Client, reserva
 // sent attempt retains the conservative estimate; pre-send failures refund RPM.
 func FinishGatewayProviderRate(ctx context.Context, client *redis.Client, reservation GatewayProviderRateReservation, actualTokens int64, upstreamStarted, usageKnown bool, retryAfter time.Duration) error {
 	if client == nil || reservation.ID == "" || len(reservation.Scopes) == 0 || actualTokens < 0 || actualTokens > 1_000_000_000 {
-		return ErrRouteLeaseUnavailable
+		return ErrGatewayStorageUnavailable
 	}
 	if upstreamStarted && !usageKnown {
 		actualTokens = reservation.EstimatedTokens
@@ -91,7 +91,7 @@ func FinishGatewayProviderRate(ctx context.Context, client *redis.Client, reserv
 	}
 	result, err := gatewayProviderFinishScript.Run(ctx, client, gatewayProviderRateKeys(reservation), reservation.ID, actualTokens, upstreamStarted, max(retryAfter.Milliseconds(), 0)).Int()
 	if err != nil {
-		return errors.Join(ErrRouteLeaseUnavailable, err)
+		return errors.Join(ErrGatewayStorageUnavailable, err)
 	}
 	if result != 1 {
 		return ErrGatewayReservationLost
@@ -112,7 +112,7 @@ func ResolveGatewayProviderRateScopes(config model.GatewayConfig, channelID int,
 		return nil, err
 	}
 	if channelID <= 0 || credentialID == "" {
-		return nil, ErrRouteLeaseRuntime
+		return nil, ErrAdmissionRuntime
 	}
 	channelLimit, credentialLimit := config.ChannelRates[channelID], config.CredentialRates[credentialID]
 	return []GatewayProviderRateScope{
@@ -121,8 +121,8 @@ func ResolveGatewayProviderRateScopes(config model.GatewayConfig, channelID int,
 	}, nil
 }
 
-func LoadGatewayProviderRateScopes(channelID int, credentialID string) ([]GatewayProviderRateScope, error) {
-	config, err := model.GetGatewayConfig()
+func LoadGatewayProviderRateScopes(ctx context.Context, channelID int, credentialID string) ([]GatewayProviderRateScope, error) {
+	config, err := model.GetGatewayConfigContext(ctx)
 	if err != nil {
 		return nil, err
 	}

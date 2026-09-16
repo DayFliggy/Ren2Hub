@@ -171,11 +171,11 @@ func (s *BillingSession) Refund(c *gin.Context) {
 			refundErr = fmt.Errorf("mark billing recovery pending: %w", err)
 		}
 	}
-	if !fundingRefunded && !fundingSettled {
+	if refundErr == nil && !fundingRefunded && !fundingSettled {
 		var err error
-		if refundErr == nil && s.recoveryID != "" {
+		if s.recoveryID != "" {
 			err = model.ApplyBillingRecoveryAdjustment(s.recoveryID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationRefund)
-		} else if refundErr == nil {
+		} else {
 			err = funding.Refund()
 		}
 		if err != nil {
@@ -219,33 +219,25 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	} else {
 		s.tokenRefunded = tokenRefunded
 	}
+	complete := refundErr == nil && s.refundComponentsCompleteLocked(isPlayground, tokenConsumed)
+	s.mu.Unlock()
+	if complete && s.recoveryID != "" {
+		if err := model.MarkBillingRecoveryRefunded(s.recoveryID, nil); err != nil {
+			refundErr = fmt.Errorf("complete billing recovery refund: %w", err)
+		}
+	}
+	s.mu.Lock()
 	s.refundInProgress = false
 	s.refundErr = refundErr
 	s.relayInfo.BillingRefundError = refundErr
-	if refundErr == nil && s.refundComponentsCompleteLocked(isPlayground, tokenConsumed) {
-		s.refunded = true
-	}
+	s.refunded = complete && refundErr == nil
 	s.mu.Unlock()
 	if refundErr != nil {
 		common.SysLog("billing refund remains pending: " + refundErr.Error())
-	} else {
-		s.mu.Lock()
-		recoveryComplete := s.recoveryID != "" && s.refundComponentsCompleteLocked(isPlayground, tokenConsumed)
-		s.mu.Unlock()
-		if !recoveryComplete {
-			return
-		}
-		if err := model.MarkBillingRecoveryRefunded(s.recoveryID, nil); err != nil {
-			common.SysLog("billing recovery completion remains pending: " + err.Error())
-			s.mu.Lock()
-			s.refundErr = err
-			s.relayInfo.BillingRefundError = err
-			s.mu.Unlock()
-		}
 	}
 }
 
-// NeedsRefund 返回是否存在需要退还的预扣状态。
+// NeedsRefund 返回是否存在需要退还的预扣或需要终结的恢复记录。
 func (s *BillingSession) NeedsRefund() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -255,6 +247,11 @@ func (s *BillingSession) NeedsRefund() bool {
 func (s *BillingSession) needsRefundLocked() bool {
 	if s.settled || s.settlementStarted || s.refunded {
 		return false
+	}
+	// Trust can leave every amount at zero, but its durable request record
+	// still needs a terminal state and must stop renewing after failure.
+	if s.recoveryID != "" {
+		return true
 	}
 	if !s.fundingSettled && !s.fundingRefunded {
 		if s.tokenConsumed > 0 || (func() bool {

@@ -11,26 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGatewayRuntimeIgnoresExpiredOccupancyWithoutChangingOwnership(t *testing.T) {
-	server := useRoutePlanningRedis(t)
-	now := time.Unix(2000, 0)
-	server.SetTime(now)
-	ctx := context.Background()
-	resource := RouteLeaseResource{Key: UserRouteLeaseKey(2), Capacity: 1}
-	assert.Equal(t, 1, queueTestAttempt(t, common.RDB, resource, "running", time.Second, false))
-	assert.Equal(t, 0, queueTestAttempt(t, common.RDB, resource, "waiting", time.Second, false))
-	before, err := ReadGatewayResourceRuntime(ctx, common.RDB, resource.Key)
-	require.NoError(t, err)
-	assert.Equal(t, GatewayResourceRuntime{InFlight: 1, Queued: 1}, before)
-	server.SetTime(now.Add(2 * time.Second))
-	after, err := ReadGatewayResourceRuntime(ctx, common.RDB, resource.Key)
-	require.NoError(t, err)
-	assert.Equal(t, GatewayResourceRuntime{InFlight: 1, Queued: 0}, after)
-	assert.Equal(t, int64(1), common.RDB.ZCard(ctx, resource.Key+":queue").Val())
-	_, err = RenewRouteLease(ctx, common.RDB, RouteLease{LeaseID: "running", RequestID: "running", Resources: []RouteLeaseResource{resource}}, GatewayLeaseTTL)
-	require.NoError(t, err)
-}
-
 func TestGatewayRuntimeReportsSharedProviderUsageAndExpiry(t *testing.T) {
 	server := useRoutePlanningRedis(t)
 	now := time.Unix(2000, 0)

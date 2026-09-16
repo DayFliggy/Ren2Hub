@@ -62,7 +62,7 @@ func TestGatewayImageFinalQuantityAndNativeMapping(t *testing.T) {
 			body, err := io.ReadAll(response.Body)
 			require.NoError(t, err)
 			assert.Equal(t, test.status, response.StatusCode, string(body))
-			awaitRealtimeLeasesReleased(t)
+			awaitGatewayPermitsReleased(t)
 			var user model.User
 			var token model.Token
 			require.NoError(t, model.DB.First(&user, 1).Error)
@@ -134,7 +134,7 @@ func TestGatewayImageDeliveryAndSettlement(t *testing.T) {
 					assert.Equal(t, 1, strings.Count(string(body), "data: [DONE]"))
 				}
 			}
-			awaitRealtimeLeasesReleased(t)
+			awaitGatewayPermitsReleased(t)
 			assert.EqualValues(t, 1, sends.Load(), "accepted image generation cannot replay")
 			var user model.User
 			var token model.Token

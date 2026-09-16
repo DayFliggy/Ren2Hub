@@ -57,7 +57,8 @@ export function parseGatewayConfig(value: unknown): GatewayConfig {
     !isRecord(value) ||
     !isRecord(value.groups) ||
     !isRecord(value.channel_rates) ||
-    !isRecord(value.credential_rates)
+    !isRecord(value.credential_rates) ||
+    typeof value.retry_budget_enabled !== 'boolean'
   )
     invalidResponse(endpoint)
   const groups = Object.fromEntries(
@@ -88,6 +89,10 @@ export function parseGatewayConfig(value: unknown): GatewayConfig {
     invalidResponse(endpoint)
   return {
     version: bounded(value.version, Number.MAX_SAFE_INTEGER, 1),
+    total_queue_size: bounded(value.total_queue_size, 100000),
+    retry_budget_enabled: value.retry_budget_enabled,
+    retry_budget_percent: bounded(value.retry_budget_percent, 100, 1),
+    retry_budget_burst: bounded(value.retry_budget_burst, 10000, 1),
     user_concurrency: bounded(value.user_concurrency, 1000000),
     wait_ms: bounded(value.wait_ms, 5000),
     user_queue_size: bounded(value.user_queue_size, 20),
@@ -133,8 +138,14 @@ export function parseGatewayAdmission(value: unknown): GatewayAdmission {
 }
 
 export function parseGatewayRuntime(value: unknown): GatewayRuntime {
-  if (!isRecord(value)) invalidResponse(endpoint)
+  if (!isRecord(value) || typeof value.draining !== 'boolean')
+    invalidResponse(endpoint)
   return {
+    capacity: bounded(value.capacity, 1000000),
+    config_version: bounded(value.config_version, Number.MAX_SAFE_INTEGER, 1),
+    revision: bounded(value.revision, Number.MAX_SAFE_INTEGER),
+    started_at: bounded(value.started_at, Number.MAX_SAFE_INTEGER),
+    draining: value.draining,
     in_flight: bounded(value.in_flight, Number.MAX_SAFE_INTEGER),
     queued: bounded(value.queued, Number.MAX_SAFE_INTEGER),
   }
@@ -205,12 +216,22 @@ export const gatewayApi = {
       undefined,
       { signal }
     )
-    if (!isRecord(value)) invalidResponse(endpoint)
+    if (
+      !isRecord(value) ||
+      (value.rate_status !== 'available' && value.rate_status !== 'unavailable')
+    )
+      invalidResponse(endpoint)
+    if (value.rate_status === 'unavailable' && value.rate !== null)
+      invalidResponse(endpoint)
     return {
       ...parseGatewayRuntime(value),
       channel_id: bounded(value.channel_id, 2147483647, 1),
       capacity: bounded(value.capacity, 1000000),
-      rate: parseGatewayRateRuntime(value.rate),
+      rate:
+        value.rate_status === 'available'
+          ? parseGatewayRateRuntime(value.rate)
+          : null,
+      rate_status: value.rate_status,
     }
   },
   async credentials(

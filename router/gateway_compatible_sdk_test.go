@@ -287,7 +287,7 @@ func TestGatewayCompatibleInvalidUsageIsNotDeliveredOrCharged(t *testing.T) {
 				assert.Equal(t, http.StatusBadGateway, status, output)
 				assert.NotContains(t, output, "must-not-be-delivered")
 				assert.EqualValues(t, 1, sends.Load())
-				awaitRealtimeLeasesReleased(t)
+				awaitGatewayPermitsReleased(t)
 				var user model.User
 				var token model.Token
 				require.Eventually(t, func() bool {
@@ -357,7 +357,7 @@ func TestGatewayCompatibleJSONClientFailureRefundsWithoutHealthPenalty(t *testin
 				request.Header.Set("Content-Type", "application/json")
 				engine.ServeHTTP(httptest.NewRecorder(), request)
 				assert.EqualValues(t, 1, sends.Load(), "a client write failure must not retry the provider")
-				awaitRealtimeLeasesReleased(t)
+				awaitGatewayPermitsReleased(t)
 				var user model.User
 				var token model.Token
 				require.Eventually(t, func() bool {

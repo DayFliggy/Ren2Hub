@@ -37,7 +37,7 @@ const gatewayProcessRedisDB = 13
 
 // Opt-in integration test. Every table has a run-specific prefix; Redis keys
 // use distinct user/channel IDs in DB 13. It never flushes a Redis database.
-func TestGatewayMultiProcessAdmission(t *testing.T) {
+func TestGatewayMultiProcessSuccessReservation(t *testing.T) {
 	dsn, redisAddress := os.Getenv("GATEWAY_MULTIPROCESS_MYSQL_DSN"), os.Getenv("GATEWAY_MULTIPROCESS_REDIS_ADDR")
 	if dsn == "" || redisAddress == "" {
 		t.Skip("set GATEWAY_MULTIPROCESS_MYSQL_DSN and GATEWAY_MULTIPROCESS_REDIS_ADDR to isolated local services")
@@ -54,17 +54,6 @@ func TestGatewayMultiProcessAdmission(t *testing.T) {
 		common.SetMainDatabaseType(previousKind)
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		for _, key := range fixture.resources {
-			members, readErr := client.ZRange(cleanupCtx, key, 0, -1).Result()
-			assert.NoError(t, readErr)
-			keys := []string{key, key + ":queue", key + ":queue_expiry", key + ":sequence"}
-			for _, leaseID := range members {
-				meta := "route:lease:v2:meta:" + leaseID
-				requestID, _ := client.HGet(cleanupCtx, meta, "request_id").Result()
-				keys = append(keys, meta, "route:lease:v2:request:"+requestID)
-			}
-			assert.NoError(t, client.Del(cleanupCtx, keys...).Err())
-		}
 		for _, userID := range fixture.users {
 			key := service.GatewayLogicalRateKey(userID)
 			assert.NoError(t, client.Del(cleanupCtx, key+":total", key+":success", key+":pending").Err())
@@ -97,57 +86,6 @@ func TestGatewayMultiProcessAdmission(t *testing.T) {
 		}
 	}
 
-	t.Run("user_limit_shared_by_protocols", func(t *testing.T) {
-		user, channel := fixture.account(t, 1, 0, "default"), fixture.channel(t, 2)
-		otherChannel := fixture.channel(t, 2)
-		active := first.hold(t, "/v1/chat/completions", user, channel)
-		for _, path := range []string{"/v1/messages", "/v1/responses", "/v1beta/models/gateway-model:generateContent"} {
-			response := second.request(t, path, user, otherChannel)
-			assert.Equal(t, http.StatusTooManyRequests, response.StatusCode, path)
-			require.NoError(t, response.Body.Close())
-		}
-		fixture.occupancy(t, service.UserRouteLeaseKey(user), 1, 0)
-		active.complete(t)
-		fixture.occupancy(t, service.UserRouteLeaseKey(user), 0, 0)
-		second.hold(t, "/v1/messages", user, otherChannel).complete(t)
-	})
-
-	t.Run("channel_limit_shared_by_users_models_and_protocols", func(t *testing.T) {
-		userA, userB := fixture.account(t, 2, 0, "default"), fixture.account(t, 2, 0, "default")
-		channel := fixture.channel(t, 1)
-		active := first.hold(t, "/v1/chat/completions", userA, channel)
-		response := second.request(t, "/v1/messages", userB, channel)
-		assert.Equal(t, http.StatusTooManyRequests, response.StatusCode)
-		require.NoError(t, response.Body.Close())
-		fixture.occupancy(t, service.UserRouteLeaseKey(userB), 0, 0)
-		fixture.occupancy(t, service.ChannelRouteLeaseKey(channel), 1, 0)
-		active.complete(t)
-		second.hold(t, "/v1beta/models/different-model:generateContent", userB, channel).complete(t)
-	})
-
-	for _, queueScope := range []string{"user", "channel"} {
-		t.Run(queueScope+"_queue_cancellation", func(t *testing.T) {
-			userA, userB := fixture.account(t, 1, 5000, "default"), fixture.account(t, 1, 5000, "default")
-			channel := fixture.channel(t, 1)
-			active := first.hold(t, "/v1/chat/completions", userA, channel)
-			key := service.ChannelRouteLeaseKey(channel)
-			if queueScope == "user" {
-				userB, key = userA, service.UserRouteLeaseKey(userA)
-			}
-			queued := second.begin(t, "/v1/messages", userB, channel)
-			fixture.occupancy(t, key, 1, 1)
-			queued.cancel()
-			result := queued.result(t)
-			assert.ErrorIs(t, result.err, context.Canceled)
-			fixture.occupancy(t, key, 1, 0)
-			if queueScope == "channel" {
-				fixture.occupancy(t, service.UserRouteLeaseKey(userB), 0, 0)
-			}
-			active.complete(t)
-			fixture.occupancy(t, key, 0, 0)
-		})
-	}
-
 	t.Run("strict_success_reservation_across_processes", func(t *testing.T) {
 		user, channel := fixture.account(t, 10, 0, "success"), fixture.channel(t, 10)
 		left, right := first.begin(t, "/v1/chat/completions", user, channel), second.begin(t, "/v1/messages", user, channel)
@@ -178,110 +116,14 @@ func TestGatewayMultiProcessAdmission(t *testing.T) {
 		assert.Equal(t, int64(4), client.ZCard(t.Context(), key+":total").Val(), "success-capacity rejections still count once as logical requests")
 	})
 
-	t.Run("hot_limits_preserve_existing_occupancy", func(t *testing.T) {
-		user, channel := fixture.account(t, 2, 0, "default"), fixture.channel(t, 2)
-		left, right := first.hold(t, "/v1/chat/completions", user, channel), second.hold(t, "/v1/messages", user, channel)
-		require.NoError(t, db.Model(&model.User{}).Where("id = ?", user).Update("gateway_concurrency", 1).Error)
-		require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", channel).Update("capacity_total", 1).Error)
-		fixture.occupancy(t, service.UserRouteLeaseKey(user), 2, 0)
-		fixture.occupancy(t, service.ChannelRouteLeaseKey(channel), 2, 0)
-		response := first.request(t, "/v1/responses", user, channel)
-		assert.Equal(t, http.StatusTooManyRequests, response.StatusCode)
-		require.NoError(t, response.Body.Close())
-		left.complete(t)
-		fixture.occupancy(t, service.ChannelRouteLeaseKey(channel), 1, 0)
-		require.NoError(t, db.Model(&model.User{}).Where("id = ?", user).Update("gateway_concurrency", 2).Error)
-		require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", channel).Update("capacity_total", 2).Error)
-		replacement := first.hold(t, "/v1/responses", user, channel)
-		fixture.occupancy(t, service.ChannelRouteLeaseKey(channel), 2, 0)
-		right.complete(t)
-		replacement.complete(t)
-	})
-
-	t.Run("queued_request_observes_capacity_update", func(t *testing.T) {
-		userA, userB := fixture.account(t, 1, 5000, "default"), fixture.account(t, 1, 5000, "default")
-		channel := fixture.channel(t, 1)
-		active := first.hold(t, "/v1/chat/completions", userA, channel)
-		queued := second.begin(t, "/v1/messages", userB, channel)
-		fixture.occupancy(t, service.ChannelRouteLeaseKey(channel), 1, 1)
-		require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", channel).Update("capacity_total", 2).Error)
-		result := queued.result(t)
-		require.NoError(t, result.err)
-		require.Equal(t, http.StatusOK, result.response.StatusCode)
-		fixture.occupancy(t, service.ChannelRouteLeaseKey(channel), 2, 0)
-		(&gatewayHeldRequest{pending: queued, response: result.response}).complete(t)
-		active.complete(t)
-	})
-
-	t.Run("system_config_version_preserves_existing_user_pool", func(t *testing.T) {
-		user, channel := fixture.account(t, 1, 0, "default"), fixture.channel(t, 3)
-		require.NoError(t, db.Model(&model.User{}).Where("id = ?", user).Updates(map[string]any{"gateway_concurrency": nil, "gateway_wait_ms": nil}).Error)
-		active := first.hold(t, "/v1/chat/completions", user, channel)
-		key := service.UserRouteLeaseKey(user)
-		originalMembers, err := client.ZRange(t.Context(), key, 0, -1).Result()
-		require.NoError(t, err)
-		require.Len(t, originalMembers, 1)
-		current, err := model.GetGatewayConfig()
-		require.NoError(t, err)
-		current.UserConcurrency = 2
-		require.NoError(t, model.SaveGatewayConfig(current))
-		increased := second.hold(t, "/v1/messages", user, channel)
-		fixture.occupancy(t, key, 2, 0)
-		assert.NotZero(t, client.ZScore(t.Context(), key, originalMembers[0]).Val())
-		current, err = model.GetGatewayConfig()
-		require.NoError(t, err)
-		current.UserConcurrency = 1
-		require.NoError(t, model.SaveGatewayConfig(current))
-		fixture.occupancy(t, key, 2, 0)
-		blocked := first.request(t, "/v1/responses", user, channel)
-		assert.Equal(t, http.StatusTooManyRequests, blocked.StatusCode)
-		require.NoError(t, blocked.Body.Close())
-		active.complete(t)
-		increased.complete(t)
-	})
-
-	t.Run("redis_connection_failure_rejects_both_instances", func(t *testing.T) {
-		user, channel := fixture.account(t, 1, 0, "default"), fixture.channel(t, 1)
-		proxy.setAvailable(false)
-		for _, worker := range []*gatewayWorkerProcess{first, second} {
-			response := worker.request(t, "/v1/messages", user, channel)
-			assert.Equal(t, http.StatusServiceUnavailable, response.StatusCode)
-			require.NoError(t, response.Body.Close())
-		}
-		fixture.occupancy(t, service.UserRouteLeaseKey(user), 0, 0)
-		proxy.setAvailable(true)
-		second.hold(t, "/v1/messages", user, channel).complete(t)
-	})
-
-	t.Run("process_exit_reclaims_only_after_lease_expiry", func(t *testing.T) {
-		user, channel := fixture.account(t, 1, 0, "default"), fixture.channel(t, 1)
-		response := first.request(t, "/control/orphan", user, channel)
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		require.NoError(t, response.Body.Close())
-		fixture.occupancy(t, service.UserRouteLeaseKey(user), 1, 0)
-		fixture.occupancy(t, service.ChannelRouteLeaseKey(channel), 1, 0)
-		require.NoError(t, first.command.Process.Kill())
-		select {
-		case <-first.exited:
-		case <-time.After(3 * time.Second):
-			t.Fatal("first worker did not exit")
-		}
-		blocked := second.request(t, "/v1/messages", user, channel)
-		assert.Equal(t, http.StatusTooManyRequests, blocked.StatusCode, "a dead process does not immediately lose unexpired ownership")
-		require.NoError(t, blocked.Body.Close())
-		fixture.occupancy(t, service.UserRouteLeaseKey(user), 0, 0)
-		fixture.occupancy(t, service.ChannelRouteLeaseKey(channel), 0, 0)
-		second.hold(t, "/v1beta/models/gateway-model:generateContent", user, channel).complete(t)
-	})
 }
 
 type gatewayProcessFixture struct {
-	db        *gorm.DB
-	redis     *redis.Client
-	nextID    int
-	prefix    string
-	users     []int
-	resources []string
+	db     *gorm.DB
+	redis  *redis.Client
+	nextID int
+	prefix string
+	users  []int
 }
 
 func (fixture *gatewayProcessFixture) account(t *testing.T, concurrency, wait int, group string) int {
@@ -290,7 +132,6 @@ func (fixture *gatewayProcessFixture) account(t *testing.T, concurrency, wait in
 	user := model.User{Id: fixture.nextID, Username: fmt.Sprint("u", fixture.nextID), AffCode: fmt.Sprint(fixture.nextID), Status: common.UserStatusEnabled, Group: group, GatewayConcurrency: &concurrency, GatewayWaitMS: &wait}
 	require.NoError(t, fixture.db.Create(&user).Error)
 	fixture.users = append(fixture.users, user.Id)
-	fixture.resources = append(fixture.resources, service.UserRouteLeaseKey(user.Id))
 	return user.Id
 }
 
@@ -299,17 +140,7 @@ func (fixture *gatewayProcessFixture) channel(t *testing.T, capacity int) int {
 	fixture.nextID++
 	channel := model.Channel{Id: fixture.nextID, Key: "local-fixture-only", Name: fixture.prefix, Status: common.ChannelStatusEnabled, CapacityTotal: capacity, ChannelRatio: 1}
 	require.NoError(t, fixture.db.Create(&channel).Error)
-	fixture.resources = append(fixture.resources, service.ChannelRouteLeaseKey(channel.Id))
 	return channel.Id
-}
-
-func (fixture *gatewayProcessFixture) occupancy(t *testing.T, key string, inFlight, queued int64) {
-	t.Helper()
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		runtime, err := service.ReadGatewayResourceRuntime(t.Context(), fixture.redis, key)
-		assert.NoError(collect, err)
-		assert.Equal(collect, service.GatewayResourceRuntime{InFlight: inFlight, Queued: queued}, runtime)
-	}, 3*time.Second, 10*time.Millisecond, key)
 }
 
 func openGatewayProcessDB(t *testing.T, dsn, prefix string) *gorm.DB {
@@ -484,35 +315,6 @@ func TestGatewayMultiProcessWorker(t *testing.T) {
 			c.Status(404)
 		}
 	})
-	engine.POST("/control/orphan", func(c *gin.Context) {
-		userID, _ := strconv.Atoi(c.GetHeader("X-Fixture-User"))
-		channelID, _ := strconv.Atoi(c.GetHeader("X-Fixture-Channel"))
-		ctx := c.Request.Context()
-		policy, err := service.LoadGatewayAdmissionPolicy(ctx, userID)
-		if err != nil {
-			c.AbortWithStatusJSON(503, gin.H{"error": err.Error()})
-			return
-		}
-		userLease, err := service.AcquireGatewayUserLease(ctx, c.GetHeader("X-Fixture-Request"), userID, policy, nil)
-		if err != nil {
-			c.AbortWithStatusJSON(503, gin.H{"error": err.Error()})
-			return
-		}
-		channelLease, _, err := service.AcquireGatewayChannelLease(ctx, c.GetHeader("X-Fixture-Request"), channelID, 0, nil)
-		if err != nil {
-			c.AbortWithStatusJSON(503, gin.H{"error": err.Error()})
-			return
-		}
-		// Exercise real expiry within the 60-second suite deadline. Only the
-		// owning process can change these leases using the production API.
-		for _, lease := range []service.RouteLease{userLease, channelLease} {
-			if _, err := service.RenewRouteLease(ctx, common.RDB, lease, 1500*time.Millisecond); err != nil {
-				c.AbortWithStatusJSON(503, gin.H{"error": err.Error()})
-				return
-			}
-		}
-		c.JSON(200, gin.H{"pid": os.Getpid()})
-	})
 	requests := engine.Group("", func(c *gin.Context) {
 		userID, _ := strconv.Atoi(c.GetHeader("X-Fixture-User"))
 		var user model.User
@@ -535,27 +337,21 @@ func TestGatewayMultiProcessWorker(t *testing.T) {
 	}, middleware.GatewayAdmission())
 	handler := func(c *gin.Context) {
 		channelID, _ := strconv.Atoi(c.GetHeader("X-Fixture-Channel"))
-		policy, budget, ok := service.GatewayAdmissionFromContext(c.Request.Context())
+		_, budget, ok := service.GatewayAdmissionFromContext(c.Request.Context())
 		if !ok {
 			c.AbortWithStatus(500)
 			return
 		}
-		lease, _, err := service.AcquireGatewayChannelLease(c.Request.Context(), c.GetString(common.RequestIdKey), channelID, policy.ChannelQueueSize, budget)
+		lease, _, err := service.AcquireGatewayChannelPermit(c.Request.Context(), c.GetString(common.RequestIdKey), channelID, true, budget)
 		if err != nil {
 			status := http.StatusServiceUnavailable
-			if errors.Is(err, service.ErrRouteLeaseCapacity) || errors.Is(err, service.ErrGatewayWaitExpired) || errors.Is(err, service.ErrGatewayQueueFull) {
+			if errors.Is(err, service.ErrAdmissionCapacity) || errors.Is(err, service.ErrGatewayWaitExpired) || errors.Is(err, service.ErrGatewayQueueFull) {
 				status = http.StatusTooManyRequests
 			}
 			c.AbortWithStatusJSON(status, gin.H{"error": service.GatewayAdmissionErrorCode(err)})
 			return
 		}
-		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-			if err := service.ReleaseRouteLease(ctx, common.RDB, lease); err != nil {
-				t.Logf("channel release: %v", err)
-			}
-		}()
+		defer lease.Release()
 		gate := make(chan struct{})
 		id := c.GetString(common.RequestIdKey)
 		gates.Store(id, gate)

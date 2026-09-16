@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -144,23 +145,34 @@ func handleFinalStream(c *gin.Context, info *relaycommon.RelayInfo, resp *dto.Ch
 }
 
 func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response, callback func(data string, geminiResponse *dto.GeminiChatResponse) bool) (*dto.Usage, *types.NewAPIError) {
+	if contentType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); contentType == "application/json" {
+		_, _, apiErr := readGeminiGenerationResponse(c, resp)
+		if apiErr == nil {
+			apiErr = types.NewOpenAIError(errors.New("Gemini API returned JSON for a streaming request"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+		}
+		info.StreamStatus = relaycommon.NewStreamStatus()
+		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonHandlerStop, apiErr)
+		return nil, apiErr
+	}
 	var usage = &dto.Usage{}
 	var imageCount int
 	var hasBillableUsageMetadata bool
+	var sawOutput, sawTerminal bool
 	responseText := strings.Builder{}
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
-		var geminiResponse dto.GeminiChatResponse
-		if err := common.UnmarshalJsonStr(data, &geminiResponse); err != nil {
-			sr.Stop(fmt.Errorf("unmarshal: %w", err))
+		geminiResponse, apiErr := parseGeminiGenerationResponse(c, []byte(data), true, sawOutput)
+		if apiErr != nil {
+			apiErr.RetryAfter, _ = service.ParseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+			sr.Stop(apiErr)
 			return
 		}
-
-		if len(geminiResponse.Candidates) == 0 && geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
-			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, fmt.Sprintf("gemini_block_reason=%s", *geminiResponse.PromptFeedback.BlockReason))
+		sawOutput = sawOutput || geminiResponseHasOutput(geminiResponse)
+		for _, candidate := range geminiResponse.Candidates {
+			sawTerminal = sawTerminal || (candidate.FinishReason != nil && geminiKnownFinishReason(*candidate.FinishReason))
 		}
 
-		markGeminiGoogleSearchCall(c, &geminiResponse)
+		markGeminiGoogleSearchCall(c, geminiResponse)
 
 		// 统计图片数量
 		for _, candidate := range geminiResponse.Candidates {
@@ -181,10 +193,16 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			hasBillableUsageMetadata = true
 		}
 
-		if !callback(data, &geminiResponse) {
+		if !sawOutput && !sawTerminal {
+			return
+		}
+		if !callback(data, geminiResponse) {
 			sr.Stop(fmt.Errorf("gemini callback stopped"))
 		}
 	})
+	if !sawOutput && !sawTerminal && helper.StreamError(info) == nil {
+		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonHandlerStop, geminiEmptyResponseError())
+	}
 
 	if !hasBillableUsageMetadata {
 		if responseText.Len() > 0 || imageCount > 0 {
@@ -267,6 +285,7 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 				err := handleStream(c, info, emptyResponse)
 				if err != nil {
 					logger.LogError(c, err.Error())
+					return false
 				}
 
 				response.ClearToolCalls()
@@ -277,6 +296,7 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 				err := handleStream(c, info, emptyResponse)
 				if err != nil {
 					logger.LogError(c, err.Error())
+					return false
 				}
 			}
 		}
@@ -284,10 +304,13 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 		err := handleStream(c, info, response)
 		if err != nil {
 			logger.LogError(c, err.Error())
+			return false
 		}
 		if isStop {
 			if info.RelayFormat != types.RelayFormatClaude {
-				_ = handleStream(c, info, helper.GenerateStopResponse(id, createAt, info.UpstreamModelName, finishReason))
+				if err := handleStream(c, info, helper.GenerateStopResponse(id, createAt, info.UpstreamModelName, finishReason)); err != nil {
+					return false
+				}
 			}
 		}
 		return true
@@ -299,76 +322,38 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 
 	response := helper.GenerateFinalUsageResponse(id, createAt, info.UpstreamModelName, *usage)
 	if info.RelayFormat == types.RelayFormatClaude && info.ClaudeConvertInfo != nil && !info.ClaudeConvertInfo.Done {
+		if info.ClaudeConvertInfo.FinishReason != "" {
+			finishReason = info.ClaudeConvertInfo.FinishReason
+		}
 		response = helper.GenerateStopResponse(id, createAt, info.UpstreamModelName, finishReason)
 		response.Usage = usage
 	}
 	handleErr := handleFinalStream(c, info, response)
 	if handleErr != nil {
-		common.SysLog("send final response failed: " + handleErr.Error())
+		return usage, types.NewOpenAIError(handleErr, types.ErrorCodeBadResponse, http.StatusBadGateway)
 	}
 	return usage, nil
 }
 
 func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+	responseBody, geminiResponse, apiErr := readGeminiGenerationResponse(c, resp)
+	if apiErr != nil {
+		return nil, apiErr
 	}
-	service.CloseResponseBodyGracefully(resp)
-	logger.LogDebug(c, "Gemini response body: %s", responseBody)
-	var geminiResponse dto.GeminiChatResponse
-	err = common.Unmarshal(responseBody, &geminiResponse)
-	if err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
-	}
-	markGeminiGoogleSearchCall(c, &geminiResponse)
-	if len(geminiResponse.Candidates) == 0 {
-		usage := buildUsageFromGeminiResponse(c, info, &geminiResponse)
-
-		var newAPIError *types.NewAPIError
-		if geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
-			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, fmt.Sprintf("gemini_block_reason=%s", *geminiResponse.PromptFeedback.BlockReason))
-			newAPIError = types.NewOpenAIError(
-				errors.New("request blocked by Gemini API: "+*geminiResponse.PromptFeedback.BlockReason),
-				types.ErrorCodePromptBlocked,
-				http.StatusBadRequest,
-			)
-		} else {
-			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "gemini_empty_candidates")
-			newAPIError = types.NewOpenAIError(
-				errors.New("empty response from Gemini API"),
-				types.ErrorCodeEmptyResponse,
-				http.StatusInternalServerError,
-			)
-		}
-
-		service.ResetStatusCode(newAPIError, c.GetString("status_code_mapping"))
-
-		switch info.RelayFormat {
-		case types.RelayFormatClaude:
-			c.JSON(newAPIError.StatusCode, gin.H{
-				"type":  "error",
-				"error": newAPIError.ToClaudeError(),
-			})
-		default:
-			c.JSON(newAPIError.StatusCode, gin.H{
-				"error": newAPIError.ToOpenAIError(),
-			})
-		}
-		return &usage, nil
-	}
-	fullTextResponse := responseGeminiChat2OpenAI(c, &geminiResponse)
+	markGeminiGoogleSearchCall(c, geminiResponse)
+	fullTextResponse := responseGeminiChat2OpenAI(c, geminiResponse)
 	fullTextResponse.Model = info.UpstreamModelName
-	usage := buildUsageFromGeminiResponse(c, info, &geminiResponse)
+	usage := buildUsageFromGeminiResponse(c, info, geminiResponse)
 
 	fullTextResponse.Usage = usage
 
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:
-		responseBody, err = common.Marshal(fullTextResponse)
+		encoded, err := common.Marshal(fullTextResponse)
 		if err != nil {
 			return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 		}
+		responseBody = encoded
 	case types.RelayFormatClaude:
 		convertResult, err := relayconvert.ConvertResponse(c, info, types.RelayFormatClaude, fullTextResponse)
 		if err != nil {

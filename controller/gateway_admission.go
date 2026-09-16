@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -29,7 +31,7 @@ func GetGatewayMetrics(c *gin.Context) {
 }
 
 func GetGatewayConfig(c *gin.Context) {
-	config, err := model.GetGatewayConfig()
+	config, err := model.GetGatewayConfigContext(c.Request.Context())
 	if err != nil {
 		writeGatewayAPIError(c, err)
 		return
@@ -38,8 +40,30 @@ func GetGatewayConfig(c *gin.Context) {
 }
 
 func UpdateGatewayConfig(c *gin.Context) {
-	var config model.GatewayConfig
-	if err := c.ShouldBindJSON(&config); err != nil || config.Version < 1 {
+	config, err := model.GetGatewayConfigContext(c.Request.Context())
+	if err != nil {
+		writeGatewayAPIError(c, err)
+		return
+	}
+	var fields map[string]json.RawMessage
+	if err := c.ShouldBindJSON(&fields); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "code": "VALIDATION_ERROR"})
+		return
+	}
+	for _, key := range []string{"total_queue_size", "retry_budget_enabled", "retry_budget_percent", "retry_budget_burst"} {
+		if value, exists := fields[key]; exists && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "code": "VALIDATION_ERROR"})
+			return
+		}
+	}
+	// Only the new fields inherit on omission; the optimistic version is mandatory.
+	config = model.GatewayConfig{TotalQueueSize: config.TotalQueueSize, RetryBudgetEnabled: config.RetryBudgetEnabled, RetryBudgetPercent: config.RetryBudgetPercent, RetryBudgetBurst: config.RetryBudgetBurst}
+	encoded, encodeErr := common.Marshal(fields)
+	if encodeErr != nil {
+		writeGatewayAPIError(c, encodeErr)
+		return
+	}
+	if err := common.DecodeJson(bytes.NewReader(encoded), &config); err != nil || config.Version < 1 {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid gateway configuration", "code": "VALIDATION_ERROR"})
 		return
 	}
@@ -61,7 +85,7 @@ func GetGatewayUserAdmission(c *gin.Context) {
 	if !ok {
 		return
 	}
-	config, err := model.GetGatewayConfig()
+	config, err := model.GetGatewayConfigContext(c.Request.Context())
 	if err != nil {
 		writeGatewayAPIError(c, err)
 		return
@@ -116,6 +140,7 @@ func UpdateGatewayUserAdmission(c *gin.Context) {
 			return
 		}
 	}
+	model.NotifyGatewayAdmissionChanged("user", user.Id)
 	recordManageAuditFor(c, user.Id, "gateway.user.update", map[string]interface{}{"concurrency": override.Concurrency, "wait_ms": override.WaitMS, "queue_size": override.QueueSize})
 	common.ApiSuccess(c, override)
 }
@@ -125,22 +150,25 @@ func GetGatewayUserRuntime(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !common.RedisEnabled {
-		writeGatewayAPIError(c, service.ErrRouteLeaseUnavailable)
-		return
-	}
-	runtime, err := service.ReadGatewayResourceRuntime(c.Request.Context(), common.RDB, service.UserRouteLeaseKey(user.Id))
+	config, err := model.GetGatewayConfigContext(c.Request.Context())
 	if err != nil {
 		writeGatewayAPIError(c, err)
 		return
 	}
+	policy, err := service.ResolveGatewayAdmissionPolicy(config, user)
+	if err != nil {
+		writeGatewayAPIError(c, err)
+		return
+	}
+	runtime := service.ReadGatewayAdmissionRuntime(service.UserAdmissionKey(user.Id))
+	runtime.Capacity, runtime.ConfigVersion = policy.UserConcurrency, config.Version
 	common.ApiSuccess(c, runtime)
 }
 
 func GetGatewayChannelRuntime(c *gin.Context) {
 	channelID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || channelID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid channel id", "code": "VALIDATION_ERROR"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "code": "VALIDATION_ERROR"})
 		return
 	}
 	var channel model.Channel
@@ -153,23 +181,31 @@ func GetGatewayChannelRuntime(c *gin.Context) {
 		writeGatewayAPIError(c, err)
 		return
 	}
-	if !common.RedisEnabled {
-		writeGatewayAPIError(c, service.ErrRouteLeaseUnavailable)
-		return
-	}
-	runtime, err := service.ReadGatewayResourceRuntime(c.Request.Context(), common.RDB, service.ChannelRouteLeaseKey(channelID))
+	runtime := service.ReadGatewayAdmissionRuntime(service.ChannelAdmissionKey(channelID))
+	runtime.Capacity = capacity
+	config, err := model.GetGatewayConfigContext(c.Request.Context())
 	if err != nil {
 		writeGatewayAPIError(c, err)
 		return
 	}
-	rate, err := service.ReadGatewayProviderRateRuntime(c.Request.Context(), common.RDB, service.GatewayChannelRateScopeID(channelID))
-	if err != nil {
-		writeGatewayAPIError(c, err)
-		return
+	runtime.ConfigVersion = config.Version
+	var rate *service.GatewayProviderRateRuntime
+	rateStatus := "unavailable"
+	if common.RedisEnabled && common.RDB != nil {
+		value, err := service.ReadGatewayProviderRateRuntime(c.Request.Context(), common.RDB, service.GatewayChannelRateScopeID(channelID))
+		if err == nil {
+			rate, rateStatus = &value, "available"
+		} else {
+			common.SysError("gateway provider runtime read failed: " + err.Error())
+		}
 	}
-	common.ApiSuccess(c, gin.H{"channel_id": channelID, "capacity": capacity, "in_flight": runtime.InFlight, "queued": runtime.Queued, "rate": rate})
+	common.ApiSuccess(c, struct {
+		service.AdmissionSnapshot
+		ChannelID  int                                 `json:"channel_id"`
+		Rate       *service.GatewayProviderRateRuntime `json:"rate"`
+		RateStatus string                              `json:"rate_status"`
+	}{runtime, channelID, rate, rateStatus})
 }
-
 func ListGatewayChannelCredentials(c *gin.Context) {
 	channelID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || channelID <= 0 {
@@ -196,7 +232,7 @@ func GetGatewayCredentialRuntime(c *gin.Context) {
 		return
 	}
 	if !common.RedisEnabled {
-		writeGatewayAPIError(c, service.ErrRouteLeaseUnavailable)
+		writeGatewayAPIError(c, service.ErrGatewayStorageUnavailable)
 		return
 	}
 	runtime, err := service.ReadGatewayProviderRateRuntime(c.Request.Context(), common.RDB, service.GatewayCredentialRateScopeID(credential.ID))

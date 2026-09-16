@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -50,9 +49,8 @@ func TestGatewayAudioSpeechAccounting(t *testing.T) {
 				if assert.NoError(t, model.DB.First(&user, 1).Error) {
 					assert.Equal(t, 9999500, user.Quota, "precharge precedes actual audio send")
 				}
-				for _, resource := range []string{service.UserRouteLeaseKey(1), service.ChannelRouteLeaseKey(1)} {
-					count, err := common.RDB.ZCard(context.Background(), resource).Result()
-					assert.NoError(t, err)
+				for _, resource := range []string{service.UserAdmissionKey(1), service.ChannelAdmissionKey(1)} {
+					count := service.ReadGatewayAdmissionRuntime(resource).InFlight
 					if sends.Load() == 1 {
 						assert.EqualValues(t, 1, count)
 					}
@@ -104,7 +102,7 @@ func TestGatewayAudioSpeechAccounting(t *testing.T) {
 			if scenario == "binary" {
 				assert.Equal(t, "\x00\x01\x02\x03", output)
 			}
-			awaitRealtimeLeasesReleased(t)
+			awaitGatewayPermitsReleased(t)
 			wantQuota := 0
 			if delivered {
 				wantQuota = 500
@@ -175,7 +173,7 @@ func TestGatewayAudioCancellationReleasesAdmission(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("upstream did not observe cancellation")
 	}
-	awaitRealtimeLeasesReleased(t)
+	awaitGatewayPermitsReleased(t)
 	require.Eventually(t, func() bool {
 		var user model.User
 		return model.DB.First(&user, 1).Error == nil && user.UsedQuota == 500

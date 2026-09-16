@@ -23,7 +23,7 @@ var (
 const RouteFilterKeyUnavailable = "key_unavailable"
 
 // RouteLiveSelectionRequiredContextKey marks requests that require a route
-// decision and distributed admission before upstream execution.
+// decision and local admission before upstream execution.
 const RouteLiveSelectionRequiredContextKey = "route_live_selection_required"
 
 // LiveRouteQualificationError identifies a mutable authorization or
@@ -56,7 +56,7 @@ func LiveRouteQualificationReason(err error) string {
 // candidate from a request-wide authorization or infrastructure failure.
 // Only the former may consume the bounded next-candidate budget.
 func LiveRouteQualificationAllowsFailover(err error) bool {
-	if errors.Is(err, ErrRouteLeaseCapacity) {
+	if errors.Is(err, ErrAdmissionCapacity) {
 		return true
 	}
 	switch LiveRouteQualificationReason(err) {
@@ -101,7 +101,7 @@ type LiveRouteCandidateQualificationRequest struct {
 }
 
 // RecheckLiveRouteCandidate is the final qualification boundary after a live
-// route lease has been acquired and immediately before billing/upstream
+// channel permit has been acquired and immediately before billing/upstream
 // execution. It re-reads mutable authorization and capability facts instead
 // of trusting the selector snapshot or the request-time channel cache.
 func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) error {
@@ -306,6 +306,7 @@ type LiveRouteRequest struct {
 }
 
 type LiveRouteSelection struct {
+	ManualLoadBalance bool
 	CompactStage      relaycommon.CompactAttemptStage
 	SpecificChannelID int
 	Source            RouteSource

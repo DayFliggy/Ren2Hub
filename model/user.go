@@ -789,6 +789,7 @@ func (user *User) Update(updatePassword bool) error {
 	}); err != nil {
 		return err
 	}
+	NotifyGatewayAdmissionChanged("user", user.Id)
 	if err := updateUserCache(*user); err != nil {
 		return err
 	}
@@ -850,6 +851,7 @@ func (user *User) Edit(updatePassword bool) error {
 	}); err != nil {
 		return err
 	}
+	NotifyGatewayAdmissionChanged("user", user.Id)
 	if err := updateUserCache(*user); err != nil {
 		return err
 	}
@@ -1007,6 +1009,11 @@ func UpdateManagedUserStatuses(ids []int, status, operatorID, operatorRole int) 
 	if err != nil {
 		return ManagedUserStatusResult{}, err
 	}
+	changedIDs := make([]int, 0, len(changedUsers))
+	for _, user := range changedUsers {
+		changedIDs = append(changedIDs, user.Id)
+	}
+	NotifyGatewayAdmissionChanged("user", changedIDs...)
 	for _, user := range changedUsers {
 		if err := PublishUserAuthCache(user.Id); err != nil {
 			return result, err
@@ -1120,6 +1127,7 @@ func (user *User) Delete() error {
 	}); err != nil {
 		return err
 	}
+	NotifyGatewayAdmissionChanged("user", user.Id)
 	if err := publishCommittedUserAuthVersion(user.Id, nextAuthVersion); err != nil {
 		return err
 	}
@@ -1182,6 +1190,11 @@ func hardDeleteUsersWithTx(tx *gorm.DB, users []User) ([]hardDeletedUserState, e
 }
 
 func finishHardDeletedUsers(users []hardDeletedUserState) {
+	ids := make([]int, 0, len(users))
+	for _, user := range users {
+		ids = append(ids, user.ID)
+	}
+	NotifyGatewayAdmissionChanged("user", ids...)
 	for _, user := range users {
 		if err := publishCommittedUserAuthVersion(user.ID, user.AuthVersion); err != nil {
 			common.SysError(fmt.Sprintf("failed to publish auth tombstone after hard deleting user %d: %v", user.ID, err))

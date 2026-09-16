@@ -52,7 +52,7 @@ func gatewayVolcAudioFrame(t *testing.T, sequence int32) []byte {
 
 func assertGatewayVolcSpeechAccounting(t *testing.T, charge, tokenQuota int, healthFailure bool) {
 	t.Helper()
-	awaitRealtimeLeasesReleased(t)
+	awaitGatewayPermitsReleased(t)
 	var user model.User
 	var token model.Token
 	require.Eventually(t, func() bool {
@@ -114,9 +114,8 @@ func TestGatewayVolcSpeechWebSocketAccounting(t *testing.T) {
 					if assert.NoError(t, model.DB.First(&user, 1).Error) {
 						assert.Equal(t, 9999500, user.Quota, "speech precharge precedes the WebSocket handshake")
 					}
-					for _, resource := range []string{service.UserRouteLeaseKey(1), service.ChannelRouteLeaseKey(1)} {
-						count, err := common.RDB.ZCard(context.Background(), resource).Result()
-						assert.NoError(t, err)
+					for _, resource := range []string{service.UserAdmissionKey(1), service.ChannelAdmissionKey(1)} {
+						count := service.ReadGatewayAdmissionRuntime(resource).InFlight
 						assert.EqualValues(t, 1, count)
 					}
 					conn, err := (&websocket.Upgrader{}).Upgrade(w, request, nil)

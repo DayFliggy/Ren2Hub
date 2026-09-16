@@ -1,5 +1,16 @@
 export default {
   gateway: {
+    configVersion: 'Configuration version',
+    runtimeRevision: 'Runtime revision',
+    startedAt: 'Instance started',
+    draining:
+      'The instance is draining and is not accepting new generation requests.',
+    totalQueue: 'Total queued requests per process',
+    retryPercent: 'Retry credit per first send (%)',
+    retryBurst: 'Maximum retry credit',
+    retryEnabled: 'Enable shared retry budget',
+    rateUnavailable:
+      'Provider rate status is unavailable. Local concurrency is still available.',
     title: 'Gateway admission',
     accountLimits: 'Account limits',
     providerLimits: 'Provider limits',

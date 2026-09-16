@@ -105,7 +105,7 @@ func TestGatewayOfficialAudioSDK(t *testing.T) {
 			assert.EqualValues(t, 1, volcHTTP.Load())
 			assert.EqualValues(t, 2, volcWS.Load())
 			assert.EqualValues(t, 2, cloud.Load(), "unsupported requests must not reach the provider")
-			awaitRealtimeLeasesReleased(t)
+			awaitGatewayPermitsReleased(t)
 			var logs []model.Log
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
 			assert.Len(t, logs, 6, "partial speech settles once; unsupported paths do not charge")

@@ -32,6 +32,8 @@ RelayKit 是从 [new-api](https://github.com/QuantumNous/new-api) 中拆分出�
 
 请求、非流式响应和流式响应均覆盖上述矩阵。实际采用的路径可从转换结果的 `Steps` 和 `Quality` 字段中读取。
 
+2026-09-14 兼容性修正：`AnalyzeRequest` 和 `ConversionPlan` 区分旧 OpenAI completion、moderation、edit 操作。这些操作没有跨协议转换器，即使使用 `allow` 也会拒绝转换，不能因复用 `GeneralOpenAIRequest` 而视为 Chat。Responses 历史中的 `function_call.namespace` 与工具声明采用相同的身份语义：原生保留；跨协议在默认 `safe` 和 `strict` 下拒绝，`allow` 接受已登记降级并返回结构化损失诊断，不提供可逆 namespace 映射。
+
 ## 安装
 
 RelayKit 要求 Go 1.25.1 或更高版本。

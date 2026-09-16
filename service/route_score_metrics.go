@@ -4,46 +4,26 @@ import (
 	"context"
 	"errors"
 	"math"
-	"strconv"
+
 	"sync"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/go-redis/redis/v8"
 )
 
 var ErrRouteScoreMetricsUnavailable = errors.New("route score runtime metrics are unavailable")
 
-// LoadRouteChannelLoads reads only unexpired lease members. Redis time keeps
-// scoring aligned with admission even when application hosts have clock skew.
+// LoadRouteChannelLoads observes the same local counters used for admission.
 func LoadRouteChannelLoads(ctx context.Context, channels map[int]*model.Channel) (map[int]float64, error) {
-	if !common.RedisEnabled || common.RDB == nil {
-		return nil, ErrRouteLeaseUnavailable
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	now, err := common.RDB.Time(ctx).Result()
-	if err != nil {
-		return nil, errors.Join(ErrRouteLeaseUnavailable, err)
-	}
-	pipeline := common.RDB.Pipeline()
-	defer pipeline.Close()
-	counts := make(map[int]*redis.IntCmd, len(channels))
-	capacities := make(map[int]int, len(channels))
-	for channelID, channel := range channels {
+	loads := make(map[int]float64, len(channels))
+	for id, channel := range channels {
 		capacity, _, err := channel.RoutingSettings()
 		if err != nil {
 			return nil, err
 		}
-		capacities[channelID] = capacity
-		counts[channelID] = pipeline.ZCount(ctx, ChannelRouteLeaseKey(channelID), "("+strconv.FormatInt(now.UnixMilli(), 10), "+inf")
-	}
-	if len(counts) > 0 {
-		if _, err := pipeline.Exec(ctx); err != nil {
-			return nil, errors.Join(ErrRouteLeaseUnavailable, err)
-		}
-	}
-	loads := make(map[int]float64, len(channels))
-	for channelID, count := range counts {
-		loads[channelID] = float64(count.Val()) / float64(capacities[channelID])
+		loads[id] = float64(gatewayAdmission.Snapshot(ChannelAdmissionKey(id)).InFlight) / float64(capacity)
 	}
 	return loads, nil
 }
@@ -58,7 +38,7 @@ type RouteScoreRuntimeMetrics struct {
 }
 
 // RouteScoreMetricProvider supplies optional telemetry to diagnostic callers.
-// Request planning always reads distributed lease occupancy directly.
+// Request planning reads local admission occupancy directly.
 type RouteScoreMetricProvider interface {
 	ResolveRouteScoreMetrics(context.Context, int, string) (RouteScoreRuntimeMetrics, error)
 }

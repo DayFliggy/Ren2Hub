@@ -33,8 +33,8 @@ func TestGatewayRealtimeResponseOutcomes(t *testing.T) {
 			if !test.stop {
 				require.NoError(t, upstream.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second)))
 			}
-			awaitRealtimeLeasesReleased(t)
-			// Lease release precedes request-final settlement by a small interval.
+			awaitGatewayPermitsReleased(t)
+			// Channel permit release precedes request-final settlement by a small interval.
 			require.Eventually(t, func() bool {
 				var row model.BillingRecovery
 				return model.DB.First(&row).Error == nil && (row.Status == model.BillingRecoveryStatusRefunded || row.ConsumptionState == model.BillingRecoveryStateCompleted)

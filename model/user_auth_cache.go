@@ -227,6 +227,7 @@ func BumpUserAuthVersion(userId int) (int64, error) {
 // PublishUserAuthCache refreshes the current database state after a successful
 // auth-sensitive transaction without touching the cached quota field.
 func PublishUserAuthCache(userId int) error {
+	NotifyGatewayAdmissionChanged("user", userId)
 	user, err := GetUserById(userId, false)
 	if err != nil {
 		return err

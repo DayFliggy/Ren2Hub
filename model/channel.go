@@ -556,9 +556,7 @@ func BatchDeleteChannels(ids []int) (int64, error) {
 	if err := tx.Commit().Error; err != nil {
 		return 0, err
 	}
-	for _, id := range ids {
-		NotifyChannelCapabilityChanged(id)
-	}
+	NotifyChannelCapabilityChanged(ids...)
 	return deletedCount, nil
 }
 
@@ -985,9 +983,7 @@ func DeleteChannelByStatus(status int64) (int64, error) {
 	}
 	result := DB.Where("status = ?", status).Delete(&Channel{})
 	if result.Error == nil {
-		for _, id := range ids {
-			NotifyChannelCapabilityChanged(id)
-		}
+		NotifyChannelCapabilityChanged(ids...)
 	}
 	return result.RowsAffected, result.Error
 }
@@ -999,9 +995,7 @@ func DeleteDisabledChannel() (int64, error) {
 	}
 	result := DB.Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Delete(&Channel{})
 	if result.Error == nil {
-		for _, id := range ids {
-			NotifyChannelCapabilityChanged(id)
-		}
+		NotifyChannelCapabilityChanged(ids...)
 	}
 	return result.RowsAffected, result.Error
 }
@@ -1210,9 +1204,7 @@ func BatchSetChannelTag(ids []int, tag *string) error {
 	if err := tx.Commit().Error; err != nil {
 		return err
 	}
-	for _, id := range ids {
-		NotifyChannelCapabilityChanged(id)
-	}
+	NotifyChannelCapabilityChanged(ids...)
 	return nil
 }
 

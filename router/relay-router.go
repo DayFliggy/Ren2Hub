@@ -70,6 +70,21 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router.Use(middleware.RouteTag("relay"))
 	relayV1Router.Use(middleware.SystemPerformanceCheck())
 	relayV1Router.Use(middleware.TokenAuth())
+	// Legacy text edits are unsupported and must not enter image routing or billing.
+	relayV1Router.POST("/edits", controller.RelayNotImplemented)
+	// not implemented
+	relayV1Router.POST("/images/variations", controller.RelayNotImplemented)
+	relayV1Router.GET("/files", controller.RelayNotImplemented)
+	relayV1Router.POST("/files", controller.RelayNotImplemented)
+	relayV1Router.DELETE("/files/:id", controller.RelayNotImplemented)
+	relayV1Router.GET("/files/:id", controller.RelayNotImplemented)
+	relayV1Router.GET("/files/:id/content", controller.RelayNotImplemented)
+	relayV1Router.POST("/fine-tunes", controller.RelayNotImplemented)
+	relayV1Router.GET("/fine-tunes", controller.RelayNotImplemented)
+	relayV1Router.GET("/fine-tunes/:id", controller.RelayNotImplemented)
+	relayV1Router.POST("/fine-tunes/:id/cancel", controller.RelayNotImplemented)
+	relayV1Router.GET("/fine-tunes/:id/events", controller.RelayNotImplemented)
+	relayV1Router.DELETE("/models/:model", controller.RelayNotImplemented)
 	relayV1Router.Use(middleware.ModelRequestRateLimit())
 	relayV1Router.Use(middleware.GatewayAdmission())
 	{
@@ -112,9 +127,6 @@ func SetRelayRouter(router *gin.Engine) {
 		})
 
 		// image related routes
-		httpRouter.POST("/edits", func(c *gin.Context) {
-			controller.Relay(c, types.RelayFormatOpenAIImage)
-		})
 		httpRouter.POST("/images/generations", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAIImage)
 		})
@@ -124,6 +136,9 @@ func SetRelayRouter(router *gin.Engine) {
 
 		// embedding related routes
 		httpRouter.POST("/embeddings", func(c *gin.Context) {
+			controller.Relay(c, types.RelayFormatEmbedding)
+		})
+		httpRouter.POST("/engines/:model/embeddings", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatEmbedding)
 		})
 
@@ -144,9 +159,6 @@ func SetRelayRouter(router *gin.Engine) {
 		})
 
 		// gemini relay routes
-		httpRouter.POST("/engines/:model/embeddings", func(c *gin.Context) {
-			controller.Relay(c, types.RelayFormatGemini)
-		})
 		httpRouter.POST("/models/*path", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatGemini)
 		})
@@ -156,19 +168,6 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.Relay(c, types.RelayFormatOpenAI)
 		})
 
-		// not implemented
-		httpRouter.POST("/images/variations", controller.RelayNotImplemented)
-		httpRouter.GET("/files", controller.RelayNotImplemented)
-		httpRouter.POST("/files", controller.RelayNotImplemented)
-		httpRouter.DELETE("/files/:id", controller.RelayNotImplemented)
-		httpRouter.GET("/files/:id", controller.RelayNotImplemented)
-		httpRouter.GET("/files/:id/content", controller.RelayNotImplemented)
-		httpRouter.POST("/fine-tunes", controller.RelayNotImplemented)
-		httpRouter.GET("/fine-tunes", controller.RelayNotImplemented)
-		httpRouter.GET("/fine-tunes/:id", controller.RelayNotImplemented)
-		httpRouter.POST("/fine-tunes/:id/cancel", controller.RelayNotImplemented)
-		httpRouter.GET("/fine-tunes/:id/events", controller.RelayNotImplemented)
-		httpRouter.DELETE("/models/:model", controller.RelayNotImplemented)
 	}
 
 	relayMjRouter := router.Group("/mj")

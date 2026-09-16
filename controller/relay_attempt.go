@@ -28,6 +28,25 @@ type routeAttemptHealthState struct {
 	rate    *service.GatewayProviderRateReservation
 }
 
+// A final reservation can reject a candidate after the advisory scan. No
+// upstream work started, so all protocols may continue the existing scan.
+func markLiveRoutePreSendRejection(c *gin.Context, info *relaycommon.RelayInfo, apiErr *types.NewAPIError) bool {
+	if apiErr == nil || info.UpstreamSent || relayResponseCommitted(c, info) || requestContextDone(c) || c.GetBool("gateway_retry_stopped") {
+		return false
+	}
+	reason := ""
+	switch {
+	case errors.Is(apiErr, service.ErrRouteHealthUnavailable):
+		reason = "health_unavailable"
+	case errors.Is(apiErr, service.ErrGatewayProviderRateLimit):
+		reason = "provider_rate_limited"
+	default:
+		return false
+	}
+	markLiveRouteCandidateFiltered(c, info.ChannelId, reason)
+	return true
+}
+
 func scanLiveRouteCandidate(c *gin.Context, channelID int) *types.NewAPIError {
 	if err := c.Request.Context().Err(); err != nil {
 		return types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, http.StatusRequestTimeout, types.ErrOptionWithSkipRetry())
@@ -54,7 +73,7 @@ func queueBusyLiveRouteCandidate(c *gin.Context) (int, bool) {
 		return 0, false
 	}
 	_, budget, available := service.GatewayAdmissionFromContext(c.Request.Context())
-	if !available || budget.Remaining() <= 0 {
+	if !available {
 		return 0, false
 	}
 	value, _ := c.Get("route_live_selection")
@@ -62,10 +81,47 @@ func queueBusyLiveRouteCandidate(c *gin.Context) (int, bool) {
 	if !ok {
 		return 0, false
 	}
+	selected := -1
+	selectedIdle := false
+	var selectedRuntime service.AdmissionSnapshot
+	policy, _, policyErr := service.GatewayRoutingPolicy(c.Request.Context())
+	canQueue := budget.Remaining() > 0 && (policyErr != nil || policy.ChannelQueueSize > 0)
 	for index := range selection.Attempts {
 		if selection.Attempts[index].FilterReason != "capacity_exhausted" {
 			continue
 		}
+		runtime := service.ReadGatewayAdmissionRuntime(service.ChannelAdmissionKey(selection.Attempts[index].ChannelID))
+		// An idle pool may already have been reclaimed since the immediate
+		// scan found it busy. Give that candidate a fresh immediate attempt;
+		// the final admission remains the only authority to grant its slot.
+		idle := runtime.Queued == 0 && (runtime.InFlight == 0 || runtime.InFlight < int64(runtime.Capacity))
+		if !idle && (!canQueue || (policyErr == nil && runtime.Queued >= int64(policy.ChannelQueueSize))) {
+			continue
+		}
+		// Reclaimed pools have no retained capacity and zero queue pressure.
+		runtime.Capacity = max(runtime.Capacity, 1)
+		candidate := selection.Attempts[index]
+		if knownRouteCandidateUnavailable(c, candidate) != "" {
+			continue
+		}
+		if selected < 0 || idle && !selectedIdle {
+			selected, selectedRuntime, selectedIdle = index, runtime, idle
+			continue
+		}
+		if selectedIdle {
+			continue
+		}
+		first := selection.Attempts[selected]
+		sameLayer := selection.Source == service.RouteSourceManual && selection.ManualLoadBalance && candidate.Position == first.Position
+		if selection.Decision.DynamicScoreApplied && candidate.Score != nil && first.Score != nil {
+			sameLayer = candidate.Priority == first.Priority && candidate.Score.LoadBucket == first.Score.LoadBucket
+		}
+		if sameLayer && runtime.Queued*int64(selectedRuntime.Capacity) < selectedRuntime.Queued*int64(runtime.Capacity) {
+			selected, selectedRuntime = index, runtime
+		}
+	}
+	if selected >= 0 {
+		index := selected
 		channelID := selection.Attempts[index].ChannelID
 		selection.Attempts[index].FilterReason = ""
 		for i := range selection.Decision.Candidates {
@@ -81,13 +137,37 @@ func queueBusyLiveRouteCandidate(c *gin.Context) (int, bool) {
 	return 0, false
 }
 
+func knownRouteCandidateUnavailable(c *gin.Context, candidate service.RouteDecisionCandidate) string {
+	if c.Request == nil {
+		return ""
+	}
+	usable, _, healthErr := service.RouteHealthUsable(c.Request.Context(), candidate.ChannelID, candidate.RequestModel, time.Now())
+	if healthErr == nil && !usable {
+		return "health_unavailable"
+	}
+	if !common.RedisEnabled {
+		return ""
+	}
+	policy, enabled, policyErr := service.GatewayRoutingPolicy(c.Request.Context())
+	if !enabled || policyErr != nil {
+		return ""
+	}
+	rate, rateErr := service.ReadGatewayProviderRateRuntime(c.Request.Context(), common.RDB, service.GatewayChannelRateScopeID(candidate.ChannelID))
+	limit := policy.ProviderRates[candidate.ChannelID]
+	if rateErr == nil && (rate.CooldownMS > 0 || (limit.RPM > 0 && rate.RPMUsed >= limit.RPM) || (limit.TPM > 0 && rate.TokensUsed+rate.TokensReserved >= limit.TPM)) {
+		return "provider_rate_limited"
+	}
+	// Unknown observations do not claim a quota or bypass the final reservation.
+	return ""
+}
+
 func (state *routeAttemptHealthState) renew(ctx context.Context) error {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	if state.attempt == nil {
 		return nil
 	}
-	if err := service.RenewRouteAttemptHealth(ctx, *state.attempt, routeAttemptLeaseTTL()); err != nil {
+	if err := service.RenewRouteAttemptHealth(ctx, *state.attempt, service.GatewayReservationTTL); err != nil {
 		return err
 	}
 	if state.rate != nil {
@@ -103,13 +183,26 @@ func prepareLiveRouteSend(c *gin.Context, info *relaycommon.RelayInfo, state *ro
 	if err := c.Request.Context().Err(); err != nil {
 		return err
 	}
+	if c.GetInt(liveRouteAttemptCountKey) >= service.DefaultTotalAttempts {
+		return stopLiveRouteRetry(c, errors.New("route send attempt limit exceeded"))
+	}
+	var retryTicket *service.RetryTicket
+	if c.GetInt(liveRouteAttemptCountKey) > 0 {
+		var err error
+		retryTicket, err = service.ReserveGatewayRetry()
+		if err != nil {
+			c.Set("gateway_retry_budget_exhausted", true)
+			return stopLiveRouteRetry(c, err)
+		}
+		defer retryTicket.Finish(false)
+	}
 	if err := prepareRelayOutboundPrice(c, info, body); err != nil {
 		return err
 	}
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	health, err := service.AcquireRouteAttemptHealth(c.Request.Context(), info.ChannelId,
-		info.RouteCapabilityModel, common.GetContextKeyString(c, constant.ContextKeyChannelKey), owner, routeAttemptLeaseTTL())
+		info.RouteCapabilityModel, common.GetContextKeyString(c, constant.ContextKeyChannelKey), owner, service.GatewayReservationTTL)
 	if err != nil {
 		return types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, 503, types.ErrOptionWithSkipRetry())
 	}
@@ -122,7 +215,7 @@ func prepareLiveRouteSend(c *gin.Context, info *relaycommon.RelayInfo, state *ro
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, 503, types.ErrOptionWithSkipRetry())
 		}
-		scopes, err := service.LoadGatewayProviderRateScopes(info.ChannelId, credential.ID)
+		scopes, err := service.LoadGatewayProviderRateScopes(c.Request.Context(), info.ChannelId, credential.ID)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, 503, types.ErrOptionWithSkipRetry())
 		}
@@ -148,9 +241,32 @@ func prepareLiveRouteSend(c *gin.Context, info *relaycommon.RelayInfo, state *ro
 			return err
 		}
 	}
+	// Cancellation during qualification or billing must not cross the send boundary.
+	if err := c.Request.Context().Err(); err != nil {
+		return err
+	}
 	info.RetryIndex = beginLiveRouteUpstreamAttempt(c, info.ChannelId)
+	if retryTicket != nil {
+		retryTicket.Finish(true)
+	} else {
+		service.RecordGatewayFirstSend()
+	}
 	info.UpstreamSent = true
 	return nil
+}
+
+// Internal protection terminates replay without replacing an actual upstream
+// response with a new synthetic provider failure.
+func stopLiveRouteRetry(c *gin.Context, cause error) *types.NewAPIError {
+	c.Set("gateway_retry_stopped", true)
+	if value, ok := c.Get("gateway_last_upstream_error"); ok {
+		if previous, valid := value.(*types.NewAPIError); valid && previous != nil {
+			result := *previous
+			types.ErrOptionWithSkipRetry()(&result)
+			return &result
+		}
+	}
+	return types.NewErrorWithStatusCode(cause, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
 }
 
 func prepareRelayOutboundPrice(c *gin.Context, info *relaycommon.RelayInfo, body io.Reader) error {
@@ -245,6 +361,9 @@ func relayAttemptOutcome(c *gin.Context, info *relaycommon.RelayInfo, apiErr *ty
 	if apiErr == nil {
 		return outcome
 	}
+	if info != nil && info.UpstreamSent {
+		c.Set("gateway_last_upstream_error", apiErr)
+	}
 	outcome.StatusCode, outcome.ProviderCode, outcome.Message, outcome.RetryAfter = apiErr.StatusCode, string(apiErr.GetErrorCode()), apiErr.Error(), apiErr.RetryAfter
 	if types.IsSkipRetryError(apiErr) {
 		outcome.RetryPermission = service.AttemptRetryForbidden
@@ -265,7 +384,7 @@ func relayAttemptOutcome(c *gin.Context, info *relaycommon.RelayInfo, apiErr *ty
 			outcome.Acceptance = service.AttemptRejected
 		}
 	}
-	if liveRouteRenewalFailed(c) || errors.Is(apiErr, service.ErrRouteLeaseUnavailable) || errors.Is(apiErr, service.ErrRouteLeaseRuntime) || errors.Is(apiErr, service.ErrRouteHealthUnavailable) {
+	if c.GetBool("gateway_retry_stopped") || liveRouteRenewalFailed(c) || errors.Is(apiErr, service.ErrGatewayStorageUnavailable) || errors.Is(apiErr, service.ErrAdmissionRuntime) || errors.Is(apiErr, service.ErrRouteHealthUnavailable) {
 		outcome.Origin = service.AttemptOriginAdmission
 	} else if errors.Is(helper.StreamOutputError(c), helper.ErrStreamClientWrite) || (info != nil && info.StreamStatus != nil && info.StreamStatus.EndReason == relaycommon.StreamEndReasonClientGone) || c.Request.Context().Err() != nil {
 		outcome.Origin = service.AttemptOriginClientCancel
@@ -275,6 +394,7 @@ func relayAttemptOutcome(c *gin.Context, info *relaycommon.RelayInfo, apiErr *ty
 }
 
 func observeLiveRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, outcome service.AttemptOutcome) {
+	defer releaseRouteAttempt(c)
 	c.Set("gateway_last_attempt_outcome", outcome)
 	stopRouteAttemptRenewal(c)
 	value, _ := c.Get("route_live_health")

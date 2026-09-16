@@ -5,14 +5,14 @@
 | 方法和路径 | 权限 | data |
 |---|---|---|
 | `GET /self` | 登录用户 | 当前用户配置、有效值及来源 |
-| `GET /self/runtime` | 登录用户 | 当前用户的 `{ in_flight, queued }` |
+| `GET /self/runtime` | 登录用户 | 当前用户的本地准入运行态 |
 | `GET /config` | Root | 全局网关配置 |
-| `GET /metrics` | Root | 本进程排队、租约、状态绑定失败计数及共享数据库的账务恢复积压 |
+| `GET /metrics` | Root | schema v2：本地准入、重试预算、尝试维护、状态绑定失败及账务恢复积压 |
 | `PUT /config` | Root | 保存后的完整配置，version 加一 |
 | `GET /users/:id` | 管理员 | 指定用户配置、有效值及来源 |
 | `PUT /users/:id` | 管理员 | 保存后的用户覆盖 |
-| `GET /runtime/users/:id` | 管理员 | `{ in_flight, queued }` |
-| `GET /runtime/channels/:id` | 管理员且具备 channel.read | `{ channel_id, capacity, in_flight, queued, rate }` |
+| `GET /runtime/users/:id` | 管理员 | 本地准入运行态 |
+| `GET /runtime/channels/:id` | 管理员且具备 channel.read | 本地准入运行态，加 `channel_id`、`rate`、`rate_status` |
 | `GET /channels/:id/credentials` | 管理员且具备 channel.read | 已登记凭据的 `[{ id }]`，id 为稳定 UUID |
 | `GET /runtime/credentials/:id` | 管理员且具备 channel.read | 凭据的 rate |
 
@@ -20,7 +20,7 @@ Root 可以管理所有用户；其他管理员只能查看和修改角色低于
 
 ## 配置契约
 
-`PUT /config` 替换完整配置，应先 GET 并保留所有字段。`channel_rates` 按渠道 ID 配置，该渠道的所有模型共享额度。`credential_rates` 按稳定凭据 UUID 配置，同一渠道内使用该凭据的请求共享额度。两个范围原子准入。
+`PUT /config` 保留原有全量更新契约和乐观版本检查。新客户端先 GET 并保留所有字段；旧客户端省略本轮新增的四个字段时保留数据库当前值，显式 null 返回 400。`channel_rates` 按渠道 ID 配置，该渠道的所有模型共享额度。`credential_rates` 按稳定凭据 UUID 配置，同一渠道内使用该凭据的请求共享额度。两个范围原子准入。
 
 ```json
 {
@@ -29,6 +29,10 @@ Root 可以管理所有用户；其他管理员只能查看和修改角色低于
   "wait_ms": 5000,
   "user_queue_size": 20,
   "channel_queue_size": 20,
+  "total_queue_size": 1024,
+  "retry_budget_enabled": true,
+  "retry_budget_percent": 10,
+  "retry_budget_burst": 20,
   "groups": {
     "team": { "concurrency": 5, "wait_ms": null, "queue_size": null }
   },
@@ -38,6 +42,8 @@ Root 可以管理所有用户；其他管理员只能查看和修改角色低于
 ```
 
 并发范围为 0 至 1000000；累计等待毫秒为 0 至 5000；每用户队列长度为 0 至 20，渠道队列长度为 0 至 10000，默认 20。RPM、TPM 为 0 至 1000000000，0 表示该限制关闭。配置引用的渠道和凭据必须存在。版本不匹配返回 `409 CONFLICT`，客户端重新加载后再保存。
+
+新增字段：`total_queue_size` 范围 0–100000，0 禁止新增排队但不阻止立即获槽；`retry_budget_percent` 范围 1–100；`retry_budget_burst` 范围 1–10000；`retry_budget_enabled` 为布尔值。数据库缺失字段按上例补齐，仅实际补字段时版本增加一次，已有显式 0/false 保留。
 
 `PUT /users/:id` 的请求和成功 data 为 `{ concurrency: number|null, wait_ms: number|null, queue_size: number|null }`，替换该用户的三个覆盖字段。null 恢复继承；显式 0 保留其含义。该更新允许重复提交相同值。
 
@@ -58,9 +64,11 @@ Root 可以管理所有用户；其他管理员只能查看和修改角色低于
 
 ## 运行数据
 
-rate 为 `{ rpm_used, tokens_used, tokens_reserved, cooldown_ms }`：RPM 统计最近 60 秒已准入尝试；发送前失败会退回。tokens_used 为最近 60 秒已结算用量，tokens_reserved 为仍有效的在途估算。发送后用量未知时保留估算，实际用量超过估算时按真实用量入账并限制后续请求。cooldown_ms 是 Retry-After 共享冷却剩余毫秒。
+rate 为 `{ rpm_used, tokens_used, tokens_reserved, cooldown_ms }`：RPM 统计最近 60 秒已准入尝试；发送前失败会退回。tokens_used 为最近 60 秒已结算用量，tokens_reserved 为仍有效的在途估算。发送后用量未知时保留估算，实际用量超过估算时按真实用量入账并限制后续请求。cooldown_ms 是当前渠道或渠道内凭据的 Retry-After 冷却剩余毫秒，独立渠道不共享冷却。
 
-运行数据来自 Redis，查询不更改租约或排队所有权，并忽略过期记录。Redis 不可用返回 `503 GATEWAY_UNAVAILABLE`，不返回零占用。无效输入返回 `400 VALIDATION_ERROR`；资源不存在返回 `404 NOT_FOUND`；无权管理目标用户返回 `403 FORBIDDEN`。
+用户和渠道并发运行态来自同一进程内 manager，返回 `in_flight`、`queued`、`capacity`、`config_version`、`revision`、`started_at`（Unix 秒）、`draining`。查询不创建池、不占容量。Provider rate 继续读取 Redis；渠道并发可读而 Provider 不可用时仍返回 200、真实本地计数及 `rate: null`、`rate_status: unavailable`；正常时 `rate_status: available`。独立凭据 rate 读取失败仍返回 503。无效输入返回 `400 VALIDATION_ERROR`；资源不存在返回 `404 NOT_FOUND`；无权管理目标用户返回 `403 FORBIDDEN`。
+
+生成入口的用户准入在 OpenAI 错误对象中返回明确 `code`，包括 `gateway_capacity_exhausted`、`gateway_queue_full`、`gateway_wait_timeout`、`gateway_total_queue_full` 和 `gateway_draining`。诊断 message 分别标记 `user admission` 或 `process admission`；渠道尝试错误保留 `channel admission` 原因，路由日志记录对应渠道。客户端已取消或已提交响应时不再追加错误。
 
 TPM 要求宿主登记可解析的最终请求格式。仅支持媒体任务、Coze、Codex 及未登记旧投影的渠道或凭据不能配置 TPM，保存返回 `400 VALIDATION_ERROR`；RPM 不受此限制。运行时重新检查最终发送体：覆盖后的最大输出上限乘输出数量，加输入 JSON 估算；关闭 CountToken 不关闭准入计数。已登记的 Embedding 使用输入估算。未知扩展、无法估算的媒体/状态输入、非文本输出或缺少有效上限均不能伪装成有限预算。渠道类型变更后残留的无效 TPM 也在发送前拒绝。
 
@@ -68,10 +76,13 @@ TPM 要求宿主登记可解析的最终请求格式。仅支持媒体任务、C
 
 ## 运维指标
 
-`GET /metrics` 复用 Root 鉴权和关键接口限流，建议低频采集。`counter_scope` 为 `instance`，`started_at` 为进程启动时间；重启后累计计数归零。它不是所有实例的占用汇总，共享占用应查询 `/runtime/*`。
+`GET /metrics` 复用 Root 鉴权和关键接口限流，建议低频采集。`counter_scope` 为 `instance`，`started_at` 为进程启动时间；重启后累计计数归零。本系统仅支持一个进程承接业务流量，`/runtime/*` 与指标读取同一个 manager。
 
 - `user_queue`、`channel_queue`：`active` 为本进程等待请求数；`entered_total`、`completed_total`、`failed_total` 为累计结果，`wait_ms_total` 为累计等待毫秒。取消计入失败并释放 active。
-- `leases`：复用 `RouteLeaseMetricsSnapshot` 的获取、续期、释放计数。
+- `schema_version: 2`；移除 `leases`。
+- `admission`：活动、等待、池数、总队列上限、授槽/释放累计数、队列满/进程队列满/取消/超时计数。`wait_duration_ms_buckets` 是累计毫秒桶，边界为 1、5、20、100、500、1000、5000、+Inf。守恒关系为 `granted_total - released_total == in_flight`。
+- `retry_budget`：enabled、available_hundredths、reserved、first_sends_total、retry_sends_total、rejected_total；余额以百分之一次发送为单位。
+- `attempt_maintenance`：active、checks_total、failures_total，仅维护健康探测及 Provider/逻辑频率预留，本地 Permit 不续期。
 - `state_binding_failure_total`：输出绑定失败次数，同一请求的失败 latch 不重复计数。
 - `recovery_scope` 为 `database`；`billing_recovery` 与恢复任务共用待处理条件。多实例采集不能把共享积压相加。
 
@@ -100,7 +111,7 @@ TPM 要求宿主登记可解析的最终请求格式。仅支持媒体任务、C
 
 渠道系统提示词在四种文本入口转换前统一应用，原生透传仍执行模型映射、提示词和参数覆盖。Nova 能保留渠道系统提示词；Coze 无法保留时，预览与执行返回 `channel_system_prompt_unsupported`，Token 的 `allow` 不能绕过。诊断不包含渠道提示词正文。
 
-预览和执行共用 `PlanChannelConversion`。预览不会下载媒体、建立凭据、认领探测、获取租约、预扣或发送上游。状态归属、权限、价格、额度、健康和容量仍在真实请求时重检。诊断不包含密钥、内部端点、请求正文或其他用户数据。
+预览和执行共用 `PlanChannelConversion`。预览不会下载媒体、建立凭据、认领探测、获取 Permit、预扣或发送上游。状态归属、权限、价格、额度、健康和容量仍在真实请求时重检。诊断不包含密钥、内部端点、请求正文或其他用户数据。
 
 `tool_identity` 只记录 `explicit_ids`、`invalid_history`、`requires_ids` 三个事实，不包含调用 ID、参数或结果。Vertex 的无 ID 投影启用时，`tool_ids_projected_to_names` 表示可无歧义改按名称关联；strict 拒绝该损失。`invalid_tool_history` 和 `tool_identity_required` 在所有策略下拒绝。请求多候选答案转换至 Claude/Responses 时返回 `multiple_candidates_unsupported`，allow 也不把多份答案合并成一份。
 
@@ -139,3 +150,9 @@ Chat 的 `content[].file.file_id`、Responses 的 `input_file.file_id` 与 Claud
 Gemini 转换器不再自动填入思考签名绕过标记，`allow` 也不会合成供应商状态。旧 `gemini.function_call_thought_signature_enabled` 配置仍可读取但不再生效，控制台已移除该开关；RelayKit 同名选项仅保留源码兼容。供应商返回的真实签名仍按原生协议与绑定身份处理。
 
 `gateway_state_cleanup` 系统任务每 5 分钟删除最多 1000 条过期绑定，复用数据库任务租约，单次预算 5 秒。清理延迟不影响权限：查找时直接拒绝过期记录。任务只清理网关状态元数据，不操作账单、异步任务记录或完整会话。
+
+## 准入错误与日志
+
+用户/渠道容量不足、队列满、等待超时继续返回 429；`gateway_total_queue_full` 明确区分进程总等待上限。排空返回 503 `gateway_draining`，策略读取失败返回 503。客户端取消或输出已提交时不写第二份错误。
+
+新日志使用 `admission_state`，读取器兼容历史 `lease_state`。重试额度耗尽在管理日志记录 `retry_budget_exhausted: true`，保留最后一个真实上游错误，不追加供应商健康处罚。

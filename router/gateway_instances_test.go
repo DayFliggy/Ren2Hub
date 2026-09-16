@@ -21,7 +21,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/go-redis/redis/v8"
 	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
@@ -32,7 +31,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func TestGatewayApplicationInstances(t *testing.T) {
+func TestGatewayApplicationSingleInstanceRestart(t *testing.T) {
 	binary, adminDSN, redisAddress := os.Getenv("GATEWAY_APP_BINARY"), os.Getenv("GATEWAY_APP_MYSQL_DSN"), os.Getenv("GATEWAY_APP_REDIS_ADDR")
 	if binary == "" || adminDSN == "" || redisAddress == "" {
 		t.Skip("set GATEWAY_APP_BINARY, GATEWAY_APP_MYSQL_DSN and GATEWAY_APP_REDIS_ADDR for isolated application-process acceptance")
@@ -42,7 +41,7 @@ func TestGatewayApplicationInstances(t *testing.T) {
 	_, err = os.Stat(binary)
 	require.NoError(t, err)
 	dsn, db := gatewayInstancesDatabase(t, adminDSN)
-	redisClient := gatewayInstancesRedis(t, redisAddress)
+	gatewayInstancesRedis(t, redisAddress)
 	var upstreamCalls atomic.Int64
 	upstreamCancelled := make(chan struct{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -85,13 +84,11 @@ func TestGatewayApplicationInstances(t *testing.T) {
 		_, _ = w.Write(data)
 	}))
 	t.Cleanup(upstream.Close)
-	users, tokens, channels := gatewayInstancesSeed(t, db, upstream.URL)
+	users, tokens, _ := gatewayInstancesSeed(t, db, upstream.URL)
 	secret := uuid.NewString()
 	secrets := []string{dsn, secret, tokens[0].Key, tokens[1].Key, tokens[2].Key}
 	first := startGatewayInstance(t, binary, dsn, redisAddress, secret, "first", secrets)
-	second := startGatewayInstance(t, binary, dsn, redisAddress, secret, "second", secrets)
-	require.NotEqual(t, first.command.Process.Pid, second.command.Process.Pid)
-	t.Logf("real application PIDs %d/%d; MySQL test database; Redis DB 15", first.command.Process.Pid, second.command.Process.Pid)
+	second := first
 
 	unauthenticated := gatewayInstanceCall(t, second.url, "/v1/chat/completions", "", false, "complete")
 	assert.Equal(t, http.StatusUnauthorized, unauthenticated.StatusCode)
@@ -115,8 +112,6 @@ func TestGatewayApplicationInstances(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = held.Body.Close() })
 	require.Eventually(t, func() bool { return upstreamCalls.Load() == 1 }, 3*time.Second, 10*time.Millisecond)
-	gatewayInstanceOccupancy(t, redisClient, service.UserRouteLeaseKey(users[0].Id), 1)
-	gatewayInstanceOccupancy(t, redisClient, service.ChannelRouteLeaseKey(channels[0].Id), 1)
 
 	blockedUser := gatewayInstanceCall(t, second.url, "/v1/messages", tokens[1].Key, false, "complete")
 	assert.Equal(t, http.StatusTooManyRequests, blockedUser.StatusCode, "different protocols and tokens share the user's in-flight limit")
@@ -124,10 +119,9 @@ func TestGatewayApplicationInstances(t *testing.T) {
 	assert.Equal(t, int64(1), upstreamCalls.Load(), "user rejection must happen before upstream dispatch")
 
 	blockedChannel := gatewayInstanceCall(t, second.url, "/v1/chat/completions", tokens[2].Key, false, "complete")
-	assert.Equal(t, http.StatusServiceUnavailable, blockedChannel.StatusCode, "channel capacity is shared by both application processes")
+	assert.Equal(t, http.StatusTooManyRequests, blockedChannel.StatusCode, "channel capacity is shared by all users in the process")
 	require.NoError(t, blockedChannel.Body.Close())
 	assert.Equal(t, int64(1), upstreamCalls.Load(), "capacity rejection must not send another upstream request")
-	gatewayInstanceOccupancy(t, redisClient, service.UserRouteLeaseKey(users[1].Id), 0)
 	var rejectedUser model.User
 	require.NoError(t, db.First(&rejectedUser, users[1].Id).Error)
 	assert.Equal(t, users[1].Quota, rejectedUser.Quota, "capacity rejection cannot consume balance")
@@ -142,8 +136,6 @@ func TestGatewayApplicationInstances(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("client cancellation did not reach the local upstream")
 	}
-	gatewayInstanceOccupancy(t, redisClient, service.UserRouteLeaseKey(users[0].Id), 0)
-	gatewayInstanceOccupancy(t, redisClient, service.ChannelRouteLeaseKey(channels[0].Id), 0)
 
 	completed := gatewayInstanceCall(t, second.url, "/v1/chat/completions", tokens[2].Key, false, "complete")
 	completedBody, err := io.ReadAll(completed.Body)
@@ -151,7 +143,6 @@ func TestGatewayApplicationInstances(t *testing.T) {
 	require.NoError(t, completed.Body.Close())
 	require.Equal(t, http.StatusOK, completed.StatusCode, "%s", completedBody)
 	assert.Contains(t, string(completedBody), `"finish_reason":"stop"`)
-	gatewayInstanceOccupancy(t, redisClient, service.ChannelRouteLeaseKey(channels[0].Id), 0)
 	requestID := completed.Header.Get(common.RequestIdKey)
 	require.NotEmpty(t, requestID)
 	gatewayInstanceBilling(t, db, users[1], tokens[2], requestID)
@@ -163,6 +154,16 @@ func TestGatewayApplicationInstances(t *testing.T) {
 	require.Equal(t, http.StatusOK, claude.StatusCode, "%s", claudeBody)
 	assert.Contains(t, string(claudeBody), `"stop_reason":"end_turn"`)
 	assert.Equal(t, int64(3), upstreamCalls.Load())
+	require.NoError(t, first.command.Process.Kill())
+	select {
+	case <-first.exited:
+	case <-time.After(3 * time.Second):
+		t.Fatal("old process did not exit")
+	}
+	restarted := startGatewayInstance(t, binary, dsn, redisAddress, secret, "restarted", secrets)
+	resumed := gatewayInstanceCall(t, restarted.url, "/v1/chat/completions", tokens[2].Key, false, "complete")
+	require.Equal(t, http.StatusOK, resumed.StatusCode)
+	require.NoError(t, resumed.Body.Close())
 	t.Log("TokenAuth, cross-protocol user rejection, capacity rejection without dispatch, cancellation propagation, readmission and database billing passed")
 }
 
@@ -367,15 +368,6 @@ func gatewayInstanceCall(t *testing.T, baseURL, path, key string, stream bool, c
 	response, err := (&http.Client{Timeout: 5 * time.Second}).Do(request)
 	require.NoError(t, err)
 	return response
-}
-
-func gatewayInstanceOccupancy(t *testing.T, client *redis.Client, key string, expected int64) {
-	t.Helper()
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		state, err := service.ReadGatewayResourceRuntime(t.Context(), client, key)
-		assert.NoError(collect, err)
-		assert.Equal(collect, service.GatewayResourceRuntime{InFlight: expected}, state)
-	}, 3*time.Second, 10*time.Millisecond, key)
 }
 
 func gatewayInstanceBilling(t *testing.T, db *gorm.DB, initialUser model.User, initialToken model.Token, requestID string) {

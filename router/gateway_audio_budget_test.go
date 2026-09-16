@@ -78,7 +78,7 @@ func TestGatewaySpeechFinalInputAccounting(t *testing.T) {
 					assert.Equal(t, "\x00\x01\x02\x03", output)
 					assert.EqualValues(t, 1, sends.Load())
 				}
-				awaitRealtimeLeasesReleased(t)
+				awaitGatewayPermitsReleased(t)
 				var user model.User
 				var token model.Token
 				require.NoError(t, model.DB.First(&user, 1).Error)

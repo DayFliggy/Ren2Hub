@@ -5,6 +5,7 @@ const model = defineModel<T>({ required: true })
 defineProps<{
   label: string
   max: number
+  min?: number
   nullable?: boolean
   disabled?: boolean
 }>()
@@ -38,7 +39,7 @@ const id = useId()
       :id="id"
       :value="model ?? ''"
       type="number"
-      min="0"
+      :min="min ?? 0"
       :max="max"
       step="1"
       :disabled="disabled || (nullable && model === null)"

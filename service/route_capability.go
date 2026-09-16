@@ -589,7 +589,7 @@ func channelCapabilityFingerprint(channel *model.Channel, abilities []model.Abil
 		return "", errors.New("channel is required")
 	}
 	fingerprint := channelFingerprint{
-		AdaptorContract: "host-capabilities-v11",
+		AdaptorContract: "host-capabilities-v12",
 		Status:          channel.Status,
 		Models:          channel.Models,
 		Mapping:         channel.GetModelMapping(),

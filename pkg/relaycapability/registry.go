@@ -12,14 +12,15 @@ import (
 )
 
 type Surface struct {
-	Incoming        types.RelayFormat
-	Target          types.RelayFormat
-	Native          bool
-	Stream          bool
-	RequestPaths    []string
-	UnboundedOutput bool
-	BudgetCodec     string
-	TextProjection  *TextProjection
+	Incoming         types.RelayFormat
+	Target           types.RelayFormat
+	Native           bool
+	Stream           bool
+	RequestPaths     []string
+	NativeOperations []string
+	UnboundedOutput  bool
+	BudgetCodec      string
+	TextProjection   *TextProjection
 }
 
 type Definition struct {
@@ -33,6 +34,10 @@ func (s Surface) SupportsTokenBudget() bool {
 }
 
 func (s Surface) SupportsPath(path string) bool {
+	if operation := LegacyOpenAIOperation(path); operation != "" &&
+		(!s.Native || !slices.Contains(s.NativeOperations, operation)) {
+		return false
+	}
 	return len(s.RequestPaths) == 0 || slices.Contains(s.RequestPaths, strings.Split(path, "?")[0])
 }
 
@@ -261,6 +266,14 @@ func Describe(apiType int, model string) (Definition, bool) {
 	// Legacy projections and media envelopes need their own budget decoders.
 	for i := range d.Surfaces {
 		s := &d.Surfaces[i]
+		if s.Incoming == types.RelayFormatOpenAI {
+			switch apiType {
+			case constant.APITypeOpenAI, constant.APITypeOpenRouter, constant.APITypeXinference, constant.APITypeNewAPI:
+				s.NativeOperations = []string{"completion", "moderation"}
+			case constant.APITypeDeepSeek, constant.APITypeAli, constant.APITypeMoonshot:
+				s.NativeOperations = []string{"completion"}
+			}
+		}
 		if s.Incoming == types.RelayFormatOpenAIAudio {
 			s.Stream = apiType != constant.APITypeCloudflare
 			switch apiType {

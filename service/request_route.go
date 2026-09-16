@@ -53,6 +53,7 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			return selection, ErrRouteSelectionUnavailable
 		}
 		manualEnabled, loadBalance = true, group.Policy.LoadBalance
+		selection.ManualLoadBalance = loadBalance
 		selection.MaxRatio = group.Policy.MaxRatio
 		selection.Retry = RouteLiveRetryPolicy{Mode: group.Policy.RetryMode, MaxSameResourceAttempts: group.Policy.MaxSameResourceAttempts, MaxFailoverAttempts: group.Policy.MaxFailoverAttempts}
 		if !group.Policy.Sticky {
@@ -197,6 +198,7 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 	if err := applyLiveHealth(input.Context, candidates, channels, input.ExcludedKeyIndexes); err != nil {
 		return selection, err
 	}
+	filterKnownProviderUnavailable(input.Context, candidates)
 	result, err := SelectTokenRoute(RouteSelectionInput{
 		SourceInput: sourceInput, ManualGroupEnabled: manualEnabled, ManualLoadBalance: loadBalance,
 		ManualCandidates: candidates, AutoCandidates: candidates, TopK: MaxRouteCandidateChannels,
@@ -204,6 +206,14 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 		DynamicScoringEnabled: selection.Source == RouteSourceAutoLab,
 	})
 	selection.Decision = result.Decision
+	if errors.Is(err, ErrRouteSelectionUnavailable) {
+		for _, candidate := range candidates {
+			if candidate.FilterReason == "provider_rate_limited" {
+				err = ErrGatewayProviderRateLimit
+				break
+			}
+		}
+	}
 	if selection.Source == RouteSourceManual {
 		selection.Attempts = manualRouteAttemptCandidates(result, selection.Retry)
 	} else {

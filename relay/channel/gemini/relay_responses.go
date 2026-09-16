@@ -1,14 +1,11 @@
 package gemini
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -19,43 +16,18 @@ import (
 )
 
 func GeminiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
-	defer service.CloseResponseBodyGracefully(resp)
-
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+	responseBody, geminiResponse, apiErr := readGeminiGenerationResponse(c, resp)
+	if apiErr != nil {
+		return nil, apiErr
 	}
-	logger.LogDebug(c, "Gemini responses response body: %s", responseBody)
+	markGeminiGoogleSearchCall(c, geminiResponse)
 
-	var geminiResponse dto.GeminiChatResponse
-	if err := common.Unmarshal(responseBody, &geminiResponse); err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
-	}
-	markGeminiGoogleSearchCall(c, &geminiResponse)
-	if len(geminiResponse.Candidates) == 0 {
-		usage := buildUsageFromGeminiResponse(c, info, &geminiResponse)
-		if geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
-			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, fmt.Sprintf("gemini_block_reason=%s", *geminiResponse.PromptFeedback.BlockReason))
-			return &usage, types.NewOpenAIError(
-				errors.New("request blocked by Gemini API: "+*geminiResponse.PromptFeedback.BlockReason),
-				types.ErrorCodePromptBlocked,
-				http.StatusBadRequest,
-			)
-		}
-		common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "gemini_empty_candidates")
-		return &usage, types.NewOpenAIError(
-			errors.New("empty response from Gemini API"),
-			types.ErrorCodeEmptyResponse,
-			http.StatusInternalServerError,
-		)
-	}
-
-	chatResp := responseGeminiChat2OpenAI(c, &geminiResponse)
+	chatResp := responseGeminiChat2OpenAI(c, geminiResponse)
 	chatResp.Model = info.UpstreamModelName
 	if responseID := helper.GetResponseID(c); responseID != "" {
 		chatResp.Id = responseID
 	}
-	usage := buildUsageFromGeminiResponse(c, info, &geminiResponse)
+	usage := buildUsageFromGeminiResponse(c, info, geminiResponse)
 	chatResp.Usage = usage
 
 	convertResult, err := relayconvert.ConvertResponse(c, info, types.RelayFormatOpenAIResponses, chatResp)

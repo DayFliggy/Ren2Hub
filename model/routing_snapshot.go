@@ -42,12 +42,15 @@ func SetChannelCapabilityRefreshHook(fn func(channelID int)) {
 	capabilityRefreshHook.Unlock()
 }
 
-func NotifyChannelCapabilityChanged(channelID int) {
+func NotifyChannelCapabilityChanged(channelIDs ...int) {
+	NotifyGatewayAdmissionChanged("channel", channelIDs...)
 	capabilityRefreshHook.RLock()
 	fn := capabilityRefreshHook.fn
 	capabilityRefreshHook.RUnlock()
 	if fn != nil {
-		fn(channelID)
+		for _, channelID := range channelIDs {
+			fn(channelID)
+		}
 	}
 }
 

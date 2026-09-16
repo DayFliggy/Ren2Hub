@@ -127,8 +127,16 @@ func GetAndValidateEmbeddingRequest(c *gin.Context, relayMode int) (*dto.Embeddi
 	if relayMode == relayconstant.RelayModeModerations && embeddingRequest.Model == "" {
 		embeddingRequest.Model = "omni-moderation-latest"
 	}
-	if relayMode == relayconstant.RelayModeEmbeddings && embeddingRequest.Model == "" {
-		embeddingRequest.Model = c.Param("model")
+	if relayMode == relayconstant.RelayModeEmbeddings {
+		if pathModel := c.Param("model"); pathModel != "" {
+			if embeddingRequest.Model != "" && embeddingRequest.Model != pathModel {
+				return nil, errors.New("body model must match the embeddings path model")
+			}
+			embeddingRequest.Model = pathModel
+		}
+		if embeddingRequest.Model == "" {
+			return nil, errors.New("model is required")
+		}
 	}
 	return embeddingRequest, nil
 }

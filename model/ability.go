@@ -197,9 +197,7 @@ func UpdateAbilityStatusByTag(tag string, status bool) error {
 	}
 	err := DB.Model(&Ability{}).Where("tag = ?", tag).Select("enabled").Update("enabled", status).Error
 	if err == nil {
-		for _, channelID := range channelIDs {
-			NotifyChannelCapabilityChanged(channelID)
-		}
+		NotifyChannelCapabilityChanged(channelIDs...)
 	}
 	return err
 }
@@ -221,9 +219,7 @@ func UpdateAbilityByTag(tag string, newTag *string, priority *int64, weight *uin
 	}
 	err := DB.Model(&Ability{}).Where("tag = ?", tag).Updates(ability).Error
 	if err == nil {
-		for _, channelID := range channelIDs {
-			NotifyChannelCapabilityChanged(channelID)
-		}
+		NotifyChannelCapabilityChanged(channelIDs...)
 	}
 	return err
 }

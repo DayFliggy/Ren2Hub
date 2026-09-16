@@ -100,7 +100,7 @@ func TestGatewayReplicateUploadAdmissionAndAcceptance(t *testing.T) {
 			output, err := io.ReadAll(response.Body)
 			require.NoError(t, err)
 			assert.Equal(t, scenario.status, response.StatusCode, string(output))
-			awaitRealtimeLeasesReleased(t)
+			awaitGatewayPermitsReleased(t)
 			assert.EqualValues(t, scenario.uploads, uploads.Load())
 			assert.EqualValues(t, scenario.predictions, predictions.Load(), "accepted upload or unknown prediction must not replay")
 			var user model.User

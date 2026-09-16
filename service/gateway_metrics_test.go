@@ -16,46 +16,6 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestGatewayQueueMetricsFollowCancellation(t *testing.T) {
-	useRoutePlanningRedis(t)
-	resource := RouteLeaseResource{Key: UserRouteLeaseKey(812), Capacity: 1}
-	occupant, err := AcquireQueuedRouteLease(context.Background(), common.RDB, "occupant", "occupant", GatewayLeaseTTL, resource, 0, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, ReleaseRouteLease(context.Background(), common.RDB, occupant)) })
-	before := gatewayMetrics.user.snapshot()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	queued, finished := make(chan struct{}, 1), make(chan error, 1)
-	go func() {
-		_, err := AcquireQueuedRouteLease(ctx, common.RDB, "waiting", "waiting", GatewayLeaseTTL, resource, 1, NewGatewayWaitBudget(time.Second), func(context.Context) (int, error) {
-			select {
-			case queued <- struct{}{}:
-			default:
-			}
-			return 1, nil
-		})
-		finished <- err
-	}()
-	select {
-	case <-queued:
-	case <-time.After(2 * time.Second):
-		t.Fatal("request did not enter the queue")
-	}
-	during := gatewayMetrics.user.snapshot()
-	assert.Equal(t, before.Active+1, during.Active)
-	assert.Equal(t, before.Entered+1, during.Entered)
-	cancel()
-	require.ErrorIs(t, <-finished, context.Canceled)
-	after := gatewayMetrics.user.snapshot()
-	assert.Equal(t, before.Active, after.Active)
-	assert.Equal(t, before.Failed+1, after.Failed)
-	assert.Equal(t, before.Completed, after.Completed)
-	runtime, err := ReadGatewayResourceRuntime(context.Background(), common.RDB, resource.Key)
-	require.NoError(t, err)
-	assert.Zero(t, runtime.Queued)
-	assert.Equal(t, int64(1), runtime.InFlight)
-}
-
 func TestGatewayMetricsShareRecoveryPredicateAndLatchStateFailure(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "metrics.db")), &gorm.Config{})
 	require.NoError(t, err)

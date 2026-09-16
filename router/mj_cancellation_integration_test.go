@@ -112,7 +112,7 @@ func TestMidjourneyUnknownAcceptanceCancellation(t *testing.T) {
 			}
 
 			assert.True(t, upstreamCancelled.Load())
-			assert.Equal(t, http.StatusBadGateway, response.Code, response.Body.String())
+			assert.Empty(t, response.Body.String(), "client cancellation must not write another error response")
 			require.Eventually(t, func() bool {
 				return db.First(user, user.Id).Error == nil && db.First(token, token.Id).Error == nil && user.Quota == 1_000_000 && token.RemainQuota == 1_000_000
 			}, time.Second, 10*time.Millisecond)
@@ -121,7 +121,7 @@ func TestMidjourneyUnknownAcceptanceCancellation(t *testing.T) {
 			var taskCount int64
 			require.NoError(t, db.Model(&model.Midjourney{}).Count(&taskCount).Error)
 			assert.Zero(t, taskCount)
-			assert.Equal(t, int64(0), redisClient.ZCard(context.Background(), service.ChannelRouteLeaseKey(channel.Id)).Val())
+			assert.Equal(t, int64(0), service.ReadGatewayAdmissionRuntime(service.ChannelAdmissionKey(channel.Id)).InFlight)
 		})
 	}
 }

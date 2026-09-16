@@ -8,32 +8,22 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestRouteChannelLoadsIgnoreExpiredMembersAndRequireRedis(t *testing.T) {
-	server := useRoutePlanningRedis(t)
+func TestRouteChannelLoadsUseLocalOccupancyWithoutRedis(t *testing.T) {
 	ctx := context.Background()
-	now := time.Unix(1000, 0)
-	server.SetTime(now)
+	permit, err := gatewayAdmission.TryAcquire(ctx, ChannelAdmissionKey(1), AdmissionPolicy{Capacity: 10, Revision: admissionRevision.Load()})
+	require.NoError(t, err)
+	defer permit.Release()
 	channels := map[int]*model.Channel{1: {Id: 1, CapacityTotal: 10, ChannelRatio: 1}}
-	require.NoError(t, common.RDB.ZAdd(ctx, ChannelRouteLeaseKey(1),
-		&redis.Z{Score: float64(now.Add(-time.Second).UnixMilli()), Member: "expired"},
-		&redis.Z{Score: float64(now.UnixMilli()), Member: "expires-now"},
-		&redis.Z{Score: float64(now.Add(time.Minute).UnixMilli()), Member: "active"},
-	).Err())
+	previous := common.RedisEnabled
+	common.RedisEnabled = false
+	defer func() { common.RedisEnabled = previous }()
 	loads, err := LoadRouteChannelLoads(ctx, channels)
 	require.NoError(t, err)
 	assert.InDelta(t, .1, loads[1], .000001)
-	common.RedisEnabled = false
-	_, err = LoadRouteChannelLoads(ctx, channels)
-	require.ErrorIs(t, err, ErrRouteLeaseUnavailable)
-	common.RedisEnabled = true
-	server.Close()
-	_, err = LoadRouteChannelLoads(ctx, channels)
-	require.ErrorIs(t, err, ErrRouteLeaseUnavailable)
 }
 
 func TestLivePlanningReadsRecoveryWithoutClaimingProbe(t *testing.T) {

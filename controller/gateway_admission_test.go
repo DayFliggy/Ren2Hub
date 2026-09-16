@@ -100,7 +100,7 @@ func TestGatewayAPIConfigVersionAndProviderTPM(t *testing.T) {
 	assert.Contains(t, response.Body.String(), `"version":2`)
 	response = gatewayAPIRequest(t, router, http.MethodPut, "/config", config)
 	assert.Equal(t, http.StatusConflict, response.Code)
-	scopes, err := service.LoadGatewayProviderRateScopes(2, identity.ID)
+	scopes, err := service.LoadGatewayProviderRateScopes(context.Background(), 2, identity.ID)
 	require.NoError(t, err)
 	_, err = service.ReserveGatewayProviderRate(context.Background(), common.RDB, scopes, 41)
 	require.ErrorIs(t, err, service.ErrGatewayProviderRateLimit)
@@ -177,8 +177,8 @@ func TestGatewayAPIRuntimeUnavailableAndCredentialListRedaction(t *testing.T) {
 	assert.JSONEq(t, fmt.Sprintf(`{"success":true,"message":"","data":[{"id":%q}]}`, identity.ID), response.Body.String())
 	common.RedisEnabled = false
 	response = gatewayAPIRequest(t, router, http.MethodGet, "/self/runtime", nil)
-	assert.Equal(t, http.StatusServiceUnavailable, response.Code)
-	assert.Contains(t, response.Body.String(), `"code":"GATEWAY_UNAVAILABLE"`)
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Contains(t, response.Body.String(), `"in_flight":0`)
 }
 
 func TestGatewayAPIAdminCannotOverridePeer(t *testing.T) {
@@ -189,4 +189,68 @@ func TestGatewayAPIAdminCannotOverridePeer(t *testing.T) {
 	router.PUT("/users/:id", UpdateGatewayUserAdmission)
 	response := gatewayAPIRequest(t, router, http.MethodPut, "/users/2", model.GatewayAdmissionOverride{})
 	assert.Equal(t, http.StatusForbidden, response.Code)
+}
+
+func TestGatewayAPIKeepsNewSettingsForOldClientsAndRejectsNull(t *testing.T) {
+	_, router := setupGatewayAPI(t)
+	t.Cleanup(func() {
+		current, err := model.GetGatewayConfig()
+		require.NoError(t, err)
+		defaults := model.DefaultGatewayConfig()
+		defaults.Version = current.Version
+		require.NoError(t, model.SaveGatewayConfig(defaults))
+	})
+	config := model.DefaultGatewayConfig()
+	config.TotalQueueSize, config.RetryBudgetEnabled, config.RetryBudgetPercent, config.RetryBudgetBurst = 0, false, 7, 9
+	response := gatewayAPIRequest(t, router, http.MethodPut, "/config", config)
+	require.Equal(t, http.StatusOK, response.Code)
+	encoded, err := common.Marshal(config)
+	require.NoError(t, err)
+	var legacy map[string]interface{}
+	require.NoError(t, common.Unmarshal(encoded, &legacy))
+	for _, field := range []string{"total_queue_size", "retry_budget_enabled", "retry_budget_percent", "retry_budget_burst"} {
+		delete(legacy, field)
+	}
+	legacy["version"], legacy["user_concurrency"] = 2, 3
+	response = gatewayAPIRequest(t, router, http.MethodPut, "/config", legacy)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	stored, err := model.GetGatewayConfig()
+	require.NoError(t, err)
+	assert.Zero(t, stored.TotalQueueSize)
+	assert.False(t, stored.RetryBudgetEnabled)
+	assert.Equal(t, 7, stored.RetryBudgetPercent)
+	assert.Equal(t, 9, stored.RetryBudgetBurst)
+	assert.Equal(t, 3, stored.UserConcurrency)
+	for _, field := range []string{"total_queue_size", "retry_budget_enabled", "retry_budget_percent", "retry_budget_burst"} {
+		legacy["version"], legacy[field] = 3, nil
+		response = gatewayAPIRequest(t, router, http.MethodPut, "/config", legacy)
+		assert.Equal(t, http.StatusBadRequest, response.Code, field)
+		delete(legacy, field)
+	}
+	current, err := model.GetGatewayConfig()
+	require.NoError(t, err)
+	assert.Equal(t, stored, current)
+}
+
+func TestGatewayAPIChannelRuntimeKeepsLocalValuesWhenRateUnavailable(t *testing.T) {
+	db, router := setupGatewayAPI(t)
+	require.NoError(t, db.Create(&model.Channel{Id: 25, Status: common.ChannelStatusEnabled, CapacityTotal: 2}).Error)
+	router.GET("/runtime/channels/:id", GetGatewayChannelRuntime)
+	permit, _, err := service.AcquireGatewayChannelPermit(context.Background(), "runtime-fixture", 25, false, nil)
+	require.NoError(t, err)
+	defer permit.Release()
+	common.RedisEnabled = false
+	response := gatewayAPIRequest(t, router, http.MethodGet, "/runtime/channels/25", nil)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var result struct {
+		Data struct {
+			InFlight int64       `json:"in_flight"`
+			Rate     interface{} `json:"rate"`
+			Status   string      `json:"rate_status"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+	assert.EqualValues(t, 1, result.Data.InFlight)
+	assert.Nil(t, result.Data.Rate)
+	assert.Equal(t, "unavailable", result.Data.Status)
 }

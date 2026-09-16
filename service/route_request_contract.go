@@ -72,7 +72,7 @@ func endpointTypeForRequestPath(requestPath string) string {
 		return string(constant.EndpointTypeAnthropic)
 	case strings.HasPrefix(requestPath, "/v1/rerank"):
 		return string(constant.EndpointTypeJinaRerank)
-	case strings.HasPrefix(requestPath, "/v1/images/generations"), requestPath == "/v1/images/edits", requestPath == "/v1/edits":
+	case strings.HasPrefix(requestPath, "/v1/images/generations"), requestPath == "/v1/images/edits":
 		return string(constant.EndpointTypeImageGeneration)
 	case strings.HasPrefix(requestPath, "/v1/embeddings"):
 		return string(constant.EndpointTypeEmbeddings)

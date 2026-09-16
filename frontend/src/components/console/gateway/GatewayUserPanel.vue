@@ -7,6 +7,7 @@ import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import GatewayNumber from './GatewayNumber.vue'
+import GatewayRuntimeDetails from './GatewayRuntimeDetails.vue'
 import type {
   GatewayAdmission,
   GatewayOverride,
@@ -165,7 +166,12 @@ watch(
       <template v-if="runtime"
         ><span
           >{{ t('gateway.inFlight') }}
-          <strong>{{ runtime.in_flight }}</strong></span
+          <strong
+            >{{ runtime.in_flight }} /
+            {{
+              runtime.capacity === 0 ? t('gateway.unlimited') : runtime.capacity
+            }}</strong
+          ></span
         ><span
           >{{ t('gateway.queued') }} <strong>{{ runtime.queued }}</strong></span
         ></template
@@ -185,5 +191,6 @@ watch(
         ><Save class="h-4 w-4" />{{ t('gateway.saveLimits') }}</ConsoleButton
       >
     </div>
+    <GatewayRuntimeDetails v-if="runtime" :runtime="runtime" />
   </section>
 </template>

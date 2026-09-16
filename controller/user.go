@@ -672,6 +672,7 @@ func UpdateUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	model.NotifyGatewayAdmissionChanged("user", updatedUser.Id)
 	if authzTouched {
 		if err := authz.ReloadPolicy(); err != nil {
 			common.ApiError(c, err)

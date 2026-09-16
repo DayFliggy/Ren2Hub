@@ -1,6 +1,8 @@
 package model
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -41,21 +43,28 @@ type GatewayAdmissionOverride struct {
 }
 
 type GatewayConfig struct {
-	Version          int64                               `json:"version"`
-	UserConcurrency  int                                 `json:"user_concurrency"`
-	WaitMS           int                                 `json:"wait_ms"`
-	UserQueueSize    int                                 `json:"user_queue_size"`
-	ChannelQueueSize int                                 `json:"channel_queue_size"`
-	Groups           map[string]GatewayAdmissionOverride `json:"groups"`
-	ChannelRates     map[int]GatewayProviderRateLimit    `json:"channel_rates"`
-	CredentialRates  map[string]GatewayProviderRateLimit `json:"credential_rates"`
+	TotalQueueSize     int                                 `json:"total_queue_size"`
+	RetryBudgetEnabled bool                                `json:"retry_budget_enabled"`
+	RetryBudgetPercent int                                 `json:"retry_budget_percent"`
+	RetryBudgetBurst   int                                 `json:"retry_budget_burst"`
+	Version            int64                               `json:"version"`
+	UserConcurrency    int                                 `json:"user_concurrency"`
+	WaitMS             int                                 `json:"wait_ms"`
+	UserQueueSize      int                                 `json:"user_queue_size"`
+	ChannelQueueSize   int                                 `json:"channel_queue_size"`
+	Groups             map[string]GatewayAdmissionOverride `json:"groups"`
+	ChannelRates       map[int]GatewayProviderRateLimit    `json:"channel_rates"`
+	CredentialRates    map[string]GatewayProviderRateLimit `json:"credential_rates"`
 }
 
 func DefaultGatewayConfig() GatewayConfig {
-	return GatewayConfig{Version: 1, UserConcurrency: 10, WaitMS: 5000, UserQueueSize: 20, ChannelQueueSize: 20, Groups: map[string]GatewayAdmissionOverride{}, ChannelRates: map[int]GatewayProviderRateLimit{}, CredentialRates: map[string]GatewayProviderRateLimit{}}
+	return GatewayConfig{Version: 1, UserConcurrency: 10, WaitMS: 5000, UserQueueSize: 20, ChannelQueueSize: 20, TotalQueueSize: 1024, RetryBudgetEnabled: true, RetryBudgetPercent: 10, RetryBudgetBurst: 20, Groups: map[string]GatewayAdmissionOverride{}, ChannelRates: map[int]GatewayProviderRateLimit{}, CredentialRates: map[string]GatewayProviderRateLimit{}}
 }
 
 func (config GatewayConfig) Validate() error {
+	if config.TotalQueueSize < 0 || config.TotalQueueSize > 100000 || config.RetryBudgetPercent < 1 || config.RetryBudgetPercent > 100 || config.RetryBudgetBurst < 1 || config.RetryBudgetBurst > 10000 {
+		return errors.New("invalid gateway queue or retry budget")
+	}
 	if config.UserConcurrency < 0 || config.UserConcurrency > 1000000 || config.WaitMS < 0 || config.WaitMS > GatewayMaxWaitMS || config.UserQueueSize < 0 || config.UserQueueSize > GatewayMaxUserQueueSize || config.ChannelQueueSize < 0 || config.ChannelQueueSize > 10000 {
 		return errors.New("invalid gateway admission limits")
 	}
@@ -103,15 +112,31 @@ func (override GatewayAdmissionOverride) Validate() error {
 }
 
 func GetGatewayConfig() (GatewayConfig, error) {
+	return GetGatewayConfigContext(context.Background())
+}
+
+func GetGatewayConfigContext(ctx context.Context) (GatewayConfig, error) {
 	var option Option
-	err := DB.Where(map[string]any{"key": GatewayConfigKey}).First(&option).Error
+	err := DB.WithContext(ctx).Where(map[string]any{"key": GatewayConfigKey}).First(&option).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return DefaultGatewayConfig(), nil
 	}
 	if err != nil {
 		return GatewayConfig{}, err
 	}
-	var config GatewayConfig
+	config := DefaultGatewayConfig()
+	var fields map[string]json.RawMessage
+	if err := common.UnmarshalJsonStr(option.Value, &fields); err != nil {
+		return config, err
+	}
+	if fields == nil {
+		return config, errors.New("gateway configuration must be an object")
+	}
+	for _, field := range []string{"total_queue_size", "retry_budget_enabled", "retry_budget_percent", "retry_budget_burst"} {
+		if raw, exists := fields[field]; exists && strings.TrimSpace(string(raw)) == "null" {
+			return config, fmt.Errorf("%s cannot be null", field)
+		}
+	}
 	if err := common.UnmarshalJsonStr(option.Value, &config); err != nil {
 		return config, err
 	}
@@ -127,7 +152,12 @@ func GetGatewayConfig() (GatewayConfig, error) {
 	return config, config.Validate()
 }
 
-func SaveGatewayConfig(config GatewayConfig) error {
+func SaveGatewayConfig(config GatewayConfig) (resultErr error) {
+	defer func() {
+		if resultErr == nil {
+			NotifyGatewayAdmissionChanged("config", 0)
+		}
+	}()
 	if err := config.Validate(); err != nil {
 		return err
 	}
@@ -259,6 +289,52 @@ func migrateGatewayDefaults(db *gorm.DB) error {
 		return err
 	}
 	if err := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&Option{Key: GatewayConfigKey, Value: string(config)}).Error; err != nil {
+		return err
+	}
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var option Option
+		if err := lockForUpdate(tx).Where(map[string]any{"key": GatewayConfigKey}).First(&option).Error; err != nil {
+			return err
+		}
+		var fields map[string]json.RawMessage
+		if err := common.UnmarshalJsonStr(option.Value, &fields); err != nil {
+			return err
+		}
+		if fields == nil {
+			return errors.New("gateway configuration must be an object")
+		}
+		changed := false
+		for key, value := range map[string]string{"total_queue_size": "1024", "retry_budget_enabled": "true", "retry_budget_percent": "10", "retry_budget_burst": "20"} {
+			if _, exists := fields[key]; !exists {
+				fields[key] = json.RawMessage(value)
+				changed = true
+			}
+		}
+		if !changed {
+			return nil
+		}
+		current := DefaultGatewayConfig()
+		if err := common.UnmarshalJsonStr(option.Value, &current); err != nil {
+			return err
+		}
+		version, err := common.Marshal(current.Version + 1)
+		if err != nil {
+			return err
+		}
+		fields["version"] = version
+		encoded, err := common.Marshal(fields)
+		if err != nil {
+			return err
+		}
+		result := tx.Model(&Option{}).Where(map[string]any{"key": GatewayConfigKey, "value": option.Value}).Update("value", string(encoded))
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrGatewayConfigConflict
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 	if err := db.Model(&Token{}).Where("conversion_policy IS NULL OR conversion_policy = ?", "").Update("conversion_policy", "safe").Error; err != nil {

@@ -21,6 +21,7 @@ type responsesInputEnvelope struct {
 	Role             string          `json:"role"`
 	Content          any             `json:"content"`
 	Name             string          `json:"name"`
+	Namespace        *string         `json:"namespace"`
 	CallID           string          `json:"call_id"`
 	Arguments        json.RawMessage `json:"arguments"`
 	Output           json.RawMessage `json:"output"`
@@ -162,6 +163,24 @@ func (r *RequestRequirements) inspectRetainedRequestFields(request any, payload 
 
 func (r *RequestRequirements) inspectProjectionSemantics(payload map[string]any) error {
 	r.inspectReasoningControls(payload)
+	if r.Format == types.RelayFormatOpenAIResponses {
+		items, _ := payload["input"].([]any)
+		for index, item := range items {
+			call, _ := item.(map[string]any)
+			if call["type"] != "function_call" || call["namespace"] == nil {
+				continue
+			}
+			path := fmt.Sprintf("input[%d].namespace", index)
+			namespace, ok := call["namespace"].(string)
+			if !ok || strings.TrimSpace(namespace) == "" {
+				return fmt.Errorf("%s must be a non-empty string or null", path)
+			}
+			// Historical tool identity has the same portability boundary as a
+			// namespace declaration, even when no tools are declared this turn.
+			r.Tools = append(r.Tools, ToolRequirement{Type: "namespace", Path: path})
+			r.Features = appendUnique(r.Features, "tools")
+		}
+	}
 	if choice, ok := payload["tool_choice"].(map[string]any); ok {
 		kind, _ := choice["type"].(string)
 		allowed := []string{"function"}

@@ -345,6 +345,9 @@ func analyzeRoutePreviewRequest(input RouteProfilePreviewInput) (relayconvert.Re
 		return requirements, fmt.Errorf("request sample model must match the preview model")
 	}
 	requirements.Model = input.Model
+	if operation := relaycapability.LegacyOpenAIOperation(input.Path); operation != "" {
+		requirements.Operation = operation
+	}
 	if requirements.Format == types.RelayFormatGemini {
 		requirements.Stream = strings.Contains(input.Path, ":streamGenerateContent")
 	}
@@ -354,7 +357,10 @@ func analyzeRoutePreviewRequest(input RouteProfilePreviewInput) (relayconvert.Re
 // PlanChannelConversion resolves the same read-only host surface for preview
 // and execution. It does not initialize credentials, download media or debit.
 func PlanChannelConversion(requirements relayconvert.RequestRequirements, channel *model.Channel, path, actualModel string, policy types.ConversionLossPolicy) (relayconvert.ConversionPlan, error) {
-	plan := relayconvert.ConversionPlan{From: requirements.Format, Policy: policy}
+	if operation := relaycapability.LegacyOpenAIOperation(path); operation != "" {
+		requirements.Operation = operation
+	}
+	plan := relayconvert.ConversionPlan{From: requirements.Format, Operation: requirements.Operation, Policy: policy}
 	apiType, registered := common.ChannelType2APIType(channel.Type)
 	if !registered {
 		return plan, fmt.Errorf("channel has no registered request adaptor")
@@ -374,6 +380,9 @@ func PlanChannelConversion(requirements relayconvert.RequestRequirements, channe
 			return plan, fmt.Errorf("custom channel does not implement this request path")
 		}
 		surface = relaycapability.Surface{Incoming: requirements.Format, Target: requirements.Format, Native: true, Stream: true}
+		if operation := relaycapability.LegacyOpenAIOperation(path); operation != "" && operation != "edit" {
+			surface.NativeOperations = []string{operation}
+		}
 		if route.Converter != "" && route.Converter != relayconvert.ConverterNone {
 			spec, exists := relayconvert.LookupRequestConverter(route.Converter)
 			if !exists || spec.From != requirements.Format || !dto.IsAdvancedCustomConverterAllowed(route.Converter) {
@@ -389,6 +398,11 @@ func PlanChannelConversion(requirements relayconvert.RequestRequirements, channe
 	if !surface.SupportsPath(path) {
 		return plan, fmt.Errorf("channel does not implement this request path")
 	}
+	if requirements.Operation == "completion" && apiType == constant.APITypeMoonshot {
+		if _, special := constant.ChannelSpecialBases[channel.GetBaseURL()]; special {
+			return plan, fmt.Errorf("channel endpoint does not implement legacy completions")
+		}
+	}
 	if requirements.Format == types.RelayFormatClaude && apiType == constant.APITypeVolcEngine {
 		if _, native := constant.ChannelSpecialBases[channel.GetBaseURL()]; native {
 			surface.Target, surface.Native = types.RelayFormatClaude, true
@@ -403,7 +417,7 @@ func PlanChannelConversion(requirements relayconvert.RequestRequirements, channe
 		}
 	}
 	passthrough := model_setting.GetGlobalSettings().PassThroughRequestEnabled || channel.GetSetting().PassThroughBodyEnabled
-	if (requirements.Format == types.RelayFormatOpenAI || requirements.Format == types.RelayFormatClaude) && !passthrough &&
+	if requirements.Operation == "text" && (requirements.Format == types.RelayFormatOpenAI || requirements.Format == types.RelayFormatClaude) && !passthrough &&
 		ShouldChatCompletionsUseResponsesGlobal(channel.Id, channel.Type, requirements.Model) {
 		if _, supported := definition.Resolve(types.RelayFormatOpenAIResponses); !supported {
 			return plan, fmt.Errorf("configured Responses upgrade is not implemented by selected channel")
@@ -466,7 +480,7 @@ func PlanChannelConversion(requirements relayconvert.RequestRequirements, channe
 			return plan, projectionErr
 		}
 	}
-	if requirements.Stream && !plan.StreamSupported && (requirements.Operation == "text" || requirements.Operation == "audio") {
+	if requirements.Stream && !plan.StreamSupported && (requirements.Operation == "text" || requirements.Operation == "completion" || requirements.Operation == "audio") {
 		return plan, fmt.Errorf("channel does not implement streaming responses for this request")
 	}
 	return plan, nil

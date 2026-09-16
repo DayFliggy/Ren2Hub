@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -25,6 +26,7 @@ func TestCompactRetryBudgetAndStageTransition(t *testing.T) {
 	}
 	state := newCompactRetryState(info)
 	ctx, _ := gin.CreateTestContext(nil)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses/compact", nil)
 	require.Equal(t, 2, state.exactBudget)
 	require.Equal(t, 1, state.baseBudget)
 

@@ -106,10 +106,19 @@ func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilt
 		result.Reason = RouteFilterPathUnsupported
 		return result
 	}
-	if input.EndpointType == string(constant.EndpointTypeAudio) {
+	if input.ChannelType != constant.ChannelTypeAdvancedCustom &&
+		(input.EndpointType == string(constant.EndpointTypeAudio) || relaycapability.LegacyOpenAIOperation(input.RequestPath) != "") {
 		apiType, _ := common.ChannelType2APIType(input.ChannelType)
-		definition, _ := relaycapability.Describe(apiType, input.RequestModel)
-		if surface, found := definition.Resolve(types.RelayFormatOpenAIAudio); found && !surface.SupportsPath(input.RequestPath) {
+		actualModel := input.Capability.ActualModel
+		if actualModel == "" {
+			actualModel = input.RequestModel
+		}
+		definition, _ := relaycapability.Describe(apiType, actualModel)
+		format := types.RelayFormatOpenAI
+		if input.EndpointType == string(constant.EndpointTypeAudio) {
+			format = types.RelayFormatOpenAIAudio
+		}
+		if surface, found := definition.Resolve(format); !found || !surface.SupportsPath(input.RequestPath) {
 			result.Reason = RouteFilterPathUnsupported
 			return result
 		}

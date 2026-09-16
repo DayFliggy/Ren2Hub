@@ -37,7 +37,7 @@ func TestClassifyRouteErrorSeparatesKeyModelAndStreamFailures(t *testing.T) {
 }
 
 func TestClassifyRouteAdmissionFailureDoesNotAffectProviderHealth(t *testing.T) {
-	classification := ClassifyRouteError(http.StatusServiceUnavailable, RouteLeaseFailureCode, "route lease redis is unavailable", false)
+	classification := ClassifyRouteError(http.StatusServiceUnavailable, AdmissionFailureCode, "route lease redis is unavailable", false)
 
 	assert.Equal(t, RouteErrorAdmission, classification.Class)
 	assert.False(t, classification.Retryable)

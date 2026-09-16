@@ -89,14 +89,14 @@ func DoMidjourneyHttpRequest(c *gin.Context, info *relaycommon.RelayInfo, timeou
 	}
 	if info.BeforeUpstream != nil {
 		if err := info.BeforeUpstream(); err != nil {
-			status := http.StatusServiceUnavailable
+			status := GatewayAdmissionHTTPStatus(err)
 			if errors.Is(err, ErrRoutePriceRatioExceeded) || errors.Is(err, ErrLiveRouteCandidateInvalid) {
 				status = http.StatusForbidden
 			}
 			return fail(err, types.ErrorCodeGetChannelFailed, status)
 		}
 	}
-	// The lease may replace the context to propagate renewal failures.
+	// Attempt maintenance may replace the context to propagate failures.
 	requestCtx, stop := context.WithTimeout(c.Request.Context(), timeout)
 	defer stop()
 	req = req.WithContext(requestCtx)

@@ -11,7 +11,7 @@ var ErrRouteSelectionUnavailable = errors.New("no eligible route candidate")
 const (
 	MaxRouteCandidateChannels             = 64
 	RouteCandidateFilterHealthUnavailable = "health_unavailable"
-	RouteLeaseStateNotAttempted           = "not_attempted"
+	AdmissionStateNotAttempted           = "not_attempted"
 )
 
 // RouteSelectionCandidate is the transport-neutral candidate passed from
@@ -176,7 +176,7 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 				Position: candidate.Position, Weight: candidate.Weight,
 				SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
 				HealthEpoch: candidate.HealthEpoch,
-				LeaseState:  RouteLeaseStateNotAttempted,
+				AdmissionState:  AdmissionStateNotAttempted,
 			})
 		}
 	}
@@ -313,7 +313,7 @@ func appendRouteDecisionCandidatesWithScores(decision *RouteDecision, candidates
 			Priority:     candidate.Priority, Position: candidate.Position, Weight: candidate.Weight,
 			SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
 			HealthEpoch: candidate.HealthEpoch,
-			Score:       score, LeaseState: RouteLeaseStateNotAttempted,
+			Score:       score, AdmissionState: AdmissionStateNotAttempted,
 		})
 	}
 }

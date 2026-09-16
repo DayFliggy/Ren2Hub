@@ -154,6 +154,7 @@ func NextUpdateAdminUser(c *gin.Context) {
 		writeManagedUserError(c, err)
 		return
 	}
+	model.NotifyGatewayAdmissionChanged("user", user.Id)
 	if authzTouched {
 		if err := authz.ReloadPolicy(); err != nil {
 			common.ApiError(c, err)

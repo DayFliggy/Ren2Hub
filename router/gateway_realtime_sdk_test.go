@@ -65,7 +65,7 @@ func TestGatewayOfficialRealtimeSDK(t *testing.T) {
 				waited = true
 				require.NoError(t, err, "%s", output.String())
 				t.Log(output.String())
-				awaitRealtimeLeasesReleased(t)
+				awaitGatewayPermitsReleased(t)
 				assert.EqualValues(t, 1, sends.Load(), "SDK connection must not replay after a committed upgrade")
 				var logs []model.Log
 				require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)

@@ -212,6 +212,7 @@ func TestGatewayTaskProviderRPMRejectsBeforeBilling(t *testing.T) {
 		_, _ = io.WriteString(w, `{"id":"provider-job","status":"queued"}`)
 	})
 	config := model.DefaultGatewayConfig()
+	require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", 4).Update("status", common.ChannelStatusManuallyDisabled).Error)
 	encoded, err := common.Marshal(config)
 	require.NoError(t, err)
 	require.NoError(t, model.DB.Create(&model.Option{Key: model.GatewayConfigKey, Value: string(encoded)}).Error)
@@ -236,8 +237,10 @@ func TestGatewayTaskProviderRPMRejectsBeforeBilling(t *testing.T) {
 
 func TestGatewayTaskExplicitRejectionCanAdvance(t *testing.T) {
 	var sends atomic.Int32
+	started := time.Now()
 	url, key, _ := setupGatewayTask(t, func(w http.ResponseWriter, r *http.Request) {
 		if sends.Add(1) == 1 {
+			w.Header().Set("Retry-After", "120")
 			w.WriteHeader(http.StatusTooManyRequests)
 			_, _ = io.WriteString(w, `{"error":"capacity exhausted before acceptance"}`)
 			return
@@ -247,4 +250,10 @@ func TestGatewayTaskExplicitRejectionCanAdvance(t *testing.T) {
 	code, body := postGatewayTask(t, url, key, "/v1/videos", `{"model":"sora-2","prompt":"local fixture"}`)
 	require.Equal(t, 200, code, body)
 	assert.EqualValues(t, 2, sends.Load())
+	var health model.ChannelHealth
+	require.NoError(t, model.DB.First(&health, "channel_id = ? AND cooldown_until > ?", 1, 0).Error)
+	assert.GreaterOrEqual(t, health.CooldownUntil, started.Add(120*time.Second).Unix())
+	rate, err := service.ReadGatewayProviderRateRuntime(context.Background(), common.RDB, service.GatewayChannelRateScopeID(4))
+	require.NoError(t, err)
+	assert.Zero(t, rate.CooldownMS, "A's cooldown must not propagate to the independent fallback")
 }

@@ -61,6 +61,7 @@ func userCacheTTLSeconds() int {
 
 // invalidateUserCache clears user cache
 func invalidateUserCache(userId int) error {
+	NotifyGatewayAdmissionChanged("user", userId)
 	if !common.RedisEnabled {
 		return nil
 	}

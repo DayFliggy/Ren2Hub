@@ -19,8 +19,8 @@ type GatewayRequestReservation struct {
 	Window time.Duration
 }
 
-func StartGatewayRequestReservationRenewal(ctx context.Context, client *redis.Client, reservation GatewayRequestReservation) RouteLeaseRenewal {
-	return startRouteRenewal(ctx, GatewayLeaseRenewInterval, func(ctx context.Context) error {
+func StartGatewayRequestReservationRenewal(ctx context.Context, client *redis.Client, reservation GatewayRequestReservation) AttemptMaintenance {
+	return StartAttemptMaintenance(ctx, GatewayReservationRenewInterval, func(ctx context.Context) error {
 		return RenewGatewayRequestReservation(ctx, client, reservation)
 	})
 }
@@ -29,12 +29,12 @@ func StartGatewayRequestReservationRenewal(ctx context.Context, client *redis.Cl
 // successful-request reservation. Failed requests consume only the total limit.
 func ReserveGatewayRequest(ctx context.Context, client *redis.Client, key, requestID string, window time.Duration, totalLimit, successLimit int) (GatewayRequestReservation, error) {
 	if client == nil || key == "" || requestID == "" || window < time.Millisecond || totalLimit < 0 || successLimit < 0 {
-		return GatewayRequestReservation{}, ErrRouteLeaseUnavailable
+		return GatewayRequestReservation{}, ErrGatewayStorageUnavailable
 	}
 	if totalLimit > 0 {
 		allowed, err := gatewayTotalRateScript.Run(ctx, client, []string{key + ":total"}, requestID, window.Milliseconds(), totalLimit).Int()
 		if err != nil {
-			return GatewayRequestReservation{}, errors.Join(ErrRouteLeaseUnavailable, err)
+			return GatewayRequestReservation{}, errors.Join(ErrGatewayStorageUnavailable, err)
 		}
 		if allowed != 1 {
 			return GatewayRequestReservation{}, ErrGatewayTotalRateLimit
@@ -42,14 +42,14 @@ func ReserveGatewayRequest(ctx context.Context, client *redis.Client, key, reque
 	}
 	if successLimit == 0 {
 		if err := client.Ping(ctx).Err(); err != nil {
-			return GatewayRequestReservation{}, errors.Join(ErrRouteLeaseUnavailable, err)
+			return GatewayRequestReservation{}, errors.Join(ErrGatewayStorageUnavailable, err)
 		}
 		return GatewayRequestReservation{}, nil
 	}
 	reservation := GatewayRequestReservation{Key: key, ID: uuid.NewString(), Window: window}
-	allowed, err := gatewaySuccessReserveScript.Run(ctx, client, []string{key + ":success", key + ":pending"}, reservation.ID, window.Milliseconds(), successLimit, GatewayLeaseTTL.Milliseconds()).Int()
+	allowed, err := gatewaySuccessReserveScript.Run(ctx, client, []string{key + ":success", key + ":pending"}, reservation.ID, window.Milliseconds(), successLimit, GatewayReservationTTL.Milliseconds()).Int()
 	if err != nil {
-		return GatewayRequestReservation{}, errors.Join(ErrRouteLeaseUnavailable, err)
+		return GatewayRequestReservation{}, errors.Join(ErrGatewayStorageUnavailable, err)
 	}
 	if allowed != 1 {
 		return GatewayRequestReservation{}, ErrGatewaySuccessRateLimit
@@ -62,11 +62,11 @@ func RenewGatewayRequestReservation(ctx context.Context, client *redis.Client, r
 		return nil
 	}
 	if client == nil {
-		return ErrRouteLeaseUnavailable
+		return ErrGatewayStorageUnavailable
 	}
-	result, err := gatewaySuccessRenewScript.Run(ctx, client, []string{reservation.Key + ":pending"}, reservation.ID, GatewayLeaseTTL.Milliseconds()).Int()
+	result, err := gatewaySuccessRenewScript.Run(ctx, client, []string{reservation.Key + ":pending"}, reservation.ID, GatewayReservationTTL.Milliseconds()).Int()
 	if err != nil {
-		return errors.Join(ErrRouteLeaseUnavailable, err)
+		return errors.Join(ErrGatewayStorageUnavailable, err)
 	}
 	if result != 1 {
 		return ErrGatewayReservationLost
@@ -79,11 +79,11 @@ func FinishGatewayRequestReservation(ctx context.Context, client *redis.Client, 
 		return nil
 	}
 	if client == nil {
-		return ErrRouteLeaseUnavailable
+		return ErrGatewayStorageUnavailable
 	}
 	result, err := gatewaySuccessFinishScript.Run(ctx, client, []string{reservation.Key + ":success", reservation.Key + ":pending"}, reservation.ID, reservation.Window.Milliseconds(), success).Int()
 	if err != nil {
-		return errors.Join(ErrRouteLeaseUnavailable, err)
+		return errors.Join(ErrGatewayStorageUnavailable, err)
 	}
 	if result != 1 {
 		return ErrGatewayReservationLost

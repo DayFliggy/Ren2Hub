@@ -91,6 +91,10 @@ async function fixture(page: Page) {
     groups: [group],
   }
   let config = {
+    total_queue_size: 1024,
+    retry_budget_enabled: true,
+    retry_budget_percent: 10,
+    retry_budget_burst: 20,
     version: 1,
     user_concurrency: 10,
     wait_ms: 5000,
@@ -122,13 +126,26 @@ async function fixture(page: Page) {
       return result(route, {
         channel_id: 12,
         capacity: 20,
+        config_version: 1,
+        revision: 1,
+        started_at: 1,
+        draining: false,
+        rate_status: 'available',
         in_flight: 2,
         queued: 1,
         rate,
       })
     if (path.includes('/runtime/credentials/')) return result(route, rate)
     if (path.includes('/runtime/') || path.endsWith('/self/runtime'))
-      return result(route, { in_flight: 2, queued: 1 })
+      return result(route, {
+        in_flight: 2,
+        queued: 1,
+        capacity: 10,
+        config_version: 1,
+        revision: 1,
+        started_at: 1,
+        draining: false,
+      })
     if (route.request().method() === 'PUT')
       return result(route, route.request().postDataJSON())
     return result(route, policy)
@@ -336,6 +353,44 @@ for (const theme of ['light', 'dark'] as const) {
       await assertNoHorizontalOverflow(page)
       await channel.screenshot({
         path: `output/gateway-${theme}-${viewport.name}-channel.png`,
+      })
+      await page.route('**/api/gateway/runtime/channels/12', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            data: {
+              channel_id: 12,
+              capacity: 20,
+              in_flight: 2,
+              queued: 1,
+              config_version: 2,
+              revision: 9,
+              started_at: 1700000000,
+              draining: true,
+              rate: null,
+              rate_status: 'unavailable',
+            },
+          }),
+        })
+      )
+      await channel
+        .getByRole('button', { name: '重新加载', exact: true })
+        .first()
+        .click()
+      await expect(channel.getByText('2 / 20', { exact: true })).toBeVisible()
+      await expect(
+        channel.getByText('供应商限流状态暂不可用；并发数据仍为本地实际值。', {
+          exact: true,
+        })
+      ).toBeVisible()
+      await expect(
+        channel.getByText('实例正在排空，暂不接收新生成请求。', { exact: true })
+      ).toBeVisible()
+      await assertNoHorizontalOverflow(page)
+      await channel.screenshot({
+        path: `output/gateway-${theme}-${viewport.name}-unavailable.png`,
       })
       await page.keyboard.press('Escape')
 

@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/task/suno"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
@@ -147,7 +148,11 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 	c.Set(service.RouteLiveSelectionRequiredContextKey, true)
 	selection, err := service.SelectLiveTokenRoute(input)
 	if err != nil {
-		return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
+		status := http.StatusServiceUnavailable
+		if errors.Is(err, service.ErrGatewayProviderRateLimit) {
+			status = http.StatusTooManyRequests
+		}
+		return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, status, types.ErrOptionWithSkipRetry())
 	}
 	channel, err := model.GetChannelById(selection.Decision.SelectedChannelID, true)
 	if err != nil {
@@ -246,7 +251,47 @@ func getJSONStringValue(result gjson.Result, field string) (string, error) {
 	return result.String(), nil
 }
 
+type parsedGatewayModel struct {
+	model         *ModelRequest
+	selectChannel bool
+	err           error
+}
+
 func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
+	if cached, ok := c.Get("gateway_parsed_model"); ok {
+		parsed := cached.(parsedGatewayModel)
+		return parsed.model, parsed.selectChannel, parsed.err
+	}
+	request, selectChannel, err := parseModelRequest(c)
+	c.Set("gateway_parsed_model", parsedGatewayModel{request, selectChannel, err})
+	return request, selectChannel, err
+}
+
+func requiresGatewayAdmission(c *gin.Context) bool {
+	switch c.GetInt("relay_mode") {
+	case relayconstant.RelayModeMidjourneyTaskFetch, relayconstant.RelayModeMidjourneyTaskFetchByCondition,
+		relayconstant.RelayModeMidjourneyNotify, relayconstant.RelayModeMidjourneyTaskImageSeed,
+		relayconstant.RelayModeSunoFetch, relayconstant.RelayModeSunoFetchByID, relayconstant.RelayModeVideoFetchByID:
+		return false
+	}
+	return true
+}
+
+func parseModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
+	if strings.HasPrefix(c.Request.URL.Path, "/v1/realtime") {
+		c.Set("relay_mode", relayconstant.RelayModeRealtime)
+		return &ModelRequest{Model: c.Query("model")}, true, nil
+	}
+	if c.Request.URL.Path == "/v1/embeddings" || c.FullPath() == "/v1/engines/:model/embeddings" {
+		request, err := helper.GetAndValidateEmbeddingRequest(c, relayconstant.RelayModeEmbeddings)
+		if err != nil {
+			return nil, false, err
+		}
+		// Keep Gin's path model for repeated validation and RequestURI for tracing.
+		c.Request.URL.Path = "/v1/embeddings"
+		c.Request.URL.RawPath = ""
+		return &ModelRequest{Model: request.Model}, true, nil
+	}
 	var modelRequest ModelRequest
 	shouldSelectChannel := true
 	var err error
@@ -338,6 +383,12 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			c.Set("relay_mode", relayMode)
 		}
 	} else if strings.HasPrefix(c.Request.URL.Path, "/v1beta/models/") || strings.HasPrefix(c.Request.URL.Path, "/v1/models/") {
+		if strings.HasSuffix(c.Request.URL.Path, ":generateContent") || strings.HasSuffix(c.Request.URL.Path, ":streamGenerateContent") {
+			// Validate local input before state lookup can classify parse errors as unavailable state.
+			if _, err := helper.GetAndValidateGeminiRequest(c); err != nil {
+				return nil, false, err
+			}
+		}
 		// Gemini API 路径处理: /v1beta/models/gemini-2.0-flash:generateContent
 		relayMode := relayconstant.RelayModeGemini
 		modelName := extractModelNameFromGeminiPath(c.Request.URL.Path)
@@ -352,18 +403,9 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		}
 		modelRequest.Model = req.Model
 	}
-	if strings.HasPrefix(c.Request.URL.Path, "/v1/realtime") {
-		//wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01
-		modelRequest.Model = c.Query("model")
-	}
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/moderations") {
 		if modelRequest.Model == "" {
 			modelRequest.Model = "text-moderation-stable"
-		}
-	}
-	if strings.HasSuffix(c.Request.URL.Path, "embeddings") {
-		if modelRequest.Model == "" {
-			modelRequest.Model = c.Param("model")
 		}
 	}
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/images/generations") {

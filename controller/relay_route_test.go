@@ -186,7 +186,7 @@ func TestRecoveredKeyProbeIsClaimedOnlyAtSend(t *testing.T) {
 	assert.Equal(t, 1, liveRouteRetryCounters(first).TotalAttempts)
 	require.ErrorIs(t, prepareLiveRouteSend(second, secondInfo, &routeAttemptHealthState{}, "attempt-second", nil), service.ErrRouteHealthUnavailable)
 	assert.Zero(t, liveRouteRetryCounters(second).TotalAttempts)
-	releaseRouteAttemptLease(first)
+	releaseRouteAttempt(first)
 	require.NoError(t, prepareLiveRouteSend(second, secondInfo, &routeAttemptHealthState{}, "attempt-second", nil))
 }
 
@@ -252,8 +252,8 @@ func TestLiveRouteCandidateAdvanceStopsWhenRequestIsCancelled(t *testing.T) {
 
 func TestLiveRouteRenewalFailureDoesNotFailCommittedResponse(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Set("route_live_renewal", service.RouteLeaseRenewal{
-		Failure: func() error { return service.ErrRouteLeaseUnavailable },
+	c.Set("route_live_renewal", service.AttemptMaintenance{
+		Failure: func() error { return service.ErrGatewayStorageUnavailable },
 	})
 	info := &relaycommon.RelayInfo{StartTime: time.Now().Add(-time.Second)}
 	info.MarkValidOutput()
@@ -346,7 +346,7 @@ func TestGetChannelLiveFirstCandidateDoesNotRequireChannelMeta(t *testing.T) {
 	assert.Equal(t, 0, param.GetRetry())
 }
 
-func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *testing.T) {
+func TestAcquireRouteAttemptPermitReleasesCapacityAfterQualificationFailure(t *testing.T) {
 	originalDB, originalRDB, originalRedisEnabled := model.DB, common.RDB, common.RedisEnabled
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
 	require.NoError(t, err)
@@ -366,16 +366,16 @@ func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *te
 		&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{},
 		&model.UserRouteProfile{}, &model.UserRouteGroup{}, &model.UserRouteEntry{},
 		&model.UserChannelEntitlement{}, &model.ChannelModelCapability{},
-		&model.ChannelCapabilitySnapshot{}, &model.ChannelHealth{},
+		&model.ChannelCapabilitySnapshot{}, &model.ChannelHealth{}, &model.Option{},
 	))
 
 	const userID = 9101
 	const channelID = 91011
-	user := model.User{Id: userID, Username: "lease-qualification-user", Password: "password", Status: common.UserStatusEnabled, Group: "default"}
+	user := model.User{Id: userID, Username: "permit-qualification-user", Password: "password", Status: common.UserStatusEnabled, Group: "default"}
 	require.NoError(t, db.Create(&user).Error)
-	token := model.Token{UserId: userID, Key: "lease-qualification-token", Name: "lease-qualification-token", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true}
+	token := model.Token{UserId: userID, Key: "permit-qualification-token", Name: "permit-qualification-token", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true}
 	require.NoError(t, db.Create(&token).Error)
-	channel := model.Channel{Id: channelID, Type: constant.ChannelTypeOpenAI, Key: "lease-qualification-key", Name: "lease-qualification-channel", Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default"}
+	channel := model.Channel{Id: channelID, Type: constant.ChannelTypeOpenAI, Key: "permit-qualification-key", Name: "permit-qualification-channel", Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default"}
 	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, db.Create(&model.Ability{ChannelId: channelID, Group: "default", Model: "gpt-test", Enabled: true}).Error)
 	profile := model.UserRouteProfile{UserID: userID, TokenID: token.Id, Mode: model.RouteModeManual, Version: 1, Status: model.RouteProfileStatusEnabled}
@@ -389,7 +389,7 @@ func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *te
 	require.NoError(t, err)
 	endpoints, err := common.Marshal([]string{string(constant.EndpointTypeOpenAI)})
 	require.NoError(t, err)
-	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, model.ChannelCapabilitySnapshotFence{}, "lease-source", "lease-catalog", []model.ChannelModelCapability{{
+	require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, model.ChannelCapabilitySnapshotFence{}, "permit-source", "permit-catalog", []model.ChannelModelCapability{{
 		RequestModel: "gpt-test", ActualModel: "gpt-test", LabSlug: "openai", Source: "canonical", Confidence: 1,
 		AbilityGroups: string(groups), EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
 		ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
@@ -404,33 +404,32 @@ func TestAcquireRouteAttemptLeaseReleasesCapacityAfterQualificationFailure(t *te
 		Decision: service.RouteDecision{
 			ConfigurationVersion: 1,
 			Candidates: []service.RouteDecisionCandidate{{
-				ChannelID: channelID, RequestModel: "gpt-test", SnapshotVersion: 1, CatalogVersion: "lease-catalog", HealthEpoch: 1,
+				ChannelID: channelID, RequestModel: "gpt-test", SnapshotVersion: 1, CatalogVersion: "permit-catalog", HealthEpoch: 1,
 			}},
 		},
 		Attempts: []service.RouteDecisionCandidate{{
-			ChannelID: channelID, RequestModel: "gpt-test", SnapshotVersion: 1, CatalogVersion: "lease-catalog", HealthEpoch: 1,
+			ChannelID: channelID, RequestModel: "gpt-test", SnapshotVersion: 1, CatalogVersion: "permit-catalog", HealthEpoch: 1,
 		}},
 	})
 	markLiveRouteSecurityQualified(c)
 	markLiveRoutePriceQualified(c)
-	info := &relaycommon.RelayInfo{RequestId: "lease-qualification-request", UserId: userID, TokenId: token.Id, UserGroup: "default", OriginModelName: "gpt-test"}
+	info := &relaycommon.RelayInfo{RequestId: "permit-qualification-request", UserId: userID, TokenId: token.Id, UserGroup: "default", OriginModelName: "gpt-test"}
 	info.PriceData.ChannelRatio = 1
 
-	err = acquireRouteAttemptLease(c, info, &channel, 0)
+	err = acquireRouteAttemptPermit(c, info, &channel, 0)
 	assert.ErrorIs(t, err, service.ErrLiveRouteCandidateInvalid)
-	assert.Equal(t, int64(0), client.ZCard(context.Background(), service.UserRouteLeaseKey(userID)).Val())
-	assert.Equal(t, int64(0), client.ZCard(context.Background(), service.TokenRouteLeaseKey(token.Id)).Val())
-	assert.Equal(t, int64(0), client.ZCard(context.Background(), service.ChannelRouteLeaseKey(channelID)).Val())
-	_, hasLease := c.Get("route_live_lease")
-	assert.False(t, hasLease)
+	assert.Equal(t, int64(0), service.ReadGatewayAdmissionRuntime(service.UserAdmissionKey(userID)).InFlight)
+	assert.Equal(t, int64(0), service.ReadGatewayAdmissionRuntime(service.ChannelAdmissionKey(channelID)).InFlight)
+	_, hasPermit := c.Get("route_channel_permit")
+	assert.False(t, hasPermit)
 	updatedValue, ok := c.Get("route_live_selection")
 	require.True(t, ok)
 	updated := updatedValue.(service.LiveRouteSelection)
 	assert.Equal(t, service.RouteFilterAbilityDisabled, updated.Decision.Candidates[0].FilterReason)
-	assert.Equal(t, "qualification_failed", updated.Decision.LeaseState)
+	assert.Equal(t, service.AdmissionStateReleased, updated.Decision.AdmissionState)
 }
 
-func TestReleaseRouteAttemptLeaseStopsRenewalAndRestoresParentContext(t *testing.T) {
+func TestReleaseRouteAttemptPermitStopsRenewalAndRestoresParentContext(t *testing.T) {
 	originalRDB, originalRedisEnabled := common.RDB, common.RedisEnabled
 	server := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
@@ -441,83 +440,83 @@ func TestReleaseRouteAttemptLeaseStopsRenewalAndRestoresParentContext(t *testing
 		_ = client.Close()
 	})
 
-	resources := []service.RouteLeaseResource{{Key: "route:lease:test:release-order", Capacity: 1}}
-	lease, err := service.AcquireRouteLease(context.Background(), client, "release-request", "release-lease", time.Minute, resources)
+	manager := service.NewAdmissionManager(10)
+	permit, err := manager.TryAcquire(context.Background(), "channel:31", service.AdmissionPolicy{Capacity: 1})
 	require.NoError(t, err)
-	lease.ChannelID = 31
+	permit.ChannelID = 31
 
 	type contextKey string
 	const parentKey contextKey = "parent"
 	parentContext := context.WithValue(context.Background(), parentKey, "preserved")
 	attemptContext, cancel := context.WithCancel(parentContext)
-	renewal := service.StartRouteLeaseRenewal(attemptContext, client, lease, time.Millisecond, time.Minute)
+	renewal := service.StartAttemptMaintenance(attemptContext, time.Millisecond, func(context.Context) error { return nil })
 
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil).WithContext(attemptContext)
-	c.Set("route_live_lease", lease)
-	c.Set("route_live_lease_cancel", context.CancelFunc(cancel))
-	c.Set("route_live_lease_parent_context", parentContext)
+	c.Set("route_channel_permit", permit)
+	c.Set("route_attempt_cancel", context.CancelFunc(cancel))
+	c.Set("route_attempt_parent_context", parentContext)
 	c.Set("route_live_renewal", renewal)
 
-	releaseRouteAttemptLease(c)
+	releaseRouteAttempt(c)
 
 	assert.NoError(t, c.Request.Context().Err())
 	assert.Equal(t, "preserved", c.Request.Context().Value(parentKey))
-	assert.Equal(t, int64(0), client.ZCard(context.Background(), resources[0].Key).Val())
-	_, hasLease := c.Get("route_live_lease")
-	assert.True(t, hasLease)
-	assert.Nil(t, c.MustGet("route_live_lease"))
+	assert.Equal(t, int64(0), manager.Snapshot("channel:31").InFlight)
+	_, hasPermit := c.Get("route_channel_permit")
+	assert.True(t, hasPermit)
+	assert.Nil(t, c.MustGet("route_channel_permit"))
 }
 
-func TestReleaseRouteAttemptLeaseRecordsRenewalFailure(t *testing.T) {
+func TestReleaseRouteAttemptPermitRecordsRenewalFailure(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	selection := service.LiveRouteSelection{
 		Source: service.RouteSourceAutoLab,
 		Decision: service.RouteDecision{Candidates: []service.RouteDecisionCandidate{{
-			ChannelID: 31, LeaseState: service.RouteLeaseStateAcquired,
+			ChannelID: 31, AdmissionState: service.AdmissionStateAcquired,
 		}}},
 		Attempts: []service.RouteDecisionCandidate{{ChannelID: 31}},
 	}
 	c.Set("route_live_selection", selection)
 	done := make(chan error)
 	close(done)
-	c.Set("route_live_renewal", service.RouteLeaseRenewal{
+	c.Set("route_live_renewal", service.AttemptMaintenance{
 		Done:    done,
 		Stop:    func() {},
-		Failure: func() error { return service.ErrRouteLeaseUnavailable },
+		Failure: func() error { return service.ErrGatewayStorageUnavailable },
 	})
 
-	releaseRouteAttemptLease(c)
+	releaseRouteAttempt(c)
 	updatedValue, ok := c.Get("route_live_selection")
 	require.True(t, ok)
 	updated := updatedValue.(service.LiveRouteSelection)
-	assert.Equal(t, service.RouteLeaseStateRenewalFailed, updated.Decision.Candidates[0].LeaseState)
+	assert.Equal(t, service.AdmissionStateRenewalFailed, updated.Decision.Candidates[0].AdmissionState)
 	assert.True(t, c.GetBool(liveRouteRenewalFailedKey))
 }
 
 func TestLiveRouteRenewalFailureIsAdmissionError(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Set("route_live_renewal", service.RouteLeaseRenewal{
-		Failure: func() error { return service.ErrRouteLeaseUnavailable },
+	c.Set("route_live_renewal", service.AttemptMaintenance{
+		Failure: func() error { return service.ErrGatewayStorageUnavailable },
 	})
 
 	assert.True(t, liveRouteRenewalFailed(c))
-	classification := service.ClassifyRouteError(http.StatusServiceUnavailable, service.RouteLeaseFailureCode, service.ErrRouteLeaseUnavailable.Error(), false)
+	classification := service.ClassifyRouteError(http.StatusServiceUnavailable, service.AdmissionFailureCode, service.ErrGatewayStorageUnavailable.Error(), false)
 	assert.Equal(t, service.RouteErrorAdmission, classification.Class)
 	assert.False(t, classification.Failoverable)
 }
 
-func TestLiveRouteLeaseRenewalFailureIsDetectableWithoutProviderError(t *testing.T) {
+func TestLiveAttemptMaintenanceFailureIsDetectableWithoutProviderError(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Set("route_live_renewal", service.RouteLeaseRenewal{
-		Failure: func() error { return service.ErrRouteLeaseUnavailable },
+	c.Set("route_live_renewal", service.AttemptMaintenance{
+		Failure: func() error { return service.ErrGatewayStorageUnavailable },
 	})
 	assert.True(t, liveRouteRenewalFailed(c))
 	// Once observed, the failure is latched for the request so a cleared
 	// renewal object cannot reopen a retry path after capacity was lost.
-	c.Set("route_live_renewal", service.RouteLeaseRenewal{})
+	c.Set("route_live_renewal", service.AttemptMaintenance{})
 	assert.True(t, liveRouteRenewalFailed(c))
 	c2, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c2.Set("route_live_renewal", service.RouteLeaseRenewal{})
+	c2.Set("route_live_renewal", service.AttemptMaintenance{})
 	assert.False(t, liveRouteRenewalFailed(c2))
 }

@@ -7,6 +7,7 @@ import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useAuthStore } from '@/stores/auth'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import GatewayConfigPanel from './GatewayConfigPanel.vue'
+import GatewayRuntimeDetails from './GatewayRuntimeDetails.vue'
 import type { GatewayChannelRuntime, GatewayRateRuntime } from '@/types/gateway'
 const props = defineProps<{ channelId: number }>()
 const { t } = useI18n()
@@ -101,6 +102,7 @@ watch(
       {{ t('common.loading') }}
     </p>
     <div v-if="runtime" class="space-y-3">
+      <GatewayRuntimeDetails :runtime="runtime" />
       <div class="flex flex-wrap gap-5 text-sm">
         <span
           >{{ t('gateway.inFlight') }}
@@ -111,7 +113,14 @@ watch(
           >{{ t('gateway.queued') }} <strong>{{ runtime.queued }}</strong></span
         >
       </div>
-      <dl class="grid gap-3 sm:grid-cols-2">
+      <p
+        v-if="runtime.rate === null"
+        role="status"
+        class="text-sm text-[var(--status-warning-text)]"
+      >
+        {{ t('gateway.rateUnavailable') }}
+      </p>
+      <dl v-else class="grid gap-3 sm:grid-cols-2">
         <div v-for="metric in metrics" :key="metric">
           <dt class="text-xs text-[var(--text-tertiary)]">
             {{ t(`gateway.${metric}`) }}

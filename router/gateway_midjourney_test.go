@@ -237,6 +237,9 @@ func TestGatewayMidjourneyProviderRPMDoesNotPrechargeOrPenalize(t *testing.T) {
 		_, _ = io.WriteString(w, `{"code":1,"result":"provider-mj"}`)
 	})
 	config := model.DefaultGatewayConfig()
+	// This case isolates a fully unavailable pool; independent fallback is
+	// covered separately by the channel failover tests.
+	require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", 4).Update("status", common.ChannelStatusManuallyDisabled).Error)
 	encoded, err := common.Marshal(config)
 	require.NoError(t, err)
 	require.NoError(t, model.DB.Create(&model.Option{Key: model.GatewayConfigKey, Value: string(encoded)}).Error)
@@ -322,7 +325,8 @@ func TestGatewayMidjourneyFourthAvailableCandidateAndCancellation(t *testing.T) 
 		require.NoError(t, channel.AddAbilities(model.DB))
 		if i == 0 {
 			for slot := 0; slot < channel.CapacityTotal; slot++ {
-				_, err := service.AcquireRouteLease(context.Background(), common.RDB, fmt.Sprintf("extra-%d", slot), fmt.Sprintf("extra-%d", slot), time.Minute, []service.RouteLeaseResource{{Key: service.ChannelRouteLeaseKey(channel.Id), Capacity: channel.CapacityTotal}})
+				permit, _, err := service.AcquireGatewayChannelPermit(context.Background(), fmt.Sprintf("extra-%d", slot), channel.Id, false, nil)
+				defer permit.Release()
 				require.NoError(t, err)
 			}
 		}
@@ -330,7 +334,8 @@ func TestGatewayMidjourneyFourthAvailableCandidateAndCancellation(t *testing.T) 
 	for _, id := range []int{1, 4} {
 		for slot := 0; slot < 10; slot++ {
 			name := fmt.Sprintf("held-%d-%d", id, slot)
-			_, err := service.AcquireRouteLease(context.Background(), common.RDB, name, name, time.Minute, []service.RouteLeaseResource{{Key: service.ChannelRouteLeaseKey(id), Capacity: 10}})
+			permit, _, err := service.AcquireGatewayChannelPermit(context.Background(), name, id, false, nil)
+			defer permit.Release()
 			require.NoError(t, err)
 		}
 	}

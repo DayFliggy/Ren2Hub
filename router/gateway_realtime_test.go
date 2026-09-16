@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gorilla/websocket"
@@ -61,12 +60,12 @@ func relayRealtimeEvent(t *testing.T, sender, recipient *websocket.Conn, event s
 	assert.JSONEq(t, event, string(message))
 }
 
-func awaitRealtimeLeasesReleased(t *testing.T) {
+func awaitGatewayPermitsReleased(t *testing.T) {
 	t.Helper()
 	require.Eventually(t, func() bool {
-		for _, key := range []string{service.UserRouteLeaseKey(1), service.ChannelRouteLeaseKey(1), service.ChannelRouteLeaseKey(4)} {
-			count, err := common.RDB.ZCard(context.Background(), key).Result()
-			if err != nil || count != 0 {
+		for _, key := range []string{service.UserAdmissionKey(1), service.ChannelAdmissionKey(1), service.ChannelAdmissionKey(4)} {
+			state := service.ReadGatewayAdmissionRuntime(key)
+			if state.InFlight != 0 || state.Queued != 0 {
 				return false
 			}
 		}
@@ -80,9 +79,8 @@ func TestGatewayRealtimeTerminationAndAccounting(t *testing.T) {
 			url, key, accepted, sends := setupGatewayRealtime(t)
 			client, upstream := dialGatewayRealtime(t, url, key, accepted)
 			relayRealtimeEvent(t, upstream, client, `{"type":"session.created","session":{"id":"isolated-session"}}`)
-			for _, resource := range []string{service.UserRouteLeaseKey(1), service.ChannelRouteLeaseKey(1)} {
-				count, err := common.RDB.ZCard(context.Background(), resource).Result()
-				require.NoError(t, err)
+			for _, resource := range []string{service.UserAdmissionKey(1), service.ChannelAdmissionKey(1)} {
+				count := service.ReadGatewayAdmissionRuntime(resource).InFlight
 				assert.EqualValues(t, 1, count, "Realtime retains both slots during the connection")
 			}
 			hasOutput := ending != "client_invalid" && ending != "input_without_output"
@@ -107,7 +105,7 @@ func TestGatewayRealtimeTerminationAndAccounting(t *testing.T) {
 				relayRealtimeEvent(t, client, upstream, `{"type":"session.update","session":{"instructions":"please answer with a short explanation"}}`)
 				require.NoError(t, client.Close())
 			}
-			awaitRealtimeLeasesReleased(t)
+			awaitGatewayPermitsReleased(t)
 			assert.EqualValues(t, 1, sends.Load(), "a committed WebSocket session must never replay")
 			var user model.User
 			var logs []model.Log
@@ -152,7 +150,7 @@ func TestGatewayRealtimeBillingRecoveryDoesNotReplay(t *testing.T) {
 	}))
 	t.Cleanup(func() { _ = model.DB.Callback().Create().Remove("realtime_settlement_fault") })
 	require.NoError(t, upstream.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second)))
-	awaitRealtimeLeasesReleased(t)
+	awaitGatewayPermitsReleased(t)
 	assert.EqualValues(t, 1, sends.Load())
 	var recovery model.BillingRecovery
 	require.NoError(t, model.DB.First(&recovery).Error)

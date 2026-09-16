@@ -10,6 +10,10 @@ export interface GatewayRateLimit {
   tpm: number
 }
 export interface GatewayConfig {
+  total_queue_size: number
+  retry_budget_enabled: boolean
+  retry_budget_percent: number
+  retry_budget_burst: number
   version: number
   user_concurrency: number
   wait_ms: number
@@ -33,6 +37,11 @@ export interface GatewayAdmission {
   sources: Record<keyof GatewayAdmission['effective'], GatewaySource>
 }
 export interface GatewayRuntime {
+  capacity: number
+  config_version: number
+  revision: number
+  started_at: number
+  draining: boolean
   in_flight: number
   queued: number
 }
@@ -45,5 +54,6 @@ export interface GatewayRateRuntime {
 export interface GatewayChannelRuntime extends GatewayRuntime {
   channel_id: number
   capacity: number
-  rate: GatewayRateRuntime
+  rate: GatewayRateRuntime | null
+  rate_status: 'available' | 'unavailable'
 }

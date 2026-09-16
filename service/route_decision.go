@@ -1,8 +1,10 @@
 package service
 
 import (
-	"github.com/QuantumNous/new-api/relaykit/types"
 	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
 type RouteSource string
@@ -50,10 +52,11 @@ type RouteDecisionCandidate struct {
 	HealthEpoch     int64                `json:"health_epoch,omitempty"`
 	CatalogVersion  string               `json:"catalog_version,omitempty"`
 	Score           *RouteScoreBreakdown `json:"score_breakdown,omitempty"`
-	LeaseState      string               `json:"lease_state,omitempty"`
+	AdmissionState  string               `json:"admission_state,omitempty"`
 }
 
 type RouteDecision struct {
+	RetryBudgetExhausted     bool                         `json:"retry_budget_exhausted,omitempty"`
 	Event                    string                       `json:"event"`
 	RequestID                string                       `json:"request_id"`
 	RouteSource              RouteSource                  `json:"route_source"`
@@ -73,7 +76,7 @@ type RouteDecision struct {
 	RetryAttempt             int                          `json:"retry_attempt"`
 	SameResourceRetry        int                          `json:"same_resource_retry_attempt"`
 	FailoverAttempt          int                          `json:"failover_attempt"`
-	LeaseState               string                       `json:"lease_state,omitempty"`
+	AdmissionState           string                       `json:"admission_state,omitempty"`
 	FinalError               string                       `json:"final_error,omitempty"`
 	RejectionOrigin          AttemptOrigin                `json:"rejection_origin,omitempty"`
 	GeneratedAt              int64                        `json:"generated_at"`
@@ -86,6 +89,36 @@ type RouteDecision struct {
 	TokenBudget              int64                        `json:"token_budget,omitempty"`
 	TokenBudgetSource        string                       `json:"token_budget_source,omitempty"`
 	HealthEpoch              int64                        `json:"health_epoch,omitempty"`
+}
+
+func (decision *RouteDecision) UnmarshalJSON(data []byte) error {
+	type current RouteDecision
+	value := struct {
+		*current
+		Legacy string `json:"lease_state"`
+	}{current: (*current)(decision)}
+	if err := common.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	if decision.AdmissionState == "" {
+		decision.AdmissionState = value.Legacy
+	}
+	return nil
+}
+
+func (candidate *RouteDecisionCandidate) UnmarshalJSON(data []byte) error {
+	type current RouteDecisionCandidate
+	value := struct {
+		*current
+		Legacy string `json:"lease_state"`
+	}{current: (*current)(candidate)}
+	if err := common.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	if candidate.AdmissionState == "" {
+		candidate.AdmissionState = value.Legacy
+	}
+	return nil
 }
 
 func NewRouteDecision(requestID string, source RouteSource, model string, configurationVersion int64) RouteDecision {

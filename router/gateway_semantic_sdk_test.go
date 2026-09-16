@@ -206,7 +206,7 @@ func runGatewaySemanticSDK(t *testing.T, runtime, script string) {
 	output, err := command.CombinedOutput()
 	t.Log(string(output))
 	require.NoError(t, err)
-	awaitRealtimeLeasesReleased(t)
+	awaitGatewayPermitsReleased(t)
 	for _, test := range cases {
 		expected := 1
 		if test.Reject {

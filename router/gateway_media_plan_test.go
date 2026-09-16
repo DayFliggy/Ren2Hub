@@ -86,7 +86,7 @@ func TestGatewayMediaPlanRejectsBeforeSendAndPreservesImages(t *testing.T) {
 							assert.Contains(t, output, "hello")
 							assert.EqualValues(t, 1, sends.Load())
 						}
-						awaitRealtimeLeasesReleased(t)
+						awaitGatewayPermitsReleased(t)
 						var user model.User
 						var token model.Token
 						require.Eventually(t, func() bool {

@@ -35,6 +35,7 @@ type ToolRequirement struct {
 type ConversionPlan struct {
 	From              types.RelayFormat            `json:"from"`
 	To                types.RelayFormat            `json:"to"`
+	Operation         string                       `json:"operation,omitempty"`
 	Native            bool                         `json:"native"`
 	RequestProjection string                       `json:"request_projection,omitempty"`
 	RequestConverter  string                       `json:"request_converter,omitempty"`
@@ -61,6 +62,16 @@ func AnalyzeRequest(request any) (RequestRequirements, error) {
 		return RequestRequirements{}, err
 	}
 	req := RequestRequirements{Format: format, Operation: "text"}
+	if format == types.RelayFormatOpenAI {
+		switch {
+		case payload["instruction"] != nil:
+			req.Operation = "edit"
+		case payload["prompt"] != nil:
+			req.Operation = "completion"
+		case payload["input"] != nil:
+			req.Operation = "moderation"
+		}
+	}
 	if format == types.RelayFormatOpenAIResponses && payload["instructions"] != nil {
 		if _, ok := payload["instructions"].(string); !ok {
 			return req, fmt.Errorf("instructions must be a string or null")
@@ -166,12 +177,15 @@ func PlanConversion(req RequestRequirements, target types.RelayFormat, policy ty
 	if policy == "" {
 		policy = types.ConversionLossPolicySafe
 	}
-	plan := ConversionPlan{From: req.Format, To: target, Native: req.Format == target, Policy: policy}
+	plan := ConversionPlan{From: req.Format, To: target, Operation: req.Operation, Native: req.Format == target, Policy: policy}
 	if err := policy.Validate(); err != nil {
 		return plan, err
 	}
 	if req.Format == "" || target == "" {
 		return plan, fmt.Errorf("source and target relay formats are required")
+	}
+	if req.Format == types.RelayFormatOpenAI && req.Operation != "" && req.Operation != "text" && !plan.Native {
+		return plan, fmt.Errorf("conversion for OpenAI %s requests is not implemented", req.Operation)
 	}
 	if slices.Contains(req.Features, "multiple_candidates") &&
 		(target == types.RelayFormatClaude || target == types.RelayFormatOpenAIResponses) {
@@ -272,7 +286,8 @@ func ExecuteConversionPlan(ctx context.Context, meta convmeta.Meta, plan Convers
 	if err != nil {
 		return &RequestResult{Diagnostics: current.Diagnostics}, err
 	}
-	if current.From != plan.From || current.Native != plan.Native || current.RequestConverter != plan.RequestConverter || current.ResponseConverter != plan.ResponseConverter {
+	if current.From != plan.From || current.Native != plan.Native || current.RequestConverter != plan.RequestConverter || current.ResponseConverter != plan.ResponseConverter ||
+		(plan.Operation != "" && current.Operation != plan.Operation) {
 		return nil, fmt.Errorf("conversion plan no longer matches the request")
 	}
 	if plan.Native {

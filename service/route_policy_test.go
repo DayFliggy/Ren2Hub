@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -30,7 +29,7 @@ func setupChannelAdmissionTest(t *testing.T) *gorm.DB {
 		require.NoError(t, err)
 		require.NoError(t, sqlDB.Close())
 	})
-	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.ChannelCapabilitySnapshot{}, &model.ChannelHealth{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.Channel{}, &model.ChannelCapabilitySnapshot{}, &model.ChannelHealth{}))
 	return db
 }
 
@@ -38,21 +37,22 @@ func TestChannelAdmissionSharesCapacityAcrossModelsAndUsers(t *testing.T) {
 	db := setupChannelAdmissionTest(t)
 	require.NoError(t, db.Create(&model.Channel{Id: 7, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: 1.5}).Error)
 	ctx := context.Background()
-	first, channel, err := AcquireConfiguredRouteLease(ctx, "first", 7, 10, 20, "gpt-5", time.Minute)
+	first, channel, err := AcquireGatewayChannelPermit(ctx, "first", 7, false, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1.5, channel.ChannelRatio)
-	_, _, err = AcquireConfiguredRouteLease(ctx, "second", 7, 11, 21, "claude-sonnet-4", time.Minute)
-	assert.ErrorIs(t, err, ErrRouteLeaseCapacity)
-	require.NoError(t, ReleaseConfiguredRouteLease(ctx, first))
-	second, _, err := AcquireConfiguredRouteLease(ctx, "second", 7, 11, 21, "claude-sonnet-4", time.Minute)
+	_, _, err = AcquireGatewayChannelPermit(ctx, "second", 7, false, nil)
+	assert.ErrorIs(t, err, ErrAdmissionCapacity)
+	first.Release()
+	second, _, err := AcquireGatewayChannelPermit(ctx, "second", 7, false, nil)
 	require.NoError(t, err)
-	require.NoError(t, ReleaseConfiguredRouteLease(ctx, second))
+	second.Release()
 	common.RedisEnabled = false
-	_, _, err = AcquireConfiguredRouteLease(ctx, "offline", 7, 10, 20, "gpt-5", time.Minute)
-	assert.ErrorIs(t, err, ErrRouteLeaseUnavailable)
+	offline, _, err := AcquireGatewayChannelPermit(ctx, "offline", 7, false, nil)
+	require.NoError(t, err)
+	offline.Release()
 }
 
-func TestChannelAdmissionRechecksCapacityPriceAndStatus(t *testing.T) {
+func TestChannelAdmissionRechecksPriceAndStatusAfterCapacityUpdate(t *testing.T) {
 	db := setupChannelAdmissionTest(t)
 	require.NoError(t, db.Create(&model.Channel{Id: 7, Status: common.ChannelStatusEnabled, CapacityTotal: 3, ChannelRatio: 1.5}).Error)
 	ctx := context.Background()
@@ -62,9 +62,13 @@ func TestChannelAdmissionRechecksCapacityPriceAndStatus(t *testing.T) {
 		require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 7).Updates(update).Error)
 		current, err := GetRouteRuntimeState(ctx, 7, "gpt-5")
 		require.NoError(t, err)
-		assert.ErrorIs(t, RecheckRouteLeaseRuntime(expected, current), ErrRouteLeaseRuntime)
+		if current.ChannelRatio == expected.ChannelRatio {
+			assert.NoError(t, RecheckRouteRuntime(expected, current))
+		} else {
+			assert.ErrorIs(t, RecheckRouteRuntime(expected, current), ErrAdmissionRuntime)
+		}
 	}
 	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 7).Update("status", common.ChannelStatusManuallyDisabled).Error)
-	_, _, err = AcquireConfiguredRouteLease(ctx, "disabled", 7, 10, 20, "gpt-5", time.Minute)
-	assert.ErrorIs(t, err, ErrRouteLeaseRuntime)
+	_, _, err = AcquireGatewayChannelPermit(ctx, "disabled", 7, false, nil)
+	assert.ErrorIs(t, err, ErrAdmissionRuntime)
 }

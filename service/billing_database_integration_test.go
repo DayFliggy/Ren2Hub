@@ -52,9 +52,43 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 				"duplicate_finalization", "funding_failure", "funding_marker_failure", "token_failure",
 				"statistics_failure", "log_insert_failure", "log_completion_failure", "canceled_request",
 				"playground_token_identity", "free_consumption", "concurrent_delivery", "refund_before_settlement",
+				"zero_precharge_refund", "zero_precharge_refund_completion_failure",
 			} {
 				t.Run(scenario, func(t *testing.T) {
 					c, info, cancel := seedBillingIntegrationRequest(t, index+1, scenario)
+					if scenario == "zero_precharge_refund" || scenario == "zero_precharge_refund_completion_failure" {
+						session := info.Billing.(*BillingSession)
+						require.Zero(t, session.GetPreConsumedQuota())
+						require.True(t, session.NeedsRefund())
+						removeFailure := injectBillingIntegrationFailure(t, mainDB, logDB, scenario)
+						t.Cleanup(func() {
+							if removeFailure != nil {
+								removeFailure()
+							}
+						})
+						session.Refund(c)
+						if removeFailure != nil {
+							require.Error(t, info.BillingRefundError)
+							assert.True(t, session.NeedsRefund())
+							removeFailure()
+							removeFailure = nil
+						}
+						session.Refund(c)
+						session.Refund(c)
+						require.NoError(t, info.BillingRefundError)
+						assert.False(t, session.NeedsRefund())
+						select {
+						case <-session.recoveryDone:
+						default:
+							t.Error("zero-precharge refund did not stop its heartbeat")
+						}
+						var recovery model.BillingRecovery
+						require.NoError(t, mainDB.Where("request_id = ?", info.RequestId).First(&recovery).Error)
+						assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
+						assert.True(t, model.BillingRecoveryRefundComplete(recovery))
+						assertBillingIntegrationBalances(t, info, 100, 100, 0, 0, 0, 0)
+						return
+					}
 					source := "estimated"
 					if index%2 == 0 {
 						source = "provider_and_estimated"
@@ -246,7 +280,11 @@ func seedBillingIntegrationRequest(t *testing.T, id int, scenario string) (*gin.
 		UserSetting: dto.UserSetting{BillingPreference: "wallet_only"}, IsPlayground: scenario == "playground_token_identity",
 		ChannelMeta: &relaycommon.ChannelMeta{ChannelId: id},
 	}
-	apiErr := PreConsumeBilling(c, 5, info)
+	precharge := 5
+	if scenario == "zero_precharge_refund" || scenario == "zero_precharge_refund_completion_failure" {
+		precharge = 0
+	}
+	apiErr := PreConsumeBilling(c, precharge, info)
 	require.Nil(t, apiErr, "%v", apiErr)
 	require.NoError(t, model.TouchBillingRecovery(info.RequestId))
 	require.NoError(t, model.TouchBillingRecovery(info.RequestId))
@@ -258,14 +296,15 @@ func injectBillingIntegrationFailure(t *testing.T, mainDB, logDB *gorm.DB, scena
 	t.Helper()
 	const callback = "test:billing-failure"
 	switch scenario {
-	case "funding_failure", "token_failure", "statistics_failure", "log_completion_failure":
+	case "funding_failure", "token_failure", "statistics_failure", "log_completion_failure", "zero_precharge_refund_completion_failure":
 		require.NoError(t, mainDB.Callback().Update().Before("gorm:update").Register(callback, func(tx *gorm.DB) {
 			values, _ := tx.Statement.Dest.(map[string]interface{})
 			_, balanceChange := values["quota"]
 			if scenario == "funding_failure" && tx.Statement.Table == "users" && balanceChange ||
 				scenario == "token_failure" && tx.Statement.Table == "tokens" ||
 				scenario == "statistics_failure" && tx.Statement.Table == "channels" ||
-				scenario == "log_completion_failure" && values["consumption_state"] == model.BillingRecoveryStateCompleted {
+				scenario == "log_completion_failure" && values["consumption_state"] == model.BillingRecoveryStateCompleted ||
+				scenario == "zero_precharge_refund_completion_failure" && tx.Statement.Table == "billing_recoveries" && values["status"] == model.BillingRecoveryStatusRefunded {
 				tx.AddError(assert.AnError)
 			}
 		}))

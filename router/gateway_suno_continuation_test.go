@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -166,11 +165,11 @@ func TestGatewaySunoContinuationUnavailableOwnerDoesNotFallback(t *testing.T) {
 		gatewaySunoSubmitResponse(w)
 	})
 	body := fmt.Sprintf(`{"task_id":%q,"continue_clip_id":"clip-one"}`, task.TaskID)
-	held, _, err := service.AcquireConfiguredRouteLease(context.Background(), "occupied-suno-origin", task.ChannelId, task.UserId, task.PrivateData.TokenId, "suno_music", time.Minute)
+	held, _, err := service.AcquireGatewayChannelPermit(context.Background(), "occupied-suno-origin", task.ChannelId, false, nil)
 	require.NoError(t, err)
 	code, response := postGatewayTask(t, url, key, "/suno/submit/music", body)
-	assert.Equal(t, http.StatusServiceUnavailable, code, response)
-	require.NoError(t, service.ReleaseConfiguredRouteLease(context.Background(), held))
+	assert.Equal(t, http.StatusTooManyRequests, code, response)
+	held.Release()
 	for _, update := range []map[string]any{
 		{"status": common.ChannelStatusManuallyDisabled},
 		{"status": common.ChannelStatusEnabled, "key": "replacement-key"},

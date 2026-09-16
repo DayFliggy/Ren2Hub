@@ -246,8 +246,15 @@ func main() {
 	shutdownTimeout := time.Duration(common.GetEnvOrDefault("SHUTDOWN_TIMEOUT_SECONDS", 120)) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
+	service.BeginGatewayDrain()
 	if err := srv.Shutdown(ctx); err != nil {
 		common.SysError(fmt.Sprintf("server forced to shutdown: %v", err))
+	}
+	if err := service.WaitGatewayDrain(ctx); err != nil {
+		common.SysError("gateway drain deadline reached: " + err.Error())
+		if err := srv.Close(); err != nil {
+			common.SysError("server close failed: " + err.Error())
+		}
 	}
 	// 内存中的看板数据保存入库，避免重启丢失未落库数据 (issue #5679)
 	if common.DataExportEnabled {
@@ -339,6 +346,9 @@ func InitResources() error {
 		}
 	}
 	model.InitOptionMap()
+	if err := service.InitGatewayAdmission(context.Background()); err != nil {
+		return fmt.Errorf("initialize local gateway admission: %w", err)
+	}
 
 	// 清理旧的磁盘缓存文件
 	common.CleanupOldCacheFiles()

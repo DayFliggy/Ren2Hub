@@ -1,5 +1,14 @@
 export default {
   gateway: {
+    configVersion: '配置版本',
+    runtimeRevision: '运行态修订',
+    startedAt: '实例启动时间',
+    draining: '实例正在排空，暂不接收新生成请求。',
+    totalQueue: '进程总等待人数上限',
+    retryPercent: '首次发送补充重试额度（%）',
+    retryBurst: '重试额度储备上限',
+    retryEnabled: '启用整体重试预算',
+    rateUnavailable: '供应商限流状态暂不可用；并发数据仍为本地实际值。',
     title: '网关准入',
     accountLimits: '账户有效限制',
     providerLimits: '上游限流',

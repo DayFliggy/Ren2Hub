@@ -41,9 +41,9 @@ var gatewayMetrics = struct {
 
 func gatewayQueueCounter(resourceKey string) *gatewayQueueCounters {
 	switch {
-	case strings.HasPrefix(resourceKey, routeLeasePrefix+":user:"):
+	case strings.HasPrefix(resourceKey, "user:"):
 		return &gatewayMetrics.user
-	case strings.HasPrefix(resourceKey, routeLeasePrefix+":channel:"):
+	case strings.HasPrefix(resourceKey, "channel:"):
 		return &gatewayMetrics.channel
 	default:
 		return nil
@@ -51,11 +51,14 @@ func gatewayQueueCounter(resourceKey string) *gatewayQueueCounters {
 }
 
 type GatewayMetricsSnapshot struct {
+	SchemaVersion        int                          `json:"schema_version"`
+	Admission            AdmissionMetrics             `json:"admission"`
+	RetryBudget          RetryBudgetSnapshot          `json:"retry_budget"`
+	Maintenance          AttemptMaintenanceMetrics    `json:"attempt_maintenance"`
 	CounterScope         string                       `json:"counter_scope"`
 	StartedAt            int64                        `json:"started_at"`
 	UserQueue            GatewayQueueMetrics          `json:"user_queue"`
 	ChannelQueue         GatewayQueueMetrics          `json:"channel_queue"`
-	Leases               RouteLeaseMetricsSnapshot    `json:"leases"`
 	StateBindingFailures uint64                       `json:"state_binding_failure_total"`
 	RecoveryScope        string                       `json:"recovery_scope"`
 	Recovery             model.BillingRecoveryBacklog `json:"billing_recovery"`
@@ -70,8 +73,9 @@ func ReadGatewayMetrics(ctx context.Context) (GatewayMetricsSnapshot, error) {
 	}
 	return GatewayMetricsSnapshot{
 		CounterScope: "instance", StartedAt: gatewayMetrics.startedAt,
-		UserQueue: gatewayMetrics.user.snapshot(), ChannelQueue: gatewayMetrics.channel.snapshot(),
-		Leases: RouteLeaseMetrics(), StateBindingFailures: gatewayMetrics.stateBindingFailures.Load(),
+		Maintenance: ReadAttemptMaintenanceMetrics(),
+		UserQueue:   gatewayMetrics.user.snapshot(), ChannelQueue: gatewayMetrics.channel.snapshot(),
+		SchemaVersion: 2, Admission: gatewayAdmission.Metrics(), RetryBudget: gatewayRetries.Snapshot(), StateBindingFailures: gatewayMetrics.stateBindingFailures.Load(),
 		RecoveryScope: "database", Recovery: backlog,
 	}, nil
 }

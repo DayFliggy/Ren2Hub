@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -259,7 +260,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// Admission precedes billing; retries reserve any price increase.
 	if info.BeforeUpstream != nil {
 		if err := info.BeforeUpstream(); err != nil {
-			return nil, service.TaskErrorWrapperLocal(err, "route_lease_failed", http.StatusServiceUnavailable)
+			return nil, service.TaskErrorWrapperLocal(err, service.GatewayAdmissionErrorCode(err), service.GatewayAdmissionHTTPStatus(err))
 		}
 	}
 	info.ForcePreConsume = true
@@ -313,7 +314,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	info.UpstreamAccepted = resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300
 	if !info.UpstreamAccepted {
 		responseBody, _ := io.ReadAll(resp.Body)
-		return nil, service.TaskErrorWrapper(fmt.Errorf("%s", string(responseBody)), "fail_to_fetch_task", resp.StatusCode)
+		apiErr := types.NewErrorWithStatusCode(errors.New(string(responseBody)), types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
+		apiErr.RetryAfter, _ = service.ParseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+		return nil, service.TaskErrorWrapper(apiErr, "fail_to_fetch_task", resp.StatusCode)
 	}
 
 	// 10. 返回 OtherRatios 给下游（header 必须在 DoResponse 写 body 之前设置）
