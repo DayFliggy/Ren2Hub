@@ -1312,6 +1312,9 @@ func finalizeLiveRouteDecision(c *gin.Context, info *relaycommon.RelayInfo, apiE
 		selection.Decision.TokenBudgetSource = c.GetString("gateway_token_budget_source")
 		if counters.TotalAttempts > 0 {
 			selection.Decision.RetryAttempt = counters.TotalAttempts - 1
+			// Later candidate checks may clear or replace the selected channel
+			// without sending. Final evidence belongs to the last actual send.
+			selection.Decision.SelectedChannelID = c.GetInt(liveRoutePreviousChannelKey)
 		}
 		selection.Decision.SameResourceRetry = counters.SameChannelAttempts + counters.SameKeyAttempts
 		selection.Decision.FailoverAttempt = counters.FailoverAttempts
