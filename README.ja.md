@@ -55,7 +55,7 @@
 
 ## 📝 プロジェクト説明
 
-このチェックアウトは Ren2Hub です。現在のルーティング、受付制御、API、リリース契約は[ローカルドキュメント](docs/README.md)を参照してください。以下の上流プロジェクトの紹介、リンク、配置例は参考資料であり、上流イメージにはこのチェックアウトの変更は含まれません。Ren2Hub は単一プロセスのローカル FIFO を使用し、新旧バージョンを順番に切り替えます。RenAI ワークスペースでは専用の配置設定と PostgreSQL を使用します。
+このチェックアウトは Ren2Hub です。現在のルーティング、受付制御、API、リリース契約は[ローカルドキュメント](docs/README.md)を参照してください。上流プロジェクトの紹介と帰属情報を保持しています。配置には [Ren2Hub 導入手順](docs/installation/DOCKER.md)を使用してください。上流イメージにはこのチェックアウトの変更は含まれません。Ren2Hub は単一プロセスのローカル FIFO を使用し、新旧バージョンを順番に切り替えます。RenAI ワークスペースでは専用の配置設定と PostgreSQL を使用します。
 
 > [!IMPORTANT]
 > - 本プロジェクトは、合法的に許可された AI API ゲートウェイ、組織レベルの認証、マルチモデル管理、利用量分析、コスト管理、プライベートデプロイのシナリオのみを対象としています。
@@ -110,55 +110,7 @@
 
 ## 🚀 クイックスタート
 
-### Docker Composeを使用（推奨）
-
-```bash
-# プロジェクトをクローン
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
-
-# docker-compose.yml 設定を編集
-nano docker-compose.yml
-
-# サービスを起動
-docker-compose up -d
-```
-
-<details>
-<summary><strong>Dockerコマンドを使用</strong></summary>
-
-```bash
-# 最新のイメージをプル
-docker pull calciumion/new-api:latest
-
-# SQLiteを使用（デフォルト）
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
-
-# MySQLを使用
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
-```
-
-> **💡 ヒント:** `-v ./data:/data` は現在のディレクトリの `data` フォルダにデータを保存します。絶対パスに変更することもできます：`-v /your/custom/path:/data`
-
-</details>
-
----
-
-🎉 デプロイが完了したら、`http://localhost:3000` にアクセスして使用を開始してください！
-
-> [!WARNING]
-> 本プロジェクトを公衆向け生成 AI サービスまたは API 再販サービスとして運営する場合、ユーザーは届出、コンテンツセキュリティ、本人確認、ログ保持、税務、決済、上流認可などの必要なコンプライアンス義務を先に完了してください。
-
-📖 その他のデプロイ方法については[デプロイガイド](https://docs.newapi.pro/ja/docs/installation)を参照してください。
+現在の Ren2Hub ソースは[単一インスタンスの Docker 導入手順](docs/installation/DOCKER.md)に従って構築してください。Go バックエンドと Vue フロントエンドをビルドし、PostgreSQL と Redis を使用します。必要なシークレットを設定してから起動します。公開先は `127.0.0.1:3000` のみで、コンテナに CPU やメモリの上限を設定しません。
 
 ---
 
@@ -299,137 +251,11 @@ docker run --name new-api -d --restart always \
 
 ## 🚢 デプロイ
 
-> [!TIP]
-> **最新のDockerイメージ:** `calciumion/new-api:latest`
+保守対象の [Compose 設定](docker-compose.yml)と[導入手順](docs/installation/DOCKER.md)を使用してください。フロントエンド開発には [docker-compose.dev.yml](docker-compose.dev.yml)、管理パネルには[宝塔の説明](docs/installation/BT.md)を参照してください。上流 New-API イメージには、このチェックアウトの変更は含まれません。
 
-### 📋 デプロイ要件
+Ren2Hub の同時実行枠は単一プロセスが管理します。旧ゲートウェイの処理完了と終了を確認してから新ゲートウェイを起動します。[リリースとロールバック手順](docs/routing/GATEWAY_RELEASE.md)に従い、ローリング更新や複数レプリカを使用しないでください。PostgreSQL、Redis、アプリの既存データボリュームを維持します。
 
-| コンポーネント | 要件 |
-|------|------|
-| **ローカルデータベース** | SQLite（Dockerは `/data` ディレクトリをマウントする必要があります）|
-| **リモートデータベース** | MySQL ≥ 5.7.8 または PostgreSQL ≥ 9.6 |
-| **コンテナエンジン** | Docker / Docker Compose |
-| **システムアーキテクチャ** | 64ビットのみ対応（amd64 / arm64）。32ビットシステムは非対応 |
-
-### ⚙️ 環境変数設定
-
-<details>
-<summary>一般的な環境変数設定</summary>
-
-| 変数名 | 説明 | デフォルト値 |
-|--------|------|--------|
-| `SESSION_SECRET` | 認証署名シークレット。すべてのノードで同じ値が必要 | - |
-| `SESSION_COOKIE_SECURE` | `false`/未設定ではローカル HTTP 開発プロキシ向けに refresh/logout の OriginGuard を無効化し、`true` では Secure Cookie と厳格な Origin 検証を有効化 | `false` |
-| `SESSION_COOKIE_TRUSTED_URL` | Secure モードでは必須。refresh/logout を許可する完全一致の HTTPS Origin をカンマ区切りで指定。relay CORS 設定ではありません | - |
-| `TRUSTED_PROXIES` | 未設定/空ではループバック、RFC 1918、IPv6 ULA を信頼して起動時に警告し、`none` ではすべて無効、明示的なプロキシ IP/CIDR リストは既定値を完全に置き換えます | `127.0.0.0/8, ::1, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7` |
-| `USER_SESSION_ACTIVE_LIMIT` | 1 ユーザーあたりの有効なログイン Session 上限 | `50` |
-| `USER_SESSION_ISSUANCE_LIMIT` | カウント期間内に作成できる Session 数の上限（取り消し済みを含む） | `100` |
-| `USER_SESSION_ISSUANCE_WINDOW_SECONDS` | Session 発行のカウント期間（秒）。取り消し済み Session の保持期間を超える場合は自動的に制限 | `86400` |
-| `USER_SESSION_REVOKED_RETENTION_DAYS` | 監査と発行数計算のため取り消し済み Session を保持する日数 | `7` |
-| `USER_SESSION_HOURLY_ALERT_THRESHOLD` | 1 時間あたりのグローバル Session 発行数の警告閾値。ログインは拒否しません | `5000` |
-| `CRYPTO_SECRET` | キャッシュキー用 HMAC シークレット。Redis を共有するノードでは同じ実効値が必要 | デフォルトは `SESSION_SECRET` |
-| `SQL_DSN** | データベース接続文字列 | - |
-| `REDIS_CONN_STRING` | Redis接続文字列 | - |
-| `STREAMING_TIMEOUT` | ストリーミング応答のタイムアウト時間（秒） | `300` |
-| `STREAM_SCANNER_MAX_BUFFER_MB` | ストリームスキャナの1行あたりバッファ上限（MB）。4K画像など巨大なbase64 `data:` ペイロードを扱う場合は値を増加させてください | `64` |
-| `MAX_REQUEST_BODY_MB` | リクエストボディ最大サイズ（MB、**解凍後**に計測。巨大リクエスト/zip bomb によるメモリ枯渇を防止）。超過時は `413` | `32` |
-| `AZURE_DEFAULT_API_VERSION` | Azure APIバージョン | `2025-04-01-preview` |
-| `ERROR_LOG_ENABLED` | エラーログスイッチ | `false` |
-| `PYROSCOPE_URL` | Pyroscopeサーバーのアドレス | - |
-| `PYROSCOPE_APP_NAME` | Pyroscopeアプリ名 | `new-api` |
-| `PYROSCOPE_BASIC_AUTH_USER` | Pyroscope Basic Authユーザー | - |
-| `PYROSCOPE_BASIC_AUTH_PASSWORD` | Pyroscope Basic Authパスワード | - |
-| `PYROSCOPE_MUTEX_RATE` | Pyroscope mutexサンプリング率 | `5` |
-| `PYROSCOPE_BLOCK_RATE` | Pyroscope blockサンプリング率 | `5` |
-| `HOSTNAME` | Pyroscope用のホスト名タグ | `new-api` |
-
-📖 **完全な設定:** [環境変数ドキュメント](https://docs.newapi.pro/ja/docs/installation/config-maintenance/environment-variables)
-
-</details>
-
-### 🔧 デプロイ方法
-
-<details>
-<summary><strong>方法 1: Docker Compose（推奨）</strong></summary>
-
-```bash
-# プロジェクトをクローン
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
-
-# 設定を編集
-nano docker-compose.yml
-
-# サービスを起動
-docker-compose up -d
-```
-
-</details>
-
-<details>
-<summary><strong>方法 2: Dockerコマンド</strong></summary>
-
-**SQLiteを使用:**
-```bash
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
-```
-
-**MySQLを使用:**
-```bash
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
-```
-
-> **💡 パス説明:**
-> - `./data:/data` - 相対パス、データは現在のディレクトリのdataフォルダに保存されます
-> - 絶対パスを使用することもできます：`/your/custom/path:/data`
-
-</details>
-
-<details>
-<summary><strong>方法 3: 宝塔パネル</strong></summary>
-
-1. 宝塔パネル（**9.2.0バージョン**以上）をインストールし、アプリケーションストアで**New-API**を検索してインストールします。
-
-📖 [画像付きチュートリアル](./docs/installation/BT.md)
-
-</details>
-
-### ⚠️ マルチマシンデプロイの注意事項
-
-以下は Session 認証と Redis キャッシュの動作のみを説明しています。複数の Ren2Hub ゲートウェイが同時にトラフィックを処理できるという意味ではありません。ユーザーとチャネルの同時実行枠は単一プロセスが保持します。[単一インスタンスの切り替え手順](docs/routing/GATEWAY_RELEASE.md)に従ってください。
-
-> [!WARNING]
-> - すべてのノードで同じプライマリデータベースと同じ `SESSION_SECRET` を使用してください。異なる場合、Access Token、Refresh セッション、一時認証フローを一貫して検証できません。
-> - 同じ Redis に接続するノードでは同じ `CRYPTO_SECRET` も設定してください。異なる場合、キャッシュキーのダイジェストが一致せず、共有エントリを正しく再利用できません。
-
-ログイン Session とユーザー単位の有効数／発行数制限では、データベースが信頼できる唯一の情報源です。Redis の Session エントリは短期キャッシュであり、TTL は `SYNC_FREQUENCY`（デフォルト 60 秒）に従い、Session の残り有効期間を超えません。
-
-| Redis トポロジー | Session 状態の伝播 | レート制限 |
-| --- | --- | --- |
-| すべてのノードで Redis を共有 | 取り消しとバージョン更新は通常即時に伝播 | Redis の制限枠はノード間で共有 |
-| ノードごとに独立した Redis | 有効な `SYNC_FREQUENCY` 以内にデータベースへフォールバックして収束。バージョンローテーション直後の新しい Token は、古いキャッシュを持つノードで一時的に 401 になる場合があります | ノードごとに独立して計数するため、クラスター全体では設定値の約ノード数倍まで許可される可能性があります |
-| Redis なし | Session の検証ごとにデータベースを直接参照 | メモリ内の制限枠はノードごとに独立 |
-
-`SYNC_FREQUENCY` を短くすると独立 Redis のキャッシュ陳腐化時間は短くなりますが、有効な SID ごと、ノードごと、TTL ごとにデータベースへの主キー照会が 1 回増えます。この保証は Session 認証の陳腐化時間を限定するものです。レート制限や Redis を使うその他のコントロールプレーンキャッシュは、引き続きトポロジーに依存します。
-
-Token、Origin 検証、PAT の契約については[ユーザー認証とログインセッション](./docs/authentication.md)を参照してください。
-
-### 🔄 チャネルリトライとキャッシュ
-
-**リトライ契約:** 論理リクエストごとの実際の上流送信は最大 3 回で、追加送信にはプロセス共通の予算を適用します。[統合ルーティング](docs/routing/UNIFIED_ROUTING.md)と[ゲートウェイ設定 API](docs/routing/GATEWAY_API.md)を参照してください。
-
-**キャッシュ設定:**
-- `REDIS_CONN_STRING`：Redisキャッシュ（推奨）
-- `MEMORY_CACHE_ENABLED`：メモリキャッシュ
+環境変数は [.env.example](.env.example)、認証は[セッション契約](docs/authentication.md)、FIFO と共有リトライ予算は[ゲートウェイ API](docs/routing/GATEWAY_API.md)と[統合ルーティング](docs/routing/UNIFIED_ROUTING.md)を参照してください。Redis は Provider 制限、頻度、ヘルス、キャッシュを担当し、ユーザーとチャネルの同時実行枠は管理しません。
 
 ---
 

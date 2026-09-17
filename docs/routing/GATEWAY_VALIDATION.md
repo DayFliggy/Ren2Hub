@@ -76,6 +76,6 @@ HTTP 夹具明确把内存 SQLite 限为单连接，不把此结果当作多连�
 
 ## 服务器 PostgreSQL 验证
 
-RenAI 工作区提供 `scripts/server/build-ren2hub-test.sh`、`prepare-ren2hub-test.sh` 和 `run-ren2hub-test.sh`。它们使用已发布 Git 提交、独立 PostgreSQL/Redis 数据目录和内部 Docker 网络，验证前端烟测，并运行 11 个模拟渠道场景；执行入口、精确命令和报告位于工作区 `docs/server/REN2HUB_POSTGRES_TEST_20260917.md`。
+RenAI 工作区提供 `scripts/server/build-ren2hub-test.sh`、`prepare-ren2hub-test.sh` 和 `run-ren2hub-test.sh`。它们使用已发布 Git 提交、独立 PostgreSQL/Redis 数据目录和内部 Docker 网络，验证前端烟测，并运行 11 个模拟渠道场景；执行入口和精确命令见工作区 `routing-simulator/ADMISSION_LAB.md`，最新无配额结果见 `docs/server/REN2HUB_GATEWAY_FIXES_LOAD_20260917.md`。
 
-重跑须记录应用 SHA、工作区 SHA、镜像 OCI revision、本地 image ID、数据库版本、负载参数及资源配置；只有存在 registry manifest 时才记录对应 digest，本地 image ID 不等于 registry digest。2026-09-17 的通过报告使用 Docker CPU/内存配额；随后按用户要求移除了全部此类限制，仅完成健康核验，尚未重跑完整压测。不得把旧报告标为当前无配额环境的性能结果。模拟渠道清理、配置恢复、账务、最终路由证据和槽位守恒必须全部通过，不能仅按 HTTP 成功率验收。
+重跑须记录应用 SHA、工作区 SHA、镜像 OCI revision、本地 image ID、数据库版本、负载参数及资源配置；只有存在 registry manifest 时才记录对应 digest，本地 image ID 不等于 registry digest。现行部署不设置 Docker CPU/内存配额；旧 `REN2HUB_POSTGRES_TEST_20260917.md` 保留受限环境证据，不与无配额复测混算性能。模拟渠道清理、配置恢复、账务、最终路由证据和槽位守恒必须全部通过，不能仅按 HTTP 成功率验收。

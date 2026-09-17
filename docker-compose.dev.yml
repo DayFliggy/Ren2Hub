@@ -1,4 +1,6 @@
-# Frontend Development - Backend built from local source
+# Ren2Hub frontend development - backend built from local source.
+# Local HTTP only; PostgreSQL credentials below are isolated development defaults.
+# Do not publish this stack or run it alongside another gateway using the same data.
 #
 # Usage:
 #   1. docker compose -f docker-compose.dev.yml up -d
@@ -19,11 +21,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    image: new-api-dev:local
+    image: ren2hub-dev:local
     container_name: new-api-dev
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - dev_data:/data
     environment:
@@ -33,6 +35,8 @@ services:
       - BATCH_UPDATE_ENABLED=true
       # Local HTTP dev mode: keep Secure=false and leave TRUSTED_URL unset. This disables the refresh/logout OriginGuard so the :5175 -> :3000 dev proxy works.
       - SESSION_COOKIE_SECURE=false
+      - TRUSTED_PROXIES=none
+      - SHUTDOWN_TIMEOUT_SECONDS=120
       # For HTTPS only: set Secure=true and list every exact trusted HTTPS browser Origin. This does not configure relay CORS.
       # - SESSION_COOKIE_SECURE=true
       # - SESSION_COOKIE_TRUSTED_URL=https://example.com,https://admin.example.com
@@ -43,6 +47,8 @@ services:
         condition: service_healthy
     networks:
       - dev-network
+    stop_signal: SIGTERM
+    stop_grace_period: 130s
 
   redis:
     image: redis:7-alpine

@@ -7,6 +7,7 @@
 | 主题 | 入口 | 内容 |
 | --- | --- | --- |
 | 开发与目录 | [项目约定](../AGENTS.md) | Go/Gin/GORM、Vue、独立 RelayKit、验证要求 |
+| 安装与更新 | [单实例 Compose](installation/DOCKER.md)、[宝塔要求](installation/BT.md) | 当前源码、PostgreSQL、独立密钥、排空与数据保留 |
 | Web 应用 | [前端说明](../frontend/README.md)、[页面路由](../frontend/ROUTING.md) | 根路径、同源 API、权限与功能门控 |
 | 登录与会话 | [认证契约](authentication.md) | 登录令牌、刷新会话、Origin 与代理规则 |
 | 模型路由 | [统一路由](routing/UNIFIED_ROUTING.md) | Token Profile、私有组、渠道容量、资格重检、计费与重试 |

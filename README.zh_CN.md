@@ -55,7 +55,7 @@
 
 ## 📝 项目说明
 
-当前检出项目为 Ren2Hub，路由、准入、API 与发布契约请从[本地文档](docs/README.md)进入。下文保留上游项目介绍、链接和部署示例；上游镜像不包含本检出的改造。Ren2Hub 采用单进程本地 FIFO 准入，新旧版本必须顺序切换。RenAI 工作区使用独立部署资产和 PostgreSQL。
+当前检出项目为 Ren2Hub，路由、准入、API 与发布契约请从[本地文档](docs/README.md)进入。下文保留上游项目介绍和署名；部署以 [Ren2Hub 安装文档](docs/installation/DOCKER.md)为准，上游镜像不包含本检出的改造。Ren2Hub 采用单进程本地 FIFO 准入，新旧版本必须顺序切换。RenAI 工作区使用独立部署资产和 PostgreSQL。
 
 > [!IMPORTANT]
 > - 本项目仅面向合法授权的 AI API 网关、组织内部鉴权、多模型管理、用量统计、成本核算和私有化部署场景。
@@ -110,55 +110,7 @@
 
 ## 🚀 快速开始
 
-### 使用 Docker Compose（推荐）
-
-```bash
-# 克隆项目
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
-
-# 编辑 docker-compose.yml 配置
-nano docker-compose.yml
-
-# 启动服务
-docker-compose up -d
-```
-
-<details>
-<summary><strong>使用 Docker 命令</strong></summary>
-
-```bash
-# 拉取最新镜像
-docker pull calciumion/new-api:latest
-
-# 使用 SQLite（默认）
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
-
-# 使用 MySQL
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
-```
-
-> **💡 提示：** `-v ./data:/data` 会将数据保存在当前目录的 `data` 文件夹中，你也可以改为绝对路径如 `-v /your/custom/path:/data`
-
-</details>
-
----
-
-🎉 部署完成后，访问 `http://localhost:3000` 即可使用！
-
-> [!WARNING]
-> 将本项目作为面向公众的生成式 AI 服务或 API 转售服务运营时，使用者应先完成备案、内容安全、实名、日志留存、税务、支付和上游授权等合规义务。
-
-📖 更多部署方式请参考 [部署指南](https://docs.newapi.pro/zh/docs/installation)
+按[单实例 Docker 安装文档](docs/installation/DOCKER.md)部署当前 Ren2Hub 源码。构建包含 Go 后端和 Vue 前端，使用 PostgreSQL 与 Redis；先填写必要密钥再启动。应用仅绑定 `127.0.0.1:3000`，容器不设置 CPU 或内存配额。
 
 ---
 
@@ -297,139 +249,11 @@ docker run --name new-api -d --restart always \
 
 ## 🚢 部署
 
-> [!TIP]
-> **最新版 Docker 镜像：** `calciumion/new-api:latest`
+使用维护中的 [Compose 配置](docker-compose.yml)和[安装文档](docs/installation/DOCKER.md)。前端开发使用 [docker-compose.dev.yml](docker-compose.dev.yml)，面板环境见[宝塔说明](docs/installation/BT.md)。上游 New-API 镜像不包含当前检出的改造。
 
-### 📋 部署要求
+Ren2Hub 的用户与渠道并发由单进程持有。先排空并退出旧网关，再启动新网关，遵守[发布与回退流程](docs/routing/GATEWAY_RELEASE.md)，不得滚动多副本。PostgreSQL、Redis 和应用数据始终使用已确认的数据卷。
 
-| 组件 | 要求 |
-|------|------|
-| **本地数据库** | SQLite（Docker 需挂载 `/data` 目录）|
-| **远程数据库** | MySQL ≥ 5.7.8 或 PostgreSQL ≥ 9.6 |
-| **容器引擎** | Docker / Docker Compose |
-| **系统架构** | 仅支持 64 位系统（amd64 / arm64），不支持 32 位系统 |
-
-### ⚙️ 环境变量配置
-
-<details>
-<summary>常用环境变量配置</summary>
-
-| 变量名 | 说明                                                           | 默认值 |
-|--------|--------------------------------------------------------------|--------|
-| `SESSION_SECRET` | 鉴权签名密钥；所有节点必须保持一致                                           | - |
-| `SESSION_COOKIE_SECURE` | `false`/未配置时关闭 refresh/logout OriginGuard 以兼容本地 HTTP 开发代理；`true` 时启用 Secure Cookie 和严格 Origin 校验 | `false` |
-| `SESSION_COOKIE_TRUSTED_URL` | Secure 模式必填：允许调用 refresh/logout 的精确 HTTPS Origin，多个用英文逗号分隔；不是 relay CORS 白名单 | - |
-| `TRUSTED_PROXIES` | 未配置/留空时信任回环、RFC1918 和 IPv6 ULA 并输出启动告警；`none` 不信任任何代理；显式代理 IP/CIDR 列表完全替代默认值 | `127.0.0.0/8, ::1, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7` |
-| `USER_SESSION_ACTIVE_LIMIT` | 单用户最大活跃登录 Session 数 | `50` |
-| `USER_SESSION_ISSUANCE_LIMIT` | 单用户在签发窗口内可创建的 Session 总数，包含已撤销 Session | `100` |
-| `USER_SESSION_ISSUANCE_WINDOW_SECONDS` | Session 签发计数窗口（秒）；高于 revoked 保留期时自动钳制 | `86400` |
-| `USER_SESSION_REVOKED_RETENTION_DAYS` | revoked Session 用于审计和签发计数的保留天数 | `7` |
-| `USER_SESSION_HOURLY_ALERT_THRESHOLD` | 全局每小时 Session 签发告警阈值；只告警，不拒绝登录 | `5000` |
-| `CRYPTO_SECRET` | 缓存键 HMAC 密钥；共享 Redis 的节点必须使用相同有效值 | 默认跟随 `SESSION_SECRET` |
-| `SQL_DSN` | 数据库连接字符串                                                     | - |
-| `REDIS_CONN_STRING` | Redis 连接字符串                                                  | - |
-| `STREAMING_TIMEOUT` | 流式超时时间（秒）                                                    | `300` |
-| `STREAM_SCANNER_MAX_BUFFER_MB` | 流式扫描器单行最大缓冲（MB），图像生成等超大 `data:` 片段（如 4K 图片 base64）需适当调大 | `64` |
-| `MAX_REQUEST_BODY_MB` | 请求体最大大小（MB，**解压后**计；防止超大请求/zip bomb 导致内存暴涨），超过将返回 `413` | `32` |
-| `AZURE_DEFAULT_API_VERSION` | Azure API 版本                                                 | `2025-04-01-preview` |
-| `ERROR_LOG_ENABLED` | 错误日志开关                                                       | `false` |
-| `PYROSCOPE_URL` | Pyroscope 服务地址                                            | - |
-| `PYROSCOPE_APP_NAME` | Pyroscope 应用名                                        | `new-api` |
-| `PYROSCOPE_BASIC_AUTH_USER` | Pyroscope Basic Auth 用户名                        | - |
-| `PYROSCOPE_BASIC_AUTH_PASSWORD` | Pyroscope Basic Auth 密码                  | - |
-| `PYROSCOPE_MUTEX_RATE` | Pyroscope mutex 采样率                               | `5` |
-| `PYROSCOPE_BLOCK_RATE` | Pyroscope block 采样率                               | `5` |
-| `HOSTNAME` | Pyroscope 标签里的主机名                                          | `new-api` |
-
-📖 **完整配置：** [环境变量文档](https://docs.newapi.pro/zh/docs/installation/config-maintenance/environment-variables)
-
-</details>
-
-### 🔧 部署方式
-
-<details>
-<summary><strong>方式 1：Docker Compose（推荐）</strong></summary>
-
-```bash
-# 克隆项目
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
-
-# 编辑配置
-nano docker-compose.yml
-
-# 启动服务
-docker-compose up -d
-```
-
-</details>
-
-<details>
-<summary><strong>方式 2：Docker 命令</strong></summary>
-
-**使用 SQLite：**
-```bash
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
-```
-
-**使用 MySQL：**
-```bash
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
-```
-
-> **💡 路径说明：**
-> - `./data:/data` - 相对路径，数据保存在当前目录的 data 文件夹
-> - 也可使用绝对路径，如：`/your/custom/path:/data`
-
-</details>
-
-<details>
-<summary><strong>方式 3：宝塔面板</strong></summary>
-
-1. 安装宝塔面板（≥ 9.2.0 版本）
-2. 在应用商店搜索 **New-API**
-3. 一键安装
-
-📖 [图文教程](./docs/installation/BT.md)
-
-</details>
-
-### ⚠️ 多机部署注意事项
-
-以下仅说明 Session 鉴权与 Redis 缓存行为，不代表支持多个 Ren2Hub 网关同时接流量。用户与渠道并发由单进程持有，部署遵守[单实例切换与回退](docs/routing/GATEWAY_RELEASE.md)。
-
-> [!WARNING]
-> - 所有节点必须使用同一个主数据库，并设置相同的 `SESSION_SECRET`；否则 Access Token、Refresh 会话和临时鉴权流程无法一致校验。
-> - 连接同一个 Redis 的节点还必须设置相同的 `CRYPTO_SECRET`，否则节点生成的缓存键摘要不一致，无法正确共享缓存。
-
-登录 Session 和单用户活跃数/签发数限制均以数据库为权威。Redis 中的 Session 仅为短期缓存，TTL 跟随 `SYNC_FREQUENCY`（默认 60 秒），且不会超过 Session 的剩余寿命。
-
-| Redis 拓扑 | Session 状态传播 | 限流语义 |
-| --- | --- | --- |
-| 所有节点共享 Redis | 撤销和版本发布通常即时传播 | Redis 限流额度在节点间共享 |
-| 每个节点使用独立 Redis | 最迟在有效 `SYNC_FREQUENCY` 内回源数据库收敛；版本轮换后，新 Token 在持有旧缓存的节点上可能短暂返回 401 | 每个节点独立计数，集群总额度最坏约为单节点阈值乘以节点数 |
-| 不使用 Redis | 每次 Session 校验直接读取数据库 | 各节点使用独立的内存限流额度 |
-
-缩短 `SYNC_FREQUENCY` 可减小独立 Redis 的陈旧窗口，但每个活跃 SID 在每个节点上会按该 TTL 增加一次数据库主键点查。上述保证只让 Session 鉴权在不同拓扑下保持有界陈旧；限流和其他 Redis 控制面缓存仍受拓扑影响。
-
-Token、Origin 校验和 PAT 契约见[用户鉴权与登录会话](./docs/authentication.md)。
-
-### 🔄 渠道重试与缓存
-
-**重试契约：** 每个逻辑请求最多进行三次真实上游发送，并受进程共享额外发送预算限制，详见[统一路由](docs/routing/UNIFIED_ROUTING.md)与[网关配置 API](docs/routing/GATEWAY_API.md)。
-
-**缓存配置：**
-- `REDIS_CONN_STRING`：Redis 缓存（推荐）
-- `MEMORY_CACHE_ENABLED`：内存缓存
+环境变量见 [.env.example](.env.example)，鉴权和代理配置见[登录会话契约](docs/authentication.md)。FIFO 限制与共享重试预算以[网关 API](docs/routing/GATEWAY_API.md)及[统一路由](docs/routing/UNIFIED_ROUTING.md)为准。Redis 继续承担 Provider 配额、频率、健康和缓存职责，不再维护用户或渠道并发。
 
 ---
 

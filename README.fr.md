@@ -55,7 +55,7 @@
 
 ## 📝 Description du projet
 
-Cette copie du projet est Ren2Hub. Consultez la [documentation locale](docs/README.md) pour les contrats actuels de routage, d'admission, d'API et de publication. La présentation, les liens et les exemples de déploiement du projet amont sont conservés comme références ; ses images ne contiennent pas les modifications de cette copie. Ren2Hub utilise une admission FIFO locale dans un seul processus et impose un remplacement séquentiel des versions. L'espace RenAI utilise ses propres fichiers de déploiement et PostgreSQL.
+Cette copie du projet est Ren2Hub. Consultez la [documentation locale](docs/README.md) pour les contrats actuels de routage, d'admission, d'API et de publication. La présentation et les attributions du projet amont sont conservées. Utilisez le [guide d'installation Ren2Hub](docs/installation/DOCKER.md) ; les images amont ne contiennent pas les modifications de cette copie. Ren2Hub utilise une admission FIFO locale dans un seul processus et impose un remplacement séquentiel des versions. L'espace RenAI utilise ses propres fichiers de déploiement et PostgreSQL.
 
 > [!IMPORTANT]
 > - Ce projet est exclusivement destiné aux scénarios de passerelle API d'IA légalement autorisés, d'authentification organisationnelle, de gestion multi-modèles, d'analyse d'utilisation, de comptabilisation des coûts et de déploiement privé.
@@ -110,55 +110,7 @@ Cette copie du projet est Ren2Hub. Consultez la [documentation locale](docs/READ
 
 ## 🚀 Démarrage rapide
 
-### Utilisation de Docker Compose (recommandé)
-
-```bash
-# Cloner le projet
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
-
-# Modifier la configuration docker-compose.yml
-nano docker-compose.yml
-
-# Démarrer le service
-docker-compose up -d
-```
-
-<details>
-<summary><strong>Utilisation des commandes Docker</strong></summary>
-
-```bash
-# Tirer la dernière image
-docker pull calciumion/new-api:latest
-
-# Utilisation de SQLite (par défaut)
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
-
-# Utilisation de MySQL
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
-```
-
-> **💡 Astuce:** `-v ./data:/data` sauvegardera les données dans le dossier `data` du répertoire actuel, vous pouvez également le changer en chemin absolu comme `-v /your/custom/path:/data`
-
-</details>
-
----
-
-🎉 Après le déploiement, visitez `http://localhost:3000` pour commencer à utiliser!
-
-> [!WARNING]
-> Lorsque vous exploitez ce projet en tant que service public d'IA générative ou service de revente d'API, les utilisateurs doivent d'abord remplir toutes les obligations requises en matière d'enregistrement, de licence, de sécurité du contenu, de vérification d'identité, de conservation des journaux, de fiscalité, de paiement et d'autorisation en amont.
-
-📖 Pour plus de méthodes de déploiement, veuillez vous référer à [Guide de déploiement](https://docs.newapi.pro/en/docs/installation)
+Construisez cette copie de Ren2Hub avec le [guide Docker à instance unique](docs/installation/DOCKER.md). Il construit le backend Go et le frontend Vue depuis les sources, avec PostgreSQL et Redis. Configurez les secrets requis avant le démarrage. L'application écoute sur `127.0.0.1:3000` ; les conteneurs n'ont pas de quotas CPU ou mémoire.
 
 ---
 
@@ -297,139 +249,11 @@ docker run --name new-api -d --restart always \
 
 ## 🚢 Déploiement
 
-> [!TIP]
-> **Dernière image Docker:** `calciumion/new-api:latest`
+Utilisez la [configuration Compose maintenue](docker-compose.yml) et le [guide d'installation](docs/installation/DOCKER.md). Le développement frontend utilise [docker-compose.dev.yml](docker-compose.dev.yml) ; pour un panneau, consultez [les notes BT](docs/installation/BT.md). Les images New-API en amont ne contiennent pas les modifications de cette copie.
 
-### 📋 Exigences de déploiement
+Ren2Hub gère la concurrence dans un seul processus. Attendez la fin des requêtes et l'arrêt de l'ancien processus avant de démarrer le nouveau, conformément à la [procédure de publication et de retour arrière](docs/routing/GATEWAY_RELEASE.md). Conservez les volumes de PostgreSQL, Redis et de l'application ; n'utilisez pas de réplicas en mise à jour progressive.
 
-| Composant | Exigence |
-|------|------|
-| **Base de données locale** | SQLite (Docker doit monter le répertoire `/data`)|
-| **Base de données distante | MySQL ≥ 5.7.8 ou PostgreSQL ≥ 9.6 |
-| **Moteur de conteneur** | Docker / Docker Compose |
-| **Architecture système** | 64 bits uniquement (amd64 / arm64) ; les systèmes 32 bits ne sont pas pris en charge |
-
-### ⚙️ Configuration des variables d'environnement
-
-<details>
-<summary>Configuration courante des variables d'environnement</summary>
-
-| Nom de variable | Description | Valeur par défaut |
-|--------|------|--------|
-| `SESSION_SECRET` | Secret de signature d’authentification, identique sur tous les nœuds | - |
-| `SESSION_COOKIE_SECURE` | `false`/non défini désactive l’OriginGuard de refresh/logout pour les proxys HTTP locaux ; `true` active le cookie Secure et le contrôle strict de l’Origin | `false` |
-| `SESSION_COOKIE_TRUSTED_URL` | Obligatoire en mode Secure : Origins HTTPS exactes autorisées pour refresh/logout, séparées par des virgules ; ce n’est pas une liste CORS relay | - |
-| `TRUSTED_PROXIES` | Variable absente/vide : approuve le bouclage, les réseaux RFC 1918 et l’ULA IPv6 avec un avertissement au démarrage ; `none` n’approuve aucun proxy ; une liste IP/CIDR explicite remplace les valeurs par défaut | `127.0.0.0/8, ::1, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7` |
-| `USER_SESSION_ACTIVE_LIMIT` | Nombre maximal de Sessions de connexion actives par utilisateur | `50` |
-| `USER_SESSION_ISSUANCE_LIMIT` | Nombre maximal de Sessions créées par utilisateur dans la fenêtre, y compris les Sessions révoquées | `100` |
-| `USER_SESSION_ISSUANCE_WINDOW_SECONDS` | Fenêtre de comptage des Sessions ; limitée à la durée de conservation des Sessions révoquées si elle est supérieure | `86400` |
-| `USER_SESSION_REVOKED_RETENTION_DAYS` | Conservation en jours des Sessions révoquées pour l’audit et le comptage | `7` |
-| `USER_SESSION_HOURLY_ALERT_THRESHOLD` | Seuil global horaire déclenchant uniquement une alerte, sans bloquer les connexions | `5000` |
-| `CRYPTO_SECRET` | Secret HMAC des clés de cache ; les nœuds partageant Redis doivent utiliser la même valeur effective | Par défaut, `SESSION_SECRET` |
-| `SQL_DSN` | Chaine de connexion à la base de données | - |
-| `REDIS_CONN_STRING` | Chaine de connexion Redis | - |
-| `STREAMING_TIMEOUT` | Délai d'expiration du streaming (secondes) | `300` |
-| `STREAM_SCANNER_MAX_BUFFER_MB` | Taille max du buffer par ligne (Mo) pour le scanner SSE ; à augmenter quand les sorties image/base64 sont très volumineuses (ex. images 4K) | `64` |
-| `MAX_REQUEST_BODY_MB` | Taille maximale du corps de requête (Mo, comptée **après décompression** ; évite les requêtes énormes/zip bombs qui saturent la mémoire). Dépassement ⇒ `413` | `32` |
-| `AZURE_DEFAULT_API_VERSION` | Version de l'API Azure | `2025-04-01-preview` |
-| `ERROR_LOG_ENABLED` | Interrupteur du journal d'erreurs | `false` |
-| `PYROSCOPE_URL` | Adresse du serveur Pyroscope | - |
-| `PYROSCOPE_APP_NAME` | Nom de l'application Pyroscope | `new-api` |
-| `PYROSCOPE_BASIC_AUTH_USER` | Utilisateur Basic Auth Pyroscope | - |
-| `PYROSCOPE_BASIC_AUTH_PASSWORD` | Mot de passe Basic Auth Pyroscope | - |
-| `PYROSCOPE_MUTEX_RATE` | Taux d'échantillonnage mutex Pyroscope | `5` |
-| `PYROSCOPE_BLOCK_RATE` | Taux d'échantillonnage block Pyroscope | `5` |
-| `HOSTNAME` | Nom d'hôte tagué pour Pyroscope | `new-api` |
-
-📖 **Configuration complète:** [Documentation des variables d'environnement](https://docs.newapi.pro/en/docs/installation/config-maintenance/environment-variables)
-
-</details>
-
-### 🔧 Méthodes de déploiement
-
-<details>
-<summary><strong>Méthode 1: Docker Compose (recommandé)</strong></summary>
-
-```bash
-# Cloner le projet
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
-
-# Modifier la configuration
-nano docker-compose.yml
-
-# Démarrer le service
-docker-compose up -d
-```
-
-</details>
-
-<details>
-<summary><strong>Méthode 2: Commandes Docker</strong></summary>
-
-**Utilisation de SQLite:**
-```bash
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
-```
-
-**Utilisation de MySQL:**
-```bash
-docker run --name new-api -d --restart always \
-  -p 3000:3000 \
-  -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
-  -e TZ=Asia/Shanghai \
-  -v ./data:/data \
-  calciumion/new-api:latest
-```
-
-> **💡 Explication du chemin:**
-> - `./data:/data` - Chemin relatif, données sauvegardées dans le dossier data du répertoire actuel
-> - Vous pouvez également utiliser un chemin absolu, par exemple : `/your/custom/path:/data`
-
-</details>
-
-<details>
-<summary><strong>Méthode 3: Panneau BaoTa</strong></summary>
-
-1. Installez le panneau BaoTa (version ≥ 9.2.0)
-2. Recherchez **New-API** dans le magasin d'applications
-3. Installation en un clic
-
-📖 [Tutoriel avec des images](./docs/installation/BT.md)
-
-</details>
-
-### ⚠️ Considérations sur le déploiement multi-machines
-
-Ce qui suit décrit uniquement l'authentification Session et le cache Redis. Cela ne permet pas à plusieurs processus Ren2Hub de servir du trafic simultanément : les limites de concurrence des utilisateurs et des canaux appartiennent à un seul processus. Suivez la [procédure de remplacement à instance unique](docs/routing/GATEWAY_RELEASE.md).
-
-> [!WARNING]
-> - Tous les nœuds doivent utiliser la même base de données principale et la même valeur `SESSION_SECRET` ; sinon les Access Tokens, sessions Refresh et flux d’authentification temporaires ne peuvent pas être vérifiés de façon cohérente.
-> - Les nœuds connectés au même Redis doivent aussi utiliser le même `CRYPTO_SECRET`, faute de quoi les empreintes de clé de cache diffèrent et les entrées partagées ne peuvent pas être réutilisées de façon cohérente.
-
-La base de données fait autorité pour les Sessions de connexion et pour les limites actives/d’émission par utilisateur. Les entrées Session de Redis sont des caches de courte durée dont le TTL suit `SYNC_FREQUENCY` (60 secondes par défaut), sans jamais dépasser la durée de vie restante de la Session.
-
-| Topologie Redis | Propagation des Sessions | Limitation de débit |
-| --- | --- | --- |
-| Redis partagé | Les révocations et publications de version se propagent normalement immédiatement | Les quotas Redis sont partagés entre les nœuds |
-| Redis indépendant par nœud | Les nœuds se resynchronisent depuis la base dans le délai effectif de `SYNC_FREQUENCY` ; un nouveau Token issu d’une rotation peut recevoir temporairement une réponse 401 sur un nœud dont le cache est obsolète | Chaque nœud possède son propre quota ; la capacité agrégée peut donc atteindre environ la limite configurée multipliée par le nombre de nœuds |
-| Sans Redis | Chaque validation de Session consulte directement la base de données | Les limites en mémoire sont indépendantes sur chaque nœud |
-
-Réduire `SYNC_FREQUENCY` raccourcit la fenêtre d’obsolescence avec des Redis indépendants, mais ajoute une lecture de Session par clé primaire, par SID actif, par nœud et par TTL. Ces garanties donnent une obsolescence bornée à l’authentification Session ; les limites et les autres caches du plan de contrôle adossés à Redis restent dépendants de la topologie.
-
-Consultez [Authentification utilisateur et sessions de connexion](./docs/authentication.md) pour les contrats de token, de vérification Origin et de PAT.
-
-### 🔄 Nouvelle tentative de canal et cache
-
-**Contrat des nouvelles tentatives :** Ren2Hub autorise au plus trois envois réels en amont par requête logique, avec un budget partagé pour les envois supplémentaires. Consultez le [routage unifié](docs/routing/UNIFIED_ROUTING.md) et l'[API de configuration](docs/routing/GATEWAY_API.md).
-
-**Configuration du cache:**
-- `REDIS_CONN_STRING`: Cache Redis (recommandé)
-- `MEMORY_CACHE_ENABLED`: Cache mémoire
+Consultez [.env.example](.env.example) pour les variables, le [contrat des sessions](docs/authentication.md) pour l'authentification, et l'[API de la passerelle](docs/routing/GATEWAY_API.md) et le [routage unifié](docs/routing/UNIFIED_ROUTING.md) pour le FIFO et le budget partagé. Redis conserve les quotas Provider, la fréquence, la santé et le cache ; il ne gère plus la concurrence des utilisateurs et des canaux.
 
 ---
 
