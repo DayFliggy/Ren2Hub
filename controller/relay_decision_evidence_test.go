@@ -81,3 +81,64 @@ func TestFinalRouteEvidenceRetainsLastSendAfterRejectedCandidates(t *testing.T) 
 		})
 	}
 }
+
+func TestRouteAttemptEvidenceExcludesUnsentAndProviderText(t *testing.T) {
+	capture := &routeEvidenceCapture{requestID: t.Name(), events: make(chan service.RouteDecision, 1)}
+	common.LogWriterMu.Lock()
+	original := gin.DefaultWriter
+	gin.DefaultWriter = capture
+	common.LogWriterMu.Unlock()
+	t.Cleanup(func() {
+		common.LogWriterMu.Lock()
+		gin.DefaultWriter = original
+		common.LogWriterMu.Unlock()
+	})
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	selection := service.LiveRouteSelection{Source: service.RouteSourceAutoLab, Decision: service.NewRouteDecision(t.Name(), service.RouteSourceAutoLab, "test-model", 0)}
+	c.Set("route_live_selection", selection)
+	info := &relaycommon.RelayInfo{UpstreamSent: true}
+	beginLiveRouteUpstreamAttempt(c, 11)
+	observeLiveRouteAttempt(c, info, service.AttemptOutcome{
+		Origin: service.AttemptOriginProvider, StatusCode: http.StatusServiceUnavailable,
+		ProviderCode: "private-provider-code", Message: "private-provider-message", LatencyMS: 25, TTFTMS: 4,
+		Acceptance: service.AttemptAcceptanceUnknown, RetryPermission: service.AttemptRetryPolicy,
+	})
+	info.UpstreamSent = false
+	observeLiveRouteAttempt(c, info, service.AttemptOutcome{
+		Origin: service.AttemptOriginAdmission, StatusCode: http.StatusTooManyRequests,
+		Acceptance: service.AttemptNotSent, RetryPermission: service.AttemptRetryForbidden,
+	})
+	// Compact fallback can replace the selection, but not the logical history.
+	c.Set("route_live_selection", selection)
+	info.UpstreamSent = true
+	beginLiveRouteUpstreamAttempt(c, 12)
+	observeLiveRouteAttempt(c, info, service.AttemptOutcome{
+		Origin: service.AttemptOriginProvider, Success: true, StatusCode: http.StatusCreated,
+		LatencyMS: 12, Acceptance: service.AttemptAccepted, RetryPermission: service.AttemptRetryPolicy,
+		ResponseCommitted: true,
+	})
+	finalizeLiveRouteDecision(c, info, nil)
+	select {
+	case decision := <-capture.events:
+		require.Len(t, decision.Attempts, 2)
+		assert.Equal(t, service.RouteDecisionAttempt{
+			Sequence: 1, ChannelID: 11, ErrorClass: service.RouteErrorTransient,
+			ErrorHTTPStatus: http.StatusServiceUnavailable, Origin: service.AttemptOriginProvider,
+			LatencyMS: 25, Acceptance: service.AttemptAcceptanceUnknown, RetryPermission: service.AttemptRetryPolicy,
+		}, decision.Attempts[0])
+		assert.Equal(t, service.RouteDecisionAttempt{
+			Sequence: 2, ChannelID: 12, Success: true, Origin: service.AttemptOriginProvider,
+			LatencyMS: 12, Acceptance: service.AttemptAccepted, RetryPermission: service.AttemptRetryPolicy,
+			ResponseCommitted: true,
+		}, decision.Attempts[1])
+		encoded, err := common.Marshal(decision)
+		require.NoError(t, err)
+		assert.NotContains(t, string(encoded), "private-provider")
+		assert.NotContains(t, string(encoded), "ttft")
+		assert.Equal(t, 2, decision.UpstreamAttempts)
+		assert.Equal(t, 12, decision.SelectedChannelID)
+	case <-time.After(time.Second):
+		require.FailNow(t, "final route decision was not emitted")
+	}
+}

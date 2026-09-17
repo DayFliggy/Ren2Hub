@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -186,5 +187,67 @@ func TestBillingSessionZeroPrechargeRefundCannotUndoSettlement(t *testing.T) {
 			session.Refund(c)
 			assertRefundSessionBalances(t, quota, 10)
 		})
+	}
+}
+
+func TestBillingSessionTaskRefundRequiresRejectionOrNoSend(t *testing.T) {
+	for _, format := range []types.RelayFormat{types.RelayFormatTask, types.RelayFormatMjProxy, types.RelayFormatOpenAI} {
+		for _, test := range []struct {
+			name             string
+			sent             bool
+			accepted         bool
+			rejected         bool
+			outcomeRejection bool
+			preparationOnly  bool
+			hold             bool
+		}{
+			{name: "before send"},
+			{name: "accepted", sent: true, accepted: true, hold: true},
+			{name: "acceptance unknown", sent: true, hold: true},
+			{name: "provider rejection", sent: true, rejected: true},
+			{name: "HTTP rejection", sent: true, outcomeRejection: true},
+			{name: "accepted overrides stale rejection", sent: true, accepted: true, outcomeRejection: true, hold: true},
+			{name: "accepted prerequisite without generation", sent: true, accepted: true, preparationOnly: true},
+			{name: "unknown prerequisite without generation", sent: true, preparationOnly: true},
+		} {
+			t.Run(string(format)+"/"+test.name, func(t *testing.T) {
+				c, session, quota := seedRefundBillingSession(t, false, 10)
+				info := session.relayInfo
+				info.Billing, info.RelayFormat = session, format
+				info.UpstreamSideEffecting = format == types.RelayFormatOpenAI
+				info.UpstreamPreparationOnly = test.preparationOnly
+				info.ChannelMeta = &relaycommon.ChannelMeta{ChannelId: 1}
+				require.NoError(t, prepareBillingDispatch(c, info))
+				info.UpstreamSent, info.UpstreamAccepted, info.UpstreamRejected = test.sent, test.accepted, test.rejected
+				if test.outcomeRejection {
+					c.Set("gateway_last_attempt_outcome", AttemptOutcome{SideEffecting: true, Acceptance: AttemptRejected})
+				}
+				for range 2 {
+					session.Refund(c)
+				}
+				select {
+				case <-session.recoveryDone:
+				default:
+					t.Error("finished task request kept its heartbeat running")
+				}
+				recovery, err := loadBillingRecovery(session.recoveryID)
+				require.NoError(t, err)
+				if !test.hold {
+					assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
+					assertRefundSessionBalances(t, quota, 0)
+					return
+				}
+				assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
+				assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
+				status, err := recoverOneBillingRecovery(context.Background(), session.recoveryID)
+				require.NoError(t, err)
+				assert.Equal(t, model.BillingRecoveryStatusActive, status)
+				var refunds int64
+				require.NoError(t, model.DB.Model(&model.BillingRecoveryAdjustment{}).
+					Where("request_id = ? AND operation = ?", session.recoveryID, model.BillingRecoveryOperationRefund).Count(&refunds).Error)
+				assert.Zero(t, refunds)
+				assertRefundSessionBalances(t, quota, 10)
+			})
+		}
 	}
 }

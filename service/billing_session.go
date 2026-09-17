@@ -144,6 +144,23 @@ func (s *BillingSession) Refund(c *gin.Context) {
 		s.mu.Unlock()
 		return
 	}
+	info := s.relayInfo
+	if !info.UpstreamPreparationOnly && (info.UpstreamSideEffecting || info.RelayFormat == types.RelayFormatTask || info.RelayFormat == types.RelayFormatMjProxy) {
+		rejected := info.UpstreamRejected
+		if c != nil {
+			value, _ := c.Get("gateway_last_attempt_outcome")
+			outcome, _ := value.(AttemptOutcome)
+			rejected = rejected || outcome.Acceptance == AttemptRejected
+		}
+		if info.UpstreamAccepted || info.UpstreamSent && !rejected {
+			// The dispatch guard must survive a missing task ID or failed task
+			// persistence: either can happen after the provider created the job.
+			s.mu.Unlock()
+			s.stopRecoveryHeartbeat()
+			logger.LogError(c, "billing requires reconciliation (request_id="+info.RequestId+"): upstream acceptance does not permit a refund")
+			return
+		}
+	}
 	s.refundInProgress = true
 	fundingRefunded := s.fundingRefunded
 	fundingSettled := s.fundingSettled

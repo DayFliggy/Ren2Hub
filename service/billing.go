@@ -60,7 +60,7 @@ func PrepareBillingForSelectedModel(c *gin.Context, relayInfo *relaycommon.Relay
 		}
 		relayInfo.FinalPreConsumedQuota = relayInfo.Billing.GetPreConsumedQuota()
 	}
-	if err := prepareBillingPriceGuard(c, relayInfo); err != nil {
+	if err := prepareBillingDispatch(c, relayInfo); err != nil {
 		return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 	}
 	return nil

@@ -113,11 +113,21 @@ func TestMidjourneyUnknownAcceptanceCancellation(t *testing.T) {
 
 			assert.True(t, upstreamCancelled.Load())
 			assert.Empty(t, response.Body.String(), "client cancellation must not write another error response")
-			require.Eventually(t, func() bool {
-				return db.First(user, user.Id).Error == nil && db.First(token, token.Id).Error == nil && user.Quota == 1_000_000 && token.RemainQuota == 1_000_000
-			}, time.Second, 10*time.Millisecond)
+			var recovery model.BillingRecovery
+			for range 2 {
+				require.NoError(t, db.First(&recovery).Error)
+				assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
+				assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
+				assert.Positive(t, recovery.FundingAmount)
+				require.NoError(t, db.First(user, user.Id).Error)
+				require.NoError(t, db.First(token, token.Id).Error)
+				assert.Equal(t, 1_000_000-int(recovery.FundingAmount), user.Quota)
+				assert.Equal(t, 1_000_000-int(recovery.TokenAmount), token.RemainQuota)
+				_, err := service.RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+3600, 10)
+				require.NoError(t, err)
+			}
 			assert.Zero(t, user.UsedQuota)
-			assert.Zero(t, token.UsedQuota)
+			assert.Equal(t, int(recovery.TokenAmount), token.UsedQuota)
 			var taskCount int64
 			require.NoError(t, db.Model(&model.Midjourney{}).Count(&taskCount).Error)
 			assert.Zero(t, taskCount)

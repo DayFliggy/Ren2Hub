@@ -41,5 +41,6 @@ func TestRouteDecisionReadsHistoricalAdmissionField(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, string(encoded), "lease_state")
 		assert.Contains(t, string(encoded), "admission_state")
+		assert.NotContains(t, string(encoded), "\"attempts\"", "historical decisions keep their existing shape")
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
@@ -82,15 +83,24 @@ func TestGatewayAliAsyncImageAcceptance(t *testing.T) {
 			var token model.Token
 			require.NoError(t, model.DB.First(&user, 1).Error)
 			require.NoError(t, model.DB.First(&token, 1).Error)
-			assert.Equal(t, 10000000-charge, user.Quota)
-			assert.Equal(t, 2000-charge, token.RemainQuota)
+			assert.Equal(t, 10000000-500, user.Quota, "accepted or unknown creation retains its reservation")
+			assert.Equal(t, 2000-500, token.RemainQuota)
 			assert.Equal(t, charge, user.UsedQuota)
+			assert.Equal(t, 500, token.UsedQuota)
 			var logs []model.Log
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
 			if success {
 				assert.Len(t, logs, 1)
 			} else {
 				assert.Empty(t, logs)
+				for range 2 {
+					var recovery model.BillingRecovery
+					require.NoError(t, model.DB.First(&recovery).Error)
+					assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
+					assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
+					_, err := service.RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+3600, 10)
+					require.NoError(t, err)
+				}
 			}
 		})
 	}

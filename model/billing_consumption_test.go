@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -145,8 +146,13 @@ func TestMissingBillingConsumptionSnapshotRemainsVisibleForReconciliation(t *tes
 	assert.ErrorContains(t, ApplyBillingRecoveryConsumption("consume-once"), "reconciliation")
 	rows, err := ListStaleBillingRecoveries(1<<62, 100)
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	assert.Equal(t, "unprepared", rows[0].ConsumptionState)
-	assert.NotEmpty(t, rows[0].ConsumptionError)
-	assert.Equal(t, BillingRecoveryStatusSettled, rows[0].Status)
+	assert.Empty(t, rows, "missing evidence requires reconciliation, not repeated automatic attempts")
+	backlog, err := ReadBillingRecoveryBacklog(context.Background(), 1<<62)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), backlog.Pending)
+	var pending BillingRecovery
+	require.NoError(t, db.Where("request_id = ?", "consume-once").First(&pending).Error)
+	assert.Equal(t, "unprepared", pending.ConsumptionState)
+	assert.NotEmpty(t, pending.ConsumptionError)
+	assert.Equal(t, BillingRecoveryStatusSettled, pending.Status)
 }

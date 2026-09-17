@@ -219,13 +219,24 @@ func ExtractReasoningTextFromResponses(resp *dto.OpenAIResponsesResponse) string
 		if out.Type != responsesOutputTypeReasoning {
 			continue
 		}
-		for _, c := range out.Content {
-			if c.Text != "" {
-				sb.WriteString(c.Text)
-			}
-		}
+		sb.WriteString(reasoningOutputText(&out))
 	}
 	return sb.String()
+}
+
+func reasoningOutputText(output *dto.ResponsesOutput) string {
+	var text strings.Builder
+	if len(output.Summary) > 0 {
+		for _, part := range output.Summary {
+			text.WriteString(part.Text)
+		}
+		return text.String()
+	}
+	// Older compatible providers placed summary text in content.
+	for _, part := range output.Content {
+		text.WriteString(part.Text)
+	}
+	return text.String()
 }
 
 func responseStatusString(resp *dto.OpenAIResponsesResponse) string {

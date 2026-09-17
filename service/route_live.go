@@ -56,7 +56,7 @@ func LiveRouteQualificationReason(err error) string {
 // candidate from a request-wide authorization or infrastructure failure.
 // Only the former may consume the bounded next-candidate budget.
 func LiveRouteQualificationAllowsFailover(err error) bool {
-	if errors.Is(err, ErrAdmissionCapacity) {
+	if errors.Is(err, ErrAdmissionCapacity) || errors.Is(err, ErrRouteHealthUnavailable) {
 		return true
 	}
 	switch LiveRouteQualificationReason(err) {

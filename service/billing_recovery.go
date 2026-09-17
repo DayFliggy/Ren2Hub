@@ -108,7 +108,7 @@ func recoverOneBillingRecovery(ctx context.Context, requestID string) (string, e
 	case model.BillingRecoveryStatusSettlementPending:
 		return recoverBillingSettlement(recovery)
 	case model.BillingRecoveryStatusActive:
-		if recovery.ConsumptionState == model.BillingRecoveryStatePricingPending || recovery.ConsumptionState == model.BillingRecoveryStatePricingCollecting {
+		if model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
 			return recovery.Status, nil
 		}
 		if recovery.ConsumptionState == model.BillingRecoveryStateCollecting {

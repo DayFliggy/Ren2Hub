@@ -127,6 +127,8 @@ func TestDifyUploadRespectsGatewayLifecycle(t *testing.T) {
 				assert.False(t, info.UpstreamSent)
 			} else {
 				assert.EqualValues(t, 1, uploaded.Load())
+				assert.Equal(t, mode != "success", info.UpstreamPreparationOnly,
+					"failed prerequisite upload permits refund only while generation has not started")
 				assert.True(t, info.UpstreamSideEffecting)
 				classification := service.ClassifyAttemptOutcome(service.AttemptOutcome{Origin: service.AttemptOriginTransport, SideEffecting: info.UpstreamSideEffecting, Acceptance: service.AttemptAcceptanceUnknown})
 				assert.False(t, classification.Retryable)

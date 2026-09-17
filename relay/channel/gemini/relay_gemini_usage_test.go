@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -13,8 +14,49 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGeminiHandlersEstimatedCompletionPreservesBillingMetadata(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		stream  bool
+		handler func(*gin.Context, *relaycommon.RelayInfo, *http.Response) (*dto.Usage, *types.NewAPIError)
+	}{
+		{name: "native JSON", handler: GeminiTextGenerationHandler},
+		{name: "chat stream", stream: true, handler: GeminiChatStreamHandler},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			info := &relaycommon.RelayInfo{RelayFormat: types.RelayFormatOpenAI, IsStream: tc.stream,
+				ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gemini-test"}}
+			body := `{"candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"Delivered answer with enough text for a nonzero local estimate."}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":100,"toolUsePromptTokenCount":7,"candidatesTokenCount":0,"totalTokenCount":107,"cachedContentTokenCount":80,"promptTokensDetails":[{"modality":"AUDIO","tokenCount":10},{"modality":"IMAGE","tokenCount":20},{"modality":"TEXT","tokenCount":70}],"toolUsePromptTokensDetails":[{"modality":"TEXT","tokenCount":7}]}}`
+			contentType := "application/json"
+			if tc.stream {
+				body = "data: " + body + "\n\n"
+				contentType = "text/event-stream"
+			}
+			usage, apiErr := tc.handler(c, info, &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {contentType}}, Body: io.NopCloser(strings.NewReader(body))})
+			require.Nil(t, apiErr)
+			require.NotNil(t, usage)
+			require.Positive(t, usage.CompletionTokens)
+			require.NotNil(t, usage.BillingUsage)
+			require.NotNil(t, usage.BillingUsage.GeminiUsageMetadata)
+			metadata := usage.BillingUsage.GeminiUsageMetadata
+			assert.Equal(t, dto.BillingUsageSourceGeminiChat, usage.BillingUsage.Source)
+			assert.True(t, usage.BillingUsage.Estimated)
+			assert.Equal(t, 100, metadata.PromptTokenCount)
+			assert.Equal(t, 7, metadata.ToolUsePromptTokenCount)
+			assert.Equal(t, 80, metadata.CachedContentTokenCount)
+			assert.Equal(t, []dto.GeminiPromptTokensDetails{{Modality: "AUDIO", TokenCount: 10}, {Modality: "IMAGE", TokenCount: 20}, {Modality: "TEXT", TokenCount: 70}}, metadata.PromptTokensDetails)
+			assert.Equal(t, []dto.GeminiPromptTokensDetails{{Modality: "TEXT", TokenCount: 7}}, metadata.ToolUsePromptTokensDetails)
+			assert.Equal(t, usage.CompletionTokens, metadata.CandidatesTokenCount)
+			assert.Equal(t, 107+usage.CompletionTokens, metadata.TotalTokenCount)
+		})
+	}
+}
 
 func TestGeminiChatHandlerCompletionTokensExcludeToolUsePromptTokens(t *testing.T) {
 	t.Parallel()

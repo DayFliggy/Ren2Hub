@@ -9,13 +9,56 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGeminiChatStreamHandlerSeparatesThoughtAndAnswerAcrossFrameBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		frames []string
+	}{
+		{name: "mixed frame", frames: []string{`{"candidates":[{"index":0,"content":{"role":"model","parts":[{"thought":true,"text":"Brief explanation."},{"text":"Final answer"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":2,"totalTokenCount":12}}`}},
+		{name: "separate frames", frames: []string{
+			`{"candidates":[{"index":0,"content":{"role":"model","parts":[{"thought":true,"text":"Brief explanation."}]}}]}`,
+			`{"candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"Final answer"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":2,"totalTokenCount":12}}`,
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			info := &relaycommon.RelayInfo{RelayFormat: types.RelayFormatOpenAI, IsStream: true, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gemini-test"}}
+			body := "data: " + strings.Join(tc.frames, "\n\ndata: ") + "\n\n"
+			usage, apiErr := GeminiChatStreamHandler(c, info, &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(body))})
+			require.Nil(t, apiErr)
+			require.NotNil(t, usage)
+			assert.Equal(t, 12, usage.TotalTokens)
+			var answer, reasoning strings.Builder
+			for line := range strings.SplitSeq(recorder.Body.String(), "\n") {
+				data, ok := strings.CutPrefix(line, "data: ")
+				if !ok || data == "[DONE]" {
+					continue
+				}
+				var chunk dto.ChatCompletionsStreamResponse
+				require.NoError(t, common.UnmarshalJsonStr(data, &chunk))
+				for _, choice := range chunk.Choices {
+					answer.WriteString(choice.Delta.GetContentString())
+					reasoning.WriteString(choice.Delta.GetReasoningContent())
+				}
+			}
+			assert.Equal(t, "Final answer", answer.String())
+			assert.Equal(t, "Brief explanation.", reasoning.String())
+			assert.Equal(t, 1, strings.Count(recorder.Body.String(), "data: [DONE]"))
+		})
+	}
+}
 
 func TestGeminiGenerationSignalsBeforeClientCommit(t *testing.T) {
 	for _, handler := range []struct {

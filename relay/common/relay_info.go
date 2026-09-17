@@ -158,6 +158,9 @@ type RelayInfo struct {
 	UpstreamAccepted      bool                  `json:"-"`
 	UpstreamRejected      bool                  `json:"-"`
 	UpstreamSideEffecting bool                  `json:"-"`
+	// Only prerequisite resources have been sent; billable generation has not
+	// started. This permits a refund but does not make resource creation replayable.
+	UpstreamPreparationOnly bool `json:"-"`
 	// Billing 是计费会话，封装了预扣费/结算/退款的统一生命周期。
 	// 免费渠道可为 nil；重试切换到收费渠道时会在发送前创建。
 	Billing BillingSettler
@@ -299,6 +302,7 @@ func (info *RelayInfo) ResetAttemptState() error {
 	}
 	info.SendResponseCount, info.ReceivedResponseCount = 0, 0
 	info.UpstreamSideEffecting = false
+	info.UpstreamPreparationOnly = false
 	info.UpstreamSent, info.UpstreamAccepted, info.UpstreamRejected = false, false, false
 	info.StreamStatus, info.GeminiConvertState = nil, nil
 	info.ClaudeConvertInfo = &ClaudeConvertInfo{LastMessagesType: LastMessageTypeNone}

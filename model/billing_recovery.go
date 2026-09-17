@@ -365,10 +365,10 @@ func markBillingRecoveryRefundPending(requestID string, lastError error, automat
 		if recovery.Status != BillingRecoveryStatusActive && recovery.Status != BillingRecoveryStatusRefundPending {
 			return ErrBillingRecoveryStateConflict
 		}
-		if recovery.ConsumptionState == BillingRecoveryStateCollecting || recovery.ConsumptionState == BillingRecoveryStatePricingCollecting {
+		if BillingRecoveryUsageCollecting(recovery.ConsumptionState) {
 			return ErrBillingRecoveryStateConflict
 		}
-		if automatic && recovery.Status == BillingRecoveryStatusActive && recovery.ConsumptionState == BillingRecoveryStatePricingPending {
+		if automatic && recovery.Status == BillingRecoveryStatusActive && BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
 			return ErrBillingRecoveryStateConflict
 		}
 		updates := map[string]any{
@@ -459,7 +459,7 @@ func ListStaleBillingRecoveries(cutoff int64, limit int) ([]BillingRecovery, err
 	err := staleBillingRecoveries(DB, cutoff).
 		Where("status <> ?", BillingRecoveryStatusReconciliation).
 		Where("status NOT IN ? OR consumption_state IS NULL OR consumption_state NOT IN ?",
-			[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettled}, []string{BillingRecoveryStatePricingPending, BillingRecoveryStatePricingCollecting}).
+			[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettled}, billingRecoveryUnconfirmedStates()).
 		Order("updated_at asc").Limit(limit).Find(&rows).Error
 	return rows, err
 }
@@ -467,7 +467,7 @@ func ListStaleBillingRecoveries(cutoff int64, limit int) ([]BillingRecovery, err
 func staleBillingRecoveries(db *gorm.DB, cutoff int64) *gorm.DB {
 	return db.Model(&BillingRecovery{}).Where("(status IN ? OR (status = ? AND consumption_state IN ?)) AND updated_at < ?",
 		[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending, BillingRecoveryStatusReconciliation},
-		BillingRecoveryStatusSettled, []string{BillingRecoveryStatePending, BillingRecoveryStateUnprepared, BillingRecoveryStatePricingPending, BillingRecoveryStatePricingCollecting}, cutoff)
+		BillingRecoveryStatusSettled, append(billingRecoveryUnconfirmedStates(), BillingRecoveryStatePending), cutoff)
 }
 
 type BillingRecoveryBacklog struct {

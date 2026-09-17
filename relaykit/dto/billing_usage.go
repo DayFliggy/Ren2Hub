@@ -115,11 +115,72 @@ func NewEstimatedGeminiChatBillingUsage(usage *Usage) *BillingUsage {
 	if totalTokens == 0 {
 		totalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
-	return newGeminiChatBillingUsage(&GeminiUsageMetadata{
-		PromptTokenCount:     usage.PromptTokens,
-		CandidatesTokenCount: usage.CompletionTokens,
-		TotalTokenCount:      totalTokens,
-	}, true)
+	metadata := &GeminiUsageMetadata{
+		PromptTokenCount:        usage.PromptTokens,
+		CandidatesTokenCount:    max(usage.CompletionTokens-usage.CompletionTokenDetails.ReasoningTokens, 0),
+		ThoughtsTokenCount:      usage.CompletionTokenDetails.ReasoningTokens,
+		TotalTokenCount:         totalTokens,
+		CachedContentTokenCount: usage.PromptTokensDetails.CachedTokens,
+	}
+	for _, detail := range []GeminiPromptTokensDetails{
+		{Modality: "TEXT", TokenCount: usage.PromptTokensDetails.TextTokens},
+		{Modality: "IMAGE", TokenCount: usage.PromptTokensDetails.ImageTokens},
+		{Modality: "AUDIO", TokenCount: usage.PromptTokensDetails.AudioTokens},
+	} {
+		if detail.TokenCount != 0 {
+			metadata.PromptTokensDetails = append(metadata.PromptTokensDetails, detail)
+		}
+	}
+	for _, detail := range []GeminiPromptTokensDetails{
+		{Modality: "TEXT", TokenCount: usage.CompletionTokenDetails.TextTokens},
+		{Modality: "IMAGE", TokenCount: usage.CompletionTokenDetails.ImageTokens},
+		{Modality: "AUDIO", TokenCount: usage.CompletionTokenDetails.AudioTokens},
+	} {
+		if detail.TokenCount != 0 {
+			metadata.CandidatesTokensDetails = append(metadata.CandidatesTokensDetails, detail)
+		}
+	}
+	return newGeminiChatBillingUsage(metadata, true)
+}
+
+// CloneBillingUsageWithEstimatedCompletion fills missing output usage without
+// replacing the provider's original input classifications or billing dialect.
+func CloneBillingUsageWithEstimatedCompletion(usage *BillingUsage, completionTokens int) *BillingUsage {
+	clone := CloneBillingUsage(usage)
+	if clone == nil || completionTokens <= 0 {
+		return clone
+	}
+
+	switch {
+	case clone.OpenAIUsage != nil:
+		usage := clone.OpenAIUsage
+		if usage.CompletionTokens != 0 || usage.OutputTokens != 0 {
+			return clone
+		}
+		usage.CompletionTokens = completionTokens
+		usage.OutputTokens = completionTokens
+		inputTokens := usage.PromptTokens
+		if inputTokens == 0 {
+			inputTokens = usage.InputTokens
+		}
+		usage.TotalTokens = max(usage.TotalTokens, inputTokens+completionTokens)
+	case clone.ClaudeUsage != nil:
+		if clone.ClaudeUsage.OutputTokens != 0 {
+			return clone
+		}
+		clone.ClaudeUsage.OutputTokens = completionTokens
+	case clone.GeminiUsageMetadata != nil:
+		metadata := clone.GeminiUsageMetadata
+		if metadata.CandidatesTokenCount != 0 || completionTokens <= metadata.ThoughtsTokenCount {
+			return clone
+		}
+		metadata.CandidatesTokenCount = completionTokens - metadata.ThoughtsTokenCount
+		metadata.TotalTokenCount = max(metadata.TotalTokenCount, metadata.PromptTokenCount+metadata.ToolUsePromptTokenCount+completionTokens)
+	default:
+		return clone
+	}
+	clone.Estimated = true
+	return clone
 }
 
 func newGeminiChatBillingUsage(metadata *GeminiUsageMetadata, estimated bool) *BillingUsage {

@@ -28,6 +28,23 @@ type routeAttemptHealthState struct {
 	rate    *service.GatewayProviderRateReservation
 }
 
+const liveRouteAttemptEvidenceKey = "route_live_attempt_evidence"
+
+func markLiveRouteAdmissionRejection(c *gin.Context, channelID int, err error) bool {
+	if !service.LiveRouteQualificationAllowsFailover(err) {
+		return false
+	}
+	reason := service.LiveRouteQualificationReason(err)
+	switch {
+	case errors.Is(err, service.ErrAdmissionCapacity):
+		reason = "capacity_exhausted"
+	case errors.Is(err, service.ErrRouteHealthUnavailable):
+		reason = "health_unavailable"
+	}
+	markLiveRouteCandidateFiltered(c, channelID, reason)
+	return true
+}
+
 // A final reservation can reject a candidate after the advisory scan. No
 // upstream work started, so all protocols may continue the existing scan.
 func markLiveRoutePreSendRejection(c *gin.Context, info *relaycommon.RelayInfo, apiErr *types.NewAPIError) bool {
@@ -69,7 +86,7 @@ func scanLiveRouteCandidate(c *gin.Context, channelID int) *types.NewAPIError {
 }
 
 func queueBusyLiveRouteCandidate(c *gin.Context) (int, bool) {
-	if c.GetBool("route_queue_selected") {
+	if c == nil || c.Request == nil || requestContextDone(c) || c.GetBool("route_queue_selected") {
 		return 0, false
 	}
 	_, budget, available := service.GatewayAdmissionFromContext(c.Request.Context())
@@ -399,6 +416,21 @@ func relayAttemptOutcome(c *gin.Context, info *relaycommon.RelayInfo, apiErr *ty
 func observeLiveRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, outcome service.AttemptOutcome) {
 	defer releaseRouteAttempt(c)
 	c.Set("gateway_last_attempt_outcome", outcome)
+	if routeLiveSelectionActive(c) && info != nil && info.UpstreamSent {
+		value, _ := c.Get(liveRouteAttemptEvidenceKey)
+		attempts, _ := value.([]service.RouteDecisionAttempt)
+		attempt := service.RouteDecisionAttempt{
+			Sequence: c.GetInt(liveRouteAttemptCountKey), ChannelID: c.GetInt(liveRoutePreviousChannelKey),
+			Success: outcome.Success, Origin: outcome.Origin, LatencyMS: outcome.LatencyMS,
+			Acceptance: outcome.Acceptance, RetryPermission: outcome.RetryPermission,
+			ResponseCommitted: outcome.ResponseCommitted,
+		}
+		if !outcome.Success {
+			attempt.ErrorClass = service.ClassifyAttemptOutcome(outcome).Class
+			attempt.ErrorHTTPStatus = outcome.StatusCode
+		}
+		c.Set(liveRouteAttemptEvidenceKey, append(attempts, attempt))
+	}
 	stopRouteAttemptRenewal(c)
 	value, _ := c.Get("route_live_health")
 	state, ok := value.(*routeAttemptHealthState)

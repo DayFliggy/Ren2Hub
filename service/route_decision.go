@@ -55,6 +55,21 @@ type RouteDecisionCandidate struct {
 	AdmissionState  string               `json:"admission_state,omitempty"`
 }
 
+// RouteDecisionAttempt contains only safe diagnostics for a dispatched attempt.
+// Successful response statuses and time to first token are not inferred.
+type RouteDecisionAttempt struct {
+	Sequence          int                    `json:"sequence"`
+	ChannelID         int                    `json:"channel_id"`
+	Success           bool                   `json:"success"`
+	ErrorClass        RouteErrorClass        `json:"error_class,omitempty"`
+	ErrorHTTPStatus   int                    `json:"error_http_status,omitempty"`
+	Origin            AttemptOrigin          `json:"origin"`
+	LatencyMS         int64                  `json:"latency_ms"`
+	Acceptance        AttemptAcceptance      `json:"acceptance"`
+	RetryPermission   AttemptRetryPermission `json:"retry_permission"`
+	ResponseCommitted bool                   `json:"response_committed,omitempty"`
+}
+
 type RouteDecision struct {
 	RetryBudgetExhausted     bool                         `json:"retry_budget_exhausted,omitempty"`
 	Event                    string                       `json:"event"`
@@ -72,6 +87,7 @@ type RouteDecision struct {
 	StaticPreferredChannelID int                          `json:"static_preferred_channel_id,omitempty"`
 	ScoredPreferredChannelID int                          `json:"scored_preferred_channel_id,omitempty"`
 	Candidates               []RouteDecisionCandidate     `json:"candidates"`
+	Attempts                 []RouteDecisionAttempt       `json:"attempts,omitempty"`
 	SelectedChannelID        int                          `json:"selected_channel_id,omitempty"`
 	RetryAttempt             int                          `json:"retry_attempt"`
 	SameResourceRetry        int                          `json:"same_resource_retry_attempt"`

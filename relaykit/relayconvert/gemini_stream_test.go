@@ -176,6 +176,37 @@ func TestGeminiToolCallsPreserveNonStopFinishReasons(t *testing.T) {
 	}
 }
 
+func TestGeminiMixedReasoningPreservesTextAndToolsInBothResponseModes(t *testing.T) {
+	stop := "STOP"
+	response := &dto.GeminiChatResponse{Candidates: []dto.GeminiChatCandidate{{FinishReason: &stop, Content: dto.GeminiChatContent{
+		Role: "model", Parts: []dto.GeminiPart{
+			{Thought: true, Text: "First thought."},
+			{Text: "Final answer"},
+			{Thought: true, Text: "Second thought."},
+			{FunctionCall: &dto.FunctionCall{ID: "call_tool", FunctionName: "lookup", Arguments: map[string]any{"q": "answer"}}},
+		},
+	}}}}
+	full, err := ConvertResponse(nil, nil, types.RelayFormatOpenAI, response)
+	require.NoError(t, err)
+	message := full.Value.(*dto.OpenAITextResponse).Choices[0].Message
+	assert.Equal(t, "Final answer", message.StringContent())
+	assert.Equal(t, "First thought.\nSecond thought.", message.GetReasoningContent())
+	require.Len(t, message.ParseToolCalls(), 1)
+	assert.Equal(t, "call_tool", message.ParseToolCalls()[0].ID)
+
+	state, err := NewResponseStreamState(types.RelayFormatGemini, types.RelayFormatOpenAI, ResponseStreamOptions{})
+	require.NoError(t, err)
+	chunks, err := ConvertStreamResponseChunk(nil, nil, state, response)
+	require.NoError(t, err)
+	require.Len(t, chunks, 2)
+	delta := chunks[0].Value.(*dto.ChatCompletionsStreamResponse).Choices[0].Delta
+	assert.Equal(t, "Final answer", delta.GetContentString())
+	assert.Equal(t, "First thought.\nSecond thought.", delta.GetReasoningContent())
+	require.Len(t, delta.ToolCalls, 1)
+	assert.Equal(t, "call_tool", delta.ToolCalls[0].ID)
+	assert.Equal(t, "tool_calls", *chunks[1].Value.(*dto.ChatCompletionsStreamResponse).Choices[0].FinishReason)
+}
+
 func geminiTestToolDelta(index int, id, name, arguments string) dto.ToolCallResponse {
 	return dto.ToolCallResponse{Index: &index, ID: id, Type: "function", Function: dto.FunctionResponse{Name: name, Arguments: arguments}}
 }

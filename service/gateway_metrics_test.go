@@ -31,6 +31,8 @@ func TestGatewayMetricsShareRecoveryPredicateAndLatchStateFailure(t *testing.T) 
 		{RequestID: "refund-stale", Status: model.BillingRecoveryStatusRefundPending, UpdatedAt: stale},
 		{RequestID: "log-pending", Status: model.BillingRecoveryStatusSettled, ConsumptionState: model.BillingRecoveryStatePending, UpdatedAt: stale},
 		{RequestID: "log-unprepared", Status: model.BillingRecoveryStatusSettled, ConsumptionState: model.BillingRecoveryStateUnprepared, UpdatedAt: stale},
+		{RequestID: "usage-unconfirmed", Status: model.BillingRecoveryStatusActive, ConsumptionState: model.BillingRecoveryStateUsagePending, UpdatedAt: stale},
+		{RequestID: "usage-partial", Status: model.BillingRecoveryStatusActive, ConsumptionState: model.BillingRecoveryStateUsageCollecting, UpdatedAt: stale},
 		{RequestID: "completed", Status: model.BillingRecoveryStatusSettled, ConsumptionState: model.BillingRecoveryStateCompleted, UpdatedAt: stale},
 		{RequestID: "refunded", Status: model.BillingRecoveryStatusRefunded, UpdatedAt: stale},
 	} {
@@ -40,11 +42,16 @@ func TestGatewayMetricsShareRecoveryPredicateAndLatchStateFailure(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, "instance", before.CounterScope)
 	assert.Equal(t, "database", before.RecoveryScope)
-	assert.Equal(t, int64(5), before.Recovery.Pending)
+	assert.Equal(t, int64(7), before.Recovery.Pending)
 	assert.Equal(t, stale, before.Recovery.OldestUpdated)
 	rows, err := model.ListStaleBillingRecoveries(time.Now().Add(-BillingRecoveryStaleAfter()).Unix(), 100)
 	require.NoError(t, err)
-	assert.Len(t, rows, int(before.Recovery.Pending))
+	requestIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		requestIDs = append(requestIDs, row.RequestID)
+	}
+	assert.ElementsMatch(t, []string{"active-stale", "settle-stale", "refund-stale", "log-pending"}, requestIDs,
+		"unconfirmed consumption stays in metrics without occupying automatic recovery batches")
 	encoded, err := common.Marshal(before)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), "active-stale")

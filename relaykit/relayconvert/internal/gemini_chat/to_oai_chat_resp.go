@@ -136,7 +136,7 @@ func ResponseGeminiChat2OpenAI(id string, created int64, response *dto.GeminiCha
 						toolCalls = append(toolCalls, *call)
 					}
 				} else if part.Thought {
-					choice.Message.ReasoningContent = &part.Text
+					continue
 				} else {
 					if part.ExecutableCode != nil {
 						writeSep()
@@ -161,6 +161,9 @@ func ResponseGeminiChat2OpenAI(id string, created int64, response *dto.GeminiCha
 				isToolCall = true
 			}
 			choice.Message.SetStringContent(content.String())
+			if reasoning := geminiThoughtText(candidate.Content.Parts); reasoning != "" {
+				choice.Message.ReasoningContent = &reasoning
+			}
 		}
 		if candidate.FinishReason != nil {
 			switch *candidate.FinishReason {
@@ -213,7 +216,6 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 			appended++
 		}
 		isTools := false
-		isThought := false
 		if candidate.FinishReason != nil {
 			switch *candidate.FinishReason {
 			case "STOP":
@@ -243,9 +245,7 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 					choice.Delta.ToolCalls = append(choice.Delta.ToolCalls, *call)
 				}
 			} else if part.Thought {
-				isThought = true
-				writeSep()
-				content.WriteString(part.Text)
+				continue
 			} else {
 				if part.ExecutableCode != nil {
 					writeSep()
@@ -265,9 +265,11 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 				}
 			}
 		}
-		if isThought {
-			choice.Delta.SetReasoningContent(content.String())
-		} else {
+		reasoning := geminiThoughtText(candidate.Content.Parts)
+		if reasoning != "" {
+			choice.Delta.SetReasoningContent(reasoning)
+		}
+		if content.Len() > 0 || reasoning == "" {
 			choice.Delta.SetContentString(content.String())
 		}
 		if isTools && choice.FinishReason == nil {
@@ -281,6 +283,20 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 		Choices: choices,
 	}
 	return &response, isStop
+}
+
+func geminiThoughtText(parts []dto.GeminiPart) string {
+	var text strings.Builder
+	for _, part := range parts {
+		if !part.Thought || part.Text == "" {
+			continue
+		}
+		if text.Len() > 0 {
+			text.WriteByte('\n')
+		}
+		text.WriteString(part.Text)
+	}
+	return text.String()
 }
 
 type GeminiToChatStreamState struct {

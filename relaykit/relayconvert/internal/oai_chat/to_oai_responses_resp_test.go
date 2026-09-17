@@ -74,6 +74,17 @@ func TestChatCompletionsResponseToResponsesMapsIncompleteFinishReasons(t *testin
 	}
 }
 
+func TestChatCompletionsResponseToResponsesReasoningUsesSummary(t *testing.T) {
+	response, _, err := ChatCompletionsResponseToResponsesResponse(&dto.OpenAITextResponse{
+		Choices: []dto.OpenAITextResponseChoice{{Message: dto.Message{Role: "assistant", ReasoningContent: lo.ToPtr("public explanation")}, FinishReason: "stop"}},
+	}, "resp_summary")
+	require.NoError(t, err)
+	require.Len(t, response.Output, 1)
+	assert.Equal(t, responsesOutputTypeReasoning, response.Output[0].Type)
+	assert.Equal(t, []dto.ResponsesReasoningSummaryPart{{Type: "summary_text", Text: "public explanation"}}, response.Output[0].Summary)
+	assert.Empty(t, response.Output[0].Content)
+}
+
 func TestChatCompletionsStreamToResponsesEventsAggregatesUsageAndToolArgs(t *testing.T) {
 	state := NewChatToResponsesStreamState("resp_1", "gpt-test")
 	state.Created = 123

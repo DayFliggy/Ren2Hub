@@ -57,6 +57,40 @@ func postGatewayTask(t *testing.T, url, key, path, body string) (int, string) {
 	return resp.StatusCode, string(data)
 }
 
+func assertGatewaySubmissionBilling(t *testing.T, expectedStatus string) {
+	t.Helper()
+	for pass := range 3 {
+		if pass > 0 {
+			_, err := service.RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+3600, 10)
+			require.NoError(t, err)
+		}
+		var recovery model.BillingRecovery
+		require.NoError(t, model.DB.First(&recovery).Error)
+		assert.Equal(t, expectedStatus, recovery.Status)
+		fundingHeld, tokenHeld := int(recovery.FundingAmount), int(recovery.TokenAmount)
+		if expectedStatus == model.BillingRecoveryStatusRefunded {
+			assert.True(t, model.BillingRecoveryRefundComplete(recovery))
+			fundingHeld, tokenHeld = 0, 0
+		} else {
+			assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
+			assert.Positive(t, fundingHeld)
+			var refunds int64
+			require.NoError(t, model.DB.Model(&model.BillingRecoveryAdjustment{}).
+				Where("request_id = ? AND operation = ?", recovery.RequestID, model.BillingRecoveryOperationRefund).Count(&refunds).Error)
+			assert.Zero(t, refunds)
+		}
+		var user model.User
+		var token model.Token
+		require.NoError(t, model.DB.First(&user, recovery.UserID).Error)
+		require.NoError(t, model.DB.First(&token, recovery.TokenID).Error)
+		assert.Equal(t, 10000000-fundingHeld, user.Quota)
+		assert.Zero(t, user.RequestCount)
+		assert.Zero(t, user.UsedQuota)
+		assert.Equal(t, -tokenHeld, token.RemainQuota)
+		assert.Equal(t, tokenHeld, token.UsedQuota)
+	}
+}
+
 func TestGatewayTaskAcceptedStatusesAndAccounting(t *testing.T) {
 	for _, status := range []int{200, 201, 202} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
@@ -110,6 +144,7 @@ func TestGatewayTaskPersistenceFailureDoesNotExposeSuccessOrReplay(t *testing.T)
 	var count int64
 	require.NoError(t, model.DB.Model(&model.Task{}).Count(&count).Error)
 	assert.Zero(t, count)
+	assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusActive)
 }
 
 func TestGatewayTaskSettlementFailureKeepsTaskAndRecoversOnce(t *testing.T) {
@@ -190,19 +225,49 @@ func TestGatewayTaskRemixKeepsOriginalCredentialAndProviderID(t *testing.T) {
 }
 
 func TestGatewayTaskUnknownAcceptanceIsNotReplayed(t *testing.T) {
-	for _, status := range []int{202, 500} {
-		t.Run(fmt.Sprint(status), func(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{name: "accepted without ID", status: 202, body: `{"object":"video","status":"queued"}`},
+		{name: "accepted malformed JSON", status: 200, body: `{"id":`},
+		{name: "server error after send", status: 500, body: `{"error":"upstream failed"}`},
+		{name: "connection lost after send"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			var sends atomic.Int32
 			url, key, _ := setupGatewayTask(t, func(w http.ResponseWriter, r *http.Request) {
 				sends.Add(1)
-				w.WriteHeader(status)
-				_, _ = io.WriteString(w, `{"error":"accepted status without a usable task ID"}`)
+				if test.status == 0 {
+					conn, _, err := w.(http.Hijacker).Hijack()
+					if assert.NoError(t, err) {
+						assert.NoError(t, conn.Close())
+					}
+					return
+				}
+				w.WriteHeader(test.status)
+				_, _ = io.WriteString(w, test.body)
 			})
 			code, _ := postGatewayTask(t, url, key, "/v1/videos", `{"model":"sora-2","prompt":"local fixture"}`)
 			assert.GreaterOrEqual(t, code, 400)
 			assert.EqualValues(t, 1, sends.Load())
+			assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusActive)
 		})
 	}
+}
+
+func TestGatewayTaskExplicitRejectionRefunds(t *testing.T) {
+	var sends atomic.Int32
+	url, key, _ := setupGatewayTask(t, func(w http.ResponseWriter, r *http.Request) {
+		sends.Add(1)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"error":{"message":"invalid prompt","type":"invalid_request_error"}}`)
+	})
+	code, body := postGatewayTask(t, url, key, "/v1/videos", `{"model":"sora-2","prompt":"local fixture"}`)
+	assert.Equal(t, http.StatusBadRequest, code, body)
+	assert.EqualValues(t, 1, sends.Load())
+	assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusRefunded)
 }
 
 func TestGatewayTaskProviderRPMRejectsBeforeBilling(t *testing.T) {

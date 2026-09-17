@@ -47,8 +47,8 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 		if recovery.UserID != consumption.Log.UserId || recovery.TokenID != consumption.Log.TokenId {
 			return ErrBillingRecoveryStateConflict
 		}
-		if recovery.ConsumptionSnapshot != "" && recovery.ConsumptionState != BillingRecoveryStateCollecting &&
-			recovery.ConsumptionState != BillingRecoveryStatePricingPending && recovery.ConsumptionState != BillingRecoveryStatePricingCollecting {
+		if recovery.ConsumptionSnapshot != "" && !BillingRecoveryUsageCollecting(recovery.ConsumptionState) &&
+			!BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
 			var existing BillingConsumption
 			if err := common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &existing); err != nil {
 				return err
@@ -84,6 +84,8 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 			if recovery.ConsumptionState == BillingRecoveryStatePricingPending || recovery.ConsumptionState == BillingRecoveryStatePricingCollecting {
 				// Further Realtime output can still fail expression evaluation.
 				state = BillingRecoveryStatePricingCollecting
+			} else if BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
+				state = BillingRecoveryStateUsageCollecting
 			}
 		} else if status == BillingRecoveryStatusActive {
 			status = BillingRecoveryStatusSettlementPending
@@ -113,7 +115,7 @@ func ApplyBillingRecoveryConsumption(requestID string) error {
 	}
 	if err != nil {
 		writeErr := DB.Model(&BillingRecovery{}).
-			Where("request_id = ? AND consumption_state IN ?", requestID, []string{BillingRecoveryStatePending, BillingRecoveryStateUnprepared, BillingRecoveryStatePricingPending, BillingRecoveryStatePricingCollecting}).
+			Where("request_id = ? AND consumption_state IN ?", requestID, append(billingRecoveryUnconfirmedStates(), BillingRecoveryStatePending)).
 			Updates(map[string]any{
 				"consumption_error": err.Error(),
 				"attempts":          gorm.Expr("attempts + 1"),
@@ -130,12 +132,23 @@ func RecordBillingConsumptionPreparationFailure(requestID string, cause error) e
 	if DB == nil || requestID == "" || cause == nil {
 		return errors.New("invalid billing consumption preparation failure")
 	}
-	return DB.Model(&BillingRecovery{}).
-		Where("request_id = ? AND (consumption_snapshot = '' OR consumption_snapshot IS NULL)", requestID).
-		Updates(map[string]any{
-			"consumption_state": BillingRecoveryStateUnprepared, "consumption_error": cause.Error(),
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var recovery BillingRecovery
+		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
+			return err
+		}
+		if recovery.ConsumptionSnapshot != "" && !BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
+			return nil
+		}
+		state := recovery.ConsumptionState
+		if !BillingRecoveryUsageUnconfirmed(state) {
+			state = BillingRecoveryStateUnprepared
+		}
+		return tx.Model(&recovery).Updates(map[string]any{
+			"consumption_state": state, "consumption_error": cause.Error(),
 			"attempts": gorm.Expr("attempts + 1"), "updated_at": common.GetTimestamp(),
 		}).Error
+	})
 }
 
 func applyBillingConsumptionStatistics(requestID string) error {
@@ -148,11 +161,8 @@ func applyBillingConsumptionStatistics(requestID string) error {
 		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
 			return err
 		}
-		if recovery.ConsumptionState == BillingRecoveryStatePricingPending || recovery.ConsumptionState == BillingRecoveryStatePricingCollecting {
-			return errors.New("billing expression consumption is unconfirmed; reconciliation is required")
-		}
-		if recovery.ConsumptionSnapshot == "" && recovery.ConsumptionState == BillingRecoveryStateUnprepared {
-			return errors.New("billing consumption snapshot is missing; reconciliation is required")
+		if BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
+			return errors.New("billing consumption is unconfirmed; reconciliation is required")
 		}
 		if recovery.ConsumptionSnapshot == "" || recovery.ConsumptionStatistics == BillingRecoveryStateCompleted {
 			return nil

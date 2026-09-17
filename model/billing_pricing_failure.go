@@ -29,27 +29,7 @@ func PrepareBillingPricing(requestID string, pending BillingPricingFailure) erro
 		return errors.New("invalid billing pricing preparation")
 	}
 	pending.Reason = "billing_expression_usage_unconfirmed"
-	data, err := common.Marshal(pending)
-	if err != nil {
-		return err
-	}
-	return DB.Transaction(func(tx *gorm.DB) error {
-		var recovery BillingRecovery
-		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
-			return err
-		}
-		if recovery.Status != BillingRecoveryStatusActive || recovery.PreConsumeState != BillingRecoveryPreConsumeCommitted {
-			return ErrBillingRecoveryStateConflict
-		}
-		if recovery.ConsumptionState != "" && recovery.ConsumptionState != BillingRecoveryStateUnprepared && recovery.ConsumptionState != BillingRecoveryStatePricingPending {
-			return ErrBillingRecoveryStateConflict
-		}
-		return tx.Model(&recovery).Updates(map[string]any{
-			"consumption_snapshot": string(data),
-			"consumption_state":    BillingRecoveryStatePricingPending,
-			"updated_at":           common.GetTimestamp(),
-		}).Error
-	})
+	return prepareBillingDispatch(requestID, pending, BillingRecoveryStatePricingPending)
 }
 
 func RecordBillingPricingFailure(requestID string, failure BillingPricingFailure) error {

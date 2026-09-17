@@ -10,10 +10,12 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func newResponsesChatTestContext(t *testing.T, body string, isStream bool) (*gin.Context, *httptest.ResponseRecorder, *http.Response, *relaycommon.RelayInfo) {
@@ -37,6 +39,37 @@ func newResponsesChatTestContext(t *testing.T, body string, isStream bool) (*gin
 		DisablePing:        true,
 	}
 	return c, recorder, resp, info
+}
+
+func TestResponsesChatHandlersPreserveReasoningSummary(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, reasoningPath, answerPath string
+		format                                types.RelayFormat
+		handler                               func(*gin.Context, *relaycommon.RelayInfo, *http.Response) (*dto.Usage, *types.NewAPIError)
+	}{
+		{
+			name: "responses to chat", format: types.RelayFormatOpenAI, handler: OaiResponsesToChatHandler,
+			body:          `{"id":"resp_summary","model":"test-model","status":"completed","output":[{"id":"reason_1","type":"reasoning","summary":[{"type":"summary_text","text":"Public explanation."}]},{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"output_text","text":"Final answer","annotations":[]}]}],"usage":{"input_tokens":10,"output_tokens":20,"total_tokens":30}}`,
+			reasoningPath: "choices.0.message.reasoning_content", answerPath: "choices.0.message.content",
+		},
+		{
+			name: "chat to responses", format: types.RelayFormatOpenAIResponses, handler: OaiChatToResponsesHandler,
+			body:          `{"id":"chat_summary","model":"test-model","choices":[{"index":0,"message":{"role":"assistant","content":"Final answer","reasoning_content":"Public explanation."},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30}}`,
+			reasoningPath: `output.#(type=="reasoning").summary.0.text`, answerPath: `output.#(type=="message").content.0.text`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, recorder, resp, info := newResponsesChatTestContext(t, tc.body, false)
+			info.RelayFormat = tc.format
+			resp.Header.Set("Content-Type", "application/json")
+			usage, apiErr := tc.handler(c, info, resp)
+			require.Nil(t, apiErr)
+			require.NotNil(t, usage)
+			assert.Equal(t, 30, usage.TotalTokens)
+			assert.Equal(t, "Final answer", gjson.Get(recorder.Body.String(), tc.answerPath).String())
+			assert.Equal(t, "Public explanation.", gjson.Get(recorder.Body.String(), tc.reasoningPath).String())
+		})
+	}
 }
 
 func TestOaiResponsesToChatStreamHandlerConvertsSSEOrderAndUsage(t *testing.T) {

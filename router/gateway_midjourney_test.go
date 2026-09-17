@@ -87,10 +87,39 @@ func TestGatewayMidjourneyUnknownAcceptanceDoesNotReplay(t *testing.T) {
 			var count int64
 			require.NoError(t, model.DB.Model(&model.Midjourney{}).Count(&count).Error)
 			assert.Zero(t, count)
-			require.Eventually(t, func() bool {
-				var recovery model.BillingRecovery
-				return model.DB.First(&recovery).Error == nil && recovery.Status == model.BillingRecoveryStatusRefunded
-			}, time.Second, 10*time.Millisecond)
+			assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusActive)
+		})
+	}
+}
+
+func TestGatewayMidjourneyInterruptedSubmissionKeepsReservation(t *testing.T) {
+	var sends atomic.Int32
+	url, key, _ := setupGatewayMidjourney(t, func(w http.ResponseWriter, r *http.Request) {
+		sends.Add(1)
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if assert.NoError(t, err) {
+			assert.NoError(t, conn.Close())
+		}
+	})
+	code, body := postGatewayTask(t, url, key, "/mj/submit/imagine", `{"prompt":"local fixture"}`)
+	assert.Equal(t, http.StatusBadGateway, code, body)
+	assert.EqualValues(t, 1, sends.Load())
+	assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusActive)
+}
+
+func TestGatewayMidjourneyExplicitRejectionRefunds(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusBadRequest} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			var sends atomic.Int32
+			url, key, _ := setupGatewayMidjourney(t, func(w http.ResponseWriter, r *http.Request) {
+				sends.Add(1)
+				w.WriteHeader(status)
+				_, _ = io.WriteString(w, `{"code":4,"description":"invalid prompt"}`)
+			})
+			code, body := postGatewayTask(t, url, key, "/mj/submit/imagine", `{"prompt":"local fixture"}`)
+			assert.Equal(t, http.StatusBadRequest, code, body)
+			assert.EqualValues(t, 1, sends.Load())
+			assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusRefunded)
 		})
 	}
 }
@@ -131,7 +160,9 @@ func TestGatewayMidjourneyPersistenceAndSettlementRecovery(t *testing.T) {
 				require.NoError(t, err)
 			}
 			assert.EqualValues(t, 1, sends.Load())
-			if failure != "task" {
+			if failure == "task" {
+				assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusActive)
+			} else {
 				var task model.Midjourney
 				require.NoError(t, model.DB.First(&task).Error)
 				ready, err := model.MidjourneySubmissionReady(context.Background(), &task)

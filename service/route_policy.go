@@ -2,12 +2,11 @@ package service
 
 import (
 	"context"
-	"errors"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
-	"gorm.io/gorm"
 )
 
 func loadRouteChannel(ctx context.Context, channelID int) (model.Channel, error) {
@@ -39,20 +38,18 @@ func GetRouteRuntimeState(ctx context.Context, channelID int, requestModel strin
 		return RouteRuntimeState{}, err
 	}
 	state := RouteRuntimeState{
-		ChannelEnabled: true, HealthEpoch: 1,
-		Capacity: channel.CapacityTotal, ChannelRatio: channel.ChannelRatio,
+		ChannelEnabled: true,
+		Capacity:       channel.CapacityTotal, ChannelRatio: channel.ChannelRatio,
 	}
 	fence, err := model.GetChannelCapabilitySnapshotFence(ctx, channelID)
 	if err != nil {
 		return RouteRuntimeState{}, err
 	}
 	state.CapabilityVersion = fence.ActiveVersion
-	var health model.ChannelHealth
-	err = model.DB.WithContext(ctx).Where("channel_id = ? AND model = ? AND key_scope = ?", channelID, canonicalModel, "").First(&health).Error
-	if err == nil {
-		state.HealthEpoch = health.HealthEpoch
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+	health, err := LoadRouteHealth(ctx, channelID, canonicalModel)
+	if err != nil {
 		return RouteRuntimeState{}, err
 	}
+	state.HealthUnavailable = !RouteHealthReadOnlyUsable(health, time.Now())
 	return state, nil
 }

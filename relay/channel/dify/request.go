@@ -96,6 +96,7 @@ func (a *Adaptor) sendRequest(c *gin.Context, info *relaycommon.RelayInfo, body 
 	if len(uploads) == 0 {
 		return channel.DoRequest(c, request, info)
 	}
+	info.UpstreamPreparationOnly = true
 	if err := info.PrepareUpstreamSend(bytes.NewReader(data)); err != nil {
 		return nil, err
 	}
@@ -134,5 +135,6 @@ func (a *Adaptor) sendRequest(c *gin.Context, info *relaycommon.RelayInfo, body 
 	request.ContentLength = int64(len(data))
 	request.Header.Del("Content-Length")
 	request.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(data)), nil }
+	info.UpstreamPreparationOnly = false
 	return channel.DoRequest(c, request, info)
 }

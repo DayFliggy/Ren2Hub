@@ -49,15 +49,23 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 			}
 			mainDB, logDB := isolatedBillingDatabases(t, backend.kind, dsn)
 			bindBillingIntegrationDatabases(t, mainDB, logDB, backend.kind)
-			for index, scenario := range append([]string{
+			scenarios := append([]string{
 				"duplicate_finalization", "funding_failure", "funding_marker_failure", "token_failure",
 				"statistics_failure", "log_insert_failure", "log_completion_failure", "canceled_request",
 				"playground_token_identity", "free_consumption", "concurrent_delivery", "refund_before_settlement",
 				"zero_precharge_refund", "zero_precharge_refund_completion_failure",
 				"pricing_reconciliation",
-			}, billingPricingGuardScenarios...) {
+			}, billingPricingGuardScenarios...)
+			scenarios = append(scenarios, billingDispatchGuardScenarios...)
+			for index, scenario := range scenarios {
 				t.Run(scenario, func(t *testing.T) {
 					c, info, cancel := seedBillingIntegrationRequest(t, index+1, scenario)
+					for _, guardedScenario := range billingDispatchGuardScenarios {
+						if scenario == guardedScenario {
+							runBillingDispatchGuardScenario(t, c, info, scenario)
+							return
+						}
+					}
 					for _, guardedScenario := range billingPricingGuardScenarios {
 						if scenario == guardedScenario {
 							runBillingPricingGuardScenario(t, c, info, scenario)

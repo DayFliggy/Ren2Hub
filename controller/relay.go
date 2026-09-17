@@ -309,15 +309,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		if permitErr := acquireRouteAttemptPermit(c, relayInfo, channel, retryParam.GetRetry()); permitErr != nil {
-			if errors.Is(permitErr, service.ErrAdmissionCapacity) {
-				markLiveRouteCandidateFiltered(c, channel.Id, "capacity_exhausted")
-			}
-			if service.LiveRouteQualificationAllowsFailover(permitErr) && !relayResponseCommitted(c, relayInfo) {
+			if markLiveRouteAdmissionRejection(c, channel.Id, permitErr) && !relayResponseCommitted(c, relayInfo) {
 				if nextAttempt, found := nextLiveRouteCandidateIndex(c, retryParam.GetRetry()); found {
-					retryParam.SetRetry(nextAttempt)
-					continue
-				}
-				if nextAttempt, found := queueBusyLiveRouteCandidate(c); found {
 					retryParam.SetRetry(nextAttempt)
 					continue
 				}
@@ -388,10 +381,6 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		observeLiveRouteAttempt(c, relayInfo, attemptOutcome)
 		if markLiveRoutePreSendRejection(c, relayInfo, newAPIError) {
 			if nextAttempt, found := nextLiveRouteCandidateIndex(c, retryParam.GetRetry()); found {
-				retryParam.SetRetry(nextAttempt)
-				continue
-			}
-			if nextAttempt, found := queueBusyLiveRouteCandidate(c); found {
 				retryParam.SetRetry(nextAttempt)
 				continue
 			}
@@ -734,11 +723,15 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	if !valid || selection.Source == service.RouteSourceUnavailable {
 		return nil, types.NewError(service.ErrRouteSelectionUnavailable, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
-	for candidateIndex := retryParam.GetRetry(); candidateIndex < len(selection.Attempts); candidateIndex++ {
-		candidate, actualIndex, found := selection.CandidateAtOrAfter(candidateIndex)
+	for candidateIndex := retryParam.GetRetry(); ; {
+		actualIndex, found := nextLiveRouteCandidateIndex(c, candidateIndex-1)
 		if !found {
 			break
 		}
+		value, _ = c.Get("route_live_selection")
+		selection = value.(service.LiveRouteSelection)
+		candidate, _ := selection.CandidateForAttempt(actualIndex)
+		candidateIndex = actualIndex + 1
 		if scanErr := scanLiveRouteCandidate(c, candidate.ChannelID); scanErr != nil {
 			return nil, scanErr
 		}
@@ -748,7 +741,6 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		}
 		if channel.Status != common.ChannelStatusEnabled {
 			markLiveRouteCandidateFiltered(c, candidate.ChannelID, service.RouteFilterChannelDisabled)
-			candidateIndex = actualIndex
 			continue
 		}
 		retryParam.SetRetry(actualIndex)
@@ -758,7 +750,6 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		if setupErr := middleware.SetupContextForSelectedChannel(c, channel, info.BillingModelName()); setupErr != nil {
 			if setupErr.GetErrorCode() == types.ErrorCodeChannelNoAvailableKey {
 				markLiveRouteCandidateFiltered(c, candidate.ChannelID, service.RouteFilterKeyUnavailable)
-				candidateIndex = actualIndex
 				continue
 			}
 			return nil, setupErr
@@ -792,8 +783,8 @@ func acquireRouteAttemptPermit(c *gin.Context, info *relaycommon.RelayInfo, chan
 	if candidate.SnapshotVersion <= 0 || expected.CapabilityVersion != candidate.SnapshotVersion {
 		return service.ErrAdmissionRuntime
 	}
-	if candidate.HealthEpoch <= 0 || expected.HealthEpoch != candidate.HealthEpoch {
-		return service.ErrAdmissionRuntime
+	if expected.HealthUnavailable {
+		return service.ErrRouteHealthUnavailable
 	}
 	if expected.ChannelRatio != info.PriceData.ChannelRatio {
 		return service.ErrAdmissionRuntime
@@ -1136,7 +1127,12 @@ func nextLiveRouteCandidateIndex(c *gin.Context, currentAttempt int) (int, bool)
 		return 0, false
 	}
 	_, index, found := selection.CandidateAtOrAfter(currentAttempt + 1)
-	return index, found
+	if found {
+		return index, true
+	}
+	// Every candidate-local rejection shares this exhaustion path. A later
+	// price, conversion, key, or health rejection cannot discard a busy pool.
+	return queueBusyLiveRouteCandidate(c)
 }
 
 func nextLiveRouteAttemptForError(c *gin.Context, currentAttempt, currentChannelID int, class service.RouteErrorClassification) (int, bool) {
@@ -1289,6 +1285,9 @@ func finalizeLiveRouteDecision(c *gin.Context, info *relaycommon.RelayInfo, apiE
 	if !ok || !valid {
 		return
 	}
+	// Keep attempt evidence on the logical request across compact reselection.
+	attempts, _ := c.Get(liveRouteAttemptEvidenceKey)
+	selection.Decision.Attempts, _ = attempts.([]service.RouteDecisionAttempt)
 	if info != nil {
 		counters := liveRouteRetryCounters(c)
 		selection.Decision.ScannedCandidates = c.GetInt("gateway_scanned_candidates")
@@ -1489,19 +1488,15 @@ func RelayMidjourney(c *gin.Context) {
 				break
 			}
 			_, bound := c.Get("gateway_origin_midjourney")
-			if admissionErr != nil && service.LiveRouteQualificationAllowsFailover(admissionErr) {
-				reason := "admission_failed"
-				if errors.Is(admissionErr, service.ErrAdmissionCapacity) {
-					reason = "capacity_exhausted"
+			if admissionErr != nil && markLiveRouteAdmissionRejection(c, info.ChannelId, admissionErr) {
+				var next int
+				var found bool
+				if bound {
+					next, found = queueBusyLiveRouteCandidate(c)
+				} else {
+					next, found = nextLiveRouteCandidateIndex(c, retry.GetRetry())
 				}
-				markLiveRouteCandidateFiltered(c, info.ChannelId, reason)
-				if !bound {
-					if next, found := nextLiveRouteCandidateIndex(c, retry.GetRetry()); found {
-						retry.SetRetry(next)
-						continue
-					}
-				}
-				if next, found := queueBusyLiveRouteCandidate(c); found {
+				if found {
 					retry.SetRetry(next)
 					continue
 				}
@@ -1512,10 +1507,6 @@ func RelayMidjourney(c *gin.Context) {
 			}
 			if markLiveRoutePreSendRejection(c, info, info.LastError) {
 				if next, found := nextLiveRouteCandidateIndex(c, retry.GetRetry()); found {
-					retry.SetRetry(next)
-					continue
-				}
-				if next, found := queueBusyLiveRouteCandidate(c); found {
 					retry.SetRetry(next)
 					continue
 				}
@@ -1670,17 +1661,8 @@ func RelayTask(c *gin.Context) {
 		outcome := relayAttemptOutcome(c, relayInfo, attemptError, attemptStartedAt, true)
 		observeLiveRouteAttempt(c, relayInfo, outcome)
 		if admissionErr != nil {
-			if service.LiveRouteQualificationAllowsFailover(admissionErr) {
-				reason := "admission_failed"
-				if errors.Is(admissionErr, service.ErrAdmissionCapacity) {
-					reason = "capacity_exhausted"
-				}
-				markLiveRouteCandidateFiltered(c, channel.Id, reason)
+			if markLiveRouteAdmissionRejection(c, channel.Id, admissionErr) {
 				if nextAttempt, found := nextLiveRouteCandidateIndex(c, retryParam.GetRetry()); found {
-					retryParam.SetRetry(nextAttempt)
-					continue
-				}
-				if nextAttempt, found := queueBusyLiveRouteCandidate(c); found {
 					retryParam.SetRetry(nextAttempt)
 					continue
 				}
@@ -1692,10 +1674,6 @@ func RelayTask(c *gin.Context) {
 		}
 		if markLiveRoutePreSendRejection(c, relayInfo, attemptError) {
 			if nextAttempt, found := nextLiveRouteCandidateIndex(c, retryParam.GetRetry()); found {
-				retryParam.SetRetry(nextAttempt)
-				continue
-			}
-			if nextAttempt, found := queueBusyLiveRouteCandidate(c); found {
 				retryParam.SetRetry(nextAttempt)
 				continue
 			}

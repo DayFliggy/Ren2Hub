@@ -142,8 +142,16 @@ func TestGatewayImageDeliveryAndSettlement(t *testing.T) {
 			require.NoError(t, model.DB.First(&user, 1).Error)
 			require.NoError(t, model.DB.First(&token, 1).Error)
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
-			assert.Equal(t, 10000000-test.charge, user.Quota)
-			assert.Equal(t, 100000-test.charge, token.RemainQuota)
+			heldOrCharged := test.charge
+			if test.charge == 0 {
+				heldOrCharged = 1500
+				var recovery model.BillingRecovery
+				require.NoError(t, model.DB.First(&recovery).Error)
+				assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
+				assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
+			}
+			assert.Equal(t, 10000000-heldOrCharged, user.Quota)
+			assert.Equal(t, 100000-heldOrCharged, token.RemainQuota)
 			assert.Equal(t, test.charge, user.UsedQuota)
 			if test.charge == 0 {
 				assert.Empty(t, logs)
