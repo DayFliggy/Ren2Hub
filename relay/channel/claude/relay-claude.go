@@ -117,13 +117,19 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		countClaudeStreamBillableTools(c, info, &claudeResponse)
 		helper.ClaudeChunkData(c, claudeResponse, data)
 	} else if info.RelayFormat == types.RelayFormatOpenAI {
-		response := StreamResponseClaude2OpenAI(&claudeResponse)
+		response, convertErr := claudeInfo.ChatStream.ConvertChunk(&claudeResponse)
+		if convertErr != nil {
+			return types.NewError(convertErr, types.ErrorCodeBadResponse)
+		}
 
 		if !FormatClaudeResponseInfo(&claudeResponse, response, claudeInfo) {
 			return nil
 		}
 
 		countClaudeStreamBillableTools(c, info, &claudeResponse)
+		if response == nil {
+			return nil
+		}
 
 		err = helper.ObjectData(c, response)
 		if err != nil {
@@ -198,9 +204,7 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 	if claudeInfo.Usage != nil {
 		claudeInfo.Usage.UsageSemantic = "anthropic"
 	}
-	if claudeInfo.Usage != nil && claudeInfo.Usage.BillingUsage == nil {
-		claudeInfo.Usage.BillingUsage = dto.NewClaudeMessagesBillingUsage(buildMessageDeltaPatchUsage(nil, claudeInfo))
-	}
+	relayconvert.FinalizeClaudeStreamBillingUsage(claudeInfo)
 
 	if info.StreamStatus != nil && !info.StreamStatus.IsNormalEnd() {
 		return

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
@@ -67,15 +68,21 @@ func ExtendWriteDeadline(c *gin.Context) {
 // output. A failed attempt can then be retried without exposing its prelude.
 type StreamPreludeWriter struct {
 	gin.ResponseWriter
-	buffer    bytes.Buffer
-	committed bool
-	err       error
-	written   int
+	buffer        bytes.Buffer
+	committed     bool
+	commitOnWrite bool
+	err           error
+	written       int
 }
 
 func (w *StreamPreludeWriter) Write(data []byte) (int, error) {
 	if w.err != nil {
 		return 0, w.err
+	}
+	if w.commitOnWrite {
+		if err := w.Commit(); err != nil {
+			return 0, err
+		}
 	}
 	if w.committed {
 		n, err := w.ResponseWriter.Write(data)
@@ -111,6 +118,7 @@ func (w *StreamPreludeWriter) Commit() error {
 		return nil
 	}
 	w.committed = true
+	w.commitOnWrite = false
 	hasData := w.buffer.Len() != 0
 	if hasData {
 		n, err := w.ResponseWriter.Write(w.buffer.Bytes())
@@ -126,9 +134,29 @@ func (w *StreamPreludeWriter) Commit() error {
 	return w.err
 }
 
+// CommitStreamOutput authorizes the next semantic event write to commit the
+// stream. Deferring the actual commit until Write lets state binding and output
+// validation reject the event without exposing buffered metadata.
+func CommitStreamOutput(c *gin.Context) error {
+	if c == nil || c.Writer == nil {
+		return fmt.Errorf("context or writer is nil")
+	}
+	if requestContextDone(c) {
+		return recordStreamOutputError(c, fmt.Errorf("%w: %w", ErrStreamClientWrite, c.Request.Context().Err()))
+	}
+	if writer, ok := c.Writer.(*StreamPreludeWriter); ok {
+		writer.commitOnWrite = true
+		return writer.err
+	}
+	return nil
+}
+
 // StreamPayloadState distinguishes protocol terminals and semantic payload from
 // headers, roles, accounting-only frames and keepalives.
 func StreamPayloadState(data string) (semantic, terminal bool) {
+	if !gjson.Valid(data) {
+		return false, false
+	}
 	value := gjson.Parse(data)
 	typ := value.Get("type").String()
 	switch typ {
@@ -136,6 +164,10 @@ func StreamPayloadState(data string) (semantic, terminal bool) {
 		semantic, terminal = true, true
 	case "image_generation.partial_image", "image_edit.partial_image":
 		semantic = true
+	case "response.image_generation_call.partial_image":
+		semantic = value.Get("partial_image_b64").String() != ""
+	case "response.output_item.done":
+		semantic = value.Get("item.type").String() == "image_generation_call" && value.Get("item.status").String() == "completed" && value.Get("item.result").String() != ""
 	case "message_stop", "response.completed", "response.done", "message_end":
 		terminal = true
 	case "content_block_delta":
@@ -170,7 +202,7 @@ func StreamPayloadState(data string) (semantic, terminal bool) {
 }
 
 func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(string, *StreamResult)) {
-	streamScannerHandler(c, resp, info, dataHandler, false)
+	streamScannerHandler(c, resp, info, dataHandler, false, configuredStreamTimeouts())
 }
 
 // NDJSONStreamScannerHandler shares cancellation, prelude and termination
@@ -182,10 +214,22 @@ func NDJSONStreamScannerHandler(c *gin.Context, resp *http.Response, info *relay
 // LineStreamScannerHandler preserves provider-specific fields and text spacing.
 // The parser must explicitly mark semantic output and protocol completion.
 func LineStreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(string, *StreamResult)) {
-	streamScannerHandler(c, resp, info, dataHandler, true)
+	streamScannerHandler(c, resp, info, dataHandler, true, configuredStreamTimeouts())
 }
 
-func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(string, *StreamResult), ndjson bool) {
+type streamTimeouts struct {
+	firstOutput time.Duration
+	idle        time.Duration
+}
+
+func configuredStreamTimeouts() streamTimeouts {
+	return streamTimeouts{
+		firstOutput: common.RelayPhaseTimeout(common.StreamingFirstOutputTimeout),
+		idle:        common.RelayPhaseTimeout(constant.StreamingTimeout),
+	}
+}
+
+func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(string, *StreamResult), ndjson bool, timeouts streamTimeouts) {
 	info.StreamStatus = relaycommon.NewStreamStatus()
 	status := info.StreamStatus
 	if resp == nil || resp.Body == nil || dataHandler == nil {
@@ -195,20 +239,46 @@ func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	readerDone := make(chan struct{})
 	type scanItem struct {
-		data string
-		err  error
-		eof  bool
+		data      string
+		eventName string
+		activity  bool
+		err       error
+		eof       bool
 	}
 	items := make(chan scanItem)
 	go func() {
 		defer close(readerDone)
 		defer close(items)
 		scanner := NewStreamScanner(resp.Body)
+		decoder := sseDecoder{maxSize: getScannerBufferSize()}
+		if !ndjson {
+			scanner.Split(splitSSELine)
+		}
 		for scanner.Scan() {
+			item := scanItem{data: scanner.Text()}
+			if !ndjson {
+				event, err := decoder.addLine(item.data)
+				item = scanItem{activity: event == nil, err: err}
+				if event != nil {
+					item.data, item.eventName = event.data, event.name
+				}
+			}
 			select {
-			case items <- scanItem{data: scanner.Text()}:
+			case items <- item:
 			case <-ctx.Done():
 				return
+			}
+			if item.err != nil {
+				return
+			}
+		}
+		if !ndjson && scanner.Err() == nil {
+			if event := decoder.finish(); event != nil {
+				select {
+				case items <- scanItem{data: event.data, eventName: event.name}:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 		select {
@@ -230,12 +300,13 @@ func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	}()
 	copyCodexSSEHeaders(c, resp)
 	SetEventStreamHeaders(c)
-	timeout := time.Duration(constant.StreamingTimeout) * time.Second
-	if timeout <= 0 {
-		timeout = 300 * time.Second
-	}
-	timer := time.NewTimer(timeout)
+	timer := time.NewTimer(timeouts.idle)
+	timer.Stop()
 	defer timer.Stop()
+	var idleDeadline <-chan time.Time
+	firstOutputTimer := time.NewTimer(timeouts.firstOutput)
+	defer firstOutputTimer.Stop()
+	firstOutputDeadline := firstOutputTimer.C
 	settings := operation_setting.GetGeneralSetting()
 	var ping <-chan time.Time
 	if settings.PingIntervalEnabled && !info.DisablePing {
@@ -250,14 +321,16 @@ func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	sr := newStreamResult(status)
 	terminalSeen := false
 	preludeEvents := 0
-	eventName := ""
 	for {
 		select {
 		case <-ctx.Done():
 			status.SetEndReason(relaycommon.StreamEndReasonClientGone, ctx.Err())
 			return
-		case <-timer.C:
+		case <-idleDeadline:
 			status.SetEndReason(relaycommon.StreamEndReasonTimeout, fmt.Errorf("upstream stream timeout"))
+			return
+		case <-firstOutputDeadline:
+			status.SetEndReason(relaycommon.StreamEndReasonTimeout, fmt.Errorf("upstream first output timeout"))
 			return
 		case <-ping:
 			// A heartbeat must not commit an otherwise retryable attempt.
@@ -269,42 +342,29 @@ func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				}
 			}
 		case item, ok := <-items:
+			if ctx.Err() != nil {
+				status.SetEndReason(relaycommon.StreamEndReasonClientGone, ctx.Err())
+				return
+			}
+			if item.err != nil {
+				status.SetEndReason(relaycommon.StreamEndReasonScannerErr, item.err)
+				return
+			}
 			if !ok || item.eof {
-				if item.err != nil {
-					status.SetEndReason(relaycommon.StreamEndReasonScannerErr, item.err)
-				} else if terminalSeen {
+				if terminalSeen {
 					status.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 				} else {
 					status.SetEndReason(relaycommon.StreamEndReasonEOF, io.ErrUnexpectedEOF)
 				}
 				return
 			}
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
+			if idleDeadline != nil {
+				timer.Reset(timeouts.idle)
 			}
-			timer.Reset(timeout)
-			data := strings.TrimSpace(item.data)
-			if ndjson {
-				data = strings.TrimSuffix(item.data, "\r")
-			}
-			if !ndjson {
-				if data == "" {
-					eventName = ""
-					continue
-				}
-				if strings.HasPrefix(data, "event:") {
-					eventName = strings.TrimSpace(strings.TrimPrefix(data, "event:"))
-					continue
-				}
-			}
-			if !ndjson && strings.HasPrefix(data, "data:") {
-				data = strings.TrimSpace(strings.TrimPrefix(data, "data:"))
-			} else if !ndjson && data != "[DONE]" {
+			if item.activity {
 				continue
 			}
+			data := strings.TrimSuffix(item.data, "\r")
 			if data == "" {
 				continue
 			}
@@ -319,7 +379,7 @@ func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			}
 			info.ReceivedResponseCount++
 			sr.reset()
-			sr.eventName = eventName
+			sr.eventName = item.eventName
 			ExtendWriteDeadline(c)
 			writtenBefore := writer.written
 			dataHandler(data, sr)
@@ -345,6 +405,10 @@ func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				if semantic && original.Written() {
 					info.SetFirstResponseTime()
 					info.MarkValidOutput()
+					firstOutputTimer.Stop()
+					firstOutputDeadline = nil
+					timer.Reset(timeouts.idle)
+					idleDeadline = timer.C
 				}
 			}
 			if !writer.committed {

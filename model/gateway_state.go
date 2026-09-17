@@ -84,6 +84,18 @@ func ResolveGatewayCredential(ctx context.Context, channel *Channel, identity st
 	if err := DB.WithContext(ctx).Where("id = ? AND channel_id = ?", identity, channel.Id).First(&credential).Error; err != nil {
 		return "", 0, ErrGatewayStateUnavailable
 	}
+	return channel.enabledGatewayKey(credential.Fingerprint)
+}
+
+func (channel *Channel) HasEnabledGatewayKey(key string) bool {
+	if strings.TrimSpace(key) == "" {
+		return false
+	}
+	_, _, err := channel.enabledGatewayKey(GatewayDigest(strings.TrimSpace(key)))
+	return err == nil
+}
+
+func (channel *Channel) enabledGatewayKey(fingerprint string) (string, int, error) {
 	keys := channel.GetKeys()
 	if !channel.ChannelInfo.IsMultiKey {
 		keys = []string{channel.Key}
@@ -92,7 +104,7 @@ func ResolveGatewayCredential(ctx context.Context, channel *Channel, identity st
 		if status, set := channel.ChannelInfo.MultiKeyStatusList[index]; set && status != common.ChannelStatusEnabled {
 			continue
 		}
-		if GatewayDigest(strings.TrimSpace(key)) == credential.Fingerprint {
+		if GatewayDigest(strings.TrimSpace(key)) == fingerprint {
 			return key, index, nil
 		}
 	}

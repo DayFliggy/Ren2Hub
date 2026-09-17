@@ -1,6 +1,8 @@
 package service
 
 import (
+	"errors"
+
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -91,13 +93,12 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 }
 
 // TryTieredSettle checks if the request uses tiered_expr billing and, if so,
-// computes the actual quota using the captured BillingSnapshot. Returns:
-//   - ok=true, quota, result  when tiered billing applies
-//   - ok=false, 0, nil        when it doesn't (caller should fall through to existing logic)
-func TryTieredSettle(relayInfo *relaycommon.RelayInfo, params billingexpr.TokenParams) (ok bool, quota int, result *billingexpr.TieredResult) {
+// computes the actual quota using the captured BillingSnapshot. ok reports the
+// billing mode only; callers must handle err before using quota or falling back.
+func TryTieredSettle(relayInfo *relaycommon.RelayInfo, params billingexpr.TokenParams) (ok bool, quota int, result *billingexpr.TieredResult, err error) {
 	snap := relayInfo.TieredBillingSnapshot
 	if snap == nil || snap.BillingMode != "tiered_expr" {
-		return false, 0, nil
+		return false, 0, nil, nil
 	}
 
 	requestInput := billingexpr.RequestInput{}
@@ -107,11 +108,9 @@ func TryTieredSettle(relayInfo *relaycommon.RelayInfo, params billingexpr.TokenP
 
 	tr, err := billingexpr.ComputeTieredQuotaWithRequest(snap, params, requestInput)
 	if err != nil {
-		quota = relayInfo.FinalPreConsumedQuota
-		if quota <= 0 {
-			quota = snap.EstimatedQuotaAfterGroup
-		}
-		return true, quota, nil
+		// Evaluation errors can contain request-probe values. Persist and expose
+		// only the category; the frozen expression and token vector allow review.
+		return true, 0, nil, errors.New("billing expression settlement failed; reconciliation required")
 	}
 
 	// Surface any int32 saturation from settlement onto RelayInfo so the
@@ -119,5 +118,5 @@ func TryTieredSettle(relayInfo *relaycommon.RelayInfo, params billingexpr.TokenP
 	// (text, audio, WSS) consumes the returned quota. First non-nil wins.
 	noteQuotaClamp(relayInfo, tr.Clamp)
 
-	return true, tr.ActualQuotaAfterGroup, &tr
+	return true, tr.ActualQuotaAfterGroup, &tr, nil
 }

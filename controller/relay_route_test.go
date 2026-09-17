@@ -162,6 +162,8 @@ func TestRecoveredKeyProbeIsClaimedOnlyAtSend(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
 
 	channel := model.Channel{Id: 92012, Type: constant.ChannelTypeOpenAI, Key: "recovering-key", Name: "single-key", Status: common.ChannelStatusEnabled}
+	require.NoError(t, db.AutoMigrate(&model.Channel{}))
+	require.NoError(t, db.Create(&channel).Error)
 	require.NoError(t, db.Create(&model.ChannelHealth{
 		ChannelID: channel.Id, Model: "gpt-test", KeyScope: service.RouteKeyScope("recovering-key"), State: model.RouteHealthStateOpen,
 		FailureCount: 1, CooldownUntil: time.Now().Add(-time.Second).Unix(), HealthEpoch: 4,
@@ -413,6 +415,8 @@ func TestAcquireRouteAttemptPermitReleasesCapacityAfterQualificationFailure(t *t
 	})
 	markLiveRouteSecurityQualified(c)
 	markLiveRoutePriceQualified(c)
+	service.CaptureGatewayChannelIdentity(c, &channel)
+	common.SetContextKey(c, constant.ContextKeyChannelKey, channel.Key)
 	info := &relaycommon.RelayInfo{RequestId: "permit-qualification-request", UserId: userID, TokenId: token.Id, UserGroup: "default", OriginModelName: "gpt-test"}
 	info.PriceData.ChannelRatio = 1
 

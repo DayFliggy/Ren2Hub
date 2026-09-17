@@ -91,6 +91,7 @@ func newRelayHTTPTransport() *http.Transport {
 	transport.MaxIdleConns = common.RelayMaxIdleConns
 	transport.MaxIdleConnsPerHost = common.RelayMaxIdleConnsPerHost
 	transport.IdleConnTimeout = time.Duration(common.RelayIdleConnTimeout) * time.Second
+	transport.ResponseHeaderTimeout = common.RelayPhaseTimeout(common.RelayResponseHeaderTimeout)
 	transport.ForceAttemptHTTP2 = true
 	if common.TLSInsecureSkipVerify {
 		transport.TLSClientConfig = common.InsecureTLSConfig
@@ -103,10 +104,34 @@ func newRelayHTTPClient(transport http.RoundTripper) *http.Client {
 		Transport:     transport,
 		CheckRedirect: checkRedirect,
 	}
-	if common.RelayTimeout != 0 {
-		client.Timeout = time.Duration(common.RelayTimeout) * time.Second
+	if common.RelayTimeout > 0 {
+		client.Timeout = common.RelayPhaseTimeout(common.RelayTimeout)
 	}
-	return client
+	return RelayRequestHTTPClient(client, false)
+}
+
+// RelayRequestHTTPClient preserves shared connection pools while giving a
+// non-streaming response a finite completion deadline. A streaming request uses
+// its first-output and idle deadlines, plus any explicitly configured total cap.
+func RelayRequestHTTPClient(client *http.Client, streaming bool) *http.Client {
+	requestClient := *client
+	if streaming {
+		requestClient.Timeout = 0
+		if common.RelayTimeout > 0 {
+			requestClient.Timeout = common.RelayPhaseTimeout(common.RelayTimeout)
+		}
+		transport := client.Transport
+		if transport == nil {
+			transport = http.DefaultTransport
+		}
+		requestClient.Transport = &streamResponseDeadlineTransport{base: transport, timeout: common.RelayPhaseTimeout(common.RelayNonStreamTimeout)}
+		return &requestClient
+	}
+	timeout := common.RelayPhaseTimeout(common.RelayNonStreamTimeout)
+	if requestClient.Timeout <= 0 || timeout < requestClient.Timeout {
+		requestClient.Timeout = timeout
+	}
+	return &requestClient
 }
 
 func clientCacheKey(proxyCacheKey string, policy HTTPTransportPolicy) string {
@@ -394,8 +419,7 @@ func getOrCreateDirectClient(policy HTTPTransportPolicy) (*http.Client, error) {
 		if client := GetHttpClient(); client != nil {
 			return client, nil
 		}
-		// Compatibility with pre-init callers: never assign httpClient outside InitHttpClient.
-		return http.DefaultClient, nil
+		// Pre-init callers still need the gateway's bounded transport policy.
 	}
 
 	if client, ok := proxyClients.get("", policy); ok {

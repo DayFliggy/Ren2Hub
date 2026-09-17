@@ -355,13 +355,14 @@ func TestSettleTestQuotaUsesTieredBilling(t *testing.T) {
 		},
 	}
 
-	quota, result := settleTestQuota(info, types.PriceData{
+	quota, result, err := settleTestQuota(info, types.PriceData{
 		ModelRatio:      1,
 		CompletionRatio: 2,
 	}, &dto.Usage{
 		PromptTokens: 1000,
 	})
 
+	require.NoError(t, err)
 	require.Equal(t, 1500, quota)
 	require.NotNil(t, result)
 	require.Equal(t, "stream", result.MatchedTier)

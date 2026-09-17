@@ -184,6 +184,7 @@ When a request arrives and the model uses `tiered_expr` billing:
 3. Runs expression with estimated tokens: `RunExprWithRequest(expr, {P, C}, requestInput)`
 4. Converts output to quota: `rawCost / 1,000,000 * QuotaPerUnit`
 5. Creates `BillingSnapshot` and stores it on `RelayInfo`. Expression and request state stay frozen for settlement. A unified-route retry refreshes group-dependent fields from the selected route group before the next upstream attempt. If a free initial group skipped pre-consume and the retry selects a paid group, the billing session is created before that attempt. If an existing session moves to a more expensive group, its reservation is raised to that group's estimate before sending; cheaper groups are refunded only after actual usage is settled.
+6. Before dispatch, `PrepareBillingForSelectedModel` durably records `pricing_pending`, including for free expressions. Unconfirmed expression usage cannot be automatically refunded after a lost process or failed final snapshot write. Realtime preserves this guard as `pricing_collect` while retaining its latest confirmed cumulative consumption. Explicit request failure can still refund; confirmed final consumption follows normal settlement. Manual reconciliation records remain visible in backlog without occupying automatic recovery batches.
 
 ### 4. Settlement (Actual Billing)
 
@@ -200,7 +201,9 @@ After the upstream response returns with actual token usage:
    - Uses the captured `BillingSnapshot`, whose group-dependent fields have been refreshed from the final selected group
    - Re-runs the expression with actual token counts
    - Converts via `quotaConversion()` (version-dispatched)
-   - Returns actual quota
+   - Returns `(applicable, actualQuota, result, error)`; `applicable` identifies expression billing and does not imply success
+   - Evaluation errors never return the estimated precharge as a final price. Text, audio and Realtime settlement retain the reservation, persist the frozen pricing snapshot and normalized token vector under `reconciliation_required`, and expose `BillingSettlementError`
+   - Recovery, repeated settlement and deferred refunds cannot charge or refund these held records automatically. Reconciliation requires an explicit decision using the saved pricing evidence; request bodies, headers and raw evaluator errors are not persisted in this record
 
 ### 5. Log Display
 

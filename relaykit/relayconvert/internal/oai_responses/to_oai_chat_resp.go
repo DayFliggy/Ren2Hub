@@ -136,10 +136,8 @@ func UsageFromResponsesUsage(src *dto.Usage) *dto.Usage {
 	usage.UsageSemantic = src.UsageSemantic
 	usage.UsageSource = src.UsageSource
 	usage.BillingUsage = dto.CloneBillingUsage(src.BillingUsage)
-	if usage.BillingUsage == nil {
-		usage.BillingUsage = dto.NewOpenAIResponsesBillingUsage(src)
-	}
 	usage.Cost = src.Cost
+	usage.PromptCacheHitTokens = src.PromptCacheHitTokens
 	if src.InputTokens != 0 {
 		usage.PromptTokens = src.InputTokens
 		usage.InputTokens = src.InputTokens
@@ -154,24 +152,26 @@ func UsageFromResponsesUsage(src *dto.Usage) *dto.Usage {
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
 	if src.InputTokensDetails != nil {
-		usage.PromptTokensDetails.CachedTokens = src.InputTokensDetails.CachedTokens
-		usage.PromptTokensDetails.CachedCreationTokens = src.InputTokensDetails.CachedCreationTokens
-		usage.PromptTokensDetails.CacheWriteTokens = src.InputTokensDetails.CacheWriteTokens
-		usage.PromptTokensDetails.TextTokens = src.InputTokensDetails.TextTokens
-		usage.PromptTokensDetails.ImageTokens = src.InputTokensDetails.ImageTokens
-		usage.PromptTokensDetails.AudioTokens = src.InputTokensDetails.AudioTokens
+		details := *src.InputTokensDetails
+		usage.InputTokensDetails = &details
+		usage.PromptTokensDetails = details
 	}
-	if src.CompletionTokenDetails.ReasoningTokens != 0 ||
-		src.CompletionTokenDetails.TextTokens != 0 ||
-		src.CompletionTokenDetails.AudioTokens != 0 ||
-		src.CompletionTokenDetails.ImageTokens != 0 {
-		usage.CompletionTokenDetails.ReasoningTokens = src.CompletionTokenDetails.ReasoningTokens
-		usage.CompletionTokenDetails.TextTokens = src.CompletionTokenDetails.TextTokens
-		usage.CompletionTokenDetails.AudioTokens = src.CompletionTokenDetails.AudioTokens
-		usage.CompletionTokenDetails.ImageTokens = src.CompletionTokenDetails.ImageTokens
+	usage.CompletionTokenDetails = src.CompletionTokenDetails
+	if src.OutputTokensDetails != nil {
+		details := *src.OutputTokensDetails
+		usage.OutputTokensDetails = &details
+		usage.CompletionTokenDetails = details
 	}
 	usage.ClaudeCacheCreation5mTokens = src.ClaudeCacheCreation5mTokens
 	usage.ClaudeCacheCreation1hTokens = src.ClaudeCacheCreation1hTokens
+	if usage.BillingUsage == nil {
+		// Keep provider counters while making its modality categories available
+		// to billing consumers of the common usage representation.
+		billing := *src
+		billing.PromptTokensDetails = usage.PromptTokensDetails
+		billing.CompletionTokenDetails = usage.CompletionTokenDetails
+		usage.BillingUsage = dto.NewOpenAIResponsesBillingUsage(&billing)
+	}
 	return usage
 }
 

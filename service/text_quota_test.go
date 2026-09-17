@@ -708,7 +708,8 @@ func TestTryTieredSettleRecordsClampOnOverflow(t *testing.T) {
 		},
 	}
 
-	ok, quota, result := TryTieredSettle(relayInfo, billingexpr.TokenParams{P: 1_000_000_000})
+	ok, quota, result, settleErr := TryTieredSettle(relayInfo, billingexpr.TokenParams{P: 1_000_000_000})
+	require.NoError(t, settleErr)
 
 	require.True(t, ok)
 	require.NotNil(t, result)
@@ -732,7 +733,8 @@ func TestTryTieredSettleNoClampInRange(t *testing.T) {
 		},
 	}
 
-	ok, _, result := TryTieredSettle(relayInfo, billingexpr.TokenParams{P: 1000, C: 500})
+	ok, _, result, settleErr := TryTieredSettle(relayInfo, billingexpr.TokenParams{P: 1000, C: 500})
+	require.NoError(t, settleErr)
 
 	require.True(t, ok)
 	require.NotNil(t, result)

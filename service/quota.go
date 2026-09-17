@@ -92,7 +92,10 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 	if usage.TotalTokens == 0 && !(relayInfo.PriceData.UsePrice && relayInfo.HasValidOutput()) {
 		return nil
 	}
-	params := buildWssConsumptionParams(ctx, relayInfo, usage, "")
+	params, err := buildWssConsumptionParams(ctx, relayInfo, usage, "")
+	if err != nil {
+		return err
+	}
 	quota := params.Quota
 	if relayInfo.QuotaClamp != nil {
 		return relayInfo.QuotaClamp
@@ -120,19 +123,27 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		logger.LogError(ctx, "invalid realtime billing usage: "+err.Error())
 		return
 	}
-	params := buildWssConsumptionParams(ctx, relayInfo, usage, extraContent)
+	params, err := buildWssConsumptionParams(ctx, relayInfo, usage, extraContent)
+	if err != nil {
+		return
+	}
 	settleBillingConsumption(ctx, relayInfo, params, usage.TotalTokens > 0 || relayInfo.PriceData.UsePrice && relayInfo.HasValidOutput())
 }
 
-func buildWssConsumptionParams(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage, extraContent string) model.RecordConsumeLogParams {
+func buildWssConsumptionParams(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage, extraContent string) (model.RecordConsumeLogParams, error) {
 	modelName := relayInfo.BillingModelName()
 
 	var tieredResult *billingexpr.TieredResult
-	tieredOk, tieredQuota, tieredRes := TryTieredSettle(relayInfo, billingexpr.TokenParams{
+	tokens := billingexpr.TokenParams{
 		P:   float64(usage.InputTokens),
 		C:   float64(usage.OutputTokens),
 		Len: float64(usage.InputTokens),
-	})
+	}
+	tieredOk, tieredQuota, tieredRes, err := TryTieredSettle(relayInfo, tokens)
+	if err != nil {
+		holdFailedBillingPrice(ctx, relayInfo, tokens, err)
+		return model.RecordConsumeLogParams{}, relayInfo.BillingSettlementError
+	}
 	if tieredOk {
 		tieredResult = tieredRes
 	}
@@ -218,7 +229,7 @@ func buildWssConsumptionParams(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		IsStream:         relayInfo.IsStream,
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
-	}
+	}, nil
 }
 
 func CalcOpenRouterCacheCreateTokens(usage dto.Usage, priceData types.PriceData) int {
@@ -249,7 +260,12 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		tieredUsedVars = billingexpr.UsedVars(snap.ExprString)
 	}
 	var tieredResult *billingexpr.TieredResult
-	tieredOk, tieredQuota, tieredRes := TryTieredSettle(relayInfo, BuildTieredTokenParams(usage, false, tieredUsedVars))
+	tokens := BuildTieredTokenParams(usage, false, tieredUsedVars)
+	tieredOk, tieredQuota, tieredRes, err := TryTieredSettle(relayInfo, tokens)
+	if err != nil {
+		holdFailedBillingPrice(ctx, relayInfo, tokens, err)
+		return
+	}
 	if tieredOk {
 		tieredResult = tieredRes
 	}

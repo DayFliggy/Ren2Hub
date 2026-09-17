@@ -19,7 +19,6 @@ import (
 func TestGeminiChatHandlerCompletionTokensExcludeToolUsePromptTokens(t *testing.T) {
 	t.Parallel()
 
-	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 
@@ -68,7 +67,6 @@ func TestGeminiChatHandlerCompletionTokensExcludeToolUsePromptTokens(t *testing.
 }
 
 func TestGeminiStreamHandlerCompletionTokensExcludeToolUsePromptTokens(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 
@@ -108,7 +106,7 @@ func TestGeminiStreamHandlerCompletionTokensExcludeToolUsePromptTokens(t *testin
 	chunkData, err := common.Marshal(chunk)
 	require.NoError(t, err)
 
-	streamBody := []byte("data: " + string(chunkData) + "\n" + "data: [DONE]\n")
+	streamBody := []byte("data: " + string(chunkData) + "\n\n" + "data: [DONE]\n\n")
 	resp := &http.Response{
 		Body: io.NopCloser(bytes.NewReader(streamBody)),
 	}
@@ -127,7 +125,6 @@ func TestGeminiStreamHandlerCompletionTokensExcludeToolUsePromptTokens(t *testin
 func TestGeminiTextGenerationHandlerPromptTokensIncludeToolUsePromptTokens(t *testing.T) {
 	t.Parallel()
 
-	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-3-flash-preview:generateContent", nil)
 
@@ -177,7 +174,6 @@ func TestGeminiTextGenerationHandlerPromptTokensIncludeToolUsePromptTokens(t *te
 func TestGeminiChatHandlerUsesEstimatedPromptTokensWhenUsagePromptMissing(t *testing.T) {
 	t.Parallel()
 
-	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 
@@ -226,7 +222,6 @@ func TestGeminiChatHandlerUsesEstimatedPromptTokensWhenUsagePromptMissing(t *tes
 }
 
 func TestGeminiStreamHandlerUsesEstimatedPromptTokensWhenUsagePromptMissing(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 
@@ -267,7 +262,7 @@ func TestGeminiStreamHandlerUsesEstimatedPromptTokensWhenUsagePromptMissing(t *t
 	chunkData, err := common.Marshal(chunk)
 	require.NoError(t, err)
 
-	streamBody := []byte("data: " + string(chunkData) + "\n" + "data: [DONE]\n")
+	streamBody := []byte("data: " + string(chunkData) + "\n\n" + "data: [DONE]\n\n")
 	resp := &http.Response{
 		Body: io.NopCloser(bytes.NewReader(streamBody)),
 	}
@@ -285,7 +280,6 @@ func TestGeminiStreamHandlerUsesEstimatedPromptTokensWhenUsagePromptMissing(t *t
 func TestGeminiTextGenerationHandlerUsesEstimatedPromptTokensWhenUsagePromptMissing(t *testing.T) {
 	t.Parallel()
 
-	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-3-flash-preview:generateContent", nil)
 
@@ -335,7 +329,6 @@ func TestGeminiTextGenerationHandlerUsesEstimatedPromptTokensWhenUsagePromptMiss
 func TestGeminiChatHandlerMissingUsageMetadataBuildsEstimatedBillingUsage(t *testing.T) {
 	t.Parallel()
 
-	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 
@@ -368,7 +361,6 @@ func TestGeminiChatHandlerMissingUsageMetadataBuildsEstimatedBillingUsage(t *tes
 }
 
 func TestGeminiStreamHandlerPromptOnlyUsageMetadataEstimatesCompletionTokens(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 
@@ -408,7 +400,7 @@ func TestGeminiStreamHandlerPromptOnlyUsageMetadataEstimatesCompletionTokens(t *
 	chunkData, err := common.Marshal(chunk)
 	require.NoError(t, err)
 
-	streamBody := []byte("data: " + string(chunkData) + "\n" + "data: [DONE]\n")
+	streamBody := []byte("data: " + string(chunkData) + "\n\n" + "data: [DONE]\n\n")
 	resp := &http.Response{
 		Body: io.NopCloser(bytes.NewReader(streamBody)),
 	}
@@ -430,7 +422,6 @@ func TestGeminiStreamHandlerPromptOnlyUsageMetadataEstimatesCompletionTokens(t *
 func TestGeminiChatHandlerPromptOnlyUsageMetadataEstimatesCompletionTokens(t *testing.T) {
 	t.Parallel()
 
-	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 
@@ -477,7 +468,6 @@ func TestGeminiChatHandlerPromptOnlyUsageMetadataEstimatesCompletionTokens(t *te
 }
 
 func TestGeminiStreamHandlerEmptyUsageMetadataBuildsEstimatedBillingUsage(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 
@@ -495,7 +485,7 @@ func TestGeminiStreamHandlerEmptyUsageMetadataBuildsEstimatedBillingUsage(t *tes
 	}
 	info.SetEstimatePromptTokens(20)
 
-	streamBody := []byte("data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"partial\"}]}}],\"usageMetadata\":{}}\n" + "data: [DONE]\n")
+	streamBody := []byte("data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"partial\"}]}}],\"usageMetadata\":{}}\n\n" + "data: [DONE]\n\n")
 	resp := &http.Response{
 		Body: io.NopCloser(bytes.NewReader(streamBody)),
 	}

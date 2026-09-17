@@ -49,15 +49,20 @@ func PrepareBillingForSelectedModel(c *gin.Context, relayInfo *relaycommon.Relay
 	}
 	targetQuota := relayInfo.PriceData.QuotaToPreConsume
 	if relayInfo.Billing == nil {
-		if relayInfo.PriceData.FreeModel {
-			return nil
+		if !relayInfo.PriceData.FreeModel {
+			if apiErr := PreConsumeBilling(c, targetQuota, relayInfo); apiErr != nil {
+				return apiErr
+			}
 		}
-		return PreConsumeBilling(c, targetQuota, relayInfo)
+	} else {
+		if err := relayInfo.Billing.Reserve(targetQuota); err != nil {
+			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
+		relayInfo.FinalPreConsumedQuota = relayInfo.Billing.GetPreConsumedQuota()
 	}
-	if err := relayInfo.Billing.Reserve(targetQuota); err != nil {
+	if err := prepareBillingPriceGuard(c, relayInfo); err != nil {
 		return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 	}
-	relayInfo.FinalPreConsumedQuota = relayInfo.Billing.GetPreConsumedQuota()
 	return nil
 }
 

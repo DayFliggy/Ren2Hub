@@ -67,6 +67,7 @@ func newAwsClient(c *gin.Context, info *relaycommon.RelayInfo) (*bedrockruntime.
 	if err != nil {
 		return nil, fmt.Errorf("new proxy http client failed: %w", err)
 	}
+	httpClient = service.RelayRequestHTTPClient(httpClient, info.IsStream)
 
 	awsSecret := strings.Split(info.ApiKey, "|")
 	var client *bedrockruntime.Client

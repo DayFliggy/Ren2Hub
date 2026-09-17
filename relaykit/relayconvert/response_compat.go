@@ -10,6 +10,7 @@ import (
 )
 
 type ClaudeResponseInfo = claudemessages.ClaudeResponseInfo
+type ClaudeToChatStreamState = claudemessages.ClaudeToChatStreamState
 
 type ChatToResponsesStreamEvent = oaichat.ChatToResponsesStreamEvent
 type ChatToResponsesStreamState = oaichat.ChatToResponsesStreamState
@@ -58,6 +59,10 @@ func PatchClaudeMessageDeltaUsageData(data string, usage *dto.ClaudeUsage) strin
 
 func FormatClaudeResponseInfo(claudeResponse *dto.ClaudeResponse, oaiResponse *dto.ChatCompletionsStreamResponse, claudeInfo *ClaudeResponseInfo) bool {
 	return claudemessages.FormatClaudeResponseInfo(claudeResponse, oaiResponse, claudeInfo)
+}
+
+func FinalizeClaudeStreamBillingUsage(info *ClaudeResponseInfo) {
+	claudemessages.FinalizeClaudeStreamBillingUsage(info)
 }
 
 func ResponseOpenAI2Gemini(openAIResponse *dto.OpenAITextResponse, info convmeta.Meta) *dto.GeminiChatResponse {

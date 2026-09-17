@@ -514,7 +514,10 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	}
 	info.SetEstimatePromptTokens(usage.PromptTokens)
 
-	quota, tieredResult := settleTestQuota(info, priceData, usage)
+	quota, tieredResult, settleErr := settleTestQuota(info, priceData, usage)
+	if settleErr != nil {
+		return testResult{context: c, localErr: settleErr, newAPIError: types.NewError(settleErr, types.ErrorCodeModelPriceError)}
+	}
 	tok := time.Now()
 	milliseconds := tok.Sub(tik).Milliseconds()
 	consumedTime := float64(milliseconds) / 1000.0
@@ -553,12 +556,12 @@ func attachTestBillingRequestInput(info *relaycommon.RelayInfo, request dto.Requ
 	return nil
 }
 
-func settleTestQuota(info *relaycommon.RelayInfo, priceData hosttypes.PriceData, usage *dto.Usage) (int, *billingexpr.TieredResult) {
+func settleTestQuota(info *relaycommon.RelayInfo, priceData hosttypes.PriceData, usage *dto.Usage) (int, *billingexpr.TieredResult, error) {
 	if usage != nil && info != nil && info.TieredBillingSnapshot != nil {
 		isClaudeUsageSemantic := usage.UsageSemantic == "anthropic" || info.GetFinalRequestRelayFormat() == types.RelayFormatClaude
 		usedVars := billingexpr.UsedVars(info.TieredBillingSnapshot.ExprString)
-		if ok, quota, result := service.TryTieredSettle(info, service.BuildTieredTokenParams(usage, isClaudeUsageSemantic, usedVars)); ok {
-			return quota, result
+		if ok, quota, result, err := service.TryTieredSettle(info, service.BuildTieredTokenParams(usage, isClaudeUsageSemantic, usedVars)); ok || err != nil {
+			return quota, result, err
 		}
 	}
 
@@ -569,10 +572,10 @@ func settleTestQuota(info *relaycommon.RelayInfo, priceData hosttypes.PriceData,
 		if priceData.ModelRatio != 0 && quota <= 0 {
 			quota = 1
 		}
-		return quota, nil
+		return quota, nil, nil
 	}
 
-	return int(priceData.ModelPrice * common.QuotaPerUnit), nil
+	return int(priceData.ModelPrice * common.QuotaPerUnit), nil, nil
 }
 
 func buildTestLogOther(c *gin.Context, info *relaycommon.RelayInfo, priceData hosttypes.PriceData, usage *dto.Usage, tieredResult *billingexpr.TieredResult) map[string]interface{} {

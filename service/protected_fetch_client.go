@@ -91,10 +91,10 @@ func newProtectedFetchHTTPClientWithProxy(resolver ssrfResolver, dialContext fun
 		},
 		CheckRedirect: checkProtectedFetchRedirect,
 	}
-	if common.RelayTimeout != 0 {
-		client.Timeout = time.Duration(common.RelayTimeout) * time.Second
+	if common.RelayTimeout > 0 {
+		client.Timeout = common.RelayPhaseTimeout(common.RelayTimeout)
 	}
-	return client
+	return RelayRequestHTTPClient(client, false)
 }
 
 func (t *ssrfProtectedRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {

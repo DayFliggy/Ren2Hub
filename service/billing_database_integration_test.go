@@ -14,6 +14,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/gin-gonic/gin"
@@ -48,14 +49,45 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 			}
 			mainDB, logDB := isolatedBillingDatabases(t, backend.kind, dsn)
 			bindBillingIntegrationDatabases(t, mainDB, logDB, backend.kind)
-			for index, scenario := range []string{
+			for index, scenario := range append([]string{
 				"duplicate_finalization", "funding_failure", "funding_marker_failure", "token_failure",
 				"statistics_failure", "log_insert_failure", "log_completion_failure", "canceled_request",
 				"playground_token_identity", "free_consumption", "concurrent_delivery", "refund_before_settlement",
 				"zero_precharge_refund", "zero_precharge_refund_completion_failure",
-			} {
+				"pricing_reconciliation",
+			}, billingPricingGuardScenarios...) {
 				t.Run(scenario, func(t *testing.T) {
 					c, info, cancel := seedBillingIntegrationRequest(t, index+1, scenario)
+					for _, guardedScenario := range billingPricingGuardScenarios {
+						if scenario == guardedScenario {
+							runBillingPricingGuardScenario(t, c, info, scenario)
+							return
+						}
+					}
+					if scenario == "pricing_reconciliation" {
+						info.TieredBillingSnapshot = makeSnapshot(`c == 13 ? float("invalid-price") : p * 2 + c * 10`, 1, 10, 1)
+						require.Nil(t, PrepareBillingForSelectedModel(c, info))
+						usage := &dto.Usage{PromptTokens: 10, CompletionTokens: 13, TotalTokens: 23}
+						cancel()
+						PostTextConsumeQuota(c, info, usage, nil)
+						require.Error(t, info.BillingSettlementError)
+						PostTextConsumeQuota(c, info, usage, nil)
+						require.Error(t, info.BillingSettlementError)
+						info.Billing.Refund(c)
+						status, err := recoverOneBillingRecovery(context.Background(), info.RequestId)
+						require.NoError(t, err)
+						assert.Equal(t, model.BillingRecoveryStatusReconciliation, status)
+						assert.ErrorIs(t, model.MarkBillingRecoveryRefundPending(info.RequestId, nil), model.ErrBillingRecoveryStateConflict)
+						assert.ErrorIs(t, model.UpdateBillingRecoverySettlement(info.RequestId, 0), model.ErrBillingRecoveryStateConflict)
+						var recovery model.BillingRecovery
+						require.NoError(t, mainDB.Where("request_id = ?", info.RequestId).First(&recovery).Error)
+						var failure model.BillingPricingFailure
+						require.NoError(t, common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &failure))
+						assert.Equal(t, billingexpr.TokenParams{P: 10, C: 13, Len: 10}, failure.Tokens)
+						assert.Equal(t, info.TieredBillingSnapshot.ExprHash, failure.Snapshot.ExprHash)
+						assertBillingIntegrationBalances(t, info, 95, 95, 0, 5, 0, 0)
+						return
+					}
 					if scenario == "zero_precharge_refund" || scenario == "zero_precharge_refund_completion_failure" {
 						session := info.Billing.(*BillingSession)
 						require.Zero(t, session.GetPreConsumedQuota())
@@ -233,7 +265,11 @@ func isolatedBillingDatabases(t *testing.T, kind common.DatabaseType, baseDSN st
 	for _, suffix := range []string{"main", "logs"} {
 		name := fmt.Sprintf("billing_validation_%d_%s", time.Now().UnixNano(), suffix)
 		require.True(t, regexp.MustCompile(`^billing_validation_[0-9]+_(main|logs)$`).MatchString(name))
-		require.NoError(t, admin.Exec("CREATE DATABASE "+name).Error)
+		createDatabase := "CREATE DATABASE " + name
+		if kind == common.DatabaseTypeMySQL {
+			createDatabase += " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+		}
+		require.NoError(t, admin.Exec(createDatabase).Error)
 		t.Logf("Disposable database: %s", name)
 		db := open(name)
 		conn, err := db.DB()

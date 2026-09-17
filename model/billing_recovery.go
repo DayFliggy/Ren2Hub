@@ -339,6 +339,14 @@ func TouchBillingRecovery(requestID string) error {
 }
 
 func MarkBillingRecoveryRefundPending(requestID string, lastError error) error {
+	return markBillingRecoveryRefundPending(requestID, lastError, false)
+}
+
+func MarkBillingRecoveryAutomaticRefundPending(requestID string) error {
+	return markBillingRecoveryRefundPending(requestID, nil, true)
+}
+
+func markBillingRecoveryRefundPending(requestID string, lastError error, automatic bool) error {
 	if DB == nil || strings.TrimSpace(requestID) == "" {
 		return errors.New("invalid billing recovery refund")
 	}
@@ -357,7 +365,10 @@ func MarkBillingRecoveryRefundPending(requestID string, lastError error) error {
 		if recovery.Status != BillingRecoveryStatusActive && recovery.Status != BillingRecoveryStatusRefundPending {
 			return ErrBillingRecoveryStateConflict
 		}
-		if recovery.ConsumptionState == BillingRecoveryStateCollecting {
+		if recovery.ConsumptionState == BillingRecoveryStateCollecting || recovery.ConsumptionState == BillingRecoveryStatePricingCollecting {
+			return ErrBillingRecoveryStateConflict
+		}
+		if automatic && recovery.Status == BillingRecoveryStatusActive && recovery.ConsumptionState == BillingRecoveryStatePricingPending {
 			return ErrBillingRecoveryStateConflict
 		}
 		updates := map[string]any{
@@ -446,14 +457,17 @@ func ListStaleBillingRecoveries(cutoff int64, limit int) ([]BillingRecovery, err
 	}
 	var rows []BillingRecovery
 	err := staleBillingRecoveries(DB, cutoff).
+		Where("status <> ?", BillingRecoveryStatusReconciliation).
+		Where("status NOT IN ? OR consumption_state IS NULL OR consumption_state NOT IN ?",
+			[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettled}, []string{BillingRecoveryStatePricingPending, BillingRecoveryStatePricingCollecting}).
 		Order("updated_at asc").Limit(limit).Find(&rows).Error
 	return rows, err
 }
 
 func staleBillingRecoveries(db *gorm.DB, cutoff int64) *gorm.DB {
 	return db.Model(&BillingRecovery{}).Where("(status IN ? OR (status = ? AND consumption_state IN ?)) AND updated_at < ?",
-		[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending},
-		BillingRecoveryStatusSettled, []string{BillingRecoveryStatePending, BillingRecoveryStateUnprepared}, cutoff)
+		[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending, BillingRecoveryStatusReconciliation},
+		BillingRecoveryStatusSettled, []string{BillingRecoveryStatePending, BillingRecoveryStateUnprepared, BillingRecoveryStatePricingPending, BillingRecoveryStatePricingCollecting}, cutoff)
 }
 
 type BillingRecoveryBacklog struct {

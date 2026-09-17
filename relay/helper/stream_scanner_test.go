@@ -49,9 +49,9 @@ func setupStreamTest(t *testing.T, body io.Reader) (*gin.Context, *http.Response
 func buildSSEBody(n int) string {
 	var b strings.Builder
 	for i := 0; i < n; i++ {
-		fmt.Fprintf(&b, "data: {\"id\":%d,\"choices\":[{\"delta\":{\"content\":\"token_%d\"}}]}\n", i, i)
+		fmt.Fprintf(&b, "data: {\"id\":%d,\"choices\":[{\"delta\":{\"content\":\"token_%d\"}}]}\n\n", i, i)
 	}
-	b.WriteString("data: [DONE]\n")
+	b.WriteString("data: [DONE]\n\n")
 	return b.String()
 }
 
@@ -185,7 +185,7 @@ func TestStreamScannerHandler_SkipsNonDataLines(t *testing.T) {
 	b.WriteString("id: 12345\n")
 	b.WriteString("retry: 5000\n")
 	for i := 0; i < 100; i++ {
-		fmt.Fprintf(&b, "data: payload_%d\n", i)
+		fmt.Fprintf(&b, "data: payload_%d\n\n", i)
 		b.WriteString(": interleaved comment\n")
 	}
 	b.WriteString("data: [DONE]\n")
@@ -205,7 +205,7 @@ func TestStreamScannerHandler_SkipsNonDataLines(t *testing.T) {
 func TestStreamScannerHandler_DataWithExtraSpaces(t *testing.T) {
 	t.Parallel()
 
-	body := "data:   {\"trimmed\":true}  \ndata: [DONE]\n"
+	body := "data:   {\"trimmed\":true}  \n\ndata: [DONE]\n"
 	c, resp, info := setupStreamTest(t, strings.NewReader(body))
 
 	var got string
@@ -213,7 +213,7 @@ func TestStreamScannerHandler_DataWithExtraSpaces(t *testing.T) {
 		got = data
 	})
 
-	assert.Equal(t, "{\"trimmed\":true}", got)
+	assert.Equal(t, "  {\"trimmed\":true}  ", got, "SSE removes exactly one optional space after the colon")
 }
 
 // TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns pins the
@@ -256,7 +256,7 @@ func TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns(t *testing.T)
 		close(done)
 	}()
 
-	_, err := fmt.Fprint(pw, "data: first\n")
+	_, err := fmt.Fprint(pw, "data: first\n\n")
 	require.NoError(t, err)
 
 	select {
@@ -296,9 +296,9 @@ func TestStreamScannerHandler_BufferedConversionDoesNotCommitPrelude(t *testing.
 	const tool = `{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{"}}]}}]}`
 	for _, sendOutput := range []bool{false, true} {
 		t.Run(fmt.Sprintf("output=%t", sendOutput), func(t *testing.T) {
-			body := "data: " + role + "\ndata: " + tool + "\n"
+			body := "data: " + role + "\n\ndata: " + tool + "\n\n"
 			if sendOutput {
-				body += "data: " + tool + "\ndata: [DONE]\n"
+				body += "data: " + tool + "\n\ndata: [DONE]\n"
 			}
 			c, resp, info := setupStreamTest(t, strings.NewReader(body))
 			calls := 0
@@ -326,7 +326,7 @@ func TestStreamScannerHandler_EmptyConversionCannotStartHeartbeat(t *testing.T) 
 	reader, writer := io.Pipe()
 	t.Cleanup(func() { _ = reader.Close(); _ = writer.Close() })
 	go func() {
-		_, _ = io.WriteString(writer, "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0}]}}]}\n")
+		_, _ = io.WriteString(writer, "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0}]}}]}\n\n")
 	}()
 	c, resp, info := setupStreamTest(t, reader)
 	c.Request = c.Request.WithContext(ctx)
@@ -339,7 +339,7 @@ func TestStreamScannerHandler_EmptyConversionCannotStartHeartbeat(t *testing.T) 
 }
 
 func TestStreamScannerHandler_BufferedSemanticFramesHavePreludeLimit(t *testing.T) {
-	body := strings.Repeat("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0}]}}]}\n", MaxStreamPreludeEvents+2)
+	body := strings.Repeat("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0}]}}]}\n\n", MaxStreamPreludeEvents+2)
 	c, resp, info := setupStreamTest(t, strings.NewReader(body))
 	StreamScannerHandler(c, resp, info, func(string, *StreamResult) {})
 	assert.Equal(t, MaxStreamPreludeEvents+1, info.ReceivedResponseCount)
@@ -362,7 +362,7 @@ func TestStreamScannerHandler_PingSentDuringSlowUpstream(t *testing.T) {
 	go func() {
 		defer pw.Close()
 		for i := 0; i < 4; i++ {
-			fmt.Fprintf(pw, "data: chunk_%d\n", i)
+			fmt.Fprintf(pw, "data: chunk_%d\n\n", i)
 			time.Sleep(400 * time.Millisecond)
 		}
 		fmt.Fprint(pw, "data: [DONE]\n")
@@ -465,7 +465,7 @@ func TestStreamScannerHandler_StreamStatus_EOFWithoutDone(t *testing.T) {
 
 	var b strings.Builder
 	for i := 0; i < 5; i++ {
-		fmt.Fprintf(&b, "data: {\"id\":%d}\n", i)
+		fmt.Fprintf(&b, "data: {\"id\":%d}\n\n", i)
 	}
 	c, resp, info := setupStreamTest(t, strings.NewReader(b.String()))
 
@@ -524,7 +524,7 @@ func TestStreamScannerHandler_StreamStatus_Timeout(t *testing.T) {
 
 	pr, pw := io.Pipe()
 	go func() {
-		fmt.Fprint(pw, "data: {\"id\":1}\n")
+		fmt.Fprint(pw, "data: {\"choices\":[{\"delta\":{\"content\":\"first\"}}]}\n\n")
 		time.Sleep(2 * time.Second)
 		pw.Close()
 	}()
@@ -538,7 +538,7 @@ func TestStreamScannerHandler_StreamStatus_Timeout(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) { _ = StringData(c, data) })
 		close(done)
 	}()
 
@@ -592,7 +592,7 @@ func TestStreamScannerHandler_StreamStatus_ErrorThenStop(t *testing.T) {
 	// and handler's Stop on the sync.Once EndReason.
 	var b strings.Builder
 	for i := 0; i < 100; i++ {
-		fmt.Fprintf(&b, "data: {\"id\":%d}\n", i)
+		fmt.Fprintf(&b, "data: {\"id\":%d}\n\n", i)
 	}
 	c, resp, info := setupStreamTest(t, strings.NewReader(b.String()))
 

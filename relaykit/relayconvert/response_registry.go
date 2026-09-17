@@ -999,12 +999,40 @@ func convertClaudeMessagesStreamResponseToOAIChat(_ context.Context, _ convmeta.
 	if err != nil {
 		return nil, nil, err
 	}
+	if (claudeResponse.ContentBlock != nil && claudeResponse.ContentBlock.Type == "tool_use") ||
+		(claudeResponse.Delta != nil && claudeResponse.Delta.Type == "input_json_delta") {
+		return nil, nil, errors.New("Claude tool stream conversion requires ConvertStreamResponseChunk with per-stream state")
+	}
 	openAIResponse := StreamResponseClaude2OpenAI(claudeResponse)
 	usage := usageFromClaudeResponse(claudeResponse)
 	if openAIResponse != nil && usage != nil {
 		openAIResponse.Usage = usage
 	}
 	return openAIResponse, usage, nil
+}
+
+func newClaudeMessagesToOAIChatStreamState(_ ResponseStreamOptions) any {
+	return &ClaudeToChatStreamState{}
+}
+
+func convertClaudeMessagesStreamChunkToOAIChat(_ context.Context, _ convmeta.Meta, response any, state any) ([]any, *dto.Usage, error) {
+	claudeResponse, err := asClaudeResponse(response)
+	if err != nil {
+		return nil, nil, err
+	}
+	streamState, ok := state.(*ClaudeToChatStreamState)
+	if !ok || streamState == nil {
+		return nil, nil, errors.New("Claude-to-Chat stream state is required")
+	}
+	converted, err := streamState.ConvertChunk(claudeResponse)
+	if err != nil {
+		return nil, nil, err
+	}
+	usage := usageFromClaudeResponse(claudeResponse)
+	if converted != nil && usage != nil {
+		converted.Usage = usage
+	}
+	return streamValuesFromAny(converted), usage, nil
 }
 
 func convertGeminiChatResponseToOAIChat(_ context.Context, info convmeta.Meta, response any) (any, *dto.Usage, error) {

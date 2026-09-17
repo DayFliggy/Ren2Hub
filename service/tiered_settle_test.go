@@ -75,7 +75,8 @@ func TestTryTieredSettleUsesFrozenRequestInput(t *testing.T) {
 		},
 	}
 
-	ok, quota, result := TryTieredSettle(relayInfo, billingexpr.TokenParams{P: 100})
+	ok, quota, result, settleErr := TryTieredSettle(relayInfo, billingexpr.TokenParams{P: 100})
+	require.NoError(t, settleErr)
 	if !ok {
 		t.Fatal("expected tiered settle to apply")
 	}
@@ -88,7 +89,7 @@ func TestTryTieredSettleUsesFrozenRequestInput(t *testing.T) {
 	}
 }
 
-func TestTryTieredSettleFallsBackToFrozenPreConsumeOnExprError(t *testing.T) {
+func TestTryTieredSettleRejectsInvalidExpressionWithoutChargingPreConsume(t *testing.T) {
 	relayInfo := &relaycommon.RelayInfo{
 		FinalPreConsumedQuota: 321,
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
@@ -100,16 +101,11 @@ func TestTryTieredSettleFallsBackToFrozenPreConsumeOnExprError(t *testing.T) {
 		},
 	}
 
-	ok, quota, result := TryTieredSettle(relayInfo, billingexpr.TokenParams{P: 100})
-	if !ok {
-		t.Fatal("expected tiered settle to apply")
-	}
-	if quota != 321 {
-		t.Fatalf("quota = %d, want 321", quota)
-	}
-	if result != nil {
-		t.Fatalf("result = %#v, want nil", result)
-	}
+	ok, quota, result, settleErr := TryTieredSettle(relayInfo, billingexpr.TokenParams{P: 100})
+	require.Error(t, settleErr)
+	assert.True(t, ok)
+	assert.Zero(t, quota)
+	assert.Nil(t, result)
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +116,8 @@ func TestTryTieredSettle_PreConsumeMatchesPostConsume(t *testing.T) {
 	info := makeRelayInfo(flatExpr, 1.0, 1000, 500)
 	params := billingexpr.TokenParams{P: 1000, C: 500}
 
-	ok, quota, _ := TryTieredSettle(info, params)
+	ok, quota, _, settleErr := TryTieredSettle(info, params)
+	require.NoError(t, settleErr)
 	if !ok {
 		t.Fatal("expected tiered settle")
 	}
@@ -139,7 +136,8 @@ func TestTryTieredSettle_PostConsumeOverPreConsume(t *testing.T) {
 
 	// Actual usage is higher than estimated
 	params := billingexpr.TokenParams{P: 2000, C: 1000}
-	ok, quota, _ := TryTieredSettle(info, params)
+	ok, quota, _, settleErr := TryTieredSettle(info, params)
+	require.NoError(t, settleErr)
 	if !ok {
 		t.Fatal("expected tiered settle")
 	}
@@ -158,7 +156,8 @@ func TestTryTieredSettle_PostConsumeUnderPreConsume(t *testing.T) {
 
 	// Actual usage is lower than estimated
 	params := billingexpr.TokenParams{P: 100, C: 50}
-	ok, quota, _ := TryTieredSettle(info, params)
+	ok, quota, _, settleErr := TryTieredSettle(info, params)
+	require.NoError(t, settleErr)
 	if !ok {
 		t.Fatal("expected tiered settle")
 	}
@@ -179,7 +178,8 @@ func TestTryTieredSettle_ExactBoundary(t *testing.T) {
 	info := makeRelayInfo(sonnetTieredExpr, 1.0, 200000, 1000)
 
 	// p == 200000 => standard tier (p <= 200000)
-	ok, quota, result := TryTieredSettle(info, billingexpr.TokenParams{P: 200000, C: 1000})
+	ok, quota, result, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 200000, C: 1000})
+	require.NoError(t, settleErr)
 	if !ok {
 		t.Fatal("expected tiered settle")
 	}
@@ -196,7 +196,8 @@ func TestTryTieredSettle_BoundaryPlusOne(t *testing.T) {
 	info := makeRelayInfo(sonnetTieredExpr, 1.0, 200000, 1000)
 
 	// p == 200001 => crosses to long_context tier
-	ok, quota, result := TryTieredSettle(info, billingexpr.TokenParams{P: 200001, C: 1000})
+	ok, quota, result, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 200001, C: 1000})
+	require.NoError(t, settleErr)
 	if !ok {
 		t.Fatal("expected tiered settle")
 	}
@@ -215,7 +216,8 @@ func TestTryTieredSettle_BoundaryPlusOne(t *testing.T) {
 func TestTryTieredSettle_ZeroTokens(t *testing.T) {
 	info := makeRelayInfo(flatExpr, 1.0, 0, 0)
 
-	ok, quota, result := TryTieredSettle(info, billingexpr.TokenParams{P: 0, C: 0})
+	ok, quota, result, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 0, C: 0})
+	require.NoError(t, settleErr)
 	if !ok {
 		t.Fatal("expected tiered settle")
 	}
@@ -230,7 +232,8 @@ func TestTryTieredSettle_ZeroTokens(t *testing.T) {
 func TestTryTieredSettle_HugeTokens(t *testing.T) {
 	info := makeRelayInfo(flatExpr, 1.0, 10000000, 5000000)
 
-	ok, quota, _ := TryTieredSettle(info, billingexpr.TokenParams{P: 10000000, C: 5000000})
+	ok, quota, _, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 10000000, C: 5000000})
+	require.NoError(t, settleErr)
 	if !ok {
 		t.Fatal("expected tiered settle")
 	}
@@ -244,14 +247,16 @@ func TestTryTieredSettle_CacheTokensAffectSettlement(t *testing.T) {
 	info := makeRelayInfo(cacheExpr, 1.0, 1000, 500)
 
 	// Without cache tokens
-	ok1, quota1, _ := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	ok1, quota1, _, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	require.NoError(t, settleErr)
 	if !ok1 {
 		t.Fatal("expected tiered settle")
 	}
 	// p*2 + c*10 = 7000; quota = 7000 / 1M * 500K = 3500
 
 	// With cache tokens
-	ok2, quota2, _ := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500, CR: 10000, CC: 5000, CC1h: 2000})
+	ok2, quota2, _, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500, CR: 10000, CC: 5000, CC1h: 2000})
+	require.NoError(t, settleErr)
 	if !ok2 {
 		t.Fatal("expected tiered settle")
 	}
@@ -278,7 +283,8 @@ func TestTryTieredSettle_RequestProbeInfluencesBilling(t *testing.T) {
 		Body: []byte(`{"service_tier":"fast"}`),
 	}
 
-	ok, quota, result := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	ok, quota, result, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	require.NoError(t, settleErr)
 	if !ok {
 		t.Fatal("expected tiered settle")
 	}
@@ -295,7 +301,8 @@ func TestTryTieredSettle_NoRequestInput_FallsBackToDefault(t *testing.T) {
 	info := makeRelayInfo(probeExpr, 1.0, 1000, 500)
 	// No BillingRequestInput set — param("service_tier") returns nil, not "fast"
 
-	ok, quota, result := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	ok, quota, result, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	require.NoError(t, settleErr)
 	if !ok {
 		t.Fatal("expected tiered settle")
 	}
@@ -340,7 +347,8 @@ func TestBillingSessionReserveWalletTopUpDecrementsBalance(t *testing.T) {
 func TestTryTieredSettle_GroupRatioScaling(t *testing.T) {
 	info := makeRelayInfo(flatExpr, 1.5, 1000, 500)
 
-	ok, quota, _ := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	ok, quota, _, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	require.NoError(t, settleErr)
 	if !ok {
 		t.Fatal("expected tiered settle")
 	}
@@ -353,7 +361,8 @@ func TestTryTieredSettle_GroupRatioScaling(t *testing.T) {
 func TestTryTieredSettle_GroupRatioZero(t *testing.T) {
 	info := makeRelayInfo(flatExpr, 0, 1000, 500)
 
-	ok, quota, _ := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	ok, quota, _, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	require.NoError(t, settleErr)
 	if !ok {
 		t.Fatal("expected tiered settle")
 	}
@@ -371,7 +380,8 @@ func TestTryTieredSettle_RatioMode_NilSnapshot(t *testing.T) {
 		TieredBillingSnapshot: nil,
 	}
 
-	ok, _, _ := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	ok, _, _, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	require.NoError(t, settleErr)
 	if ok {
 		t.Fatal("expected TryTieredSettle to return false when snapshot is nil")
 	}
@@ -387,7 +397,8 @@ func TestTryTieredSettle_RatioMode_WrongBillingMode(t *testing.T) {
 		},
 	}
 
-	ok, _, _ := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	ok, _, _, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	require.NoError(t, settleErr)
 	if ok {
 		t.Fatal("expected TryTieredSettle to return false for ratio billing mode")
 	}
@@ -403,7 +414,8 @@ func TestTryTieredSettle_RatioMode_EmptyBillingMode(t *testing.T) {
 		},
 	}
 
-	ok, _, _ := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	ok, _, _, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
+	require.NoError(t, settleErr)
 	if ok {
 		t.Fatal("expected TryTieredSettle to return false for empty billing mode")
 	}
@@ -413,7 +425,7 @@ func TestTryTieredSettle_RatioMode_EmptyBillingMode(t *testing.T) {
 // Fallback tests
 // ---------------------------------------------------------------------------
 
-func TestTryTieredSettle_ErrorFallbackToEstimatedQuotaAfterGroup(t *testing.T) {
+func TestTryTieredSettleErrorDoesNotUseEstimateWhenReservationIsZero(t *testing.T) {
 	info := &relaycommon.RelayInfo{
 		FinalPreConsumedQuota: 0,
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
@@ -425,17 +437,11 @@ func TestTryTieredSettle_ErrorFallbackToEstimatedQuotaAfterGroup(t *testing.T) {
 		},
 	}
 
-	ok, quota, result := TryTieredSettle(info, billingexpr.TokenParams{P: 100})
-	if !ok {
-		t.Fatal("expected tiered settle to apply")
-	}
-	// FinalPreConsumedQuota is 0, should fall back to EstimatedQuotaAfterGroup
-	if quota != 999 {
-		t.Fatalf("quota = %d, want 999", quota)
-	}
-	if result != nil {
-		t.Fatal("result should be nil on error fallback")
-	}
+	ok, quota, result, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 100})
+	require.Error(t, settleErr)
+	assert.True(t, ok)
+	assert.Zero(t, quota)
+	assert.Nil(t, result)
 }
 
 // ---------------------------------------------------------------------------

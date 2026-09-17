@@ -186,6 +186,9 @@ func prepareLiveRouteSend(c *gin.Context, info *relaycommon.RelayInfo, state *ro
 	if c.GetInt(liveRouteAttemptCountKey) >= service.DefaultTotalAttempts {
 		return stopLiveRouteRetry(c, errors.New("route send attempt limit exceeded"))
 	}
+	if err := service.ValidateGatewayChannelIdentity(c, info.ChannelId); err != nil {
+		return types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
+	}
 	var retryTicket *service.RetryTicket
 	if c.GetInt(liveRouteAttemptCountKey) > 0 {
 		var err error

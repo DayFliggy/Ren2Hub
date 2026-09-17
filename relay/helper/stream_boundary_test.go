@@ -12,7 +12,7 @@ import (
 func TestStreamPreludeFailureRemainsUncommitted(t *testing.T) {
 	for _, tc := range []struct{ name, body string }{
 		{"eof", "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n"},
-		{"event limit", strings.Repeat("data: {\"type\":\"ping\"}\n", MaxStreamPreludeEvents+1)},
+		{"event limit", strings.Repeat("data: {\"type\":\"ping\"}\n\n", MaxStreamPreludeEvents+1)},
 		{"byte limit", "data: {\"padding\":\"" + strings.Repeat("x", MaxStreamPreludeBytes) + "\"}\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -32,11 +32,11 @@ func TestStreamPreludeFailureRemainsUncommitted(t *testing.T) {
 func TestStreamTerminalCannotHideEarlierMalformedChunk(t *testing.T) {
 	for _, semantic := range []bool{false, true} {
 		t.Run(fmt.Sprint(semantic), func(t *testing.T) {
-			prefix := "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n"
+			prefix := "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n"
 			if semantic {
-				prefix = "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n"
+				prefix = "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n"
 			}
-			c, resp, info := setupStreamTest(t, strings.NewReader(prefix+"data: broken\ndata: [DONE]\n"))
+			c, resp, info := setupStreamTest(t, strings.NewReader(prefix+"data: broken\n\ndata: [DONE]\n"))
 			StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
 				if data == "broken" {
 					sr.Stop(fmt.Errorf("malformed frame"))

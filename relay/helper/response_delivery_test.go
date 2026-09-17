@@ -122,7 +122,7 @@ func TestSSEDataNewlinesCannotCreateEvents(t *testing.T) {
 }
 
 func TestIgnoredClaudeWriteFailureStopsScannerAndCanResetForRetry(t *testing.T) {
-	c, resp, info := setupStreamTest(t, strings.NewReader("data: {\"type\":\"message_start\"}\ndata: [DONE]\n"))
+	c, resp, info := setupStreamTest(t, strings.NewReader("data: {\"type\":\"message_start\"}\n\ndata: [DONE]\n"))
 	c.Set("gateway_state_output", "invalid state context")
 	callbacks := 0
 	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {

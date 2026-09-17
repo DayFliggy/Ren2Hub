@@ -47,7 +47,8 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 		if recovery.UserID != consumption.Log.UserId || recovery.TokenID != consumption.Log.TokenId {
 			return ErrBillingRecoveryStateConflict
 		}
-		if recovery.ConsumptionSnapshot != "" && recovery.ConsumptionState != BillingRecoveryStateCollecting {
+		if recovery.ConsumptionSnapshot != "" && recovery.ConsumptionState != BillingRecoveryStateCollecting &&
+			recovery.ConsumptionState != BillingRecoveryStatePricingPending && recovery.ConsumptionState != BillingRecoveryStatePricingCollecting {
 			var existing BillingConsumption
 			if err := common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &existing); err != nil {
 				return err
@@ -80,6 +81,10 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 				return ErrBillingRecoveryStateConflict
 			}
 			state = BillingRecoveryStateCollecting
+			if recovery.ConsumptionState == BillingRecoveryStatePricingPending || recovery.ConsumptionState == BillingRecoveryStatePricingCollecting {
+				// Further Realtime output can still fail expression evaluation.
+				state = BillingRecoveryStatePricingCollecting
+			}
 		} else if status == BillingRecoveryStatusActive {
 			status = BillingRecoveryStatusSettlementPending
 		}
@@ -108,7 +113,7 @@ func ApplyBillingRecoveryConsumption(requestID string) error {
 	}
 	if err != nil {
 		writeErr := DB.Model(&BillingRecovery{}).
-			Where("request_id = ? AND consumption_state IN ?", requestID, []string{BillingRecoveryStatePending, BillingRecoveryStateUnprepared}).
+			Where("request_id = ? AND consumption_state IN ?", requestID, []string{BillingRecoveryStatePending, BillingRecoveryStateUnprepared, BillingRecoveryStatePricingPending, BillingRecoveryStatePricingCollecting}).
 			Updates(map[string]any{
 				"consumption_error": err.Error(),
 				"attempts":          gorm.Expr("attempts + 1"),
@@ -142,6 +147,9 @@ func applyBillingConsumptionStatistics(requestID string) error {
 		var recovery BillingRecovery
 		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
 			return err
+		}
+		if recovery.ConsumptionState == BillingRecoveryStatePricingPending || recovery.ConsumptionState == BillingRecoveryStatePricingCollecting {
+			return errors.New("billing expression consumption is unconfirmed; reconciliation is required")
 		}
 		if recovery.ConsumptionSnapshot == "" && recovery.ConsumptionState == BillingRecoveryStateUnprepared {
 			return errors.New("billing consumption snapshot is missing; reconciliation is required")

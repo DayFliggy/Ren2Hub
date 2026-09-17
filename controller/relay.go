@@ -818,6 +818,9 @@ func acquireRouteAttemptPermit(c *gin.Context, info *relaycommon.RelayInfo, chan
 	if admittedChannel.ChannelRatio != expected.ChannelRatio {
 		return releaseRejectedRouteAttempt(c, permit, service.ErrAdmissionRuntime)
 	}
+	if err := service.ValidateGatewayChannelIdentity(c, channel.Id); err != nil {
+		return releaseRejectedRouteAttempt(c, permit, err)
+	}
 	boundKey, _, stateErr := service.ValidateGatewayStateOwner(c, admittedChannel.Id)
 	if stateErr != nil {
 		return releaseRejectedRouteAttempt(c, permit, stateErr)

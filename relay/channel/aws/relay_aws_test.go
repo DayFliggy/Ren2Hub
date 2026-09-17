@@ -445,7 +445,9 @@ func TestAwsStreamHandlerStopsAtClientCancellationAndKeepsPartialBillingUsage(t 
 	assert.Equal(t, dto.BillingUsageSourceClaudeMessages, result.usage.BillingUsage.Source)
 	assert.Equal(t, dto.BillingUsageSemanticAnthropic, result.usage.BillingUsage.Semantic)
 	assert.Equal(t, 100, result.usage.BillingUsage.ClaudeUsage.InputTokens)
-	assert.Equal(t, 1, result.usage.BillingUsage.ClaudeUsage.OutputTokens)
+	assert.Equal(t, result.usage.CompletionTokens, result.usage.BillingUsage.ClaudeUsage.OutputTokens)
+	assert.Greater(t, result.usage.CompletionTokens, 1, "delivered text replaces the initial partial usage")
+	assert.True(t, result.usage.BillingUsage.Estimated)
 	assert.Equal(t, bodyLengthBeforeCancel, responseWriter.Body.Len())
 	assert.NotContains(t, responseWriter.Body.String(), "[DONE]")
 
