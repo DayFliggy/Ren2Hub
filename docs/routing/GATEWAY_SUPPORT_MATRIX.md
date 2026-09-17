@@ -1,6 +1,6 @@
 # 网关协议支持与验证边界
 
-本矩阵记录 2026-09-14 核对的协议能力，已纳入 2026-09-17 发布到新服务器的应用源码；后续准入、故障转移和隔离验证状态见 [验收记录](SINGLE_INSTANCE_ACCEPTANCE.md)。能力来自 `pkg/relaycapability`，预览和执行共用 `PlanChannelConversion`，宿主合同为 v11。“原生”表示宿主具备该协议入口，不保证所有上游模型、端点和账号提供相同功能；模拟上游验证不等于真实供应商认证。
+本矩阵维护源码中的协议能力与专项测试边界，最近整理于 2026-09-18。能力来自 `pkg/relaycapability`，预览和执行共用 `PlanChannelConversion`，宿主合同为 v12。“原生”表示宿主具备该协议入口，不保证所有上游模型、端点和账号提供相同功能。表内已有专项证据不表示所有套件在最新提交重跑；本轮实测范围和当前容器版本见 [验收记录](SINGLE_INSTANCE_ACCEPTANCE.md)。
 
 ## 文本入口
 
@@ -62,7 +62,7 @@ Google Files URI 与 `gs://` 引用要求已知、同 Token 的媒体归属绑�
 
 TPM 只对登记了最终请求体解码器的操作开放。HTTP 和 AWS SDK 都在发送前读取最终请求体的独立副本，计算输入 JSON 估算和有效输出总上限；渠道提示词、参数覆盖、输出数量及协议切换均在此之前完成。Coze、Codex、未登记的旧投影或媒体格式不能配置有效 TPM；即使渠道支持文本 TPM，带未知扩展、无法估算的媒体/状态输入、缺少输出上限或生成非文本的请求仍会被拒绝。此估算不是供应商 tokenizer 的精确认证，结算使用可信 usage 修正。
 
-## 当前证据
+## 专项覆盖与限制
 
 | 验证层 | 已覆盖 | 尚未证明 |
 |---|---|---|
@@ -95,7 +95,7 @@ TPM 只对登记了最终请求体解码器的操作开放。HTTP 和 AWS SDK �
 
 SDK 版本锁文件位于 `tests/gateway-sdk`：Python OpenAI 3.13.0、Anthropic 1.5.0、google-genai 2.23.0；TypeScript OpenAI 7.15.0、Anthropic 0.125.0、Google 2.22.0。
 
-云验收分为 `TestGatewayOfficialCloudSDK`、`TestGatewayOfficialCloudToolAndInterruptionSDK` 和 `TestGatewayOfficialCloudParallelToolSDK`。基础 80 条的证据为 `.local-tests/gateway/sdk-cloud-partial.log` 与 `sdk-cloud-vertex-final.log`；后两套分别记录在 `sdk-cloud-tools-final.log`、`sdk-cloud-parallel-tools.log`，旧协议记录在 `sdk-legacy.log`。兼容适配器两语言的通过记录为 `compatible-sdk-python.log`、`compatible-sdk-node.log`，每语言 170 条成功和 54 条发送前拒绝。特殊文本、Codex 分别记录在 `sdk-special.log`、`sdk-codex.log`；Vertex 开源模型与认证身份记录在 `sdk-vertex-open-source.log`、`vertex-auth-identity.log`。400 条请求和 226 条标准响应记录在 `adaptor-matrix-v11-final.log`，思考控制和 Google 引用记录在 `reasoning-search-plan.log`、`reasoning-file-http.log`。这些本地日志不进入版本库，测试与脚本是可复现入口。
+云验收分为 `TestGatewayOfficialCloudSDK`、`TestGatewayOfficialCloudToolAndInterruptionSDK` 和 `TestGatewayOfficialCloudParallelToolSDK`；其他套件与锁定依赖统一从 [SDK 测试说明](../../tests/gateway-sdk/README.md) 运行。源码中的正式测试与脚本是复现入口，已执行结果由 [最新修复验收](GATEWAY_REVIEW_FIXES_2026_09_18.md#验证记录) 记录。
 
 双工具回归通过 OpenAI/Anthropic SDK 内置流累积器和 Google SDK 内容事件验证：首帧同时出现两个调用、后续分片组成参数 `0` 与 `false`、工具结果逆序回传，检查 ID 或经验证的 Vertex 名称关联、最终值、usage 和唯一终止事件。Google 返回的完整函数参数来自网关转换和官方 SDK 解析，没有手写 SSE 累积器。云工具场景中的“往返”包括流式工具请求和提交结果后的最终响应，不等同于额外两个独立能力路径。
 
