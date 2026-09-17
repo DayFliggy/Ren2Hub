@@ -55,6 +55,8 @@
 
 ## 📝 项目说明
 
+当前检出项目为 Ren2Hub，路由、准入、API 与发布契约请从[本地文档](docs/README.md)进入。下文保留上游项目介绍、链接和部署示例；上游镜像不包含本检出的改造。Ren2Hub 采用单进程本地 FIFO 准入，新旧版本必须顺序切换。RenAI 工作区使用独立部署资产和 PostgreSQL。
+
 > [!IMPORTANT]
 > - 本项目仅面向合法授权的 AI API 网关、组织内部鉴权、多模型管理、用量统计、成本核算和私有化部署场景。
 > - 使用者必须合法取得上游 API Key、账号、模型服务或接口权限，并遵守上游服务条款及适用法律法规。
@@ -403,6 +405,8 @@ docker run --name new-api -d --restart always \
 
 ### ⚠️ 多机部署注意事项
 
+以下仅说明 Session 鉴权与 Redis 缓存行为，不代表支持多个 Ren2Hub 网关同时接流量。用户与渠道并发由单进程持有，部署遵守[单实例切换与回退](docs/routing/GATEWAY_RELEASE.md)。
+
 > [!WARNING]
 > - 所有节点必须使用同一个主数据库，并设置相同的 `SESSION_SECRET`；否则 Access Token、Refresh 会话和临时鉴权流程无法一致校验。
 > - 连接同一个 Redis 的节点还必须设置相同的 `CRYPTO_SECRET`，否则节点生成的缓存键摘要不一致，无法正确共享缓存。
@@ -421,7 +425,7 @@ Token、Origin 校验和 PAT 契约见[用户鉴权与登录会话](./docs/authe
 
 ### 🔄 渠道重试与缓存
 
-**重试配置：** `设置 → 运营设置 → 通用设置 → 失败重试次数`
+**重试契约：** 每个逻辑请求最多进行三次真实上游发送，并受进程共享额外发送预算限制，详见[统一路由](docs/routing/UNIFIED_ROUTING.md)与[网关配置 API](docs/routing/GATEWAY_API.md)。
 
 **缓存配置：**
 - `REDIS_CONN_STRING`：Redis 缓存（推荐）

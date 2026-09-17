@@ -12,7 +12,7 @@
 | 模型路由 | [统一路由](routing/UNIFIED_ROUTING.md) | Token Profile、私有组、渠道容量、资格重检、计费与重试 |
 | 单实例网关 | [管理 API](routing/GATEWAY_API.md)、[验收记录](routing/SINGLE_INSTANCE_ACCEPTANCE.md) | 本地 FIFO、总队列、渠道冷却、重试预算与验证边界 |
 | 网关交付 | [验证步骤](routing/GATEWAY_VALIDATION.md)、[切换与回退](routing/GATEWAY_RELEASE.md) | 可重复测试、顺序排空切换、旧 Redis 键限定清理 |
-| 协议转换 | [RelayKit](../relaykit/README.md) | 独立模块、转换路径及协议边界 |
+| 协议转换 | [支持矩阵](routing/GATEWAY_SUPPORT_MATRIX.md)、[RelayKit](../relaykit/README.md) | 已验证协议、独立模块、转换路径及边界 |
 | 表达式计费 | [计费表达式](../pkg/billingexpr/expr.md) | 计费表达式及实现入口；渠道倍率以统一路由为准 |
 
 ## 源码阅读顺序
@@ -23,9 +23,8 @@ Vue 从 `frontend/src/router/`、`frontend/src/stores/app.ts` 和 `frontend/src/
 
 ## 历史与辅助材料
 
-- [改造前路由归档](routing/archive/UNIFIED_ROUTING_PRE_SINGLE_INSTANCE_2026_09_16.md)：适用于 2026-09-16 本地 FIFO 改造前工作树；旧 Redis 并发与双网关结果不代表现行支持。
+- [路由历史归档索引](routing/archive/README.md)：按契约、修复、验证与发布分类保留改造前材料；旧 Redis 并发与双网关结果不代表现行支持。
 - 工作区 `reference-projects/` 保留 AxonHub、sub2api 和研究报告；现行单实例方案替代 Redis-only 用户准入以及配置变化新建活动池的旧建议。
-
 - [模型管理前端验收](frontend-model-management-acceptance.md)：对应记录版本的验收，不能当作当前重跑结果。
 - [上游 RC24 同步记录](upstream-sync/NEWAPI_RC24_E2C7AA7B.md)：固定提交的历史同步材料。
 - `openapi/`：API 描述文件；覆盖范围与现行路由应交叉核对。
@@ -36,3 +35,5 @@ Vue 从 `frontend/src/router/`、`frontend/src/stores/app.ts` 和 `frontend/src/
 `frontend/node_modules/`、`frontend/dist/` 是可重建依赖与构建产物；清理前确认没有正在使用它们的开发或测试进程。`frontend/embed-dist/` 含受跟踪占位文件和可能的嵌入构建输出，不应整目录删除。
 
 `.local-tests/` 是被忽略的探测工作区，可能同时包含脚本、测试数据库、可执行文件和截图，必须逐项识别。数据库、自动定价目录缓存、未合并补丁与验收证据不能只凭忽略规则或日期删除。版本文件、迁移脚本和历史契约也不是构建垃圾。
+
+文档状态集中维护：运行契约写在统一路由和管理 API，执行方法写在验证及发布说明，已执行结果写在验收记录。阶段报告进入归档索引，不再保留只有跳转内容的状态页。服务器部署身份和资源配置由所属工作区的服务器档案维护，历史压测条件不能随当前配置变更而覆盖。

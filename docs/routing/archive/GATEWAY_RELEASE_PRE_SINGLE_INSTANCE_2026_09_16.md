@@ -34,7 +34,7 @@
 
 ## 本地证据
 
-已执行的具体日志、命令及 SDK 锁版本见[验证说明](../GATEWAY_VALIDATION.md)和[支持矩阵](../GATEWAY_SUPPORT_MATRIX.md)。本轮隔离数据库为 SQLite、MySQL 5.7.19、PostgreSQL 16；未将 PostgreSQL 16 的结果称为生产 PostgreSQL 15 实测。
+已执行的具体日志、命令及 SDK 锁版本见[验证说明](GATEWAY_VALIDATION_PRE_SINGLE_INSTANCE_2026_09_16.md)和[支持矩阵](../GATEWAY_SUPPORT_MATRIX.md)。本轮隔离数据库为 SQLite、MySQL 5.7.19、PostgreSQL 16；未将 PostgreSQL 16 的结果称为生产 PostgreSQL 15 实测。
 
 | 检查 | 已有证据 | 不能由此推导 |
 |---|---|---|
@@ -46,7 +46,7 @@
 
 ## 最终发布步骤
 
-1. 核对[实施记录](../GATEWAY_IMPROVEMENT_STATUS.md)中的本地提交、F01–F13 回归及[支持矩阵](../GATEWAY_SUPPORT_MATRIX.md)，记录发布所用源码 SHA 和根部署资产 SHA。按[同步流程](../../../../docs/workflows/SYNC_WORKFLOW.md)检查子模块提交可获取性，保留其他任务的未提交修改；当前本地提交尚未证明可从发布远端取得。
+1. 核对[实施记录](GATEWAY_IMPROVEMENT_STATUS_PRE_SINGLE_INSTANCE_2026_09_16.md)中的本地提交、F01–F13 回归及[支持矩阵](../GATEWAY_SUPPORT_MATRIX.md)，记录发布所用源码 SHA 和根部署资产 SHA。按[同步流程](../../../../docs/workflows/SYNC_WORKFLOW.md)检查子模块提交可获取性，保留其他任务的未提交修改；当前本地提交尚未证明可从发布远端取得。
 2. 在最终提交的干净隔离检出中重做发布构建和本清单差异检查。继承现有不可变 SHA 镜像方式，验证 OCI revision、版本及实际镜像身份；本轮尚未执行 Docker 冷构建。
 3. 生产操作获得对应授权后，按[容器替换手册](../../../../skills/update-ren2hub-production/references/container-replacement-runbook.md)执行预检、可读数据库备份、排空和仅替换应用容器；不重建 PostgreSQL/Redis。
 4. 验证状态、Vue 入口和深链接、哈希资源、登录、JSON/SSE 中继、准入及恢复积压。真实供应商验证与本地模拟 SDK 分开记录；付费调用需单独授权。

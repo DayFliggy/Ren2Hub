@@ -1,5 +1,7 @@
 # 模型管理与系统实例验收矩阵
 
+本文保留所列参考版本的功能对齐和验收证据，不是当前提交的重跑结果。现行 Vue 入口、协议和网关验证从[文档索引](README.md)进入。
+
 功能基线为工作区本地 NewAPI `2d8e50bf36e94200b809dfb39e73624ec48b1e23`，参考 `web/src/features/models/` 和 `web/src/features/system-info/`。供应商与预填充组均为 NewAPI 原有管理功能。本项目用 Vue 实现对应业务流程，并采用 Desert Ledger / One Night 主题及中英文文案。
 
 ## 功能与证据

@@ -55,6 +55,8 @@
 
 ## 📝 Description du projet
 
+Cette copie du projet est Ren2Hub. Consultez la [documentation locale](docs/README.md) pour les contrats actuels de routage, d'admission, d'API et de publication. La présentation, les liens et les exemples de déploiement du projet amont sont conservés comme références ; ses images ne contiennent pas les modifications de cette copie. Ren2Hub utilise une admission FIFO locale dans un seul processus et impose un remplacement séquentiel des versions. L'espace RenAI utilise ses propres fichiers de déploiement et PostgreSQL.
+
 > [!IMPORTANT]
 > - Ce projet est exclusivement destiné aux scénarios de passerelle API d'IA légalement autorisés, d'authentification organisationnelle, de gestion multi-modèles, d'analyse d'utilisation, de comptabilisation des coûts et de déploiement privé.
 > - Les utilisateurs doivent obtenir légalement les clés API, comptes, services de modèles et autorisations d'interface en amont, et doivent respecter les conditions d'utilisation en amont et les lois et réglementations applicables.
@@ -397,11 +399,13 @@ docker run --name new-api -d --restart always \
 2. Recherchez **New-API** dans le magasin d'applications
 3. Installation en un clic
 
-📖 [Tutoriel avec des images](./docs/BT.md)
+📖 [Tutoriel avec des images](./docs/installation/BT.md)
 
 </details>
 
 ### ⚠️ Considérations sur le déploiement multi-machines
+
+Ce qui suit décrit uniquement l'authentification Session et le cache Redis. Cela ne permet pas à plusieurs processus Ren2Hub de servir du trafic simultanément : les limites de concurrence des utilisateurs et des canaux appartiennent à un seul processus. Suivez la [procédure de remplacement à instance unique](docs/routing/GATEWAY_RELEASE.md).
 
 > [!WARNING]
 > - Tous les nœuds doivent utiliser la même base de données principale et la même valeur `SESSION_SECRET` ; sinon les Access Tokens, sessions Refresh et flux d’authentification temporaires ne peuvent pas être vérifiés de façon cohérente.
@@ -421,7 +425,7 @@ Consultez [Authentification utilisateur et sessions de connexion](./docs/authent
 
 ### 🔄 Nouvelle tentative de canal et cache
 
-**Configuration de la nouvelle tentative:** `Paramètres → Paramètres de fonctionnement → Paramètres généraux → Nombre de tentatives en cas d'échec`
+**Contrat des nouvelles tentatives :** Ren2Hub autorise au plus trois envois réels en amont par requête logique, avec un budget partagé pour les envois supplémentaires. Consultez le [routage unifié](docs/routing/UNIFIED_ROUTING.md) et l'[API de configuration](docs/routing/GATEWAY_API.md).
 
 **Configuration du cache:**
 - `REDIS_CONN_STRING`: Cache Redis (recommandé)

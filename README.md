@@ -55,6 +55,8 @@
 
 ## 📝 Project Description
 
+This checkout is Ren2Hub. Start with the [local documentation](docs/README.md) for its current routing, admission, API and release contracts. The upstream project introduction, links and deployment examples below are retained as reference; upstream images do not contain this checkout's changes. Ren2Hub uses single-process FIFO admission and requires sequential version replacement. The RenAI workspace deploys PostgreSQL using its own deployment assets.
+
 > [!IMPORTANT]
 > - This project is intended solely for lawful and authorized AI API gateway, organization-level authentication, multi-model management, usage analytics, cost accounting, and private deployment scenarios.
 > - Users must lawfully obtain upstream API keys, accounts, model services, and interface permissions, and must comply with upstream terms of service and applicable laws and regulations.
@@ -398,11 +400,13 @@ docker run --name new-api -d --restart always \
 2. Search for **New-API** in the application store
 3. One-click installation
 
-📖 [Tutorial with images](./docs/BT.md)
+📖 [Tutorial with images](./docs/installation/BT.md)
 
 </details>
 
 ### ⚠️ Multi-machine Deployment Considerations
+
+The following describes Session authentication and Redis cache behavior only. It does not authorize multiple Ren2Hub gateway processes to serve traffic: user and channel concurrency are local to one process. Follow the [single-instance release procedure](docs/routing/GATEWAY_RELEASE.md).
 
 > [!WARNING]
 > - All nodes must use the same primary database and the same `SESSION_SECRET`; otherwise Access Tokens, refresh sessions, and temporary authentication flows cannot be verified consistently.
@@ -422,7 +426,7 @@ See [User authentication and login sessions](./docs/authentication.md) for the t
 
 ### 🔄 Channel Retry and Cache
 
-**Retry configuration:** `Settings → Operation Settings → General Settings → Failure Retry Count`
+**Retry contract:** Ren2Hub allows at most three actual upstream sends per logical request and applies a shared extra-send budget. See [unified routing](docs/routing/UNIFIED_ROUTING.md) and the [gateway configuration API](docs/routing/GATEWAY_API.md).
 
 **Cache configuration:**
 - `REDIS_CONN_STRING`: Redis cache (recommended)

@@ -54,6 +54,8 @@
 
 ## 📝 項目說明
 
+目前檢出的專案為 Ren2Hub，路由、准入、API 與發布契約請從[本機文件](docs/README.md)進入。下文保留上游專案介紹、連結和部署範例；上游映像不包含本次檢出的修改。Ren2Hub 採用單一程序本機 FIFO 准入，新舊版本必須依序切換。RenAI 工作區使用獨立部署資產和 PostgreSQL。
+
 > [!IMPORTANT]
 > - 本專案僅面向合法授權的 AI API 閘道、組織內部鑑權、多模型管理、用量統計、成本核算和私有化部署場景。
 > - 使用者必須合法取得上游 API Key、帳號、模型服務或介面權限，並遵守上游服務條款及適用法律法規。
@@ -396,11 +398,13 @@ docker run --name new-api -d --restart always \
 2. 在應用商店搜尋 **New-API**
 3. 一鍵安裝
 
-📖 [圖文教學](./docs/BT.md)
+📖 [圖文教學](./docs/installation/BT.md)
 
 </details>
 
 ### ⚠️ 多機部署注意事項
+
+以下僅說明 Session 鑑權與 Redis 快取行為，不代表支援多個 Ren2Hub 閘道同時接收流量。使用者與管道並行額度由單一程序持有，部署遵守[單一實例切換與回復](docs/routing/GATEWAY_RELEASE.md)。
 
 > [!WARNING]
 > - 所有節點必須使用同一個主資料庫，並設定相同的 `SESSION_SECRET`；否則 Access Token、Refresh 工作階段和臨時鑑權流程無法一致驗證。
@@ -420,7 +424,7 @@ Token、Origin 驗證和 PAT 契約請參閱[使用者鑑權與登入工作階�
 
 ### 🔄 管道重試與快取
 
-**重試配置：** `設置 → 運營設置 → 通用設置 → 失敗重試次數`
+**重試契約：** 每個邏輯請求最多進行三次實際上游傳送，並受程序共用的額外傳送預算限制，詳見[統一路由](docs/routing/UNIFIED_ROUTING.md)與[閘道配置 API](docs/routing/GATEWAY_API.md)。
 
 **快取配置：**
 - `REDIS_CONN_STRING`：Redis 快取（推薦）

@@ -38,7 +38,7 @@ Gemini 生成请求在读取路径模型时复用现有请求校验器，先验�
 | 三数据库账务 | 42 场景通过；`.local-tests/gateway/review-fixes-billing-databases.log` |
 | 静态检查与构建 | 通过：主模块 vet、受影响构建及 diff 检查；`.local-tests/gateway/review-fixes-vet.log`。构建产物为 `.local-tests/gateway/ren2hub-review-fixes.exe` |
 
-回归可直接运行，不需要研究目录的 Go overlay。数据库测试使用 `BILLING_TEST_MYSQL_DSN` 和 `BILLING_TEST_POSTGRES_DSN`，只通过提供的连接创建并销毁临时测试数据库，不修改提供连接对应数据库的业务表。SDK 测试使用既有 `GATEWAY_SDK_PYTHON`、`GATEWAY_SDK_NODE` 与测试锁文件，详细操作沿用 [验证说明](../GATEWAY_VALIDATION.md)。
+回归可直接运行，不需要研究目录的 Go overlay。数据库测试使用 `BILLING_TEST_MYSQL_DSN` 和 `BILLING_TEST_POSTGRES_DSN`，只通过提供的连接创建并销毁临时测试数据库，不修改提供连接对应数据库的业务表。SDK 测试使用既有 `GATEWAY_SDK_PYTHON`、`GATEWAY_SDK_NODE` 与测试锁文件，详细操作沿用 [验证说明](GATEWAY_VALIDATION_PRE_SINGLE_INSTANCE_2026_09_16.md)。
 
 宿主能力合同由 v11 升至 v12，现有指纹刷新会重建受影响能力快照。本轮没有数据库结构变更，不重写历史账单，不重置管理员配置。源码、构建产物、本地运行进程及生产部署是分别记录的状态；本轮没有替换运行中的应用或执行生产操作。
 

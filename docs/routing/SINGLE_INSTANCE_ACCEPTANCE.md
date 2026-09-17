@@ -1,8 +1,10 @@
 # 单实例改造验收记录
 
-日期：2026-09-16。范围：本地 Ren2Hub 工作树，包含开始任务前已有的路由、转换及账务修改；没有用 HEAD 覆盖工作树。未发布子模块、未同步服务器、未部署或清理生产 Redis。
+更新：2026-09-17。单实例改造及审计修复已发布到新服务器，应用提交为 `f99a1bd66594476a90fb470496380ec05a2ba232`；PostgreSQL 15.18 隔离测试栈的 11 场景验证通过。公网生产站点未上线，没有执行生产 Redis 清理。
 
-本地功能改造、正式回归和旧执行路径替换已完成。完整旧应用的等价工作树基线没有留存，因此“相同完整 HTTP 工作负载下的新旧性能比较”仍未完成，不满足全部发布验收条件。以下通过结果不能替代这项缺失验证，也不能推导生产吞吐提升百分比。
+本地功能改造、正式回归和旧执行路径替换已完成。完整旧应用的等价工作树基线没有留存，因此“相同完整 HTTP 工作负载下的新旧性能比较”仍未完成，不能推导生产吞吐提升百分比。服务器长时间固定到达率压力、长连接排空及真实供应商验证仍待执行；完整生产上线验收尚未完成。
+
+下文 2026-09-16 的本地记录包含开始任务前已有的路由、转换及账务修改，没有用 HEAD 覆盖工作树。当时尚未提交或发布的说明只描述历史快照。服务器通过结果使用当时的 Docker CPU/内存配额；随后配额全部取消，已核验健康状态，但无配额配置尚未重跑完整压测。
 
 ## 交付实现
 
@@ -40,9 +42,9 @@ manager 当前使用覆盖资源 map 的短互斥锁，统一保护总队列与�
 
 审计修复后的 `go test -p 4 ./... -timeout 60s` 全模块通过（`backend-final.log`）；`go vet -p 4 ./...` 和 `go build -p 4 ./...` 均通过（`vet-final.log`、`build-final.log`）。`TestGatewayOfficialMediaSDK` 使用已安装的固定依赖与模拟上游，Python、TypeScript 两套通过（`media-sdk-final.log`，没有跳过）。视频冷却回归最初失败及修复通过分别保留于 `.local-tests/single-instance/audit-task-cooldown-{before,after}.log`。
 
-本次未修改数据库 schema、SQL 事务、前端或 RelayKit；此前三库、前端与独立模块验证按相同代码边界复用。完整新旧 HTTP 性能基线与代表性生产数据库容量验收仍未完成，下文的限制继续有效。
+此轮审计未修改数据库 schema、SQL 事务、前端或 RelayKit；此前三库、前端与独立模块验证按相同代码边界复用。完整新旧 HTTP 性能基线与代表性生产数据库容量验收当时尚未完成；后续 PostgreSQL 场景验证和仍存限制见末节。
 
-## 正式验证
+## 本地正式验证（2026-09-16）
 
 所有 Go 测试命令带 `-timeout 60s`，单个包或 SDK 套件分别受此期限约束。原始日志保留在 `.local-tests/single-instance/`；前端截图保留在 `frontend/output/`。完整可重复命令见 [验证步骤](GATEWAY_VALIDATION.md)。
 
@@ -61,7 +63,7 @@ manager 当前使用覆盖资源 map 的短互斥锁，统一保护总队列与�
 | 旧键清理工具 | dry-run 不写、仅固定前缀删除、重复执行及其他命名空间保护通过，`cmd/gateway-lease-cleanup/main_test.go` |
 | 历史兼容与错误 | 新日志仅写 admission_state，旧 lease_state 仍可读；省略新增配置/null/Provider 部分不可用及错误层级正式回归通过 |
 
-## HTTP 受控负载
+## 本地 HTTP 受控负载（2026-09-16）
 
 运行 `TestGatewaySingleInstanceControlledLoad`，使用独占回环 Redis 5.0.14.1 的初始空 DB、内存 SQLite、真实 HTTP/SSE 和模拟上游。五组场景共 61 个请求，均断言账务请求数、授槽释放守恒、活动/等待归零和旧并发 Redis 命令为零。另有 `TestGatewayProviderFullChannelRoutesToIndependentChannel` 验证 A 的 RPM 满后直接选 B，不增加 A 调用。
 
@@ -106,7 +108,7 @@ manager 当前使用覆盖资源 map 的短互斥锁，统一保护总队列与�
 
 CPU 原始值由 Windows GetProcessTimes 与 Redis INFO CPU 读取，短批次受约 15.625ms 粒度影响。各轮新核心进程 CPU 为 0–15.625ms，旧核心为 0–46.875ms；零值不是零成本，不能作精确倍数结论。完整原始 JSON（包括墙钟、超时和堆值）保留在 `.local-tests/admission-comparison/4eb5b30851ff4185b270f58f2ff79517/results.json`。此范围没有 SQL、上游内容或重试，它们不是核心微基准的业务，不能伪报为这些指标已完成新旧对比。
 
-## 清理清单与交付状态
+## 本地改造清理记录（2026-09-16）
 
 已移除 `service/route_lease.go`、`route_lease_queue.go`、`route_lease_coordinator.go` 和旧 Redis 槽测试 `route_lease_test.go`。共用资格复核、健康探测、Provider 维护及结算已迁出保留；原账务/频率多进程测试保留。应用不再调用旧获取、释放、续期或 Lua 排队，无双轨或自动回退后端。
 
@@ -116,12 +118,16 @@ CPU 原始值由 Windows GetProcessTimes 与 Redis INFO CPU 读取，短批次�
 
 收尾时已正常关闭本任务创建的 MySQL、PostgreSQL、Redis，确认回环 13306、15432、16379 不再监听。保留 `.local-tests/single-instance/{mysql,postgres,redis}` 数据、日志及构建供复核。真实回环 Redis 的旧键清理工具 dry-run 返回 observed=0、unlinked=0；未执行生产清理。最终额外补齐 Provider 配置读取的请求 context，定向取消测试与受影响构建通过，证据为 `provider-context-final.log`；准入错误层级见 `admission-errors-final.log`。
 
-本地实现与上述功能验证已完成；完整 HTTP 新旧性能对比及代表性生产数据库容量验收仍未完成，发布准备保持该门槛。顺序切换、限定旧键清理和回退步骤已写入 [发布说明](GATEWAY_RELEASE.md)，本次没有执行生产操作。
+本地实现与上述功能验证完成后，保留完整 HTTP 新旧性能对比及代表性数据库容量验收的缺项。顺序切换、限定旧键清理和回退步骤见 [发布说明](GATEWAY_RELEASE.md)；此阶段未执行服务器部署。
 
 2026-09-16 的历史记录曾处于子模块未提交、未发布状态；该状态只描述当时的验收快照。2026-09-17 已在新服务器独立 bare 仓库发布应用提交，并在隔离 PostgreSQL 测试栈复验。根工作区的发布状态、服务器地址和后续测试证据以 `docs/server/REN2HUB_POSTGRES_TEST_20260917.md` 为准；根 gitlink 同步不替代子模块源码发布。
 
-## 2026-09-17 审计修复
+## 服务器审计与 PostgreSQL 复验（2026-09-17）
 
-PostgreSQL 隔离压测首轮的业务、账务、槽位守恒和故障转移均通过，但严格路由日志核验发现：真实发送结束后，后续候选筛选会清除当前 `selected_channel_id`，重试预算耗尽时还可能把未发送的候选写成最终渠道。修复后，最终决策日志从真实发送边界保存的最后渠道读取证据；没有真实发送的请求仍不伪造渠道。新增回归覆盖“发送 11 后候选 12 被拒绝”和“已选 12 但预算拒绝发送”两条路径，普通测试、race、vet 和构建均通过。
+PostgreSQL 隔离压测在修正管理 API 限流夹具后，业务、账务、槽位守恒和故障转移均通过，但严格路由日志核验发现：真实发送结束后，后续候选筛选会清除当前 `selected_channel_id`，重试预算耗尽时还可能把未发送的候选写成最终渠道。修复后，最终决策日志从真实发送边界保存的最后渠道读取证据；没有真实发送的请求仍不伪造渠道。新增回归覆盖“发送 11 后候选 12 被拒绝”和“已选 12 但预算拒绝发送”两条路径，普通测试、race、vet 和构建均通过。
 
-服务器上的新版本会重新运行完整 11 场景实验；在新报告完成前，上一轮报告的 `success=false` 保留为未验收证据，不能改写为通过。完整旧 HTTP 基线、长时间固定到达率压力、真实供应商和公网 TLS 验收仍未完成。
+修复后的应用提交 `f99a1bd66594476a90fb470496380ec05a2ba232` 已发布到服务器独立 bare 仓库，并以不可变镜像在 PostgreSQL 15.18、Redis 7.4.10 隔离栈复验。报告目录为 `/srv/ren2hub-test/reports/20260916T171507.860099Z/`（UTC），最终 `success=true`、`cleanup_complete=true`、`route_evidence=true`。11 场景覆盖低负载和稳态 JSON/SSE、用户与渠道拥塞、A 忙 B 空、独立冷却、部分 503、全池不可用及共享重试预算；行为、账务、路由证据和槽位守恒全部通过。
+
+原先管理 API 限流不足和最终渠道日志缺失的失败报告继续保留，不改写为通过。测试没有公网端口或真实供应商调用；PostgreSQL 备份经 `pg_restore --list` 验证可读，该检查不等于恢复演练。具体请求量、延迟、CPU/内存和数据库调用量由工作区 `docs/server/REN2HUB_POSTGRES_TEST_20260917.md` 统一记录，避免在多个文档复制易失同步的数据表。
+
+该报告使用当时的容器 CPU/内存上限。随后工作区配置已移除应用、PostgreSQL、Redis、构建和压测辅助容器的全部 CPU/内存配额，健康核验通过；没有重跑完整 11 场景，原测量不能代表无配额环境。完整旧 HTTP 基线、长时间固定到达率压力、SSE/Realtime 长连接排空、真实供应商和公网 TLS 验收仍未完成。

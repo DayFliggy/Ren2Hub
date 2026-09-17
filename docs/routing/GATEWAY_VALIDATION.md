@@ -1,6 +1,6 @@
 # 单实例网关验证步骤
 
-更新：2026-09-16。仅连接隔离的本地数据库、Redis 和模拟上游，不使用生产连接或付费模型。此前多版本结果已保留于 [历史验证归档](archive/GATEWAY_VALIDATION_PRE_SINGLE_INSTANCE_2026_09_16.md)，本轮通过情况见 [验收记录](SINGLE_INSTANCE_ACCEPTANCE.md)。
+更新：2026-09-17。测试仅连接明确隔离的数据库、Redis 和模拟上游；本地夹具与服务器测试栈的数据各自独立，不使用生产数据或付费模型。此前多版本结果已保留于 [历史验证归档](archive/GATEWAY_VALIDATION_PRE_SINGLE_INSTANCE_2026_09_16.md)，已执行结果见 [验收记录](SINGLE_INSTANCE_ACCEPTANCE.md)。
 
 ## 顺序与命令
 
@@ -10,6 +10,7 @@
 go test ./service ./controller ./middleware -run 'TestLocalAdmission|TestGateway|TestRouteSendFence|TestRouteBackoff|TestRouteRetry|TestRouteQueue' -timeout 60s
 go test -race ./service -run 'TestLocalAdmission|TestGatewayAdmissionCommitted|TestGatewayChannelPolicyRefresh|TestGatewayRetry|TestGatewayDrain' -timeout 60s
 go test -race ./controller -run 'TestRouteSendFence|TestRouteBackoff|TestRouteRetry|TestRouteQueue' -timeout 60s
+go test -race ./controller -run '^TestFinalRouteEvidenceRetainsLastSendAfterRejectedCandidates$' -timeout 60s
 go test -race ./service ./controller ./router -run 'TestGatewayBatchRevocation|TestGatewayRoutingPolicy|TestGatewayChannelPolicy|TestRouteQueue|TestRouteAvailability|TestGatewayMediaCredential|TestGatewayPreSend|TestGatewayTaskExplicitRejection' -timeout 60s
 go test ./model -run 'TestGatewayConfig|TestGatewayStartup' -timeout 60s
 go test ./service -run 'TestBillingDatabaseIntegration|TestGatewayMultiProcessSuccessReservation' -timeout 60s
@@ -23,7 +24,7 @@ go build ./...
 
 ## 本地依赖
 
-本轮新建数据位于 `.local-tests/single-instance/{mysql,postgres,redis}`；没有复用或删除已有 `.local-tests/gateway` 数据。本轮 MySQL 5.7.19 使用回环 13306，PostgreSQL 16.4 使用 15432，Redis 5.0.14.1 使用 16379。测试创建临时数据库/表并按夹具清理；这些版本的结果不能冒充其他服务端版本实测。
+2026-09-16 本地验证的数据位于 `.local-tests/single-instance/{mysql,postgres,redis}`，相关进程已在验证后关闭，数据和日志保留。记录版本为 MySQL 5.7.19（回环 13306）、PostgreSQL 16.4（15432）、Redis 5.0.14.1（16379）；复跑前核对隔离服务和连接，不假定旧端口仍在监听。测试创建临时数据库/表并按夹具清理；这些版本的结果不能冒充其他服务端版本实测。
 
 | 检查 | 环境变量 |
 | --- | --- |
@@ -33,7 +34,7 @@ go build ./...
 | 单实例及顺序重启 | `GATEWAY_APP_BINARY`、`GATEWAY_APP_MYSQL_DSN`、`GATEWAY_APP_REDIS_ADDR`；运行 `TestGatewayApplicationSingleInstanceRestart` |
 | 官方 SDK | `GATEWAY_SDK_PYTHON`、`GATEWAY_SDK_NODE`，必要时 `PYTHONPATH` 指向隔离依赖 |
 
-SDK 套件与锁定版本见 `tests/gateway-sdk/README.md`，每套单独执行，避免把多个 60 秒工作合并成一个总 60 秒命令。Windows 代理环境中为回环请求设置 `NO_PROXY=127.0.0.1,localhost`。禁止关闭 TLS 校验来让 Realtime 测试通过。
+SDK 套件与锁定版本见 [SDK 测试说明](../../tests/gateway-sdk/README.md)，每套单独执行，避免把多个 60 秒工作合并成一个总 60 秒命令。Windows 代理环境中为回环请求设置 `NO_PROXY=127.0.0.1,localhost`。禁止关闭 TLS 校验来让 Realtime 测试通过。
 
 ## 前端
 
@@ -70,3 +71,9 @@ powershell -NoProfile -File tests/admission-benchmark/compare.ps1 -RedisAddress 
 ```
 
 HTTP 夹具明确把内存 SQLite 限为单连接，不把此结果当作多连接 SQLite 负载已通过。核心比较说明和固定旧提交见 [基准说明](../../tests/admission-benchmark/README.md)；只恢复旧核心到独立临时包，结束删除临时源码，不恢复旧生产执行路径。
+
+## 服务器 PostgreSQL 验证
+
+RenAI 工作区提供 `scripts/server/build-ren2hub-test.sh`、`prepare-ren2hub-test.sh` 和 `run-ren2hub-test.sh`。它们使用已发布 Git 提交、独立 PostgreSQL/Redis 数据目录和内部 Docker 网络，验证前端烟测，并运行 11 个模拟渠道场景；执行入口、精确命令和报告位于工作区 `docs/server/REN2HUB_POSTGRES_TEST_20260917.md`。
+
+重跑须记录应用 SHA、工作区 SHA、镜像 OCI revision、本地 image ID、数据库版本、负载参数及资源配置；只有存在 registry manifest 时才记录对应 digest，本地 image ID 不等于 registry digest。2026-09-17 的通过报告使用 Docker CPU/内存配额；随后按用户要求移除了全部此类限制，仅完成健康核验，尚未重跑完整压测。不得把旧报告标为当前无配额环境的性能结果。模拟渠道清理、配置恢复、账务、最终路由证据和槽位守恒必须全部通过，不能仅按 HTTP 成功率验收。
