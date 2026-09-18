@@ -1,11 +1,9 @@
 package openai
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -41,39 +39,36 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
 
-	chatResult, err := relayconvert.ConvertResponse(c, info, types.RelayFormatOpenAI, &responsesResp)
-	if err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
-	}
-	chatResp, ok := chatResult.Value.(*dto.OpenAITextResponse)
-	if !ok {
-		return nil, types.NewOpenAIError(fmt.Errorf("expected OpenAI chat response, got %T", chatResult.Value), types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
-	}
-	if chatID := helper.GetResponseID(c); chatID != "" {
-		chatResp.Id = chatID
-	}
-	usage := chatResult.Usage
+	return writeConvertedResponsesResponse(c, info, resp, &responsesResp)
+}
 
+// Both JSON and buffered SSE use the same response semantics and loss policy.
+func writeConvertedResponsesResponse(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response, response *dto.OpenAIResponsesResponse) (*dto.Usage, *types.NewAPIError) {
+	terminal := relayconvert.TerminationFromResponse(response)
+	c.Set("response_termination", terminal)
+	usage := relayconvert.UsageFromResponsesUsage(response.Usage)
 	if usage == nil || usage.TotalTokens == 0 {
-		text := service.ExtractOutputTextFromResponses(&responsesResp)
-		usage = service.ResponseText2Usage(c, text, info.UpstreamModelName, info.GetEstimatePromptTokens())
-		chatResp.Usage = *usage
+		usage = service.ResponseText2Usage(c, service.ExtractOutputTextFromResponses(response), info.UpstreamModelName, info.GetEstimatePromptTokens())
 	}
-
-	responseValue := any(chatResp)
-	if info.RelayFormat != types.RelayFormatOpenAI {
-		targetResult, err := relayconvert.ConvertResponse(c, info, info.RelayFormat, chatResp)
-		if err != nil {
-			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
-		}
-		responseValue = targetResult.Value
+	if terminal.Kind == types.ResponseFailed || terminal.Kind == types.ResponseCancelled {
+		return usage, types.NewOpenAIError(fmt.Errorf("upstream response %s", terminal.Kind), types.ErrorCodeBadResponse, http.StatusBadGateway)
 	}
-	responseBody, err := common.Marshal(responseValue)
+	result, err := relayconvert.ConvertResponse(c, info, info.RelayFormat, response)
 	if err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
+		return usage, helper.ResponseConversionError(err)
 	}
-
-	service.IOCopyBytesGracefully(c, resp, responseBody)
+	helper.ObserveResponseConversion(c, *result)
+	if chat, ok := result.Value.(*dto.OpenAITextResponse); ok {
+		if id := helper.GetResponseID(c); id != "" {
+			chat.Id = id
+		}
+		chat.Usage = *usage
+	}
+	body, err := common.Marshal(result.Value)
+	if err != nil {
+		return usage, types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
+	}
+	service.IOCopyBytesGracefully(c, resp, body)
 	return usage, nil
 }
 
@@ -87,56 +82,43 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 	var finalResponse *dto.OpenAIResponsesResponse
 	var streamErr *types.NewAPIError
 
-	scanner := helper.NewStreamScanner(resp.Body)
-	scanner.Split(bufio.ScanLines)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if len(line) < 6 || line[:5] != "data:" {
-			continue
+	readErr := helper.ReadSSEEvents(resp.Body, func(data, eventName string) (bool, error) {
+		if data == "[DONE]" {
+			return true, nil
 		}
-		data := line[5:]
-		data = strings.TrimSpace(data)
-		if data == "" || data == "[DONE]" {
-			if data == "[DONE]" {
-				break
+		var event dto.ResponsesStreamResponse
+		if err := common.UnmarshalJsonStr(data, &event); err != nil {
+			return true, err
+		}
+		if event.Type == "" {
+			event.Type = eventName
+		}
+		accumulator.ProcessEvent(&event)
+		terminal := relayconvert.TerminationFromResponse(&event)
+		if terminal.IsTerminal() {
+			c.Set("response_termination", terminal)
+		}
+		if !terminal.IsTerminal() {
+			return false, nil
+		}
+		finalResponse = event.Response
+		if finalResponse == nil {
+			finalResponse = &dto.OpenAIResponsesResponse{}
+		}
+		if event.Type == "response.incomplete" && len(finalResponse.Status) == 0 {
+			finalResponse.Status = []byte(`"incomplete"`)
+		}
+		if !terminal.IsSuccessful() {
+			if err := relayconvert.ValidateResponseTermination(types.RelayFormatOpenAIResponses, info.RelayFormat, terminal); err != nil && (terminal.Kind == types.ResponseUnknown || terminal.Kind == types.ResponseProviderPause) {
+				streamErr = helper.ResponseConversionError(err)
+			} else {
+				streamErr = types.NewOpenAIError(fmt.Errorf("upstream responses stream failed"), types.ErrorCodeBadResponse, http.StatusBadGateway)
 			}
-			continue
 		}
-
-		var streamResp dto.ResponsesStreamResponse
-		if err := common.UnmarshalJsonStr(data, &streamResp); err != nil {
-			logger.LogError(c, "failed to unmarshal buffered responses stream event: "+err.Error())
-			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
-			break
-		}
-		accumulator.ProcessEvent(&streamResp)
-		switch streamResp.Type {
-		case "response.completed", "response.done", "response.incomplete":
-			finalResponse = streamResp.Response
-			if streamResp.Type == "response.incomplete" {
-				streamErr = types.NewOpenAIError(fmt.Errorf("upstream responses stream is incomplete"), types.ErrorCodeBadResponse, http.StatusBadGateway)
-				if finalResponse == nil {
-					finalResponse = &dto.OpenAIResponsesResponse{}
-				}
-				if len(finalResponse.Status) == 0 {
-					finalResponse.Status = []byte(`"incomplete"`)
-				}
-			}
-		case "response.failed", "response.error":
-			if streamResp.Response != nil {
-				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
-					streamErr = types.WithOpenAIError(*oaiErr, http.StatusInternalServerError)
-					break
-				}
-			}
-			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusInternalServerError)
-		}
-		if streamErr != nil || finalResponse != nil {
-			break
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
+		return true, nil
+	})
+	if readErr != nil {
+		streamErr = types.NewOpenAIError(readErr, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 	if finalResponse == nil {
 		finalResponse = &dto.OpenAIResponsesResponse{
@@ -161,39 +143,7 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 		return usage, streamErr
 	}
 
-	chatResult, err := relayconvert.ConvertResponse(c, info, types.RelayFormatOpenAI, finalResponse)
-	if err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
-	}
-	chatResp, ok := chatResult.Value.(*dto.OpenAITextResponse)
-	if !ok {
-		return nil, types.NewOpenAIError(fmt.Errorf("expected OpenAI chat response, got %T", chatResult.Value), types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
-	}
-	if chatID := helper.GetResponseID(c); chatID != "" {
-		chatResp.Id = chatID
-	}
-	usage := chatResult.Usage
-	if usage == nil || usage.TotalTokens == 0 {
-		text := service.ExtractOutputTextFromResponses(finalResponse)
-		usage = service.ResponseText2Usage(c, text, info.UpstreamModelName, info.GetEstimatePromptTokens())
-		chatResp.Usage = *usage
-	}
-
-	responseValue := any(chatResp)
-	if info.RelayFormat != types.RelayFormatOpenAI {
-		targetResult, err := relayconvert.ConvertResponse(c, info, info.RelayFormat, chatResp)
-		if err != nil {
-			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
-		}
-		responseValue = targetResult.Value
-	}
-	responseBody, err := common.Marshal(responseValue)
-	if err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
-	}
-
-	service.IOCopyBytesGracefully(c, resp, responseBody)
-	return usage, nil
+	return writeConvertedResponsesResponse(c, info, resp, finalResponse)
 }
 
 func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
@@ -291,9 +241,18 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			return
 		}
 
-		if streamResp.Type == "response.error" || streamResp.Type == "response.failed" || streamResp.Type == "response.incomplete" || streamResp.Type == "response.cancelled" || streamResp.Type == "response.canceled" {
+		terminal := relayconvert.TerminationFromResponse(&streamResp)
+		if terminal.IsTerminal() {
+			c.Set("response_termination", terminal)
+		}
+		if terminal.IsTerminal() && !terminal.IsSuccessful() {
 			if streamResp.Response != nil && streamResp.Response.Usage != nil {
 				state.SetUsage(relayconvert.UsageFromResponsesUsage(streamResp.Response.Usage))
+			}
+			if terminal.Kind == types.ResponseUnknown || terminal.Kind == types.ResponseProviderPause {
+				streamErr = helper.ResponseConversionError(relayconvert.ValidateResponseTermination(types.RelayFormatOpenAIResponses, info.RelayFormat, terminal))
+				sr.Stop(streamErr)
+				return
 			}
 			if streamResp.Response != nil {
 				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
@@ -309,15 +268,19 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 		results, err := relayconvert.ConvertStreamResponseChunk(c, info, state, &streamResp)
 		if err != nil {
-			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
+			streamErr = helper.ResponseConversionError(err)
 			sr.Stop(streamErr)
 			return
 		}
 		for _, result := range results {
+			helper.ObserveResponseConversion(c, result)
 			if !sendStreamResult(result) {
 				sr.Stop(streamErr)
 				return
 			}
+		}
+		if terminal.IsSuccessful() {
+			sr.Done()
 		}
 	})
 

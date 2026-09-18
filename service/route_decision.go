@@ -58,16 +58,23 @@ type RouteDecisionCandidate struct {
 // RouteDecisionAttempt contains only safe diagnostics for a dispatched attempt.
 // Successful response statuses and time to first token are not inferred.
 type RouteDecisionAttempt struct {
-	Sequence          int                    `json:"sequence"`
-	ChannelID         int                    `json:"channel_id"`
-	Success           bool                   `json:"success"`
-	ErrorClass        RouteErrorClass        `json:"error_class,omitempty"`
-	ErrorHTTPStatus   int                    `json:"error_http_status,omitempty"`
-	Origin            AttemptOrigin          `json:"origin"`
-	LatencyMS         int64                  `json:"latency_ms"`
-	Acceptance        AttemptAcceptance      `json:"acceptance"`
-	RetryPermission   AttemptRetryPermission `json:"retry_permission"`
-	ResponseCommitted bool                   `json:"response_committed,omitempty"`
+	Termination       types.ResponseTerminationKind `json:"termination,omitempty"`
+	Diagnostics       []RouteDiagnosticSummary      `json:"response_diagnostics,omitempty"`
+	Sequence          int                           `json:"sequence"`
+	ChannelID         int                           `json:"channel_id"`
+	Success           bool                          `json:"success"`
+	ErrorClass        RouteErrorClass               `json:"error_class,omitempty"`
+	ErrorHTTPStatus   int                           `json:"error_http_status,omitempty"`
+	Origin            AttemptOrigin                 `json:"origin"`
+	LatencyMS         int64                         `json:"latency_ms"`
+	Acceptance        AttemptAcceptance             `json:"acceptance"`
+	RetryPermission   AttemptRetryPermission        `json:"retry_permission"`
+	ResponseCommitted bool                          `json:"response_committed,omitempty"`
+}
+
+type RouteDiagnosticSummary struct {
+	Code string `json:"code"`
+	Path string `json:"path,omitempty"`
 }
 
 type RouteDecision struct {

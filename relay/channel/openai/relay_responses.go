@@ -31,6 +31,11 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
 
+	terminal := relayconvert.TerminationFromResponse(&responsesResponse)
+	c.Set("response_termination", terminal)
+	if terminal.Kind == types.ResponseFailed || terminal.Kind == types.ResponseCancelled {
+		return relayconvert.UsageFromResponsesUsage(responsesResponse.Usage), types.NewOpenAIError(fmt.Errorf("upstream response %s", terminal.Kind), types.ErrorCodeBadResponse, http.StatusBadGateway)
+	}
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 	usage := relayconvert.UsageFromResponsesUsage(responsesResponse.Usage)
 	for _, output := range responsesResponse.Output {
@@ -67,7 +72,11 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			return
 		}
 		accounting.Observe(&event)
-		failed := event.Type == "error" || event.Type == "response.error" || event.Type == "response.failed" || event.Type == "response.incomplete" || event.Type == "response.cancelled" || event.Type == "response.canceled"
+		terminal := relayconvert.TerminationFromResponse(&event)
+		if terminal.IsTerminal() {
+			c.Set("response_termination", terminal)
+		}
+		failed := terminal.Kind == types.ResponseFailed || terminal.Kind == types.ResponseCancelled || event.Type == "error"
 		if !failed || c.Writer.Written() {
 			// Parsing has succeeded, and native Responses forwards this semantic
 			// event immediately. Image bytes must not consume the prelude budget.
@@ -85,6 +94,8 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		if failed {
 			streamErr = types.NewOpenAIError(fmt.Errorf("upstream responses stream ended: %s", event.Type), types.ErrorCodeBadResponse, http.StatusBadGateway)
 			sr.Stop(streamErr)
+		} else if terminal.IsTerminal() {
+			sr.Done()
 		}
 	})
 	usage := accounting.Finish()

@@ -273,6 +273,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		c.Set("gateway_health_epoch", int64(0))
 		c.Set("gateway_token_budget", int64(0))
 		c.Set("gateway_token_budget_source", "")
+		c.Set("response_termination", types.ResponseTermination{})
+		c.Set("response_conversion_diagnostics", []types.ConversionDiagnostic(nil))
 		if compactRetry != nil {
 			if err := helper.ConfigureCompactAttempt(c, relayInfo); err != nil {
 				newAPIError = types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
@@ -360,6 +362,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = geminiRelayHandler(c, relayInfo)
 		default:
 			newAPIError = relayHandler(c, relayInfo)
+		}
+		var responseLoss *types.ConversionLossError
+		if errors.As(newAPIError, &responseLoss) {
+			newAPIError = helper.ResponseConversionError(responseLoss)
 		}
 		if outputErr := helper.StreamOutputError(c); outputErr != nil {
 			if errors.Is(outputErr, helper.ErrStreamClientWrite) {
@@ -826,7 +832,7 @@ func acquireRouteAttemptPermit(c *gin.Context, info *relaycommon.RelayInfo, chan
 	if err := service.RecheckRouteRuntime(expected, current); err != nil {
 		return releaseRejectedRouteAttempt(c, permit, err)
 	}
-	if err := service.RecheckLiveRouteCandidate(service.LiveRouteCandidateQualificationRequest{
+	finalQualification := service.LiveRouteCandidateQualificationRequest{
 		Context:                  c.Request.Context(),
 		RouteSource:              selection.Source,
 		UserID:                   info.UserId,
@@ -840,11 +846,13 @@ func acquireRouteAttemptPermit(c *gin.Context, info *relaycommon.RelayInfo, chan
 		ExpectedSnapshotVersion:  candidate.SnapshotVersion,
 		ExpectedCatalogVersion:   candidate.CatalogVersion,
 		ExpectedProfileVersion:   selection.Decision.ConfigurationVersion,
+		ExpectedConversionPolicy: info.ConversionPolicy,
 		PriceEligibilityKnown:    qualification.PriceEligibilityKnown,
 		PriceEligible:            qualification.PriceEligible,
 		SecurityEligibilityKnown: qualification.SecurityEligibilityKnown,
 		SecurityAllowed:          qualification.SecurityAllowed,
-	}); err != nil {
+	}
+	if err := service.RecheckLiveRouteCandidate(finalQualification); err != nil {
 		if reason := service.LiveRouteQualificationReason(err); reason != "" {
 			markLiveRouteCandidateFiltered(c, channel.Id, reason)
 		}
@@ -870,7 +878,13 @@ func acquireRouteAttemptPermit(c *gin.Context, info *relaycommon.RelayInfo, chan
 	healthState := &routeAttemptHealthState{}
 	c.Set("route_live_health", healthState)
 	info.UpstreamSent, info.UpstreamAccepted = false, false
-	info.BeforeSend = func(body io.Reader) error { return prepareLiveRouteSend(c, info, healthState, uuid.NewString(), body) }
+	info.BeforeSend = func(body io.Reader) error {
+		finalQualification.Context = c.Request.Context()
+		if err := service.RecheckLiveRouteCandidate(finalQualification); err != nil {
+			return types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
+		}
+		return prepareLiveRouteSend(c, info, healthState, uuid.NewString(), body)
+	}
 	renewal := service.StartAttemptMaintenance(attemptContext, 30*time.Second, healthState.renew)
 	go func() {
 		if err, ok := <-renewal.Done; ok && err != nil {
@@ -1126,9 +1140,12 @@ func nextLiveRouteCandidateIndex(c *gin.Context, currentAttempt int) (int, bool)
 	if !ok || !valid {
 		return 0, false
 	}
-	_, index, found := selection.CandidateAtOrAfter(currentAttempt + 1)
-	if found {
-		return index, true
+	for index := currentAttempt + 1; index < len(selection.Attempts); index++ {
+		candidate := selection.Attempts[index]
+		if candidate.FilterReason == "" && selection.AllowsCandidate(candidate.ChannelID, c.GetInt(liveRoutePreviousChannelKey),
+			service.RouteErrorClassification{Retryable: true, Failoverable: true}, liveRouteRetryCounters(c)) {
+			return index, true
+		}
 	}
 	// Every candidate-local rejection shares this exhaustion path. A later
 	// price, conversion, key, or health rejection cannot discard a busy pool.

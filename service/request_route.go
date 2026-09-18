@@ -7,6 +7,8 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"gorm.io/gorm"
 )
@@ -15,7 +17,7 @@ import (
 // A token without a private profile uses automatic routing; missing candidates
 // or infrastructure never invoke another selector.
 func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
-	selection := LiveRouteSelection{Source: RouteSourceUnavailable, CompactStage: input.CompactStage, SpecificChannelID: input.SpecificChannelID}
+	selection := LiveRouteSelection{Source: RouteSourceUnavailable, CompactStage: input.CompactStage, SpecificChannelID: input.SpecificChannelID, ConversionPlans: make(map[int]relayconvert.ConversionPlan)}
 	if !input.CapabilityEnabled || model.DB == nil || input.UserID <= 0 || (input.TokenID <= 0 && !input.IsPlayground) {
 		return selection, ErrLiveRouteProfileUnavailable
 	}
@@ -107,6 +109,24 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 	for row := range channelRows {
 		channels[channelRows[row].Id] = &channelRows[row]
 	}
+	// The index discovers channels; current rows decide qualification. A stale
+	// index must not spend the candidate budget on revoked or obsolete entries.
+	currentCapabilities, err := model.FindActiveChannelCapabilities(input.Context, channelIDs, "", "")
+	if err != nil {
+		return selection, err
+	}
+	type capabilityKey struct {
+		channelID int
+		model     string
+	}
+	currentByModel := make(map[capabilityKey]model.ChannelModelCapability, len(currentCapabilities))
+	for _, capability := range currentCapabilities {
+		currentByModel[capabilityKey{capability.ChannelID, capability.RequestModel}] = capability
+	}
+	abilityAccess, err := FindUserRouteCapabilityAccess(input.Context, input.UserID, currentCapabilities)
+	if err != nil {
+		return selection, err
+	}
 	compactAbilities := make(map[int]map[string]bool)
 	if input.CompactStage != relaycommon.CompactAttemptNone && len(channelIDs) > 0 {
 		var abilities []model.Ability
@@ -143,16 +163,23 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			if !exists {
 				entitled = true
 			}
+			current, currentExists := currentByModel[capabilityKey{channel.Id, lookupModel}]
+			if currentExists {
+				capability = current
+			}
 			filtered := filterRouteCapability(routeCapabilityFilterInput{
 				Capability: capability, SnapshotVersion: capability.SnapshotVersion,
 				ChannelStatus: channel.Status, ChannelType: channel.Type,
-				AbilityEnabled: len(indexed.AbilityGroups) > 0,
+				AbilityEnabled: abilityAccess[capability.ID].Enabled,
 				RequestModel:   input.RequestModel, NormalizedModel: modellab.NormalizeModel(input.RequestModel),
 				TokenLimitEnabled: input.TokenModelLimitEnabled, TokenLimit: input.TokenModelLimit,
 				RequestPath: input.RequestPath, EndpointType: endpointTypeForRequestPath(input.RequestPath),
 				Entitled: entitled, RequireSnapshot: true, RequireEndpoint: true,
 				Advanced: indexed.Advanced,
 			})
+			if !currentExists {
+				filtered.Reason = RouteFilterSnapshotStale
+			}
 			candidate := RouteSelectionCandidate{
 				ChannelID: channel.Id, RequestModel: capability.RequestModel, ActualModel: capability.ActualModel,
 				LabSlug:  capability.LabSlug,
@@ -187,6 +214,16 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			if reason := input.ExcludedChannelIDs[channel.Id]; reason != "" {
 				candidate.FilterReason = reason
 			}
+			if candidate.FilterReason == "" && input.Requirements != nil {
+				plan, planErr := PlanChannelConversion(*input.Requirements, channel, input.RequestPath, candidate.ActualModel, input.ConversionPolicy)
+				if planErr != nil {
+					candidate.FilterReason = RoutePreviewFilterConversion
+					if len(plan.Diagnostics) == 0 {
+						plan.Diagnostics = []types.ConversionDiagnostic{{Code: RoutePreviewFilterConversion, Message: planErr.Error(), Severity: types.ConversionDiagnosticError, From: input.Requirements.Format, To: plan.To}}
+					}
+				}
+				selection.ConversionPlans[channel.Id] = plan
+			}
 			if previous, exists := byChannel[channel.Id]; exists {
 				candidates[previous] = candidate
 			} else {
@@ -198,7 +235,9 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 	if err := applyLiveHealth(input.Context, candidates, channels, input.ExcludedKeyIndexes); err != nil {
 		return selection, err
 	}
-	filterKnownProviderUnavailable(input.Context, candidates)
+	if !input.Preview {
+		filterKnownProviderUnavailable(input.Context, candidates)
+	}
 	result, err := SelectTokenRoute(RouteSelectionInput{
 		SourceInput: sourceInput, ManualGroupEnabled: manualEnabled, ManualLoadBalance: loadBalance,
 		ManualCandidates: candidates, AutoCandidates: candidates, TopK: MaxRouteCandidateChannels,
@@ -207,11 +246,20 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 	})
 	selection.Decision = result.Decision
 	if errors.Is(err, ErrRouteSelectionUnavailable) {
+		var diagnostics []types.ConversionDiagnostic
+		conversionRejected := false
 		for _, candidate := range candidates {
 			if candidate.FilterReason == "provider_rate_limited" {
 				err = ErrGatewayProviderRateLimit
 				break
 			}
+			if candidate.FilterReason == RoutePreviewFilterConversion {
+				conversionRejected = true
+				diagnostics = append(diagnostics, selection.ConversionPlans[candidate.ChannelID].Diagnostics...)
+			}
+		}
+		if errors.Is(err, ErrRouteSelectionUnavailable) && conversionRejected {
+			err = &types.ConversionLossError{Diagnostics: diagnostics}
 		}
 	}
 	if selection.Source == RouteSourceManual {

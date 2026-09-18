@@ -229,11 +229,7 @@ func runResponsesImageBillingStream(t *testing.T, events ...string) *relaycommon
 	}
 
 	_, apiErr := OaiResponsesStreamHandler(c, info, resp)
-	if strings.Contains(body.String(), "response.incomplete") {
-		require.NotNil(t, apiErr)
-	} else {
-		require.Nil(t, apiErr)
-	}
+	require.Nil(t, apiErr)
 	require.NotNil(t, info.ResponsesUsageInfo)
 	require.Contains(t, info.ResponsesUsageInfo.BuiltInTools, dto.BuildInToolImageGeneration)
 	return info

@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -203,6 +205,17 @@ func TestGatewayAudioTranscriptionRoundTrip(t *testing.T) {
 					_, _ = io.WriteString(w, `{"text":"hello","usage":{"input_tokens":10,"input_token_details":{"audio_tokens":8,"text_tokens":2},"output_tokens":2,"total_tokens":12}}`)
 				}
 			})
+			if stream {
+				var original model.Channel
+				require.NoError(t, model.DB.First(&original, 1).Error)
+				priority := int64(100)
+				for range 64 {
+					channel := model.Channel{Type: constant.ChannelCloudflare, Models: "gpt-4o-transcribe", Name: "nonstream-transcription", Key: "fixture", Status: common.ChannelStatusEnabled, BaseURL: original.BaseURL, Group: "default", CapacityTotal: 10, ChannelRatio: 1, Priority: &priority}
+					require.NoError(t, model.DB.Create(&channel).Error)
+					require.NoError(t, channel.AddAbilities(model.DB))
+				}
+				require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
+			}
 			body := &bytes.Buffer{}
 			form := multipart.NewWriter(body)
 			require.NoError(t, form.WriteField("model", "gpt-4o-transcribe"))

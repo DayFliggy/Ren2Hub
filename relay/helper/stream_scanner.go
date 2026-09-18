@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
@@ -168,8 +169,17 @@ func StreamPayloadState(data string) (semantic, terminal bool) {
 		semantic = value.Get("partial_image_b64").String() != ""
 	case "response.output_item.done":
 		semantic = value.Get("item.type").String() == "image_generation_call" && value.Get("item.status").String() == "completed" && value.Get("item.result").String() != ""
-	case "message_stop", "response.completed", "response.done", "message_end":
+	case "message_stop", "message_end":
 		terminal = true
+	case "response.completed", "response.done", "response.incomplete", "response.failed", "response.cancelled":
+		status := value.Get("response.status").String()
+		if status == "" {
+			status = strings.TrimPrefix(typ, "response.")
+			if status == "done" {
+				status = "completed"
+			}
+		}
+		terminal = types.ClassifyResponseTermination(types.RelayFormatOpenAIResponses, status, value.Get("response.incomplete_details.reason").String()).IsSuccessful()
 	case "content_block_delta":
 		semantic = value.Get("delta.text").String() != "" || value.Get("delta.thinking").String() != "" || value.Get("delta.partial_json").String() != "" || value.Get("delta.signature").String() != ""
 	case "content_block_start":
@@ -181,7 +191,7 @@ func StreamPayloadState(data string) (semantic, terminal bool) {
 		semantic = itemType == "function_call" || itemType == "custom_tool_call"
 	}
 	for _, choice := range value.Get("choices").Array() {
-		if choice.Get("finish_reason").String() != "" {
+		if types.ClassifyResponseTermination(types.RelayFormatOpenAI, "", choice.Get("finish_reason").String()).IsTerminal() {
 			terminal = true
 		}
 		if choice.Get("text").String() != "" || choice.Get("delta.content").String() != "" || choice.Get("delta.reasoning_content").String() != "" || choice.Get("delta.reasoning").String() != "" || len(choice.Get("delta.tool_calls").Array()) != 0 || choice.Get("delta.function_call").Exists() {
@@ -189,7 +199,7 @@ func StreamPayloadState(data string) (semantic, terminal bool) {
 		}
 	}
 	for _, candidate := range value.Get("candidates").Array() {
-		if candidate.Get("finishReason").String() != "" {
+		if types.ClassifyResponseTermination(types.RelayFormatGemini, "", candidate.Get("finishReason").String()).IsTerminal() {
 			terminal = true
 		}
 		for _, part := range candidate.Get("content.parts").Array() {

@@ -42,8 +42,9 @@ func handleClaudeFormat(c *gin.Context, data string, info *relaycommon.RelayInfo
 	}
 	result, err := relayconvert.ConvertStreamResponse(c, info, types.RelayFormatClaude, &streamResponse)
 	if err != nil {
-		return err
+		return helper.ResponseConversionError(err)
 	}
+	helper.ObserveResponseConversion(c, *result)
 	claudeResponses, ok := result.Value.([]*dto.ClaudeResponse)
 	if !ok {
 		return fmt.Errorf("expected Claude stream responses, got %T", result.Value)
@@ -65,8 +66,9 @@ func handleGeminiFormat(c *gin.Context, data string, info *relaycommon.RelayInfo
 
 	result, err := relayconvert.ConvertStreamResponse(c, info, types.RelayFormatGemini, &streamResponse)
 	if err != nil {
-		return err
+		return helper.ResponseConversionError(err)
 	}
+	helper.ObserveResponseConversion(c, *result)
 	geminiResponse, ok := result.Value.(*dto.GeminiChatResponse)
 	if !ok {
 		return fmt.Errorf("expected Gemini stream response, got %T", result.Value)
@@ -211,8 +213,9 @@ func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStream
 
 		result, err := relayconvert.ConvertStreamResponse(c, info, types.RelayFormatClaude, &streamResponse)
 		if err != nil {
-			return err
+			return helper.ResponseConversionError(err)
 		}
+		helper.ObserveResponseConversion(c, *result)
 		claudeResponses, ok := result.Value.([]*dto.ClaudeResponse)
 		if !ok {
 			return fmt.Errorf("expected Claude stream responses, got %T", result.Value)

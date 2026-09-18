@@ -40,8 +40,9 @@ func OaiChatToResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 	convertResult, err := relayconvert.ConvertResponse(c, info, types.RelayFormatOpenAIResponses, &chatResp)
 	if err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		return &chatResp.Usage, helper.ResponseConversionError(err)
 	}
+	helper.ObserveResponseConversion(c, *convertResult)
 	responsesResp, ok := convertResult.Value.(*dto.OpenAIResponsesResponse)
 	if !ok {
 		return nil, types.NewOpenAIError(fmt.Errorf("expected OpenAI responses response, got %T", convertResult.Value), types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
@@ -115,11 +116,12 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 		results, err := relayconvert.ConvertStreamResponseChunk(c, info, state, &chunk)
 		if err != nil {
-			streamErr = types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError)
+			streamErr = helper.ResponseConversionError(err)
 			sr.Stop(streamErr)
 			return
 		}
 		for _, result := range results {
+			helper.ObserveResponseConversion(c, result)
 			event, ok := result.Value.(relayconvert.ChatToResponsesStreamEvent)
 			if !ok {
 				streamErr = types.NewOpenAIError(fmt.Errorf("expected OAI responses stream event, got %T", result.Value), types.ErrorCodeBadResponse, http.StatusInternalServerError)

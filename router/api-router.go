@@ -390,6 +390,7 @@ func SetApiRouter(router *gin.Engine) {
 			routingRoute.PUT("/profiles/:id", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.UpdateRouteProfile)
 			routingRoute.DELETE("/profiles/:id", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.DeleteRouteProfile)
 			routingRoute.POST("/profiles/:id/preview", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.PreviewRouteProfile)
+			routingRoute.POST("/tokens/:id/preview", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.PreviewTokenRoute)
 		}
 
 		usageRoute := apiRouter.Group("/usage")

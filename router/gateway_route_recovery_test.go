@@ -145,7 +145,9 @@ func TestGatewayFilteredTailPreservesBusyQueue(t *testing.T) {
 			if test.noWait {
 				want := http.StatusForbidden
 				if test.conversion {
-					want = http.StatusBadRequest
+					// Conversion-incompatible B is filtered before admission;
+					// only eligible A's exhausted capacity determines the error.
+					want = http.StatusTooManyRequests
 				}
 				assert.Equal(t, want, result.code, result.body)
 				assert.Zero(t, sends.Load())

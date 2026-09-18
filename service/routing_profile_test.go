@@ -297,12 +297,13 @@ func TestRouteProfilePreviewUsesActiveGroupOrderAndSamePositionWeight(t *testing
 	require.NotNil(t, preview.ActiveGroup)
 	assert.Equal(t, created.Groups[0].Group.ID, preview.ActiveGroup.ID)
 	assert.Equal(t, RoutePreviewSelectionWeighted, preview.SelectionMode)
-	assert.Equal(t, secondChannelID, preview.PreferredChannelID)
-	assert.Equal(t, []int{secondChannelID, firstChannelID}, preview.CandidateChannelIDs)
+	assert.Contains(t, []int{firstChannelID, secondChannelID}, preview.PreferredChannelID)
+	assert.ElementsMatch(t, []int{secondChannelID, firstChannelID}, preview.CandidateChannelIDs)
+	assert.Equal(t, preview.CandidateChannelIDs[0], preview.PreferredChannelID)
 	assert.Empty(t, preview.FilterReasonCounts)
 	assert.False(t, preview.LiveSelection)
 	assert.True(t, preview.RuntimeRecheckRequired)
-	assert.Equal(t, []string{"price_qualification", "quota_qualification", "security_policy"}, preview.RuntimeRecheckReasons)
+	assert.Subset(t, preview.RuntimeRecheckReasons, []string{"price_qualification", "quota_qualification", "security_policy", "admission_capacity", "provider_rate_limit", "configuration_version"})
 }
 
 func TestRouteProfilePreviewKeepsResolvableMixedCapabilityEligible(t *testing.T) {

@@ -127,6 +127,9 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			return
 		}
 		lastStreamData = data
+		if terminal := relayconvert.TerminationFromResponse(&observed); terminal.IsTerminal() {
+			c.Set("response_termination", terminal)
+		}
 		tail.observe(observed)
 		if service.ValidUsage(observed.Usage) {
 			usage, containStreamUsage, usageStreamData = observed.Usage, true, data
@@ -323,6 +326,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 
 	applyUsagePostProcessing(info, &simpleResponse.Usage, responseBody)
+	c.Set("response_termination", relayconvert.TerminationFromResponse(&simpleResponse))
 
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:
@@ -346,8 +350,9 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	case types.RelayFormatClaude:
 		convertResult, err := relayconvert.ConvertResponse(c, info, types.RelayFormatClaude, &simpleResponse)
 		if err != nil {
-			return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+			return &simpleResponse.Usage, helper.ResponseConversionError(err)
 		}
+		helper.ObserveResponseConversion(c, *convertResult)
 		claudeRespStr, err := common.Marshal(convertResult.Value)
 		if err != nil {
 			return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
@@ -356,8 +361,9 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	case types.RelayFormatGemini:
 		convertResult, err := relayconvert.ConvertResponse(c, info, types.RelayFormatGemini, &simpleResponse)
 		if err != nil {
-			return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
+			return &simpleResponse.Usage, helper.ResponseConversionError(err)
 		}
+		helper.ObserveResponseConversion(c, *convertResult)
 		geminiRespStr, err := common.Marshal(convertResult.Value)
 		if err != nil {
 			return nil, types.NewError(err, types.ErrorCodeBadResponseBody)

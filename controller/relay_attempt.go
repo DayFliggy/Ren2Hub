@@ -104,6 +104,10 @@ func queueBusyLiveRouteCandidate(c *gin.Context) (int, bool) {
 	policy, _, policyErr := service.GatewayRoutingPolicy(c.Request.Context())
 	canQueue := budget.Remaining() > 0 && (policyErr != nil || policy.ChannelQueueSize > 0)
 	for index := range selection.Attempts {
+		if !selection.AllowsCandidate(selection.Attempts[index].ChannelID, c.GetInt(liveRoutePreviousChannelKey),
+			service.RouteErrorClassification{Retryable: true, Failoverable: true}, liveRouteRetryCounters(c)) {
+			continue
+		}
 		if selection.Attempts[index].FilterReason != "capacity_exhausted" {
 			continue
 		}
@@ -388,6 +392,15 @@ func relayAttemptOutcome(c *gin.Context, info *relaycommon.RelayInfo, apiErr *ty
 	if types.IsSkipRetryError(apiErr) {
 		outcome.RetryPermission = service.AttemptRetryForbidden
 	}
+	var conversionLoss *types.ConversionLossError
+	if errors.As(apiErr, &conversionLoss) || apiErr.GetErrorCode() == helper.ResponseConversionErrorCode {
+		outcome.Origin = service.AttemptOriginLocalConvert
+		outcome.RetryPermission = service.AttemptRetryForbidden
+		if conversionLoss != nil {
+			c.Set("response_conversion_diagnostics", conversionLoss.Diagnostics)
+		}
+		return outcome
+	}
 	switch apiErr.GetErrorCode() {
 	case types.ErrorCodeConvertRequestFailed, types.ErrorCodeJsonMarshalFailed, types.ErrorCodeChannelModelMappedError,
 		types.ErrorCodeChannelParamOverrideInvalid, types.ErrorCodeChannelHeaderOverrideInvalid, types.ErrorCodeInvalidApiType:
@@ -424,6 +437,18 @@ func observeLiveRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, outcom
 			Success: outcome.Success, Origin: outcome.Origin, LatencyMS: outcome.LatencyMS,
 			Acceptance: outcome.Acceptance, RetryPermission: outcome.RetryPermission,
 			ResponseCommitted: outcome.ResponseCommitted,
+		}
+		if value, exists := c.Get("response_termination"); exists {
+			if terminal, valid := value.(types.ResponseTermination); valid {
+				attempt.Termination = terminal.Kind
+			}
+		}
+		if value, exists := c.Get("response_conversion_diagnostics"); exists {
+			if diagnostics, valid := value.([]types.ConversionDiagnostic); valid {
+				for _, diagnostic := range diagnostics {
+					attempt.Diagnostics = append(attempt.Diagnostics, service.RouteDiagnosticSummary{Code: diagnostic.Code, Path: diagnostic.Path})
+				}
+			}
 		}
 		if !outcome.Success {
 			attempt.ErrorClass = service.ClassifyAttemptOutcome(outcome).Class

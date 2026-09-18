@@ -13,6 +13,7 @@ import (
 )
 
 const (
+	RouteRequestRequirementsKey    = "route_request_requirements"
 	RouteFilterSnapshotUnavailable = "snapshot_unavailable"
 	RouteFilterSnapshotStale       = "snapshot_stale"
 	RouteFilterUnknownCapability   = "unknown_capability"
@@ -86,7 +87,7 @@ func endpointTypeForRequestPath(requestPath string) string {
 		return string(constant.EndpointTypeAudio)
 	case strings.HasPrefix(requestPath, "/v1/realtime"):
 		return string(constant.EndpointTypeRealtime)
-	case requestPath == "/v1/completions", requestPath == "/v1/moderations":
+	case requestPath == "/v1/completions", requestPath == "/v1/moderations", requestPath == "/v1/edits":
 		return string(constant.EndpointTypeOpenAI)
 	case strings.HasPrefix(requestPath, "/v1beta/models"), strings.HasPrefix(requestPath, "/v1/models"):
 		return string(constant.EndpointTypeGemini)

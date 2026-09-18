@@ -83,25 +83,8 @@ func TestSelectLiveTokenRouteAutoLabUsesActiveIndexAndCurrentChannelStatus(t *te
 	db := setupRouteProfileTest(t)
 	useRoutePlanningRedis(t)
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
-	channel := model.Channel{}
-	require.NoError(t, db.First(&channel, "id = ?", channelID).Error)
-	abilityGroups, err := common.Marshal([]string{"default"})
-	require.NoError(t, err)
-	capability := model.ChannelModelCapability{
-		ChannelID: channelID, SnapshotVersion: 1, RequestModel: "gpt-test", ActualModel: "gpt-test",
-		LabSlug: "openai", Source: "canonical", Confidence: 1, State: model.RouteCapabilityStateEligible,
-		AbilityGroups: string(abilityGroups), ChannelStatus: common.ChannelStatusEnabled,
-		ChannelType: constant.ChannelTypeOpenAI, EndpointTypes: `[
-  "openai"
-]`, Priority: 20, Weight: 10,
-	}
-	resetRouteCapabilityIndexForTest()
-	routeCapabilityIndex.Store(&capabilityIndex{
-		ByRequestModel: map[string][]indexedCapability{"gpt-test": {{
-			Capability: capability, ChannelStatus: common.ChannelStatusEnabled,
-			Priority: 20, Weight: 10, AbilityGroups: []string{"default"}, ChannelType: constant.ChannelTypeOpenAI,
-		}}},
-	})
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	var err error
 	t.Cleanup(resetRouteCapabilityIndexForTest)
 	_, err = CreateUserRouteProfile(RouteProfileInput{UserID: userID, TokenID: tokenID, Mode: model.RouteModeAutoLab})
 	require.NoError(t, err)
@@ -414,8 +397,8 @@ func TestManualRouteAttemptsHonorPolicyWithoutExpandingSystemLimit(t *testing.T)
 		}
 		return ids
 	}
-	assert.Equal(t, []int{1}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{Mode: model.RoutePolicyRetryNone})))
-	assert.Equal(t, []int{1, 1}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
+	assert.Equal(t, []int{1, 2, 3}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{Mode: model.RoutePolicyRetryNone})))
+	assert.Equal(t, []int{1, 1, 2, 2, 3, 3}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{
 		Mode: model.RoutePolicyRetrySameChannel, MaxSameResourceAttempts: 9,
 	})))
 	assert.Equal(t, []int{1, 2, 3}, channelIDs(manualRouteAttemptCandidates(result, RouteLiveRetryPolicy{

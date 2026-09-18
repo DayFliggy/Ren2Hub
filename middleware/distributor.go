@@ -21,6 +21,7 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -129,6 +130,46 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 		TokenModelLimitEnabled:  common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled),
 		TokenModelLimit:         limits,
 		ExcludedKeyIndexes:      service.RequestRouteAttemptedKeys(c, stage),
+		ConversionPolicy:        types.ConversionLossPolicy(c.GetString("conversion_policy")),
+	}
+	path := c.Request.URL.Path
+	plannableRequest := slices.Contains([]string{
+		"/v1/chat/completions", "/pg/chat/completions", "/v1/responses", "/v1/responses/compact", "/v1/messages",
+		"/v1/completions", "/v1/moderations", "/v1/edits", "/v1/embeddings", "/v1/rerank",
+		"/v1/images/generations", "/v1/images/edits", "/v1/audio/speech", "/v1/audio/transcriptions", "/v1/audio/translations",
+	}, path) || strings.HasSuffix(path, ":generateContent") || strings.HasSuffix(path, ":streamGenerateContent")
+	if plannableRequest {
+		cached, exists := c.Get(service.RouteRequestRequirementsKey)
+		requirements, valid := cached.(relayconvert.RequestRequirements)
+		if !exists || !valid {
+			var err error
+			if c.ContentType() == gin.MIMEMultipartPOSTForm {
+				var request dto.Request
+				if path == "/v1/images/edits" {
+					request, err = helper.GetAndValidOpenAIImageRequest(c, relayconstant.Path2RelayMode(path))
+				} else {
+					request, err = helper.GetAndValidAudioRequest(c, relayconstant.Path2RelayMode(path))
+				}
+				if err == nil {
+					requirements, err = relayconvert.AnalyzeRequest(request)
+				}
+			} else {
+				storage, bodyErr := common.GetBodyStorage(c)
+				if bodyErr != nil {
+					return nil, types.NewErrorWithStatusCode(bodyErr, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+				}
+				payload, bodyErr := storage.Bytes()
+				if bodyErr != nil {
+					return nil, types.NewErrorWithStatusCode(bodyErr, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+				}
+				requirements, err = service.AnalyzeRouteRequest(modelName, path, payload)
+			}
+			if err != nil {
+				return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeConvertRequestFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			}
+			c.Set(service.RouteRequestRequirementsKey, requirements)
+		}
+		input.Requirements = &requirements
 	}
 	if stage != relaycommon.CompactAttemptNone {
 		input.ExcludedChannelIDs = make(map[int]string)
@@ -149,6 +190,10 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 	selection, err := service.SelectLiveTokenRoute(input)
 	if err != nil {
 		status := http.StatusServiceUnavailable
+		var conversionErr *types.ConversionLossError
+		if errors.As(err, &conversionErr) {
+			return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeConvertRequestFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
 		if errors.Is(err, service.ErrGatewayProviderRateLimit) {
 			status = http.StatusTooManyRequests
 		}

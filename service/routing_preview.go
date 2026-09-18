@@ -18,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
 const (
@@ -43,6 +44,10 @@ type RouteProfilePreviewInput struct {
 }
 
 type RouteProfilePreview struct {
+	TokenID                int                              `json:"token_id"`
+	Mode                   string                           `json:"mode"`
+	PreviewID              string                           `json:"preview_id"`
+	GeneratedAt            int64                            `json:"generated_at"`
 	ProfileID              int                              `json:"profile_id"`
 	ProfileVersion         int64                            `json:"profile_version"`
 	RequestModel           string                           `json:"request_model"`
@@ -65,6 +70,8 @@ type RouteProfilePreview struct {
 }
 
 type RoutePreviewEntry struct {
+	Priority        int64                        `json:"priority"`
+	Score           *RouteScoreBreakdown         `json:"score_breakdown,omitempty"`
 	EntryID         int                          `json:"entry_id"`
 	ChannelID       int                          `json:"channel_id"`
 	Position        int                          `json:"position"`
@@ -99,10 +106,9 @@ type RouteCapabilityUserAccess struct {
 	Allowed bool
 }
 
-// PreviewUserRouteProfile evaluates only the active manual group. It is a
-// configuration preview and deliberately has no relay, billing, retry, or
-// context side effects.
-func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input RouteProfilePreviewInput) (*RouteProfilePreview, error) {
+// loadManualRoutePreviewContext preserves legacy group and excluded-entry metadata.
+// Qualification and candidate ordering are supplied by SelectLiveTokenRoute.
+func loadManualRoutePreviewContext(ctx context.Context, userID, profileID int, input RouteProfilePreviewInput, requirements relayconvert.RequestRequirements) (*RouteProfilePreview, error) {
 	input.Model = strings.TrimSpace(input.Model)
 	input.Path = strings.TrimSpace(input.Path)
 	normalizedModel := modellab.NormalizeModel(input.Model)
@@ -131,11 +137,6 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 	if err := conversionPolicy.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: invalid token conversion policy", ErrRouteProfileValidation)
 	}
-	requirements, err := analyzeRoutePreviewRequest(input)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrRouteProfileValidation, err)
-	}
-
 	preview := &RouteProfilePreview{
 		ProfileID:              view.Profile.ID,
 		ProfileVersion:         view.Profile.Version,
@@ -252,56 +253,31 @@ func PreviewUserRouteProfile(ctx context.Context, userID, profileID int, input R
 			item.CatalogVersion = capability.CatalogVersion
 			item.CapabilityState = capability.State
 		}
-		if item.FilterReason == "" {
-			channel := channels[entry.ChannelID]
-			plan, planErr := PlanChannelConversion(requirements, &channel, input.Path, item.ActualModel, conversionPolicy)
-			item.ConversionPlan = &plan
-			item.Diagnostics = append(item.Diagnostics, plan.Diagnostics...)
-			if planErr != nil {
-				item.FilterReason = RoutePreviewFilterConversion
-				if len(item.Diagnostics) == 0 {
-					item.Diagnostics = append(item.Diagnostics, types.ConversionDiagnostic{
-						Code: RoutePreviewFilterConversion, Message: planErr.Error(),
-						Severity: types.ConversionDiagnosticError, From: requirements.Format, To: plan.To,
-					})
-				}
-			}
-		}
+
 		if item.FilterReason != "" {
 			preview.FilterReasonCounts[item.FilterReason]++
 		}
 		preview.Entries = append(preview.Entries, item)
 	}
 
-	sortRoutePreviewEntries(preview.Entries, policy.LoadBalance)
-	eligible := make([]RoutePreviewEntry, 0, len(preview.Entries))
-	for _, entry := range preview.Entries {
-		if entry.FilterReason == "" {
-			eligible = append(eligible, entry)
-			preview.CandidateChannelIDs = append(preview.CandidateChannelIDs, entry.ChannelID)
-		}
-	}
-	if len(eligible) == 0 {
-		return preview, nil
-	}
-	firstPosition := eligible[0].Position
-	topLayer := make([]RoutePreviewEntry, 0, len(eligible))
-	for _, entry := range eligible {
-		if entry.Position != firstPosition {
-			break
-		}
-		topLayer = append(topLayer, entry)
-	}
-	if policy.LoadBalance && len(topLayer) > 1 {
+	if policy.LoadBalance {
 		preview.SelectionMode = RoutePreviewSelectionWeighted
 	}
-	preview.PreferredChannelID = topLayer[0].ChannelID
 	return preview, nil
 }
 
 func analyzeRoutePreviewRequest(input RouteProfilePreviewInput) (relayconvert.RequestRequirements, error) {
+	if len(input.Request) > 1024*1024 {
+		return relayconvert.RequestRequirements{}, fmt.Errorf("request sample exceeds 1 MiB")
+	}
+	return AnalyzeRouteRequest(input.Model, input.Path, input.Request)
+}
+
+// AnalyzeRouteRequest shares request semantics between preview and dispatch.
+// The caller owns body-size enforcement; analysis never resolves media.
+func AnalyzeRouteRequest(modelName, path string, payload []byte) (relayconvert.RequestRequirements, error) {
 	var request any
-	switch constant.EndpointType(endpointTypeForRequestPath(input.Path)) {
+	switch constant.EndpointType(endpointTypeForRequestPath(path)) {
 	case constant.EndpointTypeOpenAI:
 		request = &dto.GeneralOpenAIRequest{}
 	case constant.EndpointTypeAnthropic:
@@ -323,12 +299,8 @@ func analyzeRoutePreviewRequest(input RouteProfilePreviewInput) (relayconvert.Re
 	default:
 		return relayconvert.RequestRequirements{}, fmt.Errorf("request path does not support conversion preview")
 	}
-	payload := input.Request
 	if len(payload) == 0 {
 		payload = json.RawMessage(`{}`)
-	}
-	if len(payload) > 1024*1024 {
-		return relayconvert.RequestRequirements{}, fmt.Errorf("request sample exceeds 1 MiB")
 	}
 	var object map[string]json.RawMessage
 	if err := common.Unmarshal(payload, &object); err != nil || object == nil {
@@ -341,15 +313,27 @@ func analyzeRoutePreviewRequest(input RouteProfilePreviewInput) (relayconvert.Re
 	if err != nil {
 		return requirements, err
 	}
-	if requirements.Model != "" && modellab.NormalizeModel(requirements.Model) != modellab.NormalizeModel(input.Model) {
+	bodyModel, routeModel := requirements.Model, modelName
+	if path == "/v1/responses/compact" {
+		bodyModel, routeModel = ratio_setting.CompactBaseModelName(bodyModel), ratio_setting.CompactBaseModelName(routeModel)
+	}
+	if bodyModel != "" && modellab.NormalizeModel(bodyModel) != modellab.NormalizeModel(routeModel) {
 		return requirements, fmt.Errorf("request sample model must match the preview model")
 	}
-	requirements.Model = input.Model
-	if operation := relaycapability.LegacyOpenAIOperation(input.Path); operation != "" {
+	requirements.Model = modelName
+	if operation := relaycapability.LegacyOpenAIOperation(path); operation != "" {
 		requirements.Operation = operation
 	}
 	if requirements.Format == types.RelayFormatGemini {
-		requirements.Stream = strings.Contains(input.Path, ":streamGenerateContent")
+		_, operation, hasOperation := strings.Cut(path, ":")
+		if !hasOperation || (operation != "generateContent" && operation != "streamGenerateContent") {
+			return requirements, fmt.Errorf("request path does not match the Gemini generation protocol")
+		}
+		_, pathModel, hasModel := strings.Cut(strings.Split(path, ":")[0], "/models/")
+		if !hasModel || modellab.NormalizeModel(pathModel) != modellab.NormalizeModel(modelName) {
+			return requirements, fmt.Errorf("request path model must match the preview model")
+		}
+		requirements.Stream = operation == "streamGenerateContent"
 	}
 	return requirements, nil
 }
@@ -732,18 +716,4 @@ func entitlementIsActive(entitlement model.UserChannelEntitlement) bool {
 	return entitlement.Status == model.RouteEntitlementStatusEnabled &&
 		entitlement.RevokedAt == 0 &&
 		(entitlement.ExpiresAt == 0 || entitlement.ExpiresAt > time.Now().Unix())
-}
-
-func sortRoutePreviewEntries(entries []RoutePreviewEntry, loadBalance bool) {
-	sort.SliceStable(entries, func(i, j int) bool {
-		left := entries[i]
-		right := entries[j]
-		if left.Position != right.Position {
-			return left.Position < right.Position
-		}
-		if loadBalance && left.Weight != right.Weight {
-			return left.Weight > right.Weight
-		}
-		return left.ChannelID < right.ChannelID
-	})
 }

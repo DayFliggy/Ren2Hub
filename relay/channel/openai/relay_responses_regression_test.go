@@ -87,7 +87,7 @@ func TestResponsesImageAccountingOnStreamTermination(t *testing.T) {
 		{"unexpected_eof", nil, 1, true},
 		{"completed_duplicate", []string{completedImage, `{"type":"response.completed","response":{"status":"completed","output":[` + item + `]}}`}, 1, false},
 		{"failed", []string{`{"type":"response.failed","response":{"status":"failed"}}`}, 0, true},
-		{"incomplete", []string{`{"type":"response.incomplete","response":{"status":"incomplete"}}`}, 0, true},
+		{"incomplete", []string{`{"type":"response.incomplete","response":{"status":"incomplete"}}`}, 0, false},
 		{"cancelled", []string{`{"type":"response.cancelled","response":{"status":"cancelled"}}`}, 0, true},
 		{"canceled", []string{`{"type":"response.canceled","response":{"status":"canceled"}}`}, 0, true},
 		{"error", []string{`{"type":"error","message":"upstream failed"}`}, 0, true},

@@ -56,6 +56,7 @@ func TestGeminiChatStreamHandlerSeparatesThoughtAndAnswerAcrossFrameBoundaries(t
 			assert.Equal(t, "Final answer", answer.String())
 			assert.Equal(t, "Brief explanation.", reasoning.String())
 			assert.Equal(t, 1, strings.Count(recorder.Body.String(), "data: [DONE]"))
+			assert.Contains(t, recorder.Body.String(), `"role":"assistant"`)
 		})
 	}
 }

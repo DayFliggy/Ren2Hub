@@ -35,9 +35,10 @@ func StreamOutcome(info *relaycommon.RelayInfo) relayconvert.StreamOutcome {
 }
 
 func WriteConvertedStreamResult(c *gin.Context, result relayconvert.ResponseResult) (err error) {
+	ObserveResponseConversion(c, result)
 	eventType := ""
 	defer func() {
-		if err == nil && (eventType == "error" || eventType == "response.failed" || eventType == "response.incomplete") {
+		if err == nil && (eventType == "error" || eventType == "response.failed" || eventType == "response.incomplete" && !result.Termination.IsSuccessful()) {
 			c.Set("gateway_stream_error_sent", true)
 		}
 	}()

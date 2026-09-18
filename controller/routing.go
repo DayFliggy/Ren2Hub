@@ -132,6 +132,25 @@ func PreviewRouteProfile(c *gin.Context) {
 	common.ApiSuccess(c, preview)
 }
 
+func PreviewTokenRoute(c *gin.Context) {
+	tokenID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || tokenID <= 0 {
+		writeRoutePreviewBindingError(c)
+		return
+	}
+	var input service.RouteProfilePreviewInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		writeRoutePreviewBindingError(c)
+		return
+	}
+	preview, err := service.PreviewUserTokenRoute(c, c.GetInt("id"), tokenID, input)
+	if err != nil {
+		writeRouteError(c, err)
+		return
+	}
+	common.ApiSuccess(c, preview)
+}
+
 func ListEligibleRouteChannels(c *gin.Context) {
 	channels, err := listEligibleRouteChannels(c.GetInt("id"))
 	if err != nil {

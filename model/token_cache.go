@@ -61,6 +61,10 @@ func cacheInitToken(token Token) (int, error) {
 	if token.AllowIps != nil {
 		allowIps = *token.AllowIps
 	}
+	conversionPolicy := token.ConversionPolicy
+	if conversionPolicy == "" {
+		conversionPolicy = "safe"
+	}
 	const script = `
 if redis.call('EXISTS', KEYS[2]) == 1 then
   return 0
@@ -73,7 +77,8 @@ redis.call('HSET', KEYS[1],
   'Id', ARGV[1], 'UserId', ARGV[2], 'Status', ARGV[3], 'Name', ARGV[4],
   'CreatedTime', ARGV[5], 'AccessedTime', ARGV[6], 'ExpiredTime', ARGV[7],
   'UnlimitedQuota', ARGV[8], 'ModelLimitsEnabled', ARGV[9], 'ModelLimits', ARGV[10],
-  'AllowIps', ARGV[11], 'RemainQuota', ARGV[12], 'UsedQuota', ARGV[13])
+  'AllowIps', ARGV[11], 'RemainQuota', ARGV[12], 'UsedQuota', ARGV[13],
+  'ConversionPolicy', ARGV[15])
 redis.call('EXPIRE', KEYS[1], ARGV[14])
 return 1`
 
@@ -85,6 +90,7 @@ return 1`
 		strconv.FormatBool(token.UnlimitedQuota), strconv.FormatBool(token.ModelLimitsEnabled),
 		token.ModelLimits, allowIps, token.RemainQuota, token.UsedQuota,
 		tokenCacheTTLSeconds(),
+		conversionPolicy,
 	).Int()
 }
 
@@ -97,7 +103,7 @@ func cacheGetTokenByKey(key string) (*Token, error) {
 	if err := common.RedisHGetObj(getTokenCacheKey(key), &token); err != nil {
 		return nil, err
 	}
-	if token.Id <= 0 {
+	if token.Id <= 0 || token.ConversionPolicy == "" {
 		return nil, fmt.Errorf("token cache is incomplete")
 	}
 	token.Key = key

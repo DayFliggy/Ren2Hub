@@ -51,17 +51,18 @@ func gatewayQueueCounter(resourceKey string) *gatewayQueueCounters {
 }
 
 type GatewayMetricsSnapshot struct {
-	SchemaVersion        int                          `json:"schema_version"`
-	Admission            AdmissionMetrics             `json:"admission"`
-	RetryBudget          RetryBudgetSnapshot          `json:"retry_budget"`
-	Maintenance          AttemptMaintenanceMetrics    `json:"attempt_maintenance"`
-	CounterScope         string                       `json:"counter_scope"`
-	StartedAt            int64                        `json:"started_at"`
-	UserQueue            GatewayQueueMetrics          `json:"user_queue"`
-	ChannelQueue         GatewayQueueMetrics          `json:"channel_queue"`
-	StateBindingFailures uint64                       `json:"state_binding_failure_total"`
-	RecoveryScope        string                       `json:"recovery_scope"`
-	Recovery             model.BillingRecoveryBacklog `json:"billing_recovery"`
+	RouteDecisionEventsDropped uint64                       `json:"route_decision_events_dropped_total"`
+	SchemaVersion              int                          `json:"schema_version"`
+	Admission                  AdmissionMetrics             `json:"admission"`
+	RetryBudget                RetryBudgetSnapshot          `json:"retry_budget"`
+	Maintenance                AttemptMaintenanceMetrics    `json:"attempt_maintenance"`
+	CounterScope               string                       `json:"counter_scope"`
+	StartedAt                  int64                        `json:"started_at"`
+	UserQueue                  GatewayQueueMetrics          `json:"user_queue"`
+	ChannelQueue               GatewayQueueMetrics          `json:"channel_queue"`
+	StateBindingFailures       uint64                       `json:"state_binding_failure_total"`
+	RecoveryScope              string                       `json:"recovery_scope"`
+	Recovery                   model.BillingRecoveryBacklog `json:"billing_recovery"`
 }
 
 // Counters belong to this process; the recovery gauge belongs to the shared
@@ -72,7 +73,8 @@ func ReadGatewayMetrics(ctx context.Context) (GatewayMetricsSnapshot, error) {
 		return GatewayMetricsSnapshot{}, err
 	}
 	return GatewayMetricsSnapshot{
-		CounterScope: "instance", StartedAt: gatewayMetrics.startedAt,
+		RouteDecisionEventsDropped: RouteDecisionEventsDropped(),
+		CounterScope:               "instance", StartedAt: gatewayMetrics.startedAt,
 		Maintenance: ReadAttemptMaintenanceMetrics(),
 		UserQueue:   gatewayMetrics.user.snapshot(), ChannelQueue: gatewayMetrics.channel.snapshot(),
 		SchemaVersion: 2, Admission: gatewayAdmission.Metrics(), RetryBudget: gatewayRetries.Snapshot(), StateBindingFailures: gatewayMetrics.stateBindingFailures.Load(),

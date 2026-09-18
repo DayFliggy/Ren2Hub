@@ -11,6 +11,8 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"gorm.io/gorm"
 )
 
@@ -94,6 +96,7 @@ type LiveRouteCandidateQualificationRequest struct {
 	ExpectedSnapshotVersion  int64
 	ExpectedCatalogVersion   string
 	ExpectedProfileVersion   int64
+	ExpectedConversionPolicy types.ConversionLossPolicy
 	PriceEligibilityKnown    bool
 	PriceEligible            bool
 	SecurityEligibilityKnown bool
@@ -173,6 +176,15 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 		}
 		if !routeTokenUsable(token) {
 			return &LiveRouteQualificationError{Reason: RouteFilterTokenForbidden}
+		}
+		if input.ExpectedConversionPolicy != "" {
+			currentPolicy := types.ConversionLossPolicy(token.ConversionPolicy)
+			if currentPolicy == "" {
+				currentPolicy = types.ConversionLossPolicySafe
+			}
+			if currentPolicy != input.ExpectedConversionPolicy {
+				return &LiveRouteQualificationError{Reason: "conversion_policy_changed"}
+			}
 		}
 	} else if !input.IsPlayground {
 		return &LiveRouteQualificationError{Reason: RouteFilterTokenForbidden}
@@ -283,6 +295,9 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 // and distribution middleware. It intentionally does not carry credentials,
 // body content, or channel configuration.
 type LiveRouteRequest struct {
+	Preview                  bool
+	Requirements             *relayconvert.RequestRequirements
+	ConversionPolicy         types.ConversionLossPolicy
 	ExcludedChannelIDs       map[int]string
 	SpecificChannelID        int
 	IsPlayground             bool
@@ -306,6 +321,7 @@ type LiveRouteRequest struct {
 }
 
 type LiveRouteSelection struct {
+	ConversionPlans   map[int]relayconvert.ConversionPlan
 	ManualLoadBalance bool
 	CompactStage      relaycommon.CompactAttemptStage
 	SpecificChannelID int
@@ -382,30 +398,36 @@ func (selection LiveRouteSelection) CandidateAtOrAfter(attempt int) (RouteDecisi
 }
 
 func (selection LiveRouteSelection) NextCandidateForError(currentAttempt, currentChannelID int, class RouteErrorClassification, counters RouteRetryCounters) (RouteDecisionCandidate, int, bool) {
-	if selection.Retry.Mode == model.RoutePolicyRetryNone {
-		return RouteDecisionCandidate{}, 0, false
-	}
-	budget := selection.Retry.Budget()
 	for index := currentAttempt + 1; index < len(selection.Attempts); index++ {
 		candidate := selection.Attempts[index]
 		if candidate.FilterReason != "" {
 			continue
 		}
-		relation := RouteRetryFailover
-		if candidate.ChannelID == currentChannelID {
-			relation = RouteRetrySameChannel
-		}
-		if selection.Retry.Mode == model.RoutePolicyRetrySameChannel && relation != RouteRetrySameChannel {
-			continue
-		}
-		if selection.Retry.Mode == model.RoutePolicyRetryNextChannel && relation != RouteRetryFailover {
-			continue
-		}
-		if budget.Allows(class, relation, counters) {
+		if selection.AllowsCandidate(candidate.ChannelID, currentChannelID, class, counters) {
 			return candidate, index, true
 		}
 	}
 	return RouteDecisionCandidate{}, 0, false
+}
+
+// AllowsCandidate keeps pre-send qualification separate from replay policy.
+// A request locks its retry scope only when an upstream send actually begins.
+func (selection LiveRouteSelection) AllowsCandidate(channelID, previousChannelID int, class RouteErrorClassification, counters RouteRetryCounters) bool {
+	if counters.TotalAttempts == 0 {
+		return true
+	}
+	if selection.Retry.Mode == model.RoutePolicyRetryNone {
+		return false
+	}
+	relation := RouteRetryFailover
+	if channelID == previousChannelID {
+		relation = RouteRetrySameChannel
+	}
+	if selection.Retry.Mode == model.RoutePolicyRetrySameChannel && relation != RouteRetrySameChannel ||
+		selection.Retry.Mode == model.RoutePolicyRetryNextChannel && relation != RouteRetryFailover {
+		return false
+	}
+	return selection.Retry.Budget().Allows(class, relation, counters)
 }
 
 func selectedRouteAttemptCandidates(result RouteSelectionResult) []RouteDecisionCandidate {
@@ -441,9 +463,6 @@ func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveR
 	if policy.Mode == "" {
 		policy.Mode = model.RoutePolicyRetryNextChannel
 	}
-	appendCandidate := func(attempts []RouteDecisionCandidate, candidate RouteDecisionCandidate) []RouteDecisionCandidate {
-		return append(attempts, candidate)
-	}
 	appendSameResource := func(attempts []RouteDecisionCandidate, candidate RouteDecisionCandidate) []RouteDecisionCandidate {
 		repetitions := policy.MaxSameResourceAttempts
 		if repetitions < 0 {
@@ -453,7 +472,7 @@ func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveR
 			repetitions = DefaultSameChannelAttempts
 		}
 		for index := 0; index <= repetitions; index++ {
-			attempts = appendCandidate(attempts, candidate)
+			attempts = append(attempts, candidate)
 		}
 		return attempts
 	}
@@ -461,27 +480,14 @@ func manualRouteAttemptCandidates(result RouteSelectionResult, policy RouteLiveR
 	attempts := make([]RouteDecisionCandidate, 0, DefaultTotalAttempts)
 	switch policy.Mode {
 	case model.RoutePolicyRetryNone:
-		return appendCandidate(attempts, available[0])
-	case model.RoutePolicyRetrySameChannel:
-		return appendSameResource(attempts, available[0])
-	case model.RoutePolicyRetrySameThenNext:
-		for index, candidate := range available {
-			if index > 0 && policy.MaxFailoverAttempts <= 0 {
-				break
-			}
+		return available
+	case model.RoutePolicyRetrySameChannel, model.RoutePolicyRetrySameThenNext:
+		for _, candidate := range available {
 			attempts = appendSameResource(attempts, candidate)
 		}
 		return attempts
-	case model.RoutePolicyRetryNextChannel:
-		fallthrough
 	default:
-		for index, candidate := range available {
-			if index > 0 && policy.MaxFailoverAttempts <= 0 {
-				break
-			}
-			attempts = appendCandidate(attempts, candidate)
-		}
-		return attempts
+		return available
 	}
 }
 

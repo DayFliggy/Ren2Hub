@@ -39,6 +39,13 @@ func PlanRequestForChannel(c *gin.Context, info *relaycommon.RelayInfo, selected
 	}
 	var requirements relayconvert.RequestRequirements
 	var err error
+	if info.RequestRequirements == nil && c != nil {
+		if cached, ok := c.Get(service.RouteRequestRequirementsKey); ok {
+			if parsed, valid := cached.(relayconvert.RequestRequirements); valid {
+				info.RequestRequirements = &parsed
+			}
+		}
+	}
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAIRealtime, types.RelayFormatOpenAIAlphaSearch:
 		requirements = relayconvert.RequestRequirements{Format: info.RelayFormat, Stream: info.IsStream, Model: info.OriginModelName}
