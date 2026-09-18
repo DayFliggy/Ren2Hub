@@ -190,25 +190,62 @@ func StreamPayloadState(data string) (semantic, terminal bool) {
 		itemType := value.Get("item.type").String()
 		semantic = itemType == "function_call" || itemType == "custom_tool_call"
 	}
-	for _, choice := range value.Get("choices").Array() {
-		if types.ClassifyResponseTermination(types.RelayFormatOpenAI, "", choice.Get("finish_reason").String()).IsTerminal() {
-			terminal = true
-		}
+	choices := value.Get("choices").Array()
+	allChoicesDone := len(choices) > 0
+	for _, choice := range choices {
+		allChoicesDone = allChoicesDone && types.ClassifyResponseTermination(types.RelayFormatOpenAI, "", choice.Get("finish_reason").String()).IsSuccessful()
 		if choice.Get("text").String() != "" || choice.Get("delta.content").String() != "" || choice.Get("delta.reasoning_content").String() != "" || choice.Get("delta.reasoning").String() != "" || len(choice.Get("delta.tool_calls").Array()) != 0 || choice.Get("delta.function_call").Exists() {
 			semantic = true
 		}
 	}
-	for _, candidate := range value.Get("candidates").Array() {
-		if types.ClassifyResponseTermination(types.RelayFormatGemini, "", candidate.Get("finishReason").String()).IsTerminal() {
-			terminal = true
-		}
+	candidates := value.Get("candidates").Array()
+	allCandidatesDone := len(candidates) > 0
+	for _, candidate := range candidates {
+		allCandidatesDone = allCandidatesDone && types.ClassifyResponseTermination(types.RelayFormatGemini, "", candidate.Get("finishReason").String()).IsSuccessful()
 		for _, part := range candidate.Get("content.parts").Array() {
 			if part.Get("text").String() != "" || part.Get("functionCall").Exists() || part.Get("inlineData").Exists() {
 				semantic = true
 			}
 		}
 	}
+	terminal = terminal || allChoicesDone || allCandidatesDone
 	return
+}
+
+// Candidate finish frames may arrive independently. A terminal for one index
+// never completes another index, and a later index invalidates earlier EOF
+// eligibility. The handler remains responsible for provider-specific errors.
+type streamCandidateTerminals map[string]types.ResponseTermination
+
+func (s streamCandidateTerminals) observe(data string) {
+	if !gjson.Valid(data) {
+		return
+	}
+	value := gjson.Parse(data)
+	for _, family := range []struct {
+		path, reason string
+		format       types.RelayFormat
+	}{
+		{"choices", "finish_reason", types.RelayFormatOpenAI},
+		{"candidates", "finishReason", types.RelayFormatGemini},
+	} {
+		for _, candidate := range value.Get(family.path).Array() {
+			key := fmt.Sprintf("%s:%d", family.path, candidate.Get("index").Int())
+			terminal := types.ClassifyResponseTermination(family.format, "", candidate.Get(family.reason).String())
+			if _, exists := s[key]; !exists || terminal.IsTerminal() {
+				s[key] = terminal
+			}
+		}
+	}
+}
+
+func (s streamCandidateTerminals) complete() bool {
+	for _, terminal := range s {
+		if !terminal.IsSuccessful() {
+			return false
+		}
+	}
+	return true
 }
 
 func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(string, *StreamResult)) {
@@ -330,6 +367,7 @@ func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	}
 	sr := newStreamResult(status)
 	terminalSeen := false
+	candidateTerminals := make(streamCandidateTerminals)
 	preludeEvents := 0
 	for {
 		select {
@@ -361,7 +399,7 @@ func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				return
 			}
 			if !ok || item.eof {
-				if terminalSeen {
+				if terminalSeen && candidateTerminals.complete() {
 					status.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 				} else {
 					status.SetEndReason(relaycommon.StreamEndReasonEOF, io.ErrUnexpectedEOF)
@@ -379,6 +417,10 @@ func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				continue
 			}
 			if !ndjson && data == "[DONE]" {
+				if !candidateTerminals.complete() {
+					status.SetEndReason(relaycommon.StreamEndReasonEOF, fmt.Errorf("%w: upstream candidate is missing a successful finish reason", io.ErrUnexpectedEOF))
+					return
+				}
 				status.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 				if writer.buffer.Len() != 0 {
 					if err := writer.Commit(); err != nil {
@@ -388,6 +430,7 @@ func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				return
 			}
 			info.ReceivedResponseCount++
+			candidateTerminals.observe(data)
 			sr.reset()
 			sr.eventName = item.eventName
 			ExtendWriteDeadline(c)
@@ -407,6 +450,13 @@ func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			// producing a client event. It must not commit earlier metadata.
 			semantic = (semantic || sr.HasValidOutput()) && writer.written > writtenBefore
 			terminalSeen = terminalSeen || terminal || status.IsNormalEnd()
+			if len(candidateTerminals) > 0 {
+				terminalSeen = candidateTerminals.complete()
+			}
+			if sr.IsStopped() && status.IsNormalEnd() && !candidateTerminals.complete() {
+				status.SetEndReason(relaycommon.StreamEndReasonEOF, fmt.Errorf("%w: upstream candidate is missing a successful finish reason", io.ErrUnexpectedEOF))
+				return
+			}
 			if (semantic || terminal || (sr.IsStopped() && terminalSeen)) && (writer.committed || writer.buffer.Len() != 0) {
 				if err := writer.Commit(); err != nil {
 					status.SetEndReason(relaycommon.StreamEndReasonClientGone, err)

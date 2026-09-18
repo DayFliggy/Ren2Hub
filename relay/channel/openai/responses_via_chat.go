@@ -32,7 +32,8 @@ func OaiChatToResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 	if oaiError := chatResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
-		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
+		c.Set("response_termination", types.ResponseTermination{Kind: types.ResponseFailed})
+		return &chatResp.Usage, types.WithOpenAIError(*oaiError, http.StatusBadGateway)
 	}
 
 	if responseID := helper.GetResponseID(c); responseID != "" {
@@ -70,7 +71,7 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	defer service.CloseResponseBodyGracefully(resp)
 
 	responseID := helper.GetResponseID(c)
-	state, err := relayconvert.NewResponseStreamState(types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, relayconvert.ResponseStreamOptions{
+	state, err := relayconvert.NewResponseStreamState(types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, relayconvert.ResponseStreamOptions{MaxInputBytes: helper.ResponseConversionByteLimit(),
 		ID:    responseID,
 		Model: info.UpstreamModelName,
 	})
@@ -101,7 +102,9 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		var errorResp dto.OpenAITextResponse
 		if err := common.UnmarshalJsonStr(data, &errorResp); err == nil {
 			if oaiError := errorResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
-				streamErr = types.WithOpenAIError(*oaiError, resp.StatusCode)
+				c.Set("response_termination", types.ResponseTermination{Kind: types.ResponseFailed})
+				state.SetUsage(&errorResp.Usage)
+				streamErr = types.WithOpenAIError(*oaiError, http.StatusBadGateway)
 				sr.Stop(streamErr)
 				return
 			}
@@ -115,6 +118,7 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		}
 
 		results, err := relayconvert.ConvertStreamResponseChunk(c, info, state, &chunk)
+		helper.ObserveResponseStream(c, state)
 		if err != nil {
 			streamErr = helper.ResponseConversionError(err)
 			sr.Stop(streamErr)

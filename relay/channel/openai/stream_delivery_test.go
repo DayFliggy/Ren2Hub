@@ -108,7 +108,7 @@ func TestChatStreamDeliversCurrentFrameWithoutDuplicateTail(t *testing.T) {
 		}{
 			{"single_delta_eof", []string{chatDeliveryHello}, "hello", false},
 			{"consecutive_delta_eof", []string{chatDeliveryHello, chatDeliveryTail}, "hello tail", false},
-			{"done_without_finish_frame", []string{chatDeliveryHello, "[DONE]"}, "hello", true},
+			{"done_without_finish_frame", []string{chatDeliveryHello, "[DONE]"}, "hello", false},
 			{"normal_finish", []string{chatDeliveryHello, chatDeliveryTail, chatDeliveryStop, "[DONE]"}, "hello tail", true},
 			{"usage_only_tail", []string{chatDeliveryHello, chatDeliveryStop, chatDeliveryUsage, "[DONE]"}, "hello", true},
 			{"usage_without_terminal", []string{chatDeliveryHello, chatDeliveryUsage}, "hello", false},
@@ -332,7 +332,7 @@ func TestChatStreamDownstreamTerminalWriteFailure(t *testing.T) {
 	for _, format := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatClaude, types.RelayFormatGemini} {
 		t.Run(string(format), func(t *testing.T) {
 			writer := &chatDeliveryFailureWriter{ResponseRecorder: httptest.NewRecorder(), failAt: 2}
-			c, info, _, apiErr := runChatDelivery(t, format, writer, io.NopCloser(strings.NewReader(chatDeliverySSE(chatDeliveryHello, "[DONE]"))), nil)
+			c, info, _, apiErr := runChatDelivery(t, format, writer, io.NopCloser(strings.NewReader(chatDeliverySSE(chatDeliveryHello, chatDeliveryStop, "[DONE]"))), nil)
 			require.NotNil(t, apiErr)
 			assert.ErrorIs(t, helper.StreamOutputError(c), helper.ErrStreamClientWrite)
 			assert.Equal(t, "hello", chatDeliveryText(writer.Body.String(), format))

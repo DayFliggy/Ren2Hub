@@ -7,7 +7,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -130,13 +129,14 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 			state, _ = value.(*relayconvert.ResponseStreamState)
 		}
 		if state == nil {
-			state, err = relayconvert.NewResponseStreamState(types.RelayFormatClaude, info.RelayFormat, relayconvert.ResponseStreamOptions{ID: claudeInfo.ResponseId, Model: info.UpstreamModelName, Created: claudeInfo.Created, IncludeUsage: info.ShouldIncludeUsage})
+			state, err = relayconvert.NewResponseStreamState(types.RelayFormatClaude, info.RelayFormat, relayconvert.ResponseStreamOptions{MaxInputBytes: helper.ResponseConversionByteLimit(), ID: claudeInfo.ResponseId, Model: info.UpstreamModelName, Created: claudeInfo.Created, IncludeUsage: info.ShouldIncludeUsage})
 			if err != nil {
 				return types.NewError(err, types.ErrorCodeBadResponse)
 			}
 			c.Set("claude_response_stream_state", state)
 		}
 		results, err := relayconvert.ConvertStreamResponseChunk(c, info, state, &claudeResponse)
+		helper.ObserveResponseStream(c, state)
 		if err != nil {
 			return helper.ResponseConversionError(err)
 		}
@@ -332,7 +332,6 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
-	logger.LogDebug(c, "responseBody: %s", responseBody)
 	handleErr := HandleClaudeResponseData(c, info, claudeInfo, resp, responseBody)
 	if handleErr != nil {
 		return claudeInfo.Usage, handleErr

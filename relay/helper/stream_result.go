@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -63,6 +64,23 @@ func WriteConvertedStreamResult(c *gin.Context, result relayconvert.ResponseResu
 	case dto.ClaudeResponse:
 		eventType = value.Type
 		return ClaudeData(c, value)
+	case *dto.GeminiChatResponse:
+		if value == nil {
+			return nil
+		}
+		body, marshalErr := common.Marshal(value)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		semantic, terminal := StreamPayloadState(string(body))
+		hasGrounding := false
+		for _, candidate := range value.Candidates {
+			hasGrounding = hasGrounding || candidate.GroundingMetadata != nil
+		}
+		if !semantic && !terminal && !hasGrounding {
+			return nil
+		}
+		return ObjectData(c, value)
 	case nil:
 		return fmt.Errorf("converted stream response is nil")
 	default:
@@ -77,6 +95,10 @@ func FinalizeConvertedStream(c *gin.Context, info *relaycommon.RelayInfo, state 
 	}
 	results, err := relayconvert.FinalizeStreamResponseWithOutcome(c, info, state, outcome)
 	if err != nil {
+		var loss *types.ConversionLossError
+		if outcome == relayconvert.StreamOutcomeCompleted || errors.As(err, &loss) {
+			return ResponseConversionError(err)
+		}
 		return types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusBadGateway)
 	}
 	for _, result := range results {

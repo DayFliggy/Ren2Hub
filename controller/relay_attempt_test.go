@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -16,6 +17,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRelayAttemptClientCancellationPrecedesConversionFailure(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil).WithContext(ctx)
+	info := &relaycommon.RelayInfo{UpstreamSent: true, UpstreamAccepted: true}
+	apiErr := helper.ResponseConversionError(errors.New("conversion stopped"))
+	outcome := relayAttemptOutcome(c, info, apiErr, time.Now(), false)
+	assert.Equal(t, service.AttemptOriginClientCancel, outcome.Origin)
+	assert.Equal(t, service.AttemptAccepted, outcome.Acceptance)
+	assert.Equal(t, service.AttemptRetryForbidden, outcome.RetryPermission)
+	classification := service.ClassifyAttemptOutcome(outcome)
+	assert.False(t, classification.MarkChannelModel)
+	assert.False(t, classification.Failoverable)
+}
 
 func TestRelayAttemptDisconnectedWriterIsClientFailure(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())

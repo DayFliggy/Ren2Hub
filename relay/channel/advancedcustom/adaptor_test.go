@@ -588,6 +588,7 @@ func TestAdaptorResponsesToGeminiUsesResponsesBridge(t *testing.T) {
 	payload := dto.GeminiChatResponse{
 		Candidates: []dto.GeminiChatCandidate{
 			{
+				FinishReason: common.GetPointer("STOP"),
 				Content: dto.GeminiChatContent{
 					Role: "model",
 					Parts: []dto.GeminiPart{

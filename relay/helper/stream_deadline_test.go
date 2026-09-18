@@ -61,7 +61,7 @@ func TestStreamValidOutputReplacesFirstOutputDeadlineWithIdle(t *testing.T) {
 				time.Sleep(250 * time.Millisecond)
 				_, _ = io.WriteString(writer, ": heartbeat\n\n")
 			}
-			_, _ = io.WriteString(writer, "data: [DONE]\n\n")
+			_, _ = io.WriteString(writer, "data: {\"choices\":[{\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
 		}()
 		c, resp, info := setupStreamTest(t, reader)
 		resp.Body = reader

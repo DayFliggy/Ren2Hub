@@ -36,7 +36,8 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	if oaiError := responsesResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
-		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
+		c.Set("response_termination", relayconvert.TerminationFromResponse(&responsesResp))
+		return relayconvert.UsageFromResponsesUsage(responsesResp.Usage), types.WithOpenAIError(*oaiError, http.StatusBadGateway)
 	}
 
 	return writeConvertedResponsesResponse(c, info, resp, &responsesResp)
@@ -78,7 +79,7 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 	}
 	defer service.CloseResponseBodyGracefully(resp)
 
-	accumulator := relayconvert.NewResponsesBufferedAccumulator()
+	accumulator := relayconvert.NewResponsesBufferedAccumulator(helper.ResponseConversionByteLimit())
 	var finalResponse *dto.OpenAIResponsesResponse
 	var streamErr *types.NewAPIError
 
@@ -94,6 +95,9 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 			event.Type = eventName
 		}
 		accumulator.ProcessEvent(&event)
+		if err := accumulator.Err(); err != nil {
+			return true, err
+		}
 		terminal := relayconvert.TerminationFromResponse(&event)
 		if terminal.IsTerminal() {
 			c.Set("response_termination", terminal)
@@ -119,6 +123,9 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 	})
 	if readErr != nil {
 		streamErr = types.NewOpenAIError(readErr, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+		if accumulator.Err() != nil {
+			streamErr = helper.ResponseConversionError(accumulator.Err())
+		}
 	}
 	if finalResponse == nil {
 		finalResponse = &dto.OpenAIResponsesResponse{
@@ -132,6 +139,9 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 		}
 	}
 	accumulator.SupplementResponseOutput(finalResponse)
+	if streamErr == nil && accumulator.Err() != nil {
+		streamErr = helper.ResponseConversionError(accumulator.Err())
+	}
 	if streamErr != nil {
 		usage := service.ResponseText2Usage(c, service.ExtractOutputTextFromResponses(finalResponse), info.UpstreamModelName, info.GetEstimatePromptTokens())
 		if len(finalResponse.Output) == 0 {
@@ -155,7 +165,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	responseId := helper.GetResponseID(c)
 	createAt := time.Now().Unix()
-	state, err := relayconvert.NewResponseStreamState(types.RelayFormatOpenAIResponses, info.RelayFormat, relayconvert.ResponseStreamOptions{
+	state, err := relayconvert.NewResponseStreamState(types.RelayFormatOpenAIResponses, info.RelayFormat, relayconvert.ResponseStreamOptions{MaxInputBytes: helper.ResponseConversionByteLimit(),
 		ID:      responseId,
 		Model:   info.UpstreamModelName,
 		Created: createAt,
@@ -256,17 +266,18 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			}
 			if streamResp.Response != nil {
 				if oaiErr := streamResp.Response.GetOpenAIError(); oaiErr != nil && oaiErr.Type != "" {
-					streamErr = types.WithOpenAIError(*oaiErr, http.StatusInternalServerError)
+					streamErr = types.WithOpenAIError(*oaiErr, http.StatusBadGateway)
 					sr.Stop(streamErr)
 					return
 				}
 			}
-			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusInternalServerError)
+			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusBadGateway)
 			sr.Stop(streamErr)
 			return
 		}
 
 		results, err := relayconvert.ConvertStreamResponseChunk(c, info, state, &streamResp)
+		helper.ObserveResponseStream(c, state)
 		if err != nil {
 			streamErr = helper.ResponseConversionError(err)
 			sr.Stop(streamErr)

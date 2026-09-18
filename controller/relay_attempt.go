@@ -392,6 +392,11 @@ func relayAttemptOutcome(c *gin.Context, info *relaycommon.RelayInfo, apiErr *ty
 	if types.IsSkipRetryError(apiErr) {
 		outcome.RetryPermission = service.AttemptRetryForbidden
 	}
+	if errors.Is(helper.StreamOutputError(c), helper.ErrStreamClientWrite) || (info != nil && info.StreamStatus != nil && info.StreamStatus.EndReason == relaycommon.StreamEndReasonClientGone) || c.Request.Context().Err() != nil {
+		outcome.Origin = service.AttemptOriginClientCancel
+		outcome.RetryPermission = service.AttemptRetryForbidden
+		return outcome
+	}
 	var conversionLoss *types.ConversionLossError
 	if errors.As(apiErr, &conversionLoss) || apiErr.GetErrorCode() == helper.ResponseConversionErrorCode {
 		outcome.Origin = service.AttemptOriginLocalConvert
@@ -419,9 +424,6 @@ func relayAttemptOutcome(c *gin.Context, info *relaycommon.RelayInfo, apiErr *ty
 	}
 	if c.GetBool("gateway_retry_stopped") || liveRouteRenewalFailed(c) || errors.Is(apiErr, service.ErrGatewayStorageUnavailable) || errors.Is(apiErr, service.ErrAdmissionRuntime) || errors.Is(apiErr, service.ErrRouteHealthUnavailable) {
 		outcome.Origin = service.AttemptOriginAdmission
-	} else if errors.Is(helper.StreamOutputError(c), helper.ErrStreamClientWrite) || (info != nil && info.StreamStatus != nil && info.StreamStatus.EndReason == relaycommon.StreamEndReasonClientGone) || c.Request.Context().Err() != nil {
-		outcome.Origin = service.AttemptOriginClientCancel
-		outcome.RetryPermission = service.AttemptRetryForbidden
 	}
 	return outcome
 }

@@ -39,6 +39,9 @@ func TestChatStreamUsageFilteringPreservesChoices(t *testing.T) {
 			info := &relaycommon.RelayInfo{RelayFormat: types.RelayFormatOpenAI, RelayMode: relayconstant.RelayModeChatCompletions, DisablePing: true, ShouldIncludeUsage: tc.includeUsage,
 				ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "test-model"}}
 			body := "data: {\"id\":\"chat_1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"body\"},\"finish_reason\":null}]}\n\n"
+			if tc.choices == "[]" {
+				body = strings.Replace(body, "\"finish_reason\":null", "\"finish_reason\":\"stop\"", 1)
+			}
 			body += fmt.Sprintf("data: {\"id\":\"chat_1\",\"choices\":%s,\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}\n\ndata: [DONE]\n\n", tc.choices)
 			usage, apiErr := OaiStreamHandler(c, info, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))})
 			require.Nil(t, apiErr)

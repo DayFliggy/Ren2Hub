@@ -41,13 +41,14 @@ func GeminiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, r
 }
 
 func geminiConvertedStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response, target types.RelayFormat) (*dto.Usage, *types.NewAPIError) {
-	state, err := relayconvert.NewResponseStreamState(types.RelayFormatGemini, target, relayconvert.ResponseStreamOptions{ID: helper.GetResponseID(c), Model: info.UpstreamModelName, Created: common.GetTimestamp(), IncludeUsage: info.ShouldIncludeUsage})
+	state, err := relayconvert.NewResponseStreamState(types.RelayFormatGemini, target, relayconvert.ResponseStreamOptions{MaxInputBytes: helper.ResponseConversionByteLimit(), ID: helper.GetResponseID(c), Model: info.UpstreamModelName, Created: common.GetTimestamp(), IncludeUsage: info.ShouldIncludeUsage})
 	if err != nil {
 		return nil, helper.ResponseConversionError(err)
 	}
 	var conversionErr *types.NewAPIError
 	usage, streamErr := geminiStreamHandler(c, info, resp, func(_ string, response *dto.GeminiChatResponse) bool {
 		results, err := relayconvert.ConvertStreamResponseChunk(c, info, state, response)
+		helper.ObserveResponseStream(c, state)
 		if err != nil {
 			conversionErr = helper.ResponseConversionError(err)
 			return false

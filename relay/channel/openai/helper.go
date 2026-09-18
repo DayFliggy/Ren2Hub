@@ -2,10 +2,10 @@ package openai
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -18,83 +18,46 @@ import (
 
 // 辅助函数
 func HandleStreamFormat(c *gin.Context, info *relaycommon.RelayInfo, data string, forceFormat bool, thinkToContent bool) error {
-	info.SendResponseCount++
-
-	switch info.RelayFormat {
-	case types.RelayFormatOpenAI:
+	if info.RelayFormat == types.RelayFormatOpenAI {
+		info.SendResponseCount++
 		return sendStreamData(c, info, data, forceFormat, thinkToContent)
-	case types.RelayFormatClaude:
-		return handleClaudeFormat(c, data, info)
-	case types.RelayFormatGemini:
-		return handleGeminiFormat(c, data, info)
 	}
-	return nil
-}
-
-func handleClaudeFormat(c *gin.Context, data string, info *relaycommon.RelayInfo) error {
-	var streamResponse dto.ChatCompletionsStreamResponse
-	if err := common.Unmarshal(common.StringToByteSlice(data), &streamResponse); err != nil {
+	if info.RelayFormat != types.RelayFormatClaude && info.RelayFormat != types.RelayFormatGemini {
+		return nil
+	}
+	var response dto.ChatCompletionsStreamResponse
+	if err := common.UnmarshalJsonStr(data, &response); err != nil {
 		return err
 	}
-
-	if streamResponse.Usage != nil {
-		info.EnsureClaudeConvertInfo().Usage = streamResponse.Usage
+	value, _ := c.Get("openai_response_stream_state")
+	state, _ := value.(*relayconvert.ResponseStreamState)
+	if state == nil {
+		var err error
+		state, err = relayconvert.NewResponseStreamState(types.RelayFormatOpenAI, info.RelayFormat, relayconvert.ResponseStreamOptions{ID: response.Id, Model: info.UpstreamModelName, Created: response.Created, MaxInputBytes: helper.ResponseConversionByteLimit()})
+		if err != nil {
+			return helper.ResponseConversionError(err)
+		}
+		c.Set("openai_response_stream_state", state)
 	}
-	result, err := relayconvert.ConvertStreamResponse(c, info, types.RelayFormatClaude, &streamResponse)
+	results, err := relayconvert.ConvertStreamResponseChunk(c, info, state, &response)
+	helper.ObserveResponseStream(c, state)
 	if err != nil {
 		return helper.ResponseConversionError(err)
 	}
-	helper.ObserveResponseConversion(c, *result)
-	claudeResponses, ok := result.Value.([]*dto.ClaudeResponse)
-	if !ok {
-		return fmt.Errorf("expected Claude stream responses, got %T", result.Value)
-	}
-	for _, resp := range claudeResponses {
-		if err := helper.ClaudeData(c, *resp); err != nil {
+	for _, result := range results {
+		if err := helper.WriteConvertedStreamResult(c, result); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func handleGeminiFormat(c *gin.Context, data string, info *relaycommon.RelayInfo) error {
-	var streamResponse dto.ChatCompletionsStreamResponse
-	if err := common.Unmarshal(common.StringToByteSlice(data), &streamResponse); err != nil {
-		logger.LogError(c, "failed to unmarshal stream response: "+err.Error())
-		return err
-	}
-
-	result, err := relayconvert.ConvertStreamResponse(c, info, types.RelayFormatGemini, &streamResponse)
-	if err != nil {
-		return helper.ResponseConversionError(err)
-	}
-	helper.ObserveResponseConversion(c, *result)
-	geminiResponse, ok := result.Value.(*dto.GeminiChatResponse)
-	if !ok {
-		return fmt.Errorf("expected Gemini stream response, got %T", result.Value)
-	}
-
-	// 如果返回 nil，表示没有实际内容，跳过发送
-	if geminiResponse == nil {
-		return nil
-	}
-
-	geminiResponseStr, err := common.Marshal(geminiResponse)
-	if err != nil {
-		logger.LogError(c, "failed to marshal gemini response: "+err.Error())
-		return err
-	}
-
-	semantic, terminal := helper.StreamPayloadState(string(geminiResponseStr))
-	if !semantic && !terminal {
-		return nil
-	}
-	if err := helper.StringData(c, string(geminiResponseStr)); err != nil {
-		return err
-	}
-	if semantic && c.Writer.Written() {
-		info.SetFirstResponseTime()
-		info.MarkValidOutput()
+		if output, ok := result.Value.(*dto.GeminiChatResponse); ok && output != nil && c.Writer.Written() {
+			encoded, err := common.Marshal(output)
+			if err != nil {
+				return err
+			}
+			if semantic, _ := helper.StreamPayloadState(string(encoded)); semantic {
+				info.SetFirstResponseTime()
+				info.MarkValidOutput()
+			}
+		}
 	}
 	return nil
 }
@@ -180,8 +143,7 @@ func (tail *chatStreamTail) finalData(usage *dto.Usage) (string, error) {
 	tail.response.Usage = usage
 	for i := range tail.response.Choices {
 		if tail.response.Choices[i].FinishReason == nil {
-			stop := "stop"
-			tail.response.Choices[i].FinishReason = &stop
+			return "", io.ErrUnexpectedEOF
 		}
 	}
 	encoded, err := common.Marshal(tail.response)
@@ -203,32 +165,19 @@ func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStream
 		}
 		return helper.StringData(c, "[DONE]")
 
-	case types.RelayFormatClaude:
-		var streamResponse dto.ChatCompletionsStreamResponse
-		if err := common.Unmarshal(common.StringToByteSlice(lastStreamData), &streamResponse); err != nil {
+	case types.RelayFormatClaude, types.RelayFormatGemini:
+		if err := HandleStreamFormat(c, info, lastStreamData, false, false); err != nil {
 			return err
 		}
-
-		info.EnsureClaudeConvertInfo().Usage = usage
-
-		result, err := relayconvert.ConvertStreamResponse(c, info, types.RelayFormatClaude, &streamResponse)
-		if err != nil {
-			return helper.ResponseConversionError(err)
+		value, _ := c.Get("openai_response_stream_state")
+		state, ok := value.(*relayconvert.ResponseStreamState)
+		if !ok || state == nil {
+			return fmt.Errorf("missing response conversion state")
 		}
-		helper.ObserveResponseConversion(c, *result)
-		claudeResponses, ok := result.Value.([]*dto.ClaudeResponse)
-		if !ok {
-			return fmt.Errorf("expected Claude stream responses, got %T", result.Value)
+		state.SetUsage(usage)
+		if err := helper.FinalizeConvertedStream(c, info, state); err != nil {
+			return err
 		}
-		for _, resp := range claudeResponses {
-			if err := helper.ClaudeData(c, *resp); err != nil {
-				return err
-			}
-		}
-		info.ClaudeConvertInfo.Done = true
-
-	case types.RelayFormatGemini:
-		return handleGeminiFormat(c, lastStreamData, info)
 	}
 	return nil
 }

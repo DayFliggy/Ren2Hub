@@ -49,7 +49,11 @@ func setupStreamTest(t *testing.T, body io.Reader) (*gin.Context, *http.Response
 func buildSSEBody(n int) string {
 	var b strings.Builder
 	for i := 0; i < n; i++ {
-		fmt.Fprintf(&b, "data: {\"id\":%d,\"choices\":[{\"delta\":{\"content\":\"token_%d\"}}]}\n\n", i, i)
+		finish := ""
+		if i == n-1 {
+			finish = `,"finish_reason":"stop"`
+		}
+		fmt.Fprintf(&b, "data: {\"id\":%d,\"choices\":[{\"delta\":{\"content\":\"token_%d\"}%s}]}\n\n", i, i, finish)
 	}
 	b.WriteString("data: [DONE]\n\n")
 	return b.String()
@@ -136,7 +140,11 @@ func TestStreamScannerHandler_OrderPreserved(t *testing.T) {
 
 	require.Equal(t, numChunks, len(received))
 	for i := 0; i < numChunks; i++ {
-		expected := fmt.Sprintf("{\"id\":%d,\"choices\":[{\"delta\":{\"content\":\"token_%d\"}}]}", i, i)
+		finish := ""
+		if i == numChunks-1 {
+			finish = `,"finish_reason":"stop"`
+		}
+		expected := fmt.Sprintf("{\"id\":%d,\"choices\":[{\"delta\":{\"content\":\"token_%d\"}%s}]}", i, i, finish)
 		assert.Equal(t, expected, received[i], "chunk %d out of order", i)
 	}
 }
@@ -298,7 +306,7 @@ func TestStreamScannerHandler_BufferedConversionDoesNotCommitPrelude(t *testing.
 		t.Run(fmt.Sprintf("output=%t", sendOutput), func(t *testing.T) {
 			body := "data: " + role + "\n\ndata: " + tool + "\n\n"
 			if sendOutput {
-				body += "data: " + tool + "\n\ndata: [DONE]\n"
+				body += "data: " + strings.Replace(tool, `"delta":`, `"finish_reason":"tool_calls","delta":`, 1) + "\n\ndata: [DONE]\n"
 			}
 			c, resp, info := setupStreamTest(t, strings.NewReader(body))
 			calls := 0
@@ -499,7 +507,7 @@ func TestStreamScannerHandler_StreamStatus_HandlerStop(t *testing.T) {
 func TestStreamScannerHandler_StreamStatus_HandlerDone(t *testing.T) {
 	t.Parallel()
 
-	body := buildSSEBody(20)
+	body := strings.Repeat("data: {\"type\":\"provider_message\"}\n\n", 20)
 	c, resp, info := setupStreamTest(t, strings.NewReader(body))
 
 	var count atomic.Int64

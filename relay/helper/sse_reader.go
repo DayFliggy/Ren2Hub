@@ -2,6 +2,10 @@ package helper
 
 import "io"
 
+// ResponseConversionByteLimit also bounds accumulated conversion state, so a
+// sequence of individually valid frames cannot grow an unbounded buffer.
+func ResponseConversionByteLimit() int64 { return int64(getScannerBufferSize()) }
+
 // ReadSSEEvents shares the streaming decoder without writing SSE headers or
 // heartbeats. The upstream response body retains its request cancellation and
 // non-streaming completion deadline.

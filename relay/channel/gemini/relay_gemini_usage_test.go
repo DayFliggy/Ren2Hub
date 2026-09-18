@@ -145,6 +145,8 @@ func TestGeminiStreamHandlerCompletionTokensExcludeToolUsePromptTokens(t *testin
 		},
 	}
 
+	stop := "STOP"
+	chunk.Candidates[0].FinishReason = &stop
 	chunkData, err := common.Marshal(chunk)
 	require.NoError(t, err)
 
@@ -301,6 +303,8 @@ func TestGeminiStreamHandlerUsesEstimatedPromptTokensWhenUsagePromptMissing(t *t
 		},
 	}
 
+	stop := "STOP"
+	chunk.Candidates[0].FinishReason = &stop
 	chunkData, err := common.Marshal(chunk)
 	require.NoError(t, err)
 
@@ -439,6 +443,8 @@ func TestGeminiStreamHandlerPromptOnlyUsageMetadataEstimatesCompletionTokens(t *
 		},
 	}
 
+	stop := "STOP"
+	chunk.Candidates[0].FinishReason = &stop
 	chunkData, err := common.Marshal(chunk)
 	require.NoError(t, err)
 
@@ -527,7 +533,7 @@ func TestGeminiStreamHandlerEmptyUsageMetadataBuildsEstimatedBillingUsage(t *tes
 	}
 	info.SetEstimatePromptTokens(20)
 
-	streamBody := []byte("data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"partial\"}]}}],\"usageMetadata\":{}}\n\n" + "data: [DONE]\n\n")
+	streamBody := []byte("data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"partial\"}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{}}\n\n" + "data: [DONE]\n\n")
 	resp := &http.Response{
 		Body: io.NopCloser(bytes.NewReader(streamBody)),
 	}
