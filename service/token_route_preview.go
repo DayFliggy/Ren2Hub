@@ -75,6 +75,21 @@ func PreviewUserTokenRoute(ctx context.Context, userID, tokenID int, input Route
 	preview.TokenID, preview.Mode = tokenID, profile.Mode
 	preview.PreviewID, preview.GeneratedAt = common.NewRequestId(), time.Now().UnixMilli()
 	preview.RuntimeRecheckReasons = append(preview.RuntimeRecheckReasons, "admission_capacity", "provider_rate_limit", "configuration_version", "affinity")
+	if profile.ID > 0 && profile.Status != model.RouteProfileStatusEnabled && profile.Mode != model.RouteModeManual {
+		preview.FilterReasonCounts[RoutePreviewFilterProfileDisabled]++
+		return preview, nil
+	}
+	var user model.User
+	if err := model.DB.WithContext(ctx).Select("id", "status").Where("id = ?", userID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	if user.Status != common.UserStatusEnabled {
+		for index := range preview.Entries {
+			preview.Entries[index].FilterReason = RouteFilterTokenForbidden
+		}
+		preview.FilterReasonCounts = map[string]int{RouteFilterTokenForbidden: max(len(preview.Entries), 1)}
+		return preview, nil
+	}
 	if len(preview.Entries) == 0 && len(preview.FilterReasonCounts) > 0 {
 		return preview, nil
 	}
@@ -95,39 +110,57 @@ func PreviewUserTokenRoute(ctx context.Context, userID, tokenID int, input Route
 	for _, candidate := range selection.Decision.Candidates {
 		ids = append(ids, candidate.ChannelID)
 	}
-	capabilities, err := model.FindActiveChannelCapabilities(ctx, ids, preview.NormalizedModel, "")
+	capabilities, err := model.FindActiveChannelCapabilities(ctx, ids, "", "")
 	if err != nil {
 		return nil, err
 	}
-	capabilityByChannel := make(map[int]model.ChannelModelCapability, len(capabilities))
+	type candidateKey struct {
+		channelID int
+		model     string
+	}
+	capabilityByChannel := make(map[candidateKey]model.ChannelModelCapability, len(capabilities))
 	for _, capability := range capabilities {
-		capabilityByChannel[capability.ChannelID] = capability
+		capabilityByChannel[candidateKey{capability.ChannelID, capability.RequestModel}] = capability
 	}
-	health, err := loadRoutePreviewHealth(ctx, ids, preview.NormalizedModel)
-	if err != nil {
-		return nil, err
+	health := make(map[candidateKey]model.ChannelHealth)
+	seenModels := make(map[string]bool)
+	for _, candidate := range selection.Decision.Candidates {
+		if seenModels[candidate.RequestModel] {
+			continue
+		}
+		seenModels[candidate.RequestModel] = true
+		rows, err := loadRoutePreviewHealth(ctx, ids, candidate.RequestModel)
+		if err != nil {
+			return nil, err
+		}
+		for channelID, row := range rows {
+			health[candidateKey{channelID, candidate.RequestModel}] = row
+		}
 	}
 	entryIndexes := make(map[int]int, len(preview.Entries))
 	for index, entry := range preview.Entries {
 		entryIndexes[entry.ChannelID] = index
 	}
 	for _, candidate := range selection.Decision.Candidates {
+		key := candidateKey{candidate.ChannelID, candidate.RequestModel}
+		capability := capabilityByChannel[key]
+		if capability.State == "" {
+			capability.State = model.RouteCapabilityStateUnresolved
+		}
 		index, exists := entryIndexes[candidate.ChannelID]
 		if !exists {
-			capability := capabilityByChannel[candidate.ChannelID]
-			if capability.State == "" {
-				capability.State = model.RouteCapabilityStateUnresolved
-			}
 			index = len(preview.Entries)
 			preview.Entries = append(preview.Entries, RoutePreviewEntry{
-				ChannelID: candidate.ChannelID, RequestModel: candidate.RequestModel, ActualModel: capability.ActualModel,
-				LabSlug: capability.LabSlug, CapabilityState: capability.State, Position: candidate.Position, Weight: candidate.Weight,
-				SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
-				Health: routePreviewHealthSummary(health[candidate.ChannelID]), Diagnostics: []types.ConversionDiagnostic{},
+				ChannelID: candidate.ChannelID, Position: candidate.Position, Weight: candidate.Weight,
+				Diagnostics: []types.ConversionDiagnostic{},
 			})
-			preview.HasMixed = preview.HasMixed || capability.IsMixed
 		}
 		entry := &preview.Entries[index]
+		entry.RequestModel, entry.ActualModel = candidate.RequestModel, capability.ActualModel
+		entry.LabSlug, entry.CapabilityState = capability.LabSlug, capability.State
+		entry.SnapshotVersion, entry.CatalogVersion = candidate.SnapshotVersion, candidate.CatalogVersion
+		entry.Health = routePreviewHealthSummary(health[key])
+		preview.HasMixed = preview.HasMixed || capability.IsMixed
 		entry.Priority, entry.Score = candidate.Priority, candidate.Score
 		entry.FilterReason = candidate.FilterReason
 		if plan, found := selection.ConversionPlans[candidate.ChannelID]; found {

@@ -17,6 +17,21 @@ import (
 // A token without a private profile uses automatic routing; missing candidates
 // or infrastructure never invoke another selector.
 func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
+	if input.RequestPath == "/v1/responses/compact" {
+		input.RequestModel = ratio_setting.WithCompactModelSuffix(input.RequestModel)
+	}
+	if input.RequestPath == "/v1/responses/compact" && input.CompactStage == relaycommon.CompactAttemptNone {
+		input.CompactStage = relaycommon.CompactAttemptBase
+		if ratio_setting.IsGPTCompactBaseModel(ratio_setting.CompactBaseModelName(input.RequestModel)) {
+			input.CompactStage = relaycommon.CompactAttemptExact
+		}
+		selection, err := SelectLiveTokenRoute(input)
+		if input.CompactStage == relaycommon.CompactAttemptExact && errors.Is(err, ErrRouteSelectionUnavailable) {
+			input.CompactStage = relaycommon.CompactAttemptBase
+			return SelectLiveTokenRoute(input)
+		}
+		return selection, err
+	}
 	selection := LiveRouteSelection{Source: RouteSourceUnavailable, CompactStage: input.CompactStage, SpecificChannelID: input.SpecificChannelID, ConversionPlans: make(map[int]relayconvert.ConversionPlan)}
 	if !input.CapabilityEnabled || model.DB == nil || input.UserID <= 0 || (input.TokenID <= 0 && !input.IsPlayground) {
 		return selection, ErrLiveRouteProfileUnavailable

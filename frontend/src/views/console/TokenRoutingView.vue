@@ -983,6 +983,19 @@ onMounted(() => void load())
                 </dd>
               </div>
             </dl>
+            <div
+              v-if="!preview.entries.length"
+              class="flex flex-wrap gap-2"
+              data-testid="route-preview-rejections"
+            >
+              <StatusChip
+                v-for="(count, reason) in preview.filter_reason_counts"
+                :key="reason"
+                tone="danger"
+              >
+                {{ reason }} · {{ count }}
+              </StatusChip>
+            </div>
             <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <div
                 v-for="entry in preview.entries"

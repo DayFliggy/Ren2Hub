@@ -403,7 +403,7 @@ export default {
     snapshotRank: 'Snapshot rank {rank} · Weight {weight}',
     title: 'Token routing',
     subtitle:
-      'Manage manual channel order and static preview for this token. Request routing remains disabled until the backend capability is enabled.',
+      'Preview automatic routing for this token, or manage manual channel order, price limits, and retry policy.',
     groupsTitle: 'Manual groups',
     addGroup: 'Add group',
     defaultGroupName: 'Route {position}',

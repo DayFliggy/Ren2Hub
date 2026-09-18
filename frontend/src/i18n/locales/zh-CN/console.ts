@@ -395,7 +395,7 @@ export default {
     snapshotRank: '本次快照顺序 {rank} · 权重 {weight}',
     title: '令牌路由',
     subtitle:
-      '管理当前令牌的手动渠道顺序和静态预览。保存后仍需后端能力开启才会参与请求调度。',
+      '预览当前令牌的自动路由结果，或管理手动渠道顺序、倍率上限与重试策略。',
     groupsTitle: '手动分组',
     addGroup: '添加分组',
     defaultGroupName: '线路 {position}',

@@ -87,21 +87,10 @@ func Distribute() func(c *gin.Context) {
 			abortWithOpenAiMessage(c, http.StatusBadRequest, model.ErrGatewayStateUnknown.Error(), "state_unavailable")
 			return
 		}
-		stage := relaycommon.CompactAttemptNone
-		if strings.HasPrefix(c.Request.URL.Path, "/v1/responses/compact") {
-			stage = relaycommon.CompactAttemptBase
-			if ratio_setting.IsGPTCompactBaseModel(ratio_setting.CompactBaseModelName(request.Model)) {
-				stage = relaycommon.CompactAttemptExact
-			}
-		}
-		requiresNative := stage == relaycommon.CompactAttemptNone &&
-			relayconstant.Path2RelayMode(c.Request.URL.Path) == relayconstant.RelayModeResponses &&
+		requiresNative := relayconstant.Path2RelayMode(c.Request.URL.Path) == relayconstant.RelayModeResponses &&
 			requestRequiresNativeResponses(c)
 		common.SetContextKey(c, constant.ContextKeyResponsesNativeRequired, requiresNative)
-		_, routeErr := SelectRequestChannel(c, request.Model, specificChannelID, stage)
-		if routeErr != nil && stage == relaycommon.CompactAttemptExact && errors.Is(routeErr, service.ErrRouteSelectionUnavailable) {
-			_, routeErr = SelectRequestChannel(c, request.Model, specificChannelID, relaycommon.CompactAttemptBase)
-		}
+		_, routeErr := SelectRequestChannel(c, request.Model, specificChannelID, relaycommon.CompactAttemptNone)
 		if routeErr != nil {
 			abortWithOpenAiMessage(c, routeErr.StatusCode, routeErr.Error(), routeErr.GetErrorCode())
 			return
@@ -133,12 +122,7 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 		ConversionPolicy:        types.ConversionLossPolicy(c.GetString("conversion_policy")),
 	}
 	path := c.Request.URL.Path
-	plannableRequest := slices.Contains([]string{
-		"/v1/chat/completions", "/pg/chat/completions", "/v1/responses", "/v1/responses/compact", "/v1/messages",
-		"/v1/completions", "/v1/moderations", "/v1/edits", "/v1/embeddings", "/v1/rerank",
-		"/v1/images/generations", "/v1/images/edits", "/v1/audio/speech", "/v1/audio/transcriptions", "/v1/audio/translations",
-	}, path) || strings.HasSuffix(path, ":generateContent") || strings.HasSuffix(path, ":streamGenerateContent")
-	if plannableRequest {
+	if service.SupportsRouteRequestAnalysis(path) {
 		cached, exists := c.Get(service.RouteRequestRequirementsKey)
 		requirements, valid := cached.(relayconvert.RequestRequirements)
 		if !exists || !valid {
@@ -205,7 +189,7 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 	}
 	c.Set("route_live_selection", selection)
 	c.Set("route_request_model", modelName)
-	service.SetCompactStage(c, stage)
+	service.SetCompactStage(c, selection.CompactStage)
 	if setupErr := SetupContextForSelectedChannel(c, channel, modelName); setupErr != nil {
 		return nil, setupErr
 	}

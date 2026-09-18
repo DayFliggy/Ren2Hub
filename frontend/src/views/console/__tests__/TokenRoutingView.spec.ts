@@ -351,6 +351,20 @@ describe('TokenRoutingView', () => {
     )
   })
 
+  it('shows request-wide rejection reasons when the preview has no entries', async () => {
+    const blocked = structuredClone(preview)
+    blocked.entries = []
+    blocked.candidate_channel_ids = []
+    delete blocked.preferred_channel_id
+    blocked.filter_reason_counts = { profile_disabled: 1 }
+    mocks.previewToken.mockResolvedValueOnce(blocked)
+    const view = await mountView()
+    await view.get('input[placeholder="gpt-5"]').setValue('gpt-5')
+    await buttonByText(view, 'Run preview').trigger('click')
+    await flushPromises()
+    expect(view.text()).toContain('profile_disabled')
+  })
+
   it('sends the request sample and renders blocked conversion diagnostics', async () => {
     const blocked = structuredClone(preview)
     blocked.request_requirements.stream = true

@@ -27,6 +27,8 @@ func TestDistributeCompactAndNativeResponsesUseUnifiedRouting(t *testing.T) {
 		stage                   relaycommon.CompactAttemptStage
 		native                  bool
 	}{
+		{"GPT exact", "/v1/responses/compact", "gpt-5-openai-compact", `{"model":"gpt-5","input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptExact, false},
+		{"GPT base fallback", "/v1/responses/compact", "gpt-5", `{"model":"gpt-5","input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptBase, false},
 		{"regular suffix", "/v1/responses", "gpt-5-openai-compact", `{"model":"gpt-5-openai-compact","input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptNone, false},
 		{"non GPT base", "/v1/responses/compact", "claude-3-5-sonnet", `{"model":"claude-3-5-sonnet-openai-compact","input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptBase, false},
 		{"non GPT suffix only", "/v1/responses/compact", "claude-3-5-sonnet-openai-compact", `{"model":"claude-3-5-sonnet-openai-compact","input":"hello"}`, constant.ChannelTypeOpenAI, 503, relaycommon.CompactAttemptNone, false},

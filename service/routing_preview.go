@@ -276,6 +276,9 @@ func analyzeRoutePreviewRequest(input RouteProfilePreviewInput) (relayconvert.Re
 // AnalyzeRouteRequest shares request semantics between preview and dispatch.
 // The caller owns body-size enforcement; analysis never resolves media.
 func AnalyzeRouteRequest(modelName, path string, payload []byte) (relayconvert.RequestRequirements, error) {
+	if !SupportsRouteRequestAnalysis(path) {
+		return relayconvert.RequestRequirements{}, fmt.Errorf("request path does not support conversion preview")
+	}
 	var request any
 	switch constant.EndpointType(endpointTypeForRequestPath(path)) {
 	case constant.EndpointTypeOpenAI:
@@ -336,6 +339,25 @@ func AnalyzeRouteRequest(modelName, path string, payload []byte) (relayconvert.R
 		requirements.Stream = operation == "streamGenerateContent"
 	}
 	return requirements, nil
+}
+
+// SupportsRouteRequestAnalysis describes concrete generation paths, not path
+// prefixes. Preview and dispatch must analyze the same request surfaces.
+func SupportsRouteRequestAnalysis(path string) bool {
+	switch path {
+	case "/v1/chat/completions", "/pg/chat/completions", "/v1/responses", "/v1/responses/compact", "/v1/messages",
+		"/v1/completions", "/v1/moderations", "/v1/edits", "/v1/embeddings", "/v1/rerank",
+		"/v1/images/generations", "/v1/images/edits", "/v1/audio/speech", "/v1/audio/transcriptions", "/v1/audio/translations":
+		return true
+	}
+	for _, prefix := range []string{"/v1beta/models/", "/v1/models/"} {
+		if modelAndOperation, ok := strings.CutPrefix(path, prefix); ok {
+			modelName, operation, found := strings.Cut(modelAndOperation, ":")
+			return found && modelName != "" && !strings.ContainsAny(modelName, "?#") &&
+				(operation == "generateContent" || operation == "streamGenerateContent")
+		}
+	}
+	return false
 }
 
 // PlanChannelConversion resolves the same read-only host surface for preview
