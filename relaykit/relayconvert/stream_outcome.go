@@ -31,6 +31,12 @@ func FinalizeStreamResponseWithOutcome(ctx context.Context, info convmeta.Meta, 
 	}
 	switch outcome {
 	case StreamOutcomeCompleted:
+		if state.conversionError != nil {
+			return nil, state.conversionError
+		}
+		if err := ValidateResponseTermination(state.From, state.To, state.Termination()); err != nil {
+			return nil, err
+		}
 		return finalizeStreamResponse(ctx, info, state)
 	case StreamOutcomeIncomplete, StreamOutcomeFailed, StreamOutcomeCancelled:
 	default:

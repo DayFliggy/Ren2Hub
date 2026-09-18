@@ -181,6 +181,7 @@ func ResponseGeminiChat2OpenAI(id string, created int64, response *dto.GeminiCha
 			choice.FinishReason = types.FinishReasonToolCalls
 		}
 
+		choice.Message.Annotations = groundingAnnotationsToChat(candidate.GroundingMetadata, candidate.Content, choice.Message.StringContent())
 		fullTextResponse.Choices = append(fullTextResponse.Choices, choice)
 	}
 	return &fullTextResponse
@@ -307,9 +308,11 @@ type GeminiToChatStreamState struct {
 }
 
 type geminiToChatChoiceState struct {
-	sawToolCall   bool
-	finishEmitted bool
-	nextToolIndex int
+	grounding       *geminiGroundingStreamCandidate
+	seenAnnotations map[string]struct{}
+	sawToolCall     bool
+	finishEmitted   bool
+	nextToolIndex   int
 }
 
 func NewGeminiToChatStreamState(id string, created int64) *GeminiToChatStreamState {
@@ -347,9 +350,12 @@ func (s *GeminiToChatStreamState) ConvertChunk(geminiResponse *dto.GeminiChatRes
 		choice := &response.Choices[i]
 		state := s.choices[choice.Index]
 		if state == nil {
-			state = &geminiToChatChoiceState{}
+			state = &geminiToChatChoiceState{grounding: newGeminiGroundingStreamCandidate(), seenAnnotations: make(map[string]struct{})}
 			s.choices[choice.Index] = state
+			choice.Delta.Role = "assistant"
 		}
+		state.grounding.appendContent(geminiResponse.Candidates[i].Content, choice.Delta.GetContentString())
+		choice.Delta.Annotations = state.grounding.groundingAnnotations(geminiResponse.Candidates[i].GroundingMetadata, int64(choice.Index), state.seenAnnotations)
 		finish := ""
 		if geminiResponse.Candidates[i].FinishReason != nil {
 			finish = *geminiResponse.Candidates[i].FinishReason
@@ -442,4 +448,16 @@ func geminiResponseToolCall(item *dto.GeminiPart) *dto.ToolCallResponse {
 			Name:      item.FunctionCall.FunctionName,
 		},
 	}
+}
+
+func (s *GeminiToChatStreamState) Error() error {
+	if s == nil {
+		return nil
+	}
+	for _, choice := range s.choices {
+		if choice.grounding != nil && choice.grounding.err != nil {
+			return choice.grounding.err
+		}
+	}
+	return nil
 }

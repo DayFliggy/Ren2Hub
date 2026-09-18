@@ -57,6 +57,18 @@ func TestPortableSearchAndExplicitZeroAcrossProtocols(t *testing.T) {
 	assert.NotNil(t, chat.WebSearchOptions)
 }
 
+func TestHostedSearchRequiresRepresentableResponseBeforeSending(t *testing.T) {
+	request := &dto.OpenAIResponsesRequest{Model: "test", Input: []byte(`"search"`), Tools: []byte(`[{"type":"web_search"}]`)}
+	requirements, err := AnalyzeRequest(request)
+	require.NoError(t, err)
+	for _, policy := range []types.ConversionLossPolicy{types.ConversionLossPolicySafe, types.ConversionLossPolicyStrict, types.ConversionLossPolicyAllow} {
+		_, err := PlanConversion(requirements, types.RelayFormatClaude, policy)
+		require.ErrorContains(t, err, "pause")
+	}
+	_, err = PlanConversion(requirements, types.RelayFormatOpenAIResponses, types.ConversionLossPolicyStrict)
+	require.NoError(t, err)
+}
+
 func TestExecuteConversionPlanKeepsPolicyAndRejectsChangedState(t *testing.T) {
 	req := &dto.OpenAIResponsesRequest{Model: "test", Input: []byte(`"hi"`), Tools: []byte(`[{"type":"custom","name":"shell"}]`)}
 	requirements, err := AnalyzeRequest(req)

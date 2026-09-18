@@ -275,6 +275,9 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 	if err := attachPortableSearch(current, requirements); err != nil {
 		return nil, err
 	}
+	if err := preserveToolMedia(request, current, from, target); err != nil {
+		return nil, err
+	}
 	return &RequestResult{
 		Value:       current,
 		From:        from,

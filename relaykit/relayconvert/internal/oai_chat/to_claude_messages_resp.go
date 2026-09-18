@@ -2,6 +2,7 @@ package oaichat
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/reasonmap"
@@ -259,6 +260,7 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 				} else {
 					if state.LastMessagesType != convmeta.LastMessageTypeText {
 						stopOpenBlocksAndAdvance()
+						state.CitationBlockOffset = state.CitationTextLength
 						idx := state.Index
 						claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
 							Index: &idx,
@@ -270,6 +272,7 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 						})
 					}
 					state.LastMessagesType = convmeta.LastMessageTypeText
+					state.CitationTextLength += utf8.RuneCountInString(textContent)
 					claudeResponse.Delta = &dto.ClaudeMediaMessage{
 						Type: "text_delta",
 						Text: kitutil.GetPointer[string](textContent),
@@ -285,6 +288,12 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 			claudeResponses = append(claudeResponses, &claudeResponse)
 		}
 
+		citationEvents, citationErr := appendClaudeStreamCitations(state, chosenChoice.Delta.Annotations)
+		if citationErr != nil {
+			state.ResponseError = citationErr
+			return nil
+		}
+		claudeResponses = append(claudeResponses, citationEvents...)
 		if doneChunk || state.Done {
 			oaiUsage := openAIResponse.Usage
 			if oaiUsage == nil {
@@ -358,10 +367,11 @@ func ResponseOpenAI2Claude(openAIResponse *dto.OpenAITextResponse, info convmeta
 		textContent := choice.Message.StringContent()
 		toolCalls := choice.Message.ParseToolCalls()
 		if textContent != "" || len(toolCalls) == 0 {
-			claudeContent := dto.ClaudeMediaMessage{}
-			claudeContent.Type = "text"
-			claudeContent.SetText(textContent)
-			contents = append(contents, claudeContent)
+			blocks, err := CitationTextBlocks(textContent, choice.Message.Annotations)
+			if err != nil {
+				return nil
+			}
+			contents = append(contents, blocks...)
 		}
 		for _, toolUse := range toolCalls {
 			claudeContent := dto.ClaudeMediaMessage{}

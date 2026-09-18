@@ -60,6 +60,9 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 		return nil, nil, errors.New("response is nil")
 	}
 
+	if err := validateResponsesTerminal(resp); err != nil {
+		return nil, nil, err
+	}
 	text := ExtractOutputTextFromResponses(resp)
 	reasoning := ExtractReasoningTextFromResponses(resp)
 
@@ -100,8 +103,9 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 	}
 
 	msg := dto.Message{
-		Role:    "assistant",
-		Content: text,
+		Annotations: responsesAnnotationsToChat(resp),
+		Role:        "assistant",
+		Content:     text,
 	}
 	if reasoning != "" {
 		msg.ReasoningContent = &reasoning

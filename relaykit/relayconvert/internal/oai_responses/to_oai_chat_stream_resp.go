@@ -11,10 +11,12 @@ import (
 )
 
 type ResponsesToChatStreamState struct {
-	ID           string
-	Model        string
-	Created      int64
-	IncludeUsage bool
+	annotationItems map[int]*dto.ResponsesOutput
+	seenAnnotations map[string]struct{}
+	ID              string
+	Model           string
+	Created         int64
+	IncludeUsage    bool
 
 	Usage *dto.Usage
 
@@ -73,6 +75,9 @@ func ResponsesStreamEventToChatChunks(event *dto.ResponsesStreamResponse, state 
 		return nil, nil
 	}
 
+	if err := state.rememberAnnotationEvent(event); err != nil {
+		return nil, err
+	}
 	switch event.Type {
 	case responsesEventCreated:
 		state.applyResponseMetadata(event.Response)
@@ -100,8 +105,12 @@ func ResponsesStreamEventToChatChunks(event *dto.ResponsesStreamResponse, state 
 		if event.Type == responsesEventIncomplete {
 			response = ensureIncompleteResponse(response)
 		}
+		if err := validateResponsesTerminal(response); err != nil {
+			return nil, err
+		}
 		state.applyResponseMetadata(response)
 		chunks := state.terminalOutputChunks(response)
+		chunks = append(chunks, state.annotationChunks(state.annotationsAtTerminal(response))...)
 		chunks = append(chunks, state.finalize(response)...)
 		return chunks, nil
 	case responsesEventFailed, responsesEventError:

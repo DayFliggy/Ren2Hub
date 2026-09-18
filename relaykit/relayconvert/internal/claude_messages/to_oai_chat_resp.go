@@ -3,6 +3,7 @@ package claudemessages
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/reasonmap"
@@ -116,6 +117,9 @@ func StreamResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.ChatCo
 
 // Claude content indexes include text and thinking; Chat tool indexes do not.
 type ClaudeToChatStreamState struct {
+	text        strings.Builder
+	blockText   map[int]string
+	blockOffset map[int]int
 	toolIndexes map[int]int
 	blockTypes  map[int]string
 }
@@ -130,6 +134,8 @@ func (s *ClaudeToChatStreamState) ConvertChunk(response *dto.ClaudeResponse) (*d
 	if s.toolIndexes == nil {
 		s.toolIndexes = make(map[int]int)
 		s.blockTypes = make(map[int]string)
+		s.blockText = make(map[int]string)
+		s.blockOffset = make(map[int]int)
 	}
 	converted := *response
 	switch response.Type {
@@ -168,7 +174,45 @@ func (s *ClaudeToChatStreamState) ConvertChunk(response *dto.ClaudeResponse) (*d
 		}
 		converted.Index = kitutil.GetPointer(toolIndex)
 	}
-	return StreamResponseClaude2OpenAI(&converted), nil
+	chat := StreamResponseClaude2OpenAI(&converted)
+	index := 0
+	if response.Index != nil {
+		index = *response.Index
+	}
+	if response.Type == "content_block_start" && response.ContentBlock != nil && response.ContentBlock.Type == "text" {
+		s.blockOffset[index] = utf8.RuneCountInString(s.text.String())
+		s.blockText[index] = response.ContentBlock.GetText()
+		s.text.WriteString(response.ContentBlock.GetText())
+	}
+	if response.Type == "content_block_delta" && response.Delta != nil {
+		if response.Delta.Type == "text_delta" {
+			s.blockText[index] += response.Delta.GetText()
+			s.text.WriteString(response.Delta.GetText())
+		}
+		if response.Delta.Type == "citations_delta" && len(response.Delta.Citation) > 0 && chat != nil {
+			raw := append([]byte{'['}, response.Delta.Citation...)
+			raw = append(raw, ']')
+			annotations, err := claudeCitationsToChat(raw, s.blockText[index], s.blockOffset[index])
+			if err != nil {
+				return nil, err
+			}
+			chat.Choices[0].Delta.Annotations, err = marshalChatAnnotations(annotations)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if response.Type == "content_block_start" && response.ContentBlock != nil && chat != nil {
+		annotations, err := claudeCitationsToChat(response.ContentBlock.Citations, s.blockText[index], s.blockOffset[index])
+		if err != nil {
+			return nil, err
+		}
+		chat.Choices[0].Delta.Annotations, err = marshalChatAnnotations(annotations)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return chat, nil
 }
 
 func ResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.OpenAITextResponse {
@@ -180,6 +224,7 @@ func ResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.OpenAITextRe
 	}
 	var responseText strings.Builder
 	var responseThinking strings.Builder
+	var annotations []any
 	tools := make([]dto.ToolCallResponse, 0)
 
 	fullTextResponse.Id = claudeResponse.Id
@@ -200,6 +245,8 @@ func ResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.OpenAITextRe
 				responseThinking.WriteString(*message.Thinking)
 			}
 		case "text":
+			citations, _ := claudeCitationsToChat(message.Citations, message.GetText(), utf8.RuneCountInString(responseText.String()))
+			annotations = append(annotations, citations...)
 			responseText.WriteString(message.GetText())
 		}
 	}
@@ -211,6 +258,7 @@ func ResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.OpenAITextRe
 		FinishReason: StopReasonClaudeToOpenAI(claudeResponse.StopReason),
 	}
 	choice.SetStringContent(responseText.String())
+	choice.Message.Annotations, _ = marshalChatAnnotations(annotations)
 	if len(tools) > 0 {
 		choice.Message.SetToolCalls(tools)
 	}

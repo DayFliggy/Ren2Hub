@@ -251,6 +251,12 @@ func PlanConversion(req RequestRequirements, target types.RelayFormat, policy ty
 		// Only unconfigured web search has a portable representation in this
 		// release. Provider-specific filters must not be silently discarded.
 		if tool.Type == "web_search" && !tool.Configured && (target == types.RelayFormatGemini || target == types.RelayFormatClaude || target == types.RelayFormatOpenAIResponses || target == types.RelayFormatOpenAI) {
+			if target == types.RelayFormatClaude {
+				plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "native_state_required", Path: tool.Path, Message: "Claude hosted search may pause and requires a native client to preserve continuation", Severity: types.ConversionDiagnosticError, From: req.Format, To: target})
+			}
+			if req.Format == types.RelayFormatOpenAI {
+				plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "hosted_trace_not_portable", Path: tool.Path, Message: "Chat preserves search citations but cannot represent provider-side tool execution traces", Severity: types.ConversionDiagnosticWarning, From: target, To: req.Format})
+			}
 			continue
 		}
 		plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "unsupported_tool_semantics", Path: tool.Path, Message: "cannot preserve tool " + tool.Type + " and its configuration", Severity: types.ConversionDiagnosticError, From: req.Format, To: target})
@@ -418,13 +424,21 @@ func (r *RequestRequirements) inspectTools(payload map[string]any) error {
 }
 
 func (r *RequestRequirements) inspectContent(value any, path string) {
+	r.inspectContentContext(value, path, false)
+}
+
+func (r *RequestRequirements) inspectContentContext(value any, path string, toolResult bool) {
 	switch value := value.(type) {
 	case []any:
 		for index, item := range value {
-			r.inspectContent(item, fmt.Sprintf("%s[%d]", path, index))
+			r.inspectContentContext(item, fmt.Sprintf("%s[%d]", path, index), toolResult)
 		}
 	case map[string]any:
+		before := len(r.Media)
 		r.inspectMedia(value, path)
+		if len(r.Media) > before {
+			r.Media[before].ToolResult = toolResult
+		}
 		kind, _ := value["type"].(string)
 		switch kind {
 		case "image", "document", "audio", "video", "input_file", "file":
@@ -456,9 +470,9 @@ func (r *RequestRequirements) inspectContent(value any, path string) {
 				r.Features = appendUnique(r.Features, "multimodal")
 			}
 		}
-		for _, field := range []string{"content", "parts", "source", "image_url", "file", "input_audio", "tool_calls", "function"} {
+		for _, field := range []string{"content", "output", "parts", "source", "image_url", "file", "input_audio", "tool_calls", "function"} {
 			if nested, ok := value[field]; ok {
-				r.inspectContent(nested, path+"."+field)
+				r.inspectContentContext(nested, path+"."+field, toolResult || kind == "tool_result" || kind == "function_call_output")
 			}
 		}
 	}

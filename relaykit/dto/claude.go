@@ -15,6 +15,12 @@ type ClaudeMetadata struct {
 }
 
 type ClaudeMediaMessage struct {
+	Citations    json.RawMessage      `json:"citations,omitempty"`
+	Citation     json.RawMessage      `json:"citation,omitempty"`
+	Caller       json.RawMessage      `json:"caller,omitempty"`
+	ServerName   string               `json:"server_name,omitempty"`
+	IsError      *bool                `json:"is_error,omitempty"`
+	ErrorCode    string               `json:"error_code,omitempty"`
 	Type         string               `json:"type,omitempty"`
 	Text         *string              `json:"text,omitempty"`
 	Model        string               `json:"model,omitempty"`

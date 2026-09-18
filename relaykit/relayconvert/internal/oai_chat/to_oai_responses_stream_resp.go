@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
@@ -15,10 +16,18 @@ type ChatToResponsesStreamEvent struct {
 }
 
 type ChatToResponsesStreamState struct {
-	ID      string
-	Model   string
-	Created int64
-	Usage   *dto.Usage
+	completedMessages map[int]dto.ResponsesOutput
+	previousText      strings.Builder
+	textRuneOffset    int
+	messageSerial     int
+	hosted            map[string]dto.ResponsesOutput
+	hostedIndexes     map[string]int
+	annotations       []any
+	seenAnnotations   map[string]struct{}
+	ID                string
+	Model             string
+	Created           int64
+	Usage             *dto.Usage
 
 	status            string
 	incompleteDetails *dto.IncompleteDetails
@@ -54,6 +63,7 @@ type chatToResponsesOutputRef struct {
 
 func NewChatToResponsesStreamState(id string, model string) *ChatToResponsesStreamState {
 	return &ChatToResponsesStreamState{
+		annotations:     []any{},
 		ID:              id,
 		Model:           model,
 		Created:         time.Now().Unix(),
@@ -100,6 +110,11 @@ func ChatCompletionsStreamChunkToResponsesEvents(chunk *dto.ChatCompletionsStrea
 		if choice.Delta.GetContentString() != "" {
 			events = append(events, state.appendTextDelta(choice.Delta.GetContentString())...)
 		}
+		annotationEvents, err := state.appendAnnotations(choice.Delta.Annotations)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, annotationEvents...)
 		for _, toolCall := range choice.Delta.ToolCalls {
 			toolEvents, err := state.appendToolCallDelta(toolCall)
 			if err != nil {
@@ -161,14 +176,14 @@ func (s *ChatToResponsesStreamState) UsageText() string {
 	if s == nil {
 		return ""
 	}
-	return s.text.String()
+	return s.previousText.String() + s.text.String()
 }
 
 func (s *ChatToResponsesStreamState) appendTextDelta(delta string) []ChatToResponsesStreamEvent {
 	events := make([]ChatToResponsesStreamEvent, 0, 2)
 	if !s.textStarted {
 		s.textStarted = true
-		s.textOutputIndex = s.nextIndex("message", -1)
+		s.textOutputIndex = s.nextIndex("message", s.nextOutputIndex)
 		events = append(events, responsesStreamEvent(responsesEventOutputItemAdded, dto.ResponsesStreamResponse{
 			Type:        responsesEventOutputItemAdded,
 			OutputIndex: intPtr(s.textOutputIndex),
@@ -352,12 +367,23 @@ func (s *ChatToResponsesStreamState) finalResponse() *dto.OpenAIResponsesRespons
 	for _, ref := range s.outputOrder {
 		switch ref.Kind {
 		case "message":
-			output = append(output, *s.messageOutput(status))
+			if completed, ok := s.completedMessages[ref.ToolIndex]; ok {
+				output = append(output, completed)
+			} else {
+				output = append(output, *s.messageOutput(status))
+			}
 		case "reasoning":
 			output = append(output, *s.reasoningOutput(status))
 		case "tool":
 			if tool := s.toolsByIndex[ref.ToolIndex]; tool != nil {
 				output = append(output, *s.toolOutput(tool, status))
+			}
+		case "hosted":
+			for id, index := range s.hostedIndexes {
+				if index == ref.ToolIndex {
+					output = append(output, s.hosted[id])
+					break
+				}
 			}
 		}
 	}
@@ -371,6 +397,56 @@ func (s *ChatToResponsesStreamState) finalResponse() *dto.OpenAIResponsesRespons
 		Output:            output,
 		Usage:             s.Usage,
 	}
+}
+
+// UpsertHostedOutput shares the output index and sequence allocator with normal
+// text/tool events, so a provider's later result updates the original call.
+func (s *ChatToResponsesStreamState) UpsertHostedOutput(item dto.ResponsesOutput) []ChatToResponsesStreamEvent {
+	if s == nil || s.finalized {
+		return nil
+	}
+	if s.hosted == nil {
+		s.hosted = make(map[string]dto.ResponsesOutput)
+		s.hostedIndexes = make(map[string]int)
+	}
+	var events []ChatToResponsesStreamEvent
+	if !s.sentCreated {
+		s.sentCreated = true
+		events = append(events, responsesStreamEvent(responsesEventCreated, dto.ResponsesStreamResponse{Response: s.createdResponse()}))
+	}
+	index, exists := s.hostedIndexes[item.ID]
+	if !exists {
+		if s.textStarted && !s.textDone {
+			item := s.messageOutput("completed")
+			events = append(events,
+				responsesStreamEvent("response.output_text.done", dto.ResponsesStreamResponse{OutputIndex: intPtr(s.textOutputIndex), ContentIndex: intPtr(0), ItemID: s.messageID(), Text: stringPtr(s.text.String())}),
+				responsesStreamEvent("response.content_part.done", dto.ResponsesStreamResponse{OutputIndex: intPtr(s.textOutputIndex), ContentIndex: intPtr(0), ItemID: s.messageID(), Part: outputTextPart(s.text.String())}),
+				responsesStreamEvent(responsesEventOutputItemDone, dto.ResponsesStreamResponse{OutputIndex: intPtr(s.textOutputIndex), Item: item}))
+			if s.completedMessages == nil {
+				s.completedMessages = make(map[int]dto.ResponsesOutput)
+			}
+			s.completedMessages[s.textOutputIndex] = *item
+			s.previousText.WriteString(s.text.String())
+			s.textRuneOffset += utf8.RuneCountInString(s.text.String())
+			s.text.Reset()
+			s.textStarted = false
+			s.textOutputIndex = -1
+			s.messageSerial++
+			s.annotations = []any{}
+			s.seenAnnotations = nil
+		}
+		index = s.nextOutputIndex
+		s.nextIndex("hosted", index)
+		s.hostedIndexes[item.ID] = index
+		added := item
+		added.Status = "in_progress"
+		events = append(events, responsesStreamEvent(responsesEventOutputItemAdded, dto.ResponsesStreamResponse{OutputIndex: intPtr(index), Item: &added}))
+	}
+	s.hosted[item.ID] = item
+	if item.Status == "completed" || item.Status == "failed" {
+		events = append(events, responsesStreamEvent(responsesEventOutputItemDone, dto.ResponsesStreamResponse{OutputIndex: intPtr(index), Item: &item}))
+	}
+	return s.sequence(events)
 }
 
 func (s *ChatToResponsesStreamState) createdResponse() *dto.OpenAIResponsesResponse {
@@ -412,7 +488,7 @@ func (s *ChatToResponsesStreamState) outputStatus() string {
 }
 
 func (s *ChatToResponsesStreamState) messageID() string {
-	return fmt.Sprintf("%s_msg_0", s.ID)
+	return fmt.Sprintf("%s_msg_%d", s.ID, s.messageSerial)
 }
 
 func (s *ChatToResponsesStreamState) reasoningID() string {
@@ -429,7 +505,7 @@ func (s *ChatToResponsesStreamState) messageOutput(status string) *dto.Responses
 			{
 				Type:        "output_text",
 				Text:        s.text.String(),
-				Annotations: []interface{}{},
+				Annotations: s.annotations,
 			},
 		},
 	}

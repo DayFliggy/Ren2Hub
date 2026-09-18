@@ -296,6 +296,7 @@ func (r *GeneralOpenAIRequest) ParseInput() []string {
 }
 
 type Message struct {
+	Annotations      json.RawMessage `json:"annotations,omitempty"`
 	Role             string          `json:"role"`
 	Content          any             `json:"content"`
 	Name             *string         `json:"name,omitempty"`

@@ -52,6 +52,15 @@ func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id
 	}
 
 	choice := resp.Choices[0]
+	switch choice.FinishReason {
+	case "", "stop", "tool_calls", "function_call", "length", "content_filter":
+	default:
+		return nil, nil, fmt.Errorf("response_termination_unsupported: cannot represent Chat finish reason")
+	}
+	annotations, err := chatAnnotationsToResponses(choice.Message.Annotations)
+	if err != nil {
+		return nil, nil, err
+	}
 	if status, details := ResponsesStatusFromChatFinishReason(choice.FinishReason); status != "" {
 		out.Status = []byte(fmt.Sprintf("%q", status))
 		out.IncompleteDetails = details
@@ -67,7 +76,7 @@ func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id
 				{
 					Type:        "output_text",
 					Text:        text,
-					Annotations: []interface{}{},
+					Annotations: annotations,
 				},
 			},
 		})

@@ -102,6 +102,9 @@ func StreamResponseOpenAI2GeminiWithState(openAIResponse *dto.ChatCompletionsStr
 	if state.Err != nil {
 		return nil
 	}
+	if state.CitationText == nil {
+		state.CitationText = make(map[int]string)
+	}
 	if state.Tools == nil {
 		state.Tools = make(map[[2]int]*convmeta.GeminiToolCall)
 	}
@@ -109,7 +112,7 @@ func StreamResponseOpenAI2GeminiWithState(openAIResponse *dto.ChatCompletionsStr
 	hasContent := false
 	hasFinishReason := false
 	for _, choice := range openAIResponse.Choices {
-		if len(choice.Delta.GetContentString()) > 0 || (choice.Delta.ToolCalls != nil && len(choice.Delta.ToolCalls) > 0) {
+		if len(choice.Delta.Annotations) > 0 || len(choice.Delta.GetContentString()) > 0 || (choice.Delta.ToolCalls != nil && len(choice.Delta.ToolCalls) > 0) {
 			hasContent = true
 		}
 		if choice.FinishReason != nil && *choice.FinishReason != "" {
@@ -224,6 +227,13 @@ func StreamResponseOpenAI2GeminiWithState(openAIResponse *dto.ChatCompletionsStr
 				tool.Emitted = true
 			}
 		}
+		state.CitationText[choice.Index] += choice.Delta.GetContentString()
+		metadata, err := ChatAnnotationsToGemini(choice.Delta.Annotations, state.CitationText[choice.Index])
+		if err != nil {
+			state.Err = err
+			return nil
+		}
+		candidate.GroundingMetadata = metadata
 		candidate.Content = content
 		geminiResponse.Candidates = append(geminiResponse.Candidates, candidate)
 	}

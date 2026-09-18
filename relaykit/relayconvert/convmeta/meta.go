@@ -52,12 +52,16 @@ type Meta interface {
 // ClaudeConvertInfo carries mutable state for OpenAI chat → Claude Messages
 // stream conversion. Moved here from relay/common (which keeps an alias).
 type ClaudeConvertInfo struct {
-	LastMessagesType string
-	Index            int
-	Usage            *dto.Usage
-	FinishReason     string
-	Done             bool
-	MessageStarted   bool
+	CitationTextLength  int
+	CitationBlockOffset int
+	CitationSeen        map[string]struct{}
+	ResponseError       error
+	LastMessagesType    string
+	Index               int
+	Usage               *dto.Usage
+	FinishReason        string
+	Done                bool
+	MessageStarted      bool
 
 	ToolCallBaseIndex      int
 	ToolCallMaxIndexOffset int
@@ -71,8 +75,9 @@ type GeminiToolCall struct {
 }
 
 type GeminiConvertInfo struct {
-	Tools map[[2]int]*GeminiToolCall
-	Err   error
+	CitationText map[int]string
+	Tools        map[[2]int]*GeminiToolCall
+	Err          error
 }
 
 const (
