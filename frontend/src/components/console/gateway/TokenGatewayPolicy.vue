@@ -9,6 +9,7 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
 import type { TokenSummary } from '@/types/console'
 const props = defineProps<{ tokenId: number }>()
+const emit = defineEmits<{ updated: [] }>()
 const { t } = useI18n()
 const request = useLatestRequest()
 const token = ref<TokenSummary | null>(null)
@@ -30,6 +31,10 @@ async function load() {
   loading.value = false
   if (result.ok) token.value = result.value
   else error.value = String(result.error)
+}
+function tokenSaved(): void {
+  emit('updated')
+  void load()
 }
 watch(
   () => props.tokenId,
@@ -81,7 +86,7 @@ watch(
       :editing="token"
       :models="token?.model_limits ?? []"
       @close="editing = false"
-      @saved="load"
+      @saved="tokenSaved"
     />
   </section>
 </template>

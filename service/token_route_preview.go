@@ -140,6 +140,11 @@ func PreviewUserTokenRoute(ctx context.Context, userID, tokenID int, input Route
 	entryIndexes := make(map[int]int, len(preview.Entries))
 	for index, entry := range preview.Entries {
 		entryIndexes[entry.ChannelID] = index
+		// Manual metadata may see a newly published capability before the
+		// dispatch index. Only the shared selector can declare it eligible.
+		if entry.FilterReason == "" {
+			preview.Entries[index].FilterReason = RouteFilterSnapshotStale
+		}
 	}
 	for _, candidate := range selection.Decision.Candidates {
 		key := candidateKey{candidate.ChannelID, candidate.RequestModel}

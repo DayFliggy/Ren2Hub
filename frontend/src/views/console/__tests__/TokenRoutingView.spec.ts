@@ -19,6 +19,8 @@ import type {
   RouteProfileView,
 } from '@/types/routing'
 import TokenRoutingView from '@/views/console/TokenRoutingView.vue'
+import TokenGatewayPolicy from '@/components/console/gateway/TokenGatewayPolicy.vue'
+import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
 
 const mocks = vi.hoisted(() => ({
   profiles: vi.fn(),
@@ -363,6 +365,42 @@ describe('TokenRoutingView', () => {
     await buttonByText(view, 'Run preview').trigger('click')
     await flushPromises()
     expect(view.text()).toContain('profile_disabled')
+  })
+
+  it('invalidates the preview and pending results after token settings change', async () => {
+    const view = await mountView()
+    await view.get('input[placeholder="gpt-5"]').setValue('gpt-5')
+    await buttonByText(view, 'Run preview').trigger('click')
+    await flushPromises()
+    expect(view.find('[data-testid="route-preview-health"]').exists()).toBe(
+      true
+    )
+    view
+      .getComponent(TokenGatewayPolicy)
+      .getComponent(KeyFormModal)
+      .vm.$emit('saved')
+    await flushPromises()
+    expect(view.find('[data-testid="route-preview-health"]').exists()).toBe(
+      false
+    )
+
+    let resolvePreview!: (value: RoutePreview) => void
+    mocks.previewToken.mockImplementationOnce(
+      () =>
+        new Promise<RoutePreview>((resolve) => {
+          resolvePreview = resolve
+        })
+    )
+    await buttonByText(view, 'Run preview').trigger('click')
+    view
+      .getComponent(TokenGatewayPolicy)
+      .getComponent(KeyFormModal)
+      .vm.$emit('saved')
+    resolvePreview(preview)
+    await flushPromises()
+    expect(view.find('[data-testid="route-preview-health"]').exists()).toBe(
+      false
+    )
   })
 
   it('sends the request sample and renders blocked conversion diagnostics', async () => {

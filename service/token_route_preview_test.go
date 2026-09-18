@@ -145,3 +145,23 @@ func TestTokenPreviewReportsRequestWideDisabledState(t *testing.T) {
 		})
 	}
 }
+
+func TestManualPreviewDoesNotClaimEligibilityWithoutDispatchDiscovery(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	// Capture an index before a channel's published snapshot becomes visible.
+	require.NoError(t, RebuildRouteCapabilityIndex(context.Background()))
+	staleIndex := routeCapabilityIndex.Load()
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	routeCapabilityIndex.Store(staleIndex)
+	_, err := CreateUserRouteProfile(RouteProfileInput{UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{Name: "manual", Enabled: true, Entries: []RouteEntryInput{{ChannelID: channelID, Source: model.RouteSourcePlatform, Enabled: true}}}},
+	})
+	require.NoError(t, err)
+	preview, err := PreviewUserTokenRoute(context.Background(), userID, tokenID, RouteProfilePreviewInput{Model: "gpt-test", Path: "/v1/chat/completions"})
+	require.NoError(t, err)
+	assert.Empty(t, preview.CandidateChannelIDs)
+	entry := findRoutePreviewEntry(t, preview, channelID)
+	assert.Equal(t, RouteFilterSnapshotStale, entry.FilterReason)
+	assert.Equal(t, 1, preview.FilterReasonCounts[RouteFilterSnapshotStale])
+}

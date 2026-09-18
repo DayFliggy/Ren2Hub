@@ -539,7 +539,7 @@ onMounted(() => void load())
     </header>
 
     <GatewayUserPanel />
-    <TokenGatewayPolicy :token-id="tokenId" />
+    <TokenGatewayPolicy :token-id="tokenId" @updated="invalidatePreview" />
     <div
       v-if="conflict"
       class="flex items-center justify-between gap-4 border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-4 text-sm"
