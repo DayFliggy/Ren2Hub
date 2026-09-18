@@ -2,12 +2,14 @@
 
 基于 `1fa59c2ff3ba39040e51e564d956822c31447e5a`，本轮修复六项已复现问题，并把统一转换计划接到 Token 路由预览。只发布源码，不部署应用。
 
+本文记录首次交付时的范围与验证。随后对 `52e331e02` 逐项复审发现响应终态、工具媒体顺序、缓冲伴随信息和预览一致性仍有遗漏；修复与最终验收以 [后续计划审计](PROTOCOL_ROUTING_PLAN_AUDIT_2026_09_18.md) 为准，不能仅凭此前通过的基础用例认定全部语义已覆盖。
+
 ## 已交付行为
 
 | 原问题 | 实现与正式回归 |
 |---|---|
 | Responses 正常限长被当成断流 | `ResponseTermination` 分离生成结果与传输结果；JSON、SSE、缓冲 JSON 保留 limited 内容、usage 和原因。`response_termination_test.go` 验证 max_output_tokens、content_filter 及未知原因 |
-| 工具图片退成字符串 | 需求带 `tool_result` 位置；Claude ↔ Responses 使用结构化旁传恢复文本／图片、调用 ID 和顺序，不依赖 Chat 字符串表达媒体。`tool_media_test.go` 验证双向结构和不支持目标的硬拒绝 |
+| 工具图片退成字符串 | 需求带 `tool_result` 位置；最初使用结构化旁传，后续审计改为直接有序历史转换，修复普通消息与工具块交错时的顺序丢失。`tool_media_test.go` 与 `tool_media_contract_test.go` 验证双向结构和拒绝边界 |
 | pause_turn 伪造 completed | 原生保留；跨协议返回 502 转换错误、禁止重放并保留已观测用量。可预知暂停的 Claude 托管搜索跨协议请求在发送前拒绝。`response_semantics_test.go`、Claude 宿主回归覆盖 JSON/SSE |
 | 引用和托管工具丢失 | DTO、响应注册表、流式状态、宿主调用入口一起更新；保留可表达 URL 引用和托管搜索／MCP 结果，按身份去重。无法表达时明确诊断或拒绝，不伪造客户端工具调用 |
 | 转换资格晚于重试裁剪／64 上限 | 完整资格进入统一选择器；手动 none/same_channel 保留首次发送扫描集合，发送后锁定策略。HTTP 回归覆盖 63/64 个不兼容文本渠道，以及 64 个不兼容流式转写渠道 |

@@ -15,7 +15,7 @@ RelayKit 是从 [new-api](https://github.com/QuantumNous/new-api) 中拆分出�
 
 ## 支持矩阵
 
-以下四种文本协议支持任意两种格式之间的转换：
+以下四种文本协议登记了双向转换路径；登记表示基础文本转换可用，具体请求与响应仍须通过语义资格和损失策略检查：
 
 | 源格式 \ 目标格式 | OpenAI Chat | OpenAI Responses | Claude Messages | Gemini |
 |---|---:|---:|---:|---:|
@@ -31,6 +31,19 @@ RelayKit 是从 [new-api](https://github.com/QuantumNous/new-api) 中拆分出�
 - `Discouraged`：目前需要经过中间协议转换，语义损失风险更高
 
 请求、非流式响应和流式响应均覆盖上述矩阵。实际采用的路径可从转换结果的 `Steps` 和 `Quality` 字段中读取。
+
+| 专项能力 | 当前边界 |
+|---|---|
+| 工具结果图片 | Claude ↔ Responses 直接按历史顺序转换结构化文本和图片，保留调用 ID；其他跨协议路径拒绝，`allow` 不放宽 |
+| 工具媒体附加语义 | 重复／缺失 ID、无法表达的工具失败状态、非默认图片 detail 和未知内容块明确拒绝；不下载或上传媒体 |
+| 引用 | 保留可表达的 URL、标题、范围和顺序；无效范围、缺来源、不可表达的文件引用明确失败 |
+| 托管工具 | 保留可表达的搜索和 MCP 结构；Chat 内部执行轨迹省略会产生诊断，strict 拒绝；不能把托管工具伪造成客户端函数 |
+| 多候选 | Chat／Gemini 逐候选判断终态；不能把多份答案合并为 Responses／Claude 单份答案 |
+| 暂停与未知终态 | 原生保留；跨协议不能表达时失败，不伪造完成、不自动续跑 |
+| 流式状态 | 必须观察到生成终态才能正常结束；重复终态不重复输出，冲突终态报错 |
+| 内存边界 | `ResponseStreamOptions.MaxInputBytes` 限制累计输入帧；默认 128 MiB，宿主可采用现有响应限制。缓冲 Responses 使用相同原则，超限仍保留已观测 usage |
+
+生成结果通过 `ResponseResult.Termination` 与 `ResponseStreamState.Termination()` 获取；传输结果继续使用 `StreamOutcome`。`ErrResponseTerminalMissing`／`ErrStreamTerminalMissing` 表示 JSON／流式上游缺少生成终态，不应归类为本地协议表达能力不足。详细宿主验收见 [计划审计](../docs/routing/PROTOCOL_ROUTING_PLAN_AUDIT_2026_09_18.md)。
 
 2026-09-14 兼容性修正：`AnalyzeRequest` 和 `ConversionPlan` 区分旧 OpenAI completion、moderation、edit 操作。这些操作没有跨协议转换器，即使使用 `allow` 也会拒绝转换，不能因复用 `GeneralOpenAIRequest` 而视为 Chat。Responses 历史中的 `function_call.namespace` 与工具声明采用相同的身份语义：原生保留；跨协议在默认 `safe` 和 `strict` 下拒绝，`allow` 接受已登记降级并返回结构化损失诊断，不提供可逆 namespace 映射。
 

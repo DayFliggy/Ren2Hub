@@ -4,7 +4,7 @@
 
 ## 路由和权限
 
-`middleware.Distribute` 和协议阶段切换统一调用 `SelectLiveTokenRoute`。自动模式根据模型能力、渠道优先级和健康评分选渠；手动模式使用 Token 的 Profile、活动 Group、Entry 顺序与 Policy。没有 Profile 的已有 Token 使用自动模式；手动 Profile 没有启用的活动组时拒绝请求。
+`middleware.Distribute` 和协议阶段切换统一调用 `SelectLiveTokenRoute`。自动模式先检查模型能力和健康资格，再按优先级、负载桶、软亲和和稳定加权顺序选渠；手动模式使用 Token 的 Profile、活动 Group、Entry 顺序与 Policy。没有 Profile 的已有 Token 使用自动模式；手动 Profile 没有启用的活动组时拒绝请求。
 
 Token 的所有权、启停、到期、额度、IP 和模型限制继续生效。旧 `Group`、`AutoGroups`、`CrossGroupRetry` 字段、业务组权限、组间价格和旧随机选择器退出运行路径。账号分类仍可用于充值、订阅和账号限流，但不授权模型或决定 Relay 价格。
 
@@ -25,6 +25,8 @@ Token 的所有权、启停、到期、额度、IP 和模型限制继续生效�
 ## 候选排序、排队和故障转移
 
 请求正文的语义需求在选渠前分析并保存在当前请求内，文本、Compact、JSON 媒体／Embedding／Rerank／legacy 及 multipart 音频／图像复用已有解析边界。`SelectLiveTokenRoute` 先按当前能力和权限筛选，再执行双向转换规划，最后排序并截断为最多 64 个合格渠道。已确定不兼容的渠道不占调度上限。该计划不取得槽位、不初始化凭据、不下载媒体、不预扣；不能替代发送前复核。
+
+候选扫描复用一次原始请求分析；应用渠道参数后的具体 DTO 在转换执行前重新校验，避免缓存旧资格绕过新输入限制。预览与执行共用精确入口识别，不接受仅后缀相似的伪路径。Compact 的初始 exact/base 阶段和空候选退回基础阶段在统一选择器中计算，预览按同一阶段查询模型权限、能力和健康。
 
 手动 `none` 与 `same_channel` 从首次真实发送开始生效。此前可以在活动组启用的 Entry 内跳过不兼容、超价或无法准入的候选；此后 `none` 不再发送，`same_channel` 只重试实际首次发送的渠道。保留 position、总发送预算、共享重试储备及最多一次渠道排队。排队后还会核对当前 Token 转换策略；策略变化以 `conversion_policy_changed` 拒绝旧计划。Token 缓存保存转换策略，旧缓存缺失该字段时从数据库读取。
 
@@ -51,6 +53,8 @@ Retry-After 只作用于所属渠道或已有渠道内 credential/模型健康�
 生成终态由 RelayKit 的 `ResponseTermination` 表达，与 `StreamOutcome` 的传输结果分开。正常限长／内容过滤保留内容及用量，作为受限结束，不重试、不处罚健康；供应商暂停在原生协议保留，跨协议无法表达时返回 `response_conversion_unrepresentable`。未知 incomplete 不猜测 completed 或可重试。转换错误归为 `local_convert`，禁止替代请求；已提交输出只按目标协议报错，不追加另一份成功响应。无终态 EOF 仍为失败。
 
 Responses SSE 缓冲到 JSON 复用完整 SSE 事件解码器，支持多行 data、CRLF/LF/CR、BOM、注释、事件名及 EOF 最后完整事件，遵守整事件大小上限，不向 JSON 客户端写心跳。已观测用量继续传入既有账务流程，终态、引用与诊断不写入账务用量字段。
+
+流式和缓冲转换另按同一宿主限制累计输入帧，避免无界保留文本、引用和工具参数。多候选的每个已观察候选均须有有效终态；`[DONE]` 不补造缺失终态。上游缺少终态归为上游异常，本地无法表达的响应归为 `local_convert`；客户端取消优先归为 `client_cancel`。转换错误对外只保留稳定诊断，不转发转换器错误里的供应商正文。
 
 Chat、Responses、Claude、Gemini、图像、音频、Embedding、Rerank、Realtime、Compact、Midjourney、Suno 和视频均使用同一选渠与准入边界。查询类接口保留自己的任务所有权校验；后续任务操作绑定原任务渠道，并重新检查当前能力和用户资格。
 
