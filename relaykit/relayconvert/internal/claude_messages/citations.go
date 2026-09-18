@@ -20,6 +20,9 @@ func claudeCitationsToChat(raw json.RawMessage, text string, textOffset int) ([]
 	}
 	annotations := make([]any, 0, len(citations))
 	for _, citation := range citations {
+		if reference, _ := citation["encrypted_index"].(string); reference != "" {
+			return nil, fmt.Errorf("native_state_required: encrypted citation reference requires the original protocol")
+		}
 		url := strings.TrimSpace(kitutil.Interface2String(citation["url"]))
 		if url == "" {
 			return nil, fmt.Errorf("citation_source_unrepresentable: native document citation requires its original protocol")

@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
 	geminichat "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/gemini_chat"
 	oaichat "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/oai_chat"
+	oairesponses "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/oai_responses"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/types"
 )
@@ -697,6 +698,9 @@ func (s *ResponseStreamState) checkTerminalSnapshot(response any) (bool, error) 
 		return false, nil
 	}
 	if !TerminationFromResponse(event).IsTerminal() {
+		if s.terminalSnapshot != "" {
+			return false, fmt.Errorf("response_after_terminal: upstream sent an event after its terminal snapshot")
+		}
 		return false, nil
 	}
 	encoded, err := kitutil.Marshal(event.Response)
@@ -1039,7 +1043,7 @@ func finalizeOAIChatStreamResponseToOAIResponses(_ context.Context, _ convmeta.M
 }
 
 func newOAIResponsesToOAIChatStreamState(options ResponseStreamOptions) any {
-	state := NewResponsesToChatStreamState(strings.TrimSpace(options.Model), options.IncludeUsage)
+	state := oairesponses.NewResponsesToChatStreamState(strings.TrimSpace(options.Model), options.IncludeUsage, options.MaxInputBytes)
 	state.ID = strings.TrimSpace(options.ID)
 	if options.Created != 0 {
 		state.Created = options.Created

@@ -118,6 +118,31 @@ func attachResponseArtifacts(to types.RelayFormat, response any, set responseArt
 	for i := range diagnostics {
 		diagnostics[i].To = to
 	}
+	for _, artifact := range set.claude {
+		if artifact.block.Type != "web_search_tool_result" {
+			continue
+		}
+		raw, err := kitutil.Marshal(artifact.block.Content)
+		if err != nil {
+			return nil, diagnostics, err
+		}
+		var results []struct {
+			EncryptedContent string `json:"encrypted_content"`
+		}
+		if err := kitutil.Unmarshal(raw, &results); err != nil {
+			if claudeHostedResultFailed(artifact.block) {
+				continue // Failed searches use an error object instead of a result list.
+			}
+			diagnostic := responseArtifactDiagnostic(set.from, to, "hosted_tool_result_invalid", fmt.Sprintf("content[%d]", artifact.position), true)
+			return nil, append(diagnostics, diagnostic), &types.ConversionLossError{Diagnostics: []types.ConversionDiagnostic{diagnostic}}
+		}
+		for _, result := range results {
+			if result.EncryptedContent != "" {
+				diagnostic := responseArtifactDiagnostic(set.from, to, "native_state_required", fmt.Sprintf("content[%d]", artifact.position), true)
+				return nil, append(diagnostics, diagnostic), &types.ConversionLossError{Diagnostics: []types.ConversionDiagnostic{diagnostic}}
+			}
+		}
+	}
 	switch target := response.(type) {
 	case *dto.OpenAIResponsesResponse:
 		items := append([]positionedResponsesArtifact(nil), set.responses...)
@@ -390,6 +415,9 @@ func validateResponseAnnotations(response any) error {
 		}
 		if claude {
 			for _, value := range values {
+				if valuePresent(value["encrypted_index"]) {
+					return &types.ConversionLossError{Diagnostics: []types.ConversionDiagnostic{{Code: "native_state_required", Path: "response.citations", Severity: types.ConversionDiagnosticError, Message: "provider-owned citation state requires the original protocol"}}}
+				}
 				if url, ok := value["url"].(string); !ok || url == "" {
 					return fmt.Errorf("citation_source_unrepresentable: native document citation requires its original protocol")
 				}

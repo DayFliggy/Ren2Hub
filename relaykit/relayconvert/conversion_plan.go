@@ -261,7 +261,7 @@ func PlanConversion(req RequestRequirements, target types.RelayFormat, policy ty
 		// Only unconfigured web search has a portable representation in this
 		// release. Provider-specific filters must not be silently discarded.
 		if tool.Type == "web_search" && !tool.Configured && (target == types.RelayFormatGemini || target == types.RelayFormatClaude || target == types.RelayFormatOpenAIResponses || target == types.RelayFormatOpenAI) {
-			if target == types.RelayFormatClaude {
+			if target == types.RelayFormatClaude || req.Format == types.RelayFormatClaude {
 				plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "native_state_required", Path: tool.Path, Message: "Claude hosted search may pause and requires a native client to preserve continuation", Severity: types.ConversionDiagnosticError, From: req.Format, To: target})
 			}
 			if req.Format == types.RelayFormatOpenAI {
@@ -479,7 +479,7 @@ func (r *RequestRequirements) inspectContentContext(value any, path string, tool
 				}
 			}
 		}
-		for _, field := range []string{"encrypted_content", "thoughtSignature", "signature", "file_id"} {
+		for _, field := range []string{"encrypted_content", "encrypted_index", "thoughtSignature", "signature", "file_id"} {
 			if valuePresent(value[field]) {
 				r.NativeState = appendUnique(r.NativeState, path+"."+field)
 			}
@@ -489,7 +489,7 @@ func (r *RequestRequirements) inspectContentContext(value any, path string, tool
 				r.Features = appendUnique(r.Features, "multimodal")
 			}
 		}
-		for _, field := range []string{"content", "output", "parts", "source", "image_url", "file", "input_audio", "tool_calls", "function", "functionResponse"} {
+		for _, field := range []string{"content", "output", "parts", "source", "image_url", "file", "input_audio", "tool_calls", "function", "functionResponse", "citations", "annotations", "url_citation"} {
 			if nested, ok := value[field]; ok {
 				r.inspectContentContext(nested, path+"."+field, toolResult || kind == "tool_result" || kind == "function_call_output" || field == "functionResponse")
 			}

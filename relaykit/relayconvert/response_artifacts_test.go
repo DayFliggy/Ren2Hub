@@ -18,6 +18,10 @@ func TestGeminiGroundingSurvivesResponsePivot(t *testing.T) {
 	for _, target := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, types.RelayFormatClaude} {
 		t.Run(string(target), func(t *testing.T) {
 			result, err := ConvertResponse(context.Background(), nil, target, &input)
+			if target == types.RelayFormatClaude {
+				require.ErrorContains(t, err, "native_state_required")
+				return
+			}
 			require.NoError(t, err)
 			raw, err := kitutil.Marshal(result.Value)
 			require.NoError(t, err)
@@ -35,7 +39,7 @@ func TestGeminiGroundingSurvivesResponsePivot(t *testing.T) {
 
 func TestClaudeHostedResponseKeepsCallIdentityAndCitations(t *testing.T) {
 	var input dto.ClaudeResponse
-	require.NoError(t, kitutil.Unmarshal([]byte(`{"id":"msg_test","type":"message","stop_reason":"end_turn","content":[{"type":"server_tool_use","id":"srv_1","name":"web_search","input":{"query":"test"}},{"type":"web_search_tool_result","tool_use_id":"srv_1","content":[{"type":"web_search_result","url":"https://example.com","title":"Source","encrypted_content":"opaque"}]},{"type":"text","text":"answer","citations":[{"type":"web_search_result_location","url":"https://example.com","title":"Source","cited_text":"answer"}]}]}`), &input))
+	require.NoError(t, kitutil.Unmarshal([]byte(`{"id":"msg_test","type":"message","stop_reason":"end_turn","content":[{"type":"server_tool_use","id":"srv_1","name":"web_search","input":{"query":"test"}},{"type":"web_search_tool_result","tool_use_id":"srv_1","content":[{"type":"web_search_result","url":"https://example.com","title":"Source"}]},{"type":"text","text":"answer","citations":[{"type":"web_search_result_location","url":"https://example.com","title":"Source","cited_text":"answer"}]}]}`), &input))
 	result, err := ConvertResponse(context.Background(), nil, types.RelayFormatOpenAIResponses, &input)
 	require.NoError(t, err)
 	response := result.Value.(*dto.OpenAIResponsesResponse)
@@ -171,19 +175,12 @@ func TestUnknownHostedResultIsRejectedEvenUnderAllow(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestClaudeCitationRangesSplitTextWithoutChangingAnswer(t *testing.T) {
-	var input dto.OpenAITextResponse
-	require.NoError(t, kitutil.Unmarshal([]byte(`{"choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"prefix cited suffix","annotations":[{"type":"url_citation","url_citation":{"url":"https://example.com","title":"Source","start_index":7,"end_index":12}}]}}]}`), &input))
+func TestNativeClaudeCitationsRetainOriginalSourceState(t *testing.T) {
+	var input dto.ClaudeResponse
+	require.NoError(t, kitutil.Unmarshal([]byte(`{"stop_reason":"end_turn","content":[{"type":"text","text":"prefix "},{"type":"text","text":"cited","citations":[{"type":"web_search_result_location","url":"https://example.test","title":"source","cited_text":"original quotation","encrypted_index":"provider-state"}]},{"type":"text","text":" suffix"}]}`), &input))
 	result, err := ConvertResponse(context.Background(), nil, types.RelayFormatClaude, &input)
 	require.NoError(t, err)
-	response := result.Value.(*dto.ClaudeResponse)
-	require.Len(t, response.Content, 3)
-	assert.Equal(t, "prefix ", response.Content[0].GetText())
-	assert.Empty(t, response.Content[0].Citations)
-	assert.Equal(t, "cited", response.Content[1].GetText())
-	assert.NotEmpty(t, response.Content[1].Citations)
-	assert.Equal(t, " suffix", response.Content[2].GetText())
-	assert.Empty(t, response.Content[2].Citations)
+	assert.Same(t, &input, result.Value)
 }
 
 func TestLatePartialCitationCannotPretendToCoverWholeClaudeStream(t *testing.T) {

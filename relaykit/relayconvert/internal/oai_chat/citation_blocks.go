@@ -33,6 +33,9 @@ func CitationTextBlocks(text string, raw json.RawMessage) ([]dto.ClaudeMediaMess
 		if !ok {
 			citation = annotation
 		}
+		if !claudeCitationHasSource(citation) {
+			return nil, fmt.Errorf("native_state_required: Claude web citations require original source quotation and encrypted reference")
+		}
 		start, startOK := annotationIndex(citation["start_index"])
 		end, endOK := annotationIndex(citation["end_index"])
 		if !startOK || !endOK || start < 0 || end <= start || end > len(runes) {
@@ -105,6 +108,9 @@ func appendClaudeStreamCitations(state *convmeta.ClaudeConvertInfo, raw json.Raw
 		end, endOK := annotationIndex(citation["end_index"])
 		if !startOK || !endOK || start != state.CitationBlockOffset || end != state.CitationTextLength || state.LastMessagesType != convmeta.LastMessageTypeText {
 			return nil, fmt.Errorf("citation_range_unrepresentable: streamed Claude citations must cover the current open text block")
+		}
+		if !claudeCitationHasSource(citation) {
+			return nil, fmt.Errorf("native_state_required: Claude web citations require original source quotation and encrypted reference")
 		}
 		array, err := kitutil.Marshal([]any{annotation})
 		if err != nil {

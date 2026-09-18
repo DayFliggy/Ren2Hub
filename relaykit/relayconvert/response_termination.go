@@ -2,6 +2,7 @@ package relayconvert
 
 import (
 	"errors"
+
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -76,6 +77,9 @@ func TerminationFromResponse(response any) types.ResponseTermination {
 				if r.Response.IncompleteDetails != nil {
 					reason = r.Response.IncompleteDetails.Reason
 				}
+			}
+			if r.Type == "response.incomplete" {
+				return types.ClassifyResponseTermination(types.RelayFormatOpenAIResponses, "incomplete", reason)
 			}
 			if status == "" {
 				switch r.Type {

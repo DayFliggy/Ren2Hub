@@ -24,10 +24,30 @@ func (a *ResponsesBufferedAccumulator) rememberIndexedEvent(event *dto.Responses
 	}
 	index, known := a.itemIndexes[itemID]
 	if event.OutputIndex != nil {
-		if known && index != *event.OutputIndex {
-			a.err = fmt.Errorf("response item identity changed its output index")
+		if *event.OutputIndex < 0 || *event.OutputIndex > 1024 {
+			a.err = fmt.Errorf("invalid response output index")
 			return true
 		}
+		if known && index != *event.OutputIndex {
+			if !a.unindexedItems[itemID] {
+				a.err = fmt.Errorf("response item identity changed its output index")
+				return true
+			}
+			// An ID-only delta may precede the provider's actual output index.
+			// Move only provisional slots; fixed identities cannot be reassigned.
+			previous, occupied := a.items[index], a.items[*event.OutputIndex]
+			if occupied != nil && !a.unindexedItems[occupied.ID] {
+				a.err = fmt.Errorf("response output index belongs to another item")
+				return true
+			}
+			delete(a.items, index)
+			if occupied != nil {
+				a.items[index] = occupied
+				a.itemIndexes[occupied.ID] = index
+			}
+			a.items[*event.OutputIndex] = previous
+		}
+		delete(a.unindexedItems, itemID)
 		index, known = *event.OutputIndex, true
 	}
 	if !known && itemID != "" {
@@ -37,6 +57,7 @@ func (a *ResponsesBufferedAccumulator) rememberIndexedEvent(event *dto.Responses
 			}
 		}
 		known = true
+		a.unindexedItems[itemID] = true
 	}
 	if !known {
 		if event.Type == "response.output_text.annotation.added" || event.Item != nil && !isResponsesToolOutputType(event.Item.Type) {

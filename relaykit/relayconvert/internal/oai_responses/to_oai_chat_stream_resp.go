@@ -11,7 +11,7 @@ import (
 )
 
 type ResponsesToChatStreamState struct {
-	annotationItems map[int]*dto.ResponsesOutput
+	outputSnapshot  *ResponsesBufferedAccumulator
 	seenAnnotations map[string]struct{}
 	ID              string
 	Model           string
@@ -48,8 +48,9 @@ type responsesStreamTool struct {
 	ArgsSentAt int
 }
 
-func NewResponsesToChatStreamState(model string, includeUsage bool) *ResponsesToChatStreamState {
+func NewResponsesToChatStreamState(model string, includeUsage bool, limits ...int64) *ResponsesToChatStreamState {
 	return &ResponsesToChatStreamState{
+		outputSnapshot:           NewResponsesBufferedAccumulator(limits...),
 		Model:                    model,
 		Created:                  time.Now().Unix(),
 		IncludeUsage:             includeUsage,
@@ -75,7 +76,11 @@ func ResponsesStreamEventToChatChunks(event *dto.ResponsesStreamResponse, state 
 		return nil, nil
 	}
 
-	if err := state.rememberAnnotationEvent(event); err != nil {
+	if state.outputSnapshot == nil {
+		state.outputSnapshot = NewResponsesBufferedAccumulator()
+	}
+	state.outputSnapshot.ProcessEvent(event)
+	if err := state.outputSnapshot.Err(); err != nil {
 		return nil, err
 	}
 	switch event.Type {
@@ -101,7 +106,14 @@ func ResponsesStreamEventToChatChunks(event *dto.ResponsesStreamResponse, state 
 	case responsesEventFunctionArgsDone, responsesEventCustomToolInputDone:
 		return state.flushPendingTool(event), nil
 	case responsesEventCompleted, responsesEventDone, responsesEventIncomplete:
-		response := event.Response
+		response := &dto.OpenAIResponsesResponse{}
+		if event.Response != nil {
+			*response = *event.Response
+		}
+		state.outputSnapshot.SupplementResponseOutput(response)
+		if err := state.outputSnapshot.Err(); err != nil {
+			return nil, err
+		}
 		if event.Type == responsesEventIncomplete {
 			response = ensureIncompleteResponse(response)
 		}
@@ -110,7 +122,7 @@ func ResponsesStreamEventToChatChunks(event *dto.ResponsesStreamResponse, state 
 		}
 		state.applyResponseMetadata(response)
 		chunks := state.terminalOutputChunks(response)
-		chunks = append(chunks, state.annotationChunks(state.annotationsAtTerminal(response))...)
+		chunks = append(chunks, state.annotationChunks(response)...)
 		chunks = append(chunks, state.finalize(response)...)
 		return chunks, nil
 	case responsesEventFailed, responsesEventError:
@@ -559,6 +571,7 @@ func (s *ResponsesToChatStreamState) keyForEvent(event *dto.ResponsesStreamRespo
 type ResponsesBufferedAccumulator struct {
 	items                map[int]*dto.ResponsesOutput
 	itemIndexes          map[string]int
+	unindexedItems       map[string]bool
 	usage                *dto.Usage
 	err                  error
 	inputBytes           int64
@@ -585,7 +598,7 @@ func NewResponsesBufferedAccumulator(limits ...int64) *ResponsesBufferedAccumula
 		limit = limits[0]
 	}
 	return &ResponsesBufferedAccumulator{
-		items: make(map[int]*dto.ResponsesOutput), itemIndexes: make(map[string]int), maxInputBytes: limit,
+		items: make(map[int]*dto.ResponsesOutput), itemIndexes: make(map[string]int), unindexedItems: make(map[string]bool), maxInputBytes: limit,
 		outputIndexToToolIdx: make(map[int]int),
 		itemIDToToolIdx:      make(map[string]int),
 		pendingByOutputIndex: make(map[int]string),

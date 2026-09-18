@@ -3,7 +3,6 @@ package oairesponses
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -94,92 +93,4 @@ func validateResponsesTerminal(response *dto.OpenAIResponsesResponse) error {
 		return fmt.Errorf("response_termination_unsupported: cannot represent %s as Chat completion", status)
 	}
 	return nil
-}
-
-// Annotation events can arrive independently of text and may be absent from a
-// provider's final snapshot. Keep them by output/content index until terminal.
-func (s *ResponsesToChatStreamState) rememberAnnotationEvent(event *dto.ResponsesStreamResponse) error {
-	if s.annotationItems == nil {
-		s.annotationItems = make(map[int]*dto.ResponsesOutput)
-	}
-	if event.OutputIndex == nil {
-		return nil
-	}
-	index := *event.OutputIndex
-	item := s.annotationItems[index]
-	if item == nil {
-		item = &dto.ResponsesOutput{Type: "message", ID: event.ItemID}
-		s.annotationItems[index] = item
-	}
-	if event.Item != nil && event.Item.Type == "message" {
-		copy := *event.Item
-		copy.Content = append([]dto.ResponsesOutputContent(nil), event.Item.Content...)
-		for i, part := range item.Content {
-			if i < len(copy.Content) && len(copy.Content[i].Annotations) == 0 {
-				copy.Content[i].Annotations = part.Annotations
-			}
-		}
-		s.annotationItems[index] = &copy
-		return nil
-	}
-	partIndex := 0
-	if event.ContentIndex != nil {
-		partIndex = *event.ContentIndex
-	}
-	if partIndex < 0 || partIndex > 1024 {
-		return fmt.Errorf("invalid response content index")
-	}
-	for len(item.Content) <= partIndex {
-		item.Content = append(item.Content, dto.ResponsesOutputContent{Type: "output_text"})
-	}
-	part := &item.Content[partIndex]
-	switch event.Type {
-	case "response.output_text.delta":
-		part.Text += event.Delta
-	case "response.output_text.done":
-		if event.Text != nil {
-			part.Text = *event.Text
-		}
-	case "response.output_text.annotation.added":
-		var annotation map[string]any
-		if err := kitutil.Unmarshal(event.Annotation, &annotation); err != nil {
-			return fmt.Errorf("invalid response annotation: %w", err)
-		}
-		if annotation["type"] != "url_citation" {
-			return fmt.Errorf("citation_source_unrepresentable: native citation requires its original protocol")
-		}
-		part.Annotations = append(part.Annotations, annotation)
-	}
-	return nil
-}
-
-func (s *ResponsesToChatStreamState) annotationsAtTerminal(response *dto.OpenAIResponsesResponse) *dto.OpenAIResponsesResponse {
-	if response != nil && len(response.Output) > 0 {
-		clone := *response
-		clone.Output = append([]dto.ResponsesOutput(nil), response.Output...)
-		for i := range clone.Output {
-			if cached := s.annotationItems[i]; cached != nil {
-				clone.Output[i].Content = append([]dto.ResponsesOutputContent(nil), clone.Output[i].Content...)
-				for j := range clone.Output[i].Content {
-					if j < len(cached.Content) && len(clone.Output[i].Content[j].Annotations) == 0 {
-						clone.Output[i].Content[j].Annotations = cached.Content[j].Annotations
-					}
-				}
-			}
-		}
-		return &clone
-	}
-	clone := &dto.OpenAIResponsesResponse{}
-	if response != nil {
-		*clone = *response
-	}
-	indexes := make([]int, 0, len(s.annotationItems))
-	for index := range s.annotationItems {
-		indexes = append(indexes, index)
-	}
-	sort.Ints(indexes)
-	for _, index := range indexes {
-		clone.Output = append(clone.Output, *s.annotationItems[index])
-	}
-	return clone
 }
