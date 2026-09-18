@@ -36,12 +36,14 @@ RelayKit 是从 [new-api](https://github.com/QuantumNous/new-api) 中拆分出�
 |---|---|
 | 工具结果图片 | Claude ↔ Responses 直接按历史顺序转换结构化文本和图片，保留调用 ID；其他跨协议路径拒绝，`allow` 不放宽 |
 | 工具媒体附加语义 | 重复／缺失 ID、无法表达的工具失败状态、非默认图片 detail 和未知内容块明确拒绝；不下载或上传媒体 |
-| 引用 | 保留可表达的 URL、标题、范围和顺序；无效范围、缺来源、不可表达的文件引用明确失败 |
+| 引用 | 保留可表达的 URL、标题、范围和顺序；Claude 加密引用／搜索结果需原生路径。普通 URL 注释不能凭生成答案补造来源摘录或加密引用 |
 | 托管工具 | 保留可表达的搜索和 MCP 结构；Chat 内部执行轨迹省略会产生诊断，strict 拒绝；不能把托管工具伪造成客户端函数 |
 | 多候选 | Chat／Gemini 逐候选判断终态；不能把多份答案合并为 Responses／Claude 单份答案 |
 | 暂停与未知终态 | 原生保留；跨协议不能表达时失败，不伪造完成、不自动续跑 |
 | 流式状态 | 必须观察到生成终态才能正常结束；重复终态不重复输出，冲突终态报错 |
 | 内存边界 | `ResponseStreamOptions.MaxInputBytes` 限制累计输入帧；默认 128 MiB，宿主可采用现有响应限制。缓冲 Responses 使用相同原则，超限仍保留已观测 usage |
+
+Responses 流式和缓冲共用输出项累计器，部分最终快照按身份合并引用和文本偏移。明确的 incomplete 事件不能借用内嵌 completed 状态；观察到终态后拒绝新的非终态事件。原生引用和续跑状态的硬限制不受 allow 放宽，宿主仍负责其 Token、渠道和凭据归属。
 
 生成结果通过 `ResponseResult.Termination` 与 `ResponseStreamState.Termination()` 获取；传输结果继续使用 `StreamOutcome`。`ErrResponseTerminalMissing`／`ErrStreamTerminalMissing` 表示 JSON／流式上游缺少生成终态，不应归类为本地协议表达能力不足。详细宿主验收见 [计划审计](../docs/routing/PROTOCOL_ROUTING_PLAN_AUDIT_2026_09_18.md)。
 

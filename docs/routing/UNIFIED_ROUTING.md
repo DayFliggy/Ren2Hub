@@ -30,6 +30,8 @@ Token 的所有权、启停、到期、额度、IP 和模型限制继续生效�
 
 手动 `none` 与 `same_channel` 从首次真实发送开始生效。此前可以在活动组启用的 Entry 内跳过不兼容、超价或无法准入的候选；此后 `none` 不再发送，`same_channel` 只重试实际首次发送的渠道。保留 position、总发送预算、共享重试储备及最多一次渠道排队。排队后还会核对当前 Token 转换策略；策略变化以 `conversion_policy_changed` 拒绝旧计划。Token 缓存保存转换策略，旧缓存缺失该字段时从数据库读取。
 
+最终复核还使用当前 Token 的 IP 白名单和本次客户端 IP。排队期间收窄范围后不能按旧鉴权继续发送，也不能通过换渠道恢复已撤销的 Token 权限。原生引用 encrypted_index 纳入既有状态摘要归属检查，不记录引用原文。
+
 权限、Token 模型权限、状态绑定、原任务渠道、模型能力、转换策略与价格资格始终先于负载优化。自动动态排序保持 `priority → 10% 负载桶 → 软亲和 → RequestID 稳定加权顺序`；关闭动态排序时保持静态顺序。手动路由 position 是硬边界；负载均衡仅在首个合格 position 层加权选择，不跨层重排。
 
 先立即尝试允许候选，全部繁忙后最多进入一个渠道队列。扫描期间变为空闲的候选可重新立即获取；池已回收且快照容量为零不代表不可用，最终仍由 manager 授槽。排队只比较仍合格、未冷却、队列未满的繁忙候选：自动动态模式在相同 priority 和负载桶内、手动负载均衡在相同 position 内按 `queued / effective_capacity` 较小者优先，平局保留原顺序。静态和非负载均衡手动模式保留原顺序。
@@ -82,6 +84,8 @@ SSE 按事件空行组装多行 `data:`，支持 CRLF/LF/CR、注释、事件名
 不再使用 TOKEN_PRIVATE_ROUTING_ENABLED、ROUTE_LIVE_*、ROUTE_SHADOW_* 或 ROUTE_SCORE_* 灰度开关。能力刷新任务继续使用 ROUTE_CAPABILITY_REFRESH_*；ROUTE_DECISION_EVENT_QUEUE_SIZE 控制有界决策日志队列。
 
 `route_decision.attempts` 增加 `termination` 和 `response_diagnostics`（仅稳定 code/path）。网关指标增加 `route_decision_events_dropped_total`。这些诊断不记录请求正文、引用文本、凭据或完整上游错误。自动路由运营页面的分数仅用于运营比较，实际选择继续遵守后端排序。
+
+手动预览中，能力数据库与调度索引暂时不一致时，未被共同选择器发现的 Entry 标为 snapshot_stale，不凭元数据宣称合格。保存 Token 的转换策略、模型或访问限制后，界面失效当前预览并取消旧在途请求，必须重新取得快照。
 
 ## 数据和验证
 

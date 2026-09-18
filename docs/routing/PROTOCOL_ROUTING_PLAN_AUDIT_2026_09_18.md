@@ -2,6 +2,8 @@
 
 本次对已交付版本 `52e331e02d49fe4798ce389d3b4e2b6f4ea0a318` 按用户原计划逐项检查。结论是：首次交付存在遗漏，不能认定所有行为已经正确落实。本次补充正式反例、修复实现并完成受影响验证；下表记录本期计划的最终状态和明确拒绝边界。
 
+用户随后要求再次逐项核查。对 `b7f9f469391465488f078efaa6fe0b9defbe3b81` 的第二轮复审仍发现遗漏；最新结论、收紧的原生引用边界及新增验证见本文末尾“第二轮复审”。上轮通过的检查仅证明对应场景，不证明所有供应商扩展均可转换。
+
 未修改价格、倍率、预扣、结算、退款、恢复、账务表结构或用量归一化算法。没有增加自动续跑、隐式模型降级或部署应用。本次新增或调整测试中的 usage 均沿用已有账务流程，不为结算补造成功输出。
 
 ## 五阶段核对
@@ -67,3 +69,33 @@
 本期计划在上述本地验证范围内落实。明确拒绝不等于实现了供应商全部能力：工具图片目前只实现 Claude ↔ Responses；原生文件引用、暂停续跑必需数据或无等价目标表示的托管动作仍需合格原生渠道，否则拒绝。纯文本历史已有的 namespace/custom-tool 显式降级继续遵守既有 allow 契约，不能据此放行尚未实现的工具媒体。
 
 路由级透传、Responses WebSocket、自适应评分、消费预算、对账管理、Provider 限流性能改造及任何计费状态机调整仍按原计划后置。真实供应商兼容认证、生产压测和应用部署没有执行；仅同步验证后的源码。参考设计仍采用首轮记录的固定版本与许可边界，本次没有合并参考仓库或引入额外依赖。
+
+## 第二轮复审
+
+基于 `b7f9f4693` 再次检查五阶段计划，发现并修复以下八项遗漏。没有改变账务实现、数据库结构或原计划的后置范围。
+
+| 问题 | 修复及行为证据 |
+|---|---|
+| 流式引用仍走另一套快照合并 | 删除独立 annotation 缓存逻辑，流式与缓冲复用同一按身份累计器。部分最终快照不会丢失较早引用或将其附到另一条消息，字符范围保留全局偏移；ID 先于 output_index 到达时允许把临时位置绑定到真实位置。`TestResponsesStreamPartialSnapshotPreservesCitationIdentityAndOffsets` 先失败后通过，既有参数先到的兼容测试继续通过 |
+| incomplete 事件借用 completed 快照而被判成功 | 事件明确 incomplete 时，按限制原因分类，不因内嵌 status=completed 伪造完成；未知原因拒绝转换。`TestIncompleteEventCannotBorrowCompletedSnapshot` 先失败后通过 |
+| 终态之后还能转换文本事件 | 已观察终态后重复相同终态仍去重；后续非终态事件明确失败，不输出终态后的文本。`TestResponsesCannotEmitTextAfterTerminal` 先失败后通过 |
+| Claude 引用丢失原生状态或伪造来源摘录 | Claude 搜索涉及加密续轮引用，跨协议请求预先拒绝；意外收到带加密引用／搜索结果的跨协议响应硬拒绝，allow 不放宽。普通 URL 注释缺少 Claude 原生来源信息时不再把生成答案截成 cited_text。`TestClaudeCitationStateCannotBeInventedOrDropped`、`TestClaudeSearchRequiresNativeResponseCapability`、`TestEncryptedHostedSearchResultsRequireNativeResponse` 覆盖；HTTP 回归确认单次发送、local_convert、禁止重试、不处罚健康 |
+| 原生 encrypted_index 未纳入归属检查 | 在现有状态引用提取中识别引用块及加密索引，沿用已有摘要归属表，原生续轮锁定 Token／渠道／凭据／端点。跨 Token 拒绝，数据库不保存加密引用原文；`TestGatewayCitationStateDatabaseIntegration` 在三库实际执行 |
+| 排队期间收窄 IP 白名单后仍发送 | 最终资格复核接收真实客户端 IP，并重读当前 Token 白名单；无有效 IP 或不在新范围内拒绝整个请求，不能通过换渠道绕过。Service 正式反例及 `TestGatewayQueuedTokenIPRevocationPreventsSendAndDebit` 验证零发送、零预扣及资源释放 |
+| 手动预览在索引落后时错误显示合格 | 数据库元数据不能单独授予资格；只有统一选择器发现并确认的候选才合格，索引未更新的 Entry 标为 snapshot_stale。正式测试覆盖能力已发布但选择索引尚未看到的窗口 |
+| 保存 Token 设置后仍显示旧预览 | 子组件保存成功通知父页面，取消旧请求并清空旧预览；此前在途结果不能回填。前端从实际保存事件验证已完成和在途两种情况 |
+
+Claude 网页搜索文档明确要求后续轮次保留结果中的 encrypted_content，并描述引用中的 encrypted_index 与 cited_text；因此把它们当作可随意丢弃的展示信息不符合本计划的原生状态边界。参见 [Claude 官方搜索工具文档](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool)，2026-09-18 核对。本次只修正资格、转换和现有归属提取，不引入私有续跑协议、自动续跑或新持久化历史。
+
+五阶段状态：阶段一补齐上述正式反例；阶段二修复矛盾终态及终态后输出；阶段三统一引用累计、修正原生状态和来源语义；阶段四补 IP 最终复核；阶段五修正预览资格及保存后的失效。原来的媒体双向结构、64 个合格候选上限、首次发送后的 none/same_channel、FIFO、单队列等待、三次发送及共享重试储备均继续采用已有实现和有效回归结果。
+
+| 第二轮验证 | 结果 |
+|---|---|
+| 主模块与 RelayKit | 主模块全量测试通过；后续状态归属改动补测 service/controller 和新增网关用例。RelayKit 独立全量测试、vet/build 通过；两模块分别构建 |
+| 协议和 SDK | 基础 SDK、Python/Node 语义、云基础及云工具／断流五个入口实际执行通过；新网关反例和 Responses 引用、终态专项通过 |
+| 竞争检测 | service/router 的排队复核、预览、状态归属目标，以及 RelayKit 引用／终态／缓冲目标用例通过 |
+| 三库 | 既有计费 102 子场景、路由三库契约通过；新增原生引用归属在 SQLite/MySQL/PostgreSQL 三库均通过，不将缺 DSN 跳过计为通过 |
+| 前端 | 相关 Vitest 23 用例、类型检查、受影响文件 ESLint/Prettier、生产构建通过；Playwright 桌面／移动端 × 明／暗四场景通过 |
+| 构建与差异 | 主模块 vet、Windows 与 Linux amd64 构建通过；diff、格式、文档引用和计费实现隔离检查通过 |
+
+所有后端测试使用 60 秒超时。新日志在忽略目录 `tmp/protocol-routing-reaudit/`；未变部分复用此前有效结果。只使用本地模拟上游，未执行真实供应商兼容认证、生产压测或应用部署。当前支持范围以更新后的支持矩阵为准；没有把“存在转换路径”解释为“能保留所有供应商原生状态”。

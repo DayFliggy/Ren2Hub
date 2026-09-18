@@ -13,11 +13,13 @@
 | 工具返回图片 | Claude ↔ Responses 保留结构化文本／图片顺序、调用 ID、URL 或内联来源；Chat、Gemini 目的转换发送前拒绝，`allow` 不能字符串化媒体 |
 | 受限终态 | Responses 的 max_output_tokens/content_filter 在 JSON、SSE、SSE 缓冲 JSON 保留正文、usage 及对应原因，不计供应商故障 |
 | 供应商暂停 | Claude 原生保留 pause_turn；无法表达的跨协议响应明确失败且不重放。跨协议请求 Claude 托管搜索因可预知的暂停风险发送前拒绝 |
-| 搜索引用 | Gemini grounding、Claude URL citations、Responses URL annotations 经响应注册表保留可表达 URL、标题、文本范围和顺序；不伪造客户端 function call |
-| 托管工具 | 可表达搜索及 MCP 结果在多步转换旁传；无法保留身份、结果或续跑信息时拒绝。Chat 不能表达的内部执行轨迹产生诊断，strict 拒绝展示损失 |
+| 搜索引用 | Gemini grounding、Chat／Responses URL annotations 保留可表达 URL、标题、文本范围和顺序；Claude 带加密状态的引用需原生路径。不能将普通 URL 注释伪造成 Claude 原生引用或来源摘录 |
+| 托管工具 | 可表达搜索及 MCP 结果在多步转换旁传；Claude encrypted_content 搜索结果等续跑必需数据跨协议硬拒绝。Chat 不能表达的纯展示执行轨迹产生诊断，strict 拒绝展示损失 |
 | 流式合并 | 按块、输出项和工具身份累计；最终快照不重复追加引用或工具结果；本轮不自动续跑 |
 
 Responses 缓冲路径也保留独立 annotation、托管项及部分终态快照中的既有字段；无法识别输出身份时明确失败。流式转换和 SSE 缓冲遵守当前宿主响应大小限制，累计超限返回不可重试的转换错误。缺少终态仍属于上游响应异常；客户端取消优先归为取消，不因同时发生转换错误而改变归因。
+
+第二轮审计后，Responses 流式和缓冲共用同一输出项累计器。部分最终快照按输出身份合并，保留引用偏移；矛盾 incomplete 事件不借用 completed 状态，终态后不继续输出文本。Claude 搜索跨协议规划必须考虑原生引用与暂停能力，不仅检查输入工具是否能改名。原生引用的 encrypted_index 沿用既有状态摘要绑定和所有权复核。
 
 响应语义的无法实现项在所有策略下拒绝。`safe` 允许有诊断的纯展示损失，`strict` 拒绝所有已声明损失；`allow` 仅放宽已有实现声明的降级，不能伪造终态或绕过原生状态归属。文档／文件引用等没有等价目标表示的引用仍明确拒绝，不能由 URL 引用支持推导为所有引用均已支持。
 
