@@ -273,14 +273,14 @@ export default {
     autoRoute: {
       tabLabel: '自动路由',
       subtitle:
-        '按实验室分组，依延迟、健康度、倍率、额度等维度选出各组最优渠道',
+        '按实验室比较渠道运营指标。实际选路由令牌权限、协议能力、优先级和实时负载决定。',
       refresh: '刷新',
       updated: '更新于 {time}',
-      groupBest: '组内最优',
+      groupBest: '运营评分领先',
       health: '健康',
       cost: '成本倍率',
       quota: '上游余额',
-      score: '评分',
+      score: '运营评分',
       untested: '未测试',
       channelCount: '{count} 条渠道',
       topScore: '组内最高分',
@@ -387,6 +387,12 @@ export default {
   },
 
   routing: {
+    previewSnapshotHint:
+      '预览当前已保存的令牌配置，不发送请求。实际请求会重新检查资格和容量，加权结果可能变化。重试策略从首次真实发送后生效。',
+    snapshotTime: '快照时间：{time}',
+    selectionLayer: '渠道优先级 {priority} · 手动顺序 {position}',
+    loadRatio: '当前负载 {value}%',
+    snapshotRank: '本次快照顺序 {rank} · 权重 {weight}',
     title: '令牌路由',
     subtitle:
       '管理当前令牌的手动渠道顺序和静态预览。保存后仍需后端能力开启才会参与请求调度。',

@@ -279,14 +279,14 @@ export default {
     autoRoute: {
       tabLabel: 'Auto Route',
       subtitle:
-        'Channels are grouped by model lab; each group ranks its best channel by latency, health, cost, quota and more',
+        'Compare channel operating metrics by model lab. Token access, protocol support, priority and current load determine actual routing.',
       refresh: 'Refresh',
       updated: 'Updated {time}',
-      groupBest: 'Group best',
+      groupBest: 'Leading operating score',
       health: 'Health',
       cost: 'Cost multiplier',
       quota: 'Upstream quota',
-      score: 'Score',
+      score: 'Operating score',
       untested: 'untested',
       channelCount: '{count} channels',
       topScore: 'Best score in group',
@@ -395,6 +395,12 @@ export default {
   },
 
   routing: {
+    previewSnapshotHint:
+      'Preview the saved token configuration without sending a request. Access and capacity are checked again during execution; weighted choices may change. Retry policy starts after the first upstream send.',
+    snapshotTime: 'Snapshot: {time}',
+    selectionLayer: 'Channel priority {priority} · Manual position {position}',
+    loadRatio: 'Current load {value}%',
+    snapshotRank: 'Snapshot rank {rank} · Weight {weight}',
     title: 'Token routing',
     subtitle:
       'Manage manual channel order and static preview for this token. Request routing remains disabled until the backend capability is enabled.',

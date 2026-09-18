@@ -75,8 +75,10 @@ describe('ChannelScoreRow', () => {
   it('crowns and announces the top-ranked channel score', () => {
     const wrapper = render()
 
-    expect(wrapper.find('[title="Group best"]').exists()).toBe(true)
-    const ring = wrapper.find(`[aria-label="Score ${entry.score}"]`)
+    expect(wrapper.find('[title="Leading operating score"]').exists()).toBe(
+      true
+    )
+    const ring = wrapper.find(`[aria-label="Operating score ${entry.score}"]`)
     expect(ring.exists()).toBe(true)
     expect(ring.text()).toContain(String(entry.score))
   })
@@ -92,6 +94,6 @@ describe('ChannelScoreRow', () => {
 
     expect(wrapper.text()).toContain('Manually disabled')
     expect(wrapper.text()).toContain('Excluded from auto routing')
-    expect(wrapper.find('[aria-label^="Score"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label^="Operating score"]').exists()).toBe(false)
   })
 })

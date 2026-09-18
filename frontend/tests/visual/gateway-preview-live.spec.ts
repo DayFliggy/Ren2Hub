@@ -209,7 +209,7 @@ test.describe('gateway real preview permissions and conversion', () => {
           '{"messages":[{"role":"user","content":"hello"}],"parallel_tool_calls":false,"temperature":0}'
         )
         const rejected = page.waitForResponse((response) =>
-          response.url().endsWith(`/profiles/${profileId}/preview`)
+          response.url().endsWith(`/tokens/${tokenId}/preview`)
         )
         await page
           .getByRole('button', { name: '运行 Preview', exact: true })
@@ -238,7 +238,7 @@ test.describe('gateway real preview permissions and conversion', () => {
         })
         await sample.fill('{"messages":[{"role":"user","content":"hello"}]}')
         const accepted = page.waitForResponse((response) =>
-          response.url().endsWith(`/profiles/${profileId}/preview`)
+          response.url().endsWith(`/tokens/${tokenId}/preview`)
         )
         await page
           .getByRole('button', { name: '运行 Preview', exact: true })

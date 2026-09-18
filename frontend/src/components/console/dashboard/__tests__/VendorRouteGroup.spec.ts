@@ -146,7 +146,7 @@ describe('VendorRouteGroup', () => {
     expect(wrapper.findAll('[title="Group best"]')).toHaveLength(0)
 
     await wrapper.find('button[aria-expanded]').trigger('click')
-    expect(wrapper.findAll('[title="Group best"]')).toHaveLength(1)
+    expect(wrapper.findAll('[title="Leading operating score"]')).toHaveLength(1)
     expect(wrapper.findAll('[data-route-channel]')).toHaveLength(
       channels.length
     )

@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
-  preview: vi.fn(),
+  previewToken: vi.fn(),
 }))
 
 vi.mock('@/api/routingApi', () => ({
@@ -239,7 +239,7 @@ beforeEach(() => {
   mocks.catalog.mockResolvedValue(catalog)
   mocks.update.mockResolvedValue(profile)
   mocks.remove.mockResolvedValue(undefined)
-  mocks.preview.mockResolvedValue(preview)
+  mocks.previewToken.mockResolvedValue(preview)
 })
 
 afterEach(() => {
@@ -275,6 +275,19 @@ function buttonByText(view: VueWrapper, text: string) {
 }
 
 describe('TokenRoutingView', () => {
+  it('previews an automatic token without creating a profile', async () => {
+    mocks.profiles.mockResolvedValueOnce([])
+    const view = await mountView()
+    await view.get('input[placeholder="gpt-5"]').setValue('gpt-5')
+    await buttonByText(view, 'Run preview').trigger('click')
+    await flushPromises()
+    expect(mocks.previewToken).toHaveBeenCalledWith(
+      11,
+      { model: 'gpt-5', path: '/v1/chat/completions' },
+      expect.any(AbortSignal)
+    )
+    expect(mocks.create).not.toHaveBeenCalled()
+  })
   it('saves reordered entries by stable channel id', async () => {
     const view = await mountView()
 
@@ -305,8 +318,8 @@ describe('TokenRoutingView', () => {
     await buttonByText(view, 'Run preview').trigger('click')
     await flushPromises()
 
-    expect(mocks.preview).toHaveBeenCalledWith(
-      1,
+    expect(mocks.previewToken).toHaveBeenCalledWith(
+      11,
       {
         model: 'gpt-5',
         path: '/v1/chat/completions',
@@ -329,7 +342,7 @@ describe('TokenRoutingView', () => {
       true
     )
 
-    mocks.preview.mockRejectedValueOnce(new ApiError('preview failed'))
+    mocks.previewToken.mockRejectedValueOnce(new ApiError('preview failed'))
     await buttonByText(view, 'Run preview').trigger('click')
     await flushPromises()
 
@@ -364,7 +377,7 @@ describe('TokenRoutingView', () => {
         to: 'gemini',
       },
     ]
-    mocks.preview.mockResolvedValueOnce(blocked)
+    mocks.previewToken.mockResolvedValueOnce(blocked)
     const view = await mountView()
     await view.get('input[placeholder="gpt-5"]').setValue('gpt-5')
     await view
@@ -372,8 +385,8 @@ describe('TokenRoutingView', () => {
       .setValue('{"stream":true,"parallel_tool_calls":false}')
     await buttonByText(view, 'Run preview').trigger('click')
     await flushPromises()
-    expect(mocks.preview).toHaveBeenCalledWith(
-      1,
+    expect(mocks.previewToken).toHaveBeenCalledWith(
+      11,
       {
         model: 'gpt-5',
         path: '/v1/chat/completions',
@@ -405,7 +418,7 @@ describe('TokenRoutingView', () => {
       await buttonByText(view, 'Run preview').trigger('click')
       await flushPromises()
     }
-    expect(mocks.preview).not.toHaveBeenCalled()
+    expect(mocks.previewToken).not.toHaveBeenCalled()
   })
 
   it('requires a reload after a version conflict', async () => {
@@ -434,12 +447,12 @@ describe('TokenRoutingView', () => {
     await flushPromises()
 
     expect(mocks.remove).toHaveBeenCalledWith(1)
-    expect(view.text()).toContain('Create routing profile')
+    expect(view.text()).toContain('Run preview')
   })
 
   it('does not apply a preview that resolves after the profile is deleted', async () => {
     let resolvePreview: (value: RoutePreview) => void = () => undefined
-    mocks.preview.mockImplementationOnce(
+    mocks.previewToken.mockImplementationOnce(
       () =>
         new Promise<RoutePreview>((resolve) => {
           resolvePreview = resolve
@@ -453,7 +466,7 @@ describe('TokenRoutingView', () => {
     resolvePreview(preview)
     await flushPromises()
 
-    expect(view.text()).toContain('Create routing profile')
+    expect(view.text()).toContain('Run preview')
     expect(view.find('[data-testid="route-preview-health"]').exists()).toBe(
       false
     )

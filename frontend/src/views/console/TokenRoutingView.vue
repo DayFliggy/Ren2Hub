@@ -435,7 +435,7 @@ function healthTone(state: RouteHealthState): 'success' | 'warning' | 'danger' {
 }
 
 async function runPreview(): Promise<void> {
-  if (!profileView.value || !model.value.trim() || !path.value.trim()) return
+  if (!tokenId.value || !model.value.trim() || !path.value.trim()) return
   preview.value = null
   let request: Record<string, unknown> | undefined
   if (requestSample.value.trim()) {
@@ -450,12 +450,12 @@ async function runPreview(): Promise<void> {
       return
     }
   }
-  const profileID = profileView.value.profile.id
+  const requestedTokenID = tokenId.value
   loadingPreview.value = true
   preview.value = null
   const result = await previewRequest.run((signal) =>
-    routingApi.preview(
-      profileID,
+    routingApi.previewToken(
+      requestedTokenID,
       {
         model: model.value.trim(),
         path: path.value.trim(),
@@ -850,7 +850,7 @@ onMounted(() => void load())
       </ConsoleCard>
 
       <ConsoleCard :title="t('routing.previewTitle')">
-        <div v-if="!profileView" class="space-y-4">
+        <div v-if="!profileView && groups.length" class="mb-4 space-y-4">
           <p class="text-sm text-[var(--text-tertiary)]">
             {{ t('routing.createHint') }}
           </p>
@@ -859,7 +859,10 @@ onMounted(() => void load())
             {{ t('routing.createProfile') }}
           </ConsoleButton>
         </div>
-        <template v-else>
+        <template v-if="!loading">
+          <p class="mb-4 text-sm text-[var(--text-tertiary)]">
+            {{ t('routing.previewSnapshotHint') }}
+          </p>
           <div class="grid gap-4 md:grid-cols-2">
             <FormField :label="t('routing.modelLabel')">
               <TextInput v-model="model" placeholder="gpt-5" />
@@ -895,6 +898,11 @@ onMounted(() => void load())
             style="border-color: var(--border-subtle)"
           >
             <div class="flex flex-wrap items-center gap-2 text-sm">
+              <span v-if="preview.generated_at">{{
+                t('routing.snapshotTime', {
+                  time: new Date(preview.generated_at).toLocaleTimeString(),
+                })
+              }}</span>
               <StatusChip tone="info">{{ preview.selection_mode }}</StatusChip>
               <StatusChip v-if="preview.preferred_channel_id" tone="success">{{
                 t('routing.preferred', { id: preview.preferred_channel_id })
@@ -978,7 +986,7 @@ onMounted(() => void load())
             <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <div
                 v-for="entry in preview.entries"
-                :key="entry.entry_id"
+                :key="entry.channel_id"
                 class="min-w-0 border p-3"
                 style="border-color: var(--border-subtle)"
               >
@@ -996,6 +1004,41 @@ onMounted(() => void load())
                     }}
                   </StatusChip>
                 </div>
+                <p class="mt-2 text-xs text-[var(--text-tertiary)]">
+                  {{
+                    t('routing.selectionLayer', {
+                      priority: entry.priority ?? 0,
+                      position: entry.position,
+                    })
+                  }}
+                </p>
+                <p
+                  v-if="
+                    preview.candidate_channel_ids.includes(entry.channel_id)
+                  "
+                  class="mt-1 text-xs text-[var(--text-tertiary)]"
+                >
+                  {{
+                    t('routing.snapshotRank', {
+                      rank:
+                        preview.candidate_channel_ids.indexOf(
+                          entry.channel_id
+                        ) + 1,
+                      weight:
+                        entry.score_breakdown?.effective_weight ?? entry.weight,
+                    })
+                  }}
+                </p>
+                <p
+                  v-if="entry.score_breakdown"
+                  class="mt-1 text-xs text-[var(--text-tertiary)]"
+                >
+                  {{
+                    t('routing.loadRatio', {
+                      value: Math.round(entry.score_breakdown.load_ratio * 100),
+                    })
+                  }}
+                </p>
                 <div
                   v-if="entry.conversion_plan"
                   class="mt-3 border-t pt-3 text-xs"

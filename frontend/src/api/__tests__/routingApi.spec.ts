@@ -242,6 +242,64 @@ describe('routing API contracts', () => {
     expect(parsed.entries[0].health.state).toBe('closed')
   })
 
+  it('accepts automatic previews without profile or entry identities', () => {
+    const parsed = parseRoutePreview({
+      token_id: 11,
+      mode: 'auto_lab',
+      preview_id: 'snapshot',
+      generated_at: 1789700000000,
+      profile_id: 0,
+      profile_version: 0,
+      request_model: 'gpt-5',
+      normalized_model: 'gpt-5',
+      path: '/v1/chat/completions',
+      endpoint_type: 'openai',
+      entries: [202, 101].map((id) => ({
+        entry_id: 0,
+        channel_id: id,
+        position: 0,
+        priority: 2,
+        weight: 10,
+        request_model: 'gpt-5',
+        actual_model: 'gpt-5',
+        lab_slug: 'openai',
+        snapshot_version: 1,
+        catalog_version: 'fixture',
+        capability_state: 'eligible',
+        conversion_plan: {
+          from: 'openai',
+          to: 'openai',
+          native: true,
+          policy: 'safe',
+          stream_supported: true,
+        },
+        diagnostics: [],
+        health: {
+          state: 'closed',
+          failure_count: 0,
+          cooldown_until: 0,
+          health_epoch: 1,
+          last_latency_ms: 0,
+          first_token_latency_ms: 0,
+          updated_at: 0,
+        },
+      })),
+      candidate_channel_ids: [202, 101],
+      preferred_channel_id: 202,
+      selection_mode: 'weighted',
+      filter_reason_counts: {},
+      has_mixed: false,
+      runtime_recheck_required: true,
+      runtime_recheck_reasons: ['admission_capacity'],
+      live_selection: false,
+      request_requirements: requestRequirements,
+      conversion_policy: 'safe',
+    })
+    expect(parsed.profile_id).toBe(0)
+    expect(parsed.mode).toBe('auto_lab')
+    expect(parsed.candidate_channel_ids).toEqual([202, 101])
+  })
+
   it('rejects unknown capability and health states', () => {
     const response = {
       profile_id: 1,

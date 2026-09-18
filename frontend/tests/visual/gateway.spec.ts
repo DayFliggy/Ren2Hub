@@ -418,7 +418,7 @@ for (const theme of ['light', 'dark'] as const) {
       const sample = page.getByTestId('route-preview-request')
       await sample.fill('{"stream":true,"parallel_tool_calls":false,"top_p":0}')
       const request = page.waitForRequest((request) =>
-        request.url().endsWith('/profiles/1/preview')
+        request.url().endsWith('/tokens/7/preview')
       )
       await page
         .getByRole('button', { name: '运行 Preview', exact: true })

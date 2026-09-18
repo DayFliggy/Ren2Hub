@@ -352,6 +352,17 @@ function parseCatalog(value: unknown): RouteCatalog {
   }
 }
 
+function parseRouteScore(value: unknown, endpoint: string) {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  return {
+    effective_weight: requiredStrictNumber(value.effective_weight, endpoint),
+    load_ratio: requiredStrictNumber(value.load_ratio, endpoint),
+    load_bucket: requiredStrictInteger(value.load_bucket, endpoint),
+    sticky: requiredBoolean(value.sticky, endpoint),
+    selection_rank: requiredStrictNumber(value.selection_rank, endpoint),
+  }
+}
+
 export function parseRoutePreview(value: unknown): RoutePreview {
   const endpoint = `${ROUTING_ENDPOINT}/profiles/:id/preview`
   if (
@@ -365,6 +376,8 @@ export function parseRoutePreview(value: unknown): RoutePreview {
   if (selectionMode !== 'ordered' && selectionMode !== 'weighted')
     invalidResponse(endpoint)
   if (value.live_selection !== false) invalidResponse(endpoint)
+  const mode = value.mode === undefined ? 'manual' : value.mode
+  if (mode !== 'manual' && mode !== 'auto_lab') invalidResponse(endpoint)
   const conversionPolicy = parseConversionPolicy(
     value.conversion_policy,
     endpoint
@@ -383,6 +396,14 @@ export function parseRoutePreview(value: unknown): RoutePreview {
     if (!isRecord(entry)) invalidResponse(endpoint)
     return {
       entry_id: requiredInteger(entry.entry_id, endpoint),
+      priority:
+        entry.priority === undefined
+          ? undefined
+          : requiredStrictInteger(entry.priority, endpoint),
+      score_breakdown:
+        entry.score_breakdown === undefined
+          ? undefined
+          : parseRouteScore(entry.score_breakdown, endpoint),
       channel_id: requiredInteger(entry.channel_id, endpoint),
       position: requiredInteger(entry.position, endpoint),
       weight: requiredInteger(entry.weight, endpoint),
@@ -439,9 +460,23 @@ export function parseRoutePreview(value: unknown): RoutePreview {
     candidateChannelIDs,
     preferredChannelID,
     selectionMode,
-    endpoint
+    endpoint,
+    mode === 'auto_lab'
   )
   return {
+    token_id:
+      value.token_id === undefined
+        ? undefined
+        : requiredInteger(value.token_id, endpoint),
+    mode,
+    preview_id:
+      value.preview_id === undefined
+        ? undefined
+        : requiredString(value.preview_id, endpoint, false),
+    generated_at:
+      value.generated_at === undefined
+        ? undefined
+        : requiredInteger(value.generated_at, endpoint),
     profile_id: requiredInteger(value.profile_id, endpoint),
     profile_version: requiredInteger(value.profile_version, endpoint),
     request_model: requiredString(value.request_model, endpoint, false),
@@ -580,7 +615,8 @@ function assertRoutePreviewInvariants(
   candidateChannelIDs: number[],
   preferredChannelID: number | undefined,
   selectionMode: RoutePreview['selection_mode'],
-  endpoint: string
+  endpoint: string,
+  automatic = false
 ): void {
   if ((activeGroup === undefined) !== (policy === undefined)) {
     invalidResponse(endpoint)
@@ -596,17 +632,18 @@ function assertRoutePreviewInvariants(
   let previousChannelID = -1
   for (const entry of entries) {
     if (
-      entry.entry_id <= 0 ||
+      (!automatic && entry.entry_id <= 0) ||
       entry.channel_id <= 0 ||
       entry.position < 0 ||
       entry.weight < 0 ||
-      entryIDs.has(entry.entry_id) ||
+      (!automatic && entryIDs.has(entry.entry_id)) ||
       channelIDs.has(entry.channel_id)
     ) {
       invalidResponse(endpoint)
     }
-    if (entry.position < previousPosition) invalidResponse(endpoint)
-    if (entry.position === previousPosition) {
+    if (!automatic && entry.position < previousPosition)
+      invalidResponse(endpoint)
+    if (!automatic && entry.position === previousPosition) {
       if (selectionMode === 'weighted' && entry.weight > previousWeight) {
         invalidResponse(endpoint)
       }
@@ -659,6 +696,19 @@ function parseStringArray(value: unknown, endpoint: string): string[] {
 }
 
 export const routingApi = {
+  async previewToken(
+    id: number,
+    input: { model: string; path: string; request?: Record<string, unknown> },
+    signal?: AbortSignal
+  ): Promise<RoutePreview> {
+    return parseRoutePreview(
+      await api.post<unknown>(
+        `${ROUTING_ENDPOINT}/tokens/${id}/preview`,
+        input,
+        signal ? { signal } : undefined
+      )
+    )
+  },
   async profiles(): Promise<RouteProfileView[]> {
     const endpoint = `${ROUTING_ENDPOINT}/profiles`
     const value = await api.get<unknown>(endpoint)

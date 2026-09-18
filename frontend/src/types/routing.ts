@@ -125,6 +125,14 @@ export interface RouteConversionPlan {
 }
 
 export interface RoutePreviewEntry {
+  priority?: number
+  score_breakdown?: {
+    effective_weight: number
+    load_ratio: number
+    load_bucket: number
+    sticky: boolean
+    selection_rank: number
+  }
   entry_id: number
   channel_id: number
   position: number
@@ -152,6 +160,10 @@ export interface RouteHealthSummary {
 }
 
 export interface RoutePreview {
+  token_id?: number
+  mode?: RouteMode
+  preview_id?: string
+  generated_at?: number
   profile_id: number
   profile_version: number
   request_model: string
