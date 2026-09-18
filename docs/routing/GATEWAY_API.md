@@ -18,6 +18,18 @@
 
 Root 可以管理所有用户；其他管理员只能查看和修改角色低于自己的用户。`/self` 始终读取登录用户，不接受用户 ID。凭据列表返回已通过可信路径登记的身份，不返回密钥、指纹或可变密钥索引；它不是当前启用密钥列表。
 
+`GET /api/gateway/metrics` 的 schema v2 增加 `route_decision_events_dropped_total`，表示本实例有界路由日志队列的累计丢弃数，进程重启后清零。
+
+## Token 路由预览
+
+`POST /api/routing/tokens/:id/preview` 使用用户认证、Token 所有权检查、敏感接口限频和禁止缓存。请求为 `{ "model": "gpt-4o-mini", "path": "/v1/chat/completions", "request": { "model": "gpt-4o-mini", "messages": [{ "role": "user", "content": "示例" }] } }`；request 可省略，样本最多 1 MiB。正文模型必须匹配 model，Gemini 同时校验 URL 模型及生成操作；Compact 的已登记模型后缀按既有语义比较。
+
+沿用统一 success/data 包装。data 保留旧 Profile 预览字段，新增 `token_id`、`mode`（auto_lab/manual）、服务端生成的 `preview_id`、毫秒时间戳 `generated_at`；`profile_version` 为配置版本，无 Profile 时为 0。每条 entry 增加 `priority`、`score_breakdown`，继续提供 conversion_plan、diagnostics、filter_reason。自动候选没有 Entry，entry_id 为 0。
+
+`candidate_channel_ids` 按当前资格和实际排序生成，`preferred_channel_id` 仅表示此快照首选。`runtime_recheck_required` 始终为 true，reasons 包括价格、实时额度、安全策略、准入容量、Provider 限制、配置版本、亲和及必要的状态归属。无 Profile 的预览不创建 Profile；不发送请求、不预扣、不持有 Permit、不占用健康探测。
+
+旧 `POST /api/routing/profiles/:id/preview` 保留所有权检查并委托 Token 预览。预览样本只在当前请求内分析，不加入路由日志或持久化历史。
+
 ## 配置契约
 
 `PUT /config` 保留原有全量更新契约和乐观版本检查。新客户端先 GET 并保留所有字段；旧客户端省略本轮新增的四个字段时保留数据库当前值，显式 null 返回 400。`channel_rates` 按渠道 ID 配置，该渠道的所有模型共享额度。`credential_rates` 按稳定凭据 UUID 配置，同一渠道内使用该凭据的请求共享额度。两个范围原子准入。

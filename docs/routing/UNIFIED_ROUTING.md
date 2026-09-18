@@ -24,6 +24,10 @@ Token 的所有权、启停、到期、额度、IP 和模型限制继续生效�
 
 ## 候选排序、排队和故障转移
 
+请求正文的语义需求在选渠前分析并保存在当前请求内，文本、Compact、JSON 媒体／Embedding／Rerank／legacy 及 multipart 音频／图像复用已有解析边界。`SelectLiveTokenRoute` 先按当前能力和权限筛选，再执行双向转换规划，最后排序并截断为最多 64 个合格渠道。已确定不兼容的渠道不占调度上限。该计划不取得槽位、不初始化凭据、不下载媒体、不预扣；不能替代发送前复核。
+
+手动 `none` 与 `same_channel` 从首次真实发送开始生效。此前可以在活动组启用的 Entry 内跳过不兼容、超价或无法准入的候选；此后 `none` 不再发送，`same_channel` 只重试实际首次发送的渠道。保留 position、总发送预算、共享重试储备及最多一次渠道排队。排队后还会核对当前 Token 转换策略；策略变化以 `conversion_policy_changed` 拒绝旧计划。Token 缓存保存转换策略，旧缓存缺失该字段时从数据库读取。
+
 权限、Token 模型权限、状态绑定、原任务渠道、模型能力、转换策略与价格资格始终先于负载优化。自动动态排序保持 `priority → 10% 负载桶 → 软亲和 → RequestID 稳定加权顺序`；关闭动态排序时保持静态顺序。手动路由 position 是硬边界；负载均衡仅在首个合格 position 层加权选择，不跨层重排。
 
 先立即尝试允许候选，全部繁忙后最多进入一个渠道队列。扫描期间变为空闲的候选可重新立即获取；池已回收且快照容量为零不代表不可用，最终仍由 manager 授槽。排队只比较仍合格、未冷却、队列未满的繁忙候选：自动动态模式在相同 priority 和负载桶内、手动负载均衡在相同 position 内按 `queued / effective_capacity` 较小者优先，平局保留原顺序。静态和非负载均衡手动模式保留原顺序。
@@ -44,6 +48,10 @@ Retry-After 只作用于所属渠道或已有渠道内 credential/模型健康�
 
 ## 协议和重试
 
+生成终态由 RelayKit 的 `ResponseTermination` 表达，与 `StreamOutcome` 的传输结果分开。正常限长／内容过滤保留内容及用量，作为受限结束，不重试、不处罚健康；供应商暂停在原生协议保留，跨协议无法表达时返回 `response_conversion_unrepresentable`。未知 incomplete 不猜测 completed 或可重试。转换错误归为 `local_convert`，禁止替代请求；已提交输出只按目标协议报错，不追加另一份成功响应。无终态 EOF 仍为失败。
+
+Responses SSE 缓冲到 JSON 复用完整 SSE 事件解码器，支持多行 data、CRLF/LF/CR、BOM、注释、事件名及 EOF 最后完整事件，遵守整事件大小上限，不向 JSON 客户端写心跳。已观测用量继续传入既有账务流程，终态、引用与诊断不写入账务用量字段。
+
 Chat、Responses、Claude、Gemini、图像、音频、Embedding、Rerank、Realtime、Compact、Midjourney、Suno 和视频均使用同一选渠与准入边界。查询类接口保留自己的任务所有权校验；后续任务操作绑定原任务渠道，并重新检查当前能力和用户资格。
 
 Compact 保留精确模型和基础模型两个阶段。每阶段分别排除已用 Key，能力健康按该阶段实际匹配的能力模型记录，逻辑计费模型保持独立。总尝试次数受系统上限及手动重试策略约束。已输出响应后不得切换上游或拼接第二份响应。
@@ -63,10 +71,13 @@ SSE 按事件空行组装多行 `data:`，支持 CRLF/LF/CR、注释、事件名
 - `/api/status.frontend_capabilities` 开放 `api_tokens`、`token_private_routing`。
 - `/api/token/*` 返回 `type: auto | manual`，不返回旧分组字段。
 - `/api/routing/*` 管理 Profile、候选目录和静态预览；预览不发送请求、不预扣、不持有 Permit。
+- `POST /api/routing/tokens/:id/preview` 覆盖自动、手动及无 Profile 的旧 Token，旧 Profile 预览委托同一入口。预览复用实际静态资格及排序，输出快照标识、时间、配置版本和动态复核提示；加权顺序不是下一次请求承诺。
 - `/api/channel/` 管理实际容量和渠道倍率；独立 `/route-policy` 接口已移除。
 - `/api/pricing` 返回模型基础价格和可用渠道倍率区间，取消旧组过滤和组倍率响应。
 
 不再使用 TOKEN_PRIVATE_ROUTING_ENABLED、ROUTE_LIVE_*、ROUTE_SHADOW_* 或 ROUTE_SCORE_* 灰度开关。能力刷新任务继续使用 ROUTE_CAPABILITY_REFRESH_*；ROUTE_DECISION_EVENT_QUEUE_SIZE 控制有界决策日志队列。
+
+`route_decision.attempts` 增加 `termination` 和 `response_diagnostics`（仅稳定 code/path）。网关指标增加 `route_decision_events_dropped_total`。这些诊断不记录请求正文、引用文本、凭据或完整上游错误。自动路由运营页面的分数仅用于运营比较，实际选择继续遵守后端排序。
 
 ## 数据和验证
 

@@ -4,6 +4,19 @@
 
 ## 文本入口
 
+2026-09-18 协议与路由改进的验证记录见 [本轮记录](PROTOCOL_ROUTING_IMPROVEMENTS_2026_09_18.md)，该记录只代表本地模拟验收和源码发布，不代表应用部署。
+
+| 新增语义合同 | 支持范围与拒绝边界 |
+|---|---|
+| 工具返回图片 | Claude ↔ Responses 保留结构化文本／图片顺序、调用 ID、URL 或内联来源；Chat、Gemini 目的转换发送前拒绝，`allow` 不能字符串化媒体 |
+| 受限终态 | Responses 的 max_output_tokens/content_filter 在 JSON、SSE、SSE 缓冲 JSON 保留正文、usage 及对应原因，不计供应商故障 |
+| 供应商暂停 | Claude 原生保留 pause_turn；无法表达的跨协议响应明确失败且不重放。跨协议请求 Claude 托管搜索因可预知的暂停风险发送前拒绝 |
+| 搜索引用 | Gemini grounding、Claude URL citations、Responses URL annotations 经响应注册表保留可表达 URL、标题、文本范围和顺序；不伪造客户端 function call |
+| 托管工具 | 可表达搜索及 MCP 结果在多步转换旁传；无法保留身份、结果或续跑信息时拒绝。Chat 不能表达的内部执行轨迹产生诊断，strict 拒绝展示损失 |
+| 流式合并 | 按块、输出项和工具身份累计；最终快照不重复追加引用或工具结果；本轮不自动续跑 |
+
+响应语义的无法实现项在所有策略下拒绝。`safe` 允许有诊断的纯展示损失，`strict` 拒绝所有已声明损失；`allow` 仅放宽已有实现声明的降级，不能伪造终态或绕过原生状态归属。文档／文件引用等没有等价目标表示的引用仍明确拒绝，不能由 URL 引用支持推导为所有引用均已支持。
+
 Chat/Responses/Claude/Gemini 分别指 OpenAI Chat、OpenAI Responses、Anthropic Messages、generateContent。`转 X` 使用 RelayKit，`投影` 使用供应商专用数据结构，`拒绝` 指预扣和发送前拒绝。实际特性仍受策略、模型映射、权限和配置约束。
 
 | 适配器或模型域 | Chat | Responses | Claude | Gemini |
