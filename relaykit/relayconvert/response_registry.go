@@ -2,6 +2,7 @@ package relayconvert
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"reflect"
@@ -72,10 +73,14 @@ type responseConverterRoute struct {
 }
 
 type ResponseStreamOptions struct {
-	ID           string
-	Model        string
-	Created      int64
-	IncludeUsage bool
+	// MaxInputBytes bounds all source frames retained/processed by a conversion
+	// session, including text, arguments, citations and final snapshots. Zero
+	// uses 128 MiB, matching the hosting gateway's default SSE event bound.
+	MaxInputBytes int64
+	ID            string
+	Model         string
+	Created       int64
+	IncludeUsage  bool
 }
 
 type ResponseStreamState struct {
@@ -95,6 +100,10 @@ type ResponseStreamState struct {
 	artifacts          *responseArtifactStreamState
 	fallbackInfo       *convmeta.Values
 	conversionError    error
+	choiceTerminations map[int]types.ResponseTermination
+	maxInputBytes      int64
+	inputBytes         int64
+	terminalSnapshot   string
 }
 
 const (
@@ -289,8 +298,9 @@ func NewResponseStreamState(from types.RelayFormat, target types.RelayFormat, op
 	}
 	if from == target {
 		return &ResponseStreamState{
-			From: from,
-			To:   target,
+			From:          from,
+			To:            target,
+			maxInputBytes: responseStreamInputLimit(options),
 		}, nil
 	}
 
@@ -327,9 +337,7 @@ func ConvertStreamResponseChunk(c context.Context, info convmeta.Meta, state *Re
 		return nil, fmt.Errorf("response stream converter %q expects %s response, got %s", state.Converter, state.From, from)
 	}
 	terminal := TerminationFromResponse(response)
-	if terminal.IsTerminal() {
-		state.termination = terminal
-	}
+	state.observeResponseTermination(response)
 	state.rememberUsage(canonicalUsageFromResponse(response))
 	if err := ValidateResponseTermination(state.From, state.To, terminal); err != nil {
 		state.conversionError = err
@@ -339,6 +347,26 @@ func ConvertStreamResponseChunk(c context.Context, info convmeta.Meta, state *Re
 		usage := canonicalUsageFromResponse(response)
 		state.rememberUsage(usage)
 		return responseStreamResults(state, streamValuesFromAny(response), usage), nil
+	}
+	if err := validateResponseAnnotations(response); err != nil {
+		state.conversionError = err
+		return nil, err
+	}
+	encoded, err := kitutil.Marshal(response)
+	if err != nil {
+		state.conversionError = err
+		return nil, err
+	}
+	if int64(len(encoded)) > state.maxInputBytes-state.inputBytes {
+		state.conversionError = fmt.Errorf("response_conversion_limit: stream conversion input exceeds configured byte limit")
+		return nil, state.conversionError
+	}
+	state.inputBytes += int64(len(encoded))
+	if duplicate, err := state.checkTerminalSnapshot(response); duplicate || err != nil {
+		if err != nil {
+			state.conversionError = err
+		}
+		return nil, err
 	}
 
 	if info == nil {
@@ -502,6 +530,9 @@ func executeResponseSpec(c context.Context, info convmeta.Meta, from types.Relay
 
 func executeResponseSteps(c context.Context, info convmeta.Meta, from types.RelayFormat, target types.RelayFormat, response any, converter string, quality ResponseConverterQuality, specs []ResponseConverterSpec) (*ResponseResult, error) {
 	termination := TerminationFromResponse(response)
+	if from != target && !termination.IsTerminal() {
+		return nil, ErrResponseTerminalMissing
+	}
 	if err := ValidateResponseTermination(from, target, termination); err != nil {
 		return nil, err
 	}
@@ -567,6 +598,23 @@ func executeStatelessStreamResponseSpec(c context.Context, info convmeta.Meta, f
 	if err := ValidateResponseTermination(from, target, termination); err != nil {
 		return nil, err
 	}
+	if err := validateResponseAnnotations(response); err != nil {
+		return nil, err
+	}
+	_, artifacts := extractResponseArtifacts(from, response)
+	switch value := response.(type) {
+	case *dto.ClaudeResponse:
+		if value.ContentBlock != nil && isClaudeHostedResponse(value.ContentBlock.Type) {
+			return nil, fmt.Errorf("hosted_response_state_required: use stateful response conversion")
+		}
+	case *dto.ResponsesStreamResponse:
+		if value.Item != nil && isResponsesHostedResponse(value.Item.Type) {
+			return nil, fmt.Errorf("hosted_response_state_required: use stateful response conversion")
+		}
+	}
+	if len(artifacts.claude) > 0 || len(artifacts.responses) > 0 || len(artifacts.diagnostics) > 0 {
+		return nil, fmt.Errorf("response_artifact_state_required: use stateful response conversion")
+	}
 	steps, err := expandResponseConverterSteps(spec)
 	if err != nil {
 		return nil, err
@@ -620,14 +668,51 @@ func newResponseStreamStateFromSpec(from types.RelayFormat, target types.RelayFo
 		})
 	}
 	return &ResponseStreamState{
-		From:       from,
-		To:         target,
-		Converter:  spec.ID,
-		Quality:    spec.Quality,
-		Steps:      resultSteps,
-		specs:      steps,
-		stepStates: stepStates,
+		From:          from,
+		To:            target,
+		Converter:     spec.ID,
+		Quality:       spec.Quality,
+		Steps:         resultSteps,
+		specs:         steps,
+		stepStates:    stepStates,
+		maxInputBytes: responseStreamInputLimit(options),
 	}, nil
+}
+
+func responseStreamInputLimit(options ResponseStreamOptions) int64 {
+	if options.MaxInputBytes > 0 {
+		return options.MaxInputBytes
+	}
+	return 128 << 20
+}
+
+func (s *ResponseStreamState) checkTerminalSnapshot(response any) (bool, error) {
+	var event *dto.ResponsesStreamResponse
+	switch value := response.(type) {
+	case *dto.ResponsesStreamResponse:
+		event = value
+	case dto.ResponsesStreamResponse:
+		event = &value
+	default:
+		return false, nil
+	}
+	if !TerminationFromResponse(event).IsTerminal() {
+		return false, nil
+	}
+	encoded, err := kitutil.Marshal(event.Response)
+	if err != nil {
+		return false, err
+	}
+	digest := sha256.Sum256(encoded)
+	snapshot := string(digest[:])
+	if s.terminalSnapshot != "" {
+		if s.terminalSnapshot != snapshot {
+			return false, fmt.Errorf("response_terminal_conflict: upstream changed its terminal snapshot")
+		}
+		return true, nil
+	}
+	s.terminalSnapshot = snapshot
+	return false, nil
 }
 
 func executeResponseStreamSteps(c context.Context, info convmeta.Meta, state *ResponseStreamState, values []any, start int) ([]any, *dto.Usage, error) {

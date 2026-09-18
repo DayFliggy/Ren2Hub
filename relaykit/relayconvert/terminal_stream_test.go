@@ -70,6 +70,11 @@ func TestGeminiToOpenAIStatefulStreamTerminal(t *testing.T) {
 			}
 
 			finalResults, err := FinalizeStreamResponse(nil, info, state)
+			if tt.name == "truncated stream" {
+				require.ErrorContains(t, err, "stream_terminal_missing")
+				assert.Empty(t, finalResults)
+				return
+			}
 			require.NoError(t, err)
 			finalFinishes := terminalTestFinishedChatChunks(t, finalResults)
 			if tt.wantFinishOnFinalize {

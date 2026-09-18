@@ -2,6 +2,7 @@ package relayconvert
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -166,6 +167,15 @@ func AnalyzeRequest(request any) (RequestRequirements, error) {
 	if err := req.inspectProjectionSemantics(payload); err != nil {
 		return RequestRequirements{}, err
 	}
+	if hasToolMedia(req) && (format == types.RelayFormatClaude || format == types.RelayFormatOpenAIResponses) {
+		if _, err := convertToolMediaHistory(payload, format); err != nil {
+			var loss *types.ConversionLossError
+			if !errors.As(err, &loss) {
+				return RequestRequirements{}, err
+			}
+			req.Diagnostics = append(req.Diagnostics, loss.Diagnostics...)
+		}
+	}
 	req.NativeRequired = len(req.NativeState) != 0
 	req.ToolIdentity = analyzeToolIdentity(request)
 	return req, nil
@@ -274,6 +284,14 @@ func PlanConversion(req RequestRequirements, target types.RelayFormat, policy ty
 		}
 		diagnostic.From, diagnostic.To = req.Format, target
 		plan.Diagnostics = append(plan.Diagnostics, diagnostic)
+	}
+	// Missing implementations and identity/status loss are hard capabilities,
+	// not opt-in degradation. Native forwarding returned above.
+	for _, diagnostic := range plan.Diagnostics {
+		if strings.HasPrefix(diagnostic.Code, "tool_media_") || strings.HasPrefix(diagnostic.Code, "tool_result_identity_") ||
+			(hasToolMedia(req) && diagnostic.Code == "tool_result_status_not_portable") {
+			return plan, &types.ConversionLossError{Diagnostics: plan.Diagnostics}
+		}
 	}
 	return plan, types.RejectConversionLoss(policy, plan.Diagnostics)
 }
@@ -434,6 +452,7 @@ func (r *RequestRequirements) inspectContentContext(value any, path string, tool
 			r.inspectContentContext(item, fmt.Sprintf("%s[%d]", path, index), toolResult)
 		}
 	case map[string]any:
+		toolResult = toolResult || (r.Format == types.RelayFormatOpenAI && value["role"] == "tool")
 		before := len(r.Media)
 		r.inspectMedia(value, path)
 		if len(r.Media) > before {
@@ -470,9 +489,9 @@ func (r *RequestRequirements) inspectContentContext(value any, path string, tool
 				r.Features = appendUnique(r.Features, "multimodal")
 			}
 		}
-		for _, field := range []string{"content", "output", "parts", "source", "image_url", "file", "input_audio", "tool_calls", "function"} {
+		for _, field := range []string{"content", "output", "parts", "source", "image_url", "file", "input_audio", "tool_calls", "function", "functionResponse"} {
 			if nested, ok := value[field]; ok {
-				r.inspectContentContext(nested, path+"."+field, toolResult || kind == "tool_result" || kind == "function_call_output")
+				r.inspectContentContext(nested, path+"."+field, toolResult || kind == "tool_result" || kind == "function_call_output" || field == "functionResponse")
 			}
 		}
 	}

@@ -12,11 +12,12 @@ import (
 )
 
 type responseArtifactStreamState struct {
-	claude    map[int]dto.ClaudeMediaMessage
-	arguments map[int]string
-	responses map[string]dto.ResponsesOutput
-	order     []string
-	seen      map[string]string
+	claude      map[int]dto.ClaudeMediaMessage
+	arguments   map[int]string
+	responses   map[string]dto.ResponsesOutput
+	order       []string
+	seen        map[string]string
+	diagnostics []types.ConversionDiagnostic
 }
 
 func (s *ResponseStreamState) convertHostedStreamArtifacts(response any, info convmeta.Meta) ([]any, error) {
@@ -83,6 +84,10 @@ func (s *ResponseStreamState) convertHostedStreamArtifacts(response any, info co
 		}
 	case *dto.GeminiChatResponse:
 		_, set := extractResponseArtifacts(s.From, r)
+		if len(set.diagnostics) > 0 {
+			artifacts.diagnostics = set.diagnostics
+			changed = true
+		}
 		for _, item := range set.responses {
 			if _, found := artifacts.responses[item.item.ID]; !found {
 				artifacts.order = append(artifacts.order, item.item.ID)
@@ -94,7 +99,7 @@ func (s *ResponseStreamState) convertHostedStreamArtifacts(response any, info co
 	if !changed {
 		return nil, nil
 	}
-	set := responseArtifacts{from: s.From}
+	set := responseArtifacts{from: s.From, diagnostics: artifacts.diagnostics}
 	indexes := make([]int, 0, len(artifacts.claude))
 	for index := range artifacts.claude {
 		indexes = append(indexes, index)

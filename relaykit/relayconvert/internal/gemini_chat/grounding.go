@@ -93,8 +93,11 @@ func groundingAnnotationsToChat(metadata *dto.GeminiGroundingMetadata, content d
 }
 
 func GroundingAnnotationsToChat(metadata *dto.GeminiGroundingMetadata, content dto.GeminiChatContent, rendered string) ([]byte, error) {
-	if metadata == nil || len(metadata.GroundingChunks) == 0 || len(metadata.GroundingSupports) == 0 {
+	if metadata == nil || len(metadata.GroundingSupports) == 0 {
 		return nil, nil
+	}
+	if len(metadata.GroundingChunks) == 0 {
+		return nil, fmt.Errorf("citation_source_unrepresentable: grounding support has no source chunks")
 	}
 	var chunks []geminiGroundingChunk
 	if err := kitutil.Unmarshal(metadata.GroundingChunks, &chunks); err != nil {
@@ -209,7 +212,11 @@ func (s *geminiGroundingStreamCandidate) groundingAnnotations(
 		return nil
 	}
 	s.appendGroundingChunks(metadata)
-	if len(s.chunks) == 0 || len(metadata.GroundingSupports) == 0 {
+	if len(metadata.GroundingSupports) == 0 {
+		return nil
+	}
+	if len(s.chunks) == 0 {
+		s.err = fmt.Errorf("citation_source_unrepresentable: grounding support has no source chunks")
 		return nil
 	}
 	var supports []geminiGroundingSupport
@@ -228,7 +235,8 @@ func (s *geminiGroundingStreamCandidate) groundingAnnotations(
 		}
 		start, end, ok := s.groundingRuneRange(partIndex, support.Segment.StartIndex, support.Segment.EndIndex)
 		if !ok {
-			continue
+			s.err = fmt.Errorf("citation_range_unrepresentable: invalid grounding range")
+			return nil
 		}
 		part := s.parts[partIndex]
 		if support.Segment.Text != "" && part.text.String()[support.Segment.StartIndex:support.Segment.EndIndex] != support.Segment.Text {

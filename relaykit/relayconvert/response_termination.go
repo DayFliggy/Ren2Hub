@@ -1,10 +1,13 @@
 package relayconvert
 
 import (
+	"errors"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/types"
 )
+
+var ErrResponseTerminalMissing = errors.New("response_terminal_missing: upstream response lacks a generation terminal")
 
 // TerminationFromResponse extracts only generation semantics. An absent terminal
 // is not an EOF success and must not be used to finalize an interrupted stream.
@@ -23,13 +26,27 @@ func TerminationFromResponse(response any) types.ResponseTermination {
 	case dto.GeminiChatResponse:
 		return TerminationFromResponse(&r)
 	case *dto.OpenAITextResponse:
-		if r != nil && len(r.Choices) > 0 {
-			return types.ClassifyResponseTermination(types.RelayFormatOpenAI, "", r.Choices[0].FinishReason)
+		if r == nil {
+			break
 		}
+		terminals := make([]types.ResponseTermination, 0, len(r.Choices))
+		for _, choice := range r.Choices {
+			terminals = append(terminals, types.ClassifyResponseTermination(types.RelayFormatOpenAI, "", choice.FinishReason))
+		}
+		return aggregateResponseTerminations(terminals)
 	case *dto.ChatCompletionsStreamResponse:
-		if r != nil && len(r.Choices) > 0 && r.Choices[0].FinishReason != nil {
-			return types.ClassifyResponseTermination(types.RelayFormatOpenAI, "", *r.Choices[0].FinishReason)
+		if r == nil {
+			break
 		}
+		terminals := make([]types.ResponseTermination, 0, len(r.Choices))
+		for _, choice := range r.Choices {
+			reason := ""
+			if choice.FinishReason != nil {
+				reason = *choice.FinishReason
+			}
+			terminals = append(terminals, types.ClassifyResponseTermination(types.RelayFormatOpenAI, "", reason))
+		}
+		return aggregateResponseTerminations(terminals)
 	case *dto.OpenAIResponsesResponse:
 		if r == nil {
 			break
@@ -47,6 +64,12 @@ func TerminationFromResponse(response any) types.ResponseTermination {
 		}
 		switch r.Type {
 		case "response.completed", "response.done", "response.incomplete", "response.failed", "response.cancelled", "response.canceled", "response.error", "error":
+			switch r.Type {
+			case "response.failed", "response.error", "error":
+				return types.ResponseTermination{Kind: types.ResponseFailed}
+			case "response.cancelled", "response.canceled":
+				return types.ResponseTermination{Kind: types.ResponseCancelled}
+			}
 			status, reason := "", ""
 			if r.Response != nil {
 				_ = kitutil.Unmarshal(r.Response.Status, &status)
@@ -66,6 +89,9 @@ func TerminationFromResponse(response any) types.ResponseTermination {
 					status = "failed"
 				}
 			}
+			if status == "in_progress" || status == "queued" {
+				return types.ResponseTermination{Kind: types.ResponseUnknown}
+			}
 			return types.ClassifyResponseTermination(types.RelayFormatOpenAIResponses, status, reason)
 		}
 	case *dto.ClaudeResponse:
@@ -81,11 +107,94 @@ func TerminationFromResponse(response any) types.ResponseTermination {
 		}
 		return types.ClassifyResponseTermination(types.RelayFormatClaude, "", reason)
 	case *dto.GeminiChatResponse:
-		if r != nil && len(r.Candidates) > 0 && r.Candidates[0].FinishReason != nil {
-			return types.ClassifyResponseTermination(types.RelayFormatGemini, "", *r.Candidates[0].FinishReason)
+		if r == nil {
+			break
 		}
+		if len(r.Candidates) == 0 && r.PromptFeedback != nil && r.PromptFeedback.BlockReason != nil {
+			return types.ClassifyResponseTermination(types.RelayFormatGemini, "", *r.PromptFeedback.BlockReason)
+		}
+		terminals := make([]types.ResponseTermination, 0, len(r.Candidates))
+		for _, candidate := range r.Candidates {
+			reason := ""
+			if candidate.FinishReason != nil {
+				reason = *candidate.FinishReason
+			}
+			terminals = append(terminals, types.ClassifyResponseTermination(types.RelayFormatGemini, "", reason))
+		}
+		return aggregateResponseTerminations(terminals)
 	}
 	return types.ResponseTermination{}
+}
+
+func aggregateResponseTerminations(terminals []types.ResponseTermination) types.ResponseTermination {
+	var result types.ResponseTermination
+	pending := false
+	for _, terminal := range terminals {
+		if !terminal.IsTerminal() {
+			pending = true
+			continue
+		}
+		if !terminal.IsSuccessful() {
+			return terminal
+		}
+		if result.Kind != types.ResponseLimited {
+			result = terminal
+		}
+	}
+	if pending {
+		return types.ResponseTermination{}
+	}
+	return result
+}
+
+func (s *ResponseStreamState) observeResponseTermination(response any) {
+	terminal := TerminationFromResponse(response)
+	if terminal.IsTerminal() && !terminal.IsSuccessful() {
+		s.termination = terminal
+		return
+	}
+	if s.choiceTerminations == nil {
+		s.choiceTerminations = make(map[int]types.ResponseTermination)
+	}
+	remember := func(index int, terminal types.ResponseTermination) {
+		if _, exists := s.choiceTerminations[index]; !exists || terminal.IsTerminal() {
+			s.choiceTerminations[index] = terminal
+		}
+	}
+	switch r := response.(type) {
+	case dto.ChatCompletionsStreamResponse:
+		s.observeResponseTermination(&r)
+		return
+	case dto.GeminiChatResponse:
+		s.observeResponseTermination(&r)
+		return
+	case *dto.ChatCompletionsStreamResponse:
+		for _, choice := range r.Choices {
+			reason := ""
+			if choice.FinishReason != nil {
+				reason = *choice.FinishReason
+			}
+			remember(choice.Index, types.ClassifyResponseTermination(types.RelayFormatOpenAI, "", reason))
+		}
+	case *dto.GeminiChatResponse:
+		for _, candidate := range r.Candidates {
+			reason := ""
+			if candidate.FinishReason != nil {
+				reason = *candidate.FinishReason
+			}
+			remember(int(candidate.Index), types.ClassifyResponseTermination(types.RelayFormatGemini, "", reason))
+		}
+	default:
+		if terminal.IsTerminal() {
+			s.termination = terminal
+		}
+		return
+	}
+	terminals := make([]types.ResponseTermination, 0, len(s.choiceTerminations))
+	for _, terminal := range s.choiceTerminations {
+		terminals = append(terminals, terminal)
+	}
+	s.termination = aggregateResponseTerminations(terminals)
 }
 
 // ValidateResponseTermination rejects terminal states that the target cannot

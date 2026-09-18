@@ -2,6 +2,7 @@ package relayconvert
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -11,6 +12,8 @@ import (
 )
 
 type StreamOutcome string
+
+var ErrStreamTerminalMissing = errors.New("stream_terminal_missing: all upstream candidates must have an explicit terminal")
 
 const (
 	StreamOutcomeCompleted  StreamOutcome = "completed"
@@ -33,6 +36,9 @@ func FinalizeStreamResponseWithOutcome(ctx context.Context, info convmeta.Meta, 
 	case StreamOutcomeCompleted:
 		if state.conversionError != nil {
 			return nil, state.conversionError
+		}
+		if state.From != state.To && !state.Termination().IsTerminal() {
+			return nil, ErrStreamTerminalMissing
 		}
 		if err := ValidateResponseTermination(state.From, state.To, state.Termination()); err != nil {
 			return nil, err

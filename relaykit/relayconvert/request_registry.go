@@ -249,6 +249,10 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 	if err != nil {
 		return nil, err
 	}
+	history, err := prepareToolMediaHistory(current, requirements, target)
+	if err != nil {
+		return nil, err
+	}
 	steps := make([]RequestStep, 0, len(specs))
 	for _, spec := range specs {
 		var err error
@@ -275,7 +279,7 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 	if err := attachPortableSearch(current, requirements); err != nil {
 		return nil, err
 	}
-	if err := preserveToolMedia(request, current, from, target); err != nil {
+	if err := history.apply(current); err != nil {
 		return nil, err
 	}
 	return &RequestResult{

@@ -557,6 +557,12 @@ func (s *ResponsesToChatStreamState) keyForEvent(event *dto.ResponsesStreamRespo
 }
 
 type ResponsesBufferedAccumulator struct {
+	items                map[int]*dto.ResponsesOutput
+	itemIndexes          map[string]int
+	usage                *dto.Usage
+	err                  error
+	inputBytes           int64
+	maxInputBytes        int64
 	text                 strings.Builder
 	reasoning            strings.Builder
 	tools                []*responsesBufferedTool
@@ -573,8 +579,13 @@ type responsesBufferedTool struct {
 	Arguments strings.Builder
 }
 
-func NewResponsesBufferedAccumulator() *ResponsesBufferedAccumulator {
+func NewResponsesBufferedAccumulator(limits ...int64) *ResponsesBufferedAccumulator {
+	limit := int64(128 << 20)
+	if len(limits) > 0 && limits[0] > 0 {
+		limit = limits[0]
+	}
 	return &ResponsesBufferedAccumulator{
+		items: make(map[int]*dto.ResponsesOutput), itemIndexes: make(map[string]int), maxInputBytes: limit,
 		outputIndexToToolIdx: make(map[int]int),
 		itemIDToToolIdx:      make(map[string]int),
 		pendingByOutputIndex: make(map[int]string),
@@ -583,7 +594,44 @@ func NewResponsesBufferedAccumulator() *ResponsesBufferedAccumulator {
 }
 
 func (a *ResponsesBufferedAccumulator) ProcessEvent(event *dto.ResponsesStreamResponse) {
-	if a == nil || event == nil {
+	if a == nil || event == nil || a.err != nil {
+		return
+	}
+	if event.Response != nil && event.Response.Usage != nil {
+		a.usage = event.Response.Usage
+	}
+	raw, err := kitutil.Marshal(event)
+	if err != nil {
+		a.err = err
+		return
+	}
+	if int64(len(raw)) > a.maxInputBytes-a.inputBytes {
+		a.err = fmt.Errorf("response_conversion_limit: buffered response exceeds configured byte limit")
+		return
+	}
+	a.inputBytes += int64(len(raw))
+	if event.Response != nil && len(event.Response.Output) > 0 {
+		// Keep snapshots as another source of item metadata. A later compact
+		// terminal must not discard items present in an earlier snapshot.
+		snapshot := *event.Response
+		snapshot.Output = append([]dto.ResponsesOutput(nil), event.Response.Output...)
+		a.supplementIndexedOutput(&snapshot)
+		if a.err != nil {
+			return
+		}
+	}
+	switch event.Type {
+	case responsesEventCompleted, responsesEventDone, responsesEventIncomplete, responsesEventFailed:
+		// Fail while ProcessEvent is still inside the host's parser boundary,
+		// before it decides that a protocol terminal can be returned as success.
+		for _, item := range a.items {
+			if item.Type == "" {
+				a.err = fmt.Errorf("response output item is missing its type")
+				return
+			}
+		}
+	}
+	if a.rememberIndexedEvent(event) {
 		return
 	}
 	switch event.Type {
@@ -613,7 +661,14 @@ func (a *ResponsesBufferedAccumulator) ProcessEvent(event *dto.ResponsesStreamRe
 }
 
 func (a *ResponsesBufferedAccumulator) SupplementResponseOutput(resp *dto.OpenAIResponsesResponse) {
-	if a == nil || resp == nil || len(resp.Output) > 0 {
+	if a == nil || resp == nil {
+		return
+	}
+	if resp.Usage == nil {
+		resp.Usage = a.usage
+	}
+	if len(resp.Output) > 0 {
+		a.supplementIndexedOutput(resp)
 		return
 	}
 	resp.Output = a.BuildOutput()
@@ -640,6 +695,18 @@ func (a *ResponsesBufferedAccumulator) BuildOutput() []dto.ResponsesOutput {
 				{Type: "output_text", Text: a.text.String()},
 			},
 		})
+	}
+	indexes := make([]int, 0, len(a.items))
+	for index := range a.items {
+		indexes = append(indexes, index)
+	}
+	sort.Ints(indexes)
+	for _, index := range indexes {
+		if a.items[index].Type == "" {
+			a.err = fmt.Errorf("response output item is missing its type")
+			return nil
+		}
+		out = append(out, *a.items[index])
 	}
 	for _, tool := range a.tools {
 		if tool == nil {

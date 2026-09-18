@@ -79,6 +79,9 @@ func ChatCompletionsStreamChunkToResponsesEvents(chunk *dto.ChatCompletionsStrea
 	if chunk == nil || state == nil {
 		return nil, nil
 	}
+	if len(chunk.Choices) > 1 || len(chunk.Choices) == 1 && chunk.Choices[0].Index != 0 {
+		return nil, fmt.Errorf("Responses stream conversion cannot represent multiple choices")
+	}
 	if state.finalized {
 		return nil, fmt.Errorf("Responses stream is already finalized")
 	}

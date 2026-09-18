@@ -35,6 +35,9 @@ func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id
 	if resp == nil {
 		return nil, nil, errors.New("response is nil")
 	}
+	if len(resp.Choices) > 1 || len(resp.Choices) == 1 && resp.Choices[0].Index != 0 {
+		return nil, nil, fmt.Errorf("Responses conversion cannot represent multiple choices")
+	}
 
 	usage := UsageFromChatUsage(&resp.Usage)
 	out := &dto.OpenAIResponsesResponse{

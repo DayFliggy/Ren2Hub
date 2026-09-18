@@ -93,6 +93,12 @@ func extractResponseArtifacts(from types.RelayFormat, response any) (any, respon
 		return &clone, set
 	case *dto.GeminiChatResponse:
 		for i, candidate := range r.Candidates {
+			if candidate.GroundingMetadata != nil && len(candidate.GroundingMetadata.RetrievalQueries) > 0 {
+				set.diagnostics = append(set.diagnostics, responseArtifactDiagnostic(from, "", "retrieval_queries_omitted", fmt.Sprintf("candidates[%d].groundingMetadata.retrievalQueries", i), false))
+			}
+			if candidate.GroundingMetadata != nil && len(candidate.GroundingMetadata.SearchEntryPoint) > 0 {
+				set.diagnostics = append(set.diagnostics, responseArtifactDiagnostic(from, "", "search_presentation_omitted", fmt.Sprintf("candidates[%d].groundingMetadata.searchEntryPoint", i), false))
+			}
 			if candidate.GroundingMetadata == nil || len(candidate.GroundingMetadata.WebSearchQueries) == 0 {
 				continue
 			}
@@ -105,10 +111,13 @@ func extractResponseArtifacts(from types.RelayFormat, response any) (any, respon
 }
 
 func attachResponseArtifacts(to types.RelayFormat, response any, set responseArtifacts, info convmeta.Meta) (any, []types.ConversionDiagnostic, error) {
-	if len(set.claude) == 0 && len(set.responses) == 0 {
+	if len(set.claude) == 0 && len(set.responses) == 0 && len(set.diagnostics) == 0 {
 		return response, nil, nil
 	}
 	diagnostics := append([]types.ConversionDiagnostic(nil), set.diagnostics...)
+	for i := range diagnostics {
+		diagnostics[i].To = to
+	}
 	switch target := response.(type) {
 	case *dto.OpenAIResponsesResponse:
 		items := append([]positionedResponsesArtifact(nil), set.responses...)
@@ -150,7 +159,7 @@ func attachResponseArtifacts(to types.RelayFormat, response any, set responseArt
 					continue
 				}
 				items[index].item.Status = "completed"
-				if block.IsError != nil && *block.IsError {
+				if claudeHostedResultFailed(block) {
 					items[index].item.Status = "failed"
 				}
 				if block.Type == "mcp_tool_result" {
@@ -222,6 +231,13 @@ func attachResponseArtifacts(to types.RelayFormat, response any, set responseArt
 				if err := kitutil.Unmarshal(item.Action, &input); err != nil {
 					return nil, diagnostics, err
 				}
+				if input["type"] != "search" || item.Status == "failed" {
+					diagnostics = append(diagnostics, responseArtifactDiagnostic(set.from, to, "web_search_action_unrepresentable", path, true))
+					continue
+				}
+				if item.Status != "" {
+					diagnostics = append(diagnostics, responseArtifactDiagnostic(set.from, to, "hosted_tool_status_omitted", path+".status", false))
+				}
 				delete(input, "type")
 				blocks = append(blocks, dto.ClaudeMediaMessage{Type: "server_tool_use", Id: item.ID, Name: "web_search", Input: input})
 			case "mcp_call":
@@ -279,7 +295,9 @@ func attachResponseArtifacts(to types.RelayFormat, response any, set responseArt
 			target.Content = append(target.Content, blocks...)
 		}
 	default:
-		diagnostics = append(diagnostics, responseArtifactDiagnostic(set.from, to, "hosted_tool_event_omitted", "response.hosted_tools", false))
+		if len(set.claude) > 0 || len(set.responses) > 0 {
+			diagnostics = append(diagnostics, responseArtifactDiagnostic(set.from, to, "hosted_tool_event_omitted", "response.hosted_tools", false))
+		}
 	}
 	for _, diagnostic := range diagnostics {
 		if diagnostic.Severity == types.ConversionDiagnosticError {
@@ -292,11 +310,48 @@ func attachResponseArtifacts(to types.RelayFormat, response any, set responseArt
 	return response, diagnostics, nil
 }
 
+func claudeHostedResultFailed(block dto.ClaudeMediaMessage) bool {
+	if block.IsError != nil && *block.IsError || block.ErrorCode != "" {
+		return true
+	}
+	raw, err := kitutil.Marshal(block.Content)
+	if err != nil {
+		return false
+	}
+	var object map[string]any
+	if kitutil.Unmarshal(raw, &object) != nil {
+		return false
+	}
+	kind, _ := object["type"].(string)
+	return strings.HasSuffix(kind, "_error") || object["error_code"] != nil
+}
+
 // A malformed annotation cannot be silently dropped in any conversion policy.
 func validateResponseAnnotations(response any) error {
 	var rawValues []json.RawMessage
 	claude := false
 	switch r := response.(type) {
+	case dto.ResponsesStreamResponse:
+		return validateResponseAnnotations(&r)
+	case *dto.ResponsesStreamResponse:
+		if r.Response != nil {
+			if err := validateResponseAnnotations(r.Response); err != nil {
+				return err
+			}
+		}
+		if r.Item != nil {
+			return validateResponseAnnotations(&dto.OpenAIResponsesResponse{Output: []dto.ResponsesOutput{*r.Item}})
+		}
+		if len(r.Annotation) > 0 {
+			rawValues = append(rawValues, append(append([]byte{'['}, r.Annotation...), ']'))
+		}
+	case dto.ChatCompletionsStreamResponse:
+		return validateResponseAnnotations(&r)
+	case *dto.ChatCompletionsStreamResponse:
+		for _, choice := range r.Choices {
+			rawValues = append(rawValues, choice.Delta.Annotations)
+		}
+
 	case dto.ClaudeResponse:
 		return validateResponseAnnotations(&r)
 	case dto.OpenAITextResponse:
@@ -344,6 +399,13 @@ func validateResponseAnnotations(response any) error {
 			for _, value := range values {
 				if value["type"] != "url_citation" {
 					return fmt.Errorf("citation_source_unrepresentable: native citation requires its original protocol")
+				}
+				citation := value
+				if nested, ok := value["url_citation"].(map[string]any); ok {
+					citation = nested
+				}
+				if url, ok := citation["url"].(string); !ok || strings.TrimSpace(url) == "" {
+					return fmt.Errorf("citation_source_unrepresentable: URL citation has no URL")
 				}
 			}
 		}

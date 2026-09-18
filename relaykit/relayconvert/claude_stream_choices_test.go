@@ -73,7 +73,7 @@ func TestClaudeResponseConversionRejectsMultipleChoices(t *testing.T) {
 		chat := &dto.OpenAITextResponse{}
 		chunk := &dto.ChatCompletionsStreamResponse{}
 		for _, index := range indexes {
-			chat.Choices = append(chat.Choices, dto.OpenAITextResponseChoice{Index: index, Message: dto.Message{Role: "assistant", Content: "choice"}})
+			chat.Choices = append(chat.Choices, dto.OpenAITextResponseChoice{Index: index, Message: dto.Message{Role: "assistant", Content: "choice"}, FinishReason: "stop"})
 			text := "choice"
 			chunk.Choices = append(chunk.Choices, dto.ChatCompletionsStreamResponseChoice{Index: index, Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Content: &text}})
 		}

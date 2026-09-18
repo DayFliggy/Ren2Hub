@@ -107,7 +107,7 @@ func TestOpenAIToGeminiRejectsInvalidOrUnfinishedToolArguments(t *testing.T) {
 	_, err = ConvertStreamResponseChunk(nil, nil, state, &dto.ChatCompletionsStreamResponse{Choices: []dto.ChatCompletionsStreamResponseChoice{{Delta: dto.ChatCompletionsStreamResponseChoiceDelta{ToolCalls: []dto.ToolCallResponse{geminiTestToolDelta(0, "call_unfinished", "lookup", `{}`)}}}}})
 	require.NoError(t, err)
 	results, err := FinalizeStreamResponse(nil, nil, state)
-	require.ErrorContains(t, err, "incomplete streamed tool call")
+	require.ErrorContains(t, err, "stream_terminal_missing")
 	assert.Empty(t, results, "finalization cannot invent a successful tool terminal")
 }
 
