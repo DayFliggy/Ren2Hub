@@ -273,6 +273,31 @@ func TestRecheckLiveRouteCandidateRejectsDisabledUserAfterSelection(t *testing.T
 	assert.Equal(t, RouteFilterTokenForbidden, LiveRouteQualificationReason(err))
 }
 
+func TestRecheckLiveRouteCandidateRejectsTightenedTokenIPScope(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	input := LiveRouteCandidateQualificationRequest{
+		Context: context.Background(), RouteSource: RouteSourceAutoLab,
+		UserID: userID, TokenID: tokenID, ChannelID: channelID,
+		RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
+		ExpectedSnapshotVersion: 1, ExpectedCatalogVersion: "preview-catalog",
+	}
+	require.NoError(t, RecheckLiveRouteCandidate(input))
+	// A token that had no IP restriction is restricted while the request waits.
+	// Missing peer evidence cannot authorize the previously accepted request.
+	require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Update("allow_ips", "192.0.2.0/24").Error)
+	err := RecheckLiveRouteCandidate(input)
+	assert.Equal(t, RouteFilterTokenForbidden, LiveRouteQualificationReason(err))
+	assert.False(t, LiveRouteQualificationAllowsFailover(err), "switching channels cannot restore token IP permission")
+	input.ClientIP = "192.0.2.12"
+	require.NoError(t, RecheckLiveRouteCandidate(input))
+	input.ClientIP = "203.0.113.12"
+	err = RecheckLiveRouteCandidate(input)
+	assert.Equal(t, RouteFilterTokenForbidden, LiveRouteQualificationReason(err))
+	assert.False(t, LiveRouteQualificationAllowsFailover(err))
+}
+
 func TestRecheckLiveRouteCandidateRejectsCurrentPathCapability(t *testing.T) {
 	db := setupRouteProfileTest(t)
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"net"
 	"strings"
 	"time"
 
@@ -83,6 +84,7 @@ func LiveRouteQualificationAllowsFailover(err error) bool {
 }
 
 type LiveRouteCandidateQualificationRequest struct {
+	ClientIP                 string
 	IsPlayground             bool
 	SpecificChannelID        int
 	PermissionModel          string
@@ -176,6 +178,12 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 		}
 		if !routeTokenUsable(token) {
 			return &LiveRouteQualificationError{Reason: RouteFilterTokenForbidden}
+		}
+		if allowedIPs := token.GetIpLimits(); len(allowedIPs) > 0 {
+			clientIP := net.ParseIP(input.ClientIP)
+			if clientIP == nil || !common.IsIpInCIDRList(clientIP, allowedIPs) {
+				return &LiveRouteQualificationError{Reason: RouteFilterTokenForbidden}
+			}
 		}
 		if input.ExpectedConversionPolicy != "" {
 			currentPolicy := types.ConversionLossPolicy(token.ConversionPolicy)

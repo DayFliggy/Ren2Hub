@@ -27,12 +27,38 @@ func TestGatewayStateOutputAndContinuationUseSameOwnership(t *testing.T) {
 	model.DB = db
 	t.Cleanup(func() { model.DB = previous; sqlDB, _ := db.DB(); _ = sqlDB.Close() })
 	require.NoError(t, db.AutoMigrate(&model.GatewayStateBinding{}, &model.GatewayCredential{}))
+	assertGatewayStateOutputOwnership(t, db)
+}
+
+func assertGatewayStateOutputOwnership(t *testing.T, db *gorm.DB) {
+	t.Helper()
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
 	c.Set("id", 1)
 	c.Set("token_id", 2)
 	c.Set("gateway_state_output", &gatewayStateOutput{owner: model.GatewayStateBinding{UserID: 1, TokenID: 2, ChannelID: 3, CredentialID: "identity", EndpointID: "endpoint", TransportID: "transport"}, signatures: make(map[int]string)})
 	require.NoError(t, BindGatewayOutput(c, []byte(`{"type":"response.created","response":{"object":"response","id":"resp_bound","output":[]}}`)))
+	require.NoError(t, BindGatewayOutput(c, []byte(`{"type":"content_block_delta","index":1,"delta":{"type":"citations_delta","citation":{"type":"web_search_result_location","encrypted_index":"citation-bound"}}}`)))
+	_, err := model.FindGatewayState(context.Background(), 1, 2, "encrypted_index", "citation-bound")
+	require.NoError(t, err)
+	_, err = model.FindGatewayState(context.Background(), 1, 4, "encrypted_index", "citation-bound")
+	require.ErrorIs(t, err, model.ErrGatewayStateUnknown)
+	for _, tokenID := range []int{2, 4} {
+		citationContext, _ := gin.CreateTestContext(httptest.NewRecorder())
+		citationContext.Set("id", 1)
+		citationContext.Set("token_id", tokenID)
+		citationContext.Request = httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"messages":[{"role":"assistant","content":[{"type":"text","text":"answer","citations":[{"type":"web_search_result_location","encrypted_index":"citation-bound"}]}]}]}`))
+		citationContext.Request.Header.Set("Content-Type", "application/json")
+		owner, err := ResolveGatewayRequestState(citationContext)
+		common.CleanupBodyStorage(citationContext)
+		if tokenID == 2 {
+			require.NoError(t, err)
+			require.NotNil(t, owner)
+			assert.Equal(t, 3, owner.ChannelID)
+		} else {
+			require.ErrorIs(t, err, model.ErrGatewayStateUnknown)
+		}
+	}
 	require.NoError(t, BindGatewayOutput(c, []byte(`{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"first"}}`)))
 	require.NoError(t, BindGatewayOutput(c, []byte(`{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"second"}}`)))
 	_, err = model.FindGatewayState(context.Background(), 1, 2, "signature", "firstsecond")
@@ -53,6 +79,7 @@ func TestGatewayStateOutputAndContinuationUseSameOwnership(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), "resp_bound")
 	assert.NotContains(t, string(encoded), "firstsecond")
+	assert.NotContains(t, string(encoded), "citation-bound")
 
 	shortExpiry := time.Now().Add(time.Hour).Unix()
 	require.NoError(t, BindGatewayOutput(c, []byte(fmt.Sprintf(`{"type":"response.completed","response":{"object":"response","id":"resp_bound","status":"completed","expires_at":%d}}`, shortExpiry))))

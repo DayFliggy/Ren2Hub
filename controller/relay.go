@@ -833,6 +833,7 @@ func acquireRouteAttemptPermit(c *gin.Context, info *relaycommon.RelayInfo, chan
 		return releaseRejectedRouteAttempt(c, permit, err)
 	}
 	finalQualification := service.LiveRouteCandidateQualificationRequest{
+		ClientIP:                 c.ClientIP(),
 		Context:                  c.Request.Context(),
 		RouteSource:              selection.Source,
 		UserID:                   info.UserId,

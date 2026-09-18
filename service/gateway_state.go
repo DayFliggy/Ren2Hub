@@ -86,10 +86,10 @@ func stateReferences(payload map[string]any, output bool) []gatewayStateReferenc
 					add("file_uri", uri)
 				}
 			}
-			for _, name := range []string{"encrypted_content", "thoughtSignature", "signature"} {
+			for _, name := range []string{"encrypted_content", "encrypted_index", "thoughtSignature", "signature"} {
 				add(name, item[name])
 			}
-			for _, name := range []string{"content", "parts", "message", "content_block", "delta", "item", "source", "file", "fileData", "file_data"} {
+			for _, name := range []string{"content", "parts", "message", "content_block", "delta", "item", "source", "file", "fileData", "file_data", "citations", "citation", "annotations", "url_citation"} {
 				inspect(item[name])
 			}
 		}
