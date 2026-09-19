@@ -14,7 +14,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -24,7 +23,7 @@ func setupGatewayMidjourney(t *testing.T, upstream http.HandlerFunc) (string, st
 	t.Helper()
 	url, key, other := setupGatewaySDKWithUpstream(t, upstream)
 	require.NoError(t, model.DB.AutoMigrate(&model.Midjourney{}))
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"mj_imagine":0.001,"mj_upscale":0.001,"mj_upload":0.001,"swap_face":0.001}`))
+	require.NoError(t, publishGatewayFixturePrices(`{"mj_imagine":0.001,"mj_upscale":0.001,"mj_upload":0.001,"swap_face":0.001}`, false))
 	for _, id := range []int{1, 4} {
 		channel, err := model.GetChannelById(id, true)
 		require.NoError(t, err)
@@ -46,7 +45,7 @@ func TestGatewayMidjourneyAcceptedSubmissionAccounting(t *testing.T) {
 				assert.Equal(t, "local-test-key", r.Header.Get("mj-api-secret"))
 				var user model.User
 				if assert.NoError(t, model.DB.First(&user, 1).Error) {
-					assert.Less(t, user.Quota, 10000000, "reservation must precede the actual send")
+					assert.Less(t, user.Quota, common.Quota(10000000), "reservation must precede the actual send")
 				}
 				_, _ = fmt.Fprintf(w, `{"code":%d,"result":"provider-mj","description":"queued","extension":false}`, proxyCode)
 			})
@@ -62,12 +61,13 @@ func TestGatewayMidjourneyAcceptedSubmissionAccounting(t *testing.T) {
 			assert.Empty(t, task.PrivateData.Key)
 			var recovery model.BillingRecovery
 			require.NoError(t, model.DB.First(&recovery, "request_id = ?", task.PrivateData.SubmissionRequestID).Error)
-			assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
-			assert.Equal(t, model.BillingRecoveryStateCompleted, recovery.ConsumptionState)
+			assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
+			assert.Equal(t, model.BillingRecoveryStateTaskPending, recovery.ConsumptionState)
 			var user model.User
 			require.NoError(t, model.DB.First(&user, task.UserId).Error)
-			assert.Equal(t, 1, user.RequestCount)
-			assert.Equal(t, task.Quota, user.UsedQuota)
+			assert.Zero(t, user.RequestCount)
+			assert.Zero(t, user.UsedQuota)
+			assert.EqualValues(t, task.Quota, user.ReservedQuota)
 			assert.EqualValues(t, 1, sends.Load())
 		})
 	}
@@ -136,7 +136,7 @@ func TestGatewayMidjourneyPersistenceAndSettlementRecovery(t *testing.T) {
 				if failure == "task" && tx.Statement.Table == "midjourneys" || failure == "log" && tx.Statement.Table == "logs" {
 					tx.AddError(assert.AnError)
 				}
-				if adjustment, ok := tx.Statement.Dest.(*model.BillingRecoveryAdjustment); ok && failure == "settlement" && adjustment.Operation == model.BillingRecoveryOperationSettle {
+				if adjustment, ok := tx.Statement.Dest.(*model.BillingEvent); ok && failure == "settlement" && adjustment.Operation == model.BillingRecoveryOperationSettle {
 					tx.AddError(assert.AnError)
 				}
 			}))
@@ -150,6 +150,12 @@ func TestGatewayMidjourneyPersistenceAndSettlementRecovery(t *testing.T) {
 				require.Equal(t, 200, code, body)
 				var task model.Midjourney
 				require.NoError(t, model.DB.First(&task).Error)
+				from := task.Status
+				task.Status, task.Progress = "SUCCESS", "100%"
+				won, err := service.CompleteMidjourneyBilling(context.Background(), &task, from)
+				require.True(t, won)
+				require.ErrorIs(t, err, assert.AnError)
+
 				ready, err := model.MidjourneySubmissionReady(context.Background(), &task)
 				require.NoError(t, err)
 				assert.False(t, ready)
@@ -167,11 +173,11 @@ func TestGatewayMidjourneyPersistenceAndSettlementRecovery(t *testing.T) {
 				require.NoError(t, model.DB.First(&task).Error)
 				ready, err := model.MidjourneySubmissionReady(context.Background(), &task)
 				require.NoError(t, err)
-				assert.True(t, ready)
+				assert.False(t, ready)
 				var user model.User
 				require.NoError(t, model.DB.First(&user, task.UserId).Error)
 				assert.Equal(t, 1, user.RequestCount)
-				assert.Equal(t, task.Quota, user.UsedQuota)
+				assert.EqualValues(t, task.Quota, user.UsedQuota)
 			}
 		})
 	}
@@ -254,8 +260,9 @@ func TestGatewayMidjourneyExplicitRejectionCanAdvance(t *testing.T) {
 	assert.Equal(t, 4, tasks[0].ChannelId)
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 1).Error)
-	assert.Equal(t, 1, user.RequestCount)
-	assert.Equal(t, tasks[0].Quota, user.UsedQuota)
+	assert.Zero(t, user.RequestCount)
+	assert.Zero(t, user.UsedQuota)
+	assert.EqualValues(t, tasks[0].Quota, user.ReservedQuota)
 	var health model.ChannelHealth
 	require.NoError(t, model.DB.First(&health, "channel_id = ? AND cooldown_until > ?", 1, 0).Error)
 	assert.GreaterOrEqual(t, health.CooldownUntil, started.Add(120*time.Second).Unix())
@@ -297,7 +304,7 @@ func TestGatewayMidjourneyIgnoresRetiredBillingPreferenceAndRefundsWallet(t *tes
 		_, _ = io.WriteString(w, `{"code":1,"result":"wallet-job"}`)
 	})
 	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", 1).Updates(map[string]any{
-		"quota": 10000, "setting": `{"billing_preference":"subscription_only"}`,
+		"available_quota": 10000, "setting": `{"billing_preference":"subscription_only"}`,
 	}).Error)
 	code, body := postGatewayTask(t, url, key, "/mj/submit/imagine", `{"prompt":"fixture"}`)
 	require.Equal(t, 200, code, body)
@@ -307,8 +314,9 @@ func TestGatewayMidjourneyIgnoresRetiredBillingPreferenceAndRefundsWallet(t *tes
 	var chargedUser model.User
 	require.NoError(t, model.DB.First(&chargedUser, 1).Error)
 	require.Positive(t, task.Quota)
-	assert.Equal(t, 10000-task.Quota, chargedUser.Quota)
-	assert.Equal(t, task.Quota, chargedUser.UsedQuota)
+	assert.EqualValues(t, 10000-task.Quota, chargedUser.Quota)
+	assert.Zero(t, chargedUser.UsedQuota)
+	assert.EqualValues(t, task.Quota, chargedUser.ReservedQuota)
 	from := task.Status
 	task.Status, task.Progress, task.FailReason = "FAILURE", "100%", "provider rejected job"
 	won, err := service.CompleteMidjourneyBilling(context.Background(), &task, from)
@@ -319,9 +327,9 @@ func TestGatewayMidjourneyIgnoresRetiredBillingPreferenceAndRefundsWallet(t *tes
 	assert.False(t, won)
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 1).Error)
-	assert.Equal(t, 10000, user.Quota)
+	assert.EqualValues(t, 10000, user.Quota)
 	assert.Zero(t, user.UsedQuota)
-	assert.Equal(t, 1, user.RequestCount)
+	assert.Zero(t, user.RequestCount)
 }
 
 func TestGatewayMidjourneyFourthAvailableCandidateAndCancellation(t *testing.T) {
@@ -425,15 +433,16 @@ func TestGatewayMidjourneyKnownAcceptancePersistsAfterClientCancellation(t *test
 	var task model.Midjourney
 	require.Eventually(t, func() bool {
 		var recovery model.BillingRecovery
-		return model.DB.First(&task).Error == nil && model.DB.First(&recovery, "request_id = ?", task.PrivateData.SubmissionRequestID).Error == nil && recovery.Status == model.BillingRecoveryStatusSettled && recovery.ConsumptionState == model.BillingRecoveryStateCompleted
+		return model.DB.First(&task).Error == nil && model.DB.First(&recovery, "request_id = ?", task.PrivateData.SubmissionRequestID).Error == nil && recovery.Status == model.BillingRecoveryStatusActive && recovery.ConsumptionState == model.BillingRecoveryStateTaskPending
 	}, 2*time.Second, 10*time.Millisecond)
 	assert.Equal(t, "accepted-before-cancel", task.MjId)
 	assert.NotEmpty(t, task.PrivateData.CredentialID)
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 1).Error)
-	assert.Equal(t, 1, user.RequestCount)
-	assert.Equal(t, task.Quota, user.UsedQuota)
-	assert.Equal(t, 10000000-task.Quota, user.Quota)
+	assert.Zero(t, user.RequestCount)
+	assert.Zero(t, user.UsedQuota)
+	assert.EqualValues(t, task.Quota, user.ReservedQuota)
+	assert.EqualValues(t, 10000000-task.Quota, user.Quota)
 	assert.EqualValues(t, 1, sends.Load())
 }
 

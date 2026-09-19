@@ -2,166 +2,168 @@ import { api } from './client'
 import {
   invalidResponse,
   isRecord,
+  requiredStrictInteger,
   requiredString,
-  requiredStrictNumber,
 } from './contracts'
+import { isDecimal } from '@/utils/decimal'
 
-export const MODEL_PRICE_KEYS = [
-  'ModelPrice',
-  'ModelRatio',
-  'CompletionRatio',
-  'CacheRatio',
-  'ImageRatio',
-  'AudioRatio',
-  'AudioCompletionRatio',
+export const PRICE_UNITS = [
+  'per_million_tokens',
+  'per_thousand_calls',
+  'per_call',
+  'per_image',
+  'per_second',
 ] as const
-export type ModelPriceKey = (typeof MODEL_PRICE_KEYS)[number]
-export type ModelPriceMaps = Partial<
-  Record<ModelPriceKey, Record<string, number>>
->
-export type ModelPriceFields = Record<ModelPriceKey, string>
-export type ModelPriceMode = 'per-token' | 'per-request'
-
-function priceForModel(
-  map: Record<string, number> | undefined,
-  name: string
-): number | undefined {
-  return map && Object.hasOwn(map, name) ? map[name] : undefined
+export const PRICE_QUANTITIES = [
+  'p',
+  'c',
+  'cr',
+  'cc',
+  'cc1h',
+  'img',
+  'img_o',
+  'ai',
+  'ao',
+  'calls',
+  'images',
+  'seconds',
+] as const
+export type PriceMode = 'unit_price' | 'expression' | 'free'
+export interface UnitPrice {
+  quantity: string
+  unit: (typeof PRICE_UNITS)[number]
+  price: string
+}
+export interface PriceVersion {
+  id: number
+  model: string
+  mode: PriceMode
+  prices: UnitPrice[]
+  expression?: string
+  created_at: number
+  hash: string
+}
+export interface PriceSeed {
+  prices: PriceVersion[]
+  unconfigured: string[]
+  source: string
 }
 
-export function parseModelPriceOptions(value: unknown): ModelPriceMaps {
-  const endpoint = '/api/option/'
-  if (!Array.isArray(value)) invalidResponse(endpoint)
-  const maps: ModelPriceMaps = {}
-  for (const option of value) {
-    if (!isRecord(option)) invalidResponse(endpoint)
-    const key = requiredString(option.key, endpoint)
-    if (!MODEL_PRICE_KEYS.includes(key as ModelPriceKey)) continue
-    if (Object.hasOwn(maps, key)) invalidResponse(endpoint)
-    const raw = requiredString(option.value, endpoint)
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(raw)
-    } catch {
-      invalidResponse(endpoint)
-    }
-    if (!isRecord(parsed)) invalidResponse(endpoint)
-    const values: Record<string, number> = {}
-    for (const [name, value] of Object.entries(parsed)) {
-      const price = requiredStrictNumber(value, endpoint)
-      if (price < 0) invalidResponse(endpoint)
-      Object.defineProperty(values, name, {
-        value: price,
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      })
-    }
-    maps[key as ModelPriceKey] = values
-  }
-  return maps
-}
-
-export function modelPriceFields(
-  maps: ModelPriceMaps,
-  name: string
-): ModelPriceFields {
-  return Object.fromEntries(
-    MODEL_PRICE_KEYS.map((key) => [
-      key,
-      priceForModel(maps[key], name)?.toString() ?? '',
-    ])
-  ) as ModelPriceFields
-}
-
-export function validateModelPriceFields(fields: ModelPriceFields): void {
-  for (const value of Object.values(fields)) {
+export function validatePriceVersion(
+  value: Pick<PriceVersion, 'mode' | 'prices' | 'expression'>
+): void {
+  if (!['unit_price', 'expression', 'free'].includes(value.mode))
+    throw new Error('Invalid price mode')
+  if (value.mode === 'free' && (value.prices.length || value.expression))
+    throw new Error('Free mode cannot contain charges')
+  if (value.mode === 'expression' && !value.expression?.trim())
+    throw new Error('Expression is required')
+  if (value.mode === 'unit_price' && (!value.prices.length || value.expression))
+    throw new Error('Unit prices are required')
+  if ((value.expression?.length ?? 0) > 16384)
+    throw new Error('Expression is too long')
+  const seen = new Set<string>()
+  for (const price of value.prices) {
     if (
-      value.trim() &&
-      (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()) ||
-        !Number.isFinite(Number(value)) ||
-        Number(value) < 0)
+      !(PRICE_QUANTITIES as readonly string[]).includes(price.quantity) &&
+      !/^tool:[a-zA-Z0-9_.:-]+$/.test(price.quantity)
     )
-      throw new Error('priceInvalidNumber')
-  }
-}
-
-export interface ModelPriceEdit {
-  initial: ModelPriceMaps
-  originalName: string
-  name: string
-  fields: ModelPriceFields
-  mode: ModelPriceMode
-  dirty: boolean
-}
-
-// Merge only this model into a fresh options snapshot. Concurrent target edits
-// are rejected; unrelated model changes and options this form never loaded survive.
-export function mergeModelPriceEdit(
-  latest: ModelPriceMaps,
-  edit: ModelPriceEdit
-): Partial<Record<ModelPriceKey, string>> {
-  validateModelPriceFields(edit.fields)
-  const patch: Partial<Record<ModelPriceKey, string>> = {}
-  const renamed = Boolean(edit.originalName && edit.originalName !== edit.name)
-  if (!edit.dirty && !renamed) return patch
-  for (const key of MODEL_PRICE_KEYS) {
-    const initial = edit.initial[key]
-    if (!initial) continue
-    const current = latest[key]
-    if (!current) throw new Error('priceUnavailable')
-    const oldValue = edit.originalName
-      ? priceForModel(initial, edit.originalName)
-      : undefined
+      throw new Error('Unknown quantity')
+    if (!PRICE_UNITS.includes(price.unit) || !isDecimal(price.price))
+      throw new Error('Invalid unit price')
+    const tokenQuantity =
+      !['calls', 'images', 'seconds'].includes(price.quantity) &&
+      !price.quantity.startsWith('tool:')
     if (
-      edit.originalName &&
-      priceForModel(current, edit.originalName) !== oldValue
+      price.quantity.length > 128 ||
+      (value.mode === 'expression' && tokenQuantity)
     )
-      throw new Error('priceConcurrentChange')
-    const raw = edit.fields[key].trim()
-    const active =
-      edit.mode === 'per-request' ? key === 'ModelPrice' : key !== 'ModelPrice'
-    const value = edit.dirty
-      ? active && raw !== ''
-        ? Number(raw)
-        : undefined
-      : oldValue
-    if (edit.name !== edit.originalName && Object.hasOwn(current, edit.name)) {
-      if (value !== undefined || renamed) throw new Error('priceTargetConflict')
-      continue
-    }
-    const next = { ...current }
-    if (renamed) delete next[edit.originalName]
-    if (value === undefined) delete next[edit.name]
-    else
-      Object.defineProperty(next, edit.name, {
-        value,
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      })
-    if (JSON.stringify(next) !== JSON.stringify(current))
-      patch[key] = JSON.stringify(next)
+      throw new Error('Expression owns token pricing')
+    const expectedUnit = tokenQuantity
+      ? 'per_million_tokens'
+      : (
+          {
+            calls: 'per_call',
+            images: 'per_image',
+            seconds: 'per_second',
+          } as Record<string, string>
+        )[price.quantity]
+    if (
+      price.quantity.startsWith('tool:')
+        ? !['per_call', 'per_thousand_calls'].includes(price.unit)
+        : price.unit !== expectedUnit
+    )
+      throw new Error('Incompatible quantity and unit')
+    if (seen.has(price.quantity)) throw new Error('Duplicate quantity')
+    seen.add(price.quantity)
   }
-  return patch
+}
+
+export function parsePriceVersion(
+  value: unknown,
+  endpoint: string
+): PriceVersion {
+  if (!isRecord(value) || !Array.isArray(value.prices))
+    invalidResponse(endpoint)
+  const result: PriceVersion = {
+    id: requiredStrictInteger(value.id, endpoint),
+    model: requiredString(value.model, endpoint, false),
+    mode: requiredString(value.mode, endpoint) as PriceMode,
+    prices: value.prices.map((line) => {
+      if (!isRecord(line)) invalidResponse(endpoint)
+      return {
+        quantity: requiredString(line.quantity, endpoint),
+        unit: requiredString(line.unit, endpoint) as UnitPrice['unit'],
+        price: requiredString(line.price, endpoint),
+      }
+    }),
+    expression:
+      value.expression === undefined
+        ? undefined
+        : requiredString(value.expression, endpoint),
+    created_at: requiredStrictInteger(value.created_at, endpoint),
+    hash: requiredString(value.hash, endpoint),
+  }
+  try {
+    validatePriceVersion(result)
+  } catch {
+    invalidResponse(endpoint)
+  }
+  return result
 }
 
 export const modelPricingApi = {
-  async load(signal?: AbortSignal): Promise<ModelPriceMaps> {
-    return parseModelPriceOptions(
-      await api.get('/api/option/', undefined, { signal })
+  async load(signal?: AbortSignal): Promise<PriceVersion[]> {
+    const endpoint = '/api/billing/prices'
+    const value = await api.get(endpoint, undefined, { signal })
+    if (!Array.isArray(value)) invalidResponse(endpoint)
+    return value.map((row) => parsePriceVersion(row, endpoint))
+  },
+  async publish(
+    price: PriceVersion,
+    expectedVersion: number
+  ): Promise<PriceVersion> {
+    validatePriceVersion(price)
+    const endpoint = '/api/billing/prices'
+    return parsePriceVersion(
+      await api.post(endpoint, { price, expected_version: expectedVersion }),
+      endpoint
     )
   },
-  async save(edit: ModelPriceEdit): Promise<ModelPriceMaps> {
-    const latest = await modelPricingApi.load()
-    const options = mergeModelPriceEdit(latest, edit)
-    if (Object.keys(options).length)
-      await api.put('/api/option/bulk', { options })
+  async seed(signal?: AbortSignal): Promise<PriceSeed> {
+    const endpoint = '/api/billing/prices/seed'
+    const value = await api.get(endpoint, undefined, { signal })
+    if (
+      !isRecord(value) ||
+      !Array.isArray(value.prices) ||
+      !Array.isArray(value.unconfigured) ||
+      value.unconfigured.some((name) => typeof name !== 'string')
+    )
+      invalidResponse(endpoint)
     return {
-      ...latest,
-      ...Object.fromEntries(
-        Object.entries(options).map(([key, value]) => [key, JSON.parse(value)])
-      ),
+      prices: value.prices.map((row) => parsePriceVersion(row, endpoint)),
+      unconfigured: value.unconfigured as string[],
+      source: requiredString(value.source, endpoint),
     }
   },
 }

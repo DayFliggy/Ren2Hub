@@ -41,6 +41,13 @@ func FinalAudioPriceMeta(info *relaycommon.RelayInfo, body io.Reader) (*types.To
 		return nil, 0, errors.New("final speech input must be nonempty text")
 	}
 	request := &dto.AudioRequest{Model: info.BillingModelName(), Input: input}
+	pricingPayload, err := common.Marshal(payload)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := FreezeOutboundBillingAttributes(info, pricingPayload); err != nil {
+		return nil, 0, err
+	}
 	meta := request.GetTokenCountMeta()
 	tokens := utf8.RuneCountInString(input)
 	if meta.TokenType != types.TokenTypeTextNumber {

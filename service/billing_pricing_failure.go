@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"time"
 
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
@@ -22,21 +21,8 @@ func holdFailedBillingPrice(ctx *gin.Context, info *relaycommon.RelayInfo, token
 		session.stopRecoveryHeartbeat()
 	}
 	if err == nil {
-		failure := model.BillingPricingFailure{
-			ChannelID: info.ChannelId, Model: info.BillingModelName(),
-			Snapshot: *info.TieredBillingSnapshot, Tokens: tokens,
-			Reason: "billing_expression_evaluation_failed",
-		}
-		for attempt := 0; attempt < 3; attempt++ {
-			err = model.RecordBillingPricingFailure(info.RequestId, failure)
-			if err == nil || errors.Is(err, model.ErrBillingRecoveryStateConflict) {
-				break
-			}
-			if attempt < 2 {
-				time.Sleep(time.Duration(attempt+1) * 50 * time.Millisecond)
-			}
-		}
+		err = model.RecordBillingCalculationFailure(info.RequestId, info.PriceData.Usage)
 	}
 	info.BillingSettlementError = errors.Join(cause, err)
-	logger.LogError(ctx, "billing pricing requires reconciliation (request_id="+info.RequestId+"): "+info.BillingSettlementError.Error())
+	logger.LogError(ctx, "billing pricing requires reconciliation (request_id="+info.RequestId+"): "+"billing calculation failed")
 }

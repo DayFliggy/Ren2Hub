@@ -1,3 +1,4 @@
+import { isQuota } from '@/utils/quota'
 import type { SystemSettingField } from '@/constants/systemSettingsCatalog'
 import { SETTINGS_RECORD_EDITORS } from '@/constants/settingsEditors'
 
@@ -21,6 +22,17 @@ export function validateSetting(
   field: SystemSettingField,
   value: unknown
 ): string | null {
+  if (
+    [
+      'QuotaForNewUser',
+      'QuotaForInviter',
+      'QuotaForInvitee',
+      'QuotaRemindThreshold',
+      'checkin_setting.min_quota',
+      'checkin_setting.max_quota',
+    ].includes(field.key)
+  )
+    return isQuota(value) && BigInt(value) >= 0n ? null : 'range'
   if (field.kind === 'boolean')
     return typeof value === 'boolean' ? null : 'shape'
   if (field.kind === 'number') {
@@ -75,6 +87,8 @@ export function validateSetting(
         if (column.required && (item == null || String(item).trim() === ''))
           return 'required'
         if (item == null || item === '') continue
+        if (column.key === 'quota' && (!isQuota(item) || BigInt(item) <= 0n))
+          return 'range'
         if (
           column.kind === 'number' &&
           (typeof item !== 'number' ||

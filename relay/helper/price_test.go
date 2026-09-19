@@ -1,418 +1,89 @@
 package helper
 
 import (
-	"net/http"
+	"context"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/setting/billing_setting"
-	"github.com/QuantumNous/new-api/setting/config"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
-func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	saved := map[string]string{}
-	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
-		saved[key] = value
-		return nil
-	}))
-	t.Cleanup(func() {
-		require.NoError(t, config.GlobalConfig.LoadFromDB(saved))
-	})
-
-	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode": `{"tiered-test-model":"tiered_expr"}`,
-		"billing_setting.billing_expr": `{"tiered-test-model":"param(\"stream\") == true ? tier(\"stream\", p * 3) : tier(\"base\", p * 2)"}`,
-	}))
-
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	req := httptest.NewRequest(http.MethodPost, "/api/channel/test/1", nil)
-	req.Body = nil
-	req.ContentLength = 0
-	req.Header.Set("Content-Type", "application/json")
-	ctx.Request = req
-	ctx.Set("group", "default")
-
-	info := &relaycommon.RelayInfo{
-		OriginModelName: "tiered-test-model",
-		UserGroup:       "default",
-		UsingGroup:      "default",
-		RequestHeaders:  map[string]string{"Content-Type": "application/json"},
-		BillingRequestInput: &billingexpr.RequestInput{
-			Headers: map[string]string{"Content-Type": "application/json"},
-			Body:    []byte(`{"stream":true}`),
-		},
-	}
-
-	priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{
-		BillingRatios: map[string]float64{"n": 3},
-	})
+func pricingFixture(t *testing.T, version billing.PriceVersion) (*gin.Context, *relaycommon.RelayInfo) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.Equal(t, 1500, priceData.QuotaToPreConsume)
-	require.NotNil(t, info.TieredBillingSnapshot)
-	require.Equal(t, "stream", info.TieredBillingSnapshot.EstimatedTier)
-	require.Equal(t, billing_setting.BillingModeTieredExpr, info.TieredBillingSnapshot.BillingMode)
-	require.Equal(t, common.QuotaPerUnit, info.TieredBillingSnapshot.QuotaPerUnit)
+	require.NoError(t, db.AutoMigrate(&model.BillingPriceVersion{}, &model.BillingActivePrice{}))
+	previousDB := model.DB
+	previousType := common.MainDatabaseType()
+	previousLog := common.LogDatabaseType()
+	model.DB = db
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB = previousDB
+		common.SetDatabaseTypes(previousType, previousLog)
+		sqlDB, err := db.DB()
+		require.NoError(t, err)
+		require.NoError(t, sqlDB.Close())
+	})
+	_, err = model.PublishBillingPrice(context.Background(), version, 0, 1)
+	require.NoError(t, err)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{OriginModelName: version.Model, BillingRequestInput: &billingexpr.RequestInput{Attributes: map[string]interface{}{"service_tier": "priority"}, FrozenAt: time.Date(2026, 9, 19, 3, 0, 0, 0, time.UTC)}}
+	return c, info
 }
 
-func TestModelPriceHelperTieredPreConsumeMaxTokensFallback(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	saved := map[string]string{}
-	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
-		saved[key] = value
-		return nil
-	}))
-	t.Cleanup(func() {
-		require.NoError(t, config.GlobalConfig.LoadFromDB(saved))
-	})
-
-	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode":    `{"tiered-fallback-model":"tiered_expr"}`,
-		"billing_setting.billing_expr":    `{"tiered-fallback-model":"tier(\"base\", p * 3 + c * 15)"}`,
-		"group_ratio_setting.group_ratio": `{"default":1,"free":0}`,
-	}))
-
-	const promptTokens = 1000
-
-	cases := []struct {
-		name      string
-		group     string
-		maxTokens int
-		expected  int
-	}{
-		{
-			// max_tokens omitted in a paid group -> fall back to 8192 completion tokens.
-			// p*3 + c*15 = 1000*3 + 8192*15 = 125880 -> /1e6 * 500000 = 62940
-			name:      "non-free group falls back to 8192 completion tokens",
-			group:     "default",
-			maxTokens: 0,
-			expected:  62940,
-		},
-		{
-			// explicit max_tokens is used verbatim, no fallback.
-			// 1000*3 + 100*15 = 4500 -> /1e6 * 500000 = 2250
-			name:      "explicit max_tokens is used verbatim",
-			group:     "default",
-			maxTokens: 100,
-			expected:  2250,
-		},
-		{
-			// Retired group pricing must not grant free requests.
-			name:      "former free group uses the channel price",
-			group:     "free",
-			maxTokens: 0,
-			expected:  62940,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			recorder := httptest.NewRecorder()
-			ctx, _ := gin.CreateTestContext(recorder)
-			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-			req.Header.Set("Content-Type", "application/json")
-			ctx.Request = req
-			ctx.Set("group", tc.group)
-
-			info := &relaycommon.RelayInfo{
-				OriginModelName: "tiered-fallback-model",
-				UserGroup:       tc.group,
-				UsingGroup:      tc.group,
-				RequestHeaders:  map[string]string{"Content-Type": "application/json"},
-				BillingRequestInput: &billingexpr.RequestInput{
-					Headers: map[string]string{"Content-Type": "application/json"},
-					Body:    []byte(`{}`),
-				},
-			}
-
-			priceData, err := ModelPriceHelper(ctx, info, promptTokens, &types.TokenCountMeta{MaxTokens: tc.maxTokens})
-			require.NoError(t, err)
-			require.Equal(t, tc.expected, priceData.QuotaToPreConsume)
-		})
-	}
+func TestPublishedPricePrepaymentUsesFrozenAttributesAndDefaultOutputEstimate(t *testing.T) {
+	c, info := pricingFixture(t, billing.PriceVersion{Model: "test", Mode: billing.ModeExpression, Expression: `p * 2 + c * (attr("service_tier") == "priority" ? 4 : 1)`})
+	price, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
+	require.NoError(t, err)
+	assert.Equal(t, 16484, price.QuotaToPreConsume)
+	require.NotNil(t, price.Quote)
+	assert.Equal(t, 3, price.Quote.FrozenAt.Hour())
+	assert.True(t, price.Usage.Estimated)
+	previous := price.Quote
+	_, err = model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{Model: "test", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "99"}, {Quantity: "c", Unit: "per_million_tokens", Price: "99"}}}, previous.PriceVersion.ID, 1)
+	require.NoError(t, err)
+	result, err := billing.Calculate(previous, *price.Usage)
+	require.NoError(t, err)
+	assert.Equal(t, common.Quota(16484), result.FinalQuota)
 }
 
-func TestModelPriceHelperTieredRejectsPreConsumeOverflow(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	saved := map[string]string{}
-	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
-		saved[key] = value
-		return nil
-	}))
-	t.Cleanup(func() {
-		require.NoError(t, config.GlobalConfig.LoadFromDB(saved))
-	})
-
-	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode":    `{"tiered-overflow-model":"tiered_expr"}`,
-		"billing_setting.billing_expr":    `{"tiered-overflow-model":"tier(\"overflow\", p * 1000000000000000)"}`,
-		"group_ratio_setting.group_ratio": `{"default":1}`,
-	}))
-
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-	ctx.Set("group", "default")
-	info := &relaycommon.RelayInfo{
-		OriginModelName: "tiered-overflow-model",
-		UserGroup:       "default",
-		UsingGroup:      "default",
-		BillingRequestInput: &billingexpr.RequestInput{
-			Body: []byte(`{}`),
-		},
-	}
-
-	_, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
-
-	var clamp *common.QuotaClamp
-	require.ErrorAs(t, err, &clamp)
-	require.Equal(t, "QuotaRound", clamp.Op)
-	require.Equal(t, common.QuotaClampOverflow, clamp.Kind)
+func TestPublishedPriceRejectsMissingModelOverflowAndInvalidChannelRatio(t *testing.T) {
+	c, info := pricingFixture(t, billing.PriceVersion{Model: "test", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "999999999999"}}})
+	_, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 1})
+	require.Error(t, err)
+	info.OriginModelName = "not-published"
+	_, err = ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
+	require.Error(t, err)
+	info.OriginModelName = "test"
+	c.Set("channel_ratio", -1.0)
+	_, err = ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
+	require.Error(t, err)
 }
 
-func TestModelPriceHelperRequestBillingRatiosOnlyApplyToFixedPrice(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	savedModelPrices := ratio_setting.ModelPrice2JSONString()
-	savedModelRatios := ratio_setting.ModelRatio2JSONString()
-	t.Cleanup(func() {
-		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(savedModelPrices))
-		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedModelRatios))
-	})
-
-	modelPrices, err := common.Marshal(map[string]float64{
-		"fixed-image-price":      0.04,
-		"fractional-image-price": 0.0000012,
-		"overflow-image-price":   float64(common.MaxQuota) / common.QuotaPerUnit / 2,
-	})
+func TestPublishedZeroEstimateStillReservesOneUnlessExplicitFree(t *testing.T) {
+	c, info := pricingFixture(t, billing.PriceVersion{Model: "test", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0"}}})
+	price, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
 	require.NoError(t, err)
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(modelPrices)))
-	modelRatios, err := common.Marshal(map[string]float64{"ratio-image-price": 15})
+	assert.Equal(t, 1, price.QuotaToPreConsume)
+	assert.False(t, price.FreeModel)
+	_, err = model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{Model: "test", Mode: billing.ModeFree}, price.Quote.PriceVersion.ID, 1)
 	require.NoError(t, err)
-	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(string(modelRatios)))
-
-	tests := []struct {
-		name           string
-		model          string
-		wantQuota      int
-		wantUsePrice   bool
-		wantImageCount bool
-	}{
-		{
-			name:           "fixed price applies image count",
-			model:          "fixed-image-price",
-			wantQuota:      180000,
-			wantUsePrice:   true,
-			wantImageCount: true,
-		},
-		{
-			name:         "ratio price ignores request billing ratios",
-			model:        "ratio-image-price",
-			wantQuota:    15000,
-			wantUsePrice: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-			ctx.Set("group", "default")
-			info := &relaycommon.RelayInfo{
-				OriginModelName: tt.model,
-				UserGroup:       "default",
-				UsingGroup:      "default",
-			}
-			meta := &types.TokenCountMeta{
-				ImagePriceRatio: 3,
-				BillingRatios:   map[string]float64{"n": 3},
-			}
-
-			priceData, err := ModelPriceHelper(ctx, info, 1000, meta)
-
-			require.NoError(t, err)
-			require.Equal(t, tt.wantQuota, priceData.QuotaToPreConsume)
-			require.Equal(t, tt.wantUsePrice, priceData.UsePrice)
-			require.Equal(t, tt.wantImageCount, priceData.HasOtherRatio("n"))
-			require.Equal(t, priceData.OtherRatios(), info.PriceData.OtherRatios())
-		})
-	}
-
-	newInfo := func(model string) (*gin.Context, *relaycommon.RelayInfo) {
-		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-		ctx.Set("group", "default")
-		return ctx, &relaycommon.RelayInfo{
-			OriginModelName: model,
-			UserGroup:       "default",
-			UsingGroup:      "default",
-		}
-	}
-	meta := &types.TokenCountMeta{BillingRatios: map[string]float64{"n": 3}}
-
-	ctx, info := newInfo("fractional-image-price")
-	priceData, err := ModelPriceHelper(ctx, info, 0, meta)
+	price, err = ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
 	require.NoError(t, err)
-	// 0.0000012 * 500000 * 3 = 1.8, then truncate once to 1.
-	require.Equal(t, 1, priceData.QuotaToPreConsume)
-
-	ctx, info = newInfo("overflow-image-price")
-	_, err = ModelPriceHelper(ctx, info, 0, meta)
-	var clamp *common.QuotaClamp
-	require.ErrorAs(t, err, &clamp)
-	require.Equal(t, "QuotaFromFloat", clamp.Op)
-	require.Equal(t, common.QuotaClampOverflow, clamp.Kind)
-	require.Nil(t, info.Billing)
-}
-
-func TestCompactPricingUsesOneInheritedBaseMode(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	savedPrices := ratio_setting.ModelPrice2JSONString()
-	savedRatios := ratio_setting.ModelRatio2JSONString()
-	savedCompletionRatios := ratio_setting.CompletionRatio2JSONString()
-	t.Cleanup(func() {
-		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(savedPrices))
-		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedRatios))
-		require.NoError(t, ratio_setting.UpdateCompletionRatioByJSONString(savedCompletionRatios))
-	})
-
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{}`))
-	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"compact-base":2}`))
-	require.NoError(t, ratio_setting.UpdateCompletionRatioByJSONString(`{"compact-base":3}`))
-
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
-	info := &relaycommon.RelayInfo{
-		RelayMode:           relayconstant.RelayModeResponsesCompact,
-		OriginModelName:     "compact-base",
-		RequestedModel:      "compact-base",
-		LogicalBillingModel: "compact-base",
-		UserGroup:           "default",
-		UsingGroup:          "default",
-	}
-
-	priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{})
-	require.NoError(t, err)
-	require.False(t, priceData.UsePrice)
-	require.Equal(t, 2.0, priceData.ModelRatio)
-	require.Equal(t, 3.0, priceData.CompletionRatio)
-	require.Equal(t, "compact-base", info.PricingModelName)
-	require.Equal(t, "compact_base_manual", info.ModelPricingSource)
-}
-
-func TestCompactPricingWildcardPrecedesBaseFixedPrice(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	savedPrices := ratio_setting.ModelPrice2JSONString()
-	savedRatios := ratio_setting.ModelRatio2JSONString()
-	t.Cleanup(func() {
-		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(savedPrices))
-		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedRatios))
-	})
-
-	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{}`))
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"gpt-*-openai-compact":0.1,"gpt-compact-base":0.2}`))
-
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
-	info := &relaycommon.RelayInfo{
-		RelayMode:           relayconstant.RelayModeResponsesCompact,
-		OriginModelName:     "gpt-compact-base",
-		LogicalBillingModel: "gpt-compact-base-openai-compact",
-		UserGroup:           "default",
-		UsingGroup:          "default",
-	}
-
-	priceData, err := ModelPriceHelper(ctx, info, 0, &types.TokenCountMeta{})
-	require.NoError(t, err)
-	require.True(t, priceData.UsePrice)
-	require.Equal(t, 0.1, priceData.ModelPrice)
-	require.Equal(t, ratio_setting.CompactWildcardModelKey, info.PricingModelName)
-	require.Equal(t, "compact_wildcard_manual", info.ModelPricingSource)
-}
-
-func TestCompactPricingInheritsBaseTieredExpressionAsSingleMode(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	saved := map[string]string{}
-	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
-		saved[key] = value
-		return nil
-	}))
-	t.Cleanup(func() { require.NoError(t, config.GlobalConfig.LoadFromDB(saved)) })
-
-	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode": `{"compact-tiered-base":"tiered_expr"}`,
-		"billing_setting.billing_expr": `{"compact-tiered-base":"tier(\"base\", p * 2 + c * 8)"}`,
-	}))
-
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
-	info := &relaycommon.RelayInfo{
-		RelayMode:           relayconstant.RelayModeResponsesCompact,
-		OriginModelName:     "compact-tiered-base",
-		LogicalBillingModel: "compact-tiered-base",
-		UserGroup:           "default",
-		UsingGroup:          "default",
-	}
-
-	priceData, err := ModelPriceHelper(ctx, info, 1000, &types.TokenCountMeta{MaxTokens: 100})
-	require.NoError(t, err)
-	require.False(t, priceData.UsePrice)
-	require.NotNil(t, info.TieredBillingSnapshot)
-	require.Equal(t, "compact-tiered-base", info.TieredBillingSnapshot.ModelName)
-	require.Equal(t, "compact-tiered-base", info.PricingModelName)
-	require.Equal(t, "compact_base_manual", info.ModelPricingSource)
-}
-
-func TestRegularResponsesNonGPTCompactSuffixUsesBasePricingIdentity(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	savedPrices := ratio_setting.ModelPrice2JSONString()
-	savedRatios := ratio_setting.ModelRatio2JSONString()
-	t.Cleanup(func() {
-		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(savedPrices))
-		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedRatios))
-	})
-
-	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{}`))
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{
-		"regular-base":0.2,
-		"regular-base-openai-compact":0.3,
-		"*-openai-compact":0.1
-	}`))
-
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("group", "default")
-	info := &relaycommon.RelayInfo{
-		OriginModelName: "regular-base-openai-compact",
-		UserGroup:       "default",
-		UsingGroup:      "default",
-	}
-
-	priceData, err := ModelPriceHelper(ctx, info, 0, &types.TokenCountMeta{})
-	require.NoError(t, err)
-	require.True(t, priceData.UsePrice)
-	require.Equal(t, 0.2, priceData.ModelPrice)
-	require.Equal(t, "regular-base", info.PricingModelName)
-	require.Equal(t, "compact_base_manual", info.ModelPricingSource)
-}
-
-func TestRegularNonGPTCompactSuffixInheritsBaseBillingAvailability(t *testing.T) {
-	savedPrices := ratio_setting.ModelPrice2JSONString()
-	savedRatios := ratio_setting.ModelRatio2JSONString()
-	t.Cleanup(func() {
-		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(savedPrices))
-		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedRatios))
-	})
-
-	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{}`))
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"ordinary-only-base":0.2}`))
-	require.True(t, HasModelBillingConfig("ordinary-only-base-openai-compact"))
+	assert.Zero(t, price.QuotaToPreConsume)
+	assert.True(t, price.FreeModel)
+	require.NotNil(t, price.Quote)
 }

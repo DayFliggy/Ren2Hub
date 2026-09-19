@@ -141,9 +141,9 @@ func TestNextAdminQuotaUsesManagedTransactionAndBounds(t *testing.T) {
 	require.NoError(t, db.Create(&users).Error)
 
 	updated := decodeNextResponse[nextAdminUserDTO](t, performNextAdminJSON(
-		t, http.MethodPost, "/api/next/admin/users/quota", `{"id":`+strconv.Itoa(users[0].Id)+`,"delta":25}`, NextAdminUserQuota,
+		t, http.MethodPost, "/api/next/admin/users/quota", `{"id":`+strconv.Itoa(users[0].Id)+`,"delta":"25","operation_id":"adjust-25","expected_version":0,"reason":"contract test"}`, NextAdminUserQuota,
 	))
-	assert.Equal(t, 125, updated.Quota)
+	assert.EqualValues(t, 125, updated.Quota)
 
 	for _, body := range []string{
 		`{"id":` + strconv.Itoa(users[1].Id) + `,"delta":25}`,
@@ -161,7 +161,7 @@ func TestNextAdminQuotaUsesManagedTransactionAndBounds(t *testing.T) {
 
 	var user model.User
 	require.NoError(t, db.First(&user, users[0].Id).Error)
-	assert.Equal(t, 125, user.Quota)
+	assert.EqualValues(t, 125, user.Quota)
 }
 
 func TestNextAdminUserStatusBatchIsAtomicAndRevokesSessions(t *testing.T) {

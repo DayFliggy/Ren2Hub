@@ -14,15 +14,22 @@ describe('live model market adapter', () => {
           icon: '',
           tags: '',
           vendor_id: 1,
-          quota_type: 0,
-          model_ratio: 0.5,
-          model_price: 0,
           owner_by: 'OpenAI',
-          completion_ratio: 1.2,
-          cache_ratio: 0.25,
-          create_cache_ratio: 0.5,
           supported_endpoint_types: ['chat'],
           billing_mode: '',
+          price_version: {
+            id: 1,
+            model: 'gpt-4o',
+            mode: 'unit_price' as const,
+            prices: [
+              { quantity: 'p', unit: 'per_million_tokens', price: '1' },
+              { quantity: 'c', unit: 'per_million_tokens', price: '1.2' },
+              { quantity: 'cr', unit: 'per_million_tokens', price: '0.25' },
+              { quantity: 'cc', unit: 'per_million_tokens', price: '0.5' },
+            ],
+            created_at: 1,
+            hash: 'fixture',
+          },
         },
         {
           model_name: 'text-embedding-3-small',
@@ -30,15 +37,17 @@ describe('live model market adapter', () => {
           icon: '',
           tags: '',
           vendor_id: 0,
-          quota_type: 1,
-          model_ratio: 0,
-          model_price: 0.0001,
           owner_by: '',
-          completion_ratio: 0,
-          cache_ratio: 0.5,
-          create_cache_ratio: 0.75,
           supported_endpoint_types: ['embeddings'],
           billing_mode: '',
+          price_version: {
+            id: 1,
+            model: 'text-embedding-3-small',
+            mode: 'unit_price' as const,
+            prices: [{ quantity: 'calls', unit: 'per_call', price: '0.0001' }],
+            created_at: 1,
+            hash: 'fixture',
+          },
         },
       ],
       [
@@ -57,10 +66,10 @@ describe('live model market adapter', () => {
       type: 'chat',
       billing: 'token',
       price: {
-        input: 1,
-        output: 1.2,
-        cache_read: 0.25,
-        cache_write: 0.5,
+        input: '1',
+        output: '1.2',
+        cache_read: '0.25',
+        cache_write: '0.5',
       },
       latency: 0.8,
       tps: 40,
@@ -69,7 +78,7 @@ describe('live model market adapter', () => {
     expect(catalog.models[1]).toMatchObject({
       type: 'embedding',
       billing: 'per_call',
-      price: { per_call: 0.0001 },
+      price: { per_call: '0.0001' },
       health: 0,
     })
     expect(catalog.models[1].price).not.toHaveProperty('cache_read')
@@ -92,15 +101,20 @@ describe('live model market adapter', () => {
         icon: '',
         tags: '',
         vendor_id: 1,
-        quota_type: 0,
-        model_ratio: 1,
-        model_price: 0,
         owner_by: vendor,
-        completion_ratio: 1,
-        cache_ratio: null,
-        create_cache_ratio: null,
         supported_endpoint_types: ['chat'],
         billing_mode: '',
+        price_version: {
+          id: 1,
+          model: `model-${vendor}`,
+          mode: 'unit_price' as const,
+          prices: [
+            { quantity: 'p', unit: 'per_million_tokens', price: '2' },
+            { quantity: 'c', unit: 'per_million_tokens', price: '2' },
+          ],
+          created_at: 1,
+          hash: 'fixture',
+        },
       })),
       []
     )
@@ -125,16 +139,21 @@ describe('live model market adapter', () => {
         icon: '',
         tags: '',
         vendor_id: index + 1,
-        quota_type: 0,
-        model_ratio: 1,
-        model_price: 0,
         owner_by:
           name === 'gpt-5.3-codex-openai-compact' ? 'Virtual' : 'OpenAI',
-        completion_ratio: 1,
-        cache_ratio: null,
-        create_cache_ratio: null,
         supported_endpoint_types: ['chat'],
         billing_mode: '',
+        price_version: {
+          id: 1,
+          model: name,
+          mode: 'unit_price' as const,
+          prices: [
+            { quantity: 'p', unit: 'per_million_tokens', price: '2' },
+            { quantity: 'c', unit: 'per_million_tokens', price: '2' },
+          ],
+          created_at: 1,
+          hash: 'fixture',
+        },
       })),
       []
     )
@@ -158,15 +177,22 @@ describe('live model market adapter', () => {
           icon: '',
           tags: '',
           vendor_id: 1,
-          quota_type: 0,
-          model_ratio: 2,
-          model_price: 0,
           owner_by: 'OpenAI',
-          completion_ratio: 3,
-          cache_ratio: 0.25,
-          create_cache_ratio: 0,
           supported_endpoint_types: ['chat'],
           billing_mode: '',
+          price_version: {
+            id: 1,
+            model: 'zero-cache-write',
+            mode: 'unit_price' as const,
+            prices: [
+              { quantity: 'p', unit: 'per_million_tokens', price: '4' },
+              { quantity: 'c', unit: 'per_million_tokens', price: '12' },
+              { quantity: 'cr', unit: 'per_million_tokens', price: '1' },
+              { quantity: 'cc', unit: 'per_million_tokens', price: '0' },
+            ],
+            created_at: 1,
+            hash: 'fixture',
+          },
         },
         {
           model_name: 'missing-cache-write',
@@ -174,26 +200,31 @@ describe('live model market adapter', () => {
           icon: '',
           tags: '',
           vendor_id: 1,
-          quota_type: 0,
-          model_ratio: 2,
-          model_price: 0,
           owner_by: 'OpenAI',
-          completion_ratio: 3,
-          cache_ratio: null,
-          create_cache_ratio: null,
           supported_endpoint_types: ['chat'],
           billing_mode: '',
+          price_version: {
+            id: 1,
+            model: 'missing-cache-write',
+            mode: 'unit_price' as const,
+            prices: [
+              { quantity: 'p', unit: 'per_million_tokens', price: '4' },
+              { quantity: 'c', unit: 'per_million_tokens', price: '12' },
+            ],
+            created_at: 1,
+            hash: 'fixture',
+          },
         },
       ],
       []
     )
 
     expect(catalog.models[0].price).toEqual({
-      input: 4,
-      output: 12,
-      cache_read: 1,
-      cache_write: 0,
+      input: '4',
+      output: '12',
+      cache_read: '1',
+      cache_write: '0',
     })
-    expect(catalog.models[1].price).toEqual({ input: 4, output: 12 })
+    expect(catalog.models[1].price).toEqual({ input: '4', output: '12' })
   })
 })

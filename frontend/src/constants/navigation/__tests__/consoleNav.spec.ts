@@ -18,6 +18,7 @@ describe('console navigation', () => {
       'user-management',
       'redemption-management',
       'order-management',
+      'billing-reconciliations',
       'system-settings',
       'models-admin',
       'system-info',
@@ -69,6 +70,12 @@ describe('console navigation', () => {
       hasPermission: () => true,
     }).flatMap((group) => group.items)
 
+    expect(
+      adminItems.some((item) => item.name === 'billing-reconciliations')
+    ).toBe(false)
+    expect(
+      rootItems.find((item) => item.name === 'billing-reconciliations')
+    ).toMatchObject({ rootOnly: true })
     expect(adminItems.some((item) => item.name === 'system-settings')).toBe(
       false
     )

@@ -7,7 +7,8 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import UsageHeatmapGrid from '@/components/console/dashboard/UsageHeatmapGrid.vue'
 import UsageSegmentBar from '@/components/console/dashboard/UsageSegmentBar.vue'
 import type { UsageDistributionPoint } from '@/composables/useUsageDistribution'
-import { formatCompact, formatNumber, formatQuota } from '@/utils/format'
+import { quotaForChart } from '@/utils/quota'
+import { formatCompact, formatNumber, formatMoney } from '@/utils/format'
 import {
   buildUsageDistributionView,
   type UsageDistributionMetric,
@@ -27,7 +28,14 @@ const period = ref<UsageDistributionPeriod>('month')
 const metric = ref<UsageDistributionMetric>('requests')
 
 const view = computed(() =>
-  buildUsageDistributionView(props.points, period.value, metric.value)
+  buildUsageDistributionView(
+    props.points.map((point) => ({
+      ...point,
+      consume: quotaForChart(point.consume),
+    })),
+    period.value,
+    metric.value
+  )
 )
 
 const periodOptions = computed(() => [
@@ -59,7 +67,7 @@ const metricLabel = computed(
 )
 
 function formatMetric(value: number): string {
-  if (metric.value === 'consume') return formatQuota(value)
+  if (metric.value === 'consume') return formatMoney(value)
   if (metric.value === 'tokens') return formatCompact(Math.round(value))
   return formatNumber(Math.round(value))
 }

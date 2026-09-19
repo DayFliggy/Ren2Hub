@@ -1,7 +1,10 @@
 package helper
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
@@ -10,82 +13,92 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// BillingAttributesFromBody projects only registered scalar attributes. Request
+// bodies and headers never become expression inputs or persisted evidence.
+func BillingAttributesFromBody(body []byte) (map[string]interface{}, error) {
+	attrs := map[string]interface{}{}
+	if len(body) == 0 {
+		return attrs, nil
+	}
+	var fields map[string]interface{}
+	if err := common.Unmarshal(body, &fields); err != nil {
+		return nil, err
+	}
+	for _, pair := range [][2]string{{"service_tier", "service_tier"}, {"quality", "quality"}, {"size", "resolution"}, {"resolution", "resolution"}, {"n", "quantity"}, {"quantity", "quantity"}, {"seconds", "duration"}, {"duration", "duration"}, {"tool_category", "tool_category"}} {
+		if value, ok := fields[pair[0]]; ok {
+			attrs[pair[1]] = value
+		}
+	}
+	for _, name := range []string{"quantity", "duration"} {
+		if value, ok := attrs[name].(string); ok {
+			parsed, err := strconv.ParseFloat(value, 64)
+			if err != nil {
+				return nil, fmt.Errorf("invalid billing quantity")
+			}
+			attrs[name] = parsed
+		}
+	}
+	if err := billingexpr.ValidateAttributes(attrs); err != nil {
+		return nil, err
+	}
+	return attrs, nil
+}
+
 func ResolveIncomingBillingExprRequestInput(c *gin.Context, info *relaycommon.RelayInfo) (billingexpr.RequestInput, error) {
 	if info != nil && info.BillingRequestInput != nil {
-		input := cloneRequestInput(*info.BillingRequestInput)
-		merged := cloneStringMap(info.RequestHeaders)
-		for k, v := range input.Headers {
-			merged[k] = v
-		}
-		input.Headers = merged
-		return input, nil
+		return cloneRequestInput(*info.BillingRequestInput), nil
 	}
-
-	input := billingexpr.RequestInput{}
-	if info != nil {
-		input.Headers = cloneStringMap(info.RequestHeaders)
+	if info != nil && info.Request != nil {
+		return BuildBillingExprRequestInputFromRequest(info.Request, nil)
 	}
-
-	bodyBytes, err := readIncomingBillingExprBody(c)
-	if err != nil {
-		return billingexpr.RequestInput{}, err
-	}
-	input.Body = bodyBytes
-	return input, nil
-}
-
-func BuildBillingExprRequestInputFromRequest(request dto.Request, headers map[string]string) (billingexpr.RequestInput, error) {
-	input := billingexpr.RequestInput{
-		Headers: cloneStringMap(headers),
-	}
-	if request == nil {
-		return input, nil
-	}
-
-	bodyBytes, err := common.Marshal(request)
-	if err != nil {
-		return billingexpr.RequestInput{}, err
-	}
-	input.Body = bodyBytes
-	return input, nil
-}
-
-func readIncomingBillingExprBody(c *gin.Context) ([]byte, error) {
+	input := billingexpr.RequestInput{FrozenAt: time.Now().UTC(), Attributes: map[string]interface{}{}}
 	if c == nil || c.Request == nil || !isJSONContentType(c.Request.Header.Get("Content-Type")) {
-		return nil, nil
+		return input, nil
 	}
 	storage, err := common.GetBodyStorage(c)
 	if err != nil {
-		return nil, err
+		return input, err
 	}
-	return storage.Bytes()
+	body, err := storage.Bytes()
+	if err != nil {
+		return input, err
+	}
+	input.Attributes, err = BillingAttributesFromBody(body)
+	return input, err
+}
+
+func BuildBillingExprRequestInputFromRequest(request dto.Request, _ map[string]string) (billingexpr.RequestInput, error) {
+	input := billingexpr.RequestInput{FrozenAt: time.Now().UTC(), Attributes: map[string]interface{}{}}
+	if request == nil {
+		return input, nil
+	}
+	body, err := common.Marshal(request)
+	if err != nil {
+		return input, err
+	}
+	input.Attributes, err = BillingAttributesFromBody(body)
+	return input, err
 }
 
 func cloneRequestInput(src billingexpr.RequestInput) billingexpr.RequestInput {
-	input := billingexpr.RequestInput{
-		Headers: cloneStringMap(src.Headers),
-	}
-	if len(src.Body) > 0 {
-		input.Body = append([]byte(nil), src.Body...)
+	input := billingexpr.RequestInput{FrozenAt: src.FrozenAt, Attributes: map[string]interface{}{}}
+	for name, value := range src.Attributes {
+		input.Attributes[name] = value
 	}
 	return input
 }
 
 func isJSONContentType(contentType string) bool {
-	contentType = strings.ToLower(strings.TrimSpace(contentType))
-	return strings.HasPrefix(contentType, "application/json")
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(contentType)), "application/json")
 }
 
-func cloneStringMap(src map[string]string) map[string]string {
-	if len(src) == 0 {
-		return map[string]string{}
+// FreezeOutboundBillingAttributes is called after the final wire body has been
+// built and validated, before the quote is estimated and funds reserved.
+func FreezeOutboundBillingAttributes(info *relaycommon.RelayInfo, body []byte) error {
+	attrs, err := BillingAttributesFromBody(body)
+	if err != nil {
+		return err
 	}
-	dst := make(map[string]string, len(src))
-	for key, value := range src {
-		if strings.TrimSpace(key) == "" {
-			continue
-		}
-		dst[key] = value
-	}
-	return dst
+	info.BillingRequestInput = &billingexpr.RequestInput{Attributes: attrs, FrozenAt: time.Now().UTC()}
+	return nil
 }

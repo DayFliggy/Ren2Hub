@@ -19,7 +19,7 @@ const props = defineProps<{
 const { t } = useI18n()
 
 const hasInvitees = computed(() => props.user.invited_count > 0)
-const hasEarnings = computed(() => props.user.affiliate_quota > 0)
+const hasEarnings = computed(() => BigInt(props.user.affiliate_quota) > 0n)
 const hasInviter = computed(() => props.user.inviter_id > 0)
 const isDormant = computed(() => !hasInvitees.value && !hasInviter.value)
 

@@ -65,7 +65,10 @@ onBeforeUnmount(() => {
 const dailyBurn = computed(() => {
   const tail = flow.value.slice(-7)
   if (!tail.length) return undefined
-  return tail.reduce((sum, point) => sum + point.consume, 0) / tail.length
+  return (
+    tail.reduce((sum, point) => sum + BigInt(point.consume), 0n) /
+    BigInt(tail.length)
+  ).toString()
 })
 
 const greeting = computed(() =>

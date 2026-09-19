@@ -382,6 +382,12 @@ func relayAttemptOutcome(c *gin.Context, info *relaycommon.RelayInfo, apiErr *ty
 			outcome.TTFTMS = info.FirstResponseTime.Sub(started).Milliseconds()
 		}
 	}
+	if c.GetBool("billing_upstream_rejected") {
+		c.Set("billing_upstream_rejected", false)
+		if info != nil && !info.HasValidOutput() {
+			outcome.Acceptance = service.AttemptRejected
+		}
+	}
 	if apiErr == nil {
 		return outcome
 	}

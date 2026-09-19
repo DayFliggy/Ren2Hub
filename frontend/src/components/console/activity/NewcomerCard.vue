@@ -19,15 +19,15 @@ const { t } = useI18n()
 const confirmOpen = ref(false)
 
 const pendingReward = computed(() =>
-  props.activity.newcomer.tasks.reduce((s, t) => s + t.reward, 0)
+  props.activity.newcomer.tasks.reduce((s, t) => s + BigInt(t.reward), 0n)
 )
 
 const allDone = computed(() =>
   props.activity.newcomer.tasks.every((t) => t.done)
 )
 
-function formatQuota(v: number) {
-  return `${(v / 10000).toFixed(0)}`
+function formatQuota(v: string | bigint) {
+  return ((BigInt(v) + 5000n) / 10000n).toString()
 }
 
 function confirmClaim() {

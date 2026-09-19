@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/url"
@@ -192,10 +193,13 @@ func InitDB() (err error) {
 		}
 		sqlDB.SetMaxIdleConns(common.GetEnvOrDefault("SQL_MAX_IDLE_CONNS", 100))
 		sqlDB.SetMaxOpenConns(common.GetEnvOrDefault("SQL_MAX_OPEN_CONNS", 1000))
+		if dbType == common.DatabaseTypeSQLite {
+			sqlDB.SetMaxOpenConns(1)
+		}
 		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetEnvOrDefault("SQL_MAX_LIFETIME", 60)))
 
 		if !common.IsMasterNode {
-			return nil
+			return requireBillingSchema(DB)
 		}
 		if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
 			//_, _ = sqlDB.Exec("ALTER TABLE channels MODIFY model_mapping TEXT;") // TODO: delete this line when most users have upgraded
@@ -251,6 +255,9 @@ func InitLogDB() (err error) {
 }
 
 func migrateDB() error {
+	if err := prepareBillingSchema(DB); err != nil {
+		return err
+	}
 	// Migrate model_limits column from varchar to text for existing tables
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
@@ -284,7 +291,10 @@ func migrateDB() error {
 		&Checkin{},
 		&AffiliateLedger{},
 		&BillingRecovery{},
-		&BillingRecoveryAdjustment{},
+		&BillingAttempt{},
+		&BillingEvent{},
+		&BillingPriceVersion{},
+		&BillingActivePrice{},
 		&CustomOAuthProvider{},
 		&UserOAuthBinding{},
 		&PerfMetric{},
@@ -325,10 +335,13 @@ func migrateDB() error {
 	if err := InitializeAffiliateLedger(); err != nil {
 		return err
 	}
-	return nil
+	return SeedBillingPriceVersions(context.Background())
 }
 
 func migrateDBFast() error {
+	if err := prepareBillingSchema(DB); err != nil {
+		return err
+	}
 
 	var wg sync.WaitGroup
 	if err := prepareChannelCapabilityMigration(); err != nil {
@@ -363,7 +376,9 @@ func migrateDBFast() error {
 		{&Checkin{}, "Checkin"},
 		{&AffiliateLedger{}, "AffiliateLedger"},
 		{&BillingRecovery{}, "BillingRecovery"},
-		{&BillingRecoveryAdjustment{}, "BillingRecoveryAdjustment"},
+		{&BillingEvent{}, "BillingEvent"},
+		{&BillingPriceVersion{}, "BillingPriceVersion"},
+		{&BillingActivePrice{}, "BillingActivePrice"},
 		{&CustomOAuthProvider{}, "CustomOAuthProvider"},
 		{&UserOAuthBinding{}, "UserOAuthBinding"},
 		{&PerfMetric{}, "PerfMetric"},
@@ -499,7 +514,7 @@ CREATE TABLE IF NOT EXISTS logs (
 	username String DEFAULT '',
 	token_name String DEFAULT '',
 	model_name String DEFAULT '',
-	quota Int32 DEFAULT 0,
+	quota Int64 DEFAULT 0,
 	prompt_tokens Int32 DEFAULT 0,
 	completion_tokens Int32 DEFAULT 0,
 	use_time Int32 DEFAULT 0,
@@ -509,6 +524,7 @@ CREATE TABLE IF NOT EXISTS logs (
 	`+"`group`"+` String DEFAULT '',
 	ip String DEFAULT '',
 	request_id String DEFAULT '',
+	billing_event_id Nullable(String),
 	upstream_request_id String DEFAULT '',
 	other String DEFAULT ''
 )

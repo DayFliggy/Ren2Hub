@@ -36,7 +36,7 @@ func TestGatewayReplicateUploadAdmissionAndAcceptance(t *testing.T) {
 				assert.Equal(t, "tenant-fixture", r.Header.Get("X-Tenant"), "upload uses final validated transport headers")
 				var user model.User
 				if assert.NoError(t, model.DB.First(&user, 1).Error) {
-					assert.Equal(t, scenario.quota-1500, user.Quota, "reserve the final output count before any provider resource creation")
+					assert.EqualValues(t, scenario.quota-1500, user.Quota, "reserve the final output count before any provider resource creation")
 				}
 				w.Header().Set("Content-Type", "application/json")
 				if r.URL.Path == "/v1/files" {
@@ -77,8 +77,9 @@ func TestGatewayReplicateUploadAdmissionAndAcceptance(t *testing.T) {
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("models = ?", "gpt-4o-mini").Updates(map[string]any{
 				"type": constant.ChannelTypeReplicate, "param_override": scenario.override, "header_override": `{"X-Tenant":"tenant-fixture"}`,
 			}).Error)
-			require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", 1).Update("quota", scenario.quota).Error)
-			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "remain_quota": 100000}).Error)
+			require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", 1).Update("available_quota", scenario.quota).Error)
+			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 100000}).Error)
+			require.NoError(t, publishGatewayImagePrice("gpt-4o-mini"))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			var body bytes.Buffer
 			writer := multipart.NewWriter(&body)
@@ -124,8 +125,8 @@ func TestGatewayReplicateUploadAdmissionAndAcceptance(t *testing.T) {
 				require.NoError(t, model.DB.First(&recovery).Error)
 				assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
 			}
-			assert.Equal(t, scenario.quota-charge, user.Quota)
-			assert.Equal(t, 100000-charge, token.RemainQuota)
+			assert.EqualValues(t, scenario.quota-charge, user.Quota)
+			assert.EqualValues(t, 100000-charge, token.RemainQuota)
 		})
 	}
 }

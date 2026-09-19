@@ -87,7 +87,9 @@ onMounted(load)
           </p>
           <p class="text-[11px] text-[var(--text-tertiary)]">
             {{
-              row.quota > 0 ? formatQuota(row.quota) : t('orders.notCredited')
+              BigInt(row.quota) > 0n
+                ? formatQuota(row.quota)
+                : t('orders.notCredited')
             }}
           </p>
           <StatusChip :tone="adminOrderStatusTone(row.status)" class="mt-1">

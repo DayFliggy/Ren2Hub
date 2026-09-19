@@ -54,11 +54,11 @@ type CreemPayRequest struct {
 }
 
 type CreemProduct struct {
-	ProductId string  `json:"productId"`
-	Name      string  `json:"name"`
-	Price     float64 `json:"price"`
-	Currency  string  `json:"currency"`
-	Quota     int64   `json:"quota"`
+	ProductId string       `json:"productId"`
+	Name      string       `json:"name"`
+	Price     float64      `json:"price"`
+	Currency  string       `json:"currency"`
+	Quota     common.Quota `json:"quota"`
 }
 
 type CreemAdaptor struct {
@@ -99,7 +99,7 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 	}
 
 	id := c.GetInt("id")
-	if rejectInvalidCreditedQuota(c, id, decimal.NewFromInt(selectedProduct.Quota)) {
+	if rejectInvalidCreditedQuota(c, id, decimal.NewFromInt(int64(selectedProduct.Quota))) {
 		return
 	}
 
@@ -121,8 +121,8 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 	// 先创建订单记录，使用产品配置的金额和充值额度
 	topUp := &model.TopUp{
 		UserId:             id,
-		Amount:             selectedProduct.Quota, // 充值额度
-		Money:              selectedProduct.Price, // 支付金额
+		Amount:             int64(selectedProduct.Quota), // 充值额度
+		Money:              selectedProduct.Price,        // 支付金额
 		TradeNo:            referenceId,
 		PaymentMethod:      model.PaymentMethodCreem,
 		PaymentProvider:    model.PaymentProviderCreem,

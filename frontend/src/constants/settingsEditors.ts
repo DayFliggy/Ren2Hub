@@ -96,7 +96,7 @@ export const SETTINGS_RECORD_EDITORS: Record<string, RecordEditorSchema> = {
       { key: 'name', kind: 'text', required: true },
       { key: 'productId', kind: 'text', required: true },
       { key: 'price', kind: 'number', min: 0.01, required: true },
-      { key: 'quota', kind: 'number', min: 1, required: true },
+      { key: 'quota', kind: 'text', required: true },
       {
         key: 'currency',
         kind: 'select',

@@ -35,6 +35,7 @@ func realtimeBillingSession(t *testing.T) (*gin.Context, *relaycommon.RelayInfo)
 		PriceData:   hosttypes.PriceData{ModelRatio: 1, ChannelRatio: 1},
 		ChannelMeta: &relaycommon.ChannelMeta{ChannelId: 882, UpstreamModelName: "realtime-test-model"},
 	}
+	info.PriceData.Quote = billingTestQuote(t, "p * 2 + c * 2")
 	require.Nil(t, PreConsumeBilling(c, 5, info))
 	t.Cleanup(func() { info.Billing.(*BillingSession).stopRecoveryHeartbeat() })
 	return c, info
@@ -45,7 +46,7 @@ func TestRealtimeReservesCumulativeUsageAndSettlesOnce(t *testing.T) {
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 10}))
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 20}))
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 20}))
-	assert.Equal(t, 20, info.Billing.GetPreConsumedQuota())
+	assert.EqualValues(t, 20, info.Billing.GetPreConsumedQuota())
 	for i := 0; i < 2; i++ {
 		PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 20}, "")
 		require.NoError(t, info.BillingSettlementError)
@@ -59,43 +60,43 @@ func TestRealtimeReservesCumulativeUsageAndSettlesOnce(t *testing.T) {
 	require.NoError(t, model.DB.First(&token, 881).Error)
 	require.NoError(t, model.DB.First(&channel, 882).Error)
 	require.NoError(t, model.LOG_DB.Model(&model.Log{}).Where("request_id = ?", info.RequestId).Count(&logCount).Error)
-	assert.Equal(t, 80, user.Quota)
-	assert.Equal(t, 20, user.UsedQuota)
-	assert.Equal(t, 1, user.RequestCount)
-	assert.Equal(t, 80, token.RemainQuota)
-	assert.Equal(t, 20, token.UsedQuota)
-	assert.Equal(t, int64(20), channel.UsedQuota)
-	assert.Equal(t, int64(1), logCount)
+	assert.EqualValues(t, 80, user.Quota)
+	assert.EqualValues(t, 20, user.UsedQuota)
+	assert.EqualValues(t, 1, user.RequestCount)
+	assert.EqualValues(t, 80, token.RemainQuota)
+	assert.EqualValues(t, 20, token.UsedQuota)
+	assert.EqualValues(t, int64(20), channel.UsedQuota)
+	assert.EqualValues(t, int64(1), logCount)
 }
 
 func TestRealtimeReservationStopsAtAvailableFunds(t *testing.T) {
 	c, info := realtimeBillingSession(t)
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 60}))
 	assert.ErrorIs(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 120}), model.ErrBillingRecoveryFundingQuota)
-	assert.Equal(t, 60, info.Billing.GetPreConsumedQuota())
+	assert.EqualValues(t, 60, info.Billing.GetPreConsumedQuota())
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 880).Error)
-	assert.Equal(t, 40, user.Quota)
+	assert.EqualValues(t, 40, user.Quota)
 	PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 120}, "")
 	require.NoError(t, info.BillingSettlementError)
 	require.NoError(t, model.DB.First(&user, 880).Error)
-	assert.Equal(t, -20, user.Quota, "already incurred usage is settled once even when the session cannot reserve further")
+	assert.EqualValues(t, -20, user.Quota, "already incurred usage is settled once even when the session cannot reserve further")
 }
 
 func TestRealtimePerCallPriceIsReservedAndChargedOncePerSession(t *testing.T) {
 	c, info := realtimeBillingSession(t)
 	info.PriceData.UsePrice = true
-	info.PriceData.ModelPrice = 20 / common.QuotaPerUnit
+	info.PriceData.Quote = billingTestCallQuote(t)
 	info.MarkValidOutput()
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{}))
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{}))
-	assert.Equal(t, 20, info.Billing.GetPreConsumedQuota())
+	assert.EqualValues(t, 20, info.Billing.GetPreConsumedQuota())
 	PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{}, "")
 	require.NoError(t, info.BillingSettlementError)
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 880).Error)
-	assert.Equal(t, 80, user.Quota)
-	assert.Equal(t, 1, user.RequestCount)
+	assert.EqualValues(t, 80, user.Quota)
+	assert.EqualValues(t, 1, user.RequestCount)
 }
 
 func TestRealtimeConsumptionRecoveryFinishesAfterLostProcess(t *testing.T) {
@@ -106,12 +107,12 @@ func TestRealtimeConsumptionRecoveryFinishesAfterLostProcess(t *testing.T) {
 	info.Billing.(*BillingSession).stopRecoveryHeartbeat()
 	summary, err := RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+1, 100)
 	require.NoError(t, err)
-	assert.Equal(t, 1, summary.Settled)
+	assert.EqualValues(t, 1, summary.Settled)
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 880).Error)
-	assert.Equal(t, 80, user.Quota)
-	assert.Equal(t, 20, user.UsedQuota)
-	assert.Equal(t, 1, user.RequestCount)
+	assert.EqualValues(t, 80, user.Quota)
+	assert.EqualValues(t, 20, user.UsedQuota)
+	assert.EqualValues(t, 1, user.RequestCount)
 	summary, err = RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+1, 100)
 	require.NoError(t, err)
 	assert.Zero(t, summary.Scanned)
@@ -125,17 +126,17 @@ func TestRealtimeRecoverySettlesTheLastConfirmedRoundAfterSessionCrash(t *testin
 	info.Billing.(*BillingSession).stopRecoveryHeartbeat()
 	summary, err := RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+1, 100)
 	require.NoError(t, err)
-	assert.Equal(t, 1, summary.Settled)
+	assert.EqualValues(t, 1, summary.Settled)
 	assert.Zero(t, summary.Refunded)
 	var user model.User
 	var logs []model.Log
 	require.NoError(t, model.DB.First(&user, 880).Error)
 	require.NoError(t, model.LOG_DB.Where("request_id = ?", info.RequestId).Find(&logs).Error)
-	assert.Equal(t, 80, user.Quota)
-	assert.Equal(t, 20, user.UsedQuota)
-	assert.Equal(t, 1, user.RequestCount)
+	assert.EqualValues(t, 80, user.Quota)
+	assert.EqualValues(t, 20, user.UsedQuota)
+	assert.EqualValues(t, 1, user.RequestCount)
 	require.Len(t, logs, 1)
-	assert.Equal(t, 20, logs[0].Quota)
+	assert.EqualValues(t, 20, logs[0].Quota)
 }
 
 func TestRealtimeUsageRejectsNegativeAndOverflowCounts(t *testing.T) {
@@ -156,5 +157,5 @@ func TestRealtimeUsageRejectsNegativeAndOverflowCounts(t *testing.T) {
 	total := &dto.RealtimeUsage{InputTokens: math.MaxInt32}
 	_, err := AddRealtimeUsage(total, &dto.RealtimeUsage{InputTokens: 1})
 	assert.Error(t, err)
-	assert.Equal(t, math.MaxInt32, total.InputTokens)
+	assert.EqualValues(t, math.MaxInt32, total.InputTokens)
 }

@@ -57,7 +57,7 @@ func TestGatewayResponsesNamespaceHistoryPolicyBeforeBilling(t *testing.T) {
 					require.NoError(t, model.DB.Model(channel).Update("type", channel.Type).Error)
 					require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 					require.NoError(t, model.DB.Model(&model.Token{}).Where("key = ?", key).Updates(map[string]any{
-						"conversion_policy": policy, "unlimited_quota": false, "remain_quota": 2000,
+						"conversion_policy": policy, "unlimited_quota": false, "available_quota": 2000,
 					}).Error)
 					var token model.Token
 					require.NoError(t, model.DB.Where("key = ?", key).First(&token).Error)
@@ -111,9 +111,9 @@ func TestGatewayResponsesNamespaceHistoryPolicyBeforeBilling(t *testing.T) {
 					var user model.User
 					require.NoError(t, model.DB.First(&user, token.UserId).Error)
 					require.NoError(t, model.DB.First(&token, token.Id).Error)
-					assert.Equal(t, 10000000, user.Quota)
+					assert.EqualValues(t, 10000000, user.Quota)
 					assert.Zero(t, user.UsedQuota)
-					assert.Equal(t, 2000, token.RemainQuota)
+					assert.EqualValues(t, 2000, token.RemainQuota)
 					assert.Zero(t, token.UsedQuota)
 					var consumeLogs int64
 					require.NoError(t, model.LOG_DB.Model(&model.Log{}).Where("type = ?", model.LogTypeConsume).Count(&consumeLogs).Error)

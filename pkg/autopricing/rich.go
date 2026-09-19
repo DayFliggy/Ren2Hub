@@ -478,7 +478,7 @@ func LoadBuiltInOverrides(now time.Time) (*SourceCatalog, []string, error) {
 		}
 		source.Records[model] = record
 	}
-	addRich("gpt-5.6-sol", 5, 30, "param(\"service_tier\") == \"priority\" || param(\"service_tier\") == \"fast\" ? tier(\"priority\", p * 10 + c * 60) : param(\"service_tier\") == \"flex\" ? tier(\"flex\", p * 2.5 + c * 15) : (len <= 272000 ? tier(\"base\", p * 5 + c * 30) : tier(\"long\", p * 10 + c * 45))", "reviewed official price")
+	addRich("gpt-5.6-sol", 5, 30, "attr(\"service_tier\") == \"priority\" || attr(\"service_tier\") == \"fast\" ? tier(\"priority\", p * 10 + c * 60) : attr(\"service_tier\") == \"flex\" ? tier(\"flex\", p * 2.5 + c * 15) : (len <= 272000 ? tier(\"base\", p * 5 + c * 30) : tier(\"long\", p * 10 + c * 45))", "reviewed official price")
 	addRich("gpt-5.6-terra", 2, 12, "", "reviewed official price")
 	addRich("gpt-5.6-"+"luna", 0.2, 1.2, "", "reviewed official price")
 	addRich("gpt-5.4", 2.5, 15, "", "reviewed official price")

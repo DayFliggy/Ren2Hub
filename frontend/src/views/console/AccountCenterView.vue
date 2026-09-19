@@ -62,8 +62,8 @@ const joinDate = computed(() =>
 )
 
 const tier = computed(() => {
-  const used = auth.user?.used_quota ?? 0
-  if (used >= 50_000_000) {
+  const used = BigInt(auth.user?.used_quota ?? '0')
+  if (used >= 50_000_000n) {
     return {
       name: t('profile.tierDiamond'),
       progress: 100,
@@ -71,33 +71,33 @@ const tier = computed(() => {
       next: null as null | number,
     }
   }
-  if (used >= 20_000_000) {
+  if (used >= 20_000_000n) {
     return {
       name: t('profile.tierPlatinum'),
-      progress: Math.round(((used - 20_000_000) / 30_000_000) * 100),
+      progress: Number(((used - 20_000_000n) * 100n) / 30_000_000n),
       nextName: t('profile.tierDiamond'),
       next: 50_000_000,
     }
   }
-  if (used >= 5_000_000) {
+  if (used >= 5_000_000n) {
     return {
       name: t('profile.tierGold'),
-      progress: Math.round(((used - 5_000_000) / 15_000_000) * 100),
+      progress: Number(((used - 5_000_000n) * 100n) / 15_000_000n),
       nextName: t('profile.tierPlatinum'),
       next: 20_000_000,
     }
   }
-  if (used >= 1_000_000) {
+  if (used >= 1_000_000n) {
     return {
       name: t('profile.tierSilver'),
-      progress: Math.round(((used - 1_000_000) / 4_000_000) * 100),
+      progress: Number(((used - 1_000_000n) * 100n) / 4_000_000n),
       nextName: t('profile.tierGold'),
       next: 5_000_000,
     }
   }
   return {
     name: t('profile.tierBronze'),
-    progress: Math.round((used / 1_000_000) * 100),
+    progress: Number((used * 100n) / 1_000_000n),
     nextName: t('profile.tierSilver'),
     next: 1_000_000,
   }
@@ -107,7 +107,7 @@ const accountStats = computed(() => [
   {
     key: 'balance',
     label: t('profile.balance'),
-    value: formatQuota(auth.user?.quota ?? 0),
+    value: formatQuota(auth.user?.available_quota ?? 0),
     destination: t('nav.wallet'),
     route: 'wallet',
     icon: WalletCards,

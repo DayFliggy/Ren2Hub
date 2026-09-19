@@ -8,7 +8,7 @@ import { useToast } from '@/composables/useToast'
 export interface UsageDistributionPoint {
   date: string
   requests: number
-  consume: number
+  consume: string
   tokens: number
 }
 

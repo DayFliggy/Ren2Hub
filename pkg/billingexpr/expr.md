@@ -1,277 +1,52 @@
-# Billing Expression System (billingexpr)
+# 计费表达式契约
 
-## Design Philosophy
+Ren2Hub 的计价来源是数据库中发布的不可变 PriceVersion，模式为 unit_price、expression 或显式 free。表达式作为计价器的一种，读取与明确单价相同的规范化用量、已登记安全属性和报价冻结时间。结算绝不读取实时倍率、价格设置、请求正文或请求头。
 
-**One expression, one truth.** A single expression string completely defines a model's billing logic — pricing, tier conditions, cache/image/audio differentiation, time-based discounts, request-aware multipliers — all in one line. No scattered configuration, no implicit rules, no magic numbers.
-
-The expression is the billing contract between the administrator and the system. What you write is what gets executed. The system's job is to evaluate it faithfully, not to interpret it.
-
-### Core Principles
-
-1. **Expression is self-contained** — The expression string alone determines billing. No external ratio tables, no implicit completion multipliers, no hidden conversion factors. Given the same token counts and request context, the same expression always produces the same cost.
-
-2. **Variables are opt-in** — `p` (prompt) and `c` (completion) are the base. Cache (`cr`, `cc`, `cc1h`), image (`img`), and audio (`ai`, `ao`) variables are optional. If omitted, those tokens are included in `p`/`c` and priced at their rate. The system automatically detects which variables the expression uses (via AST introspection) and adjusts token normalization accordingly.
-
-3. **Prices are real prices** — Expression coefficients are actual $/1M tokens prices as published by providers. No ratio conversion, no `/2` convention. `p * 2.5` means $2.50 per 1M prompt tokens.
-
-4. **Upstream-agnostic** — The expression doesn't need to know whether the upstream API is OpenAI-format (prompt_tokens includes cache) or Claude-format (input_tokens excludes cache). The system normalizes token counts before evaluation based on the upstream response format.
-
-5. **Version-aware** — Expressions carry a version tag (`v1:`, default when omitted). The version controls the compile environment, token normalization, and quota conversion formula, enabling future evolution without breaking existing expressions.
-
----
-
-## Expression Language
-
-Powered by [expr-lang/expr](https://github.com/expr-lang/expr). Expressions are compiled, cached, and evaluated against a runtime environment.
-
-### Token Variables
-
-**输入侧变量：**
+## 表达式变量与归一化
 
 | 变量 | 含义 |
-|------|------|
-| `p` | 输入 token 数（**计价用**）。**自动排除**表达式中单独计价的子类别（见下方说明） |
-| `len` | 输入上下文总长度（**条件判断用**）。不受自动排除影响，始终反映完整输入长度。非 Claude：等于原始 `prompt_tokens`；Claude：等于文本输入 + 缓存读取 + 缓存创建 |
-| `cr` | 缓存命中（读取）token 数 |
-| `cc` | 缓存创建 token 数（Claude 5分钟 TTL / 通用） |
-| `cc1h` | 缓存创建 token 数 — 1小时 TTL（Claude 专用） |
-| `img` | 图片输入 token 数 |
-| `ai` | 音频输入 token 数 |
+|---|---|
+| p、c | 未单独定价的输入、输出 token |
+| len | 完整输入上下文长度，阶梯条件应使用此字段 |
+| cr | 缓存读取 token |
+| cc、cc1h | 默认/5 分钟、1 小时缓存写入 token |
+| img、img_o | 图片输入、输出 token |
+| ai、ao | 音频输入、输出 token |
 
-**输出侧变量：**
+子类别在表达式中出现时，从 p/c 排除；未出现时仍按基础输入/输出价格计费。OpenAI/Gemini 输入为包含缓存的总量；Claude 输入不包含缓存，因此未独立定价的缓存需要加回基础输入量。归一化在 pkg/billing.Usage.TokenParams 中统一执行。缓存重叠可将剩余文本降到零，不得产生负费用；原始负数或超范围数量直接拒绝计价。
 
-| 变量 | 含义 |
-|------|------|
-| `c` | 输出 token 数。**自动排除**表达式中单独计价的子类别（见下方说明） |
-| `img_o` | 图片输出 token 数 |
-| `ao` | 音频输出 token 数 |
+表达式系数为 USD / 百万 token，例如 p * 2.5 表示输入单价每百万 token 2.5 USD。v1: 是唯一表达式版本前缀，没有前缀也按 v1。
 
-#### `p` 和 `c` 的自动排除机制
+## 函数与安全属性
 
-`p` 和 `c` 是"兜底变量"——它们代表**所有没有被表达式单独定价的 token**。系统会根据表达式实际使用了哪些变量，自动从 `p` / `c` 中减去对应的子类别 token，避免重复计费。
+支持 tier(name,value)、max/min/abs/ceil/floor、has(value,substring)。tier 记录命中档位，符合条件的倍率表达式记录 request_rules。
 
-**规则：如果表达式使用了某个子类别变量，对应的 token 就从 `p` 或 `c` 中扣除；如果没使用，那些 token 就留在 `p` 或 `c` 里按基础价格计费。**
+attr(name) 只接受登记名称的字面量：service_tier、quality、resolution、quantity、duration、tool_category。适配器从完成转换和参数覆盖后的最终发送参数提取这些属性。未知名称、动态名称、复合对象均拒绝。param() 和 header() 已删除，任意正文、原始请求头和密钥不会进入报价和恢复证据。
 
-> **重要：`len` 不受自动排除影响。** `len` 始终代表完整的输入上下文长度，不管表达式是否单独对缓存/图片/音频定价。因此**阶梯条件应使用 `len` 而非 `p`**，以避免缓存命中导致 `p` 降低而误判档位。
+hour/minute/weekday/month/day 接受有效 IANA 时区的字面量，使用 Quote.FrozenAt，空值及无效时区报错；未冻结时间的求值也报错。不得回退到服务器当前时间或 UTC。
 
-举例说明（假设上游返回的原始数据：prompt_tokens=1000，其中包含 200 cache read、100 image）：
+示例：
 
-| 表达式 | `p` 的值 | 说明 |
-|--------|---------|------|
-| `p * 3 + c * 15` | 1000 | 没用 `cr`/`img`，所以缓存和图片都包含在 `p` 里，全按 $3 计费 |
-| `p * 3 + c * 15 + cr * 0.3` | 800 | 用了 `cr`，缓存 200 从 `p` 中扣除，按 $0.3 单独计费；图片仍在 `p` 里按 $3 计费 |
-| `p * 3 + c * 15 + cr * 0.3 + img * 2` | 700 | 用了 `cr` 和 `img`，都从 `p` 中扣除，各自按自己的价格计费 |
-
-输出侧同理（假设 completion_tokens=500，其中包含 100 audio output）：
-
-| 表达式 | `c` 的值 | 说明 |
-|--------|---------|------|
-| `p * 3 + c * 15` | 500 | 没用 `ao`，音频输出包含在 `c` 里按 $15 计费 |
-| `p * 3 + c * 15 + ao * 50` | 400 | 用了 `ao`，音频 100 从 `c` 中扣除按 $50 计费 |
-
-> **注意：** 这个自动排除仅针对 GPT/OpenAI 格式的 API（prompt_tokens 包含所有子类别）。Claude 格式的 API（input_tokens 本身就只包含纯文本）不做任何减法。系统根据上游返回格式自动判断，表达式作者无需关心。
-
-### Built-in Functions
-
-| Function | Signature | Purpose |
-|----------|-----------|---------|
-| `tier` | `tier(name, value) → float64` | Records which pricing tier matched; must wrap the cost expression |
-| `param` | `param(path) → any` | Reads a JSON path from the request body (uses gjson) |
-| `header` | `header(key) → string` | Reads a request header value |
-| `has` | `has(source, substr) → bool` | Substring check |
-| `hour` | `hour(tz) → int` | Current hour in timezone (0-23) |
-| `minute` | `minute(tz) → int` | Current minute (0-59) |
-| `weekday` | `weekday(tz) → int` | Day of week (0=Sunday, 6=Saturday) |
-| `month` | `month(tz) → int` | Month (1-12) |
-| `day` | `day(tz) → int` | Day of month (1-31) |
-| `max` | `max(a, b) → float64` | Math max |
-| `min` | `min(a, b) → float64` | Math min |
-| `abs` | `abs(x) → float64` | Absolute value |
-| `ceil` | `ceil(x) → float64` | Ceiling |
-| `floor` | `floor(x) → float64` | Floor |
-
-### Expression Examples
-
-```
-# Simple flat pricing
+~~~text
 tier("base", p * 2.5 + c * 15 + cr * 0.25)
 
-# Multi-tier (Claude Sonnet style) — use len for tier conditions
 len <= 200000
   ? tier("standard", p * 3 + c * 15 + cr * 0.3 + cc * 3.75 + cc1h * 6)
   : tier("long_context", p * 6 + c * 22.5 + cr * 0.6 + cc * 7.5 + cc1h * 12)
 
-# Image model (no separate cache/audio pricing — those tokens stay in p/c)
-tier("base", p * 2 + c * 8 + img * 2.5)
+tier("base", p * 2 + c * 10)
+  * (attr("service_tier") == "priority" ? 2 : 1)
+  * (hour("Asia/Shanghai") < 6 ? 0.8 : 1)
+~~~
 
-# Multimodal with audio
-tier("base", p * 0.43 + c * 3.06 + img * 0.78 + ai * 3.81 + ao * 15.11)
-```
+## 计算和持久化
 
-### Request Rules (appended after `|||`)
+发送前的 Quote 保存完整价格版本、全部单价、渠道倍率、安全属性和时间，并计算 SHA-256 哈希。每次结算校验哈希。Usage 与 ChargeResult 分别保存规范化用量和费用结果，不能覆盖原报价。
 
-Request-conditional multipliers are appended to the expression after a `|||` separator:
+表达式引擎保持 float64 求值，结果必须有限、非负；随后转 Decimal，与报价中的工具/媒体单价费用合计，乘渠道倍率及固定 500000 quota/USD。总额只四舍五入一次；正费用最低 1 quota，零费用为零。超过 MaxInt32 单次限额直接报错并进入对账，不按饱和值扣款。
 
-```
-tier("base", p * 5 + c * 25)|||when(header("anthropic-beta") has "fast-mode") * 6
-```
+工具费用与表达式共享一次最终舍入；表达式版本的 prices 不得再次列出 token 单价。费用分项保存精确 USD 小计，总结果记录未舍入 quota、最终 quota、舍入差额和计算版本。
 
-These factors are stored as ordinary multiplication in the final expression (for example, `(tier(...)) * (condition ? 6 : 1)`) and run in the same billing program.
+计算错误只向恢复记录暴露类别及冻结证据，不保存原始求值异常。未知接受状态或金额不明时保留预留，必须经过明确对账决定。
 
-### Request Rule Tracing
-
-At compile time, the engine instruments ternary factors with this exact shape:
-
-```
-<request-probe condition> ? <numeric literal> : 1
-```
-
-The condition must reference at least one request probe (`param`, `header`, `hour`, `minute`, `weekday`, `month`, or `day`). Both branches must be numeric literals and the fallback must equal `1`. Other conditionals, including `(condition ? 2 : 1.5)`, are evaluated normally but are not traced. Integer-only factors use an integer-preserving trace callback, so instrumentation does not change expressions that require an integer operand (for example, `%`). The internal trace callback names are reserved and cannot be used in stored expressions.
-
-The compiled cache stores the canonical condition and multiplier for every instrumented node. Each run starts with the full detected rule list marked as unmatched; callbacks mark rules that actually evaluate true. Rules skipped by normal expression short-circuiting remain unmatched. This keeps the expression's numeric result unchanged and avoids reparsing it on each request.
-
-Settlement copies the actual run's traces into the consume log as:
-
-```json
-{
-  "request_rules": [
-    { "cond": "param(\"service_tier\") == \"fast\"", "multiplier": 2, "matched": true }
-  ]
-}
-```
-
-The usage-log UI treats `request_rules` as the authoritative rule list and renders directly from it. It parses `cond` only to produce a friendly label and falls back to the canonical condition text when that parser does not recognize the condition. Pricing pages without log context continue to parse the stored expression for display.
-
----
-
-## Architecture
-
-### Data Flow
-
-```
-Frontend Editor → Storage → Pre-consume → Settlement → Log Display
-```
-
-### 1. Frontend Editor
-
-**File**: `frontend/src/constants/systemSettingsCatalog.ts` and the Vue settings editor
-
-Two editing modes:
-- **Visual mode**: Fill in prices per variable, conditions per tier. Generates expression via `generateExprFromVisualConfig()`.
-- **Raw mode**: Edit the expression string directly. Includes preset templates for common models.
-
-The editor outputs a billing expression string and an optional request rule expression string. These are combined via `combineBillingExpr(billingExpr, requestRuleExpr)` before storage.
-
-### 2. Storage
-
-**File**: `setting/billing_setting/tiered_billing.go`
-
-Two option maps stored in the `options` DB table:
-- `ModelBillingMode`: `{ "model-name": "tiered_expr" }` — activates tiered billing for a model
-- `ModelBillingExpr`: `{ "model-name": "tier(\"base\", p * 2.5 + c * 15)" }` — the expression
-
-On save, the expression is validated:
-1. Compiled via `billingexpr.CompileFromCache()` — syntax check
-2. Smoke-tested with sample token vectors — ensures non-negative results
-
-### 3. Pre-consume (Quota Estimation)
-
-**File**: `relay/helper/price.go` → `modelPriceHelperTiered()`
-
-When a request arrives and the model uses `tiered_expr` billing:
-1. Loads expression from `billing_setting.GetBillingExpr()`
-2. Builds `RequestInput` (headers + body) for `param()` / `header()` functions
-3. Runs expression with estimated tokens: `RunExprWithRequest(expr, {P, C}, requestInput)`
-4. Converts output to quota: `rawCost / 1,000,000 * QuotaPerUnit`
-5. Creates `BillingSnapshot` and stores it on `RelayInfo`. Expression and request state stay frozen for settlement. A unified-route retry refreshes group-dependent fields from the selected route group before the next upstream attempt. If a free initial group skipped pre-consume and the retry selects a paid group, the billing session is created before that attempt. If an existing session moves to a more expensive group, its reservation is raised to that group's estimate before sending; cheaper groups are refunded only after actual usage is settled.
-6. Before dispatch, `PrepareBillingForSelectedModel` durably records `pricing_pending`, including for free expressions. Unconfirmed expression usage cannot be automatically refunded after a lost process or failed final snapshot write. Realtime preserves this guard as `pricing_collect` while retaining its latest confirmed cumulative consumption. Explicit request failure can still refund; confirmed final consumption follows normal settlement. Manual reconciliation records remain visible in backlog without occupying automatic recovery batches.
-
-### 4. Settlement (Actual Billing)
-
-**Files**: `service/tiered_settle.go`, `pkg/billingexpr/settle.go`
-
-After the upstream response returns with actual token usage:
-
-1. `BuildTieredTokenParams(usage, isClaudeUsageSemantic, usedVars)`:
-   - Reads actual token counts from `dto.Usage`
-   - For GPT-format APIs (prompt_tokens includes everything): subtracts sub-categories from P/C **only when** the expression uses their variables (detected via AST introspection of the compiled expression)
-   - For Claude-format APIs (input_tokens is text-only): no adjustment needed
-
-2. `TryTieredSettle(relayInfo, params)`:
-   - Uses the captured `BillingSnapshot`, whose group-dependent fields have been refreshed from the final selected group
-   - Re-runs the expression with actual token counts
-   - Converts via `quotaConversion()` (version-dispatched)
-   - Returns `(applicable, actualQuota, result, error)`; `applicable` identifies expression billing and does not imply success
-   - Evaluation errors never return the estimated precharge as a final price. Text, audio and Realtime settlement retain the reservation, persist the frozen pricing snapshot and normalized token vector under `reconciliation_required`, and expose `BillingSettlementError`
-   - Recovery, repeated settlement and deferred refunds cannot charge or refund these held records automatically. Reconciliation requires an explicit decision using the saved pricing evidence; request bodies, headers and raw evaluator errors are not persisted in this record
-
-### 5. Log Display
-
-**Files**: `service/log_info_generate.go`, `frontend/src/views/public/PricingView.vue`
-
-Backend: `InjectTieredBillingInfo()` adds `billing_mode`, `expr_b64` (base64 expression), `matched_tier`, and the structured `request_rules` trace list to the log's `other` JSON.
-
-Frontend: Detects `billing_mode === "tiered_expr"`, decodes `expr_b64`, parses tiers via shared `parseTiersFromExpr()`, and renders request multipliers from `request_rules` when present. Without log traces, it falls back to parsing the stored expression.
-
----
-
-## Key Design Decisions
-
-### Token Normalization via AST Introspection
-
-Different upstream APIs report `prompt_tokens` differently:
-- **OpenAI/GPT**: `prompt_tokens` = total (text + cache + image + audio)
-- **Claude**: `input_tokens` = text only (cache reported separately)
-
-The system normalizes `p` to mean "tokens not separately priced" by subtracting sub-categories **only when the expression references them**. This is determined by walking the compiled AST to find `IdentifierNode` references — zero runtime cost after first compilation (cached).
-
-Example: `p * 2.5 + c * 15 + cr * 0.25`
-- Expression uses `cr` → cache read tokens subtracted from `p`
-- Expression doesn't use `img` → image tokens stay in `p`, priced at $2.50
-
-### `len` — Context Length Variable
-
-`len` represents the total input context length, designed for **tier condition evaluation** (e.g. `len <= 200000 ? ...`). Unlike `p`, `len` is never reduced by sub-category exclusion.
-
-**Computation rules:**
-- **Non-Claude (GPT/OpenAI format)**: `len = prompt_tokens` (the raw total from the upstream response)
-- **Claude format**: `len = input_tokens + cache_read_tokens + cache_creation_tokens` (since Claude's `input_tokens` is text-only, cache must be added back to reflect full context length)
-
-This ensures that heavy cache usage doesn't cause the tier condition to incorrectly evaluate to a lower tier. For example, if a request has 300K total context but 250K is cached, `p` with cache subtracted would be only 50K (standard tier), while `len` correctly reports 300K (long-context tier).
-
-### Quota Conversion
-
-Expression coefficients are $/1M tokens. Conversion to internal quota:
-
-```
-quota = exprOutput / 1,000,000 * QuotaPerUnit * groupRatio
-```
-
-This matches the per-call billing pattern: `quota = modelPrice * QuotaPerUnit * groupRatio`.
-
-### Expression Versioning
-
-Expressions can carry a version prefix: `v1:tier(...)`. No prefix = v1.
-
-Version controls:
-- Compile environment (available variables and functions)
-- Token normalization logic
-- Quota conversion formula
-
-This enables future evolution without breaking existing expressions.
-
----
-
-## File Map
-
-| Layer | Files |
-|-------|-------|
-| Expression engine | `pkg/billingexpr/compile.go`, `run.go`, `settle.go`, `round.go`, `types.go` |
-| Storage | `setting/billing_setting/tiered_billing.go` |
-| Pre-consume | `relay/helper/price.go`, `relay/helper/billing_expr_request.go` |
-| Settlement | `service/tiered_settle.go`, `service/quota.go` |
-| Log injection | `service/log_info_generate.go` |
-| Frontend editor | `frontend/src/constants/systemSettingsCatalog.ts` and Vue settings components |
-| Frontend display | `frontend/src/views/public/PricingView.vue` |
-| Model detail | `frontend/src/views/public/PricingView.vue` |
-| Log display | `frontend/src/views/console/LogsView.vue` |
+相关实现：pkg/billing/pricing.go、pkg/billingexpr、model/billing_pricing.go、relay/helper/price.go、service/billing_usage.go。

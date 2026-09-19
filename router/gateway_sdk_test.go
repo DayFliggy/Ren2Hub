@@ -52,7 +52,7 @@ func setupGatewaySDKWithUpstream(t *testing.T, handler http.HandlerFunc) (string
 	t.Helper()
 	setupRelayRouterTestDB(t)
 	db := model.DB
-	require.NoError(t, db.AutoMigrate(&model.UserRouteGroup{}, &model.UserRouteEntry{}, &model.RoutePolicy{}, &model.ChannelCapabilitySnapshot{}, &model.ChannelModelCapability{}, &model.ChannelHealth{}, &model.BillingRecovery{}, &model.BillingRecoveryAdjustment{}, &model.Log{}, &model.QuotaData{}))
+	require.NoError(t, db.AutoMigrate(&model.UserRouteGroup{}, &model.UserRouteEntry{}, &model.RoutePolicy{}, &model.ChannelCapabilitySnapshot{}, &model.ChannelModelCapability{}, &model.ChannelHealth{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.Log{}, &model.QuotaData{}))
 	oldRedis, oldMemory := common.RDB, common.MemoryCacheEnabled
 	client := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
 	common.RDB, common.RedisEnabled, common.MemoryCacheEnabled = client, true, false
@@ -62,7 +62,7 @@ func setupGatewaySDKWithUpstream(t *testing.T, handler http.HandlerFunc) (string
 		_ = client.Close()
 		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(oldPrices))
 	})
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"gpt-4o-mini":0.001,"claude-3-5-sonnet":0.001,"gemini-2.5-flash":0.001,"llama3.1":0.001}`))
+	require.NoError(t, publishGatewayFixturePrices(`{"gpt-4o-mini":0.001,"claude-3-5-sonnet":0.001,"gemini-2.5-flash":0.001,"llama3.1":0.001}`, false))
 	service.InitHttpClient()
 	upstream := httptest.NewServer(handler)
 	t.Cleanup(upstream.Close)

@@ -729,7 +729,7 @@ onBeforeUnmount(() => {
                 : 'text-[var(--text-primary)]'
             "
           >
-            {{ formatQuota(Math.abs((row as LogItem).quota)) }}
+            {{ formatQuota((row as LogItem).quota.replace(/^-/, '')) }}
           </span>
         </template>
         <template #cell-content="{ row }">

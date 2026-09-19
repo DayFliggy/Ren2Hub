@@ -26,8 +26,8 @@ const todayReward = computed(
 // Week total (sum of claimed entries)
 const weekTotal = computed(() =>
   props.activity.checkin.week_entries.reduce(
-    (sum, e) => sum + (e.claimed ? e.reward : 0),
-    0
+    (sum, e) => sum + (e.claimed ? BigInt(e.reward) : 0n),
+    0n
   )
 )
 

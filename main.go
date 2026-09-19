@@ -111,11 +111,6 @@ func main() {
 	}
 	service.RegisterRouteCapabilityRefreshHook()
 
-	// Restore the automatic pricing catalog from its local cache and start the
-	// refresh loop before pricing is warmed, so models that rely on the
-	// fallback are priced on the first request after a restart.
-	service.InitAutoPricing()
-
 	// Warm pricing after channel cache initialization so Advanced Custom
 	// endpoint inference can read cached route settings on first request.
 	model.GetPricing()
@@ -125,9 +120,6 @@ func main() {
 
 	// 周期性重载授权策略，保证多节点/多 master 部署下权限变更能传播到每个实例
 	go authz.StartPolicySync(common.SyncFrequency)
-
-	// 数据看板
-	go model.UpdateQuotaData()
 
 	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_UPDATE_FREQUENCY"))
@@ -162,12 +154,6 @@ func main() {
 	// switch are enforced inside the runner and each handler's Enabled().
 	controller.RegisterScheduledSystemTasks()
 	service.StartSystemTaskRunner()
-
-	if os.Getenv("BATCH_UPDATE_ENABLED") == "true" {
-		common.BatchUpdateEnabled = true
-		common.SysLog("batch update enabled with interval " + strconv.Itoa(common.BatchUpdateInterval) + "s")
-		model.InitBatchUpdater()
-	}
 
 	if os.Getenv("ENABLE_PPROF") == "true" {
 		gopool.Go(func() {
@@ -252,10 +238,6 @@ func main() {
 		if err := srv.Close(); err != nil {
 			common.SysError("server close failed: " + err.Error())
 		}
-	}
-	// 内存中的看板数据保存入库，避免重启丢失未落库数据 (issue #5679)
-	if common.DataExportEnabled {
-		model.SaveQuotaDataCache()
 	}
 	common.SysLog("server exited")
 }

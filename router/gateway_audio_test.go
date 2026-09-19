@@ -18,7 +18,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +25,7 @@ import (
 func setupGatewayAudio(t *testing.T, handler http.HandlerFunc) (string, string) {
 	t.Helper()
 	url, key, _ := setupGatewaySDKWithUpstream(t, handler)
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"gpt-4o-mini-tts":0.001,"gpt-4o-transcribe":0.001}`))
+	require.NoError(t, publishGatewayFixturePrices(`{"gpt-4o-mini-tts":0.001,"gpt-4o-transcribe":0.001}`, false))
 	for _, id := range []int{1, 4} {
 		channel, err := model.GetChannelById(id, true)
 		require.NoError(t, err)
@@ -35,7 +34,7 @@ func setupGatewayAudio(t *testing.T, handler http.HandlerFunc) (string, string) 
 		require.NoError(t, channel.AddAbilities(model.DB))
 	}
 	// Keep a real reservation enabled instead of using the trust-quota bypass.
-	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "remain_quota": 2000}).Error)
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 2000}).Error)
 	require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 	return url, key
 }
@@ -49,7 +48,7 @@ func TestGatewayAudioSpeechAccounting(t *testing.T) {
 				assert.Equal(t, "/v1/audio/speech", r.URL.Path)
 				var user model.User
 				if assert.NoError(t, model.DB.First(&user, 1).Error) {
-					assert.Equal(t, 9999500, user.Quota, "precharge precedes actual audio send")
+					assert.EqualValues(t, 9999500, user.Quota, "precharge precedes actual audio send")
 				}
 				for _, resource := range []string{service.UserAdmissionKey(1), service.ChannelAdmissionKey(1)} {
 					count := service.ReadGatewayAdmissionRuntime(resource).InFlight
@@ -105,17 +104,20 @@ func TestGatewayAudioSpeechAccounting(t *testing.T) {
 				assert.Equal(t, "\x00\x01\x02\x03", output)
 			}
 			awaitGatewayPermitsReleased(t)
-			wantQuota := 0
+			wantQuota, heldQuota := 0, 0
 			if delivered {
 				wantQuota = 500
+			} else if scenario != "invalid_input" {
+				heldQuota = 500
 			}
 			require.Eventually(t, func() bool {
 				var user model.User
-				return model.DB.First(&user, 1).Error == nil && user.Quota == 10000000-wantQuota
+				return model.DB.First(&user, 1).Error == nil && user.Quota == common.Quota(10000000-wantQuota-heldQuota)
 			}, time.Second, 10*time.Millisecond)
 			var user model.User
 			require.NoError(t, model.DB.First(&user, 1).Error)
-			assert.Equal(t, wantQuota, user.UsedQuota)
+			assert.EqualValues(t, wantQuota, user.UsedQuota)
+			assert.EqualValues(t, heldQuota, user.ReservedQuota)
 			var logs []model.Log
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
 			if delivered {

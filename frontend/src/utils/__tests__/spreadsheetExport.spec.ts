@@ -6,6 +6,18 @@ import {
 } from '@/utils/spreadsheetExport'
 
 describe('spreadsheetExport', () => {
+  it.each(['csv', 'excel'] as const)(
+    'keeps full quota and decimal strings in the %s file',
+    (format) => {
+      const [content] = serializeSpreadsheet(
+        ['quota', 'price'],
+        [['9223372036854775807', '1.123456789012345678']],
+        format
+      )
+      expect(content).toContain('9223372036854775807')
+      expect(content).toContain('1.123456789012345678')
+    }
+  )
   it.each([
     [
       '=HYPERLINK("https://example.test")',

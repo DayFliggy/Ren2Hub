@@ -13,8 +13,10 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestListModelsSupportsOpenAIAndGeminiAuthentication(t *testing.T) {
@@ -110,9 +112,17 @@ func setupRelayRouterTestDB(t *testing.T) {
 	common.SQLitePath = fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
 	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
 	require.NoError(t, os.Setenv("SQL_DSN", "local"))
+	// This fixture owns a disposable database and supplies the release marker.
+	bootstrap, bootstrapErr := gorm.Open(sqlite.Open(common.SQLitePath), &gorm.Config{})
+	require.NoError(t, bootstrapErr)
+	require.NoError(t, bootstrap.AutoMigrate(&model.BillingSchema{}))
+	require.NoError(t, bootstrap.Create(&model.BillingSchema{ID: 1, Version: model.BillingSchemaVersion}).Error)
+	bootstrapSQL, bootstrapErr := bootstrap.DB()
+	require.NoError(t, bootstrapErr)
+	defer bootstrapSQL.Close()
 	require.NoError(t, model.InitDB())
 	model.LOG_DB = model.DB
-	require.NoError(t, model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.Ability{}, &model.Channel{}, &model.UserChannelEntitlement{}, &model.UserRouteProfile{}, &model.Option{}, &model.GatewayCredential{}, &model.GatewayStateBinding{}))
+	require.NoError(t, model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.Ability{}, &model.Channel{}, &model.UserChannelEntitlement{}, &model.UserRouteProfile{}, &model.Option{}, &model.GatewayCredential{}, &model.GatewayStateBinding{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}, &model.BillingPriceVersion{}, &model.BillingActivePrice{}, &model.Log{}, &model.QuotaData{}))
 
 	t.Cleanup(func() {
 		if sqlDB, err := model.DB.DB(); err == nil {

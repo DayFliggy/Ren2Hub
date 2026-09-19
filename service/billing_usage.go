@@ -1,10 +1,57 @@
 package service
 
 import (
+	"math"
 	"strings"
 
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
+
+// NormalizedBillingUsage is the single protocol boundary used by unit prices
+// and expressions. Counts are not inferred from a provider's monetary cost.
+func NormalizedBillingUsage(usage *dto.Usage, semantic string) billing.Usage {
+	usage = effectiveBillingUsage(usage)
+	if usage == nil {
+		return billing.Usage{Estimated: true, Source: "missing", Quantities: map[string]string{}}
+	}
+	if usage.UsageSemantic != "" {
+		semantic = usage.UsageSemantic
+	}
+	// Reject bad source quantities before display helpers can clamp them or
+	// overlapping cache aliases can mask them during normalization.
+	invalid := false
+	for _, count := range []int{usage.PromptTokens, usage.CompletionTokens,
+		usage.PromptTokensDetails.CachedTokens, usage.PromptTokensDetails.CachedCreationTokens,
+		usage.PromptTokensDetails.CacheWriteTokens, usage.ClaudeCacheCreation5mTokens, usage.ClaudeCacheCreation1hTokens,
+		usage.PromptTokensDetails.ImageTokens, usage.PromptTokensDetails.AudioTokens,
+		usage.CompletionTokenDetails.ImageTokens, usage.CompletionTokenDetails.AudioTokens} {
+		invalid = invalid || count < 0 || int64(count) > math.MaxInt32
+	}
+	write := usage.PromptTokensDetails.CacheCreationTokensTotal()
+	write1h := usage.ClaudeCacheCreation1hTokens
+	if usage.ClaudeCacheCreation5mTokens > 0 || write1h > 0 {
+		write = usage.ClaudeCacheCreation5mTokens
+		if total := usage.PromptTokensDetails.CacheCreationTokensTotal() - write1h; total > write {
+			write = total
+		}
+	}
+	input, output := int64(usage.PromptTokens), int64(usage.CompletionTokens)
+	context := input
+	includesCache := semantic != "anthropic"
+	if !includesCache {
+		context += int64(usage.PromptTokensDetails.CachedTokens) + int64(write) + int64(write1h)
+	}
+	estimated := usage.UsageSource == "estimated" || usage.UsageSource == "provider_and_estimated"
+	if usage.BillingUsage != nil {
+		estimated = estimated || usage.BillingUsage.Estimated
+	}
+	return billing.Usage{InputTokens: input, OutputTokens: output, ContextTokens: context,
+		CacheReadTokens: int64(usage.PromptTokensDetails.CachedTokens), CacheWriteTokens: int64(write), CacheWrite1hTokens: int64(write1h),
+		ImageInputTokens: int64(usage.PromptTokensDetails.ImageTokens), ImageOutputTokens: int64(usage.CompletionTokenDetails.ImageTokens),
+		AudioInputTokens: int64(usage.PromptTokensDetails.AudioTokens), AudioOutputTokens: int64(usage.CompletionTokenDetails.AudioTokens),
+		InputIncludesCache: includesCache, Source: usage.UsageSource, Estimated: estimated, Complete: true, Invalid: invalid, Quantities: map[string]string{}}
+}
 
 const (
 	usageBillingPathLocal              = "local"

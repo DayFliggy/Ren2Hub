@@ -145,7 +145,7 @@ describe('useMarketplace filtering', () => {
     const market = setupMarketplace()
     market.currency.value = 'USD'
     expect(market.formatPrice(2)).toBe('$2.00')
-    expect(market.formatPrice(0.5)).toBe('$0.5000')
+    expect(market.formatPrice(0.5)).toBe('$0.500')
     market.currency.value = 'CNY'
     expect(market.formatPrice(1)).toMatch(/^¥\d/)
   })

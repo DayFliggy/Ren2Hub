@@ -2,11 +2,11 @@ package model
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -43,7 +43,7 @@ func TestMidjourneyCompletionRecoveryAcrossDatabases(t *testing.T) {
 				initCol()
 				require.NoError(t, connection.Close())
 			})
-			require.NoError(t, db.AutoMigrate(&Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingRecoveryAdjustment{}))
+			require.NoError(t, db.AutoMigrate(&Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}))
 			t.Run("accepted-submission", func(t *testing.T) {
 				fixture := newMidjourneyCompletionFixture(t, db, "accepted", false, true)
 				testMidjourneyAcceptedSubmission(t, fixture)
@@ -69,7 +69,21 @@ func TestMidjourneyCompletionRecoveryAcrossDatabases(t *testing.T) {
 			}{{"legacy-token", true, true}, {"legacy-wallet-only", true, false}, {"playground", false, false}} {
 				t.Run(test.name, func(t *testing.T) {
 					fixture := newMidjourneyCompletionFixture(t, db, test.name, test.legacy, test.tokenRequired)
-					testMidjourneyCompletionRecovery(t, fixture, "FAILURE")
+					if test.legacy {
+						fixture.task.Status = "FAILURE"
+						won, err := PersistMidjourneyCompletion(context.Background(), &fixture.task, "IN_PROGRESS", fixture.consumption)
+						require.ErrorIs(t, err, ErrBillingRecoveryStateConflict)
+						assert.False(t, won)
+						assertTaskAccountProjection(t, db, fixture.user.Id, fixture.token.Id, 100, 0, 0)
+						var persisted Midjourney
+						require.NoError(t, db.First(&persisted, fixture.task.Id).Error)
+						assert.Equal(t, "IN_PROGRESS", persisted.Status)
+						var events int64
+						require.NoError(t, db.Model(&BillingEvent{}).Where("user_id = ?", fixture.user.Id).Count(&events).Error)
+						assert.Zero(t, events, "missing reservation cannot synthesize a credit event")
+					} else {
+						testMidjourneyCompletionRecovery(t, fixture, "FAILURE")
+					}
 				})
 			}
 			t.Run("concurrent-terminal", func(t *testing.T) {
@@ -108,17 +122,17 @@ func testMidjourneyCompletionRejectsRetiredSource(t *testing.T, fixture midjourn
 	require.NoError(t, db.First(&persisted, task.Id).Error)
 	assert.Equal(t, "IN_PROGRESS", persisted.Status)
 	assert.Equal(t, "45%", persisted.Progress)
-	assert.Equal(t, 30, persisted.Quota)
+	assert.EqualValues(t, 30, persisted.Quota)
 	assert.Equal(t, "subscription", persisted.PrivateData.BillingSource)
 	require.NoError(t, db.First(&fixture.user, fixture.user.Id).Error)
 	require.NoError(t, db.First(&fixture.token, fixture.token.Id).Error)
 	require.NoError(t, db.First(&fixture.channel, fixture.channel.Id).Error)
-	assert.Equal(t, 70, fixture.user.Quota)
-	assert.Equal(t, 30, fixture.user.UsedQuota)
-	assert.Equal(t, 1, fixture.user.RequestCount)
-	assert.Equal(t, 70, fixture.token.RemainQuota)
-	assert.Equal(t, 30, fixture.token.UsedQuota)
-	assert.EqualValues(t, 30, fixture.channel.UsedQuota)
+	assert.EqualValues(t, 70, fixture.user.Quota)
+	assert.Zero(t, fixture.user.UsedQuota)
+	assert.Zero(t, fixture.user.RequestCount)
+	assert.EqualValues(t, 70, fixture.token.RemainQuota)
+	assert.Zero(t, fixture.token.UsedQuota)
+	assert.Zero(t, fixture.channel.UsedQuota)
 	var count int64
 	require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", MidjourneyBillingRequestID(task.Id)).Count(&count).Error)
 	assert.Zero(t, count)
@@ -131,11 +145,9 @@ func newMidjourneySubmission(t *testing.T, fixture midjourneyCompletionFixture, 
 	task := fixture.task
 	task.Id, task.MjId, task.Status = 0, "accepted-provider-id", "SUBMITTED"
 	task.PrivateData.SubmissionRequestID, task.PrivateData.CredentialVersion = requestID, 1
-	require.NoError(t, fixture.db.Create(&BillingRecovery{
-		RequestID: requestID, UserID: task.UserId, TokenID: task.PrivateData.TokenId, TokenRequired: true,
-		Source: "wallet", Status: BillingRecoveryStatusActive, FundingAmount: int64(task.Quota), TokenAmount: int64(task.Quota),
-		PreConsumeState: BillingRecoveryPreConsumeCommitted,
-	}).Error)
+	_, err := EnsureBillingRecovery(BillingRecoveryInput{RequestID: requestID, UserID: task.UserId, TokenID: task.PrivateData.TokenId, TokenRequired: fixture.tokenRequired, Source: "wallet"})
+	require.NoError(t, err)
+	require.NoError(t, Reserve(requestID, task.Quota))
 	consumption := fixture.consumption
 	consumption.Log.Quota = task.Quota
 	return task, consumption
@@ -165,7 +177,8 @@ func testMidjourneyAcceptedSubmission(t *testing.T, fixture midjourneyCompletion
 	require.NoError(t, db.Model(&Midjourney{}).Where("user_id = ? AND mj_id = ?", task.UserId, task.MjId).Count(&count).Error)
 	assert.EqualValues(t, 1, count)
 	require.NoError(t, db.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
-	assert.Equal(t, BillingRecoveryStatusSettlementPending, recovery.Status)
+	assert.Equal(t, BillingRecoveryStatusActive, recovery.Status)
+	assert.Equal(t, BillingRecoveryStateTaskPending, recovery.ConsumptionState)
 	assert.NotEmpty(t, recovery.ConsumptionSnapshot)
 	owned, err := GetOwnedMidjourneyTask(context.Background(), task.UserId, task.PrivateData.TokenId, task.MjId)
 	require.NoError(t, err)
@@ -218,14 +231,11 @@ type midjourneyCompletionFixture struct {
 func newMidjourneyCompletionFixture(t *testing.T, db *gorm.DB, identity string, legacy, tokenRequired bool) midjourneyCompletionFixture {
 	t.Helper()
 	fixture := midjourneyCompletionFixture{db: db, tokenRequired: tokenRequired}
-	fixture.user = User{Username: "mj-" + identity, AffCode: "mj-" + identity, Quota: 70, UsedQuota: 30, RequestCount: 1}
+	fixture.user = User{Username: "mj-" + identity, AffCode: "mj-" + identity, Quota: 100}
 	require.NoError(t, db.Create(&fixture.user).Error)
 	fixture.token = Token{UserId: fixture.user.Id, Key: "mj-" + identity, RemainQuota: 100}
-	if tokenRequired {
-		fixture.token.RemainQuota, fixture.token.UsedQuota = 70, 30
-	}
 	require.NoError(t, db.Create(&fixture.token).Error)
-	fixture.channel = Channel{Name: "mj-" + identity, UsedQuota: 30}
+	fixture.channel = Channel{Name: "mj-" + identity}
 	require.NoError(t, db.Create(&fixture.channel).Error)
 	fixture.task = Midjourney{MjId: "provider-" + identity, UserId: fixture.user.Id, ChannelId: fixture.channel.Id,
 		Quota: 30, Status: "IN_PROGRESS", Progress: "45%", Action: "IMAGINE"}
@@ -245,14 +255,21 @@ func newMidjourneyCompletionFixture(t *testing.T, db *gorm.DB, identity string, 
 	} else {
 		fixture.task.PrivateData = TaskPrivateData{TokenId: fixture.token.Id, BillingSource: "wallet",
 			SubmissionRequestID: "mj-submission-" + identity, CredentialID: "local-credential", EndpointID: "local-endpoint"}
-		submission := BillingRecovery{RequestID: fixture.task.PrivateData.SubmissionRequestID, UserID: fixture.user.Id, TokenID: fixture.token.Id,
-			TokenRequired: tokenRequired, Source: "wallet",
-			Status: BillingRecoveryStatusSettled, ConsumptionState: BillingRecoveryStateCompleted}
-		require.NoError(t, db.Create(&submission).Error)
+		_, err := EnsureBillingRecovery(BillingRecoveryInput{RequestID: fixture.task.PrivateData.SubmissionRequestID, UserID: fixture.user.Id, TokenID: fixture.token.Id, TokenRequired: tokenRequired, Source: "wallet"})
+		require.NoError(t, err)
+		require.NoError(t, Reserve(fixture.task.PrivateData.SubmissionRequestID, 30))
 	}
 	require.NoError(t, db.Create(&fixture.task).Error)
 	fixture.consumption = BillingConsumption{Log: Log{UserId: fixture.user.Id, TokenId: logTokenID, ChannelId: fixture.channel.Id,
-		Username: fixture.user.Username, ModelName: "mj_imagine", CreatedAt: 7200}, CountUsage: true, LogEnabled: true, ExportEnabled: true}
+		Username: fixture.user.Username, ModelName: "mj_imagine", CreatedAt: 7200}, CountUsage: true, LogEnabled: true, ExportEnabled: true,
+		Usage: &billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "provider", Complete: true}, Charge: &billing.ChargeResult{FinalQuota: 30}}
+	if !legacy {
+		accepted := fixture.consumption
+		accepted.Log.Quota = fixture.task.Quota
+		require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+			return prepareTaskAcceptedBillingTx(tx, fixture.task.PrivateData.SubmissionRequestID, accepted)
+		}))
+	}
 	return fixture
 }
 
@@ -261,92 +278,97 @@ func testMidjourneyCompletionRecovery(t *testing.T, fixture midjourneyCompletion
 	db, task := fixture.db, fixture.task
 	task.Status, task.Progress, task.FinishTime = status, "100%", 7300
 	task.ImageUrl = "https://result.example.invalid/mj"
-	task.Buttons, task.Properties = `[{"label":"V1"}]`, `{"seed":"123"}`
-	// Completion updates provider fields without overwriting durable ownership.
+	task.Buttons = `[{"label":"V1"}]`
+	task.Properties = `{"seed":"123"}`
 	task.PrivateData.CredentialID = "must-not-replace-original"
-	actual := 30
-	if status == "FAILURE" {
+	actual := common.Quota(30)
+	release := status == "FAILURE"
+	if release {
 		actual = 0
 		task.FailReason = "provider confirmed task failure"
+		fixture.consumption.Charge = nil
+		fixture.consumption.Usage = nil
 	}
-	requestID := MidjourneyBillingRequestID(task.Id)
+	requestID := fixture.task.PrivateData.SubmissionRequestID
 	require.NoError(t, db.Callback().Update().Before("gorm:update").Register("mj_completion_failure", func(tx *gorm.DB) {
 		if tx.Statement.Table == "midjourneys" {
 			tx.AddError(assert.AnError)
 		}
 	}))
 	won, err := PersistMidjourneyCompletion(context.Background(), &task, "IN_PROGRESS", fixture.consumption)
-	require.Error(t, err)
+	require.ErrorIs(t, err, assert.AnError)
 	assert.False(t, won)
 	require.NoError(t, db.Callback().Update().Remove("mj_completion_failure"))
 	var persisted Midjourney
 	require.NoError(t, db.First(&persisted, task.Id).Error)
 	assert.Equal(t, "IN_PROGRESS", persisted.Status)
-	var count int64
-	require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", requestID).Count(&count).Error)
-	assert.Zero(t, count, "intent must roll back with the failed terminal write")
+	var recovery BillingRecovery
+	require.NoError(t, db.Where("request_id = ?", requestID).First(&recovery).Error)
+	assert.Equal(t, BillingRecoveryStatusActive, recovery.Status)
+	assert.Equal(t, BillingRecoveryStateTaskPending, recovery.ConsumptionState)
 	won, err = PersistMidjourneyCompletion(context.Background(), &task, "IN_PROGRESS", fixture.consumption)
 	require.NoError(t, err)
 	assert.True(t, won)
 	won, err = PersistMidjourneyCompletion(context.Background(), &task, "IN_PROGRESS", fixture.consumption)
 	require.NoError(t, err)
 	assert.False(t, won)
-	require.NoError(t, ApplyBillingRecoveryAdjustment(requestID, BillingRecoveryComponentFunding, BillingRecoveryOperationSettle))
-	if actual == 0 && fixture.tokenRequired {
+	if fixture.tokenRequired {
 		require.NoError(t, db.Callback().Update().Before("gorm:update").Register("mj_token_failure", func(tx *gorm.DB) {
 			if tx.Statement.Table == "tokens" {
 				tx.AddError(assert.AnError)
 			}
 		}))
-		require.Error(t, ApplyBillingRecoveryAdjustment(requestID, BillingRecoveryComponentToken, BillingRecoveryOperationSettle))
+		if release {
+			require.ErrorIs(t, Release(requestID), assert.AnError)
+		} else {
+			require.ErrorIs(t, Settle(requestID, actual), assert.AnError)
+		}
 		require.NoError(t, db.Callback().Update().Remove("mj_token_failure"))
+		assertTaskAccountProjection(t, db, fixture.user.Id, fixture.token.Id, 70, 30, 0)
 	}
-	require.NoError(t, ApplyBillingRecoveryAdjustment(requestID, BillingRecoveryComponentFunding, BillingRecoveryOperationSettle))
-	require.NoError(t, ApplyBillingRecoveryAdjustment(requestID, BillingRecoveryComponentToken, BillingRecoveryOperationSettle))
-	require.NoError(t, MarkBillingRecoverySettled(requestID))
-	if actual == 0 {
-		require.NoError(t, db.Callback().Update().Before("gorm:update").Register("mj_statistics_failure", func(tx *gorm.DB) {
-			if tx.Statement.Table == "channels" {
-				tx.AddError(assert.AnError)
-			}
-		}))
-		require.Error(t, ApplyBillingRecoveryConsumption(requestID))
-		require.NoError(t, db.Callback().Update().Remove("mj_statistics_failure"))
-		require.NoError(t, db.First(&persisted, task.Id).Error)
-		assert.Equal(t, 30, persisted.Quota, "task quota must roll back with statistics")
-		require.NoError(t, db.Callback().Create().Before("gorm:create").Register("mj_log_failure", func(tx *gorm.DB) {
-			if tx.Statement.Table == "logs" {
-				tx.AddError(assert.AnError)
-			}
-		}))
-		require.Error(t, ApplyBillingRecoveryConsumption(requestID))
-		require.NoError(t, db.Callback().Create().Remove("mj_log_failure"))
-		require.NoError(t, db.First(&persisted, task.Id).Error)
-		assert.Zero(t, persisted.Quota)
+	if release {
+		require.NoError(t, Release(requestID))
+	} else {
+		require.NoError(t, Settle(requestID, actual))
 	}
+	require.NoError(t, db.Callback().Create().Before("gorm:create").Register("mj_statistics_failure", func(tx *gorm.DB) {
+		if tx.Statement.Table == "quota_data" {
+			tx.AddError(assert.AnError)
+		}
+	}))
+	require.ErrorIs(t, ApplyBillingRecoveryConsumption(requestID), assert.AnError)
+	require.NoError(t, db.Callback().Create().Remove("mj_statistics_failure"))
+	require.NoError(t, db.First(&persisted, task.Id).Error)
+	assert.EqualValues(t, 30, persisted.Quota, "task quota must roll back with statistics")
+	require.NoError(t, db.Callback().Create().Before("gorm:create").Register("mj_log_failure", func(tx *gorm.DB) {
+		if tx.Statement.Table == "logs" {
+			tx.AddError(assert.AnError)
+		}
+	}))
+	require.ErrorIs(t, ApplyBillingRecoveryConsumption(requestID), assert.AnError)
+	require.NoError(t, db.Callback().Create().Remove("mj_log_failure"))
+	require.NoError(t, db.First(&persisted, task.Id).Error)
+	assert.Equal(t, actual, persisted.Quota)
 	for range 2 {
-		require.NoError(t, ApplyBillingRecoveryAdjustment(requestID, BillingRecoveryComponentFunding, BillingRecoveryOperationSettle))
-		require.NoError(t, ApplyBillingRecoveryAdjustment(requestID, BillingRecoveryComponentToken, BillingRecoveryOperationSettle))
-		require.NoError(t, ApplyBillingRecoveryConsumption(requestID))
+		completeTaskRecovery(t, requestID, actual, release)
 	}
+	assertTaskAccountProjection(t, db, fixture.user.Id, 0, 100-actual, 0, actual)
 	require.NoError(t, db.First(&fixture.user, fixture.user.Id).Error)
-	assert.Equal(t, 100-actual, fixture.user.Quota)
-	assert.Equal(t, actual, fixture.user.UsedQuota)
-	assert.Equal(t, 1, fixture.user.RequestCount, "terminal adjustment never counts another submission")
+	expectedCount := 1
+	if release {
+		expectedCount = 0
+	}
+	assert.Equal(t, expectedCount, fixture.user.RequestCount)
 	require.NoError(t, db.First(&fixture.token, fixture.token.Id).Error)
-	expectedTokenQuota := 0
+	expectedTokenQuota := common.Quota(0)
 	if fixture.tokenRequired {
 		expectedTokenQuota = actual
 	}
 	assert.Equal(t, 100-expectedTokenQuota, fixture.token.RemainQuota)
 	assert.Equal(t, expectedTokenQuota, fixture.token.UsedQuota)
+	assert.Zero(t, fixture.token.ReservedQuota)
 	require.NoError(t, db.First(&fixture.channel, fixture.channel.Id).Error)
-	assert.EqualValues(t, actual, fixture.channel.UsedQuota)
-	if fixture.task.ChannelId != fixture.channel.Id {
-		var routeChannel Channel
-		require.NoError(t, db.First(&routeChannel, fixture.task.ChannelId).Error)
-		assert.Zero(t, routeChannel.UsedQuota)
-	}
+	assert.Equal(t, actual, fixture.channel.UsedQuota)
 	require.NoError(t, db.First(&persisted, task.Id).Error)
 	assert.Equal(t, actual, persisted.Quota)
 	assert.Equal(t, task.Status, persisted.Status)
@@ -356,17 +378,20 @@ func testMidjourneyCompletionRecovery(t *testing.T, fixture midjourneyCompletion
 	assert.Equal(t, fixture.task.PrivateData, persisted.PrivateData)
 	var logs []Log
 	require.NoError(t, db.Where("request_id = ?", requestID).Find(&logs).Error)
-	if actual == 30 {
-		assert.Empty(t, logs)
-	} else {
-		require.Len(t, logs, 1)
-		assert.Equal(t, LogTypeRefund, logs[0].Type)
-		assert.Equal(t, 30, logs[0].Quota)
-		var bucket QuotaData
-		require.NoError(t, db.Where("user_id = ?", fixture.user.Id).First(&bucket).Error)
-		assert.Zero(t, bucket.Count)
-		assert.Equal(t, -30, bucket.Quota)
+	require.Len(t, logs, 1)
+	assert.Equal(t, actual, logs[0].Quota)
+	expectedType := LogTypeConsume
+	if release {
+		expectedType = LogTypeRefund
 	}
+	assert.Equal(t, expectedType, logs[0].Type)
+	var bucket QuotaData
+	require.NoError(t, db.Where("user_id = ?", fixture.user.Id).First(&bucket).Error)
+	assert.Equal(t, actual, bucket.Quota)
+	assert.Equal(t, expectedCount, bucket.Count, "exported request count matches committed usage statistics")
+	var count int64
+	require.NoError(t, db.Model(&BillingEvent{}).Where("request_id = ?", requestID).Count(&count).Error)
+	assert.EqualValues(t, 2, count)
 }
 
 func testMidjourneyConcurrentCompletion(t *testing.T, fixture midjourneyCompletionFixture) {
@@ -383,7 +408,7 @@ func testMidjourneyConcurrentCompletion(t *testing.T, fixture midjourneyCompleti
 			task.Status, task.Progress = status, "100%"
 			<-start
 			won, err := PersistMidjourneyCompletion(context.Background(), &task, "IN_PROGRESS", fixture.consumption)
-			results <- result{won: won, err: err, status: status}
+			results <- result{won, err, status}
 		}(status)
 	}
 	close(start)
@@ -400,23 +425,20 @@ func testMidjourneyConcurrentCompletion(t *testing.T, fixture midjourneyCompleti
 	var persisted Midjourney
 	require.NoError(t, fixture.db.First(&persisted, fixture.task.Id).Error)
 	assert.Equal(t, winner, persisted.Status)
-	requestID := MidjourneyBillingRequestID(fixture.task.Id)
+	requestID := fixture.task.PrivateData.SubmissionRequestID
 	var recoveries []BillingRecovery
 	require.NoError(t, fixture.db.Where("request_id = ?", requestID).Find(&recoveries).Error)
 	require.Len(t, recoveries, 1)
-	actual := 30
+	actual := common.Quota(30)
 	if winner == "FAILURE" {
 		actual = 0
 	}
-	assert.EqualValues(t, actual-30, recoveries[0].SettlementDelta)
+	assert.Equal(t, actual-30, recoveries[0].SettlementDelta)
 	for range 2 {
-		require.NoError(t, ApplyBillingRecoveryAdjustment(requestID, BillingRecoveryComponentFunding, BillingRecoveryOperationSettle))
-		require.NoError(t, ApplyBillingRecoveryAdjustment(requestID, BillingRecoveryComponentToken, BillingRecoveryOperationSettle))
-		require.NoError(t, MarkBillingRecoverySettled(requestID))
-		require.NoError(t, ApplyBillingRecoveryConsumption(requestID))
+		completeTaskRecovery(t, requestID, actual, winner == "FAILURE")
 	}
-	require.NoError(t, fixture.db.First(&fixture.user, fixture.user.Id).Error)
-	assert.Equal(t, 100-actual, fixture.user.Quota, fmt.Sprintf("winner %s", winner))
-	assert.Equal(t, actual, fixture.user.UsedQuota)
-	assert.Equal(t, 1, fixture.user.RequestCount)
+	assertTaskAccountProjection(t, fixture.db, fixture.user.Id, fixture.token.Id, 100-actual, 0, actual)
+	var count int64
+	require.NoError(t, fixture.db.Model(&BillingEvent{}).Where("request_id = ?", requestID).Count(&count).Error)
+	assert.EqualValues(t, 2, count)
 }

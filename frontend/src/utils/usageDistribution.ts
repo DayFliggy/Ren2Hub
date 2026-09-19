@@ -1,4 +1,9 @@
-import type { UsageDistributionPoint } from '@/composables/useUsageDistribution'
+export interface UsageDistributionPoint {
+  date: string
+  requests: number
+  consume: number
+  tokens: number
+}
 
 export type UsageDistributionMetric = 'requests' | 'consume' | 'tokens'
 export type UsageDistributionPeriod = 'month' | 'quarter' | 'year'

@@ -33,7 +33,7 @@ describe('system settings catalog', () => {
     expect(keys).toContain('ModelRequestRateLimitGroup')
     expect(keys).toContain('WorkerAllowHttpImageRequestEnabled')
     expect(keys).toContain('perf_metrics_setting.retention_days')
-    expect(keys).toContain('billing_setting.billing_expr')
+    expect(keys).not.toContain('billing_setting.billing_expr')
     expect(keys).toContain('payment_setting.amount_discount')
     expect(keys).toContain('channel_affinity_setting.rules')
     expect(keys).toContain('global.chat_completions_to_responses_policy')
@@ -53,7 +53,7 @@ describe('system settings catalog', () => {
     )
 
     expect(
-      pricing?.fields.find((field) => field.key === 'ModelRatio')?.kind
+      pricing?.fields.find((field) => field.key === 'TopupGroupRatio')?.kind
     ).toBe('ratio')
     expect(
       ssrf?.fields.find((field) => field.key === 'fetch_setting.domain_list')

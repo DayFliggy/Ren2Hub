@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { quotaForChart } from '@/utils/quota'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -8,7 +9,7 @@ import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import type { FlowPoint } from '@/composables/useDashboard'
 import type { StatsComparison, StatsKpi } from '@/composables/useDashboardStats'
-import { formatNumber, formatQuota } from '@/utils/format'
+import { formatNumber, formatQuota, formatMoney } from '@/utils/format'
 import { escapeHtml } from '@/utils/html'
 
 type ChartMode = 'both' | 'consume' | 'requests'
@@ -76,7 +77,7 @@ useEChart(
             .map((entry) => {
               const value =
                 entry.seriesName === consumeLabel
-                  ? formatQuota(entry.value)
+                  ? formatMoney(entry.value)
                   : formatNumber(entry.value)
               return `<div style="display:flex;align-items:center;gap:6px;margin-top:4px">
                 <span style="width:8px;height:8px;border-radius:50%;background:${entry.color}"></span>
@@ -165,7 +166,7 @@ useEChart(
                 name: consumeLabel,
                 type: 'line',
                 smooth: mood.line.smooth,
-                data: data.value.map((point) => point.consume),
+                data: data.value.map((point) => quotaForChart(point.consume)),
                 lineStyle: { color: palette.accent, ...mood.line.lineStyle },
                 itemStyle: {
                   color: palette.accent,

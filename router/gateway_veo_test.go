@@ -19,8 +19,8 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,12 +52,13 @@ func TestGatewayVeoFinalParametersAndPrecharge(t *testing.T) {
 				}
 				var user model.User
 				if assert.NoError(t, model.DB.First(&user, 1).Error) {
-					assert.Equal(t, quotaBefore-expectedQuota, user.Quota, "precharge must use the parameters sent to Veo")
+					assert.EqualValues(t, quotaBefore-expectedQuota, user.Quota, "precharge must use the parameters sent to Veo")
 				}
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = fmt.Fprintf(w, `{"name":"models/%s/operations/local-%d"}`, requestModel, index)
 			})
-			require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"veo-3.1-generate-preview":0.001}`))
+			_, priceErr := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: requestModel, Mode: billing.ModeExpression, Expression: `attr("duration") * 1000 * (attr("resolution") == "4k" ? 1.5 : 1)`}, 0, 1)
+			require.NoError(t, priceErr)
 			ch, err := model.GetChannelById(1, true)
 			require.NoError(t, err)
 			ch.Type, ch.Models = channelType, requestModel
@@ -107,15 +108,15 @@ func TestGatewayVeoFinalParametersAndPrecharge(t *testing.T) {
 					expectedQuota = common.QuotaFromFloat(0.001 * common.QuotaPerUnit * float64(tc.seconds) * tc.multiplier)
 					var before model.User
 					require.NoError(t, model.DB.First(&before, 1).Error)
-					quotaBefore = before.Quota
+					quotaBefore = int(before.Quota)
 					code, body := postGatewayTask(t, url, key, "/v1/videos", `{"model":"`+requestModel+`","prompt":"isolated video"`+tc.fields+`}`)
 					require.Equal(t, 200, code, body)
 					var task model.Task
 					require.NoError(t, model.DB.Order("id desc").First(&task).Error)
-					assert.Equal(t, expectedQuota, task.Quota)
+					assert.EqualValues(t, expectedQuota, task.Quota)
 					var after model.User
 					require.NoError(t, model.DB.First(&after, 1).Error)
-					assert.Equal(t, expectedQuota, after.UsedQuota-before.UsedQuota)
+					assert.EqualValues(t, expectedQuota, after.ReservedQuota-before.ReservedQuota)
 				})
 			}
 			t.Run("multipart image", func(t *testing.T) {
@@ -123,7 +124,7 @@ func TestGatewayVeoFinalParametersAndPrecharge(t *testing.T) {
 				expectedQuota = common.QuotaFromFloat(0.001 * common.QuotaPerUnit * 4)
 				var before model.User
 				require.NoError(t, model.DB.First(&before, 1).Error)
-				quotaBefore = before.Quota
+				quotaBefore = int(before.Quota)
 				var body bytes.Buffer
 				writer := multipart.NewWriter(&body)
 				for field, value := range map[string]string{"model": requestModel, "prompt": "multipart image", "seconds": "4"} {
@@ -148,7 +149,7 @@ func TestGatewayVeoFinalParametersAndPrecharge(t *testing.T) {
 				require.Equal(t, 200, resp.StatusCode, string(response))
 				var task model.Task
 				require.NoError(t, model.DB.Order("id desc").First(&task).Error)
-				assert.Equal(t, expectedQuota, task.Quota)
+				assert.EqualValues(t, expectedQuota, task.Quota)
 			})
 			for _, fields := range []string{`,"metadata":{"durationSeconds":3601}`, `,"metadata":{"sampleCount":2}`, `,"seconds":"bad"`, `,"duration":"bad"`, `,"metadata":"bad"`, `,"images":["data:image/png;base64,bad"]`, `,"input_reference":"https://image.invalid/input.png"`,
 				`,"metadata":{"DurationSeconds":-1}`, `,"metadata":{"SampleCount":2}`, `,"metadata":{"Resolution":"invalid"}`,
@@ -165,8 +166,8 @@ func TestGatewayVeoFinalParametersAndPrecharge(t *testing.T) {
 					assert.Equal(t, beforeSends, sends.Load())
 					assert.Equal(t, beforeAuth, authCalls.Load(), "invalid requests cannot initiate token exchange")
 					require.NoError(t, model.DB.First(&after, 1).Error)
-					assert.Equal(t, before.Quota, after.Quota)
-					assert.Equal(t, before.UsedQuota, after.UsedQuota)
+					assert.EqualValues(t, int(before.Quota), after.Quota)
+					assert.EqualValues(t, before.UsedQuota, after.UsedQuota)
 					require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&recoveriesAfter).Error)
 					assert.Equal(t, recoveriesBefore, recoveriesAfter)
 				})

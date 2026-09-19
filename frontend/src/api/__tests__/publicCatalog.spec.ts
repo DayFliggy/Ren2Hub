@@ -11,29 +11,31 @@ describe('public catalog contracts', () => {
         icon: '',
         tags: '',
         vendor_id: 1,
-        quota_type: 0,
-        model_ratio: 2,
-        model_price: 0,
         owner_by: 'Demo',
-        completion_ratio: 3,
-        cache_ratio: 0.5,
-        create_cache_ratio: null,
         channel_ratio_min: 1.5,
         channel_ratio_max: 2,
         supported_endpoint_types: [],
         billing_mode: '',
-        billing_expr: '',
-        image_ratio: null,
-        audio_ratio: null,
-        audio_completion_ratio: null,
+        price_version: {
+          id: 1,
+          model: 'demo',
+          mode: 'unit_price' as const,
+          prices: [
+            { quantity: 'p', unit: 'per_million_tokens', price: '4' },
+            { quantity: 'c', unit: 'per_million_tokens', price: '12' },
+            { quantity: 'cr', unit: 'per_million_tokens', price: '2' },
+          ],
+          created_at: 1,
+          hash: 'fixture',
+        },
       },
       1.5,
       'M'
     )
     expect(prices).toEqual([
-      { key: 'input', value: 6 },
-      { key: 'output', value: 18 },
-      { key: 'cacheRead', value: 3 },
+      { key: 'input', value: '6', unit: 'per_million_tokens' },
+      { key: 'output', value: '18', unit: 'per_million_tokens' },
+      { key: 'cacheRead', value: '3', unit: 'per_million_tokens' },
     ])
   })
 

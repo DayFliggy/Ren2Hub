@@ -46,6 +46,13 @@ func AnalyzeOutboundTokenBudget(info *relaycommon.RelayInfo, body io.Reader) (*O
 	if payload == nil {
 		return nil, fmt.Errorf("outbound request must be a JSON object")
 	}
+	pricingPayload, err := common.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	if err := FreezeOutboundBillingAttributes(info, pricingPayload); err != nil {
+		return nil, err
+	}
 	var request dto.Request
 	var inputFields, limitFields, countFields []string
 	limits := payload

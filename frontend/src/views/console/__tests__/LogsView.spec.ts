@@ -29,9 +29,9 @@ beforeEach(() => {
     if (path === '/api/log/self/stat') {
       return Promise.resolve({
         total_requests: 0,
-        total_quota: 0,
+        total_quota: '0',
         today_requests: 0,
-        today_quota: 0,
+        today_quota: '0',
       })
     }
     return Promise.reject(new Error(`Unexpected API request: ${path}`))

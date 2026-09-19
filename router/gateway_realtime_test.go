@@ -113,7 +113,7 @@ func TestGatewayRealtimeTerminationAndAccounting(t *testing.T) {
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
 			if hasOutput {
 				assert.Equal(t, 1, user.RequestCount)
-				assert.Equal(t, 500, user.UsedQuota)
+				assert.EqualValues(t, 500, user.UsedQuota)
 				require.Len(t, logs, 1)
 				if ending == "completed" {
 					assert.Equal(t, 10, logs[0].PromptTokens)
@@ -125,7 +125,8 @@ func TestGatewayRealtimeTerminationAndAccounting(t *testing.T) {
 				}
 			} else {
 				assert.Zero(t, user.RequestCount)
-				assert.Equal(t, 10000000, user.Quota, "undelivered session must refund input-only estimates")
+				assert.EqualValues(t, 9999500, user.Quota, "an accepted session with unknown consumption keeps its reservation")
+				assert.EqualValues(t, 500, user.ReservedQuota)
 			}
 			var failures int64
 			require.NoError(t, model.DB.Model(&model.ChannelHealth{}).Where("failure_count > 0").Count(&failures).Error)
@@ -144,7 +145,7 @@ func TestGatewayRealtimeBillingRecoveryDoesNotReplay(t *testing.T) {
 	relayRealtimeEvent(t, upstream, client, `{"type":"response.output_text.delta","delta":"hello"}`)
 	relayRealtimeEvent(t, upstream, client, `{"type":"response.done","response":{"id":"round-one","usage":{"input_tokens":10,"output_tokens":20}}}`)
 	require.NoError(t, model.DB.Callback().Create().Before("gorm:create").Register("realtime_settlement_fault", func(tx *gorm.DB) {
-		if adjustment, ok := tx.Statement.Dest.(*model.BillingRecoveryAdjustment); ok && adjustment.Operation == model.BillingRecoveryOperationSettle {
+		if adjustment, ok := tx.Statement.Dest.(*model.BillingEvent); ok && adjustment.Operation == model.BillingRecoveryOperationSettle {
 			tx.AddError(assert.AnError)
 		}
 	}))
@@ -164,7 +165,7 @@ func TestGatewayRealtimeBillingRecoveryDoesNotReplay(t *testing.T) {
 	var logs int64
 	require.NoError(t, model.DB.First(&user, 1).Error)
 	require.NoError(t, model.LOG_DB.Model(&model.Log{}).Where("type = ?", model.LogTypeConsume).Count(&logs).Error)
-	assert.Equal(t, 500, user.UsedQuota)
+	assert.EqualValues(t, 500, user.UsedQuota)
 	assert.Equal(t, 1, user.RequestCount)
 	assert.EqualValues(t, 1, logs)
 	assert.EqualValues(t, 1, sends.Load())

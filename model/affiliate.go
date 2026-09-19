@@ -38,25 +38,25 @@ var (
 var affiliateCodeAlphabet = []byte("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
 
 type AffiliateLedger struct {
-	Id                  int64  `json:"id"`
-	UserId              int    `json:"user_id" gorm:"index;not null"`
-	InviteeId           int    `json:"invitee_id" gorm:"index;not null;default:0"`
-	Action              string `json:"action" gorm:"type:varchar(32);index;not null"`
-	SourceType          string `json:"source_type" gorm:"type:varchar(32);index"`
-	SourceId            int64  `json:"source_id" gorm:"type:bigint;index;not null;default:0"`
-	SourceTradeNo       string `json:"source_trade_no" gorm:"type:varchar(255);index"`
-	SourceEventKey      string `json:"source_event_key" gorm:"type:varchar(160);uniqueIndex;not null"`
-	BaseQuota           int64  `json:"base_quota" gorm:"type:bigint;not null;default:0"`
-	RateBps             int    `json:"rate_bps" gorm:"type:int;not null;default:0"`
-	RewardQuota         int64  `json:"reward_quota" gorm:"type:bigint;not null;default:0"`
-	Reason              string `json:"reason" gorm:"type:varchar(64)"`
-	FrozenUntil         int64  `json:"frozen_until" gorm:"type:bigint;index;not null;default:0"`
-	ThawedAt            int64  `json:"thawed_at" gorm:"type:bigint;not null;default:0"`
-	BalanceAfter        *int64 `json:"balance_after,omitempty" gorm:"type:bigint"`
-	AvailableQuotaAfter *int64 `json:"available_quota_after,omitempty" gorm:"type:bigint"`
-	FrozenQuotaAfter    *int64 `json:"frozen_quota_after,omitempty" gorm:"type:bigint"`
-	HistoryQuotaAfter   *int64 `json:"history_quota_after,omitempty" gorm:"type:bigint"`
-	CreatedAt           int64  `json:"created_at" gorm:"autoCreateTime"`
+	Id                  int64         `json:"id"`
+	UserId              int           `json:"user_id" gorm:"index;not null"`
+	InviteeId           int           `json:"invitee_id" gorm:"index;not null;default:0"`
+	Action              string        `json:"action" gorm:"type:varchar(32);index;not null"`
+	SourceType          string        `json:"source_type" gorm:"type:varchar(32);index"`
+	SourceId            int64         `json:"source_id" gorm:"type:bigint;index;not null;default:0"`
+	SourceTradeNo       string        `json:"source_trade_no" gorm:"type:varchar(255);index"`
+	SourceEventKey      string        `json:"source_event_key" gorm:"type:varchar(160);uniqueIndex;not null"`
+	BaseQuota           common.Quota  `json:"base_quota" gorm:"type:bigint;not null;default:0"`
+	RateBps             int           `json:"rate_bps" gorm:"type:int;not null;default:0"`
+	RewardQuota         common.Quota  `json:"reward_quota" gorm:"type:bigint;not null;default:0"`
+	Reason              string        `json:"reason" gorm:"type:varchar(64)"`
+	FrozenUntil         int64         `json:"frozen_until" gorm:"type:bigint;index;not null;default:0"`
+	ThawedAt            int64         `json:"thawed_at" gorm:"type:bigint;not null;default:0"`
+	BalanceAfter        *common.Quota `json:"balance_after,omitempty" gorm:"type:bigint"`
+	AvailableQuotaAfter *common.Quota `json:"available_quota_after,omitempty" gorm:"type:bigint"`
+	FrozenQuotaAfter    *common.Quota `json:"frozen_quota_after,omitempty" gorm:"type:bigint"`
+	HistoryQuotaAfter   *common.Quota `json:"history_quota_after,omitempty" gorm:"type:bigint"`
+	CreatedAt           int64         `json:"created_at" gorm:"autoCreateTime"`
 }
 
 type AffiliateRewardSource struct {
@@ -64,7 +64,7 @@ type AffiliateRewardSource struct {
 	Id        int64
 	TradeNo   string
 	InviteeId int
-	BaseQuota int64
+	BaseQuota common.Quota
 	CreatedAt int64
 }
 
@@ -104,7 +104,7 @@ func EnsureAffiliateCode(userId int) (string, error) {
 		return "", gorm.ErrRecordNotFound
 	}
 	var code string
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	err := BillingTransaction(nil, func(tx *gorm.DB) error {
 		var user User
 		if err := lockForUpdate(tx).Select("id", "aff_code").Where("id = ?", userId).First(&user).Error; err != nil {
 			return err
@@ -190,7 +190,7 @@ func ResolveAffiliateInviterTx(tx *gorm.DB, rawCode string, required bool) (*Use
 }
 
 func ValidateAffiliateCode(rawCode string) error {
-	return DB.Transaction(func(tx *gorm.DB) error {
+	return BillingTransaction(nil, func(tx *gorm.DB) error {
 		_, err := ResolveAffiliateInviterTx(tx, rawCode, true)
 		return err
 	})
@@ -213,8 +213,8 @@ func clampAffiliateRateBps(value int) int {
 	return value
 }
 
-func AffiliateBaseQuotaFromPayment(payMoney float64, unitPrice float64) (int64, error) {
-	if payMoney <= 0 || unitPrice <= 0 || common.QuotaPerUnit <= 0 || math.IsNaN(payMoney) || math.IsInf(payMoney, 0) {
+func AffiliateBaseQuotaFromPayment(payMoney float64, unitPrice float64) (common.Quota, error) {
+	if payMoney <= 0 || unitPrice <= 0 || common.QuotaPerUnit <= 0 || math.IsNaN(payMoney) || math.IsInf(payMoney, 0) || math.IsNaN(unitPrice) || math.IsInf(unitPrice, 0) {
 		return 0, errors.New("invalid affiliate payment base")
 	}
 	base := decimal.NewFromFloat(payMoney).
@@ -224,18 +224,18 @@ func AffiliateBaseQuotaFromPayment(payMoney float64, unitPrice float64) (int64, 
 	if !base.IsPositive() {
 		return 0, errors.New("invalid affiliate quota base")
 	}
-	quota, err := common.QuotaFromDecimalStrict(base)
+	quota, err := common.WalletQuotaFromDecimal(base)
 	if err != nil || quota <= 0 {
 		return 0, errors.New("invalid affiliate quota base")
 	}
-	return int64(quota), nil
+	return quota, nil
 }
 
-func AffiliateBaseQuotaFromUSD(amount float64) (int64, error) {
+func AffiliateBaseQuotaFromUSD(amount float64) (common.Quota, error) {
 	return AffiliateBaseQuotaFromPayment(amount, 1)
 }
 
-func SnapshotAffiliateBaseQuota(payMoney float64, unitPrice float64) (int64, error) {
+func SnapshotAffiliateBaseQuota(payMoney float64, unitPrice float64) (common.Quota, error) {
 	if !common.AffiliateEnabled || common.AffiliateActivatedAt <= 0 {
 		return 0, nil
 	}
@@ -315,17 +315,20 @@ func ApplyAffiliateRewardTx(tx *gorm.DB, source AffiliateRewardSource) error {
 	}
 
 	rateBps := EffectiveAffiliateRateBps(&inviter)
-	reward := source.BaseQuota * int64(rateBps) / 10000
+	reward, err := common.WalletQuotaFromDecimal(decimal.NewFromInt(int64(source.BaseQuota)).Mul(decimal.NewFromInt(int64(rateBps))).Div(decimal.NewFromInt(10000)))
+	if err != nil {
+		return err
+	}
 	if reward <= 0 {
 		return createAffiliateSkipTx(tx, source, eventKey, inviter.Id, "zero_reward")
 	}
 
-	capQuota, err := AffiliateBaseQuotaFromUSD(common.AffiliatePerInviteeCap)
-	if err != nil && common.AffiliatePerInviteeCap > 0 {
+	capQuota, err := AffiliateCapQuota(common.AffiliatePerInviteeCap)
+	if err != nil {
 		return err
 	}
 	if capQuota > 0 {
-		var accrued int64
+		var accrued common.Quota
 		if err := tx.Model(&AffiliateLedger{}).
 			Where("user_id = ? AND invitee_id = ? AND action = ?", inviter.Id, invitee.Id, AffiliateActionAccrue).
 			Select("COALESCE(SUM(reward_quota), 0)").Scan(&accrued).Error; err != nil {
@@ -338,10 +341,15 @@ func ApplyAffiliateRewardTx(tx *gorm.DB, source AffiliateRewardSource) error {
 			reward = remaining
 		}
 	}
-	if reward > int64(common.MaxQuota) ||
-		int64(inviter.AffHistoryQuota)+reward >= int64(common.MaxQuota) ||
-		int64(inviter.AffQuota)+int64(inviter.AffFrozenQuota)+reward >= int64(common.MaxQuota) {
-		return createAffiliateSkipTx(tx, source, eventKey, inviter.Id, "inviter_quota_limit")
+	if _, err := common.AddQuota(inviter.AffHistoryQuota, reward); err != nil {
+		return err
+	}
+	total, err := common.AddQuota(inviter.AffQuota, inviter.AffFrozenQuota)
+	if err != nil {
+		return err
+	}
+	if _, err := common.AddQuota(total, reward); err != nil {
+		return err
 	}
 
 	frozenUntil := int64(0)
@@ -366,9 +374,9 @@ func ApplyAffiliateRewardTx(tx *gorm.DB, source AffiliateRewardSource) error {
 	if err := tx.Select("aff_quota", "aff_frozen_quota", "aff_history").Where("id = ?", inviter.Id).First(&updated).Error; err != nil {
 		return err
 	}
-	availableAfter := int64(updated.AffQuota)
-	frozenAfter := int64(updated.AffFrozenQuota)
-	historyAfter := int64(updated.AffHistoryQuota)
+	availableAfter := updated.AffQuota
+	frozenAfter := updated.AffFrozenQuota
+	historyAfter := updated.AffHistoryQuota
 	return tx.Create(&AffiliateLedger{
 		UserId: inviter.Id, InviteeId: invitee.Id, Action: AffiliateActionAccrue,
 		SourceType: source.Type, SourceId: source.Id, SourceTradeNo: source.TradeNo, SourceEventKey: eventKey,
@@ -385,7 +393,7 @@ func createAffiliateSkipTx(tx *gorm.DB, source AffiliateRewardSource, eventKey s
 	}).Error
 }
 
-func ThawAffiliateQuotaTx(tx *gorm.DB, userId int) (int64, error) {
+func ThawAffiliateQuotaTx(tx *gorm.DB, userId int) (common.Quota, error) {
 	if tx == nil {
 		return 0, errors.New("affiliate transaction is required")
 	}
@@ -406,10 +414,14 @@ func ThawAffiliateQuotaTx(tx *gorm.DB, userId int) (int64, error) {
 	}
 
 	ids := make([]int64, 0, len(rows))
-	var thawed int64
+	var thawed common.Quota
 	for _, row := range rows {
 		ids = append(ids, row.Id)
-		thawed += row.RewardQuota
+		var err error
+		thawed, err = common.AddQuota(thawed, row.RewardQuota)
+		if err != nil {
+			return 0, err
+		}
 	}
 	if thawed <= 0 {
 		return 0, nil
@@ -417,15 +429,22 @@ func ThawAffiliateQuotaTx(tx *gorm.DB, userId int) (int64, error) {
 	if err := tx.Model(&AffiliateLedger{}).Where("id IN ? AND thawed_at = 0", ids).Update("thawed_at", now).Error; err != nil {
 		return 0, err
 	}
+	if thawed > user.AffFrozenQuota {
+		return 0, errors.New("affiliate frozen quota invariant violated")
+	}
+	available, err := common.AddQuota(user.AffQuota, thawed)
+	if err != nil {
+		return 0, err
+	}
 	return thawed, tx.Model(&User{}).Where("id = ?", userId).Updates(map[string]any{
-		"aff_quota":        gorm.Expr("aff_quota + ?", thawed),
-		"aff_frozen_quota": gorm.Expr("CASE WHEN aff_frozen_quota >= ? THEN aff_frozen_quota - ? ELSE 0 END", thawed, thawed),
+		"aff_quota":        available,
+		"aff_frozen_quota": user.AffFrozenQuota - thawed,
 	}).Error
 }
 
-func ThawAffiliateQuota(userId int) (int64, error) {
-	var thawed int64
-	err := DB.Transaction(func(tx *gorm.DB) error {
+func ThawAffiliateQuota(userId int) (common.Quota, error) {
+	var thawed common.Quota
+	err := BillingTransaction(nil, func(tx *gorm.DB) error {
 		var err error
 		thawed, err = ThawAffiliateQuotaTx(tx, userId)
 		return err
@@ -433,55 +452,73 @@ func ThawAffiliateQuota(userId int) (int64, error) {
 	return thawed, err
 }
 
-func TransferAffiliateQuota(userId int, amount int) (int, int, error) {
+func TransferAffiliateQuota(userId int, amount common.Quota, operationID string) (common.Quota, common.Quota, error) {
 	if !operation_setting.IsPaymentComplianceConfirmed() {
 		return 0, 0, errors.New("邀请返利功能未启用")
 	}
-	if amount <= 0 || float64(amount) < common.QuotaPerUnit {
-		return 0, 0, errors.New("转移额度低于最低限制")
+	if amount < 500000 || operationID == "" || len(operationID) > 96 {
+		return 0, 0, errors.New("invalid affiliate transfer")
 	}
-
-	var newBalance int
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	var newBalance common.Quota
+	eventID := fmt.Sprintf("affiliate-transfer:%d:%s", userId, operationID)
+	err := BillingTransaction(nil, func(tx *gorm.DB) error {
 		if _, err := ThawAffiliateQuotaTx(tx, userId); err != nil {
 			return err
 		}
 		var user User
-		if err := lockForUpdate(tx).Where("id = ?", userId).First(&user).Error; err != nil {
+		if err := lockForUpdate(tx).First(&user, userId).Error; err != nil {
+			return err
+		}
+		var existing BillingEvent
+		err := tx.Where("event_id = ?", eventID).First(&existing).Error
+		if err == nil {
+			if existing.UserID != userId || existing.AvailableDelta != amount || existing.SourceType != "affiliate_transfer" {
+				return ErrBillingEventConflict
+			}
+			newBalance = existing.AvailableAfter
+			return nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
 		if user.AffQuota < amount {
 			return ErrAffiliateQuotaEmpty
 		}
-		if int64(user.Quota)+int64(amount) >= int64(common.MaxQuota) {
-			return ErrTopUpQuotaLimitExceeded
-		}
-		if err := tx.Model(&User{}).Where("id = ?", userId).Updates(map[string]any{
-			"aff_quota": gorm.Expr("aff_quota - ?", amount),
-			"quota":     gorm.Expr("quota + ?", amount),
-		}).Error; err != nil {
+		event, err := ApplyWalletAdjustmentTx(tx, WalletAdjustment{EventID: eventID, UserID: userId, Delta: amount, SourceType: "affiliate_transfer", SourceID: operationID, ActorID: userId, Reason: "affiliate reward transferred to wallet"})
+		if err != nil {
 			return err
 		}
-		if err := tx.Select("quota", "aff_quota", "aff_frozen_quota", "aff_history").Where("id = ?", userId).First(&user).Error; err != nil {
+		availableAfter := user.AffQuota - amount
+		if err := tx.Model(&User{}).Where("id = ?", userId).Update("aff_quota", availableAfter).Error; err != nil {
 			return err
 		}
-		newBalance = user.Quota
-		balanceAfter := int64(user.Quota)
-		availableAfter := int64(user.AffQuota)
-		frozenAfter := int64(user.AffFrozenQuota)
-		historyAfter := int64(user.AffHistoryQuota)
-		return tx.Create(&AffiliateLedger{
-			UserId: userId, Action: AffiliateActionTransfer,
-			SourceEventKey: "transfer:" + common.GetUUID(), RewardQuota: int64(amount),
-			BalanceAfter: &balanceAfter, AvailableQuotaAfter: &availableAfter,
-			FrozenQuotaAfter: &frozenAfter, HistoryQuotaAfter: &historyAfter,
-		}).Error
+		newBalance = event.AvailableAfter
+		return tx.Create(&AffiliateLedger{UserId: userId, Action: AffiliateActionTransfer, SourceEventKey: eventID, RewardQuota: amount, BalanceAfter: &newBalance, AvailableQuotaAfter: &availableAfter, FrozenQuotaAfter: &user.AffFrozenQuota, HistoryQuotaAfter: &user.AffHistoryQuota}).Error
 	})
 	if err != nil {
 		return 0, 0, err
 	}
-	syncCreditUserQuotaCache(userId, amount, "affiliate transfer")
 	return amount, newBalance, nil
+}
+
+func creditRegistrationInviterTx(tx *gorm.DB, inviterID, inviteeID int) error {
+	var inviter User
+	if err := lockForUpdate(tx).First(&inviter, inviterID).Error; err != nil {
+		return err
+	}
+	reward := common.Quota(common.QuotaForInviter)
+	available, err := common.AddQuota(inviter.AffQuota, reward)
+	if err != nil {
+		return err
+	}
+	history, err := common.AddQuota(inviter.AffHistoryQuota, reward)
+	if err != nil {
+		return err
+	}
+	if err := tx.Model(&User{}).Where("id = ?", inviterID).Updates(map[string]any{"aff_quota": available, "aff_history": history}).Error; err != nil {
+		return err
+	}
+	return tx.Create(&AffiliateLedger{UserId: inviterID, InviteeId: inviteeID, Action: AffiliateActionAccrue, SourceType: "registration", SourceEventKey: fmt.Sprintf("registration-inviter:%d", inviteeID), RewardQuota: reward, AvailableQuotaAfter: &available, HistoryQuotaAfter: &history, FrozenQuotaAfter: &inviter.AffFrozenQuota}).Error
 }
 
 func HasActiveAffiliateSeed() (bool, error) {
@@ -540,7 +577,7 @@ func BackfillAffiliateCodeEnabled() error {
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
-	return DB.Transaction(func(tx *gorm.DB) error {
+	return BillingTransaction(nil, func(tx *gorm.DB) error {
 		if err := tx.Model(&User{}).Where("1 = 1").Update("aff_code_enabled", true).Error; err != nil {
 			return err
 		}
@@ -553,19 +590,19 @@ func BackfillAffiliateCodeEnabled() error {
 
 func InitializeAffiliateLedger() error {
 	var users []User
-	if err := DB.Select("id", "quota", "aff_quota", "aff_frozen_quota", "aff_history").
+	if err := DB.Select("id", "available_quota", "aff_quota", "aff_frozen_quota", "aff_history").
 		Where("aff_history <> 0 OR aff_quota <> 0 OR aff_frozen_quota <> 0").Find(&users).Error; err != nil {
 		return err
 	}
 	for _, user := range users {
 		key := fmt.Sprintf("legacy:user:%d", user.Id)
-		balanceAfter := int64(user.Quota)
-		availableAfter := int64(user.AffQuota)
-		frozenAfter := int64(user.AffFrozenQuota)
-		historyAfter := int64(user.AffHistoryQuota)
+		balanceAfter := user.Quota
+		availableAfter := user.AffQuota
+		frozenAfter := user.AffFrozenQuota
+		historyAfter := user.AffHistoryQuota
 		entry := AffiliateLedger{
 			UserId: user.Id, Action: AffiliateActionLegacySnapshot, SourceEventKey: key,
-			RewardQuota: int64(user.AffHistoryQuota), BalanceAfter: &balanceAfter,
+			RewardQuota: user.AffHistoryQuota, BalanceAfter: &balanceAfter,
 			AvailableQuotaAfter: &availableAfter, FrozenQuotaAfter: &frozenAfter, HistoryQuotaAfter: &historyAfter,
 		}
 		if err := DB.Where("source_event_key = ?", key).FirstOrCreate(&entry).Error; err != nil {
@@ -573,4 +610,16 @@ func InitializeAffiliateLedger() error {
 		}
 	}
 	return nil
+}
+
+// AffiliateCapQuota parses the configured USD limit without a float round trip.
+func AffiliateCapQuota(value string) (common.Quota, error) {
+	if len(value) > 64 {
+		return 0, errors.New("invalid affiliate cap")
+	}
+	amount, err := decimal.NewFromString(value)
+	if err != nil || amount.IsNegative() || amount.Exponent() < -18 || amount.Exponent() > 18 {
+		return 0, errors.New("invalid affiliate cap")
+	}
+	return common.WalletQuotaFromDecimal(amount.Mul(decimal.NewFromInt(500000)))
 }

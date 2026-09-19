@@ -11,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relay/channel/ali"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -49,7 +50,7 @@ func TestImageAdapterDeliveryContracts(t *testing.T) {
 						RelayFormat: types.RelayFormatOpenAIImage, RelayMode: relayconstant.RelayModeImagesGenerations, IsStream: stream,
 						StartTime: time.Now(), Request: &dto.ImageRequest{Model: provider.model}}
 					info.PriceData.UsePrice = true
-					info.PriceData.AddOtherRatio("n", 3)
+					info.PriceData.Usage = &billing.Usage{Quantities: map[string]string{"images": "3"}}
 					adaptor.Init(info)
 					if aliAdaptor, ok := adaptor.(*ali.Adaptor); ok {
 						aliAdaptor.IsSyncImageModel = true
@@ -70,7 +71,7 @@ func TestImageAdapterDeliveryContracts(t *testing.T) {
 					require.Nil(t, apiErr)
 					require.NotNil(t, usage)
 					assert.True(t, info.HasValidOutput())
-					assert.Equal(t, 2.0, info.PriceData.OtherRatios()["n"])
+					assert.Equal(t, "2", info.PriceData.Usage.Quantities["images"])
 					if stream {
 						assert.Equal(t, 2, strings.Count(recorder.Body.String(), "event: image_generation.completed"))
 						assert.Equal(t, 1, strings.Count(recorder.Body.String(), "data: [DONE]"))

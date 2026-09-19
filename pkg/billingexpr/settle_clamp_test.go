@@ -1,10 +1,8 @@
 package billingexpr_test
 
 import (
-	"math"
 	"testing"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,12 +25,8 @@ func TestComputeTieredQuota_ClampOnOverflow(t *testing.T) {
 	}
 
 	result, err := billingexpr.ComputeTieredQuota(snap, billingexpr.TokenParams{P: 1_000_000_000})
-	require.NoError(t, err)
-
-	assert.Equal(t, math.MaxInt32, result.ActualQuotaAfterGroup, "oversized quota must clamp to int32 max, never wrap negative")
-	require.NotNil(t, result.Clamp, "clamp event must be surfaced so it can be audited")
-	assert.Equal(t, common.QuotaClampOverflow, result.Clamp.Kind)
-	assert.Equal(t, math.MaxInt32, result.Clamp.Clamped)
+	require.Error(t, err)
+	assert.Zero(t, result.ActualQuotaAfterGroup, "invalid charges must not reach settlement")
 }
 
 // TestComputeTieredQuota_NoClampInRange confirms an in-range settlement leaves

@@ -13,25 +13,28 @@ import (
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 type nextAdminUserDTO struct {
-	ID             int    `json:"id"`
-	Username       string `json:"username"`
-	DisplayName    string `json:"display_name"`
-	Email          string `json:"email"`
-	Role           int    `json:"role"`
-	Status         int    `json:"status"`
-	Quota          int    `json:"quota"`
-	UsedQuota      int    `json:"used_quota"`
-	RequestCount   int    `json:"request_count"`
-	InvitedCount   int    `json:"invited_count"`
-	AffiliateQuota int    `json:"affiliate_quota"`
-	InviterID      int    `json:"inviter_id"`
-	CreatedTime    int64  `json:"created_time"`
-	LastLoginTime  int64  `json:"last_login_time"`
+	ID             int          `json:"id"`
+	Username       string       `json:"username"`
+	DisplayName    string       `json:"display_name"`
+	Email          string       `json:"email"`
+	Role           int          `json:"role"`
+	Status         int          `json:"status"`
+	Quota          common.Quota `json:"available_quota"`
+	ReservedQuota  common.Quota `json:"reserved_quota"`
+	QuotaVersion   int64        `json:"quota_version"`
+	UsedQuota      common.Quota `json:"used_quota"`
+	RequestCount   int          `json:"request_count"`
+	InvitedCount   int          `json:"invited_count"`
+	AffiliateQuota common.Quota `json:"affiliate_quota"`
+	InviterID      int          `json:"inviter_id"`
+	CreatedTime    int64        `json:"created_time"`
+	LastLoginTime  int64        `json:"last_login_time"`
 }
 
 type nextAdminUserWriteRequest struct {
@@ -73,7 +76,7 @@ func validateNextAdminUserWrite(request *nextAdminUserWriteRequest, creating boo
 func buildNextAdminUserDTO(user *model.User) nextAdminUserDTO {
 	return nextAdminUserDTO{
 		ID: user.Id, Username: user.Username, DisplayName: user.DisplayName,
-		Email: user.Email, Role: user.Role, Status: user.Status, Quota: user.Quota,
+		Email: user.Email, Role: user.Role, Status: user.Status, Quota: user.Quota, ReservedQuota: user.ReservedQuota, QuotaVersion: user.QuotaVersion,
 		UsedQuota: user.UsedQuota, RequestCount: user.RequestCount,
 		InvitedCount: user.AffCount, AffiliateQuota: user.AffQuota,
 		InviterID: user.InviterId, CreatedTime: user.CreatedAt, LastLoginTime: user.LastLoginAt,
@@ -268,7 +271,7 @@ func NextListAdminUsers(c *gin.Context) {
 		return
 	}
 	sortColumns := map[string]string{
-		"id": "id", "username": "username", "quota": "quota", "used_quota": "used_quota",
+		"id": "id", "username": "username", "available_quota": "available_quota", "used_quota": "used_quota",
 		"created_time": "created_at", "last_login_time": "last_login_at",
 	}
 	sortColumn := sortColumns[c.Query("sort_by")]
@@ -317,14 +320,17 @@ func NextAdminUserStatus(c *gin.Context) {
 
 func NextAdminUserQuota(c *gin.Context) {
 	var request struct {
-		ID    int `json:"id"`
-		Delta int `json:"delta"`
+		ID              int          `json:"id"`
+		Delta           common.Quota `json:"delta"`
+		OperationID     string       `json:"operation_id"`
+		ExpectedVersion *int64       `json:"expected_version"`
+		Reason          string       `json:"reason"`
 	}
-	if err := c.ShouldBindJSON(&request); err != nil || request.ID <= 0 || request.Delta == 0 {
+	if err := c.ShouldBindJSON(&request); err != nil || request.ID <= 0 || request.Delta == 0 || request.OperationID == "" || len(request.OperationID) > 96 || request.ExpectedVersion == nil || strings.TrimSpace(request.Reason) == "" {
 		nextBusinessError(c, "invalid quota adjustment", "VALIDATION_ERROR")
 		return
 	}
-	user, err := model.AdjustManagedUserQuota(request.ID, request.Delta, c.GetInt("role"))
+	user, err := model.AdjustManagedUserQuota(model.WalletAdjustment{EventID: "admin:" + request.OperationID, UserID: request.ID, Delta: request.Delta, ActorID: c.GetInt("id"), ExpectedVersion: request.ExpectedVersion, SourceID: request.OperationID, Reason: request.Reason}, c.GetInt("role"))
 	if err != nil {
 		writeManagedUserError(c, err)
 		return
@@ -365,12 +371,16 @@ func NextAdminUserStatusBatch(c *gin.Context) {
 }
 
 func writeManagedUserError(c *gin.Context, err error) {
+	if errors.Is(err, model.ErrBillingEventConflict) || errors.Is(err, model.ErrBillingVersionConflict) {
+		c.JSON(409, gin.H{"success": false, "message": err.Error(), "code": "BILLING_CONFLICT"})
+		return
+	}
 	switch {
 	case errors.Is(err, model.ErrManagedUserNotFound):
 		nextBusinessError(c, "user not found", "NOT_FOUND")
 	case errors.Is(err, model.ErrManagedUserForbidden):
 		nextBusinessError(c, "insufficient permission", "FORBIDDEN")
-	case errors.Is(err, model.ErrManagedUserQuotaOutOfRange):
+	case errors.Is(err, common.ErrQuotaOverflow):
 		nextBusinessError(c, "quota adjustment is out of range", "VALIDATION_ERROR")
 	default:
 		common.ApiError(c, err)
@@ -385,7 +395,7 @@ type nextAdminChannelDTO struct {
 	Status        int                   `json:"status"`
 	Priority      int64                 `json:"priority"`
 	Weight        uint                  `json:"weight"`
-	UsedQuota     int64                 `json:"used_quota"`
+	UsedQuota     common.Quota          `json:"used_quota"`
 	ChannelRatio  float64               `json:"channel_ratio"`
 	Balance       float64               `json:"balance"`
 	UpstreamRatio float64               `json:"upstream_ratio"`
@@ -512,18 +522,18 @@ func NextListAdminChannels(c *gin.Context) {
 }
 
 type nextAdminRedemptionDTO struct {
-	ID            int     `json:"id"`
-	Name          string  `json:"name"`
-	Code          string  `json:"code"`
-	Type          string  `json:"type"`
-	Status        string  `json:"status"`
-	Quota         int     `json:"quota,omitempty"`
-	Amount        float64 `json:"amount,omitempty"`
-	RedeemerID    int     `json:"redeemer_id"`
-	RedeemerEmail string  `json:"redeemer_email"`
-	CreatedTime   int64   `json:"created_time"`
-	UsedTime      int64   `json:"used_time"`
-	ExpiredTime   int64   `json:"expired_time"`
+	ID            int          `json:"id"`
+	Name          string       `json:"name"`
+	Code          string       `json:"code"`
+	Type          string       `json:"type"`
+	Status        string       `json:"status"`
+	Quota         common.Quota `json:"quota,omitempty"`
+	Amount        string       `json:"amount,omitempty"`
+	RedeemerID    int          `json:"redeemer_id"`
+	RedeemerEmail string       `json:"redeemer_email"`
+	CreatedTime   int64        `json:"created_time"`
+	UsedTime      int64        `json:"used_time"`
+	ExpiredTime   int64        `json:"expired_time"`
 }
 
 func buildNextAdminRedemptionDTO(item *model.Redemption, redeemerEmail string) nextAdminRedemptionDTO {
@@ -543,7 +553,7 @@ func buildNextAdminRedemptionDTO(item *model.Redemption, redeemerEmail string) n
 	}
 	return nextAdminRedemptionDTO{
 		ID: item.Id, Name: item.Name, Code: item.Key, Type: "quota", Status: status,
-		Quota: item.Quota, Amount: float64(item.Quota) / common.QuotaPerUnit,
+		Quota: item.Quota, Amount: decimal.NewFromInt(int64(item.Quota)).Div(decimal.NewFromInt(500000)).String(),
 		RedeemerID: item.UsedUserId, RedeemerEmail: redeemerEmail, CreatedTime: item.CreatedTime,
 		UsedTime: item.RedeemedTime, ExpiredTime: expiredTime,
 	}
@@ -658,16 +668,21 @@ func NextListAdminRedemptions(c *gin.Context) {
 
 func NextCreateAdminRedemptions(c *gin.Context) {
 	var request struct {
-		Type        string  `json:"type"`
-		Count       int     `json:"count"`
-		Amount      float64 `json:"amount"`
-		ExpiredTime int64   `json:"expired_time"`
+		Type        string `json:"type"`
+		Count       int    `json:"count"`
+		Amount      string `json:"amount"`
+		ExpiredTime int64  `json:"expired_time"`
 	}
-	if err := c.ShouldBindJSON(&request); err != nil || request.Type != "quota" || request.Count < 1 || request.Count > 100 || request.Amount <= 0 {
+	if err := c.ShouldBindJSON(&request); err != nil || request.Type != "quota" || request.Count < 1 || request.Count > 100 || request.Amount == "" {
 		nextBusinessError(c, "only quota redemption codes are supported", "VALIDATION_ERROR")
 		return
 	}
-	quota, err := common.QuotaFromFloatStrict(request.Amount * common.QuotaPerUnit)
+	amount, err := decimal.NewFromString(request.Amount)
+	if err != nil || !amount.IsPositive() {
+		nextBusinessError(c, "redemption amount is invalid", "VALIDATION_ERROR")
+		return
+	}
+	quota, err := common.WalletQuotaFromDecimal(amount.Mul(decimal.NewFromInt(500000)))
 	if err != nil || quota <= 0 {
 		nextBusinessError(c, "redemption amount is out of range", "VALIDATION_ERROR")
 		return
@@ -689,8 +704,8 @@ func NextCreateAdminRedemptions(c *gin.Context) {
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
 		for index := 0; index < request.Count; index++ {
 			item := &model.Redemption{
-				UserId: c.GetInt("id"), Name: fmt.Sprintf("$%.2f", request.Amount), Key: common.GetUUID(),
-				Quota: quota, CreatedTime: common.GetTimestamp(), ExpiredTime: expires,
+				UserId: c.GetInt("id"), Name: "$" + amount.StringFixed(2), Key: common.GetUUID(),
+				Quota: common.Quota(quota), CreatedTime: common.GetTimestamp(), ExpiredTime: expires,
 			}
 			if err := tx.Create(item).Error; err != nil {
 				return err

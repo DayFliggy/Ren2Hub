@@ -28,9 +28,10 @@ withDefaults(
     viewKey: (token: TokenSummary) => void
     editKey: (token: TokenSummary) => void
     deleteKey: (token: TokenSummary) => void
+    viewBilling?: (token: TokenSummary) => void
     routingEnabled?: boolean
   }>(),
-  { routingEnabled: false }
+  { routingEnabled: false, viewBilling: undefined }
 )
 
 const { t } = useI18n()
@@ -114,14 +115,24 @@ const { t } = useI18n()
               {{ t('keys.colUsage') }}
             </dt>
             <dd class="mt-1.5 text-[var(--text-secondary)]">
-              {{ formatQuota(token.used_quota) }} /
+              {{ t('billing.used') }} {{ formatQuota(token.used_quota, 3)
+              }}<br />{{ t('billing.available') }}
               <span class="font-semibold text-[var(--text-primary)]">
                 {{
                   token.unlimited
                     ? t('common.unlimited')
-                    : formatQuota(token.remain_quota)
+                    : formatQuota(token.available_quota ?? '0', 3)
                 }}
               </span>
+              <button
+                v-if="viewBilling"
+                type="button"
+                class="mt-1 block text-xs focus-ring"
+                @click="viewBilling(token)"
+              >
+                {{ t('billing.reserved') }}
+                {{ formatQuota(token.reserved_quota, 3) }}
+              </button>
             </dd>
           </div>
           <div class="col-span-2 min-w-0">

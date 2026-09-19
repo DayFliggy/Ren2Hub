@@ -17,6 +17,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func InjectBillingPriceInfo(other map[string]interface{}, info *relaycommon.RelayInfo) {
+	if other == nil || info == nil || info.PriceData.Quote == nil {
+		return
+	}
+	other["billing_mode"] = info.PriceData.Quote.PriceVersion.Mode
+	other["price_version_id"] = info.PriceData.Quote.PriceVersion.ID
+	other["quote_hash"] = info.PriceData.Quote.Hash
+	other["billing_usage"] = info.PriceData.Usage
+	other["charge_result"] = info.PriceData.Charge
+}
+
 // attachQuotaSaturationToOther nests a quota saturation marker under
 // other.admin_info.quota_saturation. Nesting under admin_info makes it
 // admin-only for free, since model.formatUserLogs strips the whole admin_info

@@ -3,6 +3,7 @@ package billingexpr_test
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/stretchr/testify/assert"
@@ -146,10 +147,10 @@ func TestMathHelpers(t *testing.T) {
 
 func TestRequestProbeHelpers(t *testing.T) {
 	cost, _, err := billingexpr.RunExprWithRequest(
-		`p * 0.5 + c * 1.0 * (param("service_tier") == "fast" ? 2 : 1)`,
+		`p * 0.5 + c * 1.0 * (attr("service_tier") == "fast" ? 2 : 1)`,
 		billingexpr.TokenParams{P: 1000, C: 500},
 		billingexpr.RequestInput{
-			Body: []byte(`{"service_tier":"fast"}`),
+			Attributes: map[string]interface{}{"service_tier": "fast"},
 		},
 	)
 	if err != nil {
@@ -163,12 +164,10 @@ func TestRequestProbeHelpers(t *testing.T) {
 
 func TestHeaderProbeHelper(t *testing.T) {
 	cost, _, err := billingexpr.RunExprWithRequest(
-		`p * 0.5 + c * 1.0 * (has(header("anthropic-beta"), "fast-mode") ? 2 : 1)`,
+		`p * 0.5 + c * 1.0 * (has(attr("quality"), "fast-mode") ? 2 : 1)`,
 		billingexpr.TokenParams{P: 1000, C: 500},
 		billingexpr.RequestInput{
-			Headers: map[string]string{
-				"Anthropic-Beta": "fast-mode-2026-02-01",
-			},
+			Attributes: map[string]interface{}{"quality": "fast-mode-2026-02-01"},
 		},
 	)
 	if err != nil {
@@ -180,66 +179,26 @@ func TestHeaderProbeHelper(t *testing.T) {
 	}
 }
 
-func TestParamProbeNestedBool(t *testing.T) {
-	cost, _, err := billingexpr.RunExprWithRequest(
-		`p * (param("stream_options.fast_mode") == true ? 1.5 : 1.0)`,
-		billingexpr.TokenParams{P: 100},
-		billingexpr.RequestInput{
-			Body: []byte(`{"stream_options":{"fast_mode":true}}`),
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := 150.0
-	if math.Abs(cost-want) > 1e-6 {
-		t.Errorf("cost = %f, want %f", cost, want)
+func TestBillingProbesRejectArbitraryInputs(t *testing.T) {
+	for _, expression := range []string{`param("messages.#")`, `header("authorization")`, `attr("messages")`, `attr("stream_options.fast_mode")`, `attr("quality" + "x")`} {
+		_, err := billingexpr.CompileFromCache(expression)
+		require.Error(t, err, expression)
 	}
 }
 
-func TestParamProbeArrayLength(t *testing.T) {
-	cost, _, err := billingexpr.RunExprWithRequest(
-		`p * (param("messages.#") > 20 ? 1.2 : 1.0)`,
-		billingexpr.TokenParams{P: 100},
-		billingexpr.RequestInput{
-			Body: []byte(`{"messages":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]}`),
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := 120.0
-	if math.Abs(cost-want) > 1e-6 {
-		t.Errorf("cost = %f, want %f", cost, want)
-	}
-}
-
-func TestRequestProbeMissingFieldReturnsNil(t *testing.T) {
-	cost, _, err := billingexpr.RunExprWithRequest(
-		`param("missing.value") == nil ? 2 : 1`,
-		billingexpr.TokenParams{},
-		billingexpr.RequestInput{
-			Body: []byte(`{"service_tier":"standard"}`),
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cost != 2 {
-		t.Errorf("cost = %f, want 2", cost)
-	}
+func TestBillingAttributeMissingReturnsNil(t *testing.T) {
+	value, _, err := billingexpr.RunExprWithRequest(`attr("quality") == nil ? 2 : 1`, billingexpr.TokenParams{}, billingexpr.RequestInput{})
+	require.NoError(t, err)
+	assert.Equal(t, float64(2), value)
 }
 
 func TestRequestProbeMultipleRulesTraceAllFactors(t *testing.T) {
-	exprStr := `(tier("base", p * 2)) * (param("service_tier") == "fast" ? 2 : 1) * (has(header("anthropic-beta"), "fast-mode-2026-02-01") ? 2.5 : 1)`
+	exprStr := `(tier("base", p * 2)) * (attr("service_tier") == "fast" ? 2 : 1) * (has(attr("quality"), "fast-mode-2026-02-01") ? 2.5 : 1)`
 	cost, trace, err := billingexpr.RunExprWithRequest(
 		exprStr,
 		billingexpr.TokenParams{P: 10},
 		billingexpr.RequestInput{
-			Headers: map[string]string{
-				"Anthropic-Beta": "fast-mode-2026-02-01",
-			},
-			Body: []byte(`{"service_tier":"fast"}`),
+			Attributes: map[string]interface{}{"service_tier": "fast", "quality": "fast-mode-2026-02-01"},
 		},
 	)
 
@@ -247,46 +206,46 @@ func TestRequestProbeMultipleRulesTraceAllFactors(t *testing.T) {
 	assert.InDelta(t, 100, cost, 1e-6)
 	assert.Equal(t, "base", trace.MatchedTier)
 	assert.Equal(t, []billingexpr.RequestRuleTrace{
-		{Cond: `param("service_tier") == "fast"`, Multiplier: 2, Matched: true},
-		{Cond: `has(header("anthropic-beta"), "fast-mode-2026-02-01")`, Multiplier: 2.5, Matched: true},
+		{Cond: `attr("service_tier") == "fast"`, Multiplier: 2, Matched: true},
+		{Cond: `has(attr("quality"), "fast-mode-2026-02-01")`, Multiplier: 2.5, Matched: true},
 	}, trace.RequestRules)
 }
 
 func TestRequestProbeTraceIncludesUnmatchedFactors(t *testing.T) {
-	exprStr := `(tier("base", p * 2)) * (param("service_tier") == "fast" ? 2 : 1) * (has(header("anthropic-beta"), "fast-mode") ? 2.5 : 1)`
+	exprStr := `(tier("base", p * 2)) * (attr("service_tier") == "fast" ? 2 : 1) * (has(attr("quality"), "fast-mode") ? 2.5 : 1)`
 	cost, trace, err := billingexpr.RunExprWithRequest(
 		exprStr,
 		billingexpr.TokenParams{P: 10},
-		billingexpr.RequestInput{Body: []byte(`{"service_tier":"fast"}`)},
+		billingexpr.RequestInput{Attributes: map[string]interface{}{"service_tier": "fast"}},
 	)
 
 	require.NoError(t, err)
 	assert.InDelta(t, 40, cost, 1e-6)
 	assert.Equal(t, []billingexpr.RequestRuleTrace{
-		{Cond: `param("service_tier") == "fast"`, Multiplier: 2, Matched: true},
-		{Cond: `has(header("anthropic-beta"), "fast-mode")`, Multiplier: 2.5, Matched: false},
+		{Cond: `attr("service_tier") == "fast"`, Multiplier: 2, Matched: true},
+		{Cond: `has(attr("quality"), "fast-mode")`, Multiplier: 2.5, Matched: false},
 	}, trace.RequestRules)
 }
 
 func TestRequestProbeTracePreservesIntegerConditionalType(t *testing.T) {
 	cost, trace, err := billingexpr.RunExprWithRequest(
-		`5 % (param("service_tier") == "fast" ? 2 : 1)`,
+		`5 % (attr("service_tier") == "fast" ? 2 : 1)`,
 		billingexpr.TokenParams{},
-		billingexpr.RequestInput{Body: []byte(`{"service_tier":"fast"}`)},
+		billingexpr.RequestInput{Attributes: map[string]interface{}{"service_tier": "fast"}},
 	)
 
 	require.NoError(t, err)
 	assert.Equal(t, float64(1), cost)
 	assert.Equal(t, []billingexpr.RequestRuleTrace{
-		{Cond: `param("service_tier") == "fast"`, Multiplier: 2, Matched: true},
+		{Cond: `attr("service_tier") == "fast"`, Multiplier: 2, Matched: true},
 	}, trace.RequestRules)
 }
 
 func TestRequestProbeNonUnitFallbackIsNotTraced(t *testing.T) {
 	cost, trace, err := billingexpr.RunExprWithRequest(
-		`10 * (param("service_tier") == "fast" ? 2 : 1.5)`,
+		`10 * (attr("service_tier") == "fast" ? 2 : 1.5)`,
 		billingexpr.TokenParams{},
-		billingexpr.RequestInput{Body: []byte(`{"service_tier":"standard"}`)},
+		billingexpr.RequestInput{Attributes: map[string]interface{}{"service_tier": "standard"}},
 	)
 
 	require.NoError(t, err)
@@ -758,7 +717,7 @@ func TestComputeTieredQuota_RoundingEdgeDown(t *testing.T) {
 }
 
 func TestComputeTieredQuotaWithRequest_ProbeAffectsQuota(t *testing.T) {
-	exprStr := `param("fast") == true ? tier("fast", p * 4) : tier("normal", p * 2)`
+	exprStr := `attr("quality") == true ? tier("fast", p * 4) : tier("normal", p * 2)`
 	snap := &billingexpr.BillingSnapshot{
 		BillingMode:   "tiered_expr",
 		ExprString:    exprStr,
@@ -780,7 +739,7 @@ func TestComputeTieredQuotaWithRequest_ProbeAffectsQuota(t *testing.T) {
 
 	// With request: fast tier
 	r2, err := billingexpr.ComputeTieredQuotaWithRequest(snap, billingexpr.TokenParams{P: 1000}, billingexpr.RequestInput{
-		Body: []byte(`{"fast":true}`),
+		Attributes: map[string]interface{}{"quality": true},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -837,85 +796,22 @@ func TestComputeTieredQuota_BoundaryTierCrossing(t *testing.T) {
 // Time function tests
 // ---------------------------------------------------------------------------
 
-func TestTimeFunctions_ValidTimezone(t *testing.T) {
-	exprStr := `tier("default", p) * (hour("UTC") >= 0 ? 1 : 1)`
-	cost, _, err := billingexpr.RunExpr(exprStr, billingexpr.TokenParams{P: 100})
-	if err != nil {
-		t.Fatal(err)
+func TestBillingTimeIsFrozenAndTimezoneValidated(t *testing.T) {
+	at := time.Date(2026, 1, 1, 0, 17, 0, 0, time.UTC)
+	input := billingexpr.RequestInput{FrozenAt: at}
+	expression := `hour("Asia/Shanghai") + minute("UTC") + weekday("UTC") + month("UTC") + day("UTC")`
+	value, _, err := billingexpr.RunExprWithRequest(expression, billingexpr.TokenParams{}, input)
+	require.NoError(t, err)
+	assert.Equal(t, float64(31), value)
+	_, _, err = billingexpr.RunExpr(expression, billingexpr.TokenParams{})
+	require.ErrorContains(t, err, "not frozen")
+	for _, expression := range []string{`hour("")`, `hour("Invalid/Zone")`} {
+		_, err := billingexpr.CompileFromCache(expression)
+		require.ErrorContains(t, err, "timezone")
 	}
-	if cost != 100 {
-		t.Errorf("cost = %f, want 100", cost)
-	}
-}
-
-func TestTimeFunctions_AllFunctionsCompile(t *testing.T) {
-	exprStr := `tier("default", p) * (hour("Asia/Shanghai") >= 0 ? 1 : 1) * (minute("UTC") >= 0 ? 1 : 1) * (weekday("UTC") >= 0 ? 1 : 1) * (month("UTC") >= 1 ? 1 : 1) * (day("UTC") >= 1 ? 1 : 1)`
-	cost, _, err := billingexpr.RunExpr(exprStr, billingexpr.TokenParams{P: 500})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cost != 500 {
-		t.Errorf("cost = %f, want 500", cost)
-	}
-}
-
-func TestTimeFunctions_InvalidTimezone(t *testing.T) {
-	exprStr := `tier("default", p) * (hour("Invalid/Zone") >= 0 ? 1 : 2)`
-	cost, _, err := billingexpr.RunExpr(exprStr, billingexpr.TokenParams{P: 100})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Invalid timezone falls back to UTC; hour is 0-23, so condition is always true
-	if cost != 100 {
-		t.Errorf("cost = %f, want 100 (fallback to UTC)", cost)
-	}
-}
-
-func TestTimeFunctions_EmptyTimezone(t *testing.T) {
-	exprStr := `tier("default", p) * (hour("") >= 0 ? 1 : 2)`
-	cost, _, err := billingexpr.RunExpr(exprStr, billingexpr.TokenParams{P: 100})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cost != 100 {
-		t.Errorf("cost = %f, want 100 (empty tz -> UTC)", cost)
-	}
-}
-
-func TestTimeFunctions_NightDiscountPattern(t *testing.T) {
-	exprStr := `tier("default", p * 2 + c * 10) * (hour("UTC") >= 21 || hour("UTC") < 6 ? 0.5 : 1)`
-	cost, _, err := billingexpr.RunExpr(exprStr, billingexpr.TokenParams{P: 1000, C: 500})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Base = 1000*2 + 500*10 = 7000; multiplier is either 0.5 or 1 depending on current UTC hour
-	if cost != 7000 && cost != 3500 {
-		t.Errorf("cost = %f, want 7000 or 3500", cost)
-	}
-}
-
-func TestTimeFunctions_WeekdayRange(t *testing.T) {
-	exprStr := `tier("default", p) * (weekday("UTC") >= 0 && weekday("UTC") <= 6 ? 1 : 999)`
-	cost, _, err := billingexpr.RunExpr(exprStr, billingexpr.TokenParams{P: 100})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// weekday is always 0-6, so multiplier is always 1
-	if cost != 100 {
-		t.Errorf("cost = %f, want 100", cost)
-	}
-}
-
-func TestTimeFunctions_MonthDayPattern(t *testing.T) {
-	exprStr := `tier("default", p) * (month("Asia/Shanghai") == 1 && day("Asia/Shanghai") == 1 ? 0.5 : 1)`
-	cost, _, err := billingexpr.RunExpr(exprStr, billingexpr.TokenParams{P: 1000})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Either 1000 (not Jan 1) or 500 (Jan 1) — both are valid
-	if cost != 1000 && cost != 500 {
-		t.Errorf("cost = %f, want 1000 or 500", cost)
-	}
+	value, _, err = billingexpr.RunExprWithRequest(`p * (hour("UTC") < 6 ? 0.5 : 1)`, billingexpr.TokenParams{P: 100}, input)
+	require.NoError(t, err)
+	assert.Equal(t, float64(50), value)
 }
 
 // ---------------------------------------------------------------------------

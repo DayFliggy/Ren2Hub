@@ -5,8 +5,10 @@ export interface UserInfo {
   email: string
   role: number
   status: number
-  quota: number
-  used_quota: number
+  available_quota: string
+  reserved_quota: string
+  used_quota: string
+  quota_version: number
   request_count: number
   created_at: number
   group?: string

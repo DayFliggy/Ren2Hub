@@ -33,6 +33,7 @@ const billingTone: Record<MarketBilling, 'accent' | 'warning' | 'info'> = {
   token: 'accent',
   tiered: 'warning',
   per_call: 'info',
+  free: 'info',
 }
 
 const typeTone: Record<MarketModelType, 'info' | 'success' | 'neutral'> = {

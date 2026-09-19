@@ -49,9 +49,9 @@ func TestNextDashboardStatsUseCurrentUserRealLogs(t *testing.T) {
 		common.RoleCommonUser,
 		NextGetDashboardStats,
 	))
-	assert.Equal(t, int64(100), stats.KPI.TotalTokens)
-	assert.Equal(t, int64(400), stats.KPI.TotalQuota)
-	assert.Equal(t, int64(3), stats.KPI.TotalRequests)
+	assert.EqualValues(t, int64(100), stats.KPI.TotalTokens)
+	assert.EqualValues(t, int64(400), stats.KPI.TotalQuota)
+	assert.EqualValues(t, int64(3), stats.KPI.TotalRequests)
 	assert.InDelta(t, 3, stats.KPI.AvgLatency, 0.001)
 	assert.InDelta(t, 66.7, stats.KPI.SuccessRate, 0.001)
 	require.NotNil(t, stats.Comparison.QuotaDelta)
@@ -59,18 +59,18 @@ func TestNextDashboardStatsUseCurrentUserRealLogs(t *testing.T) {
 	assert.InDelta(t, 100, *stats.Comparison.QuotaDelta, 0.001)
 	assert.InDelta(t, 200, *stats.Comparison.RequestsDelta, 0.001)
 	require.Len(t, stats.Models, 2)
-	assert.Equal(t, "model-b", stats.Models[0].Model)
+	assert.EqualValues(t, "model-b", stats.Models[0].Model)
 	assert.InDelta(t, 75, stats.Models[0].Share, 0.001)
-	assert.Equal(t, int64(2), stats.Models[1].Requests)
+	assert.EqualValues(t, int64(2), stats.Models[1].Requests)
 	assert.InDelta(t, 2, stats.Models[1].AvgLatency, 0.001)
 	require.Len(t, stats.Hourly, 24)
-	assert.Equal(t, int64(1), stats.Hourly[1].Requests)
-	assert.Equal(t, int64(1), stats.Hourly[2].Requests)
-	assert.Equal(t, int64(1), stats.Hourly[3].Requests)
+	assert.EqualValues(t, int64(1), stats.Hourly[1].Requests)
+	assert.EqualValues(t, int64(1), stats.Hourly[2].Requests)
+	assert.EqualValues(t, int64(1), stats.Hourly[3].Requests)
 	require.Len(t, stats.Flow, 2)
-	assert.Equal(t, "2026-08-01", stats.Flow[0].Date)
-	assert.Equal(t, int64(2), stats.Flow[0].Requests)
-	assert.Equal(t, int64(100), stats.Flow[0].Consume)
+	assert.EqualValues(t, "2026-08-01", stats.Flow[0].Date)
+	assert.EqualValues(t, int64(2), stats.Flow[0].Requests)
+	assert.EqualValues(t, int64(100), stats.Flow[0].Consume)
 }
 
 func TestNextDashboardStatsUseClientTimezoneForDayAndHourBuckets(t *testing.T) {
@@ -94,18 +94,18 @@ func TestNextDashboardStatsUseClientTimezoneForDayAndHourBuckets(t *testing.T) {
 		NextGetDashboardStats,
 	))
 
-	assert.Equal(t, int64(2), stats.KPI.TotalRequests)
-	assert.Equal(t, int64(30), stats.KPI.TotalQuota)
+	assert.EqualValues(t, int64(2), stats.KPI.TotalRequests)
+	assert.EqualValues(t, int64(30), stats.KPI.TotalQuota)
 	require.Len(t, stats.Hourly, 24)
-	assert.Equal(t, int64(1), stats.Hourly[0].Requests)
-	assert.Equal(t, int64(1), stats.Hourly[23].Requests)
+	assert.EqualValues(t, int64(1), stats.Hourly[0].Requests)
+	assert.EqualValues(t, int64(1), stats.Hourly[23].Requests)
 	require.Len(t, stats.Flow, 2)
-	assert.Equal(t, "2026-08-01", stats.Flow[0].Date)
-	assert.Equal(t, int64(1), stats.Flow[0].Requests)
-	assert.Equal(t, int64(10), stats.Flow[0].Consume)
-	assert.Equal(t, "2026-08-02", stats.Flow[1].Date)
-	assert.Equal(t, int64(1), stats.Flow[1].Requests)
-	assert.Equal(t, int64(20), stats.Flow[1].Consume)
+	assert.EqualValues(t, "2026-08-01", stats.Flow[0].Date)
+	assert.EqualValues(t, int64(1), stats.Flow[0].Requests)
+	assert.EqualValues(t, int64(10), stats.Flow[0].Consume)
+	assert.EqualValues(t, "2026-08-02", stats.Flow[1].Date)
+	assert.EqualValues(t, int64(1), stats.Flow[1].Requests)
+	assert.EqualValues(t, int64(20), stats.Flow[1].Consume)
 }
 
 func TestNextDashboardTokenTrendAggregatesRealTokenBreakdown(t *testing.T) {
@@ -165,10 +165,10 @@ func TestNextDashboardTokenTrendAggregatesRealTokenBreakdown(t *testing.T) {
 		NextGetDashboardTokenTrend,
 	))
 	require.Len(t, points, 2)
-	assert.Equal(t, nextDashboardTokenTrendPoint{
+	assert.EqualValues(t, nextDashboardTokenTrendPoint{
 		Date: "2026-08-01", Input: 72, Output: 20, CacheCreate: 10, CacheRead: 30, HitRate: 29.4,
 	}, points[0])
-	assert.Equal(t, nextDashboardTokenTrendPoint{
+	assert.EqualValues(t, nextDashboardTokenTrendPoint{
 		Date: "2026-08-02", Input: 75, Output: 35, CacheCreate: 30, CacheRead: 105, HitRate: 58.3,
 	}, points[1])
 }
@@ -193,11 +193,11 @@ func TestNextDashboardTokenTrendUsesClientTimezoneAndFillsEmptyDays(t *testing.T
 		NextGetDashboardTokenTrend,
 	))
 	require.Len(t, points, 3)
-	assert.Equal(t, "2026-08-01", points[0].Date)
-	assert.Equal(t, int64(10), points[0].Input)
-	assert.Equal(t, "2026-08-02", points[1].Date)
-	assert.Equal(t, int64(20), points[1].Input)
-	assert.Equal(t, nextDashboardTokenTrendPoint{Date: "2026-08-03"}, points[2])
+	assert.EqualValues(t, "2026-08-01", points[0].Date)
+	assert.EqualValues(t, int64(10), points[0].Input)
+	assert.EqualValues(t, "2026-08-02", points[1].Date)
+	assert.EqualValues(t, int64(20), points[1].Input)
+	assert.EqualValues(t, nextDashboardTokenTrendPoint{Date: "2026-08-03"}, points[2])
 }
 
 func TestNextDashboardDistributionUsesCurrentUserLogs(t *testing.T) {
@@ -213,9 +213,9 @@ func TestNextDashboardDistributionUsesCurrentUserLogs(t *testing.T) {
 		t, "/api/next/dashboard/distribution?tz_offset=0", 11, common.RoleCommonUser, NextGetDashboardDistribution,
 	))
 	require.Len(t, points, 1)
-	assert.Equal(t, int64(2), points[0].Requests)
-	assert.Equal(t, int64(50), points[0].Consume)
-	assert.Equal(t, int64(10), points[0].Tokens)
+	assert.EqualValues(t, int64(2), points[0].Requests)
+	assert.EqualValues(t, int64(50), points[0].Consume)
+	assert.EqualValues(t, int64(10), points[0].Tokens)
 }
 
 func TestNextDashboardSystemStatusLeavesUnavailableFieldsNull(t *testing.T) {
@@ -260,9 +260,9 @@ func TestBuildNextDashboardSystemStatusReturnsAvailableApplicationTraffic(t *tes
 	assert.InDelta(t, 4.627, *response.CPUPercent, 0.0001)
 	assert.InDelta(t, 1.25, *response.BandwidthUpMbps, 0.0001)
 	assert.InDelta(t, 6.5, *response.BandwidthDownMbps, 0.0001)
-	assert.Equal(t, []float64{0, 1.25}, response.BandwidthSeries.Up)
-	assert.Equal(t, []float64{0, 6.5}, response.BandwidthSeries.Down)
-	assert.Equal(t, &successRate, response.APISuccessRate)
+	assert.EqualValues(t, []float64{0, 1.25}, response.BandwidthSeries.Up)
+	assert.EqualValues(t, []float64{0, 6.5}, response.BandwidthSeries.Down)
+	assert.EqualValues(t, &successRate, response.APISuccessRate)
 }
 
 func TestNextAdminDashboardRoutesExposeOnlyPersistedMetrics(t *testing.T) {
@@ -280,15 +280,15 @@ func TestNextAdminDashboardRoutesExposeOnlyPersistedMetrics(t *testing.T) {
 		t, "/api/next/admin/dashboard/routes", 99, common.RoleRootUser, NextGetAdminDashboardRoutes,
 	))
 	require.Len(t, routes, 1)
-	assert.Equal(t, channel.Id, routes[0].ID)
-	assert.Equal(t, 420, routes[0].Latency)
+	assert.EqualValues(t, channel.Id, routes[0].ID)
+	assert.EqualValues(t, 420, routes[0].Latency)
 	assert.InDelta(t, 12.5, routes[0].Quota, 0.001)
-	assert.Equal(t, weight, routes[0].Weight)
-	assert.Equal(t, priority, routes[0].Priority)
-	assert.Equal(t, "openai", routes[0].LabGroupSlug)
-	assert.Equal(t, "OpenAI", routes[0].LabGroupName)
+	assert.EqualValues(t, weight, routes[0].Weight)
+	assert.EqualValues(t, priority, routes[0].Priority)
+	assert.EqualValues(t, "openai", routes[0].LabGroupSlug)
+	assert.EqualValues(t, "OpenAI", routes[0].LabGroupName)
 	require.Len(t, routes[0].LabMatches, 1)
-	assert.Equal(t, "openai", routes[0].LabMatches[0].Slug)
+	assert.EqualValues(t, "openai", routes[0].LabMatches[0].Slug)
 
 	var raw nextTestResponse[[]map[string]interface{}]
 	recorder := performNextDashboardGet(t, "/api/next/admin/dashboard/routes", 99, common.RoleRootUser, NextGetAdminDashboardRoutes)
@@ -319,8 +319,8 @@ func TestNextAdminDashboardRoutesExposeChannelManagementLabGroups(t *testing.T) 
 	for _, route := range routes {
 		byName[route.Name] = route
 	}
-	assert.Equal(t, "openai", byName["openai-route"].LabGroupSlug)
-	assert.Equal(t, "mixed", byName["mixed-route"].LabGroupSlug)
-	assert.Equal(t, "unknown", byName["unknown-route"].LabGroupSlug)
-	assert.Equal(t, "Unknown / Provider-specific", byName["unknown-route"].LabGroupName)
+	assert.EqualValues(t, "openai", byName["openai-route"].LabGroupSlug)
+	assert.EqualValues(t, "mixed", byName["mixed-route"].LabGroupSlug)
+	assert.EqualValues(t, "unknown", byName["unknown-route"].LabGroupSlug)
+	assert.EqualValues(t, "Unknown / Provider-specific", byName["unknown-route"].LabGroupName)
 }

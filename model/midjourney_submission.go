@@ -62,15 +62,16 @@ func PersistAcceptedMidjourney(task *Midjourney, requestID string, consumption B
 		return errors.New("invalid accepted Midjourney task")
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := prepareTaskAcceptedBillingTx(tx, requestID, consumption); err != nil {
+			return err
+		}
 		// Serializes concurrent bindings for the same account, including the
 		// first row, where a provider-ID lookup cannot lock a nonexistent row.
 		var user User
 		if err := lockForUpdate(tx).Select("id").First(&user, task.UserId).Error; err != nil {
 			return err
 		}
-		if err := prepareBillingRecoveryConsumption(tx, requestID, consumption, true); err != nil {
-			return err
-		}
+
 		var rows []Midjourney
 		if err := tx.Where("user_id = ? AND mj_id = ?", task.UserId, task.MjId).Find(&rows).Error; err != nil {
 			return err

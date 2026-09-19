@@ -5,7 +5,6 @@ import { useI18n } from 'vue-i18n'
 import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
 import type { TokenSummary, TokenType } from '@/types/console'
-import AmountInput from '@/components/common/AmountInput.vue'
 import ChipPicker from '@/components/common/ChipPicker.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
@@ -13,7 +12,7 @@ import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
-import { QUOTA_PER_DOLLAR } from '@/utils/format'
+import { decimalToQuota, quotaToDecimal } from '@/utils/quota'
 import GatewayUserPanel from '@/components/console/gateway/GatewayUserPanel.vue'
 import ConversionPolicySelect from '@/components/console/gateway/ConversionPolicySelect.vue'
 import type { ConversionPolicy } from '@/types/gateway'
@@ -38,12 +37,13 @@ const form = reactive({
   conversion_policy: 'safe' as ConversionPolicy,
   name: '',
   model_limits: [] as string[],
-  quotaDollars: null as number | null,
+  quotaDollars: '',
   unlimited: false,
   ipText: '',
   expireDate: '',
 })
 const saving = ref(false)
+let pendingBudget: { fingerprint: string; id: string } | null = null
 const advancedOpen = ref(false)
 const advancedSectionId = useId()
 
@@ -56,13 +56,16 @@ watch(
   () => props.open,
   (open) => {
     if (!open) return
+    pendingBudget = null
     const e = props.editing
     form.type = e?.type ?? 'auto'
     form.conversion_policy = e?.conversion_policy ?? 'safe'
     form.name = e?.name ?? ''
     form.model_limits = e?.model_limits ? [...e.model_limits] : []
     form.quotaDollars =
-      e && !e.unlimited ? e.remain_quota / QUOTA_PER_DOLLAR : null
+      e && !e.unlimited && e.available_quota !== null
+        ? quotaToDecimal(e.available_quota)
+        : ''
     form.unlimited = e?.unlimited ?? true
     form.ipText = e?.ip_limits?.join('\n') ?? ''
     form.expireDate =
@@ -107,9 +110,9 @@ async function save() {
       conversion_policy: form.conversion_policy,
       model_limits: form.model_limits,
       unlimited: form.unlimited,
-      remain_quota: form.unlimited
-        ? 0
-        : Math.round((form.quotaDollars ?? 0) * QUOTA_PER_DOLLAR),
+      available_quota: form.unlimited
+        ? '0'
+        : decimalToQuota(form.quotaDollars || '0'),
       ip_limits: form.ipText
         .split('\n')
         .map((s) => s.trim())
@@ -129,6 +132,16 @@ async function save() {
     }
     if (props.editing) {
       payload.id = props.editing.id
+      payload.expected_version = props.editing.quota_version
+      const fingerprint = JSON.stringify([
+        props.editing.id,
+        payload.available_quota,
+        payload.unlimited_quota,
+        payload.expected_version,
+      ])
+      if (pendingBudget?.fingerprint !== fingerprint)
+        pendingBudget = { fingerprint, id: crypto.randomUUID() }
+      payload.operation_id = pendingBudget.id
       await api.put('/api/token/', payload)
       toast.success(t('keys.updated'))
     } else {
@@ -234,7 +247,7 @@ async function save() {
       >
         <div class="flex items-center justify-between px-4 py-2.5">
           <span class="text-sm text-[var(--text-secondary)]">{{
-            t('keys.quotaLabel')
+            t('billing.budgetUSD')
           }}</span>
           <label
             class="flex items-center gap-2 text-xs text-[var(--text-secondary)]"
@@ -250,12 +263,13 @@ async function save() {
           v-if="!form.unlimited"
           class="border-t border-[var(--border-subtle)] px-4 pb-3 pt-2"
         >
-          <AmountInput
+          <input
             v-model="form.quotaDollars"
+            inputmode="decimal"
+            class="w-full rounded-lg bg-[var(--surface-muted)] p-3 font-mono focus-ring"
             name="token-quota"
-            :aria-label="t('keys.quotaLabel')"
+            :aria-label="t('billing.budgetUSD')"
             placeholder="20"
-            :min="0"
           />
         </div>
       </div>

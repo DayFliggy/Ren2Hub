@@ -11,7 +11,7 @@ export type StatsRange = 'today' | '7d' | '30d' | 'custom'
 
 export interface StatsKpi {
   totalTokens: number
-  totalQuota: number
+  totalQuota: string
   totalRequests: number
   avgLatency: number
   successRate: number
@@ -20,7 +20,7 @@ export interface StatsKpi {
 export interface StatsModelRow {
   model: string
   tokens: number
-  quota: number
+  quota: string
   requests: number
   share: number
   avgLatency: number

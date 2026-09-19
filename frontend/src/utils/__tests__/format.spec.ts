@@ -31,7 +31,7 @@ describe('maskKey', () => {
 describe('quota and money formatting', () => {
   it('converts quota to dollars at 500k per dollar', () => {
     expect(formatQuota(500_000)).toBe('$1.00')
-    expect(formatQuota(1_250_000, 4)).toBe('$2.5000')
+    expect(formatQuota(1_250_000, 4)).toBe('$2.500')
     expect(formatQuota(0)).toBe('$0.00')
   })
 
@@ -40,7 +40,7 @@ describe('quota and money formatting', () => {
   })
 
   it('formats token prices and missing values', () => {
-    expect(formatTokenPrice(1.25)).toBe('$1.2500')
+    expect(formatTokenPrice('1.25')).toBe('$1.250')
     expect(formatTokenPrice(undefined)).toBe('—')
   })
 })

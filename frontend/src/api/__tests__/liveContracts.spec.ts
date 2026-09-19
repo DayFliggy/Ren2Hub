@@ -31,13 +31,21 @@ function pricingResponse(overrides: Record<string, unknown> = {}) {
   return {
     model_name: 'gpt-4o',
     description: 'Fast model',
-    quota_type: 0,
-    model_ratio: 0.5,
-    completion_ratio: 1.2,
-    cache_ratio: 0.25,
     owner_by: 'OpenAI',
     supported_endpoint_types: ['chat'],
     ...overrides,
+    price_version: {
+      id: 1,
+      model: 'gpt-4o',
+      mode: 'unit_price' as const,
+      prices: [
+        { quantity: 'p', unit: 'per_million_tokens', price: '1' },
+        { quantity: 'c', unit: 'per_million_tokens', price: '1.2' },
+        { quantity: 'cr', unit: 'per_million_tokens', price: '0.25' },
+      ],
+      created_at: 1,
+      hash: 'fixture',
+    },
   }
 }
 
@@ -52,13 +60,14 @@ describe('live API contracts', () => {
   })
 
   it('parses model pricing and performance summaries with optional metadata', () => {
-    expect(
-      parsePricingModels([pricingResponse({ create_cache_ratio: 1.25 })])[0]
-    ).toMatchObject({
+    expect(parsePricingModels([pricingResponse()])[0]).toMatchObject({
       model_name: 'gpt-4o',
-      model_ratio: 0.5,
-      cache_ratio: 0.25,
-      create_cache_ratio: 1.25,
+      price_version: {
+        mode: 'unit_price',
+        prices: expect.arrayContaining([
+          { quantity: 'p', unit: 'per_million_tokens', price: '1' },
+        ]),
+      },
       owner_by: 'OpenAI',
     })
     expect(
@@ -82,17 +91,20 @@ describe('live API contracts', () => {
     expectInvalidResponse(() => parsePerfMetricsSummary({ models: [{}] }))
   })
 
-  it('normalizes missing cache-write ratios and rejects invalid values', () => {
-    expect(parsePricingModels([pricingResponse()])[0].create_cache_ratio).toBe(
-      null
+  it('rejects missing and numeric prices instead of inferring a free model', () => {
+    const response = pricingResponse()
+    expectInvalidResponse(() =>
+      parsePricingModels([{ ...response, price_version: undefined }])
     )
-    expect(
-      parsePricingModels([pricingResponse({ create_cache_ratio: null })])[0]
-        .create_cache_ratio
-    ).toBe(null)
     expectInvalidResponse(() =>
       parsePricingModels([
-        pricingResponse({ create_cache_ratio: 'not-a-number' }),
+        {
+          ...response,
+          price_version: {
+            ...response.price_version,
+            prices: [{ quantity: 'p', unit: 'per_million_tokens', price: 0 }],
+          },
+        },
       ])
     )
   })
@@ -101,17 +113,17 @@ describe('live API contracts', () => {
     expect(
       parseLogStat({
         total_requests: 20,
-        total_quota: 500,
+        total_quota: '500',
         today_requests: 2,
-        today_quota: 70,
+        today_quota: '70',
       })
     ).toEqual({
       total_requests: 20,
-      total_quota: 500,
+      total_quota: '500',
       today_requests: 2,
-      today_quota: 70,
+      today_quota: '70',
     })
-    expectInvalidResponse(() => parseLogStat({ quota: 500 }))
+    expectInvalidResponse(() => parseLogStat({ quota: '500' }))
   })
 
   it('uses the route type returned by the backend and normalizes token limits', () => {
@@ -126,8 +138,10 @@ describe('live API contracts', () => {
           key: 'sk-12**********7890',
           type: 'manual',
           status: 1,
-          used_quota: 120,
-          remain_quota: 880,
+          used_quota: '120',
+          available_quota: '880',
+          reserved_quota: '0',
+          quota_version: 0,
           unlimited_quota: false,
           model_limits_enabled: true,
           model_limits: 'gpt-4o, claude-3-7-sonnet',
@@ -158,7 +172,7 @@ describe('live API contracts', () => {
           model_name: 'gpt-4o',
           created_at: 1_700_000_000,
           count: 2,
-          quota: 300,
+          quota: '300',
           token_used: 42,
         },
       ])
@@ -167,7 +181,7 @@ describe('live API contracts', () => {
         model_name: 'gpt-4o',
         created_at: 1_700_000_000,
         count: 2,
-        quota: 300,
+        quota: '300',
         token_used: 42,
       },
     ])
@@ -192,8 +206,9 @@ describe('live API contracts', () => {
     ])
     expect(info.amount_options).toEqual([5, 10])
 
-    expect(parseRedeemedQuota(500_000)).toBe(500_000)
-    expect(parseRedeemedQuota({ quota: 250_000 })).toBe(250_000)
+    expect(parseRedeemedQuota('500000')).toBe('500000')
+    expectInvalidResponse(() => parseRedeemedQuota(500000))
+    expect(parseRedeemedQuota({ quota: '250000' })).toBe('250000')
     expectInvalidResponse(() => parseTopupInfo({}))
     expectInvalidResponse(() =>
       parseTopupInfo({
@@ -227,7 +242,7 @@ describe('live API contracts', () => {
           prompt_tokens: 10,
           completion_tokens: 20,
           other: '{"frt":250}',
-          quota: 300,
+          quota: '300',
           use_time: 1000,
           is_stream: true,
           content: '',
@@ -271,7 +286,7 @@ describe('live API contracts', () => {
           channel_name: '',
           prompt_tokens: 0,
           completion_tokens: 0,
-          quota: 0,
+          quota: '0',
           use_time: 0,
           is_stream: false,
           content: 'Logged in',
@@ -388,7 +403,7 @@ describe('live API contracts', () => {
           progress: '100%',
           fail_reason: '',
           image_url: 'https://cdn.example.com/fox.png',
-          quota: 5000,
+          quota: '5000',
           submit_time: 1_700_000_000_000,
           finish_time: 1_700_000_060_000,
         },
@@ -408,11 +423,11 @@ describe('live API contracts', () => {
       page: 1,
       page_size: 20,
       total: 1,
-      items: [{ id: 4, status: 'BRAND_NEW_STATE' }],
+      items: [{ id: 4, status: 'BRAND_NEW_STATE', quota: '0' }],
     })
     expect(futureStatus.items[0]).toMatchObject({
       status: 'BRAND_NEW_STATE',
-      quota: 0,
+      quota: '0',
       finish_time: 0,
     })
 
@@ -444,7 +459,7 @@ describe('live API contracts', () => {
           progress: '100%',
           fail_reason: '',
           result_url: 'https://cdn.example.com/song.mp3',
-          quota: 12_000,
+          quota: '12000',
           submit_time: 1_700_000_000,
           finish_time: 1_700_000_090,
         },
@@ -456,7 +471,7 @@ describe('live API contracts', () => {
           status: 'FAILURE',
           progress: '0%',
           fail_reason: 'upstream timeout',
-          quota: 0,
+          quota: '0',
           submit_time: 1_700_000_100,
           finish_time: 0,
         },

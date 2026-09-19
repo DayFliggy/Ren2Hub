@@ -10,26 +10,25 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
 // NextOrderDTO is the stable order contract consumed by the Vue frontend.
 type NextOrderDTO struct {
-	ID            int     `json:"id"`
-	OrderNo       string  `json:"order_no"`
-	Type          string  `json:"type"`
-	UserID        int     `json:"user_id,omitempty"`
-	Username      string  `json:"username,omitempty"`
-	Email         string  `json:"email,omitempty"`
-	Amount        float64 `json:"amount"`
-	Quota         int64   `json:"quota"`
-	Currency      string  `json:"currency"`
-	Method        string  `json:"method"`
-	PaymentMethod string  `json:"payment_method"`
-	Status        string  `json:"status"`
-	Created       int64   `json:"created"`
-	PaidAt        int64   `json:"paid_at"`
+	ID            int          `json:"id"`
+	OrderNo       string       `json:"order_no"`
+	Type          string       `json:"type"`
+	UserID        int          `json:"user_id,omitempty"`
+	Username      string       `json:"username,omitempty"`
+	Email         string       `json:"email,omitempty"`
+	Amount        float64      `json:"amount"`
+	Quota         common.Quota `json:"quota"`
+	Currency      string       `json:"currency"`
+	Method        string       `json:"method"`
+	PaymentMethod string       `json:"payment_method"`
+	Status        string       `json:"status"`
+	Created       int64        `json:"created"`
+	PaidAt        int64        `json:"paid_at"`
 }
 
 type nextTopUpRequest struct {
@@ -116,22 +115,11 @@ func nextOtherTopUpQuery(query *gorm.DB) *gorm.DB {
 	)
 }
 
-func nextTopUpQuota(topUp *model.TopUp) int64 {
+func nextTopUpQuota(topUp *model.TopUp) common.Quota {
 	if topUp.Status != common.TopUpStatusSuccess {
 		return 0
 	}
-	switch nextOrderMethod(topUp) {
-	case model.PaymentProviderStripe:
-		return int64(common.QuotaFromFloat(topUp.Money * common.QuotaPerUnit))
-	case model.PaymentProviderCreem, model.PaymentProviderBalance:
-		return topUp.Amount
-	case model.PaymentProviderEpay, model.PaymentProviderWaffo, model.PaymentProviderWaffoPancake:
-		return int64(common.QuotaFromDecimal(
-			decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
-		))
-	default:
-		return 0
-	}
+	return topUp.CreditedQuota
 }
 
 func nextTopUpDTO(topUp *model.TopUp, user *model.User) NextOrderDTO {

@@ -20,7 +20,7 @@ export function useActivity() {
   const activities = ref<Activity[]>([])
   const summary = ref<ActivitySummary>({
     claimable: 0,
-    reward_earned: 0,
+    reward_earned: '0',
     ongoing: 0,
   })
   const loading = ref(true)
@@ -57,7 +57,7 @@ export function useActivity() {
   async function checkin(id: number, turnstileToken?: string) {
     claiming.value = true
     try {
-      const res = await api.post<{ reward: number; streak: number }>(
+      const res = await api.post<{ reward: string; streak: number }>(
         '/api/next/activity/checkin',
         { activity_id: id },
         turnstileToken
@@ -76,7 +76,7 @@ export function useActivity() {
   async function claim(id: number, taskId?: string) {
     claiming.value = true
     try {
-      const res = await api.post<{ message: string; reward: number }>(
+      const res = await api.post<{ message: string; reward: string }>(
         '/api/next/activity/claim',
         { activity_id: id, task_id: taskId }
       )

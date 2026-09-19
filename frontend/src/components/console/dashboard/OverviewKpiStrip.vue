@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { quotaForChart } from '@/utils/quota'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -90,7 +91,7 @@ const cells = computed<Cell[]>(() => [
     value: hidden.value ? '••••' : formatQuota(props.stats?.today_quota ?? 0),
     color: 'var(--accent-text)',
     skeleton: 'w-24',
-    series: flowWindow.value.map((f) => f.consume),
+    series: flowWindow.value.map((f) => quotaForChart(f.consume)),
     drillDown: true,
   },
   {

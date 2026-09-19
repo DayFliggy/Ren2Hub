@@ -18,6 +18,8 @@ import (
 func setupAffiliateTest(t *testing.T) {
 	t.Helper()
 	previousDB := DB
+	previousKeyCol := commonKeyCol
+	commonKeyCol = "`key`"
 	previousType := common.MainDatabaseType()
 	previousEnabled := common.AffiliateEnabled
 	previousActivatedAt := common.AffiliateActivatedAt
@@ -33,7 +35,7 @@ func setupAffiliateTest(t *testing.T) {
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&User{}, &AffiliateLedger{}, &Option{}))
+	require.NoError(t, db.AutoMigrate(&User{}, &BillingEvent{}, &AffiliateLedger{}, &Option{}))
 	DB = db
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
 	common.AffiliateEnabled = true
@@ -41,7 +43,7 @@ func setupAffiliateTest(t *testing.T) {
 	common.AffiliateRebateRateBps = 1000
 	common.AffiliateFreezeHours = 168
 	common.AffiliateDurationDays = 0
-	common.AffiliatePerInviteeCap = 100
+	common.AffiliatePerInviteeCap = "100"
 	common.QuotaPerUnit = 500_000
 	common.QuotaForNewUser = 0
 	common.QuotaForInviter = 0
@@ -52,6 +54,7 @@ func setupAffiliateTest(t *testing.T) {
 
 	t.Cleanup(func() {
 		DB = previousDB
+		commonKeyCol = previousKeyCol
 		common.SetMainDatabaseType(previousType)
 		common.AffiliateEnabled = previousEnabled
 		common.AffiliateActivatedAt = previousActivatedAt
@@ -93,6 +96,10 @@ func TestAffiliateBaseQuotaUsesPaidAmountAndFloors(t *testing.T) {
 	assert.EqualValues(t, 2_497_500, quota)
 
 	_, err = AffiliateBaseQuotaFromPayment(0, 1)
+	assert.Error(t, err)
+	_, err = AffiliateBaseQuotaFromPayment(1, math.NaN())
+	assert.Error(t, err)
+	_, err = AffiliateBaseQuotaFromPayment(1, math.Inf(1))
 	assert.Error(t, err)
 }
 
@@ -187,9 +194,9 @@ func TestApplyAffiliateRewardIsIdempotentAndFrozen(t *testing.T) {
 	applyAffiliateTestReward(t, source)
 
 	require.NoError(t, DB.First(inviter, inviter.Id).Error)
-	assert.Equal(t, 0, inviter.AffQuota)
-	assert.Equal(t, 50_000, inviter.AffFrozenQuota)
-	assert.Equal(t, 50_000, inviter.AffHistoryQuota)
+	assert.Equal(t, common.Quota(0), inviter.AffQuota)
+	assert.Equal(t, common.Quota(50_000), inviter.AffFrozenQuota)
+	assert.Equal(t, common.Quota(50_000), inviter.AffHistoryQuota)
 
 	var ledgers []AffiliateLedger
 	require.NoError(t, DB.Where("source_event_key = ?", "topup:1").Find(&ledgers).Error)
@@ -206,7 +213,7 @@ func TestApplyAffiliateRewardUsesCustomRateAndPerInviteeCap(t *testing.T) {
 	require.NoError(t, DB.Model(inviter).Update("aff_rebate_rate_bps", customRate).Error)
 	invitee := createAffiliateTestUser(t, "invitee", "INVITEE02", inviter.Id)
 	common.AffiliateFreezeHours = 0
-	common.AffiliatePerInviteeCap = 0.10
+	common.AffiliatePerInviteeCap = "0.10"
 
 	for id := int64(1); id <= 3; id++ {
 		applyAffiliateTestReward(t, AffiliateRewardSource{
@@ -216,8 +223,8 @@ func TestApplyAffiliateRewardUsesCustomRateAndPerInviteeCap(t *testing.T) {
 	}
 
 	require.NoError(t, DB.First(inviter, inviter.Id).Error)
-	assert.Equal(t, 50_000, inviter.AffQuota)
-	assert.Equal(t, 50_000, inviter.AffHistoryQuota)
+	assert.Equal(t, common.Quota(50_000), inviter.AffQuota)
+	assert.Equal(t, common.Quota(50_000), inviter.AffHistoryQuota)
 
 	var rows []AffiliateLedger
 	require.NoError(t, DB.Order("id").Find(&rows).Error)
@@ -276,14 +283,20 @@ func TestThawAndPartialTransferAffiliateQuota(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 600_000, thawed)
 
-	transferred, balance, err := TransferAffiliateQuota(user.Id, 500_000)
+	transferred, balance, err := TransferAffiliateQuota(user.Id, 500_000, "test-transfer")
 	require.NoError(t, err)
-	assert.Equal(t, 500_000, transferred)
-	assert.Equal(t, 500_000, balance)
+	assert.Equal(t, common.Quota(500_000), transferred)
+	assert.Equal(t, common.Quota(500_000), balance)
+	replayed, balanceAgain, err := TransferAffiliateQuota(user.Id, 500_000, "test-transfer")
+	require.NoError(t, err)
+	assert.Equal(t, transferred, replayed)
+	assert.Equal(t, balance, balanceAgain)
+	_, _, err = TransferAffiliateQuota(user.Id, 600_000, "test-transfer")
+	assert.ErrorIs(t, err, ErrBillingEventConflict)
 
 	require.NoError(t, DB.First(user, user.Id).Error)
-	assert.Equal(t, 500_000, user.Quota)
-	assert.Equal(t, 100_000, user.AffQuota)
+	assert.Equal(t, common.Quota(500_000), user.Quota)
+	assert.Equal(t, common.Quota(100_000), user.AffQuota)
 	assert.Zero(t, user.AffFrozenQuota)
 
 	var transfer AffiliateLedger
@@ -295,7 +308,7 @@ func TestInitializeAffiliateLedgerIsIdempotent(t *testing.T) {
 	setupAffiliateTest(t)
 	user := createAffiliateTestUser(t, "legacy", "LEGACY01", 0)
 	require.NoError(t, DB.Model(user).Updates(map[string]any{
-		"quota": 300, "aff_quota": 100, "aff_history": 250,
+		"available_quota": 300, "aff_quota": 100, "aff_history": 250,
 	}).Error)
 
 	require.NoError(t, InitializeAffiliateLedger())
@@ -317,6 +330,9 @@ func TestValidateAffiliateCodeRejectsDisabledCode(t *testing.T) {
 }
 
 func TestAffiliateBooleanColumnsMigrateAndBackfillExistingUsers(t *testing.T) {
+	oldKeyCol := commonKeyCol
+	commonKeyCol = "`key`"
+	t.Cleanup(func() { commonKeyCol = oldKeyCol })
 	type legacyUser struct {
 		Id        int
 		Username  string
@@ -345,4 +361,14 @@ func TestAffiliateBooleanColumnsMigrateAndBackfillExistingUsers(t *testing.T) {
 	require.NoError(t, db.Select("aff_code_enabled", "aff_code_custom").Where("username = ?", "legacy").First(&migrated).Error)
 	assert.True(t, migrated.AffCodeEnabled)
 	assert.False(t, migrated.AffCodeCustom)
+}
+
+func TestAffiliateCapKeepsExactQuotaAboveJavaScriptSafeInteger(t *testing.T) {
+	quota, err := AffiliateCapQuota("18014398509.481986")
+	require.NoError(t, err)
+	assert.Equal(t, common.Quota(9007199254740993), quota)
+	for _, value := range []string{"NaN", "+Inf", "-1", "999999999999999999999999"} {
+		_, err := AffiliateCapQuota(value)
+		require.Error(t, err)
+	}
 }

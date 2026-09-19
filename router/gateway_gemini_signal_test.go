@@ -30,7 +30,7 @@ func enableGeminiSignalSuccessLimit(t *testing.T) {
 func useGeminiSignalChannel(t *testing.T, channelType int) int {
 	t.Helper()
 	// Exercise an actual reservation and refund instead of the trusted-wallet bypass.
-	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "remain_quota": 100000}).Error)
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 100000}).Error)
 	channel, err := model.GetChannelById(3, true)
 	require.NoError(t, err)
 	if channelType == constant.ChannelTypeVertexAi {
@@ -104,15 +104,22 @@ func TestGatewayGeminiSignalFailures(t *testing.T) {
 						require.Contains(t, string(data), `"error"`)
 						var recovery model.BillingRecovery
 						require.Eventually(t, func() bool {
-							return model.DB.First(&recovery).Error == nil && recovery.Status == model.BillingRecoveryStatusRefunded
+							return model.DB.First(&recovery).Error == nil && ((tc.name == "empty" && model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState)) || (tc.name != "empty" && recovery.Status == model.BillingRecoveryStatusRefunded))
 						}, 2*time.Second, 10*time.Millisecond)
 						var user model.User
 						require.NoError(t, model.DB.First(&user).Error)
 						require.Zero(t, user.UsedQuota)
-						require.Equal(t, 10000000, user.Quota)
+						held := common.Quota(0)
+						if tc.name == "empty" {
+							held = recovery.FundingAmount
+							require.Positive(t, held)
+						}
+						require.EqualValues(t, 10000000-held, user.Quota)
+						require.Equal(t, held, user.ReservedQuota)
 						var token model.Token
 						require.NoError(t, model.DB.First(&token).Error)
-						require.Equal(t, 100000, token.RemainQuota)
+						require.EqualValues(t, 100000-held, token.RemainQuota)
+						require.Equal(t, held, token.ReservedQuota)
 						require.Zero(t, token.UsedQuota)
 						var health []model.ChannelHealth
 						require.NoError(t, model.DB.Where("channel_id = ?", channelID).Find(&health).Error)
@@ -186,7 +193,7 @@ func TestGatewayGeminiPartialAndNormalTermination(t *testing.T) {
 					}, 2*time.Second, 10*time.Millisecond)
 					var user model.User
 					require.NoError(t, model.DB.First(&user).Error)
-					require.Equal(t, 500, user.UsedQuota, "delivered output settles exactly one fixed-price call")
+					require.EqualValues(t, 500, user.UsedQuota, "delivered output settles exactly one fixed-price call")
 					var health []model.ChannelHealth
 					require.NoError(t, model.DB.Where("channel_id = ?", channelID).Find(&health).Error)
 					failures := 0

@@ -44,7 +44,7 @@ func TestGatewayReasoningAndSearchPolicyBeforeBilling(t *testing.T) {
 						require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&recoveries).Error)
 						assert.Zero(t, recoveries)
 						require.NoError(t, model.DB.First(&after, token.UserId).Error)
-						assert.Equal(t, before.Quota, after.Quota)
+						assert.EqualValues(t, before.Quota, after.Quota)
 						continue
 					}
 					require.Equal(t, http.StatusOK, status, output)

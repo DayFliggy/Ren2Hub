@@ -1,3 +1,4 @@
+import { addQuota, quotaRatio, sumQuota } from '@/utils/quota'
 import { ref } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
@@ -9,10 +10,10 @@ import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 
 export interface DashboardStats {
-  quota: number
-  used_quota: number
-  today_quota: number
-  month_quota?: number
+  quota: string
+  used_quota: string
+  today_quota: string
+  month_quota?: string
   today_requests: number
   total_requests: number
   month_quota_delta: number
@@ -33,7 +34,7 @@ export interface UserDiscounts {
 export interface ModelShare {
   model: string
   ratio: number
-  quota: number
+  quota: string
   requests: number
   tokens: number
 }
@@ -62,7 +63,7 @@ export interface SystemMetrics {
 
 export interface FlowPoint {
   date: string
-  consume: number
+  consume: string
   requests: number
 }
 
@@ -202,30 +203,33 @@ export function useDashboard() {
     const previousUsage =
       previousResult[0]?.status === 'fulfilled' ? previousResult[0].value : []
     const todayStart = getLocalDayStartTimestamp()
-    const totalQuota = usage.reduce((sum, row) => sum + row.quota, 0)
+    const totalQuota = sumQuota(usage.map((row) => row.quota))
     const totalRequests = usage.reduce((sum, row) => sum + row.count, 0)
-    const previousQuota = previousUsage.reduce((sum, row) => sum + row.quota, 0)
+    const previousQuota = sumQuota(previousUsage.map((row) => row.quota))
     const previousRequests = previousUsage.reduce(
       (sum, row) => sum + row.count,
       0
     )
     stats.value = {
-      quota: auth.user?.quota ?? 0,
-      used_quota: auth.user?.used_quota ?? 0,
+      quota: auth.user?.available_quota ?? '0',
+      used_quota: auth.user?.used_quota ?? '0',
       today_quota: usage
         .filter((row) => row.created_at >= todayStart)
-        .reduce((sum, row) => sum + row.quota, 0),
+        .reduce((sum, row) => addQuota(sum, row.quota), '0'),
       month_quota:
         monthResult.status === 'fulfilled'
-          ? monthUsage.reduce((sum, row) => sum + row.quota, 0)
+          ? sumQuota(monthUsage.map((row) => row.quota))
           : undefined,
       today_requests: usage
         .filter((row) => row.created_at >= todayStart)
         .reduce((sum, row) => sum + row.count, 0),
       total_requests: totalRequests,
       month_quota_delta:
-        previousQuota > 0
-          ? ((totalQuota - previousQuota) / previousQuota) * 100
+        BigInt(previousQuota) > 0n
+          ? quotaRatio(
+              (BigInt(totalQuota) - BigInt(previousQuota)).toString(),
+              previousQuota
+            ) * 100
           : 0,
       month_requests_delta:
         previousRequests > 0
@@ -236,17 +240,17 @@ export function useDashboard() {
     const modelRows = new Map<string, ModelShare>()
     const dateKeys = recentLocalDateKeys()
     const dayRows = new Map<string, FlowPoint>(
-      dateKeys.map((date) => [date, { date, consume: 0, requests: 0 }])
+      dateKeys.map((date) => [date, { date, consume: '0', requests: 0 }])
     )
     for (const row of usage) {
       const current = modelRows.get(row.model_name) ?? {
         model: row.model_name,
         ratio: 0,
-        quota: 0,
+        quota: '0',
         requests: 0,
         tokens: 0,
       }
-      current.quota += row.quota
+      current.quota = addQuota(current.quota, row.quota)
       current.requests += row.count
       current.tokens += row.token_used
       modelRows.set(row.model_name, current)
@@ -254,13 +258,13 @@ export function useDashboard() {
       const date = localDateKey(new Date(row.created_at * 1000))
       const day = dayRows.get(date)
       if (day) {
-        day.consume += row.quota
+        day.consume = addQuota(day.consume, row.quota)
         day.requests += row.count
       }
     }
     share.value = [...modelRows.values()].map((row) => ({
       ...row,
-      ratio: totalQuota > 0 ? row.quota / totalQuota : 0,
+      ratio: quotaRatio(row.quota, totalQuota),
     }))
     flow.value = dateKeys.map((date) => dayRows.get(date)!)
     await loadSystem()

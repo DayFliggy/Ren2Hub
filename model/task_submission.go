@@ -3,9 +3,33 @@ package model
 import (
 	"context"
 	"errors"
+	"github.com/QuantumNous/new-api/common"
 
 	"gorm.io/gorm"
 )
+
+const BillingRecoveryStateTaskPending = "task_pending"
+
+func prepareTaskAcceptedBillingTx(tx *gorm.DB, requestID string, consumption BillingConsumption) error {
+	var recovery BillingRecovery
+	if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
+		return err
+	}
+	if recovery.Status != BillingRecoveryStatusActive || recovery.PreConsumeState != BillingRecoveryPreConsumeCommitted || recovery.UserID != consumption.Log.UserId || recovery.TokenID != consumption.Log.TokenId {
+		return ErrBillingRecoveryStateConflict
+	}
+	data, err := common.Marshal(consumption)
+	if err != nil {
+		return err
+	}
+	if recovery.ConsumptionState == BillingRecoveryStateTaskPending {
+		if recovery.ConsumptionSnapshot != string(data) {
+			return ErrBillingEventConflict
+		}
+		return nil
+	}
+	return tx.Model(&recovery).Updates(map[string]any{"consumption_snapshot": string(data), "consumption_state": BillingRecoveryStateTaskPending, "version": recovery.Version + 1, "updated_at": common.GetTimestamp()}).Error
+}
 
 // TaskSubmissionReady keeps polling refunds and completion adjustments behind
 // the original submission's funding, token and consumption recovery.
@@ -14,7 +38,7 @@ func TaskSubmissionReady(ctx context.Context, task *Task) (bool, error) {
 		return false, errors.New("missing task")
 	}
 	if task.PrivateData.SubmissionRequestID == "" {
-		return true, nil
+		return false, ErrBillingRecoveryStateConflict
 	}
 	var recovery BillingRecovery
 	if err := DB.WithContext(ctx).Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error; err != nil {
@@ -23,7 +47,7 @@ func TaskSubmissionReady(ctx context.Context, task *Task) (bool, error) {
 	if recovery.UserID != task.UserId || recovery.TokenID != task.PrivateData.TokenId {
 		return false, ErrBillingRecoveryStateConflict
 	}
-	return recovery.Status == BillingRecoveryStatusSettled && recovery.ConsumptionState == BillingRecoveryStateCompleted, nil
+	return (recovery.Status == BillingRecoveryStatusActive || recovery.Status == BillingRecoveryStatusReconciliation) && recovery.ConsumptionState == BillingRecoveryStateTaskPending, nil
 }
 
 // PersistAcceptedTask saves the provider job and its accounting intent together.
@@ -34,7 +58,7 @@ func PersistAcceptedTask(task *Task, requestID string, consumption BillingConsum
 		return errors.New("invalid accepted task")
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
-		if err := prepareBillingRecoveryConsumption(tx, requestID, consumption, true); err != nil {
+		if err := prepareTaskAcceptedBillingTx(tx, requestID, consumption); err != nil {
 			return err
 		}
 		var existing Task

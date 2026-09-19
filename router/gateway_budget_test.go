@@ -48,9 +48,9 @@ func TestGatewayFinalBudgetRejectsBeforeDebitOrSend(t *testing.T) {
 			if test.quota > 0 {
 				oldRatios := ratio_setting.ModelRatio2JSONString()
 				t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(oldRatios)) })
-				require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"gpt-4o-mini":1}`))
-				require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{}`))
-				require.NoError(t, model.DB.Model(&model.User{}).Where("username = ?", "sdk-isolated").Update("quota", test.quota).Error)
+				require.NoError(t, publishGatewayFixturePrices(`{"gpt-4o-mini":1}`, true))
+				require.NoError(t, publishGatewayFixturePrices(`{}`, false))
+				require.NoError(t, model.DB.Model(&model.User{}).Where("username = ?", "sdk-isolated").Update("available_quota", test.quota).Error)
 			}
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			var before model.User
@@ -68,9 +68,9 @@ func TestGatewayFinalBudgetRejectsBeforeDebitOrSend(t *testing.T) {
 			assert.Zero(t, sends.Load())
 			var after model.User
 			require.NoError(t, model.DB.First(&after, before.Id).Error)
-			assert.Equal(t, before.Quota, after.Quota)
+			assert.EqualValues(t, before.Quota, after.Quota)
 			var recoveries, failures int64
-			require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&recoveries).Error)
+			require.NoError(t, model.DB.Model(&model.BillingEvent{}).Count(&recoveries).Error)
 			require.NoError(t, model.DB.Model(&model.ChannelHealth{}).Where("failure_count > 0").Count(&failures).Error)
 			assert.Zero(t, recoveries)
 			assert.Zero(t, failures, "local admission must not penalize provider health")

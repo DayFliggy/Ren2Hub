@@ -1,15 +1,19 @@
-/** Quota follows new-api semantics: 500_000 quota = $1. */
-export const QUOTA_PER_DOLLAR = 500_000
+import { formatDecimalUSD } from './decimal'
+import { quotaToDecimal } from './quota'
 
-export function formatQuota(quota: number, digits = 2): string {
-  const dollars = quota / QUOTA_PER_DOLLAR
-  return `$${dollars.toLocaleString('en-US', {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  })}`
+export function formatQuota(
+  quota: string | bigint | number,
+  digits = 2
+): string {
+  const [whole = '0', fraction] = quotaToDecimal(
+    quota,
+    Math.min(digits, 3)
+  ).split('.')
+  return `$${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${fraction === undefined ? '' : `.${fraction}`}`
 }
 
 export function formatMoney(amount: number, digits = 2): string {
+  digits = Math.min(digits, 3)
   return `$${amount.toLocaleString('en-US', {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
@@ -68,10 +72,10 @@ export function relativeTime(epochSec: number, locale = 'zh-CN'): string {
   return formatDate(epochSec)
 }
 
-/** Price per 1M tokens, e.g. "$1.2500". null renders as "—" upstream. */
-export function formatTokenPrice(value: number | undefined): string {
+/** Price per 1M tokens, e.g. "$1.250". null renders as "—" upstream. */
+export function formatTokenPrice(value: string | undefined): string {
   if (value == null) return '—'
-  return `$${value.toFixed(4)}`
+  return formatDecimalUSD(value, 3)
 }
 
 /** Latency snapshot: "1.78s" (<10s) / "18.0s" (≥10s), matching the design. */

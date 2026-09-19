@@ -15,7 +15,6 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel/volcengine"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,14 +23,14 @@ import (
 func setupGatewayVolcSpeech(t *testing.T, handler http.HandlerFunc) (string, string) {
 	t.Helper()
 	url, key, _ := setupGatewaySDKWithUpstream(t, handler)
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"tts-volc":0.001}`))
+	require.NoError(t, publishGatewayFixturePrices(`{"tts-volc":0.001}`, false))
 	channel, err := model.GetChannelById(1, true)
 	require.NoError(t, err)
 	baseURL := "ws" + strings.TrimPrefix(*channel.BaseURL, "http")
 	channel.Type, channel.Models, channel.Key, channel.BaseURL = constant.ChannelTypeVolcEngine, "tts-volc", "local-app|local-token", &baseURL
 	require.NoError(t, model.DB.Model(channel).Updates(map[string]any{"type": channel.Type, "models": channel.Models, "key": channel.Key, "base_url": baseURL}).Error)
 	require.NoError(t, channel.AddAbilities(model.DB))
-	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "remain_quota": 2000}).Error)
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 2000}).Error)
 	require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 	return url, key
 }
@@ -55,8 +54,12 @@ func assertGatewayVolcSpeechAccounting(t *testing.T, charge, tokenQuota int, hea
 	awaitGatewayPermitsReleased(t)
 	var user model.User
 	var token model.Token
+	held := 0
+	if charge == 0 && tokenQuota >= 500 {
+		held = 500
+	}
 	require.Eventually(t, func() bool {
-		return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == 10000000-charge && user.UsedQuota == charge && token.RemainQuota == tokenQuota-charge
+		return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == common.Quota(10000000-charge-held) && user.UsedQuota == common.Quota(charge) && token.RemainQuota == common.Quota(tokenQuota-charge-held)
 	}, time.Second, 10*time.Millisecond)
 	var logs []model.Log
 	require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
@@ -67,7 +70,7 @@ func assertGatewayVolcSpeechAccounting(t *testing.T, charge, tokenQuota int, hea
 		require.Len(t, logs, 1)
 		assert.Equal(t, 1, user.RequestCount)
 		assert.Equal(t, 1, logs[0].ChannelId)
-		assert.Equal(t, charge, logs[0].Quota)
+		assert.EqualValues(t, charge, logs[0].Quota)
 		assert.Equal(t, 5, logs[0].PromptTokens)
 		assert.Zero(t, logs[0].CompletionTokens)
 		var other map[string]any
@@ -91,7 +94,12 @@ func assertGatewayVolcSpeechAccounting(t *testing.T, charge, tokenQuota int, hea
 	}
 	var pending int64
 	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Where("status IN ?", []string{model.BillingRecoveryStatusActive, model.BillingRecoveryStatusSettlementPending, model.BillingRecoveryStatusRefundPending}).Count(&pending).Error)
-	assert.Zero(t, pending)
+	if held > 0 {
+		assert.EqualValues(t, 1, pending)
+		assert.EqualValues(t, held, user.ReservedQuota)
+	} else {
+		assert.Zero(t, pending)
+	}
 }
 
 func TestGatewayVolcSpeechWebSocketAccounting(t *testing.T) {
@@ -112,7 +120,7 @@ func TestGatewayVolcSpeechWebSocketAccounting(t *testing.T) {
 					assert.Equal(t, "Bearer;local-token", request.Header.Get("Authorization"))
 					var user model.User
 					if assert.NoError(t, model.DB.First(&user, 1).Error) {
-						assert.Equal(t, 9999500, user.Quota, "speech precharge precedes the WebSocket handshake")
+						assert.EqualValues(t, 9999500, user.Quota, "speech precharge precedes the WebSocket handshake")
 					}
 					for _, resource := range []string{service.UserAdmissionKey(1), service.ChannelAdmissionKey(1)} {
 						count := service.ReadGatewayAdmissionRuntime(resource).InFlight
@@ -193,7 +201,7 @@ func TestGatewayVolcSpeechQuotaDeniedBeforeWebSocket(t *testing.T) {
 		sends.Add(1)
 		http.Error(w, "unexpected send", http.StatusInternalServerError)
 	})
-	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Update("remain_quota", 100).Error)
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Update("available_quota", 100).Error)
 	code, output := postGatewayTask(t, url, key, "/v1/audio/speech", `{"model":"tts-volc","input":"hello","voice":"alloy","response_format":"pcm"}`)
 	assert.Equal(t, http.StatusForbidden, code, output)
 	assert.Zero(t, sends.Load())

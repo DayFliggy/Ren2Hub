@@ -10,11 +10,12 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import PaymentMethods from '@/components/console/wallet/PaymentMethods.vue'
 import { useToast } from '@/composables/useToast'
-import { formatMoney, formatQuota, QUOTA_PER_DOLLAR } from '@/utils/format'
+import { addQuota, decimalToQuota } from '@/utils/quota'
+import { formatMoney, formatQuota } from '@/utils/format'
 
 const props = withDefaults(
   defineProps<{
-    balanceQuota?: number | null
+    balanceQuota?: string | null
     paymentMethod?: string
   }>(),
   { balanceQuota: null, paymentMethod: 'epay' }
@@ -47,24 +48,41 @@ const selectedMinimumTopup = computed(
     paymentMethods.value.find((item) => item.value === method.value)
       ?.minTopup ?? minimumTopup.value
 )
+const balanceProjection = computed(() => {
+  if (amount.value === null) return { quota: null, invalid: false }
+  if (!Number.isSafeInteger(amount.value) || amount.value < 0)
+    return { quota: null, invalid: true }
+  try {
+    const credit = decimalToQuota(String(amount.value))
+    return {
+      quota:
+        props.balanceQuota == null
+          ? null
+          : addQuota(props.balanceQuota, credit),
+      invalid: false,
+    }
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error
+    return { quota: null, invalid: true }
+  }
+})
 const canSubmit = computed(
   () =>
     amount.value !== null &&
+    !balanceProjection.value.invalid &&
     amount.value >= selectedMinimumTopup.value &&
     paymentLoadState.value === 'ready' &&
     paymentMethods.value.length > 0
 )
 
 const balanceAfter = computed(() =>
-  props.balanceQuota !== null &&
-  props.balanceQuota !== undefined &&
-  amount.value
-    ? formatQuota(props.balanceQuota + amount.value * QUOTA_PER_DOLLAR)
-    : '—'
+  balanceProjection.value.quota === null
+    ? '—'
+    : formatQuota(balanceProjection.value.quota)
 )
 
 async function topup(): Promise<void> {
-  if (!amount.value) return
+  if (!canSubmit.value || submittingTopup.value) return
   submittingTopup.value = true
   try {
     const value = amount.value
@@ -165,6 +183,13 @@ onMounted(async () => {
         :placeholder="t('wallet.amountPlaceholder')"
         :min="selectedMinimumTopup"
       />
+      <p
+        v-if="balanceProjection.invalid"
+        role="alert"
+        class="mt-2 text-xs text-[var(--danger-text)]"
+      >
+        {{ t('wallet.invalidTopupAmount') }}
+      </p>
     </div>
 
     <div class="mt-4">

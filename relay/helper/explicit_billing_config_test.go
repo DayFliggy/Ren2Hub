@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/pkg/autopricing"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -49,17 +50,15 @@ func TestExplicitBillingConfigIgnoresAutoPricingCatalog(t *testing.T) {
 
 	const variant = "gemini-9.9-flash-nothinking"
 
-	assert.True(t, HasModelBillingConfig(variant),
-		"the catalog must keep the variant billable")
+	assert.False(t, HasModelBillingConfig(variant),
+		"downloaded catalog entries require explicit publication")
 	assert.False(t, HasExplicitModelBillingConfig(variant),
 		"a catalog entry must not count as operator configuration")
 }
 
 func TestExplicitBillingConfigHonorsManualEntries(t *testing.T) {
 	installExplicitConfigFixture(t)
-	ratio_setting.InitRatioSettings()
-
-	// gpt-4o ships in the built-in manual ratio table.
+	pricingFixture(t, billing.PriceVersion{Model: "gpt-4o", Mode: billing.ModeFree})
 	assert.True(t, HasExplicitModelBillingConfig("gpt-4o"))
 	assert.False(t, HasExplicitModelBillingConfig("model-nobody-has-heard-of"))
 }
@@ -68,7 +67,5 @@ func TestExplicitBillingConfigHonorsSelfUseMode(t *testing.T) {
 	installExplicitConfigFixture(t)
 
 	operation_setting.SelfUseModeEnabled = true
-	// Self-use mode has always meant "everything is billable"; the explicit
-	// check keeps that historical behavior.
-	assert.True(t, HasExplicitModelBillingConfig("model-nobody-has-heard-of"))
+	assert.False(t, HasExplicitModelBillingConfig("model-nobody-has-heard-of"), "self-use is not a published free price")
 }

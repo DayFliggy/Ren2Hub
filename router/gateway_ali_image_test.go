@@ -55,7 +55,7 @@ func TestGatewayAliAsyncImageAcceptance(t *testing.T) {
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("models = ?", "gpt-4o-mini").Updates(map[string]any{
 				"type": constant.ChannelTypeAli, "header_override": `{"X-Tenant":"tenant-fixture"}`,
 			}).Error)
-			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "remain_quota": 2000}).Error)
+			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 2000}).Error)
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			status, output := postGatewayTask(t, url, key, "/v1/images/generations", `{"model":"gpt-4o-mini","prompt":"image fixture","n":1,"response_format":"url"}`)
 			success := scenario == "success" || scenario == "rejected_then_success"
@@ -83,10 +83,11 @@ func TestGatewayAliAsyncImageAcceptance(t *testing.T) {
 			var token model.Token
 			require.NoError(t, model.DB.First(&user, 1).Error)
 			require.NoError(t, model.DB.First(&token, 1).Error)
-			assert.Equal(t, 10000000-500, user.Quota, "accepted or unknown creation retains its reservation")
-			assert.Equal(t, 2000-500, token.RemainQuota)
-			assert.Equal(t, charge, user.UsedQuota)
-			assert.Equal(t, 500, token.UsedQuota)
+			assert.EqualValues(t, 10000000-500, user.Quota, "accepted or unknown creation retains its reservation")
+			assert.EqualValues(t, 2000-500, token.RemainQuota)
+			assert.EqualValues(t, charge, user.UsedQuota)
+			assert.EqualValues(t, charge, token.UsedQuota)
+			assert.EqualValues(t, 500-charge, token.ReservedQuota)
 			var logs []model.Log
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
 			if success {

@@ -15,7 +15,6 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,7 +25,7 @@ func setupGatewayTask(t *testing.T, upstream http.HandlerFunc) (string, string, 
 	t.Helper()
 	_, key, otherKey := setupGatewaySDKWithUpstream(t, upstream)
 	require.NoError(t, model.DB.AutoMigrate(&model.Task{}))
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"sora-2":0.001}`))
+	require.NoError(t, publishGatewayFixturePrices(`{"sora-2":0.001}`, false))
 	for _, id := range []int{1, 4} {
 		ch, err := model.GetChannelById(id, true)
 		require.NoError(t, err)
@@ -69,13 +68,14 @@ func assertGatewaySubmissionBilling(t *testing.T, expectedStatus string) {
 		assert.Equal(t, expectedStatus, recovery.Status)
 		fundingHeld, tokenHeld := int(recovery.FundingAmount), int(recovery.TokenAmount)
 		if expectedStatus == model.BillingRecoveryStatusRefunded {
-			assert.True(t, model.BillingRecoveryRefundComplete(recovery))
+			assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
+			assert.NotEmpty(t, recovery.FinalEventID)
 			fundingHeld, tokenHeld = 0, 0
 		} else {
 			assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
 			assert.Positive(t, fundingHeld)
 			var refunds int64
-			require.NoError(t, model.DB.Model(&model.BillingRecoveryAdjustment{}).
+			require.NoError(t, model.DB.Model(&model.BillingEvent{}).
 				Where("request_id = ? AND operation = ?", recovery.RequestID, model.BillingRecoveryOperationRefund).Count(&refunds).Error)
 			assert.Zero(t, refunds)
 		}
@@ -83,11 +83,12 @@ func assertGatewaySubmissionBilling(t *testing.T, expectedStatus string) {
 		var token model.Token
 		require.NoError(t, model.DB.First(&user, recovery.UserID).Error)
 		require.NoError(t, model.DB.First(&token, recovery.TokenID).Error)
-		assert.Equal(t, 10000000-fundingHeld, user.Quota)
+		assert.EqualValues(t, 10000000-fundingHeld, user.Quota)
 		assert.Zero(t, user.RequestCount)
 		assert.Zero(t, user.UsedQuota)
-		assert.Equal(t, -tokenHeld, token.RemainQuota)
-		assert.Equal(t, tokenHeld, token.UsedQuota)
+		assert.Zero(t, token.RemainQuota, "unlimited token has no debited balance")
+		assert.Zero(t, token.UsedQuota)
+		assert.EqualValues(t, tokenHeld, token.ReservedQuota)
 	}
 }
 
@@ -112,12 +113,13 @@ func TestGatewayTaskAcceptedStatusesAndAccounting(t *testing.T) {
 			assert.Empty(t, task.PrivateData.Key)
 			var recovery model.BillingRecovery
 			require.NoError(t, model.DB.First(&recovery).Error)
-			assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
-			assert.Equal(t, model.BillingRecoveryStateCompleted, recovery.ConsumptionState)
+			assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
+			assert.Equal(t, model.BillingRecoveryStateTaskPending, recovery.ConsumptionState)
 			var user model.User
 			require.NoError(t, model.DB.First(&user, task.UserId).Error)
-			assert.Equal(t, 1, user.RequestCount)
-			assert.Equal(t, task.Quota, user.UsedQuota)
+			assert.Zero(t, user.RequestCount)
+			assert.Zero(t, user.UsedQuota)
+			assert.EqualValues(t, task.Quota, user.ReservedQuota)
 			assert.EqualValues(t, 1, sends.Load())
 		})
 	}
@@ -154,7 +156,7 @@ func TestGatewayTaskSettlementFailureKeepsTaskAndRecoversOnce(t *testing.T) {
 		_, _ = io.WriteString(w, `{"id":"provider-job","status":"queued"}`)
 	})
 	require.NoError(t, model.DB.Callback().Create().Before("gorm:create").Register("task_settle_failure", func(tx *gorm.DB) {
-		if adjustment, ok := tx.Statement.Dest.(*model.BillingRecoveryAdjustment); ok && adjustment.Operation == model.BillingRecoveryOperationSettle {
+		if adjustment, ok := tx.Statement.Dest.(*model.BillingEvent); ok && adjustment.Operation == model.BillingRecoveryOperationSettle {
 			tx.AddError(assert.AnError)
 		}
 	}))
@@ -164,6 +166,14 @@ func TestGatewayTaskSettlementFailureKeepsTaskAndRecoversOnce(t *testing.T) {
 	var task model.Task
 	require.NoError(t, model.DB.First(&task).Error)
 	assert.Contains(t, body, task.TaskID)
+	from := task.Status
+	task.Status, task.Progress = model.TaskStatusSuccess, "100%"
+	won, err := model.PersistTaskCompletion(context.Background(), &task, from, task.Quota, model.BillingConsumption{Log: model.Log{UserId: task.UserId, TokenId: task.PrivateData.TokenId, ChannelId: task.ChannelId}, CountUsage: true, LogEnabled: true})
+	require.NoError(t, err)
+	require.True(t, won)
+	_, err = service.RetryBillingRecovery(context.Background(), task.PrivateData.SubmissionRequestID)
+	require.ErrorIs(t, err, assert.AnError)
+
 	var recovery model.BillingRecovery
 	require.NoError(t, model.DB.First(&recovery).Error)
 	assert.Equal(t, model.BillingRecoveryStatusSettlementPending, recovery.Status)
@@ -180,11 +190,11 @@ func TestGatewayTaskSettlementFailureKeepsTaskAndRecoversOnce(t *testing.T) {
 	assert.Equal(t, model.BillingRecoveryStateCompleted, recovery.ConsumptionState)
 	ready, err = model.TaskSubmissionReady(context.Background(), &task)
 	require.NoError(t, err)
-	assert.True(t, ready)
+	assert.False(t, ready, "completed accounting is not a pending task submission")
 	var user model.User
 	require.NoError(t, model.DB.First(&user, task.UserId).Error)
 	assert.Equal(t, 1, user.RequestCount)
-	assert.Equal(t, task.Quota, user.UsedQuota)
+	assert.EqualValues(t, task.Quota, user.UsedQuota)
 	assert.EqualValues(t, 1, sends.Load())
 }
 

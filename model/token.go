@@ -8,7 +8,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
 )
 
@@ -21,12 +20,14 @@ type Token struct {
 	CreatedTime        int64          `json:"created_time" gorm:"bigint"`
 	AccessedTime       int64          `json:"accessed_time" gorm:"bigint"`
 	ExpiredTime        int64          `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
-	RemainQuota        int            `json:"remain_quota" gorm:"default:0"`
+	RemainQuota        common.Quota   `json:"available_quota" gorm:"column:available_quota;type:bigint;default:0"`
+	ReservedQuota      common.Quota   `json:"reserved_quota" gorm:"type:bigint;not null;default:0"`
+	QuotaVersion       int64          `json:"quota_version" gorm:"type:bigint;not null;default:0"`
 	UnlimitedQuota     bool           `json:"unlimited_quota"`
 	ModelLimitsEnabled bool           `json:"model_limits_enabled"`
 	ModelLimits        string         `json:"model_limits" gorm:"type:text"`
 	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
-	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
+	UsedQuota          common.Quota   `json:"used_quota" gorm:"type:bigint;default:0"` // used quota
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 	ConversionPolicy   string         `json:"conversion_policy" gorm:"type:varchar(16);default:'safe'"`
 }
@@ -213,16 +214,9 @@ func ValidateUserToken(key string) (token *Token, err error) {
 			}
 			return token, ErrTokenInvalid
 		}
-		if !token.UnlimitedQuota && token.RemainQuota <= 0 {
-			if !common.RedisEnabled {
-				token.Status = common.TokenStatusExhausted
-				err := token.SelectUpdate()
-				if err != nil {
-					common.SysLog("failed to update token status" + err.Error())
-				}
-			}
-			return token, ErrTokenInvalid
-		}
+		// Budget admission happens after pricing, in the atomic reservation. A zero
+		// available budget can still authorize a request with an explicit free quote.
+
 		return token, nil
 	}
 	common.SysLog("ValidateUserToken: failed to get token: " + err.Error())
@@ -257,6 +251,11 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 		// Try Redis first
 		token, err := cacheGetTokenByKey(key)
 		if err == nil {
+			var balances Token
+			if err := DB.Select("id", "available_quota", "reserved_quota", "used_quota", "quota_version", "unlimited_quota").First(&balances, token.Id).Error; err != nil {
+				return nil, err
+			}
+			token.RemainQuota, token.ReservedQuota, token.UsedQuota, token.QuotaVersion, token.UnlimitedQuota = balances.RemainQuota, balances.ReservedQuota, balances.UsedQuota, balances.QuotaVersion, balances.UnlimitedQuota
 			return token, nil
 		}
 		// Don't return error - fall through to DB
@@ -275,10 +274,51 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 	return token, nil
 }
 
+func (token Token) MarshalJSON() ([]byte, error) {
+	type tokenJSON Token
+	var available *common.Quota
+	if !token.UnlimitedQuota {
+		available = &token.RemainQuota
+	}
+	return common.Marshal(struct {
+		tokenJSON
+		Available *common.Quota `json:"available_quota"`
+	}{tokenJSON: tokenJSON(token), Available: available})
+}
+
 func (token *Token) Insert() error {
-	var err error
-	err = DB.Create(token).Error
-	return err
+	return DB.Transaction(func(tx *gorm.DB) error { return token.insertWithBudgetEventTx(tx) })
+}
+
+func (token *Token) insertWithBudgetEventTx(tx *gorm.DB) error {
+	if token.RemainQuota < 0 || token.ReservedQuota != 0 || token.UsedQuota != 0 {
+		return errors.New("invalid initial token budget")
+	}
+	var user User
+	if err := lockForUpdate(tx).First(&user, token.UserId).Error; err != nil {
+		return err
+	}
+	initial := token.RemainQuota
+	token.RemainQuota = 0
+	if token.UnlimitedQuota {
+		initial = 0
+	}
+	if err := tx.Create(token).Error; err != nil {
+		return err
+	}
+	fingerprint, err := billingEventFingerprint(struct {
+		TokenID   int
+		Available common.Quota
+		Unlimited bool
+	}{token.Id, initial, token.UnlimitedQuota})
+	if err != nil {
+		return err
+	}
+	_, err = applyAccountEventTx(tx, &BillingEvent{EventID: fmt.Sprintf("token-create:%d", token.Id), UserID: token.UserId, TokenID: token.Id, Operation: "token_budget", SourceType: "token_create", SourceID: fmt.Sprint(token.Id), Fingerprint: fingerprint, TokenAvailableDelta: initial, ActorID: token.UserId, Reason: "token budget created"}, &user, false)
+	if err != nil {
+		return err
+	}
+	return tx.First(token, token.Id).Error
 }
 
 func (token *Token) InsertWithRouteMode(mode string) error {
@@ -286,7 +326,7 @@ func (token *Token) InsertWithRouteMode(mode string) error {
 		return errors.New("invalid token route mode")
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(token).Error; err != nil {
+		if err := token.insertWithBudgetEventTx(tx); err != nil {
 			return err
 		}
 		profile := UserRouteProfile{UserID: token.UserId, TokenID: token.Id, Mode: mode}
@@ -295,14 +335,80 @@ func (token *Token) InsertWithRouteMode(mode string) error {
 	})
 }
 
-// Update Make sure your token's fields is completed, because this will update non-zero values
-func (token *Token) Update() (err error) {
-	// 写库前失效缓存并设置 fence，防止并发读者把过期快照重新写回缓存。
-	if cacheErr := invalidateTokenCacheForMutation(token.Key); cacheErr != nil {
-		common.SysLog("failed to invalidate token cache before update: " + cacheErr.Error())
+// Update changes metadata only. Budget edits require a stable operation and version.
+func (token *Token) Update() error { return token.UpdateWithBudget("", nil) }
+
+func (token *Token) UpdateWithBudget(operationID string, expectedVersion *int64) error {
+	err := BillingTransaction(nil, func(tx *gorm.DB) error {
+		var user User
+		if err := lockForUpdate(tx).First(&user, token.UserId).Error; err != nil {
+			return err
+		}
+		var current Token
+		if err := lockForUpdate(tx).First(&current, token.Id).Error; err != nil {
+			return err
+		}
+		if current.UserId != token.UserId {
+			return errors.New("token owner mismatch")
+		}
+		budgetChanged := current.RemainQuota != token.RemainQuota || current.UnlimitedQuota != token.UnlimitedQuota
+		if current.ReservedQuota > 0 && current.UnlimitedQuota != token.UnlimitedQuota {
+			return errors.New("cannot change token budget policy while reservations are active")
+		}
+		if operationID != "" {
+			if len(operationID) > 96 || expectedVersion == nil {
+				return errors.New("expected_version is required")
+			}
+			fingerprint, err := billingEventFingerprint(struct {
+				TokenID   int
+				Available common.Quota
+				Unlimited bool
+				Version   int64
+			}{token.Id, token.RemainQuota, token.UnlimitedQuota, *expectedVersion})
+			if err != nil {
+				return err
+			}
+			eventID := fmt.Sprintf("token-budget:%d:%s", token.Id, operationID)
+			existing, err := findBillingEvent(tx, eventID, fingerprint)
+			if err != nil {
+				return err
+			}
+			if existing != nil {
+				return nil
+			}
+			if current.QuotaVersion != *expectedVersion {
+				return ErrBillingEventConflict
+			}
+			if token.RemainQuota < 0 {
+				return errors.New("invalid token budget")
+			}
+			negative, err := common.NegateQuota(current.RemainQuota)
+			if err != nil {
+				return err
+			}
+			delta, err := common.AddQuota(token.RemainQuota, negative)
+			if err != nil {
+				return err
+			}
+			if err := tx.Model(&Token{}).Where("id = ?", token.Id).Update("unlimited_quota", token.UnlimitedQuota).Error; err != nil {
+				return err
+			}
+			_, err = applyAccountEventTx(tx, &BillingEvent{EventID: eventID, UserID: token.UserId, TokenID: token.Id, Operation: "token_budget", SourceType: "token_adjustment", SourceID: operationID, Fingerprint: fingerprint, TokenAvailableDelta: delta, ActorID: token.UserId, Reason: "token budget updated"}, &user, false)
+			if err != nil {
+				return err
+			}
+		} else if budgetChanged {
+			return errors.New("budget updates require operation_id and expected_version")
+		}
+		return tx.Model(token).Select("name", "status", "expired_time", "model_limits_enabled", "model_limits", "allow_ips", "conversion_policy").Updates(token).Error
+	})
+	if err != nil {
+		return err
 	}
-	return DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
-		"model_limits_enabled", "model_limits", "allow_ips", "conversion_policy").Updates(token).Error
+	if err := invalidateTokenCacheForMutation(token.Key); err != nil {
+		common.SysError("token cache invalidation failed: " + err.Error())
+	}
+	return DB.First(token, token.Id).Error
 }
 
 func (token *Token) SelectUpdate() (err error) {
@@ -313,11 +419,31 @@ func (token *Token) SelectUpdate() (err error) {
 	return DB.Model(token).Select("accessed_time", "status").Updates(token).Error
 }
 
-func (token *Token) Delete() (err error) {
-	if cacheErr := invalidateTokenCacheForMutation(token.Key); cacheErr != nil {
-		common.SysLog("failed to invalidate token cache before delete: " + cacheErr.Error())
+func (token *Token) Delete() error {
+	err := BillingTransaction(nil, func(tx *gorm.DB) error {
+		var owner User
+		if err := lockForUpdate(tx).First(&owner, token.UserId).Error; err != nil {
+			return err
+		}
+		var current Token
+		if err := lockForUpdate(tx).First(&current, token.Id).Error; err != nil {
+			return err
+		}
+		if current.UserId != token.UserId {
+			return errors.New("token owner mismatch")
+		}
+		if current.ReservedQuota != 0 {
+			return errors.New("token has active reservations")
+		}
+		if err := ensureNoActiveAccountBillingTx(tx, token.UserId, token.Id); err != nil {
+			return err
+		}
+		return tx.Delete(&current).Error
+	})
+	if err != nil {
+		return err
 	}
-	return DB.Delete(token).Error
+	return invalidateTokenCacheForMutation(token.Key)
 }
 
 func (token *Token) IsModelLimitsEnabled() bool {
@@ -363,70 +489,6 @@ func DeleteTokenById(id int, userId int) (err error) {
 	return token.Delete()
 }
 
-func IncreaseTokenQuota(tokenId int, key string, quota int) (err error) {
-	if quota < 0 {
-		return errors.New("quota 不能为负数！")
-	}
-	unlock := lockQuotaMutationResources(0, tokenId)
-	defer unlock()
-	if common.RedisEnabled {
-		gopool.Go(func() {
-			// 守卫式增量：哈希不存在时跳过，由下次读取从数据库水合，
-			// 绝不创建只有配额字段的残缺哈希。
-			if _, err := cacheApplyTokenQuotaDelta(tokenId, key, int64(quota)); err != nil {
-				common.SysLog("failed to increase token quota: " + err.Error())
-			}
-		})
-	}
-	if common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeTokenQuota, tokenId, quota)
-		return nil
-	}
-	return increaseTokenQuota(tokenId, quota)
-}
-
-func increaseTokenQuota(id int, quota int) (err error) {
-	err = DB.Model(&Token{}).Where("id = ?", id).Updates(
-		map[string]interface{}{
-			"remain_quota":  gorm.Expr("remain_quota + ?", quota),
-			"used_quota":    gorm.Expr("used_quota - ?", quota),
-			"accessed_time": common.GetTimestamp(),
-		},
-	).Error
-	return err
-}
-
-func DecreaseTokenQuota(id int, key string, quota int) (err error) {
-	if quota < 0 {
-		return errors.New("quota 不能为负数！")
-	}
-	unlock := lockQuotaMutationResources(0, id)
-	defer unlock()
-	if common.RedisEnabled {
-		gopool.Go(func() {
-			if _, err := cacheApplyTokenQuotaDelta(id, key, int64(-quota)); err != nil {
-				common.SysLog("failed to decrease token quota: " + err.Error())
-			}
-		})
-	}
-	if common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeTokenQuota, id, -quota)
-		return nil
-	}
-	return decreaseTokenQuota(id, quota)
-}
-
-func decreaseTokenQuota(id int, quota int) (err error) {
-	err = DB.Model(&Token{}).Where("id = ?", id).Updates(
-		map[string]interface{}{
-			"remain_quota":  gorm.Expr("remain_quota - ?", quota),
-			"used_quota":    gorm.Expr("used_quota + ?", quota),
-			"accessed_time": common.GetTimestamp(),
-		},
-	).Error
-	return err
-}
-
 // CountUserTokens returns total number of tokens for the given user, used for pagination
 func CountUserTokens(userId int) (int64, error) {
 	var total int64
@@ -441,11 +503,29 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 	}
 
 	tx := DB.Begin()
-
-	var tokens []Token
-	if err := tx.Where("user_id = ? AND id IN (?)", userId, ids).Find(&tokens).Error; err != nil {
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+	var owner User
+	if err := lockForUpdate(tx).First(&owner, userId).Error; err != nil {
 		tx.Rollback()
 		return 0, err
+	}
+
+	var tokens []Token
+	if err := lockForUpdate(tx).Where("user_id = ? AND id IN (?)", userId, ids).Order("id ASC").Find(&tokens).Error; err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+	for _, token := range tokens {
+		if err := ensureNoActiveAccountBillingTx(tx, userId, token.Id); err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+		if token.ReservedQuota != 0 {
+			tx.Rollback()
+			return 0, errors.New("token has active reservations")
+		}
 	}
 	if err := invalidateTokensCache(tokens); err != nil {
 		common.SysLog("failed to invalidate token cache before batch delete: " + err.Error())

@@ -92,7 +92,7 @@ func TestGatewayStateContinuationHTTP(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, status)
 			assert.Empty(t, calls)
 			require.NoError(t, model.DB.First(&user, binding.UserID).Error)
-			assert.Equal(t, quota, user.Quota, "rejected state continuations never debit")
+			assert.EqualValues(t, quota, user.Quota, "rejected state continuations never debit")
 		})
 	}
 }

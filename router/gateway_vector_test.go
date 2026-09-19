@@ -13,7 +13,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +35,7 @@ func TestGatewayCloudflareUnimplementedRerankIsRejectedBeforeSend(t *testing.T) 
 	assert.Zero(t, sends.Load())
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 1).Error)
-	assert.Equal(t, 10000000, user.Quota)
+	assert.EqualValues(t, 10000000, user.Quota)
 	var recoveryCount int64
 	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&recoveryCount).Error)
 	assert.Zero(t, recoveryCount)
@@ -82,7 +81,7 @@ func TestGatewayVectorAccountingAndRequestBoundaries(t *testing.T) {
 					}
 					var user model.User
 					if assert.NoError(t, model.DB.First(&user, 1).Error) {
-						assert.Equal(t, 9999500, user.Quota, "reservation must precede the actual upstream request")
+						assert.EqualValues(t, 9999500, user.Quota, "reservation must precede the actual upstream request")
 					}
 					w.Header().Set("Content-Type", "application/json")
 					_, _ = io.WriteString(w, scenario.response)
@@ -96,8 +95,8 @@ func TestGatewayVectorAccountingAndRequestBoundaries(t *testing.T) {
 				require.NoError(t, channel.UpdateAbilities(model.DB))
 				prices, err := common.Marshal(map[string]float64{operation.model: 0.001, operation.mappedModel: 0.001})
 				require.NoError(t, err)
-				require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(prices)))
-				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "remain_quota": 1000000}).Error)
+				require.NoError(t, publishGatewayFixturePrices(string(prices), false))
+				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 1000000}).Error)
 				require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 				requestBody := operation.request
 				if scenario.name == "invalid_request" {
@@ -122,7 +121,7 @@ func TestGatewayVectorAccountingAndRequestBoundaries(t *testing.T) {
 						if model.DB.First(&recovery).Error != nil {
 							return false
 						}
-						return recovery.Status == model.BillingRecoveryStatusRefunded || (recovery.Status == model.BillingRecoveryStatusSettled && recovery.ConsumptionState == model.BillingRecoveryStateCompleted)
+						return model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) && scenario.status == http.StatusBadGateway || (recovery.Status == model.BillingRecoveryStatusSettled && recovery.ConsumptionState == model.BillingRecoveryStateCompleted)
 					}, 2*time.Second, 10*time.Millisecond, "logical request must finish settlement after delivering the JSON response")
 				}
 				var user model.User
@@ -133,10 +132,16 @@ func TestGatewayVectorAccountingAndRequestBoundaries(t *testing.T) {
 				if scenario.status == http.StatusOK {
 					charged = 500
 				}
-				assert.Equal(t, charged, user.UsedQuota)
-				assert.Equal(t, 10000000-charged, user.Quota)
-				assert.Equal(t, charged, token.UsedQuota)
-				assert.Equal(t, 1000000-charged, token.RemainQuota)
+				assert.EqualValues(t, charged, user.UsedQuota)
+				held := 0
+				if scenario.status == http.StatusBadGateway {
+					held = 500
+				}
+				assert.EqualValues(t, held, user.ReservedQuota)
+				assert.EqualValues(t, 10000000-charged-held, user.Quota)
+				assert.EqualValues(t, charged, token.UsedQuota)
+				assert.EqualValues(t, 1000000-charged-held, token.RemainQuota)
+				assert.EqualValues(t, held, token.ReservedQuota)
 				var failures int64
 				require.NoError(t, model.DB.Model(&model.ChannelHealth{}).Where("failure_count > 0").Count(&failures).Error)
 				assert.Equal(t, scenario.status == http.StatusBadGateway, failures > 0)
@@ -151,7 +156,7 @@ func TestGatewayVectorAccountingAndRequestBoundaries(t *testing.T) {
 					assert.Equal(t, model.BillingRecoveryStatusSettled, recoveries[0].Status)
 					assert.Equal(t, model.BillingRecoveryStateCompleted, recoveries[0].ConsumptionState)
 				} else {
-					assert.Equal(t, model.BillingRecoveryStatusRefunded, recoveries[0].Status)
+					assert.True(t, model.BillingRecoveryUsageUnconfirmed(recoveries[0].ConsumptionState))
 				}
 			})
 		}

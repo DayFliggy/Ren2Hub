@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
@@ -37,7 +38,7 @@ func TestGatewayRealtimeResponseOutcomes(t *testing.T) {
 			// Channel permit release precedes request-final settlement by a small interval.
 			require.Eventually(t, func() bool {
 				var row model.BillingRecovery
-				return model.DB.First(&row).Error == nil && (row.Status == model.BillingRecoveryStatusRefunded || row.ConsumptionState == model.BillingRecoveryStateCompleted)
+				return model.DB.First(&row).Error == nil && (row.Status == model.BillingRecoveryStatusRefunded || row.ConsumptionState == model.BillingRecoveryStateCompleted || (!test.output && model.BillingRecoveryUsageUnconfirmed(row.ConsumptionState)))
 			}, 2*time.Second, 10*time.Millisecond)
 			var user model.User
 			require.NoError(t, model.DB.First(&user, 1).Error)
@@ -45,8 +46,13 @@ func TestGatewayRealtimeResponseOutcomes(t *testing.T) {
 			if test.output {
 				wantQuota = 500
 			}
-			assert.Equal(t, wantQuota, user.UsedQuota)
-			assert.Equal(t, 10000000-wantQuota, user.Quota)
+			assert.EqualValues(t, wantQuota, user.UsedQuota)
+			held := common.Quota(0)
+			if test.name == "provider_rate_limit" || test.name == "provider_invalid_input" {
+				held = 500
+			}
+			assert.EqualValues(t, 10000000-common.Quota(wantQuota)-held, user.Quota)
+			assert.Equal(t, held, user.ReservedQuota)
 			var failures int64
 			require.NoError(t, model.DB.Model(&model.ChannelHealth{}).Where("failure_count > 0").Count(&failures).Error)
 			assert.Equal(t, test.fault, failures > 0, fmt.Sprint(test.name))

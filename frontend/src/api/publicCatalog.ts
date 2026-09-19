@@ -1,3 +1,8 @@
+import {
+  channelRatioDecimal,
+  multiplyDecimal,
+  shiftDecimal,
+} from '@/utils/decimal'
 import { createApiClient } from './createClient'
 import { httpTransport, publicHttpTransport } from './httpTransport'
 import {
@@ -15,10 +20,6 @@ export type RankingPeriod = 'today' | 'week' | 'month' | 'year'
 export interface CatalogModel extends PricingModelContract {
   channel_ratio_min: number
   channel_ratio_max: number
-  billing_expr: string
-  image_ratio: number | null
-  audio_ratio: number | null
-  audio_completion_ratio: number | null
 }
 export interface PricingCatalog {
   models: CatalogModel[]
@@ -100,16 +101,6 @@ export function parsePricingCatalog(value: unknown): PricingCatalog {
   const rawModels = records(value.data, endpoint)
   const models = parsePricingModels(rawModels).map((model, index) => {
     const raw = rawModels[index]!
-    if (model.quota_type !== 0 && model.quota_type !== 1)
-      invalidResponse(endpoint)
-    for (const key of [
-      'model_ratio',
-      'model_price',
-      'completion_ratio',
-    ] as const)
-      nonNegative(raw[key], endpoint)
-    for (const ratio of [model.cache_ratio, model.create_cache_ratio])
-      if (ratio !== null) nonNegative(ratio, endpoint)
     const minimum = nonNegative(raw.channel_ratio_min, endpoint)
     const maximum = nonNegative(raw.channel_ratio_max, endpoint)
     if (minimum <= 0 || maximum < minimum) invalidResponse(endpoint)
@@ -117,15 +108,6 @@ export function parsePricingCatalog(value: unknown): PricingCatalog {
       ...model,
       channel_ratio_min: minimum,
       channel_ratio_max: maximum,
-      billing_expr: requiredString(raw.billing_expr ?? '', endpoint),
-      image_ratio:
-        raw.image_ratio == null ? null : nonNegative(raw.image_ratio, endpoint),
-      audio_ratio:
-        raw.audio_ratio == null ? null : nonNegative(raw.audio_ratio, endpoint),
-      audio_completion_ratio:
-        raw.audio_completion_ratio == null
-          ? null
-          : nonNegative(raw.audio_completion_ratio, endpoint),
     }
   })
   if (!isRecord(value.supported_endpoint)) invalidResponse(endpoint)
@@ -225,30 +207,33 @@ export function catalogPrices(
   channelRatio: number,
   unit: 'M' | 'K'
 ) {
-  if (model.billing_mode === 'tiered_expr') return []
-  if (model.quota_type === 1)
-    return [{ key: 'request', value: model.model_price * channelRatio }]
-  const input =
-    (model.model_ratio * 2 * channelRatio) / (unit === 'K' ? 1000 : 1)
-  const prices = [
-    { key: 'input', value: input },
-    { key: 'output', value: input * model.completion_ratio },
-  ]
-  const optionalPrices = [
-    ['cacheRead', model.cache_ratio],
-    ['cacheWrite', model.create_cache_ratio],
-    ['image', model.image_ratio],
-    ['audioInput', model.audio_ratio],
-    [
-      'audioOutput',
-      model.audio_ratio !== null && model.audio_completion_ratio !== null
-        ? model.audio_ratio * model.audio_completion_ratio
-        : null,
-    ],
-  ] as const
-  for (const [key, ratio] of optionalPrices)
-    if (ratio !== null) prices.push({ key, value: input * ratio })
-  return prices
+  const version = model.price_version
+  if (version.mode === 'free') return [{ key: 'free', value: '0', unit: '' }]
+  const labels: Record<string, string> = {
+    p: 'input',
+    c: 'output',
+    cr: 'cacheRead',
+    cc: 'cacheWrite',
+    cc1h: 'cacheWrite1h',
+    img: 'image',
+    img_o: 'imageOutput',
+    ai: 'audioInput',
+    ao: 'audioOutput',
+    calls: 'request',
+    images: 'images',
+    seconds: 'seconds',
+  }
+  return version.prices.map((price) => ({
+    key: labels[price.quantity] ?? price.quantity,
+    value: shiftDecimal(
+      multiplyDecimal(price.price, channelRatioDecimal(channelRatio)),
+      unit === 'K' && price.unit === 'per_million_tokens' ? 3 : 0
+    ),
+    unit:
+      unit === 'K' && price.unit === 'per_million_tokens'
+        ? 'per_thousand_tokens'
+        : price.unit,
+  }))
 }
 
 export const publicCatalogApi = {

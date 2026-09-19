@@ -106,7 +106,7 @@ describe('useDashboard', () => {
       model_name: 'gpt-4o',
       created_at: new Date(2026, 7, 19, 23, 30).getTime() / 1000,
       count: 2,
-      quota: 500_000,
+      quota: '500000',
       token_used: 100,
     }
     vi.spyOn(api, 'get').mockImplementation(async (path, params) => {
@@ -126,10 +126,10 @@ describe('useDashboard', () => {
     await state.load()
 
     expect(state.flow.value).toHaveLength(30)
-    expect(state.flow.value[0]).toMatchObject({ consume: 0, requests: 0 })
+    expect(state.flow.value[0]).toMatchObject({ consume: '0', requests: 0 })
     expect(
       state.flow.value.find((point) => point.date === '2026-08-19')
-    ).toMatchObject({ consume: 500_000, requests: 2 })
+    ).toMatchObject({ consume: '500000', requests: 2 })
     expect(state.flow.value.every((point) => point.date.length === 10)).toBe(
       true
     )
@@ -152,7 +152,7 @@ describe('useDashboard', () => {
                 model_name: 'gpt-4o',
                 created_at: monthStartTimestamp,
                 count: 1,
-                quota: 500_000,
+                quota: '500000',
                 token_used: 100,
               },
             ] as never
@@ -189,7 +189,7 @@ describe('useDashboard', () => {
       start_timestamp: monthStartTimestamp + 30 * 86_400,
       end_timestamp: endTimestamp,
     })
-    expect(state.stats.value?.month_quota).toBe(500_000)
+    expect(state.stats.value?.month_quota).toBe('500000')
     wrapper.unmount()
   })
 

@@ -418,7 +418,8 @@ func GenerateAccessToken(c *gin.Context) {
 }
 
 type TransferAffQuotaRequest struct {
-	Quota int `json:"quota" binding:"required"`
+	Quota       common.Quota `json:"quota" binding:"required"`
+	OperationID string       `json:"operation_id" binding:"required"`
 }
 
 func TransferAffQuota(c *gin.Context) {
@@ -432,7 +433,7 @@ func TransferAffQuota(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	transferred, balance, err := model.TransferAffiliateQuota(id, tran.Quota)
+	transferred, balance, err := model.TransferAffiliateQuota(id, tran.Quota, tran.OperationID)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgUserTransferFailed, map[string]any{"Error": err.Error()})
 		return
@@ -502,7 +503,9 @@ func buildSelfUserData(user *model.User) map[string]interface{} {
 		"wechat_id":         user.WeChatId,
 		"telegram_id":       user.TelegramId,
 		"group":             user.Group,
-		"quota":             user.Quota,
+		"available_quota":   user.Quota,
+		"reserved_quota":    user.ReservedQuota,
+		"quota_version":     user.QuotaVersion,
 		"used_quota":        user.UsedQuota,
 		"request_count":     user.RequestCount,
 		"created_at":        user.CreatedAt,
@@ -1036,10 +1039,13 @@ func updateAdminPermissionsForUserInTx(c *gin.Context, tx *gorm.DB, userID int, 
 }
 
 type ManageRequest struct {
-	Id     int    `json:"id"`
-	Action string `json:"action"`
-	Value  int    `json:"value"`
-	Mode   string `json:"mode"`
+	Id              int          `json:"id"`
+	Action          string       `json:"action"`
+	Value           common.Quota `json:"value"`
+	OperationID     string       `json:"operation_id"`
+	ExpectedVersion *int64       `json:"expected_version"`
+	Reason          string       `json:"reason"`
+	Mode            string       `json:"mode"`
 }
 
 // ManageUser Only admin user can do this
@@ -1122,49 +1128,44 @@ func ManageUser(c *gin.Context) {
 		}
 		user.Role = common.RoleCommonUser
 	case "add_quota":
+		if strings.TrimSpace(req.OperationID) == "" || len(req.OperationID) > 96 || req.ExpectedVersion == nil || strings.TrimSpace(req.Reason) == "" {
+			common.ApiErrorMsg(c, "operation_id, expected_version and reason are required")
+			return
+		}
+		adjustment := model.WalletAdjustment{EventID: "admin:" + req.OperationID, UserID: user.Id, ActorID: c.GetInt("id"), SourceType: "admin_adjustment", SourceID: req.OperationID, Reason: req.Reason, ExpectedVersion: req.ExpectedVersion}
 		switch req.Mode {
 		case "add":
 			if req.Value <= 0 {
 				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
 				return
 			}
-			if err := model.IncreaseUserQuota(user.Id, req.Value, true); err != nil {
-				common.ApiError(c, err)
-				return
-			}
-			recordManageAuditFor(c, user.Id, "user.quota_add", map[string]interface{}{
-				"quota": logger.LogQuota(req.Value),
-			})
+			adjustment.Delta = req.Value
 		case "subtract":
 			if req.Value <= 0 {
 				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
 				return
 			}
-			if err := model.DecreaseUserQuota(user.Id, req.Value, true); err != nil {
+			adjustment.Delta, err = common.NegateQuota(req.Value)
+			if err != nil {
 				common.ApiError(c, err)
 				return
 			}
-			recordManageAuditFor(c, user.Id, "user.quota_subtract", map[string]interface{}{
-				"quota": logger.LogQuota(req.Value),
-			})
 		case "override":
-			oldQuota := user.Quota
-			if err := model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("quota", req.Value).Error; err != nil {
-				common.ApiError(c, err)
-				return
-			}
-			recordManageAuditFor(c, user.Id, "user.quota_override", map[string]interface{}{
-				"from": logger.LogQuota(oldQuota),
-				"to":   logger.LogQuota(req.Value),
-			})
+			adjustment.TargetBalance = &req.Value
 		default:
 			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "",
-		})
+		if _, err := model.AdjustManagedUserQuota(adjustment, myRole); err != nil {
+			if errors.Is(err, model.ErrBillingEventConflict) || errors.Is(err, model.ErrBillingVersionConflict) {
+				c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+				return
+			}
+			common.ApiError(c, err)
+			return
+		}
+		recordManageAuditFor(c, user.Id, "user.quota_adjust", map[string]interface{}{"operation_id": req.OperationID, "mode": req.Mode, "value": req.Value, "reason": req.Reason})
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 		return
 	default:
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
@@ -1347,18 +1348,18 @@ func TopUp(c *gin.Context) {
 }
 
 type UpdateUserSettingRequest struct {
-	QuotaWarningType                 string  `json:"notify_type"`
-	QuotaWarningThreshold            float64 `json:"quota_warning_threshold"`
-	WebhookUrl                       string  `json:"webhook_url,omitempty"`
-	WebhookSecret                    string  `json:"webhook_secret,omitempty"`
-	NotificationEmail                string  `json:"notification_email,omitempty"`
-	BarkUrl                          string  `json:"bark_url,omitempty"`
-	GotifyUrl                        string  `json:"gotify_url,omitempty"`
-	GotifyToken                      string  `json:"gotify_token,omitempty"`
-	GotifyPriority                   int     `json:"gotify_priority,omitempty"`
-	UpstreamModelUpdateNotifyEnabled *bool   `json:"upstream_model_update_notify_enabled,omitempty"`
-	AcceptUnsetModelRatioModel       bool    `json:"accept_unset_model_ratio_model"`
-	RecordIpLog                      bool    `json:"record_ip_log"`
+	QuotaWarningType                 string       `json:"notify_type"`
+	QuotaWarningThreshold            common.Quota `json:"quota_warning_threshold"`
+	WebhookUrl                       string       `json:"webhook_url,omitempty"`
+	WebhookSecret                    string       `json:"webhook_secret,omitempty"`
+	NotificationEmail                string       `json:"notification_email,omitempty"`
+	BarkUrl                          string       `json:"bark_url,omitempty"`
+	GotifyUrl                        string       `json:"gotify_url,omitempty"`
+	GotifyToken                      string       `json:"gotify_token,omitempty"`
+	GotifyPriority                   int          `json:"gotify_priority,omitempty"`
+	UpstreamModelUpdateNotifyEnabled *bool        `json:"upstream_model_update_notify_enabled,omitempty"`
+	AcceptUnsetModelRatioModel       bool         `json:"accept_unset_model_ratio_model"`
+	RecordIpLog                      bool         `json:"record_ip_log"`
 }
 
 func UpdateUserSetting(c *gin.Context) {
@@ -1457,7 +1458,7 @@ func UpdateUserSetting(c *gin.Context) {
 	// 构建设置
 	settings := dto.UserSetting{
 		NotifyType:                       req.QuotaWarningType,
-		QuotaWarningThreshold:            req.QuotaWarningThreshold,
+		QuotaWarningThreshold:            int64(req.QuotaWarningThreshold),
 		UpstreamModelUpdateNotifyEnabled: upstreamModelUpdateNotifyEnabled,
 		AcceptUnsetRatioModel:            req.AcceptUnsetModelRatioModel,
 		RecordIpLog:                      req.RecordIpLog,

@@ -12,6 +12,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -65,7 +66,7 @@ func runRealtimeHandler(t *testing.T, quota int) (*websocket.Conn, *websocket.Co
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingRecoveryAdjustment{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}, &model.Log{}, &model.QuotaData{}, &model.Channel{}))
 	previousDB := model.DB
 	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
 	previousRedis, previousBatch := common.RedisEnabled, common.BatchUpdateEnabled
@@ -78,7 +79,7 @@ func runRealtimeHandler(t *testing.T, quota int) (*websocket.Conn, *websocket.Co
 		common.RedisEnabled, common.BatchUpdateEnabled = previousRedis, previousBatch
 		_ = sqlDB.Close()
 	})
-	require.NoError(t, db.Create(&model.User{Id: 1, Username: "realtime-test", Quota: quota}).Error)
+	require.NoError(t, db.Create(&model.User{Id: 1, Username: "realtime-test", Quota: common.Quota(quota)}).Error)
 	require.NoError(t, db.Create(&model.Token{Id: 2, UserId: 1, Key: "realtime-test-token", RemainQuota: 100}).Error)
 	client, clientPeer := realtimeSocketPair(t)
 	target, targetPeer := realtimeSocketPair(t)
@@ -92,6 +93,9 @@ func runRealtimeHandler(t *testing.T, quota int) (*websocket.Conn, *websocket.Co
 		OriginModelName: "realtime-test-model", PriceData: hosttypes.PriceData{ModelRatio: 1, ChannelRatio: 1},
 		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "realtime-test-model"},
 	}
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "realtime-test-model", Mode: billing.ModeExpression, Expression: "p * 2 + c * 2 + ai * 2 + ao * 2"}, "1", nil, time.Unix(1700000000, 0))
+	require.NoError(t, err)
+	info.PriceData.Quote = quote
 	require.Nil(t, service.PreConsumeBilling(c, 5, info))
 	done := make(chan realtimeTestResult, 1)
 	go func() {
@@ -142,7 +146,7 @@ func TestRealtimeProviderUsageReplacesEstimatesAndDeduplicatesResponses(t *testi
 	assert.Equal(t, 20, result.usage.OutputTokens)
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 1).Error)
-	assert.Equal(t, 70, user.Quota)
+	assert.EqualValues(t, 70, user.Quota)
 }
 
 func TestRealtimeCancellationReturnsPartialUsageAndClosesBothPeers(t *testing.T) {

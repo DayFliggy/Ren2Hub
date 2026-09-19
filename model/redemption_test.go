@@ -102,6 +102,7 @@ func TestSearchRedemptionsFiltersAndPaginates(t *testing.T) {
 
 func setupRedeemFixture(t *testing.T, quota int) (userId int, key string) {
 	t.Helper()
+	truncateTables(t)
 	require.NoError(t, DB.AutoMigrate(&Redemption{}))
 	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
 	t.Cleanup(func() {
@@ -118,7 +119,7 @@ func setupRedeemFixture(t *testing.T, quota int) (userId int, key string) {
 		Name:        "redeem-test",
 		Key:         key,
 		Status:      common.RedemptionCodeStatusEnabled,
-		Quota:       quota,
+		Quota:       common.Quota(quota),
 		CreatedTime: common.GetTimestamp(),
 	}
 	require.NoError(t, DB.Create(redemption).Error)
@@ -130,11 +131,11 @@ func TestRedeemCreditsQuotaExactlyOnce(t *testing.T) {
 
 	quota, err := Redeem(key, userId)
 	require.NoError(t, err)
-	assert.Equal(t, 500, quota)
+	assert.Equal(t, common.Quota(500), quota)
 
 	var user User
 	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
-	assert.Equal(t, 500, user.Quota)
+	assert.Equal(t, common.Quota(500), user.Quota)
 
 	var redemption Redemption
 	require.NoError(t, DB.First(&redemption, "name = ?", "redeem-test").Error)
@@ -145,7 +146,7 @@ func TestRedeemCreditsQuotaExactlyOnce(t *testing.T) {
 	_, err = Redeem(key, userId)
 	require.Error(t, err)
 	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
-	assert.Equal(t, 500, user.Quota)
+	assert.Equal(t, common.Quota(500), user.Quota)
 }
 
 // Exactly one of several concurrent redeems of the same code may win, and
@@ -177,5 +178,5 @@ func TestRedeemConcurrentSingleSuccess(t *testing.T) {
 
 	var user User
 	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
-	assert.Equal(t, 300, user.Quota, "quota must be credited exactly once")
+	assert.Equal(t, common.Quota(300), user.Quota, "quota must be credited exactly once")
 }

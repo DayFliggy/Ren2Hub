@@ -123,21 +123,21 @@ var TurnstileSecretKey = ""
 var TelegramBotToken = ""
 var TelegramBotName = ""
 
-var QuotaForNewUser = 0
-var QuotaForInviter = 0
-var QuotaForInvitee = 0
+var QuotaForNewUser Quota = 0
+var QuotaForInviter Quota = 0
+var QuotaForInvitee Quota = 0
 var AffiliateEnabled = false
 var AffiliateRegistrationRequired = false
 var AffiliateRebateRateBps = 1000
 var AffiliateFreezeHours = 168
 var AffiliateDurationDays = 0
-var AffiliatePerInviteeCap = 100.0
+var AffiliatePerInviteeCap = "100"
 var AffiliateActivatedAt int64 = 0
 var ChannelDisableThreshold = 5.0
 var AutomaticDisableChannelEnabled = false
 var AutomaticEnableChannelEnabled = false
-var QuotaRemindThreshold = 1000
-var PreConsumedQuota = 500
+var QuotaRemindThreshold Quota = 1000
+var PreConsumedQuota Quota = 500
 
 var RetryTimes = 0
 

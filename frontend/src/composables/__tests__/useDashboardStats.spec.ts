@@ -13,7 +13,7 @@ function statsPeriod(marker: number): StatsPeriod {
   return {
     kpi: {
       totalTokens: marker,
-      totalQuota: 0,
+      totalQuota: '0',
       totalRequests: 0,
       avgLatency: 0,
       successRate: 0,

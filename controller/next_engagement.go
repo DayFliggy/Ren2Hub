@@ -19,10 +19,10 @@ const (
 )
 
 type nextNewcomerTask struct {
-	ID       string `json:"id"`
-	LabelKey string `json:"labelKey"`
-	Reward   int    `json:"reward"`
-	Done     bool   `json:"done"`
+	ID       string       `json:"id"`
+	LabelKey string       `json:"labelKey"`
+	Reward   common.Quota `json:"reward"`
+	Done     bool         `json:"done"`
 }
 
 func ensureNextInviteCode(user *model.User) error {
@@ -73,7 +73,7 @@ func NextGetInvite(c *gin.Context) {
 	}
 	type inviteeRewardRow struct {
 		InviteeId   int
-		RewardTotal int64
+		RewardTotal common.Quota
 		LastPaidAt  int64
 	}
 	rewardRows := make([]inviteeRewardRow, 0)
@@ -100,7 +100,7 @@ func NextGetInvite(c *gin.Context) {
 
 	now := time.Now()
 	monthCounts := make(map[string]int)
-	monthRewards := make(map[string]int64)
+	monthRewards := make(map[string]common.Quota)
 	for _, invitee := range invitees {
 		monthCounts[time.Unix(invitee.CreatedAt, 0).Format("2006-01")]++
 	}
@@ -112,7 +112,12 @@ func NextGetInvite(c *gin.Context) {
 		return
 	}
 	for _, accrual := range accruals {
-		monthRewards[time.Unix(accrual.CreatedAt, 0).Format("2006-01")] += accrual.RewardQuota
+		month := time.Unix(accrual.CreatedAt, 0).Format("2006-01")
+		monthRewards[month], err = common.AddQuota(monthRewards[month], accrual.RewardQuota)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	series := make([]gin.H, 0, 6)
 	cumulative := len(invitees)
@@ -148,7 +153,7 @@ func NextGetInvite(c *gin.Context) {
 		"effective_rate_percent": float64(model.EffectiveAffiliateRateBps(user)) / 100,
 		"available_reward":       user.AffQuota, "frozen_reward": user.AffFrozenQuota,
 		"total_reward":      user.AffHistoryQuota,
-		"reward_per_invite": 0,
+		"reward_per_invite": common.Quota(0),
 		"reward_total":      user.AffHistoryQuota, "transferable": user.AffQuota,
 		"policy": gin.H{
 			"enabled": common.AffiliateEnabled, "activated_at": common.AffiliateActivatedAt,
@@ -165,13 +170,14 @@ func NextTransferInviteQuota(c *gin.Context) {
 		return
 	}
 	var request struct {
-		Amount int `json:"amount"`
+		Amount      common.Quota `json:"amount"`
+		OperationID string       `json:"operation_id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || request.Amount <= 0 {
 		nextBusinessError(c, "invalid transfer amount", "VALIDATION_ERROR")
 		return
 	}
-	transferred, balance, err := model.TransferAffiliateQuota(c.GetInt("id"), request.Amount)
+	transferred, balance, err := model.TransferAffiliateQuota(c.GetInt("id"), request.Amount, request.OperationID)
 	if err != nil {
 		nextBusinessError(c, err.Error(), "TRANSFER_FAILED")
 		return
@@ -258,13 +264,19 @@ func nextActivityPayload(user *model.User) (gin.H, error) {
 	if err != nil {
 		return nil, err
 	}
-	totalReward := 0
-	monthReward := 0
+	var totalReward common.Quota
+	var monthReward common.Quota
 	for _, record := range allCheckins {
-		totalReward += record.QuotaAwarded
+		totalReward, err = common.AddQuota(totalReward, record.QuotaAwarded)
+		if err != nil {
+			return nil, err
+		}
 	}
 	for _, record := range monthRecords {
-		monthReward += record.QuotaAwarded
+		monthReward, err = common.AddQuota(monthReward, record.QuotaAwarded)
+		if err != nil {
+			return nil, err
+		}
 	}
 	todayClaimed, err := model.HasCheckedInToday(user.Id)
 	if err != nil {
@@ -277,14 +289,14 @@ func nextActivityPayload(user *model.User) (gin.H, error) {
 		if setting.MaxQuota > setting.MinQuota {
 			reward += (setting.MaxQuota - setting.MinQuota) * index / 6
 		}
-		days = append(days, gin.H{"done": index < currentStreak%7, "reward": reward})
+		days = append(days, gin.H{"done": index < currentStreak%7, "reward": common.Quota(reward)})
 	}
 	weekStart := now.AddDate(0, 0, -((int(now.Weekday()) + 6) % 7))
 	weekRecords, err := model.GetUserCheckinRecords(user.Id, weekStart.Format("2006-01-02"), weekStart.AddDate(0, 0, 6).Format("2006-01-02"))
 	if err != nil {
 		return nil, err
 	}
-	weekMap := make(map[string]int, len(weekRecords))
+	weekMap := make(map[string]common.Quota, len(weekRecords))
 	for _, record := range weekRecords {
 		weekMap[record.CheckinDate] = record.QuotaAwarded
 	}
@@ -348,14 +360,22 @@ func nextActivityPayload(user *model.User) (gin.H, error) {
 	if tasksDone && !newcomerClaimed {
 		claimable++
 	}
-	var claimedReward int64
+	var claimedReward common.Quota
 	if err := model.DB.Model(&model.ActivityClaim{}).Where("user_id = ?", user.Id).
 		Select("COALESCE(SUM(reward), 0)").Scan(&claimedReward).Error; err != nil {
 		return nil, err
 	}
+	rewardEarned, err := common.AddQuota(totalReward, claimedReward)
+	if err != nil {
+		return nil, err
+	}
+	rewardEarned, err = common.AddQuota(rewardEarned, user.AffHistoryQuota)
+	if err != nil {
+		return nil, err
+	}
 	return gin.H{
 		"activities": activities,
-		"summary":    gin.H{"claimable": claimable, "reward_earned": totalReward + int(claimedReward) + user.AffHistoryQuota, "ongoing": len(activities)},
+		"summary":    gin.H{"claimable": claimable, "reward_earned": rewardEarned, "ongoing": len(activities)},
 	}, nil
 }
 
@@ -428,5 +448,5 @@ func NextClaimActivity(c *gin.Context) {
 		nextBusinessError(c, err.Error(), "CLAIM_FAILED")
 		return
 	}
-	common.ApiSuccess(c, gin.H{"message": "领取成功", "reward": nextNewcomerReward})
+	common.ApiSuccess(c, gin.H{"message": "领取成功", "reward": common.Quota(nextNewcomerReward)})
 }

@@ -21,12 +21,12 @@ import (
 func TestTaskTerminalRecoveryResumesAfterLogFailure(t *testing.T) {
 	truncate(t)
 	const id, previous, actual = 851, 30, 15
-	seedUser(t, id, 70)
-	seedToken(t, id, id, "task-terminal-recovery", 70)
+	seedUser(t, id, 100)
+	seedToken(t, id, id, "task-terminal-recovery", 100)
 	seedChannel(t, id)
-	seedChargedAccounting(t, id, id, id, previous, 1)
+
 	task := makeTask(id, id, previous, id, BillingSourceWallet)
-	require.NoError(t, model.DB.Create(task).Error)
+	acceptTestTask(t, task)
 	require.NoError(t, model.DB.Callback().Create().Before("gorm:create").Register("completion_log_failure", func(tx *gorm.DB) {
 		if tx.Statement.Table == "logs" {
 			tx.AddError(assert.AnError)
@@ -38,10 +38,10 @@ func TestTaskTerminalRecoveryResumesAfterLogFailure(t *testing.T) {
 	var persisted model.Task
 	require.NoError(t, model.DB.First(&persisted, task.ID).Error)
 	assert.EqualValues(t, model.TaskStatusSuccess, persisted.Status)
-	assert.Equal(t, actual, persisted.Quota)
+	assert.EqualValues(t, actual, persisted.Quota)
 	assert.Equal(t, 85, getUserQuota(t, id))
 	assert.Zero(t, countLogs(t))
-	requestID := model.TaskBillingRequestID(task.ID)
+	requestID := task.PrivateData.SubmissionRequestID
 	markBillingRecoveryStale(t, requestID)
 	summary, err := RecoverStaleBillingRecoveries(context.Background(), common.GetTimestamp()-30, 100)
 	require.NoError(t, err)
@@ -87,7 +87,7 @@ func TestTaskPollingErrorsNeverBecomeJobFailure(t *testing.T) {
 			assert.EqualValues(t, model.TaskStatusInProgress, persisted.Status)
 			var recoveries int64
 			require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&recoveries).Error)
-			assert.Zero(t, recoveries)
+			assert.EqualValues(t, 1, recoveries)
 		})
 	}
 }

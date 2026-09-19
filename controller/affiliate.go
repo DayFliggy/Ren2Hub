@@ -232,12 +232,12 @@ func NextListAffiliateRelationships(c *gin.Context) {
 		return
 	}
 	type relationshipRow struct {
-		InviteeId    int    `json:"invitee_id"`
-		Invitee      string `json:"invitee"`
-		InviterId    int    `json:"inviter_id"`
-		Inviter      string `json:"inviter"`
-		RegisteredAt int64  `json:"registered_at"`
-		RewardTotal  int64  `json:"reward_total"`
+		InviteeId    int          `json:"invitee_id"`
+		Invitee      string       `json:"invitee"`
+		InviterId    int          `json:"inviter_id"`
+		Inviter      string       `json:"inviter"`
+		RegisteredAt int64        `json:"registered_at"`
+		RewardTotal  common.Quota `json:"reward_total"`
 	}
 	var rows []relationshipRow
 	if err := query.
@@ -293,8 +293,8 @@ func NextGetAffiliateOverview(c *gin.Context) {
 		return
 	}
 	type ledgerTotals struct {
-		Accrued     int64
-		Transferred int64
+		Accrued     common.Quota
+		Transferred common.Quota
 		Skipped     int64
 	}
 	var totals ledgerTotals

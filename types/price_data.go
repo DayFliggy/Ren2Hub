@@ -2,12 +2,16 @@ package types
 
 import (
 	"fmt"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"math"
 
 	"github.com/shopspring/decimal"
 )
 
 type PriceData struct {
+	Quote                *billing.Quote        `json:"quote,omitempty"`
+	Usage                *billing.Usage        `json:"usage,omitempty"`
+	Charge               *billing.ChargeResult `json:"charge,omitempty"`
 	FreeModel            bool
 	ModelPrice           float64
 	ModelRatio           float64

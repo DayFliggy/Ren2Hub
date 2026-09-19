@@ -30,8 +30,8 @@ const palette = {
 } as unknown as ChartPalette
 
 const flow: FlowPoint[] = [
-  { date: '07-26', consume: 500_000, requests: 10 },
-  { date: '07-27', consume: 1_000_000, requests: 20 },
+  { date: '07-26', consume: '500000', requests: 10 },
+  { date: '07-27', consume: '1000000', requests: 20 },
 ]
 
 beforeAll(async () => {
@@ -44,7 +44,7 @@ function render() {
     props: {
       kpi: {
         totalTokens: 3_000,
-        totalQuota: 1_500_000,
+        totalQuota: '1500000',
         totalRequests: 30,
         avgLatency: 1.2,
         successRate: 99,
@@ -97,7 +97,7 @@ describe('StatsDualTrend', () => {
         axisValueLabel: '<svg>',
         color: '#d8984c',
         seriesName: option.series[0]!.name,
-        value: 500_000,
+        value: 1,
       },
       {
         axisValueLabel: '<svg>',

@@ -10,13 +10,13 @@ type BillingSettler interface {
 	Settle(actualQuota int) error
 
 	// Refund 退还所有预扣费额度（资金来源 + 令牌），幂等安全。
-	// 各退款组件独立推进；失败组件保持 pending，供恢复调用继续处理。
+	// 钱包和 Token 在同一事件事务中释放；结果未知时保留预留。
 	Refund(c *gin.Context)
 
 	// NeedsRefund 返回会话是否存在需要退还的预扣状态（未结算且未退款）。
 	NeedsRefund() bool
 
-	// GetPreConsumedQuota 返回实际预扣的额度值（信任用户可能为 0）。
+	// GetPreConsumedQuota 返回实际预扣的额度值（仅显式免费请求可为 0）。
 	GetPreConsumedQuota() int
 
 	// Reserve 将预扣额度补到目标值；若目标值不高于当前预扣额度则不做任何事。

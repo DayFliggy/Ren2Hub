@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	hailuotask "github.com/QuantumNous/new-api/relay/channel/task/hailuo"
 	klingtask "github.com/QuantumNous/new-api/relay/channel/task/kling"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
@@ -34,7 +35,7 @@ import (
 func setupVideoTaskLifecycle(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, _ := setupGatewayAPI(t)
-	require.NoError(t, db.AutoMigrate(&model.Task{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingRecoveryAdjustment{}, &model.QuotaData{}))
+	require.NoError(t, db.AutoMigrate(&model.Task{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.QuotaData{}))
 	connection, err := db.DB()
 	require.NoError(t, err)
 	connection.SetMaxOpenConns(1)
@@ -48,8 +49,8 @@ func setupVideoTaskLifecycle(t *testing.T) *gorm.DB {
 		constant.TaskTimeoutMinutes, constant.TaskQueryLimit = previousTimeout, previousLimit
 		service.GetTaskAdaptorFunc = previousFactory
 	})
-	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 1).Updates(map[string]any{"quota": 80, "used_quota": 20, "request_count": 1}).Error)
-	require.NoError(t, db.Create(&model.Token{Id: 1, UserId: 1, Key: "video-test-token", RemainQuota: 80, UsedQuota: 20}).Error)
+	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 1).Updates(map[string]any{"available_quota": 100, "used_quota": 0, "request_count": 0}).Error)
+	require.NoError(t, db.Create(&model.Token{Id: 1, UserId: 1, Key: "video-test-token", RemainQuota: 100}).Error)
 	service.InitHttpClient()
 	return db
 }
@@ -57,7 +58,7 @@ func setupVideoTaskLifecycle(t *testing.T) *gorm.DB {
 func seedBoundVideoTask(t *testing.T, db *gorm.DB, channelType int, endpoint string, status model.TaskStatus) (*model.Channel, *model.Task) {
 	t.Helper()
 	channel := &model.Channel{Type: channelType, Name: "video-owner", Key: "sk-original\nsk-other", BaseURL: &endpoint,
-		Status: common.ChannelStatusEnabled, UsedQuota: 20, ChannelInfo: model.ChannelInfo{IsMultiKey: true, MultiKeySize: 2}}
+		Status: common.ChannelStatusEnabled, ChannelInfo: model.ChannelInfo{IsMultiKey: true, MultiKeySize: 2}}
 	require.NoError(t, db.Create(channel).Error)
 	task := &model.Task{TaskID: "task_video_owner", UserId: 1, ChannelId: channel.Id, Platform: constant.TaskPlatform(fmt.Sprint(channelType)),
 		Action: constant.TaskActionGenerate, Status: status, Progress: "30%", Quota: 20, SubmitTime: time.Now().Unix(),
@@ -65,11 +66,18 @@ func seedBoundVideoTask(t *testing.T, db *gorm.DB, channelType int, endpoint str
 	require.NoError(t, task.PrivateData.BindCredential(context.Background(), channel, "sk-original"))
 	task.PrivateData.UpstreamTaskID, task.PrivateData.TokenId = "provider-job", 1
 	task.PrivateData.BillingSource = service.BillingSourceWallet
-	require.NoError(t, db.Create(task).Error)
+	task.PrivateData.SubmissionRequestID = "video-submit"
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "video-fixture", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.00004"}}}, "1", nil, time.Unix(1700000000, 0))
+	require.NoError(t, err)
+	task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "request_quantity", Complete: true}}
+	_, err = model.EnsureBillingRecovery(model.BillingRecoveryInput{RequestID: task.PrivateData.SubmissionRequestID, UserID: 1, TokenID: 1, TokenRequired: true, Source: "wallet"})
+	require.NoError(t, err)
+	require.NoError(t, model.Reserve(task.PrivateData.SubmissionRequestID, 20))
+	require.NoError(t, model.PersistAcceptedTask(task, task.PrivateData.SubmissionRequestID, model.BillingConsumption{Log: model.Log{UserId: 1, TokenId: 1, ChannelId: channel.Id, Quota: 20}, CountUsage: true, LogEnabled: true}))
 	return channel, task
 }
 
-func assertVideoTaskAccountingUnchanged(t *testing.T, db *gorm.DB, channelID int) {
+func assertVideoTaskAccountingUnchanged(t *testing.T, db *gorm.DB, channelID int, settled ...bool) {
 	t.Helper()
 	var user model.User
 	var token model.Token
@@ -77,12 +85,18 @@ func assertVideoTaskAccountingUnchanged(t *testing.T, db *gorm.DB, channelID int
 	require.NoError(t, db.First(&user, 1).Error)
 	require.NoError(t, db.First(&token, 1).Error)
 	require.NoError(t, db.First(&channel, channelID).Error)
-	assert.Equal(t, 80, user.Quota)
-	assert.Equal(t, 20, user.UsedQuota)
-	assert.Equal(t, 1, user.RequestCount)
-	assert.Equal(t, 80, token.RemainQuota)
-	assert.Equal(t, 20, token.UsedQuota)
-	assert.EqualValues(t, 20, channel.UsedQuota)
+	used, reserved, requests := 0, 20, 0
+	if len(settled) > 0 && settled[0] {
+		used, reserved, requests = 20, 0, 1
+	}
+	assert.EqualValues(t, 80, user.Quota)
+	assert.EqualValues(t, used, user.UsedQuota)
+	assert.EqualValues(t, reserved, user.ReservedQuota)
+	assert.Equal(t, requests, user.RequestCount)
+	assert.EqualValues(t, 80, token.RemainQuota)
+	assert.EqualValues(t, used, token.UsedQuota)
+	assert.EqualValues(t, reserved, token.ReservedQuota)
+	assert.EqualValues(t, used, channel.UsedQuota)
 }
 
 func TestVideoContentUsesOriginalTaskCredential(t *testing.T) {
@@ -132,7 +146,7 @@ func TestVideoContentUsesOriginalTaskCredential(t *testing.T) {
 				assertVideoTaskAccountingUnchanged(t, db, channel.Id)
 				var recoveries int64
 				require.NoError(t, db.Model(&model.BillingRecovery{}).Count(&recoveries).Error)
-				assert.Zero(t, recoveries)
+				assert.EqualValues(t, 1, recoveries)
 			})
 		}
 	}
@@ -544,7 +558,7 @@ func TestHailuoTaskCompletionRequiresOwnedDownload(t *testing.T) {
 			assert.Equal(t, 1, summary.UnfinishedTasks)
 			var stored model.Task
 			require.NoError(t, db.First(&stored, task.ID).Error)
-			assert.Equal(t, 20, stored.Quota)
+			assert.EqualValues(t, 20, stored.Quota)
 			if scenario == "reordered" {
 				assert.EqualValues(t, model.TaskStatusSuccess, stored.Status)
 				assert.Equal(t, "https://fixture.invalid/video.mp4", stored.GetResultURL())
@@ -558,7 +572,7 @@ func TestHailuoTaskCompletionRequiresOwnedDownload(t *testing.T) {
 				var recoveries, logs int64
 				require.NoError(t, db.Model(&model.BillingRecovery{}).Count(&recoveries).Error)
 				require.NoError(t, db.Model(&model.Log{}).Count(&logs).Error)
-				assert.Zero(t, recoveries)
+				assert.EqualValues(t, 1, recoveries)
 				assert.Zero(t, logs)
 				if scenario == "replaced" || scenario == "endpoint-changed" {
 					assert.Zero(t, queries.Load())
@@ -572,7 +586,7 @@ func TestHailuoTaskCompletionRequiresOwnedDownload(t *testing.T) {
 					}
 				}
 			}
-			assertVideoTaskAccountingUnchanged(t, db, channel.Id)
+			assertVideoTaskAccountingUnchanged(t, db, channel.Id, scenario == "reordered")
 			if scenario == "http-error" {
 				recovered.Store(true)
 				service.RunTaskPollingOnce(context.Background(), nil)
@@ -581,7 +595,7 @@ func TestHailuoTaskCompletionRequiresOwnedDownload(t *testing.T) {
 				assert.Equal(t, "https://fixture.invalid/video.mp4", stored.GetResultURL())
 				assert.EqualValues(t, 2, queries.Load())
 				assert.EqualValues(t, 2, downloads.Load())
-				assertVideoTaskAccountingUnchanged(t, db, channel.Id)
+				assertVideoTaskAccountingUnchanged(t, db, channel.Id, true)
 			}
 		})
 	}
@@ -618,12 +632,12 @@ func TestVideoPollingRejectsForeignTaskResults(t *testing.T) {
 				assert.Equal(t, "30%", stored.Progress)
 				assert.Empty(t, stored.Data)
 				assert.Empty(t, stored.GetResultURL())
-				assert.Equal(t, 20, stored.Quota)
+				assert.EqualValues(t, 20, stored.Quota)
 				assertVideoTaskAccountingUnchanged(t, db, channel.Id)
 				var recoveries, logs int64
 				require.NoError(t, db.Model(&model.BillingRecovery{}).Count(&recoveries).Error)
 				require.NoError(t, db.Model(&model.Log{}).Count(&logs).Error)
-				assert.Zero(t, recoveries)
+				assert.EqualValues(t, 1, recoveries)
 				assert.Zero(t, logs)
 			})
 		}

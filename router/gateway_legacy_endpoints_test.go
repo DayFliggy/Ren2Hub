@@ -55,7 +55,7 @@ func TestGatewayLegacyEmbeddingAliases(t *testing.T) {
 						"type": provider.typeID, "model_mapping": `{"gpt-4o-mini":"private-embedding"}`, "other": "2025-04-01-preview",
 					}).Error)
 					require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{
-						"unlimited_quota": false, "remain_quota": 100000, "model_limits_enabled": true, "model_limits": "gpt-4o-mini",
+						"unlimited_quota": false, "available_quota": 100000, "model_limits_enabled": true, "model_limits": "gpt-4o-mini",
 					}).Error)
 					require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 					status, body := gatewayLegacyEndpointRequest(t, gateway, key, test.path, test.body)
@@ -78,8 +78,8 @@ func TestGatewayLegacyEmbeddingAliases(t *testing.T) {
 					var token model.Token
 					require.NoError(t, model.DB.First(&user, 1).Error)
 					require.NoError(t, model.DB.First(&token, 1).Error)
-					assert.Equal(t, 10000000-500, user.Quota)
-					assert.Equal(t, 100000-500, token.RemainQuota)
+					assert.EqualValues(t, 10000000-500, user.Quota)
+					assert.EqualValues(t, 100000-500, token.RemainQuota)
 					var recoveries, logs int64
 					require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&recoveries).Error)
 					require.NoError(t, model.DB.Model(&model.Log{}).Where("type = ?", model.LogTypeConsume).Count(&logs).Error)
@@ -115,7 +115,7 @@ func TestGatewayLegacyEndpointRejections(t *testing.T) {
 			var sends atomic.Int32
 			gateway, key, _ := setupGatewaySDKWithUpstream(t, func(w http.ResponseWriter, r *http.Request) { sends.Add(1); gatewayMediaSDKUpstream(w, r) })
 			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{
-				"unlimited_quota": false, "remain_quota": 100000, "model_limits_enabled": true, "model_limits": "gpt-4o-mini",
+				"unlimited_quota": false, "available_quota": 100000, "model_limits_enabled": true, "model_limits": "gpt-4o-mini",
 			}).Error)
 			if test.noAuth {
 				key = ""
@@ -131,8 +131,8 @@ func TestGatewayLegacyEndpointRejections(t *testing.T) {
 			var token model.Token
 			require.NoError(t, model.DB.First(&user, 1).Error)
 			require.NoError(t, model.DB.First(&token, 1).Error)
-			assert.Equal(t, 10000000, user.Quota)
-			assert.Equal(t, 100000, token.RemainQuota)
+			assert.EqualValues(t, 10000000, user.Quota)
+			assert.EqualValues(t, 100000, token.RemainQuota)
 			var recoveries, logs, failures int64
 			require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&recoveries).Error)
 			require.NoError(t, model.DB.Model(&model.Log{}).Where("type = ?", model.LogTypeConsume).Count(&logs).Error)

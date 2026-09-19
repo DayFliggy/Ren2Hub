@@ -1,8 +1,8 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"regexp"
 	"sort"
@@ -14,7 +14,6 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
 	"github.com/QuantumNous/new-api/setting"
-	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -23,17 +22,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
-
-var completionRatioMetaOptionKeys = []string{
-	"ModelPrice",
-	"ModelRatio",
-	"CompletionRatio",
-	"CacheRatio",
-	"CreateCacheRatio",
-	"ImageRatio",
-	"AudioRatio",
-	"AudioCompletionRatio",
-}
 
 func isPaymentComplianceOptionKey(key string) bool {
 	return strings.HasPrefix(key, "payment_setting.compliance_")
@@ -48,45 +36,11 @@ func isPositiveOptionValue(value string) bool {
 	return err == nil && floatValue > 0
 }
 
-func collectModelNamesFromOptionValue(raw string, modelNames map[string]struct{}) {
-	if strings.TrimSpace(raw) == "" {
-		return
-	}
-
-	var parsed map[string]any
-	if err := common.UnmarshalJsonStr(raw, &parsed); err != nil {
-		return
-	}
-
-	for modelName := range parsed {
-		modelNames[modelName] = struct{}{}
-	}
-}
-
-func buildCompletionRatioMetaValue(optionValues map[string]string) string {
-	modelNames := make(map[string]struct{})
-	for _, key := range completionRatioMetaOptionKeys {
-		collectModelNamesFromOptionValue(optionValues[key], modelNames)
-	}
-
-	meta := make(map[string]ratio_setting.CompletionRatioInfo, len(modelNames))
-	for modelName := range modelNames {
-		meta[modelName] = ratio_setting.GetCompletionRatioInfo(modelName)
-	}
-
-	jsonBytes, err := common.Marshal(meta)
-	if err != nil {
-		return "{}"
-	}
-	return string(jsonBytes)
-}
-
 func GetOptions(c *gin.Context) {
 	var options []*model.Option
-	optionValues := make(map[string]string)
 	common.OptionMapRWMutex.Lock()
 	for k, v := range common.OptionMap {
-		if k == "theme.frontend" {
+		if k == "theme.frontend" || model.IsRetiredBillingOption(k) {
 			continue
 		}
 		value := common.Interface2String(v)
@@ -97,18 +51,10 @@ func GetOptions(c *gin.Context) {
 			Key:   k,
 			Value: value,
 		})
-		for _, optionKey := range completionRatioMetaOptionKeys {
-			if optionKey == k {
-				optionValues[k] = value
-				break
-			}
-		}
+
 	}
 	common.OptionMapRWMutex.Unlock()
-	options = append(options, &model.Option{
-		Key:   "CompletionRatioMeta",
-		Value: buildCompletionRatioMetaValue(optionValues),
-	})
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -177,9 +123,6 @@ var optionDefaults = map[string]any{
 	"PreConsumedQuota": 500000, "QuotaPerUnit": 500000, "USDExchangeRate": 1.0,
 	"Price": 7.3, "MinTopUp": 1, "ChannelDisableThreshold": 5,
 	"monitor_setting.channel_test_mode":           "scheduled_all",
-	"auto_pricing.models_dev_url":                 "https://models.dev/api.json",
-	"billing_setting.billing_mode":                map[string]any{},
-	"billing_setting.billing_expr":                map[string]any{},
 	"payment_setting.amount_options":              []any{},
 	"payment_setting.amount_discount":             map[string]any{},
 	"global.thinking_model_blacklist":             []any{},
@@ -192,8 +135,6 @@ var optionDefaults = map[string]any{
 }
 
 var optionValidators = map[string]string{
-	"billing_setting.billing_mode":      "billing-mode",
-	"billing_setting.billing_expr":      "billing-expression",
 	"payment_setting.amount_options":    "positive-amount-list",
 	"payment_setting.amount_discount":   "amount-discount",
 	"channel_affinity_setting.rules":    "channel-affinity-rules",
@@ -207,7 +148,7 @@ func optionDescriptorFor(key, value string) OptionDescriptor {
 		DefaultValue: value,
 		Editor:       "text",
 		Sensitive:    isSensitiveOptionKey(key),
-		Editable:     key != "CompletionRatioMeta" && !isPaymentComplianceOptionKey(key),
+		Editable:     key != "QuotaPerUnit" && !model.IsRetiredBillingOption(key) && !isPaymentComplianceOptionKey(key),
 		Validator:    optionValidators[key],
 	}
 	trimmed := strings.TrimSpace(value)
@@ -239,8 +180,6 @@ func optionDescriptorFor(key, value string) OptionDescriptor {
 		descriptor.Editor = "amount-list"
 	case key == "payment_setting.amount_discount":
 		descriptor.Editor = "discount"
-	case key == "billing_setting.billing_mode" || key == "billing_setting.billing_expr":
-		descriptor.Editor = "billing-expression"
 	case key == "global.chat_completions_to_responses_policy":
 		descriptor.Editor = "conversion-policy"
 	case key == "channel_affinity_setting.rules":
@@ -251,6 +190,10 @@ func optionDescriptorFor(key, value string) OptionDescriptor {
 		descriptor.Editor = "url"
 	case key == "FileUploadPermission" || key == "FileDownloadPermission" || key == "ImageUploadPermission" || key == "ImageDownloadPermission":
 		descriptor.Editor = "role"
+	}
+	switch key {
+	case "QuotaForNewUser", "QuotaForInviter", "QuotaForInvitee", "QuotaRemindThreshold", "AffiliatePerInviteeCap":
+		descriptor.ValueType, descriptor.Editor, descriptor.DefaultValue = "string", "text", value
 	}
 	return descriptor
 }
@@ -263,7 +206,7 @@ func GetOptionCatalog(c *gin.Context) {
 	keys := make([]string, 0, len(common.OptionMap))
 	values := make(map[string]string, len(common.OptionMap))
 	for key, value := range common.OptionMap {
-		if key == "theme.frontend" {
+		if key == "theme.frontend" || model.IsRetiredBillingOption(key) {
 			continue
 		}
 		keys = append(keys, key)
@@ -434,38 +377,18 @@ func validateChannelAffinitySettingValue(key, value string) error {
 	return nil
 }
 
-func validateBillingSettingValue(key, value string) error {
-	if key == "billing_setting.billing_mode" {
-		var modes map[string]string
-		if err := common.UnmarshalJsonStr(value, &modes); err != nil || modes == nil {
-			return fmt.Errorf("计费模式必须是 JSON 对象")
-		}
-		for modelName, mode := range modes {
-			if mode != billing_setting.BillingModeRatio && mode != billing_setting.BillingModeTieredExpr {
-				return fmt.Errorf("模型 %q 的计费模式无效", modelName)
-			}
-		}
-		return nil
-	}
-	var expressions map[string]string
-	if err := common.UnmarshalJsonStr(value, &expressions); err != nil || expressions == nil {
-		return fmt.Errorf("计费表达式必须是 JSON 对象")
-	}
-	for modelName, expression := range expressions {
-		if strings.TrimSpace(expression) == "" {
-			return fmt.Errorf("模型 %q 的计费表达式不能为空", modelName)
-		}
-		if err := billing_setting.SmokeTestExpr(expression); err != nil {
-			return fmt.Errorf("模型 %q 的计费表达式无效: %w", modelName, err)
-		}
-	}
-	return nil
-}
-
 // validateOptionPatch is intentionally free of persistence and runtime side
 // effects so a full patch can be checked before model.UpdateOptionsBulk opens
 // its transaction. The current option map plus the patch forms the final state.
 func validateOptionPatch(values map[string]string) error {
+	for key := range values {
+		if model.IsRetiredBillingOption(key) {
+			return errors.New("pricing must be published as an immutable billing price version")
+		}
+		if key == "QuotaPerUnit" {
+			return errors.New("quota conversion is fixed at 500000 per USD")
+		}
+	}
 	snapshot := optionSnapshot(values)
 	for key, value := range values {
 		if key == "" {
@@ -519,10 +442,6 @@ func validateOptionPatch(values map[string]string) error {
 			if err := ratio_setting.CheckGroupRatio(value); err != nil {
 				return err
 			}
-		case "billing_setting.billing_mode", "billing_setting.billing_expr":
-			if err := validateBillingSettingValue(key, value); err != nil {
-				return err
-			}
 		case "payment_setting.amount_options":
 			if err := validatePositiveIntList(value, "充值金额选项"); err != nil {
 				return err
@@ -566,7 +485,7 @@ func validateOptionPatch(values map[string]string) error {
 			if err != nil || !common.IsValidateRole(role) {
 				return fmt.Errorf("文件访问权限角色无效")
 			}
-		case "ModelRatio", "ModelPrice", "CompletionRatio", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "TopupGroupRatio":
+		case "TopupGroupRatio":
 			if err := validateRatioMap(value); err != nil {
 				return err
 			}
@@ -576,10 +495,6 @@ func validateOptionPatch(values map[string]string) error {
 			}
 		case "claude.default_max_tokens":
 			if err := model_setting.ValidateClaudeDefaultMaxTokens(value); err != nil {
-				return err
-			}
-		case operation_setting.ToolPriceOptionKey:
-			if err := operation_setting.ValidateToolPricesJSON(value); err != nil {
 				return err
 			}
 		case "ModelRequestRateLimitGroup":
@@ -722,8 +637,8 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	case "AffiliatePerInviteeCap":
-		value, parseErr := strconv.ParseFloat(option.Value.(string), 64)
-		if parseErr != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+		_, parseErr := model.AffiliateCapQuota(option.Value.(string))
+		if parseErr != nil {
 			common.ApiErrorMsg(c, "单个受邀用户返利上限必须是非负有限数值")
 			return
 		}
@@ -829,51 +744,6 @@ func UpdateOption(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": err.Error(),
-			})
-			return
-		}
-	case operation_setting.ToolPriceOptionKey:
-		err = operation_setting.ValidateToolPricesJSON(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	case "ImageRatio":
-		err = ratio_setting.UpdateImageRatioByJSONString(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "图片倍率设置失败: " + err.Error(),
-			})
-			return
-		}
-	case "AudioRatio":
-		err = ratio_setting.UpdateAudioRatioByJSONString(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "音频倍率设置失败: " + err.Error(),
-			})
-			return
-		}
-	case "AudioCompletionRatio":
-		err = ratio_setting.UpdateAudioCompletionRatioByJSONString(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "音频补全倍率设置失败: " + err.Error(),
-			})
-			return
-		}
-	case "CreateCacheRatio":
-		err = ratio_setting.UpdateCreateCacheRatioByJSONString(option.Value.(string))
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "缓存创建倍率设置失败: " + err.Error(),
 			})
 			return
 		}

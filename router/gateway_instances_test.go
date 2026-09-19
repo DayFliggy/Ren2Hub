@@ -124,7 +124,7 @@ func TestGatewayApplicationSingleInstanceRestart(t *testing.T) {
 	assert.Equal(t, int64(1), upstreamCalls.Load(), "capacity rejection must not send another upstream request")
 	var rejectedUser model.User
 	require.NoError(t, db.First(&rejectedUser, users[1].Id).Error)
-	assert.Equal(t, users[1].Quota, rejectedUser.Quota, "capacity rejection cannot consume balance")
+	assert.EqualValues(t, users[1].Quota, rejectedUser.Quota, "capacity rejection cannot consume balance")
 	var rejectedConsumes int64
 	require.NoError(t, db.Model(&model.Log{}).Where("user_id = ? AND type = ?", users[1].Id, model.LogTypeConsume).Count(&rejectedConsumes).Error)
 	assert.Zero(t, rejectedConsumes)
@@ -382,9 +382,9 @@ func gatewayInstanceBilling(t *testing.T, db *gorm.DB, initialUser model.User, i
 		var token model.Token
 		assert.NoError(collect, db.First(&user, initialUser.Id).Error)
 		assert.NoError(collect, db.First(&token, initialToken.Id).Error)
-		assert.Equal(collect, initialUser.Quota-logs[0].Quota, user.Quota)
-		assert.Equal(collect, initialToken.RemainQuota-logs[0].Quota, token.RemainQuota)
-		assert.Equal(collect, logs[0].Quota, token.UsedQuota)
+		assert.EqualValues(collect, initialUser.Quota-logs[0].Quota, user.Quota)
+		assert.EqualValues(collect, initialToken.RemainQuota-logs[0].Quota, token.RemainQuota)
+		assert.EqualValues(collect, logs[0].Quota, token.UsedQuota)
 		var recovery model.BillingRecovery
 		if assert.NoError(collect, db.Where("request_id = ?", requestID).First(&recovery).Error) {
 			assert.Equal(collect, model.BillingRecoveryStatusSettled, recovery.Status)

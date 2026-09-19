@@ -12,13 +12,13 @@ const tieredModel: MarketModel = {
   type: 'chat',
   billing: 'tiered',
   price: {
-    input: 2.5,
-    output: 10,
-    cache_read: 1.25,
-    cache_write: 3.125,
+    input: '2.5',
+    output: '10',
+    cache_read: '1.25',
+    cache_write: '3.125',
     tiers: [
-      { label: '0-128K', input: 2.5, output: 10 },
-      { label: '128K+', input: 5, output: 15 },
+      { label: '0-128K', input: '2.5', output: '10' },
+      { label: '128K+', input: '5', output: '15' },
     ],
   },
   context: 128_000,
@@ -56,11 +56,11 @@ describe('ModelCard billing metadata', () => {
     const wrapper = render('grid')
 
     expect(wrapper.text()).not.toContain('128K')
-    expect(wrapper.text()).toContain('$2.5000')
-    expect(wrapper.text()).toContain('$10.0000')
-    expect(wrapper.text()).toContain('$1.2500')
-    expect(wrapper.get('[data-model-cache-read]').text()).toContain('$1.2500')
-    expect(wrapper.get('[data-model-cache-write]').text()).toContain('$3.1250')
+    expect(wrapper.text()).toContain('$2.500')
+    expect(wrapper.text()).toContain('$10.000')
+    expect(wrapper.text()).toContain('$1.250')
+    expect(wrapper.get('[data-model-cache-read]').text()).toContain('$1.250')
+    expect(wrapper.get('[data-model-cache-write]').text()).toContain('$3.125')
     expect(wrapper.get('[data-model-divider]').classes()).toContain(
       'border-[var(--border-default)]'
     )
@@ -88,14 +88,14 @@ describe('ModelCard billing metadata', () => {
       props: {
         model: {
           ...tieredModel,
-          price: { ...tieredModel.price, cache_write: 0 },
+          price: { ...tieredModel.price, cache_write: '0' },
         },
         layout: 'grid',
       },
       global: { plugins: [i18n] },
     })
 
-    expect(wrapper.get('[data-model-cache-write]').text()).toContain('$0.0000')
+    expect(wrapper.get('[data-model-cache-write]').text()).toContain('$0.000')
   })
 
   it('keeps cache pricing out of the compact list layout', () => {
@@ -128,7 +128,7 @@ describe('ModelCard billing metadata', () => {
         model: {
           ...tieredModel,
           billing: 'token',
-          price: { input: 0.15, output: 0.6 },
+          price: { input: '0.15', output: '0.6' },
         },
         layout: 'grid',
       },

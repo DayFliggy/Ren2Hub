@@ -24,7 +24,6 @@ import (
 	"github.com/QuantumNous/new-api/pkg/relaycapability"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -177,7 +176,7 @@ func TestGatewayOfficialCompatibleSDK(t *testing.T) {
 			}
 			priceJSON, err := common.Marshal(prices)
 			require.NoError(t, err)
-			require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(priceJSON)))
+			require.NoError(t, publishGatewayFixturePrices(string(priceJSON), false))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			configJSON, err := common.Marshal(config)
 			require.NoError(t, err)
@@ -271,7 +270,7 @@ func TestGatewayCompatibleInvalidUsageIsNotDeliveredOrCharged(t *testing.T) {
 					sends.Add(1)
 					var user model.User
 					require.NoError(t, model.DB.First(&user, 1).Error)
-					assert.Equal(t, 9999500, user.Quota, "precharge must precede provider send")
+					assert.EqualValues(t, 9999500, user.Quota, "precharge must precede provider send")
 					w.Header().Set("Content-Type", "application/json")
 					_, _ = fmt.Fprintf(w, `{"id":"invalid-usage","object":"chat.completion","model":"compatible-usage","choices":[{"index":0,"message":{"role":"assistant","content":"must-not-be-delivered"},"finish_reason":"stop"}],"usage":%s}`, invalidUsage.body)
 				})
@@ -280,8 +279,8 @@ func TestGatewayCompatibleInvalidUsageIsNotDeliveredOrCharged(t *testing.T) {
 				channel.Type, channel.Models, channel.Other = provider.kind, "compatible-usage", "isolated-account"
 				require.NoError(t, model.DB.Model(channel).Updates(map[string]any{"type": channel.Type, "models": channel.Models, "other": channel.Other}).Error)
 				require.NoError(t, channel.AddAbilities(model.DB))
-				require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"compatible-usage":0.001}`))
-				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "remain_quota": 2000}).Error)
+				require.NoError(t, publishGatewayFixturePrices(`{"compatible-usage":0.001}`, false))
+				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 2000}).Error)
 				require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 				status, output := postGatewayTask(t, gatewayURL, key, "/v1/chat/completions", `{"model":"compatible-usage","messages":[{"role":"user","content":"hello"}],"max_tokens":32}`)
 				assert.Equal(t, http.StatusBadGateway, status, output)
@@ -291,7 +290,7 @@ func TestGatewayCompatibleInvalidUsageIsNotDeliveredOrCharged(t *testing.T) {
 				var user model.User
 				var token model.Token
 				require.Eventually(t, func() bool {
-					return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == 10000000 && token.RemainQuota == 2000
+					return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == 9999500 && token.RemainQuota == 1500 && user.ReservedQuota == 500 && token.ReservedQuota == 500
 				}, time.Second, 10*time.Millisecond)
 				assert.Zero(t, user.UsedQuota)
 				assert.Zero(t, user.RequestCount)
@@ -326,7 +325,7 @@ func (writer *gatewayCompatibleFailureWriter) Write(body []byte) (int, error) {
 	}
 }
 
-func TestGatewayCompatibleJSONClientFailureRefundsWithoutHealthPenalty(t *testing.T) {
+func TestGatewayCompatibleJSONClientFailureHoldsWithoutHealthPenalty(t *testing.T) {
 	for _, provider := range []struct {
 		name string
 		kind int
@@ -343,8 +342,8 @@ func TestGatewayCompatibleJSONClientFailureRefundsWithoutHealthPenalty(t *testin
 				channel.Type, channel.Models, channel.Other = provider.kind, "compatible-usage", "isolated-account"
 				require.NoError(t, model.DB.Model(channel).Updates(map[string]any{"type": channel.Type, "models": channel.Models, "other": channel.Other}).Error)
 				require.NoError(t, channel.AddAbilities(model.DB))
-				require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"compatible-usage":0.001}`))
-				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "remain_quota": 2000}).Error)
+				require.NoError(t, publishGatewayFixturePrices(`{"compatible-usage":0.001}`, false))
+				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 2000}).Error)
 				require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 				engine := gin.New()
 				engine.Use(middleware.RequestId(), func(c *gin.Context) {
@@ -361,7 +360,7 @@ func TestGatewayCompatibleJSONClientFailureRefundsWithoutHealthPenalty(t *testin
 				var user model.User
 				var token model.Token
 				require.Eventually(t, func() bool {
-					return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == 10000000 && token.RemainQuota == 2000
+					return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == 9999500 && token.RemainQuota == 1500 && user.ReservedQuota == 500 && token.ReservedQuota == 500
 				}, time.Second, 10*time.Millisecond)
 				assert.Zero(t, user.UsedQuota)
 				assert.Zero(t, user.RequestCount)

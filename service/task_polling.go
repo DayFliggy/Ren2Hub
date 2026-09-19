@@ -51,54 +51,12 @@ func sweepTimedOutTasks(ctx context.Context) {
 		return
 	}
 
-	reason := fmt.Sprintf("任务超时（%d分钟）", constant.TaskTimeoutMinutes)
-	legacyReason := "任务超时（旧系统遗留任务，不进行退款，请联系管理员）"
-	now := time.Now().Unix()
-	timedOutCount := 0
-
 	for _, task := range tasks {
-		ready, err := model.TaskSubmissionReady(ctx, task)
-		if err != nil {
-			logger.LogError(ctx, fmt.Sprintf("task submission accounting lookup failed (task_id=%s): %v", task.TaskID, err))
+		if err := model.HoldTaskBilling(ctx, task, task.Status, "task_timeout_outcome_unknown"); err != nil {
+			logger.LogError(ctx, fmt.Sprintf("task timeout reconciliation failed (task_id=%s): %v", task.TaskID, err))
 		}
-		if !ready {
-			continue
-		}
-		isLegacy := task.SubmitTime > 0 && task.SubmitTime < model.TaskRefundLegacyCutoff
-
-		oldStatus := task.Status
-		task.Status = model.TaskStatusFailure
-		task.Progress = "100%"
-		task.FinishTime = now
-		if isLegacy {
-			task.FailReason = legacyReason
-			// 旧系统任务明确不退款，随终态 CAS 一并清掉 quota，
-			// 避免留下可再次退款的计费状态。
-			task.Quota = 0
-		} else {
-			task.FailReason = reason
-		}
-
-		var won bool
-		if isLegacy {
-			won, err = task.UpdateWithStatus(oldStatus)
-		} else {
-			won, err = completeTaskBilling(ctx, task, oldStatus, 0, reason)
-		}
-		if err != nil {
-			logger.LogError(ctx, fmt.Sprintf("sweepTimedOutTasks completion error for task %s: %v", task.TaskID, err))
-			continue
-		}
-		if !won {
-			logger.LogInfo(ctx, fmt.Sprintf("sweepTimedOutTasks: task %s already transitioned, skip", task.TaskID))
-			continue
-		}
-		timedOutCount++
 	}
 
-	if timedOutCount > 0 {
-		logger.LogInfo(ctx, fmt.Sprintf("sweepTimedOutTasks: timed out %d tasks", timedOutCount))
-	}
 }
 
 // TaskPollSummary is the result recorded on an async_task_poll system task row,
@@ -161,15 +119,8 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 		owners := make(map[owner][]*model.Task)
 		for _, task := range tasks {
 			if task.GetUpstreamTaskID() == "" {
-				fromStatus := task.Status
-				task.Status, task.Progress = model.TaskStatusFailure, "100%"
-				task.FailReason = "任务缺少上游标识"
-				won, err := completeTaskBilling(ctx, task, fromStatus, 0, task.FailReason)
-				if err != nil {
-					logger.LogError(ctx, fmt.Sprintf("invalid task completion failed (task_id=%d): %v", task.ID, err))
-				}
-				if won {
-					summary.NullTasksFailed++
+				if err := model.HoldTaskBilling(ctx, task, task.Status, "task_upstream_identity_missing"); err != nil {
+					logger.LogError(ctx, fmt.Sprintf("task reconciliation failed (task_id=%s): %v", task.TaskID, err))
 				}
 				continue
 			}
@@ -372,9 +323,14 @@ func pollSunoCredentialGroup(ctx context.Context, adaptor TaskPollingAdaptor, ch
 		var won bool
 		var err error
 		if task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure {
-			actualQuota := task.Quota
-			if isFailure {
-				actualQuota = 0
+			var actualQuota common.Quota
+			if !isFailure {
+				actualQuota, _, _, err = taskCompletionQuota(nil, task, nil)
+				if err != nil {
+					err = errors.Join(err, model.HoldTaskBilling(ctx, task, prevStatus, "task_final_usage_invalid"))
+					logger.LogError(ctx, fmt.Sprintf("Suno task %s requires billing reconciliation: %v", task.TaskID, err))
+					continue
+				}
 			}
 			won, err = completeTaskBilling(ctx, task, prevStatus, actualQuota, task.FailReason)
 		} else {
@@ -608,7 +564,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	if isDone {
 		quota, reason, clamp, err := taskCompletionQuota(adaptor, task, taskResult)
 		if err != nil {
-			return err
+			return errors.Join(err, model.HoldTaskBilling(ctx, task, snap.Status, "task_final_usage_invalid"))
 		}
 		_, err = completeTaskBilling(ctx, task, snap.Status, quota, reason, clamp)
 		return err

@@ -17,7 +17,6 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel/volcengine"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,7 +71,7 @@ func TestGatewayOfficialAudioSDK(t *testing.T) {
 				assert.Equal(t, "hello", request["text"])
 				_, _ = io.WriteString(w, `{"base_resp":{"status_code":0},"data":{"audio":"00010203","status":2}}`)
 			})
-			require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"speech-minimax":0.001,"speech-volc-http":0.001,"speech-volc-ws":0.001,"whisper-cloudflare":0.001}`))
+			require.NoError(t, publishGatewayFixturePrices(`{"speech-minimax":0.001,"speech-volc-http":0.001,"speech-volc-ws":0.001,"whisper-cloudflare":0.001}`, false))
 			for _, config := range []struct {
 				id, channelType int
 				name, key       string
@@ -92,7 +91,7 @@ func TestGatewayOfficialAudioSDK(t *testing.T) {
 				require.NoError(t, model.DB.Model(channel).Updates(map[string]any{"type": channel.Type, "models": channel.Models, "key": channel.Key, "base_url": base}).Error)
 				require.NoError(t, channel.AddAbilities(model.DB))
 			}
-			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "remain_quota": 10000}).Error)
+			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 10000}).Error)
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 			defer cancel()

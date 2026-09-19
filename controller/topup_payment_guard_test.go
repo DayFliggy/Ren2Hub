@@ -34,7 +34,7 @@ func setupWalletPaymentGuard(t *testing.T, provider, tradeNo string) (*gorm.DB, 
 	connection, err := db.DB()
 	require.NoError(t, err)
 	connection.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.TopUp{}, &model.Log{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.TopUp{}, &model.Log{}, &model.BillingEvent{}))
 	previousDB, previousLogDB := model.DB, model.LOG_DB
 	previousRedis, previousAffiliate := common.RedisEnabled, common.AffiliateEnabled
 	previousQuotaPerUnit := common.QuotaPerUnit
@@ -94,8 +94,8 @@ func TestStripePaymentEventsKeepWalletOrdersIsolated(t *testing.T) {
 				var user model.User
 				require.NoError(t, db.First(&user, 1).Error)
 				require.NoError(t, db.First(&order, order.Id).Error)
-				assert.Equal(t, wantQuota, user.Quota)
-				assert.Equal(t, wantStatus, order.Status)
+				assert.EqualValues(t, wantQuota, user.Quota)
+				assert.EqualValues(t, wantStatus, order.Status)
 			})
 		}
 	}
@@ -128,9 +128,9 @@ func TestCreemCheckoutKeepsWalletOrdersIsolated(t *testing.T) {
 				// Creem stores credited quota directly in Amount.
 				wantQuota, wantStatus = 9, common.TopUpStatusSuccess
 			}
-			assert.Equal(t, wantQuota, user.Quota)
-			assert.Equal(t, wantStatus, order.Status)
-			assert.Equal(t, http.StatusOK, response.Code)
+			assert.EqualValues(t, wantQuota, user.Quota)
+			assert.EqualValues(t, wantStatus, order.Status)
+			assert.EqualValues(t, http.StatusOK, response.Code)
 		})
 	}
 }
@@ -145,7 +145,7 @@ func TestWaffoPancakeRejectsArchivedPlanBeforeWalletLookup(t *testing.T) {
 	})
 	require.EqualError(t, err, "retired payment order")
 	require.NoError(t, db.First(&order, order.Id).Error)
-	assert.Equal(t, common.TopUpStatusPending, order.Status)
+	assert.EqualValues(t, common.TopUpStatusPending, order.Status)
 }
 
 func TestEpayWebhookRejectsArchivedPlanWalletCredit(t *testing.T) {
@@ -187,9 +187,9 @@ func TestEpayWebhookRejectsArchivedPlanWalletCredit(t *testing.T) {
 			if tc.allowed {
 				wantQuota, wantStatus, wantBody = 207, common.TopUpStatusSuccess, "success"
 			}
-			assert.Equal(t, wantQuota, user.Quota)
-			assert.Equal(t, wantStatus, order.Status)
-			assert.Equal(t, wantBody, response.Body.String())
+			assert.EqualValues(t, wantQuota, user.Quota)
+			assert.EqualValues(t, wantStatus, order.Status)
+			assert.EqualValues(t, wantBody, response.Body.String())
 		})
 	}
 }
@@ -236,8 +236,8 @@ func TestWaffoWebhookRejectsRecurringWalletCredit(t *testing.T) {
 			if tc.allowed {
 				wantQuota, wantStatus, wantMessage = 207, common.TopUpStatusSuccess, "success"
 			}
-			assert.Equal(t, wantQuota, user.Quota)
-			assert.Equal(t, wantStatus, order.Status)
+			assert.EqualValues(t, wantQuota, user.Quota)
+			assert.EqualValues(t, wantStatus, order.Status)
 			assert.JSONEq(t, `{"message":"`+wantMessage+`"}`, response.Body.String())
 		})
 	}

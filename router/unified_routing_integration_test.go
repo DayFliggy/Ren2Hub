@@ -50,7 +50,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			name: "video", path: "/v1/videos", models: "sora-2",
 			body:             `{"model":"sora-2","prompt":"test scene","seconds":"4","size":"720x1280"}`,
 			upstreamResponse: `{"id":"upstream-video-task","object":"video","model":"sora-2","status":"queued","seconds":"4","size":"720x1280"}`,
-			channelType:      constant.ChannelTypeSora, quota: 4000, calls: 1,
+			channelType:      constant.ChannelTypeSora, quota: 1000, calls: 1,
 		},
 		{
 			name: "midjourney", path: "/mj/submit/imagine", models: "mj_imagine",
@@ -65,7 +65,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			require.NoError(t, db.AutoMigrate(
 				&model.UserRouteGroup{}, &model.UserRouteEntry{}, &model.RoutePolicy{},
 				&model.ChannelCapabilitySnapshot{}, &model.ChannelModelCapability{}, &model.ChannelHealth{},
-				&model.BillingRecovery{}, &model.BillingRecoveryAdjustment{},
+				&model.BillingRecovery{}, &model.BillingEvent{},
 				&model.Log{}, &model.QuotaData{}, &model.Task{}, &model.Midjourney{},
 			))
 			previousRDB, previousMemory := common.RDB, common.MemoryCacheEnabled
@@ -84,7 +84,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			}
 			priceJSON, err := common.Marshal(prices)
 			require.NoError(t, err)
-			require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(priceJSON)))
+			require.NoError(t, publishGatewayFixturePrices(string(priceJSON), false))
 			var calls atomic.Int32
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				n := calls.Add(1)
@@ -117,7 +117,12 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 			assert.Equal(t, int32(test.calls), calls.Load(), response.Body.String())
 			require.NoError(t, db.First(user, user.Id).Error)
-			assert.Equal(t, test.quota, user.UsedQuota)
+			if test.name == "suno" || test.name == "video" || test.name == "midjourney" {
+				assert.Zero(t, user.UsedQuota)
+				assert.EqualValues(t, test.quota, user.ReservedQuota)
+			} else {
+				assert.EqualValues(t, test.quota, user.UsedQuota)
+			}
 			assert.Equal(t, int64(0), service.ReadGatewayAdmissionRuntime(service.ChannelAdmissionKey(channel.Id)).InFlight)
 			if test.name == "chat" {
 				held, _, err := service.AcquireGatewayChannelPermit(context.Background(), "occupied", channel.Id, false, nil)
@@ -139,7 +144,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 					assert.Equal(t, want, blockedResponse.Code, failure)
 					assert.Equal(t, int32(1), calls.Load(), failure)
 					require.NoError(t, db.First(user, user.Id).Error)
-					assert.Equal(t, test.quota, user.UsedQuota, failure)
+					assert.EqualValues(t, test.quota, user.UsedQuota, failure)
 				}
 			}
 			if test.name == "suno" || test.name == "video" {
@@ -147,7 +152,8 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 				require.NoError(t, db.First(&task).Error)
 				assert.Equal(t, channel.Id, task.ChannelId)
 				require.NotNil(t, task.PrivateData.BillingContext)
-				assert.Equal(t, 2.0, task.PrivateData.BillingContext.GroupRatio)
+				require.NotNil(t, task.PrivateData.BillingContext.Quote)
+				assert.Equal(t, "2", task.PrivateData.BillingContext.Quote.ChannelRatio)
 			}
 		})
 	}

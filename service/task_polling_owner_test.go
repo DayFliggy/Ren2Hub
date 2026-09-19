@@ -64,6 +64,7 @@ func TestTaskPollingScopesDuplicateProviderIDsByCredential(t *testing.T) {
 	require.NoError(t, model.DB.Create(channel).Error)
 	other := &model.Channel{Name: "polling-other", Type: constant.ChannelTypeSunoAPI, Status: common.ChannelStatusEnabled, Key: "third", BaseURL: &baseURL}
 	require.NoError(t, model.DB.Create(other).Error)
+	seedUser(t, 1, 10000)
 	tasks := make([]*model.Task, 0, 3)
 	for index, key := range []string{"first", "second", "third"} {
 		owner := channel
@@ -74,7 +75,7 @@ func TestTaskPollingScopesDuplicateProviderIDsByCredential(t *testing.T) {
 			Platform: constant.TaskPlatformSuno, Status: model.TaskStatusNotStart, Progress: "0%", SubmitTime: time.Now().Unix()}
 		require.NoError(t, task.PrivateData.BindCredential(ctx, owner, key))
 		task.PrivateData.UpstreamTaskID = "same-provider-id"
-		require.NoError(t, model.DB.Create(task).Error)
+		acceptTestTask(t, task)
 		tasks = append(tasks, task)
 	}
 	require.NoError(t, model.DB.Model(channel).Update("key", "second\nfirst").Error)

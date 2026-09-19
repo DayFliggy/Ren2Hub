@@ -14,6 +14,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -191,7 +192,7 @@ func TestAliAsyncImageDelivery(t *testing.T) {
 			c, _ := gin.CreateTestContext(recorder)
 			c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
 			info := &relaycommon.RelayInfo{StartTime: time.Now(), ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: server.URL}}
-			info.PriceData.UsePrice = true
+			info.PriceData.Usage = &billing.Usage{Quantities: map[string]string{"images": "3"}}
 			resp := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"output":{"task_id":"task-1"}}`))}
 			apiErr, usage := aliImageHandler(&Adaptor{}, c, resp, info)
 			if test.wantError {
@@ -205,7 +206,7 @@ func TestAliAsyncImageDelivery(t *testing.T) {
 			require.Nil(t, apiErr)
 			require.NotNil(t, usage)
 			assert.True(t, info.HasValidOutput())
-			assert.Equal(t, 2.0, info.PriceData.OtherRatios()["n"])
+			assert.Equal(t, "2", info.PriceData.Usage.Quantities["images"])
 			var result dto.ImageResponse
 			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &result))
 			assert.Len(t, result.Data, 2)

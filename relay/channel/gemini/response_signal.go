@@ -30,7 +30,11 @@ func parseGeminiGenerationResponse(c *gin.Context, data []byte, stream, priorOut
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 	if len(envelope.Error) > 0 && !bytes.Equal(bytes.TrimSpace(envelope.Error), []byte("null")) {
-		return nil, geminiEnvelopeError(envelope.Error)
+		apiErr := geminiEnvelopeError(envelope.Error)
+		if !priorOutput && apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 {
+			c.Set("billing_upstream_rejected", true)
+		}
+		return nil, apiErr
 	}
 	var response dto.GeminiChatResponse
 	if err := common.Unmarshal(data, &response); err != nil {
@@ -39,6 +43,9 @@ func parseGeminiGenerationResponse(c *gin.Context, data []byte, stream, priorOut
 	if feedback := response.PromptFeedback; feedback != nil && feedback.BlockReason != nil {
 		reason := strings.TrimSpace(*feedback.BlockReason)
 		if reason != "" && reason != "BLOCK_REASON_UNSPECIFIED" {
+			if !priorOutput && !geminiResponseHasOutput(&response) && !dto.HasGeminiUsageMetadataTokens(response.GetUsageMetadata()) {
+				c.Set("billing_upstream_rejected", true)
+			}
 			return &response, geminiPolicyError(c, reason)
 		}
 	}
@@ -48,6 +55,9 @@ func parseGeminiGenerationResponse(c *gin.Context, data []byte, stream, priorOut
 			return &response, types.NewOpenAIError(fmt.Errorf("unknown Gemini finish reason: %s", *candidate.FinishReason), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 		}
 		if candidate.FinishReason != nil && geminiPolicyFinishReason(*candidate.FinishReason) && !hasOutput {
+			if !dto.HasGeminiUsageMetadataTokens(response.GetUsageMetadata()) {
+				c.Set("billing_upstream_rejected", true)
+			}
 			return &response, geminiPolicyError(c, *candidate.FinishReason)
 		}
 	}

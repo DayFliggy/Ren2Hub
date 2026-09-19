@@ -8,11 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"context"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
@@ -48,7 +49,7 @@ func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	model.DB = db
 	model.LOG_DB = db
 
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}, &model.BillingPriceVersion{}, &model.BillingActivePrice{}))
 	require.NoError(t, db.AutoMigrate(&model.UserChannelEntitlement{}, &model.UserRouteProfile{}, &model.UserRouteGroup{}, &model.UserRouteEntry{}))
 
 	t.Cleanup(func() {
@@ -85,6 +86,14 @@ func initModelListColumnNames(t *testing.T) {
 	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
 	require.NoError(t, os.Setenv("SQL_DSN", "local"))
 
+	// This fixture owns a disposable database and supplies the release marker.
+	bootstrap, bootstrapErr := gorm.Open(sqlite.Open(common.SQLitePath), &gorm.Config{})
+	require.NoError(t, bootstrapErr)
+	require.NoError(t, bootstrap.AutoMigrate(&model.BillingSchema{}))
+	require.NoError(t, bootstrap.Create(&model.BillingSchema{ID: 1, Version: model.BillingSchemaVersion}).Error)
+	bootstrapSQL, bootstrapErr := bootstrap.DB()
+	require.NoError(t, bootstrapErr)
+	defer bootstrapSQL.Close()
 	require.NoError(t, model.InitDB())
 	if model.DB != nil {
 		sqlDB, err := model.DB.DB()
@@ -97,27 +106,15 @@ func initModelListColumnNames(t *testing.T) {
 func withTieredBillingConfig(t *testing.T, modes map[string]string, exprs map[string]string) {
 	t.Helper()
 
-	saved := map[string]string{}
-	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
-		if strings.HasPrefix(key, "billing_setting.") {
-			saved[key] = value
+	for name, mode := range modes {
+		require.Equal(t, "tiered_expr", mode)
+		_, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: name, Mode: billing.ModeExpression, Expression: exprs[name]}, 0, 1)
+		if strings.TrimSpace(exprs[name]) == "" {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
 		}
-		return nil
-	}))
-	t.Cleanup(func() {
-		require.NoError(t, config.GlobalConfig.LoadFromDB(saved))
-		model.InvalidatePricingCache()
-	})
-
-	modeBytes, err := common.Marshal(modes)
-	require.NoError(t, err)
-	exprBytes, err := common.Marshal(exprs)
-	require.NoError(t, err)
-
-	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
-		"billing_setting.billing_mode": string(modeBytes),
-		"billing_setting.billing_expr": string(exprBytes),
-	}))
+	}
 	model.InvalidatePricingCache()
 }
 
@@ -410,6 +407,7 @@ func TestListModelsDoesNotProjectCompactPermissionIntoAnthropicList(t *testing.T
 }
 
 func TestListModelsIncludesTieredBillingModel(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
 	withSelfUseModeDisabled(t)
 	withTieredBillingConfig(t, map[string]string{
 		"zz-tiered-visible-model":      "tiered_expr",
@@ -420,7 +418,6 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 		"zz-tiered-empty-expr-model": "   ",
 	})
 
-	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.Create(&model.User{
 		Id:       1001,
 		Username: "model-list-user",
@@ -452,7 +449,7 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 	pricingByName := pricingByModelName(model.GetPricing())
 	visiblePricing, ok := pricingByName["zz-tiered-visible-model"]
 	require.True(t, ok)
-	require.Equal(t, "tiered_expr", visiblePricing.BillingMode)
+	require.Equal(t, "expression", visiblePricing.BillingMode)
 	require.NotEmpty(t, visiblePricing.BillingExpr)
 
 	emptyExprPricing, ok := pricingByName["zz-tiered-empty-expr-model"]
@@ -538,6 +535,7 @@ func TestListModelsUsesAdvancedCustomEndpointTypesFromPricingCache(t *testing.T)
 }
 
 func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
 	withSelfUseModeDisabled(t)
 	withTieredBillingConfig(t, map[string]string{
 		"zz-token-tiered-visible-model":      "tiered_expr",
@@ -547,7 +545,6 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 		"zz-token-tiered-visible-model":    `tier("base", p * 1 + c * 2)`,
 		"zz-token-tiered-empty-expr-model": "",
 	})
-	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.Create(&model.Channel{Id: 1, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI}).Error)
 	require.NoError(t, db.Create(&[]model.Ability{
 		{Group: "default", Model: "zz-token-tiered-visible-model", ChannelId: 1, Enabled: true},

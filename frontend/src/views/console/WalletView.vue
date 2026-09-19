@@ -20,7 +20,9 @@ import {
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
-import { formatNumber, formatQuota, QUOTA_PER_DOLLAR } from '@/utils/format'
+import BillingHistory from '@/components/console/wallet/BillingHistory.vue'
+import { addQuota, quotaToDecimal, sumQuota } from '@/utils/quota'
+import { formatNumber, formatQuota } from '@/utils/format'
 
 type WalletStats = DashboardStats
 
@@ -32,7 +34,7 @@ const { hidden, toggle } = useBalanceVisibility()
 
 const stats = ref<WalletStats | null>(null)
 const flow = ref<FlowPoint[]>([])
-const todayConsume = ref(0)
+const todayConsume = ref('0')
 const refreshKey = ref(0)
 const paymentMethod = ref('epay')
 const loading = ref(false)
@@ -42,24 +44,22 @@ const activePanel = computed<'topup' | 'redeem'>(() =>
   route.query.panel === 'redeem' ? 'redeem' : 'topup'
 )
 
-const balanceTotalCents = computed(() =>
-  stats.value ? Math.round(stats.value.quota / (QUOTA_PER_DOLLAR / 100)) : 0
+const balanceParts = computed(() =>
+  quotaToDecimal(stats.value?.quota ?? '0', 2).split('.')
 )
-const balanceDollars = computed(() => Math.floor(balanceTotalCents.value / 100))
-const balanceCents = computed(() =>
-  String(balanceTotalCents.value % 100).padStart(2, '0')
-)
+const balanceDollars = computed(() => balanceParts.value[0])
+const balanceCents = computed(() => balanceParts.value[1])
 const dayCount = computed(() => flow.value.length || 30)
 
 const statCards = computed(() => {
   const current = stats.value
   if (!current) return []
   const average = flow.value.length
-    ? Math.round(
-        flow.value.reduce((sum, point) => sum + point.consume, 0) /
-          flow.value.length
-      )
-    : 0
+    ? (
+        BigInt(sumQuota(flow.value.map((point) => point.consume))) /
+        BigInt(flow.value.length)
+      ).toString()
+    : '0'
   return [
     {
       label: t('wallet.statMonthConsume'),
@@ -102,24 +102,24 @@ async function loadStats(): Promise<void> {
     return
   }
   const rows = result.value
-  const monthQuota = rows.reduce((sum, row) => sum + row.quota, 0)
+  const monthQuota = rows.reduce((sum, row) => addQuota(sum, row.quota), '0')
   const todayStart = getLocalDayStartTimestamp()
   todayConsume.value = rows
     .filter((row) => row.created_at >= todayStart)
-    .reduce((sum, row) => sum + row.quota, 0)
+    .reduce((sum, row) => addQuota(sum, row.quota), '0')
   const byDay = new Map<string, FlowPoint>()
   for (const row of rows) {
     const date = new Date(row.created_at * 1000).toISOString().slice(0, 10)
-    const point = byDay.get(date) ?? { date, consume: 0, requests: 0 }
-    point.consume += row.quota
+    const point = byDay.get(date) ?? { date, consume: '0', requests: 0 }
+    point.consume = addQuota(point.consume, row.quota)
     point.requests += row.count
     byDay.set(date, point)
   }
   flow.value = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date))
   stats.value = {
-    quota: auth.user?.quota ?? 0,
+    quota: auth.user?.available_quota ?? '0',
     used_quota: monthQuota,
-    today_quota: 0,
+    today_quota: '0',
     month_quota: monthQuota,
     today_requests: 0,
     total_requests: rows.reduce((sum, row) => sum + row.count, 0),
@@ -130,7 +130,7 @@ async function loadStats(): Promise<void> {
 
 function handlePaymentDone(): void {
   refreshKey.value += 1
-  void loadStats()
+  void auth.fetchSelf().then(loadStats)
 }
 
 onMounted(() => void loadStats())
@@ -188,6 +188,35 @@ onMounted(() => void loadStats())
       </template>
     </PageHero>
 
+    <dl v-if="auth.user && !hidden" class="mb-6 grid gap-3 sm:grid-cols-3">
+      <div
+        v-for="key in [
+          'available_quota',
+          'reserved_quota',
+          'used_quota',
+        ] as const"
+        :key="key"
+        class="min-w-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
+      >
+        <dt class="text-xs text-[var(--text-tertiary)]">
+          {{
+            t(
+              key === 'available_quota'
+                ? 'billing.available'
+                : key === 'reserved_quota'
+                  ? 'billing.reserved'
+                  : 'billing.used'
+            )
+          }}
+        </dt>
+        <dd class="mt-2 break-all font-mono text-sm">
+          {{ formatQuota(auth.user[key], 3)
+          }}<span class="mt-1 block text-xs text-[var(--text-tertiary)]"
+            >{{ auth.user[key] }} quota</span
+          >
+        </dd>
+      </div>
+    </dl>
     <StatTileGrid class="mb-6" :tiles="statCards" :columns="4" />
 
     <div class="mb-6 grid gap-6 xl:grid-cols-[1fr_380px]">
@@ -204,6 +233,7 @@ onMounted(() => void loadStats())
     </div>
 
     <div class="space-y-6">
+      <BillingHistory :refresh-key="refreshKey" />
       <FlowChart :flow="flow" />
       <TopupRecords v-model:refresh-key="refreshKey" />
     </div>

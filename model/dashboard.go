@@ -9,14 +9,14 @@ import (
 
 type DashboardModelUsage struct {
 	Tokens             int64
-	Quota              int64
+	Quota              common.Quota
 	Requests           int64
 	SuccessfulRequests int64
 	TotalUseTime       int64
 }
 
 type DashboardDailyUsage struct {
-	Quota             int64
+	Quota             common.Quota
 	Requests          int64
 	Tokens            int64
 	InputTokens       int64
@@ -27,7 +27,7 @@ type DashboardDailyUsage struct {
 
 type DashboardUsage struct {
 	Tokens             int64
-	Quota              int64
+	Quota              common.Quota
 	Requests           int64
 	SuccessfulRequests int64
 	TotalUseTime       int64
@@ -57,7 +57,8 @@ func GetUserDashboardUsage(userID int, startTimestamp, endTimestamp int64, timez
 		var createdAt int64
 		var logType int
 		var modelName string
-		var quota, promptTokens, completionTokens, useTime int64
+		var quota common.Quota
+		var promptTokens, completionTokens, useTime int64
 		var other sql.NullString
 		if err := rows.Scan(&createdAt, &logType, &modelName, &quota, &promptTokens, &completionTokens, &useTime, &other); err != nil {
 			return usage, err
@@ -104,17 +105,26 @@ func GetUserDashboardUsage(userID int, startTimestamp, endTimestamp int64, timez
 		cacheReadTokens, cacheCreateTokens, inputTokens := dashboardTokenBreakdown(promptTokens, other.String)
 		tokens := promptTokens + completionTokens
 		usage.SuccessfulRequests++
-		usage.Quota += quota
+		usage.Quota, err = common.AddQuota(usage.Quota, quota)
+		if err != nil {
+			return usage, err
+		}
 		usage.Tokens += tokens
 		usage.TotalUseTime += useTime
-		day.Quota += quota
+		day.Quota, err = common.AddQuota(day.Quota, quota)
+		if err != nil {
+			return usage, err
+		}
 		day.Tokens += tokens
 		day.InputTokens += inputTokens
 		day.OutputTokens += completionTokens
 		day.CacheReadTokens += cacheReadTokens
 		day.CacheCreateTokens += cacheCreateTokens
 		modelUsage.SuccessfulRequests++
-		modelUsage.Quota += quota
+		modelUsage.Quota, err = common.AddQuota(modelUsage.Quota, quota)
+		if err != nil {
+			return usage, err
+		}
 		modelUsage.Tokens += tokens
 		modelUsage.TotalUseTime += useTime
 	}

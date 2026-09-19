@@ -7,6 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { labNavItems } from '@/constants/navigation/labNav'
 import { useLabChat } from '@/composables/useLab'
 import { useAuthStore } from '@/stores/auth'
+import { addQuota, quotaRatio } from '@/utils/quota'
 import { formatQuota } from '@/utils/format'
 
 const { t } = useI18n()
@@ -57,13 +58,13 @@ const activeConversationId = computed(() =>
 const remaining = computed(() => {
   const u = auth.user
   if (!u) return null
-  return Math.max(0, u.quota)
+  return BigInt(u.available_quota) > 0n ? u.available_quota : '0'
 })
 const remainingPct = computed(() => {
   const u = auth.user
   if (!u) return 0
-  const total = u.quota + u.used_quota
-  return total > 0 ? Math.min(100, (u.quota / total) * 100) : 0
+  const total = addQuota(u.available_quota, u.used_quota)
+  return Math.min(100, Math.max(0, quotaRatio(u.available_quota, total) * 100))
 })
 
 function go(routeName: string) {

@@ -1,33 +1,24 @@
 package model
 
 import (
-	"encoding/json"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/stretchr/testify/require"
 )
 
-func TestPricingCreateCacheRatioJSONContract(t *testing.T) {
-	t.Run("configured ratio is serialized", func(t *testing.T) {
-		ratio := 0.75
-		payload, err := json.Marshal(Pricing{
-			ModelName:        "gpt-cache-contract",
-			CreateCacheRatio: &ratio,
-		})
-		require.NoError(t, err)
-
-		var response map[string]json.RawMessage
-		require.NoError(t, json.Unmarshal(payload, &response))
-		require.JSONEq(t, "0.75", string(response["create_cache_ratio"]))
-	})
-
-	t.Run("missing ratio is omitted", func(t *testing.T) {
-		payload, err := json.Marshal(Pricing{ModelName: "gpt-cache-contract"})
-		require.NoError(t, err)
-
-		var response map[string]json.RawMessage
-		require.NoError(t, json.Unmarshal(payload, &response))
-		_, exists := response["create_cache_ratio"]
-		require.False(t, exists)
-	})
+func TestPricingJSONPublishesDecimalVersionWithoutRatioFields(t *testing.T) {
+	payload, err := common.Marshal(Pricing{ModelName: "priced-model",
+		PriceVersion: &billing.PriceVersion{Model: "priced-model", Mode: billing.ModeUnitPrice,
+			Prices: []billing.UnitPrice{{Quantity: "cc", Unit: "per_million_tokens", Price: "0.750000000000000001"}}}})
+	require.NoError(t, err)
+	var response map[string]interface{}
+	require.NoError(t, common.Unmarshal(payload, &response))
+	version := response["price_version"].(map[string]interface{})
+	price := version["prices"].([]interface{})[0].(map[string]interface{})
+	require.Equal(t, "0.750000000000000001", price["price"])
+	for _, field := range []string{"model_ratio", "model_price", "completion_ratio", "cache_ratio", "create_cache_ratio", "image_ratio", "audio_ratio", "audio_completion_ratio"} {
+		require.NotContains(t, response, field)
+	}
 }

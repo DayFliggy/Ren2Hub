@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { quotaForChart } from '@/utils/quota'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -57,7 +58,7 @@ const cells = computed<Cell[]>(() => [
     value: props.kpi ? formatQuota(props.kpi.totalQuota) : '—',
     color: 'var(--accent-text)',
     skeleton: 'w-24',
-    series: (props.flow ?? []).map((f) => f.consume),
+    series: (props.flow ?? []).map((f) => quotaForChart(f.consume)),
   },
   {
     key: 'requests',

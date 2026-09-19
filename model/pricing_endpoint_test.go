@@ -1,13 +1,14 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,14 +17,14 @@ func resetPricingEndpointTestTables(t *testing.T) {
 	t.Helper()
 	originalMemoryCacheEnabled := common.MemoryCacheEnabled
 	common.MemoryCacheEnabled = true
-	require.NoError(t, DB.AutoMigrate(&Channel{}, &Ability{}, &Model{}, &Vendor{}))
-	for _, table := range []string{"abilities", "channels", "models", "vendors"} {
+	require.NoError(t, DB.AutoMigrate(&Channel{}, &Ability{}, &Model{}, &Vendor{}, &BillingPriceVersion{}, &BillingActivePrice{}))
+	for _, table := range []string{"abilities", "channels", "models", "vendors", "billing_active_prices", "billing_price_versions"} {
 		require.NoError(t, DB.Exec("DELETE FROM "+table).Error)
 	}
 	InitChannelCache()
 	InvalidatePricingCache()
 	t.Cleanup(func() {
-		for _, table := range []string{"abilities", "channels", "models", "vendors"} {
+		for _, table := range []string{"abilities", "channels", "models", "vendors", "billing_active_prices", "billing_price_versions"} {
 			require.NoError(t, DB.Exec("DELETE FROM "+table).Error)
 		}
 		InitChannelCache()
@@ -204,16 +205,9 @@ func TestPricingNativeChannelEndpointTypesUnchanged(t *testing.T) {
 
 func TestPricingAddsGPTCompactVariantWithBaseMetadataAndResolvedPrice(t *testing.T) {
 	resetPricingEndpointTestTables(t)
-	savedPrices := ratio_setting.ModelPrice2JSONString()
-	t.Cleanup(func() {
-		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(savedPrices))
-	})
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{
-		"gpt-*-openai-compact": 0.1,
-		"gpt-pricing-base": 0.2,
-		"claude-pricing-base": 0.3,
-		"claude-pricing-base-openai-compact": 0.4
-	}`))
+	_, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "gpt-pricing-base-openai-compact", Mode: billing.ModeUnitPrice,
+		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.1"}}}, 0, 1)
+	require.NoError(t, err)
 
 	require.NoError(t, DB.Create(&Vendor{Id: 90, Name: "OpenAI Test", Status: 1}).Error)
 	require.NoError(t, DB.Create(&Model{
@@ -253,7 +247,8 @@ func TestPricingAddsGPTCompactVariantWithBaseMetadataAndResolvedPrice(t *testing
 	require.ElementsMatch(t, []string{"default", "vip"}, compact.EnableGroup)
 	require.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAIResponseCompact}, compact.SupportedEndpointTypes)
 	require.Equal(t, 1, compact.QuotaType)
-	require.Equal(t, 0.1, compact.ModelPrice)
+	require.NotNil(t, compact.PriceVersion)
+	require.Equal(t, "0.1", compact.PriceVersion.Prices[0].Price)
 }
 
 func TestInitChannelCacheInvalidatesPricingCache(t *testing.T) {

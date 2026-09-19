@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
@@ -7,7 +7,7 @@ import { useFeatureAccess } from '@/composables/useFeatureAccess'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import type { InviteInfo } from '@/types/console'
-import { QUOTA_PER_DOLLAR } from '@/utils/format'
+import { decimalToQuota } from '@/utils/quota'
 import { safeExternalUrl } from '@/utils/safeUrl'
 
 export function useInvite() {
@@ -22,7 +22,22 @@ export function useInvite() {
   const inviteLink = ref('')
 
   const transferOpen = ref(false)
-  const transferDollars = ref<number | null>(null)
+  const transferDollars = ref('')
+  let transferOperation: { amount: string; id: string } | null = null
+  const transferQuota = computed(() => {
+    try {
+      return decimalToQuota(transferDollars.value)
+    } catch {
+      return null
+    }
+  })
+  const canTransfer = computed(
+    () =>
+      !readOnly.value &&
+      transferQuota.value !== null &&
+      BigInt(transferQuota.value) >= 500000n &&
+      BigInt(transferQuota.value) <= BigInt(info.value?.transferable ?? '0')
+  )
   const transferring = ref(false)
 
   async function load() {
@@ -93,18 +108,25 @@ export function useInvite() {
   }
 
   async function transfer() {
-    const dollars = transferDollars.value
-    if (readOnly.value || dollars === null || dollars < 1) return
-    const quota = Math.round(dollars * QUOTA_PER_DOLLAR)
+    if (
+      !canTransfer.value ||
+      transferQuota.value === null ||
+      transferring.value
+    )
+      return
+    const quota = transferQuota.value
+    if (transferOperation?.amount !== quota)
+      transferOperation = { amount: quota, id: crypto.randomUUID() }
     transferring.value = true
     try {
       const response = await api.post<{ message: string }>(
         '/api/next/invite/transfer',
-        { amount: quota }
+        { amount: quota, operation_id: transferOperation.id }
       )
       toast.success(response.message)
       transferOpen.value = false
-      transferDollars.value = null
+      transferDollars.value = ''
+      transferOperation = null
       await Promise.all([auth.fetchSelf(), load()])
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : String(error))
@@ -120,6 +142,7 @@ export function useInvite() {
     inviteLink,
     transferOpen,
     transferDollars,
+    canTransfer,
     transferring,
     readOnly,
     load,

@@ -12,6 +12,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// CompleteBillingConsumption is also used by administrator channel probes,
+// which follow the same reservation and accounting rules as relayed requests.
+func CompleteBillingConsumption(ctx *gin.Context, info *relaycommon.RelayInfo, params model.RecordConsumeLogParams, countUsage bool) error {
+	settleBillingConsumption(ctx, info, params, countUsage)
+	return info.BillingSettlementError
+}
+
 func settleBillingConsumption(ctx *gin.Context, info *relaycommon.RelayInfo, params model.RecordConsumeLogParams, countUsage bool) {
 	consumption, prepareErr := billingConsumptionSnapshot(ctx, info, params, countUsage)
 	if prepareErr == nil {
@@ -25,13 +32,19 @@ func settleBillingConsumption(ctx *gin.Context, info *relaycommon.RelayInfo, par
 			}
 		}
 	}
-	// A failed log preparation must not refund already delivered usage. Persist
-	// the monetary settlement even when the ancillary snapshot could not be saved.
+	// Without a durable calculation/outbox, keep the reservation for recovery.
+	// Wallet settlement must never race ahead of its consumption evidence.
 	var settleErr error
-	if info.Billing != nil {
-		settleErr = SettleBilling(ctx, info, params.Quota)
+	if prepareErr == nil && info.Billing != nil {
+		settleErr = SettleBilling(ctx, info, int(params.Quota))
 	}
 	if prepareErr != nil {
+		if session, ok := info.Billing.(*BillingSession); ok {
+			session.mu.Lock()
+			session.settlementStarted = true
+			session.mu.Unlock()
+			session.stopRecoveryHeartbeat()
+		}
 		prepareErr = errors.Join(prepareErr, model.RecordBillingConsumptionPreparationFailure(info.RequestId, prepareErr))
 	}
 	err := errors.Join(prepareErr, settleErr)
@@ -62,7 +75,7 @@ func billingConsumptionSnapshot(ctx *gin.Context, info *relaycommon.RelayInfo, p
 	if err != nil {
 		return model.BillingConsumption{}, err
 	}
-	return model.BillingConsumption{Log: *log, CountUsage: countUsage,
+	return model.BillingConsumption{Log: *log, CountUsage: countUsage, Usage: info.PriceData.Usage, Charge: info.PriceData.Charge,
 		LogEnabled: common.LogConsumeEnabled, ExportEnabled: common.LogConsumeEnabled && common.DataExportEnabled,
 		NodeName: common.NodeName,
 	}, nil
@@ -70,47 +83,11 @@ func billingConsumptionSnapshot(ctx *gin.Context, info *relaycommon.RelayInfo, p
 
 func ensureBillingConsumptionRecovery(info *relaycommon.RelayInfo) error {
 	session, ok := info.Billing.(*BillingSession)
-	if info.Billing != nil && !ok {
-		return errors.New("billing session does not support durable consumption")
+	if !ok || session.recoveryID == "" {
+		return errors.New("durable reservation must exist before dispatch")
 	}
-	if session != nil && session.recoveryID != "" {
-		if session.recoveryID != info.RequestId {
-			return errors.New("billing consumption request identity conflict")
-		}
-		return nil
-	}
-	// Free and legacy callers may not have created a session before dispatch.
-	// Attach their existing reservation to the same durable settlement path.
-	reserved := info.FinalPreConsumedQuota
-	if info.Billing != nil {
-		reserved = info.Billing.GetPreConsumedQuota()
-	}
-	source := info.BillingSource
-	if source == "" {
-		source = BillingSourceWallet
-	}
-	tokenRequired := !info.IsPlayground && info.TokenId > 0
-	tokenAmount := int64(0)
-	if tokenRequired {
-		tokenAmount = int64(reserved)
-	}
-	recovery, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
-		RequestID: info.RequestId, UserID: info.UserId, TokenID: info.TokenId,
-		Source: source, FundingAmount: int64(reserved), TokenAmount: tokenAmount, TokenRequired: tokenRequired,
-	})
-	if err != nil {
-		return err
-	}
-	if recovery.PreConsumeState == model.BillingRecoveryPreConsumePrepared && recovery.Status == model.BillingRecoveryStatusActive {
-		if err := model.UpdateBillingRecoveryAmounts(info.RequestId, int64(reserved), tokenAmount); err != nil {
-			return err
-		}
-	}
-	if info.Billing == nil {
-		var funding FundingSource = &WalletFunding{userId: info.UserId, consumed: reserved}
-		info.Billing = &BillingSession{relayInfo: info, funding: funding, recoveryID: info.RequestId, preConsumedQuota: reserved, tokenConsumed: int(tokenAmount)}
-	} else {
-		session.recoveryID = info.RequestId
+	if session.recoveryID != info.RequestId {
+		return errors.New("billing request identity conflict")
 	}
 	return nil
 }

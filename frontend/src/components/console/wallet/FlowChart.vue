@@ -6,7 +6,8 @@ import { useEChart } from '@/charts/useEChart'
 import { areaGradient, lineMood } from '@/charts/themePreset'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import type { FlowPoint } from '@/composables/useDashboard'
-import { formatQuota } from '@/utils/format'
+import { quotaForChart } from '@/utils/quota'
+import { formatMoney } from '@/utils/format'
 
 const { t } = useI18n()
 const props = defineProps<{ flow: FlowPoint[] }>()
@@ -16,7 +17,7 @@ const flow = computed(() => props.flow)
 const year = computed(() => props.flow.at(-1)?.date.slice(0, 4) ?? '')
 
 const categories = computed(() => flow.value.map((f) => f.date))
-const series = computed(() => flow.value.map((f) => f.consume))
+const series = computed(() => flow.value.map((f) => quotaForChart(f.consume)))
 
 useEChart(
   el,
@@ -30,7 +31,7 @@ useEChart(
         backgroundColor: p.surfaceSolid,
         borderColor: p.borderSubtle,
         textStyle: { color: p.textPrimary, fontSize: 12 },
-        valueFormatter: (v: number) => formatQuota(v),
+        valueFormatter: (v: number) => formatMoney(v),
       },
       xAxis: {
         type: 'category',

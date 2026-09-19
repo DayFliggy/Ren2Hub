@@ -110,7 +110,7 @@ async function saveSmtp() {
 
 // ── Monitoring ──────────────────────────────────────────────────────────────
 const monitoring = reactive({
-  QuotaRemindThreshold: 1000,
+  QuotaRemindThreshold: '1000',
   LogConsumeEnabled: true,
 })
 const monitoringSaving = reactive({ value: false })
@@ -124,7 +124,7 @@ const monitoringDirty = computed(() => {
 async function saveMonitoring() {
   monitoringSaving.value = true
   const s = settings.value
-  const patch: Record<string, boolean | number> = {}
+  const patch: Record<string, string | boolean | number> = {}
   if (monitoring.QuotaRemindThreshold !== s.QuotaRemindThreshold)
     patch.QuotaRemindThreshold = monitoring.QuotaRemindThreshold
   if (monitoring.LogConsumeEnabled !== s.LogConsumeEnabled)
@@ -363,13 +363,9 @@ onMounted(async () => {
       </div>
       <div class="mt-4">
         <SysInputRow
+          v-model="monitoring.QuotaRemindThreshold"
           :label="t('systemSettings.operations.quotaRemindThreshold')"
           :description="t('systemSettings.operations.quotaRemindThresholdDesc')"
-          :model-value="String(monitoring.QuotaRemindThreshold)"
-          type="number"
-          @update:model-value="
-            monitoring.QuotaRemindThreshold = Number($event) || 0
-          "
         />
       </div>
     </SysSettingsFormCard>

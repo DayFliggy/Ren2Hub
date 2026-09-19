@@ -1,3 +1,4 @@
+import { parsePriceVersion, type PriceVersion } from './modelPricing'
 import type {
   DrawingLogItem,
   LogItem,
@@ -14,6 +15,9 @@ import {
   parsePage,
   parseStringArray,
   requiredInteger,
+  requiredStrictInteger,
+  requiredBoolean,
+  requiredQuota,
   requiredNumber,
   requiredString,
 } from './contracts'
@@ -24,7 +28,7 @@ export interface UsageRow {
   model_name: string
   created_at: number
   count: number
-  quota: number
+  quota: string
   token_used: number
 }
 
@@ -64,13 +68,8 @@ export interface PricingModelContract {
   icon: string
   tags: string
   vendor_id: number
-  quota_type: number
-  model_ratio: number
-  model_price: number
+  price_version: PriceVersion
   owner_by: string
-  completion_ratio: number
-  cache_ratio: number | null
-  create_cache_ratio: number | null
   supported_endpoint_types: string[]
   billing_mode: string
 }
@@ -94,27 +93,14 @@ export function parsePricingModels(value: unknown): PricingModelContract[] {
     ) {
       invalidResponse(endpoint)
     }
-    const cacheRatio =
-      item.cache_ratio === undefined || item.cache_ratio === null
-        ? null
-        : requiredNumber(item.cache_ratio, endpoint)
-    const createCacheRatio =
-      item.create_cache_ratio === undefined || item.create_cache_ratio === null
-        ? null
-        : requiredNumber(item.create_cache_ratio, endpoint)
     return {
       model_name: requiredString(item.model_name, endpoint, false),
       description: requiredString(item.description ?? '', endpoint),
       icon: requiredString(item.icon ?? '', endpoint),
       tags: requiredString(item.tags ?? '', endpoint),
       vendor_id: requiredInteger(item.vendor_id ?? 0, endpoint),
-      quota_type: requiredInteger(item.quota_type, endpoint),
-      model_ratio: requiredNumber(item.model_ratio ?? 0, endpoint),
-      model_price: requiredNumber(item.model_price ?? 0, endpoint),
+      price_version: parsePriceVersion(item.price_version, endpoint),
       owner_by: requiredString(item.owner_by ?? '', endpoint),
-      completion_ratio: requiredNumber(item.completion_ratio ?? 0, endpoint),
-      cache_ratio: cacheRatio,
-      create_cache_ratio: createCacheRatio,
       supported_endpoint_types: [...endpoints],
       billing_mode: requiredString(item.billing_mode ?? '', endpoint),
     }
@@ -141,9 +127,9 @@ export function parsePerfMetricsSummary(
 
 export interface LogStatContract {
   total_requests: number
-  total_quota: number
+  total_quota: string
   today_requests: number
-  today_quota: number
+  today_quota: string
 }
 
 export function parseLogStat(value: unknown): LogStatContract {
@@ -151,9 +137,9 @@ export function parseLogStat(value: unknown): LogStatContract {
   if (!isRecord(value)) invalidResponse(endpoint)
   return {
     total_requests: requiredInteger(value.total_requests, endpoint),
-    total_quota: requiredInteger(value.total_quota, endpoint),
+    total_quota: requiredQuota(value.total_quota, endpoint),
     today_requests: requiredInteger(value.today_requests, endpoint),
-    today_quota: requiredInteger(value.today_quota, endpoint),
+    today_quota: requiredQuota(value.today_quota, endpoint),
   }
 }
 
@@ -170,6 +156,10 @@ export function parseToken(value: unknown, endpoint: string): TokenSummary {
     invalidResponse(endpoint)
   }
   const limits = requiredString(value.model_limits ?? '', endpoint)
+  const unlimited = requiredBoolean(value.unlimited_quota, endpoint)
+  if (unlimited && value.available_quota !== null) invalidResponse(endpoint)
+  const version = requiredStrictInteger(value.quota_version, endpoint)
+  if (version < 0) invalidResponse(endpoint)
   return {
     id: requiredInteger(value.id, endpoint),
     name: requiredString(value.name, endpoint, false),
@@ -177,9 +167,13 @@ export function parseToken(value: unknown, endpoint: string): TokenSummary {
     type,
     conversion_policy: parseConversionPolicy(value.conversion_policy ?? 'safe'),
     status: requiredInteger(value.status, endpoint) === 1 ? 1 : 2,
-    used_quota: requiredInteger(value.used_quota, endpoint),
-    remain_quota: requiredInteger(value.remain_quota, endpoint),
-    unlimited: optionalBoolean(value.unlimited_quota, endpoint),
+    used_quota: requiredQuota(value.used_quota, endpoint),
+    reserved_quota: requiredQuota(value.reserved_quota, endpoint),
+    quota_version: version,
+    available_quota: unlimited
+      ? null
+      : requiredQuota(value.available_quota, endpoint),
+    unlimited,
     model_limits: optionalBoolean(value.model_limits_enabled, endpoint)
       ? limits
           .split(',')
@@ -215,7 +209,7 @@ export function parseUsageRows(value: unknown): UsageRow[] {
       model_name: requiredString(item.model_name, endpoint, false),
       created_at: requiredInteger(item.created_at, endpoint),
       count: requiredInteger(item.count, endpoint),
-      quota: requiredInteger(item.quota, endpoint),
+      quota: requiredQuota(item.quota, endpoint),
       token_used: requiredInteger(item.token_used, endpoint),
     }
   })
@@ -260,11 +254,11 @@ export function parseTopupInfo(value: unknown): TopupInfo {
   }
 }
 
-export function parseRedeemedQuota(value: unknown): number {
+export function parseRedeemedQuota(value: unknown): string {
   const endpoint = '/api/user/topup'
-  if (typeof value === 'number') return requiredInteger(value, endpoint)
+  if (typeof value === 'string') return requiredQuota(value, endpoint)
   if (isRecord(value) && value.quota !== undefined) {
-    return requiredInteger(value.quota, endpoint)
+    return requiredQuota(value.quota, endpoint)
   }
   return invalidResponse(endpoint)
 }
@@ -313,7 +307,7 @@ function parseLog(value: unknown, endpoint: string): LogItem {
     prompt_tokens: promptTokens,
     completion_tokens: completionTokens,
     other,
-    quota: requiredInteger(value.quota, endpoint),
+    quota: requiredQuota(value.quota, endpoint),
     latency,
     first_token_latency: Number.isFinite(firstToken) ? firstToken / 1000 : null,
     request_mode: optionalBoolean(value.is_stream, endpoint)
@@ -420,7 +414,7 @@ function parseDrawingLog(value: unknown, endpoint: string): DrawingLogItem {
     fail_reason: requiredString(value.fail_reason ?? '', endpoint),
     image_url: requiredString(value.image_url ?? '', endpoint),
     video_url: requiredString(value.video_url ?? '', endpoint),
-    quota: requiredInteger(value.quota ?? 0, endpoint),
+    quota: requiredQuota(value.quota, endpoint),
     submit_time: requiredInteger(value.submit_time ?? 0, endpoint),
     finish_time: requiredInteger(value.finish_time ?? 0, endpoint),
   }
@@ -444,7 +438,7 @@ function parseRelayTaskLog(value: unknown, endpoint: string): RelayTaskLogItem {
     progress: requiredString(value.progress ?? '', endpoint),
     fail_reason: requiredString(value.fail_reason ?? '', endpoint),
     result_url: requiredString(value.result_url ?? '', endpoint),
-    quota: requiredInteger(value.quota ?? 0, endpoint),
+    quota: requiredQuota(value.quota, endpoint),
     submit_time: requiredInteger(value.submit_time ?? 0, endpoint),
     finish_time: requiredInteger(value.finish_time ?? 0, endpoint),
   }

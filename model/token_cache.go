@@ -49,9 +49,8 @@ func invalidateTokenCacheForMutation(key string) error {
 
 // cacheInitToken publishes a database snapshot only when no mutation fence is
 // active and the hash is cold. An existing hash only gets its TTL refreshed:
-// its RemainQuota may already be ahead of this snapshot because atomic
-// pre-consume decrements Redis first, so a snapshot must never overwrite any
-// field of a live hash.
+// budget fields are display snapshots only; spending and token validation read
+// authoritative database balances. Metadata snapshots never replace a live hash.
 // 返回值：0=被 fence 拦截，1=完成初始化，2=哈希已存在，仅刷新 TTL。
 func cacheInitToken(token Token) (int, error) {
 	if !common.RedisEnabled {
@@ -88,7 +87,7 @@ return 1`
 		token.Id, token.UserId, token.Status, token.Name,
 		token.CreatedTime, token.AccessedTime, token.ExpiredTime,
 		strconv.FormatBool(token.UnlimitedQuota), strconv.FormatBool(token.ModelLimitsEnabled),
-		token.ModelLimits, allowIps, token.RemainQuota, token.UsedQuota,
+		token.ModelLimits, allowIps, int64(token.RemainQuota), int64(token.UsedQuota),
 		tokenCacheTTLSeconds(),
 		conversionPolicy,
 	).Int()

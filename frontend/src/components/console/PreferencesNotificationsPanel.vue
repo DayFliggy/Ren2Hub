@@ -27,6 +27,8 @@ import { useAuthStore } from '@/stores/auth'
 import { setLocale } from '@/i18n'
 import type { NotificationSettings, SettingsNotifyType } from '@/types/settings'
 
+import { isQuota } from '@/utils/quota'
+
 import SettingsSectionHeading from './SettingsSectionHeading.vue'
 
 defineProps<{ isAdmin: boolean }>()
@@ -39,7 +41,7 @@ const { hidden: balanceHidden } = useBalanceVisibility()
 
 const readonlyNotification: NotificationSettings = {
   notifyType: 'email',
-  quotaWarningThreshold: 500_000,
+  quotaWarningThreshold: '500000',
   notificationEmail: '',
   webhookUrl: '',
   webhookSecret: '',
@@ -49,7 +51,6 @@ const readonlyNotification: NotificationSettings = {
   gotifyPriority: 5,
   walletReminder: false,
   upstreamModelUpdateNotify: false,
-  acceptUnsetModelPrice: false,
   recordIpLog: false,
 }
 
@@ -64,7 +65,7 @@ onMounted(() => {
     const value = JSON.parse(auth.user.setting) as Record<string, unknown>
     if (typeof value.notify_type === 'string')
       draft.notifyType = value.notify_type as SettingsNotifyType
-    if (typeof value.quota_warning_threshold === 'number')
+    if (isQuota(value.quota_warning_threshold))
       draft.quotaWarningThreshold = value.quota_warning_threshold
     if (typeof value.notification_email === 'string')
       draft.notificationEmail = value.notification_email
@@ -80,7 +81,6 @@ onMounted(() => {
       draft.gotifyPriority = value.gotify_priority
     draft.upstreamModelUpdateNotify =
       value.upstream_model_update_notify_enabled === true
-    draft.acceptUnsetModelPrice = value.accept_unset_model_ratio_model === true
     draft.recordIpLog = value.record_ip_log === true
   } catch {
     toast.error(t('settings.loadFailed'))
@@ -131,8 +131,8 @@ function validate(): boolean {
   Object.keys(errors).forEach((key) => delete errors[key])
 
   if (
-    !Number.isFinite(draft.quotaWarningThreshold) ||
-    draft.quotaWarningThreshold <= 0
+    !isQuota(draft.quotaWarningThreshold) ||
+    BigInt(draft.quotaWarningThreshold) <= 0n
   ) {
     errors.quotaWarningThreshold = t('settings.errorPositiveThreshold')
   }
@@ -182,7 +182,6 @@ async function saveNotification(): Promise<void> {
       gotify_token: draft.gotifyToken,
       gotify_priority: draft.gotifyPriority,
       upstream_model_update_notify_enabled: draft.upstreamModelUpdateNotify,
-      accept_unset_model_ratio_model: draft.acceptUnsetModelPrice,
       record_ip_log: draft.recordIpLog,
     })
     await auth.fetchSelf(false)
@@ -271,8 +270,9 @@ function changeTheme(value: string): void {
               t('settings.quotaWarningThreshold')
             }}</span>
             <input
-              v-model.number="draft.quotaWarningThreshold"
-              type="number"
+              v-model="draft.quotaWarningThreshold"
+              type="text"
+              inputmode="numeric"
               min="1"
               :disabled="false"
               class="settings-input mt-2"
@@ -509,21 +509,6 @@ function changeTheme(value: string): void {
           <ConsoleToggle
             v-model="draft.upstreamModelUpdateNotify"
             :label="t('settings.upstreamModelUpdates')"
-            :disabled="false"
-          />
-        </div>
-        <div class="settings-toggle-row">
-          <div>
-            <p class="settings-toggle-title">
-              {{ t('settings.acceptUnpricedModels') }}
-            </p>
-            <p class="settings-toggle-description">
-              {{ t('settings.acceptUnpricedModelsDesc') }}
-            </p>
-          </div>
-          <ConsoleToggle
-            v-model="draft.acceptUnsetModelPrice"
-            :label="t('settings.acceptUnpricedModels')"
             :disabled="false"
           />
         </div>

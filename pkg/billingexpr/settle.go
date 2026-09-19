@@ -1,6 +1,9 @@
 package billingexpr
 
-import "github.com/QuantumNous/new-api/common"
+import (
+	"github.com/QuantumNous/new-api/common"
+	"github.com/shopspring/decimal"
+)
 
 // quotaConversion converts raw expression output to quota based on the
 // expression version. This is the central dispatch point for future versions
@@ -25,7 +28,14 @@ func ComputeTieredQuotaWithRequest(snap *BillingSnapshot, params TokenParams, re
 	}
 
 	quotaBeforeGroup := quotaConversion(cost, snap)
-	afterGroup, clamp := common.QuotaRoundChecked(quotaBeforeGroup * snap.GroupRatio)
+	amount := decimal.NewFromFloat(cost).Div(decimal.NewFromInt(1000000)).Mul(decimal.NewFromFloat(snap.QuotaPerUnit)).Mul(decimal.NewFromFloat(snap.GroupRatio))
+	afterGroup, err := common.QuotaFromDecimalStrict(amount)
+	if err != nil {
+		return TieredResult{}, err
+	}
+	if amount.IsPositive() && afterGroup == 0 {
+		afterGroup = 1
+	}
 	crossed := trace.MatchedTier != snap.EstimatedTier
 
 	return TieredResult{
@@ -34,6 +44,5 @@ func ComputeTieredQuotaWithRequest(snap *BillingSnapshot, params TokenParams, re
 		MatchedTier:            trace.MatchedTier,
 		RequestRules:           trace.RequestRules,
 		CrossedTier:            crossed,
-		Clamp:                  clamp,
 	}, nil
 }

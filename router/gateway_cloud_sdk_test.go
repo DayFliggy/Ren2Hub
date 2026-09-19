@@ -669,7 +669,7 @@ func TestGatewayVertexToolIdentityRejectedBeforeSending(t *testing.T) {
 	assert.Zero(t, sends.Load())
 	var user model.User
 	require.NoError(t, model.DB.First(&user, owner.UserId).Error)
-	assert.Equal(t, 10000000, user.Quota)
+	assert.EqualValues(t, 10000000, user.Quota)
 	var billingCount int64
 	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&billingCount).Error)
 	assert.Zero(t, billingCount, "rejected tool histories must not create a billing session")

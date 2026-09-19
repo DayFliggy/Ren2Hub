@@ -14,7 +14,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/gin-gonic/gin"
@@ -73,7 +72,7 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 						}
 					}
 					if scenario == "pricing_reconciliation" {
-						info.TieredBillingSnapshot = makeSnapshot(`c == 13 ? float("invalid-price") : p * 2 + c * 10`, 1, 10, 1)
+						info.PriceData.Quote = billingTestQuote(t, `c == 13 ? float("invalid-price") : p * 2 + c * 10`)
 						require.Nil(t, PrepareBillingForSelectedModel(c, info))
 						usage := &dto.Usage{PromptTokens: 10, CompletionTokens: 13, TotalTokens: 23}
 						cancel()
@@ -84,21 +83,20 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 						info.Billing.Refund(c)
 						status, err := recoverOneBillingRecovery(context.Background(), info.RequestId)
 						require.NoError(t, err)
-						assert.Equal(t, model.BillingRecoveryStatusReconciliation, status)
+						assert.EqualValues(t, model.BillingRecoveryStatusReconciliation, status)
 						assert.ErrorIs(t, model.MarkBillingRecoveryRefundPending(info.RequestId, nil), model.ErrBillingRecoveryStateConflict)
 						assert.ErrorIs(t, model.UpdateBillingRecoverySettlement(info.RequestId, 0), model.ErrBillingRecoveryStateConflict)
 						var recovery model.BillingRecovery
 						require.NoError(t, mainDB.Where("request_id = ?", info.RequestId).First(&recovery).Error)
-						var failure model.BillingPricingFailure
-						require.NoError(t, common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &failure))
-						assert.Equal(t, billingexpr.TokenParams{P: 10, C: 13, Len: 10}, failure.Tokens)
-						assert.Equal(t, info.TieredBillingSnapshot.ExprHash, failure.Snapshot.ExprHash)
-						assertBillingIntegrationBalances(t, info, 95, 95, 0, 5, 0, 0)
+						assert.Contains(t, recovery.UsageSnapshot, `"output_tokens":13`)
+						assert.NotEmpty(t, recovery.QuoteSnapshot)
+
+						assertBillingIntegrationBalances(t, info, 95, 95, 0, 0, 0, 0)
 						return
 					}
 					if scenario == "zero_precharge_refund" || scenario == "zero_precharge_refund_completion_failure" {
 						session := info.Billing.(*BillingSession)
-						require.Zero(t, session.GetPreConsumedQuota())
+						require.Equal(t, 1, session.GetPreConsumedQuota())
 						require.True(t, session.NeedsRefund())
 						removeFailure := injectBillingIntegrationFailure(t, mainDB, logDB, scenario)
 						t.Cleanup(func() {
@@ -124,8 +122,9 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 						}
 						var recovery model.BillingRecovery
 						require.NoError(t, mainDB.Where("request_id = ?", info.RequestId).First(&recovery).Error)
+						assert.EqualValues(t, model.BillingRecoveryStatusRefunded, recovery.Status)
 						assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
-						assert.True(t, model.BillingRecoveryRefundComplete(recovery))
+						assert.NotEmpty(t, recovery.FinalEventID)
 						assertBillingIntegrationBalances(t, info, 100, 100, 0, 0, 0, 0)
 						return
 					}
@@ -138,7 +137,7 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 					if scenario == "free_consumption" {
 						quota = 0
 					}
-					params := model.RecordConsumeLogParams{TokenId: info.TokenId, ChannelId: info.ChannelId, Quota: quota,
+					params := model.RecordConsumeLogParams{TokenId: info.TokenId, ChannelId: info.ChannelId, Quota: common.Quota(quota),
 						PromptTokens: 17, CompletionTokens: 3, ModelName: "billing-integration", TokenName: "integration",
 						Group: "default", Other: map[string]interface{}{"billing_source": "wallet"}}
 					if scenario == "refund_before_settlement" {
@@ -160,14 +159,14 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 						assert.NotEqual(t, model.BillingRecoveryStatusRefunded, state.Status)
 						assert.NotEmpty(t, state.ConsumptionSnapshot)
 						if scenario == "funding_failure" || scenario == "funding_marker_failure" {
-							assertBillingIntegrationBalances(t, info, 95, 95, 0, 5, 0, 0)
+							assertBillingIntegrationBalances(t, info, 95, 95, 0, 0, 0, 0)
 						} else if scenario == "token_failure" {
-							assertBillingIntegrationBalances(t, info, 80, 95, 0, 5, 0, 0)
+							assertBillingIntegrationBalances(t, info, 95, 95, 0, 0, 0, 0)
 						}
 						removeFailure()
 						status, err := recoverOneBillingRecovery(context.Background(), info.RequestId)
 						require.NoError(t, err)
-						assert.Equal(t, model.BillingRecoveryStatusSettled, status)
+						assert.EqualValues(t, model.BillingRecoveryStatusSettled, status)
 					} else {
 						require.NoError(t, info.BillingSettlementError)
 					}
@@ -194,18 +193,18 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 					assertBillingIntegrationBalances(t, info, 100-quota, tokenQuota, quota, tokenUsed, 1, 1)
 					var bucket model.QuotaData
 					require.NoError(t, mainDB.Where("user_id = ?", info.UserId).First(&bucket).Error)
-					assert.Equal(t, quota, bucket.Quota)
-					assert.Equal(t, 20, bucket.TokenUsed)
-					assert.Equal(t, 1, bucket.Count)
+					assert.EqualValues(t, quota, bucket.Quota)
+					assert.EqualValues(t, 20, bucket.TokenUsed)
+					assert.EqualValues(t, 1, bucket.Count)
 					var complete model.BillingRecovery
 					require.NoError(t, mainDB.Where("request_id = ?", info.RequestId).First(&complete).Error)
-					assert.Equal(t, model.BillingRecoveryStateCompleted, complete.ConsumptionState)
+					assert.EqualValues(t, model.BillingRecoveryStateCompleted, complete.ConsumptionState)
 					assert.Empty(t, complete.ConsumptionError)
 					var log model.Log
 					require.NoError(t, logDB.Where("request_id = ?", info.RequestId).First(&log).Error)
 					var other map[string]any
 					require.NoError(t, common.UnmarshalJsonStr(log.Other, &other))
-					assert.Equal(t, source, other["usage_source"], "recovery must retain the original usage evidence")
+					assert.EqualValues(t, source, other["usage_source"], "recovery must retain the original usage evidence")
 				})
 			}
 		})
@@ -304,7 +303,7 @@ func bindBillingIntegrationDatabases(t *testing.T, mainDB, logDB *gorm.DB, kind 
 		common.SetDatabaseTypes(previousMainType, previousLogType)
 		common.RedisEnabled, common.BatchUpdateEnabled, common.LogConsumeEnabled, common.DataExportEnabled = previousRedis, previousBatch, previousLog, previousExport
 	})
-	require.NoError(t, mainDB.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.QuotaData{}, &model.BillingRecovery{}, &model.BillingRecoveryAdjustment{}))
+	require.NoError(t, mainDB.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.QuotaData{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}))
 	require.NoError(t, logDB.AutoMigrate(&model.Log{}))
 	// Existing non-consumption logs retain NULL idempotency keys after migration.
 	require.NoError(t, logDB.Create(&model.Log{Type: model.LogTypeSystem}).Error)
@@ -323,6 +322,7 @@ func seedBillingIntegrationRequest(t *testing.T, id int, scenario string) (*gin.
 		TokenKey: fmt.Sprintf("billing-integration-token-%d", id), ForcePreConsume: true, StartTime: time.Now(),
 		IsPlayground: scenario == "playground_token_identity", ChannelMeta: &relaycommon.ChannelMeta{ChannelId: id},
 	}
+	info.PriceData.Quote = billingTestQuote(t, "p * 2 + c * 2")
 	precharge := 5
 	if scenario == "zero_precharge_refund" || scenario == "zero_precharge_refund_completion_failure" {
 		precharge = 0
@@ -331,7 +331,12 @@ func seedBillingIntegrationRequest(t *testing.T, id int, scenario string) (*gin.
 	require.Nil(t, apiErr, "%v", apiErr)
 	require.NoError(t, model.TouchBillingRecovery(info.RequestId))
 	require.NoError(t, model.TouchBillingRecovery(info.RequestId))
-	t.Cleanup(func() { cancel(); info.Billing.(*BillingSession).stopRecoveryHeartbeat() })
+	t.Cleanup(func() {
+		cancel()
+		if session, ok := info.Billing.(*BillingSession); ok {
+			session.stopRecoveryHeartbeat()
+		}
+	})
 	return c, info, cancel
 }
 
@@ -342,7 +347,7 @@ func injectBillingIntegrationFailure(t *testing.T, mainDB, logDB *gorm.DB, scena
 	case "funding_failure", "token_failure", "statistics_failure", "log_completion_failure", "zero_precharge_refund_completion_failure":
 		require.NoError(t, mainDB.Callback().Update().Before("gorm:update").Register(callback, func(tx *gorm.DB) {
 			values, _ := tx.Statement.Dest.(map[string]interface{})
-			_, balanceChange := values["quota"]
+			_, balanceChange := values["available_quota"]
 			if scenario == "funding_failure" && tx.Statement.Table == "users" && balanceChange ||
 				scenario == "token_failure" && tx.Statement.Table == "tokens" ||
 				scenario == "statistics_failure" && tx.Statement.Table == "channels" ||
@@ -354,7 +359,7 @@ func injectBillingIntegrationFailure(t *testing.T, mainDB, logDB *gorm.DB, scena
 		return func() { require.NoError(t, mainDB.Callback().Update().Remove(callback)) }
 	case "funding_marker_failure":
 		require.NoError(t, mainDB.Callback().Create().Before("gorm:create").Register(callback, func(tx *gorm.DB) {
-			if marker, ok := tx.Statement.Dest.(*model.BillingRecoveryAdjustment); ok && marker.Component == model.BillingRecoveryComponentFunding {
+			if marker, ok := tx.Statement.Dest.(*model.BillingEvent); ok && marker.Operation == "settle" {
 				tx.AddError(assert.AnError)
 			}
 		}))
@@ -376,11 +381,11 @@ func assertBillingIntegrationBalances(t *testing.T, info *relaycommon.RelayInfo,
 	require.NoError(t, model.DB.First(&token, info.TokenId).Error)
 	require.NoError(t, model.DB.First(&channel, info.ChannelId).Error)
 	require.NoError(t, model.LOG_DB.Model(&model.Log{}).Where("request_id = ?", info.RequestId).Count(&logCount).Error)
-	assert.Equal(t, wallet, user.Quota)
-	assert.Equal(t, tokenQuota, token.RemainQuota)
-	assert.Equal(t, used, user.UsedQuota)
-	assert.Equal(t, tokenUsed, token.UsedQuota)
-	assert.Equal(t, count, user.RequestCount)
-	assert.Equal(t, int64(used), channel.UsedQuota)
-	assert.Equal(t, int64(logs), logCount)
+	assert.EqualValues(t, wallet, user.Quota)
+	assert.EqualValues(t, tokenQuota, token.RemainQuota)
+	assert.EqualValues(t, used, user.UsedQuota)
+	assert.EqualValues(t, tokenUsed, token.UsedQuota)
+	assert.EqualValues(t, count, user.RequestCount)
+	assert.EqualValues(t, int64(used), channel.UsedQuota)
+	assert.EqualValues(t, int64(logs), logCount)
 }

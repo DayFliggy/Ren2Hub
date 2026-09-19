@@ -131,7 +131,7 @@ export function useFarm() {
         plot.seed = null
         plot.planted_at = null
         plot.harvest_at = null
-        plot.yield_quota = 0
+        plot.yield_quota = '0'
       }
       toast.success(
         t('farm.plot.harvestToast', { amount: formatQuota(res.gained, 4) })

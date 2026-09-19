@@ -3,13 +3,18 @@ package billingexpr
 import (
 	"crypto/sha256"
 	"fmt"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 )
 
 type RequestInput struct {
-	Headers map[string]string
-	Body    []byte
+	// Raw payload fields remain source-compatible during adapter refactoring;
+	// the evaluator never reads or persists them.
+	Headers    map[string]string      `json:"-"`
+	Body       []byte                 `json:"-"`
+	Attributes map[string]interface{} `json:"attributes,omitempty"`
+	FrozenAt   time.Time              `json:"frozen_at"`
 }
 
 // TokenParams holds all token dimensions passed into an Expr evaluation.

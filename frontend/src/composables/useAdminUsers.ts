@@ -203,7 +203,12 @@ export function useAdminUsers() {
     )
   }
 
-  function adjustQuota(user: AdminUser, delta: number): Promise<boolean> {
+  function adjustQuota(
+    user: AdminUser,
+    delta: string,
+    reason: string,
+    operationId: string
+  ): Promise<boolean> {
     return runRowAction(
       user,
       'quota',
@@ -211,8 +216,11 @@ export function useAdminUsers() {
         api.post<AdminUser>('/api/next/admin/users/quota', {
           id: user.id,
           delta,
+          expected_version: user.quota_version,
+          operation_id: operationId,
+          reason,
         }),
-      delta > 0 ? 'users.quotaGranted' : 'users.quotaDeducted'
+      BigInt(delta) > 0n ? 'users.quotaGranted' : 'users.quotaDeducted'
     )
   }
 

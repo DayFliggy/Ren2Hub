@@ -427,7 +427,7 @@ func submitMidjourneyJob(c *gin.Context, info *relaycommon.RelayInfo, action, pr
 	task := &model.Midjourney{
 		UserId: info.UserId, ChannelId: info.ChannelId, Code: result.Code,
 		Action: action, MjId: result.Result, Prompt: prompt, Description: result.Description,
-		SubmitTime: now, Status: "SUBMITTED", Progress: "0%", Quota: info.PriceData.Quota,
+		SubmitTime: now, Status: "SUBMITTED", Progress: "0%", Quota: common.Quota(info.PriceData.Quota),
 		PrivateData: credential,
 	}
 	if result.Code == 21 {

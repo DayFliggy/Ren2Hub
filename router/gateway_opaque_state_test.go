@@ -75,7 +75,8 @@ func TestGatewayStateBindingFailureNeverExposesIdentifier(t *testing.T) {
 			assert.EqualValues(t, 1, sends.Load(), "accounting/ownership failure cannot resend the generation")
 			require.EventuallyWithT(t, func(collect *assert.CollectT) {
 				if assert.NoError(collect, model.DB.First(&after, before.Id).Error) {
-					assert.Equal(collect, before.Quota, after.Quota)
+					assert.EqualValues(collect, before.Quota-500, after.Quota)
+					assert.EqualValues(collect, 500, after.ReservedQuota)
 				}
 			}, time.Second, 5*time.Millisecond)
 		})
@@ -107,6 +108,7 @@ func TestGatewayCompactionStateContinuesResponsesHTTP(t *testing.T) {
 		}
 		gatewaySDKUpstream(w, r)
 	})
+	require.NoError(t, publishGatewayFixturePrices(`{"gpt-4o-mini-openai-compact":0.001}`, false))
 	status, body := gatewayStateHTTP(t, url, key, "/v1/responses/compact", `{"model":"gpt-4o-mini","input":[{"role":"user","content":"hello"}]}`)
 	require.Equal(t, 200, status, body)
 	require.Contains(t, body, "compact_cipher")

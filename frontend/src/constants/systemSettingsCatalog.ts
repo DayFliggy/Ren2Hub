@@ -386,17 +386,11 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         title: '配额与展示',
         description: '注册、邀请、充值入口和货币展示规则。',
         fields: [
-          number('QuotaForNewUser', '新用户初始配额'),
-          number('PreConsumedQuota', '请求预扣配额', 500000),
-          number('QuotaForInviter', '邀请人奖励'),
-          number('QuotaForInvitee', '被邀请人奖励'),
+          text('QuotaForNewUser', '新用户初始配额', '0'),
+          text('QuotaForInviter', '邀请人奖励', '0'),
+          text('QuotaForInvitee', '被邀请人奖励', '0'),
           url('TopUpLink', '外部充值链接'),
           url('general_setting.docs_link', '文档链接'),
-          toggle(
-            'quota_setting.enable_free_model_pre_consume',
-            '免费模型预扣配额'
-          ),
-          number('QuotaPerUnit', '每单位配额', 500000),
           number('USDExchangeRate', '美元汇率', 1),
           toggle('DisplayInCurrencyEnabled', '以货币显示配额'),
           toggle('DisplayTokenStatEnabled', '显示 Token 统计'),
@@ -422,21 +416,10 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
       {
         id: 'pricing',
         title: '模型定价',
-        description: '所有倍率字段均使用受校验的结构化 JSON 编辑器。',
+        description: '模型价格在模型管理中以不可变版本发布。此处配置充值显示。',
         fields: [
-          ratio('ModelPrice', '模型价格'),
-          ratio('ModelRatio', '模型倍率'),
-          ratio('CompletionRatio', '补全倍率'),
-          ratio('CacheRatio', '缓存倍率'),
-          ratio('CreateCacheRatio', '缓存创建倍率'),
-          ratio('ImageRatio', '图像倍率'),
-          ratio('AudioRatio', '音频倍率'),
-          ratio('AudioCompletionRatio', '音频补全倍率'),
           ratio('TopupGroupRatio', '充值分组倍率'),
           toggle('ExposeRatioEnabled', '公开倍率数据'),
-          json('tool_price_setting.prices', '工具附加价格', '[]'),
-          json('billing_setting.billing_mode', '计费模式', '{}'),
-          json('billing_setting.billing_expr', '分层计费表达式', '{}'),
         ],
       },
       {
@@ -511,8 +494,8 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         description: '每日签到的随机配额范围。',
         fields: [
           toggle('checkin_setting.enabled', '启用每日签到'),
-          number('checkin_setting.min_quota', '最小奖励', 100),
-          number('checkin_setting.max_quota', '最大奖励', 500),
+          text('checkin_setting.min_quota', '最小奖励', '100'),
+          text('checkin_setting.max_quota', '最大奖励', '500'),
         ],
       },
     ],
@@ -792,7 +775,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         title: '监控与告警',
         description: '用户余额告警和性能指标采集。',
         fields: [
-          number('QuotaRemindThreshold', '配额提醒阈值', 1000),
+          text('QuotaRemindThreshold', '配额提醒阈值', '1000'),
           toggle('perf_metrics_setting.enabled', '启用性能指标', true),
           number(
             'perf_metrics_setting.flush_interval',

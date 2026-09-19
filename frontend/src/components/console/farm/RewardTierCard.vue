@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { quotaRatio } from '@/utils/quota'
 import { formatQuota } from '@/utils/format'
 import type { RebateTier, RebateState } from '@/types/farm'
 
@@ -21,11 +22,14 @@ const nextTier = computed(
 )
 
 const progressPercent = computed(() => {
-  const cur = props.state.current_consume
-  const min = currentTier.value?.min_quota ?? 0
-  const max = nextTier.value?.min_quota ?? cur
+  const cur = BigInt(props.state.current_consume)
+  const min = BigInt(currentTier.value?.min_quota ?? '0')
+  const max = BigInt(nextTier.value?.min_quota ?? cur)
   if (max <= min) return 100
-  return Math.min(100, Math.round(((cur - min) / (max - min)) * 100))
+  return Math.min(
+    100,
+    Math.round(quotaRatio((cur - min).toString(), (max - min).toString()) * 100)
+  )
 })
 </script>
 
@@ -87,7 +91,11 @@ const progressPercent = computed(() => {
             {{ t('farm.rebate.nextTier') }}
           </p>
           <p class="mt-0.5 text-base font-bold text-[var(--text-primary)]">
-            {{ formatQuota(nextTier.min_quota - state.current_consume) }}
+            {{
+              formatQuota(
+                BigInt(nextTier.min_quota) - BigInt(state.current_consume)
+              )
+            }}
           </p>
         </div>
       </div>

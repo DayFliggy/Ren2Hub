@@ -11,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	commonRelay "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
@@ -57,7 +58,7 @@ type Task struct {
 	UserId     int                   `json:"user_id" gorm:"index"`
 	Group      string                `json:"group" gorm:"type:varchar(50)"` // 兼容历史任务记录；不参与统一路由计费
 	ChannelId  int                   `json:"channel_id" gorm:"index"`
-	Quota      int                   `json:"quota"`
+	Quota      common.Quota          `json:"quota" gorm:"type:bigint"`
 	Action     string                `json:"action" gorm:"type:varchar(40);index"` // 任务类型, song, lyrics, description-mode
 	Status     TaskStatus            `json:"status" gorm:"type:varchar(20);index"` // 任务状态
 	FailReason string                `json:"fail_reason"`
@@ -133,14 +134,12 @@ type TaskPrivateData struct {
 	BillingContext *TaskBillingContext `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
 }
 
-// TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。
+// TaskBillingContext keeps the accepted immutable quote and separate usage/result evidence.
 type TaskBillingContext struct {
-	ModelPrice      float64            `json:"model_price,omitempty"`       // 模型单价
-	GroupRatio      float64            `json:"group_ratio,omitempty"`       // 兼容字段，保存任务提交时的渠道倍率
-	ModelRatio      float64            `json:"model_ratio,omitempty"`       // 模型倍率
-	OtherRatios     map[string]float64 `json:"other_ratios,omitempty"`      // 附加倍率（时长、分辨率等）
-	OriginModelName string             `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
-	PerCallBilling  bool               `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
+	Quote           *billing.Quote        `json:"quote"`
+	Usage           *billing.Usage        `json:"usage"`
+	Charge          *billing.ChargeResult `json:"charge,omitempty"`
+	OriginModelName string                `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
 }
 
 // GetUpstreamTaskID 获取上游真实 task ID（用于与 provider 通信）

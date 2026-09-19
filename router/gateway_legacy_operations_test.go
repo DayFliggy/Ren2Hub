@@ -38,7 +38,7 @@ func TestGatewayLegacyOperationsRejectIncompatibleChannels(t *testing.T) {
 				assert.Zero(t, sends.Load())
 				var user model.User
 				require.NoError(t, model.DB.First(&user, 1).Error)
-				assert.Equal(t, 10000000, user.Quota)
+				assert.EqualValues(t, 10000000, user.Quota)
 				assert.Zero(t, user.UsedQuota)
 				var recoveries, failures int64
 				require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&recoveries).Error)
@@ -112,8 +112,8 @@ func TestGatewayLegacyOperationsPreserveNativeContracts(t *testing.T) {
 			}, 2*time.Second, 10*time.Millisecond)
 			var user model.User
 			require.NoError(t, model.DB.First(&user, 1).Error)
-			assert.Equal(t, 500, user.UsedQuota)
-			assert.Equal(t, 9999500, user.Quota)
+			assert.EqualValues(t, 500, user.UsedQuota)
+			assert.EqualValues(t, 9999500, user.Quota)
 		})
 	}
 }

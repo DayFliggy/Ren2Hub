@@ -45,11 +45,19 @@ describe('ModelsView live boundary', () => {
         {
           model_name: 'gpt-4o',
           description: 'General model',
-          quota_type: 0,
-          model_ratio: 0.5,
-          completion_ratio: 2,
-          cache_ratio: 0.25,
-          create_cache_ratio: 1.25,
+          price_version: {
+            id: 1,
+            model: 'gpt-4o',
+            mode: 'unit_price',
+            prices: [
+              { quantity: 'p', unit: 'per_million_tokens', price: '1' },
+              { quantity: 'c', unit: 'per_million_tokens', price: '2' },
+              { quantity: 'cr', unit: 'per_million_tokens', price: '0.25' },
+              { quantity: 'cc', unit: 'per_million_tokens', price: '1.25' },
+            ],
+            created_at: 1,
+            hash: 'fixture',
+          },
           owner_by: 'OpenAI',
           supported_endpoint_types: ['chat'],
           enable_groups: ['default'],
@@ -68,9 +76,9 @@ describe('ModelsView live boundary', () => {
 
     expect(
       document.body.querySelector('[data-detail-cache-read]')?.textContent
-    ).toContain('$0.2500')
+    ).toContain('$0.250')
     expect(
       document.body.querySelector('[data-detail-cache-write]')?.textContent
-    ).toContain('$1.2500')
+    ).toContain('$1.250')
   })
 })

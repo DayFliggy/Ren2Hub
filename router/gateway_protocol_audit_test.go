@@ -96,6 +96,6 @@ func TestGatewayUnsupportedToolImageNeverSendsOrDebits(t *testing.T) {
 	assert.Zero(t, count)
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 1).Error)
-	assert.Equal(t, 10000000, user.Quota)
+	assert.EqualValues(t, 10000000, user.Quota)
 	assert.Zero(t, user.UsedQuota)
 }

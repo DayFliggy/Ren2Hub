@@ -1,10 +1,12 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -12,6 +14,8 @@ import (
 // BillingConsumption contains only the metadata already intended for the log.
 // The snapshot and settlement intent are committed before any final charge.
 type BillingConsumption struct {
+	Usage          *billing.Usage         `json:"-"`
+	Charge         *billing.ChargeResult  `json:"-"`
 	Log            Log                    `json:"log"`
 	CountUsage     bool                   `json:"count_usage"`
 	LogEnabled     bool                   `json:"log_enabled"`
@@ -39,6 +43,17 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 	if err != nil {
 		return fmt.Errorf("encode billing consumption: %w", err)
 	}
+	usage, err := common.Marshal(consumption.Usage)
+	if err != nil {
+		return err
+	}
+	charge, err := common.Marshal(consumption.Charge)
+	if err != nil {
+		return err
+	}
+	if consumption.Charge != nil && consumption.Charge.FinalQuota != common.Quota(consumption.Log.Quota) {
+		return ErrBillingEventConflict
+	}
 	return db.Transaction(func(tx *gorm.DB) error {
 		var recovery BillingRecovery
 		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
@@ -64,7 +79,7 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 		if recovery.Source != "wallet" {
 			return ErrUnsupportedBillingSource
 		}
-		delta := int64(consumption.Log.Quota) - reserved
+		delta := common.Quota(consumption.Log.Quota) - reserved
 		switch recovery.Status {
 		case BillingRecoveryStatusActive:
 		case BillingRecoveryStatusSettlementPending, BillingRecoveryStatusSettled:
@@ -90,7 +105,8 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 		} else if status == BillingRecoveryStatusActive {
 			status = BillingRecoveryStatusSettlementPending
 		}
-		return tx.Model(&recovery).Updates(map[string]any{
+		updates := map[string]any{
+			"version":                recovery.Version + 1,
 			"consumption_snapshot":   string(data),
 			"consumption_state":      state,
 			"consumption_statistics": BillingRecoveryStatePending,
@@ -98,7 +114,16 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 			"settlement_delta":       delta,
 			"status":                 status,
 			"updated_at":             common.GetTimestamp(),
-		}).Error
+		}
+		// Recovery decodes the display outbox independently. Absent internal
+		// evidence must not erase the last persisted cumulative usage or charge.
+		if consumption.Usage != nil {
+			updates["usage_snapshot"] = string(usage)
+		}
+		if consumption.Charge != nil {
+			updates["charge_snapshot"] = string(charge)
+		}
+		return tx.Model(&recovery).Updates(updates).Error
 	})
 }
 
@@ -152,11 +177,7 @@ func RecordBillingConsumptionPreparationFailure(requestID string, cause error) e
 }
 
 func applyBillingConsumptionStatistics(requestID string) error {
-	// Legacy task statistics use this cache lock. Keep their flush from racing
-	// with the durable gateway update of the same hourly bucket in this process.
-	CacheQuotaDataLock.Lock()
-	defer CacheQuotaDataLock.Unlock()
-	return DB.Transaction(func(tx *gorm.DB) error {
+	return BillingTransaction(context.Background(), func(tx *gorm.DB) error {
 		var recovery BillingRecovery
 		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
 			return err
@@ -167,7 +188,7 @@ func applyBillingConsumptionStatistics(requestID string) error {
 		if recovery.ConsumptionSnapshot == "" || recovery.ConsumptionStatistics == BillingRecoveryStateCompleted {
 			return nil
 		}
-		if recovery.Status != BillingRecoveryStatusSettled {
+		if recovery.Status != BillingRecoveryStatusSettled && recovery.Status != BillingRecoveryStatusRefunded {
 			return ErrBillingRecoveryStateConflict
 		}
 		var consumption BillingConsumption
@@ -176,13 +197,16 @@ func applyBillingConsumptionStatistics(requestID string) error {
 		}
 		log := consumption.Log
 		quotaDelta, requestDelta := log.Quota, 1
+		if !consumption.CountUsage {
+			requestDelta = 0
+		}
 		if adjustment := consumption.TaskAdjustment; adjustment != nil {
 			if adjustment.PreviousQuota < 0 || adjustment.PreviousQuota > common.MaxQuota ||
 				adjustment.FinalQuota < 0 || adjustment.FinalQuota > common.MaxQuota ||
 				(adjustment.TaskID > 0) == (adjustment.MidjourneyID > 0) {
 				return ErrBillingRecoveryStateConflict
 			}
-			quotaDelta, requestDelta = adjustment.FinalQuota-adjustment.PreviousQuota, 0
+			quotaDelta = adjustment.FinalQuota
 			var target any = &Task{}
 			taskID := adjustment.TaskID
 			if adjustment.MidjourneyID > 0 {
@@ -193,9 +217,25 @@ func applyBillingConsumptionStatistics(requestID string) error {
 			if result.Error != nil {
 				return result.Error
 			}
-			if result.RowsAffected == 0 && quotaDelta != 0 {
-				return ErrBillingRecoveryStateConflict
+			if result.RowsAffected == 0 {
+				if adjustment.PreviousQuota != adjustment.FinalQuota {
+					return ErrBillingRecoveryStateConflict
+				}
+				// MySQL reports changed rows; an unchanged final amount still
+				// needs an existing, correctly owned task before statistics commit.
+				var count int64
+				if err := tx.Model(target).Where("id = ? AND user_id = ? AND quota = ?", taskID, recovery.UserID, adjustment.FinalQuota).Count(&count).Error; err != nil {
+					return err
+				}
+				if count != 1 {
+					return ErrBillingRecoveryStateConflict
+				}
 			}
+		}
+		// Failed tasks release their reservation without a consumed request;
+		// exported counters must reflect the same committed usage decision.
+		if !consumption.CountUsage {
+			requestDelta = 0
 		}
 		if consumption.CountUsage || consumption.ExportEnabled {
 			var user User
@@ -205,18 +245,22 @@ func applyBillingConsumptionStatistics(requestID string) error {
 		}
 		if consumption.CountUsage {
 			if err := tx.Model(&User{}).Where("id = ?", recovery.UserID).Updates(map[string]any{
-				"used_quota":    gorm.Expr("used_quota + ?", quotaDelta),
+
 				"request_count": gorm.Expr("request_count + ?", requestDelta),
 			}).Error; err != nil {
 				return err
 			}
 			if log.ChannelId > 0 {
 				var channel Channel
-				if err := lockForUpdate(tx).Select("id").Where("id = ?", log.ChannelId).First(&channel).Error; err != nil {
+				if err := lockForUpdate(tx).Select("id", "used_quota").Where("id = ?", log.ChannelId).First(&channel).Error; err != nil {
 					return err
 				}
 				if quotaDelta != 0 {
-					if err := tx.Model(&channel).Update("used_quota", gorm.Expr("used_quota + ?", quotaDelta)).Error; err != nil {
+					total, err := common.AddQuota(channel.UsedQuota, quotaDelta)
+					if err != nil {
+						return err
+					}
+					if err := tx.Model(&channel).Update("used_quota", total).Error; err != nil {
 						return err
 					}
 				}
@@ -235,8 +279,12 @@ func applyBillingConsumptionStatistics(requestID string) error {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				err = tx.Create(&bucket).Error
 			} else if err == nil {
+				total, addErr := common.AddQuota(existing.Quota, bucket.Quota)
+				if addErr != nil {
+					return addErr
+				}
 				err = tx.Model(&existing).Updates(map[string]any{
-					"count": gorm.Expr("count + ?", bucket.Count), "quota": gorm.Expr("quota + ?", bucket.Quota),
+					"count": gorm.Expr("count + ?", bucket.Count), "quota": total,
 					"token_used": gorm.Expr("token_used + ?", bucket.TokenUsed),
 				}).Error
 			}
@@ -258,7 +306,7 @@ func applyBillingConsumptionLog(requestID string) error {
 	if recovery.ConsumptionSnapshot == "" || recovery.ConsumptionState == BillingRecoveryStateCompleted {
 		return nil
 	}
-	if recovery.Status != BillingRecoveryStatusSettled || recovery.ConsumptionStatistics != BillingRecoveryStateCompleted {
+	if (recovery.Status != BillingRecoveryStatusSettled && recovery.Status != BillingRecoveryStatusRefunded) || recovery.ConsumptionStatistics != BillingRecoveryStateCompleted {
 		return ErrBillingRecoveryStateConflict
 	}
 	var consumption BillingConsumption
@@ -270,10 +318,13 @@ func applyBillingConsumptionLog(requestID string) error {
 			return errors.New("billing log database is unavailable")
 		}
 		log := consumption.Log
-		log.BillingRequestID = &requestID
+		if recovery.FinalEventID == "" {
+			return ErrBillingRecoveryStateConflict
+		}
+		log.BillingEventID = &recovery.FinalEventID
 		if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 			var count int64
-			if err := LOG_DB.Model(&Log{}).Where("request_id = ? AND type = ?", requestID, log.Type).Count(&count).Error; err != nil {
+			if err := LOG_DB.Model(&Log{}).Where("billing_event_id = ?", recovery.FinalEventID).Count(&count).Error; err != nil {
 				return err
 			}
 			if count == 0 {
@@ -292,7 +343,7 @@ func applyBillingConsumptionLog(requestID string) error {
 				}
 			}
 		} else if err := LOG_DB.Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "billing_request_id"}}, DoNothing: true,
+			Columns: []clause.Column{{Name: "billing_event_id"}}, DoNothing: true,
 		}).Create(&log).Error; err != nil {
 			return err
 		}

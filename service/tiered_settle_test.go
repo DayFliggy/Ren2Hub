@@ -5,7 +5,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -24,7 +23,7 @@ const flatExpr = `tier("default", p * 2 + c * 10)`
 const cacheExpr = `tier("default", p * 2 + c * 10 + cr * 0.2 + cc * 2.5 + cc1h * 4)`
 
 // Expression with request probes
-const probeExpr = `param("service_tier") == "fast" ? tier("fast", p * 4 + c * 20) : tier("normal", p * 2 + c * 10)`
+const probeExpr = `attr("service_tier") == "fast" ? tier("fast", p * 4 + c * 20) : tier("normal", p * 2 + c * 10)`
 
 const testQuotaPerUnit = 500_000.0
 
@@ -58,7 +57,7 @@ func makeRelayInfo(expr string, groupRatio float64, estPrompt, estCompletion int
 // ---------------------------------------------------------------------------
 
 func TestTryTieredSettleUsesFrozenRequestInput(t *testing.T) {
-	exprStr := `param("service_tier") == "fast" ? tier("fast", p * 2) : tier("normal", p)`
+	exprStr := `attr("service_tier") == "fast" ? tier("fast", p * 2) : tier("normal", p)`
 	relayInfo := &relaycommon.RelayInfo{
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
 			BillingMode:               "tiered_expr",
@@ -71,7 +70,7 @@ func TestTryTieredSettleUsesFrozenRequestInput(t *testing.T) {
 			QuotaPerUnit:              testQuotaPerUnit,
 		},
 		BillingRequestInput: &billingexpr.RequestInput{
-			Body: []byte(`{"service_tier":"fast"}`),
+			Attributes: map[string]interface{}{"service_tier": "fast"},
 		},
 	}
 
@@ -280,7 +279,7 @@ func TestTryTieredSettle_CacheTokensAffectSettlement(t *testing.T) {
 func TestTryTieredSettle_RequestProbeInfluencesBilling(t *testing.T) {
 	info := makeRelayInfo(probeExpr, 1.0, 1000, 500)
 	info.BillingRequestInput = &billingexpr.RequestInput{
-		Body: []byte(`{"service_tier":"fast"}`),
+		Attributes: map[string]interface{}{"service_tier": "fast"},
 	}
 
 	ok, quota, result, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
@@ -299,7 +298,7 @@ func TestTryTieredSettle_RequestProbeInfluencesBilling(t *testing.T) {
 
 func TestTryTieredSettle_NoRequestInput_FallsBackToDefault(t *testing.T) {
 	info := makeRelayInfo(probeExpr, 1.0, 1000, 500)
-	// No BillingRequestInput set — param("service_tier") returns nil, not "fast"
+	// No BillingRequestInput set — attr("service_tier") returns nil, not "fast"
 
 	ok, quota, result, settleErr := TryTieredSettle(info, billingexpr.TokenParams{P: 1000, C: 500})
 	require.NoError(t, settleErr)
@@ -318,31 +317,6 @@ func TestTryTieredSettle_NoRequestInput_FallsBackToDefault(t *testing.T) {
 // ---------------------------------------------------------------------------
 // Group ratio tests
 // ---------------------------------------------------------------------------
-
-func TestBillingSessionReserveWalletTopUpDecrementsBalance(t *testing.T) {
-	truncate(t)
-
-	const userID = 702
-	seedUser(t, userID, 500_000)
-
-	relayInfo := &relaycommon.RelayInfo{
-		UserId:       userID,
-		IsPlayground: true,
-	}
-	session := &BillingSession{
-		relayInfo:        relayInfo,
-		funding:          &WalletFunding{userId: userID, consumed: 50_000},
-		preConsumedQuota: 50_000,
-	}
-
-	require.NoError(t, session.Reserve(100_000))
-
-	assert.Equal(t, 100_000, session.GetPreConsumedQuota())
-	assert.Equal(t, 100_000, relayInfo.FinalPreConsumedQuota)
-	userQuota, err := model.GetUserQuota(userID, false)
-	require.NoError(t, err)
-	assert.Equal(t, 450_000, userQuota)
-}
 
 func TestTryTieredSettle_GroupRatioScaling(t *testing.T) {
 	info := makeRelayInfo(flatExpr, 1.5, 1000, 500)

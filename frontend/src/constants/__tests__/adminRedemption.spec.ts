@@ -11,7 +11,11 @@ describe('admin redemption contract', () => {
   })
 
   it('formats the real quota value without plan or concurrency branches', () => {
-    expect(formatRedemptionValue({ amount: 5, quota: 2_500_000 })).toBe('$5.00')
-    expect(formatRedemptionValue({ amount: 0, quota: 500_000 })).toBe('$1.00')
+    expect(formatRedemptionValue({ amount: '5', quota: '2500000' })).toBe(
+      '$5.00'
+    )
+    expect(formatRedemptionValue({ amount: '0', quota: '500000' })).toBe(
+      '$1.00'
+    )
   })
 })

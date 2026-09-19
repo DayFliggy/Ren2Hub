@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/QuantumNous/new-api/common"
 	"io"
 	"net/http"
 	"strings"
@@ -14,7 +15,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -47,7 +47,7 @@ func TestGatewayMediaPlanRejectsBeforeSendAndPreservesImages(t *testing.T) {
 							assert.Equal(t, "https://images.example/picture.png?size=2", gjson.GetBytes(payload, imagePath).String())
 							var user model.User
 							require.NoError(t, model.DB.First(&user, 1).Error)
-							assert.Equal(t, 9999500, user.Quota, "allowed requests still precharge before sending")
+							assert.EqualValues(t, 9999500, user.Quota, "allowed requests still precharge before sending")
 							r.Body = io.NopCloser(bytes.NewReader(payload))
 							gatewaySDKUpstream(w, r)
 						})
@@ -59,8 +59,8 @@ func TestGatewayMediaPlanRejectsBeforeSendAndPreservesImages(t *testing.T) {
 						}
 						require.NoError(t, model.DB.Model(channel).Updates(map[string]any{"type": channel.Type, "models": channel.Models}).Error)
 						require.NoError(t, channel.AddAbilities(model.DB))
-						require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"media-plan":0.001}`))
-						require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"conversion_policy": policy, "unlimited_quota": false, "remain_quota": 2000}).Error)
+						require.NoError(t, publishGatewayFixturePrices(`{"media-plan":0.001}`, false))
+						require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"conversion_policy": policy, "unlimited_quota": false, "available_quota": 2000}).Error)
 						require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 						content, path := protocol.image, protocol.path
 						if rejected {
@@ -90,9 +90,9 @@ func TestGatewayMediaPlanRejectsBeforeSendAndPreservesImages(t *testing.T) {
 						var user model.User
 						var token model.Token
 						require.Eventually(t, func() bool {
-							return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == 10000000-charge && token.RemainQuota == 2000-charge
+							return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == common.Quota(10000000-charge) && token.RemainQuota == common.Quota(2000-charge)
 						}, time.Second, 10*time.Millisecond)
-						assert.Equal(t, charge, user.UsedQuota)
+						assert.EqualValues(t, charge, user.UsedQuota)
 						var logs []model.Log
 						require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
 						if rejected {

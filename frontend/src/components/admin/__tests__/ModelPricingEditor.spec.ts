@@ -1,72 +1,85 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import ModelPricingEditor from '../ModelPricingEditor.vue'
-import {
-  MODEL_PRICE_KEYS,
-  modelPricingApi,
-  type ModelPriceMaps,
-} from '@/api/modelPricing'
+import { modelPricingApi, type PriceVersion } from '@/api/modelPricing'
+import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
+const price: PriceVersion = {
+  id: 3,
+  model: 'test',
+  mode: 'unit_price',
+  prices: [{ quantity: 'p', unit: 'per_million_tokens', price: '1' }],
+  created_at: 1,
+  hash: 'hash',
+}
+beforeAll(async () => {
+  await loadMessageDomain('console')
+  await setLocale('en')
+})
+afterEach(() => vi.restoreAllMocks())
 function setup() {
-  const maps: ModelPriceMaps = Object.fromEntries(
-    MODEL_PRICE_KEYS.map((key) => [key, {}])
-  )
-  maps.ModelRatio = { test: 2 }
-  maps.CompletionRatio = { test: 3 }
-  vi.spyOn(modelPricingApi, 'load').mockResolvedValue(maps)
-  const save = vi.spyOn(modelPricingApi, 'save').mockResolvedValue(maps)
+  vi.spyOn(modelPricingApi, 'load').mockResolvedValue([price])
+  const publish = vi
+    .spyOn(modelPricingApi, 'publish')
+    .mockResolvedValue({ ...price, id: 4 })
   const wrapper = mount(ModelPricingEditor, {
     props: { modelName: 'test' },
-    global: { plugins: [createI18n({ legacy: false, locale: 'en' })] },
+    global: { plugins: [i18n] },
   })
-  return { wrapper, save }
+  return { wrapper, publish }
 }
-afterEach(() => vi.restoreAllMocks())
-describe('model price form', () => {
-  it('preserves numeric input as text and converts per-million token prices', async () => {
-    const { wrapper, save } = setup()
+describe('model price editor', () => {
+  it('publishes exact decimal text and leaves the loaded immutable version intact', async () => {
+    const { wrapper, publish } = setup()
     await flushPromises()
-    await wrapper.get('input[type=number]').setValue('1.5')
-    await wrapper.vm.validate('test')
+    await wrapper
+      .get('input[inputmode=decimal]')
+      .setValue('1.000000000000000001')
     await wrapper.vm.save('test')
-    expect(save.mock.calls[0]![0].fields.ModelRatio).toBe('1.5')
-    await wrapper.get('input[type=radio][value=price]').setValue()
-    await wrapper.get('input[type=number]').setValue('4')
-    await wrapper.findAll('input[type=number]')[1]!.setValue('12')
-    await wrapper.vm.save('test')
-    expect(save.mock.calls[1]![0].fields).toMatchObject({
-      ModelRatio: '2',
-      CompletionRatio: '3',
-    })
-    wrapper.unmount()
-  })
-  it('rejects a target price conflict before metadata is submitted', async () => {
-    const { wrapper } = setup()
-    await flushPromises()
-    vi.mocked(modelPricingApi.load).mockResolvedValue({
-      ModelPrice: { renamed: 10 },
-      ModelRatio: { test: 2 },
-      CompletionRatio: { test: 3 },
-    })
-    await expect(wrapper.vm.validate('renamed')).rejects.toThrow(
-      'target model name already has pricing'
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prices: [
+          {
+            quantity: 'p',
+            unit: 'per_million_tokens',
+            price: '1.000000000000000001',
+          },
+        ],
+      }),
+      3
     )
+    expect(price.prices[0]?.price).toBe('1')
     wrapper.unmount()
   })
-  it('aborts pending reads on disposal and cannot save an unloaded map', async () => {
+  it('rejects concurrent target changes before publishing', async () => {
+    const { wrapper, publish } = setup()
+    await flushPromises()
+    await wrapper.get('input[inputmode=decimal]').setValue('2')
+    vi.mocked(modelPricingApi.load).mockResolvedValue([{ ...price, id: 5 }])
+    await expect(wrapper.vm.validate('test')).rejects.toThrow(
+      'changed elsewhere'
+    )
+    expect(publish).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('makes no price write for unchanged metadata and aborts unloaded reads', async () => {
+    const { wrapper, publish } = setup()
+    await flushPromises()
+    await wrapper.vm.save('test')
+    expect(publish).not.toHaveBeenCalled()
+    wrapper.unmount()
     const load = vi
-      .spyOn(modelPricingApi, 'load')
+      .mocked(modelPricingApi.load)
       .mockImplementation(() => new Promise(() => {}))
-    const wrapper = mount(ModelPricingEditor, {
+    const pending = mount(ModelPricingEditor, {
       props: { modelName: 'test' },
-      global: { plugins: [createI18n({ legacy: false, locale: 'en' })] },
+      global: { plugins: [i18n] },
     })
-    await expect(wrapper.vm.validate()).rejects.toThrow(
+    await expect(pending.vm.validate()).rejects.toThrow(
       'not loaded successfully'
     )
-    const signal = load.mock.calls[0]![0]!
-    wrapper.unmount()
+    const signal = load.mock.calls.at(-1)![0]!
+    pending.unmount()
     expect(signal.aborted).toBe(true)
   })
 })

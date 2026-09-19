@@ -60,10 +60,15 @@ func DeliverConvertedImage(c *gin.Context, info *relaycommon.RelayInfo, source *
 }
 
 func updateOpenAIImageCount(info *relaycommon.RelayInfo, count int64) {
-	if info == nil || !info.PriceData.UsePrice || count <= 0 || count > int64(dto.MaxImageN) {
+	if info == nil || count <= 0 || count > int64(dto.MaxImageN) {
 		return
 	}
-	info.PriceData.AddOtherRatio("n", float64(count))
+	if info.PriceData.Usage != nil {
+		if _, priced := info.PriceData.Usage.Quantities["images"]; priced {
+			info.PriceData.Usage.Quantities["images"] = strconv.FormatInt(count, 10)
+		}
+	}
+
 }
 
 // OpenaiImageHandler handles non-streaming OpenAI image responses

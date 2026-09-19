@@ -1,359 +1,179 @@
 package helper
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"strings"
+	"math"
+	"time"
 
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/setting/billing_setting"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/pricing_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 	hosttypes "github.com/QuantumNous/new-api/types"
-
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
-func modelPriceNotConfiguredError(modelName string, userId int) error {
-	if model.IsAdmin(userId) {
-		return fmt.Errorf(
-			"模型 %s 的价格未配置。请前往「系统设置 → 运营设置」开启自用模式，或在「系统设置 → 分组与模型定价设置」中为该模型配置价格；"+
-				"Model %s price not configured. Go to System Settings → Operation Settings to enable self-use mode, or configure the model price in System Settings → Group & Model Pricing.",
-			modelName, modelName,
-		)
-	}
-	return fmt.Errorf(
-		"模型 %s 的价格尚未由管理员配置，暂时无法使用，请联系站点管理员开启该模型；"+
-			"Model %s has not been priced by the administrator yet. Please contact the site administrator to enable this model.",
-		modelName, modelName,
-	)
-}
-
-// https://docs.claude.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration
-const claudeCacheCreation1hMultiplier = 6 / 3.75
-
-// defaultTieredPreConsumeMaxTokens is the fallback completion-token estimate
-// used for tiered expression pre-consume when the client omits max_tokens, so
-// the pre-consumed quota still reflects a plausible output cost on paid channels.
 const defaultTieredPreConsumeMaxTokens = 8192
 
-// HandleChannelRatio reads the selected channel's price multiplier. Account
-// and token groups no longer affect relay pricing.
-func HandleChannelRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) float64 {
+func modelPriceNotConfiguredError(modelName string, _ int) error {
+	return fmt.Errorf("模型 %s 尚未发布明确单价或计费表达式 / Model price is not configured", modelName)
+}
+
+func HandleChannelRatio(ctx *gin.Context, info *relaycommon.RelayInfo) float64 {
 	ratio := 1.0
-	if value, exists := ctx.Get("channel_ratio"); exists {
-		ratio, _ = value.(float64)
+	if ctx != nil {
+		if value, ok := ctx.Get("channel_ratio"); ok {
+			ratio, _ = value.(float64)
+		}
 	}
-	relayInfo.UsingGroup = ""
+	info.UsingGroup = ""
 	return ratio
 }
 
-func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (hosttypes.PriceData, error) {
-	billingModel := info.BillingModelName()
-	pricingModel, pricingSource := billingModel, "direct"
-	pricingLookupModel := billingModel
-	if info.RelayMode == relayconstant.RelayModeResponsesCompact && !strings.HasSuffix(pricingLookupModel, ratio_setting.CompactModelSuffix) {
-		pricingLookupModel += ratio_setting.CompactModelSuffix
-	}
-	if info.LogicalBillingModel != "" || strings.HasSuffix(pricingLookupModel, ratio_setting.CompactModelSuffix) {
-		pricingModel, pricingSource = pricing_setting.ResolveModel(pricingLookupModel)
-	}
-	info.PricingModelName = pricingModel
-	info.ModelPricingSource = pricingSource
-	modelPrice, usePrice := ratio_setting.GetModelPrice(pricingModel, false)
-
-	channelRatio := HandleChannelRatio(c, info)
-
-	// Check if this model uses tiered_expr billing
-	if billing_setting.GetBillingMode(pricingModel) == billing_setting.BillingModeTieredExpr {
-		return modelPriceHelperTiered(c, info, pricingModel, promptTokens, meta, channelRatio)
-	}
-	info.TieredBillingSnapshot = nil
-	info.BillingRequestInput = nil
-
-	var preConsumedQuota int
-	var modelRatio float64
-	var completionRatio float64
-	var cacheRatio float64
-	var imageRatio float64
-	var cacheCreationRatio float64
-	var cacheCreationRatio5m float64
-	var cacheCreationRatio1h float64
-	var audioRatio float64
-	var audioCompletionRatio float64
-	var freeModel bool
-	if !usePrice {
-		preConsumedTokens := common.Max(promptTokens, common.PreConsumedQuota)
-		if meta.MaxTokens != 0 {
-			preConsumedTokens += meta.MaxTokens
-		}
-		var success bool
-		var matchName string
-		modelRatio, success, matchName = ratio_setting.GetModelRatio(pricingModel)
-		if !success {
-			acceptUnsetRatio := false
-			if info.UserSetting.AcceptUnsetRatioModel {
-				acceptUnsetRatio = true
-			}
-			if !acceptUnsetRatio {
-				return hosttypes.PriceData{}, modelPriceNotConfiguredError(matchName, info.UserId)
-			}
-		}
-		completionRatio = ratio_setting.GetCompletionRatio(pricingModel)
-		cacheRatio, _ = ratio_setting.GetCacheRatio(pricingModel)
-		cacheCreationRatio, _ = ratio_setting.GetCreateCacheRatio(pricingModel)
-		cacheCreationRatio5m = cacheCreationRatio
-		// 固定1h和5min缓存写入价格的比例
-		cacheCreationRatio1h = cacheCreationRatio * claudeCacheCreation1hMultiplier
-		imageRatio, _ = ratio_setting.GetImageRatio(pricingModel)
-		audioRatio = ratio_setting.GetAudioRatio(pricingModel)
-		audioCompletionRatio = ratio_setting.GetAudioCompletionRatio(pricingModel)
-		ratio := modelRatio * channelRatio
-		quota, err := common.QuotaFromFloatStrict(float64(preConsumedTokens) * ratio)
-		if err != nil {
-			return hosttypes.PriceData{}, err
-		}
-		preConsumedQuota = quota
-	} else {
-		if meta.ImagePriceRatio != 0 {
-			modelPrice = modelPrice * meta.ImagePriceRatio
+func priceHasQuantity(version billing.PriceVersion, name string) bool {
+	for _, price := range version.Prices {
+		if price.Quantity == name {
+			return true
 		}
 	}
-
-	// check if free model pre-consume is disabled
-	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-		// if model price or ratio is 0, do not pre-consume quota
-		if channelRatio == 0 {
-			preConsumedQuota = 0
-			freeModel = true
-		} else if usePrice {
-			if modelPrice == 0 {
-				preConsumedQuota = 0
-				freeModel = true
-			}
-		} else {
-			if modelRatio == 0 {
-				preConsumedQuota = 0
-				freeModel = true
-			}
-		}
-	}
-
-	priceData := hosttypes.PriceData{
-		FreeModel:            freeModel,
-		ModelPrice:           modelPrice,
-		ModelRatio:           modelRatio,
-		CompletionRatio:      completionRatio,
-		ChannelRatio:         channelRatio,
-		UsePrice:             usePrice,
-		CacheRatio:           cacheRatio,
-		ImageRatio:           imageRatio,
-		AudioRatio:           audioRatio,
-		AudioCompletionRatio: audioCompletionRatio,
-		CacheCreationRatio:   cacheCreationRatio,
-		CacheCreation5mRatio: cacheCreationRatio5m,
-		CacheCreation1hRatio: cacheCreationRatio1h,
-		QuotaToPreConsume:    preConsumedQuota,
-	}
-	if usePrice {
-		for name, ratio := range meta.BillingRatios {
-			priceData.AddOtherRatio(name, ratio)
-		}
-		quotaToPreConsume := priceData.ApplyOtherRatiosToFloat(modelPrice * common.QuotaPerUnit * channelRatio)
-		quota, err := common.QuotaFromFloatStrict(quotaToPreConsume)
-		if err != nil {
-			return hosttypes.PriceData{}, err
-		}
-		priceData.QuotaToPreConsume = quota
-	}
-
-	if common.DebugEnabled {
-		logger.LogDebug(c, "model_price_helper result: %s", priceData.ToSetting())
-	}
-	info.PriceData = priceData
-	return priceData, nil
+	return false
 }
 
-// ModelPriceHelperPerCall 按次/按量计费的 PriceHelper (MJ、Task)
+func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (hosttypes.PriceData, error) {
+	version, err := model.GetActiveBillingPrice(c.Request.Context(), info.BillingModelName())
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return hosttypes.PriceData{}, modelPriceNotConfiguredError(info.BillingModelName(), info.UserId)
+		}
+		return hosttypes.PriceData{}, fmt.Errorf("billing price unavailable: %w", err)
+	}
+	input, err := ResolveIncomingBillingExprRequestInput(c, info)
+	if err != nil {
+		return hosttypes.PriceData{}, err
+	}
+	if input.FrozenAt.IsZero() {
+		input.FrozenAt = time.Now().UTC()
+	}
+	ratio := HandleChannelRatio(c, info)
+	if ratio < 0 || math.IsNaN(ratio) || math.IsInf(ratio, 0) {
+		return hosttypes.PriceData{}, fmt.Errorf("invalid channel price ratio")
+	}
+	quote, err := billing.NewQuote(*version, decimal.NewFromFloat(ratio).String(), input.Attributes, input.FrozenAt)
+	if err != nil {
+		return hosttypes.PriceData{}, err
+	}
+	output := defaultTieredPreConsumeMaxTokens
+	if rule := model_setting.GetGrokSettings(); rule != nil {
+		if rule.ViolationDeductionAmount < 0 || math.IsNaN(rule.ViolationDeductionAmount) || math.IsInf(rule.ViolationDeductionAmount, 0) {
+			return hosttypes.PriceData{}, fmt.Errorf("invalid violation fee rule")
+		}
+		quote.ViolationFeeEnabled = rule.ViolationDeductionEnabled
+		quote.ViolationFeeUSD = decimal.NewFromFloat(rule.ViolationDeductionAmount).String()
+		quote.Hash = ""
+		quote.Hash, err = billing.Hash(quote)
+		if err != nil {
+			return hosttypes.PriceData{}, err
+		}
+	}
+	if meta != nil && meta.MaxTokens != 0 {
+		output = meta.MaxTokens
+	}
+	switch info.RelayMode {
+	case relayconstant.RelayModeAudioSpeech, relayconstant.RelayModeEmbeddings, relayconstant.RelayModeModerations, relayconstant.RelayModeRerank, relayconstant.RelayModeAlphaSearch:
+		output = 0
+	}
+	usage := billing.Usage{InputTokens: int64(promptTokens), OutputTokens: int64(output), ContextTokens: int64(promptTokens), InputIncludesCache: true, Quantities: map[string]string{}, Source: "request_estimate", Estimated: true}
+	if version.Mode == billing.ModeExpression {
+		usage.Quantities["calls"] = "1"
+	}
+	perCall := priceHasQuantity(*version, "calls")
+	if version.Mode == billing.ModeUnitPrice && !priceHasQuantity(*version, "p") && !priceHasQuantity(*version, "c") {
+		usage.InputTokens = 0
+		usage.OutputTokens = 0
+	}
+	if perCall {
+		usage.Quantities["calls"] = "1"
+		usage.InputTokens = 0
+		usage.OutputTokens = 0
+	}
+	if priceHasQuantity(*version, "images") {
+		quantity := 1.0
+		if value, ok := input.Attributes["quantity"].(float64); ok {
+			quantity = value
+		}
+		if meta != nil {
+			if n, ok := meta.BillingRatios["n"]; ok {
+				quantity = n
+			}
+		}
+		if quantity < 0 || math.IsNaN(quantity) || math.IsInf(quantity, 0) {
+			return hosttypes.PriceData{}, fmt.Errorf("invalid image quantity")
+		}
+		usage.Quantities["images"] = decimal.NewFromFloat(quantity).String()
+	}
+	if priceHasQuantity(*version, "seconds") {
+		duration, ok := input.Attributes["duration"]
+		if !ok {
+			return hosttypes.PriceData{}, fmt.Errorf("duration required for per-second price")
+		}
+		seconds, err := decimal.NewFromString(fmt.Sprint(duration))
+		if err != nil {
+			return hosttypes.PriceData{}, fmt.Errorf("invalid task duration")
+		}
+		if count, exists := input.Attributes["quantity"]; exists {
+			quantity, err := decimal.NewFromString(fmt.Sprint(count))
+			if err != nil || !quantity.Equal(quantity.Truncate(0)) {
+				return hosttypes.PriceData{}, fmt.Errorf("invalid media quantity")
+			}
+			seconds = seconds.Mul(quantity)
+		}
+		usage.Quantities["seconds"] = seconds.String()
+	}
+	result, err := billing.Calculate(quote, usage)
+	if err != nil {
+		return hosttypes.PriceData{}, err
+	}
+	quota, err := billing.RequestQuota(result.FinalQuota)
+	if err != nil {
+		return hosttypes.PriceData{}, err
+	}
+	free := version.Mode == billing.ModeFree
+	if !free && quota == 0 {
+		quota = 1
+	}
+	price := hosttypes.PriceData{Quote: quote, Usage: &usage, FreeModel: free, UsePrice: perCall, ChannelRatio: ratio, QuotaToPreConsume: quota, Quota: quota}
+	// These fields are display/adapter projections only. The calculator reads
+	// exclusively the immutable quote; no ratio is a second source of price.
+	for _, p := range version.Prices {
+		if p.Quantity == "calls" {
+			d, _ := decimal.NewFromString(p.Price)
+			price.ModelPrice = d.InexactFloat64()
+		}
+	}
+	info.PricingModelName = version.Model
+	info.ModelPricingSource = "published_price_version"
+	info.PriceData = price
+	info.BillingRequestInput = &input
+	info.TieredBillingSnapshot = nil
+	if version.Mode == billing.ModeExpression {
+		info.TieredBillingSnapshot = &billingexpr.BillingSnapshot{BillingMode: "tiered_expr", ModelName: version.Model, ExprString: version.Expression, ExprHash: billingexpr.ExprHashString(version.Expression), GroupRatio: ratio, EstimatedPromptTokens: promptTokens, EstimatedCompletionTokens: output, EstimatedQuotaAfterGroup: quota, QuotaPerUnit: float64(billing.QuotaPerUSD), ExprVersion: billingexpr.ExprVersion(version.Expression)}
+	}
+	return price, nil
+}
+
 func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hosttypes.PriceData, error) {
-	channelRatio := HandleChannelRatio(c, info)
-
-	modelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)
-	usePrice := success
-	var modelRatio float64
-
-	if !success {
-		defaultPrice, ok := ratio_setting.GetDefaultModelPriceMap()[info.OriginModelName]
-		if ok {
-			modelPrice = defaultPrice
-			usePrice = true
-		} else {
-			var ratioSuccess bool
-			var matchName string
-			modelRatio, ratioSuccess, matchName = ratio_setting.GetModelRatio(info.OriginModelName)
-			acceptUnsetRatio := false
-			if info.UserSetting.AcceptUnsetRatioModel {
-				acceptUnsetRatio = true
-			}
-			if !ratioSuccess && !acceptUnsetRatio {
-				return hosttypes.PriceData{}, modelPriceNotConfiguredError(matchName, info.UserId)
-			}
-		}
-	}
-
-	var quota int
-	freeModel := false
-
-	if usePrice {
-		var err error
-		quota, err = common.QuotaFromFloatStrict(modelPrice * common.QuotaPerUnit * channelRatio)
-		if err != nil {
-			return hosttypes.PriceData{}, err
-		}
-		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-			if channelRatio == 0 || modelPrice == 0 {
-				quota = 0
-				freeModel = true
-			}
-		}
-	} else {
-		// 按量计费：以模型倍率的一半作为预扣额度
-		var err error
-		quota, err = common.QuotaFromFloatStrict(modelRatio / 2 * common.QuotaPerUnit * channelRatio)
-		if err != nil {
-			return hosttypes.PriceData{}, err
-		}
-		modelPrice = -1
-		if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-			if channelRatio == 0 || modelRatio == 0 {
-				quota = 0
-				freeModel = true
-			}
-		}
-	}
-
-	priceData := hosttypes.PriceData{
-		FreeModel:    freeModel,
-		ModelPrice:   modelPrice,
-		ModelRatio:   modelRatio,
-		UsePrice:     usePrice,
-		Quota:        quota,
-		ChannelRatio: channelRatio,
-	}
-	return priceData, nil
+	return ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
 }
 
 func HasModelBillingConfig(modelName string) bool {
-	pricingModel, _ := pricing_setting.ResolveModel(modelName)
-	if _, ok := ratio_setting.GetModelPrice(pricingModel, false); ok {
-		return true
-	}
-	if _, ok, _ := ratio_setting.GetModelRatio(pricingModel); ok {
-		return true
-	}
-	if billing_setting.GetBillingMode(pricingModel) != billing_setting.BillingModeTieredExpr {
-		return false
-	}
-	expr, ok := billing_setting.GetBillingExpr(pricingModel)
-	return ok && strings.TrimSpace(expr) != ""
+	_, err := model.GetActiveBillingPrice(context.Background(), modelName)
+	return err == nil
 }
-
-// HasExplicitModelBillingConfig mirrors HasModelBillingConfig but never
-// consults the automatic pricing catalog, preserving that function's exact
-// pre-catalog semantics: manual price, manual ratio, self-use mode, or a
-// tiered billing expression.
-//
-// Use it for decisions that change which billing name a request is recorded
-// under (for example the Gemini "-nothinking" rewrite). A catalog entry for a
-// variant name must not silently move a manually priced base model onto
-// catalog pricing.
-func HasExplicitModelBillingConfig(modelName string) bool {
-	pricingModel, _ := pricing_setting.ResolveModel(modelName)
-	if _, ok := ratio_setting.GetModelPrice(pricingModel, false); ok {
-		return true
-	}
-	if ratio_setting.HasManualModelRatio(pricingModel) || operation_setting.SelfUseModeEnabled {
-		return true
-	}
-	if billing_setting.GetBillingMode(pricingModel) != billing_setting.BillingModeTieredExpr {
-		return false
-	}
-	expr, ok := billing_setting.GetBillingExpr(pricingModel)
-	return ok && strings.TrimSpace(expr) != ""
-}
-
-func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, pricingModel string, promptTokens int, meta *types.TokenCountMeta, channelRatio float64) (hosttypes.PriceData, error) {
-	exprStr, ok := billing_setting.GetBillingExpr(pricingModel)
-	if !ok {
-		return hosttypes.PriceData{}, fmt.Errorf("model %s is configured as tiered_expr but has no billing expression", info.BillingModelName())
-	}
-
-	estimatedCompletionTokens := meta.MaxTokens
-	if estimatedCompletionTokens == 0 && channelRatio != 0 {
-		estimatedCompletionTokens = defaultTieredPreConsumeMaxTokens
-	}
-
-	requestInput, err := ResolveIncomingBillingExprRequestInput(c, info)
-	if err != nil {
-		return hosttypes.PriceData{}, err
-	}
-
-	rawCost, trace, err := billingexpr.RunExprWithRequest(exprStr, billingexpr.TokenParams{
-		P:   float64(promptTokens),
-		C:   float64(estimatedCompletionTokens),
-		Len: float64(promptTokens),
-	}, requestInput)
-	if err != nil {
-		return hosttypes.PriceData{}, fmt.Errorf("model %s tiered expr run failed: %w", info.BillingModelName(), err)
-	}
-
-	// Expression coefficients are $/1M tokens prices; convert to quota the same way per-call billing does.
-	quotaBeforeGroup := rawCost / 1_000_000 * common.QuotaPerUnit
-	preConsumedQuota, err := billingexpr.QuotaRoundStrict(quotaBeforeGroup * channelRatio)
-	if err != nil {
-		return hosttypes.PriceData{}, err
-	}
-
-	freeModel := false
-	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
-		if channelRatio == 0 {
-			preConsumedQuota = 0
-			freeModel = true
-		}
-	}
-
-	exprHash := billingexpr.ExprHashString(exprStr)
-	snapshot := &billingexpr.BillingSnapshot{
-		BillingMode:               billing_setting.BillingModeTieredExpr,
-		ModelName:                 info.BillingModelName(),
-		ExprString:                exprStr,
-		ExprHash:                  exprHash,
-		GroupRatio:                channelRatio,
-		EstimatedPromptTokens:     promptTokens,
-		EstimatedCompletionTokens: estimatedCompletionTokens,
-		EstimatedQuotaBeforeGroup: quotaBeforeGroup,
-		EstimatedQuotaAfterGroup:  preConsumedQuota,
-		EstimatedTier:             trace.MatchedTier,
-		QuotaPerUnit:              common.QuotaPerUnit,
-		ExprVersion:               billingexpr.ExprVersion(exprStr),
-	}
-	info.TieredBillingSnapshot = snapshot
-	info.BillingRequestInput = &requestInput
-
-	priceData := hosttypes.PriceData{
-		FreeModel:         freeModel,
-		ChannelRatio:      channelRatio,
-		QuotaToPreConsume: preConsumedQuota,
-	}
-
-	logger.LogDebug(c, "model_price_helper_tiered result: model=%s pricing_model=%s source=%s preConsume=%d quotaBeforeRatio=%.2f channelRatio=%.2f tier=%s", info.BillingModelName(), pricingModel, info.ModelPricingSource, preConsumedQuota, quotaBeforeGroup, channelRatio, trace.MatchedTier)
-
-	info.PriceData = priceData
-	return priceData, nil
-}
+func HasExplicitModelBillingConfig(modelName string) bool { return HasModelBillingConfig(modelName) }

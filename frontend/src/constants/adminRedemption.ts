@@ -4,7 +4,7 @@ import type {
   AdminRedemptionStatus,
   AdminRedemptionType,
 } from '@/types/console'
-import { QUOTA_PER_DOLLAR } from '@/utils/format'
+import { formatQuota } from '@/utils/format'
 
 export const ADMIN_REDEMPTION_TYPES: readonly AdminRedemptionType[] = ['quota']
 
@@ -68,11 +68,7 @@ export function adminRedemptionStatusLabelKey(
 export function formatRedemptionValue(
   code: Pick<AdminRedemptionCode, 'amount' | 'quota'>
 ): string {
-  const amount =
-    Number.isFinite(code.amount) && code.amount > 0
-      ? code.amount
-      : code.quota / QUOTA_PER_DOLLAR
-  return `$${amount.toFixed(2)}`
+  return formatQuota(code.quota)
 }
 
 export function maskRedemptionCode(code: string): string {

@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,19 +29,30 @@ func setupMidjourneyPoll(t *testing.T) *gorm.DB {
 	connection, err := db.DB()
 	require.NoError(t, err)
 	connection.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.Midjourney{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingRecoveryAdjustment{}, &model.QuotaData{}))
-	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 1).Updates(map[string]any{"quota": 60, "used_quota": 40, "request_count": 2}).Error)
+	require.NoError(t, db.AutoMigrate(&model.Midjourney{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.QuotaData{}))
+	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 1).Updates(map[string]any{"available_quota": 100, "used_quota": 0, "request_count": 0}).Error)
 	service.InitHttpClient()
 	return db
 }
 
 func seedMidjourneyPollTask(t *testing.T, db *gorm.DB, endpoint, key, id string) model.Midjourney {
 	t.Helper()
-	channel := model.Channel{Type: constant.ChannelTypeMidjourneyPlus, Name: key, Key: key, BaseURL: &endpoint, Status: common.ChannelStatusEnabled, UsedQuota: 20}
+	channel := model.Channel{Type: constant.ChannelTypeMidjourneyPlus, Name: key, Key: key, BaseURL: &endpoint, Status: common.ChannelStatusEnabled}
 	require.NoError(t, db.Create(&channel).Error)
 	task := model.Midjourney{UserId: 1, ChannelId: channel.Id, MjId: id, Status: "SUBMITTED", Progress: "0%", Quota: 20, Action: "IMAGINE", SubmitTime: time.Now().Add(-2 * time.Hour).UnixMilli()}
 	require.NoError(t, task.PrivateData.BindCredential(context.Background(), &channel, key))
-	require.NoError(t, db.Create(&task).Error)
+	task.TokenId = channel.Id
+	task.PrivateData.TokenId = channel.Id
+	task.PrivateData.BillingSource = "wallet"
+	task.PrivateData.SubmissionRequestID = fmt.Sprintf("mj-submit-%d", channel.Id)
+	require.NoError(t, db.Create(&model.Token{Id: channel.Id, UserId: 1, Key: fmt.Sprintf("mj-token-%d", channel.Id), RemainQuota: 100}).Error)
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "mj_imagine", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.00004"}}}, "1", nil, time.Unix(1700000000, 0))
+	require.NoError(t, err)
+	task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "request_quantity", Complete: true}}
+	_, err = model.EnsureBillingRecovery(model.BillingRecoveryInput{RequestID: task.PrivateData.SubmissionRequestID, UserID: 1, TokenID: task.TokenId, TokenRequired: true, Source: "wallet"})
+	require.NoError(t, err)
+	require.NoError(t, model.Reserve(task.PrivateData.SubmissionRequestID, 20))
+	require.NoError(t, model.PersistAcceptedMidjourney(&task, task.PrivateData.SubmissionRequestID, model.BillingConsumption{Log: model.Log{UserId: 1, TokenId: task.TokenId, ChannelId: channel.Id, Quota: 20}, CountUsage: true, LogEnabled: true}))
 	return task
 }
 
@@ -72,12 +84,12 @@ func TestMidjourneyPollScopesProviderIDsAndStableCredentials(t *testing.T) {
 	assert.Equal(t, "FAILURE", first.Status)
 	assert.Zero(t, first.Quota)
 	assert.Equal(t, "SUCCESS", second.Status)
-	assert.Equal(t, 20, second.Quota)
+	assert.EqualValues(t, 20, second.Quota)
 	var user model.User
 	require.NoError(t, db.First(&user, 1).Error)
-	assert.Equal(t, 80, user.Quota)
-	assert.Equal(t, 20, user.UsedQuota)
-	assert.Equal(t, 2, user.RequestCount)
+	assert.EqualValues(t, 80, user.Quota)
+	assert.EqualValues(t, 20, user.UsedQuota)
+	assert.Equal(t, 1, user.RequestCount)
 	_, err = runMidjourneyTaskUpdateOnce(context.Background(), nil)
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, sends.Load(), "terminal jobs must not be polled or refunded again")
@@ -117,10 +129,10 @@ func TestMidjourneyPollAmbiguityAndUnavailableOwnerDoNotFailJobs(t *testing.T) {
 			}
 			require.NoError(t, db.First(&task, task.Id).Error)
 			assert.Equal(t, "SUBMITTED", task.Status)
-			assert.Equal(t, 20, task.Quota)
+			assert.EqualValues(t, 20, task.Quota)
 			var recoveryCount int64
 			require.NoError(t, db.Model(&model.BillingRecovery{}).Count(&recoveryCount).Error)
-			assert.Zero(t, recoveryCount)
+			assert.EqualValues(t, 1, recoveryCount)
 			if scenario == "credential-replaced" || scenario == "legacy-owner" {
 				assert.Zero(t, sends.Load())
 			} else {
@@ -160,9 +172,9 @@ func TestMidjourneyPollTerminalLogFailureRecoversWithoutRepoll(t *testing.T) {
 	}
 	var user model.User
 	require.NoError(t, db.First(&user, 1).Error)
-	assert.Equal(t, 80, user.Quota)
+	assert.EqualValues(t, 100, user.Quota)
 	var logs int64
-	require.NoError(t, db.Model(&model.Log{}).Where("request_id = ?", model.MidjourneyBillingRequestID(task.Id)).Count(&logs).Error)
+	require.NoError(t, db.Model(&model.Log{}).Where("request_id = ?", task.PrivateData.SubmissionRequestID).Count(&logs).Error)
 	assert.EqualValues(t, 1, logs)
 }
 

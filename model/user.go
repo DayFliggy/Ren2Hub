@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 
@@ -20,12 +19,12 @@ import (
 const UserNameMaxLength = 20
 
 var userSortColumns = map[string]string{
-	"id":            "id",
-	"username":      "username",
-	"quota":         "quota",
-	"group":         "group",
-	"created_at":    "created_at",
-	"last_login_at": "last_login_at",
+	"id":              "id",
+	"username":        "username",
+	"available_quota": "available_quota",
+	"group":           "group",
+	"created_at":      "created_at",
+	"last_login_at":   "last_login_at",
 }
 
 type UserSortOptions struct {
@@ -92,15 +91,17 @@ type User struct {
 	TelegramId         string                     `json:"telegram_id" gorm:"column:telegram_id;index"`
 	VerificationCode   string                     `json:"verification_code" gorm:"-:all"`                         // this field is only for Email verification, don't save it to database!
 	AccessToken        *string                    `json:"-" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
-	Quota              int                        `json:"quota" gorm:"type:int;default:0"`
-	UsedQuota          int                        `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
-	RequestCount       int                        `json:"request_count" gorm:"type:int;default:0;"`               // request number
+	Quota              common.Quota               `json:"available_quota" gorm:"type:bigint;default:0;column:available_quota"`
+	ReservedQuota      common.Quota               `json:"reserved_quota" gorm:"type:bigint;not null;default:0"`
+	QuotaVersion       int64                      `json:"quota_version" gorm:"type:bigint;not null;default:0"`
+	UsedQuota          common.Quota               `json:"used_quota" gorm:"type:bigint;default:0;column:used_quota"` // used quota
+	RequestCount       int                        `json:"request_count" gorm:"type:int;default:0;"`                  // request number
 	Group              string                     `json:"group" gorm:"type:varchar(64);default:'default'"`
 	AffCode            string                     `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
 	AffCount           int                        `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
-	AffQuota           int                        `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
-	AffHistoryQuota    int                        `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
-	AffFrozenQuota     int                        `json:"aff_frozen_quota" gorm:"type:int;default:0;column:aff_frozen_quota"`
+	AffQuota           common.Quota               `json:"aff_quota" gorm:"type:bigint;default:0;column:aff_quota"`           // 邀请剩余额度
+	AffHistoryQuota    common.Quota               `json:"aff_history_quota" gorm:"type:bigint;default:0;column:aff_history"` // 邀请历史额度
+	AffFrozenQuota     common.Quota               `json:"aff_frozen_quota" gorm:"type:bigint;default:0;column:aff_frozen_quota"`
 	AffRebateRateBps   *int                       `json:"aff_rebate_rate_bps,omitempty" gorm:"type:int;column:aff_rebate_rate_bps"`
 	AffCodeEnabled     bool                       `json:"aff_code_enabled" gorm:"column:aff_code_enabled"`
 	AffCodeCustom      bool                       `json:"aff_code_custom" gorm:"column:aff_code_custom"`
@@ -537,30 +538,6 @@ func HardDeleteUserById(id int) error {
 	return user.HardDelete()
 }
 
-func inviteUser(inviterId int) error {
-	result := DB.Model(&User{}).Where("id = ?", inviterId).Updates(map[string]interface{}{
-		"aff_quota":   gorm.Expr("aff_quota + ?", common.QuotaForInviter),
-		"aff_history": gorm.Expr("aff_history + ?", common.QuotaForInviter),
-	})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
-}
-
-func (user *User) TransferAffQuotaToQuota(quota int) error {
-	_, balance, err := TransferAffiliateQuota(user.Id, quota)
-	if err != nil {
-		return err
-	}
-	user.Quota = balance
-	user.AffQuota -= quota
-	return nil
-}
-
 func (user *User) prepareForInsert(tx *gorm.DB) error {
 	user.Email = NormalizeEmail(user.Email)
 	if err := ensureEmailAvailableWithTx(tx, user.Email, 0); err != nil {
@@ -661,7 +638,6 @@ func (user *User) finishInsert(inviterId int) {
 				"quota":           common.QuotaForInviter,
 				"invited_user_id": user.Id,
 			}, nil)
-			_ = inviteUser(inviterId)
 		}
 	}
 }
@@ -683,18 +659,12 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 }
 
 func (user *User) insertPreparedWithTx(tx *gorm.DB, inviterId int) error {
-	quota := common.QuotaForNewUser
-	if inviterId > 0 && operation_setting.IsPaymentComplianceConfirmed() && common.QuotaForInvitee > 0 {
-		if int64(quota)+int64(common.QuotaForInvitee) >= int64(common.MaxQuota) {
-			return ErrTopUpQuotaLimitExceeded
-		}
-		quota += common.QuotaForInvitee
-	}
 	code, err := GenerateUniqueAffiliateCodeTx(tx)
 	if err != nil {
 		return err
 	}
-	user.Quota = quota
+	user.Quota, user.ReservedQuota, user.UsedQuota, user.QuotaVersion = 0, 0, 0, 0
+	user.AffQuota, user.AffHistoryQuota, user.AffFrozenQuota = 0, 0, 0
 	user.InviterId = inviterId
 	user.AffCode = code
 	user.AffCodeEnabled = true
@@ -703,6 +673,24 @@ func (user *User) insertPreparedWithTx(tx *gorm.DB, inviterId int) error {
 		user.SetSetting(dto.UserSetting{})
 	}
 	if err := tx.Create(user).Error; err != nil {
+		return err
+	}
+	if common.QuotaForNewUser > 0 {
+		if _, err := ApplyWalletAdjustmentTx(tx, WalletAdjustment{EventID: fmt.Sprintf("registration:%d", user.Id), UserID: user.Id, Delta: common.Quota(common.QuotaForNewUser), SourceType: "registration", SourceID: strconv.Itoa(user.Id), Reason: "registration reward"}); err != nil {
+			return err
+		}
+	}
+	if inviterId > 0 && operation_setting.IsPaymentComplianceConfirmed() && common.QuotaForInvitee > 0 {
+		if _, err := ApplyWalletAdjustmentTx(tx, WalletAdjustment{EventID: fmt.Sprintf("invitee:%d", user.Id), UserID: user.Id, Delta: common.Quota(common.QuotaForInvitee), SourceType: "registration", SourceID: strconv.Itoa(user.Id), Reason: "invitee reward"}); err != nil {
+			return err
+		}
+	}
+	if inviterId > 0 && operation_setting.IsPaymentComplianceConfirmed() && common.AffiliateActivatedAt == 0 && common.QuotaForInviter > 0 {
+		if err := creditRegistrationInviterTx(tx, inviterId, user.Id); err != nil {
+			return err
+		}
+	}
+	if err := tx.First(user, user.Id).Error; err != nil {
 		return err
 	}
 	if inviterId > 0 {
@@ -774,7 +762,6 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 				"quota":           common.QuotaForInviter,
 				"invited_user_id": user.Id,
 			}, nil)
-			_ = inviteUser(inviterId)
 		}
 	}
 }
@@ -828,7 +815,10 @@ func (user *User) UpdateWithTx(tx *gorm.DB, updatePassword bool) error {
 	}
 	if err = tx.Model(&current).Omit(
 		"access_token",
-		"quota",
+		"available_quota",
+		"reserved_quota",
+		"quota_version",
+		"aff_frozen_quota",
 		"used_quota",
 		"request_count",
 		"aff_count",
@@ -954,9 +944,8 @@ func (user *User) UpdateManagedWithTx(tx *gorm.DB, updatePassword bool, operator
 }
 
 var (
-	ErrManagedUserNotFound        = errors.New("managed user not found")
-	ErrManagedUserForbidden       = errors.New("managed user permission denied")
-	ErrManagedUserQuotaOutOfRange = errors.New("managed user quota is out of range")
+	ErrManagedUserNotFound  = errors.New("managed user not found")
+	ErrManagedUserForbidden = errors.New("managed user permission denied")
 )
 
 type ManagedUserStatusResult struct {
@@ -1026,49 +1015,26 @@ func UpdateManagedUserStatuses(ids []int, status, operatorID, operatorRole int) 
 	return result, nil
 }
 
-func AdjustManagedUserQuota(userID, delta, operatorRole int) (*User, error) {
-	if userID <= 0 || delta == 0 || operatorRole <= 0 {
+func AdjustManagedUserQuota(input WalletAdjustment, operatorRole int) (*User, error) {
+	if input.UserID <= 0 || operatorRole <= 0 || input.EventID == "" || input.ExpectedVersion == nil {
 		return nil, ErrManagedUserForbidden
 	}
 	var user User
-	err := DB.Transaction(func(tx *gorm.DB) error {
-		if err := lockForUpdate(tx).First(&user, userID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrManagedUserNotFound
-			}
+	err := BillingTransaction(nil, func(tx *gorm.DB) error {
+		if err := lockForUpdate(tx).First(&user, input.UserID).Error; err != nil {
 			return err
 		}
 		if user.Role >= operatorRole {
 			return ErrManagedUserForbidden
 		}
-		current := int64(user.Quota)
-		change := int64(delta)
-		if current < math.MinInt32 || current > math.MaxInt32 ||
-			(change > 0 && change > math.MaxInt32-current) ||
-			(change < 0 && change < math.MinInt32-current) {
-			return ErrManagedUserQuotaOutOfRange
+		input.SourceType = "admin_adjustment"
+		if _, err := ApplyWalletAdjustmentTx(tx, input); err != nil {
+			return err
 		}
-		user.Quota = int(current + change)
-		update := tx.Model(&User{}).Where("id = ?", userID).Update("quota", user.Quota)
-		if update.Error != nil {
-			return update.Error
-		}
-		if update.RowsAffected != 1 {
-			return ErrManagedUserNotFound
-		}
-		return nil
+		return tx.First(&user, input.UserID).Error
 	})
 	if err != nil {
 		return nil, err
-	}
-	var cacheErr error
-	if delta > 0 {
-		cacheErr = cacheIncrUserQuota(userID, int64(delta))
-	} else {
-		cacheErr = cacheDecrUserQuota(userID, -int64(delta))
-	}
-	if cacheErr != nil {
-		common.SysError(fmt.Sprintf("failed to update user %d quota cache after managed adjustment: %v", userID, cacheErr))
 	}
 	return &user, nil
 }
@@ -1112,12 +1078,37 @@ func (user *User) ClearBinding(bindingType string) error {
 	return updateUserCache(*user)
 }
 
+func ensureNoActiveAccountBillingTx(tx *gorm.DB, userID, tokenID int) error {
+	query := tx.Model(&BillingRecovery{}).Where("user_id = ? AND status IN ?", userID, []string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending, BillingRecoveryStatusReconciliation})
+	if tokenID > 0 {
+		query = query.Where("token_id = ?", tokenID)
+	}
+	var active int64
+	if err := query.Count(&active).Error; err != nil {
+		return err
+	}
+	if active > 0 {
+		return errors.New("account has unresolved billing requests")
+	}
+	return nil
+}
+
 func (user *User) Delete() error {
 	if user.Id == 0 {
 		return errors.New("id 为空！")
 	}
 	var nextAuthVersion int64
 	if err := DB.Transaction(func(tx *gorm.DB) error {
+		var current User
+		if err := lockForUpdate(tx).First(&current, user.Id).Error; err != nil {
+			return err
+		}
+		if current.ReservedQuota != 0 {
+			return errors.New("account has active reservations")
+		}
+		if err := ensureNoActiveAccountBillingTx(tx, user.Id, 0); err != nil {
+			return err
+		}
 		var err error
 		nextAuthVersion, err = IncrementUserAuthVersionWithTx(tx, user.Id)
 		if err != nil {
@@ -1163,6 +1154,16 @@ type hardDeletedUserState struct {
 func hardDeleteUsersWithTx(tx *gorm.DB, users []User) ([]hardDeletedUserState, error) {
 	deleted := make([]hardDeletedUserState, 0, len(users))
 	for _, user := range users {
+		var current User
+		if err := lockForUpdate(tx).Unscoped().First(&current, user.Id).Error; err != nil {
+			return nil, err
+		}
+		if current.ReservedQuota != 0 {
+			return nil, errors.New("account has active reservations")
+		}
+		if err := ensureNoActiveAccountBillingTx(tx, user.Id, 0); err != nil {
+			return nil, err
+		}
 		state := hardDeletedUserState{ID: user.Id}
 		var err error
 		state.AuthVersion, err = IncrementUserAuthVersionWithTx(tx, user.Id)
@@ -1451,22 +1452,17 @@ func ValidateAccessToken(token string) (*User, error) {
 	return user, nil
 }
 
-// GetUserQuota gets quota from Redis first, falls back to DB if needed
-func GetUserQuota(id int, fromDB bool) (quota int, err error) {
-	if !fromDB && common.RedisEnabled {
-		return getUserQuotaCache(id)
-	}
-	err = DB.Model(&User{}).Where("id = ?", id).Select("quota").Find(&quota).Error
-	if err != nil {
-		return 0, err
-	}
-
-	return quota, nil
+// GetUserQuota always reads the authoritative wallet; caches never admit spending.
+func GetUserQuota(id int, _ bool) (common.Quota, error) {
+	var user User
+	err := DB.Select("id", "available_quota").First(&user, id).Error
+	return user.Quota, err
 }
 
-func GetUserUsedQuota(id int) (quota int, err error) {
-	err = DB.Model(&User{}).Where("id = ?", id).Select("used_quota").Find(&quota).Error
-	return quota, err
+func GetUserUsedQuota(id int) (common.Quota, error) {
+	var user User
+	err := DB.Select("id", "used_quota").First(&user, id).Error
+	return user.UsedQuota, err
 }
 
 func GetUserEmail(id int) (email string, err error) {
@@ -1540,71 +1536,6 @@ func GetUserSetting(id int, fromDB bool) (settingMap dto.UserSetting, err error)
 	return userBase.GetSetting(), nil
 }
 
-func IncreaseUserQuota(id int, quota int, db bool) (err error) {
-	if quota < 0 {
-		return errors.New("quota 不能为负数！")
-	}
-	unlock := lockQuotaMutationResources(id, 0)
-	defer unlock()
-	gopool.Go(func() {
-		err := cacheIncrUserQuota(id, int64(quota))
-		if err != nil {
-			common.SysLog("failed to increase user quota: " + err.Error())
-		}
-	})
-	if !db && common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeUserQuota, id, quota)
-		return nil
-	}
-	return increaseUserQuota(id, quota)
-}
-
-func increaseUserQuota(id int, quota int) (err error) {
-	err = DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota + ?", quota)).Error
-	if err != nil {
-		return err
-	}
-	return err
-}
-
-func DecreaseUserQuota(id int, quota int, db bool) (err error) {
-	if quota < 0 {
-		return errors.New("quota 不能为负数！")
-	}
-	unlock := lockQuotaMutationResources(id, 0)
-	defer unlock()
-	gopool.Go(func() {
-		err := cacheDecrUserQuota(id, int64(quota))
-		if err != nil {
-			common.SysLog("failed to decrease user quota: " + err.Error())
-		}
-	})
-	if !db && common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeUserQuota, id, -quota)
-		return nil
-	}
-	return decreaseUserQuota(id, quota)
-}
-
-func decreaseUserQuota(id int, quota int) (err error) {
-	err = DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota - ?", quota)).Error
-	if err != nil {
-		return err
-	}
-	return err
-}
-
-func DeltaUpdateUserQuota(id int, delta int) (err error) {
-	if delta == 0 {
-		return nil
-	}
-	if delta > 0 {
-		return IncreaseUserQuota(id, delta, false)
-	} else {
-		return DecreaseUserQuota(id, -delta, false)
-	}
-}
-
 //func GetRootUserEmail() (email string) {
 //	DB.Model(&User{}).Where("role = ?", common.RoleRootUser).Select("email").Find(&email)
 //	return email
@@ -1618,61 +1549,6 @@ func GetRootUser() (user *User) {
 func UpdateUserLastLoginAt(id int) {
 	if err := DB.Model(&User{}).Where("id = ?", id).Update("last_login_at", common.GetTimestamp()).Error; err != nil {
 		common.SysLog("failed to update user last_login_at: " + err.Error())
-	}
-}
-
-func UpdateUserUsedQuotaAndRequestCount(id int, quota int) {
-	if common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeUsedQuota, id, quota)
-		addNewRecord(BatchUpdateTypeRequestCount, id, 1)
-		return
-	}
-	updateUserUsedQuotaAndRequestCount(id, quota, 1)
-}
-
-// UpdateUserUsedQuota adjusts accumulated usage without changing request count.
-func UpdateUserUsedQuota(id int, quota int) {
-	if common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeUsedQuota, id, quota)
-		return
-	}
-	if err := DB.Model(&User{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error; err != nil {
-		common.SysLog("failed to update user used quota: " + err.Error())
-	}
-}
-
-func updateUserUsedQuotaAndRequestCount(id int, quota int, count int) {
-	err := DB.Model(&User{}).Where("id = ?", id).Updates(
-		map[string]interface{}{
-			"used_quota":    gorm.Expr("used_quota + ?", quota),
-			"request_count": gorm.Expr("request_count + ?", count),
-		},
-	).Error
-	if err != nil {
-		common.SysLog("failed to update user used quota and request count: " + err.Error())
-		return
-	}
-
-	//// 更新缓存
-	//if err := invalidateUserCache(id); err != nil {
-	//	common.SysError("failed to invalidate user cache: " + err.Error())
-	//}
-}
-
-func updateUserQuotaUsedQuotaAndRequestCount(id int, quota int, usedQuota int, requestCount int) {
-	if quota == 0 && usedQuota == 0 && requestCount == 0 {
-		return
-	}
-
-	err := DB.Model(&User{}).Where("id = ?", id).Updates(
-		map[string]interface{}{
-			"quota":         gorm.Expr("quota + ?", quota),
-			"used_quota":    gorm.Expr("used_quota + ?", usedQuota),
-			"request_count": gorm.Expr("request_count + ?", requestCount),
-		},
-	).Error
-	if err != nil {
-		common.SysLog("failed to batch update user quota, used quota and request count: " + err.Error())
 	}
 }
 

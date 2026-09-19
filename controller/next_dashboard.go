@@ -20,11 +20,11 @@ const (
 )
 
 type nextDashboardKPI struct {
-	TotalTokens   int64   `json:"totalTokens"`
-	TotalQuota    int64   `json:"totalQuota"`
-	TotalRequests int64   `json:"totalRequests"`
-	AvgLatency    float64 `json:"avgLatency"`
-	SuccessRate   float64 `json:"successRate"`
+	TotalTokens   int64        `json:"totalTokens"`
+	TotalQuota    common.Quota `json:"totalQuota"`
+	TotalRequests int64        `json:"totalRequests"`
+	AvgLatency    float64      `json:"avgLatency"`
+	SuccessRate   float64      `json:"successRate"`
 }
 
 type nextDashboardComparison struct {
@@ -33,12 +33,12 @@ type nextDashboardComparison struct {
 }
 
 type nextDashboardModel struct {
-	Model      string  `json:"model"`
-	Tokens     int64   `json:"tokens"`
-	Quota      int64   `json:"quota"`
-	Requests   int64   `json:"requests"`
-	Share      float64 `json:"share"`
-	AvgLatency float64 `json:"avgLatency"`
+	Model      string       `json:"model"`
+	Tokens     int64        `json:"tokens"`
+	Quota      common.Quota `json:"quota"`
+	Requests   int64        `json:"requests"`
+	Share      float64      `json:"share"`
+	AvgLatency float64      `json:"avgLatency"`
 }
 
 type nextDashboardHourly struct {
@@ -47,10 +47,10 @@ type nextDashboardHourly struct {
 }
 
 type nextDashboardFlow struct {
-	Date     string `json:"date"`
-	Consume  int64  `json:"consume"`
-	Requests int64  `json:"requests"`
-	TopUp    int64  `json:"topup"`
+	Date     string       `json:"date"`
+	Consume  common.Quota `json:"consume"`
+	Requests int64        `json:"requests"`
+	TopUp    common.Quota `json:"topup"`
 }
 
 type nextDashboardStats struct {
@@ -62,10 +62,10 @@ type nextDashboardStats struct {
 }
 
 type nextDashboardDistributionPoint struct {
-	Date     string `json:"date"`
-	Requests int64  `json:"requests"`
-	Consume  int64  `json:"consume"`
-	Tokens   int64  `json:"tokens"`
+	Date     string       `json:"date"`
+	Requests int64        `json:"requests"`
+	Consume  common.Quota `json:"consume"`
+	Tokens   int64        `json:"tokens"`
 }
 
 type nextDashboardTokenTrendPoint struct {
@@ -175,7 +175,7 @@ func buildDashboardStats(current, previous model.DashboardUsage, startTimestamp,
 			TotalTokens: current.Tokens, TotalQuota: current.Quota, TotalRequests: current.Requests,
 		},
 		Comparison: nextDashboardComparison{
-			QuotaDelta:    roundedDashboardPercent(current.Quota, previous.Quota),
+			QuotaDelta:    roundedDashboardPercent(int64(current.Quota), int64(previous.Quota)),
 			RequestsDelta: roundedDashboardPercent(current.Requests, previous.Requests),
 		},
 		Models: make([]nextDashboardModel, 0, len(current.Models)),

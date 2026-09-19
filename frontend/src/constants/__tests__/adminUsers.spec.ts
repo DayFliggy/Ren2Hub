@@ -60,7 +60,9 @@ describe('admin user status', () => {
 
 describe('adminUserQuotaMeter', () => {
   it('reports the consumed share and stays quiet while the balance is healthy', () => {
-    expect(adminUserQuotaMeter({ quota: 800, used_quota: 200 })).toEqual({
+    expect(
+      adminUserQuotaMeter({ available_quota: '800', used_quota: '200' })
+    ).toEqual({
       state: 'normal',
       percent: 20,
       remainingPercent: 80,
@@ -70,10 +72,12 @@ describe('adminUserQuotaMeter', () => {
 
   it('flips to low strictly below a tenth remaining, not at it', () => {
     // Exactly 10% left is still normal; a hair under is not.
-    expect(adminUserQuotaMeter({ quota: 100, used_quota: 900 }).state).toBe(
-      'normal'
-    )
-    expect(adminUserQuotaMeter({ quota: 99, used_quota: 901 })).toMatchObject({
+    expect(
+      adminUserQuotaMeter({ available_quota: '100', used_quota: '900' }).state
+    ).toBe('normal')
+    expect(
+      adminUserQuotaMeter({ available_quota: '99', used_quota: '901' })
+    ).toMatchObject({
       state: 'low',
       remainingPercent: 10,
       color: 'var(--status-warning)',
@@ -81,13 +85,17 @@ describe('adminUserQuotaMeter', () => {
   })
 
   it('treats a spent-out and a never-funded account the same way', () => {
-    expect(adminUserQuotaMeter({ quota: 0, used_quota: 1_000 })).toMatchObject({
+    expect(
+      adminUserQuotaMeter({ available_quota: '0', used_quota: '1000' })
+    ).toMatchObject({
       state: 'exhausted',
       percent: 100,
       color: 'var(--status-danger)',
     })
     // Never funded: nothing consumed, but still unable to spend.
-    expect(adminUserQuotaMeter({ quota: 0, used_quota: 0 })).toMatchObject({
+    expect(
+      adminUserQuotaMeter({ available_quota: '0', used_quota: '0' })
+    ).toMatchObject({
       state: 'exhausted',
       percent: 0,
       remainingPercent: 0,
@@ -95,7 +103,10 @@ describe('adminUserQuotaMeter', () => {
   })
 
   it('clamps a negative balance rather than rendering a reversed ring', () => {
-    const meter = adminUserQuotaMeter({ quota: -50, used_quota: 100 })
+    const meter = adminUserQuotaMeter({
+      available_quota: '-50',
+      used_quota: '100',
+    })
     expect(meter.state).toBe('exhausted')
     expect(meter.percent).toBeGreaterThanOrEqual(0)
     expect(meter.percent).toBeLessThanOrEqual(100)

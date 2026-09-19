@@ -19,7 +19,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -170,7 +169,7 @@ func TestGatewayOfficialLegacySDK(t *testing.T) {
 			}
 			priceJSON, err := common.Marshal(prices)
 			require.NoError(t, err)
-			require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(priceJSON)))
+			require.NoError(t, publishGatewayFixturePrices(string(priceJSON), false))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 			defer cancel()

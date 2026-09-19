@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -96,7 +97,7 @@ func TestOpenaiImageStreamHandlerForwardsSSEAndUsage(t *testing.T) {
 
 	c, recorder, resp, info := newImageTestContext(t, body, "text/event-stream", true)
 	info.PriceData.UsePrice = true
-	info.PriceData.AddOtherRatio("n", 3)
+	info.PriceData.Usage = &billing.Usage{Quantities: map[string]string{"images": "3"}}
 
 	usage, err := OpenaiImageStreamHandler(c, info, resp)
 	require.Nil(t, err)
@@ -110,7 +111,7 @@ func TestOpenaiImageStreamHandlerForwardsSSEAndUsage(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), `data: {"usage":{"input_tokens":3,"output_tokens":4,"total_tokens":7,"input_tokens_details":{"image_tokens":2,"text_tokens":1}}}`)
 	require.Contains(t, recorder.Body.String(), `data: [DONE]`)
 	require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
-	require.Equal(t, 1.0, info.PriceData.OtherRatios()["n"])
+	require.Equal(t, "1", info.PriceData.Usage.Quantities["images"])
 }
 
 func TestOpenaiImageStreamHandlerUsesCompletedEventCount(t *testing.T) {
@@ -135,13 +136,13 @@ func TestOpenaiImageStreamHandlerUsesCompletedEventCount(t *testing.T) {
 
 	c, _, resp, info := newImageTestContext(t, body, "text/event-stream", true)
 	info.PriceData.UsePrice = true
-	info.PriceData.AddOtherRatio("n", 3)
+	info.PriceData.Usage = &billing.Usage{Quantities: map[string]string{"images": "3"}}
 
 	usage, err := OpenaiImageStreamHandler(c, info, resp)
 
 	require.Nil(t, err)
 	require.Equal(t, 7, usage.TotalTokens)
-	require.Equal(t, 2.0, info.PriceData.OtherRatios()["n"])
+	require.Equal(t, "2", info.PriceData.Usage.Quantities["images"])
 }
 
 // blockingBody serves one SSE chunk, then blocks until Close (the scanner's
@@ -234,7 +235,7 @@ func TestOpenaiImageStreamHandlerClientDisconnectBillsDeliveredCount(t *testing.
 	body := "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"first\"}\n\n"
 	c, recorder, resp, info := newDisconnectingImageStream(t, body, "first")
 	info.PriceData.UsePrice = true
-	info.PriceData.AddOtherRatio("n", 3)
+	info.PriceData.Usage = &billing.Usage{Quantities: map[string]string{"images": "3"}}
 
 	usage, err := OpenaiImageStreamHandler(c, info, resp)
 
@@ -247,7 +248,7 @@ func TestOpenaiImageStreamHandlerClientDisconnectBillsDeliveredCount(t *testing.
 		[]relaycommon.StreamEndReason{relaycommon.StreamEndReasonClientGone, relaycommon.StreamEndReasonHandlerStop},
 		info.StreamStatus.EndReason)
 	require.Contains(t, recorder.Body.String(), `"b64_json":"first"`)
-	require.Equal(t, 1.0, info.PriceData.OtherRatios()["n"], "client abort must not charge undelivered requested images")
+	require.Equal(t, "1", info.PriceData.Usage.Quantities["images"], "client abort must not charge undelivered requested images")
 }
 
 // TestOpenaiImageStreamHandlerClientDisconnectRaisesCount covers the other
@@ -271,7 +272,7 @@ func TestOpenaiImageStreamHandlerClientDisconnectRaisesCount(t *testing.T) {
 	}, "\n")
 	c, _, resp, info := newDisconnectingImageStream(t, body, "second")
 	info.PriceData.UsePrice = true
-	info.PriceData.AddOtherRatio("n", 1)
+	info.PriceData.Usage = &billing.Usage{Quantities: map[string]string{"images": "1"}}
 
 	usage, err := OpenaiImageStreamHandler(c, info, resp)
 
@@ -281,7 +282,7 @@ func TestOpenaiImageStreamHandlerClientDisconnectRaisesCount(t *testing.T) {
 	require.Contains(t,
 		[]relaycommon.StreamEndReason{relaycommon.StreamEndReasonClientGone, relaycommon.StreamEndReasonHandlerStop},
 		info.StreamStatus.EndReason)
-	require.Equal(t, 2.0, info.PriceData.OtherRatios()["n"], "completed events beyond the recorded n must raise the charge even on abort")
+	require.Equal(t, "2", info.PriceData.Usage.Quantities["images"], "completed events beyond the recorded n must raise the charge even on abort")
 }
 
 // TestOpenaiImageStreamHandlerWrapsJSONResponse covers the non-SSE fallback:
@@ -295,7 +296,7 @@ func TestOpenaiImageStreamHandlerWrapsJSONResponse(t *testing.T) {
 
 	c, recorder, resp, info := newImageTestContext(t, body, "application/json", true)
 	info.PriceData.UsePrice = true
-	info.PriceData.AddOtherRatio("n", 3)
+	info.PriceData.Usage = &billing.Usage{Quantities: map[string]string{"images": "3"}}
 
 	usage, err := OpenaiImageStreamHandler(c, info, resp)
 	require.Nil(t, err)
@@ -313,7 +314,7 @@ func TestOpenaiImageStreamHandlerWrapsJSONResponse(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), `"revised_prompt":"draw a cat"`)
 	require.Contains(t, recorder.Body.String(), `data: [DONE]`)
 	require.Equal(t, 2, strings.Count(recorder.Body.String(), `event: image_generation.completed`))
-	require.Equal(t, 2.0, info.PriceData.OtherRatios()["n"])
+	require.Equal(t, "2", info.PriceData.Usage.Quantities["images"])
 }
 
 func TestOpenaiImageHandlerUsesPositiveActualCountForFixedPrice(t *testing.T) {
@@ -326,32 +327,34 @@ func TestOpenaiImageHandlerUsesPositiveActualCountForFixedPrice(t *testing.T) {
 		name      string
 		body      string
 		usePrice  bool
-		wantCount float64
+		wantCount string
 	}{
 		{
 			name:      "fixed price uses data length",
 			body:      `{"data":[{"b64_json":"` + longImage + `"},{"b64_json":"second"}]}`,
 			usePrice:  true,
-			wantCount: 2,
+			wantCount: "2",
 		},
 		{
-			name:      "ratio billing ignores data length",
+			name:      "per-call billing does not introduce an unpriced image dimension",
 			body:      `{"data":[{"b64_json":"first"},{"b64_json":"second"}]}`,
 			usePrice:  false,
-			wantCount: 3,
+			wantCount: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c, recorder, resp, info := newImageTestContext(t, tt.body, "application/json", false)
-			info.PriceData.UsePrice = tt.usePrice
-			info.PriceData.AddOtherRatio("n", 3)
+			info.PriceData.Usage = &billing.Usage{Quantities: map[string]string{"calls": "1"}}
+			if tt.usePrice {
+				info.PriceData.Usage.Quantities["images"] = "3"
+			}
 
 			_, err := OpenaiImageHandler(c, info, resp)
 
 			require.Nil(t, err)
-			require.Equal(t, tt.wantCount, info.PriceData.OtherRatios()["n"])
+			require.Equal(t, tt.wantCount, info.PriceData.Usage.Quantities["images"])
 			require.Equal(t, tt.body, recorder.Body.String())
 		})
 	}
@@ -477,13 +480,13 @@ func TestOpenaiImageStreamRejectsInvalidTermination(t *testing.T) {
 		t.Run(fmt.Sprint(index), func(t *testing.T) {
 			c, recorder, resp, info := newImageTestContext(t, body, "text/event-stream", true)
 			info.PriceData.UsePrice = true
-			info.PriceData.AddOtherRatio("n", 3)
+			info.PriceData.Usage = &billing.Usage{Quantities: map[string]string{"images": "3"}}
 			_, err := OpenaiImageStreamHandler(c, info, resp)
 			require.NotNil(t, err)
 			require.NotContains(t, recorder.Body.String(), "data: [DONE]")
 			if index == 4 {
 				require.True(t, info.HasValidOutput())
-				require.Equal(t, 1.0, info.PriceData.OtherRatios()["n"])
+				require.Equal(t, "1", info.PriceData.Usage.Quantities["images"])
 			} else {
 				require.False(t, info.HasValidOutput())
 			}

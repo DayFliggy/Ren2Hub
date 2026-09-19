@@ -60,7 +60,7 @@ func BillingRecoveryBatchLimit() int {
 }
 
 // RecoverStaleBillingRecoveries resumes durable accounting after a process
-// restart. Each adjustment is fenced in model.ApplyBillingRecoveryAdjustment,
+// restart. Each adjustment is fenced in the immutable BillingEvent,
 // so rerunning this pass cannot apply a balance change twice.
 func RecoverStaleBillingRecoveries(ctx context.Context, cutoff int64, limit int) (BillingRecoverySummary, error) {
 	var summary BillingRecoverySummary
@@ -118,6 +118,12 @@ func recoverOneBillingRecovery(ctx context.Context, requestID string) (string, e
 	case model.BillingRecoveryStatusSettlementPending:
 		return recoverBillingSettlement(recovery)
 	case model.BillingRecoveryStatusActive:
+		if recovery.PreConsumeState == model.BillingRecoveryPreConsumePrepared {
+			return model.BillingRecoveryStatusRefunded, model.AbortPreparedBillingRecovery(recovery.RequestID, nil)
+		}
+		if recovery.ConsumptionState == model.BillingRecoveryStateTaskPending {
+			return recovery.Status, nil
+		}
 		if model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
 			return recovery.Status, nil
 		}
@@ -134,11 +140,15 @@ func recoverOneBillingRecovery(ctx context.Context, requestID string) (string, e
 		return recoverBillingRefund(recovery)
 	case model.BillingRecoveryStatusRefundPending:
 		return recoverBillingRefund(recovery)
-	case model.BillingRecoveryStatusSettled:
+	case model.BillingRecoveryStatusSettled, model.BillingRecoveryStatusRefunded:
 		return recovery.Status, model.ApplyBillingRecoveryConsumption(recovery.RequestID)
 	default:
 		return recovery.Status, nil
 	}
+}
+
+func RetryBillingRecovery(ctx context.Context, requestID string) (string, error) {
+	return recoverOneBillingRecovery(ctx, requestID)
 }
 
 func recoverBillingSettlement(recovery model.BillingRecovery) (string, error) {
@@ -146,70 +156,23 @@ func recoverBillingSettlement(recovery model.BillingRecovery) (string, error) {
 	if err != nil {
 		return recovery.Status, err
 	}
-	recovery = current
-	if recovery.FundingSettlement != model.BillingRecoveryStateCompleted {
-		if err := model.ApplyBillingRecoveryAdjustment(recovery.RequestID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationSettle); err != nil {
-			return recovery.Status, err
-		}
-	}
-	current, err = loadBillingRecovery(recovery.RequestID)
+	actual, err := common.AddQuota(current.FundingAmount, current.SettlementDelta)
 	if err != nil {
-		return recovery.Status, err
+		return current.Status, err
 	}
-	recovery = current
-	if recovery.TokenSettlement != model.BillingRecoveryStateCompleted {
-		if err := model.ApplyBillingRecoveryAdjustment(recovery.RequestID, model.BillingRecoveryComponentToken, model.BillingRecoveryOperationSettle); err != nil {
-			return recovery.Status, err
-		}
-	}
-	current, err = loadBillingRecovery(recovery.RequestID)
-	if err != nil {
-		return recovery.Status, err
-	}
-	if !model.BillingRecoverySettlementComplete(current) {
-		return current.Status, errors.New("billing recovery settlement remains incomplete")
-	}
-	if err := model.MarkBillingRecoverySettled(current.RequestID); err != nil {
+	if err := model.Settle(current.RequestID, actual); err != nil {
 		return current.Status, err
 	}
 	return model.BillingRecoveryStatusSettled, model.ApplyBillingRecoveryConsumption(current.RequestID)
 }
-
 func recoverBillingRefund(recovery model.BillingRecovery) (string, error) {
 	if err := model.MarkBillingRecoveryAutomaticRefundPending(recovery.RequestID); err != nil {
 		return recovery.Status, err
 	}
-	current, err := loadBillingRecovery(recovery.RequestID)
-	if err != nil {
+	if err := model.Release(recovery.RequestID); err != nil {
 		return model.BillingRecoveryStatusRefundPending, err
 	}
-	recovery = current
-	if recovery.FundingRefund != model.BillingRecoveryStateCompleted {
-		if err := model.ApplyBillingRecoveryAdjustment(recovery.RequestID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationRefund); err != nil {
-			return model.BillingRecoveryStatusRefundPending, err
-		}
-	}
-	current, err = loadBillingRecovery(recovery.RequestID)
-	if err != nil {
-		return model.BillingRecoveryStatusRefundPending, err
-	}
-	recovery = current
-	if recovery.TokenAmount > 0 && recovery.TokenRefund != model.BillingRecoveryStateCompleted {
-		if err := model.ApplyBillingRecoveryAdjustment(recovery.RequestID, model.BillingRecoveryComponentToken, model.BillingRecoveryOperationRefund); err != nil {
-			return model.BillingRecoveryStatusRefundPending, err
-		}
-	}
-	current, err = loadBillingRecovery(recovery.RequestID)
-	if err != nil {
-		return model.BillingRecoveryStatusRefundPending, err
-	}
-	if !model.BillingRecoveryRefundComplete(current) {
-		return current.Status, errors.New("billing recovery refund remains incomplete")
-	}
-	if err := model.MarkBillingRecoveryRefunded(current.RequestID, nil); err != nil {
-		return current.Status, err
-	}
-	return model.BillingRecoveryStatusRefunded, nil
+	return model.BillingRecoveryStatusRefunded, model.ApplyBillingRecoveryConsumption(recovery.RequestID)
 }
 
 func loadBillingRecovery(requestID string) (model.BillingRecovery, error) {

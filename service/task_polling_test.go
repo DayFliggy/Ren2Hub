@@ -161,7 +161,8 @@ func seedPollingTask(t *testing.T, channelID int, publicID string, upstreamID st
 			UpstreamTaskID: upstreamID,
 		},
 	}
-	require.NoError(t, model.DB.Create(task).Error)
+	require.NoError(t, model.DB.Where("id = ?", 1).FirstOrCreate(&model.User{Id: 1, Username: "polling-fixture", Quota: 10000}).Error)
+	acceptTestTask(t, task)
 	return task
 }
 
@@ -400,7 +401,7 @@ func TestUpdateSunoTasksStalePollsRefundExactlyOnce(t *testing.T) {
 	task.Progress = "50%"
 	task.SubmitTime = time.Now().Unix()
 	task.PrivateData.UpstreamTaskID = upstreamTaskID
-	require.NoError(t, model.DB.Create(task).Error)
+	acceptTestTask(t, task)
 
 	var firstPollTask model.Task
 	var staleSecondPollTask model.Task
@@ -423,8 +424,8 @@ func TestUpdateSunoTasksStalePollsRefundExactlyOnce(t *testing.T) {
 	require.NoError(t, model.DB.First(&reloaded, task.ID).Error)
 	assert.EqualValues(t, model.TaskStatusFailure, reloaded.Status)
 	assert.Zero(t, reloaded.Quota)
-	assert.Equal(t, initialUserQuota+taskQuota, getUserQuota(t, userID))
-	assert.Equal(t, initialTokenQuota+taskQuota, getTokenRemainQuota(t, tokenID))
+	assert.Equal(t, initialUserQuota, getUserQuota(t, userID))
+	assert.Equal(t, initialTokenQuota, getTokenRemainQuota(t, tokenID))
 	assert.Equal(t, int64(1), countLogs(t))
 }
 
@@ -456,45 +457,26 @@ func TestRunTaskPollingOnceDoesNotRefundHistoricalFailedTask(t *testing.T) {
 	assert.Equal(t, int64(0), countLogs(t))
 }
 
-func TestSweepTimedOutTasksHonorsRefundRolloutBoundary(t *testing.T) {
+func TestTimedOutAcceptedTasksKeepReservationsUntilEvidenceArrives(t *testing.T) {
 	truncate(t)
-
-	const (
-		userID          = 403
-		initialQuota    = 10_000
-		legacyTaskQuota = 1_800
-		modernTaskQuota = 1_200
-	)
-	seedUser(t, userID, initialQuota)
-
-	legacyTask := makeTask(userID, 0, legacyTaskQuota, 0, BillingSourceWallet)
-	legacyTask.TaskID = "legacy_timeout_without_refund"
-	legacyTask.Progress = "50%"
-	legacyTask.SubmitTime = 1771718399 // 2026-02-21 23:59:59 UTC
-	require.NoError(t, model.DB.Create(legacyTask).Error)
-
-	modernTask := makeTask(userID, 0, modernTaskQuota, 0, BillingSourceWallet)
-	modernTask.TaskID = "modern_timeout_with_refund"
-	modernTask.Progress = "50%"
-	modernTask.SubmitTime = 1771718400 // 2026-02-22 00:00:00 UTC
-	require.NoError(t, model.DB.Create(modernTask).Error)
-
-	previousTimeout := constant.TaskTimeoutMinutes
+	seedUser(t, 403, 10000)
+	task := makeTask(403, 0, 1200, 0, BillingSourceWallet)
+	task.SubmitTime = time.Now().Add(-time.Hour).Unix()
+	acceptTestTask(t, task)
+	previous := constant.TaskTimeoutMinutes
 	constant.TaskTimeoutMinutes = 1
-	t.Cleanup(func() { constant.TaskTimeoutMinutes = previousTimeout })
-
+	t.Cleanup(func() { constant.TaskTimeoutMinutes = previous })
 	sweepTimedOutTasks(context.Background())
-
-	var reloadedLegacy model.Task
-	var reloadedModern model.Task
-	require.NoError(t, model.DB.First(&reloadedLegacy, legacyTask.ID).Error)
-	require.NoError(t, model.DB.First(&reloadedModern, modernTask.ID).Error)
-	assert.EqualValues(t, model.TaskStatusFailure, reloadedLegacy.Status)
-	assert.EqualValues(t, model.TaskStatusFailure, reloadedModern.Status)
-	assert.Zero(t, reloadedLegacy.Quota)
-	assert.Zero(t, reloadedModern.Quota)
-	assert.Contains(t, reloadedLegacy.FailReason, "旧系统遗留任务")
-	assert.Contains(t, reloadedModern.FailReason, "任务超时")
-	assert.Equal(t, initialQuota+modernTaskQuota, getUserQuota(t, userID))
-	assert.Equal(t, int64(1), countLogs(t))
+	sweepTimedOutTasks(context.Background())
+	var stored model.Task
+	require.NoError(t, model.DB.First(&stored, task.ID).Error)
+	assert.EqualValues(t, model.TaskStatusInProgress, stored.Status)
+	assert.Equal(t, 8800, getUserQuota(t, 403))
+	assert.Zero(t, countLogs(t))
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
+	assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
+	assert.EqualValues(t, 1200, recovery.FundingAmount)
+	require.NoError(t, completeTestTask(t, context.Background(), task, model.TaskStatusFailure, 0, "provider confirmed failure"))
+	assert.Equal(t, 10000, getUserQuota(t, 403))
 }

@@ -21,7 +21,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -152,8 +151,8 @@ func runGatewaySemanticSDK(t *testing.T, runtime, script string) {
 	}
 	priceJSON, err := common.Marshal(prices)
 	require.NoError(t, err)
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(priceJSON)))
-	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "remain_quota": 1000000}).Error)
+	require.NoError(t, publishGatewayFixturePrices(string(priceJSON), false))
+	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 1000000}).Error)
 	strict := &model.Token{UserId: 1, Key: "semanticstrictlocal", Name: "semantic strict", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true, ConversionPolicy: "strict"}
 	require.NoError(t, model.DB.Create(strict).Error)
 	require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))

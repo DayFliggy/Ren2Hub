@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -19,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"time"
 )
 
 func TestValidateChannelProxy(t *testing.T) {
@@ -339,33 +341,15 @@ func TestDeleteChannelBatchReportsAndAuditsActualDeletedCount(t *testing.T) {
 	assert.Equal(t, float64(1), auditData.Operation.Params["count"])
 }
 
-func TestSettleTestQuotaUsesTieredBilling(t *testing.T) {
-	info := &relaycommon.RelayInfo{
-		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
-			BillingMode:   "tiered_expr",
-			ExprString:    `param("stream") == true ? tier("stream", p * 3) : tier("base", p * 2)`,
-			ExprHash:      billingexpr.ExprHashString(`param("stream") == true ? tier("stream", p * 3) : tier("base", p * 2)`),
-			GroupRatio:    1,
-			EstimatedTier: "stream",
-			QuotaPerUnit:  common.QuotaPerUnit,
-			ExprVersion:   1,
-		},
-		BillingRequestInput: &billingexpr.RequestInput{
-			Body: []byte(`{"stream":true}`),
-		},
-	}
-
-	quota, result, err := settleTestQuota(info, types.PriceData{
-		ModelRatio:      1,
-		CompletionRatio: 2,
-	}, &dto.Usage{
-		PromptTokens: 1000,
-	})
-
+func TestSettleTestQuotaUsesFrozenSafeAttributes(t *testing.T) {
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "test", Mode: billing.ModeExpression, Expression: `attr("service_tier") == "fast" ? p * 3 : p * 2`}, "1", map[string]interface{}{"service_tier": "fast"}, time.Unix(1700000000, 0))
 	require.NoError(t, err)
-	require.Equal(t, 1500, quota)
-	require.NotNil(t, result)
-	require.Equal(t, "stream", result.MatchedTier)
+	info := &relaycommon.RelayInfo{PriceData: types.PriceData{Quote: quote}}
+	quota, _, err := settleTestQuota(info, info.PriceData, &dto.Usage{PromptTokens: 1000})
+	require.NoError(t, err)
+	assert.Equal(t, 1500, quota)
+	require.NotNil(t, info.PriceData.Charge)
+	assert.Equal(t, common.Quota(1500), info.PriceData.Charge.FinalQuota)
 }
 
 func TestBuildTestLogOtherInjectsTieredInfo(t *testing.T) {

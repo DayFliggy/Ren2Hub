@@ -8,7 +8,6 @@ import (
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
-	"github.com/tidwall/gjson"
 )
 
 // RunExpr compiles (with cache) and executes an expression string.
@@ -52,7 +51,22 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, params TokenP
 	trace := TraceResult{
 		RequestRules: append([]RequestRuleTrace(nil), requestRules...),
 	}
-	headers := normalizeHeaders(request.Headers)
+	if err := ValidateAttributes(request.Attributes); err != nil {
+		return 0, trace, err
+	}
+	var probeErr error
+	inZone := func(tz string) time.Time {
+		if request.FrozenAt.IsZero() {
+			probeErr = fmt.Errorf("billing time is not frozen")
+			return time.Time{}
+		}
+		loc, err := time.LoadLocation(strings.TrimSpace(tz))
+		if err != nil || strings.TrimSpace(tz) == "" {
+			probeErr = fmt.Errorf("invalid billing timezone")
+			return time.Time{}
+		}
+		return request.FrozenAt.In(loc)
+	}
 
 	env := map[string]interface{}{
 		"p":     params.P,
@@ -88,19 +102,12 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, params TokenP
 			}
 			return 1
 		},
-		"header": func(key string) string {
-			return headers[strings.ToLower(strings.TrimSpace(key))]
-		},
-		"param": func(path string) interface{} {
-			path = strings.TrimSpace(path)
-			if path == "" || len(request.Body) == 0 {
+		"attr": func(key string) interface{} {
+			if !AllowedAttribute(key) {
+				probeErr = fmt.Errorf("unregistered billing attribute")
 				return nil
 			}
-			result := gjson.GetBytes(request.Body, path)
-			if !result.Exists() {
-				return nil
-			}
-			return result.Value()
+			return request.Attributes[key]
 		},
 		"has": func(source interface{}, substr string) bool {
 			if source == nil || substr == "" {
@@ -108,11 +115,11 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, params TokenP
 			}
 			return strings.Contains(fmt.Sprint(source), substr)
 		},
-		"hour":    func(tz string) int { return timeInZone(tz).Hour() },
-		"minute":  func(tz string) int { return timeInZone(tz).Minute() },
-		"weekday": func(tz string) int { return int(timeInZone(tz).Weekday()) },
-		"month":   func(tz string) int { return int(timeInZone(tz).Month()) },
-		"day":     func(tz string) int { return timeInZone(tz).Day() },
+		"hour":    func(tz string) int { return inZone(tz).Hour() },
+		"minute":  func(tz string) int { return inZone(tz).Minute() },
+		"weekday": func(tz string) int { return int(inZone(tz).Weekday()) },
+		"month":   func(tz string) int { return int(inZone(tz).Month()) },
+		"day":     func(tz string) int { return inZone(tz).Day() },
 		"max":     math.Max,
 		"min":     math.Min,
 		"abs":     math.Abs,
@@ -121,6 +128,9 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, params TokenP
 	}
 
 	out, err := expr.Run(prog, env)
+	if probeErr != nil {
+		return 0, trace, probeErr
+	}
 	if err != nil {
 		return 0, trace, fmt.Errorf("expr run error: %w", err)
 	}
@@ -128,33 +138,42 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, params TokenP
 	if !ok {
 		return 0, trace, fmt.Errorf("expr result is %T, want float64", out)
 	}
+	if math.IsNaN(f) || math.IsInf(f, 0) || f < 0 {
+		return 0, trace, fmt.Errorf("invalid billing expression result")
+	}
 	return f, trace, nil
 }
 
-func timeInZone(tz string) time.Time {
-	tz = strings.TrimSpace(tz)
-	if tz == "" {
-		return time.Now().UTC()
+func AllowedAttribute(name string) bool {
+	switch name {
+	case "service_tier", "quality", "resolution", "quantity", "duration", "tool_category":
+		return true
 	}
-	loc, err := time.LoadLocation(tz)
-	if err != nil {
-		return time.Now().UTC()
-	}
-	return time.Now().In(loc)
+	return false
 }
 
-func normalizeHeaders(headers map[string]string) map[string]string {
-	if len(headers) == 0 {
-		return map[string]string{}
-	}
-	normalized := make(map[string]string, len(headers))
-	for key, value := range headers {
-		k := strings.ToLower(strings.TrimSpace(key))
-		v := strings.TrimSpace(value)
-		if k == "" || v == "" {
-			continue
+func ValidateAttributes(attributes map[string]interface{}) error {
+	for name, value := range attributes {
+		if !AllowedAttribute(name) {
+			return fmt.Errorf("unregistered billing attribute")
 		}
-		normalized[k] = v
+		switch v := value.(type) {
+		case string:
+			if len(v) > 128 {
+				return fmt.Errorf("billing attribute too long")
+			}
+		case float64:
+			if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > math.MaxInt32 {
+				return fmt.Errorf("invalid billing attribute")
+			}
+		case int:
+			if v < 0 || int64(v) > math.MaxInt32 {
+				return fmt.Errorf("invalid billing attribute")
+			}
+		case bool, nil:
+		default:
+			return fmt.Errorf("invalid billing attribute type")
+		}
 	}
-	return normalized
+	return nil
 }

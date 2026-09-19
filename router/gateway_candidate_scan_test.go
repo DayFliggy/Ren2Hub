@@ -79,7 +79,7 @@ func TestGatewayTextReachesFourthAvailableCandidate(t *testing.T) {
 			require.NoError(t, model.DB.First(&after, before.Id).Error)
 			assert.Equal(t, before.RequestCount+1, after.RequestCount)
 			assert.Greater(t, after.UsedQuota, before.UsedQuota)
-			assert.Equal(t, after.UsedQuota-before.UsedQuota, before.Quota-after.Quota)
+			assert.EqualValues(t, after.UsedQuota-before.UsedQuota, before.Quota-after.Quota)
 			var recoveries, logs, failures int64
 			require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&recoveries).Error)
 			require.NoError(t, model.DB.Model(&model.Log{}).Where("type = ?", model.LogTypeConsume).Count(&logs).Error)

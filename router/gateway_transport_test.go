@@ -89,7 +89,7 @@ func TestGatewayFinalIdentityRejectionsDoNotSendOrDebit(t *testing.T) {
 			assert.Equal(t, 400, status, body)
 			assert.Zero(t, sends.Load())
 			require.NoError(t, model.DB.First(&after, before.Id).Error)
-			assert.Equal(t, before.Quota, after.Quota)
+			assert.EqualValues(t, before.Quota, after.Quota)
 			var bills, unhealthy int64
 			require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&bills).Error)
 			require.NoError(t, model.DB.Model(&model.ChannelHealth{}).Where("failure_count > 0").Count(&unhealthy).Error)

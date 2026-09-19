@@ -33,9 +33,9 @@ func TestGetSelfLogStatScopesConsumeLogsByUserAndDay(t *testing.T) {
 	stat, err := GetSelfLogStat(7, now)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), stat.TotalRequests)
-	assert.Equal(t, int64(350), stat.TotalQuota)
+	assert.Equal(t, common.Quota(350), stat.TotalQuota)
 	assert.Equal(t, int64(1), stat.TodayRequests)
-	assert.Equal(t, int64(100), stat.TodayQuota)
+	assert.Equal(t, common.Quota(100), stat.TodayQuota)
 }
 
 func TestSumUsedQuotaForUserScopesFilteredAndRateStatsByUserId(t *testing.T) {
@@ -57,7 +57,7 @@ func TestSumUsedQuotaForUserScopesFilteredAndRateStatsByUserId(t *testing.T) {
 
 	stat, err := SumUsedQuotaForUser(7, LogTypeUnknown, 0, 0, "", "", 0, "")
 	require.NoError(t, err)
-	assert.Equal(t, 350, stat.Quota)
+	assert.Equal(t, common.Quota(350), stat.Quota)
 	assert.Equal(t, 1, stat.Rpm)
 	assert.Equal(t, 15, stat.Tpm)
 }

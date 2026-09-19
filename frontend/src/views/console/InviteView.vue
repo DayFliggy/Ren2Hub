@@ -6,7 +6,6 @@ import InviteAffiliateCard from '@/components/console/invite/InviteAffiliateCard
 import InviteMonthChart from '@/components/console/invite/InviteMonthChart.vue'
 import InviteRewardCard from '@/components/console/invite/InviteRewardCard.vue'
 import PageHero from '@/components/console/PageHero.vue'
-import AmountInput from '@/components/common/AmountInput.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
@@ -15,7 +14,7 @@ import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import { useInvite } from '@/composables/useInvite'
-import { formatDate, formatQuota, QUOTA_PER_DOLLAR } from '@/utils/format'
+import { formatDate, formatQuota } from '@/utils/format'
 
 const { t } = useI18n()
 const {
@@ -24,6 +23,7 @@ const {
   inviteLink,
   transferOpen,
   transferDollars,
+  canTransfer,
   transferring,
   readOnly,
   load,
@@ -108,7 +108,7 @@ onMounted(load)
           </div>
           <ConsoleButton
             size="sm"
-            :disabled="readOnly || !info?.transferable"
+            :disabled="readOnly || BigInt(info?.transferable ?? '0') <= 0n"
             @click="transferOpen = true"
           >
             {{ t('invite.transfer') }}
@@ -333,8 +333,10 @@ onMounted(load)
       @close="transferOpen = false"
     >
       <div class="space-y-3">
-        <AmountInput
+        <input
           v-model="transferDollars"
+          inputmode="decimal"
+          class="w-full rounded-lg bg-[var(--surface-muted)] p-3 font-mono focus-ring"
           :placeholder="formatQuota(info?.transferable ?? 0)"
           :min="1"
         />
@@ -348,12 +350,7 @@ onMounted(load)
           size="lg"
           block
           :loading="transferring"
-          :disabled="
-            readOnly ||
-            !transferDollars ||
-            transferDollars < 1 ||
-            (info?.transferable ?? 0) < transferDollars * QUOTA_PER_DOLLAR
-          "
+          :disabled="!canTransfer"
           @click="transfer"
         >
           {{ t('common.confirm') }}

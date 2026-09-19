@@ -43,143 +43,43 @@ type gatewayStartupLegacyUser struct {
 	Group       string `gorm:"type:varchar(64)"`
 }
 
-type gatewayStartupLegacyRecovery struct {
-	ID             int64  `gorm:"primaryKey"`
-	RequestID      string `gorm:"type:varchar(128);uniqueIndex;not null"`
-	UserID         int    `gorm:"not null"`
-	TokenID        int    `gorm:"not null"`
-	Source         string `gorm:"type:varchar(32);not null"`
-	FundingAmount  int64  `gorm:"not null;default:0"`
-	SubscriptionID int
-	ExtraAmount    int64  `gorm:"not null;default:0"`
-	ExtraRefund    string `gorm:"type:varchar(16);not null;default:'pending'"`
-	Status         string `gorm:"type:varchar(32);not null"`
-}
-
-type gatewayStartupLegacyState struct {
-	ID           uint64 `gorm:"primaryKey"`
-	UserID       int
-	TokenID      int
-	Kind         string `gorm:"type:varchar(32)"`
-	Digest       string `gorm:"type:varchar(64)"`
-	ChannelID    int
-	CredentialID string `gorm:"type:varchar(36)"`
-	EndpointID   string `gorm:"type:varchar(64)"`
-	CreatedAt    int64
-	ExpiresAt    int64
-}
-
-type gatewayStartupLegacyMidjourney struct {
-	Id               int `gorm:"primaryKey"`
-	UserId           int
-	TokenId          int
-	BillingChannelId int
-	MjId             string
-	Quota            int
-	Status           string
-}
-
 func TestGatewayStartupMigrations(t *testing.T) {
 	for _, test := range []struct {
 		kind common.DatabaseType
 		env  string
-	}{
-		{common.DatabaseTypeSQLite, ""},
-		{common.DatabaseTypeMySQL, "GATEWAY_STARTUP_MYSQL_DSN"},
-		{common.DatabaseTypePostgreSQL, "GATEWAY_STARTUP_POSTGRES_DSN"},
-	} {
+	}{{common.DatabaseTypeSQLite, ""}, {common.DatabaseTypeMySQL, "GATEWAY_STARTUP_MYSQL_DSN"}, {common.DatabaseTypePostgreSQL, "GATEWAY_STARTUP_POSTGRES_DSN"}} {
 		t.Run(string(test.kind), func(t *testing.T) {
 			dsn := os.Getenv(test.env)
 			if test.env != "" && dsn == "" {
-				t.Skip(test.env + " must target an isolated database service with permission to create test databases")
+				t.Skip(test.env + " is not configured")
 			}
 			open := gatewayStartupDatabase(t, test.kind, dsn)
 			db, err := open()
 			require.NoError(t, err)
-			previousDB, previousLogDB := DB, LOG_DB
-			previousMainKind, previousLogKind := common.MainDatabaseType(), common.LogDatabaseType()
+			previousDB, previousLogs := DB, LOG_DB
+			previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
 			DB, LOG_DB = db, db
 			common.SetDatabaseTypes(test.kind, test.kind)
 			initCol()
 			t.Cleanup(func() {
-				DB, LOG_DB = previousDB, previousLogDB
-				common.SetDatabaseTypes(previousMainKind, previousLogKind)
+				DB, LOG_DB = previousDB, previousLogs
+				common.SetDatabaseTypes(previousMain, previousLog)
 				initCol()
-				sqlDB, closeErr := db.DB()
-				if assert.NoError(t, closeErr) {
-					assert.NoError(t, sqlDB.Close())
+				sqlDB, err := db.DB()
+				if err == nil {
+					_ = sqlDB.Close()
 				}
 			})
-			require.NoError(t, db.Table("tokens").AutoMigrate(&gatewayStartupLegacyToken{}))
-			require.NoError(t, db.Table("users").AutoMigrate(&gatewayStartupLegacyUser{}))
-			require.NoError(t, db.Table("billing_recoveries").AutoMigrate(&gatewayStartupLegacyRecovery{}))
-			require.NoError(t, db.Table("gateway_state_bindings").AutoMigrate(&gatewayStartupLegacyState{}))
-			require.NoError(t, db.Table("midjourneys").AutoMigrate(&gatewayStartupLegacyMidjourney{}))
-			require.NoError(t, db.Table("midjourneys").Create(&gatewayStartupLegacyMidjourney{Id: 41, UserId: 17, TokenId: 23, BillingChannelId: 37, MjId: "legacy-mj", Quota: 29, Status: "SUBMITTED"}).Error)
-			require.NoError(t, db.Table("gateway_state_bindings").Create(&gatewayStartupLegacyState{UserID: 17, TokenID: 23, Kind: "response", Digest: GatewayDigest("pre-transport-state"), ChannelID: 37, CredentialID: "legacy-credential", EndpointID: "legacy-endpoint", ExpiresAt: time.Now().Add(time.Hour).Unix()}).Error)
-			require.NoError(t, db.Table("users").Create(&gatewayStartupLegacyUser{ID: 17, Username: "startup-admin", Password: "fixture-password-hash", Role: common.RoleRootUser, Status: common.UserStatusEnabled, Group: "team"}).Error)
-			require.NoError(t, db.Table("tokens").Create(&gatewayStartupLegacyToken{ID: 23, UserID: 17, Key: "local-startup-fixture", Name: "legacy-token", RemainQuota: 71, ModelLimits: "model-before-upgrade"}).Error)
-			require.NoError(t, db.Table("billing_recoveries").Create(&gatewayStartupLegacyRecovery{ID: 31, RequestID: "startup-recovery", UserID: 17, TokenID: 23, Source: "wallet", FundingAmount: 73, Status: BillingRecoveryStatusActive}).Error)
-			retiredRecovery := gatewayStartupLegacyRecovery{ID: 32, RequestID: "retired-recovery", UserID: 17, TokenID: 23, Source: "subscription", FundingAmount: 41, SubscriptionID: 61, ExtraAmount: 7, ExtraRefund: "pending", Status: BillingRecoveryStatusRefundPending}
-			require.NoError(t, db.Table("billing_recoveries").Create(&retiredRecovery).Error)
-			// Retired product data remains available for offline reconciliation.
-			// The application must not migrate or delete these historical tables.
-			type archivedRow struct {
-				ID       int `gorm:"primaryKey"`
-				Evidence string
-			}
-			archivedTables := []string{"subscription_plans", "subscription_orders", "user_subscriptions", "subscription_pre_consume_records"}
-			for _, table := range archivedTables {
-				require.NoError(t, db.Table(table).AutoMigrate(&archivedRow{}))
-				require.NoError(t, db.Table(table).Create(&archivedRow{ID: 1, Evidence: "preserve-for-reconciliation"}).Error)
-			}
-			assert.False(t, db.Migrator().HasColumn(&Token{}, "conversion_policy"))
-			assert.False(t, db.Migrator().HasColumn(&User{}, "gateway_concurrency"))
-			assert.False(t, db.Migrator().HasColumn(&BillingRecovery{}, "pre_consume_state"))
-
-			err = migrateDB()
-			require.NoError(t, err, "first complete startup migration: %s", db.Logger.(*gatewayStartupMigrationRecorder).failedDDL)
-			var token Token
-			require.NoError(t, db.First(&token, 23).Error)
-			assert.Equal(t, "safe", token.ConversionPolicy)
-			assert.Equal(t, 71, token.RemainQuota)
-			assert.Equal(t, "model-before-upgrade", token.ModelLimits)
-			config, err := GetGatewayConfig()
-			require.NoError(t, err)
-			assert.Equal(t, DefaultGatewayConfig(), config)
-			var recovery BillingRecovery
-			require.NoError(t, db.First(&recovery, 31).Error)
-			assert.Equal(t, int64(73), recovery.FundingAmount)
-			assert.Equal(t, BillingRecoveryStatusActive, recovery.Status)
-			assert.Equal(t, BillingRecoveryPreConsumePrepared, recovery.PreConsumeState)
-			legacyState, err := FindGatewayState(context.Background(), 17, 23, "response", "pre-transport-state")
-			require.NoError(t, err)
-			assert.Equal(t, "legacy-credential", legacyState.CredentialID)
-			assert.Empty(t, legacyState.TransportID, "migration must not invent an actual transport identity")
-			var legacyMJ Midjourney
-			require.NoError(t, db.First(&legacyMJ, 41).Error)
-			assert.Equal(t, 29, legacyMJ.Quota)
-			assert.Equal(t, 23, legacyMJ.TokenId)
-			assert.Equal(t, 37, legacyMJ.BillingChannelId)
-			assert.Empty(t, legacyMJ.PrivateData.CredentialID, "migration must not guess the historical provider account")
-			legacyMJ.PrivateData = TaskPrivateData{CredentialVersion: 1, CredentialID: "stable-mj-credential", EndpointID: "stable-mj-endpoint", TokenId: 23, SubmissionRequestID: "mj-submission"}
-			require.NoError(t, db.Model(&legacyMJ).Update("private_data", legacyMJ.PrivateData).Error)
-
-			zero, seven := 0, 7
-			config.UserConcurrency, config.WaitMS, config.UserQueueSize = 19, 4000, 8
-			config.Groups["team"] = GatewayAdmissionOverride{Concurrency: &seven, WaitMS: &zero}
-			require.NoError(t, SaveGatewayConfig(config))
-			config.Version++
-			require.NoError(t, db.Model(&Token{}).Where("id = ?", 23).Update("conversion_policy", "strict").Error)
-			for id, policy := range map[int]any{24: "", 25: nil} {
-				require.NoError(t, db.Model(&Token{}).Create(map[string]any{"id": id, "user_id": 17, "key": fmt.Sprintf("startup-uninitialized-%d", id), "conversion_policy": policy}).Error)
-			}
-			require.NoError(t, db.Model(&User{}).Where("id = ?", 17).Updates(map[string]any{"gateway_concurrency": 0, "gateway_wait_ms": 0, "gateway_queue_size": 0}).Error)
-			var marker Option
-			require.NoError(t, db.Where(map[string]any{"key": "gateway_runtime_v2_migrated_at"}).First(&marker).Error)
-
-			// A fresh connection exercises restart behavior instead of reusing
-			// the migrator's connection and prepared-statement state.
+			require.NoError(t, migrateDB())
+			require.True(t, db.Migrator().HasTable(&BillingSchema{}))
+			require.True(t, db.Migrator().HasTable(&BillingEvent{}))
+			require.False(t, db.Migrator().HasTable("billing_recovery_adjustments"))
+			require.True(t, db.Migrator().HasColumn(&User{}, "reserved_quota"))
+			require.True(t, db.Migrator().HasColumn(&Token{}, "available_quota"))
+			user := User{Id: 17, Username: "startup", Quota: 5000000000}
+			require.NoError(t, db.Create(&user).Error)
+			gatewayStartupSchema(t, db)
+			gatewayStartupUniqueConstraints(t, db)
 			sqlDB, err := db.DB()
 			require.NoError(t, err)
 			require.NoError(t, sqlDB.Close())
@@ -187,49 +87,10 @@ func TestGatewayStartupMigrations(t *testing.T) {
 			require.NoError(t, err)
 			DB, LOG_DB = db, db
 			initCol()
-			err = migrateDB()
-			require.NoError(t, err, "second complete startup migration: %s", db.Logger.(*gatewayStartupMigrationRecorder).failedDDL)
-			var archivedRecovery gatewayStartupLegacyRecovery
-			require.NoError(t, db.Table("billing_recoveries").First(&archivedRecovery, retiredRecovery.ID).Error)
-			assert.Equal(t, retiredRecovery, archivedRecovery, "retired source and amount evidence must survive upgrades")
-			for _, table := range archivedTables {
-				var row archivedRow
-				require.NoError(t, db.Table(table).First(&row, 1).Error)
-				assert.Equal(t, "preserve-for-reconciliation", row.Evidence)
-			}
-			stored, err := GetGatewayConfig()
-			require.NoError(t, err)
-			assert.Equal(t, config, stored, "startup must preserve administrator configuration and version")
-			require.NoError(t, db.First(&token, 23).Error)
-			assert.Equal(t, "strict", token.ConversionPolicy)
-			for _, id := range []int{24, 25} {
-				var upgraded Token
-				require.NoError(t, db.First(&upgraded, id).Error)
-				assert.Equal(t, "safe", upgraded.ConversionPolicy, "empty and NULL legacy policies must be backfilled")
-			}
-			var user User
-			require.NoError(t, db.First(&user, 17).Error)
-			assert.Equal(t, &zero, user.GatewayConcurrency)
-			assert.Equal(t, &zero, user.GatewayWaitMS)
-			assert.Equal(t, &zero, user.GatewayQueueSize)
-			var afterMarker Option
-			require.NoError(t, db.Where(map[string]any{"key": marker.Key}).First(&afterMarker).Error)
-			assert.Equal(t, marker.Value, afterMarker.Value)
-			var restartedMJ Midjourney
-			require.NoError(t, db.First(&restartedMJ, 41).Error)
-			assert.Equal(t, legacyMJ.PrivateData, restartedMJ.PrivateData)
-			assert.Equal(t, 29, restartedMJ.Quota)
-			gatewayStartupSchema(t, db)
-			gatewayStartupUniqueConstraints(t, db)
-			var version string
-			if test.kind == common.DatabaseTypeSQLite {
-				require.NoError(t, db.Raw("SELECT sqlite_version()").Scan(&version).Error)
-			} else {
-				require.NoError(t, db.Raw("SELECT VERSION()").Scan(&version).Error)
-			}
-			if !t.Failed() {
-				t.Logf("two complete migrations passed on %s %s; legacy values and administrator overrides preserved", test.kind, version)
-			}
+			require.NoError(t, migrateDB())
+			var restored User
+			require.NoError(t, db.First(&restored, user.Id).Error)
+			require.EqualValues(t, 5000000000, restored.Quota)
 		})
 	}
 }
@@ -247,8 +108,8 @@ func gatewayStartupSchema(t *testing.T, db *gorm.DB) {
 		{&ChannelHealth{}, []string{"probe_owner", "probe_expires_at", "health_epoch"}, []string{"channel_health_scope"}},
 		{&GatewayCredential{}, []string{"id", "channel_id", "fingerprint"}, []string{"gateway_credential_lookup"}},
 		{&GatewayStateBinding{}, []string{"user_id", "token_id", "credential_id", "endpoint_id", "transport_id", "expires_at"}, []string{"gateway_state_lookup", "idx_gateway_state_bindings_expires_at"}},
-		{&BillingRecovery{}, []string{"pre_consume_state", "token_required", "funding_settlement", "token_settlement", "consumption_snapshot", "consumption_state", "consumption_statistics", "consumption_log", "consumption_error"}, []string{"billing_recovery_pending_scan", "idx_billing_recoveries_request_id"}},
-		{&BillingRecoveryAdjustment{}, []string{"request_id", "component", "operation", "amount"}, []string{"billing_recovery_adjustment_key"}},
+		{&BillingRecovery{}, []string{"pre_consume_state", "token_required", "final_event_id", "version", "consumption_snapshot", "consumption_state", "consumption_statistics", "consumption_log", "consumption_error"}, []string{"billing_recovery_pending_scan", "idx_billing_recoveries_request_id"}},
+		{&BillingEvent{}, []string{"event_id", "request_id", "operation", "available_delta", "reserved_delta", "used_delta", "fingerprint"}, []string{"idx_billing_events_event_id"}},
 	} {
 		require.True(t, db.Migrator().HasTable(target.model), "%T table", target.model)
 		for _, column := range target.columns {
@@ -280,8 +141,10 @@ func gatewayStartupUniqueConstraints(t *testing.T, db *gorm.DB) {
 	binding.ID = 0
 	assert.Error(t, db.Create(&binding).Error, "state ownership lookup must remain unique")
 	recovery := BillingRecovery{RequestID: "startup-recovery", UserID: 17, TokenID: 23, Source: "wallet"}
+	require.NoError(t, db.Create(&recovery).Error)
+	recovery.ID = 0
 	assert.Error(t, db.Create(&recovery).Error, "logical request accounting must remain unique")
-	adjustment := BillingRecoveryAdjustment{RequestID: "startup-recovery", Component: BillingRecoveryComponentToken, Operation: BillingRecoveryOperationSettle, Amount: 2}
+	adjustment := BillingEvent{EventID: "startup-recovery:settle", RequestID: "startup-recovery", Operation: BillingRecoveryOperationSettle, UsedDelta: 2}
 	require.NoError(t, db.Create(&adjustment).Error)
 	adjustment.ID = 0
 	assert.Error(t, db.Create(&adjustment).Error, "an accounting effect cannot be duplicated")
@@ -352,5 +215,71 @@ func (recorder *gatewayStartupMigrationRecorder) Trace(_ context.Context, _ time
 	upper := strings.ToUpper(strings.TrimSpace(statement))
 	if strings.HasPrefix(upper, "ALTER TABLE") || strings.HasPrefix(upper, "CREATE TABLE") || strings.HasPrefix(upper, "CREATE INDEX") {
 		recorder.failedDDL = statement
+	}
+}
+
+func TestGatewayStartupRejectsExistingDatabaseWithoutChanges(t *testing.T) {
+	for _, test := range []struct {
+		kind common.DatabaseType
+		env  string
+	}{{common.DatabaseTypeSQLite, ""}, {common.DatabaseTypeMySQL, "GATEWAY_STARTUP_MYSQL_DSN"}, {common.DatabaseTypePostgreSQL, "GATEWAY_STARTUP_POSTGRES_DSN"}} {
+		t.Run(string(test.kind), func(t *testing.T) {
+			dsn := os.Getenv(test.env)
+			if test.env != "" && dsn == "" {
+				t.Skip(test.env + " is not configured; existing database rejection is unverified")
+			}
+			db, err := gatewayStartupDatabase(t, test.kind, dsn)()
+			require.NoError(t, err)
+			previousDB, previousLogDB := DB, LOG_DB
+			previousKind, previousLogKind := common.MainDatabaseType(), common.LogDatabaseType()
+			DB, LOG_DB = db, db
+			common.SetDatabaseTypes(test.kind, test.kind)
+			initCol()
+			connection, err := db.DB()
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				DB, LOG_DB = previousDB, previousLogDB
+				common.SetDatabaseTypes(previousKind, previousLogKind)
+				initCol()
+				assert.NoError(t, connection.Close())
+			})
+			require.NoError(t, db.Table("users").AutoMigrate(&gatewayStartupLegacyUser{}))
+			require.NoError(t, db.Table("tokens").AutoMigrate(&gatewayStartupLegacyToken{}))
+			user := gatewayStartupLegacyUser{ID: 17, Username: "existing-user", Password: "test-only-password-hash", AffCode: "existing-aff", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default"}
+			token := gatewayStartupLegacyToken{ID: 23, UserID: 17, Key: "test-only-existing-key", Name: "existing-token", RemainQuota: 456, ModelLimits: "test-model"}
+			require.NoError(t, db.Table("users").Create(&user).Error)
+			require.NoError(t, db.Table("tokens").Create(&token).Error)
+			tablesBefore, err := db.Migrator().GetTables()
+			require.NoError(t, err)
+			columnsBefore, err := db.Migrator().ColumnTypes("tokens")
+			require.NoError(t, err)
+			for range 2 {
+				require.ErrorContains(t, requireBillingSchema(db), "not initialized")
+				require.ErrorContains(t, migrateDB(), "requires an empty database")
+				var restoredUser gatewayStartupLegacyUser
+				var restoredToken gatewayStartupLegacyToken
+				require.NoError(t, db.Table("users").First(&restoredUser, user.ID).Error)
+				require.NoError(t, db.Table("tokens").First(&restoredToken, token.ID).Error)
+				assert.Equal(t, user, restoredUser)
+				assert.Equal(t, token, restoredToken)
+				tablesAfter, err := db.Migrator().GetTables()
+				require.NoError(t, err)
+				assert.ElementsMatch(t, tablesBefore, tablesAfter)
+				columnsAfter, err := db.Migrator().ColumnTypes("tokens")
+				require.NoError(t, err)
+				beforeNames, afterNames := []string{}, []string{}
+				for _, column := range columnsBefore {
+					beforeNames = append(beforeNames, column.Name())
+				}
+				for _, column := range columnsAfter {
+					afterNames = append(afterNames, column.Name())
+				}
+				assert.ElementsMatch(t, beforeNames, afterNames)
+				assert.False(t, db.Migrator().HasTable(&BillingSchema{}))
+				assert.False(t, db.Migrator().HasTable(&BillingEvent{}))
+				assert.False(t, db.Migrator().HasColumn(&Token{}, "available_quota"))
+				assert.False(t, db.Migrator().HasColumn(&User{}, "reserved_quota"))
+			}
+		})
 	}
 }

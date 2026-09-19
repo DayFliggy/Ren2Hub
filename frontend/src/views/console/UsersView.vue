@@ -312,10 +312,14 @@ function openAffiliate(user: AdminUser) {
   affiliateTarget.value = user
 }
 
-function saveQuota(delta: number): Promise<boolean> {
+function saveQuota(
+  delta: string,
+  reason: string,
+  operationId: string
+): Promise<boolean> {
   const target = quotaTarget.value
   if (!target) return Promise.resolve(false)
-  return adjustQuota(target, delta)
+  return adjustQuota(target, delta, reason, operationId)
 }
 
 function requestDelete(user: AdminUser) {

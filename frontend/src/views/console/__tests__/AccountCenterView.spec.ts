@@ -51,8 +51,10 @@ function render(
     email: 'member@example.com',
     role: 1,
     status,
-    quota: 2_000_000,
-    used_quota: 1_500_000,
+    available_quota: '2000000',
+    reserved_quota: '0',
+    quota_version: 0,
+    used_quota: '1500000',
     request_count: 12_345,
     created_at: createdAt,
   })

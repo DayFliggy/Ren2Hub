@@ -26,7 +26,7 @@ export interface FarmPlot {
   planted_at: number | null // epoch seconds
   harvest_at: number | null // epoch seconds when ready
   stage: PlotStage
-  yield_quota: number // quota reward on harvest
+  yield_quota: string // quota reward on harvest
 }
 
 export interface RanchAnimal {
@@ -36,14 +36,14 @@ export interface RanchAnimal {
   mood: number // 0-100
   fed_at: number | null
   yield_ready: boolean
-  yield_quota: number
+  yield_quota: string
 }
 
 export interface FishingState {
   daily_left: number
   last_catch: {
     name: string
-    quota: number
+    quota: string
     rarity: CatchRarity
     emoji: string
   } | null
@@ -71,25 +71,25 @@ export interface LeaderEntry {
   uid: number
   display_name: string
   avatar_seed: string // initials or emoji seed for avatar
-  consume_quota: number // quota consumed in the period
+  consume_quota: string // quota consumed in the period
   is_self: boolean
 }
 
 export interface RebateTier {
   label: string // e.g. "青铜"
-  min_quota: number // minimum cumulative consume to reach this tier
+  min_quota: string // minimum cumulative consume to reach this tier
   rate: number // rebate rate 0..1, e.g. 0.02 = 2%
   badge: string // emoji badge
 }
 
 export interface RebateState {
-  current_consume: number // user's current period consume
+  current_consume: string // user's current period consume
   current_tier_index: number // which tier they're in (0-based)
-  earned_total: number // total rebate earned (quota units)
+  earned_total: string // total rebate earned (quota units)
   last_rebate_at: number // epoch seconds
   history: Array<{
     date: string // e.g. "2026-07"
-    amount: number // quota rebated
+    amount: string // quota rebated
     rate: number
   }>
 }

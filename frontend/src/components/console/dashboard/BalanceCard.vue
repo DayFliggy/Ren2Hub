@@ -8,20 +8,21 @@ import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import IconButton from '@/components/common/IconButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import { useBalanceVisibility } from '@/composables/useDashboard'
+import { quotaRatio } from '@/utils/quota'
 import { formatQuota } from '@/utils/format'
 
 const props = withDefaults(
   defineProps<{
-    quota: number | null
-    usedQuota?: number | null
-    todayQuota?: number
-    monthQuota?: number
+    quota: string | null
+    usedQuota?: string | null
+    todayQuota?: string
+    monthQuota?: string
     /** rolling daily burn used for the runway estimate */
-    dailyBurn?: number
+    dailyBurn?: string
     compact?: boolean
   }>(),
   {
-    usedQuota: 0,
+    usedQuota: '0',
     todayQuota: undefined,
     monthQuota: undefined,
     dailyBurn: undefined,
@@ -41,12 +42,17 @@ const display = computed(() =>
       : formatQuota(props.quota)
 )
 
-// Usage ratio: how much of total balance has been consumed this billing period
-const usedQuota = computed(() => props.usedQuota ?? 0)
-const totalBalance = computed(() => (props.quota ?? 0) + usedQuota.value)
+// This display denominator may exceed one account field's int64 range.
+const usedQuota = computed(() => props.usedQuota ?? '0')
+const totalBalance = computed(
+  () => BigInt(props.quota ?? '0') + BigInt(usedQuota.value)
+)
 const usedPercent = computed(() =>
-  totalBalance.value > 0
-    ? Math.min(100, Math.round((usedQuota.value / totalBalance.value) * 100))
+  BigInt(totalBalance.value) > 0n
+    ? Math.min(
+        100,
+        Math.round(quotaRatio(usedQuota.value, totalBalance.value) * 100)
+      )
     : 0
 )
 const meterColor = computed(() => {
@@ -75,9 +81,10 @@ const health = computed(() => {
 
 /** Runway in whole days; null when there is nothing to extrapolate from. */
 const runwayDays = computed(() => {
-  const burn = props.dailyBurn ?? props.todayQuota ?? 0
-  if (burn <= 0 || props.quota === null || props.quota <= 0) return null
-  return Math.floor(props.quota / burn)
+  const burn = BigInt(props.dailyBurn ?? props.todayQuota ?? '0')
+  if (burn <= 0n || props.quota === null || BigInt(props.quota) <= 0n)
+    return null
+  return (BigInt(props.quota) / burn).toString()
 })
 
 const monthSpendDisplay = computed(() => {
@@ -153,7 +160,11 @@ const monthSpendDisplay = computed(() => {
     </p>
 
     <!-- Usage bar: hand-drawn brush-stroke style -->
-    <div v-if="usedQuota > 0 && !compact" class="mt-4" data-balance-usage-meter>
+    <div
+      v-if="BigInt(usedQuota) > 0n && !compact"
+      class="mt-4"
+      data-balance-usage-meter
+    >
       <div
         class="mb-1.5 flex items-baseline justify-between gap-3 text-xs text-[var(--text-tertiary)]"
       >

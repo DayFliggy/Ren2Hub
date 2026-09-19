@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGatewayPhaseDeadlineReleasesAdmissionAndReservation(t *testing.T) {
+func TestGatewayPhaseDeadlineReleasesAdmissionAndHoldsReservation(t *testing.T) {
 	for _, phase := range []string{"headers", "non_stream_body", "stream_heartbeats"} {
 		t.Run(phase, func(t *testing.T) {
 			oldHeader, oldBody, oldFirst := common.RelayResponseHeaderTimeout, common.RelayNonStreamTimeout, common.StreamingFirstOutputTimeout
@@ -69,7 +69,7 @@ func TestGatewayPhaseDeadlineReleasesAdmissionAndReservation(t *testing.T) {
 			t.Cleanup(func() { close(cleanup) })
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", 4).Update("status", common.ChannelStatusManuallyDisabled).Error)
 			require.NoError(t, service.RefreshChannelCapabilitiesByID(context.Background(), 4))
-			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "remain_quota": 2000}).Error)
+			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 2000}).Error)
 			body := `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"deadline fixture"}],"stream":false}`
 			if phase == "stream_heartbeats" {
 				body = strings.Replace(body, `"stream":false`, `"stream":true`, 1)
@@ -93,11 +93,13 @@ func TestGatewayPhaseDeadlineReleasesAdmissionAndReservation(t *testing.T) {
 			var token model.Token
 			require.NoError(t, model.DB.First(&user, 1).Error)
 			require.NoError(t, model.DB.First(&token, 1).Error)
-			assert.Equal(t, 10000000, user.Quota)
-			assert.Equal(t, 2000, token.RemainQuota)
+			assert.EqualValues(t, 9999500, user.Quota)
+			assert.EqualValues(t, 500, user.ReservedQuota)
+			assert.EqualValues(t, 1500, token.RemainQuota)
+			assert.EqualValues(t, 500, token.ReservedQuota)
 			var recovery model.BillingRecovery
 			require.NoError(t, model.DB.First(&recovery).Error)
-			assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
+			assert.True(t, model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState))
 		})
 	}
 }

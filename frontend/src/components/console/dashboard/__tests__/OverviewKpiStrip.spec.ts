@@ -35,10 +35,10 @@ afterEach(() => {
 })
 
 const stats: DashboardStats = {
-  quota: 5_200_000,
-  used_quota: 2_985_000,
-  today_quota: 96_402,
-  month_quota: 1_842_600,
+  quota: '5200000',
+  used_quota: '2985000',
+  today_quota: '96402',
+  month_quota: '1842600',
   today_requests: 312,
   total_requests: 18_764,
   month_quota_delta: 16.2,
@@ -47,7 +47,7 @@ const stats: DashboardStats = {
 
 const flowPoints: FlowPoint[] = Array.from({ length: 14 }, (_, i) => ({
   date: `07-${String(i + 13).padStart(2, '0')}`,
-  consume: 60_000 + i * 4_000,
+  consume: '60000' + i * 4_000,
   requests: 200 + i * 15,
 }))
 

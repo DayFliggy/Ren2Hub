@@ -77,7 +77,7 @@ const typeLabelKey: Record<LogType, string> = {
             : 'text-[var(--text-primary)]'
         "
       >
-        {{ formatQuota(Math.abs(log.quota)) }}
+        {{ formatQuota(log.quota.replace(/^-/, '')) }}
       </p>
     </header>
 

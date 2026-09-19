@@ -19,8 +19,10 @@ export interface TokenItem {
   type: TokenType
   conversion_policy?: import('@/types/gateway').ConversionPolicy
   status: 1 | 2 // 1 enabled · 2 disabled
-  used_quota: number
-  remain_quota: number
+  used_quota: string
+  available_quota: string | null
+  reserved_quota: string
+  quota_version: number
   unlimited: boolean
   model_limits: string[]
   ip_limits: string[]
@@ -68,7 +70,7 @@ export interface AdminChannel extends Record<string, unknown> {
   capacity_total: number
   channel_ratio: number
   upstream_ratio: number
-  used_quota: number
+  used_quota: string
   balance: number
   response_time: number
   test_time: number
@@ -134,7 +136,7 @@ export type AdminUserStatus = 1 | 2
 export type AdminUserSortBy =
   | 'id'
   | 'username'
-  | 'quota'
+  | 'available_quota'
   | 'used_quota'
   | 'created_time'
   | 'last_login_time'
@@ -148,11 +150,13 @@ export interface AdminUser extends Record<string, unknown> {
   email: string
   role: AdminUserRole
   status: AdminUserStatus
-  quota: number
-  used_quota: number
+  available_quota: string
+  reserved_quota: string
+  used_quota: string
+  quota_version: number
   request_count: number
   invited_count: number
-  affiliate_quota: number
+  affiliate_quota: string
   /** 0 = registered without an inviter. */
   inviter_id: number
   created_time: number
@@ -197,9 +201,9 @@ export interface AdminAffiliateUser {
   effective_rate_bps: number
   invite_limit: number | null
   invited_count: number
-  available_reward: number
-  frozen_reward: number
-  total_reward: number
+  available_reward: string
+  frozen_reward: string
+  total_reward: string
 }
 
 export interface AdminAffiliateUserUpdateInput {
@@ -250,7 +254,7 @@ export interface AdminOrder extends Record<string, unknown> {
   /** Amount actually paid, denominated by `currency`. */
   amount: number
   /** Quota credited on completion. 0 for orders that never completed. */
-  quota: number
+  quota: string
   type: AdminOrderType
   currency: AdminOrderCurrency
   method: AdminOrderMethod
@@ -337,7 +341,7 @@ export interface LogItem {
   fast_mode?: boolean | null
   service_tier?: string | null
   speed?: string | null
-  quota: number
+  quota: string
   latency: number // 延迟（秒）
   first_token_latency: number | null // 首字延迟（秒），仅流式请求适用
   request_mode: LogRequestMode | null // 非请求类日志为 null
@@ -399,7 +403,7 @@ export interface DrawingLogItem {
   fail_reason: string
   image_url: string
   video_url: string
-  quota: number
+  quota: string
   submit_time: number
   finish_time: number
 }
@@ -414,7 +418,7 @@ export interface RelayTaskLogItem {
   progress: string
   fail_reason: string
   result_url: string
-  quota: number
+  quota: string
   submit_time: number
   finish_time: number
 }
@@ -424,20 +428,20 @@ export interface RelayTaskLogItem {
 export type MarketModelType =
   'chat' | 'image' | 'embedding' | 'rerank' | 'audio' | 'video'
 
-export type MarketBilling = 'token' | 'per_call' | 'tiered'
+export type MarketBilling = 'token' | 'per_call' | 'tiered' | 'free'
 
 export interface MarketPriceTier {
   label: string
-  input: number
-  output: number
+  input: string
+  output: string
 }
 
 export interface MarketModelPrice {
-  input?: number // $ / 1M tokens
-  output?: number // $ / 1M tokens
-  cache_read?: number // $ / 1M tokens
-  cache_write?: number // $ / 1M tokens
-  per_call?: number // $ / call
+  input?: string // $ / 1M tokens
+  output?: string // $ / 1M tokens
+  cache_read?: string // $ / 1M tokens
+  cache_write?: string // $ / 1M tokens
+  per_call?: string // $ / call
   tiers?: MarketPriceTier[] // tiered billing breakdown
 }
 
@@ -460,7 +464,7 @@ export interface InviteRecord {
   invitee: string
   created: number
   paid: boolean
-  reward_total: number
+  reward_total: string
   last_paid_at: number
 }
 
@@ -468,7 +472,7 @@ export interface InviteMonthPoint {
   month: string
   new_count: number
   cumulative: number
-  reward: number
+  reward: string
 }
 
 export interface InvitePolicy {
@@ -477,18 +481,18 @@ export interface InvitePolicy {
   registration_required: boolean
   freeze_hours: number
   duration_days: number
-  per_invitee_cap: number
+  per_invitee_cap: string // exact USD decimal
   cash_withdrawal: false
 }
 
 export interface InviteInfo {
   code: string
   invited: number
-  reward_total: number // lifetime reward quota earned
-  transferable: number // reward quota available to move into balance
-  available_reward: number
-  frozen_reward: number
-  total_reward: number
+  reward_total: string // lifetime reward quota earned
+  transferable: string // reward quota available to move into balance
+  available_reward: string
+  frozen_reward: string
+  total_reward: string
   effective_rate_bps: number
   effective_rate_percent: number
   code_enabled: boolean
@@ -582,13 +586,13 @@ export interface ActivityBase {
 
 export interface CheckinDay {
   done: boolean
-  reward: number
+  reward: string
 }
 
 export interface WeekEntry {
   date: string // "07/21"
   weekday: string // "MON" | "TUE" | ...
-  reward: number // quota units; 0 = not claimed
+  reward: string // quota units; 0 = not claimed
   claimed: boolean
   today: boolean
 }
@@ -600,8 +604,8 @@ export interface CheckinPayload {
   total_days: number
   month_days: number
   month_days_total: number
-  total_reward: number
-  month_reward: number
+  total_reward: string
+  month_reward: string
   best_streak: number
   week_entries: WeekEntry[]
 }
@@ -609,7 +613,7 @@ export interface CheckinPayload {
 export interface NewcomerTask {
   id: string
   labelKey: string
-  reward: number
+  reward: string
   done: boolean
 }
 
@@ -620,9 +624,9 @@ export interface NewcomerPayload {
 
 export interface InviteActivityPayload {
   invited: number
-  reward_total: number
-  available_reward: number
-  frozen_reward: number
+  reward_total: string
+  available_reward: string
+  frozen_reward: string
   effective_rate_percent: number
 }
 
@@ -635,7 +639,7 @@ export type Activity = ActivityBase &
 
 export interface ActivitySummary {
   claimable: number
-  reward_earned: number
+  reward_earned: string
   ongoing: number
 }
 
@@ -765,8 +769,8 @@ export interface AdminRedemptionCode extends Record<string, unknown> {
   code: string // raw 32-character redemption code
   type: AdminRedemptionType
   status: AdminRedemptionStatus
-  quota: number
-  amount: number
+  quota: string
+  amount: string
   // redemption record
   redeemer_id: number // 0 = not yet redeemed
   redeemer_email: string // '' = not yet redeemed
@@ -787,6 +791,6 @@ export interface AdminRedemptionPage {
 export interface AdminRedemptionCreateInput {
   type: AdminRedemptionType
   count: number // 1–100
-  amount: number
+  amount: string
   expired_time: number // -1 = never; future unix epoch = deadline
 }

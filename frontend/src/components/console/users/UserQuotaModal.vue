@@ -6,12 +6,13 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import FormField from '@/components/common/FormField.vue'
 import type { AdminUser } from '@/types/console'
-import { QUOTA_PER_DOLLAR, formatQuota } from '@/utils/format'
+import { formatQuota } from '@/utils/format'
+import { addQuota, decimalToQuota } from '@/utils/quota'
 
 const props = defineProps<{
   open: boolean
   target: AdminUser | null
-  save: (delta: number) => Promise<boolean>
+  save: (delta: string, reason: string, operationId: string) => Promise<boolean>
 }>()
 
 const emit = defineEmits<{ close: [] }>()
@@ -19,21 +20,37 @@ const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
 const saving = ref(false)
 const mode = ref<'grant' | 'deduct'>('grant')
-const amount = ref(1)
+const amount = ref('1')
+const reason = ref('')
+let pending: { fingerprint: string; id: string } | null = null
 
 /** Admins think in dollars; the ledger stores quota units. */
-const units = computed(() => Math.round(amount.value * QUOTA_PER_DOLLAR))
+const units = computed(() => {
+  try {
+    return decimalToQuota(amount.value)
+  } catch {
+    return null
+  }
+})
 const delta = computed(() =>
-  mode.value === 'grant' ? units.value : -units.value
+  units.value === null
+    ? '0'
+    : (BigInt(units.value) * (mode.value === 'grant' ? 1n : -1n)).toString()
 )
-const nextQuota = computed(() => (props.target?.quota ?? 0) + delta.value)
+const nextQuota = computed(() => {
+  try {
+    return addQuota(props.target?.available_quota ?? '0', delta.value)
+  } catch {
+    return null
+  }
+})
 const valid = computed(
   () =>
-    Number.isFinite(amount.value) &&
-    amount.value > 0 &&
-    units.value > 0 &&
-    units.value <= 1_000_000_000 &&
-    nextQuota.value >= 0
+    units.value !== null &&
+    BigInt(units.value) > 0n &&
+    nextQuota.value !== null &&
+    reason.value.trim().length > 0 &&
+    new TextEncoder().encode(reason.value.trim()).length <= 512
 )
 
 watch(
@@ -41,7 +58,9 @@ watch(
   (open) => {
     if (!open) return
     mode.value = 'grant'
-    amount.value = 1
+    amount.value = '1'
+    reason.value = ''
+    pending = null
   },
   { immediate: true }
 )
@@ -54,7 +73,16 @@ async function submit() {
   if (!valid.value || saving.value) return
   saving.value = true
   try {
-    if (await props.save(delta.value)) emit('close')
+    const fingerprint = JSON.stringify([
+      props.target?.id,
+      props.target?.quota_version,
+      delta.value,
+      reason.value.trim(),
+    ])
+    if (pending?.fingerprint !== fingerprint)
+      pending = { fingerprint, id: crypto.randomUUID() }
+    if (await props.save(delta.value, reason.value.trim(), pending.id))
+      emit('close')
   } finally {
     saving.value = false
   }
@@ -104,10 +132,9 @@ async function submit() {
             >$</span
           >
           <input
-            v-model.number="amount"
-            type="number"
-            min="0.01"
-            step="0.01"
+            v-model="amount"
+            type="text"
+            inputmode="decimal"
             name="admin-user-quota-amount"
             :aria-label="t('users.quotaAmount')"
             class="user-quota-number pl-8 focus-ring"
@@ -115,6 +142,14 @@ async function submit() {
         </div>
       </FormField>
 
+      <FormField :label="t('billing.reason')">
+        <textarea
+          v-model="reason"
+          maxlength="512"
+          rows="2"
+          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 focus-ring"
+        />
+      </FormField>
       <dl
         class="sketch-md space-y-1.5 border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 text-xs"
       >
@@ -122,8 +157,10 @@ async function submit() {
           <dt class="text-[var(--text-tertiary)]">
             {{ t('users.quotaCurrent') }}
           </dt>
-          <dd class="font-mono tabular-nums text-[var(--text-secondary)]">
-            {{ formatQuota(target?.quota ?? 0) }}
+          <dd
+            class="break-all font-mono tabular-nums text-[var(--text-secondary)]"
+          >
+            {{ formatQuota(target?.available_quota ?? '0', 3) }}
           </dd>
         </div>
         <div class="flex items-center justify-between gap-3">
@@ -131,14 +168,14 @@ async function submit() {
             {{ t('users.quotaNext') }}
           </dt>
           <dd
-            class="font-mono font-semibold tabular-nums"
+            class="break-all font-mono font-semibold tabular-nums"
             :style="
-              nextQuota < 0
+              nextQuota !== null && BigInt(nextQuota) < 0n
                 ? 'color:var(--status-danger-text)'
                 : 'color:var(--text-primary)'
             "
           >
-            {{ formatQuota(nextQuota) }}
+            {{ nextQuota === null ? '—' : formatQuota(nextQuota, 3) }}
           </dd>
         </div>
       </dl>

@@ -13,7 +13,7 @@ const order: AdminOrder = {
   username: 'ada.lovelace',
   email: 'ada@example.com',
   amount: 142.5,
-  quota: 10_000_000,
+  quota: '10000000',
   currency: 'CNY',
   type: 'topup',
   method: 'epay',
@@ -24,6 +24,15 @@ const order: AdminOrder = {
 }
 
 describe('order exports', () => {
+  it('exports exact int64 quota without converting it through Number', () => {
+    const values = getOrderExportValues({
+      ...order,
+      quota: '9223372036854775807',
+    })
+    expect(values[ORDER_EXPORT_HEADERS.indexOf('quota')]).toBe(
+      '9223372036854775807'
+    )
+  })
   it('keeps the header row aligned with the value row', () => {
     expect(getOrderExportValues(order)).toHaveLength(
       ORDER_EXPORT_HEADERS.length

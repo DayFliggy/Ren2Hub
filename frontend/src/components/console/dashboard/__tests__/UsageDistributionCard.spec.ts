@@ -26,7 +26,7 @@ function points(): UsageDistributionPoint[] {
     return {
       date: dateKey(date),
       requests: index + 1,
-      consume: (index + 1) * 500_000,
+      consume: String((index + 1) * 500_000),
       tokens: (index + 1) * 1_000,
     }
   })

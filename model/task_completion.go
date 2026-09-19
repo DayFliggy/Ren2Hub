@@ -12,10 +12,10 @@ import (
 // TaskBillingAdjustment adjusts an already counted submission. It never adds
 // another request, and its quota update shares the statistics transaction.
 type TaskBillingAdjustment struct {
-	TaskID        int64 `json:"task_id,omitempty"`
-	MidjourneyID  int   `json:"midjourney_id,omitempty"`
-	PreviousQuota int   `json:"previous_quota"`
-	FinalQuota    int   `json:"final_quota"`
+	TaskID        int64        `json:"task_id,omitempty"`
+	MidjourneyID  int          `json:"midjourney_id,omitempty"`
+	PreviousQuota common.Quota `json:"previous_quota"`
+	FinalQuota    common.Quota `json:"final_quota"`
 }
 
 func TaskBillingRequestID(taskID int64) string {
@@ -24,14 +24,20 @@ func TaskBillingRequestID(taskID int64) string {
 
 // PersistTaskCompletion commits the terminal transition and its accounting
 // intent together. A losing poller cannot replace the winner's result or charge.
-func PersistTaskCompletion(ctx context.Context, task *Task, fromStatus TaskStatus, actualQuota int, consumption BillingConsumption) (bool, error) {
+func PersistTaskCompletion(ctx context.Context, task *Task, fromStatus TaskStatus, actualQuota common.Quota, consumption BillingConsumption) (bool, error) {
 	if DB == nil || task == nil || task.ID <= 0 || actualQuota < 0 || actualQuota > common.MaxQuota ||
 		(task.Status != TaskStatusSuccess && task.Status != TaskStatusFailure) ||
 		(task.Status == TaskStatusFailure && actualQuota != 0) {
 		return false, errors.New("invalid task completion")
 	}
 	won := false
-	err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := BillingTransaction(ctx, func(tx *gorm.DB) error {
+		won = false
+		// Lock request state before its task row, matching recovery delivery.
+		var guard BillingRecovery
+		if err := lockForUpdate(tx).Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&guard).Error; err != nil {
+			return err
+		}
 		var current Task
 		if err := lockForUpdate(tx).First(&current, task.ID).Error; err != nil {
 			return err
@@ -39,12 +45,15 @@ func PersistTaskCompletion(ctx context.Context, task *Task, fromStatus TaskStatu
 		if current.Status != fromStatus || current.Status == TaskStatusSuccess || current.Status == TaskStatusFailure {
 			return nil
 		}
+		if current.PrivateData.SubmissionRequestID != task.PrivateData.SubmissionRequestID {
+			return ErrBillingRecoveryStateConflict
+		}
 		if current.UserId != task.UserId || current.ChannelId != task.ChannelId || current.Quota != task.Quota || current.Quota < 0 || current.Quota > common.MaxQuota ||
 			current.PrivateData.TokenId != consumption.Log.TokenId || consumption.Log.UserId != current.UserId || consumption.Log.ChannelId != current.ChannelId {
 			return ErrBillingRecoveryStateConflict
 		}
 		consumption.TaskAdjustment = &TaskBillingAdjustment{TaskID: current.ID, PreviousQuota: current.Quota, FinalQuota: actualQuota}
-		if err := createTaskCompletionBilling(tx, TaskBillingRequestID(current.ID), current.PrivateData, consumption); err != nil {
+		if err := createTaskCompletionBilling(tx, TaskBillingRequestID(current.ID), current.PrivateData, consumption, task.Status == TaskStatusFailure); err != nil {
 			return err
 		}
 		privateData := current.PrivateData
@@ -68,55 +77,53 @@ func PersistTaskCompletion(ctx context.Context, task *Task, fromStatus TaskStatu
 
 // Both task tables use the same funding, token and consumption recovery. Only
 // their terminal compare-and-swap and quota target differ.
-func createTaskCompletionBilling(tx *gorm.DB, requestID string, privateData TaskPrivateData, consumption BillingConsumption) error {
+func createTaskCompletionBilling(tx *gorm.DB, _ string, privateData TaskPrivateData, consumption BillingConsumption, release bool) error {
 	adjustment := consumption.TaskAdjustment
-	if adjustment == nil || adjustment.PreviousQuota < 0 || adjustment.PreviousQuota > common.MaxQuota ||
-		adjustment.FinalQuota < 0 || adjustment.FinalQuota > common.MaxQuota ||
-		(adjustment.TaskID > 0) == (adjustment.MidjourneyID > 0) ||
-		consumption.Log.UserId <= 0 || consumption.Log.TokenId != privateData.TokenId {
+	if adjustment == nil || privateData.SubmissionRequestID == "" || adjustment.FinalQuota < 0 || adjustment.FinalQuota > common.MaxQuota {
 		return ErrBillingRecoveryStateConflict
 	}
-	source := privateData.BillingSource
-	if source == "" {
-		source = "wallet"
+	var recovery BillingRecovery
+	if err := lockForUpdate(tx).Where("request_id = ?", privateData.SubmissionRequestID).First(&recovery).Error; err != nil {
+		return err
 	}
-	if source != "wallet" {
+	if privateData.BillingSource != "wallet" || recovery.Source != "wallet" {
 		return ErrUnsupportedBillingSource
 	}
-	tokenRequired := privateData.TokenId > 0
-	if submissionID := privateData.SubmissionRequestID; submissionID != "" {
-		var submission BillingRecovery
-		if err := tx.Where("request_id = ?", submissionID).First(&submission).Error; err != nil {
-			return err
-		}
-		if submission.UserID != consumption.Log.UserId || submission.TokenID != privateData.TokenId ||
-			submission.Source != source ||
-			submission.Status != BillingRecoveryStatusSettled || submission.ConsumptionState != BillingRecoveryStateCompleted {
-			return ErrBillingRecoveryStateConflict
-		}
-		tokenRequired = submission.TokenRequired
+	if recovery.UserID != consumption.Log.UserId || recovery.TokenID != privateData.TokenId || (recovery.Status != BillingRecoveryStatusActive && recovery.Status != BillingRecoveryStatusReconciliation) || recovery.ConsumptionState != BillingRecoveryStateTaskPending {
+		return ErrBillingRecoveryStateConflict
 	}
-	delta := adjustment.FinalQuota - adjustment.PreviousQuota
-	consumption.Log.RequestId = requestID
-	consumption.Log.Quota = delta
+	consumption.Log.RequestId = recovery.RequestID
+	consumption.Log.Quota = common.Quota(adjustment.FinalQuota)
 	consumption.Log.Type = LogTypeConsume
-	if delta < 0 {
-		consumption.Log.Quota = -delta
+	if release {
+		consumption.CountUsage = false
 		consumption.Log.Type = LogTypeRefund
-	}
-	if delta == 0 {
-		consumption.LogEnabled, consumption.ExportEnabled, consumption.CountUsage = false, false, false
 	}
 	data, err := common.Marshal(consumption)
 	if err != nil {
 		return err
 	}
-	recovery := BillingRecovery{
-		RequestID: requestID, UserID: consumption.Log.UserId, TokenID: privateData.TokenId, TokenRequired: tokenRequired,
-		Source: source, SettlementDelta: int64(delta),
-		PreConsumeState: BillingRecoveryPreConsumeCommitted, Status: BillingRecoveryStatusSettlementPending,
-		ConsumptionSnapshot: string(data), ConsumptionState: BillingRecoveryStatePending,
-		ConsumptionStatistics: BillingRecoveryStatePending, ConsumptionLog: BillingRecoveryStatePending,
+	status := BillingRecoveryStatusSettlementPending
+	if release {
+		status = BillingRecoveryStatusRefundPending
 	}
-	return tx.Create(&recovery).Error
+	updates := map[string]any{"status": status, "settlement_delta": common.Quota(adjustment.FinalQuota) - recovery.FundingAmount, "consumption_snapshot": string(data), "consumption_state": BillingRecoveryStatePending, "consumption_statistics": BillingRecoveryStatePending, "consumption_log": BillingRecoveryStatePending, "updated_at": common.GetTimestamp(), "version": recovery.Version + 1}
+	if consumption.Usage != nil {
+		usage, err := common.Marshal(consumption.Usage)
+		if err != nil {
+			return err
+		}
+		updates["usage_snapshot"] = string(usage)
+	}
+	if consumption.Charge != nil {
+		if consumption.Charge.FinalQuota != adjustment.FinalQuota {
+			return ErrBillingEventConflict
+		}
+		charge, err := common.Marshal(consumption.Charge)
+		if err != nil {
+			return err
+		}
+		updates["charge_snapshot"] = string(charge)
+	}
+	return tx.Model(&recovery).Updates(updates).Error
 }

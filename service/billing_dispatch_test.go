@@ -59,7 +59,7 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 	if scenario == "dispatch_guard_write_failure" {
 		remove, writes := failBillingStateWrite(t, "consumption_state", model.BillingRecoveryStateUsagePending)
 		require.NotNil(t, PrepareBillingForSelectedModel(c, info))
-		assert.Equal(t, 1, *writes)
+		assert.EqualValues(t, 1, *writes)
 		remove()
 		info.Billing.Refund(c)
 		require.NoError(t, info.BillingRefundError)
@@ -74,12 +74,12 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 	reserved := info.Billing.GetPreConsumedQuota()
 	var pending model.BillingRecovery
 	require.NoError(t, model.DB.Where("request_id = ?", info.RequestId).First(&pending).Error)
-	require.Equal(t, model.BillingRecoveryStateUsagePending, pending.ConsumptionState)
-	var snapshot model.BillingDispatchSnapshot
-	require.NoError(t, common.UnmarshalJsonStr(pending.ConsumptionSnapshot, &snapshot))
-	assert.Equal(t, info.PriceData.ChannelRatio, snapshot.Price.ChannelRatio)
-	assert.Equal(t, info.BillingModelName(), snapshot.Model)
-	assert.Equal(t, common.QuotaPerUnit, snapshot.QuotaPerUnit)
+	require.EqualValues(t, model.BillingRecoveryStateUsagePending, pending.ConsumptionState)
+	assert.NotEmpty(t, pending.QuoteSnapshot)
+	assert.Empty(t, pending.ConsumptionSnapshot)
+	var attempts int64
+	require.NoError(t, model.DB.Model(&model.BillingAttempt{}).Where("request_id = ?", info.RequestId).Count(&attempts).Error)
+	assert.EqualValues(t, 1, attempts)
 
 	if scenario == "dispatch_explicit_refund" || scenario == "dispatch_refund_resume" {
 		_, err := recoverBillingRefund(stale)
@@ -95,7 +95,7 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 		remove()
 		status, err := recoverOneBillingRecovery(context.Background(), info.RequestId)
 		require.NoError(t, err)
-		assert.Equal(t, model.BillingRecoveryStatusRefunded, status)
+		assert.EqualValues(t, model.BillingRecoveryStatusRefunded, status)
 		assertBillingIntegrationBalances(t, info, 100, 100, 0, 0, 0, 0)
 		return
 	}
@@ -104,29 +104,30 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 		require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 1, TotalTokens: 11}))
 		reserved = info.Billing.GetPreConsumedQuota()
 		require.NoError(t, model.DB.Where("request_id = ?", info.RequestId).First(&pending).Error)
-		assert.Equal(t, model.BillingRecoveryStateUsageCollecting, pending.ConsumptionState)
+		assert.EqualValues(t, model.BillingRecoveryStateUsageCollecting, pending.ConsumptionState)
 		assert.ErrorIs(t, model.MarkBillingRecoveryRefundPending(info.RequestId, nil), model.ErrBillingRecoveryStateConflict)
 	}
+	info.PriceData.Charge = nil
 	remove, writes := failBillingStateWrite(t, "status", model.BillingRecoveryStatusSettlementPending)
-	params := model.RecordConsumeLogParams{TokenId: info.TokenId, ChannelId: info.ChannelId, ModelName: info.BillingModelName(), PromptTokens: 10, CompletionTokens: 10, Quota: quota}
+	params := model.RecordConsumeLogParams{TokenId: info.TokenId, ChannelId: info.ChannelId, ModelName: info.BillingModelName(), PromptTokens: 10, CompletionTokens: 10, Quota: common.Quota(quota)}
 	settleBillingConsumption(c, info, params, true)
 	require.Error(t, info.BillingSettlementError)
-	assert.Equal(t, 6, *writes)
+	assert.EqualValues(t, 3, *writes)
 	remove()
 	info.Billing.(*BillingSession).stopRecoveryHeartbeat()
 	info.Billing.Refund(c)
 	status, err := recoverOneBillingRecovery(context.Background(), info.RequestId)
 	require.NoError(t, err)
-	assert.Equal(t, model.BillingRecoveryStatusActive, status)
+	assert.EqualValues(t, model.BillingRecoveryStatusActive, status)
 	assert.ErrorIs(t, model.MarkBillingRecoveryAutomaticRefundPending(info.RequestId), model.ErrBillingRecoveryStateConflict)
 	wallet := 100 - reserved
-	assertBillingIntegrationBalances(t, info, wallet, 100-reserved, 0, reserved, 0, 0)
+	assertBillingIntegrationBalances(t, info, wallet, 100-reserved, 0, 0, 0, 0)
 	rows, err := model.ListStaleBillingRecoveries(time.Now().Unix()+1, 100)
 	require.NoError(t, err)
 	assert.Empty(t, rows, "unconfirmed usage must not occupy automatic recovery batches")
 	backlog, err := model.ReadBillingRecoveryBacklog(context.Background(), time.Now().Unix()+1)
 	require.NoError(t, err)
-	assert.Equal(t, initialBacklog.Pending, backlog.Pending, "the unresolved request stays visible alongside earlier reconciliation records")
+	assert.EqualValues(t, initialBacklog.Pending, backlog.Pending, "the unresolved request stays visible alongside earlier reconciliation records")
 
 	// Retrying known final usage resolves the hold exactly once; the worker
 	// itself must not infer this amount from the old reservation or snapshot.
@@ -134,7 +135,7 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 	require.NoError(t, info.BillingSettlementError)
 	status, err = recoverOneBillingRecovery(context.Background(), info.RequestId)
 	require.NoError(t, err)
-	assert.Equal(t, model.BillingRecoveryStatusSettled, status)
+	assert.EqualValues(t, model.BillingRecoveryStatusSettled, status)
 	wallet = 100 - quota
 	assertBillingIntegrationBalances(t, info, wallet, 100-quota, quota, quota, 1, 1)
 }

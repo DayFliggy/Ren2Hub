@@ -8,9 +8,8 @@ import (
 )
 
 // Quota conversions are centralized here so every billing path shares one
-// saturation + logging policy. Quota columns (user/token/log) are 32-bit
-// integers in the database, so an oversized product must clamp to the int32
-// range instead of wrapping around and turning a charge into a credit.
+// request-size conversion policy. Request charges remain limited to int32;
+// wallet balances use WalletQuotaFromDecimal and checked int64 arithmetic.
 const (
 	MaxQuota = math.MaxInt32
 	MinQuota = math.MinInt32
@@ -151,4 +150,14 @@ func QuotaFromDecimalChecked(d decimal.Decimal) (int, *QuotaClamp) {
 // value that would otherwise be saturated at the database's int32 boundary.
 func QuotaFromDecimalStrict(d decimal.Decimal) (int, error) {
 	return strictQuota(QuotaFromDecimalChecked(d))
+}
+
+// WalletQuotaFromDecimal rejects overflow instead of saturating a stored amount.
+// Request charging retains its separate MaxQuota ceiling.
+func WalletQuotaFromDecimal(value decimal.Decimal) (Quota, error) {
+	integer := value.Truncate(0)
+	if integer.GreaterThan(decimal.NewFromInt(math.MaxInt64)) || integer.LessThan(decimal.NewFromInt(math.MinInt64)) {
+		return 0, ErrQuotaOverflow
+	}
+	return Quota(integer.IntPart()), nil
 }

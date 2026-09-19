@@ -130,6 +130,13 @@ func FinalImagePriceMeta(c *gin.Context, info *relaycommon.RelayInfo, body io.Re
 		}
 	}
 	request.Size = strings.ReplaceAll(request.Size, "*", "x")
+	pricingPayload, err := common.Marshal(map[string]interface{}{"quantity": count, "quality": request.Quality, "resolution": request.Size})
+	if err != nil {
+		return nil, err
+	}
+	if err := FreezeOutboundBillingAttributes(info, pricingPayload); err != nil {
+		return nil, err
+	}
 	meta := request.GetTokenCountMeta()
 	if info.ApiType == constant.APITypeAli && strings.Contains(info.UpstreamModelName, "z-image") {
 		var extend bool

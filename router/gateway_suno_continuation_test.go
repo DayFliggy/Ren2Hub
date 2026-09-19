@@ -13,7 +13,6 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +21,7 @@ func setupGatewaySunoContinuation(t *testing.T, upstream http.HandlerFunc) (stri
 	t.Helper()
 	url, key, otherKey := setupGatewaySDKWithUpstream(t, upstream)
 	require.NoError(t, model.DB.AutoMigrate(&model.Task{}))
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"suno_music":0.001,"suno_lyrics":0.001}`))
+	require.NoError(t, publishGatewayFixturePrices(`{"suno_music":0.001,"suno_lyrics":0.001}`, false))
 	for _, id := range []int{1, 4} {
 		channel, err := model.GetChannelById(id, true)
 		require.NoError(t, err)
@@ -204,8 +203,9 @@ func assertSunoContinuationNoBilling(t *testing.T, task model.Task) {
 	t.Helper()
 	var user model.User
 	require.NoError(t, model.DB.First(&user, task.UserId).Error)
-	assert.Equal(t, task.Quota, user.UsedQuota)
-	assert.Equal(t, 1, user.RequestCount)
+	assert.Zero(t, user.UsedQuota)
+	assert.EqualValues(t, task.Quota, user.ReservedQuota)
+	assert.Zero(t, user.RequestCount)
 	var reservations int64
 	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&reservations).Error)
 	assert.EqualValues(t, 1, reservations)

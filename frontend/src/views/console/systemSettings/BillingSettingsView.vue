@@ -13,24 +13,19 @@ const { settings, load, saveOptions } = useSystemSettings()
 
 // ── Quota ───────────────────────────────────────────────────────────────────
 const quota = reactive({
-  QuotaForNewUser: 0,
-  PreConsumedQuota: 500000,
-  QuotaForInvitee: 0,
+  QuotaForNewUser: '0',
+  QuotaForInvitee: '0',
   TopUpLink: '',
   'general_setting.docs_link': '',
-  'quota_setting.enable_free_model_pre_consume': false,
 })
 const quotaSaving = reactive({ value: false })
 const quotaDirty = computed(() => {
   const s = settings.value
   return (
     quota.QuotaForNewUser !== s.QuotaForNewUser ||
-    quota.PreConsumedQuota !== s.PreConsumedQuota ||
     quota.QuotaForInvitee !== s.QuotaForInvitee ||
     quota.TopUpLink !== s.TopUpLink ||
-    quota['general_setting.docs_link'] !== s['general_setting.docs_link'] ||
-    quota['quota_setting.enable_free_model_pre_consume'] !==
-      s['quota_setting.enable_free_model_pre_consume']
+    quota['general_setting.docs_link'] !== s['general_setting.docs_link']
   )
 })
 async function saveQuota() {
@@ -39,19 +34,11 @@ async function saveQuota() {
   const patch: Record<string, string | boolean | number> = {}
   if (quota.QuotaForNewUser !== s.QuotaForNewUser)
     patch.QuotaForNewUser = quota.QuotaForNewUser
-  if (quota.PreConsumedQuota !== s.PreConsumedQuota)
-    patch.PreConsumedQuota = quota.PreConsumedQuota
   if (quota.QuotaForInvitee !== s.QuotaForInvitee)
     patch.QuotaForInvitee = quota.QuotaForInvitee
   if (quota.TopUpLink !== s.TopUpLink) patch.TopUpLink = quota.TopUpLink
   if (quota['general_setting.docs_link'] !== s['general_setting.docs_link'])
     patch['general_setting.docs_link'] = quota['general_setting.docs_link']
-  if (
-    quota['quota_setting.enable_free_model_pre_consume'] !==
-    s['quota_setting.enable_free_model_pre_consume']
-  )
-    patch['quota_setting.enable_free_model_pre_consume'] =
-      quota['quota_setting.enable_free_model_pre_consume']
   const ok = await saveOptions(patch)
   quotaSaving.value = false
   if (ok) toast.success(t('systemSettings.saved'))
@@ -60,8 +47,8 @@ async function saveQuota() {
 // ── Check-in ────────────────────────────────────────────────────────────────
 const checkin = reactive({
   'checkin_setting.enabled': false,
-  'checkin_setting.min_quota': 100,
-  'checkin_setting.max_quota': 500,
+  'checkin_setting.min_quota': '100',
+  'checkin_setting.max_quota': '500',
 })
 
 const affiliate = reactive({
@@ -70,7 +57,7 @@ const affiliate = reactive({
   AffiliateRebateRateBps: 1000,
   AffiliateFreezeHours: 168,
   AffiliateDurationDays: 0,
-  AffiliatePerInviteeCap: 100,
+  AffiliatePerInviteeCap: '100',
   AffiliateActivatedAt: 0,
 })
 const affiliateSaving = reactive({ value: false })
@@ -89,7 +76,7 @@ const affiliateDirty = computed(() => {
 async function saveAffiliate() {
   affiliateSaving.value = true
   const s = settings.value
-  const patch: Record<string, boolean | number> = {}
+  const patch: Record<string, string | boolean | number> = {}
   if (affiliate.AffiliateEnabled !== s.AffiliateEnabled)
     patch.AffiliateEnabled = affiliate.AffiliateEnabled
   if (
@@ -134,7 +121,7 @@ const checkinDirty = computed(() => {
 async function saveCheckin() {
   checkinSaving.value = true
   const s = settings.value
-  const patch: Record<string, boolean | number> = {}
+  const patch: Record<string, string | boolean | number> = {}
   if (checkin['checkin_setting.enabled'] !== s['checkin_setting.enabled'])
     patch['checkin_setting.enabled'] = checkin['checkin_setting.enabled']
   if (checkin['checkin_setting.min_quota'] !== s['checkin_setting.min_quota'])
@@ -151,12 +138,9 @@ onMounted(async () => {
   const s = settings.value
   Object.assign(quota, {
     QuotaForNewUser: s.QuotaForNewUser,
-    PreConsumedQuota: s.PreConsumedQuota,
     QuotaForInvitee: s.QuotaForInvitee,
     TopUpLink: s.TopUpLink,
     'general_setting.docs_link': s['general_setting.docs_link'],
-    'quota_setting.enable_free_model_pre_consume':
-      s['quota_setting.enable_free_model_pre_consume'],
   })
   Object.assign(checkin, {
     'checkin_setting.enabled': s['checkin_setting.enabled'],
@@ -173,16 +157,6 @@ onMounted(async () => {
     AffiliateActivatedAt: s.AffiliateActivatedAt,
   })
 })
-
-// helper: bind number input with two-way numeric model
-function asStr(n: number) {
-  return String(n)
-}
-function fromStr(v: string, key: string) {
-  const n = Number(v)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ;(quota as any)[key] = Number.isFinite(n) ? n : 0
-}
 </script>
 
 <template>
@@ -196,25 +170,14 @@ function fromStr(v: string, key: string) {
     >
       <div class="grid gap-5 sm:grid-cols-2">
         <SysInputRow
+          v-model="quota.QuotaForNewUser"
           :label="t('systemSettings.billing.newUserQuota')"
           :description="t('systemSettings.billing.newUserQuotaDesc')"
-          :model-value="asStr(quota.QuotaForNewUser)"
-          type="number"
-          @update:model-value="fromStr($event, 'QuotaForNewUser')"
         />
         <SysInputRow
-          :label="t('systemSettings.billing.preConsumedQuota')"
-          :description="t('systemSettings.billing.preConsumedQuotaDesc')"
-          :model-value="asStr(quota.PreConsumedQuota)"
-          type="number"
-          @update:model-value="fromStr($event, 'PreConsumedQuota')"
-        />
-        <SysInputRow
+          v-model="quota.QuotaForInvitee"
           :label="t('systemSettings.billing.inviteeReward')"
           :description="t('systemSettings.billing.inviteeRewardDesc')"
-          :model-value="asStr(quota.QuotaForInvitee)"
-          type="number"
-          @update:model-value="fromStr($event, 'QuotaForInvitee')"
         />
         <SysInputRow
           v-model="quota.TopUpLink"
@@ -231,13 +194,6 @@ function fromStr(v: string, key: string) {
           placeholder="https://docs.example.com"
           type="url"
           class="sm:col-span-2"
-        />
-      </div>
-      <div class="mt-4 border-t border-[var(--border-subtle)]">
-        <SysToggleRow
-          v-model="quota['quota_setting.enable_free_model_pre_consume']"
-          :label="t('systemSettings.billing.freeModelPreConsume')"
-          :description="t('systemSettings.billing.freeModelPreConsumeDesc')"
         />
       </div>
     </SysSettingsFormCard>
@@ -294,9 +250,7 @@ function fromStr(v: string, key: string) {
           :label="t('systemSettings.billing.affiliateCap')"
           :model-value="String(affiliate.AffiliatePerInviteeCap)"
           type="number"
-          @update:model-value="
-            affiliate.AffiliatePerInviteeCap = Number($event) || 0
-          "
+          @update:model-value="affiliate.AffiliatePerInviteeCap = $event"
         />
         <SysInputRow
           class="sm:col-span-2"
@@ -327,20 +281,12 @@ function fromStr(v: string, key: string) {
       </div>
       <div class="mt-4 grid gap-4 sm:grid-cols-2">
         <SysInputRow
+          v-model="checkin['checkin_setting.min_quota']"
           :label="t('systemSettings.billing.checkinMinQuota')"
-          :model-value="String(checkin['checkin_setting.min_quota'])"
-          type="number"
-          @update:model-value="
-            checkin['checkin_setting.min_quota'] = Number($event) || 0
-          "
         />
         <SysInputRow
+          v-model="checkin['checkin_setting.max_quota']"
           :label="t('systemSettings.billing.checkinMaxQuota')"
-          :model-value="String(checkin['checkin_setting.max_quota'])"
-          type="number"
-          @update:model-value="
-            checkin['checkin_setting.max_quota'] = Number($event) || 0
-          "
         />
       </div>
     </SysSettingsFormCard>

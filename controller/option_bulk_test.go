@@ -138,8 +138,6 @@ func TestGetOptionSecretStatusNeverReturnsSecretValues(t *testing.T) {
 func TestValidateOptionPatchAcceptsNewStructuredSettings(t *testing.T) {
 	withOptionMap(t, map[string]string{})
 	err := validateOptionPatch(map[string]string{
-		"billing_setting.billing_mode":      `{"gpt-4":"ratio"}`,
-		"billing_setting.billing_expr":      `{"gpt-4":"p + c"}`,
 		"payment_setting.amount_options":    `[10,20]`,
 		"payment_setting.amount_discount":   `{"100":0.9}`,
 		"global.thinking_model_blacklist":   `["kimi-k2-thinking"]`,
@@ -155,4 +153,20 @@ func TestValidateOptionPatchRejectsInvalidStructuredSettings(t *testing.T) {
 	assert.Error(t, validateOptionPatch(map[string]string{"payment_setting.amount_discount": `{"100":1.2}`}))
 	assert.Error(t, validateOptionPatch(map[string]string{"monitor_setting.channel_test_mode": "invalid"}))
 	assert.Error(t, validateOptionPatch(map[string]string{"FileUploadPermission": "2"}))
+}
+
+func TestValidateOptionPatchRejectsRetiredPricing(t *testing.T) {
+	for _, key := range []string{"ModelRatio", "ModelPrice", "CompletionRatio", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "billing_setting.billing_expr", "billing_setting.billing_mode", "auto_pricing.models_dev_url", "QuotaPerUnit"} {
+		t.Run(key, func(t *testing.T) {
+			require.Error(t, validateOptionPatch(map[string]string{key: "{}"}))
+		})
+	}
+}
+
+func TestQuotaOptionCatalogPreservesExactIntegerStrings(t *testing.T) {
+	for _, key := range []string{"QuotaForNewUser", "QuotaForInviter", "QuotaForInvitee", "QuotaRemindThreshold"} {
+		descriptor := optionDescriptorFor(key, "9007199254740993")
+		assert.Equal(t, "string", descriptor.ValueType)
+		assert.Equal(t, "9007199254740993", descriptor.DefaultValue)
+	}
 }

@@ -52,8 +52,8 @@ func TestGatewayStrictExtensionsRejectedBeforeSendingOrBilling(t *testing.T) {
 				assert.Zero(t, recoveries, "conversion rejection must happen before any debit")
 				var after model.User
 				require.NoError(t, model.DB.First(&after, token.UserId).Error)
-				assert.Equal(t, before.Quota, after.Quota)
-				assert.Equal(t, before.UsedQuota, after.UsedQuota)
+				assert.EqualValues(t, before.Quota, after.Quota)
+				assert.EqualValues(t, before.UsedQuota, after.UsedQuota)
 			})
 		}
 	}

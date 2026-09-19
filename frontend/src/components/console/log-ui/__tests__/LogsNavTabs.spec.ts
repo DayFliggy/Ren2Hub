@@ -21,8 +21,10 @@ async function mountTabs(role: number) {
     email: 'tester@example.com',
     role,
     status: 1,
-    quota: 0,
-    used_quota: 0,
+    available_quota: '0',
+    reserved_quota: '0',
+    quota_version: 0,
+    used_quota: '0',
     request_count: 0,
     created_at: 1_700_000_000,
   })

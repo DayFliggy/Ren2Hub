@@ -45,16 +45,6 @@ const groups = [
     items: model.endpoints,
   },
 ]
-const priceKeys = [
-  'ModelPrice',
-  'ModelRatio',
-  'CompletionRatio',
-  'CacheRatio',
-  'ImageRatio',
-  'AudioRatio',
-  'AudioCompletionRatio',
-]
-
 async function data(page: Page) {
   await page.route('**/api/models/search?*', (route) =>
     route.fulfill({
@@ -87,14 +77,27 @@ async function data(page: Page) {
   await page.route('**/api/prefill_group/', (route) =>
     route.fulfill({ json: { success: true, data: groups } })
   )
-  await page.route('**/api/option/', (route) =>
+  await page.route('**/api/billing/prices', (route) =>
     route.fulfill({
       json: {
         success: true,
-        data: priceKeys.map((key) => ({
-          key,
-          value: JSON.stringify(key === 'ModelRatio' ? { 'gpt-local': 2 } : {}),
-        })),
+        data: [
+          {
+            id: 1,
+            model: 'gpt-local',
+            mode: 'unit_price',
+            prices: [
+              {
+                quantity: 'p',
+                unit: 'per_million_tokens',
+                price: '1.000000000000000001',
+              },
+              { quantity: 'c', unit: 'per_million_tokens', price: '2' },
+            ],
+            created_at: 1700000000,
+            hash: 'fixture',
+          },
+        ],
       },
     })
   )
@@ -172,7 +175,9 @@ for (const language of ['zh-CN', 'en']) {
           drawer.getByLabel(zh ? '模型名称' : 'Model name', { exact: true })
         ).toHaveValue('gpt-local')
         await expect(
-          drawer.getByText(zh ? '计费' : 'Billing', { exact: true })
+          drawer.getByText(zh ? '模型价格版本' : 'Model price version', {
+            exact: true,
+          })
         ).toBeVisible()
         await expect(drawer.locator('img').first()).toBeVisible()
         await drawer.getByRole('button', { name: 'JSON', exact: true }).click()

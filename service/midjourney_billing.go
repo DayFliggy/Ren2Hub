@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
@@ -19,8 +20,7 @@ func FinalizeMidjourneySubmission(c *gin.Context, info *relaycommon.RelayInfo, t
 	task.PrivateData.NodeName = common.NodeName
 	task.PrivateData.SubmissionRequestID = info.RequestId
 	task.PrivateData.BillingContext = &model.TaskBillingContext{
-		ModelPrice: info.PriceData.ModelPrice, GroupRatio: info.PriceData.ChannelRatio,
-		OriginModelName: info.OriginModelName, PerCallBilling: true,
+		Quote: info.PriceData.Quote, Usage: info.PriceData.Usage, OriginModelName: info.OriginModelName,
 	}
 	params := taskConsumptionParams(c, info)
 	params.Quota = task.Quota
@@ -28,31 +28,34 @@ func FinalizeMidjourneySubmission(c *gin.Context, info *relaycommon.RelayInfo, t
 	if err != nil {
 		return err
 	}
-	task.PrivateData.SubmissionRequestID = info.RequestId
 	if err := model.PersistAcceptedMidjourney(task, info.RequestId, consumption); err != nil {
 		return err
 	}
-	err = SettleBilling(c, info, task.Quota)
-	if err == nil {
-		err = model.ApplyBillingRecoveryConsumption(info.RequestId)
-	}
-	info.BillingSettlementError = err
-	if err != nil {
-		logger.LogError(c, fmt.Sprintf("accepted Midjourney accounting remains pending (request_id=%s, row_id=%d): %v", info.RequestId, task.Id, err))
+	if session, ok := info.Billing.(*BillingSession); ok {
+		session.stopRecoveryHeartbeat()
 	}
 	return nil
 }
 
 func CompleteMidjourneyBilling(ctx context.Context, task *model.Midjourney, fromStatus string) (bool, error) {
-	tokenID := task.PrivateData.TokenId
-	if task.PrivateData.SubmissionRequestID == "" {
-		tokenID = task.TokenId
+	if task == nil || (task.Status != "SUCCESS" && task.Status != "FAILURE") {
+		return false, fmt.Errorf("invalid Midjourney completion")
+	}
+	// Midjourney uses the same immutable quote calculator as other async jobs.
+	// The reserved amount is never treated as evidence of the final charge.
+	billingTask := &model.Task{TaskID: task.MjId, Status: model.TaskStatus(task.Status), PrivateData: task.PrivateData}
+	actualQuota, _, _, err := taskCompletionQuota(nil, billingTask, nil)
+	if err != nil {
+		return false, errors.Join(err, model.HoldMidjourneyBilling(ctx, task, fromStatus, "midjourney_final_usage_invalid"))
 	}
 	username, err := model.GetUsernameById(task.UserId, false)
 	if err != nil {
 		return false, err
 	}
-	other, err := common.Marshal(map[string]any{"task_id": task.MjId, "reason": task.FailReason, "pre_consumed_quota": task.Quota})
+	other := taskBillingOther(billingTask)
+	other["task_id"], other["reason"] = task.MjId, task.FailReason
+	other["pre_consumed_quota"], other["actual_quota"] = task.Quota, actualQuota
+	encoded, err := common.Marshal(other)
 	if err != nil {
 		return false, err
 	}
@@ -62,22 +65,23 @@ func CompleteMidjourneyBilling(ctx context.Context, task *model.Midjourney, from
 	}
 	consumption := model.BillingConsumption{
 		Log: model.Log{UserId: task.UserId, Username: username, CreatedAt: common.GetTimestamp(),
-			TokenId: tokenID, ChannelId: task.GetBillingChannelId(), ModelName: CovertMjpActionToModelName(task.Action),
-			Content: task.FailReason, Other: string(other)},
-		CountUsage: true, LogEnabled: true,
+			TokenId: task.PrivateData.TokenId, ChannelId: task.GetBillingChannelId(), ModelName: CovertMjpActionToModelName(task.Action),
+			Quota: actualQuota, Content: task.FailReason, Other: string(encoded)},
+		CountUsage: task.Status == "SUCCESS", LogEnabled: task.Status == "FAILURE" || common.LogConsumeEnabled,
 		ExportEnabled: common.LogConsumeEnabled && common.DataExportEnabled, NodeName: nodeName,
+	}
+	if snapshot := task.PrivateData.BillingContext; snapshot != nil && task.Status == "SUCCESS" {
+		consumption.Usage, consumption.Charge = snapshot.Usage, snapshot.Charge
 	}
 	won, err := model.PersistMidjourneyCompletion(ctx, task, fromStatus, consumption)
 	if err != nil || !won {
 		return won, err
 	}
-	_, err = recoverOneBillingRecovery(ctx, model.MidjourneyBillingRequestID(task.Id))
+	_, err = recoverOneBillingRecovery(ctx, task.PrivateData.SubmissionRequestID)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("Midjourney completion accounting remains pending (row_id=%d): %v", task.Id, err))
 		return true, err
 	}
-	if task.Status == "FAILURE" {
-		task.Quota = 0
-	}
+	task.Quota = actualQuota
 	return true, nil
 }

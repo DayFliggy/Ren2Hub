@@ -17,7 +17,7 @@ const baseLog: LogItem = {
   cache_read_tokens: 826_998,
   cache_write_tokens: 993,
   cache_ttl: '5m',
-  quota: 0,
+  quota: '0',
   latency: 1,
   first_token_latency: 0.2,
   request_mode: 'stream',

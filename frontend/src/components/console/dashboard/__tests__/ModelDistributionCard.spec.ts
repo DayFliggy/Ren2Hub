@@ -65,7 +65,7 @@ function model(name: string, quota: number): ModelShare {
   return {
     model: name,
     ratio: 0,
-    quota,
+    quota: String(quota),
     requests: 100,
     tokens: quota * 600,
   }
@@ -115,8 +115,12 @@ describe('ModelDistributionCard', () => {
     const items = models(15)
     render(items)
 
-    const tail = [...items].sort((a, b) => b.quota - a.quota).slice(10)
-    expect(slices()[10]!.value).toBe(tail.reduce((s, m) => s + m.quota, 0))
+    const tail = [...items]
+      .sort((a, b) => Number(BigInt(b.quota) - BigInt(a.quota)))
+      .slice(10)
+    expect(slices()[10]!.value).toBe(
+      Number(tail.reduce((s, m) => s + BigInt(m.quota), 0n)) / 500000
+    )
   })
 
   it('ranks slices by spend regardless of input order', () => {

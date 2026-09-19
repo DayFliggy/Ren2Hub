@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -10,9 +11,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/setting/billing_setting"
-	"github.com/QuantumNous/new-api/setting/pricing_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 )
@@ -24,25 +24,15 @@ type Pricing struct {
 	Tags                   string                  `json:"tags,omitempty"`
 	VendorID               int                     `json:"vendor_id,omitempty"`
 	QuotaType              int                     `json:"quota_type"`
-	ModelRatio             float64                 `json:"model_ratio"`
-	ModelPrice             float64                 `json:"model_price"`
 	OwnerBy                string                  `json:"owner_by"`
-	CompletionRatio        float64                 `json:"completion_ratio"`
-	CacheRatio             *float64                `json:"cache_ratio,omitempty"`
-	CreateCacheRatio       *float64                `json:"create_cache_ratio,omitempty"`
-	ImageRatio             *float64                `json:"image_ratio,omitempty"`
-	AudioRatio             *float64                `json:"audio_ratio,omitempty"`
-	AudioCompletionRatio   *float64                `json:"audio_completion_ratio,omitempty"`
 	EnableGroup            []string                `json:"-"`
 	ChannelRatioMin        float64                 `json:"channel_ratio_min"`
 	ChannelRatioMax        float64                 `json:"channel_ratio_max"`
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
 	BillingMode            string                  `json:"billing_mode,omitempty"`
 	BillingExpr            string                  `json:"billing_expr,omitempty"`
-	PricingVersion         string                  `json:"pricing_version,omitempty"`
+	PriceVersion           *billing.PriceVersion   `json:"price_version,omitempty"`
 }
-
-const PricingVersion = "db96bf4087646951cb0885f808b0737aa1b799c688ae11384de08639992d0800"
 
 type PricingVendor struct {
 	ID          int    `json:"id"`
@@ -184,7 +174,6 @@ func appendPricingEndpoint(endpoints []string, endpoint string) []string {
 }
 
 func updatePricing() {
-	//modelRatios := common.GetModelRatios()
 	enableAbilities, err := GetAllEnableAbilityWithChannels()
 	if err != nil {
 		common.SysLog(fmt.Sprintf("GetAllEnableAbilityWithChannels error: %v", err))
@@ -395,6 +384,15 @@ func updatePricing() {
 		}
 	}
 
+	versions, err := ListActiveBillingPrices(context.Background())
+	if err != nil {
+		common.SysLog(fmt.Sprintf("load published billing prices error: %v", err))
+		return
+	}
+	byModel := make(map[string]*billing.PriceVersion, len(versions))
+	for i := range versions {
+		byModel[versions[i].Model] = &versions[i]
+	}
 	pricingMap = make([]Pricing, 0)
 	for model, groups := range modelGroupsMap {
 		pricing := Pricing{
@@ -421,46 +419,18 @@ func updatePricing() {
 				pricing.OwnerBy = vendor.Name
 			}
 		}
-		pricingModel, _ := pricing_setting.ResolveModel(model)
-		modelPrice, findPrice := ratio_setting.GetModelPrice(pricingModel, false)
-		if findPrice {
-			pricing.ModelPrice = modelPrice
-			pricing.QuotaType = 1
-		} else {
-			modelRatio, _, _ := ratio_setting.GetModelRatio(pricingModel)
-			pricing.ModelRatio = modelRatio
-			pricing.CompletionRatio = ratio_setting.GetCompletionRatio(pricingModel)
-			pricing.QuotaType = 0
-		}
-		if cacheRatio, ok := ratio_setting.GetCacheRatio(pricingModel); ok {
-			pricing.CacheRatio = &cacheRatio
-		}
-		if createCacheRatio, ok := ratio_setting.GetCreateCacheRatio(pricingModel); ok {
-			pricing.CreateCacheRatio = &createCacheRatio
-		}
-		if imageRatio, ok := ratio_setting.GetImageRatio(pricingModel); ok {
-			pricing.ImageRatio = &imageRatio
-		}
-		if ratio_setting.ContainsAudioRatio(pricingModel) {
-			audioRatio := ratio_setting.GetAudioRatio(pricingModel)
-			pricing.AudioRatio = &audioRatio
-		}
-		if ratio_setting.ContainsAudioCompletionRatio(pricingModel) {
-			audioCompletionRatio := ratio_setting.GetAudioCompletionRatio(pricingModel)
-			pricing.AudioCompletionRatio = &audioCompletionRatio
-		}
-		if billingMode := billing_setting.GetBillingMode(pricingModel); billingMode == "tiered_expr" {
-			if expr, ok := billing_setting.GetBillingExpr(pricingModel); ok && strings.TrimSpace(expr) != "" {
-				pricing.BillingMode = billingMode
-				pricing.BillingExpr = expr
+		if version := byModel[model]; version != nil {
+			pricing.BillingMode = version.Mode
+			pricing.BillingExpr = version.Expression
+			pricing.PriceVersion = version
+			for _, price := range version.Prices {
+				if price.Quantity == "calls" {
+					pricing.QuotaType = 1
+				}
 			}
 		}
-		pricingMap = append(pricingMap, pricing)
-	}
 
-	// 防止大更新后数据不通用
-	if len(pricingMap) > 0 {
-		pricingMap[0].PricingVersion = PricingVersion
+		pricingMap = append(pricingMap, pricing)
 	}
 
 	// 刷新缓存映射，供高并发快速查询

@@ -140,7 +140,7 @@ type RelayInfo struct {
 	ReasoningEffort        string
 	UserSetting            dto.UserSetting
 	UserEmail              string
-	UserQuota              int
+	UserQuota              common.Quota
 	RelayFormat            types.RelayFormat
 	SendResponseCount      int
 	ReceivedResponseCount  int
@@ -171,7 +171,8 @@ type RelayInfo struct {
 	// session retryable for a later recovery attempt.
 	BillingRefundError error `json:"-"`
 	// BillingSource is retained for persisted request identity; new requests use wallet.
-	BillingSource string
+	BillingSource    string
+	BillingAttemptID string `json:"-"`
 	// RequestId is used for idempotent pre-consume/refund.
 	RequestId                 string
 	IsClaudeBetaQuery         bool // /v1/messages?beta=true
@@ -570,7 +571,7 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		UserId:     common.GetContextKeyInt(c, constant.ContextKeyUserId),
 		UsingGroup: common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
 		UserGroup:  common.GetContextKeyString(c, constant.ContextKeyUserGroup),
-		UserQuota:  common.GetContextKeyInt(c, constant.ContextKeyUserQuota),
+		UserQuota:  common.GetContextKeyQuota(c, constant.ContextKeyUserQuota),
 		UserEmail:  common.GetContextKeyString(c, constant.ContextKeyUserEmail),
 
 		OriginModelName: common.GetContextKeyString(c, constant.ContextKeyOriginalModel),

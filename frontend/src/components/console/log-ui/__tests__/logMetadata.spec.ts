@@ -11,7 +11,7 @@ const baseLog = {
   channel: 'channel',
   prompt_tokens: 1,
   completion_tokens: 1,
-  quota: 0,
+  quota: '0',
   latency: 1,
   first_token_latency: null,
   request_mode: 'sync',

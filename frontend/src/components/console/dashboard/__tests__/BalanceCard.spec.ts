@@ -20,7 +20,7 @@ beforeEach(() => {
 describe('BalanceCard', () => {
   it('does not relabel today spend as monthly spend', () => {
     const wrapper = mount(BalanceCard, {
-      props: { quota: 5_000_000, todayQuota: 500_000 },
+      props: { quota: '5000000', todayQuota: '500000' },
       global: { plugins: [i18n] },
     })
 
@@ -32,7 +32,7 @@ describe('BalanceCard', () => {
 
   it('renders the supplied calendar-month spend', () => {
     const wrapper = mount(BalanceCard, {
-      props: { quota: 5_000_000, monthQuota: 1_500_000 },
+      props: { quota: '5000000', monthQuota: '1500000' },
       global: { plugins: [i18n] },
     })
 
@@ -50,5 +50,19 @@ describe('BalanceCard', () => {
     expect(wrapper.text()).toContain('--')
     expect(wrapper.text()).not.toContain('$0.00')
     expect(wrapper.text()).toContain('UNKNOWN')
+  })
+
+  it('renders valid account fields whose display denominator exceeds int64', () => {
+    const wrapper = mount(BalanceCard, {
+      props: {
+        quota: '9223372036854775807',
+        usedQuota: '9223372036854775807',
+      },
+      global: { plugins: [i18n] },
+    })
+
+    expect(wrapper.text()).toContain('$18,446,744,073,709.55')
+    expect(wrapper.text()).toContain('50%')
+    wrapper.unmount()
   })
 })

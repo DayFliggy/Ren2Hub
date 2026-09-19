@@ -1,6 +1,7 @@
 package autopricing
 
 import (
+	"github.com/QuantumNous/new-api/common"
 	"testing"
 	"time"
 
@@ -197,7 +198,9 @@ func TestReviewedOverrideExpressionPricesContextServiceTiersAndCache(t *testing.
 
 	run := func(params billingexpr.TokenParams, body string) float64 {
 		t.Helper()
-		value, _, runErr := billingexpr.RunExprWithRequest(entry.BillingExpr, params, billingexpr.RequestInput{Body: []byte(body)})
+		var attributes map[string]interface{}
+		require.NoError(t, common.Unmarshal([]byte(body), &attributes))
+		value, _, runErr := billingexpr.RunExprWithRequest(entry.BillingExpr, params, billingexpr.RequestInput{Attributes: attributes})
 		require.NoError(t, runErr)
 		return value
 	}

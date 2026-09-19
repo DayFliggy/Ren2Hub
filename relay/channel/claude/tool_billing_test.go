@@ -4,21 +4,18 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"time"
 )
 
 func TestHandleClaudeResponseDataCountsToolUse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	operation_setting.SetToolPriceForTest("lookup_fn", 3.0)
-	t.Cleanup(func() {
-		operation_setting.DeleteToolPriceForTest("lookup_fn")
-	})
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -26,6 +23,9 @@ func TestHandleClaudeResponseDataCountsToolUse(t *testing.T) {
 		OriginModelName: "claude-3-7-sonnet",
 		RelayFormat:     types.RelayFormatClaude,
 	}
+	quote, quoteErr := billing.NewQuote(billing.PriceVersion{Model: info.OriginModelName, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "tool:lookup_fn", Unit: "per_call", Price: "0.003"}}}, "1", nil, time.Unix(1700000000, 0))
+	require.NoError(t, quoteErr)
+	info.PriceData.Quote = quote
 	claudeInfo := &ClaudeResponseInfo{Usage: &dto.Usage{}}
 
 	data := []byte(`{
@@ -51,6 +51,9 @@ func TestCountClaudeStreamBillableToolsSetsWebSearchRequests(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	info := &relaycommon.RelayInfo{OriginModelName: "claude-3-7-sonnet"}
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: info.OriginModelName, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "tool:stream_fn", Unit: "per_call", Price: "0.002"}}}, "1", nil, time.Unix(1700000000, 0))
+	require.NoError(t, err)
+	info.PriceData.Quote = quote
 
 	countClaudeStreamBillableTools(c, info, &dto.ClaudeResponse{
 		Type: "message_delta",
@@ -60,10 +63,6 @@ func TestCountClaudeStreamBillableToolsSetsWebSearchRequests(t *testing.T) {
 	})
 	assert.Equal(t, 3, c.GetInt("claude_web_search_requests"))
 
-	operation_setting.SetToolPriceForTest("stream_fn", 2.0)
-	t.Cleanup(func() {
-		operation_setting.DeleteToolPriceForTest("stream_fn")
-	})
 	countClaudeStreamBillableTools(c, info, &dto.ClaudeResponse{
 		Type: "content_block_start",
 		ContentBlock: &dto.ClaudeMediaMessage{

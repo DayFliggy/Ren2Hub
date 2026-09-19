@@ -100,7 +100,7 @@ func openTokenControllerTestDB(t *testing.T) *gorm.DB {
 
 func migrateTokenControllerTestDB(t *testing.T, db *gorm.DB) {
 	t.Helper()
-	require.NoError(t, db.AutoMigrate(&model.UserRouteProfile{}))
+	require.NoError(t, db.AutoMigrate(&model.UserRouteProfile{}, &model.User{}, &model.BillingEvent{}, &model.BillingRecovery{}))
 
 	if err := db.AutoMigrate(&model.Token{}); err != nil {
 		t.Fatalf("failed to migrate token table: %v", err)
@@ -166,6 +166,11 @@ func openTokenControllerExternalDB(t *testing.T, dialect string, dsn string) (*g
 func seedToken(t *testing.T, db *gorm.DB, userID int, name string, rawKey string) *model.Token {
 	t.Helper()
 
+	var userCount int64
+	require.NoError(t, db.Model(&model.User{}).Where("id = ?", userID).Count(&userCount).Error)
+	if userCount == 0 {
+		require.NoError(t, db.Create(&model.User{Id: userID, Username: fmt.Sprintf("token-owner-%d", userID), AffCode: fmt.Sprintf("aff-%d", userID)}).Error)
+	}
 	token := &model.Token{
 		UserId:         userID,
 		Name:           name,
@@ -478,7 +483,9 @@ func TestUpdateTokenMasksKeyInResponse(t *testing.T) {
 		"id":                   token.Id,
 		"name":                 "updated-token",
 		"expired_time":         -1,
-		"remain_quota":         100,
+		"available_quota":      "100",
+		"operation_id":         "token-update",
+		"expected_version":     token.QuotaVersion,
 		"unlimited_quota":      true,
 		"model_limits_enabled": false,
 		"model_limits":         "",

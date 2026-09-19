@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/ast"
@@ -36,15 +37,41 @@ func ParseExprVersion(exprStr string) (version int, body string) {
 type requestRulePatcher struct {
 	requestRules         []RequestRuleTrace
 	restrictedIdentifier string
+	validationError      error
 }
 
 func (p *requestRulePatcher) Visit(node *ast.Node) {
 	if identifier, ok := (*node).(*ast.IdentifierNode); ok {
 		switch identifier.Value {
-		case requestRuleTraceFunction, requestRuleTraceIntFunction:
+		case requestRuleTraceFunction, requestRuleTraceIntFunction, "param", "header":
 			p.restrictedIdentifier = identifier.Value
 		}
 		return
+	}
+	if call, ok := (*node).(*ast.CallNode); ok {
+		if callee, ok := call.Callee.(*ast.IdentifierNode); ok {
+			switch callee.Value {
+			case "attr", "hour", "minute", "weekday", "month", "day":
+				if len(call.Arguments) != 1 {
+					p.validationError = fmt.Errorf("billing probe requires one literal argument")
+					return
+				}
+				arg, ok := call.Arguments[0].(*ast.StringNode)
+				if !ok {
+					p.validationError = fmt.Errorf("billing probe requires a literal argument")
+					return
+				}
+				if callee.Value == "attr" {
+					if !AllowedAttribute(arg.Value) {
+						p.validationError = fmt.Errorf("unregistered billing attribute")
+					}
+				} else {
+					if _, err := time.LoadLocation(arg.Value); err != nil || arg.Value == "" {
+						p.validationError = fmt.Errorf("invalid billing timezone")
+					}
+				}
+			}
+		}
 	}
 
 	conditional, ok := (*node).(*ast.ConditionalNode)
@@ -100,7 +127,7 @@ func usesRequestProbe(node ast.Node) bool {
 			return false
 		}
 		switch identifier.Value {
-		case "param", "header", "hour", "minute", "weekday", "month", "day":
+		case "attr", "hour", "minute", "weekday", "month", "day":
 			return true
 		default:
 			return false
@@ -135,8 +162,7 @@ var compileEnvPrototypeV1 = map[string]interface{}{
 	"tier":       func(string, float64) float64 { return 0 },
 	"_trace":     func(int, bool, float64) float64 { return 1 },
 	"_trace_int": func(int, bool, int) int { return 1 },
-	"header":     func(string) string { return "" },
-	"param":      func(string) interface{} { return nil },
+	"attr":       func(string) interface{} { return nil },
 	"has":        func(interface{}, string) bool { return false },
 	"hour":       func(string) int { return 0 },
 	"minute":     func(string) int { return 0 },
@@ -188,6 +214,9 @@ func compileEntryFromCacheByHash(exprStr, hash string) (*cachedEntry, error) {
 	version, body := ParseExprVersion(exprStr)
 	patcher := &requestRulePatcher{}
 	prog, err := expr.Compile(body, expr.Env(getCompileEnv(version)), expr.Patch(patcher), expr.AsFloat64())
+	if patcher.validationError != nil {
+		return nil, patcher.validationError
+	}
 	if patcher.restrictedIdentifier != "" {
 		return nil, fmt.Errorf("expr compile error: identifier %q is reserved for internal use", patcher.restrictedIdentifier)
 	}

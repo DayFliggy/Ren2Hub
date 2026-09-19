@@ -42,7 +42,7 @@ func TestGatewaySpeechFinalInputAccounting(t *testing.T) {
 					assert.Equal(t, finalText, payload["text"])
 					var user model.User
 					require.NoError(t, model.DB.First(&user, 1).Error)
-					assert.Equal(t, 10000000-400, user.Quota, "reserve the actual provider input before sending")
+					assert.EqualValues(t, 10000000-400, user.Quota, "reserve the actual provider input before sending")
 					w.Header().Set("Content-Type", "application/json")
 					_, _ = io.WriteString(w, provider.response)
 				})
@@ -52,7 +52,7 @@ func TestGatewaySpeechFinalInputAccounting(t *testing.T) {
 					common.PreConsumedQuota, constant.CountToken = oldPreconsume, oldCount
 				})
 				common.PreConsumedQuota, constant.CountToken = 1, false
-				require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"tts-budget":1}`))
+				require.NoError(t, publishGatewayFixturePrices(`{"tts-budget":1}`, true))
 				channel, err := model.GetChannelById(1, true)
 				require.NoError(t, err)
 				channel.Type, channel.Models = provider.channelType, "tts-budget"
@@ -66,7 +66,7 @@ func TestGatewaySpeechFinalInputAccounting(t *testing.T) {
 				if insufficient {
 					quota = 100
 				}
-				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "remain_quota": quota}).Error)
+				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": quota}).Error)
 				require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 				body := fmt.Sprintf(`{"model":"tts-budget","input":"x","voice":"alloy","response_format":"pcm","metadata":%s}`, fmt.Sprintf(provider.metadata, finalText))
 				code, output := postGatewayTask(t, url, key, "/v1/audio/speech", body)
@@ -87,9 +87,9 @@ func TestGatewaySpeechFinalInputAccounting(t *testing.T) {
 				if insufficient {
 					wantCharge = 0
 				}
-				assert.Equal(t, 10000000-wantCharge, user.Quota)
-				assert.Equal(t, wantCharge, user.UsedQuota)
-				assert.Equal(t, quota-wantCharge, token.RemainQuota)
+				assert.EqualValues(t, 10000000-wantCharge, user.Quota)
+				assert.EqualValues(t, wantCharge, user.UsedQuota)
+				assert.EqualValues(t, quota-wantCharge, token.RemainQuota)
 				var logs []model.Log
 				require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
 				if insufficient {

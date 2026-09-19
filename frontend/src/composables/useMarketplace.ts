@@ -133,7 +133,7 @@ export function useMarketplace() {
   /** Convert a USD base price into the active currency + symbol. */
   function formatPrice(usd: number): string {
     if (currency.value === 'USD') {
-      return `$${usd.toFixed(usd < 1 ? 4 : 2)}`
+      return `$${usd.toFixed(usd < 1 ? 3 : 2)}`
     }
     const cny = usd * USD_TO_CNY
     return `¥${cny.toFixed(cny < 1 ? 3 : 2)}`

@@ -21,7 +21,7 @@ type userLogDTO struct {
 	TokenName        string          `json:"token_name"`
 	ModelName        string          `json:"model_name"`
 	ChannelName      string          `json:"channel_name"`
-	Quota            int             `json:"quota"`
+	Quota            common.Quota    `json:"quota"`
 	PromptTokens     int             `json:"prompt_tokens"`
 	CompletionTokens int             `json:"completion_tokens"`
 	UseTime          int             `json:"use_time"`

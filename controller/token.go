@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -16,6 +17,8 @@ import (
 )
 
 type tokenRequest struct {
+	OperationID     string `json:"operation_id"`
+	ExpectedVersion *int64 `json:"expected_version"`
 	model.Token
 	Type string `json:"type"`
 }
@@ -23,6 +26,19 @@ type tokenRequest struct {
 type tokenResponse struct {
 	*model.Token
 	Type string `json:"type"`
+}
+
+func (response tokenResponse) MarshalJSON() ([]byte, error) {
+	type tokenJSON model.Token
+	var available *common.Quota
+	if !response.UnlimitedQuota {
+		available = &response.RemainQuota
+	}
+	return common.Marshal(struct {
+		tokenJSON
+		Available *common.Quota `json:"available_quota"`
+		Type      string        `json:"type"`
+	}{tokenJSON: tokenJSON(*response.Token), Available: available, Type: response.Type})
 }
 
 func buildMaskedTokenResponses(tokens []*model.Token) ([]*tokenResponse, error) {
@@ -143,6 +159,21 @@ func GetTokenKey(c *gin.Context) {
 	})
 }
 
+func tokenBudgetSummary(token *model.Token) (any, any, error) {
+	if token.UnlimitedQuota {
+		return nil, nil, nil
+	}
+	total, err := common.AddQuota(token.RemainQuota, token.ReservedQuota)
+	if err != nil {
+		return nil, nil, err
+	}
+	total, err = common.AddQuota(total, token.UsedQuota)
+	if err != nil {
+		return nil, nil, err
+	}
+	return token.RemainQuota, total, nil
+}
+
 func GetTokenStatus(c *gin.Context) {
 	tokenId := c.GetInt("token_id")
 	userId := c.GetInt("id")
@@ -155,11 +186,18 @@ func GetTokenStatus(c *gin.Context) {
 	if expiredAt == -1 {
 		expiredAt = 0
 	}
+	available, total, err := tokenBudgetSummary(token)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"object":          "credit_summary",
-		"total_granted":   token.RemainQuota,
-		"total_used":      0, // not supported currently
-		"total_available": token.RemainQuota,
+		"total_granted":   total,
+		"total_used":      token.UsedQuota,
+		"reserved_quota":  token.ReservedQuota,
+		"total_available": available,
 		"expires_at":      expiredAt * 1000,
 	})
 }
@@ -196,15 +234,22 @@ func GetTokenUsage(c *gin.Context) {
 		expiredAt = 0
 	}
 
+	available, total, err := tokenBudgetSummary(token)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code":    true,
 		"message": "ok",
 		"data": gin.H{
 			"object":               "token_usage",
 			"name":                 token.Name,
-			"total_granted":        token.RemainQuota + token.UsedQuota,
+			"total_granted":        total,
+			"reserved_quota":       token.ReservedQuota,
 			"total_used":           token.UsedQuota,
-			"total_available":      token.RemainQuota,
+			"total_available":      available,
 			"unlimited_quota":      token.UnlimitedQuota,
 			"model_limits":         token.GetModelLimitsMap(),
 			"model_limits_enabled": token.ModelLimitsEnabled,
@@ -236,11 +281,6 @@ func AddToken(c *gin.Context) {
 	if !token.UnlimitedQuota {
 		if token.RemainQuota < 0 {
 			common.ApiErrorI18n(c, i18n.MsgTokenQuotaNegative)
-			return
-		}
-		maxQuotaValue := common.QuotaFromFloat(1000000000 * common.QuotaPerUnit)
-		if token.RemainQuota > maxQuotaValue {
-			common.ApiErrorI18n(c, i18n.MsgTokenQuotaExceedMax, map[string]any{"Max": maxQuotaValue})
 			return
 		}
 	}
@@ -287,6 +327,10 @@ func AddToken(c *gin.Context) {
 	}
 	err = cleanToken.InsertWithRouteMode(mode)
 	if err != nil {
+		if errors.Is(err, model.ErrBillingEventConflict) || errors.Is(err, model.ErrBillingVersionConflict) {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
@@ -329,11 +373,6 @@ func UpdateToken(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgTokenQuotaNegative)
 			return
 		}
-		maxQuotaValue := common.QuotaFromFloat(1000000000 * common.QuotaPerUnit)
-		if token.RemainQuota > maxQuotaValue {
-			common.ApiErrorI18n(c, i18n.MsgTokenQuotaExceedMax, map[string]any{"Max": maxQuotaValue})
-			return
-		}
 	}
 	cleanToken, err := model.GetTokenByIds(token.Id, userId)
 	if err != nil {
@@ -370,8 +409,12 @@ func UpdateToken(c *gin.Context) {
 		}
 
 	}
-	err = cleanToken.Update()
+	err = cleanToken.UpdateWithBudget(request.OperationID, request.ExpectedVersion)
 	if err != nil {
+		if errors.Is(err, model.ErrBillingEventConflict) || errors.Is(err, model.ErrBillingVersionConflict) {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}

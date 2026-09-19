@@ -113,10 +113,5 @@ func TryTieredSettle(relayInfo *relaycommon.RelayInfo, params billingexpr.TokenP
 		return true, 0, nil, errors.New("billing expression settlement failed; reconciliation required")
 	}
 
-	// Surface any int32 saturation from settlement onto RelayInfo so the
-	// consume log records it under admin_info, regardless of which caller
-	// (text, audio, WSS) consumes the returned quota. First non-nil wins.
-	noteQuotaClamp(relayInfo, tr.Clamp)
-
 	return true, tr.ActualQuotaAfterGroup, &tr, nil
 }

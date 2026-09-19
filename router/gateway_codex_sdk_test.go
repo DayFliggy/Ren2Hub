@@ -20,7 +20,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -57,7 +56,7 @@ func TestGatewayOfficialCodexSDK(t *testing.T) {
 				BaseURL: &endpoint, ModelMapping: &mapping, Status: common.ChannelStatusEnabled, Group: "default", ChannelRatio: 1, CapacityTotal: 10}
 			require.NoError(t, model.DB.Create(errorChannel).Error)
 			require.NoError(t, errorChannel.AddAbilities(model.DB))
-			require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"codex-fixture":0.001,"codex-errors":0.001}`))
+			require.NoError(t, publishGatewayFixturePrices(`{"codex-fixture":0.001,"codex-errors":0.001}`, false))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			client := service.GetHttpClient()
 			previousTransport := client.Transport

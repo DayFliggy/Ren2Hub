@@ -46,10 +46,8 @@ func PrepareBillingForSelectedModel(c *gin.Context, relayInfo *relaycommon.Relay
 	}
 	targetQuota := relayInfo.PriceData.QuotaToPreConsume
 	if relayInfo.Billing == nil {
-		if !relayInfo.PriceData.FreeModel {
-			if apiErr := PreConsumeBilling(c, targetQuota, relayInfo); apiErr != nil {
-				return apiErr
-			}
+		if apiErr := PreConsumeBilling(c, targetQuota, relayInfo); apiErr != nil {
+			return apiErr
 		}
 	} else {
 		if err := relayInfo.Billing.Reserve(targetQuota); err != nil {
@@ -68,7 +66,7 @@ func PrepareBillingForSelectedModel(c *gin.Context, relayInfo *relaycommon.Relay
 // ---------------------------------------------------------------------------
 
 // SettleBilling 执行计费结算。如果 RelayInfo 上有 BillingSession 则通过 session 结算，
-// 否则回退到旧的 PostConsumeQuota 路径（兼容按次计费等场景）。
+// 所有请求均要求持久化会话，缺失时拒绝扣款。
 func SettleBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuota int) error {
 	if relayInfo.Billing != nil {
 		preConsumed := relayInfo.Billing.GetPreConsumedQuota()
@@ -115,13 +113,5 @@ func SettleBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuo
 		return nil
 	}
 
-	// 回退：无 BillingSession 时使用旧路径
-	quotaDelta := actualQuota - relayInfo.FinalPreConsumedQuota
-	if quotaDelta != 0 {
-		err := PostConsumeQuota(relayInfo, quotaDelta, relayInfo.FinalPreConsumedQuota, true)
-		relayInfo.BillingSettlementError = err
-		return err
-	}
-	relayInfo.BillingSettlementError = nil
-	return nil
+	return fmt.Errorf("durable billing session is required")
 }

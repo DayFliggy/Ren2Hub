@@ -22,7 +22,7 @@ func TestGatewayGeminiInvalidInputPrecedesStateLookup(t *testing.T) {
 				assert.Zero(t, sends.Load())
 				var user model.User
 				require.NoError(t, model.DB.First(&user, 1).Error)
-				assert.Equal(t, 10000000, user.Quota)
+				assert.EqualValues(t, 10000000, user.Quota)
 				var recoveries, failures int64
 				require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&recoveries).Error)
 				require.NoError(t, model.DB.Model(&model.ChannelHealth{}).Where("failure_count > 0").Count(&failures).Error)

@@ -188,6 +188,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	defer func() {
 		if relayInfo.ResponseUsage != nil && (newAPIError == nil || relayInfo.HasValidOutput()) {
+			if newAPIError == nil && !relayInfo.IsStream {
+				relayInfo.MarkValidOutput()
+			}
 			if relayInfo.ResponseUsageKind == "realtime" {
 				usage := relayInfo.ResponseUsage
 				service.PostWssConsumeQuota(c, relayInfo, relayInfo.BillingModelName(), &dto.RealtimeUsage{
@@ -1750,14 +1753,10 @@ func RelayTask(c *gin.Context) {
 		task.PrivateData.TokenId = relayInfo.TokenId
 		task.PrivateData.NodeName = common.NodeName
 		task.PrivateData.BillingContext = &model.TaskBillingContext{
-			ModelPrice:      relayInfo.PriceData.ModelPrice,
-			GroupRatio:      relayInfo.PriceData.ChannelRatio,
-			ModelRatio:      relayInfo.PriceData.ModelRatio,
-			OtherRatios:     relayInfo.PriceData.OtherRatios(),
+			Quote: relayInfo.PriceData.Quote, Usage: relayInfo.PriceData.Usage,
 			OriginModelName: relayInfo.OriginModelName,
-			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
 		}
-		task.Quota = result.Quota
+		task.Quota = common.Quota(result.Quota)
 		task.Data = result.TaskData
 		task.Action = relayInfo.Action
 		if persistErr := service.FinalizeTaskSubmission(c, relayInfo, task); persistErr != nil {

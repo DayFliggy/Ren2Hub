@@ -18,7 +18,7 @@ const log: LogItem = {
   cache_read_tokens: 3,
   cache_write_tokens: 4,
   cache_ttl: '5m',
-  quota: 3,
+  quota: '3',
   latency: 4.5,
   first_token_latency: 1.25,
   request_mode: 'stream',
@@ -28,6 +28,15 @@ const log: LogItem = {
 }
 
 describe('log exports', () => {
+  it('exports raw quota and timing precision independently of rounded UI labels', () => {
+    const values = getLogExportValues({
+      ...log,
+      quota: '9007199254740993',
+      latency: 1.123456789,
+    })
+    expect(values[LOG_EXPORT_HEADERS.indexOf('quota')]).toBe('9007199254740993')
+    expect(values[LOG_EXPORT_HEADERS.indexOf('latency')]).toBe(1.123456789)
+  })
   it('exports request timing and cache fields in the token field group', () => {
     expect(LOG_EXPORT_HEADERS).toEqual([
       'time',
@@ -64,7 +73,7 @@ describe('log exports', () => {
       '5m',
       4.5,
       5,
-      3,
+      '3',
       'done',
     ])
   })

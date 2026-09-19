@@ -23,7 +23,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -81,7 +80,7 @@ func setupGatewayVertexOpenSource(t *testing.T) *gatewayVertexOpenSourceFixture 
 	}
 	priceJSON, err := common.Marshal(prices)
 	require.NoError(t, err)
-	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(priceJSON)))
+	require.NoError(t, publishGatewayFixturePrices(string(priceJSON), false))
 	require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 	client := service.GetHttpClient()
 	original := client.Transport

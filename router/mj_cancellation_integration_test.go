@@ -37,7 +37,7 @@ func TestMidjourneyUnknownAcceptanceCancellation(t *testing.T) {
 			require.NoError(t, db.AutoMigrate(
 				&model.UserRouteGroup{}, &model.UserRouteEntry{}, &model.RoutePolicy{},
 				&model.ChannelCapabilitySnapshot{}, &model.ChannelModelCapability{}, &model.ChannelHealth{},
-				&model.BillingRecovery{}, &model.BillingRecoveryAdjustment{},
+				&model.BillingRecovery{}, &model.BillingEvent{},
 				&model.Log{}, &model.Midjourney{},
 			))
 
@@ -53,7 +53,7 @@ func TestMidjourneyUnknownAcceptanceCancellation(t *testing.T) {
 			})
 			prices, err := common.Marshal(map[string]float64{test.model: 0.001})
 			require.NoError(t, err)
-			require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(prices)))
+			require.NoError(t, publishGatewayFixturePrices(string(prices), false))
 
 			accepted := make(chan struct{})
 			release := make(chan struct{})
@@ -120,13 +120,14 @@ func TestMidjourneyUnknownAcceptanceCancellation(t *testing.T) {
 				assert.Positive(t, recovery.FundingAmount)
 				require.NoError(t, db.First(user, user.Id).Error)
 				require.NoError(t, db.First(token, token.Id).Error)
-				assert.Equal(t, 1_000_000-int(recovery.FundingAmount), user.Quota)
-				assert.Equal(t, 1_000_000-int(recovery.TokenAmount), token.RemainQuota)
+				assert.EqualValues(t, 1_000_000-int(recovery.FundingAmount), user.Quota)
+				assert.EqualValues(t, 1_000_000-int(recovery.TokenAmount), token.RemainQuota)
 				_, err := service.RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+3600, 10)
 				require.NoError(t, err)
 			}
 			assert.Zero(t, user.UsedQuota)
-			assert.Equal(t, int(recovery.TokenAmount), token.UsedQuota)
+			assert.Zero(t, token.UsedQuota)
+			assert.EqualValues(t, recovery.TokenAmount, token.ReservedQuota)
 			var taskCount int64
 			require.NoError(t, db.Model(&model.Midjourney{}).Count(&taskCount).Error)
 			assert.Zero(t, taskCount)

@@ -17,7 +17,7 @@ func useActivityClaimTestDB(t *testing.T) *gorm.DB {
 	previousRedisEnabled := common.RedisEnabled
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&User{}, &ActivityClaim{}))
+	require.NoError(t, db.AutoMigrate(&User{}, &BillingEvent{}, &ActivityClaim{}))
 	DB = db
 	common.RedisEnabled = false
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
@@ -38,7 +38,7 @@ func TestClaimActivityRewardIsAtomicAndIdempotent(t *testing.T) {
 	require.Error(t, ClaimActivityReward(user.Id, "newcomer-v1", 25))
 
 	require.NoError(t, db.First(&user, user.Id).Error)
-	assert.Equal(t, 125, user.Quota)
+	assert.Equal(t, common.Quota(125), user.Quota)
 	var claimCount int64
 	require.NoError(t, db.Model(&ActivityClaim{}).Where("user_id = ?", user.Id).Count(&claimCount).Error)
 	assert.Equal(t, int64(1), claimCount)

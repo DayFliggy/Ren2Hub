@@ -9,9 +9,11 @@ import (
 
 func TestCachedTokenPreservesConversionPolicy(t *testing.T) {
 	truncateTables(t)
-	resetBatchUpdateTestState(t)
 	useUserCacheMiniRedis(t)
-	token := createReserveTestToken(t, 100)
+	user := User{Username: "conversion-policy", Quota: 100}
+	require.NoError(t, DB.Create(&user).Error)
+	token := Token{UserId: user.Id, Key: "conversion-policy-token", RemainQuota: 100}
+	require.NoError(t, token.Insert())
 	require.NoError(t, DB.Model(&Token{}).Where("id = ?", token.Id).Update("conversion_policy", "strict").Error)
 	first, err := GetTokenByKey(token.Key, false)
 	require.NoError(t, err)

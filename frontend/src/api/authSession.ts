@@ -1,3 +1,4 @@
+import { isQuota } from '@/utils/quota'
 import type {
   AuthBundle,
   AuthTokenRotation,
@@ -46,8 +47,11 @@ function isUserInfo(value: unknown): value is UserInfo {
     typeof value.email === 'string' &&
     isFiniteNumber(value.role) &&
     isFiniteNumber(value.status) &&
-    isFiniteNumber(value.quota) &&
-    isFiniteNumber(value.used_quota) &&
+    isQuota(value.available_quota) &&
+    isQuota(value.reserved_quota) &&
+    Number.isSafeInteger(value.quota_version) &&
+    Number(value.quota_version) >= 0 &&
+    isQuota(value.used_quota) &&
     isFiniteNumber(value.request_count) &&
     isFiniteNumber(value.created_at)
   )

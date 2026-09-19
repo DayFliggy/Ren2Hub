@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"github.com/QuantumNous/new-api/common"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -25,7 +26,7 @@ func setupBillingConsumptionTest(t *testing.T) (*gorm.DB, *gorm.DB, BillingConsu
 	require.NoError(t, db.Create(&Channel{Id: 3, Name: "consumption"}).Error)
 	_, err = EnsureBillingRecovery(BillingRecoveryInput{RequestID: "consume-once", UserID: 1, TokenID: 2, Source: "wallet", TokenRequired: true})
 	require.NoError(t, err)
-	require.NoError(t, PreConsumeWalletBillingRecovery("consume-once", 40, false))
+	require.NoError(t, Reserve("consume-once", 40))
 	consumption := BillingConsumption{
 		Log: Log{UserId: 1, TokenId: 2, ChannelId: 3, Username: "consumption", CreatedAt: 7200, Type: LogTypeConsume,
 			ModelName: "test-model", Quota: 30, PromptTokens: 10, CompletionTokens: 20},
@@ -37,9 +38,8 @@ func setupBillingConsumptionTest(t *testing.T) (*gorm.DB, *gorm.DB, BillingConsu
 
 func completeConsumptionFunds(t *testing.T) {
 	t.Helper()
-	require.NoError(t, ApplyBillingRecoveryAdjustment("consume-once", BillingRecoveryComponentFunding, BillingRecoveryOperationSettle))
-	require.NoError(t, ApplyBillingRecoveryAdjustment("consume-once", BillingRecoveryComponentToken, BillingRecoveryOperationSettle))
-	require.NoError(t, MarkBillingRecoverySettled("consume-once"))
+	require.NoError(t, Settle("consume-once", 30))
+	require.NoError(t, Settle("consume-once", 30))
 }
 
 func TestBillingConsumptionPreservesSettlementIntentAndRejectsConflictingUsage(t *testing.T) {
@@ -52,7 +52,7 @@ func TestBillingConsumptionPreservesSettlementIntentAndRejectsConflictingUsage(t
 	assert.ErrorIs(t, UpdateBillingRecoverySettlement("consume-once", 999), ErrBillingRecoveryStateConflict)
 	var user User
 	require.NoError(t, db.First(&user, 1).Error)
-	assert.Equal(t, 60, user.Quota)
+	assert.EqualValues(t, 60, user.Quota)
 	assert.Zero(t, user.RequestCount)
 }
 
@@ -82,8 +82,8 @@ func TestBillingConsumptionRecoversWithoutDuplicateCountersOrLogs(t *testing.T) 
 			require.Error(t, ApplyBillingRecoveryConsumption("consume-once"))
 			var pending BillingRecovery
 			require.NoError(t, db.Where("request_id = ?", "consume-once").First(&pending).Error)
-			assert.Equal(t, BillingRecoveryStatusSettled, pending.Status)
-			assert.Equal(t, BillingRecoveryStatePending, pending.ConsumptionState)
+			assert.EqualValues(t, BillingRecoveryStatusSettled, pending.Status)
+			assert.EqualValues(t, BillingRecoveryStatePending, pending.ConsumptionState)
 			assert.NotEmpty(t, pending.ConsumptionError)
 			assert.ErrorIs(t, MarkBillingRecoveryRefundPending("consume-once", nil), ErrBillingRecoveryStateConflict)
 			if failure == "log_insert" {
@@ -104,21 +104,21 @@ func TestBillingConsumptionRecoversWithoutDuplicateCountersOrLogs(t *testing.T) 
 			require.NoError(t, db.First(&channel, 3).Error)
 			require.NoError(t, db.First(&quotaData).Error)
 			require.NoError(t, logs.Find(&storedLogs).Error)
-			assert.Equal(t, 70, user.Quota)
-			assert.Equal(t, 30, user.UsedQuota)
-			assert.Equal(t, 1, user.RequestCount)
-			assert.Equal(t, 70, token.RemainQuota)
-			assert.Equal(t, 30, token.UsedQuota)
-			assert.Equal(t, int64(30), channel.UsedQuota)
-			assert.Equal(t, 30, quotaData.Quota)
-			assert.Equal(t, 1, quotaData.Count)
-			assert.Equal(t, 30, quotaData.TokenUsed)
+			assert.EqualValues(t, 70, user.Quota)
+			assert.EqualValues(t, 30, user.UsedQuota)
+			assert.EqualValues(t, 1, user.RequestCount)
+			assert.EqualValues(t, 70, token.RemainQuota)
+			assert.EqualValues(t, 30, token.UsedQuota)
+			assert.EqualValues(t, int64(30), channel.UsedQuota)
+			assert.EqualValues(t, 30, quotaData.Quota)
+			assert.EqualValues(t, 1, quotaData.Count)
+			assert.EqualValues(t, 30, quotaData.TokenUsed)
 			require.Len(t, storedLogs, 1)
-			assert.Equal(t, "consume-once", storedLogs[0].RequestId)
-			assert.Equal(t, 30, storedLogs[0].Quota)
+			assert.EqualValues(t, "consume-once", storedLogs[0].RequestId)
+			assert.EqualValues(t, 30, storedLogs[0].Quota)
 			var complete BillingRecovery
 			require.NoError(t, db.Where("request_id = ?", "consume-once").First(&complete).Error)
-			assert.Equal(t, BillingRecoveryStateCompleted, complete.ConsumptionState)
+			assert.EqualValues(t, BillingRecoveryStateCompleted, complete.ConsumptionState)
 			assert.Empty(t, complete.ConsumptionError)
 		})
 	}
@@ -133,7 +133,7 @@ func TestBillingLogIdempotencyAllowsLegacyNullKeys(t *testing.T) {
 	require.NoError(t, ApplyBillingRecoveryConsumption("consume-once"))
 	var count int64
 	require.NoError(t, logs.Model(&Log{}).Count(&count).Error)
-	assert.Equal(t, int64(3), count)
+	assert.EqualValues(t, int64(3), count)
 }
 
 func TestMissingBillingConsumptionSnapshotRemainsVisibleForReconciliation(t *testing.T) {
@@ -149,10 +149,48 @@ func TestMissingBillingConsumptionSnapshotRemainsVisibleForReconciliation(t *tes
 	assert.Empty(t, rows, "missing evidence requires reconciliation, not repeated automatic attempts")
 	backlog, err := ReadBillingRecoveryBacklog(context.Background(), 1<<62)
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), backlog.Pending)
+	assert.EqualValues(t, int64(1), backlog.Pending)
 	var pending BillingRecovery
 	require.NoError(t, db.Where("request_id = ?", "consume-once").First(&pending).Error)
-	assert.Equal(t, "unprepared", pending.ConsumptionState)
+	assert.EqualValues(t, "unprepared", pending.ConsumptionState)
 	assert.NotEmpty(t, pending.ConsumptionError)
-	assert.Equal(t, BillingRecoveryStatusSettled, pending.Status)
+	assert.EqualValues(t, BillingRecoveryStatusSettled, pending.Status)
+}
+
+// Exercise the ClickHouse delivery policy with an isolated SQL-backed store.
+// This verifies the unknown-write fence, not a real ClickHouse driver's behavior.
+func TestBillingAmbiguousClickHouseWriteIsConfirmedBeforeRetry(t *testing.T) {
+	db, logs, consumption := setupBillingConsumptionTest(t)
+	completeConsumptionFunds(t)
+	common.SetLogDatabaseType(common.DatabaseTypeClickHouse)
+	writes := 0
+	require.NoError(t, logs.Callback().Create().Before("gorm:create").Register("unknown_insert", func(tx *gorm.DB) { writes++; tx.AddError(assert.AnError) }))
+	require.ErrorContains(t, ApplyBillingRecoveryConsumption("consume-once"), "outcome is unknown")
+	require.NoError(t, logs.Callback().Create().Remove("unknown_insert"))
+	require.ErrorContains(t, ApplyBillingRecoveryConsumption("consume-once"), "outcome is unknown")
+	assert.Equal(t, 1, writes)
+	var count int64
+	require.NoError(t, logs.Model(&Log{}).Count(&count).Error)
+	assert.Zero(t, count)
+	metrics, err := ReadBillingMetrics(context.Background())
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, metrics.Pending)
+	assert.EqualValues(t, 1, metrics.RecoveryFailures)
+	// An initially invisible insert becomes visible by its stable event ID.
+	eventID := "consume-once:settle"
+	consumption.Log.RequestId, consumption.Log.BillingEventID = "consume-once", &eventID
+	require.NoError(t, logs.Create(&consumption.Log).Error)
+	for range 2 {
+		require.NoError(t, ApplyBillingRecoveryConsumption("consume-once"))
+	}
+	require.NoError(t, logs.Model(&Log{}).Count(&count).Error)
+	assert.EqualValues(t, 1, count)
+	var user User
+	require.NoError(t, db.First(&user, 1).Error)
+	assert.EqualValues(t, 70, user.Quota)
+	assert.EqualValues(t, 30, user.UsedQuota)
+	metrics, err = ReadBillingMetrics(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, metrics.Pending)
+	assert.Zero(t, metrics.RecoveryFailures)
 }

@@ -53,8 +53,10 @@ beforeEach(async () => {
     email: 'user@example.com',
     role: 1,
     status: 1,
-    quota: 100,
-    used_quota: 0,
+    available_quota: '100',
+    reserved_quota: '0',
+    quota_version: 0,
+    used_quota: '0',
     request_count: 0,
     created_at: 1_700_000_000,
   })
@@ -64,6 +66,26 @@ beforeEach(async () => {
 })
 
 describe('capability route guard', () => {
+  it.each([1, 10])(
+    'denies reconciliation access to role %s',
+    async (role) => {
+      useAuthStore().user!.role = role
+      publicApi.status.mockResolvedValue({
+        frontend_capabilities: {
+          dashboard_basic: 'live',
+          billing_reconciliation: 'live',
+        },
+      })
+      await router.push('/billing/reconciliations')
+      expect(router.currentRoute.value.name).toBe('dashboard')
+    },
+    15000
+  )
+  it('requires the reconciliation capability even for root', async () => {
+    useAuthStore().user!.role = 100
+    await router.push('/billing/reconciliations')
+    expect(router.currentRoute.value.name).toBe('dashboard')
+  })
   it.each([
     '/subscription',
     '/plan-management',
@@ -156,8 +178,10 @@ describe('capability route guard', () => {
       email: 'admin@example.com',
       role: 10,
       status: 1,
-      quota: 100,
-      used_quota: 0,
+      available_quota: '100',
+      reserved_quota: '0',
+      quota_version: 0,
+      used_quota: '0',
       request_count: 0,
       created_at: 1_700_000_000,
     })

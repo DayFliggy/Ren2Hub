@@ -1,3 +1,4 @@
+import { compareDecimal } from '@/utils/decimal'
 import { computed, ref } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
@@ -46,20 +47,27 @@ function modelType(endpoints: string[]): MarketModel['type'] {
 }
 
 function modelPrice(pricing: PricingModelContract): MarketModel['price'] {
-  if (pricing.quota_type === 1) {
-    return { per_call: pricing.model_price }
+  const version = pricing.price_version
+  if (version.mode === 'free') return { input: '0', output: '0' }
+  const names: Record<string, keyof MarketModel['price']> = {
+    p: 'input',
+    c: 'output',
+    cr: 'cache_read',
+    cc: 'cache_write',
+    calls: 'per_call',
   }
-  const input = pricing.model_ratio * 2
-  return {
-    input,
-    output: input * pricing.completion_ratio,
-    ...(pricing.cache_ratio === null
-      ? {}
-      : { cache_read: input * pricing.cache_ratio }),
-    ...(pricing.create_cache_ratio === null
-      ? {}
-      : { cache_write: input * pricing.create_cache_ratio }),
+  const result: MarketModel['price'] = {}
+  for (const line of version.prices) {
+    const key = names[line.quantity]
+    if (
+      key &&
+      key !== 'tiers' &&
+      (line.unit === 'per_million_tokens' ||
+        (key === 'per_call' && line.unit === 'per_call'))
+    )
+      result[key] = line.price
   }
+  return result
 }
 
 export function buildLiveModelCatalog(
@@ -83,11 +91,16 @@ export function buildLiveModelCatalog(
         vendor,
         type: modelType(price?.supported_endpoint_types ?? []),
         billing:
-          price?.billing_mode === 'tiered_expr'
+          price?.price_version.mode === 'expression'
             ? ('tiered' as const)
-            : price?.quota_type === 1
-              ? ('per_call' as const)
-              : ('token' as const),
+            : price?.price_version.mode === 'free'
+              ? ('free' as const)
+              : price?.price_version.prices.some(
+                    (line) =>
+                      line.quantity === 'calls' && line.unit === 'per_call'
+                  )
+                ? ('per_call' as const)
+                : ('token' as const),
         price: price ? modelPrice(price) : {},
         context: 0,
         tagline: price?.description ?? '',
@@ -108,19 +121,19 @@ export function buildLiveModelCatalog(
  * models are grouped after all token-priced ones (bucket 0 vs 1) and only
  * compared within their own unit.
  */
-function priceKey(m: MarketModel): [number, number] {
+function priceKey(m: MarketModel): [number, string] {
   const p = m.price
   const tokenPrice = p.input ?? p.tiers?.[0]?.input
   if (tokenPrice != null) return [0, tokenPrice]
   if (p.per_call != null) return [1, p.per_call]
-  return [2, Number.MAX_SAFE_INTEGER]
+  return [2, '0']
 }
 
 /** Compare two [bucket, price] keys: bucket first, then price within bucket. */
 function comparePrice(a: MarketModel, b: MarketModel): number {
   const [ba, pa] = priceKey(a)
   const [bb, pb] = priceKey(b)
-  return ba !== bb ? ba - bb : pa - pb
+  return ba !== bb ? ba - bb : compareDecimal(pa, pb)
 }
 
 export function useModelMarket() {

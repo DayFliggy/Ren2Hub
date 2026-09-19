@@ -7,6 +7,7 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
+import { decimalToQuota } from '@/utils/quota'
 import type { AdminRedemptionCreateInput } from '@/types/console'
 
 const props = defineProps<{
@@ -58,11 +59,16 @@ watch(
 
 const canSubmit = computed(() => {
   const quantity = Number(count.value)
-  const value = Number(amount.value)
+  let value: bigint
+  try {
+    value = BigInt(decimalToQuota(amount.value))
+  } catch {
+    return false
+  }
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
     return false
   }
-  if (!Number.isFinite(value) || value <= 0) return false
+  if (value <= 0n) return false
   if (expiryOption.value === 'custom' && !customDate.value) return false
   return true
 })
@@ -89,7 +95,7 @@ function submit() {
   emit('submit', {
     type: 'quota',
     count: Number(count.value),
-    amount: Number(amount.value),
+    amount: amount.value,
     expired_time: computeExpiredTime(),
   })
 }
@@ -107,13 +113,7 @@ function submit() {
         :label="t('redemption.fieldAmount')"
         :hint="t('redemption.amountHint')"
       >
-        <TextInput
-          v-model="amount"
-          type="number"
-          min="0.01"
-          step="0.01"
-          placeholder="10"
-        />
+        <TextInput v-model="amount" inputmode="decimal" placeholder="10" />
       </FormField>
 
       <FormField :label="t('redemption.fieldExpiry')">

@@ -81,19 +81,17 @@ export interface AuthSettings {
 }
 
 export interface BillingSettings {
-  QuotaForNewUser: number
-  PreConsumedQuota: number
-  QuotaForInviter: number
-  QuotaForInvitee: number
+  QuotaForNewUser: string
+  QuotaForInviter: string
+  QuotaForInvitee: string
   AffiliateEnabled: boolean
   AffiliateRegistrationRequired: boolean
   AffiliateRebateRateBps: number
   AffiliateFreezeHours: number
   AffiliateDurationDays: number
-  AffiliatePerInviteeCap: number
+  AffiliatePerInviteeCap: string
   AffiliateActivatedAt: number
   TopUpLink: string
-  QuotaPerUnit: number
   USDExchangeRate: number
   DisplayInCurrencyEnabled: boolean
   DisplayTokenStatEnabled: boolean
@@ -101,14 +99,11 @@ export interface BillingSettings {
   'general_setting.quota_display_type': string
   'general_setting.custom_currency_symbol': string
   'general_setting.custom_currency_exchange_rate': number
-  'quota_setting.enable_free_model_pre_consume': boolean
   'checkin_setting.enabled': boolean
-  'checkin_setting.min_quota': number
-  'checkin_setting.max_quota': number
+  'checkin_setting.min_quota': string
+  'checkin_setting.max_quota': string
   Price: number
   MinTopUp: number
-  'billing_setting.billing_mode': string
-  'billing_setting.billing_expr': string
   'payment_setting.amount_options': string
   'payment_setting.amount_discount': string
   'payment_setting.compliance_confirmed': boolean
@@ -204,7 +199,7 @@ export interface OperationsSettings {
   DemoSiteEnabled: boolean
   SelfUseModeEnabled: boolean
   LogConsumeEnabled: boolean
-  QuotaRemindThreshold: number
+  QuotaRemindThreshold: string
   SMTPServer: string
   SMTPPort: string
   SMTPAccount: string
@@ -287,19 +282,17 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   'passkey.rp_id': '',
   'passkey.origins': '',
   // Billing
-  QuotaForNewUser: 0,
-  PreConsumedQuota: 500000,
-  QuotaForInviter: 0,
-  QuotaForInvitee: 0,
+  QuotaForNewUser: '0',
+  QuotaForInviter: '0',
+  QuotaForInvitee: '0',
   AffiliateEnabled: false,
   AffiliateRegistrationRequired: false,
   AffiliateRebateRateBps: 1000,
   AffiliateFreezeHours: 168,
   AffiliateDurationDays: 0,
-  AffiliatePerInviteeCap: 100,
+  AffiliatePerInviteeCap: '100',
   AffiliateActivatedAt: 0,
   TopUpLink: '',
-  QuotaPerUnit: 500000,
   USDExchangeRate: 1,
   DisplayInCurrencyEnabled: false,
   DisplayTokenStatEnabled: false,
@@ -307,8 +300,6 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   'general_setting.quota_display_type': 'quota',
   'general_setting.custom_currency_symbol': '¤',
   'general_setting.custom_currency_exchange_rate': 1,
-  'billing_setting.billing_mode': '{}',
-  'billing_setting.billing_expr': '{}',
   'payment_setting.amount_options': '[]',
   'payment_setting.amount_discount': '{}',
   'payment_setting.compliance_confirmed': false,
@@ -320,10 +311,9 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   WaffoSandboxPublicCert: '',
   WaffoPancakeUnitPrice: 1,
   WaffoPancakeMinTopUp: 1,
-  'quota_setting.enable_free_model_pre_consume': false,
   'checkin_setting.enabled': false,
-  'checkin_setting.min_quota': 100,
-  'checkin_setting.max_quota': 500,
+  'checkin_setting.min_quota': '100',
+  'checkin_setting.max_quota': '500',
   Price: 7.3,
   MinTopUp: 1,
   // Models
@@ -402,7 +392,7 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   DemoSiteEnabled: false,
   SelfUseModeEnabled: false,
   LogConsumeEnabled: true,
-  QuotaRemindThreshold: 1000,
+  QuotaRemindThreshold: '1000',
   SMTPServer: '',
   SMTPPort: '',
   SMTPAccount: '',

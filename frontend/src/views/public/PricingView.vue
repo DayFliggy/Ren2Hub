@@ -19,10 +19,12 @@ import SearchInput from '@/components/common/SearchInput.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
+import { formatNumber } from '@/utils/format'
+import { formatDecimalUSD } from '@/utils/decimal'
 import { publicPageMessages } from '@/i18n/publicPages'
 
 const route = useRoute()
-const { t, locale } = useI18n({
+const { t } = useI18n({
   useScope: 'local',
   messages: publicPageMessages,
 })
@@ -62,14 +64,19 @@ const billingOptions = computed(() => [
   { value: '', label: t('publicPage.all') },
   { value: 'token', label: t('publicPage.tokenBilling') },
   { value: 'request', label: t('publicPage.requestBilling') },
-  { value: 'tiered_expr', label: t('publicPage.dynamic') },
+  { value: 'expression', label: t('publicPage.dynamic') },
+  { value: 'free', label: t('publicPage.free') },
 ])
 const billingMode = (model: CatalogModel) =>
-  model.billing_mode === 'tiered_expr'
-    ? 'tiered_expr'
-    : model.quota_type === 1
-      ? 'request'
-      : 'token'
+  model.price_version.mode === 'expression'
+    ? 'expression'
+    : model.price_version.mode === 'free'
+      ? 'free'
+      : model.price_version.prices.some(
+            (price) => price.unit === 'per_million_tokens'
+          )
+        ? 'token'
+        : 'request'
 const filtered = computed(() =>
   (catalog.value?.models ?? []).filter((model) => {
     const search = keyword.value.trim().toLowerCase()
@@ -89,12 +96,7 @@ const pageModels = computed(() =>
     page.value * pageSize.value
   )
 )
-const money = (value: number) =>
-  new Intl.NumberFormat(locale.value, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 8,
-  }).format(value)
+const money = (value: string) => formatDecimalUSD(value, 3)
 const prices = (model: CatalogModel) => {
   const tokenUnit = unit.value === 'K' ? 'K' : 'M'
   const maximum = catalogPrices(model, model.channel_ratio_max, tokenUnit)
@@ -233,7 +235,7 @@ onScopeDispose(() => controller?.abort())
             <h2 class="mb-4 text-lg font-semibold">
               {{ t('publicPage.billing') }}
             </h2>
-            <template v-if="detail.billing_mode === 'tiered_expr'"
+            <template v-if="detail.price_version.mode === 'expression'"
               ><p class="mb-3 text-sm text-[var(--accent-text)]">
                 {{ t('publicPage.dynamic') }}
               </p>
@@ -243,25 +245,29 @@ onScopeDispose(() => controller?.abort())
                 </summary>
                 <pre
                   class="mt-3 overflow-x-auto whitespace-pre-wrap break-all bg-[var(--surface-muted)] p-4 text-xs"
-                  >{{ detail.billing_expr }}</pre>
+                  >{{ detail.price_version.expression }}</pre>
               </details></template
             >
             <dl
-              v-else
+              v-if="prices(detail).length"
               class="grid grid-cols-2 gap-x-8 gap-y-5 border-y border-[var(--border-subtle)] py-5 sm:grid-cols-3 lg:grid-cols-4"
             >
               <div v-for="price in prices(detail)" :key="price.key">
                 <dt class="text-xs text-[var(--text-secondary)]">
-                  {{ t(`publicPage.${price.key}`) }}
+                  {{ t(`publicPage.${price.key}`, price.key) }}
                 </dt>
                 <dd class="mt-2 break-words font-mono text-sm">
                   {{ price.formatted }}
+                  <span class="block text-xs text-[var(--text-tertiary)]">{{
+                    price.unit ? t(`publicPage.units.${price.unit}`) : ''
+                  }}</span>
                 </dd>
               </div>
             </dl>
             <p class="mt-4 break-words text-xs text-[var(--text-tertiary)]">
               {{ t('publicPage.channelRatio') }}:
-              {{ detail.channel_ratio_min }} - {{ detail.channel_ratio_max }}
+              {{ formatNumber(detail.channel_ratio_min) }} -
+              {{ formatNumber(detail.channel_ratio_max) }}
             </p>
           </section>
           <section v-if="detailEndpoints.length">
@@ -304,8 +310,7 @@ onScopeDispose(() => controller?.abort())
                 <th>{{ t('publicPage.model') }}</th>
                 <th>{{ t('publicPage.vendor') }}</th>
                 <th>{{ t('publicPage.billing') }}</th>
-                <th>{{ t('publicPage.input') }}</th>
-                <th>{{ t('publicPage.output') }}</th>
+                <th>{{ t('publicPage.prices') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -331,15 +336,27 @@ onScopeDispose(() => controller?.abort())
                 <td>
                   {{
                     t(
-                      `publicPage.${billingMode(model) === 'tiered_expr' ? 'dynamic' : billingMode(model) === 'request' ? 'requestBilling' : 'tokenBilling'}`
+                      `publicPage.${billingMode(model) === 'expression' ? 'dynamic' : billingMode(model) === 'request' ? 'requestBilling' : billingMode(model) === 'free' ? 'free' : 'tokenBilling'}`
                     )
                   }}
                 </td>
-                <td class="whitespace-nowrap font-mono">
-                  {{ prices(model)[0]?.formatted ?? '--' }}
-                </td>
-                <td class="whitespace-nowrap font-mono">
-                  {{ prices(model)[1]?.formatted ?? '--' }}
+                <td>
+                  <p
+                    v-for="price in prices(model)"
+                    :key="price.key"
+                    class="mb-1 flex flex-wrap gap-x-2 text-xs"
+                  >
+                    <span>{{ t(`publicPage.${price.key}`, price.key) }}</span
+                    ><span class="font-mono">{{ price.formatted }}</span
+                    ><span
+                      v-if="price.unit"
+                      class="text-[var(--text-tertiary)]"
+                      >{{ t(`publicPage.units.${price.unit}`) }}</span
+                    >
+                  </p>
+                  <span v-if="!prices(model).length">{{
+                    t('publicPage.dynamic')
+                  }}</span>
                 </td>
               </tr>
             </tbody>

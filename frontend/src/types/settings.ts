@@ -22,7 +22,7 @@ export interface SettingsBinding {
 
 export interface NotificationSettings {
   notifyType: SettingsNotifyType
-  quotaWarningThreshold: number
+  quotaWarningThreshold: string
   notificationEmail: string
   webhookUrl: string
   webhookSecret: string
@@ -32,6 +32,5 @@ export interface NotificationSettings {
   gotifyPriority: number
   walletReminder: boolean
   upstreamModelUpdateNotify: boolean
-  acceptUnsetModelPrice: boolean
   recordIpLog: boolean
 }

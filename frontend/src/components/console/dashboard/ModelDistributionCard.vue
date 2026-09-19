@@ -7,7 +7,13 @@ import { useEChart } from '@/charts/useEChart'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import type { ModelShare } from '@/composables/useDashboard'
-import { formatCompact, formatNumber, formatQuota } from '@/utils/format'
+import { quotaForChart, quotaRatio, sumQuota } from '@/utils/quota'
+import {
+  formatCompact,
+  formatNumber,
+  formatQuota,
+  formatMoney,
+} from '@/utils/format'
 import { escapeHtml } from '@/utils/html'
 
 /** Slices the donut plots individually; everything past this folds into one. */
@@ -25,21 +31,25 @@ const colors = SERIES_TOKENS
 
 /** Highest spend first, so the fold keeps the models that matter. */
 const ranked = computed(() =>
-  [...props.items].sort((a, b) => b.quota - a.quota)
+  [...props.items].sort((a, b) =>
+    BigInt(b.quota) > BigInt(a.quota)
+      ? 1
+      : BigInt(b.quota) < BigInt(a.quota)
+        ? -1
+        : 0
+  )
 )
 
-const totalQuota = computed(() =>
-  props.items.reduce((sum, m) => sum + m.quota, 0)
-)
+const totalQuota = computed(() => sumQuota(props.items.map((m) => m.quota)))
 
-function modelSharePercent(quota: number): string {
-  if (totalQuota.value <= 0) return '0.0'
-  return ((quota / totalQuota.value) * 100).toFixed(1)
+function modelSharePercent(quota: string): string {
+  if (BigInt(totalQuota.value) <= 0n) return '0.0'
+  return (quotaRatio(quota, totalQuota.value) * 100).toFixed(1)
 }
 
-function modelShareRatio(quota: number): number {
-  if (totalQuota.value <= 0) return 0
-  return Math.min(100, Math.max(0, (quota / totalQuota.value) * 100))
+function modelShareRatio(quota: string): number {
+  if (BigInt(totalQuota.value) <= 0n) return 0
+  return Math.min(100, Math.max(0, quotaRatio(quota, totalQuota.value) * 100))
 }
 
 /**
@@ -50,13 +60,14 @@ function modelShareRatio(quota: number): number {
 const slices = computed(() => {
   const head = ranked.value.slice(0, TOP_N)
   const tail = ranked.value.slice(TOP_N)
-  if (!tail.length) return head.map((m) => ({ name: m.model, value: m.quota }))
+  if (!tail.length)
+    return head.map((m) => ({ name: m.model, value: quotaForChart(m.quota) }))
 
   return [
-    ...head.map((m) => ({ name: m.model, value: m.quota })),
+    ...head.map((m) => ({ name: m.model, value: quotaForChart(m.quota) })),
     {
       name: t('dashboard.modelDist.others', { n: tail.length }),
-      value: tail.reduce((sum, m) => sum + m.quota, 0),
+      value: quotaForChart(sumQuota(tail.map((m) => m.quota))),
     },
   ]
 })
@@ -88,7 +99,7 @@ const { dispatch } = useEChart(
       borderColor: p.borderSubtle,
       textStyle: { color: p.textPrimary, fontSize: 12 },
       formatter: (params: { name: string; percent: number; value: number }) =>
-        `${escapeHtml(params.name)}<br/>${escapeHtml(formatQuota(params.value))} · ${escapeHtml(String(params.percent))}%`,
+        `${escapeHtml(params.name)}<br/>${escapeHtml(formatMoney(params.value))} · ${escapeHtml(String(params.percent))}%`,
     },
     series: [
       {

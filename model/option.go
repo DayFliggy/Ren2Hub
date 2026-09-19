@@ -128,31 +128,25 @@ func InitOptionMap() {
 	common.OptionMap["WeChatAccountQRCodeImageURL"] = ""
 	common.OptionMap["TurnstileSiteKey"] = ""
 	common.OptionMap["TurnstileSecretKey"] = ""
-	common.OptionMap["QuotaForNewUser"] = strconv.Itoa(common.QuotaForNewUser)
-	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
-	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
+	common.OptionMap["QuotaForNewUser"] = strconv.FormatInt(int64(common.QuotaForNewUser), 10)
+	common.OptionMap["QuotaForInviter"] = strconv.FormatInt(int64(common.QuotaForInviter), 10)
+	common.OptionMap["QuotaForInvitee"] = strconv.FormatInt(int64(common.QuotaForInvitee), 10)
 	common.OptionMap["AffiliateEnabled"] = strconv.FormatBool(common.AffiliateEnabled)
 	common.OptionMap["AffiliateRegistrationRequired"] = strconv.FormatBool(common.AffiliateRegistrationRequired)
 	common.OptionMap["AffiliateRebateRateBps"] = strconv.Itoa(common.AffiliateRebateRateBps)
 	common.OptionMap["AffiliateFreezeHours"] = strconv.Itoa(common.AffiliateFreezeHours)
 	common.OptionMap["AffiliateDurationDays"] = strconv.Itoa(common.AffiliateDurationDays)
-	common.OptionMap["AffiliatePerInviteeCap"] = strconv.FormatFloat(common.AffiliatePerInviteeCap, 'f', -1, 64)
+	common.OptionMap["AffiliatePerInviteeCap"] = common.AffiliatePerInviteeCap
 	common.OptionMap["AffiliateActivatedAt"] = strconv.FormatInt(common.AffiliateActivatedAt, 10)
-	common.OptionMap["QuotaRemindThreshold"] = strconv.Itoa(common.QuotaRemindThreshold)
-	common.OptionMap["PreConsumedQuota"] = strconv.Itoa(common.PreConsumedQuota)
+	common.OptionMap["QuotaRemindThreshold"] = strconv.FormatInt(int64(common.QuotaRemindThreshold), 10)
+	common.OptionMap["PreConsumedQuota"] = strconv.FormatInt(int64(common.PreConsumedQuota), 10)
 	common.OptionMap["ModelRequestRateLimitCount"] = strconv.Itoa(setting.ModelRequestRateLimitCount)
 	common.OptionMap["ModelRequestRateLimitDurationMinutes"] = strconv.Itoa(setting.ModelRequestRateLimitDurationMinutes)
 	common.OptionMap["ModelRequestRateLimitSuccessCount"] = strconv.Itoa(setting.ModelRequestRateLimitSuccessCount)
 	common.OptionMap["ModelRequestRateLimitGroup"] = setting.ModelRequestRateLimitGroup2JSONString()
-	common.OptionMap["ModelRatio"] = ratio_setting.ModelRatio2JSONString()
-	common.OptionMap["ModelPrice"] = ratio_setting.ModelPrice2JSONString()
-	common.OptionMap["CacheRatio"] = ratio_setting.CacheRatio2JSONString()
-	common.OptionMap["CreateCacheRatio"] = ratio_setting.CreateCacheRatio2JSONString()
+
 	common.OptionMap["GroupRatio"] = ratio_setting.GroupRatio2JSONString()
-	common.OptionMap["CompletionRatio"] = ratio_setting.CompletionRatio2JSONString()
-	common.OptionMap["ImageRatio"] = ratio_setting.ImageRatio2JSONString()
-	common.OptionMap["AudioRatio"] = ratio_setting.AudioRatio2JSONString()
-	common.OptionMap["AudioCompletionRatio"] = ratio_setting.AudioCompletionRatio2JSONString()
+
 	common.OptionMap["TopUpLink"] = common.TopUpLink
 	//common.OptionMap["ChatLink"] = common.ChatLink
 	//common.OptionMap["ChatLink2"] = common.ChatLink2
@@ -177,11 +171,13 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticDisableKeywords"] = operation_setting.AutomaticDisableKeywordsToString()
 	common.OptionMap["AutomaticDisableStatusCodes"] = operation_setting.AutomaticDisableStatusCodesToString()
 	common.OptionMap["AutomaticRetryStatusCodes"] = operation_setting.AutomaticRetryStatusCodesToString()
-	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
 
 	// 自动添加所有注册的模型配置
 	modelConfigs := config.GlobalConfig.ExportAllConfigs()
 	for k, v := range modelConfigs {
+		if IsRetiredBillingOption(k) {
+			continue
+		}
 		common.OptionMap[k] = v
 	}
 
@@ -191,32 +187,15 @@ func InitOptionMap() {
 
 func loadOptionsFromDatabase() {
 	options, _ := AllOption()
-	legacyAutoPricingURL := false
-	legacyAutoPricingHashNeedsMigration := true
 	for _, option := range options {
-		if option.Key == "auto_pricing.remote_url" && strings.TrimSpace(option.Value) == ratio_setting.LegacyAutoPricingRemoteURL {
-			legacyAutoPricingURL = true
+		if IsRetiredBillingOption(option.Key) {
+			continue
 		}
-		if option.Key == "auto_pricing.hash_url" && strings.TrimSpace(option.Value) != "" {
-			// A non-empty checksum URL is an operator choice and must survive
-			// the legacy URL migration unchanged.
-			legacyAutoPricingHashNeedsMigration = false
-		}
-		err := updateOptionMap(option.Key, option.Value)
-		if err != nil {
+		if err := updateOptionMap(option.Key, option.Value); err != nil {
 			common.SysLog("failed to update option map: " + err.Error())
 		}
 	}
-	if legacyAutoPricingURL {
-		if err := UpdateOption("auto_pricing.remote_url", ratio_setting.DefaultAutoPricingRemoteURL); err != nil {
-			common.SysLog("failed to migrate legacy auto pricing URL: " + err.Error())
-		}
-		if legacyAutoPricingHashNeedsMigration {
-			if err := UpdateOption("auto_pricing.hash_url", ratio_setting.DefaultAutoPricingHashURL); err != nil {
-				common.SysLog("failed to migrate legacy auto pricing checksum URL: " + err.Error())
-			}
-		}
-	}
+
 }
 
 func SyncOptions(frequency int) {
@@ -227,12 +206,38 @@ func SyncOptions(frequency int) {
 	}
 }
 
+// Price versions are the only live model and tool pricing configuration.
+func IsRetiredBillingOption(key string) bool {
+	if strings.HasPrefix(key, "auto_pricing.") || strings.HasPrefix(key, "billing_setting.") {
+		return true
+	}
+	switch key {
+	case "ModelRatio", "ModelPrice", "CompletionRatio", "CompletionRatioMeta", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "ExposeRatioEnabled", operation_setting.ToolPriceOptionKey:
+		return true
+	}
+	return false
+}
+
 func validateOptionValue(key string, value string) error {
+	if key == "AffiliatePerInviteeCap" {
+		_, err := AffiliateCapQuota(value)
+		return err
+	}
+	if IsRetiredBillingOption(key) {
+		return errors.New("pricing must be published as an immutable billing price version")
+	}
+	if key == "QuotaPerUnit" {
+		return errors.New("quota conversion is fixed at 500000 per USD")
+	}
+	switch key {
+	case "QuotaForNewUser", "QuotaForInviter", "QuotaForInvitee", "QuotaRemindThreshold", "PreConsumedQuota":
+		n, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || n < 0 || strconv.FormatInt(n, 10) != value {
+			return errors.New("quota setting must be a nonnegative integer string")
+		}
+	}
 	if key == "WaffoSubscriptionReturnUrl" {
 		return errors.New("obsolete payment option")
-	}
-	if key == operation_setting.ToolPriceOptionKey {
-		return operation_setting.ValidateToolPricesJSON(value)
 	}
 	if retiredRoutingOption(key) {
 		return errors.New("obsolete routing option")
@@ -309,7 +314,7 @@ func UpdateOptionsBulk(values map[string]string) error {
 }
 
 func updateOptionMap(key string, value string) (err error) {
-	if key == retiredThemeOptionKey || key == "WaffoSubscriptionReturnUrl" || retiredRoutingOption(key) {
+	if IsRetiredBillingOption(key) || key == retiredThemeOptionKey || key == "WaffoSubscriptionReturnUrl" || retiredRoutingOption(key) {
 		common.OptionMapRWMutex.Lock()
 		delete(common.OptionMap, key)
 		common.OptionMapRWMutex.Unlock()
@@ -425,8 +430,6 @@ func updateOptionMap(key string, value string) (err error) {
 			common.SMTPForceAuthLogin = boolValue
 		case "WorkerAllowHttpImageRequestEnabled":
 			system_setting.WorkerAllowHttpImageRequestEnabled = boolValue
-		case "ExposeRatioEnabled":
-			ratio_setting.SetExposeRatioEnabled(boolValue)
 		}
 	}
 	switch key {
@@ -560,11 +563,23 @@ func updateOptionMap(key string, value string) (err error) {
 	case "TurnstileSecretKey":
 		common.TurnstileSecretKey = value
 	case "QuotaForNewUser":
-		common.QuotaForNewUser, _ = strconv.Atoi(value)
+		n, parseErr := strconv.ParseInt(value, 10, 64)
+		if parseErr != nil || n < 0 {
+			return errors.New("invalid quota setting")
+		}
+		common.QuotaForNewUser = common.Quota(n)
 	case "QuotaForInviter":
-		common.QuotaForInviter, _ = strconv.Atoi(value)
+		n, parseErr := strconv.ParseInt(value, 10, 64)
+		if parseErr != nil || n < 0 {
+			return errors.New("invalid quota setting")
+		}
+		common.QuotaForInviter = common.Quota(n)
 	case "QuotaForInvitee":
-		common.QuotaForInvitee, _ = strconv.Atoi(value)
+		n, parseErr := strconv.ParseInt(value, 10, 64)
+		if parseErr != nil || n < 0 {
+			return errors.New("invalid quota setting")
+		}
+		common.QuotaForInvitee = common.Quota(n)
 	case "AffiliateRebateRateBps":
 		common.AffiliateRebateRateBps, _ = strconv.Atoi(value)
 	case "AffiliateFreezeHours":
@@ -572,13 +587,24 @@ func updateOptionMap(key string, value string) (err error) {
 	case "AffiliateDurationDays":
 		common.AffiliateDurationDays, _ = strconv.Atoi(value)
 	case "AffiliatePerInviteeCap":
-		common.AffiliatePerInviteeCap, _ = strconv.ParseFloat(value, 64)
+		if _, err := AffiliateCapQuota(value); err != nil {
+			return err
+		}
+		common.AffiliatePerInviteeCap = value
 	case "AffiliateActivatedAt":
 		common.AffiliateActivatedAt, _ = strconv.ParseInt(value, 10, 64)
 	case "QuotaRemindThreshold":
-		common.QuotaRemindThreshold, _ = strconv.Atoi(value)
+		n, parseErr := strconv.ParseInt(value, 10, 64)
+		if parseErr != nil || n < 0 {
+			return errors.New("invalid quota setting")
+		}
+		common.QuotaRemindThreshold = common.Quota(n)
 	case "PreConsumedQuota":
-		common.PreConsumedQuota, _ = strconv.Atoi(value)
+		n, parseErr := strconv.ParseInt(value, 10, 64)
+		if parseErr != nil || n < 0 {
+			return errors.New("invalid quota setting")
+		}
+		common.PreConsumedQuota = common.Quota(n)
 	case "ModelRequestRateLimitCount":
 		setting.ModelRequestRateLimitCount, _ = strconv.Atoi(value)
 	case "ModelRequestRateLimitDurationMinutes":
@@ -593,24 +619,8 @@ func updateOptionMap(key string, value string) (err error) {
 		common.DataExportInterval, _ = strconv.Atoi(value)
 	case "DataExportDefaultTime":
 		common.DataExportDefaultTime = value
-	case "ModelRatio":
-		err = ratio_setting.UpdateModelRatioByJSONString(value)
 	case "GroupRatio":
 		err = ratio_setting.UpdateGroupRatioByJSONString(value)
-	case "CompletionRatio":
-		err = ratio_setting.UpdateCompletionRatioByJSONString(value)
-	case "ModelPrice":
-		err = ratio_setting.UpdateModelPriceByJSONString(value)
-	case "CacheRatio":
-		err = ratio_setting.UpdateCacheRatioByJSONString(value)
-	case "CreateCacheRatio":
-		err = ratio_setting.UpdateCreateCacheRatioByJSONString(value)
-	case "ImageRatio":
-		err = ratio_setting.UpdateImageRatioByJSONString(value)
-	case "AudioRatio":
-		err = ratio_setting.UpdateAudioRatioByJSONString(value)
-	case "AudioCompletionRatio":
-		err = ratio_setting.UpdateAudioCompletionRatioByJSONString(value)
 	case "TopUpLink":
 		common.TopUpLink = value
 	//case "ChatLink":
@@ -620,7 +630,7 @@ func updateOptionMap(key string, value string) (err error) {
 	case "ChannelDisableThreshold":
 		common.ChannelDisableThreshold, _ = strconv.ParseFloat(value, 64)
 	case "QuotaPerUnit":
-		common.QuotaPerUnit, _ = strconv.ParseFloat(value, 64)
+		common.OptionMap[key] = "500000"
 	case "SensitiveWords":
 		setting.SensitiveWordsFromString(value)
 	case "AutomaticDisableKeywords":
@@ -643,11 +653,6 @@ func updateOptionMap(key string, value string) (err error) {
 
 // handleConfigUpdate 处理分层配置更新，返回是否已处理
 func handleConfigUpdate(key, value string) bool {
-	if key == operation_setting.ToolPriceOptionKey {
-		operation_setting.LoadToolPricesFromJSONString(value)
-		return true
-	}
-
 	parts := strings.SplitN(key, ".", 2)
 	if len(parts) != 2 {
 		return false // 不是分层配置
@@ -671,9 +676,7 @@ func handleConfigUpdate(key, value string) bool {
 	// 特定配置的后处理
 	if configName == "performance_setting" {
 		performance_setting.UpdateAndSync()
-	} else if configName == "billing_setting" {
-		InvalidatePricingCache()
-		ratio_setting.InvalidateExposedDataCache()
+
 	}
 
 	return true // 已处理

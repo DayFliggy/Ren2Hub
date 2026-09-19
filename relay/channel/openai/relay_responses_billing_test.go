@@ -10,20 +10,17 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"time"
 )
 
 func TestOaiResponsesHandlerCountsOutputCallsNotDeclarations(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	operation_setting.SetToolPriceForTest("priced_fn", 5.0)
-	t.Cleanup(func() {
-		operation_setting.DeleteToolPriceForTest("priced_fn")
-	})
 
 	body, err := common.Marshal(dto.OpenAIResponsesResponse{
 		Tools: []map[string]any{
@@ -53,6 +50,8 @@ func TestOaiResponsesHandlerCountsOutputCallsNotDeclarations(t *testing.T) {
 			},
 		},
 	}
+	info.PriceData.Quote, err = billing.NewQuote(billing.PriceVersion{Model: info.OriginModelName, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "tool:priced_fn", Unit: "per_call", Price: "0.005"}}}, "1", nil, time.Unix(1700000000, 0))
+	require.NoError(t, err)
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(bytes.NewReader(body)),

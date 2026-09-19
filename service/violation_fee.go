@@ -1,18 +1,15 @@
 package service
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/setting/model_setting"
-
-	"github.com/shopspring/decimal"
 
 	"github.com/gin-gonic/gin"
 )
@@ -81,84 +78,78 @@ func shouldChargeViolationFee(err *types.NewAPIError) bool {
 	return HasCSAMViolationMarker(err)
 }
 
-func calcViolationFeeQuota(amount, groupRatio float64) int {
-	if amount <= 0 {
-		return 0
-	}
-	if groupRatio <= 0 {
-		return 0
-	}
-	quota := decimal.NewFromFloat(amount).
-		Mul(decimal.NewFromFloat(common.QuotaPerUnit)).
-		Mul(decimal.NewFromFloat(groupRatio)).
-		Round(0).
-		IntPart()
-	if quota <= 0 {
-		return 0
-	}
-	return int(quota)
-}
-
-// ChargeViolationFeeIfNeeded charges an additional fee after the normal flow finishes (including refund).
-// It uses Grok fee settings as the fee policy.
-func ChargeViolationFeeIfNeeded(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, apiErr *types.NewAPIError) bool {
-	if ctx == nil || relayInfo == nil || apiErr == nil {
+// ChargeViolationFeeIfNeeded uses the rule frozen with the original attempt.
+// Its own request and event survive a completed or released primary bill.
+func ChargeViolationFeeIfNeeded(ctx *gin.Context, info *relaycommon.RelayInfo, apiErr *types.NewAPIError) bool {
+	if ctx == nil || info == nil || !shouldChargeViolationFee(apiErr) {
 		return false
 	}
-	//if relayInfo.IsPlayground {
-	//	return false
-	//}
-	if !shouldChargeViolationFee(apiErr) {
+	original := info.PriceData.Quote
+	if original == nil || !original.ViolationFeeEnabled {
 		return false
 	}
-
-	settings := model_setting.GetGrokSettings()
-	if settings == nil || !settings.ViolationDeductionEnabled {
+	quote, err := billing.NewQuote(billing.PriceVersion{
+		ID: original.PriceVersion.ID, Model: original.PriceVersion.Model + ":violation",
+		Mode:      billing.ModeUnitPrice,
+		Prices:    []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: original.ViolationFeeUSD}},
+		CreatedAt: original.PriceVersion.CreatedAt,
+	}, original.ChannelRatio, nil, original.FrozenAt)
+	if err != nil {
+		logger.LogError(ctx, "invalid frozen violation fee rule")
 		return false
 	}
-
-	groupRatio := relayInfo.PriceData.ChannelRatio
-	feeQuota := calcViolationFeeQuota(settings.ViolationDeductionAmount, groupRatio)
-	if feeQuota <= 0 {
+	usage := billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "confirmed_violation", Complete: true}
+	charge, err := billing.Calculate(quote, usage)
+	if err != nil {
+		logger.LogError(ctx, "invalid frozen violation charge")
 		return false
 	}
-
-	if err := PostConsumeQuota(relayInfo, feeQuota, 0, true); err != nil {
-		logger.LogError(ctx, fmt.Sprintf("failed to charge violation fee: %s", err.Error()))
+	if charge.FinalQuota == 0 {
 		return false
 	}
-
-	model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, feeQuota)
-	model.UpdateChannelUsedQuota(relayInfo.ChannelId, feeQuota)
-
-	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
-	tokenName := ctx.GetString("token_name")
-	oai := apiErr.ToOpenAIError()
-
-	other := map[string]any{
-		"violation_fee":        true,
-		"violation_fee_code":   string(types.ErrorCodeViolationFeeGrokCSAM),
-		"fee_quota":            feeQuota,
-		"base_amount":          settings.ViolationDeductionAmount,
-		"group_ratio":          groupRatio,
-		"status_code":          apiErr.StatusCode,
-		"upstream_error_type":  oai.Type,
-		"upstream_error_code":  fmt.Sprintf("%v", oai.Code),
-		"violation_fee_marker": CSAMViolationMarker,
-	}
-
-	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
-		ChannelId:      relayInfo.ChannelId,
-		ModelName:      relayInfo.OriginModelName,
-		TokenName:      tokenName,
-		Quota:          feeQuota,
-		Content:        "Violation fee charged",
-		TokenId:        relayInfo.TokenId,
-		UseTimeSeconds: int(useTimeSeconds),
-		IsStream:       relayInfo.IsStream,
-		Group:          relayInfo.UsingGroup,
-		Other:          other,
+	requestID := info.RequestId + ":violation"
+	recovery, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
+		RequestID: requestID, UserID: info.UserId, TokenID: info.TokenId,
+		TokenRequired: !info.IsPlayground && info.TokenId > 0, Source: BillingSourceWallet,
 	})
-
+	if err == nil && recovery.PreConsumeState == model.BillingRecoveryPreConsumePrepared {
+		err = model.Reserve(requestID, 0)
+	}
+	if err == nil {
+		err = model.PrepareBillingAttempt(ctx.Request.Context(), requestID, requestID, info.ChannelId, quote)
+	}
+	if err != nil {
+		logger.LogError(ctx, "violation accounting remains pending: "+err.Error())
+		return false
+	}
+	other := map[string]any{
+		"violation_fee": true, "violation_fee_code": string(types.ErrorCodeViolationFeeGrokCSAM),
+		"fee_quota": charge.FinalQuota, "base_amount": original.ViolationFeeUSD,
+		"channel_ratio": original.ChannelRatio, "source_quote_hash": original.Hash,
+		"status_code": apiErr.StatusCode,
+	}
+	log, err := model.BuildConsumeLog(ctx, info.UserId, model.RecordConsumeLogParams{
+		ChannelId: info.ChannelId, ModelName: info.OriginModelName,
+		TokenName: ctx.GetString("token_name"), Quota: charge.FinalQuota,
+		Content: "Violation fee charged", TokenId: info.TokenId,
+		UseTimeSeconds: int(time.Since(info.StartTime).Seconds()), IsStream: info.IsStream,
+		Group: info.UsingGroup, Other: other,
+	})
+	if err == nil {
+		err = model.PrepareBillingRecoveryConsumption(requestID, model.BillingConsumption{
+			Usage: &usage, Charge: charge, Log: *log, LogEnabled: common.LogConsumeEnabled,
+			CountUsage: false, NodeName: common.NodeName,
+		})
+	}
+	if err == nil {
+		err = model.Settle(requestID, charge.FinalQuota)
+	}
+	if err == nil {
+		err = model.ApplyBillingRecoveryConsumption(requestID)
+	}
+	if err != nil {
+		logger.LogError(ctx, "violation accounting remains pending: "+err.Error())
+		return false
+	}
 	return true
 }

@@ -104,7 +104,7 @@ function paymentRailLabel(method: string): string {
         </dt>
         <dd class="mt-1 text-sm tabular-nums text-[var(--text-primary)]">
           {{
-            props.order.quota > 0
+            BigInt(props.order.quota) > 0n
               ? formatQuota(props.order.quota)
               : t('orders.notCredited')
           }}

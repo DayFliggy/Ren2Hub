@@ -390,3 +390,17 @@ func multipartMemoryLimit() int64 {
 	}
 	return int64(limitMB) << 20
 }
+
+func GetContextKeyQuota(c *gin.Context, key constant.ContextKey) Quota {
+	value, _ := c.Get(string(key))
+	switch q := value.(type) {
+	case Quota:
+		return q
+	case int64:
+		return Quota(q)
+	case int:
+		return Quota(q)
+	default:
+		return 0
+	}
+}

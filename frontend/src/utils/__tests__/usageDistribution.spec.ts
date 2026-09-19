@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { UsageDistributionPoint } from '@/composables/useUsageDistribution'
+import type { UsageDistributionPoint } from '@/utils/usageDistribution'
 import { buildUsageDistributionView } from '@/utils/usageDistribution'
 
 function dateKey(date: Date): string {

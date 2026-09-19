@@ -5,12 +5,12 @@ import { useI18n } from 'vue-i18n'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import { useAuthStore } from '@/stores/auth'
-import { formatQuota, QUOTA_PER_DOLLAR } from '@/utils/format'
+import { formatQuota } from '@/utils/format'
 
 const props = defineProps<{
-  transferable: number
-  frozen: number
-  rewardTotal: number
+  transferable: string
+  frozen: string
+  rewardTotal: string
   invited: number
   readonly?: boolean
 }>()
@@ -20,10 +20,12 @@ const emit = defineEmits<{ transfer: [] }>()
 const { t } = useI18n()
 const auth = useAuthStore()
 
-const currentBalance = computed(() => auth.user?.quota ?? 0)
-const afterBalance = computed(() => currentBalance.value + props.transferable)
+const currentBalance = computed(() => auth.user?.available_quota ?? 0)
+const afterBalance = computed(() =>
+  (BigInt(currentBalance.value) + BigInt(props.transferable)).toString()
+)
 const canTransfer = computed(
-  () => !props.readonly && props.transferable >= QUOTA_PER_DOLLAR
+  () => !props.readonly && BigInt(props.transferable) >= 500000n
 )
 </script>
 
