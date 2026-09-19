@@ -58,6 +58,8 @@
 
 This checkout is Ren2Hub. Start with the [local documentation](docs/README.md) for its current routing, admission, API and release contracts. The upstream project introduction and attribution are retained. Deployment follows the [Ren2Hub installation guide](docs/installation/DOCKER.md); upstream images do not contain this checkout's changes. Ren2Hub uses single-process FIFO admission and requires sequential version replacement. The RenAI workspace deploys PostgreSQL using its own deployment assets.
 
+Billing uses the wallet balance, with an additional Token quota limit. Site subscriptions and plan management have been removed; historical billing records remain protected. See the [current acceptance record](docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md) for the removal commit and validation boundaries.
+
 > [!NOTE]  
 > This is an open-source project developed based on [One API](https://github.com/songquanpeng/one-api)
 
@@ -144,8 +146,8 @@ Build this Ren2Hub checkout using the [single-instance Docker guide](docs/instal
 | Feature | Description |
 |------|------|
 | 🎨 New UI | Modern user interface design |
-| 🌍 Multi-language | Supports Chinese, English, French, Japanese |
-| 🔄 Data Compatibility | Fully compatible with the original One API database |
+| 🌍 Multi-language | Vue interface: Simplified Chinese and English |
+| 🔄 Data Compatibility | SQLite, MySQL and PostgreSQL; upgrades follow the local migration and release contract |
 | 📈 Data Dashboard | Visual console and statistical analysis |
 | 🔒 Permission Management | Token grouping, model restrictions, user management |
 
@@ -178,11 +180,8 @@ Build this Ren2Hub checkout using the [single-instance Docker guide](docs/instal
 - 🚦 User-level model rate limiting
 
 **Format Conversion:**
-- 🔄 **OpenAI Compatible ⇄ Claude Messages**
-- 🔄 **OpenAI Compatible → Google Gemini**
-- 🔄 **Google Gemini → OpenAI Compatible** - Text only, function calling not supported yet
-- 🚧 **OpenAI Compatible ⇄ OpenAI Responses** - In development
-- 🔄 **Thinking-to-content functionality**
+
+Chat, Responses, Claude and Gemini use the shared conversion planner. Supported tools, media, citations, termination semantics and explicit rejection boundaries are maintained in the [protocol support matrix](docs/routing/GATEWAY_SUPPORT_MATRIX.md).
 
 **Reasoning Effort Support:**
 

@@ -1,4 +1,4 @@
-# Ren2Hub 新前端
+# Ren2Hub 前端
 
 该目录是 Ren2Hub 唯一的 Vue 3 Web 前端。
 

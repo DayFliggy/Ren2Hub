@@ -14,6 +14,8 @@
 
 ## 多节点 Redis 拓扑
 
+本节仅说明认证子系统的存储语义；Ren2Hub 当前采用单进程网关，不支持据此增加业务副本。应用部署仍遵守[单实例发布契约](routing/GATEWAY_RELEASE.md)。
+
 多节点部署必须共用同一主数据库。登录 Session、账户级活跃 Session 上限和签发窗口计数都以数据库为权威，因此这些限制在应用节点间全局生效。Redis 中的 Session Hash（包含 `revoking`/`revoked` tombstone）只是缓存，其 TTL 为 Session 剩余寿命与有效 `SYNC_FREQUENCY` 中的较小值；`SYNC_FREQUENCY` 默认及非法值回退均为 `60` 秒。读取缓存不会续期，过期后会按 SID 回源数据库。延迟完成的 active 缓存回写只能使用其数据库观察窗口尚未消耗的 TTL，不能在撤销 tombstone 到期后重新启动一个完整缓存周期。
 
 | Redis 部署方式 | Session 状态传播 | 限流语义 |

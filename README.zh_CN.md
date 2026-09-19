@@ -57,6 +57,8 @@
 
 当前检出项目为 Ren2Hub，路由、准入、API 与发布契约请从[本地文档](docs/README.md)进入。下文保留上游项目介绍和署名；部署以 [Ren2Hub 安装文档](docs/installation/DOCKER.md)为准，上游镜像不包含本检出的改造。Ren2Hub 采用单进程本地 FIFO 准入，新旧版本必须顺序切换。RenAI 工作区使用独立部署资产和 PostgreSQL。
 
+计费使用钱包余额，Token 额度作为附加消费限制。本站订阅与套餐管理已移除，历史账务数据继续保留并受保护；专属提交和验证边界见[现行验收记录](docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md)。
+
 > [!IMPORTANT]
 > - 本项目仅面向合法授权的 AI API 网关、组织内部鉴权、多模型管理、用量统计、成本核算和私有化部署场景。
 > - 使用者必须合法取得上游 API Key、账号、模型服务或接口权限，并遵守上游服务条款及适用法律法规。
@@ -143,8 +145,8 @@
 | 特性 | 说明 |
 |------|------|
 | 🎨 全新 UI | 现代化的用户界面设计 |
-| 🌍 多语言 | 支持中文、英文、法语、日语 |
-| 🔄 数据兼容 | 完全兼容原版 One API 数据库 |
+| 🌍 多语言 | Vue 界面支持简体中文、英文 |
+| 🔄 数据兼容 | 支持 SQLite、MySQL、PostgreSQL；升级遵守本地迁移与发布契约 |
 | 📈 数据看板 | 可视化控制台与统计分析 |
 | 🔒 权限管理 | 令牌分组、模型限制、用户管理 |
 
@@ -178,11 +180,8 @@
 - 🚦 用户级别模型限流
 
 **格式转换：**
-- 🔄 **OpenAI Compatible ⇄ Claude Messages**
-- 🔄 **OpenAI Compatible → Google Gemini**
-- 🔄 **Google Gemini → OpenAI Compatible** - 仅支持文本，暂不支持函数调用
-- 🚧 **OpenAI Compatible ⇄ OpenAI Responses** - 开发中
-- 🔄 **思考转内容功能**
+
+Chat、Responses、Claude、Gemini 使用统一转换规划。已支持的工具、媒体、引用、终态语义及明确拒绝边界集中维护在[协议支持矩阵](docs/routing/GATEWAY_SUPPORT_MATRIX.md)。
 
 **Reasoning Effort 支持：**
 

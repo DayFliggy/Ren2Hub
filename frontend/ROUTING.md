@@ -32,4 +32,4 @@ Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`�
 
 Playwright 路由用例可在真正 Go 构建上运行：准备 embed 后启动本地独立测试实例，设置 `PLAYWRIGHT_PORT`，运行 `test:visual`。`PLAYWRIGHT_THEME=light` 选择浅色。测试夹具只模拟 API，HTML、模块与字体由实际二进制服务；生产恢复还必须用真实 API 的浏览器冒烟验证。
 
-本次路由重构不表示所有旧认证功能已迁移：当前 OAuth 回调用于账号绑定，Passkey 登录仍受后端禁用。本轮没有实现这些额外认证流程，也没有更改支付、数据库或 Relay 业务语义。
+当前 OAuth 回调用于账号绑定，Passkey 登录仍受后端禁用；不能由旧认证页面或 API 名称推导相关登录入口已开放。支付、数据库及 Relay 的现行边界见[认证契约](../docs/authentication.md)和[统一路由](../docs/routing/UNIFIED_ROUTING.md)。

@@ -57,6 +57,8 @@
 
 Cette copie du projet est Ren2Hub. Consultez la [documentation locale](docs/README.md) pour les contrats actuels de routage, d'admission, d'API et de publication. La présentation et les attributions du projet amont sont conservées. Utilisez le [guide d'installation Ren2Hub](docs/installation/DOCKER.md) ; les images amont ne contiennent pas les modifications de cette copie. Ren2Hub utilise une admission FIFO locale dans un seul processus et impose un remplacement séquentiel des versions. L'espace RenAI utilise ses propres fichiers de déploiement et PostgreSQL.
 
+La facturation utilise le solde du portefeuille, avec un quota Token supplémentaire. Les abonnements et la gestion des forfaits du site ont été supprimés ; les données comptables historiques restent protégées. Le [rapport de validation](docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md) précise le commit et les limites des vérifications.
+
 > [!IMPORTANT]
 > - Ce projet est exclusivement destiné aux scénarios de passerelle API d'IA légalement autorisés, d'authentification organisationnelle, de gestion multi-modèles, d'analyse d'utilisation, de comptabilisation des coûts et de déploiement privé.
 > - Les utilisateurs doivent obtenir légalement les clés API, comptes, services de modèles et autorisations d'interface en amont, et doivent respecter les conditions d'utilisation en amont et les lois et réglementations applicables.
@@ -143,8 +145,8 @@ Construisez cette copie de Ren2Hub avec le [guide Docker à instance unique](doc
 | Fonctionnalité | Description |
 |------|------|
 | 🎨 Nouvelle interface utilisateur | Conception d'interface utilisateur moderne |
-| 🌍 Multilingue | Prend en charge le chinois simplifié, le chinois traditionnel, l'anglais, le français et le japonais |
-| 🔄 Compatibilité des données | Complètement compatible avec la base de données originale de One API |
+| 🌍 Multilingue | Interface Vue : chinois simplifié et anglais |
+| 🔄 Compatibilité des données | SQLite, MySQL et PostgreSQL ; les mises à jour suivent les contrats locaux de migration et de publication |
 | 📈 Tableau de bord des données | Console visuelle et analyse statistique |
 | 🔒 Gestion des permissions | Regroupement de jetons, restrictions de modèles, gestion des utilisateurs |
 
@@ -178,11 +180,8 @@ Construisez cette copie de Ren2Hub avec le [guide Docker à instance unique](doc
 - 🚦 Limitation du débit du modèle pour les utilisateurs
 
 **Conversion de format:**
-- 🔄 **OpenAI Compatible ⇄ Claude Messages**
-- 🔄 **OpenAI Compatible → Google Gemini**
-- 🔄 **Google Gemini → OpenAI Compatible** - Texte uniquement, les appels de fonction ne sont pas encore pris en charge
-- 🚧 **OpenAI Compatible ⇄ OpenAI Responses** - En développement
-- 🔄 **Fonctionnalité de la pensée au contenu**
+
+Chat, Responses, Claude et Gemini utilisent le même planificateur de conversion. La [matrice de prise en charge](docs/routing/GATEWAY_SUPPORT_MATRIX.md) décrit les outils, médias, citations, fins de réponse et cas explicitement refusés.
 
 **Prise en charge de l'effort de raisonnement:**
 
