@@ -243,6 +243,10 @@ func sessionAsyncPaymentSucceeded(ctx context.Context, event stripe.Event, calle
 // sessionAsyncPaymentFailed marks orders as failed when delayed payment methods
 // ultimately fail (e.g. bank transfer not received, SEPA rejected).
 func sessionAsyncPaymentFailed(ctx context.Context, event stripe.Event, callerIp string) {
+	if !isStripeWalletCheckout(ctx, event) {
+		return
+	}
+
 	referenceId := event.GetObjectValue("client_reference_id")
 	logger.LogWarn(ctx, fmt.Sprintf("Stripe 异步支付失败 trade_no=%s client_ip=%s", referenceId, callerIp))
 
@@ -278,8 +282,24 @@ func sessionAsyncPaymentFailed(ctx context.Context, event stripe.Event, callerIp
 	logger.LogInfo(ctx, fmt.Sprintf("Stripe 充值订单已标记为失败 trade_no=%s client_ip=%s", referenceId, callerIp))
 }
 
+// isStripeWalletCheckout excludes recurring and archived plan payments before
+// any wallet order is credited or its status is changed.
+func isStripeWalletCheckout(ctx context.Context, event stripe.Event) bool {
+	referenceID := event.GetObjectValue("client_reference_id")
+	if event.GetObjectValue("mode") != string(stripe.CheckoutSessionModePayment) ||
+		strings.HasPrefix(referenceID, "sub_ref_") {
+		logger.LogWarn(ctx, fmt.Sprintf("Stripe 忽略非钱包支付事件 event_type=%s trade_no=%s", event.Type, referenceID))
+		return false
+	}
+	return true
+}
+
 // fulfillOrder is the shared logic for crediting quota after payment is confirmed.
 func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, customerId string, callerIp string) {
+	if !isStripeWalletCheckout(ctx, event) {
+		return
+	}
+
 	if len(referenceId) == 0 {
 		logger.LogWarn(ctx, fmt.Sprintf("Stripe 完成订单时缺少订单号 client_ip=%s", callerIp))
 		return
@@ -287,20 +307,6 @@ func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, c
 
 	LockOrder(referenceId)
 	defer UnlockOrder(referenceId)
-	payload := map[string]any{
-		"customer":     customerId,
-		"amount_total": event.GetObjectValue("amount_total"),
-		"currency":     strings.ToUpper(event.GetObjectValue("currency")),
-		"event_type":   string(event.Type),
-	}
-	if err := model.CompleteSubscriptionOrder(referenceId, common.GetJsonString(payload), model.PaymentProviderStripe, ""); err == nil {
-		logger.LogInfo(ctx, fmt.Sprintf("Stripe 订阅订单处理成功 trade_no=%s event_type=%s client_ip=%s", referenceId, string(event.Type), callerIp))
-		return
-	} else if err != nil && !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
-		logger.LogError(ctx, fmt.Sprintf("Stripe 订阅订单处理失败 trade_no=%s event_type=%s client_ip=%s error=%q", referenceId, string(event.Type), callerIp, err.Error()))
-		return
-	}
-
 	err := model.Recharge(referenceId, customerId, callerIp)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("Stripe 充值处理失败 trade_no=%s event_type=%s client_ip=%s error=%q", referenceId, string(event.Type), callerIp, err.Error()))
@@ -313,6 +319,10 @@ func fulfillOrder(ctx context.Context, event stripe.Event, referenceId string, c
 }
 
 func sessionExpired(ctx context.Context, event stripe.Event) {
+	if !isStripeWalletCheckout(ctx, event) {
+		return
+	}
+
 	referenceId := event.GetObjectValue("client_reference_id")
 	status := event.GetObjectValue("status")
 	if "expired" != status {
@@ -325,16 +335,8 @@ func sessionExpired(ctx context.Context, event stripe.Event) {
 		return
 	}
 
-	// Subscription order expiration
 	LockOrder(referenceId)
 	defer UnlockOrder(referenceId)
-	if err := model.ExpireSubscriptionOrder(referenceId, model.PaymentProviderStripe); err == nil {
-		logger.LogInfo(ctx, fmt.Sprintf("Stripe 订阅订单已过期 trade_no=%s", referenceId))
-		return
-	} else if err != nil && !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
-		logger.LogError(ctx, fmt.Sprintf("Stripe 订阅订单过期处理失败 trade_no=%s error=%q", referenceId, err.Error()))
-		return
-	}
 
 	err := model.UpdatePendingTopUpStatus(referenceId, model.PaymentProviderStripe, common.TopUpStatusExpired)
 	if errors.Is(err, model.ErrTopUpNotFound) {

@@ -210,7 +210,7 @@ func TestApplyAffiliateRewardUsesCustomRateAndPerInviteeCap(t *testing.T) {
 
 	for id := int64(1); id <= 3; id++ {
 		applyAffiliateTestReward(t, AffiliateRewardSource{
-			Type: AffiliateSourceSubscription, Id: id, InviteeId: invitee.Id,
+			Type: AffiliateSourceTopUp, Id: id, InviteeId: invitee.Id,
 			BaseQuota: 160_000, CreatedAt: common.AffiliateActivatedAt + id,
 		})
 	}

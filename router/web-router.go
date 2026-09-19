@@ -29,6 +29,7 @@ var immutableWebAsset = regexp.MustCompile(`^/assets/[^/]+-[A-Za-z0-9_-]{8,}\.[A
 
 var retiredWebPathPrefixes = []string{
 	"/next", "/playground", "/chat", "/chat2link", "/chat-presets",
+	"/subscription", "/plan-management", "/plans",
 	"/models/deployments", "/deployment", "/admin/deployments",
 	"/system-settings/content/chat", "/system-settings/content/chats", "/system-settings/content/chat-presets",
 }

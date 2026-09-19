@@ -16,7 +16,7 @@ func setupBillingRecoveryTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
-		&User{}, &Token{}, &UserSubscription{}, &SubscriptionPreConsumeRecord{},
+		&User{}, &Token{},
 		&BillingRecovery{}, &BillingRecoveryAdjustment{},
 	))
 
@@ -32,29 +32,113 @@ func setupBillingRecoveryTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestBillingRecoveryRejectsIdentityConflictAndRebindsOnlyAbortedAttempt(t *testing.T) {
+func TestBillingRecoveryRejectsIdentityConflicts(t *testing.T) {
 	db := setupBillingRecoveryTestDB(t)
-	input := BillingRecoveryInput{RequestID: "recovery-rebind", UserID: 1, TokenID: 2, Source: "wallet", TokenRequired: true}
+	input := BillingRecoveryInput{RequestID: "wallet-identity", UserID: 1, TokenID: 2, Source: "wallet", TokenRequired: true}
 	_, err := EnsureBillingRecovery(input)
 	require.NoError(t, err)
-
-	_, err = EnsureBillingRecovery(BillingRecoveryInput{RequestID: input.RequestID, UserID: 9, TokenID: 2, Source: "wallet", TokenRequired: true})
-	assert.Error(t, err)
-	_, err = EnsureBillingRecovery(BillingRecoveryInput{RequestID: input.RequestID, UserID: 1, TokenID: 2, Source: "subscription", TokenRequired: true})
-	assert.Error(t, err)
-
-	require.NoError(t, AbortPreparedBillingRecovery(input.RequestID, assert.AnError))
-	rebound, err := EnsureBillingRecovery(BillingRecoveryInput{RequestID: input.RequestID, UserID: 1, TokenID: 2, Source: "subscription", TokenRequired: true})
+	require.NoError(t, UpdateBillingRecoveryAmounts(input.RequestID, 10, 10))
+	for _, conflict := range []BillingRecoveryInput{
+		{RequestID: input.RequestID, UserID: 9, TokenID: 2, Source: "wallet", TokenRequired: true},
+		{RequestID: input.RequestID, UserID: 1, TokenID: 9, Source: "wallet", TokenRequired: true},
+		{RequestID: input.RequestID, UserID: 1, TokenID: 2, Source: "wallet", TokenRequired: false},
+	} {
+		_, err := EnsureBillingRecovery(conflict)
+		require.Error(t, err)
+	}
+	repeated, err := EnsureBillingRecovery(input)
 	require.NoError(t, err)
-	assert.Equal(t, "subscription", rebound.Source)
-	assert.Equal(t, BillingRecoveryStatusActive, rebound.Status)
-
-	require.NoError(t, UpdateBillingRecoveryAmounts(input.RequestID, 0, 10, 0, 10))
-	_, err = EnsureBillingRecovery(BillingRecoveryInput{RequestID: input.RequestID, UserID: 1, TokenID: 2, Source: "wallet", TokenRequired: true})
-	assert.Error(t, err)
+	assert.EqualValues(t, 10, repeated.FundingAmount)
+	assert.EqualValues(t, 10, repeated.TokenAmount)
 	var recovery BillingRecovery
 	require.NoError(t, db.Where("request_id = ?", input.RequestID).First(&recovery).Error)
-	assert.Equal(t, "subscription", recovery.Source)
+	assert.Equal(t, input.UserID, recovery.UserID)
+	assert.Equal(t, input.TokenID, recovery.TokenID)
+	assert.True(t, recovery.TokenRequired)
+	assert.Equal(t, "wallet", recovery.Source)
+}
+
+func TestBillingRecoveryRejectsRetiredSourceForNewRequests(t *testing.T) {
+	db := setupBillingRecoveryTestDB(t)
+	_, err := EnsureBillingRecovery(BillingRecoveryInput{RequestID: "retired-source", UserID: 1, Source: "subscription"})
+	require.ErrorIs(t, err, ErrUnsupportedBillingSource)
+	var count int64
+	require.NoError(t, db.Model(&BillingRecovery{}).Count(&count).Error)
+	assert.Zero(t, count)
+}
+
+func TestHistoricalSubscriptionRecoveryCannotMutateWalletOrToken(t *testing.T) {
+	for _, operation := range []string{BillingRecoveryOperationSettle, BillingRecoveryOperationRefund} {
+		for _, component := range []string{BillingRecoveryComponentFunding, BillingRecoveryComponentToken} {
+			t.Run(operation+"/"+component, func(t *testing.T) {
+				db := setupBillingRecoveryTestDB(t)
+				user := User{Username: "historical-recovery", Quota: 100, UsedQuota: 40}
+				require.NoError(t, db.Create(&user).Error)
+				token := Token{UserId: user.Id, Key: "historical-recovery-token", RemainQuota: 60, UsedQuota: 40}
+				require.NoError(t, db.Create(&token).Error)
+				status := BillingRecoveryStatusSettlementPending
+				if operation == BillingRecoveryOperationRefund {
+					status = BillingRecoveryStatusRefundPending
+				}
+				recovery := BillingRecovery{
+					RequestID: "historical-subscription", UserID: user.Id, TokenID: token.Id, TokenRequired: true,
+					Source: "subscription", FundingAmount: 40, TokenAmount: 40, SettlementDelta: 10,
+					Status: status, PreConsumeState: BillingRecoveryPreConsumeCommitted,
+				}
+				require.NoError(t, db.Create(&recovery).Error)
+				for range 2 {
+					require.ErrorIs(t, ApplyBillingRecoveryAdjustment(recovery.RequestID, component, operation), ErrUnsupportedBillingSource)
+				}
+				require.NoError(t, db.First(&user, user.Id).Error)
+				require.NoError(t, db.First(&token, token.Id).Error)
+				assert.Equal(t, 100, user.Quota)
+				assert.Equal(t, 40, user.UsedQuota)
+				assert.Equal(t, 60, token.RemainQuota)
+				assert.Equal(t, 40, token.UsedQuota)
+				var persisted BillingRecovery
+				require.NoError(t, db.First(&persisted, recovery.ID).Error)
+				assert.Equal(t, recovery, persisted)
+				var count int64
+				require.NoError(t, db.Model(&BillingRecoveryAdjustment{}).Where("request_id = ?", recovery.RequestID).Count(&count).Error)
+				assert.Zero(t, count, "rejected legacy accounting must not leave a success marker")
+			})
+		}
+	}
+}
+
+func TestBillingRecoveryWalletPreConsumeInsufficientFundsRollsBackBothBalances(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		walletQuota int
+		tokenQuota  int
+		err         error
+	}{
+		{"wallet", 30, 100, ErrBillingRecoveryFundingQuota},
+		{"token", 100, 30, ErrBillingRecoveryTokenQuota},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			db := setupBillingRecoveryTestDB(t)
+			user := User{Username: "insufficient-funds", Quota: test.walletQuota}
+			require.NoError(t, db.Create(&user).Error)
+			token := Token{UserId: user.Id, Key: "insufficient-funds-token", RemainQuota: test.tokenQuota}
+			require.NoError(t, db.Create(&token).Error)
+			_, err := EnsureBillingRecovery(BillingRecoveryInput{
+				RequestID: "insufficient-funds", UserID: user.Id, TokenID: token.Id, Source: "wallet", TokenRequired: true,
+			})
+			require.NoError(t, err)
+			require.ErrorIs(t, PreConsumeWalletBillingRecovery("insufficient-funds", 40, false), test.err)
+			require.NoError(t, db.First(&user, user.Id).Error)
+			require.NoError(t, db.First(&token, token.Id).Error)
+			assert.Equal(t, test.walletQuota, user.Quota)
+			assert.Equal(t, test.tokenQuota, token.RemainQuota)
+			assert.Zero(t, token.UsedQuota)
+			var recovery BillingRecovery
+			require.NoError(t, db.Where("request_id = ?", "insufficient-funds").First(&recovery).Error)
+			assert.Equal(t, BillingRecoveryPreConsumePrepared, recovery.PreConsumeState)
+			assert.Zero(t, recovery.FundingAmount)
+			assert.Zero(t, recovery.TokenAmount)
+		})
+	}
 }
 
 func TestMarkBillingRecoveryRefundedRequiresCompletedComponents(t *testing.T) {
@@ -62,7 +146,7 @@ func TestMarkBillingRecoveryRefundedRequiresCompletedComponents(t *testing.T) {
 	const requestID = "billing-recovery-completion"
 	_, err := EnsureBillingRecovery(BillingRecoveryInput{RequestID: requestID, UserID: 1, Source: "wallet"})
 	require.NoError(t, err)
-	require.NoError(t, UpdateBillingRecoveryAmounts(requestID, 0, 10, 4, 0))
+	require.NoError(t, UpdateBillingRecoveryAmounts(requestID, 10, 0))
 	require.NoError(t, MarkBillingRecoveryRefundPending(requestID, assert.AnError))
 
 	err = MarkBillingRecoveryRefunded(requestID, nil)
@@ -70,7 +154,6 @@ func TestMarkBillingRecoveryRefundedRequiresCompletedComponents(t *testing.T) {
 
 	require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", requestID).Updates(map[string]any{
 		"funding_refund": BillingRecoveryStateCompleted,
-		"extra_refund":   BillingRecoveryStateCompleted,
 	}).Error)
 	require.NoError(t, MarkBillingRecoveryRefunded(requestID, nil))
 
@@ -194,32 +277,30 @@ func TestUpdateBillingRecoveryAmountsRejectsTerminalRecoveries(t *testing.T) {
 			requestID := "terminal-amounts-" + status
 			recovery := BillingRecovery{
 				RequestID: requestID, UserID: 1, Source: "wallet",
-				FundingAmount: 40, ExtraAmount: 3, TokenAmount: 20,
+				FundingAmount: 40, TokenAmount: 20,
 				PreConsumeState: BillingRecoveryPreConsumeCommitted, Status: status,
 			}
 			require.NoError(t, db.Create(&recovery).Error)
 
-			err := UpdateBillingRecoveryAmounts(requestID, 99, 1, 2, 3)
+			err := UpdateBillingRecoveryAmounts(requestID, 1, 3)
 			assert.ErrorIs(t, err, ErrBillingRecoveryStateConflict)
 
 			var reloaded BillingRecovery
 			require.NoError(t, db.Where("request_id = ?", requestID).First(&reloaded).Error)
-			assert.Equal(t, 0, reloaded.SubscriptionID)
 			assert.EqualValues(t, 40, reloaded.FundingAmount)
-			assert.EqualValues(t, 3, reloaded.ExtraAmount)
 			assert.EqualValues(t, 20, reloaded.TokenAmount)
 			assert.Equal(t, status, reloaded.Status)
 		})
 	}
 }
 
-func TestBillingRecoveryReserveUsesPersistentAmountAndSubscriptionSettlementDelta(t *testing.T) {
+func TestBillingRecoveryReserveUsesPersistentAmount(t *testing.T) {
 	db := setupBillingRecoveryTestDB(t)
 	require.NoError(t, db.Create(&User{Id: 1, Username: "recovery-user", Quota: 100}).Error)
 	require.NoError(t, db.Create(&Token{Id: 1, UserId: 1, Key: "reserve-token", RemainQuota: 100}).Error)
 	_, err := EnsureBillingRecovery(BillingRecoveryInput{RequestID: "reserve-wallet", UserID: 1, TokenID: 1, Source: "wallet", TokenRequired: true})
 	require.NoError(t, err)
-	require.NoError(t, UpdateBillingRecoveryAmounts("reserve-wallet", 0, 40, 0, 40))
+	require.NoError(t, UpdateBillingRecoveryAmounts("reserve-wallet", 40, 40))
 	require.NoError(t, db.Model(&User{}).Where("id = ?", 1).Update("quota", 60).Error)
 	require.NoError(t, db.Model(&Token{}).Where("id = ?", 1).Updates(map[string]any{"remain_quota": 60, "used_quota": 40}).Error)
 
@@ -241,18 +322,6 @@ func TestBillingRecoveryReserveUsesPersistentAmountAndSubscriptionSettlementDelt
 	assert.Equal(t, int64(90), recovery.TokenAmount)
 	assert.Equal(t, 10, token.RemainQuota)
 	assert.Equal(t, 90, token.UsedQuota)
-
-	require.NoError(t, db.Create(&UserSubscription{Id: 1, UserId: 1, AmountTotal: 1000, AmountUsed: 40}).Error)
-	_, err = EnsureBillingRecovery(BillingRecoveryInput{RequestID: "settle-subscription", UserID: 1, Source: "subscription"})
-	require.NoError(t, err)
-	require.NoError(t, UpdateBillingRecoveryAmounts("settle-subscription", 1, 40, 0, 0))
-	require.NoError(t, UpdateBillingRecoverySettlement("settle-subscription", 10))
-	require.NoError(t, ApplyBillingRecoveryAdjustment("settle-subscription", BillingRecoveryComponentFunding, BillingRecoveryOperationSettle))
-	require.NoError(t, ApplyBillingRecoveryAdjustment("settle-subscription", BillingRecoveryComponentToken, BillingRecoveryOperationSettle))
-	require.NoError(t, MarkBillingRecoverySettled("settle-subscription"))
-	var subscription UserSubscription
-	require.NoError(t, db.Where("id = ?", 1).First(&subscription).Error)
-	assert.Equal(t, int64(50), subscription.AmountUsed)
 }
 
 func TestListStaleBillingRecoveriesIncludesPreparedRowsForSafeReconciliation(t *testing.T) {

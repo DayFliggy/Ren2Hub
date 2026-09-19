@@ -17,7 +17,6 @@ describe('console navigation', () => {
       'ticket-management',
       'user-management',
       'redemption-management',
-      'plan-management',
       'order-management',
       'system-settings',
       'models-admin',
@@ -40,14 +39,6 @@ describe('console navigation', () => {
       expect.objectContaining({
         name: 'user-management',
         route: 'users',
-      })
-    )
-    expect(adminGroup?.items).toContainEqual(
-      expect.objectContaining({
-        name: 'plan-management',
-        labelKey: 'nav.planManagement',
-        route: 'plan-management',
-        hidden: true,
       })
     )
     expect(adminGroup?.items).toContainEqual(
@@ -118,20 +109,7 @@ describe('console navigation', () => {
     expect(getConsoleRouteAccessMeta('models')).toEqual({})
   })
 
-  it('retains hidden subscription routes without rendering navigation items', () => {
-    const accountGroup = consoleNavGroups.find(
-      (group) => group.key === 'account'
-    )
-
-    expect(accountGroup?.items).toContainEqual(
-      expect.objectContaining({
-        name: 'subscription',
-        labelKey: 'nav.subscription',
-        route: 'subscription',
-        hidden: true,
-      })
-    )
-
+  it('exposes wallet access without retired plan entries', () => {
     const accessibleItems = getAccessibleConsoleNavGroups({
       isAdmin: true,
       hasPermission: () => true,
@@ -142,8 +120,11 @@ describe('console navigation', () => {
     expect(
       accessibleItems.some((item) => item.name === 'plan-management')
     ).toBe(false)
-    expect(getConsoleRouteAccessMeta('plan-management')).toEqual({
-      requiresAdmin: true,
+    expect(
+      accessibleItems.find((item) => item.name === 'wallet')
+    ).toMatchObject({
+      route: 'wallet',
+      feature: 'wallet',
     })
   })
 

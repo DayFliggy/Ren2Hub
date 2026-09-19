@@ -268,18 +268,6 @@ const router = createRouter({
           },
         },
         {
-          path: '/plan-management',
-          name: 'plan-management',
-          component: () => import('@/views/console/PlanManagementView.vue'),
-          meta: {
-            wide: true,
-            noPageScroll: true,
-            protected: true,
-            feature: 'subscription_balance',
-            ...getConsoleRouteAccessMeta('plan-management'),
-          },
-        },
-        {
           path: '/orders',
           name: 'orders',
           component: () => import('@/views/console/OrdersView.vue'),
@@ -310,12 +298,6 @@ const router = createRouter({
           name: 'wallet',
           component: () => import('@/views/console/WalletView.vue'),
           meta: { feature: 'wallet' },
-        },
-        {
-          path: '/subscription',
-          name: 'subscription',
-          component: () => import('@/views/console/SubscriptionView.vue'),
-          meta: { protected: true, feature: 'subscription_balance' },
         },
         {
           path: '/invite',

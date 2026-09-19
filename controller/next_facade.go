@@ -15,7 +15,6 @@ import (
 )
 
 // NextOrderDTO is the stable order contract consumed by the Vue frontend.
-// Subscription and marketplace values are reserved for later phases.
 type NextOrderDTO struct {
 	ID            int     `json:"id"`
 	OrderNo       string  `json:"order_no"`

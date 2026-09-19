@@ -105,7 +105,6 @@ func InitOptionMap() {
 	common.OptionMap["WaffoMerchantId"] = setting.WaffoMerchantId
 	common.OptionMap["WaffoNotifyUrl"] = setting.WaffoNotifyUrl
 	common.OptionMap["WaffoReturnUrl"] = setting.WaffoReturnUrl
-	common.OptionMap["WaffoSubscriptionReturnUrl"] = setting.WaffoSubscriptionReturnUrl
 	common.OptionMap["WaffoCurrency"] = setting.WaffoCurrency
 	common.OptionMap["WaffoUnitPrice"] = strconv.FormatFloat(setting.WaffoUnitPrice, 'f', -1, 64)
 	common.OptionMap["WaffoMinTopUp"] = strconv.Itoa(setting.WaffoMinTopUp)
@@ -229,6 +228,9 @@ func SyncOptions(frequency int) {
 }
 
 func validateOptionValue(key string, value string) error {
+	if key == "WaffoSubscriptionReturnUrl" {
+		return errors.New("obsolete payment option")
+	}
 	if key == operation_setting.ToolPriceOptionKey {
 		return operation_setting.ValidateToolPricesJSON(value)
 	}
@@ -307,7 +309,7 @@ func UpdateOptionsBulk(values map[string]string) error {
 }
 
 func updateOptionMap(key string, value string) (err error) {
-	if key == retiredThemeOptionKey || retiredRoutingOption(key) {
+	if key == retiredThemeOptionKey || key == "WaffoSubscriptionReturnUrl" || retiredRoutingOption(key) {
 		common.OptionMapRWMutex.Lock()
 		delete(common.OptionMap, key)
 		common.OptionMapRWMutex.Unlock()
@@ -505,8 +507,6 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.WaffoNotifyUrl = value
 	case "WaffoReturnUrl":
 		setting.WaffoReturnUrl = value
-	case "WaffoSubscriptionReturnUrl":
-		setting.WaffoSubscriptionReturnUrl = value
 	case "WaffoCurrency":
 		setting.WaffoCurrency = value
 	case "WaffoUnitPrice":

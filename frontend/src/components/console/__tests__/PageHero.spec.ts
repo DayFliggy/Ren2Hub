@@ -7,7 +7,7 @@ import i18n from '@/i18n'
 describe('PageHero accent rendering', () => {
   it('keeps the ampersand swash form for existing callers', () => {
     const wrapper = mount(PageHero, {
-      props: { title: '订阅', titleAccent: '余额' },
+      props: { title: '钱包', titleAccent: '余额' },
       global: { plugins: [i18n] },
     })
     const heading = wrapper.get('h1')

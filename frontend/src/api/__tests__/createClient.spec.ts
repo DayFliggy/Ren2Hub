@@ -37,21 +37,15 @@ describe('API client request scope', () => {
     const client = createApiClient({ request } as ApiTransport)
 
     await expect(
-      client.patch('/api/subscription/admin/plans/1', { enabled: false })
+      client.patch('/api/test/resource/1', { enabled: false })
     ).resolves.toEqual({ updated: true })
-    expect(request).toHaveBeenCalledWith(
-      'PATCH',
-      '/api/subscription/admin/plans/1',
-      { data: { enabled: false } }
-    )
+    expect(request).toHaveBeenCalledWith('PATCH', '/api/test/resource/1', {
+      data: { enabled: false },
+    })
   })
 
   it('rejects nonstandard response envelopes for every endpoint', async () => {
-    const endpoints = [
-      '/api/next/wallet/topup',
-      '/api/user/pay',
-      '/api/subscription/epay/pay',
-    ]
+    const endpoints = ['/api/next/wallet/topup', '/api/user/pay']
     for (const url of endpoints) {
       const client = createApiClient({
         request: vi.fn().mockResolvedValue({

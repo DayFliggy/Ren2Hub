@@ -34,7 +34,7 @@ import (
 func setupVideoTaskLifecycle(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, _ := setupGatewayAPI(t)
-	require.NoError(t, db.AutoMigrate(&model.Task{}, &model.Token{}, &model.UserSubscription{}, &model.BillingRecovery{}, &model.BillingRecoveryAdjustment{}, &model.QuotaData{}))
+	require.NoError(t, db.AutoMigrate(&model.Task{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingRecoveryAdjustment{}, &model.QuotaData{}))
 	connection, err := db.DB()
 	require.NoError(t, err)
 	connection.SetMaxOpenConns(1)

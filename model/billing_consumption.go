@@ -61,8 +61,8 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 			return nil
 		}
 		reserved := recovery.FundingAmount
-		if recovery.Source == "subscription" {
-			reserved += recovery.ExtraAmount
+		if recovery.Source != "wallet" {
+			return ErrUnsupportedBillingSource
 		}
 		delta := int64(consumption.Log.Quota) - reserved
 		switch recovery.Status {

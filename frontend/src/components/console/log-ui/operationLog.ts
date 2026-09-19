@@ -79,12 +79,6 @@ export const OPERATION_LOG_ACTION_LABEL_KEYS: Record<string, string> = {
   'model.update': 'operationLogs.actions.modelUpdate',
   'model.delete': 'operationLogs.actions.modelDelete',
   'model.sync_upstream': 'operationLogs.actions.modelSyncUpstream',
-  'subscription.plan_create': 'operationLogs.actions.subscriptionPlanCreate',
-  'subscription.plan_update': 'operationLogs.actions.subscriptionPlanUpdate',
-  'subscription.bind': 'operationLogs.actions.subscriptionBind',
-  'subscription.plan_reset': 'operationLogs.actions.subscriptionPlanReset',
-  'subscription.user_plan_reset':
-    'operationLogs.actions.subscriptionUserPlanReset',
   'log.cleanup_start': 'operationLogs.actions.logCleanupStart',
   generic: 'operationLogs.actions.generic',
 }
@@ -108,7 +102,6 @@ const PARAM_LABEL_KEYS: Record<string, string> = {
   method: 'operationLogs.params.method',
   scope: 'operationLogs.params.scope',
   route: 'operationLogs.params.route',
-  plan_id: 'operationLogs.params.planId',
   inviter_id: 'operationLogs.params.inviterId',
   invited_user_id: 'operationLogs.params.invitedUserId',
   bindingType: 'operationLogs.params.bindingType',

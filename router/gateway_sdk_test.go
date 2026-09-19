@@ -52,7 +52,7 @@ func setupGatewaySDKWithUpstream(t *testing.T, handler http.HandlerFunc) (string
 	t.Helper()
 	setupRelayRouterTestDB(t)
 	db := model.DB
-	require.NoError(t, db.AutoMigrate(&model.UserRouteGroup{}, &model.UserRouteEntry{}, &model.RoutePolicy{}, &model.ChannelCapabilitySnapshot{}, &model.ChannelModelCapability{}, &model.ChannelHealth{}, &model.BillingRecovery{}, &model.BillingRecoveryAdjustment{}, &model.SubscriptionPlan{}, &model.UserSubscription{}, &model.SubscriptionPreConsumeRecord{}, &model.Log{}, &model.QuotaData{}))
+	require.NoError(t, db.AutoMigrate(&model.UserRouteGroup{}, &model.UserRouteEntry{}, &model.RoutePolicy{}, &model.ChannelCapabilitySnapshot{}, &model.ChannelModelCapability{}, &model.ChannelHealth{}, &model.BillingRecovery{}, &model.BillingRecoveryAdjustment{}, &model.Log{}, &model.QuotaData{}))
 	oldRedis, oldMemory := common.RDB, common.MemoryCacheEnabled
 	client := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
 	common.RDB, common.RedisEnabled, common.MemoryCacheEnabled = client, true, false

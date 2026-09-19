@@ -43,22 +43,24 @@ func TestMidjourneyCompletionRecoveryAcrossDatabases(t *testing.T) {
 				initCol()
 				require.NoError(t, connection.Close())
 			})
-			require.NoError(t, db.AutoMigrate(&Midjourney{}, &User{}, &Token{}, &Channel{}, &UserSubscription{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingRecoveryAdjustment{}))
+			require.NoError(t, db.AutoMigrate(&Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingRecoveryAdjustment{}))
 			t.Run("accepted-submission", func(t *testing.T) {
-				fixture := newMidjourneyCompletionFixture(t, db, "accepted", "wallet", false, true)
+				fixture := newMidjourneyCompletionFixture(t, db, "accepted", false, true)
 				testMidjourneyAcceptedSubmission(t, fixture)
 			})
 			t.Run("concurrent-owner", func(t *testing.T) {
-				fixture := newMidjourneyCompletionFixture(t, db, "owner", "wallet", false, true)
+				fixture := newMidjourneyCompletionFixture(t, db, "owner", false, true)
 				testMidjourneyConcurrentOwner(t, fixture)
 			})
-			for _, source := range []string{"wallet", "subscription"} {
-				for _, status := range []string{"SUCCESS", "FAILURE"} {
-					t.Run(source+"/"+status, func(t *testing.T) {
-						fixture := newMidjourneyCompletionFixture(t, db, source+status, source, false, true)
-						testMidjourneyCompletionRecovery(t, fixture, status)
-					})
-				}
+			for _, status := range []string{"SUCCESS", "FAILURE"} {
+				t.Run("wallet/"+status, func(t *testing.T) {
+					fixture := newMidjourneyCompletionFixture(t, db, "wallet"+status, false, true)
+					testMidjourneyCompletionRecovery(t, fixture, status)
+				})
+				t.Run("retired-source/"+status, func(t *testing.T) {
+					fixture := newMidjourneyCompletionFixture(t, db, "retired-"+status, false, true)
+					testMidjourneyCompletionRejectsRetiredSource(t, fixture, status)
+				})
 			}
 			for _, test := range []struct {
 				name          string
@@ -66,16 +68,16 @@ func TestMidjourneyCompletionRecoveryAcrossDatabases(t *testing.T) {
 				tokenRequired bool
 			}{{"legacy-token", true, true}, {"legacy-wallet-only", true, false}, {"playground", false, false}} {
 				t.Run(test.name, func(t *testing.T) {
-					fixture := newMidjourneyCompletionFixture(t, db, test.name, "wallet", test.legacy, test.tokenRequired)
+					fixture := newMidjourneyCompletionFixture(t, db, test.name, test.legacy, test.tokenRequired)
 					testMidjourneyCompletionRecovery(t, fixture, "FAILURE")
 				})
 			}
 			t.Run("concurrent-terminal", func(t *testing.T) {
-				fixture := newMidjourneyCompletionFixture(t, db, "concurrent", "wallet", false, true)
+				fixture := newMidjourneyCompletionFixture(t, db, "concurrent", false, true)
 				testMidjourneyConcurrentCompletion(t, fixture)
 			})
 			t.Run("submission-pending", func(t *testing.T) {
-				fixture := newMidjourneyCompletionFixture(t, db, "pending", "wallet", false, true)
+				fixture := newMidjourneyCompletionFixture(t, db, "pending", false, true)
 				require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", fixture.task.PrivateData.SubmissionRequestID).
 					Update("consumption_state", BillingRecoveryStatePending).Error)
 				fixture.task.Status = "FAILURE"
@@ -88,6 +90,40 @@ func TestMidjourneyCompletionRecoveryAcrossDatabases(t *testing.T) {
 			})
 		})
 	}
+}
+
+func testMidjourneyCompletionRejectsRetiredSource(t *testing.T, fixture midjourneyCompletionFixture, status string) {
+	t.Helper()
+	db, task := fixture.db, fixture.task
+	task.PrivateData.BillingSource = "subscription"
+	require.NoError(t, db.Model(&task).Update("private_data", task.PrivateData).Error)
+	require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", task.PrivateData.SubmissionRequestID).Update("source", "subscription").Error)
+	task.Status, task.Progress = status, "100%"
+	for range 2 {
+		won, err := PersistMidjourneyCompletion(context.Background(), &task, "IN_PROGRESS", fixture.consumption)
+		require.ErrorIs(t, err, ErrUnsupportedBillingSource)
+		assert.False(t, won)
+	}
+	var persisted Midjourney
+	require.NoError(t, db.First(&persisted, task.Id).Error)
+	assert.Equal(t, "IN_PROGRESS", persisted.Status)
+	assert.Equal(t, "45%", persisted.Progress)
+	assert.Equal(t, 30, persisted.Quota)
+	assert.Equal(t, "subscription", persisted.PrivateData.BillingSource)
+	require.NoError(t, db.First(&fixture.user, fixture.user.Id).Error)
+	require.NoError(t, db.First(&fixture.token, fixture.token.Id).Error)
+	require.NoError(t, db.First(&fixture.channel, fixture.channel.Id).Error)
+	assert.Equal(t, 70, fixture.user.Quota)
+	assert.Equal(t, 30, fixture.user.UsedQuota)
+	assert.Equal(t, 1, fixture.user.RequestCount)
+	assert.Equal(t, 70, fixture.token.RemainQuota)
+	assert.Equal(t, 30, fixture.token.UsedQuota)
+	assert.EqualValues(t, 30, fixture.channel.UsedQuota)
+	var count int64
+	require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", MidjourneyBillingRequestID(task.Id)).Count(&count).Error)
+	assert.Zero(t, count)
+	require.NoError(t, db.Model(&Log{}).Where("user_id = ?", fixture.user.Id).Count(&count).Error)
+	assert.Zero(t, count)
 }
 
 func newMidjourneySubmission(t *testing.T, fixture midjourneyCompletionFixture, requestID string) (Midjourney, BillingConsumption) {
@@ -176,14 +212,12 @@ type midjourneyCompletionFixture struct {
 	user          User
 	token         Token
 	channel       Channel
-	subscription  UserSubscription
-	source        string
 	tokenRequired bool
 }
 
-func newMidjourneyCompletionFixture(t *testing.T, db *gorm.DB, identity, source string, legacy, tokenRequired bool) midjourneyCompletionFixture {
+func newMidjourneyCompletionFixture(t *testing.T, db *gorm.DB, identity string, legacy, tokenRequired bool) midjourneyCompletionFixture {
 	t.Helper()
-	fixture := midjourneyCompletionFixture{db: db, source: source, tokenRequired: tokenRequired}
+	fixture := midjourneyCompletionFixture{db: db, tokenRequired: tokenRequired}
 	fixture.user = User{Username: "mj-" + identity, AffCode: "mj-" + identity, Quota: 70, UsedQuota: 30, RequestCount: 1}
 	require.NoError(t, db.Create(&fixture.user).Error)
 	fixture.token = Token{UserId: fixture.user.Id, Key: "mj-" + identity, RemainQuota: 100}
@@ -193,10 +227,6 @@ func newMidjourneyCompletionFixture(t *testing.T, db *gorm.DB, identity, source 
 	require.NoError(t, db.Create(&fixture.token).Error)
 	fixture.channel = Channel{Name: "mj-" + identity, UsedQuota: 30}
 	require.NoError(t, db.Create(&fixture.channel).Error)
-	if source == "subscription" {
-		fixture.subscription = UserSubscription{UserId: fixture.user.Id, AmountTotal: 1000, AmountUsed: 30}
-		require.NoError(t, db.Create(&fixture.subscription).Error)
-	}
 	fixture.task = Midjourney{MjId: "provider-" + identity, UserId: fixture.user.Id, ChannelId: fixture.channel.Id,
 		Quota: 30, Status: "IN_PROGRESS", Progress: "45%", Action: "IMAGINE"}
 	logTokenID := fixture.token.Id
@@ -213,10 +243,10 @@ func newMidjourneyCompletionFixture(t *testing.T, db *gorm.DB, identity, source 
 			fixture.task.ChannelId, fixture.task.BillingChannelId = routeChannel.Id, fixture.channel.Id
 		}
 	} else {
-		fixture.task.PrivateData = TaskPrivateData{TokenId: fixture.token.Id, BillingSource: source, SubscriptionId: fixture.subscription.Id,
+		fixture.task.PrivateData = TaskPrivateData{TokenId: fixture.token.Id, BillingSource: "wallet",
 			SubmissionRequestID: "mj-submission-" + identity, CredentialID: "local-credential", EndpointID: "local-endpoint"}
 		submission := BillingRecovery{RequestID: fixture.task.PrivateData.SubmissionRequestID, UserID: fixture.user.Id, TokenID: fixture.token.Id,
-			TokenRequired: tokenRequired, Source: source, SubscriptionID: fixture.subscription.Id,
+			TokenRequired: tokenRequired, Source: "wallet",
 			Status: BillingRecoveryStatusSettled, ConsumptionState: BillingRecoveryStateCompleted}
 		require.NoError(t, db.Create(&submission).Error)
 	}
@@ -300,13 +330,7 @@ func testMidjourneyCompletionRecovery(t *testing.T, fixture midjourneyCompletion
 		require.NoError(t, ApplyBillingRecoveryConsumption(requestID))
 	}
 	require.NoError(t, db.First(&fixture.user, fixture.user.Id).Error)
-	if fixture.source == "wallet" {
-		assert.Equal(t, 100-actual, fixture.user.Quota)
-	} else {
-		require.NoError(t, db.First(&fixture.subscription, fixture.subscription.Id).Error)
-		assert.EqualValues(t, actual, fixture.subscription.AmountUsed)
-		assert.Equal(t, 70, fixture.user.Quota)
-	}
+	assert.Equal(t, 100-actual, fixture.user.Quota)
 	assert.Equal(t, actual, fixture.user.UsedQuota)
 	assert.Equal(t, 1, fixture.user.RequestCount, "terminal adjustment never counts another submission")
 	require.NoError(t, db.First(&fixture.token, fixture.token.Id).Error)

@@ -11,7 +11,7 @@ Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`�
 | 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                          | Admin 和已有权限规则                  |
 | 模型管理 | `/models/metadata`、`/models/vendors`、`/models/prefill-groups`、`/models/deployments`                                    | Admin，admin capability               |
 | 系统     | `/system-settings/:domain/:section?`、`/system-info`                                                                      | Root，admin capability                |
-| 延期模块 | 市场、订阅、发票、Farm、Bigame、Lab                                                                                       | 保留源码，capability 未开放时拒绝进入 |
+| 延期模块 | 市场、发票、Farm、Bigame、Lab                                                                                             | 保留源码，capability 未开放时拒绝进入 |
 
 普通用户模型目录使用 `/models`，管理 metadata 使用 `/models/metadata`，避免将参考项目的路径含义误用于现有权限。
 
@@ -21,6 +21,7 @@ Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`�
 - `/next` 和 `/next/*` 已退休：Go 返回 HTTP 404，Vue 内部导航进入 404 页面，不再转换旧书签。
 - `/api`、`/api/next`、Relay 和 `/dashboard/billing` 是后端命名空间，缺失接口返回 JSON 404。绝不清理 API 尾斜杠：`/api/models` 是用户目录，`/api/models/` 是管理 metadata。
 - 已退出的 Playground、Chat、Chat2Link、Chat Presets 及旧前缀路径由 Go 返回 404；Vue 内部导航也拒绝进入。
+- 本站订阅与套餐管理已移除：`/subscription`、`/plan-management`、`/plans` 及其 `/console/` 旧前缀路径进入标准 404，不再注册功能路由或请求订阅接口。
 - 缺失 capability 按禁用处理；后端不可达时不挂载业务页面。服务端鉴权仍为最终权限边界。
 
 ## 空白页与交付验证

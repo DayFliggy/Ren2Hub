@@ -12,8 +12,7 @@ beforeAll(async () => {
 
 const discounts: UserDiscounts = {
   global_ratio: 0.88,
-  plan_ratio: 0.95,
-  effective_ratio: 0.836,
+  effective_ratio: 0.88,
 }
 
 function render(props: Record<string, unknown> = {}) {
@@ -32,16 +31,14 @@ describe('DiscountCard', () => {
     expect(wrapper.text()).not.toContain('At list price')
   })
 
-  it('labels the personal row as the volume tier, not an account group', () => {
+  it('renders the platform discount without a plan discount', () => {
     const wrapper = render()
 
-    expect(wrapper.text()).toContain('Personal discount')
-    // plan_ratio 0.95 → an extra 5% off the volume tier.
-    expect(wrapper.text()).toContain('Volume-tier extra 5% off')
-    expect(wrapper.text()).not.toContain('VIP')
+    expect(wrapper.text()).toContain('0.88×')
+    expect(wrapper.text()).not.toContain('Personal discount')
   })
 
   it('still shows the headline rate', () => {
-    expect(render().text()).toContain('0.836×')
+    expect(render().text()).toContain('0.880×')
   })
 })

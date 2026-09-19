@@ -41,36 +41,80 @@ func TestTaskCompletionRecoveryAcrossDatabases(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, connection.Close())
 			})
-			require.NoError(t, db.AutoMigrate(&Task{}, &User{}, &Token{}, &Channel{}, &UserSubscription{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingRecoveryAdjustment{}))
-			for _, source := range []string{"wallet", "subscription"} {
-				for _, actual := range []int{0, 15, 30, 60} {
-					t.Run(fmt.Sprintf("%s/%d", source, actual), func(t *testing.T) {
-						testTaskCompletionRecovery(t, db, source, actual)
-					})
-				}
+			require.NoError(t, db.AutoMigrate(&Task{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingRecoveryAdjustment{}))
+			for _, actual := range []int{0, 15, 30, 60} {
+				t.Run(fmt.Sprintf("wallet/%d", actual), func(t *testing.T) {
+					testTaskCompletionRecovery(t, db, actual)
+				})
+			}
+			for _, status := range []TaskStatus{TaskStatusSuccess, TaskStatusFailure} {
+				t.Run("retired-source/"+string(status), func(t *testing.T) {
+					testTaskCompletionRejectsRetiredSource(t, db, status)
+				})
 			}
 		})
 	}
 }
 
-func testTaskCompletionRecovery(t *testing.T, db *gorm.DB, source string, actual int) {
+func testTaskCompletionRejectsRetiredSource(t *testing.T, db *gorm.DB, status TaskStatus) {
 	t.Helper()
-	ctx := context.Background()
-	identity := fmt.Sprintf("%s-%d", source, actual)
-	user := User{Username: identity, AffCode: fmt.Sprintf("%c%03d", source[0], actual), Quota: 70, UsedQuota: 30, RequestCount: 1}
+	identity := "retired-" + string(status)
+	user := User{Username: identity, AffCode: identity, Quota: 70, UsedQuota: 30, RequestCount: 1}
 	require.NoError(t, db.Create(&user).Error)
 	token := Token{UserId: user.Id, Key: identity, RemainQuota: 70, UsedQuota: 30}
 	require.NoError(t, db.Create(&token).Error)
 	channel := Channel{Name: identity, UsedQuota: 30}
 	require.NoError(t, db.Create(&channel).Error)
-	subscription := UserSubscription{UserId: user.Id, AmountTotal: 1000, AmountUsed: 30}
-	if source == "subscription" {
-		require.NoError(t, db.Create(&subscription).Error)
+	task := Task{TaskID: identity, UserId: user.Id, ChannelId: channel.Id, Quota: 30, Status: TaskStatusInProgress, Progress: "45%",
+		PrivateData: TaskPrivateData{TokenId: token.Id, BillingSource: "subscription"}}
+	require.NoError(t, db.Create(&task).Error)
+	consumption := BillingConsumption{Log: Log{UserId: user.Id, TokenId: token.Id, ChannelId: channel.Id}, CountUsage: true, LogEnabled: true}
+	task.Status, task.Progress = status, "100%"
+	actual := 60
+	if status == TaskStatusFailure {
+		actual = 0
 	}
+	for range 2 {
+		won, err := PersistTaskCompletion(context.Background(), &task, TaskStatusInProgress, actual, consumption)
+		require.ErrorIs(t, err, ErrUnsupportedBillingSource)
+		assert.False(t, won)
+	}
+	var persisted Task
+	require.NoError(t, db.First(&persisted, task.ID).Error)
+	assert.Equal(t, TaskStatus(TaskStatusInProgress), persisted.Status)
+	assert.Equal(t, "45%", persisted.Progress)
+	assert.Equal(t, 30, persisted.Quota)
+	assert.Equal(t, "subscription", persisted.PrivateData.BillingSource)
+	require.NoError(t, db.First(&user, user.Id).Error)
+	require.NoError(t, db.First(&token, token.Id).Error)
+	require.NoError(t, db.First(&channel, channel.Id).Error)
+	assert.Equal(t, 70, user.Quota)
+	assert.Equal(t, 30, user.UsedQuota)
+	assert.Equal(t, 1, user.RequestCount)
+	assert.Equal(t, 70, token.RemainQuota)
+	assert.Equal(t, 30, token.UsedQuota)
+	assert.EqualValues(t, 30, channel.UsedQuota)
+	var count int64
+	require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", TaskBillingRequestID(task.ID)).Count(&count).Error)
+	assert.Zero(t, count)
+	require.NoError(t, db.Model(&Log{}).Where("user_id = ?", user.Id).Count(&count).Error)
+	assert.Zero(t, count)
+}
+
+func testTaskCompletionRecovery(t *testing.T, db *gorm.DB, actual int) {
+	t.Helper()
+	ctx := context.Background()
+	identity := fmt.Sprintf("wallet-%d", actual)
+	user := User{Username: identity, AffCode: fmt.Sprintf("w%03d", actual), Quota: 70, UsedQuota: 30, RequestCount: 1}
+	require.NoError(t, db.Create(&user).Error)
+	token := Token{UserId: user.Id, Key: identity, RemainQuota: 70, UsedQuota: 30}
+	require.NoError(t, db.Create(&token).Error)
+	channel := Channel{Name: identity, UsedQuota: 30}
+	require.NoError(t, db.Create(&channel).Error)
 	task := Task{TaskID: identity, UserId: user.Id, ChannelId: channel.Id, Quota: 30, Status: TaskStatusInProgress,
-		PrivateData: TaskPrivateData{TokenId: token.Id, BillingSource: source, SubscriptionId: subscription.Id, SubmissionRequestID: identity}}
+		PrivateData: TaskPrivateData{TokenId: token.Id, BillingSource: "wallet", SubmissionRequestID: identity}}
 	submission := BillingRecovery{RequestID: identity, UserID: user.Id, TokenID: token.Id, TokenRequired: true,
-		Source: source, SubscriptionID: subscription.Id, Status: BillingRecoveryStatusSettled, ConsumptionState: BillingRecoveryStateCompleted}
+		Source: "wallet", Status: BillingRecoveryStatusSettled, ConsumptionState: BillingRecoveryStateCompleted}
 	require.NoError(t, db.Create(&submission).Error)
 	require.NoError(t, db.Create(&task).Error)
 	oldStatus := task.Status
@@ -152,13 +196,7 @@ func testTaskCompletionRecovery(t *testing.T, db *gorm.DB, source string, actual
 		require.NoError(t, ApplyBillingRecoveryConsumption(requestID))
 	}
 	require.NoError(t, db.First(&user, user.Id).Error)
-	if source == "wallet" {
-		assert.Equal(t, 100-actual, user.Quota)
-	} else {
-		require.NoError(t, db.First(&subscription, subscription.Id).Error)
-		assert.EqualValues(t, actual, subscription.AmountUsed)
-		assert.Equal(t, 70, user.Quota)
-	}
+	assert.Equal(t, 100-actual, user.Quota)
 	assert.Equal(t, actual, user.UsedQuota)
 	assert.Equal(t, 1, user.RequestCount)
 	require.NoError(t, db.First(&token, token.Id).Error)

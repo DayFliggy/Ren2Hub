@@ -324,23 +324,7 @@ func RequestWaffoPay(c *gin.Context) {
 	})
 }
 
-// webhookPayloadWithSubInfo 扩展 PAYMENT_NOTIFICATION，包含 SDK 未定义的 subscriptionInfo 字段
-type webhookPayloadWithSubInfo struct {
-	EventType string `json:"eventType"`
-	Result    struct {
-		core.PaymentNotificationResult
-		SubscriptionInfo *webhookSubscriptionInfo `json:"subscriptionInfo,omitempty"`
-	} `json:"result"`
-}
-
-type webhookSubscriptionInfo struct {
-	Period              string `json:"period,omitempty"`
-	MerchantRequest     string `json:"merchantRequest,omitempty"`
-	SubscriptionID      string `json:"subscriptionId,omitempty"`
-	SubscriptionRequest string `json:"subscriptionRequest,omitempty"`
-}
-
-// WaffoWebhook 处理 Waffo 回调通知（支付/退款/订阅）
+// WaffoWebhook 处理钱包支付回调通知
 func WaffoWebhook(c *gin.Context) {
 	if !isWaffoWebhookEnabled() {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Waffo webhook 被拒绝 reason=webhook_disabled path=%q client_ip=%s", c.Request.RequestURI, c.ClientIP()))
@@ -383,15 +367,23 @@ func WaffoWebhook(c *gin.Context) {
 
 	switch event.EventType {
 	case core.EventPayment:
-		// 解析为扩展类型，区分普通支付和订阅支付
-		var payload webhookPayloadWithSubInfo
+		var payload core.PaymentNotification
 		if err := common.Unmarshal(bodyBytes, &payload); err != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("Waffo 支付回调载荷解析失败 event_type=%s client_ip=%s error=%q body=%q", event.EventType, c.ClientIP(), err.Error(), bodyStr))
 			sendWaffoWebhookResponse(c, wh, false, "invalid payment payload")
 			return
 		}
+		if payload.Result == nil {
+			sendWaffoWebhookResponse(c, wh, false, "missing payment result")
+			return
+		}
+		if payload.Result.SubscriptionInfo != nil {
+			logger.LogWarn(c.Request.Context(), "Waffo 拒绝非钱包支付事件")
+			sendWaffoWebhookResponse(c, wh, false, "unsupported payment type")
+			return
+		}
 		logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo webhook 验签并解析成功 event_type=%s merchant_order_id=%s order_status=%s client_ip=%s", event.EventType, payload.Result.MerchantOrderID, payload.Result.OrderStatus, c.ClientIP()))
-		handleWaffoPayment(c, wh, &payload.Result.PaymentNotificationResult)
+		handleWaffoPayment(c, wh, payload.Result)
 	default:
 		logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo webhook 忽略事件 event_type=%s client_ip=%s", event.EventType, c.ClientIP()))
 		sendWaffoWebhookResponse(c, wh, true, "")

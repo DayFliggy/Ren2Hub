@@ -25,7 +25,7 @@ func TestTaskTerminalRecoveryResumesAfterLogFailure(t *testing.T) {
 	seedToken(t, id, id, "task-terminal-recovery", 70)
 	seedChannel(t, id)
 	seedChargedAccounting(t, id, id, id, previous, 1)
-	task := makeTask(id, id, previous, id, BillingSourceWallet, 0)
+	task := makeTask(id, id, previous, id, BillingSourceWallet)
 	require.NoError(t, model.DB.Create(task).Error)
 	require.NoError(t, model.DB.Callback().Create().Before("gorm:create").Register("completion_log_failure", func(tx *gorm.DB) {
 		if tx.Statement.Table == "logs" {

@@ -44,13 +44,16 @@ type gatewayStartupLegacyUser struct {
 }
 
 type gatewayStartupLegacyRecovery struct {
-	ID            int64  `gorm:"primaryKey"`
-	RequestID     string `gorm:"type:varchar(128);uniqueIndex;not null"`
-	UserID        int    `gorm:"not null"`
-	TokenID       int    `gorm:"not null"`
-	Source        string `gorm:"type:varchar(32);not null"`
-	FundingAmount int64  `gorm:"not null;default:0"`
-	Status        string `gorm:"type:varchar(32);not null"`
+	ID             int64  `gorm:"primaryKey"`
+	RequestID      string `gorm:"type:varchar(128);uniqueIndex;not null"`
+	UserID         int    `gorm:"not null"`
+	TokenID        int    `gorm:"not null"`
+	Source         string `gorm:"type:varchar(32);not null"`
+	FundingAmount  int64  `gorm:"not null;default:0"`
+	SubscriptionID int
+	ExtraAmount    int64  `gorm:"not null;default:0"`
+	ExtraRefund    string `gorm:"type:varchar(16);not null;default:'pending'"`
+	Status         string `gorm:"type:varchar(32);not null"`
 }
 
 type gatewayStartupLegacyState struct {
@@ -117,6 +120,19 @@ func TestGatewayStartupMigrations(t *testing.T) {
 			require.NoError(t, db.Table("users").Create(&gatewayStartupLegacyUser{ID: 17, Username: "startup-admin", Password: "fixture-password-hash", Role: common.RoleRootUser, Status: common.UserStatusEnabled, Group: "team"}).Error)
 			require.NoError(t, db.Table("tokens").Create(&gatewayStartupLegacyToken{ID: 23, UserID: 17, Key: "local-startup-fixture", Name: "legacy-token", RemainQuota: 71, ModelLimits: "model-before-upgrade"}).Error)
 			require.NoError(t, db.Table("billing_recoveries").Create(&gatewayStartupLegacyRecovery{ID: 31, RequestID: "startup-recovery", UserID: 17, TokenID: 23, Source: "wallet", FundingAmount: 73, Status: BillingRecoveryStatusActive}).Error)
+			retiredRecovery := gatewayStartupLegacyRecovery{ID: 32, RequestID: "retired-recovery", UserID: 17, TokenID: 23, Source: "subscription", FundingAmount: 41, SubscriptionID: 61, ExtraAmount: 7, ExtraRefund: "pending", Status: BillingRecoveryStatusRefundPending}
+			require.NoError(t, db.Table("billing_recoveries").Create(&retiredRecovery).Error)
+			// Retired product data remains available for offline reconciliation.
+			// The application must not migrate or delete these historical tables.
+			type archivedRow struct {
+				ID       int `gorm:"primaryKey"`
+				Evidence string
+			}
+			archivedTables := []string{"subscription_plans", "subscription_orders", "user_subscriptions", "subscription_pre_consume_records"}
+			for _, table := range archivedTables {
+				require.NoError(t, db.Table(table).AutoMigrate(&archivedRow{}))
+				require.NoError(t, db.Table(table).Create(&archivedRow{ID: 1, Evidence: "preserve-for-reconciliation"}).Error)
+			}
 			assert.False(t, db.Migrator().HasColumn(&Token{}, "conversion_policy"))
 			assert.False(t, db.Migrator().HasColumn(&User{}, "gateway_concurrency"))
 			assert.False(t, db.Migrator().HasColumn(&BillingRecovery{}, "pre_consume_state"))
@@ -173,6 +189,14 @@ func TestGatewayStartupMigrations(t *testing.T) {
 			initCol()
 			err = migrateDB()
 			require.NoError(t, err, "second complete startup migration: %s", db.Logger.(*gatewayStartupMigrationRecorder).failedDDL)
+			var archivedRecovery gatewayStartupLegacyRecovery
+			require.NoError(t, db.Table("billing_recoveries").First(&archivedRecovery, retiredRecovery.ID).Error)
+			assert.Equal(t, retiredRecovery, archivedRecovery, "retired source and amount evidence must survive upgrades")
+			for _, table := range archivedTables {
+				var row archivedRow
+				require.NoError(t, db.Table(table).First(&row, 1).Error)
+				assert.Equal(t, "preserve-for-reconciliation", row.Evidence)
+			}
 			stored, err := GetGatewayConfig()
 			require.NoError(t, err)
 			assert.Equal(t, config, stored, "startup must preserve administrator configuration and version")

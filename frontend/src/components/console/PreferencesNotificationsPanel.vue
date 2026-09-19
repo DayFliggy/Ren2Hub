@@ -48,7 +48,6 @@ const readonlyNotification: NotificationSettings = {
   gotifyToken: '',
   gotifyPriority: 5,
   walletReminder: false,
-  subscriptionReminder: false,
   upstreamModelUpdateNotify: false,
   acceptUnsetModelPrice: false,
   recordIpLog: false,

@@ -38,7 +38,6 @@ func TestMidjourneyUnknownAcceptanceCancellation(t *testing.T) {
 				&model.UserRouteGroup{}, &model.UserRouteEntry{}, &model.RoutePolicy{},
 				&model.ChannelCapabilitySnapshot{}, &model.ChannelModelCapability{}, &model.ChannelHealth{},
 				&model.BillingRecovery{}, &model.BillingRecoveryAdjustment{},
-				&model.SubscriptionPlan{}, &model.UserSubscription{}, &model.SubscriptionPreConsumeRecord{},
 				&model.Log{}, &model.Midjourney{},
 			))
 

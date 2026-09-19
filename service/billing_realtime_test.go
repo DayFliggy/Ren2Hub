@@ -32,7 +32,6 @@ func realtimeBillingSession(t *testing.T) (*gin.Context, *relaycommon.RelayInfo)
 	info := &relaycommon.RelayInfo{
 		RequestId: "realtime-billing-session", UserId: 880, TokenId: 881, TokenKey: "realtime-billing-test",
 		RelayFormat: types.RelayFormatOpenAIRealtime, OriginModelName: "realtime-test-model", StartTime: time.Now(),
-		UserSetting: dto.UserSetting{BillingPreference: "wallet_only"},
 		PriceData:   hosttypes.PriceData{ModelRatio: 1, ChannelRatio: 1},
 		ChannelMeta: &relaycommon.ChannelMeta{ChannelId: 882, UpstreamModelName: "realtime-test-model"},
 	}
@@ -158,44 +157,4 @@ func TestRealtimeUsageRejectsNegativeAndOverflowCounts(t *testing.T) {
 	_, err := AddRealtimeUsage(total, &dto.RealtimeUsage{InputTokens: 1})
 	assert.Error(t, err)
 	assert.Equal(t, math.MaxInt32, total.InputTokens)
-}
-
-func TestConsumptionSnapshotIncludesFinalSubscriptionDelta(t *testing.T) {
-	truncate(t)
-	seedUser(t, 889, 100)
-	seedToken(t, 889, 889, "subscription-consumption-snapshot", 60)
-	seedSubscription(t, 889, 889, 1000, 40)
-	seedChannel(t, 889)
-	beforeExport := common.DataExportEnabled
-	common.DataExportEnabled = false
-	t.Cleanup(func() { common.DataExportEnabled = beforeExport })
-	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
-		RequestID: "subscription-consumption-snapshot", UserID: 889, TokenID: 889, Source: BillingSourceSubscription, TokenRequired: true,
-	})
-	require.NoError(t, err)
-	require.NoError(t, model.UpdateBillingRecoveryAmounts("subscription-consumption-snapshot", 889, 40, 0, 40))
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
-	info := &relaycommon.RelayInfo{
-		RequestId: "subscription-consumption-snapshot", UserId: 889, TokenId: 889,
-		BillingSource: BillingSourceSubscription, SubscriptionId: 889, SubscriptionPreConsumed: 40,
-		SubscriptionAmountTotal: 1000, SubscriptionAmountUsedAfterPreConsume: 40,
-		ChannelMeta: &relaycommon.ChannelMeta{ChannelId: 889},
-	}
-	info.Billing = &BillingSession{
-		relayInfo: info, recoveryID: info.RequestId, preConsumedQuota: 40, tokenConsumed: 40,
-		funding: &SubscriptionFunding{subscriptionId: 889, preConsumed: 40},
-	}
-	other := map[string]interface{}{}
-	appendBillingInfo(info, other)
-	settleBillingConsumption(c, info, model.RecordConsumeLogParams{TokenId: 889, ChannelId: 889, Quota: 30, PromptTokens: 30, Other: other}, true)
-	require.NoError(t, info.BillingSettlementError)
-	var log model.Log
-	require.NoError(t, model.LOG_DB.Where("request_id = ?", info.RequestId).First(&log).Error)
-	var stored map[string]interface{}
-	require.NoError(t, common.UnmarshalJsonStr(log.Other, &stored))
-	assert.Equal(t, float64(-10), stored["subscription_post_delta"])
-	assert.Equal(t, float64(30), stored["subscription_consumed"])
-	assert.Equal(t, float64(30), stored["subscription_used"])
-	assert.Equal(t, float64(970), stored["subscription_remain"])
 }

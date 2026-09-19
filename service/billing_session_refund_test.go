@@ -8,7 +8,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -27,7 +26,6 @@ func seedRefundBillingSession(t *testing.T, trusted bool, precharge int) (*gin.C
 	info := &relaycommon.RelayInfo{
 		RequestId: "billing-refund-session", UserId: 810, TokenId: 811, TokenKey: "billing-refund-session",
 		TokenUnlimited: true, ForcePreConsume: !trusted,
-		UserSetting: dto.UserSetting{BillingPreference: "wallet_only"},
 	}
 	session, apiErr := NewBillingSession(c, info, precharge)
 	require.Nil(t, apiErr, "%v", apiErr)

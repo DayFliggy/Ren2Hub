@@ -76,12 +76,12 @@ func createTaskCompletionBilling(tx *gorm.DB, requestID string, privateData Task
 		consumption.Log.UserId <= 0 || consumption.Log.TokenId != privateData.TokenId {
 		return ErrBillingRecoveryStateConflict
 	}
-	source, subscriptionID := privateData.BillingSource, privateData.SubscriptionId
+	source := privateData.BillingSource
 	if source == "" {
 		source = "wallet"
 	}
-	if source != "wallet" && source != "subscription" || source == "subscription" && subscriptionID <= 0 {
-		return errors.New("invalid task billing source")
+	if source != "wallet" {
+		return ErrUnsupportedBillingSource
 	}
 	tokenRequired := privateData.TokenId > 0
 	if submissionID := privateData.SubmissionRequestID; submissionID != "" {
@@ -90,7 +90,7 @@ func createTaskCompletionBilling(tx *gorm.DB, requestID string, privateData Task
 			return err
 		}
 		if submission.UserID != consumption.Log.UserId || submission.TokenID != privateData.TokenId ||
-			submission.Source != source || submission.SubscriptionID != subscriptionID ||
+			submission.Source != source ||
 			submission.Status != BillingRecoveryStatusSettled || submission.ConsumptionState != BillingRecoveryStateCompleted {
 			return ErrBillingRecoveryStateConflict
 		}
@@ -113,7 +113,7 @@ func createTaskCompletionBilling(tx *gorm.DB, requestID string, privateData Task
 	}
 	recovery := BillingRecovery{
 		RequestID: requestID, UserID: consumption.Log.UserId, TokenID: privateData.TokenId, TokenRequired: tokenRequired,
-		Source: source, SubscriptionID: subscriptionID, SettlementDelta: int64(delta),
+		Source: source, SettlementDelta: int64(delta),
 		PreConsumeState: BillingRecoveryPreConsumeCommitted, Status: BillingRecoveryStatusSettlementPending,
 		ConsumptionSnapshot: string(data), ConsumptionState: BillingRecoveryStatePending,
 		ConsumptionStatistics: BillingRecoveryStatePending, ConsumptionLog: BillingRecoveryStatePending,

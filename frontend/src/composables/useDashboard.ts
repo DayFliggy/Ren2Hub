@@ -20,15 +20,14 @@ export interface DashboardStats {
 }
 
 export interface UserLimits {
-  /** Request ceiling from the active subscription plan; 0 = unmetered. */
+  /** Account request ceiling; 0 = unmetered. */
   rate_limit: number
   current_rpm: number // observed throughput
 }
 
 export interface UserDiscounts {
   global_ratio: number // platform-wide pricing multiplier, e.g. 0.88
-  plan_ratio: number // active plan's multiplier, e.g. 0.95; 1.0 without a plan
-  effective_ratio: number // combined: global × plan
+  effective_ratio: number // effective pricing multiplier
 }
 
 export interface ModelShare {

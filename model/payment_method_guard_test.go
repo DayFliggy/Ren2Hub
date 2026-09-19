@@ -53,37 +53,6 @@ func insertUserForPaymentGuardTest(t *testing.T, id int, quota int) *User {
 	return user
 }
 
-func insertSubscriptionPlanForPaymentGuardTest(t *testing.T, id int) *SubscriptionPlan {
-	t.Helper()
-	plan := &SubscriptionPlan{
-		Id:            id,
-		Title:         "Guard Plan",
-		PriceAmount:   9.99,
-		Currency:      "USD",
-		DurationUnit:  SubscriptionDurationMonth,
-		DurationValue: 1,
-		Enabled:       true,
-		TotalAmount:   1000,
-	}
-	require.NoError(t, DB.Create(plan).Error)
-	return plan
-}
-
-func insertSubscriptionOrderForPaymentGuardTest(t *testing.T, tradeNo string, userID int, planID int, paymentProvider string) {
-	t.Helper()
-	order := &SubscriptionOrder{
-		UserId:          userID,
-		PlanId:          planID,
-		Money:           9.99,
-		TradeNo:         tradeNo,
-		PaymentMethod:   paymentProvider,
-		PaymentProvider: paymentProvider,
-		Status:          common.TopUpStatusPending,
-		CreateTime:      time.Now().Unix(),
-	}
-	require.NoError(t, order.Insert())
-}
-
 func insertTopUpForPaymentGuardTest(t *testing.T, tradeNo string, userID int, paymentProvider string) {
 	t.Helper()
 	topUp := &TopUp{
@@ -104,13 +73,6 @@ func getTopUpStatusForPaymentGuardTest(t *testing.T, tradeNo string) string {
 	topUp := GetTopUpByTradeNo(tradeNo)
 	require.NotNil(t, topUp)
 	return topUp.Status
-}
-
-func countUserSubscriptionsForPaymentGuardTest(t *testing.T, userID int) int64 {
-	t.Helper()
-	var count int64
-	require.NoError(t, DB.Model(&UserSubscription{}).Where("user_id = ?", userID).Count(&count).Error)
-	return count
 }
 
 func getUserQuotaForPaymentGuardTest(t *testing.T, userID int) int {
@@ -170,40 +132,6 @@ func TestUpdatePendingTopUpStatus_RejectsMismatchedPaymentProvider(t *testing.T)
 			assert.Equal(t, common.TopUpStatusPending, getTopUpStatusForPaymentGuardTest(t, tc.tradeNo))
 		})
 	}
-}
-
-func TestCompleteSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T) {
-	truncateTables(t)
-
-	insertUserForPaymentGuardTest(t, 202, 0)
-	plan := insertSubscriptionPlanForPaymentGuardTest(t, 301)
-	insertSubscriptionOrderForPaymentGuardTest(t, "sub-guard-order", 202, plan.Id, PaymentProviderStripe)
-
-	err := CompleteSubscriptionOrder("sub-guard-order", `{"provider":"epay"}`, PaymentProviderEpay, "alipay")
-	require.ErrorIs(t, err, ErrPaymentMethodMismatch)
-
-	order := GetSubscriptionOrderByTradeNo("sub-guard-order")
-	require.NotNil(t, order)
-	assert.Equal(t, common.TopUpStatusPending, order.Status)
-	assert.Zero(t, countUserSubscriptionsForPaymentGuardTest(t, 202))
-
-	topUp := GetTopUpByTradeNo("sub-guard-order")
-	assert.Nil(t, topUp)
-}
-
-func TestExpireSubscriptionOrder_RejectsMismatchedPaymentProvider(t *testing.T) {
-	truncateTables(t)
-
-	insertUserForPaymentGuardTest(t, 303, 0)
-	plan := insertSubscriptionPlanForPaymentGuardTest(t, 401)
-	insertSubscriptionOrderForPaymentGuardTest(t, "sub-expire-guard", 303, plan.Id, PaymentProviderStripe)
-
-	err := ExpireSubscriptionOrder("sub-expire-guard", PaymentProviderCreem)
-	require.ErrorIs(t, err, ErrPaymentMethodMismatch)
-
-	order := GetSubscriptionOrderByTradeNo("sub-expire-guard")
-	require.NotNil(t, order)
-	assert.Equal(t, common.TopUpStatusPending, order.Status)
 }
 
 func createEpayTestOrder(t *testing.T, userId int, tradeNo string, provider string, status string) TopUp {
@@ -416,36 +344,4 @@ func TestRechargeEpayCommitsAffiliateRewardExactlyOnce(t *testing.T) {
 	assert.True(t, alreadyDone)
 	require.NoError(t, DB.Model(&AffiliateLedger{}).Where("source_event_key = ?", "topup:"+strconv.Itoa(order.Id)).Count(&ledgerCount).Error)
 	assert.EqualValues(t, 1, ledgerCount)
-}
-
-func TestSubscriptionAffiliateRewardExcludesBalancePurchases(t *testing.T) {
-	truncateTables(t)
-	enableAffiliatePaymentTest(t)
-
-	inviter := insertUserForPaymentGuardTest(t, 701, 0)
-	require.NoError(t, DB.Model(inviter).Updates(map[string]any{
-		"aff_code": "SUB-INVITER", "aff_code_enabled": true,
-	}).Error)
-	invitee := insertUserForPaymentGuardTest(t, 702, 5_000_000)
-	require.NoError(t, DB.Model(invitee).Update("inviter_id", inviter.Id).Error)
-	plan := insertSubscriptionPlanForPaymentGuardTest(t, 703)
-	order := &SubscriptionOrder{
-		UserId: invitee.Id, PlanId: plan.Id, Money: plan.PriceAmount,
-		TradeNo: "SUBAFFILIATEEXTERNAL", PaymentMethod: PaymentMethodStripe,
-		PaymentProvider: PaymentProviderStripe, Status: common.TopUpStatusPending,
-		CreateTime: common.GetTimestamp(), AffiliateBaseQuota: 500_000,
-	}
-	require.NoError(t, order.Insert())
-
-	require.NoError(t, CompleteSubscriptionOrder(order.TradeNo, "", PaymentProviderStripe, ""))
-	require.NoError(t, DB.First(inviter, inviter.Id).Error)
-	assert.Equal(t, 50_000, inviter.AffQuota)
-	var beforeBalance int64
-	require.NoError(t, DB.Model(&AffiliateLedger{}).Where("action = ?", AffiliateActionAccrue).Count(&beforeBalance).Error)
-	assert.EqualValues(t, 1, beforeBalance)
-
-	require.NoError(t, PurchaseSubscriptionWithBalance(invitee.Id, plan.Id))
-	var afterBalance int64
-	require.NoError(t, DB.Model(&AffiliateLedger{}).Where("action = ?", AffiliateActionAccrue).Count(&afterBalance).Error)
-	assert.Equal(t, beforeBalance, afterBalance)
 }

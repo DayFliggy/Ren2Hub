@@ -188,15 +188,7 @@ test('deferred module entry points are disabled and routes fail closed', async (
     })
   ).toBeDisabled()
 
-  for (const path of [
-    '/market',
-    '/subscription',
-    '/plan-management',
-    '/invoice',
-    '/farm',
-    '/bigame',
-    '/lab/chat',
-  ]) {
+  for (const path of ['/market', '/invoice', '/farm', '/bigame', '/lab/chat']) {
     await page.goto(path, { waitUntil: 'domcontentloaded' })
     await expect(page).toHaveURL(/\/dashboard$/)
   }

@@ -149,7 +149,7 @@ func TestBillingSessionReserveReloadsAnAlreadyExtendedReservation(t *testing.T) 
 		RequestID: "stale-billing-session", UserID: 809, TokenID: 809, Source: BillingSourceWallet, TokenRequired: true,
 	})
 	require.NoError(t, err)
-	require.NoError(t, model.UpdateBillingRecoveryAmounts("stale-billing-session", 0, 40, 0, 40))
+	require.NoError(t, model.UpdateBillingRecoveryAmounts("stale-billing-session", 40, 40))
 	_, err = model.ReserveBillingRecovery("stale-billing-session", 70, 30, false)
 	require.NoError(t, err)
 	session := &BillingSession{
@@ -201,7 +201,7 @@ func TestBillingSessionReservePersistsRecoveryAmountsWithReservation(t *testing.
 		TokenRequired: true,
 	})
 	require.NoError(t, err)
-	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 0, 40, 0, 40))
+	require.NoError(t, model.UpdateBillingRecoveryAmounts(requestID, 40, 40))
 
 	session := &BillingSession{
 		relayInfo:        &relaycommon.RelayInfo{UserId: userID, TokenId: tokenID, TokenKey: "billing-reserve-atomic-key"},
@@ -218,7 +218,6 @@ func TestBillingSessionReservePersistsRecoveryAmountsWithReservation(t *testing.
 	require.NoError(t, model.DB.Where("request_id = ?", requestID).First(&recovery).Error)
 	assert.Equal(t, int64(90), recovery.FundingAmount)
 	assert.Equal(t, int64(90), recovery.TokenAmount)
-	assert.Equal(t, int64(0), recovery.ExtraAmount)
 	assert.Equal(t, 90, session.GetPreConsumedQuota())
 
 	var marker model.BillingRecoveryAdjustment

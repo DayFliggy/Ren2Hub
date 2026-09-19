@@ -31,7 +31,6 @@ export interface NotificationSettings {
   gotifyToken: string
   gotifyPriority: number
   walletReminder: boolean
-  subscriptionReminder: boolean
   upstreamModelUpdateNotify: boolean
   acceptUnsetModelPrice: boolean
   recordIpLog: boolean

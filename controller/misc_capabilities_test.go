@@ -22,7 +22,6 @@ func TestFrontendCapabilitiesAreFlatStatuses(t *testing.T) {
 	require.Equal(t, "live", capabilities["two_factor"])
 	require.Equal(t, "live", capabilities["token_private_routing"])
 	for _, feature := range []string{
-		"subscription_balance",
 		"marketplace",
 		"invoices",
 		"lab",

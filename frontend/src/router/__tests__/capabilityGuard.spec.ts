@@ -64,6 +64,24 @@ beforeEach(async () => {
 })
 
 describe('capability route guard', () => {
+  it.each([
+    '/subscription',
+    '/plan-management',
+    '/plans',
+    '/console/subscription',
+    '/console/plan-management',
+    '/console/plans',
+  ])('resolves retired plan page %s to the standard 404', async (path) => {
+    const auth = useAuthStore()
+    auth.user!.role = 100
+
+    await router.push(path)
+
+    expect(router.currentRoute.value.name).toBe('not-found')
+    expect(sanitizeRedirect(path)).toBeNull()
+    expect(publicApi.status).not.toHaveBeenCalled()
+  })
+
   it('redirects uninitialized routes to setup before auth checks', async () => {
     const setup = useSetupStore()
     setup.phase = 'idle'
@@ -155,7 +173,6 @@ describe('capability route guard', () => {
       frontend_capabilities: {
         dashboard_basic: 'live',
         marketplace: 'disabled',
-        subscription_balance: 'disabled',
         invoices: 'disabled',
         farm: 'disabled',
         bigame: 'disabled',
@@ -165,8 +182,6 @@ describe('capability route guard', () => {
 
     for (const path of [
       '/console/market',
-      '/console/subscription',
-      '/console/plan-management',
       '/console/invoice',
       '/console/keys/11/routing',
       '/console/farm',

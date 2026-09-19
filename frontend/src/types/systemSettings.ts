@@ -118,7 +118,6 @@ export interface BillingSettings {
   WaffoSandboxApiKey: string
   WaffoSandboxPrivateKey: string
   WaffoSandboxPublicCert: string
-  WaffoSubscriptionReturnUrl: string
   WaffoPancakeUnitPrice: number
   WaffoPancakeMinTopUp: number
 }
@@ -319,7 +318,6 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   WaffoSandboxApiKey: '',
   WaffoSandboxPrivateKey: '',
   WaffoSandboxPublicCert: '',
-  WaffoSubscriptionReturnUrl: '',
   WaffoPancakeUnitPrice: 1,
   WaffoPancakeMinTopUp: 1,
   'quota_setting.enable_free_model_pre_consume': false,

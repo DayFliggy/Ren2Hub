@@ -292,24 +292,23 @@ func TestGatewayMidjourneyProviderRPMDoesNotPrechargeOrPenalize(t *testing.T) {
 	assert.Zero(t, failures)
 }
 
-func TestGatewayMidjourneySubscriptionSubmissionAndTerminalRefund(t *testing.T) {
+func TestGatewayMidjourneyIgnoresRetiredBillingPreferenceAndRefundsWallet(t *testing.T) {
 	url, key, _ := setupGatewayMidjourney(t, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{"code":1,"result":"subscription-job"}`)
+		_, _ = io.WriteString(w, `{"code":1,"result":"wallet-job"}`)
 	})
 	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", 1).Updates(map[string]any{
-		"quota": 0, "setting": `{"billing_preference":"subscription_only"}`,
+		"quota": 10000, "setting": `{"billing_preference":"subscription_only"}`,
 	}).Error)
-	plan := model.SubscriptionPlan{Title: "isolated MJ", TotalAmount: 10000, Enabled: true, QuotaResetPeriod: "never"}
-	require.NoError(t, model.DB.Create(&plan).Error)
-	subscription := model.UserSubscription{UserId: 1, PlanId: plan.Id, AmountTotal: 10000, Status: "active", StartTime: time.Now().Unix(), EndTime: time.Now().Add(time.Hour).Unix()}
-	require.NoError(t, model.DB.Create(&subscription).Error)
 	code, body := postGatewayTask(t, url, key, "/mj/submit/imagine", `{"prompt":"fixture"}`)
 	require.Equal(t, 200, code, body)
 	var task model.Midjourney
 	require.NoError(t, model.DB.First(&task).Error)
-	assert.Equal(t, service.BillingSourceSubscription, task.PrivateData.BillingSource)
-	require.NoError(t, model.DB.First(&subscription, subscription.Id).Error)
-	assert.EqualValues(t, task.Quota, subscription.AmountUsed)
+	assert.Equal(t, service.BillingSourceWallet, task.PrivateData.BillingSource)
+	var chargedUser model.User
+	require.NoError(t, model.DB.First(&chargedUser, 1).Error)
+	require.Positive(t, task.Quota)
+	assert.Equal(t, 10000-task.Quota, chargedUser.Quota)
+	assert.Equal(t, task.Quota, chargedUser.UsedQuota)
 	from := task.Status
 	task.Status, task.Progress, task.FailReason = "FAILURE", "100%", "provider rejected job"
 	won, err := service.CompleteMidjourneyBilling(context.Background(), &task, from)
@@ -318,11 +317,9 @@ func TestGatewayMidjourneySubscriptionSubmissionAndTerminalRefund(t *testing.T) 
 	won, err = service.CompleteMidjourneyBilling(context.Background(), &task, from)
 	require.NoError(t, err)
 	assert.False(t, won)
-	require.NoError(t, model.DB.First(&subscription, subscription.Id).Error)
-	assert.Zero(t, subscription.AmountUsed)
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 1).Error)
-	assert.Zero(t, user.Quota)
+	assert.Equal(t, 10000, user.Quota)
 	assert.Zero(t, user.UsedQuota)
 	assert.Equal(t, 1, user.RequestCount)
 }

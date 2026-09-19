@@ -6,7 +6,7 @@
 
 `middleware.Distribute` 和协议阶段切换统一调用 `SelectLiveTokenRoute`。自动模式先检查模型能力和健康资格，再按优先级、负载桶、软亲和和稳定加权顺序选渠；手动模式使用 Token 的 Profile、活动 Group、Entry 顺序与 Policy。没有 Profile 的已有 Token 使用自动模式；手动 Profile 没有启用的活动组时拒绝请求。
 
-Token 的所有权、启停、到期、额度、IP 和模型限制继续生效。旧 `Group`、`AutoGroups`、`CrossGroupRetry` 字段、业务组权限、组间价格和旧随机选择器退出运行路径。账号分类仍可用于充值、订阅和账号限流，但不授权模型或决定 Relay 价格。
+Token 的所有权、启停、到期、额度、IP 和模型限制继续生效。旧 `Group`、`AutoGroups`、`CrossGroupRetry` 字段、业务组权限、组间价格和旧随机选择器退出运行路径。账号分类仍可用于充值和账号限流，但不授权模型或决定 Relay 价格。
 
 平台渠道默认可被发现；显式撤销或到期的 UserChannelEntitlement 会阻止使用。能力快照、当前 Channel/Ability 状态、模型限制、协议与 Advanced Custom 路径共同决定候选资格。目录未识别但渠道明确配置的模型归为 custom，不猜测供应商；映射冲突和非法映射会拒绝。
 
@@ -48,7 +48,7 @@ Retry-After 只作用于所属渠道或已有渠道内 credential/模型健康�
 
 进程共享重试额度使用固定百分之一精度，初始/最大储备默认 20 次；每次首次真实发送补 0.1 次，额外发送消耗 1 次。发送前可撤销预留，进入发送边界后提交；结果未知不退款，重试本身不补额度。预留计入 burst，热更新不补满，禁用期间不积累。额度不足立即停止重试、保留最后真实上游错误，并记录 `retry_budget_exhausted`。
 
-新计费对象与日志使用 `channel_ratio`。历史 TaskBillingContext 的 `group_ratio` JSON 字段保留作为已接受的价格快照，异步结算不会重新读取分组配置。Midjourney 继续使用已有钱包账务和退款记录，不新增订阅计费能力。
+新计费对象与日志使用 `channel_ratio`。历史 TaskBillingContext 的 `group_ratio` JSON 字段保留作为已接受的价格快照，异步结算不会重新读取分组配置。钱包是唯一资金来源，Token 是附加消费限额；普通请求、Realtime 和异步任务共用持久化账务恢复。历史非钱包任务禁止自动结算，历史非钱包恢复记录进入人工对账，不允许转为钱包扣退。
 
 ## 协议和重试
 

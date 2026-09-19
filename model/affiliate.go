@@ -21,8 +21,7 @@ const (
 	AffiliateActionTransfer       = "transfer"
 	AffiliateActionLegacySnapshot = "legacy_snapshot"
 
-	AffiliateSourceTopUp        = "topup"
-	AffiliateSourceSubscription = "subscription"
+	AffiliateSourceTopUp = "topup"
 
 	affiliateCodeLength = 12
 )

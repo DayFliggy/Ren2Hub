@@ -486,7 +486,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           secret('WaffoSandboxApiKey', 'Waffo 沙箱 API Key'),
           secret('WaffoSandboxPrivateKey', 'Waffo 沙箱私钥'),
           secretTextarea('WaffoSandboxPublicCert', 'Waffo 沙箱公钥证书'),
-          url('WaffoSubscriptionReturnUrl', 'Waffo 订阅返回地址'),
         ],
         integration: 'payment-compliance',
       },

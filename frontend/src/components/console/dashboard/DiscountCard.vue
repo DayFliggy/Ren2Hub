@@ -71,50 +71,6 @@ const { t } = useI18n()
         </div>
       </div>
 
-      <!-- Personal / group discount row -->
-      <div class="flex items-center gap-3">
-        <div
-          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)]"
-        >
-          <svg
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--accent-text)"
-            stroke-width="2"
-          >
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-xs text-[var(--text-tertiary)]">
-              {{ t('dashboard.discount.personal') }}
-            </span>
-            <span class="font-mono text-sm font-bold text-[var(--accent-text)]">
-              {{ discounts.plan_ratio.toFixed(2) }}×
-            </span>
-          </div>
-          <div
-            class="pencil-progress mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]"
-          >
-            <div
-              class="h-full rounded-full bg-[var(--accent)] transition-[width]"
-              :style="{ width: `${(1 - discounts.plan_ratio) * 100 * 5}%` }"
-            />
-          </div>
-          <p class="mt-0.5 text-[11px] text-[var(--text-tertiary)]">
-            {{
-              t('dashboard.discount.personalDesc', {
-                pct: Math.round((1 - discounts.plan_ratio) * 100),
-              })
-            }}
-          </p>
-        </div>
-      </div>
-
       <!-- Divider + effective rate -->
       <div class="border-t border-[var(--border-subtle)] pt-3">
         <div class="flex items-center justify-between gap-3">

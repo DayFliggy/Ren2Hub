@@ -104,6 +104,16 @@ func recoverOneBillingRecovery(ctx context.Context, requestID string) (string, e
 	if err := model.DB.WithContext(ctx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
 		return "", err
 	}
+	if recovery.Source != "wallet" {
+		// Preserve retired-source evidence; never reinterpret it as wallet money.
+		err := model.DB.WithContext(ctx).Model(&model.BillingRecovery{}).
+			Where("request_id = ? AND source <> ?", requestID, "wallet").
+			Updates(map[string]any{"status": model.BillingRecoveryStatusReconciliation, "last_error": model.ErrUnsupportedBillingSource.Error()}).Error
+		if err != nil {
+			return recovery.Status, err
+		}
+		return model.BillingRecoveryStatusReconciliation, model.ErrUnsupportedBillingSource
+	}
 	switch recovery.Status {
 	case model.BillingRecoveryStatusSettlementPending:
 		return recoverBillingSettlement(recovery)
@@ -176,16 +186,6 @@ func recoverBillingRefund(recovery model.BillingRecovery) (string, error) {
 	recovery = current
 	if recovery.FundingRefund != model.BillingRecoveryStateCompleted {
 		if err := model.ApplyBillingRecoveryAdjustment(recovery.RequestID, model.BillingRecoveryComponentFunding, model.BillingRecoveryOperationRefund); err != nil {
-			return model.BillingRecoveryStatusRefundPending, err
-		}
-	}
-	current, err = loadBillingRecovery(recovery.RequestID)
-	if err != nil {
-		return model.BillingRecoveryStatusRefundPending, err
-	}
-	recovery = current
-	if recovery.ExtraAmount > 0 && recovery.ExtraRefund != model.BillingRecoveryStateCompleted {
-		if err := model.ApplyBillingRecoveryAdjustment(recovery.RequestID, model.BillingRecoveryComponentExtra, model.BillingRecoveryOperationRefund); err != nil {
 			return model.BillingRecoveryStatusRefundPending, err
 		}
 	}

@@ -58,21 +58,6 @@ func billingConsumptionSnapshot(ctx *gin.Context, info *relaycommon.RelayInfo, p
 		}
 		params.Other["usage_source"] = info.ResponseUsage.UsageSource
 	}
-	if info.BillingSource == BillingSourceSubscription {
-		if params.Other == nil {
-			params.Other = make(map[string]interface{})
-		}
-		delete(params.Other, "subscription_post_delta")
-		delete(params.Other, "subscription_consumed")
-		appendBillingInfo(&relaycommon.RelayInfo{
-			BillingSource: info.BillingSource, UserSetting: info.UserSetting,
-			SubscriptionId: info.SubscriptionId, SubscriptionPreConsumed: info.SubscriptionPreConsumed,
-			SubscriptionPostDelta: int64(params.Quota) - int64(info.Billing.GetPreConsumedQuota()),
-			SubscriptionPlanId:    info.SubscriptionPlanId, SubscriptionPlanTitle: info.SubscriptionPlanTitle,
-			SubscriptionAmountTotal:               info.SubscriptionAmountTotal,
-			SubscriptionAmountUsedAfterPreConsume: info.SubscriptionAmountUsedAfterPreConsume,
-		}, params.Other)
-	}
 	log, err := model.BuildConsumeLog(ctx, info.UserId, params)
 	if err != nil {
 		return model.BillingConsumption{}, err
@@ -117,15 +102,12 @@ func ensureBillingConsumptionRecovery(info *relaycommon.RelayInfo) error {
 		return err
 	}
 	if recovery.PreConsumeState == model.BillingRecoveryPreConsumePrepared && recovery.Status == model.BillingRecoveryStatusActive {
-		if err := model.UpdateBillingRecoveryAmounts(info.RequestId, info.SubscriptionId, int64(reserved), 0, tokenAmount); err != nil {
+		if err := model.UpdateBillingRecoveryAmounts(info.RequestId, int64(reserved), tokenAmount); err != nil {
 			return err
 		}
 	}
 	if info.Billing == nil {
 		var funding FundingSource = &WalletFunding{userId: info.UserId, consumed: reserved}
-		if source == BillingSourceSubscription {
-			funding = &SubscriptionFunding{requestId: info.RequestId, userId: info.UserId, subscriptionId: info.SubscriptionId, preConsumed: int64(reserved)}
-		}
 		info.Billing = &BillingSession{relayInfo: info, funding: funding, recoveryID: info.RequestId, preConsumedQuota: reserved, tokenConsumed: int(tokenAmount)}
 	} else {
 		session.recoveryID = info.RequestId

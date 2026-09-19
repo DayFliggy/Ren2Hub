@@ -321,8 +321,7 @@ func seedBillingIntegrationRequest(t *testing.T, id int, scenario string) (*gin.
 	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil).WithContext(ctx)
 	info := &relaycommon.RelayInfo{RequestId: fmt.Sprintf("billing-%d", id), UserId: id, TokenId: id,
 		TokenKey: fmt.Sprintf("billing-integration-token-%d", id), ForcePreConsume: true, StartTime: time.Now(),
-		UserSetting: dto.UserSetting{BillingPreference: "wallet_only"}, IsPlayground: scenario == "playground_token_identity",
-		ChannelMeta: &relaycommon.ChannelMeta{ChannelId: id},
+		IsPlayground: scenario == "playground_token_identity", ChannelMeta: &relaycommon.ChannelMeta{ChannelId: id},
 	}
 	precharge := 5
 	if scenario == "zero_precharge_refund" || scenario == "zero_precharge_refund_completion_failure" {

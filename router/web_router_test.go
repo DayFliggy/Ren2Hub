@@ -93,6 +93,8 @@ func TestVueWebFallbackBoundaries(t *testing.T) {
 				"/dashboard/billing/missing", "/dashboard/billing", "/next/api/missing",
 				"/playground", "/playground/", "/chat/", "/chat/123", "/chat2link/", "/chat2link/123", "/chat-presets", "/chat-presets/",
 				"/console/chat-presets", "/next/chat/123", "/next/console/playground",
+				"/subscription", "/subscription/", "/plan-management", "/plans",
+				"/console/subscription", "/console/plan-management", "/console/plans",
 				"/system-settings/content/chat-presets", "/next/console/system-settings/content/chat-presets",
 				"/models/deployments", "/models/deployments/1", "/deployment", "/deployment/", "/admin/deployments",
 				"/console/models/deployments", "/console/deployment", "/console/admin/deployments/1",

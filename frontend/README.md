@@ -62,6 +62,6 @@ src/
   __tests__/    全局测试设置
 ```
 
-当前暂缓接入炼金室、Token 农场、小游戏、开票、市场和订阅/套餐管理。旧 Playground、Chat、Chat2Link 和 Chat Presets 路径已明确退休并返回 404。
+当前暂缓接入炼金室、Token 农场、小游戏、开票和市场。本站订阅与套餐管理已移除，原页面路径返回 404；钱包充值继续保留。旧 Playground、Chat、Chat2Link 和 Chat Presets 路径已明确退休并返回 404。
 
 主题和样式约束见 [docs/THEMES.md](docs/THEMES.md)。

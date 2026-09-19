@@ -16,7 +16,6 @@ func FinalizeMidjourneySubmission(c *gin.Context, info *relaycommon.RelayInfo, t
 	task.BillingChannelId = info.ChannelId
 	task.PrivateData.TokenId = info.TokenId
 	task.PrivateData.BillingSource = info.BillingSource
-	task.PrivateData.SubscriptionId = info.SubscriptionId
 	task.PrivateData.NodeName = common.NodeName
 	task.PrivateData.SubmissionRequestID = info.RequestId
 	task.PrivateData.BillingContext = &model.TaskBillingContext{

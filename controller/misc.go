@@ -186,7 +186,6 @@ func getFrontendCapabilities(passkeyEnabled bool) map[string]string {
 		"dashboard_basic":       "live",
 		"wallet":                "live",
 		"redemption":            "live",
-		"subscription_balance":  "disabled",
 		"passkey":               "live",
 		"two_factor":            "live",
 		"oauth_bindings":        "live",

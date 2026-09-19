@@ -89,7 +89,6 @@ func runRealtimeHandler(t *testing.T, quota int) (*websocket.Conn, *websocket.Co
 	info := &relaycommon.RelayInfo{
 		ClientWs: client, TargetWs: target, RelayFormat: types.RelayFormatOpenAIRealtime,
 		RequestId: "realtime-test-session", UserId: 1, TokenId: 2, TokenKey: "realtime-test-token",
-		UserSetting:     dto.UserSetting{BillingPreference: "wallet_only"},
 		OriginModelName: "realtime-test-model", PriceData: hosttypes.PriceData{ModelRatio: 1, ChannelRatio: 1},
 		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "realtime-test-model"},
 	}

@@ -17,7 +17,7 @@ import (
 var billingDispatchGuardScenarios = []string{
 	"dispatch_final_write_failure", "dispatch_per_call_write_failure", "dispatch_zero_precharge_write_failure",
 	"dispatch_guard_write_failure", "dispatch_explicit_refund", "dispatch_refund_resume", "dispatch_realtime",
-	"dispatch_subscription_write_failure", "dispatch_paid_zero_precharge_write_failure",
+	"dispatch_paid_zero_precharge_write_failure",
 }
 
 func TestBillingDispatchGuardLifecycle(t *testing.T) {
@@ -35,30 +35,12 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 	require.NoError(t, err)
 	info.PriceData.QuotaToPreConsume = 5
 	quota := 20
-	var subscription *model.UserSubscription
-	if scenario == "dispatch_subscription_write_failure" || scenario == "dispatch_paid_zero_precharge_write_failure" {
+	if scenario == "dispatch_paid_zero_precharge_write_failure" {
 		info.Billing.Refund(c)
 		require.NoError(t, info.BillingRefundError)
 		info.Billing, info.FinalPreConsumedQuota = nil, 0
 		info.RequestId += "-guarded"
-		if scenario == "dispatch_subscription_write_failure" {
-			require.NoError(t, model.DB.AutoMigrate(&model.SubscriptionPlan{}, &model.UserSubscription{}, &model.SubscriptionPreConsumeRecord{}))
-			plan := &model.SubscriptionPlan{Title: "dispatch-test", TotalAmount: 100, QuotaResetPeriod: "never"}
-			require.NoError(t, model.DB.Create(plan).Error)
-			model.InvalidateSubscriptionPlanCache(plan.Id)
-			subscription = &model.UserSubscription{UserId: info.UserId, PlanId: plan.Id, AmountTotal: 100,
-				Status: "active", StartTime: time.Now().Unix(), EndTime: time.Now().Add(time.Hour).Unix()}
-			require.NoError(t, model.DB.Create(subscription).Error)
-			t.Cleanup(func() {
-				require.NoError(t, model.DB.Where("request_id = ?", info.RequestId).Delete(&model.SubscriptionPreConsumeRecord{}).Error)
-				require.NoError(t, model.DB.Delete(subscription).Error)
-				require.NoError(t, model.DB.Delete(plan).Error)
-				model.InvalidateSubscriptionPlanCache(plan.Id)
-			})
-			info.UserSetting.BillingPreference = "subscription_only"
-		} else {
-			info.PriceData.QuotaToPreConsume = 0
-		}
+		info.PriceData.QuotaToPreConsume = 0
 	}
 	if scenario == "dispatch_per_call_write_failure" {
 		info.PriceData.UsePrice = true
@@ -90,9 +72,6 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 	}
 	require.Nil(t, PrepareBillingForSelectedModel(c, info))
 	reserved := info.Billing.GetPreConsumedQuota()
-	if subscription != nil {
-		assert.Equal(t, BillingSourceSubscription, info.BillingSource)
-	}
 	var pending model.BillingRecovery
 	require.NoError(t, model.DB.Where("request_id = ?", info.RequestId).First(&pending).Error)
 	require.Equal(t, model.BillingRecoveryStateUsagePending, pending.ConsumptionState)
@@ -141,11 +120,6 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 	assert.Equal(t, model.BillingRecoveryStatusActive, status)
 	assert.ErrorIs(t, model.MarkBillingRecoveryAutomaticRefundPending(info.RequestId), model.ErrBillingRecoveryStateConflict)
 	wallet := 100 - reserved
-	if subscription != nil {
-		wallet = 100
-		require.NoError(t, model.DB.First(subscription, subscription.Id).Error)
-		assert.Equal(t, int64(reserved), subscription.AmountUsed)
-	}
 	assertBillingIntegrationBalances(t, info, wallet, 100-reserved, 0, reserved, 0, 0)
 	rows, err := model.ListStaleBillingRecoveries(time.Now().Unix()+1, 100)
 	require.NoError(t, err)
@@ -162,10 +136,5 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 	require.NoError(t, err)
 	assert.Equal(t, model.BillingRecoveryStatusSettled, status)
 	wallet = 100 - quota
-	if subscription != nil {
-		wallet = 100
-		require.NoError(t, model.DB.First(subscription, subscription.Id).Error)
-		assert.Equal(t, int64(quota), subscription.AmountUsed)
-	}
 	assertBillingIntegrationBalances(t, info, wallet, 100-quota, quota, quota, 1, 1)
 }

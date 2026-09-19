@@ -2,8 +2,7 @@ import { expect, test } from '@playwright/test'
 
 import { configureStablePage, waitForStablePage } from './fixtures'
 
-// Wallet is the enabled pre-existing PageHero accent caller. Subscription uses
-// the same component contract but is intentionally capability-disabled.
+// Wallet is the existing PageHero accent caller.
 test('wallet hero keeps the ampersand swash accent', async ({ page }) => {
   await configureStablePage(page, { theme: 'light' })
   await page.goto('/wallet')
