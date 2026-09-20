@@ -47,7 +47,7 @@ const stats: DashboardStats = {
 
 const flowPoints: FlowPoint[] = Array.from({ length: 14 }, (_, i) => ({
   date: `07-${String(i + 13).padStart(2, '0')}`,
-  consume: '60000' + i * 4_000,
+  consume: String(60_000 + i * 4_000),
   requests: 200 + i * 15,
 }))
 

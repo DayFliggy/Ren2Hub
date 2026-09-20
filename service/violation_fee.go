@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -108,20 +109,6 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, info *relaycommon.RelayInfo, a
 		return false
 	}
 	requestID := info.RequestId + ":violation"
-	recovery, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{
-		RequestID: requestID, UserID: info.UserId, TokenID: info.TokenId,
-		TokenRequired: !info.IsPlayground && info.TokenId > 0, Source: BillingSourceWallet,
-	})
-	if err == nil && recovery.PreConsumeState == model.BillingRecoveryPreConsumePrepared {
-		err = model.Reserve(requestID, 0)
-	}
-	if err == nil {
-		err = model.PrepareBillingAttempt(ctx.Request.Context(), requestID, requestID, info.ChannelId, quote)
-	}
-	if err != nil {
-		logger.LogError(ctx, "violation accounting remains pending: "+err.Error())
-		return false
-	}
 	other := map[string]any{
 		"violation_fee": true, "violation_fee_code": string(types.ErrorCodeViolationFeeGrokCSAM),
 		"fee_quota": charge.FinalQuota, "base_amount": original.ViolationFeeUSD,
@@ -136,7 +123,10 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, info *relaycommon.RelayInfo, a
 		Group: info.UsingGroup, Other: other,
 	})
 	if err == nil {
-		err = model.PrepareBillingRecoveryConsumption(requestID, model.BillingConsumption{
+		err = model.PrepareBillingSurcharge(context.WithoutCancel(ctx.Request.Context()), model.BillingRecoveryInput{
+			RequestID: requestID, UserID: info.UserId, TokenID: info.TokenId,
+			TokenRequired: !info.IsPlayground && info.TokenId > 0, Source: BillingSourceWallet,
+		}, info.ChannelId, quote, model.BillingConsumption{
 			Usage: &usage, Charge: charge, Log: *log, LogEnabled: common.LogConsumeEnabled,
 			CountUsage: false, NodeName: common.NodeName,
 		})

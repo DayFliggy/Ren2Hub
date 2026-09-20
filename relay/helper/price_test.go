@@ -87,3 +87,16 @@ func TestPublishedZeroEstimateStillReservesOneUnlessExplicitFree(t *testing.T) {
 	assert.True(t, price.FreeModel)
 	require.NotNil(t, price.Quote)
 }
+
+func TestPublishedMixedCallAndTokenPricesReserveEveryKnownDimension(t *testing.T) {
+	c, info := pricingFixture(t, billing.PriceVersion{Model: "mixed", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{
+		{Quantity: "calls", Unit: "per_call", Price: "0.002"},
+		{Quantity: "p", Unit: "per_million_tokens", Price: "2"},
+		{Quantity: "c", Unit: "per_million_tokens", Price: "4"},
+	}})
+	price, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 50})
+	require.NoError(t, err)
+	assert.Equal(t, 1200, price.QuotaToPreConsume)
+	assert.EqualValues(t, 100, price.Usage.InputTokens)
+	assert.EqualValues(t, 50, price.Usage.OutputTokens)
+}

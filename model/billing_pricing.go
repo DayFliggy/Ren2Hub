@@ -9,6 +9,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -46,6 +47,13 @@ func PublishBillingPrice(ctx context.Context, version billing.PriceVersion, expe
 	version.Hash = ""
 	if err := billing.ValidatePriceVersion(version); err != nil {
 		return nil, err
+	}
+	for i := range version.Prices {
+		price, err := decimal.NewFromString(version.Prices[i].Price)
+		if err != nil {
+			return nil, err
+		}
+		version.Prices[i].Price = price.String()
 	}
 	definition, err := common.Marshal(version)
 	if err != nil {

@@ -1,4 +1,4 @@
-import { addQuota, quotaRatio } from '@/utils/quota'
+import { quotaInteger, quotaRatio } from '@/utils/quota'
 import type {
   AdminUser,
   AdminUserRole,
@@ -80,13 +80,15 @@ const QUOTA_LOW_REMAINING_RATIO = 0.1
 export function adminUserQuotaMeter(
   user: Pick<AdminUser, 'available_quota' | 'used_quota'>
 ): AdminUserQuotaMeter {
-  const lifetime = addQuota(user.available_quota, user.used_quota)
+  // The display denominator can exceed one account field's int64 range.
+  const lifetime =
+    quotaInteger(user.available_quota) + quotaInteger(user.used_quota)
   const percent =
-    BigInt(lifetime) > 0n
+    lifetime > 0n
       ? Math.min(100, Math.max(0, quotaRatio(user.used_quota, lifetime) * 100))
       : 0
   const remainingRatio =
-    BigInt(lifetime) > 0n ? quotaRatio(user.available_quota, lifetime) : 0
+    lifetime > 0n ? quotaRatio(user.available_quota, lifetime) : 0
 
   // quota <= 0 covers both a spent-out account and one never funded; either way
   // the operator's takeaway is identical — this user cannot spend.

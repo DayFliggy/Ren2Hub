@@ -339,6 +339,35 @@ func (token *Token) InsertWithRouteMode(mode string) error {
 func (token *Token) Update() error { return token.UpdateWithBudget("", nil) }
 
 func (token *Token) UpdateWithBudget(operationID string, expectedVersion *int64) error {
+	return token.updateWithBudget(operationID, expectedVersion, "snapshot")
+}
+
+// UpdateFromRequest fingerprints only fields controlled by the HTTP command.
+// Later changes to untouched metadata or balances cannot invalidate its replay.
+func (token *Token) UpdateFromRequest(operationID string, expectedVersion *int64, statusOnly bool) error {
+	mode := "settings"
+	if statusOnly {
+		mode = "status"
+	}
+	return token.updateWithBudget(operationID, expectedVersion, mode)
+}
+
+func (token *Token) updateWithBudget(operationID string, expectedVersion *int64, mode string) error {
+	metadata := map[string]any{
+		"name": token.Name, "status": token.Status, "expired_time": token.ExpiredTime,
+		"model_limits_enabled": token.ModelLimitsEnabled, "model_limits": token.ModelLimits,
+		"allow_ips": token.AllowIps, "conversion_policy": token.ConversionPolicy,
+	}
+	available, unlimited := token.RemainQuota, token.UnlimitedQuota
+	if mode == "settings" {
+		delete(metadata, "status")
+		if token.ConversionPolicy == "" {
+			delete(metadata, "conversion_policy")
+		}
+	} else if mode == "status" {
+		metadata = map[string]any{"status": token.Status}
+		available, unlimited = 0, false
+	}
 	err := BillingTransaction(nil, func(tx *gorm.DB) error {
 		var user User
 		if err := lockForUpdate(tx).First(&user, token.UserId).Error; err != nil {
@@ -351,10 +380,12 @@ func (token *Token) UpdateWithBudget(operationID string, expectedVersion *int64)
 		if current.UserId != token.UserId {
 			return errors.New("token owner mismatch")
 		}
-		budgetChanged := current.RemainQuota != token.RemainQuota || current.UnlimitedQuota != token.UnlimitedQuota
-		if current.ReservedQuota > 0 && current.UnlimitedQuota != token.UnlimitedQuota {
-			return errors.New("cannot change token budget policy while reservations are active")
+		token.Key = current.Key
+		targetAvailable, targetUnlimited := token.RemainQuota, token.UnlimitedQuota
+		if mode == "status" {
+			targetAvailable, targetUnlimited = current.RemainQuota, current.UnlimitedQuota
 		}
+		budgetChanged := current.RemainQuota != targetAvailable || current.UnlimitedQuota != targetUnlimited
 		if operationID != "" {
 			if len(operationID) > 96 || expectedVersion == nil {
 				return errors.New("expected_version is required")
@@ -364,7 +395,9 @@ func (token *Token) UpdateWithBudget(operationID string, expectedVersion *int64)
 				Available common.Quota
 				Unlimited bool
 				Version   int64
-			}{token.Id, token.RemainQuota, token.UnlimitedQuota, *expectedVersion})
+				Metadata  map[string]any
+				Mode      string
+			}{token.Id, available, unlimited, *expectedVersion, metadata, mode})
 			if err != nil {
 				return err
 			}
@@ -376,21 +409,24 @@ func (token *Token) UpdateWithBudget(operationID string, expectedVersion *int64)
 			if existing != nil {
 				return nil
 			}
+			if current.ReservedQuota > 0 && current.UnlimitedQuota != targetUnlimited {
+				return errors.New("cannot change token budget policy while reservations are active")
+			}
 			if current.QuotaVersion != *expectedVersion {
 				return ErrBillingEventConflict
 			}
-			if token.RemainQuota < 0 {
+			if targetAvailable < 0 && targetAvailable != current.RemainQuota {
 				return errors.New("invalid token budget")
 			}
 			negative, err := common.NegateQuota(current.RemainQuota)
 			if err != nil {
 				return err
 			}
-			delta, err := common.AddQuota(token.RemainQuota, negative)
+			delta, err := common.AddQuota(targetAvailable, negative)
 			if err != nil {
 				return err
 			}
-			if err := tx.Model(&Token{}).Where("id = ?", token.Id).Update("unlimited_quota", token.UnlimitedQuota).Error; err != nil {
+			if err := tx.Model(&Token{}).Where("id = ?", token.Id).Update("unlimited_quota", targetUnlimited).Error; err != nil {
 				return err
 			}
 			_, err = applyAccountEventTx(tx, &BillingEvent{EventID: eventID, UserID: token.UserId, TokenID: token.Id, Operation: "token_budget", SourceType: "token_adjustment", SourceID: operationID, Fingerprint: fingerprint, TokenAvailableDelta: delta, ActorID: token.UserId, Reason: "token budget updated"}, &user, false)
@@ -400,7 +436,15 @@ func (token *Token) UpdateWithBudget(operationID string, expectedVersion *int64)
 		} else if budgetChanged {
 			return errors.New("budget updates require operation_id and expected_version")
 		}
-		return tx.Model(token).Select("name", "status", "expired_time", "model_limits_enabled", "model_limits", "allow_ips", "conversion_policy").Updates(token).Error
+		if mode == "status" && token.Status == common.TokenStatusEnabled {
+			if current.ExpiredTime != -1 && current.ExpiredTime <= common.GetTimestamp() {
+				return errors.New("expired token cannot be enabled")
+			}
+			if current.Status == common.TokenStatusExhausted && current.RemainQuota <= 0 && !current.UnlimitedQuota {
+				return errors.New("exhausted token cannot be enabled")
+			}
+		}
+		return tx.Model(token).Updates(metadata).Error
 	})
 	if err != nil {
 		return err

@@ -174,6 +174,7 @@ const VISUAL_ROUTE_CHANNELS = [
 
 interface StablePageOptions {
   theme: VisualTheme
+  user?: Partial<typeof VISUAL_USER>
   authenticated?: boolean
   routeAwareAuth?: boolean
   setupInitialized?: boolean
@@ -184,6 +185,7 @@ export async function configureStablePage(
   page: Page,
   {
     theme,
+    user,
     authenticated = true,
     routeAwareAuth = false,
     setupInitialized = true,
@@ -1163,7 +1165,7 @@ export async function configureStablePage(
             last_active_at: nowSeconds,
             expires_at: nowSeconds + 86_400,
           },
-          user: VISUAL_USER,
+          user: { ...VISUAL_USER, ...user },
         },
       }),
     })

@@ -31,6 +31,20 @@ func setupBillingPricingDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+func TestPublishedPricesUseCanonicalDecimalAPIStrings(t *testing.T) {
+	setupBillingPricingDB(t)
+	for _, test := range []struct{ input, expected string }{{"1e-6", "0.000001"}, {"01.20", "1.2"}, {"+1.25", "1.25"}, {".1", "0.1"}} {
+		t.Run(test.input, func(t *testing.T) {
+			version, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Model: test.input, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: test.input}}}, 0, 1)
+			require.NoError(t, err)
+			assert.Equal(t, test.expected, version.Prices[0].Price)
+			restored, err := GetActiveBillingPrice(context.Background(), test.input)
+			require.NoError(t, err)
+			assert.Equal(t, version, restored)
+		})
+	}
+}
+
 func TestPublishedBillingPriceVersionsAreImmutableAndConflictChecked(t *testing.T) {
 	db := setupBillingPricingDB(t)
 	ctx := context.Background()

@@ -12,6 +12,7 @@ import HealthMeter from '@/components/common/HealthMeter.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import { useToast } from '@/composables/useToast'
 import { formatLatency, formatTokenPrice } from '@/utils/format'
+import ModelPriceItems from './ModelPriceItems.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -34,6 +35,7 @@ const billingTone: Record<MarketBilling, 'accent' | 'warning' | 'info'> = {
   tiered: 'warning',
   per_call: 'info',
   free: 'info',
+  unit_price: 'accent',
 }
 
 const typeTone: Record<MarketModelType, 'info' | 'success' | 'neutral'> = {
@@ -45,6 +47,11 @@ const typeTone: Record<MarketModelType, 'info' | 'success' | 'neutral'> = {
   audio: 'neutral',
 }
 
+const detailedPricing = computed(() => {
+  return ['unit_price', 'tiered'].includes(props.model.billing)
+    ? (props.model.pricing ?? null)
+    : null
+})
 const billingLabel = computed(() => t(`models.billing.${props.model.billing}`))
 const typeLabel = computed(() => t(`models.type.${props.model.type}`))
 const tierCount = computed(() => props.model.price.tiers?.length ?? 0)
@@ -130,7 +137,13 @@ async function copyName() {
 
       <!-- Pricing magnetic tiles: 2-column strip -->
       <div class="mt-3">
-        <template v-if="model.billing === 'per_call'">
+        <ModelPriceItems
+          v-if="detailedPricing"
+          :pricing="detailedPricing"
+          class="rounded-md border border-[var(--border-default)] bg-[var(--surface-table-header)] p-3"
+          data-model-price-panel
+        />
+        <template v-else-if="model.billing === 'per_call'">
           <div
             class="flex items-center justify-between rounded-md border border-[var(--border-default)] bg-[var(--surface-muted)] px-3.5 py-2.5"
             data-model-price-panel
@@ -330,8 +343,9 @@ async function copyName() {
     </div>
     <!-- price (input/output) -->
     <div class="hidden w-32 shrink-0 text-right lg:block">
+      <ModelPriceItems v-if="detailedPricing" :pricing="detailedPricing" />
       <p
-        v-if="model.billing === 'per_call'"
+        v-else-if="model.billing === 'per_call'"
         class="font-mono text-xs font-semibold text-[var(--text-primary)]"
       >
         {{ formatTokenPrice(model.price.per_call) }}

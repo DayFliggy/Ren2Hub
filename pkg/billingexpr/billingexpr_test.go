@@ -805,7 +805,7 @@ func TestBillingTimeIsFrozenAndTimezoneValidated(t *testing.T) {
 	assert.Equal(t, float64(31), value)
 	_, _, err = billingexpr.RunExpr(expression, billingexpr.TokenParams{})
 	require.ErrorContains(t, err, "not frozen")
-	for _, expression := range []string{`hour("")`, `hour("Invalid/Zone")`} {
+	for _, expression := range []string{`hour("")`, `hour("Invalid/Zone")`, `hour("Local")`} {
 		_, err := billingexpr.CompileFromCache(expression)
 		require.ErrorContains(t, err, "timezone")
 	}

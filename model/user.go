@@ -1079,7 +1079,10 @@ func (user *User) ClearBinding(bindingType string) error {
 }
 
 func ensureNoActiveAccountBillingTx(tx *gorm.DB, userID, tokenID int) error {
-	query := tx.Model(&BillingRecovery{}).Where("user_id = ? AND status IN ?", userID, []string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending, BillingRecoveryStatusReconciliation})
+	query := tx.Model(&BillingRecovery{}).Where("user_id = ?", userID).
+		Where("status IN ? OR (status IN ? AND consumption_state <> ?)",
+			[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending, BillingRecoveryStatusReconciliation},
+			[]string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded}, BillingRecoveryStateCompleted)
 	if tokenID > 0 {
 		query = query.Where("token_id = ?", tokenID)
 	}

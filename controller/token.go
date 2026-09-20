@@ -368,48 +368,12 @@ func UpdateToken(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
 		return
 	}
-	if !token.UnlimitedQuota {
-		if token.RemainQuota < 0 {
-			common.ApiErrorI18n(c, i18n.MsgTokenQuotaNegative)
-			return
-		}
-	}
-	cleanToken, err := model.GetTokenByIds(token.Id, userId)
-	if err != nil {
-		common.ApiError(c, err)
+	if statusOnly == "" && token.ConversionPolicy != "" && !validTokenConversionPolicy(token.ConversionPolicy) {
+		common.ApiError(c, fmt.Errorf("invalid conversion_policy"))
 		return
 	}
-	if token.Status == common.TokenStatusEnabled {
-		if cleanToken.Status == common.TokenStatusExpired && cleanToken.ExpiredTime <= common.GetTimestamp() && cleanToken.ExpiredTime != -1 {
-			common.ApiErrorI18n(c, i18n.MsgTokenExpiredCannotEnable)
-			return
-		}
-		if cleanToken.Status == common.TokenStatusExhausted && cleanToken.RemainQuota <= 0 && !cleanToken.UnlimitedQuota {
-			common.ApiErrorI18n(c, i18n.MsgTokenExhaustedCannotEable)
-			return
-		}
-	}
-	if statusOnly != "" {
-		cleanToken.Status = token.Status
-	} else {
-		// If you add more fields, please also update token.Update()
-		cleanToken.Name = token.Name
-		cleanToken.ExpiredTime = token.ExpiredTime
-		cleanToken.RemainQuota = token.RemainQuota
-		cleanToken.UnlimitedQuota = token.UnlimitedQuota
-		cleanToken.ModelLimitsEnabled = token.ModelLimitsEnabled
-		cleanToken.ModelLimits = token.ModelLimits
-		cleanToken.AllowIps = token.AllowIps
-		if token.ConversionPolicy != "" {
-			if !validTokenConversionPolicy(token.ConversionPolicy) {
-				common.ApiError(c, fmt.Errorf("invalid conversion_policy"))
-				return
-			}
-			cleanToken.ConversionPolicy = token.ConversionPolicy
-		}
-
-	}
-	err = cleanToken.UpdateWithBudget(request.OperationID, request.ExpectedVersion)
+	token.UserId = userId
+	err = token.UpdateFromRequest(request.OperationID, request.ExpectedVersion, statusOnly != "")
 	if err != nil {
 		if errors.Is(err, model.ErrBillingEventConflict) || errors.Is(err, model.ErrBillingVersionConflict) {
 			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
@@ -418,7 +382,7 @@ func UpdateToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	writeTokenResponse(c, cleanToken)
+	writeTokenResponse(c, &token)
 }
 
 func validTokenConversionPolicy(policy string) bool {

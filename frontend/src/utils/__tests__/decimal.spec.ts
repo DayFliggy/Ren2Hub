@@ -32,4 +32,17 @@ describe('billing presentation precision', () => {
     expect(quotaToDecimal('9007199254740993')).toBe('18014398509.481986')
     expect(decimalToQuota('18014398509.481986')).toBe('9007199254740993')
   })
+  it('preserves constant expressions and numeric-looking identifiers in evidence', () => {
+    const evidence = {
+      expression: '0.000000123456',
+      model: '1.234567',
+      id: '2.345678',
+      request_id: '3.456789',
+      price: '1.234567',
+    }
+    expect(JSON.parse(formatBillingEvidence(evidence))).toEqual({
+      ...evidence,
+      price: '1.235',
+    })
+  })
 })

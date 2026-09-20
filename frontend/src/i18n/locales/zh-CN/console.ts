@@ -730,6 +730,7 @@ export default {
     channelTitle: '可用渠道（{count} 条）',
     billing: {
       token: '按量计费',
+      unit_price: '明确单价',
       tiered: '分档动态计费',
       free: '免费',
       per_call: '按次计费',

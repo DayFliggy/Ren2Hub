@@ -133,12 +133,7 @@ async function save() {
     if (props.editing) {
       payload.id = props.editing.id
       payload.expected_version = props.editing.quota_version
-      const fingerprint = JSON.stringify([
-        props.editing.id,
-        payload.available_quota,
-        payload.unlimited_quota,
-        payload.expected_version,
-      ])
+      const fingerprint = JSON.stringify(payload)
       if (pendingBudget?.fingerprint !== fingerprint)
         pendingBudget = { fingerprint, id: crypto.randomUUID() }
       payload.operation_id = pendingBudget.id

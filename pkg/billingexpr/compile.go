@@ -66,7 +66,7 @@ func (p *requestRulePatcher) Visit(node *ast.Node) {
 						p.validationError = fmt.Errorf("unregistered billing attribute")
 					}
 				} else {
-					if _, err := time.LoadLocation(arg.Value); err != nil || arg.Value == "" {
+					if _, err := time.LoadLocation(arg.Value); err != nil || arg.Value == "" || arg.Value == "Local" {
 						p.validationError = fmt.Errorf("invalid billing timezone")
 					}
 				}

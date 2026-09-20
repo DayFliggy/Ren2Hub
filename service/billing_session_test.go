@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -91,6 +92,32 @@ func TestBillingSessionConfirmedUnsentRelease(t *testing.T) {
 	s.Refund(c)
 	assert.Equal(t, 100, getUserQuota(t, 1))
 	assert.Zero(t, getTokenUsedQuota(t, 1))
+	assert.False(t, s.NeedsRefund())
+}
+
+func TestBillingSessionAcceptedTaskCannotBeReleasedByContradictoryRejection(t *testing.T) {
+	for _, staleFlag := range []bool{false, true} {
+		t.Run(fmt.Sprintf("rejection_flag_%t", staleFlag), func(t *testing.T) {
+			c, s := durableSession(t, 40)
+			s.relayInfo.UpstreamSent = true
+			s.relayInfo.UpstreamAccepted = true
+			s.relayInfo.UpstreamSideEffecting = true
+			s.relayInfo.UpstreamRejected = staleFlag
+			c.Set("gateway_last_attempt_outcome", AttemptOutcome{Acceptance: AttemptRejected})
+			s.Refund(c)
+			assert.Equal(t, 60, getUserQuota(t, 1))
+			assert.True(t, s.NeedsRefund())
+		})
+	}
+}
+
+func TestBillingSessionExplicitTextRejectionReleasesReservation(t *testing.T) {
+	c, s := durableSession(t, 40)
+	s.relayInfo.UpstreamSent = true
+	s.relayInfo.UpstreamAccepted = true // HTTP 200 can contain a provider safety rejection.
+	c.Set("gateway_last_attempt_outcome", AttemptOutcome{Acceptance: AttemptRejected})
+	s.Refund(c)
+	assert.Equal(t, 100, getUserQuota(t, 1))
 	assert.False(t, s.NeedsRefund())
 }
 

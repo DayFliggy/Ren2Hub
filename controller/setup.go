@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"time"
 	"unicode/utf8"
 
@@ -112,11 +113,18 @@ func PostSetup(c *gin.Context) {
 				Status:         common.UserStatusEnabled,
 				DisplayName:    "Root User",
 				AccessToken:    nil,
-				Quota:          100000000,
 				AffCode:        affCode,
 				AffCodeEnabled: true,
 			}
-			return tx.Create(&rootUser).Error
+			if err := tx.Create(&rootUser).Error; err != nil {
+				return err
+			}
+			_, err = model.ApplyWalletAdjustmentTx(tx, model.WalletAdjustment{
+				EventID: fmt.Sprintf("bootstrap:%d", rootUser.Id), UserID: rootUser.Id,
+				Delta: 100000000, SourceType: "bootstrap", SourceID: fmt.Sprint(rootUser.Id),
+				Reason: "initial root account grant",
+			})
+			return err
 		})
 		if err != nil {
 			c.JSON(200, gin.H{

@@ -96,12 +96,15 @@ export function buildLiveModelCatalog(
             : price?.price_version.mode === 'free'
               ? ('free' as const)
               : price?.price_version.prices.some(
-                    (line) =>
-                      line.quantity === 'calls' && line.unit === 'per_call'
+                    (line) => !['p', 'c', 'cr', 'cc'].includes(line.quantity)
                   )
-                ? ('per_call' as const)
+                ? price.price_version.prices.length === 1 &&
+                  price.price_version.prices[0]?.quantity === 'calls'
+                  ? ('per_call' as const)
+                  : ('unit_price' as const)
                 : ('token' as const),
         price: price ? modelPrice(price) : {},
+        pricing: price?.price_version,
         context: 0,
         tagline: price?.description ?? '',
         latency: metrics ? Math.max(0, metrics.avg_latency_ms / 1000) : 0,

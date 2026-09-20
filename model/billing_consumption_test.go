@@ -42,6 +42,22 @@ func completeConsumptionFunds(t *testing.T) {
 	require.NoError(t, Settle("consume-once", 30))
 }
 
+func TestAccountDeletionWaitsForSettledConsumptionDelivery(t *testing.T) {
+	db, _, _ := setupBillingConsumptionTest(t)
+	require.NoError(t, db.AutoMigrate(&UserSession{}))
+	completeConsumptionFunds(t)
+	user := User{Id: 1}
+	require.ErrorContains(t, user.Delete(), "unresolved billing")
+	require.ErrorContains(t, user.HardDelete(), "unresolved billing")
+	require.NoError(t, ApplyBillingRecoveryConsumption("consume-once"))
+	var restored User
+	require.NoError(t, db.First(&restored, 1).Error)
+	assert.Equal(t, 1, restored.RequestCount)
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		return ensureNoActiveAccountBillingTx(tx, 1, 0)
+	}))
+}
+
 func TestBillingConsumptionPreservesSettlementIntentAndRejectsConflictingUsage(t *testing.T) {
 	db, _, consumption := setupBillingConsumptionTest(t)
 	assert.ErrorIs(t, ApplyBillingRecoveryConsumption("consume-once"), ErrBillingRecoveryStateConflict)

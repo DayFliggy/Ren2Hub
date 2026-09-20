@@ -69,7 +69,7 @@ func TestPostSetupCreatesActiveRootAffiliateSeed(t *testing.T) {
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Option{}, &model.Setup{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Option{}, &model.Setup{}, &model.BillingEvent{}))
 	model.DB = db
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
 	common.OptionMap = map[string]string{}
@@ -104,6 +104,12 @@ func TestPostSetupCreatesActiveRootAffiliateSeed(t *testing.T) {
 	require.NoError(t, db.Where("role = ?", common.RoleRootUser).First(&root).Error)
 	assert.Len(t, root.AffCode, 12)
 	assert.True(t, root.AffCodeEnabled)
+	var events []model.BillingEvent
+	require.NoError(t, db.Where("user_id = ?", root.Id).Find(&events).Error)
+	require.Len(t, events, 1)
+	assert.EqualValues(t, 100000000, root.Quota)
+	assert.Equal(t, root.Quota, events[0].AvailableDelta)
+	assert.Equal(t, "bootstrap", events[0].SourceType)
 	hasSeed, err := model.HasActiveAffiliateSeed()
 	require.NoError(t, err)
 	assert.True(t, hasSeed)

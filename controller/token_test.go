@@ -513,6 +513,57 @@ func TestUpdateTokenMasksKeyInResponse(t *testing.T) {
 	}
 }
 
+func TestUpdateIndebtedTokenMetadataPreservesDebt(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	token := seedToken(t, db, 1, "indebted-token", "debt-token-key")
+	require.NoError(t, db.Model(token).Updates(map[string]any{"available_quota": -5, "unlimited_quota": false}).Error)
+	body := map[string]any{
+		"id": token.Id, "name": "renamed", "expired_time": -1,
+		"available_quota": "-5", "unlimited_quota": false,
+		"operation_id": "rename-indebted", "expected_version": token.QuotaVersion,
+	}
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPut, "/api/token/", body, 1)
+	UpdateToken(ctx)
+	require.True(t, decodeAPIResponse(t, recorder).Success)
+	require.NoError(t, db.First(token, token.Id).Error)
+	require.Equal(t, "renamed", token.Name)
+	require.EqualValues(t, -5, token.RemainQuota)
+	body["operation_id"], body["expected_version"], body["available_quota"] = "invent-debt", token.QuotaVersion, "-6"
+	ctx, recorder = newAuthenticatedContext(t, http.MethodPut, "/api/token/", body, 1)
+	UpdateToken(ctx)
+	require.False(t, decodeAPIResponse(t, recorder).Success)
+	require.NoError(t, db.First(token, token.Id).Error)
+	require.EqualValues(t, -5, token.RemainQuota)
+}
+
+func TestUpdateTokenReplayDoesNotDependOnUntouchedState(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	token := seedToken(t, db, 1, "original", "replay-controller-key")
+	body := map[string]any{"id": token.Id, "name": "renamed", "expired_time": -1,
+		"available_quota": "100", "unlimited_quota": false,
+		"operation_id": "rename-replay", "expected_version": token.QuotaVersion}
+	invoke := func(path string, input map[string]any) {
+		ctx, recorder := newAuthenticatedContext(t, http.MethodPut, path, input, 1)
+		UpdateToken(ctx)
+		require.True(t, decodeAPIResponse(t, recorder).Success, recorder.Body.String())
+	}
+	invoke("/api/token/", body)
+	require.NoError(t, db.First(token, token.Id).Error)
+	status := map[string]any{"id": token.Id, "status": common.TokenStatusDisabled,
+		"operation_id": "disable-replay", "expected_version": token.QuotaVersion}
+	invoke("/api/token/?status_only=true", status)
+	invoke("/api/token/", body)
+	require.NoError(t, db.First(token, token.Id).Error)
+	require.Equal(t, common.TokenStatusDisabled, token.Status)
+	version := token.QuotaVersion
+	token.RemainQuota = 120
+	require.NoError(t, token.UpdateWithBudget("later-budget", &version))
+	invoke("/api/token/?status_only=true", status)
+	require.NoError(t, db.First(token, token.Id).Error)
+	require.EqualValues(t, 120, token.RemainQuota)
+	require.Equal(t, common.TokenStatusDisabled, token.Status)
+}
+
 func TestGetTokenKeyRequiresOwnershipAndReturnsFullKey(t *testing.T) {
 	db := setupTokenControllerTestDB(t)
 	token := seedToken(t, db, 1, "owned-token", "owner1234token5678")

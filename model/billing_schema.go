@@ -22,14 +22,20 @@ func prepareBillingSchema(db *gorm.DB) error {
 		return errors.New("billing database unavailable")
 	}
 	if db.Migrator().HasTable(&BillingSchema{}) {
-		return requireBillingSchema(db)
+		var count int64
+		if err := db.Model(&BillingSchema{}).Count(&count).Error; err != nil {
+			return err
+		}
+		if count != 0 {
+			return requireBillingSchema(db)
+		}
 	}
 	tables, err := db.Migrator().GetTables()
 	if err != nil {
 		return err
 	}
 	for _, table := range tables {
-		if table == "sqlite_sequence" || table == "sqlite_stat1" {
+		if table == "billing_schemas" || table == "sqlite_sequence" || table == "sqlite_stat1" {
 			continue
 		}
 		return errors.New("this billing release requires an empty database; existing databases are not upgraded or erased")

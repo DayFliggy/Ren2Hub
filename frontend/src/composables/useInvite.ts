@@ -7,7 +7,7 @@ import { useFeatureAccess } from '@/composables/useFeatureAccess'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import type { InviteInfo } from '@/types/console'
-import { decimalToQuota } from '@/utils/quota'
+import { decimalToQuota, MAX_QUOTA } from '@/utils/quota'
 import { safeExternalUrl } from '@/utils/safeUrl'
 
 export function useInvite() {
@@ -36,7 +36,9 @@ export function useInvite() {
       !readOnly.value &&
       transferQuota.value !== null &&
       BigInt(transferQuota.value) >= 500000n &&
-      BigInt(transferQuota.value) <= BigInt(info.value?.transferable ?? '0')
+      BigInt(transferQuota.value) <= BigInt(info.value?.transferable ?? '0') &&
+      BigInt(auth.user?.available_quota ?? '0') + BigInt(transferQuota.value) <=
+        MAX_QUOTA
   )
   const transferring = ref(false)
 

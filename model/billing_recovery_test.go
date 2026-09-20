@@ -47,6 +47,27 @@ func newReservation(t *testing.T, id string) {
 	require.NoError(t, err)
 }
 
+func TestBillingAbortedReservationHasNoPendingDelivery(t *testing.T) {
+	db := setupBillingRecoveryTestDB(t)
+	seedBillingAccount(t, db, 1, 1, false)
+	newReservation(t, "unfunded")
+	require.ErrorIs(t, Reserve("unfunded", 2), ErrBillingRecoveryFundingQuota)
+	require.NoError(t, AbortPreparedBillingRecovery("unfunded", ErrBillingRecoveryFundingQuota))
+	require.NoError(t, AbortPreparedBillingRecovery("unfunded", ErrBillingRecoveryFundingQuota))
+	metrics, err := ReadBillingMetrics(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, metrics.Pending)
+	assert.Zero(t, metrics.Reconciliations)
+	var recovery BillingRecovery
+	require.NoError(t, db.Where("request_id = ?", "unfunded").First(&recovery).Error)
+	assert.Equal(t, BillingRecoveryStateCompleted, recovery.ConsumptionState)
+	assert.EqualValues(t, 1, recovery.Version)
+	var count int64
+	require.NoError(t, db.Model(&BillingEvent{}).Count(&count).Error)
+	assert.Zero(t, count)
+	assertBillingProjection(t, db, 1, 1)
+}
+
 func assertBillingProjection(t *testing.T, db *gorm.DB, initialWallet, initialToken common.Quota) {
 	t.Helper()
 	var user User

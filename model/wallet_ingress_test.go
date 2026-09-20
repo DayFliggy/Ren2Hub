@@ -149,6 +149,9 @@ func TestWalletIngressTokenBudgetUsesEventsAndVersion(t *testing.T) {
 	token.RemainQuota += 100
 	require.NoError(t, token.UpdateWithBudget("raise-budget", &version))
 	require.NoError(t, token.UpdateWithBudget("raise-budget", &version))
+	token.Name = "changed-after-lost-response"
+	assert.ErrorIs(t, token.UpdateWithBudget("raise-budget", &version), ErrBillingEventConflict)
+	token.Name = "budget"
 	token.RemainQuota += 1
 	assert.ErrorIs(t, token.UpdateWithBudget("raise-budget", &version), ErrBillingEventConflict)
 	var events []BillingEvent
@@ -222,4 +225,29 @@ func TestWalletIngressDeletionProtectsZeroAmountRecovery(t *testing.T) {
 	require.Error(t, user.Delete())
 	require.NoError(t, db.First(&user, user.Id).Error)
 	require.NoError(t, db.First(&token, token.Id).Error)
+}
+
+func TestTokenBudgetReplayIgnoresLaterPolicyAndReservation(t *testing.T) {
+	db := useWalletIngressDB(t)
+	user := User{Username: "replay-owner", AffCode: "replay-owner", Quota: 1000}
+	require.NoError(t, db.Create(&user).Error)
+	token := Token{UserId: user.Id, Key: "replay-key", Name: "replay", RemainQuota: 100}
+	require.NoError(t, token.Insert())
+	versionA := token.QuotaVersion
+	token.UnlimitedQuota = true
+	requestA := token
+	require.NoError(t, token.UpdateWithBudget("policy-a", &versionA))
+	versionB := token.QuotaVersion
+	token.UnlimitedQuota = false
+	require.NoError(t, token.UpdateWithBudget("policy-b", &versionB))
+	_, err := EnsureBillingRecovery(BillingRecoveryInput{RequestID: "later-request", UserID: user.Id, TokenID: token.Id, TokenRequired: true, Source: "wallet"})
+	require.NoError(t, err)
+	require.NoError(t, Reserve("later-request", 10))
+	require.NoError(t, requestA.UpdateWithBudget("policy-a", &versionA))
+	assert.False(t, requestA.UnlimitedQuota)
+	assert.EqualValues(t, 90, requestA.RemainQuota)
+	assert.EqualValues(t, 10, requestA.ReservedQuota)
+	var events int64
+	require.NoError(t, db.Model(&BillingEvent{}).Where("source_id = ?", "policy-a").Count(&events).Error)
+	assert.EqualValues(t, 1, events)
 }

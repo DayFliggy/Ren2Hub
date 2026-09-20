@@ -42,6 +42,66 @@ function render(layout: 'grid' | 'list') {
 
 describe('ModelCard billing metadata', () => {
   it.each(['grid', 'list'] as const)(
+    'retains mixed token, media and call prices in %s layout',
+    (layout) => {
+      const wrapper = mount(ModelCard, {
+        props: {
+          layout,
+          model: {
+            ...tieredModel,
+            billing: 'unit_price',
+            price: { input: '2', per_call: '0.01' },
+            pricing: {
+              id: 1,
+              model: 'mixed',
+              mode: 'unit_price',
+              created_at: 1,
+              hash: 'hash',
+              prices: [
+                { quantity: 'p', unit: 'per_million_tokens', price: '2' },
+                { quantity: 'calls', unit: 'per_call', price: '0.01' },
+                { quantity: 'images', unit: 'per_image', price: '0.1256789' },
+              ],
+            },
+          },
+        },
+        global: { plugins: [i18n] },
+      })
+      expect(wrapper.text()).toContain('$2.000')
+      expect(wrapper.text()).toContain('$0.010')
+      expect(wrapper.text()).toContain('$0.126')
+      expect(wrapper.text()).toContain('每张图片')
+      expect(wrapper.get('[data-model-billing]').text()).toBe('明确单价')
+      wrapper.unmount()
+    }
+  )
+
+  it('shows an expression with supplemental prices without inventing token unit prices', () => {
+    const wrapper = mount(ModelCard, {
+      props: {
+        model: {
+          ...tieredModel,
+          price: {},
+          pricing: {
+            id: 1,
+            model: 'expression',
+            mode: 'expression',
+            created_at: 1,
+            hash: 'hash',
+            expression: 'p * 0.00123456789',
+            prices: [{ quantity: 'seconds', unit: 'per_second', price: '0.1' }],
+          },
+        },
+      },
+      global: { plugins: [i18n] },
+    })
+    expect(wrapper.get('pre').text()).toBe('p * 0.00123456789')
+    expect(wrapper.text()).toContain('每秒')
+    expect(wrapper.text()).toContain('$0.100')
+    wrapper.unmount()
+  })
+
+  it.each(['grid', 'list'] as const)(
     'shows one billing label with its tier count in %s layout',
     (layout) => {
       const wrapper = render(layout)

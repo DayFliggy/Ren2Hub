@@ -428,7 +428,8 @@ export interface RelayTaskLogItem {
 export type MarketModelType =
   'chat' | 'image' | 'embedding' | 'rerank' | 'audio' | 'video'
 
-export type MarketBilling = 'token' | 'per_call' | 'tiered' | 'free'
+export type MarketBilling =
+  'token' | 'per_call' | 'tiered' | 'free' | 'unit_price'
 
 export interface MarketPriceTier {
   label: string
@@ -452,6 +453,7 @@ export interface MarketModel {
   type: MarketModelType
   billing: MarketBilling
   price: MarketModelPrice
+  pricing?: import('@/api/modelPricing').PriceVersion
   context: number // context window in tokens (0 = n/a)
   tagline: string
   latency: number // seconds, snapshot

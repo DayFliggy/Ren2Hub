@@ -59,6 +59,15 @@ describe('admin user status', () => {
 })
 
 describe('adminUserQuotaMeter', () => {
+  it('renders valid balances when the display denominator exceeds int64', () => {
+    expect(
+      adminUserQuotaMeter({
+        available_quota: '9223372036854775807',
+        used_quota: '9223372036854775807',
+      })
+    ).toMatchObject({ state: 'normal', percent: 50, remainingPercent: 50 })
+  })
+
   it('reports the consumed share and stays quiet while the balance is healthy', () => {
     expect(
       adminUserQuotaMeter({ available_quota: '800', used_quota: '200' })

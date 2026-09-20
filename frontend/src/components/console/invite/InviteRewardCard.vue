@@ -6,6 +6,7 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { formatQuota } from '@/utils/format'
+import { MAX_QUOTA } from '@/utils/quota'
 
 const props = defineProps<{
   transferable: string
@@ -21,11 +22,15 @@ const { t } = useI18n()
 const auth = useAuthStore()
 
 const currentBalance = computed(() => auth.user?.available_quota ?? 0)
-const afterBalance = computed(() =>
-  (BigInt(currentBalance.value) + BigInt(props.transferable)).toString()
-)
+const afterBalance = computed(() => {
+  const total = BigInt(currentBalance.value) + BigInt(props.transferable)
+  return total <= MAX_QUOTA ? total : null
+})
 const canTransfer = computed(
-  () => !props.readonly && BigInt(props.transferable) >= 500000n
+  () =>
+    !props.readonly &&
+    BigInt(props.transferable) >= 500000n &&
+    MAX_QUOTA - BigInt(currentBalance.value) >= 500000n
 )
 </script>
 
@@ -63,7 +68,7 @@ const canTransfer = computed(
           {{ t('invite.balanceAfterTransfer') }}
         </dt>
         <dd class="font-semibold text-[var(--text-primary)]">
-          {{ formatQuota(afterBalance) }}
+          {{ afterBalance === null ? '—' : formatQuota(afterBalance) }}
         </dd>
       </div>
     </dl>

@@ -18,7 +18,8 @@ import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import VendorSection from '@/components/console/models/VendorSection.vue'
 import { useModelMarket } from '@/composables/useModelMarket'
 import { useToast } from '@/composables/useToast'
-import { formatContext, formatLatency, formatTokenPrice } from '@/utils/format'
+import { formatContext, formatLatency } from '@/utils/format'
+import ModelPriceItems from '@/components/console/models/ModelPriceItems.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -280,111 +281,12 @@ onMounted(load)
           <h3 class="mb-2 text-sm font-semibold text-[var(--text-primary)]">
             {{ t('models.priceTitle') }}
           </h3>
-          <div
-            v-if="detailModel.billing === 'per_call'"
-            class="rounded-xl border border-[var(--border-subtle)] px-4 py-3 text-sm"
-          >
-            <div class="flex justify-between">
-              <span class="text-[var(--text-tertiary)]">{{
-                t('models.perCall')
-              }}</span>
-              <span
-                class="font-mono font-semibold text-[var(--text-primary)]"
-                >{{ formatTokenPrice(detailModel.price.per_call) }}</span
-              >
-            </div>
-          </div>
-          <div
-            v-else
-            class="overflow-hidden rounded-xl border border-[var(--border-subtle)]"
-          >
-            <table class="w-full text-sm">
-              <thead>
-                <tr
-                  class="border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] text-xs text-[var(--text-tertiary)]"
-                >
-                  <th class="px-4 py-2 text-left font-medium">
-                    {{ t('models.tier') }}
-                  </th>
-                  <th class="px-4 py-2 text-right font-medium">
-                    {{ t('models.priceInput') }}
-                  </th>
-                  <th class="px-4 py-2 text-right font-medium">
-                    {{ t('models.priceOutput') }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <template v-if="detailModel.price.tiers?.length">
-                  <tr
-                    v-for="tier in detailModel.price.tiers"
-                    :key="tier.label"
-                    class="border-b border-[var(--border-subtle)] last:border-0"
-                  >
-                    <td class="px-4 py-2 text-[var(--text-secondary)]">
-                      {{ tier.label }}
-                    </td>
-                    <td
-                      class="px-4 py-2 text-right font-mono text-[var(--text-primary)]"
-                    >
-                      {{ formatTokenPrice(tier.input) }} / 1M
-                    </td>
-                    <td
-                      class="px-4 py-2 text-right font-mono text-[var(--text-primary)]"
-                    >
-                      {{ formatTokenPrice(tier.output) }} / 1M
-                    </td>
-                  </tr>
-                </template>
-                <tr
-                  v-else
-                  class="border-b border-[var(--border-subtle)] last:border-0"
-                >
-                  <td class="px-4 py-2 text-[var(--text-secondary)]">
-                    {{ t('models.standard') }}
-                  </td>
-                  <td
-                    class="px-4 py-2 text-right font-mono text-[var(--text-primary)]"
-                  >
-                    {{ formatTokenPrice(detailModel.price.input) }} / 1M
-                  </td>
-                  <td
-                    class="px-4 py-2 text-right font-mono text-[var(--text-primary)]"
-                  >
-                    {{ formatTokenPrice(detailModel.price.output) }} / 1M
-                  </td>
-                </tr>
-                <tr
-                  v-if="detailModel.price.cache_read != null"
-                  data-detail-cache-read
-                >
-                  <td class="px-4 py-2 text-[var(--text-secondary)]">
-                    {{ t('models.priceCache') }}
-                  </td>
-                  <td
-                    class="px-4 py-2 text-right font-mono text-[var(--text-secondary)]"
-                    colspan="2"
-                  >
-                    {{ formatTokenPrice(detailModel.price.cache_read) }} / 1M
-                  </td>
-                </tr>
-                <tr
-                  v-if="detailModel.price.cache_write != null"
-                  data-detail-cache-write
-                >
-                  <td class="px-4 py-2 text-[var(--text-secondary)]">
-                    {{ t('models.priceCacheWrite') }}
-                  </td>
-                  <td
-                    class="px-4 py-2 text-right font-mono text-[var(--text-secondary)]"
-                    colspan="2"
-                  >
-                    {{ formatTokenPrice(detailModel.price.cache_write) }} / 1M
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <ModelPriceItems
+            v-if="detailModel.pricing"
+            :pricing="detailModel.pricing"
+            class="rounded-xl border border-[var(--border-subtle)] p-4"
+          />
+          <p v-else class="text-sm text-[var(--text-tertiary)]">—</p>
         </div>
       </div>
     </ConsoleModal>

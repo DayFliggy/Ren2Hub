@@ -21,6 +21,12 @@ type BillingAttempt struct {
 }
 
 func PrepareBillingAttempt(ctx context.Context, requestID, attemptID string, channelID int, quote *billing.Quote) error {
+	return BillingTransaction(ctx, func(tx *gorm.DB) error {
+		return prepareBillingAttemptTx(tx, requestID, attemptID, channelID, quote)
+	})
+}
+
+func prepareBillingAttemptTx(tx *gorm.DB, requestID, attemptID string, channelID int, quote *billing.Quote) error {
 	if quote == nil || requestID == "" || attemptID == "" {
 		return errors.New("complete billing quote is required")
 	}
@@ -28,30 +34,28 @@ func PrepareBillingAttempt(ctx context.Context, requestID, attemptID string, cha
 	if err != nil {
 		return err
 	}
-	return BillingTransaction(ctx, func(tx *gorm.DB) error {
-		var recovery BillingRecovery
-		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
-			return err
+	var recovery BillingRecovery
+	if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
+		return err
+	}
+	var existing BillingAttempt
+	err = tx.Where("id = ?", attemptID).First(&existing).Error
+	if err == nil {
+		if existing.Quote != string(data) || existing.RequestID != requestID || existing.ChannelID != channelID {
+			return ErrBillingEventConflict
 		}
-		var existing BillingAttempt
-		err := tx.Where("id = ?", attemptID).First(&existing).Error
-		if err == nil {
-			if existing.Quote != string(data) || existing.RequestID != requestID || existing.ChannelID != channelID {
-				return ErrBillingEventConflict
-			}
-			return nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		if recovery.Status != BillingRecoveryStatusActive || recovery.PreConsumeState != BillingRecoveryPreConsumeCommitted || BillingRecoveryUsageCollecting(recovery.ConsumptionState) {
-			return ErrBillingRecoveryStateConflict
-		}
-		if err := tx.Create(&BillingAttempt{ID: attemptID, RequestID: requestID, ChannelID: channelID, Quote: string(data), QuoteHash: quote.Hash, CreatedAt: common.GetTimestamp()}).Error; err != nil {
-			return err
-		}
-		return tx.Model(&recovery).Updates(map[string]any{"quote_snapshot": string(data), "consumption_state": BillingRecoveryStateUsagePending, "version": recovery.Version + 1, "updated_at": common.GetTimestamp()}).Error
-	})
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if recovery.Status != BillingRecoveryStatusActive || recovery.PreConsumeState != BillingRecoveryPreConsumeCommitted || BillingRecoveryUsageCollecting(recovery.ConsumptionState) {
+		return ErrBillingRecoveryStateConflict
+	}
+	if err := tx.Create(&BillingAttempt{ID: attemptID, RequestID: requestID, ChannelID: channelID, Quote: string(data), QuoteHash: quote.Hash, CreatedAt: common.GetTimestamp()}).Error; err != nil {
+		return err
+	}
+	return tx.Model(&recovery).Updates(map[string]any{"quote_snapshot": string(data), "consumption_state": BillingRecoveryStateUsagePending, "version": recovery.Version + 1, "updated_at": common.GetTimestamp()}).Error
 }
 
 func RecordBillingCalculationFailure(requestID string, usage *billing.Usage) error {

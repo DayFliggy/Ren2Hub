@@ -95,6 +95,37 @@ func TestGatewayStartupMigrations(t *testing.T) {
 	}
 }
 
+func TestGatewayStartupResumesEmptyMarkerButRejectsUnmarkedData(t *testing.T) {
+	for _, test := range []struct {
+		kind common.DatabaseType
+		env  string
+	}{{common.DatabaseTypeSQLite, ""}, {common.DatabaseTypeMySQL, "GATEWAY_STARTUP_MYSQL_DSN"}, {common.DatabaseTypePostgreSQL, "GATEWAY_STARTUP_POSTGRES_DSN"}} {
+		t.Run(string(test.kind), func(t *testing.T) {
+			dsn := os.Getenv(test.env)
+			if test.env != "" && dsn == "" {
+				t.Skip(test.env + " is not configured; interrupted initialization is unverified")
+			}
+			db, err := gatewayStartupDatabase(t, test.kind, dsn)()
+			require.NoError(t, err)
+			connection, err := db.DB()
+			require.NoError(t, err)
+			t.Cleanup(func() { assert.NoError(t, connection.Close()) })
+			// Simulate a process exit between marker DDL and marker insertion.
+			require.NoError(t, db.AutoMigrate(&BillingSchema{}))
+			require.NoError(t, prepareBillingSchema(db))
+			require.NoError(t, requireBillingSchema(db))
+			require.NoError(t, prepareBillingSchema(db))
+			// An empty marker alongside application data is not a fresh install.
+			require.NoError(t, db.Delete(&BillingSchema{}, 1).Error)
+			require.NoError(t, db.Table("users").AutoMigrate(&gatewayStartupLegacyUser{}))
+			require.ErrorContains(t, prepareBillingSchema(db), "requires an empty database")
+			var count int64
+			require.NoError(t, db.Model(&BillingSchema{}).Count(&count).Error)
+			assert.Zero(t, count)
+		})
+	}
+}
+
 func gatewayStartupSchema(t *testing.T, db *gorm.DB) {
 	t.Helper()
 	for _, target := range []struct {

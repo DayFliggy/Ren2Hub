@@ -752,6 +752,7 @@ export default {
     channelTitle: 'Available channels ({count})',
     billing: {
       token: 'Pay as you go',
+      unit_price: 'Unit prices',
       tiered: 'Tiered pricing',
       free: 'Free',
       per_call: 'Per call',

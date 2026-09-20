@@ -100,8 +100,6 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	}
 	if perCall {
 		usage.Quantities["calls"] = "1"
-		usage.InputTokens = 0
-		usage.OutputTokens = 0
 	}
 	if priceHasQuantity(*version, "images") {
 		quantity := 1.0

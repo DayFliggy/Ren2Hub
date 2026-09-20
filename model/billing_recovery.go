@@ -9,6 +9,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var ErrBillingRecoveryStateConflict = errors.New("billing recovery state conflict")
@@ -94,7 +95,17 @@ type BillingRecoveryInput struct {
 }
 
 func EnsureBillingRecovery(input BillingRecoveryInput) (*BillingRecovery, error) {
-	if DB == nil || strings.TrimSpace(input.RequestID) == "" || len(input.RequestID) > 128 || input.UserID <= 0 || input.TokenID < 0 || input.TokenRequired && input.TokenID == 0 {
+	var recovery *BillingRecovery
+	err := BillingTransaction(context.Background(), func(tx *gorm.DB) error {
+		var err error
+		recovery, err = ensureBillingRecoveryTx(tx, input)
+		return err
+	})
+	return recovery, err
+}
+
+func ensureBillingRecoveryTx(tx *gorm.DB, input BillingRecoveryInput) (*BillingRecovery, error) {
+	if tx == nil || strings.TrimSpace(input.RequestID) == "" || len(input.RequestID) > 128 || input.UserID <= 0 || input.TokenID < 0 || input.TokenRequired && input.TokenID == 0 {
 		return nil, errors.New("invalid billing recovery input")
 	}
 	if input.Source != "wallet" {
@@ -106,25 +117,18 @@ func EnsureBillingRecovery(input BillingRecoveryInput) (*BillingRecovery, error)
 	if input.TokenID == 0 && input.TokenAmount != 0 {
 		return nil, errors.New("billing recovery token amount requires a token")
 	}
-	var recovery BillingRecovery
-	err := DB.Where("request_id = ?", input.RequestID).First(&recovery).Error
-	if err == nil {
-		return reconcileBillingRecoveryInput(&recovery, input)
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-	recovery = BillingRecovery{
+	recovery := BillingRecovery{
 		RequestID: input.RequestID, UserID: input.UserID, TokenID: input.TokenID,
 		Source: input.Source, FundingAmount: input.FundingAmount, TokenAmount: input.TokenAmount, TokenRequired: input.TokenRequired,
 	}
-	if err := DB.Create(&recovery).Error; err != nil {
-		if lookupErr := DB.Where("request_id = ?", input.RequestID).First(&recovery).Error; lookupErr == nil {
-			return reconcileBillingRecoveryInput(&recovery, input)
-		}
+	if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "request_id"}}, DoNothing: true}).Create(&recovery).Error; err != nil {
 		return nil, err
 	}
-	return &recovery, nil
+	var existing BillingRecovery
+	if err := lockForUpdate(tx).Where("request_id = ?", input.RequestID).First(&existing).Error; err != nil {
+		return nil, err
+	}
+	return reconcileBillingRecoveryInput(&existing, input)
 }
 
 func reconcileBillingRecoveryInput(recovery *BillingRecovery, input BillingRecoveryInput) (*BillingRecovery, error) {
@@ -158,9 +162,13 @@ func AbortPreparedBillingRecovery(requestID string, lastError error) error {
 			return ErrBillingRecoveryStateConflict
 		}
 		return tx.Model(&BillingRecovery{}).Where("request_id = ?", requestID).Updates(map[string]any{
-			"status":     BillingRecoveryStatusRefunded,
-			"last_error": message,
-			"updated_at": common.GetTimestamp(),
+			"status":                 BillingRecoveryStatusRefunded,
+			"version":                recovery.Version + 1,
+			"consumption_state":      BillingRecoveryStateCompleted,
+			"consumption_statistics": BillingRecoveryStateCompleted,
+			"consumption_log":        BillingRecoveryStateCompleted,
+			"last_error":             message,
+			"updated_at":             common.GetTimestamp(),
 		}).Error
 	})
 }

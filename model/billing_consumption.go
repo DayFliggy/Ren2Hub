@@ -28,6 +28,30 @@ func PrepareBillingRecoveryConsumption(requestID string, consumption BillingCons
 	return prepareBillingRecoveryConsumption(DB, requestID, consumption, true)
 }
 
+// A confirmed surcharge has no further upstream work. Persist its frozen rule,
+// usage and settlement intent together so recovery never mistakes a partial
+// setup for an unsent request and releases it.
+func PrepareBillingSurcharge(ctx context.Context, input BillingRecoveryInput, channelID int, quote *billing.Quote, consumption BillingConsumption) error {
+	if quote == nil || consumption.Usage == nil || consumption.Charge == nil {
+		return errors.New("complete surcharge evidence is required")
+	}
+	return BillingTransaction(ctx, func(tx *gorm.DB) error {
+		recovery, err := ensureBillingRecoveryTx(tx, input)
+		if err != nil {
+			return err
+		}
+		if recovery.PreConsumeState == BillingRecoveryPreConsumePrepared {
+			if err := ReserveTx(tx, input.RequestID, 0); err != nil {
+				return err
+			}
+		}
+		if err := prepareBillingAttemptTx(tx, input.RequestID, input.RequestID, channelID, quote); err != nil {
+			return err
+		}
+		return prepareBillingRecoveryConsumption(tx, input.RequestID, consumption, true)
+	})
+}
+
 // A live Realtime session may keep replacing its cumulative snapshot until
 // final settlement. A stale session recovers this last confirmed consumption.
 func RecordRealtimeBillingConsumption(requestID string, consumption BillingConsumption) error {

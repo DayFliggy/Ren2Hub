@@ -7,7 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { labNavItems } from '@/constants/navigation/labNav'
 import { useLabChat } from '@/composables/useLab'
 import { useAuthStore } from '@/stores/auth'
-import { addQuota, quotaRatio } from '@/utils/quota'
+import { quotaInteger, quotaRatio } from '@/utils/quota'
 import { formatQuota } from '@/utils/format'
 
 const { t } = useI18n()
@@ -63,7 +63,7 @@ const remaining = computed(() => {
 const remainingPct = computed(() => {
   const u = auth.user
   if (!u) return 0
-  const total = addQuota(u.available_quota, u.used_quota)
+  const total = quotaInteger(u.available_quota) + quotaInteger(u.used_quota)
   return Math.min(100, Math.max(0, quotaRatio(u.available_quota, total) * 100))
 })
 

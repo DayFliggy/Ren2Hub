@@ -69,7 +69,10 @@ func (s *BillingSession) Refund(c *gin.Context) {
 		outcome, _ := value.(AttemptOutcome)
 		rejected = rejected || outcome.Acceptance == AttemptRejected
 	}
-	if info.HasValidOutput() || !info.UpstreamPreparationOnly && !rejected && (info.UpstreamAccepted || info.UpstreamSent) {
+	// An accepted task may continue running despite a contradictory rejection
+	// signal. Keep its reservation until task evidence resolves the outcome.
+	acceptedTask := info.UpstreamSideEffecting && info.UpstreamAccepted
+	if info.HasValidOutput() || !info.UpstreamPreparationOnly && (acceptedTask || !rejected && (info.UpstreamAccepted || info.UpstreamSent)) {
 		s.stopRecoveryHeartbeat()
 		logger.LogError(c, "billing requires reconciliation (request_id="+info.RequestId+"): upstream acceptance or consumption is unknown")
 		return
