@@ -208,6 +208,73 @@ func TestAddChannelSuccessEnvelopeIncludesData(t *testing.T) {
 	assert.Equal(t, 1, *response.Data)
 }
 
+func TestAddChannelCanImmediatelyDisableWithMemoryCache(t *testing.T) {
+	for _, mode := range []string{"single", "batch", "multi_to_single"} {
+		t.Run(mode, func(t *testing.T) {
+			db := setupModelListControllerTestDB(t)
+			require.NoError(t, db.AutoMigrate(&model.Log{}))
+			previousMemoryCache := common.MemoryCacheEnabled
+			common.MemoryCacheEnabled = true
+			model.InitChannelCache()
+			t.Cleanup(func() {
+				require.NoError(t, db.Exec("DELETE FROM channels").Error)
+				model.InitChannelCache()
+				common.MemoryCacheEnabled = previousMemoryCache
+			})
+			key := "test-key-one"
+			if mode != "single" {
+				key += "\ntest-key-two"
+			}
+			body, err := common.Marshal(AddChannelRequest{
+				Mode: mode, MultiKeyMode: constant.MultiKeyModePolling,
+				Channel: &model.Channel{Name: "immediate-disable", Type: constant.ChannelTypeOpenAI,
+					Key: key, Models: "gpt-4o", Status: common.ChannelStatusEnabled},
+			})
+			require.NoError(t, err)
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/api/next/admin/channels", bytes.NewReader(body))
+			ctx.Request.Header.Set("Content-Type", "application/json")
+			AddChannel(ctx)
+			var created struct {
+				Success bool `json:"success"`
+				Data    int  `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &created))
+			require.True(t, created.Success)
+			var channels []model.Channel
+			require.NoError(t, db.Find(&channels).Error)
+			require.Len(t, channels, created.Data)
+			require.NotEmpty(t, channels)
+			for _, channel := range channels {
+				body, err = common.Marshal(ChannelStatusRequest{Status: common.ChannelStatusManuallyDisabled})
+				require.NoError(t, err)
+				recorder = httptest.NewRecorder()
+				ctx, _ = gin.CreateTestContext(recorder)
+				ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprint(channel.Id)}}
+				ctx.Request = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/next/admin/channels/%d/status", channel.Id), bytes.NewReader(body))
+				ctx.Request.Header.Set("Content-Type", "application/json")
+				UpdateChannelStatus(ctx)
+				var updated struct {
+					Success bool `json:"success"`
+					Data    bool `json:"data"`
+				}
+				require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &updated))
+				require.True(t, updated.Success)
+				require.True(t, updated.Data, "a newly created channel must be immediately manageable")
+				require.NoError(t, db.First(&channel, channel.Id).Error)
+				assert.Equal(t, common.ChannelStatusManuallyDisabled, channel.Status)
+				cached, err := model.CacheGetChannel(channel.Id)
+				require.NoError(t, err)
+				assert.Equal(t, channel.Status, cached.Status)
+				var ability model.Ability
+				require.NoError(t, db.Where("channel_id = ?", channel.Id).First(&ability).Error)
+				assert.False(t, ability.Enabled)
+			}
+		})
+	}
+}
+
 func TestNewAPIChannelRegistration(t *testing.T) {
 	apiType, ok := common.ChannelType2APIType(constant.ChannelTypeNewAPI)
 
