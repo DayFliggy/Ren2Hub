@@ -19,6 +19,15 @@ const emit = defineEmits<{
   validity: [valid: boolean]
 }>()
 const { t } = useI18n({ useScope: 'local', messages: editorMessages })
+const { t: globalT } = useI18n({ useScope: 'global' })
+const label = computed(() =>
+  props.field.labelKey ? globalT(props.field.labelKey) : props.field.label
+)
+const description = computed(() =>
+  props.field.descriptionKey
+    ? globalT(props.field.descriptionKey)
+    : props.field.description
+)
 const schema = computed(() => SETTINGS_RECORD_EDITORS[props.field.key])
 const entries = ref<Array<{ key: string; value: string }>>([])
 const rawMode = ref(false)
@@ -153,19 +162,20 @@ function remove(index: number) {
     :class="{
       'settings-field-wide': structured || schema || field.kind === 'json',
       'settings-field-toggle': field.kind === 'boolean',
+      'settings-field-described': !!field.descriptionKey,
     }"
   >
     <label
       v-if="field.kind !== 'boolean'"
       :for="`setting-${field.key}`"
       class="settings-field-title"
-      >{{ field.label }}</label
+      >{{ label }}</label
     >
     <div v-if="field.kind === 'boolean'" class="settings-boolean-row">
-      <span class="settings-field-title">{{ field.label }}</span>
+      <span class="settings-field-title">{{ label }}</span>
       <ConsoleToggle
         :model-value="modelValue === true"
-        :label="field.label"
+        :label="label"
         @update:model-value="publish"
       />
     </div>
@@ -186,7 +196,7 @@ function remove(index: number) {
           v-if="map"
           v-model="entry.key"
           class="settings-input"
-          :aria-label="`${field.label} ${t('editor.key')} ${index + 1}`"
+          :aria-label="`${label} ${t('editor.key')} ${index + 1}`"
           :placeholder="t('editor.key')"
           @input="publishEntries"
         />
@@ -198,7 +208,7 @@ function remove(index: number) {
               ? 'number'
               : 'text'
           "
-          :aria-label="`${field.label} ${t('editor.value')} ${index + 1}`"
+          :aria-label="`${label} ${t('editor.value')} ${index + 1}`"
           :placeholder="t('editor.value')"
           @input="publishEntries"
         />
@@ -264,6 +274,7 @@ function remove(index: number) {
       :autocomplete="isSecret ? 'new-password' : 'off'"
       @input="scalar(($event.target as HTMLInputElement).value)"
     />
+    <p v-if="field.descriptionKey" class="settings-hint">{{ description }}</p>
     <p v-if="draftError || validation" role="alert" class="settings-error">
       {{ t(`editor.${draftError || validation}`) }}
     </p>
@@ -303,6 +314,10 @@ function remove(index: number) {
   color: var(--text-primary);
   padding: 0.65rem 0.75rem;
   font-size: 0.875rem;
+}
+.settings-field-described {
+  flex-direction: column;
+  align-items: stretch;
 }
 .settings-boolean-row {
   display: flex;

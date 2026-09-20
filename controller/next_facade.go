@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -32,8 +33,10 @@ type NextOrderDTO struct {
 }
 
 type nextTopUpRequest struct {
-	Amount        int64  `json:"amount" binding:"required,gt=0"`
-	PaymentMethod string `json:"payment_method" binding:"required"`
+	Amount           int64  `json:"amount" binding:"required,gt=0"`
+	PaymentMethod    string `json:"payment_method" binding:"required"`
+	AmountUnit       string `json:"amount_unit"`
+	QuoteFingerprint string `json:"quote_fingerprint"`
 }
 
 type nextEpayPaymentMethod struct {
@@ -168,34 +171,29 @@ func nextTopUpUsers(topUps []*model.TopUp) (map[int]*model.User, error) {
 // NextCreateEpayTopUp starts an Epay recharge while preserving the existing
 // payment configuration and callback implementation.
 func NextGetEpayTopUpConfig(c *gin.Context) {
-	enabled := isEpayTopUpEnabled()
-	methods := make([]nextEpayPaymentMethod, 0, len(operation_setting.PayMethods))
-	if enabled {
-		for _, configured := range operation_setting.PayMethods {
-			name := strings.TrimSpace(configured["name"])
-			methodType := strings.TrimSpace(configured["type"])
-			if name == "" || methodType == "" {
-				continue
+	config, err := service.LoadEpayConfig(c.Request.Context())
+	if err != nil {
+		common.ApiErrorMsg(c, "读取支付配置失败")
+		return
+	}
+	methods := make([]nextEpayPaymentMethod, 0, len(config.Methods))
+	if config.Enabled() {
+		for _, item := range config.Methods {
+			minimum, err := operation_setting.EpayMinimumUSD(config.MinTopUp, item)
+			if err != nil {
+				common.ApiErrorMsg(c, "支付方式配置无效")
+				return
 			}
-			minTopUp := getMinTopup()
-			if configuredMin, err := strconv.ParseInt(strings.TrimSpace(configured["min_topup"]), 10, 64); err == nil && configuredMin > 0 {
-				minTopUp = configuredMin
-			}
-			methods = append(methods, nextEpayPaymentMethod{
-				Name: name, Type: methodType, Color: strings.TrimSpace(configured["color"]), MinTopUp: minTopUp,
-			})
+			methods = append(methods, nextEpayPaymentMethod{Name: item["name"], Type: item["type"], Color: item["color"], MinTopUp: minimum})
 		}
 	}
-	amountOptions := make([]int, 0, len(operation_setting.GetPaymentSetting().AmountOptions))
-	for _, amount := range operation_setting.GetPaymentSetting().AmountOptions {
-		if amount > 0 {
-			amountOptions = append(amountOptions, amount)
+	options := make([]int, 0, len(config.AmountOptions))
+	for _, value := range config.AmountOptions {
+		if value > 0 {
+			options = append(options, value)
 		}
 	}
-	common.ApiSuccess(c, nextEpayTopUpConfig{
-		Enabled: enabled, RedemptionEnabled: operation_setting.IsPaymentComplianceConfirmed(),
-		PayMethods: methods, MinTopUp: getMinTopup(), AmountOptions: amountOptions,
-	})
+	common.ApiSuccess(c, nextEpayTopUpConfig{Enabled: config.Enabled(), RedemptionEnabled: config.Compliance, PayMethods: methods, MinTopUp: config.MinTopUp, AmountOptions: options})
 }
 
 func NextCreateEpayTopUp(c *gin.Context) {
@@ -207,7 +205,7 @@ func NextCreateEpayTopUp(c *gin.Context) {
 	// Order creation is single-sourced in createEpayTopUpOrder (topup.go),
 	// shared with the legacy POST /api/user/pay endpoint.
 	method := strings.TrimSpace(strings.TrimPrefix(req.PaymentMethod, "epay:"))
-	order, orderErr := createEpayTopUpOrder(c, c.GetInt("id"), req.Amount, method)
+	order, orderErr := createEpayTopUpOrder(c, c.GetInt("id"), req.Amount, method, req.AmountUnit, req.QuoteFingerprint)
 	if orderErr != nil {
 		nextBusinessError(c, orderErr.Message, orderErr.Code)
 		return
@@ -219,6 +217,7 @@ func NextCreateEpayTopUp(c *gin.Context) {
 		"amount":         order.Amount,
 		"money":          order.PayMoney,
 		"payment_method": order.Method,
+		"quote":          order.Quote,
 		"url":            order.PayURL,
 		"data":           order.PayParams,
 	})

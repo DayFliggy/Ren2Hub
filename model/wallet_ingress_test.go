@@ -20,7 +20,7 @@ func useWalletIngressDB(t *testing.T) *gorm.DB {
 	commonKeyCol, common.QuotaPerUnit = "`key`", 500000
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &BillingRecovery{}, &BillingEvent{}, &TopUp{}, &Redemption{}, &Checkin{}, &ActivityClaim{}, &AffiliateLedger{}, &UserRouteProfile{}, &Log{}))
+	require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &BillingRecovery{}, &BillingEvent{}, &TopUp{}, &EpayOrder{}, &EpayMerchantVersion{}, &Option{}, &Redemption{}, &Checkin{}, &ActivityClaim{}, &AffiliateLedger{}, &UserRouteProfile{}, &Log{}))
 	DB, LOG_DB, common.RedisEnabled = db, db, false
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
 	sqlDB, err := db.DB()
@@ -40,11 +40,11 @@ func TestWalletIngressTopUpIsAtomicAndBeyondInt32(t *testing.T) {
 	user := User{Username: "payer", AffCode: "payer", Quota: math.MaxInt32}
 	require.NoError(t, db.Create(&user).Error)
 	order := TopUp{UserId: user.Id, TradeNo: "payment-1", PaymentProvider: PaymentProviderEpay, Status: common.TopUpStatusPending, Amount: 5000}
-	require.NoError(t, db.Create(&order).Error)
-	already, err := RechargeEpay(order.TradeNo, "", "")
+	payment := insertEpaySnapshotTestOrder(t, &order, 2_500_000_000, "test-key")
+	already, err := RechargeEpay(payment, "")
 	require.NoError(t, err)
 	assert.False(t, already)
-	already, err = RechargeEpay(order.TradeNo, "", "")
+	already, err = RechargeEpay(payment, "")
 	require.NoError(t, err)
 	assert.True(t, already)
 	require.NoError(t, db.First(&user, user.Id).Error)
@@ -191,8 +191,8 @@ func TestWalletIngressFailedPaymentCreditKeepsOrderPending(t *testing.T) {
 	user := User{Username: "full-payer", AffCode: "full-payer", Quota: math.MaxInt64}
 	require.NoError(t, db.Create(&user).Error)
 	order := TopUp{UserId: user.Id, TradeNo: "payment-overflow", PaymentProvider: PaymentProviderEpay, Status: common.TopUpStatusPending, Amount: 1}
-	require.NoError(t, db.Create(&order).Error)
-	_, err := RechargeEpay(order.TradeNo, "", "")
+	payment := insertEpaySnapshotTestOrder(t, &order, 500_000, "test-key")
+	_, err := RechargeEpay(payment, "")
 	require.ErrorIs(t, err, ErrTopUpQuotaLimitExceeded)
 	require.NoError(t, db.First(&order, order.Id).Error)
 	assert.Equal(t, common.TopUpStatusPending, order.Status)

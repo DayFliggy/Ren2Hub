@@ -1764,7 +1764,7 @@ export default {
     colTime: 'Time',
     methodRedeem: 'Redeem',
     callbackNote:
-      'Credit arrival is confirmed by server callback, not by redirect.',
+      'Credit arrival is confirmed by the server after verifying payment.',
     pendingNote: '{count} order(s) pending payment',
     statMonthConsume: 'Month spend',
     statMonthConsumeSub: 'This month',
@@ -1774,7 +1774,19 @@ export default {
     statTodayConsumeSub: 'Since midnight',
     statMonthRequests: 'Month requests',
     statMonthRequestsSub: 'API calls',
-    summaryPayNow: 'You pay',
+    summaryPayNow: 'You pay (CNY)',
+    summaryCredit: 'Credit received (USD)',
+    quoteLoading: 'Updating payment quote…',
+    quoteFailed: 'The payment quote could not be loaded. Please try again.',
+    retryQuote: 'Retry quote',
+    quoteChanged:
+      'The quote changed. Review the updated amount and click top up again.',
+    checkPayment: 'Check payment result',
+    paymentConfirmed: 'Payment confirmed and credited.',
+    paymentPending:
+      'Payment is still pending. You can check again in a minute.',
+    paymentCheckFailed:
+      'The payment result could not be checked. Please try again later.',
     summaryBalanceAfter: 'Balance after',
     redeemLimitOnce: 'Single use',
     redeemCount: '{count} redeemed',
@@ -2414,6 +2426,9 @@ export default {
   },
 
   systemSettings: {
+    epaySettlement: 'Enable Epay settlement',
+    epaySettlementDescription:
+      'Allow callbacks and payment checks to credit existing orders. Disabling this pauses settlement independently of new payment methods.',
     title: 'System Settings',
     breadcrumb: ['Admin', 'System Settings'],
     saved: 'Saved',

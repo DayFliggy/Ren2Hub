@@ -3,12 +3,12 @@ package controller
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,31 +39,9 @@ func decodeNextResponse[T any](t *testing.T, recorder *httptest.ResponseRecorder
 }
 
 func TestNextEpayTopUpConfigExposesOnlyEpayMethodsAndRequiresCompliance(t *testing.T) {
-	paymentSetting := operation_setting.GetPaymentSetting()
-	originalPaymentSetting := *paymentSetting
-	originalPayMethods := operation_setting.PayMethods
-	originalPayAddress := operation_setting.PayAddress
-	originalEpayID := operation_setting.EpayId
-	originalEpayKey := operation_setting.EpayKey
-	t.Cleanup(func() {
-		*paymentSetting = originalPaymentSetting
-		operation_setting.PayMethods = originalPayMethods
-		operation_setting.PayAddress = originalPayAddress
-		operation_setting.EpayId = originalEpayID
-		operation_setting.EpayKey = originalEpayKey
-	})
-
-	paymentSetting.ComplianceConfirmed = true
-	paymentSetting.ComplianceTermsVersion = operation_setting.CurrentComplianceTermsVersion
-	paymentSetting.AmountOptions = []int{10, -1, 50}
-	operation_setting.PayAddress = "https://epay.example.test"
-	operation_setting.EpayId = "epay-id"
-	operation_setting.EpayKey = "epay-key"
-	operation_setting.PayMethods = []map[string]string{
-		{"name": "Alipay", "type": "alipay", "color": "#1677ff"},
-		{"name": "WeChat Pay", "type": "wxpay", "min_topup": "5"},
-		{"name": "", "type": "invalid"},
-	}
+	db := setupEpayControllerTestDB(t)
+	require.NoError(t, db.Save(&model.Option{Key: "payment_setting.amount_options", Value: "[10,-1,50]"}).Error)
+	require.NoError(t, db.Save(&model.Option{Key: "PayMethods", Value: `[{"name":"Alipay","type":"alipay","color":"#1677ff"},{"name":"WeChat Pay","type":"wxpay","min_topup":"5"}]`}).Error)
 
 	config := decodeNextResponse[nextEpayTopUpConfig](t, performNextGet(
 		t, "/api/next/wallet/config", NextGetEpayTopUpConfig,
@@ -75,7 +53,7 @@ func TestNextEpayTopUpConfigExposesOnlyEpayMethodsAndRequiresCompliance(t *testi
 	assert.Equal(t, int64(5), config.PayMethods[1].MinTopUp)
 	assert.Equal(t, []int{10, 50}, config.AmountOptions)
 
-	paymentSetting.ComplianceConfirmed = false
+	require.NoError(t, db.Save(&model.Option{Key: "payment_setting.compliance_confirmed", Value: "false"}).Error)
 	disabled := decodeNextResponse[nextEpayTopUpConfig](t, performNextGet(
 		t, "/api/next/wallet/config", NextGetEpayTopUpConfig,
 	))
@@ -83,9 +61,12 @@ func TestNextEpayTopUpConfigExposesOnlyEpayMethodsAndRequiresCompliance(t *testi
 	assert.False(t, disabled.RedemptionEnabled)
 	assert.Empty(t, disabled.PayMethods)
 
-	recorder := performNextAdminJSON(
-		t, http.MethodPost, "/api/next/wallet/topup", `{"amount":10,"payment_method":"alipay"}`, NextCreateEpayTopUp,
-	)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Set("id", 1)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/next/wallet/topup", strings.NewReader(`{"amount":10,"payment_method":"alipay"}`))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	NextCreateEpayTopUp(ctx)
 	var response struct {
 		Success bool   `json:"success"`
 		Code    string `json:"code"`

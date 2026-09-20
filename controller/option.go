@@ -125,6 +125,7 @@ var optionDefaults = map[string]any{
 	"monitor_setting.channel_test_mode":           "scheduled_all",
 	"payment_setting.amount_options":              []any{},
 	"payment_setting.amount_discount":             map[string]any{},
+	"payment_setting.epay_settlement_enabled":     true,
 	"global.thinking_model_blacklist":             []any{},
 	"global.chat_completions_to_responses_policy": map[string]any{},
 	"gemini.version_settings":                     map[string]any{},
@@ -521,7 +522,11 @@ func validateOptionPatch(values map[string]string) error {
 			if err := console_setting.ValidateConsoleSettings(value, "UptimeKumaGroups"); err != nil {
 				return err
 			}
-		case "Chats", "PayMethods", "WaffoPayMethods":
+		case "PayMethods":
+			if _, err := operation_setting.ParseEpayMethods(value); err != nil {
+				return err
+			}
+		case "Chats", "WaffoPayMethods":
 			if err := validateJSON(value); err != nil {
 				return err
 			}

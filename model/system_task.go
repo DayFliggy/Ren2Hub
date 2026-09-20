@@ -24,6 +24,7 @@ const (
 	SystemTaskTypeRouteCapabilityRefresh = "route_capability_refresh"
 	SystemTaskTypeBillingRecovery        = "billing_recovery"
 	SystemTaskTypeGatewayStateCleanup    = "gateway_state_cleanup"
+	SystemTaskTypeEpayRecovery           = "epay_recovery"
 )
 
 var ErrSystemTaskLockLost = errors.New("system task lock lost")

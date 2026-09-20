@@ -50,6 +50,8 @@ func TestMain(m *testing.M) {
 		&QuotaData{},
 		&Ability{},
 		&TopUp{},
+		&EpayMerchantVersion{}, &EpayOrder{},
+		&Option{},
 		&AffiliateLedger{},
 		&UserOAuthBinding{},
 		&PerfMetric{},
@@ -84,6 +86,8 @@ func truncateTables(t *testing.T) {
 		DB.Exec("DELETE FROM quota_data")
 		DB.Exec("DELETE FROM abilities")
 		DB.Exec("DELETE FROM top_ups")
+		DB.Exec("DELETE FROM epay_orders")
+		DB.Exec("DELETE FROM epay_merchant_versions")
 		DB.Exec("DELETE FROM affiliate_ledgers")
 		DB.Exec("DELETE FROM perf_metrics")
 		DB.Exec("DELETE FROM system_instances")

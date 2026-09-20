@@ -128,9 +128,14 @@ async function loadStats(): Promise<void> {
   }
 }
 
-function handlePaymentDone(): void {
+async function handlePaymentDone(): Promise<void> {
   refreshKey.value += 1
-  void auth.fetchSelf().then(loadStats)
+  try {
+    await auth.fetchSelf()
+    await loadStats()
+  } catch (error) {
+    toast.error(error instanceof ApiError ? error.message : t('common.failed'))
+  }
 }
 
 onMounted(() => void loadStats())
@@ -235,7 +240,10 @@ onMounted(() => void loadStats())
     <div class="space-y-6">
       <BillingHistory :refresh-key="refreshKey" />
       <FlowChart :flow="flow" />
-      <TopupRecords v-model:refresh-key="refreshKey" />
+      <TopupRecords
+        v-model:refresh-key="refreshKey"
+        @done="handlePaymentDone"
+      />
     </div>
   </div>
 </template>

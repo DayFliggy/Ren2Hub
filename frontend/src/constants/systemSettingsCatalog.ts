@@ -24,6 +24,8 @@ export interface SystemSettingField {
   key: string
   label: string
   description?: string
+  labelKey?: string
+  descriptionKey?: string
   kind: SystemSettingFieldKind
   defaultValue: SystemSettingValue
   min?: number
@@ -430,6 +432,15 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           url('PayAddress', '易支付地址'),
           text('EpayId', '易支付商户 ID'),
           secret('EpayKey', '易支付密钥'),
+          {
+            ...toggle(
+              'payment_setting.epay_settlement_enabled',
+              '启用易支付结算',
+              true
+            ),
+            labelKey: 'systemSettings.epaySettlement',
+            descriptionKey: 'systemSettings.epaySettlementDescription',
+          },
           number('Price', '基础价格', 7.3),
           number('MinTopUp', '最低充值金额', 1),
           url('CustomCallbackAddress', '支付回调地址'),

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/epay"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -14,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Option struct {
@@ -219,6 +221,32 @@ func IsRetiredBillingOption(key string) bool {
 }
 
 func validateOptionValue(key string, value string) error {
+	switch key {
+	case "PayAddress":
+		if strings.TrimSpace(value) != "" {
+			_, err := epay.NormalizeGatewayURL(value)
+			return err
+		}
+	case "EpayId", "EpayKey":
+		if len(value) > 128 || strings.ContainsAny(value, "\x00\r\n") {
+			return errors.New("invalid epay merchant configuration")
+		}
+	case "MinTopUp":
+		minimum, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return errors.New("invalid epay minimum")
+		}
+		_, err = operation_setting.EpayMinimumUSD(minimum, nil)
+		return err
+	case "payment_setting.epay_settlement_enabled":
+		if value != "true" && value != "false" {
+			return errors.New("invalid epay settlement setting")
+		}
+	}
+	if key == "PayMethods" {
+		_, err := operation_setting.ParseEpayMethods(value)
+		return err
+	}
 	if key == "AffiliatePerInviteeCap" {
 		_, err := AffiliateCapQuota(value)
 		return err
@@ -246,22 +274,7 @@ func validateOptionValue(key string, value string) error {
 }
 
 func UpdateOption(key string, value string) error {
-	if err := validateOptionValue(key, value); err != nil {
-		return err
-	}
-	// Save to database first
-	option := Option{
-		Key: key,
-	}
-	// https://gorm.io/docs/update.html#Save-All-Fields
-	DB.FirstOrCreate(&option, Option{Key: key})
-	option.Value = value
-	// Save is a combination function.
-	// If save value does not contain primary key, it will execute Create,
-	// otherwise it will execute Update (with all fields).
-	DB.Save(&option)
-	// Update OptionMap
-	return updateOptionMap(key, value)
+	return UpdateOptionsBulk(map[string]string{key: value})
 }
 
 // UpdateOptionsBulk persists multiple key/value pairs in a single database
@@ -278,7 +291,11 @@ func UpdateOptionsBulk(values map[string]string) error {
 			return err
 		}
 	}
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	db := DB
+	if _, containsSecret := values["EpayKey"]; containsSecret {
+		db = DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)})
+	}
+	err := db.Transaction(func(tx *gorm.DB) error {
 		for k, v := range values {
 			option := Option{Key: k}
 			if err := tx.FirstOrCreate(&option, Option{Key: k}).Error; err != nil {

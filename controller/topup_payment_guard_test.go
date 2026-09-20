@@ -12,12 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Calcium-Ion/go-epay/epay"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/epay"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -149,15 +148,6 @@ func TestWaffoPancakeRejectsArchivedPlanBeforeWalletLookup(t *testing.T) {
 }
 
 func TestEpayWebhookRejectsArchivedPlanWalletCredit(t *testing.T) {
-	confirmPaymentComplianceForTest(t)
-	previousAddress, previousID, previousKey := operation_setting.PayAddress, operation_setting.EpayId, operation_setting.EpayKey
-	previousMethods := operation_setting.PayMethods
-	operation_setting.PayAddress, operation_setting.EpayId, operation_setting.EpayKey = "https://pay.example.com", "1", "test-key"
-	operation_setting.PayMethods = []map[string]string{{"type": "alipay"}}
-	t.Cleanup(func() {
-		operation_setting.PayAddress, operation_setting.EpayId, operation_setting.EpayKey = previousAddress, previousID, previousKey
-		operation_setting.PayMethods = previousMethods
-	})
 	for _, tc := range []struct {
 		name, reference string
 		allowed         bool
@@ -166,11 +156,16 @@ func TestEpayWebhookRejectsArchivedPlanWalletCredit(t *testing.T) {
 		{"archived plan", "SUBUSR1NOarchived", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			db, order := setupWalletPaymentGuard(t, model.PaymentProviderEpay, tc.reference)
-			params := epay.GenerateParams(map[string]string{
+			db := setupEpayControllerTestDB(t)
+			created, err := service.CreateEpayTopUp(context.Background(), 1, service.EpayQuoteRequest{Amount: 2, AmountUnit: "USD", PaymentMethod: "alipay"})
+			require.NoError(t, err)
+			order := created.Order
+			require.NoError(t, db.Model(order).Update("trade_no", tc.reference).Error)
+			params := map[string]string{
 				"pid": "1", "out_trade_no": tc.reference, "type": "alipay",
-				"trade_no": "provider-order", "trade_status": epay.StatusTradeSuccess, "money": "2.00",
-			}, operation_setting.EpayKey)
+				"trade_no": "provider-order", "trade_status": epay.StatusTradeSuccess, "money": "2.00", "sign_type": "MD5",
+			}
+			params["sign"] = epay.Sign(params, "test-key")
 			form := url.Values{}
 			for key, value := range params {
 				form.Set(key, value)
@@ -185,7 +180,7 @@ func TestEpayWebhookRejectsArchivedPlanWalletCredit(t *testing.T) {
 			require.NoError(t, db.First(&order, order.Id).Error)
 			wantQuota, wantStatus, wantBody := 7, common.TopUpStatusPending, "fail"
 			if tc.allowed {
-				wantQuota, wantStatus, wantBody = 207, common.TopUpStatusSuccess, "success"
+				wantQuota, wantStatus, wantBody = 1000007, common.TopUpStatusSuccess, "success"
 			}
 			assert.EqualValues(t, wantQuota, user.Quota)
 			assert.EqualValues(t, wantStatus, order.Status)

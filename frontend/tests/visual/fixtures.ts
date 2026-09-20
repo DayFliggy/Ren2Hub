@@ -1171,6 +1171,26 @@ export async function configureStablePage(
     })
   })
 
+  await page.route('**/api/next/wallet/topup/quote', (route) => {
+    const input = route.request().postDataJSON()
+    return route.fulfill({
+      json: {
+        success: true,
+        data: {
+          amount: input.amount,
+          amount_unit: 'USD',
+          payment_method: input.payment_method,
+          amount_minor: String(input.amount * 730),
+          pay_amount: (input.amount * 7.3).toFixed(2),
+          currency: 'CNY',
+          expected_quota: String(input.amount * 500000),
+          min_topup: 5,
+          quote_fingerprint: 'visual-epay-quote',
+        },
+      },
+    })
+  })
+
   for (const [path, data] of responses) {
     const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     await page.route(new RegExp(`${escapedPath}(?:\\?.*)?$`), (route) =>

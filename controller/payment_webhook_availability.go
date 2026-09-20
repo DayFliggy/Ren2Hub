@@ -104,7 +104,3 @@ func isEpayWebhookConfigured() bool {
 		strings.TrimSpace(operation_setting.EpayId) != "" &&
 		strings.TrimSpace(operation_setting.EpayKey) != ""
 }
-
-func isEpayWebhookEnabled() bool {
-	return isEpayTopUpEnabled()
-}

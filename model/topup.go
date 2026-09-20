@@ -9,6 +9,7 @@ import (
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type TopUp struct {
@@ -167,7 +168,8 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 // 在同一个事务内完成，因此同一订单的并发/重复回调（包括多实例部署下）最多充值一次。
 // alreadyDone=true 表示订单此前已完成，本次为幂等重复回调。
 // 进程内的 LockOrder 只是优化，正确性由本函数的数据库行锁保证。
-func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (alreadyDone bool, err error) {
+func RechargeEpay(payment EpayPayment, callerIp string) (alreadyDone bool, err error) {
+	tradeNo, actualPaymentMethod := payment.OrderNo, payment.PaymentMethod
 	if tradeNo == "" {
 		return false, errors.New("未提供支付单号")
 	}
@@ -180,11 +182,51 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 	var quotaToAdd common.Quota
 	topUp := &TopUp{}
 	err = BillingTransaction(nil, func(tx *gorm.DB) error {
+		// Lock the same row that administrators update, before any order or
+		// wallet lock. A pause committed first must prevent this settlement.
+		settlement := Option{Key: "payment_setting.epay_settlement_enabled", Value: "true"}
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&settlement).Error; err != nil {
+			return err
+		}
+		if err := lockForUpdate(tx).Where(&Option{Key: settlement.Key}).First(&settlement).Error; err != nil {
+			return err
+		}
+		if settlement.Value == "false" {
+			return ErrEpaySettlementPaused
+		}
+		if settlement.Value != "true" {
+			return errors.New("invalid epay settlement setting")
+		}
 		if err := lockForUpdate(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
-			return ErrTopUpNotFound
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrTopUpNotFound
+			}
+			return err
 		}
 		if topUp.PaymentProvider != PaymentProviderEpay {
 			return ErrPaymentMethodMismatch
+		}
+		var snapshot EpayOrder
+		if err := tx.First(&snapshot, topUp.Id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrEpaySnapshotMissing
+			}
+			return err
+		}
+		merchant, err := loadEpayMerchantVersion(tx, snapshot.MerchantVersionID)
+		if err != nil {
+			return err
+		}
+		if payment.MerchantVersionID != merchant.ID || payment.MerchantID != merchant.MerchantID || payment.AmountMinor != snapshot.AmountMinor || payment.AmountMinor <= 0 || payment.GatewayTradeNo == "" || len(payment.GatewayTradeNo) > 128 || snapshot.ExpectedQuota <= 0 || snapshot.Currency != "CNY" {
+			return ErrEpayPaymentMismatch
+		}
+		if snapshot.GatewayTradeNo != nil && *snapshot.GatewayTradeNo != payment.GatewayTradeNo {
+			return ErrEpayPaymentMismatch
+		}
+		if snapshot.GatewayTradeNo == nil {
+			if err := tx.Model(&snapshot).Update("gateway_trade_no", payment.GatewayTradeNo).Error; err != nil {
+				return err
+			}
 		}
 		if topUp.Status == common.TopUpStatusSuccess {
 			alreadyDone = true
@@ -196,11 +238,8 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 		if actualPaymentMethod != "" && topUp.PaymentMethod != actualPaymentMethod {
 			topUp.PaymentMethod = actualPaymentMethod
 		}
-		var quotaErr error
-		quotaToAdd, quotaErr = common.WalletQuotaFromDecimal(
-			decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
-		)
-		if quotaErr != nil || quotaToAdd <= 0 {
+		quotaToAdd = snapshot.ExpectedQuota
+		if quotaToAdd <= 0 {
 			return ErrInvalidTopUpQuota
 		}
 		topUp.CompleteTime = common.GetTimestamp()
@@ -214,16 +253,13 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 		return applyTopUpAffiliateRewardTx(tx, topUp)
 	})
 	if err != nil {
-		if !errors.Is(err, ErrTopUpNotFound) && !errors.Is(err, ErrPaymentMethodMismatch) && !errors.Is(err, ErrTopUpStatusInvalid) {
-			common.SysError("epay topup failed: " + err.Error())
-		}
 		return false, err
 	}
 	if alreadyDone {
 		return true, nil
 	}
 
-	common.SysLog(fmt.Sprintf("易支付充值成功 trade_no=%s user_id=%d quota_to_add=%d money=%.2f", topUp.TradeNo, topUp.UserId, quotaToAdd, topUp.Money))
+	common.SysLog(fmt.Sprintf("易支付充值成功 trade_no=%s user_id=%d", topUp.TradeNo, topUp.UserId))
 	RecordTopupLog(topUp.UserId, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", logger.LogQuota(quotaToAdd), topUp.Money), callerIp, topUp.PaymentMethod, PaymentProviderEpay)
 	return false, nil
 }
@@ -458,6 +494,7 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 	var quotaToAdd common.Quota
 	var payMoney float64
 	var paymentMethod string
+	var completed bool
 
 	err := BillingTransaction(nil, func(tx *gorm.DB) error {
 		topUp := &TopUp{}
@@ -475,11 +512,18 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 			return errors.New("订单状态不是待支付，无法补单")
 		}
 
-		// 计算应充值额度：
-		// - Stripe 订单：Money 代表经分组倍率换算后的美元数量，直接 * QuotaPerUnit
-		// - 其他订单（如易支付）：Amount 为美元数量，* QuotaPerUnit
+		// 易支付仅使用下单冻结的额度；管理员补单无需网关凭据。
 		var quotaErr error
-		if topUp.PaymentProvider == PaymentProviderStripe {
+		if topUp.PaymentProvider == PaymentProviderEpay {
+			var snapshot EpayOrder
+			if err := tx.First(&snapshot, topUp.Id).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return ErrEpaySnapshotMissing
+				}
+				return err
+			}
+			quotaToAdd = snapshot.ExpectedQuota
+		} else if topUp.PaymentProvider == PaymentProviderStripe {
 			quotaToAdd, quotaErr = common.WalletQuotaFromDecimal(
 				decimal.NewFromFloat(topUp.Money).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
 			)
@@ -510,11 +554,15 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		userId = topUp.UserId
 		payMoney = topUp.Money
 		paymentMethod = topUp.PaymentMethod
+		completed = true
 		return nil
 	})
 
 	if err != nil {
 		return err
+	}
+	if !completed {
+		return nil
 	}
 
 	// 事务外记录日志，避免阻塞

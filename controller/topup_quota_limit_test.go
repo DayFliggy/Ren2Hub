@@ -11,11 +11,9 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
-	"github.com/glebarez/sqlite"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func TestTopUpQuotaValidation(t *testing.T) {
@@ -95,18 +93,12 @@ func TestValidateTopUpQuotaReturnsMaximumAmount(t *testing.T) {
 }
 
 func TestRequestAmountRejectsTopUpThatCannotBeSettled(t *testing.T) {
-	oldQuotaPerUnit := common.QuotaPerUnit
-	oldDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
-	common.QuotaPerUnit = 500000
-	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
-	t.Cleanup(func() {
-		common.QuotaPerUnit = oldQuotaPerUnit
-		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplayType
-	})
+	setupEpayControllerTestDB(t)
 
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Set("id", 1)
 	ctx.Request = httptest.NewRequest(
 		http.MethodPost,
 		"/api/user/amount",
@@ -117,41 +109,17 @@ func TestRequestAmountRejectsTopUpThatCannotBeSettled(t *testing.T) {
 	RequestAmount(ctx)
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.JSONEq(t, `{"message":"error","data":"单笔充值数量不能大于 18446744073709"}`, recorder.Body.String())
+	assert.JSONEq(t, `{"message":"error","data":"充值额度超出系统可表示范围"}`, recorder.Body.String())
 }
 
 func TestRequestAmountRejectsTopUpThatWouldOverflowWallet(t *testing.T) {
-	oldQuotaPerUnit := common.QuotaPerUnit
-	oldDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
-	oldDB := model.DB
-	common.QuotaPerUnit = 500000
-	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
-
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}))
-	model.DB = db
-	t.Cleanup(func() {
-		common.QuotaPerUnit = oldQuotaPerUnit
-		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplayType
-		model.DB = oldDB
-		sqlDB, dbErr := db.DB()
-		if dbErr == nil {
-			require.NoError(t, sqlDB.Close())
-		}
-	})
-
-	require.NoError(t, model.DB.Create(&model.User{
-		Id:       42,
-		Username: "topup_capacity_user",
-		Quota:    math.MaxInt64 - 500000,
-		Status:   common.UserStatusEnabled,
-	}).Error)
+	db := setupEpayControllerTestDB(t)
+	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 1).Update("available_quota", math.MaxInt64-500000).Error)
 
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Set("id", 42)
+	ctx.Set("id", 1)
 	ctx.Request = httptest.NewRequest(
 		http.MethodPost,
 		"/api/user/amount",

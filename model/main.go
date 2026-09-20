@@ -257,6 +257,8 @@ func migrateDB() error {
 		&Log{},
 		&Midjourney{},
 		&TopUp{},
+		&EpayMerchantVersion{},
+		&EpayOrder{},
 		&QuotaData{},
 		&Task{},
 		&Model{},

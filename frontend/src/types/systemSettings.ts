@@ -107,6 +107,7 @@ export interface BillingSettings {
   'payment_setting.amount_options': string
   'payment_setting.amount_discount': string
   'payment_setting.compliance_confirmed': boolean
+  'payment_setting.epay_settlement_enabled': boolean
   'payment_setting.compliance_terms_version': string
   'payment_setting.compliance_confirmed_at': number
   'payment_setting.compliance_confirmed_by': number
@@ -303,6 +304,7 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   'payment_setting.amount_options': '[]',
   'payment_setting.amount_discount': '{}',
   'payment_setting.compliance_confirmed': false,
+  'payment_setting.epay_settlement_enabled': true,
   'payment_setting.compliance_terms_version': '',
   'payment_setting.compliance_confirmed_at': 0,
   'payment_setting.compliance_confirmed_by': 0,
