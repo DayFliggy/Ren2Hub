@@ -3,41 +3,21 @@ import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 
 for (const theme of ['light', 'dark'] as const) {
   for (const mobile of [false, true]) {
-    test(`Epay quote and recovery ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+    test(`Epay quote and callback settlement ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
       page,
     }, testInfo) => {
       await page.setViewportSize(
         mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
       )
-      await configureStablePage(page, { theme })
+      const user = { available_quota: '5201314', quota_version: 1 }
+      await configureStablePage(page, { theme, user })
       const errors: string[] = []
       page.on('pageerror', (error) => errors.push(error.message))
       let failQuote = false
       let quoteVersion = 1
       let orderWrites = 0
-      let verificationWrites = 0
+      const unexpectedTopupWrites: string[] = []
       let completed = false
-      await page.route('**/api/user/self', (route) =>
-        route.fulfill({
-          json: {
-            success: true,
-            data: {
-              id: 1,
-              username: 'visual.root',
-              display_name: 'Visual Root',
-              email: 'visual-root@ren2hub.dev',
-              role: 100,
-              status: 1,
-              available_quota: completed ? '10201314' : '5201314',
-              reserved_quota: '150000',
-              used_quota: '2985211',
-              quota_version: completed ? 2 : 1,
-              request_count: 32132,
-              group: 'vip',
-            },
-          },
-        })
-      )
       const order = {
         id: 1,
         order_no: 'USR1NOpayment-test',
@@ -54,8 +34,9 @@ for (const theme of ['light', 'dark'] as const) {
         created: 1785114000,
         paid_at: 0,
       }
-      await page.route('**/api/next/wallet/topups?*', (route) =>
-        route.fulfill({
+      await page.route('**/api/next/wallet/topups?*', (route) => {
+        expect(route.request().method()).toBe('GET')
+        return route.fulfill({
           json: {
             success: true,
             data: {
@@ -72,7 +53,15 @@ for (const theme of ['light', 'dark'] as const) {
             },
           },
         })
-      )
+      })
+      page.on('request', (request) => {
+        if (
+          request.url().includes('/api/next/wallet/topups') &&
+          request.method() !== 'GET'
+        ) {
+          unexpectedTopupWrites.push(request.url())
+        }
+      })
       await page.route('**/api/next/wallet/topup/quote', (route) => {
         expect(route.request().method()).toBe('POST')
         const input = route.request().postDataJSON()
@@ -113,24 +102,6 @@ for (const theme of ['light', 'dark'] as const) {
           },
         })
       })
-      await page.route(
-        '**/api/next/wallet/topups/USR1NOpayment-test/verify',
-        (route) => {
-          verificationWrites++
-          expect(route.request().method()).toBe('POST')
-          if (verificationWrites === 1)
-            return route.fulfill({
-              json: { success: false, message: '模拟网关查询超时' },
-            })
-          completed = true
-          return route.fulfill({
-            json: {
-              success: true,
-              data: { ...order, status: 'completed', quota: '5000000' },
-            },
-          })
-        }
-      )
       await page.goto('/wallet')
       const pay = page.getByRole('button', { name: '立即充值', exact: true })
       await expect(
@@ -142,7 +113,16 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(pay).toBeEnabled()
       await pay.focus()
       await expect(pay).toBeFocused()
-      expect(verificationWrites).toBe(0)
+      await expect(
+        page.getByRole('button', { name: '检查支付结果' })
+      ).toHaveCount(0)
+      await expect(page.getByText('待支付', { exact: true })).toBeVisible()
+      const records = page.locator('section').filter({
+        has: page.getByRole('heading', { name: '充值记录', exact: true }),
+      })
+      await records.screenshot({
+        path: testInfo.outputPath('epay-records-pending.png'),
+      })
       failQuote = true
       await page.getByPlaceholder('输入金额', { exact: true }).fill('20')
       await expect(
@@ -162,18 +142,29 @@ for (const theme of ['light', 'dark'] as const) {
       ).toBeVisible()
       await expect(page.getByText('¥147.00', { exact: true })).toBeVisible()
       expect(orderWrites).toBe(1)
-      const verify = page.getByRole('button', { name: '检查支付结果' })
-      await verify.click()
+      completed = true
+      user.available_quota = '10201314'
+      user.quota_version = 2
+      await page.reload()
+      await expect(page.getByText('已完成', { exact: true })).toBeVisible()
+      await expect(page.getByText('待支付', { exact: true })).toHaveCount(0)
       await expect(
-        page.getByRole('alert').filter({ hasText: '模拟网关查询超时' })
+        page.getByText('10201314 quota', { exact: true })
       ).toBeVisible()
-      await verify.click()
-      await expect(page.getByText('支付已确认并到账。')).toBeVisible()
-      await expect(verify).toHaveCount(0)
-      expect(verificationWrites).toBe(2)
+      expect(unexpectedTopupWrites).toEqual([])
+      await assertNoHorizontalOverflow(page)
+      await records.screenshot({
+        path: testInfo.outputPath('epay-records-completed.png'),
+      })
+      await page.goto('/system-settings/billing/payment')
+      const settlementDescription = page.getByText(
+        '允许支付网关回调确认已有订单并入账。异常订单由网关重试通知，或由管理员复查后补单。关闭后暂停回调结算，与新单支付方式独立控制。'
+      )
+      await expect(settlementDescription).toBeVisible()
+      await settlementDescription.scrollIntoViewIfNeeded()
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
-        path: testInfo.outputPath('epay-wallet.png'),
+        path: testInfo.outputPath('epay-settings.png'),
         fullPage: true,
       })
       expect(errors).toEqual([])

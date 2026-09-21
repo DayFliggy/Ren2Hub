@@ -1781,12 +1781,6 @@ export default {
     retryQuote: 'Retry quote',
     quoteChanged:
       'The quote changed. Review the updated amount and click top up again.',
-    checkPayment: 'Check payment result',
-    paymentConfirmed: 'Payment confirmed and credited.',
-    paymentPending:
-      'Payment is still pending. You can check again in a minute.',
-    paymentCheckFailed:
-      'The payment result could not be checked. Please try again later.',
     summaryBalanceAfter: 'Balance after',
     redeemLimitOnce: 'Single use',
     redeemCount: '{count} redeemed',
@@ -2428,7 +2422,7 @@ export default {
   systemSettings: {
     epaySettlement: 'Enable Epay settlement',
     epaySettlementDescription:
-      'Allow callbacks and payment checks to credit existing orders. Disabling this pauses settlement independently of new payment methods.',
+      'Allow payment gateway callbacks to credit existing orders. Failed notifications are retried by the gateway, or an administrator can review and complete the order manually. Disabling this pauses callback settlement independently of new payment methods.',
     title: 'System Settings',
     breadcrumb: ['Admin', 'System Settings'],
     saved: 'Saved',

@@ -1742,10 +1742,6 @@ export default {
     quoteFailed: '无法获取支付报价，请重试。',
     retryQuote: '重新获取报价',
     quoteChanged: '报价已变化，请确认更新后的金额，再次点击充值。',
-    checkPayment: '检查支付结果',
-    paymentConfirmed: '支付已确认并到账。',
-    paymentPending: '订单仍待支付，可在一分钟后再次检查。',
-    paymentCheckFailed: '暂时无法检查支付结果，请稍后重试。',
     summaryBalanceAfter: '到账后余额',
     redeemLimitOnce: '限用一次',
     redeemCount: '已兑换 {count} 次',
@@ -2362,7 +2358,7 @@ export default {
   systemSettings: {
     epaySettlement: '启用易支付结算',
     epaySettlementDescription:
-      '允许回调和查单确认已有订单并入账。关闭后暂停结算，与新单支付方式独立控制。',
+      '允许支付网关回调确认已有订单并入账。异常订单由网关重试通知，或由管理员复查后补单。关闭后暂停回调结算，与新单支付方式独立控制。',
     title: '系统设置',
     breadcrumb: ['管理员', '系统设置'],
     saved: '已保存',

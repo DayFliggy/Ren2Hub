@@ -1,7 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/console'
-import { ApiError } from '@/api/types'
 import TopupRecords from '@/components/console/wallet/TopupRecords.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
@@ -35,45 +34,41 @@ async function render() {
     page: 1,
     pageSize: 6,
   })
-  const wrapper = mount(TopupRecords, { global: { plugins: [i18n] } })
+  const wrapper = mount(TopupRecords, {
+    props: { refreshKey: 0 },
+    global: { plugins: [i18n] },
+  })
   await flushPromises()
   return wrapper
 }
 
-describe('TopupRecords payment verification', () => {
-  it('keeps reads side-effect free and explicitly checks payment before refreshing the balance', async () => {
-    const post = vi
-      .spyOn(api, 'post')
-      .mockResolvedValue({ ...order, status: 'completed', quota: '5000000' })
+describe('TopupRecords', () => {
+  it('only reads order status and shows externally completed payments after refresh', async () => {
+    const post = vi.spyOn(api, 'post')
     const wrapper = await render()
-    expect(post).not.toHaveBeenCalled()
-    await wrapper
-      .findAll('button')
-      .find((button) => button.text() === 'Check payment result')!
-      .trigger('click')
-    await flushPromises()
-    expect(post).toHaveBeenCalledWith(
-      '/api/next/wallet/topups/USR1NOtest/verify',
-      undefined,
+    expect(api.get).toHaveBeenCalledWith(
+      '/api/next/wallet/topups',
+      { p: 1, page_size: 6 },
       { signal: expect.any(AbortSignal) }
     )
-    expect(wrapper.text()).toContain('Payment confirmed and credited')
-    expect(wrapper.emitted('done')).toHaveLength(1)
-    expect(wrapper.text()).not.toContain('Check payment result')
-    wrapper.unmount()
-  })
-
-  it('does not report success or change the order after a failed check', async () => {
-    vi.spyOn(api, 'post').mockRejectedValue(new ApiError('Gateway timed out'))
-    const wrapper = await render()
-    await wrapper
-      .findAll('button')
-      .find((button) => button.text() === 'Check payment result')!
-      .trigger('click')
-    await flushPromises()
-    expect(wrapper.get('[role="alert"]').text()).toBe('Gateway timed out')
     expect(wrapper.text()).toContain('Pending')
-    expect(wrapper.emitted('done')).toBeUndefined()
+    expect(wrapper.text()).toContain('Not credited')
+    expect(wrapper.text()).not.toContain('Check payment result')
+    expect(post).not.toHaveBeenCalled()
+
+    vi.mocked(api.get).mockResolvedValueOnce({
+      items: [{ ...order, status: 'completed', quota: '5000000' }],
+      total: 1,
+      page: 1,
+      pageSize: 6,
+    })
+    await wrapper.setProps({ refreshKey: 1 })
+    await flushPromises()
+    expect(api.get).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('Completed')
+    expect(wrapper.text()).toContain('$10.00')
+    expect(wrapper.text()).not.toContain('Pending')
+    expect(post).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })

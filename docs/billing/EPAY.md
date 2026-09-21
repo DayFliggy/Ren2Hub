@@ -30,26 +30,29 @@
 
 管理员强制补单保持现有权限与入口，不增加查单前置条件或必填理由；按快照中的 quota 入账。之后合法回调可补齐凭据，但不重复增加余额或返利。
 
-清空支付方式或更换当前商户仅影响新单。`payment_setting.epay_settlement_enabled` 默认 true，是独立结算开关；false 暂停回调和查单自动入账，管理员强制补单仍按原权限执行。资金事务先锁定同一设置行，再取得订单和钱包锁；暂停先提交时，在途回调/查单也不能入账，已取得设置锁的结算则先完成提交。
+清空支付方式或更换当前商户仅影响新单。`payment_setting.epay_settlement_enabled` 默认 true，是独立结算开关；false 暂停回调入账，管理员强制补单仍按原权限执行。资金事务先锁定同一设置行，再取得订单和钱包锁；暂停先提交时，在途回调也不能入账，已取得设置锁的结算则先完成提交。
 
-## 漏通知恢复
+## 异常处理与补单
 
-本人订单可调用 `POST /api/next/wallet/topups/:order_no/verify`，须 URL 编码订单号。服务端校验归属；普通 GET 列表/详情保持只读。查询遵循[易支付 V1 查单契约](https://pay.yzfpay.com/doc/v1_legacy_api.html)，使用订单版本向 HTTPS `api.php` 发送 GET 请求，查询参数为 `act=order`、`pid`、`key`、`out_trade_no`。协议要求密钥位于 URL 查询参数，因此禁止记录查单 URL 或传播原始网络错误，只保留脱敏错误分类。超时 10 秒、响应上限 1 MiB、禁止重定向。
+Ren2Hub 不主动向支付网关查询订单，不提供用户手动验付和后台查单恢复。原 `POST /api/next/wallet/topups/:order_no/verify` 返回 404，`epay_recovery` 不再注册或调度；订单列表、详情和页面刷新仅查询本站已保存状态。
 
-只接受标准顶层 `code=1`、`status=0/1` 与 `pid/out_trade_no/trade_no/type/money`；不猜测 `data`、`trade_status` 等方言。身份、订单与金额不符拒绝入账。网络错误及无法确认的响应返回明确失败，不视为未付款。合法未付款响应保持 pending，合法成功响应进入与回调相同的结算函数。
+通知丢失或处理失败时，由外部支付网关重试通知。回调参数、签名或金额无效、结算暂停、资金事务失败时返回 `fail`；合法成功通知完成入账或确认同一凭据已处理后返回 `success`。事务失败不留下部分余额、流水或成功凭据，网关可以再次发送同一通知。
 
-`epay_recovery` 复用系统任务数据库租约，每分钟最多处理 20 笔近 7 天待支付订单，并发最多 2。自动与手动查单共享订单级 30 秒租约和至少 60 秒请求间隔，失败/未支付后的退避为 1、5、15、60 分钟。记录查询时间及固定错误分类，不保存原始上游响应。超过 7 天保持 pending，仍接受合法回调及受控手动查单。
+仍未入账的异常订单由管理员在外部网关复查，确认付款后使用现有补单入口，按冻结快照入账。补单后的合法通知可以补齐交易凭据；重复通知、重复补单及两者并发都不能重复充值或返利。没有收到有效通知、也未补单的订单继续保持 pending。
+
+查单客户端、订单检查租约与退避逻辑已移除。已有数据库中的旧检查列和系统任务历史不删除，新代码不再读写这些字段或执行旧恢复任务。
 
 ## 验证入口
 
 后端测试必须带 `-timeout 60s`：
 
 ```powershell
-go test ./pkg/epay ./service ./controller ./model ./middleware ./setting/operation_setting -timeout 60s
+go test ./pkg/epay ./service ./controller ./model ./router ./middleware ./setting/operation_setting -timeout 60s
 go test ./model -run TestEpayMigrationsAndConcurrentSettlementAcrossDatabases -v -timeout 60s
-go test ./service -run 'TestEpayLocalGateway' -v -timeout 60s
+go test ./controller -run TestEpayGatewayRetriesAfterSettlementFailure -v -timeout 60s
+go test ./router -run TestRetiredEpayVerificationReturnsNotFound -v -timeout 60s
 ```
 
-三库测试使用独立测试数据库；MySQL/PostgreSQL 分别由 `GATEWAY_STARTUP_MYSQL_DSN`、`GATEWAY_STARTUP_POSTGRES_DSN` 指定。缺失环境时测试显式跳过，不能称为该数据库验收通过。TLS 模拟网关覆盖下单、通知与查单竞争、漏通知批量恢复，全部在本地运行，不触发真实支付。
+三库测试使用独立测试数据库；MySQL/PostgreSQL 分别由 `GATEWAY_STARTUP_MYSQL_DSN`、`GATEWAY_STARTUP_POSTGRES_DSN` 指定。缺失环境时测试显式跳过，不能称为该数据库验收通过。回归覆盖回调失败后重试、暂停后恢复接收通知、管理员补单与重复通知、事务回滚和旧验付接口退休，不触发真实支付。根工作区的独立模拟网关提供真实 HTTP 验收入口。
 
 当次执行结果与未完成项见 [易支付验证记录](EPAY_VALIDATION.md)。

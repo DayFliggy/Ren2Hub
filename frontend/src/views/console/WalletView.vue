@@ -240,10 +240,7 @@ onMounted(() => void loadStats())
     <div class="space-y-6">
       <BillingHistory :refresh-key="refreshKey" />
       <FlowChart :flow="flow" />
-      <TopupRecords
-        v-model:refresh-key="refreshKey"
-        @done="handlePaymentDone"
-      />
+      <TopupRecords :refresh-key="refreshKey" />
     </div>
   </div>
 </template>

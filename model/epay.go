@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/google/uuid"
@@ -24,7 +23,7 @@ type EpayMerchantVersion struct {
 	Key         string `json:"-" gorm:"type:text;not null"`
 }
 
-// Quote fields are immutable. Only receipt and query scheduling fields change.
+// Quote fields are immutable. Only the gateway receipt changes after creation.
 type EpayOrder struct {
 	TopUpID           int          `json:"-" gorm:"primaryKey;autoIncrement:false"`
 	MerchantVersionID string       `json:"-" gorm:"size:36;not null"`
@@ -39,12 +38,6 @@ type EpayOrder struct {
 	GroupRatio        string       `json:"group_ratio" gorm:"size:64;not null"`
 	Discount          string       `json:"discount" gorm:"size:64;not null"`
 	QuoteFingerprint  string       `json:"quote_fingerprint" gorm:"size:64;not null"`
-	NextCheckAt       int64        `json:"-" gorm:"index;not null;default:0"`
-	CheckedAt         int64        `json:"checked_at" gorm:"not null;default:0"`
-	CheckAttempts     int          `json:"-" gorm:"not null;default:0"`
-	LeaseToken        string       `json:"-" gorm:"size:36"`
-	LeaseUntil        int64        `json:"-" gorm:"not null;default:0"`
-	LastCheckError    string       `json:"last_check_error,omitempty" gorm:"size:64"`
 }
 
 type EpayPayment struct {
@@ -58,7 +51,6 @@ type EpayPayment struct {
 
 var ErrEpayPaymentMismatch = errors.New("payment does not match the order")
 var ErrEpaySnapshotMissing = errors.New("epay order snapshot is missing")
-var ErrEpayCheckThrottled = errors.New("payment check is already running or was requested recently")
 var ErrEpayMerchantUnavailable = errors.New("epay merchant version is unavailable")
 var ErrEpaySettlementPaused = errors.New("epay settlement is paused")
 
@@ -98,7 +90,6 @@ func CreateEpayOrder(ctx context.Context, topUp *TopUp, snapshot *EpayOrder, mer
 		snapshot.TopUpID = topUp.Id
 		snapshot.MerchantVersionID = merchant.ID
 		snapshot.AccountID = merchant.AccountID
-		snapshot.NextCheckAt = topUp.CreateTime + 60
 		return tx.Create(snapshot).Error
 	})
 }
@@ -131,40 +122,4 @@ func loadEpayMerchantVersion(tx *gorm.DB, id string) (*EpayMerchantVersion, erro
 		return nil, ErrEpayMerchantUnavailable
 	}
 	return &merchant, nil
-}
-
-func ClaimEpayCheck(ctx context.Context, id int, now int64) (string, error) {
-	token := uuid.NewString()
-	result := DB.WithContext(ctx).Model(&EpayOrder{}).Where("top_up_id = ? AND lease_until <= ? AND checked_at <= ?", id, now, now-60).
-		Updates(map[string]any{"lease_token": token, "lease_until": now + 30, "checked_at": now})
-	if result.Error != nil {
-		return "", result.Error
-	}
-	if result.RowsAffected != 1 {
-		return "", ErrEpayCheckThrottled
-	}
-	return token, nil
-}
-
-func FinishEpayCheck(ctx context.Context, id int, token string, errorCode string, now int64) error {
-	return BillingTransaction(ctx, func(tx *gorm.DB) error {
-		var order EpayOrder
-		if err := lockForUpdate(tx).Where("top_up_id = ? AND lease_token = ?", id, token).First(&order).Error; err != nil {
-			return err
-		}
-		delays := []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute, time.Hour}
-		index := order.CheckAttempts
-		if index >= len(delays) {
-			index = len(delays) - 1
-		}
-		return tx.Model(&order).Updates(map[string]any{"check_attempts": order.CheckAttempts + 1, "next_check_at": now + int64(delays[index].Seconds()), "last_check_error": errorCode, "lease_token": "", "lease_until": 0}).Error
-	})
-}
-
-func PendingEpayChecks(ctx context.Context, now int64, limit int) ([]TopUp, error) {
-	var orders []TopUp
-	err := DB.WithContext(ctx).Model(&TopUp{}).Select("top_ups.*").Joins("JOIN epay_orders ON epay_orders.top_up_id = top_ups.id").
-		Where("top_ups.payment_provider = ? AND top_ups.status = ? AND top_ups.create_time >= ? AND epay_orders.next_check_at <= ? AND epay_orders.lease_until <= ? AND epay_orders.checked_at <= ?", PaymentProviderEpay, common.TopUpStatusPending, now-7*24*3600, now, now, now-60).
-		Order("epay_orders.next_check_at ASC").Limit(limit).Find(&orders).Error
-	return orders, err
 }

@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
 import { ApiError, type PageResult } from '@/api/types'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
@@ -19,8 +18,7 @@ import {
 import type { AdminOrder } from '@/types/console'
 import { formatQuota, formatTime } from '@/utils/format'
 
-const refreshKey = defineModel<number>('refreshKey', { default: 0 })
-const emit = defineEmits<{ done: [] }>()
+const props = defineProps<{ refreshKey: number }>()
 
 const { t } = useI18n()
 const toast = useToast()
@@ -31,53 +29,6 @@ const page = ref(1)
 const pageSize = ref(6)
 const loading = ref(true)
 const listRequest = useLatestRequest()
-const checking = ref(new Set<string>())
-const checkMessages = ref<Record<string, { text: string; failed: boolean }>>({})
-const checkControllers = new Map<string, AbortController>()
-
-async function verify(row: AdminOrder): Promise<void> {
-  if (checking.value.has(row.order_no)) return
-  checking.value.add(row.order_no)
-  delete checkMessages.value[row.order_no]
-  const controller = new AbortController()
-  checkControllers.set(row.order_no, controller)
-  try {
-    const updated = await api.post<AdminOrder>(
-      `/api/next/wallet/topups/${encodeURIComponent(row.order_no)}/verify`,
-      undefined,
-      { signal: controller.signal }
-    )
-    if (controller.signal.aborted) return
-    if (!updated || updated.order_no !== row.order_no) {
-      throw new Error('Invalid order response')
-    }
-    rows.value = rows.value.map((item) =>
-      item.order_no === row.order_no ? updated : item
-    )
-    checkMessages.value[row.order_no] = {
-      text: t(
-        updated.status === 'completed'
-          ? 'wallet.paymentConfirmed'
-          : 'wallet.paymentPending'
-      ),
-      failed: false,
-    }
-    if (updated.status === 'completed') emit('done')
-  } catch (error) {
-    if (!controller.signal.aborted) {
-      checkMessages.value[row.order_no] = {
-        text:
-          error instanceof ApiError
-            ? error.message
-            : t('wallet.paymentCheckFailed'),
-        failed: true,
-      }
-    }
-  } finally {
-    checkControllers.delete(row.order_no)
-    checking.value.delete(row.order_no)
-  }
-}
 
 async function load() {
   loading.value = true
@@ -109,11 +60,8 @@ function reloadFromFirstPage() {
 
 watch(pageSize, reloadFromFirstPage)
 watch(page, load)
-watch(refreshKey, load)
+watch(() => props.refreshKey, load)
 onMounted(load)
-onUnmounted(() => {
-  for (const controller of checkControllers.values()) controller.abort()
-})
 </script>
 
 <template>
@@ -148,31 +96,6 @@ onUnmounted(() => {
             {{ t(adminOrderStatusLabelKey(row.status)) }}
           </StatusChip>
         </div>
-        <div
-          v-if="row.method === 'epay' && row.status === 'pending'"
-          class="w-full"
-        >
-          <ConsoleButton
-            variant="secondary"
-            size="sm"
-            :loading="checking.has(row.order_no)"
-            @click="verify(row)"
-          >
-            {{ t('wallet.checkPayment') }}
-          </ConsoleButton>
-        </div>
-        <p
-          v-if="checkMessages[row.order_no]"
-          :role="checkMessages[row.order_no]?.failed ? 'alert' : 'status'"
-          class="w-full break-words text-xs"
-          :class="
-            checkMessages[row.order_no]?.failed
-              ? 'text-[var(--danger-text)]'
-              : 'text-[var(--text-secondary)]'
-          "
-        >
-          {{ checkMessages[row.order_no]?.text }}
-        </p>
       </li>
       <li
         v-if="!loading && rows.length === 0"

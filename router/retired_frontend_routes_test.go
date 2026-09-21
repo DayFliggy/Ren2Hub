@@ -48,3 +48,10 @@ func TestRetiredPlanAPIsReturnNotFound(t *testing.T) {
 		})
 	}
 }
+
+func TestRetiredEpayVerificationReturnsNotFound(t *testing.T) {
+	engine := newWebTestRouter(t, testWebAssets("vue-index"), "", true)
+	response := serveWebRequest(engine, http.MethodPost, "/api/next/wallet/topups/pending-order/verify")
+	assert.Equal(t, http.StatusNotFound, response.Code)
+	assert.Contains(t, response.Header().Get("Content-Type"), "application/json")
+}

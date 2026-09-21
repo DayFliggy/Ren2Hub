@@ -18,7 +18,7 @@
 | 协议转换 | [支持矩阵](routing/GATEWAY_SUPPORT_MATRIX.md)、[RelayKit](../relaykit/README.md) | 已验证协议、独立模块、转换路径及边界 |
 | 历史修复证据 | [网关复评](routing/GATEWAY_REVIEW_FIXES_2026_09_18.md)、[协议与路由验收](routing/PROTOCOL_ROUTING_ACCEPTANCE_2026_09_18.md) | 已完成修复、正式回归、固定参考版本和当时的验证边界 |
 | 表达式计费 | [计费表达式](../pkg/billingexpr/expr.md) | 计费表达式及实现入口；渠道倍率以统一路由为准 |
-| 易支付充值 | [支付契约](billing/EPAY.md)、[验证记录](billing/EPAY_VALIDATION.md) | 精确报价、订单快照、商户版本、验付及漏通知恢复 |
+| 易支付充值 | [支付契约](billing/EPAY.md)、[验证记录](billing/EPAY_VALIDATION.md) | 精确报价、订单快照、商户版本、网关通知重试及管理员补单 |
 
 ## 源码阅读顺序
 

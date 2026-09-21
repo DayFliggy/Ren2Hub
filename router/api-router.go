@@ -202,7 +202,6 @@ func SetApiRouter(router *gin.Engine) {
 				// pricing, and order persistence cannot diverge.
 				walletRoute.POST("/topup", middleware.CriticalRateLimit(), controller.NextCreateEpayTopUp)
 				walletRoute.POST("/topup/quote", middleware.CriticalRateLimit(), controller.NextQuoteEpayTopUp)
-				walletRoute.POST("/topups/:order_no/verify", middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("epay-verify"), controller.NextVerifyEpayTopUp)
 				walletRoute.GET("/topups", controller.NextListUserOrders)
 				walletRoute.GET("/topups/:order_no", controller.NextGetUserOrder)
 			}

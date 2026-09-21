@@ -213,49 +213,6 @@ func TestEpayReceiptAndAffiliateRollbackWithFailedCredit(t *testing.T) {
 	assert.Zero(t, count)
 }
 
-func TestEpayCheckLeaseRecoveryBackoffAndWindow(t *testing.T) {
-	db := useWalletIngressDB(t)
-	ctx := context.Background()
-	now := time.Now().Unix()
-	order := TopUp{UserId: 1, TradeNo: "lease-order", PaymentProvider: PaymentProviderEpay, Status: common.TopUpStatusPending, CreateTime: now - 120}
-	insertEpaySnapshotTestOrder(t, &order, 750_000, "test-key")
-	firstToken, err := ClaimEpayCheck(ctx, order.Id, now)
-	require.NoError(t, err)
-	_, err = ClaimEpayCheck(ctx, order.Id, now+59)
-	require.ErrorIs(t, err, ErrEpayCheckThrottled)
-	orders, err := PendingEpayChecks(ctx, now+59, 20)
-	require.NoError(t, err)
-	assert.Empty(t, orders, "expired leases still obey the minimum query interval")
-	secondToken, err := ClaimEpayCheck(ctx, order.Id, now+60)
-	require.NoError(t, err)
-	require.ErrorIs(t, FinishEpayCheck(ctx, order.Id, firstToken, "stale", now+60), gorm.ErrRecordNotFound)
-	for i, delay := range []int64{60, 300, 900, 3600} {
-		checkedAt := now + 60
-		token := secondToken
-		if i > 0 {
-			var previous EpayOrder
-			require.NoError(t, db.First(&previous, order.Id).Error)
-			checkedAt = previous.NextCheckAt
-			token, err = ClaimEpayCheck(ctx, order.Id, checkedAt)
-			require.NoError(t, err)
-		}
-		require.NoError(t, FinishEpayCheck(ctx, order.Id, token, "network", checkedAt))
-		var snapshot EpayOrder
-		require.NoError(t, db.First(&snapshot, order.Id).Error)
-		assert.Equal(t, checkedAt+delay, snapshot.NextCheckAt)
-		assert.Equal(t, "network", snapshot.LastCheckError)
-		assert.Empty(t, snapshot.LeaseToken)
-		assert.Zero(t, snapshot.LeaseUntil)
-	}
-	old := TopUp{UserId: 1, TradeNo: "old-pending-order", PaymentProvider: PaymentProviderEpay, Status: common.TopUpStatusPending, CreateTime: now - 8*24*3600}
-	insertEpaySnapshotTestOrder(t, &old, 750_000, "test-key")
-	orders, err = PendingEpayChecks(ctx, now, 20)
-	require.NoError(t, err)
-	assert.Empty(t, orders)
-	_, err = ClaimEpayCheck(ctx, old.Id, now)
-	require.NoError(t, err, "orders outside the automatic window remain manually checkable")
-}
-
 func TestEpayMigrationsAndConcurrentSettlementAcrossDatabases(t *testing.T) {
 	for _, backend := range []struct {
 		kind common.DatabaseType
@@ -287,6 +244,18 @@ func TestEpayMigrationsAndConcurrentSettlementAcrossDatabases(t *testing.T) {
 			require.NoError(t, db.AutoMigrate(&User{}, &BillingEvent{}, &TopUp{}, &AffiliateLedger{}, &Log{}, &Option{}))
 			preserved := TopUp{UserId: 99, TradeNo: "preserved-payment", PaymentProvider: PaymentProviderStripe, Status: common.TopUpStatusSuccess, CreditedQuota: 2_000_000}
 			require.NoError(t, db.Create(&preserved).Error)
+			// Existing installations retain retired check columns. New orders and
+			// callback/manual settlement must still work with their old constraints.
+			legacyOrderSchema := struct {
+				EpayOrder
+				NextCheckAt    int64  `gorm:"index;not null;default:0"`
+				CheckedAt      int64  `gorm:"not null;default:0"`
+				CheckAttempts  int    `gorm:"not null;default:0"`
+				LeaseToken     string `gorm:"size:36"`
+				LeaseUntil     int64  `gorm:"not null;default:0"`
+				LastCheckError string `gorm:"size:64"`
+			}{}
+			require.NoError(t, db.Table("epay_orders").AutoMigrate(&legacyOrderSchema))
 			require.NoError(t, db.AutoMigrate(&EpayOrder{}, &EpayMerchantVersion{}))
 			require.NoError(t, db.AutoMigrate(&EpayOrder{}, &EpayMerchantVersion{}))
 			require.NoError(t, db.First(&preserved, preserved.Id).Error)
