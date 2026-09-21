@@ -155,6 +155,27 @@ func TestValidateOptionPatchRejectsInvalidStructuredSettings(t *testing.T) {
 	assert.Error(t, validateOptionPatch(map[string]string{"FileUploadPermission": "2"}))
 }
 
+func TestUpdateOptionsBulkRejectsInvalidEpayPricing(t *testing.T) {
+	withOptionMap(t, map[string]string{"Price": "7.3", "TopupGroupRatio": `{"default":1}`})
+	for _, body := range []string{
+		`{"options":{"Price":0}}`,
+		`{"options":{"Price":"NaN"}}`,
+		`{"options":{"TopupGroupRatio":"{\"default\":-1}"}}`,
+	} {
+		response := httptest.NewRecorder()
+		context, _ := gin.CreateTestContext(response)
+		context.Request = httptest.NewRequest(http.MethodPut, "/api/option/bulk", strings.NewReader(body))
+		UpdateOptionsBulk(context)
+		var payload struct {
+			Success bool `json:"success"`
+		}
+		require.NoError(t, common.Unmarshal(response.Body.Bytes(), &payload))
+		assert.False(t, payload.Success, body)
+	}
+	assert.Equal(t, "7.3", common.OptionMap["Price"])
+	assert.Equal(t, `{"default":1}`, common.OptionMap["TopupGroupRatio"])
+}
+
 func TestValidateOptionPatchRejectsRetiredPricing(t *testing.T) {
 	for _, key := range []string{"ModelRatio", "ModelPrice", "CompletionRatio", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "billing_setting.billing_expr", "billing_setting.billing_mode", "auto_pricing.models_dev_url", "QuotaPerUnit"} {
 		t.Run(key, func(t *testing.T) {

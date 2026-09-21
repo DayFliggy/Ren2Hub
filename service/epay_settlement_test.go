@@ -114,3 +114,40 @@ func TestEpayExistingQuoteInvalidatesWhenMethodOrMinimumChanges(t *testing.T) {
 		})
 	}
 }
+
+func TestEpayPricingRejectsInvalidSaveWithoutChangingCheckout(t *testing.T) {
+	db := epayServiceTestDB(t, "https://pay.example.test")
+	setEpayTestOption(t, db, "TopupGroupRatio", `{"default":1}`)
+	request := EpayQuoteRequest{Amount: 10, AmountUnit: "USD", PaymentMethod: "alipay"}
+	before, _, err := QuoteEpay(context.Background(), 1, request)
+	require.NoError(t, err)
+	for _, patch := range []map[string]string{
+		{"Price": "0", "MinTopUp": "2"},
+		{"Price": "-1"},
+		{"Price": "1e2147483647"},
+		{"TopupGroupRatio": `{"default":0}`, "MinTopUp": "2"},
+		{"TopupGroupRatio": `{"default":-1}`},
+	} {
+		require.Error(t, model.UpdateOptionsBulk(patch))
+		after, _, err := QuoteEpay(context.Background(), 1, request)
+		require.NoError(t, err)
+		assert.Equal(t, before.QuoteFingerprint, after.QuoteFingerprint)
+		assert.Equal(t, "73.00", after.PayAmount)
+		assert.EqualValues(t, 1, after.MinTopUp)
+	}
+}
+
+func TestEpayPricingRejectsInvalidPersistedConfiguration(t *testing.T) {
+	for _, option := range []struct{ key, value string }{
+		{"Price", "0"},
+		{"Price", "1e2147483647"},
+		{"TopupGroupRatio", `{"default":-1}`},
+	} {
+		t.Run(option.key+option.value, func(t *testing.T) {
+			db := epayServiceTestDB(t, "https://pay.example.test")
+			setEpayTestOption(t, db, option.key, option.value)
+			_, err := LoadEpayConfig(context.Background())
+			require.Error(t, err)
+		})
+	}
+}

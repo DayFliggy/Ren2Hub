@@ -141,3 +141,39 @@ func TestEpayGatewayRetriesAfterSettlementFailure(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminEpayCompletionAuditIdentifiesOrderAndOperator(t *testing.T) {
+	db := setupEpayControllerTestDB(t)
+	require.NoError(t, db.Create(&model.User{Id: 2, Username: "payment-admin", AffCode: "payment-admin", Role: common.RoleAdminUser, Status: common.UserStatusEnabled}).Error)
+	order, err := service.CreateEpayTopUp(context.Background(), 1, service.EpayQuoteRequest{Amount: 1, AmountUnit: "USD", PaymentMethod: "alipay"})
+	require.NoError(t, err)
+	body, err := common.Marshal(AdminCompleteTopupRequest{TradeNo: order.Order.TradeNo})
+	require.NoError(t, err)
+	gin.SetMode(gin.TestMode)
+	for range 2 {
+		response := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(response)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/user/topup/complete", strings.NewReader(string(body)))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("id", 2)
+		c.Set("username", "payment-admin")
+		c.Set("role", common.RoleAdminUser)
+		AdminCompleteTopUp(c)
+		assert.Equal(t, http.StatusOK, response.Code)
+		assert.JSONEq(t, `{"success":true,"message":"","data":null}`, response.Body.String())
+	}
+	var entries []model.Log
+	require.NoError(t, db.Where("type = ?", model.LogTypeManage).Order("id").Find(&entries).Error)
+	require.Len(t, entries, 2, "each successful administrative request must identify the target order")
+	for _, entry := range entries {
+		audit := buildOperationLogDTO(&entry)
+		assert.Equal(t, "user.topup_complete", audit.Action)
+		assert.Equal(t, "payment-admin", audit.Actor.Username)
+		assert.Equal(t, 2, entry.UserId)
+		assert.Equal(t, order.Order.TradeNo, audit.Params["trade_no"])
+		assert.Contains(t, audit.Content, order.Order.TradeNo)
+	}
+	var events int64
+	require.NoError(t, db.Model(&model.BillingEvent{}).Count(&events).Error)
+	assert.EqualValues(t, 1, events, "repeated completion must only credit once")
+}

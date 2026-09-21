@@ -265,11 +265,6 @@ func validateJSON(value string) error {
 	return common.UnmarshalJsonStr(value, &decoded)
 }
 
-func validateRatioMap(value string) error {
-	var ratios map[string]float64
-	return common.UnmarshalJsonStr(value, &ratios)
-}
-
 func validateStringMap(value string, name string) error {
 	var values map[string]string
 	if err := common.UnmarshalJsonStr(value, &values); err != nil || values == nil {
@@ -486,8 +481,12 @@ func validateOptionPatch(values map[string]string) error {
 			if err != nil || !common.IsValidateRole(role) {
 				return fmt.Errorf("文件访问权限角色无效")
 			}
+		case "Price":
+			if _, err := operation_setting.ParseEpayPrice(value); err != nil {
+				return err
+			}
 		case "TopupGroupRatio":
-			if err := validateRatioMap(value); err != nil {
+			if _, err := operation_setting.ParseEpayGroupRatios(value); err != nil {
 				return err
 			}
 		case "gemini.safety_settings":

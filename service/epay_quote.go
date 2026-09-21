@@ -76,12 +76,13 @@ func LoadEpayConfig(ctx context.Context) (*EpayConfig, error) {
 	if _, err = operation_setting.EpayMinimumUSD(config.MinTopUp, nil); err != nil {
 		return nil, err
 	}
-	config.Price, err = decimal.NewFromString(values["Price"])
-	if err != nil || !config.Price.IsPositive() {
-		return nil, errors.New("invalid epay price")
+	config.Price, err = operation_setting.ParseEpayPrice(values["Price"])
+	if err != nil {
+		return nil, err
 	}
-	if err = common.UnmarshalJsonStr(values["TopupGroupRatio"], &config.Ratios); err != nil {
-		return nil, errors.New("invalid topup ratios")
+	config.Ratios, err = operation_setting.ParseEpayGroupRatios(values["TopupGroupRatio"])
+	if err != nil {
+		return nil, err
 	}
 	if err = common.UnmarshalJsonStr(values["payment_setting.amount_discount"], &config.Discounts); err != nil {
 		return nil, errors.New("invalid topup discounts")

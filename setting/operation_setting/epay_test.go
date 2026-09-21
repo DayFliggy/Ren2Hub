@@ -30,3 +30,24 @@ func TestEpayMethodsRejectInvalidConfiguration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, methods)
 }
+
+func TestEpayPricingRejectsUnusableValues(t *testing.T) {
+	for _, raw := range []string{"", "0", "-1", "NaN", "Inf", "1e1000", "1e2147483647", "1e-1000", "1e64", "1e-64"} {
+		_, err := ParseEpayPrice(raw)
+		require.Error(t, err, raw)
+	}
+	price, err := ParseEpayPrice("7.300000000000000001")
+	require.NoError(t, err)
+	assert.Equal(t, "7.300000000000000001", price.String())
+	for _, raw := range []string{`null`, `[]`, `{"default":0}`, `{"default":-1}`, `{"default":null}`, `{"default":"1"}`, `{"default":1e1000}`, `{"default":1e-1000}`} {
+		_, err := ParseEpayGroupRatios(raw)
+		require.Error(t, err, raw)
+	}
+	ratios, err := ParseEpayGroupRatios(`{"default":1.000000000000000001,"vip":0.9}`)
+	require.NoError(t, err)
+	assert.Equal(t, "1.000000000000000001", ratios["default"].String())
+	assert.Equal(t, "0.9", ratios["vip"].String())
+	ratios, err = ParseEpayGroupRatios(`{}`)
+	require.NoError(t, err)
+	assert.Empty(t, ratios)
+}
