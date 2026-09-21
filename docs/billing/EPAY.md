@@ -34,7 +34,7 @@
 
 ## 漏通知恢复
 
-本人订单可调用 `POST /api/next/wallet/topups/:order_no/verify`，须 URL 编码订单号。服务端校验归属；普通 GET 列表/详情保持只读。查询使用订单版本向 HTTPS `api.php` 提交 `act=order`、`pid`、`key`、`out_trade_no`，密钥放表单体，不放 URL。超时 10 秒、响应上限 1 MiB、禁止重定向。
+本人订单可调用 `POST /api/next/wallet/topups/:order_no/verify`，须 URL 编码订单号。服务端校验归属；普通 GET 列表/详情保持只读。查询遵循[易支付 V1 查单契约](https://pay.yzfpay.com/doc/v1_legacy_api.html)，使用订单版本向 HTTPS `api.php` 发送 GET 请求，查询参数为 `act=order`、`pid`、`key`、`out_trade_no`。协议要求密钥位于 URL 查询参数，因此禁止记录查单 URL 或传播原始网络错误，只保留脱敏错误分类。超时 10 秒、响应上限 1 MiB、禁止重定向。
 
 只接受标准顶层 `code=1`、`status=0/1` 与 `pid/out_trade_no/trade_no/type/money`；不猜测 `data`、`trade_status` 等方言。身份、订单与金额不符拒绝入账。网络错误及无法确认的响应返回明确失败，不视为未付款。合法未付款响应保持 pending，合法成功响应进入与回调相同的结算函数。
 

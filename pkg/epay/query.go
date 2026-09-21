@@ -51,11 +51,12 @@ func (client *Client) QueryOrder(ctx context.Context, config Config, orderNo str
 		return nil, ErrInvalidParameters
 	}
 	params := url.Values{"act": {"order"}, "pid": {config.MerchantID}, "key": {config.Key}, "out_trade_no": {orderNo}}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api.php", strings.NewReader(params.Encode()))
+	// The V1 api.php contract reads query parameters, including the merchant
+	// key. Never propagate the credential-bearing URL into errors or logs.
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api.php?"+params.Encode(), nil)
 	if err != nil {
 		return nil, ErrQueryFailed
 	}
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	transport := defaultClient.httpClient
 	if client != nil && client.httpClient != nil {
 		transport = client.httpClient

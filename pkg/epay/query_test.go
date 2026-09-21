@@ -18,17 +18,14 @@ func TestQueryOrderTLSProtocol(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Equal(t, "/gateway/api.php", r.URL.Path)
-		if !assert.NoError(t, r.ParseForm()) {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		assert.Equal(t, "order", r.PostForm.Get("act"))
-		assert.Equal(t, "1001", r.PostForm.Get("pid"))
-		assert.Equal(t, "test-secret", r.PostForm.Get("key"))
-		assert.Equal(t, "order-456", r.PostForm.Get("out_trade_no"))
-		assert.Empty(t, r.URL.RawQuery, "merchant key must stay out of request URL")
+		params := r.URL.Query()
+		assert.Equal(t, "order", params.Get("act"))
+		assert.Equal(t, "1001", params.Get("pid"))
+		assert.Equal(t, "test-secret", params.Get("key"))
+		assert.Equal(t, "order-456", params.Get("out_trade_no"))
+		assert.Zero(t, r.ContentLength, "V1 queries use URL parameters, not a form body")
 		_, _ = io.WriteString(w, `{"code":1,"pid":1001,"out_trade_no":"order-456","trade_no":"gateway-123","type":"alipay","money":"10.20","status":1}`)
 	}))
 	defer server.Close()

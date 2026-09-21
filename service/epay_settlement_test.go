@@ -122,10 +122,10 @@ func TestEpayExistingQuoteInvalidatesWhenMethodOrMinimumChanges(t *testing.T) {
 func TestEpayPauseDuringGatewayQueryPreventsSettlement(t *testing.T) {
 	var db *gorm.DB
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.NoError(t, r.ParseForm())
+		assert.Equal(t, http.MethodGet, r.Method)
 		err := db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&model.Option{Key: "payment_setting.epay_settlement_enabled", Value: "false"}).Error
 		assert.NoError(t, err)
-		body, err := common.Marshal(map[string]any{"code": 1, "status": 1, "pid": "1", "out_trade_no": r.PostForm.Get("out_trade_no"), "trade_no": "gateway-paused", "type": "alipay", "money": "7.30"})
+		body, err := common.Marshal(map[string]any{"code": 1, "status": 1, "pid": "1", "out_trade_no": r.URL.Query().Get("out_trade_no"), "trade_no": "gateway-paused", "type": "alipay", "money": "7.30"})
 		assert.NoError(t, err)
 		_, _ = w.Write(body)
 	}))
@@ -152,11 +152,11 @@ func TestEpayPauseDuringGatewayQueryPreventsSettlement(t *testing.T) {
 func TestEpayLocalGatewayQueryCallbackRace(t *testing.T) {
 	started, release := make(chan struct{}, 1), make(chan struct{})
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.NoError(t, r.ParseForm())
-		assert.Equal(t, "test-only-key", r.PostForm.Get("key"))
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "test-only-key", r.URL.Query().Get("key"))
 		started <- struct{}{}
 		<-release
-		body, err := common.Marshal(map[string]any{"code": 1, "status": 1, "pid": "1", "out_trade_no": r.PostForm.Get("out_trade_no"), "trade_no": "gateway-race", "type": "alipay", "money": "7.30"})
+		body, err := common.Marshal(map[string]any{"code": 1, "status": 1, "pid": "1", "out_trade_no": r.URL.Query().Get("out_trade_no"), "trade_no": "gateway-race", "type": "alipay", "money": "7.30"})
 		assert.NoError(t, err)
 		_, _ = w.Write(body)
 	}))
@@ -229,8 +229,8 @@ func TestEpayLocalGatewayMissedNotificationRecovery(t *testing.T) {
 			}
 		}
 		calls.Add(1)
-		assert.NoError(t, r.ParseForm())
-		orderNo := r.PostForm.Get("out_trade_no")
+		assert.Equal(t, http.MethodGet, r.Method)
+		orderNo := r.URL.Query().Get("out_trade_no")
 		body, err := common.Marshal(map[string]any{"code": 1, "status": 1, "pid": "1", "out_trade_no": orderNo, "trade_no": "gw-" + orderNo, "type": "alipay", "money": "7.30"})
 		assert.NoError(t, err)
 		_, _ = w.Write(body)
