@@ -1,12 +1,12 @@
 # 网关协议支持与验证边界
 
-本矩阵维护源码中的协议能力与专项测试边界，最近整理于 2026-09-18。能力来自 `pkg/relaycapability`，预览和执行共用 `PlanChannelConversion`，宿主合同为 v12。“原生”表示宿主具备该协议入口，不保证所有上游模型、端点和账号提供相同功能。表内已有专项证据不表示所有套件在最新提交重跑；本轮实测范围和当前容器版本见 [验收记录](SINGLE_INSTANCE_ACCEPTANCE.md)。
+本矩阵维护源码中的协议能力与专项测试边界。能力来自 `pkg/relaycapability`，预览和执行共用 `PlanChannelConversion`，宿主合同为 v12。“原生”表示宿主具备该协议入口，不保证所有上游模型、端点和账号提供相同功能。表内专项执行记录来自 2026-09-18 协议复审，不表示全部套件在最新提交重跑，也不替代后续账务格式验证。版本范围见[网关与协议验证证据](SINGLE_INSTANCE_ACCEPTANCE.md)，实际容器状态由所属工作区服务器档案维护。
 
 ## 文本入口
 
-2026-09-18 的首次交付和两轮复审合并为[协议与路由修复验收](PROTOCOL_ROUTING_ACCEPTANCE_2026_09_18.md)，保留当时的本地模拟验证范围，不代表应用部署。工具媒体现采用直接有序历史转换；缺失／重复调用 ID、不能表达的失败状态或图片 detail 不会因 `allow` 而放行。多候选响应必须逐个结束，不能由首个候选的 stop 证明整个请求完成。
+已执行范围按版本保留在[网关与协议验证证据](SINGLE_INSTANCE_ACCEPTANCE.md)，不代表当前全部套件重测或应用部署。工具媒体采用直接有序历史转换；缺失／重复调用 ID、不能表达的失败状态或图片 detail 不会因 `allow` 而放行。多候选响应必须逐个结束，不能由首个候选的 stop 证明整个请求完成。
 
-| 新增语义合同 | 支持范围与拒绝边界 |
+| 语义合同 | 支持范围与拒绝边界 |
 |---|---|
 | 工具返回图片 | Claude ↔ Responses 保留结构化文本／图片顺序、调用 ID、URL 或内联来源；Chat、Gemini 目的转换发送前拒绝，`allow` 不能字符串化媒体 |
 | 受限终态 | Responses 的 max_output_tokens/content_filter 在 JSON、SSE、SSE 缓冲 JSON 保留正文、usage 及对应原因，不计供应商故障 |
@@ -112,7 +112,7 @@ TPM 只对登记了最终请求体解码器的操作开放。HTTP 和 AWS SDK �
 
 SDK 版本锁文件位于 `tests/gateway-sdk`：Python OpenAI 3.13.0、Anthropic 1.5.0、google-genai 2.23.0；TypeScript OpenAI 7.15.0、Anthropic 0.125.0、Google 2.22.0。
 
-云验收分为 `TestGatewayOfficialCloudSDK`、`TestGatewayOfficialCloudToolAndInterruptionSDK` 和 `TestGatewayOfficialCloudParallelToolSDK`；其他套件与锁定依赖统一从 [SDK 测试说明](../../tests/gateway-sdk/README.md) 运行。源码中的正式测试与脚本是复现入口，已执行结果由 [最新修复验收](GATEWAY_REVIEW_FIXES_2026_09_18.md#验证记录) 记录。
+云验收分为 `TestGatewayOfficialCloudSDK`、`TestGatewayOfficialCloudToolAndInterruptionSDK` 和 `TestGatewayOfficialCloudParallelToolSDK`；其他套件与锁定依赖统一从[SDK 测试说明](../../tests/gateway-sdk/README.md)运行。源码中的正式测试与脚本是复现入口，已执行范围由[网关验证证据](SINGLE_INSTANCE_ACCEPTANCE.md)按版本记录。
 
 双工具回归通过 OpenAI/Anthropic SDK 内置流累积器和 Google SDK 内容事件验证：首帧同时出现两个调用、后续分片组成参数 `0` 与 `false`、工具结果逆序回传，检查 ID 或经验证的 Vertex 名称关联、最终值、usage 和唯一终止事件。Google 返回的完整函数参数来自网关转换和官方 SDK 解析，没有手写 SSE 累积器。云工具场景中的“往返”包括流式工具请求和提交结果后的最终响应，不等同于额外两个独立能力路径。
 

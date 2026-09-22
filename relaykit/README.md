@@ -45,7 +45,7 @@ RelayKit 是从 [new-api](https://github.com/QuantumNous/new-api) 中拆分出�
 
 Responses 流式和缓冲共用输出项累计器，部分最终快照按身份合并引用和文本偏移。明确的 incomplete 事件不能借用内嵌 completed 状态；观察到终态后拒绝新的非终态事件。原生引用和续跑状态的硬限制不受 allow 放宽，宿主仍负责其 Token、渠道和凭据归属。
 
-生成结果通过 `ResponseResult.Termination` 与 `ResponseStreamState.Termination()` 获取；传输结果继续使用 `StreamOutcome`。`ErrResponseTerminalMissing`／`ErrStreamTerminalMissing` 表示 JSON／流式上游缺少生成终态，不应归类为本地协议表达能力不足。详细宿主验收见[协议与路由修复验收](../docs/routing/PROTOCOL_ROUTING_ACCEPTANCE_2026_09_18.md)。
+生成结果通过 `ResponseResult.Termination` 与 `ResponseStreamState.Termination()` 获取；传输结果继续使用 `StreamOutcome`。`ErrResponseTerminalMissing`／`ErrStreamTerminalMissing` 表示 JSON／流式上游缺少生成终态，不应归类为本地协议表达能力不足。宿主支持范围见[协议矩阵](../docs/routing/GATEWAY_SUPPORT_MATRIX.md)，已执行范围见[网关与协议验证证据](../docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md)。
 
 2026-09-14 兼容性修正：`AnalyzeRequest` 和 `ConversionPlan` 区分旧 OpenAI completion、moderation、edit 操作。这些操作没有跨协议转换器，即使使用 `allow` 也会拒绝转换，不能因复用 `GeneralOpenAIRequest` 而视为 Chat。Responses 历史中的 `function_call.namespace` 与工具声明采用相同的身份语义：原生保留；跨协议在默认 `safe` 和 `strict` 下拒绝，`allow` 接受已登记降级并返回结构化损失诊断，不提供可逆 namespace 映射。
 
@@ -248,14 +248,14 @@ relayconvert.SetMediaResolver(relayconvert.MediaResolver{
 RelayKit 必须始终保持独立可构建。修改模块后，在 `relaykit` 目录运行：
 
 ```bash
-GOWORK=off go test ./...
+GOWORK=off go test ./... -timeout 60s
 GOWORK=off go build ./...
 ```
 
 转换矩阵由 golden tests 覆盖。确认协议输出变化是预期行为后，可更新快照：
 
 ```bash
-GOWORK=off go test ./relayconvert -run TestGolden -update
+GOWORK=off go test ./relayconvert -run TestGolden -update -timeout 60s
 ```
 
 ## 版本与兼容性

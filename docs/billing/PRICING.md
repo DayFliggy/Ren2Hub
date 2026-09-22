@@ -24,7 +24,7 @@ OpenAI、Claude、Gemini 的原始用量先归一化，缓存是否包含在输�
 
 发送前保存完整 Quote、价格版本、属性和 SHA-256 哈希，每次上游尝试有独立 ID。配置更新仅影响之后生成的报价。Usage 与 ChargeResult 单独持久化。恢复重放已确认金额与事件，不重新取价。文本没有输出上限时采用 8192 的估计并标记 Estimated，这不是费用上界；付费预估为零仍预留 1 quota，显式免费也写入发送保护。
 
-初始目录位于 [billing_pricing_seed.json](../../model/billing_pricing_seed.json)：254 个明确价格，13 个待配置模式/模型。其来源是仓库内已检视的本地默认配置，使用以下命令确定性导出；本任务没有联网更新价格：
+初始目录位于 [billing_pricing_seed.json](../../model/billing_pricing_seed.json)：254 个明确价格，13 个待配置模式/模型。其来源是仓库内已检视的本地默认配置，使用以下命令确定性导出；它不是实时供应商报价，也不会联网更新价格：
 
 ```powershell
 go run ./pkg/billing/cmd/exportseed

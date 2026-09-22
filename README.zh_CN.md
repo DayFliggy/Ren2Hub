@@ -144,7 +144,7 @@
 
 | 特性 | 说明 |
 |------|------|
-| 🎨 全新 UI | 现代化的用户界面设计 |
+| 🎨 全新 UI | Vue 3、TypeScript 与 Vite，结构和开发方式见[前端文档](frontend/README.md) |
 | 🌍 多语言 | Vue 界面支持简体中文、英文 |
 | 🔄 数据兼容 | 支持 SQLite、MySQL、PostgreSQL；升级遵守本地迁移与发布契约 |
 | 📈 数据看板 | 可视化控制台与统计分析 |
@@ -159,10 +159,10 @@
 
 ### 🔐 授权与安全
 
-- 😈 Discord 授权登录
-- 🤖 LinuxDO 授权登录
-- 📱 Telegram 授权登录
-- 🔑 OIDC 统一认证
+- Vue 登录页提供密码登录与可选 2FA
+- 短期 Bearer Access Token、HttpOnly Refresh Cookie 与可撤销的设备会话
+- OAuth 账号绑定及账户安全管理，模块可用性由后端声明
+- 后端 Passkey 与第三方登录接口由各自设置控制；Vue 登录页未提供这些登录流程，详情见[认证契约](docs/authentication.md)
 - 🔍 Key 查询使用额度（配合 [new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool)）
 
 ### 🚀 高级功能

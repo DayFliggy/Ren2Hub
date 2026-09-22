@@ -8,8 +8,8 @@ RenAI 工作区的服务器部署使用工作区 `deploy/ren2hub/` 与对应部�
 
 使用 Docker Engine 和 Docker Compose v2，在当前 Ren2Hub 源码目录执行。先确认 `relaykit/` 源码完整，构建需要访问 Docker 镜像和包依赖服务。
 
-1. 以 `.env.example` 为模板创建本地 `.env`，分别为 `POSTGRES_PASSWORD`、`REDIS_PASSWORD`、`SESSION_SECRET`、`CRYPTO_SECRET` 填入独立的随机值，例如每项执行一次 `openssl rand -hex 32`。空值会使 Compose 在启动前报错。不要把 `.env` 提交到 Git。
-2. 新库默认用户名为 `root`，数据库名为 `new-api`，以保持已有 Compose 卷的命名兼容。可用 `POSTGRES_USER` 和 `POSTGRES_DB` 指定新库身份。密码建议使用十六进制；如需沿用含 URL 保留字符的旧口令，应在 Compose 的 `SQL_DSN` / `REDIS_CONN_STRING` 中填写编码后的连接字符串，而数据库与 Redis 的实际口令保持原值。
+1. 确认目标是空库，或已具有当前版本要求的 `billing_schemas` 标记。旧账务库会被启动守卫拒绝，不会迁移或清空；首次采用当前格式应使用独立新库并保留旧库。以 `.env.example` 为模板创建本地 `.env`，分别为 `POSTGRES_PASSWORD`、`REDIS_PASSWORD`、`SESSION_SECRET`、`CRYPTO_SECRET` 填入独立随机值，例如每项执行一次 `openssl rand -hex 32`。空值会使 Compose 在启动前报错。不要把 `.env` 提交到 Git。
+2. 新库默认用户名为 `root`，数据库名为 `new-api`；名称相同不代表旧账务数据兼容。可用 `POSTGRES_USER` 和 `POSTGRES_DB` 指定新库身份。密码建议使用十六进制；如需沿用含 URL 保留字符的口令，应在 Compose 的 `SQL_DSN` / `REDIS_CONN_STRING` 中填写编码后的连接字符串，而数据库与 Redis 的实际口令保持原值。
 3. 校验配置，再构建和启动：
 
 ```bash
@@ -31,7 +31,7 @@ curl --fail http://127.0.0.1:3000/api/status
 1. 记录当前源码、镜像、配置、卷名与备份。构建待发布镜像时保留可回退镜像，不能只依赖可变的 `ren2hub:local` 标签。
 2. 停止新入口流量，执行 `docker compose stop new-api`，确认旧进程已退出，再启动新版本。已有 PostgreSQL/Redis 需要更换容器时也先排空应用。
 3. 仅应用更新使用 `docker compose up -d --no-deps new-api`。核对健康状态、前端、鉴权、并发和账务。
-4. 回退同样先排空当前进程，再启动已记录的旧镜像和对应配置。不能并行回退；数据库恢复需单独确认兼容性。
+4. 回退同样先排空当前进程，再启动已记录且数据兼容的镜像与配置。不能把当前事件账务库交给旧格式程序；数据库恢复或切换需独立核验和授权，不能并行回退。
 
 旧版本使用 Redis 并发租约时，还要执行[发布与回退契约](../routing/GATEWAY_RELEASE.md)中的旧进程退出确认和限定命名空间清理。不要假设旧键自动消失。
 

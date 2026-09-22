@@ -1,6 +1,6 @@
 # 统一路由
 
-更新：2026-09-19。本文描述单实例网关的源码契约。只允许一个网关进程承接业务流量；新旧版本必须顺序排空切换。源码验证见[验收记录](SINGLE_INSTANCE_ACCEPTANCE.md)，当前运行版本由所属工作区的服务器档案维护。
+本文描述现行单实例网关的源码契约。只允许一个网关进程承接业务流量；新旧版本必须顺序排空切换。源码验证见[验证证据](SINGLE_INSTANCE_ACCEPTANCE.md)，当前运行版本由所属工作区的服务器档案维护。
 
 ## 路由和权限
 
@@ -48,7 +48,7 @@ Retry-After 只作用于所属渠道或已有渠道内 credential/模型健康�
 
 进程共享重试额度使用固定百分之一精度，初始/最大储备默认 20 次；每次首次真实发送补 0.1 次，额外发送消耗 1 次。发送前可撤销预留，进入发送边界后提交；结果未知不退款，重试本身不补额度。预留计入 burst，热更新不补满，禁用期间不积累。额度不足立即停止重试、保留最后真实上游错误，并记录 `retry_budget_exhausted`。
 
-新计费对象与日志使用 `channel_ratio`。历史 TaskBillingContext 的 `group_ratio` JSON 字段保留作为已接受的价格快照，异步结算不会重新读取分组配置。钱包是唯一资金来源，Token 是附加消费限额；普通请求、Realtime 和异步任务共用持久化账务恢复。历史非钱包任务禁止自动结算，历史非钱包恢复记录进入人工对账，不允许转为钱包扣退。
+钱包是唯一资金来源，Token 是附加消费限额。每次发送冻结不可变价格版本、渠道售价系数、安全属性与时间；`TaskBillingContext` 保存独立的 `Quote`、`Usage`、`Charge` 及原模型名，不再依赖旧 `group_ratio` 快照。普通请求、Realtime 与异步任务共用持久化预留和事件恢复。当前账务格式不迁移旧账务数据库，详见[账务架构](../billing/IMPLEMENTATION.md)。
 
 ## 协议和重试
 
@@ -70,7 +70,7 @@ Compact 保留精确模型和基础模型两个阶段。每阶段分别排除已
 
 SSE 按事件空行组装多行 `data:`，支持 CRLF/LF/CR、注释、事件名和 BOM，整事件受大小上限约束；NDJSON 使用独立解码路径。正常 EOF 可处理最后一个未以空行结束的完整事件，读取失败或取消不补交未完成事件。已验证的大图片帧可越过前导缓冲限制；畸形帧或状态绑定失败不得暴露前导内容。
 
-所有计价模式在发送前持久化消费保护，最终证据不足时保留预扣，不凭缺少记录推定可退款。实际用量使表达式计算失败时，保存 `reconciliation_required`、冻结价格与规范化用量，不生成成功消费日志；不保存正文、请求头或原始表达式错误。修正价格配置不会自动解锁旧记录，须按该记录明确对账。待确认或待对账记录计入积压但不占自动恢复批次；任务接受不明与前置上传的退款边界见 [账务状态与故障边界](GATEWAY_REVIEW_FIXES_2026_09_18.md#账务状态与故障边界)。
+所有计价模式在发送前持久化消费保护，最终证据不足时保留预留，不凭缺少记录推定可释放。实际用量使计价失败时保存待对账状态、冻结价格与规范用量，不生成成功消费日志，也不保存正文、请求头或原始表达式错误。修正价格配置不会自动解锁旧记录，须按该记录明确对账。任务接受不明、Realtime 累计与前置上传的处理见[恢复与对账](../billing/RECONCILIATION.md#发送与任务故障边界)。
 
 ## 接口和运行依赖
 
@@ -79,18 +79,20 @@ SSE 按事件空行组装多行 `data:`，支持 CRLF/LF/CR、注释、事件名
 - `/api/routing/*` 管理 Profile、候选目录和静态预览；预览不发送请求、不预扣、不持有 Permit。
 - `POST /api/routing/tokens/:id/preview` 覆盖自动、手动及无 Profile 的旧 Token，旧 Profile 预览委托同一入口。预览复用实际静态资格及排序，输出快照标识、时间、配置版本和动态复核提示；加权顺序不是下一次请求承诺。
 - `/api/channel/` 管理实际容量和渠道倍率；独立 `/route-policy` 接口已移除。
-- `/api/pricing` 返回模型基础价格和可用渠道倍率区间，取消旧组过滤和组倍率响应。
+- `/api/pricing` 返回已发布且当前可路由模型的 `price_version`、`billing_mode` 和可用渠道倍率区间，不返回旧组过滤与组倍率计价合同。
 
 不再使用 TOKEN_PRIVATE_ROUTING_ENABLED、ROUTE_LIVE_*、ROUTE_SHADOW_* 或 ROUTE_SCORE_* 灰度开关。能力刷新任务继续使用 ROUTE_CAPABILITY_REFRESH_*；ROUTE_DECISION_EVENT_QUEUE_SIZE 控制有界决策日志队列。
 
-`route_decision.attempts` 增加 `termination` 和 `response_diagnostics`（仅稳定 code/path）。网关指标增加 `route_decision_events_dropped_total`。这些诊断不记录请求正文、引用文本、凭据或完整上游错误。自动路由运营页面的分数仅用于运营比较，实际选择继续遵守后端排序。
+`route_decision.attempts` 仅记录真实发送，序号对应 `upstream_attempts`；发送前的价格、转换和容量拒绝仍属于候选诊断。每次尝试记录 `sequence`、`channel_id`、`success`、`origin`、`latency_ms`、`acceptance`、`retry_permission`、`response_committed`，失败附稳定错误分类与状态，并可带 `termination` 和仅 code/path 的 `response_diagnostics`。`latency_ms` 包含本轮发送前准备，不是纯上游延迟；错误状态也不保证是供应商原始 HTTP 状态。
+
+诊断不记录请求正文、引用文本、凭据或完整上游错误；有界异步日志队列满时可丢弃整条事件，并计入 `route_decision_events_dropped_total`。它不是持久化账务凭证。运营页面的分数仅用于比较，实际选择继续遵守后端排序。
 
 手动预览中，能力数据库与调度索引暂时不一致时，未被共同选择器发现的 Entry 标为 snapshot_stale，不凭元数据宣称合格。保存 Token 的转换策略、模型或访问限制后，界面失效当前预览并取消旧在途请求，必须重新取得快照。
 
 ## 数据和验证
 
-代码清理不自动删除历史数据库列、账单、任务或审计数据。旧组配置即使仍在数据库中也不会重新进入请求权限和定价。该版本改变权限与计费语义，发布前需备份并按部署技能评估回滚，不能仅凭 AutoMigrate 成功认定可只回滚镜像。
+源码和文档清理不删除数据库、账单、任务或审计数据。当前安装由 `model/billing_schema.go` 检查空库或匹配格式标记；旧组和旧倍率账务库不能直接升级。发布与回退须同时核对代码、数据格式和在途消费保护，不能只回滚镜像。
 
 `router/unified_routing_integration_test.go` 使用隔离 SQLite、Redis 和模拟 HTTP 上游，覆盖 Chat、Compact 阶段切换、Suno、视频、Midjourney、倍率计费、Permit 释放以及准入失败不发送、不扣费。其他测试覆盖 Profile 版本、资格撤销、Key 健康、表达式计费和退款。主模块与独立 RelayKit 必须分别验证；本地模拟测试不代表真实供应商或生产集群已验收。
 
-工作区 `reference-projects/` 提供三个参考项目的固定源码；已吸收机制和未采用方案见 [参考设计取舍](GATEWAY_REVIEW_FIXES_2026_09_18.md#三个参考项目的吸收与取舍)。旧 Redis 用户并发和配置变化重建活动池不属于当前方案。
+工作区参考源码只用于研究。当前方案保持一个选择器、一套本地准入事实和已有尝试诊断，不引入第二套请求管线、持久化正文追踪或 Redis 容量缓存。旧 Redis 用户并发和配置变化重建活动池不属于当前方案。

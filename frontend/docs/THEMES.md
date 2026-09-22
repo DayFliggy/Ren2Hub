@@ -69,7 +69,7 @@
 
 ## 可访问性
 
-浅色和深色主题都必须保留可见焦点、状态文本和足够的文本对比度。`prefers-reduced-motion` 下关闭非必要动画；Canvas 仍绘制稳定静态帧，并继续遵守 DPR 上限和整数释放规则。
+浅色和深色主题都必须保留可见焦点、状态文本和足够的文本对比度。`prefers-reduced-motion` 下关闭非必要动画；Canvas 仍绘制稳定静态帧，并继续限制 DPR、在组件卸载时释放资源。
 
 ## 视觉回归
 
@@ -77,4 +77,4 @@
 
 - `bun run test:visual`
 
-该命令只审计当前实时页面，不读取、生成或比较历史截图。测试环境固定为 `Asia/Shanghai`、符合真实 wire contract 的认证与 API 夹具、本地字体和 `reduced-motion`；固定时间由浏览器测试 fixture 负责。审计覆盖运行错误、DOM 状态、响应式布局、横向溢出、交互遮挡、主题与字体契约。
+该命令审计当前页面，不与历史截图基线比较。默认只在失败时保存截图；设置 `PLAYWRIGHT_CAPTURE_SCREENSHOTS=true` 可保留本次页面截图，输出位于 `output/playwright/`。测试环境使用 `Asia/Shanghai`、符合真实 wire contract 的认证与 API 夹具、本地字体和 `reduced-motion`；需要固定时间的用例由浏览器 fixture 控制。审计覆盖运行错误、DOM 状态、响应式布局、横向溢出、交互遮挡、主题与字体契约。服务启动和 Go 产物验证方式见[路由约定](../ROUTING.md)。

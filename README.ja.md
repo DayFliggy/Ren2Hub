@@ -144,7 +144,7 @@
 
 | 機能 | 説明 |
 |------|------|
-| 🎨 新しいUI | モダンなユーザーインターフェースデザイン |
+| 🎨 新しいUI | Vue 3、TypeScript、Vite を使用。構成と開発手順は[フロントエンドの説明](frontend/README.md)を参照 |
 | 🌍 多言語 | Vue UI は簡体字中国語と英語をサポート |
 | 🔄 データ互換性 | SQLite、MySQL、PostgreSQL に対応。更新はローカルの移行・リリース契約に従います |
 | 📈 データダッシュボード | ビジュアルコンソールと統計分析 |
@@ -159,10 +159,10 @@
 
 ### 🔐 認証とセキュリティ
 
-- 😈 Discord認証ログイン
-- 🤖 LinuxDO認証ログイン
-- 📱 Telegram認証ログイン
-- 🔑 OIDC統一認証
+- Vue のログイン画面はパスワード認証と任意の 2FA に対応
+- 短期 Bearer Access Token、HttpOnly Refresh Cookie、取り消し可能なデバイスセッション
+- OAuth アカウント連携とアカウントのセキュリティ管理。利用可能な機能はバックエンドが宣言
+- バックエンドの Passkey・外部認証ログイン API は各設定に従います。Vue のログイン画面にはこれらの入口はありません。[認証契約](docs/authentication.md)を参照してください
 - 🔍 Key使用量クォータ照会（[new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool)と併用）
 
 

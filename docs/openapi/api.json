@@ -2,7 +2,7 @@
   "openapi": "3.0.1",
   "info": {
     "title": "后台管理接口",
-    "description": "",
+    "description": "Ren2Hub 后台 API 的有限覆盖历史描述，尚未与现行路由、认证和账务 schema 全面同步；包含兼容或已退休接口，不能直接作为生产客户端生成依据。实际开放路径及校验以 router/api-router.go、router/authz-router.go、router/channel-router.go、router/gateway-router.go 为准；现行契约见 docs/authentication.md、docs/billing/API.md、docs/billing/EPAY.md、docs/routing/GATEWAY_API.md 与 docs/README.md。",
     "version": "1.0.0"
   },
   "tags": [

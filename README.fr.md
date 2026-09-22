@@ -144,7 +144,7 @@ Construisez cette copie de Ren2Hub avec le [guide Docker à instance unique](doc
 
 | Fonctionnalité | Description |
 |------|------|
-| 🎨 Nouvelle interface utilisateur | Conception d'interface utilisateur moderne |
+| 🎨 Nouvelle interface utilisateur | Application Vue 3 et TypeScript construite avec Vite ; voir le [guide du frontend](frontend/README.md) |
 | 🌍 Multilingue | Interface Vue : chinois simplifié et anglais |
 | 🔄 Compatibilité des données | SQLite, MySQL et PostgreSQL ; les mises à jour suivent les contrats locaux de migration et de publication |
 | 📈 Tableau de bord des données | Console visuelle et analyse statistique |
@@ -159,10 +159,10 @@ Construisez cette copie de Ren2Hub avec le [guide Docker à instance unique](doc
 
 ### 🔐 Autorisation et sécurité
 
-- 😈 Connexion par autorisation Discord
-- 🤖 Connexion par autorisation LinuxDO
-- 📱 Connexion par autorisation Telegram
-- 🔑 Authentification unifiée OIDC
+- Connexion par mot de passe et 2FA facultative dans l'interface Vue
+- Jetons Bearer de courte durée, cookies de renouvellement HttpOnly et sessions d'appareil révocables
+- Liaison de comptes OAuth et paramètres de sécurité ; le backend déclare les modules disponibles
+- Les API de connexion Passkey et tierces restent contrôlées par leurs paramètres respectifs. La page de connexion Vue ne propose pas ces parcours ; voir le [contrat d'authentification](docs/authentication.md)
 - 🔍 Requête de quota d'utilisation de clé (avec [new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool))
 
 ### 🚀 Fonctionnalités avancées

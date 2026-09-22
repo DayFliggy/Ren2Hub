@@ -145,7 +145,7 @@ Build this Ren2Hub checkout using the [single-instance Docker guide](docs/instal
 
 | Feature | Description |
 |------|------|
-| 🎨 New UI | Modern user interface design |
+| 🎨 New UI | Vue 3 and TypeScript application built with Vite; see the [frontend guide](frontend/README.md) |
 | 🌍 Multi-language | Vue interface: Simplified Chinese and English |
 | 🔄 Data Compatibility | SQLite, MySQL and PostgreSQL; upgrades follow the local migration and release contract |
 | 📈 Data Dashboard | Visual console and statistical analysis |
@@ -160,10 +160,10 @@ Build this Ren2Hub checkout using the [single-instance Docker guide](docs/instal
 
 ### 🔐 Authorization and Security
 
-- 😈 Discord authorization login
-- 🤖 LinuxDO authorization login
-- 📱 Telegram authorization login
-- 🔑 OIDC unified authentication
+- Password login and optional 2FA in the Vue interface
+- Short-lived Bearer access tokens, HttpOnly refresh cookies, and revocable device sessions
+- OAuth account binding and account security controls; module availability comes from the backend
+- Backend Passkey and third-party login APIs remain controlled by their respective settings. The Vue login page does not expose those login flows; see the [authentication contract](docs/authentication.md)
 
 ### 🚀 Advanced Features
 

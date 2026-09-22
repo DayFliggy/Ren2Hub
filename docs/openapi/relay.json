@@ -2,7 +2,7 @@
   "openapi": "3.0.1",
   "info": {
     "title": "AI模型接口",
-    "description": "",
+    "description": "Ren2Hub AI 接口的有限覆盖历史描述，尚未完整反映当前协议、媒体、状态归属、转换损失和未实现路径的拒绝边界；不能据 schema 存在推定功能可用。实际路径以 router/relay-router.go、router/video-router.go 及适配器实现为准；现行契约见 docs/routing/UNIFIED_ROUTING.md、docs/routing/GATEWAY_SUPPORT_MATRIX.md、docs/routing/GATEWAY_API.md 和 relaykit/README.md。",
     "version": "1.0.0"
   },
   "tags": [

@@ -30,7 +30,9 @@
 
 ## 浏览器接口
 
-登录成功后，密码登录、2FA、Passkey、OAuth、WeChat 和 Telegram 登录均返回统一数据：
+当前 Vue 登录页只提供密码和 2FA 登录；Passkey 在安全设置中用于管理与敏感操作验证，OAuth 用于已登录账户的绑定。后端仍保留受配置开关控制的 Passkey、标准 OAuth、WeChat 和 Telegram 兼容登录接口，不能由这些接口存在推导出当前 Vue 已开放对应登录入口。
+
+成功签发浏览器登录会话时，后端统一返回以下数据；密码登录与 2FA 是当前 Vue 使用的路径：
 
 ```json
 {
@@ -162,7 +164,9 @@ Proof 同时绑定用户、登录会话、用户鉴权版本、会话版本和 s
 
 启用了 2FA 的用户注册 Passkey 时，register begin 与 finish 都必须携带有效的 `passkey.register` Proof；finish 会在消费一次性 AuthFlow 之前重新验证 Proof。未启用 2FA 的首次 Passkey 注册不要求该请求头。
 
-## 升级注意事项
+## 存储与兼容边界
+
+当前账务格式只接受空库初始化或匹配 `billing_schemas` 标记的数据库；旧账务库不能因认证表迁移兼容而直接升级。下列认证字段与旧凭据说明只描述认证子系统，整库安装与回退以[发布契约](routing/GATEWAY_RELEASE.md)为准。
 
 - 旧 `session` Cookie 不再使用；升级后现有面板登录会失效，用户需要重新登录。
 - 数据库迁移会新增 `user_sessions`、`auth_flows`、`external_identity_claims` 和 `users.auth_version`，并为已有用户初始化鉴权版本、回填 Telegram 账号唯一归属；若历史数据中同一 Telegram ID 已绑定多个用户，迁移会拒绝继续启动，需先消除歧义。
