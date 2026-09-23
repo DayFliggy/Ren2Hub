@@ -67,6 +67,16 @@ beforeEach(async () => {
 
 describe('capability route guard', () => {
   it.each([1, 10])(
+    'keeps GMPay merchant configuration inaccessible to role %s',
+    async (role) => {
+      useAuthStore().user!.role = role
+      await router.push('/system-settings/billing/gmpay')
+      expect(router.currentRoute.value.name).toBe('dashboard')
+    },
+    15000
+  )
+
+  it.each([1, 10])(
     'denies reconciliation access to role %s',
     async (role) => {
       useAuthStore().user!.role = role

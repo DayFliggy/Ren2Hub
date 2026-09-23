@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/model"
@@ -20,7 +19,10 @@ func GmpaySettlementEnabled(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return strconv.ParseBool(option.Value)
+	if option.Value != "true" && option.Value != "false" {
+		return false, errors.New("invalid gmpay settlement setting")
+	}
+	return option.Value == "true", nil
 }
 
 // SettleGmpayNotification verifies a callback against the credentials the order

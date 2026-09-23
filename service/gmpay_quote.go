@@ -193,12 +193,13 @@ func callGmpayCreateOrder(ctx context.Context, config gmpay.Config, order gmpay.
 	if err != nil || len(body) > 16<<10 {
 		return nil, gmpay.ErrInvalidParameters
 	}
-	created, err := gmpay.ParseCreatedOrder(body)
-	// A server/proxy failure cannot prove whether this non-idempotent request
-	// reached the gateway, even if the body resembles a business response.
-	if response.StatusCode >= 500 || response.StatusCode < 200 || (response.StatusCode >= 300 && response.StatusCode < 400) {
+	// epusdt uses 400 for business rejection and 401 for signature rejection;
+	// older deployments also use 200. Other HTTP statuses cannot establish the
+	// outcome of creation, even when a proxy returns a known-looking error body.
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusBadRequest && response.StatusCode != http.StatusUnauthorized {
 		return nil, gmpay.ErrInvalidParameters
 	}
+	created, err := gmpay.ParseCreatedOrder(body)
 	if err != nil {
 		return nil, err
 	}
@@ -207,13 +208,18 @@ func callGmpayCreateOrder(ctx context.Context, config gmpay.Config, order gmpay.
 	}
 	amount, amountErr := gmpay.ParseFiatAmount(created.Amount)
 	expectedAmount, _ := gmpay.ParseFiatAmount(order.Amount)
-	_, cryptoErr := gmpay.ParseTokenAmount(created.ActualAmount)
+	cryptoAmount, cryptoErr := gmpay.ParseTokenAmount(created.ActualAmount)
 	if created.OrderNo != order.OrderNo || amountErr != nil || amount != expectedAmount ||
 		!strings.EqualFold(created.Currency, order.Currency) || !strings.EqualFold(created.Token, order.Token) ||
 		(created.Status != gmpay.StatusWaitPay && created.Status != gmpay.StatusPaySuccess) ||
-		cryptoErr != nil || strings.TrimSpace(created.ReceiveAddress) == "" || created.ExpirationTime <= 0 {
+		cryptoErr != nil || len(cryptoAmount.String()) > 64 ||
+		strings.TrimSpace(created.ReceiveAddress) == "" || len(created.ReceiveAddress) > 256 || created.ExpirationTime <= 0 {
 		return nil, gmpay.ErrInvalidParameters
 	}
+	// Persist the validated numeric value, so harmless padding cannot overflow
+	// the receipt columns on databases that enforce their varchar limits.
+	created.Amount = gmpay.FormatFiatAmount(amount)
+	created.ActualAmount = cryptoAmount.String()
 	return created, nil
 }
 

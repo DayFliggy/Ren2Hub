@@ -35,6 +35,9 @@ const toast = useToast()
 const { load, rawValue, isSecretConfigured } = useSystemSettings()
 const probing = ref(false)
 const saving = ref(false)
+const configurationReady = ref(false)
+const configurationLoading = ref(true)
+const configurationFailed = ref(false)
 const supported = ref<SupportedAsset[] | null>(null)
 const selected = ref<SelectedAsset[]>([])
 let probeController: AbortController | null = null
@@ -52,42 +55,40 @@ const secretConfigured = computed(() => isSecretConfigured('GmpayKey'))
 const selectedCount = computed(() => selected.value.length)
 
 function parseStoredAssets(raw: string): SelectedAsset[] {
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.flatMap((item) => {
-      if (!item || typeof item !== 'object') return []
-      const record = item as Record<string, unknown>
-      const token = String(record.token ?? '')
-        .trim()
-        .toLowerCase()
-      const network = String(record.network ?? '')
-        .trim()
-        .toLowerCase()
-      if (!token || !network) return []
-      return [
-        {
-          name:
-            String(record.name ?? '').trim() ||
-            `${token.toUpperCase()} ${network}`,
-          token,
-          network,
-          minTopUp: String(record.min_topup ?? '').trim(),
-          ...(typeof record.icon === 'string' ? { icon: record.icon } : {}),
-          ...(typeof record.color === 'string' ? { color: record.color } : {}),
-        },
-      ]
-    })
-  } catch {
-    return []
-  }
+  const parsed: unknown = JSON.parse(raw)
+  // The backend also accepts JSON null as an empty catalog.
+  if (parsed === null) return []
+  if (!Array.isArray(parsed)) throw new Error('Invalid stored asset catalog')
+  return parsed.map((record) => {
+    if (
+      !record ||
+      typeof record !== 'object' ||
+      typeof record.name !== 'string' ||
+      !record.name.trim() ||
+      typeof record.token !== 'string' ||
+      !record.token.trim() ||
+      typeof record.network !== 'string' ||
+      !record.network.trim() ||
+      (record.min_topup !== undefined && typeof record.min_topup !== 'string')
+    ) {
+      throw new Error('Invalid stored asset catalog')
+    }
+    return {
+      name: record.name.trim(),
+      token: record.token.trim().toLowerCase(),
+      network: record.network.trim().toLowerCase(),
+      minTopUp: (record.min_topup ?? '').trim(),
+      ...(typeof record.icon === 'string' ? { icon: record.icon } : {}),
+      ...(typeof record.color === 'string' ? { color: record.color } : {}),
+    }
+  })
 }
 
 function syncForm() {
   form.payAddress = String(rawValue('GmpayPayAddress', ''))
   form.merchantId = String(rawValue('GmpayId', ''))
-  form.price = Number(rawValue('GmpayPrice', 1)) || 1
-  form.minTopUp = Number(rawValue('GmpayMinTopUp', 1)) || 1
+  form.price = Number(rawValue('GmpayPrice', 1))
+  form.minTopUp = Number(rawValue('GmpayMinTopUp', 1))
   form.groupRatio = String(rawValue('GmpayGroupRatio', '{"default":1}'))
   selected.value = parseStoredAssets(String(rawValue('GmpayAssets', '[]')))
 }
@@ -144,13 +145,14 @@ function assetPayload(): string {
       ...(item.color === undefined ? {} : { color: item.color }),
       ...(item.minTopUp.trim() === ''
         ? {}
-        : { min_topup: item.minTopUp.trim() }),
+        : { min_topup: String(Number(item.minTopUp)) }),
     }))
   )
 }
 
 /** The gateway secret is verified by an order, so the probe never needs it. */
 async function probe() {
+  if (!configurationReady.value || saving.value) return
   if (!form.payAddress.trim()) {
     toast.error(t('systemSettings.gmpayPanel.addressRequired'))
     return
@@ -202,7 +204,7 @@ async function probe() {
 }
 
 async function save() {
-  if (saving.value) return
+  if (saving.value || !configurationReady.value) return
   if (!form.payAddress.trim() || !form.merchantId.trim()) {
     toast.error(t('systemSettings.gmpayPanel.credentialsRequired'))
     return
@@ -254,13 +256,15 @@ async function save() {
       min_topup: form.minTopUp,
       group_ratio: form.groupRatio,
     })
-    if (disposed) return
+    if (disposed) {
+      // The write still completed. Refresh the shared cache for the next visit.
+      await load(true)
+      return
+    }
     form.secretKey = ''
-    await load(true)
-    if (disposed) return
-    syncForm()
     emit('saved')
     toast.success(t('systemSettings.gmpayPanel.saved'))
+    await loadConfiguration(true)
   } catch (error) {
     if (!disposed)
       toast.error(error instanceof Error ? error.message : String(error))
@@ -269,10 +273,27 @@ async function save() {
   }
 }
 
-onMounted(async () => {
-  await load()
-  if (!disposed) syncForm()
-})
+async function loadConfiguration(force = false) {
+  configurationReady.value = false
+  configurationLoading.value = true
+  configurationFailed.value = false
+  try {
+    const loaded = await load(force)
+    if (disposed) return
+    if (!loaded) {
+      configurationFailed.value = true
+      return
+    }
+    syncForm()
+    configurationReady.value = true
+  } catch {
+    if (!disposed) configurationFailed.value = true
+  } finally {
+    if (!disposed) configurationLoading.value = false
+  }
+}
+
+onMounted(() => void loadConfiguration())
 
 watch(
   () => form.payAddress,
@@ -295,7 +316,24 @@ onUnmounted(() => {
     class="gmpay-panel"
     :aria-label="t('systemSettings.gmpayPanel.title')"
   >
-    <fieldset :disabled="saving" class="min-w-0 border-0 p-0">
+    <p v-if="configurationLoading" class="gmpay-hint" role="status">
+      {{ t('systemSettings.gmpayPanel.loading') }}
+    </p>
+    <div v-if="configurationFailed" class="gmpay-hint" role="alert">
+      <p>{{ t('systemSettings.gmpayPanel.loadFailed') }}</p>
+      <ConsoleButton
+        class="mt-2"
+        variant="secondary"
+        size="sm"
+        @click="loadConfiguration(true)"
+      >
+        {{ t('systemSettings.gmpayPanel.retryLoad') }}
+      </ConsoleButton>
+    </div>
+    <fieldset
+      :disabled="saving || !configurationReady"
+      class="min-w-0 border-0 p-0"
+    >
       <div class="grid gap-4 sm:grid-cols-2">
         <FormField
           :label="t('systemSettings.gmpayPanel.address')"

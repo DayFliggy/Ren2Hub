@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -525,4 +526,98 @@ func TestAdminGmpayCompletionAuditIdentifiesOrderAndOperator(t *testing.T) {
 	var events int64
 	require.NoError(t, db.Model(&model.BillingEvent{}).Count(&events).Error)
 	assert.EqualValues(t, 1, events, "repeated completion must credit only once")
+}
+
+func TestGmpayInputRejectionsDoNotCreateOrders(t *testing.T) {
+	var calls atomic.Int64
+	gateway := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(gateway.Close)
+	db := setupGmpayControllerTestDB(t, gateway.URL)
+	for _, endpoint := range []struct {
+		name    string
+		handler gin.HandlerFunc
+	}{
+		{"quote", NextQuoteGmpayTopUp}, {"create", NextCreateGmpayTopUp},
+		{"legacy quote", RequestGmpayAmount}, {"legacy create", RequestGmpay},
+	} {
+		t.Run(endpoint.name, func(t *testing.T) {
+			for _, body := range []string{
+				`{"amount":1.5,"payment_method":"usdt.tron"}`,
+				`{"amount":9223372036854775808,"payment_method":"usdt.tron"}`,
+				`{"amount":-1,"payment_method":"usdt.tron"}`,
+				`{"amount":0,"payment_method":"usdt.tron"}`,
+				`{"amount":10,"amount_unit":"CNY","payment_method":"usdt.tron"}`,
+				`{"amount":10,"amount_unit":"USD","payment_method":"usdt.missing"}`,
+			} {
+				response := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(response)
+				c.Set("id", 1)
+				c.Request = httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(body))
+				c.Request.Header.Set("Content-Type", "application/json")
+				endpoint.handler(c)
+				var result struct {
+					Success bool   `json:"success"`
+					Message string `json:"message"`
+				}
+				require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+				assert.False(t, result.Success, body)
+				assert.NotEqual(t, "success", result.Message, body)
+				assert.NotContains(t, response.Body.String(), gmpayControllerTestSecret)
+			}
+		})
+	}
+	assert.Zero(t, calls.Load())
+	var orders, snapshots int64
+	require.NoError(t, db.Model(&model.TopUp{}).Count(&orders).Error)
+	require.NoError(t, db.Model(&model.GmpayOrder{}).Count(&snapshots).Error)
+	assert.Zero(t, orders)
+	assert.Zero(t, snapshots)
+}
+
+func TestGmpayCallbackBoundaryRejectsBeforeCrediting(t *testing.T) {
+	db := setupGmpayControllerTestDB(t, "https://payments.example.test")
+	order, _, _ := gmpayControllerTestPendingOrder(t, db)
+	params := map[string]string{
+		"pid": "1", "trade_id": "gateway-trade-1", "order_id": order.TradeNo,
+		"amount": "10", "actual_amount": "10", "receive_address": "owned-test-address",
+		"token": "usdt", "block_transaction_id": "test-transaction", "status": "2",
+	}
+	signature, err := gmpay.Sign(params, gmpayControllerTestSecret)
+	require.NoError(t, err)
+	params["signature"] = signature
+	body, err := common.Marshal(params)
+	require.NoError(t, err)
+	for _, test := range []struct {
+		name   string
+		method string
+		body   string
+		status int
+	}{
+		{"get with valid signature", http.MethodGet, string(body), http.StatusBadRequest},
+		{"duplicate order id", http.MethodPost, `{"order_id":"other",` + strings.TrimPrefix(string(body), "{"), http.StatusBadRequest},
+		{"tampered signature", http.MethodPost, strings.Replace(string(body), signature, strings.Repeat("0", 64), 1), http.StatusOK},
+		{"oversized body", http.MethodPost, strings.Repeat(" ", gmpay.MaxNotificationBytes+1), http.StatusBadRequest},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(response)
+			c.Request = httptest.NewRequest(test.method, "/api/user/gmpay/notify", strings.NewReader(test.body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			GmpayNotify(c)
+			assert.Equal(t, test.status, response.Code)
+			assert.Equal(t, "fail", response.Body.String())
+			var stored model.TopUp
+			require.NoError(t, db.First(&stored, order.Id).Error)
+			assert.Equal(t, common.TopUpStatusPending, stored.Status)
+			var user model.User
+			require.NoError(t, db.First(&user, 1).Error)
+			assert.Equal(t, common.Quota(7), user.Quota)
+			var events int64
+			require.NoError(t, db.Model(&model.BillingEvent{}).Count(&events).Error)
+			assert.Zero(t, events)
+		})
+	}
 }

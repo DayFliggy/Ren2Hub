@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseGmpayOrderEvidence } from '../adminOrders'
+import { parseGmpayOrderDetail, parseGmpayOrderEvidence } from '../adminOrders'
 
 const evidence = {
   status: 'unknown',
@@ -14,6 +14,54 @@ const evidence = {
 }
 
 describe('GMPay administrator evidence', () => {
+  it('preserves large exact quota and crypto values and excludes unrecognized fields', () => {
+    const detail = parseGmpayOrderDetail(
+      {
+        order_no: 'GPtest',
+        method: 'gmpay',
+        status: 'completed',
+        quota: '9007199254740993',
+        paid_at: 1785114100,
+        gmpay: {
+          ...evidence,
+          status: 'settled',
+          settled_crypto_amount: '0.123456789012345678',
+          merchant_key: 'must-not-be-exposed',
+        },
+      },
+      'GPtest'
+    )
+    expect(detail.state).toEqual({
+      status: 'completed',
+      quota: '9007199254740993',
+      paid_at: 1785114100,
+    })
+    expect(detail.evidence?.settled_crypto_amount).toBe('0.123456789012345678')
+    expect(detail.evidence).not.toHaveProperty('merchant_key')
+  })
+
+  it.each([
+    { quota: 500000 },
+    { quota: '-1' },
+    { paid_at: -1 },
+    { status: 'unverified' },
+  ])('rejects invalid authoritative order state %j', (overrides) => {
+    expect(() =>
+      parseGmpayOrderDetail(
+        {
+          order_no: 'GPtest',
+          method: 'gmpay',
+          status: 'pending',
+          quota: '0',
+          paid_at: 0,
+          gmpay: evidence,
+          ...overrides,
+        },
+        'GPtest'
+      )
+    ).toThrow()
+  })
+
   it('accepts an unknown creation result without inventing a gateway trade number', () => {
     expect(
       parseGmpayOrderEvidence(

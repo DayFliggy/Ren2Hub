@@ -2491,6 +2491,10 @@ export default {
         'No payment assets are available. Check the enabled networks and wallets on the gateway.',
       probed: 'Available assets loaded. Select the tokens to offer.',
       saved: 'GMPay configuration saved',
+      loading: 'Loading gateway configuration…',
+      loadFailed:
+        'Gateway configuration could not be loaded. Editing is disabled until a successful reload.',
+      retryLoad: 'Reload gateway configuration',
     },
     epaySettlement: 'Enable Epay settlement',
     gmpaySettlement: 'Enable crypto settlement',

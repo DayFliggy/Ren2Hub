@@ -310,6 +310,30 @@ func TestParseCreatedOrderRejectsNonNumericAmounts(t *testing.T) {
 	}
 }
 
+func TestCreatedOrderNumericExponentsPreserveExactAmounts(t *testing.T) {
+	for _, test := range []struct {
+		literal string
+		want    string
+	}{
+		{"1e1", "10"}, {"1e+21", "1000000000000000000000"},
+		{"1.23456E-1", "0.123456"}, {"9007199254740993e0", "9007199254740993"},
+	} {
+		t.Run(test.literal, func(t *testing.T) {
+			body := `{"status_code":200,"data":{"trade_id":"t","order_id":"o","amount":10,"actual_amount":` + test.literal + `,"status":1,"payment_url":"https://pay.example/cashier/t"}}`
+			created, err := ParseCreatedOrder([]byte(body))
+			require.NoError(t, err)
+			assert.Equal(t, test.want, created.ActualAmount)
+			_, err = ParseTokenAmount(created.ActualAmount)
+			require.NoError(t, err)
+		})
+	}
+	for _, literal := range []string{"1e10000", "1e-10000"} {
+		body := `{"status_code":200,"data":{"trade_id":"t","order_id":"o","amount":10,"actual_amount":` + literal + `,"status":1,"payment_url":"https://pay.example/cashier/t"}}`
+		_, err := ParseCreatedOrder([]byte(body))
+		assert.ErrorIs(t, err, ErrInvalidParameters, "exponent expansion must remain bounded")
+	}
+}
+
 func notificationParams() map[string]string {
 	return map[string]string{
 		"pid": "1000", "trade_id": "t1", "order_id": "o1", "amount": "73.00",
@@ -388,6 +412,16 @@ func TestNotificationUsesJSONMediaType(t *testing.T) {
 		request.Header.Set("Content-Type", mediaType)
 		_, err = ParseNotification(request)
 		assert.ErrorIs(t, err, ErrInvalidParameters, mediaType)
+	}
+}
+
+func TestNotificationAcceptsOnlyPost(t *testing.T) {
+	body := signedNotificationBody(t, notificationParams(), "secret")
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodHead, http.MethodDelete} {
+		request := postNotification(t, body)
+		request.Method = method
+		_, err := ParseNotification(request)
+		assert.ErrorIs(t, err, ErrInvalidParameters, method)
 	}
 }
 
@@ -486,4 +520,35 @@ func TestVerifyNotificationRequiresConfig(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidConfig)
 	_, err = VerifyNotification(params, Config{Key: "secret"})
 	assert.ErrorIs(t, err, ErrInvalidConfig)
+}
+
+func TestPublicConfigRequiresAnExplicitAssetCatalog(t *testing.T) {
+	for _, body := range []string{
+		`{"status_code":200,"data":{}}`,
+		`{"status_code":200,"data":{"supported_assets":null}}`,
+		`{"status_code":200,"data":{"supported_assets":{}}}`,
+		`{"status_code":200,"data":{"supported_assets":[{"network":"tron","tokens":[true]}]}}`,
+	} {
+		_, err := ParsePublicConfig([]byte(body))
+		assert.ErrorIs(t, err, ErrInvalidParameters, body)
+	}
+	assets, err := ParsePublicConfig([]byte(`{"status_code":200,"data":{"supported_assets":[]}}`))
+	require.NoError(t, err, "a gateway without configured wallets has an explicit empty array")
+	assert.Empty(t, assets)
+	assets, err = ParsePublicConfig([]byte(`{"status_code":200,"data":{"supported_assets":[{"network":" ETHEREUM ","display_name":"Ethereum","tokens":["USDT","USDC"]}],"site":{"cashier_name":"Test"}}}`))
+	require.NoError(t, err)
+	assert.Equal(t, []SupportedAsset{{Network: "ethereum", DisplayName: "Ethereum", Tokens: []string{"usdt", "usdc"}}}, assets)
+}
+
+func TestNotificationAuthenticatesExtensionFields(t *testing.T) {
+	params := notificationParams()
+	params["receipt_memo"] = "gateway-extension"
+	body := signedNotificationBody(t, params, "secret")
+	parsed, err := ParseNotification(postNotification(t, body))
+	require.NoError(t, err)
+	_, err = VerifyNotification(parsed, Config{MerchantID: "1000", Key: "secret"})
+	require.NoError(t, err)
+	parsed["receipt_memo"] = "tampered"
+	_, err = VerifyNotification(parsed, Config{MerchantID: "1000", Key: "secret"})
+	assert.ErrorIs(t, err, ErrInvalidSignature)
 }

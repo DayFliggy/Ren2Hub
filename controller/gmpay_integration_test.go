@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // This exercises real HTTP on both sides, with isolated storage and no chain or
@@ -35,6 +37,8 @@ func TestGmpayHTTPConfigurationCheckoutAndSettlement(t *testing.T) {
 	engine.Use(func(c *gin.Context) { c.Set("id", 1) })
 	engine.POST("/api/option/gmpay/save", SaveGmpay)
 	engine.GET("/api/option/", GetOptions)
+	engine.GET("/api/option/catalog", GetOptionCatalog)
+	engine.GET("/api/option/secret-status", GetOptionSecretStatus)
 	engine.GET("/api/next/wallet/gmpay/config", NextGetGmpayTopUpConfig)
 	engine.GET("/api/next/wallet/config", NextGetEpayTopUpConfig)
 	engine.POST("/api/next/wallet/topup/quote", NextQuoteEpayTopUp)
@@ -77,6 +81,24 @@ func TestGmpayHTTPConfigurationCheckoutAndSettlement(t *testing.T) {
 	assert.Contains(t, options, "GmpayGroupRatio")
 	assert.NotContains(t, options, "GmpayKey")
 	assert.NotContains(t, options, gmpayControllerTestSecret)
+	var catalog struct {
+		Data []OptionDescriptor `json:"data"`
+	}
+	catalogBody := get("/api/option/catalog")
+	require.NoError(t, common.Unmarshal(catalogBody, &catalog))
+	assert.NotContains(t, string(catalogBody), gmpayControllerTestSecret)
+	foundSecret := false
+	for _, option := range catalog.Data {
+		if option.Key == "GmpayKey" {
+			foundSecret = true
+			assert.True(t, option.Sensitive)
+			assert.Empty(t, option.DefaultValue)
+		}
+	}
+	assert.True(t, foundSecret)
+	secretStatus := string(get("/api/option/secret-status"))
+	assert.Contains(t, secretStatus, `"GmpayKey"`)
+	assert.NotContains(t, secretStatus, gmpayControllerTestSecret)
 	assert.Contains(t, string(get("/api/next/wallet/gmpay/config")), `"enable_gmpay_topup":true`)
 	assert.Contains(t, string(get("/api/next/wallet/config")), `"enable_online_topup":false`, "an unconfigured EPay rail does not block GMPay")
 
@@ -161,4 +183,55 @@ func TestGmpayHTTPConfigurationCheckoutAndSettlement(t *testing.T) {
 	assert.NotContains(t, detail, gmpayControllerTestSecret)
 	assert.NotContains(t, detail, "merchant_version_id")
 	assert.NotContains(t, detail, "account_id")
+}
+
+func TestGmpayConfigurationRejectsInvalidOrUncommittedChanges(t *testing.T) {
+	db := setupGmpayControllerTestDB(t, "https://payments.example.test")
+	withOptionMap(t, map[string]string{"GmpayId": "1", "GmpayKey": gmpayControllerTestSecret})
+	var before []model.Option
+	require.NoError(t, db.Order("key").Find(&before).Error)
+	valid := saveGmpayRequest{
+		PayAddress: "https://payments.example.test", MerchantID: "changed-merchant", SecretKey: "new-test-key",
+		Assets: `[{"name":"Ethereum","token":"usdt","network":"ethereum"}]`,
+		Price:  2, MinTopUp: 2, GroupRatio: `{"default":2}`,
+	}
+	for _, test := range []struct {
+		name   string
+		mutate func(*saveGmpayRequest)
+	}{
+		{"invalid price", func(r *saveGmpayRequest) { r.Price = 0 }},
+		{"invalid minimum", func(r *saveGmpayRequest) { r.MinTopUp = 0 }},
+		{"duplicate asset", func(r *saveGmpayRequest) {
+			r.Assets = `[{"name":"A","token":"usdt","network":"tron"},{"name":"B","token":"USDT","network":"TRON"}]`
+		}},
+		{"invalid ratio", func(r *saveGmpayRequest) { r.GroupRatio = `{"default":0}` }},
+		{"control in merchant", func(r *saveGmpayRequest) { r.MerchantID = "merchant\nother" }},
+		{"persistence failure", nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := valid
+			if test.mutate != nil {
+				test.mutate(&candidate)
+			} else {
+				require.NoError(t, db.Callback().Update().Before("gorm:update").Register("reject_gmpay_options", func(tx *gorm.DB) {
+					if option, ok := tx.Statement.Dest.(*model.Option); ok && option.Key == "GmpayAssets" {
+						tx.AddError(errors.New("injected configuration write failure"))
+					}
+				}))
+				t.Cleanup(func() { db.Callback().Update().Remove("reject_gmpay_options") })
+			}
+			body, err := common.Marshal(candidate)
+			require.NoError(t, err)
+			response := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(response)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/option/gmpay/save", bytes.NewReader(body))
+			SaveGmpay(c)
+			assert.Contains(t, response.Body.String(), `"success":false`)
+			assert.NotContains(t, response.Body.String(), candidate.SecretKey)
+			var after []model.Option
+			require.NoError(t, db.Order("key").Find(&after).Error)
+			assert.Equal(t, before, after, "all merchant settings must remain committed together")
+			assert.Equal(t, map[string]string{"GmpayId": "1", "GmpayKey": gmpayControllerTestSecret}, common.OptionMap)
+		})
+	}
 }

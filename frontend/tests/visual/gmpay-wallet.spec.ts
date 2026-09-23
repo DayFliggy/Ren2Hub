@@ -154,6 +154,10 @@ for (const theme of ['light', 'dark'] as const) {
       let failQuote = false
       let quoteVersion = 1
       let orderWrites = 0
+      let releaseOrder!: () => void
+      const pendingOrder = new Promise<void>((resolve) => {
+        releaseOrder = resolve
+      })
       await page.route('**/api/next/wallet/gmpay/quote', (route) => {
         const input = route.request().postDataJSON()
         expect(input.payment_method).toBe('usdt.tron')
@@ -182,12 +186,13 @@ for (const theme of ['light', 'dark'] as const) {
           },
         })
       })
-      await page.route('**/api/next/wallet/gmpay/topup', (route) => {
+      await page.route('**/api/next/wallet/gmpay/topup', async (route) => {
         orderWrites++
         const input = route.request().postDataJSON()
         expect(input.payment_method).toBe('usdt.tron')
         expect(input.quote_fingerprint).toBe(`crypto-${quoteVersion}`)
         if (orderWrites === 1) {
+          await pendingOrder
           quoteVersion++
           return route.fulfill({
             json: {
@@ -257,6 +262,18 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(submit).toBeEnabled()
       await submit.click()
       await expect(
+        page.getByPlaceholder('输入金额', { exact: true })
+      ).toBeDisabled()
+      await expect(
+        page.getByRole('button', { name: 'Alipay', exact: true })
+      ).toBeDisabled()
+      await expect(
+        page.getByRole('button', { name: '$10', exact: true })
+      ).toBeDisabled()
+      await expect(submit).toBeDisabled()
+      expect(orderWrites).toBe(1)
+      releaseOrder()
+      await expect(
         page.getByText('报价已变化，请确认更新后的金额，再次点击充值。')
       ).toBeVisible()
       await expect(page.getByText('$20.01', { exact: true })).toBeVisible()
@@ -273,15 +290,18 @@ for (const theme of ['light', 'dark'] as const) {
         GmpayGroupRatio: '{"default":1,"vip":0.8}',
         GmpayAssets: '[{"name":"USDT Tron","token":"usdt","network":"tron"}]',
       }
+      let settingsUnavailable = true
       await page.route('**/api/option/', (route) =>
         route.fulfill({
-          json: {
-            success: true,
-            data: Object.entries(options).map(([key, value]) => ({
-              key,
-              value,
-            })),
-          },
+          json: settingsUnavailable
+            ? { success: false, message: '模拟配置读取失败' }
+            : {
+                success: true,
+                data: Object.entries(options).map(([key, value]) => ({
+                  key,
+                  value,
+                })),
+              },
         })
       )
       await page.route('**/api/option/secret-status', (route) =>
@@ -318,12 +338,33 @@ for (const theme of ['light', 'dark'] as const) {
         })
         options.GmpayAssets = input.assets
         options.GmpayGroupRatio = input.group_ratio
+        settingsUnavailable = true
         return route.fulfill({ json: { success: true, data: {} } })
       })
       await page.goto('/system-settings/billing/gmpay')
       await expect(
         page.getByRole('heading', { name: 'GMPay 虚拟币支付', exact: true })
       ).toBeVisible()
+      const gatewayPanel = page.getByRole('region', {
+        name: 'GMPay 虚拟币支付',
+        exact: true,
+      })
+      await expect(gatewayPanel.getByRole('alert')).toContainText(
+        '网关配置读取失败'
+      )
+      await expect(
+        gatewayPanel.getByRole('button', { name: '保存网关配置', exact: true })
+      ).toBeDisabled()
+      await expect(
+        gatewayPanel.getByLabel('网关地址', { exact: true })
+      ).toBeDisabled()
+      settingsUnavailable = false
+      await gatewayPanel
+        .getByRole('button', { name: '重新读取网关配置', exact: true })
+        .click()
+      await expect(
+        gatewayPanel.getByLabel('网关地址', { exact: true })
+      ).toHaveValue('https://gateway.example')
       await page
         .getByRole('button', { name: '探测可用资产', exact: true })
         .click()
@@ -352,7 +393,27 @@ for (const theme of ['light', 'dark'] as const) {
         page.getByText('GMPay 配置已保存', { exact: true })
       ).toBeVisible()
       expect(saves).toBe(1)
+      await expect(gatewayPanel.getByRole('alert')).toContainText(
+        '网关配置读取失败'
+      )
+      await expect(save).toBeDisabled()
+      await expect(
+        gatewayPanel.getByLabel('用户组价格倍率（JSON）', { exact: false })
+      ).toHaveValue('{"default":1,"vip":0.75}')
+      await expect(page.locator('[data-handdrawn="toast"]')).toHaveCount(0)
+      await gatewayPanel.getByRole('alert').scrollIntoViewIfNeeded()
+      await page.screenshot({
+        path: testInfo.outputPath('gmpay-settings-refresh-failure.png'),
+      })
+      settingsUnavailable = false
+      await gatewayPanel
+        .getByRole('button', { name: '重新读取网关配置', exact: true })
+        .click()
+      await expect(save).toBeEnabled()
       await assertNoHorizontalOverflow(page)
+      await gatewayPanel
+        .getByLabel('网关地址', { exact: true })
+        .scrollIntoViewIfNeeded()
       await page.screenshot({
         path: testInfo.outputPath('gmpay-settings.png'),
         fullPage: true,

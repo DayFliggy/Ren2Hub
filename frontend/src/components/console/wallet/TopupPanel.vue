@@ -76,6 +76,7 @@ const quoteError = ref('')
 const quoteChanged = ref(false)
 let quoteSequence = 0
 let quoteController: AbortController | null = null
+let disposed = false
 const method = computed({
   get: () => props.paymentMethod,
   set: (value: string) => emit('update:paymentMethod', value),
@@ -154,6 +155,7 @@ const balanceAfter = computed(() =>
 async function topup(): Promise<void> {
   if (!canSubmit.value || submittingTopup.value) return
   submittingTopup.value = true
+  let navigating = false
   try {
     const value = amount.value
     const payload = {
@@ -169,6 +171,7 @@ async function topup(): Promise<void> {
         orderEndpoint.value,
         payload
       )
+      if (disposed) return
       let cashier: URL
       try {
         cashier = new URL(response.url)
@@ -184,6 +187,7 @@ async function topup(): Promise<void> {
       }
       toast.success(t('wallet.callbackNote'))
       window.location.href = cashier.href
+      navigating = true
       emit('done')
       return
     }
@@ -191,6 +195,7 @@ async function topup(): Promise<void> {
       url: string
       data: Record<string, unknown>
     }>(orderEndpoint.value, payload)
+    if (disposed) return
     if (!response.url || !response.data) {
       throw new ApiError(t('wallet.paymentMethodsUnavailable'))
     }
@@ -207,10 +212,12 @@ async function topup(): Promise<void> {
     }
     document.body.append(form)
     form.submit()
+    navigating = true
     form.remove()
     toast.success(t('wallet.callbackNote'))
     emit('done')
   } catch (error) {
+    if (disposed) return
     if (error instanceof ApiError && error.code === 'QUOTE_CHANGED') {
       quoteChanged.value = true
       await refreshQuote()
@@ -218,7 +225,7 @@ async function topup(): Promise<void> {
     }
     toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
-    submittingTopup.value = false
+    if (!navigating) submittingTopup.value = false
   }
 }
 
@@ -361,6 +368,7 @@ watch(
 )
 
 onUnmounted(() => {
+  disposed = true
   configControllers.epay?.abort()
   configControllers.gmpay?.abort()
   ++quoteSequence
@@ -370,162 +378,164 @@ onUnmounted(() => {
 
 <template>
   <ConsoleCard :title="t('wallet.quickTopup')">
-    <div class="grid grid-cols-3 gap-2">
-      <button
-        v-for="preset in presets"
-        :key="preset"
-        type="button"
-        class="h-14 rounded-xl text-sm font-bold transition-all focus-ring"
-        :style="
-          amount === preset
-            ? 'background:var(--accent);color:var(--accent-contrast)'
-            : 'background:var(--surface-muted);color:var(--text-secondary)'
-        "
-        :class="{ 'hover:bg-[var(--surface-hover)]': amount !== preset }"
-        :aria-pressed="amount === preset"
-        @click="amount = preset"
-      >
-        ${{ preset }}
-      </button>
-    </div>
+    <fieldset :disabled="submittingTopup" class="min-w-0 border-0 p-0">
+      <div class="grid grid-cols-3 gap-2">
+        <button
+          v-for="preset in presets"
+          :key="preset"
+          type="button"
+          class="h-14 rounded-xl text-sm font-bold transition-all focus-ring"
+          :style="
+            amount === preset
+              ? 'background:var(--accent);color:var(--accent-contrast)'
+              : 'background:var(--surface-muted);color:var(--text-secondary)'
+          "
+          :class="{ 'hover:bg-[var(--surface-hover)]': amount !== preset }"
+          :aria-pressed="amount === preset"
+          @click="amount = preset"
+        >
+          ${{ preset }}
+        </button>
+      </div>
 
-    <div class="mt-4">
-      <AmountInput
-        v-model="amount"
-        :placeholder="t('wallet.amountPlaceholder')"
-        :min="selectedMinimumTopup"
-      />
+      <div class="mt-4">
+        <AmountInput
+          v-model="amount"
+          :placeholder="t('wallet.amountPlaceholder')"
+          :min="selectedMinimumTopup"
+        />
+        <p
+          v-if="invalidAmount || balanceProjection.invalid"
+          role="alert"
+          class="mt-2 text-xs text-[var(--danger-text)]"
+        >
+          {{ t('wallet.invalidTopupAmount') }}
+        </p>
+      </div>
+
+      <div class="mt-4">
+        <PaymentMethods v-model="method" :methods="selectableMethods" />
+        <p
+          v-if="configStates.epay === 'failed'"
+          role="alert"
+          class="mt-2 text-xs text-[var(--danger-text)]"
+        >
+          {{ t('wallet.epayMethodsLoadFailed') }}
+          <ConsoleButton
+            class="mt-2"
+            variant="secondary"
+            size="sm"
+            @click="loadPaymentConfig('epay')"
+            >{{ t('wallet.retryEpayMethods') }}</ConsoleButton
+          >
+        </p>
+        <p
+          v-if="configStates.gmpay === 'failed'"
+          role="alert"
+          class="mt-2 text-xs text-[var(--danger-text)]"
+        >
+          {{ t('wallet.gmpayMethodsLoadFailed') }}
+          <ConsoleButton
+            class="mt-2"
+            variant="secondary"
+            size="sm"
+            @click="loadPaymentConfig('gmpay')"
+            >{{ t('wallet.retryGmpayMethods') }}</ConsoleButton
+          >
+        </p>
+        <p
+          v-if="
+            configStates.epay === 'ready' &&
+            configStates.gmpay === 'ready' &&
+            !paymentMethods.length
+          "
+          class="mt-2 text-xs text-[var(--text-tertiary)]"
+        >
+          {{ t('wallet.paymentMethodsUnavailable') }}
+        </p>
+      </div>
+
+      <div class="mt-5 space-y-2 border-t border-[var(--border-subtle)] pt-4">
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-[var(--text-secondary)]">{{
+            t(
+              quote?.currency === 'USD'
+                ? 'wallet.summaryPayNowUsd'
+                : 'wallet.summaryPayNow'
+            )
+          }}</span>
+          <span class="font-semibold tabular-nums text-[var(--text-primary)]">
+            {{ quote?.pay_amount ? `${quoteSymbol}${quote.pay_amount}` : '—' }}
+          </span>
+        </div>
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-[var(--text-secondary)]">{{
+            t('wallet.summaryCredit')
+          }}</span>
+          <span class="font-semibold tabular-nums text-[var(--text-primary)]">
+            {{ quote ? formatQuota(quote.expected_quota, 3) : '—' }}
+          </span>
+        </div>
+        <div class="flex items-center justify-between gap-3 text-sm">
+          <span class="text-[var(--text-secondary)]">{{
+            t('wallet.summaryBalanceAfter')
+          }}</span>
+          <span class="font-semibold tabular-nums text-[var(--accent-text)]">{{
+            balanceAfter
+          }}</span>
+        </div>
+      </div>
+
       <p
-        v-if="invalidAmount || balanceProjection.invalid"
-        role="alert"
-        class="mt-2 text-xs text-[var(--danger-text)]"
+        v-if="quoteLoading"
+        role="status"
+        class="mt-3 text-xs text-[var(--text-tertiary)]"
       >
-        {{ t('wallet.invalidTopupAmount') }}
+        {{ t('wallet.quoteLoading') }}
       </p>
-    </div>
-
-    <div class="mt-4">
-      <PaymentMethods v-model="method" :methods="selectableMethods" />
-      <p
-        v-if="configStates.epay === 'failed'"
+      <div
+        v-if="quoteError"
         role="alert"
-        class="mt-2 text-xs text-[var(--danger-text)]"
+        class="mt-3 text-xs text-[var(--danger-text)]"
       >
-        {{ t('wallet.epayMethodsLoadFailed') }}
+        <p>{{ quoteError }}</p>
         <ConsoleButton
           class="mt-2"
           variant="secondary"
           size="sm"
-          @click="loadPaymentConfig('epay')"
-          >{{ t('wallet.retryEpayMethods') }}</ConsoleButton
+          @click="refreshQuote"
         >
-      </p>
+          {{ t('wallet.retryQuote') }}
+        </ConsoleButton>
+      </div>
       <p
-        v-if="configStates.gmpay === 'failed'"
-        role="alert"
-        class="mt-2 text-xs text-[var(--danger-text)]"
+        v-if="quoteChanged"
+        role="status"
+        class="mt-3 text-xs text-[var(--text-secondary)]"
       >
-        {{ t('wallet.gmpayMethodsLoadFailed') }}
-        <ConsoleButton
-          class="mt-2"
-          variant="secondary"
-          size="sm"
-          @click="loadPaymentConfig('gmpay')"
-          >{{ t('wallet.retryGmpayMethods') }}</ConsoleButton
-        >
+        {{ t('wallet.quoteChanged') }}
       </p>
-      <p
-        v-if="
-          configStates.epay === 'ready' &&
-          configStates.gmpay === 'ready' &&
-          !paymentMethods.length
-        "
-        class="mt-2 text-xs text-[var(--text-tertiary)]"
-      >
-        {{ t('wallet.paymentMethodsUnavailable') }}
-      </p>
-    </div>
 
-    <div class="mt-5 space-y-2 border-t border-[var(--border-subtle)] pt-4">
-      <div class="flex items-center justify-between text-sm">
-        <span class="text-[var(--text-secondary)]">{{
-          t(
-            quote?.currency === 'USD'
-              ? 'wallet.summaryPayNowUsd'
-              : 'wallet.summaryPayNow'
-          )
-        }}</span>
-        <span class="font-semibold tabular-nums text-[var(--text-primary)]">
-          {{ quote?.pay_amount ? `${quoteSymbol}${quote.pay_amount}` : '—' }}
-        </span>
-      </div>
-      <div class="flex items-center justify-between text-sm">
-        <span class="text-[var(--text-secondary)]">{{
-          t('wallet.summaryCredit')
-        }}</span>
-        <span class="font-semibold tabular-nums text-[var(--text-primary)]">
-          {{ quote ? formatQuota(quote.expected_quota, 3) : '—' }}
-        </span>
-      </div>
-      <div class="flex items-center justify-between gap-3 text-sm">
-        <span class="text-[var(--text-secondary)]">{{
-          t('wallet.summaryBalanceAfter')
-        }}</span>
-        <span class="font-semibold tabular-nums text-[var(--accent-text)]">{{
-          balanceAfter
-        }}</span>
-      </div>
-    </div>
-
-    <p
-      v-if="quoteLoading"
-      role="status"
-      class="mt-3 text-xs text-[var(--text-tertiary)]"
-    >
-      {{ t('wallet.quoteLoading') }}
-    </p>
-    <div
-      v-if="quoteError"
-      role="alert"
-      class="mt-3 text-xs text-[var(--danger-text)]"
-    >
-      <p>{{ quoteError }}</p>
       <ConsoleButton
-        class="mt-2"
-        variant="secondary"
-        size="sm"
-        @click="refreshQuote"
+        class="mt-4"
+        block
+        size="lg"
+        :loading="submittingTopup"
+        :disabled="!canSubmit"
+        @click="topup"
       >
-        {{ t('wallet.retryQuote') }}
+        {{ submitLabel }}
       </ConsoleButton>
-    </div>
-    <p
-      v-if="quoteChanged"
-      role="status"
-      class="mt-3 text-xs text-[var(--text-secondary)]"
-    >
-      {{ t('wallet.quoteChanged') }}
-    </p>
 
-    <ConsoleButton
-      class="mt-4"
-      block
-      size="lg"
-      :loading="submittingTopup"
-      :disabled="!canSubmit"
-      @click="topup"
-    >
-      {{ submitLabel }}
-    </ConsoleButton>
-
-    <p v-if="isCrypto" class="mt-2 text-xs text-[var(--text-tertiary)]">
-      {{ t('wallet.gmpayNetworkGuidance') }}
-    </p>
-    <p v-if="isCrypto" class="mt-2 text-xs text-[var(--text-tertiary)]">
-      {{ t('wallet.gmpayRedirectNote') }}
-    </p>
-    <p class="mt-3 text-xs text-[var(--text-tertiary)]">
-      {{ t('wallet.callbackNote') }}
-    </p>
+      <p v-if="isCrypto" class="mt-2 text-xs text-[var(--text-tertiary)]">
+        {{ t('wallet.gmpayNetworkGuidance') }}
+      </p>
+      <p v-if="isCrypto" class="mt-2 text-xs text-[var(--text-tertiary)]">
+        {{ t('wallet.gmpayRedirectNote') }}
+      </p>
+      <p class="mt-3 text-xs text-[var(--text-tertiary)]">
+        {{ t('wallet.callbackNote') }}
+      </p>
+    </fieldset>
   </ConsoleCard>
 </template>

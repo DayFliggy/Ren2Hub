@@ -396,10 +396,9 @@ func ParseCreatedOrder(body []byte) (*CreatedOrder, error) {
 	}, nil
 }
 
-// createdOrderWire keeps every gateway amount as literal text. The gateway
-// emits the amounts as JSON numbers, so a plain string field would fail to
-// decode; literalString preserves the exact spelling instead of routing the
-// value through float64.
+// createdOrderWire keeps every gateway amount as exact decimal text. The
+// gateway emits JSON numbers, including exponent notation for large values;
+// decoding must not lose precision through float64.
 type createdOrderWire struct {
 	TradeNo        string        `json:"trade_id"`
 	OrderNo        string        `json:"order_id"`
@@ -413,9 +412,8 @@ type createdOrderWire struct {
 	PaymentURL     string        `json:"payment_url"`
 }
 
-// literalString captures a JSON value verbatim, accepting either a quoted
-// string or a bare number. Amounts must survive decoding exactly as the
-// gateway wrote them; reparsing through float64 would rewrite them.
+// literalString accepts a quoted string or a bare number. Numeric exponents
+// expand to decimal notation without rounding; strings retain their spelling.
 type literalString string
 
 // UnmarshalJSON copies the raw token text, stripping quotes when the value is a
@@ -438,6 +436,17 @@ func (value *literalString) UnmarshalJSON(data []byte) error {
 		if err := common.Unmarshal(data, &number); err != nil {
 			return ErrInvalidParameters
 		}
+		if strings.ContainsAny(trimmed, "eE") {
+			amount, err := decimal.NewFromString(trimmed)
+			// Bound expansion before allocating a decimal string from remote input.
+			if err != nil || amount.Exponent() > maxValueBytes || amount.Exponent() < -maxValueBytes {
+				return ErrInvalidParameters
+			}
+			trimmed = amount.String()
+			if len(trimmed) > maxValueBytes {
+				return ErrInvalidParameters
+			}
+		}
 		*value = literalString(trimmed)
 		return nil
 	}
@@ -445,7 +454,7 @@ func (value *literalString) UnmarshalJSON(data []byte) error {
 
 // ParseNotification reads the bounded JSON callback body exactly once.
 func ParseNotification(request *http.Request) (map[string]string, error) {
-	if request == nil || request.Body == nil {
+	if request == nil || request.Method != http.MethodPost || request.Body == nil {
 		return nil, ErrInvalidParameters
 	}
 	mediaType := request.Header.Get("Content-Type")
@@ -634,7 +643,7 @@ func ParsePublicConfig(body []byte) ([]SupportedAsset, error) {
 	if env.StatusCode != http.StatusOK || env.Data == nil {
 		return nil, ErrGatewayRejected
 	}
-	if len(env.Data.SupportedAssets) > maxSupportedNetworks {
+	if env.Data.SupportedAssets == nil || len(env.Data.SupportedAssets) > maxSupportedNetworks {
 		return nil, ErrInvalidParameters
 	}
 	assets := make([]SupportedAsset, 0, len(env.Data.SupportedAssets))

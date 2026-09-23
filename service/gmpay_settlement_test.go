@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -269,6 +270,76 @@ func TestGmpaySettlementHonoursThePauseSwitch(t *testing.T) {
 	assert.False(t, enabled)
 	setGmpayTestOption(t, db, "payment_setting.gmpay_settlement_enabled", "true")
 	require.NoError(t, SettleGmpayNotification(ctx, gmpayTestNotification(order, "trade-resumed", gmpayTestSecret, nil), ""))
+	assert.Equal(t, common.Quota(5_000_000), gmpayTestUserQuota(t, db))
+}
+
+func TestGmpaySettlementRejectsNoncanonicalStoredSwitch(t *testing.T) {
+	for _, value := range []string{"TRUE", "1", "t", "FALSE", "0", "", "invalid"} {
+		t.Run(value, func(t *testing.T) {
+			db := gmpayServiceTestDB(t, "https://payments.example.test")
+			order := &model.TopUp{UserId: 1, TradeNo: gmpayTestTradeNoString(5)}
+			gmpayTestSnapshot(t, order, 5_000_000)
+			setGmpayTestOption(t, db, "payment_setting.gmpay_settlement_enabled", value)
+			enabled, err := GmpaySettlementEnabled(context.Background())
+			require.Error(t, err)
+			assert.False(t, enabled)
+			require.Error(t, SettleGmpayNotification(context.Background(), gmpayTestNotification(order, "trade-invalid-switch", gmpayTestSecret, nil), ""))
+			assert.Zero(t, gmpayTestUserQuota(t, db))
+			var saved model.GmpayOrder
+			require.NoError(t, db.First(&saved, order.Id).Error)
+			assert.Nil(t, saved.GatewayTradeNo)
+			assert.Equal(t, model.GmpayStatusCreating, saved.Status)
+		})
+	}
+}
+
+func TestGmpaySettlementUsesFrozenCredentialsAfterRotationAndDisable(t *testing.T) {
+	db := gmpayServiceTestDB(t, "https://payments.example.test")
+	ctx := context.Background()
+	order := &model.TopUp{UserId: 1, TradeNo: gmpayTestTradeNoString(6)}
+	gmpayTestSnapshot(t, order, 5_000_000)
+	setGmpayTestOption(t, db, "GmpayKey", "replacement-test-key")
+	require.ErrorIs(t, SettleGmpayNotification(ctx, gmpayTestNotification(order, "trade-frozen", "replacement-test-key", nil), ""), gmpay.ErrInvalidSignature)
+	assert.Zero(t, gmpayTestUserQuota(t, db))
+	for key, value := range map[string]string{"GmpayPayAddress": "", "GmpayId": "", "GmpayKey": "", "GmpayAssets": "[]", "GmpayPrice": "7"} {
+		setGmpayTestOption(t, db, key, value)
+	}
+	config, err := LoadGmpayConfig(ctx)
+	require.NoError(t, err)
+	assert.False(t, config.Enabled(), "the current checkout is disabled")
+	params := gmpayTestNotification(order, "trade-frozen", gmpayTestSecret, nil)
+	require.NoError(t, SettleGmpayNotification(ctx, params, ""))
+	require.NoError(t, SettleGmpayNotification(ctx, params, ""))
+	require.NoError(t, db.First(&order, order.Id).Error)
+	assert.Equal(t, common.Quota(5_000_000), order.CreditedQuota)
+	assert.Equal(t, common.Quota(5_000_000), gmpayTestUserQuota(t, db))
+	var events int64
+	require.NoError(t, db.Model(&model.BillingEvent{}).Count(&events).Error)
+	assert.EqualValues(t, 1, events)
+}
+
+func TestGmpaySettlementDoesNotTreatOptionDatabaseFailureAsEnabled(t *testing.T) {
+	db := gmpayServiceTestDB(t, "https://payments.example.test")
+	order := &model.TopUp{UserId: 1, TradeNo: gmpayTestTradeNoString(7)}
+	gmpayTestSnapshot(t, order, 5_000_000)
+	injected := errors.New("injected option read failure")
+	require.NoError(t, db.Callback().Query().Before("gorm:query").Register("gmpay_option_read_failure", func(tx *gorm.DB) {
+		if tx.Statement.Table == "options" {
+			tx.AddError(injected)
+		}
+	}))
+	t.Cleanup(func() { db.Callback().Query().Remove("gmpay_option_read_failure") })
+	enabled, err := GmpaySettlementEnabled(t.Context())
+	require.ErrorIs(t, err, injected)
+	assert.False(t, enabled)
+	params := gmpayTestNotification(order, "trade-option-failure", gmpayTestSecret, nil)
+	require.ErrorIs(t, SettleGmpayNotification(t.Context(), params, ""), injected)
+	assert.Zero(t, gmpayTestUserQuota(t, db))
+	var snapshot model.GmpayOrder
+	require.NoError(t, db.First(&snapshot, order.Id).Error)
+	assert.Nil(t, snapshot.GatewayTradeNo)
+	require.NoError(t, db.Callback().Query().Remove("gmpay_option_read_failure"))
+	require.NoError(t, SettleGmpayNotification(t.Context(), params, ""))
 	assert.Equal(t, common.Quota(5_000_000), gmpayTestUserQuota(t, db))
 }
 

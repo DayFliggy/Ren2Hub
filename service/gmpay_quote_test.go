@@ -1,6 +1,8 @@
 package service
 
 import (
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -298,4 +300,43 @@ func TestSaveGmpayConfigRejectsInvalidInputBeforePublishing(t *testing.T) {
 			require.Error(t, save())
 		})
 	}
+}
+
+func TestGmpayQuoteNumericLimits(t *testing.T) {
+	for _, test := range []struct {
+		name, price string
+		amount      int64
+		unit        string
+	}{
+		{"zero rounded payable", "0.001", 1, "USD"},
+		{"gateway minimum", "0.01", 1, "USD"},
+		{"payable cents overflow", "10000", math.MaxInt64, "TOKENS"},
+		{"wallet quota overflow", "1", math.MaxInt64/500000 + 1, "USD"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := gmpayQuoteTestConfig()
+			config.Price = decimal.RequireFromString(test.price)
+			_, err := BuildGmpayQuote(config, 1, "default", GmpayQuoteRequest{
+				Amount: test.amount, AmountUnit: test.unit, PaymentMethod: "usdt.tron",
+			})
+			var business *GmpayError
+			require.ErrorAs(t, err, &business)
+			assert.Equal(t, "VALIDATION_ERROR", business.Code)
+		})
+	}
+	config := gmpayQuoteTestConfig()
+	config.MinTopUp = math.MaxInt64 / 500000
+	request := GmpayQuoteRequest{Amount: config.MinTopUp, AmountUnit: "USD", PaymentMethod: "usdt.tron"}
+	quote, err := BuildGmpayQuote(config, 1, "default", request)
+	require.NoError(t, err)
+	assert.Equal(t, common.Quota(config.MinTopUp*500000), quote.MinimumQuota)
+	assert.Equal(t, quote.MinimumQuota, quote.ExpectedQuota)
+	assert.Equal(t, config.MinTopUp*100, quote.AmountMinor)
+	config.MinTopUp++
+	_, err = BuildGmpayQuote(config, 1, "default", request)
+	require.Error(t, err, "minimum quota multiplication must never overflow")
+	config.MinTopUp = 1
+	config.Assets[0].MinTopUp = strconv.FormatInt(math.MaxInt64/500000+1, 10)
+	_, err = BuildGmpayQuote(config, 1, "default", request)
+	require.Error(t, err, "per-asset minimum uses the same bound")
 }

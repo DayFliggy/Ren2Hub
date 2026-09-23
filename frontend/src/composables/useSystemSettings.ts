@@ -69,14 +69,18 @@ const _configuredSecrets = ref<string[]>([])
 const _catalog = ref<SystemOptionDescriptor[]>([])
 const _loading = ref(false)
 const _loaded = ref(false)
-let _fetchPromise: Promise<void> | null = null
+let _fetchPromise: Promise<boolean> | null = null
 
 export function useSystemSettings() {
   const toast = useToast()
 
-  async function load(force = false): Promise<void> {
-    if (_loaded.value && !force) return
-    if (_fetchPromise) return _fetchPromise
+  async function load(force = false): Promise<boolean> {
+    if (_fetchPromise) {
+      const loaded = await _fetchPromise
+      // A post-save refresh must start after an earlier read has completed.
+      return force ? load(true) : loaded
+    }
+    if (_loaded.value && !force) return true
 
     _loading.value = true
     // api.get<T> unwraps the ApiResponse envelope and returns .data directly
@@ -89,31 +93,38 @@ export function useSystemSettings() {
         for (const option of Array.isArray(data) ? data : []) {
           raw[option.key] = option.value
         }
-        _rawOptions.value = raw
+        let descriptors: SystemOptionDescriptor[]
         try {
           const catalog = await api.get<SystemOptionDescriptor[]>(
             '/api/option/catalog'
           )
-          _catalog.value = Array.isArray(catalog) ? catalog : []
+          descriptors = Array.isArray(catalog) ? catalog : []
         } catch {
-          _catalog.value = []
+          descriptors = []
         }
+        const secretStatus = await api.get<SecretStatusResponse>(
+          '/api/option/secret-status'
+        )
+        // Publish options and credential availability together. A failed
+        // refresh must not pair new values with stale secret status.
+        _rawOptions.value = raw
+        _catalog.value = descriptors
         _settings.value = parseOptions(
           Array.isArray(data) ? data : [],
           SYSTEM_SETTINGS_DEFAULTS,
-          _catalog.value
-        )
-        const secretStatus = await api.get<SecretStatusResponse>(
-          '/api/option/secret-status'
+          descriptors
         )
         _configuredSecrets.value = Array.isArray(secretStatus?.configured)
           ? secretStatus.configured
           : []
         _loaded.value = true
+        return true
       })
       .catch((err) => {
+        _loaded.value = false
         const msg = err instanceof ApiError ? err.message : String(err)
         toast.error(msg)
+        return false
       })
       .finally(() => {
         _loading.value = false

@@ -51,7 +51,7 @@ beforeEach(() => {
       { name: 'USDC Ethereum', token: 'usdc', network: 'ethereum' },
     ]),
   }
-  settings.load.mockResolvedValue(undefined)
+  settings.load.mockResolvedValue(true)
 })
 afterEach(() => {
   vi.restoreAllMocks()
@@ -65,6 +65,116 @@ async function render() {
 }
 
 describe('GMPay administration', () => {
+  it.each(['invalid-json', '{}', '[{"token":"usdt"}]'])(
+    'never replaces a malformed stored catalog with an empty selection: %s',
+    async (value) => {
+      settings.values.GmpayAssets = value
+      const post = vi.spyOn(api, 'post')
+      const wrapper = await render()
+      expect(wrapper.get('[role="alert"]').text()).toContain(
+        'could not be loaded'
+      )
+      expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+      expect(post).not.toHaveBeenCalled()
+      wrapper.unmount()
+    }
+  )
+  it('blocks editing until configuration loads and supports an explicit retry after failure', async () => {
+    let finish!: (ok: boolean) => void
+    settings.load.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve
+        })
+    )
+    const post = vi.spyOn(api, 'post')
+    const wrapper = mount(GmpayPanel, { global: { plugins: [i18n] } })
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[role="status"]').text()).toContain('Loading gateway')
+    finish(false)
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'could not be loaded'
+    )
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    expect(post).not.toHaveBeenCalled()
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Reload gateway configuration')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeUndefined()
+    expect(
+      wrapper.get<HTMLInputElement>('input[type="url"]').element.value
+    ).toBe('https://pay.example')
+    wrapper.unmount()
+  })
+
+  it('keeps the saved draft visible when refreshing fails, without permitting a stale second save', async () => {
+    settings.load.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    const post = vi.spyOn(api, 'post').mockResolvedValue({})
+    const wrapper = await render()
+    await wrapper.get('input[type="url"]').setValue('https://new-pay.example')
+    await wrapper.get('input[type="password"]').setValue('replacement-secret')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save gateway configuration')!
+      .trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenCalledOnce()
+    expect(
+      wrapper.get<HTMLInputElement>('input[type="url"]').element.value
+    ).toBe('https://new-pay.example')
+    expect(
+      wrapper.get<HTMLInputElement>('input[type="password"]').element.value
+    ).toBe('')
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'could not be loaded'
+    )
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    expect(wrapper.emitted('saved')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('sends whole-number asset minimums in the decimal string format required by the API', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({})
+    const wrapper = await render()
+    await wrapper.findAll('input[type="number"]').at(2)!.setValue('1e2')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save gateway configuration')!
+      .trigger('click')
+    await flushPromises()
+    const payload = post.mock.calls[0]?.[1] as { assets: string }
+    expect(JSON.parse(payload.assets)[0].min_topup).toBe('100')
+    wrapper.unmount()
+  })
+
+  it('sends one configuration write while saving and ignores completion after leaving the panel', async () => {
+    let finish!: (value: unknown) => void
+    const post = vi.spyOn(api, 'post').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const wrapper = await render()
+    const save = wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save gateway configuration')!
+    await save.trigger('click')
+    await save.trigger('click')
+    expect(post).toHaveBeenCalledOnce()
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+    finish({})
+    await flushPromises()
+    expect(settings.load).toHaveBeenCalledWith(true)
+    expect(wrapper.emitted('saved')).toBeUndefined()
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
   it('removes saved assets without probing and preserves payment metadata and the existing secret', async () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue({})
     const wrapper = await render()

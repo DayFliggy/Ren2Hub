@@ -145,6 +145,108 @@ async function render(
 }
 
 describe('TopupPanel server quotes', () => {
+  it('locks the quoted selection and sends only one order while creation is pending', async () => {
+    let finish!: (value: unknown) => void
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValueOnce(cryptoQuote())
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve
+          })
+      )
+    const wrapper = await render('0', 'gmpay:usdt.tron', [
+      'gmpay:usdc.ethereum',
+    ])
+    const submit = wrapper.findAll('button').at(-1)!
+    await submit.trigger('click')
+    await submit.trigger('click')
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    expect(
+      post.mock.calls.filter(([url]) => url.endsWith('/topup'))
+    ).toHaveLength(1)
+    expect(post).toHaveBeenLastCalledWith('/api/next/wallet/gmpay/topup', {
+      amount: 10,
+      amount_unit: 'USD',
+      payment_method: 'usdt.tron',
+      quote_fingerprint: 'crypto-quote-10',
+    })
+    // A terminal rejection restores the controls without silently creating another order.
+    finish({ url: 'http://invalid.example' })
+    await flushPromises()
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it.each(['epay:alipay', 'gmpay:usdt.tron'])(
+    'does not navigate from a late %s order response after the wallet is unmounted',
+    async (method) => {
+      Object.defineProperty(window, 'location', {
+        value: { href: 'http://localhost/other-page' },
+        configurable: true,
+        writable: true,
+      })
+      const submitForm = vi
+        .spyOn(HTMLFormElement.prototype, 'submit')
+        .mockImplementation(() => {})
+      let finish!: (value: unknown) => void
+      vi.spyOn(api, 'post')
+        .mockResolvedValueOnce(
+          method.startsWith('gmpay:') ? cryptoQuote() : quote()
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finish = resolve
+            })
+        )
+      const wrapper = await render('0', method)
+      await wrapper.findAll('button').at(-1)!.trigger('click')
+      wrapper.unmount()
+      finish({ url: 'https://gateway.example/cashier', data: { sign: 'test' } })
+      await flushPromises()
+      expect(window.location.href).toBe('http://localhost/other-page')
+      expect(submitForm).not.toHaveBeenCalled()
+      expect(wrapper.emitted('done')).toBeUndefined()
+    }
+  )
+
+  it('ignores an old asset quote after the payment asset changes', async () => {
+    let finish!: (value: unknown) => void
+    const post = vi
+      .spyOn(api, 'post')
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve
+          })
+      )
+      .mockResolvedValueOnce(
+        cryptoQuote(10, {
+          payment_method: 'usdc.ethereum',
+          token: 'usdc',
+          network: 'ethereum',
+          pay_amount: '11.00',
+          amount_minor: '1100',
+          quote_fingerprint: 'usdc-quote',
+        })
+      )
+    const wrapper = await render('0', 'gmpay:usdt.tron', [
+      'gmpay:usdc.ethereum',
+    ])
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'usdc.ethereum')!
+      .trigger('click')
+    await flushPromises()
+    expect(post.mock.calls[0]?.[2]?.signal?.aborted).toBe(true)
+    finish(cryptoQuote())
+    await flushPromises()
+    expect(wrapper.text()).toContain('$11.00')
+    wrapper.unmount()
+  })
+
   it('loads crypto from its own endpoint when Epay is disabled and chooses it for the initial method', async () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue(cryptoQuote())
     const wrapper = await render('0', 'epay', ['gmpay:usdt.tron'])
@@ -455,6 +557,11 @@ describe('TopupPanel server quotes', () => {
       'https://gateway.example/pay/checkout-counter/cashier-1'
     )
     expect(submitForm).not.toHaveBeenCalled()
+    await wrapper.findAll('button').at(-1)!.trigger('click')
+    expect(
+      post.mock.calls.filter(([url]) => url.endsWith('/topup'))
+    ).toHaveLength(1)
+    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
     wrapper.unmount()
   })
 
