@@ -11,6 +11,7 @@ import {
   parseTaskLogPage,
   parseTokenPage,
   parseTopupInfo,
+  parseGmpayTopupInfo,
   parseUsageRows,
   parseUserModels,
 } from '@/api/liveContracts'
@@ -194,11 +195,11 @@ describe('live API contracts', () => {
       enable_online_topup: true,
       enable_redemption: true,
       pay_methods: [
-        { name: 'Alipay', type: 'alipay', min_topup: '5' },
+        { name: 'Alipay', type: 'alipay', min_topup: 5 },
         { name: 'WeChat Pay', type: 'wxpay', min_topup: 10 },
       ],
       min_topup: 1,
-      amount_options: [5, '10'],
+      amount_options: [5, 10],
     })
     expect(info.pay_methods).toEqual([
       {
@@ -206,18 +207,12 @@ describe('live API contracts', () => {
         type: 'alipay',
         min_topup: 5,
         color: undefined,
-        token: undefined,
-        network: undefined,
-        icon: undefined,
       },
       {
         name: 'WeChat Pay',
         type: 'wxpay',
         min_topup: 10,
         color: undefined,
-        token: undefined,
-        network: undefined,
-        icon: undefined,
       },
     ])
     expect(info.amount_options).toEqual([5, 10])
@@ -228,6 +223,8 @@ describe('live API contracts', () => {
     expectInvalidResponse(() => parseTopupInfo({}))
     expectInvalidResponse(() =>
       parseTopupInfo({
+        enable_online_topup: false,
+        enable_redemption: false,
         pay_methods: [],
         min_topup: 0,
         amount_options: [10],
@@ -235,25 +232,31 @@ describe('live API contracts', () => {
     )
     expectInvalidResponse(() =>
       parseTopupInfo({
+        enable_online_topup: false,
+        enable_redemption: false,
         pay_methods: [],
         min_topup: 1,
         amount_options: [-10],
       })
     )
-    const crypto = parseTopupInfo({
+    const cryptoConfig = {
+      enable_gmpay_topup: true,
+      enable_gmpay_settlement: true,
       pay_methods: [
         {
           name: 'USDT Tron',
           type: 'gmpay:usdt.tron',
           token: 'usdt',
           network: 'tron',
-          min_topup: 2,
-          icon: 'https://cdn.example/usdt.svg',
+          min_topup: '2',
+          icon: '',
+          color: '',
         },
       ],
       min_topup: 1,
       amount_options: [10],
-    })
+    }
+    const crypto = parseGmpayTopupInfo(cryptoConfig)
     expect(crypto.pay_methods).toEqual([
       {
         name: 'USDT Tron',
@@ -262,15 +265,21 @@ describe('live API contracts', () => {
         color: undefined,
         token: 'usdt',
         network: 'tron',
-        icon: 'https://cdn.example/usdt.svg',
+        icon: undefined,
       },
     ])
-    // A half-specified chain is unusable: the pair is either both present or both absent.
     expectInvalidResponse(() =>
       parseTopupInfo({
+        ...cryptoConfig,
+        enable_online_topup: true,
+        enable_redemption: true,
+      })
+    )
+    // The crypto endpoint identifies an asset with both token and network.
+    expectInvalidResponse(() =>
+      parseGmpayTopupInfo({
+        ...cryptoConfig,
         pay_methods: [{ name: 'USDT', type: 'gmpay:usdt.tron', token: 'usdt' }],
-        min_topup: 1,
-        amount_options: [10],
       })
     )
 

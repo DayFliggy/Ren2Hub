@@ -83,24 +83,61 @@ async function render(
   extraMethods: string[] = [],
   epayMinimum = 1
 ) {
-  // Epay methods arrive bare and the panel adds the epay: prefix; crypto assets
-  // already carry their gmpay:<token>.<network> identity from the server.
+  // Each provider publishes its own endpoint and uses a different minimum type.
   const methods = [selectedMethod, ...extraMethods]
-  vi.spyOn(api, 'get').mockResolvedValue({
-    pay_methods: methods.map((value) => {
-      const asset = value.replace(/^(?:epay|gmpay):/, '')
-      const [token, network] = asset.split('.')
-      return value.startsWith('gmpay:')
-        ? { name: asset, type: value, token, network, min_topup: 1 }
-        : { name: asset, type: asset }
-    }),
-    min_topup: epayMinimum,
-    amount_options: [10, 20],
-  })
+  if (!vi.isMockFunction(api.get))
+    vi.spyOn(api, 'get').mockImplementation(async (path) => {
+      if (path === '/api/next/wallet/config') {
+        const epay = methods.filter((value) => value.startsWith('epay:'))
+        return {
+          enable_online_topup: epay.length > 0,
+          enable_redemption: true,
+          pay_methods: epay.map((value) => ({
+            name: value.slice(5),
+            type: value.slice(5),
+            min_topup: epayMinimum,
+          })),
+          min_topup: epayMinimum,
+          amount_options: [10, 20],
+        }
+      }
+      if (path === '/api/next/wallet/gmpay/config') {
+        const crypto = methods.filter((value) => value.startsWith('gmpay:'))
+        return {
+          enable_gmpay_topup: crypto.length > 0,
+          enable_gmpay_settlement: true,
+          pay_methods: crypto.map((value) => {
+            const asset = value.slice(6)
+            const [token, network] = asset.split('.')
+            return {
+              name: asset,
+              type: value,
+              token,
+              network,
+              min_topup: '1',
+              icon: '',
+              color: '',
+            }
+          }),
+          min_topup: 1,
+          amount_options: [10, 20],
+          price: '1',
+          discount: {},
+          crypto_callback_proves_network: false,
+        }
+      }
+      throw new Error('Unexpected endpoint')
+    })
   if (!vi.isMockFunction(api.post))
     vi.spyOn(api, 'post').mockResolvedValue(quote())
   const wrapper = mount(TopupPanel, {
-    props: { balanceQuota, paymentMethod: selectedMethod },
+    props: {
+      balanceQuota,
+      paymentMethod: selectedMethod,
+      'onUpdate:paymentMethod': (value: string) => {
+        void wrapper.setProps({ paymentMethod: value })
+      },
+    },
     global: { plugins: [i18n] },
   })
   await flushPromises()
@@ -108,6 +145,136 @@ async function render(
 }
 
 describe('TopupPanel server quotes', () => {
+  it('loads crypto from its own endpoint when Epay is disabled and chooses it for the initial method', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue(cryptoQuote())
+    const wrapper = await render('0', 'epay', ['gmpay:usdt.tron'])
+    expect(api.get).toHaveBeenCalledWith(
+      '/api/next/wallet/config',
+      undefined,
+      expect.anything()
+    )
+    expect(api.get).toHaveBeenCalledWith(
+      '/api/next/wallet/gmpay/config',
+      undefined,
+      expect.anything()
+    )
+    expect(wrapper.text()).toContain('usdt.tron')
+    expect(wrapper.text()).toContain('You pay (USD)')
+    expect(
+      wrapper.findAll('button').at(-1)?.attributes('disabled')
+    ).toBeUndefined()
+    expect(post).toHaveBeenCalledWith(
+      '/api/next/wallet/gmpay/quote',
+      {
+        amount: 10,
+        amount_unit: 'USD',
+        payment_method: 'usdt.tron',
+      },
+      expect.anything()
+    )
+    wrapper.unmount()
+  })
+
+  it.each(['epay', 'gmpay'] as const)(
+    'keeps the other provider usable when %s configuration fails and retries it separately',
+    async (failed) => {
+      let restored = false
+      const get = vi.spyOn(api, 'get').mockImplementation(async (path) => {
+        const provider = path.includes('/gmpay/') ? 'gmpay' : 'epay'
+        if (provider === failed && !restored) throw new Error('offline')
+        return provider === 'epay'
+          ? {
+              enable_online_topup: true,
+              enable_redemption: true,
+              pay_methods: [{ name: 'Alipay', type: 'alipay', min_topup: 1 }],
+              min_topup: 1,
+              amount_options: [10, 20],
+            }
+          : {
+              enable_gmpay_topup: true,
+              pay_methods: [
+                {
+                  name: 'USDT Tron',
+                  type: 'gmpay:usdt.tron',
+                  token: 'usdt',
+                  network: 'tron',
+                  min_topup: '1',
+                  icon: '',
+                  color: '',
+                },
+              ],
+              min_topup: 1,
+              amount_options: [10, 20],
+            }
+      })
+      const post = vi
+        .spyOn(api, 'post')
+        .mockImplementation(async (path) =>
+          path.includes('/gmpay/') ? cryptoQuote() : quote()
+        )
+      const wrapper = await render('0', 'epay')
+      expect(wrapper.get('[role="alert"]').text()).toContain(
+        failed === 'epay'
+          ? 'Epay payment methods could not be loaded.'
+          : 'Crypto payment methods could not be loaded.'
+      )
+      expect(
+        wrapper.findAll('button').at(-1)?.attributes('disabled')
+      ).toBeUndefined()
+      expect(post).toHaveBeenCalledWith(
+        failed === 'epay'
+          ? '/api/next/wallet/gmpay/quote'
+          : '/api/next/wallet/topup/quote',
+        expect.anything(),
+        expect.anything()
+      )
+      restored = true
+      await wrapper
+        .findAll('button')
+        .find(
+          (button) =>
+            button.text() ===
+            (failed === 'epay'
+              ? 'Reload Epay methods'
+              : 'Reload crypto methods')
+        )!
+        .trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+      expect(get).toHaveBeenCalledTimes(3)
+      wrapper.unmount()
+    }
+  )
+
+  it('shows both provider failures and never requests a quote when neither configuration loads', async () => {
+    vi.spyOn(api, 'get').mockRejectedValue(new Error('offline'))
+    const post = vi.spyOn(api, 'post')
+    const wrapper = await render('0', 'epay')
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(2)
+    expect(
+      wrapper.findAll('button').at(-1)?.attributes('disabled')
+    ).toBeDefined()
+    expect(post).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('aborts both configuration requests on unmount and ignores late results', async () => {
+    const finishes: Array<(value: unknown) => void> = []
+    const get = vi.spyOn(api, 'get').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishes.push(resolve)
+        })
+    )
+    const post = vi.spyOn(api, 'post')
+    const wrapper = await render('0', 'epay')
+    wrapper.unmount()
+    expect(get.mock.calls.every((call) => call[2]?.signal?.aborted)).toBe(true)
+    finishes.forEach((finish) => finish({}))
+    await flushPromises()
+    expect(post).not.toHaveBeenCalled()
+  })
+
   it('uses the exact server credit for the balance projection and displays CNY separately', async () => {
     vi.spyOn(api, 'post').mockResolvedValue(quote(10, '750000'))
     const wrapper = await render('9007199254740993')

@@ -54,13 +54,20 @@ export interface TopupInfo {
   amount_options: number[]
 }
 
+export interface GmpayTopupInfo {
+  enable_gmpay_topup: boolean
+  pay_methods: PaymentMethodInfo[]
+  min_topup: number
+  amount_options: number[]
+}
+
 /** Optional payment metadata uses an empty string when not configured. */
 function optionalMethodField(
   value: unknown,
   endpoint: string
 ): string | undefined {
   if (value === undefined) return undefined
-  const parsed = requiredString(value, endpoint, false)
+  const parsed = requiredString(value, endpoint)
   return parsed === '' ? undefined : parsed
 }
 
@@ -239,51 +246,73 @@ export function parseTopupInfo(value: unknown): TopupInfo {
   }
   const payMethods = value.pay_methods.map((item) => {
     if (!isRecord(item)) invalidResponse(endpoint)
-    const minTopup =
-      item.min_topup === undefined ? undefined : Number(item.min_topup)
-    if (
-      minTopup !== undefined &&
-      (!Number.isFinite(minTopup) || minTopup <= 0)
-    ) {
-      invalidResponse(endpoint)
-    }
-    const token = optionalMethodField(item.token, endpoint)
-    const network = optionalMethodField(item.network, endpoint)
+    const minTopup = requiredStrictInteger(item.min_topup, endpoint)
     const type = requiredString(item.type, endpoint, false)
-    if ((token === undefined) !== (network === undefined)) {
+    if (minTopup <= 0 || type.includes(':')) {
       invalidResponse(endpoint)
     }
+    return {
+      name: requiredString(item.name, endpoint, false),
+      type,
+      color: optionalMethodField(item.color, endpoint),
+      min_topup: minTopup,
+    }
+  })
+  return {
+    enable_online_topup: requiredBoolean(value.enable_online_topup, endpoint),
+    enable_redemption: requiredBoolean(value.enable_redemption, endpoint),
+    pay_methods: payMethods,
+    ...parseTopupAmounts(value, endpoint),
+  }
+}
+
+export function parseGmpayTopupInfo(value: unknown): GmpayTopupInfo {
+  const endpoint = '/api/next/wallet/gmpay/config'
+  if (!isRecord(value) || !Array.isArray(value.pay_methods))
+    invalidResponse(endpoint)
+  const payMethods = value.pay_methods.map((item) => {
+    if (!isRecord(item)) invalidResponse(endpoint)
+    const token = requiredString(item.token, endpoint, false)
+    const network = requiredString(item.network, endpoint, false)
+    const type = requiredString(item.type, endpoint, false)
+    const minimum = requiredString(item.min_topup, endpoint, false)
+    const minTopup = Number(minimum)
     if (
-      type.startsWith('gmpay:') &&
-      (!token ||
-        !network ||
-        type !== `gmpay:${token}.${network}` ||
-        minTopup === undefined)
+      type !== `gmpay:${token}.${network}` ||
+      !/^[a-z0-9_-]+$/.test(token) ||
+      !/^[a-z0-9_-]+$/.test(network) ||
+      !/^[1-9]\d*$/.test(minimum) ||
+      !Number.isSafeInteger(minTopup)
     ) {
       invalidResponse(endpoint)
     }
     return {
       name: requiredString(item.name, endpoint, false),
       type,
-      color: typeof item.color === 'string' ? item.color : undefined,
-      min_topup: minTopup,
       token,
       network,
+      min_topup: minTopup,
+      color: optionalMethodField(item.color, endpoint),
       icon: optionalMethodField(item.icon, endpoint),
     }
   })
-  const amountOptions = value.amount_options ?? []
+  return {
+    enable_gmpay_topup: requiredBoolean(value.enable_gmpay_topup, endpoint),
+    pay_methods: payMethods,
+    ...parseTopupAmounts(value, endpoint),
+  }
+}
+
+function parseTopupAmounts(value: Record<string, unknown>, endpoint: string) {
+  const amountOptions = value.amount_options
   if (!Array.isArray(amountOptions)) invalidResponse(endpoint)
   const parsedAmounts = amountOptions.map((item) =>
-    requiredNumber(item, endpoint)
+    requiredStrictInteger(item, endpoint)
   )
   if (parsedAmounts.some((amount) => amount <= 0)) invalidResponse(endpoint)
-  const minTopup = requiredNumber(value.min_topup ?? 1, endpoint)
+  const minTopup = requiredStrictInteger(value.min_topup, endpoint)
   if (minTopup <= 0) invalidResponse(endpoint)
   return {
-    enable_online_topup: optionalBoolean(value.enable_online_topup, endpoint),
-    enable_redemption: optionalBoolean(value.enable_redemption, endpoint),
-    pay_methods: payMethods,
     min_topup: minTopup,
     amount_options: parsedAmounts,
   }

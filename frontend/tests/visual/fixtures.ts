@@ -1080,6 +1080,19 @@ export async function configureStablePage(
     ],
     ['/api/next/wallet/topups', { items: [], total: 0, page: 1, page_size: 6 }],
     [
+      '/api/next/wallet/gmpay/config',
+      {
+        enable_gmpay_topup: false,
+        enable_gmpay_settlement: true,
+        pay_methods: [],
+        min_topup: 1,
+        price: '1',
+        amount_options: [10, 20, 50, 100],
+        discount: {},
+        crypto_callback_proves_network: false,
+      },
+    ],
+    [
       '/api/next/invite/self',
       {
         code: 'VISUAL2026',

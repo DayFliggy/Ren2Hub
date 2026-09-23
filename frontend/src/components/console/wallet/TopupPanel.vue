@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
-import { parseTopupInfo } from '@/api/liveContracts'
+import { parseGmpayTopupInfo, parseTopupInfo } from '@/api/liveContracts'
 import AmountInput from '@/components/common/AmountInput.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -29,14 +29,30 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const toast = useToast()
 
-const amountOptions = ref([10, 20, 50, 100, 200, 500])
 const amount = ref<number | null>(10)
 const submittingTopup = ref(false)
-const paymentMethods = ref<
-  Array<{ value: string; label: string; minTopup: number }>
->([])
-const minimumTopup = ref(1)
-const paymentLoadState = ref<'idle' | 'ready' | 'failed'>('idle')
+type PaymentProvider = 'epay' | 'gmpay'
+interface SelectablePaymentMethod {
+  value: string
+  label: string
+  minTopup: number
+  amountOptions: number[]
+}
+const providerMethods = reactive<
+  Record<PaymentProvider, SelectablePaymentMethod[]>
+>({ epay: [], gmpay: [] })
+const configStates = reactive<
+  Record<PaymentProvider, 'idle' | 'ready' | 'failed'>
+>({ epay: 'idle', gmpay: 'idle' })
+const configControllers: Record<PaymentProvider, AbortController | null> = {
+  epay: null,
+  gmpay: null,
+}
+const paymentMethods = computed(() => [
+  ...providerMethods.epay,
+  ...providerMethods.gmpay,
+])
+let initialSelectionApplied = false
 /**
  * One server-priced offer. Epay settles in CNY and GMPay in USD, so the
  * currency travels with the quote instead of being assumed by the panel.
@@ -60,7 +76,6 @@ const quoteError = ref('')
 const quoteChanged = ref(false)
 let quoteSequence = 0
 let quoteController: AbortController | null = null
-const configController = new AbortController()
 const method = computed({
   get: () => props.paymentMethod,
   set: (value: string) => emit('update:paymentMethod', value),
@@ -82,13 +97,13 @@ const orderEndpoint = computed(() =>
 function providerMethod(value: string): string {
   return value.replace(/^(?:epay|gmpay):/, '')
 }
-const selectedMinimumTopup = computed(
-  () =>
-    paymentMethods.value.find((item) => item.value === method.value)
-      ?.minTopup ?? minimumTopup.value
+const selectedMethod = computed(() =>
+  paymentMethods.value.find((item) => item.value === method.value)
 )
+const selectedMinimumTopup = computed(() => selectedMethod.value?.minTopup ?? 1)
 const presets = computed(() => {
-  const valid = amountOptions.value.filter(
+  if (!selectedMethod.value) return []
+  const valid = selectedMethod.value.amountOptions.filter(
     (value) => value >= selectedMinimumTopup.value
   )
   return valid.length ? valid : [selectedMinimumTopup.value]
@@ -125,7 +140,7 @@ const canSubmit = computed(
     !invalidAmount.value &&
     !balanceProjection.value.invalid &&
     amount.value >= selectedMinimumTopup.value &&
-    paymentLoadState.value === 'ready' &&
+    selectedMethod.value !== undefined &&
     quote.value !== null &&
     !quoteLoading.value
 )
@@ -216,7 +231,7 @@ async function refreshQuote(): Promise<void> {
   const currentAmount = amount.value
   const currentMethod = method.value
   if (
-    paymentLoadState.value !== 'ready' ||
+    !selectedMethod.value ||
     currentAmount === null ||
     invalidAmount.value ||
     currentAmount < selectedMinimumTopup.value ||
@@ -275,45 +290,69 @@ async function refreshQuote(): Promise<void> {
   }
 }
 
-onMounted(async () => {
+async function loadPaymentConfig(provider: PaymentProvider): Promise<void> {
+  configControllers[provider]?.abort()
+  const controller = new AbortController()
+  configControllers[provider] = controller
+  configStates[provider] = 'idle'
+  providerMethods[provider] = []
   try {
-    const info = parseTopupInfo(
-      await api.get<unknown>('/api/next/wallet/config', undefined, {
-        signal: configController.signal,
-      })
+    const raw = await api.get<unknown>(
+      provider === 'gmpay'
+        ? '/api/next/wallet/gmpay/config'
+        : '/api/next/wallet/config',
+      undefined,
+      { signal: controller.signal }
     )
-    if (configController.signal.aborted) return
-    paymentMethods.value = info.pay_methods.map((item) => ({
-      // Crypto assets arrive already prefixed as gmpay:<token>.<network>; the
-      // Epay rail keeps its historical epay: prefix.
-      value: item.type.startsWith('gmpay:') ? item.type : `epay:${item.type}`,
-      label: item.name,
-      minTopup: item.type.startsWith('gmpay:')
-        ? (item.min_topup ?? 1)
-        : Math.max(item.min_topup ?? info.min_topup, info.min_topup),
-    }))
-    minimumTopup.value = info.min_topup
-    amountOptions.value = info.amount_options
-    let selectedMethod = paymentMethods.value.find(
-      (item) => item.value === method.value
-    )
-    if (!selectedMethod && paymentMethods.value.length > 0) {
-      selectedMethod = paymentMethods.value[0]!
-      method.value = selectedMethod.value
-    }
-    const initialMinimum = selectedMethod?.minTopup ?? info.min_topup
-    if (amount.value === null || amount.value < initialMinimum) {
-      amount.value =
-        presets.value.find((value) => value >= initialMinimum) ?? initialMinimum
-    }
-    paymentLoadState.value = 'ready'
+    if (controller.signal.aborted) return
+    const info =
+      provider === 'gmpay' ? parseGmpayTopupInfo(raw) : parseTopupInfo(raw)
+    const enabled =
+      'enable_gmpay_topup' in info
+        ? info.enable_gmpay_topup
+        : info.enable_online_topup
+    providerMethods[provider] = enabled
+      ? info.pay_methods.map((item) => ({
+          value: provider === 'gmpay' ? item.type : `epay:${item.type}`,
+          label: item.name,
+          minTopup: Math.max(item.min_topup ?? info.min_topup, info.min_topup),
+          amountOptions: info.amount_options,
+        }))
+      : []
+    configStates[provider] = 'ready'
   } catch {
-    if (!configController.signal.aborted) paymentLoadState.value = 'failed'
+    if (!controller.signal.aborted) configStates[provider] = 'failed'
   }
+}
+
+onMounted(() => {
+  void loadPaymentConfig('epay')
+  void loadPaymentConfig('gmpay')
 })
 
 watch(
-  [amount, method, paymentLoadState],
+  [paymentMethods, method, () => configStates.epay, () => configStates.gmpay],
+  () => {
+    if (!selectedMethod.value) {
+      const preferred = method.value.startsWith('gmpay:') ? 'gmpay' : 'epay'
+      if (method.value.includes(':') && configStates[preferred] === 'idle')
+        return
+      const first = paymentMethods.value[0]
+      if (first) method.value = first.value
+      return
+    }
+    if (!initialSelectionApplied) {
+      initialSelectionApplied = true
+      if (amount.value === null || amount.value < selectedMinimumTopup.value) {
+        amount.value = presets.value[0] ?? selectedMinimumTopup.value
+      }
+    }
+  },
+  { flush: 'sync' }
+)
+
+watch(
+  [amount, selectedMethod],
   () => {
     quoteChanged.value = false
     void refreshQuote()
@@ -322,7 +361,8 @@ watch(
 )
 
 onUnmounted(() => {
-  configController.abort()
+  configControllers.epay?.abort()
+  configControllers.gmpay?.abort()
   ++quoteSequence
   quoteController?.abort()
 })
@@ -367,13 +407,39 @@ onUnmounted(() => {
     <div class="mt-4">
       <PaymentMethods v-model="method" :methods="selectableMethods" />
       <p
-        v-if="paymentLoadState === 'failed'"
+        v-if="configStates.epay === 'failed'"
+        role="alert"
         class="mt-2 text-xs text-[var(--danger-text)]"
       >
-        {{ t('wallet.paymentMethodsLoadFailed') }}
+        {{ t('wallet.epayMethodsLoadFailed') }}
+        <ConsoleButton
+          class="mt-2"
+          variant="secondary"
+          size="sm"
+          @click="loadPaymentConfig('epay')"
+          >{{ t('wallet.retryEpayMethods') }}</ConsoleButton
+        >
       </p>
       <p
-        v-else-if="paymentLoadState === 'ready' && !paymentMethods.length"
+        v-if="configStates.gmpay === 'failed'"
+        role="alert"
+        class="mt-2 text-xs text-[var(--danger-text)]"
+      >
+        {{ t('wallet.gmpayMethodsLoadFailed') }}
+        <ConsoleButton
+          class="mt-2"
+          variant="secondary"
+          size="sm"
+          @click="loadPaymentConfig('gmpay')"
+          >{{ t('wallet.retryGmpayMethods') }}</ConsoleButton
+        >
+      </p>
+      <p
+        v-if="
+          configStates.epay === 'ready' &&
+          configStates.gmpay === 'ready' &&
+          !paymentMethods.length
+        "
         class="mt-2 text-xs text-[var(--text-tertiary)]"
       >
         {{ t('wallet.paymentMethodsUnavailable') }}

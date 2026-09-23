@@ -72,11 +72,13 @@ epusdt 当前用商户数据库里的现密钥签发旧单通知；Ren2Hub 使�
 
 数据库 CI 已接入 `TestGmpayMigrationsAndConcurrentSettlementAcrossDatabases`，从现有 MySQL/PostgreSQL 服务传入 `GATEWAY_STARTUP_MYSQL_DSN` / `GATEWAY_STARTUP_POSTGRES_DSN`。2026-09-23 在服务器临时隔离容器中完成 SQLite、MySQL 8.4、PostgreSQL 15 的迁移与并发结算实测，三项全部通过；测试结束后删除本次容器和网络，未连接已有业务数据库。
 
+服务器已完成真实 epusdt 商户配置、资产探测、USD 报价及原生签名下单，生成一笔 `1.00 USD` 的 `usdt.ethereum` 待付订单；钱包金额和版本均未提前变化。公网 IP HTTPS 收银台、静态资源和订单 API 可用，未签名公网回调被拒绝。网关停机备份后重建同版本容器，订单仍可读取，两个 SQLite 库完整性正常。这些结果不包含链上支付成功或已付款通知。
+
 上线前仍需完成：
 
-- 独立 epusdt 服务的数据卷、数据库、HTTPS 收银台和备份恢复验证；当前参考版本使用 SQLite 运行时存储，不应照旧计划假定必须部署 Redis。工作区 `deploy/epusdt/` 已提供独立部署模板，运行环境验收另行记录。
-- 测试环境使用服务器 IP 和可信 HTTPS 证书；PID、收款钱包和启用资产通过测试环境安全配置注入，敏感值不写入仓库。
-- 从实际 epusdt 环境验证公网回调可达、通知失败重试、旧 PID 存量订单和密钥轮换流程。
-- 发布经过上述验证的 Ren2Hub 与网关版本，完成隔离的小额真实支付验收；本轮没有执行真实支付或生产部署。
+- 在已部署测试网关上完成小额真实链上支付、到账证据与一次入账核对，以及成功通知失败后的重试；本轮未执行有资金的支付。
+- 在实际 epusdt 环境验收新旧 PID 并存时的存量订单及密钥轮换流程。
+- 演练从备份恢复独立业务服务；已做的归档检查、SQLite 完整性和容器重建不等同于恢复演练。
+- 生产部署及业务验收；目前仅有独立测试环境，测试 PID、空钱包和密钥通过服务器私有配置注入，敏感值不写入仓库。
 
 已有 EPay 约定见 [EPAY.md](EPAY.md)，共同账务事件约定见 [IMPLEMENTATION.md](IMPLEMENTATION.md)。

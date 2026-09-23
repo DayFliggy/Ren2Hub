@@ -1756,8 +1756,10 @@ export default {
   },
 
   wallet: {
-    paymentMethodsLoadFailed:
-      'Payment methods could not be loaded. Try again later.',
+    epayMethodsLoadFailed: 'Epay payment methods could not be loaded.',
+    gmpayMethodsLoadFailed: 'Crypto payment methods could not be loaded.',
+    retryEpayMethods: 'Reload Epay methods',
+    retryGmpayMethods: 'Reload crypto methods',
     paymentMethodsUnavailable: 'No payment methods are currently available.',
     invalidTopupAmount:
       'Enter a whole USD amount that keeps the resulting balance within the supported range.',

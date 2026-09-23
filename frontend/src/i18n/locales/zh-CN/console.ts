@@ -1721,7 +1721,10 @@ export default {
   },
 
   wallet: {
-    paymentMethodsLoadFailed: '支付方式加载失败，请稍后重试。',
+    epayMethodsLoadFailed: '易支付方式加载失败。',
+    gmpayMethodsLoadFailed: '虚拟币支付方式加载失败。',
+    retryEpayMethods: '重新加载易支付方式',
+    retryGmpayMethods: '重新加载虚拟币支付方式',
     paymentMethodsUnavailable: '当前暂无可用支付方式。',
     invalidTopupAmount: '请输入整数美元金额，充值后余额不能超出支持范围。',
     title: '钱包',

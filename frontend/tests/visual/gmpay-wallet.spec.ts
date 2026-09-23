@@ -1,6 +1,101 @@
 import { expect, test } from '@playwright/test'
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 
+for (const failed of ['epay', 'gmpay'] as const) {
+  test(`wallet keeps the other provider usable after ${failed} configuration fails`, async ({
+    page,
+  }) => {
+    await configureStablePage(page, { theme: 'light' })
+    let allFail = false
+    await page.route('**/api/next/wallet/config', (route) =>
+      route.fulfill({
+        json:
+          failed === 'epay' || allFail
+            ? { success: false, message: 'Epay test failure' }
+            : {
+                success: true,
+                data: {
+                  enable_online_topup: true,
+                  enable_redemption: true,
+                  pay_methods: [
+                    { name: 'Alipay', type: 'alipay', min_topup: 5 },
+                  ],
+                  min_topup: 5,
+                  amount_options: [5, 10, 20],
+                },
+              },
+      })
+    )
+    await page.route('**/api/next/wallet/gmpay/config', (route) =>
+      route.fulfill({
+        json:
+          failed === 'gmpay' || allFail
+            ? { success: false, message: 'Crypto test failure' }
+            : {
+                success: true,
+                data: {
+                  enable_gmpay_topup: true,
+                  enable_gmpay_settlement: true,
+                  pay_methods: [
+                    {
+                      name: 'USDT · Tron',
+                      type: 'gmpay:usdt.tron',
+                      token: 'usdt',
+                      network: 'tron',
+                      min_topup: '1',
+                      icon: '',
+                      color: '',
+                    },
+                  ],
+                  min_topup: 1,
+                  amount_options: [10, 20],
+                  price: '1',
+                  discount: {},
+                  crypto_callback_proves_network: false,
+                },
+              },
+      })
+    )
+    await page.route('**/api/next/wallet/gmpay/quote', (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: {
+            amount: 10,
+            amount_unit: 'USD',
+            payment_method: 'usdt.tron',
+            currency: 'USD',
+            amount_minor: '1000',
+            pay_amount: '10.00',
+            expected_quota: '5000000',
+            min_topup: 1,
+            quote_fingerprint: 'crypto-test',
+            token: 'usdt',
+            network: 'tron',
+          },
+        },
+      })
+    )
+    await page.goto('/wallet')
+    await expect(page.getByRole('alert')).toContainText(
+      failed === 'epay' ? '易支付方式加载失败。' : '虚拟币支付方式加载失败。'
+    )
+    await expect(
+      page.getByRole('button', {
+        name: failed === 'epay' ? '前往收银台支付' : '立即充值',
+        exact: true,
+      })
+    ).toBeEnabled()
+    await assertNoHorizontalOverflow(page)
+    allFail = true
+    await page.reload()
+    await expect(page.getByRole('alert')).toHaveCount(2)
+    await expect(
+      page.getByRole('button', { name: '立即充值', exact: true })
+    ).toBeDisabled()
+  })
+}
+
 for (const theme of ['light', 'dark'] as const) {
   for (const mobile of [false, true]) {
     test(`GMPay quotes and configuration ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
@@ -12,22 +107,45 @@ for (const theme of ['light', 'dark'] as const) {
       await configureStablePage(page, { theme })
       const errors: string[] = []
       page.on('pageerror', (error) => errors.push(error.message))
+      let epayEnabled = false
       await page.route('**/api/next/wallet/config', (route) =>
         route.fulfill({
           json: {
             success: true,
             data: {
+              enable_online_topup: epayEnabled,
+              enable_redemption: true,
+              pay_methods: epayEnabled
+                ? [{ name: 'Alipay', type: 'alipay', min_topup: 50 }]
+                : [],
+              min_topup: 50,
+              amount_options: [10, 20, 50, 100],
+            },
+          },
+        })
+      )
+      await page.route('**/api/next/wallet/gmpay/config', (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: {
+              enable_gmpay_topup: true,
+              enable_gmpay_settlement: true,
               pay_methods: [
                 {
                   name: 'USDT · Tron',
                   type: 'gmpay:usdt.tron',
                   token: 'usdt',
                   network: 'tron',
-                  min_topup: 1,
+                  min_topup: '1',
+                  icon: '',
+                  color: '',
                 },
-                { name: 'Alipay', type: 'alipay', min_topup: 50 },
               ],
-              min_topup: 50,
+              min_topup: 1,
+              price: '1',
+              discount: {},
+              crypto_callback_proves_network: false,
               amount_options: [10, 20, 50, 100],
             },
           },
@@ -107,6 +225,11 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(
         page.getByRole('button', { name: '$10', exact: true })
       ).toBeVisible()
+      await expect(
+        page.getByRole('button', { name: 'Alipay', exact: true })
+      ).toHaveCount(0)
+      epayEnabled = true
+      await page.reload()
       await page.getByRole('button', { name: 'Alipay', exact: true }).click()
       await expect(
         page.getByRole('button', { name: '$10', exact: true })
@@ -114,6 +237,7 @@ for (const theme of ['light', 'dark'] as const) {
       await page
         .getByRole('button', { name: 'USDT · Tron', exact: true })
         .click()
+      await page.getByRole('button', { name: '$10', exact: true }).click()
       await expect(submit).toBeEnabled()
       await submit.focus()
       await expect(submit).toBeFocused()
