@@ -42,6 +42,7 @@ const (
 	PaymentProviderWaffo        = "waffo"
 	PaymentProviderWaffoPancake = "waffo_pancake"
 	PaymentProviderBalance      = "balance"
+	PaymentProviderGmpay        = "gmpay"
 )
 
 var (
@@ -512,7 +513,7 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 			return errors.New("订单状态不是待支付，无法补单")
 		}
 
-		// 易支付仅使用下单冻结的额度；管理员补单无需网关凭据。
+		// 易支付与虚拟币仅使用下单冻结的额度；管理员补单无需网关凭据。
 		var quotaErr error
 		if topUp.PaymentProvider == PaymentProviderEpay {
 			var snapshot EpayOrder
@@ -523,6 +524,18 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 				return err
 			}
 			quotaToAdd = snapshot.ExpectedQuota
+		} else if topUp.PaymentProvider == PaymentProviderGmpay {
+			var snapshot GmpayOrder
+			if err := lockForUpdate(tx).First(&snapshot, topUp.Id).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return ErrGmpaySnapshotMissing
+				}
+				return err
+			}
+			quotaToAdd = snapshot.ExpectedQuota
+			if err := tx.Model(&snapshot).Update("status", GmpayStatusSettled).Error; err != nil {
+				return err
+			}
 		} else if topUp.PaymentProvider == PaymentProviderStripe {
 			quotaToAdd, quotaErr = common.WalletQuotaFromDecimal(
 				decimal.NewFromFloat(topUp.Money).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),

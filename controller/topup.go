@@ -96,8 +96,39 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	// Crypto assets appear beside the Epay methods. A broken GMPay configuration
+	// reports itself unavailable and must never fail this response.
+	enableGmpay := isGmpayTopUpEnabled()
+	if enableGmpay {
+		gmpayConfig, gmpayErr := service.LoadGmpayConfig(c.Request.Context())
+		if gmpayErr != nil {
+			enableGmpay = false
+		} else if gmpayMethods, methodsErr := gmpayConfig.GmpayMethods(); methodsErr != nil {
+			enableGmpay = false
+		} else {
+			for _, method := range gmpayMethods {
+				hasGmpay := false
+				for _, existing := range payMethods {
+					if existing["type"] == method["type"] {
+						hasGmpay = true
+						break
+					}
+				}
+				if hasGmpay {
+					continue
+				}
+				payMethods = append(payMethods, map[string]string{
+					"name": method["name"], "type": method["type"], "token": method["token"],
+					"network": method["network"], "icon": method["icon"], "color": method["color"],
+					"min_topup": method["min_topup"],
+				})
+			}
+		}
+	}
+
 	data := gin.H{
 		"enable_online_topup":              isEpayTopUpEnabled(),
+		"enable_gmpay_topup":               enableGmpay,
 		"enable_stripe_topup":              isStripeTopUpEnabled(),
 		"enable_creem_topup":               isCreemTopUpEnabled(),
 		"enable_waffo_topup":               enableWaffo,
@@ -117,6 +148,8 @@ func GetTopUpInfo(c *gin.Context) {
 		"stripe_min_topup":        setting.StripeMinTopUp,
 		"waffo_min_topup":         setting.WaffoMinTopUp,
 		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
+		"gmpay_min_topup":         setting.GmpayMinTopUp,
+		"gmpay_currency":          "USD",
 		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
 		"topup_link":              common.TopUpLink,

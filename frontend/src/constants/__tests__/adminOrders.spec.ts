@@ -24,6 +24,7 @@ describe('admin order contract', () => {
     expect(ADMIN_ORDER_TYPES).toEqual(['topup'])
     expect(ADMIN_ORDER_METHODS).toEqual([
       'epay',
+      'gmpay',
       'stripe',
       'creem',
       'waffo',

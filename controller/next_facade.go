@@ -16,20 +16,21 @@ import (
 
 // NextOrderDTO is the stable order contract consumed by the Vue frontend.
 type NextOrderDTO struct {
-	ID            int          `json:"id"`
-	OrderNo       string       `json:"order_no"`
-	Type          string       `json:"type"`
-	UserID        int          `json:"user_id,omitempty"`
-	Username      string       `json:"username,omitempty"`
-	Email         string       `json:"email,omitempty"`
-	Amount        float64      `json:"amount"`
-	Quota         common.Quota `json:"quota"`
-	Currency      string       `json:"currency"`
-	Method        string       `json:"method"`
-	PaymentMethod string       `json:"payment_method"`
-	Status        string       `json:"status"`
-	Created       int64        `json:"created"`
-	PaidAt        int64        `json:"paid_at"`
+	ID            int               `json:"id"`
+	OrderNo       string            `json:"order_no"`
+	Type          string            `json:"type"`
+	UserID        int               `json:"user_id,omitempty"`
+	Username      string            `json:"username,omitempty"`
+	Email         string            `json:"email,omitempty"`
+	Amount        float64           `json:"amount"`
+	Quota         common.Quota      `json:"quota"`
+	Currency      string            `json:"currency"`
+	Method        string            `json:"method"`
+	PaymentMethod string            `json:"payment_method"`
+	Status        string            `json:"status"`
+	Created       int64             `json:"created"`
+	PaidAt        int64             `json:"paid_at"`
+	Gmpay         *model.GmpayOrder `json:"gmpay,omitempty"`
 }
 
 type nextTopUpRequest struct {
@@ -80,8 +81,9 @@ func nextOrderMethod(topUp *model.TopUp) string {
 		}
 	}
 	switch provider {
-	case model.PaymentProviderEpay, model.PaymentProviderStripe, model.PaymentProviderCreem,
-		model.PaymentProviderWaffo, model.PaymentProviderWaffoPancake, model.PaymentProviderBalance:
+	case model.PaymentProviderEpay, model.PaymentProviderGmpay, model.PaymentProviderStripe,
+		model.PaymentProviderCreem, model.PaymentProviderWaffo, model.PaymentProviderWaffoPancake,
+		model.PaymentProviderBalance:
 		return provider
 	default:
 		return "other"
@@ -95,6 +97,7 @@ func nextEpayTopUpQuery(query *gorm.DB) *gorm.DB {
 		model.PaymentMethodWaffo,
 		model.PaymentMethodWaffoPancake,
 		model.PaymentMethodBalance,
+		model.PaymentProviderGmpay,
 	}
 	return query.Where(
 		"(top_ups.payment_provider = ? OR (top_ups.payment_provider = '' AND top_ups.payment_method NOT IN ?))",
@@ -106,6 +109,7 @@ func nextEpayTopUpQuery(query *gorm.DB) *gorm.DB {
 func nextOtherTopUpQuery(query *gorm.DB) *gorm.DB {
 	knownProviders := []string{
 		model.PaymentProviderEpay,
+		model.PaymentProviderGmpay,
 		model.PaymentProviderStripe,
 		model.PaymentProviderCreem,
 		model.PaymentProviderWaffo,
@@ -341,7 +345,16 @@ func NextGetAdminOrder(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, nextTopUpDTO(topUp, user))
+	detail := nextTopUpDTO(topUp, user)
+	if topUp.PaymentProvider == model.PaymentProviderGmpay {
+		var snapshot model.GmpayOrder
+		if err := model.DB.WithContext(c.Request.Context()).First(&snapshot, topUp.Id).Error; err != nil {
+			common.ApiErrorMsg(c, "读取支付订单快照失败")
+			return
+		}
+		detail.Gmpay = &snapshot
+	}
+	common.ApiSuccess(c, detail)
 }
 
 func nextEpayRail(method string) string {

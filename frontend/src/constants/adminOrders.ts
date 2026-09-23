@@ -18,6 +18,7 @@ export const ADMIN_ORDER_TYPES: readonly AdminOrderType[] = ['topup']
 
 export const ADMIN_ORDER_METHODS: readonly AdminOrderMethod[] = [
   'epay',
+  'gmpay',
   'stripe',
   'creem',
   'waffo',

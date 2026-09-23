@@ -201,8 +201,24 @@ describe('live API contracts', () => {
       amount_options: [5, '10'],
     })
     expect(info.pay_methods).toEqual([
-      { name: 'Alipay', type: 'alipay', min_topup: 5, color: undefined },
-      { name: 'WeChat Pay', type: 'wxpay', min_topup: 10, color: undefined },
+      {
+        name: 'Alipay',
+        type: 'alipay',
+        min_topup: 5,
+        color: undefined,
+        token: undefined,
+        network: undefined,
+        icon: undefined,
+      },
+      {
+        name: 'WeChat Pay',
+        type: 'wxpay',
+        min_topup: 10,
+        color: undefined,
+        token: undefined,
+        network: undefined,
+        icon: undefined,
+      },
     ])
     expect(info.amount_options).toEqual([5, 10])
 
@@ -224,6 +240,40 @@ describe('live API contracts', () => {
         amount_options: [-10],
       })
     )
+    const crypto = parseTopupInfo({
+      pay_methods: [
+        {
+          name: 'USDT Tron',
+          type: 'gmpay:usdt.tron',
+          token: 'usdt',
+          network: 'tron',
+          min_topup: 2,
+          icon: 'https://cdn.example/usdt.svg',
+        },
+      ],
+      min_topup: 1,
+      amount_options: [10],
+    })
+    expect(crypto.pay_methods).toEqual([
+      {
+        name: 'USDT Tron',
+        type: 'gmpay:usdt.tron',
+        min_topup: 2,
+        color: undefined,
+        token: 'usdt',
+        network: 'tron',
+        icon: 'https://cdn.example/usdt.svg',
+      },
+    ])
+    // A half-specified chain is unusable: the pair is either both present or both absent.
+    expectInvalidResponse(() =>
+      parseTopupInfo({
+        pay_methods: [{ name: 'USDT', type: 'gmpay:usdt.tron', token: 'usdt' }],
+        min_topup: 1,
+        amount_options: [10],
+      })
+    )
+
     expectInvalidResponse(() => parseRedeemedQuota({ amount: 1 }))
   })
 

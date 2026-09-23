@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/epay"
+	"github.com/QuantumNous/new-api/pkg/gmpay"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -83,6 +84,13 @@ func InitOptionMap() {
 	common.OptionMap["CustomCallbackAddress"] = ""
 	common.OptionMap["EpayId"] = ""
 	common.OptionMap["EpayKey"] = ""
+	common.OptionMap["GmpayPayAddress"] = setting.GmpayPayAddress
+	common.OptionMap["GmpayId"] = setting.GmpayId
+	common.OptionMap["GmpayKey"] = setting.GmpayKey
+	common.OptionMap["GmpayAssets"] = setting.GmpayAssets
+	common.OptionMap["GmpayPrice"] = strconv.FormatFloat(setting.GmpayPrice, 'f', -1, 64)
+	common.OptionMap["GmpayMinTopUp"] = strconv.Itoa(setting.GmpayMinTopUp)
+	common.OptionMap["GmpayGroupRatio"] = setting.GmpayGroupRatio
 	common.OptionMap["Price"] = strconv.FormatFloat(operation_setting.Price, 'f', -1, 64)
 	common.OptionMap["USDExchangeRate"] = strconv.FormatFloat(operation_setting.USDExchangeRate, 'f', -1, 64)
 	common.OptionMap["MinTopUp"] = strconv.Itoa(operation_setting.MinTopUp)
@@ -237,6 +245,35 @@ func validateOptionValue(key string, value string) error {
 		if len(value) > 128 || strings.ContainsAny(value, "\x00\r\n") {
 			return errors.New("invalid epay merchant configuration")
 		}
+	case "GmpayPayAddress":
+		if strings.TrimSpace(value) != "" {
+			_, err := gmpay.NormalizeGatewayURL(value)
+			return err
+		}
+	case "GmpayId", "GmpayKey":
+		if len(value) > 128 || strings.ContainsAny(value, "\x00\r\n") {
+			return errors.New("invalid gmpay merchant configuration")
+		}
+	case "GmpayAssets":
+		_, err := operation_setting.ParseGmpayAssets(value)
+		return err
+	case "GmpayPrice":
+		_, err := operation_setting.ParseEpayPrice(value)
+		return err
+	case "GmpayGroupRatio":
+		_, err := operation_setting.ParseEpayGroupRatios(value)
+		return err
+	case "GmpayMinTopUp":
+		minimum, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return errors.New("invalid gmpay minimum")
+		}
+		_, err = operation_setting.GmpayMinimumUSD(minimum, operation_setting.GmpayAsset{})
+		return err
+	case "payment_setting.gmpay_settlement_enabled":
+		if value != "true" && value != "false" {
+			return errors.New("invalid gmpay settlement setting")
+		}
 	case "MinTopUp":
 		minimum, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
@@ -288,6 +325,18 @@ func UpdateOption(key string, value string) error {
 // any DB write fails the whole transaction rolls back and no in-memory state
 // is touched — safe for callers that must commit a set of related options
 // atomically (e.g. payment gateway binding).
+// containsGatewaySecret reports whether a bulk update carries a payment
+// gateway credential. Such a write is applied on a silent session so the value
+// cannot reach the SQL diagnostics log.
+func containsGatewaySecret(values map[string]string) bool {
+	for _, key := range []string{"EpayKey", "GmpayKey"} {
+		if _, present := values[key]; present {
+			return true
+		}
+	}
+	return false
+}
+
 func UpdateOptionsBulk(values map[string]string) error {
 	if len(values) == 0 {
 		return nil
@@ -298,7 +347,7 @@ func UpdateOptionsBulk(values map[string]string) error {
 		}
 	}
 	db := DB
-	if _, containsSecret := values["EpayKey"]; containsSecret {
+	if containsGatewaySecret(values) {
 		db = DB.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)})
 	}
 	err := db.Transaction(func(tx *gorm.DB) error {
@@ -553,6 +602,20 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.WaffoPancakeUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "WaffoPancakeMinTopUp":
 		setting.WaffoPancakeMinTopUp, _ = strconv.Atoi(value)
+	case "GmpayPayAddress":
+		setting.GmpayPayAddress = value
+	case "GmpayId":
+		setting.GmpayId = value
+	case "GmpayKey":
+		setting.GmpayKey = value
+	case "GmpayAssets":
+		setting.GmpayAssets = value
+	case "GmpayPrice":
+		setting.GmpayPrice, _ = strconv.ParseFloat(value, 64)
+	case "GmpayMinTopUp":
+		setting.GmpayMinTopUp, _ = strconv.Atoi(value)
+	case "GmpayGroupRatio":
+		setting.GmpayGroupRatio = value
 	case "TopupGroupRatio":
 		err = common.UpdateTopupGroupRatioByJSONString(value)
 	case "GitHubClientId":

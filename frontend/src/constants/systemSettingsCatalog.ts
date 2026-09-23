@@ -38,6 +38,8 @@ export interface SystemSettingsSection {
   id: string
   title: string
   description: string
+  titleKey?: string
+  descriptionKey?: string
   fields: readonly SystemSettingField[]
   /** Keys managed by a dedicated integration panel instead of generic fields. */
   managedKeys?: readonly string[]
@@ -46,6 +48,7 @@ export interface SystemSettingsSection {
     | 'performance'
     | 'channel-affinity'
     | 'waffo-pancake'
+    | 'gmpay'
     | 'payment-compliance'
     | 'operations-maintenance'
 }
@@ -441,6 +444,15 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             labelKey: 'systemSettings.epaySettlement',
             descriptionKey: 'systemSettings.epaySettlementDescription',
           },
+          {
+            ...toggle(
+              'payment_setting.gmpay_settlement_enabled',
+              '启用虚拟币结算',
+              true
+            ),
+            labelKey: 'systemSettings.gmpaySettlement',
+            descriptionKey: 'systemSettings.gmpaySettlementDescription',
+          },
           number('Price', '基础价格', 7.3),
           number('MinTopUp', '最低充值金额', 1),
           url('CustomCallbackAddress', '支付回调地址'),
@@ -482,6 +494,25 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           secretTextarea('WaffoSandboxPublicCert', 'Waffo 沙箱公钥证书'),
         ],
         integration: 'payment-compliance',
+      },
+      {
+        id: 'gmpay',
+        title: 'GMPay 虚拟币支付',
+        titleKey: 'systemSettings.gmpayPanel.title',
+        descriptionKey: 'systemSettings.gmpayPanel.description',
+        description:
+          '探测网关公开的资产目录并勾选要开放的代币，保存后立即发布；凭据仅支持更新。',
+        fields: [],
+        managedKeys: [
+          'GmpayPayAddress',
+          'GmpayId',
+          'GmpayKey',
+          'GmpayAssets',
+          'GmpayPrice',
+          'GmpayMinTopUp',
+          'GmpayGroupRatio',
+        ],
+        integration: 'gmpay',
       },
       {
         id: 'waffo-pancake',

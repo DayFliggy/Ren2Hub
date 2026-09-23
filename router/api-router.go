@@ -92,6 +92,8 @@ func SetApiRouter(router *gin.Engine) {
 			//userRoute.POST("/tokenlog", middleware.CriticalRateLimit(), controller.TokenLog)
 			userRoute.POST("/epay/notify", anonymousRequestBodyLimit, controller.EpayNotify)
 			userRoute.GET("/epay/notify", controller.EpayNotify)
+			userRoute.POST("/gmpay/notify", anonymousRequestBodyLimit, controller.GmpayNotify)
+			userRoute.GET("/gmpay/notify", controller.GmpayNotify)
 
 			selfRoute := userRoute.Group("/")
 			selfRoute.Use(middleware.UserAuth())
@@ -123,6 +125,8 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/waffo/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPay)
 				selfRoute.POST("/waffo-pancake/amount", controller.RequestWaffoPancakeAmount)
 				selfRoute.POST("/waffo-pancake/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPancakePay)
+				selfRoute.POST("/gmpay/amount", controller.RequestGmpayAmount)
+				selfRoute.POST("/gmpay/pay", middleware.CriticalRateLimit(), controller.RequestGmpay)
 				selfRoute.POST("/aff_transfer", middleware.UserCriticalRateLimit("aff-transfer"), controller.TransferAffQuota)
 				selfRoute.PUT("/setting", controller.UpdateUserSetting)
 
@@ -204,6 +208,11 @@ func SetApiRouter(router *gin.Engine) {
 				walletRoute.POST("/topup/quote", middleware.CriticalRateLimit(), controller.NextQuoteEpayTopUp)
 				walletRoute.GET("/topups", controller.NextListUserOrders)
 				walletRoute.GET("/topups/:order_no", controller.NextGetUserOrder)
+				walletRoute.GET("/gmpay/config", controller.NextGetGmpayTopUpConfig)
+				walletRoute.POST("/gmpay/topup", middleware.CriticalRateLimit(), controller.NextCreateGmpayTopUp)
+				// Mirrors POST /topup/quote: the crypto rail needs the same
+				// server-priced offer before an order can be created.
+				walletRoute.POST("/gmpay/quote", middleware.CriticalRateLimit(), controller.NextQuoteGmpayTopUp)
 			}
 			orderRoute := nextRoute.Group("/orders")
 			{
@@ -301,6 +310,8 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.GET("/waffo-pancake/catalog", controller.ListWaffoPancakeCatalog)
 			optionRoute.POST("/waffo-pancake/pair", controller.CreateWaffoPancakePair)
 			optionRoute.POST("/waffo-pancake/save", controller.SaveWaffoPancake)
+			optionRoute.POST("/gmpay/probe", controller.ProbeGmpay)
+			optionRoute.POST("/gmpay/save", controller.SaveGmpay)
 		}
 
 		// Custom OAuth provider management (root only)

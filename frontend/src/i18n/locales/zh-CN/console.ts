@@ -1312,6 +1312,30 @@ export default {
   },
 
   orders: {
+    gmpay: {
+      title: 'GMPay 订单证据',
+      loading: '正在读取网关证据…',
+      loadFailed: '无法读取网关订单证据。',
+      retry: '重新读取证据',
+      missing: '此订单未返回网关证据。',
+      networkNote:
+        '下方网络是创建订单时的请求值，回调不能证明最终付款网络；创建信息与实际到账证据可能不同。',
+      status: '网关订单状态',
+      creating: '正在创建',
+      ready: '收银台已就绪',
+      failed: '创建被拒绝',
+      unknown: '创建结果未确定',
+      settled: '已结算',
+      failure: '最近失败分类',
+      tradeNo: '网关交易号',
+      token: '代币',
+      requestedNetwork: '请求网络（未验证实际网络）',
+      createdAmount: '创建时币种数量',
+      createdAddress: '创建时收款地址',
+      settledAmount: '实际到账币种数量',
+      settledAddress: '实际到账地址',
+      transactionId: '到账交易哈希',
+    },
     tabOverview: '经营概览',
     tabList: '订单列表',
     refresh: '刷新数据',
@@ -1369,6 +1393,7 @@ export default {
     method: {
       label: '支付服务商',
       epay: '在线支付',
+      gmpay: '虚拟币支付',
       stripe: 'Stripe',
       creem: 'Creem',
       waffo: 'Waffo',
@@ -1737,6 +1762,7 @@ export default {
     statMonthRequests: '本月请求',
     statMonthRequestsSub: 'API 调用次数',
     summaryPayNow: '实际支付 CNY',
+    summaryPayNowUsd: '实际支付 USD',
     summaryCredit: '到账 USD 额度',
     quoteLoading: '正在更新支付报价…',
     quoteFailed: '无法获取支付报价，请重试。',
@@ -1753,6 +1779,12 @@ export default {
     payEpay: '支付宝 / 微信',
     payStripe: 'Stripe 信用卡',
     payCreem: 'Creem 国际卡',
+    payGmpay: '虚拟币支付',
+    gmpaySubmit: '前往收银台支付',
+    gmpayRedirectNote:
+      '将跳转到支付网关收银台，请在那里完成转账。到账以服务端核验的回调为准，跳转本身不代表支付成功。',
+    gmpayNetworkGuidance:
+      '请使用所选代币付款，并在转账前核对收银台显示的网络、地址和金额。',
   },
 
   settings: {
@@ -2356,7 +2388,43 @@ export default {
   },
 
   systemSettings: {
+    gmpayPanel: {
+      title: 'GMPay 虚拟币支付',
+      description: '选择向用户开放的代币与网络，然后保存网关配置。',
+      address: '网关地址',
+      merchantId: '商户 ID',
+      secret: '商户密钥',
+      configured: '已配置',
+      keepSecret: '留空会保留现有密钥。',
+      price: '每 USD 额度的支付单价（USD）',
+      minimum: '最低购买额度（USD）',
+      groupRatio: '用户组价格倍率（JSON）',
+      groupRatioHint: '将用户组名称映射到正数倍率；未列出的用户组使用倍率 1。',
+      probeHint:
+        '探测只读取公开资产目录，不创建订单，也不会校验商户凭据。凭据在创建支付订单时校验。',
+      probe: '探测可用资产',
+      save: '保存网关配置',
+      remove: '移除资产',
+      removeAsset: '移除 {asset}',
+      assetName: '{asset} 显示名',
+      assetMinimum: '{asset} 最低购买额度（USD）',
+      assetMinimumPlaceholder: '留空则使用全局最低额度',
+      addressRequired: '请先填写网关地址。',
+      credentialsRequired: '请填写网关地址与商户 ID。',
+      secretRequired: '请填写商户密钥。',
+      noSelectedAssets:
+        '不选择资产并保存会停止创建新的虚拟币订单；已启用虚拟币结算时，已有订单仍可入账。',
+      invalidAmounts: '支付单价必须大于零，最低购买额度必须为正整数 USD。',
+      invalidGroupRatios: '请输入 JSON 对象，用户组倍率必须为正数。',
+      invalidCatalog: '网关返回的资产目录格式无效。',
+      noAssets: '暂无可用支付资产，请检查网关已启用的网络和钱包。',
+      probed: '已读取可用资产，请选择要开放的代币。',
+      saved: 'GMPay 配置已保存',
+    },
     epaySettlement: '启用易支付结算',
+    gmpaySettlement: '启用虚拟币结算',
+    gmpaySettlementDescription:
+      '允许虚拟币网关回调确认已有订单并入账。回调可核验代币与法币金额，但无法证明最终付款网络。异常通知是否重试取决于网关配置，也可经管理员复查后补单。关闭后暂停回调结算，与易支付与新单支付方式独立控制。',
     epaySettlementDescription:
       '允许支付网关回调确认已有订单并入账。异常订单由网关重试通知，或由管理员复查后补单。关闭后暂停回调结算，与新单支付方式独立控制。',
     title: '系统设置',

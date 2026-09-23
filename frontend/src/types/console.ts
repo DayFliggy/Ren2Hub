@@ -231,7 +231,14 @@ export type AdminOrderType = 'topup'
  * Historical providers remain visible for read-only order reconciliation.
  */
 export type AdminOrderMethod =
-  'epay' | 'stripe' | 'creem' | 'waffo' | 'waffo_pancake' | 'balance' | 'other'
+  | 'epay'
+  | 'gmpay'
+  | 'stripe'
+  | 'creem'
+  | 'waffo'
+  | 'waffo_pancake'
+  | 'balance'
+  | 'other'
 
 export type AdminOrderPaymentRail = 'alipay' | 'wechat' | 'other'
 
@@ -263,6 +270,20 @@ export interface AdminOrder extends Record<string, unknown> {
   created: number
   /** 0 = never paid. */
   paid_at: number
+}
+
+export interface GmpayOrderEvidence {
+  status: 'creating' | 'ready' | 'failed' | 'unknown' | 'settled'
+  last_failure: string
+  gateway_trade_no: string
+  token: string
+  /** Requested network; the callback does not attest to the final network. */
+  network: string
+  gateway_crypto_amount: string
+  receive_address: string
+  settled_crypto_amount: string
+  settled_receive_address: string
+  settled_transaction_id: string
 }
 
 export interface AdminOrderPage {

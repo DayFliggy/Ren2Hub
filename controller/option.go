@@ -126,6 +126,7 @@ var optionDefaults = map[string]any{
 	"payment_setting.amount_options":              []any{},
 	"payment_setting.amount_discount":             map[string]any{},
 	"payment_setting.epay_settlement_enabled":     true,
+	"payment_setting.gmpay_settlement_enabled":    true,
 	"global.thinking_model_blacklist":             []any{},
 	"global.chat_completions_to_responses_policy": map[string]any{},
 	"gemini.version_settings":                     map[string]any{},

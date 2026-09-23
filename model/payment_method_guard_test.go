@@ -372,3 +372,61 @@ func TestRechargeEpayCommitsAffiliateRewardExactlyOnce(t *testing.T) {
 	require.NoError(t, DB.Model(&AffiliateLedger{}).Where("source_event_key = ?", "topup:"+strconv.Itoa(order.Id)).Count(&ledgerCount).Error)
 	assert.EqualValues(t, 1, ledgerCount)
 }
+
+// TestRechargeGmpayRejectsForeignAndNonPendingOrders extends the provider guard
+// to the crypto rail: a snapshot-bound order may be settled only by the provider
+// that created it, and only while it is still pending.
+func TestRechargeGmpayRejectsForeignAndNonPendingOrders(t *testing.T) {
+	truncateTables(t)
+
+	oldQuotaPerUnit := common.QuotaPerUnit
+	common.QuotaPerUnit = 500000
+	t.Cleanup(func() { common.QuotaPerUnit = oldQuotaPerUnit })
+
+	user := insertUserForPaymentGuardTest(t, 701, 7)
+
+	t.Run("crypto order from another provider", func(t *testing.T) {
+		insertTopUpForPaymentGuardTest(t, "GMPAYGUARDEPAY", user.Id, PaymentProviderEpay)
+		_, err := RechargeGmpay(GmpayPayment{OrderNo: "GMPAYGUARDEPAY", GatewayTradeNo: "receipt"}, "127.0.0.1")
+		assert.ErrorIs(t, err, ErrPaymentMethodMismatch)
+		assert.EqualValues(t, 7, getUserQuotaForPaymentGuardTest(t, user.Id))
+	})
+
+	t.Run("provider switch is refused for a crypto order", func(t *testing.T) {
+		order := &TopUp{
+			UserId: user.Id, Amount: 10, Money: 10, TradeNo: "GMPAYGUARDSWITCH",
+			PaymentMethod: "gmpay:usdt.tron", PaymentProvider: PaymentProviderGmpay,
+			CreateTime: common.GetTimestamp(), Status: common.TopUpStatusPending,
+		}
+		snapshot := &GmpayOrder{
+			InputAmount: 10, AmountUnit: "USD", AmountMinor: 1000, Currency: "USD",
+			ExpectedQuota: 5_000_000, UnitPrice: "1", GroupRatio: "1", Discount: "1",
+			Token: "usdt", Network: "tron", QuoteFingerprint: "guard-quote",
+		}
+		merchant := &GmpayMerchantVersion{
+			GatewayURL: "https://payments.example.test", MerchantID: "1", Key: "guard-key",
+		}
+		require.NoError(t, CreateGmpayOrder(context.Background(), order, snapshot, merchant))
+
+		err := UpdatePendingTopUpStatus(order.TradeNo, PaymentProviderEpay, common.TopUpStatusExpired)
+		assert.ErrorIs(t, err, ErrPaymentMethodMismatch)
+		assert.EqualValues(t, common.TopUpStatusPending, getTopUpStatusForPaymentGuardTest(t, order.TradeNo))
+
+		_, err = RechargeEpay(EpayPayment{OrderNo: order.TradeNo, PaymentMethod: "alipay"}, "127.0.0.1")
+		assert.ErrorIs(t, err, ErrPaymentMethodMismatch)
+		assert.EqualValues(t, 7, getUserQuotaForPaymentGuardTest(t, user.Id))
+	})
+}
+
+// TestUpdatePendingTopUpStatusRejectsMismatchedGmpayProvider pins that the
+// status guard also refuses a crypto order whose stored provider is gmpay when
+// another rail claims it.
+func TestUpdatePendingTopUpStatusRejectsMismatchedGmpayProvider(t *testing.T) {
+	truncateTables(t)
+	insertUserForPaymentGuardTest(t, 702, 0)
+	insertTopUpForPaymentGuardTest(t, "gmpay-expire-guard", 702, PaymentProviderGmpay)
+
+	err := UpdatePendingTopUpStatus("gmpay-expire-guard", PaymentProviderStripe, common.TopUpStatusExpired)
+	require.ErrorIs(t, err, ErrPaymentMethodMismatch)
+	assert.EqualValues(t, common.TopUpStatusPending, getTopUpStatusForPaymentGuardTest(t, "gmpay-expire-guard"))
+}

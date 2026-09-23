@@ -259,6 +259,8 @@ func migrateDB() error {
 		&TopUp{},
 		&EpayMerchantVersion{},
 		&EpayOrder{},
+		&GmpayMerchantVersion{},
+		&GmpayOrder{},
 		&QuotaData{},
 		&Task{},
 		&Model{},

@@ -68,7 +68,7 @@ jobs:
         run: make test
 
   routing-integration:
-    name: Routing migration integration (${{ matrix.database }})
+    name: Routing and GMPay database integration (${{ matrix.database }})
     if: github.event.action != 'closed' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -126,6 +126,12 @@ jobs:
 
       - name: Run routing migration integration
         run: go test ./model -run '^TestRoutingDatabaseIntegration$' -timeout 60s -count=1
+
+      - name: Run GMPay migration and concurrent settlement integration
+        env:
+          GATEWAY_STARTUP_MYSQL_DSN: ${{ matrix.database == 'mysql' && matrix.dsn || '' }}
+          GATEWAY_STARTUP_POSTGRES_DSN: ${{ matrix.database == 'postgres' && matrix.dsn || '' }}
+        run: go test ./model -run '^TestGmpayMigrationsAndConcurrentSettlementAcrossDatabases$' -timeout 60s -count=1
 
   frontend:
     name: Vue frontend test, typecheck, lint, format, and build

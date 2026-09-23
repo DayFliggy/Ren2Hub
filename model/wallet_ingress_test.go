@@ -20,7 +20,7 @@ func useWalletIngressDB(t *testing.T) *gorm.DB {
 	commonKeyCol, common.QuotaPerUnit = "`key`", 500000
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &BillingRecovery{}, &BillingEvent{}, &TopUp{}, &EpayOrder{}, &EpayMerchantVersion{}, &Option{}, &Redemption{}, &Checkin{}, &ActivityClaim{}, &AffiliateLedger{}, &UserRouteProfile{}, &Log{}))
+	require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &BillingRecovery{}, &BillingEvent{}, &TopUp{}, &EpayOrder{}, &EpayMerchantVersion{}, &GmpayOrder{}, &GmpayMerchantVersion{}, &Option{}, &Redemption{}, &Checkin{}, &ActivityClaim{}, &AffiliateLedger{}, &UserRouteProfile{}, &Log{}))
 	DB, LOG_DB, common.RedisEnabled = db, db, false
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
 	sqlDB, err := db.DB()

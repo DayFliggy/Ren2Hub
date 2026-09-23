@@ -37,6 +37,13 @@ export interface PaymentMethodInfo {
   type: string
   color?: string
   min_topup?: number
+  /**
+   * Crypto assets carry the requested token and network. Epay methods leave
+   * these unset, and the pair is never inferred from the display name.
+   */
+  token?: string
+  network?: string
+  icon?: string
 }
 
 export interface TopupInfo {
@@ -45,6 +52,16 @@ export interface TopupInfo {
   pay_methods: PaymentMethodInfo[]
   min_topup: number
   amount_options: number[]
+}
+
+/** Optional payment metadata uses an empty string when not configured. */
+function optionalMethodField(
+  value: unknown,
+  endpoint: string
+): string | undefined {
+  if (value === undefined) return undefined
+  const parsed = requiredString(value, endpoint, false)
+  return parsed === '' ? undefined : parsed
 }
 
 function optionalBoolean(value: unknown, endpoint: string): boolean {
@@ -230,11 +247,29 @@ export function parseTopupInfo(value: unknown): TopupInfo {
     ) {
       invalidResponse(endpoint)
     }
+    const token = optionalMethodField(item.token, endpoint)
+    const network = optionalMethodField(item.network, endpoint)
+    const type = requiredString(item.type, endpoint, false)
+    if ((token === undefined) !== (network === undefined)) {
+      invalidResponse(endpoint)
+    }
+    if (
+      type.startsWith('gmpay:') &&
+      (!token ||
+        !network ||
+        type !== `gmpay:${token}.${network}` ||
+        minTopup === undefined)
+    ) {
+      invalidResponse(endpoint)
+    }
     return {
       name: requiredString(item.name, endpoint, false),
-      type: requiredString(item.type, endpoint, false),
+      type,
       color: typeof item.color === 'string' ? item.color : undefined,
       min_topup: minTopup,
+      token,
+      network,
+      icon: optionalMethodField(item.icon, endpoint),
     }
   })
   const amountOptions = value.amount_options ?? []

@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { api } from '@/api/console'
+import { parseGmpayOrderDetail } from '@/api/adminOrders'
 
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
@@ -25,6 +28,83 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const detail = ref<ReturnType<typeof parseGmpayOrderDetail> | null>(null)
+const evidence = computed(() => detail.value?.evidence ?? null)
+const displayOrder = computed(() =>
+  props.order && detail.value
+    ? { ...props.order, ...detail.value.state }
+    : props.order
+)
+const evidenceLoading = ref(false)
+const evidenceFailed = ref(false)
+const evidenceRetry = ref(0)
+const evidenceStatusLabels = {
+  creating: 'orders.gmpay.creating',
+  ready: 'orders.gmpay.ready',
+  failed: 'orders.gmpay.failed',
+  unknown: 'orders.gmpay.unknown',
+  settled: 'orders.gmpay.settled',
+} as const
+const evidenceFields = computed(() => {
+  const current = evidence.value
+  if (!current) return []
+  return [
+    {
+      label: 'orders.gmpay.status',
+      value: t(evidenceStatusLabels[current.status]),
+    },
+    { label: 'orders.gmpay.failure', value: current.last_failure },
+    { label: 'orders.gmpay.tradeNo', value: current.gateway_trade_no },
+    { label: 'orders.gmpay.token', value: current.token.toUpperCase() },
+    { label: 'orders.gmpay.requestedNetwork', value: current.network },
+    {
+      label: 'orders.gmpay.createdAmount',
+      value: current.gateway_crypto_amount,
+    },
+    { label: 'orders.gmpay.createdAddress', value: current.receive_address },
+    {
+      label: 'orders.gmpay.settledAmount',
+      value: current.settled_crypto_amount,
+    },
+    {
+      label: 'orders.gmpay.settledAddress',
+      value: current.settled_receive_address,
+    },
+    {
+      label: 'orders.gmpay.transactionId',
+      value: current.settled_transaction_id,
+    },
+  ]
+})
+
+watch(
+  () => [props.order?.order_no, props.order?.method, evidenceRetry.value],
+  async (_, __, onCleanup) => {
+    detail.value = null
+    evidenceFailed.value = false
+    evidenceLoading.value = false
+    const current = props.order
+    if (!current || current.method !== 'gmpay') return
+    const controller = new AbortController()
+    onCleanup(() => controller.abort())
+    evidenceLoading.value = true
+    try {
+      const response = await api.get<unknown>(
+        `/api/next/admin/orders/${encodeURIComponent(current.order_no)}`,
+        undefined,
+        { signal: controller.signal }
+      )
+      if (!controller.signal.aborted) {
+        detail.value = parseGmpayOrderDetail(response, current.order_no)
+      }
+    } catch {
+      if (!controller.signal.aborted) evidenceFailed.value = true
+    } finally {
+      if (!controller.signal.aborted) evidenceLoading.value = false
+    }
+  },
+  { immediate: true }
+)
 
 function paymentRailLabel(method: string): string {
   if (isAdminOrderPaymentRail(method)) {
@@ -42,13 +122,13 @@ function paymentRailLabel(method: string): string {
     size="lg"
     @close="emit('close')"
   >
-    <dl v-if="props.order" class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+    <dl v-if="displayOrder" class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
       <div class="min-w-0">
         <dt class="text-xs text-[var(--text-tertiary)]">
           {{ t('orders.colId') }}
         </dt>
         <dd class="mt-1 font-mono text-sm text-[var(--text-primary)]">
-          #{{ props.order.id }}
+          #{{ displayOrder.id }}
         </dd>
       </div>
       <div class="min-w-0">
@@ -56,8 +136,8 @@ function paymentRailLabel(method: string): string {
           {{ t('orders.colStatus') }}
         </dt>
         <dd class="mt-1">
-          <StatusChip :tone="adminOrderStatusTone(props.order.status)">
-            {{ t(adminOrderStatusLabelKey(props.order.status)) }}
+          <StatusChip :tone="adminOrderStatusTone(displayOrder.status)">
+            {{ t(adminOrderStatusLabelKey(displayOrder.status)) }}
           </StatusChip>
         </dd>
       </div>
@@ -66,7 +146,7 @@ function paymentRailLabel(method: string): string {
           {{ t('orders.colOrderNo') }}
         </dt>
         <dd class="mt-1 break-all font-mono text-sm text-[var(--text-primary)]">
-          {{ props.order.order_no }}
+          {{ displayOrder.order_no }}
         </dd>
       </div>
       <div class="min-w-0">
@@ -74,16 +154,16 @@ function paymentRailLabel(method: string): string {
           {{ t('orders.colUser') }}
         </dt>
         <dd class="mt-1 min-w-0 text-sm text-[var(--text-primary)]">
-          <span class="block truncate" :title="props.order.email">
+          <span class="block truncate" :title="displayOrder.email">
             {{
-              props.order.email ||
-              props.order.username ||
-              `#${props.order.user_id}`
+              displayOrder.email ||
+              displayOrder.username ||
+              `#${displayOrder.user_id}`
             }}
           </span>
           <span class="block truncate text-xs text-[var(--text-tertiary)]">
-            {{ props.order.username || t('orders.notRecorded') }} · #{{
-              props.order.user_id
+            {{ displayOrder.username || t('orders.notRecorded') }} · #{{
+              displayOrder.user_id
             }}
           </span>
         </dd>
@@ -95,7 +175,9 @@ function paymentRailLabel(method: string): string {
         <dd
           class="mt-1 text-lg font-bold tabular-nums text-[var(--text-primary)]"
         >
-          {{ formatAdminOrderAmount(props.order.amount, props.order.currency) }}
+          {{
+            formatAdminOrderAmount(displayOrder.amount, displayOrder.currency)
+          }}
         </dd>
       </div>
       <div class="min-w-0">
@@ -104,8 +186,8 @@ function paymentRailLabel(method: string): string {
         </dt>
         <dd class="mt-1 text-sm tabular-nums text-[var(--text-primary)]">
           {{
-            BigInt(props.order.quota) > 0n
-              ? formatQuota(props.order.quota)
+            BigInt(displayOrder.quota) > 0n
+              ? formatQuota(displayOrder.quota)
               : t('orders.notCredited')
           }}
         </dd>
@@ -115,7 +197,7 @@ function paymentRailLabel(method: string): string {
           {{ t('orders.colType') }}
         </dt>
         <dd class="mt-1 text-sm text-[var(--text-primary)]">
-          {{ t(adminOrderTypeLabelKey(props.order.type)) }}
+          {{ t(adminOrderTypeLabelKey(displayOrder.type)) }}
         </dd>
       </div>
       <div class="min-w-0">
@@ -123,7 +205,7 @@ function paymentRailLabel(method: string): string {
           {{ t('orders.colProvider') }}
         </dt>
         <dd class="mt-1 text-sm text-[var(--text-primary)]">
-          {{ t(adminOrderMethodLabelKey(props.order.method)) }}
+          {{ t(adminOrderMethodLabelKey(displayOrder.method)) }}
         </dd>
       </div>
       <div class="min-w-0">
@@ -131,7 +213,7 @@ function paymentRailLabel(method: string): string {
           {{ t('orders.colPaymentMethod') }}
         </dt>
         <dd class="mt-1 text-sm text-[var(--text-primary)]">
-          {{ paymentRailLabel(props.order.payment_method) }}
+          {{ paymentRailLabel(displayOrder.payment_method) }}
         </dd>
       </div>
       <div class="min-w-0">
@@ -139,7 +221,7 @@ function paymentRailLabel(method: string): string {
           {{ t('orders.colCreated') }}
         </dt>
         <dd class="mt-1 text-sm tabular-nums text-[var(--text-secondary)]">
-          {{ formatTime(props.order.created) }}
+          {{ formatTime(displayOrder.created) }}
         </dd>
       </div>
       <div class="min-w-0">
@@ -148,13 +230,69 @@ function paymentRailLabel(method: string): string {
         </dt>
         <dd class="mt-1 text-sm tabular-nums text-[var(--text-secondary)]">
           {{
-            props.order.paid_at > 0
-              ? formatTime(props.order.paid_at)
+            displayOrder.paid_at > 0
+              ? formatTime(displayOrder.paid_at)
               : t('orders.notRecorded')
           }}
         </dd>
       </div>
     </dl>
+
+    <section
+      v-if="order?.method === 'gmpay'"
+      class="mt-6 border-t border-[var(--border-subtle)] pt-5"
+    >
+      <h4 class="text-sm font-semibold text-[var(--text-primary)]">
+        {{ t('orders.gmpay.title') }}
+      </h4>
+      <p
+        v-if="evidenceLoading"
+        role="status"
+        class="mt-3 text-sm text-[var(--text-secondary)]"
+      >
+        {{ t('orders.gmpay.loading') }}
+      </p>
+      <div v-else-if="evidenceFailed" class="mt-3">
+        <p role="alert" class="text-sm text-[var(--status-error-text)]">
+          {{ t('orders.gmpay.loadFailed') }}
+        </p>
+        <ConsoleButton
+          class="mt-2"
+          variant="secondary"
+          size="sm"
+          @click="evidenceRetry++"
+          >{{ t('orders.gmpay.retry') }}</ConsoleButton
+        >
+      </div>
+      <p
+        v-else-if="!evidence"
+        role="status"
+        class="mt-3 text-sm text-[var(--text-secondary)]"
+      >
+        {{ t('orders.gmpay.missing') }}
+      </p>
+      <template v-else>
+        <p class="mt-2 text-xs text-[var(--text-tertiary)]">
+          {{ t('orders.gmpay.networkNote') }}
+        </p>
+        <dl class="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+          <div
+            v-for="field in evidenceFields"
+            :key="field.label"
+            class="min-w-0"
+          >
+            <dt class="text-xs text-[var(--text-tertiary)]">
+              {{ t(field.label) }}
+            </dt>
+            <dd
+              class="mt-1 break-all font-mono text-sm text-[var(--text-primary)]"
+            >
+              {{ field.value || t('orders.notRecorded') }}
+            </dd>
+          </div>
+        </dl>
+      </template>
+    </section>
 
     <template #footer>
       <ConsoleButton variant="secondary" block @click="emit('close')">

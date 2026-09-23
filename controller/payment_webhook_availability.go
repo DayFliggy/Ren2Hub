@@ -3,6 +3,7 @@ package controller
 import (
 	"strings"
 
+	"github.com/QuantumNous/new-api/pkg/gmpay"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
@@ -103,4 +104,25 @@ func isEpayWebhookConfigured() bool {
 	return strings.TrimSpace(operation_setting.PayAddress) != "" &&
 		strings.TrimSpace(operation_setting.EpayId) != "" &&
 		strings.TrimSpace(operation_setting.EpayKey) != ""
+}
+
+// isGmpayTopUpEnabled is independent of every other rail: a broken crypto
+// configuration must not disable Epay, and the reverse holds too.
+func isGmpayTopUpEnabled() bool {
+	if !isPaymentComplianceConfirmed() {
+		return false
+	}
+	if !isGmpayWebhookConfigured() {
+		return false
+	}
+	assets, err := operation_setting.ParseGmpayAssets(setting.GmpayAssets)
+	return err == nil && len(assets) > 0
+}
+
+func isGmpayWebhookConfigured() bool {
+	if strings.TrimSpace(setting.GmpayId) == "" || strings.TrimSpace(setting.GmpayKey) == "" {
+		return false
+	}
+	_, err := gmpay.NormalizeGatewayURL(setting.GmpayPayAddress)
+	return err == nil
 }

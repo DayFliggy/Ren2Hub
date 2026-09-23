@@ -1343,6 +1343,30 @@ export default {
   },
 
   orders: {
+    gmpay: {
+      title: 'GMPay order evidence',
+      loading: 'Loading gateway evidence…',
+      loadFailed: 'Gateway evidence could not be loaded.',
+      retry: 'Reload evidence',
+      missing: 'No gateway evidence was returned for this order.',
+      networkNote:
+        'The network below was requested at creation. The callback does not prove the final payment network. Creation details and settlement evidence can differ.',
+      status: 'Gateway order status',
+      creating: 'Creating',
+      ready: 'Cashier ready',
+      failed: 'Creation rejected',
+      unknown: 'Creation outcome unknown',
+      settled: 'Settled',
+      failure: 'Last failure category',
+      tradeNo: 'Gateway trade number',
+      token: 'Token',
+      requestedNetwork: 'Requested network (not verified)',
+      createdAmount: 'Crypto amount at creation',
+      createdAddress: 'Address at creation',
+      settledAmount: 'Settled crypto amount',
+      settledAddress: 'Settled receiving address',
+      transactionId: 'Settled transaction ID',
+    },
     tabOverview: 'Overview',
     tabList: 'Orders',
     refresh: 'Refresh',
@@ -1401,6 +1425,7 @@ export default {
     method: {
       label: 'Payment provider',
       epay: 'Online Payment',
+      gmpay: 'Crypto payment',
       stripe: 'Stripe',
       creem: 'Creem',
       waffo: 'Waffo',
@@ -1775,6 +1800,7 @@ export default {
     statMonthRequests: 'Month requests',
     statMonthRequestsSub: 'API calls',
     summaryPayNow: 'You pay (CNY)',
+    summaryPayNowUsd: 'You pay (USD)',
     summaryCredit: 'Credit received (USD)',
     quoteLoading: 'Updating payment quote…',
     quoteFailed: 'The payment quote could not be loaded. Please try again.',
@@ -1792,6 +1818,12 @@ export default {
     payEpay: 'Alipay / WeChat',
     payStripe: 'Stripe card',
     payCreem: 'Creem intl card',
+    payGmpay: 'Crypto payment',
+    gmpaySubmit: 'Continue to cashier',
+    gmpayRedirectNote:
+      'You will leave this site for the payment gateway cashier and complete the transfer there. Credit arrival is confirmed by the server callback; the redirect itself does not prove payment.',
+    gmpayNetworkGuidance:
+      'Pay with the selected token. Before transferring, check the network, address, and amount shown in the cashier.',
   },
 
   settings: {
@@ -2420,7 +2452,48 @@ export default {
   },
 
   systemSettings: {
+    gmpayPanel: {
+      title: 'GMPay crypto payments',
+      description:
+        'Choose the tokens and networks available to customers, then save the gateway configuration.',
+      address: 'Gateway address',
+      merchantId: 'Merchant ID',
+      secret: 'Merchant secret',
+      configured: 'Configured',
+      keepSecret: 'Leave blank to keep the existing secret.',
+      price: 'USD price per credit USD',
+      minimum: 'Minimum credit purchase (USD)',
+      groupRatio: 'User group price multipliers (JSON)',
+      groupRatioHint:
+        'Map user group names to positive multipliers. Unlisted groups use 1.',
+      probeHint:
+        'The probe reads the public asset catalog without creating an order or checking merchant credentials. Credentials are checked when a payment order is created.',
+      probe: 'Load available assets',
+      save: 'Save gateway configuration',
+      remove: 'Remove asset',
+      removeAsset: 'Remove {asset}',
+      assetName: '{asset} display name',
+      assetMinimum: '{asset} minimum purchase (USD)',
+      assetMinimumPlaceholder: 'Leave blank to use the global minimum',
+      addressRequired: 'Enter the gateway address first.',
+      credentialsRequired: 'Enter the gateway address and merchant ID.',
+      secretRequired: 'Enter the merchant secret.',
+      noSelectedAssets:
+        'Saving with no selected assets stops new crypto orders. Existing orders can still settle when crypto settlement is enabled.',
+      invalidAmounts:
+        'The price must be positive. Minimum purchases must be positive whole USD amounts.',
+      invalidGroupRatios:
+        'Enter a JSON object with positive numeric group multipliers.',
+      invalidCatalog: 'The gateway returned an invalid asset catalog.',
+      noAssets:
+        'No payment assets are available. Check the enabled networks and wallets on the gateway.',
+      probed: 'Available assets loaded. Select the tokens to offer.',
+      saved: 'GMPay configuration saved',
+    },
     epaySettlement: 'Enable Epay settlement',
+    gmpaySettlement: 'Enable crypto settlement',
+    gmpaySettlementDescription:
+      'Allow crypto gateway callbacks to credit existing orders. The callback verifies the token and fiat amount but cannot prove the final payment network. Failed notifications depend on the gateway retry configuration, or an administrator can review and complete the order manually. Disabling this pauses callback settlement independently of Epay and of new payment methods.',
     epaySettlementDescription:
       'Allow payment gateway callbacks to credit existing orders. Failed notifications are retried by the gateway, or an administrator can review and complete the order manually. Disabling this pauses callback settlement independently of new payment methods.',
     title: 'System Settings',

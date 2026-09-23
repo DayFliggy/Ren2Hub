@@ -6,6 +6,7 @@ import CustomOAuthProvidersPanel from '@/components/console/systemSettings/Custo
 import SysSettingsFormCard from '@/components/console/systemSettings/SysSettingsFormCard.vue'
 import SystemSettingsMaintenanceActions from '@/components/console/systemSettings/SystemSettingsMaintenanceActions.vue'
 import SystemSettingsField from '@/components/console/systemSettings/SystemSettingsField.vue'
+import GmpayPanel from '@/components/console/systemSettings/GmpayPanel.vue'
 import WaffoPancakePanel from '@/components/console/systemSettings/WaffoPancakePanel.vue'
 import PaymentCompliancePanel from '@/components/console/systemSettings/PaymentCompliancePanel.vue'
 import SystemSettingsOperationsPanel from '@/components/console/systemSettings/SystemSettingsOperationsPanel.vue'
@@ -164,15 +165,25 @@ onMounted(() => load())
             class="settings-active-bar"
             aria-hidden="true"
           />
-          <span class="truncate">{{ section.title }}</span>
+          <span class="truncate">{{
+            section.titleKey ? t(section.titleKey) : section.title
+          }}</span>
         </button>
       </nav>
     </aside>
 
     <div class="min-w-0 flex-1">
       <SysSettingsFormCard
-        :title="activeSection.title"
-        :description="activeSection.description"
+        :title="
+          activeSection.titleKey
+            ? t(activeSection.titleKey)
+            : activeSection.title
+        "
+        :description="
+          activeSection.descriptionKey
+            ? t(activeSection.descriptionKey)
+            : activeSection.description
+        "
         :saving="saving.value"
         :dirty="dirty"
         @save="saveSection"
@@ -194,6 +205,7 @@ onMounted(() => load())
         <CustomOAuthProvidersPanel
           v-if="activeSection.integration === 'custom-oauth'"
         />
+        <GmpayPanel v-else-if="activeSection.integration === 'gmpay'" />
         <WaffoPancakePanel
           v-else-if="activeSection.integration === 'waffo-pancake'"
           @saved="load(true)"

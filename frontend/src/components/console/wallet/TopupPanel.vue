@@ -29,7 +29,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const toast = useToast()
 
-const presets = ref([10, 20, 50, 100, 200, 500])
+const amountOptions = ref([10, 20, 50, 100, 200, 500])
 const amount = ref<number | null>(10)
 const submittingTopup = ref(false)
 const paymentMethods = ref<
@@ -37,18 +37,24 @@ const paymentMethods = ref<
 >([])
 const minimumTopup = ref(1)
 const paymentLoadState = ref<'idle' | 'ready' | 'failed'>('idle')
-interface EpayQuote {
+/**
+ * One server-priced offer. Epay settles in CNY and GMPay in USD, so the
+ * currency travels with the quote instead of being assumed by the panel.
+ */
+interface TopupQuote {
   amount: number
   amount_unit: 'USD'
   payment_method: string
-  currency: 'CNY'
+  currency: 'CNY' | 'USD'
   amount_minor: string
   pay_amount: string
   expected_quota: string
   min_topup: number
   quote_fingerprint: string
+  token?: string
+  network?: string
 }
-const quote = ref<EpayQuote | null>(null)
+const quote = ref<TopupQuote | null>(null)
 const quoteLoading = ref(false)
 const quoteError = ref('')
 const quoteChanged = ref(false)
@@ -61,11 +67,32 @@ const method = computed({
 })
 
 const selectableMethods = computed(() => paymentMethods.value)
+const isCrypto = computed(() => method.value.startsWith('gmpay:'))
+const submitLabel = computed(() =>
+  isCrypto.value ? t('wallet.gmpaySubmit') : t('wallet.topupNow')
+)
+/** The cashier currency symbol, taken from the server quote and never guessed. */
+const quoteSymbol = computed(() =>
+  quote.value?.currency === 'USD' ? '$' : '\u00a5'
+)
+const orderEndpoint = computed(() =>
+  isCrypto.value ? '/api/next/wallet/gmpay/topup' : '/api/next/wallet/topup'
+)
+/** Both rails take the bare provider method; the prefix is a UI concern only. */
+function providerMethod(value: string): string {
+  return value.replace(/^(?:epay|gmpay):/, '')
+}
 const selectedMinimumTopup = computed(
   () =>
     paymentMethods.value.find((item) => item.value === method.value)
       ?.minTopup ?? minimumTopup.value
 )
+const presets = computed(() => {
+  const valid = amountOptions.value.filter(
+    (value) => value >= selectedMinimumTopup.value
+  )
+  return valid.length ? valid : [selectedMinimumTopup.value]
+})
 const invalidAmount = computed(() => {
   if (amount.value === null) return false
   if (!Number.isSafeInteger(amount.value) || amount.value <= 0) return true
@@ -114,16 +141,41 @@ async function topup(): Promise<void> {
   submittingTopup.value = true
   try {
     const value = amount.value
-    const epayMethod = method.value.replace(/^epay:/, '')
+    const payload = {
+      amount: value,
+      amount_unit: 'USD',
+      payment_method: providerMethod(method.value),
+      quote_fingerprint: quote.value?.quote_fingerprint,
+    }
+    if (isCrypto.value) {
+      // A crypto checkout leaves the site for the gateway cashier, which is the
+      // only place the deposit address is shown.
+      const response = await api.post<{ url: string; trade_no: string }>(
+        orderEndpoint.value,
+        payload
+      )
+      let cashier: URL
+      try {
+        cashier = new URL(response.url)
+      } catch {
+        throw new ApiError(t('wallet.paymentMethodsUnavailable'))
+      }
+      if (
+        cashier.protocol !== 'https:' ||
+        cashier.username ||
+        cashier.password
+      ) {
+        throw new ApiError(t('wallet.paymentMethodsUnavailable'))
+      }
+      toast.success(t('wallet.callbackNote'))
+      window.location.href = cashier.href
+      emit('done')
+      return
+    }
     const response = await api.post<{
       url: string
       data: Record<string, unknown>
-    }>('/api/next/wallet/topup', {
-      amount: value,
-      amount_unit: 'USD',
-      payment_method: epayMethod,
-      quote_fingerprint: quote.value?.quote_fingerprint,
-    })
+    }>(orderEndpoint.value, payload)
     if (!response.url || !response.data) {
       throw new ApiError(t('wallet.paymentMethodsUnavailable'))
     }
@@ -176,12 +228,15 @@ async function refreshQuote(): Promise<void> {
   quoteController = controller
   quoteLoading.value = true
   try {
-    const response = await api.post<EpayQuote>(
-      '/api/next/wallet/topup/quote',
+    const crypto = currentMethod.startsWith('gmpay:')
+    const expectedCurrency = crypto ? 'USD' : 'CNY'
+    const expectedMethod = providerMethod(currentMethod)
+    const response = await api.post<TopupQuote>(
+      crypto ? '/api/next/wallet/gmpay/quote' : '/api/next/wallet/topup/quote',
       {
         amount: currentAmount,
         amount_unit: 'USD',
-        payment_method: currentMethod.replace(/^epay:/, ''),
+        payment_method: expectedMethod,
       },
       { signal: controller.signal }
     )
@@ -190,8 +245,8 @@ async function refreshQuote(): Promise<void> {
       !response ||
       response.amount !== currentAmount ||
       response.amount_unit !== 'USD' ||
-      response.payment_method !== currentMethod.replace(/^epay:/, '') ||
-      response.currency !== 'CNY' ||
+      response.payment_method !== expectedMethod ||
+      response.currency !== expectedCurrency ||
       !isQuota(response.amount_minor) ||
       BigInt(response.amount_minor) <= 0n ||
       !isQuota(response.expected_quota) ||
@@ -201,7 +256,11 @@ async function refreshQuote(): Promise<void> {
       typeof response.quote_fingerprint !== 'string' ||
       !response.quote_fingerprint ||
       response.pay_amount !==
-        `${BigInt(response.amount_minor) / 100n}.${(BigInt(response.amount_minor) % 100n).toString().padStart(2, '0')}`
+        `${BigInt(response.amount_minor) / 100n}.${(BigInt(response.amount_minor) % 100n).toString().padStart(2, '0')}` ||
+      (crypto &&
+        (!response.token ||
+          !response.network ||
+          `gmpay:${response.token}.${response.network}` !== currentMethod))
     ) {
       throw new Error('Invalid payment quote')
     }
@@ -225,15 +284,16 @@ onMounted(async () => {
     )
     if (configController.signal.aborted) return
     paymentMethods.value = info.pay_methods.map((item) => ({
-      value: `epay:${item.type}`,
+      // Crypto assets arrive already prefixed as gmpay:<token>.<network>; the
+      // Epay rail keeps its historical epay: prefix.
+      value: item.type.startsWith('gmpay:') ? item.type : `epay:${item.type}`,
       label: item.name,
-      minTopup: Math.max(item.min_topup ?? info.min_topup, info.min_topup),
+      minTopup: item.type.startsWith('gmpay:')
+        ? (item.min_topup ?? 1)
+        : Math.max(item.min_topup ?? info.min_topup, info.min_topup),
     }))
     minimumTopup.value = info.min_topup
-    const validPresets = info.amount_options.filter(
-      (value) => value >= info.min_topup
-    )
-    presets.value = validPresets.length ? validPresets : [info.min_topup]
+    amountOptions.value = info.amount_options
     let selectedMethod = paymentMethods.value.find(
       (item) => item.value === method.value
     )
@@ -323,10 +383,14 @@ onUnmounted(() => {
     <div class="mt-5 space-y-2 border-t border-[var(--border-subtle)] pt-4">
       <div class="flex items-center justify-between text-sm">
         <span class="text-[var(--text-secondary)]">{{
-          t('wallet.summaryPayNow')
+          t(
+            quote?.currency === 'USD'
+              ? 'wallet.summaryPayNowUsd'
+              : 'wallet.summaryPayNow'
+          )
         }}</span>
         <span class="font-semibold tabular-nums text-[var(--text-primary)]">
-          {{ quote?.pay_amount ? `¥${quote.pay_amount}` : '—' }}
+          {{ quote?.pay_amount ? `${quoteSymbol}${quote.pay_amount}` : '—' }}
         </span>
       </div>
       <div class="flex items-center justify-between text-sm">
@@ -385,9 +449,15 @@ onUnmounted(() => {
       :disabled="!canSubmit"
       @click="topup"
     >
-      {{ t('wallet.topupNow') }}
+      {{ submitLabel }}
     </ConsoleButton>
 
+    <p v-if="isCrypto" class="mt-2 text-xs text-[var(--text-tertiary)]">
+      {{ t('wallet.gmpayNetworkGuidance') }}
+    </p>
+    <p v-if="isCrypto" class="mt-2 text-xs text-[var(--text-tertiary)]">
+      {{ t('wallet.gmpayRedirectNote') }}
+    </p>
     <p class="mt-3 text-xs text-[var(--text-tertiary)]">
       {{ t('wallet.callbackNote') }}
     </p>
