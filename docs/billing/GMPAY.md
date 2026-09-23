@@ -70,14 +70,13 @@ epusdt 当前用商户数据库里的现密钥签发旧单通知；Ren2Hub 使�
 
 前端验证包括 GMPay 配置保存、倍率校验、空资产停新单、资产分流、最低额度、报价变化和收银台跳转。完整 Vitest、类型、lint、格式、生产构建，以及 EPay/GMPay 桌面和手机、浅色和深色浏览器用例已执行。管理员对账详情另有定向用例。
 
-数据库 CI 已接入 `TestGmpayMigrationsAndConcurrentSettlementAcrossDatabases`，从现有 MySQL/PostgreSQL 服务传入 `GATEWAY_STARTUP_MYSQL_DSN` / `GATEWAY_STARTUP_POSTGRES_DSN`。本机没有这两类隔离数据库及 Docker，两库实测仍未完成，不能把 SQLite 通过或 CI 配置检查当作两库验收。
+数据库 CI 已接入 `TestGmpayMigrationsAndConcurrentSettlementAcrossDatabases`，从现有 MySQL/PostgreSQL 服务传入 `GATEWAY_STARTUP_MYSQL_DSN` / `GATEWAY_STARTUP_POSTGRES_DSN`。2026-09-23 在服务器临时隔离容器中完成 SQLite、MySQL 8.4、PostgreSQL 15 的迁移与并发结算实测，三项全部通过；测试结束后删除本次容器和网络，未连接已有业务数据库。
 
 上线前仍需完成：
 
 - 独立 epusdt 服务的数据卷、数据库、HTTPS 收银台和备份恢复验证；当前参考版本使用 SQLite 运行时存储，不应照旧计划假定必须部署 Redis。工作区 `deploy/epusdt/` 已提供独立部署模板，运行环境验收另行记录。
 - 测试环境使用服务器 IP 和可信 HTTPS 证书；PID、收款钱包和启用资产通过测试环境安全配置注入，敏感值不写入仓库。
 - 从实际 epusdt 环境验证公网回调可达、通知失败重试、旧 PID 存量订单和密钥轮换流程。
-- 在隔离 MySQL/PostgreSQL 中运行迁移、并发结算及回滚测试。
 - 发布经过上述验证的 Ren2Hub 与网关版本，完成隔离的小额真实支付验收；本轮没有执行真实支付或生产部署。
 
 已有 EPay 约定见 [EPAY.md](EPAY.md)，共同账务事件约定见 [IMPLEMENTATION.md](IMPLEMENTATION.md)。
