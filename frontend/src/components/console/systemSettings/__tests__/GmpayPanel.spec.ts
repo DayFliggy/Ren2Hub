@@ -65,6 +65,34 @@ async function render() {
 }
 
 describe('GMPay administration', () => {
+  it('edits optional asset metadata without changing its token and network', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({})
+    const wrapper = await render()
+    const fields = wrapper.findAllComponents({ name: 'FormField' })
+    const icon = fields.find((field) =>
+      String(field.props('label')).includes('USDT · tron icon identifier')
+    )!
+    const color = fields.find((field) =>
+      String(field.props('label')).includes('USDT · tron color metadata')
+    )!
+    await icon.get('input').setValue('coin-usdt')
+    await color.get('input').setValue('#246810')
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Save gateway configuration')!
+      .trigger('click')
+    await flushPromises()
+    const payload = post.mock.calls[0]?.[1] as { assets: string }
+    expect(JSON.parse(payload.assets)[0]).toEqual({
+      name: 'USDT Tron',
+      token: 'usdt',
+      network: 'tron',
+      icon: 'coin-usdt',
+      color: '#246810',
+    })
+    expect(wrapper.text()).toContain('/api/user/gmpay/notify')
+    wrapper.unmount()
+  })
   it.each(['invalid-json', '{}', '[{"token":"usdt"}]'])(
     'never replaces a malformed stored catalog with an empty selection: %s',
     async (value) => {

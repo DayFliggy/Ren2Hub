@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"strconv"
 
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/epay"
@@ -19,7 +18,10 @@ func EpaySettlementEnabled(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return strconv.ParseBool(option.Value)
+	if option.Value != "true" && option.Value != "false" {
+		return false, errors.New("invalid epay settlement setting")
+	}
+	return option.Value == "true", nil
 }
 
 func SettleEpayNotification(ctx context.Context, params map[string]string, callerIP string) error {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/pkg/epay"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -173,6 +174,9 @@ func RechargeEpay(payment EpayPayment, callerIp string) (alreadyDone bool, err e
 	tradeNo, actualPaymentMethod := payment.OrderNo, payment.PaymentMethod
 	if tradeNo == "" {
 		return false, errors.New("未提供支付单号")
+	}
+	if len(actualPaymentMethod) > epay.MaxPaymentMethodBytes {
+		return false, ErrEpayPaymentMismatch
 	}
 
 	refCol := "`trade_no`"

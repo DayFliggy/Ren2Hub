@@ -122,8 +122,18 @@ var optionDefaults = map[string]any{
 	"DataExportEnabled": true, "DataExportInterval": 5, "DataExportDefaultTime": "hour",
 	"PreConsumedQuota": 500000, "QuotaPerUnit": 500000, "USDExchangeRate": 1.0,
 	"Price": 7.3, "MinTopUp": 1, "ChannelDisableThreshold": 5,
+	"PayAddress": "", "CustomCallbackAddress": "", "EpayId": "", "EpayKey": "",
+	"GmpayPayAddress": "", "GmpayId": "", "GmpayKey": "",
+	"GmpayPrice": 1.0, "GmpayMinTopUp": 1, "GmpayAssets": []any{},
+	"GmpayGroupRatio": map[string]any{"default": 1},
+	"TopupGroupRatio": map[string]any{"default": 1, "vip": 1, "svip": 1},
+	"PayMethods": []map[string]string{
+		{"name": "支付宝", "type": "alipay", "icon": "SiAlipay"},
+		{"name": "微信", "type": "wxpay", "icon": "SiWechat"},
+		{"name": "自定义1", "type": "custom1", "icon": "LuCreditCard", "min_topup": "50"},
+	},
 	"monitor_setting.channel_test_mode":           "scheduled_all",
-	"payment_setting.amount_options":              []any{},
+	"payment_setting.amount_options":              []int{10, 20, 50, 100, 200, 500},
 	"payment_setting.amount_discount":             map[string]any{},
 	"payment_setting.epay_settlement_enabled":     true,
 	"payment_setting.gmpay_settlement_enabled":    true,
@@ -194,6 +204,26 @@ func optionDescriptorFor(key, value string) OptionDescriptor {
 		descriptor.Editor = "role"
 	}
 	switch key {
+	// Payment contracts must not change with the saved value. In particular,
+	// numeric-looking merchant IDs are opaque strings, never JSON numbers.
+	case "EpayId", "GmpayId":
+		descriptor.ValueType, descriptor.Editor = "string", "text"
+	case "EpayKey", "GmpayKey":
+		descriptor.ValueType, descriptor.Editor = "string", "secret"
+	case "PayAddress", "GmpayPayAddress", "CustomCallbackAddress":
+		descriptor.ValueType, descriptor.Editor = "string", "url"
+	case "Price", "GmpayPrice":
+		descriptor.ValueType, descriptor.Editor = "number", "ratio"
+	case "MinTopUp", "GmpayMinTopUp":
+		descriptor.ValueType, descriptor.Editor = "number", "number"
+	case "PayMethods", "GmpayAssets":
+		descriptor.ValueType, descriptor.Editor = "json", "json"
+	case "TopupGroupRatio", "GmpayGroupRatio":
+		descriptor.ValueType, descriptor.Editor = "json", "ratio"
+	case "payment_setting.amount_options", "payment_setting.amount_discount":
+		descriptor.ValueType = "json"
+	case "payment_setting.epay_settlement_enabled", "payment_setting.gmpay_settlement_enabled":
+		descriptor.ValueType, descriptor.Editor = "boolean", "toggle"
 	case "QuotaForNewUser", "QuotaForInviter", "QuotaForInvitee", "QuotaRemindThreshold", "AffiliatePerInviteeCap":
 		descriptor.ValueType, descriptor.Editor, descriptor.DefaultValue = "string", "text", value
 	}

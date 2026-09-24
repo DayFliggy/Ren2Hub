@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -102,6 +103,48 @@ func TestRechargeEpayRejectsMismatchedReceiptBeforeAndAfterSuccess(t *testing.T)
 	assert.True(t, already)
 	require.NoError(t, db.First(&user, user.Id).Error)
 	assert.Equal(t, common.Quota(750_000), user.Quota)
+}
+
+func TestEpayPaymentMethodStorageBoundaryPreservesSettlement(t *testing.T) {
+	db := useWalletIngressDB(t)
+	user := User{Username: "method-boundary", AffCode: "method-boundary"}
+	require.NoError(t, db.Create(&user).Error)
+	order := TopUp{UserId: user.Id, TradeNo: "method-boundary", PaymentMethod: "alipay", PaymentProvider: PaymentProviderEpay, Status: common.TopUpStatusPending}
+	payment := insertEpaySnapshotTestOrder(t, &order, 750_000, "test-key")
+	payment.PaymentMethod = strings.Repeat("m", 72)
+	_, err := RechargeEpay(payment, "")
+	require.ErrorIs(t, err, ErrEpayPaymentMismatch)
+	var snapshot EpayOrder
+	require.NoError(t, db.First(&snapshot, order.Id).Error)
+	assert.Nil(t, snapshot.GatewayTradeNo)
+	require.NoError(t, db.First(&order, order.Id).Error)
+	assert.Equal(t, common.TopUpStatusPending, order.Status)
+	assert.Equal(t, "alipay", order.PaymentMethod)
+	assert.Zero(t, order.CreditedQuota)
+	require.NoError(t, db.First(&user, user.Id).Error)
+	assert.Zero(t, user.Quota)
+	var count int64
+	require.NoError(t, db.Model(&BillingEvent{}).Count(&count).Error)
+	assert.Zero(t, count)
+
+	payment.PaymentMethod = strings.Repeat("m", 71)
+	_, err = RechargeEpay(payment, "")
+	require.NoError(t, err)
+	invalid := payment
+	invalid.PaymentMethod += "m"
+	_, err = RechargeEpay(invalid, "")
+	require.ErrorIs(t, err, ErrEpayPaymentMismatch)
+	require.NoError(t, db.First(&order, order.Id).Error)
+	assert.Equal(t, common.TopUpStatusSuccess, order.Status)
+	assert.Equal(t, payment.PaymentMethod, order.PaymentMethod)
+	assert.Equal(t, common.Quota(750_000), order.CreditedQuota)
+	require.NoError(t, db.First(&snapshot, order.Id).Error)
+	require.NotNil(t, snapshot.GatewayTradeNo)
+	assert.Equal(t, payment.GatewayTradeNo, *snapshot.GatewayTradeNo)
+	require.NoError(t, db.First(&user, user.Id).Error)
+	assert.Equal(t, common.Quota(750_000), user.Quota)
+	require.NoError(t, db.Model(&BillingEvent{}).Count(&count).Error)
+	assert.EqualValues(t, 1, count)
 }
 
 func TestEpaySettlementRequiresSnapshot(t *testing.T) {
@@ -309,6 +352,24 @@ func TestEpayMigrationsAndConcurrentSettlementAcrossDatabases(t *testing.T) {
 			require.Error(t, err)
 			require.NoError(t, db.First(&duplicate, duplicate.Id).Error)
 			assert.Equal(t, common.TopUpStatusPending, duplicate.Status)
+
+			methodOrder := TopUp{UserId: user.Id, TradeNo: "method-storage-boundary", PaymentMethod: "alipay", PaymentProvider: PaymentProviderEpay, Status: common.TopUpStatusPending}
+			methodPayment := insertEpaySnapshotTestOrder(t, &methodOrder, 750_000, "test-key")
+			methodPayment.PaymentMethod = strings.Repeat("m", 72)
+			_, err = RechargeEpay(methodPayment, "")
+			require.ErrorIs(t, err, ErrEpayPaymentMismatch)
+			var methodSnapshot EpayOrder
+			require.NoError(t, db.First(&methodSnapshot, methodOrder.Id).Error)
+			assert.Nil(t, methodSnapshot.GatewayTradeNo)
+			require.NoError(t, db.First(&methodOrder, methodOrder.Id).Error)
+			assert.Equal(t, common.TopUpStatusPending, methodOrder.Status)
+			assert.Zero(t, methodOrder.CreditedQuota)
+			methodPayment.PaymentMethod = strings.Repeat("m", 71)
+			_, err = RechargeEpay(methodPayment, "")
+			require.NoError(t, err)
+			require.NoError(t, db.First(&methodOrder, methodOrder.Id).Error)
+			assert.Equal(t, methodPayment.PaymentMethod, methodOrder.PaymentMethod)
+			assert.Equal(t, common.Quota(750_000), methodOrder.CreditedQuota)
 
 			pausedOrder := TopUp{UserId: user.Id, TradeNo: "pause-wins", PaymentProvider: PaymentProviderEpay, Status: common.TopUpStatusPending}
 			pausedPayment := insertEpaySnapshotTestOrder(t, &pausedOrder, 750_000, "test-key")

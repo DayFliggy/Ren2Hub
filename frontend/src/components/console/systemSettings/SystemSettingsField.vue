@@ -32,6 +32,7 @@ const schema = computed(() => SETTINGS_RECORD_EDITORS[props.field.key])
 const entries = ref<Array<{ key: string; value: string }>>([])
 const rawMode = ref(false)
 const draftError = ref('')
+const collectionValid = ref(true)
 const map = computed(() =>
   ['key-value', 'ratio', 'discount'].includes(props.field.kind)
 )
@@ -94,9 +95,14 @@ watch(
   ([value]) => syncStructuredEntries(value),
   { immediate: true }
 )
-watch(validation, (value) => emit('validity', value === null), {
-  immediate: true,
-})
+watch(
+  [validation, collectionValid],
+  ([value, valid]) =>
+    emit('validity', value === null && !draftError.value && valid),
+  {
+    immediate: true,
+  }
+)
 
 function publish(value: SystemSettingValue) {
   draftError.value = ''
@@ -118,10 +124,12 @@ function publishEntries() {
     const keys = entries.value.map((entry) => entry.key.trim())
     if (keys.some((key) => !key)) {
       draftError.value = 'required'
+      emit('validity', false)
       return
     }
     if (new Set(keys).size !== keys.length) {
       draftError.value = 'duplicate'
+      emit('validity', false)
       return
     }
     const pairs = entries.value.map((entry) => [
@@ -148,6 +156,10 @@ function publishEntries() {
 }
 function add() {
   entries.value.push({ key: '', value: '' })
+  publishEntries()
+}
+function updateEntryValue(index: number, value: string) {
+  entries.value[index]!.value = value
   publishEntries()
 }
 function remove(index: number) {
@@ -184,6 +196,7 @@ function remove(index: number) {
       :model-value="String(modelValue)"
       :schema="schema"
       @update:model-value="publish"
+      @validity="collectionValid = $event"
     />
     <template v-else-if="structured && !rawMode">
       <div
@@ -201,7 +214,7 @@ function remove(index: number) {
           @input="publishEntries"
         />
         <input
-          v-model="entry.value"
+          :value="entry.value"
           class="settings-input"
           :type="
             ['ratio', 'discount', 'amount-list'].includes(field.kind)
@@ -210,7 +223,9 @@ function remove(index: number) {
           "
           :aria-label="`${label} ${t('editor.value')} ${index + 1}`"
           :placeholder="t('editor.value')"
-          @input="publishEntries"
+          @input="
+            updateEntryValue(index, ($event.target as HTMLInputElement).value)
+          "
         />
         <button
           type="button"
@@ -274,7 +289,7 @@ function remove(index: number) {
       :autocomplete="isSecret ? 'new-password' : 'off'"
       @input="scalar(($event.target as HTMLInputElement).value)"
     />
-    <p v-if="field.descriptionKey" class="settings-hint">{{ description }}</p>
+    <p v-if="description" class="settings-hint">{{ description }}</p>
     <p v-if="draftError || validation" role="alert" class="settings-error">
       {{ t(`editor.${draftError || validation}`) }}
     </p>

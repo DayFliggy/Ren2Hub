@@ -232,6 +232,20 @@ const discount = (
   defaultValue: '{}',
 })
 
+function paymentField(
+  field: SystemSettingField,
+  label: string,
+  description?: string
+): SystemSettingField {
+  return {
+    ...field,
+    labelKey: `systemSettings.paymentFields.${label}`,
+    ...(description
+      ? { descriptionKey: `systemSettings.paymentFields.${description}` }
+      : {}),
+  }
+}
+
 export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
   {
     id: 'site',
@@ -422,41 +436,25 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         id: 'pricing',
         title: '模型定价',
         description: '模型价格在模型管理中以不可变版本发布。此处配置充值显示。',
-        fields: [
-          ratio('TopupGroupRatio', '充值分组倍率'),
-          toggle('ExposeRatioEnabled', '公开倍率数据'),
-        ],
+        fields: [toggle('ExposeRatioEnabled', '公开倍率数据')],
       },
       {
         id: 'payment',
-        title: '支付网关',
-        description: '所有凭据仅支持更新，保存后不会回传。',
+        title: '通用支付设置',
+        titleKey: 'systemSettings.paymentSections.general',
+        description: '支付共用规则与合规确认。',
+        descriptionKey: 'systemSettings.paymentSections.generalDescription',
         fields: [
-          url('PayAddress', '易支付地址'),
-          text('EpayId', '易支付商户 ID'),
-          secret('EpayKey', '易支付密钥'),
-          {
-            ...toggle(
-              'payment_setting.epay_settlement_enabled',
-              '启用易支付结算',
-              true
-            ),
-            labelKey: 'systemSettings.epaySettlement',
-            descriptionKey: 'systemSettings.epaySettlementDescription',
-          },
-          {
-            ...toggle(
-              'payment_setting.gmpay_settlement_enabled',
-              '启用虚拟币结算',
-              true
-            ),
-            labelKey: 'systemSettings.gmpaySettlement',
-            descriptionKey: 'systemSettings.gmpaySettlementDescription',
-          },
-          number('Price', '基础价格', 7.3),
-          number('MinTopUp', '最低充值金额', 1),
-          url('CustomCallbackAddress', '支付回调地址'),
-          json('PayMethods', '易支付支付方式', '[]'),
+          paymentField(
+            url('CustomCallbackAddress', '支付回调基础地址'),
+            'callbackAddress',
+            'callbackHint'
+          ),
+          paymentField(
+            ratio('TopupGroupRatio', '充值分组倍率'),
+            'groupRatio',
+            'groupRatioHint'
+          ),
           secret('StripeApiSecret', 'Stripe API Secret'),
           secret('StripeWebhookSecret', 'Stripe Webhook Secret'),
           text('StripePriceId', 'Stripe Price ID'),
@@ -479,15 +477,15 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           url('WaffoNotifyUrl', 'Waffo 通知地址'),
           url('WaffoReturnUrl', 'Waffo 返回地址'),
           json('WaffoPayMethods', 'Waffo 支付方式', '[]'),
-          amountList(
-            'payment_setting.amount_options',
-            '充值金额选项',
-            '仅允许正整数，保存时自动排序并去重。'
+          paymentField(
+            amountList('payment_setting.amount_options', '充值金额选项'),
+            'amountOptions',
+            'amountOptionsHint'
           ),
-          discount(
-            'payment_setting.amount_discount',
-            '充值金额折扣',
-            '折扣范围为 0 到 1 之间（不含 0）。'
+          paymentField(
+            discount('payment_setting.amount_discount', '充值金额折扣'),
+            'discount',
+            'discountHint'
           ),
           secret('WaffoSandboxApiKey', 'Waffo 沙箱 API Key'),
           secret('WaffoSandboxPrivateKey', 'Waffo 沙箱私钥'),
@@ -496,13 +494,66 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         integration: 'payment-compliance',
       },
       {
+        id: 'epay',
+        title: 'EPay 易支付',
+        titleKey: 'systemSettings.paymentSections.epay',
+        description: '人民币支付接口。',
+        descriptionKey: 'systemSettings.paymentSections.epayDescription',
+        fields: [
+          paymentField(url('PayAddress', '易支付地址'), 'epayAddress'),
+          paymentField(text('EpayId', '易支付商户 ID'), 'merchantId'),
+          paymentField(
+            secret('EpayKey', '易支付密钥'),
+            'merchantSecret',
+            'secretHint'
+          ),
+          {
+            ...toggle(
+              'payment_setting.epay_settlement_enabled',
+              '启用易支付结算',
+              true
+            ),
+            labelKey: 'systemSettings.epaySettlement',
+            descriptionKey: 'systemSettings.epaySettlementDescription',
+          },
+          paymentField(
+            { ...number('Price', '基础价格', 7.3), min: 0 },
+            'epayPrice'
+          ),
+          paymentField(
+            {
+              ...number('MinTopUp', '最低购买额度', 1),
+              min: 1,
+              max: 18446744073709,
+              integer: true,
+            },
+            'minimumUsd'
+          ),
+          paymentField(
+            json('PayMethods', '易支付支付方式', '[]'),
+            'epayMethods',
+            'epayMethodsHint'
+          ),
+        ],
+      },
+      {
         id: 'gmpay',
         title: 'GMPay 虚拟币支付',
         titleKey: 'systemSettings.gmpayPanel.title',
         descriptionKey: 'systemSettings.gmpayPanel.description',
         description:
           '探测网关公开的资产目录并勾选要开放的代币，保存后立即发布；凭据仅支持更新。',
-        fields: [],
+        fields: [
+          {
+            ...toggle(
+              'payment_setting.gmpay_settlement_enabled',
+              '启用虚拟币结算',
+              true
+            ),
+            labelKey: 'systemSettings.gmpaySettlement',
+            descriptionKey: 'systemSettings.gmpaySettlementDescription',
+          },
+        ],
         managedKeys: [
           'GmpayPayAddress',
           'GmpayId',

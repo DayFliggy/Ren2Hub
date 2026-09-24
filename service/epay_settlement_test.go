@@ -151,3 +151,54 @@ func TestEpayPricingRejectsInvalidPersistedConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestEpaySettlementRejectsNoncanonicalStoredSwitch(t *testing.T) {
+	for _, value := range []string{"TRUE", "1", "t", "FALSE", "0", "", "invalid"} {
+		t.Run(value, func(t *testing.T) {
+			db := epayServiceTestDB(t, "https://pay.example.test")
+			ctx := context.Background()
+			order, err := CreateEpayTopUp(ctx, 1, EpayQuoteRequest{Amount: 10, AmountUnit: "USD", PaymentMethod: "alipay"})
+			require.NoError(t, err)
+			setEpayTestOption(t, db, "payment_setting.epay_settlement_enabled", value)
+			enabled, err := EpaySettlementEnabled(ctx)
+			require.Error(t, err)
+			assert.False(t, enabled)
+			require.Error(t, SettleEpayNotification(ctx, epayTestNotification(order, "invalid-switch", "test-only-key"), ""))
+			var user model.User
+			require.NoError(t, db.First(&user, 1).Error)
+			assert.Zero(t, user.Quota)
+			var snapshot model.EpayOrder
+			require.NoError(t, db.First(&snapshot, order.Order.Id).Error)
+			assert.Nil(t, snapshot.GatewayTradeNo)
+			var saved model.TopUp
+			require.NoError(t, db.First(&saved, order.Order.Id).Error)
+			assert.Equal(t, common.TopUpStatusPending, saved.Status)
+			assert.Zero(t, saved.CreditedQuota)
+		})
+	}
+}
+
+func TestEpaySettlementSwitchDefaultsAndPauseResume(t *testing.T) {
+	db := epayServiceTestDB(t, "https://pay.example.test")
+	ctx := context.Background()
+	enabled, err := EpaySettlementEnabled(ctx)
+	require.NoError(t, err)
+	assert.True(t, enabled)
+	order, err := CreateEpayTopUp(ctx, 1, EpayQuoteRequest{Amount: 10, AmountUnit: "USD", PaymentMethod: "alipay"})
+	require.NoError(t, err)
+	callback := epayTestNotification(order, "paused-receipt", "test-only-key")
+	setEpayTestOption(t, db, "payment_setting.epay_settlement_enabled", "false")
+	enabled, err = EpaySettlementEnabled(ctx)
+	require.NoError(t, err)
+	assert.False(t, enabled)
+	require.ErrorIs(t, SettleEpayNotification(ctx, callback, ""), model.ErrEpaySettlementPaused)
+	setEpayTestOption(t, db, "payment_setting.epay_settlement_enabled", "true")
+	require.NoError(t, SettleEpayNotification(ctx, callback, ""))
+	require.NoError(t, SettleEpayNotification(ctx, callback, ""))
+	var user model.User
+	require.NoError(t, db.First(&user, 1).Error)
+	assert.Equal(t, common.Quota(5_000_000), user.Quota)
+	var count int64
+	require.NoError(t, db.Model(&model.BillingEvent{}).Count(&count).Error)
+	assert.EqualValues(t, 1, count)
+}

@@ -2391,6 +2391,41 @@ export default {
   },
 
   systemSettings: {
+    paymentSections: {
+      general: '通用支付与其他网关',
+      generalDescription:
+        '维护共用充值规则和其他已配置网关。EPay、GMPay 的商户与结算配置在各自页面；密钥留空保留现有值。',
+      epay: 'EPay 易支付',
+      epayDescription:
+        '通过 EPay 购买 USD 额度并以 CNY 付款。凭据齐全且支付方式非空时开放新单；清空支付方式只停止新单，已有订单由结算开关控制。',
+    },
+    paymentFields: {
+      callbackAddress: '支付回调基础地址',
+      callbackHint:
+        '填写公网 HTTP(S) 基础地址，留空使用「站点与品牌 → 服务器地址」。EPay 通知路径为 /api/user/epay/notify；GMPay 通知路径为 /api/user/gmpay/notify。不要在此填写完整通知路径。',
+      groupRatio: '共用充值分组倍率',
+      groupRatioHint:
+        '正数倍率；未列出的分组使用 1。EPay 等通道共用此设置，GMPay 使用其专用分组倍率。',
+      amountOptions: '快捷购买额度（USD）',
+      amountOptionsHint:
+        'EPay、GMPay 的快捷按钮使用正整数 USD 额度；不填可使用自定义金额。此列表也供其他支付通道读取。',
+      discount: '购买额度折扣',
+      discountHint:
+        '将正整数购买额度映射为大于 0 且不超过 1 的折扣，1 表示原价。EPay、GMPay 按 USD 额度匹配；此设置也供其他支付通道读取。',
+      epayAddress: 'EPay 网关基础地址',
+      merchantId: '商户 ID',
+      merchantSecret: '商户密钥',
+      secretHint: '仅在更新时填写；留空保留现有密钥，保存后不回显。',
+      epayPrice: '每 USD 额度的支付单价（CNY）',
+      minimumUsd: '最低购买额度（USD）',
+      epayMethods: 'EPay 支付方式',
+      epayMethodsHint:
+        '类型需与网关一致（如 alipay、wxpay）。每种方式的最低购买额度为正整数 USD，只能提高全局下限；清空列表后停止创建 EPay 新单。',
+    },
+    invalidConfiguration: '请先修正无效配置。',
+    invalidJson: '{field} 不是有效的 JSON。',
+    loadFailed: '系统设置读取失败。重新读取成功前不能编辑或保存。',
+    retryLoad: '重新读取设置',
     gmpayPanel: {
       title: 'GMPay 虚拟币支付',
       description: '选择向用户开放的代币与网络，然后保存网关配置。',
@@ -2412,6 +2447,12 @@ export default {
       assetName: '{asset} 显示名',
       assetMinimum: '{asset} 最低购买额度（USD）',
       assetMinimumPlaceholder: '留空则使用全局最低额度',
+      assetIcon: '{asset} 图标标识（可选）',
+      assetColor: '{asset} 颜色元数据（可选）',
+      metadataHint:
+        '保留给支付配置 API 的展示元数据；当前钱包不使用自定义图标或颜色。',
+      callbackHint:
+        '通知地址由通用支付的回调基础地址加 /api/user/gmpay/notify 生成；留空基础地址时使用站点服务器地址。网关资产、钱包和链监听在 epusdt 自身管理，探测不会修改网关。',
       addressRequired: '请先填写网关地址。',
       credentialsRequired: '请填写网关地址与商户 ID。',
       secretRequired: '请填写商户密钥。',

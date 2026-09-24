@@ -31,10 +31,11 @@ function castValue(
     typeof descriptorDefault === 'boolean'
       ? descriptorDefault
       : (defaults[key as keyof AllSystemSettings] as string | number | boolean)
-  if (descriptor?.value_type === 'boolean' || typeof def === 'boolean') {
+  const expected = defaults[key as keyof AllSystemSettings]
+  if (typeof expected === 'boolean') {
     return raw === 'true' || raw === '1'
   }
-  if (descriptor?.value_type === 'number' || typeof def === 'number') {
+  if (typeof expected === 'number') {
     const n = Number(raw)
     return Number.isFinite(n) ? n : def
   }
@@ -69,12 +70,25 @@ const _configuredSecrets = ref<string[]>([])
 const _catalog = ref<SystemOptionDescriptor[]>([])
 const _loading = ref(false)
 const _loaded = ref(false)
+const _saving = ref(false)
 let _fetchPromise: Promise<boolean> | null = null
+let _savePromise: Promise<boolean> | null = null
+
+function isSensitiveOption(
+  key: string,
+  descriptors: readonly SystemOptionDescriptor[] = _catalog.value
+): boolean {
+  return (
+    descriptors.some((item) => item.key === key && item.sensitive) ||
+    /(?:Token|Secret|Key|Cert|Certificate|Password|secret|api_key)$/.test(key)
+  )
+}
 
 export function useSystemSettings() {
   const toast = useToast()
 
   async function load(force = false): Promise<boolean> {
+    if (_savePromise) await _savePromise
     if (_fetchPromise) {
       const loaded = await _fetchPromise
       // A post-save refresh must start after an earlier read has completed.
@@ -89,34 +103,46 @@ export function useSystemSettings() {
     _fetchPromise = api
       .get<SystemOption[]>('/api/option/')
       .then(async (data) => {
-        const raw: SystemSettingsRawOptions = {}
-        for (const option of Array.isArray(data) ? data : []) {
-          raw[option.key] = option.value
-        }
-        let descriptors: SystemOptionDescriptor[]
-        try {
-          const catalog = await api.get<SystemOptionDescriptor[]>(
-            '/api/option/catalog'
-          )
-          descriptors = Array.isArray(catalog) ? catalog : []
-        } catch {
-          descriptors = []
-        }
+        const descriptors = await api.get<SystemOptionDescriptor[]>(
+          '/api/option/catalog'
+        )
         const secretStatus = await api.get<SecretStatusResponse>(
           '/api/option/secret-status'
         )
+        if (
+          !Array.isArray(data) ||
+          data.some(
+            (option) =>
+              typeof option?.key !== 'string' ||
+              typeof option.value !== 'string'
+          ) ||
+          !Array.isArray(descriptors) ||
+          descriptors.some(
+            (descriptor) => !descriptor || typeof descriptor.key !== 'string'
+          ) ||
+          !Array.isArray(secretStatus?.configured) ||
+          secretStatus.configured.some((key) => typeof key !== 'string')
+        )
+          throw new Error('Invalid system settings response')
+        const raw: SystemSettingsRawOptions = {}
+        for (const option of data) {
+          if (!isSensitiveOption(option.key, descriptors))
+            raw[option.key] = option.value
+        }
         // Publish options and credential availability together. A failed
         // refresh must not pair new values with stale secret status.
         _rawOptions.value = raw
-        _catalog.value = descriptors
+        _catalog.value = descriptors.map((item) =>
+          isSensitiveOption(item.key, descriptors)
+            ? { ...item, default_value: '' }
+            : item
+        )
         _settings.value = parseOptions(
-          Array.isArray(data) ? data : [],
+          Object.entries(raw).map(([key, value]) => ({ key, value })),
           SYSTEM_SETTINGS_DEFAULTS,
           descriptors
         )
-        _configuredSecrets.value = Array.isArray(secretStatus?.configured)
-          ? secretStatus.configured
-          : []
+        _configuredSecrets.value = secretStatus.configured
         _loaded.value = true
         return true
       })
@@ -145,50 +171,72 @@ export function useSystemSettings() {
   async function saveOptions(
     patch: Partial<Record<string, SystemSettingValue>>
   ): Promise<boolean> {
-    const entries = Object.entries(patch)
+    if (!_loaded.value || _loading.value || _saving.value) return false
+    const entries = Object.entries(patch).filter(
+      ([key, value]) =>
+        !isSensitiveOption(key) || String(value ?? '').trim() !== ''
+    )
     if (entries.length === 0) return true
-
-    try {
-      await api.put<null>('/api/option/bulk', { options: patch })
-      const nextRaw = { ..._rawOptions.value }
-      for (const [key, value] of entries) {
-        nextRaw[key] = String(value)
-        if (
-          Object.prototype.hasOwnProperty.call(SYSTEM_SETTINGS_DEFAULTS, key)
-        ) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ;(_settings.value as any)[key] = value
+    _saving.value = true
+    _savePromise = api
+      .put<null>('/api/option/bulk', { options: Object.fromEntries(entries) })
+      .then(() => {
+        const nextRaw = { ..._rawOptions.value }
+        const configured = new Set(_configuredSecrets.value)
+        for (const [key, value] of entries) {
+          const sensitive = isSensitiveOption(key)
+          if (sensitive) {
+            delete nextRaw[key]
+            configured.add(key)
+          } else nextRaw[key] = String(value)
+          if (
+            Object.prototype.hasOwnProperty.call(SYSTEM_SETTINGS_DEFAULTS, key)
+          ) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ;(_settings.value as any)[key] = sensitive ? '' : value
+          }
         }
-      }
-      _rawOptions.value = nextRaw
-      return true
-    } catch (err) {
-      const msg = err instanceof ApiError ? err.message : String(err)
-      toast.error(msg)
-      return false
-    }
+        _rawOptions.value = nextRaw
+        _configuredSecrets.value = [...configured]
+        return true
+      })
+      .catch((err) => {
+        const msg = err instanceof ApiError ? err.message : String(err)
+        toast.error(msg)
+        return false
+      })
+      .finally(() => {
+        _saving.value = false
+        _savePromise = null
+      })
+    return _savePromise
   }
 
   function rawValue(
     key: string,
     fallback: SystemSettingValue = ''
   ): SystemSettingValue {
+    if (isSensitiveOption(key)) return ''
     const value = _rawOptions.value[key]
     const descriptor = _catalog.value.find((item) => item.key === key)
     if (value === undefined) {
       const defaultValue = descriptor?.default_value
       if (
-        typeof defaultValue === 'boolean' ||
-        typeof defaultValue === 'number' ||
-        typeof defaultValue === 'string'
+        typeof fallback === 'string' &&
+        descriptor?.value_type === 'json' &&
+        defaultValue !== undefined
       ) {
-        return defaultValue
+        return typeof defaultValue === 'string'
+          ? defaultValue
+          : JSON.stringify(defaultValue)
+      }
+      if (typeof defaultValue === typeof fallback) {
+        return defaultValue as SystemSettingValue
       }
       return fallback
     }
-    if (descriptor?.value_type === 'boolean' || typeof fallback === 'boolean')
-      return value === 'true' || value === '1'
-    if (descriptor?.value_type === 'number' || typeof fallback === 'number') {
+    if (typeof fallback === 'boolean') return value === 'true' || value === '1'
+    if (typeof fallback === 'number') {
       const parsed = Number(value)
       return Number.isFinite(parsed) ? parsed : fallback
     }
@@ -206,6 +254,7 @@ export function useSystemSettings() {
     catalog: readonly(_catalog),
     loading: readonly(_loading),
     loaded: readonly(_loaded),
+    saving: readonly(_saving),
     load,
     updateOption,
     saveOptions,

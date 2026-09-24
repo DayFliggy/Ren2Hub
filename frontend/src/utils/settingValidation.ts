@@ -39,6 +39,7 @@ export function validateSetting(
     if (value === '' || value === null || !Number.isFinite(Number(value)))
       return 'number'
     const n = Number(value)
+    if (field.key === 'Price' && n <= 0) return 'range'
     if (
       (field.min !== undefined && n < field.min) ||
       (field.max !== undefined && n > field.max) ||
@@ -48,6 +49,22 @@ export function validateSetting(
     return null
   }
   if (typeof value !== 'string') return 'shape'
+  if (field.key === 'CustomCallbackAddress' && value.trim()) {
+    try {
+      const url = new URL(value)
+      if (
+        !validSettingUrl(value) ||
+        /[?#]/.test(value) ||
+        url.port === '0' ||
+        url.search ||
+        url.hash ||
+        (url.pathname !== '' && url.pathname !== '/')
+      )
+        return 'url'
+    } catch {
+      return 'url'
+    }
+  }
   if (field.kind === 'url')
     return !value.trim() || validSettingUrl(value) ? null : 'url'
   if (field.kind === 'select' || field.kind === 'role')
@@ -84,9 +101,34 @@ export function validateSetting(
       }
       for (const column of schema.fields) {
         const item = row[column.key]
+        if (
+          field.key === 'PayMethods' &&
+          item !== undefined &&
+          typeof item !== 'string'
+        )
+          return 'shape'
         if (column.required && (item == null || String(item).trim() === ''))
           return 'required'
         if (item == null || item === '') continue
+        if (field.key === 'PayMethods') {
+          if (
+            column.key === 'type' &&
+            !/^[a-zA-Z0-9_-]{1,50}$/.test(String(item).trim())
+          )
+            return 'shape'
+          if (
+            column.key === 'min_topup' &&
+            (!/^[0-9]+$/.test(String(item).trim()) ||
+              BigInt(String(item).trim()) < 1n ||
+              BigInt(String(item).trim()) > 18446744073709n)
+          )
+            return 'range'
+          if (
+            column.key === 'name' &&
+            new TextEncoder().encode(String(item).trim()).length > 128
+          )
+            return 'range'
+        }
         if (column.key === 'quota' && (!isQuota(item) || BigInt(item) <= 0n))
           return 'range'
         if (
@@ -131,7 +173,10 @@ export function validateSetting(
   if (field.kind === 'ratio')
     return object(parsed) &&
       Object.values(parsed).every(
-        (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0
+        (v) =>
+          typeof v === 'number' &&
+          Number.isFinite(v) &&
+          (field.key === 'TopupGroupRatio' ? v > 0 : v >= 0)
       )
       ? null
       : 'range'

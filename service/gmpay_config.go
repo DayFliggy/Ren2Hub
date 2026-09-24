@@ -127,12 +127,14 @@ func LoadGmpayConfig(ctx context.Context) (*GmpayConfig, error) {
 	}
 	config.Compliance = values["payment_setting.compliance_confirmed"] == "true" &&
 		values["payment_setting.compliance_terms_version"] == operation_setting.CurrentComplianceTermsVersion
-	base := values["CustomCallbackAddress"]
-	if base == "" {
-		base = values["ServerAddress"]
+	// A disabled rail cannot create an order and does not require public URLs.
+	if !config.Enabled() {
+		return config, nil
 	}
-	config.NotifyURL = strings.TrimRight(base, "/") + "/api/user/gmpay/notify"
-	config.ReturnURL = strings.TrimRight(values["ServerAddress"], "/") + "/usage-logs"
+	config.NotifyURL, config.ReturnURL, err = paymentCallbackURLs(values["ServerAddress"], values["CustomCallbackAddress"], "/api/user/gmpay/notify")
+	if err != nil {
+		return nil, err
+	}
 	return config, nil
 }
 

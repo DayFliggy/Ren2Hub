@@ -46,20 +46,60 @@ describe('system settings catalog', () => {
     const sections = SYSTEM_SETTINGS_DOMAINS.flatMap(
       (domain) => domain.sections
     )
-    const pricing = sections.find((section) => section.id === 'pricing')
+    const payment = sections.find((section) => section.id === 'payment')
     const ssrf = sections.find((section) => section.id === 'ssrf')
     const waffoPancake = sections.find(
       (section) => section.id === 'waffo-pancake'
     )
 
     expect(
-      pricing?.fields.find((field) => field.key === 'TopupGroupRatio')?.kind
+      payment?.fields.find((field) => field.key === 'TopupGroupRatio')?.kind
     ).toBe('ratio')
     expect(
       ssrf?.fields.find((field) => field.key === 'fetch_setting.domain_list')
         ?.kind
     ).toBe('list')
     expect(waffoPancake?.integration).toBe('waffo-pancake')
+  })
+
+  it('exposes EPay and GMPay contracts in distinct settings pages without duplicate keys', () => {
+    const sections = SYSTEM_SETTINGS_DOMAINS.find(
+      (domain) => domain.id === 'billing'
+    )!.sections
+    const epay = sections.find((section) => section.id === 'epay')!
+    const gmpay = sections.find((section) => section.id === 'gmpay')!
+    expect(epay.fields.map((field) => field.key)).toEqual([
+      'PayAddress',
+      'EpayId',
+      'EpayKey',
+      'payment_setting.epay_settlement_enabled',
+      'Price',
+      'MinTopUp',
+      'PayMethods',
+    ])
+    expect(gmpay.fields.map((field) => field.key)).toEqual([
+      'payment_setting.gmpay_settlement_enabled',
+    ])
+    expect(gmpay.managedKeys).toEqual([
+      'GmpayPayAddress',
+      'GmpayId',
+      'GmpayKey',
+      'GmpayAssets',
+      'GmpayPrice',
+      'GmpayMinTopUp',
+      'GmpayGroupRatio',
+    ])
+    expect(epay.fields.every((field) => !!field.labelKey)).toBe(true)
+    const payment = sections.find((section) => section.id === 'payment')!
+    expect(
+      payment.fields.some((field) => field.key === 'StripeApiSecret')
+    ).toBe(true)
+    expect(payment.fields.some((field) => field.key === 'CreemProducts')).toBe(
+      true
+    )
+    expect(
+      payment.fields.some((field) => field.key === 'WaffoSandboxPublicCert')
+    ).toBe(true)
   })
 
   it('preserves automatic pricing without editable deployment settings', () => {

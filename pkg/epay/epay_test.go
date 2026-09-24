@@ -160,6 +160,34 @@ func TestVerifyNotificationRejectsInvalidClaims(t *testing.T) {
 	}
 }
 
+func TestNotificationPaymentMethodFitsStoredOrder(t *testing.T) {
+	for _, size := range []int{71, 72} {
+		t.Run(strings.Repeat("m", size), func(t *testing.T) {
+			params := make(map[string]string)
+			for name, values := range notificationValues() {
+				params[name] = values[0]
+			}
+			params["type"] = strings.Repeat("m", size)
+			params["sign"] = Sign(params, "test-secret")
+			values := make(url.Values)
+			for name, value := range params {
+				values.Set(name, value)
+			}
+			_, parseErr := ParseNotification(httptest.NewRequest(http.MethodGet, "/notify?"+values.Encode(), nil))
+			payment, verifyErr := VerifyNotification(params, Config{MerchantID: "1001", Key: "test-secret"})
+			if size == 72 {
+				assert.ErrorIs(t, parseErr, ErrInvalidParameters)
+				assert.ErrorIs(t, verifyErr, ErrInvalidParameters)
+				assert.Nil(t, payment)
+				return
+			}
+			require.NoError(t, parseErr)
+			require.NoError(t, verifyErr)
+			assert.Equal(t, params["type"], payment.Method)
+		})
+	}
+}
+
 func TestMoneyPrecisionAndOverflow(t *testing.T) {
 	for _, test := range []struct {
 		raw   string

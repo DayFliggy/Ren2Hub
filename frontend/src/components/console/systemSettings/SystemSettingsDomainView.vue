@@ -19,6 +19,7 @@ import {
   type SystemSettingValue,
 } from '@/composables/useSystemSettings'
 import { useToast } from '@/composables/useToast'
+import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import GatewayConfigPanel from '@/components/console/gateway/GatewayConfigPanel.vue'
 
 const props = defineProps<{ domain: SystemSettingsDomainId }>()
@@ -27,8 +28,16 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
-const { load, rawOptions, rawValue, isSecretConfigured, saveOptions } =
-  useSystemSettings()
+const {
+  load,
+  loaded,
+  loading,
+  saving: sharedSaving,
+  rawOptions,
+  rawValue,
+  isSecretConfigured,
+  saveOptions,
+} = useSystemSettings()
 
 const domainConfig = computed(() => getSystemSettingsDomain(props.domain))
 const activeSection = computed(() => {
@@ -42,6 +51,7 @@ const activeSection = computed(() => {
 })
 
 const draft = reactive<Record<string, SystemSettingValue>>({})
+const baseline = reactive<Record<string, SystemSettingValue>>({})
 const draftValid = reactive<Record<string, boolean>>({})
 const saving = reactive({ value: false })
 
@@ -52,9 +62,16 @@ function readField(key: string, fallback: SystemSettingValue) {
 function syncDraft() {
   const section = activeSection.value
   if (!section) return
+  for (const key of Object.keys(draft)) delete draft[key]
+  for (const key of Object.keys(draftValid)) delete draftValid[key]
+  for (const key of Object.keys(baseline)) delete baseline[key]
   for (const field of section.fields) {
-    draft[field.key] = readField(field.key, field.defaultValue)
+    draft[field.key] =
+      field.kind === 'secret' || field.kind === 'secret-textarea'
+        ? ''
+        : readField(field.key, field.defaultValue)
     draftValid[field.key] = true
+    baseline[field.key] = draft[field.key]
   }
 }
 
@@ -72,9 +89,7 @@ const dirty = computed(() => {
       !String(next ?? '').trim()
     )
       return false
-    return (
-      serialize(next) !== serialize(readField(field.key, field.defaultValue))
-    )
+    return serialize(next) !== serialize(baseline[field.key])
   })
 })
 
@@ -96,9 +111,17 @@ function normalizeRoute() {
 
 async function saveSection() {
   const section = activeSection.value
-  if (!section || !dirty.value) return
+  if (
+    !section ||
+    !dirty.value ||
+    !loaded.value ||
+    loading.value ||
+    saving.value ||
+    sharedSaving.value
+  )
+    return
   if (section.fields.some((field) => draftValid[field.key] === false)) {
-    toast.error('请先修正无效配置。')
+    toast.error(t('systemSettings.invalidConfiguration'))
     return
   }
   const patch: Record<string, SystemSettingValue> = {}
@@ -114,13 +137,15 @@ async function saveSection() {
       try {
         JSON.parse(String(next))
       } catch {
-        toast.error(`${field.label} 不是有效的 JSON。`)
+        toast.error(
+          t('systemSettings.invalidJson', {
+            field: field.labelKey ? t(field.labelKey) : field.label,
+          })
+        )
         return
       }
     }
-    if (
-      serialize(next) !== serialize(readField(field.key, field.defaultValue))
-    ) {
+    if (serialize(next) !== serialize(baseline[field.key])) {
       patch[field.key] = next
     }
   }
@@ -135,13 +160,19 @@ async function saveSection() {
 }
 
 watch(
-  () => [props.domain, route.params.section, rawOptions.value],
+  () => [props.domain, route.params.section],
   () => {
     normalizeRoute()
     syncDraft()
   },
   { immediate: true }
 )
+watch(rawOptions, () => {
+  if (!dirty.value) syncDraft()
+})
+watch(loaded, (ready) => {
+  if (ready && !dirty.value) syncDraft()
+})
 
 onMounted(() => load())
 </script>
@@ -155,6 +186,7 @@ onMounted(() => load())
           v-for="section in domainConfig.sections"
           :key="section.id"
           type="button"
+          :disabled="saving.value || sharedSaving"
           class="settings-section-link focus-ring"
           :class="section.id === activeSection.id ? 'is-active' : ''"
           :aria-current="section.id === activeSection.id ? 'page' : undefined"
@@ -185,23 +217,48 @@ onMounted(() => load())
             : activeSection.description
         "
         :saving="saving.value"
-        :dirty="dirty"
+        :dirty="dirty && loaded && !loading && !sharedSaving"
         @save="saveSection"
       >
-        <div class="settings-fields-grid">
-          <SystemSettingsField
-            v-for="field in activeSection.fields"
-            :key="field.key"
-            v-model="draft[field.key]"
-            :field="field"
-            :secret-configured="
-              (field.kind === 'secret' || field.kind === 'secret-textarea') &&
-              isSecretConfigured(field.key)
-            "
-            @validity="draftValid[field.key] = $event"
-          />
+        <p
+          v-if="loading"
+          role="status"
+          class="mb-4 text-sm text-[var(--text-secondary)]"
+        >
+          {{ t('systemSettings.loading') }}
+        </p>
+        <div
+          v-else-if="!loaded"
+          role="alert"
+          class="mb-4 text-sm text-[var(--status-danger-text)]"
+        >
+          <p>{{ t('systemSettings.loadFailed') }}</p>
+          <ConsoleButton
+            class="mt-2"
+            variant="secondary"
+            size="sm"
+            @click="load(true)"
+            >{{ t('systemSettings.retryLoad') }}</ConsoleButton
+          >
         </div>
-
+        <fieldset
+          :disabled="!loaded || loading || saving.value || sharedSaving"
+          class="min-w-0 border-0 p-0"
+        >
+          <div class="settings-fields-grid">
+            <SystemSettingsField
+              v-for="field in activeSection.fields"
+              :key="field.key"
+              v-model="draft[field.key]"
+              :field="field"
+              :secret-configured="
+                (field.kind === 'secret' || field.kind === 'secret-textarea') &&
+                isSecretConfigured(field.key)
+              "
+              @validity="draftValid[field.key] = $event"
+            />
+          </div>
+        </fieldset>
         <CustomOAuthProvidersPanel
           v-if="activeSection.integration === 'custom-oauth'"
         />

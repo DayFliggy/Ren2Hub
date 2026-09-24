@@ -230,6 +230,11 @@ func IsRetiredBillingOption(key string) bool {
 
 func validateOptionValue(key string, value string) error {
 	switch key {
+	case "CustomCallbackAddress":
+		if strings.TrimSpace(value) != "" {
+			_, err := common.NormalizePaymentOrigin(value)
+			return err
+		}
 	case "Price":
 		_, err := operation_setting.ParseEpayPrice(value)
 		return err

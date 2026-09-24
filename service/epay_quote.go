@@ -91,12 +91,15 @@ func LoadEpayConfig(ctx context.Context) (*EpayConfig, error) {
 		return nil, errors.New("invalid topup presets")
 	}
 	config.Compliance = values["payment_setting.compliance_confirmed"] == "true" && values["payment_setting.compliance_terms_version"] == operation_setting.CurrentComplianceTermsVersion
-	base := values["CustomCallbackAddress"]
-	if base == "" {
-		base = values["ServerAddress"]
+	// An unconfigured rail must not block wallet configuration or redemption
+	// because an older installation has not set its public site origin yet.
+	if !config.Enabled() {
+		return config, nil
 	}
-	config.NotifyURL = strings.TrimRight(base, "/") + "/api/user/epay/notify"
-	config.ReturnURL = strings.TrimRight(values["ServerAddress"], "/") + "/usage-logs"
+	config.NotifyURL, config.ReturnURL, err = paymentCallbackURLs(values["ServerAddress"], values["CustomCallbackAddress"], "/api/user/epay/notify")
+	if err != nil {
+		return nil, err
+	}
 	return config, nil
 }
 

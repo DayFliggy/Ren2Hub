@@ -22,10 +22,12 @@ const (
 	StatusTradeSuccess   = "TRADE_SUCCESS"
 	StatusPending        = "WAIT_BUYER_PAY"
 	MaxNotificationBytes = 16 << 10
-	maxFields            = 32
-	maxKeyBytes          = 64
-	maxValueBytes        = 4 << 10
-	maxIdentifierBytes   = 128
+	// MaxPaymentMethodBytes matches the persisted TopUp payment method column.
+	MaxPaymentMethodBytes = 71
+	maxFields             = 32
+	maxKeyBytes           = 64
+	maxValueBytes         = 4 << 10
+	maxIdentifierBytes    = 128
 )
 
 var (
@@ -188,6 +190,9 @@ func validateNotificationParameters(params map[string]string) error {
 		if !validIdentifier(params[name]) {
 			return ErrInvalidParameters
 		}
+	}
+	if len(params["type"]) > MaxPaymentMethodBytes {
+		return ErrInvalidParameters
 	}
 	if params["sign_type"] != "MD5" || (params["trade_status"] != StatusTradeSuccess && params["trade_status"] != StatusPending && params["trade_status"] != "TRADE_CLOSED") {
 		return ErrInvalidParameters

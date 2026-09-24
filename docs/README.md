@@ -16,6 +16,7 @@
 | 定价 | [单价与初始目录](billing/PRICING.md)、[计价接口](../pkg/billing/API.md)、[表达式](../pkg/billingexpr/expr.md) | 不可变价格版本、规范用量、精确金额与安全属性 |
 | 易支付充值 | [支付契约](billing/EPAY.md) | 报价、订单快照、商户版本、通知重试与管理员补单 |
 | GMPay 加密货币充值 | [接入契约与验收状态](billing/GMPAY.md) | 独立配置、多链资产、USD 报价、到账证据和验收边界 |
+| 支付系统设置 | [EPay / GMPay 配置清单](billing/PAYMENT_SETTINGS.md) | 控制台入口、默认值、金额单位、保存与启停边界 |
 | 复验方法 | [网关验证](routing/GATEWAY_VALIDATION.md)、[SDK 套件](../tests/gateway-sdk/README.md)、[准入基准](../tests/admission-benchmark/README.md) | 隔离依赖、测试入口与测量范围 |
 | 既有验证证据 | [网关与协议](routing/SINGLE_INSTANCE_ACCEPTANCE.md)、[账务](billing/VALIDATION.md)、[易支付](billing/EPAY_VALIDATION.md) | 明确版本、环境、已执行结果及未证明的边界 |
 

@@ -2454,6 +2454,43 @@ export default {
   },
 
   systemSettings: {
+    paymentSections: {
+      general: 'Shared payment settings and other gateways',
+      generalDescription:
+        'Manage shared top-up rules and other configured gateways. EPay and GMPay merchant and settlement settings have their own pages. Blank credentials retain the saved value.',
+      epay: 'EPay',
+      epayDescription:
+        'Purchase USD credits and pay in CNY through EPay. Complete credentials and at least one payment method enable new orders. An empty method list stops new orders; the settlement switch controls existing orders.',
+    },
+    paymentFields: {
+      callbackAddress: 'Payment callback base URL',
+      callbackHint:
+        'Use a public HTTP(S) base URL, or leave blank to use Site & Branding → Server address. Notification paths are /api/user/epay/notify for EPay and /api/user/gmpay/notify for GMPay. Do not include the notification path here.',
+      groupRatio: 'Shared top-up group multipliers',
+      groupRatioHint:
+        'Use positive multipliers; unlisted groups use 1. EPay and other gateways share this setting. GMPay uses its own group multipliers.',
+      amountOptions: 'Quick purchase amounts (USD)',
+      amountOptionsHint:
+        'EPay and GMPay quick amounts are positive whole USD credits. Custom amounts remain available without presets. Other payment gateways also read this list.',
+      discount: 'Purchase amount discounts',
+      discountHint:
+        'Map positive whole purchase amounts to discounts greater than 0 and at most 1; 1 is full price. EPay and GMPay match USD credit amounts. Other payment gateways also read this setting.',
+      epayAddress: 'EPay gateway base URL',
+      merchantId: 'Merchant ID',
+      merchantSecret: 'Merchant secret',
+      secretHint:
+        'Enter a value only to replace the credential. Leaving it blank preserves the current value, which is never displayed after saving.',
+      epayPrice: 'CNY price per USD credit',
+      minimumUsd: 'Minimum credit purchase (USD)',
+      epayMethods: 'EPay payment methods',
+      epayMethodsHint:
+        'Match gateway types such as alipay or wxpay. Per-method minimums are positive whole USD amounts and can only raise the global minimum. An empty list stops new EPay orders.',
+    },
+    invalidConfiguration: 'Correct invalid settings before saving.',
+    invalidJson: '{field} is not valid JSON.',
+    loadFailed:
+      'Settings could not be loaded. Editing and saving are disabled until a successful reload.',
+    retryLoad: 'Reload settings',
     gmpayPanel: {
       title: 'GMPay crypto payments',
       description:
@@ -2477,6 +2514,12 @@ export default {
       assetName: '{asset} display name',
       assetMinimum: '{asset} minimum purchase (USD)',
       assetMinimumPlaceholder: 'Leave blank to use the global minimum',
+      assetIcon: '{asset} icon identifier (optional)',
+      assetColor: '{asset} color metadata (optional)',
+      metadataHint:
+        'Display metadata for the payment configuration API. The current wallet does not use custom icons or colors.',
+      callbackHint:
+        'The notification URL appends /api/user/gmpay/notify to the shared callback base URL, falling back to the site server address. Assets, wallets, and chain monitoring are managed in epusdt itself; probing does not change the gateway.',
       addressRequired: 'Enter the gateway address first.',
       credentialsRequired: 'Enter the gateway address and merchant ID.',
       secretRequired: 'Enter the merchant secret.',

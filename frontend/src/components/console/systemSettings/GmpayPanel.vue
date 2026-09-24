@@ -135,6 +135,19 @@ function setAssetMinimum(token: string, network: string, value: string) {
   )
 }
 
+function setAssetMetadata(
+  token: string,
+  network: string,
+  key: 'icon' | 'color',
+  value: string
+) {
+  selected.value = selected.value.map((item) =>
+    item.token === token && item.network === network
+      ? { ...item, [key]: value }
+      : item
+  )
+}
+
 function assetPayload(): string {
   return JSON.stringify(
     selected.value.map((item) => ({
@@ -235,11 +248,13 @@ async function save() {
     form.price <= 0 ||
     !Number.isSafeInteger(form.minTopUp) ||
     form.minTopUp < 1 ||
+    form.minTopUp > 18446744073709 ||
     selected.value.some(
       (item) =>
         item.minTopUp.trim() !== '' &&
         (!Number.isSafeInteger(Number(item.minTopUp)) ||
-          Number(item.minTopUp) < 1)
+          Number(item.minTopUp) < 1 ||
+          Number(item.minTopUp) > 18446744073709)
     )
   ) {
     toast.error(t('systemSettings.gmpayPanel.invalidAmounts'))
@@ -395,6 +410,9 @@ onUnmounted(() => {
       <p class="gmpay-hint">
         {{ t('systemSettings.gmpayPanel.probeHint') }}
       </p>
+      <p class="gmpay-hint">
+        {{ t('systemSettings.gmpayPanel.callbackHint') }}
+      </p>
 
       <div class="gmpay-actions">
         <ConsoleButton
@@ -481,6 +499,49 @@ onUnmounted(() => {
               "
               @update:model-value="
                 setAssetMinimum(item.token, item.network, String($event))
+              "
+            />
+          </FormField>
+          <FormField
+            :label="
+              t('systemSettings.gmpayPanel.assetIcon', {
+                asset: `${item.token.toUpperCase()} · ${item.network}`,
+              })
+            "
+            class="mt-2"
+          >
+            <TextInput
+              :model-value="item.icon ?? ''"
+              autocomplete="off"
+              @update:model-value="
+                setAssetMetadata(
+                  item.token,
+                  item.network,
+                  'icon',
+                  String($event)
+                )
+              "
+            />
+          </FormField>
+          <FormField
+            :label="
+              t('systemSettings.gmpayPanel.assetColor', {
+                asset: `${item.token.toUpperCase()} · ${item.network}`,
+              })
+            "
+            :hint="t('systemSettings.gmpayPanel.metadataHint')"
+            class="mt-2"
+          >
+            <TextInput
+              :model-value="item.color ?? ''"
+              autocomplete="off"
+              @update:model-value="
+                setAssetMetadata(
+                  item.token,
+                  item.network,
+                  'color',
+                  String($event)
+                )
               "
             />
           </FormField>
