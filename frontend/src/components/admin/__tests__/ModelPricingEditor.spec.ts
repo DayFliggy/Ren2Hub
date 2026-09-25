@@ -282,6 +282,44 @@ describe('model price editor', () => {
     expect(price.prices[0]?.price).toBe('1')
     wrapper.unmount()
   })
+  it.each(['rename', 'reopen'] as const)(
+    'discards a pending preview after %s changes its context',
+    async (change) => {
+      const { wrapper } = setup()
+      let resolve!: (
+        value: Awaited<ReturnType<typeof modelPricingApi.preview>>
+      ) => void
+      vi.spyOn(modelPricingApi, 'preview').mockReturnValue(
+        new Promise((done) => {
+          resolve = done
+        })
+      )
+      await flushPromises()
+      await wrapper.get('[data-price-preview]').trigger('click')
+      if (change === 'rename') {
+        await wrapper.setProps({ modelName: 'renamed-model' })
+      } else {
+        await wrapper.setProps({ open: false })
+        await wrapper.setProps({ open: true })
+        await flushPromises()
+      }
+      resolve({
+        quote: {},
+        charge: {
+          lines: [],
+          final_quota: '500',
+          total_usd: '0.001',
+          unrounded_quota: '500',
+          rounding_delta: '0',
+          calculation_version: 'billing-v2',
+          rounding_version: 'half-up-positive-minimum-v1',
+        },
+      })
+      await flushPromises()
+      expect(wrapper.find('[data-price-preview-result]').exists()).toBe(false)
+      wrapper.unmount()
+    }
+  )
   it('rejects concurrent target changes before publishing', async () => {
     const { wrapper, publish } = setup()
     await flushPromises()
@@ -291,6 +329,38 @@ describe('model price editor', () => {
       'changed elsewhere'
     )
     expect(publish).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('keeps edits made during publication dirty against the published version', async () => {
+    const { wrapper, publish } = setup()
+    await flushPromises()
+    const amount = wrapper.get('input[inputmode=decimal]')
+    await amount.setValue('2')
+    let resolve!: (price: PriceVersion) => void
+    publish.mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done
+      })
+    )
+    const saving = wrapper.vm.save('test')
+    await flushPromises()
+    expect(publish).toHaveBeenCalledTimes(1)
+    await amount.setValue('3')
+    const published = {
+      ...price,
+      id: 4,
+      prices: [{ ...price.prices[0]!, price: '2' }],
+    }
+    resolve(published)
+    await saving
+    vi.mocked(modelPricingApi.load).mockResolvedValue([published])
+    await wrapper.vm.save('test')
+    expect(publish).toHaveBeenCalledTimes(2)
+    expect(publish).toHaveBeenLastCalledWith(
+      expect.objectContaining({ prices: [{ ...price.prices[0], price: '3' }] }),
+      4,
+      undefined
+    )
     wrapper.unmount()
   })
   it('makes no price write for unchanged metadata and aborts unloaded reads', async () => {

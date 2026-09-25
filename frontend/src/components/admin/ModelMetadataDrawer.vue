@@ -45,7 +45,6 @@ const endpointEditor = ref<InstanceType<typeof MetadataEndpointEditor> | null>(
   null
 )
 const pricingEditor = ref<InstanceType<typeof ModelPricingEditor> | null>(null)
-const originalName = ref(props.model?.model_name ?? props.initialName ?? '')
 const loading = ref(Boolean(props.model))
 const saving = ref(false)
 const error = ref('')
@@ -69,7 +68,6 @@ async function load() {
   try {
     const model = await metadataApi.model(props.model.id, controller.signal)
     if (controller.signal.aborted) return
-    originalName.value = model.model_name
     Object.assign(form, {
       id: model.id,
       model_name: model.model_name,
@@ -229,7 +227,7 @@ async function save() {
         <ModelPricingEditor
           ref="pricingEditor"
           :open="true"
-          :model-name="originalName"
+          :model-name="form.model_name"
         />
       </fieldset>
     </form>

@@ -90,3 +90,29 @@ func TestBillingContractsRejectOldSnapshotsAndWrongUnits(t *testing.T) {
 	_, err = billing.NewQuoteWithFacts(p, "1", nil, time.Now(), map[string]interface{}{"resolution": "1080p"})
 	require.ErrorContains(t, err, "unit")
 }
+
+func TestSchemaUnitPricesUseFactsEvenWhenNamesMatchTokenDimensions(t *testing.T) {
+	for _, field := range []string{"p", "c", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao"} {
+		t.Run(field, func(t *testing.T) {
+			price := billing.PriceVersion{Model: "plugin-meter", Mode: billing.ModeUnitPrice,
+				Prices: []billing.UnitPrice{{Quantity: field, Unit: "per_second", Price: "0.4"}},
+				UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
+					field: {Type: "number", Unit: "second", Source: billingexpr.UsageCompletionFact, Required: true},
+				}}}
+			quote, err := billing.NewQuote(price, "1", nil, time.Now())
+			require.NoError(t, err)
+			for _, tokens := range []int64{0, 100} {
+				usage := billing.Usage{Complete: true, ActualFacts: map[string]any{field: "10"},
+					InputTokens: tokens, OutputTokens: tokens, CacheReadTokens: tokens, CacheWriteTokens: tokens,
+					CacheWrite1hTokens: tokens, ImageInputTokens: tokens, ImageOutputTokens: tokens,
+					AudioInputTokens: tokens, AudioOutputTokens: tokens}
+				result, err := billing.Calculate(quote, usage)
+				require.NoError(t, err)
+				assert.Equal(t, "4", result.TotalUSD, "declared seconds must not become legacy token counts")
+				assert.EqualValues(t, 2000000, result.FinalQuota)
+				require.Len(t, result.Lines, 1)
+				assert.Equal(t, "10", result.Lines[0].Count)
+			}
+		})
+	}
+}

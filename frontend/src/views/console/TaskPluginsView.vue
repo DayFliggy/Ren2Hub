@@ -59,7 +59,9 @@ const selectedModels = computed(
   () =>
     rows.value.find((row) => row.meta.key === selected.value)?.meta.models ?? []
 )
+let priceDraftSequence = 0
 watch([selected, priceModel, priceExpression], () => {
+  priceDraftSequence++
   priceDraft.value = undefined
 })
 const abort = new AbortController()
@@ -232,11 +234,13 @@ async function runDebug() {
   )
 }
 async function createPriceDraft() {
+  const current = ++priceDraftSequence
   const result = await taskPluginsApi.priceDraft(
     selected.value,
     priceModel.value,
     priceExpression.value
   )
+  if (current !== priceDraftSequence || abort.signal.aborted) return
   priceDraft.value = result.price_version
 }
 async function savePrice() {

@@ -176,7 +176,9 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 		}
 		usage.EstimatedFacts = nil
 		usage.ActualFacts = nil
-		if result != nil {
+		// An explicitly free price without a schema has no fact inputs.
+		// Preserve the provider's evidence in CompletionUsage instead.
+		if snapshot.Quote.PriceVersion.Mode != billing.ModeFree || snapshot.Quote.PriceVersion.UsageSchema != nil {
 			usage.ActualFacts = result.UsageFacts
 		}
 	}
@@ -189,13 +191,15 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 		usage.ContextTokens = usage.InputTokens
 	} else {
 		usesTokens := false
-		for _, price := range snapshot.Quote.PriceVersion.Prices {
-			usesTokens = usesTokens || price.Unit == "per_million_tokens"
-		}
-		if snapshot.Quote.PriceVersion.Mode == billing.ModeExpression {
-			used := billingexpr.UsedVars(snapshot.Quote.PriceVersion.Expression)
-			for _, name := range []string{"p", "c", "len", "cr", "cc", "cc1h", "img", "img_o", "ai", "ao"} {
-				usesTokens = usesTokens || used[name]
+		if snapshot.Quote.PriceVersion.UsageSchema == nil {
+			for _, price := range snapshot.Quote.PriceVersion.Prices {
+				usesTokens = usesTokens || price.Unit == "per_million_tokens"
+			}
+			if snapshot.Quote.PriceVersion.Mode == billing.ModeExpression {
+				used := billingexpr.UsedVars(snapshot.Quote.PriceVersion.Expression)
+				for _, name := range []string{"p", "c", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao"} {
+					usesTokens = usesTokens || used[name]
+				}
 			}
 		}
 		if usesTokens {

@@ -51,7 +51,7 @@ async function data(page: Page) {
       json: {
         success: true,
         data: {
-          model: 'gpt-local',
+          model: new URL(route.request().url()).searchParams.get('model'),
           plugin_key: '',
           usage_schema: null,
           manifest_schema: null,
@@ -275,6 +275,27 @@ for (const language of ['zh-CN', 'en']) {
         await expect(
           drawer.locator('[data-price-preview-result]')
         ).toContainText('night')
+        const updatedSchema = page.waitForRequest((request) => {
+          const url = new URL(request.url())
+          return (
+            url.pathname === '/api/billing/prices/task-schema' &&
+            url.searchParams.get('model') === 'gpt-renamed'
+          )
+        })
+        await drawer
+          .getByLabel(zh ? '模型名称' : 'Model name', { exact: true })
+          .fill('gpt-renamed')
+        await updatedSchema
+        await expect(drawer.locator('[data-price-preview-result]')).toHaveCount(
+          0
+        )
+        await expect(drawer.locator('textarea[spellcheck=false]')).toHaveValue(
+          /1\.000000000000000001/
+        )
+        await drawer.locator('[data-price-preview]').click()
+        await expect(
+          drawer.locator('[data-price-preview-result]')
+        ).toContainText('617 quota')
         await drawer
           .locator('[data-price-preview-result]')
           .scrollIntoViewIfNeeded()

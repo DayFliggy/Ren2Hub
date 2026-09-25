@@ -409,13 +409,14 @@ async function validate(name = props.modelName) {
 async function save(name: string) {
   await validate(name)
   if (!dirty.value && name === originalName.value && initial.value) return
+  const submittedForm = snapshot()
   initial.value = await modelPricingApi.publish(
     draft(name),
     name === originalName.value ? (initial.value?.id ?? 0) : 0,
     selectedPlugin.value || currentSchema.value?.plugin_key || undefined
   )
   originalName.value = name
-  initialForm.value = snapshot()
+  initialForm.value = submittedForm
 }
 async function importSeed() {
   request?.abort()
@@ -481,6 +482,8 @@ async function runPreview() {
 }
 watch(
   [
+    () => props.modelName,
+    () => props.open,
     snapshot,
     previewInput,
     previewAttributes,

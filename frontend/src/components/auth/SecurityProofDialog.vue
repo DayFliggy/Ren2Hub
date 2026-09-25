@@ -41,6 +41,7 @@ function cancel() {
   pending?.reject(new DOMException(t('security.cancelled'), 'AbortError'))
   pending = null
   open.value = false
+  busy.value = false
   value.value = ''
 }
 
@@ -80,11 +81,14 @@ async function verify() {
         options: AssertionOptions
         flow_token: string
       }>('/api/user/passkey/verify/begin', { ...operation, rp_id: rpID.value })
+      if (version !== requestVersion) return
+      const credential = await assertPasskey(begin.options)
+      if (version !== requestVersion) return
       result = await api.post<SecurityProof>(
         '/api/user/passkey/verify/finish',
         {
           flow_token: begin.flow_token,
-          credential: await assertPasskey(begin.options),
+          credential,
         }
       )
     } else if (method.value === 'oauth') {
@@ -112,9 +116,10 @@ async function verify() {
     open.value = false
     value.value = ''
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    if (version === requestVersion)
+      error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
-    busy.value = false
+    if (version === requestVersion) busy.value = false
   }
 }
 onBeforeUnmount(cancel)

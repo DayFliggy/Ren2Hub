@@ -458,8 +458,12 @@ func Calculate(quote *Quote, usage Usage) (*ChargeResult, error) {
 			counts[key] = number
 		}
 	}
-	for name, n := range tokenCounts {
-		counts[name] = decimal.NewFromFloat(n)
+	// Schema quantities are a separate namespace with explicit units. A field
+	// named "p" or "c" must retain its fact value, not an unrelated token count.
+	if quote.PriceVersion.UsageSchema == nil {
+		for name, n := range tokenCounts {
+			counts[name] = decimal.NewFromFloat(n)
+		}
 	}
 	if quote.PriceVersion.UsageSchema == nil && quote.PriceVersion.Mode == ModeUnitPrice && !used["calls"] && !used["images"] && !used["seconds"] {
 		for _, name := range []string{"p", "c"} {

@@ -92,6 +92,45 @@ func assertResponsesWSAuditAccounting(t *testing.T, status string, attempts int6
 	assert.Equal(t, attempts, count)
 }
 
+func TestGatewayResponsesWSSubprotocolAuthentication(t *testing.T) {
+	for _, mode := range []string{"bearer", "browser_key", "unrelated_key_prefix"} {
+		t.Run(mode, func(t *testing.T) {
+			base, key, _, accepted := setupResponsesWSAudit(t)
+			dialer := *websocket.DefaultDialer
+			dialer.Subprotocols = []string{"responses"}
+			headers := http.Header{"Authorization": {"Bearer " + key}}
+			switch mode {
+			case "browser_key":
+				headers.Del("Authorization")
+				dialer.Subprotocols = append(dialer.Subprotocols, "openai-insecure-api-key."+key)
+			case "unrelated_key_prefix":
+				dialer.Subprotocols = append(dialer.Subprotocols, "openai-insecure-api-key-disabled")
+			}
+			client, response, err := dialer.Dial("ws"+strings.TrimPrefix(base, "http")+"/v1/responses", headers)
+			if response != nil {
+				t.Logf("handshake HTTP status: %d", response.StatusCode)
+			}
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = client.Close() })
+			assert.Equal(t, "responses", client.Subprotocol())
+			var upstream *websocket.Conn
+			for _, id := range []string{"first-subprotocol-response", "second-subprotocol-response"} {
+				writeResponsesWSAudit(t, client, `{"type":"response.create","stream_id":"active","model":"gpt-4o-mini","input":"hello","max_output_tokens":10}`)
+				if upstream == nil {
+					upstream = acceptResponsesWSAudit(t, accepted)
+				}
+				readResponsesWSAudit(t, upstream)
+				completeResponsesWSAudit(t, upstream, client, id)
+			}
+			assert.Empty(t, accepted)
+			awaitGatewayPermitsReleased(t)
+			var attempts int64
+			require.NoError(t, model.DB.Model(&model.BillingAttempt{}).Count(&attempts).Error)
+			assert.EqualValues(t, 2, attempts, "captured credentials authorize each generation")
+		})
+	}
+}
+
 func TestGatewayResponsesWSPreviousResponseOwnership(t *testing.T) {
 	base, key, foreignKey, accepted := setupResponsesWSAudit(t)
 	client := dialResponsesWSAudit(t, base, key)

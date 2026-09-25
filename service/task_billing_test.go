@@ -323,3 +323,174 @@ func TestPluginTaskCompletionUsesOnlyFrozenSchemaFacts(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskTokenExpressionCannotSettleWithoutCompletionUsage(t *testing.T) {
+	for _, dimension := range []string{"p", "c", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao"} {
+		t.Run(dimension, func(t *testing.T) {
+			quote, err := billing.NewQuote(billing.PriceVersion{
+				Model: "task-token-model", Mode: billing.ModeExpression, Expression: dimension + " * 2",
+			}, "1", nil, time.Now())
+			require.NoError(t, err)
+			estimate := &billing.Usage{InputTokens: 100, OutputTokens: 200, Estimated: true}
+			task := &model.Task{Status: model.TaskStatusSuccess, PrivateData: model.TaskPrivateData{
+				BillingContext: &model.TaskBillingContext{Quote: quote, Usage: estimate},
+			}}
+			_, _, _, err = taskCompletionQuota(nil, task, &relaycommon.TaskInfo{})
+			require.ErrorContains(t, err, "task token usage unavailable")
+			assert.Nil(t, task.PrivateData.BillingContext.Charge, "missing completion usage cannot silently become a free settlement")
+			assert.Same(t, estimate, task.PrivateData.BillingContext.Usage)
+		})
+	}
+}
+
+func TestPluginTaskSchemaQuantityDoesNotRequireLegacyTokenCounters(t *testing.T) {
+	for _, unit := range []string{"second", "million_tokens"} {
+		t.Run(unit, func(t *testing.T) {
+			quote, err := billing.NewQuote(billing.PriceVersion{
+				Model: "task-schema-model", Mode: billing.ModeUnitPrice,
+				Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_" + unit, Price: "0.4"}},
+				UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
+					"p": {Type: "number", Unit: unit, Source: billingexpr.UsageCompletionFact, Required: true},
+				}},
+			}, "1", nil, time.Now())
+			require.NoError(t, err)
+			task := &model.Task{Status: model.TaskStatusSuccess, PrivateData: model.TaskPrivateData{
+				PluginRef: &model.TaskPluginRef{Key: "schema-plugin", Version: "1.0.0", SourceHash: "fixed"},
+				BillingContext: &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{
+					Estimated: true, EstimatedFacts: map[string]any{"p": 30},
+				}},
+			}}
+			quota, _, _, err := taskCompletionQuota(nil, task, &relaycommon.TaskInfo{UsageFacts: map[string]any{"p": 10}})
+			require.NoError(t, err)
+			assert.EqualValues(t, 2000000, quota, "the schema unit already defines the supplied quantity")
+			assert.Equal(t, "4", task.PrivateData.BillingContext.Charge.TotalUSD)
+		})
+	}
+}
+
+func TestExplicitFreePluginDoesNotPriceUnboundCompletionFacts(t *testing.T) {
+	registry := taskPriceTestRegistry(t)
+	registerPriceTestPlugin(t, registry, "free-price-fixture", "1.0.0", `["720p","1080p"]`, 24)
+	price, err := ValidateTaskPluginPricePublication(billing.PriceVersion{
+		Model: "task-price-fixture", Mode: billing.ModeFree,
+	}, "free-price-fixture")
+	require.NoError(t, err)
+	quote, err := billing.NewQuote(price, "1", nil, time.Now())
+	require.NoError(t, err)
+	for _, hookError := range []string{"", "plugin completion usage facts are invalid"} {
+		t.Run(hookError, func(t *testing.T) {
+			task := &model.Task{Status: model.TaskStatusSuccess, PrivateData: model.TaskPrivateData{
+				PluginRef:      &model.TaskPluginRef{Key: "free-price-fixture", Version: "1.0.0", SourceHash: "fixed"},
+				BillingContext: &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Estimated: true}},
+			}}
+			facts := map[string]any{"seconds": 10}
+			quota, _, _, err := taskCompletionQuota(nil, task, &relaycommon.TaskInfo{UsageFacts: facts, UsageError: hookError})
+			if hookError != "" {
+				require.Error(t, err, "explicit free must not suppress a failed usage hook")
+				assert.Nil(t, task.PrivateData.BillingContext.Charge)
+				return
+			}
+			require.NoError(t, err)
+			assert.Zero(t, quota)
+			require.NotNil(t, task.PrivateData.BillingContext.Charge)
+			assert.Empty(t, task.PrivateData.BillingContext.Usage.ActualFacts, "a schema-free price has no bound fact inputs")
+			assert.Equal(t, map[string]any{"seconds": 10}, facts, "provider evidence must remain available to the terminal snapshot")
+		})
+	}
+	for _, price := range []billing.PriceVersion{
+		{Model: "task-price-fixture", Mode: billing.ModeUnitPrice,
+			Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "1"}}},
+		{Model: "task-price-fixture", Mode: billing.ModeFree,
+			UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
+				"seconds": {Type: "number", Unit: "second", Source: billingexpr.UsageCompletionFact, Required: true, Maximum: "5"},
+			}}},
+	} {
+		quote, err := billing.NewQuote(price, "1", nil, time.Now())
+		require.NoError(t, err)
+		task := &model.Task{Status: model.TaskStatusSuccess, PrivateData: model.TaskPrivateData{
+			PluginRef:      &model.TaskPluginRef{Key: "free-price-fixture", Version: "1.0.0", SourceHash: "fixed"},
+			BillingContext: &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Estimated: true}},
+		}}
+		_, _, _, err = taskCompletionQuota(nil, task, &relaycommon.TaskInfo{UsageFacts: map[string]any{"seconds": 10}})
+		require.Error(t, err, "free-with-schema and paid prices keep their fact validation")
+		assert.Nil(t, task.PrivateData.BillingContext.Charge)
+	}
+}
+
+func TestTaskCompletionUsageBoundariesPreserveFundsAndTerminalEvidence(t *testing.T) {
+	for _, test := range []struct {
+		name             string
+		price            billing.PriceVersion
+		facts            map[string]any
+		reserved, actual int
+		invalid          bool
+	}{
+		{name: "schema quantity retains its unit", reserved: 6000000, actual: 2000000, facts: map[string]any{"p": 10},
+			price: billing.PriceVersion{Mode: billing.ModeUnitPrice,
+				Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_second", Price: "0.4"}},
+				UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
+					"p": {Type: "number", Unit: "second", Source: billingexpr.UsageCompletionFact, Required: true},
+				}}}},
+		{name: "free keeps provider facts", facts: map[string]any{"seconds": 10}, price: billing.PriceVersion{Mode: billing.ModeFree}},
+		{name: "missing image cache usage retains reservation", reserved: 30, invalid: true,
+			price: billing.PriceVersion{Mode: billing.ModeExpression, Expression: "img_cr * 2"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			truncate(t)
+			const id, balance = 953, 10000000
+			seedUser(t, id, balance)
+			seedToken(t, id, id, "task-usage-boundaries", balance)
+			seedChannel(t, id)
+			task := makeTask(id, id, test.reserved, id, BillingSourceWallet)
+			acceptTestTask(t, task)
+			test.price.Model = task.Properties.OriginModelName
+			quote, err := billing.NewQuote(test.price, "1", nil, time.Now())
+			require.NoError(t, err)
+			task.PrivateData.PluginRef = &model.TaskPluginRef{Key: "usage-boundaries", Version: "1.0.0", SourceHash: quote.Hash}
+			task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Estimated: true}}
+			require.NoError(t, model.DB.Model(task).Update("private_data", task.PrivateData).Error)
+			for range 2 {
+				err := CompleteImmediateTask(context.Background(), task, &relaycommon.TaskInfo{Status: model.TaskStatusSuccess, UsageFacts: test.facts})
+				if test.invalid {
+					require.ErrorContains(t, err, "task token usage unavailable")
+				} else {
+					require.NoError(t, err)
+				}
+			}
+			var persisted model.Task
+			require.NoError(t, model.DB.First(&persisted, task.ID).Error)
+			assert.EqualValues(t, model.TaskStatusSuccess, persisted.Status)
+			require.NotNil(t, persisted.PrivateData.CompletionUsage)
+			wantFacts, err := common.Marshal(test.facts)
+			require.NoError(t, err)
+			gotFacts, err := common.Marshal(persisted.PrivateData.CompletionUsage.Facts)
+			require.NoError(t, err)
+			assert.JSONEq(t, string(wantFacts), string(gotFacts))
+			var recovery model.BillingRecovery
+			require.NoError(t, model.DB.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
+			settlements := int64(1)
+			if test.invalid {
+				assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
+				assert.Nil(t, persisted.PrivateData.BillingContext.Charge)
+				assert.Equal(t, balance-test.reserved, getUserQuota(t, id))
+				assert.Equal(t, balance-test.reserved, getTokenRemainQuota(t, id))
+				settlements = 0
+			} else {
+				assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
+				assert.EqualValues(t, test.actual, persisted.Quota)
+				assert.Equal(t, balance-test.actual, getUserQuota(t, id))
+				assert.Equal(t, balance-test.actual, getTokenRemainQuota(t, id))
+			}
+			assert.Equal(t, test.actual, getTokenUsedQuota(t, id))
+			var count int64
+			require.NoError(t, model.DB.Model(&model.BillingEvent{}).Where("request_id = ? AND operation = ?", task.PrivateData.SubmissionRequestID, "settle").Count(&count).Error)
+			assert.Equal(t, settlements, count)
+			require.NoError(t, model.DB.Model(&model.TaskResultEvent{}).Where("task_id = ?", task.ID).Count(&count).Error)
+			assert.EqualValues(t, 1, count)
+			var metric model.PerfMetric
+			require.NoError(t, model.DB.First(&metric).Error)
+			assert.EqualValues(t, 1, metric.RequestCount)
+			assert.EqualValues(t, 1, metric.SuccessCount)
+		})
+	}
+}
