@@ -88,7 +88,14 @@ func FrozenTaskPriceVersion(meta jsplugin.Meta, model, expression string) (billi
 	if err != nil {
 		return billing.PriceVersion{}, err
 	}
-	return billing.PreparePriceVersion(billing.PriceVersion{Model: model, Mode: billing.ModeExpression, Expression: expression, UsageSchema: schema})
+	price, err := billing.PreparePriceVersion(billing.PriceVersion{Model: model, Mode: billing.ModeExpression, Expression: expression, UsageSchema: schema})
+	if err != nil {
+		return billing.PriceVersion{}, err
+	}
+	if err := ValidateFactoryPriceReservation(meta.Key, price); err != nil {
+		return billing.PriceVersion{}, err
+	}
+	return price, nil
 }
 
 func factoryUsageSource(key, model, field string) string {

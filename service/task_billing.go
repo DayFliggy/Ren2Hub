@@ -176,9 +176,9 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 		}
 		usage.EstimatedFacts = nil
 		usage.ActualFacts = nil
-		// An explicitly free price without a schema has no fact inputs.
+		// A schema-free fixed call or free price has no provider fact inputs.
 		// Preserve the provider's evidence in CompletionUsage instead.
-		if snapshot.Quote.PriceVersion.Mode != billing.ModeFree || snapshot.Quote.PriceVersion.UsageSchema != nil {
+		if snapshot.Quote.PriceVersion.UsageSchema != nil {
 			usage.ActualFacts = result.UsageFacts
 		}
 	}

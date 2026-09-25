@@ -7,7 +7,7 @@ export const meta = {
     en: "Kuaishou Kling video generation (text-to-video and image-to-video)",
     zh: "快手可灵视频生成（文生视频、图生视频）",
   },
-  version: "1.1.0",
+  version: "1.1.1",
   author: { name: "QuantumNous" },
   channelTypes: [50],
   models: ["kling-v1", "kling-v1-6", "kling-v2-master"],
@@ -287,6 +287,11 @@ export function buildQueryRequest(ctx) {
   };
 }
 
+function completionUnits(value) {
+  if (typeof value === "string" && /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(value.trim())) return Number(value);
+  return typeof value === "number" ? value : NaN;
+}
+
 export function parseTaskResult(ctx, body) {
   const data = body.data || {};
   const statuses = { submitted: "SUBMITTED", processing: "IN_PROGRESS", succeed: "SUCCESS", failed: "FAILURE" };
@@ -295,7 +300,7 @@ export function parseTaskResult(ctx, body) {
   const videos = status === "SUCCESS" && data.task_result && data.task_result.videos ? data.task_result.videos : [];
   const result = { code: body.code || 0, taskId: data.task_id, status: status, reason: data.task_status_msg || "" };
   if (videos.length && videos[0].url) result.url = videos[0].url;
-  const units = Number.parseFloat(data.final_unit_deduction || "");
+  const units = completionUnits(data.final_unit_deduction);
   if (Number.isFinite(units) && units > 0) {
     result.completionTokens = Math.ceil(units);
     result.totalTokens = Math.ceil(units);
@@ -328,16 +333,9 @@ export function buildContentRequest(ctx) {
 
 export function extractUsageOnComplete(_task, _taskResult, body) {
   const data = (body && body.data) || {};
-  if (
-    !Object.prototype.hasOwnProperty.call(data, "final_unit_deduction") ||
-    data.final_unit_deduction === undefined ||
-    data.final_unit_deduction === null ||
-    data.final_unit_deduction === ""
-  ) {
-    return null;
-  }
-  const units = Number.parseFloat(data.final_unit_deduction);
-  if (!Number.isFinite(units)) return null;
+  if (!Object.prototype.hasOwnProperty.call(data, "final_unit_deduction")) return null;
+  const units = completionUnits(data.final_unit_deduction);
+  if (!Number.isFinite(units)) throw new Error("invalid completion unit deduction");
   return { units: units };
 }
 

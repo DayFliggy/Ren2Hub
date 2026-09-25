@@ -69,6 +69,9 @@ export default {
     ruleUnmatched: 'Not matched',
     frozenChargeHint: 'Saved billing evidence; current prices are not used.',
     usageSchema: 'Frozen task usage fields',
+    fixedCallWithoutSchema: 'Use fixed per-call price without usage schema',
+    fixedCallWithoutSchemaHint:
+      'This draft has one calls/per_call price. Removing its usage schema makes the charge independent of provider usage. This only changes the draft; review the amount before publishing.',
     previewTitle: 'Price preview',
     previewHint:
       'Evaluate this draft with the server billing engine. No price is published and no funds are reserved.',
@@ -570,6 +573,7 @@ export default {
     endpoints: {
       regionLabel: 'API endpoints',
       defaultName: 'API endpoint',
+      currentDomain: 'Current domain',
       usWestName: 'US West',
       cloudflareName: 'Cloudflare global',
       asiaPacificName: 'Asia Pacific',

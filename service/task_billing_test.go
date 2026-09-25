@@ -398,8 +398,6 @@ func TestExplicitFreePluginDoesNotPriceUnboundCompletionFacts(t *testing.T) {
 		})
 	}
 	for _, price := range []billing.PriceVersion{
-		{Model: "task-price-fixture", Mode: billing.ModeUnitPrice,
-			Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "1"}}},
 		{Model: "task-price-fixture", Mode: billing.ModeFree,
 			UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
 				"seconds": {Type: "number", Unit: "second", Source: billingexpr.UsageCompletionFact, Required: true, Maximum: "5"},
@@ -412,7 +410,7 @@ func TestExplicitFreePluginDoesNotPriceUnboundCompletionFacts(t *testing.T) {
 			BillingContext: &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Estimated: true}},
 		}}
 		_, _, _, err = taskCompletionQuota(nil, task, &relaycommon.TaskInfo{UsageFacts: map[string]any{"seconds": 10}})
-		require.Error(t, err, "free-with-schema and paid prices keep their fact validation")
+		require.Error(t, err, "free-with-schema prices keep their fact validation")
 		assert.Nil(t, task.PrivateData.BillingContext.Charge)
 	}
 }

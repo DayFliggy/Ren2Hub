@@ -147,19 +147,29 @@ const previewError = ref('')
 const previewEpoch = ref(0)
 const quantities = computed(() =>
   usageSchema.value
-    ? Object.keys(usageSchema.value.fields)
+    ? [...new Set(['calls', ...Object.keys(usageSchema.value.fields)])]
     : [...PRICE_QUANTITIES]
 )
 const units = computed(() =>
   usageSchema.value
     ? [
-        ...new Set(
-          Object.values(usageSchema.value.fields)
+        ...new Set([
+          'per_call',
+          ...Object.values(usageSchema.value.fields)
             .filter((field) => field.type === 'number')
-            .map((field) => `per_${field.unit}`)
-        ),
+            .map((field) => `per_${field.unit}`),
+        ]),
       ]
     : [...PRICE_UNITS]
+)
+const canRemoveSchemaForFixedCall = computed(
+  () =>
+    Boolean(usageSchema.value) &&
+    mode.value === 'unit_price' &&
+    prices.value.length === 1 &&
+    prices.value[0].quantity === 'calls' &&
+    prices.value[0].unit === 'per_call' &&
+    isDecimal(prices.value[0].price)
 )
 let request: AbortController | null = null
 const snapshot = () =>
@@ -969,6 +979,16 @@ defineExpose({ validate, save })
           </template>
         </dl>
       </details>
+      <div v-if="canRemoveSchemaForFixedCall" class="space-y-2 text-xs">
+        <p>{{ t('billing.fixedCallWithoutSchemaHint') }}</p>
+        <ConsoleButton
+          size="sm"
+          variant="secondary"
+          data-fixed-call-without-schema
+          @click="usageSchema = undefined"
+          >{{ t('billing.fixedCallWithoutSchema') }}</ConsoleButton
+        >
+      </div>
       <details
         class="space-y-3 rounded-lg border border-[var(--border-subtle)] p-3"
       >

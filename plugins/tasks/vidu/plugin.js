@@ -7,7 +7,7 @@ export const meta = {
     en: "Shengshu Vidu video generation (text-to-video, image-to-video, first-and-last-frame, and reference-to-video)",
     zh: "生数 Vidu 视频生成（文生视频、图生视频、首尾帧、参考生视频）",
   },
-  version: "1.0.2",
+  version: "1.0.3",
   author: { name: "QuantumNous" },
   channelTypes: [52],
   models: ["viduq2", "viduq1", "vidu2.0", "vidu1.5"],
@@ -304,9 +304,11 @@ export function buildContentRequest(ctx) {
 }
 
 export function extractUsageOnComplete(_task, _taskResult, body) {
-  if (!body || !Object.prototype.hasOwnProperty.call(body, "credits") || body.credits === undefined || body.credits === null) return null;
-  const credits = Number(body.credits);
-  if (!Number.isFinite(credits)) return null;
+  if (!body || !Object.prototype.hasOwnProperty.call(body, "credits")) return null;
+  const raw = body.credits;
+  const credits = typeof raw === "number" ? raw :
+    typeof raw === "string" && /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(raw.trim()) ? Number(raw) : NaN;
+  if (!Number.isFinite(credits)) throw new Error("invalid completion credits");
   return { credits: credits };
 }
 

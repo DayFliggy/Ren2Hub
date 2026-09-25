@@ -33,6 +33,18 @@ export const taskPluginMessages = {
     enableOnInstall: '保存后启用（新版本仍需显式激活）',
     activate: '激活版本',
     disable: '停用',
+    disableTitle: '确认停用插件',
+    disableConfirm: '停用 {name} 后，新的请求将不再使用此插件。',
+    confirmDisable: '确认停用',
+    inUseTitle: '插件仍在使用中',
+    usageChanged: '服务端报告以下使用情况，请确认本次操作的影响。',
+    newApiUnbind: 'New API：仅解除当前插件绑定，其他插件和普通流量继续可用。',
+    channelDisable: '任务插件渠道：同时手动停用此渠道。',
+    pendingCount: '未完成任务：{count}',
+    forceWarning:
+      '仍有未完成任务。强制停用会阻止此插件的新请求，但不会删除或结算这些任务，也不会绕过版本引用保护。',
+    cascadeDisable: '级联停用渠道',
+    forceDisable: '强制停用',
     enable: '启用',
     remove: '删除版本',
     versions: '版本与源码',
@@ -47,7 +59,7 @@ export const taskPluginMessages = {
     empty: '暂无插件',
     saved: '操作已完成。',
     immutable:
-      '同一 key/version 的源码不可修改。活动版本和任务引用版本不可删除；停用前请解除渠道绑定。',
+      '同一 key/version 的源码不可修改。活动版本和任务引用版本不可删除；存在渠道绑定时，停用需要确认级联影响。',
     marketHint:
       '市场源码由浏览器从所选 HTTPS 来源读取，下载必须带 SHA-256。导入只填充预览，安装需要保存。',
     marketEmpty: '尚未加载市场，或来源没有带有效哈希的任务插件。',
@@ -112,6 +124,22 @@ export const taskPluginMessages = {
       'Enable on save (new versions require explicit activation)',
     activate: 'Activate version',
     disable: 'Disable',
+    disableTitle: 'Disable plugin?',
+    disableConfirm:
+      'New requests will no longer use {name} after it is disabled.',
+    confirmDisable: 'Confirm disable',
+    inUseTitle: 'Plugin is still in use',
+    usageChanged:
+      'The server reports the following usage. Confirm the effects before continuing.',
+    newApiUnbind:
+      'New API: remove only this plugin binding. Other plugins and ordinary traffic remain available.',
+    channelDisable:
+      'Task plugin channel: manually disable this channel as well.',
+    pendingCount: '{count} pending tasks',
+    forceWarning:
+      'Tasks are still pending. Force disabling prevents new requests through this plugin. It does not delete or settle these tasks, or bypass version reference protection.',
+    cascadeDisable: 'Cascade disable channels',
+    forceDisable: 'Force disable',
     enable: 'Enable',
     remove: 'Delete version',
     versions: 'Versions and source',
@@ -126,7 +154,7 @@ export const taskPluginMessages = {
     empty: 'No plugins',
     saved: 'Operation completed.',
     immutable:
-      'Source is immutable for each key/version. Active and task-referenced versions cannot be deleted. Unbind channels before disabling.',
+      'Source is immutable for each key/version. Active and task-referenced versions cannot be deleted. Bound channels require explicit cascade confirmation before disabling.',
     marketHint:
       'Your browser reads source from the selected HTTPS marketplace. Downloads require SHA-256. Import fills the preview; saving installs it.',
     marketEmpty:

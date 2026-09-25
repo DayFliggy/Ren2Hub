@@ -102,11 +102,14 @@ func ValidateTaskPluginPricePublication(price billing.PriceVersion, pluginKey st
 	if current.PluginKey == "" {
 		return price, fmt.Errorf("model is declared by multiple task plugins; plugin_key is required")
 	}
-	// An explicit free price has no charge inputs to reconcile with metadata.
-	if price.Mode == billing.ModeFree && price.UsageSchema == nil {
-		return price, nil
-	}
 	if price.UsageSchema == nil {
+		// Fixed call prices have no provider-dependent quantity. Other paid
+		// dimensions still require a reviewed schema and completion evidence.
+		if price.Mode == billing.ModeFree || (price.Mode == billing.ModeUnitPrice && len(price.Prices) == 1 &&
+			price.Prices[0].Quantity == "calls" && price.Prices[0].Unit == "per_call") {
+			price.ID, price.CreatedAt, price.Hash = 0, 0, ""
+			return billing.PreparePriceVersion(price)
+		}
 		return price, fmt.Errorf("task plugin price requires an explicitly reviewed usage_schema")
 	}
 	schema, err := billingexpr.FreezeUsageSchema(price.UsageSchema)
@@ -148,6 +151,11 @@ func ValidateTaskPluginPricePublication(price billing.PriceVersion, pluginKey st
 	}
 	if price.Mode == billing.ModeExpression {
 		if err := validateTaskPriceEnumLiterals(price); err != nil {
+			return price, err
+		}
+	}
+	if current.UsageSchema != nil {
+		if err := plugins.ValidateFactoryPriceReservation(current.PluginKey, price); err != nil {
 			return price, err
 		}
 	}

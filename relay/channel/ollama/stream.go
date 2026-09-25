@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -33,15 +32,15 @@ type ollamaChatStreamChunk struct {
 		ToolCalls []OllamaToolCall `json:"tool_calls"`
 	} `json:"message"`
 	// generate
-	Response           string `json:"response"`
-	Done               bool   `json:"done"`
-	DoneReason         string `json:"done_reason"`
-	TotalDuration      int64  `json:"total_duration"`
-	LoadDuration       int64  `json:"load_duration"`
-	PromptEvalCount    int    `json:"prompt_eval_count"`
-	EvalCount          int    `json:"eval_count"`
-	PromptEvalDuration int64  `json:"prompt_eval_duration"`
-	EvalDuration       int64  `json:"eval_duration"`
+	Response           string          `json:"response"`
+	Done               bool            `json:"done"`
+	DoneReason         string          `json:"done_reason"`
+	TotalDuration      int64           `json:"total_duration"`
+	LoadDuration       int64           `json:"load_duration"`
+	PromptEvalCount    json.RawMessage `json:"prompt_eval_count"`
+	EvalCount          json.RawMessage `json:"eval_count"`
+	PromptEvalDuration int64           `json:"prompt_eval_duration"`
+	EvalDuration       int64           `json:"eval_duration"`
 }
 
 func ollamaToolCallsToOpenAI(toolCalls []OllamaToolCall, responseID string, startIndex int, includeIndex bool) ([]dto.ToolCallResponse, int, error) {
@@ -197,10 +196,7 @@ func ollamaStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 }
 
 func ollamaChunkUsage(chunk ollamaChatStreamChunk) (*dto.Usage, error) {
-	if chunk.PromptEvalCount < 0 || chunk.EvalCount < 0 || chunk.PromptEvalCount > math.MaxInt-chunk.EvalCount {
-		return nil, fmt.Errorf("invalid ollama token usage")
-	}
-	return &dto.Usage{PromptTokens: chunk.PromptEvalCount, CompletionTokens: chunk.EvalCount, TotalTokens: chunk.PromptEvalCount + chunk.EvalCount, UsageSource: "provider"}, nil
+	return ollamaTokenUsage(chunk.PromptEvalCount, chunk.EvalCount)
 }
 
 // non-stream handler for chat/generate

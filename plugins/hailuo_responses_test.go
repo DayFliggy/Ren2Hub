@@ -41,14 +41,14 @@ func TestHailuoResponsesProtocol(t *testing.T) {
 			"size":     "1920x1080",
 			"metadata": map[string]any{"first_frame_image": "https://cdn.example/frame.png"},
 		},
-		wantUsageKeys:  []string{"input_images", "input_video_seconds", "resolution", "seconds"},
-		wantVendorName: "hailuo",
+		wantUsageKeys:       []string{"input_images", "input_video_seconds", "resolution", "seconds"},
+		wantSubmitUsageKeys: []string{"resolution", "seconds"},
+		wantVendorName:      "hailuo",
 	})
 }
 
-// Every model selects only the dimensions it can actually bill, while
-// submission still reports the union so prices saved against the previous
-// schema keep evaluating.
+// Every model reports only the dimensions in its selected usage profile.
+// Existing tasks retain their previously pinned plugin and frozen schema.
 func TestHailuoUsageProfilesPerModel(t *testing.T) {
 	plugin := loadHailuoPlugin(t)
 	families := []struct {
@@ -90,7 +90,7 @@ func TestHailuoUsageProfilesPerModel(t *testing.T) {
 	}
 	assert.ElementsMatch(t, plugin.Meta.Models, profiled, "every declared model must select a usage profile")
 
-	t.Run("submission keeps facts outside the selected profile billable", func(t *testing.T) {
+	t.Run("submission reports only selected profile facts", func(t *testing.T) {
 		info := &relaycommon.RelayInfo{
 			ChannelMeta:     &relaycommon.ChannelMeta{ApiKey: "test-ak", ChannelBaseUrl: "https://api.minimax.example", UpstreamModelName: "MiniMax-Hailuo-2.3"},
 			OriginModelName: "MiniMax-Hailuo-2.3",
@@ -106,7 +106,7 @@ func TestHailuoUsageProfilesPerModel(t *testing.T) {
 		facts, err := adaptor.ExtractUsageFactsValidated(c, info)
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{
-			"seconds": float64(10), "resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(0),
+			"seconds": float64(10), "resolution": "768P",
 		}, facts)
 	})
 }
@@ -467,7 +467,7 @@ func TestHailuoExtractUsageFacts(t *testing.T) {
 			"seconds": float64(5), "resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(15),
 		}},
 		{"legacy model", "MiniMax-Hailuo-2.3", map[string]any{"prompt": "p", "duration": 10}, map[string]any{
-			"seconds": float64(10), "resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(0),
+			"seconds": float64(10), "resolution": "768P",
 		}},
 	}
 	for _, testCase := range testCases {
@@ -483,9 +483,10 @@ func TestHailuoExtractUsageFacts(t *testing.T) {
 func TestHailuoH3CompletionUsageFacts(t *testing.T) {
 	plugin := loadHailuoPlugin(t)
 	testCases := []struct {
-		name string
-		body string
-		want map[string]any
+		name    string
+		body    string
+		want    map[string]any
+		invalid bool
 	}{
 		{
 			name: "actual usage replaces submission estimates",
@@ -498,9 +499,9 @@ func TestHailuoH3CompletionUsageFacts(t *testing.T) {
 			want: map[string]any{"seconds": float64(4), "resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(0)},
 		},
 		{
-			name: "zero output cannot erase the submission reservation",
-			body: `{"task":{"id":"1","status":"succeeded","resolution":"768P","usage":{"output_seconds":0,"input_seconds":0,"input_image_count":0}}}`,
-			want: map[string]any{"resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(0)},
+			name:    "zero output cannot erase the submission reservation",
+			body:    `{"task":{"id":"1","status":"succeeded","resolution":"768P","usage":{"output_seconds":0,"input_seconds":0,"input_image_count":0}}}`,
+			invalid: true,
 		},
 		{
 			name: "missing usage leaves submission estimates untouched",
@@ -508,16 +509,26 @@ func TestHailuoH3CompletionUsageFacts(t *testing.T) {
 			want: map[string]any{"resolution": "768P"},
 		},
 		{
-			name: "out of contract usage cannot become a billing multiplier",
-			body: `{"task":{"id":"1","status":"succeeded","resolution":"2K","usage":{"output_seconds":16,"input_seconds":16,"input_image_count":10}}}`,
-			want: map[string]any{"resolution": "2K"},
+			name:    "out of contract usage cannot become a billing multiplier",
+			body:    `{"task":{"id":"1","status":"succeeded","resolution":"2K","usage":{"output_seconds":16,"input_seconds":16,"input_image_count":10}}}`,
+			invalid: true,
 		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			var body any
 			require.NoError(t, common.UnmarshalJsonStr(testCase.body, &body))
-			assert.Equal(t, testCase.want, callHailuoHook(t, plugin, "extractUsageOnComplete", nil, nil, body))
+			value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", nil, nil, body)
+			if testCase.invalid {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			encoded, err := common.Marshal(value)
+			require.NoError(t, err)
+			var facts map[string]any
+			require.NoError(t, common.Unmarshal(encoded, &facts))
+			assert.Equal(t, testCase.want, facts)
 		})
 	}
 

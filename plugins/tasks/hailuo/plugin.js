@@ -62,7 +62,7 @@ export const meta = {
     en: "MiniMax Hailuo video generation (text-to-video, image-to-video, and MiniMax-H3 multimodal reference)",
     zh: "MiniMax 海螺视频生成（文生视频、图生视频、MiniMax-H3 多模态参考生视频）",
   },
-  version: "1.2.0",
+  version: "1.2.1",
   author: { name: "QuantumNous" },
   channelTypes: [35],
   models: [
@@ -518,7 +518,14 @@ export function extractUsage(ctx) {
         : 0,
     };
   }
-  return { seconds: outboundDuration(req), resolution: outboundResolution(req, model), input_images: 0, input_video_seconds: 0 };
+  const facts = { seconds: outboundDuration(req) };
+  if (usageSchemaForModel(model).resolution) facts.resolution = outboundResolution(req, model);
+  return facts;
+}
+
+function usageSchemaForModel(model) {
+  const profile = meta.usageProfiles.find(function (entry) { return entry.models.includes(model); });
+  return profile ? profile.schema : meta.usageSchema;
 }
 
 export function buildQueryRequest(ctx) {
@@ -607,7 +614,7 @@ export function buildContentRequest(ctx) {
   };
 }
 
-export function extractUsageOnComplete(_task, _taskResult, body) {
+export function extractUsageOnComplete(task, _taskResult, body) {
   const h3Task = h3QueryTask(body);
   if (h3Task) {
     const resolution = trimmed(h3Task.resolution).toUpperCase();
@@ -619,20 +626,27 @@ export function extractUsageOnComplete(_task, _taskResult, body) {
       { key: "input_images", value: usage.input_image_count, minimum: 0, maximum: H3_MAX_REFERENCE_IMAGES, integer: true },
       { key: "input_video_seconds", value: usage.input_seconds, minimum: 0, maximum: H3_MAX_INPUT_VIDEO_SECONDS, integer: false },
     ];
-    // Omit malformed or out-of-contract upstream values so settlement keeps
-    // the bounded submission estimate instead of accepting a new multiplier.
+    // Missing facts remain missing. Invalid facts hold accounting without
+    // converting them into zero or replacing the frozen reservation.
     for (const field of fields) {
-      if (field.value === undefined || field.value === null || field.value === "") continue;
-      const value = Number(field.value);
-      if (!Number.isFinite(value) || value < field.minimum || value > field.maximum || (field.integer && !Number.isInteger(value))) continue;
+      if (field.value === undefined) continue;
+      const raw = field.value;
+      const value = typeof raw === "number" ? raw :
+        typeof raw === "string" && /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(raw.trim()) ? Number(raw) : NaN;
+      if (!Number.isFinite(value) || value < field.minimum || value > field.maximum || (field.integer && !Number.isInteger(value)))
+        throw new Error("invalid completion " + field.key);
       facts[field.key] = value;
     }
     return Object.keys(facts).length ? facts : null;
   }
-  const width = Number((body || {}).video_width || 0);
-  const height = Number((body || {}).video_height || 0);
-  if (!(width > 0) || !(height > 0)) return null;
-  return { resolution: resolutionFor(width + "x" + height, "") };
+  const model = (task || {}).upstreamModel || (task || {}).model;
+  if (!usageSchemaForModel(model).resolution) return null;
+  const width = (body || {}).video_width;
+  const height = (body || {}).video_height;
+  if (width === undefined || height === undefined) return null;
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width <= 0 || height <= 0)
+    throw new Error("invalid completion dimensions");
+  return { resolution: resolutionFor(width + "x" + height, model) };
 }
 
 export const protocols = {

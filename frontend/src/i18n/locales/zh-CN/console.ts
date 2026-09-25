@@ -66,6 +66,9 @@ export default {
     ruleUnmatched: '未命中',
     frozenChargeHint: '展示已保存的账务证据，不使用当前价格重算。',
     usageSchema: '冻结的任务用量字段',
+    fixedCallWithoutSchema: '使用固定每次价格，不附用量 Schema',
+    fixedCallWithoutSchemaHint:
+      '当前草稿仅有一条 calls/per_call 价格。移除用量 Schema 后，费用不再依赖供应商用量。此操作只修改草稿，请核对金额后再发布。',
     previewTitle: '价格预览',
     previewHint: '使用服务器计价器计算当前草稿，不发布价格，也不预留资金。',
     previewAttributes: '已登记属性（JSON 对象）',
@@ -551,6 +554,7 @@ export default {
     endpoints: {
       regionLabel: 'API 端点',
       defaultName: 'API 端点',
+      currentDomain: '当前域名',
       usWestName: '美西优化',
       cloudflareName: 'CF全球加速',
       asiaPacificName: '亚太加速',

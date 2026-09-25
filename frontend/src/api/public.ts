@@ -3,6 +3,9 @@ import { publicHttpTransport } from './httpTransport'
 import { ApiError } from './types'
 
 export interface PublicStatus {
+  server_address?: string
+  api_info_enabled?: boolean
+  api_info?: Array<{ url: string; route?: string; description?: string }>
   passkey_rp_ids?: string[]
   password_login_enabled?: boolean
   password_login_encryption_enabled?: boolean
@@ -84,8 +87,15 @@ export function parsePublicStatus(value: unknown): PublicStatus {
   if (!isRecord(value)) invalidResponse('/api/status')
 
   const result: PublicStatus = {}
-  const stringKeys = ['version', 'system_name', 'logo', 'docs_link'] as const
+  const stringKeys = [
+    'version',
+    'system_name',
+    'logo',
+    'docs_link',
+    'server_address',
+  ] as const
   const booleanKeys = [
+    'api_info_enabled',
     'password_login_enabled',
     'password_login_encryption_enabled',
     'register_enabled',
@@ -108,6 +118,24 @@ export function parsePublicStatus(value: unknown): PublicStatus {
       invalidResponse('/api/status')
     }
     if (typeof value[key] === 'string') result[key] = value[key]
+  }
+  if (value.api_info !== undefined) {
+    if (!Array.isArray(value.api_info)) invalidResponse('/api/status')
+    result.api_info = value.api_info.map((entry: unknown) => {
+      if (
+        !isRecord(entry) ||
+        typeof entry.url !== 'string' ||
+        (entry.route !== undefined && typeof entry.route !== 'string') ||
+        (entry.description !== undefined &&
+          typeof entry.description !== 'string')
+      )
+        invalidResponse('/api/status')
+      return {
+        url: entry.url,
+        route: entry.route as string | undefined,
+        description: entry.description as string | undefined,
+      }
+    })
   }
   if (value.start_time !== undefined) {
     if (

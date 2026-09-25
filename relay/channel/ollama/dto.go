@@ -64,10 +64,10 @@ type OllamaEmbeddingRequest struct {
 }
 
 type OllamaEmbeddingResponse struct {
-	Error           string      `json:"error,omitempty"`
-	Model           string      `json:"model"`
-	Embeddings      [][]float64 `json:"embeddings"`
-	PromptEvalCount int         `json:"prompt_eval_count,omitempty"`
+	Error           string          `json:"error,omitempty"`
+	Model           string          `json:"model"`
+	Embeddings      [][]float64     `json:"embeddings"`
+	PromptEvalCount json.RawMessage `json:"prompt_eval_count,omitempty"`
 }
 
 type OllamaTagsResponse struct {

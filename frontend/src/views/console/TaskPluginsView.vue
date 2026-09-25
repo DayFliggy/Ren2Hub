@@ -7,6 +7,8 @@ import {
   parseMarketIndex,
   marketSourceURL,
   pluginSourceHash,
+  TaskPluginUsageError,
+  type TaskPluginUsage,
   type TaskPlugin,
   type PluginVersion,
   type MarketSource,
@@ -33,6 +35,10 @@ const rows = ref<TaskPlugin[]>([]),
   sources = ref<MarketSource[]>([]),
   market = ref<MarketPlugin[]>([])
 const runtime = ref<PluginRuntime | null>(null)
+const disableTarget = ref<TaskPlugin | null>(null)
+const disableUsage = ref<TaskPluginUsage | null>(null)
+const disableError = ref('')
+const disabling = ref(false)
 const changelog = ref<{ plugin: MarketPlugin; version: string } | null>(null)
 const selected = ref(''),
   source = ref(''),
@@ -87,6 +93,45 @@ async function action(work: () => Promise<void>) {
       error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
     busy.value = false
+  }
+}
+function beginDisable(plugin: TaskPlugin) {
+  disableTarget.value = plugin
+  disableUsage.value = null
+  disableError.value = ''
+}
+function closeDisable() {
+  if (disabling.value) return
+  disableTarget.value = null
+  disableUsage.value = null
+  disableError.value = ''
+}
+async function confirmDisable(options?: {
+  cascade?: boolean
+  force?: boolean
+}) {
+  if (!disableTarget.value || disabling.value) return
+  const key = disableTarget.value.meta.key
+  disabling.value = true
+  disableError.value = ''
+  try {
+    await taskPluginsApi.enabled(key, false, options)
+    if (abort.signal.aborted) return
+    disableTarget.value = null
+    disableUsage.value = null
+    await action(async () => {
+      await load()
+      if (selected.value) await viewVersions(selected.value)
+      message.value = t('taskPlugins.saved')
+    })
+  } catch (cause) {
+    if (abort.signal.aborted) return
+    if (cause instanceof TaskPluginUsageError) disableUsage.value = cause.usage
+    else
+      disableError.value =
+        cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    disabling.value = false
   }
 }
 async function load() {
@@ -371,11 +416,11 @@ onBeforeUnmount(() => {
               variant="secondary"
               :disabled="busy"
               @click="
-                action(() =>
-                  mutate(() =>
-                    taskPluginsApi.enabled(row.meta.key, !row.enabled)
-                  )
-                )
+                row.enabled
+                  ? beginDisable(row)
+                  : action(() =>
+                      mutate(() => taskPluginsApi.enabled(row.meta.key, true))
+                    )
               "
               >{{
                 t(row.enabled ? 'taskPlugins.disable' : 'taskPlugins.enable')
@@ -621,6 +666,106 @@ onBeforeUnmount(() => {
         >{{ t('taskPlugins.saveSources') }}</ConsoleButton
       >
     </ConsoleCard>
+    <ConsoleModal
+      :open="disableTarget !== null"
+      :title="
+        t(disableUsage ? 'taskPlugins.inUseTitle' : 'taskPlugins.disableTitle')
+      "
+      :close-disabled="disabling"
+      @close="closeDisable"
+    >
+      <div class="space-y-3 text-sm">
+        <p class="break-words">
+          {{
+            t('taskPlugins.disableConfirm', {
+              name: disableTarget?.meta.name || disableTarget?.meta.key,
+            })
+          }}
+        </p>
+        <template v-if="disableUsage">
+          <p>{{ t('taskPlugins.usageChanged') }}</p>
+          <ul v-if="disableUsage.channels.length" class="space-y-2">
+            <li
+              v-for="channel in disableUsage.channels"
+              :key="channel.id"
+              class="break-words rounded-lg border border-[var(--border-subtle)] p-2"
+            >
+              <span class="font-semibold"
+                >{{ channel.name }} (#{{ channel.id }})</span
+              >
+              <p>
+                {{
+                  t(
+                    channel.type === 60
+                      ? 'taskPlugins.newApiUnbind'
+                      : 'taskPlugins.channelDisable'
+                  )
+                }}
+              </p>
+            </li>
+          </ul>
+          <p>
+            {{
+              t('taskPlugins.pendingCount', {
+                count: disableUsage.in_flight_count,
+              })
+            }}
+          </p>
+          <p
+            v-if="disableUsage.in_flight_count > 0"
+            class="text-[var(--status-danger)]"
+          >
+            {{ t('taskPlugins.forceWarning') }}
+          </p>
+        </template>
+        <p
+          v-if="disableError"
+          role="alert"
+          class="break-words text-[var(--status-danger)]"
+        >
+          {{ disableError }}
+        </p>
+      </div>
+      <template #footer>
+        <div class="flex flex-wrap gap-2">
+          <ConsoleButton
+            variant="secondary"
+            :disabled="disabling"
+            @click="closeDisable"
+            >{{ t('common.cancel') }}</ConsoleButton
+          >
+          <ConsoleButton
+            v-if="!disableUsage"
+            variant="danger"
+            :loading="disabling"
+            @click="confirmDisable()"
+            >{{ t('taskPlugins.confirmDisable') }}</ConsoleButton
+          >
+          <template v-else>
+            <ConsoleButton
+              v-if="disableUsage.channels.length"
+              variant="danger"
+              :loading="disabling"
+              :disabled="disableUsage.in_flight_count > 0"
+              @click="confirmDisable({ cascade: true })"
+              >{{ t('taskPlugins.cascadeDisable') }}</ConsoleButton
+            >
+            <ConsoleButton
+              v-if="disableUsage.in_flight_count > 0"
+              variant="danger"
+              :loading="disabling"
+              @click="
+                confirmDisable({
+                  cascade: disableUsage.channels.length > 0,
+                  force: true,
+                })
+              "
+              >{{ t('taskPlugins.forceDisable') }}</ConsoleButton
+            >
+          </template>
+        </div>
+      </template>
+    </ConsoleModal>
     <ConsoleModal
       :open="changelog !== null"
       :title="t('taskPlugins.changelog')"

@@ -146,6 +146,38 @@
       "log": ".local-tests/rc40-ws-helper-tests.log",
       "result": "passed",
       "notes": "7项本地helper测试：真实升级与双向持久连接、帧mask/长度/fragment/ping/截断/限额，以及logout异常仅在旧凭据401时可确认。"
+    },
+    {
+      "id": "f1_f5_presence_regressions",
+      "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s ./relay/channel/ollama ./relay/common ./router -run '^(TestOllamaUsagePresence|TestOllamaUsageRejectsInvalidCounters|TestOllamaEmbeddingUsagePresence|TestChannelSystemPromptPreservesKimiDynamicTools|TestGatewayOllamaUsagePresenceAccounting)$' -count=1 -json",
+      "cwd": ".",
+      "log": ".local-tests/rc40-f1-f5-green-final.json",
+      "result": "passed_local_only",
+      "notes": "2026-09-25 二审修复后5个顶层测试、52个子例全部通过。修复前两份日志 rc40-f1-f5-red.json 与 rc40-f1-embedding-red.json 共26个子例失败、26个通过。HTTP/流式账务使用回环模拟上游及本地SQLite/miniredis夹具；没有请求真实Ollama或Kimi，不代表服务器固定SHA验收。"
+    },
+    {
+      "id": "f1_f5_affected_packages",
+      "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s ./relay/channel/ollama ./relay/common -count=1 -json",
+      "cwd": ".",
+      "log": ".local-tests/rc40-f1-f5-packages.json",
+      "result": "passed_local_only",
+      "notes": "二审修复后的两个完整包，共147个顶层测试、259个含子例pass事件；不是根模块全量测试。"
+    },
+    {
+      "id": "f1_ollama_router",
+      "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s ./router -run '^TestGatewayOllama' -count=1 -json",
+      "cwd": ".",
+      "log": ".local-tests/rc40-f1-router-ollama.json",
+      "result": "passed_local_only",
+      "notes": "2个顶层测试、15个子例通过。终态缺失、null和单边计数保留用户与限额Token预留，零settle/release；明确零值可零结算，5输入/7输出按冻结表达式结算19 quota且仅一次settle。另保留已有中断流回归。仅回环模拟上游。"
+    },
+    {
+      "id": "f5_system_prompt_final",
+      "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s ./relay/common -run '^TestChannelSystemPromptPreservesKimiDynamicTools$' -count=1 -json",
+      "cwd": ".",
+      "log": ".local-tests/rc40-f5-final.json",
+      "result": "passed_local_only",
+      "notes": "测试请求体清理补齐后12个子例再次通过：DTO/native双路径，插入、覆盖以及真实system位于动态tools前后；未请求真实Kimi。"
     }
   ],
   "commits": [
@@ -256,17 +288,32 @@
       "disposition": "保留Ollama思考和工具ID/参数/多轮上下文",
       "implementation_paths": [
         "relay/channel/ollama/stream.go",
-        "relay/channel/ollama/relay-ollama.go"
+        "relay/channel/ollama/relay-ollama.go",
+        "relay/channel/ollama/dto.go",
+        "relay/channel/ollama/usage.go",
+        "relay/channel/ollama/usage_test.go",
+        "router/gateway_ollama_usage_test.go"
       ],
       "validation_ids": [
-        "adapter_all"
+        "adapter_all",
+        "f1_f5_presence_regressions",
+        "f1_f5_affected_packages",
+        "f1_ollama_router"
       ],
       "test_names": [
         "TestOllamaToolHistoryPreservesIdentityAndArguments",
-        "TestOllamaToolResponsesCanContinueAcrossMultipleRounds"
+        "TestOllamaToolResponsesCanContinueAcrossMultipleRounds",
+        "TestOllamaUsagePresence",
+        "TestOllamaUsageRejectsInvalidCounters",
+        "TestOllamaEmbeddingUsagePresence",
+        "TestGatewayOllamaUsagePresenceAccounting"
       ],
       "evidence_level": "local_runtime",
-      "limitations": []
+      "limitations": [
+        "原证据只覆盖思考与工具上下文，不能证明usage存在性及资金边界完整。二审F1确认本地int默认零值会使缺失计数误结算；该问题不是上游此提交已修复而本地漏合并的声明。",
+        "本轮已补严格计数存在性：缺失missing、单边partial、null invalid均不估算成provider；完整明确零值和合法非负计数仍可结算，非法类型/负数/溢出拒绝。chat/generate共用边界，embedding同类缺口一并修复。",
+        "正式handler与本地HTTP/SQLite/miniredis账务回归通过；上游为模拟服务，未验证真实Ollama或服务器固定SHA部署。"
+      ]
     },
     {
       "sha": "253a74dd1b47e2bde6dd6027c6aa1b5e0ee67827",
@@ -707,16 +754,28 @@
       "scope": "P3",
       "disposition": "保留 Kimi 动态 tools 消息的 content 存在性，并统计动态工具元数据",
       "implementation_paths": [
-        "relaykit/dto/openai_request.go"
+        "relaykit/dto/openai_request.go",
+        "relay/common/system_prompt.go",
+        "relay/common/system_prompt_test.go",
+        "relay/common/native_request.go",
+        "relay/compatible_handler.go"
       ],
       "validation_ids": [
-        "relaykit_final"
+        "relaykit_final",
+        "f1_f5_presence_regressions",
+        "f1_f5_affected_packages",
+        "f5_system_prompt_final"
       ],
       "test_names": [
-        "TestKimiDynamicToolMessagesRetainWireShapeAndTokenMetadata"
+        "TestKimiDynamicToolMessagesRetainWireShapeAndTokenMetadata",
+        "TestChannelSystemPromptPreservesKimiDynamicTools"
       ],
       "evidence_level": "local_runtime",
-      "limitations": []
+      "limitations": [
+        "原DTO/元数据测试未覆盖渠道SystemPrompt注入，不能证明上游完整规则已经吸收。二审F5确认未跳过tools系统消息，导致漏注入或向动态工具消息写入content。",
+        "本轮已在统一系统提示词处理跳过tools消息，并避免插入后解码复用旧Messages元素残留tools/content。DTO/native两路径的插入、覆盖、真实system在tools前后共12个子例通过。",
+        "运行证据为本地生产helper/native请求体构造，handler接线另经静态核对；未请求真实Kimi，不代表供应商或服务器部署验收。"
+      ]
     },
     {
       "sha": "7bbe85bcb09546e0b89572bf97198fc94889be3d",
@@ -807,16 +866,29 @@
       "scope": "P3",
       "disposition": "保留Ollama最后流帧工具调用与终态",
       "implementation_paths": [
-        "relay/channel/ollama/stream.go"
+        "relay/channel/ollama/stream.go",
+        "relay/channel/ollama/usage.go",
+        "relay/channel/ollama/usage_test.go",
+        "router/gateway_ollama_usage_test.go"
       ],
       "validation_ids": [
-        "adapter_all"
+        "adapter_all",
+        "f1_f5_presence_regressions",
+        "f1_f5_affected_packages",
+        "f1_ollama_router"
       ],
       "test_names": [
-        "TestOllamaStreamHasExplicitCompletionAndPreludeBoundary"
+        "TestOllamaStreamHasExplicitCompletionAndPreludeBoundary",
+        "TestOllamaUsagePresence",
+        "TestOllamaUsageRejectsInvalidCounters",
+        "TestGatewayOllamaUsagePresenceAccounting"
       ],
       "evidence_level": "local_runtime",
-      "limitations": []
+      "limitations": [
+        "最后帧工具与终态输出保留不等于用量完整。二审F1发现同一适配器把终态缺失计数当provider零值，原无限制表述不成立。",
+        "本轮JSON/stream正式回归已区分缺失、null、单边、明确零及合法完整计数；未知用量仍交付有效输出但保留账务预留，未以估算结算。",
+        "证据仅为本地handler与回环模拟上游账务测试；未验证真实Ollama或服务器固定SHA部署。"
+      ]
     },
     {
       "sha": "5caafd3d84dc74c8b0d081524f57a534b3980cb0",

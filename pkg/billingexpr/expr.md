@@ -29,6 +29,10 @@ v2 必须附带冻结 UsageSchema（版本 1、字段定义及 SHA-256 哈希）
 
 Quote.RequestFacts 仅存请求固定值；Usage.EstimatedFacts 与 ActualFacts 分开。实际结算不从估算补缺；缺失、null、非法和明确零分别处理。完成事实不得覆盖冻结条件，只有完整实际事实才能结算；价格引用的事实缺失则待核对。estimate_only 字段不能定义最终收费。表达式与单价行不得同时收取同一维度。
 
+Vidu 工厂插件仅在完成时提供 credits，提交阶段没有可信的估算或预留上界。新工厂价格草稿和发布中，只要 schema 将 credits 标为必需、表达式任意分支引用 credits 或单价行按 credits 收费，就拒绝该方案；不能把示例中的 0 当预留依据。未引用 credits 的 `v2:0` 仍可用于 schema 发现。已发布价格与在途 Quote 不改写，再次发布则必须通过当前校验。
+
+固定任务价使用不带 UsageSchema 的 unit_price，且仅含一条明确的 calls/per_call 单价；发送前和成功完成均按 calls=1 计价。供应商完成事实保存在 CompletionUsage 中，不作为这类价格的 ActualFacts，也不追加收费；hook 失败或非法完成事实仍进入待核对。插件升级不替换在途任务固定的 key/version/hash，新工厂解析修正不会追溯改写旧执行引用。
+
 ## 函数与安全属性
 
 支持 tier(name,value)、max/min/abs/ceil/floor、has(value,substring)。tier 记录命中档位，符合条件的倍率表达式记录 request_rules。

@@ -50,6 +50,63 @@ function setup() {
   return { wrapper, publish }
 }
 describe('model price editor', () => {
+  it('removes a saved usage schema only after explicitly choosing a single fixed per-call price', async () => {
+    const savedSchema = {
+      version: 1 as const,
+      hash: 'old',
+      fields: {
+        credits: {
+          type: 'number' as const,
+          unit: 'credit',
+          source: 'completion_fact' as const,
+          required: true,
+        },
+      },
+    }
+    const existing: PriceVersion = {
+      ...price,
+      prices: [{ quantity: 'credits', unit: 'credit', price: '0.01' }],
+      usage_schema: savedSchema,
+    }
+    const { wrapper, publish } = setup()
+    vi.mocked(modelPricingApi.load).mockResolvedValue([existing])
+    vi.mocked(modelPricingApi.taskSchema).mockResolvedValue({
+      model: 'test',
+      plugin_key: 'vidu',
+      usage_schema: null,
+      manifest_schema: {},
+      review_required: true,
+      plugins: [{ key: 'vidu', name: 'Vidu', version: '1' }],
+    })
+    await wrapper.setProps({ open: false })
+    await wrapper.setProps({ open: true })
+    await flushPromises()
+    expect(wrapper.find('[data-fixed-call-without-schema]').exists()).toBe(
+      false
+    )
+    await wrapper.get('input[list="billing-quantities-0"]').setValue('calls')
+    await wrapper.get('select').setValue('unit_price')
+    const unitSelect = wrapper
+      .findAll('select')
+      .find((select) => select.find('option[value="per_call"]').exists())!
+    await unitSelect.setValue('per_call')
+    await wrapper.get('input[inputmode="decimal"]').setValue('0.12')
+    expect(wrapper.text()).toContain('credits')
+    expect(publish).not.toHaveBeenCalled()
+    await wrapper.get('[data-fixed-call-without-schema]').trigger('click')
+    await wrapper.vm.save('test')
+    expect(publish).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'unit_price',
+        prices: [{ quantity: 'calls', unit: 'per_call', price: '0.12' }],
+        usage_schema: undefined,
+      }),
+      3,
+      'vidu'
+    )
+    expect(existing.usage_schema).toEqual(savedSchema)
+    wrapper.unmount()
+  })
   it('converts per-image prices only after review and preserves the saved source', async () => {
     const { wrapper, publish } = setup()
     const original: PriceVersion = {

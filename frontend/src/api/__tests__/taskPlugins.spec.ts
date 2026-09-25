@@ -6,6 +6,8 @@ import {
   taskPluginsApi,
 } from '../taskPlugins'
 import { api } from '../client'
+import { ApiError } from '../types'
+import { TaskPluginUsageError } from '../taskPlugins'
 
 describe('task plugin marketplace integrity', () => {
   const source = {
@@ -57,5 +59,56 @@ describe('task plugin marketplace integrity', () => {
       source,
     ])
     put.mockRestore()
+  })
+  it('sends explicitly requested disable options and never adds them to enable or delete', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue(undefined)
+    const remove = vi.spyOn(api, 'delete').mockResolvedValue(undefined)
+    await taskPluginsApi.enabled('fixture/key', false, {
+      cascade: true,
+      force: true,
+    })
+    expect(post).toHaveBeenLastCalledWith(
+      '/api/plugin/task/fixture%2Fkey/status?cascade=true&force=true',
+      { enabled: false }
+    )
+    await taskPluginsApi.enabled('fixture/key', true, {
+      cascade: true,
+      force: true,
+    })
+    expect(post).toHaveBeenLastCalledWith(
+      '/api/plugin/task/fixture%2Fkey/status',
+      { enabled: true }
+    )
+    await taskPluginsApi.remove('fixture/key', '1.0')
+    expect(remove).toHaveBeenCalledWith(
+      '/api/plugin/task/fixture%2Fkey/versions/1.0'
+    )
+  })
+  it.each([
+    { channels: [], in_flight_count: -1 },
+    { channels: [{ id: 7, name: 'Channel' }], in_flight_count: 0 },
+    { channels: [{ id: 7, name: 'Channel', type: 60 }], in_flight_count: '2' },
+  ])(
+    'keeps an invalid usage payload as an ordinary error: %j',
+    async (data) => {
+      const error = new ApiError('Invalid usage', { business: true, data })
+      vi.spyOn(api, 'post').mockRejectedValue(error)
+      await expect(taskPluginsApi.enabled('fixture', false)).rejects.toBe(error)
+    }
+  )
+  it('preserves valid usage only for a disable business error', async () => {
+    const usage = {
+      channels: [{ id: 7, name: 'Channel', type: 60 }],
+      in_flight_count: 2,
+    }
+    vi.spyOn(api, 'post').mockRejectedValue(
+      new ApiError('in use', { business: true, data: usage })
+    )
+    await expect(
+      taskPluginsApi.enabled('fixture', false)
+    ).rejects.toBeInstanceOf(TaskPluginUsageError)
+    await expect(
+      taskPluginsApi.enabled('fixture', true)
+    ).rejects.toBeInstanceOf(ApiError)
   })
 })

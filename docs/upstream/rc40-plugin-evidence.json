@@ -2,7 +2,7 @@
   {
     "sha": "eb48396d5fe97d27772d0cd5e3ca8aa5caa4f3e9",
     "disposition": "需要适配",
-    "notes": "已按固定最终快照整合沙箱、工厂插件、原生/宿主协议及管理 API；本地替换 active 轮询为持久化 key/version/hash，发送前建引用并保留未知接受预留。终态事件和资金恢复分离，旧 Go 适配器入口退出。API 四文件改写为本地冻结合同，不能照搬上游轮询更新及倍率结算。独立两阶段 HTTP 工具已验证本地常驻候选重启；产物 access 在 GIN 捕获请求前去除并保留鉴权上下文。",
+    "notes": "按固定最终快照整合沙箱、工厂插件、原生/宿主协议及管理 API；本地用持久化 key/version/hash 固定执行，发送前建引用，未知接受保留预留，终态事件与资金恢复分离。源码一致只证明引入来源，不能证明本地冻结计价兼容。2026-09-25 二审确证并修复 F2 工厂非法完成事实被转数字、F3 海螺 profile/hook 不一致；F4 对 Vidu 无可信预留估算的 credits 新草稿/发布直接拒绝，并允许明确的无 schema calls/per_call 固定任务价。Kling/Sora 升至 1.1.1、Vidu 至 1.0.3、Hailuo 至 1.2.1，避免同 key/version 不同源码。旧任务仍按保存的版本执行，不能把新解析修正视为旧 hook 已追溯修复。既有 API 文档、两阶段候选重启和日志 access 脱敏证据保留，其运行范围以各条日志为准。",
     "local_evidence": [
       "pkg/jsplugin/engine.go",
       "pkg/jsplugin/registry.go",
@@ -17,7 +17,14 @@
       "docs/plugin-api/README.md",
       "docs/plugin-api/v1.md",
       "docs/plugin-api/v1.d.ts",
-      "docs/plugin-api/v1.schema.json"
+      "docs/plugin-api/v1.schema.json",
+      "plugins/factory_completion_billing_test.go",
+      "plugins/reservation_contract.go:ValidateFactoryPriceReservation",
+      "plugins/frozen_pricing.go:FrozenTaskPriceVersion",
+      "service/task_plugin_reservation_test.go",
+      "router/gateway_vidu_pricing_test.go:TestGatewayViduFixedPriceReservesAndSettlesOnce",
+      "pkg/billingexpr/expr.md",
+      "plugins/frozen_pricing_test.go:TestViduFactoryPriceRequiresReviewableReservation"
     ],
     "validation": [
       {
@@ -70,9 +77,45 @@
           "TestGatewayTaskPersistenceFailureDoesNotExposeSuccessOrReplay"
         ],
         "result": "本地通过；未知接受与发送崩溃窗口仍只有故障注入证据"
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 -json ./plugins",
+        "log": ".local-tests/rc40-factory-f2-f3-plugins-final.json",
+        "result": "2026-09-25 本地通过：59 个顶层测试、557 个叶子测试，6.291s；覆盖本轮四工厂 patch 版本。仅本地包验证，不代表服务器或真实供应商验收。",
+        "tests": [
+          "TestFactoryCompletionFactsPreserveInvalidAndZeroUsage",
+          "TestSoraCompletionSecondsPresencePrecedesDuration",
+          "TestHailuoUsageFactsMatchEveryModelProfile",
+          "TestHailuoPublishedResolutionPriceReachesPrecharge",
+          "TestHailuoUpgradeKeepsPinnedLegacySourceAndQuote",
+          "TestViduFactoryPriceRequiresReviewableReservation"
+        ]
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 ./service -run '^(TestViduPricePublicationRejectsUnreservableCredits|TestViduPublicationGuardPreservesAcceptedCreditQuotes|TestPluginPerCallPricePublishesAndSettlesWithoutUsageDimensions)$'",
+        "log": ".local-tests/rc40-f4-after.log",
+        "tests": [
+          "TestViduPricePublicationRejectsUnreservableCredits",
+          "TestViduPublicationGuardPreservesAcceptedCreditQuotes",
+          "TestPluginPerCallPricePublishesAndSettlesWithoutUsageDimensions"
+        ],
+        "result": "2026-09-25 本地通过（5.744s）：四个 Vidu 模型拒绝没有可信预留依据的 credits 表达式及单价行，包含未执行分支；旧价格/Quote 不改写，实际 credits=10 仍按旧价算 4 USD；显式无 schema 单次价格可发布和结算。"
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 ./router -run '^TestGatewayViduFixedPriceReservesAndSettlesOnce$'",
+        "log": ".local-tests/rc40-f4-router.log",
+        "tests": [
+          "TestGatewayViduFixedPriceReservesAndSettlesOnce"
+        ],
+        "result": "2026-09-25 本地真实 HTTP/隔离 mock 通过（5.751s）：发布 0.25 USD 的 calls/per_call 价格后只发送一次；用户/Token 预留及结算均为 125000 quota；重复完成只有一个金额事件与结果事件，credits=10 仅留完成证据。未调用真实供应商，不是服务器部署验证。"
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 -v ./plugins -run 'TestFactoryCompletionFactsPreserveInvalidAndZeroUsage|TestSoraCompletionSecondsPresencePrecedesDuration|TestHailuoUsageFactsMatchEveryModelProfile|TestHailuoPublishedResolutionPriceReachesPrecharge'",
+        "log": ".local-tests/rc40-factory-f2-f3-red.log",
+        "result": "修复前的正式回归按预期失败：非法完成事实、Sora 零值优先级、海螺模型 profile、允许的 resolution 表达式预扣共四组复现缺陷；这是 red 证据，不是通过。修复后的通过结果见 rc40-factory-f2-f3-plugins-final.json。"
       }
     ],
-    "acceptance": "未完成：本地行为、文档与常驻候选两阶段重启通过；真实 MySQL/PostgreSQL 插件引用矩阵、Vue 管理页面端到端及最终 SHA 两服务器部署由主线合并验证。此次没有验证真实供应商、公开产物域名网络或 SIGTERM 优雅停机。"
+    "acceptance": "本轮 F2/F3/F4 本地正式回归通过；既有候选重启证据不能替代本次源码的服务器验收。最终 SHA、三库、Vue 与两服务器运行结论由主线合并；本条不预写本轮服务器或真实供应商结果，旧版本未结任务需按冻结引用审查。"
   },
   {
     "sha": "6c22550ea325d4fea0e0ece52412cb1e4449291c",
@@ -115,39 +158,62 @@
   {
     "sha": "aece11d2f7f095a33052696c5d28d3656609a99e",
     "disposition": "直接采用",
-    "notes": "Hailuo 最终源码与固定 d04c118c 快照逐字节（归一化行尾）一致，包含 MiniMax-H3 /v2 提交、查询和媒体合同；完成计费由本地冻结价格层负责。",
+    "notes": "保留固定上游 MiniMax-H3 /v2 提交、查询及媒体合同。此前与快照逐字节一致仅证明源码来源；二审发现完成事实 Number 强制转换不能满足本地非法用量待核对合同。Hailuo 1.2.1 对显式非法数值报错，正常完成事实和允许的零值保留，由原 host 校验和冻结计价继续处理。",
     "local_evidence": [
       "plugins/tasks/hailuo/plugin.js",
       "plugins/hailuo_responses_test.go:TestHailuoH3BuildSubmitRequest",
       "plugins/hailuo_responses_test.go:TestHailuoH3RejectsOutOfContractRequests",
-      "plugins/hailuo_responses_test.go:TestHailuoH3PassesOpenAIVideoDecode"
+      "plugins/hailuo_responses_test.go:TestHailuoH3PassesOpenAIVideoDecode",
+      "plugins/factory_completion_billing_test.go:TestHailuoH3InvalidCompletionFactsRetainTerminalResult"
     ],
     "validation": [
       {
         "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
         "log": ".local-tests/plugin-finish-runtime-router-all.log",
         "result": "通过"
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 -json ./plugins",
+        "log": ".local-tests/rc40-factory-f2-f3-plugins-final.json",
+        "result": "2026-09-25 本地通过：59 个顶层测试、557 个叶子测试，6.291s；覆盖本轮四工厂 patch 版本。仅本地包验证，不代表服务器或真实供应商验收。",
+        "tests": [
+          "TestHailuoH3BuildSubmitRequest",
+          "TestHailuoH3RejectsOutOfContractRequests",
+          "TestHailuoH3PassesOpenAIVideoDecode",
+          "TestHailuoH3InvalidCompletionFactsRetainTerminalResult"
+        ]
       }
     ],
-    "acceptance": "通过：H3 本地插件合同测试；未调用真实提供商。"
+    "acceptance": "本地 H3 协议与严格完成事实回归通过；未调用真实提供商，本轮服务器验收另记。"
   },
   {
     "sha": "73afad588ca7af07134fa423e8a33fdea6c855b2",
     "disposition": "直接采用",
-    "notes": "H3 输入图片/视频/音频计量取完成响应事实；采用最终快照相应 usage schema、输入媒体和完成用量修正。",
+    "notes": "采用 H3 输入媒体合同；输出秒数、输入图片数、输入视频秒数取完成响应事实。2026-09-25 修复完成字段被 Number 强制转换成零或数字的缺口：缺失保持缺失，显式非法类型、负数、越界和小数图片数报错；合法输入媒体零值保留。不能用提交估算替代实际事实或静默丢弃非法字段后完成收费。",
     "local_evidence": [
       "plugins/tasks/hailuo/plugin.js",
       "plugins/hailuo_responses_test.go:TestHailuoExtractUsageFacts",
-      "plugins/hailuo_responses_test.go:TestHailuoH3CompletionUsageFacts"
+      "plugins/hailuo_responses_test.go:TestHailuoH3CompletionUsageFacts",
+      "plugins/factory_completion_billing_test.go:TestHailuoH3InvalidCompletionFactsRetainTerminalResult"
     ],
     "validation": [
       {
         "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
         "log": ".local-tests/plugin-finish-runtime-router-all.log",
         "result": "通过"
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 -json ./plugins",
+        "log": ".local-tests/rc40-factory-f2-f3-plugins-final.json",
+        "result": "2026-09-25 本地通过：59 个顶层测试、557 个叶子测试，6.291s；覆盖本轮四工厂 patch 版本。仅本地包验证，不代表服务器或真实供应商验收。",
+        "tests": [
+          "TestHailuoExtractUsageFacts",
+          "TestHailuoH3CompletionUsageFacts",
+          "TestHailuoH3InvalidCompletionFactsRetainTerminalResult"
+        ]
       }
     ],
-    "acceptance": "通过：H3 媒体用量提取用例。"
+    "acceptance": "本地 H3 媒体及严格用量测试通过；供应商 SUCCESS 事实保留，非法完成用量标记错误，不代表已完成服务器验收。"
   },
   {
     "sha": "9df450fe54e1a874a5339b7c38a61014217f02c3",
@@ -343,13 +409,15 @@
   {
     "sha": "9bf328d9749751757d5d6b74088d514813a618bd",
     "disposition": "需要适配",
-    "notes": "Sora 最终插件源码与固定快照一致，Video renderer 保留供应商扩展和 URL/metadata；宿主覆盖生命周期及公开 ID 并隐藏私有结构字段。检索改用固定版本，不能随 active 更新改变 renderer。",
+    "notes": "保留上游 Sora Video renderer 的供应商扩展、URL/metadata；宿主覆盖生命周期及公开 ID 并隐藏私有结构，检索使用固定版本。原源码相同不能证明完成计价安全；本轮 Sora 1.1.1 去除实际时长截断，按字段存在性保留明确零、拒绝显式 null 和非法转换，由 host 拒绝越界。renderer 合同保持既有行为。",
     "local_evidence": [
       "plugins/tasks/sora/plugin.js",
       "relay/channel/task/jsplugin/adaptor.go",
       "relay/channel/task/jsplugin/adaptor_test.go:TestTaskAdaptorPreservesSoraVideoResponseFields",
       "controller/task_plugin_contract_test.go:TestRetrieveTaskPluginResponseRetainsExactVersionAndTokenOwnership",
-      "docs/plugin-api/v1.md"
+      "docs/plugin-api/v1.md",
+      "plugins/factory_completion_billing_test.go:TestFactoryCompletionFactsPreserveInvalidAndZeroUsage",
+      "plugins/factory_completion_billing_test.go:TestSoraCompletionSecondsPresencePrecedesDuration"
     ],
     "validation": [
       {
@@ -366,9 +434,18 @@
         "command": "node .local-tests/validate-plugin-docs.cjs",
         "log": ".local-tests/plugin-finish-docs.log",
         "result": "严格 TypeScript 声明检查、JSON 解析/19 个本地引用、5 个文档链接通过；不是部署验证"
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 -json ./plugins",
+        "log": ".local-tests/rc40-factory-f2-f3-plugins-final.json",
+        "result": "2026-09-25 本地通过：59 个顶层测试、557 个叶子测试，6.291s；覆盖本轮四工厂 patch 版本。仅本地包验证，不代表服务器或真实供应商验收。",
+        "tests": [
+          "TestFactoryCompletionFactsPreserveInvalidAndZeroUsage",
+          "TestSoraCompletionSecondsPresencePrecedesDuration"
+        ]
       }
     ],
-    "acceptance": "通过：提供商字段、生命周期覆盖、固定 renderer 和 Token 所有权。"
+    "acceptance": "既有 renderer/所有权证据保留；本轮 Sora 严格完成事实与零值优先级本地回归通过，未把历史运行结果扩展为本轮服务器结论。"
   },
   {
     "sha": "a20574136b2746e9afc4b268c99cf99b3f6cc68b",
@@ -415,7 +492,7 @@
   {
     "sha": "74629e29f83f506bb523c5542aa851947bd423eb",
     "disposition": "需要适配",
-    "notes": "采用 JSON clone、受限增量 SSE、同步/异步 Images 与每模型 usage profiles；本地将 manifest 用量展示和冻结 PriceVersion schema 分开，不采用倍率兜底或用请求预估结算。hook失败、负数/小数 token/越界事实保留终态并待核对。",
+    "notes": "采用 JSON clone、受限增量 SSE、同步/异步 Images 与每模型 usage profiles；manifest 展示和冻结 PriceVersion schema 分开，不采用倍率兜底或请求预估结算。此前 host 边界测试未覆盖工厂 hook 在校验前的 Number/parseFloat 转换及截断；本轮 F2 在 Kling/Vidu/Sora/Hailuo 源头拒绝非法事实并保留合法零，F3 使海螺按模型输出精准 profile，F4 拒绝不可预留的 Vidu credits 新价格。通用 host 未声明字段、范围与来源检查未放松。",
     "local_evidence": [
       "pkg/jsplugin/json_state.go",
       "relay/channel/task/jsplugin/submit_stream.go",
@@ -424,7 +501,12 @@
       "pkg/billing/usage_facts.go",
       "service/task_billing.go:taskCompletionQuota",
       "service/task_billing_test.go:TestPluginTaskCompletionUsesOnlyFrozenSchemaFacts",
-      "docs/plugin-api/v1.md"
+      "docs/plugin-api/v1.md",
+      "plugins/factory_completion_billing_test.go",
+      "plugins/reservation_contract.go",
+      "service/task_plugin_reservation_test.go",
+      "plugins/frozen_pricing_test.go:TestViduFactoryPriceRequiresReviewableReservation",
+      "router/gateway_vidu_pricing_test.go:TestGatewayViduFixedPriceReservesAndSettlesOnce"
     ],
     "validation": [
       {
@@ -472,9 +554,39 @@
           "TestFactoryPriceRequiresExplicitPriceAndActualUsage"
         ],
         "result": "本地插件/资金边界通过"
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 -json ./plugins",
+        "log": ".local-tests/rc40-factory-f2-f3-plugins-final.json",
+        "result": "2026-09-25 本地通过：59 个顶层测试、557 个叶子测试，6.291s；覆盖本轮四工厂 patch 版本。仅本地包验证，不代表服务器或真实供应商验收。",
+        "tests": [
+          "TestFactoryCompletionFactsPreserveInvalidAndZeroUsage",
+          "TestHailuoUsageFactsMatchEveryModelProfile",
+          "TestHailuoPublishedResolutionPriceReachesPrecharge",
+          "TestHailuoH3InvalidCompletionFactsRetainTerminalResult",
+          "TestViduFactoryPriceRequiresReviewableReservation"
+        ]
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 ./service -run '^(TestViduPricePublicationRejectsUnreservableCredits|TestViduPublicationGuardPreservesAcceptedCreditQuotes|TestPluginPerCallPricePublishesAndSettlesWithoutUsageDimensions)$'",
+        "log": ".local-tests/rc40-f4-after.log",
+        "tests": [
+          "TestViduPricePublicationRejectsUnreservableCredits",
+          "TestViduPublicationGuardPreservesAcceptedCreditQuotes",
+          "TestPluginPerCallPricePublishesAndSettlesWithoutUsageDimensions"
+        ],
+        "result": "2026-09-25 本地通过（5.744s）：四个 Vidu 模型拒绝没有可信预留依据的 credits 表达式及单价行，包含未执行分支；旧价格/Quote 不改写，实际 credits=10 仍按旧价算 4 USD；显式无 schema 单次价格可发布和结算。"
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 ./router -run '^TestGatewayViduFixedPriceReservesAndSettlesOnce$'",
+        "log": ".local-tests/rc40-f4-router.log",
+        "tests": [
+          "TestGatewayViduFixedPriceReservesAndSettlesOnce"
+        ],
+        "result": "2026-09-25 本地真实 HTTP/隔离 mock 通过（5.751s）：发布 0.25 USD 的 calls/per_call 价格后只发送一次；用户/Token 预留及结算均为 125000 quota；重复完成只有一个金额事件与结果事件，credits=10 仅留完成证据。未调用真实供应商，不是服务器部署验证。"
       }
     ],
-    "acceptance": "未完成：插件运行与冻结合同通过，常驻候选实际完成事实结算/缺事实待核对已验收；通用 Images 计价和价格 Vue 展示/编辑由主线合并验收。"
+    "acceptance": "本轮工厂源头校验、profile 与报价兼容本地通过；既有 Images/候选重启证据按原运行范围保留，本轮服务器和页面结果由主线合并。"
   },
   {
     "sha": "129f21b6942ed433fd7eea1239b4a24d8b58b48b",
@@ -515,20 +627,36 @@
   {
     "sha": "a8ed7f7c5f24e56c2f1612126d82e9fec625056c",
     "disposition": "直接采用",
-    "notes": "Hailuo 按模型家族给完整 usage profile；legacy 与 H3 支持的分辨率/媒体维度不混用，最终源码与固定快照一致。",
+    "notes": "采用上游按模型家族声明 usage profile 的功能；二审推翻了“最终源码相同即完整兼容”的断言：旧 hook 返回 union 字段，而本地冻结 schema 和报价拒绝未声明字段。Hailuo 1.2.1 对提交/完成按实际模型输出精准字段，10 个模型均检查 profile 一致；海螺 2.3 的 resolution 条件表达式完成真实发布、预扣和最终计价。旧任务使用持久化旧版本，旧 union 价格/Quote 不改写；兼容回归使用明确的旧合同夹具，不宣称旧 hook 已获得新版本修复。",
     "local_evidence": [
       "plugins/tasks/hailuo/plugin.js",
       "plugins/hailuo_responses_test.go:TestHailuoUsageProfilesPerModel",
-      "plugins/hailuo_responses_test.go:TestHailuoLegacySubmitRequestUnchanged"
+      "plugins/hailuo_responses_test.go:TestHailuoLegacySubmitRequestUnchanged",
+      "plugins/factory_completion_billing_test.go:TestHailuoUsageFactsMatchEveryModelProfile",
+      "plugins/factory_completion_billing_test.go:TestHailuoPublishedResolutionPriceReachesPrecharge",
+      "plugins/factory_completion_billing_test.go:TestHailuoUpgradeKeepsPinnedLegacySourceAndQuote",
+      "plugins/frozen_pricing.go",
+      "relay/helper/price.go:ModelPriceHelperWithTaskFacts"
     ],
     "validation": [
       {
         "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
         "log": ".local-tests/plugin-finish-runtime-router-all.log",
         "result": "通过"
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 -json ./plugins",
+        "log": ".local-tests/rc40-factory-f2-f3-plugins-final.json",
+        "result": "2026-09-25 本地通过：59 个顶层测试、557 个叶子测试，6.291s；覆盖本轮四工厂 patch 版本。仅本地包验证，不代表服务器或真实供应商验收。",
+        "tests": [
+          "TestHailuoUsageProfilesPerModel",
+          "TestHailuoUsageFactsMatchEveryModelProfile",
+          "TestHailuoPublishedResolutionPriceReachesPrecharge",
+          "TestHailuoUpgradeKeepsPinnedLegacySourceAndQuote"
+        ]
       }
     ],
-    "acceptance": "通过：各模型 profile 与旧提交行为用例。"
+    "acceptance": "F3 本地正式回归通过：10 模型精准事实、允许的 resolution 表达式发布/预扣/结算、旧固定执行及报价保持；旧全包通过仅为历史证据，本轮服务器运行尚不在本条确认范围。"
   },
   {
     "sha": "4c34f25a49f1cf491479e3842b2251e8a6908851",
@@ -677,22 +805,34 @@
   {
     "sha": "47713bcb1749f81c3a48127c0150e4c6d4da35f1",
     "disposition": "需要适配",
-    "notes": "Jimeng/Kling/Sora 版本与固定最终快照一致；Suno 采用目标 1.1.0，并保留本地 continuation 所有权和标准化修复。所有内置插件编译及 protocol/usage 合同通过。",
+    "notes": "保留已纳入的 Jimeng/Suno 协议及本地 continuation 所有权修正。Kling/Sora 本轮从目标快照版本升为 1.1.1，严格解析完成事实并去除 Sora 时长截断；不再宣称最终源码或版本与上游完全相同。Vidu 1.0.3、Hailuo 1.2.1 的关联修复另见平台/profile 条目。编译和协议通过不能单独证明计价兼容，使用真实 adaptor 到冻结计算器的合法与非法事实回归。",
     "local_evidence": [
       "plugins/tasks/jimeng/plugin.js",
       "plugins/tasks/kling/plugin.js",
       "plugins/tasks/sora/plugin.js",
       "plugins/tasks/sunoapi/plugin.js",
-      "plugins/builtin_plugins_test.go:TestBuiltInTaskPluginResponsesAndUsageContracts"
+      "plugins/builtin_plugins_test.go:TestBuiltInTaskPluginResponsesAndUsageContracts",
+      "plugins/factory_completion_billing_test.go:TestFactoryCompletionFactsPreserveInvalidAndZeroUsage",
+      "plugins/factory_completion_billing_test.go:TestSoraCompletionSecondsPresencePrecedesDuration"
     ],
     "validation": [
       {
         "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
         "log": ".local-tests/plugin-finish-runtime-router-all.log",
         "result": "通过"
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 -json ./plugins",
+        "log": ".local-tests/rc40-factory-f2-f3-plugins-final.json",
+        "result": "2026-09-25 本地通过：59 个顶层测试、557 个叶子测试，6.291s；覆盖本轮四工厂 patch 版本。仅本地包验证，不代表服务器或真实供应商验收。",
+        "tests": [
+          "TestBuiltInTaskPluginResponsesAndUsageContracts",
+          "TestFactoryCompletionFactsPreserveInvalidAndZeroUsage",
+          "TestSoraCompletionSecondsPresencePrecedesDuration"
+        ]
       }
     ],
-    "acceptance": "通过：四插件版本和协议运行用例。"
+    "acceptance": "本轮本地工厂整包与严格事实回归通过；旧任务的固定版本不被静默替换，本条不确认本轮服务器部署。"
   },
   {
     "sha": "474ed66fb14b0de30f82a1729b4f7cf3dab19d63",
@@ -822,14 +962,19 @@
   {
     "sha": "9a0be8750a6d736d9692535ed2cd68f8eec46529",
     "disposition": "需要适配",
-    "notes": "后端新增当前插件schema只读接口与新发布校验；历史价格和在途Quote保持原schema/表达式。新发布拒绝已删枚举（包括表达式未达分支）、来源/类型/单位漂移和放宽工厂范围；共享模型必须明确plugin_key，自定义来源不能从manifest猜测。Vue保留旧值/显式采用新schema由前端工作包合并。",
+    "notes": "当前插件 schema 只读接口及新发布校验保留历史价格和在途 Quote；拒绝已删枚举（含未达分支）、来源/类型/单位漂移和放宽工厂范围，共享模型要求明确 plugin_key。2026-09-25 F4 补入预留可执行性：未修改的 Vidu 工厂没有可信 credits 估算，引用该维度的新草稿/发布拒绝；允许仅含一条 calls/per_call 的无 schema 固定任务价，完成事实只留证据。旧价格和接受后的 Quote 仍冻结，不能以新发布规则重写历史。Vue 证据由前端工作包合并。",
     "local_evidence": [
       "service/task_plugin_pricing.go",
       "service/task_plugin_pricing_test.go",
       "controller/billing_pricing.go",
       "controller/billing_plugin_schema_test.go",
       "router/api-router.go",
-      "docs/plugin-api/v1.md"
+      "docs/plugin-api/v1.md",
+      "plugins/reservation_contract.go:ValidateFactoryPriceReservation",
+      "plugins/frozen_pricing_test.go:TestViduFactoryPriceRequiresReviewableReservation",
+      "service/task_plugin_reservation_test.go",
+      "router/gateway_vidu_pricing_test.go:TestGatewayViduFixedPriceReservesAndSettlesOnce",
+      "pkg/billingexpr/expr.md"
     ],
     "validation": [
       {
@@ -851,8 +996,34 @@
         "command": "python scripts/server/test_ren2hub_plugin.py --base http://127.0.0.1:3000 --credentials <private-admin-json> --revision rc40-integration-validation --report <private-after-report> --state <private-state> --phase after-restart --sqlite <isolated-sqlite>",
         "log": ".local-tests/plugin-deploy-after8.json",
         "result": "2026-09-25 同 SQLite/secret 候选进程重启后通过 7 项；旧 v1 实际 10 秒按冻结 0.4 USD/秒结算 4 USD，另一 SUCCESS 缺事实任务人工结算 4 USD，重复命令和查询仍总额 8 USD/两次金额事件、唯一结果 outbox/metric；重启前签名产物有效；submits/replays/wrong_version 均 0，清理无错误。Windows Stop-Process 只证明进程重启，不证明 SIGTERM 优雅停机或最终 SHA 部署"
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 -json ./plugins",
+        "log": ".local-tests/rc40-factory-f2-f3-plugins-final.json",
+        "result": "2026-09-25 本地通过：59 个顶层测试、557 个叶子测试，6.291s；覆盖本轮四工厂 patch 版本。仅本地包验证，不代表服务器或真实供应商验收。",
+        "tests": [
+          "TestViduFactoryPriceRequiresReviewableReservation"
+        ]
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 ./service -run '^(TestViduPricePublicationRejectsUnreservableCredits|TestViduPublicationGuardPreservesAcceptedCreditQuotes|TestPluginPerCallPricePublishesAndSettlesWithoutUsageDimensions)$'",
+        "log": ".local-tests/rc40-f4-after.log",
+        "tests": [
+          "TestViduPricePublicationRejectsUnreservableCredits",
+          "TestViduPublicationGuardPreservesAcceptedCreditQuotes",
+          "TestPluginPerCallPricePublishesAndSettlesWithoutUsageDimensions"
+        ],
+        "result": "2026-09-25 本地通过（5.744s）：四个 Vidu 模型拒绝没有可信预留依据的 credits 表达式及单价行，包含未执行分支；旧价格/Quote 不改写，实际 credits=10 仍按旧价算 4 USD；显式无 schema 单次价格可发布和结算。"
+      },
+      {
+        "command": "GOMAXPROCS=2 go test -p 2 -timeout 60s -count=1 ./router -run '^TestGatewayViduFixedPriceReservesAndSettlesOnce$'",
+        "log": ".local-tests/rc40-f4-router.log",
+        "tests": [
+          "TestGatewayViduFixedPriceReservesAndSettlesOnce"
+        ],
+        "result": "2026-09-25 本地真实 HTTP/隔离 mock 通过（5.751s）：发布 0.25 USD 的 calls/per_call 价格后只发送一次；用户/Token 预留及结算均为 125000 quota；重复完成只有一个金额事件与结果事件，credits=10 仅留完成证据。未调用真实供应商，不是服务器部署验证。"
       }
     ],
-    "acceptance": "后端通过；需合并Vue旧值可见/明确选择当前schema的运行证据。"
+    "acceptance": "F4 本地草稿、发布、旧价读取/旧 Quote 计价及固定单次价 HTTP 落库回归通过；页面和本轮服务器证据由主线合并，不预写通过。"
   }
 ]

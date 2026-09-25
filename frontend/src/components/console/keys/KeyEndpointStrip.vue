@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive } from 'vue'
+import { computed, onBeforeUnmount, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useToast } from '@/composables/useToast'
+import { useAppStore } from '@/stores/app'
 
 import { runEndpointProbe } from './endpointProbe'
 
@@ -13,44 +14,77 @@ interface ProbeResult {
   latency?: number
 }
 
-const ENDPOINTS = [
-  {
-    id: 'default',
-    labelKey: 'keys.endpoints.defaultName',
-    url: 'https://renai.uno',
-    isDefault: true,
-  },
-  {
-    id: 'usWest',
-    labelKey: 'keys.endpoints.usWestName',
-    url: 'https://vm.renai.uno',
-    isDefault: false,
-  },
-  {
-    id: 'cloudflare',
-    labelKey: 'keys.endpoints.cloudflareName',
-    url: 'https://cf.renai.uno',
-    isDefault: false,
-  },
-  {
-    id: 'asiaPacific',
-    labelKey: 'keys.endpoints.asiaPacificName',
-    url: 'https://cn.renai.uno',
-    isDefault: false,
-  },
-] as const
-
 const PROBE_TIMEOUT_MS = 5_000
 
 const { t } = useI18n()
 const toast = useToast()
-const results = reactive<Record<string, ProbeResult>>(
-  Object.fromEntries(
-    ENDPOINTS.map((endpoint) => [endpoint.id, { status: 'idle' }])
-  )
-)
+const app = useAppStore()
+function validAddress(value: string | undefined): string | null {
+  if (!value?.trim()) return null
+  try {
+    const url = new URL(value.trim())
+    return ['http:', 'https:'].includes(url.protocol) &&
+      !url.username &&
+      !url.password
+      ? value.trim()
+      : null
+  } catch {
+    return null
+  }
+}
+const endpoints = computed(() => {
+  const configured =
+    app.status.api_info_enabled === false
+      ? []
+      : (app.status.api_info ?? []).flatMap((entry) => {
+          const url = validAddress(entry.url)
+          return url
+            ? [
+                {
+                  id: url,
+                  url,
+                  label: entry.route?.trim() || t('keys.endpoints.defaultName'),
+                  description: entry.description ?? '',
+                  isDefault: false,
+                },
+              ]
+            : []
+        })
+  if (configured.length)
+    return [...new Map(configured.map((entry) => [entry.url, entry])).values()]
+  const server = validAddress(app.status.server_address)
+  const url = server || window.location.origin
+  return [
+    {
+      id: url,
+      url,
+      label: t(
+        server ? 'keys.endpoints.defaultName' : 'keys.endpoints.currentDomain'
+      ),
+      description: '',
+      isDefault: true,
+    },
+  ]
+})
+const results = reactive<Record<string, ProbeResult>>({})
 const controllers = new Map<string, AbortController>()
 const timers = new Map<string, number>()
+watch(
+  endpoints,
+  (items) => {
+    const ids = new Set(items.map((item) => item.id))
+    for (const id of Object.keys(results)) {
+      if (ids.has(id)) continue
+      controllers.get(id)?.abort()
+      window.clearTimeout(timers.get(id))
+      controllers.delete(id)
+      timers.delete(id)
+      delete results[id]
+    }
+    for (const item of items) results[item.id] ??= { status: 'idle' }
+  },
+  { immediate: true }
+)
 
 async function copyEndpoint(url: string) {
   try {
@@ -76,16 +110,20 @@ async function probeEndpoint(id: string, url: string) {
 
   try {
     const latency = await runEndpointProbe(url, controller.signal)
+    if (controllers.get(id) !== controller) return
     results[id] = {
       status: 'success',
       latency,
     }
   } catch {
+    if (controllers.get(id) !== controller) return
     results[id] = { status: timedOut ? 'timeout' : 'error' }
   } finally {
     window.clearTimeout(timer)
-    timers.delete(id)
-    controllers.delete(id)
+    if (controllers.get(id) === controller) {
+      timers.delete(id)
+      controllers.delete(id)
+    }
   }
 }
 
@@ -118,12 +156,12 @@ onBeforeUnmount(() => {
     :aria-label="t('keys.endpoints.regionLabel')"
   >
     <div
-      v-for="endpoint in ENDPOINTS"
+      v-for="endpoint in endpoints"
       :key="endpoint.id"
-      class="flex min-w-0 items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-2 py-1 sm:min-w-max sm:flex-none"
+      class="flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-2 py-1"
     >
       <span class="shrink-0 text-[11px] font-medium text-[var(--text-primary)]">
-        {{ t(endpoint.labelKey) }}
+        {{ endpoint.label }}
       </span>
       <span
         v-if="endpoint.isDefault"
@@ -136,7 +174,7 @@ onBeforeUnmount(() => {
         aria-hidden="true"
       />
       <code
-        class="min-w-0 max-w-28 truncate text-[11px] text-[var(--text-secondary)]"
+        class="min-w-0 break-all text-[11px] text-[var(--text-secondary)]"
         :title="endpoint.url"
       >
         {{ endpoint.url }}
@@ -158,8 +196,8 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="flex h-11 w-11 shrink-0 items-center justify-center rounded text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] focus-ring sm:h-5 sm:w-5"
-        :aria-label="t('keys.endpoints.copy', { name: t(endpoint.labelKey) })"
-        :title="t('keys.endpoints.copy', { name: t(endpoint.labelKey) })"
+        :aria-label="t('keys.endpoints.copy', { name: endpoint.label })"
+        :title="t('keys.endpoints.copy', { name: endpoint.label })"
         @click="copyEndpoint(endpoint.url)"
       >
         <svg
@@ -181,8 +219,8 @@ onBeforeUnmount(() => {
         type="button"
         class="flex h-11 w-11 shrink-0 items-center justify-center rounded text-[var(--text-tertiary)] transition-colors hover:bg-[var(--accent-soft)] hover:text-[var(--accent-text)] focus-ring disabled:cursor-wait disabled:opacity-50 sm:h-5 sm:w-5"
         :disabled="results[endpoint.id].status === 'testing'"
-        :aria-label="t('keys.endpoints.test', { name: t(endpoint.labelKey) })"
-        :title="t('keys.endpoints.test', { name: t(endpoint.labelKey) })"
+        :aria-label="t('keys.endpoints.test', { name: endpoint.label })"
+        :title="t('keys.endpoints.test', { name: endpoint.label })"
         @click="probeEndpoint(endpoint.id, endpoint.url)"
       >
         <svg
@@ -199,6 +237,12 @@ onBeforeUnmount(() => {
           <path d="m13 2-9 12h8l-1 8 9-12h-8l1-8Z" />
         </svg>
       </button>
+      <p
+        v-if="endpoint.description"
+        class="w-full break-words text-[11px] text-[var(--text-secondary)]"
+      >
+        {{ endpoint.description }}
+      </p>
     </div>
   </div>
 </template>

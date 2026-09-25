@@ -108,6 +108,7 @@ export function createApiClient(
           throw new ApiError(envelope.message || 'Request failed', {
             status: 200,
             business: true,
+            data: payload.data,
             code: typeof payload.code === 'string' ? payload.code : undefined,
           })
         }

@@ -1719,11 +1719,20 @@
       "version": "v1.0.0-rc.39",
       "subject": "feat(keys): show and copy configured API addresses",
       "disposition": "已等效",
-      "acceptance": "已有本地实现或明确排除",
-      "conclusion": "KeyEndpointStrip实际显示并复制服务端配置地址",
+      "acceptance": "2026-09-25 二次审计发现缺口后修复；本地单元、构建与浏览器 fixture 验证通过，服务器真实配置联调待主线验收",
+      "conclusion": "原记录错误地把硬编码端点视为配置吸收。现由 /api/status 的 api_info_enabled/api_info 驱动实际显示与复制，保留配置 URL 路径；禁用或无可用地址时依次使用 server_address、当前 origin，地址变化会取消旧探测。",
       "evidence": [
         "frontend/src/components/console/keys/KeyEndpointStrip.vue",
-        "frontend/src/types/console.ts"
+        "frontend/src/api/public.ts",
+        "frontend/src/components/console/keys/__tests__/KeyEndpointStrip.spec.ts",
+        "frontend/src/api/__tests__/publicBoundary.spec.ts",
+        "frontend/tests/visual/upstream-addresses-disable.spec.ts"
+      ],
+      "validation": [
+        "修复前 output/rc40-f6-f7-before.log 保留可复现失败；最终相关 7 文件 53 项通过：frontend/output/rc40-f4-f6-f7-final-targeted.log",
+        "Bun 1.4.0 全量 Vitest 153 文件 791 项通过：frontend/output/rc40-f4-f6-f7-full-vitest.log",
+        "typecheck、lint、format:check、build 通过：frontend/output/rc40-f4-f6-f7-typecheck.log、rc40-f4-f6-f7-lint-final.log、rc40-f4-f6-f7-format-final.log、rc40-f4-f6-f7-build.log",
+        "Playwright fixture：配置地址、原路径复制、禁用/空地址回退与插件停用、价格 schema 共 12 项通过，覆盖 1440/390 浅色/深色：frontend/output/rc40-f4-f6-f7-browser-retry.log；该结果不是服务器联调证据"
       ]
     },
     {
@@ -1891,12 +1900,23 @@
       "version": "rc.40+8",
       "subject": "fix: move force operation into confirm slot so plugin-in-use dialog has one cancel button (#7528)",
       "disposition": "已等效",
-      "acceptance": "已有本地实现或明确排除",
-      "conclusion": "引用阻止删除的单一确认dialog只有一个取消操作",
+      "acceptance": "2026-09-25 二次审计发现缺口后修复；本地单元、构建与浏览器 fixture 验证通过，服务器真实渠道绑定和在途任务联调待主线验收",
+      "conclusion": "原记录以删除确认代替了缺失的插件使用中停用交互。现保留业务错误 data 并严格解析渠道/在途计数，先确认普通停用，收到使用中响应后显示影响，只有再次显式确认才发送 cascade/force；NewAPI 多绑定只解除当前插件，专属渠道同时停用，取消不提交且在途版本删除保护不变。",
       "evidence": [
         "frontend/src/views/console/TaskPluginsView.vue",
         "frontend/src/api/taskPlugins.ts",
-        "frontend/src/components/console/plugins/PluginIcon.vue"
+        "frontend/src/api/createClient.ts",
+        "frontend/src/api/types.ts",
+        "frontend/src/views/console/__tests__/TaskPluginDisable.spec.ts",
+        "frontend/src/views/console/__tests__/TaskPluginsView.spec.ts",
+        "frontend/src/api/__tests__/taskPlugins.spec.ts",
+        "frontend/tests/visual/upstream-addresses-disable.spec.ts"
+      ],
+      "validation": [
+        "正式回归通过真实组件和 API 客户端，仅模拟 HTTP 传输；覆盖取消/无绑定、cascade、刷新后的在途阻止和显式 force、普通错误、重复提交与删除不携带 force。最终相关 7 文件 53 项通过：frontend/output/rc40-f4-f6-f7-final-targeted.log",
+        "Bun 1.4.0 全量 Vitest 153 文件 791 项通过：frontend/output/rc40-f4-f6-f7-full-vitest.log；typecheck/lint/format:check/build 通过，同 F6 日志",
+        "Playwright fixture：1440/390 浅色/深色，F6/F7 新场景 8 项与原插件管理 4 项通过：frontend/output/rc40-f6-f7-browser.log；后续价格 schema 4 项和 F6/F7 8 项再次通过：frontend/output/rc40-f4-f6-f7-browser-retry.log；两次共 16 个不同场景",
+        "取消/错误/焦点恢复/横向溢出及 NewAPI 多绑定影响文字已验证；真实服务端绑定变更、在途任务保存和服务器授权验证由主线补证，不能以 fixture 结果代替"
       ]
     },
     {

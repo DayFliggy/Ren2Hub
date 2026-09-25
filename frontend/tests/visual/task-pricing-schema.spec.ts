@@ -161,6 +161,29 @@ for (const theme of ['light', 'dark'] as const) {
         path: testInfo.outputPath('schema-preview.png'),
         fullPage: true,
       })
+      await dialog
+        .locator('select')
+        .filter({ has: page.locator('option[value="unit_price"]') })
+        .selectOption('unit_price')
+      await dialog
+        .getByRole('button', { name: '添加价格项', exact: true })
+        .click()
+      await dialog.locator('input[inputmode=decimal]').first().fill('0.12')
+      await expect(
+        dialog.locator('[data-fixed-call-without-schema]')
+      ).toBeVisible()
+      await dialog.locator('[data-fixed-call-without-schema]').click()
+      await dialog.locator('[data-price-preview]').click()
+      await expect
+        .poll(() => (preview?.price as Record<string, unknown>)?.usage_schema)
+        .toBeUndefined()
+      expect((preview?.price as Record<string, unknown>).prices).toEqual([
+        { quantity: 'calls', unit: 'per_call', price: '0.12' },
+      ])
+      expect((preview?.price as Record<string, unknown>).mode).toBe(
+        'unit_price'
+      )
+      await assertNoHorizontalOverflow(page)
     })
   }
 }

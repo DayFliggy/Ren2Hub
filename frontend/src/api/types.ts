@@ -15,6 +15,8 @@ export class ApiError extends Error {
   readonly code?: string
   /** true when the server answered 200 with success:false */
   readonly business: boolean
+  /** Structured business-error details; callers must validate before use. */
+  readonly data?: unknown
 
   constructor(
     message: string,
@@ -23,6 +25,7 @@ export class ApiError extends Error {
       code?: string
       business?: boolean
       cause?: unknown
+      data?: unknown
     }
   ) {
     super(message)
@@ -30,6 +33,7 @@ export class ApiError extends Error {
     this.status = options?.status
     this.code = options?.code
     this.business = options?.business ?? false
+    this.data = options?.data
     if (options?.cause !== undefined) this.cause = options.cause
   }
 }

@@ -32,6 +32,17 @@ func ApplyChannelSystemPrompt(c *gin.Context, info *RelayInfo, request any) erro
 	if err != nil {
 		return err
 	}
+	if chat, ok := request.(*dto.GeneralOpenAIRequest); ok {
+		// Inserting a message shifts the slice. Decoding into its old elements
+		// would retain fields omitted by the replacement message, such as tools.
+		updated := *chat
+		updated.Messages = nil
+		if err := common.Unmarshal(data, &updated); err != nil {
+			return err
+		}
+		*chat = updated
+		return nil
+	}
 	return common.Unmarshal(data, request)
 }
 
@@ -52,6 +63,11 @@ func applyChannelSystemPromptJSON(c *gin.Context, info *RelayInfo, request any, 
 		role := request.GetSystemRoleName()
 		index := -1
 		for i, message := range messages {
+			// Kimi tool-loading messages declare tools, not instructions, and
+			// must never receive a content field during prompt injection.
+			if len(message["tools"]) > 0 {
+				continue
+			}
 			var existingRole string
 			if common.Unmarshal(message["role"], &existingRole) == nil && existingRole == role {
 				index = i

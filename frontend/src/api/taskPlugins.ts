@@ -1,5 +1,39 @@
 import { api } from './client'
 import type { PriceVersion } from './modelPricing'
+import { ApiError } from './types'
+
+export interface TaskPluginUsage {
+  channels: Array<{ id: number; name: string; type: number }>
+  in_flight_count: number
+}
+export class TaskPluginUsageError extends Error {
+  constructor(
+    message: string,
+    public readonly usage: TaskPluginUsage
+  ) {
+    super(message)
+    this.name = 'TaskPluginUsageError'
+  }
+}
+function pluginUsage(value: unknown): TaskPluginUsage | null {
+  if (!value || typeof value !== 'object') return null
+  const usage = value as TaskPluginUsage
+  if (
+    !Number.isSafeInteger(usage.in_flight_count) ||
+    usage.in_flight_count < 0 ||
+    !Array.isArray(usage.channels) ||
+    usage.channels.some(
+      (channel) =>
+        !channel ||
+        !Number.isSafeInteger(channel.id) ||
+        channel.id <= 0 ||
+        typeof channel.name !== 'string' ||
+        !Number.isSafeInteger(channel.type)
+    )
+  )
+    return null
+  return usage
+}
 
 export interface PluginMeta {
   key: string
@@ -95,8 +129,27 @@ export const taskPluginsApi = {
     api.post<PluginDetail>(base, { source, sourceSha256, enabled }),
   activate: (key: string, version: string) =>
     api.post(`${keyPath(key)}/activate`, { version }),
-  enabled: (key: string, enabled: boolean) =>
-    api.post(`${keyPath(key)}/status`, { enabled }),
+  async enabled(
+    key: string,
+    enabled: boolean,
+    options?: { cascade?: boolean; force?: boolean }
+  ) {
+    const params = new URLSearchParams()
+    if (!enabled && options?.cascade) params.set('cascade', 'true')
+    if (!enabled && options?.force) params.set('force', 'true')
+    const query = params.size ? `?${params}` : ''
+    try {
+      return await api.post(`${keyPath(key)}/status${query}`, { enabled })
+    } catch (error) {
+      const usage =
+        error instanceof ApiError && error.business
+          ? pluginUsage(error.data)
+          : null
+      if (!enabled && usage)
+        throw new TaskPluginUsageError((error as Error).message, usage)
+      throw error
+    }
+  },
   remove: (key: string, version: string) =>
     api.delete(`${keyPath(key)}/versions/${encodeURIComponent(version)}`),
   dryRun: (key: string, hook: string, member: string, args: unknown[]) =>

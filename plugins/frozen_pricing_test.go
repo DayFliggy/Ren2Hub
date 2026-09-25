@@ -36,3 +36,19 @@ func TestFactoryPriceDoesNotPriceEstimatedDuration(t *testing.T) {
 	_, err = FrozenTaskPriceVersion(plug.Meta, plug.Meta.Models[0], `u("seconds") * 0.1`)
 	require.Error(t, err)
 }
+
+func TestViduFactoryPriceRequiresReviewableReservation(t *testing.T) {
+	source, err := Source("vidu")
+	require.NoError(t, err)
+	plug, err := jsplugin.CompilePlugin(source, jsplugin.Options{})
+	require.NoError(t, err)
+	for _, name := range plug.Meta.Models {
+		t.Run(name, func(t *testing.T) {
+			_, err := FrozenTaskPriceVersion(plug.Meta, name, `u("credits") * 0.4`)
+			require.ErrorContains(t, err, "no reviewed reservation estimate")
+			schemaPreview, err := FrozenTaskPriceVersion(plug.Meta, name, "v2:0")
+			require.NoError(t, err)
+			assert.Contains(t, schemaPreview.UsageSchema.Fields, "credits", "schema discovery remains available")
+		})
+	}
+}

@@ -7,7 +7,7 @@ export const meta = {
     en: "OpenAI Sora video generation (text-to-video, image-to-video, and remix)",
     zh: "OpenAI Sora 视频生成（文生视频、图生视频、remix）",
   },
-  version: "1.1.0",
+  version: "1.1.1",
   channelTypes: [55, 1], // OpenAI-type channels natively serve sora with the same wire format
   author: { name: "QuantumNous" },
   models: ["sora-2", "sora-2-pro"],
@@ -134,8 +134,15 @@ export function extractUsage(ctx) {
 
 export function extractUsageOnComplete(task, taskResult, body) {
   const facts = {};
-  const seconds = Number((body || {}).seconds || (body || {}).duration || 0);
-  if (Number.isFinite(seconds) && seconds > 0) facts.seconds = Math.min(seconds, 3600);
+  const result = body || {};
+  const field = Object.prototype.hasOwnProperty.call(result, "seconds") ? "seconds" : "duration";
+  if (Object.prototype.hasOwnProperty.call(result, field)) {
+    const raw = result[field];
+    const seconds = typeof raw === "number" ? raw :
+      typeof raw === "string" && /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(raw.trim()) ? Number(raw) : NaN;
+    if (!Number.isFinite(seconds)) throw new Error("invalid completion duration");
+    facts.seconds = seconds;
+  }
   const size = trimmed((body || {}).size);
   if (["720x1280", "1280x720", "1792x1024", "1024x1792"].includes(size)) facts.size = size;
   return facts;

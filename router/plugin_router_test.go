@@ -733,7 +733,9 @@ func TestProductionPluginNativeQueryTraversesInnerRouter(t *testing.T) {
 	model.DB = database
 	t.Cleanup(func() { model.DB = previousDB })
 	require.NoError(t, controller.InitTaskPlugins())
-	version, err := model.GetTaskPluginVersion("kling", "1.1.0")
+	kling, found := jsplugin.DefaultRegistry.Get("kling")
+	require.True(t, found)
+	version, err := model.GetTaskPluginVersion("kling", kling.Meta.Version)
 	require.NoError(t, err)
 	require.NoError(t, database.Create(&model.Task{
 		TaskID:    "task_native_router",
@@ -750,8 +752,6 @@ func TestProductionPluginNativeQueryTraversesInnerRouter(t *testing.T) {
 		},
 	}).Error)
 
-	kling, found := jsplugin.DefaultRegistry.Get("kling")
-	require.True(t, found)
 	authenticatedProductionHandlers := func(
 		generation *jsplugin.RoutingGeneration,
 		binding jsplugin.RouteBinding,

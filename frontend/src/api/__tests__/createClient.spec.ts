@@ -35,11 +35,13 @@ describe('API client request scope', () => {
         success: false,
         code: 'INVALID_OPTION',
         message: 'Invalid option',
+        data: { fields: ['example'] },
       }),
     } as unknown as ApiTransport)
     await expect(client.put('/api/option/bulk')).rejects.toMatchObject({
       business: true,
       code: 'INVALID_OPTION',
+      data: { fields: ['example'] },
     })
   })
   it('forwards PATCH bodies through the transport', async () => {

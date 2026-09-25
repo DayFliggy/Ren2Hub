@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
@@ -58,7 +59,9 @@ func seedBoundVideoTask(t *testing.T, db *gorm.DB, channelType int, endpoint str
 	task.PrivateData.UpstreamTaskID, task.PrivateData.TokenId = "provider-job", 1
 	task.PrivateData.BillingSource = service.BillingSourceWallet
 	task.PrivateData.SubmissionRequestID = "video-submit"
-	version, err := model.GetTaskPluginVersion("sora", "1.1.0")
+	sora, found := jsplugin.DefaultRegistry.Get("sora")
+	require.True(t, found)
+	version, err := model.GetTaskPluginVersion("sora", sora.Meta.Version)
 	require.NoError(t, err)
 	ref := model.TaskPluginRef{Key: version.Key, Version: version.Version, SourceHash: version.SourceHash}
 	task.Platform = "sora"
