@@ -10,12 +10,17 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
 )
 
 // BillingAttributesFromBody projects only registered scalar attributes. Request
 // bodies and headers never become expression inputs or persisted evidence.
 func BillingAttributesFromBody(body []byte) (map[string]interface{}, error) {
+	return billingAttributesFromBody(body, "")
+}
+
+func billingAttributesFromBody(body []byte, format types.RelayFormat) (map[string]interface{}, error) {
 	attrs := map[string]interface{}{}
 	if len(body) == 0 {
 		return attrs, nil
@@ -39,6 +44,30 @@ func BillingAttributesFromBody(body []byte) (map[string]interface{}, error) {
 		}
 	}
 	projectReasoningBillingAttributes(fields, attrs)
+	if format == types.RelayFormatClaude {
+		var request dto.ClaudeRequest
+		if err := common.Unmarshal(body, &request); err != nil {
+			return nil, fmt.Errorf("invalid Claude billing request")
+		}
+		effort, present, err := request.ResolveEffectiveEffort()
+		if err != nil {
+			return nil, err
+		}
+		delete(attrs, "effort")
+		if present {
+			attrs["effort"] = strings.TrimSpace(effort)
+		}
+	}
+	if effort, ok := attrs["effort"].(string); ok && effort != "" {
+		effort = strings.ToLower(effort)
+		attrs["effort"] = effort
+		if _, exists := attrs["thinking"]; !exists {
+			attrs["thinking"] = "on"
+			if effort == "none" {
+				attrs["thinking"] = "off"
+			}
+		}
+	}
 	if err := billingexpr.ValidateAttributes(attrs); err != nil {
 		return nil, err
 	}
@@ -107,15 +136,6 @@ func projectReasoningBillingAttributes(fields, attrs map[string]interface{}) {
 			}
 		}
 	}
-	if effort, ok := attrs["effort"].(string); ok && effort != "" {
-		attrs["effort"] = strings.ToLower(effort)
-		if _, exists := attrs["thinking"]; !exists {
-			attrs["thinking"] = "on"
-			if effort == "none" {
-				attrs["thinking"] = "off"
-			}
-		}
-	}
 }
 
 func ResolveIncomingBillingExprRequestInput(c *gin.Context, info *relaycommon.RelayInfo) (billingexpr.RequestInput, error) {
@@ -137,7 +157,11 @@ func ResolveIncomingBillingExprRequestInput(c *gin.Context, info *relaycommon.Re
 	if err != nil {
 		return input, err
 	}
-	input.Attributes, err = BillingAttributesFromBody(body)
+	var format types.RelayFormat
+	if info != nil {
+		format = info.RelayFormat
+	}
+	input.Attributes, err = billingAttributesFromBody(body, format)
 	return input, err
 }
 
@@ -150,7 +174,8 @@ func BuildBillingExprRequestInputFromRequest(request dto.Request, _ map[string]s
 	if err != nil {
 		return input, err
 	}
-	input.Attributes, err = BillingAttributesFromBody(body)
+	format, _ := relaycommon.GuessRelayFormatFromRequest(request)
+	input.Attributes, err = billingAttributesFromBody(body, format)
 	return input, err
 }
 
@@ -169,10 +194,15 @@ func isJSONContentType(contentType string) bool {
 // FreezeOutboundBillingAttributes is called after the final wire body has been
 // built and validated, before the quote is estimated and funds reserved.
 func FreezeOutboundBillingAttributes(info *relaycommon.RelayInfo, body []byte) error {
-	attrs, err := BillingAttributesFromBody(body)
+	format := info.GetFinalRequestRelayFormat()
+	attrs, err := billingAttributesFromBody(body, format)
 	if err != nil {
 		return err
 	}
 	info.BillingRequestInput = &billingexpr.RequestInput{Attributes: attrs, FrozenAt: time.Now().UTC()}
+	if format == types.RelayFormatClaude || info.RelayFormat == types.RelayFormatClaude {
+		effort, _ := attrs["effort"].(string)
+		info.SetReasoningEffort(effort)
+	}
 	return nil
 }

@@ -233,6 +233,13 @@ func (r *RequestRequirements) inspectProjectionSemantics(payload map[string]any)
 			}
 		}
 	case types.RelayFormatClaude:
+		messages, _ := payload["messages"].([]any)
+		for index, item := range messages {
+			message, _ := item.(map[string]any)
+			if _, exists := message["output_config"]; exists {
+				r.projectionLoss("claude_message_output_config_not_portable", fmt.Sprintf("messages[%d].output_config", index), "conversion cannot preserve Claude per-message output configuration", "")
+			}
+		}
 		if valuePresent(payload["output_format"]) {
 			r.Features = appendUnique(r.Features, "structured_output")
 			r.projectionLoss("structured_output_not_portable", "output_format", "conversion does not preserve Claude output constraints", "")

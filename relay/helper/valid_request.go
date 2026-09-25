@@ -326,6 +326,9 @@ func GetAndValidateClaudeRequest(c *gin.Context) (textRequest *dto.ClaudeRequest
 	if exceedsMaxTokensLimit(textRequest.MaxTokens, textRequest.MaxTokensToSample) {
 		return nil, errors.New("max_tokens is invalid")
 	}
+	if _, _, err := textRequest.ResolveEffectiveEffort(); err != nil {
+		return nil, err
+	}
 
 	//if textRequest.Stream {
 	//	relayInfo.IsStream = true

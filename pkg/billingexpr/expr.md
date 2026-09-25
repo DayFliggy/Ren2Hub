@@ -39,6 +39,8 @@ Vidu 工厂插件仅在完成时提供 credits，提交阶段没有可信的估�
 
 attr(name) 只接受登记名称的字面量：service_tier、quality、resolution、quantity、duration、tool_category、effort、thinking、thinking_budget_tokens、temperature、top_p。适配器从完成转换和参数覆盖后的最终发送参数提取这些属性；缺失参数不补默认值，明确零值保留。thinking 为 on/off/adaptive，Gemini 自动预算 -1 记录为 adaptive 而不记录负用量。未知名称、动态名称、复合对象均拒绝。param() 和 header() 已删除，任意正文、原始请求头和密钥不会进入报价和恢复证据。
 
+Claude 的 effort 取最终请求当前回合的有效值：顶层作为初始设置，消息级 system 设置从其后第一个 user 开始生效并持续；尾部未遇到 user 的配置不覆盖当前值。该只读解析由 RelayKit 统一提供，计价与最终日志共用结果；配置缺省不猜模型默认值，非法结构在预留和发送前拒绝。跨协议采用实际目标参数，不用已丢失的源消息配置计价。参数覆盖和重试仅影响新尝试，历史 Quote 的属性、哈希及恢复结算不追溯更改。
+
 hour/minute/weekday/month/day 接受有效 IANA 时区的字面量，使用 Quote.FrozenAt，空值及无效时区报错；未冻结时间的求值也报错。不得回退到服务器当前时间或 UTC。
 
 示例：

@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/reasoning"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
@@ -196,7 +198,9 @@ func ApplyParamOverrideWithRelayInfo(jsonData []byte, info *RelayInfo) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	syncReasoningEffortAfterParamOverride(info, jsonData, result)
+	if err := syncReasoningEffortAfterParamOverride(info, jsonData, result); err != nil {
+		return nil, reasoning.AsClientError(err)
+	}
 	syncRuntimeHeaderOverrideFromContext(info, overrideCtx)
 	if info != nil {
 		if recorder != nil {
@@ -208,19 +212,46 @@ func ApplyParamOverrideWithRelayInfo(jsonData []byte, info *RelayInfo) ([]byte, 
 	return result, nil
 }
 
-func syncReasoningEffortAfterParamOverride(info *RelayInfo, before, after []byte) {
+func syncReasoningEffortAfterParamOverride(info *RelayInfo, before, after []byte) error {
 	if info == nil {
-		return
+		return nil
+	}
+	if info.GetFinalRequestRelayFormat() == types.RelayFormatClaude {
+		var request dto.ClaudeRequest
+		if err := common.Unmarshal(after, &request); err != nil {
+			return fmt.Errorf("invalid Claude request after parameter override")
+		}
+		effort, present, err := request.ResolveEffectiveEffort()
+		if err != nil {
+			return err
+		}
+		if present {
+			info.SetReasoningEffort(strings.ToLower(strings.TrimSpace(effort)))
+			return nil
+		}
+		var original dto.ClaudeRequest
+		if err := common.Unmarshal(before, &original); err != nil {
+			return fmt.Errorf("invalid Claude request before parameter override")
+		}
+		_, existedBefore, err := original.ResolveEffectiveEffort()
+		if err != nil {
+			return err
+		}
+		if existedBefore {
+			info.SetReasoningEffort("")
+		}
+		return nil
 	}
 	_, existedBefore := extractReasoningEffortFromJSON(info.GetFinalRequestRelayFormat(), before)
 	effort, existsAfter := extractReasoningEffortFromJSON(info.GetFinalRequestRelayFormat(), after)
 	if existsAfter {
 		info.SetReasoningEffort(effort)
-		return
+		return nil
 	}
 	if existedBefore {
 		info.SetReasoningEffort("")
 	}
+	return nil
 }
 
 func extractReasoningEffortFromJSON(format types.RelayFormat, data []byte) (string, bool) {
@@ -230,8 +261,6 @@ func extractReasoningEffortFromJSON(format types.RelayFormat, data []byte) (stri
 		paths = []string{"reasoning_effort", "reasoning.effort"}
 	case types.RelayFormatOpenAIResponses:
 		paths = []string{"reasoning.effort"}
-	case types.RelayFormatClaude:
-		paths = []string{"output_config.effort"}
 	case types.RelayFormatGemini:
 		paths = []string{
 			"generationConfig.thinkingConfig.thinkingLevel",

@@ -38,6 +38,7 @@ RelayKit 是从 [new-api](https://github.com/QuantumNous/new-api) 中拆分出�
 | 工具媒体附加语义 | 重复／缺失 ID、无法表达的工具失败状态、非默认图片 detail 和未知内容块明确拒绝；不下载或上传媒体 |
 | 引用 | 保留可表达的 URL、标题、范围和顺序；Claude 加密引用／搜索结果需原生路径。普通 URL 注释不能凭生成答案补造来源摘录或加密引用 |
 | 托管工具 | 保留可表达的搜索和 MCP 结构；Chat 内部执行轨迹省略会产生诊断，strict 拒绝；不能把托管工具伪造成客户端函数 |
+| Claude 消息级配置 | 原生保留 `messages[].output_config`；跨协议 safe/strict 拒绝，allow 返回 `claude_message_output_config_not_portable`，不近似映射成全局 effort |
 | 多候选 | Chat／Gemini 逐候选判断终态；不能把多份答案合并为 Responses／Claude 单份答案 |
 | 暂停与未知终态 | 原生保留；跨协议不能表达时失败，不伪造完成、不自动续跑 |
 | 流式状态 | 必须观察到生成终态才能正常结束；重复终态不重复输出，冲突终态报错 |
@@ -50,6 +51,8 @@ Responses 流式和缓冲共用输出项累计器，部分最终快照按身份�
 2026-09-14 兼容性修正：`AnalyzeRequest` 和 `ConversionPlan` 区分旧 OpenAI completion、moderation、edit 操作。这些操作没有跨协议转换器，即使使用 `allow` 也会拒绝转换，不能因复用 `GeneralOpenAIRequest` 而视为 Chat。Responses 历史中的 `function_call.namespace` 与工具声明采用相同的身份语义：原生保留；跨协议在默认 `safe` 和 `strict` 下拒绝，`allow` 接受已登记降级并返回结构化损失诊断，不提供可逆 namespace 映射。
 
 ## 安装
+
+`ClaudeRequest.ResolveEffectiveEffort() (string, bool, error)` 只读计算当前 user 回合生效的 effort：消息级设置等待其后的 user 激活，尾部未激活设置不覆盖当前值，缺省不推断模型默认值；返回值保留原文，调用方负责其属性规范化。`GetEfforts()` 继续只读取顶层配置。完整边界见[协议合同](../docs/upstream/RC40_PROTOCOL_CONTRACT.md)。
 
 RelayKit 要求 Go 1.25.1 或更高版本。
 

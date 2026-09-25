@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 
@@ -247,6 +248,24 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 	plan, err := PlanConversion(requirements, target, convmeta.OptionsOf(info).EffectiveConversionPolicy())
 	if err != nil {
 		return &RequestResult{From: from, To: target, Diagnostics: plan.Diagnostics}, err
+	}
+	if plan.Native {
+		// A round trip still loses source semantics at its first protocol boundary.
+		for _, spec := range specs {
+			if spec.To == from {
+				continue
+			}
+			outbound, outboundErr := PlanConversion(requirements, spec.To, plan.Policy)
+			for _, diagnostic := range outbound.Diagnostics {
+				if !slices.Contains(plan.Diagnostics, diagnostic) {
+					plan.Diagnostics = append(plan.Diagnostics, diagnostic)
+				}
+			}
+			if outboundErr != nil {
+				return &RequestResult{From: from, To: target, Diagnostics: plan.Diagnostics}, outboundErr
+			}
+			break
+		}
 	}
 	c, diagnosticCollector := convdiag.WithCollector(c)
 	current, tools, err := toolconv.ExtractRequest(from, request)
