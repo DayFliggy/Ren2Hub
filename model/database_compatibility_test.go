@@ -162,6 +162,31 @@ func TestPrefillGroupCompatibilityAcrossDatabases(t *testing.T) {
 	}
 }
 
+func TestMySQLPrefillGroupRejectsUnexpectedGeneratedDefinition(t *testing.T) {
+	dsn := os.Getenv("TEST_MYSQL_DSN")
+	if dsn == "" {
+		t.Skip("TEST_MYSQL_DSN is not configured; generated definition rejection remains unverified")
+	}
+	db, err := gatewayStartupDatabase(t, common.DatabaseTypeMySQL, dsn)()
+	require.NoError(t, err)
+	connection, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, connection.Close()) })
+	require.NoError(t, db.AutoMigrate(&PrefillGroup{}))
+	require.NoError(t, db.Exec("CREATE UNIQUE INDEX imported_prefill_name ON prefill_groups (name)").Error)
+	// A reversed predicate would enforce uniqueness on deleted names instead.
+	require.NoError(t, db.Exec("ALTER TABLE prefill_groups ADD COLUMN active_name VARCHAR(64) GENERATED ALWAYS AS (IF(deleted_at IS NULL, NULL, name)) VIRTUAL").Error)
+	recorder := &migrationSQLRecorder{}
+	require.ErrorContains(t, migratePrefillGroups(db.Session(&gorm.Session{Logger: recorder})), "unexpected generated definition")
+	assert.Empty(t, recorder.schemaMutations(), "reject the incompatible definition without changing the imported schema")
+	assert.True(t, db.Migrator().HasIndex(&PrefillGroup{}, "imported_prefill_name"))
+	assert.False(t, db.Migrator().HasIndex(&PrefillGroup{}, "uk_prefill_active_name"))
+	first := PrefillGroup{Name: "still-protected", Type: "model"}
+	require.NoError(t, db.Create(&first).Error)
+	duplicate := PrefillGroup{Name: first.Name, Type: "model"}
+	require.Error(t, db.Create(&duplicate).Error, "failed migration must retain the original unique constraint")
+}
+
 func TestPoolerErrorHintDoesNotExposeQueryData(t *testing.T) {
 	for _, code := range []string{"08P01", "42P05"} {
 		err := sanitizeDBError(&pgconn.PgError{Code: code, Message: "private payload"})

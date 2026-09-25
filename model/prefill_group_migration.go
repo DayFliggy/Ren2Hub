@@ -82,7 +82,9 @@ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'active_nam
 		}
 	} else {
 		expression := strings.NewReplacer("`", "", " ", "", "(", "", ")", "", "\n", "", "\t", "").Replace(strings.ToLower(columns[0].Expression))
-		if columns[0].DataType != "varchar" || columns[0].Length != 64 || expression != "ifdeleted_atisnull,name,null" {
+		// MySQL 5.7 serializes IS NULL as isnull(column) in metadata.
+		validExpression := expression == "ifdeleted_atisnull,name,null" || expression == "ifisnulldeleted_at,name,null"
+		if columns[0].DataType != "varchar" || columns[0].Length != 64 || !validExpression {
 			return fmt.Errorf("prefill group active_name has an unexpected generated definition")
 		}
 	}
