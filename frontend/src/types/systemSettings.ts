@@ -131,6 +131,7 @@ export interface ModelSettings {
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
   'monitor_setting.channel_test_mode': string
+  'monitor_setting.channel_test_concurrency': number
   'gemini.safety_settings': string
   'gemini.version_settings': string
   'gemini.supported_imagine_models': string
@@ -331,6 +332,7 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   'monitor_setting.auto_test_channel_enabled': false,
   'monitor_setting.auto_test_channel_minutes': 60,
   'monitor_setting.channel_test_mode': 'scheduled_all',
+  'monitor_setting.channel_test_concurrency': 1,
   'gemini.safety_settings': '',
   'gemini.version_settings': '{}',
   'gemini.supported_imagine_models': '[]',

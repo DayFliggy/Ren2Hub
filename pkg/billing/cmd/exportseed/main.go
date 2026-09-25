@@ -1,101 +1,160 @@
+// exportseed converts the checked-in fixed upstream snapshot, never live prices.
 package main
 
 import (
+	_ "embed"
+	"encoding/json"
+	"flag"
 	"fmt"
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billing"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
+	_ "github.com/QuantumNous/new-api/plugins"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/shopspring/decimal"
+	"os"
 	"slices"
 	"sort"
 	"strings"
 )
 
+const upstreamSHA = "d04c118c8803f49e0c9bab74dcf5b5efeab9464a"
+
+//go:embed upstream-rc40.json
+var upstreamData []byte
+
+type resolvedPrice struct {
+	Completion      decimal.Decimal            `json:"completion"`
+	Cache           decimal.Decimal            `json:"cache"`
+	CacheWrite      decimal.Decimal            `json:"cache_write"`
+	Image           decimal.Decimal            `json:"image"`
+	Audio           decimal.Decimal            `json:"audio"`
+	AudioCompletion decimal.Decimal            `json:"audio_completion"`
+	GeminiAudio     decimal.Decimal            `json:"gemini_audio_usd"`
+	Tools           map[string]decimal.Decimal `json:"tools"`
+}
+type upstreamSnapshot struct {
+	Source      string                                `json:"source"`
+	Defaults    map[string]map[string]decimal.Decimal `json:"defaults"`
+	Expressions map[string]string                     `json:"expressions"`
+	Resolved    map[string]resolvedPrice              `json:"resolved"`
+}
+type priceCatalog struct {
+	Source       string                 `json:"source"`
+	Prices       []billing.PriceVersion `json:"prices"`
+	Unconfigured []string               `json:"unconfigured"`
+	Reasons      map[string]string      `json:"unconfigured_reasons"`
+}
+
 func main() {
-	prices, unconfigured := InitialBillingPriceCatalog()
-	data, err := common.Marshal(map[string]interface{}{"prices": prices, "unconfigured": unconfigured, "source": "checked-in-local-defaults"})
+	output := flag.String("output", "", "output JSON file; stdout when omitted")
+	flag.Parse()
+	catalog, err := initialCatalog()
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(string(data))
+	data, err := json.MarshalIndent(catalog, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	data = append(data, '\n')
+	if *output == "" {
+		_, err = os.Stdout.Write(data)
+	} else {
+		err = os.WriteFile(*output, data, 0644)
+	}
+	if err != nil {
+		panic(err)
+	}
 }
-
-func InitialBillingPriceCatalog() ([]billing.PriceVersion, []string) {
+func initialCatalog() (priceCatalog, error) {
+	var source upstreamSnapshot
+	if err := json.Unmarshal(upstreamData, &source); err != nil {
+		return priceCatalog{}, err
+	}
+	if source.Source != upstreamSHA {
+		return priceCatalog{}, fmt.Errorf("unexpected upstream snapshot")
+	}
+	catalog := priceCatalog{Source: upstreamSHA, Prices: []billing.PriceVersion{}, Unconfigured: []string{}, Reasons: map[string]string{}}
 	versions := map[string]billing.PriceVersion{}
-	var unconfigured []string
-	for name, ratio := range ratio_setting.GetDefaultModelRatioMap() {
+	for name, ratio := range source.Defaults["ModelRatio"] {
 		if strings.Contains(name, "*") {
-			unconfigured = append(unconfigured, name)
+			catalog.Reasons[name] = "通配符不是可发布的精确模型价格"
 			continue
 		}
-		input := decimal.NewFromFloat(ratio).Mul(decimal.NewFromInt(2))
+		resolved, ok := source.Resolved[name]
+		if !ok {
+			return catalog, fmt.Errorf("missing resolved snapshot for %s", name)
+		}
+		input := ratio.Mul(decimal.NewFromInt(2))
 		version := billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{}}
 		if input.IsZero() {
 			version.Mode = billing.ModeFree
-			versions[name] = version
-			continue
-		}
-		cache, _ := ratio_setting.GetCacheRatio(name)
-		write, _ := ratio_setting.GetCreateCacheRatio(name)
-		image, _ := ratio_setting.GetImageRatio(name)
-		prices := map[string]decimal.Decimal{
-			"p": input, "c": input.Mul(decimal.NewFromFloat(ratio_setting.GetCompletionRatio(name))),
-			"cr": input.Mul(decimal.NewFromFloat(cache)), "cc": input.Mul(decimal.NewFromFloat(write)), "cc1h": input.Mul(decimal.NewFromFloat(write)).Mul(decimal.RequireFromString("1.6")),
-			"img": input.Mul(decimal.NewFromFloat(image)), "ai": input.Mul(decimal.NewFromFloat(ratio_setting.GetAudioRatio(name))),
-			"ao": input.Mul(decimal.NewFromFloat(ratio_setting.GetAudioRatio(name))).Mul(decimal.NewFromFloat(ratio_setting.GetAudioCompletionRatio(name))),
-		}
-		if audio := operation_setting.GetGeminiInputAudioPricePerMillionTokens(name); audio > 0 {
-			prices["ai"] = decimal.NewFromFloat(audio)
-		}
-		keys := make([]string, 0, len(prices))
-		for key := range prices {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			version.Prices = append(version.Prices, billing.UnitPrice{Quantity: key, Unit: "per_million_tokens", Price: prices[key].String()})
-		}
-		versions[name] = version
-	}
-	for name, price := range ratio_setting.GetDefaultModelPriceMap() {
-		if strings.Contains(name, "*") {
-			unconfigured = append(unconfigured, name)
-			continue
-		}
-		// These defaults depend on adapter-specific duration/quality rules;
-		// a flat USD/call conversion would silently change their prices.
-		if strings.HasPrefix(name, "sora-") || strings.HasPrefix(name, "veo-") || name == "dall-e-3" || name == "gpt-4o-mini-tts" {
-			delete(versions, name)
-			unconfigured = append(unconfigured, name)
-			continue
-		}
-		version := billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: decimal.NewFromFloat(price).String()}}}
-		if name == "imagen-3.0-generate-002" || name == "black-forest-labs/flux-1.1-pro" {
-			version.Prices[0].Quantity = "images"
-			version.Prices[0].Unit = "per_image"
-		}
-		if price == 0 {
-			version.Mode = billing.ModeFree
-			version.Prices = nil
-		}
-		versions[name] = version
-	}
-	keys := make([]string, 0, len(versions))
-	for key := range versions {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	result := make([]billing.PriceVersion, 0, len(keys))
-	for _, key := range keys {
-		version := versions[key]
-		if version.Mode != billing.ModeFree {
-			for _, tool := range []string{"web_search", "web_search_preview", "file_search", "google_search", "image_generation"} {
-				version.Prices = append(version.Prices, billing.UnitPrice{Quantity: "tool:" + tool, Unit: "per_thousand_calls", Price: decimal.NewFromFloat(operation_setting.GetToolPriceForModel(tool, key)).String()})
+		} else {
+			prices := map[string]decimal.Decimal{
+				"p": input, "c": input.Mul(resolved.Completion), "cr": input.Mul(resolved.Cache),
+				"cc": input.Mul(resolved.CacheWrite), "cc1h": input.Mul(resolved.CacheWrite).Mul(decimal.RequireFromString("1.6")),
+				"img": input.Mul(resolved.Image), "ai": input.Mul(resolved.Audio), "ao": input.Mul(resolved.Audio).Mul(resolved.AudioCompletion),
+			}
+			if resolved.GeminiAudio.IsPositive() {
+				prices["ai"] = resolved.GeminiAudio
+			}
+			for quantity, price := range prices {
+				version.Prices = append(version.Prices, billing.UnitPrice{Quantity: quantity, Unit: "per_million_tokens", Price: price.String()})
 			}
 		}
-		result = append(result, version)
+		versions[name] = version
 	}
-	sort.Strings(unconfigured)
-	return result, slices.Compact(unconfigured)
+	for name, price := range source.Defaults["ModelPrice"] {
+		if strings.Contains(name, "*") || strings.HasPrefix(name, "sora-") || strings.HasPrefix(name, "veo-") || name == "dall-e-3" || name == "gpt-4o-mini-tts" || strings.HasPrefix(name, "suno_") {
+			delete(versions, name)
+			catalog.Reasons[name] = "需要供应商时长、质量或插件完成用量合同，不能转换为固定每次费用"
+			continue
+		}
+		version := billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: price.String()}}}
+		if name == "imagen-3.0-generate-002" || name == "black-forest-labs/flux-1.1-pro" {
+			version.Prices[0].Quantity, version.Prices[0].Unit = "images", "per_image"
+		}
+		if price.IsZero() {
+			version.Mode, version.Prices = billing.ModeFree, []billing.UnitPrice{}
+		}
+		versions[name] = version
+	}
+	for name, expression := range source.Expressions {
+		versions[name] = billing.PriceVersion{Model: name, Mode: billing.ModeExpression, Expression: "v1:" + expression, Prices: []billing.UnitPrice{}}
+	}
+	// The fixed factory snapshot declares capabilities and usage, not prices.
+	// Never let a legacy per-call seed accidentally price a plugin task.
+	for _, meta := range jsplugin.DefaultRegistry.Snapshot().Factory {
+		for _, name := range meta.Models {
+			delete(versions, name)
+			catalog.Reasons[name] = "插件 " + meta.Key + " 的固定上游快照未提供可审阅的正式价格表达式"
+		}
+	}
+	for name, version := range versions {
+		if err := reasoning.ValidateBillingModelName(name); err != nil {
+			catalog.Reasons[name] = "该名称不是本地可命中的规范价格键"
+			continue
+		}
+		if version.Mode != billing.ModeFree {
+			resolved, ok := source.Resolved[name]
+			if !ok {
+				return catalog, fmt.Errorf("missing tool snapshot for %s", name)
+			}
+			for tool, price := range resolved.Tools {
+				version.Prices = append(version.Prices, billing.UnitPrice{Quantity: "tool:" + tool, Unit: "per_thousand_calls", Price: price.String()})
+			}
+		}
+		sort.Slice(version.Prices, func(i, j int) bool { return version.Prices[i].Quantity < version.Prices[j].Quantity })
+		prepared, err := billing.PreparePriceVersion(version)
+		if err != nil {
+			return catalog, fmt.Errorf("%s: %w", name, err)
+		}
+		catalog.Prices = append(catalog.Prices, prepared)
+	}
+	sort.Slice(catalog.Prices, func(i, j int) bool { return catalog.Prices[i].Model < catalog.Prices[j].Model })
+	for name := range catalog.Reasons {
+		catalog.Unconfigured = append(catalog.Unconfigured, name)
+	}
+	slices.Sort(catalog.Unconfigured)
+	return catalog, nil
 }

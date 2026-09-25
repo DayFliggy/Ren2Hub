@@ -58,6 +58,36 @@ func TestTaskTerminalRecoveryResumesAfterLogFailure(t *testing.T) {
 	assert.Zero(t, summary.Scanned)
 }
 
+func TestTaskTerminalSurvivesAccountingPreparationFailure(t *testing.T) {
+	truncate(t)
+	const id = 852
+	seedUser(t, id, 100)
+	seedToken(t, id, id, "task-terminal-preparation", 100)
+	seedChannel(t, id)
+	task := makeTask(id, id, 30, id, BillingSourceWallet)
+	task.Properties.OriginModelName = "terminal-preparation"
+	acceptTestTask(t, task)
+	require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register("terminal_username_failure", func(tx *gorm.DB) {
+		if tx.Statement.Table == "users" {
+			tx.AddError(assert.AnError)
+		}
+	}))
+	err := completeTestTask(t, context.Background(), task, model.TaskStatusSuccess, 15, "actual usage")
+	require.ErrorIs(t, err, assert.AnError)
+	require.NoError(t, model.DB.Callback().Query().Remove("terminal_username_failure"))
+	var persisted model.Task
+	require.NoError(t, model.DB.First(&persisted, task.ID).Error)
+	assert.EqualValues(t, model.TaskStatusSuccess, persisted.Status)
+	assert.Equal(t, 70, getUserQuota(t, id), "keep reservation when accounting preparation failed")
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
+	assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
+	var event model.TaskResultEvent
+	require.NoError(t, model.DB.First(&event, task.ID).Error)
+	assert.EqualValues(t, model.TaskStatusSuccess, event.Status)
+	assert.Equal(t, model.BillingRecoveryStateCompleted, event.MetricsState)
+}
+
 type ambiguousTaskPollingAdaptor struct {
 	taskPollingFetchAdaptor
 	status int

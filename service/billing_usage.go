@@ -11,6 +11,8 @@ import (
 // NormalizedBillingUsage is the single protocol boundary used by unit prices
 // and expressions. Counts are not inferred from a provider's monetary cost.
 func NormalizedBillingUsage(usage *dto.Usage, semantic string) billing.Usage {
+	estimated := usage != nil && strings.Contains(usage.UsageSource, "estimated")
+	unconfirmed := usage == nil || usage.UsageSource == "missing" || usage.UsageSource == "partial" || usage.UsageSource == "invalid"
 	usage = effectiveBillingUsage(usage)
 	if usage == nil {
 		return billing.Usage{Estimated: true, Source: "missing", Quantities: map[string]string{}}
@@ -42,15 +44,21 @@ func NormalizedBillingUsage(usage *dto.Usage, semantic string) billing.Usage {
 	if !includesCache {
 		context += int64(usage.PromptTokensDetails.CachedTokens) + int64(write) + int64(write1h)
 	}
-	estimated := usage.UsageSource == "estimated" || usage.UsageSource == "provider_and_estimated"
+	estimated = estimated || strings.Contains(usage.UsageSource, "estimated")
 	if usage.BillingUsage != nil {
 		estimated = estimated || usage.BillingUsage.Estimated
 	}
+	var imageCacheRead *int64
+	if details := usage.PromptTokensDetails.CachedTokensDetails; details != nil && details.ImageTokens != nil {
+		value := int64(*details.ImageTokens)
+		imageCacheRead = &value
+		invalid = invalid || value < 0 || value > math.MaxInt32
+	}
 	return billing.Usage{InputTokens: input, OutputTokens: output, ContextTokens: context,
-		CacheReadTokens: int64(usage.PromptTokensDetails.CachedTokens), CacheWriteTokens: int64(write), CacheWrite1hTokens: int64(write1h),
+		CacheReadTokens: int64(usage.PromptTokensDetails.CachedTokens), ImageCacheReadTokens: imageCacheRead, CacheWriteTokens: int64(write), CacheWrite1hTokens: int64(write1h),
 		ImageInputTokens: int64(usage.PromptTokensDetails.ImageTokens), ImageOutputTokens: int64(usage.CompletionTokenDetails.ImageTokens),
 		AudioInputTokens: int64(usage.PromptTokensDetails.AudioTokens), AudioOutputTokens: int64(usage.CompletionTokenDetails.AudioTokens),
-		InputIncludesCache: includesCache, Source: usage.UsageSource, Estimated: estimated, Complete: true, Invalid: invalid, Quantities: map[string]string{}}
+		InputIncludesCache: includesCache, Source: usage.UsageSource, Estimated: estimated, Complete: !unconfirmed && !estimated, Invalid: invalid, Quantities: map[string]string{}}
 }
 
 const (
@@ -154,6 +162,12 @@ func usageFromBillingUsage(usage *dto.Usage) (*dto.Usage, bool) {
 
 func usageFromOpenAIBillingUsage(billingUsage *dto.BillingUsage) *dto.Usage {
 	usage := *billingUsage.OpenAIUsage
+	if usage.InputTokensDetails != nil {
+		usage.PromptTokensDetails = usage.InputTokensDetails.Clone()
+	}
+	if usage.OutputTokensDetails != nil {
+		usage.CompletionTokenDetails = *usage.OutputTokensDetails
+	}
 	if usage.PromptTokens == 0 && usage.InputTokens > 0 {
 		usage.PromptTokens = usage.InputTokens
 	}

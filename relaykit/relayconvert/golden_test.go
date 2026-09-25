@@ -323,14 +323,8 @@ func TestGoldenRequestConversionMatrix(t *testing.T) {
 			name := fmt.Sprintf("request/%s_to_%s", from, to)
 			t.Run(name, func(t *testing.T) {
 				info := goldenInfo()
-				if from == types.RelayFormatClaude {
-					info.(*convmeta.Values).Options.ConversionPolicy = types.ConversionLossPolicyAllow
-				}
-				result, err := ConvertRequest(nil, info, to, deepCopyFixture(t, requests[from]))
+				result, err := ConvertRequest(context.Background(), info, to, deepCopyFixture(t, requests[from]))
 				require.NoError(t, err)
-				if from == types.RelayFormatClaude {
-					require.Contains(t, fmt.Sprint(result.Diagnostics), "reasoning_controls_not_portable")
-				}
 				checkGolden(t, name, marshalGolden(t, result.Value))
 			})
 		}

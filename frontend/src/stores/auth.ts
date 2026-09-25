@@ -15,6 +15,7 @@ import {
 } from '@/api/authSessionSync'
 import { ApiError } from '@/api/types'
 import type {
+  AuthBundle,
   TwoFactorChallenge,
   UserInfo,
   UserProfilePatch,
@@ -99,12 +100,19 @@ export const useAuthStore = defineStore('auth', () => {
   ): Promise<TwoFactorChallenge | null> {
     const api = await getAuthApi()
     const data = await api.login(username, password, turnstileToken)
-    if ('require_2fa' in data) return data
+    if ('require_verification' in data) return data
     setAuthBundle(data)
     persist(data.user)
     checked.value = true
     publishCurrentSession('authenticated', data.session.sid)
     return null
+  }
+
+  function acceptLogin(bundle: AuthBundle): void {
+    setAuthBundle(bundle)
+    persist(bundle.user)
+    checked.value = true
+    publishCurrentSession('authenticated', bundle.session.sid)
   }
 
   async function verifyTwoFactor(
@@ -161,17 +169,18 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function changePassword(
     originalPassword: string,
-    password: string
+    password: string,
+    proof: string
   ): Promise<void> {
     const api = await getAuthApi()
-    const rotation = await api.changePassword(originalPassword, password)
+    const rotation = await api.changePassword(originalPassword, password, proof)
     applyAuthRotation(rotation)
     publishCurrentSession('authenticated', rotation.session.sid)
   }
 
-  async function deleteAccount(): Promise<void> {
+  async function deleteAccount(proof: string): Promise<void> {
     const api = await getAuthApi()
-    await api.deleteSelf()
+    await api.deleteSelf(proof)
     invalidateLocalSession()
   }
 
@@ -206,6 +215,7 @@ export const useAuthStore = defineStore('auth', () => {
     adminPermissions,
     hasPermission,
     login,
+    acceptLogin,
     verifyTwoFactor,
     logout,
     fetchSelf,

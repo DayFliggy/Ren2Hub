@@ -12,7 +12,7 @@ func prepareBillingDispatch(ctx *gin.Context, info *relaycommon.RelayInfo) error
 		return err
 	}
 	info.BillingAttemptID = common.NewRequestId()
-	if err := model.PrepareBillingAttempt(billingRecoveryContext(ctx), info.RequestId, info.BillingAttemptID, info.ChannelId, info.PriceData.Quote); err != nil {
+	if err := model.PrepareBillingAttemptWithPlugin(billingRecoveryContext(ctx), info.RequestId, info.BillingAttemptID, info.ChannelId, info.PriceData.Quote, info.TaskPluginRef); err != nil {
 		return err
 	}
 	info.Billing.(*BillingSession).startRecoveryHeartbeat(billingRecoveryContext(ctx))

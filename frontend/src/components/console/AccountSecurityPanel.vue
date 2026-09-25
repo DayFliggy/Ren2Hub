@@ -33,11 +33,20 @@ import type { SettingsBinding, SettingsBindingId } from '@/types/settings'
 import type { UserInfo } from '@/types/auth'
 
 import SettingsSectionHeading from './SettingsSectionHeading.vue'
+import SecurityProofDialog from '@/components/auth/SecurityProofDialog.vue'
+import { completeOAuth } from '@/api/oauth'
+import {
+  securityApi,
+  proofOptions,
+  type AccessTokenStatus,
+} from '@/api/security'
 import { authApi } from '@/api/auth'
 import { api } from '@/api/console'
 import { ApiError } from '@/api/types'
 import { applyAuthRotation, parseAuthRotation } from '@/api/authSession'
 import { useAuthStore } from '@/stores/auth'
+
+const oauthAbort = new AbortController()
 
 const props = defineProps<{ user: UserInfo | null }>()
 
@@ -50,6 +59,15 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const toast = useToast()
 const auth = useAuthStore()
+const proofDialog = ref<InstanceType<typeof SecurityProofDialog> | null>(null)
+const tokenStatus = ref<AccessTokenStatus | null>(null)
+const enrollmentFlow = ref('')
+const emailFlow = ref('')
+const emailOldRequired = ref(false)
+const emailOldCode = ref('')
+const emailResendAt = ref(0)
+const currentTime = ref(Date.now())
+let emailTimer: ReturnType<typeof setInterval> | null = null
 const passkeyEnabled = ref(false)
 const passkeyLastUsedAt = ref<string | null>(null)
 const twoFAEnabled = ref(false)
@@ -59,7 +77,6 @@ const setupBackupCodes = ref<string[]>([])
 
 const passkeyRegisterOpen = ref(false)
 const passkeyRemoveOpen = ref(false)
-const passkeyProofCode = ref('')
 const twoFASetupOpen = ref(false)
 const twoFACode = ref('')
 const twoFAAction = ref<'regenerate' | 'disable' | null>(null)
@@ -72,9 +89,6 @@ const bindingCode = ref('')
 const emailSending = ref(false)
 const customBindings = ref<SettingsBinding[]>([])
 const publicStatus = ref<PublicStatus | null>(null)
-const oauthPopup = ref<Window | null>(null)
-const oauthProvider = ref('')
-const oauthState = ref('')
 const accessToken = ref('')
 const accessTokenOpen = ref(false)
 const accessTokenConfirmOpen = ref(false)
@@ -142,7 +156,7 @@ const builtinBindings = computed<SettingsBinding[]>(() =>
       linuxdo: status.linuxdo_oauth,
       oidc: status.oidc_enabled,
       wechat: status.wechat_login,
-      telegram: status.telegram_oauth,
+      telegram: status.telegram_oauth && status.telegram_oauth_configured,
     }
     return Boolean(enabled[binding.id] || binding.bound)
   })
@@ -265,7 +279,7 @@ function credentialJSON(
 
 async function loadSecurity(): Promise<void> {
   try {
-    const [passkey, twoFA, status, oauth] = await Promise.all([
+    const [passkey, twoFA, status, oauth, pat] = await Promise.all([
       api.get<{ enabled: boolean; last_used_at?: string }>('/api/user/passkey'),
       api.get<{ enabled: boolean; backup_codes_remaining?: number }>(
         '/api/user/2fa/status'
@@ -280,13 +294,15 @@ async function loadSecurity(): Promise<void> {
           provider_user_id: string
         }>
       >('/api/user/oauth/bindings'),
+      securityApi.tokenStatus(),
     ])
+    tokenStatus.value = pat
     passkeyEnabled.value = passkey.enabled
     passkeyLastUsedAt.value = passkey.last_used_at ?? null
     twoFAEnabled.value = twoFA.enabled
     backupCodesRemaining.value = twoFA.backup_codes_remaining ?? 0
     publicStatus.value = status
-    customBindings.value = oauth.map((binding) => ({
+    const storedBindings = oauth.map((binding) => ({
       id: `custom:${binding.provider_id}` as SettingsBindingId,
       bound: true,
       account: binding.provider_user_id,
@@ -295,89 +311,96 @@ async function loadSecurity(): Promise<void> {
       providerName: binding.provider_name,
       providerIcon: binding.provider_icon,
     }))
+    customBindings.value = [
+      ...storedBindings,
+      ...(status.custom_oauth_providers ?? [])
+        .filter(
+          (provider) =>
+            !storedBindings.some(
+              (binding) => binding.providerId === provider.id
+            )
+        )
+        .map((provider) => ({
+          id: `custom:${provider.id}` as SettingsBindingId,
+          bound: false,
+          account: '',
+          providerId: provider.id,
+          providerSlug: provider.slug,
+          providerName: provider.name,
+          providerIcon: provider.icon,
+        })),
+    ]
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
   }
 }
 
-function openOAuthPopup(provider: string): void {
-  const status = publicStatus.value
-  const config = status?.custom_oauth_providers?.find(
-    (item) => item.slug === provider
-  )
-  const clientId =
-    provider === 'github'
-      ? status?.github_client_id
-      : provider === 'discord'
-        ? status?.discord_client_id
-        : provider === 'linuxdo'
-          ? status?.linuxdo_client_id
-          : provider === 'oidc'
-            ? status?.oidc_client_id
-            : config?.client_id
-  const authorizationEndpoint =
-    provider === 'github'
-      ? 'https://github.com/login/oauth/authorize'
-      : provider === 'discord'
-        ? 'https://discord.com/api/oauth2/authorize'
-        : provider === 'linuxdo'
-          ? 'https://connect.linux.do/oauth2/authorize'
-          : provider === 'oidc'
-            ? status?.oidc_authorization_endpoint
-            : config?.authorization_endpoint
-  if (!clientId || !authorizationEndpoint) {
-    toast.error(t('settings.oauthUnavailable'))
-    return
-  }
-
-  const popup = window.open(
-    '',
-    'ren2hub-oauth-bind',
-    'popup,width=560,height=720'
-  )
+async function openOAuthPopup(provider: string): Promise<void> {
+  const popup = window.open('', 'ren2hub-oauth', 'popup,width=560,height=720')
   if (!popup) {
     toast.error(t('settings.oauthPopupBlocked'))
     return
   }
-  oauthPopup.value = popup
-  oauthProvider.value = provider
-  void api
-    .post<{ flow_token: string }>('/api/oauth/state', {
+  let popupTransferred = false
+  try {
+    const proof = await proofDialog.value!.request({
+      scope: 'account.binding.bind',
+      context: { provider },
+    })
+    const status = await publicApi.status()
+    popupTransferred = true
+    await completeOAuth(
+      status,
       provider,
-      intent: 'bind',
-    })
-    .then((flow) => {
-      oauthState.value = flow.flow_token
-      const url = new URL(authorizationEndpoint)
-      url.searchParams.set('client_id', clientId)
-      url.searchParams.set(
-        'redirect_uri',
-        `${window.location.origin}/oauth/${provider}`
-      )
-      url.searchParams.set('response_type', 'code')
-      url.searchParams.set('state', flow.flow_token)
-      if (provider === 'github') url.searchParams.set('scope', 'user:email')
-      else if (config?.scopes) url.searchParams.set('scope', config.scopes)
-      popup.location.replace(url.toString())
-    })
-    .catch((error) => {
-      popup.close()
-      toast.error(error instanceof ApiError ? error.message : String(error))
-    })
+      'bind',
+      undefined,
+      proof,
+      oauthAbort.signal,
+      popup
+    )
+    await auth.fetchSelf(false)
+    await loadSecurity()
+    toast.success(t('settings.bindingSaved'))
+  } catch (error) {
+    if (!popupTransferred) popup.close()
+    toast.error(error instanceof Error ? error.message : String(error))
+  }
 }
 
 async function sendEmailCode(): Promise<void> {
-  const email = bindingEmail.value.trim()
+  const email = bindingEmail.value.trim().toLowerCase()
   if (!email.includes('@')) {
     toast.error(t('settings.emailBindingInvalid'))
     return
   }
   emailSending.value = true
   try {
-    await api.get('/api/verification', { email })
+    let data: {
+      flow_token: string
+      old_email_required: boolean
+      resend_at: number
+    }
+    if (emailFlow.value) {
+      data = await api.post('/api/oauth/email/bind/resend', {
+        flow_token: emailFlow.value,
+      })
+    } else {
+      const proof = await proofDialog.value!.request({
+        scope: 'account.binding.bind',
+        context: { provider: 'email', email },
+      })
+      data = await api.post(
+        '/api/oauth/email/bind/start',
+        { email },
+        proofOptions(proof)
+      )
+    }
+    emailFlow.value = data.flow_token
+    emailOldRequired.value = data.old_email_required
+    emailResendAt.value = data.resend_at
     toast.success(t('settings.emailCodeSent'))
   } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    toast.error(error instanceof Error ? error.message : String(error))
   } finally {
     emailSending.value = false
   }
@@ -385,11 +408,9 @@ async function sendEmailCode(): Promise<void> {
 
 async function registerPasskey(): Promise<void> {
   try {
-    const proof = await securityProof(
-      'passkey.register',
-      passkeyProofCode.value
-    )
-    if (twoFAEnabled.value && !proof) return
+    const proof = await proofDialog.value!.request({
+      scope: 'passkey.register',
+    })
     const headers = proof ? { 'X-Security-Proof': proof } : undefined
     const begin = await api.post<{
       options: { publicKey: WirePasskeyCreationOptions }
@@ -423,7 +444,6 @@ async function registerPasskey(): Promise<void> {
     )
     applyRotation(finish)
     passkeyRegisterOpen.value = false
-    passkeyProofCode.value = ''
     toast.success(t('settings.passkeyEnabled'))
     await loadSecurity()
   } catch (error) {
@@ -433,14 +453,12 @@ async function registerPasskey(): Promise<void> {
 
 async function removePasskey(): Promise<void> {
   try {
-    const proof = await securityProof('passkey.delete', passkeyProofCode.value)
-    if (twoFAEnabled.value && !proof) return
+    const proof = await proofDialog.value!.request({ scope: 'passkey.delete' })
     const result = await api.delete<unknown>('/api/user/passkey', undefined, {
       headers: proof ? { 'X-Security-Proof': proof } : undefined,
     })
     applyRotation(result)
     passkeyRemoveOpen.value = false
-    passkeyProofCode.value = ''
     toast.success(t('settings.passkeyRemoved'))
     await loadSecurity()
   } catch (error) {
@@ -448,34 +466,15 @@ async function removePasskey(): Promise<void> {
   }
 }
 
-async function securityProof(
-  scope: 'passkey.register' | 'passkey.delete',
-  code: string
-): Promise<string | undefined> {
-  if (!twoFAEnabled.value) return undefined
-  if (!/^\d{6}$/.test(code)) {
-    toast.error(t('settings.securityProofCodeRequired'))
-    return undefined
-  }
-  try {
-    const result = await api.post<{ proof_token: string }>('/api/verify', {
-      method: '2fa',
-      code,
-      scope,
-    })
-    return result.proof_token
-  } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
-    return undefined
-  }
-}
-
 async function openTwoFASetup(): Promise<void> {
   try {
+    const proof = await proofDialog.value!.request({ scope: '2fa.setup' })
     const result = await api.post<{
       qr_code_data: string
       backup_codes: string[]
-    }>('/api/user/2fa/setup')
+      flow_token: string
+    }>('/api/user/2fa/setup', undefined, proofOptions(proof))
+    enrollmentFlow.value = result.flow_token
     setupQRCode.value = result.qr_code_data
     setupBackupCodes.value = result.backup_codes
     twoFACode.value = ''
@@ -489,6 +488,7 @@ async function confirmTwoFASetup(): Promise<void> {
   if (!/^\d{6}$/.test(twoFACode.value)) return
   try {
     const result = await api.post<unknown>('/api/user/2fa/enable', {
+      flow_token: enrollmentFlow.value,
       code: twoFACode.value,
     })
     applyRotation(result)
@@ -503,20 +503,26 @@ async function confirmTwoFASetup(): Promise<void> {
 }
 
 function openTwoFAAction(action: 'regenerate' | 'disable'): void {
-  twoFACode.value = ''
   twoFAAction.value = action
+  void confirmTwoFAAction()
 }
 
 async function confirmTwoFAAction(): Promise<void> {
-  if (!/^\d{6}$/.test(twoFACode.value) || !twoFAAction.value) return
+  if (!twoFAAction.value) return
   const endpoint =
     twoFAAction.value === 'regenerate'
       ? '/api/user/2fa/backup_codes'
       : '/api/user/2fa/disable'
   try {
+    const proof = await proofDialog.value!.request({
+      scope:
+        twoFAAction.value === 'regenerate'
+          ? '2fa.backup_codes.regenerate'
+          : '2fa.disable',
+    })
     const result = await api.post<
       { backup_codes?: string[] } & Record<string, unknown>
-    >(endpoint, { code: twoFACode.value })
+    >(endpoint, undefined, proofOptions(proof))
     applyRotation(result)
     if (twoFAAction.value === 'regenerate') {
       visibleBackupCodes.value = result.backup_codes ?? []
@@ -557,7 +563,11 @@ async function generateAccessToken(): Promise<void> {
   if (generatingAccessToken.value) return
   generatingAccessToken.value = true
   try {
-    accessToken.value = await authApi.generateAccessToken()
+    const proof = await proofDialog.value!.request({
+      scope: 'access_token.generate',
+    })
+    accessToken.value = await authApi.generateAccessToken(proof)
+    tokenStatus.value = await securityApi.tokenStatus()
     accessTokenConfirmOpen.value = false
     const copied = await copyAccessToken(false)
     toast.success(
@@ -570,6 +580,20 @@ async function generateAccessToken(): Promise<void> {
     toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
     generatingAccessToken.value = false
+  }
+}
+
+async function revokeAccessToken(): Promise<void> {
+  try {
+    const proof = await proofDialog.value!.request({
+      scope: 'access_token.revoke',
+    })
+    await securityApi.revokeToken(proof)
+    accessToken.value = ''
+    tokenStatus.value = await securityApi.tokenStatus()
+    toast.success(t('security.tokenRevoked'))
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : String(error))
   }
 }
 
@@ -589,6 +613,10 @@ function openBinding(binding: SettingsBinding): void {
   bindTarget.value = binding.id
   bindingEmail.value = binding.id === 'email' ? (props.user?.email ?? '') : ''
   bindingCode.value = ''
+  emailFlow.value = ''
+  emailOldCode.value = ''
+  emailOldRequired.value = false
+  emailResendAt.value = 0
 }
 
 async function confirmBinding(): Promise<void> {
@@ -603,8 +631,9 @@ async function confirmBinding(): Promise<void> {
     }
     try {
       await api.post('/api/oauth/email/bind', {
-        email: bindingEmail.value.trim(),
-        code: bindingCode.value,
+        flow_token: emailFlow.value,
+        new_code: bindingCode.value,
+        old_code: emailOldCode.value,
       })
       await auth.fetchSelf(false)
       toast.success(t('settings.bindingSaved'))
@@ -613,10 +642,26 @@ async function confirmBinding(): Promise<void> {
       toast.error(error instanceof ApiError ? error.message : String(error))
     }
     return
+  } else if (bindTarget.value === 'wechat') {
+    try {
+      const code = bindingCode.value.trim()
+      const proof = await proofDialog.value!.request({
+        scope: 'account.binding.bind',
+        context: { provider: 'wechat', code },
+      })
+      await api.post('/api/oauth/wechat/bind', { code }, proofOptions(proof))
+      await auth.fetchSelf(false)
+      await loadSecurity()
+      bindTarget.value = null
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
   } else {
-    const provider = bindTarget.value
+    const provider =
+      bindings.value.find((item) => item.id === bindTarget.value)
+        ?.providerSlug ?? bindTarget.value
     bindTarget.value = null
-    openOAuthPopup(provider)
+    void openOAuthPopup(provider)
   }
 }
 
@@ -625,7 +670,15 @@ async function confirmUnbind(): Promise<void> {
   const binding = bindings.value.find((item) => item.id === unbindTarget.value)
   if (!binding?.providerId) return
   try {
-    await api.delete(`/api/user/oauth/bindings/${binding.providerId}`)
+    const proof = await proofDialog.value!.request({
+      scope: 'account.binding.unbind',
+      context: { provider_id: binding.providerId },
+    })
+    await api.delete(
+      `/api/user/oauth/bindings/${binding.providerId}`,
+      undefined,
+      proofOptions(proof)
+    )
     await loadSecurity()
     toast.success(t('settings.bindingRemoved'))
   } catch (error) {
@@ -635,81 +688,16 @@ async function confirmUnbind(): Promise<void> {
   }
 }
 
-function handleOAuthMessage(event: MessageEvent<unknown>): void {
-  if (
-    event.origin !== window.location.origin ||
-    event.source !== oauthPopup.value
-  )
-    return
-  const message = event.data as {
-    type?: string
-    provider?: string
-    state?: string
-    code?: string
-    error?: string
-    error_description?: string
-  } | null
-  if (
-    !message ||
-    message.type !== 'ren2hub:oauth-bind-callback' ||
-    message.provider !== oauthProvider.value ||
-    message.state !== oauthState.value
-  )
-    return
-  const popup = oauthPopup.value
-  oauthPopup.value = null
-  if (!message.code && !message.error) return
-  void api
-    .get(`/api/oauth/${message.provider}`, {
-      state: message.state,
-      code: message.code,
-      error: message.error,
-      error_description: message.error_description,
-    })
-    .then(async () => {
-      await auth.fetchSelf(false)
-      await loadSecurity()
-      toast.success(t('settings.bindingSaved'))
-      popup?.postMessage(
-        {
-          type: 'ren2hub:oauth-bind-result',
-          provider: message.provider,
-          state: message.state,
-          success: true,
-        },
-        window.location.origin
-      )
-    })
-    .catch((error) => {
-      toast.error(error instanceof ApiError ? error.message : String(error))
-      popup?.postMessage(
-        {
-          type: 'ren2hub:oauth-bind-result',
-          provider: message.provider,
-          state: message.state,
-          success: false,
-          message: error instanceof Error ? error.message : String(error),
-        },
-        window.location.origin
-      )
-    })
-}
-
-function closeOAuthPopup(): void {
-  oauthPopup.value?.close()
-  oauthPopup.value = null
-}
-
 onMounted(() => {
-  window.addEventListener('message', handleOAuthMessage)
-  window.addEventListener('beforeunload', closeOAuthPopup)
   void loadSecurity()
+  emailTimer = setInterval(() => {
+    currentTime.value = Date.now()
+  }, 1000)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('message', handleOAuthMessage)
-  window.removeEventListener('beforeunload', closeOAuthPopup)
-  closeOAuthPopup()
+  oauthAbort.abort()
+  if (emailTimer) clearInterval(emailTimer)
   accessToken.value = ''
   accessTokenOpen.value = false
   accessTokenConfirmOpen.value = false
@@ -1011,7 +999,13 @@ onBeforeUnmount(() => {
             "
             @click="openBinding(binding)"
           >
-            {{ binding.bound ? t('settings.unbind') : t('settings.bind') }}
+            {{
+              binding.id === 'email' && binding.bound
+                ? t('common.edit')
+                : binding.bound
+                  ? t('settings.unbind')
+                  : t('settings.bind')
+            }}
           </ConsoleButton>
         </div>
       </div>
@@ -1057,19 +1051,6 @@ onBeforeUnmount(() => {
       <KeyRound :size="20" aria-hidden="true" />
       <p>{{ t('settings.passkeyPrompt') }}</p>
     </div>
-    <FormField
-      v-if="twoFAEnabled"
-      :label="t('settings.twoFACode')"
-      :hint="t('settings.securityProofCodeHint')"
-      class="mt-4"
-    >
-      <TextInput
-        v-model="passkeyProofCode"
-        inputmode="numeric"
-        maxlength="6"
-        placeholder="000000"
-      />
-    </FormField>
     <template #footer>
       <div class="grid grid-cols-2 gap-3">
         <ConsoleButton
@@ -1093,6 +1074,21 @@ onBeforeUnmount(() => {
     :close-disabled="generatingAccessToken"
     @close="closeAccessToken"
   >
+    <p class="mb-3 text-sm text-[var(--text-secondary)]">
+      {{
+        tokenStatus?.exists
+          ? t('security.tokenExists', { ref: tokenStatus.token_ref })
+          : t('security.tokenMissing')
+      }}
+    </p>
+    <ConsoleButton
+      v-if="tokenStatus?.exists"
+      variant="danger"
+      size="sm"
+      class="mb-3"
+      @click="revokeAccessToken"
+      >{{ t('security.revokeToken') }}</ConsoleButton
+    >
     <div v-if="accessToken" class="space-y-3">
       <FormField :label="t('settings.accessTokenValue')">
         <div class="flex items-end gap-2">
@@ -1166,19 +1162,6 @@ onBeforeUnmount(() => {
     @confirm="removePasskey"
     @cancel="passkeyRemoveOpen = false"
   >
-    <FormField
-      v-if="twoFAEnabled"
-      :label="t('settings.twoFACode')"
-      :hint="t('settings.securityProofCodeHint')"
-      class="mt-4 w-full"
-    >
-      <TextInput
-        v-model="passkeyProofCode"
-        inputmode="numeric"
-        maxlength="6"
-        placeholder="000000"
-      />
-    </FormField>
   </ConfirmDialog>
 
   <ConsoleModal
@@ -1225,40 +1208,6 @@ onBeforeUnmount(() => {
   </ConsoleModal>
 
   <ConsoleModal
-    :open="twoFAAction !== null"
-    :title="
-      twoFAAction === 'regenerate'
-        ? t('settings.regenerateBackupCodes')
-        : t('settings.disableTwoFA')
-    "
-    size="sm"
-    @close="twoFAAction = null"
-  >
-    <FormField
-      :label="t('settings.twoFACode')"
-      :hint="t('settings.sixDigitHint')"
-    >
-      <TextInput
-        v-model="twoFACode"
-        inputmode="numeric"
-        maxlength="6"
-        placeholder="000000"
-      />
-    </FormField>
-    <template #footer>
-      <ConsoleButton
-        block
-        size="lg"
-        :variant="twoFAAction === 'disable' ? 'danger' : 'primary'"
-        :disabled="!/^\d{6}$/.test(twoFACode)"
-        @click="confirmTwoFAAction"
-      >
-        {{ t('common.confirm') }}
-      </ConsoleButton>
-    </template>
-  </ConsoleModal>
-
-  <ConsoleModal
     :open="backupCodesOpen"
     :title="t('settings.backupCodes')"
     size="sm"
@@ -1295,6 +1244,7 @@ onBeforeUnmount(() => {
         <TextInput
           v-model="bindingEmail"
           type="email"
+          :disabled="Boolean(emailFlow)"
           placeholder="name@example.com"
         />
       </FormField>
@@ -1311,14 +1261,28 @@ onBeforeUnmount(() => {
         <ConsoleButton
           variant="secondary"
           size="sm"
-          :disabled="emailSending"
+          :disabled="
+            emailSending ||
+            (Boolean(emailFlow) && currentTime < emailResendAt * 1000)
+          "
           @click="sendEmailCode"
         >
           {{ emailSending ? t('common.loading') : t('settings.sendEmailCode') }}
         </ConsoleButton>
       </FormField>
     </div>
-    <div v-else class="settings-context-callout">
+    <FormField v-if="bindTarget === 'wechat'" :label="t('security.code')"
+      ><TextInput v-model="bindingCode" maxlength="128"
+    /></FormField>
+    <FormField
+      v-if="bindTarget === 'email' && emailOldRequired"
+      :label="t('security.oldEmailCode')"
+      ><TextInput
+        v-model="emailOldCode"
+        autocomplete="one-time-code"
+        maxlength="6"
+    /></FormField>
+    <div v-if="bindTarget !== 'email'" class="settings-context-callout">
       <AtSign :size="20" aria-hidden="true" />
       <p>
         {{ t('settings.oauthPrompt', { provider: currentBindLabel }) }}
@@ -1338,6 +1302,7 @@ onBeforeUnmount(() => {
     @confirm="confirmUnbind"
     @cancel="unbindTarget = null"
   />
+  <SecurityProofDialog ref="proofDialog" />
 </template>
 
 <style scoped>

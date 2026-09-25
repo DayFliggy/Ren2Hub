@@ -162,7 +162,7 @@ func (r *RequestRequirements) inspectRetainedRequestFields(request any, payload 
 }
 
 func (r *RequestRequirements) inspectProjectionSemantics(payload map[string]any) error {
-	r.inspectReasoningControls(payload)
+
 	if r.Format == types.RelayFormatOpenAIResponses {
 		items, _ := payload["input"].([]any)
 		for index, item := range items {

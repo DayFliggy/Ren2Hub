@@ -6,6 +6,19 @@ import type { ApiTransport } from '@/api/transport'
 import { ApiError } from '@/api/types'
 
 describe('API client request scope', () => {
+  it('preserves pagination metadata without mixing plain and envelope requests', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValue({ success: true, data: ['task'], total: 42 })
+    const client = createApiClient({ request } as ApiTransport)
+    const [data, envelope] = await Promise.all([
+      client.get('/tasks'),
+      client.getEnvelope('/tasks'),
+    ])
+    expect(data).toEqual(['task'])
+    expect(envelope).toEqual({ success: true, data: ['task'], total: 42 })
+    expect(request).toHaveBeenCalledTimes(2)
+  })
   it.each(['post', 'put', 'patch', 'delete'] as const)(
     'accepts an acknowledged %s mutation without a response body',
     async (method) => {

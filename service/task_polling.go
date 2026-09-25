@@ -38,6 +38,30 @@ type TaskPollingAdaptor interface {
 // 打破 service -> relay -> relay/channel -> service 的循环依赖。
 var GetTaskAdaptorFunc func(platform constant.TaskPlatform) TaskPollingAdaptor
 
+type PinnedTaskPollingAdaptor interface {
+	TaskPollingAdaptor
+	FetchTaskForTask(baseURL, key string, task *model.Task, proxy string) (*http.Response, error)
+	ParseTaskResultForTask(task *model.Task, resp *http.Response, body []byte) (*relaycommon.TaskInfo, error)
+}
+
+type BatchTaskPollingAdaptor interface {
+	TaskPollingAdaptor
+	FetchMode() string
+	FetchBatchTasks(string, string, []*model.Task, string) (*http.Response, error)
+	ParseBatchResult([]*model.Task, *http.Response, []byte) (map[string]*BatchTaskResult, error)
+}
+
+var GetPinnedTaskAdaptorFunc func(*model.Task) (TaskPollingAdaptor, error)
+
+type BatchTaskResult struct {
+	TaskInfo   relaycommon.TaskInfo
+	Action     string
+	SubmitTime int64
+	StartTime  int64
+	FinishTime int64
+	Data       any
+}
+
 // sweepTimedOutTasks 在主轮询之前独立清理超时任务。
 // 每次最多处理 100 条，剩余的下个周期继续处理。
 // 使用 per-task CAS (UpdateWithStatus) 防止覆盖被正常轮询已推进的任务。
@@ -82,6 +106,9 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 	}
 
 	common.SysLog("任务进度轮询开始")
+	if err := model.RecoverTaskResultMetrics(ctx, constant.TaskQueryLimit); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("task result metrics recovery failed: %v", err))
+	}
 	sweepTimedOutTasks(ctx)
 	allTasks := model.GetAllUnFinishSyncTasks(constant.TaskQueryLimit)
 	summary.UnfinishedTasks = len(allTasks)
@@ -414,7 +441,7 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 		return fmt.Errorf("task channel unavailable: %w", err)
 	}
 	adaptor := GetTaskAdaptorFunc(platform)
-	if adaptor == nil {
+	if adaptor == nil && GetPinnedTaskAdaptorFunc == nil {
 		return fmt.Errorf("video adaptor not found")
 	}
 	disablePollingSleep := cacheGetChannel.GetOtherSettings().DisableTaskPollingSleep
@@ -459,6 +486,21 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		logger.LogError(ctx, fmt.Sprintf("Task %s not found in taskM", taskId))
 		return fmt.Errorf("task %s not found", taskId)
 	}
+	if task.PrivateData.PluginRef != nil {
+		if GetPinnedTaskAdaptorFunc == nil {
+			return errors.New("plugin task resolver unavailable")
+		}
+		adaptor, err = GetPinnedTaskAdaptorFunc(task)
+		if err != nil {
+			return err
+		}
+	}
+	if adaptor == nil {
+		return errors.New("task adaptor unavailable")
+	}
+	if aware, ok := adaptor.(interface{ SetTaskContext(context.Context) }); ok {
+		aware.SetTaskContext(ctx)
+	}
 	key, _, err := model.ResolveTaskCredential(ctx, ch, task)
 	if err != nil {
 		return err
@@ -467,10 +509,12 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		ChannelId: ch.Id, ChannelType: ch.Type, ChannelBaseUrl: baseURL,
 		ApiKey: key, ChannelSetting: ch.GetSetting(), UpstreamModelName: task.Properties.UpstreamModelName,
 	}})
-	resp, err := adaptor.FetchTask(baseURL, key, map[string]any{
-		"task_id": task.GetUpstreamTaskID(),
-		"action":  task.Action,
-	}, proxy)
+	var resp *http.Response
+	if pinned, ok := adaptor.(PinnedTaskPollingAdaptor); ok {
+		resp, err = pinned.FetchTaskForTask(baseURL, key, task, proxy)
+	} else {
+		resp, err = adaptor.FetchTask(baseURL, key, map[string]any{"task_id": task.GetUpstreamTaskID(), "action": task.Action}, proxy)
+	}
 	if err != nil {
 		return fmt.Errorf("fetchTask failed for task %s: %w", taskId, err)
 	}
@@ -481,9 +525,12 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("task polling returned HTTP %d", resp.StatusCode)
 	}
-	responseBody, err := io.ReadAll(resp.Body)
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20+1))
 	if err != nil {
 		return fmt.Errorf("readAll failed for task %s: %w", taskId, err)
+	}
+	if len(responseBody) > 8<<20 {
+		return errors.New("task polling response exceeds 8 MiB")
 	}
 
 	logger.LogDebug(ctx, "updateVideoSingleTask response: %s", responseBody)
@@ -493,7 +540,38 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	taskResult := &relaycommon.TaskInfo{}
 	// try parse as New API response format
 	var responseItems taskdto.TaskResponse[model.Task]
-	if err = common.Unmarshal(responseBody, &responseItems); err == nil && responseItems.IsSuccess() {
+	if batch, ok := adaptor.(BatchTaskPollingAdaptor); ok && batch.FetchMode() == "batch" {
+		results, parseErr := batch.ParseBatchResult([]*model.Task{task}, resp, responseBody)
+		if parseErr != nil {
+			return parseErr
+		}
+		result := results[task.GetUpstreamTaskID()]
+		if result == nil {
+			return errors.New("batch polling omitted requested task")
+		}
+		taskResult = &result.TaskInfo
+		if result.SubmitTime > 0 {
+			task.SubmitTime = result.SubmitTime
+		}
+		if result.StartTime > 0 {
+			task.StartTime = result.StartTime
+		}
+		if result.FinishTime > 0 {
+			taskResult.FinishTime = result.FinishTime
+		}
+		if result.Data != nil {
+			if data, encodeErr := common.Marshal(result.Data); encodeErr == nil {
+				responseBody = data
+			} else {
+				return encodeErr
+			}
+		}
+	} else if pinned, ok := adaptor.(PinnedTaskPollingAdaptor); ok {
+		taskResult, err = pinned.ParseTaskResultForTask(task, resp, responseBody)
+		if err != nil {
+			return err
+		}
+	} else if err = common.Unmarshal(responseBody, &responseItems); err == nil && responseItems.IsSuccess() {
 		logger.LogDebug(ctx, "updateVideoSingleTask parsed as new api response format: %+v", responseItems)
 		t := responseItems.Data
 		taskResult.TaskID = t.TaskID
@@ -501,6 +579,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		taskResult.Url = t.GetResultURL()
 		taskResult.Progress = t.Progress
 		taskResult.Reason = t.FailReason
+		taskResult.FinishTime = t.FinishTime
 	} else if taskResult, err = adaptor.ParseTaskResult(responseBody); err != nil {
 		return fmt.Errorf("parseTaskResult failed for task %s: %w", taskId, err)
 	}
@@ -512,6 +591,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		return errors.New("task polling response ID does not match the requested task")
 	}
 	task.Data = redactVideoResponseBody(responseBody)
+	if taskResult.PluginState != nil {
+		task.PrivateData.PluginState = taskResult.PluginState
+	}
 
 	logger.LogDebug(ctx, "updateVideoSingleTask taskResult: %+v", taskResult)
 
@@ -519,7 +601,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 
 	task.Status = model.TaskStatus(taskResult.Status)
 	switch taskResult.Status {
-	case model.TaskStatusSubmitted:
+	case string(model.TaskStatusNotStart), model.TaskStatusSubmitted:
 		task.Progress = taskcommon.ProgressSubmitted
 	case model.TaskStatusQueued:
 		task.Progress = taskcommon.ProgressQueued
@@ -562,6 +644,10 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 
 	isDone := task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure
 	if isDone {
+		if taskResult.FinishTime > 0 {
+			task.FinishTime = taskResult.FinishTime
+		}
+		task.PrivateData.CompletionUsage = &model.TaskCompletionUsage{CompletionTokens: taskResult.CompletionTokens, TotalTokens: taskResult.TotalTokens, Facts: taskResult.UsageFacts, Error: taskResult.UsageError}
 		quota, reason, clamp, err := taskCompletionQuota(adaptor, task, taskResult)
 		if err != nil {
 			return errors.Join(err, model.HoldTaskBilling(ctx, task, snap.Status, "task_final_usage_invalid"))

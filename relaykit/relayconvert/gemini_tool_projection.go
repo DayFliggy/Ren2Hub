@@ -1,7 +1,7 @@
 package relayconvert
 
 import (
-	"context"
+"context"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	claudemessages "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/claude_messages"
@@ -109,7 +109,7 @@ func analyzeToolIdentity(request any) *ToolIdentityRequirements {
 				history.Messages = append(history.Messages, dto.ClaudeMessage{Role: message.Role, Content: tools})
 			}
 		}
-		chat, err = claudemessages.ClaudeMessagesRequestToOpenAIChat(*history, nil)
+		chat, err = claudemessages.ClaudeMessagesRequestToOpenAIChat(context.Background(), *history, nil)
 	case *dto.OpenAIResponsesRequest:
 		if request == nil {
 			return &ToolIdentityRequirements{InvalidHistory: true}
@@ -132,7 +132,7 @@ func analyzeToolIdentity(request any) *ToolIdentityRequirements {
 		if marshalErr != nil {
 			return &ToolIdentityRequirements{InvalidHistory: true}
 		}
-		chat, err = oairesponses.ResponsesRequestToChatCompletionsRequest(&dto.OpenAIResponsesRequest{Model: "tool-history", Input: data})
+		chat, err = oairesponses.ResponsesRequestToChatCompletionsRequest(context.Background(), &dto.OpenAIResponsesRequest{Model: "tool-history", Input: data})
 	default:
 		return nil
 	}
@@ -189,7 +189,7 @@ func analyzeGeminiToolIdentity(request *dto.GeminiChatRequest) *ToolIdentityRequ
 			history.Contents = append(history.Contents, tools)
 		}
 	}
-	if _, err := geminichat.GeminiGenerateContentRequestToOpenAIChat(history, nil); err != nil {
+	if _, err := geminichat.GeminiGenerateContentRequestToOpenAIChat(context.Background(), history, nil); err != nil {
 		requirements.InvalidHistory = true
 	}
 	data, err := kitutil.Marshal(history)
@@ -199,7 +199,7 @@ func analyzeGeminiToolIdentity(request *dto.GeminiChatRequest) *ToolIdentityRequ
 		return requirements
 	}
 	removeGeminiToolIDs(&projected)
-	if _, err := geminichat.GeminiGenerateContentRequestToOpenAIChat(&projected, nil); err != nil {
+	if _, err := geminichat.GeminiGenerateContentRequestToOpenAIChat(context.Background(), &projected, nil); err != nil {
 		requirements.RequiresIDs = true
 	}
 	for i := range request.Requests {

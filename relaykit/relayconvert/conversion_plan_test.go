@@ -17,9 +17,9 @@ func TestConversionPlanPoliciesAndNativeState(t *testing.T) {
 	features, err := AnalyzeRequest(req)
 	require.NoError(t, err)
 	plan, err := PlanConversion(features, types.RelayFormatGemini, "")
-	require.Error(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, types.ConversionLossPolicySafe, plan.Policy)
-	require.NotEmpty(t, plan.Diagnostics)
+	assert.NotEmpty(t, plan.Diagnostics)
 	plan, err = PlanConversion(features, types.RelayFormatGemini, types.ConversionLossPolicyAllow)
 	require.NoError(t, err)
 	assert.NotEmpty(t, plan.RequestConverter)
@@ -57,13 +57,13 @@ func TestPortableSearchAndExplicitZeroAcrossProtocols(t *testing.T) {
 	assert.NotNil(t, chat.WebSearchOptions)
 }
 
-func TestHostedSearchRequiresRepresentableResponseBeforeSending(t *testing.T) {
+func TestHostedSearchUsesUpstreamBridge(t *testing.T) {
 	request := &dto.OpenAIResponsesRequest{Model: "test", Input: []byte(`"search"`), Tools: []byte(`[{"type":"web_search"}]`)}
 	requirements, err := AnalyzeRequest(request)
 	require.NoError(t, err)
 	for _, policy := range []types.ConversionLossPolicy{types.ConversionLossPolicySafe, types.ConversionLossPolicyStrict, types.ConversionLossPolicyAllow} {
 		_, err := PlanConversion(requirements, types.RelayFormatClaude, policy)
-		require.ErrorContains(t, err, "pause")
+		require.NoError(t, err)
 	}
 	_, err = PlanConversion(requirements, types.RelayFormatOpenAIResponses, types.ConversionLossPolicyStrict)
 	require.NoError(t, err)
@@ -146,14 +146,14 @@ func TestGeminiToolHistoryUsesExplicitIDsAndRejectsAmbiguity(t *testing.T) {
 func TestResponsesStreamLifecycleAndOutcome(t *testing.T) {
 	for _, outcome := range []StreamOutcome{StreamOutcomeCompleted, StreamOutcomeIncomplete, StreamOutcomeFailed, StreamOutcomeCancelled} {
 		t.Run(string(outcome), func(t *testing.T) {
-			state, err := NewResponseStreamState(types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, ResponseStreamOptions{ID: "resp_test", Model: "test"})
+			state, err := NewResponseStreamState(types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, ResponseStreamOptions{ID: "resp_test", Model: "test", EmitSequenceNumber: true})
 			require.NoError(t, err)
 			text := "hello"
 			chunk := &dto.ChatCompletionsStreamResponse{Choices: []dto.ChatCompletionsStreamResponseChoice{{Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Content: &text}}}}
 			results, err := ConvertStreamResponseChunk(context.Background(), nil, state, chunk)
 			require.NoError(t, err)
-			require.Len(t, results, 4)
-			assert.Equal(t, "response.content_part.added", results[2].Value.(ChatToResponsesStreamEvent).Type)
+			require.Len(t, results, 3)
+			assert.Equal(t, "response.output_text.delta", results[2].Value.(ChatToResponsesStreamEvent).Type)
 			if outcome == StreamOutcomeCompleted {
 				stop := "stop"
 				terminal, err := ConvertStreamResponseChunk(context.Background(), nil, state, &dto.ChatCompletionsStreamResponse{Choices: []dto.ChatCompletionsStreamResponseChoice{{FinishReason: &stop}}})

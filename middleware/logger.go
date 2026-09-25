@@ -18,6 +18,9 @@ func RouteTag(tag string) gin.HandlerFunc {
 }
 
 func SetUpLogger(server *gin.Engine) {
+	// Gin captures RawQuery before c.Next; remove route-bound capabilities
+	// before that capture and retain them only in the auth middleware context.
+	server.Use(redactTaskArtifactAccessQuery())
 	server.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
 		var requestID string
 		if param.Keys != nil {
@@ -29,8 +32,8 @@ func SetUpLogger(server *gin.Engine) {
 		}
 		requestPath := param.Path
 		pathOnly, _, _ := strings.Cut(requestPath, "?")
-		if pathOnly == "/api/user/epay/notify" {
-			// GET notifications carry signed payment details in their query.
+		if pathOnly == "/api/user/epay/notify" || strings.HasPrefix(pathOnly, "/api/oauth/") || pathOnly == "/api/reset_password" || pathOnly == "/api/verification" {
+			// Authentication callbacks and payment notifications carry one-use or signed secrets.
 			requestPath = pathOnly
 		}
 		return fmt.Sprintf("[GIN] %s | %s | %s | %3d | %13v | %15s | %7s %s\n",

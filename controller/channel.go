@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -432,7 +433,11 @@ func GetChannelKey(c *gin.Context) {
 	// 获取渠道信息（包含密钥）
 	channel, err := model.GetChannelById(channelId, true)
 	if err != nil {
-		common.ApiError(c, fmt.Errorf("获取渠道信息失败: %v", err))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.ApiErrorMsg(c, "Channel does not exist")
+		} else {
+			writeSecurityOperationError(c, err)
+		}
 		return
 	}
 
@@ -478,6 +483,9 @@ func validateTwoFactorAuth(twoFA *model.TwoFA, code string) bool {
 func validateChannel(channel *model.Channel, isAdd bool) error {
 	if channel == nil {
 		return fmt.Errorf("channel cannot be empty")
+	}
+	if err := validateTaskPluginChannel(channel); err != nil {
+		return err
 	}
 
 	// 校验 channel settings
@@ -654,6 +662,10 @@ func AddChannel(c *gin.Context) {
 			"success": false,
 			"message": err.Error(),
 		})
+		return
+	}
+	if len(addChannelRequest.Channel.GetSetting().TaskPluginBindings()) > 0 && !authz.Can(c.GetInt("id"), c.GetInt("role"), authz.TaskPluginBind) {
+		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
 		return
 	}
 
@@ -1035,6 +1047,10 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	originProxy := originChannel.GetSetting().Proxy
+	if _, provided := requestData["setting"]; provided && !taskPluginBindingsEqual(channel.GetSetting().TaskPluginBindings(), originChannel.GetSetting().TaskPluginBindings()) && !authz.Can(c.GetInt("id"), c.GetInt("role"), authz.TaskPluginBind) {
+		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
+		return
+	}
 	proxyChanged := false
 	if _, settingProvided := requestData["setting"]; settingProvided {
 		newProxy, _ := service.NormalizeProxyURL(channel.GetSetting().Proxy)
@@ -1277,7 +1293,7 @@ func buildAdvancedCustomModelPreviewChannel(req fetchModelsRequest) (*model.Chan
 		if err != nil {
 			return nil, err
 		}
-		if savedChannel.Type != constant.ChannelTypeAdvancedCustom {
+		if !constant.IsAdvancedCustomChannel(savedChannel.Type) {
 			return nil, fmt.Errorf("channel %d is not an advanced custom channel", req.ChannelID)
 		}
 		channel = savedChannel
@@ -1292,7 +1308,7 @@ func buildAdvancedCustomModelPreviewChannel(req fetchModelsRequest) (*model.Chan
 		}
 	}
 
-	if channel.Type != constant.ChannelTypeAdvancedCustom {
+	if !constant.IsAdvancedCustomChannel(channel.Type) {
 		return nil, fmt.Errorf("channel type must be advanced custom")
 	}
 	if req.BaseURL != nil {
@@ -1311,7 +1327,7 @@ func buildAdvancedCustomModelPreviewChannel(req fetchModelsRequest) (*model.Chan
 			return nil, err
 		}
 		settings.AdvancedCustom = &config
-	} else if req.ChannelID <= 0 {
+	} else if settings.AdvancedCustom == nil {
 		return nil, fmt.Errorf("advanced_custom is required")
 	}
 	channel.SetOtherSettings(settings)
@@ -1350,7 +1366,7 @@ func FetchModels(c *gin.Context) {
 	}
 
 	var channel *model.Channel
-	if req.Type == constant.ChannelTypeAdvancedCustom || req.ChannelID > 0 {
+	if constant.IsAdvancedCustomChannel(req.Type) || req.ChannelID > 0 {
 		var err error
 		channel, err = buildAdvancedCustomModelPreviewChannel(req)
 		if err != nil {
@@ -1364,6 +1380,10 @@ func FetchModels(c *gin.Context) {
 		baseURL := ""
 		if req.BaseURL != nil {
 			baseURL = strings.TrimSpace(*req.BaseURL)
+		}
+		if req.Type <= 0 || req.Type >= constant.ChannelTypeDummy {
+			common.ApiError(c, fmt.Errorf("invalid channel type"))
+			return
 		}
 		if baseURL == "" {
 			baseURL = constant.ChannelBaseURLs[req.Type]

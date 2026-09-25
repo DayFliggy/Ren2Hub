@@ -58,6 +58,11 @@ export interface AdminChannelModelMatch {
 }
 
 export interface AdminChannel extends Record<string, unknown> {
+  channel_info?: {
+    is_multi_key: boolean
+    multi_key_mode: 'random' | 'polling'
+    multi_key_size?: number
+  }
   id: number
   name: string
   type: number
@@ -86,6 +91,12 @@ export interface AdminChannel extends Record<string, unknown> {
 }
 
 export interface AdminChannelCreateInput {
+  setting?: string
+  settings?: string
+  param_override?: string
+  header_override?: string
+  multi_key_mode?: 'random' | 'polling'
+  key_mode?: 'append' | 'replace'
   name: string
   type: number
   status: Extract<AdminChannelStatus, 1 | 2>
@@ -104,6 +115,12 @@ export interface AdminChannelCreateInput {
   channel_ratio: number
 }
 
+export interface AdminChannelCreateOptions {
+  batchKeys?: boolean
+  multiKey?: boolean
+  multiKeyMode?: 'random' | 'polling'
+}
+
 export type AdminChannelUpdateInput = Omit<
   AdminChannelCreateInput,
   'status' | 'key'
@@ -114,7 +131,8 @@ export type AdminChannelUpdateInput = Omit<
 
 /** Params for discovering a channel's model list from its upstream. */
 export type AdminChannelFetchModelsParams =
-  { channelId: number } | { type: number; key: string; baseUrl: string }
+  | { channelId: number; advancedCustom?: string; baseUrl?: string }
+  | { type: number; key: string; baseUrl: string; advancedCustom?: string }
 
 export interface AdminChannelPage {
   items: AdminChannel[]

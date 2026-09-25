@@ -36,6 +36,9 @@ function pricingResponse(overrides: Record<string, unknown> = {}) {
     supported_endpoint_types: ['chat'],
     ...overrides,
     price_version: {
+      contract_version: 2,
+      calculation_version: 'billing-v2',
+      result_unit: 'usd',
       id: 1,
       model: 'gpt-4o',
       mode: 'unit_price' as const,

@@ -66,6 +66,9 @@ func updateOpenAIImageCount(info *relaycommon.RelayInfo, count int64) {
 	if info.PriceData.Usage != nil {
 		if _, priced := info.PriceData.Usage.Quantities["images"]; priced {
 			info.PriceData.Usage.Quantities["images"] = strconv.FormatInt(count, 10)
+			info.PriceData.Usage.Source = "provider_image_count"
+			info.PriceData.Usage.Estimated = false
+			info.PriceData.Usage.Complete = true
 		}
 	}
 
@@ -142,6 +145,14 @@ func normalizeOpenAIUsage(usage *dto.Usage) error {
 			return fmt.Errorf("invalid image usage token count")
 		}
 	}
+	if d := usage.OutputTokensDetails; d != nil {
+		for _, count := range []int{d.TextTokens, d.ImageTokens, d.AudioTokens, d.ReasoningTokens} {
+			if count < 0 || count > math.MaxInt32 {
+				return fmt.Errorf("invalid image output usage detail")
+			}
+		}
+		usage.CompletionTokenDetails = *d
+	}
 	usage.BillingUsage = nil
 	usage.UsageSource = "provider"
 	if usage.InputTokens != 0 {
@@ -151,6 +162,7 @@ func normalizeOpenAIUsage(usage *dto.Usage) error {
 		usage.CompletionTokens = usage.OutputTokens
 	}
 	if usage.InputTokensDetails != nil {
+		usage.PromptTokensDetails.CachedTokensDetails = usage.InputTokensDetails.Clone().CachedTokensDetails
 		usage.PromptTokensDetails.CachedTokens = usage.InputTokensDetails.CachedTokens
 		usage.PromptTokensDetails.CachedCreationTokens = usage.InputTokensDetails.CachedCreationTokens
 		usage.PromptTokensDetails.CacheWriteTokens = usage.InputTokensDetails.CacheWriteTokens
@@ -214,7 +226,6 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 	usage := &dto.Usage{UsageSource: "estimated"}
 	var lastStreamData []byte
 	var completedImages int64
-	var partialOutput bool
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		raw := common.StringToByteSlice(data)
@@ -264,7 +275,7 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 			if completed {
 				completedImages++
 			}
-			partialOutput = partialOutput || partial
+
 		}
 		if writeErr != nil {
 			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, writeErr)
@@ -280,13 +291,10 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 	if err := normalizeOpenAIUsage(usage); err != nil {
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonHandlerStop, err)
 	}
-	// Bill delivered images, never the requested maximum after interruption.
-	// Partial output with no final image incurs one fixed-price operation.
-	count := completedImages
-	if count == 0 && partialOutput {
-		count = 1
+	if info.StreamStatus != nil && info.StreamStatus.IsNormalEnd() {
+		updateOpenAIImageCount(info, completedImages)
 	}
-	updateOpenAIImageCount(info, count)
+
 	if info.StreamStatus != nil && info.StreamStatus.IsNormalEnd() {
 		if err := writeOpenaiImageStreamDone(c); err != nil {
 			info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, err)

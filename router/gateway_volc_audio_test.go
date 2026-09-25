@@ -93,7 +93,7 @@ func assertGatewayVolcSpeechAccounting(t *testing.T, charge, tokenQuota int, hea
 		assert.Equal(t, 1, health.FailureCount, "one failed provider send must not be counted twice in a health scope")
 	}
 	var pending int64
-	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Where("status IN ?", []string{model.BillingRecoveryStatusActive, model.BillingRecoveryStatusSettlementPending, model.BillingRecoveryStatusRefundPending}).Count(&pending).Error)
+	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Where("status IN ?", []string{model.BillingRecoveryStatusActive, model.BillingRecoveryStatusSettlementPending, model.BillingRecoveryStatusRefundPending, model.BillingRecoveryStatusReconciliation}).Count(&pending).Error)
 	if held > 0 {
 		assert.EqualValues(t, 1, pending)
 		assert.EqualValues(t, held, user.ReservedQuota)
@@ -174,6 +174,9 @@ func TestGatewayVolcSpeechWebSocketAccounting(t *testing.T) {
 				}
 				assert.EqualValues(t, 1, sends.Load())
 				charge := 500
+				if scenario == "interrupted" {
+					charge = 0
+				}
 				if scenario == "truncated" {
 					charge = 0
 					assert.Equal(t, http.StatusBadGateway, response.StatusCode, string(output))

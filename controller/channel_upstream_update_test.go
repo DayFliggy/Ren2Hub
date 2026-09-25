@@ -595,3 +595,19 @@ func TestDetectAllChannelUpstreamModelUpdatesRejectsExistingActiveTask(t *testin
 	require.Contains(t, recorder.Body.String(), existing.TaskID)
 	require.Contains(t, recorder.Body.String(), "已有模型更新任务正在运行或等待中")
 }
+
+func TestFetchPresetModelsPreviewUsesNativeModelRoute(t *testing.T) {
+	for _, kind := range []int{constant.ChannelTypeVLLM, constant.ChannelTypeSGLang} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/v1/models", r.URL.Path)
+			assert.Equal(t, "Bearer preview-key", r.Header.Get("Authorization"))
+			_, _ = w.Write([]byte(`{"data":[{"id":"local-model"}]}`))
+		}))
+		channel, err := buildAdvancedCustomModelPreviewChannel(fetchModelsRequest{Type: kind, Key: "preview-key", BaseURL: common.GetPointer(server.URL)})
+		require.NoError(t, err)
+		names, err := fetchChannelUpstreamModelIDs(channel)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"local-model"}, names)
+		server.Close()
+	}
+}

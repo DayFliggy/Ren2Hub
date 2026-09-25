@@ -15,7 +15,6 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -36,6 +35,14 @@ type userModelsResponse struct {
 
 func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
+	previousRedis := common.RedisEnabled
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+		common.SetDatabaseTypes(previousMain, previousLog)
+		common.RedisEnabled = previousRedis
+	})
 
 	initModelListColumnNames(t)
 
@@ -213,7 +220,7 @@ func TestGetUserModelsIgnoresRetiredGroupQuery(t *testing.T) {
 	require.ElementsMatch(t, defaultModels, decodeUserModelsResponse(t, vipRecorder))
 }
 
-func TestGetUserModelsAddsCompactPermissionVariantWithoutChangingStandardDiscovery(t *testing.T) {
+func TestGetUserModelsDoesNotAddCompactPermissionVariant(t *testing.T) {
 	withSelfUseModeEnabled(t)
 	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.Create(&model.User{
@@ -254,7 +261,6 @@ func TestGetUserModelsAddsCompactPermissionVariantWithoutChangingStandardDiscove
 	models := decodeUserModelsResponse(t, recorder)
 	require.ElementsMatch(t, []string{
 		"gpt-zz-compact-capable",
-		"gpt-zz-compact-capable-openai-compact",
 		"gemini-zz-compact-capable",
 	}, models)
 
@@ -269,7 +275,7 @@ func TestGetUserModelsAddsCompactPermissionVariantWithoutChangingStandardDiscove
 	}, decodeListModelsResponse(t, standardRecorder))
 }
 
-func TestListModelsProjectsCompactEndpointsByTokenPermission(t *testing.T) {
+func TestListModelsUsesSamePermissionForCompactEndpoint(t *testing.T) {
 	withSelfUseModeEnabled(t)
 	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.Create(&model.Channel{
@@ -302,14 +308,15 @@ func TestListModelsProjectsCompactEndpointsByTokenPermission(t *testing.T) {
 			endpoints: []constant.EndpointType{
 				constant.EndpointTypeOpenAI,
 				constant.EndpointTypeOpenAIResponse,
+				constant.EndpointTypeOpenAIResponseCompact,
 			},
 			visible: true,
 		},
 		{
 			name:      "compact only",
 			limit:     map[string]bool{"gpt-zz-compact-token-model-openai-compact": true},
-			endpoints: []constant.EndpointType{constant.EndpointTypeOpenAIResponseCompact},
-			visible:   true,
+			endpoints: nil,
+			visible:   false,
 		},
 		{
 			name: "base and compact",
@@ -349,16 +356,13 @@ func TestListModelsProjectsCompactEndpointsByTokenPermission(t *testing.T) {
 	}
 }
 
-func TestTokenModelPermissionNormalizationUsesBaseForNonGPTCompact(t *testing.T) {
-	baseModel := "gemini-2.5-flash-thinking-1024"
-	compactModel := baseModel + ratio_setting.CompactModelSuffix
-	baseLimit := map[string]bool{"gemini-2.5-flash-thinking-*": true}
-	compactLimit := map[string]bool{"gemini-2.5-flash-thinking-*-openai-compact": true}
-
-	require.True(t, tokenAllowsModel(baseLimit, baseModel))
-	require.True(t, tokenAllowsModel(baseLimit, compactModel))
-	require.False(t, tokenAllowsModel(compactLimit, compactModel))
-	require.False(t, tokenAllowsModel(compactLimit, baseModel))
+func TestTokenModelPermissionTreatsCompactSuffixAsLiteral(t *testing.T) {
+	base := "ordinary-model"
+	literal := base + "-openai-compact"
+	require.True(t, tokenAllowsModel(map[string]bool{base: true}, base))
+	require.False(t, tokenAllowsModel(map[string]bool{base: true}, literal))
+	require.True(t, tokenAllowsModel(map[string]bool{literal: true}, literal))
+	require.False(t, tokenAllowsModel(map[string]bool{literal: true}, base))
 }
 
 func TestListModelsDoesNotProjectCompactPermissionIntoAnthropicList(t *testing.T) {
@@ -637,7 +641,7 @@ func TestSetupLoginDoesNotTouchPasswordWhenPasswordFieldOmitted(t *testing.T) {
 			Role:     user.Role,
 			Status:   user.Status,
 			Group:    user.Group,
-		}, c)
+		}, nil, c)
 	})
 
 	recorder := httptest.NewRecorder()

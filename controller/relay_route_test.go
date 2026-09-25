@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/alicebob/miniredis/v2"
@@ -182,6 +183,9 @@ func TestRecoveredKeyProbeIsClaimedOnlyAtSend(t *testing.T) {
 	require.Nil(t, middleware.SetupContextForSelectedChannel(second, &channel, "gpt-test"))
 	firstInfo := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelId: channel.Id}, RouteCapabilityModel: "gpt-test"}
 	secondInfo := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelId: channel.Id}, RouteCapabilityModel: "gpt-test"}
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "gpt-test", Mode: billing.ModeFree}, "1", nil, time.Now())
+	require.NoError(t, err)
+	firstInfo.PriceData.Quote, secondInfo.PriceData.Quote = quote, quote
 	state := &routeAttemptHealthState{}
 	first.Set("route_live_health", state)
 	require.NoError(t, prepareLiveRouteSend(first, firstInfo, state, "attempt-first", nil))

@@ -1,16 +1,10 @@
 package service
 
 import (
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 )
 
-func RequestRouteAttemptedKeys(c *gin.Context, stage relaycommon.CompactAttemptStage) map[int]map[int]struct{} {
-	if stage != relaycommon.CompactAttemptNone {
-		value, _ := c.Get(compactAttemptedKeysContextKey)
-		attempted, _ := value.(CompactAttemptedKeyIndexes)
-		return attempted
-	}
+func RequestRouteAttemptedKeys(c *gin.Context) map[int]map[int]struct{} {
 	value, _ := c.Get(liveRouteAttemptedKeysContextKey)
 	attempted, _ := value.(LiveRouteAttemptedKeyIndexes)
 	return attempted
@@ -53,8 +47,5 @@ func GetLiveRouteAttemptedKeyIndexes(c *gin.Context, channelID int) map[int]stru
 }
 
 func GetRouteAttemptedKeyIndexes(c *gin.Context, channelID int) map[int]struct{} {
-	if CompactStageFromContext(c) != relaycommon.CompactAttemptNone {
-		return GetCompactAttemptedKeyIndexes(c, channelID)
-	}
 	return GetLiveRouteAttemptedKeyIndexes(c, channelID)
 }

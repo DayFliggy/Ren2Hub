@@ -18,7 +18,6 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/model_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
 const (
@@ -317,9 +316,6 @@ func AnalyzeRouteRequest(modelName, path string, payload []byte) (relayconvert.R
 		return requirements, err
 	}
 	bodyModel, routeModel := requirements.Model, modelName
-	if path == "/v1/responses/compact" {
-		bodyModel, routeModel = ratio_setting.CompactBaseModelName(bodyModel), ratio_setting.CompactBaseModelName(routeModel)
-	}
 	if bodyModel != "" && modellab.NormalizeModel(bodyModel) != modellab.NormalizeModel(routeModel) {
 		return requirements, fmt.Errorf("request sample model must match the preview model")
 	}
@@ -389,7 +385,11 @@ func PlanChannelConversion(requirements relayconvert.RequestRequirements, channe
 		if operation := relaycapability.LegacyOpenAIOperation(path); operation != "" && operation != "edit" {
 			surface.NativeOperations = []string{operation}
 		}
-		if route.Converter != "" && route.Converter != relayconvert.ConverterNone {
+		if route.Converter == dto.AdvancedCustomConverterSGLangRerank {
+			if requirements.Format != types.RelayFormatRerank {
+				return plan, fmt.Errorf("SGLang rerank route requires rerank request")
+			}
+		} else if route.Converter != "" && route.Converter != relayconvert.ConverterNone {
 			spec, exists := relayconvert.LookupRequestConverter(route.Converter)
 			if !exists || spec.From != requirements.Format || !dto.IsAdvancedCustomConverterAllowed(route.Converter) {
 				return plan, fmt.Errorf("custom channel conversion does not support this request protocol")
@@ -423,6 +423,9 @@ func PlanChannelConversion(requirements relayconvert.RequestRequirements, channe
 		}
 	}
 	passthrough := model_setting.GetGlobalSettings().PassThroughRequestEnabled || channel.GetSetting().PassThroughBodyEnabled
+	if apiType == constant.APITypeAdvancedCustom && channel.GetOtherSettings().AdvancedCustom.BodyPassThroughEnabled(path, requirements.Model) {
+		passthrough = true
+	}
 	if requirements.Operation == "text" && (requirements.Format == types.RelayFormatOpenAI || requirements.Format == types.RelayFormatClaude) && !passthrough &&
 		ShouldChatCompletionsUseResponsesGlobal(channel.Id, channel.Type, requirements.Model) {
 		if _, supported := definition.Resolve(types.RelayFormatOpenAIResponses); !supported {

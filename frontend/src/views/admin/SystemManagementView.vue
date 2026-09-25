@@ -14,10 +14,12 @@ import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import IconButton from '@/components/common/IconButton.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
+import TablePagination from '@/components/common/TablePagination.vue'
 import SystemResourceMetric from '@/components/admin/SystemResourceMetric.vue'
 import SystemTaskSection from '@/components/admin/SystemTaskSection.vue'
 import {
   systemManagementApi,
+  SYSTEM_TASK_TYPES,
   type SystemInstance,
   type SystemTask,
 } from '@/api/systemManagement'
@@ -34,8 +36,60 @@ const { t, te, locale } = useI18n({
   useScope: 'local',
   messages: systemManagementMessages,
 })
-const { instances, active, history, activeTasks, historyTasks, staleCount } =
-  useSystemManagement()
+const {
+  instances,
+  active,
+  history,
+  activeTasks,
+  historyTasks,
+  staleCount,
+  historyType,
+  historyStatus,
+  historyPage,
+  historyPageSize,
+  historyTotal,
+} = useSystemManagement()
+const historyTarget = ref<{
+  type: string
+  status: '' | 'succeeded' | 'failed'
+} | null>(null)
+const clearingHistory = ref(false)
+const historyDeleteError = ref('')
+const historyDeleteMessage = computed(() =>
+  t('deleteHistoryMessage', {
+    type: historyTarget.value?.type
+      ? t(historyTarget.value.type)
+      : t('allTypes'),
+    status: historyTarget.value?.status
+      ? t(historyTarget.value.status)
+      : t('allStatuses'),
+  })
+)
+
+function confirmHistoryCleanup() {
+  historyDeleteError.value = ''
+  historyTarget.value = { type: historyType.value, status: historyStatus.value }
+}
+
+async function deleteHistory() {
+  if (!historyTarget.value || clearingHistory.value) return
+  clearingHistory.value = true
+  historyDeleteError.value = ''
+  try {
+    const count = await systemManagementApi.deleteHistory(historyTarget.value)
+    if (disposed) return
+    result.value = t('historyDeleted', { count })
+    historyTarget.value = null
+    if (historyPage.value !== 1) historyPage.value = 1
+    else await history.refresh()
+  } catch (cause) {
+    if (!disposed)
+      historyDeleteError.value =
+        cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    if (!disposed) clearingHistory.value = false
+  }
+}
 const deleteTarget = ref<SystemInstance | 'all' | null>(null)
 const deleting = ref(false)
 const deleteError = ref('')
@@ -336,13 +390,57 @@ async function cleanLogs() {
       :title="t('historyTasks')"
       :empty-text="t('emptyHistory')"
       :tasks="historyTasks"
+      :total="historyTotal"
       :loading="history.loading.value"
       :loaded="history.loaded.value"
       :error="history.error.value"
       :updated-at="history.updatedAt.value"
       @refresh="history.refresh"
       @details="taskDetail = $event"
-    />
+    >
+      <template #actions>
+        <ConsoleButton
+          variant="ghost"
+          size="sm"
+          :disabled="history.loading.value || !historyTotal || clearingHistory"
+          @click="confirmHistoryCleanup"
+        >
+          <Trash2 :size="15" />{{ t('deleteHistory') }}
+        </ConsoleButton>
+      </template>
+      <template #filters>
+        <div class="history-filters">
+          <label class="admin-field"
+            ><span>{{ t('filterType') }}</span
+            ><select v-model="historyType" :disabled="clearingHistory">
+              <option value="">{{ t('allTypes') }}</option>
+              <option
+                v-for="type in SYSTEM_TASK_TYPES"
+                :key="type"
+                :value="type"
+              >
+                {{ t(type) }}
+              </option>
+            </select></label
+          >
+          <label class="admin-field"
+            ><span>{{ t('filterStatus') }}</span
+            ><select v-model="historyStatus" :disabled="clearingHistory">
+              <option value="">{{ t('allStatuses') }}</option>
+              <option value="succeeded">{{ t('succeeded') }}</option>
+              <option value="failed">{{ t('failed') }}</option>
+            </select></label
+          >
+        </div>
+      </template>
+      <template #footer>
+        <TablePagination
+          v-model:page="historyPage"
+          v-model:page-size="historyPageSize"
+          :total="historyTotal"
+        />
+      </template>
+    </SystemTaskSection>
 
     <ConfirmDialog
       :open="deleteTarget !== null"
@@ -496,12 +594,35 @@ async function cleanLogs() {
         {{ logError }}
       </p></ConfirmDialog
     >
+    <ConfirmDialog
+      :open="historyTarget !== null"
+      :title="t('deleteHistory')"
+      :message="historyDeleteMessage"
+      :confirm-text="t('remove')"
+      :loading="clearingHistory"
+      @confirm="deleteHistory"
+      @cancel="historyTarget = null"
+    >
+      <p v-if="historyDeleteError" class="admin-error mt-3" role="alert">
+        {{ historyDeleteError }}
+      </p>
+    </ConfirmDialog>
   </div>
 </template>
 
 <style scoped>
 .system-page {
   gap: 1.5rem;
+}
+.history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.history-filters .admin-field {
+  flex: 1;
+  min-width: 10rem;
 }
 .system-section {
   min-width: 0;

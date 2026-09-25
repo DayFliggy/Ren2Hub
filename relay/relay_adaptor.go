@@ -4,6 +4,8 @@ import (
 	"strconv"
 
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
+	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/pkg/relaycapability"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/advancedcustom"
@@ -34,16 +36,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/siliconflow"
 	"github.com/QuantumNous/new-api/relay/channel/sub2api"
 	"github.com/QuantumNous/new-api/relay/channel/submodel"
-	taskali "github.com/QuantumNous/new-api/relay/channel/task/ali"
-	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
-	taskGemini "github.com/QuantumNous/new-api/relay/channel/task/gemini"
-	"github.com/QuantumNous/new-api/relay/channel/task/hailuo"
-	taskjimeng "github.com/QuantumNous/new-api/relay/channel/task/jimeng"
-	"github.com/QuantumNous/new-api/relay/channel/task/kling"
-	tasksora "github.com/QuantumNous/new-api/relay/channel/task/sora"
-	"github.com/QuantumNous/new-api/relay/channel/task/suno"
-	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
-	taskVidu "github.com/QuantumNous/new-api/relay/channel/task/vidu"
+	taskplugin "github.com/QuantumNous/new-api/relay/channel/task/jsplugin"
 	"github.com/QuantumNous/new-api/relay/channel/tencent"
 	"github.com/QuantumNous/new-api/relay/channel/vertex"
 	"github.com/QuantumNous/new-api/relay/channel/volcengine"
@@ -51,6 +44,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/xunfei"
 	"github.com/QuantumNous/new-api/relay/channel/zhipu"
 	"github.com/QuantumNous/new-api/relay/channel/zhipu_4v"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -107,6 +101,9 @@ func GetAdaptor(apiType int) channel.Adaptor {
 }
 
 func GetTaskPlatform(c *gin.Context) constant.TaskPlatform {
+	if key := c.GetString("expected_task_plugin_key"); key != "" {
+		return constant.TaskPlatform(key)
+	}
 	channelType := c.GetInt("channel_type")
 	if channelType > 0 {
 		return constant.TaskPlatform(strconv.Itoa(channelType))
@@ -115,33 +112,42 @@ func GetTaskPlatform(c *gin.Context) constant.TaskPlatform {
 }
 
 func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
-	switch platform {
-	//case constant.APITypeAIProxyLibrary:
-	//	return &aiproxy.Adaptor{}
-	case constant.TaskPlatformSuno:
-		return &suno.TaskAdaptor{}
+	if plugin, ok := pluginruntime.DefaultRegistry.Get(string(platform)); ok {
+		return taskplugin.New(plugin)
 	}
-	if channelType, err := strconv.ParseInt(string(platform), 10, 64); err == nil {
-		switch channelType {
-		case constant.ChannelTypeAli:
-			return &taskali.TaskAdaptor{}
-		case constant.ChannelTypeKling:
-			return &kling.TaskAdaptor{}
-		case constant.ChannelTypeJimeng:
-			return &taskjimeng.TaskAdaptor{}
-		case constant.ChannelTypeVertexAi:
-			return &taskvertex.TaskAdaptor{}
-		case constant.ChannelTypeVidu:
-			return &taskVidu.TaskAdaptor{}
-		case constant.ChannelTypeDoubaoVideo, constant.ChannelTypeVolcEngine:
-			return &taskdoubao.TaskAdaptor{}
-		case constant.ChannelTypeSora, constant.ChannelTypeOpenAI:
-			return &tasksora.TaskAdaptor{}
-		case constant.ChannelTypeGemini:
-			return &taskGemini.TaskAdaptor{}
-		case constant.ChannelTypeMiniMax:
-			return &hailuo.TaskAdaptor{}
+	if platform == constant.TaskPlatformSuno {
+		if plugin, ok := pluginruntime.DefaultRegistry.Get("sunoapi"); ok {
+			return taskplugin.New(plugin)
+		}
+		return nil
+	}
+	if kind, err := strconv.Atoi(string(platform)); err == nil {
+		if plugin, ok := pluginruntime.DefaultRegistry.GetByChannelType(kind); ok {
+			return taskplugin.New(plugin)
+		}
+		switch kind {
+		case constant.ChannelTypeAli, constant.ChannelTypeKling, constant.ChannelTypeJimeng, constant.ChannelTypeVertexAi, constant.ChannelTypeVidu, constant.ChannelTypeDoubaoVideo, constant.ChannelTypeVolcEngine, constant.ChannelTypeSora, constant.ChannelTypeOpenAI, constant.ChannelTypeGemini, constant.ChannelTypeMiniMax, constant.ChannelTypeSunoAPI:
+			return nil
 		}
 	}
 	return nil
+}
+
+func ResolveTaskPluginForPlatform(generation *pluginruntime.RoutingGeneration, platform constant.TaskPlatform) (*pluginruntime.LoadedPlugin, bool) {
+	if generation == nil {
+		return nil, false
+	}
+	return generation.Get(string(platform))
+}
+
+func GetTaskAdaptorForTask(task *model.Task) (channel.TaskAdaptor, error) {
+	plugin, err := service.LoadTaskPluginForTask(task)
+	if err != nil {
+		return nil, err
+	}
+	return taskplugin.New(plugin), nil
+}
+
+func init() {
+	service.GetPinnedTaskAdaptorFunc = func(task *model.Task) (service.TaskPollingAdaptor, error) { return GetTaskAdaptorForTask(task) }
 }

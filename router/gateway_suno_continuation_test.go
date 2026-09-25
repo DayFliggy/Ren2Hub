@@ -5,22 +5,27 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func setupGatewaySunoContinuation(t *testing.T, upstream http.HandlerFunc) (string, string, string, model.Task) {
 	t.Helper()
-	url, key, otherKey := setupGatewaySDKWithUpstream(t, upstream)
-	require.NoError(t, model.DB.AutoMigrate(&model.Task{}))
+	_, key, otherKey := setupGatewaySDKWithUpstream(t, upstream)
+	require.NoError(t, model.DB.AutoMigrate(&model.Task{}, &model.TaskPlugin{}, &model.TaskPluginNamespace{}, &model.TaskPluginExecution{}))
+	require.NoError(t, controller.InitTaskPlugins())
 	require.NoError(t, publishGatewayFixturePrices(`{"suno_music":0.001,"suno_lyrics":0.001}`, false))
 	for _, id := range []int{1, 4} {
 		channel, err := model.GetChannelById(id, true)
@@ -35,6 +40,12 @@ func setupGatewaySunoContinuation(t *testing.T, upstream http.HandlerFunc) (stri
 	require.NoError(t, err)
 	require.NoError(t, model.DB.Create(&model.Option{Key: model.GatewayConfigKey, Value: string(encoded)}).Error)
 	require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
+	engine := gin.New()
+	engine.Use(middleware.RequestId())
+	engine.NoRoute(SetPluginRouter(engine))
+	server := httptest.NewServer(engine)
+	t.Cleanup(server.Close)
+	url := server.URL
 	code, body := postGatewayTask(t, url, key, "/suno/submit/music", `{"prompt":"local melody"}`)
 	require.Equal(t, http.StatusOK, code, body)
 	var task model.Task

@@ -64,6 +64,8 @@ func TestOllamaToolHistoryPreservesIdentityAndArguments(t *testing.T) {
 				require.NoError(t, common.Unmarshal([]byte(test.body), request))
 				converted, err = adaptor.ConvertClaudeRequest(c, info, request)
 				require.NoError(t, err)
+				assert.Same(t, request, converted)
+				return
 			}
 			body, err := common.Marshal(converted)
 			require.NoError(t, err)
@@ -174,8 +176,9 @@ func TestOllamaToolConstraintsAreEnforcedBeforeSending(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "llama3.1"}}
-	_, err := (&Adaptor{}).ConvertClaudeRequest(c, info, request)
-	require.ErrorContains(t, err, "tool selection")
-	assert.NotEmpty(t, info.ConversionDiagnostics)
+	converted, err := (&Adaptor{}).ConvertClaudeRequest(c, info, request)
+	require.NoError(t, err)
+	assert.Same(t, request, converted)
+	assert.Empty(t, info.ConversionDiagnostics)
 	assert.False(t, c.Writer.Written())
 }

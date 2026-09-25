@@ -102,7 +102,7 @@ func ollamaStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		target = types.RelayFormatOpenAI
 	}
 	responseID, created := helper.GetResponseID(c), time.Now().Unix()
-	state, err := relayconvert.NewResponseStreamState(types.RelayFormatOpenAI, target, relayconvert.ResponseStreamOptions{
+	state, err := relayconvert.NewResponseStreamState(types.RelayFormatOpenAI, target, relayconvert.ResponseStreamOptions{EmitSequenceNumber: true,
 		ID: responseID, Created: created, Model: info.UpstreamModelName, IncludeUsage: info.ShouldIncludeUsage,
 	})
 	if err != nil {
@@ -121,6 +121,7 @@ func ollamaStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			result.Stop(fmt.Errorf("ollama upstream error: %s", chunk.Error))
 			return
 		}
+		info.ObserveResponseModel(chunk.Model)
 		delta := dto.ChatCompletionsStreamResponse{
 			Id: responseID, Object: "chat.completion.chunk", Created: created, Model: info.UpstreamModelName,
 			Choices: []dto.ChatCompletionsStreamResponseChoice{{Index: 0, Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Role: "assistant"}}},
@@ -248,6 +249,7 @@ func ollamaChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 			return nil, types.NewOpenAIError(fmt.Errorf("invalid ollama completion"), types.ErrorCodeBadResponse, http.StatusBadGateway)
 		}
 		lastChunk = ck
+		info.ObserveResponseModel(ck.Model)
 		if ck.Message != nil && len(ck.Message.Thinking) > 0 {
 			raw := strings.TrimSpace(string(ck.Message.Thinking))
 			if raw != "" && raw != "null" {

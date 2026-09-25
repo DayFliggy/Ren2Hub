@@ -26,6 +26,15 @@ export function multiplyDecimal(left: string, right: string): string {
     b = parts(right)
   return render(a.coefficient * b.coefficient, a.scale + b.scale)
 }
+/** Local-currency input is converted explicitly, with 18-place half-up USD. */
+export function divideDecimal(left: string, right: string): string {
+  const a = parts(left),
+    b = parts(right)
+  if (b.coefficient === 0n) throw new RangeError('Zero exchange rate')
+  const numerator = a.coefficient * 10n ** BigInt(b.scale + 18)
+  const denominator = b.coefficient * 10n ** BigInt(a.scale)
+  return render((numerator + denominator / 2n) / denominator, 18)
+}
 export function shiftDecimal(value: string, places: number): string {
   const parsed = parts(value),
     scale = parsed.scale + places

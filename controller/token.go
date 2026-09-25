@@ -154,6 +154,8 @@ func GetTokenKey(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	setTokenAuditParams(c, model.AuditFields{"id": token.Id, "name": token.Name})
+	common.SetContextKey(c, "token_audit_succeeded", true)
 	common.ApiSuccess(c, gin.H{
 		"key": token.GetFullKey(),
 	})
@@ -266,6 +268,7 @@ func AddToken(c *gin.Context) {
 		return
 	}
 	token := request.Token
+	setTokenAuditParams(c, model.AuditFields{"name": token.Name, "unlimited_quota": token.UnlimitedQuota, "available_quota": token.RemainQuota})
 	if token.ConversionPolicy == "" {
 		token.ConversionPolicy = string(types.ConversionLossPolicySafe)
 	}
@@ -334,6 +337,8 @@ func AddToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	setTokenAuditParams(c, model.AuditFields{"id": cleanToken.Id})
+	common.SetContextKey(c, "token_audit_succeeded", true)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -348,6 +353,7 @@ func DeleteToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	common.SetContextKey(c, "token_audit_succeeded", true)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -364,6 +370,7 @@ func UpdateToken(c *gin.Context) {
 		return
 	}
 	token := request.Token
+	setTokenAuditParams(c, model.AuditFields{"id": token.Id, "name": token.Name, "status": token.Status, "operation_id": request.OperationID, "expected_version": request.ExpectedVersion})
 	if len(token.Name) > 50 {
 		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
 		return
@@ -382,6 +389,7 @@ func UpdateToken(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	common.SetContextKey(c, "token_audit_succeeded", true)
 	writeTokenResponse(c, &token)
 }
 
@@ -399,12 +407,15 @@ func DeleteTokenBatch(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
+	setTokenAuditParams(c, model.AuditFields{"requested_count": len(tokenBatch.Ids)})
 	userId := c.GetInt("id")
 	count, err := model.BatchDeleteTokens(tokenBatch.Ids, userId)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	setTokenAuditParams(c, model.AuditFields{"deleted_count": count})
+	common.SetContextKey(c, "token_audit_succeeded", true)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -422,6 +433,7 @@ func GetTokenKeysBatch(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgBatchTooMany, map[string]any{"Max": 100})
 		return
 	}
+	setTokenAuditParams(c, model.AuditFields{"ids": tokenBatch.Ids, "requested_count": len(tokenBatch.Ids)})
 	userId := c.GetInt("id")
 	tokens, err := model.GetTokenKeysByIds(tokenBatch.Ids, userId)
 	if err != nil {
@@ -432,5 +444,7 @@ func GetTokenKeysBatch(c *gin.Context) {
 	for _, t := range tokens {
 		keysMap[t.Id] = t.GetFullKey()
 	}
+	setTokenAuditParams(c, model.AuditFields{"count": len(keysMap)})
+	common.SetContextKey(c, "token_audit_succeeded", true)
 	common.ApiSuccess(c, gin.H{"keys": keysMap})
 }

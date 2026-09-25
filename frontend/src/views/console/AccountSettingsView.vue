@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
+import SecurityProofDialog from '@/components/auth/SecurityProofDialog.vue'
 import { ApiError } from '@/api/types'
 import PasswordStrengthMeter from '@/components/auth/PasswordStrengthMeter.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -26,6 +27,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const toast = useToast()
 
+const proofDialog = ref<InstanceType<typeof SecurityProofDialog> | null>(null)
 const profileOpen = ref(false)
 const displayName = ref(auth.user?.display_name ?? '')
 const savingProfile = ref(false)
@@ -65,7 +67,13 @@ function openPassword(): void {
 async function changePassword(): Promise<void> {
   savingPassword.value = true
   try {
-    await auth.changePassword(oldPassword.value, newPassword.value)
+    const proof = await proofDialog.value!.request({
+      scope: auth.user?.has_password
+        ? 'account.password.change'
+        : 'account.password.set',
+    })
+    await auth.changePassword(oldPassword.value, newPassword.value, proof)
+    await auth.fetchSelf(false)
     toast.success(t('settings.passwordChanged'))
     passwordOpen.value = false
   } catch (error) {
@@ -79,7 +87,8 @@ async function deleteAccount(): Promise<void> {
   if (deleting.value || deleteConfirmText.value !== auth.user?.username) return
   deleting.value = true
   try {
-    await auth.deleteAccount()
+    const proof = await proofDialog.value!.request({ scope: 'account.delete' })
+    await auth.deleteAccount(proof)
     await router.push({ name: 'sign-in' })
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
@@ -147,7 +156,10 @@ async function deleteAccount(): Promise<void> {
       @close="passwordOpen = false"
     >
       <div class="space-y-4">
-        <FormField :label="t('settings.oldPassword')">
+        <FormField
+          v-if="auth.user?.has_password"
+          :label="t('settings.oldPassword')"
+        >
           <TextInput
             v-model="oldPassword"
             type="password"
@@ -171,7 +183,11 @@ async function deleteAccount(): Promise<void> {
           block
           size="lg"
           :loading="savingPassword"
-          :disabled="!oldPassword || newPassword.length < 8"
+          :disabled="
+            (auth.user?.has_password && !oldPassword) ||
+            [...newPassword].length < 8 ||
+            [...newPassword].length > 128
+          "
           @click="changePassword"
         >
           {{ t('common.save') }}
@@ -198,5 +214,6 @@ async function deleteAccount(): Promise<void> {
         />
       </FormField>
     </ConfirmDialog>
+    <SecurityProofDialog ref="proofDialog" />
   </div>
 </template>

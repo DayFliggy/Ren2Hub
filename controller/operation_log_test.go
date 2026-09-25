@@ -91,11 +91,14 @@ func TestBuildOperationLogDTOHandlesLoginAndLegacySystemRows(t *testing.T) {
 }
 
 func TestManualManageAuditWritesOneLogAndMarksRequest(t *testing.T) {
+	previousRedis := common.RedisEnabled
+	common.RedisEnabled = false
+	t.Cleanup(func() { common.RedisEnabled = previousRedis })
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.Exec("CREATE TABLE users (id integer primary key, username text)").Error)
-	require.NoError(t, db.AutoMigrate(&model.Log{}))
+	require.NoError(t, db.AutoMigrate(&model.Log{}, &model.AuditLog{}))
 	require.NoError(t, db.Exec("INSERT INTO users (id, username) VALUES (?, ?)", 3, "root").Error)
 
 	previousDB, previousLogDB := model.DB, model.LOG_DB
@@ -115,17 +118,17 @@ func TestManualManageAuditWritesOneLogAndMarksRequest(t *testing.T) {
 	assert.True(t, common.GetContextKeyBool(context, constant.ContextKeyAuditLogged))
 
 	var count int64
-	require.NoError(t, db.Model(&model.Log{}).Count(&count).Error)
+	require.NoError(t, db.Model(&model.AuditLog{}).Count(&count).Error)
 	assert.Equal(t, int64(1), count)
 
-	var recorded model.Log
+	var recorded model.AuditLog
 	require.NoError(t, db.First(&recorded).Error)
-	other, err := common.StrToMap(recorded.Other)
-	require.NoError(t, err)
-	auditInfo := operationLogMap(other["audit_info"])
-	assert.Equal(t, true, auditInfo["success"])
-	assert.Equal(t, "PUT", auditInfo["method"])
-	assert.Equal(t, "Audit Browser/2.0", auditInfo["user_agent"])
-	assert.Equal(t, float64(100), auditInfo["actor_role"])
-	assert.Equal(t, "session", auditInfo["auth_method"])
+	assert.True(t, recorded.Success)
+	assert.Equal(t, "PUT", recorded.Method)
+	assert.Equal(t, "Audit Browser/2.0", recorded.UserAgent)
+	assert.Equal(t, 100, recorded.ActorRole)
+	assert.Equal(t, "session", recorded.AuthMethod)
+	var legacy int64
+	require.NoError(t, db.Model(&model.Log{}).Count(&legacy).Error)
+	assert.Zero(t, legacy)
 }

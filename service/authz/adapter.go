@@ -1,8 +1,9 @@
 package authz
 
 import (
-	"strings"
+	"fmt"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	casbinmodel "github.com/casbin/casbin/v2/model"
 	"github.com/casbin/casbin/v2/persist"
@@ -24,7 +25,25 @@ func (a *gormAdapter) LoadPolicy(m casbinmodel.Model) error {
 		return err
 	}
 	for _, rule := range rules {
-		if err := persist.LoadPolicyLine(ruleToLine(rule), m); err != nil {
+		if rule.Ptype != "p" {
+			continue
+		}
+		if rule.V0 == "" || rule.V1 == "" || rule.V2 == "" {
+			return fmt.Errorf("authorization policy %d is missing a subject, resource or action", rule.Id)
+		}
+		effect := rule.V3
+		if effect == "" {
+			effect = EffectAllow
+		}
+		if effect != EffectAllow && effect != EffectDeny {
+			return fmt.Errorf("authorization policy %d has an invalid effect", rule.Id)
+		}
+		if rule.V5 != "" || (rule.V4 != "" && rule.V4 != "all") {
+			// Unsupported restrictions cannot fall through to a broader role grant.
+			effect = EffectDeny
+			common.SysLog(fmt.Sprintf("authorization policy %d has an unsupported legacy scope; loaded as deny; review the stored policy before granting access", rule.Id))
+		}
+		if err := persist.LoadPolicyArray([]string{rule.Ptype, rule.V0, rule.V1, rule.V2, effect}, m); err != nil {
 			return err
 		}
 	}
@@ -103,19 +122,4 @@ func newRule(ptype string, policy []string) model.CasbinRule {
 		*values[idx] = value
 	}
 	return rule
-}
-
-func ruleToLine(rule model.CasbinRule) string {
-	parts := []string{rule.Ptype}
-	values := []string{rule.V0, rule.V1, rule.V2, rule.V3, rule.V4, rule.V5}
-	if rule.Ptype == "p" && rule.V0 != "" && rule.V1 != "" && rule.V2 != "" && rule.V3 == "" {
-		values[3] = EffectAllow
-	}
-	for _, value := range values {
-		if value == "" {
-			continue
-		}
-		parts = append(parts, value)
-	}
-	return strings.Join(parts, ", ")
 }

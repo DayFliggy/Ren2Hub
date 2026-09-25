@@ -2,7 +2,6 @@ package relayconvert
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -167,15 +166,6 @@ func AnalyzeRequest(request any) (RequestRequirements, error) {
 	if err := req.inspectProjectionSemantics(payload); err != nil {
 		return RequestRequirements{}, err
 	}
-	if hasToolMedia(req) && (format == types.RelayFormatClaude || format == types.RelayFormatOpenAIResponses) {
-		if _, err := convertToolMediaHistory(payload, format); err != nil {
-			var loss *types.ConversionLossError
-			if !errors.As(err, &loss) {
-				return RequestRequirements{}, err
-			}
-			req.Diagnostics = append(req.Diagnostics, loss.Diagnostics...)
-		}
-	}
 	req.NativeRequired = len(req.NativeState) != 0
 	req.ToolIdentity = analyzeToolIdentity(request)
 	return req, nil
@@ -216,6 +206,14 @@ func PlanConversion(req RequestRequirements, target types.RelayFormat, policy ty
 		}
 		return plan, types.RejectConversionLoss(policy, plan.Diagnostics)
 	}
+	for _, tool := range req.Tools {
+		if target == types.RelayFormatGemini && (tool.Type == "custom" || tool.Type == "custom_history") {
+			plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "unsupported_tool_semantics", Path: tool.Path, Message: "Gemini cannot preserve free-form tool execution", Severity: types.ConversionDiagnosticError, From: req.Format, To: target})
+		}
+		if tool.Type == "namespace" {
+			plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "unsupported_tool_semantics", Path: tool.Path, Message: "cannot preserve tool namespace and its configuration", Severity: types.ConversionDiagnosticError, From: req.Format, To: target})
+		}
+	}
 	if req.NativeRequired {
 		plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "native_state_required", Path: strings.Join(req.NativeState, ","), Message: "provider-owned state requires the original protocol and owner", Severity: types.ConversionDiagnosticError, From: req.Format, To: target})
 	}
@@ -254,23 +252,6 @@ func PlanConversion(req RequestRequirements, target types.RelayFormat, policy ty
 	if req.Stream && !plan.StreamSupported {
 		return plan, fmt.Errorf("stream response conversion from %s to %s is unavailable", target, req.Format)
 	}
-	for _, tool := range req.Tools {
-		if tool.Type == "function" {
-			continue
-		}
-		// Only unconfigured web search has a portable representation in this
-		// release. Provider-specific filters must not be silently discarded.
-		if tool.Type == "web_search" && !tool.Configured && (target == types.RelayFormatGemini || target == types.RelayFormatClaude || target == types.RelayFormatOpenAIResponses || target == types.RelayFormatOpenAI) {
-			if target == types.RelayFormatClaude || req.Format == types.RelayFormatClaude {
-				plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "native_state_required", Path: tool.Path, Message: "Claude hosted search may pause and requires a native client to preserve continuation", Severity: types.ConversionDiagnosticError, From: req.Format, To: target})
-			}
-			if req.Format == types.RelayFormatOpenAI {
-				plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "hosted_trace_not_portable", Path: tool.Path, Message: "Chat preserves search citations but cannot represent provider-side tool execution traces", Severity: types.ConversionDiagnosticWarning, From: target, To: req.Format})
-			}
-			continue
-		}
-		plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "unsupported_tool_semantics", Path: tool.Path, Message: "cannot preserve tool " + tool.Type + " and its configuration", Severity: types.ConversionDiagnosticError, From: req.Format, To: target})
-	}
 	if target == types.RelayFormatGemini && slices.Contains(req.Features, "serial_tools") {
 		plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "serial_tools_not_portable", Path: "parallel_tool_calls", Message: "Gemini conversion cannot enforce serial tool execution", Severity: types.ConversionDiagnosticError, From: req.Format, To: target})
 	}
@@ -284,14 +265,6 @@ func PlanConversion(req RequestRequirements, target types.RelayFormat, policy ty
 		}
 		diagnostic.From, diagnostic.To = req.Format, target
 		plan.Diagnostics = append(plan.Diagnostics, diagnostic)
-	}
-	// Missing implementations and identity/status loss are hard capabilities,
-	// not opt-in degradation. Native forwarding returned above.
-	for _, diagnostic := range plan.Diagnostics {
-		if strings.HasPrefix(diagnostic.Code, "tool_media_") || strings.HasPrefix(diagnostic.Code, "tool_result_identity_") ||
-			(hasToolMedia(req) && diagnostic.Code == "tool_result_status_not_portable") {
-			return plan, &types.ConversionLossError{Diagnostics: plan.Diagnostics}
-		}
 	}
 	return plan, types.RejectConversionLoss(policy, plan.Diagnostics)
 }
@@ -462,7 +435,7 @@ func (r *RequestRequirements) inspectContentContext(value any, path string, tool
 		switch kind {
 		case "image", "document", "audio", "video", "input_file", "file":
 			r.Features = appendUnique(r.Features, "multimodal")
-		case "compaction", "compaction_trigger", "item_reference", "redacted_thinking", "server_tool_use", "web_search_tool_result":
+		case "compaction", "compaction_trigger", "item_reference", "redacted_thinking":
 			r.NativeState = appendUnique(r.NativeState, path+"."+kind)
 		case "custom_tool_call", "custom_tool_call_output":
 			r.Tools = append(r.Tools, ToolRequirement{Type: "custom_history", Path: path})

@@ -6,6 +6,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -102,7 +103,7 @@ func TestConvertOpenAIResponsesRequestToGeminiFunctionCallConversation(t *testin
 	assert.Equal(t, map[string]interface{}{"ok": true}, got.Contents[1].Parts[0].FunctionResponse.Response)
 }
 
-func TestConvertOpenAIResponsesRequestToGeminiRejectsCustomToolCalls(t *testing.T) {
+func TestConvertOpenAIResponsesRequestToGeminiRejectsCustomToolLoss(t *testing.T) {
 	request := dto.OpenAIResponsesRequest{
 		Model: "gemini-test",
 		Input: mustGeminiRawMessage(t, []map[string]any{
@@ -138,9 +139,13 @@ func TestConvertOpenAIResponsesRequestToGeminiRejectsCustomToolCalls(t *testing.
 			{"type": "unknown", "name": "unknown"},
 		}),
 	}
-	_, err := (&Adaptor{}).ConvertOpenAIResponsesRequest(nil, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: request.Model}}, request)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot preserve")
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: request.Model}}
+	converted, err := (&Adaptor{}).ConvertOpenAIResponsesRequest(nil, info, request)
+	var loss *types.ConversionLossError
+	require.ErrorAs(t, err, &loss)
+	assert.Nil(t, converted)
+	require.NotEmpty(t, info.ConversionDiagnostics)
+	assert.Contains(t, loss.Error(), "Gemini cannot preserve free-form tool execution")
 }
 
 func mustConvertResponsesToGemini(t *testing.T, req dto.OpenAIResponsesRequest) *dto.GeminiChatRequest {

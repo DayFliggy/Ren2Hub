@@ -42,11 +42,11 @@ func PersistTaskCompletion(ctx context.Context, task *Task, fromStatus TaskStatu
 		if err := lockForUpdate(tx).First(&current, task.ID).Error; err != nil {
 			return err
 		}
+		if err := validateTaskCompletionIdentity(&current, task); err != nil {
+			return err
+		}
 		if current.Status != fromStatus || current.Status == TaskStatusSuccess || current.Status == TaskStatusFailure {
 			return nil
-		}
-		if current.PrivateData.SubmissionRequestID != task.PrivateData.SubmissionRequestID {
-			return ErrBillingRecoveryStateConflict
 		}
 		if current.UserId != task.UserId || current.ChannelId != task.ChannelId || current.Quota != task.Quota || current.Quota < 0 || current.Quota > common.MaxQuota ||
 			current.PrivateData.TokenId != consumption.Log.TokenId || consumption.Log.UserId != current.UserId || consumption.Log.ChannelId != current.ChannelId {
@@ -58,9 +58,20 @@ func PersistTaskCompletion(ctx context.Context, task *Task, fromStatus TaskStatu
 		}
 		privateData := current.PrivateData
 		privateData.ResultURL = task.PrivateData.ResultURL
+		privateData.PluginState = task.PrivateData.PluginState
+		privateData.PollFailures = task.PrivateData.PollFailures
+		privateData.CompletionUsage = task.PrivateData.CompletionUsage
+		privateData.BillingContext = task.PrivateData.BillingContext
+		privateData.ResultDiscarded = task.PrivateData.ResultDiscarded
+		storedData := task.Data
+		if privateData.ResultDiscarded {
+			storedData = nil
+			privateData.PluginState = nil
+			privateData.ResultURL = ""
+		}
 		result := tx.Model(&current).Where("status = ?", fromStatus).Updates(map[string]any{
 			"status": task.Status, "progress": task.Progress, "start_time": task.StartTime, "finish_time": task.FinishTime,
-			"submit_time": task.SubmitTime, "fail_reason": task.FailReason, "data": task.Data,
+			"submit_time": task.SubmitTime, "fail_reason": task.FailReason, "data": storedData,
 			"private_data": privateData, "updated_at": common.GetTimestamp(),
 		})
 		if result.Error != nil {
@@ -68,6 +79,9 @@ func PersistTaskCompletion(ctx context.Context, task *Task, fromStatus TaskStatu
 		}
 		if result.RowsAffected != 1 {
 			return ErrBillingRecoveryStateConflict
+		}
+		if err := recordTaskResultEvent(tx, task); err != nil {
+			return err
 		}
 		won = true
 		return nil

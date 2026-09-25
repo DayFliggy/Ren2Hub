@@ -27,6 +27,7 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	if err = common.Unmarshal(responseBody, &responsesResponse); err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	info.ObserveResponseModel(responsesResponse.Model)
 	if oaiError := responsesResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		c.Set("response_termination", relayconvert.TerminationFromResponse(&responsesResponse))
 		return relayconvert.UsageFromResponsesUsage(responsesResponse.Usage), types.WithOpenAIError(*oaiError, http.StatusBadGateway)

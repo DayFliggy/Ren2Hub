@@ -25,14 +25,14 @@ func TestClaudeCitationStateCannotBeInventedOrDropped(t *testing.T) {
 	}
 }
 
-func TestClaudeSearchRequiresNativeResponseCapability(t *testing.T) {
+func TestClaudeSearchHasUpstreamConversionRoute(t *testing.T) {
 	var request dto.ClaudeRequest
 	require.NoError(t, kitutil.Unmarshal([]byte(`{"model":"claude-test","max_tokens":16,"messages":[{"role":"user","content":"search"}],"tools":[{"type":"web_search_20250305","name":"web_search"}]}`), &request))
 	requirements, err := AnalyzeRequest(&request)
 	require.NoError(t, err)
 	for _, target := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, types.RelayFormatGemini} {
 		_, err := PlanConversion(requirements, target, types.ConversionLossPolicyAllow)
-		require.Error(t, err)
+		require.NoError(t, err)
 	}
 	_, err = PlanConversion(requirements, types.RelayFormatClaude, types.ConversionLossPolicySafe)
 	require.NoError(t, err)

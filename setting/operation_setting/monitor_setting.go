@@ -11,6 +11,7 @@ type MonitorSetting struct {
 	AutoTestChannelEnabled bool    `json:"auto_test_channel_enabled"`
 	AutoTestChannelMinutes float64 `json:"auto_test_channel_minutes"`
 	ChannelTestMode        string  `json:"channel_test_mode"`
+	ChannelTestConcurrency int     `json:"channel_test_concurrency"`
 }
 
 const (
@@ -24,6 +25,7 @@ var monitorSetting = MonitorSetting{
 	AutoTestChannelEnabled: false,
 	AutoTestChannelMinutes: 10,
 	ChannelTestMode:        ChannelTestModeScheduledAll,
+	ChannelTestConcurrency: 1,
 }
 
 func init() {

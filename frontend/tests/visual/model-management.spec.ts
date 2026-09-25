@@ -46,6 +46,21 @@ const groups = [
   },
 ]
 async function data(page: Page) {
+  await page.route('**/api/billing/prices/task-schema?*', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          model: 'gpt-local',
+          plugin_key: '',
+          usage_schema: null,
+          manifest_schema: null,
+          review_required: false,
+          plugins: [],
+        },
+      },
+    })
+  )
   await page.route('**/api/models/search?*', (route) =>
     route.fulfill({
       json: {
@@ -85,6 +100,9 @@ async function data(page: Page) {
           {
             id: 1,
             model: 'gpt-local',
+            contract_version: 2,
+            calculation_version: 'billing-v2',
+            result_unit: 'usd',
             mode: 'unit_price',
             prices: [
               {
@@ -104,6 +122,45 @@ async function data(page: Page) {
   await page.route('**/api/models/missing', (route) =>
     route.fulfill({ json: { success: true, data: ['missing-local'] } })
   )
+  await page.route('**/api/billing/prices/preview', async (route) => {
+    expect(route.request().method()).toBe('POST')
+    expect(route.request().postDataJSON().price.contract_version).toBe(2)
+    await route.fulfill({
+      json: {
+        success: true,
+        data: {
+          quote: {},
+          charge: {
+            lines: [
+              {
+                quantity: 'expression',
+                count: '1',
+                unit: 'per_call',
+                unit_price: '0.001234567',
+                subtotal_usd: '0.001234567',
+              },
+            ],
+            total_usd: '0.001234567',
+            final_quota: '617',
+            unrounded_quota: '617.2835',
+            rounding_delta: '-0.2835',
+            calculation_version: 'billing-v2',
+            rounding_version: 'half-up-positive-minimum-v1',
+            trace: {
+              matched_tier: 'night',
+              request_rules: [
+                {
+                  cond: 'hour("Asia/Shanghai") < 6',
+                  multiplier: 0.8,
+                  matched: true,
+                },
+              ],
+            },
+          },
+        },
+      },
+    })
+  })
   await page.route('**/api/models/sync_upstream/preview?*', (route) =>
     route.fulfill({
       json: {
@@ -180,6 +237,52 @@ for (const language of ['zh-CN', 'en']) {
           })
         ).toBeVisible()
         await expect(drawer.locator('img').first()).toBeVisible()
+        await drawer
+          .getByText(zh ? '本币编辑辅助' : 'Local currency editing helper', {
+            exact: true,
+          })
+          .click()
+        const usd = drawer.locator('input[inputmode=decimal]').first()
+        await expect(usd).toHaveValue('1.000000000000000001')
+        await drawer.locator('[data-exchange-rate]').fill('7')
+        await expect(usd).toHaveValue('1.000000000000000001')
+        await drawer
+          .getByRole('button', {
+            name: zh
+              ? '将单价转换为表达式草稿'
+              : 'Convert unit prices to expression draft',
+          })
+          .click()
+        await expect(
+          drawer.locator('[data-price-conversion-preview]')
+        ).toContainText('v1:p * 1.000000000000000001')
+        await drawer.locator('[data-apply-price-conversion]').click()
+        await drawer
+          .getByText(zh ? '时间价格规则' : 'Time price rule', { exact: true })
+          .click()
+        await drawer
+          .getByRole('button', {
+            name: zh ? '添加到表达式' : 'Add rule to expression',
+          })
+          .click()
+        await drawer
+          .getByText(zh ? '价格预览' : 'Price preview', { exact: true })
+          .click()
+        await drawer.locator('[data-price-preview]').click()
+        await expect(
+          drawer.locator('[data-price-preview-result]')
+        ).toContainText('617 quota')
+        await expect(
+          drawer.locator('[data-price-preview-result]')
+        ).toContainText('night')
+        await drawer
+          .locator('[data-price-preview-result]')
+          .scrollIntoViewIfNeeded()
+        await page.screenshot({
+          path: testInfo.outputPath('price-preview.png'),
+          fullPage: true,
+        })
+        await assertNoHorizontalOverflow(page)
         await drawer.getByRole('button', { name: 'JSON', exact: true }).click()
         await drawer.getByLabel('JSON', { exact: true }).fill('{')
         await drawer
@@ -276,3 +379,121 @@ test('sync cancellation and missing-model creation preserve the draft boundary',
   await page.keyboard.press('Escape')
   expect(writes).toEqual([])
 })
+
+for (const mobile of [false, true]) {
+  for (const theme of ['light', 'dark'] as const) {
+    test(`image count price draft ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize(
+        mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
+      )
+      await configureStablePage(page, { theme })
+      await page.addInitScript(() =>
+        localStorage.setItem('ren2hub_locale', 'en')
+      )
+      await data(page)
+      await page.route('**/api/billing/prices', (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: [
+              {
+                id: 1,
+                model: 'gpt-local',
+                contract_version: 2,
+                calculation_version: 'billing-v2',
+                result_unit: 'usd',
+                mode: 'unit_price',
+                prices: [
+                  { quantity: 'images', unit: 'per_image', price: '0.001' },
+                ],
+                created_at: 1700000000,
+                hash: 'image-price-fixture',
+              },
+            ],
+          },
+        })
+      )
+      await page.route('**/api/billing/prices/preview', async (route) => {
+        const payload = route.request().postDataJSON()
+        expect(payload.price.expression).toBe('v1:fixed(0.001) * image_count')
+        expect(payload.price.prices).toEqual([])
+        expect(payload.usage.quantities.images).toBe('2')
+        await route.fulfill({
+          json: {
+            success: true,
+            data: {
+              quote: {},
+              charge: {
+                lines: [
+                  {
+                    quantity: 'expression',
+                    count: '1',
+                    unit: 'per_call',
+                    unit_price: '0.002',
+                    subtotal_usd: '0.002',
+                  },
+                ],
+                final_quota: '1000',
+                total_usd: '0.002',
+                unrounded_quota: '1000',
+                rounding_delta: '0',
+                calculation_version: 'billing-v2',
+                rounding_version: 'half-up-positive-minimum-v1',
+                trace: { matched_tier: '', image_count: 2 },
+              },
+            },
+          },
+        })
+      })
+      const errors: string[] = []
+      const writes: string[] = []
+      page.on('pageerror', (error) => errors.push(error.message))
+      page.on('request', (request) => {
+        if (
+          request.method() !== 'GET' &&
+          request.url().includes('/api/billing/prices') &&
+          !request.url().endsWith('/preview')
+        )
+          writes.push(request.url())
+      })
+      await page.goto('/models/metadata')
+      await page
+        .getByRole('button', { name: 'Edit model', exact: true })
+        .filter({ visible: true })
+        .first()
+        .click()
+      const drawer = page.getByRole('dialog')
+      await drawer
+        .getByRole('button', {
+          name: 'Convert unit prices to expression draft',
+        })
+        .click()
+      await expect(
+        drawer.locator('[data-price-conversion-preview]')
+      ).toContainText('v1:fixed(0.001) * image_count')
+      await drawer.locator('[data-apply-price-conversion]').click()
+      await drawer.getByText('Price preview', { exact: true }).click()
+      await drawer.locator('[data-price-preview-usage]').fill(
+        JSON.stringify({
+          quantities: { images: '2' },
+          source: 'provider_image_count',
+          complete: true,
+        })
+      )
+      await drawer.locator('[data-price-preview]').click()
+      const result = drawer.locator('[data-price-preview-result]')
+      await expect(result).toContainText('1000 quota')
+      await expect(result).toContainText('Image count: 2')
+      await result.scrollIntoViewIfNeeded()
+      await assertNoHorizontalOverflow(page)
+      await page.screenshot({
+        path: testInfo.outputPath('image-count-preview.png'),
+        fullPage: true,
+      })
+      expect(writes).toEqual([])
+      expect(errors).toEqual([])
+    })
+  }
+}

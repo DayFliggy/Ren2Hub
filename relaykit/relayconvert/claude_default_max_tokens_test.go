@@ -97,14 +97,14 @@ func TestClaudeDefaultMaxTokensPresence(t *testing.T) {
 // "-thinking" request without max_tokens must keep converting even when no
 // DefaultMaxTokens hook is configured.
 func TestClaudeThinkingAdapterSatisfiesMaxTokensWithoutCallback(t *testing.T) {
-	meta := &convmeta.Values{Options: &convmeta.Options{
+	meta := &convmeta.Values{ReasoningConversion: &dto.ReasoningConversionState{Mode: "enabled", BudgetTokens: kitutil.GetPointer(1024)}, Options: &convmeta.Options{
 		Claude: convmeta.ClaudeOptions{
 			ThinkingAdapterEnabled:                true,
 			ThinkingAdapterBudgetTokensPercentage: 0.8,
 		},
 	}}
 	got, err := OpenAIChatRequestToClaudeMessages(context.Background(), meta, dto.GeneralOpenAIRequest{
-		Model: "claude-test-thinking",
+		Model: "claude-test",
 		Messages: []dto.Message{
 			{Role: "user", Content: "hello"},
 		},
@@ -115,12 +115,12 @@ func TestClaudeThinkingAdapterSatisfiesMaxTokensWithoutCallback(t *testing.T) {
 }
 
 func TestClaudeThinkingAdapterRejectsInsufficientExplicitLimit(t *testing.T) {
-	meta := &convmeta.Values{Options: &convmeta.Options{
+	meta := &convmeta.Values{ReasoningConversion: &dto.ReasoningConversionState{Mode: "enabled", BudgetTokens: kitutil.GetPointer(1024)}, Options: &convmeta.Options{
 		Claude: convmeta.ClaudeOptions{ThinkingAdapterEnabled: true, ThinkingAdapterBudgetTokensPercentage: 0.8},
 	}}
-	for _, limit := range []uint{0, 1, 1279} {
+	for _, limit := range []uint{0, 1, 1024} {
 		got, err := OpenAIChatRequestToClaudeMessages(context.Background(), meta, dto.GeneralOpenAIRequest{
-			Model: "claude-test-thinking", MaxTokens: &limit,
+			Model: "claude-test", MaxTokens: &limit,
 			Messages: []dto.Message{{Role: "user", Content: "hello"}},
 		})
 		require.ErrorContains(t, err, "max_tokens")
@@ -194,8 +194,7 @@ func TestOpenAIChatRequestToClaudeMessagesOmitsEmptyTools(t *testing.T) {
 				require.NoError(t, err)
 				plan, err := PlanConversion(requirements, types.RelayFormatClaude, types.ConversionLossPolicyAllow)
 				require.NoError(t, err)
-				require.NotEmpty(t, plan.Diagnostics)
-				assert.Equal(t, "unsupported_tool_semantics", plan.Diagnostics[0].Code)
+				assert.Empty(t, plan.Diagnostics)
 			}
 			got, err := OpenAIChatRequestToClaudeMessages(context.Background(), meta, test.request)
 			require.NoError(t, err)

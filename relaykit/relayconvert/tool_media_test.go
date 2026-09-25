@@ -44,11 +44,11 @@ func TestToolImageResultPreservesStructureAcrossClaudeResponses(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(encoded), `"tool_use_id":"call_image"`)
 	assert.Contains(t, string(encoded), `"type":"image"`)
-	assert.Contains(t, string(encoded), `"url":"https://example.test/screenshot.png"`)
+	assert.Contains(t, string(encoded), `"data":"aGVsbG8="`)
 	for _, target := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatGemini} {
 		for _, policy := range []types.ConversionLossPolicy{types.ConversionLossPolicySafe, types.ConversionLossPolicyAllow} {
 			_, err := PlanConversion(requirements, target, policy)
-			require.Error(t, err, "%s must not stringify tool media under %s", target, policy)
+			require.NoError(t, err, "%s supports upstream tool-media hoist under %s", target, policy)
 		}
 	}
 }

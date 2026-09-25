@@ -19,7 +19,6 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/model_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	hosttypes "github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -85,20 +84,15 @@ type TokenCountMeta struct {
 	estimatePromptTokens int
 }
 
-type CompactAttemptStage string
-
-const (
-	CompactAttemptNone  CompactAttemptStage = ""
-	CompactAttemptExact CompactAttemptStage = "exact"
-	CompactAttemptBase  CompactAttemptStage = "base"
-)
-
 type RelayInfo struct {
+	ReasoningConversion *dto.ReasoningConversionState
+
 	ConversionPolicy        types.ConversionLossPolicy
 	ConversionPlan          *relayconvert.ConversionPlan
 	RequestRequirements     *relayconvert.RequestRequirements
 	ConversionDiagnostics   []types.ConversionDiagnostic
 	ResponseUsage           *dto.Usage
+	ResponseModel           *ResponseModel
 	ResponseUsageKind       string
 	ResponseUsageLogContent []string
 	RouteCapabilityModel    string
@@ -119,10 +113,6 @@ type RelayInfo struct {
 	UsePrice               bool
 	RelayMode              int
 	OriginModelName        string
-	RequestedModel         string
-	LogicalBillingModel    string
-	UpstreamAttemptModel   string
-	CompactAttemptStage    CompactAttemptStage
 	CompactResponseObject  string
 	PricingModelName       string
 	ModelPricingSource     string
@@ -172,7 +162,8 @@ type RelayInfo struct {
 	BillingRefundError error `json:"-"`
 	// BillingSource is retained for persisted request identity; new requests use wallet.
 	BillingSource    string
-	BillingAttemptID string `json:"-"`
+	BillingAttemptID string                   `json:"-"`
+	TaskPluginRef    *hosttypes.TaskPluginRef `json:"-"`
 	// RequestId is used for idempotent pre-consume/refund.
 	RequestId                 string
 	IsClaudeBetaQuery         bool // /v1/messages?beta=true
@@ -221,6 +212,8 @@ type RelayInfo struct {
 }
 
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
+	info.ReasoningConversion = nil
+	info.ResponseModel = nil
 	channelType := common.GetContextKeyInt(c, constant.ContextKeyChannelType)
 	paramOverride := common.GetContextKeyStringMap(c, constant.ContextKeyChannelParamOverride)
 	headerOverride := common.GetContextKeyStringMap(c, constant.ContextKeyChannelHeaderOverride)
@@ -258,6 +251,10 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	channelOtherSettings, ok := common.GetContextKeyType[dto.ChannelOtherSettings](c, constant.ContextKeyChannelOtherSetting)
 	if ok {
 		channelMeta.ChannelOtherSettings = channelOtherSettings
+	}
+	if channelType == constant.ChannelTypeAdvancedCustom && c.Request != nil && c.Request.URL != nil &&
+		channelMeta.ChannelOtherSettings.AdvancedCustom.BodyPassThroughEnabled(c.Request.URL.Path, info.OriginModelName) {
+		channelMeta.ChannelSetting.PassThroughBodyEnabled = true
 	}
 
 	if streamSupportedChannels[channelMeta.ChannelType] {
@@ -298,6 +295,7 @@ func (info *RelayInfo) ResetAttemptState() error {
 	info.isFirstResponse = true
 	info.ThinkingContentInfo = ThinkingContentInfo{IsFirstThinkingContent: true}
 	info.ResponseUsage, info.ResponseUsageLogContent, info.ResponseUsageKind = nil, nil, ""
+	info.ResponseModel = nil
 	info.RuntimeHeadersOverride, info.UseRuntimeHeadersOverride = nil, false
 	info.RequestConversionChain, info.FinalRequestRelayFormat = nil, ""
 	info.InitRequestConversionChain()
@@ -325,10 +323,6 @@ func (info *RelayInfo) ToString() string {
 	fmt.Fprintf(b, "IsPlayground: %t, ", info.IsPlayground)
 	fmt.Fprintf(b, "RequestURLPath: %q, ", info.RequestURLPath)
 	fmt.Fprintf(b, "OriginModelName: %q, ", info.OriginModelName)
-	if info.LogicalBillingModel != "" {
-		fmt.Fprintf(b, "LogicalBillingModel: %q, ", info.LogicalBillingModel)
-		fmt.Fprintf(b, "UpstreamAttemptModel: %q, ", info.UpstreamAttemptModel)
-	}
 	fmt.Fprintf(b, "EstimatePromptTokens: %d, ", info.estimatePromptTokens)
 	fmt.Fprintf(b, "ShouldIncludeUsage: %t, ", info.ShouldIncludeUsage)
 	fmt.Fprintf(b, "DisablePing: %t, ", info.DisablePing)
@@ -411,6 +405,8 @@ var streamSupportedChannels = map[int]bool{
 	constant.ChannelTypeMiniMax:        true,
 	constant.ChannelTypeSiliconFlow:    true,
 	constant.ChannelTypeAdvancedCustom: true,
+	constant.ChannelTypeVLLM:           true,
+	constant.ChannelTypeSGLang:         true,
 	constant.ChannelTypeSub2API:        true,
 	constant.ChannelTypeNewAPI:         true,
 	constant.ChannelTypeTencent:        true,
@@ -596,12 +592,6 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 			//promptTokens: common.GetContextKeyInt(c, constant.ContextKeyPromptTokens),
 			estimatePromptTokens: common.GetContextKeyInt(c, constant.ContextKeyEstimatedTokens),
 		},
-	}
-	if info.RelayMode == relayconstant.RelayModeResponsesCompact {
-		info.RequestedModel = ratio_setting.CompactBaseModelName(info.OriginModelName)
-		info.LogicalBillingModel = ratio_setting.WithCompactModelSuffix(info.RequestedModel)
-		info.OriginModelName = info.RequestedModel
-		info.CompactAttemptStage = CompactAttemptStage(common.GetContextKeyString(c, constant.ContextKeyCompactStage))
 	}
 
 	if info.RelayMode == relayconstant.RelayModeUnknown {
@@ -812,18 +802,12 @@ func (info *RelayInfo) BillingModelName() string {
 	if info == nil {
 		return ""
 	}
-	if info.LogicalBillingModel != "" {
-		return info.LogicalBillingModel
-	}
 	return info.OriginModelName
 }
 
 func (info *RelayInfo) ActualUpstreamModelName() string {
 	if info == nil {
 		return ""
-	}
-	if info.UpstreamAttemptModel != "" {
-		return info.UpstreamAttemptModel
 	}
 	return info.GetUpstreamModelName()
 }
@@ -920,6 +904,7 @@ func (info *RelayInfo) ConvOptions() *convmeta.Options {
 		},
 		OpenRouterDialect:      info != nil && info.GetChannelType() == constant.ChannelTypeOpenRouter,
 		PreserveThinkingSuffix: model_setting.ShouldPreserveThinkingSuffix,
+		PreserveEffortTail:     model_setting.ShouldPreserveEffortTail,
 	}
 	if info != nil {
 		options.ConversionPolicy = info.ConversionPolicy
@@ -956,8 +941,11 @@ func (info *RelayInfo) PrepareUpstreamSend(body ...io.Reader) error {
 }
 
 func (info *RelayInfo) CaptureResponseUsage(usage *dto.Usage, kind string, content []string) {
-	if info == nil || usage == nil {
+	if info == nil {
 		return
+	}
+	if usage == nil {
+		usage = &dto.Usage{UsageSource: "missing"}
 	}
 	info.ResponseUsage = usage
 	if usage.BillingUsage != nil && usage.BillingUsage.Estimated {
@@ -1001,11 +989,20 @@ type TaskRelayInfo struct {
 	PublicTaskID string
 
 	ConsumeQuota bool
+	OriginTasks  []OriginTaskRef
 
 	// LockedChannel holds the full channel object when the request is bound to
 	// a specific channel (e.g., remix on origin task's channel). Stored as any
 	// to avoid an import cycle with model; callers type-assert to *model.Channel.
 	LockedChannel any
+}
+
+type OriginTaskRef struct {
+	TaskID         string
+	UpstreamTaskID string
+	Action         string
+	Status         string
+	Data           []byte
 }
 
 type TaskSubmitReq struct {
@@ -1091,15 +1088,19 @@ func (t *TaskSubmitReq) UnmarshalMetadata(v any) error {
 }
 
 type TaskInfo struct {
-	Code             int    `json:"code"`
-	TaskID           string `json:"task_id"`
-	Status           string `json:"status"`
-	Reason           string `json:"reason,omitempty"`
-	Url              string `json:"url,omitempty"`
-	RemoteUrl        string `json:"remote_url,omitempty"`
-	Progress         string `json:"progress,omitempty"`
-	CompletionTokens int    `json:"completion_tokens,omitempty"` // 用于按倍率计费
-	TotalTokens      int    `json:"total_tokens,omitempty"`      // 用于按倍率计费
+	FinishTime       int64           `json:"finish_time,omitempty"`
+	Code             int             `json:"code"`
+	TaskID           string          `json:"task_id"`
+	Status           string          `json:"status"`
+	Reason           string          `json:"reason,omitempty"`
+	Url              string          `json:"url,omitempty"`
+	RemoteUrl        string          `json:"remote_url,omitempty"`
+	Progress         string          `json:"progress,omitempty"`
+	CompletionTokens int             `json:"completion_tokens,omitempty"` // 用于按倍率计费
+	TotalTokens      int             `json:"total_tokens,omitempty"`      // 用于按倍率计费
+	UsageFacts       map[string]any  `json:"usage_facts,omitempty"`
+	UsageError       string          `json:"-"`
+	PluginState      json.RawMessage `json:"plugin_state,omitempty"`
 }
 
 func FailTaskInfo(reason string) *TaskInfo {
@@ -1250,4 +1251,11 @@ func RemoveGeminiDisabledFields(jsonData []byte) ([]byte, error) {
 		return jsonData, nil
 	}
 	return jsonDataAfter, nil
+}
+
+func (info *RelayInfo) ReasoningState() *dto.ReasoningConversionState {
+	if info == nil {
+		return nil
+	}
+	return info.ReasoningConversion
 }

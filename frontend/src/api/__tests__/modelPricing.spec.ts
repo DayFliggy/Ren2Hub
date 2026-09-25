@@ -14,6 +14,9 @@ import {
 } from '@/utils/decimal'
 
 export const price: PriceVersion = {
+  contract_version: 2,
+  calculation_version: 'billing-v2',
+  result_unit: 'usd',
   id: 3,
   model: 'test',
   mode: 'unit_price',
@@ -30,6 +33,68 @@ export const price: PriceVersion = {
 }
 afterEach(() => vi.restoreAllMocks())
 describe('immutable model pricing', () => {
+  it('loads current task schema choices and carries explicit publication selection', async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue({
+      model: 'test',
+      plugin_key: '',
+      usage_schema: null,
+      manifest_schema: null,
+      review_required: true,
+      plugins: [
+        { key: 'one', name: 'One', version: '2' },
+        { key: 'two', name: 'Two', version: '3' },
+      ],
+    })
+    expect((await modelPricingApi.taskSchema('test')).plugins).toHaveLength(2)
+    expect(get).toHaveBeenCalledWith(
+      '/api/billing/prices/task-schema',
+      { model: 'test' },
+      { signal: undefined }
+    )
+    const post = vi.spyOn(api, 'post').mockResolvedValue(price)
+    await modelPricingApi.publish(price, 3, 'two')
+    expect(post).toHaveBeenCalledWith('/api/billing/prices', {
+      price,
+      expected_version: 3,
+      plugin_key: 'two',
+    })
+  })
+  it('rejects persisted prices without the current contract', () => {
+    expect(() =>
+      parsePriceVersion({ ...price, contract_version: undefined }, '/prices')
+    ).toThrow()
+    expect(() =>
+      parsePriceVersion(
+        { ...price, calculation_version: 'billing-v1' },
+        '/prices'
+      )
+    ).toThrow()
+  })
+  it('keeps task schemas and exact custom units when parsing prices', () => {
+    const task = {
+      ...price,
+      usage_schema: {
+        version: 1,
+        hash: 'schema',
+        fields: {
+          credits: {
+            type: 'number',
+            unit: 'credit',
+            source: 'completion_fact',
+            required: true,
+          },
+        },
+      },
+      prices: [
+        {
+          quantity: 'credits',
+          unit: 'per_credit',
+          price: '0.000000000000000001',
+        },
+      ],
+    }
+    expect(parsePriceVersion(task, '/prices')).toEqual(task)
+  })
   it('preserves explicit zero and decimal precision without a ratio tree', () => {
     expect(parsePriceVersion(price, '/prices')).toEqual(price)
     expect(multiplyDecimal(price.prices[0]!.price, '2')).toBe(

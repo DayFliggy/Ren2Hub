@@ -21,11 +21,11 @@ func HoldTaskBilling(ctx context.Context, task *Task, from TaskStatus, reason st
 		if err := lockForUpdate(tx).First(&current, task.ID).Error; err != nil {
 			return err
 		}
+		if err := validateTaskCompletionIdentity(&current, task); err != nil {
+			return err
+		}
 		if current.Status != from || current.Status == TaskStatusSuccess || current.Status == TaskStatusFailure {
 			return nil
-		}
-		if current.PrivateData.SubmissionRequestID != task.PrivateData.SubmissionRequestID {
-			return ErrBillingRecoveryStateConflict
 		}
 		if recovery.Status != BillingRecoveryStatusActive && recovery.Status != BillingRecoveryStatusReconciliation {
 			return ErrBillingRecoveryStateConflict
@@ -48,7 +48,16 @@ func HoldTaskBilling(ctx context.Context, task *Task, from TaskStatus, reason st
 			}
 		}
 		if task.Status == TaskStatusSuccess || task.Status == TaskStatusFailure {
-			return tx.Model(&current).Updates(map[string]any{"status": task.Status, "progress": task.Progress, "finish_time": task.FinishTime, "data": task.Data, "private_data": task.PrivateData, "fail_reason": task.FailReason, "updated_at": common.GetTimestamp()}).Error
+			privateData, data := task.PrivateData, task.Data
+			if privateData.ResultDiscarded {
+				data = nil
+				privateData.PluginState = nil
+				privateData.ResultURL = ""
+			}
+			if err := tx.Model(&current).Updates(map[string]any{"status": task.Status, "progress": task.Progress, "submit_time": task.SubmitTime, "start_time": task.StartTime, "finish_time": task.FinishTime, "data": data, "private_data": privateData, "fail_reason": task.FailReason, "updated_at": common.GetTimestamp()}).Error; err != nil {
+				return err
+			}
+			return recordTaskResultEvent(tx, task)
 		}
 		return nil
 	})

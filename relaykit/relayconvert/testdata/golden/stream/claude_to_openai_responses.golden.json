@@ -25,8 +25,7 @@
           "usage": null,
           "user": null,
           "metadata": null
-        },
-        "sequence_number": 0
+        }
       }
     },
     {
@@ -42,23 +41,7 @@
           "quality": "",
           "size": ""
         },
-        "sequence_number": 1,
         "output_index": 0
-      }
-    },
-    {
-      "Type": "response.content_part.added",
-      "Payload": {
-        "type": "response.content_part.added",
-        "sequence_number": 2,
-        "output_index": 0,
-        "content_index": 0,
-        "item_id": "stream_fixed_msg_0",
-        "part": {
-          "type": "output_text",
-          "text": "",
-          "annotations": []
-        }
       }
     },
     {
@@ -66,7 +49,6 @@
       "Payload": {
         "type": "response.output_text.delta",
         "delta": "Hello world",
-        "sequence_number": 3,
         "output_index": 0,
         "content_index": 0,
         "item_id": "stream_fixed_msg_0"
@@ -76,26 +58,9 @@
       "Type": "response.output_text.done",
       "Payload": {
         "type": "response.output_text.done",
-        "sequence_number": 4,
-        "text": "Hello world",
         "output_index": 0,
         "content_index": 0,
         "item_id": "stream_fixed_msg_0"
-      }
-    },
-    {
-      "Type": "response.content_part.done",
-      "Payload": {
-        "type": "response.content_part.done",
-        "sequence_number": 5,
-        "output_index": 0,
-        "content_index": 0,
-        "item_id": "stream_fixed_msg_0",
-        "part": {
-          "type": "output_text",
-          "text": "Hello world",
-          "annotations": []
-        }
       }
     },
     {
@@ -117,7 +82,6 @@
           "quality": "",
           "size": ""
         },
-        "sequence_number": 6,
         "output_index": 0
       }
     },
@@ -197,22 +161,21 @@
           },
           "user": null,
           "metadata": null
-        },
-        "sequence_number": 7
+        }
       }
     }
   ],
   "usage": {
-    "prompt_tokens": 0,
+    "prompt_tokens": 4,
     "completion_tokens": 2,
-    "total_tokens": 2,
+    "total_tokens": 6,
     "usage_semantic": "openai",
     "usage_source": "anthropic",
     "billing_usage": {
       "source": "claude_messages",
       "semantic": "anthropic",
       "claude_usage": {
-        "input_tokens": 0,
+        "input_tokens": 4,
         "cache_creation_input_tokens": 0,
         "cache_read_input_tokens": 0,
         "output_tokens": 2,
@@ -232,7 +195,7 @@
       "image_tokens": 0,
       "reasoning_tokens": 0
     },
-    "input_tokens": 0,
+    "input_tokens": 4,
     "output_tokens": 2,
     "input_tokens_details": null,
     "claude_cache_creation_5_m_tokens": 0,

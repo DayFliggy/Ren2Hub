@@ -55,12 +55,17 @@ func FinalizeStreamResponseWithOutcome(ctx context.Context, info convmeta.Meta, 
 	if state.To == types.RelayFormatOpenAIResponses {
 		for _, value := range state.stepStates {
 			if converted, ok := value.(*oaichat.ChatToResponsesStreamState); ok {
-				events := converted.EndAbnormally(string(outcome))
+				var events []oaichat.ChatToResponsesStreamEvent
+				if outcome == StreamOutcomeIncomplete {
+					events = converted.EndIncomplete()
+				} else {
+					events = converted.Fail("upstream_stream_interrupted", "upstream stream ended before terminal", "")
+				}
 				values := make([]any, len(events))
 				for i := range events {
 					values[i] = events[i]
 				}
-				return responseStreamResults(state, values, state.Usage()), nil
+				return responseStreamResults(state, values, state.Usage(), nil), nil
 			}
 		}
 	}
@@ -74,5 +79,5 @@ func FinalizeStreamResponseWithOutcome(ctx context.Context, info convmeta.Meta, 
 	default:
 		return nil, fmt.Errorf("%s: %s", outcome, message)
 	}
-	return responseStreamResults(state, []any{value}, state.Usage()), nil
+	return responseStreamResults(state, []any{value}, state.Usage(), nil), nil
 }

@@ -22,7 +22,7 @@ Root 可以管理所有用户；其他管理员只能查看和修改角色低于
 
 ## Token 路由预览
 
-`POST /api/routing/tokens/:id/preview` 使用用户认证、Token 所有权检查、敏感接口限频和禁止缓存。请求为 `{ "model": "gpt-4o-mini", "path": "/v1/chat/completions", "request": { "model": "gpt-4o-mini", "messages": [{ "role": "user", "content": "示例" }] } }`；request 可省略，样本最多 1 MiB。正文模型必须匹配 model，Gemini 同时校验 URL 模型及生成操作；Compact 的已登记模型后缀按既有语义比较。
+`POST /api/routing/tokens/:id/preview` 使用用户认证、Token 所有权检查、敏感接口限频和禁止缓存。请求为 `{ "model": "gpt-4o-mini", "path": "/v1/chat/completions", "request": { "model": "gpt-4o-mini", "messages": [{ "role": "user", "content": "示例" }] } }`；request 可省略，样本最多 1 MiB。正文模型必须匹配 model，Gemini 同时校验 URL 模型及生成操作。Compact 使用 `/v1/responses/compact` 和普通模型名；旧 `-compact` 模型别名不再自动生成或剥离。
 
 沿用统一 success/data 包装。data 保留旧 Profile 预览字段，新增 `token_id`、`mode`（auto_lab/manual）、服务端生成的 `preview_id`、毫秒时间戳 `generated_at`；`profile_version` 为配置版本，无 Profile 时为 0。每条 entry 增加 `priority`、`score_breakdown`，继续提供 conversion_plan、diagnostics、filter_reason。自动候选没有 Entry，entry_id 为 0。
 
@@ -127,7 +127,7 @@ TPM 要求宿主登记可解析的最终请求格式。仅支持媒体任务、C
 
 `tool_identity` 只记录 `explicit_ids`、`invalid_history`、`requires_ids` 三个事实，不包含调用 ID、参数或结果。Vertex 的无 ID 投影启用时，`tool_ids_projected_to_names` 表示可无歧义改按名称关联；strict 拒绝该损失。`invalid_tool_history` 和 `tool_identity_required` 在所有策略下拒绝。请求多候选答案转换至 Claude/Responses 时返回 `multiple_candidates_unsupported`，allow 也不把多份答案合并成一份。
 
-`reasoning_controls_not_portable` 表示当前转换不能保留供应商推理控制，包含 Claude thinking/effort、Gemini thinkingConfig，以及 Chat/Responses 转 Claude/Gemini 时的 effort 近似或丢失。`safe/strict` 拒绝，`allow` 显式接受并记录损失；Chat 与 Responses 之间可等价复制的 effort 仍可在 strict 下转换，Responses 的 summary/mode/context 不随之宣称可移植。带配置的搜索走 `unsupported_tool_semantics`；搜索上下文大小映射为次数等近似不能标为无损。
+Claude thinking/effort、Gemini thinkingConfig 与 Chat/Responses reasoning 通过共享推理意图转换，支持的结构不再统一视作不可移植。具体不支持的字段仍由转换器报告损失并按 Token 策略拒绝；`allow` 不会使未实现的媒体、命名空间或自由格式工具路径变得可执行。搜索配置按已实现目标结构保留，不能仅凭工具名称推断无损。协议合同及本地验收范围见 [rc.40 协议说明](../upstream/RC40_PROTOCOL_CONTRACT.md)。
 
 `request_requirements.media` 只记录媒体种类、MIME、来源类别、字段路径和图片 detail，不含 URL 或媒体内容。`media_conversion_unavailable` 表示当前转换器不能表达该媒体或输入形态，所有策略拒绝，不把音视频当作图片，也不丢掉文档后继续发送文本。Claude/Gemini 经 Chat 的当前非图片投影属于此类；Chat/Responses 的已实现媒体路径按实际字段结构执行。图片 detail 在 Chat/Responses 之间保留显式 `low/high/auto` 和缺省差异，计价端仍采用原默认规则；其他不能保留 detail 的目标产生损失诊断。
 

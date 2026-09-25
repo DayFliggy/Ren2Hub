@@ -31,3 +31,19 @@ func TestBillingAttributesRejectInvalidScalarAndPreferCanonicalFields(t *testing
 	assert.Equal(t, float64(2), attrs["quantity"])
 	assert.Equal(t, "b", attrs["resolution"])
 }
+
+func TestBillingAttributesCaptureFinalReasoningAndExplicitZero(t *testing.T) {
+	attrs, err := BillingAttributesFromBody([]byte(`{"temperature":0,"top_p":0,"reasoning":{"effort":"high"}}`))
+	require.NoError(t, err)
+	assert.Equal(t, float64(0), attrs["temperature"])
+	assert.Equal(t, float64(0), attrs["top_p"])
+	assert.Equal(t, "high", attrs["effort"])
+	assert.Equal(t, "on", attrs["thinking"])
+	attrs, err = BillingAttributesFromBody([]byte(`{"generationConfig":{"thinkingConfig":{"thinkingBudget":-1}}}`))
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"thinking": "adaptive"}, attrs)
+	attrs, err = BillingAttributesFromBody([]byte(`{"thinking":{"type":"enabled","budget_tokens":1024},"output_config":{"effort":"max"}}`))
+	require.NoError(t, err)
+	assert.Equal(t, float64(1024), attrs["thinking_budget_tokens"])
+	assert.NotContains(t, attrs, "temperature")
+}

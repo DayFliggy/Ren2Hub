@@ -135,14 +135,6 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		imageN = *request.N
 	}
 
-	if usage.TotalTokens == 0 {
-		usage.TotalTokens = 1
-		usage.UsageSource = "estimated"
-	}
-	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 {
-		usage.PromptTokens = 1
-	}
-
 	quality := request.Quality
 	if quality == "" {
 		quality = "standard"

@@ -6,6 +6,7 @@ import type { LogItem, LogType } from '@/types/console'
 import { formatQuota, formatTime } from '@/utils/format'
 
 import LogDetailTrigger from './LogDetailTrigger.vue'
+import LogModelMismatch from './LogModelMismatch.vue'
 import LogPerformanceCell from './LogPerformanceCell.vue'
 import LogReasoningEffort from './LogReasoningEffort.vue'
 import LogUsageCell from './LogUsageCell.vue'
@@ -64,6 +65,7 @@ const typeLabelKey: Record<LogType, string> = {
             {{ t(typeLabelKey[log.type]) }}
           </StatusChip>
         </div>
+        <LogModelMismatch :log="log" />
         <p class="mt-1 truncate text-xs text-[var(--text-tertiary)]">
           {{ log.channel }} · {{ formatTime(log.created) }}
         </p>

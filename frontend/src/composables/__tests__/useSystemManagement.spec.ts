@@ -35,7 +35,10 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
   vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
   vi.spyOn(systemManagementApi, 'instances').mockResolvedValue([node])
-  vi.spyOn(systemManagementApi, 'tasks').mockResolvedValue([])
+  vi.spyOn(systemManagementApi, 'tasks').mockResolvedValue({
+    items: [],
+    total: 0,
+  })
 })
 afterEach(() => {
   wrapper?.unmount()
@@ -51,7 +54,10 @@ describe('system management section lifecycles', () => {
     )
     vi.mocked(systemManagementApi.tasks)
       .mockRejectedValueOnce(new Error('active unavailable'))
-      .mockResolvedValueOnce([{ ...running, status: 'succeeded' }])
+      .mockResolvedValueOnce({
+        items: [{ ...running, status: 'succeeded' }],
+        total: 1,
+      })
     wrapper = mount(Host)
     await flushPromises()
     expect(state.instances.error.value).toBe('nodes unavailable')
@@ -64,20 +70,25 @@ describe('system management section lifecycles', () => {
   })
 
   it('polls nodes every 30 seconds and recent tasks every 8 seconds only while active', async () => {
-    vi.mocked(systemManagementApi.tasks).mockResolvedValue([running])
+    vi.mocked(systemManagementApi.tasks).mockImplementation(async (query) => ({
+      items: query.scope === 'active' ? [running] : [],
+      total: query.scope === 'active' ? 1 : 0,
+    }))
     wrapper = mount(Host)
     await flushPromises()
     expect(systemManagementApi.tasks).toHaveBeenNthCalledWith(
       1,
-      20,
+      { scope: 'active', limit: 100 },
       expect.any(AbortSignal)
     )
     await vi.advanceTimersByTimeAsync(8000)
     expect(systemManagementApi.tasks).toHaveBeenCalledTimes(4)
     expect(systemManagementApi.instances).toHaveBeenCalledTimes(1)
-    vi.mocked(systemManagementApi.tasks).mockResolvedValue([
-      { ...running, status: 'succeeded' },
-    ])
+    vi.mocked(systemManagementApi.tasks).mockImplementation(async (query) => ({
+      items:
+        query.scope === 'history' ? [{ ...running, status: 'succeeded' }] : [],
+      total: query.scope === 'history' ? 1 : 0,
+    }))
     await vi.advanceTimersByTimeAsync(8000)
     expect(state.activeTasks.value).toEqual([])
     expect(state.historyTasks.value).toHaveLength(1)
@@ -85,6 +96,31 @@ describe('system management section lifecycles', () => {
     await vi.advanceTimersByTimeAsync(14000)
     expect(systemManagementApi.instances).toHaveBeenCalledTimes(2)
     expect(systemManagementApi.tasks).toHaveBeenCalledTimes(6)
+  })
+
+  it('uses server pagination and resets the offset when filters change', async () => {
+    wrapper = mount(Host)
+    await flushPromises()
+    state.historyPage.value = 3
+    await flushPromises()
+    expect(systemManagementApi.tasks).toHaveBeenLastCalledWith(
+      { scope: 'history', type: '', status: '', offset: 40, limit: 20 },
+      expect.any(AbortSignal)
+    )
+    state.historyType.value = 'log_cleanup'
+    state.historyStatus.value = 'failed'
+    await flushPromises()
+    expect(state.historyPage.value).toBe(1)
+    expect(systemManagementApi.tasks).toHaveBeenLastCalledWith(
+      {
+        scope: 'history',
+        type: 'log_cleanup',
+        status: 'failed',
+        offset: 0,
+        limit: 20,
+      },
+      expect.any(AbortSignal)
+    )
   })
 
   it('cancels hidden or superseded requests and rejects their late results', async () => {

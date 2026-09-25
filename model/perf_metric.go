@@ -27,10 +27,14 @@ func (PerfMetric) TableName() string {
 }
 
 func UpsertPerfMetric(metric *PerfMetric) error {
+	return upsertPerfMetricWithTx(DB, metric)
+}
+
+func upsertPerfMetricWithTx(tx *gorm.DB, metric *PerfMetric) error {
 	if metric == nil || metric.RequestCount == 0 {
 		return nil
 	}
-	return DB.Clauses(clause.OnConflict{
+	return tx.Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "model_name"},
 			{Name: "group"},

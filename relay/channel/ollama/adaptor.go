@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/QuantumNous/new-api/relay/channel"
+	"github.com/QuantumNous/new-api/relay/channel/claude"
+	"github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -25,17 +26,18 @@ func (a *Adaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayIn
 }
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ClaudeRequest) (any, error) {
-	return a.convertToChat(c, info, request)
+	adaptor := claude.Adaptor{}
+	return adaptor.ConvertClaudeRequest(c, info, request)
 }
 
 func (a *Adaptor) convertToChat(c *gin.Context, info *relaycommon.RelayInfo, request any) (any, error) {
-	converted, err := service.ConvertRequest(c, info, types.RelayFormatOpenAI, request)
+	result, err := service.ConvertRequest(c, info, types.RelayFormatOpenAI, request)
 	if err != nil {
 		return nil, err
 	}
-	chat, ok := converted.Value.(*dto.GeneralOpenAIRequest)
+	chat, ok := result.Value.(*dto.GeneralOpenAIRequest)
 	if !ok {
-		return nil, fmt.Errorf("expected OpenAI chat request, got %T", converted.Value)
+		return nil, fmt.Errorf("expected OpenAI chat request, got %T", result.Value)
 	}
 	return a.ConvertOpenAIRequest(c, info, chat)
 }
@@ -49,21 +51,46 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
+	// OpenAI-compatible chat responses are handled by the OpenAI adaptor, which
+	// relies on the thinking-to-content state initialized here.
+	(&openai.Adaptor{}).Init(info)
 }
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	if info.RelayMode == relayconstant.RelayModeEmbeddings {
-		return info.ChannelBaseUrl + "/api/embed", nil
+	switch info.RelayFormat {
+	case types.RelayFormatClaude:
+		return (&claude.Adaptor{}).GetRequestURL(info)
+	default:
+		switch info.RelayMode {
+		case relayconstant.RelayModeEmbeddings:
+			return fmt.Sprintf("%s/api/embed", info.ChannelBaseUrl), nil
+		case relayconstant.RelayModeResponses:
+			return fmt.Sprintf("%s/v1/responses", info.ChannelBaseUrl), nil
+		case relayconstant.RelayModeResponsesCompact:
+			return fmt.Sprintf("%s/v1/responses/compact", info.ChannelBaseUrl), nil
+		case relayconstant.RelayModeCompletions:
+			return fmt.Sprintf("%s/api/generate", info.ChannelBaseUrl), nil
+		default:
+			if info.ChannelOtherSettings.OllamaOpenAIChat {
+				return fmt.Sprintf("%s/v1/chat/completions", info.ChannelBaseUrl), nil
+			}
+			return fmt.Sprintf("%s/api/chat", info.ChannelBaseUrl), nil
+		}
 	}
-	if strings.Contains(info.RequestURLPath, "/v1/completions") || info.RelayMode == relayconstant.RelayModeCompletions {
-		return info.ChannelBaseUrl + "/api/generate", nil
-	}
-	return info.ChannelBaseUrl + "/api/chat", nil
 }
 
 func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *relaycommon.RelayInfo) error {
 	channel.SetupApiRequestHeader(info, c, req)
 	req.Set("Authorization", "Bearer "+info.ApiKey)
+	switch info.RelayFormat {
+	case types.RelayFormatClaude:
+		claude.CommonClaudeHeadersOperation(c, req, info)
+		anthropicVersion := c.Request.Header.Get("anthropic-version")
+		if anthropicVersion == "" {
+			anthropicVersion = "2023-06-01"
+		}
+		req.Set("anthropic-version", anthropicVersion)
+	}
 	return nil
 }
 
@@ -71,16 +98,26 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	// decide generate or chat
-	if strings.Contains(info.RequestURLPath, "/v1/completions") || info.RelayMode == relayconstant.RelayModeCompletions {
+	if info == nil {
+		info = &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
+	}
+	if info.ChannelMeta == nil {
+		info.ChannelMeta = &relaycommon.ChannelMeta{}
+	}
+	switch info.RelayMode {
+	case relayconstant.RelayModeCompletions:
 		return openAIToGenerate(c, request)
+	default:
+		if info.ChannelOtherSettings.OllamaOpenAIChat {
+			return (&openai.Adaptor{}).ConvertOpenAIRequest(c, info, request)
+		}
+		diagnostics, err := validateOllamaRequest(request, info.ConversionPolicy)
+		info.RecordConversionDiagnostics(c, diagnostics)
+		if err != nil {
+			return nil, err
+		}
+		return openAIChatToOllamaChat(c, request)
 	}
-	diagnostics, err := validateOllamaRequest(request, info.ConversionPolicy)
-	info.ConversionDiagnostics = append(info.ConversionDiagnostics, diagnostics...)
-	if err != nil {
-		return nil, err
-	}
-	return openAIChatToOllamaChat(c, request)
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, relayMode int, request dto.RerankRequest) (any, error) {
@@ -92,7 +129,8 @@ func (a *Adaptor) ConvertEmbeddingRequest(c *gin.Context, info *relaycommon.Rela
 }
 
 func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.OpenAIResponsesRequest) (any, error) {
-	return a.convertToChat(c, info, &request)
+	adaptor := openai.Adaptor{}
+	return adaptor.ConvertOpenAIResponsesRequest(c, info, request)
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error) {
@@ -100,14 +138,28 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
-	switch info.RelayMode {
-	case relayconstant.RelayModeEmbeddings:
-		return ollamaEmbeddingHandler(c, info, resp)
+	switch info.RelayFormat {
+	case types.RelayFormatClaude:
+		adaptor := claude.Adaptor{}
+		return adaptor.DoResponse(c, resp, info)
 	default:
-		if info.IsStream {
-			return ollamaStreamHandler(c, info, resp)
+		switch info.RelayMode {
+		case relayconstant.RelayModeEmbeddings:
+			return ollamaEmbeddingHandler(c, info, resp)
+		case relayconstant.RelayModeResponses, relayconstant.RelayModeResponsesCompact:
+			adaptor := openai.Adaptor{}
+			return adaptor.DoResponse(c, resp, info)
+		default:
+			// /api/generate always returns native NDJSON; chat follows the channel setting.
+			if info.RelayMode != relayconstant.RelayModeCompletions && info.ChannelOtherSettings.OllamaOpenAIChat {
+				adaptor := openai.Adaptor{}
+				return adaptor.DoResponse(c, resp, info)
+			}
+			if info.IsStream {
+				return ollamaStreamHandler(c, info, resp)
+			}
+			return ollamaChatHandler(c, info, resp)
 		}
-		return ollamaChatHandler(c, info, resp)
 	}
 }
 

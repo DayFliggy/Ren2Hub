@@ -1,4 +1,6 @@
+import { securityMessages } from '../../security'
 export default {
+  security: securityMessages['zh-CN'],
   auth: {
     resetConfirm: '确认重置密码',
     resetInvalid: '重置链接无效或不完整。',

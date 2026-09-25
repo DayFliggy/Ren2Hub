@@ -192,17 +192,18 @@ func Describe(apiType int, model string) (Definition, bool) {
 		add(chat, chat, true)
 		add(claude, chat, false)
 		add(responses, responses, true)
-	case constant.APITypeOllama, constant.APITypeBaiduV2:
+	case constant.APITypeOllama:
+		add(chat, chat, false)
+		d.Surfaces[len(d.Surfaces)-1].TextProjection = OllamaChatProjection()
+		add(claude, claude, true)
+		add(responses, responses, true)
+		add(gemini, chat, false)
+		d.Surfaces[len(d.Surfaces)-1].TextProjection = OllamaChatProjection()
+		media(types.RelayFormatOpenAIResponsesCompaction, types.RelayFormatEmbedding)
+	case constant.APITypeBaiduV2:
 		add(chat, chat, false)
 		add(claude, chat, false)
-		if apiType == constant.APITypeOllama {
-			add(responses, chat, false)
-			add(gemini, chat, false)
-			for index := range d.Surfaces {
-				d.Surfaces[index].TextProjection = OllamaChatProjection()
-			}
-			media(types.RelayFormatEmbedding)
-		}
+
 	case constant.APITypeCloudflare:
 		add(chat, chat, false)
 		add(responses, responses, true)
@@ -216,6 +217,7 @@ func Describe(apiType int, model string) (Definition, bool) {
 	case constant.APITypeMokaAI:
 		media(types.RelayFormatEmbedding)
 	case constant.APITypeZhipuV4:
+		add(responses, responses, true)
 		add(chat, chat, false)
 		add(claude, claude, true)
 		media(types.RelayFormatEmbedding, types.RelayFormatOpenAIImage)
@@ -299,8 +301,8 @@ func Describe(apiType int, model string) (Definition, bool) {
 				s.BudgetCodec = "aws_nova"
 			}
 		case constant.APITypeZhipuV4:
-			if s.Target == claude {
-				s.BudgetCodec = string(claude)
+			if s.Target == claude || s.Target == responses {
+				s.BudgetCodec = string(s.Target)
 			}
 		}
 		if s.Incoming == types.RelayFormatEmbedding {
@@ -322,6 +324,15 @@ func IsVertexOpenSourceModel(model string) bool {
 // Credential values are inspected only for dispatch shape and never retained.
 func DescribeForCredentials(apiType int, model string, credentials []string, settings ...dto.ChannelOtherSettings) (Definition, bool) {
 	definition, found := Describe(apiType, model)
+	if found && apiType == constant.APITypeOllama && len(settings) > 0 && settings[0].OllamaOpenAIChat {
+		for i := range definition.Surfaces {
+			if definition.Surfaces[i].Target == types.RelayFormatOpenAI {
+				definition.Surfaces[i].TextProjection = nil
+				definition.Surfaces[i].Native = definition.Surfaces[i].Incoming == types.RelayFormatOpenAI
+				definition.Surfaces[i].BudgetCodec = string(types.RelayFormatOpenAI)
+			}
+		}
+	}
 	if found && apiType == constant.APITypeVertexAi && IsVertexOpenSourceModel(model) &&
 		len(settings) > 0 && settings[0].VertexKeyType == dto.VertexKeyTypeAPIKey {
 		definition.Surfaces, definition.Endpoints = nil, nil

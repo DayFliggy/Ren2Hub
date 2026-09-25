@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import PasskeyDomainsPanel from '@/components/console/systemSettings/PasskeyDomainsPanel.vue'
 import CustomOAuthProvidersPanel from '@/components/console/systemSettings/CustomOAuthProvidersPanel.vue'
 import SysSettingsFormCard from '@/components/console/systemSettings/SysSettingsFormCard.vue'
 import SystemSettingsMaintenanceActions from '@/components/console/systemSettings/SystemSettingsMaintenanceActions.vue'
@@ -259,6 +260,9 @@ onMounted(() => load())
             />
           </div>
         </fieldset>
+        <PasskeyDomainsPanel
+          v-if="domain === 'auth' && activeSection?.id === 'passkey'"
+        />
         <CustomOAuthProvidersPanel
           v-if="activeSection.integration === 'custom-oauth'"
         />

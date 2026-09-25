@@ -12,5 +12,7 @@ func SetRouter(router *gin.Engine, assets WebAssets) {
 	SetDashboardRouter(router)
 	SetRelayRouter(router)
 	SetVideoRouter(router)
+	SetTaskRouter(router)
+	router.Use(SetPluginRouter(router))
 	SetWebRouter(router, assets)
 }

@@ -1,6 +1,8 @@
 {
   "name": "new-api-electron",
   "version": "1.0.0",
+  "packageManager": "bun@1.4.0",
+  "trustedDependencies": ["electron"],
   "description": "New API - AI Model Gateway Desktop Application",
   "main": "main.js",
   "scripts": {

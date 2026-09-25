@@ -11,7 +11,7 @@ import (
 )
 
 func TestZhipuV4PreservesChatEnvelope(t *testing.T) {
-	body := `{"model":"glm-4v","messages":[{"role":"user","name":"client","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,aW1hZ2U=","detail":"low"},"vendor_hint":false}]},{"role":"assistant","reasoning_content":"analysis","tool_calls":[{"id":"call_1","type":"function","function":{"name":"search","arguments":"{}"}}]},{"role":"tool","tool_call_id":"call_1","name":"search","content":"result"}],"max_completion_tokens":0,"top_p":1,"temperature":0,"parallel_tool_calls":false,"stop":["END"],"metadata":{"case":"preserve"},"response_format":{"type":"json_schema","json_schema":{"name":"output","strict":true,"schema":{"type":"object"}}}}`
+	body := `{"model":"glm-4v","messages":[{"role":"user","name":"client","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,aW1hZ2U=","detail":"low"},"vendor_hint":false}]},{"role":"assistant","reasoning_content":"analysis","tool_calls":[{"id":"call_1","type":"function","function":{"name":"search","arguments":"{}"}}]},{"role":"tool","tool_call_id":"call_1","name":"search","content":"result"}],"max_completion_tokens":0,"top_p":1,"temperature":0,"reasoning_effort":"max","parallel_tool_calls":false,"stop":["END"],"metadata":{"case":"preserve"},"response_format":{"type":"json_schema","json_schema":{"name":"output","strict":true,"schema":{"type":"object"}}}}`
 	var request dto.GeneralOpenAIRequest
 	require.NoError(t, common.Unmarshal([]byte(body), &request))
 	before, err := common.Marshal(request)

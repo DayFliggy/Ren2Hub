@@ -48,6 +48,7 @@ export interface AdminChannelTypeMeta {
 export const ADMIN_CHANNEL_TYPE_META: Record<number, AdminChannelTypeMeta> = {
   1: { label: 'OpenAI', supplier: 'OpenAI' },
   3: { label: 'Azure', supplier: 'OpenAI' },
+  4: { label: 'Ollama', supplier: 'Ollama' },
   14: { label: 'Anthropic', supplier: 'Anthropic' },
   17: { label: 'Ali', supplier: '阿里通义' },
   20: { label: 'OpenRouter', supplier: 'OpenAI' },
@@ -59,6 +60,12 @@ export const ADMIN_CHANNEL_TYPE_META: Record<number, AdminChannelTypeMeta> = {
   43: { label: 'DeepSeek', supplier: 'DeepSeek' },
   48: { label: 'xAI', supplier: 'xAI' },
   57: { label: 'Codex', supplier: 'OpenAI' },
+  58: { label: 'Advanced Custom', supplier: 'Custom' },
+  59: { label: 'Sub2API', supplier: 'Sub2API' },
+  60: { label: 'New API', supplier: 'New API' },
+  61: { label: 'Task Plugin', supplier: 'Plugin' },
+  62: { label: 'vLLM', supplier: 'vLLM' },
+  63: { label: 'SGLang', supplier: 'SGLang' },
 }
 
 export const ADMIN_CHANNEL_SORT_FIELDS: AdminChannelSortBy[] = [

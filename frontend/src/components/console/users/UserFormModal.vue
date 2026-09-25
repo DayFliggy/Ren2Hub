@@ -8,6 +8,7 @@ import FilterSelect from '@/components/common/FilterSelect.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import GatewayUserPanel from '@/components/console/gateway/GatewayUserPanel.vue'
+import AdminUserBindings from './AdminUserBindings.vue'
 import {
   ADMIN_USER_ASSIGNABLE_ROLES,
   adminUserRoleLabelKey,
@@ -73,7 +74,7 @@ const valid = computed(
     usernameValid.value &&
     emailValid.value &&
     (props.editing !== null ||
-      (form.password.length >= 8 && form.password.length <= 20)) &&
+      (form.password.length >= 8 && [...form.password].length <= 128)) &&
     form.displayName.trim().length <= 20 &&
     form.email.trim().length <= 50 &&
     ADMIN_USER_ASSIGNABLE_ROLES.includes(selectedRole.value) &&
@@ -97,6 +98,10 @@ watch(
 
 function close() {
   if (!saving.value) emit('close')
+}
+
+function bindingRemoved(key: string) {
+  if (key === 'email' && form.email === props.editing?.email) form.email = ''
 }
 
 async function submit() {
@@ -223,6 +228,12 @@ async function submit() {
       :key="editing.id"
       :user-id="editing.id"
       editable
+    />
+    <AdminUserBindings
+      v-if="open && editing"
+      :key="editing.id"
+      :user="editing"
+      @removed="bindingRemoved"
     />
     <template #footer>
       <div class="grid grid-cols-2 gap-3">

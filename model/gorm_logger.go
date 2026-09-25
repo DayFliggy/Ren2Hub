@@ -72,6 +72,9 @@ func sanitizeDBError(err error) error {
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
+		if pgErr.Code == "08P01" || pgErr.Code == "42P05" {
+			return fmt.Errorf("postgres error SQLSTATE %s (check pooler configuration: both pgx and GORM prepared statements must be disabled)", pgErr.Code)
+		}
 		return fmt.Errorf("postgres error SQLSTATE %s", pgErr.Code)
 	}
 	var chErr *proto.Exception

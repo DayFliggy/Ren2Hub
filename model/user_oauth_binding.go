@@ -131,7 +131,15 @@ func UpdateUserOAuthBinding(userId, providerId int, newProviderUserId string) er
 
 // DeleteUserOAuthBinding deletes an OAuth binding
 func DeleteUserOAuthBinding(userId, providerId int) error {
-	return DB.Where("user_id = ? AND provider_id = ?", userId, providerId).Delete(&UserOAuthBinding{}).Error
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		if _, err := IncrementUserAuthVersionWithTx(tx, userId); err != nil {
+			return err
+		}
+		return tx.Where("user_id = ? AND provider_id = ?", userId, providerId).Delete(&UserOAuthBinding{}).Error
+	}); err != nil {
+		return err
+	}
+	return PublishUserAuthCache(userId)
 }
 
 func deleteUserOAuthBindingsByUserId(tx *gorm.DB, userId int) error {

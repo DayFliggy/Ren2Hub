@@ -1,4 +1,11 @@
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  shallowRef,
+  watch,
+} from 'vue'
 import {
   isActiveSystemTask,
   systemManagementApi,
@@ -78,13 +85,42 @@ export function useSystemManagement() {
   const taskInterval = (rows: SystemTask[]) =>
     rows.some(isActiveSystemTask) ? 8000 : null
   const active = useSystemFeed(
-    (signal) => systemManagementApi.tasks(20, signal),
+    async (signal) =>
+      (await systemManagementApi.tasks({ scope: 'active', limit: 100 }, signal))
+        .items,
     taskInterval
   )
+  const historyType = ref('')
+  const historyStatus = ref<'' | 'succeeded' | 'failed'>('')
+  const historyPage = ref(1)
+  const historyPageSize = ref(20)
+  const historyTotal = ref(0)
   const history = useSystemFeed(
-    (signal) => systemManagementApi.tasks(20, signal),
-    taskInterval
+    async (signal) => {
+      const page = await systemManagementApi.tasks(
+        {
+          scope: 'history',
+          type: historyType.value,
+          status: historyStatus.value,
+          offset: (historyPage.value - 1) * historyPageSize.value,
+          limit: historyPageSize.value,
+        },
+        signal
+      )
+      if (!signal.aborted) historyTotal.value = page.total
+      return page.items
+    },
+    () => null
   )
+  watch([historyType, historyStatus, historyPageSize], () => {
+    if (historyPage.value !== 1) historyPage.value = 1
+    else void history.refresh()
+  })
+  watch(historyPage, () => void history.refresh())
+  watch(active.rows, (_rows, previous) => {
+    if (previous.some(isActiveSystemTask) && !history.loading.value)
+      void history.refresh()
+  })
   const activeTasks = computed(() =>
     active.rows.value.filter(isActiveSystemTask)
   )
@@ -94,5 +130,17 @@ export function useSystemManagement() {
   const staleCount = computed(
     () => instances.rows.value.filter((row) => row.status === 'stale').length
   )
-  return { instances, active, history, activeTasks, historyTasks, staleCount }
+  return {
+    instances,
+    active,
+    history,
+    activeTasks,
+    historyTasks,
+    staleCount,
+    historyType,
+    historyStatus,
+    historyPage,
+    historyPageSize,
+    historyTotal,
+  }
 }

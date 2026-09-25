@@ -46,6 +46,9 @@ describe('ModelsView live boundary', () => {
           model_name: 'gpt-4o',
           description: 'General model',
           price_version: {
+            contract_version: 2,
+            calculation_version: 'billing-v2',
+            result_unit: 'usd',
             id: 1,
             model: 'gpt-4o',
             mode: 'unit_price',

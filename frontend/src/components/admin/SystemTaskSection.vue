@@ -18,6 +18,7 @@ defineProps<{
   loaded: boolean
   error: string
   updatedAt: number
+  total?: number
 }>()
 const emit = defineEmits<{ refresh: []; details: [task: SystemTask] }>()
 const { t, te, locale } = useI18n({
@@ -37,7 +38,7 @@ const tones = {
     <header class="task-header">
       <h2>
         <ListChecks :size="17" aria-hidden="true" />{{ title
-        }}<span class="task-count">{{ tasks.length }}</span>
+        }}<span class="task-count">{{ total ?? tasks.length }}</span>
       </h2>
       <div class="task-actions">
         <slot name="actions" />
@@ -49,6 +50,7 @@ const tones = {
         /></IconButton>
       </div>
     </header>
+    <slot name="filters" />
     <div v-if="error" class="task-error" role="alert">
       <p>{{ error }}</p>
       <button type="button" :disabled="loading" @click="emit('refresh')">
@@ -125,6 +127,7 @@ const tones = {
         </tbody>
       </table>
     </div>
+    <slot name="footer" />
   </section>
 </template>
 

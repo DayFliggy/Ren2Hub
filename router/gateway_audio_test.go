@@ -105,7 +105,8 @@ func TestGatewayAudioSpeechAccounting(t *testing.T) {
 			}
 			awaitGatewayPermitsReleased(t)
 			wantQuota, heldQuota := 0, 0
-			if delivered {
+			settled := scenario == "binary" || scenario == "sse"
+			if settled {
 				wantQuota = 500
 			} else if scenario != "invalid_input" {
 				heldQuota = 500
@@ -120,7 +121,7 @@ func TestGatewayAudioSpeechAccounting(t *testing.T) {
 			assert.EqualValues(t, heldQuota, user.ReservedQuota)
 			var logs []model.Log
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
-			if delivered {
+			if settled {
 				require.Len(t, logs, 1)
 				assert.Equal(t, 1, user.RequestCount)
 				assert.Positive(t, logs[0].CompletionTokens)
@@ -180,7 +181,7 @@ func TestGatewayAudioCancellationReleasesAdmission(t *testing.T) {
 	awaitGatewayPermitsReleased(t)
 	require.Eventually(t, func() bool {
 		var user model.User
-		return model.DB.First(&user, 1).Error == nil && user.UsedQuota == 500
+		return model.DB.First(&user, 1).Error == nil && user.UsedQuota == 0 && user.ReservedQuota == 500 && user.Quota == 9999500
 	}, time.Second, 10*time.Millisecond)
 	var failures int64
 	require.NoError(t, model.DB.Model(&model.ChannelHealth{}).Where("failure_count > 0").Count(&failures).Error)

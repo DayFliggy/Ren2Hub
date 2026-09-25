@@ -189,11 +189,24 @@ func TestGatewayGeminiPartialAndNormalTermination(t *testing.T) {
 					}
 					var recovery model.BillingRecovery
 					require.Eventually(t, func() bool {
-						return model.DB.First(&recovery).Error == nil && recovery.Status == model.BillingRecoveryStatusSettled && recovery.ConsumptionState == model.BillingRecoveryStateCompleted
+						if model.DB.First(&recovery).Error != nil {
+							return false
+						}
+						if reason == "error" {
+							return recovery.Status == model.BillingRecoveryStatusReconciliation
+						}
+						return recovery.Status == model.BillingRecoveryStatusSettled && recovery.ConsumptionState == model.BillingRecoveryStateCompleted
 					}, 2*time.Second, 10*time.Millisecond)
 					var user model.User
 					require.NoError(t, model.DB.First(&user).Error)
-					require.EqualValues(t, 500, user.UsedQuota, "delivered output settles exactly one fixed-price call")
+					if reason == "error" {
+						require.Zero(t, user.UsedQuota, "partial output cannot confirm final consumption")
+						require.Equal(t, recovery.FundingAmount, user.ReservedQuota)
+						require.Positive(t, user.ReservedQuota)
+					} else {
+						require.EqualValues(t, 500, user.UsedQuota, "confirmed terminal settles exactly one fixed-price call")
+						require.Zero(t, user.ReservedQuota)
+					}
 					var health []model.ChannelHealth
 					require.NoError(t, model.DB.Where("channel_id = ?", channelID).Find(&health).Error)
 					failures := 0

@@ -1,8 +1,13 @@
-import { ApiError } from './types'
+import { ApiError, type ApiResponse } from './types'
 import type { ApiTransport, RequestOptions } from './transport'
 import { AuthSessionInvalidatedError } from './authSession'
 
 export interface ApiClient {
+  getEnvelope<T>(
+    url: string,
+    params?: Record<string, unknown>,
+    options?: Pick<RequestOptions, 'signal' | 'headers'>
+  ): Promise<ApiResponse<T>>
   get<T>(
     url: string,
     params?: Record<string, unknown>,
@@ -59,12 +64,13 @@ export function createApiClient(
   async function request<T>(
     method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     url: string,
-    options: RequestOptions = {}
+    options: RequestOptions = {},
+    includeEnvelope = false
   ): Promise<T> {
     const requestScope = clientOptions.getRequestScope?.()
     const dedupKey =
       method === 'GET' && !options.signal
-        ? `${requestScope ?? 'global'}::${url}::${JSON.stringify(options.params ?? {})}`
+        ? `${requestScope ?? 'global'}::${includeEnvelope}::${url}::${JSON.stringify(options.params ?? {})}`
         : null
     if (dedupKey && inflightGet.has(dedupKey)) {
       return inflightGet.get(dedupKey) as Promise<T>
@@ -105,7 +111,7 @@ export function createApiClient(
             code: typeof payload.code === 'string' ? payload.code : undefined,
           })
         }
-        return envelope.data
+        return includeEnvelope ? (envelope as unknown as T) : envelope.data
       })
       .catch((error: unknown) => {
         if (
@@ -134,6 +140,8 @@ export function createApiClient(
   }
 
   return {
+    getEnvelope: (url, params, options) =>
+      request('GET', url, { ...options, params }, true),
     get: (url, params, options) => request('GET', url, { ...options, params }),
     post: (url, data, options) => request('POST', url, { ...options, data }),
     put: (url, data, options) => request('PUT', url, { ...options, data }),

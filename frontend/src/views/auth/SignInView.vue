@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { Eye, EyeOff } from 'lucide-vue-next'
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
+import { api } from '@/api/client'
+import { parseAuthBundle, parseTwoFactorChallenge } from '@/api/authSession'
+import { completeOAuth, oauthProviders } from '@/api/oauth'
+import { assertPasskey, type AssertionOptions } from '@/utils/passkey'
+import type { TwoFactorChallenge } from '@/types/auth'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -16,6 +21,8 @@ import { sanitizeRedirect } from '@/router'
 import { useAppStore } from '@/stores'
 import { clearAffiliateAttribution } from '@/utils/affiliate'
 
+const oauthAbort = new AbortController()
+onBeforeUnmount(() => oauthAbort.abort())
 const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
@@ -23,6 +30,15 @@ const auth = useAuthStore()
 const app = useAppStore()
 const toast = useToast()
 
+const challengeMethods = ref<TwoFactorChallenge['methods']>([])
+const rpID = ref('')
+const providers = computed(() => oauthProviders(app.status))
+const passwordEnabled = computed(
+  () =>
+    app.status.password_login_enabled !== false &&
+    app.isFeatureEnabled('password_login', 'live')
+)
+const passkeyEnabled = computed(() => app.isFeatureEnabled('passkey'))
 const username = ref('')
 const password = ref('')
 const twoFactorCode = ref('')
@@ -48,6 +64,7 @@ function turnstileReady(): boolean {
 }
 
 function resetTwoFactor() {
+  challengeMethods.value = []
   twoFactorFlowToken.value = ''
   twoFactorCode.value = ''
   twoFactorExpiresAt.value = 0
@@ -71,12 +88,18 @@ async function submit() {
     } else {
       await app.initialize()
       if (!turnstileReady()) return
+      const submittedTurnstileToken = turnstileToken.value
+      if (app.turnstileEnabled) {
+        turnstileToken.value = ''
+        turnstileWidget.value?.reset()
+      }
       const challenge = await auth.login(
         username.value,
         password.value,
-        turnstileToken.value || undefined
+        submittedTurnstileToken || undefined
       )
       if (challenge) {
+        challengeMethods.value = challenge.methods
         twoFactorFlowToken.value = challenge.flow_token
         twoFactorExpiresAt.value = challenge.expires_at
         return
@@ -88,9 +111,76 @@ async function submit() {
     await router.push(redirect || { name: 'dashboard' })
   } catch (error) {
     toast.error(error instanceof ApiError ? error.message : String(error))
-    if (!twoFactorFlowToken.value && app.turnstileEnabled) {
-      turnstileWidget.value?.reset()
-    }
+  } finally {
+    loading.value = false
+  }
+}
+async function finishAlternateLogin(value: unknown) {
+  const challenge = parseTwoFactorChallenge(value)
+  if (challenge) {
+    challengeMethods.value = challenge.methods
+    twoFactorFlowToken.value = challenge.flow_token
+    twoFactorExpiresAt.value = challenge.expires_at
+    return
+  }
+  const bundle = parseAuthBundle(value)
+  if (!bundle) throw new Error(t('security.invalidProof'))
+  auth.acceptLogin(bundle)
+  clearAffiliateAttribution()
+  await router.push(
+    sanitizeRedirect(route.query.redirect) || { name: 'dashboard' }
+  )
+}
+async function signInPasskey() {
+  if (loading.value) return
+  loading.value = true
+  try {
+    const verifying = Boolean(twoFactorFlowToken.value)
+    const prefix = verifying
+      ? '/api/user/login/verify/passkey'
+      : '/api/user/passkey/login'
+    const begin = await api.post<{
+      options: AssertionOptions
+      flow_token: string
+    }>(prefix + '/begin', {
+      rp_id: rpID.value,
+      ...(verifying ? { flow_token: twoFactorFlowToken.value } : {}),
+    })
+    const credential = await assertPasskey(begin.options)
+    await finishAlternateLogin(
+      await api.post(
+        prefix + '/finish',
+        verifying
+          ? {
+              flow_token: twoFactorFlowToken.value,
+              passkey_flow_token: begin.flow_token,
+              credential,
+            }
+          : { flow_token: begin.flow_token, credential }
+      )
+    )
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : String(error))
+  } finally {
+    loading.value = false
+  }
+}
+async function signInOAuth(provider: string) {
+  if (loading.value) return
+  loading.value = true
+  try {
+    await finishAlternateLogin(
+      await completeOAuth(
+        app.status,
+        provider,
+        'login',
+        undefined,
+        undefined,
+        oauthAbort.signal
+      )
+    )
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : String(error))
   } finally {
     loading.value = false
   }
@@ -110,7 +200,11 @@ async function submit() {
       </p>
     </div>
 
-    <form class="mt-8 space-y-4" @submit.prevent="submit">
+    <form
+      v-if="passwordEnabled || twoFactorFlowToken"
+      class="mt-8 space-y-4"
+      @submit.prevent="submit"
+    >
       <template v-if="!twoFactorFlowToken">
         <FormField :label="t('auth.username')">
           <TextInput
@@ -144,7 +238,14 @@ async function submit() {
         </FormField>
       </template>
 
-      <FormField v-else :label="t('auth.twoFactorCode')">
+      <FormField
+        v-else-if="
+          challengeMethods.some(
+            (item) => item.method === '2fa' && item.available
+          )
+        "
+        :label="t('auth.twoFactorCode')"
+      >
         <TextInput
           v-model="twoFactorCode"
           autocomplete="one-time-code"
@@ -171,6 +272,12 @@ async function submit() {
       />
 
       <ConsoleButton
+        v-if="
+          !twoFactorFlowToken ||
+          challengeMethods.some(
+            (item) => item.method === '2fa' && item.available
+          )
+        "
         type="submit"
         size="lg"
         block
@@ -193,6 +300,49 @@ async function submit() {
       </button>
     </form>
 
+    <div class="mt-4 space-y-3">
+      <FormField
+        v-if="passkeyEnabled && (app.status.passkey_rp_ids?.length ?? 0) > 1"
+        :label="t('security.passkeyDomain')"
+      >
+        <select
+          v-model="rpID"
+          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-page)] p-2"
+        >
+          <option value="">{{ t('security.automaticDomain') }}</option>
+          <option v-for="id in app.status.passkey_rp_ids" :key="id" :value="id">
+            {{ id }}
+          </option>
+        </select>
+      </FormField>
+      <ConsoleButton
+        v-if="
+          passkeyEnabled &&
+          (!twoFactorFlowToken ||
+            challengeMethods.some(
+              (item) => item.method === 'passkey' && item.available
+            ))
+        "
+        block
+        variant="secondary"
+        :disabled="loading"
+        @click="signInPasskey"
+        >{{ t('security.signInPasskey') }}</ConsoleButton
+      >
+      <template v-if="!twoFactorFlowToken"
+        ><ConsoleButton
+          v-for="provider in providers"
+          :key="provider.slug"
+          block
+          variant="secondary"
+          :disabled="loading"
+          @click="signInOAuth(provider.slug)"
+          >{{
+            t('security.signInProvider', { provider: provider.name })
+          }}</ConsoleButton
+        ></template
+      >
+    </div>
     <p
       v-if="app.registerEnabled && !twoFactorFlowToken"
       class="mt-6 text-center text-sm text-[var(--text-tertiary)]"

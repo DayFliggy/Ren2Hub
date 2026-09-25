@@ -31,6 +31,7 @@ func OaiChatToResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	if err := common.Unmarshal(body, &chatResp); err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	info.ObserveResponseModel(chatResp.Model)
 	if oaiError := chatResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		c.Set("response_termination", types.ResponseTermination{Kind: types.ResponseFailed})
 		return &chatResp.Usage, types.WithOpenAIError(*oaiError, http.StatusBadGateway)
@@ -71,7 +72,7 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	defer service.CloseResponseBodyGracefully(resp)
 
 	responseID := helper.GetResponseID(c)
-	state, err := relayconvert.NewResponseStreamState(types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, relayconvert.ResponseStreamOptions{MaxInputBytes: helper.ResponseConversionByteLimit(),
+	state, err := relayconvert.NewResponseStreamState(types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, relayconvert.ResponseStreamOptions{EmitSequenceNumber: true, MaxInputBytes: helper.ResponseConversionByteLimit(),
 		ID:    responseID,
 		Model: info.UpstreamModelName,
 	})
@@ -117,6 +118,7 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			return
 		}
 
+		info.ObserveResponseModel(chunk.Model)
 		results, err := relayconvert.ConvertStreamResponseChunk(c, info, state, &chunk)
 		helper.ObserveResponseStream(c, state)
 		if err != nil {

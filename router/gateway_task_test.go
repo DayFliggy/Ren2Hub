@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
@@ -24,7 +25,8 @@ import (
 func setupGatewayTask(t *testing.T, upstream http.HandlerFunc) (string, string, string) {
 	t.Helper()
 	_, key, otherKey := setupGatewaySDKWithUpstream(t, upstream)
-	require.NoError(t, model.DB.AutoMigrate(&model.Task{}))
+	require.NoError(t, model.DB.AutoMigrate(&model.Task{}, &model.TaskResultEvent{}, &model.PerfMetric{}, &model.TaskPlugin{}, &model.TaskPluginNamespace{}, &model.TaskPluginExecution{}))
+	require.NoError(t, controller.InitTaskPlugins())
 	require.NoError(t, publishGatewayFixturePrices(`{"sora-2":0.001}`, false))
 	for _, id := range []int{1, 4} {
 		ch, err := model.GetChannelById(id, true)
@@ -93,7 +95,7 @@ func assertGatewaySubmissionBilling(t *testing.T, expectedStatus string) {
 }
 
 func TestGatewayTaskAcceptedStatusesAndAccounting(t *testing.T) {
-	for _, status := range []int{200, 201, 202} {
+	for _, status := range []int{200, 201, 202, 299} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
 			var sends atomic.Int32
 			url, key, _ := setupGatewayTask(t, func(w http.ResponseWriter, r *http.Request) {

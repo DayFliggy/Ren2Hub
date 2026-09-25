@@ -5,35 +5,15 @@ import (
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/stretchr/testify/require"
 )
 
-func TestCompactChannelStageCapabilities(t *testing.T) {
-	openAI := &model.Channel{Type: constant.ChannelTypeOpenAI}
-	mapping := `{"gpt-5":"real-openai-compact"}`
-	openAI.ModelMapping = &mapping
-	require.True(t, compactChannelSupportsStage(openAI, map[string]bool{"gpt-5": true}, "gpt-5", "gpt-5-openai-compact", relaycommon.CompactAttemptExact))
-	require.True(t, compactChannelSupportsStage(openAI, map[string]bool{"gpt-5": true}, "gpt-5", "gpt-5-openai-compact", relaycommon.CompactAttemptBase))
-
-	unsupported := &model.Channel{Type: constant.ChannelTypeOpenRouter}
-	require.False(t, compactChannelSupportsStage(unsupported, map[string]bool{"gpt-5-openai-compact": true}, "gpt-5", "gpt-5-openai-compact", relaycommon.CompactAttemptExact))
-}
-
-func TestNonGPTCompactChannelUsesOnlyBaseAbility(t *testing.T) {
-	channel := &model.Channel{Type: constant.ChannelTypeOpenAI, Models: "claude-3-5-sonnet-openai-compact"}
-	require.Equal(t, relaycommon.CompactAttemptNone, SpecificChannelCompactStage(channel, "claude-3-5-sonnet-openai-compact"))
-
-	channel.Models = "claude-3-5-sonnet"
-	require.Equal(t, relaycommon.CompactAttemptBase, SpecificChannelCompactStage(channel, "claude-3-5-sonnet-openai-compact"))
-	require.False(t, compactChannelSupportsStage(
-		channel,
-		map[string]bool{"claude-3-5-sonnet-openai-compact": true},
-		"claude-3-5-sonnet",
-		"claude-3-5-sonnet",
-		relaycommon.CompactAttemptExact,
-	))
+func TestCompactEndpointCapabilityIsIndependentOfModelName(t *testing.T) {
+	for _, name := range []string{"gpt-5", "claude-3-5-sonnet", "literal-openai-compact"} {
+		require.True(t, ChannelSupportsCompactEndpoint(&model.Channel{Type: constant.ChannelTypeOpenAI}, name))
+		require.False(t, ChannelSupportsCompactEndpoint(&model.Channel{Type: constant.ChannelTypeGemini}, name))
+	}
 }
 
 func TestAdvancedCustomCompactRequiresExplicitRoute(t *testing.T) {
@@ -41,12 +21,12 @@ func TestAdvancedCustomCompactRequiresExplicitRoute(t *testing.T) {
 	channel.SetOtherSettings(dto.ChannelOtherSettings{AdvancedCustom: &dto.AdvancedCustomConfig{
 		Routes: []dto.AdvancedCustomRoute{{IncomingPath: "/v1/responses", UpstreamPath: "/v1/responses"}},
 	}})
-	require.False(t, channelSupportsCompactEndpoint(channel, "gpt-5"))
+	require.False(t, ChannelSupportsCompactEndpoint(channel, "gpt-5"))
 
 	channel.SetOtherSettings(dto.ChannelOtherSettings{AdvancedCustom: &dto.AdvancedCustomConfig{
 		Routes: []dto.AdvancedCustomRoute{{IncomingPath: "/v1/responses/compact", UpstreamPath: "/v1/responses/compact"}},
 	}})
-	require.True(t, channelSupportsCompactEndpoint(channel, "gpt-5"))
+	require.True(t, ChannelSupportsCompactEndpoint(channel, "gpt-5"))
 }
 
 func TestNativeResponsesCapability(t *testing.T) {

@@ -72,6 +72,7 @@ func runBillingPricingGuardScenario(t *testing.T, c *gin.Context, info *relaycom
 
 	switch scenario {
 	case "pricing_failure_write_failure", "pricing_realtime_failure":
+		info.MarkValidOutput()
 		reserved := 5
 		if scenario == "pricing_realtime_failure" {
 			require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 1, TotalTokens: 11}))
@@ -143,6 +144,7 @@ func runBillingPricingGuardScenario(t *testing.T, c *gin.Context, info *relaycom
 		require.NoError(t, err)
 		assert.EqualValues(t, int64(2), backlog.Pending, "manual work remains visible but cannot occupy the worker batch")
 	case "pricing_success", "pricing_free", "pricing_realtime", "pricing_consumption_write_failure":
+		info.MarkValidOutput()
 		quota := 20
 		if scenario == "pricing_free" {
 			quota = 0

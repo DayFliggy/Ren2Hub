@@ -28,7 +28,7 @@ func setupEpayControllerTestDB(t *testing.T) *gorm.DB {
 	connection, err := db.DB()
 	require.NoError(t, err)
 	connection.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.EpayOrder{}, &model.EpayMerchantVersion{}, &model.User{}, &model.TopUp{}, &model.BillingEvent{}, &model.Log{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.EpayOrder{}, &model.EpayMerchantVersion{}, &model.User{}, &model.TopUp{}, &model.BillingEvent{}, &model.Log{}, &model.AuditLog{}))
 	previousDB, previousLogDB := model.DB, model.LOG_DB
 	previousRedis, previousAffiliate := common.RedisEnabled, common.AffiliateEnabled
 	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
@@ -162,16 +162,19 @@ func TestAdminEpayCompletionAuditIdentifiesOrderAndOperator(t *testing.T) {
 		assert.Equal(t, http.StatusOK, response.Code)
 		assert.JSONEq(t, `{"success":true,"message":"","data":null}`, response.Body.String())
 	}
-	var entries []model.Log
-	require.NoError(t, db.Where("type = ?", model.LogTypeManage).Order("id").Find(&entries).Error)
+	var entries []model.AuditLog
+	require.NoError(t, db.Where("category = ?", model.AuditCategoryOperation).Order("id").Find(&entries).Error)
 	require.Len(t, entries, 2, "each successful administrative request must identify the target order")
 	for _, entry := range entries {
-		audit := buildOperationLogDTO(&entry)
-		assert.Equal(t, "user.topup_complete", audit.Action)
-		assert.Equal(t, "payment-admin", audit.Actor.Username)
+		assert.Equal(t, "user.topup_complete", entry.Action)
+		assert.Equal(t, "payment-admin", entry.Username)
 		assert.Equal(t, 2, entry.UserId)
-		assert.Equal(t, order.Order.TradeNo, audit.Params["trade_no"])
-		assert.Contains(t, audit.Content, order.Order.TradeNo)
+		encoded, err := common.Marshal(entry.Other.Op.Params["trade_no"])
+		require.NoError(t, err)
+		var trade string
+		require.NoError(t, common.Unmarshal(encoded, &trade))
+		assert.Equal(t, order.Order.TradeNo, trade)
+		assert.Contains(t, entry.Content, order.Order.TradeNo)
 	}
 	var events int64
 	require.NoError(t, db.Model(&model.BillingEvent{}).Count(&events).Error)

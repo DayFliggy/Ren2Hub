@@ -19,7 +19,10 @@ let wrapper: VueWrapper | undefined
 beforeEach(() => {
   vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
   vi.spyOn(systemManagementApi, 'instances').mockResolvedValue([node])
-  vi.spyOn(systemManagementApi, 'tasks').mockResolvedValue([])
+  vi.spyOn(systemManagementApi, 'tasks').mockResolvedValue({
+    items: [],
+    total: 0,
+  })
 })
 afterEach(() => {
   wrapper?.unmount()
@@ -44,6 +47,41 @@ function render() {
 }
 
 describe('system instance destructive controls', () => {
+  it('confirms the selected history filters and retains errors until cleanup succeeds', async () => {
+    vi.mocked(systemManagementApi.tasks).mockResolvedValue({
+      items: [],
+      total: 4,
+    })
+    const remove = vi
+      .spyOn(systemManagementApi, 'deleteHistory')
+      .mockRejectedValueOnce(new Error('Cleanup failed'))
+      .mockResolvedValue(2)
+    const view = render()
+    await flushPromises()
+    const filters = view.findAll('.history-filters select')
+    await filters[0].setValue('log_cleanup')
+    await filters[1].setValue('failed')
+    await flushPromises()
+    await view
+      .findAll('button')
+      .find((button) => button.text().includes('Clean up task history'))!
+      .trigger('click')
+    expect(remove).not.toHaveBeenCalled()
+    const confirm = view.findAllComponents(ConfirmDialog)[2]
+    expect(confirm.props('message')).toContain('Log cleanup / Failed')
+    confirm.vm.$emit('confirm')
+    await flushPromises()
+    expect(remove).toHaveBeenCalledWith({
+      type: 'log_cleanup',
+      status: 'failed',
+    })
+    expect(confirm.props('open')).toBe(true)
+    expect(document.body.textContent).toContain('Cleanup failed')
+    confirm.vm.$emit('confirm')
+    await flushPromises()
+    expect(confirm.props('open')).toBe(false)
+    expect(view.text()).toContain('Deleted 2 task history records')
+  })
   it('requires confirmation and retains the dialog when a stale node comes back online', async () => {
     const remove = vi
       .spyOn(systemManagementApi, 'deleteStale')

@@ -29,6 +29,12 @@ const publicHttp = axios.create({
 const AUTH_ENDPOINTS = new Set([
   '/api/user/login',
   '/api/user/login/2fa',
+  '/api/user/login/verify',
+  '/api/user/login/verify/passkey/begin',
+  '/api/user/login/verify/passkey/finish',
+  '/api/user/passkey/login/begin',
+  '/api/user/passkey/login/finish',
+  '/api/user/login/encryption-key',
   '/api/user/register',
   '/api/user/auth/refresh',
   '/api/user/auth/logout',

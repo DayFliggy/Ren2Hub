@@ -44,10 +44,10 @@ func TestStatus(c *gin.Context) {
 func GetStatus(c *gin.Context) {
 
 	cs := console_setting.GetConsoleSetting()
+	passkeySetting := system_setting.PasskeySettingsSnapshot()
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()
 
-	passkeySetting := system_setting.GetPasskeySettings()
 	legalSetting := system_setting.GetLegalSettings()
 	frontendCapabilities := getFrontendCapabilities(passkeySetting.Enabled)
 
@@ -63,6 +63,7 @@ func GetStatus(c *gin.Context) {
 		"linuxdo_client_id":           common.LinuxDOClientId,
 		"linuxdo_minimum_trust_level": common.LinuxDOMinimumTrustLevel,
 		"telegram_oauth":              common.TelegramOAuthEnabled,
+		"telegram_oauth_configured":   oauth.TelegramConfigurationError() == nil,
 		"telegram_bot_name":           common.TelegramBotName,
 		"theme":                       "default",
 		"system_name":                 common.SystemName,
@@ -108,22 +109,23 @@ func GetStatus(c *gin.Context) {
 		"HeaderNavModules":    common.OptionMap["HeaderNavModules"],
 		"SidebarModulesAdmin": common.OptionMap["SidebarModulesAdmin"],
 
-		"oidc_enabled":                system_setting.GetOIDCSettings().Enabled,
-		"oidc_client_id":              system_setting.GetOIDCSettings().ClientId,
-		"oidc_authorization_endpoint": system_setting.GetOIDCSettings().AuthorizationEndpoint,
-		"oidc_display_name":           system_setting.GetOIDCSettings().GetEffectiveDisplayName(),
-		"passkey_login":               passkeySetting.Enabled,
-		"passkey_display_name":        passkeySetting.RPDisplayName,
-		"passkey_rp_id":               passkeySetting.RPID,
-		"passkey_origins":             passkeySetting.Origins,
-		"passkey_allow_insecure":      passkeySetting.AllowInsecureOrigin,
-		"passkey_user_verification":   passkeySetting.UserVerification,
-		"passkey_attachment":          passkeySetting.AttachmentPreference,
-		"setup":                       constant.Setup,
-		"user_agreement_enabled":      legalSetting.UserAgreement != "",
-		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
-		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,
-		"frontend_capabilities":       frontendCapabilities,
+		"oidc_enabled":                      system_setting.GetOIDCSettings().Enabled,
+		"oidc_client_id":                    system_setting.GetOIDCSettings().ClientId,
+		"oidc_authorization_endpoint":       system_setting.GetOIDCSettings().AuthorizationEndpoint,
+		"oidc_display_name":                 system_setting.GetOIDCSettings().GetEffectiveDisplayName(),
+		"passkey_login":                     passkeySetting.Enabled,
+		"passkey_display_name":              passkeySetting.RPDisplayName,
+		"passkey_rp_id":                     passkeySetting.RPID,
+		"passkey_rp_ids":                    passkeySetting.RelyingPartyIDs(),
+		"password_login_encryption_enabled": common.PasswordLoginEncryptionEnabled,
+		"passkey_allow_insecure":            passkeySetting.AllowInsecureOrigin,
+		"passkey_user_verification":         passkeySetting.UserVerification,
+		"passkey_attachment":                passkeySetting.AttachmentPreference,
+		"setup":                             constant.Setup,
+		"user_agreement_enabled":            legalSetting.UserAgreement != "",
+		"privacy_policy_enabled":            legalSetting.PrivacyPolicy != "",
+		"checkin_enabled":                   operation_setting.GetCheckinSetting().Enabled,
+		"frontend_capabilities":             frontendCapabilities,
 	}
 
 	// 根据启用状态注入可选内容
@@ -176,6 +178,8 @@ func GetStatus(c *gin.Context) {
 func getFrontendCapabilities(passkeyEnabled bool) map[string]string {
 	capabilities := map[string]string{
 		"login":                  "live",
+		"password_login":         "live",
+		"audit":                  "live",
 		"refresh":                "live",
 		"logout":                 "live",
 		"profile":                "live",
@@ -192,6 +196,7 @@ func getFrontendCapabilities(passkeyEnabled bool) map[string]string {
 		"notifications":          "live",
 		"token_private_routing":  "live",
 		"marketplace":            "disabled",
+		"taskPlugins":            "live",
 		"admin":                  "live",
 		"orders":                 "live",
 		"tickets":                "live",
@@ -204,7 +209,10 @@ func getFrontendCapabilities(passkeyEnabled bool) map[string]string {
 	}
 
 	if !common.PasswordLoginEnabled {
-		capabilities["login"] = "disabled"
+		capabilities["password_login"] = "disabled"
+		if !passkeyEnabled && !common.GitHubOAuthEnabled && !system_setting.GetDiscordSettings().Enabled && !system_setting.GetOIDCSettings().Enabled && !common.LinuxDOOAuthEnabled && !common.TelegramOAuthEnabled && len(oauth.GetEnabledCustomProviders()) == 0 {
+			capabilities["login"] = "disabled"
+		}
 	}
 	if common.RegisterEnabled {
 		capabilities["registration"] = "live"
@@ -220,42 +228,24 @@ func getFrontendCapabilities(passkeyEnabled bool) map[string]string {
 
 func GetNotice(c *gin.Context) {
 	common.OptionMapRWMutex.RLock()
-	defer common.OptionMapRWMutex.RUnlock()
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    common.OptionMap["Notice"],
-	})
-	return
+	notice := common.OptionMap["Notice"]
+	common.OptionMapRWMutex.RUnlock()
+	serveRevalidatedJSON(c, notice)
 }
 
 func GetAbout(c *gin.Context) {
 	common.OptionMapRWMutex.RLock()
-	defer common.OptionMapRWMutex.RUnlock()
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    common.OptionMap["About"],
-	})
-	return
+	about := common.OptionMap["About"]
+	common.OptionMapRWMutex.RUnlock()
+	serveRevalidatedJSON(c, about)
 }
 
 func GetUserAgreement(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    system_setting.GetLegalSettings().UserAgreement,
-	})
-	return
+	serveRevalidatedJSON(c, system_setting.GetLegalSettings().UserAgreement)
 }
 
 func GetPrivacyPolicy(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    system_setting.GetLegalSettings().PrivacyPolicy,
-	})
-	return
+	serveRevalidatedJSON(c, system_setting.GetLegalSettings().PrivacyPolicy)
 }
 
 func GetMidjourney(c *gin.Context) {
@@ -271,13 +261,9 @@ func GetMidjourney(c *gin.Context) {
 
 func GetHomePageContent(c *gin.Context) {
 	common.OptionMapRWMutex.RLock()
-	defer common.OptionMapRWMutex.RUnlock()
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    common.OptionMap["HomePageContent"],
-	})
-	return
+	homePageContent := common.OptionMap["HomePageContent"]
+	common.OptionMapRWMutex.RUnlock()
+	serveRevalidatedJSON(c, homePageContent)
 }
 
 func SendEmailVerification(c *gin.Context) {

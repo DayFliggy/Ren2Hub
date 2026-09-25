@@ -253,6 +253,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   return {
+    status,
     phase,
     initialized,
     loading,

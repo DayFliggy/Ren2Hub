@@ -1,13 +1,16 @@
 package oaichat
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/internal/convdiag"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/reasoning"
 	"github.com/samber/lo"
 )
 
@@ -73,7 +76,7 @@ func convertChatResponseFormatToResponsesText(reqFormat *dto.ResponseFormat) jso
 	return textRaw
 }
 
-func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*dto.OpenAIResponsesRequest, error) {
+func ChatCompletionsRequestToResponsesRequest(ctx context.Context, req *dto.GeneralOpenAIRequest) (*dto.OpenAIResponsesRequest, error) {
 	if req == nil {
 		return nil, errors.New("request is nil")
 	}
@@ -224,10 +227,7 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 					"text": part.Text,
 				})
 			case dto.ContentTypeImageURL:
-				imagePart := map[string]any{
-					"type":      "input_image",
-					"image_url": normalizeChatImageURLToString(part.ImageUrl),
-				}
+				imagePart := map[string]any{"type": "input_image", "image_url": normalizeChatImageURLToString(part.ImageUrl)}
 				if image := part.GetImageMedia(); image != nil && image.Detail != "" {
 					imagePart["detail"] = image.Detail
 				}
@@ -238,19 +238,17 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 					"input_audio": part.InputAudio,
 				})
 			case dto.ContentTypeFile:
-				file := part.GetFile()
-				if file == nil {
-					return nil, errors.New("file content has no file source")
-				}
 				filePart := map[string]any{"type": "input_file"}
-				if file.FileId != "" {
-					filePart["file_id"] = file.FileId
-				}
-				if file.FileData != "" {
-					filePart["file_data"] = file.FileData
-				}
-				if file.FileName != "" {
-					filePart["filename"] = file.FileName
+				if file := part.GetFile(); file != nil {
+					if file.FileId != "" {
+						filePart["file_id"] = file.FileId
+					}
+					if file.FileData != "" {
+						filePart["file_data"] = file.FileData
+					}
+					if file.FileName != "" {
+						filePart["filename"] = file.FileName
+					}
 				}
 				contentParts = append(contentParts, filePart)
 			case dto.ContentTypeVideoUrl:
@@ -306,16 +304,12 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 		for _, tool := range req.Tools {
 			switch tool.Type {
 			case "function":
-				definition := map[string]any{
+				tools = append(tools, map[string]any{
 					"type":        "function",
 					"name":        tool.Function.Name,
 					"description": tool.Function.Description,
 					"parameters":  tool.Function.Parameters,
-				}
-				if tool.Function.Strict != nil {
-					definition["strict"] = *tool.Function.Strict
-				}
-				tools = append(tools, definition)
+				})
 			default:
 				// Best-effort: keep original tool shape for unknown types.
 				var m map[string]any
@@ -376,7 +370,14 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 
 	textRaw := convertChatResponseFormatToResponsesText(req.ResponseFormat)
 
-	maxOutputTokens := req.GetMaxTokens()
+	maxOutputTokens := lo.FromPtrOr(req.MaxTokens, uint(0))
+	if req.MaxCompletionTokens != nil {
+		maxOutputTokens = *req.MaxCompletionTokens
+	}
+	// OpenAI Responses API rejects max_output_tokens < 16 when explicitly provided.
+	//if maxOutputTokens > 0 && maxOutputTokens < 16 {
+	//	maxOutputTokens = 16
+	//}
 
 	var topP *float64
 	if req.TopP != nil {
@@ -423,11 +424,13 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 		out.MaxOutputTokens = lo.ToPtr(maxOutputTokens)
 	}
 
-	if req.ReasoningEffort != "" {
-		out.Reasoning = &dto.Reasoning{
-			Effort:  req.ReasoningEffort,
-			Summary: "detailed",
-		}
+	reasoningIntent, diagnostics, err := reasoning.FromOpenAIChat(req)
+	if err != nil {
+		return nil, reasoning.AsClientError(err)
+	}
+	convdiag.Add(ctx, diagnostics...)
+	if err := reasoning.ApplyToOpenAIResponses(out, reasoningIntent); err != nil {
+		return nil, reasoning.AsClientError(err)
 	}
 
 	return out, nil

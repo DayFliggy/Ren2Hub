@@ -83,14 +83,12 @@ func AvailableRoutePrices(ctx context.Context, userID int) ([]model.Pricing, err
 		if err != nil {
 			return nil, err
 		}
-		for _, name := range ExpandCompactPermissionModels([]string{row.Model}) {
-			current, exists := ranges[name]
-			if !exists {
-				current = ratioRange{ratio, ratio}
-			}
-			current.min, current.max = min(current.min, ratio), max(current.max, ratio)
-			ranges[name] = current
+		current, exists := ranges[row.Model]
+		if !exists {
+			current = ratioRange{ratio, ratio}
 		}
+		current.min, current.max = min(current.min, ratio), max(current.max, ratio)
+		ranges[row.Model] = current
 	}
 	prices := make([]model.Pricing, 0)
 	for _, price := range model.GetPricing() {

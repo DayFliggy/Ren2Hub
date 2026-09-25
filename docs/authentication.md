@@ -30,9 +30,9 @@
 
 ## 浏览器接口
 
-当前 Vue 登录页只提供密码和 2FA 登录；Passkey 在安全设置中用于管理与敏感操作验证，OAuth 用于已登录账户的绑定。后端仍保留受配置开关控制的 Passkey、标准 OAuth、WeChat 和 Telegram 兼容登录接口，不能由这些接口存在推导出当前 Vue 已开放对应登录入口。
+Vue 登录入口依据服务端能力分别显示密码、Passkey 和已配置 OAuth。关闭密码登录不会关闭其他可用方法；要求额外验证时使用统一登录 challenge。Passkey 安全设置保持每用户一份凭据，重新注册会明确替换旧凭据；一个当前注册 RP 与兼容认证 RP 分开配置。
 
-成功签发浏览器登录会话时，后端统一返回以下数据；密码登录与 2FA 是当前 Vue 使用的路径：
+成功签发浏览器登录会话时，后端统一返回以下数据；各入口完成全部要求的验证后才签发：
 
 ```json
 {
@@ -138,7 +138,7 @@ Gin 只在请求的直连来源属于可信代理时解析客户端 IP 请求头
 
 Redis 限流使用原子 Lua 固定窗口，替代旧的近似滑动窗口 List 实现。这是有意的语义变化：窗口边界两侧可分别打满一次，极短时间内通过量最高约为配置值的两倍。例如 `20 次/20 分钟` 在边界可通过约 40 次。帐户级 Session 上限和签发窗口继续控制数据库增长；如未来需要严格抑制边界突发，需单独迁移为 ZSET 滑动窗口。
 
-用户级模型成功请求限流仍使用原有 Redis List 近似滑动窗口，但列表时间戳统一写为 UTC。滚动升级期间，旧节点写入的本地时间字符串和新节点写入的 UTC 字符串无法从格式上区分，可能在一个模型限流窗口内临时误放行或误拒绝。所有节点升级完成并经过一个完整窗口后会自然收敛；本次升级不会切换 Key 或主动删除现有列表。
+用户级模型请求限流通过 Redis 原子预留统一处理总次数和成功次数。每个逻辑请求只取得一个成功名额，在途请求续约，渠道重试复用该名额；请求结束后按实际输出结果确认或释放。失败流不能因 HTTP 200 被记作成功，预留维护失败会拒绝继续发送。开启该限流时 Redis 不可用返回 503，不回退到节点内计数。原生 Responses WS 对每次 `response.create` 分别执行同一合同。
 
 开放注册仍会受 Critical IP 限流保护，但分布式 IP 多账号攻击不能仅靠 IP 限流阻止。公网开放注册的部署应同时启用 Turnstile 和邮箱验证；更强的设备或多维风控需作为独立安全项目设计。
 
@@ -154,15 +154,13 @@ OAuth state、2FA pending、Passkey ceremony、Telegram bind 等临时状态存�
 
 标准 OAuth 绑定回调由 popup 通过同源 `postMessage` 交给 opener；只有 opener 使用自身内存中的 Bearer 调用后端绑定接口。Telegram 绑定先由已登录前端创建绑定 AuthFlow，再让 widget 回调携带路径中的 `flow_token`，回调时会重新确认原登录会话仍有效。Telegram 的已签名 widget assertion 也会登记为一次性凭据，重复回放会被拒绝。
 
-敏感操作使用有效期 5 分钟的 `X-Security-Proof`：
+敏感操作使用 `GET /api/verify/methods` 获取当前可用因子，通过对应验证流程取得有效期 5 分钟的 `X-Security-Proof`。作用域包括渠道密钥读取、PAT 生成/撤销、Passkey 注册/删除、2FA 设置/禁用/恢复码更新、账户绑定/解绑、设置/修改密码和账户删除。
 
-- `channel.key.read`：查看渠道密钥；
-- `passkey.register`：注册 Passkey；
-- `passkey.delete`：删除 Passkey。
+Proof 绑定用户、登录会话、用户鉴权版本、会话版本、操作及严格规范化的上下文。数据库一次性消费 Proof，随后各业务事务重新核对授权状态。消费后撤销会话会使业务写入失败；业务失败不会恢复 Proof。注册 Passkey 与 2FA 的 begin、finish 使用绑定的流程状态，不能因尚无第二因子而绕过验证。
 
-Proof 同时绑定用户、登录会话、用户鉴权版本、会话版本和 scope，不能跨用户、跨会话或跨用途复用。
+账户密码使用 Argon2id，新密码校验 8–128 个 Unicode 字符，不裁剪空格。已有 bcrypt 哈希保留兼容校验。登录传输加密默认关闭；`GET /api/user/login/encryption-key` 只读且 `no-store`。启用后使用带 `kid` 的 v2 RSA-OAEP + AES-GCM 混合信封，拒绝明文降级、错误密钥标识和损坏密文，后续登录验证仍绑定同一流程。
 
-启用了 2FA 的用户注册 Passkey 时，register begin 与 finish 都必须携带有效的 `passkey.register` Proof；finish 会在消费一次性 AuthFlow 之前重新验证 Proof。未启用 2FA 的首次 Passkey 注册不要求该请求头。
+PAT 管理的 `GET /api/user/token/status` 只返回状态及指纹；旧 `GET /api/user/token` 也是只读。`POST /api/user/token` 要求 `access_token.generate` Proof，生成或轮换后仅一次返回明文；`DELETE /api/user/token` 要求 `access_token.revoke` Proof。个人与授权管理员审计存入独立 `audit_logs`，普通用量日志清理不会移除它。审计保留事件、指纹和必要上下文，不记录密码、Proof 或 PAT 原文。
 
 ## 存储与兼容边界
 
@@ -175,5 +173,5 @@ Proof 同时绑定用户、登录会话、用户鉴权版本、会话版本和 s
 - 仅 master 节点定时清理过期登录会话、超过配置保留期的 revoked 会话和已过保留期的 AuthFlow。
 - 未配置 `TRUSTED_PROXIES` 时会兼容信任回环和常见私网代理；使用公网负载均衡器、`100.64.0.0/10`、链路本地地址或自定义 CNI 网段的部署仍需显式配置。需要严格忽略所有转发头时设置为 `none`。
 - Redis 限流从近似滑动窗口改为原子固定窗口，存在明确的边界双倍突发语义。
-- 用户级模型成功请求限流的 UTC 时间戳在滚动升级期间存在一个窗口的混合格式过渡，期间可能临时误放行或误拒绝。
+- 用户级模型限流及网关准入使用当前预留合同；本次不兼容格式切换采用独立空库和已确认归属的缓存重建，不支持混合版本滚动运行。
 - 自建客户端应按新的 AuthBundle、`flow_token` 和 Security Proof 契约升级；PAT 客户端可直接移除 `New-Api-User`。

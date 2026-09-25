@@ -127,6 +127,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			sr.Stop(err)
 			return
 		}
+		info.ObserveResponseModel(observed.Model)
 		lastStreamData = data
 		if terminal := relayconvert.TerminationFromResponse(&observed); terminal.IsTerminal() {
 			c.Set("response_termination", terminal)
@@ -261,6 +262,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 
+	info.ObserveResponseModel(simpleResponse.Model)
 	if oaiError := simpleResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		c.Set("response_termination", types.ResponseTermination{Kind: types.ResponseFailed})
 		return &simpleResponse.Usage, types.WithOpenAIError(*oaiError, http.StatusBadGateway)

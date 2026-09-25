@@ -12,8 +12,10 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	hosttypes "github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
@@ -21,6 +23,37 @@ import (
 )
 
 const defaultTieredPreConsumeMaxTokens = 8192
+
+const pinnedBillingPriceKey = "billing_pinned_price"
+
+type pinnedBillingPrice struct {
+	RequestID string
+	Origin    string
+	Price     billing.PriceVersion
+	FrozenAt  time.Time
+}
+
+// PinBillingPrice is called only after a durable dispatch record was saved.
+// Subsequent attempts keep the logical request's published price and clock.
+func PinBillingPrice(c *gin.Context, info *relaycommon.RelayInfo) error {
+	if info == nil || info.PriceData.Quote == nil {
+		return fmt.Errorf("cannot pin missing billing quote")
+	}
+	quote := info.PriceData.Quote
+	if value, exists := c.Get(pinnedBillingPriceKey); exists {
+		pinned, ok := value.(pinnedBillingPrice)
+		if !ok || pinned.RequestID != info.RequestId || pinned.Origin != info.OriginModelName || pinned.Price.ID != quote.PriceVersion.ID || pinned.Price.Hash != quote.PriceVersion.Hash || !pinned.FrozenAt.Equal(quote.FrozenAt) {
+			return fmt.Errorf("logical request billing identity changed")
+		}
+		return nil
+	}
+	price, err := billing.PreparePriceVersion(quote.PriceVersion)
+	if err != nil {
+		return err
+	}
+	c.Set(pinnedBillingPriceKey, pinnedBillingPrice{RequestID: info.RequestId, Origin: info.OriginModelName, Price: price, FrozenAt: quote.FrozenAt})
+	return nil
+}
 
 func modelPriceNotConfiguredError(modelName string, _ int) error {
 	return fmt.Errorf("模型 %s 尚未发布明确单价或计费表达式 / Model price is not configured", modelName)
@@ -47,7 +80,32 @@ func priceHasQuantity(version billing.PriceVersion, name string) bool {
 }
 
 func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (hosttypes.PriceData, error) {
-	version, err := model.GetActiveBillingPrice(c.Request.Context(), info.BillingModelName())
+	return modelPriceWithFacts(c, info, promptTokens, meta, nil)
+}
+
+func ModelPriceHelperWithTaskFacts(c *gin.Context, info *relaycommon.RelayInfo, facts map[string]any) (hosttypes.PriceData, error) {
+	return modelPriceWithFacts(c, info, 0, &types.TokenCountMeta{}, facts)
+}
+
+func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta, facts map[string]any) (hosttypes.PriceData, error) {
+	var version *billing.PriceVersion
+	var frozenAt time.Time
+	var err error
+	if value, exists := c.Get(pinnedBillingPriceKey); exists {
+		pinned, ok := value.(pinnedBillingPrice)
+		if !ok || pinned.RequestID != info.RequestId || pinned.Origin != info.OriginModelName {
+			return hosttypes.PriceData{}, fmt.Errorf("logical request billing identity changed")
+		}
+		copyVersion := pinned.Price
+		version, frozenAt = &copyVersion, pinned.FrozenAt
+	} else {
+		for _, name := range reasoning.BillingModelCandidates(info.BillingModelName()) {
+			version, err = model.GetActiveBillingPrice(c.Request.Context(), name)
+			if err == nil || !errors.Is(err, gorm.ErrRecordNotFound) {
+				break
+			}
+		}
+	}
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return hosttypes.PriceData{}, modelPriceNotConfiguredError(info.BillingModelName(), info.UserId)
@@ -61,11 +119,28 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	if input.FrozenAt.IsZero() {
 		input.FrozenAt = time.Now().UTC()
 	}
+	if !frozenAt.IsZero() {
+		input.FrozenAt = frozenAt
+	}
 	ratio := HandleChannelRatio(c, info)
 	if ratio < 0 || math.IsNaN(ratio) || math.IsInf(ratio, 0) {
 		return hosttypes.PriceData{}, fmt.Errorf("invalid channel price ratio")
 	}
-	quote, err := billing.NewQuote(*version, decimal.NewFromFloat(ratio).String(), input.Attributes, input.FrozenAt)
+	requestFacts, estimatedFacts := map[string]any{}, map[string]any{}
+	if version.UsageSchema != nil {
+		for key, value := range facts {
+			field, exists := version.UsageSchema.Fields[key]
+			if !exists {
+				return hosttypes.PriceData{}, fmt.Errorf("undeclared plugin usage fact %q", key)
+			}
+			if field.Source == billingexpr.UsageRequestFixed {
+				requestFacts[key] = value
+			} else {
+				estimatedFacts[key] = value
+			}
+		}
+	}
+	quote, err := billing.NewQuoteWithFacts(*version, decimal.NewFromFloat(ratio).String(), input.Attributes, input.FrozenAt, requestFacts)
 	if err != nil {
 		return hosttypes.PriceData{}, err
 	}
@@ -90,7 +165,11 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		output = 0
 	}
 	usage := billing.Usage{InputTokens: int64(promptTokens), OutputTokens: int64(output), ContextTokens: int64(promptTokens), InputIncludesCache: true, Quantities: map[string]string{}, Source: "request_estimate", Estimated: true}
-	if version.Mode == billing.ModeExpression {
+	if version.UsageSchema != nil {
+		usage.InputTokens, usage.OutputTokens, usage.ContextTokens = 0, 0, 0
+		usage.EstimatedFacts = estimatedFacts
+	}
+	if version.Mode == billing.ModeExpression && version.UsageSchema == nil {
 		usage.Quantities["calls"] = "1"
 	}
 	perCall := priceHasQuantity(*version, "calls")
@@ -98,25 +177,28 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		usage.InputTokens = 0
 		usage.OutputTokens = 0
 	}
-	if perCall {
+	if perCall && version.UsageSchema == nil {
 		usage.Quantities["calls"] = "1"
 	}
-	if priceHasQuantity(*version, "images") {
+	if version.UsageSchema == nil && (priceHasQuantity(*version, "images") || version.UsesImageCount()) {
 		quantity := 1.0
+		quantityKnown := false
 		if value, ok := input.Attributes["quantity"].(float64); ok {
 			quantity = value
+			quantityKnown = true
 		}
 		if meta != nil {
 			if n, ok := meta.BillingRatios["n"]; ok {
 				quantity = n
+				quantityKnown = true
 			}
 		}
-		if quantity < 0 || math.IsNaN(quantity) || math.IsInf(quantity, 0) {
+		if quantity < 1 || quantity > float64(dto.MaxImageN) || quantity != math.Trunc(quantity) || math.IsNaN(quantity) || math.IsInf(quantity, 0) || (version.UsesImageCount() && !quantityKnown) {
 			return hosttypes.PriceData{}, fmt.Errorf("invalid image quantity")
 		}
 		usage.Quantities["images"] = decimal.NewFromFloat(quantity).String()
 	}
-	if priceHasQuantity(*version, "seconds") {
+	if version.UsageSchema == nil && priceHasQuantity(*version, "seconds") {
 		duration, ok := input.Attributes["duration"]
 		if !ok {
 			return hosttypes.PriceData{}, fmt.Errorf("duration required for per-second price")
@@ -171,7 +253,15 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (hostt
 }
 
 func HasModelBillingConfig(modelName string) bool {
-	_, err := model.GetActiveBillingPrice(context.Background(), modelName)
-	return err == nil
+	for _, name := range reasoning.BillingModelCandidates(modelName) {
+		_, err := model.GetActiveBillingPrice(context.Background(), name)
+		if err == nil {
+			return true
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return false
+		}
+	}
+	return false
 }
 func HasExplicitModelBillingConfig(modelName string) bool { return HasModelBillingConfig(modelName) }

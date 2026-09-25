@@ -102,3 +102,16 @@ func TestResolveCountsCatalogLabMissesAsUnresolved(t *testing.T) {
 	assert.Equal(t, GroupUnknown, result.GroupSlug)
 	assert.Equal(t, 1, result.UnresolvedCount)
 }
+
+func TestModifierCapabilityIdentityAndChainedMapping(t *testing.T) {
+	assert.Equal(t, "public@effort:high", NormalizeModel("public@effort:high"))
+	result := Resolve("public@effort:high", `{"public":"middle","middle":"openai/gpt-5"}`)
+	require.NotEmpty(t, result.Models)
+	for _, match := range result.Models {
+		if match.InputModel == "public@effort:high" {
+			assert.Equal(t, "openai/gpt-5", match.RealModel)
+			return
+		}
+	}
+	t.Fatal("modifier model disappeared")
+}

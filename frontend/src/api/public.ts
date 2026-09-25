@@ -3,6 +3,9 @@ import { publicHttpTransport } from './httpTransport'
 import { ApiError } from './types'
 
 export interface PublicStatus {
+  passkey_rp_ids?: string[]
+  password_login_enabled?: boolean
+  password_login_encryption_enabled?: boolean
   version?: string
   system_name?: string
   logo?: string
@@ -28,6 +31,7 @@ export interface PublicStatus {
   oidc_authorization_endpoint?: string
   wechat_login?: boolean
   telegram_oauth?: boolean
+  telegram_oauth_configured?: boolean
   custom_oauth_providers?: CustomOAuthProviderInfo[]
 }
 
@@ -82,6 +86,8 @@ export function parsePublicStatus(value: unknown): PublicStatus {
   const result: PublicStatus = {}
   const stringKeys = ['version', 'system_name', 'logo', 'docs_link'] as const
   const booleanKeys = [
+    'password_login_enabled',
+    'password_login_encryption_enabled',
     'register_enabled',
     'affiliate_registration_required',
     'user_agreement_enabled',
@@ -94,6 +100,7 @@ export function parsePublicStatus(value: unknown): PublicStatus {
     'oidc_enabled',
     'wechat_login',
     'telegram_oauth',
+    'telegram_oauth_configured',
   ] as const
 
   for (const key of stringKeys) {
@@ -136,6 +143,14 @@ export function parsePublicStatus(value: unknown): PublicStatus {
       invalidResponse('/api/status')
     }
     if (typeof value[key] === 'boolean') result[key] = value[key]
+  }
+  if (value.passkey_rp_ids !== undefined) {
+    if (
+      !Array.isArray(value.passkey_rp_ids) ||
+      value.passkey_rp_ids.some((id) => typeof id !== 'string')
+    )
+      invalidResponse('/api/status')
+    result.passkey_rp_ids = value.passkey_rp_ids
   }
   if (value.HeaderNavModules !== undefined) {
     result.HeaderNavModules = value.HeaderNavModules

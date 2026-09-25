@@ -33,7 +33,7 @@ func HandleStreamFormat(c *gin.Context, info *relaycommon.RelayInfo, data string
 	state, _ := value.(*relayconvert.ResponseStreamState)
 	if state == nil {
 		var err error
-		state, err = relayconvert.NewResponseStreamState(types.RelayFormatOpenAI, info.RelayFormat, relayconvert.ResponseStreamOptions{ID: response.Id, Model: info.UpstreamModelName, Created: response.Created, MaxInputBytes: helper.ResponseConversionByteLimit()})
+		state, err = relayconvert.NewResponseStreamState(types.RelayFormatOpenAI, info.RelayFormat, relayconvert.ResponseStreamOptions{EmitSequenceNumber: true, ID: response.Id, Model: info.UpstreamModelName, Created: response.Created, MaxInputBytes: helper.ResponseConversionByteLimit()})
 		if err != nil {
 			return helper.ResponseConversionError(err)
 		}

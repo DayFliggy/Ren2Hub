@@ -46,3 +46,11 @@ func TestAttemptResetRetainsLogicalBillingAndDropsUndeliveredToolUsage(t *testin
 	require.ErrorContains(t, info.ResetAttemptState(), "after output delivery")
 	assert.True(t, info.HasValidOutput())
 }
+
+func TestCaptureMissingUsageKeepsSettlementBoundary(t *testing.T) {
+	info := &RelayInfo{}
+	info.CaptureResponseUsage(nil, "text", nil)
+	require.NotNil(t, info.ResponseUsage)
+	assert.Equal(t, "missing", info.ResponseUsage.UsageSource)
+	assert.Equal(t, "text", info.ResponseUsageKind)
+}

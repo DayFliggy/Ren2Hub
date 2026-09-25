@@ -2,7 +2,6 @@ package controller
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -184,30 +183,7 @@ func projectModelEndpointTypesForToken(modelName string, tokenModelLimit map[str
 	if !modelLimitEnabled {
 		return endpointTypes, true
 	}
-	if strings.HasSuffix(modelName, ratio_setting.CompactModelSuffix) {
-		return endpointTypes, tokenAllowsModel(tokenModelLimit, modelName)
-	}
-
-	baseAllowed := tokenAllowsModel(tokenModelLimit, modelName)
-	compactAllowed := slices.Contains(endpointTypes, constant.EndpointTypeOpenAIResponseCompact) &&
-		tokenAllowsModel(tokenModelLimit, ratio_setting.WithCompactModelSuffix(modelName))
-	if !baseAllowed && !compactAllowed {
-		return nil, false
-	}
-
-	projected := make([]constant.EndpointType, 0, len(endpointTypes))
-	for _, endpointType := range endpointTypes {
-		if endpointType == constant.EndpointTypeOpenAIResponseCompact {
-			if compactAllowed {
-				projected = append(projected, endpointType)
-			}
-			continue
-		}
-		if baseAllowed {
-			projected = append(projected, endpointType)
-		}
-	}
-	return projected, true
+	return endpointTypes, tokenAllowsModel(tokenModelLimit, modelName)
 }
 
 func ListModels(c *gin.Context, modelType int) {

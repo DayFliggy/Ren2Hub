@@ -195,60 +195,28 @@ func TestPricingNativeChannelEndpointTypesUnchanged(t *testing.T) {
 		constant.EndpointTypeOpenAIResponse,
 		constant.EndpointTypeOpenAIResponseCompact,
 	}, byModel["gpt-4o"])
-	assert.Equal(t, []constant.EndpointType{
-		constant.EndpointTypeOpenAIResponseCompact,
-	}, byModel["gpt-4o-openai-compact"])
+	assert.Equal(t, byModel["gpt-4o"], byModel["gpt-4o-openai-compact"])
 	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeGemini, constant.EndpointTypeOpenAI}, byModel["gemini-2.5-flash"])
 	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeAnthropic, constant.EndpointTypeOpenAI}, byModel["claude-3-5-sonnet"])
-	assert.NotContains(t, byModel, "legacy-openrouter-openai-compact")
+	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAI}, byModel["legacy-openrouter-openai-compact"])
 }
 
-func TestPricingAddsGPTCompactVariantWithBaseMetadataAndResolvedPrice(t *testing.T) {
+func TestPricingDoesNotCreateVirtualCompactModel(t *testing.T) {
 	resetPricingEndpointTestTables(t)
-	_, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "gpt-pricing-base-openai-compact", Mode: billing.ModeUnitPrice,
-		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.1"}}}, 0, 1)
+	_, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "gpt-pricing-base", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.1"}}}, 0, 1)
 	require.NoError(t, err)
-
-	require.NoError(t, DB.Create(&Vendor{Id: 90, Name: "OpenAI Test", Status: 1}).Error)
-	require.NoError(t, DB.Create(&Model{
-		ModelName:   "gpt-pricing-base",
-		Description: "base description",
-		Icon:        "OpenAI",
-		Tags:        "chat",
-		VendorID:    90,
-		Status:      1,
-		NameRule:    NameRuleExact,
-	}).Error)
+	require.NoError(t, DB.Create(&Model{ModelName: "gpt-pricing-base", Description: "base description", Status: 1, NameRule: NameRuleExact}).Error)
 	insertPricingEndpointChannel(t, 205, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointAbility(t, 205, "gpt-pricing-base")
-	require.NoError(t, DB.Create(&Ability{Group: "vip", Model: "gpt-pricing-base-openai-compact", ChannelId: 205, Enabled: true}).Error)
-	insertPricingEndpointAbility(t, 205, "claude-pricing-base-openai-compact")
-
 	InitChannelCache()
-	pricings := GetPricing()
-	compactCount := 0
-	var compact Pricing
-	for _, pricing := range pricings {
-		switch pricing.ModelName {
-		case "gpt-pricing-base-openai-compact":
-			compactCount++
-			compact = pricing
-		case "claude-pricing-base-openai-compact":
-			t.Fatal("non-GPT compact suffix must not be published")
-		}
-	}
-
-	require.Equal(t, 1, compactCount)
-	require.Equal(t, "base description", compact.Description)
-	require.Equal(t, "OpenAI", compact.Icon)
-	require.Equal(t, "chat", compact.Tags)
-	require.Equal(t, 90, compact.VendorID)
-	require.Equal(t, "OpenAI Test", compact.OwnerBy)
-	require.ElementsMatch(t, []string{"default", "vip"}, compact.EnableGroup)
-	require.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAIResponseCompact}, compact.SupportedEndpointTypes)
-	require.Equal(t, 1, compact.QuotaType)
-	require.NotNil(t, compact.PriceVersion)
-	require.Equal(t, "0.1", compact.PriceVersion.Prices[0].Price)
+	byName := pricingByName(GetPricing())
+	require.Contains(t, byName, "gpt-pricing-base")
+	require.NotContains(t, byName, "gpt-pricing-base-openai-compact")
+	base := byName["gpt-pricing-base"]
+	require.Contains(t, base.SupportedEndpointTypes, constant.EndpointTypeOpenAIResponseCompact)
+	require.NotNil(t, base.PriceVersion)
+	require.Equal(t, "gpt-pricing-base", base.PriceVersion.Model)
+	require.Equal(t, "0.1", base.PriceVersion.Prices[0].Price)
 }
 
 func TestInitChannelCacheInvalidatesPricingCache(t *testing.T) {

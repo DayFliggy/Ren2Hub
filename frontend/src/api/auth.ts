@@ -1,3 +1,4 @@
+import { passwordPayload, proofOptions } from './security'
 import type {
   AuthBundle,
   AuthTokenRotation,
@@ -54,7 +55,7 @@ export const authApi = {
     return parseLoginResponse(
       await api.post<unknown>(
         '/api/user/login',
-        { username, password },
+        { username, ...(await passwordPayload(password)) },
         turnstileToken
           ? { headers: { 'X-Turnstile-Token': turnstileToken } }
           : undefined
@@ -135,21 +136,33 @@ export const authApi = {
     await api.post('/api/user/auth/logout')
   },
   self: () => api.get<UserInfo>('/api/user/self'),
-  deleteSelf: () => api.delete<{ message: string }>('/api/user/self'),
+  deleteSelf: (proof: string) =>
+    api.delete<{ message: string }>(
+      '/api/user/self',
+      undefined,
+      proofOptions(proof)
+    ),
   updateProfile: (patch: UserProfilePatch) =>
     api.put<unknown>('/api/user/self', patch),
   async changePassword(
     originalPassword: string,
-    password: string
+    password: string,
+    proof: string
   ): Promise<AuthTokenRotation> {
-    const value = await api.put<unknown>('/api/user/self', {
-      original_password: originalPassword,
-      password,
-    })
+    const value = await api.put<unknown>(
+      '/api/user/self',
+      {
+        original_password: originalPassword,
+        password,
+      },
+      proofOptions(proof)
+    )
     return parseAuthRotation(value) ?? invalidAuthResponse('/api/user/self')
   },
-  async generateAccessToken(): Promise<string> {
-    return parseAccessToken(await api.get<unknown>('/api/user/token'))
+  async generateAccessToken(proof: string): Promise<string> {
+    return parseAccessToken(
+      await api.post<unknown>('/api/user/token', undefined, proofOptions(proof))
+    )
   },
   async getLoginSessions(): Promise<LoginSession[]> {
     return parseLoginSessions(await api.get<unknown>('/api/user/sessions'))

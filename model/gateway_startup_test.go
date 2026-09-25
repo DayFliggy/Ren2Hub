@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/glebarez/sqlite"
 	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -186,7 +185,13 @@ func gatewayStartupDatabase(t *testing.T, kind common.DatabaseType, dsn string) 
 	config := &gorm.Config{Logger: &gatewayStartupMigrationRecorder{Interface: logger.Default.LogMode(logger.Silent)}}
 	if kind == common.DatabaseTypeSQLite {
 		path := filepath.Join(t.TempDir(), "gateway-startup.db")
-		return func() (*gorm.DB, error) { return gorm.Open(sqlite.Open(path), config) }
+		return func() (*gorm.DB, error) {
+			db, err := openSQLiteDatabase(path)
+			if err != nil {
+				return nil, err
+			}
+			return db.Session(&gorm.Session{Logger: config.Logger}), nil
+		}
 	}
 	name := "gateway_startup_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
 	var admin *gorm.DB
@@ -200,7 +205,9 @@ func gatewayStartupDatabase(t *testing.T, kind common.DatabaseType, dsn string) 
 		require.NoError(t, err)
 		quoted = "`" + name + "`"
 		parsed.DBName = name
-		open = func() (*gorm.DB, error) { return gorm.Open(mysql.Open(parsed.FormatDSN()), config) }
+		open = func() (*gorm.DB, error) {
+			return gorm.Open(mysqlMigrationDialector{*mysql.Open(parsed.FormatDSN()).(*mysql.Dialector)}, config)
+		}
 	} else {
 		parsed, parseErr := pgx.ParseConfig(dsn)
 		require.NoError(t, parseErr)
@@ -211,7 +218,7 @@ func gatewayStartupDatabase(t *testing.T, kind common.DatabaseType, dsn string) 
 		parsed.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 		open = func() (*gorm.DB, error) {
 			connection := stdlib.OpenDB(*parsed)
-			db, err := gorm.Open(postgres.New(postgres.Config{Conn: connection}), config)
+			db, err := gorm.Open(postgresMigrationDialector{*postgres.New(postgres.Config{Conn: connection, PreferSimpleProtocol: true}).(*postgres.Dialector)}, config)
 			if err != nil {
 				_ = connection.Close()
 			}

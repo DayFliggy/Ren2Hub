@@ -92,6 +92,9 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 	if claudeError := claudeResponse.GetClaudeError(); claudeError != nil && claudeError.Type != "" {
 		return types.WithClaudeError(*claudeError, http.StatusInternalServerError)
 	}
+	if claudeResponse.Type == "message_start" && claudeResponse.Message != nil {
+		info.ObserveResponseModel(claudeResponse.Message.Model)
+	}
 	if claudeResponse.StopReason != "" {
 		maybeMarkClaudeRefusal(c, claudeResponse.StopReason)
 	}
@@ -109,12 +112,7 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		maybeMarkClaudeRefusal(c, *claudeResponse.Delta.StopReason)
 	}
 	if info.RelayFormat == types.RelayFormatClaude {
-		if claudeResponse.Type == "message_start" {
-			// message_start, 获取usage
-			if claudeResponse.Message != nil {
-				info.UpstreamModelName = claudeResponse.Message.Model
-			}
-		} else if claudeResponse.Type == "message_delta" {
+		if claudeResponse.Type == "message_delta" {
 			// 确保 message_delta 的 usage 包含完整的 input_tokens 和 cache 相关字段
 			// 解决 AWS Bedrock 等上游返回的 message_delta 缺少这些字段的问题
 			if !shouldSkipClaudeMessageDeltaUsagePatch(info) {
@@ -129,7 +127,7 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 			state, _ = value.(*relayconvert.ResponseStreamState)
 		}
 		if state == nil {
-			state, err = relayconvert.NewResponseStreamState(types.RelayFormatClaude, info.RelayFormat, relayconvert.ResponseStreamOptions{MaxInputBytes: helper.ResponseConversionByteLimit(), ID: claudeInfo.ResponseId, Model: info.UpstreamModelName, Created: claudeInfo.Created, IncludeUsage: info.ShouldIncludeUsage})
+			state, err = relayconvert.NewResponseStreamState(types.RelayFormatClaude, info.RelayFormat, relayconvert.ResponseStreamOptions{EmitSequenceNumber: true, MaxInputBytes: helper.ResponseConversionByteLimit(), ID: claudeInfo.ResponseId, Model: info.UpstreamModelName, Created: claudeInfo.Created, IncludeUsage: info.ShouldIncludeUsage})
 			if err != nil {
 				return types.NewError(err, types.ErrorCodeBadResponse)
 			}
@@ -260,6 +258,7 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 	if claudeError := claudeResponse.GetClaudeError(); claudeError != nil && claudeError.Type != "" {
 		return types.WithClaudeError(*claudeError, http.StatusInternalServerError)
 	}
+	info.ObserveResponseModel(claudeResponse.Model)
 	c.Set("response_termination", relayconvert.TerminationFromResponse(&claudeResponse))
 	maybeMarkClaudeRefusal(c, claudeResponse.StopReason)
 	if claudeInfo.Usage == nil {

@@ -60,7 +60,10 @@ func (recorder *migrationSQLRecorder) schemaMutations() []string {
 		if strings.HasPrefix(normalized, "ALTER TABLE") ||
 			strings.HasPrefix(normalized, "CREATE TABLE") ||
 			strings.HasPrefix(normalized, "DROP TABLE") ||
-			strings.HasPrefix(normalized, "RENAME TABLE") {
+			strings.HasPrefix(normalized, "RENAME TABLE") ||
+			strings.HasPrefix(normalized, "CREATE INDEX") ||
+			strings.HasPrefix(normalized, "CREATE UNIQUE INDEX") ||
+			strings.HasPrefix(normalized, "DROP INDEX") {
 			mutations = append(mutations, statement)
 		}
 	}
@@ -131,9 +134,9 @@ func TestUserSessionPreviousRefreshHashMigrationConfiguredDatabases(t *testing.T
 		env       string
 		dialector func(string) gorm.Dialector
 	}{
-		{name: "mysql", env: "TEST_MYSQL_DSN", dialector: func(dsn string) gorm.Dialector { return mysql.Open(dsn) }},
+		{name: "mysql", env: "TEST_MYSQL_DSN", dialector: func(dsn string) gorm.Dialector { return mysqlMigrationDialector{*mysql.Open(dsn).(*mysql.Dialector)} }},
 		{name: "postgres", env: "TEST_POSTGRES_DSN", dialector: func(dsn string) gorm.Dialector {
-			return postgres.New(postgres.Config{DSN: dsn, PreferSimpleProtocol: true})
+			return postgresMigrationDialector{*postgres.New(postgres.Config{DSN: dsn, PreferSimpleProtocol: true}).(*postgres.Dialector)}
 		}},
 	}
 	for _, test := range tests {

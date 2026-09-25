@@ -1,4 +1,5 @@
 export interface UserInfo {
+  has_password?: boolean
   id: number
   username: string
   display_name: string
@@ -60,7 +61,8 @@ export interface AuthBundle extends AuthTokenRotation {
 }
 
 export interface TwoFactorChallenge {
-  require_2fa: true
+  require_verification: true
+  methods: Array<{ method: string; available: boolean; reason?: string }>
   flow_token: string
   expires_at: number
 }

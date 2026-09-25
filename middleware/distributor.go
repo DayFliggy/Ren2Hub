@@ -16,15 +16,12 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/relay/channel/task/suno"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -90,7 +87,7 @@ func Distribute() func(c *gin.Context) {
 		requiresNative := relayconstant.Path2RelayMode(c.Request.URL.Path) == relayconstant.RelayModeResponses &&
 			requestRequiresNativeResponses(c)
 		common.SetContextKey(c, constant.ContextKeyResponsesNativeRequired, requiresNative)
-		_, routeErr := SelectRequestChannel(c, request.Model, specificChannelID, relaycommon.CompactAttemptNone)
+		_, routeErr := SelectRequestChannel(c, request.Model, specificChannelID)
 		if routeErr != nil {
 			abortWithOpenAiMessage(c, routeErr.StatusCode, routeErr.Error(), routeErr.GetErrorCode())
 			return
@@ -102,27 +99,30 @@ func Distribute() func(c *gin.Context) {
 	}
 }
 
-// SelectRequestChannel also handles protocol stages and origin-bound task
+// SelectRequestChannel also handles origin-bound task
 // continuations. All callers produce the same decision and admission contract.
-func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID int, stage relaycommon.CompactAttemptStage) (*model.Channel, *types.NewAPIError) {
+func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID int) (*model.Channel, *types.NewAPIError) {
 	value, _ := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
 	limits, _ := value.(map[string]bool)
 	input := service.LiveRouteRequest{
-		Context: c.Request.Context(), CapabilityEnabled: true,
+		TaskPluginCandidateKeys: service.TaskPluginCandidateKeys(c),
+		Context:                 c.Request.Context(), CapabilityEnabled: true,
 		RequestID:    c.GetString(common.RequestIdKey),
 		UserID:       common.GetContextKeyInt(c, constant.ContextKeyUserId),
 		TokenID:      common.GetContextKeyInt(c, constant.ContextKeyTokenId),
 		RequestModel: modelName, RequestPath: c.Request.URL.Path,
-		SpecificChannelID: specificChannelID, CompactStage: stage,
-		IsPlayground:            strings.HasPrefix(c.Request.URL.Path, "/pg/"),
-		NativeResponsesRequired: common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired),
-		TokenModelLimitEnabled:  common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled),
-		TokenModelLimit:         limits,
-		ExcludedKeyIndexes:      service.RequestRouteAttemptedKeys(c, stage),
-		ConversionPolicy:        types.ConversionLossPolicy(c.GetString("conversion_policy")),
+		SpecificChannelID:          specificChannelID,
+		IsPlayground:               strings.HasPrefix(c.Request.URL.Path, "/pg/"),
+		NativeResponsesRequired:    common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired),
+		ResponsesWebSocketRequired: c.GetBool("responses_websocket_required"),
+		ExpectedTaskPluginKey:      c.GetString("expected_task_plugin_key"),
+		TokenModelLimitEnabled:     common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled),
+		TokenModelLimit:            limits,
+		ExcludedKeyIndexes:         service.RequestRouteAttemptedKeys(c),
+		ConversionPolicy:           types.ConversionLossPolicy(c.GetString("conversion_policy")),
 	}
 	path := c.Request.URL.Path
-	if service.SupportsRouteRequestAnalysis(path) {
+	if input.ExpectedTaskPluginKey == "" && service.SupportsRouteRequestAnalysis(path) {
 		cached, exists := c.Get(service.RouteRequestRequirementsKey)
 		requirements, valid := cached.(relayconvert.RequestRequirements)
 		if !exists || !valid {
@@ -155,18 +155,6 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 		}
 		input.Requirements = &requirements
 	}
-	if stage != relaycommon.CompactAttemptNone {
-		input.ExcludedChannelIDs = make(map[int]string)
-		if previous, ok := c.Get("route_live_selection"); ok {
-			if selection, valid := previous.(service.LiveRouteSelection); valid && selection.CompactStage == stage {
-				for _, candidate := range selection.Decision.Candidates {
-					if candidate.FilterReason != "" {
-						input.ExcludedChannelIDs[candidate.ChannelID] = candidate.FilterReason
-					}
-				}
-			}
-		}
-	}
 	if preferred, ok := service.GetPreferredChannelByAffinity(c, modelName, ""); ok {
 		input.PreferredChannelID = preferred
 	}
@@ -181,6 +169,10 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 		if errors.Is(err, service.ErrGatewayProviderRateLimit) {
 			status = http.StatusTooManyRequests
 		}
+		if errors.Is(err, service.ErrRouteSelectionUnavailable) && (input.ExpectedTaskPluginKey != "" || len(input.TaskPluginCandidateKeys) > 0) {
+			logger.LogWarn(c, fmt.Sprintf("task plugin channel unavailable: model=%q plugin_key=%q candidate_keys=%q", modelName, input.ExpectedTaskPluginKey, input.TaskPluginCandidateKeys))
+			err = errors.New(i18n.T(c, i18n.MsgDistributorNoAvailableTaskPluginChannel, map[string]any{"Model": modelName}))
+		}
 		return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, status, types.ErrOptionWithSkipRetry())
 	}
 	channel, err := model.GetChannelById(selection.Decision.SelectedChannelID, true)
@@ -189,7 +181,6 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 	}
 	c.Set("route_live_selection", selection)
 	c.Set("route_request_model", modelName)
-	service.SetCompactStage(c, selection.CompactStage)
 	if setupErr := SetupContextForSelectedChannel(c, channel, modelName); setupErr != nil {
 		return nil, setupErr
 	}
@@ -287,6 +278,9 @@ type parsedGatewayModel struct {
 }
 
 func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
+	if name := c.GetString("resolved_task_model"); name != "" && c.GetString("expected_task_plugin_key") != "" {
+		return &ModelRequest{Model: name}, true, nil
+	}
 	if cached, ok := c.Get("gateway_parsed_model"); ok {
 		parsed := cached.(parsedGatewayModel)
 		return parsed.model, parsed.selectChannel, parsed.err
@@ -351,22 +345,6 @@ func parseModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			}
 			modelRequest.Model = midjourneyModel
 		}
-		c.Set("relay_mode", relayMode)
-	} else if strings.Contains(c.Request.URL.Path, "/suno/") {
-		relayMode := relayconstant.Path2RelaySuno(c.Request.Method, c.Request.URL.Path)
-		if relayMode == relayconstant.RelayModeSunoFetch ||
-			relayMode == relayconstant.RelayModeSunoFetchByID {
-			shouldSelectChannel = false
-		} else {
-			request, err := suno.ParseRequest(c)
-			if err != nil {
-				return nil, false, err
-			}
-			shouldSelectChannel = request.TaskID == ""
-			modelName := service.CoverTaskActionToModelName(constant.TaskPlatformSuno, c.Param("action"))
-			modelRequest.Model = modelName
-		}
-		c.Set("platform", string(constant.TaskPlatformSuno))
 		c.Set("relay_mode", relayMode)
 	} else if strings.Contains(c.Request.URL.Path, "/v1/videos/") && strings.HasSuffix(c.Request.URL.Path, "/remix") {
 		relayMode := relayconstant.RelayModeVideoSubmit
@@ -480,9 +458,6 @@ func parseModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		modelRequest.Model = req.Model
 	}
 
-	if strings.HasPrefix(c.Request.URL.Path, "/v1/responses/compact") && modelRequest.Model != "" {
-		modelRequest.Model = ratio_setting.WithCompactModelSuffix(modelRequest.Model)
-	}
 	return &modelRequest, shouldSelectChannel, nil
 }
 
@@ -515,6 +490,9 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	c.Set("original_model", modelName) // for retry
 	if channel == nil {
 		return types.NewError(errors.New("channel is nil"), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+	}
+	if err := BindTaskPluginEndpointToChannel(c, channel); err != nil {
+		return err
 	}
 	common.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)
 	common.SetContextKey(c, constant.ContextKeyChannelName, channel.Name)

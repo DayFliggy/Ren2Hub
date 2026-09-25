@@ -123,7 +123,7 @@ describe('live model market adapter', () => {
     for (const vendor of vendors) expect(vendorMeta[vendor]).toBeTruthy()
   })
 
-  it('hides only strict GPT Compact virtual models from the market', () => {
+  it('preserves every explicitly published model name including literal suffixes', () => {
     const names = [
       'gpt-5.3-codex',
       'gpt-5.3-codex-openai-compact',
@@ -158,13 +158,8 @@ describe('live model market adapter', () => {
       []
     )
 
-    expect(catalog.models.map((model) => model.name)).toEqual([
-      'gpt-5.3-codex',
-      'claude-3-openai-compact',
-      'gpt--openai-compact',
-      'gpt-5.3-openai-compact-preview',
-    ])
-    expect(catalog.vendors).toEqual(['OpenAI'])
+    expect(catalog.models.map((model) => model.name)).toEqual(names)
+    expect(catalog.vendors).toEqual(['OpenAI', 'Virtual'])
   })
 
   it('preserves zero cache-write prices and omits unavailable cache prices', () => {

@@ -240,7 +240,7 @@ describe('ChannelTestModal', () => {
     expect(visibleModels()).toEqual(models.slice(0, 5))
   })
 
-  it('keeps batch progress and spinners visible while requests are pending', async () => {
+  it('defaults to one active request and keeps batch progress visible', async () => {
     let resolveTest: (result: ChannelModelTestResult) => void = () => {}
     const pendingTest = new Promise<ChannelModelTestResult>((resolve) => {
       resolveTest = resolve
@@ -257,7 +257,7 @@ describe('ChannelTestModal', () => {
     ).toBeTruthy()
     expect(
       document.body.querySelectorAll('[data-channel-model-row-spinner]')
-    ).toHaveLength(3)
+    ).toHaveLength(1)
 
     resolveTest({ ok: true, timeMs: 100 })
     await flushPromises()

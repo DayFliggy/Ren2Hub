@@ -93,19 +93,9 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	if relayInfo.ReasoningEffort != "" {
 		other["reasoning_effort"] = relayInfo.ReasoningEffort
 	}
-	if relayInfo.LogicalBillingModel != "" {
-		other["requested_model_name"] = relayInfo.RequestedModel
-		other["logical_model_name"] = relayInfo.LogicalBillingModel
-		other["upstream_model_name"] = relayInfo.ActualUpstreamModelName()
-		other["compact_attempt_stage"] = relayInfo.CompactAttemptStage
-		other["model_pricing_source"] = relayInfo.ModelPricingSource
-		other["pricing_model_name"] = relayInfo.PricingModelName
-	}
 	if relayInfo.IsModelMapped {
 		other["is_model_mapped"] = true
-		if relayInfo.LogicalBillingModel == "" {
-			other["upstream_model_name"] = relayInfo.UpstreamModelName
-		}
+		other["upstream_model_name"] = relayInfo.UpstreamModelName
 	}
 
 	isSystemPromptOverwritten := common.GetContextKeyBool(ctx, constant.ContextKeySystemPromptOverride)
@@ -129,9 +119,14 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 		adminInfo["compact_response_object"] = relayInfo.CompactResponseObject
 	}
 
+	if len(relayInfo.ConversionDiagnostics) > 0 {
+		adminInfo["conversion_diagnostics"] = relayInfo.ConversionDiagnostics
+	}
+
 	AppendChannelAffinityAdminInfo(ctx, adminInfo)
 
 	other["admin_info"] = adminInfo
+	AppendResponseModelLogInfo(relayInfo, other)
 	appendRequestPath(ctx, relayInfo, other)
 	appendRequestConversionChain(relayInfo, other)
 	appendFinalRequestFormat(relayInfo, other)
@@ -139,6 +134,23 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	appendParamOverrideInfo(relayInfo, other)
 	appendStreamStatus(relayInfo, other)
 	return other
+}
+
+// Response model declarations are diagnostic only and never select a price.
+func AppendResponseModelLogInfo(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
+	if relayInfo == nil || relayInfo.ResponseModel == nil || other == nil {
+		return
+	}
+	observation := relayInfo.ResponseModel
+	if observation.ReturnedModel == observation.RequestedModel &&
+		(observation.UpstreamModel == "" || observation.UpstreamModel == observation.RequestedModel) &&
+		(relayInfo.ChannelMeta == nil || !relayInfo.IsModelMapped) {
+		return
+	}
+	other["response_model_name"] = observation.ReturnedModel
+	if observation.UpstreamModel != "" {
+		other["upstream_model_name"] = observation.UpstreamModel
+	}
 }
 
 func appendParamOverrideInfo(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {

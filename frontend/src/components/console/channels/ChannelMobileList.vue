@@ -92,6 +92,7 @@ const props = defineProps<{
   refreshBalance: (channel: AdminChannel) => Promise<boolean>
   openTest: (channel: AdminChannel) => void
   editChannel: (channel: AdminChannel) => void
+  syncModels: (channel: AdminChannel) => void
   showRuntime: (channel: AdminChannel) => void
   deleteChannel: (channel: AdminChannel) => void
 }>()
@@ -461,6 +462,13 @@ function responseDisplay(channel: AdminChannel): {
             <footer
               class="mt-4 flex items-center justify-end gap-1 border-t border-[var(--border-subtle)] pt-3"
             >
+              <IconButton
+                v-if="canOperate"
+                :label="t('channels.syncModelsTitle')"
+                :disabled="!canMutate"
+                @click="syncModels(channel)"
+                ><RefreshCw :size="16"
+              /></IconButton>
               <IconButton
                 :label="t('gateway.channelRuntime')"
                 @click="showRuntime(channel)"

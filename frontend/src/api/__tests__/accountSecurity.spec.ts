@@ -9,10 +9,14 @@ beforeEach(() => vi.restoreAllMocks())
 
 describe('account security API', () => {
   it('generates an access token and validates the one-time string response', async () => {
-    const get = vi.spyOn(api, 'get').mockResolvedValue('secret-token')
+    const post = vi.spyOn(api, 'post').mockResolvedValue('secret-token')
 
-    await expect(authApi.generateAccessToken()).resolves.toBe('secret-token')
-    expect(get).toHaveBeenCalledWith('/api/user/token')
+    await expect(authApi.generateAccessToken('one-use-proof')).resolves.toBe(
+      'secret-token'
+    )
+    expect(post).toHaveBeenCalledWith('/api/user/token', undefined, {
+      headers: { 'X-Security-Proof': 'one-use-proof' },
+    })
     expect(() => parseAccessToken('')).toThrow(ApiError)
   })
 

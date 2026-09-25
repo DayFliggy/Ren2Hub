@@ -34,9 +34,7 @@ func validateSetupCredentials(req SetupRequest) string {
 	if req.Password != req.ConfirmPassword {
 		return "两次输入的密码不一致"
 	}
-	if utf8.RuneCountInString(req.Password) < 8 {
-		return "密码长度至少为8个字符"
-	}
+	if err := common.ValidateNewAccountPassword(req.Password); err != nil { return err.Error() }
 	return ""
 }
 
@@ -93,7 +91,7 @@ func PostSetup(c *gin.Context) {
 		}
 
 		// Create root user
-		hashedPassword, err := common.Password2Hash(req.Password)
+		hashedPassword, err := common.HashAccountPassword(req.Password)
 		if err != nil {
 			c.JSON(200, gin.H{
 				"success": false,

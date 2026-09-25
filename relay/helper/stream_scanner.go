@@ -180,6 +180,20 @@ func StreamPayloadState(data string) (semantic, terminal bool) {
 			}
 		}
 		terminal = types.ClassifyResponseTermination(types.RelayFormatOpenAIResponses, status, value.Get("response.incomplete_details.reason").String()).IsSuccessful()
+		if terminal {
+			for _, output := range value.Get("response.output").Array() {
+				switch output.Get("type").String() {
+				case "message":
+					for _, part := range output.Get("content").Array() {
+						semantic = semantic || part.Get("text").String() != "" || part.Get("refusal").String() != ""
+					}
+				case "function_call", "custom_tool_call":
+					semantic = semantic || output.Get("call_id").String() != ""
+				case "image_generation_call":
+					semantic = semantic || output.Get("status").String() == "completed" && output.Get("result").String() != ""
+				}
+			}
+		}
 	case "content_block_delta":
 		semantic = value.Get("delta.text").String() != "" || value.Get("delta.thinking").String() != "" || value.Get("delta.partial_json").String() != "" || value.Get("delta.signature").String() != ""
 	case "content_block_start":

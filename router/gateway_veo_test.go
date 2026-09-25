@@ -12,6 +12,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -45,10 +46,18 @@ func TestGatewayVeoFinalParametersAndPrecharge(t *testing.T) {
 				assert.Contains(t, r.URL.Path, requestModel+":predictLongRunning")
 				assert.Equal(t, int64(expectedSeconds), gjson.GetBytes(body, "parameters.durationSeconds").Int())
 				assert.Equal(t, expectedResolution, gjson.GetBytes(body, "parameters.resolution").String())
-				assert.EqualValues(t, 1, gjson.GetBytes(body, "parameters.sampleCount").Int())
+				countField := "parameters.numberOfVideos"
+				if channelType == constant.ChannelTypeVertexAi {
+					countField = "parameters.sampleCount"
+				}
+				assert.EqualValues(t, 1, gjson.GetBytes(body, countField).Int())
 				if gjson.GetBytes(body, "instances.0.prompt").String() == "multipart image" {
-					assert.Equal(t, imagePNG, gjson.GetBytes(body, "instances.0.image.bytesBase64Encoded").String())
-					assert.Equal(t, "image/png", gjson.GetBytes(body, "instances.0.image.mimeType").String())
+					dataField, mimeField := "instances.0.image.inlineData.data", "instances.0.image.inlineData.mimeType"
+					if channelType == constant.ChannelTypeVertexAi {
+						dataField, mimeField = "instances.0.image.bytesBase64Encoded", "instances.0.image.mimeType"
+					}
+					assert.Equal(t, imagePNG, gjson.GetBytes(body, dataField).String())
+					assert.Equal(t, "image/png", gjson.GetBytes(body, mimeField).String())
 				}
 				var user model.User
 				if assert.NoError(t, model.DB.First(&user, 1).Error) {
@@ -130,7 +139,7 @@ func TestGatewayVeoFinalParametersAndPrecharge(t *testing.T) {
 				for field, value := range map[string]string{"model": requestModel, "prompt": "multipart image", "seconds": "4"} {
 					require.NoError(t, writer.WriteField(field, value))
 				}
-				part, err := writer.CreateFormFile("input_reference", "input.png")
+				part, err := writer.CreatePart(textproto.MIMEHeader{"Content-Disposition": {`form-data; name="input_reference"; filename="input.png"`}, "Content-Type": {"image/png"}})
 				require.NoError(t, err)
 				data, err := base64.StdEncoding.DecodeString(imagePNG)
 				require.NoError(t, err)

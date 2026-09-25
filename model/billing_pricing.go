@@ -9,6 +9,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -41,11 +42,15 @@ func (*BillingPriceVersion) BeforeDelete(*gorm.DB) error {
 
 func PublishBillingPrice(ctx context.Context, version billing.PriceVersion, expectedVersion int64, actor int) (*billing.PriceVersion, error) {
 	version.Model = strings.TrimSpace(version.Model)
+	if err := reasoning.ValidateBillingModelName(version.Model); err != nil {
+		return nil, err
+	}
 	version.Prices = append(make([]billing.UnitPrice, 0, len(version.Prices)), version.Prices...)
 	version.ID = 0
 	version.CreatedAt = 0
 	version.Hash = ""
-	if err := billing.ValidatePriceVersion(version); err != nil {
+	version, err := billing.PreparePriceVersion(version)
+	if err != nil {
 		return nil, err
 	}
 	for i := range version.Prices {
@@ -102,7 +107,7 @@ func decodeBillingPrice(row BillingPriceVersion) (*billing.PriceVersion, error) 
 	if err := common.UnmarshalJsonStr(row.Definition, &version); err != nil {
 		return nil, err
 	}
-	if err := billing.ValidatePriceVersion(version); err != nil {
+	if err := billing.ValidateFrozenPriceVersion(version); err != nil {
 		return nil, err
 	}
 	hash, err := billing.Hash(version)

@@ -133,6 +133,7 @@ var optionDefaults = map[string]any{
 		{"name": "自定义1", "type": "custom1", "icon": "LuCreditCard", "min_topup": "50"},
 	},
 	"monitor_setting.channel_test_mode":           "scheduled_all",
+	"monitor_setting.channel_test_concurrency":    "1",
 	"payment_setting.amount_options":              []int{10, 20, 50, 100, 200, 500},
 	"payment_setting.amount_discount":             map[string]any{},
 	"payment_setting.epay_settlement_enabled":     true,
@@ -503,6 +504,11 @@ func validateOptionPatch(values map[string]string) error {
 			if err := validateChannelAffinitySettingValue(key, value); err != nil {
 				return err
 			}
+		case "monitor_setting.channel_test_concurrency":
+			concurrency, err := strconv.Atoi(strings.TrimSpace(value))
+			if err != nil || concurrency < 1 || concurrency > 32 {
+				return fmt.Errorf("渠道测试并发必须在 1 到 32 之间")
+			}
 		case "monitor_setting.channel_test_mode":
 			if value != operation_setting.ChannelTestModeScheduledAll && value != operation_setting.ChannelTestModeAutoBanOnly && value != operation_setting.ChannelTestModePassiveRecovery {
 				return fmt.Errorf("自动测试策略无效")
@@ -848,7 +854,7 @@ func UpdateOption(c *gin.Context) {
 	}
 	err = model.UpdateOption(option.Key, option.Value.(string))
 	if err != nil {
-		common.ApiError(c, err)
+		writePasskeyDomainSettingsError(c, err)
 		return
 	}
 	// 出于安全考虑只记录被修改的配置项名称，不记录配置值（可能含密钥等敏感信息）。
@@ -890,7 +896,7 @@ func UpdateOptionsBulk(c *gin.Context) {
 		return
 	}
 	if err := model.UpdateOptionsBulk(values); err != nil {
-		common.ApiError(c, err)
+		writePasskeyDomainSettingsError(c, err)
 		return
 	}
 

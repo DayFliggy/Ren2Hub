@@ -53,7 +53,11 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const TEST_BATCH_SIZE = 5
+const concurrency = ref('1')
+const concurrencyOptions = Array.from({ length: 32 }, (_, index) => ({
+  value: String(index + 1),
+  label: String(index + 1),
+}))
 const REMOVE_ARM_TIMEOUT_MS = 3000
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -221,10 +225,11 @@ async function testBatch() {
   const targets = [...batchTargets.value]
   testingAll.value = true
   batchDone.value = 0
+  const batchSize = Number(concurrency.value)
   try {
-    for (let start = 0; start < targets.length; start += TEST_BATCH_SIZE) {
+    for (let start = 0; start < targets.length; start += batchSize) {
       if (!abortController || abortController.signal.aborted) return
-      const batch = targets.slice(start, start + TEST_BATCH_SIZE)
+      const batch = targets.slice(start, start + batchSize)
       await Promise.all(batch.map((model) => runModelTest(model)))
       batchDone.value = Math.min(start + batch.length, targets.length)
     }
@@ -300,6 +305,16 @@ function close() {
     <div class="space-y-5 text-left">
       <!-- ══ 测试配置 ══════════════════════════════════════════════════ -->
       <section class="channel-test-config">
+        <div :inert="testingAll" class="mb-4">
+          <p class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]">
+            {{ t('channels.testConcurrency') }}
+          </p>
+          <FilterSelect
+            v-model="concurrency"
+            :options="concurrencyOptions"
+            :label="t('channels.testConcurrency')"
+          />
+        </div>
         <div class="grid gap-4 sm:grid-cols-2">
           <div>
             <p class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]">

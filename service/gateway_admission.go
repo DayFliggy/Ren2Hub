@@ -191,6 +191,16 @@ func AcquireGatewayUserPermit(ctx context.Context, requestID string, userID int,
 // allowQueue only selects immediate admission versus waiting. The current
 // policy owns the queue limit and is loaded within the remaining wait budget.
 func AcquireGatewayChannelPermit(ctx context.Context, requestID string, channelID int, allowQueue bool, budget *GatewayWaitBudget) (result *Permit, admitted model.Channel, resultErr error) {
+	return acquireGatewayChannelPermit(ctx, requestID, channelID, allowQueue, budget, false)
+}
+
+// Administrative probes share the business capacity pool but may inspect an
+// automatically disabled channel. They never make it eligible for routing.
+func AcquireGatewayChannelProbePermit(ctx context.Context, requestID string, channelID int, budget *GatewayWaitBudget) (*Permit, model.Channel, error) {
+	return acquireGatewayChannelPermit(ctx, requestID, channelID, true, budget, true)
+}
+
+func acquireGatewayChannelPermit(ctx context.Context, requestID string, channelID int, allowQueue bool, budget *GatewayWaitBudget, probe bool) (result *Permit, admitted model.Channel, resultErr error) {
 	defer func() {
 		if resultErr != nil {
 			resultErr = fmt.Errorf("channel admission: %w", resultErr)
@@ -226,7 +236,7 @@ func AcquireGatewayChannelPermit(ctx context.Context, requestID string, channelI
 		}
 		queueLimit, configVersion = config.ChannelQueueSize, config.Version
 	}
-	channel, err := loadRouteChannel(ctx, channelID)
+	channel, err := loadGatewayChannel(ctx, channelID, probe)
 	if err != nil {
 		return nil, channel, err
 	}

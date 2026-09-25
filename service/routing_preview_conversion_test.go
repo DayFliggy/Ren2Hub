@@ -47,7 +47,7 @@ func TestRoutePreviewConversionPolicyAndExecutableCandidates(t *testing.T) {
 		{"ollama developer role", constant.ChannelTypeOllama, "allow", "/v1/chat/completions", `{"messages":[{"role":"developer","content":"instruction"},{"role":"user","content":"hello"}]}`, types.RelayFormatOpenAI, "projection_role_dropped", false},
 		{"ollama sampling loss", constant.ChannelTypeOllama, "safe", "/v1/chat/completions", `{"logprobs":true}`, types.RelayFormatOpenAI, "projection_field_dropped", true},
 		{"ollama strict sampling loss", constant.ChannelTypeOllama, "strict", "/v1/chat/completions", `{"logprobs":true}`, types.RelayFormatOpenAI, "projection_field_dropped", false},
-		{"ollama Claude forced tool", constant.ChannelTypeOllama, "safe", "/v1/messages", `{"max_tokens":32,"tool_choice":{"type":"any"}}`, types.RelayFormatOpenAI, "projection_feature_unavailable", false},
+		{"ollama native Claude forced tool", constant.ChannelTypeOllama, "safe", "/v1/messages", `{"max_tokens":32,"tool_choice":{"type":"any"}}`, types.RelayFormatClaude, "", true},
 		{"ollama Gemini forced tool", constant.ChannelTypeOllama, "safe", "/v1beta/models/gpt-test:generateContent", `{"toolConfig":{"functionCallingConfig":{"mode":"ANY"}}}`, types.RelayFormatOpenAI, "projection_feature_unavailable", false},
 	} {
 		t.Run(test.name, func(t *testing.T) {

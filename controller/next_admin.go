@@ -335,7 +335,7 @@ func NextAdminUserQuota(c *gin.Context) {
 		writeManagedUserError(c, err)
 		return
 	}
-	recordManageAudit(c, "user.quota_adjust", map[string]interface{}{"id": request.ID, "delta": request.Delta})
+	recordManageAudit(c, "user.quota_adjust", map[string]interface{}{"id": request.ID, "delta": request.Delta, "event_id": "admin:" + request.OperationID, "expected_version": request.ExpectedVersion, "reason": request.Reason})
 	common.ApiSuccess(c, buildNextAdminUserDTO(user))
 }
 

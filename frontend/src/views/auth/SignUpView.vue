@@ -86,8 +86,8 @@ function validate(): boolean {
     errors.email = t('auth.emailInvalid')
     valid = false
   }
-  if (password.value.length < 8) {
-    errors.password = t('auth.passwordTooShort')
+  if ([...password.value].length < 8 || [...password.value].length > 128) {
+    errors.password = t('security.passwordLength')
     valid = false
   }
   if (password.value !== confirm.value) {

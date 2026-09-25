@@ -1,16 +1,17 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -76,26 +77,57 @@ func TestGatewayResponseTerminalsKeepRetryHealthAndUsageContracts(t *testing.T) 
 	}
 }
 
-func TestGatewayUnsupportedToolImageNeverSendsOrDebits(t *testing.T) {
-	var sends atomic.Int32
-	base, key, _ := setupGatewaySDKWithUpstream(t, func(w http.ResponseWriter, r *http.Request) { sends.Add(1); gatewaySDKUpstream(w, r) })
-	require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
-	body := `{"model":"gpt-4o-mini","max_tokens":32,"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"call_a","name":"screen","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_a","content":[{"type":"image","source":{"type":"url","url":"https://never-fetch.example/image.png"}}]}]}]}`
+func TestGatewayToolImageHoistPreservesResultAndSettlesOnce(t *testing.T) {
 	for _, policy := range []string{"safe", "strict", "allow"} {
-		token, err := model.GetTokenByKey(key, true)
-		require.NoError(t, err)
-		token.ConversionPolicy = policy
-		require.NoError(t, token.Update())
-		status, response := gatewayStateHTTP(t, base, key, "/v1/messages", body)
-		assert.Equal(t, 400, status, response)
-		assert.False(t, strings.Contains(response, "never-fetch.example"))
+		t.Run(policy, func(t *testing.T) {
+			var sends atomic.Int32
+			base, key, _ := setupGatewaySDKWithUpstream(t, func(w http.ResponseWriter, r *http.Request) {
+				sends.Add(1)
+				payload, err := io.ReadAll(r.Body)
+				if !assert.NoError(t, err) {
+					http.Error(w, "cannot inspect request", http.StatusBadRequest)
+					return
+				}
+				var request dto.GeneralOpenAIRequest
+				if !assert.NoError(t, common.Unmarshal(payload, &request)) {
+					http.Error(w, "invalid request", http.StatusBadRequest)
+					return
+				}
+				toolResult, image := false, false
+				for _, message := range request.Messages {
+					if message.Role == "tool" {
+						toolResult = message.ToolCallId == "call_a"
+						assert.Contains(t, message.StringContent(), "screenshot")
+					}
+					if message.Role == "user" {
+						for _, part := range message.ParseContent() {
+							media := part.GetImageMedia()
+							image = image || part.Type == "image_url" && media != nil && media.Url == "https://images.example.test/image.png"
+						}
+					}
+				}
+				assert.True(t, toolResult)
+				assert.True(t, image)
+				r.Body = io.NopCloser(bytes.NewReader(payload))
+				gatewaySDKUpstream(w, r)
+			})
+			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
+			token, err := model.GetTokenByKey(key, true)
+			require.NoError(t, err)
+			token.ConversionPolicy = policy
+			require.NoError(t, token.Update())
+			body := `{"model":"gpt-4o-mini","max_tokens":32,"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"call_a","name":"screen","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_a","content":[{"type":"text","text":"screenshot"},{"type":"image","source":{"type":"url","url":"https://images.example.test/image.png"}}]}]}]}`
+			status, response := gatewayStateHTTP(t, base, key, "/v1/messages", body)
+			require.Equal(t, http.StatusOK, status, response)
+			awaitGatewayPermitsReleased(t)
+			assert.EqualValues(t, 1, sends.Load())
+			var recovery model.BillingRecovery
+			require.NoError(t, model.DB.First(&recovery).Error)
+			assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
+			var user model.User
+			require.NoError(t, model.DB.First(&user, 1).Error)
+			assert.EqualValues(t, 500, user.UsedQuota)
+			assert.Zero(t, user.ReservedQuota)
+		})
 	}
-	assert.Zero(t, sends.Load())
-	var count int64
-	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&count).Error)
-	assert.Zero(t, count)
-	var user model.User
-	require.NoError(t, model.DB.First(&user, 1).Error)
-	assert.EqualValues(t, 10000000, user.Quota)
-	assert.Zero(t, user.UsedQuota)
 }

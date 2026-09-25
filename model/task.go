@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billing"
 	commonRelay "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	hosttypes "github.com/QuantumNous/new-api/types"
 )
 
 type TaskStatus string
@@ -21,7 +22,7 @@ type TaskStatus string
 func (t TaskStatus) ToVideoStatus() string {
 	var status string
 	switch t {
-	case TaskStatusQueued, TaskStatusSubmitted:
+	case TaskStatusNotStart, TaskStatusQueued, TaskStatusSubmitted:
 		status = dto.VideoStatusQueued
 	case TaskStatusInProgress:
 		status = dto.VideoStatusInProgress
@@ -119,20 +120,59 @@ func (m Properties) Value() (driver.Value, error) {
 type TaskPrivateData struct {
 	// Key remains only to read tasks created before credential references were
 	// introduced. New tasks must resolve credentials from their channel.
-	Key                 string `json:"key,omitempty"`
-	ChannelKeyIndex     int    `json:"channel_key_index,omitempty"`
-	CredentialVersion   int    `json:"credential_version,omitempty"`
-	CredentialID        string `json:"credential_id,omitempty"`
-	EndpointID          string `json:"endpoint_id,omitempty"`
-	UpstreamTaskID      string `json:"upstream_task_id,omitempty"` // 上游真实 task ID
-	SubmissionRequestID string `json:"submission_request_id,omitempty"`
-	ResultURL           string `json:"result_url,omitempty"` // 任务成功后的结果 URL（视频地址等）
+	Key                 string                   `json:"key,omitempty"`
+	ChannelKeyIndex     int                      `json:"channel_key_index,omitempty"`
+	CredentialVersion   int                      `json:"credential_version,omitempty"`
+	CredentialID        string                   `json:"credential_id,omitempty"`
+	EndpointID          string                   `json:"endpoint_id,omitempty"`
+	UpstreamTaskID      string                   `json:"upstream_task_id,omitempty"` // 上游真实 task ID
+	SubmissionRequestID string                   `json:"submission_request_id,omitempty"`
+	ResultURL           string                   `json:"result_url,omitempty"` // 任务成功后的结果 URL（视频地址等）
+	PluginRef           *hosttypes.TaskPluginRef `json:"plugin_ref,omitempty"`
+	PluginAttemptID     string                   `json:"plugin_attempt_id,omitempty"`
+	Execution           *TaskExecutionSnapshot   `json:"execution,omitempty"`
+	ResponsesBackground bool                     `json:"responses_background,omitempty"`
+	PluginState         json.RawMessage          `json:"plugin_state,omitempty"`
+	PollFailures        int                      `json:"poll_failures,omitempty"`
+	ResultDiscarded     bool                     `json:"result_discarded,omitempty"`
+	CompletionUsage     *TaskCompletionUsage     `json:"completion_usage,omitempty"`
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
 	BillingSource  string              `json:"billing_source,omitempty"`  // 新任务使用 wallet；保留历史来源供结算时校验
 	TokenId        int                 `json:"token_id,omitempty"`        // 令牌 ID，用于令牌额度退款
 	NodeName       string              `json:"node_name,omitempty"`       // 发起任务的节点名，轮询结算阶段据此归属日志而非最后查询节点
 	BillingContext *TaskBillingContext `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
 }
+
+// TaskCompletionUsage retains provider evidence even if pricing cannot settle it.
+type TaskCompletionUsage struct {
+	CompletionTokens int            `json:"completion_tokens"`
+	TotalTokens      int            `json:"total_tokens"`
+	Facts            map[string]any `json:"facts,omitempty"`
+	Error            string         `json:"error,omitempty"`
+}
+
+type TaskExecutionSnapshot struct {
+	RequestID   string              `json:"request_id,omitempty"`
+	RequestPath string              `json:"request_path,omitempty"`
+	TaskPlugin  *TaskPluginSnapshot `json:"task_plugin,omitempty"`
+}
+
+type TaskPluginSnapshot struct {
+	Key        string                    `json:"key"`
+	Name       string                    `json:"name"`
+	Version    string                    `json:"version"`
+	SourceHash string                    `json:"source_hash"`
+	Author     *TaskPluginAuthorSnapshot `json:"author,omitempty"`
+	APIVersion int                       `json:"api_version"`
+	Generation uint64                    `json:"generation"`
+}
+
+type TaskPluginAuthorSnapshot struct {
+	Name string `json:"name"`
+	URL  string `json:"url,omitempty"`
+}
+
+func (t *Task) ResultRetrievable() bool { return t != nil && !t.PrivateData.ResultDiscarded }
 
 // TaskBillingContext keeps the accepted immutable quote and separate usage/result evidence.
 type TaskBillingContext struct {
@@ -187,10 +227,10 @@ func (p *TaskPrivateData) Scan(val interface{}) error {
 }
 
 func (p TaskPrivateData) Value() (driver.Value, error) {
-	if (p == TaskPrivateData{}) {
+	data, err := common.Marshal(p)
+	if err == nil && string(data) == "{}" {
 		return nil, nil
 	}
-	data, err := common.Marshal(p)
 	return string(data), err
 }
 
@@ -465,13 +505,15 @@ func (Task *Task) Insert() error {
 }
 
 type taskSnapshot struct {
-	Status     TaskStatus
-	Progress   string
-	StartTime  int64
-	FinishTime int64
-	FailReason string
-	ResultURL  string
-	Data       json.RawMessage
+	Status       TaskStatus
+	Progress     string
+	StartTime    int64
+	FinishTime   int64
+	FailReason   string
+	ResultURL    string
+	Data         json.RawMessage
+	PluginState  json.RawMessage
+	PollFailures int
 }
 
 func (s taskSnapshot) Equal(other taskSnapshot) bool {
@@ -481,18 +523,20 @@ func (s taskSnapshot) Equal(other taskSnapshot) bool {
 		s.FinishTime == other.FinishTime &&
 		s.FailReason == other.FailReason &&
 		s.ResultURL == other.ResultURL &&
-		bytes.Equal(s.Data, other.Data)
+		bytes.Equal(s.Data, other.Data) && bytes.Equal(s.PluginState, other.PluginState) && s.PollFailures == other.PollFailures
 }
 
 func (t *Task) Snapshot() taskSnapshot {
 	return taskSnapshot{
-		Status:     t.Status,
-		Progress:   t.Progress,
-		StartTime:  t.StartTime,
-		FinishTime: t.FinishTime,
-		FailReason: t.FailReason,
-		ResultURL:  t.PrivateData.ResultURL,
-		Data:       t.Data,
+		Status:       t.Status,
+		Progress:     t.Progress,
+		StartTime:    t.StartTime,
+		FinishTime:   t.FinishTime,
+		FailReason:   t.FailReason,
+		ResultURL:    t.PrivateData.ResultURL,
+		Data:         t.Data,
+		PluginState:  t.PrivateData.PluginState,
+		PollFailures: t.PrivateData.PollFailures,
 	}
 }
 
@@ -609,7 +653,12 @@ func (t *Task) ToOpenAIVideo() *dto.OpenAIVideo {
 	openAIVideo.Model = t.Properties.OriginModelName
 	openAIVideo.SetProgressStr(t.Progress)
 	openAIVideo.CreatedAt = t.CreatedAt
-	openAIVideo.CompletedAt = t.UpdatedAt
+	if t.Status == TaskStatusSuccess {
+		openAIVideo.CompletedAt = t.FinishTime
+		if openAIVideo.CompletedAt == 0 {
+			openAIVideo.CompletedAt = t.UpdatedAt
+		}
+	}
 	openAIVideo.SetMetadata("url", t.GetResultURL())
 	return openAIVideo
 }

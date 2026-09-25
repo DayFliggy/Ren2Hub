@@ -114,7 +114,7 @@ func TestGatewayFilteredTailPreservesBusyQueue(t *testing.T) {
 			body := `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"fixture"}]}`
 			if test.conversion {
 				require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", 4).Update("type", constant.ChannelTypeAnthropic).Error)
-				body = `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"fixture"}],"reasoning_effort":"high"}`
+				body = `{"model":"gpt-4o-mini","messages":[{"role":"user","content":[{"type":"text","text":"fixture"},{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav"}}]}]}`
 			} else {
 				require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", 4).Update("channel_ratio", 2).Error)
 			}

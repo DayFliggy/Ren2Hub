@@ -1,4 +1,6 @@
+import { securityMessages } from '../../security'
 export default {
+  security: securityMessages['en'],
   auth: {
     resetConfirm: 'Confirm password reset',
     resetInvalid: 'The reset link is invalid or incomplete.',

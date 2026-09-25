@@ -106,7 +106,7 @@ func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilt
 		result.Reason = RouteFilterPathUnsupported
 		return result
 	}
-	if input.ChannelType != constant.ChannelTypeAdvancedCustom &&
+	if !constant.IsAdvancedCustomChannel(input.ChannelType) &&
 		(input.EndpointType == string(constant.EndpointTypeAudio) || relaycapability.LegacyOpenAIOperation(input.RequestPath) != "") {
 		apiType, _ := common.ChannelType2APIType(input.ChannelType)
 		actualModel := input.Capability.ActualModel
@@ -123,7 +123,7 @@ func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilt
 			return result
 		}
 	}
-	if input.ChannelType == constant.ChannelTypeAdvancedCustom {
+	if constant.IsAdvancedCustomChannel(input.ChannelType) {
 		advanced := input.Advanced
 		if advanced == nil {
 			advanced = advancedCustomPathConfigFromCapability(input.Capability)

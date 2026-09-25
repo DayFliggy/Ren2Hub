@@ -11,7 +11,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"gorm.io/gorm"
@@ -84,25 +83,27 @@ func LiveRouteQualificationAllowsFailover(err error) bool {
 }
 
 type LiveRouteCandidateQualificationRequest struct {
-	ClientIP                 string
-	IsPlayground             bool
-	SpecificChannelID        int
-	PermissionModel          string
-	Context                  context.Context
-	RouteSource              RouteSource
-	UserID                   int
-	TokenID                  int
-	ChannelID                int
-	RequestModel             string
-	RequestPath              string
-	ExpectedSnapshotVersion  int64
-	ExpectedCatalogVersion   string
-	ExpectedProfileVersion   int64
-	ExpectedConversionPolicy types.ConversionLossPolicy
-	PriceEligibilityKnown    bool
-	PriceEligible            bool
-	SecurityEligibilityKnown bool
-	SecurityAllowed          bool
+	ResponsesWebSocketRequired bool
+	ExpectedTaskPluginKey      string
+	ClientIP                   string
+	IsPlayground               bool
+	SpecificChannelID          int
+	PermissionModel            string
+	Context                    context.Context
+	RouteSource                RouteSource
+	UserID                     int
+	TokenID                    int
+	ChannelID                  int
+	RequestModel               string
+	RequestPath                string
+	ExpectedSnapshotVersion    int64
+	ExpectedCatalogVersion     string
+	ExpectedProfileVersion     int64
+	ExpectedConversionPolicy   types.ConversionLossPolicy
+	PriceEligibilityKnown      bool
+	PriceEligible              bool
+	SecurityEligibilityKnown   bool
+	SecurityAllowed            bool
 }
 
 // RecheckLiveRouteCandidate is the final qualification boundary after a live
@@ -131,6 +132,10 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 		return err
 	}
 
+	if !TaskPluginChannelEligible(&channel, input.ExpectedTaskPluginKey) ||
+		(input.ResponsesWebSocketRequired && !ChannelSupportsResponsesWebSocket(&channel, input.RequestModel)) {
+		return &LiveRouteQualificationError{Reason: RouteFilterPathUnsupported}
+	}
 	activeSnapshots, err := model.FindActiveChannelCapabilitySnapshots(ctx, []int{input.ChannelID})
 	if err != nil {
 		return err
@@ -284,7 +289,7 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 		RequestModel:             requestModel,
 		NormalizedModel:          permissionModel,
 		RequestPath:              input.RequestPath,
-		EndpointType:             endpointTypeForRequestPath(input.RequestPath),
+		EndpointType:             endpointTypeForTaskRequest(input.RequestPath, input.ExpectedTaskPluginKey),
 		Entitled:                 entitled,
 		PriceEligible:            input.PriceEligible,
 		PriceEligibilityKnown:    input.PriceEligibilityKnown,
@@ -303,35 +308,36 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 // and distribution middleware. It intentionally does not carry credentials,
 // body content, or channel configuration.
 type LiveRouteRequest struct {
-	Preview                  bool
-	Requirements             *relayconvert.RequestRequirements
-	ConversionPolicy         types.ConversionLossPolicy
-	ExcludedChannelIDs       map[int]string
-	SpecificChannelID        int
-	IsPlayground             bool
-	NativeResponsesRequired  bool
-	CompactStage             relaycommon.CompactAttemptStage
-	ExcludedKeyIndexes       map[int]map[int]struct{}
-	Context                  context.Context
-	CapabilityEnabled        bool
-	RequestID                string
-	UserID                   int
-	TokenID                  int
-	RequestModel             string
-	RequestPath              string
-	TokenModelLimitEnabled   bool
-	TokenModelLimit          map[string]bool
-	PriceEligibilityKnown    bool
-	PriceEligible            bool
-	SecurityEligibilityKnown bool
-	SecurityAllowed          bool
-	PreferredChannelID       int
+	TaskPluginCandidateKeys    []string
+	Preview                    bool
+	Requirements               *relayconvert.RequestRequirements
+	ConversionPolicy           types.ConversionLossPolicy
+	ExcludedChannelIDs         map[int]string
+	SpecificChannelID          int
+	IsPlayground               bool
+	NativeResponsesRequired    bool
+	ResponsesWebSocketRequired bool
+	ExpectedTaskPluginKey      string
+	ExcludedKeyIndexes         map[int]map[int]struct{}
+	Context                    context.Context
+	CapabilityEnabled          bool
+	RequestID                  string
+	UserID                     int
+	TokenID                    int
+	RequestModel               string
+	RequestPath                string
+	TokenModelLimitEnabled     bool
+	TokenModelLimit            map[string]bool
+	PriceEligibilityKnown      bool
+	PriceEligible              bool
+	SecurityEligibilityKnown   bool
+	SecurityAllowed            bool
+	PreferredChannelID         int
 }
 
 type LiveRouteSelection struct {
 	ConversionPlans   map[int]relayconvert.ConversionPlan
 	ManualLoadBalance bool
-	CompactStage      relaycommon.CompactAttemptStage
 	SpecificChannelID int
 	Source            RouteSource
 	Decision          RouteDecision

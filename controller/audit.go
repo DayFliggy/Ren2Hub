@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -136,16 +138,67 @@ func recordManageAuditFor(c *gin.Context, targetUserId int, action string, param
 	if _, ok := params["target_user_id"]; !ok && targetUserId > 0 && targetUserId != operatorUserId {
 		params["target_user_id"] = targetUserId
 	}
-	model.RecordOperationAuditLog(operatorUserId, auditContentEN(action, params), c.ClientIP(), action, params, auditOperatorInfo(c), successfulAuditInfo(c))
+	model.RecordAccountOperationAuditLog(operatorUserId, c.GetInt("role"), auditContentEN(action, params), c.ClientIP(), action, params, &model.AuditAdminInfo{AdminID: operatorUserId, AdminUsername: c.GetString("username"), AdminRole: c.GetInt("role"), AuthMethod: auditAuthMethod(c)}, &model.AuditRequestInfo{Status: 200, Success: true}, c)
 	markAuditLogged(c)
 }
 
 // recordUserSecurityAudit 记录普通用户自己的安全敏感操作（如 passkey 绑定/解绑）。
 // 这类日志没有管理员操作者，不写 admin_info；同时不依赖 AdminAuth/RootAuth 的兜底。
 func recordUserSecurityAudit(c *gin.Context, userId int, action string, params map[string]interface{}) {
-	model.RecordOperationAuditLog(userId, auditContentEN(action, params), c.ClientIP(), action, params, nil, successfulAuditInfo(c))
+	success := true
+	if value, ok := params["success"].(bool); ok {
+		success = value
+	}
+	model.RecordAccountOperationAuditLog(userId, c.GetInt("role"), auditContentEN(action, params), c.ClientIP(), action, params, nil, &model.AuditRequestInfo{Status: c.Writer.Status(), Success: success}, c)
 }
 
 func recordUserSystemAudit(c *gin.Context, userId int, action string, params map[string]interface{}) {
 	model.RecordSystemAuditLog(userId, auditContentEN(action, params), c.ClientIP(), action, params, successfulAuditInfo(c))
+}
+
+func recordPasskeyDomainAudit(c *gin.Context, change *model.PasskeyDomainChange, confirmed bool, err error) {
+	confirmed = confirmed && err == nil && change != nil && len(change.RemovedRPIDs) > 0
+	params := map[string]any{"success": err == nil, "confirmed": confirmed}
+	if change != nil {
+		params["domains"] = strings.Join(change.RemovedRPIDs, ", ")
+		params["removed_rp_ids"] = change.RemovedRPIDs
+		params["known"] = change.AffectedCredentials
+		params["unknown"] = change.UnknownCredentials
+		params["previous_rp_id"] = change.PreviousRPID
+		params["effective_rp_id"] = change.EffectiveRPID
+	}
+	action := "option.passkey_domains"
+	if errors.Is(err, model.ErrPasskeyDomainRemovalConfirmation) {
+		action = "option.passkey_domains_blocked"
+	} else if err != nil {
+		action = "option.passkey_domains_failed"
+	} else if confirmed && change != nil && len(change.RemovedRPIDs) > 0 {
+		action = "option.passkey_domains_confirmed"
+	}
+	auditInfo := &model.AuditRequestInfo{
+		Method: c.Request.Method, Route: c.FullPath(), Path: c.FullPath(),
+		Status: c.Writer.Status(), Success: err == nil,
+	}
+	model.RecordAccountOperationAuditLog(c.GetInt("id"), c.GetInt("role"), auditContentEN(action, params), c.ClientIP(), action, params, &model.AuditAdminInfo{AdminID: c.GetInt("id"), AdminRole: c.GetInt("role"), AdminUsername: c.GetString("username"), AuthMethod: auditAuthMethod(c)}, auditInfo, c)
+	markAuditLogged(c)
+}
+
+// auditContentEN 按 action 模板渲染英文兜底文本；未登记的 action 退回 action 本身。
+
+// Token handlers provide selected metadata only; raw request bodies and keys never enter audits.
+func setTokenAuditParams(c *gin.Context, fields model.AuditFields) {
+	value, exists := c.Get("token_audit_params")
+	if !exists {
+		return
+	}
+	params, ok := value.(model.AuditFields)
+	if !ok {
+		return
+	}
+	for key, value := range fields {
+		if text, ok := value.(string); ok && len(text) > 128 {
+			value = text[:128]
+		}
+		params[key] = value
+	}
 }

@@ -12,16 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCompactRelayInfoUsesFamilySpecificIdentity(t *testing.T) {
+func TestCompactRelayInfoPreservesRequestedModel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	tests := []struct {
-		name        string
-		model       string
-		wantBase    string
-		wantBilling string
-	}{
-		{name: "gpt virtual", model: "gpt-5-openai-compact", wantBase: "gpt-5", wantBilling: "gpt-5-openai-compact"},
-		{name: "non gpt suffix", model: "claude-3-5-sonnet-openai-compact", wantBase: "claude-3-5-sonnet", wantBilling: "claude-3-5-sonnet"},
+	tests := []struct{ name, model string }{
+		{"ordinary", "gpt-5"},
+		{"literal suffix", "gpt-5-openai-compact"},
+		{"non gpt", "claude-3-5-sonnet"},
 	}
 
 	for _, test := range tests {
@@ -31,9 +27,8 @@ func TestCompactRelayInfoUsesFamilySpecificIdentity(t *testing.T) {
 			rootcommon.SetContextKey(ctx, constant.ContextKeyOriginalModel, test.model)
 
 			info := GenRelayInfoResponsesCompaction(ctx, &dto.OpenAIResponsesCompactionRequest{})
-			require.Equal(t, test.wantBase, info.RequestedModel)
-			require.Equal(t, test.wantBase, info.OriginModelName)
-			require.Equal(t, test.wantBilling, info.LogicalBillingModel)
+			require.Equal(t, test.model, info.OriginModelName)
+			require.Equal(t, test.model, info.BillingModelName())
 		})
 	}
 }

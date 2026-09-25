@@ -30,25 +30,10 @@ func TestResponsesCompactUpstreamRequestUsesOfficialFieldsOnly(t *testing.T) {
 	var payload map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(jsonData, &payload))
 	require.ElementsMatch(t, responsesCompactAllowedFields, mapKeys(payload))
-	require.NotContains(t, payload, "parallel_tool_calls")
+	require.Contains(t, payload, "parallel_tool_calls")
 	require.NotContains(t, payload, "tools")
 	require.NotContains(t, payload, "reasoning")
 	require.NotContains(t, payload, "text")
-}
-
-func TestFilterResponsesCompactRequestFieldsRemovesOverrideExtras(t *testing.T) {
-	filtered, err := filterResponsesCompactRequestFields([]byte(`{
-		"model":"gpt-5",
-		"input":"hello",
-		"parallel_tool_calls":true,
-		"tools":[{"type":"function"}],
-		"metadata":{"secret":"value"}
-	}`))
-	require.NoError(t, err)
-
-	var payload map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(filtered, &payload))
-	require.ElementsMatch(t, []string{"model", "input"}, mapKeys(payload))
 }
 
 func TestCompactRequestDebugSummaryContainsNoBodyValues(t *testing.T) {
@@ -59,15 +44,14 @@ func TestCompactRequestDebugSummaryContainsNoBodyValues(t *testing.T) {
 		"prompt_cache_key":"secret-cache-key"
 	}`)
 	info := &relaycommon.RelayInfo{
-		LogicalBillingModel:  "gpt-5-openai-compact",
-		UpstreamAttemptModel: "gpt-5-openai-compact",
-		CompactAttemptStage:  relaycommon.CompactAttemptExact,
+		OriginModelName: "gpt-5-openai-compact",
+		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "provider"},
 	}
 
 	summary := compactRequestDebugSummary(info, jsonData)
 	require.Contains(t, summary, "body_bytes=")
 	require.Contains(t, summary, "fields=model,input,instructions,prompt_cache_key")
-	require.Contains(t, summary, `logical_model="gpt-5-openai-compact"`)
+	require.Contains(t, summary, `requested_model="gpt-5-openai-compact"`)
 	require.NotContains(t, summary, "secret-input")
 	require.NotContains(t, summary, "secret-instructions")
 	require.NotContains(t, summary, "secret-cache-key")

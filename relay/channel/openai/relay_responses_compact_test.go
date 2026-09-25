@@ -15,7 +15,7 @@ import (
 
 func TestOaiResponsesCompactionHandlerAuditsUnexpectedObjectAndPassesThrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	body := []byte(`{"id":"cmp_1","object":"compatible.compaction","output":[],"usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}`)
+	body := []byte(`{"id":"cmp_1","object":"compatible.compaction","created_at":"1700000000","output":[],"usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}`)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses/compact", nil)

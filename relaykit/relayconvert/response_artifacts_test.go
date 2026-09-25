@@ -12,12 +12,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestToolArgumentsAreNotProviderContinuationState(t *testing.T) {
+	var input dto.ClaudeResponse
+	require.NoError(t, kitutil.Unmarshal([]byte(`{"id":"msg_test","type":"message","stop_reason":"tool_use","content":[{"type":"tool_use","id":"call_1","name":"verify_document","input":{"signature":"customer-signature","content":{"type":"file_citation"}}}]}`), &input))
+	result, err := ConvertResponse(context.Background(), nil, types.RelayFormatOpenAI, &input)
+	require.NoError(t, err)
+	raw, err := kitutil.Marshal(result.Value)
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), "customer-signature")
+}
+
 func TestGeminiGroundingSurvivesResponsePivot(t *testing.T) {
 	var input dto.GeminiChatResponse
 	require.NoError(t, kitutil.Unmarshal([]byte(`{"candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"你好 world"}]},"finishReason":"STOP","groundingMetadata":{"webSearchQueries":["test"],"groundingChunks":[{"web":{"uri":"https://example.com/source","title":"Source"}}],"groundingSupports":[{"segment":{"startIndex":0,"endIndex":6,"text":"你好"},"groundingChunkIndices":[0]}]}}]}`), &input))
 	for _, target := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, types.RelayFormatClaude} {
 		t.Run(string(target), func(t *testing.T) {
-			result, err := ConvertResponse(context.Background(), nil, target, &input)
+			result, err := ConvertResponse(context.Background(), &convmeta.Values{Options: &convmeta.Options{ConversionPolicy: types.ConversionLossPolicyAllow}}, target, &input)
 			if target == types.RelayFormatClaude {
 				require.ErrorContains(t, err, "native_state_required")
 				return
@@ -190,7 +200,7 @@ func TestLatePartialCitationCannotPretendToCoverWholeClaudeStream(t *testing.T) 
 	_, err = ConvertStreamResponseChunk(context.Background(), nil, state, &dto.ChatCompletionsStreamResponse{Choices: []dto.ChatCompletionsStreamResponseChoice{{Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Content: &text}}}})
 	require.NoError(t, err)
 	_, err = ConvertStreamResponseChunk(context.Background(), nil, state, &dto.ChatCompletionsStreamResponse{Choices: []dto.ChatCompletionsStreamResponseChoice{{Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Annotations: []byte(`[{"type":"url_citation","url_citation":{"url":"https://example.com","start_index":7,"end_index":12}}]`)}}}})
-	require.ErrorContains(t, err, "citation_range_unrepresentable")
+	require.ErrorContains(t, err, "native_state_required")
 	_, err = FinalizeStreamResponseWithOutcome(context.Background(), nil, state, StreamOutcomeCompleted)
 	require.Error(t, err)
 }
@@ -230,8 +240,8 @@ func TestHostedToolKeepsTextOnBothSidesInStream(t *testing.T) {
 	assert.Equal(t, "web_search_call", response.Output[1].Type)
 	assert.Equal(t, "after", response.Output[2].Content[0].Text)
 	annotation := response.Output[2].Content[0].Annotations[0].(map[string]any)
-	assert.Equal(t, 0, annotation["start_index"])
-	assert.Equal(t, 5, annotation["end_index"])
+	assert.Equal(t, "source quotation", annotation["cited_text"])
+	assert.NotContains(t, annotation, "start_index", "source quotation must not fabricate answer offsets")
 	assert.Equal(t, "beforeafter", state.UsageText())
 }
 

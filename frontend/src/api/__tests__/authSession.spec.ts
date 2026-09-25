@@ -76,17 +76,23 @@ describe('authentication response boundary', () => {
   it('parses only complete two-factor challenges', () => {
     expect(
       parseTwoFactorChallenge({
-        require_2fa: true,
+        require_verification: true,
+        methods: [{ method: '2fa', available: true }],
         flow_token: 'flow-1',
         expires_at: 2_000_000_000,
       })
     ).toMatchObject({ flow_token: 'flow-1' })
     expect(
-      parseTwoFactorChallenge({ require_2fa: true, flow_token: '' })
+      parseTwoFactorChallenge({
+        require_verification: true,
+        methods: [{ method: '2fa', available: true }],
+        flow_token: '',
+      })
     ).toBeNull()
     expect(
       parseTwoFactorChallenge({
-        require_2fa: true,
+        require_verification: true,
+        methods: [{ method: '2fa', available: true }],
         flow_token: 'flow-1',
         expires_at: 0,
       })

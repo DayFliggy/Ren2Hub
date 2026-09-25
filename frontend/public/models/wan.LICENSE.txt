@@ -1,0 +1,10 @@
+Wan icon provenance
+
+Copied without modification from QuantumNous/new-api commit
+d04c118c8803, web/src/assets/custom/wan.png.
+Upstream icon wrapper attribution: Copyright (C) 2023-2026 QuantumNous.
+Source noted by upstream: https://g.alicdn.com/sail-web/wan-static-resources/0.0.30/images/favicon.ico
+
+The upstream icon wrapper is licensed under GNU Affero General Public
+License version 3 or later. See the repository LICENSE for the license text.
+The icon represents the Wan provider and retains its original branding.

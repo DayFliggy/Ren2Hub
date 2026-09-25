@@ -38,6 +38,8 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import ChannelFormModal from '@/components/console/channels/ChannelFormModal.vue'
+import ChannelModelSyncDialog from '@/components/console/channels/ChannelModelSyncDialog.vue'
+import ChannelProviderStatus from '@/components/console/channels/ChannelProviderStatus.vue'
 import ChannelInlineNumber from '@/components/console/channels/ChannelInlineNumber.vue'
 import ChannelMobileList from '@/components/console/channels/ChannelMobileList.vue'
 import ChannelTestModal from '@/components/console/channels/ChannelTestModal.vue'
@@ -64,6 +66,7 @@ import {
 import type {
   AdminChannel,
   AdminChannelCreateInput,
+  AdminChannelCreateOptions,
   AdminChannelSortBy,
   AdminChannelSortOrder,
   AdminChannelUpdateInput,
@@ -127,6 +130,7 @@ const {
   refreshing,
   initialError,
   batchProgress,
+  balanceResponse,
   isBatchBusy,
   isCrudBusy,
   isBulkBusy,
@@ -589,6 +593,10 @@ function openEdit(channel: AdminChannel) {
   editing.value = channel
   formOpen.value = true
 }
+const syncingModels = ref<AdminChannel | null>(null)
+function previewModelSync(channel: AdminChannel) {
+  if (canOperate.value && canMutate.value) syncingModels.value = channel
+}
 
 function closeForm() {
   formOpen.value = false
@@ -596,7 +604,7 @@ function closeForm() {
 
 function saveForm(
   input: AdminChannelCreateInput | AdminChannelUpdateInput,
-  options?: { batchKeys?: boolean }
+  options?: AdminChannelCreateOptions
 ): Promise<boolean> {
   if (editing.value ? !canWrite.value : !canSensitiveWrite.value) {
     return Promise.resolve(false)
@@ -1321,6 +1329,15 @@ async function runBulkStatus(
           <template #cell-actions="{ row }">
             <div class="flex items-center justify-end gap-0.5">
               <IconButton
+                v-if="canOperate"
+                :label="t('channels.syncModelsTitle')"
+                :disabled="!canMutate"
+                @click="
+                  previewModelSync(channelFromRow(row as AdminChannelTableRow))
+                "
+                ><RefreshCw :size="15"
+              /></IconButton>
+              <IconButton
                 :label="t('gateway.channelRuntime')"
                 @click="
                   runtimeChannel = channelFromRow(row as AdminChannelTableRow)
@@ -1457,6 +1474,7 @@ async function runBulkStatus(
             :refresh-balance="refreshBalance"
             :open-test="openTest"
             :edit-channel="openEdit"
+            :sync-models="previewModelSync"
             :show-runtime="(channel) => (runtimeChannel = channel)"
             :delete-channel="requestDelete"
           />
@@ -1482,6 +1500,32 @@ async function runBulkStatus(
         :key="runtimeChannel.id"
         :channel-id="runtimeChannel.id"
       />
+      <ChannelProviderStatus
+        v-if="runtimeChannel && [62, 63].includes(runtimeChannel.type)"
+        :channel="runtimeChannel"
+      />
+    </ConsoleModal>
+    <ConsoleModal
+      :open="balanceResponse !== null"
+      :title="
+        t('channels.balanceRawTitle', {
+          name: balanceResponse?.channelName ?? '',
+        })
+      "
+      size="lg"
+      @close="balanceResponse = null"
+    >
+      <p class="mb-3 text-sm text-[var(--text-secondary)]">
+        {{ t('channels.balanceRawHint') }}
+      </p>
+      <pre
+        class="max-h-[55vh] overflow-auto whitespace-pre-wrap break-all rounded-lg bg-[var(--surface-hover)] p-4 text-xs text-[var(--text-primary)]"
+        >{{ balanceResponse?.rawResponse }}</pre>
+      <template #footer>
+        <ConsoleButton variant="secondary" @click="balanceResponse = null">
+          {{ t('common.close') }}
+        </ConsoleButton>
+      </template>
     </ConsoleModal>
     <ChannelFormModal
       :open="formOpen"
@@ -1489,6 +1533,12 @@ async function runBulkStatus(
       :save="saveForm"
       :fetch-models="fetchUpstreamModels"
       @close="closeForm"
+    />
+    <ChannelModelSyncDialog
+      :channel="syncingModels"
+      :can-write="canWrite"
+      @close="syncingModels = null"
+      @applied="load({ background: true })"
     />
 
     <ChannelTestModal

@@ -98,6 +98,7 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 		if blockedPath || isBackendWebRequest(requestPath) || isRetiredWebRequest(requestPath) ||
 			strings.Contains(requestPath, "/.") ||
 			(c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead) {
+			c.Header("Cache-Control", "no-store")
 			controller.RelayNotFound(c)
 			return
 		}
@@ -120,6 +121,7 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 		}
 		if staticRequest {
 			if !staticExists {
+				c.Header("Cache-Control", "no-store")
 				controller.RelayNotFound(c)
 				return
 			}

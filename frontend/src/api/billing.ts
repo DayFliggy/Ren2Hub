@@ -54,14 +54,49 @@ export interface BillingCharge {
   rounding_delta: string
   calculation_version: string
   rounding_version: string
+  trace?: {
+    matched_tier: string
+    image_count?: number
+    request_rules?: Array<{
+      cond: string
+      multiplier: number
+      matched: boolean
+    }>
+  }
 }
 
-function parseBillingCharge(
+export function parseBillingCharge(
   value: unknown,
   endpoint: string
 ): BillingCharge | null {
   if (value === null || value === undefined) return null
   if (!isRecord(value) || !Array.isArray(value.lines)) invalidResponse(endpoint)
+  let trace: BillingCharge['trace']
+  if (value.trace != null) {
+    if (!isRecord(value.trace)) invalidResponse(endpoint)
+    trace = { matched_tier: requiredString(value.trace.matched_tier, endpoint) }
+    if (value.trace.image_count !== undefined) {
+      const count = requiredStrictInteger(value.trace.image_count, endpoint)
+      if (count < 1 || count > 128) invalidResponse(endpoint)
+      trace.image_count = count
+    }
+    if (value.trace.request_rules !== undefined) {
+      if (!Array.isArray(value.trace.request_rules)) invalidResponse(endpoint)
+      trace.request_rules = value.trace.request_rules.map((rule) => {
+        if (
+          !isRecord(rule) ||
+          typeof rule.multiplier !== 'number' ||
+          !Number.isFinite(rule.multiplier)
+        )
+          invalidResponse(endpoint)
+        return {
+          cond: requiredString(rule.cond, endpoint),
+          multiplier: rule.multiplier,
+          matched: requiredBoolean(rule.matched, endpoint),
+        }
+      })
+    }
+  }
   return {
     lines: value.lines.map((line) => {
       if (!isRecord(line)) invalidResponse(endpoint)
@@ -79,6 +114,7 @@ function parseBillingCharge(
     rounding_delta: requiredString(value.rounding_delta, endpoint),
     calculation_version: requiredString(value.calculation_version, endpoint),
     rounding_version: requiredString(value.rounding_version, endpoint),
+    ...(trace ? { trace } : {}),
   }
 }
 

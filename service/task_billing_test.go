@@ -6,6 +6,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/glebarez/sqlite"
 	"github.com/shopspring/decimal"
@@ -38,6 +39,7 @@ func TestMain(m *testing.M) {
 
 	if err := db.AutoMigrate(
 		&model.Task{},
+		&model.TaskResultEvent{}, &model.PerfMetric{},
 		&model.User{},
 		&model.Token{},
 		&model.Log{},
@@ -61,6 +63,8 @@ func truncate(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
 		model.DB.Exec("DELETE FROM tasks")
+		model.DB.Exec("DELETE FROM task_result_events")
+		model.DB.Exec("DELETE FROM perf_metrics")
 		model.DB.Exec("DELETE FROM users")
 		model.DB.Exec("DELETE FROM tokens")
 		model.DB.Exec("DELETE FROM logs")
@@ -210,7 +214,7 @@ func acceptTestTask(t *testing.T, task *model.Task) {
 		task.PrivateData.UpstreamTaskID = "provider:" + task.TaskID
 	}
 	task.PrivateData.BillingSource = BillingSourceWallet
-	quote, err := billing.NewQuote(billing.PriceVersion{ID: 1, Model: "test-model", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: decimal.NewFromInt(int64(task.Quota)).Div(decimal.NewFromInt(500000)).String()}}}, "1", nil, time.Now())
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "test-model", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: decimal.NewFromInt(int64(task.Quota)).Div(decimal.NewFromInt(500000)).String()}}}, "1", nil, time.Now())
 	require.NoError(t, err)
 	task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "accepted_parameters", Complete: true}, OriginModelName: "test-model"}
 	_, err = model.EnsureBillingRecovery(model.BillingRecoveryInput{RequestID: task.PrivateData.SubmissionRequestID, UserID: task.UserId, TokenID: task.PrivateData.TokenId, TokenRequired: task.PrivateData.TokenId > 0, Source: BillingSourceWallet})
@@ -276,4 +280,46 @@ func TestTaskPriceUsesFrozenUsageInsteadOfAdaptorMoney(t *testing.T) {
 	task.PrivateData.BillingContext.Quote = nil
 	_, _, _, err = taskCompletionQuota(nil, task, nil)
 	require.Error(t, err)
+}
+
+func TestPluginTaskCompletionUsesOnlyFrozenSchemaFacts(t *testing.T) {
+	price := billing.PriceVersion{Model: "plugin-video", Mode: billing.ModeExpression,
+		Expression: `v2:tier("1080p", u("seconds") * 0.4)`,
+		UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
+			"seconds":    {Type: "number", Unit: "second", Source: billingexpr.UsageCompletionFact, Required: true, Maximum: "300"},
+			"resolution": {Type: "string", Source: billingexpr.UsageRequestFixed, Required: true, Enum: []string{"720p", "1080p"}},
+		}}}
+	quote, err := billing.NewQuoteWithFacts(price, "1", nil, time.Now(), map[string]any{"resolution": "1080p"})
+	require.NoError(t, err)
+	for _, test := range []struct {
+		name    string
+		facts   map[string]any
+		quota   common.Quota
+		invalid bool
+	}{
+		{"actual ten seconds", map[string]any{"seconds": 10}, 2000000, false},
+		{"confirmed zero", map[string]any{"seconds": 0}, 0, false},
+		{"missing actual cannot use estimate", nil, 0, true},
+		{"request fact cannot be overwritten", map[string]any{"seconds": 10, "resolution": "720p"}, 0, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			estimate := &billing.Usage{Source: "request_estimate", Estimated: true, EstimatedFacts: map[string]any{"seconds": 30}}
+			task := &model.Task{Status: model.TaskStatusSuccess, PrivateData: model.TaskPrivateData{
+				PluginRef:      &model.TaskPluginRef{Key: "plugin", Version: "1.0.0", SourceHash: "fixed"},
+				BillingContext: &model.TaskBillingContext{Quote: quote, Usage: estimate},
+			}}
+			quota, _, _, err := taskCompletionQuota(nil, task, &relaycommon.TaskInfo{UsageFacts: test.facts})
+			if test.invalid {
+				require.Error(t, err)
+				assert.Nil(t, task.PrivateData.BillingContext.Charge)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, test.quota, quota)
+			assert.Empty(t, task.PrivateData.BillingContext.Usage.Quantities)
+			assert.Empty(t, task.PrivateData.BillingContext.Usage.EstimatedFacts)
+			assert.True(t, task.PrivateData.BillingContext.Usage.Complete)
+			assert.Equal(t, map[string]any{"seconds": 30}, estimate.EstimatedFacts, "accepted estimate remains immutable")
+		})
+	}
 }

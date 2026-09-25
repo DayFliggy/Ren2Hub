@@ -11,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
@@ -35,10 +36,10 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			channelType:      constant.ChannelTypeOpenAI, quota: 1000, calls: 1,
 		},
 		{
-			name: "compact base transition", path: "/v1/responses/compact", models: "gpt-5-openai-compact,gpt-5",
+			name: "compact ordinary mapping", path: "/v1/responses/compact", models: "gpt-5",
 			body:             `{"model":"gpt-5","input":"hello"}`,
 			upstreamResponse: `{"id":"cmp-test","object":"response.compaction","model":"gpt-5","output":[{"type":"compaction","id":"cmp-item","encrypted_content":"test"}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}`,
-			channelType:      constant.ChannelTypeOpenAI, quota: 1000, calls: 2,
+			channelType:      constant.ChannelTypeOpenAI, quota: 1000, calls: 1,
 		},
 		{
 			name: "suno", path: "/suno/submit/music", models: "suno_music",
@@ -67,7 +68,9 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 				&model.ChannelCapabilitySnapshot{}, &model.ChannelModelCapability{}, &model.ChannelHealth{},
 				&model.BillingRecovery{}, &model.BillingEvent{},
 				&model.Log{}, &model.QuotaData{}, &model.Task{}, &model.Midjourney{},
+				&model.TaskPlugin{}, &model.TaskPluginNamespace{}, &model.TaskPluginExecution{},
 			))
+			require.NoError(t, controller.InitTaskPlugins())
 			previousRDB, previousMemory := common.RDB, common.MemoryCacheEnabled
 			previousPrices := ratio_setting.ModelPrice2JSONString()
 			redisServer := miniredis.RunT(t)
@@ -87,12 +90,13 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			require.NoError(t, publishGatewayFixturePrices(string(priceJSON), false))
 			var calls atomic.Int32
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				n := calls.Add(1)
+				calls.Add(1)
 				w.Header().Set("Content-Type", "application/json")
-				if test.calls == 2 && n == 1 {
-					w.WriteHeader(http.StatusBadRequest)
-					_, _ = io.WriteString(w, `{"error":{"message":"The requested model does not exist","type":"invalid_request_error","code":"model_not_found","param":"model"}}`)
-					return
+				if test.name == "compact ordinary mapping" {
+					var body map[string]any
+					require.NoError(t, common.DecodeJson(r.Body, &body))
+					assert.Equal(t, "mapped-gpt-5", body["model"])
+					assert.Equal(t, "/v1/responses/compact", r.URL.Path)
 				}
 				_, _ = io.WriteString(w, test.upstreamResponse)
 			}))
@@ -102,6 +106,10 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			token := &model.Token{UserId: user.Id, Key: "routingsmokelocalkey", Name: "smoke", Status: common.TokenStatusEnabled, ExpiredTime: -1, RemainQuota: 1_000_000}
 			require.NoError(t, db.Create(token).Error)
 			channel := &model.Channel{Type: test.channelType, Name: "local upstream", Status: common.ChannelStatusEnabled, Key: "test-upstream-key", BaseURL: &upstream.URL, Models: test.models, Group: "unrelated-channel-group", CapacityTotal: 1, ChannelRatio: 2}
+			if test.name == "compact ordinary mapping" {
+				mapping := `{"gpt-5":"mapped-gpt-5"}`
+				channel.ModelMapping = &mapping
+			}
 			require.NoError(t, db.Create(channel).Error)
 			require.NoError(t, channel.AddAbilities(db))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
@@ -109,6 +117,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			engine.Use(middleware.RequestId())
 			SetRelayRouter(engine)
 			SetVideoRouter(engine)
+			engine.NoRoute(SetPluginRouter(engine))
 			request := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
 			request.Header.Set("Content-Type", "application/json")
 			request.Header.Set("Authorization", "Bearer "+token.Key)

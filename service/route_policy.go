@@ -10,6 +10,10 @@ import (
 )
 
 func loadRouteChannel(ctx context.Context, channelID int) (model.Channel, error) {
+	return loadGatewayChannel(ctx, channelID, false)
+}
+
+func loadGatewayChannel(ctx context.Context, channelID int, probe bool) (model.Channel, error) {
 	if model.DB == nil || channelID <= 0 {
 		return model.Channel{}, ErrAdmissionRuntime
 	}
@@ -22,10 +26,14 @@ func loadRouteChannel(ctx context.Context, channelID int) (model.Channel, error)
 		return channel, err
 	}
 	channel.CapacityTotal, channel.ChannelRatio = capacity, ratio
-	if channel.Status != common.ChannelStatusEnabled {
+	if !gatewayChannelStatusAllowsSend(channel.Status, probe) {
 		return channel, ErrAdmissionRuntime
 	}
 	return channel, nil
+}
+
+func gatewayChannelStatusAllowsSend(status int, probe bool) bool {
+	return status == common.ChannelStatusEnabled || probe && status == common.ChannelStatusAutoDisabled
 }
 
 func GetRouteRuntimeState(ctx context.Context, channelID int, requestModel string) (RouteRuntimeState, error) {

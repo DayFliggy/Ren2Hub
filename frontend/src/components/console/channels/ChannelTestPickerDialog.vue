@@ -44,7 +44,11 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const toast = useToast()
 
-const TEST_BATCH_SIZE = 5
+const concurrency = ref('1')
+const concurrencyOptions = Array.from({ length: 32 }, (_, index) => ({
+  value: String(index + 1),
+  label: String(index + 1),
+}))
 
 const selectedModel = ref('')
 const testing = ref(false)
@@ -143,12 +147,13 @@ async function runBatch() {
   testing.value = true
   done.value = 0
   total.value = batchTargets.length
+  const batchSize = Number(concurrency.value)
   let succeeded = 0
   let failed = 0
   try {
-    for (let start = 0; start < batchTargets.length; start += TEST_BATCH_SIZE) {
+    for (let start = 0; start < batchTargets.length; start += batchSize) {
       if (controller.signal.aborted || selectedModel.value !== model) return
-      const batch = batchTargets.slice(start, start + TEST_BATCH_SIZE)
+      const batch = batchTargets.slice(start, start + batchSize)
       const outcomes = await Promise.all(
         batch.map((channel) => runChannelTest(channel, model))
       )
@@ -217,6 +222,16 @@ async function runBatch() {
         >
           {{ t('channels.pickModelHint', { count: targets.length }) }}
         </p>
+      </div>
+      <div :inert="testing">
+        <p class="mb-1.5 text-sm font-medium text-[var(--text-secondary)]">
+          {{ t('channels.testConcurrency') }}
+        </p>
+        <FilterSelect
+          v-model="concurrency"
+          :options="concurrencyOptions"
+          :label="t('channels.testConcurrency')"
+        />
       </div>
     </div>
 

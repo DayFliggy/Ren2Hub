@@ -1,17 +1,20 @@
 package geminichat
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/internal/convdiag"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/internal/jsonutil"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/reasoning"
 )
 
-func GeminiGenerateContentRequestToOpenAIChat(geminiRequest *dto.GeminiChatRequest, info convmeta.Meta) (*dto.GeneralOpenAIRequest, error) {
+func GeminiGenerateContentRequestToOpenAIChat(ctx context.Context, geminiRequest *dto.GeminiChatRequest, info convmeta.Meta) (*dto.GeneralOpenAIRequest, error) {
 	modelName := ""
 	isStream := false
 	if info != nil {
@@ -22,19 +25,54 @@ func GeminiGenerateContentRequestToOpenAIChat(geminiRequest *dto.GeminiChatReque
 		Model:  modelName,
 		Stream: kitutil.GetPointer(isStream),
 	}
-
-	var messages []dto.Message
-	history := make(map[string]string)
-	pending := make(map[string]string)
-	reserved := make(map[string]bool)
-	for _, content := range geminiRequest.Contents {
-		for _, part := range content.Parts {
-			if part.FunctionCall != nil && part.FunctionCall.ID != "" {
-				reserved[part.FunctionCall.ID] = true
-			}
+	sourceModelName := modelName
+	if info != nil && info.GetOriginModelName() != "" {
+		sourceModelName = info.GetOriginModelName()
+	}
+	opts := convmeta.OptionsOf(info)
+	preserveSuffix := opts.ShouldPreserveThinkingSuffix(sourceModelName)
+	// Capability lookups need the unsuffixed Gemini model the client addressed.
+	// The host already folded any alias into ReasoningState; mirror its parser
+	// so gemini-pro-latest-thinking still resolves to gemini-pro-latest.
+	baseSourceModel := sourceModelName
+	if !preserveSuffix {
+		baseSourceModel = reasoning.ParseModelModifiers(sourceModelName).Base
+		if base, _, found, err := reasoning.ParseGeminiModelSuffix(baseSourceModel, opts.Gemini.ThinkingAdapterEnabled); err == nil && found {
+			baseSourceModel = base
 		}
 	}
-	nextCall := 1
+	if baseSourceModel != "" && geminiRequest.GenerationConfig.ThinkingConfig != nil {
+		_, diagnostics, err := reasoning.NormalizeGeminiThinkingConfig(baseSourceModel, &geminiRequest.GenerationConfig)
+		if err != nil {
+			return nil, reasoning.AsClientError(err)
+		}
+		convdiag.Add(ctx, diagnostics...)
+	}
+	reasoningIntent, diagnostics, err := reasoning.FromGemini(geminiRequest)
+	if err != nil {
+		return nil, reasoning.AsClientError(err)
+	}
+	convdiag.Add(ctx, diagnostics...)
+	if !preserveSuffix {
+		if suffix := reasoning.IntentFromState(convmeta.ReasoningStateOf(info)); !suffix.IsEmpty() {
+			reasoningIntent, diagnostics, err = reasoning.MergeExplicitAndSuffix(reasoningIntent, suffix, sourceModelName)
+			if err != nil {
+				return nil, reasoning.AsClientError(err)
+			}
+			convdiag.Add(ctx, diagnostics...)
+		}
+	}
+	reasoningIntent = reasoning.ResolveGeminiDefault(baseSourceModel, reasoningIntent)
+	effectiveEffort := reasoning.EffectiveEffort(reasoningIntent)
+	if err := reasoning.ApplyToOpenAIChat(openaiRequest, reasoningIntent); err != nil {
+		return nil, reasoning.AsClientError(err)
+	}
+	if effectiveEffort != "" && info != nil {
+		info.SetReasoningEffort(string(effectiveEffort))
+	}
+
+	callHistory := newGeminiFunctionCallHistory(geminiRequest.Contents)
+	var messages []dto.Message
 	for _, content := range geminiRequest.Contents {
 		message := dto.Message{
 			Role: convertGeminiRoleToOpenAI(content.Role),
@@ -42,59 +80,45 @@ func GeminiGenerateContentRequestToOpenAIChat(geminiRequest *dto.GeminiChatReque
 
 		var mediaContents []dto.MediaContent
 		var toolCalls []dto.ToolCallRequest
-		var toolResults []dto.Message
+		var reasoningTexts []string
 		for _, part := range content.Parts {
 			if part.Text != "" {
+				if part.Thought {
+					reasoningTexts = append(reasoningTexts, part.Text)
+					continue
+				}
 				mediaContent := dto.MediaContent{
 					Type: "text",
 					Text: part.Text,
 				}
 				mediaContents = append(mediaContents, mediaContent)
 			} else if part.InlineData != nil {
-				if !strings.HasPrefix(strings.ToLower(part.InlineData.MimeType), "image/") {
-					return nil, fmt.Errorf("Gemini media cannot be represented as a Chat image")
-				}
-				imageData, err := normalizeInlineImageBase64(part.InlineData.Data)
+				data, err := normalizeInlineImageBase64(part.InlineData.Data)
 				if err != nil {
 					return nil, err
 				}
 				mediaContent := dto.MediaContent{
 					Type: "image_url",
 					ImageUrl: &dto.MessageImageUrl{
-						Url:      fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, imageData),
+						Url:      fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, data),
+						Detail:   "auto",
 						MimeType: part.InlineData.MimeType,
 					},
 				}
 				mediaContents = append(mediaContents, mediaContent)
 			} else if part.FileData != nil {
-				if !strings.HasPrefix(strings.ToLower(part.FileData.MimeType), "image/") {
-					return nil, fmt.Errorf("Gemini media cannot be represented as a Chat image")
-				}
 				mediaContent := dto.MediaContent{
 					Type: "image_url",
 					ImageUrl: &dto.MessageImageUrl{
 						Url:      part.FileData.FileUri,
+						Detail:   "auto",
 						MimeType: part.FileData.MimeType,
 					},
 				}
 				mediaContents = append(mediaContents, mediaContent)
 			} else if part.FunctionCall != nil {
-				id := strings.TrimSpace(part.FunctionCall.ID)
-				if id == "" {
-					for {
-						id = fmt.Sprintf("call_%d", nextCall)
-						nextCall++
-						if _, exists := history[id]; !exists && !reserved[id] {
-							break
-						}
-					}
-				}
-				if _, exists := history[id]; exists {
-					return nil, fmt.Errorf("duplicate Gemini function call id %q", id)
-				}
-				history[id], pending[id] = part.FunctionCall.FunctionName, part.FunctionCall.FunctionName
 				toolCall := dto.ToolCallRequest{
-					ID:   id,
+					ID:   callHistory.add(part.FunctionCall),
 					Type: "function",
 					Function: dto.FunctionRequest{
 						Name:      part.FunctionCall.FunctionName,
@@ -103,50 +127,34 @@ func GeminiGenerateContentRequestToOpenAIChat(geminiRequest *dto.GeminiChatReque
 				}
 				toolCalls = append(toolCalls, toolCall)
 			} else if part.FunctionResponse != nil {
-				id := ""
-				if len(part.FunctionResponse.ID) != 0 {
-					if err := kitutil.Unmarshal(part.FunctionResponse.ID, &id); err != nil {
-						return nil, fmt.Errorf("Gemini function response id must be a string: %w", err)
-					}
+				callID, err := callHistory.match(part.FunctionResponse)
+				if err != nil {
+					return nil, err
 				}
-				if id == "" {
-					for callID, name := range pending {
-						if name != part.FunctionResponse.Name {
-							continue
-						}
-						if id != "" {
-							return nil, fmt.Errorf("ambiguous Gemini result for function %q requires an id", name)
-						}
-						id = callID
-					}
-				}
-				name, found := pending[id]
-				if !found || name != part.FunctionResponse.Name {
-					return nil, fmt.Errorf("Gemini function response %q has no matching outstanding call", part.FunctionResponse.Name)
-				}
-				delete(pending, id)
 				toolMessage := dto.Message{
 					Role:       "tool",
-					ToolCallId: id,
+					ToolCallId: callID,
 				}
 				toolMessage.SetStringContent(jsonutil.ToJSONString(part.FunctionResponse.Response))
-				toolResults = append(toolResults, toolMessage)
+				messages = append(messages, toolMessage)
 			}
 		}
 
 		if len(toolCalls) > 0 {
 			message.SetToolCalls(toolCalls)
-		}
-		if len(mediaContents) == 1 && mediaContents[0].Type == "text" {
+		} else if len(mediaContents) == 1 && mediaContents[0].Type == "text" {
 			message.Content = mediaContents[0].Text
 		} else if len(mediaContents) > 0 {
 			message.SetMediaContent(mediaContents)
 		}
+		if len(reasoningTexts) > 0 {
+			reasoningContent := strings.Join(reasoningTexts, "\n")
+			message.ReasoningContent = &reasoningContent
+		}
 
-		if len(message.ParseContent()) > 0 || len(message.ToolCalls) > 0 {
+		if len(message.ParseContent()) > 0 || len(message.ToolCalls) > 0 || message.ReasoningContent != nil {
 			messages = append(messages, message)
 		}
-		messages = append(messages, toolResults...)
 	}
 
 	openaiRequest.Messages = messages
@@ -178,7 +186,8 @@ func GeminiGenerateContentRequestToOpenAIChat(geminiRequest *dto.GeminiChatReque
 			}
 			functionDeclarations, err := kitutil.Any2Type[[]dto.FunctionRequest](tool.FunctionDeclarations)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse Gemini function declarations: %w", err)
+				kitutil.LogSystemError(fmt.Sprintf("failed to parse gemini function declarations: %v (type=%T)", err, tool.FunctionDeclarations))
+				continue
 			}
 			for _, function := range functionDeclarations {
 				openAITool := dto.ToolCallRequest{
@@ -196,41 +205,6 @@ func GeminiGenerateContentRequestToOpenAIChat(geminiRequest *dto.GeminiChatReque
 			openaiRequest.Tools = tools
 		}
 	}
-	if geminiRequest.ToolConfig != nil && geminiRequest.ToolConfig.FunctionCallingConfig != nil {
-		config := geminiRequest.ToolConfig.FunctionCallingConfig
-		switch config.Mode {
-		case "AUTO":
-			openaiRequest.ToolChoice = "auto"
-		case "NONE":
-			openaiRequest.ToolChoice = "none"
-		case "ANY":
-			if len(config.AllowedFunctionNames) == 1 {
-				openaiRequest.ToolChoice = map[string]any{"type": "function", "function": map[string]any{"name": config.AllowedFunctionNames[0]}}
-			} else {
-				openaiRequest.ToolChoice = "required"
-				if len(config.AllowedFunctionNames) > 0 {
-					allowed := make(map[string]bool, len(config.AllowedFunctionNames))
-					for _, name := range config.AllowedFunctionNames {
-						allowed[name] = true
-					}
-					kept := make([]dto.ToolCallRequest, 0, len(allowed))
-					for _, tool := range openaiRequest.Tools {
-						if allowed[tool.Function.Name] {
-							kept = append(kept, tool)
-							delete(allowed, tool.Function.Name)
-						}
-					}
-					if len(allowed) != 0 {
-						return nil, fmt.Errorf("Gemini tool choice references undefined functions")
-					}
-					openaiRequest.Tools = kept
-				}
-			}
-		case "":
-		default:
-			return nil, fmt.Errorf("unsupported Gemini tool choice %q", config.Mode)
-		}
-	}
 
 	if geminiRequest.SystemInstructions != nil {
 		systemMessage := dto.Message{
@@ -243,18 +217,97 @@ func GeminiGenerateContentRequestToOpenAIChat(geminiRequest *dto.GeminiChatReque
 	return openaiRequest, nil
 }
 
-func normalizeInlineImageBase64(value string) (string, error) {
-	// Google's Python SDK serializes bytes with the URL-safe alphabet, while
-	// an RFC 2397 data URI uses the standard Base64 alphabet.
-	value = strings.NewReplacer("-", "+", "_", "/").Replace(value)
-	decoded, err := base64.StdEncoding.DecodeString(value)
-	if err != nil {
-		decoded, err = base64.RawStdEncoding.DecodeString(value)
+type geminiPendingFunctionCall struct {
+	id   string
+	name string
+}
+
+// geminiFunctionCallHistory keeps legacy Gemini histories without call IDs
+// correlated across content boundaries. Named matching permits results for
+// different parallel functions to arrive out of order; same-name calls use
+// their original call order because old payloads contain no stronger identity.
+type geminiFunctionCallHistory struct {
+	reservedIDs map[string]struct{}
+	pending     []geminiPendingFunctionCall
+	nextID      int
+}
+
+func newGeminiFunctionCallHistory(contents []dto.GeminiChatContent) *geminiFunctionCallHistory {
+	history := &geminiFunctionCallHistory{
+		reservedIDs: make(map[string]struct{}),
+		nextID:      1,
 	}
-	if err != nil {
-		return "", fmt.Errorf("invalid Gemini inline image encoding: %w", err)
+	for _, content := range contents {
+		for _, part := range content.Parts {
+			if part.FunctionCall != nil && part.FunctionCall.ID != "" {
+				history.reservedIDs[part.FunctionCall.ID] = struct{}{}
+			}
+			if part.FunctionResponse != nil {
+				if id := kitutil.JsonRawMessageToString(part.FunctionResponse.ID); id != "" {
+					history.reservedIDs[id] = struct{}{}
+				}
+			}
+		}
 	}
-	return base64.StdEncoding.EncodeToString(decoded), nil
+	return history
+}
+
+func (h *geminiFunctionCallHistory) add(call *dto.FunctionCall) string {
+	id := call.ID
+	if id == "" {
+		id = h.newFallbackID()
+	}
+	h.pending = append(h.pending, geminiPendingFunctionCall{id: id, name: call.FunctionName})
+	return id
+}
+
+func (h *geminiFunctionCallHistory) match(response *dto.GeminiFunctionResponse) (string, error) {
+	id := kitutil.JsonRawMessageToString(response.ID)
+	match := -1
+	for i, call := range h.pending {
+		if id != "" {
+			if call.id != id {
+				continue
+			}
+			if response.Name != "" && response.Name != call.name {
+				return "", fmt.Errorf("function result name does not match call id")
+			}
+		} else if response.Name != "" && call.name != response.Name {
+			continue
+		}
+		if match >= 0 {
+			return "", fmt.Errorf("ambiguous function result requires explicit call id")
+		}
+		match = i
+	}
+	if match < 0 {
+		return "", fmt.Errorf("unmatched function result")
+	}
+	call := h.pending[match]
+	h.pending = append(h.pending[:match], h.pending[match+1:]...)
+	return call.id, nil
+}
+
+func (h *geminiFunctionCallHistory) removePendingByID(id string) {
+	for i, call := range h.pending {
+		if call.id != id {
+			continue
+		}
+		h.pending = append(h.pending[:i], h.pending[i+1:]...)
+		return
+	}
+}
+
+func (h *geminiFunctionCallHistory) newFallbackID() string {
+	for {
+		id := fmt.Sprintf("call_%d", h.nextID)
+		h.nextID++
+		if _, exists := h.reservedIDs[id]; exists {
+			continue
+		}
+		h.reservedIDs[id] = struct{}{}
+		return id
+	}
 }
 
 func convertGeminiRoleToOpenAI(geminiRole string) string {
@@ -278,4 +331,18 @@ func extractTextFromGeminiParts(parts []dto.GeminiPart) string {
 		}
 	}
 	return strings.Join(texts, "\n")
+}
+
+func normalizeInlineImageBase64(value string) (string, error) {
+	// Google's Python SDK serializes bytes with the URL-safe alphabet, while
+	// an RFC 2397 data URI uses the standard Base64 alphabet.
+	value = strings.NewReplacer("-", "+", "_", "/").Replace(value)
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		decoded, err = base64.RawStdEncoding.DecodeString(value)
+	}
+	if err != nil {
+		return "", fmt.Errorf("invalid Gemini inline image encoding: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(decoded), nil
 }

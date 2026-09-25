@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -262,6 +264,67 @@ func updateChannelSiliconFlowBalance(channel *model.Channel) (float64, error) {
 	return balance, nil
 }
 
+func getDeepSeekBalanceUSD(response DeepSeekUsageResponse, usdExchangeRate float64) (float64, error) {
+	var usdBalance *string
+	var cnyBalance *string
+
+	for i := range response.BalanceInfos {
+		balanceInfo := &response.BalanceInfos[i]
+		switch balanceInfo.Currency {
+		case "USD":
+			if usdBalance == nil {
+				usdBalance = &balanceInfo.TotalBalance
+			}
+		case "CNY":
+			if cnyBalance == nil {
+				cnyBalance = &balanceInfo.TotalBalance
+			}
+		}
+	}
+
+	if usdBalance != nil {
+		balance, err := strconv.ParseFloat(*usdBalance, 64)
+		if err != nil {
+			return 0, err
+		}
+		if math.IsNaN(balance) || math.IsInf(balance, 0) {
+			return 0, errors.New("USD balance must be finite")
+		}
+		if balance < 0 {
+			return 0, errors.New("USD balance must be non-negative")
+		}
+		return balance, nil
+	}
+	if cnyBalance == nil {
+		return 0, errors.New("currency USD or CNY not found")
+	}
+	if math.IsNaN(usdExchangeRate) || math.IsInf(usdExchangeRate, 0) {
+		return 0, errors.New("USD exchange rate must be finite")
+	}
+	if usdExchangeRate <= 0 {
+		return 0, errors.New("USD exchange rate must be greater than zero")
+	}
+
+	balanceCNY, err := strconv.ParseFloat(*cnyBalance, 64)
+	if err != nil {
+		return 0, err
+	}
+	if math.IsNaN(balanceCNY) || math.IsInf(balanceCNY, 0) {
+		return 0, errors.New("CNY balance must be finite")
+	}
+	if balanceCNY < 0 {
+		return 0, errors.New("CNY balance must be non-negative")
+	}
+	balanceUSD := decimal.NewFromFloat(balanceCNY).Div(decimal.NewFromFloat(usdExchangeRate)).InexactFloat64()
+	if math.IsNaN(balanceUSD) || math.IsInf(balanceUSD, 0) {
+		return 0, errors.New("converted USD balance must be finite")
+	}
+	if balanceUSD < 0 {
+		return 0, errors.New("converted USD balance must be non-negative")
+	}
+	return balanceUSD, nil
+}
+
 func updateChannelDeepSeekBalance(channel *model.Channel) (float64, error) {
 	url := "https://api.deepseek.com/user/balance"
 	body, err := GetResponseBody("GET", url, channel, GetAuthHeader(channel.Key))
@@ -269,21 +332,11 @@ func updateChannelDeepSeekBalance(channel *model.Channel) (float64, error) {
 		return 0, err
 	}
 	response := DeepSeekUsageResponse{}
-	err = json.Unmarshal(body, &response)
+	err = common.Unmarshal(body, &response)
 	if err != nil {
 		return 0, err
 	}
-	index := -1
-	for i, balanceInfo := range response.BalanceInfos {
-		if balanceInfo.Currency == "CNY" {
-			index = i
-			break
-		}
-	}
-	if index == -1 {
-		return 0, errors.New("currency CNY not found")
-	}
-	balance, err := strconv.ParseFloat(response.BalanceInfos[index].TotalBalance, 64)
+	balance, err := getDeepSeekBalanceUSD(response, operation_setting.USDExchangeRate)
 	if err != nil {
 		return 0, err
 	}
@@ -356,7 +409,7 @@ func updateChannelMoonshotBalance(channel *model.Channel) (float64, error) {
 	return availableBalanceUsd, nil
 }
 
-func updateChannelBalance(channel *model.Channel) (float64, error) {
+func updateStandardChannelBalance(channel *model.Channel) (float64, error) {
 	baseURL := constant.ChannelBaseURLs[channel.Type]
 	if channel.GetBaseURL() == "" {
 		channel.BaseURL = &baseURL
@@ -439,19 +492,28 @@ func UpdateChannelBalance(c *gin.Context) {
 		})
 		return
 	}
-	balance, err := updateChannelBalance(channel)
+	result, err := updateChannelBalance(c.Request.Context(), channel)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	// Keep top-level balance for the legacy web UI; the next frontend
-	// requires a data key on every success envelope.
-	c.JSON(http.StatusOK, gin.H{
+	data := gin.H{}
+	if result.RawResponse != "" {
+		data["raw_response"] = result.RawResponse
+	} else {
+		data["balance"] = result.Balance
+	}
+	response := gin.H{
 		"success": true,
 		"message": "",
-		"balance": balance,
-		"data":    gin.H{"balance": balance},
-	})
+		"data":    data,
+	}
+	// Preserve the existing top-level field for older API consumers.
+	for key, value := range data {
+		response[key] = value
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, response)
 }
 
 func updateAllChannelsBalance() error {
@@ -470,12 +532,12 @@ func updateAllChannelsBalance() error {
 		//if channel.Type != common.ChannelTypeOpenAI && channel.Type != common.ChannelTypeCustom {
 		//	continue
 		//}
-		balance, err := updateChannelBalance(channel)
+		result, err := updateChannelBalance(context.Background(), channel)
 		if err != nil {
 			continue
-		} else {
+		} else if result.RawResponse == "" {
 			// err is nil & balance <= 0 means quota is used up
-			if balance <= 0 {
+			if result.Balance <= 0 {
 				service.DisableChannel(*types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, "", channel.GetAutoBan()), "余额不足")
 			}
 		}

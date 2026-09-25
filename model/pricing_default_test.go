@@ -131,11 +131,8 @@ func TestPricingVendorInferenceUsesModelLabAndPreservesMetadata(t *testing.T) {
 	assert.Zero(t, byName["unknown-provider-model"].VendorID)
 	assert.Empty(t, byName["unknown-provider-model"].OwnerBy)
 
-	base := byName["gpt-compact-vendor"]
-	compact := byName["gpt-compact-vendor-openai-compact"]
-	assert.Equal(t, base.VendorID, compact.VendorID)
-	assert.Equal(t, "OpenAI", compact.OwnerBy)
-	assert.Equal(t, []constant.EndpointType{constant.EndpointTypeOpenAIResponseCompact}, compact.SupportedEndpointTypes)
+	assert.Equal(t, "OpenAI", byName["gpt-compact-vendor"].OwnerBy)
+	assert.NotContains(t, byName, "gpt-compact-vendor-openai-compact")
 
 	var inferredMetadataCount int64
 	require.NoError(t, DB.Model(&Model{}).Where("model_name IN ?", []string{

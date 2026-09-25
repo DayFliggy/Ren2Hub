@@ -1,12 +1,25 @@
 package model
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestFormatUserLogsProjectsFrozenBillingEvidence(t *testing.T) {
+	logs := []*Log{{Other: `{"price_version_id":42,"quote_hash":"` + strings.Repeat("a", 64) + `","billing_mode":"expression","upstream_model_name":"upstream-model","billing_usage":{"input_tokens":9,"source":"provider","actual_facts":{"secret":"hidden"},"headers":{"authorization":"hidden"}},"charge_result":{"calculation_version":"billing-v2","final_quota":"9007199254740993","total_usd":"1","lines":[],"unknown":{"secret":"hidden"},"trace":{"cost":1,"matched_tier":"standard","request_rules":[{"cond":"param(\"secret\")","multiplier":2,"matched":true}]}},"unknown":"hidden"}`}}
+	formatUserLogs(logs, 0)
+	require.NotContains(t, logs[0].Other, "hidden")
+	require.NotContains(t, logs[0].Other, "param(")
+	require.NotContains(t, logs[0].Other, "actual_facts")
+	require.Contains(t, logs[0].Other, `"final_quota":"9007199254740993"`)
+	require.Contains(t, logs[0].Other, `"input_tokens":9`)
+	require.Contains(t, logs[0].Other, `"upstream_model_name":"upstream-model"`)
+	formatUserLogs([]*Log{{Other: "invalid"}}, 0)
+}
 
 // TestFormatUserLogsStripsQuotaSaturation verifies the admin-only quota
 // saturation marker (nested under other.admin_info) is removed for non-admin

@@ -1,6 +1,7 @@
 package oairesponses
 
 import (
+	"context"
 	"testing"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -8,7 +9,7 @@ import (
 )
 
 func TestResponsesToChatRejectsCompactionTrigger(t *testing.T) {
-	_, err := ResponsesRequestToChatCompletionsRequest(&dto.OpenAIResponsesRequest{
+	_, err := ResponsesRequestToChatCompletionsRequest(context.Background(), &dto.OpenAIResponsesRequest{
 		Model: "gpt-5",
 		Input: []byte(`[{"type":"compaction_trigger"}]`),
 	})
@@ -18,7 +19,7 @@ func TestResponsesToChatRejectsCompactionTrigger(t *testing.T) {
 }
 
 func TestResponsesToChatRejectsCompactionItem(t *testing.T) {
-	_, err := ResponsesRequestToChatCompletionsRequest(&dto.OpenAIResponsesRequest{
+	_, err := ResponsesRequestToChatCompletionsRequest(context.Background(), &dto.OpenAIResponsesRequest{
 		Model: "gpt-5",
 		Input: []byte(`[{"type":"compaction","encrypted_content":"ciphertext"}]`),
 	})

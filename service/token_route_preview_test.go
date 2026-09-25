@@ -7,7 +7,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,15 +69,15 @@ func TestRoutePreviewRejectsUnregisteredPathLookalikes(t *testing.T) {
 	}
 }
 
-func TestTokenPreviewUsesInitialCompactStageAndItsCapability(t *testing.T) {
+func TestTokenPreviewUsesOrdinaryCompactModelAndCapability(t *testing.T) {
 	for _, manual := range []bool{false, true} {
 		t.Run(map[bool]string{false: "auto", true: "manual"}[manual], func(t *testing.T) {
 			db := setupRouteProfileTest(t)
 			userID, tokenID, channelID := seedRouteProfileFixture(t, db)
-			require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", channelID).Update("models", "gpt-5-openai-compact").Error)
-			require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", channelID).Update("model", "gpt-5-openai-compact").Error)
+			require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", channelID).Update("models", "gpt-5").Error)
+			require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", channelID).Update("model", "gpt-5").Error)
 			require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, model.ChannelCapabilitySnapshotFence{}, "compact-preview", "preview-catalog", []model.ChannelModelCapability{{
-				RequestModel: "gpt-5-openai-compact", ActualModel: "gpt-5-openai-compact", LabSlug: "openai", Source: "canonical", Confidence: 1,
+				RequestModel: "gpt-5", ActualModel: "gpt-5", LabSlug: "openai", Source: "canonical", Confidence: 1,
 				AbilityGroups: `["default"]`, EndpointTypes: `["openai-response-compact"]`, ChannelStatus: 1,
 				ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
 			}}))
@@ -94,8 +93,8 @@ func TestTokenPreviewUsesInitialCompactStageAndItsCapability(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, []int{channelID}, preview.CandidateChannelIDs)
 			entry := findRoutePreviewEntry(t, preview, channelID)
-			assert.Equal(t, "gpt-5-openai-compact", entry.RequestModel)
-			assert.Equal(t, "gpt-5-openai-compact", entry.ActualModel)
+			assert.Equal(t, "gpt-5", entry.RequestModel)
+			assert.Equal(t, "gpt-5", entry.ActualModel)
 			assert.Equal(t, model.RouteCapabilityStateEligible, entry.CapabilityState)
 			assert.Empty(t, entry.FilterReason)
 			selection, err := SelectLiveTokenRoute(LiveRouteRequest{Context: context.Background(), Preview: true, CapabilityEnabled: true,
@@ -103,16 +102,15 @@ func TestTokenPreviewUsesInitialCompactStageAndItsCapability(t *testing.T) {
 				Requirements: &preview.RequestRequirements, ConversionPolicy: preview.ConversionPolicy,
 			})
 			require.NoError(t, err)
-			assert.Equal(t, relaycommon.CompactAttemptExact, selection.CompactStage)
 			assert.Equal(t, preview.PreferredChannelID, selection.Decision.SelectedChannelID)
-			for _, allowedModel := range []string{"gpt-5", "gpt-5-openai-compact"} {
+			for _, allowedModel := range []string{"gpt-5", "other-model"} {
 				require.NoError(t, db.Model(&model.Token{}).Where("id = ?", tokenID).Updates(map[string]any{"model_limits_enabled": true, "model_limits": allowedModel}).Error)
 				limited, err := PreviewUserTokenRoute(context.Background(), userID, tokenID, input)
 				require.NoError(t, err)
 				if allowedModel == "gpt-5" {
-					assert.Empty(t, limited.CandidateChannelIDs, "base-model permission must not authorize compact dispatch")
-				} else {
 					assert.Equal(t, []int{channelID}, limited.CandidateChannelIDs)
+				} else {
+					assert.Empty(t, limited.CandidateChannelIDs)
 				}
 			}
 		})

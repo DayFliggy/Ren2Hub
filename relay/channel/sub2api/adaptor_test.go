@@ -52,15 +52,15 @@ func TestAdaptorInheritsNewAPIResponsesCompactSupport(t *testing.T) {
 	assert.Empty(t, adaptor.GetModelList())
 }
 
-func TestRen2HubCompactAttemptsSendExpectedModelToSub2API(t *testing.T) {
+func TestRen2HubCompactUsesOrdinaryMappingForSub2API(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, tt := range []struct {
 		name      string
-		stage     relaycommon.CompactAttemptStage
+		mapping   string
 		wantModel string
 	}{
-		{name: "exact suffix", stage: relaycommon.CompactAttemptExact, wantModel: "gpt-5-openai-compact"},
-		{name: "base fallback", stage: relaycommon.CompactAttemptBase, wantModel: "gpt-5"},
+		{name: "ordinary", mapping: `{}`, wantModel: "gpt-5"},
+		{name: "mapped", mapping: `{"gpt-5":"provider-model"}`, wantModel: "provider-model"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			capturedModel := ""
@@ -79,19 +79,18 @@ func TestRen2HubCompactAttemptsSendExpectedModelToSub2API(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses/compact", nil)
 			info := &relaycommon.RelayInfo{
-				RelayMode:           relayconstant.RelayModeResponsesCompact,
-				RelayFormat:         "openai_responses_compaction",
-				OriginModelName:     "gpt-5",
-				RequestedModel:      "gpt-5",
-				LogicalBillingModel: "gpt-5-openai-compact",
-				CompactAttemptStage: tt.stage,
-				RequestURLPath:      "/v1/responses/compact",
+				RelayMode:       relayconstant.RelayModeResponsesCompact,
+				RelayFormat:     "openai_responses_compaction",
+				OriginModelName: "gpt-5",
+				RequestURLPath:  "/v1/responses/compact",
 				ChannelMeta: &relaycommon.ChannelMeta{
 					ChannelType:    constant.ChannelTypeSub2API,
 					ChannelBaseUrl: upstream.URL,
 					ApiKey:         "test-key",
 				},
 			}
+			ctx.Set("model_mapping", tt.mapping)
+			info.UpstreamModelName = "gpt-5"
 			request := &dto.OpenAIResponsesRequest{Model: "gpt-5"}
 			require.NoError(t, helper.ModelMappedHelper(ctx, info, request))
 

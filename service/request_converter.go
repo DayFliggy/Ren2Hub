@@ -84,18 +84,7 @@ func RecordRequestConversionDiagnostics(info *relaycommon.RelayInfo, result *rel
 	if info == nil || result == nil {
 		return
 	}
-	for _, diagnostic := range result.Diagnostics {
-		found := false
-		for _, previous := range info.ConversionDiagnostics {
-			if previous == diagnostic {
-				found = true
-				break
-			}
-		}
-		if !found && len(info.ConversionDiagnostics) < 128 {
-			info.ConversionDiagnostics = append(info.ConversionDiagnostics, diagnostic)
-		}
-	}
+	info.RecordConversionDiagnostics(nil, result.Diagnostics)
 }
 
 func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.RelayInfo) (*dto.GeneralOpenAIRequest, error) {

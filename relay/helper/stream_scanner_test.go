@@ -28,6 +28,26 @@ func init() {
 	}
 }
 
+func TestResponsesTerminalOutputMarksOnlySuccessfulPayload(t *testing.T) {
+	for _, tc := range []struct {
+		name, body         string
+		semantic, terminal bool
+	}{
+		{"completed text", `{"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"answer"}]}]}}`, true, true},
+		{"limited text", `{"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[{"type":"message","content":[{"type":"output_text","text":"partial"}]}]}}`, true, true},
+		{"completed tool", `{"type":"response.completed","response":{"output":[{"type":"function_call","call_id":"call-one"}]}}`, true, true},
+		{"usage only", `{"type":"response.completed","response":{"output":[],"usage":{"input_tokens":3,"output_tokens":5}}}`, false, true},
+		{"unknown incomplete", `{"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"future_reason"},"output":[{"type":"message","content":[{"type":"output_text","text":"partial"}]}]}}`, false, false},
+		{"failed text", `{"type":"response.failed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"partial"}]}]}}`, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			semantic, terminal := StreamPayloadState(tc.body)
+			assert.Equal(t, tc.semantic, semantic)
+			assert.Equal(t, tc.terminal, terminal)
+		})
+	}
+}
+
 func setupStreamTest(t *testing.T, body io.Reader) (*gin.Context, *http.Response, *relaycommon.RelayInfo) {
 	t.Helper()
 

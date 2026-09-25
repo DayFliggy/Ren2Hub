@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -26,6 +27,7 @@ var responsesCompactAllowedFields = []string{
 	"input",
 	"instructions",
 	"previous_response_id",
+	"parallel_tool_calls",
 	"prompt_cache_key",
 	"prompt_cache_options",
 	"prompt_cache_retention",
@@ -38,25 +40,12 @@ func responsesCompactUpstreamRequest(req *dto.OpenAIResponsesCompactionRequest) 
 		Input:                req.Input,
 		Instructions:         req.Instructions,
 		PreviousResponseID:   req.PreviousResponseID,
+		ParallelToolCalls:    req.ParallelToolCalls,
 		ServiceTier:          req.ServiceTier,
 		PromptCacheKey:       req.PromptCacheKey,
 		PromptCacheOptions:   req.PromptCacheOptions,
 		PromptCacheRetention: req.PromptCacheRetention,
 	}
-}
-
-func filterResponsesCompactRequestFields(jsonData []byte) ([]byte, error) {
-	var payload map[string]json.RawMessage
-	if err := common.Unmarshal(jsonData, &payload); err != nil {
-		return nil, err
-	}
-	filtered := make(map[string]json.RawMessage, len(responsesCompactAllowedFields))
-	for _, field := range responsesCompactAllowedFields {
-		if value, ok := payload[field]; ok {
-			filtered[field] = value
-		}
-	}
-	return common.Marshal(filtered)
 }
 
 func compactRequestDebugSummary(info *relaycommon.RelayInfo, jsonData []byte) string {
@@ -70,12 +59,11 @@ func compactRequestDebugSummary(info *relaycommon.RelayInfo, jsonData []byte) st
 		}
 	}
 	return fmt.Sprintf(
-		"body_bytes=%d fields=%s logical_model=%q upstream_model=%q stage=%q",
+		"body_bytes=%d fields=%s requested_model=%q upstream_model=%q",
 		len(jsonData),
 		strings.Join(present, ","),
-		info.LogicalBillingModel,
+		info.OriginModelName,
 		info.ActualUpstreamModelName(),
-		info.CompactAttemptStage,
 	)
 }
 
@@ -111,7 +99,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		responsesReq = req
 	case *dto.OpenAIResponsesCompactionRequest:
 		// Only fields documented for POST /v1/responses/compact are forwarded:
-		// model, input, instructions, previous_response_id, prompt_cache_key,
+		// model, input, instructions, previous_response_id, parallel_tool_calls, prompt_cache_key,
 		// prompt_cache_options, prompt_cache_retention, service_tier.
 		// Undocumented Codex-parity fields (tools, reasoning, text) are parsed
 		// for client compatibility but intentionally not sent upstream.
@@ -125,81 +113,11 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		)
 	}
 
-	request, err := common.DeepCopy(responsesReq)
-	if err != nil {
-		return types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+	adaptor, requestBody, closer, prepareErr := PrepareResponsesRequest(c, info, responsesReq)
+	if prepareErr != nil {
+		return prepareErr
 	}
-
-	err = helper.ModelMappedHelper(c, info, request)
-	if err != nil {
-		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
-	}
-	if err := relaycommon.ApplyChannelSystemPrompt(c, info, request); err != nil {
-		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-	}
-
-	adaptor := GetAdaptor(info.ApiType)
-	if adaptor == nil {
-		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
-	}
-	adaptor.Init(info)
-	var requestBody io.Reader
-	passThroughBody := model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled
-	// Compact must always marshal the selected attempt model. Raw pass-through
-	// would keep the client's base model and defeat exact-model dispatch.
-	if passThroughBody && info.RelayMode != relayconstant.RelayModeResponsesCompact {
-		body, closer, err := relaycommon.NativeRequestBody(c, info, request)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
-		}
-		defer closer.Close()
-		requestBody = body
-	} else {
-		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-		}
-		relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
-		jsonData, err := common.Marshal(convertedRequest)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-		}
-
-		// remove disabled fields for OpenAI Responses API
-		jsonData, err = relaycommon.RemoveDisabledFields(jsonData, info.ChannelOtherSettings, info.ChannelSetting.PassThroughBodyEnabled)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-		}
-
-		// apply param override
-		if len(info.ParamOverride) > 0 {
-			jsonData, err = relaycommon.ApplyParamOverrideWithRelayInfo(jsonData, info)
-			if err != nil {
-				return newAPIErrorFromParamOverride(err)
-			}
-		}
-		if info.RelayMode == relayconstant.RelayModeResponsesCompact {
-			jsonData, err = filterResponsesCompactRequestFields(jsonData)
-			if err != nil {
-				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-			}
-		}
-
-		if info.RelayMode == relayconstant.RelayModeResponsesCompact {
-			logger.LogDebug(c, "compact request metadata: %s", compactRequestDebugSummary(info, jsonData))
-		} else if common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired) {
-			logger.LogDebug(c, "remote compaction request metadata: %s", remoteCompactionRequestDebugSummary(info, jsonData))
-		} else {
-			logger.LogDebug(c, "requestBody: %s", jsonData)
-		}
-		body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-		}
-		defer closer.Close()
-		jsonData = nil
-		requestBody = body
-	}
+	defer closer.Close()
 
 	var httpResp *http.Response
 	resp, err := adaptor.DoRequest(c, info, requestBody)
@@ -242,4 +160,82 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		info.CaptureResponseUsage(usageDto, "text", nil)
 	}
 	return nil
+}
+
+// PrepareResponsesRequest builds the final provider payload for HTTP and WS.
+// The caller owns the returned body and invokes the shared send guard before I/O.
+func PrepareResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, responsesReq *dto.OpenAIResponsesRequest) (channel.Adaptor, io.Reader, io.Closer, *types.NewAPIError) {
+	info.InitChannelMeta(c)
+	request, err := common.DeepCopy(responsesReq)
+	if err != nil {
+		return nil, nil, nil, types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+	}
+
+	err = helper.ModelMappedHelper(c, info, request)
+	if err != nil {
+		return nil, nil, nil, types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
+	}
+	if err := helper.ApplyReasoningModelSuffix(c, info, request); err != nil {
+		return nil, nil, nil, newConvertRequestFailedError(c, info, err)
+	}
+	if err := relaycommon.ApplyChannelSystemPrompt(c, info, request); err != nil {
+		return nil, nil, nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	}
+
+	adaptor := GetAdaptor(info.ApiType)
+	if adaptor == nil {
+		return nil, nil, nil, types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
+	}
+	adaptor.Init(info)
+	var requestBody io.Reader
+	var bodyCloser io.Closer
+	passThroughBody := model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled
+	if passThroughBody {
+		body, closer, err := relaycommon.NativeRequestBody(c, info, request)
+		if err != nil {
+			return nil, nil, nil, types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+		}
+		bodyCloser = closer
+		requestBody = body
+	} else {
+		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
+		if err != nil {
+			return nil, nil, nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+		relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
+		jsonData, err := common.Marshal(convertedRequest)
+		if err != nil {
+			return nil, nil, nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+
+		// remove disabled fields for OpenAI Responses API
+		jsonData, err = relaycommon.RemoveDisabledFields(jsonData, info.ChannelOtherSettings, info.ChannelSetting.PassThroughBodyEnabled)
+		if err != nil {
+			return nil, nil, nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+
+		// apply param override
+		if len(info.ParamOverride) > 0 {
+			jsonData, err = relaycommon.ApplyParamOverrideWithRelayInfo(jsonData, info)
+			if err != nil {
+				return nil, nil, nil, newAPIErrorFromParamOverride(err)
+			}
+		}
+		if info.RelayMode == relayconstant.RelayModeResponsesCompact {
+			logger.LogDebug(c, "compact request metadata: %s", compactRequestDebugSummary(info, jsonData))
+		} else if common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired) {
+			logger.LogDebug(c, "remote compaction request metadata: %s", remoteCompactionRequestDebugSummary(info, jsonData))
+		} else {
+			logger.LogDebug(c, "requestBody: %s", jsonData)
+		}
+		body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+		if err != nil {
+			return nil, nil, nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+		bodyCloser = closer
+		jsonData = nil
+		requestBody = body
+	}
+
+	return adaptor, requestBody, bodyCloser, nil
 }

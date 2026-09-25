@@ -103,7 +103,14 @@ export function parseTwoFactorChallenge(
 ): TwoFactorChallenge | null {
   if (!isRecord(value)) return null
   if (
-    value.require_2fa !== true ||
+    value.require_verification !== true ||
+    !Array.isArray(value.methods) ||
+    value.methods.some(
+      (item) =>
+        !isRecord(item) ||
+        typeof item.method !== 'string' ||
+        typeof item.available !== 'boolean'
+    ) ||
     typeof value.flow_token !== 'string' ||
     value.flow_token.length === 0 ||
     !isFiniteNumber(value.expires_at) ||

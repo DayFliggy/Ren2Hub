@@ -17,15 +17,19 @@ type ResponsesUsageAccumulator struct {
 	imageCounter   relaycommon.ImageGenerationCallCounter
 	imageCommitted bool
 	finished       bool
+	terminalUsage  bool
 }
 
 func NewResponsesUsageAccumulator(info *relaycommon.RelayInfo) *ResponsesUsageAccumulator {
-	return &ResponsesUsageAccumulator{info: info, usage: &dto.Usage{}}
+	return &ResponsesUsageAccumulator{info: info, usage: &dto.Usage{UsageSource: "missing"}}
 }
 
 func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse) {
 	if a == nil || event == nil || a.finished {
 		return
+	}
+	if event.Response != nil {
+		a.info.ObserveResponseModel(event.Response.Model)
 	}
 	if event.Response != nil && event.Response.Usage != nil {
 		// Responses usage is a cumulative snapshot, not a token delta.
@@ -33,6 +37,7 @@ func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse) 
 	}
 	switch event.Type {
 	case "response.completed", "response.done", "response.failed", "response.incomplete", "response.cancelled", "response.canceled", "response.error", "error":
+		a.terminalUsage = event.Response != nil && event.Response.Usage != nil
 		if a.imageCommitted {
 			return
 		}
@@ -73,13 +78,13 @@ func (a *ResponsesUsageAccumulator) Finish() *dto.Usage {
 		a.imageCommitted = true
 	}
 	estimated := false
-	if a.usage.CompletionTokens == 0 && a.outputText.Len() > 0 {
+	if !a.terminalUsage && a.usage.CompletionTokens == 0 && a.outputText.Len() > 0 {
 		a.usage.CompletionTokens = CountTextToken(a.outputText.String(), a.info.UpstreamModelName)
 		a.usage.OutputTokens = a.usage.CompletionTokens
 		a.usage.UsageSource = "estimated_partial"
 		estimated = true
 	}
-	if a.usage.PromptTokens == 0 && a.usage.CompletionTokens != 0 {
+	if !a.terminalUsage && a.usage.PromptTokens == 0 && a.usage.CompletionTokens != 0 {
 		a.usage.PromptTokens = a.info.GetEstimatePromptTokens()
 		a.usage.InputTokens = a.usage.PromptTokens
 		estimated = true
@@ -94,6 +99,9 @@ func (a *ResponsesUsageAccumulator) Finish() *dto.Usage {
 		if a.usage.BillingUsage != nil {
 			a.usage.BillingUsage.Estimated = true
 		}
+	}
+	if !a.terminalUsage && !estimated {
+		a.usage.UsageSource = "partial"
 	}
 	return a.usage
 }

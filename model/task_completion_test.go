@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -19,9 +20,12 @@ func withTaskBillingDatabases(t *testing.T, run func(*testing.T, *gorm.DB)) {
 	for _, database := range []struct {
 		kind common.DatabaseType
 		env  string
-	}{{common.DatabaseTypeSQLite, ""}, {common.DatabaseTypeMySQL, "GATEWAY_STARTUP_MYSQL_DSN"}, {common.DatabaseTypePostgreSQL, "GATEWAY_STARTUP_POSTGRES_DSN"}} {
+	}{{common.DatabaseTypeSQLite, ""}, {common.DatabaseTypeMySQL, "TEST_MYSQL_DSN"}, {common.DatabaseTypePostgreSQL, "TEST_POSTGRES_DSN"}} {
 		t.Run(string(database.kind), func(t *testing.T) {
 			dsn := os.Getenv(database.env)
+			if dsn == "" && database.env != "" {
+				dsn = os.Getenv(strings.Replace(database.env, "TEST_", "GATEWAY_STARTUP_", 1))
+			}
 			if database.env != "" && dsn == "" {
 				t.Skip(database.env + " is not configured; database contract is unverified")
 			}
@@ -46,7 +50,7 @@ func withTaskBillingDatabases(t *testing.T, run func(*testing.T, *gorm.DB)) {
 				initCol()
 				assert.NoError(t, connection.Close())
 			})
-			require.NoError(t, db.AutoMigrate(&Task{}, &Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}))
+			require.NoError(t, db.AutoMigrate(&Task{}, &TaskResultEvent{}, &PerfMetric{}, &Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}))
 			run(t, db)
 		})
 	}

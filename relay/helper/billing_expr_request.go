@@ -38,10 +38,84 @@ func BillingAttributesFromBody(body []byte) (map[string]interface{}, error) {
 			attrs[name] = parsed
 		}
 	}
+	projectReasoningBillingAttributes(fields, attrs)
 	if err := billingexpr.ValidateAttributes(attrs); err != nil {
 		return nil, err
 	}
 	return attrs, nil
+}
+
+func projectReasoningBillingAttributes(fields, attrs map[string]interface{}) {
+	copyFields := func(source map[string]interface{}, pairs ...string) {
+		for i := 0; i < len(pairs); i += 2 {
+			if value, present := source[pairs[i]]; present {
+				attrs[pairs[i+1]] = value
+			}
+		}
+	}
+	thinkingBudget := func(value interface{}) {
+		attrs["thinking_budget_tokens"] = value
+		if budget, ok := value.(float64); ok {
+			switch {
+			case budget == -1:
+				attrs["thinking"] = "adaptive"
+				delete(attrs, "thinking_budget_tokens")
+			case budget == 0:
+				attrs["thinking"] = "off"
+			case budget > 0:
+				attrs["thinking"] = "on"
+			}
+		}
+	}
+	copyFields(fields, "temperature", "temperature", "top_p", "top_p", "reasoning_effort", "effort")
+	if reasoning, ok := fields["reasoning"].(map[string]interface{}); ok {
+		copyFields(reasoning, "effort", "effort")
+		if budget, exists := reasoning["max_tokens"]; exists {
+			thinkingBudget(budget)
+		}
+		if enabled, ok := reasoning["enabled"].(bool); ok {
+			attrs["thinking"] = "off"
+			if enabled {
+				attrs["thinking"] = "on"
+			}
+		}
+	}
+	if thinking, ok := fields["thinking"].(map[string]interface{}); ok {
+		if budget, exists := thinking["budget_tokens"]; exists {
+			thinkingBudget(budget)
+		}
+		if mode, ok := thinking["type"].(string); ok {
+			switch mode {
+			case "enabled":
+				attrs["thinking"] = "on"
+			case "disabled":
+				attrs["thinking"] = "off"
+			case "adaptive":
+				attrs["thinking"] = "adaptive"
+			}
+		}
+	}
+	if output, ok := fields["output_config"].(map[string]interface{}); ok {
+		copyFields(output, "effort", "effort")
+	}
+	if config, ok := fields["generationConfig"].(map[string]interface{}); ok {
+		copyFields(config, "temperature", "temperature", "topP", "top_p")
+		if thinking, ok := config["thinkingConfig"].(map[string]interface{}); ok {
+			copyFields(thinking, "thinkingLevel", "effort")
+			if budget, exists := thinking["thinkingBudget"]; exists {
+				thinkingBudget(budget)
+			}
+		}
+	}
+	if effort, ok := attrs["effort"].(string); ok && effort != "" {
+		attrs["effort"] = strings.ToLower(effort)
+		if _, exists := attrs["thinking"]; !exists {
+			attrs["thinking"] = "on"
+			if effort == "none" {
+				attrs["thinking"] = "off"
+			}
+		}
+	}
 }
 
 func ResolveIncomingBillingExprRequestInput(c *gin.Context, info *relaycommon.RelayInfo) (billingexpr.RequestInput, error) {

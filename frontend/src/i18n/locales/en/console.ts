@@ -1,5 +1,83 @@
+import { securityMessages } from '../../security'
+import { taskPluginMessages } from '../../taskPlugins'
 export default {
+  taskPlugins: taskPluginMessages.en,
+  security: securityMessages['en'],
   billing: {
+    currencyHelper: 'Local currency editing helper',
+    currencyHint:
+      'Enter your exchange rate. Only an explicit conversion changes the exact USD input.',
+    localCurrency: 'Currency',
+    exchangeRate: 'Local currency per USD',
+    localAmount: 'Local amount',
+    applyCurrency: 'Convert to USD',
+    currencyInvalid: 'Enter a valid amount and a positive exchange rate.',
+    convertExpression: 'Convert unit prices to expression draft',
+    timeRule: 'Time price rule',
+    timeZone: 'IANA time zone',
+    timeStart: 'Start hour (inclusive)',
+    timeEnd: 'End hour (exclusive)',
+    timeMultiplier: 'Price multiplier',
+    applyTimeRule: 'Add rule to expression',
+    timeRuleInvalid: 'Enter a valid time zone, hour range and multiplier.',
+    sourceDifference: 'Compare with imported source',
+    currentDraft: 'Current draft',
+    sourceDraft: 'Imported source',
+    clientModel: 'Requested model',
+    upstreamModel: 'Upstream model',
+    conversionReview: 'Review conversion draft',
+    conversionReviewHint:
+      'Review the exact values before applying. Applying changes only the current draft; publishing requires saving.',
+    convertedDraft: 'Converted draft',
+    applyConversion: 'Apply conversion draft',
+    schemaCondition: 'Schema condition',
+    conditionOperator: 'Comparison',
+    multiplier: 'Multiplier',
+    addSchemaCondition: 'Add schema condition',
+    factMissing: 'Not provided',
+    currentPluginSchema: 'Current plugin schema',
+    schemaExplicitSources:
+      'Review each field and select its factual source. Requiredness and bounds are explicit choices; this only changes the draft.',
+    factSource: 'Fact source',
+    factRequired: 'Required',
+    factMinimum: 'Minimum',
+    factMaximum: 'Maximum',
+    applyReviewedSchema: 'Apply reviewed schema to draft',
+    schemaUnavailable:
+      'Current task schema is not available. Refresh it before publishing.',
+    schemaChoosePlugin: 'Select the plugin for publication validation',
+    schemaReviewRequired:
+      'This source needs an explicit schema review. Missing field sources and bounds will not be inferred.',
+    schemaPreserveHint:
+      'Saved schema and expression values remain unchanged until you adopt this schema. Publishing validates against the current plugin.',
+    adoptPluginSchema: 'Use current plugin schema in draft',
+    factLegacyValue: 'Saved value',
+    factInvalidEnum:
+      'Select a value allowed by the current schema before adding a condition.',
+    factInteger: 'Integer',
+    factSources: {
+      request_fixed: 'Frozen request fact',
+      completion_fact: 'Actual completion fact',
+      estimate_only: 'Estimate only',
+    },
+    responseModel: 'Response model',
+    responseModelMismatch: 'Response model differs',
+    responseModelMismatchDetail:
+      'The upstream returned {model}, which differs from the requested and mapped models.',
+    matchedTier: 'Matched tier',
+    ruleMatched: 'Matched',
+    ruleUnmatched: 'Not matched',
+    frozenChargeHint: 'Saved billing evidence; current prices are not used.',
+    usageSchema: 'Frozen task usage fields',
+    previewTitle: 'Price preview',
+    previewHint:
+      'Evaluate this draft with the server billing engine. No price is published and no funds are reserved.',
+    previewAttributes: 'Registered attributes (JSON object)',
+    previewFacts: 'Fixed request facts (JSON object)',
+    previewRatio: 'Channel price multiplier',
+    previewTime: 'Frozen time (RFC3339)',
+    previewAction: 'Calculate preview',
+    previewFailed: 'Price preview failed.',
     attempts: 'Attempt quotes',
     operator: 'Operator',
     budgetUSD: 'Available budget (USD)',
@@ -63,6 +141,7 @@ export default {
       cc1h: 'Cache write (1h)',
       img: 'Image input tokens',
       img_o: 'Image output tokens',
+      img_cr: 'Cached image input tokens',
       ai: 'Audio input tokens',
       ao: 'Audio output tokens',
       calls: 'Request count',
@@ -928,6 +1007,91 @@ export default {
   },
 
   channels: {
+    providerStatus: 'Provider status',
+    providerVersion: 'Version',
+    contextWindow: 'Context window',
+    providerMetrics: 'Metrics',
+    providerRawMetrics: 'Raw metrics',
+    providerErrors: {
+      request_failed: 'Request failed',
+      http_error: 'HTTP error',
+      response_too_large: 'Response exceeds limit',
+      invalid_response: 'Invalid response',
+    },
+    fieldSettingsLabels: {
+      allow_service_tier: 'Allow service_tier passthrough',
+      disable_store: 'Block store passthrough',
+      allow_safety_identifier: 'Allow safety_identifier passthrough',
+      allow_include_obfuscation: 'Allow include_obfuscation passthrough',
+      allow_inference_geo: 'Allow inference_geo passthrough',
+      allow_speed: 'Allow speed passthrough',
+      claude_beta_query: 'Enable Claude beta query',
+      ollama_openai_chat: 'Use Ollama OpenAI-compatible Chat API',
+    },
+    fieldSettingsHints: {
+      allow_service_tier:
+        'Preserve the client service tier; upstream charges may change.',
+      disable_store: 'Block the client store field. This may affect Codex.',
+      allow_safety_identifier: 'Send the client safety identifier upstream.',
+      allow_include_obfuscation:
+        'Allow client control over streamed usage obfuscation.',
+      allow_inference_geo:
+        'Allow client geography selection consistent with upstream data residency.',
+      allow_speed: 'Allow Claude speed selection; upstream charges may change.',
+      claude_beta_query: 'Append beta=true to Claude requests.',
+      ollama_openai_chat:
+        'Use /v1/chat/completions; when disabled, use native /api/chat.',
+    },
+    syncModelsTitle: 'Preview model updates',
+    syncModelsHint:
+      'Detection only creates a preview. Select additions or removals, then apply them. Removals are unselected by default.',
+    syncModelsAdd: 'Models to add',
+    syncModelsRemove: 'Models removed upstream',
+    syncModelsNone: 'No changes',
+    syncModelsRefresh: 'Detect again',
+    syncModelsApply: 'Apply selected updates',
+    addModeMultiKey: 'Multi-key channel',
+    multiKeyStrategy: 'Key selection strategy',
+    multiKeyRandom: 'Random',
+    multiKeyPolling: 'Round robin',
+    keyUpdateMode: 'Key update mode',
+    keyAppend: 'Append and deduplicate',
+    keyReplace: 'Replace all keys',
+    passThroughBody: 'Pass through request body',
+    passThroughBodyHint:
+      'Preserve the original body when API formats match, bypassing model mapping, parameter overrides and conversion. Advanced routes use their own passthrough setting.',
+    parameterOverrides: 'Parameter overrides JSON',
+    headerOverrides: 'Header overrides JSON',
+    jsonOverridesHint:
+      'Enter a JSON object; leave empty to clear overrides. The server validates on save.',
+    invalidOverrides: 'Overrides must be valid JSON objects.',
+    responsesWebSocket: 'Responses WebSocket',
+    responsesWebSocketHint:
+      'Enable only when the upstream supports native Responses WebSocket. Each generation has separate admission and billing.',
+    advancedRoutes: 'Advanced routes',
+    advancedRoutesHint:
+      'Configure upstream targets, protocol converters and authentication by incoming path and model. The server validates the complete contract on save.',
+    advancedPresetHint:
+      'This channel uses a fixed server preset. Choose Advanced Custom to customize the routes.',
+    invalidStoredSettings:
+      'Stored channel settings are not valid JSON objects. Repair the settings before editing.',
+    advancedRouteJson: 'Advanced routes JSON',
+    incomingPath: 'Incoming path',
+    upstreamPath: 'Upstream path or URL',
+    routeConverter: 'Protocol converter',
+    routeModels: 'Model matching',
+    routeModelsHint:
+      'Comma-separated; leave empty to match all models. Prefix regular expressions with re:.',
+    routeAuth: 'Authentication',
+    authNone: 'No authentication',
+    authName: 'Authentication parameter name',
+    authValue: 'Authentication parameter value',
+    authValueHint: "Use {'{api_key}'} to reference the channel key.",
+    routePassthrough: 'Pass through request body',
+    removeRoute: 'Remove route',
+    addRoute: 'Add route',
+    invalidRouteConfig:
+      'Invalid route configuration. Check the JSON, incoming paths and upstream targets.',
     title: 'Channel management',
     resultCount: '{count} channels',
     refreshList: 'Refresh list',
@@ -1020,6 +1184,7 @@ export default {
     testResultMs: '{ms} ms',
     testModelAction: 'Test model {model}',
     pickChannelTitle: 'Batch test channel responses',
+    testConcurrency: 'Test concurrency (1–32)',
     pickChannelDesc:
       'Pick one model and test every {supplier} channel that publishes it.',
     pickChannelModels: '{count} models',
@@ -1083,6 +1248,14 @@ export default {
     quickCopyAll: 'Copy all',
     quickClearAll: 'Clear all',
     upstreamFetched: 'Fetched {count} models from upstream',
+    selectFetchedModels: 'Select upstream models',
+    searchFetchedModels: 'Search models or providers',
+    fetchedSelectionHint:
+      '{count} selected. Applying updates this draft only. Models not returned by the upstream are retained.',
+    selectProvider: 'Select {provider} models',
+    otherProvider: 'Other',
+    noFetchedModels: 'No matching upstream models.',
+    applyFetchedModels: 'Apply selection to draft',
     quickActions: 'Quick actions',
     prefillGroups: 'Model prefill groups',
     selectPrefillGroup: 'Select a prefill group',
@@ -1127,6 +1300,10 @@ export default {
     enabled: 'Channel enabled',
     disabled: 'Channel disabled',
     balanceUpdated: 'Upstream balance and ratio synced',
+    balanceQueryCompleted: 'Upstream balance query completed',
+    balanceRawTitle: 'Raw balance response: {name}',
+    balanceRawHint:
+      'The upstream returned the following raw content. The channel balance was not changed.',
     loadFailed: 'Failed to load channels',
     retry: 'Retry',
     emptyTitle: 'No matching channels',
@@ -1141,6 +1318,13 @@ export default {
   },
 
   users: {
+    bindingsTitle: 'Manage account bindings',
+    bindingsEmpty: 'No bound sign-in providers or email.',
+    unbind: 'Unbind',
+    unbindProvider: 'Unbind {provider}',
+    unbindConfirmTitle: 'Unbind account identity',
+    unbindConfirmMessage:
+      'Unbind {provider} from {user}? This sign-in method will no longer access this account.',
     title: 'User management',
     resultCount: '{count} users',
     refreshList: 'Refresh list',
@@ -1459,6 +1643,8 @@ export default {
   },
 
   logs: {
+    groupLabel: 'Log group',
+    groupPlaceholder: 'Search or enter a group',
     title: 'Logs',
     breadcrumb: ['Console', 'Logs'],
     keywordPlaceholder: 'Search by model…',
@@ -2454,6 +2640,8 @@ export default {
   },
 
   systemSettings: {
+    thinkingBlacklistHint:
+      "Matched model names skip thinking suffix handling and {'@'} modifier parsing and validation. Use a re: prefix for a Go regular expression matching the full model name, for example re:.*{'@'}sha256:.*.",
     paymentSections: {
       general: 'Shared payment settings and other gateways',
       generalDescription:

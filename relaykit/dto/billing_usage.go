@@ -1,5 +1,7 @@
 package dto
 
+import "strings"
+
 const (
 	BillingUsageSourceClaudeMessages = "claude_messages"
 	BillingUsageSourceGeminiChat     = "gemini_chat"
@@ -86,7 +88,8 @@ func HasOpenAIUsageTokens(usage *Usage) bool {
 		usage.ClaudeCacheCreation1hTokens != 0 {
 		return true
 	}
-	if usage.PromptTokensDetails.CachedTokens != 0 ||
+	if usage.PromptTokensDetails.CachedTokensDetails.HasTokens() ||
+		usage.PromptTokensDetails.CachedTokens != 0 ||
 		usage.PromptTokensDetails.CachedCreationTokens != 0 ||
 		usage.PromptTokensDetails.CacheWriteTokens != 0 ||
 		usage.PromptTokensDetails.TextTokens != 0 ||
@@ -111,15 +114,17 @@ func NewEstimatedGeminiChatBillingUsage(usage *Usage) *BillingUsage {
 	if usage == nil {
 		return nil
 	}
+	reasoningTokens := usage.CompletionTokenDetails.ReasoningTokens
+	candidateTokens := max(usage.CompletionTokens-reasoningTokens, 0)
 	totalTokens := usage.TotalTokens
 	if totalTokens == 0 {
 		totalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
 	metadata := &GeminiUsageMetadata{
 		PromptTokenCount:        usage.PromptTokens,
-		CandidatesTokenCount:    max(usage.CompletionTokens-usage.CompletionTokenDetails.ReasoningTokens, 0),
-		ThoughtsTokenCount:      usage.CompletionTokenDetails.ReasoningTokens,
+		CandidatesTokenCount:    candidateTokens,
 		TotalTokenCount:         totalTokens,
+		ThoughtsTokenCount:      reasoningTokens,
 		CachedContentTokenCount: usage.PromptTokensDetails.CachedTokens,
 	}
 	for _, detail := range []GeminiPromptTokensDetails{
@@ -143,43 +148,51 @@ func NewEstimatedGeminiChatBillingUsage(usage *Usage) *BillingUsage {
 	return newGeminiChatBillingUsage(metadata, true)
 }
 
-// CloneBillingUsageWithEstimatedCompletion fills missing output usage without
-// replacing the provider's original input classifications or billing dialect.
+// CloneBillingUsageWithEstimatedCompletion preserves the original upstream
+// billing dialect and fills a missing completion count without rebuilding the
+// payload from a converted, potentially lossy Usage value.
 func CloneBillingUsageWithEstimatedCompletion(usage *BillingUsage, completionTokens int) *BillingUsage {
 	clone := CloneBillingUsage(usage)
 	if clone == nil || completionTokens <= 0 {
 		return clone
 	}
 
+	updated := false
 	switch {
 	case clone.OpenAIUsage != nil:
-		usage := clone.OpenAIUsage
-		if usage.CompletionTokens != 0 || usage.OutputTokens != 0 {
-			return clone
+		openAIUsage := clone.OpenAIUsage
+		if openAIUsage.CompletionTokens == 0 && openAIUsage.OutputTokens == 0 {
+			openAIUsage.CompletionTokens = completionTokens
+			openAIUsage.OutputTokens = completionTokens
+			inputTokens := openAIUsage.PromptTokens
+			if inputTokens == 0 {
+				inputTokens = openAIUsage.InputTokens
+			}
+			if totalTokens := inputTokens + completionTokens; openAIUsage.TotalTokens < totalTokens {
+				openAIUsage.TotalTokens = totalTokens
+			}
+			updated = true
 		}
-		usage.CompletionTokens = completionTokens
-		usage.OutputTokens = completionTokens
-		inputTokens := usage.PromptTokens
-		if inputTokens == 0 {
-			inputTokens = usage.InputTokens
-		}
-		usage.TotalTokens = max(usage.TotalTokens, inputTokens+completionTokens)
 	case clone.ClaudeUsage != nil:
-		if clone.ClaudeUsage.OutputTokens != 0 {
-			return clone
+		if clone.ClaudeUsage.OutputTokens == 0 {
+			clone.ClaudeUsage.OutputTokens = completionTokens
+			updated = true
 		}
-		clone.ClaudeUsage.OutputTokens = completionTokens
 	case clone.GeminiUsageMetadata != nil:
 		metadata := clone.GeminiUsageMetadata
-		if metadata.CandidatesTokenCount != 0 || completionTokens <= metadata.ThoughtsTokenCount {
-			return clone
+		if metadata.CandidatesTokenCount == 0 {
+			candidateTokens := max(completionTokens-metadata.ThoughtsTokenCount, 0)
+			metadata.CandidatesTokenCount = candidateTokens
+			totalTokens := metadata.PromptTokenCount + metadata.ToolUsePromptTokenCount + metadata.CandidatesTokenCount + metadata.ThoughtsTokenCount
+			if metadata.TotalTokenCount < totalTokens {
+				metadata.TotalTokenCount = totalTokens
+			}
+			updated = true
 		}
-		metadata.CandidatesTokenCount = completionTokens - metadata.ThoughtsTokenCount
-		metadata.TotalTokenCount = max(metadata.TotalTokenCount, metadata.PromptTokenCount+metadata.ToolUsePromptTokenCount+completionTokens)
-	default:
-		return clone
 	}
-	clone.Estimated = true
+	if updated {
+		clone.Estimated = true
+	}
 	return clone
 }
 
@@ -210,14 +223,164 @@ func CloneBillingUsage(usage *BillingUsage) *BillingUsage {
 	return &clone
 }
 
+// CanonicalUsage decodes the original provider usage carried across relay
+// hops into the shared accounting shape. The BillingUsage snapshot remains the
+// source of truth and is cloned onto the returned value for further relays.
+func (usage *BillingUsage) CanonicalUsage() (*Usage, bool) {
+	if usage == nil {
+		return nil, false
+	}
+	source := strings.TrimSpace(usage.Source)
+	semantic := strings.TrimSpace(usage.Semantic)
+
+	// A structurally recognized but all-zero payload must not become the
+	// settlement source of truth; rejecting it lets settlement fall back to a
+	// non-zero top-level usage.
+	if HasOpenAIUsageTokens(usage.OpenAIUsage) &&
+		(strings.EqualFold(source, BillingUsageSourceOAIChat) ||
+			strings.EqualFold(source, BillingUsageSourceOAIResponses) ||
+			strings.EqualFold(semantic, BillingUsageSemanticOpenAI)) {
+		return usage.canonicalOpenAIUsage(), true
+	}
+	if HasClaudeUsageTokens(usage.ClaudeUsage) &&
+		(strings.EqualFold(source, BillingUsageSourceClaudeMessages) ||
+			strings.EqualFold(semantic, BillingUsageSemanticAnthropic)) {
+		return usage.canonicalClaudeUsage(), true
+	}
+	if HasGeminiUsageMetadataTokens(usage.GeminiUsageMetadata) &&
+		(strings.EqualFold(source, BillingUsageSourceGeminiChat) ||
+			strings.EqualFold(semantic, BillingUsageSemanticGemini)) {
+		return usage.canonicalGeminiUsage(), true
+	}
+	return nil, false
+}
+
+func (usage *BillingUsage) canonicalOpenAIUsage() *Usage {
+	canonical := cloneOpenAIUsage(usage.OpenAIUsage)
+	if canonical.InputTokensDetails != nil {
+		// InputTokensDetails fills fields that PromptTokensDetails omitted;
+		// existing PromptTokensDetails values stay canonical on overlap.
+		filled := *canonical.InputTokensDetails
+		mergeInputTokenDetails(&filled, canonical.PromptTokensDetails)
+		canonical.PromptTokensDetails = filled
+	}
+	if canonical.PromptTokensDetails.CachedTokens == 0 && canonical.PromptCacheHitTokens > 0 {
+		canonical.PromptTokensDetails.CachedTokens = canonical.PromptCacheHitTokens
+	}
+	if canonical.PromptTokens == 0 && canonical.InputTokens > 0 {
+		canonical.PromptTokens = canonical.InputTokens
+	}
+	if canonical.CompletionTokens == 0 && canonical.OutputTokens > 0 {
+		canonical.CompletionTokens = canonical.OutputTokens
+	}
+	if canonical.InputTokens == 0 && canonical.PromptTokens > 0 {
+		canonical.InputTokens = canonical.PromptTokens
+	}
+	if canonical.OutputTokens == 0 && canonical.CompletionTokens > 0 {
+		canonical.OutputTokens = canonical.CompletionTokens
+	}
+	if canonical.TotalTokens == 0 {
+		canonical.TotalTokens = canonical.PromptTokens + canonical.CompletionTokens
+	}
+	canonical.UsageSemantic = BillingUsageSemanticOpenAI
+	canonical.UsageSource = usage.Source
+	canonical.BillingUsage = CloneBillingUsage(usage)
+	return canonical
+}
+
+func (usage *BillingUsage) canonicalClaudeUsage() *Usage {
+	claudeUsage := usage.ClaudeUsage
+	// Flat legacy fields are a fallback only when this snapshot never carried
+	// a CacheCreation sub-object. Presence (non-nil), not zero vs non-zero,
+	// is the discriminator — a later sub-object that zeros 1h must win.
+	var cacheCreation5m, cacheCreation1h int
+	if claudeUsage.CacheCreation != nil {
+		cacheCreation5m = claudeUsage.GetCacheCreation5mTokens()
+		cacheCreation1h = claudeUsage.GetCacheCreation1hTokens()
+	} else {
+		cacheCreation5m = claudeUsage.ClaudeCacheCreation5mTokens
+		cacheCreation1h = claudeUsage.ClaudeCacheCreation1hTokens
+	}
+
+	canonical := &Usage{
+		PromptTokens:                claudeUsage.InputTokens,
+		CompletionTokens:            claudeUsage.OutputTokens,
+		TotalTokens:                 claudeUsage.InputTokens + claudeUsage.OutputTokens,
+		InputTokens:                 claudeUsage.InputTokens + claudeUsage.CacheReadInputTokens + claudeUsage.CacheCreationInputTokens,
+		OutputTokens:                claudeUsage.OutputTokens,
+		UsageSemantic:               BillingUsageSemanticAnthropic,
+		UsageSource:                 BillingUsageSourceClaudeMessages,
+		BillingUsage:                CloneBillingUsage(usage),
+		ClaudeCacheCreation5mTokens: cacheCreation5m,
+		ClaudeCacheCreation1hTokens: cacheCreation1h,
+	}
+	canonical.PromptTokensDetails.CachedTokens = claudeUsage.CacheReadInputTokens
+	canonical.PromptTokensDetails.CachedCreationTokens = claudeUsage.CacheCreationInputTokens
+	return canonical
+}
+
+func (usage *BillingUsage) canonicalGeminiUsage() *Usage {
+	metadata := usage.GeminiUsageMetadata
+	promptTokens := metadata.PromptTokenCount + metadata.ToolUsePromptTokenCount
+	canonical := &Usage{
+		PromptTokens:     promptTokens,
+		CompletionTokens: metadata.CandidatesTokenCount + metadata.ThoughtsTokenCount,
+		TotalTokens:      metadata.TotalTokenCount,
+		UsageSemantic:    BillingUsageSemanticGemini,
+		UsageSource:      BillingUsageSourceGeminiChat,
+		BillingUsage:     CloneBillingUsage(usage),
+	}
+	canonical.CompletionTokenDetails.ReasoningTokens = metadata.ThoughtsTokenCount
+	canonical.PromptTokensDetails.CachedTokens = metadata.CachedContentTokenCount
+
+	for _, detail := range metadata.PromptTokensDetails {
+		addGeminiInputTokenDetail(&canonical.PromptTokensDetails, detail)
+	}
+	for _, detail := range metadata.ToolUsePromptTokensDetails {
+		addGeminiInputTokenDetail(&canonical.PromptTokensDetails, detail)
+	}
+	for _, detail := range metadata.CandidatesTokensDetails {
+		switch normalizeGeminiModality(detail.Modality) {
+		case "IMAGE":
+			canonical.CompletionTokenDetails.ImageTokens += detail.TokenCount
+		case "AUDIO":
+			canonical.CompletionTokenDetails.AudioTokens += detail.TokenCount
+		case "TEXT":
+			canonical.CompletionTokenDetails.TextTokens += detail.TokenCount
+		}
+	}
+
+	if canonical.TotalTokens == 0 {
+		canonical.TotalTokens = canonical.PromptTokens + canonical.CompletionTokens
+	} else if canonical.CompletionTokens <= 0 {
+		canonical.CompletionTokens = max(canonical.TotalTokens-canonical.PromptTokens, 0)
+	}
+	if canonical.PromptTokens > 0 && canonical.PromptTokensDetails.TextTokens == 0 && canonical.PromptTokensDetails.AudioTokens == 0 {
+		canonical.PromptTokensDetails.TextTokens = canonical.PromptTokens
+	}
+	return canonical
+}
+
+func addGeminiInputTokenDetail(details *InputTokenDetails, detail GeminiPromptTokensDetails) {
+	switch normalizeGeminiModality(detail.Modality) {
+	case "AUDIO":
+		details.AudioTokens += detail.TokenCount
+	case "IMAGE":
+		details.ImageTokens += detail.TokenCount
+	case "TEXT":
+		details.TextTokens += detail.TokenCount
+	}
+}
+
 func cloneOpenAIUsage(usage *Usage) *Usage {
 	if usage == nil {
 		return nil
 	}
 	clone := *usage
 	clone.BillingUsage = nil
+	clone.PromptTokensDetails = usage.PromptTokensDetails.Clone()
 	if usage.InputTokensDetails != nil {
-		inputTokensDetails := *usage.InputTokensDetails
+		inputTokensDetails := usage.InputTokensDetails.Clone()
 		clone.InputTokensDetails = &inputTokensDetails
 	}
 	if usage.OutputTokensDetails != nil {

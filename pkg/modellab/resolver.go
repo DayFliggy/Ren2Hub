@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/modelmapping"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/reasoning"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -137,13 +139,15 @@ func actualModels(models, modelMapping string) ([]actualModel, error) {
 	result := make([]actualModel, 0, len(values))
 	seenInputs := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		realModel := value
-		mapped, ok := mapping[value]
-		if !ok {
-			mapped, ok = mapping[normalize(value)]
+		realModel, _, resolveErr := modelmapping.Resolve(value, mapping)
+		if resolveErr != nil {
+			mappingErr = resolveErr
+			realModel = value
 		}
-		if ok && strings.TrimSpace(mapped) != "" {
-			realModel = strings.TrimSpace(mapped)
+		if realModel == value && normalize(value) != value {
+			if mapped, ok := mapping[normalize(value)]; ok {
+				realModel = mapped
+			}
 		}
 		result = append(result, actualModel{input: value, real: realModel})
 		seenInputs[value] = struct{}{}
@@ -156,7 +160,12 @@ func actualModels(models, modelMapping string) ([]actualModel, error) {
 		if _, exists := seenInputs[normalize(input)]; exists || strings.TrimSpace(realModel) == "" {
 			continue
 		}
-		result = append(result, actualModel{input: input, real: strings.TrimSpace(realModel)})
+		resolved, _, err := modelmapping.Resolve(input, mapping)
+		if err != nil {
+			mappingErr = err
+			resolved = realModel
+		}
+		result = append(result, actualModel{input: input, real: strings.TrimSpace(resolved)})
 	}
 	sort.SliceStable(result, func(i, j int) bool { return result[i].input < result[j].input })
 	return result, mappingErr
@@ -291,6 +300,9 @@ func lookupAlias(aliases map[string]string, normalized string) (string, bool) {
 
 func normalize(value string) string {
 	value = norm.NFKC.String(strings.ToLower(strings.TrimSpace(value)))
+	if reasoning.ParseModelModifiers(value).HasModifiers() {
+		return value
+	}
 	for {
 		previous := value
 		value = strings.TrimSuffix(value, "@default")

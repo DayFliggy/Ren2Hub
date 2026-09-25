@@ -25,6 +25,9 @@ for (const theme of ['light', 'dark'] as const) {
                 price_version: {
                   id: 1,
                   model: 'mixed-model',
+                  contract_version: 2,
+                  calculation_version: 'billing-v2',
+                  result_unit: 'usd',
                   mode: 'unit_price',
                   created_at: 1,
                   hash: 'fixture',

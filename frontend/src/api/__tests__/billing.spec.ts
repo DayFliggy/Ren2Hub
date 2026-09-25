@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/client'
 import {
   billingApi,
+  parseBillingCharge,
   parseBillingEvent,
   parseBillingReservation,
 } from '@/api/billing'
@@ -22,6 +23,31 @@ const reservation = {
 afterEach(() => vi.restoreAllMocks())
 
 describe('billing API', () => {
+  it('retains a confirmed image count without inventing missing trace evidence', () => {
+    const charge = {
+      lines: [],
+      final_quota: '1000',
+      total_usd: '0.002',
+      unrounded_quota: '1000',
+      rounding_delta: '0',
+      calculation_version: 'billing-v2',
+      rounding_version: 'half-up-positive-minimum-v1',
+      trace: { matched_tier: '', image_count: 2 },
+    }
+    expect(parseBillingCharge(charge, '/billing')?.trace?.image_count).toBe(2)
+    expect(
+      parseBillingCharge({ ...charge, trace: { matched_tier: '' } }, '/billing')
+        ?.trace?.image_count
+    ).toBeUndefined()
+    for (const image_count of [null, 0, -1, 1.5, 129, '2']) {
+      expect(() =>
+        parseBillingCharge(
+          { ...charge, trace: { matched_tier: '', image_count } },
+          '/billing'
+        )
+      ).toThrow('Invalid API response')
+    }
+  })
   it('retains immutable attempt evidence without presentation rounding', async () => {
     const attempts = [
       {

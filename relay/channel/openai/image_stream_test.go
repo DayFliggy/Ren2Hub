@@ -15,8 +15,10 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -112,6 +114,7 @@ func TestOpenaiImageStreamHandlerForwardsSSEAndUsage(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), `data: [DONE]`)
 	require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
 	require.Equal(t, "1", info.PriceData.Usage.Quantities["images"])
+	assert.True(t, info.PriceData.Usage.Complete)
 }
 
 func TestOpenaiImageStreamHandlerUsesCompletedEventCount(t *testing.T) {
@@ -248,7 +251,8 @@ func TestOpenaiImageStreamHandlerClientDisconnectBillsDeliveredCount(t *testing.
 		[]relaycommon.StreamEndReason{relaycommon.StreamEndReasonClientGone, relaycommon.StreamEndReasonHandlerStop},
 		info.StreamStatus.EndReason)
 	require.Contains(t, recorder.Body.String(), `"b64_json":"first"`)
-	require.Equal(t, "1", info.PriceData.Usage.Quantities["images"], "client abort must not charge undelivered requested images")
+	require.Equal(t, "3", info.PriceData.Usage.Quantities["images"], "interruption retains the estimate for reconciliation")
+	assert.False(t, info.PriceData.Usage.Complete)
 }
 
 // TestOpenaiImageStreamHandlerClientDisconnectRaisesCount covers the other
@@ -282,7 +286,8 @@ func TestOpenaiImageStreamHandlerClientDisconnectRaisesCount(t *testing.T) {
 	require.Contains(t,
 		[]relaycommon.StreamEndReason{relaycommon.StreamEndReasonClientGone, relaycommon.StreamEndReasonHandlerStop},
 		info.StreamStatus.EndReason)
-	require.Equal(t, "2", info.PriceData.Usage.Quantities["images"], "completed events beyond the recorded n must raise the charge even on abort")
+	require.Equal(t, "1", info.PriceData.Usage.Quantities["images"], "partial observations do not replace the frozen reservation")
+	assert.False(t, info.PriceData.Usage.Complete)
 }
 
 // TestOpenaiImageStreamHandlerWrapsJSONResponse covers the non-SSE fallback:
@@ -486,7 +491,8 @@ func TestOpenaiImageStreamRejectsInvalidTermination(t *testing.T) {
 			require.NotContains(t, recorder.Body.String(), "data: [DONE]")
 			if index == 4 {
 				require.True(t, info.HasValidOutput())
-				require.Equal(t, "1", info.PriceData.Usage.Quantities["images"])
+				require.Equal(t, "3", info.PriceData.Usage.Quantities["images"])
+				assert.False(t, info.PriceData.Usage.Complete)
 			} else {
 				require.False(t, info.HasValidOutput())
 			}
@@ -503,4 +509,13 @@ func TestOpenaiImageFirstPayloadCanExceedPreludeLimit(t *testing.T) {
 	require.True(t, info.HasValidOutput())
 	require.Contains(t, recorder.Body.String(), image)
 	require.Equal(t, 1, strings.Count(recorder.Body.String(), "data: [DONE]"))
+}
+
+func TestImageOutputAndCachedDetailsReachCanonicalUsage(t *testing.T) {
+	imageCache := 0
+	usage := &dto.Usage{InputTokens: 10, OutputTokens: 20, InputTokensDetails: &dto.InputTokenDetails{ImageTokens: 10, CachedTokens: 3, CachedTokensDetails: &dto.CachedTokenDetails{ImageTokens: &imageCache}}, OutputTokensDetails: &dto.OutputTokenDetails{ImageTokens: 18, TextTokens: 2}}
+	require.NoError(t, normalizeOpenAIUsage(usage))
+	assert.Equal(t, 18, usage.CompletionTokenDetails.ImageTokens)
+	require.NotNil(t, usage.PromptTokensDetails.CachedTokensDetails.ImageTokens)
+	assert.Zero(t, *usage.PromptTokensDetails.CachedTokensDetails.ImageTokens)
 }

@@ -33,7 +33,7 @@ func setupGmpayControllerTestDB(t *testing.T, gateway string) *gorm.DB {
 	connection, err := db.DB()
 	require.NoError(t, err)
 	connection.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.GmpayOrder{}, &model.GmpayMerchantVersion{}, &model.User{}, &model.TopUp{}, &model.BillingEvent{}, &model.Log{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.GmpayOrder{}, &model.GmpayMerchantVersion{}, &model.User{}, &model.TopUp{}, &model.BillingEvent{}, &model.Log{}, &model.AuditLog{}))
 	previousDB, previousLogDB := model.DB, model.LOG_DB
 	previousRedis, previousAffiliate := common.RedisEnabled, common.AffiliateEnabled
 	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
@@ -504,16 +504,18 @@ func TestAdminGmpayCompletionAuditIdentifiesOrderAndOperator(t *testing.T) {
 		assert.JSONEq(t, `{"success":true,"message":"","data":null}`, response.Body.String())
 	}
 
-	var entries []model.Log
-	require.NoError(t, db.Where("type = ?", model.LogTypeManage).Order("id").Find(&entries).Error)
+	var entries []model.AuditLog
+	require.NoError(t, db.Where("category = ?", model.AuditCategoryOperation).Order("id").Find(&entries).Error)
 	require.Len(t, entries, 2, "each successful administrative request must identify the target order")
 	for _, entry := range entries {
-		audit := buildOperationLogDTO(&entry)
-		assert.Equal(t, "user.topup_complete", audit.Action)
-		assert.Equal(t, "payment-admin", audit.Actor.Username)
+		assert.Equal(t, "user.topup_complete", entry.Action)
+		assert.Equal(t, "payment-admin", entry.Other.AdminInfo.AdminUsername)
 		assert.Equal(t, 2, entry.UserId)
-		assert.Equal(t, order.TradeNo, audit.Params["trade_no"])
-		assert.Contains(t, audit.Content, order.TradeNo)
+		params, err := common.Marshal(entry.Other.Op.Params)
+		require.NoError(t, err)
+		assert.Contains(t, string(params), order.TradeNo)
+		assert.Contains(t, entry.Content, order.TradeNo)
+		assert.True(t, entry.Success)
 	}
 
 	var stored model.TopUp

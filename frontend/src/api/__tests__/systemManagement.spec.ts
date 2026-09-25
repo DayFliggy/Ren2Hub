@@ -126,11 +126,30 @@ describe('system management response contracts', () => {
 
   it('uses request signals and requires the real deleted count', async () => {
     const signal = new AbortController().signal
-    const get = vi.spyOn(api, 'get').mockResolvedValue([task] as never)
-    await systemManagementApi.tasks(20, signal)
+    const get = vi
+      .spyOn(api, 'getEnvelope')
+      .mockResolvedValue({ success: true, data: [task], total: 41 })
+    expect(
+      await systemManagementApi.tasks(
+        {
+          scope: 'history',
+          type: 'log_cleanup',
+          status: 'failed',
+          offset: 20,
+          limit: 20,
+        },
+        signal
+      )
+    ).toMatchObject({ total: 41, items: [{ task_id: 'task-1' }] })
     expect(get).toHaveBeenCalledWith(
       '/api/system-task/list',
-      { limit: 20 },
+      {
+        scope: 'history',
+        type: 'log_cleanup',
+        status: 'failed',
+        offset: 20,
+        limit: 20,
+      },
       { signal }
     )
     const remove = vi
@@ -146,6 +165,22 @@ describe('system management response contracts', () => {
     )
     remove.mockResolvedValueOnce({} as never)
     await expect(systemManagementApi.deleteStale()).rejects.toThrow()
+    remove.mockResolvedValueOnce({ deleted_count: 3 } as never)
+    expect(
+      await systemManagementApi.deleteHistory({
+        type: 'log_cleanup',
+        status: 'failed',
+      })
+    ).toBe(3)
+    expect(remove).toHaveBeenLastCalledWith('/api/system-task/history', {
+      scope: 'history',
+      type: 'log_cleanup',
+      status: 'failed',
+    })
+    get.mockResolvedValueOnce({ success: true, data: [task] })
+    await expect(
+      systemManagementApi.tasks({ scope: 'history' })
+    ).rejects.toThrow()
   })
 
   it('validates the destructive log cutoff before sending a request', async () => {

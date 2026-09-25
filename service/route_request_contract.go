@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/gin-gonic/gin"
 )
 
@@ -38,7 +39,9 @@ func stringListContains(values []string, target string) bool {
 }
 
 func tokenAllowsRouteModel(limit map[string]bool, modelName string) bool {
-	return limit[modelName] || limit[ratio_setting.FormatMatchingModelName(modelName)]
+	base := reasoning.BaseModelName(modelName)
+	return limit[modelName] || limit[ratio_setting.FormatMatchingModelName(modelName)] ||
+		limit[base] || limit[ratio_setting.FormatMatchingModelName(base)]
 }
 
 // TokenModelPermissionError applies equally to new requests and stored task reads.
@@ -94,4 +97,11 @@ func endpointTypeForRequestPath(requestPath string) string {
 	default:
 		return ""
 	}
+}
+
+func endpointTypeForTaskRequest(path, pluginKey string) string {
+	if pluginKey != "" {
+		return string(constant.EndpointTypeTaskPlugin)
+	}
+	return endpointTypeForRequestPath(path)
 }

@@ -14,6 +14,7 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError } from '@/api/types'
+import { taskPluginsApi, type PluginMeta } from '@/api/taskPlugins'
 import { metadataApi, type PrefillGroup } from '@/api/adminManagement'
 import { appendModelNames } from '@/utils/modelEndpoints'
 import { useAppStore } from '@/stores/app'
@@ -24,6 +25,15 @@ import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import GatewayChannelPanel from '@/components/console/gateway/GatewayChannelPanel.vue'
+import AdvancedChannelEditor from './AdvancedChannelEditor.vue'
+import FetchedModelsDialog from './FetchedModelsDialog.vue'
+import {
+  advancedChannelPreset,
+  parseAdvancedChannelConfig,
+  parseChannelObject,
+  CHANNEL_SETTING_FIELDS,
+  type ChannelSettingField,
+} from '@/utils/channelSettings'
 import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import { useToast } from '@/composables/useToast'
 import {
@@ -33,6 +43,7 @@ import {
 import type {
   AdminChannel,
   AdminChannelCreateInput,
+  AdminChannelCreateOptions,
   AdminChannelFetchModelsParams,
   AdminChannelUpdateInput,
 } from '@/types/console'
@@ -42,7 +53,7 @@ const props = defineProps<{
   editing: AdminChannel | null
   save: (
     input: AdminChannelCreateInput | AdminChannelUpdateInput,
-    options?: { batchKeys?: boolean }
+    options?: AdminChannelCreateOptions
   ) => Promise<boolean>
   fetchModels: (params: AdminChannelFetchModelsParams) => Promise<string[]>
 }>()
@@ -57,6 +68,91 @@ const app = useAppStore()
 const auth = useAuthStore()
 const saving = ref(false)
 const advancedOpen = ref(false)
+const originalSetting = ref<Record<string, unknown>>({})
+const originalOtherSettings = ref<Record<string, unknown>>({})
+const settingsError = ref('')
+const responsesWebSocket = ref(false)
+const passThroughBody = ref(false)
+const paramOverride = ref('')
+const headerOverride = ref('')
+const fieldSettings = reactive<Partial<Record<ChannelSettingField, boolean>>>(
+  {}
+)
+const visibleFieldSettings = computed(() =>
+  CHANNEL_SETTING_FIELDS.filter((field) =>
+    (field.types as readonly number[]).includes(form.type)
+  )
+)
+const multiKeyMode = ref<'random' | 'polling'>('random')
+const keyMode = ref<'append' | 'replace'>('append')
+const existingMultiKey = computed(
+  () => props.editing?.channel_info?.is_multi_key === true
+)
+const validOverrides = computed(() => {
+  try {
+    parseChannelObject(paramOverride.value)
+    parseChannelObject(headerOverride.value)
+    return true
+  } catch {
+    return false
+  }
+})
+const advancedConfig = ref('')
+const canSensitiveWrite = computed(() =>
+  auth.hasPermission('channel', 'sensitive_write')
+)
+const isAdvancedChannel = computed(() => [58, 62, 63].includes(form.type))
+const supportsResponsesWebSocket = computed(() =>
+  [1, 57, 58, 59, 60].includes(form.type)
+)
+const canBindPlugin = computed(
+  () =>
+    app.featureStatus('taskPlugins') === 'live' &&
+    auth.hasPermission('task_plugin', 'bind')
+)
+const validAdvancedConfig = computed(() => {
+  if (!isAdvancedChannel.value) return true
+  try {
+    parseAdvancedChannelConfig(advancedConfig.value)
+    return true
+  } catch {
+    return false
+  }
+})
+const pluginOptions = ref<PluginMeta[]>([])
+const pluginKeys = ref<string[]>([])
+const pluginError = ref('')
+let pluginOptionsRequest: AbortController | null = null
+const availablePlugins = computed(() =>
+  pluginOptions.value.filter(
+    (item) => form.type !== 60 || item.upstreams?.includes('new_api')
+  )
+)
+watch(
+  () => props.open,
+  async (open) => {
+    pluginOptionsRequest?.abort()
+    if (
+      !open ||
+      app.featureStatus('taskPlugins') !== 'live' ||
+      !auth.hasPermission('task_plugin', 'bind')
+    )
+      return
+    const request = new AbortController()
+    pluginOptionsRequest = request
+    pluginError.value = ''
+    try {
+      const items = await taskPluginsApi.options(request.signal)
+      if (!request.signal.aborted) pluginOptions.value = items
+    } catch (cause) {
+      if (!request.signal.aborted)
+        pluginError.value =
+          cause instanceof Error ? cause.message : String(cause)
+    }
+  },
+  { immediate: true }
+)
+onBeforeUnmount(() => pluginOptionsRequest?.abort())
 
 // ── Type search dropdown ───────────────────────────────────────────────────
 const typeSearch = ref('')
@@ -76,6 +172,12 @@ const filteredTypeOptions = computed(() => {
 
 function selectType(typeId: number) {
   form.type = typeId
+  if ([58, 62, 63].includes(typeId))
+    advancedConfig.value = JSON.stringify(
+      advancedChannelPreset(typeId),
+      null,
+      2
+    )
   typeSearch.value = ''
   typeDropdownOpen.value = false
 }
@@ -92,7 +194,7 @@ const form = reactive({
   enabled: true,
   // Credentials
   key: '',
-  addMode: 'single' as 'single' | 'multi',
+  addMode: 'single' as 'single' | 'multi' | 'multiKey',
   baseUrl: '',
   // Models
   models: '',
@@ -236,6 +338,16 @@ function onModelInputKeydown(e: KeyboardEvent) {
 
 // ── Quick actions ──────────────────────────────────────────────────────────
 const fetchingUpstream = ref(false)
+const fetchedModels = ref<string[]>([])
+const modelPickerOpen = ref(false)
+let fetchEpoch = 0
+function applyFetchedModels(models: string[]) {
+  form.models = appendModelNames(
+    modelTags.value.filter((model) => !fetchedModels.value.includes(model)),
+    models
+  ).join(',')
+  modelPickerOpen.value = false
+}
 const canFetchUpstream = computed(
   () => props.editing !== null || form.key.trim().length > 0
 )
@@ -247,22 +359,34 @@ const canFetchUpstream = computed(
 async function fetchUpstream() {
   if (fetchingUpstream.value || !canFetchUpstream.value) return
   fetchingUpstream.value = true
+  const epoch = ++fetchEpoch
   try {
     const models = await props.fetchModels(
       props.editing !== null
-        ? { channelId: props.editing.id }
+        ? {
+            channelId: props.editing.id,
+            ...(isAdvancedChannel.value && canSensitiveWrite.value
+              ? { advancedCustom: advancedConfig.value, baseUrl: form.baseUrl }
+              : {}),
+          }
         : {
             type: form.type,
             key: form.key.trim(),
             baseUrl: form.baseUrl.trim(),
+            ...(isAdvancedChannel.value
+              ? { advancedCustom: advancedConfig.value }
+              : {}),
           }
     )
-    if (models.length > 0) addModelTag(models.join(','))
+    if (epoch !== fetchEpoch || !props.open) return
+    fetchedModels.value = [...new Set(models)]
+    modelPickerOpen.value = true
     toast.success(t('channels.upstreamFetched', { count: models.length }))
   } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
+    if (epoch === fetchEpoch)
+      toast.error(error instanceof ApiError ? error.message : String(error))
   } finally {
-    fetchingUpstream.value = false
+    if (epoch === fetchEpoch) fetchingUpstream.value = false
   }
 }
 
@@ -284,6 +408,9 @@ const minimumCapacity = computed(() =>
 
 const valid = computed(
   () =>
+    !settingsError.value &&
+    validAdvancedConfig.value &&
+    validOverrides.value &&
     form.name.trim().length > 0 &&
     (props.editing !== null || form.key.trim().length > 0) &&
     (props.editing !== null || modelTags.value.length > 0) &&
@@ -307,6 +434,9 @@ const valid = computed(
 watch(
   () => props.open,
   (open) => {
+    fetchEpoch++
+    fetchingUpstream.value = false
+    modelPickerOpen.value = false
     if (!open) return
     const ch = props.editing
     form.name = ch?.name ?? ''
@@ -314,6 +444,13 @@ watch(
     form.enabled = ch ? ch.status === 1 : true
     form.key = ''
     form.addMode = 'single'
+    multiKeyMode.value =
+      ch?.channel_info?.multi_key_mode === 'polling' ? 'polling' : 'random'
+    keyMode.value = 'append'
+    paramOverride.value =
+      typeof ch?.param_override === 'string' ? ch.param_override : ''
+    headerOverride.value =
+      typeof ch?.header_override === 'string' ? ch.header_override : ''
     form.baseUrl = ch?.base_url ?? ''
     form.models = ch?.models ?? ''
     form.modelMapping =
@@ -322,6 +459,37 @@ watch(
     form.weight = ch?.weight ?? 0
     form.capacityTotal = ch?.capacity_total ?? 20
     form.channelRatio = ch?.channel_ratio ?? 1
+    settingsError.value = ''
+    try {
+      const setting = parseChannelObject(ch?.setting)
+      originalSetting.value = setting
+      originalOtherSettings.value = parseChannelObject(ch?.settings)
+      for (const field of CHANNEL_SETTING_FIELDS)
+        fieldSettings[field.key] =
+          originalOtherSettings.value[field.key] === true
+      responsesWebSocket.value = setting.responses_websocket_enabled === true
+      passThroughBody.value = setting.pass_through_body_enabled === true
+      advancedConfig.value = JSON.stringify(
+        originalOtherSettings.value.advanced_custom ??
+          advancedChannelPreset(form.type),
+        null,
+        2
+      )
+      pluginKeys.value =
+        ch?.type === 61
+          ? typeof setting.task_plugin_key === 'string' &&
+            setting.task_plugin_key
+            ? [setting.task_plugin_key]
+            : []
+          : Array.isArray(setting.task_extend_plugin_keys)
+            ? setting.task_extend_plugin_keys.filter(
+                (key): key is string => typeof key === 'string'
+              )
+            : []
+    } catch {
+      pluginKeys.value = []
+      settingsError.value = t('channels.invalidStoredSettings')
+    }
     // parse mapping
     modelMappingJson.value = form.modelMapping
     try {
@@ -365,6 +533,55 @@ async function submit() {
       capacity_total: Number(form.capacityTotal),
       channel_ratio: Number(form.channelRatio),
     }
+    const settings = { ...originalSetting.value }
+    if (
+      canSensitiveWrite.value &&
+      passThroughBody.value !== (settings.pass_through_body_enabled === true)
+    )
+      settings.pass_through_body_enabled = passThroughBody.value
+    if (
+      canSensitiveWrite.value &&
+      supportsResponsesWebSocket.value &&
+      responsesWebSocket.value !==
+        (settings.responses_websocket_enabled === true)
+    )
+      settings.responses_websocket_enabled = responsesWebSocket.value
+    if (canBindPlugin.value && (form.type === 60 || form.type === 61)) {
+      settings.task_plugin_key =
+        form.type === 61 ? (pluginKeys.value[0] ?? '') : ''
+      settings.task_extend_plugin_keys =
+        form.type === 60 ? pluginKeys.value : []
+    }
+    if (JSON.stringify(settings) !== JSON.stringify(originalSetting.value))
+      base.setting = JSON.stringify(settings)
+    if (canSensitiveWrite.value) {
+      if (paramOverride.value !== (props.editing?.param_override ?? ''))
+        base.param_override = paramOverride.value.trim()
+      if (headerOverride.value !== (props.editing?.header_override ?? ''))
+        base.header_override = headerOverride.value.trim()
+      if (
+        existingMultiKey.value &&
+        multiKeyMode.value !== props.editing?.channel_info?.multi_key_mode
+      )
+        base.multi_key_mode = multiKeyMode.value
+    }
+    if (canSensitiveWrite.value) {
+      const otherSettings = { ...originalOtherSettings.value }
+      for (const field of visibleFieldSettings.value) {
+        const value = fieldSettings[field.key] === true
+        if (value !== (originalOtherSettings.value[field.key] === true))
+          otherSettings[field.key] = value
+      }
+      if (isAdvancedChannel.value)
+        otherSettings.advanced_custom = parseAdvancedChannelConfig(
+          advancedConfig.value
+        )
+      if (
+        JSON.stringify(otherSettings) !==
+        JSON.stringify(originalOtherSettings.value)
+      )
+        base.settings = JSON.stringify(otherSettings)
+    }
 
     if (props.editing === null) {
       const input: AdminChannelCreateInput = {
@@ -374,6 +591,9 @@ async function submit() {
       }
       const created = await props.save(input, {
         batchKeys: form.addMode === 'multi',
+        ...(form.addMode === 'multiKey'
+          ? { multiKey: true, multiKeyMode: multiKeyMode.value }
+          : {}),
       })
       if (created) emit('close')
       return
@@ -383,6 +603,7 @@ async function submit() {
     // ChannelSensitiveWrite can still save routing-level edits.
     const replacementKey = form.key.trim()
     if (replacementKey) base.key = replacementKey
+    if (replacementKey && existingMultiKey.value) base.key_mode = keyMode.value
     if (await props.save(base)) emit('close')
   } finally {
     saving.value = false
@@ -398,6 +619,41 @@ async function submit() {
     @close="close"
   >
     <div class="space-y-4 text-left">
+      <p
+        v-if="settingsError"
+        role="alert"
+        class="text-sm text-[var(--status-danger)]"
+      >
+        {{ settingsError }}
+      </p>
+      <FormField
+        v-if="canBindPlugin && (form.type === 60 || form.type === 61)"
+        :label="t('taskPlugins.binding')"
+        :hint="t('taskPlugins.bindingHint')"
+      >
+        <select
+          v-model="pluginKeys"
+          multiple
+          :size="Math.min(5, Math.max(2, availablePlugins.length))"
+          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-page)] p-2"
+          @change="form.type === 61 && (pluginKeys = pluginKeys.slice(-1))"
+        >
+          <option
+            v-for="plugin in availablePlugins"
+            :key="plugin.key"
+            :value="plugin.key"
+          >
+            {{ plugin.name || plugin.key }}
+          </option>
+        </select>
+        <p
+          v-if="pluginError"
+          role="alert"
+          class="text-sm text-[var(--status-danger)]"
+        >
+          {{ pluginError }}
+        </p>
+      </FormField>
       <!-- ══ Section: 基本信息 ══════════════════════════════════════════ -->
       <section class="channel-form-section channel-form-section--basic">
         <div class="channel-form-section-header">
@@ -558,7 +814,7 @@ async function submit() {
           <div>
             <div
               v-if="editing === null"
-              class="mb-1.5 flex items-center justify-between"
+              class="mb-1.5 flex flex-wrap items-center justify-between gap-2"
             >
               <p class="text-sm font-medium text-[var(--text-secondary)]">
                 {{ t('channels.addMode') }}
@@ -572,6 +828,7 @@ async function submit() {
                   v-for="mode in [
                     { value: 'single', label: t('channels.addModeSingle') },
                     { value: 'multi', label: t('channels.addModeMulti') },
+                    { value: 'multiKey', label: t('channels.addModeMultiKey') },
                   ]"
                   :key="mode.value"
                   type="button"
@@ -583,7 +840,9 @@ async function submit() {
                       ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-sm'
                       : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
                   "
-                  @click="form.addMode = mode.value as 'single' | 'multi'"
+                  @click="
+                    form.addMode = mode.value as 'single' | 'multi' | 'multiKey'
+                  "
                 >
                   {{ mode.label }}
                 </button>
@@ -596,12 +855,12 @@ async function submit() {
                 t('channels.apiKeyLabel') + (editing === null ? ' *' : '')
               "
               :hint="
-                form.addMode === 'multi'
+                form.addMode !== 'single' || existingMultiKey
                   ? t('channels.apiKeyMultiHint')
                   : t('channels.apiKeyHint')
               "
             >
-              <template v-if="form.addMode === 'single'">
+              <template v-if="form.addMode === 'single' && !existingMultiKey">
                 <TextInput
                   v-model="form.key"
                   type="password"
@@ -621,6 +880,41 @@ async function submit() {
                 />
               </template>
             </FormField>
+            <div
+              v-if="form.addMode === 'multiKey' || existingMultiKey"
+              class="mt-3 grid gap-3 sm:grid-cols-2"
+            >
+              <FormField :label="t('channels.multiKeyStrategy')"
+                ><select
+                  v-model="multiKeyMode"
+                  :aria-label="t('channels.multiKeyStrategy')"
+                  :disabled="!canSensitiveWrite"
+                  class="channel-form-textarea"
+                >
+                  <option value="random">
+                    {{ t('channels.multiKeyRandom') }}
+                  </option>
+                  <option value="polling">
+                    {{ t('channels.multiKeyPolling') }}
+                  </option>
+                </select></FormField
+              >
+              <FormField
+                v-if="existingMultiKey"
+                :label="t('channels.keyUpdateMode')"
+                ><select
+                  v-model="keyMode"
+                  :aria-label="t('channels.keyUpdateMode')"
+                  :disabled="!canSensitiveWrite"
+                  class="channel-form-textarea"
+                >
+                  <option value="append">{{ t('channels.keyAppend') }}</option>
+                  <option value="replace">
+                    {{ t('channels.keyReplace') }}
+                  </option>
+                </select></FormField
+              >
+            </div>
           </div>
         </div>
       </section>
@@ -918,7 +1212,86 @@ async function submit() {
           />
         </button>
 
-        <div v-show="advancedOpen" class="channel-form-section-body">
+        <div v-show="advancedOpen" class="channel-form-section-body space-y-4">
+          <FormField
+            v-for="field in visibleFieldSettings"
+            :key="field.key"
+            :label="t(`channels.fieldSettingsLabels.${field.key}`)"
+            :hint="t(`channels.fieldSettingsHints.${field.key}`)"
+          >
+            <ConsoleToggle
+              :model-value="fieldSettings[field.key] === true"
+              :label="t(`channels.fieldSettingsLabels.${field.key}`)"
+              :disabled="saving || !canSensitiveWrite"
+              @update:model-value="fieldSettings[field.key] = $event"
+            />
+          </FormField>
+          <FormField
+            :label="t('channels.passThroughBody')"
+            :hint="t('channels.passThroughBodyHint')"
+            ><ConsoleToggle
+              v-model="passThroughBody"
+              :label="t('channels.passThroughBody')"
+              :disabled="saving || !canSensitiveWrite"
+          /></FormField>
+          <FormField
+            :label="t('channels.parameterOverrides')"
+            :hint="t('channels.jsonOverridesHint')"
+          >
+            <textarea
+              v-model="paramOverride"
+              :disabled="saving || !canSensitiveWrite"
+              :aria-label="t('channels.parameterOverrides')"
+              class="channel-form-textarea font-mono"
+              rows="4"
+            />
+          </FormField>
+          <FormField
+            :label="t('channels.headerOverrides')"
+            :hint="t('channels.jsonOverridesHint')"
+          >
+            <textarea
+              v-model="headerOverride"
+              :disabled="saving || !canSensitiveWrite"
+              :aria-label="t('channels.headerOverrides')"
+              class="channel-form-textarea font-mono"
+              rows="4"
+            />
+          </FormField>
+          <p
+            v-if="!validOverrides"
+            role="alert"
+            class="text-sm text-[var(--status-danger)]"
+          >
+            {{ t('channels.invalidOverrides') }}
+          </p>
+          <FormField
+            v-if="supportsResponsesWebSocket"
+            :label="t('channels.responsesWebSocket')"
+            :hint="t('channels.responsesWebSocketHint')"
+          >
+            <ConsoleToggle
+              v-model="responsesWebSocket"
+              :label="t('channels.responsesWebSocket')"
+              :disabled="saving || !canSensitiveWrite"
+            />
+          </FormField>
+          <FormField
+            v-if="isAdvancedChannel"
+            :label="t('channels.advancedRoutes')"
+            :hint="
+              t(
+                form.type === 58
+                  ? 'channels.advancedRoutesHint'
+                  : 'channels.advancedPresetHint'
+              )
+            "
+          >
+            <AdvancedChannelEditor
+              v-model="advancedConfig"
+              :disabled="saving || !canSensitiveWrite || form.type !== 58"
+            />
+          </FormField>
           <div class="grid gap-4 sm:grid-cols-2">
             <FormField :label="t('channels.priority')">
               <input
@@ -1012,6 +1385,12 @@ async function submit() {
       </div>
     </template>
   </ConsoleModal>
+  <FetchedModelsDialog
+    :open="open && modelPickerOpen"
+    :models="fetchedModels"
+    @close="modelPickerOpen = false"
+    @apply="applyFetchedModels"
+  />
 </template>
 
 <style scoped>

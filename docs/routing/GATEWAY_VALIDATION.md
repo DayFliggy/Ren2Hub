@@ -22,6 +22,8 @@ go build ./...
 
 涉及 RelayKit 或公共契约时，进入 `relaykit` 设置 `GOWORK=off`，单独运行 `go test ./... -timeout 60s` 和 `go build ./...`，随后恢复环境。最终全模块测试可使用 `go test -p 4 ./... -timeout 60s`。同代码和环境已通过的包不必因其他包结束而重复运行。
 
+rc.40 的协议、原生 Responses WebSocket、逐路由透传和响应模型回归按 [协议证据](../upstream/rc40-protocol-evidence.json) 的命令拆分执行，避免把多个测试集塞进同一 60 秒包预算。WS 的最小 race 名单也列于该文件。本地 httptest、SQLite、miniredis 和隔离子进程排空只证明相应边界；真实供应商、运行二进制及部署容器停机链路需要独立证据。协议与状态 API 字段见 [协议合同](../upstream/RC40_PROTOCOL_CONTRACT.md)。
+
 ## 本地依赖
 
 复跑前准备专用隔离实例，核对数据库版本、监听端口和连接目标，不假定之前使用的进程仍在运行。测试创建临时数据库/表并按夹具清理；每次结果只证明记录的服务端版本与测试条件。所用版本和实际运行的套件应写入当次报告，不能由历史三库通过推导当前环境可用。

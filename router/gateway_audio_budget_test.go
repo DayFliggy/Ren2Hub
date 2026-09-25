@@ -83,21 +83,17 @@ func TestGatewaySpeechFinalInputAccounting(t *testing.T) {
 				var token model.Token
 				require.NoError(t, model.DB.First(&user, 1).Error)
 				require.NoError(t, model.DB.First(&token, 1).Error)
-				wantCharge := 400
+				held := 400
 				if insufficient {
-					wantCharge = 0
+					held = 0
 				}
-				assert.EqualValues(t, 10000000-wantCharge, user.Quota)
-				assert.EqualValues(t, wantCharge, user.UsedQuota)
-				assert.EqualValues(t, quota-wantCharge, token.RemainQuota)
+				assert.EqualValues(t, 10000000-held, user.Quota)
+				assert.Zero(t, user.UsedQuota, "request text cannot substitute for missing provider usage")
+				assert.EqualValues(t, held, user.ReservedQuota)
+				assert.EqualValues(t, quota-held, token.RemainQuota)
 				var logs []model.Log
 				require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
-				if insufficient {
-					assert.Empty(t, logs)
-				} else {
-					require.Len(t, logs, 1)
-					assert.Equal(t, 400, logs[0].PromptTokens)
-				}
+				assert.Empty(t, logs)
 			})
 		}
 	}

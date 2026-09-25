@@ -50,7 +50,7 @@ func TestGatewayAdmissionSharesUserAcrossGenerationEntrypoints(t *testing.T) {
 		{"suno-continuation", "POST", "/suno/submit/music", `{"task_id":"public-task","continue_clip_id":"clip"}`, true},
 		{"midjourney", "POST", "/mj/submit/imagine", `{"prompt":"a cat"}`, true},
 		{"realtime", "GET", "/v1/realtime?model=gpt-realtime", "", true},
-		{"suno-query", "GET", "/suno/fetch/public-task", "", false},
+		{"video-query", "GET", "/v1/videos/public-task", "", false},
 		{"midjourney-query", "GET", "/mj/task/public-task/fetch", "", false},
 		{"notification", "POST", "/mj/notify", "{}", false},
 	}

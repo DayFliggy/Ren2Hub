@@ -207,7 +207,11 @@ func prepareLiveRouteSend(c *gin.Context, info *relaycommon.RelayInfo, state *ro
 	if c.GetInt(liveRouteAttemptCountKey) >= service.DefaultTotalAttempts {
 		return stopLiveRouteRetry(c, errors.New("route send attempt limit exceeded"))
 	}
-	if err := service.ValidateGatewayChannelIdentity(c, info.ChannelId); err != nil {
+	validateIdentity := service.ValidateGatewayChannelIdentity
+	if info.IsChannelTest {
+		validateIdentity = service.ValidateGatewayChannelProbeIdentity
+	}
+	if err := validateIdentity(c, info.ChannelId); err != nil {
 		return types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
 	}
 	var retryTicket *service.RetryTicket
@@ -264,6 +268,9 @@ func prepareLiveRouteSend(c *gin.Context, info *relaycommon.RelayInfo, state *ro
 		if err := service.PrepareBillingForSelectedModel(c, info); err != nil {
 			return err
 		}
+	}
+	if err := helper.PinBillingPrice(c, info); err != nil {
+		return err
 	}
 	// Cancellation during qualification or billing must not cross the send boundary.
 	if err := c.Request.Context().Err(); err != nil {
@@ -482,7 +489,8 @@ func observeLiveRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, outcom
 		usageKnown := false
 		if info != nil && info.ResponseUsage != nil {
 			actualTokens = int64(info.ResponseUsage.TotalTokens)
-			usageKnown = true
+			facts := service.NormalizedBillingUsage(info.ResponseUsage, "")
+			usageKnown = facts.Complete && !facts.Estimated && !facts.Invalid && info.ResponseUsage.UsageSource != "missing"
 		}
 		if err := service.FinishGatewayProviderRate(ctx, common.RDB, *state.rate, actualTokens, outcome.Acceptance != service.AttemptNotSent, usageKnown, outcome.RetryAfter); err != nil {
 			recordLiveRouteGovernanceFailure(c, state.attempt.ChannelID, "provider_rate_finalize_failed", err)

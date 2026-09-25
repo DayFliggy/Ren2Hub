@@ -20,6 +20,7 @@ describe('console navigation', () => {
       'order-management',
       'billing-reconciliations',
       'system-settings',
+      'task-plugins',
       'models-admin',
       'system-info',
     ])

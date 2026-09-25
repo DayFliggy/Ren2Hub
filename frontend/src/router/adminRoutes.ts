@@ -2,6 +2,17 @@ import type { RouteRecordRaw } from 'vue-router'
 
 export const adminRoutes: RouteRecordRaw[] = [
   {
+    path: '/task-plugins',
+    name: 'task-plugins',
+    component: () => import('@/views/console/TaskPluginsView.vue'),
+    meta: {
+      requiresAdmin: true,
+      requiresRoot: true,
+      feature: 'taskPlugins',
+      protected: true,
+    },
+  },
+  {
     path: '/billing/reconciliations',
     name: 'billing-reconciliations',
     component: () => import('@/views/admin/BillingReconciliationsView.vue'),

@@ -1,6 +1,8 @@
 package router
 
 import (
+	"strings"
+
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
@@ -11,6 +13,7 @@ import (
 )
 
 func SetRelayRouter(router *gin.Engine) {
+	SetTaskPluginProtocolRouter(router)
 	router.Use(middleware.CORS())
 	router.Use(middleware.DecompressRequestMiddleware())
 	router.Use(middleware.BodyStorageCleanup()) // 清理请求体存储
@@ -67,6 +70,7 @@ func SetRelayRouter(router *gin.Engine) {
 		playgroundRouter.POST("/chat/completions", controller.Playground)
 	}
 	relayV1Router := router.Group("/v1")
+	relayV1Router.Use(rejectUnimplementedTokenCount)
 	relayV1Router.Use(middleware.RouteTag("relay"))
 	relayV1Router.Use(middleware.SystemPerformanceCheck())
 	relayV1Router.Use(middleware.TokenAuth())
@@ -85,6 +89,8 @@ func SetRelayRouter(router *gin.Engine) {
 	relayV1Router.POST("/fine-tunes/:id/cancel", controller.RelayNotImplemented)
 	relayV1Router.GET("/fine-tunes/:id/events", controller.RelayNotImplemented)
 	relayV1Router.DELETE("/models/:model", controller.RelayNotImplemented)
+	// The handshake authenticates once; every create owns its own admission.
+	relayV1Router.GET("/responses", controller.ResponsesWebSocket)
 	relayV1Router.Use(middleware.ModelRequestRateLimit())
 	relayV1Router.Use(middleware.GatewayAdmission())
 	{
@@ -114,9 +120,6 @@ func SetRelayRouter(router *gin.Engine) {
 		})
 
 		// response related routes
-		httpRouter.POST("/responses", func(c *gin.Context) {
-			controller.Relay(c, types.RelayFormatOpenAIResponses)
-		})
 		httpRouter.POST("/responses/compact", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAIResponsesCompaction)
 		})
@@ -127,12 +130,6 @@ func SetRelayRouter(router *gin.Engine) {
 		})
 
 		// image related routes
-		httpRouter.POST("/images/generations", func(c *gin.Context) {
-			controller.Relay(c, types.RelayFormatOpenAIImage)
-		})
-		httpRouter.POST("/images/edits", func(c *gin.Context) {
-			controller.Relay(c, types.RelayFormatOpenAIImage)
-		})
 
 		// embedding related routes
 		httpRouter.POST("/embeddings", func(c *gin.Context) {
@@ -181,17 +178,8 @@ func SetRelayRouter(router *gin.Engine) {
 	registerMjRouterGroup(relayMjModeRouter)
 	//relayMjRouter.Use()
 
-	relaySunoRouter := router.Group("/suno")
-	relaySunoRouter.Use(middleware.RouteTag("relay"))
-	relaySunoRouter.Use(middleware.SystemPerformanceCheck())
-	relaySunoRouter.Use(middleware.TokenAuth(), middleware.ModelRequestRateLimit(), middleware.GatewayAdmission(), middleware.Distribute())
-	{
-		relaySunoRouter.POST("/submit/:action", controller.RelayTask)
-		relaySunoRouter.POST("/fetch", controller.RelayTaskFetch)
-		relaySunoRouter.GET("/fetch/:id", controller.RelayTaskFetch)
-	}
-
 	relayGeminiRouter := router.Group("/v1beta")
+	relayGeminiRouter.Use(rejectUnimplementedTokenCount)
 	relayGeminiRouter.Use(middleware.RouteTag("relay"))
 	relayGeminiRouter.Use(middleware.SystemPerformanceCheck())
 	relayGeminiRouter.Use(middleware.TokenAuth())
@@ -203,6 +191,15 @@ func SetRelayRouter(router *gin.Engine) {
 		relayGeminiRouter.POST("/models/*path", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatGemini)
 		})
+	}
+}
+
+// Native token counting has no implementation. Reject wildcard Gemini actions
+// before authentication, channel selection or billing can turn them into generation.
+func rejectUnimplementedTokenCount(c *gin.Context) {
+	if strings.HasSuffix(c.Request.URL.Path, ":countTokens") || c.Request.URL.Path == "/v1/messages/count_tokens" {
+		controller.RelayNotFound(c)
+		c.Abort()
 	}
 }
 

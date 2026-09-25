@@ -109,7 +109,7 @@ func TestRouteAttemptEvidenceExcludesUnsentAndProviderText(t *testing.T) {
 		Origin: service.AttemptOriginAdmission, StatusCode: http.StatusTooManyRequests,
 		Acceptance: service.AttemptNotSent, RetryPermission: service.AttemptRetryForbidden,
 	})
-	// Compact fallback can replace the selection, but not the logical history.
+	// Channel reselection can replace the selection, but not the logical history.
 	c.Set("route_live_selection", selection)
 	info.UpstreamSent = true
 	beginLiveRouteUpstreamAttempt(c, 12)

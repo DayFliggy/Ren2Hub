@@ -6,10 +6,9 @@ import (
 
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	"gorm.io/gorm"
 )
 
@@ -17,22 +16,7 @@ import (
 // A token without a private profile uses automatic routing; missing candidates
 // or infrastructure never invoke another selector.
 func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
-	if input.RequestPath == "/v1/responses/compact" {
-		input.RequestModel = ratio_setting.WithCompactModelSuffix(input.RequestModel)
-	}
-	if input.RequestPath == "/v1/responses/compact" && input.CompactStage == relaycommon.CompactAttemptNone {
-		input.CompactStage = relaycommon.CompactAttemptBase
-		if ratio_setting.IsGPTCompactBaseModel(ratio_setting.CompactBaseModelName(input.RequestModel)) {
-			input.CompactStage = relaycommon.CompactAttemptExact
-		}
-		selection, err := SelectLiveTokenRoute(input)
-		if input.CompactStage == relaycommon.CompactAttemptExact && errors.Is(err, ErrRouteSelectionUnavailable) {
-			input.CompactStage = relaycommon.CompactAttemptBase
-			return SelectLiveTokenRoute(input)
-		}
-		return selection, err
-	}
-	selection := LiveRouteSelection{Source: RouteSourceUnavailable, CompactStage: input.CompactStage, SpecificChannelID: input.SpecificChannelID, ConversionPlans: make(map[int]relayconvert.ConversionPlan)}
+	selection := LiveRouteSelection{Source: RouteSourceUnavailable, SpecificChannelID: input.SpecificChannelID, ConversionPlans: make(map[int]relayconvert.ConversionPlan)}
 	if !input.CapabilityEnabled || model.DB == nil || input.UserID <= 0 || (input.TokenID <= 0 && !input.IsPlayground) {
 		return selection, ErrLiveRouteProfileUnavailable
 	}
@@ -86,12 +70,8 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 		return selection, ErrRouteSelectionUnavailable
 	}
 	models := []string{modellab.NormalizeModel(input.RequestModel)}
-	if input.CompactStage != relaycommon.CompactAttemptNone {
-		base := ratio_setting.CompactBaseModelName(input.RequestModel)
-		models = []string{modellab.NormalizeModel(base)}
-		if input.CompactStage == relaycommon.CompactAttemptExact {
-			models = append([]string{modellab.NormalizeModel(ratio_setting.WithCompactModelSuffix(base))}, models...)
-		}
+	if base := modellab.NormalizeModel(reasoning.BaseModelName(input.RequestModel)); base != models[0] {
+		models = append(models, base)
 	}
 	entitlements, err := liveRouteEntitlements(input.Context, input.UserID)
 	if err != nil {
@@ -142,19 +122,6 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 	if err != nil {
 		return selection, err
 	}
-	compactAbilities := make(map[int]map[string]bool)
-	if input.CompactStage != relaycommon.CompactAttemptNone && len(channelIDs) > 0 {
-		var abilities []model.Ability
-		if err := model.DB.WithContext(input.Context).Where("channel_id IN ? AND enabled = ?", channelIDs, true).Find(&abilities).Error; err != nil {
-			return selection, err
-		}
-		for _, ability := range abilities {
-			if compactAbilities[ability.ChannelId] == nil {
-				compactAbilities[ability.ChannelId] = make(map[string]bool)
-			}
-			compactAbilities[ability.ChannelId][ability.Model] = true
-		}
-	}
 	candidates := make([]RouteSelectionCandidate, 0)
 	byChannel := make(map[int]int)
 	for _, lookupModel := range models {
@@ -188,7 +155,7 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 				AbilityEnabled: abilityAccess[capability.ID].Enabled,
 				RequestModel:   input.RequestModel, NormalizedModel: modellab.NormalizeModel(input.RequestModel),
 				TokenLimitEnabled: input.TokenModelLimitEnabled, TokenLimit: input.TokenModelLimit,
-				RequestPath: input.RequestPath, EndpointType: endpointTypeForRequestPath(input.RequestPath),
+				RequestPath: input.RequestPath, EndpointType: endpointTypeForTaskRequest(input.RequestPath, input.ExpectedTaskPluginKey),
 				Entitled: entitled, RequireSnapshot: true, RequireEndpoint: true,
 				Advanced: indexed.Advanced,
 			})
@@ -208,14 +175,17 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 					candidate.FilterReason = "entry_disabled"
 				}
 			}
+			if !TaskPluginCandidateChannelEligible(channel, input.ExpectedTaskPluginKey, input.TaskPluginCandidateKeys) {
+				candidate.FilterReason = RouteFilterPathUnsupported
+			}
+			if input.ResponsesWebSocketRequired && !ChannelSupportsResponsesWebSocket(channel, input.RequestModel) {
+				candidate.FilterReason = RouteFilterPathUnsupported
+			}
 			if input.NativeResponsesRequired && !ChannelSupportsNativeResponses(channel, input.RequestModel) {
 				candidate.FilterReason = RouteFilterPathUnsupported
 			}
-			if input.CompactStage != relaycommon.CompactAttemptNone {
-				base := ratio_setting.CompactBaseModelName(input.RequestModel)
-				if !compactChannelSupportsStage(channel, compactAbilities[channel.Id], base, ratio_setting.WithCompactModelSuffix(base), input.CompactStage) {
-					candidate.FilterReason = RouteFilterPathUnsupported
-				}
+			if input.RequestPath == "/v1/responses/compact" && !ChannelSupportsCompactEndpoint(channel, input.RequestModel) {
+				candidate.FilterReason = RouteFilterPathUnsupported
 			}
 			hasKey := false
 			for _, keyIndex := range channel.GetEnabledKeyIndexes() {
@@ -229,7 +199,7 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			if reason := input.ExcludedChannelIDs[channel.Id]; reason != "" {
 				candidate.FilterReason = reason
 			}
-			if candidate.FilterReason == "" && input.Requirements != nil {
+			if candidate.FilterReason == "" && input.Requirements != nil && input.ExpectedTaskPluginKey == "" {
 				plan, planErr := PlanChannelConversion(*input.Requirements, channel, input.RequestPath, candidate.ActualModel, input.ConversionPolicy)
 				if planErr != nil {
 					candidate.FilterReason = RoutePreviewFilterConversion

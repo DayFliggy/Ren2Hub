@@ -124,6 +124,14 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			}
 		}
 	}
+	if previous := relayInfo.PriceData.Usage; previous != nil && previous.Source == "provider_image_count" && previous.Complete && !previous.Estimated {
+		onlyQuantities := relayInfo.PriceData.Quote != nil && imageOrCallOnlyPrice(relayInfo.PriceData.Quote.PriceVersion)
+		if onlyQuantities {
+			facts.Source = "provider_image_count"
+			facts.Complete = true
+			facts.Estimated = false
+		}
+	}
 	relayInfo.PriceData.Usage = &facts
 	result, err := billing.Calculate(relayInfo.PriceData.Quote, facts)
 	if err != nil {
@@ -201,7 +209,93 @@ func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) 
 	return "openai"
 }
 
+func imageOrCallOnlyPrice(version billing.PriceVersion) bool {
+	if version.UsesImageCount() {
+		used := billingexpr.UsedVars(version.Expression)
+		for _, name := range []string{"p", "c", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao"} {
+			if used[name] {
+				return false
+			}
+		}
+	} else if version.Mode != billing.ModeUnitPrice || len(version.Prices) == 0 {
+		return false
+	}
+	for _, price := range version.Prices {
+		if price.Quantity != "calls" && price.Quantity != "images" {
+			return false
+		}
+	}
+	return true
+}
+
+// TextUsageReadyForSettlement requires an explicit successful protocol terminal
+// for a stream and actual provider counters for token-dependent prices.
+func TextUsageReadyForSettlement(ctx *gin.Context, info *relaycommon.RelayInfo, usage *dto.Usage) bool {
+	if info == nil || info.PriceData.Quote == nil {
+		return false
+	}
+	terminalKnown := !info.IsStream && info.HasValidOutput()
+	// Binary audio also records a protocol terminal. Delivered bytes alone do
+	// not confirm a completed request when that transport ended abnormally.
+	if info.StreamStatus != nil {
+		terminalKnown = info.StreamStatus.IsNormalEnd()
+	}
+	explicitTerminal := false
+	if value, exists := ctx.Get("response_termination"); exists {
+		if terminal, ok := value.(types.ResponseTermination); ok && terminal.Kind != "" {
+			explicitTerminal = true
+			terminalKnown = terminal.IsSuccessful()
+		}
+	}
+	if info.IsStream && !explicitTerminal && !terminalKnown && info.StreamStatus != nil {
+		terminalKnown = info.StreamStatus.IsNormalEnd()
+	}
+	if !terminalKnown {
+		return false
+	}
+	version := info.PriceData.Quote.PriceVersion
+	if version.Mode == billing.ModeFree {
+		return true
+	}
+	quantityOnly := imageOrCallOnlyPrice(version)
+	if version.UsesImageCount() {
+		facts := info.PriceData.Usage
+		if facts == nil || !facts.Complete || facts.Estimated || facts.Source != "provider_image_count" {
+			return false
+		}
+		count, err := strconv.ParseInt(facts.Quantities["images"], 10, 64)
+		if err != nil || count < 1 || count > int64(dto.MaxImageN) {
+			return false
+		}
+	}
+	if quantityOnly {
+		if !info.HasValidOutput() {
+			return false
+		}
+		for _, price := range version.Prices {
+			if price.Quantity == "images" {
+				facts := info.PriceData.Usage
+				if facts == nil || !facts.Complete || facts.Estimated || facts.Source != "provider_image_count" {
+					return false
+				}
+				count, err := strconv.ParseInt(facts.Quantities["images"], 10, 64)
+				if err != nil || count < 0 || count > int64(dto.MaxImageN) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	facts := NormalizedBillingUsage(usage, usageSemanticFromUsage(info, usage))
+	return usage != nil && !facts.Estimated && facts.Complete && !facts.Invalid &&
+		(usage.UsageSource != "" || dto.HasOpenAIUsageTokens(usage) || usage.BillingUsage != nil)
+}
+
 func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []string) {
+	if !TextUsageReadyForSettlement(ctx, relayInfo, usage) {
+		HoldUnconfirmedResponseUsage(ctx, relayInfo, usage)
+		return
+	}
 	originUsage := usage
 	billingUsage := effectiveBillingUsage(usage)
 	if usage == nil {

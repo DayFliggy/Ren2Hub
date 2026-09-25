@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -27,7 +28,6 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	hosttypes "github.com/QuantumNous/new-api/types"
 
 	"github.com/samber/lo"
@@ -46,9 +46,6 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	normalized := strings.TrimSpace(endpointType)
 	if normalized != "" {
 		return normalized
-	}
-	if strings.HasSuffix(modelName, ratio_setting.CompactModelSuffix) {
-		return string(constant.EndpointTypeOpenAIResponseCompact)
 	}
 	if channel != nil && channel.Type == constant.ChannelTypeCodex {
 		return string(constant.EndpointTypeOpenAIResponse)
@@ -73,7 +70,7 @@ func resolveChannelTestUserID(c *gin.Context) (int, error) {
 	return rootUser.Id, nil
 }
 
-func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) testResult {
+func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) (outcome testResult) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -146,18 +143,11 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 			requestPath = "/v1/responses"
 		}
 
-		// responses compaction models (must use /v1/responses/compact)
-		if strings.HasSuffix(testModel, ratio_setting.CompactModelSuffix) {
-			requestPath = "/v1/responses/compact"
-		}
 	}
 	// Gemini 原生流式通过 URL action（:streamGenerateContent）表达而非请求体字段，
 	// GeminiChatRequest.IsStream 依据请求 URL 判定，合成请求路径需与生产入口保持一致
 	if isStream && constant.EndpointType(endpointType) == constant.EndpointTypeGemini {
 		requestPath = strings.Replace(requestPath, ":generateContent", ":streamGenerateContent", 1)
-	}
-	if strings.HasPrefix(requestPath, "/v1/responses/compact") {
-		testModel = ratio_setting.WithCompactModelSuffix(testModel)
 	}
 
 	c.Request = httptest.NewRequestWithContext(ctx, http.MethodPost, requestPath, nil)
@@ -240,17 +230,14 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 
 	request := buildTestRequest(testModel, endpointType, channel, isStream)
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/responses/compact") {
-		requestedModel := ratio_setting.CompactBaseModelName(testModel)
-		stage := service.SpecificChannelCompactStage(channel, requestedModel)
-		if stage == relaycommon.CompactAttemptNone {
-			err := fmt.Errorf("channel does not support /v1/responses/compact for model %s", requestedModel)
+		if !service.ChannelSupportsCompactEndpoint(channel, testModel) {
+			err := fmt.Errorf("channel does not support /v1/responses/compact for model %s", testModel)
 			return testResult{
 				context:     c,
 				localErr:    err,
 				newAPIError: types.NewError(err, types.ErrorCodeInvalidRequest),
 			}
 		}
-		service.SetCompactStage(c, stage)
 	}
 
 	info, err := relaycommon.GenRelayInfo(c, relayFormat, request, nil)
@@ -452,18 +439,21 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeModelPriceError)}
 	}
 	info.DeferBillingToSend = true
-	if err := prepareRelayOutboundPrice(c, info, bytes.NewReader(jsonData)); err != nil {
-		return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeModelPriceError)}
+	finish, err := prepareChannelTestAdmission(c, info)
+	if err != nil {
+		return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeGetChannelFailed)}
 	}
-	priceData = info.PriceData
-	if apiErr := service.PrepareBillingForSelectedModel(c, info); apiErr != nil {
-		return testResult{context: c, localErr: apiErr, newAPIError: apiErr}
-	}
-	defer func() { info.Billing.Refund(c) }()
+	defer finish()
+	defer func() {
+		observeLiveRouteAttempt(c, info, relayAttemptOutcome(c, info, outcome.newAPIError, tik, false))
+		if info.Billing != nil {
+			info.Billing.Refund(c)
+		}
+	}()
 	requestBody := bytes.NewBuffer(jsonData)
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
-	info.UpstreamSent = true
 	resp, err := adaptor.DoRequest(c, info, requestBody)
+	priceData = info.PriceData
 	if err != nil {
 		return testResult{
 			context:     c,
@@ -528,6 +518,12 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 	info.SetEstimatePromptTokens(usage.PromptTokens)
+	info.MarkValidOutput()
+	info.CaptureResponseUsage(usage, "text", nil)
+	if !service.TextUsageReadyForSettlement(c, info, usage) {
+		service.HoldUnconfirmedResponseUsage(c, info, usage)
+		return testResult{context: c, localErr: info.BillingSettlementError, newAPIError: types.NewError(info.BillingSettlementError, types.ErrorCodeModelPriceError)}
+	}
 
 	quota, tieredResult, settleErr := settleTestQuota(info, priceData, usage)
 	if settleErr != nil {
@@ -603,27 +599,16 @@ func buildTestLogOther(c *gin.Context, info *relaycommon.RelayInfo, priceData ho
 func coerceTestUsage(usageAny any, isStream bool, estimatePromptTokens int) (*dto.Usage, error) {
 	switch u := usageAny.(type) {
 	case *dto.Usage:
+		if u == nil {
+			return &dto.Usage{UsageSource: "missing"}, nil
+		}
 		return u, nil
 	case dto.Usage:
 		return &u, nil
 	case nil:
-		if !isStream {
-			return nil, errors.New("usage is nil")
-		}
-		usage := &dto.Usage{
-			PromptTokens: estimatePromptTokens,
-		}
-		usage.TotalTokens = usage.PromptTokens
-		return usage, nil
+		return &dto.Usage{UsageSource: "missing"}, nil
 	default:
-		if !isStream {
-			return nil, fmt.Errorf("invalid usage type: %T", usageAny)
-		}
-		usage := &dto.Usage{
-			PromptTokens: estimatePromptTokens,
-		}
-		usage.TotalTokens = usage.PromptTokens
-		return usage, nil
+		return nil, fmt.Errorf("invalid usage type: %T", usageAny)
 	}
 }
 
@@ -835,14 +820,6 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 		}
 	}
 
-	// Responses compaction models (must use /v1/responses/compact)
-	if strings.HasSuffix(model, ratio_setting.CompactModelSuffix) {
-		return &dto.OpenAIResponsesCompactionRequest{
-			Model: model,
-			Input: testResponsesInput,
-		}
-	}
-
 	// Responses-only models (e.g. codex series)
 	if strings.Contains(strings.ToLower(model), "codex") {
 		return &dto.OpenAIResponsesRequest{
@@ -960,11 +937,65 @@ type channelTestSummary struct {
 	Enabled   int `json:"enabled"`
 }
 
+type completedChannelTest struct {
+	channel      *model.Channel
+	result       testResult
+	milliseconds int64
+}
+
+func runChannelTestBatch(ctx context.Context, channels []*model.Channel, concurrency int, interval time.Duration, run func(context.Context, *model.Channel) testResult) <-chan completedChannelTest {
+	completed := make(chan completedChannelTest)
+	jobs := make(chan *model.Channel)
+	var workers sync.WaitGroup
+	for range min(max(concurrency, 1), 32) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for channel := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				start := time.Now()
+				result := run(ctx, channel)
+				completed <- completedChannelTest{channel, result, time.Since(start).Milliseconds()}
+			}
+		}()
+	}
+	go func() {
+		defer close(jobs)
+		for index, channel := range channels {
+			if ctx.Err() != nil {
+				return
+			}
+			if index > 0 && interval > 0 {
+				timer := time.NewTimer(interval)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case jobs <- channel:
+			}
+		}
+	}()
+	go func() { workers.Wait(); close(completed) }()
+	return completed
+}
+
 // performChannelTests runs the channel test loop synchronously, honoring ctx
 // cancellation so a system-task runner that loses its lease stops promptly. When
 // report is non-nil it is called after each channel with (processed, total) so
 // the system task can surface progress.
 func performChannelTests(ctx context.Context, channels []*model.Channel, testUserID int, allowDisable bool, report func(processed, total int)) channelTestSummary {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	channels = selectChannelsForAutomaticTest(channels, operation_setting.ChannelTestModeScheduledAll)
 	summary := channelTestSummary{}
 	var disableThreshold = int64(common.ChannelDisableThreshold * 1000)
 	if disableThreshold == 0 {
@@ -972,23 +1003,18 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 	}
 
 	total := len(channels)
-	for index, channel := range channels {
-		if ctx != nil && ctx.Err() != nil {
-			break
-		}
-		if report != nil {
-			report(index, total) // channels completed before this one
-		}
-		if channel.Status == common.ChannelStatusManuallyDisabled {
-			continue
-		}
+	if report != nil {
+		report(0, total)
+	}
+	results := runChannelTestBatch(ctx, channels, operation_setting.GetMonitorSetting().ChannelTestConcurrency, common.RequestInterval,
+		func(ctx context.Context, channel *model.Channel) testResult {
+			return testChannel(ctx, channel, testUserID, "", "", shouldUseStreamForAutomaticChannelTest(channel))
+		})
+	for completed := range results {
+		channel, result, milliseconds := completed.channel, completed.result, completed.milliseconds
 		isChannelEnabled := channel.Status == common.ChannelStatusEnabled
-		tik := time.Now()
-		result := testChannel(ctx, channel, testUserID, "", "", shouldUseStreamForAutomaticChannelTest(channel))
-		tok := time.Now()
-		milliseconds := tok.Sub(tik).Milliseconds()
-		if ctx != nil && ctx.Err() != nil {
-			break
+		if ctx.Err() != nil {
+			continue // Join active probes without treating cancellation as channel failure.
 		}
 
 		summary.Tested++
@@ -1009,7 +1035,7 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 			}
 		}
 
-		if newAPIError == nil {
+		if newAPIError == nil && result.localErr == nil {
 			summary.Succeeded++
 		} else {
 			summary.Failed++
@@ -1017,7 +1043,7 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 
 		// disable channel
 		if allowDisable && isChannelEnabled && shouldBanChannel && channel.GetAutoBan() {
-			processChannelError(result.context, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
+			processChannelError(result.context, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError, nil)
 			summary.Disabled++
 		}
 
@@ -1028,20 +1054,9 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 		}
 
 		channel.UpdateResponseTime(milliseconds)
-		if common.RequestInterval > 0 {
-			if ctx == nil {
-				time.Sleep(common.RequestInterval)
-			} else {
-				select {
-				case <-ctx.Done():
-					return summary
-				case <-time.After(common.RequestInterval):
-				}
-			}
+		if report != nil {
+			report(summary.Tested, total)
 		}
-	}
-	if report != nil && (ctx == nil || ctx.Err() == nil) {
-		report(total, total) // mark complete only when the full set was tested
 	}
 	return summary
 }

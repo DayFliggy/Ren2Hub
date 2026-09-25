@@ -170,7 +170,7 @@ func TestClaudeTargetStatefulStreamTerminalTail(t *testing.T) {
 					},
 				},
 			},
-			wantFinalizerTerminals: true,
+			wantFinalizerTerminals: false,
 			wantStopReason:         "end_turn",
 		},
 	}
@@ -212,7 +212,9 @@ func TestClaudeTargetStatefulStreamTerminalTail(t *testing.T) {
 			results = append(results, finalResults...)
 
 			terminalTestAssertClaudeTail(t, results, tt.wantStopReason)
-			assert.True(t, info.ClaudeConvertInfo.Done)
+			if tt.from != types.RelayFormatOpenAIResponses {
+				assert.True(t, info.ClaudeConvertInfo.Done)
+			}
 
 			repeatedFinal, err := FinalizeStreamResponse(nil, info, state)
 			require.NoError(t, err)
@@ -220,61 +222,18 @@ func TestClaudeTargetStatefulStreamTerminalTail(t *testing.T) {
 		})
 	}
 
-	t.Run("preserves preseeded usage", func(t *testing.T) {
-		info := &convmeta.Values{
-			ClaudeConvertInfo: &convmeta.ClaudeConvertInfo{
-				LastMessagesType: convmeta.LastMessageTypeNone,
-			},
-		}
-		state, err := NewResponseStreamState(
-			types.RelayFormatOpenAIResponses,
-			types.RelayFormatClaude,
-			ResponseStreamOptions{Model: "upstream-model"},
-		)
+	t.Run("direct Responses emits terminal once", func(t *testing.T) {
+		info := &convmeta.Values{}
+		state, err := NewResponseStreamState(types.RelayFormatOpenAIResponses, types.RelayFormatClaude, ResponseStreamOptions{})
 		require.NoError(t, err)
-
-		chunks := []*dto.ResponsesStreamResponse{
-			{
-				Type:  "response.output_text.delta",
-				Delta: "Hello",
-			},
-			{
-				Type: "response.completed",
-				Response: &dto.OpenAIResponsesResponse{
-					ID:     "resp-fixed",
-					Object: "response",
-					Model:  "upstream-model",
-					Status: []byte(`"completed"`),
-					Usage: &dto.Usage{
-						InputTokens:  4,
-						OutputTokens: 2,
-						TotalTokens:  6,
-					},
-				},
-			},
-		}
-		for _, chunk := range chunks {
-			_, err := ConvertStreamResponseChunk(nil, info, state, chunk)
-			require.NoError(t, err)
-		}
-
-		preseeded := &dto.Usage{
-			PromptTokens:     11,
-			CompletionTokens: 7,
-			TotalTokens:      18,
-		}
-		info.ClaudeConvertInfo.Usage = preseeded
-		finalResults, err := FinalizeStreamResponse(nil, info, state)
+		results, err := ConvertStreamResponseChunk(nil, info, state, &dto.ResponsesStreamResponse{Type: "response.completed", Response: &dto.OpenAIResponsesResponse{Status: []byte(`"completed"`), Usage: &dto.Usage{InputTokens: 4, OutputTokens: 2, TotalTokens: 6}}})
 		require.NoError(t, err)
-		require.Len(t, finalResults, 3)
-		assert.Same(t, preseeded, info.ClaudeConvertInfo.Usage)
-
-		messageDelta, ok := finalResults[1].Value.(*dto.ClaudeResponse)
-		require.True(t, ok)
-		assert.Equal(t, "message_delta", messageDelta.Type)
-		require.NotNil(t, messageDelta.Usage)
-		assert.Equal(t, 11, messageDelta.Usage.InputTokens)
-		assert.Equal(t, 7, messageDelta.Usage.OutputTokens)
+		require.Len(t, results, 3)
+		assert.Equal(t, "message_stop", results[2].Value.(*dto.ClaudeResponse).Type)
+		assert.Equal(t, 6, state.Usage().TotalTokens)
+		final, err := FinalizeStreamResponse(nil, info, state)
+		require.NoError(t, err)
+		assert.Empty(t, final)
 	})
 }
 

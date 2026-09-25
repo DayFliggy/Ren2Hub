@@ -1,0 +1,1435 @@
+{
+  "schema_version": 1,
+  "verified_date": "2026-09-25",
+  "target_upstream": "d04c118c8803f49e0c9bab74dcf5b5efeab9464a",
+  "catalog": "docs/upstream/rc40-commits.json",
+  "scope": [
+    "P2",
+    "P3",
+    "P6"
+  ],
+  "evidence_boundary": "仅记录协议工作包的本地运行与代码核对证据。整合工作区尚未提交。不会把静态覆盖、包通过或其它工作包结果冒充具体行为/生产验收。",
+  "validation_runs": [
+    {
+      "id": "relaykit_test",
+      "command": "GOWORK=off go test -timeout 60s ./...",
+      "cwd": "relaykit",
+      "log": ".local-tests/rc40-relaykit-protocol-tests.log",
+      "result": "passed",
+      "notes": "独立模块全部包；未变包复用Go缓存。"
+    },
+    {
+      "id": "relaykit_vet",
+      "command": "GOWORK=off go vet ./...",
+      "cwd": "relaykit",
+      "log": ".local-tests/rc40-relaykit-protocol-vet.log",
+      "result": "passed"
+    },
+    {
+      "id": "relaykit_build",
+      "command": "GOWORK=off go build ./...",
+      "cwd": "relaykit",
+      "log": ".local-tests/rc40-relaykit-protocol-build.log",
+      "result": "passed"
+    },
+    {
+      "id": "adapter_all",
+      "command": "go test -timeout 60s ./relay/helper ./relay/channel/openai ./relay/channel/claude ./relay/channel/ollama ./relay/channel/gemini -count=1",
+      "cwd": ".",
+      "log": ".local-tests/rc40-protocol-adapter-tests.log",
+      "result": "passed"
+    },
+    {
+      "id": "compact",
+      "command": "go test -timeout 60s ./service ./controller ./router -run '^(TestResponsesWS|TestGatewayResponsesWS|Test.*Compact)' -count=1",
+      "cwd": ".",
+      "log": ".local-tests/rc40-ws-compact-final-tests.log",
+      "result": "passed",
+      "notes": "此轮在WS重连identity补丁前；WS最新结果见response_model。Compact相关代码后续未更改。"
+    },
+    {
+      "id": "router_final",
+      "command": "go test -timeout 60s ./router -run '^TestGateway(ResponsesWS|UnsupportedTokenCount|ResponseTerminals|ToolImageHoist|ResponsesNamespace|GeminiPartial|ReasoningAndSearch)' -count=1",
+      "cwd": ".",
+      "log": ".local-tests/rc40-protocol-complete-tests.log",
+      "result": "passed"
+    },
+    {
+      "id": "response_model",
+      "command": "go test -timeout 60s ./relay ./router ./model ./service -run '^Test(ResponseModel|UserLogResponseModel|GatewayResponsesWS|ResponsesUsage)' -count=1",
+      "cwd": ".",
+      "log": ".local-tests/rc40-response-model-final-tests.log",
+      "result": "passed",
+      "notes": "包含最新WS重连/日志以及新响应模型19条handler路径。"
+    },
+    {
+      "id": "response_model_adapters",
+      "command": "go test -timeout 60s ./relay/channel/openai ./relay/channel/claude ./relay/channel/gemini ./relay/channel/ollama ./relay/common -count=1",
+      "cwd": ".",
+      "log": ".local-tests/rc40-response-model-adapter-tests.log",
+      "result": "passed"
+    },
+    {
+      "id": "root_selected",
+      "command": "复用主线 go test -json -timeout 60s ./... 的逐项pass事件",
+      "cwd": ".",
+      "log": ".local-tests/rc40-root-current.jsonl",
+      "result": "selected_tests_passed",
+      "notes": "整轮总体失败，绝不作为根模块全量通过证据。本文件仅引用其中明确pass的测试名；未变代码/条件复用。"
+    },
+    {
+      "id": "host_build",
+      "command": "go build ./controller ./router ./service",
+      "cwd": ".",
+      "log": ".local-tests/rc40-protocol-host-build.log",
+      "result": "passed",
+      "notes": "响应模型日志补丁前结果；最终编译已由response_model和response_model_adapters测试覆盖。"
+    },
+    {
+      "id": "host_vet",
+      "command": "go vet ./controller ./router ./service",
+      "cwd": ".",
+      "log": ".local-tests/rc40-protocol-host-vet.log",
+      "result": "passed",
+      "notes": "响应模型日志补丁前；主线负责最终全模块vet。"
+    },
+    {
+      "id": "provider_controls",
+      "command": "go test -timeout 60s ./relay/channel/openai -run '^TestOpenAIChatCapabilitiesUseMappedModelAndEffort$' -count=1",
+      "cwd": ".",
+      "log": ".local-tests/rc40-provider-controls-tests.log",
+      "result": "passed"
+    },
+    {
+      "id": "inference_status",
+      "command": "go test -timeout 60s ./controller -run '^Test(VLLMStatus|SGLangStatus|ParseVLLM)' -count=1",
+      "cwd": ".",
+      "log": ".local-tests/rc40-inference-status-tests.log",
+      "result": "passed_local_only",
+      "notes": "本地模拟服务通过；TestVLLMStatusLive 因未配置实例环境变量跳过。"
+    },
+    {
+      "id": "route_status",
+      "command": "go test -timeout 60s ./router -run '^Test(GatewayAdvancedCustomRoutePassthrough|InferenceChannelStatus)' -count=1",
+      "cwd": ".",
+      "log": ".local-tests/rc40-route-status-tests.log",
+      "result": "passed"
+    },
+    {
+      "id": "passthrough_host",
+      "command": "go test -timeout 60s ./service ./relay/common -run 'Test.*(Preview|PassThrough|Passthrough|ChannelMeta)' -count=1",
+      "cwd": ".",
+      "log": ".local-tests/rc40-passthrough-host-tests.log",
+      "result": "passed"
+    },
+    {
+      "id": "relaykit_final",
+      "command": "GOWORK=off go test -timeout 60s ./... && GOWORK=off go build ./...",
+      "cwd": "relaykit",
+      "log": ".local-tests/rc40-relaykit-final-tests.log",
+      "build_log": ".local-tests/rc40-relaykit-final-build.log",
+      "result": "passed",
+      "notes": "新增字段存在性与逐路由透传 helper 后独立模块复验。"
+    },
+    {
+      "id": "deployed_ws_provisional",
+      "command": "python3 scripts/server/test_ren2hub_ws.py --base http://127.0.0.1:3000 --credentials <private-json> --revision rc40-integration-validation --report <new-report.json>",
+      "cwd": "workspace root",
+      "log": ".local-tests/rc40-acceptance-http/ws-report-verified.json",
+      "result": "passed_provisional_binary",
+      "notes": "真实候选进程 + 临时SQLite/miniredis + 回环WS mock；1个上游连接/3次create/2次结算1500 quota，非最终SHA或部署容器验收。logout连接重置后旧access明确401，报告保留该异常与读回证据。"
+    },
+    {
+      "id": "ws_smoke_helpers",
+      "command": "python3 -m unittest -v test_ren2hub_ws_helpers",
+      "cwd": "workspace root/scripts/server",
+      "log": ".local-tests/rc40-ws-helper-tests.log",
+      "result": "passed",
+      "notes": "7项本地helper测试：真实升级与双向持久连接、帧mask/长度/fragment/ping/截断/限额，以及logout异常仅在旧凭据401时可确认。"
+    }
+  ],
+  "commits": [
+    {
+      "sha": "d6b5ce99de4930f348cda8dd3bb14f739ac38e22",
+      "version": "v1.0.0-rc.24",
+      "subject": "fix(relay): set Request.GetBody so the HTTP/2 transport can transparently retry after an upstream stream reset (#6249)",
+      "scope": "P3",
+      "disposition": "已有等价实现；保留统一发送前置约束",
+      "implementation_paths": [
+        "common/body_storage.go",
+        "relay/common/outbound_body.go",
+        "relay/channel/api_request.go"
+      ],
+      "validation_ids": [
+        "root_selected"
+      ],
+      "test_names": [
+        "TestApplyUpstreamBodyMetadataSetsReplayableMetadata",
+        "TestUpstreamGetBody_HTTP2RetryAfterUpstreamStreamReset"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "ea4f021012cddc52126123ab4ed8ced3df260b85",
+      "version": "v1.0.0-rc.24",
+      "subject": "refactor(relay): move replay metadata onto request bodies",
+      "scope": "P3",
+      "disposition": "请求体持有重放元数据，不绕过发送门禁",
+      "implementation_paths": [
+        "common/body_storage.go",
+        "relay/common/outbound_body.go"
+      ],
+      "validation_ids": [
+        "root_selected"
+      ],
+      "test_names": [
+        "TestApplyUpstreamBodyMetadataHidesRawBodyStorageCloser",
+        "TestApplyUpstreamBodyMetadataKeepsExistingGetBody"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "2399de97daf6ac76e5378a7c7c244ff0628a8186",
+      "version": "v1.0.0-rc.25",
+      "subject": "fix(ali): stop injecting top_p into requests that omit it (#6674)",
+      "scope": "P3",
+      "disposition": "未传top_p不注入默认值",
+      "implementation_paths": [
+        "relay/channel/ali/text.go"
+      ],
+      "validation_ids": [
+        "root_selected"
+      ],
+      "test_names": [
+        "TestRequestOpenAI2AliTopP"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "eab18a83579187f880139894dd9e7f06d1a492ce",
+      "version": "v1.0.0-rc.25",
+      "subject": "fix: record reasoning effort consistently in usage logs (#6641)",
+      "scope": "P3",
+      "disposition": "记录最终effort，重试恢复原请求语义",
+      "implementation_paths": [
+        "relay/common/relay_info.go",
+        "relay/common/override.go",
+        "service/log_info_generate.go"
+      ],
+      "validation_ids": [
+        "root_selected"
+      ],
+      "test_names": [
+        "TestGenRelayInfoCapturesRequestReasoningEffort",
+        "TestInitChannelMetaRestoresRequestReasoningEffortForRetry"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "85feb7a345d2d94d3ed4df89eb67ac504e0c1560",
+      "version": "v1.0.0-rc.25",
+      "subject": "feat(relay): expose user and group context to parameter overrides (#6534)",
+      "scope": "P3",
+      "disposition": "参数覆盖读取用户/组上下文；不改变本地授权合同",
+      "implementation_paths": [
+        "relay/common/override.go"
+      ],
+      "validation_ids": [
+        "root_selected"
+      ],
+      "test_names": [
+        "TestApplyParamOverrideConditionByUserAndGPTModel",
+        "TestApplyParamOverrideConditionByGroupContext"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "8ad159a3bbc2da9f7432848a58c99bc2dafee227",
+      "version": "v1.0.0-rc.25",
+      "subject": "fix(ollama): preserve reasoning and tool-call context (#6605)",
+      "scope": "P3",
+      "disposition": "保留Ollama思考和工具ID/参数/多轮上下文",
+      "implementation_paths": [
+        "relay/channel/ollama/stream.go",
+        "relay/channel/ollama/relay-ollama.go"
+      ],
+      "validation_ids": [
+        "adapter_all"
+      ],
+      "test_names": [
+        "TestOllamaToolHistoryPreservesIdentityAndArguments",
+        "TestOllamaToolResponsesCanContinueAcrossMultipleRounds"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "253a74dd1b47e2bde6dd6027c6aa1b5e0ee67827",
+      "version": "v1.0.0-rc.25",
+      "subject": "fix(relay): preserve presence/frequency penalty in Responses conversion (#6654)",
+      "scope": "P3",
+      "disposition": "保留Responses惩罚参数，包括显式零",
+      "implementation_paths": [
+        "relaykit/relayconvert/internal/oai_chat/to_oai_responses_req.go",
+        "relaykit/relayconvert/internal/oai_responses/to_oai_chat_req.go"
+      ],
+      "validation_ids": [
+        "relaykit_test"
+      ],
+      "test_names": [
+        "TestChatCompletionsRequestToResponsesRequestPreservesPenalties",
+        "TestResponsesRequestToChatCompletionsRequestPreservesPenalties"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "bb234ff4186140091db0defab250763861de2b45",
+      "version": "v1.0.0-rc.25",
+      "subject": "refactor(responses): remove compact model suffix handling (#6770)",
+      "scope": "P2",
+      "disposition": "移除虚拟Compact模型，保留原生端点并复用普通映射/报价/尝试预算",
+      "implementation_paths": [
+        "pkg/modelmapping",
+        "service/compact_model.go",
+        "relay/helper/model_mapped.go",
+        "relay/responses_handler.go",
+        "middleware/distributor.go",
+        "controller/channel-test.go"
+      ],
+      "validation_ids": [
+        "compact",
+        "root_selected"
+      ],
+      "test_names": [
+        "TestDistributeCompactAndNativeResponsesUseUnifiedRouting",
+        "TestPricingDoesNotCreateVirtualCompactModel",
+        "TestResponsesCompactUpstreamRequestUsesOfficialFieldsOnly",
+        "TestChannelCompactTestRequiresExplicitEndpoint"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "Vue兼容分支删除与浏览器验证见P7；不宣称本文件覆盖前端。"
+      ]
+    },
+    {
+      "sha": "93d2df85f824e4343a114e1f18dde4f795e2d55b",
+      "version": "v1.0.0-rc.25",
+      "subject": "fix(ali): 修复阿里图片模型映射后仍使用原始模型名判断协议的问题 (#6772)",
+      "scope": "P3",
+      "disposition": "Ali图像按映射后的模型决定协议",
+      "implementation_paths": [
+        "relay/channel/ali/adaptor.go"
+      ],
+      "validation_ids": [
+        "root_selected"
+      ],
+      "test_names": [
+        "TestMappedAliImageModelUsesUpstreamProtocol",
+        "TestAliNativeImageResponseUsesInitializedModel"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "7d09c6954ef3e6d65a37840ed3a566eb9acedaaa",
+      "version": "v1.0.0-rc.25",
+      "subject": "fix: prompt_cache_key openai chat -> openai responses (#6861)",
+      "scope": "P3",
+      "disposition": "Chat转换Responses保留prompt_cache_key",
+      "implementation_paths": [
+        "relaykit/relayconvert/internal/oai_chat/to_oai_responses_req.go"
+      ],
+      "validation_ids": [
+        "relaykit_test"
+      ],
+      "test_names": [
+        "TestChatCompletionsRequestToResponsesRequestPreservesPromptCacheKey"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "4442bb302898fef9763c91dab8c638ae2b27fbe7",
+      "version": "v1.0.0-rc.25",
+      "subject": "fix(relay): stop injecting empty tools into Claude requests",
+      "scope": "P3",
+      "disposition": "Claude不注入空tools",
+      "implementation_paths": [
+        "relaykit/relayconvert/internal/oai_chat/to_claude_messages_req.go"
+      ],
+      "validation_ids": [
+        "relaykit_test"
+      ],
+      "test_names": [
+        "TestOpenAIChatRequestToClaudeMessagesOmitsEmptyTools"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "3dda1d50c6d4a35edf1c74200fcb02d46d0fd075",
+      "version": "v1.0.0-rc.25",
+      "subject": "fix(relaykit): preserve parameterless tools in Claude conversion (#6862)",
+      "scope": "P3",
+      "disposition": "共享无参数工具schema归一化；非法schema仍拒绝",
+      "implementation_paths": [
+        "relaykit/relayconvert/internal/shared/claude/schema.go"
+      ],
+      "validation_ids": [
+        "relaykit_test"
+      ],
+      "test_names": [
+        "TestOpenAIChatRequestToClaudeMessagesNormalizesToolInputSchema",
+        "TestStrictPolicyAndToolSchemaSemantics"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "e90a7c48e5e47aab3b93ce663e5f1cda0964de11",
+      "version": "v1.0.0-rc.25",
+      "subject": "feat: add field passthrough controls for gateway channels (#6847)",
+      "scope": "P3",
+      "disposition": "后端透传字段配置已接入，仍保留本地发送前最终校验",
+      "implementation_paths": [
+        "relaykit/dto/channel_settings.go",
+        "relay/common/override.go"
+      ],
+      "validation_ids": [
+        "root_selected"
+      ],
+      "test_names": [
+        "TestRemoveDisabledFieldsSkipWhenChannelPassThroughEnabled",
+        "TestRemoveDisabledFieldsSkipWhenGlobalPassThroughEnabled"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "混合提交的前端交互归P7。"
+      ]
+    },
+    {
+      "sha": "f116414284162ad15d8925f7bca494c109b83e93",
+      "version": "v1.0.0-rc.25",
+      "subject": "fix: settle Responses cached token usage (#6892)",
+      "scope": "P3",
+      "disposition": "缓存用量在统一Usage边界吸收，账务按本地持久会话结算",
+      "implementation_paths": [
+        "service/responses_usage.go",
+        "relaykit/relayconvert/internal/oai_responses/to_oai_chat_resp.go"
+      ],
+      "validation_ids": [
+        "relaykit_test",
+        "adapter_all"
+      ],
+      "test_names": [
+        "TestNormalizeResponsesUsagePreservesImageCacheDetails",
+        "TestBuildOpenAIStyleUsageFromClaudeUsagePreservesCacheCreationRemainder"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "资金全链验收见主线账务证据。"
+      ]
+    },
+    {
+      "sha": "8f6961c675932f406260ff0c218bc2aa0603e9b2",
+      "version": "v1.0.0-rc.26",
+      "subject": "feat: vllm thinking_token_budget (#7027)",
+      "scope": "P3",
+      "disposition": "thinking_token_budget 缺省省略，显式 0 与正值按原值转发",
+      "implementation_paths": [
+        "relaykit/dto/openai_request.go"
+      ],
+      "validation_ids": [
+        "relaykit_final"
+      ],
+      "test_names": [
+        "TestVLLMThinkingTokenBudgetPreservesPresence"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "cae3676ec6f46ee5ef596443256f78c4e9b34ceb",
+      "version": "v1.0.0-rc.27",
+      "subject": "feat: glm chanel /v1/responses (#7050)",
+      "scope": "P3",
+      "disposition": "GLM Responses原生能力和适配器已接入",
+      "implementation_paths": [
+        "relay/channel/zhipu_4v/adaptor.go",
+        "pkg/relaycapability/registry.go"
+      ],
+      "validation_ids": [
+        "root_selected"
+      ],
+      "test_names": [
+        "TestProviderSurfacePlansMatchNewNativeEndpoints",
+        "TestGatewayAdaptorRequestMatrix"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "运行覆盖规划和请求转换；实际/api/v1/responses供应商未联调。"
+      ]
+    },
+    {
+      "sha": "ba2e9287bb7a8002116c03daa4c457a330054871",
+      "version": "v1.0.0-rc.27",
+      "subject": "feat(ollama): passthrough Claude Messages and OpenAI Responses (#7051)",
+      "scope": "P3",
+      "disposition": "Ollama Messages/Responses原生协议已接入",
+      "implementation_paths": [
+        "relay/channel/ollama/adaptor.go",
+        "pkg/relaycapability/registry.go"
+      ],
+      "validation_ids": [
+        "root_selected",
+        "adapter_all"
+      ],
+      "test_names": [
+        "TestProviderSurfacePlansMatchNewNativeEndpoints",
+        "TestGatewayAdaptorRequestMatrix",
+        "TestOllamaClaudeJSONKeepsToolIdentity"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "实际Ollama服务未外部联调。"
+      ]
+    },
+    {
+      "sha": "0f2a2075ab072ea7e20ffa5dd5d58dbf1b6b5b22",
+      "version": "v1.0.0-rc.28",
+      "subject": "fix(relay): 请求参数校验错误返回 HTTP 400 (#6774)",
+      "scope": "P3",
+      "disposition": "本地请求校验/转换损失失败保持400，发送前终止",
+      "implementation_paths": [
+        "controller/relay.go",
+        "relay/helper/valid_request.go"
+      ],
+      "validation_ids": [
+        "router_final",
+        "root_selected"
+      ],
+      "test_names": [
+        "TestGatewayReasoningAndSearchPolicyBeforeBilling",
+        "TestUnknownModelModifierIsBadRequestWithoutRetry"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "0bee5d4410296e972bf0076414ade786c2c799c8",
+      "version": "v1.0.0-rc.28",
+      "subject": "fix(ali): honor image response format (#5513) (#7048)",
+      "scope": "P3",
+      "disposition": "Ali图像按请求响应格式交付",
+      "implementation_paths": [
+        "relay/channel/ali/image.go"
+      ],
+      "validation_ids": [
+        "root_selected"
+      ],
+      "test_names": [
+        "TestAliAsyncImageDelivery",
+        "TestAliImageDownloadFailureDoesNotDeliverPartialSuccess"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "b518d0033b670f5518b8a2f1cf8ea0142a9d1b8d",
+      "version": "v1.0.0-rc.28",
+      "subject": "fix(relay): bound the wait for upstream response headers (fixes unbounded heap growth → OOM) (#6949)",
+      "scope": "P3",
+      "disposition": "沿用本地阶段截止时间，限制上游响应头等待",
+      "implementation_paths": [
+        "service/http_client.go",
+        "relay/channel/api_request.go"
+      ],
+      "validation_ids": [
+        "root_selected"
+      ],
+      "test_names": [
+        "TestRelayResponseHeaderDeadlineCancelsUpstream",
+        "TestStreamingRequestUploadIsBoundedBeforeResponseHeaders"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "0ed497f066a68613375124303ef54f220267b334",
+      "version": "v1.0.0-rc.31",
+      "subject": "feat(relay): hosted-tool conversion fidelity, reasoning normalization, and billing usage integrity (#7137)",
+      "scope": "P3",
+      "disposition": "转换改动进入独立RelayKit，推理/托管工具按safe/strict/allow合同接入",
+      "implementation_paths": [
+        "relaykit/relayconvert",
+        "relaykit/dto/billing_usage.go",
+        "service/request_converter.go"
+      ],
+      "validation_ids": [
+        "relaykit_test",
+        "adapter_all",
+        "router_final"
+      ],
+      "test_names": [
+        "TestGoldenRequestConversionMatrix",
+        "TestGoldenResponseConversionMatrix",
+        "TestGoldenStreamConversionMatrix",
+        "TestGatewayReasoningAndSearchPolicyBeforeBilling"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "大提交的资金持久化/插件部分不属于此证据的完成声明。"
+      ]
+    },
+    {
+      "sha": "bbd97446c26092f2e7250af429096064b9e0f899",
+      "version": "v1.0.0-rc.31",
+      "subject": "fix(relay): follow-up billing integrity and conversion completions (#7170)",
+      "scope": "P3",
+      "disposition": "补全转换和Usage语义；终态与交付、确认用量分别判定",
+      "implementation_paths": [
+        "relaykit/relayconvert",
+        "relay/helper/stream_scanner.go",
+        "service/responses_usage.go"
+      ],
+      "validation_ids": [
+        "relaykit_test",
+        "adapter_all",
+        "router_final"
+      ],
+      "test_names": [
+        "TestResponsesStreamLifecycleAndOutcome",
+        "TestGatewayGeminiPartialAndNormalTermination"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "对应资金持久化和数据库验收见主线。"
+      ]
+    },
+    {
+      "sha": "7c044d7c5c2d2beadf16b21910950f8f593bc3ef",
+      "version": "v1.0.0-rc.32",
+      "subject": "feat(relay): explicit @ model modifiers and canonical billing identity",
+      "scope": "P3",
+      "disposition": "共享显式@修饰符解析贯通授权/映射/价格身份",
+      "implementation_paths": [
+        "relaykit/relayconvert/reasoning/suffix.go",
+        "setting/reasoning/billing_identity.go",
+        "relay/helper/model_mapped.go"
+      ],
+      "validation_ids": [
+        "relaykit_test",
+        "root_selected"
+      ],
+      "test_names": [
+        "TestParseThinkingModifier",
+        "TestModelModifierPermissionIsDirectional",
+        "TestModelModifierPreparationKeepsOriginalRetryRequest"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "资金级发布和查价验收归主线。"
+      ]
+    },
+    {
+      "sha": "6b659fd61c50e35d559c41520a0fff7b8aea56a4",
+      "version": "v1.0.0-rc.33",
+      "subject": "fix(relay): preserve reasoning effort without implicit remapping",
+      "scope": "P3",
+      "disposition": "effort不隐式改写，转换损失可诊断",
+      "implementation_paths": [
+        "relaykit/relayconvert/reasoning/intent.go",
+        "relaykit/relayconvert/reasoning/claude.go",
+        "relay/channel/openai/adaptor.go"
+      ],
+      "validation_ids": [
+        "relaykit_test",
+        "router_final"
+      ],
+      "test_names": [
+        "TestProviderReasoningIntentSurvivesOpenAIProjection",
+        "TestReasoningWireLossStillRespectsStrictPolicy",
+        "TestGatewayReasoningAndSearchPolicyBeforeBilling"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "3a9f41ee85cc369f5b8d7fe6e62ff4e7bf3a9ec8",
+      "version": "v1.0.0-rc.32",
+      "subject": "fix: temp disable /messages/count_tokens",
+      "scope": "P3",
+      "disposition": "Claude count_tokens按未知路由拒绝，零供应商发送/预留",
+      "implementation_paths": [
+        "router/relay-router.go",
+        "router/gateway_token_count_test.go"
+      ],
+      "validation_ids": [
+        "router_final"
+      ],
+      "test_names": [
+        "TestGatewayUnsupportedTokenCountNeverGenerates"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "49ec4696682530781a036eab1ac195f0b04706c0",
+      "version": "v1.0.0-rc.34",
+      "subject": "fix(relay): apply model-specific OpenAI chat capabilities (#7211)",
+      "scope": "P3",
+      "disposition": "按最终映射模型与effort执行OpenAI Chat参数能力",
+      "implementation_paths": [
+        "relaykit/dto/openai_request.go",
+        "relay/channel/openai/adaptor.go"
+      ],
+      "validation_ids": [
+        "relaykit_final",
+        "provider_controls"
+      ],
+      "test_names": [
+        "TestGeneralOpenAIRequestGetSystemRoleName",
+        "TestOpenAIChatCapabilitiesUseMappedModelAndEffort"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "6e10f9bc927a4eae889864a6ef601359d53526b9",
+      "version": "v1.0.0-rc.35",
+      "subject": "fix(relay): preserve Kimi K3 dynamic tool loading messages",
+      "scope": "P3",
+      "disposition": "保留 Kimi 动态 tools 消息的 content 存在性，并统计动态工具元数据",
+      "implementation_paths": [
+        "relaykit/dto/openai_request.go"
+      ],
+      "validation_ids": [
+        "relaykit_final"
+      ],
+      "test_names": [
+        "TestKimiDynamicToolMessagesRetainWireShapeAndTokenMetadata"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "7bbe85bcb09546e0b89572bf97198fc94889be3d",
+      "version": "v1.0.0-rc.35",
+      "subject": "refactor(json): route JSON helpers through a host-injectable codec",
+      "scope": "P3",
+      "disposition": "JSON codec可由宿主注入，RelayKit保持独立",
+      "implementation_paths": [
+        "relaykit/relayconvert/kitutil/json.go",
+        "common/json.go"
+      ],
+      "validation_ids": [
+        "relaykit_test",
+        "relaykit_vet",
+        "relaykit_build",
+        "root_selected"
+      ],
+      "test_names": [
+        "TestHostJSONCodecConformance",
+        "TestRelaykitBoundary"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "3cea2bf799a61e07ad53368538fdb7064b017d77",
+      "version": "v1.0.0-rc.37",
+      "subject": "feat(relaykit): preserve cached input token breakdowns",
+      "scope": "P3",
+      "disposition": "保留缓存输入token细分",
+      "implementation_paths": [
+        "relaykit/dto/billing_usage.go",
+        "relaykit/dto/openai_response.go",
+        "relaykit/relayconvert/internal/oai_responses/to_oai_chat_resp.go"
+      ],
+      "validation_ids": [
+        "relaykit_test",
+        "adapter_all"
+      ],
+      "test_names": [
+        "TestNormalizeResponsesUsagePreservesImageCacheDetails",
+        "TestImageOutputAndCachedDetailsReachCanonicalUsage"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "8529f209c85913de9ec98c5af49dcfce4a41361a",
+      "version": "v1.0.0-rc.38",
+      "subject": "feat: vllm channel && sglang channel (#7332)",
+      "scope": "P3",
+      "disposition": "vLLM/SGLang 协议、rerank、数值兼容及授权只读推理服务状态 API 已吸收",
+      "implementation_paths": [
+        "common/advanced_custom_presets.go",
+        "constant/channel.go",
+        "relay/channel/advancedcustom/adaptor.go",
+        "relaykit/dto/values.go",
+        "controller/channel_inference.go",
+        "router/channel-router.go"
+      ],
+      "validation_ids": [
+        "relaykit_final",
+        "root_selected",
+        "inference_status",
+        "route_status"
+      ],
+      "test_names": [
+        "TestSGLangChannelProtocols",
+        "TestSGLangRerankRequestAndResponse",
+        "TestSGLangRerankRejectsMalformedResults",
+        "TestMaxTokensBounds",
+        "TestVLLMStatusPartialFailureAndCredentials",
+        "TestVLLMStatusRejectsInvalidTargetsAndRedirects",
+        "TestVLLMStatusInvalidAndOversizedResponses",
+        "TestParseVLLMMetricsPreservesSeriesAndHistogramTotals",
+        "TestSGLangStatusUsesDocumentedEndpointsAndRedactsServerConfiguration",
+        "TestInferenceChannelStatusRequiresAdminReadAndFixedTarget"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "真实自托管实例未配置，live 测试跳过；Vue 管理面板由前端证据验收。"
+      ]
+    },
+    {
+      "sha": "8e5e09166cf83731df1819fd1cb9c50ea2576ed6",
+      "version": "v1.0.0-rc.38",
+      "subject": "fix(ollama): preserve tool calls from final stream frame | 保留流式末尾帧的 tool calls (#7376)",
+      "scope": "P3",
+      "disposition": "保留Ollama最后流帧工具调用与终态",
+      "implementation_paths": [
+        "relay/channel/ollama/stream.go"
+      ],
+      "validation_ids": [
+        "adapter_all"
+      ],
+      "test_names": [
+        "TestOllamaStreamHasExplicitCompletionAndPreludeBoundary"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "5caafd3d84dc74c8b0d081524f57a534b3980cb0",
+      "version": "v1.0.0-rc.38",
+      "subject": "feat(ollama): add per-channel OpenAI-compatible chat switch (#7382)",
+      "scope": "P3",
+      "disposition": "Ollama单渠道Chat兼容开关影响规划及处理器",
+      "implementation_paths": [
+        "relay/channel/ollama/adaptor.go",
+        "relaykit/dto/channel_settings.go"
+      ],
+      "validation_ids": [
+        "root_selected",
+        "adapter_all"
+      ],
+      "test_names": [
+        "TestOllamaChatModeControlsProjection"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "fa90b2312cfb686aaa6010f9280bffcf0bf6d391",
+      "version": "v1.0.0-rc.38",
+      "subject": "fix(gemini): accept case-insensitive thinkingLevel and log canonical effort (#7387)",
+      "scope": "P3",
+      "disposition": "Gemini thinkingLevel不区分大小写并归一effort",
+      "implementation_paths": [
+        "relaykit/relayconvert/reasoning/gemini.go",
+        "relaykit/relayconvert/request_registry.go"
+      ],
+      "validation_ids": [
+        "relaykit_test"
+      ],
+      "test_names": [
+        "TestGeminiThinkingLevelCaseInsensitiveAcrossPaths",
+        "TestNormalizeGeminiThinkingConfigRewritesNativeConfig"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "81336fc69b8a932e70c24a8dbf439bec94c98328",
+      "version": "v1.0.0-rc.38",
+      "subject": "fix(gemini): reject :countTokens as an unknown route instead of relaying it as generateContent (#7388)",
+      "scope": "P3",
+      "disposition": "修复countTokens误转生成；/v1与/v1beta均在准入前拒绝",
+      "implementation_paths": [
+        "router/relay-router.go",
+        "router/gateway_token_count_test.go"
+      ],
+      "validation_ids": [
+        "router_final"
+      ],
+      "test_names": [
+        "TestGatewayUnsupportedTokenCountNeverGenerates"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "610334dbd760f1c5199a09ae5f860f11451f4c56",
+      "version": "v1.0.0-rc.38",
+      "subject": "fix(relay): request stream usage on every cross-protocol conversion to OpenAI chat (#7389)",
+      "scope": "P3",
+      "disposition": "跨协议到Chat的流请求统一请求usage",
+      "implementation_paths": [
+        "relaykit/relayconvert/request_registry.go",
+        "service/request_converter.go"
+      ],
+      "validation_ids": [
+        "relaykit_test",
+        "adapter_all"
+      ],
+      "test_names": [
+        "TestOaiChatToResponsesStreamHandlerConvertsSSEOrderAndUsage"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "该测试覆盖流响应用量；请求stream_options具体字段主要依赖现有golden矩阵。"
+      ]
+    },
+    {
+      "sha": "69a50029819a26c53e6babd276d49cfe2f8880ad",
+      "version": "v1.0.0-rc.38",
+      "subject": "feat(channel): per-route pass-through for advanced custom channels (#7386)",
+      "scope": "P3",
+      "disposition": "修复逐路由透传开关未进入执行/预览的缺口；按路径和模型匹配，保留扩展字段显式 0/false",
+      "implementation_paths": [
+        "relaykit/dto/channel_settings.go",
+        "relay/channel/advancedcustom/adaptor.go",
+        "relay/common/relay_info.go",
+        "service/routing_preview.go"
+      ],
+      "validation_ids": [
+        "relaykit_final",
+        "route_status",
+        "passthrough_host"
+      ],
+      "test_names": [
+        "TestAdvancedCustomMatchPathForModel",
+        "TestAdaptorSelectsDuplicateResponsesRoutesByModel",
+        "TestGatewayAdvancedCustomRoutePassthroughMatchesPreviewAndWire"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "Vue 配置界面归 P7。"
+      ]
+    },
+    {
+      "sha": "8b2c7105f91f2316f90eb86f9b1c6b98774c7105",
+      "version": "v1.0.0-rc.38",
+      "subject": "feat(relay): classify the protocol outcome on StreamStatus",
+      "scope": "P3",
+      "disposition": "统一流终态分类；成功终态自身输出可交付，失败/未知不能虚构完成",
+      "implementation_paths": [
+        "relay/common/stream_status.go",
+        "relay/helper/stream_scanner.go"
+      ],
+      "validation_ids": [
+        "adapter_all",
+        "router_final"
+      ],
+      "test_names": [
+        "TestResponsesTerminalOutputMarksOnlySuccessfulPayload",
+        "TestGatewayGeminiPartialAndNormalTermination"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "8a11b4305ed139b55ee91f914c6a19d59c783d72",
+      "version": "v1.0.0-rc.38",
+      "subject": "refactor(relaykit): surface reasoning conversion diagnostics",
+      "scope": "P3",
+      "disposition": "reasoning转换诊断进入统一规划",
+      "implementation_paths": [
+        "relaykit/relayconvert/internal/convdiag",
+        "relaykit/relayconvert/reasoning",
+        "service/request_converter.go"
+      ],
+      "validation_ids": [
+        "relaykit_test",
+        "router_final"
+      ],
+      "test_names": [
+        "TestReasoningWireLossStillRespectsStrictPolicy",
+        "TestGatewayReasoningAndSearchPolicyBeforeBilling"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "55a6cd2a44eaf189bbd565dd2cdfa591d19b06d6",
+      "version": "v1.0.0-rc.38",
+      "subject": "fix(responses): estimate usage for streams cut before terminal usage (#7427)",
+      "scope": "P3",
+      "disposition": "按本地合同适配：截断估算仅作观察/恢复证据，不确认为结算用量",
+      "implementation_paths": [
+        "service/responses_usage.go",
+        "service/text_quota.go",
+        "controller/responses_websocket_call.go"
+      ],
+      "validation_ids": [
+        "response_model",
+        "router_final"
+      ],
+      "test_names": [
+        "TestResponsesUsageEstimateRefreshesNativeBillingSnapshot",
+        "TestGatewayResponsesWSKeepsUnknownUsageAndRejectsOverlappingCreate",
+        "TestGatewayResponsesWSClientDisconnectPreservesUnknownUsage"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "3e8c358da09b4598a946712db8219ff44f197475",
+      "version": "v1.0.0-rc.39",
+      "subject": "fix: forward reasoning_effort to zhipu upstream (#7124)",
+      "scope": "P3",
+      "disposition": "智谱Chat原样传递reasoning_effort",
+      "implementation_paths": [
+        "relay/channel/zhipu_4v/request_test.go",
+        "relay/channel/zhipu_4v/adaptor.go"
+      ],
+      "validation_ids": [
+        "root_selected"
+      ],
+      "test_names": [
+        "TestZhipuV4PreservesChatEnvelope"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "946c730ed00806650fef509c74a868dda2847f7c",
+      "version": "v1.0.0-rc.39",
+      "subject": "perf: avoid repeated Claude tool-name lookups (#7447)",
+      "scope": "P3",
+      "disposition": "Claude单遍工具名关联，保留工具结果身份",
+      "implementation_paths": [
+        "relaykit/relayconvert/internal/claude_messages/to_oai_chat_req.go",
+        "relaykit/dto/claude.go"
+      ],
+      "validation_ids": [
+        "relaykit_test"
+      ],
+      "test_names": [
+        "TestClaudeMessagesRequestToOpenAIChatKeepsParallelToolResultsContiguous"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "e2bb05f70ed6b6725a83ff6f1c97dbd2c2f640d4",
+      "version": "v1.0.0-rc.38",
+      "subject": "fix(relay): map Images output_tokens_details into img_o billing (#7410)",
+      "scope": "P3",
+      "disposition": "图像output_tokens_details进入统一img_o用量",
+      "implementation_paths": [
+        "relay/channel/openai/relay_image.go",
+        "relaykit/dto/openai_image.go"
+      ],
+      "validation_ids": [
+        "adapter_all"
+      ],
+      "test_names": [
+        "TestImageOutputAndCachedDetailsReachCanonicalUsage"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "07578faf26d1a21c70bf0fbf29f12730a212c583",
+      "version": "v1.0.0-rc.38",
+      "subject": "fix(billing): count upstream images by payload instead of data length",
+      "scope": "P3",
+      "disposition": "按有效图像payload计数，拒绝空/无效输出",
+      "implementation_paths": [
+        "relay/channel/openai/relay_image.go"
+      ],
+      "validation_ids": [
+        "adapter_all"
+      ],
+      "test_names": [
+        "TestOpenaiImageHandlerUsesPositiveActualCountForFixedPrice",
+        "TestOpenaiImageHandlersRejectInvalidPayloadBeforeCommit"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "6e9de44a7dca08f44234ab9c623f6a93a174d0c4",
+      "version": "v1.0.0-rc.40",
+      "subject": "fix(relayconvert): hoist Responses tool-output media into a user message (#7510)",
+      "scope": "P3",
+      "disposition": "Responses工具媒体hoist保留工具批次、顺序和内容",
+      "implementation_paths": [
+        "relaykit/relayconvert/internal/oai_responses/to_oai_chat_req.go",
+        "relaykit/relayconvert/internal/oai_responses/req_helpers.go"
+      ],
+      "validation_ids": [
+        "relaykit_test",
+        "router_final"
+      ],
+      "test_names": [
+        "TestResponsesRequestToChatCompletionsRequestHoistsToolOutputMediaAfterToolBatch",
+        "TestGatewayToolImageHoistPreservesResultAndSettlesOnce"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "4eb3b9160566dc4c1f4f0e9340de254f7febf056",
+      "version": "v1.0.0-rc.40",
+      "subject": "fix(relayconvert): hoist Claude tool_result images and segment Responses reasoning items (#7512)",
+      "scope": "P3",
+      "disposition": "Claude工具结果图片hoist与Responses交错reasoning分段已吸收",
+      "implementation_paths": [
+        "relaykit/relayconvert/internal/claude_messages/to_oai_chat_req.go",
+        "relaykit/relayconvert/internal/oai_responses/to_oai_chat_resp.go"
+      ],
+      "validation_ids": [
+        "relaykit_test",
+        "router_final"
+      ],
+      "test_names": [
+        "TestClaudeMessagesRequestToOpenAIChatToolResultContent",
+        "TestResponsesStreamTerminalOutputPreservesInterleavedReasoningAndTextItems",
+        "TestGatewayToolImageHoistPreservesResultAndSettlesOnce"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "9fe0457ee1f4b9de407a254500d54f5a8f41ee29",
+      "version": "v1.0.0-rc.38",
+      "subject": "Add Responses WebSocket relay support (#5062)",
+      "scope": "P6",
+      "disposition": "WS每次create独立重新授权/报价/预留/持久发送",
+      "implementation_paths": [
+        "controller/responses_websocket.go",
+        "controller/responses_websocket_call.go",
+        "controller/responses_websocket_session.go"
+      ],
+      "validation_ids": [
+        "response_model",
+        "router_final"
+      ],
+      "test_names": [
+        "TestGatewayResponsesWSFinalQuoteAndPersistentConnection",
+        "TestGatewayResponsesWSReauthenticatesEveryCreate",
+        "TestGatewayResponsesWSRejectsFinalBudgetBeforeGeneration"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "未完成真实供应商WS/容器信号停机联调。"
+      ]
+    },
+    {
+      "sha": "75f3d246e2b1d6a3ea56342d9bc82cb3e1d0b6e2",
+      "version": "v1.0.0-rc.38",
+      "subject": "fix(responses-ws): carry stream_id through events and correlate errors",
+      "scope": "P6",
+      "disposition": "保留stream_id与错误关联，取消失败不结束其它生成",
+      "implementation_paths": [
+        "controller/responses_websocket_session.go",
+        "controller/responses_websocket_call.go"
+      ],
+      "validation_ids": [
+        "compact",
+        "response_model"
+      ],
+      "test_names": [
+        "TestResponsesWSEnvelopeSeparatesControlsAndPreservesZero",
+        "TestResponsesWSCancelErrorDoesNotEndGeneration",
+        "TestGatewayResponsesWSCancelErrorKeepsActiveGeneration"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "ae249f4ecbaf3ae9b1fc62cf377ca5a764b9a002",
+      "version": "v1.0.0-rc.38",
+      "subject": "feat(responses-ws): extend channel support and share routing with HTTP",
+      "scope": "P6",
+      "disposition": "原生支持矩阵共享路由；state归属绑定最终连接identity摘要",
+      "implementation_paths": [
+        "service/responses_websocket_capability.go",
+        "service/gateway_channel_identity.go",
+        "controller/responses_websocket_call.go"
+      ],
+      "validation_ids": [
+        "compact",
+        "response_model"
+      ],
+      "test_names": [
+        "TestResponsesWSRequiresEnabledNativeChannel",
+        "TestGatewayResponsesWSPreviousResponseOwnership",
+        "TestGatewayResponsesWSReconnectPreservesOnlySameOwner",
+        "TestGatewayResponsesWSRejectsChangedConnectionIdentity"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "9c293e8c02371bda844af79e3500ff2d516d1dda",
+      "version": "v1.0.0-rc.40",
+      "subject": "test(billing): fix websocket rejection refund test after pre-consume dropped output estimation (#7491)",
+      "scope": "P6",
+      "disposition": "明确拒绝退款并服从共享尝试预算；接受未知不自动退款/重放",
+      "implementation_paths": [
+        "controller/responses_websocket_call.go",
+        "router/gateway_responses_ws_audit_test.go"
+      ],
+      "validation_ids": [
+        "response_model"
+      ],
+      "test_names": [
+        "TestGatewayResponsesWSRejectionHonorsSharedRetryBudget",
+        "TestGatewayResponsesWSKeepsUnknownUsageAndRejectsOverlappingCreate"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    },
+    {
+      "sha": "fa3cc1c6b9b13f7bf25c3e896d439185d326ac9c",
+      "version": "v1.0.0-rc.38",
+      "subject": "feat(web): offer the Responses WebSocket toggle for advanced custom, sub2api and new-api channels",
+      "scope": "P6",
+      "disposition": "后端开关和原生能力已实现；纯UI提交由P7验收",
+      "implementation_paths": [
+        "service/responses_websocket_capability.go",
+        "relaykit/dto/channel_settings.go"
+      ],
+      "validation_ids": [
+        "compact"
+      ],
+      "test_names": [
+        "TestResponsesWSRequiresEnabledNativeChannel"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "本行仅后端对应合同，不宣称UI提交整体完成。"
+      ]
+    },
+    {
+      "sha": "d04c118c8803f49e0c9bab74dcf5b5efeab9464a",
+      "version": "rc.40+8",
+      "subject": "fix(channel): preserve Responses WebSocket setting on save (#7468)",
+      "scope": "P6",
+      "disposition": "后端消费WS设置已验收，保存表单修复由P7提供",
+      "implementation_paths": [
+        "relaykit/dto/channel_settings.go",
+        "service/responses_websocket_capability.go"
+      ],
+      "validation_ids": [
+        "compact"
+      ],
+      "test_names": [
+        "TestResponsesWSRequiresEnabledNativeChannel"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "Vue表单保存和浏览器证据归P7。"
+      ]
+    },
+    {
+      "sha": "ed7c4e35d4297962991ac5f00eea504ceac0fbd0",
+      "version": "v1.0.0-rc.38",
+      "subject": "feat(log): flag upstream response model mismatches (#7418)",
+      "scope": "P3",
+      "disposition": "补真实上游响应模型观察，转换前捕获并公开response_model_name",
+      "implementation_paths": [
+        "relay/common/response_model.go",
+        "relay/common/relay_info.go",
+        "service/log_info_generate.go",
+        "service/responses_usage.go",
+        "model/log_billing_projection.go",
+        "relay/channel/openai",
+        "relay/channel/claude",
+        "relay/channel/gemini",
+        "relay/channel/ollama"
+      ],
+      "validation_ids": [
+        "response_model",
+        "response_model_adapters"
+      ],
+      "test_names": [
+        "TestResponseModelHandlersCaptureBeforeConversion",
+        "TestResponseModelDoesNotRecordSynthesizedModel",
+        "TestResponseModelSharedResponsesAccumulator",
+        "TestGatewayResponsesWSFinalQuoteAndPersistentConnection",
+        "TestUserLogResponseModelProjection"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": [
+        "自动渠道测试错误日志尚未传RelayInfo；该测试消费日志自动复用新字段。"
+      ]
+    },
+    {
+      "sha": "972aed1972820389ea0b603ca58f03f846fbf790",
+      "version": "v1.0.0-rc.39",
+      "subject": "fix(log): derive response model mismatch from names instead of a stored flag (#7464)",
+      "scope": "P3",
+      "disposition": "只存名称，差异动态派生；首个实质差异保留，重试清空",
+      "implementation_paths": [
+        "relay/common/response_model.go",
+        "service/log_info_generate.go"
+      ],
+      "validation_ids": [
+        "response_model"
+      ],
+      "test_names": [
+        "TestResponseModelComparisonAndLog",
+        "TestResponseModelLogOmitsUnchangedModel",
+        "TestResponseModelRetryResetsObservation",
+        "TestResponseModelExpectedProviderPath"
+      ],
+      "evidence_level": "local_runtime",
+      "limitations": []
+    }
+  ],
+  "audit_closures": [
+    {
+      "item": "每次create重新鉴权/最终报价/独立预留/持久发送",
+      "tests": [
+        "TestGatewayResponsesWSFinalQuoteAndPersistentConnection",
+        "TestGatewayResponsesWSReauthenticatesEveryCreate",
+        "TestGatewayResponsesWSRejectsFinalBudgetBeforeGeneration"
+      ],
+      "result": "passed"
+    },
+    {
+      "item": "同连接身份漂移要求重连；新连接旧state只允许同owner",
+      "tests": [
+        "TestGatewayResponsesWSRejectsChangedConnectionIdentity",
+        "TestGatewayResponsesWSPreviousResponseOwnership",
+        "TestGatewayResponsesWSReconnectPreservesOnlySameOwner"
+      ],
+      "result": "passed",
+      "details": "最终模型、key、headers、URL/endpoint/proxy/配置参与连接摘要；相同配置可续接，变化的重连在quote和新上游握手前拒绝。"
+    },
+    {
+      "item": "明确拒绝按共享预算处理；接受未知不得重放或确认退款",
+      "tests": [
+        "TestGatewayResponsesWSRejectionHonorsSharedRetryBudget"
+      ],
+      "result": "passed",
+      "details": "400/429明确拒绝退款；408/500保留预留待核对；现共享same-key预算0，保持原拒绝错误且不制造第二尝试。"
+    },
+    {
+      "item": "重叠create、取消错误、部分下行帧断开和不完整入站帧",
+      "tests": [
+        "TestGatewayResponsesWSKeepsUnknownUsageAndRejectsOverlappingCreate",
+        "TestGatewayResponsesWSCancelErrorKeepsActiveGeneration",
+        "TestGatewayResponsesWSClientDisconnectPreservesUnknownUsage",
+        "TestGatewayResponsesWSIncompleteClientFrameNeverSends"
+      ],
+      "result": "passed",
+      "details": "客户端读取部分大帧后断连，已有发送保持待核对；未完整接收create时无发送和预留。"
+    },
+    {
+      "item": "hijacked WS排空",
+      "tests": [
+        "TestGatewayResponsesWSDrainLifecycle"
+      ],
+      "result": "passed_local_only",
+      "details": "隔离子进程验证drain后新create拒绝、活动生成完成、deadline强制断开/持久未知。尚未验证部署容器停止信号和宽限期。"
+    },
+    {
+      "item": "Claude流message_start不依赖宿主发送计数",
+      "tests": [
+        "TestStreamResponseOpenAI2ClaudeStartsMessageOnceWithoutHostCounter"
+      ],
+      "result": "passed"
+    },
+    {
+      "item": "原生count_tokens/countTokens拒绝",
+      "tests": [
+        "TestGatewayUnsupportedTokenCountNeverGenerates"
+      ],
+      "result": "passed",
+      "details": "Claude /v1/messages/count_tokens、Gemini /v1及/v1beta :countTokens；有/无凭据均404，零上游请求、尝试、已用和预留。"
+    },
+    {
+      "item": "终态输出及流资金",
+      "tests": [
+        "TestResponsesTerminalOutputMarksOnlySuccessfulPayload",
+        "TestGatewayResponseTerminalsKeepRetryHealthAndUsageContracts",
+        "TestGatewayGeminiPartialAndNormalTermination"
+      ],
+      "result": "passed",
+      "details": "成功终态内的真实输出可交付；中断、失败、缺用量不能通过估算结算。"
+    },
+    {
+      "item": "真实响应模型诊断",
+      "tests": [
+        "TestResponseModelHandlersCaptureBeforeConversion",
+        "TestResponseModelDoesNotRecordSynthesizedModel",
+        "TestResponseModelRetryResetsObservation",
+        "TestUserLogResponseModelProjection",
+        "TestGatewayResponsesWSFinalQuoteAndPersistentConnection"
+      ],
+      "result": "passed",
+      "details": "观测真实声明，诊断不改变发送/路由/价格模型；公开单一response_model_name，不持久化mismatch。"
+    },
+    {
+      "item": "高级自定义逐路由透传预览与实际发送一致",
+      "tests": [
+        "TestGatewayAdvancedCustomRoutePassthroughMatchesPreviewAndWire"
+      ],
+      "result": "passed",
+      "details": "strict 下禁用时扩展丢失拒绝且零发送/账务预留；开启时 wire 保留扩展 0/false，完成一次定价结算；不泄漏到其他路径/模型。"
+    },
+    {
+      "item": "推理服务只读状态及授权边界",
+      "tests": [
+        "TestInferenceChannelStatusRequiresAdminReadAndFixedTarget",
+        "TestVLLMStatusRejectsInvalidTargetsAndRedirects",
+        "TestSGLangStatusUsesDocumentedEndpointsAndRedactsServerConfiguration"
+      ],
+      "result": "passed_local_only",
+      "details": "AdminAuth+channel.read，固定保存的运维渠道目标，忽略任意 URL 输入，禁跳转，10 秒总请求期限，每端点 4 MiB，不返回 SGLang 启动配置。按现有运维渠道网络边界允许自托管私网，raw_metrics 仅授权管理员可读。"
+    },
+    {
+      "item": "真实运行候选 Responses WebSocket 冒烟",
+      "tests": [
+        "workspace/scripts/server/test_ren2hub_ws.py"
+      ],
+      "result": "passed_provisional_binary",
+      "details": "手工路由仅回环上游；每次create在模拟器收到之前已有冻结quote与用户/Token预留；在途改价不改变首请求，第二次新报价；重叠409零附加发送，partial无终态保持单次未知预留；仅mock证据手动release，渠道/Token禁用与session撤销回读。"
+    }
+  ],
+  "remaining": [
+    "Linux race、根模块最终test/vet/build与三库验证由主线负责，本文件尚未声明通过。",
+    "真实供应商WS和部署容器SIGTERM/停止宽限期未运行。已补当前临时候选二进制的活体WS冒烟（本地SQLite/miniredis）；最终SHA和部署栈仍需复验。",
+    "P7 WS开关保存、模型差异展示、Compact前端兼容分支验收由前端证据承担。",
+    "管理员自动渠道测试错误日志暂不传RelayInfo；普通消费日志（含渠道测试）以及统一relay错误日志可记录响应模型。",
+    "vLLM/SGLang 状态 API 仅本地模拟服务验证，真实实例 TestVLLMStatusLive 跳过；Vue 面板由前端证据承担。"
+  ],
+  "recommended_linux_race": {
+    "command": "go test -race -timeout 60s ./router -run '^TestGatewayResponsesWS(PreviousResponseOwnership|ReconnectPreservesOnlySameOwner|RejectsChangedConnectionIdentity|KeepsUnknownUsageAndRejectsOverlappingCreate|RejectionHonorsSharedRetryBudget|ClientDisconnectPreservesUnknownUsage|DrainLifecycle)$' -count=1",
+    "test_names": [
+      "TestGatewayResponsesWSPreviousResponseOwnership",
+      "TestGatewayResponsesWSReconnectPreservesOnlySameOwner",
+      "TestGatewayResponsesWSRejectsChangedConnectionIdentity",
+      "TestGatewayResponsesWSKeepsUnknownUsageAndRejectsOverlappingCreate",
+      "TestGatewayResponsesWSRejectionHonorsSharedRetryBudget",
+      "TestGatewayResponsesWSClientDisconnectPreservesUnknownUsage",
+      "TestGatewayResponsesWSDrainLifecycle"
+    ],
+    "status": "pending",
+    "notes": "Windows暂无gcc；该项不以普通并发测试替代race。"
+  }
+}

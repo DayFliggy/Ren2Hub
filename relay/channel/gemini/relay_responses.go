@@ -9,14 +9,16 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 	"net/http"
 )
 
 func GeminiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
-	_, response, apiErr := readGeminiGenerationResponse(c, resp)
+	responseBody, response, apiErr := readGeminiGenerationResponse(c, resp)
 	if apiErr != nil {
 		return nil, apiErr
 	}
+	info.ObserveResponseModel(gjson.GetBytes(responseBody, "modelVersion").Str)
 	markGeminiGoogleSearchCall(c, response)
 	usage := buildUsageFromGeminiResponse(c, info, response)
 	converted, err := relayconvert.ConvertResponse(c, info, types.RelayFormatOpenAIResponses, response)
@@ -41,7 +43,7 @@ func GeminiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, r
 }
 
 func geminiConvertedStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response, target types.RelayFormat) (*dto.Usage, *types.NewAPIError) {
-	state, err := relayconvert.NewResponseStreamState(types.RelayFormatGemini, target, relayconvert.ResponseStreamOptions{MaxInputBytes: helper.ResponseConversionByteLimit(), ID: helper.GetResponseID(c), Model: info.UpstreamModelName, Created: common.GetTimestamp(), IncludeUsage: info.ShouldIncludeUsage})
+	state, err := relayconvert.NewResponseStreamState(types.RelayFormatGemini, target, relayconvert.ResponseStreamOptions{EmitSequenceNumber: true, MaxInputBytes: helper.ResponseConversionByteLimit(), ID: helper.GetResponseID(c), Model: info.UpstreamModelName, Created: common.GetTimestamp(), IncludeUsage: info.ShouldIncludeUsage})
 	if err != nil {
 		return nil, helper.ResponseConversionError(err)
 	}

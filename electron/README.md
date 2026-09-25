@@ -21,10 +21,10 @@ its production assets into `frontend/embed-dist` before Go embeds them.
 ### 2. Electron Dependencies
 ```bash
 cd electron
-npm install
+bun install --frozen-lockfile
 ```
 
-The [frontend](../frontend/README.md) uses Bun; Electron has its own npm package and lockfile.
+前端与 Electron 统一使用 Bun 1.4.0，各自维护 bun.lock；构建不自动发布。
 
 ## Development
 
@@ -37,7 +37,7 @@ go run .
 make dev-web
 
 # electron/
-npm run dev-app
+bun run dev-app
 ```
 
 Development mode does not start the Go process or choose a database path. Start `go run .` (or the dev Docker backend) separately, then start Vite with `make dev-web`; Electron checks `http://127.0.0.1:5175/` and loads it. The backend therefore uses the database path configured by that separately started process. Electron opens a window with DevTools enabled and creates a system tray icon (menu bar on macOS).
@@ -50,12 +50,12 @@ Development mode does not start the Go process or choose a database path. Start 
 ./build.sh
 
 # Or package an existing binary for the current platform
-npm run build
+bun run build
 
 # Platform-specific builds
-npm run build:mac    # Creates .dmg and .zip
-npm run build:win    # Creates .exe installer
-npm run build:linux  # Creates .AppImage and .deb
+bun run build:mac    # Creates .dmg and .zip
+bun run build:win    # Creates .exe installer
+bun run build:linux  # Creates .AppImage and .deb
 ```
 
 ### Build Output

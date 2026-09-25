@@ -3,6 +3,7 @@ package billingexpr
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,8 +27,10 @@ const (
 // Format: "v1:tier(...)" → version=1, body="tier(...)".
 // No prefix defaults to DefaultExprVersion.
 func ParseExprVersion(exprStr string) (version int, body string) {
-	if strings.HasPrefix(exprStr, "v1:") {
-		return 1, exprStr[3:]
+	if prefix, rest, found := strings.Cut(exprStr, ":"); found && strings.HasPrefix(prefix, "v") {
+		if parsed, err := strconv.Atoi(strings.TrimPrefix(prefix, "v")); err == nil {
+			return parsed, rest
+		}
 	}
 	return DefaultExprVersion, exprStr
 }
@@ -38,10 +41,21 @@ type requestRulePatcher struct {
 	requestRules         []RequestRuleTrace
 	restrictedIdentifier string
 	validationError      error
+	usageFields          map[string]UsageField
+	usedUsage            map[string]bool
+	usageIdentifiers     int
+	usageCalls           int
+	usesImageCount       bool
 }
 
 func (p *requestRulePatcher) Visit(node *ast.Node) {
 	if identifier, ok := (*node).(*ast.IdentifierNode); ok {
+		if identifier.Value == "image_count" {
+			p.usesImageCount = true
+		}
+		if identifier.Value == "u" {
+			p.usageIdentifiers++
+		}
 		switch identifier.Value {
 		case requestRuleTraceFunction, requestRuleTraceIntFunction, "param", "header":
 			p.restrictedIdentifier = identifier.Value
@@ -50,8 +64,11 @@ func (p *requestRulePatcher) Visit(node *ast.Node) {
 	}
 	if call, ok := (*node).(*ast.CallNode); ok {
 		if callee, ok := call.Callee.(*ast.IdentifierNode); ok {
+			if callee.Value == "u" {
+				p.usageCalls++
+			}
 			switch callee.Value {
-			case "attr", "hour", "minute", "weekday", "month", "day":
+			case "u", "attr", "hour", "minute", "weekday", "month", "day":
 				if len(call.Arguments) != 1 {
 					p.validationError = fmt.Errorf("billing probe requires one literal argument")
 					return
@@ -61,7 +78,13 @@ func (p *requestRulePatcher) Visit(node *ast.Node) {
 					p.validationError = fmt.Errorf("billing probe requires a literal argument")
 					return
 				}
-				if callee.Value == "attr" {
+				if callee.Value == "u" {
+					if _, exists := p.usageFields[arg.Value]; !exists {
+						p.validationError = fmt.Errorf("undeclared billing usage field %q", arg.Value)
+					} else {
+						p.usedUsage[arg.Value] = true
+					}
+				} else if callee.Value == "attr" {
 					if !AllowedAttribute(arg.Value) {
 						p.validationError = fmt.Errorf("unregistered billing attribute")
 					}
@@ -140,6 +163,7 @@ type cachedEntry struct {
 	usedVars     map[string]bool
 	requestRules []RequestRuleTrace
 	version      int
+	usedUsage    map[string]bool
 }
 
 var (
@@ -149,38 +173,50 @@ var (
 
 // compileEnvPrototypeV1 is the v1 type-checking prototype used at compile time.
 var compileEnvPrototypeV1 = map[string]interface{}{
-	"p":          float64(0),
-	"c":          float64(0),
-	"len":        float64(0),
-	"cr":         float64(0),
-	"cc":         float64(0),
-	"cc1h":       float64(0),
-	"img":        float64(0),
-	"img_o":      float64(0),
-	"ai":         float64(0),
-	"ao":         float64(0),
-	"tier":       func(string, float64) float64 { return 0 },
-	"_trace":     func(int, bool, float64) float64 { return 1 },
-	"_trace_int": func(int, bool, int) int { return 1 },
-	"attr":       func(string) interface{} { return nil },
-	"has":        func(interface{}, string) bool { return false },
-	"hour":       func(string) int { return 0 },
-	"minute":     func(string) int { return 0 },
-	"weekday":    func(string) int { return 0 },
-	"month":      func(string) int { return 0 },
-	"day":        func(string) int { return 0 },
-	"max":        math.Max,
-	"min":        math.Min,
-	"abs":        math.Abs,
-	"ceil":       math.Ceil,
-	"floor":      math.Floor,
+	"image_count": float64(0),
+	"p":           float64(0),
+	"c":           float64(0),
+	"len":         float64(0),
+	"cr":          float64(0),
+	"cc":          float64(0),
+	"cc1h":        float64(0),
+	"img":         float64(0),
+	"img_cr":      float64(0),
+	"img_o":       float64(0),
+	"ai":          float64(0),
+	"ao":          float64(0),
+	"tier":        func(string, float64) float64 { return 0 },
+	"fixed":       func(float64) float64 { return 0 },
+	"_trace":      func(int, bool, float64) float64 { return 1 },
+	"_trace_int":  func(int, bool, int) int { return 1 },
+	"attr":        func(string) interface{} { return nil },
+	"has":         func(interface{}, string) bool { return false },
+	"hour":        func(string) int { return 0 },
+	"minute":      func(string) int { return 0 },
+	"weekday":     func(string) int { return 0 },
+	"month":       func(string) int { return 0 },
+	"day":         func(string) int { return 0 },
+	"max":         math.Max,
+	"min":         math.Min,
+	"abs":         math.Abs,
+	"ceil":        math.Ceil,
+	"floor":       math.Floor,
 }
 
 func getCompileEnv(version int) map[string]interface{} {
-	switch version {
-	default:
+	if version != 2 {
 		return compileEnvPrototypeV1
 	}
+	env := make(map[string]interface{}, len(compileEnvPrototypeV1))
+	for key, value := range compileEnvPrototypeV1 {
+		switch key {
+		case "p", "c", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao", "fixed", "image_count":
+			continue
+		}
+		env[key] = value
+	}
+	env["u"] = func(string) interface{} { return nil }
+	return env
 }
 
 // CompileFromCache compiles an expression string, using a cached program when
@@ -204,6 +240,25 @@ func compileFromCacheByHash(exprStr, hash string) (*vm.Program, error) {
 }
 
 func compileEntryFromCacheByHash(exprStr, hash string) (*cachedEntry, error) {
+	return compileEntryWithSchema(exprStr, hash, nil)
+}
+
+func compileEntryWithSchema(exprStr, hash string, schema *UsageSchema) (*cachedEntry, error) {
+	if hash != ExprHashString(exprStr) {
+		return nil, fmt.Errorf("billing expression hash mismatch")
+	}
+	version, body := ParseExprVersion(exprStr)
+	if version != 1 && version != 2 {
+		return nil, fmt.Errorf("unsupported billing expression version")
+	}
+	if version == 2 {
+		if err := ValidateUsageSchema(schema); err != nil {
+			return nil, err
+		}
+		hash += ":" + schema.Hash
+	} else if schema != nil {
+		return nil, fmt.Errorf("token expressions cannot use a task usage schema")
+	}
 	cacheMu.RLock()
 	if entry, ok := cache[hash]; ok {
 		cacheMu.RUnlock()
@@ -211,9 +266,14 @@ func compileEntryFromCacheByHash(exprStr, hash string) (*cachedEntry, error) {
 	}
 	cacheMu.RUnlock()
 
-	version, body := ParseExprVersion(exprStr)
-	patcher := &requestRulePatcher{}
+	patcher := &requestRulePatcher{usedUsage: map[string]bool{}}
+	if schema != nil {
+		patcher.usageFields = schema.Fields
+	}
 	prog, err := expr.Compile(body, expr.Env(getCompileEnv(version)), expr.Patch(patcher), expr.AsFloat64())
+	if patcher.usageIdentifiers != patcher.usageCalls {
+		return nil, fmt.Errorf("usage accessor must be called directly with a literal key")
+	}
 	if patcher.validationError != nil {
 		return nil, patcher.validationError
 	}
@@ -229,6 +289,12 @@ func compileEntryFromCacheByHash(exprStr, hash string) (*cachedEntry, error) {
 		usedVars:     extractUsedVars(prog),
 		requestRules: patcher.requestRules,
 		version:      version,
+		usedUsage:    patcher.usedUsage,
+	}
+	// An unreachable branch still owns the image dimension. Optimizer folding
+	// must not bypass quantity validation or permit a second per-image price.
+	if patcher.usesImageCount {
+		entry.usedVars["image_count"] = true
 	}
 	cacheMu.Lock()
 	if len(cache) >= maxCacheSize {
@@ -238,6 +304,28 @@ func compileEntryFromCacheByHash(exprStr, hash string) (*cachedEntry, error) {
 	cacheMu.Unlock()
 
 	return entry, nil
+}
+
+// CompileWithUsageSchema validates every usage reference, including inactive
+// branches. A compiled result cannot be reused under a different contract.
+func CompileWithUsageSchema(expression string, schema *UsageSchema) (*vm.Program, error) {
+	entry, err := compileEntryWithSchema(expression, ExprHashString(expression), schema)
+	if err != nil {
+		return nil, err
+	}
+	return entry.prog, nil
+}
+
+func UsedUsageFields(expression string, schema *UsageSchema) (map[string]bool, error) {
+	entry, err := compileEntryWithSchema(expression, ExprHashString(expression), schema)
+	if err != nil {
+		return nil, err
+	}
+	fields := make(map[string]bool, len(entry.usedUsage))
+	for key, value := range entry.usedUsage {
+		fields[key] = value
+	}
+	return fields, nil
 }
 
 // ExprVersion returns the version of a cached expression. Returns DefaultExprVersion

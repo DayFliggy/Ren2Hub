@@ -106,6 +106,11 @@ func main() {
 
 		go model.SyncChannelCache(common.SyncFrequency)
 	}
+	if err := controller.InitTaskPlugins(); err != nil {
+		common.FatalLog("failed to initialize task plugins: " + err.Error())
+		return
+	}
+	go controller.SyncTaskPlugins()
 	if err := service.InitRouteCapabilityIndex(context.Background()); err != nil {
 		common.SysError(fmt.Sprintf("initial route capability index rebuild failed: %v", err))
 	}

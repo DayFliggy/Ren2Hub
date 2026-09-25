@@ -116,15 +116,15 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, common.DatabaseType, error)
 		if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
 			// Use PostgreSQL
 			common.SysLog("using PostgreSQL as database")
-			db, err := gorm.Open(postgres.New(postgres.Config{
+			db, err := gorm.Open(postgresMigrationDialector{*postgres.New(postgres.Config{
 				DSN:                  dsn,
 				PreferSimpleProtocol: true, // disables implicit prepared statement usage
-			}), newGormConfig(true))
+			}).(*postgres.Dialector)}, newGormConfig(false))
 			return db, common.DatabaseTypePostgreSQL, err
 		}
 		if strings.HasPrefix(dsn, "local") {
 			common.SysLog("SQL_DSN not set, using SQLite as database")
-			db, err := gorm.Open(sqlite.Open(common.SQLitePath), newGormConfig(true))
+			db, err := openSQLiteDatabase(common.SQLitePath)
 			return db, common.DatabaseTypeSQLite, err
 		}
 		// Use MySQL
@@ -137,13 +137,31 @@ func chooseDB(envName string, isLog bool) (*gorm.DB, common.DatabaseType, error)
 				dsn += "?parseTime=true"
 			}
 		}
-		db, err := gorm.Open(mysql.Open(dsn), newGormConfig(true))
+		db, err := gorm.Open(mysqlMigrationDialector{*mysql.Open(dsn).(*mysql.Dialector)}, newGormConfig(true))
 		return db, common.DatabaseTypeMySQL, err
 	}
 	// Use SQLite
 	common.SysLog("SQL_DSN not set, using SQLite as database")
-	db, err := gorm.Open(sqlite.Open(common.SQLitePath), newGormConfig(true))
+	db, err := openSQLiteDatabase(common.SQLitePath)
 	return db, common.DatabaseTypeSQLite, err
+}
+
+func openSQLiteDatabase(path string) (*gorm.DB, error) {
+	dsn, err := common.SQLiteDSN(path)
+	if err != nil {
+		return nil, err
+	}
+	db, err := gorm.Open(sqlite.Open(dsn), newGormConfig(true))
+	if err != nil {
+		return nil, err
+	}
+	connection, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	connection.SetMaxIdleConns(1)
+	connection.SetMaxOpenConns(1)
+	return db, nil
 }
 
 func InitDB() (err error) {
@@ -171,18 +189,28 @@ func InitDB() (err error) {
 		sqlDB.SetMaxIdleConns(common.GetEnvOrDefault("SQL_MAX_IDLE_CONNS", 100))
 		sqlDB.SetMaxOpenConns(common.GetEnvOrDefault("SQL_MAX_OPEN_CONNS", 1000))
 		if dbType == common.DatabaseTypeSQLite {
+			sqlDB.SetMaxIdleConns(1)
 			sqlDB.SetMaxOpenConns(1)
 		}
 		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetEnvOrDefault("SQL_MAX_LIFETIME", 60)))
 
 		if !common.IsMasterNode {
-			return requireBillingSchema(DB)
+			if err := requireBillingSchema(DB); err != nil {
+				return err
+			}
+			if common.PasswordLoginEncryptionEnabled {
+				return InitPasswordEncryption()
+			}
+			return nil
 		}
 		if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
 			//_, _ = sqlDB.Exec("ALTER TABLE channels MODIFY model_mapping TEXT;") // TODO: delete this line when most users have upgraded
 		}
 		common.SysLog("database migration started")
 		err = migrateDB()
+		if err == nil && common.PasswordLoginEncryptionEnabled {
+			err = InitPasswordEncryption()
+		}
 		return err
 	} else {
 		common.FatalLog(err)
@@ -195,7 +223,10 @@ func InitLogDB() (err error) {
 		LOG_DB = DB
 		common.SetLogDatabaseType(common.MainDatabaseType())
 		initCol()
-		return
+		if common.IsMasterNode {
+			return MigrateAuditLogs()
+		}
+		return nil
 	}
 	db, dbType, err := chooseDB("LOG_SQL_DSN", true)
 	if err == nil {
@@ -217,6 +248,10 @@ func InitLogDB() (err error) {
 		}
 		sqlDB.SetMaxIdleConns(common.GetEnvOrDefault("SQL_MAX_IDLE_CONNS", 100))
 		sqlDB.SetMaxOpenConns(common.GetEnvOrDefault("SQL_MAX_OPEN_CONNS", 1000))
+		if dbType == common.DatabaseTypeSQLite {
+			sqlDB.SetMaxIdleConns(1)
+			sqlDB.SetMaxOpenConns(1)
+		}
 		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetEnvOrDefault("SQL_MAX_LIFETIME", 60)))
 
 		if !common.IsMasterNode {
@@ -242,6 +277,12 @@ func migrateDB() error {
 	if err := prepareChannelCapabilityMigration(); err != nil {
 		return err
 	}
+	if err := migrateTokenKeyUniqueness(DB); err != nil {
+		return err
+	}
+	if err := migratePrefillGroups(DB); err != nil {
+		return err
+	}
 
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -251,6 +292,7 @@ func migrateDB() error {
 		&AuthFlow{},
 		&ExternalIdentityClaim{},
 		&PasskeyCredential{},
+		&LoginEncryptionKey{},
 		&Option{},
 		&Redemption{},
 		&Ability{},
@@ -263,9 +305,12 @@ func migrateDB() error {
 		&GmpayOrder{},
 		&QuotaData{},
 		&Task{},
+		&TaskPlugin{},
+		&TaskPluginNamespace{},
+		&TaskPluginExecution{},
+		&TaskResultEvent{},
 		&Model{},
 		&Vendor{},
-		&PrefillGroup{},
 		&Setup{},
 		&TwoFA{},
 		&TwoFABackupCode{},
@@ -345,9 +390,13 @@ func migrateRoutingModels(db *gorm.DB) error {
 
 func migrateLOGDB() error {
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
-		return migrateClickHouseLogDB()
+		if err := migrateClickHouseLogDB(); err != nil {
+			return err
+		}
+	} else if err := LOG_DB.AutoMigrate(&Log{}); err != nil {
+		return err
 	}
-	return LOG_DB.AutoMigrate(&Log{})
+	return MigrateAuditLogs()
 }
 
 func migrateClickHouseLogDB() error {

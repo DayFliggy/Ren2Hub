@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
@@ -26,7 +27,7 @@ func TestGatewayResponsesNamespaceHistoryPolicyBeforeBilling(t *testing.T) {
 		channelType int
 		format      types.RelayFormat
 	}{
-		{"chat", constant.ChannelTypeOllama, types.RelayFormatOpenAI},
+		{"chat", constant.ChannelTypeAdvancedCustom, types.RelayFormatOpenAI},
 		{"claude", constant.ChannelTypeAnthropic, types.RelayFormatClaude},
 		{"gemini", constant.ChannelTypeGemini, types.RelayFormatGemini},
 		{"native", constant.ChannelTypeOpenAI, types.RelayFormatOpenAIResponses},
@@ -54,7 +55,12 @@ func TestGatewayResponsesNamespaceHistoryPolicyBeforeBilling(t *testing.T) {
 					channel, err := model.GetChannelById(1, true)
 					require.NoError(t, err)
 					channel.Type = target.channelType
-					require.NoError(t, model.DB.Model(channel).Update("type", channel.Type).Error)
+					if target.name == "chat" {
+						channel.SetOtherSettings(dto.ChannelOtherSettings{AdvancedCustom: &dto.AdvancedCustomConfig{Routes: []dto.AdvancedCustomRoute{{
+							IncomingPath: "/v1/responses", UpstreamPath: "/v1/chat/completions", Converter: "openai_responses_to_openai_chat_completions",
+						}}}})
+					}
+					require.NoError(t, model.DB.Model(channel).Updates(map[string]any{"type": channel.Type, "settings": channel.OtherSettings}).Error)
 					require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 					require.NoError(t, model.DB.Model(&model.Token{}).Where("key = ?", key).Updates(map[string]any{
 						"conversion_policy": policy, "unlimited_quota": false, "available_quota": 2000,

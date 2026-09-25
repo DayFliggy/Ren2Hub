@@ -264,6 +264,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             '用于 OAuth 回调、Webhook 与外部集成。'
           ),
           url('Logo', 'Logo 地址'),
+          url('general_setting.docs_link', '文档链接'),
           textarea('Footer', '页脚内容'),
           textarea('About', '关于页面内容'),
           textarea('HomePageContent', '首页内容'),
@@ -338,6 +339,8 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           text('discord.client_id', 'Discord Client ID'),
           secret('discord.client_secret', 'Discord Client Secret'),
           toggle('TelegramOAuthEnabled', '启用 Telegram 登录'),
+          text('telegram.client_id', 'Telegram OAuth Client ID'),
+          secret('telegram.client_secret', 'Telegram OAuth Client Secret'),
           secret('TelegramBotToken', 'Telegram Bot Token'),
           text('TelegramBotName', 'Telegram Bot 用户名'),
           toggle('WeChatAuthEnabled', '启用微信登录'),
@@ -356,13 +359,16 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
       },
       {
         id: 'passkey',
+        managedKeys: [
+          'passkey.rp_id',
+          'passkey.legacy_rp_ids',
+          'passkey.origins',
+        ],
         title: 'Passkey',
         description: 'WebAuthn 依赖方与验证策略。',
         fields: [
           toggle('passkey.enabled', '启用 Passkey'),
           text('passkey.rp_display_name', '依赖方显示名称'),
-          text('passkey.rp_id', '依赖方 ID'),
-          textarea('passkey.origins', '允许来源'),
           toggle('passkey.allow_insecure_origin', '允许不安全来源'),
           select('passkey.user_verification', '用户验证要求', 'preferred', [
             { value: 'required', label: '必须' },
@@ -409,7 +415,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           text('QuotaForInviter', '邀请人奖励', '0'),
           text('QuotaForInvitee', '被邀请人奖励', '0'),
           url('TopUpLink', '外部充值链接'),
-          url('general_setting.docs_link', '文档链接'),
           number('USDExchangeRate', '美元汇率', 1),
           toggle('DisplayInCurrencyEnabled', '以货币显示配额'),
           toggle('DisplayTokenStatEnabled', '显示 Token 统计'),
@@ -612,12 +617,20 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           textarea('AutomaticRetryStatusCodes', '自动重试状态码范围'),
           toggle('monitor_setting.auto_test_channel_enabled', '自动测试渠道'),
           number(
+            'monitor_setting.channel_test_concurrency',
+            '渠道测试并发（1–32）',
+            1
+          ),
+          number(
             'monitor_setting.auto_test_channel_minutes',
             '自动测试间隔（分钟）',
             60
           ),
           toggle('global.pass_through_request_enabled', '透传请求模式'),
-          list('global.thinking_model_blacklist', '思考模型黑名单', '[]'),
+          {
+            ...list('global.thinking_model_blacklist', '思考模型黑名单', '[]'),
+            descriptionKey: 'systemSettings.thinkingBlacklistHint',
+          },
           json(
             'global.chat_completions_to_responses_policy',
             'Chat Completions 转 Responses 策略',

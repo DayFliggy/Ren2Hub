@@ -32,6 +32,26 @@ export interface SystemInstance {
 }
 
 export type SystemTaskStatus = 'pending' | 'running' | 'succeeded' | 'failed'
+export interface SystemTaskQuery {
+  scope: 'active' | 'history'
+  type?: string
+  status?: 'succeeded' | 'failed' | ''
+  offset?: number
+  limit?: number
+}
+export interface SystemTaskPage {
+  items: SystemTask[]
+  total: number
+}
+export const SYSTEM_TASK_TYPES = [
+  'log_cleanup',
+  'channel_test',
+  'model_update',
+  'midjourney_poll',
+  'async_task_poll',
+  'route_capability_refresh',
+  'billing_recovery',
+] as const
 export interface SystemTask {
   task_id: string
   type: string
@@ -154,11 +174,31 @@ export const systemManagementApi = {
     if (!Array.isArray(data)) invalidResponse(endpoint)
     return data.map((item) => parseSystemInstance(item, endpoint))
   },
-  async tasks(limit = 20, signal?: AbortSignal): Promise<SystemTask[]> {
+  async tasks(
+    query: SystemTaskQuery,
+    signal?: AbortSignal
+  ): Promise<SystemTaskPage> {
     const endpoint = '/api/system-task/list'
-    const data = await api.get(endpoint, { limit }, { signal })
-    if (!Array.isArray(data)) invalidResponse(endpoint)
-    return data.map((item) => parseSystemTask(item, endpoint))
+    const response = await api.getEnvelope(endpoint, { ...query }, { signal })
+    if (!Array.isArray(response.data)) invalidResponse(endpoint)
+    const total = requiredStrictInteger(response.total, endpoint)
+    if (total < 0) invalidResponse(endpoint)
+    return {
+      items: response.data.map((item) => parseSystemTask(item, endpoint)),
+      total,
+    }
+  },
+  async deleteHistory(
+    filters: Pick<SystemTaskQuery, 'type' | 'status'>
+  ): Promise<number> {
+    const endpoint = '/api/system-task/history'
+    const data = record(
+      await api.delete(endpoint, { scope: 'history', ...filters }),
+      endpoint
+    )
+    const count = requiredStrictInteger(data.deleted_count, endpoint)
+    if (count < 0) invalidResponse(endpoint)
+    return count
   },
   async task(taskId: string, signal?: AbortSignal): Promise<SystemTask> {
     const endpoint = `/api/system-task/${encodeURIComponent(taskId)}`

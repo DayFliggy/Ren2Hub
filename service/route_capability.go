@@ -480,7 +480,11 @@ func projectChannelCapabilities(channel *model.Channel, abilities []model.Abilit
 }
 
 func endpointTypesForModel(channel *model.Channel, match modellab.ModelMatch) []constant.EndpointType {
-	if channel.Type == constant.ChannelTypeAdvancedCustom {
+	pluginEndpoints := taskPluginEndpointTypes(channel, match.InputModel, match.RealModel)
+	if channel.Type == constant.ChannelTypeTaskPlugin {
+		return pluginEndpoints
+	}
+	if constant.IsAdvancedCustomChannel(channel.Type) {
 		config := advancedCustomPathConfig(channel)
 		if config == nil {
 			return nil
@@ -494,9 +498,9 @@ func endpointTypesForModel(channel *model.Channel, match modellab.ModelMatch) []
 	case constant.ChannelTypeMidjourney, constant.ChannelTypeMidjourneyPlus:
 		return []constant.EndpointType{constant.EndpointTypeMidjourney}
 	case constant.ChannelTypeSunoAPI:
-		return []constant.EndpointType{constant.EndpointTypeSuno}
+		return append(pluginEndpoints, constant.EndpointTypeSuno)
 	case constant.ChannelTypeSora, constant.ChannelTypeKling, constant.ChannelTypeJimeng, constant.ChannelTypeVidu, constant.ChannelTypeDoubaoVideo:
-		return []constant.EndpointType{constant.EndpointTypeOpenAIVideo}
+		return append(pluginEndpoints, constant.EndpointTypeOpenAIVideo)
 	}
 	apiType, _ := common.ChannelType2APIType(channel.Type)
 	if definition, found := relaycapability.DescribeForCredentials(apiType, match.RealModel, channel.GetKeys(), channel.GetOtherSettings()); found {
@@ -506,7 +510,7 @@ func endpointTypesForModel(channel *model.Channel, match modellab.ModelMatch) []
 	case constant.ChannelTypeOpenAI, constant.ChannelTypeAli, constant.ChannelTypeGemini, constant.ChannelTypeVertexAi, constant.ChannelTypeMiniMax, constant.ChannelTypeVolcEngine:
 		endpoints = append(endpoints, constant.EndpointTypeOpenAIVideo)
 	}
-	return endpoints
+	return append(endpoints, pluginEndpoints...)
 }
 
 func buildCapabilityPaths(channel *model.Channel) []capabilityPath {
@@ -526,7 +530,7 @@ func buildCapabilityPaths(channel *model.Channel) []capabilityPath {
 }
 
 func advancedCustomPathConfig(channel *model.Channel) *dto.AdvancedCustomConfig {
-	if channel == nil || channel.Type != constant.ChannelTypeAdvancedCustom {
+	if channel == nil || !constant.IsAdvancedCustomChannel(channel.Type) {
 		return nil
 	}
 	config := channel.GetOtherSettings().AdvancedCustom
@@ -576,6 +580,7 @@ type channelFingerprint struct {
 	Advanced        []capabilityPath
 	Abilities       []abilityFingerprint
 	VertexKeyType   dto.VertexKeyType `json:"vertex_key_type,omitempty"`
+	TaskPlugins     string            `json:"task_plugins,omitempty"`
 }
 
 type abilityFingerprint struct {
@@ -598,6 +603,7 @@ func channelCapabilityFingerprint(channel *model.Channel, abilities []model.Abil
 		Priority:        channel.GetPriority(),
 		Weight:          channel.GetWeight(),
 		Advanced:        buildCapabilityPaths(channel),
+		TaskPlugins:     taskPluginCapabilityFingerprint(channel),
 	}
 	if channel.Type == constant.ChannelTypeVertexAi {
 		fingerprint.VertexKeyType = channel.GetOtherSettings().VertexKeyType

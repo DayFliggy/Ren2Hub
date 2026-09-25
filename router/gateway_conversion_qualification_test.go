@@ -43,7 +43,7 @@ func TestGatewayManualQualificationPrecedesRetryPolicy(t *testing.T) {
 				}, Policy: service.RoutePolicyInput{MaxRatio: 1, RetryMode: tc.mode, MaxFailoverAttempts: tc.maxFailover}}},
 			})
 			require.NoError(t, err)
-			body := `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"fixture"}],"reasoning_effort":"high"}`
+			body := `{"model":"gpt-4o-mini","messages":[{"role":"user","content":[{"type":"text","text":"fixture"},{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav"}}]}]}`
 			preview, err := service.PreviewUserRouteProfile(context.Background(), token.UserId, profile.Profile.ID, service.RouteProfilePreviewInput{Model: "gpt-4o-mini", Path: "/v1/chat/completions", Request: json.RawMessage(body)})
 			require.NoError(t, err)
 			require.Equal(t, 4, preview.PreferredChannelID)
@@ -99,7 +99,7 @@ func TestGatewayConversionQualificationPrecedesCandidateCap(t *testing.T) {
 				require.NoError(t, channel.AddAbilities(model.DB))
 			}
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
-			result := <-startGatewayRouteRequest(t, url, key, `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"fixture"}],"reasoning_effort":"high"}`)
+			result := <-startGatewayRouteRequest(t, url, key, `{"model":"gpt-4o-mini","messages":[{"role":"user","content":[{"type":"text","text":"fixture"},{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav"}}]}]}`)
 			require.NoError(t, result.err)
 			want := http.StatusOK
 			wantSends := int32(1)

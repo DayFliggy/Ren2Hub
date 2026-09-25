@@ -312,6 +312,12 @@ const router = createRouter({
           meta: { protected: true, feature: 'invoices' },
         },
         {
+          path: '/audit',
+          name: 'audit',
+          component: () => import('@/views/console/AuditView.vue'),
+          meta: { feature: 'audit' },
+        },
+        {
           path: '/settings',
           name: 'settings',
           component: () => import('@/views/console/AccountSettingsView.vue'),

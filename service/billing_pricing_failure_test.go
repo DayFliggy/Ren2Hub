@@ -23,6 +23,7 @@ func TestFailedExpressionRetainsReservationForReconciliation(t *testing.T) {
 			require.Nil(t, PrepareBillingForSelectedModel(c, info))
 			info.BillingRequestInput = &billingexpr.RequestInput{Headers: map[string]string{"Authorization": "private-fixture"}, Body: []byte(`{"private":"private-fixture"}`)}
 			usage := &dto.Usage{PromptTokens: 10, CompletionTokens: 13, TotalTokens: 23}
+			info.MarkValidOutput()
 			realtime := &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 13, TotalTokens: 23}
 			for i := 0; i < 2; i++ {
 				switch path {

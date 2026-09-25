@@ -364,17 +364,6 @@ func GetModelPrice(name string, printErr bool) (float64, bool) {
 		return price, true
 	}
 
-	if strings.HasSuffix(name, CompactModelSuffix) {
-		price, ok := modelPriceMap.Get(CompactWildcardModelKey)
-		if !ok {
-			if printErr {
-				common.SysError("model price not found: " + name)
-			}
-			return -1, false
-		}
-		return price, true
-	}
-
 	if printErr {
 		common.SysError("model price not found: " + name)
 	}
@@ -398,12 +387,6 @@ func GetModelRatio(name string) (float64, bool, string) {
 
 	ratio, ok := modelRatioMap.Get(name)
 	if !ok {
-		if strings.HasSuffix(name, CompactModelSuffix) {
-			if wildcardRatio, ok := modelRatioMap.Get(CompactWildcardModelKey); ok {
-				return wildcardRatio, true, name
-			}
-			//return 0, true, name
-		}
 		if entry, autoOK := autoPricingEntry(name); autoOK {
 			return entry.ModelRatio, true, name
 		}
@@ -712,10 +695,6 @@ func GetAudioCompletionRatioCopy() map[string]float64 {
 
 // 转换模型名，减少渠道必须配置各种带参数模型
 func FormatMatchingModelName(name string) string {
-	hasCompactSuffix := strings.HasSuffix(name, CompactModelSuffix)
-	if hasCompactSuffix {
-		name = CompactBaseModelName(name)
-	}
 
 	if strings.HasPrefix(name, "gemini-2.5-flash-lite") {
 		name = handleThinkingBudgetModel(name, "gemini-2.5-flash-lite", "gemini-2.5-flash-lite-thinking-*")
@@ -730,9 +709,6 @@ func FormatMatchingModelName(name string) string {
 	}
 	if strings.HasPrefix(name, "gpt-4o-gizmo") {
 		name = "gpt-4o-gizmo-*"
-	}
-	if hasCompactSuffix && IsGPTCompactBaseModel(name) {
-		name = WithCompactModelSuffix(name)
 	}
 	return name
 }

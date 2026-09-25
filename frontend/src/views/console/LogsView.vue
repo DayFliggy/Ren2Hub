@@ -35,6 +35,9 @@ import SearchInput from '@/components/common/SearchInput.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import LogDetailTrigger from '@/components/console/log-ui/LogDetailTrigger.vue'
+import LogBillingDetail from '@/components/console/log-ui/LogBillingDetail.vue'
+import LogModelMismatch from '@/components/console/log-ui/LogModelMismatch.vue'
+import LogGroupFilter from '@/components/console/log-ui/LogGroupFilter.vue'
 import LogMobileCard from '@/components/console/log-ui/LogMobileCard.vue'
 import LogReasoningEffort from '@/components/console/log-ui/LogReasoningEffort.vue'
 import {
@@ -59,6 +62,7 @@ const loading = ref(true)
 const stat = ref<LogStatContract | null>(null)
 
 const keyword = ref('')
+const group = ref('')
 const type = ref('')
 const startDate = ref('')
 const endDate = ref('')
@@ -271,6 +275,7 @@ function currentParams() {
     p: page.value,
     page_size: pageSize.value,
     keyword: keyword.value,
+    group: group.value,
     type: type.value ? (typeMap[type.value] ?? 0) : 0,
     start_timestamp: startTimestamp,
     end_timestamp: endTimestamp,
@@ -306,7 +311,7 @@ function reload() {
   if (page.value === 1) load()
   else page.value = 1
 }
-watch(keyword, () => {
+watch([keyword, group], () => {
   window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(reload, 300)
 })
@@ -530,6 +535,7 @@ onBeforeUnmount(() => {
         :prefix-label="t('logs.typeLabel') + ':'"
         class="w-full sm:w-48"
       />
+      <LogGroupFilter v-model="group" />
       <DateRangePicker
         v-model:start="startDate"
         v-model:end="endDate"
@@ -700,6 +706,7 @@ onBeforeUnmount(() => {
             >
               {{ (row as LogItem).model }}
             </p>
+            <LogModelMismatch :log="row as LogItem" />
             <p
               class="mt-0.5 truncate text-xs text-[var(--text-tertiary)]"
               :title="(row as LogItem).channel"
@@ -801,7 +808,7 @@ onBeforeUnmount(() => {
       size="md"
       @close="closeLogDetails"
     >
-      <div data-log-detail-empty class="min-h-20" />
+      <LogBillingDetail v-if="detailLog" :log="detailLog" />
       <template #footer>
         <div class="flex justify-end">
           <ConsoleButton variant="secondary" @click="closeLogDetails">

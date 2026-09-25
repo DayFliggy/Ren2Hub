@@ -44,6 +44,22 @@ func pricingFixture(t *testing.T, version billing.PriceVersion) (*gin.Context, *
 	return c, info
 }
 
+func TestImageExpressionPrepaymentUsesFinalQuantity(t *testing.T) {
+	c, info := pricingFixture(t, billing.PriceVersion{Model: "image-count", Mode: billing.ModeExpression, Expression: `v1:fixed(0.001) * image_count`})
+	info.BillingRequestInput.Attributes["quantity"] = float64(1)
+	price, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{BillingRatios: map[string]float64{"n": 3}})
+	require.NoError(t, err)
+	assert.Equal(t, 1500, price.QuotaToPreConsume)
+	assert.Equal(t, "3", price.Usage.Quantities["images"])
+	for _, n := range []float64{0, -1, 1.5, 129} {
+		_, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{BillingRatios: map[string]float64{"n": n}})
+		require.Error(t, err)
+	}
+	delete(info.BillingRequestInput.Attributes, "quantity")
+	_, err = ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
+	require.ErrorContains(t, err, "image quantity", "missing final quantity cannot silently default")
+}
+
 func TestPublishedPricePrepaymentUsesFrozenAttributesAndDefaultOutputEstimate(t *testing.T) {
 	c, info := pricingFixture(t, billing.PriceVersion{Model: "test", Mode: billing.ModeExpression, Expression: `p * 2 + c * (attr("service_tier") == "priority" ? 4 : 1)`})
 	price, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
@@ -99,4 +115,25 @@ func TestPublishedMixedCallAndTokenPricesReserveEveryKnownDimension(t *testing.T
 	assert.Equal(t, 1200, price.QuotaToPreConsume)
 	assert.EqualValues(t, 100, price.Usage.InputTokens)
 	assert.EqualValues(t, 50, price.Usage.OutputTokens)
+}
+
+func TestRetryPinsPublishedPriceAndClockButRepricesFinalAttributes(t *testing.T) {
+	c, info := pricingFixture(t, billing.PriceVersion{Model: "test", Mode: billing.ModeExpression, Expression: `p * (attr("quality") == "high" ? 4 : 2)`})
+	info.RequestId = "logical-request"
+	first, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 1})
+	require.NoError(t, err)
+	require.NoError(t, PinBillingPrice(c, info))
+	_, err = model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{Model: "test", Mode: billing.ModeFree}, first.Quote.PriceVersion.ID, 1)
+	require.NoError(t, err)
+	require.NoError(t, FreezeOutboundBillingAttributes(info, []byte(`{"quality":"high"}`)))
+	c.Set("channel_ratio", 2.0)
+	next, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 1})
+	require.NoError(t, err)
+	assert.Equal(t, first.Quote.PriceVersion.ID, next.Quote.PriceVersion.ID)
+	assert.Equal(t, first.Quote.FrozenAt, next.Quote.FrozenAt)
+	assert.Equal(t, 400, next.QuotaToPreConsume)
+	assert.False(t, next.FreeModel)
+	info.OriginModelName = "another"
+	_, err = ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 1})
+	require.ErrorContains(t, err, "identity")
 }

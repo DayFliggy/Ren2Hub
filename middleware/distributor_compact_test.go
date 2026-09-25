@@ -10,7 +10,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
@@ -24,16 +23,15 @@ func TestDistributeCompactAndNativeResponsesUseUnifiedRouting(t *testing.T) {
 	for _, test := range []struct {
 		name, path, model, body string
 		channelType, status     int
-		stage                   relaycommon.CompactAttemptStage
 		native                  bool
 	}{
-		{"GPT exact", "/v1/responses/compact", "gpt-5-openai-compact", `{"model":"gpt-5","input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptExact, false},
-		{"GPT base fallback", "/v1/responses/compact", "gpt-5", `{"model":"gpt-5","input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptBase, false},
-		{"regular suffix", "/v1/responses", "gpt-5-openai-compact", `{"model":"gpt-5-openai-compact","input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptNone, false},
-		{"non GPT base", "/v1/responses/compact", "claude-3-5-sonnet", `{"model":"claude-3-5-sonnet-openai-compact","input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptBase, false},
-		{"non GPT suffix only", "/v1/responses/compact", "claude-3-5-sonnet-openai-compact", `{"model":"claude-3-5-sonnet-openai-compact","input":"hello"}`, constant.ChannelTypeOpenAI, 503, relaycommon.CompactAttemptNone, false},
-		{"opaque state rejects conversion", "/v1/responses", "gpt-5", `{"model":"gpt-5","input":[{"type":"compaction_trigger"}]}`, constant.ChannelTypeGemini, 503, relaycommon.CompactAttemptNone, false},
-		{"native compaction", "/v1/responses", "gpt-5", `{"model":"gpt-5","context_management":{"compact_threshold":1000},"input":"hello"}`, constant.ChannelTypeOpenAI, 204, relaycommon.CompactAttemptNone, true},
+		{"ordinary model", "/v1/responses/compact", "gpt-5", `{"model":"gpt-5","input":"hello"}`, constant.ChannelTypeOpenAI, 204, false},
+		{"no suffix fallback", "/v1/responses/compact", "gpt-5-openai-compact", `{"model":"gpt-5","input":"hello"}`, constant.ChannelTypeOpenAI, 503, false},
+		{"literal suffix", "/v1/responses", "gpt-5-openai-compact", `{"model":"gpt-5-openai-compact","input":"hello"}`, constant.ChannelTypeOpenAI, 204, false},
+		{"non GPT ordinary", "/v1/responses/compact", "claude-3-5-sonnet", `{"model":"claude-3-5-sonnet","input":"hello"}`, constant.ChannelTypeOpenAI, 204, false},
+		{"suffix is not stripped", "/v1/responses/compact", "claude-3-5-sonnet", `{"model":"claude-3-5-sonnet-openai-compact","input":"hello"}`, constant.ChannelTypeOpenAI, 503, false},
+		{"opaque state rejects conversion", "/v1/responses", "gpt-5", `{"model":"gpt-5","input":[{"type":"compaction_trigger"}]}`, constant.ChannelTypeGemini, 503, false},
+		{"native compaction", "/v1/responses", "gpt-5", `{"model":"gpt-5","context_management":{"compact_threshold":1000},"input":"hello"}`, constant.ChannelTypeOpenAI, 204, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			previousDB, previousRedis, previousCache, previousRDB := model.DB, common.RedisEnabled, common.MemoryCacheEnabled, common.RDB
@@ -62,7 +60,6 @@ func TestDistributeCompactAndNativeResponsesUseUnifiedRouting(t *testing.T) {
 				common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, "1")
 			}, Distribute(), func(c *gin.Context) {
 				called = true
-				require.Equal(t, test.stage, service.CompactStageFromContext(c))
 				require.Equal(t, test.native, common.GetContextKeyBool(c, constant.ContextKeyResponsesNativeRequired))
 				require.True(t, c.GetBool(service.RouteLiveSelectionRequiredContextKey))
 				c.Status(http.StatusNoContent)

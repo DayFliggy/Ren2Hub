@@ -1,5 +1,11 @@
 package common
 
+import (
+	"fmt"
+	"net/url"
+	"strings"
+)
+
 type DatabaseType string
 
 const (
@@ -41,4 +47,35 @@ func UsingLogDatabase(databaseType DatabaseType) bool {
 	return logDatabaseType == databaseType
 }
 
-var SQLitePath = "one-api.db?_busy_timeout=30000"
+var SQLitePath = "one-api.db"
+
+// SQLiteDSN applies the same locking policy to default and custom database paths.
+// Keep unrelated driver options, but never allow a supplied DSN to weaken the
+// single-writer transaction or busy-timeout policy.
+func SQLiteDSN(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("SQLite database path is empty")
+	}
+	filename, query, _ := strings.Cut(path, "?")
+	options, err := url.ParseQuery(query)
+	if err != nil {
+		return "", fmt.Errorf("invalid SQLite connection options: %w", err)
+	}
+	pragmas := make([]string, 0, len(options["_pragma"])+2)
+	for _, pragma := range options["_pragma"] {
+		name := strings.ToLower(strings.TrimSpace(pragma))
+		parts := strings.FieldsFunc(name, func(r rune) bool { return r == '(' || r == '=' })
+		if len(parts) == 0 {
+			return "", fmt.Errorf("empty SQLite pragma")
+		}
+		name = strings.TrimSpace(parts[0])
+		if name != "busy_timeout" && name != "journal_mode" {
+			pragmas = append(pragmas, pragma)
+		}
+	}
+	options.Del("_busy_timeout")
+	options.Del("_journal_mode")
+	options.Set("_txlock", "immediate")
+	options["_pragma"] = append(pragmas, "busy_timeout(30000)", "journal_mode(WAL)")
+	return filename + "?" + options.Encode(), nil
+}

@@ -146,10 +146,16 @@ func formatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		var otherMap map[string]interface{}
 		otherMap, _ = common.StrToMap(logs[i].Other)
+		if otherMap == nil {
+			otherMap = map[string]interface{}{}
+		}
 		for key := range otherMap {
 			if _, ok := safeOtherKeys[key]; !ok {
 				delete(otherMap, key)
 			}
+		}
+		for key, value := range userBillingLogMetadata(logs[i].Other) {
+			otherMap[key] = value
 		}
 		logs[i].Other = common.MapToJsonStr(otherMap)
 	}
@@ -798,9 +804,11 @@ func GetSelfLogStat(userId int, now time.Time) (stat SelfLogStat, err error) {
 	}
 
 	startOfToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Unix()
-	err = base.Where("created_at >= ? AND created_at <= ?", startOfToday, now.Unix()).
+	var today SelfLogStat
+	err = LOG_DB.Table("logs").Where("user_id = ? AND type = ?", userId, LogTypeConsume).Where("created_at >= ? AND created_at <= ?", startOfToday, now.Unix()).
 		Select("count(*) today_requests, COALESCE(sum(quota), 0) today_quota").
-		Scan(&stat).Error
+		Scan(&today).Error
+	stat.TodayRequests, stat.TodayQuota = today.TodayRequests, today.TodayQuota
 	return stat, err
 }
 
@@ -869,11 +877,13 @@ func sumUsedQuota(userId int, logType int, startTimestamp int64, endTimestamp in
 		common.SysError("failed to query log stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
-	if err := rpmTpmQuery.Scan(&stat).Error; err != nil {
+	var rate Stat
+	if err := rpmTpmQuery.Scan(&rate).Error; err != nil {
 		common.SysError("failed to query rpm/tpm stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
 
+	stat.Rpm, stat.Tpm = rate.Rpm, rate.Tpm
 	return stat, nil
 }
 

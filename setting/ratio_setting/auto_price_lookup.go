@@ -1,8 +1,6 @@
 package ratio_setting
 
 import (
-	"strings"
-
 	"github.com/QuantumNous/new-api/pkg/autopricing"
 )
 
@@ -16,16 +14,11 @@ func hasManualFixedPrice(name string) bool {
 	if _, ok := modelPriceMap.Get(name); ok {
 		return true
 	}
-	if strings.HasSuffix(name, CompactModelSuffix) {
-		if _, ok := modelPriceMap.Get(CompactWildcardModelKey); ok {
-			return true
-		}
-	}
 	return false
 }
 
 // HasManualModelRatio reports whether the manual ratio map itself prices this
-// model, applying the same name normalization and compact-wildcard rule as
+// model, applying the same name normalization as
 // GetModelRatio but never consulting the automatic catalog.
 //
 // Callers use it to answer "did the operator deliberately configure this exact
@@ -36,11 +29,6 @@ func HasManualModelRatio(name string) bool {
 	name = FormatMatchingModelName(name)
 	if _, ok := modelRatioMap.Get(name); ok {
 		return true
-	}
-	if strings.HasSuffix(name, CompactModelSuffix) {
-		if _, ok := modelRatioMap.Get(CompactWildcardModelKey); ok {
-			return true
-		}
 	}
 	return false
 }

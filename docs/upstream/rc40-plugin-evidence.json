@@ -1,0 +1,858 @@
+[
+  {
+    "sha": "eb48396d5fe97d27772d0cd5e3ca8aa5caa4f3e9",
+    "disposition": "需要适配",
+    "notes": "已按固定最终快照整合沙箱、工厂插件、原生/宿主协议及管理 API；本地替换 active 轮询为持久化 key/version/hash，发送前建引用并保留未知接受预留。终态事件和资金恢复分离，旧 Go 适配器入口退出。API 四文件改写为本地冻结合同，不能照搬上游轮询更新及倍率结算。独立两阶段 HTTP 工具已验证本地常驻候选重启；产物 access 在 GIN 捕获请求前去除并保留鉴权上下文。",
+    "local_evidence": [
+      "pkg/jsplugin/engine.go",
+      "pkg/jsplugin/registry.go",
+      "middleware/task_plugin.go:BindTaskPluginEndpointToChannel",
+      "model/task_plugin_execution.go:PinTaskPluginAttemptWithTx",
+      "service/task_plugin_runtime.go:LoadTaskPluginExact",
+      "controller/plugin_protocol.go",
+      "middleware/logger.go:SetUpLogger",
+      "middleware/logger_test.go:TestLoggerRedactsTaskCapabilitiesBeforeCaptureAndPreservesAuthentication",
+      "../scripts/server/test_ren2hub_plugin.py",
+      "../scripts/server/test_ren2hub_plugin_helpers.py",
+      "docs/plugin-api/README.md",
+      "docs/plugin-api/v1.md",
+      "docs/plugin-api/v1.d.ts",
+      "docs/plugin-api/v1.schema.json"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./service ./model -count=1",
+        "log": ".local-tests/plugin-finish-model-service-all.log",
+        "result": "通过；仅本地 SQLite，未提供 MySQL/PostgreSQL DSN"
+      },
+      {
+        "command": "go test -timeout 60s ./controller ./middleware -run '^(TestServeTaskPlugin|TestRetrieveTaskPlugin|TestPluginMetadataPreview|TestPluginArtifactProjection|TestPluginQueryCancellation|TestTaskPluginSync|TestTaskPluginNoChannelDiagnostic|TestDistributeCompact)' -count=1",
+        "log": ".local-tests/plugin-finish-api-final.log",
+        "result": "通过"
+      },
+      {
+        "command": "node .local-tests/validate-plugin-docs.cjs",
+        "log": ".local-tests/plugin-finish-docs.log",
+        "result": "严格 TypeScript 声明检查、JSON 解析/19 个本地引用、5 个文档链接通过；不是部署验证"
+      },
+      {
+        "command": "python scripts/server/test_ren2hub_plugin.py --base http://127.0.0.1:3000 --credentials <private-admin-json> --revision rc40-integration-validation --report <private-before-report> --state <private-state> --phase before-restart --sqlite <isolated-sqlite>",
+        "log": ".local-tests/plugin-deploy-before8.json",
+        "result": "2026-09-25 本地常驻候选通过 5 项；两任务预留 24 USD，缺完成事实任务保持 SUCCESS/预留，激活 v2 后旧 v1 固定引用及 force 删除保护有效；清理无错误、真实提供商请求 0"
+      },
+      {
+        "command": "python scripts/server/test_ren2hub_plugin.py --base http://127.0.0.1:3000 --credentials <private-admin-json> --revision rc40-integration-validation --report <private-after-report> --state <private-state> --phase after-restart --sqlite <isolated-sqlite>",
+        "log": ".local-tests/plugin-deploy-after8.json",
+        "result": "2026-09-25 同 SQLite/secret 候选进程重启后通过 7 项；旧 v1 实际 10 秒按冻结 0.4 USD/秒结算 4 USD，另一 SUCCESS 缺事实任务人工结算 4 USD，重复命令和查询仍总额 8 USD/两次金额事件、唯一结果 outbox/metric；重启前签名产物有效；submits/replays/wrong_version 均 0，清理无错误。Windows Stop-Process 只证明进程重启，不证明 SIGTERM 优雅停机或最终 SHA 部署"
+      },
+      {
+        "command": "python -m unittest discover -s scripts/server -p test_ren2hub_plugin_helpers.py -v",
+        "result": "6 项通过（1.427s）：真实 loopback/不跟重定向、重放及版本拒绝、限定只读 SQL、固定引用与唯一统计、精确 SSRF allowlist/恢复、logout 异常仍需证明旧 access 被拒；不是部署验收替代"
+      },
+      {
+        "command": "go test -timeout 60s ./middleware -run '^TestLogger' -count=1",
+        "tests": [
+          "TestLoggerRedactsTaskCapabilitiesBeforeCaptureAndPreservesAuthentication"
+        ],
+        "result": "通过（5.707s）；真实签名仍可用，重复/编码畸形签名拒绝，GIN 与 RequestURI 无 access。候选 before7 实际产物访问日志亦不含 access"
+      },
+      {
+        "tests": [
+          "TestTaskPluginReferencesSurviveActivationRestartAndDeletion",
+          "TestTaskPluginAttemptPinRollsBackSendingRecord",
+          "TestTaskPluginDeletionRequiresTerminalRecoveryAndRetainsArtifacts",
+          "TestRetrieveTaskPluginResponseRetainsExactVersionAndTokenOwnership",
+          "TestGatewayTaskPersistenceFailureDoesNotExposeSuccessOrReplay"
+        ],
+        "result": "本地通过；未知接受与发送崩溃窗口仍只有故障注入证据"
+      }
+    ],
+    "acceptance": "未完成：本地行为、文档与常驻候选两阶段重启通过；真实 MySQL/PostgreSQL 插件引用矩阵、Vue 管理页面端到端及最终 SHA 两服务器部署由主线合并验证。此次没有验证真实供应商、公开产物域名网络或 SIGTERM 优雅停机。"
+  },
+  {
+    "sha": "6c22550ea325d4fea0e0ece52412cb1e4449291c",
+    "disposition": "需要适配",
+    "notes": "保留 ASCII 名称折叠和渠道别名视图，跨插件歧义及循环不进入可发送别名。共享模型端点保留同 generation 的提供商候选，选中渠道后报价前重绑；后续授权仍用请求模型、请求构造用固定 upstreamModel。",
+    "local_evidence": [
+      "pkg/jsplugin/model_fold.go",
+      "model/task_model_alias.go",
+      "middleware/task_plugin_model.go",
+      "middleware/task_plugin.go:BindTaskPluginEndpointToChannel",
+      "plugins/builtin_plugins_test.go:TestBuiltInResponsesDecodersEchoChannelMappedAlias",
+      "router/gateway_veo_test.go:TestGatewayVeoFinalParametersAndPrecharge"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      },
+      {
+        "tests": [
+          "TestBuiltInResponsesDecodersEchoChannelMappedAlias",
+          "TestRegistryIndexesSharedEndpointCandidatesForDistinctLegacyProviders",
+          "TestTaskAdaptorRejectsPostDistributionEndpointModelDrift",
+          "TestTaskAdaptorReDecodesFinalCandidateAndRejectsModelDrift"
+        ],
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./model ./controller ./service -run '^(TestTaskModelAliases|TestBillingPriceAPI|TestTaskPluginPrice)' -count=1",
+        "log": ".local-tests/plugin-finish-price-alias-final.log",
+        "tests": [
+          "TestTaskModelAliasesRejectCyclesAndCrossPluginAmbiguity"
+        ],
+        "result": "多跳与ASCII别名通过，循环/跨渠道跨插件/共享尾模型歧义拒绝；直接共享端点保留双提供商"
+      }
+    ],
+    "acceptance": "通过：别名回显、最终候选约束与聚合循环/跨插件歧义均已运行。"
+  },
+  {
+    "sha": "aece11d2f7f095a33052696c5d28d3656609a99e",
+    "disposition": "直接采用",
+    "notes": "Hailuo 最终源码与固定 d04c118c 快照逐字节（归一化行尾）一致，包含 MiniMax-H3 /v2 提交、查询和媒体合同；完成计费由本地冻结价格层负责。",
+    "local_evidence": [
+      "plugins/tasks/hailuo/plugin.js",
+      "plugins/hailuo_responses_test.go:TestHailuoH3BuildSubmitRequest",
+      "plugins/hailuo_responses_test.go:TestHailuoH3RejectsOutOfContractRequests",
+      "plugins/hailuo_responses_test.go:TestHailuoH3PassesOpenAIVideoDecode"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：H3 本地插件合同测试；未调用真实提供商。"
+  },
+  {
+    "sha": "73afad588ca7af07134fa423e8a33fdea6c855b2",
+    "disposition": "直接采用",
+    "notes": "H3 输入图片/视频/音频计量取完成响应事实；采用最终快照相应 usage schema、输入媒体和完成用量修正。",
+    "local_evidence": [
+      "plugins/tasks/hailuo/plugin.js",
+      "plugins/hailuo_responses_test.go:TestHailuoExtractUsageFacts",
+      "plugins/hailuo_responses_test.go:TestHailuoH3CompletionUsageFacts"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：H3 媒体用量提取用例。"
+  },
+  {
+    "sha": "9df450fe54e1a874a5339b7c38a61014217f02c3",
+    "disposition": "需要适配",
+    "notes": "查询上下文含固定模型、上游 ID、data/state 和 HTTP status/headers，所有轮询及完成钩子收到可取消 context。未采用上游 404/连续失败自动判任务失败退款策略；本地无可靠接受/终态证据时保留预留进入待核对。",
+    "local_evidence": [
+      "relay/channel/task/jsplugin/adaptor.go:ParseTaskResultForTask",
+      "relay/channel/task/jsplugin/task_context_test.go",
+      "service/task_polling.go",
+      "service/task_completion_test.go:TestTaskPollingErrorsNeverBecomeJobFailure",
+      "service/task_polling_test.go:TestTimedOutAcceptedTasksKeepReservationsUntilEvidenceArrives",
+      "docs/plugin-api/v1.md"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./service ./model -count=1",
+        "log": ".local-tests/plugin-finish-model-service-all.log",
+        "result": "通过；仅本地 SQLite，未提供 MySQL/PostgreSQL DSN"
+      },
+      {
+        "command": "go test -timeout 60s ./controller ./middleware -run '^(TestServeTaskPlugin|TestRetrieveTaskPlugin|TestPluginMetadataPreview|TestPluginArtifactProjection|TestPluginQueryCancellation|TestTaskPluginSync|TestTaskPluginNoChannelDiagnostic|TestDistributeCompact)' -count=1",
+        "log": ".local-tests/plugin-finish-api-final.log",
+        "result": "通过"
+      },
+      {
+        "command": "python scripts/server/test_ren2hub_plugin.py --base http://127.0.0.1:3000 --credentials <private-admin-json> --revision rc40-integration-validation --report <private-after-report> --state <private-state> --phase after-restart --sqlite <isolated-sqlite>",
+        "log": ".local-tests/plugin-deploy-after8.json",
+        "result": "2026-09-25 同 SQLite/secret 候选进程重启后通过 7 项；旧 v1 实际 10 秒按冻结 0.4 USD/秒结算 4 USD，另一 SUCCESS 缺事实任务人工结算 4 USD，重复命令和查询仍总额 8 USD/两次金额事件、唯一结果 outbox/metric；重启前签名产物有效；submits/replays/wrong_version 均 0，清理无错误。Windows Stop-Process 只证明进程重启，不证明 SIGTERM 优雅停机或最终 SHA 部署"
+      },
+      {
+        "command": "go test -race -timeout 60s ./model ./relay/channel/task/jsplugin -run '^(TestTaskPluginPinAndDeleteSerialize|TestTaskPollingHooksHonorCancellation|TestTaskAdaptorCompletionCountersPreserveInvalidUsage)' -count=1",
+        "log": ".local-tests/plugin-finish-race.log",
+        "result": "真实 race 检测通过"
+      }
+    ],
+    "acceptance": "通过：本地轮询上下文、取消、HTTP 故障保留预留和状态合同；常驻候选重启旧版本恢复通过，最终 SHA 部署另验收。"
+  },
+  {
+    "sha": "32c261923a9786c64d2af087327ef057e7bde7e3",
+    "disposition": "被后续替代",
+    "notes": "早期 no-channel 文案会披露插件 key，最终行为采用 7209b6d 的隐私修正并适配统一 SelectRequestChannel。三语言说明任务模型需启用且符合条件的插件渠道；key 仅记录在 request ID 关联日志。",
+    "local_evidence": [
+      "middleware/distributor.go:SelectRequestChannel",
+      "middleware/distributor_task_plugin_diagnostic_test.go:TestTaskPluginNoChannelDiagnosticDoesNotExposePluginKeys",
+      "i18n/locales/en.yaml",
+      "i18n/locales/zh-CN.yaml",
+      "i18n/locales/zh-TW.yaml"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./controller ./middleware -run '^(TestServeTaskPlugin|TestRetrieveTaskPlugin|TestPluginMetadataPreview|TestPluginArtifactProjection|TestPluginQueryCancellation|TestTaskPluginSync|TestTaskPluginNoChannelDiagnostic|TestDistributeCompact)' -count=1",
+        "log": ".local-tests/plugin-finish-api-final.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：单插件和多候选响应均无 key，日志保留可定位信息。"
+  },
+  {
+    "sha": "3b4652269a6a6d9e2c8650a84ee8c4e447e6473b",
+    "disposition": "直接采用",
+    "notes": "Wan 3.0 最终源码与固定快照一致：auto_duration 标记、原生参数透传、模型别名和 usage.output_video_duration/SR 解析均纳入。30 秒只作为预估；本地实际价格缺必需完成事实时拒绝结算。",
+    "local_evidence": [
+      "plugins/tasks/alibaba/plugin.js",
+      "plugins/alibaba_wan3_test.go:TestAlibabaWan3",
+      "plugins/frozen_pricing_test.go:TestFactoryPriceDoesNotPriceEstimatedDuration"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：Wan3 合同与预估不可作为最终计费测试。"
+  },
+  {
+    "sha": "6298b0f3238461b9629dfc1c00866f8325123aa1",
+    "disposition": "需要适配",
+    "notes": "禁用覆盖层同时把工厂 key 放入禁用集合；本地版本库保留不可变记录以供已固定任务。新增真实 controller 同步/禁用回归，避免管理列表 disabled 但工厂仍接新请求。",
+    "local_evidence": [
+      "controller/task_plugin.go:SetTaskPluginStatus",
+      "controller/task_plugin_contract_test.go:TestTaskPluginSyncReusesHashAndSuppressesDisabledFactory",
+      "pkg/jsplugin/registry_disabled_factory_test.go"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./controller ./middleware -run '^(TestServeTaskPlugin|TestRetrieveTaskPlugin|TestPluginMetadataPreview|TestPluginArtifactProjection|TestPluginQueryCancellation|TestTaskPluginSync|TestTaskPluginNoChannelDiagnostic|TestDistributeCompact)' -count=1",
+        "log": ".local-tests/plugin-finish-api-final.log",
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：覆盖层禁用不复活工厂，原精确引用保留。"
+  },
+  {
+    "sha": "92bc7ff73c5ef215496d09d3e4b5769c9e35006b",
+    "disposition": "需要适配",
+    "notes": "采用 Suno 上游模型别名和统一回显；额外恢复本地 continuation 的 task/clip 所有权、成功 MUSIC、凭据固定和模型权限合同。合法请求才将公开来源 ID 映射为私有上游 ID。",
+    "local_evidence": [
+      "plugins/tasks/sunoapi/plugin.js",
+      "plugins/builtin_plugins_test.go:TestBuiltInResponsesDecodersEchoChannelMappedAlias",
+      "router/gateway_suno_continuation_test.go",
+      "middleware/task_plugin.go"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      },
+      {
+        "tests": [
+          "TestGatewaySunoContinuationKeepsOwnerAndPrivateTaskID",
+          "TestGatewaySunoContinuationRejectsUnknownOwnershipBeforeSending",
+          "TestGatewaySunoContinuationRejectsInvalidTaskRecords",
+          "TestGatewaySunoContinuationUnavailableOwnerDoesNotFallback",
+          "TestGatewaySunoContinuationRechecksTokenModelPermission"
+        ],
+        "result": "全部通过"
+      }
+    ],
+    "acceptance": "通过：别名回显与续作拒绝合同已运行，禁止其他 Token/模型/渠道回退。"
+  },
+  {
+    "sha": "210734bb73bc3c6e37548af90360aa4226566fe2",
+    "disposition": "已等效",
+    "notes": "本地不存在 custom-plugin 层独立开关；仅保留全局插件开关、工厂 key 禁用集和版本启停，避免多开关产生另一条执行选择链。",
+    "local_evidence": [
+      "constant/task.go",
+      "setting/task_plugin.go",
+      "pkg/jsplugin/registry.go",
+      "pkg/jsplugin/registry_master_enabled_test.go:TestRegistryMasterSwitchIsOrthogonalToLayerFlags"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：主开关及工厂/覆盖层状态测试。"
+  },
+  {
+    "sha": "99974a814f00a26dfa7431beb313e487529bbeed",
+    "disposition": "需要适配",
+    "notes": "导入元数据、作者、HTTPS website、本地化文本、图标名/独立 SVG/PNG data URI 与512 KiB边界；不可变源码版本仍由本地版本模型管理。文档和 TS 使用本地真实输出，不保留原 TaskView.properties。",
+    "local_evidence": [
+      "pkg/jsplugin/icon.go",
+      "pkg/jsplugin/registry.go",
+      "controller/task_plugin.go",
+      "model/task_plugin.go",
+      "docs/plugin-api/v1.schema.json",
+      "docs/plugin-api/v1.d.ts"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./controller ./middleware -run '^(TestServeTaskPlugin|TestRetrieveTaskPlugin|TestPluginMetadataPreview|TestPluginArtifactProjection|TestPluginQueryCancellation|TestTaskPluginSync|TestTaskPluginNoChannelDiagnostic|TestDistributeCompact)' -count=1",
+        "log": ".local-tests/plugin-finish-api-final.log",
+        "result": "通过"
+      },
+      {
+        "command": "node .local-tests/validate-plugin-docs.cjs",
+        "log": ".local-tests/plugin-finish-docs.log",
+        "result": "严格 TypeScript 声明检查、JSON 解析/19 个本地引用、5 个文档链接通过；不是部署验证"
+      },
+      {
+        "tests": [
+          "TestRegistryDecodesAndValidatesIcon",
+          "TestRegistryRequiresValidPluginAuthor",
+          "TestLocalizedTextContract",
+          "TestDecodeIconDataURI",
+          "TestPluginDisplayMetadata"
+        ],
+        "result": "通过"
+      }
+    ],
+    "acceptance": "后端通过：元数据、图标与类型/文档边界；页面显示由前端工作包验收。"
+  },
+  {
+    "sha": "9bf328d9749751757d5d6b74088d514813a618bd",
+    "disposition": "需要适配",
+    "notes": "Sora 最终插件源码与固定快照一致，Video renderer 保留供应商扩展和 URL/metadata；宿主覆盖生命周期及公开 ID 并隐藏私有结构字段。检索改用固定版本，不能随 active 更新改变 renderer。",
+    "local_evidence": [
+      "plugins/tasks/sora/plugin.js",
+      "relay/channel/task/jsplugin/adaptor.go",
+      "relay/channel/task/jsplugin/adaptor_test.go:TestTaskAdaptorPreservesSoraVideoResponseFields",
+      "controller/task_plugin_contract_test.go:TestRetrieveTaskPluginResponseRetainsExactVersionAndTokenOwnership",
+      "docs/plugin-api/v1.md"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./controller ./middleware -run '^(TestServeTaskPlugin|TestRetrieveTaskPlugin|TestPluginMetadataPreview|TestPluginArtifactProjection|TestPluginQueryCancellation|TestTaskPluginSync|TestTaskPluginNoChannelDiagnostic|TestDistributeCompact)' -count=1",
+        "log": ".local-tests/plugin-finish-api-final.log",
+        "result": "通过"
+      },
+      {
+        "command": "node .local-tests/validate-plugin-docs.cjs",
+        "log": ".local-tests/plugin-finish-docs.log",
+        "result": "严格 TypeScript 声明检查、JSON 解析/19 个本地引用、5 个文档链接通过；不是部署验证"
+      }
+    ],
+    "acceptance": "通过：提供商字段、生命周期覆盖、固定 renderer 和 Token 所有权。"
+  },
+  {
+    "sha": "a20574136b2746e9afc4b268c99cf99b3f6cc68b",
+    "disposition": "直接采用",
+    "notes": "Alibaba 最终源码与固定快照一致；Wan 模型表决定协议、媒体类型、持续时长与完成事实，flash audio 和 usage 字段修正已纳入。",
+    "local_evidence": [
+      "plugins/tasks/alibaba/plugin.js",
+      "plugins/alibaba_responses_test.go:TestAlibabaWanModelCapabilities",
+      "plugins/alibaba_responses_test.go:TestAlibabaWanEntrypointsPreserveOptions",
+      "plugins/alibaba_responses_test.go:TestAlibabaWanDurationValidation",
+      "plugins/alibaba_responses_test.go:TestAlibabaWanCompletionFactsAndArtifacts"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：Wan 模型能力、参数/媒体、完成用量及产物用例。"
+  },
+  {
+    "sha": "ab489ab8842b26f3dbc2d7a384e7c0ab0f700e0e",
+    "disposition": "需要适配",
+    "notes": "后端 GetTaskPluginOptions 提供插件扩展元数据，New API 候选资格接入统一渠道选择；React 的 provider picker 不能直接用于本地 Vue。",
+    "local_evidence": [
+      "controller/task_plugin.go:GetTaskPluginOptions",
+      "service/task_plugin_channel.go",
+      "router/task-plugin-management-router.go",
+      "docs/plugin-api/v1.md"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      },
+      {
+        "result": "后端 option 字段已静态核对；该管理接口响应与 Vue provider/model picker 联动未在本子任务运行"
+      }
+    ],
+    "acceptance": "未完成：需合并前端工作包的 provider/model 选择和管理接口运行证据。"
+  },
+  {
+    "sha": "74629e29f83f506bb523c5542aa851947bd423eb",
+    "disposition": "需要适配",
+    "notes": "采用 JSON clone、受限增量 SSE、同步/异步 Images 与每模型 usage profiles；本地将 manifest 用量展示和冻结 PriceVersion schema 分开，不采用倍率兜底或用请求预估结算。hook失败、负数/小数 token/越界事实保留终态并待核对。",
+    "local_evidence": [
+      "pkg/jsplugin/json_state.go",
+      "relay/channel/task/jsplugin/submit_stream.go",
+      "relay/channel/task/jsplugin/completion_usage_test.go",
+      "plugins/frozen_pricing.go",
+      "pkg/billing/usage_facts.go",
+      "service/task_billing.go:taskCompletionQuota",
+      "service/task_billing_test.go:TestPluginTaskCompletionUsesOnlyFrozenSchemaFacts",
+      "docs/plugin-api/v1.md"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./service ./model -count=1",
+        "log": ".local-tests/plugin-finish-model-service-all.log",
+        "result": "通过；仅本地 SQLite，未提供 MySQL/PostgreSQL DSN"
+      },
+      {
+        "command": "go test -timeout 60s ./controller ./middleware -run '^(TestServeTaskPlugin|TestRetrieveTaskPlugin|TestPluginMetadataPreview|TestPluginArtifactProjection|TestPluginQueryCancellation|TestTaskPluginSync|TestTaskPluginNoChannelDiagnostic|TestDistributeCompact)' -count=1",
+        "log": ".local-tests/plugin-finish-api-final.log",
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./service -run '^(TestPluginTaskCompletion|TestTaskPrice|TestTaskTerminal)' -count=1",
+        "log": ".local-tests/plugin-finish-live-completion-fix.log",
+        "result": "通过；实际 HTTP 验收暴露 schema 用量夹带通用 calls 被拒，现冻结 schema 仅传分阶段事实；实际 10 秒、确认零、缺事实拒绝、覆盖请求事实拒绝均有回归"
+      },
+      {
+        "command": "go test -timeout 60s ./service -count=1",
+        "log": ".local-tests/plugin-finish-service-post-live-fix.log",
+        "result": "完整 service 包通过（17.007s），覆盖实际验收修复后的代码"
+      },
+      {
+        "command": "python scripts/server/test_ren2hub_plugin.py --base http://127.0.0.1:3000 --credentials <private-admin-json> --revision rc40-integration-validation --report <private-before-report> --state <private-state> --phase before-restart --sqlite <isolated-sqlite>",
+        "log": ".local-tests/plugin-deploy-before8.json",
+        "result": "2026-09-25 本地常驻候选通过 5 项；两任务预留 24 USD，缺完成事实任务保持 SUCCESS/预留，激活 v2 后旧 v1 固定引用及 force 删除保护有效；清理无错误、真实提供商请求 0"
+      },
+      {
+        "command": "python scripts/server/test_ren2hub_plugin.py --base http://127.0.0.1:3000 --credentials <private-admin-json> --revision rc40-integration-validation --report <private-after-report> --state <private-state> --phase after-restart --sqlite <isolated-sqlite>",
+        "log": ".local-tests/plugin-deploy-after8.json",
+        "result": "2026-09-25 同 SQLite/secret 候选进程重启后通过 7 项；旧 v1 实际 10 秒按冻结 0.4 USD/秒结算 4 USD，另一 SUCCESS 缺事实任务人工结算 4 USD，重复命令和查询仍总额 8 USD/两次金额事件、唯一结果 outbox/metric；重启前签名产物有效；submits/replays/wrong_version 均 0，清理无错误。Windows Stop-Process 只证明进程重启，不证明 SIGTERM 优雅停机或最终 SHA 部署"
+      },
+      {
+        "tests": [
+          "TestTaskSubmitStreamContract",
+          "TestTaskSubmitDeltaStreamContract",
+          "TestTaskSubmitStreamCancellationClosesReader",
+          "TestTaskAdaptorCompletionCountersPreserveInvalidUsage",
+          "TestTaskAdaptorImmediateCompletionUsageFailureRequiresReconciliation",
+          "TestFactoryPriceRequiresExplicitPriceAndActualUsage"
+        ],
+        "result": "本地插件/资金边界通过"
+      }
+    ],
+    "acceptance": "未完成：插件运行与冻结合同通过，常驻候选实际完成事实结算/缺事实待核对已验收；通用 Images 计价和价格 Vue 展示/编辑由主线合并验收。"
+  },
+  {
+    "sha": "129f21b6942ed433fd7eea1239b4a24d8b58b48b",
+    "disposition": "直接采用",
+    "notes": "JSON state 使用 UTF-8 规范化后的编码计量，clone 和增量变更仍保持独立容器，避免非法字节绕过输出尺寸限制。",
+    "local_evidence": [
+      "pkg/jsplugin/json_state.go",
+      "pkg/jsplugin/engine_test.go:TestJSONStateUTF8Normalization",
+      "relay/channel/task/jsplugin/adaptor_test.go:TestPluginJSONValuesPreserveCodecNormalizationAndIsolation"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：UTF-8、编码长度及快照隔离测试。"
+  },
+  {
+    "sha": "7209b6db95ef33bfb0f6344ebf61c1fec9af780c",
+    "disposition": "需要适配",
+    "notes": "最终 no-channel 隐私语义保留在统一路由器：错误响应只提示任务模型需要可用插件渠道；私有 key/候选 key 仅写入 request ID 关联警告日志，不向用户返回。已覆盖 en/zh-CN/zh-TW。",
+    "local_evidence": [
+      "middleware/distributor.go:SelectRequestChannel",
+      "middleware/distributor_task_plugin_diagnostic_test.go:TestTaskPluginNoChannelDiagnosticDoesNotExposePluginKeys",
+      "i18n/keys.go"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./controller ./middleware -run '^(TestServeTaskPlugin|TestRetrieveTaskPlugin|TestPluginMetadataPreview|TestPluginArtifactProjection|TestPluginQueryCancellation|TestTaskPluginSync|TestTaskPluginNoChannelDiagnostic|TestDistributeCompact)' -count=1",
+        "log": ".local-tests/plugin-finish-api-final.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：503、三语言提示、单/多候选保密与日志关联均有运行断言。"
+  },
+  {
+    "sha": "a8ed7f7c5f24e56c2f1612126d82e9fec625056c",
+    "disposition": "直接采用",
+    "notes": "Hailuo 按模型家族给完整 usage profile；legacy 与 H3 支持的分辨率/媒体维度不混用，最终源码与固定快照一致。",
+    "local_evidence": [
+      "plugins/tasks/hailuo/plugin.js",
+      "plugins/hailuo_responses_test.go:TestHailuoUsageProfilesPerModel",
+      "plugins/hailuo_responses_test.go:TestHailuoLegacySubmitRequestUnchanged"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：各模型 profile 与旧提交行为用例。"
+  },
+  {
+    "sha": "4c34f25a49f1cf491479e3842b2251e8a6908851",
+    "disposition": "需要适配",
+    "notes": "New API 多插件绑定保留 task_extend_plugin_keys 和 new_api upstream 合同。渠道初选从已接受候选取资格，选定后固定 key；后续资格复核、报价和 dispatch不再换插件。禁用级联只解绑目标插件，不停普通网关流量。",
+    "local_evidence": [
+      "service/task_plugin_channel.go:TaskPluginCandidateChannelEligible",
+      "middleware/task_plugin.go:BindTaskPluginEndpointToChannel",
+      "controller/task_plugin.go:SetTaskPluginStatus",
+      "relay/channel/task/jsplugin/auth.go",
+      "relay/channel/task/jsplugin/adaptor_test.go:TestTaskAdaptorChainsDoubaoThroughNewAPIUpstream",
+      "relay/channel/task/jsplugin/adaptor_test.go:TestTaskAdaptorChainsSunoBatchFetchThroughNewAPIUpstream"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./controller ./middleware -run '^(TestServeTaskPlugin|TestRetrieveTaskPlugin|TestPluginMetadataPreview|TestPluginArtifactProjection|TestPluginQueryCancellation|TestTaskPluginSync|TestTaskPluginNoChannelDiagnostic|TestDistributeCompact)' -count=1",
+        "log": ".local-tests/plugin-finish-api-final.log",
+        "result": "通过"
+      },
+      {
+        "command": "node .local-tests/validate-plugin-docs.cjs",
+        "log": ".local-tests/plugin-finish-docs.log",
+        "result": "严格 TypeScript 声明检查、JSON 解析/19 个本地引用、5 个文档链接通过；不是部署验证"
+      }
+    ],
+    "acceptance": "后端合同通过：New API 提交/批量查询凭据与路由；Vue 多绑定保存交互由前端工作包验收。"
+  },
+  {
+    "sha": "03563a4a791629a811076f1cbcbecfbe2716eac2",
+    "disposition": "需要适配",
+    "notes": "OpenAI Images generations/edits 由宿主协议桥接任务插件，接入统一报价/持久化并支持 immediate/异步结果、multipart、多图和 b64_json。renderer 无有效图或下载失败明确报错，供应商 metadata 保留。",
+    "local_evidence": [
+      "controller/plugin_protocol_image.go",
+      "controller/plugin_protocol_test.go:TestServeTaskPluginImageProtocolRendersImmediateResultAndInlinesBase64",
+      "controller/plugin_protocol_test.go:TestServeTaskPluginImageProtocolWaitsForAsynchronousTask",
+      "plugins/alibaba_responses_test.go:TestAlibabaOpenAIImageCountDerivationAndRender",
+      "pkg/jsplugin/routing_test.go:TestOpenAIImageProtocolClaimBindsBothEndpointsAndRequiresRender",
+      "docs/plugin-api/v1.md"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./controller ./middleware -run '^(TestServeTaskPlugin|TestRetrieveTaskPlugin|TestPluginMetadataPreview|TestPluginArtifactProjection|TestPluginQueryCancellation|TestTaskPluginSync|TestTaskPluginNoChannelDiagnostic|TestDistributeCompact)' -count=1",
+        "log": ".local-tests/plugin-finish-api-final.log",
+        "result": "通过"
+      },
+      {
+        "command": "node .local-tests/validate-plugin-docs.cjs",
+        "log": ".local-tests/plugin-finish-docs.log",
+        "result": "严格 TypeScript 声明检查、JSON 解析/19 个本地引用、5 个文档链接通过；不是部署验证"
+      }
+    ],
+    "acceptance": "插件 Images 本地通过；通用图片计价与前端日志展示需合并相应工作包证据。"
+  },
+  {
+    "sha": "3abbb8198e0468ac6e16eb0103c1d3642e2e7668",
+    "disposition": "需要适配",
+    "notes": "未直接采用终态回调内一次性累加；新增同事务唯一 TaskResultEvent outbox保存固定插件、结果/用量快照及供应商完成时间。PerfMetric 与投递标记同事务，资金统计继续由 BillingRecovery独立投递，SUCCESS缺用量保留预留。",
+    "local_evidence": [
+      "model/task_result_event.go",
+      "model/task_completion.go",
+      "model/task_reconciliation.go",
+      "model/perf_metric.go:upsertPerfMetricWithTx",
+      "service/task_polling.go",
+      "service/task_billing.go",
+      "model/task_result_event_test.go",
+      "service/task_completion_test.go"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./service ./model -count=1",
+        "log": ".local-tests/plugin-finish-model-service-all.log",
+        "result": "通过；仅本地 SQLite，未提供 MySQL/PostgreSQL DSN"
+      },
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./model -run '^(TestMetadataPreview|TestTaskTerminalRejects|TestTaskResultEvent)' -count=1",
+        "log": ".local-tests/plugin-finish-final-boundaries.log",
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./service -run '^(TestPluginTaskCompletion|TestTaskPrice|TestTaskTerminal)' -count=1",
+        "log": ".local-tests/plugin-finish-live-completion-fix.log",
+        "result": "通过；实际 HTTP 验收暴露 schema 用量夹带通用 calls 被拒，现冻结 schema 仅传分阶段事实；实际 10 秒、确认零、缺事实拒绝、覆盖请求事实拒绝均有回归"
+      },
+      {
+        "command": "go test -timeout 60s ./service -count=1",
+        "log": ".local-tests/plugin-finish-service-post-live-fix.log",
+        "result": "完整 service 包通过（17.007s），覆盖实际验收修复后的代码"
+      },
+      {
+        "command": "python scripts/server/test_ren2hub_plugin.py --base http://127.0.0.1:3000 --credentials <private-admin-json> --revision rc40-integration-validation --report <private-before-report> --state <private-state> --phase before-restart --sqlite <isolated-sqlite>",
+        "log": ".local-tests/plugin-deploy-before8.json",
+        "result": "2026-09-25 本地常驻候选通过 5 项；两任务预留 24 USD，缺完成事实任务保持 SUCCESS/预留，激活 v2 后旧 v1 固定引用及 force 删除保护有效；清理无错误、真实提供商请求 0"
+      },
+      {
+        "command": "python scripts/server/test_ren2hub_plugin.py --base http://127.0.0.1:3000 --credentials <private-admin-json> --revision rc40-integration-validation --report <private-after-report> --state <private-state> --phase after-restart --sqlite <isolated-sqlite>",
+        "log": ".local-tests/plugin-deploy-after8.json",
+        "result": "2026-09-25 同 SQLite/secret 候选进程重启后通过 7 项；旧 v1 实际 10 秒按冻结 0.4 USD/秒结算 4 USD，另一 SUCCESS 缺事实任务人工结算 4 USD，重复命令和查询仍总额 8 USD/两次金额事件、唯一结果 outbox/metric；重启前签名产物有效；submits/replays/wrong_version 均 0，清理无错误。Windows Stop-Process 只证明进程重启，不证明 SIGTERM 优雅停机或最终 SHA 部署"
+      },
+      {
+        "command": "go test -race -timeout 60s ./model -run '^(TestTaskResultEvent|TestTaskTerminalRejects|TestTaskPluginPinAndDeleteSerialize)' -count=1",
+        "log": ".local-tests/plugin-finish-result-events-race.log",
+        "result": "真实 race 检测通过"
+      },
+      {
+        "tests": [
+          "TestTaskResultEventSurvivesReconciliationAndMetricDeliveryRetry",
+          "TestTaskTerminalRejectsChangedPinnedIdentity",
+          "TestTaskTerminalSurvivesAccountingPreparationFailure",
+          "TestTaskTerminalRecoveryResumesAfterLogFailure"
+        ],
+        "result": "缺事实保留终态/预留、标记失败回滚、并发恢复单次计数、人工结算金额单次投递、版本漂移拒绝通过；常驻重启另见两阶段 HTTP 报告"
+      }
+    ],
+    "acceptance": "未完成：本地结果/资金分离及故障注入通过，常驻候选重启后恢复/缺事实人工结算/重复轮询/唯一 outbox 与统计已通过；真实 MySQL/PostgreSQL 事务并发与最终 SHA 两服务器部署仍需主线合并验证。"
+  },
+  {
+    "sha": "65d3a2171fd11c65ad2e2e1f1d65723926659c81",
+    "disposition": "直接采用",
+    "notes": "Seedance 和 Wan 每模型能力表限制分辨率，按模型区分 reference-video/audio；无效分辨率预先拒绝，完成时不把模型外枚举当真实事实。Alibaba/Doubao 源码与固定快照一致。",
+    "local_evidence": [
+      "plugins/tasks/alibaba/plugin.js",
+      "plugins/tasks/doubao/plugin.js",
+      "plugins/doubao_responses_test.go:TestDoubaoSeedanceUsageFacts",
+      "plugins/alibaba_responses_test.go:TestAlibabaWanModelCapabilities",
+      "plugins/alibaba_responses_test.go:TestAlibabaWanFlashAudioFact"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：模型能力、实际事实与 profile 测试；真实供应商价格不从元数据推断。"
+  },
+  {
+    "sha": "47713bcb1749f81c3a48127c0150e4c6d4da35f1",
+    "disposition": "需要适配",
+    "notes": "Jimeng/Kling/Sora 版本与固定最终快照一致；Suno 采用目标 1.1.0，并保留本地 continuation 所有权和标准化修复。所有内置插件编译及 protocol/usage 合同通过。",
+    "local_evidence": [
+      "plugins/tasks/jimeng/plugin.js",
+      "plugins/tasks/kling/plugin.js",
+      "plugins/tasks/sora/plugin.js",
+      "plugins/tasks/sunoapi/plugin.js",
+      "plugins/builtin_plugins_test.go:TestBuiltInTaskPluginResponsesAndUsageContracts"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：四插件版本和协议运行用例。"
+  },
+  {
+    "sha": "474ed66fb14b0de30f82a1729b4f7cf3dab19d63",
+    "disposition": "直接采用",
+    "notes": "Alibaba openai_image.render 在标准化图片 entries时保留其他供应商响应字段；没有只投影 data丢失 usage/metadata。源码与固定快照一致。",
+    "local_evidence": [
+      "plugins/tasks/alibaba/plugin.js",
+      "plugins/alibaba_responses_test.go:TestAlibabaOpenAIImageCountDerivationAndRender"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：图数、data渲染与供应商 metadata 保留断言。"
+  },
+  {
+    "sha": "c0cff23a3af8e68809647bd39ec204bedbea28af",
+    "disposition": "需要适配",
+    "notes": "上传源码限额8 MiB，Source/Icon使用本地 LongText 的方言类型。新增正好8 MiB存取与哈希不变测试，MySQL及PostgreSQL接真实DSN测试入口，不再在方言矩阵内反复只跑SQLite。",
+    "local_evidence": [
+      "controller/task_plugin.go:maxTaskPluginSourceBytes",
+      "model/task_plugin.go:TaskPlugin",
+      "model/task_plugin_execution_test.go:TestTaskPluginSourceDialectRoundTrip",
+      "docs/plugin-api/v1.md"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./service ./model -count=1",
+        "log": ".local-tests/plugin-finish-model-service-all.log",
+        "result": "通过；仅本地 SQLite，未提供 MySQL/PostgreSQL DSN"
+      },
+      {
+        "tests": [
+          "TestTaskPluginSourceDialectRoundTrip/sqlite"
+        ],
+        "result": "8 MiB往返通过；mysql/postgres因TEST_MYSQL_DSN/TEST_POSTGRES_DSN未配置而跳过，非通过"
+      }
+    ],
+    "acceptance": "未完成：本地SQLite容量往返通过，实际MySQL longtext及PostgreSQL方言运行未完成。"
+  },
+  {
+    "sha": "2c175190c44a95c6af4877e901dc5211ef706979",
+    "disposition": "需要适配",
+    "notes": "同步先读取版本元数据与哈希，只有变化的override才读源码编译；源码哈希再校验，失败不退回其他版本。新增真实syncTaskPluginsOnce数据库查询计数：连续两轮未变源码仅查询一次。",
+    "local_evidence": [
+      "model/task_plugin.go:GetTaskPluginSyncSnapshot",
+      "model/task_plugin.go:GetTaskPluginSource",
+      "controller/task_plugin.go:syncTaskPluginsOnceContext",
+      "controller/task_plugin_contract_test.go:TestTaskPluginSyncReusesHashAndSuppressesDisabledFactory"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./controller ./middleware -run '^(TestServeTaskPlugin|TestRetrieveTaskPlugin|TestPluginMetadataPreview|TestPluginArtifactProjection|TestPluginQueryCancellation|TestTaskPluginSync|TestTaskPluginNoChannelDiagnostic|TestDistributeCompact)' -count=1",
+        "log": ".local-tests/plugin-finish-api-final.log",
+        "result": "通过"
+      }
+    ],
+    "acceptance": "通过：真实查询计数与激活版本、禁用语义断言。"
+  },
+  {
+    "sha": "d61d6be7593f99eacf9462e99ee13f0c432657f5",
+    "disposition": "需要适配",
+    "notes": "提交状态接受整个2xx范围，但继续校验任务ID/结构/接受证据。新增299端到端测试补足200/201/202；2xx无ID和持久化失败保留未知预留，不创建成功响应或自动重放。",
+    "local_evidence": [
+      "relay/relay_task.go",
+      "router/gateway_task_test.go:TestGatewayTaskAcceptedStatusesAndAccounting",
+      "router/gateway_task_test.go:TestGatewayTaskPersistenceFailureDoesNotExposeSuccessOrReplay",
+      "docs/plugin-api/v1.md"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin ./router -count=1",
+        "log": ".local-tests/plugin-finish-runtime-router-all.log",
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./router -run '^TestGatewayTaskAcceptedStatusesAndAccounting$' -count=1",
+        "log": ".local-tests/plugin-finish-any2xx.log",
+        "result": "200/201/202/299均通过，单次发送且保留固定凭据/恢复记录"
+      }
+    ],
+    "acceptance": "通过：接受状态和证据约束，本地没有以2xx直接视作成功。"
+  },
+  {
+    "sha": "b6809a52df88e8db5c8591b2d3788a05401271b7",
+    "disposition": "需要适配",
+    "notes": "上游在前端解析安全常量；本地由Go AST preview接口实现，不执行模块或getter。允许受控const别名/嵌套字面量；逃逸、突变、循环/前向引用、覆盖属性、动态值返回unresolved，另限制深度与每字段展开预算。",
+    "local_evidence": [
+      "pkg/jsplugin/metadata_preview.go",
+      "pkg/jsplugin/metadata_preview_test.go",
+      "controller/task_plugin.go:PreviewTaskPlugin",
+      "controller/task_plugin_contract_test.go:TestPluginMetadataPreviewNeverExecutesAndReportsDynamicFields",
+      "docs/plugin-api/v1.md"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./pkg/jsplugin ./model -run '^(TestMetadataPreview|TestTaskTerminalRejects|TestTaskResultEvent)' -count=1",
+        "log": ".local-tests/plugin-finish-final-boundaries.log",
+        "result": "通过"
+      },
+      {
+        "command": "go test -timeout 60s ./controller ./middleware -run '^(TestServeTaskPlugin|TestRetrieveTaskPlugin|TestPluginMetadataPreview|TestPluginArtifactProjection|TestPluginQueryCancellation|TestTaskPluginSync|TestTaskPluginNoChannelDiagnostic|TestDistributeCompact)' -count=1",
+        "log": ".local-tests/plugin-finish-api-final.log",
+        "result": "通过"
+      },
+      {
+        "command": "node .local-tests/validate-plugin-docs.cjs",
+        "log": ".local-tests/plugin-finish-docs.log",
+        "result": "严格 TypeScript 声明检查、JSON 解析/19 个本地引用、5 个文档链接通过；不是部署验证"
+      },
+      {
+        "tests": [
+          "TestMetadataPreviewDoesNotExecuteSource",
+          "TestMetadataPreviewResolvesSafeConstants",
+          "TestMetadataPreviewRejectsMutableOrEscapingConstants",
+          "TestMetadataPreviewBoundsConstantExpansion",
+          "TestMetadataPreviewDoesNotExposeOverwrittenLiteral"
+        ],
+        "result": "全部通过"
+      }
+    ],
+    "acceptance": "后端通过：安全常量预览有执行证据；Vue上传/市场消费unresolved的交互由前端工作包验收。"
+  },
+  {
+    "sha": "9a0be8750a6d736d9692535ed2cd68f8eec46529",
+    "disposition": "需要适配",
+    "notes": "后端新增当前插件schema只读接口与新发布校验；历史价格和在途Quote保持原schema/表达式。新发布拒绝已删枚举（包括表达式未达分支）、来源/类型/单位漂移和放宽工厂范围；共享模型必须明确plugin_key，自定义来源不能从manifest猜测。Vue保留旧值/显式采用新schema由前端工作包合并。",
+    "local_evidence": [
+      "service/task_plugin_pricing.go",
+      "service/task_plugin_pricing_test.go",
+      "controller/billing_pricing.go",
+      "controller/billing_plugin_schema_test.go",
+      "router/api-router.go",
+      "docs/plugin-api/v1.md"
+    ],
+    "validation": [
+      {
+        "command": "go test -timeout 60s ./model ./controller ./service -run '^(TestTaskModelAliases|TestBillingPriceAPI|TestTaskPluginPrice)' -count=1",
+        "log": ".local-tests/plugin-finish-price-alias-final.log",
+        "tests": [
+          "TestTaskPluginPricePublicationRejectsNarrowedEnumsAndPreservesFrozenQuote",
+          "TestTaskPluginPriceSchemaRequiresExplicitProviderAndReviewedSources",
+          "TestBillingPriceAPIRevalidatesCurrentPluginWithoutRewritingHistory"
+        ],
+        "result": "全部通过：旧价读取及原Quote收费不变，新价非法枚举不写版本，多提供商必须选择"
+      },
+      {
+        "command": "node .local-tests/validate-plugin-docs.cjs",
+        "log": ".local-tests/plugin-finish-docs.log",
+        "result": "严格 TypeScript 声明检查、JSON 解析/19 个本地引用、5 个文档链接通过；不是部署验证"
+      },
+      {
+        "command": "python scripts/server/test_ren2hub_plugin.py --base http://127.0.0.1:3000 --credentials <private-admin-json> --revision rc40-integration-validation --report <private-after-report> --state <private-state> --phase after-restart --sqlite <isolated-sqlite>",
+        "log": ".local-tests/plugin-deploy-after8.json",
+        "result": "2026-09-25 同 SQLite/secret 候选进程重启后通过 7 项；旧 v1 实际 10 秒按冻结 0.4 USD/秒结算 4 USD，另一 SUCCESS 缺事实任务人工结算 4 USD，重复命令和查询仍总额 8 USD/两次金额事件、唯一结果 outbox/metric；重启前签名产物有效；submits/replays/wrong_version 均 0，清理无错误。Windows Stop-Process 只证明进程重启，不证明 SIGTERM 优雅停机或最终 SHA 部署"
+      }
+    ],
+    "acceptance": "后端通过；需合并Vue旧值可见/明确选择当前schema的运行证据。"
+  }
+]

@@ -40,7 +40,10 @@ const bundle: AuthBundle = {
   },
 }
 
-beforeEach(clearAuthBundle)
+beforeEach(() => {
+  clearAuthBundle()
+  vi.spyOn(api, 'get').mockResolvedValue({ enabled: false })
+})
 afterEach(() => vi.restoreAllMocks())
 
 describe('authentication API', () => {

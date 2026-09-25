@@ -6,8 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/relaykit/dto"
+
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
+	"github.com/shopspring/decimal"
 )
 
 // RunExpr compiles (with cache) and executes an expression string.
@@ -25,11 +28,11 @@ func RunExpr(exprStr string, params TokenParams) (float64, TraceResult, error) {
 }
 
 func RunExprWithRequest(exprStr string, params TokenParams, request RequestInput) (float64, TraceResult, error) {
-	entry, err := compileEntryFromCacheByHash(exprStr, ExprHashString(exprStr))
+	entry, err := compileEntryWithSchema(exprStr, ExprHashString(exprStr), request.UsageSchema)
 	if err != nil {
 		return 0, TraceResult{}, err
 	}
-	return runProgram(entry.prog, entry.requestRules, params, request)
+	return runEntry(entry, params, request)
 }
 
 // RunExprByHash is like RunExpr but accepts a pre-computed hash for the cache
@@ -40,9 +43,31 @@ func RunExprByHash(exprStr, hash string, params TokenParams) (float64, TraceResu
 }
 
 func RunExprByHashWithRequest(exprStr, hash string, params TokenParams, request RequestInput) (float64, TraceResult, error) {
-	entry, err := compileEntryFromCacheByHash(exprStr, hash)
+	entry, err := compileEntryWithSchema(exprStr, hash, request.UsageSchema)
 	if err != nil {
 		return 0, TraceResult{}, err
+	}
+	return runEntry(entry, params, request)
+}
+
+func runEntry(entry *cachedEntry, params TokenParams, request RequestInput) (float64, TraceResult, error) {
+	if entry.usedVars["image_count"] {
+		if request.ImageCount == nil || *request.ImageCount < 1 || *request.ImageCount > dto.MaxImageN {
+			return 0, TraceResult{}, fmt.Errorf("image_count requires an integer between 1 and %d", dto.MaxImageN)
+		}
+	} else {
+		request.ImageCount = nil
+	}
+	if entry.version == 2 {
+		for key := range entry.usedUsage {
+			value, exists := request.Usage[key]
+			if !exists || value == nil {
+				return 0, TraceResult{}, fmt.Errorf("billing usage %q is missing", key)
+			}
+			if _, err := NormalizeUsageValue(request.UsageSchema.Fields[key], value); err != nil {
+				return 0, TraceResult{}, err
+			}
+		}
 	}
 	return runProgram(entry.prog, entry.requestRules, params, request)
 }
@@ -50,6 +75,11 @@ func RunExprByHashWithRequest(exprStr, hash string, params TokenParams, request 
 func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, params TokenParams, request RequestInput) (float64, TraceResult, error) {
 	trace := TraceResult{
 		RequestRules: append([]RequestRuleTrace(nil), requestRules...),
+	}
+	imageCount := 0
+	if request.ImageCount != nil {
+		imageCount = *request.ImageCount
+		trace.ImageCount = &imageCount
 	}
 	if err := ValidateAttributes(request.Attributes); err != nil {
 		return 0, trace, err
@@ -69,16 +99,44 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, params TokenP
 	}
 
 	env := map[string]interface{}{
-		"p":     params.P,
-		"c":     params.C,
-		"len":   params.Len,
-		"cr":    params.CR,
-		"cc":    params.CC,
-		"cc1h":  params.CC1h,
-		"img":   params.Img,
-		"img_o": params.ImgO,
-		"ai":    params.AI,
-		"ao":    params.AO,
+		"image_count": float64(imageCount),
+		"p":           params.P,
+		"c":           params.C,
+		"len":         params.Len,
+		"cr":          params.CR,
+		"cc":          params.CC,
+		"cc1h":        params.CC1h,
+		"img":         params.Img,
+		"img_cr":      params.ImgCR,
+		"img_o":       params.ImgO,
+		"ai":          params.AI,
+		"ao":          params.AO,
+		"fixed":       func(usd float64) float64 { return usd * 1000000 },
+		"u": func(key string) interface{} {
+			if request.UsageSchema == nil {
+				probeErr = fmt.Errorf("billing usage schema is missing")
+				return nil
+			}
+			field, exists := request.UsageSchema.Fields[key]
+			if !exists {
+				probeErr = fmt.Errorf("undeclared billing usage field")
+				return nil
+			}
+			value, err := NormalizeUsageValue(field, request.Usage[key])
+			if err != nil {
+				probeErr = err
+				return nil
+			}
+			if field.Type == "number" {
+				number, err := decimal.NewFromString(value.(string))
+				if err != nil {
+					probeErr = err
+					return nil
+				}
+				return number.InexactFloat64()
+			}
+			return value
+		},
 		"tier": func(name string, value float64) float64 {
 			trace.MatchedTier = name
 			trace.Cost = value
@@ -146,7 +204,7 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, params TokenP
 
 func AllowedAttribute(name string) bool {
 	switch name {
-	case "service_tier", "quality", "resolution", "quantity", "duration", "tool_category":
+	case "service_tier", "quality", "resolution", "quantity", "duration", "tool_category", "effort", "thinking", "thinking_budget_tokens", "temperature", "top_p":
 		return true
 	}
 	return false

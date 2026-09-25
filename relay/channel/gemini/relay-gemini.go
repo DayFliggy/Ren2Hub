@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 )
 
 func buildUsageFromGeminiMetadata(metadata *dto.GeminiUsageMetadata, fallbackPromptTokens int) dto.Usage {
@@ -162,6 +163,9 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		geminiResponse, apiErr := parseGeminiGenerationResponse(c, []byte(data), true, sawOutput)
+		if geminiResponse != nil {
+			info.ObserveResponseModel(gjson.Get(data, "modelVersion").Str)
+		}
 		if apiErr != nil {
 			apiErr.RetryAfter, _ = service.ParseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
 			sr.Stop(apiErr)
@@ -232,6 +236,7 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 	if apiErr != nil {
 		return nil, apiErr
 	}
+	info.ObserveResponseModel(gjson.GetBytes(responseBody, "modelVersion").Str)
 	markGeminiGoogleSearchCall(c, geminiResponse)
 	usage := buildUsageFromGeminiResponse(c, info, geminiResponse)
 	switch info.RelayFormat {

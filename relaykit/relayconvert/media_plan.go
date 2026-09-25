@@ -178,11 +178,10 @@ func planMediaConversion(req RequestRequirements, target types.RelayFormat) ([]t
 	var diagnostics []types.ConversionDiagnostic
 	for _, media := range req.Media {
 		canConvert := media.SourceKind == "inline" || media.SourceKind == "url"
-		if media.ToolResult {
-			canConvert = canConvert && media.Kind == "image" &&
-				(req.Format == types.RelayFormatClaude && target == types.RelayFormatOpenAIResponses ||
-					req.Format == types.RelayFormatOpenAIResponses && target == types.RelayFormatClaude)
-		}
+        // Tool output media is hoisted by the adopted protocol converter.
+        if media.ToolResult && media.SourceKind != "owned" {
+            continue
+        }
 		if media.Kind == "image" {
 			canConvert = canConvert && (media.MIMEType == "" || strings.HasPrefix(media.MIMEType, "image/"))
 		} else {

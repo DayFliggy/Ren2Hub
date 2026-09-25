@@ -76,49 +76,51 @@ func resolveUserSortOptions(sortOptions []UserSortOptions) UserSortOptions {
 // User if you add sensitive fields, don't forget to clean them in setupLogin function.
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
-	Id                 int                        `json:"id"`
-	Username           string                     `json:"username" gorm:"unique;index" validate:"max=20"`
-	Password           string                     `json:"password" gorm:"not null;" validate:"min=8,max=20"`
-	OriginalPassword   string                     `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
-	DisplayName        string                     `json:"display_name" gorm:"index" validate:"max=20"`
-	Role               int                        `json:"role" gorm:"type:int;default:1"`   // admin, common
-	Status             int                        `json:"status" gorm:"type:int;default:1"` // enabled, disabled
-	Email              string                     `json:"email" gorm:"index" validate:"max=50"`
-	GitHubId           string                     `json:"github_id" gorm:"column:github_id;index"`
-	DiscordId          string                     `json:"discord_id" gorm:"column:discord_id;index"`
-	OidcId             string                     `json:"oidc_id" gorm:"column:oidc_id;index"`
-	WeChatId           string                     `json:"wechat_id" gorm:"column:wechat_id;index"`
-	TelegramId         string                     `json:"telegram_id" gorm:"column:telegram_id;index"`
-	VerificationCode   string                     `json:"verification_code" gorm:"-:all"`                         // this field is only for Email verification, don't save it to database!
-	AccessToken        *string                    `json:"-" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
-	Quota              common.Quota               `json:"available_quota" gorm:"type:bigint;default:0;column:available_quota"`
-	ReservedQuota      common.Quota               `json:"reserved_quota" gorm:"type:bigint;not null;default:0"`
-	QuotaVersion       int64                      `json:"quota_version" gorm:"type:bigint;not null;default:0"`
-	UsedQuota          common.Quota               `json:"used_quota" gorm:"type:bigint;default:0;column:used_quota"` // used quota
-	RequestCount       int                        `json:"request_count" gorm:"type:int;default:0;"`                  // request number
-	Group              string                     `json:"group" gorm:"type:varchar(64);default:'default'"`
-	AffCode            string                     `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
-	AffCount           int                        `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
-	AffQuota           common.Quota               `json:"aff_quota" gorm:"type:bigint;default:0;column:aff_quota"`           // 邀请剩余额度
-	AffHistoryQuota    common.Quota               `json:"aff_history_quota" gorm:"type:bigint;default:0;column:aff_history"` // 邀请历史额度
-	AffFrozenQuota     common.Quota               `json:"aff_frozen_quota" gorm:"type:bigint;default:0;column:aff_frozen_quota"`
-	AffRebateRateBps   *int                       `json:"aff_rebate_rate_bps,omitempty" gorm:"type:int;column:aff_rebate_rate_bps"`
-	AffCodeEnabled     bool                       `json:"aff_code_enabled" gorm:"column:aff_code_enabled"`
-	AffCodeCustom      bool                       `json:"aff_code_custom" gorm:"column:aff_code_custom"`
-	AffInviteLimit     *int                       `json:"aff_invite_limit,omitempty" gorm:"type:int;column:aff_invite_limit"`
-	InviterId          int                        `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
-	DeletedAt          gorm.DeletedAt             `gorm:"index"`
-	LinuxDOId          string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
-	Setting            string                     `json:"setting" gorm:"type:text;column:setting"`
-	Remark             string                     `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
-	StripeCustomer     string                     `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
-	CreatedAt          int64                      `json:"created_at" gorm:"autoCreateTime;column:created_at"`
-	LastLoginAt        int64                      `json:"last_login_at" gorm:"default:0;column:last_login_at"`
-	AuthVersion        int64                      `json:"-" gorm:"type:bigint;not null;default:1;column:auth_version"`
-	AdminPermissions   map[string]map[string]bool `json:"admin_permissions,omitempty" gorm:"-:all"`
-	GatewayConcurrency *int                       `json:"gateway_concurrency"`
-	GatewayWaitMS      *int                       `json:"gateway_wait_ms"`
-	GatewayQueueSize   *int                       `json:"gateway_queue_size"`
+	HasPassword          bool                       `json:"-" gorm:"-:all"`
+	AccessTokenCreatedAt *int64                     `json:"-" gorm:"type:bigint;column:access_token_created_at"`
+	Id                   int                        `json:"id"`
+	Username             string                     `json:"username" gorm:"unique;index" validate:"max=20"`
+	Password             string                     `json:"password" gorm:"not null;" validate:"min=8,max=128"`
+	OriginalPassword     string                     `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
+	DisplayName          string                     `json:"display_name" gorm:"index" validate:"max=20"`
+	Role                 int                        `json:"role" gorm:"type:int;default:1"`   // admin, common
+	Status               int                        `json:"status" gorm:"type:int;default:1"` // enabled, disabled
+	Email                string                     `json:"email" gorm:"index" validate:"max=50"`
+	GitHubId             string                     `json:"github_id" gorm:"column:github_id;index"`
+	DiscordId            string                     `json:"discord_id" gorm:"column:discord_id;index"`
+	OidcId               string                     `json:"oidc_id" gorm:"column:oidc_id;index"`
+	WeChatId             string                     `json:"wechat_id" gorm:"column:wechat_id;index"`
+	TelegramId           string                     `json:"telegram_id" gorm:"column:telegram_id;index"`
+	VerificationCode     string                     `json:"verification_code" gorm:"-:all"`                         // this field is only for Email verification, don't save it to database!
+	AccessToken          *string                    `json:"-" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
+	Quota                common.Quota               `json:"available_quota" gorm:"type:bigint;default:0;column:available_quota"`
+	ReservedQuota        common.Quota               `json:"reserved_quota" gorm:"type:bigint;not null;default:0"`
+	QuotaVersion         int64                      `json:"quota_version" gorm:"type:bigint;not null;default:0"`
+	UsedQuota            common.Quota               `json:"used_quota" gorm:"type:bigint;default:0;column:used_quota"` // used quota
+	RequestCount         int                        `json:"request_count" gorm:"type:int;default:0;"`                  // request number
+	Group                string                     `json:"group" gorm:"type:varchar(64);default:'default'"`
+	AffCode              string                     `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
+	AffCount             int                        `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
+	AffQuota             common.Quota               `json:"aff_quota" gorm:"type:bigint;default:0;column:aff_quota"`           // 邀请剩余额度
+	AffHistoryQuota      common.Quota               `json:"aff_history_quota" gorm:"type:bigint;default:0;column:aff_history"` // 邀请历史额度
+	AffFrozenQuota       common.Quota               `json:"aff_frozen_quota" gorm:"type:bigint;default:0;column:aff_frozen_quota"`
+	AffRebateRateBps     *int                       `json:"aff_rebate_rate_bps,omitempty" gorm:"type:int;column:aff_rebate_rate_bps"`
+	AffCodeEnabled       bool                       `json:"aff_code_enabled" gorm:"column:aff_code_enabled"`
+	AffCodeCustom        bool                       `json:"aff_code_custom" gorm:"column:aff_code_custom"`
+	AffInviteLimit       *int                       `json:"aff_invite_limit,omitempty" gorm:"type:int;column:aff_invite_limit"`
+	InviterId            int                        `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	DeletedAt            gorm.DeletedAt             `gorm:"index"`
+	LinuxDOId            string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
+	Setting              string                     `json:"setting" gorm:"type:text;column:setting"`
+	Remark               string                     `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
+	StripeCustomer       string                     `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
+	CreatedAt            int64                      `json:"created_at" gorm:"autoCreateTime;column:created_at"`
+	LastLoginAt          int64                      `json:"last_login_at" gorm:"default:0;column:last_login_at"`
+	AuthVersion          int64                      `json:"-" gorm:"type:bigint;not null;default:1;column:auth_version"`
+	AdminPermissions     map[string]map[string]bool `json:"admin_permissions,omitempty" gorm:"-:all"`
+	GatewayConcurrency   *int                       `json:"gateway_concurrency"`
+	GatewayWaitMS        *int                       `json:"gateway_wait_ms"`
+	GatewayQueueSize     *int                       `json:"gateway_queue_size"`
 }
 
 func (user *User) ToBaseUser() *UserBase {
@@ -154,7 +156,7 @@ func UpdateUserAccessToken(id int, token string) error {
 	if id == 0 {
 		return errors.New("id 为空！")
 	}
-	result := DB.Model(&User{}).Where("id = ?", id).Update("access_token", token)
+	result := DB.Model(&User{}).Where("id = ?", id).Updates(map[string]any{"access_token": token, "access_token_created_at": common.GetTimestamp()})
 	if result.Error != nil {
 		return result.Error
 	}
@@ -371,9 +373,16 @@ func EnsureEmailAvailable(email string, excludeUserID int) error {
 //
 // An empty email is allowed to repeat and needs no serialization.
 func withNormalizedEmailLock(tx *gorm.DB, email string, fn func(tx *gorm.DB) error) error {
+	if err := lockNormalizedEmail(tx, email); err != nil {
+		return err
+	}
+	return fn(tx)
+}
+
+func lockNormalizedEmail(tx *gorm.DB, email string) error {
 	email = NormalizeEmail(email)
 	if email == "" {
-		return fn(tx)
+		return nil
 	}
 	switch {
 	case common.UsingMainDatabase(common.DatabaseTypePostgreSQL):
@@ -386,7 +395,7 @@ func withNormalizedEmailLock(tx *gorm.DB, email string, fn func(tx *gorm.DB) err
 			return err
 		}
 	}
-	return fn(tx)
+	return nil
 }
 
 func GetMaxUserId() int {
@@ -547,7 +556,7 @@ func (user *User) prepareForInsert(tx *gorm.DB) error {
 		return nil
 	}
 	var err error
-	user.Password, err = common.Password2Hash(user.Password)
+	user.Password, err = common.HashAccountPassword(user.Password)
 	return err
 }
 
@@ -790,7 +799,7 @@ func (user *User) Update(updatePassword bool) error {
 func (user *User) UpdateWithTx(tx *gorm.DB, updatePassword bool) error {
 	var err error
 	if updatePassword {
-		user.Password, err = common.Password2Hash(user.Password)
+		user.Password, err = common.HashAccountPassword(user.Password)
 		if err != nil {
 			return err
 		}
@@ -855,7 +864,7 @@ func (user *User) Edit(updatePassword bool) error {
 func (user *User) EditWithTx(tx *gorm.DB, updatePassword bool) error {
 	var err error
 	if updatePassword {
-		user.Password, err = common.Password2Hash(user.Password)
+		user.Password, err = common.HashAccountPassword(user.Password)
 		if err != nil {
 			return err
 		}
@@ -911,7 +920,7 @@ func (user *User) UpdateManagedWithTx(tx *gorm.DB, updatePassword bool, operator
 		password := user.Password
 		if updatePassword {
 			var err error
-			password, err = common.Password2Hash(password)
+			password, err = common.HashAccountPassword(password)
 			if err != nil {
 				return err
 			}
@@ -1060,6 +1069,9 @@ func (user *User) ClearBinding(bindingType string) error {
 	}
 
 	if err := DB.Transaction(func(tx *gorm.DB) error {
+		if _, err := IncrementUserAuthVersionWithTx(tx, user.Id); err != nil {
+			return err
+		}
 		if err := tx.Model(&User{}).Where("id = ?", user.Id).Update(column, "").Error; err != nil {
 			return err
 		}
@@ -1096,12 +1108,31 @@ func ensureNoActiveAccountBillingTx(tx *gorm.DB, userID, tokenID int) error {
 	return nil
 }
 
-func (user *User) Delete() error {
+func (user *User) Delete() error { return user.deleteForSession(nil) }
+
+func DeleteUserForSession(identity AuthSessionIdentity) error {
+	user := &User{Id: identity.UserID}
+	return user.deleteForSession(&identity)
+}
+
+func (user *User) deleteForSession(identity *AuthSessionIdentity) error {
 	if user.Id == 0 {
 		return errors.New("id 为空！")
 	}
 	var nextAuthVersion int64
 	if err := DB.Transaction(func(tx *gorm.DB) error {
+		if identity != nil {
+			if err := ValidateAuthSessionWithTx(tx, *identity); err != nil {
+				return err
+			}
+			var current User
+			if err := tx.First(&current, identity.UserID).Error; err != nil {
+				return err
+			}
+			if current.Role == common.RoleRootUser {
+				return ErrCannotDeleteRootUser
+			}
+		}
 		var current User
 		if err := lockForUpdate(tx).First(&current, user.Id).Error; err != nil {
 			return err
@@ -1407,7 +1438,7 @@ func ResetUserPasswordByEmail(email string, password string) error {
 	if err != nil {
 		return err
 	}
-	hashedPassword, err := common.Password2Hash(password)
+	hashedPassword, err := common.HashAccountPassword(password)
 	if err != nil {
 		return err
 	}
@@ -1604,4 +1635,51 @@ func RootUserExists() bool {
 		return false
 	}
 	return true
+}
+
+func RevokeUserAccessToken(id int) (string, error) {
+	var tokenRef string
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var user User
+		if err := lockForUpdate(tx).Select("id", "access_token").First(&user, id).Error; err != nil {
+			return err
+		}
+		tokenRef = AccessTokenFingerprint(user.GetAccessToken())
+		if tokenRef == "" {
+			return nil
+		}
+		return tx.Model(&User{}).Where("id = ?", id).Updates(map[string]any{"access_token": nil, "access_token_created_at": nil}).Error
+	})
+	return tokenRef, err
+}
+
+func GetSelfUserById(id int) (*User, error) {
+	if id <= 0 {
+		return nil, errors.New("invalid user ID")
+	}
+	user := &User{}
+	// Select safe profile columns and the password-presence expression in one
+	// statement, so the response cannot mix two account revisions or expose a hash.
+	statement := &gorm.Statement{DB: DB}
+	if err := statement.Parse(&User{}); err != nil {
+		return nil, err
+	}
+	columns := make([]string, 0, len(statement.Schema.DBNames))
+	for _, column := range statement.Schema.DBNames {
+		if column == "password" || column == "access_token" || column == "remark" {
+			continue
+		}
+		columns = append(columns, statement.Quote(column))
+	}
+	columns = append(columns, "CASE WHEN password <> '' THEN 1 ELSE 0 END AS has_password")
+	var profile struct {
+		User
+		HasPassword bool
+	}
+	if err := DB.Model(&User{}).Select(strings.Join(columns, ",")).Where("id = ?", id).Take(&profile).Error; err != nil {
+		return nil, err
+	}
+	*user = profile.User
+	user.HasPassword = profile.HasPassword
+	return user, nil
 }

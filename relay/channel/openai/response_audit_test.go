@@ -30,6 +30,7 @@ func TestBufferedResponsesKeepsHostedItemsAndIndependentAnnotations(t *testing.T
 		`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[],"usage":{"input_tokens":3,"output_tokens":5,"total_tokens":8}}}`,
 	}, "\n\n") + "\n\n"
 	c, recorder, response, info := newResponsesChatTestContext(t, body, false)
+	info.ConversionPolicy = types.ConversionLossPolicyAllow
 	usage, apiErr := OaiResponsesToChatBufferedStreamHandler(c, info, response)
 	require.Nil(t, apiErr)
 	require.NotNil(t, usage)

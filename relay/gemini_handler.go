@@ -68,24 +68,13 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
+	if err := helper.ApplyReasoningModelSuffix(c, info, request); err != nil {
+		return newConvertRequestFailedError(c, info, err)
+	}
 
-	if model_setting.GetGeminiSettings().ThinkingAdapterEnabled {
-		if isNoThinkingRequest(request) {
-			// check is thinking
-			if !strings.Contains(info.OriginModelName, "-nothinking") {
-				// Rewrite to the "-nothinking" billing name only when the
-				// operator explicitly priced that variant. The automatic
-				// pricing catalog must not trigger this rename.
-				noThinkingModelName := info.OriginModelName + "-nothinking"
-				containPrice := helper.HasExplicitModelBillingConfig(noThinkingModelName)
-				if containPrice {
-					info.OriginModelName = noThinkingModelName
-					info.UpstreamModelName = noThinkingModelName
-				}
-			}
-		}
-		if request.GenerationConfig.ThinkingConfig == nil {
-			relayconvert.ApplyGeminiThinkingConfig(request, info)
+	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled && !info.ChannelSetting.PassThroughBodyEnabled {
+		if err := relayconvert.ApplyGeminiThinkingConfigChecked(request, info); err != nil {
+			return newConvertRequestFailedError(c, info, err)
 		}
 	}
 
@@ -126,7 +115,7 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		// 使用 ConvertGeminiRequest 转换请求格式
 		convertedRequest, err := adaptor.ConvertGeminiRequest(c, info, request)
 		if err != nil {
-			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			return newConvertRequestFailedError(c, info, err)
 		}
 		relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
 		jsonData, err := common.Marshal(convertedRequest)
@@ -227,6 +216,9 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo) (newAPI
 	err = helper.ModelMappedHelper(c, info, req)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
+	}
+	if err := helper.ApplyReasoningModelSuffix(c, info, req); err != nil {
+		return newConvertRequestFailedError(c, info, err)
 	}
 
 	req.SetModelName("models/" + info.UpstreamModelName)

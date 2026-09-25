@@ -61,6 +61,9 @@ func PersistAcceptedTask(task *Task, requestID string, consumption BillingConsum
 		if err := prepareTaskAcceptedBillingTx(tx, requestID, consumption); err != nil {
 			return err
 		}
+		if err := AttachTaskPluginExecution(tx, task); err != nil {
+			return err
+		}
 		var existing Task
 		err := tx.Where("task_id = ? AND user_id = ?", task.TaskID, task.UserId).First(&existing).Error
 		if err == nil {
@@ -73,6 +76,9 @@ func PersistAcceptedTask(task *Task, requestID string, consumption BillingConsum
 		}
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
+		}
+		if task.PrivateData.ResultDiscarded {
+			return tx.Omit("data").Create(task).Error
 		}
 		return tx.Create(task).Error
 	})

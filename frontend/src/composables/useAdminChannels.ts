@@ -9,6 +9,7 @@ import { useToast } from '@/composables/useToast'
 import type {
   AdminChannel,
   AdminChannelCreateInput,
+  AdminChannelCreateOptions,
   AdminChannelFetchModelsParams,
   AdminChannelPage,
   AdminChannelSortBy,
@@ -64,6 +65,10 @@ export function useAdminChannels() {
   const initialError = ref('')
   const busy = ref<Map<number, ChannelAction>>(new Map())
   const batchProgress = ref<ChannelBatchProgress | null>(null)
+  const balanceResponse = ref<{
+    channelName: string
+    rawResponse: string
+  } | null>(null)
   const crudAction = ref<{
     action: ChannelCrudAction
     id: number | null
@@ -301,8 +306,18 @@ export function useAdminChannels() {
     return runChannelAction(
       channel.id,
       'balance',
-      () => api.get<unknown>(`/api/next/admin/channels/balance/${channel.id}`),
-      'channels.balanceUpdated'
+      async () => {
+        const result = await api.get<
+          { balance: number } | { raw_response: string }
+        >(`/api/next/admin/channels/balance/${channel.id}`)
+        if (result && 'raw_response' in result) {
+          balanceResponse.value = {
+            channelName: channel.name,
+            rawResponse: result.raw_response,
+          }
+        }
+      },
+      'channels.balanceQueryCompleted'
     )
   }
 
@@ -396,12 +411,22 @@ export function useAdminChannels() {
 
   function createChannel(
     input: AdminChannelCreateInput,
-    options?: { batchKeys?: boolean }
+    options?: AdminChannelCreateOptions
   ): Promise<boolean> {
     return runCrudAction('create', null, async (signal) => {
       await api.post<AdminChannel>(
         '/api/next/admin/channels',
-        { mode: options?.batchKeys ? 'batch' : 'single', channel: input },
+        {
+          mode: options?.multiKey
+            ? 'multi_to_single'
+            : options?.batchKeys
+              ? 'batch'
+              : 'single',
+          ...(options?.multiKey
+            ? { multi_key_mode: options.multiKeyMode ?? 'random' }
+            : {}),
+          channel: input,
+        },
         { signal }
       )
       toast.success(t('channels.created'))
@@ -465,14 +490,18 @@ export function useAdminChannels() {
     params: AdminChannelFetchModelsParams
   ): Promise<string[]> {
     const models =
-      'channelId' in params
+      'channelId' in params && params.advancedCustom === undefined
         ? await api.get<string[]>(
             `/api/next/admin/channels/fetch_models/${params.channelId}`
           )
         : await api.post<string[]>('/api/next/admin/channels/fetch_models', {
-            type: params.type,
-            key: params.key,
+            ...('channelId' in params
+              ? { channel_id: params.channelId }
+              : { type: params.type, key: params.key }),
             base_url: params.baseUrl,
+            ...(params.advancedCustom === undefined
+              ? {}
+              : { advanced_custom: params.advancedCustom }),
           })
     return Array.isArray(models) ? models.filter(Boolean) : []
   }
@@ -697,6 +726,7 @@ export function useAdminChannels() {
     refreshing,
     initialError,
     batchProgress,
+    balanceResponse,
     isBatchBusy,
     isCrudBusy,
     isBulkBusy,

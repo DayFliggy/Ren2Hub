@@ -6,6 +6,19 @@ const generateAccessToken = vi.hoisted(() => vi.fn())
 const apiGet = vi.hoisted(() => vi.fn())
 const apiPost = vi.hoisted(() => vi.fn())
 const publicStatus = vi.hoisted(() => vi.fn())
+const requestProof = vi.hoisted(() => vi.fn())
+vi.mock('@/components/auth/SecurityProofDialog.vue', () => ({
+  default: {
+    setup(_: unknown, { expose }: { expose: (value: unknown) => void }) {
+      expose({ request: requestProof })
+      return () => null
+    },
+  },
+}))
+vi.mock('@/api/client', () => ({
+  api: { get: apiGet, post: apiPost, delete: vi.fn() },
+  setApiUnauthorizedHandler: vi.fn(),
+}))
 
 vi.mock('@/api/auth', () => ({
   authApi: { generateAccessToken },
@@ -35,7 +48,10 @@ beforeAll(async () => {
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  requestProof.mockReset().mockResolvedValue('one-use-proof')
   apiGet.mockImplementation((url: string) => {
+    if (url === '/api/user/token/status')
+      return Promise.resolve({ exists: false, token_ref: '' })
     if (url === '/api/user/passkey') return Promise.resolve({ enabled: false })
     if (url === '/api/user/2fa/status')
       return Promise.resolve({ enabled: false })
@@ -106,6 +122,10 @@ describe('AccountSecurityPanel access token', () => {
     const input = document.body.querySelector<HTMLInputElement>(
       'input[aria-label="access-token"]'
     )
+    expect(requestProof).toHaveBeenCalledWith({
+      scope: 'access_token.generate',
+    })
+    expect(generateAccessToken).toHaveBeenCalledWith('one-use-proof')
     expect(input?.value).toBe('one-time-secret')
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       'one-time-secret'
@@ -151,6 +171,7 @@ describe('AccountSecurityPanel OAuth popup lifecycle', () => {
     expect(openPopup).toHaveBeenCalledOnce()
 
     wrapper.unmount()
+    await flushPromises()
 
     expect(closePopup).toHaveBeenCalledOnce()
     expect(removeEventListener).toHaveBeenCalledWith(

@@ -35,6 +35,7 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 
+	info.ObserveResponseModel(responsesResp.Model)
 	if oaiError := responsesResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		c.Set("response_termination", relayconvert.TerminationFromResponse(&responsesResp))
 		return relayconvert.UsageFromResponsesUsage(responsesResp.Usage), types.WithOpenAIError(*oaiError, http.StatusBadGateway)
@@ -94,6 +95,9 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 		if event.Type == "" {
 			event.Type = eventName
 		}
+		if event.Response != nil {
+			info.ObserveResponseModel(event.Response.Model)
+		}
 		accumulator.ProcessEvent(&event)
 		if err := accumulator.Err(); err != nil {
 			return true, err
@@ -130,7 +134,7 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 	if finalResponse == nil {
 		finalResponse = &dto.OpenAIResponsesResponse{
 			ID:        helper.GetResponseID(c),
-			CreatedAt: int(time.Now().Unix()),
+			CreatedAt: dto.IntValue(time.Now().Unix()),
 			Model:     info.UpstreamModelName,
 			Status:    []byte(`"incomplete"`),
 		}
@@ -165,7 +169,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	responseId := helper.GetResponseID(c)
 	createAt := time.Now().Unix()
-	state, err := relayconvert.NewResponseStreamState(types.RelayFormatOpenAIResponses, info.RelayFormat, relayconvert.ResponseStreamOptions{MaxInputBytes: helper.ResponseConversionByteLimit(),
+	state, err := relayconvert.NewResponseStreamState(types.RelayFormatOpenAIResponses, info.RelayFormat, relayconvert.ResponseStreamOptions{EmitSequenceNumber: true, MaxInputBytes: helper.ResponseConversionByteLimit(),
 		ID:      responseId,
 		Model:   info.UpstreamModelName,
 		Created: createAt,
@@ -251,6 +255,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			return
 		}
 
+		if streamResp.Response != nil {
+			info.ObserveResponseModel(streamResp.Response.Model)
+		}
 		terminal := relayconvert.TerminationFromResponse(&streamResp)
 		if terminal.IsTerminal() {
 			c.Set("response_termination", terminal)

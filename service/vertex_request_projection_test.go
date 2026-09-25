@@ -26,7 +26,7 @@ func TestVertexNameOnlyPlanMatchesExecution(t *testing.T) {
 	for _, format := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, types.RelayFormatClaude, types.RelayFormatGemini} {
 		t.Run(string(format), func(t *testing.T) {
 			var native dto.GeminiChatRequest
-			require.NoError(t, json.Unmarshal([]byte(`{"contents":[{"role":"model","parts":[{"functionCall":{"id":"call_a","name":"echo","args":{}}},{"functionCall":{"id":"call_b","name":"echo","args":{}}}]},{"role":"user","parts":[{"functionResponse":{"id":"call_b","name":"echo","response":{"value":false}}},{"functionResponse":{"id":"call_a","name":"echo","response":{"value":0}}}]}],"generationConfig":{"maxOutputTokens":32}}`), &native))
+			require.NoError(t, json.Unmarshal([]byte(`{"contents":[{"role":"model","parts":[{"functionCall":{"id":"call_a","name":"echo","args":{}}},{"functionCall":{"id":"call_b","name":"echo","args":{}}}]},{"role":"user","parts":[{"functionResponse":{"id":"call_b","name":"echo","response":{"value":false}}},{"functionResponse":{"id":"call_a","name":"echo","response":{"value":0}}}]}],"generationConfig":{"maxOutputTokens":4096}}`), &native))
 			converted, err := relayconvert.ConvertRequest(context.Background(), &convmeta.Values{UpstreamModelName: "gemini-2.5-flash", ChannelMetaAttached: true}, format, &native)
 			require.NoError(t, err)
 			requirements, err := relayconvert.AnalyzeRequest(converted.Value)

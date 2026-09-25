@@ -23,6 +23,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.spyOn(api, 'get').mockImplementation((path: string) => {
+    if (path === '/api/log/self/groups') return Promise.resolve(['default'])
     if (path === '/api/log/self') {
       return Promise.resolve({ page: 1, page_size: 10, total: 0, items: [] })
     }

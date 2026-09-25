@@ -21,4 +21,5 @@ const (
 	EndpointTypeRealtime              EndpointType = "realtime"
 	EndpointTypeMidjourney            EndpointType = "midjourney"
 	EndpointTypeSuno                  EndpointType = "suno"
+	EndpointTypeTaskPlugin            EndpointType = "task_plugin"
 )

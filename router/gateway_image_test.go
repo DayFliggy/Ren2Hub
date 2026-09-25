@@ -12,6 +12,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -100,8 +101,8 @@ func TestGatewayImageDeliveryAndSettlement(t *testing.T) {
 		{"empty_json", "application/json", `{"data":[]}`, false, true, 502, 0},
 		{"malformed_json", "application/json", `{broken`, false, true, 502, 0},
 		{"completed_stream", "text/event-stream", "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"first\"}\n\n", true, false, 200, 500},
-		{"partial_eof", "text/event-stream", "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"partial\"}\n\n", true, true, 200, 500},
-		{"error_after_partial", "text/event-stream", "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"partial\"}\n\ndata: {\"type\":\"error\",\"error\":{\"message\":\"upstream broke\"}}\n\n", true, true, 200, 500},
+		{"partial_eof", "text/event-stream", "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"partial\"}\n\n", true, true, 200, 0},
+		{"error_after_partial", "text/event-stream", "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"partial\"}\n\ndata: {\"type\":\"error\",\"error\":{\"message\":\"upstream broke\"}}\n\n", true, true, 200, 0},
 		{"negative_usage", "text/event-stream", "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"image\",\"usage\":{\"output_tokens\":-3}}\n\n", true, true, 502, 0},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -149,8 +150,13 @@ func TestGatewayImageDeliveryAndSettlement(t *testing.T) {
 				heldOrCharged = 1500
 				var recovery model.BillingRecovery
 				require.NoError(t, model.DB.First(&recovery).Error)
-				assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
-				assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
+				if test.name == "partial_eof" || test.name == "error_after_partial" {
+					assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
+					assert.Equal(t, model.BillingRecoveryStateUnprepared, recovery.ConsumptionState)
+				} else {
+					assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
+					assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
+				}
 			}
 			assert.EqualValues(t, 10000000-heldOrCharged, user.Quota)
 			assert.EqualValues(t, 100000-heldOrCharged, token.RemainQuota)
@@ -170,6 +176,53 @@ func TestGatewayImageDeliveryAndSettlement(t *testing.T) {
 			} else {
 				assert.Zero(t, failures)
 			}
+		})
+	}
+}
+
+func TestGatewayImageExpressionUsesActualCountAndRetainsInterruptedReservation(t *testing.T) {
+	for _, test := range []struct {
+		name, contentType, body string
+		charge                  int64
+	}{
+		{"completed", "application/json", `{"data":[{"b64_json":"first"},{"b64_json":"second"}]}`, 1000},
+		{"partial", "text/event-stream", "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"partial\"}\n\n", 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			url, key, _ := setupGatewaySDKWithUpstream(t, func(w http.ResponseWriter, r *http.Request) {
+				var user model.User
+				require.NoError(t, model.DB.First(&user, 1).Error)
+				assert.EqualValues(t, 1500, user.ReservedQuota, "final overridden n=3 is reserved before send")
+				w.Header().Set("Content-Type", test.contentType)
+				_, _ = io.WriteString(w, test.body)
+			})
+			require.NoError(t, model.DB.Model(&model.Channel{}).Where("models = ?", "gpt-4o-mini").Update("param_override", `{"n":3}`).Error)
+			current, err := model.GetActiveBillingPrice(t.Context(), "gpt-4o-mini")
+			require.NoError(t, err)
+			_, err = model.PublishBillingPrice(t.Context(), billing.PriceVersion{Model: "gpt-4o-mini", Mode: billing.ModeExpression, Expression: `v1:tier("images", fixed(0.001)) * image_count`}, current.ID, 1)
+			require.NoError(t, err)
+			request, err := http.NewRequest(http.MethodPost, url+"/v1/images/generations", strings.NewReader(`{"model":"gpt-4o-mini","prompt":"draw","n":1}`))
+			require.NoError(t, err)
+			request.Header.Set("Authorization", "Bearer "+key)
+			request.Header.Set("Content-Type", "application/json")
+			response, err := (&http.Client{Timeout: 5 * time.Second}).Do(request)
+			require.NoError(t, err)
+			defer response.Body.Close()
+			_, err = io.ReadAll(response.Body)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusOK, response.StatusCode)
+			awaitGatewayPermitsReleased(t)
+			var user model.User
+			require.NoError(t, model.DB.First(&user, 1).Error)
+			assert.EqualValues(t, test.charge, user.UsedQuota)
+			if test.charge == 0 {
+				assert.EqualValues(t, 1500, user.ReservedQuota)
+				return
+			}
+			assert.Zero(t, user.ReservedQuota)
+			var log model.Log
+			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).First(&log).Error)
+			assert.Contains(t, log.Other, `"image_count":2`)
 		})
 	}
 }

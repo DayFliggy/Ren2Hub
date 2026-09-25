@@ -42,7 +42,7 @@ dev: dev-api dev-web
 
 test:
 	@echo "Testing root Go module..."
-	@GOWORK=off go test -timeout 60s ./...
+	@node scripts/test-go.mjs
 	@echo "Testing relaykit Go module..."
 	@cd relaykit && GOWORK=off go test -timeout 60s ./...
 

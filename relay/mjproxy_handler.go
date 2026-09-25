@@ -189,7 +189,7 @@ func RelayMidjourneyTaskImageSeed(c *gin.Context, info *relaycommon.RelayInfo) *
 		return service.MidjourneyRequestError(info, err, types.ErrorCodeAccessDenied, http.StatusForbidden)
 	}
 	c.Set("gateway_origin_midjourney", task)
-	if _, routeErr := middleware.SelectRequestChannel(c, info.OriginModelName, task.ChannelId, relaycommon.CompactAttemptNone); routeErr != nil {
+	if _, routeErr := middleware.SelectRequestChannel(c, info.OriginModelName, task.ChannelId); routeErr != nil {
 		return service.MidjourneyRequestError(info, routeErr, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable)
 	}
 	info.InitChannelMeta(c)
@@ -386,7 +386,7 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 				return service.MidjourneyRequestError(relayInfo, err, types.ErrorCodeAccessDenied, http.StatusForbidden)
 			}
 			c.Set("gateway_origin_midjourney", originTask)
-			if _, routeErr := middleware.SelectRequestChannel(c, service.CovertMjpActionToModelName(midjRequest.Action), originTask.ChannelId, relaycommon.CompactAttemptNone); routeErr != nil {
+			if _, routeErr := middleware.SelectRequestChannel(c, service.CovertMjpActionToModelName(midjRequest.Action), originTask.ChannelId); routeErr != nil {
 				return service.MidjourneyRequestError(relayInfo, routeErr, types.ErrorCodeGetChannelFailed, http.StatusServiceUnavailable)
 			}
 			relayInfo.InitChannelMeta(c)

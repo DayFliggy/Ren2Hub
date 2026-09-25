@@ -21,8 +21,21 @@ type BillingAttempt struct {
 }
 
 func PrepareBillingAttempt(ctx context.Context, requestID, attemptID string, channelID int, quote *billing.Quote) error {
+	return PrepareBillingAttemptWithPlugin(ctx, requestID, attemptID, channelID, quote, nil)
+}
+
+func PrepareBillingAttemptWithPlugin(ctx context.Context, requestID, attemptID string, channelID int, quote *billing.Quote, plugin *TaskPluginRef) error {
 	return BillingTransaction(ctx, func(tx *gorm.DB) error {
-		return prepareBillingAttemptTx(tx, requestID, attemptID, channelID, quote)
+		if err := prepareBillingAttemptTx(tx, requestID, attemptID, channelID, quote); err != nil {
+			return err
+		}
+		if plugin != nil {
+			if err := ValidateTaskPluginAdmissionWithTx(tx, *plugin); err != nil {
+				return err
+			}
+			return PinTaskPluginAttemptWithTx(tx, requestID, attemptID, *plugin)
+		}
+		return nil
 	})
 }
 

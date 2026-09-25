@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
@@ -88,7 +89,21 @@ func taskModelName(task *model.Task) string {
 
 // completeTaskBilling keeps provider completion separate from recoverable
 // accounting. Once the intent commits, polling must never replay the job.
-func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model.TaskStatus, actualQuota common.Quota, reason string, clamps ...*common.QuotaClamp) (bool, error) {
+func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model.TaskStatus, actualQuota common.Quota, reason string, clamps ...*common.QuotaClamp) (won bool, completionErr error) {
+	defer func() {
+		if completionErr == nil || won {
+			return
+		}
+		// A failed accounting preparation cannot erase confirmed provider
+		// completion. Preserve it with the reservation for reconciliation.
+		holdErr := model.HoldTaskBilling(ctx, task, fromStatus, "task_terminal_accounting_pending")
+		completionErr = errors.Join(completionErr, holdErr)
+		if holdErr == nil {
+			if err := model.DeliverTaskResultMetrics(ctx, task.ID); err != nil {
+				logger.LogError(ctx, fmt.Sprintf("task result metrics remain pending (task_id=%s): %v", task.TaskID, err))
+			}
+		}
+	}()
 	other := taskBillingOther(task)
 	other["task_id"], other["reason"] = task.TaskID, reason
 	other["pre_consumed_quota"], other["actual_quota"] = task.Quota, actualQuota
@@ -117,9 +132,12 @@ func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model
 	if snapshot := task.PrivateData.BillingContext; snapshot != nil {
 		consumption.Usage, consumption.Charge = snapshot.Usage, snapshot.Charge
 	}
-	won, err := model.PersistTaskCompletion(ctx, task, fromStatus, actualQuota, consumption)
+	won, err = model.PersistTaskCompletion(ctx, task, fromStatus, actualQuota, consumption)
 	if err != nil || !won {
 		return won, err
+	}
+	if err := model.DeliverTaskResultMetrics(ctx, task.ID); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("task result metrics remain pending (task_id=%s): %v", task.TaskID, err))
 	}
 	_, err = recoverOneBillingRecovery(ctx, task.PrivateData.SubmissionRequestID)
 	if err != nil {
@@ -148,6 +166,20 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 	usage.Source = "task_completed"
 	usage.Complete = true
 	usage.Estimated = false
+	if task.PrivateData.PluginRef != nil {
+		if result == nil || result.UsageError != "" {
+			return 0, "", nil, fmt.Errorf("plugin completion usage unavailable; reconciliation required")
+		}
+		usage.Quantities = nil
+		if snapshot.Quote.PriceVersion.UsageSchema == nil {
+			usage.Quantities = map[string]string{"calls": "1"}
+		}
+		usage.EstimatedFacts = nil
+		usage.ActualFacts = nil
+		if result != nil {
+			usage.ActualFacts = result.UsageFacts
+		}
+	}
 	if result != nil && (result.TotalTokens < 0 || result.CompletionTokens < 0 || result.CompletionTokens > result.TotalTokens) {
 		return 0, "", nil, fmt.Errorf("invalid task token usage")
 	}
@@ -178,4 +210,37 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 	snapshot.Usage = &usage
 	snapshot.Charge = charge
 	return charge.FinalQuota, "按冻结报价结算", nil, nil
+}
+
+// CompleteImmediateTask uses exactly the same durable terminal accounting as
+// polling. An invalid completion retains its reservation for reconciliation.
+func CompleteImmediateTask(ctx context.Context, task *model.Task, result *relaycommon.TaskInfo) error {
+	if result == nil || (result.Status != string(model.TaskStatusSuccess) && result.Status != string(model.TaskStatusFailure)) {
+		return fmt.Errorf("immediate task requires an explicit terminal status")
+	}
+	from := task.Status
+	task.Status = model.TaskStatus(result.Status)
+	task.Progress = "100%"
+	task.FinishTime = common.GetTimestamp()
+	task.FailReason = result.Reason
+	task.PrivateData.ResultURL = result.Url
+	task.PrivateData.CompletionUsage = &model.TaskCompletionUsage{CompletionTokens: result.CompletionTokens, TotalTokens: result.TotalTokens, Facts: result.UsageFacts, Error: result.UsageError}
+	if result.FinishTime > 0 {
+		task.FinishTime = result.FinishTime
+	}
+	if result.PluginState != nil {
+		task.PrivateData.PluginState = result.PluginState
+	}
+	quota, reason, clamp, err := taskCompletionQuota(nil, task, result)
+	if err != nil {
+		if holdErr := model.HoldTaskBilling(ctx, task, from, "task_final_usage_invalid"); holdErr != nil {
+			return fmt.Errorf("%w; retain reservation: %v", err, holdErr)
+		}
+		if metricErr := model.DeliverTaskResultMetrics(ctx, task.ID); metricErr != nil {
+			logger.LogError(ctx, fmt.Sprintf("task result metrics remain pending (task_id=%s): %v", task.TaskID, metricErr))
+		}
+		return err
+	}
+	_, err = completeTaskBilling(ctx, task, from, quota, reason, clamp)
+	return err
 }
