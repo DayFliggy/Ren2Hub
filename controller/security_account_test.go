@@ -26,6 +26,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -233,6 +234,67 @@ func TestSecurityAccountDeletionConcurrentRequestsHaveOneWinner(t *testing.T) {
 	require.NoError(t, model.DB.Unscoped().First(&deleted, user.Id).Error)
 	assert.True(t, deleted.DeletedAt.Valid)
 	assert.Equal(t, identity.UserAuthVersion+1, deleted.AuthVersion)
+}
+
+func TestSecurityAccountDeletionSQLiteDoesNotLoseConsumedProofToWriterRace(t *testing.T) {
+	t.Setenv("TEST_SECURITY_DIALECT", "sqlite")
+	user, identity := setupSecurityEnrollmentTest(t)
+	proof := issueSecurityEnrollmentProof(t, identity, service.VerificationOperation{Scope: service.VerificationScopeAccountDelete}, "password")
+	var flow model.AuthFlow
+	require.NoError(t, model.DB.Where("purpose = ?", model.AuthFlowPurposeSecurityProof).First(&flow).Error)
+
+	dialect, ok := model.DB.Dialector.(*sqlite.Dialector)
+	require.True(t, ok)
+	other, err := gorm.Open(sqlite.Open(dialect.DSN), &gorm.Config{Logger: model.DB.Logger})
+	require.NoError(t, err)
+	connection, err := other.DB()
+	require.NoError(t, err)
+	connection.SetMaxOpenConns(1)
+	connection.SetMaxIdleConns(1)
+	t.Cleanup(func() { assert.NoError(t, connection.Close()) })
+	require.NoError(t, other.Exec("PRAGMA busy_timeout = 0").Error)
+
+	var contender *gorm.DB
+	var contentionErr error
+	attempted := false
+	callbackName := "account-delete-competing-writer"
+	require.NoError(t, model.DB.Callback().Query().After("gorm:query").Register(callbackName, func(tx *gorm.DB) {
+		if tx.Statement.Table != "billing_recoveries" || attempted {
+			return
+		}
+		attempted = true
+		// The proof has committed and deletion has read the account and its
+		// billing state. A deferred transaction would let this other writer
+		// reserve the database now, then fail deletion's read-to-write upgrade.
+		contender = other.Begin()
+		contentionErr = contender.Error
+		if contentionErr == nil {
+			contentionErr = contender.Model(&model.AuthFlow{}).Where("id = ?", flow.Id).
+				UpdateColumn("consumed_at", gorm.Expr("consumed_at")).Error
+		}
+	}))
+	t.Cleanup(func() {
+		assert.NoError(t, model.DB.Callback().Query().Remove(callbackName))
+		if contender != nil && contender.Error == nil {
+			assert.NoError(t, contender.Rollback().Error)
+		}
+	})
+
+	response := securityEnrollmentRequest("DELETE", "/api/user/self", "", proof, identity, DeleteSelf)
+	var result securityEnrollmentResponse
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+	assert.True(t, attempted, "the competing connection must run inside the deletion transaction")
+	assert.ErrorContains(t, contentionErr, "database is locked", "deletion must reserve the writer before reading")
+	assert.True(t, result.Success, response.Body.String())
+	var deleted model.User
+	require.NoError(t, model.DB.Unscoped().First(&deleted, user.Id).Error)
+	assert.True(t, deleted.DeletedAt.Valid)
+	assert.Equal(t, identity.UserAuthVersion+1, deleted.AuthVersion)
+	require.NoError(t, model.DB.First(&flow, flow.Id).Error)
+	assert.NotNil(t, flow.ConsumedAt)
+	activeSessions, err := model.CountActiveUserSessions(user.Id, time.Now().Unix())
+	require.NoError(t, err)
+	assert.Zero(t, activeSessions)
 }
 
 type securityMailbox struct {

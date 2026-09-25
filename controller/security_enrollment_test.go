@@ -31,6 +31,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/assert"
@@ -53,8 +54,13 @@ func setupSecurityEnrollmentTest(t *testing.T) (*model.User, service.AuthIdentit
 		dialect = "sqlite"
 	}
 	dsn := os.Getenv("TEST_" + strings.ToUpper(dialect) + "_DSN")
-	db, _ := newAuditTestDatabase(t, dialect, dsn)
-	logDB, _ := newAuditTestDatabase(t, dialect, dsn)
+	var db, logDB *gorm.DB
+	if dialect == "sqlite" {
+		db, logDB = newSecuritySQLiteDatabase(t), newSecuritySQLiteDatabase(t)
+	} else {
+		db, _ = newAuditTestDatabase(t, dialect, dsn)
+		logDB, _ = newAuditTestDatabase(t, dialect, dsn)
+	}
 	db.Logger = logger.Default.LogMode(logger.Silent)
 	logDB.Logger = logger.Default.LogMode(logger.Silent)
 	versionQuery := "SELECT VERSION()"
@@ -100,6 +106,22 @@ func setupSecurityEnrollmentTest(t *testing.T) (*model.User, service.AuthIdentit
 	identity, err := service.ParseAccessToken(bundle.AccessToken)
 	require.NoError(t, err)
 	return user, identity
+}
+
+func newSecuritySQLiteDatabase(t *testing.T) *gorm.DB {
+	t.Helper()
+	// Exercise security transactions under the same immediate/WAL policy and
+	// single-connection pool as model.openSQLiteDatabase and InitDB.
+	dsn, err := common.SQLiteDSN(t.TempDir() + "/security.db")
+	require.NoError(t, err)
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	require.NoError(t, err)
+	connection, err := db.DB()
+	require.NoError(t, err)
+	connection.SetMaxIdleConns(1)
+	connection.SetMaxOpenConns(1)
+	t.Cleanup(func() { assert.NoError(t, connection.Close()) })
+	return db
 }
 
 func securityEnrollmentRequest(method, path, body, proof string, identity service.AuthIdentity, handler gin.HandlerFunc) *httptest.ResponseRecorder {
