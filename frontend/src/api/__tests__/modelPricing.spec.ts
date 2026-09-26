@@ -33,6 +33,23 @@ export const price: PriceVersion = {
 }
 afterEach(() => vi.restoreAllMocks())
 describe('immutable model pricing', () => {
+  it('preserves embedding scope through parsing and publication, and rejects unknown scopes', async () => {
+    const embedding: PriceVersion = { ...price, usage_scope: 'embedding' }
+    expect(parsePriceVersion(embedding, '/prices')).toEqual(embedding)
+    expect(parsePriceVersion(price, '/prices')).not.toHaveProperty(
+      'usage_scope'
+    )
+    for (const usage_scope of ['chat', '', null, 1])
+      expect(() =>
+        parsePriceVersion({ ...price, usage_scope }, '/prices')
+      ).toThrow()
+    const post = vi.spyOn(api, 'post').mockResolvedValue(embedding)
+    expect(await modelPricingApi.publish(embedding, 3)).toEqual(embedding)
+    expect(post).toHaveBeenCalledWith('/api/billing/prices', {
+      price: embedding,
+      expected_version: 3,
+    })
+  })
   it('loads current task schema choices and carries explicit publication selection', async () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue({
       model: 'test',

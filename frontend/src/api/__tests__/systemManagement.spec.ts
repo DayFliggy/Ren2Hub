@@ -124,6 +124,68 @@ describe('system management response contracts', () => {
     ).toMatchObject({ progress: 20, processed: 2, total: 10, deleted_count: 2 })
   })
 
+  it('retains bounded automatic pricing outcomes and source reasons without losing zero counts', () => {
+    const result = {
+      checked: 4,
+      changed: 0,
+      published: 2,
+      deactivated: 1,
+      unconfigured_count: 101,
+      unconfigured: ['embedding-v1'],
+      errors: ['OpenRouter unavailable'],
+      unconfigured_details: [
+        {
+          model: 'embedding-v1',
+          reasons: [
+            { source: 'sub2api', reason: 'Unsupported input image price' },
+          ],
+        },
+      ],
+    }
+    const pricing = { ...task, type: 'billing_pricing_sync', result }
+    expect(parseSystemTask(pricing).pricing_result).toEqual(result)
+    expect(
+      parseSystemTask({
+        ...pricing,
+        result: { ...result, unconfigured_details: undefined },
+      }).pricing_result?.unconfigured_details
+    ).toEqual([])
+    for (const invalid of [
+      { ...result, checked: '4' },
+      { ...result, published: -1 },
+      { ...result, errors: [null] },
+      { ...result, unconfigured: new Array(101).fill('model') },
+      {
+        ...result,
+        unconfigured_details: new Array(101).fill(
+          result.unconfigured_details[0]
+        ),
+      },
+      {
+        ...result,
+        unconfigured_details: [
+          { model: 'x', reasons: [{ source: 'sub2api', reason: null }] },
+        ],
+      },
+    ])
+      expect(() => parseSystemTask({ ...pricing, result: invalid })).toThrow()
+  })
+
+  it('loads the latest pricing task across all statuses using the shared list API', async () => {
+    const get = vi
+      .spyOn(api, 'getEnvelope')
+      .mockResolvedValue({ success: true, data: [], total: 0 })
+    await systemManagementApi.tasks({ type: 'billing_pricing_sync', limit: 1 })
+    expect(get).toHaveBeenCalledWith(
+      '/api/system-task/list',
+      {
+        type: 'billing_pricing_sync',
+        limit: 1,
+      },
+      { signal: undefined }
+    )
+  })
+
   it('uses request signals and requires the real deleted count', async () => {
     const signal = new AbortController().signal
     const get = vi

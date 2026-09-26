@@ -2,6 +2,7 @@ package helper
 
 import (
 	"github.com/QuantumNous/new-api/common"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,4 +47,21 @@ func TestBillingAttributesCaptureFinalReasoningAndExplicitZero(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, float64(1024), attrs["thinking_budget_tokens"])
 	assert.NotContains(t, attrs, "temperature")
+}
+
+func TestFinalServiceTierPreservesAttributeAndWireBody(t *testing.T) {
+	for _, tier := range []string{"priority", "fast", "ultrafast", "flex", " FAST ", "Unknown", " "} {
+		t.Run(tier, func(t *testing.T) {
+			body, err := common.Marshal(map[string]interface{}{"service_tier": tier})
+			require.NoError(t, err)
+			original := append([]byte(nil), body...)
+			info := &relaycommon.RelayInfo{}
+			require.NoError(t, FreezeOutboundBillingAttributes(info, body))
+			assert.Equal(t, tier, info.BillingRequestInput.Attributes["service_tier"])
+			assert.Equal(t, original, body)
+		})
+	}
+	attrs, err := BillingAttributesFromBody([]byte(`{}`))
+	require.NoError(t, err)
+	assert.NotContains(t, attrs, "service_tier")
 }

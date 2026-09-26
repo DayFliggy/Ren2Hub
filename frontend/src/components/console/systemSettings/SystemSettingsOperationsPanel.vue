@@ -7,18 +7,15 @@ import { useToast } from '@/composables/useToast'
 
 const toast = useToast()
 const loading = ref(false)
-const syncing = ref(false)
 const confirming = ref(false)
 const instances = ref<Array<Record<string, unknown>>>([])
 const tasks = ref<Array<Record<string, unknown>>>([])
-const pricingStatus = ref<Record<string, unknown> | null>(null)
 const currentTask = ref<Record<string, unknown> | null>(null)
 
 async function refresh() {
   loading.value = true
   try {
-    const [pricing, taskList, task, nodes] = await Promise.all([
-      api.get<Record<string, unknown>>('/api/auto_pricing/status'),
+    const [taskList, task, nodes] = await Promise.all([
       api.get<Array<Record<string, unknown>>>('/api/system-task/list', {
         limit: 20,
       }),
@@ -27,7 +24,6 @@ async function refresh() {
       }),
       api.get<Array<Record<string, unknown>>>('/api/system-info/instances'),
     ])
-    pricingStatus.value = pricing
     tasks.value = taskList ?? []
     currentTask.value = task
     instances.value = nodes ?? []
@@ -35,27 +31,6 @@ async function refresh() {
     toast.error(error instanceof Error ? error.message : String(error))
   } finally {
     loading.value = false
-  }
-}
-
-async function syncPricing() {
-  syncing.value = true
-  try {
-    pricingStatus.value = await api.post('/api/auto_pricing/sync')
-    toast.success('自动定价已同步')
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : String(error))
-  } finally {
-    syncing.value = false
-  }
-}
-
-async function syncRatios() {
-  try {
-    await api.post('/api/ratio_sync/fetch', { channel_ids: [] })
-    toast.success('倍率同步任务已提交')
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : String(error))
   }
 }
 
@@ -98,16 +73,6 @@ onMounted(refresh)
         @click="refresh"
         >刷新状态</ConsoleButton
       >
-      <ConsoleButton
-        variant="secondary"
-        size="sm"
-        :loading="syncing"
-        @click="syncPricing"
-        >立即同步自动定价</ConsoleButton
-      >
-      <ConsoleButton variant="secondary" size="sm" @click="syncRatios"
-        >同步上游倍率</ConsoleButton
-      >
       <ConsoleButton variant="secondary" size="sm" @click="createCleanupTask"
         >创建日志清理任务</ConsoleButton
       >
@@ -116,10 +81,6 @@ onMounted(refresh)
       >
     </div>
     <dl class="operations-summary">
-      <div>
-        <dt>自动定价</dt>
-        <dd>{{ pricingStatus?.status ?? pricingStatus?.state ?? '—' }}</dd>
-      </div>
       <div>
         <dt>当前任务</dt>
         <dd>{{ currentTask ? (currentTask.status ?? '运行中') : '无' }}</dd>

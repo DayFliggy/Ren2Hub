@@ -13,19 +13,22 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/expr-lang/expr/ast"
+	"github.com/expr-lang/expr/parser"
 	"github.com/shopspring/decimal"
 )
 
 const (
-	ModeUnitPrice      = "unit_price"
-	ModeExpression     = "expression"
-	ModeFree           = "free"
-	CalculationVersion = "billing-v2"
-	ContractVersion    = 2
-	ResultMicroUSD     = "micro_usd"
-	ResultUSD          = "usd"
-	RoundingVersion    = "half-up-positive-minimum-v1"
-	QuotaPerUSD        = int64(500000)
+	ModeUnitPrice       = "unit_price"
+	ModeExpression      = "expression"
+	ModeFree            = "free"
+	CalculationVersion  = "billing-v2"
+	ContractVersion     = 2
+	ResultMicroUSD      = "micro_usd"
+	ResultUSD           = "usd"
+	RoundingVersion     = "half-up-positive-minimum-v1"
+	QuotaPerUSD         = int64(500000)
+	UsageScopeEmbedding = "embedding"
 )
 
 // UnitPrice is USD per declared unit. Quantity is a named usage dimension;
@@ -41,6 +44,7 @@ type PriceVersion struct {
 	CalculationVersion string                   `json:"calculation_version"`
 	ResultUnit         string                   `json:"result_unit"`
 	UsageSchema        *billingexpr.UsageSchema `json:"usage_schema,omitempty"`
+	UsageScope         string                   `json:"usage_scope,omitempty"`
 	ID                 int64                    `json:"id"`
 	Model              string                   `json:"model"`
 	Mode               string                   `json:"mode"`
@@ -202,6 +206,9 @@ func ValidateFrozenPriceVersion(version PriceVersion) error {
 	if version.ContractVersion != ContractVersion || version.CalculationVersion != CalculationVersion {
 		return fmt.Errorf("unsupported billing price contract")
 	}
+	if version.UsageScope != "" && version.UsageScope != UsageScopeEmbedding {
+		return fmt.Errorf("unsupported billing usage scope")
+	}
 	expressionVersion, _ := billingexpr.ParseExprVersion(version.Expression)
 	wantUnit := ResultUSD
 	if version.Mode == ModeExpression && expressionVersion == 1 {
@@ -237,6 +244,30 @@ func ValidateFrozenPriceVersion(version PriceVersion) error {
 	default:
 		return fmt.Errorf("unknown billing mode")
 	}
+	if version.UsageScope == UsageScopeEmbedding {
+		if version.UsageSchema != nil || (version.Mode == ModeExpression && expressionVersion != 1) {
+			return fmt.Errorf("embedding scope requires token pricing without a usage schema")
+		}
+		if version.Mode == ModeExpression {
+			_, body := billingexpr.ParseExprVersion(version.Expression)
+			tree, err := parser.Parse(body)
+			if err != nil {
+				return fmt.Errorf("invalid embedding expression")
+			}
+			used := map[string]bool{}
+			// Validate every branch before optimization can remove zero rates
+			// or unreachable output and fixed-price terms.
+			ast.Find(tree.Node, func(node ast.Node) bool {
+				if identifier, ok := node.(*ast.IdentifierNode); ok {
+					used[identifier.Value] = true
+				}
+				return false
+			})
+			if !used["p"] || used["c"] || used["img_o"] || used["ao"] || used["image_count"] || used["fixed"] {
+				return fmt.Errorf("embedding scope requires an input-token expression")
+			}
+		}
+	}
 	seen := map[string]bool{}
 	imageExpression := version.UsesImageCount()
 	var expressionFields map[string]bool
@@ -253,6 +284,9 @@ func ValidateFrozenPriceVersion(version PriceVersion) error {
 		}
 	}
 	for _, price := range version.Prices {
+		if version.UsageScope == UsageScopeEmbedding && (!tokenDimension(price.Quantity) || price.Quantity == "c" || price.Quantity == "img_o" || price.Quantity == "ao") {
+			return fmt.Errorf("embedding scope only permits input-token prices")
+		}
 		if imageExpression && price.Quantity == "images" {
 			return fmt.Errorf("expression already owns image quantity")
 		}
@@ -302,6 +336,9 @@ func ValidateFrozenPriceVersion(version PriceVersion) error {
 				return fmt.Errorf("invalid billing quantity or unit")
 			}
 		}
+	}
+	if version.UsageScope == UsageScopeEmbedding && version.Mode == ModeUnitPrice && !seen["p"] {
+		return fmt.Errorf("embedding scope requires an input-token price")
 	}
 	return nil
 }
@@ -443,6 +480,9 @@ func Calculate(quote *Quote, usage Usage) (*ChargeResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	if quote.PriceVersion.UsageScope == UsageScopeEmbedding && (usage.OutputTokens > 0 || usage.ImageOutputTokens > 0 || usage.AudioOutputTokens > 0) {
+		return nil, fmt.Errorf("embedding usage cannot contain output tokens")
+	}
 	tokenCounts := map[string]float64{"p": params.P, "c": params.C, "cr": params.CR, "cc": params.CC, "cc1h": params.CC1h, "img": params.Img, "img_cr": params.ImgCR, "img_o": params.ImgO, "ai": params.AI, "ao": params.AO}
 	counts := map[string]decimal.Decimal{}
 	facts, err := resolveUsageFacts(quote, usage)
@@ -482,6 +522,9 @@ func Calculate(quote *Quote, usage Usage) (*ChargeResult, error) {
 		}
 		if tokenDimension(name) || n.GreaterThan(decimal.NewFromInt(math.MaxInt32)) {
 			return nil, fmt.Errorf("invalid usage quantity")
+		}
+		if quote.PriceVersion.UsageScope == UsageScopeEmbedding && !n.IsZero() {
+			return nil, fmt.Errorf("embedding usage cannot contain non-token quantities")
 		}
 		counts[name] = n
 		if !n.IsZero() && !used[name] && quote.PriceVersion.Mode != ModeFree &&

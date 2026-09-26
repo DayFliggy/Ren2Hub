@@ -4,14 +4,17 @@ import { createI18n } from 'vue-i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ModelManagementView from '@/views/admin/ModelManagementView.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
+import AutomaticPricingPanel from '@/components/admin/AutomaticPricingPanel.vue'
 
 const mocks = vi.hoisted(() => ({
+  auth: { isRoot: true },
   models: vi.fn(),
   allVendors: vi.fn(),
   setModelStatus: vi.fn(),
   deleteModel: vi.fn(),
 }))
 vi.mock('@/api/adminManagement', () => ({ metadataApi: mocks }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => mocks.auth }))
 const rows = [1, 2].map((id) => ({
   id,
   model_name: `model-${id}`,
@@ -57,6 +60,7 @@ async function setup(path = '/models/metadata') {
         }),
       ],
       stubs: {
+        AutomaticPricingPanel: true,
         ModelMetadataDrawer: true,
         MetadataSyncDialog: true,
         MissingModelsDialog: true,
@@ -71,6 +75,7 @@ async function setup(path = '/models/metadata') {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.auth.isRoot = true
   mocks.models.mockResolvedValue({
     items: rows,
     total: 2,
@@ -84,6 +89,27 @@ beforeEach(() => {
   })
 })
 describe('metadata list routes and bulk selection', () => {
+  it('reloads model prices after the automatic pricing task finishes', async () => {
+    const { wrapper } = await setup()
+    mocks.models.mockClear()
+    wrapper.getComponent(AutomaticPricingPanel).vm.$emit('updated')
+    await flushPromises()
+    expect(mocks.models).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+  it('shows automatic pricing only for Root', async () => {
+    const root = await setup()
+    expect(root.wrapper.find('automatic-pricing-panel-stub').exists()).toBe(
+      true
+    )
+    root.wrapper.unmount()
+    mocks.auth.isRoot = false
+    const admin = await setup()
+    expect(admin.wrapper.find('automatic-pricing-panel-stub').exists()).toBe(
+      false
+    )
+    admin.wrapper.unmount()
+  })
   it('restores filters from the URL and preserves management deep links and hash', async () => {
     const { wrapper, router } = await setup(
       '/models/metadata?keyword=model&status=1&manage=vendors#models'

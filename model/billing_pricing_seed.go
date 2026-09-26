@@ -1,15 +1,12 @@
 package model
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/setting/reasoning"
-	"gorm.io/gorm"
 )
 
 //go:embed billing_pricing_seed.json
@@ -17,8 +14,8 @@ var billingPriceSeed []byte
 
 const BillingPriceSeedSource = "d04c118c8803f49e0c9bab74dcf5b5efeab9464a"
 
-// InitialBillingPriceCatalog reads only the reviewed, checked-in price catalog.
-// Mutable runtime options and downloaded catalogs cannot alter installation.
+// InitialBillingPriceCatalog reads the frozen historical installation catalog
+// only to recognize legacy prices. Never regenerate it or use it for new installs.
 func InitialBillingPriceCatalog() ([]billing.PriceVersion, []string, error) {
 	var catalog struct {
 		Source       string                 `json:"source"`
@@ -51,41 +48,4 @@ func InitialBillingPriceCatalog() ([]billing.PriceVersion, []string, error) {
 		catalog.Prices[i] = prepared
 	}
 	return catalog.Prices, catalog.Unconfigured, nil
-}
-
-func SeedBillingPriceVersions(ctx context.Context) error {
-	versions, _, err := InitialBillingPriceCatalog()
-	if err != nil {
-		return err
-	}
-	return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var count int64
-		if err := tx.Model(&BillingPriceVersion{}).Count(&count).Error; err != nil {
-			return err
-		}
-		if count != 0 {
-			return nil
-		}
-		for _, version := range versions {
-			if err := billing.ValidateFrozenPriceVersion(version); err != nil {
-				return err
-			}
-			definition, err := common.Marshal(version)
-			if err != nil {
-				return err
-			}
-			hash, err := billing.Hash(version)
-			if err != nil {
-				return err
-			}
-			row := BillingPriceVersion{Model: version.Model, Definition: string(definition), Hash: hash, CreatedAt: time.Now().Unix()}
-			if err := tx.Create(&row).Error; err != nil {
-				return err
-			}
-			if err := tx.Create(&BillingActivePrice{Model: version.Model, VersionID: row.ID}).Error; err != nil {
-				return err
-			}
-		}
-		return nil
-	})
 }

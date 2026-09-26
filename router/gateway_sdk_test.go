@@ -17,7 +17,6 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -56,11 +55,9 @@ func setupGatewaySDKWithUpstream(t *testing.T, handler http.HandlerFunc) (string
 	oldRedis, oldMemory := common.RDB, common.MemoryCacheEnabled
 	client := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
 	common.RDB, common.RedisEnabled, common.MemoryCacheEnabled = client, true, false
-	oldPrices := ratio_setting.ModelPrice2JSONString()
 	t.Cleanup(func() {
 		common.RDB, common.MemoryCacheEnabled = oldRedis, oldMemory
 		_ = client.Close()
-		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(oldPrices))
 	})
 	require.NoError(t, publishGatewayFixturePrices(`{"gpt-4o-mini":0.001,"claude-3-5-sonnet":0.001,"gemini-2.5-flash":0.001,"llama3.1":0.001}`, false))
 	service.InitHttpClient()

@@ -1,371 +1,528 @@
-package autopricing
+package autopricing_test
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"testing"
+	"time"
 
+	"github.com/QuantumNous/new-api/pkg/autopricing"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// buildTestCatalog is a helper so each test states only the pricing document it
-// cares about.
-func buildTestCatalog(t *testing.T, document string) *Catalog {
-	t.Helper()
-	catalog, err := BuildCatalog([]byte(document), "test-version")
+func TestSourceUnitsAndExplicitZero(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source autopricing.SourceID
+		data   string
+		model  string
+	}{
+		{"sub", autopricing.SourceSub2API, `{"m":{"input_cost_per_token":0.000000123456789123456789,"output_cost_per_token":0,"cache_read_input_token_cost":0}}`, "m"},
+		{"axon", autopricing.SourceAxonHub, `{"providers":{"p":{"models":[{"id":"m","cost":{"input":0.123456789123456789,"output":0,"cache_read":0}}]}}}`, "m"},
+		{"models.dev", autopricing.SourceModelsDev, `{"p":{"models":{"m":{"cost":{"input":0.123456789123456789,"output":0,"cache_read":0}}}}}`, "m"},
+		{"openrouter", autopricing.SourceOpenRouter, `{"data":[{"id":"m","pricing":{"prompt":"0.000000123456789123456789","completion":"0","input_cache_read":"0"}}]}`, "m"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			entries, rejected, err := autopricing.ParseWithReport(test.source, []byte(test.data))
+			require.NoError(t, err)
+			require.Empty(t, rejected)
+			entry, ok := entries[test.model]
+			require.True(t, ok)
+			assert.Equal(t, billing.ModeExpression, entry.Price.Mode)
+			assert.Contains(t, entry.Price.Expression, "p * 0.123456789123456789 + c * 0 + cr * 0")
+			assert.Empty(t, entry.Price.Prices)
+			require.NoError(t, billing.ValidatePriceVersion(entry.Price))
+			quote, err := billing.NewQuote(entry.Price, "1", map[string]interface{}{"service_tier": "priority"}, time.Unix(1, 0))
+			require.NoError(t, err)
+			charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, OutputTokens: 100, CacheReadTokens: 100, InputIncludesCache: true})
+			require.NoError(t, err)
+			assert.Equal(t, "0", charge.TotalUSD)
+		})
+	}
+}
+
+func TestMissingUnsafeAndMetadataAreDistinct(t *testing.T) {
+	entries, rejected, err := autopricing.ParseWithReport(autopricing.SourceSub2API, []byte(`{
+	 "valid":{"input_cost_per_token":0,"output_cost_per_token":0,"supports_service_tier":false,"supports_prompt_caching":false},
+	 "missing":{"input_cost_per_token":0.000001},
+	 "negative":{"input_cost_per_token":-1,"output_cost_per_token":0},
+	 "unsupported":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"input_cost_per_video_per_second":0.1},
+	 "invalid":{"input_cost_per_token":"NaN","output_cost_per_token":0},
+	 "null":{"input_cost_per_token":null,"output_cost_per_token":0}
+	}`))
 	require.NoError(t, err)
-	return catalog
-}
-
-func TestBuildCatalogConvertsCostsToRatioUnits(t *testing.T) {
-	// One ratio unit is $2 per 1M tokens, so a $2.5/1M input price is 1.25.
-	catalog := buildTestCatalog(t, `{
-		"gpt-4o": {
-			"input_cost_per_token": 0.0000025,
-			"output_cost_per_token": 0.00001,
-			"cache_read_input_token_cost": 0.00000125,
-			"litellm_provider": "openai"
-		}
-	}`)
-
-	entry, ok := catalog.Lookup("gpt-4o")
-	require.True(t, ok)
-	assert.Equal(t, 1.25, entry.ModelRatio)
-	assert.Equal(t, 4.0, entry.CompletionRatio)
-	assert.True(t, entry.HasCacheRatio)
-	assert.Equal(t, 0.5, entry.CacheRatio)
-	assert.False(t, entry.HasCreateCacheRatio)
-	assert.Equal(t, "gpt-4o", entry.CatalogKey)
-}
-
-func TestBuildCatalogCacheCreationRatio(t *testing.T) {
-	catalog := buildTestCatalog(t, `{
-		"claude-opus-4-5-20251101": {
-			"input_cost_per_token": 0.000005,
-			"output_cost_per_token": 0.000025,
-			"cache_read_input_token_cost": 0.0000005,
-			"cache_creation_input_token_cost": 0.00000625
-		}
-	}`)
-
-	entry, ok := catalog.Lookup("claude-opus-4-5-20251101")
-	require.True(t, ok)
-	assert.Equal(t, 2.5, entry.ModelRatio)
-	assert.Equal(t, 5.0, entry.CompletionRatio)
-	assert.True(t, entry.HasCacheRatio)
-	assert.Equal(t, 0.1, entry.CacheRatio)
-	assert.True(t, entry.HasCreateCacheRatio)
-	assert.Equal(t, 1.25, entry.CreateCacheRatio)
-}
-
-func TestBuildCatalogRejectsUnusableEntries(t *testing.T) {
-	cases := []struct {
-		name  string
-		entry string
-	}{
-		{name: "no token pricing at all", entry: `{"output_cost_per_image": 0.04, "mode": "image_generation"}`},
-		{name: "negative input cost", entry: `{"input_cost_per_token": -0.000001, "output_cost_per_token": 0.000002}`},
-		{name: "negative output cost", entry: `{"input_cost_per_token": 0.000001, "output_cost_per_token": -0.000002}`},
-		{name: "free input with paid output", entry: `{"input_cost_per_token": 0, "output_cost_per_token": 0.000002}`},
-		{name: "absurd input cost", entry: `{"input_cost_per_token": 100, "output_cost_per_token": 100}`},
-		{name: "absurd completion multiplier", entry: `{"input_cost_per_token": 0.0000000001, "output_cost_per_token": 0.01}`},
-		{name: "absurd cache multiplier", entry: `{"input_cost_per_token": 0.000001, "output_cost_per_token": 0.000002, "cache_read_input_token_cost": 1}`},
+	require.Len(t, entries, 1)
+	require.Contains(t, entries, "valid")
+	require.Len(t, rejected, 5)
+	for _, r := range rejected {
+		assert.Equal(t, r.Model != "missing", r.BlockFallback, r.Reason)
 	}
+	_, _, err = autopricing.ParseWithReport(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0}}`))
+	require.Error(t, err)
+	_, err = autopricing.Parse(autopricing.SourceID("unknown"), []byte(`{}`))
+	require.Error(t, err)
+	_, err = autopricing.Parse(autopricing.SourceSub2API, []byte(`null`))
+	require.Error(t, err)
+}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			document := `{"keeper": {"input_cost_per_token": 0.000002, "output_cost_per_token": 0.000008}, "candidate": ` + tc.entry + `}`
-			catalog := buildTestCatalog(t, document)
-
-			_, ok := catalog.Lookup("candidate")
-			assert.False(t, ok, "unusable entry must not be priced")
-			_, keeperOK := catalog.Lookup("keeper")
-			assert.True(t, keeperOK, "valid entries in the same document must survive")
-			assert.Equal(t, 1, catalog.SkippedCount)
+func TestMalformedIdentifiedModelDoesNotDiscardValidCatalogEntries(t *testing.T) {
+	for _, test := range []struct {
+		source autopricing.SourceID
+		data   string
+	}{
+		{autopricing.SourceSub2API, `{"valid":{"input_cost_per_token":0,"output_cost_per_token":0},"primitive":42,"null":null,"bad-cost":{"input_cost_per_token":{},"output_cost_per_token":0}}`},
+		{autopricing.SourceAxonHub, `{"p":{"models":{"valid":{"cost":{"input":0,"output":0}},"primitive":42,"null":null,"bad-cost":{"cost":false},"bad-id":{"id":42,"cost":{"input":0,"output":0}}}}}`},
+		{autopricing.SourceModelsDev, `{"p":{"models":{"valid":{"cost":{"input":0,"output":0}},"primitive":42,"null":null,"bad-cost":{"cost":false},"bad-id":{"id":42,"cost":{"input":0,"output":0}}}}}`},
+	} {
+		t.Run(string(test.source), func(t *testing.T) {
+			entries, rejected, err := autopricing.ParseWithReport(test.source, []byte(test.data))
+			require.NoError(t, err)
+			require.Contains(t, entries, "valid")
+			for _, model := range []string{"primitive", "null", "bad-cost"} {
+				assert.NotContains(t, entries, model)
+				found := false
+				for _, rejection := range rejected {
+					if rejection.Model == model {
+						found = true
+						assert.NotEmpty(t, rejection.Reason)
+					}
+				}
+				assert.True(t, found, model)
+			}
+			fallback, err := autopricing.Parse(autopricing.SourceOpenRouter, []byte(`{"data":[{"id":"primitive","pricing":{"prompt":"0","completion":"0"}}]}`))
+			require.NoError(t, err)
+			assert.Equal(t, autopricing.SourceOpenRouter, autopricing.Merge(entries, fallback)["primitive"].Source)
 		})
 	}
 }
 
-func TestBuildCatalogKeepsFreeModels(t *testing.T) {
-	catalog := buildTestCatalog(t, `{
-		"free-model": {"input_cost_per_token": 0, "output_cost_per_token": 0}
-	}`)
-
-	entry, ok := catalog.Lookup("free-model")
-	require.True(t, ok)
-	assert.Equal(t, 0.0, entry.ModelRatio)
-	assert.Equal(t, 1.0, entry.CompletionRatio)
-}
-
-func TestBuildCatalogDistinguishesMissingOutputFromExplicitZero(t *testing.T) {
-	catalog := buildTestCatalog(t, `{
-		"missing-output": {"input_cost_per_token": 0.000002},
-		"free-model": {"input_cost_per_token": 0, "output_cost_per_token": 0}
-	}`)
-
-	missing, ok := catalog.Lookup("missing-output")
-	require.True(t, ok)
-	assert.False(t, missing.HasCompletionRatio)
-
-	free, ok := catalog.Lookup("free-model")
-	require.True(t, ok)
-	assert.True(t, free.HasCompletionRatio)
-	assert.Equal(t, 1.0, free.CompletionRatio)
-}
-
-func TestBuildCatalogSkipsSampleSpec(t *testing.T) {
-	catalog := buildTestCatalog(t, `{
-		"sample_spec": {"input_cost_per_token": 0.000001, "output_cost_per_token": 0.000002},
-		"real-model": {"input_cost_per_token": 0.000002, "output_cost_per_token": 0.000008}
-	}`)
-
-	_, ok := catalog.Lookup("sample_spec")
-	assert.False(t, ok)
-	assert.Equal(t, 1, catalog.ModelCount)
-}
-
-func TestBuildCatalogRejectsUnusableDocuments(t *testing.T) {
-	cases := []struct {
-		name     string
-		document string
+func TestContextBoundaryAndServiceTierNormalization(t *testing.T) {
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{
+	 "input_cost_per_token":0.000001,"output_cost_per_token":0.000002,
+	 "input_cost_per_token_above_200k_tokens":0.000003,"output_cost_per_token_above_200k_tokens":0.000004,
+	 "cache_read_input_token_cost_above_200k_tokens":0.0000005,
+	 "input_cost_per_token_priority":0.000002,"output_cost_per_token_priority":0.000004,
+	 "input_cost_per_token_above_200k_tokens_priority":0.000006,"output_cost_per_token_above_200k_tokens_priority":0.000008,
+	 "cache_read_input_token_cost_above_200k_tokens_priority":0.000001,
+	 "input_cost_per_token_flex":0.0000005,"output_cost_per_token_flex":0.000001,
+	 "input_cost_per_token_above_200k_tokens_flex":0.0000015,"output_cost_per_token_above_200k_tokens_flex":0.000002,
+	 "cache_read_input_token_cost_above_200k_tokens_flex":0.00000025,
+	 "input_cost_per_token_batches":-1
+	}}`))
+	require.NoError(t, err)
+	for _, test := range []struct {
+		context   int64
+		tier, usd string
 	}{
-		{name: "not json", document: `not json at all`},
-		{name: "empty object", document: `{}`},
-		{name: "no token priced entries", document: `{"img": {"output_cost_per_image": 0.04}}`},
+		{200000, "", "0.0001"}, {200001, "", "0.000175"}, {200000, "priority", "0.0002"}, {200001, "priority", "0.00035"}, {200001, "flex", "0.0000875"},
+	} {
+		t.Run(fmt.Sprintf("%s/%d", test.tier, test.context), func(t *testing.T) {
+			quote, err := billing.NewQuote(entries["m"].Price, "1", map[string]interface{}{"service_tier": test.tier}, time.Unix(1, 0))
+			require.NoError(t, err)
+			result, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, ContextTokens: test.context, CacheReadTokens: 50, InputIncludesCache: true})
+			require.NoError(t, err)
+			assert.Equal(t, test.usd, result.TotalUSD)
+		})
 	}
+}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			catalog, err := BuildCatalog([]byte(tc.document), "v1")
+func TestDefaultServiceMultipliersFreezeTokenAndCacheCosts(t *testing.T) {
+	for _, source := range []struct {
+		name autopricing.SourceID
+		data string
+	}{
+		{autopricing.SourceSub2API, `{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"cache_read_input_token_cost":0.0000001}}`},
+		{autopricing.SourceAxonHub, `{"p":[{"id":"m","cost":{"input":1,"output":2,"cache_read":0.1}}]}`},
+		{autopricing.SourceModelsDev, `{"p":{"models":{"m":{"cost":{"input":1,"output":2,"cache_read":0.1}}}}}`},
+		{autopricing.SourceOpenRouter, `{"data":[{"id":"m","pricing":{"prompt":"0.000001","completion":"0.000002","input_cache_read":"0.0000001"}}]}`},
+	} {
+		t.Run(string(source.name), func(t *testing.T) {
+			entries, err := autopricing.Parse(source.name, []byte(source.data))
+			require.NoError(t, err)
+			for _, test := range []struct{ tier, usd string }{
+				{"", "0.000065"}, {"default", "0.000065"}, {"priority", "0.00013"}, {"fast", "0.00013"}, {"ultrafast", "0.00013"}, {"flex", "0.0000325"},
+			} {
+				t.Run(test.tier, func(t *testing.T) {
+					quote, err := billing.NewQuote(entries["m"].Price, "1", map[string]interface{}{"service_tier": test.tier}, time.Unix(1, 0))
+					require.NoError(t, err)
+					charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, OutputTokens: 5, CacheReadTokens: 50, InputIncludesCache: true})
+					require.NoError(t, err)
+					assert.Equal(t, test.usd, charge.TotalUSD)
+				})
+			}
+		})
+	}
+}
+
+func TestExplicitPartialServicePricesPreserveZeroAndInheritOrdinaryRates(t *testing.T) {
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{
+	 "input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"cache_read_input_token_cost":0.0000001,
+	 "input_cost_per_token_priority":0,"output_cost_per_token_flex":0,
+	 "input_cost_per_token_above_100k_tokens":0.000003,"output_cost_per_token_above_100k_tokens":0.000004,
+	 "litellm_provider":"openai","search_context_cost_per_query":{"search_context_size_low":0.01,"search_context_size_medium":0.01,"search_context_size_high":0.01}
+	}}`))
+	require.NoError(t, err)
+	for _, test := range []struct {
+		tier    string
+		context int64
+		usd     string
+	}{
+		{"priority", 100000, "0.010025"}, {"fast", 100000, "0.010025"}, {"priority", 100001, "0.010055"}, {"fast", 100001, "0.010055"},
+		{"flex", 100000, "0.010055"}, {"flex", 100001, "0.010165"}, {"ultrafast", 100001, "0.01041"},
+	} {
+		t.Run(fmt.Sprintf("%s/%d", test.tier, test.context), func(t *testing.T) {
+			quote, err := billing.NewQuote(entries["m"].Price, "1", map[string]interface{}{"service_tier": test.tier}, time.Unix(1, 0))
+			require.NoError(t, err)
+			charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, OutputTokens: 10, ContextTokens: test.context, CacheReadTokens: 50, InputIncludesCache: true, Quantities: map[string]string{"tool:web_search": "1"}})
+			require.NoError(t, err)
+			assert.Equal(t, test.usd, charge.TotalUSD)
+		})
+	}
+}
+
+func TestDefaultServiceMultiplierDoesNotMultiplyImageCount(t *testing.T) {
+	entries, err := autopricing.Parse(autopricing.SourceOpenRouter, []byte(`{"data":[{"id":"m","pricing":{"prompt":"0.000001","completion":"0.000002","image_output":"0.04"}}]}`))
+	require.NoError(t, err)
+	for _, test := range []struct{ tier, usd string }{{"priority", "0.0806"}, {"flex", "0.08015"}} {
+		quote, err := billing.NewQuote(entries["m"].Price, "1", map[string]interface{}{"service_tier": test.tier}, time.Unix(1, 0))
+		require.NoError(t, err)
+		charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, OutputTokens: 1100, ImageOutputTokens: 1000, Quantities: map[string]string{"images": "2"}})
+		require.NoError(t, err)
+		assert.Equal(t, test.usd, charge.TotalUSD)
+	}
+}
+
+func TestEmbeddingRequiresSourceTypeAndNeverCreatesAnOutputPrice(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source autopricing.SourceID
+		data   string
+	}{
+		{"sub missing output", autopricing.SourceSub2API, `{"m":{"mode":"embedding","input_cost_per_token":0.000001}}`},
+		{"sub explicit zero output", autopricing.SourceSub2API, `{"m":{"mode":"embedding","input_cost_per_token":0.000001,"output_cost_per_token":0}}`},
+		{"axon missing output", autopricing.SourceAxonHub, `{"p":[{"id":"m","type":"embedding","cost":{"input":1}}]}`},
+		{"axon explicit zero output", autopricing.SourceAxonHub, `{"p":[{"id":"m","type":"embedding","cost":{"input":1,"output":0}}]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			entries, err := autopricing.Parse(test.source, []byte(test.data))
+			require.NoError(t, err)
+			price := entries["m"].Price
+			assert.Equal(t, "embedding", price.UsageScope)
+			assert.NotContains(t, price.Expression, "c *")
+			assert.Empty(t, price.Prices)
+			quote, err := billing.NewQuote(price, "1", map[string]interface{}{"service_tier": "priority"}, time.Unix(1, 0))
+			require.NoError(t, err)
+			charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100})
+			require.NoError(t, err)
+			assert.Equal(t, "0.0002", charge.TotalUSD)
+		})
+	}
+	for _, test := range []struct {
+		name   string
+		source autopricing.SourceID
+		data   string
+	}{
+		{"sub missing type", autopricing.SourceSub2API, `{"m":{"input_cost_per_token":0.000001}}`},
+		{"sub wrong type field", autopricing.SourceSub2API, `{"m":{"type":"embedding","input_cost_per_token":0.000001}}`},
+		{"sub output charge", autopricing.SourceSub2API, `{"m":{"mode":"embedding","input_cost_per_token":0.000001,"output_cost_per_token":0.000001}}`},
+		{"sub tier output charge", autopricing.SourceSub2API, `{"m":{"mode":"embedding","input_cost_per_token":0.000001,"output_cost_per_token_priority":0.000001}}`},
+		{"axon missing type", autopricing.SourceAxonHub, `{"p":[{"id":"m","cost":{"input":1}}]}`},
+		{"models.dev untrusted type", autopricing.SourceModelsDev, `{"p":{"models":{"m":{"type":"embedding","cost":{"input":1}}}}}`},
+		{"openrouter no completion", autopricing.SourceOpenRouter, `{"data":[{"id":"m","type":"embedding","pricing":{"prompt":"0.000001"}}]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			entries, rejected, err := autopricing.ParseWithReport(test.source, []byte(test.data))
 			require.Error(t, err)
-			assert.Nil(t, catalog)
+			assert.Empty(t, entries)
+			assert.NotEmpty(t, rejected)
 		})
 	}
 }
 
-func TestBuildCatalogNormalizesKeyCase(t *testing.T) {
-	catalog := buildTestCatalog(t, `{
-		"GPT-4O-Mini": {"input_cost_per_token": 0.00000015, "output_cost_per_token": 0.0000006}
-	}`)
-
-	entry, ok := catalog.Lookup("gpt-4o-mini")
-	require.True(t, ok)
-	assert.Equal(t, "GPT-4O-Mini", entry.CatalogKey, "the original spelling stays visible for auditing")
-}
-
-func TestResolveExactMatchVariants(t *testing.T) {
-	catalog := buildTestCatalog(t, `{
-		"gemini-2.5-pro": {"input_cost_per_token": 0.00000125, "output_cost_per_token": 0.00001},
-		"claude-opus-4.5": {"input_cost_per_token": 0.000005, "output_cost_per_token": 0.000025}
-	}`)
-	SetCatalog(catalog)
-	t.Cleanup(func() { SetCatalog(nil) })
-
-	cases := []struct {
-		name       string
-		model      string
-		catalogKey string
+func TestProviderTierBoundaries(t *testing.T) {
+	for _, test := range []struct {
+		source          autopricing.SourceID
+		data            string
+		boundary, after string
 	}{
-		{name: "verbatim", model: "gemini-2.5-pro", catalogKey: "gemini-2.5-pro"},
-		{name: "different case", model: "Gemini-2.5-Pro", catalogKey: "gemini-2.5-pro"},
-		{name: "models prefix", model: "models/gemini-2.5-pro", catalogKey: "gemini-2.5-pro"},
-		{name: "vertex resource path", model: "publishers/google/models/gemini-2.5-pro", catalogKey: "gemini-2.5-pro"},
-		{name: "gemini thinking tier", model: "gemini-2.5-pro-thinking-high", catalogKey: "gemini-2.5-pro"},
-		{name: "dashed minor version", model: "claude-opus-4-5", catalogKey: "claude-opus-4.5"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Exact candidate matching must not depend on the fuzzy switch.
-			entry, ok := Resolve(tc.model, false)
-			require.True(t, ok)
-			assert.Equal(t, tc.catalogKey, entry.CatalogKey)
+		{autopricing.SourceModelsDev, `{"p":{"models":{"m":{"cost":{"input":1,"output":2,"tiers":[{"input":3,"output":4,"tier":{"type":"context","size":200000}}]}}}}}`, "0.0001", "0.0003"},
+		{autopricing.SourceAxonHub, `{"p":[{"id":"m","cost":{"input":1,"output":2,"context_over_200k":{"input":3,"output":4}}}]}`, "0.0001", "0.0003"},
+	} {
+		t.Run(string(test.source), func(t *testing.T) {
+			entries, err := autopricing.Parse(test.source, []byte(test.data))
+			require.NoError(t, err)
+			quote, err := billing.NewQuote(entries["m"].Price, "1", nil, time.Unix(1, 0))
+			require.NoError(t, err)
+			for index, length := range []int64{200000, 200001} {
+				result, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, ContextTokens: length})
+				require.NoError(t, err)
+				assert.Equal(t, []string{test.boundary, test.after}[index], result.TotalUSD)
+			}
 		})
 	}
 }
 
-func TestResolveFuzzyDisabledStopsAfterExactCandidates(t *testing.T) {
-	SetCatalog(buildTestCatalog(t, `{
-		"claude-opus-4-5-20251101": {"input_cost_per_token": 0.000005, "output_cost_per_token": 0.000025}
-	}`))
-	t.Cleanup(func() { SetCatalog(nil) })
-
-	_, ok := Resolve("claude-opus-4-5-20260101", false)
-	assert.False(t, ok, "a new date must not resolve while fuzzy matching is disabled")
-
-	entry, fuzzyOK := Resolve("claude-opus-4-5-20260101", true)
-	require.True(t, fuzzyOK)
-	assert.Equal(t, "claude-opus-4-5-20251101", entry.CatalogKey)
+func TestOpenRouterConditionalOverridesAreNotSilentlyDropped(t *testing.T) {
+	for _, selector := range []string{`"min_prompt_tokens":200000`, `"utc_start":"2200","utc_end":"0600"`, `"utc_days":[1,2,3]`} {
+		_, rejected, err := autopricing.ParseWithReport(autopricing.SourceOpenRouter, []byte(`{"data":[{"id":"m","pricing":{"prompt":"0.000001","completion":"0.000002","overrides":[{`+selector+`,"prompt":"0.000003"}]}}]}`))
+		require.Error(t, err)
+		require.Len(t, rejected, 1)
+		assert.True(t, rejected[0].BlockFallback)
+		assert.Contains(t, rejected[0].Reason, "conditional pricing overrides")
+	}
+	_, err := autopricing.Parse(autopricing.SourceOpenRouter, []byte(`{"data":[{"id":"m","pricing":{"prompt":"0","completion":"0","overrides":[]}}]}`))
+	require.NoError(t, err)
 }
 
-func TestResolveFuzzyRules(t *testing.T) {
-	SetCatalog(buildTestCatalog(t, `{
-		"claude-opus-4-8": {"input_cost_per_token": 0.000005, "output_cost_per_token": 0.000025},
-		"claude-sonnet-4-5-20250929": {"input_cost_per_token": 0.000003, "output_cost_per_token": 0.000015},
-		"gpt-5.2": {"input_cost_per_token": 0.00000125, "output_cost_per_token": 0.00001},
-		"gpt-5.1-codex": {"input_cost_per_token": 0.0000015, "output_cost_per_token": 0.000012},
-		"gpt-5.2-codex": {"input_cost_per_token": 0.000002, "output_cost_per_token": 0.000016},
-		"gemini-3-pro": {"input_cost_per_token": 0.000002, "output_cost_per_token": 0.000012}
-	}`))
-	t.Cleanup(func() { SetCatalog(nil) })
+func TestOpenRouterOutputImagesArePerImageWithoutTokenDoubleCharge(t *testing.T) {
+	entries, err := autopricing.Parse(autopricing.SourceOpenRouter, []byte(`{"data":[{"id":"m","pricing":{"prompt":"0.000001","completion":"0.000002","image_output":"0.04"}}]}`))
+	require.NoError(t, err)
+	quote, err := billing.NewQuote(entries["m"].Price, "1", nil, time.Unix(1, 0))
+	require.NoError(t, err)
+	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, ContextTokens: 100, OutputTokens: 1100, ImageOutputTokens: 1000, Quantities: map[string]string{"images": "2"}})
+	require.NoError(t, err)
+	assert.Equal(t, "0.0803", charge.TotalUSD)
+	_, rejected, err := autopricing.ParseWithReport(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image_token":0.00004,"output_cost_per_image":0.04}}`))
+	require.Error(t, err)
+	require.Len(t, rejected, 1)
+	assert.True(t, rejected[0].BlockFallback)
+}
 
-	cases := []struct {
-		name       string
-		model      string
-		catalogKey string
+func TestSubServicePriceThenContextRatioAndExplicitOverrides(t *testing.T) {
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{
+	 "input_cost_per_token":0.0000025,"output_cost_per_token":0.000015,"cache_read_input_token_cost":0.00000025,
+	 "input_cost_per_token_above_272k_tokens":0.000005,"output_cost_per_token_above_272k_tokens":0.0000225,
+	 "cache_read_input_token_cost_above_272k_tokens":0.0000005,
+	 "input_cost_per_token_priority":0.000005,"output_cost_per_token_priority":0.00003,"cache_read_input_token_cost_priority":0.0000005,
+	 "input_cost_per_token_flex":0.00000125,"output_cost_per_token_flex":0.0000075,
+	 "input_cost_per_token_above_272k_tokens_flex":0.0000025,"output_cost_per_token_above_272k_tokens_flex":0.00001125,
+	 "cache_read_input_token_cost_above_272k_tokens_flex":0.00000025
+	}}`))
+	require.NoError(t, err)
+	for _, test := range []struct {
+		tier    string
+		context int64
+		usd     string
 	}{
-		{name: "undated request to dated entry", model: "claude-sonnet-4-5", catalogKey: "claude-sonnet-4-5-20250929"},
-		{name: "unknown date to known base", model: "claude-sonnet-4-5-20261231", catalogKey: "claude-sonnet-4-5-20250929"},
-		{name: "unpublished opus 5 falls back to 4.8", model: "claude-opus-5-20260401", catalogKey: "claude-opus-4-8"},
-		{name: "opus 4.8 thinking variant", model: "claude-opus-4-8-thinking", catalogKey: "claude-opus-4-8"},
-		{name: "openai suffix variant", model: "gpt-5.2-codex", catalogKey: "gpt-5.2-codex"},
-		{name: "openai dated variant", model: "gpt-5.2-20251222", catalogKey: "gpt-5.2"},
-		{name: "openai spark alias", model: "gpt-5.3-codex-spark-high", catalogKey: "gpt-5.1-codex"},
-		{name: "openai codex alias", model: "gpt-5.3-codex-high", catalogKey: "gpt-5.2-codex"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			entry, ok := Resolve(tc.model, true)
-			require.True(t, ok)
-			assert.Equal(t, tc.catalogKey, entry.CatalogKey)
-		})
+		{"priority", 272000, "0.000575"}, {"priority", 272001, "0.001"}, {"flex", 272001, "0.00025"},
+	} {
+		quote, err := billing.NewQuote(entries["m"].Price, "1", map[string]interface{}{"service_tier": test.tier}, time.Unix(1, 0))
+		require.NoError(t, err)
+		charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, OutputTokens: 10, ContextTokens: test.context, CacheReadTokens: 50, InputIncludesCache: true})
+		require.NoError(t, err)
+		assert.Equal(t, test.usd, charge.TotalUSD)
 	}
 }
 
-func TestResolveFuzzyProviderPathUsesLastModelSegment(t *testing.T) {
-	SetCatalog(buildTestCatalog(t, `{
-		"gpt-5.2": {"input_cost_per_token": 0.00000125, "output_cost_per_token": 0.00001}
-	}`))
-	t.Cleanup(func() { SetCatalog(nil) })
+func TestLegacyTierMirrorUsesTypedThresholdAndRejectsContradiction(t *testing.T) {
+	entries, rejected, err := autopricing.ParseWithReport(autopricing.SourceModelsDev, []byte(`{"p":{"models":{
+	 "m":{"cost":{"input":1,"output":2,"context_over_200k":{"input":3,"output":4},"tiers":[{"input":3,"output":4,"tier":{"type":"context","size":272000}}]}},
+	 "bad":{"cost":{"input":1,"output":2,"context_over_200k":{"input":30,"output":40},"tiers":[{"input":3,"output":4,"tier":{"type":"context","size":272000}}]}}
+	}}}`))
+	require.NoError(t, err)
+	require.Contains(t, entries, "m")
+	assert.NotContains(t, entries, "bad")
+	require.Len(t, rejected, 2)
+	for _, r := range rejected {
+		assert.True(t, r.BlockFallback)
+		assert.Equal(t, "conflicting context tier formats", r.Reason)
+	}
+	quote, err := billing.NewQuote(entries["m"].Price, "1", nil, time.Unix(1, 0))
+	require.NoError(t, err)
+	for index, length := range []int64{200001, 272000, 272001} {
+		charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, ContextTokens: length})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"0.0001", "0.0001", "0.0003"}[index], charge.TotalUSD)
+	}
+}
 
-	entry, ok := Resolve("openai/gpt-5.2-20251222", true)
+func TestRangeTiersAndExplicitMultiplierCache(t *testing.T) {
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{
+	 "range":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"long_context_threshold_inclusive":true,"tiered_pricing":[{"range":[0,32000],"input_cost_per_token":0.000001,"output_cost_per_token":0.000002},{"range":[32000,200000],"input_cost_per_token":0.000003,"output_cost_per_token":0.000004}]},
+	 "multiplier":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"cache_read_input_token_cost":0.0000001,"cache_creation_input_token_cost":0.00000125,"cache_creation_input_token_cost_above_1hr":0.000002,"long_context_input_token_threshold":32000,"long_context_input_cost_multiplier":2,"long_context_output_cost_multiplier":3},
+	 "disabled":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"long_context_input_token_threshold":0,"long_context_input_cost_multiplier":2}
+	}`))
+	require.NoError(t, err)
+	require.Len(t, entries, 3)
+	quote, err := billing.NewQuote(entries["range"].Price, "1", nil, time.Unix(1, 0))
+	require.NoError(t, err)
+	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, ContextTokens: 32000})
+	require.NoError(t, err)
+	assert.Equal(t, "0.0003", charge.TotalUSD)
+	quote, err = billing.NewQuote(entries["multiplier"].Price, "1", nil, time.Unix(1, 0))
+	require.NoError(t, err)
+	charge, err = billing.Calculate(quote, billing.Usage{InputTokens: 100, ContextTokens: 32001, CacheReadTokens: 30, CacheWriteTokens: 20, CacheWrite1hTokens: 10, InputIncludesCache: true})
+	require.NoError(t, err)
+	assert.Equal(t, "0.000176", charge.TotalUSD)
+	assert.Equal(t, billing.ModeExpression, entries["disabled"].Price.Mode)
+	quote, err = billing.NewQuote(entries["disabled"].Price, "1", nil, time.Unix(1, 0))
+	require.NoError(t, err)
+	charge, err = billing.Calculate(quote, billing.Usage{InputTokens: 100, ContextTokens: 1000000})
+	require.NoError(t, err)
+	assert.Equal(t, "0.0001", charge.TotalUSD)
+}
+
+func TestUnsupportedAndInvalidTiersAreRejectedWithinSource(t *testing.T) {
+	for _, data := range []string{
+		`{"p":{"models":{"m":{"cost":{"input":1,"output":2,"tiers":[{"input":3,"tier":{"type":"context","size":100}},{"input":4,"tier":{"type":"context","size":100}}]}}}}}`,
+		`{"p":{"models":{"m":{"cost":{"input":1,"output":2,"tiers":[{"input":3,"tier":{"type":"duration","size":100}}]}}}}}`,
+		`{"p":{"models":{"m":{"cost":{"input":1,"output":2,"tiers":[{"input":-1,"tier":{"type":"context","size":100}}]}}}}}`,
+	} {
+		_, rejected, err := autopricing.ParseWithReport(autopricing.SourceModelsDev, []byte(data))
+		require.Error(t, err)
+		require.NotEmpty(t, rejected)
+		for _, r := range rejected {
+			assert.True(t, r.BlockFallback)
+		}
+	}
+}
+
+func TestMediaCacheAndSearchPrices(t *testing.T) {
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{
+	 "media":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"cache_read_input_token_cost":0,"cache_creation_input_token_cost":0.000003,"cache_creation_input_token_cost_above_1hr":0.000004,"input_cost_per_image_token":0.000005,"output_cost_per_image_token":0.000006,"cache_read_input_image_token_cost":0.0000005,"input_cost_per_audio_token":0.000007,"output_cost_per_audio_token":0.000008},
+	 "image":{"output_cost_per_image":0.04},
+	 "image-token":{"mode":"image_generation","input_cost_per_token":0.000005,"output_cost_per_image_token":0.00004},
+	 "search":{"input_cost_per_token":0,"output_cost_per_token":0,"litellm_provider":"anthropic","search_context_cost_per_query":{"search_context_size_low":0.01,"search_context_size_medium":0.01,"search_context_size_high":0.01}}
+	}`))
+	require.NoError(t, err)
+	require.Len(t, entries, 4)
+	assert.Empty(t, entries["media"].Price.Prices)
+	mediaQuote, err := billing.NewQuote(entries["media"].Price, "1", map[string]interface{}{"service_tier": "fast"}, time.Unix(1, 0))
+	require.NoError(t, err)
+	mediaCharge, err := billing.Calculate(mediaQuote, billing.Usage{InputTokens: 20, OutputTokens: 10, ImageInputTokens: 5, ImageOutputTokens: 3, AudioInputTokens: 5, AudioOutputTokens: 2})
+	require.NoError(t, err)
+	assert.Equal(t, "0.000228", mediaCharge.TotalUSD)
+	quote, err := billing.NewQuote(entries["image"].Price, "1", nil, time.Unix(1, 0))
+	require.NoError(t, err)
+	charge, err := billing.Calculate(quote, billing.Usage{Quantities: map[string]string{"images": "3"}})
+	require.NoError(t, err)
+	assert.Equal(t, "0.12", charge.TotalUSD)
+	quote, err = billing.NewQuote(entries["search"].Price, "1", nil, time.Unix(1, 0))
+	require.NoError(t, err)
+	charge, err = billing.Calculate(quote, billing.Usage{Quantities: map[string]string{"tool:web_search": "2"}})
+	require.NoError(t, err)
+	assert.Equal(t, "0.02", charge.TotalUSD)
+}
+
+func TestProviderAmbiguityDoesNotOverrideCanonicalPrices(t *testing.T) {
+	entries, rejections, err := autopricing.ParseWithReport(autopricing.SourceModelsDev, []byte(`{
+	 "a":{"models":{"m":{"cost":{"input":1,"output":2}},"same":{"cost":{"input":1,"output":2}}}},
+	 "b":{"models":{"m":{"cost":{"input":3,"output":4}},"same":{"cost":{"input":1,"output":2}},"a/m":{"cost":{"input":9,"output":10}}}}
+	}`))
+	require.NoError(t, err)
+	assert.NotContains(t, entries, "m")
+	assert.Contains(t, entries, "same")
+	assert.Contains(t, entries, "a/m")
+	assert.Contains(t, entries, "b/m")
+	quote, err := billing.NewQuote(entries["a/m"].Price, "1", nil, time.Unix(1, 0))
+	require.NoError(t, err)
+	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100})
+	require.NoError(t, err)
+	assert.Equal(t, "0.0001", charge.TotalUSD)
+	require.Len(t, rejections, 1)
+	assert.Equal(t, "m", rejections[0].Model)
+	assert.True(t, rejections[0].BlockFallback)
+}
+
+func TestMergeKeepsWholePriceAndDoesNotShareSlices(t *testing.T) {
+	first, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0,"output_cost_per_token":0,"litellm_provider":"openai","search_context_cost_per_query":{"search_context_size_low":0,"search_context_size_medium":0,"search_context_size_high":0}}}`))
+	require.NoError(t, err)
+	second, err := autopricing.Parse(autopricing.SourceOpenRouter, []byte(`{"data":[{"id":"m","pricing":{"prompt":"0.000001","completion":"0.000002","input_cache_read":"0.0000001"}}]}`))
+	require.NoError(t, err)
+	merged := autopricing.Merge(first, second)
+	assert.Equal(t, first["m"], merged["m"])
+	require.Len(t, merged["m"].Price.Prices, 2)
+	entry := merged["m"]
+	entry.Price.Prices[0].Price = "99"
+	assert.Equal(t, "0", first["m"].Price.Prices[0].Price)
+}
+
+func TestResolveExactSafeAliasesAndAmbiguity(t *testing.T) {
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"gemini-pro":{"input_cost_per_token":0,"output_cost_per_token":0},"chat-2026-09-20":{"input_cost_per_token":0,"output_cost_per_token":0},"chat-20260921":{"input_cost_per_token":1,"output_cost_per_token":2},"single-20260920":{"input_cost_per_token":0,"output_cost_per_token":0}}`))
+	require.NoError(t, err)
+	for _, model := range []string{"gemini-pro", "models/gemini-pro", "publishers/google/models/gemini-pro", "projects/p/locations/us/publishers/google/models/gemini-pro", "gemini-pro-20260926", "models/gemini-pro-2026-09-26"} {
+		_, ok := autopricing.Resolve(entries, model)
+		assert.True(t, ok, model)
+	}
+	for _, model := range []string{"chat", "chat-20260922", "single", "single-20260921", "gemini-flash", "gemini-pro-20260230", "untrusted/gemini-pro"} {
+		_, ok := autopricing.Resolve(entries, model)
+		assert.False(t, ok, model)
+	}
+	entry, ok := autopricing.Resolve(entries, "chat-20260921")
 	require.True(t, ok)
-	assert.Equal(t, "gpt-5.2", entry.CatalogKey)
+	assert.Equal(t, "chat-20260921", entry.SourceModel)
 }
 
-func TestResolveFuzzyMisses(t *testing.T) {
-	SetCatalog(buildTestCatalog(t, `{
-		"claude-opus-4-8": {"input_cost_per_token": 0.000005, "output_cost_per_token": 0.000025},
-		"gpt-5.2": {"input_cost_per_token": 0.00000125, "output_cost_per_token": 0.00001}
-	}`))
-	t.Cleanup(func() { SetCatalog(nil) })
-
-	cases := []struct {
-		name  string
-		model string
+func TestIsBlockedFollowsOneWayAliases(t *testing.T) {
+	for _, test := range []struct {
+		rejected          string
+		blocked, accepted []string
 	}{
-		{name: "unrelated vendor model", model: "some-vendor/llama-4-405b"},
-		{name: "opus lookalike from another vendor", model: "acme-opus-turbo"},
-		{name: "unknown openai family", model: "gpt-9.9-experimental"},
-		{name: "empty name", model: "   "},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			// There is no catch-all rule: an unknown model must stay unpriced
-			// rather than inherit an unrelated model's rate.
-			_, ok := Resolve(tc.model, true)
-			assert.False(t, ok)
+		{"unsafe", []string{"unsafe", "models/unsafe", "unsafe-20260920", "publishers/google/models/unsafe-2026-09-23"}, []string{"safe", "provider/unsafe", "unsafe-20260230"}},
+		{"models/unsafe-20260920", []string{"unsafe-20260920", "projects/p/locations/us/publishers/google/models/unsafe-20260920"}, []string{"unsafe", "unsafe-20260921", "models/unsafe-2026-09-20"}},
+	} {
+		t.Run(test.rejected, func(t *testing.T) {
+			rejected := map[string]bool{test.rejected: true, "available": false}
+			for _, model := range test.blocked {
+				assert.True(t, autopricing.IsBlocked(rejected, model), model)
+			}
+			for _, model := range append(test.accepted, "available", "models/available") {
+				assert.False(t, autopricing.IsBlocked(rejected, model), model)
+			}
 		})
 	}
+	assert.False(t, autopricing.IsBlocked(nil, "unsafe"))
 }
 
-func TestClaudeFamilyOrderIsMostSpecificFirst(t *testing.T) {
-	// claude-opus-4 is a substring of claude-opus-4-7, so an unordered scan
-	// would price the newer model with the legacy family's rate.
-	SetCatalog(buildTestCatalog(t, `{
-		"claude-opus-4-20250514": {"input_cost_per_token": 0.000015, "output_cost_per_token": 0.000075},
-		"claude-opus-4-7": {"input_cost_per_token": 0.000005, "output_cost_per_token": 0.000025}
-	}`))
-	t.Cleanup(func() { SetCatalog(nil) })
-
-	entry, ok := Resolve("claude-opus-4-7-xhigh", true)
-	require.True(t, ok)
-	assert.Equal(t, "claude-opus-4-7", entry.CatalogKey)
-	assert.Equal(t, 2.5, entry.ModelRatio)
-}
-
-func TestResolveWithoutCatalog(t *testing.T) {
-	SetCatalog(nil)
-	_, ok := Resolve("gpt-4o", true)
-	assert.False(t, ok)
-	assert.False(t, Loaded())
-}
-
-func TestSetCatalogClearsFuzzyCache(t *testing.T) {
-	SetCatalog(buildTestCatalog(t, `{
-		"claude-opus-4-8": {"input_cost_per_token": 0.000005, "output_cost_per_token": 0.000025}
-	}`))
-	t.Cleanup(func() { SetCatalog(nil) })
-
-	entry, ok := Resolve("claude-opus-4-8-high", true)
-	require.True(t, ok)
-	require.Equal(t, 2.5, entry.ModelRatio)
-
-	// A new catalog generation must invalidate memoized fuzzy results.
-	SetCatalog(buildTestCatalog(t, `{
-		"claude-opus-4-8": {"input_cost_per_token": 0.00001, "output_cost_per_token": 0.00005}
-	}`))
-
-	entry, ok = Resolve("claude-opus-4-8-high", true)
-	require.True(t, ok)
-	assert.Equal(t, 5.0, entry.ModelRatio)
-}
-
-func TestFuzzyMemoStaysBounded(t *testing.T) {
-	SetCatalog(buildTestCatalog(t, `{
-		"gpt-5.2": {"input_cost_per_token": 0.00000125, "output_cost_per_token": 0.00001}
-	}`))
-	t.Cleanup(func() { SetCatalog(nil) })
-
-	// Model names come from client request bodies, so misses must not grow the
-	// cache without bound.
-	for i := 0; i < fuzzyMemoLimit+500; i++ {
-		Resolve("unknown-model-"+string(rune('a'+i%26))+"-"+itoa(i), true)
+// This optional offline integration check validates caller-supplied source
+// snapshots without making tests depend on network availability or local paths.
+func TestLocalCatalogSnapshots(t *testing.T) {
+	directory := os.Getenv("AUTOPRICING_SNAPSHOT_DIR")
+	if directory == "" {
+		t.Skip("no offline source snapshots supplied")
 	}
-
-	fuzzyMu.RLock()
-	size := len(fuzzyMemo)
-	fuzzyMu.RUnlock()
-	assert.LessOrEqual(t, size, fuzzyMemoLimit)
-}
-
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	digits := make([]byte, 0, 8)
-	for i > 0 {
-		digits = append([]byte{byte('0' + i%10)}, digits...)
-		i /= 10
-	}
-	return string(digits)
-}
-
-func TestStripDateSegments(t *testing.T) {
-	cases := []struct {
-		input string
-		want  string
-	}{
-		{input: "claude-opus-4-5-20251101", want: "claude-opus-4-5"},
-		{input: "gpt-4o-2024-08-06", want: "gpt-4o"},
-		{input: "anthropic.claude-v2:1", want: "anthropic.claude-v2"},
-		{input: "gpt-4o", want: "gpt-4o"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.input, func(t *testing.T) {
-			assert.Equal(t, tc.want, stripDateSegments(tc.input))
+	for _, source := range []autopricing.SourceID{autopricing.SourceSub2API, autopricing.SourceAxonHub, autopricing.SourceModelsDev, autopricing.SourceOpenRouter} {
+		t.Run(string(source), func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(directory, "ren2hub-pricing-"+string(source)+".json"))
+			require.NoError(t, err)
+			entries, rejected, err := autopricing.ParseWithReport(source, data)
+			require.NoError(t, err)
+			require.NotEmpty(t, entries)
+			for _, entry := range entries {
+				require.NoError(t, billing.ValidatePriceVersion(entry.Price), entry.Price.Model)
+			}
+			counts := map[string]int{}
+			for _, item := range rejected {
+				counts[item.Reason]++
+			}
+			reasons := make([]string, 0, len(counts))
+			for reason := range counts {
+				reasons = append(reasons, reason)
+			}
+			sort.Slice(reasons, func(i, j int) bool { return counts[reasons[i]] > counts[reasons[j]] })
+			t.Logf("accepted=%d rejected=%d", len(entries), len(rejected))
+			for i, reason := range reasons {
+				if i >= 8 {
+					break
+				}
+				t.Logf("%d %s", counts[reason], reason)
+			}
+			for _, model := range []string{"gpt-5.4", "gpt-5.4-pro", "claude-sonnet-4-6", "gpt-image-1", "glm-5"} {
+				if entry, ok := entries[model]; ok {
+					t.Logf("sample %s accepted %s", model, entry.Price.Mode)
+				} else {
+					for _, r := range rejected {
+						if r.Model == model {
+							t.Logf("sample %s rejected %s", model, r.Reason)
+							break
+						}
+					}
+				}
+			}
 		})
 	}
-}
-
-func TestPreferBaseKeyPicksCanonicalSpelling(t *testing.T) {
-	catalog := buildTestCatalog(t, `{
-		"claude-opus-4-5": {"input_cost_per_token": 0.000005, "output_cost_per_token": 0.000025},
-		"claude-opus-4-5-20251101": {"input_cost_per_token": 0.000005, "output_cost_per_token": 0.000025},
-		"claude-opus-4-5-20260101": {"input_cost_per_token": 0.000005, "output_cost_per_token": 0.000025}
-	}`)
-
-	assert.Equal(t, "claude-opus-4-5", catalog.baseIndex["claude-opus-4-5"])
 }

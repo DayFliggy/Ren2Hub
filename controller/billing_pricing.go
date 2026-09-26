@@ -86,10 +86,10 @@ func GetTaskPluginBillingSchema(c *gin.Context) {
 }
 
 func GetBillingPriceSeed(c *gin.Context) {
-	prices, unconfigured, err := model.InitialBillingPriceCatalog()
+	prices, unconfigured, source, err := service.AutomaticPricingDrafts(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "initial price catalog unavailable"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"prices": prices, "unconfigured": unconfigured, "source": model.BillingPriceSeedSource}})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"prices": prices, "unconfigured": unconfigured, "source": source}})
 }

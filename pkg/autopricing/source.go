@@ -1,218 +1,612 @@
 package autopricing
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/shopspring/decimal"
 )
 
-// ParseLiteLLM parses the mirrored LiteLLM document into normalized entries.
-func ParseLiteLLM(data []byte) (SourceEntries, int, error) {
-	var raw map[string]json.RawMessage
-	if err := common.Unmarshal(data, &raw); err != nil {
-		return nil, 0, fmt.Errorf("parse LiteLLM pricing catalog: %w", err)
-	}
-	if len(raw) == 0 {
-		return nil, 0, fmt.Errorf("LiteLLM pricing catalog is empty")
-	}
-
-	entries := make(SourceEntries, len(raw))
-	skipped := 0
-	for modelName, rawEntry := range raw {
-		if modelName == "" || modelName == "sample_spec" {
-			continue
-		}
-		var parsed litellmRawEntry
-		if err := common.Unmarshal(rawEntry, &parsed); err != nil {
-			skipped++
-			continue
-		}
-		entry, ok := convertEntry(parsed)
-		if !ok {
-			skipped++
-			continue
-		}
-		entry.CatalogKey = modelName
-		entries[normalizeKey(modelName)] = entry
-	}
-	if len(entries) == 0 {
-		return nil, skipped, fmt.Errorf("LiteLLM pricing catalog has no usable token-priced entries")
-	}
-	return entries, skipped, nil
-}
-
-type modelsDevProvider struct {
-	Models map[string]modelsDevModel `json:"models"`
-}
-
-type modelsDevModel struct {
-	Cost modelsDevCost `json:"cost"`
-}
-
-type modelsDevCost struct {
-	Input     *float64 `json:"input"`
-	Output    *float64 `json:"output"`
-	CacheRead *float64 `json:"cache_read"`
-}
-
-type modelsDevCandidate struct {
-	Provider  string
-	Input     float64
-	Output    *float64
-	CacheRead *float64
-}
-
-// ParseModelsDev parses models.dev /api.json. Its prices are USD per million
-// tokens, while Ren2Hub ratio units represent two USD per million tokens.
-func ParseModelsDev(data []byte) (SourceEntries, int, error) {
-	var upstream map[string]modelsDevProvider
-	if err := common.Unmarshal(data, &upstream); err != nil {
-		return nil, 0, fmt.Errorf("parse models.dev pricing catalog: %w", err)
-	}
-	if len(upstream) == 0 {
-		return nil, 0, fmt.Errorf("models.dev pricing catalog is empty")
-	}
-
-	providers := make([]string, 0, len(upstream))
-	for provider := range upstream {
-		providers = append(providers, provider)
-	}
-	sort.Strings(providers)
-	selected := make(map[string]modelsDevCandidate)
-	skipped := 0
-	for _, provider := range providers {
-		modelNames := make([]string, 0, len(upstream[provider].Models))
-		for modelName := range upstream[provider].Models {
-			modelNames = append(modelNames, modelName)
-		}
-		sort.Strings(modelNames)
-		for _, modelName := range modelNames {
-			candidate, ok := buildModelsDevCandidate(provider, upstream[provider].Models[modelName].Cost)
-			if !ok {
-				skipped++
+func sourceRecords(source SourceID, root rawObject) ([]sourceRecord, error) {
+	var records []sourceRecord
+	switch source {
+	case SourceSub2API:
+		for _, id := range keys(root) {
+			if id == "sample_spec" {
 				continue
 			}
-			key := normalizeKey(modelName)
-			current, exists := selected[key]
-			if !exists || shouldReplaceModelsDevCandidate(current, candidate) {
-				selected[key] = candidate
+			item, err := object(root[id])
+			records = append(records, sourceRecord{key: id, model: id, data: item, err: err})
+		}
+	case SourceOpenRouter:
+		var models []rawObject
+		if err := common.Unmarshal(root["data"], &models); err != nil || models == nil {
+			return nil, fmt.Errorf("invalid openrouter data array")
+		}
+		for _, item := range models {
+			id := rawString(item["id"])
+			if id == "" {
+				return nil, fmt.Errorf("missing openrouter model id")
+			}
+			records = append(records, sourceRecord{key: id, model: id, data: item})
+		}
+	case SourceAxonHub, SourceModelsDev:
+		providers := root
+		if raw, exists := root["providers"]; exists {
+			var err error
+			providers, err = object(raw)
+			if err != nil {
+				return nil, err
+			}
+		}
+		for _, provider := range keys(providers) {
+			if provider == "updated_at" {
+				continue
+			}
+			raw := providers[provider]
+			if len(raw) > 0 && raw[0] != '[' {
+				item, err := object(raw)
+				if err != nil {
+					return nil, err
+				}
+				raw = item["models"]
+			}
+			if len(raw) == 0 || string(raw) == "null" {
+				continue
+			}
+			var models []rawObject
+			if raw[0] == '[' {
+				if err := common.Unmarshal(raw, &models); err != nil {
+					return nil, fmt.Errorf("invalid models array for %s", provider)
+				}
+			} else {
+				modelMap, err := object(raw)
+				if err != nil {
+					return nil, err
+				}
+				for _, key := range keys(modelMap) {
+					item, itemErr := object(modelMap[key])
+					id := rawString(item["id"])
+					if id == "" {
+						id = key
+						if _, explicit := item["id"]; explicit && itemErr == nil {
+							itemErr = unsafePrice("invalid model id")
+						}
+					}
+					records = append(records, providerRecord(provider, id, item, itemErr))
+				}
+				continue
+			}
+			for _, item := range models {
+				id := rawString(item["id"])
+				if id == "" {
+					return nil, fmt.Errorf("missing model id for %s", provider)
+				}
+				records = append(records, providerRecord(provider, id, item, nil))
+			}
+		}
+	default:
+		return nil, fmt.Errorf("unknown pricing source %q", source)
+	}
+	return records, nil
+}
+
+func providerRecord(provider, id string, item rawObject, err error) sourceRecord {
+	qualified := id
+	if !strings.HasPrefix(id, provider+"/") {
+		qualified = provider + "/" + id
+	}
+	return sourceRecord{key: qualified, model: id, alias: id, data: item, err: err}
+}
+
+func parseRecord(source SourceID, item rawObject) (pricePlan, error) {
+	switch source {
+	case SourceSub2API:
+		return sub2APIPlan(item)
+	case SourceAxonHub, SourceModelsDev:
+		plan, err := providerPlan(item)
+		if source == SourceAxonHub && rawString(item["type"]) == "embedding" {
+			plan.usageScope = billing.UsageScopeEmbedding
+		}
+		return plan, err
+	case SourceOpenRouter:
+		return openRouterPlan(item)
+	default:
+		return pricePlan{}, fmt.Errorf("unknown pricing source %q", source)
+	}
+}
+
+var subDimensions = map[string]string{
+	"input_cost_per_token": "p", "output_cost_per_token": "c",
+	"cache_read_input_token_cost": "cr", "input_cost_per_token_cache_hit": "cr",
+	"cache_creation_input_token_cost": "cc", "cache_creation_input_token_cost_above_1hr": "cc1h",
+	"input_cost_per_image_token": "img", "output_cost_per_image_token": "img_o", "cache_read_input_image_token_cost": "img_cr",
+	"input_cost_per_audio_token": "ai", "output_cost_per_audio_token": "ao", "output_cost_per_image": "images",
+}
+var contextSuffix = regexp.MustCompile(`_above_([0-9]+)k_tokens$`)
+
+func sub2APIPlan(item rawObject) (pricePlan, error) {
+	plan := pricePlan{standard: schedule{base: make(rates)}, services: make(map[string]schedule)}
+	if rawString(item["mode"]) == "embedding" {
+		plan.usageScope = billing.UsageScopeEmbedding
+	}
+	patches := map[string]map[int64]rates{"": {0: plan.standard.base}}
+	for _, key := range keys(item) {
+		if strings.HasSuffix(key, "_batches") {
+			continue
+		} // Batch APIs are a separate product, never a service_tier.
+		if key == "tiered_pricing" || key == "long_context_input_token_threshold" || key == "long_context_threshold_inclusive" || key == "long_context_input_cost_multiplier" || key == "long_context_output_cost_multiplier" || key == "long_context_cache_read_cost_multiplier" {
+			continue
+		}
+		if key == "output_cost_per_reasoning_token" || key == "search_context_cost_per_query" {
+			continue
+		}
+		baseKey := key
+		service := ""
+		for _, name := range []string{"priority", "flex"} {
+			if strings.HasSuffix(baseKey, "_"+name) {
+				service = name
+				baseKey = strings.TrimSuffix(baseKey, "_"+name)
+				break
+			}
+		}
+		threshold := int64(0)
+		if match := contextSuffix.FindStringSubmatch(baseKey); match != nil {
+			parsed, err := strconv.ParseInt(match[1], 10, 64)
+			if err != nil || parsed <= 0 || parsed > 1_000_000 {
+				return plan, unsafePrice("invalid context threshold")
+			}
+			threshold = parsed * 1000
+			baseKey = strings.TrimSuffix(baseKey, match[0])
+		}
+		dimension, known := subDimensions[baseKey]
+		if !known {
+			if strings.Contains(key, "_cost_") || strings.HasSuffix(key, "_cost") {
+				if err := rejectUnknownPrice(key, item[key]); err != nil {
+					return plan, err
+				}
+			}
+			continue
+		}
+		if patches[service] == nil {
+			patches[service] = make(map[int64]rates)
+		}
+		if patches[service][threshold] == nil {
+			patches[service][threshold] = make(rates)
+		}
+		scale := int32(6)
+		if dimension == "images" {
+			scale = 0
+		}
+		if err := addRate(patches[service][threshold], dimension, item[key], scale); err != nil {
+			return plan, fmt.Errorf("%s: %w", key, err)
+		}
+	}
+	if raw, exists := item["output_cost_per_reasoning_token"]; exists {
+		value, err := amount(raw, 6)
+		if err != nil {
+			return plan, err
+		}
+		if output, exists := plan.standard.base["c"]; !exists || !value.Equal(output) {
+			return plan, unsafePrice("unsupported separate reasoning price")
+		}
+	}
+	if raw, exists := item["search_context_cost_per_query"]; exists {
+		search, err := object(raw)
+		if err != nil {
+			return plan, err
+		}
+		price := ""
+		for _, size := range []string{"search_context_size_low", "search_context_size_medium", "search_context_size_high"} {
+			value, err := amount(search[size], 0)
+			if err != nil {
+				return plan, err
+			}
+			if price != "" && price != value.String() {
+				return plan, unsafePrice("unsupported search context price tiers")
+			}
+			price = value.String()
+		}
+		if len(search) != 3 {
+			return plan, unsafePrice("unsupported search context price fields")
+		}
+		provider := rawString(item["litellm_provider"])
+		names := []string{"web_search", "web_search_preview"}
+		if strings.HasPrefix(provider, "vertex_ai") || provider == "gemini" {
+			names = []string{"google_search"}
+		} else if provider != "openai" && provider != "anthropic" && provider != "azure" {
+			return plan, unsafePrice("unsupported search tool provider")
+		}
+		for _, name := range names {
+			plan.extras = append(plan.extras, billing.UnitPrice{Quantity: "tool:" + name, Unit: "per_call", Price: price})
+		}
+	}
+	// Image generation can expose only an image-output price. Preserve that
+	// explicit rate for any residual output rather than inventing a free rate.
+	if rawString(item["mode"]) == "image_generation" {
+		if _, exists := plan.standard.base["c"]; !exists {
+			if value, exists := plan.standard.base["img_o"]; exists {
+				plan.standard.base["c"] = value
 			}
 		}
 	}
-	if len(selected) == 0 {
-		return nil, skipped, fmt.Errorf("models.dev pricing catalog has no usable entries")
+	for threshold, values := range patches[""] {
+		if threshold > 0 {
+			plan.standard.tiers = append(plan.standard.tiers, priceTier{threshold: threshold, rates: values})
+		}
 	}
-
-	entries := make(SourceEntries, len(selected))
-	for modelName, candidate := range selected {
-		entry := Entry{CatalogKey: modelName, HasModelRatio: true}
-		if candidate.Input == 0 {
-			entry.ModelRatio = 0
-			if candidate.Output != nil {
-				entry.CompletionRatio = 1
-				entry.HasCompletionRatio = true
+	if raw, exists := item["tiered_pricing"]; exists {
+		if len(plan.standard.tiers) > 0 {
+			return plan, unsafePrice("conflicting context tier formats")
+		}
+		if err := subRangeTiers(&plan, item, raw); err != nil {
+			return plan, err
+		}
+	} else if _, exists := item["long_context_input_token_threshold"]; exists {
+		if len(plan.standard.tiers) > 0 {
+			return plan, unsafePrice("conflicting context tier formats")
+		}
+		thresholdValue, err := amount(item["long_context_input_token_threshold"], 0)
+		if err != nil {
+			return plan, err
+		}
+		threshold := int64(0)
+		if !thresholdValue.IsZero() {
+			threshold, err = positiveThreshold(item["long_context_input_token_threshold"])
+		}
+		if err != nil {
+			return plan, err
+		}
+		values := make(rates)
+		for key, dimension := range map[string]string{"long_context_input_cost_multiplier": "p", "long_context_output_cost_multiplier": "c", "long_context_cache_read_cost_multiplier": "cr"} {
+			if raw, exists := item[key]; exists {
+				multiplier, err := amount(raw, 0)
+				if err != nil {
+					return plan, err
+				}
+				base, exists := plan.standard.base[dimension]
+				if !exists {
+					return plan, missingPrice("long context multiplier has no base price")
+				}
+				if multiplier.IsZero() {
+					continue
+				} // Source uses zero to disable this surcharge.
+				values[dimension] = base.Mul(multiplier)
+				if dimension == "p" {
+					for _, cache := range []string{"cr", "cc", "cc1h"} {
+						if rate, exists := plan.standard.base[cache]; exists {
+							if _, explicit := item["long_context_cache_read_cost_multiplier"]; cache != "cr" || !explicit {
+								values[cache] = rate.Mul(multiplier)
+							}
+						}
+					}
+				}
 			}
+		}
+		var inclusive bool
+		if raw, exists := item["long_context_threshold_inclusive"]; exists {
+			if err := common.Unmarshal(raw, &inclusive); err != nil {
+				return plan, unsafePrice("invalid context boundary")
+			}
+		}
+		if threshold > 0 {
+			plan.standard.tiers = append(plan.standard.tiers, priceTier{threshold: threshold, inclusive: inclusive, rates: values})
+		}
+	}
+	for i := range plan.standard.tiers {
+		tier := &plan.standard.tiers[i]
+		long := overlay(plan.standard.base, tier.rates)
+		derived, err := serviceContextRates(plan.standard.base, long, plan.standard.base, tier.rates)
+		if err != nil {
+			return plan, err
+		}
+		tier.rates = overlay(derived, tier.rates)
+	}
+	for service, byThreshold := range patches {
+		if service == "" {
+			continue
+		}
+		basePatch := byThreshold[0]
+		s := schedule{base: overlay(plan.standard.base, basePatch)}
+		standardRates := plan.standard.base
+		sort.Slice(plan.standard.tiers, func(i, j int) bool { return plan.standard.tiers[i].threshold < plan.standard.tiers[j].threshold })
+		for _, tier := range plan.standard.tiers {
+			standardRates = overlay(standardRates, tier.rates)
+			// Sub2API applies service prices first, then the source's context
+			// ratios. Explicit service/context absolute prices take precedence.
+			values, err := serviceContextRates(plan.standard.base, standardRates, s.base, byThreshold[tier.threshold])
+			if err != nil {
+				return plan, err
+			}
+			values = overlay(values, byThreshold[tier.threshold])
+			s.tiers = append(s.tiers, priceTier{threshold: tier.threshold, inclusive: tier.inclusive, rates: values})
+			delete(byThreshold, tier.threshold)
+		}
+		for threshold, values := range byThreshold {
+			if threshold > 0 {
+				s.tiers = append(s.tiers, priceTier{threshold: threshold, rates: values})
+			}
+		}
+		plan.services[service] = s
+	}
+	return plan, nil
+}
+
+func subRangeTiers(plan *pricePlan, item rawObject, raw common.RawMessage) error {
+	var tiers []rawObject
+	if err := common.Unmarshal(raw, &tiers); err != nil || len(tiers) == 0 {
+		return unsafePrice("invalid tiered_pricing")
+	}
+	previousEnd := int64(0)
+	var inclusive bool
+	if value, exists := item["long_context_threshold_inclusive"]; exists {
+		if err := common.Unmarshal(value, &inclusive); err != nil {
+			return unsafePrice("invalid context boundary")
+		}
+	}
+	for i, tier := range tiers {
+		var bounds []common.RawMessage
+		if err := common.Unmarshal(tier["range"], &bounds); err != nil || len(bounds) != 2 {
+			return unsafePrice("invalid context range")
+		}
+		lower, err := amount(bounds[0], 0)
+		if err != nil || !lower.Equal(decimal.NewFromInt(previousEnd)) {
+			return unsafePrice("non-contiguous context ranges")
+		}
+		upper, err := positiveThreshold(bounds[1])
+		if err != nil || upper <= previousEnd {
+			return unsafePrice("invalid context range")
+		}
+		values := make(rates)
+		for _, key := range keys(tier) {
+			if key == "range" {
+				continue
+			}
+			dimension, exists := subDimensions[key]
+			if !exists {
+				return unsafePrice("unsupported tier charge " + key)
+			}
+			scale := int32(6)
+			if dimension == "images" {
+				scale = 0
+			}
+			if err := addRate(values, dimension, tier[key], scale); err != nil {
+				return err
+			}
+		}
+		if _, exists := values["p"]; !exists {
+			return missingPrice("missing tier input price")
+		}
+		if _, exists := values["c"]; !exists && plan.usageScope != billing.UsageScopeEmbedding {
+			return missingPrice("missing tier output price")
+		}
+		if i == 0 {
+			plan.standard.base = overlay(plan.standard.base, values)
 		} else {
-			entry.ModelRatio = roundRatio(candidate.Input / 2)
-			if candidate.Output != nil {
-				entry.CompletionRatio = roundRatio(*candidate.Output / candidate.Input)
-				entry.HasCompletionRatio = true
+			plan.standard.tiers = append(plan.standard.tiers, priceTier{threshold: previousEnd, inclusive: inclusive, rates: values})
+		}
+		previousEnd = upper
+	}
+	return nil
+}
+
+var providerDimensions = map[string]string{"input": "p", "output": "c", "cache_read": "cr", "cacheRead": "cr", "cache_write": "cc", "cacheWrite": "cc", "input_audio": "ai", "output_audio": "ao"}
+
+func providerPlan(item rawObject) (pricePlan, error) {
+	plan := pricePlan{standard: schedule{base: make(rates)}}
+	raw, exists := item["cost"]
+	if !exists || string(raw) == "null" {
+		return plan, missingPrice("missing cost")
+	}
+	cost, err := object(raw)
+	if err != nil {
+		return plan, err
+	}
+	plan.standard.base, err = providerRates(cost)
+	if err != nil {
+		return plan, err
+	}
+	var legacyTier rates
+	if raw, exists := cost["context_over_200k"]; exists {
+		tier, err := object(raw)
+		if err != nil {
+			return plan, err
+		}
+		values, err := providerRates(tier)
+		if err != nil {
+			return plan, err
+		}
+		legacyTier = values
+	}
+	if raw, exists := cost["tiers"]; exists {
+		var tiers []rawObject
+		if err := common.Unmarshal(raw, &tiers); err != nil {
+			return plan, unsafePrice("invalid context tiers")
+		}
+		for _, tier := range tiers {
+			selector, err := object(tier["tier"])
+			if err != nil || rawString(selector["type"]) != "context" {
+				return plan, unsafePrice("unsupported tier selector")
+			}
+			threshold, err := positiveThreshold(selector["size"])
+			if err != nil {
+				return plan, err
+			}
+			values, err := providerRates(tier)
+			if err != nil {
+				return plan, err
+			}
+			plan.standard.tiers = append(plan.standard.tiers, priceTier{threshold: threshold, rates: values})
+		}
+	}
+	if legacyTier != nil {
+		if len(plan.standard.tiers) == 0 {
+			plan.standard.tiers = append(plan.standard.tiers, priceTier{threshold: 200000, rates: legacyTier})
+		} else {
+			// The legacy field is also emitted for thresholds other than 200k.
+			// Trust the typed threshold only when its prices prove equivalence.
+			matched := false
+			for _, tier := range plan.standard.tiers {
+				if equalRates(tier.rates, legacyTier) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return plan, unsafePrice("conflicting context tier formats")
 			}
 		}
-		if candidate.CacheRead != nil && candidate.Input > 0 {
-			entry.CacheRatio = roundRatio(*candidate.CacheRead / candidate.Input)
-			entry.HasCacheRatio = true
-		}
-		entries[modelName] = entry
 	}
-	return entries, skipped, nil
+	return plan, nil
 }
 
-func buildModelsDevCandidate(provider string, cost modelsDevCost) (modelsDevCandidate, bool) {
-	if cost.Input == nil || !validCost(*cost.Input) {
-		return modelsDevCandidate{}, false
+func equalRates(a, b rates) bool {
+	if len(a) != len(b) {
+		return false
 	}
-	if cost.Output != nil && !validCost(*cost.Output) {
-		return modelsDevCandidate{}, false
-	}
-	if cost.CacheRead != nil && !validCost(*cost.CacheRead) {
-		return modelsDevCandidate{}, false
-	}
-	if *cost.Input == 0 && cost.Output != nil && *cost.Output > 0 {
-		return modelsDevCandidate{}, false
-	}
-	return modelsDevCandidate{
-		Provider:  provider,
-		Input:     *cost.Input,
-		Output:    cloneFloat(cost.Output),
-		CacheRead: cloneFloat(cost.CacheRead),
-	}, true
-}
-
-func shouldReplaceModelsDevCandidate(current, next modelsDevCandidate) bool {
-	currentNonZero := current.Input > 0
-	nextNonZero := next.Input > 0
-	if currentNonZero != nextNonZero {
-		return nextNonZero
-	}
-	if nextNonZero && next.Input != current.Input {
-		return next.Input < current.Input
-	}
-	return next.Provider < current.Provider
-}
-
-func cloneFloat(value *float64) *float64 {
-	if value == nil {
-		return nil
-	}
-	copy := *value
-	return &copy
-}
-
-// ConvertModelsDevToRatioData keeps the existing manual ratio-sync endpoint
-// compatible while using the same parser as automatic pricing.
-func ConvertModelsDevToRatioData(reader io.Reader) (map[string]any, error) {
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, err
-	}
-	entries, _, err := ParseModelsDev(data)
-	if err != nil {
-		return nil, err
-	}
-	modelRatios := make(map[string]any, len(entries))
-	completionRatios := make(map[string]any)
-	cacheRatios := make(map[string]any)
-	keys := make([]string, 0, len(entries))
-	for key := range entries {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		entry := entries[key]
-		modelRatios[key] = entry.ModelRatio
-		if entry.HasCompletionRatio {
-			completionRatios[key] = entry.CompletionRatio
-		}
-		if entry.HasCacheRatio {
-			cacheRatios[key] = entry.CacheRatio
+	for key, value := range a {
+		other, exists := b[key]
+		if !exists || !value.Equal(other) {
+			return false
 		}
 	}
-	result := map[string]any{"model_ratio": modelRatios}
-	if len(completionRatios) > 0 {
-		result["completion_ratio"] = completionRatios
-	}
-	if len(cacheRatios) > 0 {
-		result["cache_ratio"] = cacheRatios
+	return true
+}
+
+func serviceContextRates(base, long, service, explicit rates) (rates, error) {
+	result := make(rates)
+	for dimension, value := range service {
+		if price, exists := explicit[dimension]; exists {
+			result[dimension] = price
+			continue
+		}
+		if dimension == "images" {
+			result[dimension] = value
+			continue
+		}
+		ratioDimension := dimension
+		if dimension == "cr" || dimension == "cc" || dimension == "cc1h" {
+			ratioDimension = "p"
+		}
+		before, hasBase := base[ratioDimension]
+		after, hasLong := long[ratioDimension]
+		if !hasBase || !hasLong || before.Equal(after) {
+			result[dimension] = value
+			continue
+		}
+		if before.IsZero() {
+			return nil, unsafePrice("cannot derive service tier from a zero base price")
+		}
+		product := value.Mul(after)
+		converted, remainder := product.QuoRem(before, 18)
+		if !remainder.Equal(decimal.Zero) {
+			return nil, unsafePrice("service/context price exceeds billing precision")
+		}
+		result[dimension] = converted
 	}
 	return result, nil
 }
 
-// MergeKey normalizes source model keys for callers outside this package.
-func MergeKey(model string) string {
-	return strings.ToLower(strings.TrimSpace(model))
+func providerRates(cost rawObject) (rates, error) {
+	values := make(rates)
+	for _, key := range keys(cost) {
+		if key == "context_over_200k" || key == "tiers" || key == "tier" || key == "reasoning" {
+			continue
+		}
+		dimension, known := providerDimensions[key]
+		if !known {
+			if err := rejectUnknownPrice(key, cost[key]); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if err := addRate(values, dimension, cost[key], 0); err != nil {
+			return nil, err
+		}
+	}
+	if raw, exists := cost["reasoning"]; exists {
+		value, err := amount(raw, 0)
+		if err != nil {
+			return nil, err
+		}
+		if output, exists := values["c"]; !exists || !value.Equal(output) {
+			return nil, unsafePrice("unsupported separate reasoning price")
+		}
+	}
+	return values, nil
+}
+
+var openRouterDimensions = map[string]string{"prompt": "p", "completion": "c", "input_cache_read": "cr", "input_cache_write": "cc", "input_cache_write_1h": "cc1h", "audio": "ai", "audio_output": "ao", "image_output": "images"}
+
+func openRouterPlan(item rawObject) (pricePlan, error) {
+	plan := pricePlan{standard: schedule{base: make(rates)}}
+	raw, exists := item["pricing"]
+	if !exists {
+		return plan, missingPrice("missing pricing")
+	}
+	pricing, err := object(raw)
+	if err != nil {
+		return plan, err
+	}
+	plan.standard.base, err = openRouterRates(pricing)
+	if err != nil {
+		return plan, err
+	}
+	if raw, exists := pricing["web_search"]; exists {
+		value, err := amount(raw, 0)
+		if err != nil {
+			return plan, err
+		}
+		for _, name := range []string{"web_search", "web_search_preview"} {
+			plan.extras = append(plan.extras, billing.UnitPrice{Quantity: "tool:" + name, Unit: "per_call", Price: value.String()})
+		}
+	}
+	if raw, exists := pricing["overrides"]; exists {
+		var tiers []rawObject
+		if err := common.Unmarshal(raw, &tiers); err != nil {
+			return plan, unsafePrice("invalid pricing overrides")
+		}
+		if len(tiers) > 0 {
+			return plan, unsafePrice("unsupported OpenRouter conditional pricing overrides")
+		}
+	}
+	return plan, nil
+}
+
+func openRouterRates(pricing rawObject) (rates, error) {
+	values := make(rates)
+	for _, key := range keys(pricing) {
+		if key == "overrides" || key == "internal_reasoning" || key == "web_search" {
+			continue
+		}
+		dimension, known := openRouterDimensions[key]
+		if !known {
+			if err := rejectUnknownPrice(key, pricing[key]); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		scale := int32(6)
+		if dimension == "images" {
+			scale = 0
+		}
+		if err := addRate(values, dimension, pricing[key], scale); err != nil {
+			return nil, err
+		}
+	}
+	if raw, exists := pricing["internal_reasoning"]; exists {
+		value, err := amount(raw, 6)
+		if err != nil {
+			return nil, err
+		}
+		if output, exists := values["c"]; !exists || !value.Equal(output) {
+			return nil, unsafePrice("unsupported separate reasoning price")
+		}
+	}
+	return values, nil
 }

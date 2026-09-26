@@ -14,6 +14,13 @@ import {
   type TaskPriceSchema,
 } from '@/api/modelPricing'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import {
+  automaticPricingApi,
+  type ModelPriceOrigin,
+} from '@/api/automaticPricing'
+import { ApiError } from '@/api/types'
+import { useLatestRequest } from '@/composables/useLatestRequest'
 import UsageFactsForm from './UsageFactsForm.vue'
 import UsageSchemaReview from './UsageSchemaReview.vue'
 import {
@@ -34,6 +41,12 @@ const props = withDefaults(
 )
 const { t } = useI18n()
 const initial = ref<PriceVersion | null>(null)
+const origin = ref<ModelPriceOrigin | null>(null)
+const originError = ref('')
+const originRequest = useLatestRequest()
+const restoring = ref(false)
+const restoreConfirm = ref(false)
+let disposed = false
 const mode = ref<PriceMode>('unit_price')
 const prices = ref<UnitPrice[]>([])
 const expression = ref('')
@@ -43,6 +56,7 @@ const error = ref('')
 const originalName = ref('')
 const seedMessage = ref('')
 const usageSchema = ref<UsageSchema | undefined>()
+const usageScope = ref<PriceVersion['usage_scope']>()
 const currentSchema = ref<TaskPriceSchema | null>(null)
 const schemaError = ref('')
 const selectedPlugin = ref('')
@@ -178,10 +192,29 @@ const snapshot = () =>
     prices.value,
     expression.value,
     usageSchema.value,
+    usageScope.value,
   ])
 const initialForm = ref('')
 const dirty = computed(() => initialForm.value !== snapshot())
 
+async function loadOrigin() {
+  origin.value = null
+  originError.value = ''
+  const result = await originRequest.run(automaticPricingApi.status)
+  if (result.stale) return
+  if (!result.ok) {
+    originError.value =
+      result.error instanceof Error
+        ? result.error.message
+        : String(result.error)
+    return
+  }
+  origin.value =
+    result.value.origins.find(
+      (row) =>
+        row.model === originalName.value && row.version_id === initial.value?.id
+    ) ?? null
+}
 async function load() {
   request?.abort()
   const controller = new AbortController()
@@ -195,12 +228,14 @@ async function load() {
     originalName.value = props.modelName
     initial.value =
       data.find((price) => price.model === props.modelName) ?? null
+    void loadOrigin()
     mode.value = initial.value?.mode ?? 'unit_price'
     prices.value = initial.value?.prices.map((line) => ({ ...line })) ?? [
       { quantity: 'p', unit: 'per_million_tokens', price: '' },
       { quantity: 'c', unit: 'per_million_tokens', price: '' },
     ]
     expression.value = initial.value?.expression ?? ''
+    usageScope.value = initial.value?.usage_scope
     usageSchema.value = initial.value?.usage_schema
       ? structuredClone(toRaw(initial.value.usage_schema))
       : undefined
@@ -221,11 +256,19 @@ function applyDraft(price: PriceVersion) {
   mode.value = price.mode
   prices.value = price.prices.map((line) => ({ ...line }))
   expression.value = price.expression ?? ''
+  usageScope.value = price.usage_scope
   usageSchema.value = price.usage_schema
     ? structuredClone(toRaw(price.usage_schema))
     : undefined
   localAmounts.value = {}
 }
+watch(usageScope, (value) => {
+  if (value === 'embedding')
+    previewInput.value = JSON.stringify({
+      ...parseObject(previewInput.value),
+      output_tokens: 0,
+    })
+})
 watch(
   () => props.seedDraft,
   (price) => {
@@ -394,10 +437,11 @@ function draft(name: string): PriceVersion {
         ? 'micro_usd'
         : 'usd',
     usage_schema: usageSchema.value,
+    ...(usageScope.value ? { usage_scope: usageScope.value } : {}),
   }
 }
 async function validate(name = props.modelName) {
-  if (!loaded.value || loading.value)
+  if (!loaded.value || loading.value || restoring.value)
     throw new Error(t('billing.priceUnavailable'))
   try {
     validatePriceVersion(draft(name))
@@ -427,6 +471,49 @@ async function save(name: string) {
   )
   originalName.value = name
   initialForm.value = submittedForm
+  originRequest.cancel()
+  origin.value = {
+    model: name,
+    version_id: initial.value.id,
+    origin: 'manual',
+    source_model: '',
+    source_hash: '',
+  }
+}
+async function restoreAutomatic() {
+  if (
+    restoring.value ||
+    !initial.value ||
+    props.modelName !== originalName.value
+  )
+    return
+  const model = originalName.value
+  restoring.value = true
+  error.value = ''
+  try {
+    const price = await automaticPricingApi.restore(model, initial.value.id)
+    if (disposed || !props.open || props.modelName !== model) return
+    initial.value = price
+    applyDraft(price)
+    sourceDraft.value = null
+    candidate.value = null
+    seedMessage.value = ''
+    initialForm.value = snapshot()
+    restoreConfirm.value = false
+    await loadOrigin()
+  } catch (cause) {
+    if (!disposed) {
+      restoreConfirm.value = false
+      error.value =
+        cause instanceof ApiError && cause.status === 409
+          ? t('billing.priceConflict')
+          : cause instanceof Error
+            ? cause.message
+            : String(cause)
+    }
+  } finally {
+    if (!disposed) restoring.value = false
+  }
 }
 async function importSeed() {
   request?.abort()
@@ -514,6 +601,8 @@ watch(
     if (open) void load()
     else {
       request?.abort()
+      originRequest.cancel()
+      restoreConfirm.value = false
       schemaRequest?.abort()
       clearTimeout(schemaTimer)
     }
@@ -521,6 +610,7 @@ watch(
   { immediate: true }
 )
 onBeforeUnmount(() => {
+  disposed = true
   clearTimeout(schemaTimer)
   request?.abort()
   schemaRequest?.abort()
@@ -544,6 +634,43 @@ defineExpose({ validate, save })
       {{ t('billing.priceVersionHint') }}
     </p>
     <p
+      v-if="usageScope === 'embedding'"
+      data-price-usage-scope
+      class="text-xs leading-relaxed text-[var(--text-secondary)]"
+    >
+      {{ t('billing.embeddingScope') }}
+    </p>
+    <div
+      v-if="initial && props.modelName === originalName"
+      class="space-y-1 text-xs text-[var(--text-secondary)]"
+      data-price-origin
+    >
+      <p>
+        {{ t('billing.automatic.currentOrigin') }}:
+        {{
+          origin
+            ? t(`billing.automatic.origins.${origin.origin}`)
+            : t('billing.automatic.originUnavailable')
+        }}
+      </p>
+      <p v-if="origin?.source_model">
+        {{ t('billing.automatic.sourceModel') }}: {{ origin.source_model }}
+      </p>
+      <p v-if="origin?.source_hash" class="break-all font-mono">
+        SHA: {{ origin.source_hash }}
+      </p>
+      <p v-if="origin?.origin === 'manual'">
+        {{ t('billing.automatic.manualHint') }}
+      </p>
+    </div>
+    <p
+      v-if="originError"
+      role="alert"
+      class="text-xs text-[var(--status-danger-text)]"
+    >
+      {{ originError }}
+    </p>
+    <p
       v-if="error"
       role="alert"
       class="text-sm text-[var(--status-danger-text)]"
@@ -551,14 +678,29 @@ defineExpose({ validate, save })
       {{ error }}
     </p>
     <div class="flex flex-wrap gap-2">
-      <ConsoleButton variant="secondary" :disabled="loading" @click="load">{{
-        t('billing.refresh')
-      }}</ConsoleButton
+      <ConsoleButton
+        variant="secondary"
+        :disabled="loading || restoring"
+        @click="load"
+        >{{ t('billing.refresh') }}</ConsoleButton
       ><ConsoleButton
         variant="secondary"
-        :disabled="loading || !loaded"
+        :disabled="loading || !loaded || restoring"
         @click="importSeed"
         >{{ t('billing.importSeed') }}</ConsoleButton
+      >
+      <ConsoleButton
+        v-if="
+          initial &&
+          props.modelName === originalName &&
+          (origin?.origin === 'manual' || origin?.origin === 'legacy_seed')
+        "
+        variant="secondary"
+        :disabled="loading || !loaded"
+        :loading="restoring"
+        data-restore-automatic
+        @click="restoreConfirm = true"
+        >{{ t('billing.automatic.restore') }}</ConsoleButton
       >
     </div>
     <p
@@ -568,7 +710,7 @@ defineExpose({ validate, save })
     >
       {{ seedMessage }}
     </p>
-    <fieldset :disabled="loading || !loaded" class="space-y-4">
+    <fieldset :disabled="loading || !loaded || restoring" class="space-y-4">
       <label class="block text-sm"
         >{{ t('billing.priceMode')
         }}<select
@@ -766,6 +908,9 @@ defineExpose({ validate, save })
             }}
           </dd>
         </dl>
+        <p v-if="candidate.usage_scope === 'embedding'">
+          {{ t('billing.embeddingScope') }}
+        </p>
         <div class="flex flex-wrap gap-2">
           <ConsoleButton
             variant="secondary"
@@ -1105,5 +1250,14 @@ defineExpose({ validate, save })
         </div>
       </details>
     </fieldset>
+    <ConfirmDialog
+      :open="restoreConfirm"
+      :title="t('billing.automatic.restore')"
+      :message="t('billing.automatic.restoreConfirm', { model: originalName })"
+      :confirm-text="t('billing.automatic.restore')"
+      :loading="restoring"
+      @confirm="restoreAutomatic"
+      @cancel="restoreConfirm = false"
+    />
   </section>
 </template>

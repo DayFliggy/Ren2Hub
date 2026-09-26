@@ -41,6 +41,19 @@ func TestBillingAPIRootResolutionAndOwnerIsolation(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, call(actor, http.MethodGet, "/api/billing/reconciliations", "").Code)
 		assert.Equal(t, http.StatusForbidden, call(actor, http.MethodPost, "/api/billing/reconciliations/billing-role-1/resolve", `{}`).Code)
 	}
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, "/api/billing/prices/automatic"},
+		{http.MethodPut, "/api/billing/prices/automatic"},
+		{http.MethodPost, "/api/billing/prices/automatic/sync"},
+		{http.MethodPost, "/api/billing/prices/automatic/restore"},
+	} {
+		for _, actor := range []int{1, 2} {
+			assert.Equal(t, http.StatusForbidden, call(actor, route.method, route.path, `{}`).Code)
+		}
+		recorder := httptest.NewRecorder()
+		engine.ServeHTTP(recorder, httptest.NewRequest(route.method, route.path, strings.NewReader(`{}`)))
+		assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	}
 	for _, path := range []string{"reservations", "events"} {
 		response := call(1, http.MethodGet, "/api/billing/self/"+path, "")
 		require.Equal(t, http.StatusOK, response.Code, response.Body.String())

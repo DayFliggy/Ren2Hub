@@ -19,7 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
 )
@@ -175,7 +175,7 @@ func buildOpenAIModelWithEndpointTypes(modelName string, ownerByModel map[string
 }
 
 func tokenAllowsModel(tokenModelLimit map[string]bool, modelName string) bool {
-	return tokenModelLimit[ratio_setting.FormatMatchingModelName(modelName)]
+	return tokenModelLimit[reasoning.ModelPermissionPattern(modelName)]
 }
 
 func projectModelEndpointTypesForToken(modelName string, tokenModelLimit map[string]bool, modelLimitEnabled bool) ([]constant.EndpointType, bool) {

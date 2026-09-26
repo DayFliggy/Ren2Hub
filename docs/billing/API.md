@@ -15,7 +15,11 @@
 | GET `/api/billing/metrics` | Root | 待恢复、对账、预留、等待、冲突、恢复失败、欠费事件 |
 | GET `/api/billing/prices` | Root | 当前生效价格版本 |
 | POST `/api/billing/prices` | Root | 发布新版本，旧版本不可修改 |
-| GET `/api/billing/prices/seed` | Root | 仓库内初始目录与待配置模型 |
+| GET `/api/billing/prices/seed` | Root | 当前合并参考目录、待配置模型与来源哈希 |
+| GET `/api/billing/prices/automatic` | Root | 自动配置、四个来源状态与当前模型来源 |
+| PUT `/api/billing/prices/automatic` | Root | `{enabled,check_interval_minutes}`，周期 5–1440 分钟，默认 30 |
+| POST `/api/billing/prices/automatic/sync` | Root | 创建或返回同类正在执行的系统任务；结果包含 checked、changed、published、deactivated、unconfigured_count、unconfigured、unconfigured_details 及 errors |
+| POST `/api/billing/prices/automatic/restore` | Root | `{model,expected_version}` 恢复目录价；冲突 409，不覆盖并发人工修改 |
 
 `:id` 为请求 ID，客户端必须 URL 编码。列表返回 `{ items, total }`；limit 默认 20、最大 100。预留项包含 `request_id`、`user_id`、`token_id`、`state`、`funding_amount`、`token_amount`、`version`、时间和 `manual_review_required`。
 
@@ -58,7 +62,9 @@
 }
 ```
 
-首次发布 expected_version 为 0；后续填写当前版本 ID。发布后已有尝试继续使用原报价。原 ModelRatio、ModelPrice、媒体倍率、ToolPrice、billing_setting 和 auto_pricing 写入入口退休，通用 option 接口拒绝这些配置。QuotaPerUnit 固定为 500000，不可修改。
+首次发布 expected_version 为 0；后续填写当前版本 ID。发布后已有尝试继续使用原报价。价格可选 `usage_scope: "embedding"`，随价格和 Quote 冻结；编辑、导入与导出必须保留，省略不改变旧哈希。带此限制的价格只接受 embedding 请求与输入用量，不接受输出计费项。原 ModelRatio、ModelPrice、媒体倍率、ToolPrice、ExposeRatioEnabled、billing_setting 和 auto_pricing 写入入口退休，通用 option 接口拒绝这些配置。QuotaPerUnit 固定为 500000，不可修改。
+
+同步任务通过 `GET /api/system-task/:id` 查询。页面加载或刷新时使用 `GET /api/system-task/list?type=billing_pricing_sync&limit=1` 回载最近的定时或手动任务，并继续轮询运行中任务。`unconfigured_details` 形状为 `[{model,reasons:[{source,reason}]}]`，与 `unconfigured` 一起最多返回 100 个模型，另有总结果体积限制；完整总数为 `unconfigured_count`。来源下载失败保留其有效快照；单模型失败依次尝试备用，所有来源均不可用才停用该模型自动价。
 
 管理员设置余额必须携带操作 ID、预期账户版本，通过差额事件记账。支付、兑换、奖励业务继续维护资格和业务凭据，凭据与钱包事件使用同一事务。返利额度仍归返利权益账本管理，转入钱包时建立关联事件。
 

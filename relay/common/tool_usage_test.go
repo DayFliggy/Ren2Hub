@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,17 +36,11 @@ func TestCountBillableToolCallWebSearchDefaultsToPreview(t *testing.T) {
 	assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolWebSearchPreview].CallCount)
 }
 
-func TestCountBillableToolCallFunctionCallRequiresPrice(t *testing.T) {
-	operation_setting.SetToolPriceForTest("my_priced_fn", 5.0)
-	t.Cleanup(func() {
-		operation_setting.DeleteToolPriceForTest("my_priced_fn")
-	})
-
+func TestCountBillableToolCallFunctionCallRequiresFrozenPrice(t *testing.T) {
 	info := &RelayInfo{OriginModelName: "gpt-5.1"}
 	quote, err := billing.NewQuote(billing.PriceVersion{Model: "gpt-5.1", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "tool:my_priced_fn", Unit: "per_call", Price: "0.005"}}}, "1", nil, time.Unix(1700000000, 0))
 	require.NoError(t, err)
 	info.PriceData.Quote = quote
-	operation_setting.SetToolPriceForTest("my_priced_fn", 0)
 	info.CountBillableToolCall(dto.BuildInCallFunctionCall, "my_priced_fn")
 	require.Contains(t, info.ResponsesUsageInfo.BuiltInTools, "my_priced_fn")
 	assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools["my_priced_fn"].CallCount)

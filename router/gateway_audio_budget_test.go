@@ -13,7 +13,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,9 +45,8 @@ func TestGatewaySpeechFinalInputAccounting(t *testing.T) {
 					w.Header().Set("Content-Type", "application/json")
 					_, _ = io.WriteString(w, provider.response)
 				})
-				oldRatios, oldPreconsume, oldCount := ratio_setting.ModelRatio2JSONString(), common.PreConsumedQuota, constant.CountToken
+				oldPreconsume, oldCount := common.PreConsumedQuota, constant.CountToken
 				t.Cleanup(func() {
-					require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(oldRatios))
 					common.PreConsumedQuota, constant.CountToken = oldPreconsume, oldCount
 				})
 				common.PreConsumedQuota, constant.CountToken = 1, false

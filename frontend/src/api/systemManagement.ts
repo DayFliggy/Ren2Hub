@@ -33,7 +33,7 @@ export interface SystemInstance {
 
 export type SystemTaskStatus = 'pending' | 'running' | 'succeeded' | 'failed'
 export interface SystemTaskQuery {
-  scope: 'active' | 'history'
+  scope?: 'active' | 'history'
   type?: string
   status?: 'succeeded' | 'failed' | ''
   offset?: number
@@ -51,6 +51,7 @@ export const SYSTEM_TASK_TYPES = [
   'async_task_poll',
   'route_capability_refresh',
   'billing_recovery',
+  'billing_pricing_sync',
 ] as const
 export interface SystemTask {
   task_id: string
@@ -64,6 +65,71 @@ export interface SystemTask {
   processed: number | null
   total: number | null
   deleted_count: number | null
+  pricing_result?: PricingSyncResult
+}
+
+export interface PricingSyncResult {
+  checked: number
+  changed: number
+  published: number
+  deactivated: number
+  unconfigured_count: number
+  unconfigured: string[]
+  errors: string[]
+  unconfigured_details: Array<{
+    model: string
+    reasons: Array<{ source: string; reason: string }>
+  }>
+}
+
+function parsePricingSyncResult(
+  value: Record<string, unknown>,
+  endpoint: string
+): PricingSyncResult {
+  const counters = {} as Pick<
+    PricingSyncResult,
+    'checked' | 'changed' | 'published' | 'deactivated' | 'unconfigured_count'
+  >
+  for (const key of [
+    'checked',
+    'changed',
+    'published',
+    'deactivated',
+    'unconfigured_count',
+  ] as const) {
+    const count = requiredStrictInteger(value[key], endpoint)
+    if (count < 0) invalidResponse(endpoint)
+    counters[key] = count
+  }
+  if (
+    !Array.isArray(value.unconfigured) ||
+    value.unconfigured.length > 100 ||
+    !Array.isArray(value.errors)
+  )
+    invalidResponse(endpoint)
+  const details = value.unconfigured_details ?? []
+  if (!Array.isArray(details) || details.length > 100) invalidResponse(endpoint)
+  return {
+    ...counters,
+    unconfigured: value.unconfigured.map((name) =>
+      requiredString(name, endpoint, false)
+    ),
+    errors: value.errors.map((message) => requiredString(message, endpoint)),
+    unconfigured_details: details.map((raw) => {
+      const detail = record(raw, endpoint)
+      if (!Array.isArray(detail.reasons)) invalidResponse(endpoint)
+      return {
+        model: requiredString(detail.model, endpoint, false),
+        reasons: detail.reasons.map((rawReason) => {
+          const reason = record(rawReason, endpoint)
+          return {
+            source: requiredString(reason.source, endpoint, false),
+            reason: requiredString(reason.reason, endpoint, false),
+          }
+        }),
+      }
+    }),
+  }
 }
 
 function record(value: unknown, endpoint: string): Record<string, unknown> {
@@ -160,6 +226,9 @@ export function parseSystemTask(
     processed: optionalInteger(state.processed, endpoint),
     total: optionalInteger(state.total, endpoint),
     deleted_count: optionalInteger(result.deleted_count, endpoint),
+    ...(row.type === 'billing_pricing_sync' && Object.keys(result).length
+      ? { pricing_result: parsePricingSyncResult(result, endpoint) }
+      : {}),
   }
 }
 

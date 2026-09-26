@@ -4,6 +4,60 @@ export default {
   taskPlugins: taskPluginMessages.en,
   security: securityMessages['en'],
   billing: {
+    automatic: {
+      title: 'Automatic model pricing',
+      priority:
+        'Sub2API and AxonHub form the reference catalog. Sub2API takes precedence for shared models; models.dev and OpenRouter fill gaps. Manual prices take precedence.',
+      behavior:
+        'Each model uses one complete source price. Missing or unsupported entries try the next source; models without a valid price stop accepting new quotes. Source download failures retain the last valid snapshot. Manual checks remain available when scheduled updates are disabled.',
+      enabled: 'Enable scheduled price updates',
+      interval: 'Check interval (minutes)',
+      invalidInterval: 'Enter a whole number between 5 and 1440 minutes.',
+      save: 'Save schedule',
+      saved: 'Automatic pricing schedule saved.',
+      checkNow: 'Check prices now',
+      models: 'Available models',
+      rejected: 'Rejected entries',
+      checked: 'Last checked',
+      updated: 'Last source update',
+      never: 'Not yet',
+      noSources: 'No source status is available yet.',
+      task: 'Price check {id}: {status}',
+      retryTask: 'Refresh task status',
+      results: {
+        checked: 'Sources checked',
+        changed: 'Sources changed',
+        published: 'Prices published',
+        deactivated: 'Prices deactivated',
+        unconfigured_count: 'Unconfigured models',
+      },
+      unconfiguredDetails: 'Unavailable prices and source reasons ({count})',
+      detailsLimit:
+        'Showing up to 100 models. The total includes all unconfigured models.',
+      currentOrigin: 'Current price source',
+      originUnavailable: 'Source unavailable',
+      sourceModel: 'Source model',
+      manualHint:
+        'Manual publication keeps this price outside automatic updates until you restore automatic pricing.',
+      restore: 'Restore automatic pricing',
+      restoreConfirm:
+        'Publish the current reference price for {model} and resume automatic updates? This replaces the manual price and any unsaved price draft.',
+      origins: {
+        manual: 'Manual',
+        sub2api: 'Sub2API',
+        axonhub: 'AxonHub',
+        models_dev: 'models.dev',
+        openrouter: 'OpenRouter',
+        legacy_seed: 'Legacy initial price',
+      },
+      roles: { primary: 'Primary source', fallback: 'Fallback source' },
+      status: {
+        pending: 'Pending',
+        running: 'Running',
+        succeeded: 'Completed',
+        failed: 'Failed',
+      },
+    },
     currencyHelper: 'Local currency editing helper',
     currencyHint:
       'Enter your exchange rate. Only an explicit conversion changes the exact USD input.',
@@ -109,6 +163,8 @@ export default {
     priceConflict: 'This model price changed elsewhere. Reload before saving.',
     priceVersionHint:
       'Saving publishes an immutable version. Sent requests retain their frozen quote. Missing pricing is never treated as free.',
+    embeddingScope:
+      'Embedding requests only. This restriction is frozen with the price, preserved when editing or copying, and rejects unexpected output usage.',
     priceMode: 'Pricing mode',
     unitPrice: 'Unit price (USD)',
     unit: 'Pricing unit',
@@ -120,10 +176,11 @@ export default {
       'Only normalized usage, registered attr properties and frozen time are available. Request bodies and headers cannot be read.',
     freeHint:
       'This version is explicitly free. Delivery protection and usage are still recorded.',
-    importSeed: 'Fill from local initial catalog',
-    seedLoaded: 'Loaded from {source}. Review and save to publish.',
+    importSeed: 'Compare with live reference catalog',
+    seedLoaded:
+      'Reference snapshot: {source}. Review and apply the draft, then save to publish a manual price.',
     seedUnconfigured:
-      'The local catalog cannot determine this price. Configure it manually.',
+      'The current reference catalog has no supported price for this model. Configure it manually.',
     modes: {
       unit_price: 'Explicit unit prices',
       expression: 'Advanced expression',

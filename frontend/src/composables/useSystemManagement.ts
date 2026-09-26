@@ -144,3 +144,21 @@ export function useSystemManagement() {
     historyTotal,
   }
 }
+
+export function useSystemTask() {
+  const taskId = ref('')
+  const feed = useSystemFeed<SystemTask>(
+    async (signal) =>
+      taskId.value
+        ? [await systemManagementApi.task(taskId.value, signal)]
+        : [],
+    (rows) => (rows.some(isActiveSystemTask) ? 8000 : null)
+  )
+  const task = computed(() => feed.rows.value[0] ?? null)
+  function follow(value: SystemTask) {
+    taskId.value = value.task_id
+    feed.rows.value = [value]
+    void feed.refresh()
+  }
+  return { task, error: feed.error, refresh: feed.refresh, follow }
+}

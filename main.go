@@ -30,7 +30,6 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 	_ "github.com/QuantumNous/new-api/setting/performance_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
@@ -111,6 +110,13 @@ func main() {
 		return
 	}
 	go controller.SyncTaskPlugins()
+	if common.IsMasterNode {
+		if err := service.InitializeAutomaticPricing(context.Background()); err != nil {
+			// Published prices remain valid. Keep the scheduler alive so source
+			// conflicts or temporary database failures can recover on its next run.
+			common.SysError("automatic pricing initialization incomplete; published prices retained: " + err.Error())
+		}
+	}
 	if err := service.InitRouteCapabilityIndex(context.Background()); err != nil {
 		common.SysError(fmt.Sprintf("initial route capability index rebuild failed: %v", err))
 	}
@@ -302,9 +308,6 @@ func InitResources() error {
 	common.InitEnv()
 
 	logger.SetupLogger()
-
-	// Initialize model settings
-	ratio_setting.InitRatioSettings()
 
 	service.InitHttpClient()
 

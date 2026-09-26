@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createI18n } from 'vue-i18n'
 import ModelMetadataDrawer from '../ModelMetadataDrawer.vue'
 import { modelPricingApi } from '@/api/modelPricing'
+import { automaticPricingApi } from '@/api/automaticPricing'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
 const mocks = vi.hoisted(() => ({
@@ -42,6 +43,11 @@ function mountDrawer() {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.spyOn(automaticPricingApi, 'status').mockResolvedValue({
+    config: { enabled: true, check_interval_minutes: 30 },
+    sources: [],
+    origins: [],
+  })
   mocks.auth.isRoot = true
   mocks.save.mockResolvedValue({ id: 42 })
   mocks.priceSave.mockResolvedValue(undefined)

@@ -185,6 +185,223 @@ async function data(page: Page) {
   )
 }
 
+for (const theme of ['light', 'dark'] as const) {
+  for (const mobile of [false, true]) {
+    test(`automatic price controls ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize(
+        mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
+      )
+      await configureStablePage(page, { theme })
+      await page.addInitScript(() =>
+        localStorage.setItem('ren2hub_locale', 'en')
+      )
+      await data(page)
+      let restored = false
+      let conflicts = true
+      let config = { enabled: false, check_interval_minutes: 30 }
+      const source = {
+        source: 'sub2api',
+        role: 'primary',
+        url: 'https://example.test/sub2api/prices.json',
+        hash: 'retained-valid-source-hash',
+        checked_at: 1785114000,
+        updated_at: 1785114000,
+        last_error: 'Upstream unavailable; retained valid snapshot',
+        model_count: 1400,
+        rejected_count: 2,
+      }
+      await page.route('**/api/billing/prices/automatic', async (route) => {
+        if (route.request().method() === 'PUT') {
+          config = route.request().postDataJSON()
+          expect(config).toEqual({ enabled: false, check_interval_minutes: 60 })
+          await route.fulfill({ json: { success: true, data: config } })
+          return
+        }
+        await route.fulfill({
+          json: {
+            success: true,
+            data: {
+              config,
+              sources: [source],
+              origins: [
+                {
+                  model: 'gpt-local',
+                  version_id: restored ? 2 : 1,
+                  origin: restored ? 'sub2api' : 'manual',
+                  source_model: restored ? 'gpt-local' : '',
+                  source_hash: restored ? source.hash : '',
+                },
+              ],
+            },
+          },
+        })
+      })
+      const task = {
+        task_id: 'pricing-check',
+        type: 'billing_pricing_sync',
+        status: 'running',
+        created_at: 1785114000,
+        updated_at: 1785114000,
+      }
+      const result = {
+        checked: 4,
+        changed: 1,
+        published: 7,
+        deactivated: 2,
+        unconfigured_count: 101,
+        unconfigured: ['embedding-unavailable'],
+        errors: ['OpenRouter timeout; retained source snapshot'],
+        unconfigured_details: [
+          {
+            model: 'embedding-unavailable',
+            reasons: [
+              { source: 'sub2api', reason: 'Unsupported input image cost' },
+            ],
+          },
+        ],
+      }
+      await page.route('**/api/system-task/list?*', (route) => {
+        const query = new URL(route.request().url()).searchParams
+        expect(query.get('type')).toBe('billing_pricing_sync')
+        expect(query.get('limit')).toBe('1')
+        expect(query.has('scope')).toBe(false)
+        return route.fulfill({
+          json: {
+            success: true,
+            total: 1,
+            data: [{ ...task, task_id: 'scheduled-check' }],
+          },
+        })
+      })
+      await page.route('**/api/system-task/scheduled-check', (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: {
+              ...task,
+              task_id: 'scheduled-check',
+              status: 'failed',
+              error: 'One source unavailable',
+              result,
+            },
+          },
+        })
+      )
+      await page.route('**/api/billing/prices/automatic/sync', (route) =>
+        route.fulfill({ json: { success: true, data: task } })
+      )
+      await page.route('**/api/system-task/pricing-check', (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: { ...task, status: 'succeeded', result },
+          },
+        })
+      )
+      await page.route(
+        '**/api/billing/prices/automatic/restore',
+        async (route) => {
+          expect(route.request().postDataJSON()).toEqual({
+            model: 'gpt-local',
+            expected_version: 1,
+          })
+          if (conflicts) {
+            conflicts = false
+            await route.fulfill({
+              status: 409,
+              json: { success: false, message: 'Price version conflict' },
+            })
+            return
+          }
+          restored = true
+          await route.fulfill({
+            json: {
+              success: true,
+              data: {
+                id: 2,
+                model: 'gpt-local',
+                contract_version: 2,
+                calculation_version: 'billing-v2',
+                result_unit: 'usd',
+                mode: 'unit_price',
+                prices: [
+                  {
+                    quantity: 'p',
+                    unit: 'per_million_tokens',
+                    price: '2.000000000000000001',
+                  },
+                ],
+                created_at: 1785114000,
+                hash: 'restored-price',
+              },
+            },
+          })
+        }
+      )
+      await page.goto('/models/metadata')
+      const panel = page.locator('[data-automatic-pricing]')
+      await expect(panel).toContainText('Price check scheduled-check: Failed')
+      await expect(panel).toContainText('One source unavailable')
+      await expect(panel.locator('[data-automatic-result]')).toContainText(
+        '101'
+      )
+      await panel.locator('summary').click()
+      await expect(panel).toContainText('Unsupported input image cost')
+      await expect(panel).toContainText('OpenRouter timeout')
+      await expect(panel).toContainText(source.last_error)
+      await expect(panel.getByRole('checkbox')).not.toBeChecked()
+      await panel.getByRole('spinbutton').fill('60')
+      await panel.getByRole('button', { name: 'Save schedule' }).click()
+      await expect(panel).toContainText('Automatic pricing schedule saved.')
+      await panel.getByRole('button', { name: 'Check prices now' }).click()
+      await expect(panel).toContainText('Price check pricing-check: Completed')
+      await panel.locator('summary').click()
+      await panel.locator('[data-automatic-result]').scrollIntoViewIfNeeded()
+      await assertNoHorizontalOverflow(page)
+      await page.screenshot({
+        path: testInfo.outputPath('automatic-pricing.png'),
+        fullPage: true,
+      })
+      await page
+        .getByRole('button', { name: 'Edit model', exact: true })
+        .filter({ visible: true })
+        .first()
+        .click()
+      const drawer = page.getByRole('dialog').first()
+      await expect(drawer.locator('[data-price-origin]')).toContainText(
+        'Manual'
+      )
+      const amount = drawer.locator('input[inputmode=decimal]').first()
+      await amount.fill('7.000000000000000001')
+      await drawer.locator('[data-restore-automatic]').click()
+      let confirm = page.getByRole('dialog').last()
+      await expect(confirm).toContainText('any unsaved price draft')
+      await confirm
+        .getByRole('button', { name: 'Restore automatic pricing', exact: true })
+        .click()
+      await expect(drawer).toContainText('changed elsewhere')
+      await expect(amount).toHaveValue('7.000000000000000001')
+      await drawer.locator('[data-restore-automatic]').click()
+      confirm = page.getByRole('dialog').last()
+      await confirm
+        .getByRole('button', { name: 'Restore automatic pricing', exact: true })
+        .click()
+      await expect(drawer.locator('[data-price-origin]')).toContainText(
+        'Sub2API'
+      )
+      await expect(amount).toHaveValue('2.000000000000000001')
+      await expect(drawer.locator('[data-restore-automatic]')).toHaveCount(0)
+      await assertNoHorizontalOverflow(page)
+      await page.screenshot({
+        path: testInfo.outputPath('automatic-restored.png'),
+        fullPage: true,
+      })
+    })
+  }
+}
+
 for (const language of ['zh-CN', 'en']) {
   for (const theme of ['light', 'dark'] as const) {
     for (const mobile of [false, true]) {
@@ -208,6 +425,10 @@ for (const language of ['zh-CN', 'en']) {
         })
         const zh = language === 'zh-CN'
         await page.goto('/models/metadata')
+        await expect(page.locator('[data-automatic-pricing]')).toContainText(
+          zh ? '模型自动定价' : 'Automatic model pricing'
+        )
+        await expect(page.locator('[data-price-source]')).toHaveCount(4)
         await expect(
           page
             .getByText('gpt-local', { exact: true })
@@ -400,6 +621,95 @@ test('sync cancellation and missing-model creation preserve the draft boundary',
   await page.keyboard.press('Escape')
   expect(writes).toEqual([])
 })
+
+for (const mobile of [false, true]) {
+  for (const theme of ['light', 'dark'] as const) {
+    test(`embedding price restriction ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize(
+        mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
+      )
+      await configureStablePage(page, { theme })
+      await page.addInitScript(() =>
+        localStorage.setItem('ren2hub_locale', 'en')
+      )
+      await data(page)
+      const embedding = {
+        id: 1,
+        model: 'gpt-local',
+        contract_version: 2,
+        calculation_version: 'billing-v2',
+        result_unit: 'usd',
+        usage_scope: 'embedding',
+        mode: 'unit_price',
+        prices: [{ quantity: 'p', unit: 'per_million_tokens', price: '0.025' }],
+        created_at: 1700000000,
+        hash: 'embedding-price-fixture',
+      }
+      let published = false
+      await page.route('**/api/billing/prices', async (route) => {
+        if (route.request().method() === 'POST') {
+          const payload = route.request().postDataJSON()
+          expect(payload.expected_version).toBe(1)
+          expect(payload.price.usage_scope).toBe('embedding')
+          expect(payload.price.prices[0].price).toBe('0.035000000000000001')
+          published = true
+          await route.fulfill({
+            json: { success: true, data: { ...payload.price, id: 2 } },
+          })
+          return
+        }
+        await route.fulfill({ json: { success: true, data: [embedding] } })
+      })
+      await page.route('**/api/models/', (route) =>
+        route.fulfill({ json: { success: true, data: model } })
+      )
+      await page.route('**/api/billing/prices/preview', async (route) => {
+        const payload = route.request().postDataJSON()
+        expect(payload.price.usage_scope).toBe('embedding')
+        expect(payload.usage.output_tokens).toBe(0)
+        await route.fulfill({
+          status: 400,
+          json: { success: false, message: 'Preview fixture unavailable' },
+        })
+      })
+      const errors: string[] = []
+      page.on('pageerror', (error) => errors.push(error.message))
+      await page.goto('/models/metadata')
+      await page
+        .getByRole('button', { name: 'Edit model', exact: true })
+        .filter({ visible: true })
+        .first()
+        .click()
+      const drawer = page.getByRole('dialog')
+      await expect(drawer.locator('[data-price-usage-scope]')).toContainText(
+        'Embedding requests only'
+      )
+      await drawer.getByText('Price preview', { exact: true }).click()
+      const preview = JSON.parse(
+        await drawer.locator('[data-price-preview-usage]').inputValue()
+      )
+      expect(preview.output_tokens).toBe(0)
+      await drawer.locator('[data-price-preview]').click()
+      await expect(drawer).toContainText('Preview fixture unavailable')
+      await drawer
+        .locator('input[inputmode=decimal]')
+        .first()
+        .fill('0.035000000000000001')
+      await drawer.locator('[data-price-usage-scope]').scrollIntoViewIfNeeded()
+      await assertNoHorizontalOverflow(page)
+      await page.screenshot({
+        path: testInfo.outputPath('embedding-price.png'),
+        fullPage: true,
+      })
+      await drawer.getByRole('button', { name: 'Save', exact: true }).click()
+      await expect(drawer).toHaveCount(0)
+      expect(published).toBe(true)
+      expect(errors).toEqual([])
+    })
+  }
+}
 
 for (const mobile of [false, true]) {
   for (const theme of ['light', 'dark'] as const) {

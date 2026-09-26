@@ -1,7 +1,6 @@
 package model
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/url"
@@ -321,6 +320,8 @@ func migrateDB() error {
 		&BillingEvent{},
 		&BillingPriceVersion{},
 		&BillingActivePrice{},
+		&BillingPricingSource{},
+		&BillingPricingConfig{},
 		&CustomOAuthProvider{},
 		&UserOAuthBinding{},
 		&PerfMetric{},
@@ -335,6 +336,9 @@ func migrateDB() error {
 		&ActivityClaim{},
 	)
 	if err != nil {
+		return err
+	}
+	if err := migrateBillingPriceModelIdentity(DB); err != nil {
 		return err
 	}
 	if err := migrateRoutingModels(DB); err != nil {
@@ -361,7 +365,7 @@ func migrateDB() error {
 	if err := InitializeAffiliateLedger(); err != nil {
 		return err
 	}
-	return SeedBillingPriceVersions(context.Background())
+	return nil
 }
 
 func migrateRoutingModels(db *gorm.DB) error {

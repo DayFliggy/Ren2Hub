@@ -79,6 +79,22 @@ func priceHasQuantity(version billing.PriceVersion, name string) bool {
 	return false
 }
 
+func isEmbeddingBillingRequest(info *relaycommon.RelayInfo) bool {
+	if info.RelayMode == relayconstant.RelayModeEmbeddings {
+		return true
+	}
+	if info.RelayMode != relayconstant.RelayModeGemini {
+		return false
+	}
+	// Native Gemini keeps its protocol mode for endpoint and response mapping.
+	switch info.Request.(type) {
+	case *dto.GeminiEmbeddingRequest, *dto.GeminiBatchEmbeddingRequest:
+		return true
+	default:
+		return false
+	}
+}
+
 func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (hosttypes.PriceData, error) {
 	return modelPriceWithFacts(c, info, promptTokens, meta, nil)
 }
@@ -107,10 +123,13 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 		}
 	}
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, model.ErrAutomaticBillingPriceUnavailable) {
 			return hosttypes.PriceData{}, modelPriceNotConfiguredError(info.BillingModelName(), info.UserId)
 		}
 		return hosttypes.PriceData{}, fmt.Errorf("billing price unavailable: %w", err)
+	}
+	if version.UsageScope == billing.UsageScopeEmbedding && !isEmbeddingBillingRequest(info) {
+		return hosttypes.PriceData{}, fmt.Errorf("embedding price cannot be used for this request type")
 	}
 	input, err := ResolveIncomingBillingExprRequestInput(c, info)
 	if err != nil {
@@ -164,12 +183,15 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 	case relayconstant.RelayModeAudioSpeech, relayconstant.RelayModeEmbeddings, relayconstant.RelayModeModerations, relayconstant.RelayModeRerank, relayconstant.RelayModeAlphaSearch:
 		output = 0
 	}
+	if isEmbeddingBillingRequest(info) {
+		output = 0
+	}
 	usage := billing.Usage{InputTokens: int64(promptTokens), OutputTokens: int64(output), ContextTokens: int64(promptTokens), InputIncludesCache: true, Quantities: map[string]string{}, Source: "request_estimate", Estimated: true}
 	if version.UsageSchema != nil {
 		usage.InputTokens, usage.OutputTokens, usage.ContextTokens = 0, 0, 0
 		usage.EstimatedFacts = estimatedFacts
 	}
-	if version.Mode == billing.ModeExpression && version.UsageSchema == nil {
+	if version.Mode == billing.ModeExpression && version.UsageSchema == nil && version.UsageScope != billing.UsageScopeEmbedding {
 		usage.Quantities["calls"] = "1"
 	}
 	perCall := priceHasQuantity(*version, "calls")

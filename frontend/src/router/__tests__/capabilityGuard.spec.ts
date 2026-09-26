@@ -311,9 +311,13 @@ describe('capability route guard', () => {
     }
   })
 
-  it('redirects the former mixed deployment settings to automatic pricing', async () => {
+  it('redirects former automatic pricing settings to the model pricing page', async () => {
     useAuthStore().user!.role = 100
     for (const path of [
+      '/system-settings/models/auto-pricing',
+      '/system-settings/billing/pricing',
+      '/system-settings/billing/model-pricing',
+      '/console/setting?tab=ratio',
       '/system-settings/models/deployment',
       '/console/system-settings/models/model-deployment',
       '/console/setting?tab=model-deployment',
@@ -321,9 +325,7 @@ describe('capability route guard', () => {
       await router.push(
         `${path}${path.includes('?') ? '&' : '?'}audit=1#pricing`
       )
-      expect(router.currentRoute.value.path).toBe(
-        '/system-settings/models/auto-pricing'
-      )
+      expect(router.currentRoute.value.path).toBe('/models/metadata')
       expect(router.currentRoute.value.query.audit).toBe('1')
       expect(router.currentRoute.value.hash).toBe('#pricing')
     }

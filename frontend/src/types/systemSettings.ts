@@ -151,8 +151,6 @@ export interface ModelSettings {
   'channel_affinity_setting.keep_on_channel_disabled': boolean
   'channel_affinity_setting.max_entries': number
   'channel_affinity_setting.rules': string
-  'auto_pricing.models_dev_url': string
-  'auto_pricing.check_interval_minutes': number
 }
 
 export interface SecuritySettings {
@@ -352,8 +350,6 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   'channel_affinity_setting.keep_on_channel_disabled': false,
   'channel_affinity_setting.max_entries': 100000,
   'channel_affinity_setting.rules': '[]',
-  'auto_pricing.models_dev_url': 'https://models.dev/api.json',
-  'auto_pricing.check_interval_minutes': 60,
   // Security
   ModelRequestRateLimitEnabled: false,
   ModelRequestRateLimitCount: 60,

@@ -15,7 +15,6 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -72,14 +71,12 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			))
 			require.NoError(t, controller.InitTaskPlugins())
 			previousRDB, previousMemory := common.RDB, common.MemoryCacheEnabled
-			previousPrices := ratio_setting.ModelPrice2JSONString()
 			redisServer := miniredis.RunT(t)
 			client := redis.NewClient(&redis.Options{Addr: redisServer.Addr(), MaxRetries: -1})
 			common.RDB, common.RedisEnabled, common.MemoryCacheEnabled = client, true, false
 			t.Cleanup(func() {
 				common.RDB, common.MemoryCacheEnabled = previousRDB, previousMemory
 				require.NoError(t, client.Close())
-				require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(previousPrices))
 			})
 			prices := map[string]float64{}
 			for _, name := range strings.Split(test.models, ",") {

@@ -11,6 +11,8 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -136,4 +138,89 @@ func TestRetryPinsPublishedPriceAndClockButRepricesFinalAttributes(t *testing.T)
 	info.OriginModelName = "another"
 	_, err = ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 1})
 	require.ErrorContains(t, err, "identity")
+}
+
+func TestAutomaticUnavailablePriceStopsFallbackUntilManualPublication(t *testing.T) {
+	c, info := pricingFixture(t, billing.PriceVersion{Model: "gpt-5.4", Mode: billing.ModeExpression, Expression: "p + c"})
+	for _, name := range []string{"gpt-5.4-high", "gpt-5.4@effort:high@thinking:on"} {
+		require.NoError(t, model.DB.Create(&model.BillingActivePrice{Model: name, Origin: "unavailable"}).Error)
+	}
+	for _, name := range []string{"gpt-5.4-high", "gpt-5.4@effort:high"} {
+		info.OriginModelName = name
+		assert.False(t, HasModelBillingConfig(name), name)
+		assert.False(t, HasExplicitModelBillingConfig(name), name)
+		_, err := ModelPriceHelper(c, info, 1000, &types.TokenCountMeta{MaxTokens: 1})
+		require.ErrorContains(t, err, "Model price is not configured", name)
+		assert.Nil(t, info.PriceData.Quote)
+	}
+	assert.True(t, HasModelBillingConfig("gpt-5.4"), "an unavailable alias cannot disable a valid base price")
+	for _, name := range []string{"gpt-5.4-high", "gpt-5.4@effort:high@thinking:on"} {
+		_, err := model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{Model: name, Mode: billing.ModeExpression, Expression: "p * 3"}, 0, 1)
+		require.NoError(t, err)
+	}
+	for _, name := range []string{"gpt-5.4-high", "gpt-5.4@effort:high"} {
+		info.OriginModelName, info.PricingModelName = name, ""
+		assert.True(t, HasModelBillingConfig(name), name)
+		price, err := ModelPriceHelper(c, info, 1000, &types.TokenCountMeta{MaxTokens: 1})
+		require.NoError(t, err)
+		assert.Equal(t, 1500, price.QuotaToPreConsume)
+	}
+}
+
+func TestPinnedQuoteSurvivesAutomaticPriceBecomingUnavailable(t *testing.T) {
+	c, info := pricingFixture(t, billing.PriceVersion{Model: "gpt-5.4-high", Mode: billing.ModeExpression, Expression: "p * 3"})
+	info.RequestId = "already-dispatched"
+	first, err := ModelPriceHelper(c, info, 1000, &types.TokenCountMeta{MaxTokens: 1})
+	require.NoError(t, err)
+	require.NoError(t, PinBillingPrice(c, info))
+	require.NoError(t, model.DB.Model(&model.BillingActivePrice{}).Where("model = ?", "gpt-5.4-high").Updates(map[string]any{"version_id": 0, "origin": "unavailable"}).Error)
+	assert.False(t, HasModelBillingConfig("gpt-5.4-high"))
+	next, err := ModelPriceHelper(c, info, 1000, &types.TokenCountMeta{MaxTokens: 1})
+	require.NoError(t, err)
+	assert.Equal(t, first.Quote.Hash, next.Quote.Hash)
+	charge, err := billing.Calculate(first.Quote, billing.Usage{InputTokens: 1000, ContextTokens: 1000, Complete: true, InputIncludesCache: true})
+	require.NoError(t, err)
+	assert.EqualValues(t, 1500, charge.FinalQuota)
+}
+
+func TestEmbeddingScopedPriceRejectsOtherOperationsBeforeReservation(t *testing.T) {
+	c, info := pricingFixture(t, billing.PriceVersion{Model: "embedding", Mode: billing.ModeExpression, Expression: `v1:p * 0.1`, UsageScope: billing.UsageScopeEmbedding})
+	for _, mode := range []int{relayconstant.RelayModeChatCompletions, relayconstant.RelayModeResponses, relayconstant.RelayModeGemini, relayconstant.RelayModeRerank, relayconstant.RelayModeImagesGenerations} {
+		info.RelayMode = mode
+		price, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
+		require.ErrorContains(t, err, "request type")
+		assert.Nil(t, price.Quote)
+		assert.Nil(t, info.PriceData.Quote)
+		assert.False(t, info.UpstreamSent)
+	}
+}
+
+func TestEmbeddingScopedPriceAllowsOpenAIAndNativeGeminiWithoutOutputEstimate(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		path    string
+		request dto.Request
+	}{
+		{"openai", "/v1/embeddings", &dto.EmbeddingRequest{Model: "embedding", Input: "hello"}},
+		{"gemini", "/v1beta/models/embedding:embedContent", &dto.GeminiEmbeddingRequest{}},
+		{"gemini_batch", "/v1beta/models/embedding:batchEmbedContents", &dto.GeminiBatchEmbeddingRequest{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			c, info := pricingFixture(t, billing.PriceVersion{Model: "embedding", Mode: billing.ModeExpression, Expression: `v1:p * 0.1`, UsageScope: billing.UsageScopeEmbedding})
+			c.Request = httptest.NewRequest("POST", test.path, nil)
+			info.RelayMode = relayconstant.Path2RelayMode(test.path)
+			info.Request = test.request
+			price, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 8192})
+			require.NoError(t, err)
+			assert.Equal(t, 5, price.QuotaToPreConsume)
+			assert.Zero(t, price.Usage.OutputTokens)
+			assert.Empty(t, price.Usage.Quantities)
+			assert.Equal(t, billing.UsageScopeEmbedding, price.Quote.PriceVersion.UsageScope)
+			info.RequestId = "embedding-request"
+			require.NoError(t, PinBillingPrice(c, info))
+			info.RelayMode = relayconstant.RelayModeChatCompletions
+			_, err = ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
+			require.ErrorContains(t, err, "request type", "pinned retry keeps the original scope")
+		})
+	}
 }

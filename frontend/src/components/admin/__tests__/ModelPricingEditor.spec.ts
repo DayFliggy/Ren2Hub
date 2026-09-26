@@ -10,6 +10,9 @@ import {
 } from 'vitest'
 import ModelPricingEditor from '../ModelPricingEditor.vue'
 import { modelPricingApi, type PriceVersion } from '@/api/modelPricing'
+import { automaticPricingApi } from '@/api/automaticPricing'
+import { ApiError } from '@/api/types'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
 const price: PriceVersion = {
@@ -28,7 +31,20 @@ beforeAll(async () => {
   await setLocale('en')
 })
 afterEach(() => vi.restoreAllMocks())
-beforeEach(() =>
+beforeEach(() => {
+  vi.spyOn(automaticPricingApi, 'status').mockResolvedValue({
+    config: { enabled: true, check_interval_minutes: 30 },
+    sources: [],
+    origins: [
+      {
+        model: 'test',
+        version_id: 3,
+        origin: 'manual',
+        source_model: '',
+        source_hash: '',
+      },
+    ],
+  })
   vi.spyOn(modelPricingApi, 'taskSchema').mockResolvedValue({
     model: 'test',
     plugin_key: '',
@@ -37,7 +53,7 @@ beforeEach(() =>
     review_required: false,
     plugins: [],
   })
-)
+})
 function setup() {
   vi.spyOn(modelPricingApi, 'load').mockResolvedValue([price])
   const publish = vi
@@ -50,6 +66,171 @@ function setup() {
   return { wrapper, publish }
 }
 describe('model price editor', () => {
+  it('retains a frozen embedding scope through reference import, conversion, editing and a renamed copy', async () => {
+    const reference: PriceVersion = {
+      ...price,
+      id: 0,
+      usage_scope: 'embedding',
+    }
+    vi.spyOn(modelPricingApi, 'seed').mockResolvedValue({
+      prices: [reference],
+      unconfigured: [],
+      source: 'sub2api:sha',
+    })
+    const { wrapper, publish } = setup()
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find(
+        (button) => button.text() === 'Compare with live reference catalog'
+      )!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-price-conversion-preview]').text()).toContain(
+      'Embedding requests only'
+    )
+    await wrapper.get('[data-apply-price-conversion]').trigger('click')
+    expect(wrapper.get('[data-price-usage-scope]').text()).toContain(
+      'Embedding requests only'
+    )
+    await wrapper
+      .get('input[inputmode=decimal]')
+      .setValue('0.025000000000000001')
+    await wrapper
+      .findAll('button')
+      .find(
+        (button) => button.text() === 'Convert unit prices to expression draft'
+      )!
+      .trigger('click')
+    await wrapper.get('[data-apply-price-conversion]').trigger('click')
+    await wrapper.vm.save('embedding-copy')
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'embedding-copy',
+        usage_scope: 'embedding',
+        expression: 'v1:p * 0.025000000000000001',
+      }),
+      0,
+      undefined
+    )
+    wrapper.unmount()
+  })
+
+  it('loads a persisted embedding restriction without marking the unchanged price dirty', async () => {
+    vi.spyOn(modelPricingApi, 'load').mockResolvedValue([
+      { ...price, usage_scope: 'embedding' },
+    ])
+    const publish = vi
+      .spyOn(modelPricingApi, 'publish')
+      .mockResolvedValue(price)
+    const wrapper = mount(ModelPricingEditor, {
+      props: { modelName: 'test' },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-price-usage-scope]').text()).toContain(
+      'Embedding requests only'
+    )
+    await wrapper.vm.save('test')
+    expect(publish).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('compares the current reference catalog before explicitly applying and publishing a manual draft', async () => {
+    const reference = {
+      ...price,
+      id: 0,
+      prices: [{ ...price.prices[0]!, price: '2.000000000000000001' }],
+    }
+    vi.spyOn(modelPricingApi, 'seed').mockResolvedValue({
+      prices: [reference],
+      unconfigured: [],
+      source: 'sub2api:sha-a,axonhub:sha-b',
+    })
+    const { wrapper, publish } = setup()
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find(
+        (button) => button.text() === 'Compare with live reference catalog'
+      )!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('sub2api:sha-a,axonhub:sha-b')
+    expect(
+      wrapper.get<HTMLInputElement>('input[inputmode=decimal]').element.value
+    ).toBe('1')
+    expect(wrapper.get('[data-price-conversion-preview]').text()).toContain(
+      '2.000000000000000001'
+    )
+    expect(publish).not.toHaveBeenCalled()
+    await wrapper.get('[data-apply-price-conversion]').trigger('click')
+    await wrapper.vm.save('test')
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({ prices: reference.prices }),
+      3,
+      undefined
+    )
+    expect(wrapper.get('[data-price-origin]').text()).toContain('Manual')
+    wrapper.unmount()
+  })
+  it('restores a manual price only after confirmation with the loaded version', async () => {
+    const restored = {
+      ...price,
+      id: 4,
+      prices: [{ ...price.prices[0]!, price: '2.000000000000000001' }],
+    }
+    const restore = vi
+      .spyOn(automaticPricingApi, 'restore')
+      .mockResolvedValue(restored)
+    const { wrapper, publish } = setup()
+    await flushPromises()
+    expect(wrapper.get('[data-price-origin]').text()).toContain('Manual')
+    await wrapper.get('input[inputmode=decimal]').setValue('7')
+    await wrapper.get('[data-restore-automatic]').trigger('click')
+    expect(restore).not.toHaveBeenCalled()
+    vi.mocked(automaticPricingApi.status).mockResolvedValue({
+      config: { enabled: true, check_interval_minutes: 30 },
+      sources: [],
+      origins: [
+        {
+          model: 'test',
+          version_id: 4,
+          origin: 'sub2api',
+          source_model: 'test',
+          source_hash: 'source-sha',
+        },
+      ],
+    })
+    wrapper.getComponent(ConfirmDialog).vm.$emit('confirm')
+    await flushPromises()
+    expect(restore).toHaveBeenCalledWith('test', 3)
+    expect(
+      wrapper.get<HTMLInputElement>('input[inputmode=decimal]').element.value
+    ).toBe('2.000000000000000001')
+    expect(wrapper.get('[data-price-origin]').text()).toContain('Sub2API')
+    expect(wrapper.find('[data-restore-automatic]').exists()).toBe(false)
+    await wrapper.vm.save('test')
+    expect(publish).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('preserves a manual draft after a restore conflict without retrying or publishing', async () => {
+    const restore = vi
+      .spyOn(automaticPricingApi, 'restore')
+      .mockRejectedValue(new ApiError('conflict', { status: 409 }))
+    const { wrapper, publish } = setup()
+    await flushPromises()
+    await wrapper.get('input[inputmode=decimal]').setValue('7')
+    await wrapper.get('[data-restore-automatic]').trigger('click')
+    wrapper.getComponent(ConfirmDialog).vm.$emit('confirm')
+    await flushPromises()
+    expect(restore).toHaveBeenCalledTimes(1)
+    expect(
+      wrapper.get<HTMLInputElement>('input[inputmode=decimal]').element.value
+    ).toBe('7')
+    expect(wrapper.text()).toContain('changed elsewhere')
+    expect(publish).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
   it('removes a saved usage schema only after explicitly choosing a single fixed per-call price', async () => {
     const savedSchema = {
       version: 1 as const,

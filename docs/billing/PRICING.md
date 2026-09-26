@@ -26,12 +26,29 @@ OpenAI、Claude、Gemini 的原始用量先归一化，缓存是否包含在输�
 
 发送前保存完整 Quote、价格版本、属性和 SHA-256 哈希，每次上游尝试有独立 ID。配置更新仅影响之后生成的报价。Usage 与 ChargeResult 单独持久化。恢复重放已确认金额与事件，不重新取价。文本没有输出上限时采用 8192 的估计并标记 Estimated，这不是费用上界；付费预估为零仍预留 1 quota，显式免费也写入发送保护。
 
-初始目录位于 [billing_pricing_seed.json](../../model/billing_pricing_seed.json)：254 个明确价格，101 个待配置名称。来源是固定上游 `d04c118c8803f49e0c9bab74dcf5b5efeab9464a` 的已审阅快照（`pkg/billing/cmd/exportseed/upstream-rc40.json`），使用以下命令确定性导出；它不是实时供应商报价，也不会联网更新价格：
+默认自动目录使用 Sub2API 与 AxonHub 的两个来源并集。同名模型按 `Sub2API → AxonHub → models.dev → OpenRouter` 顺序选择整份价格，后两项只补缺。手动发布的 `manual` 价格始终优先，恢复自动必须由 Root 显式操作且携带当前版本。来源内不同供应商同名且价格不一致时，保留供应商限定名，裸名标为待配置；不猜模型家族，也不拼接不同供应商的价格字段。
 
-```powershell
-go run ./pkg/billing/cmd/exportseed
-```
+| 来源 | 地址 | 计量单位 |
+| --- | --- | --- |
+| Sub2API 默认 | `https://raw.githubusercontent.com/Wei-Shaw/model-price-repo/main/model_prices_and_context_window.json` | USD/token 转 USD/百万 token |
+| AxonHub 默认 | `https://raw.githubusercontent.com/ThinkInAIXYZ/PublicProviderConf/refs/heads/dev/dist/all.json` | USD/百万 token |
+| models.dev 备用 | `https://models.dev/api.json` | USD/百万 token |
+| OpenRouter 备用 | `https://openrouter.ai/api/v1/models` | USD/token 转 USD/百万 token；按次/张维持对应单位 |
 
-历史输入倍率转换为 `倍率 × 2 USD/百万 token`，缓存、输出、媒体和工具默认值转换为显式单价。涉及适配器质量/时长规则且不能确定转换的 dall-e-3、gpt-4o-mini-tts、sora-2 系列、veo 系列，没有可审阅正式价格的插件模型，以及通配模型，留作待配置并记录原因。通配条目不能自动成为实际模型的售价。
+启动安装两个默认源的[离线快照](../../service/pricingdata/README.md)，已有数据库快照优先。默认启用自动刷新，由 `billing_pricing_sync` 系统任务每 30 分钟检查；Root 可设置 5–1440 分钟，关闭计划后仍可手动检查。Sub2API 先比较独立 SHA-256 文件，不变则不下载；其他源通过 ETag/Last-Modified 条件请求及正文 SHA-256 判断变化。正文最多 16 MiB，每源超时 40 秒，哈希请求超时 10 秒。哈希不符、HTTP 错误、空/坏目录不替换上次有效数据，错误会进入来源状态及任务结果。
 
-空库安装时，在单个事务中写入目录及生效指针；重复启动不覆盖已发布价格。前端“从本地初始目录填入”只填草稿，保存后才发布。UI 最多显示 3 位小数，编辑、请求、快照和导出保留完整精度。
+快照持久化于 `BillingPricingSource`，价格来源记录在 `BillingActivePrice`，不添加进历史报价哈希。内容变化后，只有实际价格变化才追加不可变版本；同价仅更新来源记录。来源与价格均有并发校验，完整四源哈希参与发布事务，防止慢节点用旧主源视图覆盖刚生效的价格。来源检查完成后也重试之前尚未发布完的有效目录，因此一次数据库故障不会使相同哈希永远跳过发布。
+
+解析保留明确零价，区分缺失，拒绝负值、非有限值及不能可靠表达的非零收费维度。单模型缺失、价格非法、费用不完整或不满足任务插件发布 schema 时，继续尝试下一来源的完整价格，不拼接字段。全部来源不可用时，停用该模型的自动生效指针，阻止新请求沿用旧价；历史版本和冻结报价仍完整保留。停用受完整四源哈希、当前版本和人工所有权保护。整源下载、哈希或目录结构校验失败则保留上次有效快照，记录错误。
+
+自动 token 价格在发布时把上下文阶梯与服务档组合成冻结表达式。`priority`、`fast` 共用显式 priority 价；没有显式分项时按普通 token 费用的 2 倍。`ultrafast` 始终为普通 token 费用的 2 倍；`flex` 优先显式价，否则为 0.5 倍。部分显式档位只覆盖对应分项，其余继承普通价，不再套默认倍率；明确零也算显式价。服务档缺少长上下文绝对价时，按来源中的基础与长上下文比例组合。默认倍率涵盖 token 与缓存，不影响工具按次、图片按张等独立费用。结算只使用冻结表达式；手动价格原样执行。
+
+模型匹配复用宿主 reasoning 规则，精确目录条目优先。明确的资源包装及合法日期后缀可以匹配已有基础型号；不能从一个日期版本猜另一个日期版本，不做家族兜底，也不任意删除供应商命名空间。
+
+所有来源均无法提供价格的具体身份，会在活动价格表保留 `version_id=0`、`origin=unavailable` 的不可用标记。请求查价遇到该标记立即停止，不能通过 reasoning 基础名继续兜价；有效来源恢复或显式人工发布后才解除。标记不修改历史版本，已冻结请求仍按原 Quote 结算。
+
+Sub2API 的 `mode=embedding`、AxonHub 的 `type=embedding` 是允许缺少输出单价的明确证据；其他来源不推测输入型模型。此类价格附带 `usage_scope: "embedding"`，与 PriceVersion 和 Quote 一起冻结，仅允许 embedding 请求，错误请求类型在发送前拒绝。实际输出或其他不适用用量拒绝计价并进入现有异常处理，不能按输出免费结算。省略该字段时保留旧行为及原有哈希序列化。
+
+同步任务结果包含检查、变化、发布、停用和待配置总数。`unconfigured_details` 最多返回 100 个模型及各来源原因，并限制结果体积以适配三种数据库；`unconfigured_count` 始终表示完整总数。即使正文哈希不变，也重新解析和核对待发布结果，允许失败重试与解析规则升级生效。
+
+旧 `billing_pricing_seed.json` 仅保留用于升级时辨认历史自动种子：必须由 actor 0 创建、模型与定义哈希匹配并通过内容验真才可自动托管；其他未标记旧价按人工价保护。新安装不再播种旧 New API 倍率目录。前端“从参考目录填入”只生成草稿，保存后成为人工价格。UI 最多显示 3 位小数，编辑、请求、快照和导出保留完整精度。

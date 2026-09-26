@@ -61,6 +61,29 @@ func NormalizedBillingUsage(usage *dto.Usage, semantic string) billing.Usage {
 		InputIncludesCache: includesCache, Source: usage.UsageSource, Estimated: estimated, Complete: !unconfirmed && !estimated, Invalid: invalid, Quantities: map[string]string{}}
 }
 
+// An input-only price cannot discard output evidence carried by an alias or a
+// detail field just because the provider omitted its aggregate output count.
+func embeddingHasOutputUsage(usage *dto.Usage) bool {
+	sources := []*dto.Usage{usage, effectiveBillingUsage(usage)}
+	if usage != nil && usage.BillingUsage != nil {
+		sources = append(sources, usage.BillingUsage.OpenAIUsage)
+	}
+	for _, source := range sources {
+		if source == nil {
+			continue
+		}
+		if source.CompletionTokens != 0 || source.OutputTokens != 0 {
+			return true
+		}
+		for _, details := range []*dto.OutputTokenDetails{&source.CompletionTokenDetails, source.OutputTokensDetails} {
+			if details != nil && (details.TextTokens != 0 || details.ReasoningTokens != 0 || details.AudioTokens != 0 || details.ImageTokens != 0) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 const (
 	usageBillingPathLocal              = "local"
 	usageBillingPathUpstream           = "upstream"

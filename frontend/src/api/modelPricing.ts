@@ -42,6 +42,7 @@ export interface PriceVersion {
   calculation_version?: 'billing-v2'
   result_unit?: 'micro_usd' | 'usd'
   usage_schema?: UsageSchema
+  usage_scope?: 'embedding'
   id: number
   model: string
   mode: PriceMode
@@ -154,11 +155,14 @@ export function validatePriceVersion(
     | 'prices'
     | 'expression'
     | 'usage_schema'
+    | 'usage_scope'
     | 'contract_version'
     | 'calculation_version'
     | 'result_unit'
   >
 ): void {
+  if (value.usage_scope !== undefined && value.usage_scope !== 'embedding')
+    throw new Error('Unsupported price usage scope')
   if (
     (value.contract_version !== undefined && value.contract_version !== 2) ||
     (value.calculation_version !== undefined &&
@@ -269,6 +273,10 @@ export function parsePriceVersion(
   }
   if (value.usage_schema !== undefined)
     result.usage_schema = parseUsageSchema(value.usage_schema, endpoint)
+  if (value.usage_scope !== undefined) {
+    if (value.usage_scope !== 'embedding') invalidResponse(endpoint)
+    result.usage_scope = value.usage_scope
+  }
   try {
     validatePriceVersion(result)
   } catch {

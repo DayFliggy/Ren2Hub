@@ -227,7 +227,7 @@ func IsRetiredBillingOption(key string) bool {
 		return true
 	}
 	switch key {
-	case "ModelRatio", "ModelPrice", "CompletionRatio", "CompletionRatioMeta", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "ExposeRatioEnabled", operation_setting.ToolPriceOptionKey:
+	case "ModelRatio", "ModelPrice", "CompletionRatio", "CompletionRatioMeta", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "ExposeRatioEnabled", "tool_price_setting.prices":
 		return true
 	}
 	return false

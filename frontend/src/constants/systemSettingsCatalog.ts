@@ -438,12 +438,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         ],
       },
       {
-        id: 'pricing',
-        title: '模型定价',
-        description: '模型价格在模型管理中以不可变版本发布。此处配置充值显示。',
-        fields: [toggle('ExposeRatioEnabled', '公开倍率数据')],
-      },
-      {
         id: 'payment',
         title: '通用支付设置',
         titleKey: 'systemSettings.paymentSections.general',
@@ -709,23 +703,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           list('qwen.sync_image_models', 'Qwen 图片模型', '[]'),
         ],
       },
-      {
-        id: 'auto-pricing',
-        title: '自动定价',
-        description: '自动定价数据源、模型匹配和同步参数。',
-        fields: [
-          toggle('auto_pricing.enabled', '启用自动定价'),
-          url('auto_pricing.remote_url', '自动定价数据地址'),
-          url('auto_pricing.hash_url', '自动定价校验地址'),
-          toggle('auto_pricing.fuzzy_match_enabled', '启用模糊模型匹配'),
-          url('auto_pricing.models_dev_url', 'models.dev 数据地址'),
-          number(
-            'auto_pricing.check_interval_minutes',
-            '自动定价检查间隔（分钟）',
-            60
-          ),
-        ],
-      },
     ],
   },
   {
@@ -948,7 +925,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
       {
         id: 'maintenance',
         title: '系统维护',
-        description: '执行自动定价、倍率同步、系统任务和多实例维护操作。',
+        description: '执行系统任务和多实例维护操作。',
         fields: [],
         integration: 'operations-maintenance',
       },

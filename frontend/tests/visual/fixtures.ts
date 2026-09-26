@@ -292,6 +292,59 @@ export async function configureStablePage(
       },
     ],
     ['/api/billing/prices', []],
+    [
+      '/api/billing/prices/automatic',
+      {
+        config: { enabled: true, check_interval_minutes: 30 },
+        sources: [
+          {
+            source: 'sub2api',
+            role: 'primary',
+            url: 'https://example.test/sub2api/prices.json',
+            hash: 'sub2api-sha',
+            checked_at: 1785114000,
+            updated_at: 1785114000,
+            last_error: '',
+            model_count: 1400,
+            rejected_count: 2,
+          },
+          {
+            source: 'axonhub',
+            role: 'primary',
+            url: 'https://example.test/axonhub/prices.json',
+            hash: 'axonhub-sha',
+            checked_at: 1785114000,
+            updated_at: 1785114000,
+            last_error: '',
+            model_count: 900,
+            rejected_count: 0,
+          },
+          {
+            source: 'models_dev',
+            role: 'fallback',
+            url: 'https://models.dev/api.json',
+            hash: 'models-dev-sha',
+            checked_at: 1785114000,
+            updated_at: 1785114000,
+            last_error: '',
+            model_count: 500,
+            rejected_count: 0,
+          },
+          {
+            source: 'openrouter',
+            role: 'fallback',
+            url: 'https://openrouter.ai/api/v1/models',
+            hash: 'openrouter-sha',
+            checked_at: 1785114000,
+            updated_at: 1785114000,
+            last_error: '',
+            model_count: 300,
+            rejected_count: 0,
+          },
+        ],
+        origins: [],
+      },
+    ],
     ['/api/billing/self/reservations', { items: [], total: 0 }],
     ['/api/billing/self/events', { items: [], total: 0 }],
     ['/api/option/catalog', []],
@@ -1214,6 +1267,9 @@ export async function configureStablePage(
           success: true,
           message: '',
           data,
+          ...(path === '/api/system-task/list'
+            ? { total: Array.isArray(data) ? data.length : 0 }
+            : {}),
           ...(path === '/api/pricing'
             ? {
                 vendors: [

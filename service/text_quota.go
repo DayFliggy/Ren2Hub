@@ -89,9 +89,8 @@ func cacheWriteTokensTotal(summary textQuotaSummary) int {
 	return summary.CacheCreationTokens
 }
 
-// calculateTextQuotaSummary expects a usage already remapped by
-// effectiveBillingUsage; PostTextConsumeQuota performs that remap once and shares
-// the result with tiered billing, affinity observation and logging.
+// Keep the original evidence until scope checks complete, then use canonical
+// provider counters for the charge, affinity observation and logging.
 func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) textQuotaSummary {
 	summary := textQuotaSummary{ModelName: relayInfo.BillingModelName(), TokenName: ctx.GetString("token_name"),
 		UseTimeSeconds: time.Now().Unix() - relayInfo.StartTime.Unix(), GroupRatio: relayInfo.PriceData.ChannelRatio,
@@ -99,6 +98,12 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	if usage == nil {
 		usage = &dto.Usage{PromptTokens: relayInfo.GetEstimatePromptTokens(), UsageSource: "estimated"}
 	}
+	facts := NormalizedBillingUsage(usage, summary.UsageSemantic)
+	if quote := relayInfo.PriceData.Quote; quote != nil && quote.PriceVersion.UsageScope == billing.UsageScopeEmbedding && embeddingHasOutputUsage(usage) {
+		facts.Invalid = true
+	}
+	usage = effectiveBillingUsage(usage)
+	summary.UsageSemantic = usageSemanticFromUsage(relayInfo, usage)
 	summary.IsClaudeUsageSemantic = summary.UsageSemantic == "anthropic"
 	summary.PromptTokens = usage.PromptTokens
 	summary.CompletionTokens = usage.CompletionTokens
@@ -109,7 +114,6 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	summary.CacheCreationTokens1h = usage.ClaudeCacheCreation1hTokens
 	summary.ImageTokens = usage.PromptTokensDetails.ImageTokens
 	summary.AudioTokens = usage.PromptTokensDetails.AudioTokens
-	facts := NormalizedBillingUsage(usage, summary.UsageSemantic)
 	if err := collectBillingQuantities(ctx, relayInfo, &facts); err != nil {
 		summary.PricingError = err
 		return summary
@@ -306,7 +310,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	}
 
 	adminRejectReason := common.GetContextKeyString(ctx, constant.ContextKeyAdminRejectReason)
-	summary := calculateTextQuotaSummary(ctx, relayInfo, billingUsage)
+	summary := calculateTextQuotaSummary(ctx, relayInfo, originUsage)
 	if summary.PricingError != nil {
 		holdFailedBillingPrice(ctx, relayInfo, billingexpr.TokenParams{}, summary.PricingError)
 		return

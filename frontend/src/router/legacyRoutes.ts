@@ -91,6 +91,11 @@ export function canonicalLegacyPath(
     path = `/system-settings/${settingsSections[section]}`
   }
   if (
+    path === '/system-settings/models/auto-pricing' ||
+    path === '/system-settings/billing/pricing'
+  )
+    path = '/models/metadata'
+  if (
     /^\/(next|playground|chat|chat2link|chat-presets)(\/|$)/.test(path) ||
     /^\/(models\/deployments|deployment|admin\/deployments)(\/|$)/.test(path) ||
     /^\/system-settings\/content\/(chat|chats|chat-presets)(\/|$)/.test(path)

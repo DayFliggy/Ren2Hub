@@ -15,7 +15,6 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -42,14 +41,12 @@ func TestMidjourneyUnknownAcceptanceCancellation(t *testing.T) {
 			))
 
 			previousRedis, previousRedisEnabled := common.RDB, common.RedisEnabled
-			previousPrices := ratio_setting.ModelPrice2JSONString()
 			redisServer := miniredis.RunT(t)
 			redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
 			common.RDB, common.RedisEnabled = redisClient, true
 			t.Cleanup(func() {
 				common.RDB, common.RedisEnabled = previousRedis, previousRedisEnabled
 				require.NoError(t, redisClient.Close())
-				require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(previousPrices))
 			})
 			prices, err := common.Marshal(map[string]float64{test.model: 0.001})
 			require.NoError(t, err)

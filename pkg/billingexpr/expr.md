@@ -65,6 +65,10 @@ tier("base", p * 2 + c * 10)
 
 工具费用与表达式共享一次最终舍入；表达式版本的 prices 不得再次列出 token 单价。费用分项保存精确 USD 小计，总结果记录未舍入 quota、最终 quota、舍入差额和计算版本。
 
+自动目录在生成 PriceVersion 时组合上下文和服务档位。priority/fast 共用显式 priority 分项，缺少整个档位时普通 token 与缓存费用乘 2；ultrafast 乘 2；flex 显式价优先，否则乘 0.5。部分显式档位的未覆盖分项继承普通价，明确零视为覆盖。独立工具和媒体单价不参加默认倍率。结算不读取实时目录，也不额外应用档位倍率；手动表达式完全按原定义执行。
+
+可选 usage_scope=embedding 参与价格及 Quote 的冻结哈希，省略时保留旧序列化。输入型价格不得引用输出变量、图片数量、fixed 或任务 schema；全部 AST 分支都检查，即使零系数或不可达分支也不能隐藏输出引用。实际结算拒绝输出用量，发送前拒绝非 embedding 请求。
+
 计算错误只向恢复记录暴露类别及冻结证据，不保存原始求值异常。未知接受状态或金额不明时保留预留，必须经过明确对账决定。
 
 相关实现：pkg/billing/pricing.go、pkg/billingexpr、model/billing_pricing.go、relay/helper/price.go、service/billing_usage.go。

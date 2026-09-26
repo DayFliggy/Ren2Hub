@@ -12,7 +12,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,8 +45,6 @@ func TestGatewayFinalBudgetRejectsBeforeDebitOrSend(t *testing.T) {
 			}
 			require.NoError(t, model.SaveGatewayConfig(config))
 			if test.quota > 0 {
-				oldRatios := ratio_setting.ModelRatio2JSONString()
-				t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(oldRatios)) })
 				require.NoError(t, publishGatewayFixturePrices(`{"gpt-4o-mini":1}`, true))
 				require.NoError(t, publishGatewayFixturePrices(`{}`, false))
 				require.NoError(t, model.DB.Model(&model.User{}).Where("username = ?", "sdk-isolated").Update("available_quota", test.quota).Error)

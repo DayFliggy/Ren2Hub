@@ -108,6 +108,52 @@ func TestTextMissingQuoteCannotUseOldRatioOrPrice(t *testing.T) {
 	assert.Zero(t, summary.Quota)
 }
 
+func TestEmbeddingScopeKeepsOutputEvidenceAcrossUsageAliases(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		output dto.Usage
+	}{
+		{"aggregate", dto.Usage{CompletionTokens: 1}},
+		{"aggregate_alias", dto.Usage{OutputTokens: 1}},
+		{"text_detail", dto.Usage{CompletionTokenDetails: dto.OutputTokenDetails{TextTokens: 1}}},
+		{"reasoning_detail", dto.Usage{CompletionTokenDetails: dto.OutputTokenDetails{ReasoningTokens: 1}}},
+		{"audio_detail", dto.Usage{CompletionTokenDetails: dto.OutputTokenDetails{AudioTokens: 1}}},
+		{"image_detail", dto.Usage{CompletionTokenDetails: dto.OutputTokenDetails{ImageTokens: 1}}},
+		{"detail_alias", dto.Usage{OutputTokensDetails: &dto.OutputTokenDetails{ReasoningTokens: 1}}},
+		{"invalid_detail_alias", dto.Usage{OutputTokensDetails: &dto.OutputTokenDetails{AudioTokens: -1}}},
+		{"raw_detail_with_canonical_zero", dto.Usage{CompletionTokenDetails: dto.OutputTokenDetails{ReasoningTokens: 1}, BillingUsage: dto.NewOpenAIChatBillingUsage(&dto.Usage{PromptTokens: 1000})}},
+		{"canonical_detail", dto.Usage{BillingUsage: dto.NewOpenAIChatBillingUsage(&dto.Usage{PromptTokens: 1000, CompletionTokenDetails: dto.OutputTokenDetails{ReasoningTokens: 1}})}},
+		{"canonical_conflicting_details", dto.Usage{BillingUsage: &dto.BillingUsage{Source: dto.BillingUsageSourceOAIChat, Semantic: dto.BillingUsageSemanticOpenAI, OpenAIUsage: &dto.Usage{PromptTokens: 1000, CompletionTokenDetails: dto.OutputTokenDetails{ReasoningTokens: 1}, OutputTokensDetails: &dto.OutputTokenDetails{}}}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			quote, err := billing.NewQuote(billing.PriceVersion{Model: "embedding-test", Mode: billing.ModeExpression, Expression: "p * 1", UsageScope: billing.UsageScopeEmbedding}, "1", nil, time.Now())
+			require.NoError(t, err)
+			info := &relaycommon.RelayInfo{OriginModelName: "embedding-test", StartTime: time.Now(), PriceData: hosttypes.PriceData{Quote: quote, ChannelRatio: 1}}
+			usage := test.output
+			usage.PromptTokens, usage.UsageSource = 1000, "provider"
+			summary := calculateTextQuotaSummary(ctx, info, &usage)
+			require.Error(t, summary.PricingError)
+			require.NotNil(t, info.PriceData.Usage)
+			assert.True(t, info.PriceData.Usage.Invalid, "persisted evidence must remain invalid during replay")
+			assert.Zero(t, summary.Quota)
+			_, err = billing.Calculate(quote, *info.PriceData.Usage)
+			require.Error(t, err)
+		})
+	}
+
+	t.Run("unscoped_manual_price", func(t *testing.T) {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		quote, err := billing.NewQuote(billing.PriceVersion{Model: "manual", Mode: billing.ModeExpression, Expression: "p * 1"}, "1", nil, time.Now())
+		require.NoError(t, err)
+		info := &relaycommon.RelayInfo{OriginModelName: "manual", StartTime: time.Now(), PriceData: hosttypes.PriceData{Quote: quote, ChannelRatio: 1}}
+		summary := calculateTextQuotaSummary(ctx, info, &dto.Usage{PromptTokens: 1000, CompletionTokens: 5, CompletionTokenDetails: dto.OutputTokenDetails{ReasoningTokens: 5}, UsageSource: "provider"})
+		require.NoError(t, summary.PricingError)
+		assert.Equal(t, 500, summary.Quota)
+		assert.False(t, info.PriceData.Usage.Invalid)
+	})
+}
+
 func TestUsageBillingPathForLog(t *testing.T) {
 	require.Equal(t, usageBillingPathLocal, usageBillingPathForLog(false, &dto.Usage{UsageSource: "estimated"}))
 	require.Equal(t, usageBillingPathMixed, usageBillingPathForLog(false, &dto.Usage{UsageSource: "provider_and_estimated"}))
