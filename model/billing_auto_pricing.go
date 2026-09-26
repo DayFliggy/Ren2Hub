@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/setting/reasoning"
@@ -29,7 +28,7 @@ var ErrBillingPricingSourceConflict = errors.New("billing pricing source changed
 
 // All publications lock this order so two source selections cannot deadlock.
 var automaticBillingPricingSourceOrder = [...]string{
-	BillingPriceOriginSub2API, BillingPriceOriginAxonHub, BillingPriceOriginModelsDev, BillingPriceOriginOpenRouter,
+	BillingPriceOriginSub2API, BillingPriceOriginAxonHub,
 }
 
 type BillingPriceOrigin struct {
@@ -72,7 +71,7 @@ type AutomaticBillingPriceDeactivation struct {
 
 func isAutomaticBillingPriceSource(source string) bool {
 	switch source {
-	case BillingPriceOriginSub2API, BillingPriceOriginAxonHub, BillingPriceOriginModelsDev, BillingPriceOriginOpenRouter:
+	case BillingPriceOriginSub2API, BillingPriceOriginAxonHub:
 		return true
 	default:
 		return false
@@ -211,11 +210,7 @@ func DeactivateAutomaticBillingPrices(ctx context.Context, entries []AutomaticBi
 			if err := tx.First(&current, active.VersionID).Error; err != nil {
 				return err
 			}
-			origin, err := resolveBillingPriceOrigin(active, current)
-			if err != nil {
-				return err
-			}
-			if !isAutomaticBillingPriceSource(origin) && origin != BillingPriceOriginLegacySeed {
+			if resolveBillingPriceOrigin(active.Origin) == BillingPriceOriginManual {
 				continue
 			}
 			if current.Model != entry.Model || active.Model != entry.Model {
@@ -293,58 +288,24 @@ func automaticBillingPricingCatalogFence(expected []map[string]string) (map[stri
 	return copy, nil
 }
 
-var historicalBillingSeedHashes = sync.OnceValues(func() (map[string]string, error) {
-	versions, _, err := InitialBillingPriceCatalog()
-	if err != nil {
-		return nil, err
+// Retired sources remain automatically owned until the current catalog replaces
+// or deactivates them. New source writes accept only the two live sources above.
+func resolveBillingPriceOrigin(origin string) string {
+	switch origin {
+	case BillingPriceOriginSub2API, BillingPriceOriginAxonHub, BillingPriceOriginModelsDev, BillingPriceOriginOpenRouter, BillingPriceOriginLegacySeed:
+		return origin
+	default:
+		return BillingPriceOriginManual
 	}
-	hashes := make(map[string]string, len(versions))
-	for _, version := range versions {
-		hash, err := billing.Hash(version)
-		if err != nil {
-			return nil, err
-		}
-		hashes[version.Model] = hash
-	}
-	return hashes, nil
-})
-
-func resolveBillingPriceOrigin(active BillingActivePrice, row BillingPriceVersion) (string, error) {
-	if isAutomaticBillingPriceSource(active.Origin) || active.Origin == BillingPriceOriginLegacySeed {
-		return active.Origin, nil
-	}
-	if active.Origin != "" || row.CreatedBy != 0 {
-		return BillingPriceOriginManual, nil
-	}
-	hashes, err := historicalBillingSeedHashes()
-	if err != nil {
-		return "", err
-	}
-	if hash, exists := hashes[active.Model]; !exists || hash != row.Hash || row.Model != active.Model {
-		return BillingPriceOriginManual, nil
-	}
-	// A matching hash column alone is insufficient: verify the stored immutable
-	// definition too before taking ownership of an unlabelled historical price.
-	if _, err := decodeBillingPrice(row); err != nil {
-		return "", err
-	}
-	return BillingPriceOriginLegacySeed, nil
 }
 
 func ListBillingPriceOrigins(ctx context.Context) ([]BillingPriceOrigin, error) {
 	if DB == nil {
 		return nil, fmt.Errorf("billing price database unavailable")
 	}
-	var rows []struct {
-		BillingActivePrice
-		Definition   string
-		Hash         string
-		CreatedBy    int
-		CreatedAt    int64
-		VersionModel string
-	}
+	var rows []BillingActivePrice
 	err := DB.WithContext(ctx).Table("billing_active_prices").
-		Select("billing_active_prices.*, billing_price_versions.definition, billing_price_versions.hash, billing_price_versions.created_by, billing_price_versions.created_at, billing_price_versions.model AS version_model").
+		Select("billing_active_prices.*").
 		Joins("JOIN billing_price_versions ON billing_price_versions.id = billing_active_prices.version_id").
 		Order("billing_active_prices.model").Scan(&rows).Error
 	if err != nil {
@@ -352,14 +313,8 @@ func ListBillingPriceOrigins(ctx context.Context) ([]BillingPriceOrigin, error) 
 	}
 	origins := make([]BillingPriceOrigin, 0, len(rows))
 	for _, row := range rows {
-		origin, err := resolveBillingPriceOrigin(row.BillingActivePrice, BillingPriceVersion{
-			ID: row.VersionID, Model: row.VersionModel, Definition: row.Definition, Hash: row.Hash, CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt,
-		})
-		if err != nil {
-			return nil, err
-		}
 		origins = append(origins, BillingPriceOrigin{
-			Model: row.Model, VersionID: row.VersionID, Origin: origin, SourceModel: row.SourceModel, SourceHash: row.SourceHash,
+			Model: row.Model, VersionID: row.VersionID, Origin: resolveBillingPriceOrigin(row.Origin), SourceModel: row.SourceModel, SourceHash: row.SourceHash,
 		})
 	}
 	return origins, nil

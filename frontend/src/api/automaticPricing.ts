@@ -9,14 +9,15 @@ import {
 import { parsePriceVersion } from './modelPricing'
 import { parseSystemTask } from './systemManagement'
 
-export const AUTOMATIC_PRICE_SOURCES = [
-  'sub2api',
-  'axonhub',
-  'models_dev',
-  'openrouter',
-] as const
+export const AUTOMATIC_PRICE_SOURCES = ['sub2api', 'axonhub'] as const
 export type AutomaticPriceSource = (typeof AUTOMATIC_PRICE_SOURCES)[number]
-export type PriceOrigin = AutomaticPriceSource | 'manual' | 'legacy_seed'
+const HISTORICAL_PRICE_SOURCES = ['models_dev', 'openrouter'] as const
+export type PriceOrigin =
+  | AutomaticPriceSource
+  | (typeof HISTORICAL_PRICE_SOURCES)[number]
+  | 'manual'
+  | 'legacy_seed'
+const SNAPSHOT_STATES = ['bundled', 'current', 'cached', 'unavailable'] as const
 export interface AutomaticPricingConfig {
   enabled: boolean
   check_interval_minutes: number
@@ -31,6 +32,7 @@ export interface AutomaticPricingSource {
   last_error: string
   model_count: number
   rejected_count?: number
+  snapshot_state?: (typeof SNAPSHOT_STATES)[number]
 }
 export interface ModelPriceOrigin {
   model: string
@@ -92,6 +94,16 @@ export function parseAutomaticPricingStatus(
         source.rejected_count,
         endpoint
       )
+    if (source.snapshot_state !== undefined) {
+      if (
+        !SNAPSHOT_STATES.includes(
+          source.snapshot_state as (typeof SNAPSHOT_STATES)[number]
+        )
+      )
+        invalidResponse(endpoint)
+      result.snapshot_state =
+        source.snapshot_state as AutomaticPricingSource['snapshot_state']
+    }
     if (
       [
         result.checked_at,
@@ -106,9 +118,12 @@ export function parseAutomaticPricingStatus(
   const origins = value.origins.map((origin): ModelPriceOrigin => {
     if (
       !isRecord(origin) ||
-      ![...AUTOMATIC_PRICE_SOURCES, 'manual', 'legacy_seed'].includes(
-        String(origin.origin)
-      )
+      ![
+        ...AUTOMATIC_PRICE_SOURCES,
+        ...HISTORICAL_PRICE_SOURCES,
+        'manual',
+        'legacy_seed',
+      ].includes(String(origin.origin))
     )
       invalidResponse(endpoint)
     const result: ModelPriceOrigin = {

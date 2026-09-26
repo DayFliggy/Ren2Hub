@@ -138,6 +138,8 @@ describe('system management response contracts', () => {
           model: 'embedding-v1',
           reasons: [
             { source: 'sub2api', reason: 'Unsupported input image price' },
+            { source: 'models_dev', reason: 'No catalog entry' },
+            { source: 'openrouter', reason: 'Source unavailable' },
           ],
         },
       ],

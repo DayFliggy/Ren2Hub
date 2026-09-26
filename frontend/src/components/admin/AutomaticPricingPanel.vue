@@ -330,6 +330,12 @@ defineExpose({ refresh })
         </div>
         <p class="automatic-url">{{ source.url }}</p>
         <dl>
+          <div v-if="source.snapshot_state" class="automatic-snapshot">
+            <dt>{{ t('billing.automatic.snapshotState') }}</dt>
+            <dd :data-snapshot-state="source.snapshot_state">
+              {{ t(`billing.automatic.snapshots.${source.snapshot_state}`) }}
+            </dd>
+          </div>
           <div>
             <dt>{{ t('billing.automatic.models') }}</dt>
             <dd>{{ source.model_count }}</dd>
@@ -444,6 +450,7 @@ dd {
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
+.automatic-snapshot,
 .automatic-hash {
   grid-column: 1 / -1;
 }

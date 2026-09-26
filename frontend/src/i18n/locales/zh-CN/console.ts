@@ -7,9 +7,9 @@ export default {
     automatic: {
       title: '模型自动定价',
       priority:
-        '合并 Sub2API 与 AxonHub 参考目录，同模型优先 Sub2API，models.dev 和 OpenRouter 补充缺失模型。人工价格始终优先。',
+        '使用 Sub2API 作为主价格来源，AxonHub 补充缺失或不可用的模型价格。人工价格始终优先。',
       behavior:
-        '每个模型采用一个来源的完整价格。条目缺失或无法计价时依次尝试下一来源；全部不可用时停止新报价。来源下载失败保留上次有效快照。关闭定时更新后仍可手动检查。',
+        '每个模型采用一个来源的完整价格。成功刷新后两个来源均无有效价格的模型会停止新报价；刷新失败时继续使用上次有效快照。关闭定时更新后仍可手动检查。',
       enabled: '启用定时价格更新',
       interval: '检查间隔（分钟）',
       invalidInterval: '请输入 5 至 1440 分钟之间的整数。',
@@ -18,6 +18,13 @@ export default {
       checkNow: '立即检查价格',
       models: '可用模型数',
       rejected: '拒绝条目数',
+      snapshotState: '价格快照状态',
+      snapshots: {
+        bundled: '使用内嵌快照，尚未检查远端',
+        current: '已检查远端，快照有效',
+        cached: '刷新失败，继续使用有效缓存',
+        unavailable: '无可用价格快照',
+      },
       checked: '上次检查',
       updated: '来源上次更新',
       never: '尚未执行',

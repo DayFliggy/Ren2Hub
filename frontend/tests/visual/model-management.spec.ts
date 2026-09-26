@@ -211,6 +211,7 @@ for (const theme of ['light', 'dark'] as const) {
         last_error: 'Upstream unavailable; retained valid snapshot',
         model_count: 1400,
         rejected_count: 2,
+        snapshot_state: 'cached',
       }
       await page.route('**/api/billing/prices/automatic', async (route) => {
         if (route.request().method() === 'PUT') {
@@ -224,7 +225,21 @@ for (const theme of ['light', 'dark'] as const) {
             success: true,
             data: {
               config,
-              sources: [source],
+              sources: [
+                source,
+                {
+                  source: 'axonhub',
+                  role: 'fallback',
+                  url: 'https://example.test/axonhub/prices.json',
+                  hash: 'bundled-fallback-hash',
+                  checked_at: 0,
+                  updated_at: 1785114000,
+                  last_error: '',
+                  model_count: 900,
+                  rejected_count: 0,
+                  snapshot_state: 'bundled',
+                },
+              ],
               origins: [
                 {
                   model: 'gpt-local',
@@ -246,13 +261,13 @@ for (const theme of ['light', 'dark'] as const) {
         updated_at: 1785114000,
       }
       const result = {
-        checked: 4,
+        checked: 2,
         changed: 1,
         published: 7,
         deactivated: 2,
         unconfigured_count: 101,
         unconfigured: ['embedding-unavailable'],
-        errors: ['OpenRouter timeout; retained source snapshot'],
+        errors: ['Sub2API timeout; retained source snapshot'],
         unconfigured_details: [
           {
             model: 'embedding-unavailable',
@@ -349,8 +364,15 @@ for (const theme of ['light', 'dark'] as const) {
       )
       await panel.locator('summary').click()
       await expect(panel).toContainText('Unsupported input image cost')
-      await expect(panel).toContainText('OpenRouter timeout')
+      await expect(panel).toContainText('Sub2API timeout')
       await expect(panel).toContainText(source.last_error)
+      await expect(panel.locator('[data-price-source]')).toHaveCount(2)
+      await expect(panel.locator('[data-price-source=sub2api]')).toContainText(
+        'Refresh failed; using valid cache'
+      )
+      await expect(panel.locator('[data-price-source=axonhub]')).toContainText(
+        'Bundled snapshot; remote source not checked yet'
+      )
       await expect(panel.getByRole('checkbox')).not.toBeChecked()
       await panel.getByRole('spinbutton').fill('60')
       await panel.getByRole('button', { name: 'Save schedule' }).click()
@@ -364,6 +386,16 @@ for (const theme of ['light', 'dark'] as const) {
         path: testInfo.outputPath('automatic-pricing.png'),
         fullPage: true,
       })
+      if (mobile) {
+        for (const source of ['sub2api', 'axonhub']) {
+          const card = panel.locator(`[data-price-source=${source}]`)
+          await card.scrollIntoViewIfNeeded()
+          await expect(card).toBeInViewport()
+          await page.screenshot({
+            path: testInfo.outputPath(`automatic-${source}.png`),
+          })
+        }
+      }
       await page
         .getByRole('button', { name: 'Edit model', exact: true })
         .filter({ visible: true })
@@ -428,7 +460,13 @@ for (const language of ['zh-CN', 'en']) {
         await expect(page.locator('[data-automatic-pricing]')).toContainText(
           zh ? '模型自动定价' : 'Automatic model pricing'
         )
-        await expect(page.locator('[data-price-source]')).toHaveCount(4)
+        await expect(page.locator('[data-price-source]')).toHaveCount(2)
+        await expect(page.locator('[data-price-source=axonhub]')).toContainText(
+          zh ? '备用来源' : 'Fallback source'
+        )
+        await expect(page.locator('[data-price-source=sub2api]')).toContainText(
+          zh ? '已检查远端，快照有效' : 'Remote source checked; snapshot valid'
+        )
         await expect(
           page
             .getByText('gpt-local', { exact: true })

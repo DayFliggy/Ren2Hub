@@ -7,9 +7,9 @@ export default {
     automatic: {
       title: 'Automatic model pricing',
       priority:
-        'Sub2API and AxonHub form the reference catalog. Sub2API takes precedence for shared models; models.dev and OpenRouter fill gaps. Manual prices take precedence.',
+        'Sub2API is the primary price source. AxonHub supplies prices for missing or unsupported models. Manual prices take precedence.',
       behavior:
-        'Each model uses one complete source price. Missing or unsupported entries try the next source; models without a valid price stop accepting new quotes. Source download failures retain the last valid snapshot. Manual checks remain available when scheduled updates are disabled.',
+        'Each model uses one complete source price. After a successful refresh, models without a valid price in either source stop accepting new quotes. Failed refreshes retain the last valid snapshot. Manual checks remain available when scheduled updates are disabled.',
       enabled: 'Enable scheduled price updates',
       interval: 'Check interval (minutes)',
       invalidInterval: 'Enter a whole number between 5 and 1440 minutes.',
@@ -18,6 +18,13 @@ export default {
       checkNow: 'Check prices now',
       models: 'Available models',
       rejected: 'Rejected entries',
+      snapshotState: 'Price snapshot status',
+      snapshots: {
+        bundled: 'Bundled snapshot; remote source not checked yet',
+        current: 'Remote source checked; snapshot valid',
+        cached: 'Refresh failed; using valid cache',
+        unavailable: 'No valid price snapshot',
+      },
       checked: 'Last checked',
       updated: 'Last source update',
       never: 'Not yet',

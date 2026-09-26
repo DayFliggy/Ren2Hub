@@ -23,8 +23,6 @@ func TestSourceUnitsAndExplicitZero(t *testing.T) {
 	}{
 		{"sub", autopricing.SourceSub2API, `{"m":{"input_cost_per_token":0.000000123456789123456789,"output_cost_per_token":0,"cache_read_input_token_cost":0}}`, "m"},
 		{"axon", autopricing.SourceAxonHub, `{"providers":{"p":{"models":[{"id":"m","cost":{"input":0.123456789123456789,"output":0,"cache_read":0}}]}}}`, "m"},
-		{"models.dev", autopricing.SourceModelsDev, `{"p":{"models":{"m":{"cost":{"input":0.123456789123456789,"output":0,"cache_read":0}}}}}`, "m"},
-		{"openrouter", autopricing.SourceOpenRouter, `{"data":[{"id":"m","pricing":{"prompt":"0.000000123456789123456789","completion":"0","input_cache_read":"0"}}]}`, "m"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			entries, rejected, err := autopricing.ParseWithReport(test.source, []byte(test.data))
@@ -76,7 +74,6 @@ func TestMalformedIdentifiedModelDoesNotDiscardValidCatalogEntries(t *testing.T)
 	}{
 		{autopricing.SourceSub2API, `{"valid":{"input_cost_per_token":0,"output_cost_per_token":0},"primitive":42,"null":null,"bad-cost":{"input_cost_per_token":{},"output_cost_per_token":0}}`},
 		{autopricing.SourceAxonHub, `{"p":{"models":{"valid":{"cost":{"input":0,"output":0}},"primitive":42,"null":null,"bad-cost":{"cost":false},"bad-id":{"id":42,"cost":{"input":0,"output":0}}}}}`},
-		{autopricing.SourceModelsDev, `{"p":{"models":{"valid":{"cost":{"input":0,"output":0}},"primitive":42,"null":null,"bad-cost":{"cost":false},"bad-id":{"id":42,"cost":{"input":0,"output":0}}}}}`},
 	} {
 		t.Run(string(test.source), func(t *testing.T) {
 			entries, rejected, err := autopricing.ParseWithReport(test.source, []byte(test.data))
@@ -93,9 +90,6 @@ func TestMalformedIdentifiedModelDoesNotDiscardValidCatalogEntries(t *testing.T)
 				}
 				assert.True(t, found, model)
 			}
-			fallback, err := autopricing.Parse(autopricing.SourceOpenRouter, []byte(`{"data":[{"id":"primitive","pricing":{"prompt":"0","completion":"0"}}]}`))
-			require.NoError(t, err)
-			assert.Equal(t, autopricing.SourceOpenRouter, autopricing.Merge(entries, fallback)["primitive"].Source)
 		})
 	}
 }
@@ -137,8 +131,6 @@ func TestDefaultServiceMultipliersFreezeTokenAndCacheCosts(t *testing.T) {
 	}{
 		{autopricing.SourceSub2API, `{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"cache_read_input_token_cost":0.0000001}}`},
 		{autopricing.SourceAxonHub, `{"p":[{"id":"m","cost":{"input":1,"output":2,"cache_read":0.1}}]}`},
-		{autopricing.SourceModelsDev, `{"p":{"models":{"m":{"cost":{"input":1,"output":2,"cache_read":0.1}}}}}`},
-		{autopricing.SourceOpenRouter, `{"data":[{"id":"m","pricing":{"prompt":"0.000001","completion":"0.000002","input_cache_read":"0.0000001"}}]}`},
 	} {
 		t.Run(string(source.name), func(t *testing.T) {
 			entries, err := autopricing.Parse(source.name, []byte(source.data))
@@ -185,7 +177,7 @@ func TestExplicitPartialServicePricesPreserveZeroAndInheritOrdinaryRates(t *test
 }
 
 func TestDefaultServiceMultiplierDoesNotMultiplyImageCount(t *testing.T) {
-	entries, err := autopricing.Parse(autopricing.SourceOpenRouter, []byte(`{"data":[{"id":"m","pricing":{"prompt":"0.000001","completion":"0.000002","image_output":"0.04"}}]}`))
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image":0.04}}`))
 	require.NoError(t, err)
 	for _, test := range []struct{ tier, usd string }{{"priority", "0.0806"}, {"flex", "0.08015"}} {
 		quote, err := billing.NewQuote(entries["m"].Price, "1", map[string]interface{}{"service_tier": test.tier}, time.Unix(1, 0))
@@ -231,8 +223,6 @@ func TestEmbeddingRequiresSourceTypeAndNeverCreatesAnOutputPrice(t *testing.T) {
 		{"sub output charge", autopricing.SourceSub2API, `{"m":{"mode":"embedding","input_cost_per_token":0.000001,"output_cost_per_token":0.000001}}`},
 		{"sub tier output charge", autopricing.SourceSub2API, `{"m":{"mode":"embedding","input_cost_per_token":0.000001,"output_cost_per_token_priority":0.000001}}`},
 		{"axon missing type", autopricing.SourceAxonHub, `{"p":[{"id":"m","cost":{"input":1}}]}`},
-		{"models.dev untrusted type", autopricing.SourceModelsDev, `{"p":{"models":{"m":{"type":"embedding","cost":{"input":1}}}}}`},
-		{"openrouter no completion", autopricing.SourceOpenRouter, `{"data":[{"id":"m","type":"embedding","pricing":{"prompt":"0.000001"}}]}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			entries, rejected, err := autopricing.ParseWithReport(test.source, []byte(test.data))
@@ -249,7 +239,7 @@ func TestProviderTierBoundaries(t *testing.T) {
 		data            string
 		boundary, after string
 	}{
-		{autopricing.SourceModelsDev, `{"p":{"models":{"m":{"cost":{"input":1,"output":2,"tiers":[{"input":3,"output":4,"tier":{"type":"context","size":200000}}]}}}}}`, "0.0001", "0.0003"},
+		{autopricing.SourceAxonHub, `{"p":{"models":{"m":{"cost":{"input":1,"output":2,"tiers":[{"input":3,"output":4,"tier":{"type":"context","size":200000}}]}}}}}`, "0.0001", "0.0003"},
 		{autopricing.SourceAxonHub, `{"p":[{"id":"m","cost":{"input":1,"output":2,"context_over_200k":{"input":3,"output":4}}}]}`, "0.0001", "0.0003"},
 	} {
 		t.Run(string(test.source), func(t *testing.T) {
@@ -266,20 +256,17 @@ func TestProviderTierBoundaries(t *testing.T) {
 	}
 }
 
-func TestOpenRouterConditionalOverridesAreNotSilentlyDropped(t *testing.T) {
-	for _, selector := range []string{`"min_prompt_tokens":200000`, `"utc_start":"2200","utc_end":"0600"`, `"utc_days":[1,2,3]`} {
-		_, rejected, err := autopricing.ParseWithReport(autopricing.SourceOpenRouter, []byte(`{"data":[{"id":"m","pricing":{"prompt":"0.000001","completion":"0.000002","overrides":[{`+selector+`,"prompt":"0.000003"}]}}]}`))
-		require.Error(t, err)
-		require.Len(t, rejected, 1)
-		assert.True(t, rejected[0].BlockFallback)
-		assert.Contains(t, rejected[0].Reason, "conditional pricing overrides")
+func TestRetiredAndUnknownSourcesAreRejected(t *testing.T) {
+	for _, source := range []autopricing.SourceID{"models_dev", "openrouter", "unknown"} {
+		entries, rejected, err := autopricing.ParseWithReport(source, []byte(`{"m":{"input_cost_per_token":0,"output_cost_per_token":0}}`))
+		require.ErrorContains(t, err, "unsupported pricing source")
+		assert.Empty(t, entries)
+		assert.Empty(t, rejected)
 	}
-	_, err := autopricing.Parse(autopricing.SourceOpenRouter, []byte(`{"data":[{"id":"m","pricing":{"prompt":"0","completion":"0","overrides":[]}}]}`))
-	require.NoError(t, err)
 }
 
-func TestOpenRouterOutputImagesArePerImageWithoutTokenDoubleCharge(t *testing.T) {
-	entries, err := autopricing.Parse(autopricing.SourceOpenRouter, []byte(`{"data":[{"id":"m","pricing":{"prompt":"0.000001","completion":"0.000002","image_output":"0.04"}}]}`))
+func TestOutputImagesArePerImageWithoutTokenDoubleCharge(t *testing.T) {
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image":0.04}}`))
 	require.NoError(t, err)
 	quote, err := billing.NewQuote(entries["m"].Price, "1", nil, time.Unix(1, 0))
 	require.NoError(t, err)
@@ -319,7 +306,7 @@ func TestSubServicePriceThenContextRatioAndExplicitOverrides(t *testing.T) {
 }
 
 func TestLegacyTierMirrorUsesTypedThresholdAndRejectsContradiction(t *testing.T) {
-	entries, rejected, err := autopricing.ParseWithReport(autopricing.SourceModelsDev, []byte(`{"p":{"models":{
+	entries, rejected, err := autopricing.ParseWithReport(autopricing.SourceAxonHub, []byte(`{"p":{"models":{
 	 "m":{"cost":{"input":1,"output":2,"context_over_200k":{"input":3,"output":4},"tiers":[{"input":3,"output":4,"tier":{"type":"context","size":272000}}]}},
 	 "bad":{"cost":{"input":1,"output":2,"context_over_200k":{"input":30,"output":40},"tiers":[{"input":3,"output":4,"tier":{"type":"context","size":272000}}]}}
 	}}}`))
@@ -372,7 +359,7 @@ func TestUnsupportedAndInvalidTiersAreRejectedWithinSource(t *testing.T) {
 		`{"p":{"models":{"m":{"cost":{"input":1,"output":2,"tiers":[{"input":3,"tier":{"type":"duration","size":100}}]}}}}}`,
 		`{"p":{"models":{"m":{"cost":{"input":1,"output":2,"tiers":[{"input":-1,"tier":{"type":"context","size":100}}]}}}}}`,
 	} {
-		_, rejected, err := autopricing.ParseWithReport(autopricing.SourceModelsDev, []byte(data))
+		_, rejected, err := autopricing.ParseWithReport(autopricing.SourceAxonHub, []byte(data))
 		require.Error(t, err)
 		require.NotEmpty(t, rejected)
 		for _, r := range rejected {
@@ -409,13 +396,13 @@ func TestMediaCacheAndSearchPrices(t *testing.T) {
 }
 
 func TestProviderAmbiguityDoesNotOverrideCanonicalPrices(t *testing.T) {
-	entries, rejections, err := autopricing.ParseWithReport(autopricing.SourceModelsDev, []byte(`{
+	entries, rejections, err := autopricing.ParseWithReport(autopricing.SourceAxonHub, []byte(`{
 	 "a":{"models":{"m":{"cost":{"input":1,"output":2}},"same":{"cost":{"input":1,"output":2}}}},
 	 "b":{"models":{"m":{"cost":{"input":3,"output":4}},"same":{"cost":{"input":1,"output":2}},"a/m":{"cost":{"input":9,"output":10}}}}
 	}`))
 	require.NoError(t, err)
 	assert.NotContains(t, entries, "m")
-	assert.Contains(t, entries, "same")
+	assert.NotContains(t, entries, "same")
 	assert.Contains(t, entries, "a/m")
 	assert.Contains(t, entries, "b/m")
 	quote, err := billing.NewQuote(entries["a/m"].Price, "1", nil, time.Unix(1, 0))
@@ -423,22 +410,97 @@ func TestProviderAmbiguityDoesNotOverrideCanonicalPrices(t *testing.T) {
 	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100})
 	require.NoError(t, err)
 	assert.Equal(t, "0.0001", charge.TotalUSD)
-	require.Len(t, rejections, 1)
+	require.Len(t, rejections, 2)
 	assert.Equal(t, "m", rejections[0].Model)
-	assert.True(t, rejections[0].BlockFallback)
+	assert.Equal(t, "same", rejections[1].Model)
+	for _, rejection := range rejections {
+		assert.True(t, rejection.BlockFallback)
+		assert.Equal(t, "ambiguous provider identity", rejection.Reason)
+	}
 }
 
-func TestMergeKeepsWholePriceAndDoesNotShareSlices(t *testing.T) {
-	first, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0,"output_cost_per_token":0,"litellm_provider":"openai","search_context_cost_per_query":{"search_context_size_low":0,"search_context_size_medium":0,"search_context_size_high":0}}}`))
+func TestUnpricedProviderStillMakesBareIdentityAmbiguous(t *testing.T) {
+	entries, rejected, err := autopricing.ParseWithReport(autopricing.SourceAxonHub, []byte(`{
+	 "a":[{"id":"m","cost":{"input":1,"output":2}}],
+	 "b":[{"id":"m"}]
+	}`))
 	require.NoError(t, err)
-	second, err := autopricing.Parse(autopricing.SourceOpenRouter, []byte(`{"data":[{"id":"m","pricing":{"prompt":"0.000001","completion":"0.000002","input_cache_read":"0.0000001"}}]}`))
+	assert.Contains(t, entries, "a/m")
+	assert.NotContains(t, entries, "b/m")
+	assert.NotContains(t, entries, "m")
+	assert.Contains(t, rejected, autopricing.Rejection{Model: "m", Reason: "ambiguous provider identity", BlockFallback: true})
+	assert.Contains(t, rejected, autopricing.Rejection{Model: "b/m", Reason: "missing cost", BlockFallback: false})
+}
+
+func TestConflictingDuplicateIdentityCannotDependOnArrayOrder(t *testing.T) {
+	for _, records := range []string{
+		`{"id":"m","cost":{"input":1,"output":2}},{"id":"m","cost":{"input":2,"output":2}}`,
+		`{"id":"m","cost":{"input":1,"output":2}},{"id":"m"}`,
+		`{"id":"m"},{"id":"m","cost":{"input":1,"output":2}}`,
+	} {
+		entries, rejected, err := autopricing.ParseWithReport(autopricing.SourceAxonHub, []byte(`{"p":[{"id":"valid","cost":{"input":0,"output":0}},`+records+`]}`))
+		require.NoError(t, err)
+		assert.Contains(t, entries, "valid")
+		assert.NotContains(t, entries, "p/m")
+		assert.NotContains(t, entries, "m")
+		require.Len(t, rejected, 2)
+		assert.Equal(t, "m", rejected[0].Model)
+		assert.Equal(t, "p/m", rejected[1].Model)
+	}
+	entries, rejected, err := autopricing.ParseWithReport(autopricing.SourceAxonHub, []byte(`{"p":[{"id":"m","cost":{"input":1,"output":2}},{"id":"m","cost":{"input":1,"output":2}}]}`))
 	require.NoError(t, err)
-	merged := autopricing.Merge(first, second)
-	assert.Equal(t, first["m"], merged["m"])
-	require.Len(t, merged["m"].Price.Prices, 2)
-	entry := merged["m"]
-	entry.Price.Prices[0].Price = "99"
-	assert.Equal(t, "0", first["m"].Price.Prices[0].Price)
+	assert.Contains(t, entries, "m")
+	assert.Empty(t, rejected)
+}
+
+func TestDamagedCatalogCannotBecomeAPartialSnapshot(t *testing.T) {
+	for _, data := range []string{
+		`{"providers":[]}`,
+		`{"p":[{"id":"valid","cost":{"input":0,"output":0}},42]}`,
+		`{"p":[{"id":"valid","cost":{"input":0,"output":0}},{"cost":{"input":0,"output":0}}]}`,
+		`{"p":[{"id":"valid","cost":{"input":0,"output":0}}],"broken":{"models":null}}`,
+	} {
+		entries, _, err := autopricing.ParseWithReport(autopricing.SourceAxonHub, []byte(data))
+		require.Error(t, err)
+		assert.Empty(t, entries)
+	}
+	for _, source := range []autopricing.SourceID{autopricing.SourceSub2API, autopricing.SourceAxonHub} {
+		entries, _, err := autopricing.ParseWithReport(source, []byte(`{}`))
+		require.ErrorContains(t, err, "no usable prices")
+		assert.Empty(t, entries)
+	}
+}
+
+func TestDecimalPrecisionCannotBeRoundedIntoAValidPrice(t *testing.T) {
+	entries, rejected, err := autopricing.ParseWithReport(autopricing.SourceSub2API, []byte(`{
+	 "exact":{"input_cost_per_token":1e-24,"output_cost_per_token":0},
+	 "too-precise":{"input_cost_per_token":1e-25,"output_cost_per_token":0},
+	 "too-large":{"input_cost_per_token":1e19,"output_cost_per_token":0}
+	}`))
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Contains(t, entries["exact"].Price.Expression, "p * 0.000000000000000001")
+	require.Len(t, rejected, 2)
+	for _, rejection := range rejected {
+		assert.True(t, rejection.BlockFallback)
+	}
+}
+
+func TestResolvedAliasesKeepThePublicationHashStable(t *testing.T) {
+	entries, err := autopricing.Parse(autopricing.SourceAxonHub, []byte(`{"p":[{"id":"m","cost":{"input":1,"output":2}}]}`))
+	require.NoError(t, err)
+	for _, model := range []string{"m", "p/m", "models/m", "m-20260926"} {
+		entry, ok := autopricing.Resolve(entries, model)
+		require.True(t, ok, model)
+		entry.Price.Model = model
+		published, err := billing.PreparePriceVersion(entry.Price)
+		require.NoError(t, err)
+		draftHash, err := billing.Hash(entry.Price)
+		require.NoError(t, err)
+		publishedHash, err := billing.Hash(published)
+		require.NoError(t, err)
+		assert.Equal(t, publishedHash, draftHash, model)
+	}
 }
 
 func TestResolveExactSafeAliasesAndAmbiguity(t *testing.T) {
@@ -485,7 +547,7 @@ func TestLocalCatalogSnapshots(t *testing.T) {
 	if directory == "" {
 		t.Skip("no offline source snapshots supplied")
 	}
-	for _, source := range []autopricing.SourceID{autopricing.SourceSub2API, autopricing.SourceAxonHub, autopricing.SourceModelsDev, autopricing.SourceOpenRouter} {
+	for _, source := range []autopricing.SourceID{autopricing.SourceSub2API, autopricing.SourceAxonHub} {
 		t.Run(string(source), func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(directory, "ren2hub-pricing-"+string(source)+".json"))
 			require.NoError(t, err)

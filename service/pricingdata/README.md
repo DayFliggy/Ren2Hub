@@ -9,6 +9,6 @@
 
 Sub2API 快照已与同目录 `model_prices_and_context_window.sha256` 核对一致。AxonHub 未提供独立校验文件，记录下载正文的 SHA-256。
 
-启动仅在主库尚无该来源记录时写入快照，不覆盖持久化目录。随后通过统一系统任务检查远端；无网络也可使用已验证的目录。备用 models.dev 与 OpenRouter 不打包，由运行时检查获取。快照数据不是人工价，后续有效自动更新会发布新的不可变价格版本。
+启动仅在主库尚无该来源记录时写入快照，不覆盖持久化目录。随后通过统一系统任务检查远端；无网络也可使用已验证的目录。Sub2API 为主源，AxonHub 按整模型补缺；models.dev 与 OpenRouter 已退出自动定价链路。快照数据不是人工价，后续有效自动更新会发布新的不可变价格版本。
 
 更新快照时，从 `service/billing_auto_pricing.go` 的固定来源下载、校验 Sub2API 哈希，保留原始字节再 gzip 压缩，并更新本表。运行 `go test ./pkg/autopricing ./service -run 'Test.*Pricing|Test.*Catalog' -timeout 60s` 验证解析与离线启动；不能用旧倍率导出器覆盖历史 `model/billing_pricing_seed.json`，后者仅用于辨认旧安装价格归属。

@@ -15,10 +15,8 @@ import (
 type SourceID string
 
 const (
-	SourceSub2API    SourceID = "sub2api"
-	SourceAxonHub    SourceID = "axonhub"
-	SourceModelsDev  SourceID = "models_dev"
-	SourceOpenRouter SourceID = "openrouter"
+	SourceSub2API SourceID = "sub2api"
+	SourceAxonHub SourceID = "axonhub"
 )
 
 type Entry struct {
@@ -42,39 +40,49 @@ func Parse(source SourceID, data []byte) (map[string]Entry, error) {
 }
 
 func ParseWithReport(source SourceID, data []byte) (map[string]Entry, []Rejection, error) {
+	var adapter func(rawObject) ([]catalogRecord, error)
+	switch source {
+	case SourceSub2API:
+		adapter = sub2APICatalog
+	case SourceAxonHub:
+		adapter = axonHubCatalog
+	default:
+		return nil, nil, fmt.Errorf("unsupported pricing source %q", source)
+	}
 	var root rawObject
 	if err := common.Unmarshal(data, &root); err != nil || root == nil {
 		return nil, nil, fmt.Errorf("invalid %s pricing catalog object", source)
 	}
-	records, err := sourceRecords(source, root)
+	records, err := adapter(root)
 	if err != nil {
 		return nil, nil, err
 	}
 	entries := make(map[string]Entry)
-	var rejected []Rejection
-	aliases := make(map[string][]Entry)
-	blocked := make(map[string]bool)
+	// Track identities before converting prices. An unpriced second provider
+	// still makes a bare model ambiguous, even if the first provider is usable.
+	aliases := make(map[string]map[string]bool)
+	rejections := make(map[string]Rejection)
 	explicitKeys := make(map[string]bool)
 	for _, record := range records {
 		explicitKeys[record.key] = true
+		if record.alias != "" && record.alias != record.key {
+			if aliases[record.alias] == nil {
+				aliases[record.alias] = make(map[string]bool)
+			}
+			aliases[record.alias][record.key] = true
+		}
 	}
 	for _, record := range records {
-		plan, err := pricePlan{}, record.err
-		if err == nil {
-			plan, err = parseRecord(source, record.data)
-		}
+		err := record.err
 		if err == nil {
 			var version billing.PriceVersion
-			version, err = plan.version(record.key)
+			version, err = record.plan.version(record.key)
 			if err == nil {
 				entry := Entry{Price: version, Source: source, SourceModel: record.model}
 				if previous, exists := entries[record.key]; exists && !samePrice(previous, entry) {
 					err = unsafePrice("conflicting duplicate model")
 				} else {
 					entries[record.key] = entry
-					if record.alias != "" && record.alias != record.key {
-						aliases[record.alias] = append(aliases[record.alias], entry)
-					}
 				}
 			}
 		}
@@ -86,48 +94,35 @@ func ParseWithReport(source SourceID, data []byte) (map[string]Entry, []Rejectio
 		if errors.As(err, &reason) {
 			block = reason.block
 		}
-		for _, key := range []string{record.key, record.alias} {
-			if key == "" {
-				continue
-			}
-			if key != record.key && explicitKeys[key] {
-				continue
-			}
-			rejected = append(rejected, Rejection{Model: key, Reason: err.Error(), BlockFallback: block})
-			if block {
-				blocked[key] = true
-				delete(entries, key)
-			}
-			if key == record.alias && key == record.key {
-				break
-			}
+		if previous, exists := rejections[record.key]; !exists || (!previous.BlockFallback && block) {
+			rejections[record.key] = Rejection{Model: record.key, Reason: err.Error(), BlockFallback: block}
 		}
 	}
-	for alias, candidates := range aliases {
+	for key := range rejections {
+		delete(entries, key)
+	}
+	for alias, identities := range aliases {
 		if explicitKeys[alias] {
 			continue
 		}
-		if blocked[alias] {
+		if len(identities) != 1 {
+			rejections[alias] = Rejection{Model: alias, Reason: "ambiguous provider identity", BlockFallback: true}
 			continue
 		}
-		chosen := candidates[0]
-		for _, candidate := range candidates {
-			if !samePrice(chosen, candidate) {
-				blocked[alias] = true
-				break
+		for key := range identities {
+			if rejection, rejected := rejections[key]; rejected {
+				rejection.Model = alias
+				rejections[alias] = rejection
+				continue
 			}
+			chosen := cloneEntry(entries[key])
+			chosen.Price.Model = alias
+			entries[alias] = chosen
 		}
-		if blocked[alias] {
-			delete(entries, alias)
-			rejected = append(rejected, Rejection{Model: alias, Reason: "ambiguous provider prices", BlockFallback: true})
-			continue
-		}
-		chosen = cloneEntry(chosen)
-		chosen.Price.Model = alias
-		entries[alias] = chosen
 	}
-	for key := range blocked {
-		delete(entries, key)
+	rejected := make([]Rejection, 0, len(rejections))
+	for _, rejection := range rejections {
+		rejected = append(rejected, rejection)
 	}
 	sort.Slice(rejected, func(i, j int) bool {
 		if rejected[i].Model == rejected[j].Model {
@@ -141,22 +136,10 @@ func ParseWithReport(source SourceID, data []byte) (map[string]Entry, []Rejectio
 	return entries, rejected, nil
 }
 
-// Merge gives the first catalog precedence for an entire model. It never fills
-// missing dimensions from another source, because price schedules are atomic.
-func Merge(catalogs ...map[string]Entry) map[string]Entry {
-	result := make(map[string]Entry)
-	for _, catalog := range catalogs {
-		for model, entry := range catalog {
-			if _, exists := result[model]; !exists {
-				result[model] = cloneEntry(entry)
-			}
-		}
-	}
-	return result
-}
-
 func cloneEntry(entry Entry) Entry {
-	entry.Price.Prices = append([]billing.UnitPrice(nil), entry.Price.Prices...)
+	// Keep PreparePriceVersion's empty-array representation stable. A nil
+	// slice would change the draft hash and defeat unchanged-price detection.
+	entry.Price.Prices = append(make([]billing.UnitPrice, 0, len(entry.Price.Prices)), entry.Price.Prices...)
 	return entry
 }
 
@@ -177,9 +160,9 @@ func unsafePrice(reason string) error  { return priceError{reason: reason, block
 func missingPrice(reason string) error { return priceError{reason: reason, block: false} }
 
 type rawObject map[string]common.RawMessage
-type sourceRecord struct {
+type catalogRecord struct {
 	key, model, alias string
-	data              rawObject
+	plan              pricePlan
 	err               error
 }
 

@@ -41,6 +41,123 @@ func automaticPricingTestDB(t *testing.T) {
 	})
 }
 
+func TestAutomaticPricingSnapshotStatesAndFailedInitialRefresh(t *testing.T) {
+	automaticPricingTestDB(t)
+	ctx := context.Background()
+	require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: "sub2api", Hash: strings.Repeat("a", 64)}))
+	price, err := model.PublishAutomaticBillingPrice(ctx, billing.PriceVersion{
+		Model: "existing", Mode: billing.ModeUnitPrice,
+		Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}},
+	}, "sub2api", "existing", strings.Repeat("a", 64))
+	require.NoError(t, err)
+	require.True(t, price)
+	original, err := model.GetActiveBillingPrice(ctx, "existing")
+	require.NoError(t, err)
+	body := "{}"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, body) }))
+	defer server.Close()
+	specs := []billingPricingSourceSpec{{Source: autopricing.SourceSub2API, URL: server.URL}}
+	failed, err := syncAutomaticPricing(ctx, server.Client(), specs)
+	require.Error(t, err)
+	assert.Zero(t, failed.Deactivated, "a missing cache and failed fetch cannot prove that an existing price was removed")
+	retained, err := model.GetActiveBillingPrice(ctx, "existing")
+	require.NoError(t, err)
+	assert.Equal(t, original, retained)
+	status, err := GetAutomaticPricingStatus(ctx)
+	require.NoError(t, err)
+	require.Len(t, status.Sources, 2)
+	assert.Equal(t, "unavailable", status.Sources[0].SnapshotState)
+	assert.Equal(t, "fallback", status.Sources[1].Role)
+
+	body = `{"existing":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008}}`
+	_, err = syncAutomaticPricing(ctx, server.Client(), specs)
+	require.NoError(t, err)
+	status, err = GetAutomaticPricingStatus(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "current", status.Sources[0].SnapshotState)
+
+	for _, invalid := range []string{"{}", "[]", `{"existing":{"input_cost_per_token":-1,"output_cost_per_token":2}}`} {
+		body = invalid
+		failed, err = syncAutomaticPricing(ctx, server.Client(), specs)
+		require.Error(t, err)
+		assert.Zero(t, failed.Deactivated)
+		status, err = GetAutomaticPricingStatus(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "cached", status.Sources[0].SnapshotState)
+		assert.NotEmpty(t, status.Sources[0].LastError)
+	}
+}
+
+func TestAutomaticPricingCanceledDownloadRetainsSnapshot(t *testing.T) {
+	data := `{"existing":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008}}`
+	previous := model.BillingPricingSource{Source: "sub2api", Document: model.LongText(data), Hash: pricingDocumentHash([]byte(data)), ModelCount: 1}
+	started := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	type outcome struct {
+		row     model.BillingPricingSource
+		changed bool
+		err     error
+	}
+	completed := make(chan outcome, 1)
+	go func() {
+		row, changed, err := fetchPricingSource(ctx, server.Client(), billingPricingSourceSpec{Source: autopricing.SourceSub2API, URL: server.URL}, previous)
+		completed <- outcome{row, changed, err}
+	}()
+	<-started
+	cancel()
+	result := <-completed
+	require.ErrorIs(t, result.err, context.Canceled)
+	assert.False(t, result.changed)
+	assert.Equal(t, previous, result.row)
+}
+
+func TestAutomaticPricingHTTPTimeoutRetainsSnapshot(t *testing.T) {
+	data := `{"existing":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008}}`
+	previous := model.BillingPricingSource{Source: "sub2api", Document: model.LongText(data), Hash: pricingDocumentHash([]byte(data)), ModelCount: 1}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	client := server.Client()
+	client.Timeout = 50 * time.Millisecond
+	for _, stage := range []string{"digest", "document"} {
+		t.Run(stage, func(t *testing.T) {
+			spec := billingPricingSourceSpec{Source: autopricing.SourceSub2API, URL: server.URL}
+			if stage == "digest" {
+				spec.HashURL = server.URL + "/hash"
+			}
+			row, changed, err := fetchPricingSource(context.Background(), client, spec, previous)
+			require.ErrorIs(t, err, context.DeadlineExceeded)
+			assert.False(t, changed)
+			assert.Equal(t, previous, row, "a timed-out digest or document never replaces the valid snapshot")
+		})
+	}
+}
+
+func TestAutomaticPricingStatusDoesNotExposeRetiredSources(t *testing.T) {
+	automaticPricingTestDB(t)
+	ctx := context.Background()
+	require.NoError(t, model.SaveBillingPricingConfig(ctx, &model.BillingPricingConfig{Enabled: false, CheckIntervalMinutes: 75}))
+	require.NoError(t, model.DB.Create(&model.BillingPricingSource{Source: "openrouter", LastError: "historical failure"}).Error)
+	require.NoError(t, InitializeAutomaticPricing(ctx))
+	status, err := GetAutomaticPricingStatus(ctx)
+	require.NoError(t, err)
+	assert.False(t, status.Config.Enabled)
+	assert.Equal(t, 75, status.Config.CheckIntervalMinutes)
+	require.Len(t, status.Sources, 2)
+	for _, source := range status.Sources {
+		assert.Contains(t, []string{"sub2api", "axonhub"}, source.Source)
+		assert.Equal(t, "bundled", source.SnapshotState)
+		assert.Positive(t, source.ModelCount)
+	}
+}
+
 func TestAutomaticPricingHashChecksAndRejectedDownloads(t *testing.T) {
 	ctx := context.Background()
 	data := `{"priced":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008}}`
@@ -166,8 +283,6 @@ func TestAutomaticPricingMergeUsesCompleteFallbackAndRejectsCorruption(t *testin
 	}{
 		{"sub2api", `{"shared":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008},"unsafe":{"input_cost_per_token":-1,"output_cost_per_token":0.000008}}`},
 		{"axonhub", `{"providers":{"vendor":{"models":[{"id":"shared","cost":{"input":10,"output":20}},{"id":"unsafe","cost":{"input":1,"output":2}},{"id":"second","cost":{"input":1,"output":2}}]}}}`},
-		{"models_dev", `{"vendor":{"models":{"third":{"id":"third","cost":{"input":1,"output":2}}}}}`},
-		{"openrouter", `{"data":[{"id":"fourth","pricing":{"prompt":"0.000001","completion":"0.000002"}}]}`},
 	}
 	for _, source := range sources {
 		err := model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: source.id, Document: model.LongText(source.data), Hash: pricingDocumentHash([]byte(source.data))})
@@ -175,13 +290,13 @@ func TestAutomaticPricingMergeUsesCompleteFallbackAndRejectsCorruption(t *testin
 	}
 	catalog, err := loadAutomaticPriceCatalog(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, autopricing.SourceSub2API, catalog.entries["shared"].Source)
-	assert.Equal(t, autopricing.SourceAxonHub, catalog.entries["second"].Source)
-	assert.Equal(t, autopricing.SourceModelsDev, catalog.entries["third"].Source)
-	assert.Equal(t, autopricing.SourceOpenRouter, catalog.entries["fourth"].Source)
-	assert.Equal(t, autopricing.SourceAxonHub, catalog.entries["unsafe"].Source)
-	assert.False(t, catalog.pending["unsafe"])
-	assert.Contains(t, catalog.rejections[autopricing.SourceSub2API]["unsafe"], "negative")
+	assert.Equal(t, autopricing.SourceSub2API, catalog.resolve("shared").entry.Source)
+	assert.Equal(t, autopricing.SourceAxonHub, catalog.resolve("second").entry.Source)
+	assert.Equal(t, autopricing.SourceAxonHub, catalog.resolve("unsafe").entry.Source)
+	drafts, unavailable, _, err := AutomaticPricingDrafts(ctx)
+	require.NoError(t, err)
+	assert.NotEmpty(t, drafts)
+	assert.NotContains(t, unavailable, "unsafe")
 	require.NoError(t, model.DB.Model(&model.BillingPricingSource{}).Where("source = ?", "sub2api").Update("hash", strings.Repeat("0", 64)).Error)
 	_, err = loadAutomaticPriceCatalog(ctx)
 	require.ErrorContains(t, err, "integrity")
@@ -257,12 +372,8 @@ func TestBundledAutomaticPricingBootsOfflineAndPreservesPersistedSnapshot(t *tes
 	require.NoError(t, InitializeAutomaticPricing(ctx))
 	rows, err := model.ListBillingPricingSources(ctx)
 	require.NoError(t, err)
-	require.Len(t, rows, 4)
+	require.Len(t, rows, 2)
 	for _, row := range rows {
-		if row.Source == "models_dev" || row.Source == "openrouter" {
-			assert.Empty(t, row.Document)
-			continue
-		}
 		assert.Positive(t, row.ModelCount)
 		assert.Equal(t, pricingDocumentHash([]byte(row.Document)), row.Hash)
 		assert.Zero(t, row.CheckedAt, "bundled data is not reported as a successful remote check")
@@ -406,10 +517,9 @@ func TestAutomaticPricingFallbackSwitchesAndReportsEveryUnavailableSource(t *tes
 		}
 	}
 	require.NotNil(t, detail)
-	require.Len(t, detail.Reasons, 4)
+	require.Len(t, detail.Reasons, 2)
 	assert.Contains(t, detail.Reasons[0].Reason, "negative")
 	assert.Contains(t, detail.Reasons[1].Reason, "negative")
-	assert.Equal(t, "models_dev", detail.Reasons[2].Source)
 }
 
 func TestAutomaticPricingReasoningCandidatesCannotBypassSourceRejection(t *testing.T) {
@@ -443,15 +553,15 @@ func TestAutomaticPricingReasoningCandidatesCannotBypassSourceRejection(t *testi
 			}
 			catalog, err := loadAutomaticPriceCatalog(ctx)
 			require.NoError(t, err)
-			entry, ok := catalog.resolve(test.requested)
+			match := catalog.resolve(test.requested)
 			if test.want == "" {
-				assert.False(t, ok)
+				assert.Empty(t, match.entry.Source)
 				return
 			}
-			require.True(t, ok)
-			assert.Equal(t, test.want, entry.Source)
+			require.NotEmpty(t, match.entry.Source)
+			assert.Equal(t, test.want, match.entry.Source)
 			if test.exact {
-				assert.Equal(t, test.requested, entry.Price.Model)
+				assert.Equal(t, test.requested, match.entry.Price.Model)
 			}
 		})
 	}
@@ -561,21 +671,21 @@ func TestAutomaticPricingLongSourceErrorPreservesSnapshotAndChecksLaterSources(t
 	ctx := context.Background()
 	previous := `{"vendor":{"models":{"stable":{"cost":{"input":1,"output":2}}}}}`
 	previousHash := pricingDocumentHash([]byte(previous))
-	require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: "models_dev", Document: model.LongText(previous), Hash: previousHash}))
+	require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: "axonhub", Document: model.LongText(previous), Hash: previousHash}))
 	malformed := `{"` + strings.Repeat("供应商", 8000) + `":{"models":[42]}}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/malformed" {
 			_, _ = io.WriteString(w, malformed)
 			return
 		}
-		_, _ = io.WriteString(w, `{"data":[{"id":"later","pricing":{"prompt":"0.000001","completion":"0.000002"}}]}`)
+		_, _ = io.WriteString(w, `{"later":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`)
 	}))
 	defer server.Close()
 	result, err := syncAutomaticPricing(ctx, server.Client(), []billingPricingSourceSpec{
-		{Source: autopricing.SourceModelsDev, URL: server.URL + "/malformed"},
-		{Source: autopricing.SourceOpenRouter, URL: server.URL + "/later"},
+		{Source: autopricing.SourceAxonHub, URL: server.URL + "/malformed"},
+		{Source: autopricing.SourceSub2API, URL: server.URL + "/later"},
 	})
-	require.ErrorContains(t, err, "invalid models array")
+	require.ErrorContains(t, err, "unidentified axonhub model")
 	assert.Equal(t, 2, result.Checked)
 	assert.Equal(t, 1, result.Changed)
 	assert.Zero(t, result.Deactivated)
@@ -583,10 +693,10 @@ func TestAutomaticPricingLongSourceErrorPreservesSnapshotAndChecksLaterSources(t
 	rows, err := model.ListBillingPricingSources(ctx)
 	require.NoError(t, err)
 	for _, row := range rows {
-		if row.Source == "models_dev" {
+		if row.Source == "axonhub" {
 			assert.Equal(t, previous, string(row.Document))
 			assert.Equal(t, previousHash, row.Hash)
-			assert.Contains(t, row.LastError, "invalid models array")
+			assert.Contains(t, row.LastError, "unidentified axonhub model")
 			assert.LessOrEqual(t, len(row.LastError), 512)
 			assert.True(t, utf8.ValidString(row.LastError))
 		}
@@ -598,19 +708,16 @@ func TestAutomaticPricingLongSourceErrorPreservesSnapshotAndChecksLaterSources(t
 }
 
 func TestAutomaticPricingUnconfiguredDiagnosticsFitDurableTaskHistory(t *testing.T) {
-	catalog := &automaticPriceCatalog{pending: map[string]bool{}, rejections: map[autopricing.SourceID]map[string]string{}}
-	for _, spec := range billingPricingSources {
-		catalog.rejections[spec.Source] = map[string]string{}
-	}
+	result := &AutomaticPricingSyncResult{Errors: []string{}}
 	for i := 0; i < 120; i++ {
 		name := fmt.Sprintf("%03d", i) + strings.Repeat("\"", 300)
-		catalog.pending[name] = true
+		var reasons []AutomaticPricingRejection
 		for _, spec := range billingPricingSources {
-			catalog.rejections[spec.Source][name] = strings.Repeat("费用\n", 150)
+			reasons = append(reasons, AutomaticPricingRejection{Source: string(spec.Source), Reason: strings.Repeat("\x01", 150)})
 		}
+		result.addUnconfigured(name, reasons)
 	}
-	result := &AutomaticPricingSyncResult{Errors: []string{}}
-	require.NoError(t, catalog.describeUnconfigured(result))
+	require.NoError(t, result.boundDiagnostics())
 	assert.Equal(t, 120, result.UnconfiguredCount)
 	assert.NotEmpty(t, result.UnconfiguredDetails)
 	assert.LessOrEqual(t, len(result.UnconfiguredDetails), 100)
@@ -630,7 +737,7 @@ func TestAutomaticPricingUnconfiguredDiagnosticsFitDurableTaskHistory(t *testing
 	require.Greater(t, len(encoded), 60<<10)
 	require.NoError(t, result.boundDiagnostics())
 	assert.Equal(t, 120, result.UnconfiguredCount)
-	assert.Len(t, result.Errors, 4)
+	assert.Len(t, result.Errors, 2)
 	assert.Less(t, len(result.UnconfiguredDetails), before)
 	assert.Len(t, result.Unconfigured, len(result.UnconfiguredDetails))
 	encoded, err = common.Marshal(result)

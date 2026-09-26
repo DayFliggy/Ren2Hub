@@ -1,5 +1,7 @@
 # 自动定价验证（2026-09-26）
 
+本文件保留此前四源实现的历史证据。当前双源实现及本轮验证见[双源模型定价重构验证](DUAL_SOURCE_PRICING_VALIDATION.md)。
+
 本记录对应基于 `a04750a3b7491a487fa28060a316ef6c8c06c8cb` 的自动定价重构及后续规则完善。优先级为整模型人工价、Sub2API、AxonHub、models.dev、OpenRouter；默认每 30 分钟检查。规则见[定价说明](PRICING.md)，内嵌目录的下载日期与原始哈希见[快照说明](../../service/pricingdata/README.md)。本轮没有部署应用、恢复生产数据库或调用付费模型。
 
 ## 后端与数据库

@@ -90,7 +90,7 @@ func TestRestoreAutomaticBillingPriceUsesExpectedVersionAndPreservesManualOnConf
 	})
 	ctx := context.Background()
 	document := `{"restore-model":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008}}`
-	for _, source := range []string{"sub2api", "axonhub", "models_dev", "openrouter"} {
+	for _, source := range []string{"sub2api", "axonhub"} {
 		row := model.BillingPricingSource{Source: source}
 		if source == "sub2api" {
 			row.Document, row.Hash = model.LongText(document), fmt.Sprintf("%x", sha256.Sum256([]byte(document)))

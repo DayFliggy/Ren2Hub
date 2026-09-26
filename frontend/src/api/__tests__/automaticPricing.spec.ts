@@ -50,6 +50,10 @@ describe('automatic price contract', () => {
       { ...status, sources: [{ ...status.sources[0], model_count: -1 }] },
       { ...status, sources: [{ ...status.sources[0], rejected_count: '2' }] },
       { ...status, sources: [{ ...status.sources[0], source: 'unknown' }] },
+      {
+        ...status,
+        sources: [{ ...status.sources[0], snapshot_state: 'fresh' }],
+      },
       { ...status, sources: [...status.sources, ...status.sources] },
       { ...status, origins: [{ ...status.origins[0], version_id: 0 }] },
       { ...status, origins: [{ ...status.origins[0], origin: 'unknown' }] },
@@ -58,6 +62,38 @@ describe('automatic price contract', () => {
       expect(() => parseAutomaticPricingStatus(invalid)).toThrow(
         'Invalid API response'
       )
+  })
+  it('keeps retired sources readable in provenance but rejects them as active catalogs', () => {
+    for (const source of ['models_dev', 'openrouter']) {
+      const historical = {
+        ...status,
+        origins: [{ ...status.origins[0], origin: source }],
+      }
+      expect(parseAutomaticPricingStatus(historical)).toEqual(historical)
+      expect(() =>
+        parseAutomaticPricingStatus({
+          ...status,
+          sources: [{ ...status.sources[0], source }],
+        })
+      ).toThrow('Invalid API response')
+    }
+  })
+  it('retains every explicit snapshot state without inventing one for older responses', () => {
+    for (const snapshot_state of [
+      'bundled',
+      'current',
+      'cached',
+      'unavailable',
+    ]) {
+      const response = {
+        ...status,
+        sources: [{ ...status.sources[0], snapshot_state }],
+      }
+      expect(parseAutomaticPricingStatus(response)).toEqual(response)
+    }
+    expect(parseAutomaticPricingStatus(status).sources[0]).not.toHaveProperty(
+      'snapshot_state'
+    )
   })
   it('saves disabled schedules and parses asynchronous sync tasks', async () => {
     const config = { enabled: false, check_interval_minutes: 5 }

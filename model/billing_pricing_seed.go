@@ -15,7 +15,8 @@ var billingPriceSeed []byte
 const BillingPriceSeedSource = "d04c118c8803f49e0c9bab74dcf5b5efeab9464a"
 
 // InitialBillingPriceCatalog reads the frozen historical installation catalog
-// only to recognize legacy prices. Never regenerate it or use it for new installs.
+// only for the startup ownership migration. Never regenerate it or use it for
+// new installs or live price lookup.
 func InitialBillingPriceCatalog() ([]billing.PriceVersion, []string, error) {
 	var catalog struct {
 		Source       string                 `json:"source"`

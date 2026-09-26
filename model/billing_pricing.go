@@ -159,10 +159,7 @@ func publishBillingPriceWithDB(tx *gorm.DB, version billing.PriceVersion, public
 		if err := tx.First(&current, active.VersionID).Error; err != nil {
 			return nil, false, err
 		}
-		origin, err := resolveBillingPriceOrigin(active, current)
-		if err != nil {
-			return nil, false, err
-		}
+		origin := resolveBillingPriceOrigin(active.Origin)
 		// Only explicit restore may replace a manually owned price. This
 		// decision uses the locked pointer, never a caller's stale listing.
 		if publication.expectedVersion == nil && origin == BillingPriceOriginManual {

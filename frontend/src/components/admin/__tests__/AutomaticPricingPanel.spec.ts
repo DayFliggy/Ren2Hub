@@ -28,6 +28,18 @@ const status: AutomaticPricingStatus = {
       updated_at: 1,
       last_error: 'Source download failed',
       model_count: 2,
+      snapshot_state: 'cached',
+    },
+    {
+      source: 'axonhub',
+      role: 'fallback',
+      url: 'https://example.com/fallback.json',
+      hash: 'fallback-hash',
+      checked_at: 1,
+      updated_at: 1,
+      last_error: '',
+      model_count: 1,
+      snapshot_state: 'current',
     },
   ],
   origins: [],
@@ -84,7 +96,7 @@ describe('automatic pricing controls', () => {
       status: 'failed',
       error: 'One source unavailable',
       pricing_result: {
-        checked: 4,
+        checked: 2,
         changed: 1,
         published: 2,
         deactivated: 3,
@@ -183,6 +195,15 @@ describe('automatic pricing controls', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Source download failed')
     expect(wrapper.text()).toContain('last-valid-hash')
+    expect(wrapper.get('[data-price-source=sub2api]').text()).toContain(
+      'Refresh failed; using valid cache'
+    )
+    expect(wrapper.get('[data-price-source=axonhub]').text()).toContain(
+      'Remote source checked; snapshot valid'
+    )
+    expect(wrapper.get('[data-price-source=axonhub]').text()).toContain(
+      'Fallback source'
+    )
     await wrapper.get('input[type=number]').setValue('4')
     expect(
       wrapper.get('[data-automatic-save]').attributes('disabled')
@@ -199,6 +220,30 @@ describe('automatic pricing controls', () => {
     })
     wrapper.unmount()
   })
+  it.each([
+    ['bundled', 'Bundled snapshot; remote source not checked yet'],
+    ['unavailable', 'No valid price snapshot'],
+  ] as const)(
+    'shows %s source state without implying a successful remote check',
+    async (snapshot_state, message) => {
+      const response = structuredClone(status)
+      response.sources[0] = {
+        ...response.sources[0],
+        checked_at: 0,
+        last_error: '',
+        snapshot_state,
+      }
+      vi.mocked(automaticPricingApi.status).mockResolvedValue(response)
+      const wrapper = mount(AutomaticPricingPanel, {
+        global: { plugins: [i18n] },
+      })
+      await flushPromises()
+      const source = wrapper.get('[data-price-source=sub2api]')
+      expect(source.text()).toContain(message)
+      expect(source.text()).toContain('Not yet')
+      wrapper.unmount()
+    }
+  )
   it('checks while disabled, polls the standard task and refreshes sources after completion', async () => {
     const wrapper = mount(AutomaticPricingPanel, {
       global: { plugins: [i18n] },
