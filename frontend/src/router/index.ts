@@ -12,7 +12,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useSetupStore } from '@/stores/setup'
 import { publicRoutes } from '@/router/publicRoutes'
 import { adminRoutes } from '@/router/adminRoutes'
-import { canonicalLegacyPath } from '@/router/legacyRoutes'
+import { canonicalLegacyPath, legacyQueryDefaults } from '@/router/legacyRoutes'
 import { navigationError } from '@/router/navigationState'
 
 const CONSOLE_ENTRY: RouteLocationRaw = { name: 'dashboard' }
@@ -212,14 +212,15 @@ const router = createRouter({
           },
         },
         {
-          path: '/usage-logs/operations',
-          name: 'logs-operations',
-          component: () => import('@/views/console/OperationLogsView.vue'),
+          // Members read their own events here; reading other accounts needs
+          // the audit permission and is enforced by the server.
+          path: '/usage-logs/audit',
+          name: 'logs-audit',
+          component: () => import('@/views/console/AuditLogsView.vue'),
           meta: {
             wide: true,
             noPageScroll: true,
-            requiresAdmin: true,
-            feature: 'logs',
+            feature: 'audit',
             nav: 'logs',
           },
         },
@@ -310,12 +311,6 @@ const router = createRouter({
           name: 'invoice',
           component: () => import('@/views/console/InvoiceView.vue'),
           meta: { protected: true, feature: 'invoices' },
-        },
-        {
-          path: '/audit',
-          name: 'audit',
-          component: () => import('@/views/console/AuditView.vue'),
-          meta: { feature: 'audit' },
         },
         {
           path: '/settings',
@@ -480,7 +475,11 @@ router.beforeEach(async (to) => {
   const query = new URL(to.fullPath, window.location.origin).searchParams
   const canonical = canonicalLegacyPath(to.path, query)
   if (canonical !== to.path)
-    return { path: canonical, query: to.query, hash: to.hash }
+    return {
+      path: canonical,
+      query: { ...legacyQueryDefaults(to.path), ...to.query },
+      hash: to.hash,
+    }
   if (to.meta.setupError) {
     await loadMessageDomain('setup')
     return true

@@ -223,10 +223,13 @@ func InitLogDB() (err error) {
 		LOG_DB = DB
 		common.SetLogDatabaseType(common.MainDatabaseType())
 		initCol()
-		if common.IsMasterNode {
-			return MigrateAuditLogs()
+		if !common.IsMasterNode {
+			return nil
 		}
-		return nil
+		if err := MigrateAuditLogs(); err != nil {
+			return err
+		}
+		return BackfillLegacyAuditLogs()
 	}
 	db, dbType, err := chooseDB("LOG_SQL_DSN", true)
 	if err == nil {
@@ -405,7 +408,10 @@ func migrateLOGDB() error {
 	} else if err := LOG_DB.AutoMigrate(&Log{}); err != nil {
 		return err
 	}
-	return MigrateAuditLogs()
+	if err := MigrateAuditLogs(); err != nil {
+		return err
+	}
+	return BackfillLegacyAuditLogs()
 }
 
 func migrateClickHouseLogDB() error {

@@ -2,9 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Download, Eye } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 
 import { api } from '@/api/console'
-import { parseOperationLogPage } from '@/api/liveContracts'
+import { parseAuditLogPage } from '@/api/liveContracts'
 import { ApiError, type PageResult } from '@/api/types'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -22,27 +23,36 @@ import TablePagination from '@/components/common/TablePagination.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import LogsNavTabs from '@/components/console/log-ui/LogsNavTabs.vue'
 import {
-  operationLogAuthMethodKey,
-  operationLogKindKey,
-  operationLogKindTone,
-  operationLogParamLabel,
-  operationLogParamValue,
-  operationLogRequestText,
-  operationLogResultKey,
-  operationLogResultTone,
-  operationLogRoleKey,
-  operationLogSummary,
-} from '@/components/console/log-ui/operationLog'
+  auditLogAuthMethodKey,
+  auditLogCategoryKey,
+  auditLogCategoryTone,
+  auditLogParamLabel,
+  auditLogParamValue,
+  auditLogRequestText,
+  auditLogResultKey,
+  auditLogResultTone,
+  auditLogRoleKey,
+  auditLogSummary,
+} from '@/components/console/log-ui/auditLog'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
-import type { OperationLogItem, OperationLogKind } from '@/types/console'
+import { useAuthStore } from '@/stores/auth'
+import type { AuditLogCategory, AuditLogItem } from '@/types/console'
 import { dateInputValue, formatTime } from '@/utils/format'
 import { serializeSpreadsheet } from '@/utils/spreadsheetExport'
 
 const { t } = useI18n()
 const toast = useToast()
+const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 
-const rows = ref<OperationLogItem[]>([])
+/** Reading other accounts needs the audit permission; members see only their own events. */
+const canReadAll = computed(
+  () => auth.isAdmin && auth.hasPermission('audit', 'read')
+)
+
+const rows = ref<AuditLogItem[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
@@ -50,50 +60,84 @@ const loading = ref(true)
 const loadError = ref(false)
 
 const keyword = ref('')
-const kind = ref<'all' | OperationLogKind>('all')
+const category = ref<'all' | AuditLogCategory>('all')
+const outcome = ref<'all' | 'true' | 'false'>('all')
+const tokenRef = ref('')
+const scope = ref<'self' | 'all'>(
+  route.query.scope === 'all' && canReadAll.value ? 'all' : 'self'
+)
 const startDate = ref(dateInputValue(-29))
 const endDate = ref(dateInputValue())
 
-const detailLog = ref<OperationLogItem | null>(null)
+const detailLog = ref<AuditLogItem | null>(null)
 const exportOpen = ref(false)
 const exportType = ref('csv')
 const exporting = ref(false)
 
 const columns = computed<TableColumn[]>(() => [
-  { key: 'created', label: t('operationLogs.columns.time'), width: '150px' },
-  { key: 'actor', label: t('operationLogs.columns.actor'), width: '170px' },
+  { key: 'created', label: t('auditLogs.columns.time'), width: '150px' },
+  { key: 'actor', label: t('auditLogs.columns.actor'), width: '170px' },
   {
     key: 'result',
-    label: t('operationLogs.columns.kindResult'),
+    label: t('auditLogs.columns.categoryResult'),
     width: '150px',
   },
-  { key: 'summary', label: t('operationLogs.columns.summary') },
-  { key: 'source', label: t('operationLogs.columns.source'), width: '150px' },
-  { key: 'request', label: t('operationLogs.columns.request'), width: '220px' },
+  { key: 'summary', label: t('auditLogs.columns.summary') },
+  { key: 'source', label: t('auditLogs.columns.source'), width: '150px' },
+  { key: 'request', label: t('auditLogs.columns.request'), width: '220px' },
   {
     key: 'detail',
-    label: t('operationLogs.columns.detail'),
+    label: t('auditLogs.columns.detail'),
     width: '72px',
     align: 'right',
   },
 ])
 
-const kindOptions = computed(() => [
-  { value: 'all', label: t('operationLogs.kind.all') },
+const categoryOptions = computed(() => [
+  { value: 'all', label: t('auditLogs.category.all') },
   {
-    value: 'manage',
-    label: t('operationLogs.kind.manage'),
+    value: 'operation',
+    label: t('auditLogs.category.operation'),
     tone: 'accent' as const,
   },
   {
-    value: 'system',
-    label: t('operationLogs.kind.system'),
+    value: 'security',
+    label: t('auditLogs.category.security'),
     tone: 'warning' as const,
   },
   {
     value: 'login',
-    label: t('operationLogs.kind.login'),
+    label: t('auditLogs.category.login'),
     tone: 'info' as const,
+  },
+  {
+    value: 'system',
+    label: t('auditLogs.category.system'),
+    tone: 'success' as const,
+  },
+  {
+    value: 'access_token',
+    label: t('auditLogs.category.accessToken'),
+    tone: 'warning' as const,
+  },
+])
+
+const scopeOptions = computed(() => [
+  { value: 'self', label: t('auditLogs.scope.self') },
+  { value: 'all', label: t('auditLogs.scope.all') },
+])
+
+const outcomeOptions = computed(() => [
+  { value: 'all', label: t('auditLogs.result.all') },
+  {
+    value: 'true',
+    label: t('auditLogs.result.success'),
+    tone: 'success' as const,
+  },
+  {
+    value: 'false',
+    label: t('auditLogs.result.failed'),
+    tone: 'danger' as const,
   },
 ])
 
@@ -103,11 +147,21 @@ const detailParams = computed(() =>
   )
 )
 
+const readingAll = computed(() => scope.value === 'all' && canReadAll.value)
+
+function endpoint(): string {
+  return readingAll.value ? '/api/audit' : '/api/audit/self'
+}
+
 function currentParams() {
   return {
     p: page.value,
     page_size: pageSize.value,
-    kind: kind.value,
+    category: category.value === 'all' ? '' : category.value,
+    success: outcome.value === 'all' ? '' : outcome.value,
+    // The token filter is only shown on the all-accounts view; a value left
+    // over from it must not silently narrow the personal view.
+    token_ref: readingAll.value ? tokenRef.value.trim() : '',
     keyword: keyword.value.trim(),
     start_timestamp: startDate.value
       ? Math.floor(new Date(startDate.value).getTime() / 1000)
@@ -124,11 +178,7 @@ async function load(): Promise<void> {
   loading.value = true
   loadError.value = false
   const result = await listRequest.run((signal) =>
-    api.get<PageResult<OperationLogItem>>(
-      '/api/next/admin/operation-logs',
-      currentParams(),
-      { signal }
-    )
+    api.get<PageResult<AuditLogItem>>(endpoint(), currentParams(), { signal })
   )
   if (result.stale) return
   loading.value = false
@@ -139,11 +189,11 @@ async function load(): Promise<void> {
     toast.error(
       result.error instanceof ApiError
         ? result.error.message
-        : t('operationLogs.loadFailed')
+        : t('auditLogs.loadFailed')
     )
     return
   }
-  const resultPage = parseOperationLogPage(result.value as unknown)
+  const resultPage = parseAuditLogPage(result.value as unknown)
   rows.value = resultPage.items
   total.value = resultPage.total
 }
@@ -155,24 +205,37 @@ function reload(): void {
   else page.value = 1
 }
 
-watch(keyword, () => {
+watch([keyword, tokenRef], () => {
   window.clearTimeout(searchTimer)
   searchTimer = window.setTimeout(reload, 300)
 })
-watch([kind, startDate, endDate], reload)
+watch([category, outcome, startDate, endDate], reload)
+watch(scope, (value) => {
+  void router.replace({
+    query: { ...route.query, scope: value === 'all' ? 'all' : undefined },
+  })
+  reload()
+})
+// The view is reused when the URL changes in place (tab link, back button).
+watch(
+  () => route.query.scope,
+  (value) => {
+    scope.value = value === 'all' && canReadAll.value ? 'all' : 'self'
+  }
+)
 watch(pageSize, reload)
 watch(page, load)
 
-function actorName(log: OperationLogItem): string {
+function actorName(log: AuditLogItem): string {
   return (
     log.actor.username ||
-    (log.actor.id ? t('operationLogs.actorId', { id: log.actor.id }) : '-')
+    (log.actor.id ? t('auditLogs.actorId', { id: log.actor.id }) : '-')
   )
 }
 
-function authMethod(log: OperationLogItem): string {
+function authMethod(log: AuditLogItem): string {
   if (!log.actor.auth_method) return '-'
-  const key = operationLogAuthMethodKey(log.actor.auth_method)
+  const key = auditLogAuthMethodKey(log.actor.auth_method)
   if (!key) return log.actor.auth_method
   const provider = log.actor.auth_method.startsWith('oauth:')
     ? log.actor.auth_method.slice(6)
@@ -180,9 +243,8 @@ function authMethod(log: OperationLogItem): string {
   return t(key, { provider })
 }
 
-function statusText(log: OperationLogItem): string {
-  const status = log.request?.status
-  return status === null || status === undefined ? '-' : String(status)
+function statusText(log: AuditLogItem): string {
+  return log.request.status === null ? '-' : String(log.request.status)
 }
 
 const EXPORT_PAGE_SIZE = 100
@@ -191,25 +253,25 @@ let exportController: AbortController | null = null
 
 async function fetchAllLogs(
   signal: AbortSignal
-): Promise<{ items: OperationLogItem[]; truncated: boolean }> {
+): Promise<{ items: AuditLogItem[]; truncated: boolean }> {
   const { p: _page, page_size: _pageSize, ...filters } = currentParams()
-  const firstRaw = await api.get<PageResult<OperationLogItem>>(
-    '/api/next/admin/operation-logs',
+  const firstRaw = await api.get<PageResult<AuditLogItem>>(
+    endpoint(),
     { ...filters, p: 1, page_size: EXPORT_PAGE_SIZE },
     { signal }
   )
-  const first = parseOperationLogPage(firstRaw as unknown)
+  const first = parseAuditLogPage(firstRaw as unknown)
   const items = [...first.items]
   const reachable = Math.min(first.total, EXPORT_MAX_ROWS)
   const pages = Math.ceil(reachable / EXPORT_PAGE_SIZE)
 
   for (let nextPage = 2; nextPage <= pages; nextPage++) {
-    const nextRaw = await api.get<PageResult<OperationLogItem>>(
-      '/api/next/admin/operation-logs',
+    const nextRaw = await api.get<PageResult<AuditLogItem>>(
+      endpoint(),
       { ...filters, p: nextPage, page_size: EXPORT_PAGE_SIZE },
       { signal }
     )
-    const next = parseOperationLogPage(nextRaw as unknown)
+    const next = parseAuditLogPage(nextRaw as unknown)
     items.push(...next.items)
   }
 
@@ -219,24 +281,26 @@ async function fetchAllLogs(
   }
 }
 
-function exportValues(log: OperationLogItem): readonly unknown[] {
+function exportValues(log: AuditLogItem): readonly unknown[] {
   return [
     formatTime(log.created_at),
     actorName(log),
-    t(operationLogRoleKey(log.actor.role)),
-    t(operationLogKindKey(log.kind)),
-    t(operationLogResultKey(log)),
-    operationLogSummary(log, t),
+    t(auditLogRoleKey(log.actor.role)),
+    t(auditLogCategoryKey(log.category)),
+    t(auditLogResultKey(log)),
+    auditLogSummary(log, t),
     log.ip,
     authMethod(log),
     log.user_agent,
-    log.request?.method ?? '',
-    log.request?.route || log.request?.path || '',
+    log.request.method,
+    log.request.route,
     statusText(log),
+    log.token_ref,
+    log.request_id,
     Object.entries(log.params)
       .map(
         ([key, value]) =>
-          `${operationLogParamLabel(key, t)}: ${operationLogParamValue(value)}`
+          `${auditLogParamLabel(key, t)}: ${auditLogParamValue(value)}`
       )
       .join('; '),
   ]
@@ -247,7 +311,7 @@ function download(content: string, mime: string, ext: string): void {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `ren2hub-operation-logs-${new Date().toISOString().slice(0, 10)}.${ext}`
+  anchor.download = `ren2hub-audit-logs-${new Date().toISOString().slice(0, 10)}.${ext}`
   anchor.click()
   URL.revokeObjectURL(url)
 }
@@ -267,19 +331,21 @@ async function doExport(): Promise<void> {
       )
     } else {
       const headers = [
-        t('operationLogs.export.time'),
-        t('operationLogs.export.actor'),
-        t('operationLogs.export.role'),
-        t('operationLogs.export.kind'),
-        t('operationLogs.export.result'),
-        t('operationLogs.export.summary'),
-        t('operationLogs.export.ip'),
-        t('operationLogs.export.authMethod'),
-        t('operationLogs.export.userAgent'),
-        t('operationLogs.export.method'),
-        t('operationLogs.export.route'),
-        t('operationLogs.export.status'),
-        t('operationLogs.export.params'),
+        t('auditLogs.export.time'),
+        t('auditLogs.export.actor'),
+        t('auditLogs.export.role'),
+        t('auditLogs.export.category'),
+        t('auditLogs.export.result'),
+        t('auditLogs.export.summary'),
+        t('auditLogs.export.ip'),
+        t('auditLogs.export.authMethod'),
+        t('auditLogs.export.userAgent'),
+        t('auditLogs.export.method'),
+        t('auditLogs.export.route'),
+        t('auditLogs.export.status'),
+        t('auditLogs.export.tokenRef'),
+        t('auditLogs.export.requestId'),
+        t('auditLogs.export.params'),
       ]
       download(
         ...serializeSpreadsheet(
@@ -319,10 +385,10 @@ onBeforeUnmount(() => {
 <template>
   <div class="mx-auto max-w-[1276px]">
     <PageBreadcrumb
-      :crumbs="[t('logs.breadcrumb.0'), t('operationLogs.breadcrumb')]"
+      :crumbs="[t('logs.breadcrumb.0'), t('auditLogs.breadcrumb')]"
     >
       <template #action>
-        <LogsNavTabs active="operations" />
+        <LogsNavTabs active="audit" />
       </template>
     </PageBreadcrumb>
 
@@ -332,22 +398,46 @@ onBeforeUnmount(() => {
       <SearchInput
         v-model="keyword"
         maxlength="128"
-        :placeholder="t('operationLogs.keywordPlaceholder')"
-        :aria-label="t('operationLogs.keywordPlaceholder')"
-        name="operation-log-search"
+        :placeholder="t('auditLogs.keywordPlaceholder')"
+        :aria-label="t('auditLogs.keywordPlaceholder')"
+        name="audit-log-search"
         class="w-full sm:w-64"
       />
       <FilterSelect
-        v-model="kind"
-        :options="kindOptions"
-        :label="t('operationLogs.kindLabel')"
-        :prefix-label="t('operationLogs.kindLabel') + ':'"
+        v-if="canReadAll"
+        v-model="scope"
+        :options="scopeOptions"
+        :label="t('auditLogs.scopeLabel')"
+        :prefix-label="t('auditLogs.scopeLabel') + ':'"
+        class="w-full sm:w-44"
+      />
+      <FilterSelect
+        v-model="category"
+        :options="categoryOptions"
+        :label="t('auditLogs.categoryLabel')"
+        :prefix-label="t('auditLogs.categoryLabel') + ':'"
         class="w-full sm:w-48"
+      />
+      <FilterSelect
+        v-model="outcome"
+        :options="outcomeOptions"
+        :label="t('auditLogs.resultLabel')"
+        :prefix-label="t('auditLogs.resultLabel') + ':'"
+        class="w-full sm:w-40"
       />
       <DateRangePicker
         v-model:start="startDate"
         v-model:end="endDate"
         class="w-full sm:w-64"
+      />
+      <SearchInput
+        v-if="canReadAll && scope === 'all'"
+        v-model="tokenRef"
+        maxlength="64"
+        :placeholder="t('auditLogs.tokenRefPlaceholder')"
+        :aria-label="t('auditLogs.tokenRefPlaceholder')"
+        name="audit-log-token-ref"
+        class="w-full sm:w-56"
       />
       <ConsoleButton
         class="ml-auto w-full sm:w-auto"
@@ -361,8 +451,8 @@ onBeforeUnmount(() => {
 
     <ConsoleCard v-if="loadError && !loading" :padded="false">
       <EmptyState
-        :title="t('operationLogs.loadFailed')"
-        :hint="t('operationLogs.loadFailedHint')"
+        :title="t('auditLogs.loadFailed')"
+        :hint="t('auditLogs.loadFailedHint')"
         illustration="empty-logs"
       >
         <ConsoleButton class="mt-5" variant="secondary" @click="load">
@@ -375,75 +465,75 @@ onBeforeUnmount(() => {
       <DataTable
         :columns="columns"
         :rows="rows"
-        row-key="id"
+        row-key="event_id"
         :loading="loading"
         :skeleton-rows="pageSize"
         adaptive-scroll
         :page-size="pageSize"
         min-table-width="1120px"
-        :scroll-region-label="t('operationLogs.breadcrumb')"
-        :empty-title="t('operationLogs.emptyTitle')"
-        :empty-hint="t('operationLogs.emptyHint')"
+        :scroll-region-label="t('auditLogs.breadcrumb')"
+        :empty-title="t('auditLogs.emptyTitle')"
+        :empty-hint="t('auditLogs.emptyHint')"
         empty-illustration="empty-logs"
       >
         <template #cell-created="{ row }">
           <span class="whitespace-nowrap text-xs text-[var(--text-tertiary)]">
-            {{ formatTime((row as OperationLogItem).created_at) }}
+            {{ formatTime((row as AuditLogItem).created_at) }}
           </span>
         </template>
         <template #cell-actor="{ row }">
           <div class="min-w-0">
             <p
               class="truncate text-sm font-semibold text-[var(--text-primary)]"
-              :title="actorName(row as OperationLogItem)"
+              :title="actorName(row as AuditLogItem)"
             >
-              {{ actorName(row as OperationLogItem) }}
+              {{ actorName(row as AuditLogItem) }}
             </p>
             <p class="mt-0.5 text-xs text-[var(--text-tertiary)]">
-              {{ t(operationLogRoleKey((row as OperationLogItem).actor.role)) }}
+              {{ t(auditLogRoleKey((row as AuditLogItem).actor.role)) }}
             </p>
           </div>
         </template>
         <template #cell-result="{ row }">
           <div class="flex flex-wrap items-center gap-1.5">
             <StatusChip
-              :tone="operationLogKindTone((row as OperationLogItem).kind)"
+              :tone="auditLogCategoryTone((row as AuditLogItem).category)"
             >
-              {{ t(operationLogKindKey((row as OperationLogItem).kind)) }}
+              {{ t(auditLogCategoryKey((row as AuditLogItem).category)) }}
             </StatusChip>
-            <StatusChip :tone="operationLogResultTone(row as OperationLogItem)">
-              {{ t(operationLogResultKey(row as OperationLogItem)) }}
+            <StatusChip :tone="auditLogResultTone(row as AuditLogItem)">
+              {{ t(auditLogResultKey(row as AuditLogItem)) }}
             </StatusChip>
           </div>
         </template>
         <template #cell-summary="{ row }">
           <p
             class="line-clamp-2 text-sm leading-5 text-[var(--text-secondary)]"
-            :title="operationLogSummary(row as OperationLogItem, t)"
+            :title="auditLogSummary(row as AuditLogItem, t)"
           >
-            {{ operationLogSummary(row as OperationLogItem, t) }}
+            {{ auditLogSummary(row as AuditLogItem, t) }}
           </p>
         </template>
         <template #cell-source="{ row }">
           <span
             class="block truncate font-mono text-xs text-[var(--text-secondary)]"
-            :title="(row as OperationLogItem).ip || '-'"
+            :title="(row as AuditLogItem).ip || '-'"
           >
-            {{ (row as OperationLogItem).ip || '-' }}
+            {{ (row as AuditLogItem).ip || '-' }}
           </span>
         </template>
         <template #cell-request="{ row }">
           <div class="min-w-0">
             <p
               class="truncate font-mono text-xs text-[var(--text-secondary)]"
-              :title="operationLogRequestText(row as OperationLogItem) || '-'"
+              :title="auditLogRequestText(row as AuditLogItem) || '-'"
             >
-              {{ operationLogRequestText(row as OperationLogItem) || '-' }}
+              {{ auditLogRequestText(row as AuditLogItem) || '-' }}
             </p>
             <p class="mt-0.5 text-xs text-[var(--text-tertiary)]">
               {{
-                t('operationLogs.httpStatus', {
-                  status: statusText(row as OperationLogItem),
+                t('auditLogs.httpStatus', {
+                  status: statusText(row as AuditLogItem),
                 })
               }}
             </p>
@@ -452,8 +542,8 @@ onBeforeUnmount(() => {
         <template #cell-detail="{ row }">
           <div class="flex justify-end">
             <IconButton
-              :label="t('operationLogs.viewDetails')"
-              @click="detailLog = row as OperationLogItem"
+              :label="t('auditLogs.viewDetails')"
+              @click="detailLog = row as AuditLogItem"
             >
               <Eye :size="16" aria-hidden="true" />
             </IconButton>
@@ -471,11 +561,10 @@ onBeforeUnmount(() => {
         </template>
       </DataTable>
     </ConsoleCard>
-
     <section
       v-if="!loadError || loading"
       class="lg:hidden"
-      :aria-label="t('operationLogs.breadcrumb')"
+      :aria-label="t('auditLogs.breadcrumb')"
     >
       <div v-if="loading" class="space-y-3" aria-busy="true">
         <SkeletonBlock
@@ -489,20 +578,20 @@ onBeforeUnmount(() => {
       <div v-else-if="rows.length" class="space-y-3">
         <article
           v-for="row in rows"
-          :key="row.id"
+          :key="row.event_id"
           class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 shadow-[var(--card-shadow)]"
           :aria-label="
-            t('operationLogs.mobileCardLabel', {
-              action: operationLogSummary(row, t),
+            t('auditLogs.mobileCardLabel', {
+              action: auditLogSummary(row, t),
             })
           "
         >
           <div class="flex flex-wrap items-center gap-1.5">
-            <StatusChip :tone="operationLogKindTone(row.kind)">
-              {{ t(operationLogKindKey(row.kind)) }}
+            <StatusChip :tone="auditLogCategoryTone(row.category)">
+              {{ t(auditLogCategoryKey(row.category)) }}
             </StatusChip>
-            <StatusChip :tone="operationLogResultTone(row)">
-              {{ t(operationLogResultKey(row)) }}
+            <StatusChip :tone="auditLogResultTone(row)">
+              {{ t(auditLogResultKey(row)) }}
             </StatusChip>
           </div>
           <div class="mt-3 min-w-0">
@@ -514,7 +603,7 @@ onBeforeUnmount(() => {
             <p
               class="mt-1 line-clamp-3 text-sm leading-5 text-[var(--text-secondary)]"
             >
-              {{ operationLogSummary(row, t) }}
+              {{ auditLogSummary(row, t) }}
             </p>
           </div>
           <div
@@ -528,7 +617,7 @@ onBeforeUnmount(() => {
             </div>
             <ConsoleButton size="sm" variant="ghost" @click="detailLog = row">
               <Eye :size="15" aria-hidden="true" />
-              {{ t('operationLogs.viewDetails') }}
+              {{ t('auditLogs.viewDetails') }}
             </ConsoleButton>
           </div>
         </article>
@@ -538,8 +627,8 @@ onBeforeUnmount(() => {
         class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
       >
         <EmptyState
-          :title="t('operationLogs.emptyTitle')"
-          :hint="t('operationLogs.emptyHint')"
+          :title="t('auditLogs.emptyTitle')"
+          :hint="t('auditLogs.emptyHint')"
           illustration="empty-logs"
         />
       </div>
@@ -553,22 +642,21 @@ onBeforeUnmount(() => {
         />
       </div>
     </section>
-
     <ConsoleModal
       :open="detailLog !== null"
-      :title="t('operationLogs.detailTitle')"
+      :title="t('auditLogs.detailTitle')"
       size="lg"
       @close="detailLog = null"
     >
-      <div v-if="detailLog" class="space-y-6" data-operation-log-detail>
+      <div v-if="detailLog" class="space-y-6" data-audit-log-detail>
         <section>
           <h3 class="text-sm font-semibold text-[var(--text-primary)]">
-            {{ t('operationLogs.sections.actor') }}
+            {{ t('auditLogs.sections.actor') }}
           </h3>
           <dl class="mt-3 grid gap-3 sm:grid-cols-2">
             <div class="rounded-lg bg-[var(--surface-muted)] p-3">
               <dt class="text-xs text-[var(--text-tertiary)]">
-                {{ t('operationLogs.fields.account') }}
+                {{ t('auditLogs.fields.account') }}
               </dt>
               <dd class="mt-1 break-words text-sm text-[var(--text-primary)]">
                 {{ actorName(detailLog) }}
@@ -576,15 +664,15 @@ onBeforeUnmount(() => {
             </div>
             <div class="rounded-lg bg-[var(--surface-muted)] p-3">
               <dt class="text-xs text-[var(--text-tertiary)]">
-                {{ t('operationLogs.fields.role') }}
+                {{ t('auditLogs.fields.role') }}
               </dt>
               <dd class="mt-1 text-sm text-[var(--text-primary)]">
-                {{ t(operationLogRoleKey(detailLog.actor.role)) }}
+                {{ t(auditLogRoleKey(detailLog.actor.role)) }}
               </dd>
             </div>
             <div class="rounded-lg bg-[var(--surface-muted)] p-3">
               <dt class="text-xs text-[var(--text-tertiary)]">
-                {{ t('operationLogs.fields.authMethod') }}
+                {{ t('auditLogs.fields.authMethod') }}
               </dt>
               <dd class="mt-1 break-words text-sm text-[var(--text-primary)]">
                 {{ authMethod(detailLog) }}
@@ -592,7 +680,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="rounded-lg bg-[var(--surface-muted)] p-3">
               <dt class="text-xs text-[var(--text-tertiary)]">
-                {{ t('operationLogs.fields.time') }}
+                {{ t('auditLogs.fields.time') }}
               </dt>
               <dd class="mt-1 text-sm text-[var(--text-primary)]">
                 {{ formatTime(detailLog.created_at) }}
@@ -603,12 +691,17 @@ onBeforeUnmount(() => {
 
         <section>
           <h3 class="text-sm font-semibold text-[var(--text-primary)]">
-            {{ t('operationLogs.sections.operation') }}
+            {{ t('auditLogs.sections.operation') }}
           </h3>
+          <div class="mt-3 flex flex-wrap items-center gap-1.5">
+            <StatusChip :tone="auditLogCategoryTone(detailLog.category)">
+              {{ t(auditLogCategoryKey(detailLog.category)) }}
+            </StatusChip>
+          </div>
           <p
             class="mt-3 break-words rounded-lg bg-[var(--surface-muted)] p-3 text-sm leading-6 text-[var(--text-primary)]"
           >
-            {{ operationLogSummary(detailLog, t) }}
+            {{ auditLogSummary(detailLog, t) }}
           </p>
           <dl v-if="detailParams.length" class="mt-3 grid gap-2 sm:grid-cols-2">
             <div
@@ -617,12 +710,12 @@ onBeforeUnmount(() => {
               class="min-w-0 rounded-lg border border-[var(--border-subtle)] p-3"
             >
               <dt class="text-xs text-[var(--text-tertiary)]">
-                {{ operationLogParamLabel(key, t) }}
+                {{ auditLogParamLabel(key, t) }}
               </dt>
               <dd
                 class="mt-1 break-words font-mono text-xs text-[var(--text-primary)]"
               >
-                {{ operationLogParamValue(value) }}
+                {{ auditLogParamValue(value) }}
               </dd>
             </div>
           </dl>
@@ -630,12 +723,12 @@ onBeforeUnmount(() => {
 
         <section>
           <h3 class="text-sm font-semibold text-[var(--text-primary)]">
-            {{ t('operationLogs.sections.source') }}
+            {{ t('auditLogs.sections.source') }}
           </h3>
           <dl class="mt-3 space-y-3">
             <div class="rounded-lg bg-[var(--surface-muted)] p-3">
               <dt class="text-xs text-[var(--text-tertiary)]">
-                {{ t('operationLogs.fields.ip') }}
+                {{ t('auditLogs.fields.ip') }}
               </dt>
               <dd
                 class="mt-1 break-all font-mono text-xs text-[var(--text-primary)]"
@@ -645,7 +738,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="rounded-lg bg-[var(--surface-muted)] p-3">
               <dt class="text-xs text-[var(--text-tertiary)]">
-                {{ t('operationLogs.fields.userAgent') }}
+                {{ t('auditLogs.fields.userAgent') }}
               </dt>
               <dd
                 class="mt-1 break-words text-xs leading-5 text-[var(--text-primary)]"
@@ -653,27 +746,40 @@ onBeforeUnmount(() => {
                 {{ detailLog.user_agent || '-' }}
               </dd>
             </div>
+            <div
+              v-if="detailLog.token_ref"
+              class="rounded-lg bg-[var(--surface-muted)] p-3"
+            >
+              <dt class="text-xs text-[var(--text-tertiary)]">
+                {{ t('auditLogs.fields.tokenRef') }}
+              </dt>
+              <dd
+                class="mt-1 break-all font-mono text-xs text-[var(--text-primary)]"
+              >
+                {{ detailLog.token_ref }}
+              </dd>
+            </div>
           </dl>
         </section>
 
         <section>
           <h3 class="text-sm font-semibold text-[var(--text-primary)]">
-            {{ t('operationLogs.sections.request') }}
+            {{ t('auditLogs.sections.request') }}
           </h3>
           <dl class="mt-3 grid gap-3 sm:grid-cols-2">
             <div class="rounded-lg bg-[var(--surface-muted)] p-3 sm:col-span-2">
               <dt class="text-xs text-[var(--text-tertiary)]">
-                {{ t('operationLogs.fields.route') }}
+                {{ t('auditLogs.fields.route') }}
               </dt>
               <dd
                 class="mt-1 break-all font-mono text-xs text-[var(--text-primary)]"
               >
-                {{ operationLogRequestText(detailLog) || '-' }}
+                {{ auditLogRequestText(detailLog) || '-' }}
               </dd>
             </div>
             <div class="rounded-lg bg-[var(--surface-muted)] p-3">
               <dt class="text-xs text-[var(--text-tertiary)]">
-                {{ t('operationLogs.fields.httpStatus') }}
+                {{ t('auditLogs.fields.httpStatus') }}
               </dt>
               <dd class="mt-1 text-sm text-[var(--text-primary)]">
                 {{ statusText(detailLog) }}
@@ -681,12 +787,25 @@ onBeforeUnmount(() => {
             </div>
             <div class="rounded-lg bg-[var(--surface-muted)] p-3">
               <dt class="text-xs text-[var(--text-tertiary)]">
-                {{ t('operationLogs.fields.result') }}
+                {{ t('auditLogs.fields.result') }}
               </dt>
               <dd class="mt-1">
-                <StatusChip :tone="operationLogResultTone(detailLog)">{{
-                  t(operationLogResultKey(detailLog))
+                <StatusChip :tone="auditLogResultTone(detailLog)">{{
+                  t(auditLogResultKey(detailLog))
                 }}</StatusChip>
+              </dd>
+            </div>
+            <div
+              v-if="detailLog.request_id"
+              class="rounded-lg bg-[var(--surface-muted)] p-3 sm:col-span-2"
+            >
+              <dt class="text-xs text-[var(--text-tertiary)]">
+                {{ t('auditLogs.fields.requestId') }}
+              </dt>
+              <dd
+                class="mt-1 break-all font-mono text-xs text-[var(--text-primary)]"
+              >
+                {{ detailLog.request_id }}
               </dd>
             </div>
           </dl>
@@ -704,7 +823,7 @@ onBeforeUnmount(() => {
     <ConsoleModal
       :open="exportOpen"
       :title="t('logs.exportTitle')"
-      :subtitle="t('operationLogs.exportSubtitle', { limit: EXPORT_MAX_ROWS })"
+      :subtitle="t('auditLogs.exportSubtitle', { limit: EXPORT_MAX_ROWS })"
       size="sm"
       @close="exportOpen = false"
     >

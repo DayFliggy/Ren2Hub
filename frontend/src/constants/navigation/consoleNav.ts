@@ -80,13 +80,6 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
     labelKey: 'nav.groupAccount',
     items: [
       {
-        name: 'audit',
-        labelKey: 'security.auditTitle',
-        route: 'audit',
-        feature: 'audit',
-        icon: 'M4 4h16v16H4zM8 8h8M8 12h8M8 16h4',
-      },
-      {
         name: 'wallet',
         labelKey: 'nav.wallet',
         route: 'wallet',

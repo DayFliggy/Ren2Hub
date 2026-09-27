@@ -3,8 +3,8 @@ import type {
   DrawingLogItem,
   LogItem,
   LogType,
-  OperationLogItem,
-  OperationLogKind,
+  AuditLogCategory,
+  AuditLogItem,
   RelayTaskLogItem,
   TokenSummary,
 } from '@/types/console'
@@ -416,78 +416,63 @@ export function parseLogPage(value: unknown): PageResult<LogItem> {
   return parsePage(value, endpoint, parseLog)
 }
 
-const OPERATION_LOG_KINDS = new Set<OperationLogKind>([
-  'manage',
-  'system',
+const AUDIT_LOG_CATEGORIES = new Set<AuditLogCategory>([
   'login',
+  'security',
+  'operation',
+  'access_token',
+  'system',
 ])
 
-function optionalOperationString(value: unknown, endpoint: string): string {
+const AUDIT_ACTOR_ROLES = new Set([1, 10, 100])
+
+function optionalAuditString(value: unknown, endpoint: string): string {
   if (value === undefined || value === null) return ''
   return requiredString(value, endpoint)
 }
 
-function optionalOperationInteger(
-  value: unknown,
-  endpoint: string
-): number | null {
-  if (value === undefined || value === null) return null
-  return requiredInteger(value, endpoint)
-}
-
-function optionalOperationBoolean(
-  value: unknown,
-  endpoint: string
-): boolean | null {
-  if (value === undefined || value === null) return null
-  if (typeof value !== 'boolean') invalidResponse(endpoint)
-  return value
-}
-
-function parseOperationLog(value: unknown, endpoint: string): OperationLogItem {
-  if (!isRecord(value) || !isRecord(value.actor)) invalidResponse(endpoint)
-  const kind = requiredString(value.kind, endpoint) as OperationLogKind
-  if (!OPERATION_LOG_KINDS.has(kind)) invalidResponse(endpoint)
-
-  const params = value.params ?? {}
+function parseAuditLog(value: unknown, endpoint: string): AuditLogItem {
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const category = requiredString(value.category, endpoint) as AuditLogCategory
+  if (!AUDIT_LOG_CATEGORIES.has(category)) invalidResponse(endpoint)
+  const other = value.other ?? {}
+  if (!isRecord(other)) invalidResponse(endpoint)
+  const op = other.op ?? {}
+  if (!isRecord(op)) invalidResponse(endpoint)
+  const params = op.params ?? {}
   if (!isRecord(params)) invalidResponse(endpoint)
-
-  let request: OperationLogItem['request'] = null
-  if (value.request !== undefined && value.request !== null) {
-    if (!isRecord(value.request)) invalidResponse(endpoint)
-    request = {
-      method: optionalOperationString(value.request.method, endpoint),
-      route: optionalOperationString(value.request.route, endpoint),
-      path: optionalOperationString(value.request.path, endpoint),
-      status: optionalOperationInteger(value.request.status, endpoint),
-      success: optionalOperationBoolean(value.request.success, endpoint),
-    }
-  }
+  const role = requiredInteger(value.actor_role, endpoint)
+  const status = requiredInteger(value.status, endpoint)
+  if (typeof value.success !== 'boolean') invalidResponse(endpoint)
 
   return {
-    id: requiredInteger(value.id, endpoint),
+    event_id: requiredString(value.event_id, endpoint),
     created_at: requiredInteger(value.created_at, endpoint),
-    kind,
-    action: optionalOperationString(value.action, endpoint),
+    category,
+    action: optionalAuditString(value.action, endpoint),
     params: { ...params },
-    content: requiredString(value.content, endpoint),
+    content: optionalAuditString(value.content, endpoint),
     actor: {
-      id: requiredInteger(value.actor.id, endpoint),
-      username: requiredString(value.actor.username, endpoint),
-      role: optionalOperationInteger(value.actor.role, endpoint),
-      auth_method: optionalOperationString(value.actor.auth_method, endpoint),
+      id: requiredInteger(value.user_id, endpoint),
+      username: optionalAuditString(value.username, endpoint),
+      role: AUDIT_ACTOR_ROLES.has(role) ? role : null,
+      auth_method: optionalAuditString(value.auth_method, endpoint),
     },
-    ip: optionalOperationString(value.ip, endpoint),
-    user_agent: optionalOperationString(value.user_agent, endpoint),
-    request,
+    token_ref: optionalAuditString(value.token_ref, endpoint),
+    request_id: optionalAuditString(value.request_id, endpoint),
+    ip: optionalAuditString(value.ip, endpoint),
+    user_agent: optionalAuditString(value.user_agent, endpoint),
+    request: {
+      method: optionalAuditString(value.method, endpoint),
+      route: optionalAuditString(value.route, endpoint),
+      status: status > 0 ? status : null,
+      success: value.success,
+    },
   }
 }
 
-export function parseOperationLogPage(
-  value: unknown
-): PageResult<OperationLogItem> {
-  const endpoint = '/api/next/admin/operation-logs'
-  return parsePage(value, endpoint, parseOperationLog)
+export function parseAuditLogPage(value: unknown): PageResult<AuditLogItem> {
+  return parsePage(value, '/api/audit', parseAuditLog)
 }
 
 function parseDrawingLog(value: unknown, endpoint: string): DrawingLogItem {

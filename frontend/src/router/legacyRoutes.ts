@@ -18,7 +18,9 @@ const aliases: Record<string, string> = {
   '/logs': '/usage-logs',
   '/logs/drawing': '/usage-logs/drawing',
   '/logs/tasks': '/usage-logs/task',
-  '/logs/operations': '/usage-logs/operations',
+  '/logs/operations': '/usage-logs/audit',
+  '/usage-logs/operations': '/usage-logs/audit',
+  '/audit': '/usage-logs/audit',
   '/usage-logs/common': '/usage-logs',
   '/usage-logs/consume': '/usage-logs',
   '/usage-logs/tasks': '/usage-logs/task',
@@ -71,12 +73,28 @@ const settingsSections: Record<string, string> = {
   'security/sensitive-words': 'security/sensitive',
 }
 
+// Retired pages whose replacement needs a query to show the same content.
+// The old operation-log pages listed every account's events.
+const aliasQueries: Record<string, Record<string, string>> = {
+  '/logs/operations': { scope: 'all' },
+  '/usage-logs/operations': { scope: 'all' },
+}
+
+function normalizeLegacyPath(path: string): string {
+  return path.replace(/^\/console\//, '/').replace(/\/+$/, '') || '/'
+}
+
+/** Query keys a retired path implies; explicit query values take precedence. */
+export function legacyQueryDefaults(path: string): Record<string, string> {
+  return aliasQueries[normalizeLegacyPath(path)] ?? {}
+}
+
 export function canonicalLegacyPath(
   path: string,
   query: URLSearchParams
 ): string {
   if (path.startsWith('//') || path.includes('\\')) return '/404'
-  path = path.replace(/^\/console\//, '/').replace(/\/+$/, '') || '/'
+  path = normalizeLegacyPath(path)
   path = aliases[path] ?? path
   if (path === '/setting') {
     path = `/system-settings/${settingsTabs[query.get('tab') ?? ''] ?? 'site/system-info'}`

@@ -162,6 +162,8 @@ Proof 绑定用户、登录会话、用户鉴权版本、会话版本、操作�
 
 PAT 管理的 `GET /api/user/token/status` 只返回状态及指纹；旧 `GET /api/user/token` 也是只读。`POST /api/user/token` 要求 `access_token.generate` Proof，生成或轮换后仅一次返回明文；`DELETE /api/user/token` 要求 `access_token.revoke` Proof。个人与授权管理员审计存入独立 `audit_logs`，普通用量日志清理不会移除它。审计保留事件、指纹和必要上下文，不记录密码、Proof 或 PAT 原文。
 
+登录、账号安全、管理操作、访问令牌请求和系统发放（签到、邀请奖励等）统一写入 `audit_logs`，控制台在日志子页 `/usage-logs/audit` 展示。`GET /api/audit/self` 只返回本人记录并去除管理员与请求元数据；`GET /api/audit` 查看全部账号，需要 `audit:read` 权限。非 Root 查看者看不到 Root 发起的事件和 `root_info`。读取时统一去除操作参数中疑似凭据的字段（如 password、secret、token、api_key、cookie）。旧 `logs` 表的管理、系统和登录记录（type 3/4/7）在启动迁移时一次性回填到 `audit_logs`，由 Option 标记保证幂等。
+
 ## 存储与兼容边界
 
 当前账务格式只接受空库初始化或匹配 `billing_schemas` 标记的数据库；旧账务库不能因认证表迁移兼容而直接升级。下列认证字段与旧凭据说明只描述认证子系统，整库安装与回退以[发布契约](routing/GATEWAY_RELEASE.md)为准。

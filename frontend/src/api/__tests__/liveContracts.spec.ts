@@ -4,7 +4,7 @@ import {
   parseDrawingLogPage,
   parseLogPage,
   parseLogStat,
-  parseOperationLogPage,
+  parseAuditLogPage,
   parsePerfMetricsSummary,
   parsePricingModels,
   parseRedeemedQuota,
@@ -394,88 +394,98 @@ describe('live API contracts', () => {
     })
   })
 
-  it('parses the operation log DTO and rejects raw or malformed shapes', () => {
-    const page = parseOperationLogPage({
+  it('maps audit rows to the view contract and rejects malformed shapes', () => {
+    const row = {
+      id: 45,
+      event_id: 'evt-45',
+      user_id: 7,
+      username: 'admin',
+      actor_role: 10,
+      created_at: 1_700_000_000,
+      category: 'operation',
+      action: 'user.update',
+      token_ref: '',
+      auth_method: 'session',
+      ip: '203.0.113.2',
+      user_agent: 'Test Browser',
+      method: 'PUT',
+      route: '/api/user/:id',
+      status: 200,
+      success: true,
+      request_id: 'req-45',
+      content: 'Updated user alice',
+      other: {
+        op: {
+          action: 'user.update',
+          params: { username: 'alice', changed_fields: ['status'] },
+        },
+        root_info: { note: 'root only' },
+      },
+    }
+    const page = parseAuditLogPage({
       page: 2,
       page_size: 20,
       total: 21,
-      items: [
-        {
-          id: 45,
-          created_at: 1_700_000_000,
-          kind: 'manage',
-          action: 'user.update',
-          params: { username: 'alice', changed_fields: ['status'] },
-          content: 'Updated user alice',
-          actor: {
-            id: 7,
-            username: 'admin',
-            role: 10,
-            auth_method: 'session',
-          },
-          ip: '203.0.113.2',
-          user_agent: 'Test Browser',
-          request: {
-            method: 'PUT',
-            route: '/api/user/:id',
-            path: '/api/user/9',
-            status: 200,
-            success: true,
-          },
-        },
-      ],
+      items: [row],
     })
 
     expect(page).toMatchObject({ page: 2, pageSize: 20, total: 21 })
     expect(page.items[0]).toEqual({
-      id: 45,
+      event_id: 'evt-45',
       created_at: 1_700_000_000,
-      kind: 'manage',
+      category: 'operation',
       action: 'user.update',
       params: { username: 'alice', changed_fields: ['status'] },
       content: 'Updated user alice',
-      actor: {
-        id: 7,
-        username: 'admin',
-        role: 10,
-        auth_method: 'session',
-      },
+      actor: { id: 7, username: 'admin', role: 10, auth_method: 'session' },
+      token_ref: '',
+      request_id: 'req-45',
       ip: '203.0.113.2',
       user_agent: 'Test Browser',
       request: {
         method: 'PUT',
         route: '/api/user/:id',
-        path: '/api/user/9',
         status: 200,
         success: true,
       },
     })
-    expectInvalidResponse(() =>
-      parseOperationLogPage({
-        page: 1,
-        page_size: 20,
-        total: 1,
-        items: [{ id: 1, kind: 'consume', actor: {} }],
-      })
-    )
-    const extraFields = parseOperationLogPage({
+    // Only op.params crosses the contract; root-only metadata stays behind.
+    expect(page.items[0]).not.toHaveProperty('other')
+
+    const minimal = parseAuditLogPage({
       page: 1,
       page_size: 20,
       total: 1,
       items: [
         {
-          id: 1,
+          event_id: 'evt-1',
+          user_id: 3,
+          actor_role: 0,
           created_at: 1,
-          kind: 'system',
-          action: '',
-          params: {},
-          content: 'legacy',
-          actor: { id: 1, username: 'user' },
-          other: '{"password":"must-not-cross-the-contract"}',
+          category: 'system',
+          status: 0,
+          success: true,
         },
       ],
     })
-    expect(extraFields.items[0]).not.toHaveProperty('other')
+    expect(minimal.items[0]).toMatchObject({
+      params: {},
+      content: '',
+      actor: { id: 3, username: '', role: null, auth_method: '' },
+      request: { method: '', route: '', status: null, success: true },
+    })
+
+    for (const broken of [
+      { ...row, category: 'consume' },
+      { ...row, event_id: undefined },
+      { ...row, success: 'true' },
+      { ...row, actor_role: undefined },
+      { ...row, other: { op: { params: ['password'] } } },
+    ]) {
+      expectInvalidResponse(() =>
+        parseAuditLogPage({ page: 1, page_size: 20, total: 1, items: [broken] })
+      )
+    }
   })
 
   it('parses drawing logs, defaults optional fields, and keeps unknown statuses', () => {

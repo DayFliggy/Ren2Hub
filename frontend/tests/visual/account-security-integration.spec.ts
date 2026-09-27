@@ -83,9 +83,14 @@ for (const theme of ['light', 'dark'] as const) {
           json: {
             success: true,
             data: {
+              page: 1,
+              page_size: 10,
               items: [
                 {
                   id: 1,
+                  event_id: 'visual-pat-1',
+                  user_id: 1,
+                  actor_role: 100,
                   created_at: 1_790_000_000,
                   username: 'visual.root',
                   action: 'access_token.generate',
@@ -96,6 +101,7 @@ for (const theme of ['light', 'dark'] as const) {
                   method: 'POST',
                   route: '/api/user/token',
                   status: 200,
+                  other: { op: { action: 'access_token.generate' } },
                 },
               ],
               total: 1,
@@ -141,10 +147,15 @@ for (const theme of ['light', 'dark'] as const) {
         page.locator('input[aria-label="access-token"]')
       ).toHaveCount(0)
       await assertNoHorizontalOverflow(page)
+      // The retired /audit bookmark lands on the merged log page.
       await page.goto('/audit')
       await waitForStablePage(page)
+      await expect(page).toHaveURL(/\/usage-logs\/audit$/)
       await expect(
-        page.getByText('access_token.generate', { exact: true })
+        page
+          .getByText('生成个人访问令牌', { exact: true })
+          .filter({ visible: true })
+          .first()
       ).toBeVisible()
       await assertNoHorizontalOverflow(page)
     })

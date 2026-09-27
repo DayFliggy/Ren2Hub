@@ -173,10 +173,28 @@ describe('capability route guard', () => {
     expect(router.currentRoute.value.name).toBe('home')
   })
 
-  it('redirects non-admin users away from operation logs', async () => {
-    await router.push('/console/logs/operations')
+  it('keeps the audit log page behind the audit capability', async () => {
+    await router.push('/usage-logs/audit')
 
     expect(router.currentRoute.value.name).toBe('dashboard')
+  }, 15000)
+
+  it('sends retired audit and operation-log bookmarks to the audit logs page', async () => {
+    publicApi.status.mockResolvedValue({
+      frontend_capabilities: { dashboard_basic: 'live', audit: 'live' },
+    })
+    for (const [source, target] of [
+      ['/audit', '/usage-logs/audit'],
+      ['/console/audit', '/usage-logs/audit'],
+      // The old operation-log pages listed every account's events.
+      ['/console/logs/operations', '/usage-logs/audit?scope=all'],
+      ['/usage-logs/operations/', '/usage-logs/audit?scope=all'],
+      ['/usage-logs/operations?scope=self', '/usage-logs/audit?scope=self'],
+    ]) {
+      await router.push(source!)
+      expect(router.currentRoute.value.fullPath, source).toBe(target)
+      expect(router.currentRoute.value.name, source).toBe('logs-audit')
+    }
   }, 15000)
 
   it('keeps system settings root-only even for ordinary administrators', async () => {

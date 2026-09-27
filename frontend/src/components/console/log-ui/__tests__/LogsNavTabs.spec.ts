@@ -1,34 +1,25 @@
 import { defineComponent } from 'vue'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import LogsNavTabs from '@/components/console/log-ui/LogsNavTabs.vue'
 import i18n, { loadMessageDomain } from '@/i18n'
-import { useAuthStore } from '@/stores/auth'
+import { parsePublicStatus } from '@/api/public'
+import { useAppStore } from '@/stores/app'
 
 const EmptyRoute = defineComponent({ template: '<div />' })
 
-async function mountTabs(role: number) {
+async function mountTabs(
+  capabilities: Record<string, string>,
+  active: 'consume' | 'audit' = 'consume'
+) {
   const pinia = createPinia()
   setActivePinia(pinia)
-  const auth = useAuthStore()
-  auth.persist({
-    id: 1,
-    username: 'tester',
-    display_name: 'Tester',
-    email: 'tester@example.com',
-    role,
-    status: 1,
-    available_quota: '0',
-    reserved_quota: '0',
-    quota_version: 0,
-    used_quota: '0',
-    request_count: 0,
-    created_at: 1_700_000_000,
+  useAppStore().status = parsePublicStatus({
+    frontend_capabilities: capabilities,
   })
-  auth.checked = true
 
   const router = createRouter({
     history: createMemoryHistory(),
@@ -36,36 +27,45 @@ async function mountTabs(role: number) {
       { path: '/logs', name: 'logs', component: EmptyRoute },
       { path: '/logs/drawing', name: 'logs-drawing', component: EmptyRoute },
       { path: '/logs/tasks', name: 'logs-tasks', component: EmptyRoute },
-      {
-        path: '/logs/operations',
-        name: 'logs-operations',
-        component: EmptyRoute,
-      },
+      { path: '/logs/audit', name: 'logs-audit', component: EmptyRoute },
     ],
   })
   await router.push('/logs')
   await router.isReady()
 
   return mount(LogsNavTabs, {
-    props: { active: 'consume' },
+    props: { active },
     global: { plugins: [pinia, router, i18n] },
   })
 }
 
-beforeEach(async () => {
+beforeAll(async () => {
+  i18n.global.locale.value = 'zh-CN'
   await loadMessageDomain('console')
 })
 
-describe('operation log navigation tab', () => {
-  it('shows the fourth tab to administrators', async () => {
-    const wrapper = await mountTabs(10)
+describe('audit log navigation tab', () => {
+  it('shows the audit tab whenever the audit capability is live', async () => {
+    const wrapper = await mountTabs({ logs: 'live', audit: 'live' })
+    const audit = wrapper.find('a[href="/logs/audit"]')
     expect(wrapper.findAll('a')).toHaveLength(4)
-    expect(wrapper.find('a[href="/logs/operations"]').exists()).toBe(true)
+    expect(audit.exists()).toBe(true)
+    expect(audit.text()).toBe('审计日志')
   })
 
-  it('keeps ordinary users on the three self-service tabs', async () => {
-    const wrapper = await mountTabs(1)
-    expect(wrapper.findAll('a')).toHaveLength(3)
-    expect(wrapper.find('a[href="/logs/operations"]').exists()).toBe(false)
+  it.each<Record<string, string>>([{ audit: 'disabled' }, {}])(
+    'hides the audit tab when the capability is %j',
+    async (extra) => {
+      const wrapper = await mountTabs({ logs: 'live', ...extra })
+      expect(wrapper.findAll('a')).toHaveLength(3)
+      expect(wrapper.find('a[href="/logs/audit"]').exists()).toBe(false)
+    }
+  )
+
+  it('marks the audit tab as the current page', async () => {
+    const wrapper = await mountTabs({ audit: 'live' }, 'audit')
+    expect(
+      wrapper.find('a[href="/logs/audit"]').attributes('aria-current')
+    ).toBe('page')
   })
 })

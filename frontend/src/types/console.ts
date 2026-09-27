@@ -388,34 +388,38 @@ export interface LogItem {
   created: number
 }
 
-export type OperationLogKind = 'manage' | 'system' | 'login'
+export type AuditLogCategory =
+  'login' | 'security' | 'operation' | 'access_token' | 'system'
 
-export interface OperationLogActor {
+export interface AuditLogActor {
   id: number
   username: string
+  /** null when the server recorded no valid actor role (root-only rows). */
   role: number | null
   auth_method: string
 }
 
-export interface OperationLogRequest {
+export interface AuditLogRequest {
   method: string
   route: string
-  path: string
   status: number | null
-  success: boolean | null
+  success: boolean
 }
 
-export interface OperationLogItem extends Record<string, unknown> {
-  id: number
+/** One /api/audit(/self) row. The server has already applied role projection. */
+export interface AuditLogItem extends Record<string, unknown> {
+  event_id: string
   created_at: number
-  kind: OperationLogKind
+  category: AuditLogCategory
   action: string
   params: Record<string, unknown>
   content: string
-  actor: OperationLogActor
+  actor: AuditLogActor
+  token_ref: string
+  request_id: string
   ip: string
   user_agent: string
-  request: OperationLogRequest | null
+  request: AuditLogRequest
 }
 
 /* ------------------------------------------------------------------ */

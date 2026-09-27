@@ -631,22 +631,22 @@ func (user *User) finishInsert(inviterId int) {
 	}
 
 	if common.QuotaForNewUser > 0 {
-		RecordSystemAuditLog(user.Id, "Granted new user registration quota", "", "user.registration_bonus", map[string]interface{}{
+		RecordAccountSystemAuditLog(user.Id, "Granted new user registration quota", "user.registration_bonus", map[string]any{
 			"quota": common.QuotaForNewUser,
-		}, nil)
+		})
 	}
 	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
 		if common.QuotaForInvitee > 0 {
-			RecordSystemAuditLog(user.Id, "Granted invitee quota", "", "user.invitee_bonus", map[string]interface{}{
+			RecordAccountSystemAuditLog(user.Id, "Granted invitee quota", "user.invitee_bonus", map[string]any{
 				"quota":      common.QuotaForInvitee,
 				"inviter_id": inviterId,
-			}, nil)
+			})
 		}
 		if common.AffiliateActivatedAt == 0 && common.QuotaForInviter > 0 {
-			RecordSystemAuditLog(inviterId, "Granted inviter quota", "", "user.inviter_bonus", map[string]interface{}{
+			RecordAccountSystemAuditLog(inviterId, "Granted inviter quota", "user.inviter_bonus", map[string]any{
 				"quota":           common.QuotaForInviter,
 				"invited_user_id": user.Id,
-			}, nil)
+			})
 		}
 	}
 }
@@ -755,22 +755,22 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 	}
 
 	if common.QuotaForNewUser > 0 {
-		RecordSystemAuditLog(user.Id, "Granted new user registration quota", "", "user.registration_bonus", map[string]interface{}{
+		RecordAccountSystemAuditLog(user.Id, "Granted new user registration quota", "user.registration_bonus", map[string]any{
 			"quota": common.QuotaForNewUser,
-		}, nil)
+		})
 	}
 	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
 		if common.QuotaForInvitee > 0 {
-			RecordSystemAuditLog(user.Id, "Granted invitee quota", "", "user.invitee_bonus", map[string]interface{}{
+			RecordAccountSystemAuditLog(user.Id, "Granted invitee quota", "user.invitee_bonus", map[string]any{
 				"quota":      common.QuotaForInvitee,
 				"inviter_id": inviterId,
-			}, nil)
+			})
 		}
 		if common.AffiliateActivatedAt == 0 && common.QuotaForInviter > 0 {
-			RecordSystemAuditLog(inviterId, "Granted inviter quota", "", "user.inviter_bonus", map[string]interface{}{
+			RecordAccountSystemAuditLog(inviterId, "Granted inviter quota", "user.inviter_bonus", map[string]any{
 				"quota":           common.QuotaForInviter,
 				"invited_user_id": user.Id,
-			}, nil)
+			})
 		}
 	}
 }

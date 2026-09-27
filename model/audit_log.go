@@ -25,6 +25,8 @@ const (
 	AuditCategorySecurity    = "security"
 	AuditCategoryOperation   = "operation"
 	AuditCategoryAccessToken = "access_token"
+	// AuditCategorySystem records system-granted account events such as rewards.
+	AuditCategorySystem = "system"
 )
 
 // AuditLog is retained independently of usage logs and their cleanup/TTL policy.
@@ -59,6 +61,7 @@ type AuditLogFilter struct {
 	TokenRef        string
 	ExcludeTokenRef string
 	RequestId       string
+	Keyword         string // Literal substring of username, action, content or IP.
 	StartTimestamp  int64
 	EndTimestamp    int64
 	Success         *bool
@@ -105,41 +108,60 @@ func RecordAuditLog(c *gin.Context, entry AuditLog) {
 	if entry.EventId == "" {
 		entry.EventId = common.NewRequestId()
 	}
-	switch entry.ActorRole {
-	case common.RoleCommonUser, common.RoleAdminUser, common.RoleRootUser:
-	default:
+	if !validAuditActorRole(entry.ActorRole) {
 		logger.LogError(ctx, fmt.Sprintf("audit actor role unavailable (request_id=%s, actor_role=%d)", entry.RequestId, entry.ActorRole))
 		entry.ActorRole = 0 // Unknown actors remain visible to root only.
 	}
 	if entry.Username == "" {
 		entry.Username, _ = GetUsernameById(entry.UserId, false)
 	}
-	ua := []rune(entry.UserAgent)
-	if len(ua) > 512 {
-		entry.UserAgent = string(ua[:512])
-	}
-	if LOG_DB == nil {
-		logger.LogError(ctx, fmt.Sprintf("audit log write failed (request_id=%s): log database unavailable", entry.RequestId))
-		return
-	}
-	var row any = &entry
-	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
-		encoded, err := common.Marshal(entry.Other)
-		if err != nil {
-			logger.LogError(ctx, fmt.Sprintf("audit log write failed (request_id=%s): %v", entry.RequestId, err))
-			return
-		}
-		// The ClickHouse GORM insert callback passes structs to the native
-		// driver without resolving their Valuer. Bind this column's JSON
-		// encoding while retaining AuditOther in the domain and API models.
-		row = &struct {
-			AuditLog     `gorm:"embedded"`
-			EncodedOther string `gorm:"column:other;type:json"`
-		}{AuditLog: entry, EncodedOther: string(encoded)}
-	}
-	if err := LOG_DB.Table("audit_logs").Create(row).Error; err != nil {
+	entry.UserAgent = truncateAuditText(entry.UserAgent, 512)
+	if err := insertAuditLogs([]AuditLog{entry}); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("audit log write failed (request_id=%s): %v", entry.RequestId, err))
 	}
+}
+
+func validAuditActorRole(role int) bool {
+	return role == common.RoleCommonUser || role == common.RoleAdminUser || role == common.RoleRootUser
+}
+
+// truncateAuditText limits a value to the column's character length.
+func truncateAuditText(value string, limit int) string {
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit])
+}
+
+// insertAuditLogs is the only audit_logs write path, shared by live events and
+// the legacy backfill.
+func insertAuditLogs(entries []AuditLog) error {
+	if LOG_DB == nil {
+		return errors.New("log database unavailable")
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	if !common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		return LOG_DB.Table("audit_logs").Create(&entries).Error
+	}
+	// The ClickHouse GORM insert callback passes structs to the native driver
+	// without resolving their Valuer. Bind this column's JSON encoding while
+	// retaining AuditOther in the domain and API models.
+	type clickHouseAuditRow struct {
+		AuditLog     `gorm:"embedded"`
+		EncodedOther string `gorm:"column:other;type:json"`
+	}
+	rows := make([]clickHouseAuditRow, 0, len(entries))
+	for _, entry := range entries {
+		encoded, err := common.Marshal(entry.Other)
+		if err != nil {
+			return err
+		}
+		rows = append(rows, clickHouseAuditRow{AuditLog: entry, EncodedOther: string(encoded)})
+	}
+	return LOG_DB.Table("audit_logs").Create(&rows).Error
 }
 
 func GetAuditLogs(filter AuditLogFilter, start, limit, viewerRole int) ([]*AuditLog, int64, error) {
@@ -173,6 +195,19 @@ func GetAuditLogs(filter AuditLogFilter, start, limit, viewerRole int) ([]*Audit
 	if filter.RequestId != "" {
 		query = query.Where("request_id = ?", filter.RequestId)
 	}
+	if filter.Keyword != "" {
+		// Metadata JSON is excluded: it holds projection-stripped fields that
+		// must not become searchable by viewers who cannot read them.
+		columns := []string{"username", "action", "content", "ip"}
+		conditions := make([]string, 0, len(columns))
+		args := make([]any, 0, len(columns))
+		for _, column := range columns {
+			condition, pattern := buildLiteralLogContainsCondition(column, filter.Keyword)
+			conditions = append(conditions, condition)
+			args = append(args, pattern)
+		}
+		query = query.Where("("+strings.Join(conditions, " OR ")+")", args...)
+	}
 	if filter.StartTimestamp > 0 {
 		query = query.Where("created_at >= ?", filter.StartTimestamp)
 	}
@@ -197,6 +232,9 @@ func GetAuditLogs(filter AuditLogFilter, start, limit, viewerRole int) ([]*Audit
 		visibility = auditVisibilityAdmin
 	}
 	for _, entry := range logs {
+		if entry.Other.Op != nil {
+			entry.Other.Op.Params = sanitizeAuditParams(entry.Other.Op.Params)
+		}
 		if visibility != auditVisibilityRoot {
 			entry.Other.RootInfo = nil
 		}
@@ -261,7 +299,12 @@ func MigrateAuditLogs() error {
 }
 
 func ValidAuditCategory(category string) bool {
-	return category == "" || category == AuditCategoryLogin || category == AuditCategorySecurity || category == AuditCategoryOperation || category == AuditCategoryAccessToken
+	switch category {
+	case "", AuditCategoryLogin, AuditCategorySecurity, AuditCategoryOperation, AuditCategoryAccessToken, AuditCategorySystem:
+		return true
+	default:
+		return false
+	}
 }
 
 func ValidTokenFingerprint(value string) bool {

@@ -172,6 +172,106 @@ const VISUAL_ROUTE_CHANNELS = [
   ),
 ]
 
+// Raw audit_logs rows as /api/audit and /api/audit/self return them.
+function visualAuditRow(
+  id: number,
+  minutesAgo: number,
+  row: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    id,
+    event_id: `visual-audit-${id}`,
+    user_id: 1,
+    username: 'visual.root',
+    actor_role: 100,
+    created_at: Math.floor((FIXED_NOW - minutesAgo * 60_000) / 1000),
+    category: 'operation',
+    action: '',
+    token_ref: '',
+    auth_method: 'session',
+    ip: '198.51.100.9',
+    user_agent: 'Playwright',
+    method: 'POST',
+    route: '',
+    status: 200,
+    success: true,
+    request_id: `visual-request-${id}`,
+    content: '',
+    other: {},
+    ...row,
+  }
+}
+
+const VISUAL_AUDIT_ROWS = [
+  visualAuditRow(101, 12, {
+    username: 'administrator.with.an.extremely.long.account.name@example.test',
+    action: 'user.update',
+    ip: '203.0.113.25',
+    user_agent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Visual Audit Browser',
+    method: 'PUT',
+    route:
+      '/api/next/admin/users/:id/configuration/with/a/very/long/route/segment',
+    content: 'Updated user account',
+    other: {
+      op: {
+        action: 'user.update',
+        params: {
+          username:
+            'administrator.with.an.extremely.long.account.name@example.test',
+          changed_fields: ['status', 'group', 'quota'],
+        },
+      },
+    },
+  }),
+  visualAuditRow(100, 32, {
+    action: 'channel.update',
+    method: 'PUT',
+    route: '/api/channel/',
+    status: 500,
+    success: false,
+    content: 'Updated channel OpenAI Route 1',
+    other: {
+      op: {
+        action: 'channel.update',
+        params: { id: 7, name: 'OpenAI Route 1' },
+      },
+    },
+  }),
+  visualAuditRow(99, 65, {
+    user_id: 42,
+    username: 'security.user',
+    actor_role: 1,
+    category: 'security',
+    action: 'user.2fa_enable',
+    auth_method: '2fa',
+    ip: '2001:db8:4::21',
+    user_agent: 'Mobile Safari',
+    route: '/api/user/2fa/enable',
+    content: 'Enabled two-factor authentication',
+    other: { op: { action: 'user.2fa_enable', params: { method: 'totp' } } },
+  }),
+  visualAuditRow(98, 95, {
+    user_id: 27,
+    username: 'member.user',
+    actor_role: 1,
+    category: 'login',
+    action: 'login',
+    auth_method: 'password',
+    ip: '192.0.2.81',
+    user_agent: 'Chrome',
+    route: '/api/user/login',
+    content: 'Account signed in successfully',
+  }),
+]
+
+const VISUAL_AUDIT_PAGE = {
+  page: 1,
+  page_size: 10,
+  total: VISUAL_AUDIT_ROWS.length,
+  items: VISUAL_AUDIT_ROWS,
+}
+
 interface StablePageOptions {
   theme: VisualTheme
   user?: Partial<typeof VISUAL_USER>
@@ -405,6 +505,7 @@ export async function configureStablePage(
           invites: 'live',
           activity: 'live',
           token_private_routing: 'live',
+          audit: 'live',
           marketplace: 'disabled',
           invoices: 'disabled',
           lab: 'disabled',
@@ -624,115 +725,8 @@ export async function configureStablePage(
         today_quota: '92480',
       },
     ],
-    [
-      '/api/next/admin/operation-logs',
-      {
-        page: 1,
-        page_size: 10,
-        total: 4,
-        items: [
-          {
-            id: 101,
-            created_at: Math.floor((FIXED_NOW - 12 * 60_000) / 1000),
-            kind: 'manage',
-            action: 'user.update',
-            params: {
-              username:
-                'administrator.with.an.extremely.long.account.name@example.test',
-              changed_fields: ['status', 'group', 'quota'],
-            },
-            content: 'Updated user account',
-            actor: {
-              id: 1,
-              username:
-                'administrator.with.an.extremely.long.account.name@example.test',
-              role: 100,
-              auth_method: 'session',
-            },
-            ip: '203.0.113.25',
-            user_agent:
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Visual Audit Browser',
-            request: {
-              method: 'PUT',
-              route:
-                '/api/next/admin/users/:id/configuration/with/a/very/long/route/segment',
-              path: '/api/next/admin/users/42/configuration',
-              status: 200,
-              success: true,
-            },
-          },
-          {
-            id: 100,
-            created_at: Math.floor((FIXED_NOW - 32 * 60_000) / 1000),
-            kind: 'manage',
-            action: 'channel.update',
-            params: { id: 7, name: 'OpenAI Route 1' },
-            content: 'Updated channel OpenAI Route 1',
-            actor: {
-              id: 1,
-              username: 'visual.root',
-              role: 100,
-              auth_method: 'session',
-            },
-            ip: '198.51.100.9',
-            user_agent: 'Playwright',
-            request: {
-              method: 'PUT',
-              route: '/api/channel/',
-              path: '/api/channel/',
-              status: 500,
-              success: false,
-            },
-          },
-          {
-            id: 99,
-            created_at: Math.floor((FIXED_NOW - 65 * 60_000) / 1000),
-            kind: 'system',
-            action: 'user.2fa_enable',
-            params: { method: 'totp' },
-            content: 'Enabled two-factor authentication',
-            actor: {
-              id: 42,
-              username: 'security.user',
-              role: 1,
-              auth_method: '2fa',
-            },
-            ip: '2001:db8:4::21',
-            user_agent: 'Mobile Safari',
-            request: {
-              method: 'POST',
-              route: '/api/user/2fa/enable',
-              path: '/api/user/2fa/enable',
-              status: 200,
-              success: true,
-            },
-          },
-          {
-            id: 98,
-            created_at: Math.floor((FIXED_NOW - 95 * 60_000) / 1000),
-            kind: 'login',
-            action: 'login',
-            params: { method: 'password' },
-            content: 'Account signed in successfully',
-            actor: {
-              id: 27,
-              username: 'member.user',
-              role: null,
-              auth_method: 'password',
-            },
-            ip: '192.0.2.81',
-            user_agent: 'Chrome',
-            request: {
-              method: 'POST',
-              route: '/api/user/login',
-              path: '/api/user/login',
-              status: 200,
-              success: true,
-            },
-          },
-        ],
-      },
-    ],
+    ['/api/audit', VISUAL_AUDIT_PAGE],
+    ['/api/audit/self', VISUAL_AUDIT_PAGE],
     [
       '/api/next/activity/self',
       {

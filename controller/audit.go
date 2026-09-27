@@ -100,28 +100,6 @@ func markAuditLogged(c *gin.Context) {
 	common.SetContextKey(c, constant.ContextKeyAuditLogged, true)
 }
 
-func successfulAuditInfo(c *gin.Context) map[string]interface{} {
-	status := c.Writer.Status()
-	if status <= 0 {
-		status = 200
-	}
-	info := map[string]interface{}{
-		"method":     c.Request.Method,
-		"route":      c.FullPath(),
-		"path":       c.Request.URL.Path,
-		"status":     status,
-		"success":    true,
-		"user_agent": c.Request.UserAgent(),
-	}
-	if c.GetInt("id") > 0 {
-		info["auth_method"] = auditAuthMethod(c)
-		if role, ok := c.Get("role"); ok {
-			info["actor_role"] = role
-		}
-	}
-	return info
-}
-
 // recordManageAudit 记录一条由操作者本人归属的管理/高危审计日志（资源类操作：
 // 渠道 / 系统设置 / 兑换码等）。content 由 action+params 自动渲染。
 func recordManageAudit(c *gin.Context, action string, params map[string]interface{}) {
@@ -152,8 +130,10 @@ func recordUserSecurityAudit(c *gin.Context, userId int, action string, params m
 	model.RecordAccountOperationAuditLog(userId, c.GetInt("role"), auditContentEN(action, params), c.ClientIP(), action, params, nil, &model.AuditRequestInfo{Status: c.Writer.Status(), Success: success}, c)
 }
 
-func recordUserSystemAudit(c *gin.Context, userId int, action string, params map[string]interface{}) {
-	model.RecordSystemAuditLog(userId, auditContentEN(action, params), c.ClientIP(), action, params, successfulAuditInfo(c))
+// recordUserSystemAudit 记录用户在请求中获得的系统发放事件（如签到奖励），
+// 请求元数据由 RecordAuditLog 从上下文统一采集。
+func recordUserSystemAudit(c *gin.Context, userId int, action string, params map[string]any) {
+	model.RecordAccountSystemAuditLog(userId, auditContentEN(action, params), action, params, c)
 }
 
 func recordPasskeyDomainAudit(c *gin.Context, change *model.PasskeyDomainChange, confirmed bool, err error) {
@@ -182,8 +162,6 @@ func recordPasskeyDomainAudit(c *gin.Context, change *model.PasskeyDomainChange,
 	model.RecordAccountOperationAuditLog(c.GetInt("id"), c.GetInt("role"), auditContentEN(action, params), c.ClientIP(), action, params, &model.AuditAdminInfo{AdminID: c.GetInt("id"), AdminRole: c.GetInt("role"), AdminUsername: c.GetString("username"), AuthMethod: auditAuthMethod(c)}, auditInfo, c)
 	markAuditLogged(c)
 }
-
-// auditContentEN 按 action 模板渲染英文兜底文本；未登记的 action 退回 action 本身。
 
 // Token handlers provide selected metadata only; raw request bodies and keys never enter audits.
 func setTokenAuditParams(c *gin.Context, fields model.AuditFields) {

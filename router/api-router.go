@@ -311,8 +311,6 @@ func SetApiRouter(router *gin.Engine) {
 			adminOrderRoute.GET("", controller.NextListAdminOrders)
 			adminOrderRoute.GET("/stats", controller.NextGetAdminOrderStats)
 			adminOrderRoute.GET("/:order_no", controller.NextGetAdminOrder)
-
-			nextAdminRoute.GET("/operation-logs", controller.GetOperationLogs)
 		}
 
 		optionRoute := apiRouter.Group("/option")

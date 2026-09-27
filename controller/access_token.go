@@ -3,6 +3,8 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
@@ -71,7 +73,11 @@ func GetAuditLogs(c *gin.Context) {
 		common.ApiErrorMsg(c, "Invalid audit pagination")
 		return
 	}
-	filter := model.AuditLogFilter{Username: c.Query("username"), Category: c.Query("category"), TokenRef: c.Query("token_ref"), ExcludeTokenRef: c.Query("exclude_token_ref"), RequestId: c.Query("request_id")}
+	filter := model.AuditLogFilter{Username: c.Query("username"), Category: c.Query("category"), TokenRef: c.Query("token_ref"), ExcludeTokenRef: c.Query("exclude_token_ref"), RequestId: c.Query("request_id"), Keyword: strings.TrimSpace(c.Query("keyword"))}
+	if utf8.RuneCountInString(filter.Keyword) > 128 {
+		common.ApiErrorMsg(c, "Invalid audit keyword")
+		return
+	}
 	viewerRole := c.GetInt("role")
 	if c.FullPath() == "/api/audit/self" {
 		filter.UserId = c.GetInt("id")

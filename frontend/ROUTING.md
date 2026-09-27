@@ -2,17 +2,17 @@
 
 Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`。路由定义以 `src/router/` 为准，控制台菜单与访问条件统一维护在 `src/constants/navigation/consoleNav.ts`；API 路径与鉴权遵循现有 Go 接口。
 
-| 域       | 规范路径                                                                                                                           | 访问约束                                |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| 公共     | `/`、`/about`、`/pricing/:modelId?`、`/rankings`、法律文档、错误页                                                                 | 公开模块/法律文档配置                   |
-| 认证     | `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`、`/oauth/:provider`、`/setup`                                                 | 当前 Bearer/refresh 会话                |
-| 用户     | `/dashboard`、`/models`、`/keys`、`/keys/:id/routing`、`/wallet`、`/activity`、`/invite`、`/profile`、`/settings`、`/tickets/:id?` | 会话和模块 capability                   |
-| 日志     | `/usage-logs`、`/usage-logs/drawing`、`/usage-logs/task`、`/usage-logs/operations`                                                 | logs capability；操作日志需 Admin       |
-| 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                                   | Admin 和已有权限规则                    |
-| 模型管理 | `/models/metadata`、`/models/vendors`、`/models/prefill-groups`                                                                    | Admin，admin capability                 |
-| 系统     | `/system-settings/:domain/:section?`、`/system-info`                                                                               | Root，admin capability                  |
-| 账务对账 | `/billing/reconciliations`                                                                                                         | Root，billing_reconciliation capability |
-| 延期模块 | 市场、发票、Farm、Bigame、Lab                                                                                                      | 保留源码，capability 未开放时拒绝进入   |
+| 域       | 规范路径                                                                                                                           | 访问约束                                                              |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 公共     | `/`、`/about`、`/pricing/:modelId?`、`/rankings`、法律文档、错误页                                                                 | 公开模块/法律文档配置                                                 |
+| 认证     | `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`、`/oauth/:provider`、`/setup`                                                 | 当前 Bearer/refresh 会话                                              |
+| 用户     | `/dashboard`、`/models`、`/keys`、`/keys/:id/routing`、`/wallet`、`/activity`、`/invite`、`/profile`、`/settings`、`/tickets/:id?` | 会话和模块 capability                                                 |
+| 日志     | `/usage-logs`、`/usage-logs/drawing`、`/usage-logs/task`、`/usage-logs/audit`                                                      | logs capability；审计日志需 audit capability，全部账号需 `audit:read` |
+| 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                                   | Admin 和已有权限规则                                                  |
+| 模型管理 | `/models/metadata`、`/models/vendors`、`/models/prefill-groups`                                                                    | Admin，admin capability                                               |
+| 系统     | `/system-settings/:domain/:section?`、`/system-info`                                                                               | Root，admin capability                                                |
+| 账务对账 | `/billing/reconciliations`                                                                                                         | Root，billing_reconciliation capability                               |
+| 延期模块 | 市场、发票、Farm、Bigame、Lab                                                                                                      | 保留源码，capability 未开放时拒绝进入                                 |
 
 普通用户模型目录使用 `/models`，管理 metadata 使用 `/models/metadata`；供应商与预填组路径跳转到模型管理页的对应视图。控制台共享布局，页面路径使用根路径，布局与语言包由 metadata 指定。Admin 为角色值 ≥10，Root 为 ≥100；渠道和工单管理还检查相应资源权限。
 
@@ -21,6 +21,7 @@ Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`�
 ## 兼容边界
 
 - `src/router/legacyRoutes.ts` 集中转换旧书签、日志 tab 和设置 section，守卫保留 query/hash。未知页面落入 404，不将未知控制台路径当作首页。
+- 旧账号审计 `/audit` 进入 `/usage-logs/audit`；旧操作日志 `/usage-logs/operations`、`/logs/operations` 进入 `/usage-logs/audit?scope=all`。无 `audit:read` 权限时页面仍只读取本人记录。
 - `/next` 和 `/next/*` 已退休：Go 返回 HTTP 404，Vue 内部导航进入 404 页面，不再转换旧书签。
 - `/api`、`/api/next`、Relay 和 `/dashboard/billing` 是后端命名空间，缺失接口返回 JSON 404。绝不清理 API 尾斜杠：`/api/models` 是用户目录，`/api/models/` 是管理 metadata。
 - 已退出的 Playground、Chat、Chat2Link、Chat Presets、模型部署及其旧前缀路径返回 404；Vue 内部导航也拒绝进入。

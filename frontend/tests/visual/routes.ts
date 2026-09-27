@@ -47,7 +47,7 @@ export const VISUAL_ROUTES: VisualRoute[] = [
   { name: 'market', path: '/market' },
   { name: 'keys', path: '/keys' },
   { name: 'logs', path: '/usage-logs' },
-  { name: 'operation-logs', path: '/usage-logs/operations' },
+  { name: 'audit-logs', path: '/usage-logs/audit' },
   { name: 'channels', path: '/channels' },
   { name: 'users', path: '/users' },
   { name: 'redemption', path: '/redemption-codes' },

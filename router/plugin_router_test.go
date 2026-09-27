@@ -911,6 +911,14 @@ func TestWebFallbackDoesNotCacheMissingAPIOrAssets(t *testing.T) {
 	assert.Equal(t, "no-cache", page.Header().Get("Cache-Control"))
 }
 
+func TestRetiredOperationLogRouteIsGone(t *testing.T) {
+	outer := gin.New()
+	SetApiRouter(outer)
+	// Audit events are read only through /api/audit(/self).
+	response := performPluginRequest(outer, http.MethodGet, "/api/next/admin/operation-logs")
+	assert.Equal(t, http.StatusNotFound, response.Code)
+}
+
 func TestSecurityRoutesDisableCachingBeforeAuthentication(t *testing.T) {
 	outer := gin.New()
 	SetApiRouter(outer)
