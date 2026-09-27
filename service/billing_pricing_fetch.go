@@ -105,6 +105,7 @@ func fetchPricingSource(ctx context.Context, client *http.Client, spec billingPr
 	}
 	updated := previous
 	updated.Source, updated.Document, updated.Hash = string(spec.Source), model.LongText(data), hash
+	updated.URL, updated.RemoteHash, updated.ParserVersion = spec.URL, remoteHash, autopricing.ParserVersion
 	updated.ETag, updated.LastModified = headers.Get("ETag"), headers.Get("Last-Modified")
 	updated.ModelCount = len(entries)
 	changed := !validCache || hash != previous.Hash

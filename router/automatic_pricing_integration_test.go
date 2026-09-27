@@ -27,8 +27,8 @@ func publishAutomaticGatewayFixture(t *testing.T, name, document string) {
 	entry, exists := entries[name]
 	require.True(t, exists)
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(document)))
-	require.NoError(t, model.DB.AutoMigrate(&model.BillingPricingSource{}))
-	require.NoError(t, model.EnsureBillingPricingSource(context.Background(), &model.BillingPricingSource{Source: string(entry.Source), Hash: hash, Document: model.LongText(document)}))
+	require.NoError(t, model.DB.AutoMigrate(&model.BillingPricingSource{}, &model.BillingPricingSnapshot{}))
+	require.NoError(t, model.EnsureBillingPricingSource(context.Background(), &model.BillingPricingSource{ParserVersion: autopricing.ParserVersion, Source: string(entry.Source), Hash: hash, Document: model.LongText(document)}))
 	published, err := model.PublishAutomaticBillingPrice(context.Background(), entry.Price, string(entry.Source), entry.SourceModel, hash)
 	require.NoError(t, err)
 	require.True(t, published)
@@ -128,10 +128,8 @@ func TestGatewayAutomaticServiceTierFrozenSettlement(t *testing.T) {
 		quota common.Quota
 	}{
 		{"priority", 1200},
-		{"fast", 1200},
-		{"ultrafast", 1200},
 		{"flex", 300},
-		{"unknown", 600},
+		{"default", 600},
 	} {
 		t.Run(test.tier, func(t *testing.T) {
 			base, key, _ := setupGatewaySDKWithUpstream(t, func(w http.ResponseWriter, r *http.Request) {
@@ -142,7 +140,7 @@ func TestGatewayAutomaticServiceTierFrozenSettlement(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(w, `{"id":"automatic-tier","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1000,"completion_tokens":100,"total_tokens":1100}}`)
 			})
-			publishAutomaticGatewayFixture(t, "automatic-tier-model", `{"automatic-tier-model":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`)
+			publishAutomaticGatewayFixture(t, "automatic-tier-model", `{"automatic-tier-model":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"input_cost_per_token_priority":0.000002,"output_cost_per_token_priority":0.000004,"input_cost_per_token_flex":0.0000005,"output_cost_per_token_flex":0.000001}}`)
 			payload, err := common.Marshal(map[string]any{"model": "automatic-tier-model", "messages": []map[string]string{{"role": "user", "content": "hello"}}, "service_tier": test.tier})
 			require.NoError(t, err)
 			request, err := http.NewRequest(http.MethodPost, base+"/v1/chat/completions", strings.NewReader(string(payload)))
@@ -167,7 +165,7 @@ func TestGatewayAutomaticServiceTierFrozenSettlement(t *testing.T) {
 			require.NoError(t, common.UnmarshalJsonStr(recovery.ChargeSnapshot, &charge))
 			assert.Equal(t, test.tier, quote.Attributes["service_tier"])
 			assert.Equal(t, test.quota, charge.FinalQuota)
-			_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "automatic-tier-model", Mode: billing.ModeExpression, Expression: "p * 100"}, quote.PriceVersion.ID, 1)
+			_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "automatic-tier-model", Mode: billing.ModeExpression, Expression: "p * 100"}, quote.PriceVersion.ID, 1)
 			require.NoError(t, err)
 			replayed, err := billing.Calculate(&quote, usage)
 			require.NoError(t, err)
@@ -189,7 +187,7 @@ func TestGatewayManualServiceTierKeepsCaseSensitiveExpression(t *testing.T) {
 	require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 	current, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
 	require.NoError(t, err)
-	_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "gpt-4o-mini", Mode: billing.ModeExpression, Expression: `p * (attr("service_tier") == "FAST" ? 7 : 1)`}, current.ID, 1)
+	_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "gpt-4o-mini", Mode: billing.ModeExpression, Support: &billing.PricingSupport{Dimensions: []string{"p", "c"}, ServiceTiers: []string{"default", "FAST"}}, Expression: `p * (attr("service_tier") == "FAST" ? 7 : 1) + c * 0`}, current.ID, 1)
 	require.NoError(t, err)
 	status, body := gatewayLegacyOperationRequest(t, base, key, "/v1/chat/completions", `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}],"service_tier":"FAST"}`)
 	require.Equal(t, http.StatusOK, status, body)
@@ -236,7 +234,7 @@ func TestGatewayAutomaticUnavailablePriceStopsAliasFallback(t *testing.T) {
 	assert.Zero(t, user.ReservedQuota)
 	assert.Zero(t, user.UsedQuota)
 	for _, name := range []string{"gpt-5.4-high", "gpt-5.4@effort:high@thinking:on"} {
-		_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: name, Mode: billing.ModeExpression, Expression: "p * 3"}, 0, 1)
+		_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: name, Mode: billing.ModeExpression, Expression: "p * 3 + c * 0"}, 0, 1)
 		require.NoError(t, err)
 	}
 	for _, name := range []string{"gpt-5.4-high", "gpt-5.4@effort:high"} {
@@ -287,4 +285,21 @@ func TestGatewayDispatchedQuoteSettlesAfterAutomaticPriceStops(t *testing.T) {
 	var count int64
 	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&count).Error)
 	assert.EqualValues(t, 1, count)
+}
+
+func TestGatewayAutomaticUnverifiedServiceTierStopsBeforeReserve(t *testing.T) {
+	for _, tier := range []string{"priority", "fast", "ultrafast", "flex", "unknown"} {
+		t.Run(tier, func(t *testing.T) {
+			var sends atomic.Int32
+			base, key, _ := setupGatewaySDKWithUpstream(t, func(w http.ResponseWriter, r *http.Request) { sends.Add(1) })
+			publishAutomaticGatewayFixture(t, "unsupported-tier", `{"unsupported-tier":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`)
+			payload := fmt.Sprintf(`{"model":"unsupported-tier","messages":[{"role":"user","content":"hello"}],"service_tier":%q}`, tier)
+			status, body := gatewayLegacyOperationRequest(t, base, key, "/v1/chat/completions", payload)
+			assert.Equal(t, http.StatusServiceUnavailable, status, body)
+			assert.Zero(t, sends.Load())
+			var count int64
+			require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&count).Error)
+			assert.Zero(t, count)
+		})
+	}
 }

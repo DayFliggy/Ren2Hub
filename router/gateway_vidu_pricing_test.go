@@ -34,7 +34,7 @@ func TestGatewayViduFixedPriceReservesAndSettlesOnce(t *testing.T) {
 		require.NoError(t, channel.AddAbilities(model.DB))
 	}
 	require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
-	price, err := service.ValidateTaskPluginPricePublication(billing.PriceVersion{
+	price, err := service.ValidateTaskPluginPricePublication(billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
 		Model: "viduq2", Mode: billing.ModeUnitPrice,
 		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.25"}},
 	}, "vidu")

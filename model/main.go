@@ -1,7 +1,6 @@
 package model
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/url"
@@ -323,6 +322,7 @@ func migrateDB() error {
 		&BillingPriceVersion{},
 		&BillingActivePrice{},
 		&BillingPricingSource{},
+		&BillingPricingSnapshot{},
 		&BillingPricingConfig{},
 		&CustomOAuthProvider{},
 		&UserOAuthBinding{},
@@ -342,9 +342,6 @@ func migrateDB() error {
 	}
 	if err := migrateBillingPriceModelIdentity(DB); err != nil {
 		return err
-	}
-	if err := MigrateBillingPriceOrigins(context.Background()); err != nil {
-		return fmt.Errorf("migrate billing price origins: %w", err)
 	}
 	if err := migrateRoutingModels(DB); err != nil {
 		return err

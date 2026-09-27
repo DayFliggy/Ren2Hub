@@ -50,7 +50,7 @@ func TestGatewayFactoryCompletionFactsProtectReservedFunds(t *testing.T) {
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			plugin, ok := jsplugin.DefaultRegistry.Get(test.key)
 			require.True(t, ok)
-			price := billing.PriceVersion{Model: test.model, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.25"}}}
+			price := billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: test.model, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.25"}}}
 			var err error
 			if test.expression != "" {
 				price, err = plugins.FrozenTaskPriceVersion(plugin.Meta, test.model, test.expression)

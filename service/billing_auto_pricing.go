@@ -13,6 +13,7 @@ import (
 
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/autopricing"
+	"github.com/QuantumNous/new-api/pkg/billing"
 )
 
 //go:embed pricingdata/*.json.gz
@@ -42,6 +43,9 @@ type AutomaticPricingSourceStatus struct {
 	ModelCount    int    `json:"model_count"`
 	RejectedCount int    `json:"rejected_count"`
 	SnapshotState string `json:"snapshot_state"`
+	SnapshotID    int64  `json:"snapshot_id"`
+	SnapshotCount int64  `json:"snapshot_count"`
+	ParserVersion string `json:"parser_version"`
 }
 
 type AutomaticPricingStatus struct {
@@ -72,11 +76,8 @@ type AutomaticPricingUnconfigured struct {
 }
 
 // InitializeAutomaticPricing performs no network I/O and never replaces a
-// persisted snapshot. Ownership migration also runs when publication is off.
+// persisted snapshot.
 func InitializeAutomaticPricing(ctx context.Context) error {
-	if err := model.MigrateBillingPriceOrigins(ctx); err != nil {
-		return err
-	}
 	rows, err := model.ListBillingPricingSources(ctx)
 	if err != nil {
 		return err
@@ -109,7 +110,7 @@ func InitializeAutomaticPricing(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("bundled %s: %w", spec.Source, err)
 		}
-		row := model.BillingPricingSource{Source: string(spec.Source), Document: model.LongText(data), Hash: pricingDocumentHash(data), ModelCount: len(entries)}
+		row := model.BillingPricingSource{Source: string(spec.Source), Document: model.LongText(data), Hash: pricingDocumentHash(data), ModelCount: len(entries), URL: spec.URL, ParserVersion: autopricing.ParserVersion}
 		if err := model.EnsureBillingPricingSource(ctx, &row); err != nil {
 			return err
 		}
@@ -143,6 +144,7 @@ func GetAutomaticPricingStatus(ctx context.Context) (*AutomaticPricingStatus, er
 	for _, spec := range billingPricingSources {
 		row := bySource[string(spec.Source)]
 		status := AutomaticPricingSourceStatus{Source: string(spec.Source), URL: spec.URL, Role: spec.Role, Hash: row.Hash, CheckedAt: row.CheckedAt, UpdatedAt: row.UpdatedAt, LastError: row.LastError, SnapshotState: "unavailable"}
+		status.SnapshotID, status.SnapshotCount, status.ParserVersion = row.SnapshotID, row.SnapshotCount, row.ParserVersion
 		if row.Document != "" {
 			entries, rejected, parseErr := autopricing.ParseWithReport(spec.Source, []byte(row.Document))
 			if pricingDocumentHash([]byte(row.Document)) != row.Hash {
@@ -170,9 +172,6 @@ func SyncAutomaticPricing(ctx context.Context) (*AutomaticPricingSyncResult, err
 
 func syncAutomaticPricing(ctx context.Context, client *http.Client, sources []billingPricingSourceSpec) (*AutomaticPricingSyncResult, error) {
 	result := &AutomaticPricingSyncResult{Unconfigured: []string{}, UnconfiguredDetails: []AutomaticPricingUnconfigured{}, Errors: []string{}}
-	if err := model.MigrateBillingPriceOrigins(ctx); err != nil {
-		return result, err
-	}
 	for _, spec := range billingPricingSources {
 		if err := model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: string(spec.Source)}); err != nil {
 			return result, err
@@ -200,6 +199,7 @@ func syncAutomaticPricing(ctx context.Context, client *http.Client, sources []bi
 		row.CheckedAt, row.LastError = time.Now().Unix(), ""
 		result.Checked++
 		if fetchErr != nil {
+			billing.RecordSourceRefreshFailure(string(spec.Source))
 			row.LastError = boundedPricingDiagnostic(fetchErr.Error(), 512)
 			message := fmt.Sprintf("%s: %s", spec.Source, row.LastError)
 			result.Errors = append(result.Errors, message)

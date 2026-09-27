@@ -79,7 +79,7 @@ func TestAutomaticBillingPricingConfigurationAndTaskAPI(t *testing.T) {
 func TestRestoreAutomaticBillingPriceUsesExpectedVersionAndPreservesManualOnConflict(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.BillingPriceVersion{}, &model.BillingActivePrice{}, &model.BillingPricingSource{}, &model.Channel{}))
+	require.NoError(t, db.AutoMigrate(&model.BillingPriceVersion{}, &model.BillingActivePrice{}, &model.BillingPricingSource{}, &model.BillingPricingSnapshot{}, &model.Channel{}))
 	previous := model.DB
 	model.DB = db
 	t.Cleanup(func() {
@@ -91,13 +91,13 @@ func TestRestoreAutomaticBillingPriceUsesExpectedVersionAndPreservesManualOnConf
 	ctx := context.Background()
 	document := `{"restore-model":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008}}`
 	for _, source := range []string{"sub2api", "axonhub"} {
-		row := model.BillingPricingSource{Source: source}
+		row := model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: source}
 		if source == "sub2api" {
 			row.Document, row.Hash = model.LongText(document), fmt.Sprintf("%x", sha256.Sum256([]byte(document)))
 		}
 		require.NoError(t, model.EnsureBillingPricingSource(ctx, &row))
 	}
-	manual, err := model.PublishBillingPrice(ctx, billing.PriceVersion{Model: "restore-model", Mode: billing.ModeFree}, 0, 1)
+	manual, err := model.PublishBillingPrice(ctx, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "restore-model", Mode: billing.ModeFree}, 0, 1)
 	require.NoError(t, err)
 	for _, test := range []struct {
 		body   string
@@ -123,4 +123,46 @@ func TestRestoreAutomaticBillingPriceUsesExpectedVersionAndPreservesManualOnConf
 			assert.NotEqual(t, manual.ID, current.ID)
 		}
 	}
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/?source=sub2api&limit=20", nil)
+	ListAutomaticBillingPricingSnapshots(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var history struct {
+		Data []model.BillingPricingSnapshot `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &history))
+	require.Len(t, history.Data, 1)
+	assert.Positive(t, history.Data[0].ID)
+	assert.NotEmpty(t, history.Data[0].Hash)
+	assert.Equal(t, "autopricing-v3", history.Data[0].ParserVersion)
+	assert.NotContains(t, recorder.Body.String(), "input_cost_per_token")
+	snapshotID := history.Data[0].ID
+	for _, download := range []bool{false, true} {
+		recorder = httptest.NewRecorder()
+		c, _ = gin.CreateTestContext(recorder)
+		address := "/"
+		if download {
+			address += "?download=1"
+		}
+		c.Request = httptest.NewRequest(http.MethodGet, address, nil)
+		c.Params = gin.Params{{Key: "id", Value: fmt.Sprint(snapshotID)}}
+		GetAutomaticBillingPricingSnapshot(c)
+		require.Equal(t, http.StatusOK, recorder.Code)
+		if download {
+			assert.Equal(t, document, recorder.Body.String())
+			assert.Equal(t, history.Data[0].Hash, recorder.Header().Get("X-Pricing-SHA256"))
+		} else {
+			var detail struct {
+				Data struct {
+					Document string `json:"document"`
+				} `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &detail))
+			assert.Equal(t, document, detail.Data.Document)
+		}
+	}
+	require.NoError(t, db.Session(&gorm.Session{SkipHooks: true}).Model(&model.BillingPricingSnapshot{}).Where("id = ?", snapshotID).Update("document", "corrupted").Error)
+	_, err = model.GetBillingPricingSnapshot(ctx, snapshotID)
+	require.ErrorContains(t, err, "integrity mismatch")
 }

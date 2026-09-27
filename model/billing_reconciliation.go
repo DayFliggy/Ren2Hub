@@ -154,6 +154,7 @@ func ResolveBillingReconciliation(ctx context.Context, id int64, actor int, comm
 }
 
 type BillingMetrics struct {
+	Operational          billing.OperationalMetrics `json:"operational" gorm:"-"`
 	PriceVersions        int64                      `json:"price_versions"`
 	QuoteAttempts        int64                      `json:"quote_attempts"`
 	PricesByOrigin       []BillingPriceOriginMetric `json:"prices_by_origin" gorm:"-"`
@@ -175,6 +176,7 @@ type BillingPriceOriginMetric struct {
 
 func ReadBillingMetrics(ctx context.Context) (BillingMetrics, error) {
 	var result BillingMetrics
+	result.Operational = billing.ReadOperationalMetrics()
 	q := DB.WithContext(ctx)
 	if err := q.Model(&BillingPriceVersion{}).Count(&result.PriceVersions).Error; err != nil {
 		return result, err

@@ -27,6 +27,9 @@ func sub2APICatalog(root rawObject) ([]catalogRecord, error) {
 		record := catalogRecord{key: id, model: id, err: err}
 		if err == nil {
 			record.plan, record.err = sub2APIPlan(item)
+			for i := range record.plan.evidence {
+				record.plan.evidence[i].SourcePath = "/" + jsonPointerToken(id) + record.plan.evidence[i].SourcePath
+			}
 		}
 		records = append(records, record)
 	}
@@ -38,7 +41,8 @@ var subDimensions = map[string]string{
 	"cache_read_input_token_cost": "cr", "input_cost_per_token_cache_hit": "cr",
 	"cache_creation_input_token_cost": "cc", "cache_creation_input_token_cost_above_1hr": "cc1h",
 	"input_cost_per_image_token": "img", "output_cost_per_image_token": "img_o", "cache_read_input_image_token_cost": "img_cr",
-	"input_cost_per_audio_token": "ai", "output_cost_per_audio_token": "ao", "output_cost_per_image": "images",
+	"input_cost_per_audio_token": "ai", "cache_read_input_audio_token_cost": "ai_cr", "output_cost_per_audio_token": "ao", "output_cost_per_image": "images",
+	"output_cost_per_reasoning_token": "reasoning",
 }
 var contextSuffix = regexp.MustCompile(`_above_([0-9]+)k_tokens$`)
 
@@ -55,7 +59,7 @@ func sub2APIPlan(item rawObject) (pricePlan, error) {
 		if key == "tiered_pricing" || key == "long_context_input_token_threshold" || key == "long_context_threshold_inclusive" || key == "long_context_input_cost_multiplier" || key == "long_context_output_cost_multiplier" || key == "long_context_cache_read_cost_multiplier" {
 			continue
 		}
-		if key == "output_cost_per_reasoning_token" || key == "search_context_cost_per_query" {
+		if key == "search_context_cost_per_query" {
 			continue
 		}
 		baseKey := key
@@ -98,15 +102,18 @@ func sub2APIPlan(item rawObject) (pricePlan, error) {
 		if err := addRate(patches[service][threshold], dimension, item[key], scale); err != nil {
 			return plan, fmt.Errorf("%s: %w", key, err)
 		}
-	}
-	if raw, exists := item["output_cost_per_reasoning_token"]; exists {
-		value, err := amount(raw, 6)
-		if err != nil {
-			return plan, err
+		unit, conversion := "usd_per_token", "multiply_by_1000000"
+		if scale == 0 {
+			unit, conversion = "usd_per_image", "identity"
 		}
-		if output, exists := plan.standard.base["c"]; !exists || !value.Equal(output) {
-			return plan, unsafePrice("unsupported separate reasoning price")
+		target := "default."
+		if service != "" {
+			target = service + "."
 		}
+		if threshold > 0 {
+			target += fmt.Sprintf("above_%d.", threshold)
+		}
+		plan.evidence = append(plan.evidence, billing.PriceFieldEvidence{Target: target + dimension, SourcePath: "/" + jsonPointerToken(key), RawValue: string(item[key]), SourceUnit: unit, Conversion: conversion})
 	}
 	if raw, exists := item["search_context_cost_per_query"]; exists {
 		search, err := object(raw)
@@ -136,6 +143,9 @@ func sub2APIPlan(item rawObject) (pricePlan, error) {
 		}
 		for _, name := range names {
 			plan.extras = append(plan.extras, billing.UnitPrice{Quantity: "tool:" + name, Unit: "per_call", Price: price})
+			for _, size := range []string{"search_context_size_low", "search_context_size_medium", "search_context_size_high"} {
+				plan.evidence = append(plan.evidence, billing.PriceFieldEvidence{Target: "tool:" + name, SourcePath: "/search_context_cost_per_query/" + size, RawValue: string(search[size]), SourceUnit: "usd_per_call", Conversion: "equal_context_prices_provider_tool_mapping"})
+			}
 		}
 	}
 	// Image generation can expose only an image-output price. Preserve that
@@ -144,6 +154,13 @@ func sub2APIPlan(item rawObject) (pricePlan, error) {
 		if _, exists := plan.standard.base["c"]; !exists {
 			if value, exists := plan.standard.base["img_o"]; exists {
 				plan.standard.base["c"] = value
+				for _, field := range plan.evidence {
+					if field.Target == "default.img_o" {
+						field.Target, field.Conversion = "default.c", "multiply_by_1000000_image_output_fallback"
+						plan.evidence = append(plan.evidence, field)
+						break
+					}
+				}
 			}
 		}
 	}
@@ -151,6 +168,17 @@ func sub2APIPlan(item rawObject) (pricePlan, error) {
 		if threshold > 0 {
 			plan.standard.tiers = append(plan.standard.tiers, priceTier{threshold: threshold, rates: values})
 		}
+	}
+	thresholds := make(map[int64]bool)
+	for _, byThreshold := range patches {
+		for threshold := range byThreshold {
+			if threshold > 0 {
+				thresholds[threshold] = true
+			}
+		}
+	}
+	if len(thresholds) > 1 {
+		return plan, unsafePrice("multiple context thresholds require an explicit pricing contract")
 	}
 	if raw, exists := item["tiered_pricing"]; exists {
 		if len(plan.standard.tiers) > 0 {
@@ -209,6 +237,11 @@ func sub2APIPlan(item rawObject) (pricePlan, error) {
 		if threshold > 0 {
 			plan.standard.tiers = append(plan.standard.tiers, priceTier{threshold: threshold, inclusive: inclusive, rates: values})
 		}
+		for _, key := range []string{"long_context_input_token_threshold", "long_context_threshold_inclusive", "long_context_input_cost_multiplier", "long_context_output_cost_multiplier", "long_context_cache_read_cost_multiplier"} {
+			if raw, exists := item[key]; exists {
+				plan.evidence = append(plan.evidence, billing.PriceFieldEvidence{Target: "context_schedule", SourcePath: "/" + key, RawValue: string(raw), SourceUnit: "context_policy", Conversion: "single_threshold_source_policy"})
+			}
+		}
 	}
 	for i := range plan.standard.tiers {
 		tier := &plan.standard.tiers[i]
@@ -224,7 +257,12 @@ func sub2APIPlan(item rawObject) (pricePlan, error) {
 			continue
 		}
 		basePatch := byThreshold[0]
-		s := schedule{base: overlay(plan.standard.base, basePatch)}
+		for dimension := range plan.standard.base {
+			if _, exists := basePatch[dimension]; !exists {
+				return plan, missingPrice("incomplete " + service + " price for " + dimension)
+			}
+		}
+		s := schedule{base: overlay(nil, basePatch)}
 		standardRates := plan.standard.base
 		sort.Slice(plan.standard.tiers, func(i, j int) bool { return plan.standard.tiers[i].threshold < plan.standard.tiers[j].threshold })
 		for _, tier := range plan.standard.tiers {
@@ -251,7 +289,7 @@ func sub2APIPlan(item rawObject) (pricePlan, error) {
 
 func subRangeTiers(plan *pricePlan, item rawObject, raw common.RawMessage) error {
 	var tiers []rawObject
-	if err := common.Unmarshal(raw, &tiers); err != nil || len(tiers) == 0 {
+	if err := common.Unmarshal(raw, &tiers); err != nil || len(tiers) == 0 || len(tiers) > 2 {
 		return unsafePrice("invalid tiered_pricing")
 	}
 	previousEnd := int64(0)
@@ -266,6 +304,7 @@ func subRangeTiers(plan *pricePlan, item rawObject, raw common.RawMessage) error
 		if err := common.Unmarshal(tier["range"], &bounds); err != nil || len(bounds) != 2 {
 			return unsafePrice("invalid context range")
 		}
+		plan.evidence = append(plan.evidence, billing.PriceFieldEvidence{Target: "context_range", SourcePath: fmt.Sprintf("/tiered_pricing/%d/range", i), RawValue: string(tier["range"]), SourceUnit: "tokens", Conversion: "single_context_threshold"})
 		lower, err := amount(bounds[0], 0)
 		if err != nil || !lower.Equal(decimal.NewFromInt(previousEnd)) {
 			return unsafePrice("non-contiguous context ranges")
@@ -290,6 +329,11 @@ func subRangeTiers(plan *pricePlan, item rawObject, raw common.RawMessage) error
 			if err := addRate(values, dimension, tier[key], scale); err != nil {
 				return err
 			}
+			unit, conversion := "usd_per_token", "multiply_by_1000000"
+			if scale == 0 {
+				unit, conversion = "usd_per_image", "identity"
+			}
+			plan.evidence = append(plan.evidence, billing.PriceFieldEvidence{Target: fmt.Sprintf("context_%d.%s", i, dimension), SourcePath: fmt.Sprintf("/tiered_pricing/%d/%s", i, jsonPointerToken(key)), RawValue: string(tier[key]), SourceUnit: unit, Conversion: conversion})
 		}
 		if _, exists := values["p"]; !exists {
 			return missingPrice("missing tier input price")

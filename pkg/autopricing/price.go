@@ -26,9 +26,12 @@ type pricePlan struct {
 	services   map[string]schedule
 	extras     []billing.UnitPrice
 	usageScope string
+	evidence   []billing.PriceFieldEvidence
 }
 
-var dimensionOrder = []string{"p", "c", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao", "images"}
+var dimensionOrder = []string{"p", "c", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ai_cr", "ao", "reasoning", "images"}
+
+const ParserVersion = "autopricing-v3"
 
 func amount(raw common.RawMessage, scale int32) (decimal.Decimal, error) {
 	text := strings.TrimSpace(string(raw))
@@ -94,13 +97,30 @@ func (plan pricePlan) version(model string) (billing.PriceVersion, error) {
 		// The image count owns image output; exclude those tokens from the
 		// residual text output line instead of charging both representations.
 		base["img_o"] = decimal.Zero
+		for _, field := range plan.evidence {
+			if field.Target == "default.images" {
+				field.Target, field.Conversion = "default.img_o", "exclude_image_tokens_owned_by_per_image_charge"
+				plan.evidence = append(plan.evidence, field)
+				break
+			}
+		}
 	}
 	if !input || (!output && plan.usageScope != billing.UsageScopeEmbedding) {
 		if !(images && len(base) == 1 && len(plan.standard.tiers) == 0 && len(plan.services) == 0) {
 			return billing.PriceVersion{}, missingPrice("missing explicit input/output price")
 		}
 	}
-	version := billing.PriceVersion{Model: model, Mode: billing.ModeUnitPrice, UsageScope: plan.usageScope, Prices: append([]billing.UnitPrice(nil), plan.extras...)}
+	version := billing.PriceVersion{Model: model, Mode: billing.ModeUnitPrice, UsageScope: plan.usageScope, Prices: append([]billing.UnitPrice(nil), plan.extras...),
+		Provenance: &billing.PriceProvenance{Kind: "source", ParserVersion: ParserVersion, Fields: plan.evidence},
+		Support:    &billing.PricingSupport{ServiceTiers: []string{"default"}},
+	}
+	for dimension := range base {
+		version.Support.Dimensions = append(version.Support.Dimensions, dimension)
+	}
+	for _, extra := range plan.extras {
+		version.Support.Dimensions = append(version.Support.Dimensions, extra.Quantity)
+	}
+	sort.Strings(version.Support.Dimensions)
 	if images {
 		version.Prices = append(version.Prices, billing.UnitPrice{Quantity: "images", Unit: "per_image", Price: base["images"].String()})
 		delete(base, "images")
@@ -127,24 +147,17 @@ func (plan pricePlan) version(model string) (billing.PriceVersion, error) {
 	if err != nil {
 		return version, err
 	}
-	branches := make(map[string]string, 2)
-	for _, service := range []struct {
-		name, multiplier string
-	}{{"priority", "2"}, {"flex", "0.5"}} {
-		branch := "(" + standard + ") * " + service.multiplier
-		if explicit, exists := plan.services[service.name]; exists {
-			branch, err = scheduleExpression(explicit, union)
+	expression := standard
+	for _, name := range []string{"flex", "priority"} {
+		if explicit, exists := plan.services[name]; exists {
+			branch, err := scheduleExpression(explicit, union)
 			if err != nil {
 				return version, err
 			}
+			expression = "attr(\"service_tier\") == \"" + name + "\" ? (" + branch + ") : (" + expression + ")"
+			version.Support.ServiceTiers = append(version.Support.ServiceTiers, name)
 		}
-		branches[service.name] = branch
 	}
-	// Freeze the service policy with the token schedule. Separate image/tool
-	// lines do not participate, and explicit partial schedules inherit base rates.
-	expression := "attr(\"service_tier\") == \"priority\" || attr(\"service_tier\") == \"fast\" ? (" + branches["priority"] + ") : " +
-		"attr(\"service_tier\") == \"ultrafast\" ? ((" + standard + ") * 2) : " +
-		"attr(\"service_tier\") == \"flex\" ? (" + branches["flex"] + ") : (" + standard + ")"
 	version.Mode = billing.ModeExpression
 	version.Expression = "v1:" + expression
 	return billing.PreparePriceVersion(version)
@@ -178,6 +191,9 @@ func (plan pricePlan) normalizeEmbedding() error {
 }
 
 func scheduleExpression(s schedule, union map[string]bool) (string, error) {
+	if len(s.tiers) > 1 {
+		return "", unsafePrice("multiple context thresholds require an explicit pricing contract")
+	}
 	sort.Slice(s.tiers, func(i, j int) bool { return s.tiers[i].threshold < s.tiers[j].threshold })
 	current := s.base
 	branches := make([]string, 0, len(s.tiers)+1)
@@ -216,22 +232,7 @@ func ratesExpression(values rates, union map[string]bool) (string, error) {
 		}
 		value, exists := values[dimension]
 		if !exists {
-			if dimension == "img_cr" {
-				return "", unsafePrice("incomplete image-cache tier schedule")
-			}
-			// UsedVars spans every branch. A category absent in this branch must
-			// retain its ordinary token rate after canonical normalization.
-			fallback := "p"
-			if dimension == "c" || dimension == "img_o" || dimension == "ao" {
-				fallback = "c"
-			}
-			if dimension == "images" {
-				return "", unsafePrice("incomplete per-image schedule")
-			}
-			value, exists = values[fallback]
-			if !exists {
-				return "", missingPrice("incomplete token schedule")
-			}
+			return "", missingPrice("incomplete price schedule for " + dimension)
 		}
 		if _, err := amount(common.RawMessage(value.String()), 0); err != nil {
 			return "", err
@@ -249,10 +250,6 @@ func ratesExpression(values rates, union map[string]bool) (string, error) {
 }
 
 func rejectUnknownPrice(key string, raw common.RawMessage) error {
-	value, err := amount(raw, 0)
-	if err == nil && value.IsZero() {
-		return nil
-	}
 	return unsafePrice(fmt.Sprintf("unsupported charge dimension %s", key))
 }
 

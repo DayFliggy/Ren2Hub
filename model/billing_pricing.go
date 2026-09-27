@@ -137,9 +137,32 @@ func publishBillingPriceWithDB(tx *gorm.DB, version billing.PriceVersion, public
 	version.Origin = publication.origin
 	version.SourceModel = publication.sourceModel
 	version.SourceHash = publication.sourceHash
+	version.Provenance = billing.ClonePriceProvenance(version.Provenance)
+	if publication.automatic {
+		if version.Provenance == nil || version.Provenance.Kind != "source" || version.Provenance.ParserVersion == "" || version.Support == nil {
+			return nil, false, fmt.Errorf("automatic price requires field evidence and a support contract")
+		}
+		var snapshot BillingPricingSnapshot
+		if err := tx.Where("source = ? AND hash = ?", publication.origin, publication.sourceHash).Take(&snapshot).Error; err != nil {
+			return nil, false, fmt.Errorf("automatic price snapshot: %w", err)
+		}
+		if version.Provenance.SnapshotID != 0 && version.Provenance.SnapshotID != snapshot.ID {
+			return nil, false, fmt.Errorf("automatic price snapshot mismatch")
+		}
+		version.Provenance.SnapshotID = snapshot.ID
+	} else if version.Provenance == nil || (version.Provenance.Kind != "evidence" && version.Provenance.Kind != "retail") {
+		return nil, false, fmt.Errorf("manual price requires source evidence or a retail explanation")
+	}
 	version, err := billing.PreparePriceVersion(version)
 	if err != nil {
 		return nil, false, err
+	}
+	now := time.Now()
+	if version.EffectiveFrom != nil && now.Before(*version.EffectiveFrom) {
+		return nil, false, fmt.Errorf("immediate publication cannot activate a future price")
+	}
+	if version.EffectiveTo != nil && !now.Before(*version.EffectiveTo) {
+		return nil, false, fmt.Errorf("immediate publication cannot activate an expired price")
 	}
 	// Automatic catalogs are global model prices. Channel-specific prices are
 	// explicit operator decisions and must not be overwritten by a source

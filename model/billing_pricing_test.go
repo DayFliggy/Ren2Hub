@@ -2,7 +2,6 @@ package model
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -18,7 +17,7 @@ func setupBillingPricingDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&BillingPriceVersion{}, &BillingActivePrice{}, &BillingPricingSource{}))
+	require.NoError(t, db.AutoMigrate(&BillingPriceVersion{}, &BillingActivePrice{}, &BillingPricingSource{}, &BillingPricingSnapshot{}))
 	previous := DB
 	mainType, logType := common.MainDatabaseType(), common.LogDatabaseType()
 	DB = db
@@ -37,7 +36,7 @@ func TestPublishedPricesUseCanonicalDecimalAPIStrings(t *testing.T) {
 	setupBillingPricingDB(t)
 	for _, test := range []struct{ input, expected string }{{"1e-6", "0.000001"}, {"01.20", "1.2"}, {"+1.25", "1.25"}, {".1", "0.1"}} {
 		t.Run(test.input, func(t *testing.T) {
-			version, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Model: test.input, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: test.input}}}, 0, 1)
+			version, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: test.input, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: test.input}}}, 0, 1)
 			require.NoError(t, err)
 			assert.Equal(t, test.expected, version.Prices[0].Price)
 			restored, err := GetActiveBillingPrice(context.Background(), test.input)
@@ -50,7 +49,7 @@ func TestPublishedPricesUseCanonicalDecimalAPIStrings(t *testing.T) {
 func TestPublishedBillingPriceVersionsAreImmutableAndConflictChecked(t *testing.T) {
 	db := setupBillingPricingDB(t)
 	ctx := context.Background()
-	version := billing.PriceVersion{Model: "model", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}}}
+	version := billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "model", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}}}
 	first, err := PublishBillingPrice(ctx, version, 0, 1)
 	require.NoError(t, err)
 	require.Positive(t, first.ID)
@@ -77,12 +76,12 @@ func TestPublishedBillingPriceVersionsAreImmutableAndConflictChecked(t *testing.
 func TestChannelScopedPricePrecedesExplicitGlobalFallback(t *testing.T) {
 	setupBillingPricingDB(t)
 	ctx := context.Background()
-	global, err := PublishBillingPrice(ctx, billing.PriceVersion{
+	global, err := PublishBillingPrice(ctx, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
 		Model: "scoped-model", Mode: billing.ModeUnitPrice,
 		Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "1"}},
 	}, 0, 1)
 	require.NoError(t, err)
-	channel, err := PublishBillingPrice(ctx, billing.PriceVersion{
+	channel, err := PublishBillingPrice(ctx, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
 		ScopeKind: billing.PriceScopeChannel, ChannelID: 42,
 		Model: "scoped-model", Mode: billing.ModeUnitPrice,
 		Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "3"}},
@@ -104,7 +103,7 @@ func TestChannelScopedPricePrecedesExplicitGlobalFallback(t *testing.T) {
 func TestUnavailableChannelScopeDoesNotFallBackToGlobal(t *testing.T) {
 	db := setupBillingPricingDB(t)
 	ctx := context.Background()
-	global, err := PublishBillingPrice(ctx, billing.PriceVersion{
+	global, err := PublishBillingPrice(ctx, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
 		Model: "blocked-channel-model", Mode: billing.ModeUnitPrice,
 		Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "1"}},
 	}, 0, 1)
@@ -117,31 +116,28 @@ func TestUnavailableChannelScopeDoesNotFallBackToGlobal(t *testing.T) {
 
 func TestAutomaticPublicationRejectsChannelScope(t *testing.T) {
 	setupBillingPricingDB(t)
-	ctx := context.Background()
-	hash := strings.Repeat("a", 64)
-	require.NoError(t, SaveBillingPricingSource(ctx, &BillingPricingSource{Source: BillingPriceOriginSub2API, Document: `{}`, Hash: hash}))
-	_, err := PublishAutomaticBillingPrice(ctx, billing.PriceVersion{
-		ScopeKind: billing.PriceScopeChannel, ChannelID: 42, Model: "automatic-channel-model",
-		Mode:   billing.ModeUnitPrice,
-		Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "1"}},
-	}, BillingPriceOriginSub2API, "automatic-channel-model", hash)
+	source, entries := installPricingSnapshot(t, "sub2api", `{"automatic-channel-model":{"input_cost_per_token":0.000001,"output_cost_per_token":0}}`)
+	draft := entries["automatic-channel-model"].Price
+	draft.ScopeKind = billing.PriceScopeChannel
+	draft.ChannelID = 42
+	_, err := PublishAutomaticBillingPrice(context.Background(), draft, "sub2api", draft.Model, source.Hash)
 	assert.ErrorContains(t, err, "automatic billing prices must use global model scope")
 }
 
 func TestManualPublicationKeepsIndependentChannelPointers(t *testing.T) {
 	setupBillingPricingDB(t)
 	ctx := context.Background()
-	global, err := PublishBillingPrice(ctx, billing.PriceVersion{
+	global, err := PublishBillingPrice(ctx, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
 		Model: "manual-scope-model", Mode: billing.ModeUnitPrice,
 		Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "1"}},
 	}, 0, 1)
 	require.NoError(t, err)
-	channel, err := PublishBillingPrice(ctx, billing.PriceVersion{
+	channel, err := PublishBillingPrice(ctx, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
 		ScopeKind: billing.PriceScopeChannel, ChannelID: 17, Model: "manual-scope-model", Mode: billing.ModeUnitPrice,
 		Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}},
 	}, 0, 1)
 	require.NoError(t, err)
-	updated, err := PublishBillingPrice(ctx, billing.PriceVersion{
+	updated, err := PublishBillingPrice(ctx, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
 		ScopeKind: billing.PriceScopeChannel, ChannelID: 17, Model: "manual-scope-model", Mode: billing.ModeUnitPrice,
 		Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "3"}},
 	}, channel.ID, 1)
@@ -158,9 +154,9 @@ func TestManualPublicationKeepsIndependentChannelPointers(t *testing.T) {
 func TestPublishBillingPriceCanonicalizesTierFlatFeeAndWindow(t *testing.T) {
 	setupBillingPricingDB(t)
 	ctx := context.Background()
-	from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	from := time.Now().UTC().Add(-time.Hour)
 	to := from.Add(24 * time.Hour)
-	version, err := PublishBillingPrice(ctx, billing.PriceVersion{
+	version, err := PublishBillingPrice(ctx, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
 		Model: "tiered-model", Mode: billing.ModeUnitPrice, FlatFee: "01.20",
 		EffectiveFrom: &from, EffectiveTo: &to,
 		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", TierMode: billing.TierModeGraduated, Tiers: []billing.PriceTier{
@@ -177,101 +173,27 @@ func TestPublishBillingPriceCanonicalizesTierFlatFeeAndWindow(t *testing.T) {
 	assert.Equal(t, version, loaded)
 }
 
-func TestPublishedPriceFreezesAuthoritativeProvenance(t *testing.T) {
+func TestManualPriceRequiresEvidenceAndCurrentWindow(t *testing.T) {
 	setupBillingPricingDB(t)
 	ctx := context.Background()
-	hash := strings.Repeat("b", 64)
-	require.NoError(t, SaveBillingPricingSource(ctx, &BillingPricingSource{Source: BillingPriceOriginAxonHub, Document: `{}`, Hash: hash}))
-	manual, err := PublishBillingPrice(ctx, billing.PriceVersion{
-		Model: "provenance-model", Mode: billing.ModeUnitPrice,
-		Origin: "forged", SourceModel: "forged-provider", SourceHash: "invalid",
-		Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "1"}},
-	}, 0, 1)
+	draft := billing.PriceVersion{Model: "proof", Mode: billing.ModeFree}
+	_, err := PublishBillingPrice(ctx, draft, 0, 1)
+	require.ErrorContains(t, err, "retail explanation")
+	draft.Provenance = &billing.PriceProvenance{Kind: "retail", RetailReason: "promotional free model"}
+	future := time.Now().Add(time.Hour)
+	draft.EffectiveFrom = &future
+	_, err = PublishBillingPrice(ctx, draft, 0, 1)
+	require.ErrorContains(t, err, "future")
+	draft.EffectiveFrom = nil
+	expired := time.Now().Add(-time.Hour)
+	draft.EffectiveTo = &expired
+	_, err = PublishBillingPrice(ctx, draft, 0, 1)
+	require.ErrorContains(t, err, "expired")
+	draft.EffectiveTo = nil
+	draft.Origin = "forged"
+	draft.SourceHash = "forged"
+	version, err := PublishBillingPrice(ctx, draft, 0, 1)
 	require.NoError(t, err)
-	assert.Equal(t, BillingPriceOriginManual, manual.Origin)
-	assert.Empty(t, manual.SourceModel)
-	assert.Empty(t, manual.SourceHash)
-	quote, err := billing.NewQuote(*manual, "1", nil, time.Now())
-	require.NoError(t, err)
-	restored, err := RestoreAutomaticBillingPrice(ctx, *manual, BillingPriceOriginAxonHub, "provider/provenance-model", hash, manual.ID)
-	require.NoError(t, err)
-	assert.NotEqual(t, manual.ID, restored.ID)
-	assert.NotEqual(t, manual.Hash, restored.Hash)
-	assert.Equal(t, BillingPriceOriginAxonHub, restored.Origin)
-	assert.Equal(t, "provider/provenance-model", restored.SourceModel)
-	assert.Equal(t, hash, restored.SourceHash)
-	assert.Equal(t, BillingPriceOriginManual, quote.PriceVersion.Origin)
-	assert.Empty(t, quote.PriceVersion.SourceHash)
-	loaded, err := GetActiveBillingPrice(ctx, manual.Model)
-	require.NoError(t, err)
-	assert.Equal(t, restored, loaded)
-}
-
-func TestInitialBillingCatalogIsAtomicAndRestartSafe(t *testing.T) {
-	db := setupBillingPricingDB(t)
-	ctx := context.Background()
-	versions, unconfigured, err := InitialBillingPriceCatalog()
-	require.NoError(t, err)
-	require.NotEmpty(t, versions)
-	assert.Contains(t, unconfigured, "dall-e-3")
-	for _, version := range versions {
-		require.NoError(t, billing.ValidatePriceVersion(version), version.Model)
-	}
-	require.NoError(t, SeedBillingPriceVersions(ctx))
-	require.NoError(t, SeedBillingPriceVersions(ctx))
-	active, err := ListActiveBillingPrices(ctx)
-	require.NoError(t, err)
-	assert.Len(t, active, len(versions))
-	var count int64
-	require.NoError(t, db.Model(&BillingPriceVersion{}).Count(&count).Error)
-	assert.Equal(t, int64(len(versions)), count)
-	price, err := GetActiveBillingPrice(ctx, "gpt-4o")
-	require.NoError(t, err)
-	assert.Equal(t, "2.5", func() string {
-		for _, p := range price.Prices {
-			if p.Quantity == "p" {
-				return p.Price
-			}
-		}
-		return ""
-	}())
-}
-
-// SeedBillingPriceVersions recreates the retired installer only for legacy
-// compatibility tests. Production installs use the automatic source catalogs.
-func SeedBillingPriceVersions(ctx context.Context) error {
-	versions, _, err := InitialBillingPriceCatalog()
-	if err != nil {
-		return err
-	}
-	return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var count int64
-		if err := tx.Model(&BillingPriceVersion{}).Count(&count).Error; err != nil {
-			return err
-		}
-		if count != 0 {
-			return nil
-		}
-		for _, version := range versions {
-			if err := billing.ValidateFrozenPriceVersion(version); err != nil {
-				return err
-			}
-			definition, err := common.Marshal(version)
-			if err != nil {
-				return err
-			}
-			hash, err := billing.Hash(version)
-			if err != nil {
-				return err
-			}
-			row := BillingPriceVersion{ScopeKind: version.ScopeKind, ChannelID: version.ChannelID, Model: version.Model, Definition: string(definition), Hash: hash, CreatedAt: time.Now().Unix()}
-			if err := tx.Create(&row).Error; err != nil {
-				return err
-			}
-			if err := tx.Create(&BillingActivePrice{Model: version.Model, ChannelID: version.ChannelID, VersionID: row.ID}).Error; err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	assert.Equal(t, BillingPriceOriginManual, version.Origin)
+	assert.Empty(t, version.SourceHash)
 }

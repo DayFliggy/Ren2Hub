@@ -3,6 +3,7 @@ package autopricing
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -13,9 +14,11 @@ import (
 // the catalog assembler decides whether a bare alias is unambiguous.
 func axonHubCatalog(root rawObject) ([]catalogRecord, error) {
 	providers := root
+	rootPath := ""
 	if raw, exists := root["providers"]; exists {
 		var err error
 		providers, err = object(raw)
+		rootPath = "/providers"
 		if err != nil {
 			return nil, fmt.Errorf("invalid axonhub providers: %w", err)
 		}
@@ -29,12 +32,14 @@ func axonHubCatalog(root rawObject) ([]catalogRecord, error) {
 			return nil, fmt.Errorf("invalid axonhub provider identity")
 		}
 		raw := bytes.TrimSpace(providers[provider])
+		modelPath := rootPath + "/" + jsonPointerToken(provider)
 		if len(raw) == 0 || raw[0] != '[' {
 			item, err := object(raw)
 			if err != nil {
 				return nil, fmt.Errorf("invalid axonhub provider %s: %w", provider, err)
 			}
 			raw = bytes.TrimSpace(item["models"])
+			modelPath += "/models"
 		}
 		if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
 			return nil, fmt.Errorf("missing axonhub models for %s", provider)
@@ -44,12 +49,12 @@ func axonHubCatalog(root rawObject) ([]catalogRecord, error) {
 			if err := common.Unmarshal(raw, &models); err != nil {
 				return nil, fmt.Errorf("invalid axonhub models array for %s", provider)
 			}
-			for _, value := range models {
+			for index, value := range models {
 				item, err := object(value)
 				if err != nil || rawString(item["id"]) == "" {
 					return nil, fmt.Errorf("unidentified axonhub model for %s", provider)
 				}
-				records = append(records, axonHubRecord(provider, rawString(item["id"]), item, nil))
+				records = append(records, axonHubRecord(provider, rawString(item["id"]), item, nil, modelPath+"/"+strconv.Itoa(index)))
 			}
 			continue
 		}
@@ -69,13 +74,13 @@ func axonHubCatalog(root rawObject) ([]catalogRecord, error) {
 					itemErr = unsafePrice("invalid model id")
 				}
 			}
-			records = append(records, axonHubRecord(provider, id, item, itemErr))
+			records = append(records, axonHubRecord(provider, id, item, itemErr, modelPath+"/"+jsonPointerToken(key)))
 		}
 	}
 	return records, nil
 }
 
-func axonHubRecord(provider, id string, item rawObject, err error) catalogRecord {
+func axonHubRecord(provider, id string, item rawObject, err error, path string) catalogRecord {
 	qualified := id
 	if !strings.HasPrefix(id, provider+"/") {
 		qualified = provider + "/" + id
@@ -83,11 +88,14 @@ func axonHubRecord(provider, id string, item rawObject, err error) catalogRecord
 	record := catalogRecord{key: qualified, model: id, alias: id, err: err}
 	if err == nil {
 		record.plan, record.err = axonHubPlan(item)
+		for i := range record.plan.evidence {
+			record.plan.evidence[i].SourcePath = path + record.plan.evidence[i].SourcePath
+		}
 	}
 	return record
 }
 
-var axonDimensions = map[string]string{"input": "p", "output": "c", "cache_read": "cr", "cacheRead": "cr", "cache_write": "cc", "cacheWrite": "cc", "input_audio": "ai", "output_audio": "ao"}
+var axonDimensions = map[string]string{"input": "p", "output": "c", "cache_read": "cr", "cacheRead": "cr", "cache_write": "cc", "cacheWrite": "cc", "input_audio": "ai", "cache_read_audio": "ai_cr", "output_audio": "ao", "reasoning": "reasoning"}
 
 func axonHubPlan(item rawObject) (pricePlan, error) {
 	plan := pricePlan{standard: schedule{base: make(rates)}}
@@ -106,6 +114,7 @@ func axonHubPlan(item rawObject) (pricePlan, error) {
 	if err != nil {
 		return plan, err
 	}
+	plan.evidence = append(plan.evidence, axonEvidence(cost, "/cost", "default")...)
 	var legacyTier rates
 	if raw, exists := cost["context_over_200k"]; exists {
 		tier, err := object(raw)
@@ -117,13 +126,14 @@ func axonHubPlan(item rawObject) (pricePlan, error) {
 			return plan, err
 		}
 		legacyTier = values
+		plan.evidence = append(plan.evidence, axonEvidence(tier, "/cost/context_over_200k", "context")...)
 	}
 	if raw, exists := cost["tiers"]; exists {
 		var tiers []rawObject
 		if err := common.Unmarshal(raw, &tiers); err != nil {
 			return plan, unsafePrice("invalid context tiers")
 		}
-		for _, tier := range tiers {
+		for index, tier := range tiers {
 			selector, err := object(tier["tier"])
 			if err != nil || rawString(selector["type"]) != "context" {
 				return plan, unsafePrice("unsupported tier selector")
@@ -137,6 +147,9 @@ func axonHubPlan(item rawObject) (pricePlan, error) {
 				return plan, err
 			}
 			plan.standard.tiers = append(plan.standard.tiers, priceTier{threshold: threshold, rates: values})
+			path := "/cost/tiers/" + strconv.Itoa(index)
+			plan.evidence = append(plan.evidence, axonEvidence(tier, path, "context")...)
+			plan.evidence = append(plan.evidence, billing.PriceFieldEvidence{Target: "context_threshold", SourcePath: path + "/tier/size", RawValue: string(selector["size"]), SourceUnit: "tokens", Conversion: "single_context_threshold"})
 		}
 	}
 	if legacyTier != nil {
@@ -176,7 +189,7 @@ func equalRates(a, b rates) bool {
 func axonRates(cost rawObject) (rates, error) {
 	values := make(rates)
 	for _, key := range keys(cost) {
-		if key == "context_over_200k" || key == "tiers" || key == "tier" || key == "reasoning" {
+		if key == "context_over_200k" || key == "tiers" || key == "tier" {
 			continue
 		}
 		dimension, known := axonDimensions[key]
@@ -190,14 +203,15 @@ func axonRates(cost rawObject) (rates, error) {
 			return nil, err
 		}
 	}
-	if raw, exists := cost["reasoning"]; exists {
-		value, err := amount(raw, 0)
-		if err != nil {
-			return nil, err
-		}
-		if output, exists := values["c"]; !exists || !value.Equal(output) {
-			return nil, unsafePrice("unsupported separate reasoning price")
+	return values, nil
+}
+
+func axonEvidence(cost rawObject, path, target string) []billing.PriceFieldEvidence {
+	var fields []billing.PriceFieldEvidence
+	for _, key := range keys(cost) {
+		if dimension, known := axonDimensions[key]; known {
+			fields = append(fields, billing.PriceFieldEvidence{Target: target + "." + dimension, SourcePath: path + "/" + jsonPointerToken(key), RawValue: string(cost[key]), SourceUnit: "usd_per_million_tokens", Conversion: "identity"})
 		}
 	}
-	return values, nil
+	return fields
 }

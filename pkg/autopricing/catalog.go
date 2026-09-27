@@ -140,11 +140,20 @@ func cloneEntry(entry Entry) Entry {
 	// Keep PreparePriceVersion's empty-array representation stable. A nil
 	// slice would change the draft hash and defeat unchanged-price detection.
 	entry.Price.Prices = append(make([]billing.UnitPrice, 0, len(entry.Price.Prices)), entry.Price.Prices...)
+	entry.Price.Provenance = billing.ClonePriceProvenance(entry.Price.Provenance)
+	entry.Price.Support = billing.ClonePricingSupport(entry.Price.Support)
 	return entry
+}
+
+func jsonPointerToken(value string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(value, "~", "~0"), "/", "~1")
 }
 
 func samePrice(a, b Entry) bool {
 	a.Price.Model, b.Price.Model = "", ""
+	// Identical duplicate array entries have different JSON pointers. Evidence
+	// location does not turn an otherwise identical provider price into a conflict.
+	a.Price.Provenance, b.Price.Provenance = nil, nil
 	x, errA := common.Marshal(a.Price)
 	y, errB := common.Marshal(b.Price)
 	return errA == nil && errB == nil && string(x) == string(y)

@@ -46,7 +46,7 @@ func TestFactoryCompletionFactsPreserveInvalidAndZeroUsage(t *testing.T) {
 			}
 			// A persisted quote is evaluated independently of whether today's
 			// publication policy permits this factory's reservation estimate.
-			quote, err := billing.NewQuote(billing.PriceVersion{Model: factory.model, Mode: billing.ModeExpression,
+			quote, err := billing.NewQuote(billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: factory.model, Mode: billing.ModeExpression,
 				Expression: fmt.Sprintf(`v2:u(%q) * 0.4`, factory.field),
 				UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
 					factory.field: {Type: "number", Unit: factory.unit, Source: billingexpr.UsageCompletionFact, Required: true, Minimum: "0", Maximum: fmt.Sprint(maximum)},
@@ -174,6 +174,7 @@ func TestHailuoPublishedResolutionPriceReachesPrecharge(t *testing.T) {
 	require.NoError(t, err)
 	price, err = service.ValidateTaskPluginPricePublication(price, "hailuo")
 	require.NoError(t, err)
+	price.Provenance = &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test resolution price"}
 	_, err = model.PublishBillingPrice(context.Background(), price, 0, 1)
 	require.NoError(t, err)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -245,7 +246,7 @@ export function extractUsageOnComplete(ctx,result,body){return {resolution:body.
 	updated := model.TaskPlugin{Key: "hailuo", Version: current.Meta.Version, Factory: true,
 		Source: model.LongText(currentSource), SourceHash: current.SourceHash}
 	require.NoError(t, model.SaveTaskPlugin(&updated))
-	price, err := model.PublishBillingPrice(t.Context(), billing.PriceVersion{Model: "T2V-01", Mode: billing.ModeExpression,
+	price, err := model.PublishBillingPrice(t.Context(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "T2V-01", Mode: billing.ModeExpression,
 		Expression: `v2:u("resolution") == "720P" ? 1 + u("input_images") * 0.2 : 2`,
 		UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
 			"resolution":   {Type: "string", Source: billingexpr.UsageCompletionFact, Enum: []string{"720P"}, Required: true},

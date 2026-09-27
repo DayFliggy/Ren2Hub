@@ -16,7 +16,7 @@ func settledBillingAuditEvidence(t *testing.T) (BillingRecovery, []BillingAttemp
 	db := setupBillingRecoveryTestDB(t)
 	require.NoError(t, db.AutoMigrate(&BillingPriceVersion{}, &BillingActivePrice{}))
 	seedBillingAccount(t, db, 1000, 1000, false)
-	version, err := PublishBillingPrice(context.Background(), billing.PriceVersion{
+	version, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
 		Model: "audit-model", ScopeKind: billing.PriceScopeChannel, ChannelID: 7,
 		Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}},
 	}, 0, 1)

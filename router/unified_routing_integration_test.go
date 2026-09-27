@@ -115,7 +115,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 				require.NoError(t, db.Create(channel).Error)
 				if scope == billing.PriceScopeChannel {
 					for _, name := range strings.Split(test.models, ",") {
-						_, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{
+						_, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
 							ScopeKind: scope, ChannelID: channel.Id, Model: name, Mode: billing.ModeUnitPrice,
 							Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.0006"}},
 						}, 0, 1)

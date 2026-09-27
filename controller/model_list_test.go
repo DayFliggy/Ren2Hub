@@ -115,7 +115,7 @@ func withTieredBillingConfig(t *testing.T, modes map[string]string, exprs map[st
 
 	for name, mode := range modes {
 		require.Equal(t, "tiered_expr", mode)
-		_, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: name, Mode: billing.ModeExpression, Expression: exprs[name]}, 0, 1)
+		_, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: name, Mode: billing.ModeExpression, Expression: exprs[name]}, 0, 1)
 		if strings.TrimSpace(exprs[name]) == "" {
 			require.Error(t, err)
 		} else {

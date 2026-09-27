@@ -33,6 +33,7 @@ type automaticPriceCatalog struct {
 type automaticPriceMatch struct {
 	entry   autopricing.Entry
 	reasons []AutomaticPricingRejection
+	err     error
 }
 
 func loadAutomaticPriceCatalog(ctx context.Context) (*automaticPriceCatalog, error) {
@@ -69,6 +70,8 @@ func loadAutomaticPriceCatalog(ctx context.Context) (*automaticPriceCatalog, err
 				source.rejections[rejection.Model] = rejection.Reason
 			}
 			for name, entry := range entries {
+				entry.Price.Provenance.SnapshotID = row.SnapshotID
+				entry.Price.Origin, entry.Price.SourceModel, entry.Price.SourceHash = string(spec.Source), entry.SourceModel, row.Hash
 				validationErr := reasoning.ValidateBillingModelName(name)
 				if validationErr == nil && (len(name) > 255 || len(entry.SourceModel) > 255) {
 					validationErr = fmt.Errorf("model identity exceeds 255 bytes")
@@ -92,7 +95,7 @@ func loadAutomaticPriceCatalog(ctx context.Context) (*automaticPriceCatalog, err
 		} else if row.LastError != "" {
 			// A source without a validated snapshot is unavailable, but it must
 			// not prevent another source from resolving the same model.
-			source.rejections["*"] = fmt.Sprintf("%s has no validated pricing snapshot after a failed refresh", spec.Source)
+			source.rejections["*"] = fmt.Sprintf("%s has no validated pricing snapshot: %s", spec.Source, row.LastError)
 		}
 		catalog.sources = append(catalog.sources, source)
 	}
@@ -106,7 +109,11 @@ func loadAutomaticPriceCatalog(ctx context.Context) (*automaticPriceCatalog, err
 	return catalog, nil
 }
 
-func (catalog *automaticPriceCatalog) resolve(name string) automaticPriceMatch {
+func (catalog *automaticPriceCatalog) resolve(name string, requirements ...billing.PricingRequirements) automaticPriceMatch {
+	required := billing.PricingRequirements{}
+	if len(requirements) != 0 {
+		required = requirements[0]
+	}
 	match := automaticPriceMatch{reasons: make([]AutomaticPricingRejection, len(catalog.sources))}
 	blocked := make([]bool, len(catalog.sources))
 	for i, source := range catalog.sources {
@@ -123,6 +130,12 @@ func (catalog *automaticPriceCatalog) resolve(name string) automaticPriceMatch {
 				continue
 			}
 			if entry, exists := source.entries[candidate]; exists {
+				if err := billing.ValidatePricingRequirements(entry.Price, required); err != nil {
+					billing.RecordCandidateRejection(string(source.source))
+					blocked[i], match.reasons[i].Reason = true, err.Error()
+					match.err = err
+					continue
+				}
 				match.entry = entry
 				return match
 			}
@@ -132,6 +145,7 @@ func (catalog *automaticPriceCatalog) resolve(name string) automaticPriceMatch {
 				continue
 			}
 			if autopricing.IsBlocked(source.blocked, candidate) {
+				billing.RecordCandidateRejection(string(source.source))
 				blocked[i] = true
 				if reason, exists := source.rejections[candidate]; exists {
 					match.reasons[i].Reason = reason
@@ -156,6 +170,12 @@ func (catalog *automaticPriceCatalog) resolve(name string) automaticPriceMatch {
 				continue
 			}
 			entry.Price = price
+			if err := billing.ValidatePricingRequirements(entry.Price, required); err != nil {
+				billing.RecordCandidateRejection(string(source.source))
+				blocked[i], match.reasons[i].Reason = true, err.Error()
+				match.err = err
+				continue
+			}
 			match.entry = entry
 			return match
 		}
@@ -213,6 +233,40 @@ func RestoreAutomaticPrice(ctx context.Context, name string, expectedVersion int
 		return nil, err
 	}
 	return model.RestoreAutomaticBillingPrice(ctx, price, string(entry.Source), entry.SourceModel, catalog.hashes[string(entry.Source)], expectedVersion, catalog.hashes)
+}
+
+// ResolveAndPublishAutomaticPrice may switch an automatically managed global
+// identity to a complete alternative source. The observed version is the CAS
+// fence, so a concurrent manual decision always wins.
+func ResolveAndPublishAutomaticPrice(ctx context.Context, name string, required billing.PricingRequirements) (*billing.PriceVersion, error) {
+	current, err := model.GetActiveBillingPrice(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if current.ScopeKind != billing.PriceScopeGlobal || current.ChannelID != 0 || (current.Origin != model.BillingPriceOriginSub2API && current.Origin != model.BillingPriceOriginAxonHub) {
+		return nil, fmt.Errorf("price is not an automatically managed global identity")
+	}
+	if err := billing.ValidatePricingRequirements(*current, required); err == nil {
+		return current, nil
+	}
+	catalog, err := loadAutomaticPriceCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+	match := catalog.resolve(name, required)
+	if match.entry.Source == "" {
+		parts := make([]string, 0, len(match.reasons))
+		for _, reason := range match.reasons {
+			parts = append(parts, reason.Source+": "+reason.Reason)
+		}
+		if match.err == nil {
+			match.err = &billing.PricingError{Code: "missing_usage_contract"}
+		}
+		return nil, fmt.Errorf("no complete automatic price (%s): %w", strings.Join(parts, "; "), match.err)
+	}
+	entry := match.entry
+	entry.Price.Model = name
+	return model.RestoreAutomaticBillingPrice(ctx, entry.Price, string(entry.Source), entry.SourceModel, catalog.hashes[string(entry.Source)], current.ID, catalog.hashes)
 }
 
 func (result *AutomaticPricingSyncResult) addUnconfigured(name string, reasons []AutomaticPricingRejection) {
