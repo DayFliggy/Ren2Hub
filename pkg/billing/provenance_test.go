@@ -39,3 +39,18 @@ func TestPricingSupportAcceptsExplicitV2ServiceTierPolicy(t *testing.T) {
 	require.NoError(t, billing.ValidatePriceProvenance(price))
 	require.NoError(t, billing.ValidatePricingRequirements(price, billing.PricingRequirements{ServiceTier: "priority", Dimensions: []string{"seconds"}}))
 }
+
+func TestFixedRequestCoverageDoesNotInventToolOrMixedTokenPrices(t *testing.T) {
+	for _, version := range []billing.PriceVersion{
+		{Mode: billing.ModeUnitPrice, FlatFee: "0.01"},
+		{Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.01"}}},
+	} {
+		require.NoError(t, billing.ValidatePricingRequirements(version, billing.PricingRequirements{Dimensions: []string{"ai", "ao", "img"}}))
+		for _, dimension := range []string{"tool:web_search", "seconds", "unknown"} {
+			require.ErrorContains(t, billing.ValidatePricingRequirements(version, billing.PricingRequirements{Dimensions: []string{dimension}}), "missing_price_dimension")
+		}
+		require.ErrorContains(t, billing.ValidatePricingRequirements(version, billing.PricingRequirements{ServiceTier: "priority"}), "unverified_service_tier")
+		version.Prices = append(version.Prices, billing.UnitPrice{Quantity: "p", Unit: "per_million_tokens", Price: "1"})
+		require.ErrorContains(t, billing.ValidatePricingRequirements(version, billing.PricingRequirements{Dimensions: []string{"ai"}}), "missing_price_dimension")
+	}
+}

@@ -145,6 +145,23 @@ func priceDimensions(version PriceVersion) map[string]bool {
 	return result
 }
 
+// A fixed request price covers the request's ordinary token modalities. It
+// never grants a contract for separately billed tools or physical quantities.
+func fixedRequestCoversTokens(version PriceVersion) bool {
+	if version.Mode != ModeUnitPrice || version.UsageSchema != nil {
+		return false
+	}
+	fixed := version.FlatFee != ""
+	for _, price := range version.Prices {
+		if price.Quantity == "calls" {
+			fixed = true
+		} else if !strings.HasPrefix(price.Quantity, "tool:") {
+			return false
+		}
+	}
+	return fixed
+}
+
 // ValidatePricingRequirements checks one complete candidate. It never merges
 // dimensions or service policies from a different source or a live catalog.
 func ValidatePricingRequirements(version PriceVersion, required PricingRequirements) error {
@@ -174,7 +191,7 @@ func ValidatePricingRequirements(version PriceVersion, required PricingRequireme
 		return nil
 	}
 	for _, dimension := range required.Dimensions {
-		if !dimensions[dimension] {
+		if !dimensions[dimension] && !(tokenDimension(dimension) && fixedRequestCoversTokens(version)) {
 			return &PricingError{Code: "missing_price_dimension", Dimension: dimension}
 		}
 	}
