@@ -1,6 +1,8 @@
 # 双源模型定价重构验证（2026-09-26）
 
-本轮在 `0c503f4e561a0db1ec6f32a302491adc08082f52` 上替换自动价格获取、解析、匹配和发布编排。活动来源只有 Sub2API 和 AxonHub：精确身份优先，同一身份采用 Sub2API 主源、AxonHub 补缺，每个模型选择一个来源的完整价格。models.dev、OpenRouter 只保留历史归属和任务读取兼容，不能重新写入或启用。规则见[定价说明](PRICING.md)、[解析器说明](../../pkg/autopricing/README.md)和 [API 合同](API.md)。
+本轮源码为 `6c1ef3ecaae648674d2280b8e6ff57575135b362`，在 `0c503f4e561a0db1ec6f32a302491adc08082f52` 上替换自动价格获取、解析、匹配和发布编排。活动来源只有 Sub2API 和 AxonHub：精确身份优先，同一身份采用 Sub2API 主源、AxonHub 补缺，每个模型选择一个来源的完整价格。models.dev、OpenRouter 只保留历史归属和任务读取兼容，不能重新写入或启用。现行规则见[定价说明](PRICING.md)、[解析器说明](../../pkg/autopricing/README.md)和 [API 合同](API.md)。
+
+本记录早于 `7ef87f9e3` 的价格作用域与账务格式 3 改造，不将下面的测试结果作为该次改造的验证。
 
 重构止于发布不可变 `PriceVersion`。请求锁价、资金预留、Decimal 金额协议、幂等结算、异步任务和恢复机制保持原合同；不涉及订阅计费。本轮验证使用本机隔离进程和数据库，未部署生产应用、恢复生产数据或调用付费模型。
 
@@ -67,4 +69,4 @@ bun run test:visual -- tests/visual/model-management.spec.ts --grep 'automatic p
 
 受影响 Go 包的 `go vet`、`go build ./...`、`gofmt` 和 `git diff --check` 通过。前端构建只有既有的图表分块超过 500 kB 提示。旧四源适配和合并路径已删除，`sync-models-dev` 厂商元数据脚本保留；历史价格、冻结报价、任务和资金记录不删除。
 
-以上验证不代表已验证每个上游模型的真实用量格式，也不代表生产应用已升级。源码按根仓库同步工作流发布，具体源码提交与服务器同步状态见[服务器档案](../../../docs/server/SERVER_PROFILE.md)。此前四源实现的测试证据保留在[历史验证记录](AUTOMATIC_PRICING_VALIDATION.md)，不能当作本轮双源验证结果。
+以上验证不代表已验证每个上游模型的真实用量格式，也不代表生产应用已升级。源码按根仓库同步工作流发布，具体源码提交与服务器同步状态见[服务器档案](../../../docs/server/SERVER_PROFILE.md)。此前四源实现的历史记录已从工作树移除，可在应用仓库执行 `git show 7ef87f9e3:docs/billing/AUTOMATIC_PRICING_VALIDATION.md` 追溯；它不属于当前双源或作用域价格的运行证据。

@@ -18,7 +18,7 @@
 | GMPay 加密货币充值 | [接入契约与验收状态](billing/GMPAY.md) | 独立配置、多链资产、USD 报价、到账证据和验收边界 |
 | 支付系统设置 | [EPay / GMPay 配置清单](billing/PAYMENT_SETTINGS.md) | 控制台入口、默认值、金额单位、保存与启停边界 |
 | 复验方法 | [网关验证](routing/GATEWAY_VALIDATION.md)、[SDK 套件](../tests/gateway-sdk/README.md)、[准入基准](../tests/admission-benchmark/README.md) | 隔离依赖、测试入口与测量范围 |
-| 既有验证证据 | [网关与协议](routing/SINGLE_INSTANCE_ACCEPTANCE.md)、[账务](billing/VALIDATION.md)、[易支付](billing/EPAY_VALIDATION.md) | 明确版本、环境、已执行结果及未证明的边界 |
+| 既有验证证据 | [网关与协议](routing/SINGLE_INSTANCE_ACCEPTANCE.md)、[账务](billing/VALIDATION.md)、[双源定价](billing/DUAL_SOURCE_PRICING_VALIDATION.md)、[易支付](billing/EPAY_VALIDATION.md) | 明确版本、环境、已执行结果及未证明的边界 |
 
 `openapi/api.json` 与 `openapi/relay.json` 是有限覆盖的历史接口描述，尚未与全部现行路由同步。它们不能证明接口仍开放，也不能替代上表中的 API 契约、`router/` 注册和实际请求校验；不要仅据这些 JSON 生成生产客户端。
 
@@ -28,7 +28,7 @@
 
 AI 请求按 `router/relay-router.go` → 鉴权/限流 → `middleware/gateway_admission.go` → `middleware/distributor.go` → `service/request_route.go` → `controller/relay.go` 阅读。宿主在 `relay/` 发送请求和处理传输，`relaykit/` 负责协议语义；后台作业从 `controller/system_task_handlers.go` 进入系统任务框架。
 
-Vue 从 `frontend/src/router/`、`frontend/src/stores/app.ts` 和 `frontend/src/api/` 核对页面、能力状态与真实 API。后端兼容入口存在不代表当前 UI 开放。当前数据库格式仅接受空库初始化或匹配 `billing_schemas` 标记的数据库；不能把旧计费数据库直接接给新代码。
+Vue 从 `frontend/src/router/`、`frontend/src/stores/app.ts` 和 `frontend/src/api/` 核对页面、能力状态与真实 API。后端兼容入口存在不代表当前 UI 开放。当前账务格式为 3，仅接受空库初始化或匹配 `billing_schemas` 标记的数据库；价格合同为 2，计算器为 `billing-v2`。不能把旧计费数据库直接接给新代码。
 
 ## 文档与部署状态
 
@@ -46,3 +46,5 @@ git show <commit>:<repository-relative-path>
 ```
 
 网关与协议复审的版本入口保留在[网关验证证据](routing/SINGLE_INSTANCE_ACCEPTANCE.md)，账务与易支付的版本入口分别保留在对应验证页。历史代码需要执行时使用隔离环境；恢复旧报告或旧代码不授予发布、数据库恢复或重放支付的权限。
+
+`docs/upstream/rc40-*-evidence.json` 保留原集成处置与验证时点，其中根工作区旧计划路径应从根提交 `2dfba09b00cd60134f015927cadfbb7d58f0793e` 读取；集中入口见所属工作区[历史验收索引](../../docs/server/VALIDATION_HISTORY.md)。这些历史引用不代表当前路径仍存在或最新运行版本已重验。

@@ -1,6 +1,6 @@
 # 账务验证记录
 
-本页保留 2026-09-20 本地实现与审计后的有效证据，源码范围为 `83bd7c23d` → `325c4ce40` → `a09a7c4c8`。自动定价重构的 2026-09-26 验证见[自动定价验证](AUTOMATIC_PRICING_VALIDATION.md)，后续易支付变更另见[易支付验证](EPAY_VALIDATION.md)。2026-09-22 文档整理没有重新执行应用测试；源码发布和服务器实际 HTTP/SSE、部署结果以所属工作区 `docs/server/SERVER_PROFILE.md` 为准。
+本页保留 2026-09-20 本地实现与审计后的有效证据，源码范围为 `83bd7c23d` → `325c4ce40` → `a09a7c4c8`。2026-09-26 的双源重构见[双源定价验证](DUAL_SOURCE_PRICING_VALIDATION.md)，后续易支付变更另见[易支付验证](EPAY_VALIDATION.md)。这些历史结果不覆盖 `7ef87f9e3` 引入的渠道独立价格、结构化计价与账务格式 3；现行合同见[账务架构](IMPLEMENTATION.md)和[定价说明](PRICING.md)。文档整理不算重新执行应用测试，源码发布和服务器实际 HTTP/SSE、部署结果以所属工作区 `docs/server/SERVER_PROFILE.md` 为准。
 
 ## 本地验证范围
 

@@ -26,13 +26,13 @@ Root 价格管理接口：
 
 预览正文为 `{price,usage,attributes,request_facts,channel_ratio,frozen_at}`；渠道倍率为明确十进制字符串，时间为非零 RFC3339，载荷上限 256 KiB。调用 `NewQuoteWithFacts` 和实际 `Calculate`，无需数据库写入。schema 数量使用 `estimated_facts` 或 `actual_facts`，不能同时在旧 `quantities` 再次表示。numeric facts 以规范十进制字符串保存，表达式求值时才转换浮点。
 
-`UnitPrice = {quantity:string,unit:'per_million_tokens'|'per_thousand_calls'|'per_call'|'per_image'|'per_second',price:string}`。`price` 是 USD 十进制字符串。quantity 为 `p,c,reasoning,cr,cc,cc1h,img,img_o,ai,ao,calls,images,seconds,tool:<工具名>`，单位必须与数量匹配。表达式模式的 prices 只用于额外工具、按张、按次、按秒费用，token 项由表达式负责。
+固定单价结构为 `UnitPrice = {quantity:string,unit:'per_million_tokens'|'per_thousand_calls'|'per_call'|'per_image'|'per_second',price:string}`；阶梯结构以本页的 `tier_mode` 和 `tiers` 替代 `price`。金额和数量边界均使用 Decimal 字符串。quantity 为 `p,c,reasoning,cr,cc,cc1h,img,img_cr,img_o,ai,ao,calls,images,seconds,tool:<工具名>`，单位必须与数量匹配。表达式模式的 prices 只用于额外工具、按张、按次、按秒费用，token 项由表达式负责。
 
 v1 token 表达式沿用 USD/百万 token 的计算约定，结果除以一百万得到 USD；例如 `p * 2 + c * 8`。v2 schema 表达式直接返回 USD，例如 `v2:u("seconds") * 0.4`，禁止混用 token/fixed。schema 单价 quantity 必须声明为最终数值事实，unit 为 `per_` 加声明单位。属性用 `attr("service_tier")` 访问，只允许已登记安全属性；禁止 `param`、`header`。时间函数只读取 Quote.FrozenAt，时区必须有效。详细语法见 [表达式说明](../billingexpr/expr.md)。
 
 v1 按张价格使用 `fixed(usd) * image_count`；预览/计价传 `usage.quantities.images` 十进制整数字符串，范围 1–128，缺失或零不按默认数收费。该表达式不得再带 images/per_image 附加行；服务器校验全部分支。请求固定数量仍在 Quote.Attributes.quantity，实际数写 Trace.image_count，两者分别保留。示例用量：`{"quantities":{"images":"2"},"complete":true}`。Vue 的单价转换先显示草稿预览，显式确认后才应用，保存才发布新版本。
 
-纯计算入口 `billing.Calculate(*Quote, Usage) (*ChargeResult,error)` 只读冻结数据，不访问数据库或配置。全部项目先用 Decimal 合计，再乘渠道系数与 `500000`，只对总额四舍五入一次。正数最低收 1 quota，明确为零收 0；超过 MaxInt32 的单请求费用返回错误，交由账务对账处理。`ChargeResult.FinalQuota` 为 `common.Quota`，JSON 是十进制整数字符串。`billing.RoundCharge` 供独立附加费使用；`billing.RequestQuota` 是原 relay int 接口的有界转换。
+纯计算入口 `billing.Calculate(*Quote, Usage) (*ChargeResult,error)` 只读冻结数据，不访问数据库或配置。全部项目先用 Decimal 合计，再乘渠道系数与 `500000`，只对总额四舍五入一次。正数最低收 1 quota，明确为零收 0；超过 MaxInt32 的单请求费用返回错误，交由账务对账处理。`ChargeResult.FinalQuota` 为 `common.Quota`，JSON 是十进制整数字符串。`billing.RoundCharge` 是统一计算器的舍入边界；违规附加费也通过派生 Quote 和 `Calculate` 计价。`billing.RequestQuota` 是原 relay int 接口的有界转换。
 
 接入点为 `info.PriceData.Quote`、`.Usage`、`.Charge`。文本与音频通过 `service.NormalizedBillingUsage` 统一事实；最终预算检查在 `AnalyzeOutboundTokenBudget`、`FinalImagePriceMeta`、`FinalAudioPriceMeta` 冻结已发送参数中的安全属性。任务使用 `model.TaskBillingContext.Quote/Usage`，终态计算不得调用适配器货币倍率或重新查询价格。
 
@@ -41,7 +41,6 @@ v1 按张价格使用 `fixed(usd) * image_count`；预览/计价传 `usage.quant
 自动定价管理均要求 Root：`GET /api/billing/prices/automatic` 返回 `{config,sources,origins}`；`PUT` 同地址提交 `{enabled,check_interval_minutes}`（5–1440）。`POST /automatic/sync` 返回标准系统任务，按任务 API 查询结果；关闭计划不禁止手动检查。`POST /automatic/restore` 提交 `{model,expected_version}` 恢复当前目录价，版本冲突 409。`GET /prices/seed` 保留接口形状，但返回当前合并参考目录及来源哈希，不再返回旧种子。所有路径均以 `/api/billing/prices` 为基准。
 
 公开 `GET /api/pricing` 只返回已发布价格且当前路由可用的模型，`price_versions` 包含调用方可见渠道的有效价格，`price_version` 保留首项投影，`billing_mode` 使用新模式。只配置渠道价格的模型也可列出；无权访问的渠道价格不参与返回值或公开哈希。旧 model_ratio/model_price/completion_ratio 和 channel_ratio_min/max 不再作为公开契约。
-
 
 Root 对账接口 `GET /api/billing/reconciliations/:id` 返回 `audit` 和 `upstream_cost`。`audit` 校验冻结价格、报价、尝试的 request_fingerprint、完整消费指纹及最终账本事件，并重算明细；状态为 `verified|mismatch|invalid_evidence|unconfirmed`。请求指纹绑定账务请求身份，不提供跨请求 ID 的正文去重。重放不读取实时目录，不修改钱包或恢复状态。
 

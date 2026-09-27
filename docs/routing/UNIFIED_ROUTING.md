@@ -48,7 +48,7 @@ Retry-After 只作用于所属渠道或已有渠道内 credential/模型健康�
 
 进程共享重试额度使用固定百分之一精度，初始/最大储备默认 20 次；每次首次真实发送补 0.1 次，额外发送消耗 1 次。发送前可撤销预留，进入发送边界后提交；结果未知不退款，重试本身不补额度。预留计入 burst，热更新不补满，禁用期间不积累。额度不足立即停止重试、保留最后真实上游错误，并记录 `retry_budget_exhausted`。
 
-钱包是唯一资金来源，Token 是附加消费限额。每次发送冻结不可变价格版本、渠道售价系数、安全属性与时间；`TaskBillingContext` 保存独立的 `Quote`、`Usage`、`Charge` 及原模型名，不再依赖旧 `group_ratio` 快照。普通请求、Realtime 与异步任务共用持久化预留和事件恢复。当前账务格式不迁移旧账务数据库，详见[账务架构](../billing/IMPLEMENTATION.md)。
+钱包是唯一资金来源，Token 是附加消费限额。每次发送冻结价格作用域、不可变版本及哈希、渠道售价系数、安全属性与时间；查价先精确渠道价格，再使用明确发布的全局价格，渠道独立价格的系数为 1。`TaskBillingContext` 保存独立的 `Quote`、`Usage`、`Charge` 及原模型名，不再依赖旧 `group_ratio` 快照。普通请求、Realtime 与异步任务共用持久化预留和事件恢复。当前账务格式为 3，不迁移旧账务数据库，详见[账务架构](../billing/IMPLEMENTATION.md)。
 
 ## 协议和重试
 
@@ -60,7 +60,7 @@ Responses SSE 缓冲到 JSON 复用完整 SSE 事件解码器，支持多行 dat
 
 Chat、Responses、Claude、Gemini、图像、音频、Embedding、Rerank、Realtime、Compact、Midjourney、Suno 和视频均使用同一选渠与准入边界。查询类接口保留自己的任务所有权校验；后续任务操作绑定原任务渠道，并重新检查当前能力和用户资格。
 
-Compact 保留精确模型和基础模型两个阶段。每阶段分别排除已用 Key，能力健康按该阶段实际匹配的能力模型记录，逻辑计费模型保持独立。总尝试次数受系统上限及手动重试策略约束。已输出响应后不得切换上游或拼接第二份响应。
+Compact 使用原生 `/v1/responses/compact` 和普通模型映射，不生成或剥离 `-compact` 后缀，也不使用专属双阶段路由和价格回退。它遵守共享的准入、重试与冻结报价合同。已输出响应后不得切换上游或拼接第二份响应。
 
 ## 阶段期限与账务保护
 
@@ -78,8 +78,8 @@ SSE 按事件空行组装多行 `data:`，支持 CRLF/LF/CR、注释、事件名
 - `/api/token/*` 返回 `type: auto | manual`，不返回旧分组字段。
 - `/api/routing/*` 管理 Profile、候选目录和静态预览；预览不发送请求、不预扣、不持有 Permit。
 - `POST /api/routing/tokens/:id/preview` 覆盖自动、手动及无 Profile 的旧 Token，旧 Profile 预览委托同一入口。预览复用实际静态资格及排序，输出快照标识、时间、配置版本和动态复核提示；加权顺序不是下一次请求承诺。
-- `/api/channel/` 管理实际容量和渠道倍率；独立 `/route-policy` 接口已移除。
-- `/api/pricing` 返回已发布且当前可路由模型的 `price_version`、`billing_mode` 和可用渠道倍率区间，不返回旧组过滤与组倍率计价合同。
+- `/api/channel/` 管理实际容量和 Decimal 字符串渠道售价系数；独立渠道价格通过 `/api/billing/prices` 管理，独立 `/route-policy` 接口已移除。
+- `/api/pricing` 返回已发布且当前可路由模型的 `price_versions`、首项投影 `price_version` 和 `billing_mode`。版本数组仅含调用方可见渠道的有效价格，纯渠道价格模型也可列出；旧模型倍率和渠道倍率区间不再作为公开契约。
 
 不再使用 TOKEN_PRIVATE_ROUTING_ENABLED、ROUTE_LIVE_*、ROUTE_SHADOW_* 或 ROUTE_SCORE_* 灰度开关。能力刷新任务继续使用 ROUTE_CAPABILITY_REFRESH_*；ROUTE_DECISION_EVENT_QUEUE_SIZE 控制有界决策日志队列。
 

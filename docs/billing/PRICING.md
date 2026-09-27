@@ -8,6 +8,7 @@
 | reasoning | per_million_tokens | 输出 token 中的 reasoning 数量；独立定价时从普通输出扣除 |
 | cr、cc、cc1h | per_million_tokens | 缓存读取、默认/5m 写入、1h 写入 |
 | img、img_o、ai、ao | per_million_tokens | 图片、音频输入/输出 token |
+| img_cr | per_million_tokens | 上游明确拆分的图片缓存读取 token；不猜测缓存占比 |
 | calls | per_call | 完成调用次数 |
 | images | per_image | 已确认交付图片数；发送前按最终请求数量估计 |
 | seconds | per_second | 最终参数或已确认媒体时长，批量数量计入总时长 |
@@ -57,7 +58,6 @@ Sub2API 的 `mode=embedding`、AxonHub 的 `type=embedding` 是允许缺少输�
 启动迁移将未标记的历史归属持久化，关闭自动同步也执行归属迁移，但不换价。旧 `billing_pricing_seed.json` 仅供这次幂等识别：必须由 actor 0 创建、模型与定义哈希匹配并通过内容验真才标为 `legacy_seed`；其他未标记旧价按人工价保护。正常查价、发布和来源读取不再加载旧种子。原 `models_dev`、`openrouter` 仅保留历史归属，在首次双源重建时由有效双源价格接管，无法匹配则停用；不允许再抓取、写入缓存或发布这两个来源。
 
 新安装不再播种旧 New API 倍率目录。前端“从参考目录填入”只生成草稿，保存后成为人工价格；“恢复自动定价”经版本校验后重新交由双源管理。UI 最多显示 3 位小数，编辑、请求、快照和导出保留完整精度。
-
 
 ## 审计与成本
 
