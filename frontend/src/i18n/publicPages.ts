@@ -24,6 +24,12 @@ export const publicPageMessages = {
       priceHash: '版本哈希',
       flatFee: '固定费用',
       pricesCount: '{count} 个可用报价',
+      partialPricing: '{count} 条报价暂不可展示，其余报价仍可查看',
+      unknownModel: '未知模型',
+      pricingIssues: {
+        invalid_price_offer: '报价合同不受支持或数据不完整',
+        invalid_model_record: '模型价格记录不完整',
+      },
       pricedModel: '计价模型',
       channelAdjustment: '渠道调整',
       serviceTiers: '可用服务等级',
@@ -63,6 +69,7 @@ export const publicPageMessages = {
       cacheWrite: '缓存写入',
       image: '图片输入',
       audioInput: '音频输入',
+      audioCacheRead: '音频缓存读取',
       audioOutput: '音频输出',
       dynamic: '动态计费',
       expression: '计费规则',
@@ -138,6 +145,13 @@ export const publicPageMessages = {
       credits: 'Provider credits',
       flatFee: 'Flat fee',
       pricesCount: '{count} available offers',
+      partialPricing:
+        '{count} offers cannot be displayed; other offers remain available',
+      unknownModel: 'Unknown model',
+      pricingIssues: {
+        invalid_price_offer: 'Unsupported or incomplete price contract',
+        invalid_model_record: 'Incomplete model pricing record',
+      },
       tierModes: {
         volume: 'Rate for total usage',
         graduated: 'Charge each usage band',
@@ -173,6 +187,7 @@ export const publicPageMessages = {
       cacheWrite: 'Cache write',
       image: 'Image input',
       audioInput: 'Audio input',
+      audioCacheRead: 'Audio cache read',
       audioOutput: 'Audio output',
       dynamic: 'Dynamic pricing',
       expression: 'Billing rule',

@@ -294,6 +294,7 @@ export default {
       img_o: 'Image output tokens',
       img_cr: 'Cached image input tokens',
       ai: 'Audio input tokens',
+      ai_cr: 'Audio cache read tokens',
       ao: 'Audio output tokens',
       reasoning: 'Reasoning tokens',
       calls: 'Request count',
@@ -959,6 +960,13 @@ export default {
     snapshotNote: 'Performance is a snapshot',
     metadataUnavailable:
       'Models loaded, but some pricing or performance data is unavailable',
+    partialPricing:
+      '{count} offers cannot be displayed; other offers remain available',
+    unknownModel: 'Unknown model',
+    pricingIssues: {
+      invalid_price_offer: 'Unsupported or incomplete price contract',
+      invalid_model_record: 'Incomplete model pricing record',
+    },
     detail: 'Details',
     copyHint: 'Click to copy “{name}”',
     copied: 'Copied model name “{name}”',

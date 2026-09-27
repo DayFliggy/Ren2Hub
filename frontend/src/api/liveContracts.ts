@@ -27,7 +27,7 @@ import {
   requiredNumber,
   requiredString,
 } from './contracts'
-import type { PageResult } from './types'
+import { ApiError, type PageResult } from './types'
 import { parseConversionPolicy } from './gateway'
 
 export interface UsageRow {
@@ -248,6 +248,63 @@ export function parsePricingModels(value: unknown): PricingModelContract[] {
       supported_endpoint_types: [...endpoints],
     }
   })
+}
+
+export interface PricingCatalogIssue {
+  model_name: string | null
+  offer_id: string | null
+  reason: 'invalid_price_offer' | 'invalid_model_record'
+}
+
+// One unsupported offer must not hide unrelated prices. Keep the failure
+// separate from validated offers so it cannot be mistaken for a free price.
+export function parsePricingModelsPartial(value: unknown): {
+  models: PricingModelContract[]
+  issues: PricingCatalogIssue[]
+} {
+  const endpoint = '/api/pricing'
+  if (!Array.isArray(value)) invalidResponse(endpoint)
+  const models: PricingModelContract[] = []
+  const issues: PricingCatalogIssue[] = []
+  for (const raw of value) {
+    const modelName =
+      isRecord(raw) && typeof raw.model_name === 'string'
+        ? raw.model_name
+        : null
+    if (!isRecord(raw) || !Array.isArray(raw.offers) || !raw.offers.length) {
+      issues.push({
+        model_name: modelName,
+        offer_id: null,
+        reason: 'invalid_model_record',
+      })
+      continue
+    }
+    let model: PricingModelContract | undefined
+    const seen = new Set<string>()
+    for (const offer of raw.offers) {
+      try {
+        const parsed = parsePricingModels([{ ...raw, offers: [offer] }])[0]!
+        const parsedOffer = parsed.offers[0]!
+        if (seen.has(parsedOffer.offer_id)) invalidResponse(endpoint)
+        seen.add(parsedOffer.offer_id)
+        if (model) model.offers.push(parsedOffer)
+        else model = parsed
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.code !== 'INVALID_RESPONSE')
+          throw error
+        issues.push({
+          model_name: modelName,
+          offer_id:
+            isRecord(offer) && typeof offer.offer_id === 'string'
+              ? offer.offer_id
+              : null,
+          reason: 'invalid_price_offer',
+        })
+      }
+    }
+    if (model) models.push(model)
+  }
+  return { models, issues }
 }
 
 export function parsePerfMetricsSummary(

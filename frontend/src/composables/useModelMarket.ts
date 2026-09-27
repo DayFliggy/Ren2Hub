@@ -6,10 +6,11 @@ import { useI18n } from 'vue-i18n'
 import { api } from '@/api/console'
 import {
   parsePerfMetricsSummary,
-  parsePricingModels,
+  parsePricingModelsPartial,
   parseUserModels,
   type PerfModelSummaryContract,
   type PricingModelContract,
+  type PricingCatalogIssue,
 } from '@/api/liveContracts'
 import { ApiError } from '@/api/types'
 import type { MarketModel } from '@/types/console'
@@ -144,6 +145,7 @@ export function useModelMarket() {
   const toast = useToast()
   const loading = ref(true)
   const catalog = ref<ModelMarketCatalog | null>(null)
+  const pricingIssues = ref<PricingCatalogIssue[]>([])
 
   const keyword = ref('')
   const vendor = ref('')
@@ -159,7 +161,7 @@ export function useModelMarket() {
     try {
       const names = parseUserModels(await api.get<unknown>('/api/user/models'))
       const [pricingResult, performanceResult] = await Promise.allSettled([
-        api.get<unknown>('/api/pricing').then(parsePricingModels),
+        api.get<unknown>('/api/pricing').then(parsePricingModelsPartial),
         api
           .get<unknown>('/api/perf-metrics/summary')
           .then(parsePerfMetricsSummary),
@@ -170,9 +172,11 @@ export function useModelMarket() {
       ) {
         toast.warning(t('models.metadataUnavailable'))
       }
+      pricingIssues.value =
+        pricingResult.status === 'fulfilled' ? pricingResult.value.issues : []
       catalog.value = buildLiveModelCatalog(
         names,
-        pricingResult.status === 'fulfilled' ? pricingResult.value : [],
+        pricingResult.status === 'fulfilled' ? pricingResult.value.models : [],
         performanceResult.status === 'fulfilled' ? performanceResult.value : []
       )
     } catch (error) {
@@ -250,6 +254,7 @@ export function useModelMarket() {
   return {
     loading,
     catalog,
+    pricingIssues,
     keyword,
     vendor,
     type,

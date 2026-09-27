@@ -31,6 +31,7 @@ export const PRICE_QUANTITIES = [
   'img_o',
   'img_cr',
   'ai',
+  'ai_cr',
   'ao',
   'calls',
   'images',

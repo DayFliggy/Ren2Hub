@@ -215,6 +215,25 @@ onScopeDispose(() => controller?.abort())
     </div>
     <ErrorBanner v-else-if="error" :message="error" @retry="load" />
     <template v-else-if="catalog">
+      <details
+        v-if="catalog.issues.length"
+        class="mb-4 rounded-lg border border-[var(--border-subtle)] p-3 text-sm"
+        data-pricing-issues
+      >
+        <summary class="cursor-pointer focus-ring">
+          {{ t('publicPage.partialPricing', { count: catalog.issues.length }) }}
+        </summary>
+        <ul class="mt-2 space-y-1">
+          <li
+            v-for="(issue, index) in catalog.issues"
+            :key="index"
+            class="break-all"
+          >
+            {{ issue.model_name || t('publicPage.unknownModel') }} ·
+            {{ t(`publicPage.pricingIssues.${issue.reason}`) }}
+          </li>
+        </ul>
+      </details>
       <div class="mb-6 flex flex-wrap items-center gap-3">
         <SearchInput
           v-if="!detailId"

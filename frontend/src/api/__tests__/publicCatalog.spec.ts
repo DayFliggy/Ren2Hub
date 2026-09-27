@@ -1,9 +1,45 @@
 import { offerFixture } from './pricingFixture'
 import { describe, expect, it } from 'vitest'
 
-import { catalogPrices, parseRankings } from '@/api/publicCatalog'
+import {
+  catalogPrices,
+  parsePricingCatalog,
+  parseRankings,
+} from '@/api/publicCatalog'
 
 describe('public catalog contracts', () => {
+  it('returns a partial directory with explicit unavailable records', () => {
+    const offer = offerFixture({
+      id: 1,
+      model: 'priced-model',
+      mode: 'unit_price',
+      prices: [{ quantity: 'ai_cr', unit: 'per_million_tokens', price: '0.4' }],
+      created_at: 1,
+      hash: 'audio-cache',
+    })
+    const result = parsePricingCatalog({
+      success: true,
+      supported_endpoint: {},
+      data: [
+        { model_name: 'request-alias', offers: [offer] },
+        { model_name: 'unavailable', offers: [] },
+      ],
+    })
+    expect(result.models.map((model) => model.model_name)).toEqual([
+      'request-alias',
+    ])
+    expect(result.issues).toEqual([
+      {
+        model_name: 'unavailable',
+        offer_id: null,
+        reason: 'invalid_model_record',
+      },
+    ])
+    expect(catalogPrices(result.models[0]!, 'M')).toEqual([
+      { key: 'audioCacheRead', value: '0.4', unit: 'per_million_tokens' },
+    ])
+  })
+
   it('renders version prices without mutable channel multipliers', () => {
     const prices = catalogPrices(
       {
