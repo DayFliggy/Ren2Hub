@@ -143,7 +143,7 @@ func publishBillingPriceWithDB(tx *gorm.DB, version billing.PriceVersion, public
 			return nil, false, fmt.Errorf("automatic price requires field evidence and a support contract")
 		}
 		var snapshot BillingPricingSnapshot
-		if err := tx.Where("source = ? AND hash = ?", publication.origin, publication.sourceHash).Take(&snapshot).Error; err != nil {
+		if err := tx.Select("id").Where("source = ? AND hash = ?", publication.origin, publication.sourceHash).Take(&snapshot).Error; err != nil {
 			return nil, false, fmt.Errorf("automatic price snapshot: %w", err)
 		}
 		if version.Provenance.SnapshotID != 0 && version.Provenance.SnapshotID != snapshot.ID {

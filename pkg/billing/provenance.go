@@ -108,7 +108,7 @@ func ValidatePriceProvenance(version PriceVersion) error {
 			}
 		}
 		for _, tier := range s.ServiceTiers {
-			if tier != "default" && !billingexpr.UsedAttributes(version.Expression)["service_tier"] {
+			if tier != "default" && !billingexpr.UsedAttributes(version.Expression, version.UsageSchema)["service_tier"] {
 				return fmt.Errorf("price service tier requires an explicit expression policy")
 			}
 		}
