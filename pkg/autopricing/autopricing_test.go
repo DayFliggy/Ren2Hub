@@ -282,17 +282,30 @@ func TestRetiredAndUnknownSourcesAreRejected(t *testing.T) {
 }
 
 func TestOutputImagesArePerImageWithoutTokenDoubleCharge(t *testing.T) {
-	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image":0.04}}`))
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{"output_cost_per_image":0.04}}`))
 	require.NoError(t, err)
 	quote, err := billing.NewQuote(entries["m"].Price, "1", nil, time.Unix(1, 0))
 	require.NoError(t, err)
 	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, ContextTokens: 100, OutputTokens: 1100, ImageOutputTokens: 1000, Quantities: map[string]string{"images": "2"}})
 	require.NoError(t, err)
-	assert.Equal(t, "0.0803", charge.TotalUSD)
-	_, rejected, err := autopricing.ParseWithReport(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image_token":0.00004,"output_cost_per_image":0.04}}`))
-	require.Error(t, err)
-	require.Len(t, rejected, 1)
-	assert.True(t, rejected[0].BlockFallback)
+	assert.Equal(t, "0.08", charge.TotalUSD)
+	entries, err = autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_image":0.04}}`))
+	require.NoError(t, err)
+	quote, err = billing.NewQuote(entries["m"].Price, "1", nil, time.Unix(1, 0))
+	require.NoError(t, err)
+	charge, err = billing.Calculate(quote, billing.Usage{InputTokens: 100, Quantities: map[string]string{"images": "2"}})
+	require.NoError(t, err)
+	assert.Equal(t, "0.0801", charge.TotalUSD)
+	for _, source := range []string{
+		`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image":0.04}}`,
+		`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image_token":0.00004,"output_cost_per_image":0.04}}`,
+	} {
+		_, rejected, err := autopricing.ParseWithReport(autopricing.SourceSub2API, []byte(source))
+		require.Error(t, err)
+		require.Len(t, rejected, 1)
+		assert.True(t, rejected[0].BlockFallback)
+		assert.Contains(t, rejected[0].Reason, "missing usage contract")
+	}
 }
 
 func TestSubServicePriceThenContextRatioAndExplicitOverrides(t *testing.T) {

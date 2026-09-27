@@ -88,24 +88,11 @@ func (plan pricePlan) version(model string) (billing.PriceVersion, error) {
 	_, output := base["c"]
 	_, images := base["images"]
 	if images && output {
-		if len(plan.standard.tiers) > 0 || len(plan.services) > 0 {
-			return billing.PriceVersion{}, unsafePrice("unsupported combined image-count and token tier schedule")
-		}
-		if rate, exists := base["img_o"]; exists && !rate.IsZero() {
-			return billing.PriceVersion{}, unsafePrice("overlapping per-image and image-token output prices")
-		}
-		// The image count owns image output; exclude those tokens from the
-		// residual text output line instead of charging both representations.
-		base["img_o"] = decimal.Zero
-		for _, field := range plan.evidence {
-			if field.Target == "default.images" {
-				field.Target, field.Conversion = "default.img_o", "exclude_image_tokens_owned_by_per_image_charge"
-				plan.evidence = append(plan.evidence, field)
-				break
-			}
-		}
+		// The source does not state whether output tokens include generated
+		// images. A synthetic zero image-token price cannot establish that fact.
+		return billing.PriceVersion{}, unsafePrice("missing usage contract for combined output-token and per-image prices")
 	}
-	if !input || (!output && plan.usageScope != billing.UsageScopeEmbedding) {
+	if !input || (!output && !images && plan.usageScope != billing.UsageScopeEmbedding) {
 		if !(images && len(base) == 1 && len(plan.standard.tiers) == 0 && len(plan.services) == 0) {
 			return billing.PriceVersion{}, missingPrice("missing explicit input/output price")
 		}

@@ -203,7 +203,7 @@ func TestPricingNativeChannelEndpointTypesUnchanged(t *testing.T) {
 
 func TestPricingDoesNotCreateVirtualCompactModel(t *testing.T) {
 	resetPricingEndpointTestTables(t)
-	_, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "gpt-pricing-base", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.1"}}}, 0, 1)
+	_, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit endpoint test price"}, Model: "gpt-pricing-base", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.1"}}}, 0, 1)
 	require.NoError(t, err)
 	require.NoError(t, DB.Create(&Model{ModelName: "gpt-pricing-base", Description: "base description", Status: 1, NameRule: NameRuleExact}).Error)
 	insertPricingEndpointChannel(t, 205, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
@@ -223,7 +223,7 @@ func TestPricingCacheIncludesChannelScopedPrices(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 206, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointAbility(t, 206, "channel-priced-model")
-	version, err := PublishBillingPrice(context.Background(), billing.PriceVersion{ScopeKind: billing.PriceScopeChannel, ChannelID: 206,
+	version, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit channel endpoint test price"}, ScopeKind: billing.PriceScopeChannel, ChannelID: 206,
 		Model: "channel-priced-model", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}}}, 0, 1)
 	require.NoError(t, err)
 	InitChannelCache()

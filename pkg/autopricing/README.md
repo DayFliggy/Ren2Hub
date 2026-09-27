@@ -9,7 +9,7 @@
 | Sub2API | LiteLLM 模型对象映射 | USD/token，精确乘 1,000,000 |
 | AxonHub | `providers` 包装或直接 provider 映射，`models` 数组/映射 | USD/百万 token |
 
-数字从 JSON 原文直接解析为 Decimal，保留明确零值；缺失字段不会变成免费。超出账务合同精度、负值和非法数字拒绝。支持普通输入/输出、缓存读写及 1h 写入、图片/音频 token、图片/音频缓存读、独立 reasoning、明确按张输出价和可归一的搜索工具费。尚未定义用量和单位合同的图片输入按张、音频缓存创建、视频、按秒等收费字段拒绝，包括明确零。Sub2API `image_generation` 只有图片输出 token 价时，该明确输出价同时覆盖剩余输出 token，避免把未细分输出作为免费。Sub2API `output_cost_per_image` 按 USD/输出图片计价；和普通 token 输出并存时显式排除已按张计费的图片 token，避免重复计费。非零图片 token 价与按张价重叠，或按张输出与 token 动态阶梯并存时，因来源未明确费用叠加语义而拒绝。
+数字从 JSON 原文直接解析为 Decimal，保留明确零值；缺失字段不会变成免费。超出账务合同精度、负值和非法数字拒绝。支持普通输入/输出、缓存读写及 1h 写入、图片/音频 token、图片/音频缓存读、独立 reasoning、明确按张输出价和可归一的搜索工具费。尚未定义用量和单位合同的图片输入按张、音频缓存创建、视频、按秒等收费字段拒绝，包括明确零。Sub2API `image_generation` 只有图片输出 token 价时，该明确输出价同时覆盖剩余输出 token，避免把未细分输出作为免费。Sub2API `output_cost_per_image` 按 USD/输出图片计价，可与输入 token 价格组合。与普通输出 token 价格并存时，因来源未明确输出 token 是否包含图片及如何剥离而拒绝，不生成无来源依据的零图片 token 价格。
 
 上下文阶梯使用完整 `len`，不使用扣除缓存后的输入量。Sub2API `_above_Nk_tokens` 和 provider `context` 阶梯采用 `>`；Sub2API 显式 inclusive 采用 `>=`。Sub2API 的服务档位先覆盖基础字段，再应用目录长上下文比例；明确的 priority/flex 长上下文绝对价覆盖推导结果。比例只来自目录数字，不按模型名称硬编码。`tiered_pricing` 的连续区间使用各段绝对价，最高段沿用到更长上下文；模型最大上下文由协议/上游约束。AxonHub 的 `context_over_200k` 只在与显式 `tiers` 某段金额完全一致时视为兼容副本，采用 `tiers` 的真实阈值，否则拒绝。
 

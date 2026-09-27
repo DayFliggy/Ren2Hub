@@ -403,7 +403,9 @@ func TestDeleteChannelBatchReportsAndAuditsActualDeletedCount(t *testing.T) {
 }
 
 func TestSettleTestQuotaUsesFrozenSafeAttributes(t *testing.T) {
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "test", Mode: billing.ModeExpression, Expression: `attr("service_tier") == "fast" ? p * 3 : p * 2`}, "1", map[string]interface{}{"service_tier": "fast"}, time.Unix(1700000000, 0))
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "test", Mode: billing.ModeExpression,
+		Support:    &billing.PricingSupport{Dimensions: []string{"p"}, ServiceTiers: []string{"default", "fast"}},
+		Expression: `attr("service_tier") == "fast" ? p * 3 : p * 2`}, "1", map[string]interface{}{"service_tier": "fast"}, time.Unix(1700000000, 0))
 	require.NoError(t, err)
 	info := &relaycommon.RelayInfo{PriceData: types.PriceData{Quote: quote}}
 	quota, err := settleTestQuota(info, info.PriceData, &dto.Usage{PromptTokens: 1000})
