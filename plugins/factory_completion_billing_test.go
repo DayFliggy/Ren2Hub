@@ -114,8 +114,8 @@ func TestSoraCompletionSecondsPresencePrecedesDuration(t *testing.T) {
 		want       map[string]any
 		invalid    bool
 	}{
-		{"explicit_zero", `{"status":"completed","seconds":0,"duration":10}`, map[string]any{"seconds": float64(0)}, false},
-		{"fallback_if_absent", `{"status":"completed","duration":10}`, map[string]any{"seconds": float64(10)}, false},
+		{"explicit_zero", `{"status":"completed","seconds":0,"duration":10}`, map[string]any{"seconds": "0"}, false},
+		{"fallback_if_absent", `{"status":"completed","duration":10}`, map[string]any{"seconds": "10"}, false},
 		{"null_is_not_absent", `{"status":"completed","seconds":null,"duration":10}`, nil, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {

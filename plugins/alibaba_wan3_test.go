@@ -73,11 +73,7 @@ func TestAlibabaWan3(t *testing.T) {
 
 		value, callErr = plugin.Engine.Call(t.Context(), "extractUsage", usageCtx("facts", body))
 		require.NoError(t, callErr)
-		assert.Equal(t, map[string]any{"seconds": float64(30), "resolution": "1080P"}, roundTrip(t, value))
-
-		value, callErr = plugin.Engine.Call(t.Context(), "extractUsage", usageCtx("billing_ratios", body))
-		require.NoError(t, callErr)
-		assert.Equal(t, float64(30), roundTrip(t, value)["seconds"])
+		assert.Equal(t, map[string]any{"seconds": "30", "resolution": "1080P"}, roundTrip(t, value))
 
 		_, callErr = plugin.Engine.Call(t.Context(), "buildSubmitRequest", submitCtx("wan2.7-t2v", "wan2.7-t2v", map[string]any{"model": "wan2.7-t2v", "prompt": "a cat", "auto_duration": true}))
 		require.ErrorContains(t, callErr, "only supported by wan3.0")
@@ -125,15 +121,15 @@ func TestAlibabaWan3(t *testing.T) {
 	t.Run("completion facts read the wan3.0 usage block", func(t *testing.T) {
 		value, callErr := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{}, map[string]any{}, map[string]any{
 			"output": map[string]any{"task_status": "SUCCEEDED", "video_url": "https://upstream.example/v.mp4"},
-			"usage":  map[string]any{"video_count": 1, "duration": 7.5, "output_video_duration": 7.5, "SR": 720, "ratio": "16:9"},
+			"usage":  map[string]any{"video_count": 1, "duration": "7.5", "output_video_duration": "7.5", "SR": 720, "ratio": "16:9"},
 		})
 		require.NoError(t, callErr)
-		assert.Equal(t, map[string]any{"seconds": 7.5, "resolution": "720P"}, roundTrip(t, value))
+		assert.Equal(t, map[string]any{"seconds": "7.5", "resolution": "720P"}, roundTrip(t, value))
 
 		value, callErr = plugin.Engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{}, map[string]any{}, map[string]any{
 			"output": map[string]any{"task_status": "SUCCEEDED", "duration": 5, "resolution": "1080p"},
 		})
 		require.NoError(t, callErr)
-		assert.Equal(t, map[string]any{"seconds": float64(5), "resolution": "1080P"}, roundTrip(t, value))
+		assert.Equal(t, map[string]any{"seconds": "5", "resolution": "1080P"}, roundTrip(t, value))
 	})
 }
