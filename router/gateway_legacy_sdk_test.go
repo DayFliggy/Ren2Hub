@@ -163,7 +163,7 @@ func TestGatewayOfficialLegacySDK(t *testing.T) {
 				if provider.name == "tencent" {
 					endpoint = "https://hunyuan.tencentcloudapi.com"
 				}
-				configured := &model.Channel{Type: provider.channelType, Name: "SDK legacy fixture", Models: alias, Key: provider.key, Status: common.ChannelStatusEnabled, BaseURL: &endpoint, Group: "default", CapacityTotal: 10, ChannelRatio: 1, ModelMapping: &mappingJSON}
+				configured := &model.Channel{Type: provider.channelType, Name: "SDK legacy fixture", Models: alias, Key: provider.key, Status: common.ChannelStatusEnabled, BaseURL: &endpoint, Group: "default", CapacityTotal: 10, ChannelRatio: "1", ModelMapping: &mappingJSON}
 				require.NoError(t, model.DB.Create(configured).Error)
 				require.NoError(t, configured.AddAbilities(model.DB))
 			}

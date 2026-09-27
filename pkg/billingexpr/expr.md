@@ -13,6 +13,7 @@ Ren2Hub 的计价来源是数据库中发布的不可变 PriceVersion，模式�
 | img、img_o | 图片输入、输出 token |
 | img_cr | 明确报告的图片缓存读取 token，单独定价时从 cr 与 img 中移出 |
 | ai、ao | 音频输入、输出 token |
+| reasoning | 推理输出 token；单独定价时从 c 中移出 |
 | image_count | 图片实际数量，整数 1–128；发送前使用最终请求的已验证数量 |
 
 子类别在表达式中出现时，从 p/c 排除；未出现时仍按基础输入/输出价格计费。OpenAI/Gemini 输入为包含缓存的总量；Claude 输入不包含缓存，因此未独立定价的缓存需要加回基础输入量。归一化在 pkg/billing.Usage.TokenParams 中统一执行。缓存重叠可将剩余文本降到零，不得产生负费用；原始负数或超范围数量直接拒绝计价。

@@ -1,8 +1,5 @@
-import {
-  channelRatioDecimal,
-  multiplyDecimal,
-  shiftDecimal,
-} from '@/utils/decimal'
+import { shiftDecimal } from '@/utils/decimal'
+import type { PriceTier, PriceTierMode } from './modelPricing'
 import { createApiClient } from './createClient'
 import { httpTransport, publicHttpTransport } from './httpTransport'
 import {
@@ -17,9 +14,13 @@ import { ApiError } from './types'
 
 export type PublicDocument = 'about' | 'privacy-policy' | 'user-agreement'
 export type RankingPeriod = 'today' | 'week' | 'month' | 'year'
-export interface CatalogModel extends PricingModelContract {
-  channel_ratio_min: number
-  channel_ratio_max: number
+export type CatalogModel = PricingModelContract
+export interface CatalogPrice {
+  key: string
+  value: string
+  unit: string
+  tier_mode?: PriceTierMode
+  tiers?: PriceTier[]
 }
 export interface PricingCatalog {
   models: CatalogModel[]
@@ -99,17 +100,7 @@ export function parsePricingCatalog(value: unknown): PricingCatalog {
       status: 200,
     })
   const rawModels = records(value.data, endpoint)
-  const models = parsePricingModels(rawModels).map((model, index) => {
-    const raw = rawModels[index]!
-    const minimum = nonNegative(raw.channel_ratio_min, endpoint)
-    const maximum = nonNegative(raw.channel_ratio_max, endpoint)
-    if (minimum <= 0 || maximum < minimum) invalidResponse(endpoint)
-    return {
-      ...model,
-      channel_ratio_min: minimum,
-      channel_ratio_max: maximum,
-    }
-  })
+  const models = parsePricingModels(rawModels)
   if (!isRecord(value.supported_endpoint)) invalidResponse(endpoint)
   return {
     models,
@@ -204,9 +195,8 @@ function parseMovers(value: unknown): RankingMover[] {
 
 export function catalogPrices(
   model: CatalogModel,
-  channelRatio: number,
   unit: 'M' | 'K'
-) {
+): CatalogPrice[] {
   const version = model.price_version
   if (version.mode === 'free') return [{ key: 'free', value: '0', unit: '' }]
   const labels: Record<string, string> = {
@@ -219,20 +209,35 @@ export function catalogPrices(
     img_o: 'imageOutput',
     ai: 'audioInput',
     ao: 'audioOutput',
+    reasoning: 'reasoning',
     calls: 'request',
     images: 'images',
     seconds: 'seconds',
   }
   return version.prices.map((price) => ({
     key: labels[price.quantity] ?? price.quantity,
-    value: shiftDecimal(
-      multiplyDecimal(price.price, channelRatioDecimal(channelRatio)),
-      unit === 'K' && price.unit === 'per_million_tokens' ? 3 : 0
-    ),
+    value: price.tier_mode
+      ? ''
+      : shiftDecimal(
+          price.price,
+          unit === 'K' && price.unit === 'per_million_tokens' ? 3 : 0
+        ),
     unit:
       unit === 'K' && price.unit === 'per_million_tokens'
         ? 'per_thousand_tokens'
         : price.unit,
+    ...(price.tier_mode
+      ? {
+          tier_mode: price.tier_mode,
+          tiers: (price.tiers ?? []).map((tier) => ({
+            ...tier,
+            unit_price: shiftDecimal(
+              tier.unit_price,
+              unit === 'K' && price.unit === 'per_million_tokens' ? 3 : 0
+            ),
+          })),
+        }
+      : {}),
   }))
 }
 

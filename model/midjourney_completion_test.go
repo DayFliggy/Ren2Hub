@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billing"
@@ -43,7 +44,7 @@ func TestMidjourneyCompletionRecoveryAcrossDatabases(t *testing.T) {
 				initCol()
 				require.NoError(t, connection.Close())
 			})
-			require.NoError(t, db.AutoMigrate(&Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}))
+			require.NoError(t, db.AutoMigrate(&Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}))
 			t.Run("accepted-submission", func(t *testing.T) {
 				fixture := newMidjourneyCompletionFixture(t, db, "accepted", false, true)
 				testMidjourneyAcceptedSubmission(t, fixture)
@@ -148,6 +149,7 @@ func newMidjourneySubmission(t *testing.T, fixture midjourneyCompletionFixture, 
 	_, err := EnsureBillingRecovery(BillingRecoveryInput{RequestID: requestID, UserID: task.UserId, TokenID: task.PrivateData.TokenId, TokenRequired: fixture.tokenRequired, Source: "wallet"})
 	require.NoError(t, err)
 	require.NoError(t, Reserve(requestID, task.Quota))
+	require.NoError(t, PrepareBillingAttempt(context.Background(), requestID, requestID+":attempt", task.ChannelId, fixture.quote))
 	consumption := fixture.consumption
 	consumption.Log.Quota = task.Quota
 	return task, consumption
@@ -225,6 +227,7 @@ type midjourneyCompletionFixture struct {
 	user          User
 	token         Token
 	channel       Channel
+	quote         *billing.Quote
 	tokenRequired bool
 }
 
@@ -237,6 +240,11 @@ func newMidjourneyCompletionFixture(t *testing.T, db *gorm.DB, identity string, 
 	require.NoError(t, db.Create(&fixture.token).Error)
 	fixture.channel = Channel{Name: "mj-" + identity}
 	require.NoError(t, db.Create(&fixture.channel).Error)
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "mj_imagine", ScopeKind: billing.PriceScopeChannel,
+		ChannelID: fixture.channel.Id, Mode: billing.ModeUnitPrice,
+		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.00006"}}}, "1", nil, time.Unix(7200, 0))
+	require.NoError(t, err)
+	fixture.quote = quote
 	fixture.task = Midjourney{MjId: "provider-" + identity, UserId: fixture.user.Id, ChannelId: fixture.channel.Id,
 		Quota: 30, Status: "IN_PROGRESS", Progress: "45%", Action: "IMAGINE"}
 	logTokenID := fixture.token.Id
@@ -258,11 +266,17 @@ func newMidjourneyCompletionFixture(t *testing.T, db *gorm.DB, identity string, 
 		_, err := EnsureBillingRecovery(BillingRecoveryInput{RequestID: fixture.task.PrivateData.SubmissionRequestID, UserID: fixture.user.Id, TokenID: fixture.token.Id, TokenRequired: tokenRequired, Source: "wallet"})
 		require.NoError(t, err)
 		require.NoError(t, Reserve(fixture.task.PrivateData.SubmissionRequestID, 30))
+		require.NoError(t, PrepareBillingAttempt(context.Background(), fixture.task.PrivateData.SubmissionRequestID,
+			fixture.task.PrivateData.SubmissionRequestID+":attempt", fixture.channel.Id, fixture.quote))
 	}
 	require.NoError(t, db.Create(&fixture.task).Error)
+	usage := billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "provider", Complete: true}
+	charge, err := billing.Calculate(fixture.quote, usage)
+	require.NoError(t, err)
+	require.EqualValues(t, 30, charge.FinalQuota)
 	fixture.consumption = BillingConsumption{Log: Log{UserId: fixture.user.Id, TokenId: logTokenID, ChannelId: fixture.channel.Id,
 		Username: fixture.user.Username, ModelName: "mj_imagine", CreatedAt: 7200}, CountUsage: true, LogEnabled: true, ExportEnabled: true,
-		Usage: &billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "provider", Complete: true}, Charge: &billing.ChargeResult{FinalQuota: 30}}
+		Usage: &usage, Charge: charge}
 	if !legacy {
 		accepted := fixture.consumption
 		accepted.Log.Quota = fixture.task.Quota

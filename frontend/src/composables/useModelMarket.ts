@@ -59,6 +59,7 @@ function modelPrice(pricing: PricingModelContract): MarketModel['price'] {
     const key = names[line.quantity]
     if (
       key &&
+      !line.tier_mode &&
       key !== 'tiers' &&
       (line.unit === 'per_million_tokens' ||
         (key === 'per_call' && line.unit === 'per_call'))
@@ -101,6 +102,7 @@ export function buildLiveModelCatalog(
               : ('token' as const),
       price: price ? modelPrice(price) : {},
       pricing: price?.price_version,
+      priceVersions: price?.price_versions,
       context: 0,
       tagline: price?.description ?? '',
       latency: metrics ? Math.max(0, metrics.avg_latency_ms / 1000) : 0,

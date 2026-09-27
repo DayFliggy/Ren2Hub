@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -496,8 +497,7 @@ func validateOptionPatch(values map[string]string) error {
 				return fmt.Errorf("Token 预算比例必须在 0.1 到 1 之间")
 			}
 		case "grok.violation_deduction_amount":
-			amount, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
-			if err != nil || amount < 0 {
+			if _, err := billing.ParseAmountUSD(strings.TrimSpace(value)); err != nil {
 				return fmt.Errorf("Grok 违规扣费必须为非负数字")
 			}
 		case "channel_affinity_setting.max_entries", "channel_affinity_setting.default_ttl_seconds", "channel_affinity_setting.rules":

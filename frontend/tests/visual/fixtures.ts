@@ -424,8 +424,7 @@ export async function configureStablePage(
           tags: 'reasoning,tools',
           vendor_id: 1,
           owner_by: 'OpenAI',
-          channel_ratio_min: 0.8,
-          channel_ratio_max: 1.2,
+
           supported_endpoint_types: ['openai'],
           billing_mode: 'token',
           price_version: {
@@ -449,8 +448,7 @@ export async function configureStablePage(
           tags: 'analysis,code',
           vendor_id: 2,
           owner_by: 'Anthropic',
-          channel_ratio_min: 1,
-          channel_ratio_max: 1,
+
           supported_endpoint_types: ['openai'],
           billing_mode: 'token',
           price_version: {
@@ -478,8 +476,7 @@ export async function configureStablePage(
           tags: 'multimodal,long-context',
           vendor_id: 3,
           owner_by: 'Google',
-          channel_ratio_min: 1,
-          channel_ratio_max: 1.5,
+
           supported_endpoint_types: ['openai'],
           billing_mode: 'token',
           price_version: {

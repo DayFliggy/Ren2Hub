@@ -133,7 +133,7 @@ func TestGatewayOfficialCustomSDK(t *testing.T) {
 				mapping, err := common.Marshal(map[string]string{alias: upstreamModels[outgoing]})
 				require.NoError(t, err)
 				mappingJSON, headers := string(mapping), `{"X-Tenant":"isolated-tenant","Host":"tenant.custom.example"}`
-				configured := &model.Channel{Type: constant.ChannelTypeAdvancedCustom, Name: "SDK custom fixture", Models: alias, Key: "isolated-custom-key", Status: common.ChannelStatusEnabled, BaseURL: existing.BaseURL, Group: "default", CapacityTotal: 10, ChannelRatio: 1, ModelMapping: &mappingJSON, HeaderOverride: &headers}
+				configured := &model.Channel{Type: constant.ChannelTypeAdvancedCustom, Name: "SDK custom fixture", Models: alias, Key: "isolated-custom-key", Status: common.ChannelStatusEnabled, BaseURL: existing.BaseURL, Group: "default", CapacityTotal: 10, ChannelRatio: "1", ModelMapping: &mappingJSON, HeaderOverride: &headers}
 				config := &dto.AdvancedCustomConfig{}
 				for _, incoming := range protocols {
 					converter, supported := converters[incoming+"/"+outgoing]

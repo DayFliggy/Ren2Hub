@@ -8,6 +8,7 @@ import {
   catalogPrices,
   publicCatalogApi,
   type CatalogModel,
+  type CatalogPrice,
   type PricingCatalog,
 } from '@/api/publicCatalog'
 import PublicPage from '@/components/public/PublicPage.vue'
@@ -19,7 +20,6 @@ import SearchInput from '@/components/common/SearchInput.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
-import { formatNumber } from '@/utils/format'
 import { formatDecimalUSD } from '@/utils/decimal'
 import { publicPageMessages } from '@/i18n/publicPages'
 
@@ -40,12 +40,36 @@ const unit = ref(route.query.tokenUnit === 'K' ? 'K' : 'M')
 const page = ref(1)
 const pageSize = ref(20)
 const billing = ref('')
+const selectedVersion = ref(
+  typeof route.query.priceVersion === 'string' ? route.query.priceVersion : ''
+)
 let controller: AbortController | undefined
 const detailId = computed(() =>
   typeof route.params.modelId === 'string' ? route.params.modelId : ''
 )
+const modelVersions = computed(() =>
+  (catalog.value?.models ?? []).flatMap((model) =>
+    (model.price_versions ?? [model.price_version]).map((version) => ({
+      ...model,
+      price_version: version,
+    }))
+  )
+)
+const detailVersions = computed(() =>
+  modelVersions.value.filter((model) => model.model_name === detailId.value)
+)
 const detail = computed(() =>
-  catalog.value?.models.find((model) => model.model_name === detailId.value)
+  detailVersions.value.find(
+    (model) =>
+      !selectedVersion.value ||
+      String(model.price_version.id) === selectedVersion.value
+  )
+)
+const versionOptions = computed(() =>
+  detailVersions.value.map((model) => ({
+    value: String(model.price_version.id),
+    label: `${model.price_version.scope_kind ?? 'global_model'}${model.price_version.channel_id ? ` · ${model.price_version.channel_id}` : ''} · v${model.price_version.id}`,
+  }))
 )
 const unitOptions = computed(() => [
   { value: 'M', label: t('publicPage.million') },
@@ -78,7 +102,7 @@ const billingMode = (model: CatalogModel) =>
         ? 'token'
         : 'request'
 const filtered = computed(() =>
-  (catalog.value?.models ?? []).filter((model) => {
+  modelVersions.value.filter((model) => {
     const search = keyword.value.trim().toLowerCase()
     return (
       (!search ||
@@ -99,16 +123,23 @@ const pageModels = computed(() =>
 const money = (value: string) => formatDecimalUSD(value, 3)
 const prices = (model: CatalogModel) => {
   const tokenUnit = unit.value === 'K' ? 'K' : 'M'
-  const maximum = catalogPrices(model, model.channel_ratio_max, tokenUnit)
-  return catalogPrices(model, model.channel_ratio_min, tokenUnit).map(
-    (price, index) => ({
-      ...price,
-      formatted:
-        price.value === maximum[index]?.value
-          ? money(price.value)
-          : `${money(price.value)} - ${money(maximum[index]!.value)}`,
-    })
-  )
+  const lines = catalogPrices(model, tokenUnit)
+  const version = model.price_version
+  const flatFee: CatalogPrice[] =
+    version.flat_fee && version.flat_fee !== '0'
+      ? [{ key: 'flatFee', value: version.flat_fee, unit: 'per_call' }]
+      : []
+  return [...lines, ...flatFee].map((price) => ({
+    ...price,
+    formatted: price.tiers?.length
+      ? price.tiers
+          .map((tier) => {
+            const bound = tier.up_to ? `≤${tier.up_to}` : '∞'
+            return `${bound}: ${money(tier.unit_price)}`
+          })
+          .join(' / ')
+      : money(price.value),
+  }))
 }
 const detailEndpoints = computed(() =>
   (detail.value?.supported_endpoint_types ?? []).map((name) => ({
@@ -119,6 +150,12 @@ const detailEndpoints = computed(() =>
 watch([keyword, vendor, billing, pageSize], () => {
   page.value = 1
 })
+watch(
+  () => route.query.priceVersion,
+  (value) => {
+    selectedVersion.value = typeof value === 'string' ? value : ''
+  }
+)
 
 async function load() {
   controller?.abort()
@@ -160,7 +197,7 @@ onScopeDispose(() => controller?.abort())
         ><ArrowLeft :size="16" />{{ t('publicPage.pricing') }}</RouterLink
       >
       <span v-else class="text-sm text-[var(--text-secondary)]">{{
-        t('publicPage.modelsCount', { count: filtered.length })
+        t('publicPage.pricesCount', { count: filtered.length })
       }}</span>
     </template>
     <div
@@ -194,6 +231,12 @@ onScopeDispose(() => controller?.abort())
           :options="billingOptions"
           :label="t('publicPage.billing')"
           :prefix-label="t('publicPage.billing')"
+        />
+        <FilterSelect
+          v-if="detailId && versionOptions.length > 1"
+          v-model="selectedVersion"
+          :options="versionOptions"
+          :label="t('publicPage.priceScope')"
         />
         <FilterSelect
           v-model="unit"
@@ -255,6 +298,9 @@ onScopeDispose(() => controller?.abort())
               <div v-for="price in prices(detail)" :key="price.key">
                 <dt class="text-xs text-[var(--text-secondary)]">
                   {{ t(`publicPage.${price.key}`, price.key) }}
+                  <span v-if="price.tier_mode">
+                    · {{ t(`publicPage.tierModes.${price.tier_mode}`) }}</span
+                  >
                 </dt>
                 <dd class="mt-2 break-words font-mono text-sm">
                   {{ price.formatted }}
@@ -264,11 +310,30 @@ onScopeDispose(() => controller?.abort())
                 </dd>
               </div>
             </dl>
-            <p class="mt-4 break-words text-xs text-[var(--text-tertiary)]">
-              {{ t('publicPage.channelRatio') }}:
-              {{ formatNumber(detail.channel_ratio_min) }} -
-              {{ formatNumber(detail.channel_ratio_max) }}
-            </p>
+            <dl
+              class="mt-4 grid gap-2 text-xs text-[var(--text-tertiary)] sm:grid-cols-3"
+              data-price-version-evidence
+            >
+              <div>
+                <dt>{{ t('publicPage.priceScope') }}</dt>
+                <dd class="font-mono">
+                  {{ detail.price_version.scope_kind || 'global_model'
+                  }}<span v-if="detail.price_version.channel_id">
+                    · {{ detail.price_version.channel_id }}</span
+                  >
+                </dd>
+              </div>
+              <div>
+                <dt>{{ t('publicPage.priceVersion') }}</dt>
+                <dd class="font-mono">{{ detail.price_version.id }}</dd>
+              </div>
+              <div>
+                <dt>{{ t('publicPage.priceHash') }}</dt>
+                <dd class="break-all font-mono">
+                  {{ detail.price_version.hash }}
+                </dd>
+              </div>
+            </dl>
           </section>
           <section v-if="detailEndpoints.length">
             <h2 class="mb-4 text-lg font-semibold">
@@ -314,17 +379,30 @@ onScopeDispose(() => controller?.abort())
               </tr>
             </thead>
             <tbody>
-              <tr v-for="model in pageModels" :key="model.model_name">
+              <tr
+                v-for="model in pageModels"
+                :key="`${model.model_name}:${model.price_version.id}`"
+              >
                 <td class="max-w-96">
                   <RouterLink
                     :to="{
                       name: 'pricing-model',
                       params: { modelId: model.model_name },
-                      query: { tokenUnit: unit },
+                      query: {
+                        tokenUnit: unit,
+                        priceVersion: String(model.price_version.id),
+                      },
                     }"
                     class="break-words font-medium text-[var(--accent-text)]"
                     >{{ model.model_name }}</RouterLink
                   >
+                  <p class="mt-1 text-xs text-[var(--text-tertiary)]">
+                    {{ model.price_version.scope_kind ?? 'global_model'
+                    }}<span v-if="model.price_version.channel_id">
+                      · {{ model.price_version.channel_id }}</span
+                    >
+                    · v{{ model.price_version.id }}
+                  </p>
                 </td>
                 <td>
                   <span class="flex items-center gap-2"
@@ -346,7 +424,12 @@ onScopeDispose(() => controller?.abort())
                     :key="price.key"
                     class="mb-1 flex flex-wrap gap-x-2 text-xs"
                   >
-                    <span>{{ t(`publicPage.${price.key}`, price.key) }}</span
+                    <span
+                      >{{ t(`publicPage.${price.key}`, price.key)
+                      }}<span v-if="price.tier_mode">
+                        ·
+                        {{ t(`publicPage.tierModes.${price.tier_mode}`) }}</span
+                      ></span
                     ><span class="font-mono">{{ price.formatted }}</span
                     ><span
                       v-if="price.unit"

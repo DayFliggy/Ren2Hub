@@ -298,8 +298,13 @@ func TestAutomaticPricingMergeUsesCompleteFallbackAndRejectsCorruption(t *testin
 	assert.NotEmpty(t, drafts)
 	assert.NotContains(t, unavailable, "unsafe")
 	require.NoError(t, model.DB.Model(&model.BillingPricingSource{}).Where("source = ?", "sub2api").Update("hash", strings.Repeat("0", 64)).Error)
+	catalog, err = loadAutomaticPriceCatalog(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, autopricing.SourceAxonHub, catalog.resolve("shared").entry.Source)
+	assert.Contains(t, catalog.resolve("missing").reasons[0].Reason, "integrity")
+	require.NoError(t, model.DB.Model(&model.BillingPricingSource{}).Where("source = ?", "axonhub").Update("hash", strings.Repeat("0", 64)).Error)
 	_, err = loadAutomaticPriceCatalog(ctx)
-	require.ErrorContains(t, err, "integrity")
+	require.ErrorContains(t, err, "no validated pricing snapshot")
 }
 
 func TestAutomaticPricingInvalidatesUnavailablePricesWithoutChangingFrozenQuotes(t *testing.T) {
@@ -326,7 +331,7 @@ func TestAutomaticPricingInvalidatesUnavailablePricesWithoutChangingFrozenQuotes
 	updated, err := syncAutomaticPricing(ctx, server.Client(), sources)
 	require.NoError(t, err)
 	assert.Equal(t, 3, updated.Deactivated)
-	assert.Zero(t, updated.Published)
+	assert.Equal(t, 1, updated.Published, "source provenance changes create a new frozen version even when stable pricing is unchanged")
 	for _, name := range []string{"unsafe", "models/unsafe", "removed"} {
 		_, err := model.GetActiveBillingPrice(ctx, name)
 		require.ErrorIs(t, err, model.ErrAutomaticBillingPriceUnavailable)
@@ -356,7 +361,7 @@ func TestAutomaticPricingInvalidatesUnavailablePricesWithoutChangingFrozenQuotes
 	document = `{"unsafe":{"input_cost_per_token":0.000003,"output_cost_per_token":0.000008},"stable":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008}}`
 	repaired, err := syncAutomaticPricing(ctx, server.Client(), sources)
 	require.NoError(t, err)
-	assert.Equal(t, 2, repaired.Published)
+	assert.Equal(t, 3, repaired.Published, "the repaired source revision publishes unsafe aliases and the changed stable snapshot")
 	for _, name := range []string{"unsafe", "models/unsafe"} {
 		price, err := model.GetActiveBillingPrice(ctx, name)
 		require.NoError(t, err)
@@ -705,6 +710,29 @@ func TestAutomaticPricingLongSourceErrorPreservesSnapshotAndChecksLaterSources(t
 		_, err := model.GetActiveBillingPrice(ctx, name)
 		require.NoError(t, err)
 	}
+}
+
+func TestAutomaticPricingInitialSourceFailureDoesNotBlockFallback(t *testing.T) {
+	automaticPricingTestDB(t)
+	ctx := context.Background()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/primary" {
+			_, _ = io.WriteString(w, "not-json")
+			return
+		}
+		_, _ = io.WriteString(w, `{"fallback":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`)
+	}))
+	defer server.Close()
+
+	result, err := syncAutomaticPricing(ctx, server.Client(), []billingPricingSourceSpec{
+		{Source: autopricing.SourceAxonHub, URL: server.URL + "/primary"},
+		{Source: autopricing.SourceSub2API, URL: server.URL + "/fallback"},
+	})
+	require.Error(t, err, "the failed source remains visible to operators")
+	require.NotEmpty(t, result.Errors)
+	price, err := model.GetActiveBillingPrice(ctx, "fallback")
+	require.NoError(t, err, "a valid fallback source must still publish")
+	assert.Equal(t, billing.PriceScopeGlobal, price.ScopeKind)
 }
 
 func TestAutomaticPricingUnconfiguredDiagnosticsFitDurableTaskHistory(t *testing.T) {

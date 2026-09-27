@@ -110,7 +110,7 @@ func (p *requestRulePatcher) Visit(node *ast.Node) {
 	ruleIndex := len(p.requestRules)
 	p.requestRules = append(p.requestRules, RequestRuleTrace{
 		Cond:       conditional.Cond.String(),
-		Multiplier: multiplier,
+		Multiplier: strconv.FormatFloat(multiplier, 'f', -1, 64),
 	})
 
 	traceFunction := requestRuleTraceFunction
@@ -185,6 +185,7 @@ var compileEnvPrototypeV1 = map[string]interface{}{
 	"img_o":       float64(0),
 	"ai":          float64(0),
 	"ao":          float64(0),
+	"reasoning":   float64(0),
 	"tier":        func(string, float64) float64 { return 0 },
 	"fixed":       func(float64) float64 { return 0 },
 	"_trace":      func(int, bool, float64) float64 { return 1 },
@@ -210,7 +211,7 @@ func getCompileEnv(version int) map[string]interface{} {
 	env := make(map[string]interface{}, len(compileEnvPrototypeV1))
 	for key, value := range compileEnvPrototypeV1 {
 		switch key {
-		case "p", "c", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao", "fixed", "image_count":
+		case "p", "c", "reasoning", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao", "fixed", "image_count":
 			continue
 		}
 		env[key] = value
@@ -226,7 +227,7 @@ func CompileFromCache(exprStr string) (*vm.Program, error) {
 }
 
 // CompileFromCacheByHash is like CompileFromCache but accepts a pre-computed
-// hash, useful when the caller already has the BillingSnapshot.ExprHash.
+// hash, useful when the caller already has the frozen expression hash.
 func CompileFromCacheByHash(exprStr, hash string) (*vm.Program, error) {
 	return compileFromCacheByHash(exprStr, hash)
 }

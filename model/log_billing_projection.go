@@ -38,10 +38,21 @@ func userBillingLogMetadata(raw string) map[string]any {
 	if common.Unmarshal(fields["price_version_id"], &priceID) == nil && priceID > 0 {
 		result["price_version_id"] = priceID
 	}
-	var hash, mode string
-	if common.Unmarshal(fields["quote_hash"], &hash) == nil && quoteHashPattern.MatchString(hash) {
-		result["quote_hash"] = hash
+	var scope string
+	if common.Unmarshal(fields["price_scope"], &scope) == nil && (scope == billing.PriceScopeGlobal || scope == billing.PriceScopeChannel) {
+		result["price_scope"] = scope
+		var channelID int
+		if common.Unmarshal(fields["price_channel_id"], &channelID) == nil && ((scope == billing.PriceScopeGlobal && channelID == 0) || (scope == billing.PriceScopeChannel && channelID > 0)) {
+			result["price_channel_id"] = channelID
+		}
 	}
+	for _, key := range []string{"quote_hash", "price_version_hash"} {
+		var hash string
+		if common.Unmarshal(fields[key], &hash) == nil && quoteHashPattern.MatchString(hash) {
+			result[key] = hash
+		}
+	}
+	var mode string
 	if common.Unmarshal(fields["billing_mode"], &mode) == nil && (mode == billing.ModeFree || mode == billing.ModeUnitPrice || mode == billing.ModeExpression) {
 		result["billing_mode"] = mode
 	}

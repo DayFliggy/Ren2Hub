@@ -73,8 +73,7 @@ export interface AdminChannel extends Record<string, unknown> {
   // Capacity & ratio fields (Phase A backend fields)
   capacity_used: number
   capacity_total: number
-  channel_ratio: number
-  upstream_ratio: number
+  channel_ratio: string
   used_quota: string
   balance: number
   response_time: number
@@ -112,7 +111,7 @@ export interface AdminChannelCreateInput {
   weight: number
   // Capacity & ratio
   capacity_total: number
-  channel_ratio: number
+  channel_ratio: string
 }
 
 export interface AdminChannelCreateOptions {
@@ -493,6 +492,7 @@ export interface MarketModel {
   billing: MarketBilling
   price: MarketModelPrice
   pricing?: import('@/api/modelPricing').PriceVersion
+  priceVersions?: import('@/api/modelPricing').PriceVersion[]
   context: number // context window in tokens (0 = n/a)
   tagline: string
   latency: number // seconds, snapshot

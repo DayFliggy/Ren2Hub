@@ -20,7 +20,7 @@ func quotedTextInfo(t *testing.T, prices []billing.UnitPrice) *relaycommon.Relay
 	t.Helper()
 	q, err := billing.NewQuote(billing.PriceVersion{Model: "test", Mode: billing.ModeUnitPrice, Prices: prices}, "1", nil, time.Now())
 	require.NoError(t, err)
-	return &relaycommon.RelayInfo{OriginModelName: "test", StartTime: time.Now(), PriceData: hosttypes.PriceData{Quote: q, ChannelRatio: 1}}
+	return &relaycommon.RelayInfo{OriginModelName: "test", StartTime: time.Now(), PriceData: hosttypes.PriceData{Quote: q}}
 }
 
 func TestDeliveredPerCallStreamChargesOnceWithoutTokenUsage(t *testing.T) {
@@ -102,7 +102,7 @@ func TestTextQuoteRejectsNegativeCacheBeforeDisplayNormalization(t *testing.T) {
 
 func TestTextMissingQuoteCannotUseOldRatioOrPrice(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	info := &relaycommon.RelayInfo{PriceData: hosttypes.PriceData{ModelRatio: 100, ModelPrice: 1, ChannelRatio: 1}}
+	info := &relaycommon.RelayInfo{PriceData: hosttypes.PriceData{}}
 	summary := calculateTextQuotaSummary(ctx, info, &dto.Usage{PromptTokens: 100})
 	require.ErrorContains(t, summary.PricingError, "missing frozen")
 	assert.Zero(t, summary.Quota)
@@ -129,7 +129,7 @@ func TestEmbeddingScopeKeepsOutputEvidenceAcrossUsageAliases(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			quote, err := billing.NewQuote(billing.PriceVersion{Model: "embedding-test", Mode: billing.ModeExpression, Expression: "p * 1", UsageScope: billing.UsageScopeEmbedding}, "1", nil, time.Now())
 			require.NoError(t, err)
-			info := &relaycommon.RelayInfo{OriginModelName: "embedding-test", StartTime: time.Now(), PriceData: hosttypes.PriceData{Quote: quote, ChannelRatio: 1}}
+			info := &relaycommon.RelayInfo{OriginModelName: "embedding-test", StartTime: time.Now(), PriceData: hosttypes.PriceData{Quote: quote}}
 			usage := test.output
 			usage.PromptTokens, usage.UsageSource = 1000, "provider"
 			summary := calculateTextQuotaSummary(ctx, info, &usage)
@@ -146,7 +146,7 @@ func TestEmbeddingScopeKeepsOutputEvidenceAcrossUsageAliases(t *testing.T) {
 		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 		quote, err := billing.NewQuote(billing.PriceVersion{Model: "manual", Mode: billing.ModeExpression, Expression: "p * 1"}, "1", nil, time.Now())
 		require.NoError(t, err)
-		info := &relaycommon.RelayInfo{OriginModelName: "manual", StartTime: time.Now(), PriceData: hosttypes.PriceData{Quote: quote, ChannelRatio: 1}}
+		info := &relaycommon.RelayInfo{OriginModelName: "manual", StartTime: time.Now(), PriceData: hosttypes.PriceData{Quote: quote}}
 		summary := calculateTextQuotaSummary(ctx, info, &dto.Usage{PromptTokens: 1000, CompletionTokens: 5, CompletionTokenDetails: dto.OutputTokenDetails{ReasoningTokens: 5}, UsageSource: "provider"})
 		require.NoError(t, summary.PricingError)
 		assert.Equal(t, 500, summary.Quota)
@@ -229,8 +229,8 @@ func TestCacheWriteTokensTotal(t *testing.T) {
 
 func TestAppendToolSurchargeLogInfoWritesOnlyStructuredFields(t *testing.T) {
 	items := []ToolSurchargeItem{
-		{Name: dto.BuildInToolWebSearch, Count: 2, Price: 10},
-		{Name: dto.BuildInToolImageGeneration, Count: 1, Price: 150},
+		{Name: dto.BuildInToolWebSearch, Count: 2, Price: "10"},
+		{Name: dto.BuildInToolImageGeneration, Count: 1, Price: "150"},
 	}
 	other := map[string]interface{}{}
 

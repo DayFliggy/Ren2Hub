@@ -17,7 +17,7 @@ func TestRouteChannelLoadsUseLocalOccupancyWithoutRedis(t *testing.T) {
 	permit, err := gatewayAdmission.TryAcquire(ctx, ChannelAdmissionKey(1), AdmissionPolicy{Capacity: 10, Revision: admissionRevision.Load()})
 	require.NoError(t, err)
 	defer permit.Release()
-	channels := map[int]*model.Channel{1: {Id: 1, CapacityTotal: 10, ChannelRatio: 1}}
+	channels := map[int]*model.Channel{1: {Id: 1, CapacityTotal: 10, ChannelRatio: "1"}}
 	previous := common.RedisEnabled
 	common.RedisEnabled = false
 	defer func() { common.RedisEnabled = previous }()

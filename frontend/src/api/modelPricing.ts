@@ -6,7 +6,7 @@ import {
   requiredString,
   requiredBoolean,
 } from './contracts'
-import { isDecimal } from '@/utils/decimal'
+import { compareDecimal, isDecimal } from '@/utils/decimal'
 import { parseBillingCharge, type BillingCharge } from './billing'
 
 export const PRICE_UNITS = [
@@ -30,12 +30,23 @@ export const PRICE_QUANTITIES = [
   'calls',
   'images',
   'seconds',
+  'reasoning',
 ] as const
+export const PRICE_SCOPE_KINDS = ['global_model', 'channel_model'] as const
+export const PRICE_TIER_MODES = ['volume', 'graduated'] as const
+export type PriceScopeKind = (typeof PRICE_SCOPE_KINDS)[number]
+export type PriceTierMode = (typeof PRICE_TIER_MODES)[number]
 export type PriceMode = 'unit_price' | 'expression' | 'free'
+export interface PriceTier {
+  up_to?: string
+  unit_price: string
+}
 export interface UnitPrice {
   quantity: string
   unit: string
   price: string
+  tier_mode?: PriceTierMode
+  tiers?: PriceTier[]
 }
 export interface PriceVersion {
   contract_version?: 2
@@ -43,12 +54,17 @@ export interface PriceVersion {
   result_unit?: 'micro_usd' | 'usd'
   usage_schema?: UsageSchema
   usage_scope?: 'embedding'
+  scope_kind?: PriceScopeKind
+  channel_id?: number
   id: number
   model: string
   mode: PriceMode
   prices: UnitPrice[]
+  flat_fee?: string
   expression?: string
   created_at: number
+  effective_from?: string
+  effective_to?: string
   hash: string
 }
 export interface UsageField {
@@ -159,6 +175,11 @@ export function validatePriceVersion(
     | 'contract_version'
     | 'calculation_version'
     | 'result_unit'
+    | 'scope_kind'
+    | 'channel_id'
+    | 'flat_fee'
+    | 'effective_from'
+    | 'effective_to'
   >
 ): void {
   if (value.usage_scope !== undefined && value.usage_scope !== 'embedding')
@@ -169,6 +190,42 @@ export function validatePriceVersion(
       value.calculation_version !== 'billing-v2')
   )
     throw new Error('Unsupported price contract')
+  const scope = value.scope_kind ?? 'global_model'
+  if (!(PRICE_SCOPE_KINDS as readonly string[]).includes(scope))
+    throw new Error('Unsupported price scope')
+  const channelId = value.channel_id ?? 0
+  if (!Number.isSafeInteger(channelId) || channelId < 0)
+    throw new Error('Invalid price channel')
+  if (scope === 'global_model' && channelId !== 0)
+    throw new Error('Global prices cannot have a channel')
+  if (scope === 'channel_model' && channelId <= 0)
+    throw new Error('Channel prices require a channel')
+  const decimalPrice = (raw: unknown): raw is string => {
+    if (!isDecimal(raw) || raw.length > 64) return false
+    const [whole = '', fraction = ''] = raw.split('.')
+    return whole.length <= 19 && fraction.length <= 18
+  }
+  if (value.flat_fee !== undefined && !decimalPrice(value.flat_fee))
+    throw new Error('Invalid flat fee')
+  const parseTime = (raw: unknown): number => {
+    if (
+      typeof raw !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+        raw
+      ) ||
+      !Number.isFinite(Date.parse(raw))
+    )
+      throw new Error('Invalid price window')
+    return Date.parse(raw)
+  }
+  if (value.effective_from !== undefined) parseTime(value.effective_from)
+  if (value.effective_to !== undefined) parseTime(value.effective_to)
+  if (
+    value.effective_from !== undefined &&
+    value.effective_to !== undefined &&
+    parseTime(value.effective_from) > parseTime(value.effective_to)
+  )
+    throw new Error('Invalid price window')
   if (
     value.mode === 'expression' &&
     value.expression?.startsWith('v2:') &&
@@ -177,18 +234,60 @@ export function validatePriceVersion(
     throw new Error('Task expressions require a usage schema')
   if (!['unit_price', 'expression', 'free'].includes(value.mode))
     throw new Error('Invalid price mode')
-  if (value.mode === 'free' && (value.prices.length || value.expression))
+  if (
+    value.mode === 'free' &&
+    (value.prices.length ||
+      value.expression ||
+      (value.flat_fee !== undefined &&
+        compareDecimal(value.flat_fee, '0') !== 0))
+  )
     throw new Error('Free mode cannot contain charges')
   if (value.mode === 'expression' && !value.expression?.trim())
     throw new Error('Expression is required')
-  if (value.mode === 'unit_price' && (!value.prices.length || value.expression))
-    throw new Error('Unit prices are required')
+  if (
+    value.mode === 'unit_price' &&
+    ((!value.prices.length && value.flat_fee === undefined) || value.expression)
+  )
+    throw new Error('Unit prices or a flat fee are required')
   if ((value.expression?.length ?? 0) > 16384)
     throw new Error('Expression is too long')
   const seen = new Set<string>()
   for (const price of value.prices) {
     if (seen.has(price.quantity)) throw new Error('Duplicate quantity')
     seen.add(price.quantity)
+    if (price.quantity.length > 128) throw new Error('Invalid quantity')
+    const tiered = price.tier_mode !== undefined
+    if (
+      price.tier_mode !== undefined &&
+      !(PRICE_TIER_MODES as readonly string[]).includes(price.tier_mode)
+    )
+      throw new Error('Invalid tier mode')
+    if (price.tiers !== undefined) {
+      if (
+        !tiered ||
+        !price.tiers.length ||
+        price.tiers.length > 32 ||
+        price.price !== ''
+      )
+        throw new Error('Invalid price tiers')
+      let previous = '0'
+      for (const [index, tier] of price.tiers.entries()) {
+        if (!decimalPrice(tier.unit_price) || tier.unit_price === '')
+          throw new Error('Invalid tier price')
+        if (tier.up_to === undefined) {
+          if (index !== price.tiers.length - 1)
+            throw new Error('Unbounded tier must be last')
+          continue
+        }
+        if (!decimalPrice(tier.up_to) || tier.up_to === '0')
+          throw new Error('Invalid tier boundary')
+        if (compareDecimal(tier.up_to, previous) <= 0)
+          throw new Error('Tier boundaries must increase')
+        previous = tier.up_to
+      }
+    } else if (price.tier_mode !== undefined) {
+      throw new Error('Tier mode requires tiers')
+    }
     const field = value.usage_schema?.fields[price.quantity]
     if (value.usage_schema) {
       if (
@@ -196,7 +295,7 @@ export function validatePriceVersion(
         field.type !== 'number' ||
         field.source === 'estimate_only' ||
         price.unit !== `per_${field.unit}` ||
-        !isDecimal(price.price)
+        (!tiered && !decimalPrice(price.price))
       )
         throw new Error('Invalid schema unit price')
       continue
@@ -208,7 +307,8 @@ export function validatePriceVersion(
       throw new Error('Unknown quantity')
     if (
       !(PRICE_UNITS as readonly string[]).includes(price.unit) ||
-      !isDecimal(price.price)
+      (!tiered && !decimalPrice(price.price)) ||
+      (tiered && price.price !== '')
     )
       throw new Error('Invalid unit price')
     const tokenQuantity =
@@ -258,19 +358,57 @@ export function parsePriceVersion(
     mode: requiredString(value.mode, endpoint) as PriceMode,
     prices: value.prices.map((line) => {
       if (!isRecord(line)) invalidResponse(endpoint)
-      return {
+      const parsed: UnitPrice = {
         quantity: requiredString(line.quantity, endpoint),
         unit: requiredString(line.unit, endpoint) as UnitPrice['unit'],
         price: requiredString(line.price, endpoint),
       }
+      if (line.tier_mode !== undefined) {
+        if (
+          !(PRICE_TIER_MODES as readonly string[]).includes(
+            String(line.tier_mode)
+          )
+        )
+          invalidResponse(endpoint)
+        parsed.tier_mode = line.tier_mode as PriceTierMode
+      }
+      if (line.tiers !== undefined) {
+        if (!Array.isArray(line.tiers)) invalidResponse(endpoint)
+        parsed.tiers = line.tiers.map((rawTier) => {
+          if (!isRecord(rawTier)) invalidResponse(endpoint)
+          const tier: PriceTier = {
+            unit_price: requiredString(rawTier.unit_price, endpoint),
+          }
+          if (rawTier.up_to !== undefined)
+            tier.up_to = requiredString(rawTier.up_to, endpoint)
+          return tier
+        })
+      }
+      return parsed
     }),
+    ...(value.flat_fee === undefined
+      ? {}
+      : { flat_fee: requiredString(value.flat_fee, endpoint) }),
     expression:
       value.expression === undefined
         ? undefined
         : requiredString(value.expression, endpoint),
     created_at: requiredStrictInteger(value.created_at, endpoint),
+    ...(value.effective_from === undefined
+      ? {}
+      : { effective_from: requiredString(value.effective_from, endpoint) }),
+    ...(value.effective_to === undefined
+      ? {}
+      : { effective_to: requiredString(value.effective_to, endpoint) }),
     hash: requiredString(value.hash, endpoint),
   }
+  if (value.scope_kind !== undefined)
+    result.scope_kind = requiredString(
+      value.scope_kind,
+      endpoint
+    ) as PriceScopeKind
+  if (value.channel_id !== undefined)
+    result.channel_id = requiredStrictInteger(value.channel_id, endpoint)
   if (value.usage_schema !== undefined)
     result.usage_schema = parseUsageSchema(value.usage_schema, endpoint)
   if (value.usage_scope !== undefined) {

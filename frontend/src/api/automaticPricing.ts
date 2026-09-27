@@ -36,6 +36,7 @@ export interface AutomaticPricingSource {
 }
 export interface ModelPriceOrigin {
   model: string
+  channel_id?: number
   version_id: number
   origin: PriceOrigin
   source_model: string
@@ -133,12 +134,17 @@ export function parseAutomaticPricingStatus(
       source_model: requiredString(origin.source_model, endpoint),
       source_hash: requiredString(origin.source_hash, endpoint),
     }
+    if (origin.channel_id !== undefined) {
+      result.channel_id = requiredStrictInteger(origin.channel_id, endpoint)
+      if (result.channel_id < 0) invalidResponse(endpoint)
+    }
     if (result.version_id < 1) invalidResponse(endpoint)
     return result
   })
   if (
     new Set(sources.map((row) => row.source)).size !== sources.length ||
-    new Set(origins.map((row) => row.model)).size !== origins.length
+    new Set(origins.map((row) => `${row.model}:${row.channel_id ?? 0}`))
+      .size !== origins.length
   )
     invalidResponse(endpoint)
   return { config: parseAutomaticPricingConfig(value.config), sources, origins }

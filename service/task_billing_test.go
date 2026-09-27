@@ -214,12 +214,15 @@ func acceptTestTask(t *testing.T, task *model.Task) {
 		task.PrivateData.UpstreamTaskID = "provider:" + task.TaskID
 	}
 	task.PrivateData.BillingSource = BillingSourceWallet
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "test-model", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: decimal.NewFromInt(int64(task.Quota)).Div(decimal.NewFromInt(500000)).String()}}}, "1", nil, time.Now())
-	require.NoError(t, err)
-	task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "accepted_parameters", Complete: true}, OriginModelName: "test-model"}
-	_, err = model.EnsureBillingRecovery(model.BillingRecoveryInput{RequestID: task.PrivateData.SubmissionRequestID, UserID: task.UserId, TokenID: task.PrivateData.TokenId, TokenRequired: task.PrivateData.TokenId > 0, Source: BillingSourceWallet})
+	if task.PrivateData.BillingContext == nil || task.PrivateData.BillingContext.Quote == nil {
+		quote, err := billing.NewQuote(billing.PriceVersion{Model: "test-model", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: decimal.NewFromInt(int64(task.Quota)).Div(decimal.NewFromInt(500000)).String()}}}, "1", nil, time.Now())
+		require.NoError(t, err)
+		task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "accepted_parameters", Complete: true}, OriginModelName: "test-model"}
+	}
+	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{RequestID: task.PrivateData.SubmissionRequestID, UserID: task.UserId, TokenID: task.PrivateData.TokenId, TokenRequired: task.PrivateData.TokenId > 0, Source: BillingSourceWallet})
 	require.NoError(t, err)
 	require.NoError(t, model.Reserve(task.PrivateData.SubmissionRequestID, task.Quota))
+	require.NoError(t, model.PrepareBillingAttempt(context.Background(), task.PrivateData.SubmissionRequestID, task.PrivateData.SubmissionRequestID+":attempt", task.ChannelId, task.PrivateData.BillingContext.Quote))
 	if task.ID > 0 {
 		require.NoError(t, model.DB.Model(task).Update("private_data", task.PrivateData).Error)
 	}
@@ -440,12 +443,12 @@ func TestTaskCompletionUsageBoundariesPreserveFundsAndTerminalEvidence(t *testin
 			seedToken(t, id, id, "task-usage-boundaries", balance)
 			seedChannel(t, id)
 			task := makeTask(id, id, test.reserved, id, BillingSourceWallet)
-			acceptTestTask(t, task)
 			test.price.Model = task.Properties.OriginModelName
 			quote, err := billing.NewQuote(test.price, "1", nil, time.Now())
 			require.NoError(t, err)
-			task.PrivateData.PluginRef = &model.TaskPluginRef{Key: "usage-boundaries", Version: "1.0.0", SourceHash: quote.Hash}
 			task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Estimated: true}}
+			acceptTestTask(t, task)
+			task.PrivateData.PluginRef = &model.TaskPluginRef{Key: "usage-boundaries", Version: "1.0.0", SourceHash: quote.Hash}
 			require.NoError(t, model.DB.Model(task).Update("private_data", task.PrivateData).Error)
 			for range 2 {
 				err := CompleteImmediateTask(context.Background(), task, &relaycommon.TaskInfo{Status: model.TaskStatusSuccess, UsageFacts: test.facts})

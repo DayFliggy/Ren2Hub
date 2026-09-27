@@ -12,12 +12,13 @@ import (
 // An attempt has its own identity because retries may use different prices.
 // The complete quote is immutable even after another attempt is selected.
 type BillingAttempt struct {
-	ID        string `json:"id" gorm:"type:varchar(128);primaryKey"`
-	RequestID string `json:"request_id" gorm:"type:varchar(128);not null;index"`
-	ChannelID int    `json:"channel_id"`
-	Quote     string `json:"-" gorm:"type:text;not null"`
-	QuoteHash string `json:"quote_hash" gorm:"type:varchar(64);not null"`
-	CreatedAt int64  `json:"created_at" gorm:"type:bigint;not null"`
+	ID          string `json:"id" gorm:"type:varchar(128);primaryKey"`
+	RequestID   string `json:"request_id" gorm:"type:varchar(128);not null;index"`
+	ChannelID   int    `json:"channel_id"`
+	Quote       string `json:"-" gorm:"type:text;not null"`
+	QuoteHash   string `json:"quote_hash" gorm:"type:varchar(64);not null"`
+	Fingerprint string `json:"request_fingerprint" gorm:"type:varchar(64);not null"`
+	CreatedAt   int64  `json:"created_at" gorm:"type:bigint;not null"`
 }
 
 func PrepareBillingAttempt(ctx context.Context, requestID, attemptID string, channelID int, quote *billing.Quote) error {
@@ -43,6 +44,13 @@ func prepareBillingAttemptTx(tx *gorm.DB, requestID, attemptID string, channelID
 	if quote == nil || requestID == "" || attemptID == "" {
 		return errors.New("complete billing quote is required")
 	}
+	if quote.PriceVersion.ScopeKind == billing.PriceScopeChannel && quote.PriceVersion.ChannelID != channelID {
+		return ErrBillingEventConflict
+	}
+	fingerprint, err := BillingAttemptFingerprint(requestID, channelID, quote)
+	if err != nil {
+		return err
+	}
 	data, err := common.Marshal(quote)
 	if err != nil {
 		return err
@@ -65,10 +73,30 @@ func prepareBillingAttemptTx(tx *gorm.DB, requestID, attemptID string, channelID
 	if recovery.Status != BillingRecoveryStatusActive || recovery.PreConsumeState != BillingRecoveryPreConsumeCommitted || BillingRecoveryUsageCollecting(recovery.ConsumptionState) {
 		return ErrBillingRecoveryStateConflict
 	}
-	if err := tx.Create(&BillingAttempt{ID: attemptID, RequestID: requestID, ChannelID: channelID, Quote: string(data), QuoteHash: quote.Hash, CreatedAt: common.GetTimestamp()}).Error; err != nil {
+	if err := tx.Create(&BillingAttempt{ID: attemptID, RequestID: requestID, ChannelID: channelID, Quote: string(data), QuoteHash: quote.Hash, Fingerprint: fingerprint, CreatedAt: common.GetTimestamp()}).Error; err != nil {
 		return err
 	}
 	return tx.Model(&recovery).Updates(map[string]any{"quote_snapshot": string(data), "consumption_state": BillingRecoveryStateUsagePending, "version": recovery.Version + 1, "updated_at": common.GetTimestamp()}).Error
+}
+
+// BillingAttemptFingerprint binds an attempt to its logical request and frozen
+// charge contract without storing request bodies or credentials. Identical
+// bodies with different request IDs are separate, legitimate requests.
+func BillingAttemptFingerprint(requestID string, channelID int, quote *billing.Quote) (string, error) {
+	if quote == nil || requestID == "" || quote.Hash == "" {
+		return "", errors.New("complete billing quote is required")
+	}
+	copyQuote := *quote
+	copyQuote.Hash = ""
+	hash, err := billing.Hash(&copyQuote)
+	if err != nil || hash != quote.Hash {
+		return "", errors.New("billing quote integrity mismatch")
+	}
+	return billing.Hash(struct {
+		RequestID string `json:"request_id"`
+		ChannelID int    `json:"channel_id"`
+		QuoteHash string `json:"quote_hash"`
+	}{requestID, channelID, quote.Hash})
 }
 
 func RecordBillingCalculationFailure(requestID string, usage *billing.Usage) error {

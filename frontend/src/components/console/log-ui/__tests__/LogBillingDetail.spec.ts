@@ -14,6 +14,9 @@ describe('saved billing detail', () => {
       model: 'customer-model',
       other: {
         price_version_id: 12,
+        price_scope: 'channel_model',
+        price_channel_id: 9,
+        quote_hash: 'frozen-quote-hash',
         upstream_model_name: 'provider-model',
         response_model_name: 'unexpected-model',
         charge_result: {
@@ -36,7 +39,7 @@ describe('saved billing detail', () => {
             matched_tier: 'night',
             image_count: 2,
             request_rules: [
-              { cond: 'hour("UTC") < 6', multiplier: 0.5, matched: true },
+              { cond: 'hour("UTC") < 6', multiplier: '0.5', matched: true },
             ],
           },
         },
@@ -47,6 +50,8 @@ describe('saved billing detail', () => {
       global: { plugins: [i18n] },
     })
     expect(wrapper.text()).toContain('provider-model')
+    expect(wrapper.text()).toContain('channel_model')
+    expect(wrapper.text()).toContain('frozen-quote-hash')
     expect(wrapper.text()).toContain('unexpected-model')
     expect(wrapper.text()).toContain('Response model differs')
     expect(wrapper.text()).toContain('$0.200')

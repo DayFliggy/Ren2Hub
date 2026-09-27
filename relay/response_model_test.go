@@ -10,6 +10,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	"github.com/QuantumNous/new-api/relay/channel/gemini"
 	"github.com/QuantumNous/new-api/relay/channel/ollama"
@@ -62,7 +63,7 @@ func TestResponseModelComparisonAndLog(t *testing.T) {
 			for _, name := range tc.models {
 				info.ObserveResponseModel(name)
 			}
-			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0)
+			other := service.GenerateTextOtherInfo(c, info, 0)
 			stored := info.ResponseModel
 			if tc.returned == "" {
 				assert.Nil(t, stored)
@@ -80,6 +81,12 @@ func TestResponseModelComparisonAndLog(t *testing.T) {
 }
 
 func TestResponseModelLogOmitsUnchangedModel(t *testing.T) {
+	quote, err := billing.NewQuote(billing.PriceVersion{
+		ID: 7, Model: "requested", ScopeKind: billing.PriceScopeGlobal,
+		ContractVersion: billing.ContractVersion, CalculationVersion: billing.CalculationVersion, ResultUnit: billing.ResultUSD,
+		Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}},
+	}, "1", nil, time.Unix(1700000000, 0))
+	require.NoError(t, err)
 	for _, tc := range []struct {
 		name     string
 		upstream string
@@ -101,10 +108,14 @@ func TestResponseModelLogOmitsUnchangedModel(t *testing.T) {
 				OriginModelName: "requested",
 				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: tc.upstream, IsModelMapped: tc.mapped},
 			}
+			info.PriceData.Quote = quote
 			info.ObserveResponseModel(tc.returned)
-			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0)
+			other := service.GenerateTextOtherInfo(c, info, 0)
 			require.NotNil(t, info.ResponseModel)
-			assert.Equal(t, float64(1), other["model_ratio"])
+			assert.Equal(t, billing.PriceScopeGlobal, other["price_scope"])
+			assert.Equal(t, int64(7), other["price_version_id"])
+			assert.Equal(t, quote.PriceVersion.Hash, other["price_version_hash"])
+			assert.Equal(t, quote.Hash, other["quote_hash"])
 			if tc.record {
 				assert.Equal(t, info.ResponseModel.ReturnedModel, other["response_model_name"])
 				assert.Equal(t, info.ResponseModel.UpstreamModel, other["upstream_model_name"])
@@ -243,7 +254,7 @@ func TestResponseModelHandlersCaptureBeforeConversion(t *testing.T) {
 			assert.Equal(t, &relaycommon.ResponseModel{RequestedModel: "requested", UpstreamModel: "mapped", ReturnedModel: "returned"}, info.ResponseModel)
 			assert.True(t, info.ResponseModel.Mismatch())
 			assert.Equal(t, "mapped", info.UpstreamModelName, "response diagnostics must not change the sent model")
-			other := service.GenerateTextOtherInfo(c, info, 1, 1, 1, 0, 0, 0)
+			other := service.GenerateTextOtherInfo(c, info, 0)
 			assert.Equal(t, info.ResponseModel.ReturnedModel, other["response_model_name"])
 			assert.Equal(t, info.ResponseModel.UpstreamModel, other["upstream_model_name"])
 		})

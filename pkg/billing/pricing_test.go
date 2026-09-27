@@ -114,3 +114,94 @@ func TestExpressionFrozenAttributeTimeAndCombinedToolRounding(t *testing.T) {
 	assert.Equal(t, common.Quota(1), one.FinalQuota)
 	assert.Equal(t, 1, one.ExpressionVersion)
 }
+
+func TestExpressionCanPriceReasoningTokensIndependently(t *testing.T) {
+	quote, err := billing.NewQuote(billing.PriceVersion{
+		Model: "reasoning-expression", Mode: billing.ModeExpression,
+		Expression: `p * 1 + c * 2 + reasoning * 10`,
+	}, "1", nil, time.Now())
+	require.NoError(t, err)
+	charge, err := billing.Calculate(quote, billing.Usage{
+		InputTokens: 100, OutputTokens: 20, ReasoningTokens: 5,
+		ContextTokens: 100, InputIncludesCache: true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, common.Quota(90), charge.FinalQuota)
+}
+
+func TestTieredPriceModesAndFlatFee(t *testing.T) {
+	volume, err := billing.NewQuote(billing.PriceVersion{
+		Model: "meter", Mode: billing.ModeUnitPrice, FlatFee: "0.01",
+		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", TierMode: billing.TierModeVolume, Tiers: []billing.PriceTier{{UpTo: "10", UnitPrice: "0.02"}, {UnitPrice: "0.01"}}}},
+	}, "1", nil, time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	charge, err := billing.Calculate(volume, billing.Usage{Quantities: map[string]string{"calls": "12"}})
+	require.NoError(t, err)
+	assert.Equal(t, "0.13", charge.TotalUSD)
+	assert.Equal(t, common.Quota(65000), charge.FinalQuota)
+	assert.Len(t, charge.Lines, 2)
+
+	graduated, err := billing.NewQuote(billing.PriceVersion{
+		Model: "meter", Mode: billing.ModeUnitPrice,
+		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", TierMode: billing.TierModeGraduated, Tiers: []billing.PriceTier{{UpTo: "10", UnitPrice: "0.02"}, {UnitPrice: "0.01"}}}},
+	}, "1", nil, time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	charge, err = billing.Calculate(graduated, billing.Usage{Quantities: map[string]string{"calls": "12"}})
+	require.NoError(t, err)
+	assert.Equal(t, "0.22", charge.TotalUSD)
+	assert.Equal(t, common.Quota(110000), charge.FinalQuota)
+	assert.Len(t, charge.Lines, 2)
+
+	finite, err := billing.NewQuote(billing.PriceVersion{
+		Model: "meter", Mode: billing.ModeUnitPrice,
+		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", TierMode: billing.TierModeVolume, Tiers: []billing.PriceTier{{UpTo: "10", UnitPrice: "0.02"}}}},
+	}, "1", nil, time.Now())
+	require.NoError(t, err)
+	_, err = billing.Calculate(finite, billing.Usage{Quantities: map[string]string{"calls": "11"}})
+	require.ErrorContains(t, err, "exceeds tier range")
+}
+
+func TestReasoningTokensUseAnIndependentFrozenUnitPrice(t *testing.T) {
+	quote := quoteFor(t, []billing.UnitPrice{{Quantity: "reasoning", Unit: "per_million_tokens", Price: "2"}})
+	charge, err := billing.Calculate(quote, billing.Usage{OutputTokens: 20, ReasoningTokens: 20})
+	require.NoError(t, err)
+	assert.Equal(t, "0.00004", charge.TotalUSD)
+	assert.Equal(t, common.Quota(20), charge.FinalQuota)
+
+	_, err = billing.Calculate(quote, billing.Usage{OutputTokens: 19, ReasoningTokens: 20})
+	require.ErrorContains(t, err, "reasoning token quantity")
+}
+
+func TestPriceWindowAndExpressionOverflowFailClosed(t *testing.T) {
+	start := time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	_, err := billing.NewQuote(billing.PriceVersion{
+		Model: "windowed", Mode: billing.ModeUnitPrice,
+		EffectiveFrom: &start, EffectiveTo: &end,
+		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "1"}},
+	}, "1", nil, start.Add(-time.Nanosecond))
+	require.ErrorContains(t, err, "not yet effective")
+
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "overflow", Mode: billing.ModeExpression, Expression: `v1:p * 9007199254740992`}, "1", nil, start)
+	require.NoError(t, err)
+	_, err = billing.Calculate(quote, billing.Usage{InputTokens: 1, ContextTokens: 1, InputIncludesCache: true})
+	require.ErrorContains(t, err, "request limit")
+
+	quote, err = billing.NewQuote(billing.PriceVersion{Model: "precision", Mode: billing.ModeExpression, Expression: `v1:p * 0.0000000000000000001`}, "1", nil, start)
+	require.NoError(t, err)
+	_, err = billing.Calculate(quote, billing.Usage{InputTokens: 1, ContextTokens: 1, InputIncludesCache: true})
+	require.ErrorContains(t, err, "decimal range")
+}
+
+func TestQuoteOwnsTierAndWindowCopies(t *testing.T) {
+	start := time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	prices := []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", TierMode: billing.TierModeVolume, Tiers: []billing.PriceTier{{UnitPrice: "0.002"}}}}
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "frozen", Mode: billing.ModeUnitPrice, Prices: prices, EffectiveFrom: &start, EffectiveTo: &end}, "1", nil, start)
+	require.NoError(t, err)
+	prices[0].Tiers[0].UnitPrice = "99"
+	start, end = end.Add(time.Hour), start.Add(-time.Hour)
+	charge, err := billing.Calculate(quote, billing.Usage{Quantities: map[string]string{"calls": "1"}})
+	require.NoError(t, err)
+	assert.Equal(t, "0.002", charge.TotalUSD)
+}

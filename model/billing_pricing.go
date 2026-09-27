@@ -22,6 +22,8 @@ var ErrAutomaticBillingPriceUnavailable = errors.New("automatic billing price is
 // locked, so changing the catalog cannot change a dispatched request's quote.
 type BillingPriceVersion struct {
 	ID         int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	ScopeKind  string `gorm:"type:varchar(32);not null;default:'global_model';index:idx_billing_price_scope,priority:1" json:"scope_kind"`
+	ChannelID  int    `gorm:"not null;default:0;index:idx_billing_price_scope,priority:2" json:"channel_id"`
 	Model      string `gorm:"type:varchar(255);not null;index" json:"model"`
 	Definition string `gorm:"type:text;not null" json:"-"`
 	Hash       string `gorm:"type:varchar(64);not null" json:"hash"`
@@ -31,6 +33,7 @@ type BillingPriceVersion struct {
 
 type BillingActivePrice struct {
 	Model       string `gorm:"type:varchar(255);primaryKey" json:"model"`
+	ChannelID   int    `gorm:"primaryKey;autoIncrement:false;not null;default:0" json:"channel_id"`
 	VersionID   int64  `gorm:"type:bigint;not null" json:"version_id"`
 	Origin      string `gorm:"type:varchar(32)" json:"origin"`
 	SourceModel string `gorm:"type:varchar(255)" json:"source_model"`
@@ -118,6 +121,9 @@ func publishBillingPrice(ctx context.Context, version billing.PriceVersion, publ
 // Batch publication shares this path with individual manual and automatic edits.
 func publishBillingPriceWithDB(tx *gorm.DB, version billing.PriceVersion, publication billingPricePublication) (*billing.PriceVersion, bool, error) {
 	version.Model = strings.TrimSpace(version.Model)
+	if version.ScopeKind == "" {
+		version.ScopeKind = billing.PriceScopeGlobal
+	}
 	if err := reasoning.ValidateBillingModelName(version.Model); err != nil {
 		return nil, false, err
 	}
@@ -125,16 +131,54 @@ func publishBillingPriceWithDB(tx *gorm.DB, version billing.PriceVersion, public
 	version.ID = 0
 	version.CreatedAt = 0
 	version.Hash = ""
+	// Provenance is part of the immutable definition. Never trust caller
+	// supplied fields: the publication path is the authority for ownership and
+	// source attribution.
+	version.Origin = publication.origin
+	version.SourceModel = publication.sourceModel
+	version.SourceHash = publication.sourceHash
 	version, err := billing.PreparePriceVersion(version)
 	if err != nil {
 		return nil, false, err
 	}
-	for i := range version.Prices {
-		price, err := decimal.NewFromString(version.Prices[i].Price)
+	// Automatic catalogs are global model prices. Channel-specific prices are
+	// explicit operator decisions and must not be overwritten by a source
+	// refresh that has no channel identity in its snapshot.
+	if publication.automatic && (version.ScopeKind != billing.PriceScopeGlobal || version.ChannelID != 0) {
+		return nil, false, fmt.Errorf("automatic billing prices must use global model scope")
+	}
+	if version.FlatFee != "" {
+		fee, err := decimal.NewFromString(version.FlatFee)
 		if err != nil {
 			return nil, false, err
 		}
-		version.Prices[i].Price = price.String()
+		version.FlatFee = fee.String()
+	}
+	for i := range version.Prices {
+		price := &version.Prices[i]
+		price.Tiers = append([]billing.PriceTier(nil), price.Tiers...)
+		if price.Price != "" {
+			rate, err := decimal.NewFromString(price.Price)
+			if err != nil {
+				return nil, false, err
+			}
+			price.Price = rate.String()
+		}
+		for j := range price.Tiers {
+			tier := &price.Tiers[j]
+			rate, err := decimal.NewFromString(tier.UnitPrice)
+			if err != nil {
+				return nil, false, err
+			}
+			tier.UnitPrice = rate.String()
+			if tier.UpTo != "" {
+				limit, err := decimal.NewFromString(tier.UpTo)
+				if err != nil {
+					return nil, false, err
+				}
+				tier.UpTo = limit.String()
+			}
+		}
 	}
 	definition, err := common.Marshal(version)
 	if err != nil {
@@ -144,34 +188,34 @@ func publishBillingPriceWithDB(tx *gorm.DB, version billing.PriceVersion, public
 	if err != nil {
 		return nil, false, err
 	}
-	active := BillingActivePrice{Model: version.Model}
+	active := BillingActivePrice{Model: version.Model, ChannelID: version.ChannelID}
 	if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&active).Error; err != nil {
 		return nil, false, err
 	}
-	if err := lockForUpdate(tx).Where("model = ?", version.Model).First(&active).Error; err != nil {
+	if err := lockForUpdate(tx).Where("model = ? AND channel_id = ?", version.Model, version.ChannelID).First(&active).Error; err != nil {
 		return nil, false, err
 	}
 	if publication.expectedVersion != nil && active.VersionID != *publication.expectedVersion {
 		return nil, false, ErrBillingPriceConflict
 	}
-	if publication.automatic && active.VersionID != 0 {
+	if active.VersionID != 0 {
 		var current BillingPriceVersion
 		if err := tx.First(&current, active.VersionID).Error; err != nil {
 			return nil, false, err
 		}
-		origin := resolveBillingPriceOrigin(active.Origin)
-		// Only explicit restore may replace a manually owned price. This
-		// decision uses the locked pointer, never a caller's stale listing.
-		if publication.expectedVersion == nil && origin == BillingPriceOriginManual {
-			return nil, false, nil
-		}
 		if _, err := decodeBillingPrice(current); err != nil {
 			return nil, false, err
 		}
-		if current.Model != version.Model {
+		if current.Model != version.Model || current.ChannelID != version.ChannelID || current.ScopeKind != version.ScopeKind {
 			return nil, false, fmt.Errorf("billing price model integrity mismatch")
 		}
-		if current.Hash == hash {
+		origin := resolveBillingPriceOrigin(active.Origin)
+		// Only explicit restore may replace a manually owned price. This
+		// decision uses the locked pointer, never a caller's stale listing.
+		if publication.automatic && publication.expectedVersion == nil && origin == BillingPriceOriginManual {
+			return nil, false, nil
+		}
+		if publication.automatic && current.Hash == hash {
 			if err := updateBillingPriceOrigin(tx, active, active.VersionID, publication); err != nil {
 				return nil, false, err
 			}
@@ -179,7 +223,10 @@ func publishBillingPriceWithDB(tx *gorm.DB, version billing.PriceVersion, public
 			return &version, false, nil
 		}
 	}
-	saved := BillingPriceVersion{Model: version.Model, Definition: string(definition), Hash: hash, CreatedAt: time.Now().Unix(), CreatedBy: publication.actor}
+	saved := BillingPriceVersion{
+		ScopeKind: version.ScopeKind, ChannelID: version.ChannelID, Model: version.Model,
+		Definition: string(definition), Hash: hash, CreatedAt: time.Now().Unix(), CreatedBy: publication.actor,
+	}
 	if err := tx.Create(&saved).Error; err != nil {
 		return nil, false, err
 	}
@@ -196,7 +243,7 @@ func updateBillingPriceOrigin(tx *gorm.DB, active BillingActivePrice, versionID 
 	if active.VersionID == versionID && active.Origin == publication.origin && active.SourceModel == publication.sourceModel && active.SourceHash == publication.sourceHash {
 		return nil
 	}
-	updated := tx.Model(&BillingActivePrice{}).Where("model = ? AND version_id = ?", active.Model, active.VersionID).
+	updated := tx.Model(&BillingActivePrice{}).Where("model = ? AND channel_id = ? AND version_id = ?", active.Model, active.ChannelID, active.VersionID).
 		Updates(map[string]interface{}{"version_id": versionID, "origin": publication.origin, "source_model": publication.sourceModel, "source_hash": publication.sourceHash})
 	if updated.Error != nil {
 		return updated.Error
@@ -215,6 +262,9 @@ func decodeBillingPrice(row BillingPriceVersion) (*billing.PriceVersion, error) 
 	if err := billing.ValidateFrozenPriceVersion(version); err != nil {
 		return nil, err
 	}
+	if version.Model != row.Model || version.ScopeKind != row.ScopeKind || version.ChannelID != row.ChannelID {
+		return nil, fmt.Errorf("billing price scope integrity mismatch")
+	}
 	hash, err := billing.Hash(version)
 	if err != nil || hash != row.Hash {
 		return nil, fmt.Errorf("billing price integrity mismatch")
@@ -226,9 +276,35 @@ func decodeBillingPrice(row BillingPriceVersion) (*billing.PriceVersion, error) 
 }
 
 func GetActiveBillingPrice(ctx context.Context, modelName string) (*billing.PriceVersion, error) {
+	return GetActiveBillingPriceForChannel(ctx, modelName, 0)
+}
+
+// GetActiveBillingPriceForChannel resolves an exact channel price first and
+// then an explicitly global model price. The returned version records which
+// scope was selected, so downstream settlement never needs live routing data.
+func GetActiveBillingPriceForChannel(ctx context.Context, modelName string, channelID int) (*billing.PriceVersion, error) {
 	if DB == nil {
 		return nil, fmt.Errorf("billing price database unavailable")
 	}
+	lookup := []int{0}
+	if channelID > 0 {
+		lookup = []int{channelID, 0}
+	}
+	var lastErr error
+	for _, scopedChannelID := range lookup {
+		version, err := getActiveBillingPriceScope(ctx, modelName, scopedChannelID)
+		if err == nil {
+			return version, nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
+func getActiveBillingPriceScope(ctx context.Context, modelName string, channelID int) (*billing.PriceVersion, error) {
 	var row struct {
 		BillingPriceVersion
 		ActiveVersionID int64
@@ -237,14 +313,14 @@ func GetActiveBillingPrice(ctx context.Context, modelName string) (*billing.Pric
 	err := DB.WithContext(ctx).Table("billing_active_prices").
 		Select("billing_price_versions.*, billing_active_prices.version_id AS active_version_id, billing_active_prices.origin").
 		Joins("LEFT JOIN billing_price_versions ON billing_active_prices.version_id = billing_price_versions.id").
-		Where("billing_active_prices.model = ?", modelName).Take(&row).Error
+		Where("billing_active_prices.model = ? AND billing_active_prices.channel_id = ?", modelName, channelID).Take(&row).Error
 	if err != nil {
 		return nil, err
 	}
 	if row.ActiveVersionID == 0 && row.Origin == BillingPriceOriginUnavailable {
 		return nil, ErrAutomaticBillingPriceUnavailable
 	}
-	if row.ID == 0 || row.ActiveVersionID != row.ID || row.Model != modelName {
+	if row.ID == 0 || row.ActiveVersionID != row.ID || row.Model != modelName || row.ChannelID != channelID {
 		return nil, fmt.Errorf("billing price model integrity mismatch")
 	}
 	return decodeBillingPrice(row.BillingPriceVersion)
@@ -253,7 +329,7 @@ func GetActiveBillingPrice(ctx context.Context, modelName string) (*billing.Pric
 func ListActiveBillingPrices(ctx context.Context) ([]billing.PriceVersion, error) {
 	var rows []BillingPriceVersion
 	if err := DB.WithContext(ctx).Table("billing_price_versions").Select("billing_price_versions.*").
-		Joins("JOIN billing_active_prices ON billing_active_prices.version_id = billing_price_versions.id").Order("billing_price_versions.model").Find(&rows).Error; err != nil {
+		Joins("JOIN billing_active_prices ON billing_active_prices.version_id = billing_price_versions.id AND billing_active_prices.model = billing_price_versions.model AND billing_active_prices.channel_id = billing_price_versions.channel_id").Order("billing_price_versions.model, billing_price_versions.channel_id").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	prices := make([]billing.PriceVersion, 0, len(rows))

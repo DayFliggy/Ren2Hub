@@ -33,6 +33,59 @@ type legacyAutomaticBillingActivePrice struct {
 
 func (legacyAutomaticBillingActivePrice) TableName() string { return "billing_active_prices" }
 
+func TestScopedBillingPricesAcrossDatabases(t *testing.T) {
+	for _, backend := range []struct {
+		kind common.DatabaseType
+		env  string
+	}{{common.DatabaseTypeSQLite, ""}, {common.DatabaseTypeMySQL, "GATEWAY_STARTUP_MYSQL_DSN"}, {common.DatabaseTypePostgreSQL, "GATEWAY_STARTUP_POSTGRES_DSN"}} {
+		t.Run(string(backend.kind), func(t *testing.T) {
+			dsn := os.Getenv(backend.env)
+			if backend.env != "" && dsn == "" {
+				t.Skip(backend.env + " not configured; scoped billing database contracts remain unverified")
+			}
+			db, err := gatewayStartupDatabase(t, backend.kind, dsn)()
+			require.NoError(t, err)
+			connection, err := db.DB()
+			require.NoError(t, err)
+			previousDB, previousType := DB, common.MainDatabaseType()
+			DB = db
+			common.SetMainDatabaseType(backend.kind)
+			t.Cleanup(func() {
+				DB = previousDB
+				common.SetMainDatabaseType(previousType)
+				assert.NoError(t, connection.Close())
+			})
+			// Scope keys are a fresh data model; this contract intentionally does
+			// not upgrade the retired model-only active-pointer table.
+			require.NoError(t, db.AutoMigrate(&BillingPriceVersion{}, &BillingActivePrice{}, &BillingPricingSource{}))
+			require.NoError(t, migrateBillingPriceModelIdentity(db))
+			ctx := context.Background()
+			draft := automaticPriceDraft("scoped-database-model", "1")
+			global, err := PublishBillingPrice(ctx, draft, 0, 1)
+			require.NoError(t, err)
+			for _, channelID := range []int{7, 19} {
+				draft.ScopeKind, draft.ChannelID = billing.PriceScopeChannel, channelID
+				channel, err := PublishBillingPrice(ctx, draft, 0, 1)
+				require.NoError(t, err)
+				assert.NotEqual(t, global.ID, channel.ID)
+				loaded, err := GetActiveBillingPriceForChannel(ctx, draft.Model, channelID)
+				require.NoError(t, err)
+				assert.Equal(t, channel, loaded)
+				_, err = PublishBillingPrice(ctx, draft, global.ID, 1)
+				require.ErrorIs(t, err, ErrBillingPriceConflict)
+			}
+			fallback, err := GetActiveBillingPriceForChannel(ctx, draft.Model, 23)
+			require.NoError(t, err)
+			assert.Equal(t, global, fallback)
+			var active []BillingActivePrice
+			require.NoError(t, db.Where("model = ?", draft.Model).Order("channel_id").Find(&active).Error)
+			require.Len(t, active, 3)
+			assert.Equal(t, []int{0, 7, 19}, []int{active[0].ChannelID, active[1].ChannelID, active[2].ChannelID})
+			assert.Error(t, db.Create(&BillingActivePrice{Model: draft.Model, ChannelID: 7, VersionID: global.ID}).Error, "each scope must have one active pointer")
+		})
+	}
+}
+
 func TestAutomaticBillingPriceContractsAcrossDatabases(t *testing.T) {
 	for _, backend := range []struct {
 		kind common.DatabaseType
@@ -332,16 +385,16 @@ func testAutomaticBillingPriceVersions(t *testing.T) {
 	installAutomaticPricingTestSource(t, BillingPriceOriginAxonHub, strings.Repeat("b", 64))
 	published, err = PublishAutomaticBillingPrice(ctx, automaticPriceDraft(first.Model, "2.00"), BillingPriceOriginAxonHub, first.Model, strings.Repeat("b", 64))
 	require.NoError(t, err)
-	assert.False(t, published)
+	assert.True(t, published, "a source change is a new immutable version even when the numeric price is equivalent")
 	var count int64
 	require.NoError(t, DB.Model(&BillingPriceVersion{}).Where("model = ?", first.Model).Count(&count).Error)
-	assert.EqualValues(t, 1, count, "canonical equivalent prices do not add versions")
+	assert.EqualValues(t, 2, count, "source provenance is part of the immutable version hash")
 	origins, err := ListBillingPriceOrigins(ctx)
 	require.NoError(t, err)
 	require.Len(t, origins, 2)
 	assert.Equal(t, first.Model, origins[0].Model)
 	assert.Equal(t, BillingPriceOriginAxonHub, origins[0].Origin)
-	assert.Equal(t, first.ID, origins[0].VersionID)
+	assert.NotEqual(t, first.ID, origins[0].VersionID)
 	assert.Equal(t, BillingPriceOriginManual, origins[1].Origin)
 	installAutomaticPricingTestSource(t, BillingPriceOriginAxonHub, sourceHash)
 	published, err = PublishAutomaticBillingPrice(ctx, automaticPriceDraft(first.Model, "3"), BillingPriceOriginAxonHub, first.Model, sourceHash)
@@ -374,7 +427,7 @@ func testAutomaticBillingPriceVersions(t *testing.T) {
 	require.ErrorIs(t, err, ErrBillingPriceConflict)
 	restored, err := RestoreAutomaticBillingPrice(ctx, automaticPriceDraft(first.Model, "7"), BillingPriceOriginSub2API, first.Model, sourceHash, manual.ID)
 	require.NoError(t, err)
-	assert.Equal(t, manual.ID, restored.ID, "same-price restore transfers ownership without a redundant version")
+	assert.NotEqual(t, manual.ID, restored.ID, "restoring automatic provenance creates a new immutable version")
 	published, err = PublishAutomaticBillingPrice(ctx, firstDraft, BillingPriceOriginSub2API, first.Model, sourceHash)
 	require.NoError(t, err)
 	assert.True(t, published)

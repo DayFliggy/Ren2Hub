@@ -35,11 +35,11 @@ func setupChannelAdmissionTest(t *testing.T) *gorm.DB {
 
 func TestChannelAdmissionSharesCapacityAcrossModelsAndUsers(t *testing.T) {
 	db := setupChannelAdmissionTest(t)
-	require.NoError(t, db.Create(&model.Channel{Id: 7, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: 1.5}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: 7, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: "1.5"}).Error)
 	ctx := context.Background()
 	first, channel, err := AcquireGatewayChannelPermit(ctx, "first", 7, false, nil)
 	require.NoError(t, err)
-	assert.Equal(t, 1.5, channel.ChannelRatio)
+	assert.Equal(t, "1.5", channel.ChannelRatio)
 	_, _, err = AcquireGatewayChannelPermit(ctx, "second", 7, false, nil)
 	assert.ErrorIs(t, err, ErrAdmissionCapacity)
 	first.Release()
@@ -54,11 +54,11 @@ func TestChannelAdmissionSharesCapacityAcrossModelsAndUsers(t *testing.T) {
 
 func TestChannelAdmissionRechecksPriceAndStatusAfterCapacityUpdate(t *testing.T) {
 	db := setupChannelAdmissionTest(t)
-	require.NoError(t, db.Create(&model.Channel{Id: 7, Status: common.ChannelStatusEnabled, CapacityTotal: 3, ChannelRatio: 1.5}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: 7, Status: common.ChannelStatusEnabled, CapacityTotal: 3, ChannelRatio: "1.5"}).Error)
 	ctx := context.Background()
 	expected, err := GetRouteRuntimeState(ctx, 7, "gpt-5")
 	require.NoError(t, err)
-	for _, update := range []map[string]any{{"capacity_total": 2}, {"capacity_total": 3, "channel_ratio": 2.0}} {
+	for _, update := range []map[string]any{{"capacity_total": 2}, {"capacity_total": 3, "channel_ratio": "2"}} {
 		require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 7).Updates(update).Error)
 		current, err := GetRouteRuntimeState(ctx, 7, "gpt-5")
 		require.NoError(t, err)

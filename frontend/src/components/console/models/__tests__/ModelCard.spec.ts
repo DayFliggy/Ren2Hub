@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import ModelCard from '@/components/console/models/ModelCard.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import type { MarketModel } from '@/types/console'
+import type { PriceVersion } from '@/api/modelPricing'
 
 const tieredModel: MarketModel = {
   id: 1,
@@ -41,6 +42,46 @@ function render(layout: 'grid' | 'list') {
 }
 
 describe('ModelCard billing metadata', () => {
+  it('displays each channel price with its flat fee and graduated bands', () => {
+    const versions: PriceVersion[] = [9, 10].map((channel_id) => ({
+      id: channel_id,
+      model: 'scoped',
+      scope_kind: 'channel_model',
+      channel_id,
+      mode: 'unit_price',
+      flat_fee: '0.01',
+      created_at: 1,
+      hash: `hash-${channel_id}`,
+      prices: [
+        {
+          quantity: 'p',
+          unit: 'per_million_tokens',
+          price: '',
+          tier_mode: 'graduated',
+          tiers: [{ up_to: '1000000', unit_price: '2' }, { unit_price: '1' }],
+        },
+      ],
+    }))
+    const wrapper = mount(ModelCard, {
+      props: {
+        model: {
+          ...tieredModel,
+          billing: 'token',
+          price: {},
+          pricing: versions[0],
+          priceVersions: versions,
+        },
+      },
+      global: { plugins: [i18n] },
+    })
+    expect(wrapper.findAll('[data-model-price-scope]')).toHaveLength(2)
+    expect(wrapper.text()).toContain('channel_model · 9')
+    expect(wrapper.text()).toContain('channel_model · 10')
+    expect(wrapper.text()).toContain('分段累加')
+    expect(wrapper.text()).toContain('$0.010')
+    expect(wrapper.text()).toContain('≤1000000: $2.000')
+    wrapper.unmount()
+  })
   it.each(['grid', 'list'] as const)(
     'retains mixed token, media and call prices in %s layout',
     (layout) => {

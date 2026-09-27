@@ -27,7 +27,8 @@ func NormalizedBillingUsage(usage *dto.Usage, semantic string) billing.Usage {
 		usage.PromptTokensDetails.CachedTokens, usage.PromptTokensDetails.CachedCreationTokens,
 		usage.PromptTokensDetails.CacheWriteTokens, usage.ClaudeCacheCreation5mTokens, usage.ClaudeCacheCreation1hTokens,
 		usage.PromptTokensDetails.ImageTokens, usage.PromptTokensDetails.AudioTokens,
-		usage.CompletionTokenDetails.ImageTokens, usage.CompletionTokenDetails.AudioTokens} {
+		usage.CompletionTokenDetails.ImageTokens, usage.CompletionTokenDetails.AudioTokens,
+		usage.CompletionTokenDetails.ReasoningTokens} {
 		invalid = invalid || count < 0 || int64(count) > math.MaxInt32
 	}
 	write := usage.PromptTokensDetails.CacheCreationTokensTotal()
@@ -58,6 +59,7 @@ func NormalizedBillingUsage(usage *dto.Usage, semantic string) billing.Usage {
 		CacheReadTokens: int64(usage.PromptTokensDetails.CachedTokens), ImageCacheReadTokens: imageCacheRead, CacheWriteTokens: int64(write), CacheWrite1hTokens: int64(write1h),
 		ImageInputTokens: int64(usage.PromptTokensDetails.ImageTokens), ImageOutputTokens: int64(usage.CompletionTokenDetails.ImageTokens),
 		AudioInputTokens: int64(usage.PromptTokensDetails.AudioTokens), AudioOutputTokens: int64(usage.CompletionTokenDetails.AudioTokens),
+		ReasoningTokens:    int64(usage.CompletionTokenDetails.ReasoningTokens),
 		InputIncludesCache: includesCache, Source: usage.UsageSource, Estimated: estimated, Complete: !unconfirmed && !estimated, Invalid: invalid, Quantities: map[string]string{}}
 }
 

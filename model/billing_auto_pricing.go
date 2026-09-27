@@ -33,6 +33,7 @@ var automaticBillingPricingSourceOrder = [...]string{
 
 type BillingPriceOrigin struct {
 	Model       string `json:"model"`
+	ChannelID   int    `json:"channel_id"`
 	VersionID   int64  `json:"version_id"`
 	Origin      string `json:"origin"`
 	SourceModel string `json:"source_model"`
@@ -92,7 +93,7 @@ func validateAutomaticBillingPriceSource(source, sourceModel, sourceHash string)
 }
 
 // PublishAutomaticBillingPrice appends only changed, automatically owned prices.
-// Source attribution lives on the active pointer and is not part of frozen quotes.
+// Source attribution is included in the immutable version and frozen quote.
 func PublishAutomaticBillingPrice(ctx context.Context, version billing.PriceVersion, source, sourceModel, sourceHash string, expectedCatalog ...map[string]string) (bool, error) {
 	if err := validateAutomaticBillingPriceSource(source, sourceModel, sourceHash); err != nil {
 		return false, err
@@ -187,13 +188,13 @@ func DeactivateAutomaticBillingPrices(ctx context.Context, entries []AutomaticBi
 		}
 		for _, entry := range entries {
 			if entry.ExpectedVersionID == 0 {
-				marker := BillingActivePrice{Model: entry.Model, Origin: BillingPriceOriginUnavailable}
+				marker := BillingActivePrice{Model: entry.Model, ChannelID: 0, Origin: BillingPriceOriginUnavailable}
 				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&marker).Error; err != nil {
 					return err
 				}
 			}
 			var active BillingActivePrice
-			err := lockForUpdate(tx).Where("model = ?", entry.Model).Take(&active).Error
+			err := lockForUpdate(tx).Where("model = ? AND channel_id = 0", entry.Model).Take(&active).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				continue
 			}
@@ -213,10 +214,10 @@ func DeactivateAutomaticBillingPrices(ctx context.Context, entries []AutomaticBi
 			if resolveBillingPriceOrigin(active.Origin) == BillingPriceOriginManual {
 				continue
 			}
-			if current.Model != entry.Model || active.Model != entry.Model {
+			if current.Model != entry.Model || current.ChannelID != 0 || active.Model != entry.Model || active.ChannelID != 0 {
 				return fmt.Errorf("billing price model integrity mismatch")
 			}
-			updated := tx.Model(&BillingActivePrice{}).Where("model = ? AND version_id = ?", entry.Model, entry.ExpectedVersionID).
+			updated := tx.Model(&BillingActivePrice{}).Where("model = ? AND channel_id = 0 AND version_id = ?", entry.Model, entry.ExpectedVersionID).
 				Updates(map[string]interface{}{"version_id": 0, "origin": BillingPriceOriginUnavailable, "source_model": "", "source_hash": ""})
 			if updated.Error != nil {
 				return updated.Error
@@ -307,14 +308,14 @@ func ListBillingPriceOrigins(ctx context.Context) ([]BillingPriceOrigin, error) 
 	err := DB.WithContext(ctx).Table("billing_active_prices").
 		Select("billing_active_prices.*").
 		Joins("JOIN billing_price_versions ON billing_price_versions.id = billing_active_prices.version_id").
-		Order("billing_active_prices.model").Scan(&rows).Error
+		Where("billing_active_prices.channel_id = 0").Order("billing_active_prices.model").Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 	origins := make([]BillingPriceOrigin, 0, len(rows))
 	for _, row := range rows {
 		origins = append(origins, BillingPriceOrigin{
-			Model: row.Model, VersionID: row.VersionID, Origin: resolveBillingPriceOrigin(row.Origin), SourceModel: row.SourceModel, SourceHash: row.SourceHash,
+			Model: row.Model, ChannelID: row.ChannelID, VersionID: row.VersionID, Origin: resolveBillingPriceOrigin(row.Origin), SourceModel: row.SourceModel, SourceHash: row.SourceHash,
 		})
 	}
 	return origins, nil
@@ -330,7 +331,7 @@ func ListAutomaticBillingModelNames(ctx context.Context) ([]string, error) {
 	if err := DB.WithContext(ctx).Model(&Ability{}).Distinct("model").Pluck("model", &configured).Error; err != nil {
 		return nil, err
 	}
-	if err := DB.WithContext(ctx).Model(&BillingActivePrice{}).Pluck("model", &active).Error; err != nil {
+	if err := DB.WithContext(ctx).Model(&BillingActivePrice{}).Where("channel_id = 0").Pluck("model", &active).Error; err != nil {
 		return nil, err
 	}
 	seen := make(map[string]struct{}, len(configured)+len(active))

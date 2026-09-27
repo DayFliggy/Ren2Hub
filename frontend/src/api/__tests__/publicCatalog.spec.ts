@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { catalogPrices, parseRankings } from '@/api/publicCatalog'
 
 describe('public catalog contracts', () => {
-  it('renders token and per-call prices with the channel ratio', () => {
+  it('renders version prices without mutable channel multipliers', () => {
     const prices = catalogPrices(
       {
         model_name: 'demo',
@@ -12,8 +12,6 @@ describe('public catalog contracts', () => {
         tags: '',
         vendor_id: 1,
         owner_by: 'Demo',
-        channel_ratio_min: 1.5,
-        channel_ratio_max: 2,
         supported_endpoint_types: [],
         billing_mode: '',
         price_version: {
@@ -29,13 +27,12 @@ describe('public catalog contracts', () => {
           hash: 'fixture',
         },
       },
-      1.5,
       'M'
     )
     expect(prices).toEqual([
-      { key: 'input', value: '6', unit: 'per_million_tokens' },
-      { key: 'output', value: '18', unit: 'per_million_tokens' },
-      { key: 'cacheRead', value: '3', unit: 'per_million_tokens' },
+      { key: 'input', value: '4', unit: 'per_million_tokens' },
+      { key: 'output', value: '12', unit: 'per_million_tokens' },
+      { key: 'cacheRead', value: '2', unit: 'per_million_tokens' },
     ])
   })
 

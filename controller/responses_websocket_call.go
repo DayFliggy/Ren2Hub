@@ -186,7 +186,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
 		}
 		markLiveRoutePriceQualified(c)
-		if !liveRoutePriceRatioAllowed(c, info.PriceData.ChannelRatio) {
+		if !liveRoutePriceRatioAllowed(c, info.PriceData.ChannelMultiplier()) {
 			return newResponsesWSInvalidRequestError(service.ErrRoutePriceRatioExceeded)
 		}
 		if err := acquireRouteAttemptPermit(c, info, channel, retry.GetRetry()); err != nil {

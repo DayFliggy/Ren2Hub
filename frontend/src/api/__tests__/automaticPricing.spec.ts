@@ -32,6 +32,24 @@ const status = {
 }
 afterEach(() => vi.restoreAllMocks())
 describe('automatic price contract', () => {
+  it('keeps independent origins for the same model across channels', () => {
+    const response = {
+      ...status,
+      origins: [
+        { ...status.origins[0], channel_id: 0 },
+        { ...status.origins[0], channel_id: 9, version_id: 4 },
+      ],
+    }
+    expect(parseAutomaticPricingStatus(response).origins).toEqual(
+      response.origins
+    )
+    expect(() =>
+      parseAutomaticPricingStatus({
+        ...response,
+        origins: [response.origins[1], response.origins[1]],
+      })
+    ).toThrow()
+  })
   it('loads source provenance and strictly rejects invalid configuration, origins and counts', async () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue(status)
     const controller = new AbortController()

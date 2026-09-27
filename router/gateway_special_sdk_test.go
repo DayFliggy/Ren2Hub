@@ -168,7 +168,7 @@ func TestGatewayOfficialSpecialSDK(t *testing.T) {
 				require.NoError(t, err)
 				mappingJSON, other := string(mapping), "isolated-bot"
 				configured := &model.Channel{Type: config.channelType, Name: "SDK special fixture", Models: config.alias, Key: config.key, Status: common.ChannelStatusEnabled, BaseURL: &config.endpoint,
-					Group: "default", CapacityTotal: 10, ChannelRatio: 1, ModelMapping: &mappingJSON, Other: other}
+					Group: "default", CapacityTotal: 10, ChannelRatio: "1", ModelMapping: &mappingJSON, Other: other}
 				require.NoError(t, model.DB.Create(configured).Error)
 				require.NoError(t, configured.AddAbilities(model.DB))
 			}

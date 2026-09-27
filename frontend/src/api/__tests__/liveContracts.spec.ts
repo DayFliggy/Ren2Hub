@@ -54,6 +54,35 @@ function pricingResponse(overrides: Record<string, unknown> = {}) {
 }
 
 describe('live API contracts', () => {
+  it('retains all scoped prices and rejects ambiguous duplicate scopes', () => {
+    const response = pricingResponse()
+    const versions = [
+      { ...response.price_version, scope_kind: 'global_model', channel_id: 0 },
+      {
+        ...response.price_version,
+        scope_kind: 'channel_model',
+        channel_id: 9,
+        id: 2,
+      },
+    ]
+    expect(
+      parsePricingModels([{ ...response, price_versions: versions }])[0]
+        ?.price_versions
+    ).toEqual(versions)
+    expectInvalidResponse(() =>
+      parsePricingModels([
+        { ...response, price_versions: [versions[1], versions[1]] },
+      ])
+    )
+    expectInvalidResponse(() =>
+      parsePricingModels([{ ...response, price_versions: [] }])
+    )
+    expectInvalidResponse(() =>
+      parsePricingModels([
+        { ...response, price_versions: [{ ...versions[1], model: 'other' }] },
+      ])
+    )
+  })
   it('parses user models in both supported backend shapes', () => {
     expect(parseUserModels(['gpt-4o', 'claude-3-7-sonnet'])).toEqual([
       'gpt-4o',

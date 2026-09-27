@@ -24,12 +24,11 @@ type Pricing struct {
 	QuotaType              int                     `json:"quota_type"`
 	OwnerBy                string                  `json:"owner_by"`
 	EnableGroup            []string                `json:"-"`
-	ChannelRatioMin        float64                 `json:"channel_ratio_min"`
-	ChannelRatioMax        float64                 `json:"channel_ratio_max"`
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
 	BillingMode            string                  `json:"billing_mode,omitempty"`
 	BillingExpr            string                  `json:"billing_expr,omitempty"`
 	PriceVersion           *billing.PriceVersion   `json:"price_version,omitempty"`
+	PriceVersions          []billing.PriceVersion  `json:"price_versions,omitempty"`
 }
 
 type PricingVendor struct {
@@ -352,9 +351,25 @@ func updatePricing() {
 		common.SysLog(fmt.Sprintf("load published billing prices error: %v", err))
 		return
 	}
-	byModel := make(map[string]*billing.PriceVersion, len(versions))
+	byModel := make(map[string]map[int]billing.PriceVersion, len(versions))
 	for i := range versions {
-		byModel[versions[i].Model] = &versions[i]
+		version := versions[i]
+		if byModel[version.Model] == nil {
+			byModel[version.Model] = make(map[int]billing.PriceVersion)
+		}
+		byModel[version.Model][version.ChannelID] = version
+	}
+	modelPrices := make(map[string][]billing.PriceVersion)
+	seenVersions := make(map[int64]bool)
+	for _, ability := range enableAbilities {
+		version, exists := byModel[ability.Model][ability.ChannelId]
+		if !exists {
+			version, exists = byModel[ability.Model][0]
+		}
+		if exists && !seenVersions[version.ID] {
+			modelPrices[ability.Model] = append(modelPrices[ability.Model], version)
+			seenVersions[version.ID] = true
+		}
 	}
 	pricingMap = make([]Pricing, 0)
 	for model, groups := range modelGroupsMap {
@@ -379,7 +394,9 @@ func updatePricing() {
 				pricing.OwnerBy = vendor.Name
 			}
 		}
-		if version := byModel[model]; version != nil {
+		pricing.PriceVersions = modelPrices[model]
+		if len(pricing.PriceVersions) != 0 {
+			version := &pricing.PriceVersions[0]
 			pricing.BillingMode = version.Mode
 			pricing.BillingExpr = version.Expression
 			pricing.PriceVersion = version

@@ -63,9 +63,8 @@ func TestFreezeTaskBillingRemixInheritsOnlyOmittedMediaFacts(t *testing.T) {
 	require.Error(t, FreezeTaskBillingAttributes(info, "application/json", []byte(`{}`), map[string]interface{}{"duration": -1}))
 }
 
-func TestTaskQuoteFreezesFinalDurationAndDoesNotReadLegacyMultipliers(t *testing.T) {
+func TestTaskQuoteFreezesFinalDurationAndQuantity(t *testing.T) {
 	c, info := pricingFixture(t, billing.PriceVersion{Model: "task-video", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "seconds", Unit: "per_second", Price: "0.001"}}})
-	info.PriceData.AddOtherRatio("seconds", 100)
 	require.NoError(t, FreezeTaskBillingAttributes(info, "application/json", []byte(`{"parameters":{"durationSeconds":6,"sampleCount":2}}`)))
 	price, err := ModelPriceHelperPerCall(c, info)
 	require.NoError(t, err)

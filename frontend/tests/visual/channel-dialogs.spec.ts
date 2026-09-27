@@ -24,8 +24,8 @@ const channels = [
     weight: 100,
     capacity_used: 24,
     capacity_total: 100,
-    channel_ratio: 1,
-    upstream_ratio: 1,
+    channel_ratio: '1',
+
     used_quota: 245_000,
     balance: 92.5,
     response_time: 0.42,
@@ -44,8 +44,8 @@ const channels = [
     weight: 50,
     capacity_used: 10,
     capacity_total: 100,
-    channel_ratio: 1,
-    upstream_ratio: 1,
+    channel_ratio: '1',
+
     used_quota: 120_000,
     balance: 48.25,
     response_time: 0.63,

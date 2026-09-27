@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"math/rand"
 	"slices"
 	"strings"
@@ -18,19 +17,18 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 
 	"github.com/samber/lo"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-// Defaults and bounds for the channel capacity/ratio fields. A stored zero
-// means "unset" and is normalized to the default when the channel is created
-// or rendered; the max bounds keep admin input sane before these fields ever
-// reach routing or billing logic.
+// An omitted ratio receives its default only when a channel is created.
+// Stored values remain exact decimal strings through API and quote boundaries.
 const (
 	DefaultChannelCapacityTotal = 20
-	DefaultChannelRatio         = float64(1)
+	DefaultChannelRatio         = "1"
 	MaxChannelCapacityTotal     = 1_000_000
-	MaxChannelRatio             = float64(1000)
+	MaxChannelRatio             = 1000
 )
 
 type Channel struct {
@@ -64,11 +62,10 @@ type Channel struct {
 	HeaderOverride    *string `json:"header_override" gorm:"type:text"`
 	Remark            *string `json:"remark" gorm:"type:varchar(255)" validate:"max=255"`
 	// Capacity and ratio fields (added for Vue frontend channel management)
-	ChannelRatio           float64 `json:"channel_ratio" gorm:"default:1"`
-	CapacityTotal          int     `json:"capacity_total" gorm:"default:20"`
-	CapacityUsed           int     `json:"capacity_used" gorm:"default:0"`
-	UpstreamRatio          float64 `json:"upstream_ratio" gorm:"default:1"`
-	GatewayIdentityVersion int64   `json:"-" gorm:"default:0"`
+	ChannelRatio           string `json:"channel_ratio" gorm:"type:varchar(64);not null"`
+	CapacityTotal          int    `json:"capacity_total" gorm:"default:20"`
+	CapacityUsed           int    `json:"capacity_used" gorm:"default:0"`
+	GatewayIdentityVersion int64  `json:"-" gorm:"default:0"`
 
 	// add after v0.8.5
 	ChannelInfo ChannelInfo `json:"channel_info" gorm:"type:json"`
@@ -90,18 +87,39 @@ type ChannelInfo struct {
 }
 
 // RoutingSettings shares the Vue channel fields with admission and billing.
-func (channel *Channel) RoutingSettings() (int, float64, error) {
+func (channel *Channel) RoutingSettings() (int, string, error) {
 	capacity, ratio := channel.CapacityTotal, channel.ChannelRatio
 	if capacity == 0 {
 		capacity = DefaultChannelCapacityTotal
 	}
-	if ratio == 0 {
-		ratio = DefaultChannelRatio
-	}
-	if capacity < 1 || capacity > MaxChannelCapacityTotal || ratio <= 0 || ratio > MaxChannelRatio || math.IsNaN(ratio) || math.IsInf(ratio, 0) {
-		return 0, 0, errors.New("invalid channel capacity or price ratio")
+	ratio, err := NormalizeChannelRatio(ratio, false)
+	if capacity < 1 || capacity > MaxChannelCapacityTotal || err != nil {
+		return 0, "", errors.New("invalid channel capacity or price ratio")
 	}
 	return capacity, ratio, nil
+}
+
+func NormalizeChannelRatio(value string, create bool) (string, error) {
+	if value == "" && create {
+		return DefaultChannelRatio, nil
+	}
+	if len(value) == 0 || len(value) > 64 {
+		return "", errors.New("invalid channel price ratio")
+	}
+	ratio, err := decimal.NewFromString(value)
+	if err != nil || !ratio.IsPositive() || ratio.GreaterThan(decimal.NewFromInt(MaxChannelRatio)) || ratio.Exponent() < -18 || ratio.Exponent() > 18 {
+		return "", errors.New("channel price ratio must be a decimal string greater than 0 and at most 1000, with at most 18 decimal places")
+	}
+	return ratio.String(), nil
+}
+
+func (channel *Channel) BeforeCreate(*gorm.DB) error {
+	ratio, err := NormalizeChannelRatio(channel.ChannelRatio, true)
+	if err != nil {
+		return err
+	}
+	channel.ChannelRatio = ratio
+	return nil
 }
 
 type ChannelSortOptions struct {
@@ -613,6 +631,13 @@ func (channel *Channel) Insert() error {
 }
 
 func (channel *Channel) Update() error {
+	if channel.ChannelRatio != "" {
+		ratio, err := NormalizeChannelRatio(channel.ChannelRatio, false)
+		if err != nil {
+			return err
+		}
+		channel.ChannelRatio = ratio
+	}
 	// If this is a multi-key channel, recalculate MultiKeySize based on the current key list to avoid inconsistency after editing keys
 	if channel.ChannelInfo.IsMultiKey {
 		var keyStr string

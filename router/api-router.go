@@ -31,6 +31,7 @@ func SetApiRouter(router *gin.Engine) {
 		billingRoot.GET("/reconciliations/:id", controller.GetBillingReconciliation)
 		billingRoot.POST("/reconciliations/:id/retry", controller.RetryBillingReconciliation)
 		billingRoot.POST("/reconciliations/:id/resolve", controller.ResolveBillingReconciliation)
+		billingRoot.POST("/reconciliations/:id/cost", controller.RecordBillingUpstreamCost)
 		billingRoot.GET("/metrics", controller.GetBillingMetrics)
 		billingRoot.GET("/prices", controller.GetBillingPrices)
 		billingRoot.POST("/prices", controller.PublishBillingPrice)

@@ -144,7 +144,7 @@ func FinalImagePriceMeta(c *gin.Context, info *relaycommon.RelayInfo, body io.Re
 			return nil, fmt.Errorf("invalid image prompt_extend")
 		}
 		if extend {
-			meta.BillingRatios["prompt_extend"] = 2
+			meta.BillingQuantities["prompt_extend"] = 2
 		}
 	}
 	return meta, nil

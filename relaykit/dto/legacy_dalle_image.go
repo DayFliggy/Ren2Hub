@@ -7,7 +7,6 @@ package dto
 
 import (
 	"errors"
-	"strings"
 )
 
 // NormalizeLegacyDalleImageRequest preserves the retired models' request
@@ -33,26 +32,4 @@ func (i *ImageRequest) NormalizeLegacyDalleImageRequest() error {
 		}
 	}
 	return nil
-}
-
-func (i *ImageRequest) legacyDallePriceRatio() float64 {
-	if !strings.HasPrefix(i.Model, "dall-e") {
-		return 1
-	}
-	sizeRatio, qualityRatio := 1.0, 1.0
-	switch i.Size {
-	case "256x256":
-		sizeRatio = 0.4
-	case "512x512":
-		sizeRatio = 0.45
-	case "1024x1792", "1792x1024":
-		sizeRatio = 2
-	}
-	if i.Model == "dall-e-3" && i.Quality == "hd" {
-		qualityRatio = 2
-		if i.Size == "1024x1792" || i.Size == "1792x1024" {
-			qualityRatio = 1.5
-		}
-	}
-	return sizeRatio * qualityRatio
 }

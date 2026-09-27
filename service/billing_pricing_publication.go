@@ -24,7 +24,9 @@ func publishAutomaticPricingCatalog(ctx context.Context) (*AutomaticPricingSyncR
 	}
 	byModel := make(map[string]model.BillingPriceOrigin, len(origins))
 	for _, origin := range origins {
-		byModel[origin.Model] = origin
+		if origin.ChannelID == 0 {
+			byModel[origin.Model] = origin
+		}
 	}
 	active, err := model.ListActiveBillingPrices(ctx)
 	if err != nil {
@@ -32,7 +34,9 @@ func publishAutomaticPricingCatalog(ctx context.Context) (*AutomaticPricingSyncR
 	}
 	activeHashes := make(map[string]string, len(active))
 	for _, price := range active {
-		activeHashes[price.Model] = price.Hash
+		if price.ScopeKind == "" || price.ScopeKind == billing.PriceScopeGlobal {
+			activeHashes[price.Model] = price.Hash
+		}
 	}
 	configured, err := model.ListAutomaticBillingModelNames(ctx)
 	if err != nil {
@@ -85,11 +89,12 @@ func publishAutomaticPricingCatalog(ctx context.Context) (*AutomaticPricingSyncR
 		if err != nil {
 			return result, fmt.Errorf("validate automatic price %s: %w", name, err)
 		}
+		sourceHash := catalog.hashes[string(entry.Source)]
+		price.Origin, price.SourceModel, price.SourceHash = string(entry.Source), entry.SourceModel, sourceHash
 		hash, err := billing.Hash(price)
 		if err != nil {
 			return result, err
 		}
-		sourceHash := catalog.hashes[string(entry.Source)]
 		if current.Origin == string(entry.Source) && current.SourceModel == entry.SourceModel && current.SourceHash == sourceHash && activeHashes[name] == hash {
 			continue
 		}

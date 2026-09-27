@@ -11,7 +11,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
-	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
@@ -102,7 +101,6 @@ func TestValidateChannelCapacityRatioBounds(t *testing.T) {
 		require.NoError(t, validateChannel(channel, true))
 		assert.Equal(t, model.DefaultChannelCapacityTotal, channel.CapacityTotal)
 		assert.Equal(t, model.DefaultChannelRatio, channel.ChannelRatio)
-		assert.Equal(t, model.DefaultChannelRatio, channel.UpstreamRatio)
 	})
 
 	t.Run("update keeps zero as unset", func(t *testing.T) {
@@ -110,7 +108,6 @@ func TestValidateChannelCapacityRatioBounds(t *testing.T) {
 		require.NoError(t, validateChannel(channel, false))
 		assert.Zero(t, channel.CapacityTotal)
 		assert.Zero(t, channel.ChannelRatio)
-		assert.Zero(t, channel.UpstreamRatio)
 	})
 
 	outOfRange := []struct {
@@ -119,10 +116,10 @@ func TestValidateChannelCapacityRatioBounds(t *testing.T) {
 	}{
 		{name: "negative capacity", mutate: func(c *model.Channel) { c.CapacityTotal = -1 }},
 		{name: "capacity above max", mutate: func(c *model.Channel) { c.CapacityTotal = model.MaxChannelCapacityTotal + 1 }},
-		{name: "negative channel ratio", mutate: func(c *model.Channel) { c.ChannelRatio = -0.5 }},
-		{name: "channel ratio above max", mutate: func(c *model.Channel) { c.ChannelRatio = model.MaxChannelRatio + 1 }},
-		{name: "negative upstream ratio", mutate: func(c *model.Channel) { c.UpstreamRatio = -1 }},
-		{name: "upstream ratio above max", mutate: func(c *model.Channel) { c.UpstreamRatio = model.MaxChannelRatio + 1 }},
+		{name: "negative channel ratio", mutate: func(c *model.Channel) { c.ChannelRatio = "-0.5" }},
+		{name: "channel ratio above max", mutate: func(c *model.Channel) { c.ChannelRatio = "1001" }},
+		{name: "zero channel ratio", mutate: func(c *model.Channel) { c.ChannelRatio = "0" }},
+		{name: "non-finite channel ratio", mutate: func(c *model.Channel) { c.ChannelRatio = "NaN" }},
 	}
 	for _, test := range outOfRange {
 		t.Run(test.name+" rejected on add", func(t *testing.T) {
@@ -409,47 +406,36 @@ func TestSettleTestQuotaUsesFrozenSafeAttributes(t *testing.T) {
 	quote, err := billing.NewQuote(billing.PriceVersion{Model: "test", Mode: billing.ModeExpression, Expression: `attr("service_tier") == "fast" ? p * 3 : p * 2`}, "1", map[string]interface{}{"service_tier": "fast"}, time.Unix(1700000000, 0))
 	require.NoError(t, err)
 	info := &relaycommon.RelayInfo{PriceData: types.PriceData{Quote: quote}}
-	quota, _, err := settleTestQuota(info, info.PriceData, &dto.Usage{PromptTokens: 1000})
+	quota, err := settleTestQuota(info, info.PriceData, &dto.Usage{PromptTokens: 1000})
 	require.NoError(t, err)
 	assert.Equal(t, 1500, quota)
 	require.NotNil(t, info.PriceData.Charge)
 	assert.Equal(t, common.Quota(1500), info.PriceData.Charge.FinalQuota)
 }
 
-func TestBuildTestLogOtherInjectsTieredInfo(t *testing.T) {
+func TestChannelTestLogPreservesFrozenPricingEvidence(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 
-	info := &relaycommon.RelayInfo{
-		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
-			BillingMode: "tiered_expr",
-			ExprString:  `tier("base", p * 2)`,
-		},
-		ChannelMeta: &relaycommon.ChannelMeta{},
-	}
-	priceData := types.PriceData{
-		ChannelRatio: 1,
-	}
+	quote, err := billing.NewQuote(billing.PriceVersion{ID: 7, ScopeKind: billing.PriceScopeChannel, ChannelID: 9, Model: "test", ContractVersion: billing.ContractVersion, CalculationVersion: billing.CalculationVersion, ResultUnit: billing.ResultMicroUSD, Mode: billing.ModeExpression, Expression: `tier("base", p * 2)`}, "1", nil, time.Unix(1700000000, 0))
+	require.NoError(t, err)
+	info := &relaycommon.RelayInfo{PriceData: types.PriceData{Quote: quote}, ChannelMeta: &relaycommon.ChannelMeta{}}
 	usage := &dto.Usage{
+		PromptTokens: 20,
 		PromptTokensDetails: dto.InputTokenDetails{
 			CachedTokens: 12,
 		},
 	}
 
-	requestRules := []billingexpr.RequestRuleTrace{{
-		Cond:       `param("service_tier") == "fast"`,
-		Multiplier: 2,
-		Matched:    true,
-	}}
-	other := buildTestLogOther(ctx, info, priceData, usage, &billingexpr.TieredResult{
-		MatchedTier:  "base",
-		RequestRules: requestRules,
-	})
-
-	require.Equal(t, "tiered_expr", other["billing_mode"])
-	require.Equal(t, "base", other["matched_tier"])
-	require.Equal(t, requestRules, other["request_rules"])
-	require.NotEmpty(t, other["expr_b64"])
+	_, err = settleTestQuota(info, info.PriceData, usage)
+	require.NoError(t, err)
+	other := service.GenerateTextOtherInfo(ctx, info, usage.PromptTokensDetails.CachedTokens)
+	assert.Equal(t, billing.PriceScopeChannel, other["price_scope"])
+	assert.Equal(t, int64(7), other["price_version_id"])
+	assert.Equal(t, quote.Hash, other["quote_hash"])
+	assert.Equal(t, quote.PriceVersion.Hash, other["price_version_hash"])
+	assert.Equal(t, info.PriceData.Charge, other["charge_result"])
+	assert.NotContains(t, other, "expr_b64")
 }
 
 func TestResolveChannelTestUserIDUsesRequestUser(t *testing.T) {

@@ -1,4 +1,5 @@
 import { api } from './client'
+import { isDecimal } from '@/utils/decimal'
 import {
   invalidResponse,
   isRecord,
@@ -59,7 +60,7 @@ export interface BillingCharge {
     image_count?: number
     request_rules?: Array<{
       cond: string
-      multiplier: number
+      multiplier: string
       matched: boolean
     }>
   }
@@ -83,11 +84,7 @@ export function parseBillingCharge(
     if (value.trace.request_rules !== undefined) {
       if (!Array.isArray(value.trace.request_rules)) invalidResponse(endpoint)
       trace.request_rules = value.trace.request_rules.map((rule) => {
-        if (
-          !isRecord(rule) ||
-          typeof rule.multiplier !== 'number' ||
-          !Number.isFinite(rule.multiplier)
-        )
+        if (!isRecord(rule) || !isDecimal(rule.multiplier))
           invalidResponse(endpoint)
         return {
           cond: requiredString(rule.cond, endpoint),

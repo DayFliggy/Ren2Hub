@@ -19,7 +19,6 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
-	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -525,14 +524,14 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		return testResult{context: c, localErr: info.BillingSettlementError, newAPIError: types.NewError(info.BillingSettlementError, types.ErrorCodeModelPriceError)}
 	}
 
-	quota, tieredResult, settleErr := settleTestQuota(info, priceData, usage)
+	quota, settleErr := settleTestQuota(info, priceData, usage)
 	if settleErr != nil {
 		return testResult{context: c, localErr: settleErr, newAPIError: types.NewError(settleErr, types.ErrorCodeModelPriceError)}
 	}
 	tok := time.Now()
 	milliseconds := tok.Sub(tik).Milliseconds()
 	consumedTime := float64(milliseconds) / 1000.0
-	other := buildTestLogOther(c, info, priceData, usage, tieredResult)
+	other := service.GenerateTextOtherInfo(c, info, usage.PromptTokensDetails.CachedTokens)
 	settleErr = service.CompleteBillingConsumption(c, info, model.RecordConsumeLogParams{
 		ChannelId:        channel.Id,
 		PromptTokens:     usage.PromptTokens,
@@ -570,9 +569,9 @@ func attachTestBillingRequestInput(info *relaycommon.RelayInfo, request dto.Requ
 	return nil
 }
 
-func settleTestQuota(info *relaycommon.RelayInfo, priceData hosttypes.PriceData, usage *dto.Usage) (int, *billingexpr.TieredResult, error) {
+func settleTestQuota(info *relaycommon.RelayInfo, priceData hosttypes.PriceData, usage *dto.Usage) (int, error) {
 	if info == nil || priceData.Quote == nil {
-		return 0, nil, fmt.Errorf("frozen billing quote required")
+		return 0, fmt.Errorf("frozen billing quote required")
 	}
 	usageFact := service.NormalizedBillingUsage(usage, "")
 	if priceData.Usage != nil {
@@ -580,20 +579,11 @@ func settleTestQuota(info *relaycommon.RelayInfo, priceData hosttypes.PriceData,
 	}
 	charge, err := billing.Calculate(priceData.Quote, usageFact)
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
 	info.PriceData.Usage, info.PriceData.Charge = &usageFact, charge
 	quota, err := billing.RequestQuota(charge.FinalQuota)
-	return quota, nil, err
-}
-
-func buildTestLogOther(c *gin.Context, info *relaycommon.RelayInfo, priceData hosttypes.PriceData, usage *dto.Usage, tieredResult *billingexpr.TieredResult) map[string]interface{} {
-	other := service.GenerateTextOtherInfo(c, info, priceData.ModelRatio, priceData.ChannelRatio, priceData.CompletionRatio,
-		usage.PromptTokensDetails.CachedTokens, priceData.CacheRatio, priceData.ModelPrice)
-	if tieredResult != nil {
-		service.InjectTieredBillingInfo(other, info, tieredResult)
-	}
-	return other
+	return quota, err
 }
 
 func coerceTestUsage(usageAny any, isStream bool, estimatePromptTokens int) (*dto.Usage, error) {

@@ -23,6 +23,44 @@ const reservation = {
 afterEach(() => vi.restoreAllMocks())
 
 describe('billing API', () => {
+  it('keeps saved rule multipliers as decimal strings and rejects floating point projections', () => {
+    const charge = {
+      lines: [],
+      final_quota: '1',
+      total_usd: '0.000002',
+      unrounded_quota: '1',
+      rounding_delta: '0',
+      calculation_version: 'billing-v2',
+      rounding_version: 'half-up-positive-minimum-v1',
+      trace: {
+        matched_tier: '',
+        request_rules: [
+          {
+            cond: 'hour("UTC") < 6',
+            multiplier: '0.123456789012345678',
+            matched: true,
+          },
+        ],
+      },
+    }
+    expect(
+      parseBillingCharge(charge, '/billing')?.trace?.request_rules?.[0]
+        ?.multiplier
+    ).toBe('0.123456789012345678')
+    for (const multiplier of [0.5, 'NaN', '1e9', '-1'])
+      expect(() =>
+        parseBillingCharge(
+          {
+            ...charge,
+            trace: {
+              ...charge.trace,
+              request_rules: [{ ...charge.trace.request_rules[0], multiplier }],
+            },
+          },
+          '/billing'
+        )
+      ).toThrow()
+  })
   it('retains a confirmed image count without inventing missing trace evidence', () => {
     const charge = {
       lines: [],

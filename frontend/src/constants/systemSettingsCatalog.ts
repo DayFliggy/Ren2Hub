@@ -699,7 +699,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             '移除 Gemini 函数响应 ID'
           ),
           toggle('grok.violation_deduction_enabled', 'Grok 违规扣费'),
-          number('grok.violation_deduction_amount', 'Grok 违规扣费金额', 0.05),
+          text('grok.violation_deduction_amount', 'Grok 违规扣费金额', '0.05'),
           list('qwen.sync_image_models', 'Qwen 图片模型', '[]'),
         ],
       },

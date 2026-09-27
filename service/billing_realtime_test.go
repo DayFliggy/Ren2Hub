@@ -9,6 +9,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -18,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func realtimeBillingSession(t *testing.T) (*gin.Context, *relaycommon.RelayInfo) {
+func reservedRealtimeBillingSession(t *testing.T) (*gin.Context, *relaycommon.RelayInfo) {
 	t.Helper()
 	truncate(t)
 	seedUser(t, 880, 100)
@@ -32,12 +33,19 @@ func realtimeBillingSession(t *testing.T) (*gin.Context, *relaycommon.RelayInfo)
 	info := &relaycommon.RelayInfo{
 		RequestId: "realtime-billing-session", UserId: 880, TokenId: 881, TokenKey: "realtime-billing-test",
 		RelayFormat: types.RelayFormatOpenAIRealtime, OriginModelName: "realtime-test-model", StartTime: time.Now(),
-		PriceData:   hosttypes.PriceData{ModelRatio: 1, ChannelRatio: 1},
+		PriceData:   hosttypes.PriceData{Quote: &billing.Quote{ChannelRatio: "1"}},
 		ChannelMeta: &relaycommon.ChannelMeta{ChannelId: 882, UpstreamModelName: "realtime-test-model"},
 	}
 	info.PriceData.Quote = billingTestQuote(t, "p * 2 + c * 2")
 	require.Nil(t, PreConsumeBilling(c, 5, info))
 	t.Cleanup(func() { info.Billing.(*BillingSession).stopRecoveryHeartbeat() })
+	return c, info
+}
+
+func realtimeBillingSession(t *testing.T) (*gin.Context, *relaycommon.RelayInfo) {
+	t.Helper()
+	c, info := reservedRealtimeBillingSession(t)
+	require.Nil(t, PrepareBillingForSelectedModel(c, info))
 	return c, info
 }
 
@@ -84,9 +92,10 @@ func TestRealtimeReservationStopsAtAvailableFunds(t *testing.T) {
 }
 
 func TestRealtimePerCallPriceIsReservedAndChargedOncePerSession(t *testing.T) {
-	c, info := realtimeBillingSession(t)
+	c, info := reservedRealtimeBillingSession(t)
 	info.PriceData.UsePrice = true
 	info.PriceData.Quote = billingTestCallQuote(t)
+	require.Nil(t, PrepareBillingForSelectedModel(c, info))
 	info.MarkValidOutput()
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{}))
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{}))
@@ -103,7 +112,10 @@ func TestRealtimeConsumptionRecoveryFinishesAfterLostProcess(t *testing.T) {
 	c, info := realtimeBillingSession(t)
 	log, err := model.BuildConsumeLog(c, info.UserId, model.RecordConsumeLogParams{TokenId: info.TokenId, ChannelId: info.ChannelId, ModelName: info.OriginModelName, PromptTokens: 20, Quota: 20})
 	require.NoError(t, err)
-	require.NoError(t, model.PrepareBillingRecoveryConsumption(info.RequestId, model.BillingConsumption{Log: *log, CountUsage: true, LogEnabled: true}))
+	usage := &billing.Usage{InputTokens: 20, Source: "provider", Complete: true}
+	charge, err := billing.Calculate(info.PriceData.Quote, *usage)
+	require.NoError(t, err)
+	require.NoError(t, model.PrepareBillingRecoveryConsumption(info.RequestId, model.BillingConsumption{Log: *log, Usage: usage, Charge: charge, CountUsage: true, LogEnabled: true}))
 	info.Billing.(*BillingSession).stopRecoveryHeartbeat()
 	summary, err := RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+1, 100)
 	require.NoError(t, err)
@@ -118,7 +130,7 @@ func TestRealtimeConsumptionRecoveryFinishesAfterLostProcess(t *testing.T) {
 	assert.Zero(t, summary.Scanned)
 }
 
-func TestRealtimeRecoverySettlesTheLastConfirmedRoundAfterSessionCrash(t *testing.T) {
+func TestRealtimeRecoveryRetainsLastUsageUntilSessionOutcomeConfirmed(t *testing.T) {
 	c, info := realtimeBillingSession(t)
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 10}))
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 20}))
@@ -126,13 +138,30 @@ func TestRealtimeRecoverySettlesTheLastConfirmedRoundAfterSessionCrash(t *testin
 	info.Billing.(*BillingSession).stopRecoveryHeartbeat()
 	summary, err := RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+1, 100)
 	require.NoError(t, err)
-	assert.EqualValues(t, 1, summary.Settled)
+	assert.Zero(t, summary.Settled)
 	assert.Zero(t, summary.Refunded)
 	var user model.User
 	var logs []model.Log
+	var recovery model.BillingRecovery
 	require.NoError(t, model.DB.First(&user, 880).Error)
 	require.NoError(t, model.LOG_DB.Where("request_id = ?", info.RequestId).Find(&logs).Error)
+	require.NoError(t, model.DB.Where("request_id = ?", info.RequestId).First(&recovery).Error)
 	assert.EqualValues(t, 80, user.Quota)
+	assert.EqualValues(t, 20, user.ReservedQuota)
+	assert.Zero(t, user.UsedQuota)
+	assert.Zero(t, user.RequestCount)
+	assert.Empty(t, logs)
+	assert.Equal(t, model.BillingRecoveryStateUsageCollecting, recovery.ConsumptionState)
+	assert.NotEmpty(t, recovery.ConsumptionFingerprint)
+	var savedUsage billing.Usage
+	require.NoError(t, common.UnmarshalJsonStr(recovery.UsageSnapshot, &savedUsage))
+	assert.EqualValues(t, 20, savedUsage.InputTokens, "the last known cumulative usage remains available for reconciliation")
+
+	PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 20}, "confirmed final usage")
+	require.NoError(t, info.BillingSettlementError)
+	require.NoError(t, model.DB.First(&user, 880).Error)
+	require.NoError(t, model.LOG_DB.Where("request_id = ?", info.RequestId).Find(&logs).Error)
+	assert.Zero(t, user.ReservedQuota)
 	assert.EqualValues(t, 20, user.UsedQuota)
 	assert.EqualValues(t, 1, user.RequestCount)
 	require.Len(t, logs, 1)

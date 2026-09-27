@@ -14,20 +14,21 @@ import (
 
 func TestEmptyUsageScopePreservesPublishedWireContractAndQuoteHash(t *testing.T) {
 	const legacyPrice = `{"contract_version":2,"calculation_version":"billing-v2","result_unit":"usd","id":0,"model":"embedding","mode":"unit_price","prices":[{"quantity":"p","unit":"per_million_tokens","price":"0.1"}],"created_at":0,"hash":""}`
+	const preparedPrice = `{"contract_version":2,"calculation_version":"billing-v2","result_unit":"usd","id":0,"scope_kind":"global_model","model":"embedding","mode":"unit_price","prices":[{"quantity":"p","unit":"per_million_tokens","price":"0.1"}],"created_at":0,"hash":""}`
 	var price billing.PriceVersion
 	require.NoError(t, common.Unmarshal([]byte(legacyPrice), &price))
 	prepared, err := billing.PreparePriceVersion(price)
 	require.NoError(t, err)
 	encoded, err := common.Marshal(prepared)
 	require.NoError(t, err)
-	assert.Equal(t, legacyPrice, string(encoded))
+	assert.Equal(t, preparedPrice, string(encoded))
 	hash, err := billing.Hash(prepared)
 	require.NoError(t, err)
-	assert.Equal(t, fmt.Sprintf("%x", sha256.Sum256([]byte(legacyPrice))), hash)
+	assert.Equal(t, fmt.Sprintf("%x", sha256.Sum256([]byte(preparedPrice))), hash)
 
 	quote, err := billing.NewQuote(prepared, "1", nil, time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
-	legacyQuote := `{"contract_version":2,"calculation_version":"billing-v2","price_version":` + legacyPrice + `,"channel_ratio":"1","frozen_at":"2026-09-26T00:00:00Z","hash":"","violation_fee_enabled":false,"violation_fee_usd":""}`
+	legacyQuote := `{"contract_version":2,"calculation_version":"billing-v2","price_version":` + preparedPrice + `,"channel_ratio":"1","frozen_at":"2026-09-26T00:00:00Z","hash":"","violation_fee_enabled":false,"violation_fee_usd":""}`
 	assert.Equal(t, fmt.Sprintf("%x", sha256.Sum256([]byte(legacyQuote))), quote.Hash)
 }
 

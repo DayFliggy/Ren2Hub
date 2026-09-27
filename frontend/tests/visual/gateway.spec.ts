@@ -265,8 +265,8 @@ async function fixture(page: Page) {
           weight: 10,
           capacity_used: 2,
           capacity_total: 20,
-          channel_ratio: 1,
-          upstream_ratio: 1,
+          channel_ratio: '1',
+
           used_quota: 0,
           balance: 0,
           response_time: 20,

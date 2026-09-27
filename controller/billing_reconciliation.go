@@ -100,9 +100,19 @@ func GetBillingReconciliation(c *gin.Context) {
 	}
 	quotes := make([]gin.H, 0, len(attempts))
 	for _, attempt := range attempts {
-		quotes = append(quotes, gin.H{"id": attempt.ID, "channel_id": attempt.ChannelID, "quote_hash": attempt.QuoteHash, "created_at": attempt.CreatedAt, "quote": decode(attempt.Quote)})
+		quotes = append(quotes, gin.H{"id": attempt.ID, "channel_id": attempt.ChannelID, "request_fingerprint": attempt.Fingerprint, "quote_hash": attempt.QuoteHash, "created_at": attempt.CreatedAt, "quote": decode(attempt.Quote)})
 	}
-	common.ApiSuccess(c, gin.H{"recovery": billingRecoveryDTO(recovery), "quote": decode(recovery.QuoteSnapshot), "usage": decode(recovery.UsageSnapshot), "charge": decode(recovery.ChargeSnapshot), "events": events, "attempts": quotes})
+	audit := model.AuditBillingEvidence(recovery, attempts, events)
+	costs, err := model.ReadBillingCostSummary(c.Request.Context(), recovery.RequestID)
+	if err != nil {
+		billingAPIError(c, err)
+		return
+	}
+	if err := audit.ApplyUpstreamCost(costs.UpstreamCostUSD, costs.Complete); err != nil {
+		billingAPIError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"recovery": billingRecoveryDTO(recovery), "quote": decode(recovery.QuoteSnapshot), "usage": decode(recovery.UsageSnapshot), "charge": decode(recovery.ChargeSnapshot), "events": events, "attempts": quotes, "audit": audit, "upstream_cost": costs})
 }
 
 func ResolveBillingReconciliation(c *gin.Context) {

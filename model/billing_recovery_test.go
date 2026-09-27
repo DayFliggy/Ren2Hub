@@ -21,6 +21,7 @@ func setupBillingRecoveryTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.AutoMigrate(
 		&User{}, &Token{},
 		&BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &Log{}, &QuotaData{}, &Channel{},
+		&BillingPriceVersion{}, &BillingActivePrice{},
 	))
 
 	previousDB := DB

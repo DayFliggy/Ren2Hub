@@ -140,6 +140,7 @@ func gatewayStartupSchema(t *testing.T, db *gorm.DB) {
 		{&GatewayStateBinding{}, []string{"user_id", "token_id", "credential_id", "endpoint_id", "transport_id", "expires_at"}, []string{"gateway_state_lookup", "idx_gateway_state_bindings_expires_at"}},
 		{&BillingRecovery{}, []string{"pre_consume_state", "token_required", "final_event_id", "version", "consumption_snapshot", "consumption_state", "consumption_statistics", "consumption_log", "consumption_error"}, []string{"billing_recovery_pending_scan", "idx_billing_recoveries_request_id"}},
 		{&BillingEvent{}, []string{"event_id", "request_id", "operation", "available_delta", "reserved_delta", "used_delta", "fingerprint"}, []string{"idx_billing_events_event_id"}},
+		{&BillingUpstreamCost{}, []string{"event_id", "request_id", "attempt_id", "amount_usd", "source", "reference", "actor_id", "fingerprint"}, []string{"idx_billing_upstream_costs_event_id", "idx_billing_upstream_costs_attempt_id"}},
 	} {
 		require.True(t, db.Migrator().HasTable(target.model), "%T table", target.model)
 		for _, column := range target.columns {

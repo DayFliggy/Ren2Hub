@@ -39,11 +39,12 @@ const (
 // settlement components and the sanitized consumption log snapshot. Token
 // keys, headers, request bodies, and provider credentials are never stored.
 type BillingRecovery struct {
-	Version        int64  `json:"version" gorm:"type:bigint;not null;default:0"`
-	QuoteSnapshot  string `json:"-" gorm:"type:text"`
-	UsageSnapshot  string `json:"-" gorm:"type:text"`
-	ChargeSnapshot string `json:"-" gorm:"type:text"`
-	FinalEventID   string `json:"event_id" gorm:"type:varchar(192)"`
+	Version                int64  `json:"version" gorm:"type:bigint;not null;default:0"`
+	QuoteSnapshot          string `json:"-" gorm:"type:text"`
+	UsageSnapshot          string `json:"-" gorm:"type:text"`
+	ChargeSnapshot         string `json:"-" gorm:"type:text"`
+	FinalEventID           string `json:"event_id" gorm:"type:varchar(192)"`
+	ConsumptionFingerprint string `json:"consumption_fingerprint" gorm:"type:varchar(64)"`
 
 	ID                    int64        `json:"id" gorm:"primaryKey"`
 	RequestID             string       `json:"request_id" gorm:"type:varchar(128);uniqueIndex;not null"`
@@ -411,13 +412,10 @@ func finalizeBillingTx(tx *gorm.DB, requestID string, actual common.Quota, relea
 	if operationID == "" {
 		operationID = requestID + ":" + operation
 	}
-	fingerprint, err := billingEventFingerprint(struct {
-		RequestID, Operation string
-		Quota                common.Quota
-		Actor                int
-		Reason               string
-		ExpectedVersion      []int64
-	}{requestID, operation, actual, actor, reason, expectedVersion})
+	fingerprint, err := billingEventFingerprint(billingFinalizationIdentity{
+		RequestID: requestID, Operation: operation, Quota: actual, Actor: actor, Reason: reason,
+		ExpectedVersion: expectedVersion, EvidenceHash: recovery.ConsumptionFingerprint,
+	})
 	if err != nil {
 		return err
 	}
@@ -458,7 +456,7 @@ func finalizeBillingTx(tx *gorm.DB, requestID string, actual common.Quota, relea
 	if err != nil {
 		return err
 	}
-	event := &BillingEvent{EventID: operationID, RequestID: requestID, UserID: recovery.UserID, Operation: operation, SourceType: "request", SourceID: requestID, Fingerprint: fingerprint, AvailableDelta: reserved - actual, ReservedDelta: -reserved, UsedDelta: actual, ActorID: actor, Reason: reason}
+	event := &BillingEvent{EventID: operationID, RequestID: requestID, UserID: recovery.UserID, Operation: operation, SourceType: "request", SourceID: requestID, Fingerprint: fingerprint, EvidenceHash: recovery.ConsumptionFingerprint, AvailableDelta: reserved - actual, ReservedDelta: -reserved, UsedDelta: actual, ActorID: actor, Reason: reason}
 	if recovery.TokenRequired {
 		event.TokenID = recovery.TokenID
 		event.TokenAvailableDelta = recovery.TokenAmount - actual

@@ -151,7 +151,7 @@ async function data(page: Page) {
               request_rules: [
                 {
                   cond: 'hour("Asia/Shanghai") < 6',
-                  multiplier: 0.8,
+                  multiplier: '0.8',
                   matched: true,
                 },
               ],

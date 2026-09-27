@@ -143,7 +143,7 @@ export interface ModelSettings {
   'claude.thinking_adapter_enabled': boolean
   'claude.thinking_adapter_budget_tokens_percentage': number
   'grok.violation_deduction_enabled': boolean
-  'grok.violation_deduction_amount': number
+  'grok.violation_deduction_amount': string
   'qwen.sync_image_models': string
   'channel_affinity_setting.enabled': boolean
   'channel_affinity_setting.switch_on_success': boolean
@@ -342,7 +342,7 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   'claude.thinking_adapter_enabled': false,
   'claude.thinking_adapter_budget_tokens_percentage': 0.8,
   'grok.violation_deduction_enabled': true,
-  'grok.violation_deduction_amount': 0.05,
+  'grok.violation_deduction_amount': '0.05',
   'qwen.sync_image_models': '[]',
   'channel_affinity_setting.enabled': false,
   'channel_affinity_setting.switch_on_success': false,

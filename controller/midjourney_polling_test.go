@@ -29,7 +29,7 @@ func setupMidjourneyPoll(t *testing.T) *gorm.DB {
 	connection, err := db.DB()
 	require.NoError(t, err)
 	connection.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.Midjourney{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.QuotaData{}))
+	require.NoError(t, db.AutoMigrate(&model.Midjourney{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingAttempt{}, &model.BillingEvent{}, &model.QuotaData{}))
 	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 1).Updates(map[string]any{"available_quota": 100, "used_quota": 0, "request_count": 0}).Error)
 	service.InitHttpClient()
 	return db
@@ -52,6 +52,7 @@ func seedMidjourneyPollTask(t *testing.T, db *gorm.DB, endpoint, key, id string)
 	_, err = model.EnsureBillingRecovery(model.BillingRecoveryInput{RequestID: task.PrivateData.SubmissionRequestID, UserID: 1, TokenID: task.TokenId, TokenRequired: true, Source: "wallet"})
 	require.NoError(t, err)
 	require.NoError(t, model.Reserve(task.PrivateData.SubmissionRequestID, 20))
+	require.NoError(t, model.PrepareBillingAttempt(context.Background(), task.PrivateData.SubmissionRequestID, task.PrivateData.SubmissionRequestID+":attempt", task.ChannelId, quote))
 	require.NoError(t, model.PersistAcceptedMidjourney(&task, task.PrivateData.SubmissionRequestID, model.BillingConsumption{Log: model.Log{UserId: 1, TokenId: task.TokenId, ChannelId: channel.Id, Quota: 20}, CountUsage: true, LogEnabled: true}))
 	return task
 }

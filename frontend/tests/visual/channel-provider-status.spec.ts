@@ -23,8 +23,8 @@ for (const theme of ['light', 'dark'] as const)
                   weight: 1,
                   capacity_used: 0,
                   capacity_total: 20,
-                  channel_ratio: 1,
-                  upstream_ratio: 1,
+                  channel_ratio: '1',
+
                   used_quota: '0',
                   balance: 0,
                   response_time: 0,

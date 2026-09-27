@@ -279,7 +279,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			break
 		}
 		markLiveRoutePriceQualified(c)
-		if routeLiveSelectionActive(c) && !liveRoutePriceRatioAllowed(c, relayInfo.PriceData.ChannelRatio) {
+		if routeLiveSelectionActive(c) && !liveRoutePriceRatioAllowed(c, relayInfo.PriceData.ChannelMultiplier()) {
 			markLiveRouteCandidateFiltered(c, channel.Id, service.RouteFilterPriceForbidden)
 			if nextAttempt, found := nextLiveRouteCandidateIndex(c, retryParam.GetRetry()); found {
 				retryParam.SetRetry(nextAttempt)
@@ -491,7 +491,7 @@ func fastTokenCountMetaForPricing(request dto.Request) *types.TokenCountMeta {
 	case *dto.ClaudeRequest:
 		meta.MaxTokens = int(lo.FromPtr(r.MaxTokens))
 	case *dto.ImageRequest:
-		// Pricing for image requests depends on ImagePriceRatio; safe to compute even when CountToken is disabled.
+		// Image requests carry their quantity as structured billing metadata.
 		return r.GetTokenCountMeta()
 	default:
 		// Best-effort: leave CombineText empty to avoid large allocations.
@@ -571,7 +571,9 @@ func acquireRouteAttemptPermit(c *gin.Context, info *relaycommon.RelayInfo, chan
 	if expected.HealthUnavailable {
 		return service.ErrRouteHealthUnavailable
 	}
-	if expected.ChannelRatio != info.PriceData.ChannelRatio {
+	// Admission validates the selected routing configuration. A scoped quote
+	// may deliberately use multiplier 1, and task quotes are created at send.
+	if expected.ChannelRatio != c.GetString("channel_ratio") {
 		return service.ErrAdmissionRuntime
 	}
 	qualification, qualified := liveRouteRuntimeQualificationForRequest(c)
@@ -1196,7 +1198,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 
 // admitMediaRouteAttempt is called after provider validation and pricing.
 func admitMediaRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, attempt int) error {
-	if !liveRoutePriceRatioAllowed(c, info.PriceData.ChannelRatio) {
+	if !liveRoutePriceRatioAllowed(c, info.PriceData.ChannelMultiplier()) {
 		return service.ErrRoutePriceRatioExceeded
 	}
 	channel, err := model.GetChannelById(common.GetContextKeyInt(c, constant.ContextKeyChannelId), true)

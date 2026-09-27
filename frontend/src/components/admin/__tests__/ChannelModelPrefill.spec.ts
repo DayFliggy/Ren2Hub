@@ -38,7 +38,7 @@ function setup(patch: Partial<AdminChannel> = {}) {
     weight: 0,
     capacity_total: 20,
     capacity_used: 0,
-    channel_ratio: 1,
+    channel_ratio: '1',
     ...patch,
   } as AdminChannel
   const wrapper = mount(ChannelFormModal, {
@@ -75,6 +75,29 @@ beforeEach(() => {
   ])
 })
 describe('channel model prefill integration', () => {
+  it('submits channel adjustments as exact decimal strings and rejects invalid ranges', async () => {
+    const { wrapper, save } = setup()
+    const input = wrapper.get('input[name="admin-channel-ratio"]')
+    const submit = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('channels.saveChannel'))!
+    for (const invalid of [
+      '0',
+      '1000.000000000000000001',
+      '0.0000000000000000001',
+      '1e3',
+      'NaN',
+    ]) {
+      await input.setValue(invalid)
+      expect(submit.attributes('disabled')).toBeDefined()
+    }
+    expect(save).not.toHaveBeenCalled()
+    await input.setValue('0.123456789012345678')
+    await submit.trigger('click')
+    await flushPromises()
+    expect(save.mock.calls[0]![0].channel_ratio).toBe('0.123456789012345678')
+    wrapper.unmount()
+  })
   it('saves supported passthrough fields while retaining unrelated settings', async () => {
     mocks.canSensitiveWrite = true
     const { wrapper, save } = setup({

@@ -94,7 +94,7 @@ func TestGatewayConversionQualificationPrecedesCandidateCap(t *testing.T) {
 			var original model.Channel
 			require.NoError(t, model.DB.Where("id = ?", 1).First(&original).Error)
 			for n := 1; n < incompatible; n++ {
-				channel := model.Channel{Type: constant.ChannelTypeAnthropic, Models: "gpt-4o-mini", Name: "review-incompatible", Key: "review-fixture-key", Status: common.ChannelStatusEnabled, BaseURL: original.BaseURL, Group: "default", CapacityTotal: 10, ChannelRatio: 1}
+				channel := model.Channel{Type: constant.ChannelTypeAnthropic, Models: "gpt-4o-mini", Name: "review-incompatible", Key: "review-fixture-key", Status: common.ChannelStatusEnabled, BaseURL: original.BaseURL, Group: "default", CapacityTotal: 10, ChannelRatio: "1"}
 				require.NoError(t, model.DB.Create(&channel).Error)
 				require.NoError(t, channel.AddAbilities(model.DB))
 			}

@@ -90,13 +90,15 @@ func runRealtimeHandler(t *testing.T, quota int) (*websocket.Conn, *websocket.Co
 	info := &relaycommon.RelayInfo{
 		ClientWs: client, TargetWs: target, RelayFormat: types.RelayFormatOpenAIRealtime,
 		RequestId: "realtime-test-session", UserId: 1, TokenId: 2, TokenKey: "realtime-test-token",
-		OriginModelName: "realtime-test-model", PriceData: hosttypes.PriceData{ModelRatio: 1, ChannelRatio: 1},
-		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "realtime-test-model"},
+		OriginModelName: "realtime-test-model", PriceData: hosttypes.PriceData{Quote: &billing.Quote{ChannelRatio: "1"}},
+		ChannelMeta: &relaycommon.ChannelMeta{ChannelId: 1, UpstreamModelName: "realtime-test-model"},
 	}
 	quote, err := billing.NewQuote(billing.PriceVersion{Model: "realtime-test-model", Mode: billing.ModeExpression, Expression: "p * 2 + c * 2 + ai * 2 + ao * 2"}, "1", nil, time.Unix(1700000000, 0))
 	require.NoError(t, err)
 	info.PriceData.Quote = quote
 	require.Nil(t, service.PreConsumeBilling(c, 5, info))
+	info.BillingAttemptID = info.RequestId + ":attempt"
+	require.NoError(t, model.PrepareBillingAttempt(context.Background(), info.RequestId, info.BillingAttemptID, info.ChannelMeta.ChannelId, quote))
 	done := make(chan realtimeTestResult, 1)
 	go func() {
 		err, usage := OpenaiRealtimeHandler(c, info)
@@ -177,7 +179,7 @@ func TestRealtimeReservationFailureReturnsIncurredUsage(t *testing.T) {
 	assert.Equal(t, 30, result.usage.TotalTokens)
 	var recovery model.BillingRecovery
 	require.NoError(t, model.DB.Where("request_id = ?", "realtime-test-session").First(&recovery).Error)
-	assert.Equal(t, model.BillingRecoveryStateCollecting, recovery.ConsumptionState)
+	assert.Equal(t, model.BillingRecoveryStateUsageCollecting, recovery.ConsumptionState)
 	assert.NotEmpty(t, recovery.ConsumptionSnapshot)
 }
 

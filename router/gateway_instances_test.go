@@ -252,7 +252,7 @@ func gatewayInstancesSeed(t *testing.T, db *gorm.DB, upstream string) ([]model.U
 	}
 	channels := []model.Channel{{Id: base + 5, Type: constant.ChannelTypeOpenAI, Models: "gpt-4o-mini"}, {Id: base + 6, Type: constant.ChannelTypeAnthropic, Models: "claude-3-5-sonnet"}}
 	for i := range channels {
-		channels[i].Name, channels[i].Key, channels[i].Status, channels[i].BaseURL, channels[i].Group, channels[i].CapacityTotal, channels[i].ChannelRatio = "local acceptance", "local-upstream-fixture", common.ChannelStatusEnabled, &upstream, "default", 1, 1
+		channels[i].Name, channels[i].Key, channels[i].Status, channels[i].BaseURL, channels[i].Group, channels[i].CapacityTotal, channels[i].ChannelRatio = "local acceptance", "local-upstream-fixture", common.ChannelStatusEnabled, &upstream, "default", 1, "1"
 		require.NoError(t, db.Create(&channels[i]).Error)
 		require.NoError(t, db.Create(&model.Ability{Group: "default", Model: channels[i].Models, ChannelId: channels[i].Id, Enabled: true, Weight: 1}).Error)
 	}

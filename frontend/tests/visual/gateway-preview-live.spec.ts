@@ -65,7 +65,7 @@ test.describe('gateway real preview permissions and conversion', () => {
             group: 'default',
             status: 1,
             capacity_total: 10,
-            channel_ratio: 1,
+            channel_ratio: '1',
           },
         },
       })

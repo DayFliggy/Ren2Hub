@@ -318,6 +318,7 @@ func migrateDB() error {
 		&AffiliateLedger{},
 		&BillingRecovery{},
 		&BillingAttempt{},
+		&BillingUpstreamCost{},
 		&BillingEvent{},
 		&BillingPriceVersion{},
 		&BillingActivePrice{},

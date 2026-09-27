@@ -66,6 +66,67 @@ function setup() {
   return { wrapper, publish }
 }
 describe('model price editor', () => {
+  it('edits the selected channel version without overwriting another scope and retains structured prices', async () => {
+    const scoped: PriceVersion = {
+      ...price,
+      id: 7,
+      scope_kind: 'channel_model',
+      channel_id: 9,
+      flat_fee: '0.001',
+      effective_from: '2026-01-01T00:00:00Z',
+      effective_to: '2027-01-01T00:00:00Z',
+      prices: [
+        {
+          quantity: 'reasoning',
+          unit: 'per_million_tokens',
+          price: '',
+          tier_mode: 'graduated',
+          tiers: [
+            { up_to: '1000000', unit_price: '1.000000000000000001' },
+            { unit_price: '0.5' },
+          ],
+        },
+      ],
+    }
+    vi.spyOn(modelPricingApi, 'load').mockResolvedValue([scoped, price])
+    const publish = vi
+      .spyOn(modelPricingApi, 'publish')
+      .mockResolvedValue({ ...scoped, id: 8 })
+    const wrapper = mount(ModelPricingEditor, {
+      props: { modelName: 'test' },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    expect(
+      wrapper.get<HTMLInputElement>('input[inputmode=decimal]').element.value
+    ).toBe('1')
+    await wrapper.get('[data-price-scope]').setValue('channel_model')
+    await wrapper.get('[data-price-channel]').setValue(9)
+    await flushPromises()
+    expect(
+      JSON.parse(
+        wrapper.get<HTMLTextAreaElement>('[data-price-structure]').element.value
+      )
+    ).toEqual(scoped.prices)
+    await wrapper.get('[data-price-flat-fee]').setValue('0.002')
+    await wrapper.vm.save('test')
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope_kind: 'channel_model',
+        channel_id: 9,
+        prices: scoped.prices,
+        flat_fee: '0.002',
+        effective_from: scoped.effective_from,
+        effective_to: scoped.effective_to,
+      }),
+      7,
+      undefined
+    )
+    await wrapper.get('[data-price-structure]').setValue('[{"quantity":')
+    await expect(wrapper.vm.save('test')).rejects.toThrow()
+    expect(publish).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
   it('retains a frozen embedding scope through reference import, conversion, editing and a renamed copy', async () => {
     const reference: PriceVersion = {
       ...price,

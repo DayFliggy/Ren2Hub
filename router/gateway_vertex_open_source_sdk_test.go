@@ -69,7 +69,7 @@ func setupGatewayVertexOpenSource(t *testing.T) *gatewayVertexOpenSourceFixture 
 			require.NoError(t, err)
 			mappingJSON, settings, endpoint := string(mapping), fmt.Sprintf(`{"vertex_key_type":%q}`, mode), "https://vertex-open-source.invalid"
 			channel := &model.Channel{Type: constant.ChannelTypeVertexAi, Name: "local Vertex open source", Models: alias, Key: key,
-				BaseURL: &endpoint, ModelMapping: &mappingJSON, OtherSettings: settings, Other: "global", Status: common.ChannelStatusEnabled, Group: "default", CapacityTotal: 10, ChannelRatio: 1}
+				BaseURL: &endpoint, ModelMapping: &mappingJSON, OtherSettings: settings, Other: "global", Status: common.ChannelStatusEnabled, Group: "default", CapacityTotal: 10, ChannelRatio: "1"}
 			require.NoError(t, model.DB.Create(channel).Error)
 			require.NoError(t, channel.AddAbilities(model.DB))
 			fixture.channels = append(fixture.channels, channel)

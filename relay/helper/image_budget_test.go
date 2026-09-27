@@ -50,7 +50,7 @@ func TestFinalImagePriceUsesWireQuantities(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, float64(test.count), meta.BillingRatios["n"])
+			assert.Equal(t, float64(test.count), meta.BillingQuantities["n"])
 		})
 	}
 }
@@ -80,7 +80,6 @@ func TestFinalImagePriceReadsMultipartAndQuality(t *testing.T) {
 			continue
 		}
 		require.NoError(t, err)
-		assert.Equal(t, 3.0, meta.BillingRatios["n"])
-		assert.Equal(t, 3.0, meta.ImagePriceRatio)
+		assert.Equal(t, 3.0, meta.BillingQuantities["n"])
 	}
 }

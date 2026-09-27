@@ -93,6 +93,7 @@ export interface PricingModelContract {
   tags: string
   vendor_id: number
   price_version: PriceVersion
+  price_versions?: PriceVersion[]
   owner_by: string
   supported_endpoint_types: string[]
   billing_mode: string
@@ -117,13 +118,37 @@ export function parsePricingModels(value: unknown): PricingModelContract[] {
     ) {
       invalidResponse(endpoint)
     }
+    const modelName = requiredString(item.model_name, endpoint, false)
+    const priceVersion = parsePriceVersion(item.price_version, endpoint)
+    if (
+      item.price_versions !== undefined &&
+      (!Array.isArray(item.price_versions) || !item.price_versions.length)
+    )
+      invalidResponse(endpoint)
+    const versions =
+      item.price_versions === undefined
+        ? [priceVersion]
+        : (item.price_versions as unknown[]).map((price) =>
+            parsePriceVersion(price, endpoint)
+          )
+    if (
+      versions.some((price) => price.model !== modelName) ||
+      priceVersion.model !== modelName
+    )
+      invalidResponse(endpoint)
+    const scopes = versions.map(
+      (price) =>
+        `${price.scope_kind ?? 'global_model'}:${price.channel_id ?? 0}`
+    )
+    if (new Set(scopes).size !== scopes.length) invalidResponse(endpoint)
     return {
-      model_name: requiredString(item.model_name, endpoint, false),
+      model_name: modelName,
       description: requiredString(item.description ?? '', endpoint),
       icon: requiredString(item.icon ?? '', endpoint),
       tags: requiredString(item.tags ?? '', endpoint),
       vendor_id: requiredInteger(item.vendor_id ?? 0, endpoint),
-      price_version: parsePriceVersion(item.price_version, endpoint),
+      price_version: priceVersion,
+      price_versions: versions,
       owner_by: requiredString(item.owner_by ?? '', endpoint),
       supported_endpoint_types: [...endpoints],
       billing_mode: requiredString(item.billing_mode ?? '', endpoint),

@@ -38,6 +38,19 @@ const upstreamModel = computed(() => observation.value.upstream)
       >
       <dt>{{ t('billing.priceTitle') }}</dt>
       <dd>{{ evidence.price_version_id ?? '—' }}</dd>
+      <dt>{{ t('billing.priceScope') }}</dt>
+      <dd>
+        {{ evidence.price_scope ?? '—'
+        }}<span v-if="evidence.price_channel_id">
+          · {{ evidence.price_channel_id }}</span
+        >
+      </dd>
+      <dt>{{ t('billing.quoteHash') }}</dt>
+      <dd class="break-all font-mono">{{ evidence.quote_hash ?? '—' }}</dd>
+      <dt>{{ t('billing.priceVersionHash') }}</dt>
+      <dd class="break-all font-mono">
+        {{ evidence.price_version_hash ?? '—' }}
+      </dd>
     </dl>
     <LogModelMismatch :log="log" />
     <p v-if="!charge" class="text-sm text-[var(--text-secondary)]">

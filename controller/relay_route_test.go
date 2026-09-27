@@ -125,7 +125,8 @@ func TestSetupContextLiveRetryUsesAnotherEnabledKey(t *testing.T) {
 
 	first := model.Channel{
 		Id: 92011, Type: constant.ChannelTypeOpenAI, Key: "first-key\nsecond-key", Name: "multi-key", Status: common.ChannelStatusEnabled,
-		ChannelInfo: model.ChannelInfo{IsMultiKey: true, MultiKeyMode: constant.MultiKeyModeRandom},
+		ChannelRatio: model.DefaultChannelRatio,
+		ChannelInfo:  model.ChannelInfo{IsMultiKey: true, MultiKeyMode: constant.MultiKeyModeRandom},
 	}
 
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -134,6 +135,7 @@ func TestSetupContextLiveRetryUsesAnotherEnabledKey(t *testing.T) {
 		{ChannelID: first.Id}, {ChannelID: first.Id},
 	}}
 	c.Set("route_live_selection", selection)
+	c.Set("channel_ratio", first.ChannelRatio)
 	require.Nil(t, middleware.SetupContextForSelectedChannel(c, &first, "gpt-test"))
 	initialKey := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
 	initialIndex := common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
@@ -421,8 +423,9 @@ func TestAcquireRouteAttemptPermitReleasesCapacityAfterQualificationFailure(t *t
 	markLiveRoutePriceQualified(c)
 	service.CaptureGatewayChannelIdentity(c, &channel)
 	common.SetContextKey(c, constant.ContextKeyChannelKey, channel.Key)
+	c.Set("channel_ratio", channel.ChannelRatio)
 	info := &relaycommon.RelayInfo{RequestId: "permit-qualification-request", UserId: userID, TokenId: token.Id, UserGroup: "default", OriginModelName: "gpt-test"}
-	info.PriceData.ChannelRatio = 1
+	info.PriceData.Quote = &billing.Quote{ChannelRatio: "1"}
 
 	err = acquireRouteAttemptPermit(c, info, &channel, 0)
 	assert.ErrorIs(t, err, service.ErrLiveRouteCandidateInvalid)

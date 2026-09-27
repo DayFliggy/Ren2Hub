@@ -75,16 +75,16 @@ func setupGatewaySDKWithUpstream(t *testing.T, handler http.HandlerFunc) (string
 		{Type: constant.ChannelTypeGemini, Models: "gemini-2.5-flash"},
 	} {
 		channel.Name, channel.Key, channel.Status, channel.BaseURL = "SDK fixture", "local-test-key", common.ChannelStatusEnabled, &upstream.URL
-		channel.Group, channel.CapacityTotal, channel.ChannelRatio = "default", 10, 1
+		channel.Group, channel.CapacityTotal, channel.ChannelRatio = "default", 10, "1"
 		require.NoError(t, db.Create(&channel).Error)
 		require.NoError(t, channel.AddAbilities(db))
 	}
 	fallbackPriority := int64(-1)
-	fallback := &model.Channel{Type: constant.ChannelTypeOpenAI, Models: "gpt-4o-mini", Name: "SDK fallback", Key: "local-fallback-key", Status: common.ChannelStatusEnabled, BaseURL: &upstream.URL, Group: "default", CapacityTotal: 10, ChannelRatio: 1, Priority: &fallbackPriority}
+	fallback := &model.Channel{Type: constant.ChannelTypeOpenAI, Models: "gpt-4o-mini", Name: "SDK fallback", Key: "local-fallback-key", Status: common.ChannelStatusEnabled, BaseURL: &upstream.URL, Group: "default", CapacityTotal: 10, ChannelRatio: "1", Priority: &fallbackPriority}
 	require.NoError(t, db.Create(fallback).Error)
 	require.NoError(t, fallback.AddAbilities(db))
 	ollama := &model.Channel{Type: constant.ChannelTypeOllama, Models: "llama3.1", Name: "SDK Ollama", Key: "local-ollama-key", Status: common.ChannelStatusEnabled,
-		BaseURL: &upstream.URL, Group: "default", CapacityTotal: 10, ChannelRatio: 1}
+		BaseURL: &upstream.URL, Group: "default", CapacityTotal: 10, ChannelRatio: "1"}
 	require.NoError(t, db.Create(ollama).Error)
 	require.NoError(t, ollama.AddAbilities(db))
 	require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))

@@ -63,7 +63,7 @@ describe('channel management contracts', () => {
       priority: 0,
       weight: 0,
       capacity_total: 20,
-      channel_ratio: 1,
+      channel_ratio: '1',
     }
     expect(
       await state.createChannel(input, {

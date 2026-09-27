@@ -7,11 +7,7 @@ import {
   type PriceVersion,
 } from '../modelPricing'
 import { catalogPrices } from '../publicCatalog'
-import {
-  channelRatioDecimal,
-  compareDecimal,
-  multiplyDecimal,
-} from '@/utils/decimal'
+import { compareDecimal, multiplyDecimal } from '@/utils/decimal'
 
 export const price: PriceVersion = {
   contract_version: 2,
@@ -33,6 +29,80 @@ export const price: PriceVersion = {
 }
 afterEach(() => vi.restoreAllMocks())
 describe('immutable model pricing', () => {
+  it('accepts an explicit flat fee without unit prices and rejects a missing charge definition', () => {
+    const flatOnly = { ...price, flat_fee: '0.125', prices: [] }
+    expect(parsePriceVersion(flatOnly, '/prices')).toEqual(flatOnly)
+    expect(() =>
+      parsePriceVersion({ ...flatOnly, flat_fee: undefined }, '/prices')
+    ).toThrow()
+  })
+  it('retains channel identity, exact tier rates, reasoning and effective windows', () => {
+    const scoped: PriceVersion = {
+      ...price,
+      scope_kind: 'channel_model',
+      channel_id: 9,
+      flat_fee: '0.000000000000000001',
+      effective_from: '2026-01-01T00:00:00Z',
+      effective_to: '2027-01-01T00:00:00Z',
+      prices: [
+        {
+          quantity: 'reasoning',
+          unit: 'per_million_tokens',
+          price: '',
+          tier_mode: 'graduated',
+          tiers: [
+            { up_to: '1000000', unit_price: '1.000000000000000001' },
+            { unit_price: '0.5' },
+          ],
+        },
+      ],
+    }
+    expect(parsePriceVersion(scoped, '/prices')).toEqual(scoped)
+    for (const invalid of [
+      { channel_id: 0 },
+      { scope_kind: 'global_model' },
+      { effective_to: '2025-01-01T00:00:00Z' },
+      { effective_from: '2026-01-01' },
+      { flat_fee: '0.0000000000000000001' },
+      {
+        prices: [
+          {
+            ...scoped.prices[0],
+            tiers: [{ unit_price: '1' }, { up_to: '1', unit_price: '2' }],
+          },
+        ],
+      },
+      {
+        prices: [
+          {
+            ...scoped.prices[0],
+            tiers: [
+              { up_to: '10', unit_price: '1' },
+              { up_to: '5', unit_price: '2' },
+            ],
+          },
+        ],
+      },
+    ])
+      expect(() =>
+        parsePriceVersion({ ...scoped, ...invalid }, '/prices')
+      ).toThrow()
+    const catalog = {
+      model_name: scoped.model,
+      description: '',
+      icon: '',
+      tags: '',
+      vendor_id: 0,
+      owner_by: '',
+      supported_endpoint_types: [],
+      billing_mode: 'unit_price',
+      price_version: scoped,
+    }
+    expect(catalogPrices(catalog, 'K')[0]?.tiers).toEqual([
+      { up_to: '1000000', unit_price: '0.001000000000000000001' },
+      { unit_price: '0.0005' },
+    ])
+  })
   it('preserves embedding scope through parsing and publication, and rejects unknown scopes', async () => {
     const embedding: PriceVersion = { ...price, usage_scope: 'embedding' }
     expect(parsePriceVersion(embedding, '/prices')).toEqual(embedding)
@@ -118,7 +188,6 @@ describe('immutable model pricing', () => {
       '2.000000000000000002'
     )
     expect(compareDecimal('9007199254740993.1', '9007199254740993.09')).toBe(1)
-    expect(multiplyDecimal('2.5', channelRatioDecimal(1e-7))).toBe('0.00000025')
   })
   it('rejects missing price, numeric price, unknown unit, duplicate dimensions and invalid modes', () => {
     for (const prices of [
@@ -157,8 +226,6 @@ describe('immutable model pricing', () => {
       owner_by: '',
       supported_endpoint_types: [],
       billing_mode: 'unit_price',
-      channel_ratio_min: 1,
-      channel_ratio_max: 1,
       price_version: {
         ...price,
         prices: [
@@ -167,13 +234,13 @@ describe('immutable model pricing', () => {
         ],
       },
     }
-    expect(catalogPrices(row, 2, 'K').map((line) => line.unit)).toEqual([
+    expect(catalogPrices(row, 'K').map((line) => line.unit)).toEqual([
       'per_thousand_tokens',
       'per_image',
     ])
-    expect(catalogPrices(row, 2, 'K').map((line) => line.value)).toEqual([
-      '0.002',
-      '0.04',
+    expect(catalogPrices(row, 'K').map((line) => line.value)).toEqual([
+      '0.001',
+      '0.02',
     ])
   })
 })

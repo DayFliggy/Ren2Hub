@@ -1,14 +1,12 @@
 package service
 
 import (
-	"encoding/base64"
 	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
-	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -23,7 +21,13 @@ func InjectBillingPriceInfo(other map[string]interface{}, info *relaycommon.Rela
 	}
 	other["billing_mode"] = info.PriceData.Quote.PriceVersion.Mode
 	other["price_version_id"] = info.PriceData.Quote.PriceVersion.ID
+	other["price_scope"] = info.PriceData.Quote.PriceVersion.ScopeKind
+	other["price_channel_id"] = info.PriceData.Quote.PriceVersion.ChannelID
+	other["price_version_hash"] = info.PriceData.Quote.PriceVersion.Hash
+	other["price_origin"] = info.PriceData.Quote.PriceVersion.Origin
+	other["price_source_hash"] = info.PriceData.Quote.PriceVersion.SourceHash
 	other["quote_hash"] = info.PriceData.Quote.Hash
+	other["channel_multiplier"] = info.PriceData.Quote.ChannelRatio
 	other["billing_usage"] = info.PriceData.Usage
 	other["charge_result"] = info.PriceData.Charge
 }
@@ -80,15 +84,10 @@ func appendRequestPath(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, other
 	}
 }
 
-func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, modelRatio, channelRatio, completionRatio float64,
-	cacheTokens int, cacheRatio float64, modelPrice float64) map[string]interface{} {
+func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, cacheTokens int) map[string]interface{} {
 	other := make(map[string]interface{})
-	other["model_ratio"] = modelRatio
-	other["channel_ratio"] = channelRatio
-	other["completion_ratio"] = completionRatio
 	other["cache_tokens"] = cacheTokens
-	other["cache_ratio"] = cacheRatio
-	other["model_price"] = modelPrice
+	InjectBillingPriceInfo(other, relayInfo)
 	other["frt"] = float64(relayInfo.FirstResponseTime.UnixMilli() - relayInfo.StartTime.UnixMilli())
 	if relayInfo.ReasoningEffort != "" {
 		other["reasoning_effort"] = relayInfo.ReasoningEffort
@@ -232,76 +231,53 @@ func appendFinalRequestFormat(relayInfo *relaycommon.RelayInfo, other map[string
 	}
 }
 
-func GenerateWssOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage, modelRatio, channelRatio, completionRatio, audioRatio, audioCompletionRatio, modelPrice float64) map[string]interface{} {
-	info := GenerateTextOtherInfo(ctx, relayInfo, modelRatio, channelRatio, completionRatio, 0, 0.0, modelPrice)
+func GenerateWssOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage) map[string]interface{} {
+	info := GenerateTextOtherInfo(ctx, relayInfo, 0)
 	info["ws"] = true
 	info["audio_input"] = usage.InputTokenDetails.AudioTokens
 	info["audio_output"] = usage.OutputTokenDetails.AudioTokens
 	info["text_input"] = usage.InputTokenDetails.TextTokens
 	info["text_output"] = usage.OutputTokenDetails.TextTokens
-	info["audio_ratio"] = audioRatio
-	info["audio_completion_ratio"] = audioCompletionRatio
 	return info
 }
 
-func GenerateAudioOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, modelRatio, channelRatio, completionRatio, audioRatio, audioCompletionRatio, modelPrice float64) map[string]interface{} {
-	info := GenerateTextOtherInfo(ctx, relayInfo, modelRatio, channelRatio, completionRatio, 0, 0.0, modelPrice)
+func GenerateAudioOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) map[string]interface{} {
+	info := GenerateTextOtherInfo(ctx, relayInfo, 0)
 	info["audio"] = true
 	info["audio_input"] = usage.PromptTokensDetails.AudioTokens
 	info["audio_output"] = usage.CompletionTokenDetails.AudioTokens
 	info["text_input"] = usage.PromptTokensDetails.TextTokens
 	info["text_output"] = usage.CompletionTokenDetails.TextTokens
-	info["audio_ratio"] = audioRatio
-	info["audio_completion_ratio"] = audioCompletionRatio
 	return info
 }
 
-func GenerateClaudeOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, modelRatio, channelRatio, completionRatio float64,
-	cacheTokens int, cacheRatio float64,
-	cacheCreationTokens int, cacheCreationRatio float64,
-	cacheCreationTokens5m int, cacheCreationRatio5m float64,
-	cacheCreationTokens1h int, cacheCreationRatio1h float64,
-	modelPrice float64) map[string]interface{} {
-	info := GenerateTextOtherInfo(ctx, relayInfo, modelRatio, channelRatio, completionRatio, cacheTokens, cacheRatio, modelPrice)
+func GenerateClaudeOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo,
+	cacheTokens, cacheCreationTokens, cacheCreationTokens5m, cacheCreationTokens1h int) map[string]interface{} {
+	info := GenerateTextOtherInfo(ctx, relayInfo, cacheTokens)
 	info["claude"] = true
 	info["cache_creation_tokens"] = cacheCreationTokens
-	info["cache_creation_ratio"] = cacheCreationRatio
 	if cacheCreationTokens5m != 0 {
 		info["cache_creation_tokens_5m"] = cacheCreationTokens5m
-		info["cache_creation_ratio_5m"] = cacheCreationRatio5m
 	}
 	if cacheCreationTokens1h != 0 {
 		info["cache_creation_tokens_1h"] = cacheCreationTokens1h
-		info["cache_creation_ratio_1h"] = cacheCreationRatio1h
 	}
 	return info
 }
 
 func GenerateMjOtherInfo(relayInfo *relaycommon.RelayInfo, priceData hosttypes.PriceData) map[string]interface{} {
 	other := make(map[string]interface{})
-	other["model_price"] = priceData.ModelPrice
-	other["channel_ratio"] = priceData.ChannelRatio
+	if priceData.Quote != nil {
+		other["price_scope"] = priceData.Quote.PriceVersion.ScopeKind
+		other["price_channel_id"] = priceData.Quote.PriceVersion.ChannelID
+		other["price_version_id"] = priceData.Quote.PriceVersion.ID
+		other["price_version_hash"] = priceData.Quote.PriceVersion.Hash
+		other["quote_hash"] = priceData.Quote.Hash
+		other["channel_multiplier"] = priceData.Quote.ChannelRatio
+	}
+	if priceData.Charge != nil {
+		other["charge_result"] = priceData.Charge
+	}
 	appendRequestPath(nil, relayInfo, other)
 	return other
-}
-
-// InjectTieredBillingInfo overlays tiered billing fields onto an existing
-// module-specific other map. Call this after GenerateTextOtherInfo /
-// GenerateClaudeOtherInfo / etc. when the request used tiered_expr billing.
-func InjectTieredBillingInfo(other map[string]interface{}, relayInfo *relaycommon.RelayInfo, result *billingexpr.TieredResult) {
-	if relayInfo == nil || other == nil {
-		return
-	}
-	snap := relayInfo.TieredBillingSnapshot
-	if snap == nil {
-		return
-	}
-	other["billing_mode"] = "tiered_expr"
-	other["expr_b64"] = base64.StdEncoding.EncodeToString([]byte(snap.ExprString))
-	if result != nil {
-		other["matched_tier"] = result.MatchedTier
-		if len(result.RequestRules) > 0 {
-			other["request_rules"] = result.RequestRules
-		}
-	}
 }

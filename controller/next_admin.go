@@ -396,9 +396,8 @@ type nextAdminChannelDTO struct {
 	Priority      int64                 `json:"priority"`
 	Weight        uint                  `json:"weight"`
 	UsedQuota     common.Quota          `json:"used_quota"`
-	ChannelRatio  float64               `json:"channel_ratio"`
+	ChannelRatio  string                `json:"channel_ratio"`
 	Balance       float64               `json:"balance"`
-	UpstreamRatio float64               `json:"upstream_ratio"`
 	CapacityTotal int                   `json:"capacity_total"`
 	CapacityUsed  int                   `json:"capacity_used"`
 	ResponseTime  int                   `json:"response_time"`
@@ -437,14 +436,6 @@ func buildNextAdminChannelDTO(channel *model.Channel) nextAdminChannelDTO {
 	if channel.Weight != nil {
 		weight = *channel.Weight
 	}
-	channelRatio := channel.ChannelRatio
-	if channelRatio == 0 {
-		channelRatio = model.DefaultChannelRatio
-	}
-	upstreamRatio := channel.UpstreamRatio
-	if upstreamRatio == 0 {
-		upstreamRatio = model.DefaultChannelRatio
-	}
 	capacityTotal := channel.CapacityTotal
 	if capacityTotal == 0 {
 		capacityTotal = model.DefaultChannelCapacityTotal
@@ -457,8 +448,8 @@ func buildNextAdminChannelDTO(channel *model.Channel) nextAdminChannelDTO {
 	return nextAdminChannelDTO{
 		ID: channel.Id, Name: channel.Name, Type: channel.Type, Supplier: constant.GetChannelTypeName(channel.Type),
 		Status: channel.Status, Priority: priority, Weight: weight,
-		UsedQuota: channel.UsedQuota, ChannelRatio: channelRatio, Balance: channel.Balance,
-		UpstreamRatio: upstreamRatio, CapacityTotal: capacityTotal, CapacityUsed: channel.CapacityUsed,
+		UsedQuota: channel.UsedQuota, ChannelRatio: channel.ChannelRatio, Balance: channel.Balance,
+		CapacityTotal: capacityTotal, CapacityUsed: channel.CapacityUsed,
 		ResponseTime: channel.ResponseTime, TestTime: channel.TestTime,
 		BaseURL: channel.GetBaseURL(), Models: channel.Models, ModelMapping: modelMapping,
 		LabGroupSlug: labResolution.GroupSlug, LabGroupName: labGroupName(labResolution),

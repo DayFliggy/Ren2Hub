@@ -24,7 +24,7 @@ var billingPricingGuardScenarios = []string{
 func TestBillingPricingGuardLifecycle(t *testing.T) {
 	for _, scenario := range billingPricingGuardScenarios {
 		t.Run(scenario, func(t *testing.T) {
-			c, info := realtimeBillingSession(t)
+			c, info := reservedRealtimeBillingSession(t)
 			runBillingPricingGuardScenario(t, c, info, scenario)
 		})
 	}

@@ -122,8 +122,6 @@ for (const theme of ['light', 'dark'] as const) {
                 supported_endpoint_types: ['openai'],
                 billing_mode: 'unit_price',
                 price_version: version,
-                channel_ratio_min: 1,
-                channel_ratio_max: 1,
               },
             ],
             vendors: [{ id: 1, name: 'OpenAI' }],

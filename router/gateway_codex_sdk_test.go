@@ -53,7 +53,7 @@ func TestGatewayOfficialCodexSDK(t *testing.T) {
 				require.NoError(t, channel.AddAbilities(model.DB))
 			}
 			errorChannel := &model.Channel{Type: constant.ChannelTypeCodex, Models: "codex-errors", Key: credential("fixture-error-access", "fixture-error-account"),
-				BaseURL: &endpoint, ModelMapping: &mapping, Status: common.ChannelStatusEnabled, Group: "default", ChannelRatio: 1, CapacityTotal: 10}
+				BaseURL: &endpoint, ModelMapping: &mapping, Status: common.ChannelStatusEnabled, Group: "default", ChannelRatio: "1", CapacityTotal: 10}
 			require.NoError(t, model.DB.Create(errorChannel).Error)
 			require.NoError(t, errorChannel.AddAbilities(model.DB))
 			require.NoError(t, publishGatewayFixturePrices(`{"codex-fixture":0.001,"codex-errors":0.001}`, false))

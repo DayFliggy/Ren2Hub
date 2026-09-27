@@ -172,7 +172,7 @@ func GetGatewayChannelRuntime(c *gin.Context) {
 		return
 	}
 	var channel model.Channel
-	if err := model.DB.WithContext(c.Request.Context()).Select("id", "capacity_total").First(&channel, channelID).Error; err != nil {
+	if err := model.DB.WithContext(c.Request.Context()).Select("id", "capacity_total", "channel_ratio").First(&channel, channelID).Error; err != nil {
 		writeGatewayAPIError(c, err)
 		return
 	}

@@ -17,6 +17,7 @@ import { ApiError } from '@/api/types'
 import { taskPluginsApi, type PluginMeta } from '@/api/taskPlugins'
 import { metadataApi, type PrefillGroup } from '@/api/adminManagement'
 import { appendModelNames } from '@/utils/modelEndpoints'
+import { compareDecimal, isDecimal } from '@/utils/decimal'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -203,7 +204,7 @@ const form = reactive({
   priority: 0,
   weight: 0,
   capacityTotal: 20,
-  channelRatio: 1,
+  channelRatio: '1',
 })
 
 // ── Model mapping ──────────────────────────────────────────────────────────
@@ -425,9 +426,11 @@ const valid = computed(
     Number.isSafeInteger(form.capacityTotal) &&
     form.capacityTotal >= minimumCapacity.value &&
     form.capacityTotal <= 1_000_000 &&
-    Number.isFinite(form.channelRatio) &&
-    form.channelRatio > 0 &&
-    form.channelRatio <= 1000
+    isDecimal(form.channelRatio) &&
+    form.channelRatio.length <= 64 &&
+    (form.channelRatio.split('.')[1]?.length ?? 0) <= 18 &&
+    compareDecimal(form.channelRatio, '0') > 0 &&
+    compareDecimal(form.channelRatio, '1000') <= 0
 )
 
 // ── Reset on open ──────────────────────────────────────────────────────────
@@ -458,7 +461,7 @@ watch(
     form.priority = ch?.priority ?? 0
     form.weight = ch?.weight ?? 0
     form.capacityTotal = ch?.capacity_total ?? 20
-    form.channelRatio = ch?.channel_ratio ?? 1
+    form.channelRatio = ch?.channel_ratio ?? '1'
     settingsError.value = ''
     try {
       const setting = parseChannelObject(ch?.setting)
@@ -531,7 +534,7 @@ async function submit() {
       priority: Number(form.priority),
       weight: Number(form.weight),
       capacity_total: Number(form.capacityTotal),
-      channel_ratio: Number(form.channelRatio),
+      channel_ratio: form.channelRatio,
     }
     const settings = { ...originalSetting.value }
     if (
@@ -1338,11 +1341,9 @@ async function submit() {
             >
               <div class="relative">
                 <input
-                  v-model.number="form.channelRatio"
-                  type="number"
-                  min="0.01"
-                  max="1000"
-                  step="0.01"
+                  v-model="form.channelRatio"
+                  type="text"
+                  inputmode="decimal"
                   name="admin-channel-ratio"
                   :aria-label="t('channels.channelRatio')"
                   class="channel-form-number pr-10 focus-ring"

@@ -19,11 +19,14 @@ func TestViolationFeeUsesIndependentFrozenEventAfterPrimaryRelease(t *testing.T)
 	info := session.relayInfo
 	info.StartTime = time.Now()
 	info.ChannelMeta = &relaycommon.ChannelMeta{}
-	info.PriceData.Quote = billingTestCallQuote(t)
+	require.NoError(t, model.DB.AutoMigrate(&model.BillingPriceVersion{}, &model.BillingActivePrice{}))
+	version, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "fee-test", Mode: billing.ModeUnitPrice, FlatFee: "0.002"}, 0, 1)
+	require.NoError(t, err)
+	info.PriceData.Quote, err = billing.NewQuote(*version, "1", nil, time.Now())
+	require.NoError(t, err)
 	info.PriceData.Quote.ViolationFeeEnabled = true
 	info.PriceData.Quote.ViolationFeeUSD = "0.000008"
 	info.PriceData.Quote.Hash = ""
-	var err error
 	info.PriceData.Quote.Hash, err = billing.Hash(info.PriceData.Quote)
 	require.NoError(t, err)
 	session.Refund(c)
@@ -42,6 +45,11 @@ func TestViolationFeeUsesIndependentFrozenEventAfterPrimaryRelease(t *testing.T)
 	assert.NotEmpty(t, fee.QuoteSnapshot)
 	assert.NotEmpty(t, fee.UsageSnapshot)
 	assert.NotEmpty(t, fee.ChargeSnapshot)
+	var attempts []model.BillingAttempt
+	var events []model.BillingEvent
+	require.NoError(t, model.DB.Where("request_id = ?", fee.RequestID).Find(&attempts).Error)
+	require.NoError(t, model.DB.Where("request_id = ?", fee.RequestID).Find(&events).Error)
+	assert.Equal(t, model.BillingAuditVerified, model.AuditBillingEvidence(fee, attempts, events).Status)
 	info.PriceData.Quote.ViolationFeeUSD = "0.000010"
 	assert.False(t, ChargeViolationFeeIfNeeded(c, info, apiErr), "same event with changed frozen fee must conflict")
 	assert.Equal(t, 96, getUserQuota(t, 1))
@@ -57,6 +65,10 @@ func TestViolationFeePersistsCompleteIntentAcrossFailures(t *testing.T) {
 			info.PriceData.Quote = billingTestCallQuote(t)
 			info.PriceData.Quote.ViolationFeeEnabled = true
 			info.PriceData.Quote.ViolationFeeUSD = "0.000008"
+			info.PriceData.Quote.Hash = ""
+			var err error
+			info.PriceData.Quote.Hash, err = billing.Hash(info.PriceData.Quote)
+			require.NoError(t, err)
 			session.Refund(c)
 			require.NoError(t, info.BillingRefundError)
 			apiErr := types.NewErrorWithStatusCode(assert.AnError, types.ErrorCodeViolationFeeGrokCSAM, 400)

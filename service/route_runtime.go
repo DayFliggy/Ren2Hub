@@ -20,7 +20,7 @@ type RouteRuntimeState struct {
 	HealthUnavailable bool
 	CapabilityVersion int64
 	Capacity          int
-	ChannelRatio      float64
+	ChannelRatio      string
 }
 
 func RecheckRouteRuntime(expected, current RouteRuntimeState) error {
@@ -32,7 +32,7 @@ func RecheckRouteRuntime(expected, current RouteRuntimeState) error {
 	// fence: rejecting a woken waiter would defeat expansion during its wait.
 	if !expected.ChannelEnabled || !current.ChannelEnabled ||
 		expected.Capacity <= 0 || current.Capacity <= 0 ||
-		expected.ChannelRatio <= 0 || expected.ChannelRatio != current.ChannelRatio ||
+		expected.ChannelRatio == "" || expected.ChannelRatio != current.ChannelRatio ||
 		expected.CapabilityVersion != current.CapabilityVersion {
 		return ErrAdmissionRuntime
 	}

@@ -29,29 +29,42 @@ const pinnedBillingPriceKey = "billing_pinned_price"
 type pinnedBillingPrice struct {
 	RequestID string
 	Origin    string
-	Price     billing.PriceVersion
+	Prices    map[int]billing.PriceVersion
 	FrozenAt  time.Time
 }
 
 // PinBillingPrice is called only after a durable dispatch record was saved.
-// Subsequent attempts keep the logical request's published price and clock.
+// Each channel keeps its first dispatched version. Switching channels resolves
+// a new scoped price while preserving the logical request's frozen clock.
 func PinBillingPrice(c *gin.Context, info *relaycommon.RelayInfo) error {
 	if info == nil || info.PriceData.Quote == nil {
 		return fmt.Errorf("cannot pin missing billing quote")
 	}
 	quote := info.PriceData.Quote
+	channelID := 0
+	if info.ChannelMeta != nil {
+		channelID = info.ChannelId
+	}
+	pinned := pinnedBillingPrice{RequestID: info.RequestId, Origin: info.OriginModelName, Prices: map[int]billing.PriceVersion{}, FrozenAt: quote.FrozenAt}
 	if value, exists := c.Get(pinnedBillingPriceKey); exists {
-		pinned, ok := value.(pinnedBillingPrice)
-		if !ok || pinned.RequestID != info.RequestId || pinned.Origin != info.OriginModelName || pinned.Price.ID != quote.PriceVersion.ID || pinned.Price.Hash != quote.PriceVersion.Hash || !pinned.FrozenAt.Equal(quote.FrozenAt) {
+		var ok bool
+		pinned, ok = value.(pinnedBillingPrice)
+		if !ok || pinned.RequestID != info.RequestId || pinned.Origin != info.OriginModelName || !pinned.FrozenAt.Equal(quote.FrozenAt) {
 			return fmt.Errorf("logical request billing identity changed")
 		}
-		return nil
+		if price, exists := pinned.Prices[channelID]; exists {
+			if price.ID != quote.PriceVersion.ID || price.Hash != quote.PriceVersion.Hash {
+				return fmt.Errorf("channel attempt billing identity changed")
+			}
+			return nil
+		}
 	}
 	price, err := billing.PreparePriceVersion(quote.PriceVersion)
 	if err != nil {
 		return err
 	}
-	c.Set(pinnedBillingPriceKey, pinnedBillingPrice{RequestID: info.RequestId, Origin: info.OriginModelName, Price: price, FrozenAt: quote.FrozenAt})
+	pinned.Prices[channelID] = price
+	c.Set(pinnedBillingPriceKey, pinned)
 	return nil
 }
 
@@ -59,12 +72,10 @@ func modelPriceNotConfiguredError(modelName string, _ int) error {
 	return fmt.Errorf("模型 %s 尚未发布明确单价或计费表达式 / Model price is not configured", modelName)
 }
 
-func HandleChannelRatio(ctx *gin.Context, info *relaycommon.RelayInfo) float64 {
-	ratio := 1.0
+func HandleChannelRatio(ctx *gin.Context, info *relaycommon.RelayInfo) string {
+	ratio := ""
 	if ctx != nil {
-		if value, ok := ctx.Get("channel_ratio"); ok {
-			ratio, _ = value.(float64)
-		}
+		ratio = ctx.GetString("channel_ratio")
 	}
 	info.UsingGroup = ""
 	return ratio
@@ -107,16 +118,23 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 	var version *billing.PriceVersion
 	var frozenAt time.Time
 	var err error
+	channelID := 0
+	if info.ChannelMeta != nil {
+		channelID = info.ChannelId
+	}
 	if value, exists := c.Get(pinnedBillingPriceKey); exists {
 		pinned, ok := value.(pinnedBillingPrice)
 		if !ok || pinned.RequestID != info.RequestId || pinned.Origin != info.OriginModelName {
 			return hosttypes.PriceData{}, fmt.Errorf("logical request billing identity changed")
 		}
-		copyVersion := pinned.Price
-		version, frozenAt = &copyVersion, pinned.FrozenAt
-	} else {
+		frozenAt = pinned.FrozenAt
+		if price, exists := pinned.Prices[channelID]; exists {
+			version = &price
+		}
+	}
+	if version == nil {
 		for _, name := range reasoning.BillingModelCandidates(info.BillingModelName()) {
-			version, err = model.GetActiveBillingPrice(c.Request.Context(), name)
+			version, err = model.GetActiveBillingPriceForChannel(c.Request.Context(), name, channelID)
 			if err == nil || !errors.Is(err, gorm.ErrRecordNotFound) {
 				break
 			}
@@ -127,6 +145,9 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 			return hosttypes.PriceData{}, modelPriceNotConfiguredError(info.BillingModelName(), info.UserId)
 		}
 		return hosttypes.PriceData{}, fmt.Errorf("billing price unavailable: %w", err)
+	}
+	if version == nil {
+		return hosttypes.PriceData{}, modelPriceNotConfiguredError(info.BillingModelName(), info.UserId)
 	}
 	if version.UsageScope == billing.UsageScopeEmbedding && !isEmbeddingBillingRequest(info) {
 		return hosttypes.PriceData{}, fmt.Errorf("embedding price cannot be used for this request type")
@@ -142,8 +163,12 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 		input.FrozenAt = frozenAt
 	}
 	ratio := HandleChannelRatio(c, info)
-	if ratio < 0 || math.IsNaN(ratio) || math.IsInf(ratio, 0) {
-		return hosttypes.PriceData{}, fmt.Errorf("invalid channel price ratio")
+	if version.ScopeKind == billing.PriceScopeChannel {
+		ratio = "1"
+	}
+	ratio, err = model.NormalizeChannelRatio(ratio, false)
+	if err != nil {
+		return hosttypes.PriceData{}, err
 	}
 	requestFacts, estimatedFacts := map[string]any{}, map[string]any{}
 	if version.UsageSchema != nil {
@@ -159,17 +184,18 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 			}
 		}
 	}
-	quote, err := billing.NewQuoteWithFacts(*version, decimal.NewFromFloat(ratio).String(), input.Attributes, input.FrozenAt, requestFacts)
+	quote, err := billing.NewQuoteWithFacts(*version, ratio, input.Attributes, input.FrozenAt, requestFacts)
 	if err != nil {
 		return hosttypes.PriceData{}, err
 	}
 	output := defaultTieredPreConsumeMaxTokens
 	if rule := model_setting.GetGrokSettings(); rule != nil {
-		if rule.ViolationDeductionAmount < 0 || math.IsNaN(rule.ViolationDeductionAmount) || math.IsInf(rule.ViolationDeductionAmount, 0) {
+		fee, err := billing.ParseAmountUSD(rule.ViolationDeductionAmount)
+		if err != nil {
 			return hosttypes.PriceData{}, fmt.Errorf("invalid violation fee rule")
 		}
 		quote.ViolationFeeEnabled = rule.ViolationDeductionEnabled
-		quote.ViolationFeeUSD = decimal.NewFromFloat(rule.ViolationDeductionAmount).String()
+		quote.ViolationFeeUSD = fee.String()
 		quote.Hash = ""
 		quote.Hash, err = billing.Hash(quote)
 		if err != nil {
@@ -194,10 +220,14 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 	if version.Mode == billing.ModeExpression && version.UsageSchema == nil && version.UsageScope != billing.UsageScopeEmbedding {
 		usage.Quantities["calls"] = "1"
 	}
-	perCall := priceHasQuantity(*version, "calls")
-	if version.Mode == billing.ModeUnitPrice && !priceHasQuantity(*version, "p") && !priceHasQuantity(*version, "c") {
+	perCall := priceHasQuantity(*version, "calls") || version.FlatFee != ""
+	reasoningPriced := priceHasQuantity(*version, "reasoning") || (version.Mode == billing.ModeExpression && billingexpr.UsedVars(version.Expression)["reasoning"])
+	if version.Mode == billing.ModeUnitPrice && !priceHasQuantity(*version, "p") && !priceHasQuantity(*version, "c") && !reasoningPriced {
 		usage.InputTokens = 0
 		usage.OutputTokens = 0
+	}
+	if version.Mode == billing.ModeUnitPrice && reasoningPriced && !priceHasQuantity(*version, "c") {
+		usage.ReasoningTokens = usage.OutputTokens
 	}
 	if perCall && version.UsageSchema == nil {
 		usage.Quantities["calls"] = "1"
@@ -210,7 +240,7 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 			quantityKnown = true
 		}
 		if meta != nil {
-			if n, ok := meta.BillingRatios["n"]; ok {
+			if n, ok := meta.BillingQuantities["n"]; ok {
 				quantity = n
 				quantityKnown = true
 			}
@@ -242,6 +272,19 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 	if err != nil {
 		return hosttypes.PriceData{}, err
 	}
+	if reasoningPriced && usage.ReasoningTokens == 0 && usage.OutputTokens > 0 {
+		// Reserve the more expensive of plain output and reasoning output.
+		// Actual provider counters remain authoritative at settlement.
+		estimate := usage
+		estimate.ReasoningTokens = estimate.OutputTokens
+		reasoningResult, err := billing.Calculate(quote, estimate)
+		if err != nil {
+			return hosttypes.PriceData{}, err
+		}
+		if reasoningResult.FinalQuota > result.FinalQuota {
+			usage, result = estimate, reasoningResult
+		}
+	}
 	quota, err := billing.RequestQuota(result.FinalQuota)
 	if err != nil {
 		return hosttypes.PriceData{}, err
@@ -250,23 +293,11 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 	if !free && quota == 0 {
 		quota = 1
 	}
-	price := hosttypes.PriceData{Quote: quote, Usage: &usage, FreeModel: free, UsePrice: perCall, ChannelRatio: ratio, QuotaToPreConsume: quota, Quota: quota}
-	// These fields are display/adapter projections only. The calculator reads
-	// exclusively the immutable quote; no ratio is a second source of price.
-	for _, p := range version.Prices {
-		if p.Quantity == "calls" {
-			d, _ := decimal.NewFromString(p.Price)
-			price.ModelPrice = d.InexactFloat64()
-		}
-	}
+	price := hosttypes.PriceData{Quote: quote, Usage: &usage, FreeModel: free, UsePrice: perCall, QuotaToPreConsume: quota, Quota: quota}
 	info.PricingModelName = version.Model
 	info.ModelPricingSource = "published_price_version"
 	info.PriceData = price
 	info.BillingRequestInput = &input
-	info.TieredBillingSnapshot = nil
-	if version.Mode == billing.ModeExpression {
-		info.TieredBillingSnapshot = &billingexpr.BillingSnapshot{BillingMode: "tiered_expr", ModelName: version.Model, ExprString: version.Expression, ExprHash: billingexpr.ExprHashString(version.Expression), GroupRatio: ratio, EstimatedPromptTokens: promptTokens, EstimatedCompletionTokens: output, EstimatedQuotaAfterGroup: quota, QuotaPerUnit: float64(billing.QuotaPerUSD), ExprVersion: billingexpr.ExprVersion(version.Expression)}
-	}
 	return price, nil
 }
 

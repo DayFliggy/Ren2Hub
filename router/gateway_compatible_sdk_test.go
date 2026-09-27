@@ -161,7 +161,7 @@ func TestGatewayOfficialCompatibleSDK(t *testing.T) {
 				if provider.ChannelType == constant.ChannelTypeCustom {
 					endpoint += "/custom/{model}"
 				}
-				configured := &model.Channel{Type: provider.ChannelType, Name: "SDK compatible fixture", Models: provider.Model, Key: provider.Key, Status: common.ChannelStatusEnabled, BaseURL: &endpoint, Other: "fixture-account", Group: "default", CapacityTotal: 10, ChannelRatio: 1, ModelMapping: &mappingJSON}
+				configured := &model.Channel{Type: provider.ChannelType, Name: "SDK compatible fixture", Models: provider.Model, Key: provider.Key, Status: common.ChannelStatusEnabled, BaseURL: &endpoint, Other: "fixture-account", Group: "default", CapacityTotal: 10, ChannelRatio: "1", ModelMapping: &mappingJSON}
 				require.NoError(t, model.DB.Create(configured).Error)
 				require.NoError(t, configured.AddAbilities(model.DB))
 				supported := map[string]bool{}

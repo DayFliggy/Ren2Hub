@@ -9,15 +9,15 @@ import (
 func TestRouteRuntimeRecheckFencesChannelSettings(t *testing.T) {
 	expected := RouteRuntimeState{
 		ChannelEnabled: true, CapabilityVersion: 3,
-		Capacity: 4, ChannelRatio: 1,
+		Capacity: 4, ChannelRatio: "1",
 	}
 	tests := []struct {
 		name    string
 		current RouteRuntimeState
 	}{
-		{name: "disabled", current: RouteRuntimeState{ChannelEnabled: true, CapabilityVersion: 3, ChannelRatio: 1}},
+		{name: "disabled", current: RouteRuntimeState{ChannelEnabled: true, CapabilityVersion: 3, ChannelRatio: "1"}},
 		{name: "ratio missing", current: RouteRuntimeState{ChannelEnabled: true, CapabilityVersion: 3, Capacity: 4}},
-		{name: "capability changed", current: RouteRuntimeState{ChannelEnabled: true, CapabilityVersion: 4, Capacity: 4, ChannelRatio: 1}},
+		{name: "capability changed", current: RouteRuntimeState{ChannelEnabled: true, CapabilityVersion: 4, Capacity: 4, ChannelRatio: "1"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

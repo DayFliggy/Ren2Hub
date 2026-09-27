@@ -26,6 +26,7 @@ func acceptedMidjourneyBillingFixture(t *testing.T, price string) *model.Midjour
 	_, err = model.EnsureBillingRecovery(model.BillingRecoveryInput{RequestID: task.PrivateData.SubmissionRequestID, UserID: 1, TokenID: 1, TokenRequired: true, Source: "wallet"})
 	require.NoError(t, err)
 	require.NoError(t, model.Reserve(task.PrivateData.SubmissionRequestID, task.Quota))
+	require.NoError(t, model.PrepareBillingAttempt(context.Background(), task.PrivateData.SubmissionRequestID, task.PrivateData.SubmissionRequestID+":attempt", task.ChannelId, quote))
 	require.NoError(t, model.PersistAcceptedMidjourney(task, task.PrivateData.SubmissionRequestID, model.BillingConsumption{Log: model.Log{UserId: 1, ChannelId: 1, TokenId: 1, Quota: task.Quota}, CountUsage: true, LogEnabled: true}))
 	return task
 }

@@ -89,12 +89,7 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, info *relaycommon.RelayInfo, a
 	if original == nil || !original.ViolationFeeEnabled {
 		return false
 	}
-	quote, err := billing.NewQuote(billing.PriceVersion{
-		ID: original.PriceVersion.ID, Model: original.PriceVersion.Model + ":violation",
-		Mode:      billing.ModeUnitPrice,
-		Prices:    []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: original.ViolationFeeUSD}},
-		CreatedAt: original.PriceVersion.CreatedAt,
-	}, original.ChannelRatio, nil, original.FrozenAt)
+	quote, err := billing.NewViolationQuote(original)
 	if err != nil {
 		logger.LogError(ctx, "invalid frozen violation fee rule")
 		return false
@@ -113,6 +108,9 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, info *relaycommon.RelayInfo, a
 		"violation_fee": true, "violation_fee_code": string(types.ErrorCodeViolationFeeGrokCSAM),
 		"fee_quota": charge.FinalQuota, "base_amount": original.ViolationFeeUSD,
 		"channel_ratio": original.ChannelRatio, "source_quote_hash": original.Hash,
+		"price_scope": quote.PriceVersion.ScopeKind, "price_channel_id": quote.PriceVersion.ChannelID,
+		"price_version_id": quote.PriceVersion.ID, "price_version_hash": quote.PriceVersion.Hash,
+		"quote_hash": quote.Hash, "charge_result": charge,
 		"status_code": apiErr.StatusCode,
 	}
 	log, err := model.BuildConsumeLog(ctx, info.UserId, model.RecordConsumeLogParams{

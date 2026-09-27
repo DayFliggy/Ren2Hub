@@ -8,13 +8,13 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/relay/channel/ai360"
 	"github.com/QuantumNous/new-api/relay/channel/lingyiwanwu"
 	"github.com/QuantumNous/new-api/relay/channel/minimax"
 	"github.com/QuantumNous/new-api/relay/channel/moonshot"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
@@ -204,6 +204,14 @@ func ListModels(c *gin.Context, modelType int) {
 		common.ApiError(c, err)
 		return
 	}
+	var availablePrices map[string][]billing.PriceVersion
+	if !acceptUnsetRatioModel {
+		availablePrices, err = service.AvailableRoutePriceVersions(c.Request.Context(), c.GetInt("id"), common.GetContextKeyInt(c, constant.ContextKeyTokenId))
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
 	modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
 	var tokenModelLimit map[string]bool
 	if modelLimitEnable {
@@ -225,7 +233,7 @@ func ListModels(c *gin.Context, modelType int) {
 		if !visible {
 			continue
 		}
-		if !acceptUnsetRatioModel && !helper.HasModelBillingConfig(modelName) {
+		if !acceptUnsetRatioModel && len(availablePrices[modelName]) == 0 {
 			continue
 		}
 		userModelNames = append(userModelNames, modelName)

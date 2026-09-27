@@ -178,6 +178,7 @@ func TestHailuoPublishedResolutionPriceReachesPrecharge(t *testing.T) {
 	require.NoError(t, err)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+	c.Set("channel_ratio", "1")
 	c.Set("task_request", map[string]any{"model": price.Model, "prompt": "p", "duration": 10, "resolution": "768P"})
 	info := &relaycommon.RelayInfo{OriginModelName: price.Model,
 		ChannelMeta:         &relaycommon.ChannelMeta{UpstreamModelName: price.Model, ApiKey: "test-key", ChannelBaseUrl: "https://provider.example"},

@@ -26,9 +26,10 @@ import (
 
 // ToolSurchargeItem is one billable tool-call line for consume logs.
 type ToolSurchargeItem struct {
-	Name  string  `json:"name"`
-	Count int     `json:"count"`
-	Price float64 `json:"price"`
+	Name        string `json:"name"`
+	Count       int    `json:"count"`
+	Price       string `json:"price"`
+	SubtotalUSD string `json:"subtotal_usd"`
 }
 
 func appendToolSurchargeLogInfo(other map[string]interface{}, items []ToolSurchargeItem) {
@@ -52,19 +53,10 @@ type textQuotaSummary struct {
 	ModelName              string
 	TokenName              string
 	UseTimeSeconds         int64
-	CompletionRatio        float64
-	CacheRatio             float64
-	ImageRatio             float64
-	ModelRatio             float64
-	GroupRatio             float64
-	ModelPrice             float64
-	CacheCreationRatio     float64
-	CacheCreationRatio5m   float64
-	CacheCreationRatio1h   float64
+	ChannelMultiplier      decimal.Decimal
 	Quota                  int
 	IsClaudeUsageSemantic  bool
 	UsageSemantic          string
-	AudioInputPrice        float64
 	ToolSurchargeItems     []ToolSurchargeItem
 	ToolCallSurchargeQuota decimal.Decimal
 	DeliveredPerCall       bool
@@ -93,8 +85,8 @@ func cacheWriteTokensTotal(summary textQuotaSummary) int {
 // provider counters for the charge, affinity observation and logging.
 func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) textQuotaSummary {
 	summary := textQuotaSummary{ModelName: relayInfo.BillingModelName(), TokenName: ctx.GetString("token_name"),
-		UseTimeSeconds: time.Now().Unix() - relayInfo.StartTime.Unix(), GroupRatio: relayInfo.PriceData.ChannelRatio,
-		UsageSemantic: usageSemanticFromUsage(relayInfo, usage), DeliveredPerCall: relayInfo.PriceData.UsePrice && relayInfo.HasValidOutput()}
+		UseTimeSeconds: time.Now().Unix() - relayInfo.StartTime.Unix(),
+		UsageSemantic:  usageSemanticFromUsage(relayInfo, usage), DeliveredPerCall: relayInfo.PriceData.UsePrice && relayInfo.HasValidOutput()}
 	if usage == nil {
 		usage = &dto.Usage{PromptTokens: relayInfo.GetEstimatePromptTokens(), UsageSource: "estimated"}
 	}
@@ -143,6 +135,10 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		return summary
 	}
 	relayInfo.PriceData.Charge = result
+	summary.ChannelMultiplier, summary.PricingError = decimal.NewFromString(relayInfo.PriceData.Quote.ChannelRatio)
+	if summary.PricingError != nil {
+		return summary
+	}
 	summary.Quota, summary.PricingError = billing.RequestQuota(result.FinalQuota)
 	summary.TotalTokens = int(facts.ContextTokens + facts.OutputTokens)
 	for _, value := range facts.Quantities {
@@ -158,9 +154,10 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		if line.Unit == "per_call" {
 			price = price.Mul(decimal.NewFromInt(1000))
 		}
-		summary.ToolSurchargeItems = append(summary.ToolSurchargeItems, ToolSurchargeItem{Name: strings.TrimPrefix(line.Quantity, "tool:"), Count: int(count.IntPart()), Price: price.InexactFloat64()})
 		subtotal, _ := decimal.NewFromString(line.SubtotalUSD)
-		summary.ToolCallSurchargeQuota = summary.ToolCallSurchargeQuota.Add(subtotal.Mul(decimal.NewFromInt(billing.QuotaPerUSD)).Mul(decimal.NewFromFloat(summary.GroupRatio)))
+		subtotal = subtotal.Mul(summary.ChannelMultiplier)
+		summary.ToolSurchargeItems = append(summary.ToolSurchargeItems, ToolSurchargeItem{Name: strings.TrimPrefix(line.Quantity, "tool:"), Count: int(count.IntPart()), Price: price.String(), SubtotalUSD: subtotal.String()})
+		summary.ToolCallSurchargeQuota = summary.ToolCallSurchargeQuota.Add(subtotal.Mul(decimal.NewFromInt(billing.QuotaPerUSD)))
 	}
 	return summary
 }
@@ -216,7 +213,7 @@ func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) 
 func imageOrCallOnlyPrice(version billing.PriceVersion) bool {
 	if version.UsesImageCount() {
 		used := billingexpr.UsedVars(version.Expression)
-		for _, name := range []string{"p", "c", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao"} {
+		for _, name := range []string{"p", "c", "reasoning", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao"} {
 			if used[name] {
 				return false
 			}
@@ -317,11 +314,12 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	}
 
 	for _, item := range summary.ToolSurchargeItems {
-		q := decimal.NewFromFloat(item.Price).
-			Mul(decimal.NewFromInt(int64(item.Count))).
-			Div(decimal.NewFromInt(1000)).
-			Mul(decimal.NewFromFloat(summary.GroupRatio)).
-			Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+		subtotal, err := decimal.NewFromString(item.SubtotalUSD)
+		if err != nil {
+			holdFailedBillingPrice(ctx, relayInfo, billingexpr.TokenParams{}, err)
+			return
+		}
+		q := subtotal.Mul(decimal.NewFromInt(billing.QuotaPerUSD))
 		extraContent = append(extraContent, fmt.Sprintf(
 			"%s 调用 %d 次，调用花费 %s",
 			item.Name,
@@ -329,11 +327,6 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 			logger.LogQuota(common.QuotaFromDecimal(q)),
 		))
 	}
-	if summary.AudioInputPrice > 0 && summary.AudioTokens > 0 {
-		q := decimal.NewFromFloat(summary.AudioInputPrice).Div(decimal.NewFromInt(1000000)).Mul(decimal.NewFromInt(int64(summary.AudioTokens))).Mul(decimal.NewFromFloat(summary.GroupRatio)).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
-		extraContent = append(extraContent, fmt.Sprintf("Audio Input 花费 %s", logger.LogQuota(common.QuotaFromDecimal(q))))
-	}
-
 	if !summary.hasBillableUsage() {
 		extraContent = append(extraContent, "上游没有返回计费信息，无法扣费（可能是上游超时）")
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, summary.ModelName, relayInfo.FinalPreConsumedQuota))
@@ -352,16 +345,11 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	logContent := strings.Join(extraContent, ", ")
 	var other map[string]interface{}
 	if summary.IsClaudeUsageSemantic {
-		other = GenerateClaudeOtherInfo(ctx, relayInfo,
-			summary.ModelRatio, summary.GroupRatio, summary.CompletionRatio,
-			summary.CacheTokens, summary.CacheRatio,
-			summary.CacheCreationTokens, summary.CacheCreationRatio,
-			summary.CacheCreationTokens5m, summary.CacheCreationRatio5m,
-			summary.CacheCreationTokens1h, summary.CacheCreationRatio1h,
-			summary.ModelPrice)
+		other = GenerateClaudeOtherInfo(ctx, relayInfo, summary.CacheTokens,
+			summary.CacheCreationTokens, summary.CacheCreationTokens5m, summary.CacheCreationTokens1h)
 		other["usage_semantic"] = "anthropic"
 	} else {
-		other = GenerateTextOtherInfo(ctx, relayInfo, summary.ModelRatio, summary.GroupRatio, summary.CompletionRatio, summary.CacheTokens, summary.CacheRatio, summary.ModelPrice)
+		other = GenerateTextOtherInfo(ctx, relayInfo, summary.CacheTokens)
 	}
 	appendUsageBillingPathForLog(other, common.GetContextKeyBool(ctx, constant.ContextKeyLocalCountTokens), originUsage)
 	if adminRejectReason != "" {
@@ -369,26 +357,17 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	}
 	if summary.ImageTokens != 0 {
 		other["image"] = true
-		other["image_ratio"] = summary.ImageRatio
 		other["image_output"] = summary.ImageTokens
 	}
 	appendToolSurchargeLogInfo(other, summary.ToolSurchargeItems)
-	if summary.AudioInputPrice > 0 && summary.AudioTokens > 0 {
-		other["audio_input_seperate_price"] = true
-		other["audio_input_token_count"] = summary.AudioTokens
-		other["audio_input_price"] = summary.AudioInputPrice
-	}
 	if summary.CacheCreationTokens > 0 {
 		other["cache_creation_tokens"] = summary.CacheCreationTokens
-		other["cache_creation_ratio"] = summary.CacheCreationRatio
 	}
 	if summary.CacheCreationTokens5m > 0 {
 		other["cache_creation_tokens_5m"] = summary.CacheCreationTokens5m
-		other["cache_creation_ratio_5m"] = summary.CacheCreationRatio5m
 	}
 	if summary.CacheCreationTokens1h > 0 {
 		other["cache_creation_tokens_1h"] = summary.CacheCreationTokens1h
-		other["cache_creation_ratio_1h"] = summary.CacheCreationRatio1h
 	}
 	cacheWriteTokens := cacheWriteTokensTotal(summary)
 	if cacheWriteTokens > 0 {

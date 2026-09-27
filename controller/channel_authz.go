@@ -89,7 +89,6 @@ var channelReadOnlyFields = map[string]struct{}{
 	"balance_updated_time": {},
 	"used_quota":           {},
 	"capacity_used":        {},
-	"upstream_ratio":       {},
 }
 
 func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]any) {
@@ -113,9 +112,6 @@ func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]an
 	}
 	if _, ok := requestData["capacity_used"]; ok {
 		channel.CapacityUsed = 0
-	}
-	if _, ok := requestData["upstream_ratio"]; ok {
-		channel.UpstreamRatio = 0
 	}
 }
 

@@ -47,8 +47,8 @@ for (const theme of ['light', 'dark'] as const) {
         weight: 10,
         capacity_used: 0,
         capacity_total: 20,
-        channel_ratio: 1,
-        upstream_ratio: 1,
+        channel_ratio: '1',
+
         used_quota: '0',
         balance: 0,
         response_time: 0,
@@ -125,10 +125,7 @@ for (const theme of ['light', 'dark'] as const) {
         .getByRole('button', { name: '单渠道上游同步操作', exact: true })
         .click()
       await page.keyboard.press('Escape')
-      await page
-        .locator('[aria-label="同步上游额度与倍率"]:visible')
-        .first()
-        .click()
+      await page.locator('[aria-label="同步上游额度"]:visible').first().click()
       const balanceDialog = page.getByRole('dialog', {
         name: '余额查询原始响应：Advanced Fixture',
         exact: true,
@@ -184,6 +181,12 @@ for (const theme of ['light', 'dark'] as const) {
       await dialog
         .getByRole('button', { name: '高级设置', exact: false })
         .click()
+      const ratioInput = dialog.locator('input[name="admin-channel-ratio"]')
+      await ratioInput.fill('1000.000000000000000001')
+      await expect(
+        dialog.getByRole('button', { name: '保存渠道' })
+      ).toBeDisabled()
+      await ratioInput.fill('0.123456789012345678')
       await expect(
         dialog.getByRole('switch', { name: 'Responses WebSocket' })
       ).toHaveAttribute('aria-checked', 'false')
@@ -225,6 +228,8 @@ for (const theme of ['light', 'dark'] as const) {
       await dialog.getByRole('button', { name: '保存渠道' }).click()
       await expect(dialog).toHaveCount(0)
       expect(saved).toBeDefined()
+      expect(saved!.channel_ratio).toBe('0.123456789012345678')
+      expect(saved).not.toHaveProperty('upstream_ratio')
       expect(saved!.models).toBe('fixture-model,wan2.6-t2v')
       expect(JSON.parse(saved!.setting as string)).toEqual({
         proxy: '',

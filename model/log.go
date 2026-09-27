@@ -137,9 +137,7 @@ func assignDisplayLogIds(logs []*Log, startIdx int) {
 
 func formatUserLogs(logs []*Log, startIdx int) {
 	safeOtherKeys := map[string]struct{}{
-		"model_ratio": {}, "group_ratio": {}, "completion_ratio": {},
-		"cache_tokens": {}, "cache_ratio": {}, "model_price": {},
-		"user_group_ratio": {}, "frt": {}, "reasoning_effort": {},
+		"cache_tokens": {}, "frt": {}, "reasoning_effort": {},
 		"fast_mode": {}, "service_tier": {}, "speed": {},
 		"billing_source": {}, "billing_preference": {},
 	}

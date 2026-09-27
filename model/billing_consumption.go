@@ -58,6 +58,21 @@ func RecordRealtimeBillingConsumption(requestID string, consumption BillingConsu
 	return prepareBillingRecoveryConsumption(DB, requestID, consumption, false)
 }
 
+// BillingEvidenceFingerprint binds the complete usage and charge evidence.
+// Comparing quota alone would accept different usage that happens to round to
+// the same amount, losing the original settlement evidence.
+func BillingEvidenceFingerprint(requestID, quoteHash string, usage *billing.Usage, charge *billing.ChargeResult) (string, error) {
+	if requestID == "" || quoteHash == "" || usage == nil || charge == nil {
+		return "", errors.New("complete billing evidence is required")
+	}
+	return billing.Hash(struct {
+		RequestID string                `json:"request_id"`
+		QuoteHash string                `json:"quote_hash"`
+		Usage     *billing.Usage        `json:"usage"`
+		Charge    *billing.ChargeResult `json:"charge"`
+	}{requestID, quoteHash, usage, charge})
+}
+
 func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumption BillingConsumption, final bool) error {
 	if db == nil || requestID == "" || consumption.Log.UserId <= 0 || consumption.Log.Quota < 0 || consumption.TaskAdjustment != nil {
 		return errors.New("invalid billing consumption")
@@ -86,8 +101,23 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 		if recovery.UserID != consumption.Log.UserId || recovery.TokenID != consumption.Log.TokenId {
 			return ErrBillingRecoveryStateConflict
 		}
+		var evidenceHash string
+		if consumption.Usage != nil || consumption.Charge != nil {
+			var quote billing.Quote
+			if err := common.UnmarshalJsonStr(recovery.QuoteSnapshot, &quote); err != nil {
+				return fmt.Errorf("missing frozen billing quote: %w", err)
+			}
+			var err error
+			evidenceHash, err = BillingEvidenceFingerprint(requestID, quote.Hash, consumption.Usage, consumption.Charge)
+			if err != nil {
+				return err
+			}
+		}
 		if recovery.ConsumptionSnapshot != "" && !BillingRecoveryUsageCollecting(recovery.ConsumptionState) &&
 			!BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
+			if evidenceHash != "" && recovery.ConsumptionFingerprint != evidenceHash {
+				return ErrBillingRecoveryStateConflict
+			}
 			var existing BillingConsumption
 			if err := common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &existing); err != nil {
 				return err
@@ -146,6 +176,9 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 		}
 		if consumption.Charge != nil {
 			updates["charge_snapshot"] = string(charge)
+		}
+		if evidenceHash != "" {
+			updates["consumption_fingerprint"] = evidenceHash
 		}
 		return tx.Model(&recovery).Updates(updates).Error
 	})

@@ -72,6 +72,7 @@ import type {
   AdminChannelUpdateInput,
 } from '@/types/console'
 import { formatMoney, formatQuota, relativeTime } from '@/utils/format'
+import { formatDecimal } from '@/utils/decimal'
 
 interface SupplierGroup {
   groupSlug: string
@@ -1227,10 +1228,9 @@ async function runBulkStatus(
               <p class="text-[11px] text-[var(--text-tertiary)]">
                 {{
                   t('channels.channelRatioValue', {
-                    ratio: (
-                      channelFromRow(row as AdminChannelTableRow)
-                        .channel_ratio ?? 1
-                    ).toFixed(2),
+                    ratio: formatDecimal(
+                      channelFromRow(row as AdminChannelTableRow).channel_ratio
+                    ),
                   })
                 }}
               </p>
@@ -1244,16 +1244,6 @@ async function runBulkStatus(
                     formatMoney(
                       channelFromRow(row as AdminChannelTableRow).balance
                     )
-                  }}
-                </p>
-                <p class="truncate text-[11px] text-[var(--text-tertiary)]">
-                  {{
-                    t('channels.upstreamRatioValue', {
-                      ratio: (
-                        channelFromRow(row as AdminChannelTableRow)
-                          .upstream_ratio ?? 1
-                      ).toFixed(2),
-                    })
                   }}
                 </p>
               </div>

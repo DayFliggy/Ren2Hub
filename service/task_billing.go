@@ -63,9 +63,12 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 	other := make(map[string]interface{})
 	if bc := task.PrivateData.BillingContext; bc != nil {
 		if bc.Quote != nil {
+			other["price_scope"] = bc.Quote.PriceVersion.ScopeKind
+			other["price_channel_id"] = bc.Quote.PriceVersion.ChannelID
 			other["price_version_id"] = bc.Quote.PriceVersion.ID
 			other["quote_hash"] = bc.Quote.Hash
-			other["channel_ratio"] = bc.Quote.ChannelRatio
+			other["price_version_hash"] = bc.Quote.PriceVersion.Hash
+			other["channel_multiplier"] = bc.Quote.ChannelRatio
 			other["billing_mode"] = bc.Quote.PriceVersion.Mode
 		}
 		other["billing_usage"] = bc.Usage
@@ -197,7 +200,7 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 			}
 			if snapshot.Quote.PriceVersion.Mode == billing.ModeExpression {
 				used := billingexpr.UsedVars(snapshot.Quote.PriceVersion.Expression)
-				for _, name := range []string{"p", "c", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao"} {
+				for _, name := range []string{"p", "c", "reasoning", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao"} {
 					usesTokens = usesTokens || used[name]
 				}
 			}

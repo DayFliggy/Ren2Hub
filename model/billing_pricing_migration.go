@@ -18,7 +18,7 @@ func MigrateBillingPriceOrigins(ctx context.Context) error {
 	}
 	var names []string
 	if err := DB.WithContext(ctx).Model(&BillingActivePrice{}).
-		Where("origin = ? OR origin IS NULL", "").Order("model").Pluck("model", &names).Error; err != nil {
+		Where("channel_id = 0 AND (origin = ? OR origin IS NULL)", "").Order("model").Pluck("model", &names).Error; err != nil {
 		return err
 	}
 	if len(names) == 0 {
@@ -39,7 +39,7 @@ func MigrateBillingPriceOrigins(ctx context.Context) error {
 	for _, name := range names {
 		if err := BillingTransaction(ctx, func(tx *gorm.DB) error {
 			var active BillingActivePrice
-			err := lockForUpdate(tx).Where("model = ?", name).Take(&active).Error
+			err := lockForUpdate(tx).Where("model = ? AND channel_id = 0", name).Take(&active).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil
 			}
@@ -55,7 +55,7 @@ func MigrateBillingPriceOrigins(ctx context.Context) error {
 			if err := tx.First(&version, active.VersionID).Error; err != nil {
 				return err
 			}
-			if version.Model != active.Model {
+			if version.Model != active.Model || version.ChannelID != 0 || active.ChannelID != 0 {
 				return fmt.Errorf("billing price model integrity mismatch")
 			}
 			origin := BillingPriceOriginManual
@@ -67,7 +67,7 @@ func MigrateBillingPriceOrigins(ctx context.Context) error {
 				}
 				origin = BillingPriceOriginLegacySeed
 			}
-			return tx.Model(&BillingActivePrice{}).Where("model = ? AND version_id = ?", name, active.VersionID).
+			return tx.Model(&BillingActivePrice{}).Where("model = ? AND channel_id = 0 AND version_id = ?", name, active.VersionID).
 				Update("origin", origin).Error
 		}); err != nil {
 			return fmt.Errorf("migrate billing price origin %q: %w", name, err)

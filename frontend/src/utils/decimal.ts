@@ -42,16 +42,6 @@ export function shiftDecimal(value: string, places: number): string {
     ? render(parsed.coefficient * 10n ** BigInt(-scale), 0)
     : render(parsed.coefficient, scale)
 }
-/** Normalize the API's numeric channel coefficient before decimal price math. */
-export function channelRatioDecimal(value: number): string {
-  if (!Number.isFinite(value) || value <= 0)
-    throw new RangeError('Invalid channel ratio')
-  const [coefficient = '', exponent] = String(value).split('e')
-  return exponent === undefined
-    ? coefficient
-    : shiftDecimal(coefficient, -Number(exponent))
-}
-
 export function compareDecimal(left: string, right: string): number {
   const a = parts(left),
     b = parts(right),

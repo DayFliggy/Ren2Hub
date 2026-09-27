@@ -28,7 +28,7 @@ const gatewaySelectedConfigKey = "gateway_selected_request_configuration"
 type gatewayRequestConfiguration struct {
 	ModelMapping, ParamOverride, HeaderOverride, Setting *string
 	OtherSettings                                        string
-	ChannelRatio                                         float64
+	ChannelRatio                                         string
 }
 
 func gatewayRequestConfigurationDigest(channel *model.Channel) string {

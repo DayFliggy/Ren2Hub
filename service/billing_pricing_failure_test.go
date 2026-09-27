@@ -16,7 +16,7 @@ import (
 func TestFailedExpressionRetainsReservationForReconciliation(t *testing.T) {
 	for _, path := range []string{"text", "audio", "realtime_reserve", "realtime_final"} {
 		t.Run(path, func(t *testing.T) {
-			c, info := realtimeBillingSession(t)
+			c, info := reservedRealtimeBillingSession(t)
 			expr := `c == 13 ? float("invalid-price") : p * 2 + c * 10`
 			require.NoError(t, billing_setting.SmokeTestExpr(expr))
 			info.PriceData.Quote = billingTestQuote(t, expr)

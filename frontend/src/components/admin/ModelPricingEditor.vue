@@ -7,6 +7,7 @@ import {
   PRICE_UNITS,
   validatePriceVersion,
   type PriceMode,
+  type PriceScopeKind,
   type PriceVersion,
   type UnitPrice,
   type UsageSchema,
@@ -49,6 +50,14 @@ const restoreConfirm = ref(false)
 let disposed = false
 const mode = ref<PriceMode>('unit_price')
 const prices = ref<UnitPrice[]>([])
+const availablePrices = ref<PriceVersion[]>([])
+const scopeKind = ref<PriceScopeKind>('global_model')
+const channelId = ref(0)
+const flatFee = ref('')
+const effectiveFrom = ref('')
+const effectiveTo = ref('')
+const structuredPrices = ref(false)
+const pricesJson = ref('[]')
 const expression = ref('')
 const loading = ref(false)
 const loaded = ref(false)
@@ -179,6 +188,7 @@ const units = computed(() =>
 const canRemoveSchemaForFixedCall = computed(
   () =>
     Boolean(usageSchema.value) &&
+    !structuredPrices.value &&
     mode.value === 'unit_price' &&
     prices.value.length === 1 &&
     prices.value[0].quantity === 'calls' &&
@@ -193,9 +203,60 @@ const snapshot = () =>
     expression.value,
     usageSchema.value,
     usageScope.value,
+    scopeKind.value,
+    channelId.value,
+    flatFee.value,
+    effectiveFrom.value,
+    effectiveTo.value,
+    structuredPrices.value ? pricesJson.value : null,
   ])
 const initialForm = ref('')
 const dirty = computed(() => initialForm.value !== snapshot())
+
+function matchesScope(price: PriceVersion, name: string): boolean {
+  return (
+    price.model === name &&
+    (price.scope_kind ?? 'global_model') === scopeKind.value &&
+    (price.channel_id ?? 0) ===
+      (scopeKind.value === 'channel_model' ? channelId.value : 0)
+  )
+}
+function selectScope() {
+  if (scopeKind.value === 'global_model') channelId.value = 0
+  initial.value =
+    availablePrices.value.find((price) =>
+      matchesScope(price, originalName.value)
+    ) ?? null
+  applyDraft(
+    initial.value ?? {
+      id: 0,
+      model: props.modelName,
+      mode: 'unit_price',
+      scope_kind: scopeKind.value,
+      channel_id: channelId.value,
+      prices: [
+        { quantity: 'p', unit: 'per_million_tokens', price: '' },
+        { quantity: 'c', unit: 'per_million_tokens', price: '' },
+      ],
+      created_at: 0,
+      hash: '',
+    }
+  )
+  sourceDraft.value = null
+  candidate.value = null
+  initialForm.value = snapshot()
+  void loadOrigin()
+}
+function enableStructuredPrices() {
+  pricesJson.value = JSON.stringify(prices.value, null, 2)
+  structuredPrices.value = true
+}
+function currentPrices(): UnitPrice[] {
+  if (!structuredPrices.value) return structuredClone(toRaw(prices.value))
+  const parsed: unknown = JSON.parse(pricesJson.value)
+  if (!Array.isArray(parsed)) throw new Error(t('billing.invalidPrice'))
+  return parsed as UnitPrice[]
+}
 
 async function loadOrigin() {
   origin.value = null
@@ -212,7 +273,9 @@ async function loadOrigin() {
   origin.value =
     result.value.origins.find(
       (row) =>
-        row.model === originalName.value && row.version_id === initial.value?.id
+        row.model === originalName.value &&
+        (row.channel_id ?? 0) === channelId.value &&
+        row.version_id === initial.value?.id
     ) ?? null
 }
 async function load() {
@@ -226,20 +289,8 @@ async function load() {
     const data = await modelPricingApi.load(controller.signal)
     if (controller.signal.aborted) return
     originalName.value = props.modelName
-    initial.value =
-      data.find((price) => price.model === props.modelName) ?? null
-    void loadOrigin()
-    mode.value = initial.value?.mode ?? 'unit_price'
-    prices.value = initial.value?.prices.map((line) => ({ ...line })) ?? [
-      { quantity: 'p', unit: 'per_million_tokens', price: '' },
-      { quantity: 'c', unit: 'per_million_tokens', price: '' },
-    ]
-    expression.value = initial.value?.expression ?? ''
-    usageScope.value = initial.value?.usage_scope
-    usageSchema.value = initial.value?.usage_schema
-      ? structuredClone(toRaw(initial.value.usage_schema))
-      : undefined
-    initialForm.value = snapshot()
+    availablePrices.value = data
+    selectScope()
     loaded.value = true
     candidate.value = null
     selectedPlugin.value = ''
@@ -254,7 +305,14 @@ async function load() {
 function applyDraft(price: PriceVersion) {
   sourceDraft.value = structuredClone(toRaw(price))
   mode.value = price.mode
-  prices.value = price.prices.map((line) => ({ ...line }))
+  scopeKind.value = price.scope_kind ?? 'global_model'
+  channelId.value = price.channel_id ?? 0
+  flatFee.value = price.flat_fee ?? ''
+  effectiveFrom.value = price.effective_from ?? ''
+  effectiveTo.value = price.effective_to ?? ''
+  prices.value = structuredClone(toRaw(price.prices))
+  pricesJson.value = JSON.stringify(price.prices, null, 2)
+  structuredPrices.value = price.prices.some((line) => line.tier_mode)
   expression.value = price.expression ?? ''
   usageScope.value = price.usage_scope
   usageSchema.value = price.usage_schema
@@ -311,7 +369,9 @@ function convertUnitDraft() {
   try {
     const terms: string[] = []
     const extras: UnitPrice[] = []
-    for (const line of prices.value) {
+    for (const line of currentPrices()) {
+      if (line.tier_mode)
+        throw new Error('Tiered prices require structured pricing')
       if (!isDecimal(line.price)) throw new Error('price')
       if (usageSchema.value)
         terms.push(`u(${JSON.stringify(line.quantity)}) * ${line.price}`)
@@ -423,9 +483,19 @@ function draft(name: string): PriceVersion {
   return {
     id: 0,
     model: name,
+    scope_kind: scopeKind.value,
+    channel_id: scopeKind.value === 'channel_model' ? channelId.value : 0,
     mode: mode.value,
-    prices:
-      mode.value === 'free' ? [] : prices.value.map((price) => ({ ...price })),
+    prices: mode.value === 'free' ? [] : currentPrices(),
+    ...(mode.value !== 'free' && flatFee.value.trim()
+      ? { flat_fee: flatFee.value.trim() }
+      : {}),
+    ...(effectiveFrom.value.trim()
+      ? { effective_from: effectiveFrom.value.trim() }
+      : {}),
+    ...(effectiveTo.value.trim()
+      ? { effective_to: effectiveTo.value.trim() }
+      : {}),
     expression:
       mode.value === 'expression' ? expression.value.trim() : undefined,
     created_at: 0,
@@ -455,7 +525,7 @@ async function validate(name = props.modelName) {
   if (currentSchema.value.plugins.length > 1 && !selectedPlugin.value)
     throw new Error(t('billing.schemaChoosePlugin'))
   const latest = await modelPricingApi.load()
-  const current = latest.find((row) => row.model === name)
+  const current = latest.find((row) => matchesScope(row, name))
   const expected = name === originalName.value ? (initial.value?.id ?? 0) : 0
   if ((current?.id ?? 0) !== expected)
     throw new Error(t('billing.priceConflict'))
@@ -470,10 +540,15 @@ async function save(name: string) {
     selectedPlugin.value || currentSchema.value?.plugin_key || undefined
   )
   originalName.value = name
+  availablePrices.value = availablePrices.value.filter(
+    (price) => !matchesScope(price, name)
+  )
+  availablePrices.value.push(initial.value)
   initialForm.value = submittedForm
   originRequest.cancel()
   origin.value = {
     model: name,
+    channel_id: initial.value.channel_id ?? 0,
     version_id: initial.value.id,
     origin: 'manual',
     source_model: '',
@@ -494,6 +569,10 @@ async function restoreAutomatic() {
     const price = await automaticPricingApi.restore(model, initial.value.id)
     if (disposed || !props.open || props.modelName !== model) return
     initial.value = price
+    availablePrices.value = availablePrices.value.filter(
+      (row) => !matchesScope(row, model)
+    )
+    availablePrices.value.push(price)
     applyDraft(price)
     sourceDraft.value = null
     candidate.value = null
@@ -532,7 +611,11 @@ async function importSeed() {
     candidateOriginal.value = JSON.parse(
       JSON.stringify(draft(props.modelName))
     ) as PriceVersion
-    candidate.value = structuredClone(price)
+    candidate.value = {
+      ...structuredClone(price),
+      scope_kind: scopeKind.value,
+      channel_id: channelId.value,
+    }
     seedMessage.value = t('billing.seedLoaded', { source: seed.source })
   } catch {
     if (!controller.signal.aborted) error.value = t('billing.priceUnavailable')
@@ -565,7 +648,8 @@ async function runPreview() {
       usage: objectInput(previewInput.value),
       attributes: objectInput(previewAttributes.value),
       request_facts: objectInput(previewFacts.value),
-      channel_ratio: previewRatio.value,
+      channel_ratio:
+        scopeKind.value === 'channel_model' ? '1' : previewRatio.value,
       frozen_at: previewTime.value,
     })
     if (epoch === previewEpoch.value) preview.value = result
@@ -692,6 +776,7 @@ defineExpose({ validate, save })
       <ConsoleButton
         v-if="
           initial &&
+          scopeKind === 'global_model' &&
           props.modelName === originalName &&
           (origin?.origin === 'manual' || origin?.origin === 'legacy_seed')
         "
@@ -726,102 +811,186 @@ defineExpose({ validate, save })
           </option>
         </select></label
       >
+      <div class="grid gap-3 sm:grid-cols-2">
+        <label class="text-sm"
+          >{{ t('billing.priceScope') }}
+          <select
+            v-model="scopeKind"
+            data-price-scope
+            class="mt-2 w-full rounded border p-2 bg-[var(--surface-muted)] focus-ring"
+            @change="selectScope"
+          >
+            <option value="global_model">{{ t('billing.scopeGlobal') }}</option>
+            <option value="channel_model">
+              {{ t('billing.scopeChannel') }}
+            </option>
+          </select>
+        </label>
+        <label v-if="scopeKind === 'channel_model'" class="text-sm"
+          >{{ t('billing.priceChannel') }}
+          <input
+            v-model.number="channelId"
+            data-price-channel
+            type="number"
+            min="1"
+            step="1"
+            class="mt-2 w-full rounded border p-2 bg-[var(--surface-muted)] focus-ring"
+            @change="selectScope"
+          />
+          <span class="block text-xs text-[var(--text-tertiary)]">{{
+            availablePrices
+              .filter(
+                (price) =>
+                  price.model === originalName &&
+                  price.scope_kind === 'channel_model'
+              )
+              .map((price) => price.channel_id)
+              .join(', ')
+          }}</span>
+        </label>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <label class="text-sm"
+          >{{ t('billing.effectiveFrom')
+          }}<input
+            v-model="effectiveFrom"
+            data-price-effective-from
+            placeholder="2026-01-01T00:00:00Z"
+            class="mt-2 w-full rounded border p-2 bg-[var(--surface-muted)] focus-ring"
+        /></label>
+        <label class="text-sm"
+          >{{ t('billing.effectiveTo')
+          }}<input
+            v-model="effectiveTo"
+            data-price-effective-to
+            placeholder="2027-01-01T00:00:00Z"
+            class="mt-2 w-full rounded border p-2 bg-[var(--surface-muted)] focus-ring"
+        /></label>
+      </div>
       <template v-if="mode !== 'free'">
-        <details
-          class="space-y-2 rounded border border-[var(--border-subtle)] p-3 text-xs"
-        >
-          <summary>{{ t('billing.currencyHelper') }}</summary>
-          <p>{{ t('billing.currencyHint') }}</p>
-          <label
-            >{{ t('billing.localCurrency')
-            }}<input
-              v-model="localCurrency"
-              maxlength="8"
-              class="m-2 rounded border p-1 bg-[var(--surface-muted)]"
-          /></label>
-          <label
-            >{{ t('billing.exchangeRate')
-            }}<input
-              v-model="exchangeRate"
-              data-exchange-rate
-              class="m-2 rounded border p-1 bg-[var(--surface-muted)]"
-          /></label>
-        </details>
-        <div
-          v-for="(line, index) in prices"
-          :key="index"
-          class="grid grid-cols-1 gap-2 rounded-lg bg-[var(--surface-muted)] p-3 sm:grid-cols-[1fr_1fr_1fr_auto]"
-        >
-          <label class="text-xs"
-            >{{ t('billing.quantity')
-            }}<input
-              v-model="line.quantity"
-              :list="`billing-quantities-${index}`"
-              class="mt-1 w-full rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2 font-mono focus-ring"
-            /><datalist :id="`billing-quantities-${index}`">
-              <option
-                v-for="quantity in quantities"
-                :key="quantity"
-                :value="quantity"
-              >
-                {{
-                  usageSchema ? quantity : t(`billing.quantities.${quantity}`)
-                }}
-              </option>
-            </datalist></label
+        <label class="block text-sm"
+          >{{ t('billing.flatFee')
+          }}<input
+            v-model="flatFee"
+            data-price-flat-fee
+            class="mt-2 w-full rounded border p-2 bg-[var(--surface-muted)] focus-ring"
+        /></label>
+        <label v-if="structuredPrices" class="block text-sm"
+          >{{ t('billing.structuredPrices') }}
+          <textarea
+            v-model="pricesJson"
+            data-price-structure
+            rows="12"
+            spellcheck="false"
+            class="mt-2 w-full rounded border p-3 font-mono text-xs bg-[var(--surface-muted)] focus-ring"
+          />
+          <span class="mt-2 block text-xs text-[var(--text-tertiary)]">{{
+            t('billing.structuredPricesHint')
+          }}</span>
+        </label>
+        <template v-else>
+          <details
+            class="space-y-2 rounded border border-[var(--border-subtle)] p-3 text-xs"
           >
-          <label class="text-xs"
-            >{{ t('billing.unit')
-            }}<select
-              v-model="line.unit"
-              class="mt-1 w-full rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2 focus-ring"
+            <summary>{{ t('billing.currencyHelper') }}</summary>
+            <p>{{ t('billing.currencyHint') }}</p>
+            <label
+              >{{ t('billing.localCurrency')
+              }}<input
+                v-model="localCurrency"
+                maxlength="8"
+                class="m-2 rounded border p-1 bg-[var(--surface-muted)]"
+            /></label>
+            <label
+              >{{ t('billing.exchangeRate')
+              }}<input
+                v-model="exchangeRate"
+                data-exchange-rate
+                class="m-2 rounded border p-1 bg-[var(--surface-muted)]"
+            /></label>
+          </details>
+          <div
+            v-for="(line, index) in prices"
+            :key="index"
+            class="grid grid-cols-1 gap-2 rounded-lg bg-[var(--surface-muted)] p-3 sm:grid-cols-[1fr_1fr_1fr_auto]"
+          >
+            <label class="text-xs"
+              >{{ t('billing.quantity')
+              }}<input
+                v-model="line.quantity"
+                :list="`billing-quantities-${index}`"
+                class="mt-1 w-full rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2 font-mono focus-ring"
+              /><datalist :id="`billing-quantities-${index}`">
+                <option
+                  v-for="quantity in quantities"
+                  :key="quantity"
+                  :value="quantity"
+                >
+                  {{
+                    usageSchema ? quantity : t(`billing.quantities.${quantity}`)
+                  }}
+                </option>
+              </datalist></label
             >
-              <option v-for="unit in units" :key="unit" :value="unit">
-                {{ usageSchema ? unit : t(`billing.units.${unit}`) }}
-              </option>
-            </select></label
-          >
-          <label class="text-xs"
-            >{{ t('billing.unitPrice')
-            }}<input
-              v-model="line.price"
-              inputmode="decimal"
-              class="mt-1 w-full rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2 font-mono focus-ring"
-            />
-            <template v-if="isDecimal(exchangeRate) && exchangeRate !== '0'">
-              <span class="block py-1"
-                >≈ {{ localDisplay(line.price) }} {{ localCurrency }}</span
+            <label class="text-xs"
+              >{{ t('billing.unit')
+              }}<select
+                v-model="line.unit"
+                class="mt-1 w-full rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2 focus-ring"
               >
-              <input
-                v-model="localAmounts[index]"
-                :aria-label="t('billing.localAmount')"
-                class="w-full rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2"
+                <option v-for="unit in units" :key="unit" :value="unit">
+                  {{ usageSchema ? unit : t(`billing.units.${unit}`) }}
+                </option>
+              </select></label
+            >
+            <label class="text-xs"
+              >{{ t('billing.unitPrice')
+              }}<input
+                v-model="line.price"
+                inputmode="decimal"
+                class="mt-1 w-full rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2 font-mono focus-ring"
               />
-              <button
-                type="button"
-                class="mt-1 underline"
-                @click="applyLocalAmount(index)"
-              >
-                {{ t('billing.applyCurrency') }}
-              </button>
-            </template>
-          </label>
-          <button
-            type="button"
-            class="self-end rounded p-2 text-sm focus-ring"
-            :aria-label="t('billing.removePrice')"
-            @click="prices.splice(index, 1)"
+              <template v-if="isDecimal(exchangeRate) && exchangeRate !== '0'">
+                <span class="block py-1"
+                  >≈ {{ localDisplay(line.price) }} {{ localCurrency }}</span
+                >
+                <input
+                  v-model="localAmounts[index]"
+                  :aria-label="t('billing.localAmount')"
+                  class="w-full rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2"
+                />
+                <button
+                  type="button"
+                  class="mt-1 underline"
+                  @click="applyLocalAmount(index)"
+                >
+                  {{ t('billing.applyCurrency') }}
+                </button>
+              </template>
+            </label>
+            <button
+              type="button"
+              class="self-end rounded p-2 text-sm focus-ring"
+              :aria-label="t('billing.removePrice')"
+              @click="prices.splice(index, 1)"
+            >
+              ×
+            </button>
+          </div>
+          <ConsoleButton
+            variant="secondary"
+            @click="
+              prices.push({ quantity: 'calls', unit: 'per_call', price: '' })
+            "
+            >{{ t('billing.addPrice') }}</ConsoleButton
           >
-            ×
-          </button>
-        </div>
-        <ConsoleButton
-          variant="secondary"
-          @click="
-            prices.push({ quantity: 'calls', unit: 'per_call', price: '' })
-          "
-          >{{ t('billing.addPrice') }}</ConsoleButton
-        >
+          <ConsoleButton
+            variant="secondary"
+            data-enable-structured-prices
+            @click="enableStructuredPrices"
+            >{{ t('billing.structuredPrices') }}</ConsoleButton
+          >
+        </template>
       </template>
       <label v-if="mode === 'expression'" class="block text-sm"
         >{{ t('billing.expression')
@@ -986,7 +1155,10 @@ defineExpose({ validate, save })
           >
         </template>
       </details>
-      <details v-if="sourceDraft" class="space-y-2 text-xs">
+      <details
+        v-if="sourceDraft && !structuredPrices"
+        class="space-y-2 text-xs"
+      >
         <summary>{{ t('billing.sourceDifference') }}</summary>
         <table class="w-full table-fixed text-left">
           <thead>
@@ -1180,7 +1352,7 @@ defineExpose({ validate, save })
             class="mt-1 w-full rounded border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-2 font-mono focus-ring"
           />
         </label>
-        <label class="block text-xs"
+        <label v-if="scopeKind === 'global_model'" class="block text-xs"
           >{{ t('billing.previewRatio')
           }}<input
             v-model="previewRatio"

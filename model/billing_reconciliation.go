@@ -84,13 +84,10 @@ func ResolveBillingReconciliation(ctx context.Context, id int64, actor int, comm
 			return err
 		}
 		eventID := "manual:" + command.OperationID
-		fingerprint, err := billingEventFingerprint(struct {
-			RequestID, Operation string
-			Quota                common.Quota
-			Actor                int
-			Reason               string
-			ExpectedVersion      []int64
-		}{result.RequestID, command.Action, command.Quota, actor, command.Reason, []int64{command.ExpectedVersion}})
+		fingerprint, err := billingEventFingerprint(billingFinalizationIdentity{
+			RequestID: result.RequestID, Operation: command.Action, Quota: command.Quota, Actor: actor, Reason: command.Reason,
+			ExpectedVersion: []int64{command.ExpectedVersion}, EvidenceHash: result.ConsumptionFingerprint,
+		})
 		if err != nil {
 			return err
 		}
@@ -157,19 +154,41 @@ func ResolveBillingReconciliation(ctx context.Context, id int64, actor int, comm
 }
 
 type BillingMetrics struct {
-	IdempotencyConflicts int64        `json:"idempotency_conflicts"`
-	OldestWaitSeconds    int64        `json:"oldest_wait_seconds"`
-	Pending              int64        `json:"pending"`
-	Reconciliations      int64        `json:"reconciliations"`
-	Reserved             common.Quota `json:"reserved_quota"`
-	OldestCreatedAt      int64        `json:"oldest_created_at"`
-	RecoveryFailures     int64        `json:"recovery_failures"`
-	DebtEvents           int64        `json:"debt_events"`
+	PriceVersions        int64                      `json:"price_versions"`
+	QuoteAttempts        int64                      `json:"quote_attempts"`
+	PricesByOrigin       []BillingPriceOriginMetric `json:"prices_by_origin" gorm:"-"`
+	IdempotencyConflicts int64                      `json:"idempotency_conflicts"`
+	OldestWaitSeconds    int64                      `json:"oldest_wait_seconds"`
+	Pending              int64                      `json:"pending"`
+	Reconciliations      int64                      `json:"reconciliations"`
+	Reserved             common.Quota               `json:"reserved_quota"`
+	OldestCreatedAt      int64                      `json:"oldest_created_at"`
+	RecoveryFailures     int64                      `json:"recovery_failures"`
+	DebtEvents           int64                      `json:"debt_events"`
+}
+
+type BillingPriceOriginMetric struct {
+	ScopeKind string `json:"scope_kind"`
+	Origin    string `json:"origin"`
+	Count     int64  `json:"count"`
 }
 
 func ReadBillingMetrics(ctx context.Context) (BillingMetrics, error) {
 	var result BillingMetrics
 	q := DB.WithContext(ctx)
+	if err := q.Model(&BillingPriceVersion{}).Count(&result.PriceVersions).Error; err != nil {
+		return result, err
+	}
+	if err := q.Model(&BillingAttempt{}).Count(&result.QuoteAttempts).Error; err != nil {
+		return result, err
+	}
+	result.PricesByOrigin = []BillingPriceOriginMetric{}
+	if err := q.Model(&BillingActivePrice{}).
+		Select("CASE WHEN channel_id = 0 THEN 'global_model' ELSE 'channel_model' END AS scope_kind, origin, COUNT(*) AS count").
+		Group("CASE WHEN channel_id = 0 THEN 'global_model' ELSE 'channel_model' END, origin").
+		Order("scope_kind, origin").Scan(&result.PricesByOrigin).Error; err != nil {
+		return result, err
+	}
 	if err := q.Model(&BillingRecovery{}).Where("status IN ? OR (status IN ? AND consumption_state <> ?)", []string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending, BillingRecoveryStatusReconciliation}, []string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded}, BillingRecoveryStateCompleted).Select("COUNT(*) AS pending, COALESCE(MIN(created_at),0) AS oldest_created_at").Scan(&result).Error; err != nil {
 		return result, err
 	}

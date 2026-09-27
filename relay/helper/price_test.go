@@ -42,6 +42,7 @@ func pricingFixture(t *testing.T, version billing.PriceVersion) (*gin.Context, *
 	require.NoError(t, err)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	c.Set("channel_ratio", "1")
 	info := &relaycommon.RelayInfo{OriginModelName: version.Model, BillingRequestInput: &billingexpr.RequestInput{Attributes: map[string]interface{}{"service_tier": "priority"}, FrozenAt: time.Date(2026, 9, 19, 3, 0, 0, 0, time.UTC)}}
 	return c, info
 }
@@ -49,12 +50,12 @@ func pricingFixture(t *testing.T, version billing.PriceVersion) (*gin.Context, *
 func TestImageExpressionPrepaymentUsesFinalQuantity(t *testing.T) {
 	c, info := pricingFixture(t, billing.PriceVersion{Model: "image-count", Mode: billing.ModeExpression, Expression: `v1:fixed(0.001) * image_count`})
 	info.BillingRequestInput.Attributes["quantity"] = float64(1)
-	price, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{BillingRatios: map[string]float64{"n": 3}})
+	price, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{BillingQuantities: map[string]float64{"n": 3}})
 	require.NoError(t, err)
 	assert.Equal(t, 1500, price.QuotaToPreConsume)
 	assert.Equal(t, "3", price.Usage.Quantities["images"])
 	for _, n := range []float64{0, -1, 1.5, 129} {
-		_, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{BillingRatios: map[string]float64{"n": n}})
+		_, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{BillingQuantities: map[string]float64{"n": n}})
 		require.Error(t, err)
 	}
 	delete(info.BillingRequestInput.Attributes, "quantity")
@@ -86,9 +87,23 @@ func TestPublishedPriceRejectsMissingModelOverflowAndInvalidChannelRatio(t *test
 	_, err = ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
 	require.Error(t, err)
 	info.OriginModelName = "test"
-	c.Set("channel_ratio", -1.0)
+	c.Set("channel_ratio", "-1.0")
 	_, err = ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
 	require.Error(t, err)
+}
+
+func TestPublishedPricePreservesExactChannelRatio(t *testing.T) {
+	c, info := pricingFixture(t, billing.PriceVersion{Model: "exact-ratio", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.001"}}})
+	c.Set("channel_ratio", "1.234567890123456789")
+	price, err := ModelPriceHelperPerCall(c, info)
+	require.NoError(t, err)
+	assert.Equal(t, "1.234567890123456789", price.Quote.ChannelRatio)
+	charge, err := billing.Calculate(price.Quote, *price.Usage)
+	require.NoError(t, err)
+	assert.Equal(t, "0.001234567890123456789", charge.TotalUSD)
+	c.Set("channel_ratio", 1.5)
+	_, err = ModelPriceHelperPerCall(c, info)
+	require.Error(t, err, "a float context must not become a financial default")
 }
 
 func TestPublishedZeroEstimateStillReservesOneUnlessExplicitFree(t *testing.T) {
@@ -128,7 +143,7 @@ func TestRetryPinsPublishedPriceAndClockButRepricesFinalAttributes(t *testing.T)
 	_, err = model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{Model: "test", Mode: billing.ModeFree}, first.Quote.PriceVersion.ID, 1)
 	require.NoError(t, err)
 	require.NoError(t, FreezeOutboundBillingAttributes(info, []byte(`{"quality":"high"}`)))
-	c.Set("channel_ratio", 2.0)
+	c.Set("channel_ratio", "2.0")
 	next, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 1})
 	require.NoError(t, err)
 	assert.Equal(t, first.Quote.PriceVersion.ID, next.Quote.PriceVersion.ID)
@@ -138,6 +153,48 @@ func TestRetryPinsPublishedPriceAndClockButRepricesFinalAttributes(t *testing.T)
 	info.OriginModelName = "another"
 	_, err = ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 1})
 	require.ErrorContains(t, err, "identity")
+}
+
+func TestChannelRetryFreezesIndependentVersionsAndReserveEstimates(t *testing.T) {
+	c, info := pricingFixture(t, billing.PriceVersion{Model: "test", Mode: billing.ModeUnitPrice, FlatFee: "0.001"})
+	info.RequestId, info.ChannelMeta = "scoped-retry", &relaycommon.ChannelMeta{ChannelId: 7}
+	c.Set("channel_ratio", "2.0")
+	first, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
+	require.NoError(t, err)
+	require.NoError(t, PinBillingPrice(c, info))
+	assert.Equal(t, 1000, first.QuotaToPreConsume)
+	scoped, err := model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{ScopeKind: billing.PriceScopeChannel, ChannelID: 19, Model: "test", Mode: billing.ModeUnitPrice, FlatFee: "0.003"}, 0, 1)
+	require.NoError(t, err)
+	info.ChannelId = 19
+	next, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
+	require.NoError(t, err)
+	require.NoError(t, PinBillingPrice(c, info))
+	assert.Equal(t, scoped.ID, next.Quote.PriceVersion.ID)
+	assert.Equal(t, "1", next.Quote.ChannelRatio)
+	assert.Equal(t, 1500, next.QuotaToPreConsume)
+	assert.Equal(t, first.Quote.FrozenAt, next.Quote.FrozenAt)
+	assert.NotEqual(t, first.Quote.Hash, next.Quote.Hash)
+	_, err = model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{ScopeKind: billing.PriceScopeChannel, ChannelID: 19, Model: "test", Mode: billing.ModeFree}, scoped.ID, 1)
+	require.NoError(t, err)
+	again, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
+	require.NoError(t, err)
+	assert.Equal(t, next.Quote.Hash, again.Quote.Hash)
+	info.ChannelId = 7
+	again, err = ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
+	require.NoError(t, err)
+	assert.Equal(t, first.Quote.Hash, again.Quote.Hash)
+}
+
+func TestReasoningPrepaymentUsesMoreExpensiveOutputEstimate(t *testing.T) {
+	c, info := pricingFixture(t, billing.PriceVersion{Model: "test", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{
+		{Quantity: "p", Unit: "per_million_tokens", Price: "1"},
+		{Quantity: "c", Unit: "per_million_tokens", Price: "2"},
+		{Quantity: "reasoning", Unit: "per_million_tokens", Price: "10"},
+	}})
+	price, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 20})
+	require.NoError(t, err)
+	assert.Equal(t, 150, price.QuotaToPreConsume)
+	assert.EqualValues(t, 20, price.Usage.ReasoningTokens)
 }
 
 func TestAutomaticUnavailablePriceStopsFallbackUntilManualPublication(t *testing.T) {

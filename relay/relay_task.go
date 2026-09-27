@@ -215,7 +215,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}
 
 	// Admission precedes billing; retries reserve any price increase.
-	info.PriceData.ChannelRatio = helper.HandleChannelRatio(c, info)
+	helper.HandleChannelRatio(c, info)
 	if info.BeforeUpstream != nil {
 		if err := info.BeforeUpstream(); err != nil {
 			return nil, service.TaskErrorWrapperLocal(err, service.GatewayAdmissionErrorCode(err), service.GatewayAdmissionHTTPStatus(err))
@@ -249,7 +249,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 			return err
 		}
 		if value, ok := c.Get("route_live_selection"); ok {
-			if selection, valid := value.(service.LiveRouteSelection); valid && !selection.AllowsPriceRatio(info.PriceData.ChannelRatio) {
+			if selection, valid := value.(service.LiveRouteSelection); valid && !selection.AllowsPriceRatio(info.PriceData.ChannelMultiplier()) {
 				return service.ErrRoutePriceRatioExceeded
 			}
 		}

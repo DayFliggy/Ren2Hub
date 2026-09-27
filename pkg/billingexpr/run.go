@@ -37,7 +37,7 @@ func RunExprWithRequest(exprStr string, params TokenParams, request RequestInput
 
 // RunExprByHash is like RunExpr but accepts a pre-computed hash for the cache
 // lookup, avoiding a redundant SHA-256 computation when the caller already
-// holds BillingSnapshot.ExprHash.
+// holds the frozen expression hash.
 func RunExprByHash(exprStr, hash string, params TokenParams) (float64, TraceResult, error) {
 	return RunExprByHashWithRequest(exprStr, hash, params, RequestInput{})
 }
@@ -111,6 +111,7 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, params TokenP
 		"img_o":       params.ImgO,
 		"ai":          params.AI,
 		"ao":          params.AO,
+		"reasoning":   params.Reasoning,
 		"fixed":       func(usd float64) float64 { return usd * 1000000 },
 		"u": func(key string) interface{} {
 			if request.UsageSchema == nil {
@@ -139,7 +140,6 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, params TokenP
 		},
 		"tier": func(name string, value float64) float64 {
 			trace.MatchedTier = name
-			trace.Cost = value
 			return value
 		},
 		requestRuleTraceFunction: func(ruleIndex int, matched bool, multiplier float64) float64 {

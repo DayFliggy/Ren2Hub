@@ -138,7 +138,7 @@ func (fixture *gatewayProcessFixture) account(t *testing.T, concurrency, wait in
 func (fixture *gatewayProcessFixture) channel(t *testing.T, capacity int) int {
 	t.Helper()
 	fixture.nextID++
-	channel := model.Channel{Id: fixture.nextID, Key: "local-fixture-only", Name: fixture.prefix, Status: common.ChannelStatusEnabled, CapacityTotal: capacity, ChannelRatio: 1}
+	channel := model.Channel{Id: fixture.nextID, Key: "local-fixture-only", Name: fixture.prefix, Status: common.ChannelStatusEnabled, CapacityTotal: capacity, ChannelRatio: "1"}
 	require.NoError(t, fixture.db.Create(&channel).Error)
 	return channel.Id
 }

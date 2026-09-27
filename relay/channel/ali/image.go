@@ -57,13 +57,6 @@ func oaiImage2AliImageRequest(info *relaycommon.RelayInfo, request dto.ImageRequ
 		}
 	}
 
-	if strings.Contains(request.Model, "z-image") {
-		// z-image 开启prompt_extend后，按2倍计费
-		if imageRequest.Parameters.PromptExtendValue() {
-			info.PriceData.AddOtherRatio("prompt_extend", 2)
-		}
-	}
-
 	// Parameters may come from Extra["parameters"], bypassing the standard
 	// top-level n validation; enforce the same bound before it becomes a
 	// billing multiplier.
@@ -72,9 +65,6 @@ func oaiImage2AliImageRequest(info *relaycommon.RelayInfo, request dto.ImageRequ
 	}
 	if imageRequest.Parameters.N == 0 {
 		imageRequest.Parameters.N = 1
-	}
-	if imageRequest.Parameters.N != 0 {
-		info.PriceData.AddOtherRatio("n", float64(imageRequest.Parameters.N))
 	}
 
 	// 同步图片模型和异步图片模型请求格式不一样

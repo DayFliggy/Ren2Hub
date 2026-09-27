@@ -143,7 +143,7 @@ func runGatewaySemanticSDK(t *testing.T, runtime, script string) {
 			}
 			name := "semantic-" + protocol + "-" + route
 			item := &model.Channel{Name: name, Models: name, Type: channelType, Key: "semantic-local-key", Status: common.ChannelStatusEnabled,
-				BaseURL: &base, Group: "default", CapacityTotal: 10, ChannelRatio: 1}
+				BaseURL: &base, Group: "default", CapacityTotal: 10, ChannelRatio: "1"}
 			require.NoError(t, model.DB.Create(item).Error)
 			require.NoError(t, item.AddAbilities(model.DB))
 			channelIDs[name], prices[name] = item.Id, 0.001

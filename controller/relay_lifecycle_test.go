@@ -92,7 +92,7 @@ func TestRouteQueueSelectionKeepsPolicyBoundariesAndOneQueue(t *testing.T) {
 	db, _ := setupGatewayAPI(t)
 	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
 	for _, id := range []int{7701, 7702} {
-		require.NoError(t, db.Create(&model.Channel{Id: id, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: 1}).Error)
+		require.NoError(t, db.Create(&model.Channel{Id: id, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: "1"}).Error)
 		permit, _, err := service.AcquireGatewayChannelPermit(context.Background(), "holder", id, false, service.NewGatewayWaitBudget(0))
 		require.NoError(t, err)
 		defer permit.Release()
@@ -153,7 +153,7 @@ func TestRouteQueueSelectionKeepsPolicyBoundariesAndOneQueue(t *testing.T) {
 
 	// A previously busy channel can become immediately available while the
 	// other candidates are scanned. Immediate capacity precedes any queue.
-	require.NoError(t, db.Create(&model.Channel{Id: 7703, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: 1}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: 7703, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: "1"}).Error)
 	c, _ = gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(ctx)
 	c.Set("route_live_selection", service.LiveRouteSelection{Source: service.RouteSourceAutoLab, Decision: service.RouteDecision{DynamicScoreApplied: true}, Attempts: []service.RouteDecisionCandidate{
@@ -180,7 +180,7 @@ func TestRouteQueueSelectionUsesCurrentPolicyAndReclaimedCapacity(t *testing.T) 
 		t.Run(test.name, func(t *testing.T) {
 			db, _ := setupGatewayAPI(t)
 			require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
-			require.NoError(t, db.Create(&model.Channel{Id: 7731, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: 1}).Error)
+			require.NoError(t, db.Create(&model.Channel{Id: 7731, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: "1"}).Error)
 			config := model.DefaultGatewayConfig()
 			config.ChannelQueueSize = test.before
 			require.NoError(t, model.SaveGatewayConfig(config))
@@ -211,7 +211,7 @@ func TestRouteQueueSelectionUsesCurrentPolicyAndReclaimedCapacity(t *testing.T) 
 func TestRouteAvailabilityUsesRaisedProviderLimit(t *testing.T) {
 	db, _ := setupGatewayAPI(t)
 	require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
-	require.NoError(t, db.Create(&model.Channel{Id: 7732, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: 1}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: 7732, Status: common.ChannelStatusEnabled, CapacityTotal: 1, ChannelRatio: "1"}).Error)
 	config := model.DefaultGatewayConfig()
 	config.ChannelRates[7732] = model.GatewayProviderRateLimit{RPM: 1}
 	require.NoError(t, model.SaveGatewayConfig(config))

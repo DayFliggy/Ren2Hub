@@ -3,9 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"sort"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	"gorm.io/gorm"
 )
 
@@ -61,41 +65,68 @@ func availableRouteAbilities(ctx context.Context, userID, tokenID int) (*gorm.DB
 	return query, nil
 }
 
-// AvailableRoutePrices publishes the range of currently available channel
-// multipliers without disclosing channel identities or credentials.
-func AvailableRoutePrices(ctx context.Context, userID int) ([]model.Pricing, error) {
-	query, err := availableRouteAbilities(ctx, userID, 0)
+// AvailableRoutePriceVersions resolves prices only for channels the caller can
+// route to. A price attached to an inaccessible channel cannot grant visibility.
+func AvailableRoutePriceVersions(ctx context.Context, userID, tokenID int) (map[string][]billing.PriceVersion, error) {
+	query, err := availableRouteAbilities(ctx, userID, tokenID)
 	if err != nil {
 		return nil, err
 	}
 	var rows []struct {
-		Model        string
-		ChannelRatio float64
+		Model     string
+		ChannelID int
 	}
-	if err := query.Distinct("abilities.model", "channels.channel_ratio").Scan(&rows).Error; err != nil {
+	if err := query.Distinct("abilities.model", "abilities.channel_id").Order("abilities.model, abilities.channel_id").Scan(&rows).Error; err != nil {
 		return nil, err
 	}
-	type ratioRange struct{ min, max float64 }
-	ranges := make(map[string]ratioRange)
+	prices := make(map[string][]billing.PriceVersion)
+	seen := make(map[string]map[int64]bool)
+	now := time.Now()
 	for _, row := range rows {
-		channel := model.Channel{ChannelRatio: row.ChannelRatio}
-		_, ratio, err := channel.RoutingSettings()
-		if err != nil {
-			return nil, err
+		for _, candidate := range reasoning.BillingModelCandidates(row.Model) {
+			version, err := model.GetActiveBillingPriceForChannel(ctx, candidate, row.ChannelID)
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			if errors.Is(err, model.ErrAutomaticBillingPriceUnavailable) {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+			if (version.EffectiveFrom != nil && now.Before(*version.EffectiveFrom)) || (version.EffectiveTo != nil && now.After(*version.EffectiveTo)) {
+				break
+			}
+			if seen[row.Model] == nil {
+				seen[row.Model] = make(map[int64]bool)
+			}
+			if !seen[row.Model][version.ID] {
+				prices[row.Model] = append(prices[row.Model], *version)
+				seen[row.Model][version.ID] = true
+			}
+			break
 		}
-		current, exists := ranges[row.Model]
-		if !exists {
-			current = ratioRange{ratio, ratio}
-		}
-		current.min, current.max = min(current.min, ratio), max(current.max, ratio)
-		ranges[row.Model] = current
+	}
+	for _, versions := range prices {
+		sort.Slice(versions, func(i, j int) bool { return versions[i].ChannelID < versions[j].ChannelID })
+	}
+	return prices, nil
+}
+
+func AvailableRoutePrices(ctx context.Context, userID int) ([]model.Pricing, error) {
+	versionsByModel, err := AvailableRoutePriceVersions(ctx, userID, 0)
+	if err != nil {
+		return nil, err
 	}
 	prices := make([]model.Pricing, 0)
 	for _, price := range model.GetPricing() {
-		if ratios, ok := ranges[price.ModelName]; ok {
-			price.ChannelRatioMin, price.ChannelRatioMax = ratios.min, ratios.max
+		if versions := versionsByModel[price.ModelName]; len(versions) != 0 {
+			price.PriceVersions = versions
+			price.PriceVersion = &price.PriceVersions[0]
+			price.BillingMode, price.BillingExpr = price.PriceVersion.Mode, price.PriceVersion.Expression
 			prices = append(prices, price)
 		}
 	}
+	sort.Slice(prices, func(i, j int) bool { return prices[i].ModelName < prices[j].ModelName })
 	return prices, nil
 }

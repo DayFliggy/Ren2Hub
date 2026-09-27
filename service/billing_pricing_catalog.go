@@ -48,9 +48,6 @@ func loadAutomaticPriceCatalog(ctx context.Context) (*automaticPriceCatalog, err
 	names := make(map[string]bool)
 	for _, spec := range billingPricingSources {
 		row := bySource[string(spec.Source)]
-		if row.Document == "" && row.LastError != "" {
-			return nil, fmt.Errorf("%s has no validated pricing snapshot after a failed refresh", spec.Source)
-		}
 		catalog.hashes[string(spec.Source)] = row.Hash
 		source := automaticPricingSourceCatalog{
 			source: spec.Source, entries: map[string]autopricing.Entry{},
@@ -58,11 +55,15 @@ func loadAutomaticPriceCatalog(ctx context.Context) (*automaticPriceCatalog, err
 		}
 		if row.Document != "" {
 			if pricingDocumentHash([]byte(row.Document)) != row.Hash {
-				return nil, fmt.Errorf("%s pricing cache integrity mismatch", spec.Source)
+				source.rejections["*"] = "pricing cache integrity mismatch"
+				catalog.sources = append(catalog.sources, source)
+				continue
 			}
 			entries, rejected, err := autopricing.ParseWithReport(spec.Source, []byte(row.Document))
 			if err != nil {
-				return nil, fmt.Errorf("%s pricing cache: %w", spec.Source, err)
+				source.rejections["*"] = fmt.Sprintf("pricing cache: %v", err)
+				catalog.sources = append(catalog.sources, source)
+				continue
 			}
 			for _, rejection := range rejected {
 				source.rejections[rejection.Model] = rejection.Reason
@@ -88,6 +89,10 @@ func loadAutomaticPriceCatalog(ctx context.Context) (*automaticPriceCatalog, err
 				names[name] = true
 			}
 			sort.Strings(source.rejectedNames)
+		} else if row.LastError != "" {
+			// A source without a validated snapshot is unavailable, but it must
+			// not prevent another source from resolving the same model.
+			source.rejections["*"] = fmt.Sprintf("%s has no validated pricing snapshot after a failed refresh", spec.Source)
 		}
 		catalog.sources = append(catalog.sources, source)
 	}
@@ -106,6 +111,10 @@ func (catalog *automaticPriceCatalog) resolve(name string) automaticPriceMatch {
 	blocked := make([]bool, len(catalog.sources))
 	for i, source := range catalog.sources {
 		match.reasons[i] = AutomaticPricingRejection{Source: string(source.source), Reason: "no complete price for this model or a supported alias"}
+		if reason, exists := source.rejections["*"]; exists {
+			match.reasons[i].Reason = reason
+			blocked[i] = true
+		}
 	}
 	for _, candidate := range reasoning.BillingModelCandidates(name) {
 		// Exact identity in either source precedes a less-specific alias.

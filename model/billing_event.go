@@ -17,6 +17,16 @@ var ErrBillingEventConflict = errors.New("billing event identity conflict")
 var ErrBillingVersionConflict = errors.New("billing account version conflict")
 var billingIdempotencyConflicts atomic.Int64
 
+// Automatic settlement and manual reconciliation share one event identity.
+type billingFinalizationIdentity struct {
+	RequestID, Operation string
+	Quota                common.Quota
+	Actor                int
+	Reason               string
+	ExpectedVersion      []int64
+	EvidenceHash         string
+}
+
 // BillingEvent is both the idempotency fence and the permanent accounting
 // evidence. It is never updated when a display log is retried or removed.
 type BillingEvent struct {
@@ -29,6 +39,7 @@ type BillingEvent struct {
 	SourceType          string       `json:"source_type" gorm:"type:varchar(32)"`
 	SourceID            string       `json:"source_id" gorm:"type:varchar(192)"`
 	Fingerprint         string       `json:"-" gorm:"type:varchar(64);not null"`
+	EvidenceHash        string       `json:"evidence_hash,omitempty" gorm:"type:varchar(64)"`
 	AvailableDelta      common.Quota `json:"available_delta" gorm:"type:bigint;not null"`
 	ReservedDelta       common.Quota `json:"reserved_delta" gorm:"type:bigint;not null"`
 	UsedDelta           common.Quota `json:"used_delta" gorm:"type:bigint;not null"`

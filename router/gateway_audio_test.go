@@ -213,7 +213,7 @@ func TestGatewayAudioTranscriptionRoundTrip(t *testing.T) {
 				require.NoError(t, model.DB.First(&original, 1).Error)
 				priority := int64(100)
 				for range 64 {
-					channel := model.Channel{Type: constant.ChannelCloudflare, Models: "gpt-4o-transcribe", Name: "nonstream-transcription", Key: "fixture", Status: common.ChannelStatusEnabled, BaseURL: original.BaseURL, Group: "default", CapacityTotal: 10, ChannelRatio: 1, Priority: &priority}
+					channel := model.Channel{Type: constant.ChannelCloudflare, Models: "gpt-4o-transcribe", Name: "nonstream-transcription", Key: "fixture", Status: common.ChannelStatusEnabled, BaseURL: original.BaseURL, Group: "default", CapacityTotal: 10, ChannelRatio: "1", Priority: &priority}
 					require.NoError(t, model.DB.Create(&channel).Error)
 					require.NoError(t, channel.AddAbilities(model.DB))
 				}
