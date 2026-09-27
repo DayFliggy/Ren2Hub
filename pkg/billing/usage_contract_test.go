@@ -103,7 +103,7 @@ func TestSchemaUnitPricesUseFactsEvenWhenNamesMatchTokenDimensions(t *testing.T)
 			require.NoError(t, err)
 			for _, tokens := range []int64{0, 100} {
 				usage := billing.Usage{Complete: true, ActualFacts: map[string]any{field: "10"},
-					InputTokens: tokens, OutputTokens: tokens, CacheReadTokens: tokens, CacheWriteTokens: tokens,
+					InputTokens: tokens * 2, OutputTokens: tokens * 2, CacheReadTokens: tokens, CacheWriteTokens: tokens,
 					CacheWrite1hTokens: tokens, ImageInputTokens: tokens, ImageOutputTokens: tokens,
 					AudioInputTokens: tokens, AudioOutputTokens: tokens}
 				result, err := billing.Calculate(quote, usage)

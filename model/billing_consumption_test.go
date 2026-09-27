@@ -4,12 +4,48 @@ import (
 	"context"
 	"github.com/QuantumNous/new-api/common"
 	"testing"
+	"time"
+
+	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/shopspring/decimal"
 
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func publishedBillingTestQuote(version billing.PriceVersion, ratio string, attributes map[string]interface{}, at time.Time) (*billing.Quote, error) {
+	if version.Provenance == nil {
+		version.Provenance = &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}
+	}
+	published, _, err := publishBillingPrice(context.Background(), version, billingPricePublication{origin: BillingPriceOriginManual, actor: 1})
+	if err != nil {
+		return nil, err
+	}
+	return billing.NewQuote(*published, ratio, attributes, at)
+}
+
+// Log-delivery fixtures still pass through a real frozen billing contract.
+func bindConsumptionEvidence(requestID string, consumption BillingConsumption) (BillingConsumption, error) {
+	name := consumption.Log.ModelName
+	if name == "" {
+		name = "fixture"
+	}
+	quote, err := publishedBillingTestQuote(billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice,
+		Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test charge"},
+		Prices:     []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: decimal.NewFromInt(int64(consumption.Log.Quota)).Div(decimal.NewFromInt(500000)).String()}},
+	}, "1", nil, time.Unix(7200, 0))
+	if err != nil {
+		return consumption, err
+	}
+	if err = PrepareBillingAttempt(context.Background(), requestID, requestID+":attempt", consumption.Log.ChannelId, quote); err != nil {
+		return consumption, err
+	}
+	consumption.Usage = &billing.Usage{Complete: true, Source: "provider", Terminal: "completed", Quantities: map[string]string{"calls": "1"}, InputTokens: int64(consumption.Log.PromptTokens), OutputTokens: int64(consumption.Log.CompletionTokens)}
+	consumption.Charge, err = billing.Calculate(quote, *consumption.Usage)
+	return consumption, err
+}
 
 func setupBillingConsumptionTest(t *testing.T) (*gorm.DB, *gorm.DB, BillingConsumption) {
 	t.Helper()
@@ -32,6 +68,8 @@ func setupBillingConsumptionTest(t *testing.T) (*gorm.DB, *gorm.DB, BillingConsu
 			ModelName: "test-model", Quota: 30, PromptTokens: 10, CompletionTokens: 20},
 		CountUsage: true, LogEnabled: true, ExportEnabled: true, NodeName: "test-node",
 	}
+	consumption, err = bindConsumptionEvidence("consume-once", consumption)
+	require.NoError(t, err)
 	require.NoError(t, PrepareBillingRecoveryConsumption("consume-once", consumption))
 	return db, logs, consumption
 }
@@ -64,7 +102,7 @@ func TestBillingConsumptionPreservesSettlementIntentAndRejectsConflictingUsage(t
 	assert.ErrorIs(t, MarkBillingRecoveryRefundPending("consume-once", nil), ErrBillingRecoveryStateConflict)
 	require.NoError(t, PrepareBillingRecoveryConsumption("consume-once", consumption))
 	consumption.Log.Quota++
-	assert.ErrorIs(t, PrepareBillingRecoveryConsumption("consume-once", consumption), ErrBillingRecoveryStateConflict)
+	assert.ErrorIs(t, PrepareBillingRecoveryConsumption("consume-once", consumption), ErrBillingEventConflict)
 	assert.ErrorIs(t, UpdateBillingRecoverySettlement("consume-once", 999), ErrBillingRecoveryStateConflict)
 	var user User
 	require.NoError(t, db.First(&user, 1).Error)

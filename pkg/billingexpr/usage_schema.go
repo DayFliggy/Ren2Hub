@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/billingunits"
 	"github.com/shopspring/decimal"
 )
 
@@ -79,6 +80,9 @@ func ValidateUsageSchema(schema *UsageSchema) error {
 			if field.Unit == "" || len(field.Unit) > 64 || len(field.Enum) > 0 {
 				return fmt.Errorf("numeric billing usage requires an explicit unit")
 			}
+			if _, ok := billingunits.Lookup(field.Unit); !ok {
+				return fmt.Errorf("unsupported billing usage unit %q", field.Unit)
+			}
 			low, high, err := usageBounds(field)
 			if err != nil || low.GreaterThan(high) {
 				return fmt.Errorf("invalid billing usage bounds")
@@ -147,11 +151,8 @@ func NormalizeUsageValue(field UsageField, value interface{}) (interface{}, erro
 			raw = number
 		case json.Number:
 			raw = string(number)
-		case float64:
-			if math.IsNaN(number) || math.IsInf(number, 0) {
-				return nil, fmt.Errorf("invalid billing usage number")
-			}
-			raw = decimal.NewFromFloat(number).String()
+		case decimal.Decimal:
+			raw = number.String()
 		case int:
 			raw = fmt.Sprint(number)
 		case int64:

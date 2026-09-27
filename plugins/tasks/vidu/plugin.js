@@ -90,9 +90,8 @@ function normalizeResolution(value, model) {
 }
 
 function outboundDuration(req, model) {
-  const n = Number(req && req.duration);
-  if (Number.isFinite(n) && n > 0) return n;
-  return defaultDuration(model);
+  if (!req || req.duration === undefined) return defaultDuration(model);
+  return Number(utils.decimal.bounded(req.duration, 1, 3600, true));
 }
 
 function outboundResolution(req, model) {
@@ -257,7 +256,6 @@ export function parseSubmitResponse(ctx, resp) {
 }
 
 export function extractUsage(ctx) {
-  if (ctx.usagePurpose === "billing_ratios") return null;
   const req = ctx.requestBody || {};
   const model = ctx.upstreamModel || req.model;
   return { duration: outboundDuration(req, model), resolution: outboundResolution(req, model) };
@@ -305,11 +303,7 @@ export function buildContentRequest(ctx) {
 
 export function extractUsageOnComplete(_task, _taskResult, body) {
   if (!body || !Object.prototype.hasOwnProperty.call(body, "credits")) return null;
-  const raw = body.credits;
-  const credits = typeof raw === "number" ? raw :
-    typeof raw === "string" && /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(raw.trim()) ? Number(raw) : NaN;
-  if (!Number.isFinite(credits)) throw new Error("invalid completion credits");
-  return { credits: credits };
+  return { credits: utils.decimal.bounded(body.credits, 0, 2147483647, false) };
 }
 
 export const protocols = {
@@ -337,7 +331,7 @@ export const protocols = {
       else if (Object.prototype.hasOwnProperty.call(req, "duration")) requestBody.duration = req.duration;
       if (Object.prototype.hasOwnProperty.call(req, "size")) requestBody.size = req.size;
       if (Object.prototype.hasOwnProperty.call(req, "metadata")) requestBody.metadata = req.metadata;
-      const duration = requestBody.duration === undefined ? undefined : Number(requestBody.duration);
+      const duration = requestBody.duration === undefined ? undefined : Number(utils.decimal.bounded(requestBody.duration, 0, 3600, true));
       validateViduCombo(model, duration, outboundResolution(requestBody, model), images.length > 0);
       return { kind: "submit", model: model, action: actionFor(requestBody), requestBody: requestBody };
     },
@@ -425,12 +419,12 @@ protocols.openai_video = {
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
         req.metadata = parsed;
       }
-      if (req.seconds !== undefined) req.seconds = Number(req.seconds);
-      else if (req.duration !== undefined) req.seconds = Number(req.duration);
+      if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
+      else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
     }
     const model = ctx.upstreamModel || ctx.model || req.model;
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
-    if (seconds !== undefined) req.duration = Number(seconds);
+    if (seconds !== undefined) req.duration = Number(utils.decimal.bounded(seconds, 0, 3600, true));
     else req.duration = defaultDuration(model);
     if (hasInputReferenceFile) {
       req.images = [{ __fileRef: "request_file:input_reference", encoding: "dataUrl", maxBytes: 15728640 }];

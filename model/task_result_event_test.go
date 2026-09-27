@@ -73,15 +73,19 @@ func TestTaskResultEventSurvivesReconciliationAndMetricDeliveryRetry(t *testing.
 		var recovery BillingRecovery
 		require.NoError(t, db.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
 		command := BillingResolution{OperationID: "terminal-evidence-resolution", ExpectedVersion: recovery.Version, Action: "settle", Quota: 15, Reason: "verified provider usage"}
+		_, err := ResolveBillingReconciliation(ctx, recovery.ID, 1, command)
+		require.Error(t, err, "a reason and amount do not replace missing actual usage")
+		assertTaskAccountProjection(t, db, user.Id, token.Id, 60, 40, 0)
+		command.Action, command.Quota, command.Reason = "release", 0, "explicitly waive charge because provider usage is unavailable"
 		for range 2 {
 			_, err := ResolveBillingReconciliation(ctx, recovery.ID, 1, command)
 			require.NoError(t, err)
 			require.NoError(t, ApplyBillingRecoveryConsumption(recovery.RequestID))
 			require.NoError(t, RecoverTaskResultMetrics(ctx, 10))
 		}
-		assertTaskAccountProjection(t, db, user.Id, token.Id, 85, 0, 15)
+		assertTaskAccountProjection(t, db, user.Id, token.Id, 100, 0, 0)
 		require.NoError(t, db.First(&persisted, task.ID).Error)
-		assert.EqualValues(t, 15, persisted.Quota)
+		assert.Zero(t, persisted.Quota)
 		assert.EqualValues(t, 7230, persisted.FinishTime)
 		require.NoError(t, db.First(&metric, metric.Id).Error)
 		assert.EqualValues(t, 1, metric.RequestCount)

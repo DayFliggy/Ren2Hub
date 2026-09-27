@@ -10,7 +10,7 @@ const policy = {
   id: 8,
   group_id: 4,
   load_balance: false,
-  max_ratio: 1,
+  max_ratio: '1',
   retry_mode: 'next_channel',
   max_same_resource_attempts: 0,
   max_failover_attempts: 1,
@@ -66,6 +66,29 @@ function profileResponse() {
 }
 
 describe('routing API contracts', () => {
+  it('preserves eighteen-place ceilings and rejects invalid or floating point ratios', () => {
+    const response = profileResponse()
+    const withRatio = (max_ratio: unknown) => ({
+      ...response,
+      groups: [{ ...response.groups[0], policy: { ...policy, max_ratio } }],
+    })
+    expect(
+      parseRouteProfileView(withRatio('1.000000000000000001'), '/routing')
+        .groups[0]?.policy.max_ratio
+    ).toBe('1.000000000000000001')
+    for (const invalid of [
+      1,
+      '0',
+      '-1',
+      '1000.000000000000000001',
+      '0.0000000000000000001',
+      'NaN',
+      '1e3',
+    ])
+      expect(() =>
+        parseRouteProfileView(withRatio(invalid), '/routing')
+      ).toThrow()
+  })
   it('accepts snapshotless channels as unresolved without weakening state validation', () => {
     const endpoint = '/api/routing/eligible-channels'
     const parsed = parseEligibleRouteChannel(
@@ -161,12 +184,12 @@ describe('routing API contracts', () => {
       ...profileResponse(),
       profile: { ...profileResponse().profile, id: '1' },
     }
-    const numericStringRatio = {
+    const floatingPointRatio = {
       ...profileResponse(),
       groups: [
         {
           ...profileResponse().groups[0],
-          policy: { ...policy, max_ratio: '1' },
+          policy: { ...policy, max_ratio: 1 },
         },
       ],
     }
@@ -182,7 +205,7 @@ describe('routing API contracts', () => {
 
     for (const invalid of [
       numericString,
-      numericStringRatio,
+      floatingPointRatio,
       unknownRetryMode,
     ]) {
       expect(() =>

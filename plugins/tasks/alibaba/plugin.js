@@ -639,11 +639,6 @@ function imageEstimate(ctx, converted) {
 // Legacy per-call pricing multiplies the model price by these ratios; the
 // Z-Image prompt rewriting surcharge survives as its own ratio because the
 // boolean fact cannot be a multiplier.
-function imageRatios(ctx, converted, count) {
-  const ratios = { image_count: count };
-  if (zImage(ctx) && converted.body.parameters.prompt_extend === true) ratios.prompt_extend_ratio = Z_IMAGE_PROMPT_EXTEND_RATIO;
-  return ratios;
-}
 
 function imageContent(body) {
   const output = (body && body.output) || {};
@@ -820,7 +815,7 @@ function convert(ctx) {
   const rawDuration = nativeParameters.duration ?? (req.auto_duration === true ? -1 : (req.duration ?? req.seconds));
   if (rawDuration != null && ((typeof rawDuration !== "number" && typeof rawDuration !== "string") || String(rawDuration).trim() === ""))
     throw new Error("duration must be a number");
-  const duration = rawDuration == null ? 5 : Number(rawDuration);
+  const duration = rawDuration == null ? 5 : Number(utils.decimal.bounded(rawDuration, -1, 3600, profile.kind !== "speech"));
   if (duration === -1 && profile.kind !== "all") throw new Error("duration -1 (smart duration) is only supported by wan3.0 models");
   if (profile.kind === "speech") {
     if (rawDuration != null && (!Number.isFinite(duration) || duration <= 0 || duration >= 20))
@@ -888,23 +883,6 @@ function convert(ctx) {
   return { model: upstreamModel, input: input, parameters: parameters };
 }
 
-function resolutionRatio(body) {
-  const resolution = body.parameters.size ? videoSize(body.parameters.size).resolution : body.parameters.resolution;
-  const ratios = {
-    "wan3.0-video": { "480P": 1, "720P": 2, "1080P": 4 },
-    "wan3.0-video-prime": { "480P": 1, "720P": 2, "1080P": 4 },
-    "wan2.6-i2v": { "720P": 1, "1080P": 1 / 0.6 },
-    "wan2.5-t2v-preview": { "480P": 1, "720P": 2, "1080P": 1 / 0.3 },
-    "wan2.2-t2v-plus": { "480P": 1, "1080P": 5 },
-    "wan2.5-i2v-preview": { "480P": 1, "720P": 2, "1080P": 1 / 0.3 },
-    "wan2.2-i2v-plus": { "480P": 1, "1080P": 5 },
-    "wan2.2-kf2v-flash": { "480P": 1, "720P": 2, "1080P": 4.8 },
-    "wan2.2-i2v-flash": { "480P": 1, "720P": 2 },
-    "wan2.2-s2v": { "480P": 1, "720P": 1.8 },
-  };
-  const model = modelKey(body.model);
-  return ratios[model] ? { key: "resolution-" + resolution, value: ratios[model][resolution] } : null;
-}
 
 function responsesInput(req) {
   const texts = [],
@@ -1005,7 +983,7 @@ export function buildSubmitRequest(ctx) {
 // DashScope sends text/image deltas but cumulative usage. The host applies
 // generic JSON changes; vendor completion and usage semantics remain here.
 export function parseSubmitEventDelta(ctx, event, previousState) {
-  const body = JSON.parse(event.data);
+  const body = utils.json.parseNumbers(event.data);
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("invalid DashScope stream event");
   if (body.code || event.event === "error") throw new Error((body.code || "upstream_error") + ": " + (body.message || "stream failed"));
   const state = utils.json.clone(previousState || { choices: [], hasUsage: false });
@@ -1079,7 +1057,6 @@ export function extractUsage(ctx) {
   if (imageModel(ctx)) {
     const converted = convertImage(ctx);
     const estimate = imageEstimate(ctx, converted);
-    if (ctx.usagePurpose === "billing_ratios") return imageRatios(ctx, converted, estimate.image_count);
     return estimate;
   }
   const body = convert(ctx);
@@ -1090,27 +1067,12 @@ export function extractUsage(ctx) {
   let seconds = body.parameters.duration;
   if (kind === "speech") seconds = 20;
   else if (kind === "all" && (hasVideo || seconds === -1)) seconds = 30;
-  if (ctx.usagePurpose === "billing_ratios") {
-    const ratios = { seconds: seconds };
-    const resolution = resolutionRatio(body);
-    if (resolution && resolution.value !== undefined) ratios[resolution.key] = resolution.value;
-    return ratios;
-  }
   const resolution = body.parameters.size ? videoSize(body.parameters.size).resolution : body.parameters.resolution;
-  const facts = { seconds: seconds, resolution: resolution };
+  const facts = { seconds: utils.decimal.bounded(seconds, 0, 3600, false), resolution: resolution };
   if (WAN_AUDIO_VIDEO_MODELS.includes(modelKey(body.model))) facts.audio = body.parameters.audio !== false;
   return facts;
 }
 
-export function extractUsageOnSubmit(ctx, body) {
-  // Legacy ratio pricing uses this hook; task expressions use the same actual
-  // facts through extractUsageOnComplete for both immediate and polled results.
-  if (!imageModel(ctx)) return {};
-  const converted = convertImage(ctx);
-  if (!converted.synchronous) return {};
-  const actual = imageUsage(ctx, body || {});
-  return actual.image_count === undefined ? {} : imageRatios(ctx, converted, actual.image_count);
-}
 
 export function extractUsageOnComplete(task, taskResult, body) {
   if (imageModel(task)) return imageUsage(task, body || {});
@@ -1125,13 +1087,11 @@ export function extractUsageOnComplete(task, taskResult, body) {
     // Keep the reservation when either side is missing. Invalid supplied facts
     // reach the host validator unchanged, which logs and rejects them.
     if (inputSeconds != null && outputSeconds != null) {
-      if (typeof inputSeconds !== "number" || !Number.isFinite(inputSeconds) || inputSeconds < 0) facts.seconds = inputSeconds;
-      else if (typeof outputSeconds !== "number" || !Number.isFinite(outputSeconds) || outputSeconds < 0) facts.seconds = outputSeconds;
-      else facts.seconds = inputSeconds + outputSeconds;
+      facts.seconds = utils.decimal.add(utils.decimal.bounded(inputSeconds, 0, 3600, false), utils.decimal.bounded(outputSeconds, 0, 3600, false));
     }
   } else {
     const seconds = usage.duration ?? usage.output_video_duration ?? output.duration ?? output.duration_seconds;
-    if (seconds != null) facts.seconds = seconds;
+    if (seconds !== undefined) facts.seconds = utils.decimal.bounded(seconds, 0, 3600, false);
   }
   const resolution = usage.SR ?? output.resolution;
   if (resolution != null) facts.resolution = normalizeResolution(resolution);
@@ -1496,9 +1456,9 @@ export const protocols = {
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
           req.metadata = parsed;
         }
-        if (req.seconds !== undefined) req.seconds = Number(req.seconds);
-        else if (req.duration !== undefined) req.seconds = Number(req.duration);
-        if (req.duration !== undefined) req.duration = Number(req.duration);
+        if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
+        else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+        if (req.duration !== undefined) req.duration = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
         if (req.seed !== undefined) req.seed = Number(req.seed);
         for (const key of ["prompt_extend", "watermark", "audio", "auto_duration"]) {
           if (req[key] === undefined) continue;

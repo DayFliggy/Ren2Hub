@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const BillingSchemaVersion = 3
+const BillingSchemaVersion = 4
 
 type BillingSchema struct {
 	ID      int `gorm:"primaryKey"`

@@ -13,10 +13,10 @@ import (
 )
 
 func TestEmptyUsageScopePreservesPublishedWireContractAndQuoteHash(t *testing.T) {
-	const legacyPrice = `{"contract_version":2,"calculation_version":"billing-v2","result_unit":"usd","id":0,"model":"embedding","mode":"unit_price","prices":[{"quantity":"p","unit":"per_million_tokens","price":"0.1"}],"created_at":0,"hash":""}`
-	const preparedPrice = `{"contract_version":2,"calculation_version":"billing-v2","result_unit":"usd","id":0,"scope_kind":"global_model","model":"embedding","mode":"unit_price","prices":[{"quantity":"p","unit":"per_million_tokens","price":"0.1"}],"created_at":0,"hash":""}`
+	const unscopedPrice = `{"contract_version":3,"calculation_version":"billing-v3","result_unit":"usd","id":0,"model":"embedding","mode":"unit_price","prices":[{"quantity":"p","unit":"per_million_tokens","price":"0.1"}],"created_at":0,"hash":""}`
+	const preparedPrice = `{"contract_version":3,"calculation_version":"billing-v3","result_unit":"usd","id":0,"scope_kind":"global_model","model":"embedding","mode":"unit_price","prices":[{"quantity":"p","unit":"per_million_tokens","price":"0.1"}],"created_at":0,"hash":""}`
 	var price billing.PriceVersion
-	require.NoError(t, common.Unmarshal([]byte(legacyPrice), &price))
+	require.NoError(t, common.Unmarshal([]byte(unscopedPrice), &price))
 	prepared, err := billing.PreparePriceVersion(price)
 	require.NoError(t, err)
 	encoded, err := common.Marshal(prepared)
@@ -28,8 +28,8 @@ func TestEmptyUsageScopePreservesPublishedWireContractAndQuoteHash(t *testing.T)
 
 	quote, err := billing.NewQuote(prepared, "1", nil, time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
-	legacyQuote := `{"contract_version":2,"calculation_version":"billing-v2","price_version":` + preparedPrice + `,"channel_ratio":"1","frozen_at":"2026-09-26T00:00:00Z","hash":"","violation_fee_enabled":false,"violation_fee_usd":""}`
-	assert.Equal(t, fmt.Sprintf("%x", sha256.Sum256([]byte(legacyQuote))), quote.Hash)
+	unscopedQuote := `{"contract_version":3,"calculation_version":"billing-v3","price_version":` + preparedPrice + `,"channel_ratio":"1","frozen_at":"2026-09-26T00:00:00Z","hash":"","violation_fee_enabled":false,"violation_fee_usd":""}`
+	assert.Equal(t, fmt.Sprintf("%x", sha256.Sum256([]byte(unscopedQuote))), quote.Hash)
 }
 
 func TestEmbeddingScopeValidatesOnlyInputTokenPrices(t *testing.T) {
@@ -109,7 +109,7 @@ func TestEmbeddingScopeIsFrozenAndRejectsEveryOutputRepresentation(t *testing.T)
 }
 
 func TestUnscopedManualExpressionKeepsItsPricingPolicy(t *testing.T) {
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "manual", Mode: billing.ModeExpression, Expression: `v1:p * 0.1`}, "1", map[string]interface{}{"service_tier": "priority"}, time.Now())
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "manual", Mode: billing.ModeExpression, Expression: `v1:p * 0.1`}, "1", map[string]interface{}{"service_tier": "default"}, time.Now())
 	require.NoError(t, err)
 	result, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, OutputTokens: 50, InputIncludesCache: true})
 	require.NoError(t, err)

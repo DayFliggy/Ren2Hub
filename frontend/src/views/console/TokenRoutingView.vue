@@ -13,7 +13,7 @@ import {
   Trash2,
 } from 'lucide-vue-next'
 
-import { routingApi } from '@/api/routingApi'
+import { routingApi, validRouteMaxRatio } from '@/api/routingApi'
 import { ApiError } from '@/api/types'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -88,7 +88,11 @@ const canEdit = computed(
     Boolean(tokenId.value)
 )
 
-const canSave = computed(() => canEdit.value)
+const canSave = computed(
+  () =>
+    canEdit.value &&
+    groups.value.every((group) => validRouteMaxRatio(group.policy.max_ratio))
+)
 
 const availableChannels = computed(() =>
   channels.value.filter(
@@ -103,7 +107,7 @@ function defaultPolicy(groupId = 0): RoutePolicy {
   return {
     group_id: groupId,
     load_balance: false,
-    max_ratio: 1,
+    max_ratio: '1',
     retry_mode: 'next_channel',
     max_same_resource_attempts: 0,
     max_failover_attempts: 1,
@@ -540,6 +544,13 @@ onMounted(() => void load())
 
     <GatewayUserPanel />
     <TokenGatewayPolicy :token-id="tokenId" @updated="invalidatePreview" />
+    <p
+      v-if="canEdit && !canSave"
+      role="alert"
+      class="mt-3 text-sm text-[var(--status-danger-text)]"
+    >
+      {{ t('routing.invalidMaxRatio') }}
+    </p>
     <div
       v-if="conflict"
       class="flex items-center justify-between gap-4 border border-[var(--status-warning)] bg-[var(--status-warning-soft)] p-4 text-sm"
@@ -818,11 +829,12 @@ onMounted(() => void load())
                   >
                     {{ t('routing.maxRatio') }}
                     <input
-                      v-model.number="group.policy.max_ratio"
-                      type="number"
-                      min="0.01"
-                      max="1000"
-                      step="0.01"
+                      v-model="group.policy.max_ratio"
+                      inputmode="decimal"
+                      maxlength="64"
+                      :aria-invalid="
+                        !validRouteMaxRatio(group.policy.max_ratio)
+                      "
                       class="w-24 border bg-transparent px-2 py-1 text-sm text-[var(--text-primary)]"
                       style="border-color: var(--border-default)"
                       :disabled="!canEdit"

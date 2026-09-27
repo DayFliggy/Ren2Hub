@@ -200,6 +200,8 @@ func usageFromResponsesUsage(src *dto.Usage, createBillingSnapshot bool) *dto.Us
 	}
 	usage.UsageSemantic = src.UsageSemantic
 	usage.UsageSource = src.UsageSource
+	usage.Observation = src.Observation
+	usage.MeasuredQuantities = src.MeasuredQuantities
 	usage.BillingUsage = dto.CloneBillingUsage(src.BillingUsage)
 	usage.Cost = src.Cost
 	usage.PromptCacheHitTokens = src.PromptCacheHitTokens

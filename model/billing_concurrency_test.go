@@ -43,7 +43,7 @@ func TestBillingAccountConcurrencyAcrossDatabases(t *testing.T) {
 				initCol()
 				require.NoError(t, connection.Close())
 			})
-			require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &Log{}, &QuotaData{}, &Channel{}))
+			require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &Log{}, &QuotaData{}, &Channel{}, &BillingPriceVersion{}, &BillingActivePrice{}))
 			require.NoError(t, db.Create(&User{Id: 1, Username: "concurrent-wallet", Quota: 100}).Error)
 			for id := 1; id <= 2; id++ {
 				require.NoError(t, db.Create(&Token{Id: id, UserId: 1, Key: fmt.Sprintf("concurrent-%d", id), RemainQuota: 100}).Error)
@@ -74,7 +74,9 @@ func TestBillingAccountConcurrencyAcrossDatabases(t *testing.T) {
 			assert.EqualValues(t, 40, user.Quota)
 			assert.EqualValues(t, 60, user.ReservedQuota)
 			requestID := fmt.Sprintf("reserve-%d", winner)
-			require.NoError(t, PrepareBillingRecoveryConsumption(requestID, BillingConsumption{Log: Log{UserId: 1, TokenId: winner, Quota: 30, CreatedAt: 7200}, CountUsage: true}))
+			consumption, err := bindConsumptionEvidence(requestID, BillingConsumption{Log: Log{UserId: 1, TokenId: winner, Quota: 30, CreatedAt: 7200}, CountUsage: true})
+			require.NoError(t, err)
+			require.NoError(t, PrepareBillingRecoveryConsumption(requestID, consumption))
 			var recovery BillingRecovery
 			require.NoError(t, db.Where("request_id = ?", requestID).First(&recovery).Error)
 			command := BillingResolution{OperationID: "race-resolve", ExpectedVersion: recovery.Version, Action: "settle", Quota: 30, Reason: "provider amount verified"}

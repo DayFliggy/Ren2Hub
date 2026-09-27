@@ -13,6 +13,7 @@ Ren2Hub 的计价来源是数据库中发布的不可变 PriceVersion，模式�
 | img、img_o | 图片输入、输出 token |
 | img_cr | 明确报告的图片缓存读取 token，单独定价时从 cr 与 img 中移出 |
 | ai、ao | 音频输入、输出 token |
+| ai_cr | 明确报告的音频缓存读取 token，独立计价时从 cr 与 ai 同时移出 |
 | reasoning | 推理输出 token；单独定价时从 c 中移出 |
 | image_count | 图片实际数量，整数 1–128；发送前使用最终请求的已验证数量 |
 
@@ -36,13 +37,15 @@ Vidu 工厂插件仅在完成时提供 credits，提交阶段没有可信的估�
 
 ## 函数与安全属性
 
-支持 tier(name,value)、max/min/abs/ceil/floor、has(value,substring)。tier 记录命中档位，符合条件的倍率表达式记录 request_rules。
+支持 tier(name,value)、max/min/abs/ceil/floor、has(value,substring)。tier 记录命中档位，符合条件的倍率表达式记录 request_rules。数字采用 Decimal，运算限定为加减乘除、数值比较、布尔组合及条件分支；成员访问、集合、函数别名、动态探针、未知内置、now() 和 $env 均拒绝。全部分支共用类型和依赖检查，零系数与不可达分支仍拥有引用的计价维度。
+
+数值属性计算使用 attr_num(name)，仅支持 quantity、duration、thinking_budget_tokens、temperature、top_p。数值属性接受整数、json.Number、Decimal 或精确小数字符串，拒绝 float64；Quote 冻结为小数字符串。attr(name) 保留安全标量访问，不隐式执行数值转换。
 
 attr(name) 只接受登记名称的字面量：service_tier、quality、resolution、quantity、duration、tool_category、effort、thinking、thinking_budget_tokens、temperature、top_p。适配器从完成转换和参数覆盖后的最终发送参数提取这些属性；缺失参数不补默认值，明确零值保留。thinking 为 on/off/adaptive，Gemini 自动预算 -1 记录为 adaptive 而不记录负用量。未知名称、动态名称、复合对象均拒绝。param() 和 header() 已删除，任意正文、原始请求头和密钥不会进入报价和恢复证据。
 
 Claude 的 effort 取最终请求当前回合的有效值：顶层作为初始设置，消息级 system 设置从其后第一个 user 开始生效并持续；尾部未遇到 user 的配置不覆盖当前值。该只读解析由 RelayKit 统一提供，计价与最终日志共用结果；配置缺省不猜模型默认值，非法结构在预留和发送前拒绝。跨协议采用实际目标参数，不用已丢失的源消息配置计价。参数覆盖和重试仅影响新尝试，历史 Quote 的属性、哈希及恢复结算不追溯更改。
 
-hour/minute/weekday/month/day 接受有效 IANA 时区的字面量，使用 Quote.FrozenAt，空值及无效时区报错；未冻结时间的求值也报错。不得回退到服务器当前时间或 UTC。
+hour/minute/weekday/month/day 只接受时区字面量。创建 Quote 时 FreezeCalendars 使用 FrozenAt 和有效 IANA 时区，固化日历字段及 UTC 偏移并纳入报价哈希。重放仅读取冻结日历，检查与冻结时间和偏移一致，不读取时区数据库或当前时钟。缺少冻结日历、空值、Local 和无效时区均拒绝，不回退 UTC。
 
 示例：
 
@@ -60,13 +63,15 @@ tier("base", p * 2 + c * 10)
 
 ## 计算和持久化
 
-发送前的 Quote 保存完整价格版本、全部单价、渠道倍率、安全属性、固定事实和时间，并计算 SHA-256 哈希。价格与报价均冻结合同版本 2 和计算器 billing-v2；价格额外冻结表达式结果单位及用量 schema。每次结算严格检查版本和哈希，旧报价不能自动补版本。新草稿由发布入口补齐当前合同，数据库解码必须验证已保存合同。Usage 与 ChargeResult 分别保存规范化用量和费用结果，不能覆盖原报价。
+发送前的 Quote 保存完整价格版本、全部单价、渠道倍率、安全属性、固定事实、时间与时区日历，并计算 SHA-256 哈希。价格与报价均冻结合同版本 3 和计算器 billing-v3；价格额外冻结表达式结果单位及用量 schema。每次结算严格检查版本和哈希，旧报价不能自动补版本。新草稿由发布入口补齐当前合同，数据库解码必须验证已保存合同。Usage 与 ChargeResult 分别保存规范化用量和费用结果，不能覆盖原报价。
 
-表达式引擎保持 float64 求值，结果必须有限、非负；随后转 Decimal，与报价中的工具/媒体单价费用合计，乘渠道倍率及固定 500000 quota/USD。总额只四舍五入一次；正费用最低 1 quota，零费用为零。超过 MaxInt32 单次限额直接报错并进入对账，不按饱和值扣款。
+表达式数字从词法原文直接构造 Decimal；token 参数使用 int64，schema 数值事实保存精确字符串，不存在 Expr VM 或 float64 结算兼容入口。加减乘精确执行，除法使用 DivRound(36)，除零报错。计划限制 16384 字符、2048 词法项和 128 层语法嵌套；中间 Decimal 系数和指数有资源上界，超限报错而不饱和。非负结果与报价中的工具/媒体单价费用合计，乘渠道倍率及固定 500000 quota/USD。总额只四舍五入一次；正费用最低 1 quota，零费用为零。超过 MaxInt32 单次限额直接报错并进入对账，不按饱和值扣款。
 
-工具费用与表达式共享一次最终舍入；表达式版本的 prices 不得再次列出 token 单价。费用分项保存精确 USD 小计，总结果记录未舍入 quota、最终 quota、舍入差额和计算版本。
+工具费用与表达式共享一次最终舍入；表达式版本的 prices 不得再次列出 token 单价。费用分项保存精确基础 USD 小计，base_usd 是分项合计；adjustments 记录渠道乘数、调整前金额、增减金额及调整后金额。total_usd 是调整后的总额，并记录未舍入 quota、最终 quota、舍入差额和计算版本。
 
-自动目录在生成 PriceVersion 时组合上下文和服务档位。priority/fast 共用显式 priority 分项，缺少整个档位时普通 token 与缓存费用乘 2；ultrafast 乘 2；flex 显式价优先，否则乘 0.5。部分显式档位的未覆盖分项继承普通价，明确零视为覆盖。独立工具和媒体单价不参加默认倍率。结算不读取实时目录，也不额外应用档位倍率；手动表达式完全按原定义执行。
+自动目录保存来源证据及支持的维度和服务档位。缺少可验证档位或所需维度时，必须在预留前拒绝，不使用硬编码 priority/flex/ultrafast 倍率补齐。手工非默认服务档位也须显式声明支持合同。结算仅读冻结报价，不重新查价。
+
+音频缓存 ai_cr 与图片缓存 img_cr 分别验证非负、不得超过对应媒体量及通用缓存总量，两个细分之和不得超过通用缓存。独立定价且输入包含缓存时，细分从通用缓存和对应媒体量同时移出，再从基础输入扣除各已定价类别。缺失细分不猜测比例，明确零与缺失分别保存。
 
 可选 usage_scope=embedding 参与价格及 Quote 的冻结哈希，省略时保留旧序列化。输入型价格不得引用输出变量、图片数量、fixed 或任务 schema；全部 AST 分支都检查，即使零系数或不可达分支也不能隐藏输出引用。实际结算拒绝输出用量，发送前拒绝非 embedding 请求。
 

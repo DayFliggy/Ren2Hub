@@ -33,7 +33,7 @@ func TestBillingPricingGuardLifecycle(t *testing.T) {
 // The same accounting contracts run against isolated SQLite, MySQL and Postgres.
 func runBillingPricingGuardScenario(t *testing.T, c *gin.Context, info *relaycommon.RelayInfo, scenario string) {
 	t.Helper()
-	expr := `c == 13 ? float("invalid-price") : p * 2 + c * 2`
+	expr := `c == 13 ? 1 / (c - 13) : p * 2 + c * 2`
 	info.PriceData.Quote = billingTestQuote(t, expr)
 	info.PriceData.QuotaToPreConsume = 5
 	if scenario == "pricing_free" {
@@ -157,9 +157,9 @@ func runBillingPricingGuardScenario(t *testing.T, c *gin.Context, info *relaycom
 			require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 1, TotalTokens: 11}))
 			require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15}))
 			require.ErrorIs(t, model.MarkBillingRecoveryRefundPending(info.RequestId, nil), model.ErrBillingRecoveryStateConflict)
-			PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 10, TotalTokens: 20}, "")
+			PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 10, TotalTokens: 20, Observation: &dto.UsageObservation{Source: "provider", Complete: true, Terminal: "completed"}}, "")
 		} else {
-			PostTextConsumeQuota(c, info, &dto.Usage{PromptTokens: 10, CompletionTokens: 10, TotalTokens: 20}, nil)
+			PostTextConsumeQuota(c, info, &dto.Usage{PromptTokens: 10, CompletionTokens: 10, TotalTokens: 20, UsageSource: "provider"}, nil)
 		}
 		if remove != nil {
 			require.Error(t, info.BillingSettlementError)

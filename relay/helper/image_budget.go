@@ -61,7 +61,7 @@ func FinalImagePriceMeta(c *gin.Context, info *relaycommon.RelayInfo, body io.Re
 				return nil, err
 			}
 			name := part.FormName()
-			if part.FileName() != "" || (name != "n" && name != "size" && name != "quality") {
+			if part.FileName() != "" || (name != "n" && name != "size" && name != "quality" && name != "service_tier") {
 				continue
 			}
 			if _, exists := payload[name]; exists {
@@ -130,7 +130,15 @@ func FinalImagePriceMeta(c *gin.Context, info *relaycommon.RelayInfo, body io.Re
 		}
 	}
 	request.Size = strings.ReplaceAll(request.Size, "*", "x")
-	pricingPayload, err := common.Marshal(map[string]interface{}{"quantity": count, "quality": request.Quality, "resolution": request.Size})
+	// Preserve the final wire pricing conditions while normalizing provider-
+	// specific quantity fields. Dropping service_tier here would underquote.
+	for name, value := range map[string]any{"quantity": count, "quality": request.Quality, "resolution": request.Size} {
+		payload[name], err = common.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+	}
+	pricingPayload, err := common.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +152,7 @@ func FinalImagePriceMeta(c *gin.Context, info *relaycommon.RelayInfo, body io.Re
 			return nil, fmt.Errorf("invalid image prompt_extend")
 		}
 		if extend {
-			meta.BillingQuantities["prompt_extend"] = 2
+			meta.BillingQuantities["prompt_extend"] = "2"
 		}
 	}
 	return meta, nil

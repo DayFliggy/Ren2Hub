@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func GetAutomaticBillingPricing(c *gin.Context) {
@@ -19,6 +21,43 @@ func GetAutomaticBillingPricing(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": status})
+}
+
+func ListAutomaticBillingPricingSnapshots(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	rows, err := model.ListBillingPricingSnapshots(c.Request.Context(), c.Query("source"), limit)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": rows})
+}
+
+func GetAutomaticBillingPricingSnapshot(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid pricing snapshot id"})
+		return
+	}
+	snapshot, err := model.GetBillingPricingSnapshot(c.Request.Context(), id)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	if c.Query("download") == "1" {
+		c.Header("Content-Disposition", "attachment; filename=pricing-"+snapshot.Source+"-"+snapshot.Hash+".json")
+		c.Header("X-Pricing-SHA256", snapshot.Hash)
+		c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(snapshot.Document))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": struct {
+		*model.BillingPricingSnapshot
+		Document string `json:"document"`
+	}{snapshot, string(snapshot.Document)}})
 }
 
 func SaveAutomaticBillingPricing(c *gin.Context) {

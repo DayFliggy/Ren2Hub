@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -76,14 +78,14 @@ type UserRouteEntry struct {
 }
 
 type RoutePolicy struct {
-	ID                      int     `json:"id"`
-	GroupID                 int     `json:"group_id" gorm:"uniqueIndex;not null"`
-	LoadBalance             bool    `json:"load_balance"`
-	MaxRatio                float64 `json:"max_ratio" gorm:"not null;default:1"`
-	RetryMode               string  `json:"retry_mode" gorm:"type:varchar(32);not null"`
-	MaxSameResourceAttempts int     `json:"max_same_resource_attempts" gorm:"not null;default:0"`
-	MaxFailoverAttempts     int     `json:"max_failover_attempts" gorm:"not null;default:1"`
-	Sticky                  bool    `json:"sticky"`
+	ID                      int    `json:"id"`
+	GroupID                 int    `json:"group_id" gorm:"uniqueIndex;not null"`
+	LoadBalance             bool   `json:"load_balance"`
+	MaxRatio                string `json:"max_ratio" gorm:"type:varchar(64);not null;default:1"`
+	RetryMode               string `json:"retry_mode" gorm:"type:varchar(32);not null"`
+	MaxSameResourceAttempts int    `json:"max_same_resource_attempts" gorm:"not null;default:0"`
+	MaxFailoverAttempts     int    `json:"max_failover_attempts" gorm:"not null;default:1"`
+	Sticky                  bool   `json:"sticky"`
 }
 
 type ChannelModelCapability struct {
@@ -212,8 +214,10 @@ func (e *UserRouteEntry) Validate() error {
 }
 
 func (p *RoutePolicy) Normalize() {
-	if p.MaxRatio == 0 {
-		p.MaxRatio = 1
+	if p.MaxRatio == "" {
+		p.MaxRatio = "1"
+	} else if ratio, err := ParseRouteMaxRatio(p.MaxRatio); err == nil {
+		p.MaxRatio = ratio.String()
 	}
 	if p.RetryMode == "" {
 		p.RetryMode = RoutePolicyRetryNextChannel
@@ -221,7 +225,7 @@ func (p *RoutePolicy) Normalize() {
 }
 
 func (p *RoutePolicy) Validate() error {
-	if p.GroupID <= 0 || p.MaxRatio <= 0 || p.MaxRatio > RouteMaxPolicyRatio {
+	if _, err := ParseRouteMaxRatio(p.MaxRatio); p.GroupID <= 0 || err != nil {
 		return errors.New("invalid route policy group or ratio")
 	}
 	switch p.RetryMode {
@@ -234,6 +238,17 @@ func (p *RoutePolicy) Validate() error {
 		return errors.New("route policy retry attempts exceed limits")
 	}
 	return nil
+}
+
+func ParseRouteMaxRatio(value string) (decimal.Decimal, error) {
+	if len(value) == 0 || len(value) > 64 {
+		return decimal.Zero, errors.New("invalid route price ratio")
+	}
+	ratio, err := decimal.NewFromString(value)
+	if err != nil || !ratio.IsPositive() || ratio.GreaterThan(decimal.NewFromInt(RouteMaxPolicyRatio)) || ratio.Exponent() < -18 || ratio.Exponent() > 18 {
+		return decimal.Zero, errors.New("route price ratio must be a decimal string greater than 0 and at most 1000, with at most 18 decimal places")
+	}
+	return ratio, nil
 }
 
 func (c *ChannelModelCapability) Normalize(now time.Time) {

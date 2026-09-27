@@ -214,7 +214,7 @@ function seedanceUsageExamples(profile) {
   if (profile.videoInput) specs.push({ label: "720p · 5s (+4s 输入视频)", resolution: "720p", seconds: 9, video_input: "video" });
   if (profile.audio) specs.push({ label: "720p · 5s · 无声", resolution: "720p", seconds: 5, generate_audio: false });
   return specs.map((spec) => {
-    const facts = { tokens: Math.round(estimateTokens(spec.seconds, spec.resolution)), resolution: spec.resolution };
+    const facts = { tokens: estimateTokens(spec.seconds, spec.resolution), resolution: spec.resolution };
     if (profile.videoInput) facts.video_input = spec.video_input || "none";
     if (profile.audio) facts.generate_audio = spec.generate_audio !== false;
     return { label: spec.label, facts: facts };
@@ -385,25 +385,9 @@ function resolutionMaxPixels(resolution) {
 
 function estimateTokens(seconds, resolution) {
   const dims = resolutionMaxPixels(resolution);
-  return (seconds * dims[0] * dims[1] * 24) / 1024;
+  return utils.decimal.divide(utils.decimal.multiply(utils.decimal.multiply(utils.decimal.multiply(seconds, dims[0]), dims[1]), 24), 1024);
 }
 
-function videoInputRatio(model, resolution, content) {
-  const video = hasVideo(content);
-  const res = trimmed(resolution).toLowerCase();
-  if (model === "doubao-seedance-2-5-260628") {
-    if (res === "1080p") return video ? 7.0 / 10.7 : 11.7 / 10.7;
-    return video ? 42 / 70 : 1;
-  }
-  if (model === "doubao-seedance-2-0-260128") {
-    if (res === "1080p") return video ? 31 / 46 : 51 / 46;
-    if (res === "4k") return video ? 16 / 46 : 26 / 46;
-    return video ? 28 / 46 : 1;
-  }
-  if (model === "doubao-seedance-2-0-fast-260128") return video ? 22 / 37 : 1;
-  if (model === "doubao-seedance-2-0-mini-260615") return video ? 14 / 23 : 1;
-  return 1;
-}
 
 // Channel model mapping may send a declared Seedream model to an Ark endpoint
 // ID; the declared name the client sent still describes that endpoint.
@@ -530,30 +514,34 @@ function convertImage(ctx) {
   if (sequential !== undefined && sequential !== "auto" && sequential !== "disabled") throw new Error("sequential_image_generation must be auto or disabled");
   if (sequential !== undefined && !profile.sequential) throw new Error("sequential_image_generation is not supported by this model");
   const options = objectValue(body.sequential_image_generation_options, "sequential_image_generation_options");
-  let maxImages = 15;
-  if (options.max_images !== undefined) {
-    if (!Number.isInteger(options.max_images) || options.max_images < 1 || options.max_images > 15)
-      throw new Error("max_images must be an integer between 1 and 15");
-    maxImages = options.max_images;
-  }
+  if (options.max_images !== undefined && !Number.isInteger(options.max_images))
+    throw new Error("max_images must be an integer between 1 and 15");
   const size = imageSize(body.size, profile, layered);
   if (size.size !== undefined) body.size = size.size;
+  return {
+    body: body,
+    action: images.length ? "image_to_image" : "text_to_image",
+    facts: imageQuantityFacts(body, size.pixels),
+  };
+}
+
+function imageQuantityFacts(body, pixels) {
+  const layered = body.layer_decomposition === true;
+  const images = body.image === undefined ? [] : Array.isArray(body.image) ? body.image : [body.image];
+  const options = objectValue(body.sequential_image_generation_options, "sequential_image_generation_options");
+  const maxImages = options.max_images === undefined ? 15 : Number(utils.decimal.bounded(options.max_images, 1, 15, true));
   // Submit-time estimate; extractUsageOnComplete overlays the per-image tiers
   // from data[].size and usage.input_images. Unknown output sizes (`auto`)
   // reserve the higher tier.
   let imageCount = 1;
   if (layered) imageCount = MAX_IMAGE_OUTPUTS;
-  else if (sequential === "auto") imageCount = Math.max(1, Math.min(maxImages, 15 - images.length)); // reference + generated images ≤ 15
-  const higherTier = size.pixels === null || size.pixels > IMAGE_TIER_MAX_PIXELS;
+  else if (body.sequential_image_generation === "auto") imageCount = Math.max(1, Math.min(maxImages, 15 - images.length)); // reference + generated images ≤ 15
+  const higherTier = pixels === null || pixels > IMAGE_TIER_MAX_PIXELS;
   return {
-    body: body,
-    action: images.length ? "image_to_image" : "text_to_image",
-    facts: {
-      images_up_to_1_5k: higherTier ? 0 : imageCount,
-      images_above_1_5k: higherTier ? imageCount : 0,
-      input_images: images.length,
-      layer_decomposition: layered,
-    },
+    images_up_to_1_5k: higherTier ? 0 : imageCount,
+    images_above_1_5k: higherTier ? imageCount : 0,
+    input_images: images.length,
+    layer_decomposition: layered,
   };
 }
 
@@ -793,26 +781,17 @@ export function parseSubmitResponse(ctx, resp) {
 
 export function extractUsage(ctx) {
   if (imageTask(ctx)) {
-    const facts = convertImage(ctx).facts;
-    // Legacy per-call pricing multiplies the price by every ratio returned
-    // here, so the reservation ratio is the total requested output count
-    // alone; task expressions read the tiered facts and the reference count.
-    if (ctx.usagePurpose === "billing_ratios") return { image_count: facts.images_up_to_1_5k + facts.images_above_1_5k };
-    return facts;
+    const req = ctx.requestBody || {};
+    const size = imageSize(req.size, imageProfile(ctx), req.layer_decomposition === true);
+    return imageQuantityFacts(req, size.pixels);
   }
   const req = ctx.requestBody || {};
   const metadata = req.metadata || {};
-  if (ctx.usagePurpose === "billing_ratios") {
-    const ratio = videoInputRatio(ctx.upstreamModel || ctx.model, metadata.resolution, metadata.content);
-    return ratio === 1 ? null : { video_input_ratio: ratio };
-  }
-  let seconds = Number(req.seconds || req.duration || metadata.duration || 0);
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    const frames = Number(metadata.frames);
-    seconds = Number.isFinite(frames) && frames > 0 ? Math.floor(frames / 24) : 15;
-  }
-  if (seconds <= 0) seconds = 5;
-  seconds = Math.min(seconds, 3600);
+  const raw = req.seconds !== undefined ? req.seconds : req.duration !== undefined ? req.duration : metadata.duration;
+  let seconds;
+  if (raw !== undefined) seconds = utils.decimal.bounded(raw, 0, 3600, false);
+  else if (metadata.frames !== undefined) seconds = utils.decimal.divide(utils.decimal.bounded(metadata.frames, 1, 86400, true), 24);
+  else seconds = "15";
   const profile = videoProfile(ctx);
   const resolution = videoResolution(ctx);
   const facts = { tokens: estimateTokens(seconds, resolution), resolution: resolution };
@@ -821,15 +800,6 @@ export function extractUsage(ctx) {
   return facts;
 }
 
-export function extractUsageOnSubmit(ctx, body) {
-  // Only legacy per-call pricing calls this hook, and the host multiplies the
-  // price by every ratio it returns, so a synchronous image result settles on
-  // the delivered output count alone. Task expressions settle the tiered
-  // facts through extractUsageOnComplete instead.
-  if (!imageTask(ctx)) return null;
-  const count = imagePayloads(body || {}).length;
-  return count ? { image_count: count } : {};
-}
 
 export function buildQueryRequest(ctx) {
   return {
@@ -844,11 +814,6 @@ export function parseTaskResult(ctx, body) {
   if (body.status === "processing" || body.status === "running") return { status: "IN_PROGRESS", progress: "50%" };
   if (body.status === "succeeded") {
     const result = { status: "SUCCESS", progress: "100%", url: body.content && body.content.video_url ? body.content.video_url : "" };
-    const usage = body.usage || {};
-    const completionTokens = Number(usage.completion_tokens || 0);
-    const totalTokens = Number(usage.total_tokens || 0);
-    if (Number.isFinite(completionTokens) && completionTokens > 0) result.completionTokens = completionTokens;
-    if (Number.isFinite(totalTokens) && totalTokens > 0) result.totalTokens = totalTokens;
     return result;
   }
   if (body.status === "failed" || body.status === "expired" || body.status === "cancelled") {
@@ -905,9 +870,8 @@ export function extractUsageOnComplete(task, taskResult, body) {
   if (!body || body.status !== "succeeded") return {};
   const facts = {};
   const usage = body.usage || {};
-  let tokens = Number(usage.completion_tokens);
-  if (!Number.isFinite(tokens) || tokens <= 0) tokens = Number(usage.total_tokens);
-  if (Number.isFinite(tokens) && tokens > 0) facts.tokens = tokens;
+  const tokens = usage.completion_tokens !== undefined ? usage.completion_tokens : usage.total_tokens;
+  if (tokens !== undefined) facts.tokens = utils.decimal.bounded(tokens, 0, 2147483647, true);
   const content = body.content || {};
   const resolution = trimmed(content.resolution || body.resolution).toLowerCase();
   if (videoProfile(task).resolutions.includes(resolution)) facts.resolution = resolution;
@@ -1029,7 +993,7 @@ protocols.openai_video = {
       if (!ctx.body.value || Array.isArray(ctx.body.value)) throw new Error("JSON object required");
       const req = ctx.body.value;
       const seconds = req.seconds === undefined ? req.duration : req.seconds;
-      if (seconds !== undefined && (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0 || Number(seconds) > 3600))
+      if (seconds !== undefined && (!Number.isFinite(Number(utils.decimal.bounded(seconds, 0, 3600, true))) || Number(utils.decimal.bounded(seconds, 0, 3600, true)) <= 0 || Number(utils.decimal.bounded(seconds, 0, 3600, true)) > 3600))
         throw new Error("seconds must be between 1 and 3600");
       return {
         kind: "submit",
@@ -1059,10 +1023,10 @@ protocols.openai_video = {
       req.metadata = parsed;
     }
     if ((ctx.body.files || []).length) throw new Error("Doubao requires image and video references to be URLs inside metadata.content");
-    if (req.seconds !== undefined) req.seconds = Number(req.seconds);
-    else if (req.duration !== undefined) req.seconds = Number(req.duration);
+    if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
+    else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
-    if (seconds !== undefined && (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0 || Number(seconds) > 3600))
+    if (seconds !== undefined && (!Number.isFinite(Number(utils.decimal.bounded(seconds, 0, 3600, true))) || Number(utils.decimal.bounded(seconds, 0, 3600, true)) <= 0 || Number(utils.decimal.bounded(seconds, 0, 3600, true)) > 3600))
       throw new Error("seconds must be between 1 and 3600");
     return {
       kind: "submit",

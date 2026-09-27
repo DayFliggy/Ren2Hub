@@ -9,6 +9,7 @@ import {
   type PriceMode,
   type PriceScopeKind,
   type PriceVersion,
+  type PriceProvenance,
   type UnitPrice,
   type UsageSchema,
   type PricePreview,
@@ -54,7 +55,31 @@ const availablePrices = ref<PriceVersion[]>([])
 const scopeKind = ref<PriceScopeKind>('global_model')
 const channelId = ref(0)
 const flatFee = ref('')
-const effectiveFrom = ref('')
+const provenanceKind = ref<'evidence' | 'retail'>('retail')
+const retailReason = ref('')
+const evidenceFields = ref('[]')
+const meteringMethod = ref('')
+const reservationQuantity = ref('')
+const meteringOptions: Record<string, NonNullable<PriceVersion['metering']>> = {
+  unicode_codepoints: {
+    request_kind: 'speech',
+    quantity: 'characters',
+    source: 'request_fixed',
+    method: 'unicode_codepoints',
+  },
+  provider_usage: {
+    request_kind: 'speech',
+    quantity: 'characters',
+    source: 'completion_fact',
+    method: 'provider_usage',
+  },
+  provider_duration: {
+    request_kind: 'transcription',
+    quantity: 'seconds',
+    source: 'completion_fact',
+    method: 'provider_duration',
+  },
+}
 const effectiveTo = ref('')
 const structuredPrices = ref(false)
 const pricesJson = ref('[]')
@@ -171,7 +196,11 @@ const previewEpoch = ref(0)
 const quantities = computed(() =>
   usageSchema.value
     ? [...new Set(['calls', ...Object.keys(usageSchema.value.fields)])]
-    : [...PRICE_QUANTITIES]
+    : PRICE_QUANTITIES.filter(
+        (quantity) =>
+          quantity !== 'characters' ||
+          meteringOptions[meteringMethod.value]?.quantity === 'characters'
+      )
 )
 const units = computed(() =>
   usageSchema.value
@@ -206,7 +235,11 @@ const snapshot = () =>
     scopeKind.value,
     channelId.value,
     flatFee.value,
-    effectiveFrom.value,
+    provenanceKind.value,
+    retailReason.value,
+    evidenceFields.value,
+    meteringMethod.value,
+    reservationQuantity.value,
     effectiveTo.value,
     structuredPrices.value ? pricesJson.value : null,
   ])
@@ -308,7 +341,15 @@ function applyDraft(price: PriceVersion) {
   scopeKind.value = price.scope_kind ?? 'global_model'
   channelId.value = price.channel_id ?? 0
   flatFee.value = price.flat_fee ?? ''
-  effectiveFrom.value = price.effective_from ?? ''
+  provenanceKind.value =
+    price.provenance?.kind === 'evidence' ? 'evidence' : 'retail'
+  retailReason.value =
+    price.provenance?.kind === 'retail'
+      ? (price.provenance.retail_reason ?? '')
+      : ''
+  evidenceFields.value = JSON.stringify(price.provenance?.fields ?? [], null, 2)
+  meteringMethod.value = price.metering?.method ?? ''
+  reservationQuantity.value = price.metering?.reservation_quantity ?? ''
   effectiveTo.value = price.effective_to ?? ''
   prices.value = structuredClone(toRaw(price.prices))
   pricesJson.value = JSON.stringify(price.prices, null, 2)
@@ -483,6 +524,25 @@ function draft(name: string): PriceVersion {
   return {
     id: 0,
     model: name,
+    ...(meteringMethod.value
+      ? {
+          metering: {
+            ...meteringOptions[meteringMethod.value]!,
+            ...(meteringMethod.value !== 'unicode_codepoints'
+              ? { reservation_quantity: reservationQuantity.value }
+              : {}),
+          },
+        }
+      : {}),
+    provenance:
+      provenanceKind.value === 'retail'
+        ? { kind: 'retail', retail_reason: retailReason.value.trim() }
+        : {
+            kind: 'evidence',
+            fields: JSON.parse(
+              evidenceFields.value
+            ) as PriceProvenance['fields'],
+          },
     scope_kind: scopeKind.value,
     channel_id: scopeKind.value === 'channel_model' ? channelId.value : 0,
     mode: mode.value,
@@ -490,9 +550,7 @@ function draft(name: string): PriceVersion {
     ...(mode.value !== 'free' && flatFee.value.trim()
       ? { flat_fee: flatFee.value.trim() }
       : {}),
-    ...(effectiveFrom.value.trim()
-      ? { effective_from: effectiveFrom.value.trim() }
-      : {}),
+
     ...(effectiveTo.value.trim()
       ? { effective_to: effectiveTo.value.trim() }
       : {}),
@@ -500,8 +558,8 @@ function draft(name: string): PriceVersion {
       mode.value === 'expression' ? expression.value.trim() : undefined,
     created_at: 0,
     hash: '',
-    contract_version: 2,
-    calculation_version: 'billing-v2',
+    contract_version: 3,
+    calculation_version: 'billing-v3',
     result_unit:
       mode.value === 'expression' && !expression.value.trim().startsWith('v2:')
         ? 'micro_usd'
@@ -520,6 +578,26 @@ async function validate(name = props.modelName) {
   }
   if (!name.trim()) throw new Error(t('billing.invalidPrice'))
   if (!dirty.value && name === originalName.value) return
+  const provenance = draft(name).provenance!
+  if (
+    provenance.kind === 'retail'
+      ? !provenance.retail_reason
+      : !provenance.fields?.length ||
+        provenance.fields.some((field) =>
+          [
+            'target',
+            'source_path',
+            'raw_value',
+            'source_unit',
+            'conversion',
+          ].some(
+            (key) =>
+              typeof field[key as keyof typeof field] !== 'string' ||
+              !field[key as keyof typeof field].trim()
+          )
+        )
+  )
+    throw new Error(t('billing.priceEvidenceRequired'))
   if (schemaLoading.value || schemaError.value || !currentSchema.value)
     throw new Error(schemaError.value || t('billing.schemaUnavailable'))
   if (currentSchema.value.plugins.length > 1 && !selectedPlugin.value)
@@ -778,7 +856,7 @@ defineExpose({ validate, save })
           initial &&
           scopeKind === 'global_model' &&
           props.modelName === originalName &&
-          (origin?.origin === 'manual' || origin?.origin === 'legacy_seed')
+          origin?.origin === 'manual'
         "
         variant="secondary"
         :disabled="loading || !loaded"
@@ -850,14 +928,9 @@ defineExpose({ validate, save })
         </label>
       </div>
       <div class="grid gap-3 sm:grid-cols-2">
-        <label class="text-sm"
-          >{{ t('billing.effectiveFrom')
-          }}<input
-            v-model="effectiveFrom"
-            data-price-effective-from
-            placeholder="2026-01-01T00:00:00Z"
-            class="mt-2 w-full rounded border p-2 bg-[var(--surface-muted)] focus-ring"
-        /></label>
+        <p class="text-sm text-[var(--text-secondary)]" data-price-immediate>
+          {{ t('billing.immediatePublication') }}
+        </p>
         <label class="text-sm"
           >{{ t('billing.effectiveTo')
           }}<input
@@ -867,6 +940,80 @@ defineExpose({ validate, save })
             class="mt-2 w-full rounded border p-2 bg-[var(--surface-muted)] focus-ring"
         /></label>
       </div>
+      <section
+        class="space-y-3 rounded border border-[var(--border-subtle)] p-3"
+        data-price-evidence
+      >
+        <label class="block text-sm"
+          >{{ t('billing.metering')
+          }}<select
+            v-model="meteringMethod"
+            data-price-metering
+            class="mt-2 w-full rounded border bg-[var(--surface-muted)] p-2 focus-ring"
+          >
+            <option value="">{{ t('billing.meteringMethods.none') }}</option>
+            <option
+              v-for="(_, method) in meteringOptions"
+              :key="method"
+              :value="method"
+            >
+              {{ t(`billing.meteringMethods.${method}`) }}
+            </option>
+          </select></label
+        >
+        <label
+          v-if="meteringMethod && meteringMethod !== 'unicode_codepoints'"
+          class="block text-sm"
+          >{{ t('billing.reservationQuantity')
+          }}<input
+            v-model="reservationQuantity"
+            data-price-reservation-quantity
+            inputmode="decimal"
+            class="mt-2 w-full rounded border bg-[var(--surface-muted)] p-2 font-mono focus-ring"
+        /></label>
+        <label class="block text-sm"
+          >{{ t('billing.priceBasis')
+          }}<select
+            v-model="provenanceKind"
+            data-price-provenance
+            class="mt-2 w-full rounded border bg-[var(--surface-muted)] p-2 focus-ring"
+          >
+            <option value="retail">{{ t('billing.retailPolicy') }}</option>
+            <option value="evidence">
+              {{ t('billing.verifiedEvidence') }}
+            </option>
+          </select></label
+        >
+        <label v-if="provenanceKind === 'retail'" class="block text-sm"
+          >{{ t('billing.retailReason')
+          }}<textarea
+            v-model="retailReason"
+            data-price-retail-reason
+            rows="3"
+            class="mt-2 w-full rounded border bg-[var(--surface-muted)] p-2 focus-ring"
+          />
+        </label>
+        <label v-else class="block text-sm"
+          >{{ t('billing.sourceFields')
+          }}<textarea
+            v-model="evidenceFields"
+            data-price-evidence-fields
+            rows="8"
+            spellcheck="false"
+            class="mt-2 w-full rounded border bg-[var(--surface-muted)] p-2 font-mono text-xs focus-ring"
+          /><span class="mt-1 block text-xs text-[var(--text-tertiary)]">{{
+            t('billing.sourceFieldsHint')
+          }}</span></label
+        >
+        <details v-if="sourceDraft?.provenance">
+          <summary class="cursor-pointer text-sm focus-ring">
+            {{ t('billing.originalPriceEvidence') }}
+          </summary>
+          <pre
+            class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs"
+            >{{ JSON.stringify(sourceDraft.provenance, null, 2) }}</pre>
+        </details>
+      </section>
       <template v-if="mode !== 'free'">
         <label class="block text-sm"
           >{{ t('billing.flatFee')

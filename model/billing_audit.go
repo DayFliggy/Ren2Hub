@@ -171,10 +171,11 @@ func AuditBillingEvidence(recovery BillingRecovery, attempts []BillingAttempt, e
 	savedHash, savedErr := billing.Hash(saved)
 	replayedHash, replayedErr := billing.Hash(replayed)
 	if savedErr != nil || replayedErr != nil || savedHash != replayedHash {
+		billing.RecordReplayMismatch()
 		audit.Status, audit.Reason = BillingAuditMismatch, "saved_charge_differs_from_replay"
 		return audit
 	}
-	if !usage.Complete || usage.Estimated || BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) || BillingRecoveryUsageCollecting(recovery.ConsumptionState) {
+	if !usage.ReadyForSettlement() || BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) || BillingRecoveryUsageCollecting(recovery.ConsumptionState) {
 		audit.Reason = "usage_unconfirmed"
 		return audit
 	}
@@ -182,6 +183,7 @@ func AuditBillingEvidence(recovery BillingRecovery, attempts []BillingAttempt, e
 		return audit
 	}
 	if recovery.Status != BillingRecoveryStatusSettled || *audit.ChargeDifferenceQuota != 0 {
+		billing.RecordReplayMismatch()
 		audit.Status, audit.Reason = BillingAuditMismatch, "settlement_differs_from_replay"
 		return audit
 	}
@@ -199,16 +201,7 @@ func validateBillingAuditQuote(quote billing.Quote) error {
 	if err != nil || hash != quote.PriceVersion.Hash {
 		return fmt.Errorf("price version hash mismatch")
 	}
-	if err := billing.ValidateFrozenPriceVersion(quote.PriceVersion); err != nil {
-		return err
-	}
-	quoteHash := quote.Hash
-	quote.Hash = ""
-	hash, err = billing.Hash(quote)
-	if err != nil || hash != quoteHash {
-		return fmt.Errorf("quote hash mismatch")
-	}
-	return nil
+	return billing.ValidateQuote(&quote)
 }
 
 // Cost evidence is independent from selling price. Profit stays unknown until

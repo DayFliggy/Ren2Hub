@@ -8,7 +8,6 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,14 +16,13 @@ func TestFailedExpressionRetainsReservationForReconciliation(t *testing.T) {
 	for _, path := range []string{"text", "audio", "realtime_reserve", "realtime_final"} {
 		t.Run(path, func(t *testing.T) {
 			c, info := reservedRealtimeBillingSession(t)
-			expr := `c == 13 ? float("invalid-price") : p * 2 + c * 10`
-			require.NoError(t, billing_setting.SmokeTestExpr(expr))
+			expr := `c == 13 ? 1 / (c - 13) : p * 2 + c * 10`
 			info.PriceData.Quote = billingTestQuote(t, expr)
 			require.Nil(t, PrepareBillingForSelectedModel(c, info))
-			info.BillingRequestInput = &billingexpr.RequestInput{Headers: map[string]string{"Authorization": "private-fixture"}, Body: []byte(`{"private":"private-fixture"}`)}
+			info.BillingRequestInput = &billingexpr.RequestInput{Attributes: map[string]interface{}{"quality": "private-fixture"}}
 			usage := &dto.Usage{PromptTokens: 10, CompletionTokens: 13, TotalTokens: 23}
 			info.MarkValidOutput()
-			realtime := &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 13, TotalTokens: 23}
+			realtime := &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 13, TotalTokens: 23, Observation: confirmedRealtimeObservation()}
 			for i := 0; i < 2; i++ {
 				switch path {
 				case "text":
@@ -47,10 +45,10 @@ func TestFailedExpressionRetainsReservationForReconciliation(t *testing.T) {
 			var record model.BillingRecovery
 			require.NoError(t, model.DB.Where("request_id = ?", info.RequestId).First(&record).Error)
 			assert.Contains(t, record.UsageSnapshot, `"output_tokens":13`)
-			assert.Contains(t, record.QuoteSnapshot, "invalid-price")
+			assert.Contains(t, record.QuoteSnapshot, "c - 13")
 
 			assert.NotContains(t, record.ConsumptionSnapshot, "private-fixture")
-			assert.NotContains(t, record.LastError, "invalid-price")
+			assert.NotContains(t, record.LastError, "c - 13")
 			var user model.User
 			var token model.Token
 			require.NoError(t, model.DB.First(&user, info.UserId).Error)

@@ -110,7 +110,7 @@ func TestBillingProcessExitWorker(t *testing.T) {
 	if stage == "dispatch" {
 		os.Exit(73)
 	}
-	usage := &billing.Usage{InputTokens: 30, ContextTokens: 30, Source: "provider", Complete: true}
+	usage := &billing.Usage{InputTokens: 30, ContextTokens: 30, Source: "provider", Complete: true, Terminal: "completed"}
 	charge, err := billing.Calculate(quote, *usage)
 	require.NoError(t, err)
 	require.NoError(t, model.PrepareBillingRecoveryConsumption("crash", model.BillingConsumption{

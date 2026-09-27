@@ -44,6 +44,7 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 	}
 	if scenario == "dispatch_per_call_write_failure" {
 		info.PriceData.UsePrice = true
+		info.PriceData.Quote = billingTestCallQuote(t)
 		info.PriceData.QuotaToPreConsume = quota
 	}
 	if scenario == "dispatch_zero_precharge_write_failure" {
@@ -52,6 +53,7 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 		info.Billing, info.FinalPreConsumedQuota = nil, 0
 		info.RequestId += "-free"
 		info.PriceData.FreeModel = true
+		info.PriceData.Quote = billingTestQuote(t, "0")
 		info.PriceData.QuotaToPreConsume = 0
 		quota = 0
 	}
@@ -107,8 +109,8 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 		assert.ErrorIs(t, model.MarkBillingRecoveryRefundPending(info.RequestId, nil), model.ErrBillingRecoveryStateConflict)
 	}
 	// This suite injects outbox persistence faults after final usage is known.
-	// Discard the prior cumulative estimate as a pair before its log-only write.
-	info.PriceData.Usage, info.PriceData.Charge = nil, nil
+	// Replace the live estimate with complete, independently replayable evidence.
+	billingTestFinalUsage(t, info, 10, 10)
 	remove, writes := failBillingStateWrite(t, "status", model.BillingRecoveryStatusSettlementPending)
 	params := model.RecordConsumeLogParams{TokenId: info.TokenId, ChannelId: info.ChannelId, ModelName: info.BillingModelName(), PromptTokens: 10, CompletionTokens: 10, Quota: common.Quota(quota)}
 	settleBillingConsumption(c, info, params, true)

@@ -26,7 +26,7 @@ func automaticPricingTestDB(t *testing.T) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.BillingPriceVersion{}, &model.BillingActivePrice{}, &model.BillingPricingSource{}, &model.BillingPricingConfig{}, &model.Ability{}, &model.Channel{}))
+	require.NoError(t, db.AutoMigrate(&model.BillingPriceVersion{}, &model.BillingActivePrice{}, &model.BillingPricingSource{}, &model.BillingPricingSnapshot{}, &model.BillingPricingConfig{}, &model.Ability{}, &model.Channel{}))
 	previous := model.DB
 	mainDB, logDB := common.MainDatabaseType(), common.LogDatabaseType()
 	model.DB = db
@@ -44,13 +44,15 @@ func automaticPricingTestDB(t *testing.T) {
 func TestAutomaticPricingSnapshotStatesAndFailedInitialRefresh(t *testing.T) {
 	automaticPricingTestDB(t)
 	ctx := context.Background()
-	require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: "sub2api", Hash: strings.Repeat("a", 64)}))
-	price, err := model.PublishAutomaticBillingPrice(ctx, billing.PriceVersion{
-		Model: "existing", Mode: billing.ModeUnitPrice,
-		Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}},
-	}, "sub2api", "existing", strings.Repeat("a", 64))
+	initialDocument := `{"existing":{"input_cost_per_token":0.000002,"output_cost_per_token":0}}`
+	initialSource := model.BillingPricingSource{Source: "sub2api", Document: model.LongText(initialDocument), Hash: pricingDocumentHash([]byte(initialDocument)), ParserVersion: autopricing.ParserVersion}
+	require.NoError(t, model.EnsureBillingPricingSource(ctx, &initialSource))
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(initialDocument))
+	require.NoError(t, err)
+	price, err := model.PublishAutomaticBillingPrice(ctx, entries["existing"].Price, "sub2api", "existing", initialSource.Hash)
 	require.NoError(t, err)
 	require.True(t, price)
+	require.NoError(t, model.DB.Model(&model.BillingPricingSource{}).Where("source = ?", "sub2api").Updates(map[string]interface{}{"snapshot_id": 0, "hash": ""}).Error)
 	original, err := model.GetActiveBillingPrice(ctx, "existing")
 	require.NoError(t, err)
 	body := "{}"
@@ -90,7 +92,7 @@ func TestAutomaticPricingSnapshotStatesAndFailedInitialRefresh(t *testing.T) {
 
 func TestAutomaticPricingCanceledDownloadRetainsSnapshot(t *testing.T) {
 	data := `{"existing":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008}}`
-	previous := model.BillingPricingSource{Source: "sub2api", Document: model.LongText(data), Hash: pricingDocumentHash([]byte(data)), ModelCount: 1}
+	previous := model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "sub2api", Document: model.LongText(data), Hash: pricingDocumentHash([]byte(data)), ModelCount: 1}
 	started := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		close(started)
@@ -119,7 +121,7 @@ func TestAutomaticPricingCanceledDownloadRetainsSnapshot(t *testing.T) {
 
 func TestAutomaticPricingHTTPTimeoutRetainsSnapshot(t *testing.T) {
 	data := `{"existing":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008}}`
-	previous := model.BillingPricingSource{Source: "sub2api", Document: model.LongText(data), Hash: pricingDocumentHash([]byte(data)), ModelCount: 1}
+	previous := model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "sub2api", Document: model.LongText(data), Hash: pricingDocumentHash([]byte(data)), ModelCount: 1}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	}))
@@ -144,7 +146,7 @@ func TestAutomaticPricingStatusDoesNotExposeRetiredSources(t *testing.T) {
 	automaticPricingTestDB(t)
 	ctx := context.Background()
 	require.NoError(t, model.SaveBillingPricingConfig(ctx, &model.BillingPricingConfig{Enabled: false, CheckIntervalMinutes: 75}))
-	require.NoError(t, model.DB.Create(&model.BillingPricingSource{Source: "openrouter", LastError: "historical failure"}).Error)
+	require.NoError(t, model.DB.Create(&model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "openrouter", LastError: "historical failure"}).Error)
 	require.NoError(t, InitializeAutomaticPricing(ctx))
 	status, err := GetAutomaticPricingStatus(ctx)
 	require.NoError(t, err)
@@ -238,7 +240,7 @@ func TestAutomaticPricingSyncPersistsChangesAndPreservesManual(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, document) }))
 	defer server.Close()
 	specs := []billingPricingSourceSpec{{Source: autopricing.SourceSub2API, URL: server.URL}}
-	manual, err := model.PublishBillingPrice(ctx, billing.PriceVersion{Model: "manual", Mode: billing.ModeFree}, 0, 0)
+	manual, err := model.PublishBillingPrice(ctx, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "manual", Mode: billing.ModeFree}, 0, 0)
 	require.NoError(t, err)
 	first, err := syncAutomaticPricing(ctx, server.Client(), specs)
 	require.NoError(t, err)
@@ -285,7 +287,7 @@ func TestAutomaticPricingMergeUsesCompleteFallbackAndRejectsCorruption(t *testin
 		{"axonhub", `{"providers":{"vendor":{"models":[{"id":"shared","cost":{"input":10,"output":20}},{"id":"unsafe","cost":{"input":1,"output":2}},{"id":"second","cost":{"input":1,"output":2}}]}}}`},
 	}
 	for _, source := range sources {
-		err := model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: source.id, Document: model.LongText(source.data), Hash: pricingDocumentHash([]byte(source.data))})
+		err := model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: source.id, Document: model.LongText(source.data), Hash: pricingDocumentHash([]byte(source.data))})
 		require.NoError(t, err)
 	}
 	catalog, err := loadAutomaticPriceCatalog(ctx)
@@ -315,7 +317,7 @@ func TestAutomaticPricingInvalidatesUnavailablePricesWithoutChangingFrozenQuotes
 	defer server.Close()
 	sources := []billingPricingSourceSpec{{Source: autopricing.SourceSub2API, URL: server.URL}}
 	require.NoError(t, model.DB.Create(&model.Ability{Model: "models/unsafe", Group: "default", ChannelId: 1, Enabled: true}).Error)
-	manual, err := model.PublishBillingPrice(ctx, billing.PriceVersion{Model: "manual-only", Mode: billing.ModeFree}, 0, 7)
+	manual, err := model.PublishBillingPrice(ctx, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "manual-only", Mode: billing.ModeFree}, 0, 7)
 	require.NoError(t, err)
 	initial, err := syncAutomaticPricing(ctx, server.Client(), sources)
 	require.NoError(t, err)
@@ -387,7 +389,7 @@ func TestBundledAutomaticPricingBootsOfflineAndPreservesPersistedSnapshot(t *tes
 	require.NoError(t, err)
 	assert.Empty(t, prices)
 	data := `{"persisted":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`
-	require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{Source: "sub2api", Document: model.LongText(data), Hash: pricingDocumentHash([]byte(data)), ModelCount: 1}))
+	require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "sub2api", Document: model.LongText(data), Hash: pricingDocumentHash([]byte(data)), ModelCount: 1}))
 	require.NoError(t, InitializeAutomaticPricing(ctx))
 	rows, err = model.ListBillingPricingSources(ctx)
 	require.NoError(t, err)
@@ -401,7 +403,7 @@ func TestBundledAutomaticPricingBootsOfflineAndPreservesPersistedSnapshot(t *tes
 func TestBundledAutomaticPricingPublishesUsableVersions(t *testing.T) {
 	automaticPricingTestDB(t)
 	ctx := context.Background()
-	manual, err := model.PublishBillingPrice(ctx, billing.PriceVersion{Model: "claude-sonnet-4-6", Mode: billing.ModeFree}, 0, 3)
+	manual, err := model.PublishBillingPrice(ctx, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "claude-sonnet-4-6", Mode: billing.ModeFree}, 0, 3)
 	require.NoError(t, err)
 	require.NoError(t, InitializeAutomaticPricing(ctx))
 	unchanged, err := model.GetActiveBillingPrice(ctx, manual.Model)
@@ -433,10 +435,10 @@ func TestAutomaticPricingAliasesUseCanonicalIdentityWithoutDateSiblingGuessing(t
 	primary := `{"priced":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008},"only-dated-20260101":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008},"gpt-5.4":{"input_cost_per_token":0.000002,"output_cost_per_token":0.000008},"unsafe":{"input_cost_per_token":-1,"output_cost_per_token":0.000008}}`
 	secondary := `{"providers":{"vendor":{"models":[{"id":"unsafe","cost":{"input":1,"output":2}},{"id":"other","cost":{"input":1,"output":2}}]}}}`
 	for _, spec := range billingPricingSources {
-		require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: string(spec.Source)}))
+		require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: string(spec.Source)}))
 	}
 	for id, data := range map[string]string{"sub2api": primary, "axonhub": secondary} {
-		require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{Source: id, Document: model.LongText(data), Hash: pricingDocumentHash([]byte(data))}))
+		require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: id, Document: model.LongText(data), Hash: pricingDocumentHash([]byte(data))}))
 	}
 	for index, name := range []string{"priced-20260201", "priced-20260301", "models/unsafe", "unsafe-20260201", "only-dated-20260201", "gpt-5.4@effort=high"} {
 		require.NoError(t, model.DB.Create(&model.Ability{Model: name, Group: "default", ChannelId: index + 1, Enabled: true}).Error)
@@ -463,7 +465,7 @@ func TestAutomaticPricingAliasesUseCanonicalIdentityWithoutDateSiblingGuessing(t
 		require.ErrorContains(t, err, "unavailable")
 	}
 	updated := strings.ReplaceAll(primary, "0.000002", "0.000003")
-	require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{Source: "sub2api", Document: model.LongText(updated), Hash: pricingDocumentHash([]byte(updated))}))
+	require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "sub2api", Document: model.LongText(updated), Hash: pricingDocumentHash([]byte(updated))}))
 	_, err = publishAutomaticPricingCatalog(ctx)
 	require.NoError(t, err)
 	for _, name := range []string{"priced-20260201", "priced-20260301"} {
@@ -551,10 +553,10 @@ func TestAutomaticPricingReasoningCandidatesCannotBypassSourceRejection(t *testi
 				price = "0.000003"
 			}
 			primary := fmt.Sprintf(`{"gpt-5.4":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002},%q:{"input_cost_per_token":%s,"output_cost_per_token":0.000002}}`, test.rejected, price)
-			require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: "sub2api", Document: model.LongText(primary), Hash: pricingDocumentHash([]byte(primary))}))
+			require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "sub2api", Document: model.LongText(primary), Hash: pricingDocumentHash([]byte(primary))}))
 			if test.secondary {
 				secondary := `{"vendor":{"models":[{"id":"gpt-5.4","cost":{"input":4,"output":8}}]}}`
-				require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: "axonhub", Document: model.LongText(secondary), Hash: pricingDocumentHash([]byte(secondary))}))
+				require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "axonhub", Document: model.LongText(secondary), Hash: pricingDocumentHash([]byte(secondary))}))
 			}
 			catalog, err := loadAutomaticPriceCatalog(ctx)
 			require.NoError(t, err)
@@ -578,18 +580,18 @@ func TestAutomaticPricingPersistsUnavailableSpecificIdentityUntilSourceRecovers(
 			automaticPricingTestDB(t)
 			ctx := context.Background()
 			for _, spec := range billingPricingSources {
-				require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: string(spec.Source)}))
+				require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: string(spec.Source)}))
 			}
 			valid := `{"gpt-5.4":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002},"gpt-5.4-high":{"input_cost_per_token":0.000003,"output_cost_per_token":0.000006}}`
 			if previouslyPublished {
-				require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{Source: "sub2api", Document: model.LongText(valid), Hash: pricingDocumentHash([]byte(valid))}))
+				require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "sub2api", Document: model.LongText(valid), Hash: pricingDocumentHash([]byte(valid))}))
 				_, err := publishAutomaticPricingCatalog(ctx)
 				require.NoError(t, err)
 				_, err = model.GetActiveBillingPrice(ctx, "gpt-5.4-high")
 				require.NoError(t, err)
 			}
 			invalid := strings.Replace(valid, `"input_cost_per_token":0.000003`, `"input_cost_per_token":-1`, 1)
-			require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{Source: "sub2api", Document: model.LongText(invalid), Hash: pricingDocumentHash([]byte(invalid))}))
+			require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "sub2api", Document: model.LongText(invalid), Hash: pricingDocumentHash([]byte(invalid))}))
 			_, err := publishAutomaticPricingCatalog(ctx)
 			require.NoError(t, err)
 			_, err = model.GetActiveBillingPrice(ctx, "gpt-5.4-high")
@@ -600,7 +602,7 @@ func TestAutomaticPricingPersistsUnavailableSpecificIdentityUntilSourceRecovers(
 			require.NoError(t, err)
 			assert.Zero(t, repeated.Deactivated)
 			assert.Zero(t, repeated.Published)
-			require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{Source: "sub2api", Document: model.LongText(valid), Hash: pricingDocumentHash([]byte(valid))}))
+			require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "sub2api", Document: model.LongText(valid), Hash: pricingDocumentHash([]byte(valid))}))
 			_, err = publishAutomaticPricingCatalog(ctx)
 			require.NoError(t, err)
 			_, err = model.GetActiveBillingPrice(ctx, "gpt-5.4-high")
@@ -613,20 +615,20 @@ func TestAutomaticPricingCanonicalUnavailableCanRecoverFromLowerSourceBase(t *te
 	automaticPricingTestDB(t)
 	ctx := context.Background()
 	for _, spec := range billingPricingSources {
-		require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: string(spec.Source)}))
+		require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: string(spec.Source)}))
 	}
 	requested := "gpt-5.4@effort:high"
 	canonical := reasoning.BillingModelCandidates(requested)[0]
 	require.Equal(t, "gpt-5.4@effort:high@thinking:on", canonical)
 	require.NoError(t, model.DB.Create(&model.Ability{Model: requested, Group: "default", ChannelId: 1, Enabled: true}).Error)
 	primary := fmt.Sprintf(`{"gpt-5.4":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002},%q:{"input_cost_per_token":-1,"output_cost_per_token":0.000002}}`, canonical)
-	require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{Source: "sub2api", Document: model.LongText(primary), Hash: pricingDocumentHash([]byte(primary))}))
+	require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "sub2api", Document: model.LongText(primary), Hash: pricingDocumentHash([]byte(primary))}))
 	_, err := publishAutomaticPricingCatalog(ctx)
 	require.NoError(t, err)
 	_, err = model.GetActiveBillingPrice(ctx, canonical)
 	require.ErrorIs(t, err, model.ErrAutomaticBillingPriceUnavailable)
 	secondary := `{"vendor":{"models":[{"id":"gpt-5.4","cost":{"input":4,"output":8}}]}}`
-	require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{Source: "axonhub", Document: model.LongText(secondary), Hash: pricingDocumentHash([]byte(secondary))}))
+	require.NoError(t, model.SaveBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "axonhub", Document: model.LongText(secondary), Hash: pricingDocumentHash([]byte(secondary))}))
 	result, err := publishAutomaticPricingCatalog(ctx)
 	require.NoError(t, err)
 	assert.NotContains(t, result.Unconfigured, canonical)
@@ -676,7 +678,7 @@ func TestAutomaticPricingLongSourceErrorPreservesSnapshotAndChecksLaterSources(t
 	ctx := context.Background()
 	previous := `{"vendor":{"models":{"stable":{"cost":{"input":1,"output":2}}}}}`
 	previousHash := pricingDocumentHash([]byte(previous))
-	require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: "axonhub", Document: model.LongText(previous), Hash: previousHash}))
+	require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{ParserVersion: "autopricing-v3", Source: "axonhub", Document: model.LongText(previous), Hash: previousHash}))
 	malformed := `{"` + strings.Repeat("供应商", 8000) + `":{"models":[42]}}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/malformed" {
@@ -733,6 +735,72 @@ func TestAutomaticPricingInitialSourceFailureDoesNotBlockFallback(t *testing.T) 
 	price, err := model.GetActiveBillingPrice(ctx, "fallback")
 	require.NoError(t, err, "a valid fallback source must still publish")
 	assert.Equal(t, billing.PriceScopeGlobal, price.ScopeKind)
+}
+
+func TestAutomaticPricingRequiredDimensionsSelectOneCompleteSource(t *testing.T) {
+	automaticPricingTestDB(t)
+	ctx := context.Background()
+	for _, source := range []struct{ name, document string }{
+		{"sub2api", `{"needs-cache":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`},
+		{"axonhub", `{"vendor":[{"id":"needs-cache","cost":{"input":3,"output":4,"cache_read":0}}]}`},
+	} {
+		require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: source.name, Document: model.LongText(source.document), Hash: pricingDocumentHash([]byte(source.document)), ParserVersion: autopricing.ParserVersion}))
+	}
+	_, err := publishAutomaticPricingCatalog(ctx)
+	require.NoError(t, err)
+	before, err := model.GetActiveBillingPrice(ctx, "needs-cache")
+	require.NoError(t, err)
+	assert.Equal(t, "sub2api", before.Origin)
+	selected, err := ResolveAndPublishAutomaticPrice(ctx, "needs-cache", billing.PricingRequirements{Dimensions: []string{"p", "c", "cr"}})
+	require.NoError(t, err)
+	assert.Equal(t, "axonhub", selected.Origin)
+	assert.Greater(t, selected.ID, before.ID)
+	assert.Positive(t, selected.Provenance.SnapshotID)
+	_, err = ResolveAndPublishAutomaticPrice(ctx, "needs-cache", billing.PricingRequirements{Dimensions: []string{"ai"}})
+	var missing *billing.PricingError
+	require.ErrorAs(t, err, &missing)
+	assert.Equal(t, "missing_price_dimension", missing.Code)
+	manual, err := model.PublishBillingPrice(ctx, billing.PriceVersion{Model: "needs-cache", Mode: billing.ModeFree, Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "operator promotion"}}, selected.ID, 1)
+	require.NoError(t, err)
+	_, err = ResolveAndPublishAutomaticPrice(ctx, "needs-cache", billing.PricingRequirements{Dimensions: []string{"cr"}})
+	require.ErrorContains(t, err, "automatically managed")
+	retained, err := model.GetActiveBillingPrice(ctx, "needs-cache")
+	require.NoError(t, err)
+	assert.Equal(t, manual.ID, retained.ID)
+}
+
+func TestAutomaticPricingFallbackPreservesDeclaredProviderIdentity(t *testing.T) {
+	for _, provider := range []string{"openai", "different-provider"} {
+		t.Run(provider, func(t *testing.T) {
+			automaticPricingTestDB(t)
+			ctx := context.Background()
+			for _, source := range []struct{ name, document string }{
+				{"sub2api", `{"same-name":{"litellm_provider":"openai","input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`},
+				{"axonhub", fmt.Sprintf(`{"%s":[{"id":"same-name","cost":{"input":3,"output":4,"cache_read":0}}]}`, provider)},
+			} {
+				require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: source.name, Document: model.LongText(source.document), Hash: pricingDocumentHash([]byte(source.document)), ParserVersion: autopricing.ParserVersion}))
+			}
+			_, err := publishAutomaticPricingCatalog(ctx)
+			require.NoError(t, err)
+			before, err := model.GetActiveBillingPrice(ctx, "same-name")
+			require.NoError(t, err)
+			assert.Equal(t, "sub2api", before.Origin)
+			assert.Equal(t, "openai", before.Provenance.Provider)
+			selected, err := ResolveAndPublishAutomaticPrice(ctx, "same-name", billing.PricingRequirements{Dimensions: []string{"cr"}})
+			if provider == "openai" {
+				require.NoError(t, err)
+				assert.Equal(t, "axonhub", selected.Origin)
+				assert.Equal(t, "openai", selected.Provenance.Provider)
+			} else {
+				var ambiguous *billing.PricingError
+				require.ErrorAs(t, err, &ambiguous)
+				assert.Equal(t, "ambiguous_price_identity", ambiguous.Code)
+				after, err := model.GetActiveBillingPrice(ctx, "same-name")
+				require.NoError(t, err)
+				assert.Equal(t, before.ID, after.ID)
+			}
+		})
+	}
 }
 
 func TestAutomaticPricingUnconfiguredDiagnosticsFitDurableTaskHistory(t *testing.T) {

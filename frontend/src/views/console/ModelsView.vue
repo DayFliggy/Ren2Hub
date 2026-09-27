@@ -35,6 +35,7 @@ const {
   groups,
   resultCount,
   hasResults,
+  pricingIssues,
   vendorOptions,
   load,
 } = useModelMarket()
@@ -84,6 +85,26 @@ onMounted(load)
     <PageBreadcrumb
       :crumbs="[t('models.breadcrumb.0'), t('models.breadcrumb.1')]"
     />
+
+    <details
+      v-if="pricingIssues.length"
+      class="mb-4 rounded-lg border border-[var(--border-subtle)] p-3 text-sm"
+      data-pricing-issues
+    >
+      <summary class="cursor-pointer focus-ring">
+        {{ t('models.partialPricing', { count: pricingIssues.length }) }}
+      </summary>
+      <ul class="mt-2 space-y-1">
+        <li
+          v-for="(issue, index) in pricingIssues"
+          :key="index"
+          class="break-all"
+        >
+          {{ issue.model_name || t('models.unknownModel') }} ·
+          {{ t(`models.pricingIssues.${issue.reason}`) }}
+        </li>
+      </ul>
+    </details>
 
     <!-- filter toolbar -->
     <ConsoleCard :padded="false">
@@ -283,8 +304,7 @@ onMounted(load)
           </h3>
           <ModelPriceItems
             v-if="detailModel.pricing"
-            :pricing="detailModel.pricing"
-            :versions="detailModel.priceVersions"
+            :offers="detailModel.offers ?? []"
             class="rounded-xl border border-[var(--border-subtle)] p-4"
           />
           <p v-else class="text-sm text-[var(--text-tertiary)]">—</p>

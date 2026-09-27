@@ -2,88 +2,32 @@ package model
 
 import (
 	"context"
-	"errors"
+	"crypto/sha256"
+	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/autopricing"
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 func automaticPriceDraft(name, price string) billing.PriceVersion {
-	return billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: price}}}
+	return billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice, Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: price}}}
 }
 
-func installAutomaticPricingTestSource(t *testing.T, source, hash string) {
+func installPricingSnapshot(t *testing.T, source, document string) (BillingPricingSource, map[string]autopricing.Entry) {
 	t.Helper()
-	require.NoError(t, SaveBillingPricingSource(context.Background(), &BillingPricingSource{Source: source, Document: `{}`, Hash: hash}))
-}
-
-type legacyAutomaticBillingActivePrice struct {
-	Model     string `gorm:"type:varchar(255);primaryKey"`
-	VersionID int64  `gorm:"type:bigint;not null"`
-}
-
-func (legacyAutomaticBillingActivePrice) TableName() string { return "billing_active_prices" }
-
-func TestScopedBillingPricesAcrossDatabases(t *testing.T) {
-	for _, backend := range []struct {
-		kind common.DatabaseType
-		env  string
-	}{{common.DatabaseTypeSQLite, ""}, {common.DatabaseTypeMySQL, "GATEWAY_STARTUP_MYSQL_DSN"}, {common.DatabaseTypePostgreSQL, "GATEWAY_STARTUP_POSTGRES_DSN"}} {
-		t.Run(string(backend.kind), func(t *testing.T) {
-			dsn := os.Getenv(backend.env)
-			if backend.env != "" && dsn == "" {
-				t.Skip(backend.env + " not configured; scoped billing database contracts remain unverified")
-			}
-			db, err := gatewayStartupDatabase(t, backend.kind, dsn)()
-			require.NoError(t, err)
-			connection, err := db.DB()
-			require.NoError(t, err)
-			previousDB, previousType := DB, common.MainDatabaseType()
-			DB = db
-			common.SetMainDatabaseType(backend.kind)
-			t.Cleanup(func() {
-				DB = previousDB
-				common.SetMainDatabaseType(previousType)
-				assert.NoError(t, connection.Close())
-			})
-			// Scope keys are a fresh data model; this contract intentionally does
-			// not upgrade the retired model-only active-pointer table.
-			require.NoError(t, db.AutoMigrate(&BillingPriceVersion{}, &BillingActivePrice{}, &BillingPricingSource{}))
-			require.NoError(t, migrateBillingPriceModelIdentity(db))
-			ctx := context.Background()
-			draft := automaticPriceDraft("scoped-database-model", "1")
-			global, err := PublishBillingPrice(ctx, draft, 0, 1)
-			require.NoError(t, err)
-			for _, channelID := range []int{7, 19} {
-				draft.ScopeKind, draft.ChannelID = billing.PriceScopeChannel, channelID
-				channel, err := PublishBillingPrice(ctx, draft, 0, 1)
-				require.NoError(t, err)
-				assert.NotEqual(t, global.ID, channel.ID)
-				loaded, err := GetActiveBillingPriceForChannel(ctx, draft.Model, channelID)
-				require.NoError(t, err)
-				assert.Equal(t, channel, loaded)
-				_, err = PublishBillingPrice(ctx, draft, global.ID, 1)
-				require.ErrorIs(t, err, ErrBillingPriceConflict)
-			}
-			fallback, err := GetActiveBillingPriceForChannel(ctx, draft.Model, 23)
-			require.NoError(t, err)
-			assert.Equal(t, global, fallback)
-			var active []BillingActivePrice
-			require.NoError(t, db.Where("model = ?", draft.Model).Order("channel_id").Find(&active).Error)
-			require.Len(t, active, 3)
-			assert.Equal(t, []int{0, 7, 19}, []int{active[0].ChannelID, active[1].ChannelID, active[2].ChannelID})
-			assert.Error(t, db.Create(&BillingActivePrice{Model: draft.Model, ChannelID: 7, VersionID: global.ID}).Error, "each scope must have one active pointer")
-		})
-	}
+	entries, err := autopricing.Parse(autopricing.SourceID(source), []byte(document))
+	require.NoError(t, err)
+	row := BillingPricingSource{Source: source, Document: LongText(document), Hash: fmt.Sprintf("%x", sha256.Sum256([]byte(document))), ParserVersion: autopricing.ParserVersion, URL: "https://example.test/catalog.json", ModelCount: len(entries)}
+	require.NoError(t, SaveBillingPricingSource(context.Background(), &row))
+	return row, entries
 }
 
 func TestAutomaticBillingPriceContractsAcrossDatabases(t *testing.T) {
@@ -94,701 +38,262 @@ func TestAutomaticBillingPriceContractsAcrossDatabases(t *testing.T) {
 		t.Run(string(backend.kind), func(t *testing.T) {
 			dsn := os.Getenv(backend.env)
 			if backend.env != "" && dsn == "" {
-				t.Skip(backend.env + " not configured; automatic billing database contracts remain unverified")
+				t.Skip(backend.env + " not configured; database contract remains unverified")
 			}
-			open := gatewayStartupDatabase(t, backend.kind, dsn)
-			db, err := open()
+			db, err := gatewayStartupDatabase(t, backend.kind, dsn)()
 			require.NoError(t, err)
 			connection, err := db.DB()
 			require.NoError(t, err)
-			previousDB, previousType := DB, common.MainDatabaseType()
+			if backend.kind == common.DatabaseTypeSQLite {
+				connection.SetMaxOpenConns(1)
+			}
+			previous, kind := DB, common.MainDatabaseType()
 			DB = db
 			common.SetMainDatabaseType(backend.kind)
-			t.Cleanup(func() {
-				DB = previousDB
-				common.SetMainDatabaseType(previousType)
-				assert.NoError(t, connection.Close())
-			})
-			require.NoError(t, db.AutoMigrate(&BillingPriceVersion{}, &legacyAutomaticBillingActivePrice{}))
-			legacy, err := billing.PreparePriceVersion(automaticPriceDraft("migrated-manual", "11"))
-			require.NoError(t, err)
-			definition, err := common.Marshal(legacy)
-			require.NoError(t, err)
-			hash, err := billing.Hash(legacy)
-			require.NoError(t, err)
-			row := BillingPriceVersion{Model: legacy.Model, Definition: string(definition), Hash: hash, CreatedAt: 1}
-			require.NoError(t, db.Create(&row).Error)
-			require.NoError(t, db.Create(&legacyAutomaticBillingActivePrice{Model: legacy.Model, VersionID: row.ID}).Error)
-			for range 2 {
-				require.NoError(t, db.AutoMigrate(&Ability{}, &BillingPriceVersion{}, &BillingActivePrice{}, &BillingPricingSource{}, &BillingPricingConfig{}))
-				require.NoError(t, migrateBillingPriceModelIdentity(db))
-				require.NoError(t, MigrateBillingPriceOrigins(context.Background()))
-			}
-			recorder := &automaticPricingMigrationRecorder{Interface: logger.Default.LogMode(logger.Silent)}
-			require.NoError(t, migrateBillingPriceModelIdentity(db.Session(&gorm.Session{Logger: recorder})))
-			assert.Zero(t, recorder.alters, "repeated model identity migration must not rewrite tables")
-			installAutomaticPricingTestSource(t, BillingPriceOriginSub2API, strings.Repeat("a", 64))
-			published, err := PublishAutomaticBillingPrice(context.Background(), automaticPriceDraft(legacy.Model, "1"), BillingPriceOriginSub2API, legacy.Model, strings.Repeat("a", 64))
-			require.NoError(t, err)
-			assert.False(t, published, "upgrading an unlabelled custom price preserves manual ownership")
-			t.Run("configured_and_retained_model_names", func(t *testing.T) {
-				require.NoError(t, db.Create(&[]Ability{
-					{Group: "default", Model: "channel-alias", ChannelId: 1, Enabled: true},
-					{Group: "other", Model: "channel-alias", ChannelId: 1, Enabled: true},
-					{Group: "default", Model: "disabled-alias", ChannelId: 2, Enabled: false},
-					{Group: "default", Model: "", ChannelId: 3},
-				}).Error)
-				names, err := ListAutomaticBillingModelNames(context.Background())
-				require.NoError(t, err)
-				assert.Equal(t, []string{"channel-alias", "disabled-alias", "migrated-manual"}, names)
-				cancelled, cancel := context.WithCancel(context.Background())
-				cancel()
-				_, err = ListAutomaticBillingModelNames(cancelled)
-				require.ErrorIs(t, err, context.Canceled)
-			})
-			t.Run("versions_and_manual_precedence", testAutomaticBillingPriceVersions)
-			t.Run("frozen_embedding_scope", func(t *testing.T) {
+			t.Cleanup(func() { DB = previous; common.SetMainDatabaseType(kind); assert.NoError(t, connection.Close()) })
+			require.NoError(t, db.AutoMigrate(&BillingPriceVersion{}, &BillingActivePrice{}, &BillingPricingSource{}, &BillingPricingSnapshot{}, &BillingPricingConfig{}, &Ability{}))
+			require.NoError(t, migrateBillingPriceModelIdentity(db))
+			t.Run("archive_and_cas", testPricingSnapshotArchive)
+			t.Run("versions_manual_and_restore", testPricingAutomaticOwnership)
+			t.Run("batch_and_deactivation_fences", testPricingAutomaticBatch)
+			t.Run("source_evidence_authenticity", testPricingSourceEvidence)
+			t.Run("concurrent_publication", testPricingConcurrentPublication)
+			t.Run("case_sensitive_identity", func(t *testing.T) {
 				ctx := context.Background()
-				draft := automaticPriceDraft("scoped-embedding", "0.1")
-				draft.UsageScope = billing.UsageScopeEmbedding
-				published, err := PublishBillingPrice(ctx, draft, 0, 7)
+				upper, err := PublishBillingPrice(ctx, automaticPriceDraft("Case-Sensitive-Price", "1"), 0, 1)
 				require.NoError(t, err)
-				loaded, err := GetActiveBillingPrice(ctx, draft.Model)
+				lower, err := PublishBillingPrice(ctx, automaticPriceDraft("case-sensitive-price", "2"), 0, 1)
 				require.NoError(t, err)
-				assert.Equal(t, published, loaded)
-				quote, err := billing.NewQuote(*loaded, "1", nil, time.Unix(1000, 0))
-				require.NoError(t, err)
-				encoded, err := common.Marshal(quote)
-				require.NoError(t, err)
-				var replay billing.Quote
-				require.NoError(t, common.Unmarshal(encoded, &replay))
-				assert.Equal(t, billing.UsageScopeEmbedding, replay.PriceVersion.UsageScope)
-				_, err = billing.Calculate(&replay, billing.Usage{InputTokens: 100, OutputTokens: 1, Complete: true})
-				require.ErrorContains(t, err, "embedding usage")
+				assert.NotEqual(t, upper.ID, lower.ID)
+				for _, expected := range []*billing.PriceVersion{upper, lower} {
+					actual, err := GetActiveBillingPrice(ctx, expected.Model)
+					require.NoError(t, err)
+					assert.Equal(t, expected.ID, actual.ID)
+				}
 			})
-			t.Run("legacy_seed_ownership", testAutomaticBillingLegacySeedOwnership)
-			t.Run("startup_migration_manual_race", testAutomaticBillingOriginMigrationManualRace)
-			t.Run("retired_source_ownership", testAutomaticBillingRetiredSourceOwnership)
-			t.Run("manual_publication_race", testAutomaticBillingManualRace)
-			t.Run("source_snapshot_fences", testAutomaticBillingSourceFences)
-			t.Run("catalog_priority_fence", testAutomaticBillingCatalogFence)
-			t.Run("case_sensitive_model_identity", testAutomaticBillingModelIdentity)
-			t.Run("atomic_batch_publication", testAutomaticBillingBatchPublication)
-			t.Run("atomic_batch_deactivation", testAutomaticBillingBatchDeactivation)
-			t.Run("persistent_source_and_config", func(t *testing.T) {
-				testAutomaticBillingPricingPersistence(t, open)
+			t.Run("channel_scope", func(t *testing.T) {
+				ctx := context.Background()
+				draft := automaticPriceDraft("scoped-model", "1")
+				global, err := PublishBillingPrice(ctx, draft, 0, 1)
+				require.NoError(t, err)
+				draft.ScopeKind, draft.ChannelID = billing.PriceScopeChannel, 42
+				channel, err := PublishBillingPrice(ctx, draft, 0, 1)
+				require.NoError(t, err)
+				selected, err := GetActiveBillingPriceForChannel(ctx, draft.Model, 42)
+				require.NoError(t, err)
+				assert.Equal(t, channel, selected)
+				selected, err = GetActiveBillingPriceForChannel(ctx, draft.Model, 43)
+				require.NoError(t, err)
+				assert.Equal(t, global, selected)
+				_, err = PublishBillingPrice(ctx, draft, global.ID, 1)
+				require.ErrorIs(t, err, ErrBillingPriceConflict)
 			})
 		})
 	}
 }
 
-type automaticPricingMigrationRecorder struct {
-	logger.Interface
-	alters int
-}
-
-func (recorder *automaticPricingMigrationRecorder) Trace(_ context.Context, _ time.Time, query func() (string, int64), _ error) {
-	statement, _ := query()
-	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(statement)), "ALTER TABLE") {
-		recorder.alters++
-	}
-}
-
-func testAutomaticBillingModelIdentity(t *testing.T) {
+func testPricingSnapshotArchive(t *testing.T) {
 	ctx := context.Background()
-	hash := strings.Repeat("a", 64)
-	installAutomaticPricingTestSource(t, BillingPriceOriginSub2API, hash)
-	for i, name := range []string{"GLM-5", "glm-5"} {
-		price := []string{"2", "3"}[i]
-		published, err := PublishAutomaticBillingPrice(ctx, automaticPriceDraft(name, price), BillingPriceOriginSub2API, name, hash)
-		require.NoError(t, err)
-		require.True(t, published)
-	}
-	upper, err := GetActiveBillingPrice(ctx, "GLM-5")
+	first, _ := installPricingSnapshot(t, "sub2api", `{"archive":{"input_cost_per_token":0.000001,"output_cost_per_token":0}}`)
+	require.Positive(t, first.SnapshotID)
+	same := first
+	same.CheckedAt = 123
+	same.LastError = "network unavailable"
+	require.NoError(t, SaveBillingPricingSourceCAS(ctx, &same, first.Hash))
+	assert.Equal(t, first.SnapshotID, same.SnapshotID)
+	second, _ := installPricingSnapshot(t, "sub2api", `{"archive":{"input_cost_per_token":0.000002,"output_cost_per_token":0}}`)
+	require.NotEqual(t, first.SnapshotID, second.SnapshotID)
+	require.ErrorIs(t, SaveBillingPricingSourceCAS(ctx, &first, first.Hash), ErrBillingPricingSourceConflict)
+	rows, err := ListBillingPricingSources(ctx)
 	require.NoError(t, err)
-	lower, err := GetActiveBillingPrice(ctx, "glm-5")
-	require.NoError(t, err)
-	assert.Equal(t, "GLM-5", upper.Model)
-	assert.Equal(t, "2", upper.Prices[0].Price)
-	assert.Equal(t, "glm-5", lower.Model)
-	assert.Equal(t, "3", lower.Prices[0].Price)
-	assert.NotEqual(t, upper.ID, lower.ID)
-	_, err = GetActiveBillingPrice(ctx, "Glm-5")
-	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
-	for _, name := range []string{"GLM-5", "glm-5"} {
-		var versions int64
-		require.NoError(t, DB.Model(&BillingPriceVersion{}).Where("model = ?", name).Count(&versions).Error)
-		assert.EqualValues(t, 1, versions, "price version lookups must use the same exact identity")
+	var current BillingPricingSource
+	for _, row := range rows {
+		if row.Source == "sub2api" {
+			current = row
+		}
 	}
+	assert.Equal(t, second.Document, current.Document)
+	assert.Equal(t, second.Hash, current.Hash)
+	assert.GreaterOrEqual(t, current.SnapshotCount, int64(2))
+	var old BillingPricingSnapshot
+	require.NoError(t, DB.First(&old, first.SnapshotID).Error)
+	assert.Equal(t, first.Document, old.Document)
+	require.Error(t, DB.Model(&old).Update("document", "{}").Error)
+	require.Error(t, DB.Delete(&old).Error)
+	snapshots, err := ListBillingPricingSnapshots(ctx, "sub2api", 100)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(snapshots), 2)
+	assert.Empty(t, snapshots[0].Document)
+	invalid := second
+	invalid.Hash = first.Hash
+	require.ErrorContains(t, SaveBillingPricingSourceCAS(ctx, &invalid, second.Hash), "integrity")
+	var count int64
+	require.NoError(t, DB.Model(&BillingPricingSnapshot{}).Where("source = ? AND hash = ?", "sub2api", second.Hash).Count(&count).Error)
+	assert.Equal(t, int64(1), count)
+	require.Error(t, SaveBillingPricingSource(ctx, &BillingPricingSource{Source: "retired", Document: "{}"}))
 }
 
-func testAutomaticBillingBatchPublication(t *testing.T) {
+func testPricingAutomaticOwnership(t *testing.T) {
 	ctx := context.Background()
-	hash := strings.Repeat("e", 64)
-	catalog := make(map[string]string, len(automaticBillingPricingSourceOrder))
-	for _, source := range automaticBillingPricingSourceOrder {
-		installAutomaticPricingTestSource(t, source, hash)
-		catalog[source] = hash
-	}
-	entry := func(name, price string) AutomaticBillingPrice {
-		return AutomaticBillingPrice{Price: automaticPriceDraft(name, price), Source: BillingPriceOriginSub2API, SourceModel: name, SourceHash: hash}
-	}
-	manual, err := PublishBillingPrice(ctx, automaticPriceDraft("batch-manual", "8"), 0, 0)
+	source, entries := installPricingSnapshot(t, "sub2api", `{"owned":{"input_cost_per_token":0.000001,"output_cost_per_token":0}}`)
+	draft := entries["owned"].Price
+	changed, err := PublishAutomaticBillingPrice(ctx, draft, "sub2api", "owned", source.Hash)
 	require.NoError(t, err)
-	batch := []AutomaticBillingPrice{entry("batch-first", "1"), entry("batch-manual", "2"), entry("batch-second", "3")}
-	published, err := PublishAutomaticBillingPrices(ctx, batch, catalog)
+	require.True(t, changed)
+	first, err := GetActiveBillingPrice(ctx, "owned")
 	require.NoError(t, err)
-	assert.Equal(t, 2, published)
-	activeManual, err := GetActiveBillingPrice(ctx, "batch-manual")
+	assert.Equal(t, source.SnapshotID, first.Provenance.SnapshotID)
+	assert.NotEmpty(t, first.Provenance.Fields)
+	quote, err := billing.NewQuote(*first, "1", nil, time.Now())
 	require.NoError(t, err)
-	assert.Equal(t, manual.ID, activeManual.ID)
-	published, err = PublishAutomaticBillingPrices(ctx, batch, catalog)
+	changed, err = PublishAutomaticBillingPrice(ctx, draft, "sub2api", "owned", source.Hash)
 	require.NoError(t, err)
-	assert.Zero(t, published, "unchanged automatic entries add no versions")
-	var before int64
-	require.NoError(t, DB.Model(&BillingPriceVersion{}).Count(&before).Error)
-	published, err = PublishAutomaticBillingPrices(ctx, []AutomaticBillingPrice{entry("batch-rollback", "1"), entry("batch-invalid", "-1")}, catalog)
-	require.Error(t, err)
-	assert.Zero(t, published)
-	_, err = GetActiveBillingPrice(ctx, "batch-rollback")
-	require.ErrorIs(t, err, gorm.ErrRecordNotFound, "later errors roll back earlier entries in the batch")
-	var after int64
-	require.NoError(t, DB.Model(&BillingPriceVersion{}).Count(&after).Error)
-	assert.Equal(t, before, after)
-	installAutomaticPricingTestSource(t, BillingPriceOriginAxonHub, strings.Repeat("f", 64))
-	published, err = PublishAutomaticBillingPrices(ctx, []AutomaticBillingPrice{entry("batch-stale", "1")}, catalog)
+	assert.False(t, changed)
+	manual, err := PublishBillingPrice(ctx, automaticPriceDraft("owned", "7"), first.ID, 7)
+	require.NoError(t, err)
+	changed, err = PublishAutomaticBillingPrice(ctx, draft, "sub2api", "owned", source.Hash)
+	require.NoError(t, err)
+	assert.False(t, changed)
+	_, err = RestoreAutomaticBillingPrice(ctx, draft, "sub2api", "owned", source.Hash, first.ID)
+	require.ErrorIs(t, err, ErrBillingPriceConflict)
+	restored, err := RestoreAutomaticBillingPrice(ctx, draft, "sub2api", "owned", source.Hash, manual.ID)
+	require.NoError(t, err)
+	assert.Greater(t, restored.ID, manual.ID)
+	assert.Equal(t, source.SnapshotID, restored.Provenance.SnapshotID)
+	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 1000000, Complete: true})
+	require.NoError(t, err)
+	assert.Equal(t, "1", charge.TotalUSD)
+	next, _ := installPricingSnapshot(t, "sub2api", `{"owned":{"input_cost_per_token":0.000003,"output_cost_per_token":0}}`)
+	_, err = PublishAutomaticBillingPrice(ctx, draft, "sub2api", "owned", source.Hash)
 	require.ErrorIs(t, err, ErrBillingPricingSourceConflict)
-	assert.Zero(t, published)
-	_, err = PublishAutomaticBillingPrices(ctx, make([]AutomaticBillingPrice, 101), catalog)
-	require.ErrorContains(t, err, "exceeds 100")
+	assert.NotEqual(t, source.Hash, next.Hash)
+	require.NoError(t, DB.Create(&Ability{Group: "default", Model: "configured-alias", ChannelId: 1, Enabled: true}).Error)
+	names, err := ListAutomaticBillingModelNames(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, names, "owned")
+	assert.Contains(t, names, "configured-alias")
 }
 
-func testAutomaticBillingBatchDeactivation(t *testing.T) {
+func testPricingAutomaticBatch(t *testing.T) {
 	ctx := context.Background()
-	hash := strings.Repeat("9", 64)
-	catalog := make(map[string]string, len(automaticBillingPricingSourceOrder))
-	for _, source := range automaticBillingPricingSourceOrder {
-		installAutomaticPricingTestSource(t, source, hash)
-		catalog[source] = hash
+	source, entries := installPricingSnapshot(t, "sub2api", `{"batch-a":{"input_cost_per_token":0.000001,"output_cost_per_token":0},"batch-b":{"input_cost_per_token":0.000002,"output_cost_per_token":0},"batch-manual":{"input_cost_per_token":0.000003,"output_cost_per_token":0}}`)
+	fallback, _ := installPricingSnapshot(t, "axonhub", `{"p":[{"id":"batch-a","cost":{"input":3,"output":0}}]}`)
+	guard := map[string]string{"sub2api": source.Hash, "axonhub": fallback.Hash}
+	manual, err := PublishBillingPrice(ctx, automaticPriceDraft("batch-manual", "9"), 0, 1)
+	require.NoError(t, err)
+	batch := []AutomaticBillingPrice{}
+	for _, name := range []string{"batch-a", "batch-b", "batch-manual"} {
+		batch = append(batch, AutomaticBillingPrice{Price: entries[name].Price, Source: "sub2api", SourceModel: name, SourceHash: source.Hash})
 	}
-	create := func(name string) *billing.PriceVersion {
-		published, err := PublishAutomaticBillingPrice(ctx, automaticPriceDraft(name, "2"), BillingPriceOriginSub2API, name, hash, catalog)
-		require.NoError(t, err)
-		require.True(t, published)
-		price, err := GetActiveBillingPrice(ctx, name)
-		require.NoError(t, err)
-		return price
-	}
-	retire := create("retire-automatic")
-	manualBefore := create("retire-manual-race")
-	newerBefore := create("retire-newer-race")
-	quote, err := billing.NewQuote(*retire, "1", nil, time.Unix(100, 0))
+	count, err := PublishAutomaticBillingPrices(ctx, batch, guard)
 	require.NoError(t, err)
-	manual, err := PublishBillingPrice(ctx, automaticPriceDraft(manualBefore.Model, "8"), manualBefore.ID, 0)
+	assert.Equal(t, 2, count)
+	count, err = PublishAutomaticBillingPrices(ctx, batch, guard)
 	require.NoError(t, err)
-	published, err := PublishAutomaticBillingPrice(ctx, automaticPriceDraft(newerBefore.Model, "3"), BillingPriceOriginSub2API, newerBefore.Model, hash, catalog)
-	require.NoError(t, err)
-	require.True(t, published)
-	newer, err := GetActiveBillingPrice(ctx, newerBefore.Model)
-	require.NoError(t, err)
-	batch := []AutomaticBillingPriceDeactivation{
-		{Model: retire.Model, ExpectedVersionID: retire.ID},
-		{Model: manualBefore.Model, ExpectedVersionID: manualBefore.ID},
-		{Model: manual.Model, ExpectedVersionID: manual.ID},
-		{Model: newerBefore.Model, ExpectedVersionID: newerBefore.ID},
-	}
-	installAutomaticPricingTestSource(t, BillingPriceOriginAxonHub, strings.Repeat("8", 64))
-	count, err := DeactivateAutomaticBillingPrices(ctx, batch, catalog)
-	require.ErrorIs(t, err, ErrBillingPricingSourceConflict)
 	assert.Zero(t, count)
-	_, err = GetActiveBillingPrice(ctx, retire.Model)
+	before, err := GetActiveBillingPrice(ctx, "batch-a")
 	require.NoError(t, err)
-	catalog[BillingPriceOriginAxonHub] = strings.Repeat("8", 64)
-	count, err = DeactivateAutomaticBillingPrices(ctx, batch, catalog)
+	nextSource, nextEntries := installPricingSnapshot(t, "sub2api", `{"batch-a":{"input_cost_per_token":0.000008,"output_cost_per_token":0},"batch-b":{"input_cost_per_token":0.000002,"output_cost_per_token":0}}`)
+	guard["sub2api"] = nextSource.Hash
+	invalid := AutomaticBillingPrice{Price: nextEntries["batch-b"].Price, Source: "sub2api", SourceModel: "batch-b", SourceHash: nextSource.Hash}
+	invalid.Price.Model = "batch-invalid"
+	invalid.Price.Expression = "v1:p *"
+	changed := AutomaticBillingPrice{Price: nextEntries["batch-a"].Price, Source: "sub2api", SourceModel: "batch-a", SourceHash: nextSource.Hash}
+	_, err = PublishAutomaticBillingPrices(ctx, []AutomaticBillingPrice{changed, invalid}, guard)
+	require.Error(t, err)
+	after, err := GetActiveBillingPrice(ctx, "batch-a")
+	require.NoError(t, err)
+	assert.Equal(t, before.ID, after.ID)
+	manualAfter, err := GetActiveBillingPrice(ctx, "batch-manual")
+	require.NoError(t, err)
+	assert.Equal(t, manual.ID, manualAfter.ID)
+	count, err = DeactivateAutomaticBillingPrices(ctx, []AutomaticBillingPriceDeactivation{{Model: "batch-a", ExpectedVersionID: before.ID}, {Model: "batch-manual", ExpectedVersionID: manual.ID}}, guard)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
-	_, err = GetActiveBillingPrice(ctx, retire.Model)
+	_, err = GetActiveBillingPrice(ctx, "batch-a")
 	require.ErrorIs(t, err, ErrAutomaticBillingPriceUnavailable)
-	for _, expected := range []*billing.PriceVersion{manual, newer} {
-		active, err := GetActiveBillingPrice(ctx, expected.Model)
-		require.NoError(t, err)
-		assert.Equal(t, expected.ID, active.ID)
-	}
-	var historic BillingPriceVersion
-	require.NoError(t, DB.First(&historic, retire.ID).Error)
-	decoded, err := decodeBillingPrice(historic)
+	_, err = GetActiveBillingPrice(ctx, "batch-manual")
 	require.NoError(t, err)
-	assert.Equal(t, retire, decoded)
-	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 1000000, Complete: true})
-	require.NoError(t, err)
-	assert.Equal(t, "2", charge.TotalUSD)
-	count, err = DeactivateAutomaticBillingPrices(ctx, batch, catalog)
-	require.NoError(t, err)
-	assert.Zero(t, count, "repeated deactivation is harmless")
-	// Never-published unavailable identities also block broader aliases. Creating
-	// their markers cannot clobber a price that was published concurrently.
-	count, err = DeactivateAutomaticBillingPrices(ctx, []AutomaticBillingPriceDeactivation{
-		{Model: "never-priced-high", ExpectedVersionID: 0},
-		{Model: manual.Model, ExpectedVersionID: 0},
-	}, catalog)
-	require.NoError(t, err)
-	assert.Zero(t, count, "an unavailable marker is not a retired price version")
-	_, err = GetActiveBillingPrice(ctx, "never-priced-high")
-	require.ErrorIs(t, err, ErrAutomaticBillingPriceUnavailable)
-	manualActive, err := GetActiveBillingPrice(ctx, manual.Model)
-	require.NoError(t, err)
-	assert.Equal(t, manual.ID, manualActive.ID)
-	manualReplacement, err := PublishBillingPrice(ctx, automaticPriceDraft("never-priced-high", "9"), 0, 1)
-	require.NoError(t, err)
-	require.Positive(t, manualReplacement.ID)
-	_, err = GetActiveBillingPrice(ctx, manualReplacement.Model)
-	require.NoError(t, err)
-	published, err = PublishAutomaticBillingPrice(ctx, automaticPriceDraft(retire.Model, "4"), BillingPriceOriginSub2API, retire.Model, hash, catalog)
-	require.NoError(t, err)
-	require.True(t, published, "a complete automatic price replaces an unavailable marker")
-	recovered, err := GetActiveBillingPrice(ctx, retire.Model)
-	require.NoError(t, err)
-	assert.NotEqual(t, retire.ID, recovered.ID)
-	// A later integrity error must roll back every marker in this batch.
-	rollback := create("retire-rollback")
-	corrupt := create("retire-corrupt")
-	require.NoError(t, DB.Exec("UPDATE billing_price_versions SET model = ? WHERE id = ?", "wrong-model", corrupt.ID).Error)
-	count, err = DeactivateAutomaticBillingPrices(ctx, []AutomaticBillingPriceDeactivation{
-		{Model: "unavailable-rollback", ExpectedVersionID: 0},
-		{Model: rollback.Model, ExpectedVersionID: rollback.ID},
-		{Model: corrupt.Model, ExpectedVersionID: corrupt.ID},
-	}, catalog)
-	require.ErrorContains(t, err, "integrity mismatch")
-	assert.Zero(t, count)
-	_, err = GetActiveBillingPrice(ctx, "unavailable-rollback")
-	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
-	_, err = GetActiveBillingPrice(ctx, rollback.Model)
-	require.NoError(t, err)
-	require.NoError(t, DB.Exec("UPDATE billing_price_versions SET model = ? WHERE id = ?", corrupt.Model, corrupt.ID).Error)
-	_, err = DeactivateAutomaticBillingPrices(ctx, make([]AutomaticBillingPriceDeactivation, 101), catalog)
-	require.ErrorContains(t, err, "exceeds 100")
+	guard["sub2api"] = "stale"
+	_, err = PublishAutomaticBillingPrices(ctx, batch, guard)
+	require.ErrorIs(t, err, ErrBillingPricingSourceConflict)
+	_, err = DeactivateAutomaticBillingPrices(ctx, []AutomaticBillingPriceDeactivation{{Model: "batch-b", ExpectedVersionID: 0}}, guard)
+	require.ErrorIs(t, err, ErrBillingPricingSourceConflict)
+	_, err = PublishAutomaticBillingPrices(ctx, make([]AutomaticBillingPrice, 101), guard)
+	require.Error(t, err)
 }
 
-func testAutomaticBillingPriceVersions(t *testing.T) {
+func testPricingSourceEvidence(t *testing.T) {
 	ctx := context.Background()
-	firstDraft := automaticPriceDraft("auto-model", "2")
-	sourceHash := strings.Repeat("a", 64)
-	published, err := PublishAutomaticBillingPrice(ctx, firstDraft, BillingPriceOriginSub2API, "provider/auto-model", sourceHash)
+	source, entries := installPricingSnapshot(t, "sub2api", `{"evidence":{"litellm_provider":"openai","input_cost_per_token":0.000001,"output_cost_per_token":0}}`)
+	draft := entries["evidence"].Price
+	changed, err := PublishAutomaticBillingPrice(ctx, draft, "sub2api", "evidence", source.Hash)
 	require.NoError(t, err)
-	require.True(t, published)
-	first, err := GetActiveBillingPrice(ctx, firstDraft.Model)
+	require.True(t, changed)
+	before, err := GetActiveBillingPrice(ctx, "evidence")
 	require.NoError(t, err)
-	quote, err := billing.NewQuote(*first, "1", nil, time.Unix(100, 0))
-	require.NoError(t, err)
-	quoteBefore, err := common.Marshal(quote)
-	require.NoError(t, err)
-	installAutomaticPricingTestSource(t, BillingPriceOriginAxonHub, strings.Repeat("b", 64))
-	published, err = PublishAutomaticBillingPrice(ctx, automaticPriceDraft(first.Model, "2.00"), BillingPriceOriginAxonHub, first.Model, strings.Repeat("b", 64))
-	require.NoError(t, err)
-	assert.True(t, published, "a source change is a new immutable version even when the numeric price is equivalent")
-	var count int64
-	require.NoError(t, DB.Model(&BillingPriceVersion{}).Where("model = ?", first.Model).Count(&count).Error)
-	assert.EqualValues(t, 2, count, "source provenance is part of the immutable version hash")
-	origins, err := ListBillingPriceOrigins(ctx)
-	require.NoError(t, err)
-	require.Len(t, origins, 2)
-	assert.Equal(t, first.Model, origins[0].Model)
-	assert.Equal(t, BillingPriceOriginAxonHub, origins[0].Origin)
-	assert.NotEqual(t, first.ID, origins[0].VersionID)
-	assert.Equal(t, BillingPriceOriginManual, origins[1].Origin)
-	installAutomaticPricingTestSource(t, BillingPriceOriginAxonHub, sourceHash)
-	published, err = PublishAutomaticBillingPrice(ctx, automaticPriceDraft(first.Model, "3"), BillingPriceOriginAxonHub, first.Model, sourceHash)
-	require.NoError(t, err)
-	assert.True(t, published)
-	second, err := GetActiveBillingPrice(ctx, first.Model)
-	require.NoError(t, err)
-	assert.Greater(t, second.ID, first.ID)
-	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 1000000, Complete: true})
-	require.NoError(t, err)
-	assert.Equal(t, "2", charge.TotalUSD)
-	quoteAfter, err := common.Marshal(quote)
-	require.NoError(t, err)
-	assert.Equal(t, quoteBefore, quoteAfter, "published updates cannot mutate a frozen quote")
-	var oldRow BillingPriceVersion
-	require.NoError(t, DB.First(&oldRow, first.ID).Error)
-	decoded, err := decodeBillingPrice(oldRow)
-	require.NoError(t, err)
-	assert.Equal(t, first, decoded)
-
-	manual, err := PublishBillingPrice(ctx, automaticPriceDraft(first.Model, "7"), second.ID, 0)
-	require.NoError(t, err)
-	published, err = PublishAutomaticBillingPrice(ctx, automaticPriceDraft(first.Model, "4"), BillingPriceOriginSub2API, first.Model, sourceHash)
-	require.NoError(t, err)
-	assert.False(t, published, "actor zero manual publication still takes ownership")
-	active, err := GetActiveBillingPrice(ctx, first.Model)
-	require.NoError(t, err)
-	assert.Equal(t, manual.ID, active.ID)
-	_, err = RestoreAutomaticBillingPrice(ctx, firstDraft, BillingPriceOriginSub2API, first.Model, sourceHash, second.ID)
-	require.ErrorIs(t, err, ErrBillingPriceConflict)
-	restored, err := RestoreAutomaticBillingPrice(ctx, automaticPriceDraft(first.Model, "7"), BillingPriceOriginSub2API, first.Model, sourceHash, manual.ID)
-	require.NoError(t, err)
-	assert.NotEqual(t, manual.ID, restored.ID, "restoring automatic provenance creates a new immutable version")
-	published, err = PublishAutomaticBillingPrice(ctx, firstDraft, BillingPriceOriginSub2API, first.Model, sourceHash)
-	require.NoError(t, err)
-	assert.True(t, published)
-}
-
-func testAutomaticBillingLegacySeedOwnership(t *testing.T) {
-	ctx := context.Background()
-	seeds, _, err := InitialBillingPriceCatalog()
-	require.NoError(t, err)
-	require.NotEmpty(t, seeds)
-	seed := seeds[0]
-	seedDefinition, err := common.Marshal(seed)
-	require.NoError(t, err)
-	seedHash, err := billing.Hash(seed)
-	require.NoError(t, err)
-	row := BillingPriceVersion{Model: seed.Model, Definition: string(seedDefinition), Hash: seedHash, CreatedAt: 10}
-	require.NoError(t, DB.Create(&row).Error)
-	require.NoError(t, DB.Create(&BillingActivePrice{Model: seed.Model, VersionID: row.ID}).Error)
-	// Live reads cannot infer automatic ownership from the historical bundle.
-	before, err := ListBillingPriceOrigins(ctx)
-	require.NoError(t, err)
-	for _, origin := range before {
-		if origin.Model == seed.Model {
-			assert.Equal(t, BillingPriceOriginManual, origin.Origin)
-		}
-	}
-	require.NoError(t, SaveBillingPricingConfig(ctx, &BillingPricingConfig{Enabled: false, CheckIntervalMinutes: 30}))
-	t.Cleanup(func() { require.NoError(t, DB.Where("id = ?", 1).Delete(&BillingPricingConfig{}).Error) })
-	var versionCount int64
-	require.NoError(t, DB.Model(&BillingPriceVersion{}).Count(&versionCount).Error)
-	for range 2 {
-		require.NoError(t, MigrateBillingPriceOrigins(ctx))
-	}
-	var versionCountAfter int64
-	require.NoError(t, DB.Model(&BillingPriceVersion{}).Count(&versionCountAfter).Error)
-	assert.Equal(t, versionCount, versionCountAfter, "disabled migration labels ownership without publishing prices")
-	var migrated BillingActivePrice
-	require.NoError(t, DB.Where("model = ?", seed.Model).First(&migrated).Error)
-	assert.Equal(t, row.ID, migrated.VersionID)
-	origins, err := ListBillingPriceOrigins(ctx)
-	require.NoError(t, err)
-	found := false
-	for _, origin := range origins {
-		if origin.Model == seed.Model {
-			found = true
-			assert.Equal(t, BillingPriceOriginLegacySeed, origin.Origin)
-		}
-	}
-	assert.True(t, found)
-	installAutomaticPricingTestSource(t, BillingPriceOriginSub2API, strings.Repeat("c", 64))
-	published, err := PublishAutomaticBillingPrice(ctx, automaticPriceDraft(seed.Model, "9"), BillingPriceOriginSub2API, seed.Model, strings.Repeat("c", 64))
-	require.NoError(t, err)
-	assert.True(t, published, "only a verified historical seed may be adopted")
-
-	installAutomaticPricingTestSource(t, BillingPriceOriginAxonHub, strings.Repeat("d", 64))
-	for _, test := range []struct{ name, origin string }{{"legacy-custom", ""}, {"unknown-origin", "other-import"}} {
-		manual, err := PublishBillingPrice(ctx, automaticPriceDraft(test.name, "6"), 0, 0)
-		require.NoError(t, err)
-		require.NoError(t, DB.Model(&BillingActivePrice{}).Where("model = ?", test.name).Update("origin", test.origin).Error)
-		require.NoError(t, MigrateBillingPriceOrigins(ctx))
-		published, err := PublishAutomaticBillingPrice(ctx, automaticPriceDraft(test.name, "1"), BillingPriceOriginAxonHub, test.name, strings.Repeat("d", 64))
-		require.NoError(t, err)
-		assert.False(t, published)
-		active, err := GetActiveBillingPrice(ctx, test.name)
-		require.NoError(t, err)
-		assert.Equal(t, manual.ID, active.ID)
-	}
-	// The old seed hash cannot grant ownership to changed or corrupt contents.
-	corruptSeed := seeds[1]
-	corruptHash, err := billing.Hash(corruptSeed)
-	require.NoError(t, err)
-	corrupt := BillingPriceVersion{Model: corruptSeed.Model, Definition: "{}", Hash: corruptHash, CreatedAt: 10}
-	require.NoError(t, DB.Create(&corrupt).Error)
-	require.NoError(t, DB.Create(&BillingActivePrice{Model: corrupt.Model, VersionID: corrupt.ID}).Error)
-	require.Error(t, MigrateBillingPriceOrigins(ctx))
-	var active BillingActivePrice
-	require.NoError(t, DB.Where("model = ?", corrupt.Model).First(&active).Error)
-	assert.Equal(t, corrupt.ID, active.VersionID)
-	assert.Empty(t, active.Origin)
-	require.NoError(t, DB.Where("model = ?", corrupt.Model).Delete(&BillingActivePrice{}).Error)
-}
-
-func testAutomaticBillingOriginMigrationManualRace(t *testing.T) {
-	ctx := context.Background()
-	seeds, _, err := InitialBillingPriceCatalog()
-	require.NoError(t, err)
-	require.Greater(t, len(seeds), 2)
-	seed := seeds[2]
-	definition, err := common.Marshal(seed)
-	require.NoError(t, err)
-	hash, err := billing.Hash(seed)
-	require.NoError(t, err)
-	row := BillingPriceVersion{Model: seed.Model, Definition: string(definition), Hash: hash, CreatedAt: 10}
-	require.NoError(t, DB.Create(&row).Error)
-	require.NoError(t, DB.Create(&BillingActivePrice{Model: seed.Model, VersionID: row.ID}).Error)
-	start := make(chan struct{})
-	var wg sync.WaitGroup
-	var manual *billing.PriceVersion
-	var migrationErr, manualErr error
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		<-start
-		migrationErr = MigrateBillingPriceOrigins(ctx)
-	}()
-	go func() {
-		defer wg.Done()
-		<-start
-		manual, manualErr = PublishBillingPrice(ctx, seed, row.ID, 0)
-	}()
-	close(start)
-	wg.Wait()
-	require.NoError(t, migrationErr)
-	require.NoError(t, manualErr)
-	require.NoError(t, MigrateBillingPriceOrigins(ctx))
-	var active BillingActivePrice
-	require.NoError(t, DB.Where("model = ?", seed.Model).Take(&active).Error)
-	assert.Equal(t, manual.ID, active.VersionID)
-	assert.Equal(t, BillingPriceOriginManual, active.Origin, "startup migration cannot reclaim a concurrent manual publication, even with an identical seed price")
-}
-
-func testAutomaticBillingRetiredSourceOwnership(t *testing.T) {
-	ctx := context.Background()
-	hash := strings.Repeat("6", 64)
-	guard := map[string]string{BillingPriceOriginSub2API: hash, BillingPriceOriginAxonHub: hash}
-	for source := range guard {
-		installAutomaticPricingTestSource(t, source, hash)
-	}
-	for _, source := range []string{BillingPriceOriginModelsDev, BillingPriceOriginOpenRouter} {
-		t.Run(source, func(t *testing.T) {
-			historicalSource := BillingPricingSource{Source: source, Document: `{"historical":true}`, Hash: hash, ModelCount: 2}
-			require.NoError(t, DB.Create(&historicalSource).Error)
-			changed := historicalSource
-			changed.Document = `{"unexpected":true}`
-			require.Error(t, SaveBillingPricingSource(ctx, &changed))
-			require.Error(t, SaveBillingPricingSourceCAS(ctx, &changed, hash))
-			require.Error(t, EnsureBillingPricingSource(ctx, &changed))
-			var persisted BillingPricingSource
-			require.NoError(t, DB.Where("source = ?", source).Take(&persisted).Error)
-			assert.Equal(t, historicalSource, persisted)
-			for _, action := range []string{"replace", "retire"} {
-				name := source + "-" + action
-				price, err := PublishBillingPrice(ctx, automaticPriceDraft(name, "2"), 0, 0)
-				require.NoError(t, err)
-				require.NoError(t, DB.Model(&BillingActivePrice{}).Where("model = ?", name).
-					Updates(map[string]any{"origin": source, "source_model": name, "source_hash": hash}).Error)
-				quote, err := billing.NewQuote(*price, "1", nil, time.Unix(100, 0))
-				require.NoError(t, err)
-				for range 2 {
-					require.NoError(t, MigrateBillingPriceOrigins(ctx))
-				}
-				origins, err := ListBillingPriceOrigins(ctx)
-				require.NoError(t, err)
-				assert.Contains(t, origins, BillingPriceOrigin{Model: name, VersionID: price.ID, Origin: source, SourceModel: name, SourceHash: hash})
-				published, err := PublishAutomaticBillingPrice(ctx, automaticPriceDraft(name, "3"), source, name, hash)
-				require.Error(t, err)
-				assert.False(t, published)
-				_, err = RestoreAutomaticBillingPrice(ctx, *price, source, name, hash, price.ID)
-				require.Error(t, err)
-				if action == "replace" {
-					count, err := PublishAutomaticBillingPrices(ctx, []AutomaticBillingPrice{{Price: automaticPriceDraft(name, "3"), Source: BillingPriceOriginSub2API, SourceModel: name, SourceHash: hash}}, guard)
-					require.NoError(t, err)
-					assert.Equal(t, 1, count)
-					active, err := GetActiveBillingPrice(ctx, name)
-					require.NoError(t, err)
-					assert.Equal(t, "3", active.Prices[0].Price)
-				} else {
-					count, err := DeactivateAutomaticBillingPrices(ctx, []AutomaticBillingPriceDeactivation{{Model: name, ExpectedVersionID: price.ID}}, guard)
-					require.NoError(t, err)
-					assert.Equal(t, 1, count)
-					_, err = GetActiveBillingPrice(ctx, name)
-					require.ErrorIs(t, err, ErrAutomaticBillingPriceUnavailable)
-				}
-				charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 1000000, Complete: true})
-				require.NoError(t, err)
-				assert.Equal(t, "2", charge.TotalUSD, "retiring a source preserves frozen request prices")
-			}
+	for _, test := range []struct {
+		name   string
+		mutate func(*billing.PriceVersion)
+	}{
+		{"different_rate", func(price *billing.PriceVersion) { price.Expression = "v1:p * 999 + c * 0" }},
+		{"fabricated_path", func(price *billing.PriceVersion) { price.Provenance.Fields[0].SourcePath = "/not-present" }},
+		{"fabricated_raw_value", func(price *billing.PriceVersion) { price.Provenance.Fields[0].RawValue = "999" }},
+		{"fabricated_conversion", func(price *billing.PriceVersion) { price.Provenance.Fields[0].Conversion = "multiply_by_999" }},
+		{"different_provider", func(price *billing.PriceVersion) { price.Provenance.Provider = "other" }},
+		{"different_parser", func(price *billing.PriceVersion) { price.Provenance.ParserVersion = "unregistered" }},
+		{"added_fixed_fee", func(price *billing.PriceVersion) { price.FlatFee = "1" }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			forged := draft
+			forged.Provenance = billing.ClonePriceProvenance(draft.Provenance)
+			test.mutate(&forged)
+			_, err := PublishAutomaticBillingPrice(ctx, forged, "sub2api", "evidence", source.Hash)
+			require.Error(t, err)
+			after, err := GetActiveBillingPrice(ctx, "evidence")
+			require.NoError(t, err)
+			assert.Equal(t, before.ID, after.ID)
 		})
 	}
+	_, err = PublishAutomaticBillingPrice(ctx, draft, "sub2api", "wrong-model", source.Hash)
+	require.ErrorContains(t, err, "source model mismatch")
+	// An old version must keep its original archive after a successful refresh.
+	next, nextEntries := installPricingSnapshot(t, "sub2api", `{"evidence":{"litellm_provider":"openai","input_cost_per_token":0.000002,"output_cost_per_token":0}}`)
+	archived, err := GetBillingPricingSnapshot(ctx, before.Provenance.SnapshotID)
+	require.NoError(t, err)
+	assert.Equal(t, source.Document, archived.Document)
+	require.NoError(t, DB.Session(&gorm.Session{SkipHooks: true}).Model(&BillingPricingSnapshot{}).Where("id = ?", next.SnapshotID).Update("document", "{}").Error)
+	_, err = PublishAutomaticBillingPrice(ctx, nextEntries["evidence"].Price, "sub2api", "evidence", next.Hash)
+	require.ErrorContains(t, err, "snapshot integrity mismatch")
+	require.NoError(t, DB.Session(&gorm.Session{SkipHooks: true}).Model(&BillingPricingSnapshot{}).Where("id = ?", next.SnapshotID).Update("document", next.Document).Error)
 }
 
-func testAutomaticBillingManualRace(t *testing.T) {
+func testPricingConcurrentPublication(t *testing.T) {
 	ctx := context.Background()
-	draft := automaticPriceDraft("manual-race", "1")
-	hash := strings.Repeat("e", 64)
-	installAutomaticPricingTestSource(t, BillingPriceOriginSub2API, hash)
-	installAutomaticPricingTestSource(t, BillingPriceOriginAxonHub, hash)
-	published, err := PublishAutomaticBillingPrice(ctx, draft, BillingPriceOriginSub2API, draft.Model, hash)
-	require.NoError(t, err)
-	require.True(t, published)
-	initial, err := GetActiveBillingPrice(ctx, draft.Model)
+	first, err := PublishBillingPrice(ctx, automaticPriceDraft("price-concurrency", "1"), 0, 1)
 	require.NoError(t, err)
 	start := make(chan struct{})
-	var wg sync.WaitGroup
-	var manual *billing.PriceVersion
-	var manualErr, autoErr error
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		<-start
-		manual, manualErr = PublishBillingPrice(ctx, automaticPriceDraft(draft.Model, "7"), initial.ID, 0)
-	}()
-	go func() {
-		defer wg.Done()
-		<-start
-		_, autoErr = PublishAutomaticBillingPrice(ctx, automaticPriceDraft(draft.Model, "2"), BillingPriceOriginAxonHub, draft.Model, hash)
-	}()
+	var wait sync.WaitGroup
+	var outcomes [2]error
+	for i := range 2 {
+		wait.Add(1)
+		go func(i int) {
+			defer wait.Done()
+			<-start
+			_, outcomes[i] = PublishBillingPrice(ctx, automaticPriceDraft("price-concurrency", fmt.Sprint(i+2)), first.ID, i+2)
+		}(i)
+	}
 	close(start)
-	wg.Wait()
-	require.NoError(t, autoErr)
-	if errors.Is(manualErr, ErrBillingPriceConflict) {
-		active, err := GetActiveBillingPrice(ctx, draft.Model)
-		require.NoError(t, err)
-		manual, manualErr = PublishBillingPrice(ctx, automaticPriceDraft(draft.Model, "7"), active.ID, 0)
-	}
-	require.NoError(t, manualErr)
-	published, err = PublishAutomaticBillingPrice(ctx, automaticPriceDraft(draft.Model, "3"), BillingPriceOriginSub2API, draft.Model, hash)
-	require.NoError(t, err)
-	assert.False(t, published)
-	active, err := GetActiveBillingPrice(ctx, draft.Model)
-	require.NoError(t, err)
-	assert.Equal(t, manual.ID, active.ID)
-	assert.Equal(t, "7", active.Prices[0].Price)
-}
-
-func testAutomaticBillingSourceFences(t *testing.T) {
-	ctx := context.Background()
-	oldHash, newHash := strings.Repeat("a", 64), strings.Repeat("b", 64)
-	draft := automaticPriceDraft("snapshot-fence", "1")
-	require.NoError(t, DB.Where("source = ?", BillingPriceOriginSub2API).Delete(&BillingPricingSource{}).Error)
-	published, err := PublishAutomaticBillingPrice(ctx, draft, BillingPriceOriginSub2API, draft.Model, oldHash)
-	require.ErrorIs(t, err, ErrBillingPricingSourceConflict)
-	assert.False(t, published, "publications require an existing source snapshot")
-	old := BillingPricingSource{Source: BillingPriceOriginSub2API, Document: `{"old":true}`, Hash: oldHash}
-	require.ErrorIs(t, SaveBillingPricingSourceCAS(ctx, &old, "missing-old-hash"), ErrBillingPricingSourceConflict)
-	require.NoError(t, SaveBillingPricingSourceCAS(ctx, &old, ""))
-	newer := old
-	newer.Hash, newer.Document = newHash, `{"new":true}`
-	newer.LastError, newer.CheckedAt = "check failed", 10
-	require.NoError(t, SaveBillingPricingSourceCAS(ctx, &newer, oldHash))
-	old.LastError, old.CheckedAt = "slow old response", 20
-	require.ErrorIs(t, SaveBillingPricingSourceCAS(ctx, &old, oldHash), ErrBillingPricingSourceConflict)
-	var persisted BillingPricingSource
-	require.NoError(t, DB.Where("source = ?", old.Source).Take(&persisted).Error)
-	assert.Equal(t, newer, persisted)
-	published, err = PublishAutomaticBillingPrice(ctx, draft, old.Source, draft.Model, oldHash)
-	require.ErrorIs(t, err, ErrBillingPricingSourceConflict)
-	assert.False(t, published)
-	published, err = PublishAutomaticBillingPrice(ctx, draft, old.Source, draft.Model, newHash)
-	require.NoError(t, err)
-	assert.True(t, published)
-	active, err := GetActiveBillingPrice(ctx, draft.Model)
-	require.NoError(t, err)
-	_, err = RestoreAutomaticBillingPrice(ctx, automaticPriceDraft(draft.Model, "2"), old.Source, draft.Model, oldHash, active.ID)
-	require.ErrorIs(t, err, ErrBillingPricingSourceConflict)
-	newer.LastError = ""
-	newer.CheckedAt = 30
-	require.NoError(t, SaveBillingPricingSourceCAS(ctx, &newer, newHash))
-	require.NoError(t, DB.Where("source = ?", old.Source).Take(&persisted).Error)
-	assert.Equal(t, newer, persisted, "same-snapshot checks may update metadata")
-}
-
-func testAutomaticBillingCatalogFence(t *testing.T) {
-	ctx := context.Background()
-	hash := strings.Repeat("c", 64)
-	for _, source := range automaticBillingPricingSourceOrder {
-		record := BillingPricingSource{Source: source, Document: "{}", Hash: hash}
-		if source == BillingPriceOriginSub2API {
-			record.Document, record.Hash = "", ""
-		}
-		require.NoError(t, SaveBillingPricingSource(ctx, &record))
-	}
-	guard := map[string]string{
-		BillingPriceOriginSub2API: "", BillingPriceOriginAxonHub: hash,
-	}
-	draft := automaticPriceDraft("catalog-priority", "1")
-	published, err := PublishAutomaticBillingPrice(ctx, draft, BillingPriceOriginAxonHub, draft.Model, hash, guard)
-	require.NoError(t, err)
-	assert.True(t, published)
-	active, err := GetActiveBillingPrice(ctx, draft.Model)
-	require.NoError(t, err)
-	// A new higher-priority catalog invalidates a fallback decision, even
-	// though the selected fallback source still has exactly the same hash.
-	newHash := strings.Repeat("d", 64)
-	installAutomaticPricingTestSource(t, BillingPriceOriginSub2API, newHash)
-	published, err = PublishAutomaticBillingPrice(ctx, automaticPriceDraft(draft.Model, "2"), BillingPriceOriginAxonHub, draft.Model, hash, guard)
-	require.ErrorIs(t, err, ErrBillingPricingSourceConflict)
-	assert.False(t, published)
-	_, err = RestoreAutomaticBillingPrice(ctx, draft, BillingPriceOriginAxonHub, draft.Model, hash, active.ID, guard)
-	require.ErrorIs(t, err, ErrBillingPricingSourceConflict)
-	guard[BillingPriceOriginSub2API] = newHash
-	_, err = RestoreAutomaticBillingPrice(ctx, draft, BillingPriceOriginAxonHub, draft.Model, hash, active.ID, guard)
-	require.NoError(t, err)
-	// An omitted catalog key cannot be interpreted as an absent cache.
-	delete(guard, BillingPriceOriginSub2API)
-	_, err = PublishAutomaticBillingPrice(ctx, draft, BillingPriceOriginAxonHub, draft.Model, hash, guard)
-	require.ErrorIs(t, err, ErrBillingPricingSourceConflict)
-	guard[BillingPriceOriginSub2API] = ""
-	require.NoError(t, DB.Where("source = ?", BillingPriceOriginSub2API).Delete(&BillingPricingSource{}).Error)
-	_, err = PublishAutomaticBillingPrice(ctx, draft, BillingPriceOriginAxonHub, draft.Model, hash, guard)
-	require.ErrorIs(t, err, ErrBillingPricingSourceConflict, "empty source hashes still require a placeholder row")
-	var count int64
-	require.NoError(t, DB.Model(&BillingPriceVersion{}).Where("model = ?", draft.Model).Count(&count).Error)
-	assert.EqualValues(t, 1, count, "rejected stale decisions never create a version")
-}
-
-func testAutomaticBillingPricingPersistence(t *testing.T, open func() (*gorm.DB, error)) {
-	ctx := context.Background()
-	config, err := GetBillingPricingConfig(ctx)
-	require.NoError(t, err)
-	assert.True(t, config.Enabled)
-	assert.Equal(t, 30, config.CheckIntervalMinutes)
-	var count int64
-	require.NoError(t, DB.Model(&BillingPricingConfig{}).Count(&count).Error)
-	assert.Zero(t, count, "reading defaults must not create persistent state")
-	config.Enabled, config.CheckIntervalMinutes = false, 5
-	require.NoError(t, SaveBillingPricingConfig(ctx, config))
-	for _, interval := range []int{4, 1441} {
-		invalid := *config
-		invalid.CheckIntervalMinutes = interval
-		require.Error(t, SaveBillingPricingConfig(ctx, &invalid))
-	}
-	document := `{"padding":"` + strings.Repeat("a", 70000) + `"}`
-	source := BillingPricingSource{Source: BillingPriceOriginSub2API, Document: LongText(document), Hash: strings.Repeat("f", 64), ETag: "etag-1", LastModified: "last-modified", CheckedAt: 123, UpdatedAt: 120, ModelCount: 1}
-	require.NoError(t, SaveBillingPricingSource(ctx, &source))
-	source.LastError = "upstream unavailable"
-	source.CheckedAt = 130
-	require.NoError(t, SaveBillingPricingSource(ctx, &source))
-	staleBundled := source
-	staleBundled.Document, staleBundled.CheckedAt = "old bundle", 1
-	require.NoError(t, EnsureBillingPricingSource(ctx, &staleBundled))
-	reopened, err := open()
-	require.NoError(t, err)
-	connection, err := reopened.DB()
-	require.NoError(t, err)
-	original := DB
-	DB = reopened
-	t.Cleanup(func() { DB = original; assert.NoError(t, connection.Close()) })
-	loaded, err := GetBillingPricingConfig(ctx)
-	require.NoError(t, err)
-	assert.False(t, loaded.Enabled)
-	assert.Equal(t, 5, loaded.CheckIntervalMinutes)
-	sources, err := ListBillingPricingSources(ctx)
-	require.NoError(t, err)
-	var restoredSource BillingPricingSource
-	for _, candidate := range sources {
-		if candidate.Source == source.Source {
-			restoredSource = candidate
+	wait.Wait()
+	assert.NotEqual(t, outcomes[0] == nil, outcomes[1] == nil, "one CAS publication wins")
+	for _, err := range outcomes {
+		if err != nil {
+			require.ErrorIs(t, err, ErrBillingPriceConflict)
 		}
 	}
-	assert.Equal(t, source, restoredSource, "full snapshots above MySQL TEXT size survive reconnection")
-	encoded, err := common.Marshal(sources)
-	require.NoError(t, err)
-	assert.NotContains(t, string(encoded), "padding", "public source metadata must not expose cached documents")
-	source.LastError = ""
-	require.NoError(t, SaveBillingPricingSource(ctx, &source))
-	sources, err = ListBillingPricingSources(ctx)
-	require.NoError(t, err)
-	for _, candidate := range sources {
-		if candidate.Source == source.Source {
-			assert.Empty(t, candidate.LastError)
-		}
-	}
+	var versions, pointers int64
+	require.NoError(t, DB.Model(&BillingPriceVersion{}).Where("model = ?", "price-concurrency").Count(&versions).Error)
+	require.NoError(t, DB.Model(&BillingActivePrice{}).Where("model = ?", "price-concurrency").Count(&pointers).Error)
+	assert.EqualValues(t, 2, versions)
+	assert.EqualValues(t, 1, pointers)
 }

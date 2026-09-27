@@ -217,7 +217,7 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 			wantCount: 1,
 		},
 		{
-			name: "result hash dedup",
+			name: "identical artifacts from distinct outputs",
 			observe: func(c *ImageGenerationCallCounter) {
 				idx0, idx1 := 0, 1
 				c.Observe(&dto.ResponsesOutput{
@@ -229,7 +229,7 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 					Result: "same-bytes",
 				}, &idx1)
 			},
-			wantCount: 1,
+			wantCount: 2,
 		},
 		{
 			name: "output_item.done plus completed dedup",
@@ -274,7 +274,7 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 			wantCount: 0,
 		},
 		{
-			name: "in_progress with final result counts",
+			name: "in_progress is not completed",
 			observe: func(c *ImageGenerationCallCounter) {
 				idx := 0
 				c.Observe(&dto.ResponsesOutput{
@@ -284,7 +284,7 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 					Result: "base64-a",
 				}, &idx)
 			},
-			wantCount: 1,
+			wantCount: 0,
 		},
 	}
 
@@ -298,7 +298,7 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 	}
 }
 
-func TestImageGenerationCallCounterCommitCapsAtMaxImageN(t *testing.T) {
+func TestImageGenerationCallCounterRejectsOverLimit(t *testing.T) {
 	t.Parallel()
 
 	counter := &ImageGenerationCallCounter{}
@@ -315,7 +315,8 @@ func TestImageGenerationCallCounterCommitCapsAtMaxImageN(t *testing.T) {
 	info := &RelayInfo{}
 	counter.Commit(info)
 	require.Contains(t, info.ResponsesUsageInfo.BuiltInTools, dto.BuildInToolImageGeneration)
-	assert.Equal(t, dto.MaxImageN, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
+	assert.True(t, info.BillingToolUsageInvalid)
+	assert.Equal(t, counter.Count(), info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 }
 
 func TestImageGenerationCallCounterCommitDoesNotBillDeclarationsAlone(t *testing.T) {

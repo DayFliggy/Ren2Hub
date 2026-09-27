@@ -72,7 +72,7 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 						}
 					}
 					if scenario == "pricing_reconciliation" {
-						info.PriceData.Quote = billingTestQuote(t, `c == 13 ? float("invalid-price") : p * 2 + c * 10`)
+						info.PriceData.Quote = billingTestQuote(t, `c == 13 ? 1 / (c - 13) : p * 2 + c * 10`)
 						require.Nil(t, PrepareBillingForSelectedModel(c, info))
 						usage := &dto.Usage{PromptTokens: 10, CompletionTokens: 13, TotalTokens: 23}
 						cancel()
@@ -96,7 +96,7 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 					}
 					if scenario == "zero_precharge_refund" || scenario == "zero_precharge_refund_completion_failure" {
 						session := info.Billing.(*BillingSession)
-						require.Equal(t, 1, session.GetPreConsumedQuota())
+						require.Zero(t, session.GetPreConsumedQuota())
 						require.True(t, session.NeedsRefund())
 						removeFailure := injectBillingIntegrationFailure(t, mainDB, logDB, scenario)
 						t.Cleanup(func() {
@@ -128,14 +128,12 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 						assertBillingIntegrationBalances(t, info, 100, 100, 0, 0, 0, 0)
 						return
 					}
-					source := "estimated"
-					if index%2 == 0 {
-						source = "provider_and_estimated"
-					}
+					source := "provider"
 					info.CaptureResponseUsage(&dto.Usage{PromptTokens: 17, CompletionTokens: 3, TotalTokens: 20, UsageSource: source}, "text", nil)
 					quota := 20
 					if scenario == "free_consumption" {
 						quota = 0
+						info.PriceData.Quote = billingTestQuote(t, "0")
 					}
 					params := model.RecordConsumeLogParams{TokenId: info.TokenId, ChannelId: info.ChannelId, Quota: common.Quota(quota),
 						PromptTokens: 17, CompletionTokens: 3, ModelName: "billing-integration", TokenName: "integration",
@@ -146,6 +144,9 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 						assertBillingIntegrationBalances(t, info, 100, 100, 0, 0, 0, 0)
 						return
 					}
+					info.PriceData.QuotaToPreConsume = info.Billing.GetPreConsumedQuota()
+					require.Nil(t, PrepareBillingForSelectedModel(c, info))
+					billingTestFinalUsage(t, info, 17, 3)
 					if scenario == "canceled_request" {
 						cancel()
 					}
@@ -303,7 +304,7 @@ func bindBillingIntegrationDatabases(t *testing.T, mainDB, logDB *gorm.DB, kind 
 		common.SetDatabaseTypes(previousMainType, previousLogType)
 		common.RedisEnabled, common.BatchUpdateEnabled, common.LogConsumeEnabled, common.DataExportEnabled = previousRedis, previousBatch, previousLog, previousExport
 	})
-	require.NoError(t, mainDB.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.QuotaData{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}))
+	require.NoError(t, mainDB.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.QuotaData{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}, &model.BillingPriceVersion{}, &model.BillingActivePrice{}))
 	require.NoError(t, logDB.AutoMigrate(&model.Log{}))
 	// Existing non-consumption logs retain NULL idempotency keys after migration.
 	require.NoError(t, logDB.Create(&model.Log{Type: model.LogTypeSystem}).Error)

@@ -9,7 +9,11 @@ import {
   requiredStrictNumber,
   requiredString,
 } from './contracts'
-import { parsePricingModels, type PricingModelContract } from './liveContracts'
+import {
+  parsePricingModelsPartial,
+  type PricingCatalogIssue,
+  type PricingModelContract,
+} from './liveContracts'
 import { ApiError } from './types'
 
 export type PublicDocument = 'about' | 'privacy-policy' | 'user-agreement'
@@ -24,6 +28,7 @@ export interface CatalogPrice {
 }
 export interface PricingCatalog {
   models: CatalogModel[]
+  issues: PricingCatalogIssue[]
   vendors: { id: number; name: string; description: string }[]
   endpoints: Record<string, { path: string; method: string }>
 }
@@ -99,11 +104,11 @@ export function parsePricingCatalog(value: unknown): PricingCatalog {
       business: true,
       status: 200,
     })
-  const rawModels = records(value.data, endpoint)
-  const models = parsePricingModels(rawModels)
+  const { models, issues } = parsePricingModelsPartial(value.data)
   if (!isRecord(value.supported_endpoint)) invalidResponse(endpoint)
   return {
     models,
+    issues,
     vendors: records(value.vendors ?? [], endpoint).map((vendor) => ({
       id: count(vendor.id, endpoint),
       name: requiredString(vendor.name, endpoint, false),
@@ -197,7 +202,8 @@ export function catalogPrices(
   model: CatalogModel,
   unit: 'M' | 'K'
 ): CatalogPrice[] {
-  const version = model.price_version
+  const offer = model.offers[0]!
+  const version = offer.price_version
   if (version.mode === 'free') return [{ key: 'free', value: '0', unit: '' }]
   const labels: Record<string, string> = {
     p: 'input',
@@ -208,13 +214,14 @@ export function catalogPrices(
     img: 'image',
     img_o: 'imageOutput',
     ai: 'audioInput',
+    ai_cr: 'audioCacheRead',
     ao: 'audioOutput',
     reasoning: 'reasoning',
     calls: 'request',
     images: 'images',
     seconds: 'seconds',
   }
-  return version.prices.map((price) => ({
+  return offer.display_prices.map((price) => ({
     key: labels[price.quantity] ?? price.quantity,
     value: price.tier_mode
       ? ''

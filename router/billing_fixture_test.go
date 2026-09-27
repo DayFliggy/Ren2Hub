@@ -23,7 +23,7 @@ func publishGatewayFixturePrices(raw string, tokenPrice bool) error {
 		if err != nil {
 			return err
 		}
-		version := billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: price.String()}}}
+		version := billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: name, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: price.String()}}}
 		if tokenPrice {
 			version.Prices = []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: price.Mul(decimal.NewFromInt(2)).String()}, {Quantity: "c", Unit: "per_million_tokens", Price: price.Mul(decimal.NewFromInt(2)).String()}}
 		}
@@ -49,6 +49,18 @@ func publishGatewayImagePrice(name string) error {
 	if err != nil {
 		return err
 	}
-	_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "images", Unit: "per_image", Price: "0.001"}}}, current.ID, 1)
+	_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: name, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "images", Unit: "per_image", Price: "0.001"}}}, current.ID, 1)
+	return err
+}
+
+func addGatewayFixtureDimensions(name string, prices ...billing.UnitPrice) error {
+	current, err := model.GetActiveBillingPrice(context.Background(), name)
+	if err != nil {
+		return err
+	}
+	version := billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice,
+		Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test prices for enabled capabilities"},
+		Prices:     append(append([]billing.UnitPrice(nil), current.Prices...), prices...)}
+	_, err = model.PublishBillingPrice(context.Background(), version, current.ID, 1)
 	return err
 }

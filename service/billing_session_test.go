@@ -22,14 +22,17 @@ func durableSession(t *testing.T, quota int) (*gin.Context, *BillingSession) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
 	info := &relaycommon.RelayInfo{RequestId: "session", UserId: 1, TokenId: 1, TokenKey: "session"}
+	info.PriceData.Quote = billingTestQuote(t, "p * 2")
 	session, err := NewBillingSession(c, info, quota)
 	require.Nil(t, err)
 	info.Billing = session
+	require.NoError(t, model.PrepareBillingAttempt(context.Background(), info.RequestId, info.RequestId+":attempt", 0, info.PriceData.Quote))
 	t.Cleanup(session.stopRecoveryHeartbeat)
 	return c, session
 }
 func TestBillingSessionSettleAndRefundAreIdempotent(t *testing.T) {
 	c, s := durableSession(t, 40)
+	prepareSessionSettlement(t, s, 140)
 	require.NoError(t, s.Settle(140))
 	require.NoError(t, s.Settle(140))
 	require.Error(t, s.Settle(141))
@@ -49,6 +52,7 @@ func TestBillingSessionSettleAndRefundAreIdempotent(t *testing.T) {
 }
 func TestBillingSessionFailureRollsBackBothAccountsAndRecovers(t *testing.T) {
 	c, s := durableSession(t, 40)
+	prepareSessionSettlement(t, s, 50)
 	require.NoError(t, model.DB.Callback().Update().Before("gorm:update").Register("token-fail", func(tx *gorm.DB) {
 		if tx.Statement.Table == "tokens" {
 			tx.AddError(assert.AnError)
@@ -65,10 +69,48 @@ func TestBillingSessionFailureRollsBackBothAccountsAndRecovers(t *testing.T) {
 	assert.Equal(t, 50, getUserQuota(t, 1))
 	assert.Equal(t, 50, getTokenUsedQuota(t, 1))
 }
-func TestBillingSessionPaidZeroEstimateReservesMinimum(t *testing.T) {
+func TestBillingSessionZeroChargeDoesNotReserveMinimum(t *testing.T) {
 	_, s := durableSession(t, 0)
-	assert.Equal(t, 1, s.GetPreConsumedQuota())
-	assert.Equal(t, 99, getUserQuota(t, 1))
+	require.NoError(t, s.Reserve(0))
+	assert.Zero(t, s.GetPreConsumedQuota())
+	assert.Equal(t, 100, getUserQuota(t, 1))
+}
+
+func TestBillingSessionRequiresPublishedQuoteBeforeReservation(t *testing.T) {
+	truncate(t)
+	seedUser(t, 1, 100)
+	seedToken(t, 1, 1, "missing-quote", 100)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	info := &relaycommon.RelayInfo{RequestId: "missing-quote", UserId: 1, TokenId: 1, TokenKey: "missing-quote"}
+	session, err := NewBillingSession(c, info, 40)
+	require.Nil(t, session)
+	require.NotNil(t, err)
+	assert.Equal(t, 503, err.StatusCode)
+	assert.Equal(t, 100, getUserQuota(t, 1))
+	var events, recoveries int64
+	require.NoError(t, model.DB.Model(&model.BillingEvent{}).Count(&events).Error)
+	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Count(&recoveries).Error)
+	assert.Zero(t, events)
+	assert.Zero(t, recoveries)
+}
+
+func TestBillingSessionRetryRequiresPublishedQuoteBeforeIncreasingReservation(t *testing.T) {
+	_, retry := durableSession(t, 40)
+	retry.relayInfo.PriceData.Quote = nil
+	require.Error(t, retry.Reserve(80))
+	assert.Equal(t, 60, getUserQuota(t, 1))
+	assert.Equal(t, 40, retry.GetPreConsumedQuota())
+}
+
+func prepareSessionSettlement(t *testing.T, session *BillingSession, quota int) {
+	t.Helper()
+	info := session.relayInfo
+	billingTestFinalUsage(t, info, int64(quota), 0)
+	require.NoError(t, model.PrepareBillingRecoveryConsumption(info.RequestId, model.BillingConsumption{
+		Log:   model.Log{UserId: info.UserId, TokenId: info.TokenId, ModelName: info.PriceData.Quote.PriceVersion.Model, Quota: common.Quota(quota)},
+		Usage: info.PriceData.Usage, Charge: info.PriceData.Charge,
+	}))
 }
 func TestBillingSessionMoreExpensiveRetryMustReserve(t *testing.T) {
 	_, s := durableSession(t, 40)

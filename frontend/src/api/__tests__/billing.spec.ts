@@ -5,6 +5,7 @@ import {
   parseBillingCharge,
   parseBillingEvent,
   parseBillingReservation,
+  parseBillingAudit,
 } from '@/api/billing'
 
 const reservation = {
@@ -20,17 +21,91 @@ const reservation = {
   last_error: '',
   manual_review_required: true,
 }
+const audit = {
+  status: 'unconfirmed',
+  attempts: [],
+  replayed_charge: null,
+  quoted_total_usd: null,
+  customer_charge_usd: '0',
+  customer_charge_quota: '0',
+  customer_charge_confirmed: false,
+  charge_difference_usd: null,
+  charge_difference_quota: null,
+  upstream_cost_usd: null,
+  profit_usd: null,
+  cost_status: 'unknown',
+}
+const upstream_cost = {
+  attempt_count: 0,
+  confirmed_attempt_count: 0,
+  complete: false,
+  upstream_cost_usd: null,
+  records: [],
+}
 afterEach(() => vi.restoreAllMocks())
 
 describe('billing API', () => {
+  it('retains signed audit differences and never invents profit from unknown costs', () => {
+    expect(
+      parseBillingAudit(
+        {
+          ...audit,
+          customer_charge_confirmed: true,
+          charge_difference_usd: '-0.123456789012345678',
+          charge_difference_quota: '-1',
+        },
+        '/audit'
+      )
+    ).toMatchObject({
+      profit_usd: null,
+      charge_difference_usd: '-0.123456789012345678',
+      charge_difference_quota: '-1',
+    })
+    expect(() =>
+      parseBillingAudit({ ...audit, profit_usd: '0' }, '/audit')
+    ).toThrow()
+  })
+  it('posts immutable cost evidence without converting decimal amounts', async () => {
+    const command = {
+      event_id: 'cost-1',
+      attempt_id: 'attempt-1',
+      amount_usd: '0.123456789012345678',
+      source: 'invoice' as const,
+      reference: 'invoice-1',
+    }
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      ...command,
+      id: 1,
+      request_id: 'request/1',
+      actor_id: 2,
+      created_at: 1,
+    })
+    expect((await billingApi.recordCost('request/1', command)).amount_usd).toBe(
+      command.amount_usd
+    )
+    expect(post).toHaveBeenCalledWith(
+      '/api/billing/reconciliations/request%2F1/cost',
+      command
+    )
+  })
   it('keeps saved rule multipliers as decimal strings and rejects floating point projections', () => {
     const charge = {
       lines: [],
       final_quota: '1',
+      base_usd: '0.000002',
+      adjustments: [
+        {
+          kind: 'channel_multiplier',
+          multiplier: '1',
+          base_usd: '0.000002',
+          amount_usd: '0',
+          result_usd: '0.000002',
+        },
+      ],
       total_usd: '0.000002',
       unrounded_quota: '1',
       rounding_delta: '0',
-      calculation_version: 'billing-v2',
+      calculation_version: 'billing-v3',
       rounding_version: 'half-up-positive-minimum-v1',
       trace: {
         matched_tier: '',
@@ -65,10 +140,20 @@ describe('billing API', () => {
     const charge = {
       lines: [],
       final_quota: '1000',
+      base_usd: '0.002',
+      adjustments: [
+        {
+          kind: 'channel_multiplier',
+          multiplier: '1',
+          base_usd: '0.002',
+          amount_usd: '0',
+          result_usd: '0.002',
+        },
+      ],
       total_usd: '0.002',
       unrounded_quota: '1000',
       rounding_delta: '0',
-      calculation_version: 'billing-v2',
+      calculation_version: 'billing-v3',
       rounding_version: 'half-up-positive-minimum-v1',
       trace: { matched_tier: '', image_count: 2 },
     }
@@ -101,6 +186,8 @@ describe('billing API', () => {
     ]
     const get = vi.spyOn(api, 'get').mockResolvedValue({
       recovery: reservation,
+      audit,
+      upstream_cost,
       quote: null,
       attempts,
       usage: null,
@@ -110,6 +197,8 @@ describe('billing API', () => {
     expect((await billingApi.detail('request-1')).attempts).toEqual(attempts)
     get.mockResolvedValue({
       recovery: reservation,
+      audit,
+      upstream_cost,
       quote: null,
       attempts: null,
       usage: null,
@@ -123,6 +212,8 @@ describe('billing API', () => {
   it('keeps reconciliation actionable when a charge snapshot is unavailable', async () => {
     vi.spyOn(api, 'get').mockResolvedValue({
       recovery: reservation,
+      audit,
+      upstream_cost,
       quote: null,
       attempts: [],
       usage: null,
@@ -140,6 +231,9 @@ describe('billing API', () => {
       .mockRejectedValue(new Error('database unavailable'))
     await expect(billingApi.metrics()).rejects.toThrow('database unavailable')
     get.mockResolvedValue({
+      price_versions: 0,
+      quote_attempts: 0,
+      prices_by_origin: [],
       pending: 0,
       reconciliations: 0,
       reserved_quota: '0',

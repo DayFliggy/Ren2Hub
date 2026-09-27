@@ -15,5 +15,5 @@ func BillingRecoveryUsageUnconfirmed(state string) bool {
 }
 
 func BillingRecoveryUsageCollecting(state string) bool {
-	return state == BillingRecoveryStateCollecting || state == BillingRecoveryStateUsageCollecting || state == BillingRecoveryStatePricingCollecting
+	return state == BillingRecoveryStateUsageCollecting || state == BillingRecoveryStatePricingCollecting
 }

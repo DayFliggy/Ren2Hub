@@ -84,7 +84,7 @@ func TestGatewayClaudeEffectiveEffortBilling(t *testing.T) {
 					require.NoError(t, model.DB.Create(&fallback).Error)
 					require.NoError(t, fallback.AddAbilities(model.DB))
 				}
-				price, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: channel.Models, Mode: billing.ModeExpression, Expression: `v1:p * (attr("effort") == "high" ? 10 : 1)`}, 0, 1)
+				price, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: channel.Models, Mode: billing.ModeExpression, Expression: `v1:p * (attr("effort") == "high" ? 10 : 1)`}, 0, 1)
 				require.NoError(t, err)
 				require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 				var before, after model.User
@@ -160,7 +160,7 @@ func TestGatewayClaudeEffectiveEffortBilling(t *testing.T) {
 					assert.False(t, gjson.Get(log.Other, "reasoning_effort").Exists())
 				}
 				if test.name == "message overrides top level" && !passthrough {
-					_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: channel.Models, Mode: billing.ModeExpression, Expression: `v1:p * 100`}, price.ID, 1)
+					_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: channel.Models, Mode: billing.ModeExpression, Expression: `v1:p * 100`}, price.ID, 1)
 					require.NoError(t, err)
 					var usage billing.Usage
 					require.NoError(t, common.UnmarshalJsonStr(recovery.UsageSnapshot, &usage))

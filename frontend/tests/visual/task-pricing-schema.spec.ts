@@ -76,8 +76,12 @@ for (const theme of ['light', 'dark'] as const) {
               {
                 id: 3,
                 model: 'video-fixture',
-                contract_version: 2,
-                calculation_version: 'billing-v2',
+                provenance: {
+                  kind: 'retail',
+                  retail_reason: 'Reviewed visual fixture price',
+                },
+                contract_version: 3,
+                calculation_version: 'billing-v3',
                 result_unit: 'usd',
                 mode: 'expression',
                 expression:

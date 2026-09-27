@@ -78,6 +78,9 @@ describe('model metadata and pricing save boundary', () => {
       try {
         await flushPromises()
         await wrapper.get('input[required]').setValue('new-model')
+        await wrapper
+          .get('[data-price-retail-reason]')
+          .setValue('Reviewed retail price')
         for (const input of wrapper.findAll('input[inputmode=decimal]'))
           await input.setValue('1')
         await vi.advanceTimersByTimeAsync(350)

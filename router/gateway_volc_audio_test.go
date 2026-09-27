@@ -71,7 +71,7 @@ func assertGatewayVolcSpeechAccounting(t *testing.T, charge, tokenQuota int, hea
 		assert.Equal(t, 1, user.RequestCount)
 		assert.Equal(t, 1, logs[0].ChannelId)
 		assert.EqualValues(t, charge, logs[0].Quota)
-		assert.Equal(t, 5, logs[0].PromptTokens)
+		assert.Zero(t, logs[0].PromptTokens, "a fixed business fee does not settle estimated token counters")
 		assert.Zero(t, logs[0].CompletionTokens)
 		var other map[string]any
 		require.NoError(t, common.UnmarshalJsonStr(logs[0].Other, &other))

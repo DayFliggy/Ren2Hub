@@ -66,7 +66,7 @@ func TestGatewayVeoFinalParametersAndPrecharge(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = fmt.Fprintf(w, `{"name":"models/%s/operations/local-%d"}`, requestModel, index)
 			})
-			_, priceErr := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: requestModel, Mode: billing.ModeExpression, Expression: `attr("duration") * 1000 * (attr("resolution") == "4k" ? 1.5 : 1)`}, 0, 1)
+			_, priceErr := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: requestModel, Mode: billing.ModeExpression, Expression: `attr_num("duration") * 1000 * (attr("resolution") == "4k" ? 1.5 : 1)`}, 0, 1)
 			require.NoError(t, priceErr)
 			ch, err := model.GetChannelById(1, true)
 			require.NoError(t, err)

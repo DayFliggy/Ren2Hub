@@ -12,7 +12,7 @@ import (
 func TestExpressionTracePersistsDecimalRuleAndOmitsVMResult(t *testing.T) {
 	value, trace, err := billingexpr.RunExprWithRequest(`p * (attr("service_tier") == "fast" ? 0.8 : 1)`, billingexpr.TokenParams{P: 100}, billingexpr.RequestInput{Attributes: map[string]interface{}{"service_tier": "fast"}})
 	require.NoError(t, err)
-	assert.Equal(t, float64(80), value)
+	assert.Equal(t, "80", value.String())
 	data, err := common.Marshal(trace)
 	require.NoError(t, err)
 	var saved map[string]interface{}

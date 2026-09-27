@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -133,6 +134,32 @@ func TestImageExpressionSettlementRequiresEachActualDimension(t *testing.T) {
 			info.PriceData.Usage.Quantities["images"] = "2"
 			info.PriceData.Usage.Estimated = true
 			assert.False(t, TextUsageReadyForSettlement(ctx, info, actualTokens))
+		})
+	}
+}
+
+func TestFlatFeeUsesConfirmedBusinessTerminalAndSettlesOnce(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		t.Run(map[bool]string{false: "http", true: "sse"}[stream], func(t *testing.T) {
+			ctx, info := reservedRealtimeBillingSession(t)
+			quote, err := billing.NewQuote(billingTestPublishedPrice(t, billing.PriceVersion{Model: "flat", Mode: billing.ModeUnitPrice, FlatFee: "0.000006"}), "1", nil, time.Now())
+			require.NoError(t, err)
+			info.PriceData.Quote, info.PriceData.UsePrice, info.IsStream = quote, true, stream
+			require.Nil(t, PrepareBillingForSelectedModel(ctx, info))
+			info.MarkValidOutput()
+			if stream {
+				ctx.Set("response_termination", types.ResponseTermination{Kind: types.ResponseCompleted})
+			}
+			for i := 0; i < 2; i++ {
+				PostTextConsumeQuota(ctx, info, &dto.Usage{UsageSource: "missing"}, nil)
+				require.NoError(t, info.BillingSettlementError)
+			}
+			var user model.User
+			require.NoError(t, model.DB.First(&user, info.UserId).Error)
+			assert.EqualValues(t, 3, user.UsedQuota)
+			assert.EqualValues(t, 1, user.RequestCount)
+			assert.False(t, info.PriceData.Usage.Estimated)
+			assert.True(t, info.PriceData.Usage.Complete)
 		})
 	}
 }

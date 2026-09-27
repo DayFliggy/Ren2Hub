@@ -27,7 +27,7 @@ func TestBillingPriceAPIRevalidatesCurrentPluginWithoutRewritingHistory(t *testi
 	source := `export const meta={apiVersion:1,key:"schema-fixture",name:"Schema",version:"2.0.0",author:{name:"Test"},models:["schema-fixture"],fetchMode:"per_task",usageSchema:{resolution:{enum:["720p"]}}};export function buildSubmitRequest(){return {url:"https://example.com"}};export function parseSubmitResponse(){return {taskId:"job"}};export function buildQueryRequest(){return {url:"https://example.com"}};export function parseTaskResult(){return {status:"SUCCESS"}};`
 	_, err := jsplugin.DefaultRegistry.Register(source, jsplugin.Options{})
 	require.NoError(t, err)
-	price := billing.PriceVersion{Model: "schema-fixture", Mode: billing.ModeExpression, Expression: `v2:u("resolution") == "1080p" ? 0.4 : 0.2`, UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{"resolution": {Type: "string", Source: billingexpr.UsageRequestFixed, Required: true, Enum: []string{"720p", "1080p"}}}}}
+	price := billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "schema-fixture", Mode: billing.ModeExpression, Expression: `v2:u("resolution") == "1080p" ? 0.4 : 0.2`, UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{"resolution": {Type: "string", Source: billingexpr.UsageRequestFixed, Required: true, Enum: []string{"720p", "1080p"}}}}}
 	old, err := model.PublishBillingPrice(context.Background(), price, 0, 1)
 	require.NoError(t, err)
 	body, err := common.Marshal(gin.H{"price": old, "expected_version": old.ID, "plugin_key": "schema-fixture"})

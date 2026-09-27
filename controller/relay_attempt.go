@@ -301,11 +301,30 @@ func stopLiveRouteRetry(c *gin.Context, cause error) *types.NewAPIError {
 }
 
 func prepareRelayOutboundPrice(c *gin.Context, info *relaycommon.RelayInfo, body io.Reader) error {
+	// Task adapters already freeze their wire attributes and validated schema
+	// facts in the enclosing BeforeSend. Do not replace that estimate with tokens.
+	if info.TaskRelayInfo != nil {
+		if info.PriceData.Quote == nil || info.PriceData.Usage == nil {
+			return helper.BillingPriceAPIError(fmt.Errorf("task billing facts were not prepared"))
+		}
+		return nil
+	}
 	format := info.GetFinalRequestRelayFormat()
+	if info.RelayMode == relayconstant.RelayModeAudioTranscription || info.RelayMode == relayconstant.RelayModeAudioTranslation {
+		if err := helper.FreezeTranscriptionPriceMeta(info, c.Request.Header.Get("Content-Type"), body); err != nil {
+			return helper.BillingRequestAPIError(err)
+		}
+		if info.DeferBillingToSend {
+			if _, err := helper.ModelPriceHelper(c, info, info.GetEstimatePromptTokens(), nil); err != nil {
+				return helper.BillingPriceAPIError(err)
+			}
+		}
+		return nil
+	}
 	if info.RelayMode == relayconstant.RelayModeAudioSpeech {
 		meta, tokens, err := helper.FinalAudioPriceMeta(info, body)
 		if err != nil {
-			return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			return helper.BillingRequestAPIError(err)
 		}
 		c.Set("gateway_token_budget_known", false)
 		c.Set("gateway_token_budget", int64(tokens))
@@ -313,7 +332,7 @@ func prepareRelayOutboundPrice(c *gin.Context, info *relaycommon.RelayInfo, body
 		info.SetEstimatePromptTokens(tokens)
 		if info.DeferBillingToSend {
 			if _, err := helper.ModelPriceHelper(c, info, tokens, meta); err != nil {
-				return types.NewErrorWithStatusCode(err, types.ErrorCodeModelPriceError, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+				return helper.BillingPriceAPIError(err)
 			}
 		}
 		return nil
@@ -324,11 +343,11 @@ func prepareRelayOutboundPrice(c *gin.Context, info *relaycommon.RelayInfo, body
 		c.Set("gateway_token_budget_source", "image_quantity_only")
 		meta, err := helper.FinalImagePriceMeta(c, info, body)
 		if err != nil {
-			return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+			return helper.BillingRequestAPIError(err)
 		}
 		if info.DeferBillingToSend {
 			if _, err := helper.ModelPriceHelper(c, info, info.GetEstimatePromptTokens(), meta); err != nil {
-				return types.NewErrorWithStatusCode(err, types.ErrorCodeModelPriceError, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+				return helper.BillingPriceAPIError(err)
 			}
 		}
 		return nil
@@ -337,6 +356,9 @@ func prepareRelayOutboundPrice(c *gin.Context, info *relaycommon.RelayInfo, body
 		data, err := io.ReadAll(body)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+		}
+		if err := helper.FreezeOutboundBillingAttributes(info, data); err != nil {
+			return helper.BillingRequestAPIError(err)
 		}
 		if err := service.ValidateGatewayOutboundState(c, info, data); err != nil {
 			return err
@@ -347,10 +369,19 @@ func prepareRelayOutboundPrice(c *gin.Context, info *relaycommon.RelayInfo, body
 	c.Set("gateway_token_budget", int64(0))
 	budget, err := helper.AnalyzeOutboundTokenBudget(info, body)
 	if err != nil {
-		return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		return helper.BillingRequestAPIError(err)
 	}
 	if budget == nil {
 		c.Set("gateway_token_budget_source", "wire_budget_unsupported")
+		if info.DeferBillingToSend {
+			var meta *types.TokenCountMeta
+			if info.Request != nil {
+				meta = info.Request.GetTokenCountMeta()
+			}
+			if _, err := helper.ModelPriceHelper(c, info, info.GetEstimatePromptTokens(), meta); err != nil {
+				return helper.BillingPriceAPIError(err)
+			}
+		}
 		return nil
 	}
 	c.Set("gateway_token_budget_source", budget.Reason)
@@ -365,7 +396,7 @@ func prepareRelayOutboundPrice(c *gin.Context, info *relaycommon.RelayInfo, body
 	meta := info.Request.GetTokenCountMeta()
 	meta.MaxTokens = budget.OutputTokens
 	if _, err := helper.ModelPriceHelper(c, info, info.GetEstimatePromptTokens(), meta); err != nil {
-		return types.NewErrorWithStatusCode(err, types.ErrorCodeModelPriceError, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		return helper.BillingPriceAPIError(err)
 	}
 	return nil
 }

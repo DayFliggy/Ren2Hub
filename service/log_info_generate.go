@@ -27,6 +27,8 @@ func InjectBillingPriceInfo(other map[string]interface{}, info *relaycommon.Rela
 	other["price_origin"] = info.PriceData.Quote.PriceVersion.Origin
 	other["price_source_hash"] = info.PriceData.Quote.PriceVersion.SourceHash
 	other["quote_hash"] = info.PriceData.Quote.Hash
+	other["requested_service_tier"] = info.PriceData.Quote.Attributes["service_tier"]
+	other["actual_service_tier"] = info.ActualServiceTier
 	other["channel_multiplier"] = info.PriceData.Quote.ChannelRatio
 	other["billing_usage"] = info.PriceData.Usage
 	other["charge_result"] = info.PriceData.Charge

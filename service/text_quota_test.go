@@ -104,7 +104,7 @@ func TestTextMissingQuoteCannotUseOldRatioOrPrice(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	info := &relaycommon.RelayInfo{PriceData: hosttypes.PriceData{}}
 	summary := calculateTextQuotaSummary(ctx, info, &dto.Usage{PromptTokens: 100})
-	require.ErrorContains(t, summary.PricingError, "missing frozen")
+	require.ErrorContains(t, summary.PricingError, "frozen billing quote is required")
 	assert.Zero(t, summary.Quota)
 }
 

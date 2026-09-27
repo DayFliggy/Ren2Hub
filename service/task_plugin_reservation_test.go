@@ -51,7 +51,7 @@ func TestViduPublicationGuardPreservesAcceptedCreditQuotes(t *testing.T) {
 	credits.Required = true
 	current.UsageSchema.Fields["credits"] = credits
 	current.UsageSchema.Hash = ""
-	old, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{
+	old, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"},
 		Model: "viduq2", Mode: billing.ModeExpression, Expression: `v2:u("credits") * 0.4`, UsageSchema: current.UsageSchema,
 	}, 0, 1)
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestPluginPerCallPricePublishesAndSettlesWithoutUsageDimensions(t *testing.
 	require.NoError(t, err)
 	_, err = registry.RegisterFactory(source, jsplugin.Options{})
 	require.NoError(t, err)
-	price, err := ValidateTaskPluginPricePublication(billing.PriceVersion{
+	price, err := ValidateTaskPluginPricePublication(billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"},
 		Model: "viduq2", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.25"}},
 	}, "vidu")
 	require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestPluginPerCallPricePublishesAndSettlesWithoutUsageDimensions(t *testing.
 		_, err := ValidateTaskPluginPricePublication(price, "vidu")
 		require.Error(t, err, "schema-free publication is restricted to the single fixed call dimension")
 	}
-	_, err = ValidateTaskPluginPricePublication(billing.PriceVersion{
+	_, err = ValidateTaskPluginPricePublication(billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"},
 		Model: "viduq2", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "-1"}},
 	}, "vidu")
 	require.Error(t, err)

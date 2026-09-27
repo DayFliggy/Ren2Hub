@@ -203,6 +203,13 @@ func completeTestTask(t *testing.T, ctx context.Context, task *model.Task, statu
 	}
 	fromStatus := task.Status
 	task.Status, task.Progress = status, "100%"
+	if status == model.TaskStatusSuccess {
+		usage := &billing.Usage{InputTokens: int64(actualQuota), ContextTokens: int64(actualQuota), Source: "provider", Complete: true, Terminal: "completed", Quantities: map[string]string{"calls": "1"}}
+		charge, err := billing.Calculate(task.PrivateData.BillingContext.Quote, *usage)
+		require.NoError(t, err)
+		require.EqualValues(t, actualQuota, charge.FinalQuota)
+		task.PrivateData.BillingContext.Usage, task.PrivateData.BillingContext.Charge = usage, charge
+	}
 	_, err := completeTaskBilling(ctx, task, fromStatus, common.Quota(actualQuota), reason)
 	return err
 }
@@ -215,9 +222,9 @@ func acceptTestTask(t *testing.T, task *model.Task) {
 	}
 	task.PrivateData.BillingSource = BillingSourceWallet
 	if task.PrivateData.BillingContext == nil || task.PrivateData.BillingContext.Quote == nil {
-		quote, err := billing.NewQuote(billing.PriceVersion{Model: "test-model", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: decimal.NewFromInt(int64(task.Quota)).Div(decimal.NewFromInt(500000)).String()}}}, "1", nil, time.Now())
+		quote, err := billing.NewQuote(billingTestPublishedPrice(t, billing.PriceVersion{Model: "test-model", Mode: billing.ModeExpression, Expression: "p * 2"}), "1", nil, time.Now())
 		require.NoError(t, err)
-		task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "accepted_parameters", Complete: true}, OriginModelName: "test-model"}
+		task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{InputTokens: int64(task.Quota), Quantities: map[string]string{"calls": "1"}, Source: "accepted_parameters", Estimated: true}, OriginModelName: "test-model"}
 	}
 	_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{RequestID: task.PrivateData.SubmissionRequestID, UserID: task.UserId, TokenID: task.PrivateData.TokenId, TokenRequired: task.PrivateData.TokenId > 0, Source: BillingSourceWallet})
 	require.NoError(t, err)
@@ -274,6 +281,8 @@ func TestTaskPriceUsesFrozenUsageInsteadOfAdaptorMoney(t *testing.T) {
 	seedUser(t, 1, 100)
 	seedChannel(t, 1)
 	task := makeTask(1, 1, 20, 0, BillingSourceWallet)
+	task.PrivateData.BillingContext.Quote = billingTestCallQuote(t)
+	task.PrivateData.BillingContext.Usage = &billing.Usage{Quantities: map[string]string{"calls": "1"}, Estimated: true}
 	acceptTestTask(t, task)
 	task.Status = model.TaskStatusSuccess
 	quota, _, _, err := taskCompletionQuota(nil, task, &relaycommon.TaskInfo{TotalTokens: 999, CompletionTokens: 500})
@@ -444,7 +453,7 @@ func TestTaskCompletionUsageBoundariesPreserveFundsAndTerminalEvidence(t *testin
 			seedChannel(t, id)
 			task := makeTask(id, id, test.reserved, id, BillingSourceWallet)
 			test.price.Model = task.Properties.OriginModelName
-			quote, err := billing.NewQuote(test.price, "1", nil, time.Now())
+			quote, err := billing.NewQuote(billingTestPublishedPrice(t, test.price), "1", nil, time.Now())
 			require.NoError(t, err)
 			task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Estimated: true}}
 			acceptTestTask(t, task)

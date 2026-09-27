@@ -15,12 +15,12 @@ func TestBillingEvidenceRejectsDifferentUsageWithIdenticalRoundedCharge(t *testi
 	seedBillingAccount(t, db, 100, 100, false)
 	newReservation(t, "evidence-request")
 	require.NoError(t, Reserve("evidence-request", 10))
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "test", ScopeKind: billing.PriceScopeChannel, ChannelID: 7, Mode: billing.ModeUnitPrice,
+	quote, err := publishedBillingTestQuote(billing.PriceVersion{Model: "test", ScopeKind: billing.PriceScopeChannel, ChannelID: 7, Mode: billing.ModeUnitPrice,
 		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.0000001"}}}, "1", nil, time.Now())
 	require.NoError(t, err)
 	require.ErrorIs(t, PrepareBillingAttempt(context.Background(), "evidence-request", "attempt", 8, quote), ErrBillingEventConflict)
 	require.NoError(t, PrepareBillingAttempt(context.Background(), "evidence-request", "attempt", 7, quote))
-	usage := billing.Usage{Quantities: map[string]string{"calls": "1"}, Complete: true, Source: "provider"}
+	usage := billing.Usage{Quantities: map[string]string{"calls": "1"}, Complete: true, Source: "provider", Terminal: "completed"}
 	charge, err := billing.Calculate(quote, usage)
 	require.NoError(t, err)
 	consumption := BillingConsumption{Log: Log{UserId: 1, TokenId: 1, ChannelId: 7, ModelName: "test", Quota: charge.FinalQuota}, Usage: &usage, Charge: charge}

@@ -1,3 +1,4 @@
+import { pricingOfferFixture } from './pricingFixtures'
 import { expect, test } from '@playwright/test'
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 
@@ -121,7 +122,7 @@ for (const theme of ['light', 'dark'] as const) {
                 owner_by: 'OpenAI',
                 supported_endpoint_types: ['openai'],
                 billing_mode: 'unit_price',
-                price_version: version,
+                offers: [pricingOfferFixture(version)],
               },
             ],
             vendors: [{ id: 1, name: 'OpenAI' }],

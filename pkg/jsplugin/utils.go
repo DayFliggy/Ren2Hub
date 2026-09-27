@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/grafana/sobek"
@@ -32,7 +33,18 @@ type volcSignRequest struct {
 func injectGlobals(runtime *sobek.Runtime, identity func() string, now func() time.Time, logOutput func(string)) error {
 	utils := map[string]any{
 		"hasCapability": HasCapability,
+		"decimal":       decimalHelpers(),
 		"json": map[string]any{
+			"parseNumbers": func(source string) (any, error) {
+				if len(source) > MaxJSONToolBytes {
+					return nil, fmt.Errorf("JSON exceeds tool size limit")
+				}
+				var value any
+				if err := common.DecodeJsonNumbers(strings.NewReader(source), &value); err != nil {
+					return nil, err
+				}
+				return ExactUsageValue(value)
+			},
 			"clone": func(call sobek.FunctionCall) sobek.Value {
 				if sobek.IsUndefined(call.Argument(0)) {
 					panic(runtime.NewTypeError("json.clone requires a JSON value"))

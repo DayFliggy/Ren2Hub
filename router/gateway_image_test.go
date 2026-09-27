@@ -199,7 +199,7 @@ func TestGatewayImageExpressionUsesActualCountAndRetainsInterruptedReservation(t
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("models = ?", "gpt-4o-mini").Update("param_override", `{"n":3}`).Error)
 			current, err := model.GetActiveBillingPrice(t.Context(), "gpt-4o-mini")
 			require.NoError(t, err)
-			_, err = model.PublishBillingPrice(t.Context(), billing.PriceVersion{Model: "gpt-4o-mini", Mode: billing.ModeExpression, Expression: `v1:tier("images", fixed(0.001)) * image_count`}, current.ID, 1)
+			_, err = model.PublishBillingPrice(t.Context(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "gpt-4o-mini", Mode: billing.ModeExpression, Expression: `v1:tier("images", fixed(0.001)) * image_count`}, current.ID, 1)
 			require.NoError(t, err)
 			request, err := http.NewRequest(http.MethodPost, url+"/v1/images/generations", strings.NewReader(`{"model":"gpt-4o-mini","prompt":"draw","n":1}`))
 			require.NoError(t, err)

@@ -39,13 +39,14 @@ type OpenAITextResponseChoice struct {
 }
 
 type OpenAITextResponse struct {
-	Id      string                     `json:"id"`
-	Model   string                     `json:"model"`
-	Object  string                     `json:"object"`
-	Created any                        `json:"created"`
-	Choices []OpenAITextResponseChoice `json:"choices"`
-	Error   any                        `json:"error,omitempty"`
-	Usage   `json:"usage"`
+	ServiceTier string                     `json:"service_tier,omitempty"`
+	Id          string                     `json:"id"`
+	Model       string                     `json:"model"`
+	Object      string                     `json:"object"`
+	Created     any                        `json:"created"`
+	Choices     []OpenAITextResponseChoice `json:"choices"`
+	Error       any                        `json:"error,omitempty"`
+	Usage       `json:"usage"`
 }
 
 // GetOpenAIError 从动态错误类型中提取OpenAIError结构
@@ -145,6 +146,7 @@ type FunctionResponse struct {
 }
 
 type ChatCompletionsStreamResponse struct {
+	ServiceTier       string                                `json:"service_tier,omitempty"`
 	Id                string                                `json:"id"`
 	Object            string                                `json:"object"`
 	Created           int64                                 `json:"created"`
@@ -226,13 +228,15 @@ type CompletionsStreamResponse struct {
 }
 
 type Usage struct {
-	PromptTokens         int           `json:"prompt_tokens"`
-	CompletionTokens     int           `json:"completion_tokens"`
-	TotalTokens          int           `json:"total_tokens"`
-	PromptCacheHitTokens int           `json:"prompt_cache_hit_tokens,omitempty"`
-	UsageSemantic        string        `json:"usage_semantic,omitempty"`
-	UsageSource          string        `json:"usage_source,omitempty"`
-	BillingUsage         *BillingUsage `json:"billing_usage,omitempty"`
+	MeasuredQuantities   map[string]string `json:"-"`
+	Observation          *UsageObservation `json:"-"`
+	PromptTokens         int               `json:"prompt_tokens"`
+	CompletionTokens     int               `json:"completion_tokens"`
+	TotalTokens          int               `json:"total_tokens"`
+	PromptCacheHitTokens int               `json:"prompt_cache_hit_tokens,omitempty"`
+	UsageSemantic        string            `json:"usage_semantic,omitempty"`
+	UsageSource          string            `json:"usage_source,omitempty"`
+	BillingUsage         *BillingUsage     `json:"billing_usage,omitempty"`
 
 	PromptTokensDetails    InputTokenDetails   `json:"prompt_tokens_details"`
 	CompletionTokenDetails OutputTokenDetails  `json:"completion_tokens_details"`
@@ -329,6 +333,7 @@ type OutputTokenDetails struct {
 }
 
 type OpenAIResponsesResponse struct {
+	ServiceTier        string             `json:"service_tier,omitempty"`
 	ID                 string             `json:"id"`
 	Object             string             `json:"object"`
 	CreatedAt          IntValue           `json:"created_at"`

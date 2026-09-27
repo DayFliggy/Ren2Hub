@@ -137,7 +137,7 @@ func TestGetAndValidOpenAIImageRequestNBounds(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, req.N)
 			require.Equal(t, tt.wantN, *req.N)
-			require.Equal(t, float64(tt.wantN), req.GetTokenCountMeta().BillingQuantities["n"])
+			require.Equal(t, fmt.Sprint(tt.wantN), req.GetTokenCountMeta().BillingQuantities["n"])
 		})
 	}
 

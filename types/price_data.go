@@ -2,8 +2,6 @@ package types
 
 import (
 	"fmt"
-	"math"
-	"strconv"
 
 	"github.com/QuantumNous/new-api/pkg/billing"
 )
@@ -18,17 +16,12 @@ type PriceData struct {
 	QuotaToPreConsume int // 按量计费的预消耗额度
 }
 
-// ChannelMultiplier is a diagnostic projection of the immutable quote. It is
-// not mutable request state and cannot be used as a settlement input.
-func (p *PriceData) ChannelMultiplier() float64 {
-	if p == nil || p.Quote == nil || p.Quote.ChannelRatio == "" {
-		return 1
+// ChannelMultiplier projects the frozen Decimal value without rounding it.
+func (p *PriceData) ChannelMultiplier() string {
+	if p == nil || p.Quote == nil {
+		return ""
 	}
-	ratio, err := strconv.ParseFloat(p.Quote.ChannelRatio, 64)
-	if err != nil || ratio <= 0 || math.IsNaN(ratio) || math.IsInf(ratio, 0) {
-		return 1
-	}
-	return ratio
+	return p.Quote.ChannelRatio
 }
 
 func (p *PriceData) ToSetting() string {

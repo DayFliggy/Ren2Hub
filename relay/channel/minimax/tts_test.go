@@ -85,6 +85,30 @@ func TestMiniMaxTTSRejectsIncompleteAndUnsafeUsage(t *testing.T) {
 	}
 }
 
+func TestMiniMaxTTSUsageDistinguishesMissingFromExplicitZero(t *testing.T) {
+	for _, test := range []struct {
+		extra   string
+		present bool
+	}{
+		{`{}`, false}, {`{"usage_characters":null}`, false}, {`{"usage_characters":0}`, true},
+	} {
+		t.Run(test.extra, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/audio/speech", nil)
+			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}, RelayMode: relayconstant.RelayModeAudioSpeech}
+			payload := `{"data":{"audio":"0001","status":2},"extra_info":` + test.extra + `}`
+			value, apiErr := handleTTSResponse(c, &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(payload))}, info)
+			require.Nil(t, apiErr)
+			usage := value.(*dto.Usage)
+			count, present := usage.MeasuredQuantities["characters"]
+			require.Equal(t, test.present, present)
+			if present {
+				require.Equal(t, "0", count)
+			}
+		})
+	}
+}
+
 func TestMiniMaxTTSMetadataPreservesFalseAndZero(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/audio/speech", nil)

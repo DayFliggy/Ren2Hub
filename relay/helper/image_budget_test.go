@@ -2,6 +2,7 @@ package helper
 
 import (
 	"bytes"
+	"fmt"
 	"mime/multipart"
 	"net/http/httptest"
 	"strings"
@@ -50,7 +51,7 @@ func TestFinalImagePriceUsesWireQuantities(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, float64(test.count), meta.BillingQuantities["n"])
+			assert.Equal(t, fmt.Sprint(test.count), meta.BillingQuantities["n"])
 		})
 	}
 }
@@ -80,6 +81,16 @@ func TestFinalImagePriceReadsMultipartAndQuality(t *testing.T) {
 			continue
 		}
 		require.NoError(t, err)
-		assert.Equal(t, 3.0, meta.BillingQuantities["n"])
+		assert.Equal(t, "3", meta.BillingQuantities["n"])
 	}
+}
+
+func TestFinalImagePricePreservesSentTier(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/images/generations", nil)
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ApiType: constant.APITypeOpenAI}, RelayFormat: types.RelayFormatOpenAIImage}
+	_, err := FinalImagePriceMeta(c, info, strings.NewReader(`{"n":2,"service_tier":"priority","quality":"hd"}`))
+	require.NoError(t, err)
+	require.Equal(t, "priority", info.BillingRequirements.ServiceTier)
+	require.Equal(t, "priority", info.BillingRequestInput.Attributes["service_tier"])
 }

@@ -65,7 +65,7 @@ describe('KeyFormModal', () => {
       model_limits: ['gpt-4o'],
       ip_limits: ['127.0.0.1'],
       rate_limit: 60,
-      max_ratio: 2,
+      max_ratio: '2',
       load_balance: false,
       channels: [],
       expired_time: -1,

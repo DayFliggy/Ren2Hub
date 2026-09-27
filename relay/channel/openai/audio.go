@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -305,7 +306,7 @@ func decodeAudioUsage(raw json.RawMessage, speech bool) (*dto.Usage, error) {
 	var wire struct {
 		dto.Usage
 		Type              string                 `json:"type"`
-		Seconds           *float64               `json:"seconds"`
+		Seconds           *json.Number           `json:"seconds"`
 		InputTokenDetails *dto.InputTokenDetails `json:"input_token_details"`
 	}
 	if err := common.Unmarshal(raw, &wire); err != nil {
@@ -324,12 +325,21 @@ func decodeAudioUsage(raw json.RawMessage, speech bool) (*dto.Usage, error) {
 			return nil, fmt.Errorf("invalid audio usage token count")
 		}
 	}
-	if wire.Seconds != nil && (math.IsNaN(*wire.Seconds) || math.IsInf(*wire.Seconds, 0) || *wire.Seconds < 0) {
-		return nil, fmt.Errorf("invalid audio usage duration")
-	}
 	if wire.Type == "duration" {
-		// Duration billing uses the existing request estimate, not tokens.
-		return nil, nil
+		if wire.Seconds == nil {
+			return nil, fmt.Errorf("audio duration is missing")
+		}
+		seconds, err := billing.ParseAmountUSD(wire.Seconds.String())
+		if err != nil {
+			return nil, fmt.Errorf("invalid audio usage duration")
+		}
+		return &dto.Usage{UsageSource: "provider_duration", MeasuredQuantities: map[string]string{"seconds": seconds.String()}}, nil
+	}
+	if wire.Type != "" && wire.Type != "tokens" {
+		return nil, fmt.Errorf("unsupported audio usage type %q", wire.Type)
+	}
+	if !dto.HasJSONTokenCounts(raw, "input_tokens", "output_tokens") && !dto.HasJSONTokenCounts(raw, "prompt_tokens", "completion_tokens") {
+		return nil, fmt.Errorf("audio usage requires explicit input and output counts")
 	}
 	if usage.InputTokens != 0 {
 		usage.PromptTokens = usage.InputTokens

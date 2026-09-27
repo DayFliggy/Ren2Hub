@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relay/channel/openai"
@@ -87,7 +88,7 @@ type MiniMaxTTSData struct {
 }
 
 type MiniMaxExtraInfo struct {
-	UsageCharacters int64 `json:"usage_characters"`
+	UsageCharacters *int64 `json:"usage_characters"`
 }
 
 type MiniMaxBaseResp struct {
@@ -153,7 +154,8 @@ func handleTTSResponse(c *gin.Context, resp *http.Response, info *relaycommon.Re
 		return nil, types.NewOpenAIError(fmt.Errorf("MiniMax speech did not complete"), types.ErrorCodeBadResponse, http.StatusBadGateway)
 	}
 
-	if minimaxResp.ExtraInfo.UsageCharacters < 0 || minimaxResp.ExtraInfo.UsageCharacters > math.MaxInt32 {
+	characters := minimaxResp.ExtraInfo.UsageCharacters
+	if characters != nil && (*characters < 0 || *characters > math.MaxInt32) {
 		return nil, types.NewOpenAIError(fmt.Errorf("invalid MiniMax character usage"), types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 	}
 	audioData, decodeErr := hex.DecodeString(minimaxResp.Data.Audio)
@@ -170,15 +172,10 @@ func handleTTSResponse(c *gin.Context, resp *http.Response, info *relaycommon.Re
 		contentType = "text/event-stream"
 	}
 	openai.OpenaiTTSHandler(c, &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {contentType}}, Body: io.NopCloser(bytes.NewReader(audioData))}, info)
-	// This model is billed by input characters, not generated audio tokens.
-	observed := &dto.Usage{UsageSource: "estimated"}
-	if info.HasValidOutput() {
-		observed.PromptTokens = info.GetEstimatePromptTokens()
-		if minimaxResp.ExtraInfo.UsageCharacters > 0 {
-			observed.PromptTokens = int(minimaxResp.ExtraInfo.UsageCharacters)
-			observed.UsageSource = "provider"
-		}
-		observed.TotalTokens = observed.PromptTokens
+	observed := &dto.Usage{UsageSource: "missing"}
+	if info.HasValidOutput() && characters != nil {
+		observed.UsageSource = "provider_characters"
+		observed.MeasuredQuantities = map[string]string{"characters": strconv.FormatInt(*characters, 10)}
 	}
 	return observed, helper.StreamError(info)
 }

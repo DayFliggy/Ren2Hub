@@ -29,7 +29,7 @@ func setupMidjourneyPoll(t *testing.T) *gorm.DB {
 	connection, err := db.DB()
 	require.NoError(t, err)
 	connection.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.Midjourney{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingAttempt{}, &model.BillingEvent{}, &model.QuotaData{}))
+	require.NoError(t, db.AutoMigrate(&model.Midjourney{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingAttempt{}, &model.BillingEvent{}, &model.QuotaData{}, &model.BillingPriceVersion{}, &model.BillingActivePrice{}))
 	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 1).Updates(map[string]any{"available_quota": 100, "used_quota": 0, "request_count": 0}).Error)
 	service.InitHttpClient()
 	return db
@@ -46,7 +46,14 @@ func seedMidjourneyPollTask(t *testing.T, db *gorm.DB, endpoint, key, id string)
 	task.PrivateData.BillingSource = "wallet"
 	task.PrivateData.SubmissionRequestID = fmt.Sprintf("mj-submit-%d", channel.Id)
 	require.NoError(t, db.Create(&model.Token{Id: channel.Id, UserId: 1, Key: fmt.Sprintf("mj-token-%d", channel.Id), RemainQuota: 100}).Error)
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "mj_imagine", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.00004"}}}, "1", nil, time.Unix(1700000000, 0))
+	price, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{
+		Model: "mj_imagine", ScopeKind: billing.PriceScopeChannel, ChannelID: channel.Id,
+		Mode:       billing.ModeUnitPrice,
+		Prices:     []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.00004"}},
+		Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "Reviewed Midjourney polling fixture"},
+	}, 0, 1)
+	require.NoError(t, err)
+	quote, err := billing.NewQuote(*price, "1", nil, time.Now())
 	require.NoError(t, err)
 	task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "request_quantity", Complete: true}}
 	_, err = model.EnsureBillingRecovery(model.BillingRecoveryInput{RequestID: task.PrivateData.SubmissionRequestID, UserID: 1, TokenID: task.TokenId, TokenRequired: true, Source: "wallet"})

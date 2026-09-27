@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { beforeAll, describe, expect, it } from 'vitest'
 import LogBillingDetail from '../LogBillingDetail.vue'
+import { parseBillingCharge } from '@/api/billing'
 import type { LogItem } from '@/types/console'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
@@ -14,6 +15,8 @@ describe('saved billing detail', () => {
       model: 'customer-model',
       other: {
         price_version_id: 12,
+        requested_service_tier: 'priority',
+        actual_service_tier: 'default',
         price_scope: 'channel_model',
         price_channel_id: 9,
         quote_hash: 'frozen-quote-hash',
@@ -30,10 +33,20 @@ describe('saved billing detail', () => {
             },
           ],
           final_quota: '100000',
+          base_usd: '0.2',
+          adjustments: [
+            {
+              kind: 'channel_multiplier',
+              multiplier: '1',
+              base_usd: '0.2',
+              amount_usd: '0',
+              result_usd: '0.2',
+            },
+          ],
           total_usd: '0.2',
           unrounded_quota: '100000',
           rounding_delta: '0',
-          calculation_version: 'billing-v2',
+          calculation_version: 'billing-v3',
           rounding_version: 'half-up-positive-minimum-v1',
           trace: {
             matched_tier: 'night',
@@ -45,11 +58,19 @@ describe('saved billing detail', () => {
         },
       },
     } as unknown as LogItem
+    expect(
+      parseBillingCharge(
+        (log.other as unknown as { charge_result: unknown }).charge_result,
+        'fixture'
+      )
+    ).not.toBeNull()
     const wrapper = mount(LogBillingDetail, {
       props: { log },
       global: { plugins: [i18n] },
     })
     expect(wrapper.text()).toContain('provider-model')
+    expect(wrapper.text()).toContain('priority')
+    expect(wrapper.text()).toContain('Reported service tier (audit only)')
     expect(wrapper.text()).toContain('channel_model')
     expect(wrapper.text()).toContain('frozen-quote-hash')
     expect(wrapper.text()).toContain('unexpected-model')

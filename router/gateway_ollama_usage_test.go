@@ -49,7 +49,7 @@ func TestGatewayOllamaUsagePresenceAccounting(t *testing.T) {
 				})
 				current, err := model.GetActiveBillingPrice(context.Background(), "llama3.1")
 				require.NoError(t, err)
-				_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "llama3.1", Mode: billing.ModeExpression, Expression: "p * 2 + c * 4"}, current.ID, 1)
+				_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "llama3.1", Mode: billing.ModeExpression, Expression: "p * 2 + c * 4"}, current.ID, 1)
 				require.NoError(t, err)
 				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 1000000}).Error)
 				code, body := gatewayStateHTTP(t, base, key, "/v1/chat/completions", fmt.Sprintf(`{"model":"llama3.1","max_tokens":32,"stream":%t,"messages":[{"role":"user","content":"fixture"}]}`, stream))

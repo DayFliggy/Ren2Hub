@@ -10,15 +10,27 @@ import (
 func TestRoutePolicyValidateRejectsUnsafeBounds(t *testing.T) {
 	policy := RoutePolicy{
 		GroupID:             1,
-		MaxRatio:            RouteMaxPolicyRatio + 1,
+		MaxRatio:            "1000.000000000000000001",
 		RetryMode:           RoutePolicyRetryNextChannel,
 		MaxFailoverAttempts: 1,
 	}
 	require.Error(t, policy.Validate())
 
-	policy.MaxRatio = 1
+	policy.MaxRatio = "1"
 	policy.MaxFailoverAttempts = RouteMaxFailoverAttempts + 1
 	require.Error(t, policy.Validate())
+}
+
+func TestRoutePolicyPreservesExactDecimalCeiling(t *testing.T) {
+	policy := RoutePolicy{GroupID: 1, MaxRatio: "1.000000000000000001", RetryMode: RoutePolicyRetryNone}
+	policy.Normalize()
+	require.NoError(t, policy.Validate())
+	require.Equal(t, "1.000000000000000001", policy.MaxRatio)
+	for _, invalid := range []string{"0", "-1", "NaN", "Inf", "1000.000000000000000001", "0.0000000000000000001"} {
+		policy.MaxRatio = invalid
+		policy.Normalize()
+		require.Error(t, policy.Validate(), invalid)
+	}
 }
 
 func TestRouteProfileNormalizePreservesExplicitVersion(t *testing.T) {

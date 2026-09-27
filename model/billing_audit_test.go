@@ -16,14 +16,14 @@ func settledBillingAuditEvidence(t *testing.T) (BillingRecovery, []BillingAttemp
 	db := setupBillingRecoveryTestDB(t)
 	require.NoError(t, db.AutoMigrate(&BillingPriceVersion{}, &BillingActivePrice{}))
 	seedBillingAccount(t, db, 1000, 1000, false)
-	version, err := PublishBillingPrice(context.Background(), billing.PriceVersion{
+	version, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
 		Model: "audit-model", ScopeKind: billing.PriceScopeChannel, ChannelID: 7,
 		Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}},
 	}, 0, 1)
 	require.NoError(t, err)
 	quote, err := billing.NewQuote(*version, "1", nil, time.Now())
 	require.NoError(t, err)
-	usage := &billing.Usage{InputTokens: 100, Complete: true, Source: "provider"}
+	usage := &billing.Usage{InputTokens: 100, Complete: true, Source: "provider", Terminal: "completed"}
 	charge, err := billing.Calculate(quote, *usage)
 	require.NoError(t, err)
 	newReservation(t, "audit-request")

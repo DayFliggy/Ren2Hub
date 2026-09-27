@@ -94,7 +94,7 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, info *relaycommon.RelayInfo, a
 		logger.LogError(ctx, "invalid frozen violation fee rule")
 		return false
 	}
-	usage := billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "confirmed_violation", Complete: true}
+	usage := billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "confirmed_violation", Complete: true, Terminal: "completed"}
 	charge, err := billing.Calculate(quote, usage)
 	if err != nil {
 		logger.LogError(ctx, "invalid frozen violation charge")

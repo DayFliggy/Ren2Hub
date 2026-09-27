@@ -39,6 +39,8 @@ func SetApiRouter(router *gin.Engine) {
 		billingRoot.GET("/prices/task-schema", controller.GetTaskPluginBillingSchema)
 		billingRoot.GET("/prices/seed", controller.GetBillingPriceSeed)
 		billingRoot.GET("/prices/automatic", controller.GetAutomaticBillingPricing)
+		billingRoot.GET("/prices/automatic/snapshots", controller.ListAutomaticBillingPricingSnapshots)
+		billingRoot.GET("/prices/automatic/snapshots/:id", controller.GetAutomaticBillingPricingSnapshot)
 		billingRoot.PUT("/prices/automatic", controller.SaveAutomaticBillingPricing)
 		billingRoot.POST("/prices/automatic/sync", controller.SyncAutomaticBillingPricing)
 		billingRoot.POST("/prices/automatic/restore", controller.RestoreAutomaticBillingPricing)

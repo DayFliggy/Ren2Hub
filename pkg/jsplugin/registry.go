@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"github.com/shopspring/decimal"
 	"maps"
 	"math"
 	"net"
@@ -1709,6 +1710,10 @@ func validateUsageExamples(schema map[string]UsageFieldSchema, examples []UsageE
 			if err := validateUsageExampleValue(value, field); err != nil {
 				return fmt.Errorf("plugin meta usageExamples[%d] facts field %q %s", index, key, err.Error())
 			}
+			if field.Type == "number" {
+				number, _ := pluginDecimal(value)
+				examples[index].Facts[key] = number.String()
+			}
 		}
 	}
 	return nil
@@ -1731,36 +1736,20 @@ func validateUsageExampleValue(value any, field UsageFieldSchema) error {
 		}
 		return nil
 	}
-	number, ok := usageExampleNumber(value)
-	if !ok {
-		return fmt.Errorf("must be a finite non-negative number")
+	number, err := pluginDecimal(value)
+	if err != nil || number.IsNegative() {
+		return fmt.Errorf("must be a finite non-negative number with exact decimal text")
 	}
-	if math.IsNaN(number) || math.IsInf(number, 0) || number < 0 {
-		return fmt.Errorf("must be a finite non-negative number")
-	}
-	limit := float64(relaycommon.MaxTaskDurationSeconds)
+	limit := int64(relaycommon.MaxTaskDurationSeconds)
 	if field.Unit == "count" {
-		limit = float64(dto.MaxImageN)
+		limit = int64(dto.MaxImageN)
 	} else if field.Unit == "token" || field.Unit == "credit" {
-		limit = float64(common.MaxQuota)
+		limit = int64(common.MaxQuota)
 	}
-	if number > limit {
+	if number.GreaterThan(decimal.NewFromInt(limit)) {
 		return fmt.Errorf("exceeds the host limit")
 	}
 	return nil
-}
-
-func usageExampleNumber(value any) (float64, bool) {
-	switch number := value.(type) {
-	case float64:
-		return number, true
-	case int64:
-		return float64(number), true
-	case int:
-		return float64(number), true
-	default:
-		return 0, false
-	}
 }
 
 func decodeRoutes(value any) ([]Route, error) {

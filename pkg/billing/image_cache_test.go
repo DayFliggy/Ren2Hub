@@ -13,7 +13,7 @@ func TestImageCountExpressionRequiresBoundedActualQuantity(t *testing.T) {
 	version := billing.PriceVersion{Model: "image", Mode: billing.ModeExpression,
 		Expression: `v1:tier("images", fixed(0.0000006)) * image_count`,
 		Prices:     []billing.UnitPrice{{Quantity: "tool:search", Unit: "per_call", Price: "0.0000006"}}}
-	q, err := billing.NewQuote(version, "1", map[string]any{"quantity": float64(3)}, time.Now())
+	q, err := billing.NewQuote(version, "1", map[string]any{"quantity": "3"}, time.Now())
 	require.NoError(t, err)
 	for _, count := range []string{"", "0", "-1", "1.5", "129", "NaN", "9007199254740993"} {
 		u := billing.Usage{Quantities: map[string]string{"images": count}, Complete: true}
@@ -29,7 +29,7 @@ func TestImageCountExpressionRequiresBoundedActualQuantity(t *testing.T) {
 	assert.EqualValues(t, 1, charge.FinalQuota, "round all dimensions only once")
 	require.NotNil(t, charge.Trace.ImageCount)
 	assert.Equal(t, 2, *charge.Trace.ImageCount)
-	assert.Equal(t, float64(3), q.Attributes["quantity"], "actual count cannot replace the frozen request")
+	assert.Equal(t, "3", q.Attributes["quantity"], "actual count cannot replace the frozen request")
 	for _, count := range []string{"1", "128"} {
 		_, err := billing.Calculate(q, billing.Usage{Quantities: map[string]string{"images": count, "tool:search": "0"}, Complete: true})
 		require.NoError(t, err, count)

@@ -33,8 +33,23 @@ func TestSourceUnitsAndExplicitZero(t *testing.T) {
 			assert.Equal(t, billing.ModeExpression, entry.Price.Mode)
 			assert.Contains(t, entry.Price.Expression, "p * 0.123456789123456789 + c * 0 + cr * 0")
 			assert.Empty(t, entry.Price.Prices)
+			require.NotNil(t, entry.Price.Provenance)
+			assert.Equal(t, autopricing.ParserVersion, entry.Price.Provenance.ParserVersion)
+			require.Len(t, entry.Price.Provenance.Fields, 3)
+			for _, field := range entry.Price.Provenance.Fields {
+				assert.NotEmpty(t, field.Target)
+				assert.NotEmpty(t, field.RawValue)
+				assert.Contains(t, field.SourcePath, "/")
+				if test.name == "sub" {
+					assert.Equal(t, "usd_per_token", field.SourceUnit)
+					assert.Equal(t, "multiply_by_1000000", field.Conversion)
+				} else {
+					assert.Equal(t, "usd_per_million_tokens", field.SourceUnit)
+					assert.Equal(t, "identity", field.Conversion)
+				}
+			}
 			require.NoError(t, billing.ValidatePriceVersion(entry.Price))
-			quote, err := billing.NewQuote(entry.Price, "1", map[string]interface{}{"service_tier": "priority"}, time.Unix(1, 0))
+			quote, err := billing.NewQuote(entry.Price, "1", map[string]interface{}{"service_tier": "default"}, time.Unix(1, 0))
 			require.NoError(t, err)
 			charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, OutputTokens: 100, CacheReadTokens: 100, InputIncludesCache: true})
 			require.NoError(t, err)
@@ -98,13 +113,13 @@ func TestContextBoundaryAndServiceTierNormalization(t *testing.T) {
 	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{
 	 "input_cost_per_token":0.000001,"output_cost_per_token":0.000002,
 	 "input_cost_per_token_above_200k_tokens":0.000003,"output_cost_per_token_above_200k_tokens":0.000004,
-	 "cache_read_input_token_cost_above_200k_tokens":0.0000005,
+	 "cache_read_input_token_cost_above_200k_tokens":0.0000005,"cache_read_input_token_cost":0.000001,
 	 "input_cost_per_token_priority":0.000002,"output_cost_per_token_priority":0.000004,
 	 "input_cost_per_token_above_200k_tokens_priority":0.000006,"output_cost_per_token_above_200k_tokens_priority":0.000008,
-	 "cache_read_input_token_cost_above_200k_tokens_priority":0.000001,
+	 "cache_read_input_token_cost_above_200k_tokens_priority":0.000001,"cache_read_input_token_cost_priority":0.000002,
 	 "input_cost_per_token_flex":0.0000005,"output_cost_per_token_flex":0.000001,
 	 "input_cost_per_token_above_200k_tokens_flex":0.0000015,"output_cost_per_token_above_200k_tokens_flex":0.000002,
-	 "cache_read_input_token_cost_above_200k_tokens_flex":0.00000025,
+	 "cache_read_input_token_cost_above_200k_tokens_flex":0.00000025,"cache_read_input_token_cost_flex":0.0000005,
 	 "input_cost_per_token_batches":-1
 	}}`))
 	require.NoError(t, err)
@@ -124,68 +139,69 @@ func TestContextBoundaryAndServiceTierNormalization(t *testing.T) {
 	}
 }
 
-func TestDefaultServiceMultipliersFreezeTokenAndCacheCosts(t *testing.T) {
+func TestUnverifiedServiceTiersAreRejectedWithoutDefaultMultipliers(t *testing.T) {
 	for _, source := range []struct {
-		name autopricing.SourceID
+		id   autopricing.SourceID
 		data string
 	}{
-		{autopricing.SourceSub2API, `{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"cache_read_input_token_cost":0.0000001}}`},
-		{autopricing.SourceAxonHub, `{"p":[{"id":"m","cost":{"input":1,"output":2,"cache_read":0.1}}]}`},
+		{autopricing.SourceSub2API, `{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`},
+		{autopricing.SourceAxonHub, `{"p":[{"id":"m","cost":{"input":1,"output":2}}]}`},
 	} {
-		t.Run(string(source.name), func(t *testing.T) {
-			entries, err := autopricing.Parse(source.name, []byte(source.data))
-			require.NoError(t, err)
-			for _, test := range []struct{ tier, usd string }{
-				{"", "0.000065"}, {"default", "0.000065"}, {"priority", "0.00013"}, {"fast", "0.00013"}, {"ultrafast", "0.00013"}, {"flex", "0.0000325"},
-			} {
-				t.Run(test.tier, func(t *testing.T) {
-					quote, err := billing.NewQuote(entries["m"].Price, "1", map[string]interface{}{"service_tier": test.tier}, time.Unix(1, 0))
-					require.NoError(t, err)
-					charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, OutputTokens: 5, CacheReadTokens: 50, InputIncludesCache: true})
-					require.NoError(t, err)
-					assert.Equal(t, test.usd, charge.TotalUSD)
-				})
-			}
-		})
+		entries, err := autopricing.Parse(source.id, []byte(source.data))
+		require.NoError(t, err)
+		price := entries["m"].Price
+		assert.Equal(t, []string{"default"}, price.Support.ServiceTiers)
+		for _, tier := range []string{"priority", "fast", "ultrafast", "flex"} {
+			err := billing.ValidatePricingRequirements(price, billing.PricingRequirements{ServiceTier: tier})
+			require.Error(t, err)
+			_, err = billing.NewQuote(price, "1", map[string]interface{}{"service_tier": tier}, time.Unix(1, 0))
+			require.Error(t, err)
+		}
+		quote, err := billing.NewQuote(price, "1", nil, time.Unix(1, 0))
+		require.NoError(t, err)
+		charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 1000000})
+		require.NoError(t, err)
+		assert.Equal(t, "1", charge.TotalUSD)
 	}
 }
 
-func TestExplicitPartialServicePricesPreserveZeroAndInheritOrdinaryRates(t *testing.T) {
-	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{
-	 "input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"cache_read_input_token_cost":0.0000001,
-	 "input_cost_per_token_priority":0,"output_cost_per_token_flex":0,
-	 "input_cost_per_token_above_100k_tokens":0.000003,"output_cost_per_token_above_100k_tokens":0.000004,
-	 "litellm_provider":"openai","search_context_cost_per_query":{"search_context_size_low":0.01,"search_context_size_medium":0.01,"search_context_size_high":0.01}
-	}}`))
+func TestExplicitServiceRequiresCompleteRatesAndPreservesZero(t *testing.T) {
+	_, rejected, err := autopricing.ParseWithReport(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"input_cost_per_token_priority":0}}`))
+	require.Error(t, err)
+	require.Len(t, rejected, 1)
+	assert.Contains(t, rejected[0].Reason, "incomplete priority")
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"input_cost_per_token_priority":0,"output_cost_per_token_priority":0}}`))
 	require.NoError(t, err)
-	for _, test := range []struct {
-		tier    string
-		context int64
-		usd     string
-	}{
-		{"priority", 100000, "0.010025"}, {"fast", 100000, "0.010025"}, {"priority", 100001, "0.010055"}, {"fast", 100001, "0.010055"},
-		{"flex", 100000, "0.010055"}, {"flex", 100001, "0.010165"}, {"ultrafast", 100001, "0.01041"},
+	quote, err := billing.NewQuote(entries["m"].Price, "1", map[string]interface{}{"service_tier": "priority"}, time.Unix(1, 0))
+	require.NoError(t, err)
+	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 1000000, OutputTokens: 1000000})
+	require.NoError(t, err)
+	assert.Equal(t, "0", charge.TotalUSD)
+}
+
+func TestMultipleContextThresholdsAreRejectedWithoutInventedInheritance(t *testing.T) {
+	for _, data := range []string{
+		`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"input_cost_per_token_above_100k_tokens":0.000002,"output_cost_per_token_above_200k_tokens":0.000004}}`,
+		`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"input_cost_per_token_above_100k_tokens":0.000002,"input_cost_per_token_above_200k_tokens_priority":0.000003}}`,
 	} {
-		t.Run(fmt.Sprintf("%s/%d", test.tier, test.context), func(t *testing.T) {
-			quote, err := billing.NewQuote(entries["m"].Price, "1", map[string]interface{}{"service_tier": test.tier}, time.Unix(1, 0))
-			require.NoError(t, err)
-			charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, OutputTokens: 10, ContextTokens: test.context, CacheReadTokens: 50, InputIncludesCache: true, Quantities: map[string]string{"tool:web_search": "1"}})
-			require.NoError(t, err)
-			assert.Equal(t, test.usd, charge.TotalUSD)
-		})
+		_, rejected, err := autopricing.ParseWithReport(autopricing.SourceSub2API, []byte(data))
+		require.Error(t, err)
+		require.Len(t, rejected, 1)
+		assert.Contains(t, rejected[0].Reason, "multiple context thresholds")
 	}
 }
 
-func TestDefaultServiceMultiplierDoesNotMultiplyImageCount(t *testing.T) {
-	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image":0.04}}`))
+func TestAudioCachePriceIsExplicitAndDoesNotChargeAudioTwice(t *testing.T) {
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"audio":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"cache_read_input_token_cost":0.0000001,"input_cost_per_audio_token":0.000005,"cache_read_input_audio_token_cost":0}}`))
 	require.NoError(t, err)
-	for _, test := range []struct{ tier, usd string }{{"priority", "0.0806"}, {"flex", "0.08015"}} {
-		quote, err := billing.NewQuote(entries["m"].Price, "1", map[string]interface{}{"service_tier": test.tier}, time.Unix(1, 0))
-		require.NoError(t, err)
-		charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, OutputTokens: 1100, ImageOutputTokens: 1000, Quantities: map[string]string{"images": "2"}})
-		require.NoError(t, err)
-		assert.Equal(t, test.usd, charge.TotalUSD)
-	}
+	price := entries["audio"].Price
+	require.NoError(t, billing.ValidatePricingRequirements(price, billing.PricingRequirements{Dimensions: []string{"ai", "ai_cr"}}))
+	quote, err := billing.NewQuote(price, "1", nil, time.Unix(1, 0))
+	require.NoError(t, err)
+	cached := int64(20)
+	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, CacheReadTokens: 30, AudioInputTokens: 50, AudioCacheReadTokens: &cached, InputIncludesCache: true})
+	require.NoError(t, err)
+	assert.Equal(t, "0.000191", charge.TotalUSD)
 }
 
 func TestEmbeddingRequiresSourceTypeAndNeverCreatesAnOutputPrice(t *testing.T) {
@@ -206,11 +222,11 @@ func TestEmbeddingRequiresSourceTypeAndNeverCreatesAnOutputPrice(t *testing.T) {
 			assert.Equal(t, "embedding", price.UsageScope)
 			assert.NotContains(t, price.Expression, "c *")
 			assert.Empty(t, price.Prices)
-			quote, err := billing.NewQuote(price, "1", map[string]interface{}{"service_tier": "priority"}, time.Unix(1, 0))
+			quote, err := billing.NewQuote(price, "1", map[string]interface{}{"service_tier": "default"}, time.Unix(1, 0))
 			require.NoError(t, err)
 			charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100})
 			require.NoError(t, err)
-			assert.Equal(t, "0.0002", charge.TotalUSD)
+			assert.Equal(t, "0.0001", charge.TotalUSD)
 		})
 	}
 	for _, test := range []struct {
@@ -266,17 +282,30 @@ func TestRetiredAndUnknownSourcesAreRejected(t *testing.T) {
 }
 
 func TestOutputImagesArePerImageWithoutTokenDoubleCharge(t *testing.T) {
-	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image":0.04}}`))
+	entries, err := autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{"output_cost_per_image":0.04}}`))
 	require.NoError(t, err)
 	quote, err := billing.NewQuote(entries["m"].Price, "1", nil, time.Unix(1, 0))
 	require.NoError(t, err)
 	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 100, ContextTokens: 100, OutputTokens: 1100, ImageOutputTokens: 1000, Quantities: map[string]string{"images": "2"}})
 	require.NoError(t, err)
-	assert.Equal(t, "0.0803", charge.TotalUSD)
-	_, rejected, err := autopricing.ParseWithReport(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image_token":0.00004,"output_cost_per_image":0.04}}`))
-	require.Error(t, err)
-	require.Len(t, rejected, 1)
-	assert.True(t, rejected[0].BlockFallback)
+	assert.Equal(t, "0.08", charge.TotalUSD)
+	entries, err = autopricing.Parse(autopricing.SourceSub2API, []byte(`{"m":{"input_cost_per_token":0.000001,"output_cost_per_image":0.04}}`))
+	require.NoError(t, err)
+	quote, err = billing.NewQuote(entries["m"].Price, "1", nil, time.Unix(1, 0))
+	require.NoError(t, err)
+	charge, err = billing.Calculate(quote, billing.Usage{InputTokens: 100, Quantities: map[string]string{"images": "2"}})
+	require.NoError(t, err)
+	assert.Equal(t, "0.0801", charge.TotalUSD)
+	for _, source := range []string{
+		`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image":0.04}}`,
+		`{"m":{"input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"output_cost_per_image_token":0.00004,"output_cost_per_image":0.04}}`,
+	} {
+		_, rejected, err := autopricing.ParseWithReport(autopricing.SourceSub2API, []byte(source))
+		require.Error(t, err)
+		require.Len(t, rejected, 1)
+		assert.True(t, rejected[0].BlockFallback)
+		assert.Contains(t, rejected[0].Reason, "missing usage contract")
+	}
 }
 
 func TestSubServicePriceThenContextRatioAndExplicitOverrides(t *testing.T) {
@@ -285,7 +314,7 @@ func TestSubServicePriceThenContextRatioAndExplicitOverrides(t *testing.T) {
 	 "input_cost_per_token_above_272k_tokens":0.000005,"output_cost_per_token_above_272k_tokens":0.0000225,
 	 "cache_read_input_token_cost_above_272k_tokens":0.0000005,
 	 "input_cost_per_token_priority":0.000005,"output_cost_per_token_priority":0.00003,"cache_read_input_token_cost_priority":0.0000005,
-	 "input_cost_per_token_flex":0.00000125,"output_cost_per_token_flex":0.0000075,
+	 "input_cost_per_token_flex":0.00000125,"output_cost_per_token_flex":0.0000075,"cache_read_input_token_cost_flex":0.000000125,
 	 "input_cost_per_token_above_272k_tokens_flex":0.0000025,"output_cost_per_token_above_272k_tokens_flex":0.00001125,
 	 "cache_read_input_token_cost_above_272k_tokens_flex":0.00000025
 	}}`))
@@ -378,11 +407,11 @@ func TestMediaCacheAndSearchPrices(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 4)
 	assert.Empty(t, entries["media"].Price.Prices)
-	mediaQuote, err := billing.NewQuote(entries["media"].Price, "1", map[string]interface{}{"service_tier": "fast"}, time.Unix(1, 0))
+	mediaQuote, err := billing.NewQuote(entries["media"].Price, "1", map[string]interface{}{"service_tier": "default"}, time.Unix(1, 0))
 	require.NoError(t, err)
 	mediaCharge, err := billing.Calculate(mediaQuote, billing.Usage{InputTokens: 20, OutputTokens: 10, ImageInputTokens: 5, ImageOutputTokens: 3, AudioInputTokens: 5, AudioOutputTokens: 2})
 	require.NoError(t, err)
-	assert.Equal(t, "0.000228", mediaCharge.TotalUSD)
+	assert.Equal(t, "0.000114", mediaCharge.TotalUSD)
 	quote, err := billing.NewQuote(entries["image"].Price, "1", nil, time.Unix(1, 0))
 	require.NoError(t, err)
 	charge, err := billing.Calculate(quote, billing.Usage{Quantities: map[string]string{"images": "3"}})
@@ -393,6 +422,31 @@ func TestMediaCacheAndSearchPrices(t *testing.T) {
 	charge, err = billing.Calculate(quote, billing.Usage{Quantities: map[string]string{"tool:web_search": "2"}})
 	require.NoError(t, err)
 	assert.Equal(t, "0.02", charge.TotalUSD)
+}
+
+func TestUnenabledOptionalToolsDoNotDisableOrdinaryPricing(t *testing.T) {
+	entries, rejected, err := autopricing.ParseWithReport(autopricing.SourceSub2API, []byte(`{
+	 "maps":{"litellm_provider":"gemini","input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"google_maps_grounding_cost_per_query":0.01},
+	 "search":{"litellm_provider":"openai","input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"search_context_cost_per_query":{"search_context_size_low":0.01,"search_context_size_medium":0.02,"search_context_size_high":0.03}}
+	}`))
+	require.NoError(t, err)
+	require.Empty(t, rejected)
+	for _, name := range []string{"maps", "search"} {
+		entry := entries[name]
+		require.NoError(t, billing.ValidatePricingRequirements(entry.Price, billing.PricingRequirements{Dimensions: []string{"p", "c"}}))
+		quote, err := billing.NewQuote(entry.Price, "1", nil, time.Unix(1, 0))
+		require.NoError(t, err)
+		charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 3, OutputTokens: 1})
+		require.NoError(t, err)
+		assert.Equal(t, "0.000005", charge.TotalUSD)
+	}
+	for _, test := range []struct{ model, dimension string }{{"maps", "tool:google_maps"}, {"search", "tool:web_search"}, {"search", "tool:web_search_preview"}} {
+		err := billing.ValidatePricingRequirements(entries[test.model].Price, billing.PricingRequirements{Dimensions: []string{test.dimension}})
+		var missing *billing.PricingError
+		require.ErrorAs(t, err, &missing)
+		assert.Equal(t, "missing_price_dimension", missing.Code)
+		assert.Equal(t, test.dimension, missing.Dimension)
+	}
 }
 
 func TestProviderAmbiguityDoesNotOverrideCanonicalPrices(t *testing.T) {
@@ -429,7 +483,7 @@ func TestUnpricedProviderStillMakesBareIdentityAmbiguous(t *testing.T) {
 	assert.NotContains(t, entries, "b/m")
 	assert.NotContains(t, entries, "m")
 	assert.Contains(t, rejected, autopricing.Rejection{Model: "m", Reason: "ambiguous provider identity", BlockFallback: true})
-	assert.Contains(t, rejected, autopricing.Rejection{Model: "b/m", Reason: "missing cost", BlockFallback: false})
+	assert.Contains(t, rejected, autopricing.Rejection{Model: "b/m", Provider: "b", Reason: "missing cost", BlockFallback: false})
 }
 
 func TestConflictingDuplicateIdentityCannotDependOnArrayOrder(t *testing.T) {

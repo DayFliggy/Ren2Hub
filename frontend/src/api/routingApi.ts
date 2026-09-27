@@ -1,4 +1,5 @@
 import { api } from './console'
+import { compareDecimal, isDecimal } from '@/utils/decimal'
 import {
   invalidResponse,
   isRecord,
@@ -82,14 +83,25 @@ function parseHealthSummary(
   }
 }
 
+export function validRouteMaxRatio(value: unknown): value is string {
+  return (
+    isDecimal(value) &&
+    value.length <= 64 &&
+    (value.split('.')[1]?.length ?? 0) <= 18 &&
+    compareDecimal(value, '0') > 0 &&
+    compareDecimal(value, '1000') <= 0
+  )
+}
+
 function parsePolicy(value: unknown, endpoint: string): RoutePolicy {
   if (!isRecord(value)) invalidResponse(endpoint)
   const retryMode = requiredString(value.retry_mode, endpoint, false)
   if (!retryModes.has(retryMode as RouteRetryMode)) invalidResponse(endpoint)
+  if (!validRouteMaxRatio(value.max_ratio)) invalidResponse(endpoint)
   return {
     group_id: requiredStrictInteger(value.group_id, endpoint),
     load_balance: requiredBoolean(value.load_balance, endpoint),
-    max_ratio: requiredStrictNumber(value.max_ratio, endpoint),
+    max_ratio: value.max_ratio,
     retry_mode: retryMode as RouteRetryMode,
     max_same_resource_attempts: requiredStrictInteger(
       value.max_same_resource_attempts,
@@ -145,7 +157,7 @@ function parseGroup(
         ? {
             group_id: requiredStrictInteger(groupValue.id, endpoint),
             load_balance: false,
-            max_ratio: 1,
+            max_ratio: '1',
             retry_mode: 'next_channel',
             max_same_resource_attempts: 0,
             max_failover_attempts: 1,

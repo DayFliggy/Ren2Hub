@@ -66,7 +66,7 @@ func runRealtimeHandler(t *testing.T, quota int) (*websocket.Conn, *websocket.Co
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}, &model.Log{}, &model.QuotaData{}, &model.Channel{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}, &model.Log{}, &model.QuotaData{}, &model.Channel{}, &model.BillingPriceVersion{}, &model.BillingActivePrice{}))
 	previousDB := model.DB
 	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
 	previousRedis, previousBatch := common.RedisEnabled, common.BatchUpdateEnabled
@@ -80,7 +80,7 @@ func runRealtimeHandler(t *testing.T, quota int) (*websocket.Conn, *websocket.Co
 		_ = sqlDB.Close()
 	})
 	require.NoError(t, db.Create(&model.User{Id: 1, Username: "realtime-test", Quota: common.Quota(quota)}).Error)
-	require.NoError(t, db.Create(&model.Token{Id: 2, UserId: 1, Key: "realtime-test-token", RemainQuota: 100}).Error)
+	require.NoError(t, db.Create(&model.Token{Id: 2, UserId: 1, Key: "realtime-test-token", RemainQuota: common.Quota(quota)}).Error)
 	client, clientPeer := realtimeSocketPair(t)
 	target, targetPeer := realtimeSocketPair(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -93,7 +93,9 @@ func runRealtimeHandler(t *testing.T, quota int) (*websocket.Conn, *websocket.Co
 		OriginModelName: "realtime-test-model", PriceData: hosttypes.PriceData{Quote: &billing.Quote{ChannelRatio: "1"}},
 		ChannelMeta: &relaycommon.ChannelMeta{ChannelId: 1, UpstreamModelName: "realtime-test-model"},
 	}
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "realtime-test-model", Mode: billing.ModeExpression, Expression: "p * 2 + c * 2 + ai * 2 + ao * 2"}, "1", nil, time.Unix(1700000000, 0))
+	version, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "realtime-test-model", Mode: billing.ModeExpression, Expression: "p * 2 + c * 2 + ai * 2 + ao * 2", Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "realtime test price"}}, 0, 0)
+	require.NoError(t, err)
+	quote, err := billing.NewQuote(*version, "1", nil, time.Unix(1700000000, 0))
 	require.NoError(t, err)
 	info.PriceData.Quote = quote
 	require.Nil(t, service.PreConsumeBilling(c, 5, info))
@@ -256,8 +258,8 @@ func TestRealtimeDeliveredItemsRemainBillableBeforeResponseDone(t *testing.T) {
 	assert.Equal(t, expected, result.usage.OutputTokens, "count both delivered items without counting duplicate item.done")
 }
 
-func TestRealtimeEmptyLaterResponseDoesNotChargeUndeliveredUsage(t *testing.T) {
-	client, target, _, done := runRealtimeHandler(t, 100)
+func TestRealtimeConfirmedUsageDoesNotRequireOutputDeltas(t *testing.T) {
+	client, target, _, done := runRealtimeHandler(t, 1000)
 	for _, event := range []string{
 		`{"type":"response.output_text.delta","response_id":"first","delta":"hello"}`,
 		`{"type":"response.done","response":{"id":"first","status":"completed","usage":{"input_tokens":10,"output_tokens":20}}}`,
@@ -272,7 +274,9 @@ func TestRealtimeEmptyLaterResponseDoesNotChargeUndeliveredUsage(t *testing.T) {
 	require.NoError(t, target.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second)))
 	result := awaitRealtimeResult(t, done)
 	require.Nil(t, result.err)
-	assert.Equal(t, 30, result.usage.TotalTokens)
+	assert.Equal(t, 120, result.usage.TotalTokens)
+	require.True(t, result.usage.Observation.Complete)
+	require.Equal(t, []string{"empty", "first"}, result.usage.Observation.ResponseIDs)
 }
 
 func TestRealtimeConcurrentResponseRequiresUnambiguousIdentity(t *testing.T) {

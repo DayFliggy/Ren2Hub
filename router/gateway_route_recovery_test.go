@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -113,6 +114,7 @@ func TestGatewayFilteredTailPreservesBusyQueue(t *testing.T) {
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", 1).Update("capacity_total", 1).Error)
 			body := `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"fixture"}]}`
 			if test.conversion {
+				require.NoError(t, addGatewayFixtureDimensions("gpt-4o-mini", billing.UnitPrice{Quantity: "ai", Unit: "per_million_tokens", Price: "0"}))
 				require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", 4).Update("type", constant.ChannelTypeAnthropic).Error)
 				body = `{"model":"gpt-4o-mini","messages":[{"role":"user","content":[{"type":"text","text":"fixture"},{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav"}}]}]}`
 			} else {
@@ -223,7 +225,7 @@ func configureGatewayManualQueue(t *testing.T, key string, channelIDs ...int) {
 	_, err := service.CreateUserRouteProfile(service.RouteProfileInput{
 		UserID: token.UserId, TokenID: token.Id, Mode: model.RouteModeManual,
 		Groups: []service.RouteGroupInput{{Name: "queue", Enabled: true, Entries: entries,
-			Policy: service.RoutePolicyInput{MaxRatio: 1, RetryMode: model.RoutePolicyRetryNextChannel, MaxFailoverAttempts: 2}}},
+			Policy: service.RoutePolicyInput{MaxRatio: "1", RetryMode: model.RoutePolicyRetryNextChannel, MaxFailoverAttempts: 2}}},
 	})
 	require.NoError(t, err)
 }

@@ -3,6 +3,7 @@ package common
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
@@ -49,6 +50,23 @@ func UnmarshalJsonStr(data string, v any) error {
 
 func DecodeJson(reader io.Reader, v any) error {
 	return kitutil.DecodeJson(reader, v)
+}
+
+// DecodeJsonNumbers preserves numeric source text at billing boundaries.
+func DecodeJsonNumbers(reader io.Reader, v any) error {
+	decoder := json.NewDecoder(reader)
+	decoder.UseNumber()
+	if err := decoder.Decode(v); err != nil {
+		return err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("multiple JSON values")
+	}
+	return nil
 }
 
 // DecodeJsonWithValidation decodes JSON and applies Gin's configured binding-tag

@@ -62,7 +62,7 @@ func TestGatewayChannelProbeMissingUsageRemainsReserved(t *testing.T) {
 	})
 	old, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
 	require.NoError(t, err)
-	_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "gpt-4o-mini", Mode: billing.ModeExpression, Expression: "p * 2 + c * 4"}, old.ID, 1)
+	_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "gpt-4o-mini", Mode: billing.ModeExpression, Expression: "p * 2 + c * 4"}, old.ID, 1)
 	require.NoError(t, err)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

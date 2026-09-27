@@ -1,3 +1,4 @@
+import { pricingOfferFixture } from './pricingFixtures'
 import { expect, test, type Page } from '@playwright/test'
 import type { PriceVersion } from '../../src/api/modelPricing'
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
@@ -25,8 +26,12 @@ const globalPrice: PriceVersion = {
   id: 101,
   model: metadata.model_name,
   scope_kind: 'global_model',
-  contract_version: 2,
-  calculation_version: 'billing-v2',
+  provenance: {
+    kind: 'retail',
+    retail_reason: 'Reviewed visual fixture price',
+  },
+  contract_version: 3,
+  calculation_version: 'billing-v3',
   result_unit: 'usd',
   mode: 'unit_price',
   created_at: 1,
@@ -80,11 +85,13 @@ const charge = {
       subtotal_usd: '2.000000000000000001',
     },
   ],
+  base_usd: '2.125000000000000001',
+  adjustments: [],
   total_usd: '2.125000000000000001',
   final_quota: '1062500',
   unrounded_quota: '1062500.0000000000005',
   rounding_delta: '-0.0000000000005',
-  calculation_version: 'billing-v2',
+  calculation_version: 'billing-v3',
   rounding_version: 'half-up-positive-minimum-v1',
 }
 
@@ -190,9 +197,7 @@ for (const theme of ['light', 'dark'] as const) {
       await expect
         .poll(async () => JSON.parse(await structure.inputValue()))
         .toEqual(channelPrice.prices)
-      await expect(drawer.locator('[data-price-effective-from]')).toHaveValue(
-        channelPrice.effective_from!
-      )
+      await expect(drawer.locator('[data-price-effective-from]')).toHaveCount(0)
       await expect(drawer.locator('[data-price-effective-to]')).toHaveValue(
         channelPrice.effective_to!
       )
@@ -230,7 +235,6 @@ for (const theme of ['light', 'dark'] as const) {
           channel_id: 9,
           flat_fee: '0.125000000000000001',
           prices: channelPrice.prices,
-          effective_from: channelPrice.effective_from,
           effective_to: channelPrice.effective_to,
         },
       })
@@ -265,8 +269,7 @@ for (const theme of ['light', 'dark'] as const) {
                 owner_by: 'OpenAI',
                 vendor_id: 0,
                 supported_endpoint_types: ['openai'],
-                price_version: visible[0],
-                price_versions: visible,
+                offers: visible.map(pricingOfferFixture),
               },
             ],
             vendors: [],
@@ -281,10 +284,10 @@ for (const theme of ['light', 'dark'] as const) {
         page.getByRole('link', { name: metadata.model_name, exact: true })
       ).toHaveCount(2)
       await expect(
-        page.locator('tbody tr').filter({ hasText: 'channel_model · 9' })
+        page.locator('tbody tr').filter({ hasText: 'channel_model · v201' })
       ).toHaveCount(1)
       await expect(
-        page.locator('tbody tr').filter({ hasText: 'channel_model · 10' })
+        page.locator('tbody tr').filter({ hasText: 'channel_model · v202' })
       ).toHaveCount(1)
       await expect(page.getByText('$0.375', { exact: true })).toBeVisible()
       await assertNoHorizontalOverflow(page)

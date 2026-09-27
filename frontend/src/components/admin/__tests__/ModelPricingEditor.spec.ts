@@ -16,8 +16,8 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 
 const price: PriceVersion = {
-  contract_version: 2,
-  calculation_version: 'billing-v2',
+  contract_version: 3,
+  calculation_version: 'billing-v3',
   result_unit: 'usd',
   id: 3,
   model: 'test',
@@ -25,6 +25,7 @@ const price: PriceVersion = {
   prices: [{ quantity: 'p', unit: 'per_million_tokens', price: '1' }],
   created_at: 1,
   hash: 'hash',
+  provenance: { kind: 'retail', retail_reason: 'Reviewed retail price' },
 }
 beforeAll(async () => {
   await loadMessageDomain('console')
@@ -116,7 +117,6 @@ describe('model price editor', () => {
         channel_id: 9,
         prices: scoped.prices,
         flat_fee: '0.002',
-        effective_from: scoped.effective_from,
         effective_to: scoped.effective_to,
       }),
       7,
@@ -534,10 +534,12 @@ describe('model price editor', () => {
       charge: {
         lines: [],
         final_quota: '500',
+        base_usd: '0.001',
+        adjustments: [],
         total_usd: '0.001',
         unrounded_quota: '500',
         rounding_delta: '0',
-        calculation_version: 'billing-v2',
+        calculation_version: 'billing-v3',
         rounding_version: 'half-up-positive-minimum-v1',
       },
     })
@@ -547,7 +549,7 @@ describe('model price editor', () => {
     expect(preview).toHaveBeenCalledWith(
       expect.objectContaining({
         channel_ratio: '1',
-        price: expect.objectContaining({ contract_version: 2 }),
+        price: expect.objectContaining({ contract_version: 3 }),
       })
     )
     expect(wrapper.get('[data-price-preview-result]').text()).toContain(
@@ -607,10 +609,12 @@ describe('model price editor', () => {
         charge: {
           lines: [],
           final_quota: '500',
+          base_usd: '0.001',
+          adjustments: [],
           total_usd: '0.001',
           unrounded_quota: '500',
           rounding_delta: '0',
-          calculation_version: 'billing-v2',
+          calculation_version: 'billing-v3',
           rounding_version: 'half-up-positive-minimum-v1',
         },
       })

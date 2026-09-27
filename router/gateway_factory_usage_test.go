@@ -50,12 +50,13 @@ func TestGatewayFactoryCompletionFactsProtectReservedFunds(t *testing.T) {
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			plugin, ok := jsplugin.DefaultRegistry.Get(test.key)
 			require.True(t, ok)
-			price := billing.PriceVersion{Model: test.model, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.25"}}}
+			price := billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: test.model, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.25"}}}
 			var err error
 			if test.expression != "" {
 				price, err = plugins.FrozenTaskPriceVersion(plugin.Meta, test.model, test.expression)
 				require.NoError(t, err)
 			}
+			price.Provenance = &billing.PriceProvenance{Kind: "retail", RetailReason: "reviewed mock task contract"}
 			price, err = service.ValidateTaskPluginPricePublication(price, test.key)
 			require.NoError(t, err)
 			var expected int64
@@ -64,7 +65,7 @@ func TestGatewayFactoryCompletionFactsProtectReservedFunds(t *testing.T) {
 			}
 			_, err = model.PublishBillingPrice(context.Background(), price, expected, 1)
 			require.NoError(t, err)
-			code, body := postGatewayTask(t, base, key, "/v1/videos", fmt.Sprintf(`{"model":%q,"prompt":"isolated fixture"}`, test.model))
+			code, body := postGatewayTask(t, base, key, "/v1/videos", fmt.Sprintf(`{"model":%q,"prompt":"isolated fixture","seconds":5}`, test.model))
 			require.Equal(t, http.StatusOK, code, body)
 			assert.EqualValues(t, 1, sends.Load())
 			var task model.Task

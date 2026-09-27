@@ -36,18 +36,7 @@ func WssHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.
 
 	usage, newAPIError := adaptor.DoResponse(c, nil, info)
 	if realtimeUsage, ok := usage.(*dto.RealtimeUsage); ok && realtimeUsage != nil {
-		// Input accepted by a session is not delivered output. A failed or empty
-		// session refunds its reservation even if local input estimates exist.
-		if !info.HasValidOutput() {
-			realtimeUsage = &dto.RealtimeUsage{}
-		}
-		source := "estimated"
-		if info.ResponseUsage != nil {
-			source = info.ResponseUsage.UsageSource
-		}
-		info.CaptureResponseUsage(&dto.Usage{PromptTokens: realtimeUsage.InputTokens, CompletionTokens: realtimeUsage.OutputTokens,
-			TotalTokens: realtimeUsage.TotalTokens, PromptTokensDetails: realtimeUsage.InputTokenDetails,
-			CompletionTokenDetails: realtimeUsage.OutputTokenDetails, UsageSource: source}, "realtime", []string{"realtime usage: " + source})
+		info.CaptureResponseUsage(realtimeUsage.CanonicalUsage(), "realtime", []string{"realtime usage: " + realtimeUsage.CanonicalUsage().UsageSource})
 	}
 	if newAPIError != nil {
 		// reset status code 重置状态码

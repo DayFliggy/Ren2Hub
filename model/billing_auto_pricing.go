@@ -2,11 +2,13 @@ package model
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/setting/reasoning"
@@ -18,9 +20,6 @@ const (
 	BillingPriceOriginManual      = "manual"
 	BillingPriceOriginSub2API     = "sub2api"
 	BillingPriceOriginAxonHub     = "axonhub"
-	BillingPriceOriginModelsDev   = "models_dev"
-	BillingPriceOriginOpenRouter  = "openrouter"
-	BillingPriceOriginLegacySeed  = "legacy_seed"
 	BillingPriceOriginUnavailable = "unavailable"
 )
 
@@ -41,15 +40,40 @@ type BillingPriceOrigin struct {
 }
 
 type BillingPricingSource struct {
-	Source       string   `gorm:"type:varchar(32);primaryKey" json:"source"`
-	Document     LongText `json:"-"`
-	Hash         string   `gorm:"type:varchar(64)" json:"hash"`
-	ETag         string   `gorm:"column:etag;type:text" json:"etag"`
-	LastModified string   `gorm:"type:text" json:"last_modified"`
-	CheckedAt    int64    `gorm:"type:bigint;not null" json:"checked_at"`
-	UpdatedAt    int64    `gorm:"type:bigint;not null" json:"updated_at"`
-	LastError    string   `gorm:"type:text" json:"last_error"`
-	ModelCount   int      `gorm:"not null" json:"model_count"`
+	Source        string   `gorm:"type:varchar(32);primaryKey" json:"source"`
+	SnapshotID    int64    `gorm:"type:bigint;not null" json:"snapshot_id"`
+	Document      LongText `gorm:"-" json:"-"`
+	URL           string   `gorm:"-" json:"-"`
+	RemoteHash    string   `gorm:"-" json:"-"`
+	ParserVersion string   `gorm:"-" json:"parser_version"`
+	SnapshotCount int64    `gorm:"-" json:"snapshot_count"`
+	Hash          string   `gorm:"type:varchar(64)" json:"hash"`
+	ETag          string   `gorm:"column:etag;type:text" json:"etag"`
+	LastModified  string   `gorm:"type:text" json:"last_modified"`
+	CheckedAt     int64    `gorm:"type:bigint;not null" json:"checked_at"`
+	UpdatedAt     int64    `gorm:"type:bigint;not null" json:"updated_at"`
+	LastError     string   `gorm:"type:text" json:"last_error"`
+	ModelCount    int      `gorm:"not null" json:"model_count"`
+}
+
+// A snapshot is content-addressed and append-only; a source row only points at
+// its current snapshot. Failed refreshes update status without changing bytes.
+type BillingPricingSnapshot struct {
+	ID            int64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	Source        string   `gorm:"type:varchar(32);not null;uniqueIndex:idx_pricing_snapshot,priority:1" json:"source"`
+	Hash          string   `gorm:"type:varchar(64);not null;uniqueIndex:idx_pricing_snapshot,priority:2" json:"hash"`
+	Document      LongText `gorm:"not null" json:"-"`
+	URL           string   `gorm:"type:text;not null" json:"url"`
+	RemoteHash    string   `gorm:"type:varchar(64)" json:"remote_hash"`
+	ParserVersion string   `gorm:"type:varchar(64);not null" json:"parser_version"`
+	FetchedAt     int64    `gorm:"type:bigint;not null" json:"fetched_at"`
+}
+
+func (*BillingPricingSnapshot) BeforeUpdate(*gorm.DB) error {
+	return errors.New("pricing snapshots are immutable")
+}
+func (*BillingPricingSnapshot) BeforeDelete(*gorm.DB) error {
+	return errors.New("pricing snapshots are immutable")
 }
 
 type BillingPricingConfig struct {
@@ -110,12 +134,15 @@ func PublishAutomaticBillingPrice(ctx context.Context, version billing.PriceVers
 
 // PublishAutomaticBillingPrices commits a bounded batch using one transaction.
 // Every entry shares the same catalog fence; any error rolls back the whole batch.
-func PublishAutomaticBillingPrices(ctx context.Context, entries []AutomaticBillingPrice, expectedCatalog map[string]string) (int, error) {
+func PublishAutomaticBillingPrices(ctx context.Context, entries []AutomaticBillingPrice, expectedCatalog map[string]string, prepared ...*AutomaticBillingPublicationEvidence) (int, error) {
 	if DB == nil {
 		return 0, fmt.Errorf("billing price database unavailable")
 	}
 	if len(entries) > 100 {
 		return 0, fmt.Errorf("automatic billing price batch exceeds 100 entries")
+	}
+	if len(prepared) > 1 || (len(prepared) == 1 && prepared[0] == nil) {
+		return 0, fmt.Errorf("invalid automatic publication evidence")
 	}
 	catalog, err := automaticBillingPricingCatalogFence([]map[string]string{expectedCatalog})
 	if err != nil {
@@ -137,9 +164,24 @@ func PublishAutomaticBillingPrices(ctx context.Context, entries []AutomaticBilli
 		if err := lockAutomaticBillingPricingSources(tx, catalog); err != nil {
 			return err
 		}
+		evidence := make(map[string]*automaticBillingPriceEvidence)
+		if len(prepared) == 1 {
+			evidence = prepared[0].sources
+		}
 		for _, entry := range entries {
+			if evidence[entry.Source] == nil {
+				if len(prepared) != 0 {
+					return fmt.Errorf("automatic source is absent from prepared evidence")
+				}
+				parsed, err := loadAutomaticBillingPriceEvidence(tx, entry.Source, entry.SourceHash)
+				if err != nil {
+					return err
+				}
+				evidence[entry.Source] = parsed
+			}
 			_, changed, err := publishBillingPriceWithDB(tx, entry.Price, billingPricePublication{
 				origin: entry.Source, sourceModel: entry.SourceModel, sourceHash: entry.SourceHash, automatic: true,
+				evidence: evidence[entry.Source],
 			})
 			if err != nil {
 				return fmt.Errorf("publish automatic billing price %q: %w", entry.Price.Model, err)
@@ -289,11 +331,9 @@ func automaticBillingPricingCatalogFence(expected []map[string]string) (map[stri
 	return copy, nil
 }
 
-// Retired sources remain automatically owned until the current catalog replaces
-// or deactivates them. New source writes accept only the two live sources above.
 func resolveBillingPriceOrigin(origin string) string {
 	switch origin {
-	case BillingPriceOriginSub2API, BillingPriceOriginAxonHub, BillingPriceOriginModelsDev, BillingPriceOriginOpenRouter, BillingPriceOriginLegacySeed:
+	case BillingPriceOriginSub2API, BillingPriceOriginAxonHub:
 		return origin
 	default:
 		return BillingPriceOriginManual
@@ -354,25 +394,81 @@ func ListBillingPricingSources(ctx context.Context) ([]BillingPricingSource, err
 	}
 	rows := make([]BillingPricingSource, 0)
 	err := DB.WithContext(ctx).Order("source").Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		row := &rows[i]
+		if err := DB.WithContext(ctx).Model(&BillingPricingSnapshot{}).Where("source = ?", row.Source).Count(&row.SnapshotCount).Error; err != nil {
+			return nil, err
+		}
+		if row.SnapshotID == 0 {
+			continue
+		}
+		var snapshot BillingPricingSnapshot
+		if err := DB.WithContext(ctx).First(&snapshot, row.SnapshotID).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, err
+			}
+			row.LastError = "pricing snapshot is missing"
+			continue
+		}
+		if snapshot.Source != row.Source || snapshot.Hash != row.Hash || fmt.Sprintf("%x", sha256.Sum256([]byte(snapshot.Document))) != snapshot.Hash {
+			row.LastError = "pricing snapshot integrity mismatch"
+			continue
+		}
+		row.Document, row.URL, row.RemoteHash, row.ParserVersion = snapshot.Document, snapshot.URL, snapshot.RemoteHash, snapshot.ParserVersion
+	}
 	return rows, err
 }
 
-func SaveBillingPricingSource(ctx context.Context, record *BillingPricingSource) error {
+func ListBillingPricingSnapshots(ctx context.Context, source string, limit int) ([]BillingPricingSnapshot, error) {
 	if DB == nil {
-		return fmt.Errorf("billing price database unavailable")
+		return nil, fmt.Errorf("billing price database unavailable")
 	}
-	if record == nil || !isAutomaticBillingPriceSource(record.Source) || record.ModelCount < 0 {
-		return fmt.Errorf("invalid billing pricing source")
+	if source != "" && !isAutomaticBillingPriceSource(source) {
+		return nil, fmt.Errorf("invalid automatic pricing source")
 	}
-	return DB.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "source"}},
-		DoUpdates: clause.AssignmentColumns([]string{"document", "hash", "etag", "last_modified", "checked_at", "updated_at", "last_error", "model_count"}),
-	}).Create(record).Error
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	query := DB.WithContext(ctx).Omit("document").Order("id DESC").Limit(limit)
+	if source != "" {
+		query = query.Where("source = ?", source)
+	}
+	rows := make([]BillingPricingSnapshot, 0)
+	err := query.Find(&rows).Error
+	return rows, err
+}
+
+func GetBillingPricingSnapshot(ctx context.Context, id int64) (*BillingPricingSnapshot, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("billing price database unavailable")
+	}
+	if id <= 0 {
+		return nil, fmt.Errorf("invalid pricing snapshot id")
+	}
+	var snapshot BillingPricingSnapshot
+	if err := DB.WithContext(ctx).First(&snapshot, id).Error; err != nil {
+		return nil, err
+	}
+	if !isAutomaticBillingPriceSource(snapshot.Source) || fmt.Sprintf("%x", sha256.Sum256([]byte(snapshot.Document))) != snapshot.Hash {
+		return nil, fmt.Errorf("pricing snapshot integrity mismatch")
+	}
+	return &snapshot, nil
+}
+
+func SaveBillingPricingSource(ctx context.Context, record *BillingPricingSource) error {
+	return saveBillingPricingSource(ctx, record, nil, false)
 }
 
 // SaveBillingPricingSourceCAS prevents a slow fetch or failed check from
 // replacing a newer snapshot that another process has already persisted.
 func SaveBillingPricingSourceCAS(ctx context.Context, record *BillingPricingSource, expectedHash string) error {
+	return saveBillingPricingSource(ctx, record, &expectedHash, false)
+}
+
+func saveBillingPricingSource(ctx context.Context, record *BillingPricingSource, expectedHash *string, onlyAbsent bool) error {
 	if DB == nil {
 		return fmt.Errorf("billing price database unavailable")
 	}
@@ -381,11 +477,42 @@ func SaveBillingPricingSourceCAS(ctx context.Context, record *BillingPricingSour
 	}
 	return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var current BillingPricingSource
-		err := lockForUpdate(tx).Select("source", "hash").Where("source = ?", record.Source).Take(&current).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if expectedHash != "" {
-				return ErrBillingPricingSourceConflict
+		err := lockForUpdate(tx).Select("source", "hash", "snapshot_id").Where("source = ?", record.Source).Take(&current).Error
+		missing := errors.Is(err, gorm.ErrRecordNotFound)
+		if err != nil && !missing {
+			return err
+		}
+		if onlyAbsent && !missing {
+			return nil
+		}
+		if expectedHash != nil && current.Hash != *expectedHash {
+			return ErrBillingPricingSourceConflict
+		}
+		if record.Document != "" {
+			hash := fmt.Sprintf("%x", sha256.Sum256([]byte(record.Document)))
+			if record.Hash != hash || (record.RemoteHash != "" && record.RemoteHash != hash) {
+				return fmt.Errorf("pricing snapshot integrity mismatch")
 			}
+			if record.ParserVersion == "" {
+				return fmt.Errorf("pricing snapshot parser version is required")
+			}
+			snapshot := BillingPricingSnapshot{Source: record.Source, Hash: hash, Document: record.Document, URL: record.URL, RemoteHash: record.RemoteHash, ParserVersion: record.ParserVersion, FetchedAt: time.Now().Unix()}
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&snapshot).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("source = ? AND hash = ?", record.Source, hash).Take(&snapshot).Error; err != nil {
+				return err
+			}
+			if snapshot.Document != record.Document {
+				return fmt.Errorf("pricing snapshot content conflict")
+			}
+			record.SnapshotID = snapshot.ID
+		} else if record.Hash != "" || record.SnapshotID != 0 {
+			if missing || record.LastError == "" || record.Hash != current.Hash || record.SnapshotID != current.SnapshotID {
+				return fmt.Errorf("pricing snapshot body is required")
+			}
+		}
+		if missing {
 			created := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(record)
 			if created.Error != nil {
 				return created.Error
@@ -395,14 +522,8 @@ func SaveBillingPricingSourceCAS(ctx context.Context, record *BillingPricingSour
 			}
 			return nil
 		}
-		if err != nil {
-			return err
-		}
-		if current.Hash != expectedHash {
-			return ErrBillingPricingSourceConflict
-		}
 		return tx.Model(&BillingPricingSource{}).Where("source = ?", record.Source).Updates(map[string]interface{}{
-			"document": record.Document, "hash": record.Hash, "etag": record.ETag, "last_modified": record.LastModified,
+			"snapshot_id": record.SnapshotID, "hash": record.Hash, "etag": record.ETag, "last_modified": record.LastModified,
 			"checked_at": record.CheckedAt, "updated_at": record.UpdatedAt, "last_error": record.LastError, "model_count": record.ModelCount,
 		}).Error
 	})
@@ -411,13 +532,7 @@ func SaveBillingPricingSourceCAS(ctx context.Context, record *BillingPricingSour
 // EnsureBillingPricingSource installs a bundled snapshot only when no persisted
 // source exists, so concurrent startup cannot replace a downloaded catalog.
 func EnsureBillingPricingSource(ctx context.Context, record *BillingPricingSource) error {
-	if DB == nil {
-		return fmt.Errorf("billing price database unavailable")
-	}
-	if record == nil || !isAutomaticBillingPriceSource(record.Source) || record.ModelCount < 0 {
-		return fmt.Errorf("invalid billing pricing source")
-	}
-	return DB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(record).Error
+	return saveBillingPricingSource(ctx, record, nil, true)
 }
 
 func GetBillingPricingConfig(ctx context.Context) (*BillingPricingConfig, error) {

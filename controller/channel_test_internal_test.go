@@ -403,10 +403,14 @@ func TestDeleteChannelBatchReportsAndAuditsActualDeletedCount(t *testing.T) {
 }
 
 func TestSettleTestQuotaUsesFrozenSafeAttributes(t *testing.T) {
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "test", Mode: billing.ModeExpression, Expression: `attr("service_tier") == "fast" ? p * 3 : p * 2`}, "1", map[string]interface{}{"service_tier": "fast"}, time.Unix(1700000000, 0))
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "test", Mode: billing.ModeExpression,
+		Support:    &billing.PricingSupport{Dimensions: []string{"p"}, ServiceTiers: []string{"default", "fast"}},
+		Expression: `attr("service_tier") == "fast" ? p * 3 : p * 2`}, "1", map[string]interface{}{"service_tier": "fast"}, time.Unix(1700000000, 0))
 	require.NoError(t, err)
-	info := &relaycommon.RelayInfo{PriceData: types.PriceData{Quote: quote}}
-	quota, err := settleTestQuota(info, info.PriceData, &dto.Usage{PromptTokens: 1000})
+	info := &relaycommon.RelayInfo{PriceData: types.PriceData{Quote: quote}, ChannelMeta: &relaycommon.ChannelMeta{}}
+	info.MarkValidOutput()
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	quota, err := service.PrepareFinalTextCharge(ctx, info, &dto.Usage{PromptTokens: 1000, UsageSource: "provider"})
 	require.NoError(t, err)
 	assert.Equal(t, 1500, quota)
 	require.NotNil(t, info.PriceData.Charge)
@@ -427,7 +431,8 @@ func TestChannelTestLogPreservesFrozenPricingEvidence(t *testing.T) {
 		},
 	}
 
-	_, err = settleTestQuota(info, info.PriceData, usage)
+	info.MarkValidOutput()
+	_, err = service.PrepareFinalTextCharge(ctx, info, usage)
 	require.NoError(t, err)
 	other := service.GenerateTextOtherInfo(ctx, info, usage.PromptTokensDetails.CachedTokens)
 	assert.Equal(t, billing.PriceScopeChannel, other["price_scope"])

@@ -50,7 +50,7 @@ func withTaskBillingDatabases(t *testing.T, run func(*testing.T, *gorm.DB)) {
 				initCol()
 				assert.NoError(t, connection.Close())
 			})
-			require.NoError(t, db.AutoMigrate(&Task{}, &TaskResultEvent{}, &PerfMetric{}, &Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}))
+			require.NoError(t, db.AutoMigrate(&Task{}, &TaskResultEvent{}, &PerfMetric{}, &Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &BillingPriceVersion{}, &BillingActivePrice{}))
 			run(t, db)
 		})
 	}
@@ -67,7 +67,36 @@ func TestTaskCompletionRecoveryAcrossDatabases(t *testing.T) {
 	})
 }
 
-func newAcceptedTaskFixture(t *testing.T, db *gorm.DB, identity string) (User, Token, Channel, Task, BillingConsumption) {
+func TestTaskCompletionCannotBypassFinalBillingEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*BillingConsumption)
+	}{
+		{"missing usage", func(c *BillingConsumption) { c.Usage = nil }},
+		{"missing charge", func(c *BillingConsumption) { c.Charge = nil }},
+		{"estimated", func(c *BillingConsumption) { c.Usage.Estimated = true }},
+		{"partial", func(c *BillingConsumption) { c.Usage.Complete = false }},
+		{"unknown terminal", func(c *BillingConsumption) { c.Usage.Terminal = "unknown" }},
+		{"changed charge", func(c *BillingConsumption) { c.Charge.TotalUSD = "1" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := setupBillingRecoveryTestDB(t)
+			require.NoError(t, db.AutoMigrate(&Task{}, &TaskResultEvent{}, &PerfMetric{}))
+			user, token, _, task, consumption := newAcceptedTaskFixture(t, db, "task-final-guard")
+			task.Status = TaskStatusSuccess
+			tc.mutate(&consumption)
+			won, err := PersistTaskCompletion(context.Background(), &task, TaskStatusInProgress, 30, consumption)
+			require.Error(t, err)
+			assert.False(t, won)
+			var persisted Task
+			require.NoError(t, db.First(&persisted, task.ID).Error)
+			assert.Equal(t, TaskStatus(TaskStatusInProgress), persisted.Status)
+			assertTaskAccountProjection(t, db, user.Id, token.Id, 60, 40, 0)
+		})
+	}
+}
+
+func newAcceptedTaskFixture(t *testing.T, db *gorm.DB, identity string, finalQuota ...common.Quota) (User, Token, Channel, Task, BillingConsumption) {
 	t.Helper()
 	user := User{Username: identity, AffCode: identity, Quota: 100}
 	require.NoError(t, db.Create(&user).Error)
@@ -80,6 +109,12 @@ func newAcceptedTaskFixture(t *testing.T, db *gorm.DB, identity string) (User, T
 	_, err := EnsureBillingRecovery(BillingRecoveryInput{RequestID: identity, UserID: user.Id, TokenID: token.Id, Source: "wallet", TokenRequired: true})
 	require.NoError(t, err)
 	require.NoError(t, Reserve(identity, 40))
+	if len(finalQuota) > 0 {
+		consumption.Log.Quota = finalQuota[0]
+	}
+	consumption, err = bindConsumptionEvidence(identity, consumption)
+	require.NoError(t, err)
+	consumption.Log.Quota = task.Quota
 	require.NoError(t, PersistAcceptedTask(&task, identity, consumption))
 	return user, token, channel, task, consumption
 }
@@ -140,7 +175,7 @@ func completeTaskRecovery(t *testing.T, requestID string, actual common.Quota, r
 func testTaskCompletionRecovery(t *testing.T, db *gorm.DB, actual common.Quota) {
 	t.Helper()
 	ctx := context.Background()
-	user, token, channel, task, consumption := newAcceptedTaskFixture(t, db, fmt.Sprintf("wallet-%d", actual))
+	user, token, channel, task, consumption := newAcceptedTaskFixture(t, db, fmt.Sprintf("wallet-%d", actual), actual)
 	requestID := task.PrivateData.SubmissionRequestID
 	oldStatus := task.Status
 	task.Status, task.Progress = TaskStatusSuccess, "100%"

@@ -12,6 +12,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -181,7 +182,14 @@ type RelayInfo struct {
 	// It is surfaced onto the consume/task log's admin_info for auditing.
 	QuotaClamp *common.QuotaClamp
 
-	BillingRequestInput *billingexpr.RequestInput
+	BillingRequestInput        *billingexpr.RequestInput
+	BillingRequirements        *billing.PricingRequirements     `json:"-"`
+	BillingAudioResponseFormat string                           `json:"-"`
+	BillingAudioStreamFormat   string                           `json:"-"`
+	BillingToolUsageInvalid    bool                             `json:"-"`
+	BillingToolCallIDs         map[string]*billableToolIdentity `json:"-"`
+	BillingCharacterCount      int                              `json:"-"`
+	ActualServiceTier          string                           `json:"-"`
 
 	Request dto.Request
 
@@ -210,6 +218,11 @@ type RelayInfo struct {
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	info.ReasoningConversion = nil
 	info.ResponseModel = nil
+	info.ActualServiceTier = ""
+	info.BillingRequestInput, info.BillingRequirements = nil, nil
+	info.BillingCharacterCount = 0
+	info.BillingAudioResponseFormat, info.BillingAudioStreamFormat = "", ""
+	info.BillingToolUsageInvalid, info.BillingToolCallIDs = false, nil
 	channelType := common.GetContextKeyInt(c, constant.ContextKeyChannelType)
 	paramOverride := common.GetContextKeyStringMap(c, constant.ContextKeyChannelParamOverride)
 	headerOverride := common.GetContextKeyStringMap(c, constant.ContextKeyChannelHeaderOverride)
@@ -1254,4 +1267,11 @@ func (info *RelayInfo) ReasoningState() *dto.ReasoningConversionState {
 		return nil
 	}
 	return info.ReasoningConversion
+}
+
+// ObserveActualServiceTier is audit evidence only; it never changes the quote.
+func (info *RelayInfo) ObserveActualServiceTier(tier string) {
+	if info != nil && tier != "" && len(tier) <= 64 {
+		info.ActualServiceTier = tier
+	}
 }

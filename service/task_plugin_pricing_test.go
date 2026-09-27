@@ -31,7 +31,7 @@ func registerPriceTestPlugin(t *testing.T, registry *jsplugin.Registry, key, ver
 }
 
 func taskPriceFixture() billing.PriceVersion {
-	return billing.PriceVersion{Model: "task-price-fixture", Mode: billing.ModeExpression,
+	return billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "task-price-fixture", Mode: billing.ModeExpression,
 		Expression: `v2:u("seconds") * (u("resolution") == "1080p" ? 0.4 : 0.2)`,
 		UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
 			"seconds":    {Type: "number", Unit: "second", Source: billingexpr.UsageCompletionFact, Required: true, Maximum: "60"},
@@ -65,7 +65,7 @@ func TestTaskPluginPricePublicationRejectsNarrowedEnumsAndPreservesFrozenQuote(t
 
 	for _, expression := range []string{
 		`v2:u("seconds") * (u("resolution") == "1080p" ? 0.4 : 0.2)`,
-		`v2:true ? u("seconds") : (u("resolution") in ["720p","1080p"] ? 1 : 0)`,
+		`v2:true ? u("seconds") : ((u("resolution") == "720p" || u("resolution") == "1080p") ? 1 : 0)`,
 	} {
 		draft := taskPriceFixture()
 		draft.UsageSchema.Fields["resolution"] = billingexpr.UsageField{Type: "string", Source: billingexpr.UsageRequestFixed, Required: true, Enum: []string{"720p"}}
@@ -114,7 +114,7 @@ func TestTaskPluginPriceSchemaRequiresExplicitProviderAndReviewedSources(t *test
 	assert.False(t, current.ReviewRequired)
 	field := current.UsageSchema.Fields["image_count"]
 	assert.Equal(t, billingexpr.UsageCompletionFact, field.Source)
-	price := billing.PriceVersion{Model: "wan2.6-t2i", Mode: billing.ModeExpression, Expression: `v2:u("image_count") * 0.2`, UsageSchema: current.UsageSchema}
+	price := billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "wan2.6-t2i", Mode: billing.ModeExpression, Expression: `v2:u("image_count") * 0.2`, UsageSchema: current.UsageSchema}
 	_, err = ValidateTaskPluginPricePublication(price, "alibaba")
 	require.NoError(t, err)
 	for _, mutation := range []func(*billingexpr.UsageField){

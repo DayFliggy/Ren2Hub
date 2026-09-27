@@ -1,8 +1,9 @@
 package helper
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 // BillingAttributesFromBody projects only registered scalar attributes. Request
@@ -26,7 +28,7 @@ func billingAttributesFromBody(body []byte, format types.RelayFormat) (map[strin
 		return attrs, nil
 	}
 	var fields map[string]interface{}
-	if err := common.Unmarshal(body, &fields); err != nil {
+	if err := common.DecodeJsonNumbers(bytes.NewReader(body), &fields); err != nil {
 		return nil, err
 	}
 	for _, pair := range [][2]string{{"service_tier", "service_tier"}, {"quality", "quality"}, {"size", "resolution"}, {"resolution", "resolution"}, {"n", "quantity"}, {"quantity", "quantity"}, {"seconds", "duration"}, {"duration", "duration"}, {"tool_category", "tool_category"}} {
@@ -36,11 +38,11 @@ func billingAttributesFromBody(body []byte, format types.RelayFormat) (map[strin
 	}
 	for _, name := range []string{"quantity", "duration"} {
 		if value, ok := attrs[name].(string); ok {
-			parsed, err := strconv.ParseFloat(value, 64)
+			parsed, err := decimal.NewFromString(value)
 			if err != nil {
 				return nil, fmt.Errorf("invalid billing quantity")
 			}
-			attrs[name] = parsed
+			attrs[name] = json.Number(parsed.String())
 		}
 	}
 	projectReasoningBillingAttributes(fields, attrs)
@@ -84,14 +86,18 @@ func projectReasoningBillingAttributes(fields, attrs map[string]interface{}) {
 	}
 	thinkingBudget := func(value interface{}) {
 		attrs["thinking_budget_tokens"] = value
-		if budget, ok := value.(float64); ok {
+		if raw, ok := value.(json.Number); ok {
+			budget, err := decimal.NewFromString(raw.String())
+			if err != nil {
+				return
+			}
 			switch {
-			case budget == -1:
+			case budget.Equal(decimal.NewFromInt(-1)):
 				attrs["thinking"] = "adaptive"
 				delete(attrs, "thinking_budget_tokens")
-			case budget == 0:
+			case budget.IsZero():
 				attrs["thinking"] = "off"
-			case budget > 0:
+			case budget.IsPositive():
 				attrs["thinking"] = "on"
 			}
 		}
@@ -199,6 +205,11 @@ func FreezeOutboundBillingAttributes(info *relaycommon.RelayInfo, body []byte) e
 	if err != nil {
 		return err
 	}
+	required, err := PricingRequirementsFromBody(info, body)
+	if err != nil {
+		return err
+	}
+	info.BillingRequirements = &required
 	info.BillingRequestInput = &billingexpr.RequestInput{Attributes: attrs, FrozenAt: time.Now().UTC()}
 	if format == types.RelayFormatClaude || info.RelayFormat == types.RelayFormatClaude {
 		effort, _ := attrs["effort"].(string)

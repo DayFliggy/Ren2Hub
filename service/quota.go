@@ -58,6 +58,10 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		logger.LogError(ctx, "invalid realtime billing usage: "+err.Error())
 		return
 	}
+	if usage.Observation == nil || !usage.Observation.Complete || usage.Observation.Estimated || usage.Observation.Terminal != "completed" {
+		HoldUnconfirmedResponseUsage(ctx, relayInfo, usage.CanonicalUsage())
+		return
+	}
 	params, err := buildWssConsumptionParams(ctx, relayInfo, usage, extraContent)
 	if err != nil {
 		return
@@ -66,14 +70,11 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 }
 
 func buildWssConsumptionParams(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.RealtimeUsage, extraContent string) (model.RecordConsumeLogParams, error) {
-	facts := billing.Usage{InputTokens: int64(usage.InputTokens), OutputTokens: int64(usage.OutputTokens), ContextTokens: int64(usage.InputTokens),
-		CacheReadTokens: int64(usage.InputTokenDetails.CachedTokens), CacheWriteTokens: int64(usage.InputTokenDetails.CacheCreationTokensTotal()),
-		ImageInputTokens: int64(usage.InputTokenDetails.ImageTokens), ImageOutputTokens: int64(usage.OutputTokenDetails.ImageTokens),
-		AudioInputTokens: int64(usage.InputTokenDetails.AudioTokens), AudioOutputTokens: int64(usage.OutputTokenDetails.AudioTokens),
-		InputIncludesCache: true, Source: "realtime_cumulative", Complete: true, Quantities: map[string]string{}}
-	if relayInfo.PriceData.UsePrice && relayInfo.HasValidOutput() {
+	facts := NormalizedBillingUsage(usage.CanonicalUsage(), "openai")
+	if relayInfo.PriceData.UsePrice && (relayInfo.HasValidOutput() || usage.Observation != nil && usage.Observation.Complete && usage.Observation.Terminal == "completed") {
 		facts.Quantities["calls"] = "1"
 	}
+	facts.ActualServiceTier = relayInfo.ActualServiceTier
 	relayInfo.PriceData.Usage = &facts
 	result, err := billing.Calculate(relayInfo.PriceData.Quote, facts)
 	if err != nil {

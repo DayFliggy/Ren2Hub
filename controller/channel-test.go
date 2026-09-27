@@ -18,7 +18,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -27,7 +26,6 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	hosttypes "github.com/QuantumNous/new-api/types"
 
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
@@ -297,7 +295,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	//logInfo.ApiKey = ""
 	common.SysLog(fmt.Sprintf("testing channel %d with model %s , info %+v ", channel.Id, testModel, info.ToString()))
 
-	priceData, err := helper.ModelPriceHelper(c, info, 0, request.GetTokenCountMeta())
+	_, err = helper.ModelPriceHelper(c, info, 0, request.GetTokenCountMeta())
 	if err != nil {
 		return testResult{
 			context:     c,
@@ -452,7 +450,6 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	requestBody := bytes.NewBuffer(jsonData)
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
 	resp, err := adaptor.DoRequest(c, info, requestBody)
-	priceData = info.PriceData
 	if err != nil {
 		return testResult{
 			context:     c,
@@ -524,7 +521,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		return testResult{context: c, localErr: info.BillingSettlementError, newAPIError: types.NewError(info.BillingSettlementError, types.ErrorCodeModelPriceError)}
 	}
 
-	quota, settleErr := settleTestQuota(info, priceData, usage)
+	quota, settleErr := service.PrepareFinalTextCharge(c, info, usage)
 	if settleErr != nil {
 		return testResult{context: c, localErr: settleErr, newAPIError: types.NewError(settleErr, types.ErrorCodeModelPriceError)}
 	}
@@ -567,23 +564,6 @@ func attachTestBillingRequestInput(info *relaycommon.RelayInfo, request dto.Requ
 	}
 	info.BillingRequestInput = &input
 	return nil
-}
-
-func settleTestQuota(info *relaycommon.RelayInfo, priceData hosttypes.PriceData, usage *dto.Usage) (int, error) {
-	if info == nil || priceData.Quote == nil {
-		return 0, fmt.Errorf("frozen billing quote required")
-	}
-	usageFact := service.NormalizedBillingUsage(usage, "")
-	if priceData.Usage != nil {
-		usageFact.Quantities = priceData.Usage.Quantities
-	}
-	charge, err := billing.Calculate(priceData.Quote, usageFact)
-	if err != nil {
-		return 0, err
-	}
-	info.PriceData.Usage, info.PriceData.Charge = &usageFact, charge
-	quota, err := billing.RequestQuota(charge.FinalQuota)
-	return quota, err
 }
 
 func coerceTestUsage(usageAny any, isStream bool, estimatePromptTokens int) (*dto.Usage, error) {

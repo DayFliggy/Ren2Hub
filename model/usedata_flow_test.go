@@ -148,6 +148,8 @@ func TestBillingConsumptionSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T)
 		require.NoError(t, err)
 		require.NoError(t, Reserve(id, 20))
 		consumption.Log.Group, consumption.Log.Quota = group, 20
+		consumption, err = bindConsumptionEvidence(id, consumption)
+		require.NoError(t, err)
 		require.NoError(t, PrepareBillingRecoveryConsumption(id, consumption))
 		require.NoError(t, Settle(id, 20))
 		require.NoError(t, ApplyBillingRecoveryConsumption(id))
