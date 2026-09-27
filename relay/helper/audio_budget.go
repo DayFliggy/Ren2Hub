@@ -3,7 +3,10 @@ package helper
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"strings"
 	"unicode/utf8"
 
@@ -15,8 +18,8 @@ import (
 	"github.com/QuantumNous/new-api/service"
 )
 
-// FinalAudioPriceMeta follows the existing TTS character/token pricing rule
-// using the actual provider input. It does not bound audio output for TPM.
+// FinalAudioPriceMeta freezes the final provider input. Character counts are
+// billable only when the published plan explicitly selects that counting method.
 func FinalAudioPriceMeta(info *relaycommon.RelayInfo, body io.Reader) (*types.TokenCountMeta, int, error) {
 	if body == nil {
 		return nil, 0, errors.New("final speech request is unavailable")
@@ -36,6 +39,11 @@ func FinalAudioPriceMeta(info *relaycommon.RelayInfo, body io.Reader) (*types.To
 		}
 		payload, field = request, "text"
 	}
+	if raw := payload["stream_format"]; len(raw) > 0 {
+		if err := common.Unmarshal(raw, &info.BillingAudioStreamFormat); err != nil {
+			return nil, 0, fmt.Errorf("invalid stream_format")
+		}
+	}
 	var input string
 	if common.Unmarshal(payload[field], &input) != nil || strings.TrimSpace(input) == "" {
 		return nil, 0, errors.New("final speech input must be nonempty text")
@@ -49,9 +57,50 @@ func FinalAudioPriceMeta(info *relaycommon.RelayInfo, body io.Reader) (*types.To
 		return nil, 0, err
 	}
 	meta := request.GetTokenCountMeta()
-	tokens := utf8.RuneCountInString(input)
+	info.BillingCharacterCount = utf8.RuneCountInString(input)
+	tokens := info.BillingCharacterCount
 	if meta.TokenType != types.TokenTypeTextNumber {
 		tokens = service.CountTextToken(input, info.BillingModelName())
 	}
 	return meta, tokens, nil
+}
+
+// FreezeTranscriptionPriceMeta reads only billing-relevant scalar fields from
+// the final multipart request, never audio bytes or transcripts.
+func FreezeTranscriptionPriceMeta(info *relaycommon.RelayInfo, contentType string, body io.Reader) error {
+	_, parameters, err := mime.ParseMediaType(contentType)
+	if err != nil || parameters["boundary"] == "" || body == nil {
+		return fmt.Errorf("invalid transcription multipart request")
+	}
+	fields := map[string]any{}
+	reader := multipart.NewReader(body, parameters["boundary"])
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		name := part.FormName()
+		if part.FileName() == "" && (name == "response_format" || name == "service_tier") {
+			if _, exists := fields[name]; exists {
+				return fmt.Errorf("duplicate transcription field")
+			}
+			value, err := io.ReadAll(io.LimitReader(part, 129))
+			if err != nil || len(value) > 128 {
+				return fmt.Errorf("invalid transcription field")
+			}
+			fields[name] = string(value)
+		}
+		if err := part.Close(); err != nil {
+			return err
+		}
+	}
+	info.BillingAudioResponseFormat, _ = fields["response_format"].(string)
+	data, err := common.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	return FreezeOutboundBillingAttributes(info, data)
 }

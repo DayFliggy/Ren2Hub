@@ -28,6 +28,7 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 	info.ObserveResponseModel(responsesResponse.Model)
+	info.ObserveActualServiceTier(responsesResponse.ServiceTier)
 	if oaiError := responsesResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		c.Set("response_termination", relayconvert.TerminationFromResponse(&responsesResponse))
 		return relayconvert.UsageFromResponsesUsage(responsesResponse.Usage), types.WithOpenAIError(*oaiError, http.StatusBadGateway)
@@ -40,10 +41,11 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	}
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 	usage := relayconvert.UsageFromResponsesUsage(responsesResponse.Usage)
-	for _, output := range responsesResponse.Output {
+	for i := range responsesResponse.Output {
+		output := responsesResponse.Output[i]
 		switch output.Type {
 		case dto.BuildInCallWebSearchCall, dto.BuildInCallFileSearchCall, dto.BuildInCallFunctionCall:
-			info.CountBillableToolCall(output.Type, output.Name)
+			info.ObserveBillableToolCall(&output, &i)
 		}
 	}
 

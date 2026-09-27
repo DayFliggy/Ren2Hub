@@ -30,6 +30,7 @@ func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse) 
 	}
 	if event.Response != nil {
 		a.info.ObserveResponseModel(event.Response.Model)
+		a.info.ObserveActualServiceTier(event.Response.ServiceTier)
 	}
 	if event.Response != nil && event.Response.Usage != nil {
 		// Responses usage is a cumulative snapshot, not a token delta.
@@ -38,6 +39,12 @@ func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse) 
 	switch event.Type {
 	case "response.completed", "response.done", "response.failed", "response.incomplete", "response.cancelled", "response.canceled", "response.error", "error":
 		a.terminalUsage = event.Response != nil && event.Response.Usage != nil
+		if observation := a.usage.Observation; observation != nil {
+			a.terminalUsage = a.terminalUsage && observation.Complete
+			if (event.Type == "response.completed" || event.Type == "response.done") && event.Response != nil && !relaycommon.IsNonBillableResponsesStatus(event.Response.Status) {
+				observation.Terminal = "completed"
+			}
+		}
 		if a.imageCommitted {
 			return
 		}
@@ -47,6 +54,7 @@ func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse) 
 		} else if event.Response != nil {
 			for i := range event.Response.Output {
 				a.imageCounter.Observe(&event.Response.Output[i], &i)
+				a.info.ObserveBillableToolCall(&event.Response.Output[i], &i)
 			}
 		}
 		a.imageCounter.Commit(a.info)
@@ -59,7 +67,7 @@ func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse) 
 		}
 		switch event.Item.Type {
 		case dto.BuildInCallWebSearchCall, dto.BuildInCallFileSearchCall, dto.BuildInCallFunctionCall:
-			a.info.CountBillableToolCall(event.Item.Type, event.Item.Name)
+			a.info.ObserveBillableToolCall(event.Item, event.OutputIndex)
 		case dto.ResponsesOutputTypeImageGenerationCall:
 			if !a.imageCommitted {
 				a.imageCounter.Observe(event.Item, event.OutputIndex)

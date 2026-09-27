@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/QuantumNous/new-api/common"
 	"testing"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -8,6 +9,28 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestResponsesUsagePresenceSurvivesConversionAndTerminal(t *testing.T) {
+	for _, test := range []struct {
+		raw      string
+		complete bool
+	}{
+		{`{}`, false},
+		{`{"input_tokens":12}`, false},
+		{`{"input_tokens":null,"output_tokens":0}`, false},
+		{`{"input_tokens":0,"output_tokens":0}`, true},
+	} {
+		t.Run(test.raw, func(t *testing.T) {
+			var event dto.ResponsesStreamResponse
+			require.NoError(t, common.Unmarshal([]byte(`{"type":"response.completed","response":{"usage":`+test.raw+`}}`), &event))
+			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
+			accounting := NewResponsesUsageAccumulator(info)
+			accounting.Observe(&event)
+			facts := NormalizedBillingUsage(accounting.Finish(), "openai")
+			require.Equal(t, test.complete, facts.Complete)
+		})
+	}
+}
 
 func TestResponsesUsageFinishIsIdempotent(t *testing.T) {
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-4o"}}

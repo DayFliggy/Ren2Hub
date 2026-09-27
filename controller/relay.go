@@ -193,6 +193,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			if relayInfo.ResponseUsageKind == "realtime" {
 				usage := relayInfo.ResponseUsage
 				service.PostWssConsumeQuota(c, relayInfo, relayInfo.BillingModelName(), &dto.RealtimeUsage{
+					Observation: usage.Observation,
 					InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens,
 					InputTokenDetails: usage.PromptTokensDetails, OutputTokenDetails: usage.CompletionTokenDetails,
 				}, strings.Join(relayInfo.ResponseUsageLogContent, ", "))
@@ -274,12 +275,13 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = types.NewErrorWithStatusCode(planErr, types.ErrorCodeConvertRequestFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 			break
 		}
-		if _, err := helper.ModelPriceHelper(c, relayInfo, tokens, meta); err != nil {
-			newAPIError = types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
+		qualifiedRatio, priceErr := helper.QualifyPublishedPrice(c, relayInfo)
+		if priceErr != nil {
+			newAPIError = helper.BillingPriceAPIError(priceErr)
 			break
 		}
 		markLiveRoutePriceQualified(c)
-		if routeLiveSelectionActive(c) && !liveRoutePriceRatioAllowed(c, relayInfo.PriceData.ChannelMultiplier()) {
+		if routeLiveSelectionActive(c) && !liveRoutePriceRatioAllowed(c, qualifiedRatio) {
 			markLiveRouteCandidateFiltered(c, channel.Id, service.RouteFilterPriceForbidden)
 			if nextAttempt, found := nextLiveRouteCandidateIndex(c, retryParam.GetRetry()); found {
 				retryParam.SetRetry(nextAttempt)
@@ -1013,7 +1015,7 @@ func routeLiveSelectionActive(c *gin.Context) bool {
 // admission ceiling after the established billing helper has calculated the
 // actual group ratio. It deliberately does not alter the billing calculation
 // or select a different group/channel.
-func liveRoutePriceRatioAllowed(c *gin.Context, actualRatio float64) bool {
+func liveRoutePriceRatioAllowed(c *gin.Context, actualRatio string) bool {
 	if c == nil {
 		return true
 	}

@@ -128,12 +128,19 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 			return
 		}
 		info.ObserveResponseModel(observed.Model)
+		info.ObserveActualServiceTier(observed.ServiceTier)
 		lastStreamData = data
 		if terminal := relayconvert.TerminationFromResponse(&observed); terminal.IsTerminal() {
 			c.Set("response_termination", terminal)
 		}
 		tail.observe(observed)
-		if service.ValidUsage(observed.Usage) {
+		if observed.Usage != nil {
+			if !dto.HasJSONTokenCounts([]byte(gjson.Get(data, "usage").Raw), "prompt_tokens", "completion_tokens") {
+				observed.Usage.UsageSource = "partial"
+				observed.Usage.Observation = &dto.UsageObservation{Source: "provider", Terminal: "unknown"}
+			} else {
+				observed.Usage.UsageSource = "provider"
+			}
 			usage, containStreamUsage, usageStreamData = observed.Usage, true, data
 		}
 		collectStreamFunctionCallNames(data, seenStreamToolCalls, &streamFunctionCallNames)
@@ -263,6 +270,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 
 	info.ObserveResponseModel(simpleResponse.Model)
+	info.ObserveActualServiceTier(simpleResponse.ServiceTier)
 	if oaiError := simpleResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		c.Set("response_termination", types.ResponseTermination{Kind: types.ResponseFailed})
 		return &simpleResponse.Usage, types.WithOpenAIError(*oaiError, http.StatusBadGateway)
@@ -271,12 +279,12 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		if err := helper.ValidateEmbeddingResponse(responseBody, helper.EmbeddingInputCount(info.Request)); err != nil {
 			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
 		}
-		if !gjson.GetBytes(responseBody, "usage").Exists() || gjson.GetBytes(responseBody, "usage").Type == gjson.Null {
+		if err := helper.ValidateVectorUsage(&simpleResponse.Usage); err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
+		}
+		if !dto.HasJSONTokenCounts([]byte(gjson.GetBytes(responseBody, "usage").Raw), "prompt_tokens") {
 			simpleResponse.Usage = *service.ResponseText2Usage(c, "", info.UpstreamModelName, info.GetEstimatePromptTokens())
 		} else {
-			if err := helper.ValidateVectorUsage(&simpleResponse.Usage); err != nil {
-				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusBadGateway)
-			}
 			simpleResponse.Usage.UsageSource = "provider"
 		}
 		return &simpleResponse.Usage, helper.WriteVectorResponse(c, resp, info, responseBody)

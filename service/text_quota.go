@@ -86,7 +86,11 @@ func cacheWriteTokensTotal(summary textQuotaSummary) int {
 func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) textQuotaSummary {
 	summary := textQuotaSummary{ModelName: relayInfo.BillingModelName(), TokenName: ctx.GetString("token_name"),
 		UseTimeSeconds: time.Now().Unix() - relayInfo.StartTime.Unix(),
-		UsageSemantic:  usageSemanticFromUsage(relayInfo, usage), DeliveredPerCall: relayInfo.PriceData.UsePrice && relayInfo.HasValidOutput()}
+		UsageSemantic:  usageSemanticFromUsage(relayInfo, usage), DeliveredPerCall: relayInfo.PriceData.Quote != nil && (relayInfo.PriceData.UsePrice || relayInfo.PriceData.Quote.PriceVersion.FlatFee != "") && relayInfo.HasValidOutput()}
+	if relayInfo.PriceData.Quote == nil {
+		summary.PricingError = fmt.Errorf("frozen billing quote is required")
+		return summary
+	}
 	if usage == nil {
 		usage = &dto.Usage{PromptTokens: relayInfo.GetEstimatePromptTokens(), UsageSource: "estimated"}
 	}
@@ -110,12 +114,15 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		summary.PricingError = err
 		return summary
 	}
+	if contract := relayInfo.PriceData.Quote.PriceVersion.Metering; contract != nil && contract.Source == "request_fixed" {
+		facts.Quantities[contract.Quantity] = fmt.Sprint(relayInfo.PriceData.Quote.Attributes["quantity"])
+	}
 	if summary.DeliveredPerCall {
 		facts.Quantities["calls"] = "1"
 	}
-	if relayInfo.PriceData.Usage != nil && relayInfo.HasValidOutput() {
+	if relayInfo.PriceData.Usage != nil && relayInfo.PriceData.Usage.Complete && !relayInfo.PriceData.Usage.Estimated && relayInfo.PriceData.Usage.Source == "provider_image_count" && relayInfo.HasValidOutput() {
 		for name, value := range relayInfo.PriceData.Usage.Quantities {
-			if name == "images" || name == "seconds" {
+			if name == "images" {
 				facts.Quantities[name] = value
 			}
 		}
@@ -127,6 +134,23 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			facts.Complete = true
 			facts.Estimated = false
 		}
+	}
+	if relayInfo.PriceData.Quote != nil && (imageOrCallOnlyPrice(relayInfo.PriceData.Quote.PriceVersion) || relayInfo.PriceData.Quote.PriceVersion.Metering != nil || relayInfo.PriceData.Quote.PriceVersion.Mode == billing.ModeFree) && TextUsageReadyForSettlement(ctx, relayInfo, usage) {
+		// Only business completion and any explicitly metered quantities are
+		// required here. Missing token counters are irrelevant to a fixed fee.
+		source := "business_completion"
+		if contract := relayInfo.PriceData.Quote.PriceVersion.Metering; contract != nil && contract.Source == "completion_fact" {
+			source = facts.Source
+		}
+		if facts.Estimated || !facts.Complete || facts.Invalid {
+			facts = billing.Usage{Source: source, Terminal: "completed", Complete: true, Quantities: facts.Quantities}
+			summary.PromptTokens, summary.CompletionTokens, summary.TotalTokens = 0, 0, 0
+		}
+		summary.DeliveredPerCall = true
+	}
+	facts.ActualServiceTier = relayInfo.ActualServiceTier
+	if facts.Complete && !facts.Estimated && !facts.Invalid && TextUsageReadyForSettlement(ctx, relayInfo, usage) {
+		facts.Terminal = "completed"
 	}
 	relayInfo.PriceData.Usage = &facts
 	result, err := billing.Calculate(relayInfo.PriceData.Quote, facts)
@@ -163,6 +187,9 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 }
 
 func collectBillingQuantities(ctx *gin.Context, info *relaycommon.RelayInfo, usage *billing.Usage) error {
+	if info.BillingToolUsageInvalid {
+		return fmt.Errorf("tool usage is missing a stable identity")
+	}
 	counts := map[string]int{}
 	add := func(name string, count int) error {
 		if count < 0 || count > math.MaxInt32 || counts[name] > math.MaxInt32-count {
@@ -211,14 +238,11 @@ func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) 
 }
 
 func imageOrCallOnlyPrice(version billing.PriceVersion) bool {
-	if version.UsesImageCount() {
-		used := billingexpr.UsedVars(version.Expression)
-		for _, name := range []string{"p", "c", "reasoning", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao"} {
-			if used[name] {
-				return false
-			}
+	if version.Mode == billing.ModeExpression {
+		if version.UsageSchema != nil || version.NeedsTokenUsage() {
+			return false
 		}
-	} else if version.Mode != billing.ModeUnitPrice || len(version.Prices) == 0 {
+	} else if version.Mode != billing.ModeUnitPrice || len(version.Prices) == 0 && version.FlatFee == "" {
 		return false
 	}
 	for _, price := range version.Prices {
@@ -258,6 +282,26 @@ func TextUsageReadyForSettlement(ctx *gin.Context, info *relaycommon.RelayInfo, 
 	if version.Mode == billing.ModeFree {
 		return true
 	}
+	if contract := version.Metering; contract != nil {
+		var raw string
+		var present bool
+		if contract.Source == "request_fixed" {
+			raw, present = info.PriceData.Quote.Attributes["quantity"].(string)
+		} else if usage != nil {
+			if strings.Contains(usage.UsageSource, "estimated") || usage.UsageSource == "missing" || usage.UsageSource == "partial" || usage.UsageSource == "invalid" {
+				return false
+			}
+			if observation := usage.Observation; observation != nil && (!observation.Complete || observation.Estimated || observation.Terminal != "completed") {
+				return false
+			}
+			raw, present = usage.MeasuredQuantities[contract.Quantity]
+		}
+		value, err := billing.ParseAmountUSD(raw)
+		return present && err == nil && !value.IsNegative()
+	}
+	if version.NeedsTokenUsage() && usage != nil && (usage.UsageSource == "provider_duration" || usage.UsageSource == "provider_characters") {
+		return false
+	}
 	quantityOnly := imageOrCallOnlyPrice(version)
 	if version.UsesImageCount() {
 		facts := info.PriceData.Usage
@@ -290,6 +334,16 @@ func TextUsageReadyForSettlement(ctx *gin.Context, info *relaycommon.RelayInfo, 
 	facts := NormalizedBillingUsage(usage, usageSemanticFromUsage(info, usage))
 	return usage != nil && !facts.Estimated && facts.Complete && !facts.Invalid &&
 		(usage.UsageSource != "" || dto.HasOpenAIUsageTokens(usage) || usage.BillingUsage != nil)
+}
+
+// PrepareFinalTextCharge lets administrative channel probes use the same
+// protocol completion, actual usage and quantity handling as relay requests.
+func PrepareFinalTextCharge(ctx *gin.Context, info *relaycommon.RelayInfo, usage *dto.Usage) (int, error) {
+	if !TextUsageReadyForSettlement(ctx, info, usage) {
+		return 0, fmt.Errorf("completed billing evidence required")
+	}
+	summary := calculateTextQuotaSummary(ctx, info, usage)
+	return summary.Quota, summary.PricingError
 }
 
 func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []string) {

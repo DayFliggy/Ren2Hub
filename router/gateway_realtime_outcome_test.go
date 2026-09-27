@@ -38,17 +38,17 @@ func TestGatewayRealtimeResponseOutcomes(t *testing.T) {
 			// Channel permit release precedes request-final settlement by a small interval.
 			require.Eventually(t, func() bool {
 				var row model.BillingRecovery
-				return model.DB.First(&row).Error == nil && (row.Status == model.BillingRecoveryStatusRefunded || row.ConsumptionState == model.BillingRecoveryStateCompleted || (!test.output && model.BillingRecoveryUsageUnconfirmed(row.ConsumptionState)))
+				return model.DB.First(&row).Error == nil && (row.Status == model.BillingRecoveryStatusRefunded || row.ConsumptionState == model.BillingRecoveryStateCompleted || model.BillingRecoveryUsageUnconfirmed(row.ConsumptionState))
 			}, 2*time.Second, 10*time.Millisecond)
 			var user model.User
 			require.NoError(t, model.DB.First(&user, 1).Error)
 			wantQuota := 0
-			if test.output {
+			if test.name == "usage_without_output" {
 				wantQuota = 500
 			}
 			assert.EqualValues(t, wantQuota, user.UsedQuota)
 			held := common.Quota(0)
-			if test.name == "provider_rate_limit" || test.name == "provider_invalid_input" {
+			if test.name != "usage_without_output" {
 				held = 500
 			}
 			assert.EqualValues(t, 10000000-common.Quota(wantQuota)-held, user.Quota)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -90,8 +91,10 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (apiErr 
 	total = &dto.RealtimeUsage{}
 	pendingInput := &dto.RealtimeUsage{}
 	activeResponses := make(map[string]*realtimeResponseState)
-	seenResponses := make(map[string]struct{})
+	seenResponses := make(map[string]string)
+	pendingCreates, pendingBillableInput := 0, false
 	providerUsage, estimatedUsage := false, false
+	uncertainOutcome := false
 	defer func() {
 		for _, response := range activeResponses {
 			if !response.delivered {
@@ -114,8 +117,19 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (apiErr 
 				source = "provider_and_estimated"
 			}
 		}
-		info.CaptureResponseUsage(&dto.Usage{PromptTokens: total.InputTokens, CompletionTokens: total.OutputTokens,
-			TotalTokens: total.TotalTokens, UsageSource: source}, "realtime", nil)
+		ids := make([]string, 0, len(seenResponses))
+		for id := range seenResponses {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		complete := apiErr == nil && len(activeResponses) == 0 && pendingCreates == 0 && !pendingBillableInput && providerUsage && !estimatedUsage && !uncertainOutcome
+		terminal := "unknown"
+		if complete {
+			terminal = "completed"
+		}
+		total.Observation = &dto.UsageObservation{Source: source, Estimated: estimatedUsage || !providerUsage,
+			Complete: complete, Terminal: terminal, ResponseIDs: ids}
+		info.CaptureResponseUsage(total.CanonicalUsage(), "realtime", nil)
 	}()
 	for {
 		select {
@@ -160,6 +174,9 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (apiErr 
 				return realtimeRelayError(errors.New("upstream realtime event type is missing")), total
 			}
 			if msg.fromClient {
+				if err := helper.ValidateRealtimeBillingEvent(info, msg.data); err != nil {
+					return helper.BillingRequestAPIError(err), total
+				}
 				if event.Type == dto.RealtimeEventTypeSessionUpdate && event.Session != nil && event.Session.Tools != nil {
 					info.RealtimeTools = event.Session.Tools
 				}
@@ -175,6 +192,12 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (apiErr 
 					return realtimeRelayError(err), total
 				}
 				pendingInput = updated
+				switch event.Type {
+				case dto.RealtimeEventTypeResponseCreate:
+					pendingCreates++
+				case dto.RealtimeEventInputAudioBufferAppend, "input_audio_buffer.commit", dto.RealtimeEventTypeConversationCreate:
+					pendingBillableInput = true
+				}
 				continue
 			}
 
@@ -185,6 +208,7 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (apiErr 
 			var itemUsage *dto.RealtimeUsage
 			var itemID string
 			var responseID string
+			var responseEvidence string
 			terminal := event.Type == dto.RealtimeEventTypeResponseDone
 			responseEvent := strings.HasPrefix(event.Type, "response.")
 			semantic := responseEvent && event.Delta != ""
@@ -217,6 +241,8 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (apiErr 
 					if responseState == nil {
 						responseState = &realtimeResponseState{estimate: pendingInput, items: make(map[string]*dto.RealtimeUsage)}
 						pendingInput = &dto.RealtimeUsage{}
+						pendingCreates = max(0, pendingCreates-1)
+						pendingBillableInput = false
 					}
 					activeResponses[responseID] = responseState
 				}
@@ -246,6 +272,18 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (apiErr 
 				if identity.Response.ID == "" {
 					return realtimeRelayError(errors.New("realtime response.done is missing response identity")), total
 				}
+				evidence, err := common.Marshal(struct {
+					Status   string             `json:"status"`
+					Usage    *dto.RealtimeUsage `json:"usage"`
+					Complete bool               `json:"complete"`
+				}{identity.Response.Status, event.Response.Usage, event.Response.Usage != nil && (event.Response.Usage.Observation == nil || event.Response.Usage.Observation.Complete)})
+				if err != nil {
+					return realtimeRelayError(err), total
+				}
+				responseEvidence = string(evidence)
+				if duplicate && seenResponses[responseID] != responseEvidence {
+					return realtimeRelayError(errors.New("conflicting usage for completed realtime response")), total
+				}
 				switch identity.Response.Status {
 				case "", "completed", "cancelled", "incomplete":
 				case "failed":
@@ -254,6 +292,7 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (apiErr 
 					return realtimeRelayError(fmt.Errorf("invalid realtime response.done status")), total
 				}
 				if !duplicate {
+					uncertainOutcome = uncertainOutcome || identity.Response.Status != "completed"
 					finalOutput, hasOutput, err := realtimeTerminalOutputUsage(info, msg.data)
 					if err != nil {
 						return realtimeRelayError(err), total
@@ -261,6 +300,9 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (apiErr 
 					semantic = hasOutput
 					completed := responseState.estimate
 					if event.Response.Usage != nil {
+						if observation := event.Response.Usage.Observation; observation != nil && !observation.Complete {
+							uncertainOutcome = true
+						}
 						var err error
 						completed, err = service.NormalizeRealtimeUsage(event.Response.Usage)
 						if err != nil {
@@ -349,7 +391,7 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (apiErr 
 				}
 			}
 			if terminal && !duplicate {
-				if responseState.delivered {
+				if responseState.delivered || event.Response.Usage != nil {
 					merged, err := service.AddRealtimeUsage(total, completedUsage)
 					if err != nil {
 						return realtimeRelayError(err), total
@@ -360,7 +402,7 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (apiErr 
 					reserveUsage = true
 				}
 				delete(activeResponses, responseID)
-				seenResponses[responseID] = struct{}{}
+				seenResponses[responseID] = responseEvidence
 				info.IsFirstRequest = false
 			} else if responseState != nil && completedUsage != nil {
 				responseState.estimate = completedUsage
@@ -372,7 +414,8 @@ func OpenaiRealtimeHandler(c *gin.Context, info *relaycommon.RelayInfo) (apiErr 
 			if responseErr != nil {
 				return responseErr, total
 			}
-			if reserveUsage && info.HasValidOutput() {
+			if reserveUsage {
+				total.Observation = &dto.UsageObservation{Source: "realtime_cumulative", Estimated: estimatedUsage, Terminal: "collecting"}
 				if err := service.PreWssConsumeQuota(c, info, total); err != nil {
 					return types.NewErrorWithStatusCode(fmt.Errorf("reserve realtime usage: %w", err), types.ErrorCodeUpdateDataError,
 						http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry()), total

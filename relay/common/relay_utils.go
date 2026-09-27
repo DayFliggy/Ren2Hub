@@ -259,7 +259,6 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 		if model == "sora-2-pro" && !lo.Contains([]string{"720x1280", "1280x720", "1792x1024", "1024x1792"}, size) {
 			return createTaskError(fmt.Errorf("sora-2 size is invalid"), "invalid_size", http.StatusBadRequest, true)
 		}
-		// OtherRatios 已移到 Sora adaptor 的 EstimateBilling 中设置
 	}
 
 	storeTaskRequest(c, info, action, req)

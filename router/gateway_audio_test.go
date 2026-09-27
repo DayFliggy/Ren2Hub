@@ -124,9 +124,10 @@ func TestGatewayAudioSpeechAccounting(t *testing.T) {
 			if settled {
 				require.Len(t, logs, 1)
 				assert.Equal(t, 1, user.RequestCount)
-				assert.Positive(t, logs[0].CompletionTokens)
 				if scenario == "sse" {
 					assert.Equal(t, 20, logs[0].CompletionTokens)
+				} else {
+					assert.Zero(t, logs[0].CompletionTokens, "binary audio has no actual token count")
 				}
 			} else {
 				assert.Empty(t, logs)

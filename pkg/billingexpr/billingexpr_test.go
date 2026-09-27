@@ -10,6 +10,15 @@ import (
 	"time"
 )
 
+func TestTaskAttributeDependenciesUseFrozenUsageSchema(t *testing.T) {
+	schema, err := billingexpr.FreezeUsageSchema(&billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
+		"seconds": {Type: "number", Unit: "second", Source: billingexpr.UsageCompletionFact},
+	}})
+	require.NoError(t, err)
+	used := billingexpr.UsedAttributes(`v2: attr('service_tier') == "priority" ? u("seconds") * 2 : u("seconds")`, schema)
+	assert.True(t, used["service_tier"])
+}
+
 func TestDecimalExpressionPricing(t *testing.T) {
 	const claude = `p <= 200000 ? tier("standard", p * 1.5 + c * 7.5) : tier("long_context", p * 3 + c * 11.25)`
 	const glm = `(p < 32000 && c < 200 ? tier("short",p*2+c*8) : p < 32000 ? tier("output",p*3+c*14) : tier("large",p*4+c*16))/1000000`

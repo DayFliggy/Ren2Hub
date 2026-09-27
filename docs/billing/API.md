@@ -22,6 +22,9 @@
 | PUT `/api/billing/prices/automatic` | Root | `{enabled,check_interval_minutes}`，周期 5–1440 分钟，默认 30 |
 | POST `/api/billing/prices/automatic/sync` | Root | 创建或返回同类正在执行的系统任务；结果包含 checked、changed、published、deactivated、unconfigured_count、unconfigured、unconfigured_details 及 errors |
 | POST `/api/billing/prices/automatic/restore` | Root | `{model,expected_version}` 恢复全局目录价；冲突 409，不覆盖人工渠道价格 |
+| GET `/api/billing/prices/automatic/snapshots` | Root | `source` 可选、`limit` 默认 20，返回不可变归档元数据数组 |
+| GET `/api/billing/prices/automatic/snapshots/:id` | Root | 元数据与 document 原文；`?download=1` 返回经 SHA 校验的 JSON 附件 |
+| GET `/api/pricing` | 公开/当前用户权限 | 模型元数据与 offers，含公开版本、条件、调整后价格，不含渠道秘密或证据正文 |
 
 `:id` 为请求 ID，客户端必须 URL 编码。列表返回 `{ items, total }`；limit 默认 20、最大 100。预留项包含 `request_id`、`user_id`、`token_id`、`state`、`funding_amount`、`token_amount`、`version`、时间和 `manual_review_required`。
 
@@ -57,6 +60,10 @@
     "channel_id": 0,
     "model": "example-text-model",
     "mode": "unit_price",
+    "provenance": {
+      "kind": "retail",
+      "retail_reason": "经运营审阅的本站零售价"
+    },
     "prices": [
       { "quantity": "p", "unit": "per_million_tokens", "price": "2.5" },
       { "quantity": "c", "unit": "per_million_tokens", "price": "10" },
@@ -70,7 +77,9 @@
 
 同步任务通过 `GET /api/system-task/:id` 查询。页面加载或刷新时使用 `GET /api/system-task/list?type=billing_pricing_sync&limit=1` 回载最近的定时或手动任务，并继续轮询运行中任务。`unconfigured_details` 形状为 `[{model,reasons:[{source,reason}]}]`，与 `unconfigured` 一起最多返回 100 个模型，另有总结果体积限制；完整总数为 `unconfigured_count`。来源下载失败保留其有效快照；没有有效快照的单源不阻断其他来源。有效目录无法提供该模型完整价格时停用其全局自动价；全部来源都无有效快照时返回目录错误，不据此批量停用既有价格。自动更新只管理全局价格，人工价格保持优先。
 
-活动来源 `source` 仅为 `sub2api`、`axonhub`，对应 `role` 为 `primary`、`fallback`。来源状态增加 `snapshot_state`：`bundled` 表示尚未检查远端的有效离线快照，`current` 表示最近检查成功，`cached` 表示刷新失败后继续使用有效缓存，`unavailable` 表示没有有效缓存。原有检查时间、更新时间、哈希、模型数、拒绝数和 `last_error` 仍保留。旧版本响应可能没有此字段；前端不据此臆造成功状态。历史任务与旧价格归属仍可出现 `models_dev`、`openrouter`，不能将其作为活动来源重新启用。
+活动来源仅为 `sub2api/axonhub`，对应角色 `primary/fallback`。`snapshot_state` 为 `bundled/current/cached/unavailable`，分别表示离线有效、检查成功、失败后使用有效缓存、没有有效缓存。来源还返回检查与更新时间、哈希、模型与拒绝数量、错误，以及 `snapshot_id/parser_version/snapshot_count`。原文归档与字段证据共同解释发布依据，不保留旧来源归属迁移。
+
+本 API 对应安装格式 4、价格合同 3、`billing-v3`。发布立即生效，拒绝未来开始和已经到期的价格。人工发布必须选择 evidence 完整字段证据或 retail 理由；自动来源专用 source 证据由服务端绑定。物理音频 metering、服务档 support、Decimal 调整明细与公开 offers 的完整形状见[计价接口](../../pkg/billing/API.md)。
 
 管理员设置余额必须携带操作 ID、预期账户版本，通过差额事件记账。支付、兑换、奖励业务继续维护资格和业务凭据，凭据与钱包事件使用同一事务。返利额度仍归返利权益账本管理，转入钱包时建立关联事件。
 

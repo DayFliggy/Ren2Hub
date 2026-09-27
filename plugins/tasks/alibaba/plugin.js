@@ -983,7 +983,7 @@ export function buildSubmitRequest(ctx) {
 // DashScope sends text/image deltas but cumulative usage. The host applies
 // generic JSON changes; vendor completion and usage semantics remain here.
 export function parseSubmitEventDelta(ctx, event, previousState) {
-  const body = JSON.parse(event.data);
+  const body = utils.json.parseNumbers(event.data);
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("invalid DashScope stream event");
   if (body.code || event.event === "error") throw new Error((body.code || "upstream_error") + ": " + (body.message || "stream failed"));
   const state = utils.json.clone(previousState || { choices: [], hasUsage: false });

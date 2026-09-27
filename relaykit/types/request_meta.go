@@ -26,7 +26,7 @@ type TokenCountMeta struct {
 	Files         []*FileMeta `json:"files,omitempty"`          // List of files, each with type and content
 	MaxTokens     int         `json:"max_tokens,omitempty"`     // Maximum tokens allowed in the request
 
-	BillingQuantities map[string]float64 `json:"billing_quantities,omitempty"` // Validated non-token usage quantities used for pre-consume billing
+	BillingQuantities map[string]string `json:"billing_quantities,omitempty"` // Validated non-token usage quantities used for pre-consume billing
 	//IsStreaming   bool        `json:"is_streaming,omitempty"`   // Indicates if the request is streaming
 }
 

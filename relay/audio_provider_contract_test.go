@@ -103,8 +103,9 @@ func TestProviderAudioDeliveryContracts(t *testing.T) {
 					assert.Equal(t, provider.expected, recorder.Body.String())
 					assert.True(t, info.HasValidOutput())
 					if provider.name == "minimax" {
-						assert.Equal(t, "provider", observed.UsageSource)
-						assert.Equal(t, 7, observed.PromptTokens)
+						assert.Equal(t, "provider_characters", observed.UsageSource)
+						assert.Zero(t, observed.PromptTokens)
+						assert.Equal(t, "7", observed.MeasuredQuantities["characters"])
 					} else {
 						assert.Equal(t, "estimated", observed.UsageSource)
 						assert.Equal(t, 5, observed.PromptTokens)

@@ -856,7 +856,7 @@ func TestAlibabaImageResults(t *testing.T) {
 			assert.Equal(t, first, result.Url)
 			require.Equal(t, map[string]any{"image_count": "2"}, result.UsageFacts)
 			// A reservation for four images can settle to the two actual successes.
-			schema, err := billingexpr.FreezeUsageSchema(&billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{"image_count": {Type: "number", Unit: "images", Source: billingexpr.UsageCompletionFact, Required: true, Integer: true, Maximum: "16"}}})
+			schema, err := billingexpr.FreezeUsageSchema(&billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{"image_count": {Type: "number", Unit: "image", Source: billingexpr.UsageCompletionFact, Required: true, Integer: true, Maximum: "16"}}})
 			require.NoError(t, err)
 			cost, _, err := billingexpr.RunExprWithRequest(`v2:tier("image", u("image_count") * 0.1)`, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: result.UsageFacts, UsageSchema: schema})
 			require.NoError(t, err)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -57,7 +58,7 @@ func TestAliImageConvertedQuantityMatchesBudget(t *testing.T) {
 			require.NoError(t, err)
 			meta, err := helper.FinalImagePriceMeta(c, info, bytes.NewReader(body))
 			require.NoError(t, err)
-			assert.Equal(t, test.count, meta.BillingQuantities["n"])
+			assert.Equal(t, fmt.Sprint(test.count), meta.BillingQuantities["n"])
 			var wire AliImageRequest
 			require.NoError(t, common.Unmarshal(body, &wire))
 			assert.Equal(t, int(test.count), wire.Parameters.N)

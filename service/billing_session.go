@@ -106,8 +106,8 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 	if s.settled || s.refunded || s.settlementStarted {
 		return model.ErrBillingRecoveryStateConflict
 	}
-	if !s.relayInfo.PriceData.FreeModel && targetQuota == 0 {
-		targetQuota = 1
+	if err := model.ValidatePublishedBillingQuote(context.Background(), s.relayInfo.PriceData.Quote); err != nil {
+		return err
 	}
 	if err := model.IncreaseReservation(s.recoveryID, common.Quota(targetQuota)); err != nil {
 		return err
@@ -170,11 +170,11 @@ func NewBillingSession(c *gin.Context, info *relaycommon.RelayInfo, quota int) (
 	if info == nil {
 		return nil, types.NewError(errors.New("missing relay info"), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
+	if err := model.ValidatePublishedBillingQuote(billingRecoveryContext(c), info.PriceData.Quote); err != nil {
+		return nil, types.NewErrorWithStatusCode(err, types.ErrorCodeModelPriceError, http.StatusServiceUnavailable, types.ErrOptionWithSkipRetry())
+	}
 	if strings.TrimSpace(info.RequestId) == "" {
 		info.RequestId = common.NewRequestId()
-	}
-	if !info.PriceData.FreeModel && quota == 0 {
-		quota = 1
 	}
 	session := &BillingSession{relayInfo: info, recoveryID: info.RequestId}
 	if err := ensureBillingRecovery(session); err != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,7 +51,13 @@ func TestGatewaySpeechFinalInputAccounting(t *testing.T) {
 					common.PreConsumedQuota, constant.CountToken = oldPreconsume, oldCount
 				})
 				common.PreConsumedQuota, constant.CountToken = 1, false
-				require.NoError(t, publishGatewayFixturePrices(`{"tts-budget":1}`, true))
+				_, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{
+					Model: "tts-budget", Mode: billing.ModeUnitPrice,
+					Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "reviewed character-count test contract"},
+					Metering:   &billing.PriceMetering{RequestKind: "speech", Quantity: "characters", Source: "request_fixed", Method: "unicode_codepoints"},
+					Prices:     []billing.UnitPrice{{Quantity: "characters", Unit: "per_million_characters", Price: "2"}},
+				}, 0, 1)
+				require.NoError(t, err)
 				channel, err := model.GetChannelById(1, true)
 				require.NoError(t, err)
 				channel.Type, channel.Models = provider.channelType, "tts-budget"
@@ -86,12 +93,17 @@ func TestGatewaySpeechFinalInputAccounting(t *testing.T) {
 					held = 0
 				}
 				assert.EqualValues(t, 10000000-held, user.Quota)
-				assert.Zero(t, user.UsedQuota, "request text cannot substitute for missing provider usage")
-				assert.EqualValues(t, held, user.ReservedQuota)
+				assert.EqualValues(t, held, user.UsedQuota, "reviewed request-fixed character count is a billing fact")
+				assert.Zero(t, user.ReservedQuota)
 				assert.EqualValues(t, quota-held, token.RemainQuota)
 				var logs []model.Log
 				require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
-				assert.Empty(t, logs)
+				if insufficient {
+					assert.Empty(t, logs)
+				} else {
+					require.Len(t, logs, 1)
+					assert.Contains(t, logs[0].Other, `"characters":"400"`)
+				}
 			})
 		}
 	}

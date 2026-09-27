@@ -28,7 +28,7 @@
 
 AI 请求按 `router/relay-router.go` → 鉴权/限流 → `middleware/gateway_admission.go` → `middleware/distributor.go` → `service/request_route.go` → `controller/relay.go` 阅读。宿主在 `relay/` 发送请求和处理传输，`relaykit/` 负责协议语义；后台作业从 `controller/system_task_handlers.go` 进入系统任务框架。
 
-Vue 从 `frontend/src/router/`、`frontend/src/stores/app.ts` 和 `frontend/src/api/` 核对页面、能力状态与真实 API。后端兼容入口存在不代表当前 UI 开放。当前账务格式为 3，仅接受空库初始化或匹配 `billing_schemas` 标记的数据库；价格合同为 2，计算器为 `billing-v2`。不能把旧计费数据库直接接给新代码。
+Vue 从 `frontend/src/router/`、`frontend/src/stores/app.ts` 和 `frontend/src/api/` 核对页面、能力状态与真实 API。后端入口存在不代表当前 UI 开放。当前账务格式为 4，仅接受空库初始化或匹配 `billing_schemas` 标记的数据库；价格合同为 3，计算器为 `billing-v3`。不能把旧计费数据库直接接给新代码。公开定价采用 `model_name + offers[]`，来源原文与字段证据只在授权管理接口读取。
 
 ## 文档与部署状态
 

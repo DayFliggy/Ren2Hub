@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
@@ -31,6 +32,12 @@ func setupGatewayRealtime(t *testing.T) (string, string, <-chan *websocket.Conn,
 			accepted <- conn
 		}
 	})
+	version, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
+	require.NoError(t, err)
+	expected := version.ID
+	version.Prices = append(version.Prices, billing.UnitPrice{Quantity: "ai", Unit: "per_million_tokens", Price: "0"}, billing.UnitPrice{Quantity: "ao", Unit: "per_million_tokens", Price: "0"})
+	_, err = model.PublishBillingPrice(context.Background(), *version, expected, 1)
+	require.NoError(t, err)
 	return url, key, accepted, sends
 }
 
@@ -111,7 +118,7 @@ func TestGatewayRealtimeTerminationAndAccounting(t *testing.T) {
 			var logs []model.Log
 			require.NoError(t, model.DB.First(&user, 1).Error)
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
-			if hasOutput {
+			if ending == "completed" {
 				assert.Equal(t, 1, user.RequestCount)
 				assert.EqualValues(t, 500, user.UsedQuota)
 				require.Len(t, logs, 1)
@@ -143,7 +150,7 @@ func TestGatewayRealtimeBillingRecoveryDoesNotReplay(t *testing.T) {
 	url, key, accepted, sends := setupGatewayRealtime(t)
 	client, upstream := dialGatewayRealtime(t, url, key, accepted)
 	relayRealtimeEvent(t, upstream, client, `{"type":"response.output_text.delta","delta":"hello"}`)
-	relayRealtimeEvent(t, upstream, client, `{"type":"response.done","response":{"id":"round-one","usage":{"input_tokens":10,"output_tokens":20}}}`)
+	relayRealtimeEvent(t, upstream, client, `{"type":"response.done","response":{"id":"round-one","status":"completed","usage":{"input_tokens":10,"output_tokens":20}}}`)
 	require.NoError(t, model.DB.Callback().Create().Before("gorm:create").Register("realtime_settlement_fault", func(tx *gorm.DB) {
 		if adjustment, ok := tx.Statement.Dest.(*model.BillingEvent); ok && adjustment.Operation == model.BillingRecoveryOperationSettle {
 			tx.AddError(assert.AnError)

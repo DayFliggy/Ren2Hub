@@ -97,7 +97,7 @@ func TestMidjourneyManualAmountCannotReplaceMissingCompletionEvidence(t *testing
 	require.NoError(t, model.DB.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
 	command := model.BillingResolution{OperationID: "mj-manual", ExpectedVersion: recovery.Version, Action: "settle", Quota: 7, Reason: "provider invoice confirmed"}
 	_, err = model.ResolveBillingReconciliation(context.Background(), recovery.ID, 1, command)
-	require.ErrorContains(t, err, "missing final billing charge")
+	require.ErrorIs(t, err, model.ErrBillingRecoveryStateConflict)
 	assert.Equal(t, 80, getUserQuota(t, 1))
 	assert.Zero(t, getTokenUsedQuota(t, 1))
 	require.NoError(t, model.DB.Where("request_id = ?", recovery.RequestID).First(&recovery).Error)

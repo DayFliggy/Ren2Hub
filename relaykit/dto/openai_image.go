@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strconv"
 
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -168,7 +169,7 @@ func (i *ImageRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	return &types.TokenCountMeta{
 		CombineText:       i.Prompt,
 		MaxTokens:         1584,
-		BillingQuantities: map[string]float64{"n": float64(imageN)},
+		BillingQuantities: map[string]string{"n": strconv.FormatUint(uint64(imageN), 10)},
 	}
 }
 

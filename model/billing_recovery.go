@@ -32,7 +32,6 @@ const (
 	BillingRecoveryStateCompleted          = "completed"
 	BillingRecoveryStateUnprepared         = "unprepared"
 	BillingRecoveryStateWriting            = "writing"
-	BillingRecoveryStateCollecting         = "collecting"
 )
 
 // BillingRecovery is the durable state for a request's pre-consume and

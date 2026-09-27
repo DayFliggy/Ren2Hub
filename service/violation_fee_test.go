@@ -20,7 +20,7 @@ func TestViolationFeeUsesIndependentFrozenEventAfterPrimaryRelease(t *testing.T)
 	info.StartTime = time.Now()
 	info.ChannelMeta = &relaycommon.ChannelMeta{}
 	require.NoError(t, model.DB.AutoMigrate(&model.BillingPriceVersion{}, &model.BillingActivePrice{}))
-	version, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "fee-test", Mode: billing.ModeUnitPrice, FlatFee: "0.002"}, 0, 1)
+	version, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "fee-test", Mode: billing.ModeUnitPrice, FlatFee: "0.002"}, 0, 1)
 	require.NoError(t, err)
 	info.PriceData.Quote, err = billing.NewQuote(*version, "1", nil, time.Now())
 	require.NoError(t, err)

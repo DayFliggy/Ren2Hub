@@ -11,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -52,6 +53,11 @@ func TestGatewayReasoningAndSearchPolicyBeforeBilling(t *testing.T) {
 					r.Body = io.NopCloser(bytes.NewReader(payload))
 					gatewaySDKUpstream(w, r)
 				})
+				if test.name == "configured search" {
+					for _, name := range []string{test.native, test.target} {
+						require.NoError(t, addGatewayFixtureDimensions(name, billing.UnitPrice{Quantity: "tool:web_search", Unit: "per_call", Price: "0"}, billing.UnitPrice{Quantity: "tool:web_search_preview", Unit: "per_call", Price: "0"}))
+					}
+				}
 				require.NoError(t, model.DB.Model(&model.Token{}).Where("key = ?", key).Update("conversion_policy", policy).Error)
 				var token model.Token
 				require.NoError(t, model.DB.Where("key = ?", key).First(&token).Error)

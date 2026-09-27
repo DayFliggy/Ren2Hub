@@ -1,14 +1,17 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,6 +68,18 @@ func TestBillingAPIRootResolutionAndOwnerIsolation(t *testing.T) {
 	require.NoError(t, model.DB.Where("request_id = ?", "billing-role-1").First(&recovery).Error)
 	body := fmt.Sprintf(`{"operation_id":"resolve-once","expected_version":%d,"action":"settle","quota":"30","reason":"confirmed provider invoice"}`, recovery.Version)
 	path := "/api/billing/reconciliations/billing-role-1/resolve"
+	assert.Equal(t, http.StatusConflict, call(3, http.MethodPost, path, body).Code, "administrator amounts cannot substitute for usage evidence")
+	version, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "resolution-test", Mode: billing.ModeExpression, Expression: "p * 2", Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "resolution test price"}}, 0, 1)
+	require.NoError(t, err)
+	quote, err := billing.NewQuote(*version, "1", nil, time.Now())
+	require.NoError(t, err)
+	require.NoError(t, model.PrepareBillingAttempt(context.Background(), recovery.RequestID, "resolution-attempt", 0, quote))
+	usage := &billing.Usage{InputTokens: 30, ContextTokens: 30, Source: "provider", Complete: true, Terminal: "completed"}
+	charge, err := billing.Calculate(quote, *usage)
+	require.NoError(t, err)
+	require.NoError(t, model.PrepareBillingRecoveryConsumption(recovery.RequestID, model.BillingConsumption{Log: model.Log{UserId: 1, ModelName: "resolution-test", Quota: 30}, Usage: usage, Charge: charge}))
+	require.NoError(t, model.DB.Where("request_id = ?", recovery.RequestID).First(&recovery).Error)
+	body = fmt.Sprintf(`{"operation_id":"resolve-once","expected_version":%d,"action":"settle","quota":"30","reason":"confirmed provider invoice"}`, recovery.Version)
 	for range 2 {
 		response := call(3, http.MethodPost, path, body)
 		require.Equal(t, http.StatusOK, response.Code, response.Body.String())

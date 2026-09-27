@@ -127,16 +127,6 @@ func recoverOneBillingRecovery(ctx context.Context, requestID string) (string, e
 		if model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
 			return recovery.Status, nil
 		}
-		if recovery.ConsumptionState == model.BillingRecoveryStateCollecting {
-			var consumption model.BillingConsumption
-			if err := common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &consumption); err != nil {
-				return recovery.Status, err
-			}
-			if err := model.PrepareBillingRecoveryConsumption(recovery.RequestID, consumption); err != nil {
-				return recovery.Status, err
-			}
-			return recoverBillingSettlement(recovery)
-		}
 		return recoverBillingRefund(recovery)
 	case model.BillingRecoveryStatusRefundPending:
 		return recoverBillingRefund(recovery)

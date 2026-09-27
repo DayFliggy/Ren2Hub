@@ -429,8 +429,8 @@ func operationType(n *operation, schema *UsageSchema) (string, error) {
 }
 
 // UsedAttributes shares the validated, unoptimized plan with execution.
-func UsedAttributes(expression string) map[string]bool {
-	plan, err := CompileFromCache(expression)
+func UsedAttributes(expression string, schema *UsageSchema) map[string]bool {
+	plan, err := CompileWithUsageSchema(expression, schema)
 	if err != nil {
 		return nil
 	}

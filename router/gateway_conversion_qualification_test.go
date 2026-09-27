@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,6 +32,7 @@ func TestGatewayManualQualificationPrecedesRetryPolicy(t *testing.T) {
 		t.Run(tc.mode+string(rune('0'+tc.maxFailover)), func(t *testing.T) {
 			var sends atomic.Int32
 			url, key, _ := setupGatewaySDKWithUpstream(t, func(w http.ResponseWriter, r *http.Request) { sends.Add(1); gatewaySDKUpstream(w, r) })
+			require.NoError(t, addGatewayFixtureDimensions("gpt-4o-mini", billing.UnitPrice{Quantity: "ai", Unit: "per_million_tokens", Price: "0"}))
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", 1).Update("type", constant.ChannelTypeAnthropic).Error)
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			var token model.Token
@@ -90,6 +92,7 @@ func TestGatewayConversionQualificationPrecedesCandidateCap(t *testing.T) {
 		t.Run(string(rune('A'+incompatible-63)), func(t *testing.T) {
 			var sends atomic.Int32
 			url, key, _ := setupGatewaySDKWithUpstream(t, func(w http.ResponseWriter, r *http.Request) { sends.Add(1); gatewaySDKUpstream(w, r) })
+			require.NoError(t, addGatewayFixtureDimensions("gpt-4o-mini", billing.UnitPrice{Quantity: "ai", Unit: "per_million_tokens", Price: "0"}))
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("id = ?", 1).Update("type", constant.ChannelTypeAnthropic).Error)
 			var original model.Channel
 			require.NoError(t, model.DB.Where("id = ?", 1).First(&original).Error)

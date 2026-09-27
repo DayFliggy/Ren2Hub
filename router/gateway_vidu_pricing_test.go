@@ -70,7 +70,7 @@ func TestGatewayViduFixedPriceReservesAndSettlesOnce(t *testing.T) {
 	var stored model.Task
 	require.NoError(t, model.DB.First(&stored, task.ID).Error)
 	require.NotNil(t, stored.PrivateData.CompletionUsage)
-	assert.EqualValues(t, 10, stored.PrivateData.CompletionUsage.Facts["credits"])
+	assert.Equal(t, "10", stored.PrivateData.CompletionUsage.Facts["credits"])
 	assert.Empty(t, stored.PrivateData.BillingContext.Usage.ActualFacts)
 	assert.Equal(t, "0.25", stored.PrivateData.BillingContext.Charge.TotalUSD)
 	var count int64

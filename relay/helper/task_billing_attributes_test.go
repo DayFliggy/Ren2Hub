@@ -2,6 +2,7 @@ package helper
 
 import (
 	"bytes"
+	"encoding/json"
 	"mime/multipart"
 	"testing"
 
@@ -20,7 +21,7 @@ func TestFreezeTaskBillingUsesFinalProtocolParameters(t *testing.T) {
 	} {
 		info := &relaycommon.RelayInfo{}
 		require.NoError(t, FreezeTaskBillingAttributes(info, "application/json", []byte(body)))
-		assert.Equal(t, map[string]interface{}{"duration": float64(6), "quantity": float64(2), "resolution": "720p"}, info.BillingRequestInput.Attributes)
+		assert.Equal(t, map[string]interface{}{"duration": json.Number("6"), "quantity": json.Number("2"), "resolution": "720p"}, info.BillingRequestInput.Attributes)
 		encoded, err := common.Marshal(info.BillingRequestInput)
 		require.NoError(t, err)
 		assert.NotContains(t, string(encoded), "private")
@@ -44,7 +45,7 @@ func TestFreezeTaskBillingMultipartRejectsDuplicateAndLongAttributes(t *testing.
 			require.ErrorContains(t, err, "duplicate")
 		} else {
 			require.NoError(t, err)
-			assert.Equal(t, map[string]interface{}{"duration": float64(6)}, info.BillingRequestInput.Attributes)
+			assert.Equal(t, map[string]interface{}{"duration": json.Number("6")}, info.BillingRequestInput.Attributes)
 		}
 	}
 	var body bytes.Buffer
@@ -56,10 +57,10 @@ func TestFreezeTaskBillingMultipartRejectsDuplicateAndLongAttributes(t *testing.
 
 func TestFreezeTaskBillingRemixInheritsOnlyOmittedMediaFacts(t *testing.T) {
 	info := &relaycommon.RelayInfo{}
-	inherit := map[string]interface{}{"duration": float64(6), "resolution": "720p", "quantity": float64(2), "quality": "high", "service_tier": "priority", "secret": "private"}
+	inherit := map[string]interface{}{"duration": json.Number("6"), "resolution": "720p", "quantity": json.Number("2"), "quality": "high", "service_tier": "priority", "secret": "private"}
 	require.NoError(t, FreezeTaskBillingAttributes(info, "application/json", []byte(`{"duration":8,"prompt":"new private"}`), inherit))
-	assert.Equal(t, map[string]interface{}{"duration": float64(8), "resolution": "720p", "quantity": float64(2), "quality": "high"}, info.BillingRequestInput.Attributes)
-	assert.Equal(t, float64(6), inherit["duration"])
+	assert.Equal(t, map[string]interface{}{"duration": json.Number("8"), "resolution": "720p", "quantity": json.Number("2"), "quality": "high"}, info.BillingRequestInput.Attributes)
+	assert.Equal(t, json.Number("6"), inherit["duration"])
 	require.Error(t, FreezeTaskBillingAttributes(info, "application/json", []byte(`{}`), map[string]interface{}{"duration": -1}))
 }
 
@@ -70,5 +71,5 @@ func TestTaskQuoteFreezesFinalDurationAndQuantity(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 6000, price.QuotaToPreConsume)
 	assert.Equal(t, "12", price.Usage.Quantities["seconds"])
-	assert.Equal(t, float64(6), price.Quote.Attributes["duration"])
+	assert.Equal(t, "6", price.Quote.Attributes["duration"])
 }

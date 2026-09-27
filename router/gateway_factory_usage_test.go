@@ -56,6 +56,7 @@ func TestGatewayFactoryCompletionFactsProtectReservedFunds(t *testing.T) {
 				price, err = plugins.FrozenTaskPriceVersion(plugin.Meta, test.model, test.expression)
 				require.NoError(t, err)
 			}
+			price.Provenance = &billing.PriceProvenance{Kind: "retail", RetailReason: "reviewed mock task contract"}
 			price, err = service.ValidateTaskPluginPricePublication(price, test.key)
 			require.NoError(t, err)
 			var expected int64
@@ -64,7 +65,7 @@ func TestGatewayFactoryCompletionFactsProtectReservedFunds(t *testing.T) {
 			}
 			_, err = model.PublishBillingPrice(context.Background(), price, expected, 1)
 			require.NoError(t, err)
-			code, body := postGatewayTask(t, base, key, "/v1/videos", fmt.Sprintf(`{"model":%q,"prompt":"isolated fixture"}`, test.model))
+			code, body := postGatewayTask(t, base, key, "/v1/videos", fmt.Sprintf(`{"model":%q,"prompt":"isolated fixture","seconds":5}`, test.model))
 			require.Equal(t, http.StatusOK, code, body)
 			assert.EqualValues(t, 1, sends.Load())
 			var task model.Task

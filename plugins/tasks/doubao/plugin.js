@@ -514,30 +514,34 @@ function convertImage(ctx) {
   if (sequential !== undefined && sequential !== "auto" && sequential !== "disabled") throw new Error("sequential_image_generation must be auto or disabled");
   if (sequential !== undefined && !profile.sequential) throw new Error("sequential_image_generation is not supported by this model");
   const options = objectValue(body.sequential_image_generation_options, "sequential_image_generation_options");
-  let maxImages = 15;
-  if (options.max_images !== undefined) {
-    if (!Number.isInteger(options.max_images) || options.max_images < 1 || options.max_images > 15)
-      throw new Error("max_images must be an integer between 1 and 15");
-    maxImages = options.max_images;
-  }
+  if (options.max_images !== undefined && !Number.isInteger(options.max_images))
+    throw new Error("max_images must be an integer between 1 and 15");
   const size = imageSize(body.size, profile, layered);
   if (size.size !== undefined) body.size = size.size;
+  return {
+    body: body,
+    action: images.length ? "image_to_image" : "text_to_image",
+    facts: imageQuantityFacts(body, size.pixels),
+  };
+}
+
+function imageQuantityFacts(body, pixels) {
+  const layered = body.layer_decomposition === true;
+  const images = body.image === undefined ? [] : Array.isArray(body.image) ? body.image : [body.image];
+  const options = objectValue(body.sequential_image_generation_options, "sequential_image_generation_options");
+  const maxImages = options.max_images === undefined ? 15 : Number(utils.decimal.bounded(options.max_images, 1, 15, true));
   // Submit-time estimate; extractUsageOnComplete overlays the per-image tiers
   // from data[].size and usage.input_images. Unknown output sizes (`auto`)
   // reserve the higher tier.
   let imageCount = 1;
   if (layered) imageCount = MAX_IMAGE_OUTPUTS;
-  else if (sequential === "auto") imageCount = Math.max(1, Math.min(maxImages, 15 - images.length)); // reference + generated images ≤ 15
-  const higherTier = size.pixels === null || size.pixels > IMAGE_TIER_MAX_PIXELS;
+  else if (body.sequential_image_generation === "auto") imageCount = Math.max(1, Math.min(maxImages, 15 - images.length)); // reference + generated images ≤ 15
+  const higherTier = pixels === null || pixels > IMAGE_TIER_MAX_PIXELS;
   return {
-    body: body,
-    action: images.length ? "image_to_image" : "text_to_image",
-    facts: {
-      images_up_to_1_5k: higherTier ? 0 : imageCount,
-      images_above_1_5k: higherTier ? imageCount : 0,
-      input_images: images.length,
-      layer_decomposition: layered,
-    },
+    images_up_to_1_5k: higherTier ? 0 : imageCount,
+    images_above_1_5k: higherTier ? imageCount : 0,
+    input_images: images.length,
+    layer_decomposition: layered,
   };
 }
 
@@ -777,8 +781,9 @@ export function parseSubmitResponse(ctx, resp) {
 
 export function extractUsage(ctx) {
   if (imageTask(ctx)) {
-    const facts = convertImage(ctx).facts;
-    return facts;
+    const req = ctx.requestBody || {};
+    const size = imageSize(req.size, imageProfile(ctx), req.layer_decomposition === true);
+    return imageQuantityFacts(req, size.pixels);
   }
   const req = ctx.requestBody || {};
   const metadata = req.metadata || {};

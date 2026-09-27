@@ -162,11 +162,23 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 		return 0, "", nil, fmt.Errorf("task %s has no frozen billing quote; reconciliation required", task.TaskID)
 	}
 	usage := *snapshot.Usage
-	usage.Quantities = make(map[string]string, len(snapshot.Usage.Quantities))
-	for name, count := range snapshot.Usage.Quantities {
-		usage.Quantities[name] = count
+	usage.Quantities = map[string]string{}
+	if task.PrivateData.PluginRef == nil {
+		for _, price := range snapshot.Quote.PriceVersion.Prices {
+			if price.Quantity == "calls" {
+				usage.Quantities["calls"] = "1"
+				continue
+			}
+			if price.Unit != "per_million_tokens" {
+				return 0, "", nil, fmt.Errorf("task completion lacks a metering contract for %s", price.Quantity)
+			}
+		}
+		if snapshot.Quote.PriceVersion.UsesImageCount() {
+			return 0, "", nil, fmt.Errorf("task completion lacks confirmed image count")
+		}
 	}
 	usage.Source = "task_completed"
+	usage.Terminal = "completed"
 	usage.Complete = true
 	usage.Estimated = false
 	if task.PrivateData.PluginRef != nil {
@@ -200,7 +212,7 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 			}
 			if snapshot.Quote.PriceVersion.Mode == billing.ModeExpression {
 				used := billingexpr.UsedVars(snapshot.Quote.PriceVersion.Expression)
-				for _, name := range []string{"p", "c", "reasoning", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao"} {
+				for _, name := range []string{"p", "c", "reasoning", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ai_cr", "ao"} {
 					usesTokens = usesTokens || used[name]
 				}
 			}

@@ -11,6 +11,12 @@ import (
 // NormalizedBillingUsage is the single protocol boundary used by unit prices
 // and expressions. Counts are not inferred from a provider's monetary cost.
 func NormalizedBillingUsage(usage *dto.Usage, semantic string) billing.Usage {
+	var measured map[string]string
+	var observation *dto.UsageObservation
+	if usage != nil {
+		observation = usage.Observation
+		measured = usage.MeasuredQuantities
+	}
 	estimated := usage != nil && strings.Contains(usage.UsageSource, "estimated")
 	unconfirmed := usage == nil || usage.UsageSource == "missing" || usage.UsageSource == "partial" || usage.UsageSource == "invalid"
 	usage = effectiveBillingUsage(usage)
@@ -49,18 +55,37 @@ func NormalizedBillingUsage(usage *dto.Usage, semantic string) billing.Usage {
 	if usage.BillingUsage != nil {
 		estimated = estimated || usage.BillingUsage.Estimated
 	}
+	if observation != nil {
+		estimated = estimated || observation.Estimated
+		unconfirmed = unconfirmed || !observation.Complete
+	}
+	var audioCacheRead *int64
+	if details := usage.PromptTokensDetails.CachedTokensDetails; details != nil && details.AudioTokens != nil {
+		value := int64(*details.AudioTokens)
+		audioCacheRead = &value
+		invalid = invalid || value < 0 || value > math.MaxInt32
+	}
 	var imageCacheRead *int64
 	if details := usage.PromptTokensDetails.CachedTokensDetails; details != nil && details.ImageTokens != nil {
 		value := int64(*details.ImageTokens)
 		imageCacheRead = &value
 		invalid = invalid || value < 0 || value > math.MaxInt32
 	}
-	return billing.Usage{InputTokens: input, OutputTokens: output, ContextTokens: context,
-		CacheReadTokens: int64(usage.PromptTokensDetails.CachedTokens), ImageCacheReadTokens: imageCacheRead, CacheWriteTokens: int64(write), CacheWrite1hTokens: int64(write1h),
+	result := billing.Usage{InputTokens: input, OutputTokens: output, ContextTokens: context,
+		CacheReadTokens: int64(usage.PromptTokensDetails.CachedTokens), ImageCacheReadTokens: imageCacheRead, AudioCacheReadTokens: audioCacheRead, CacheWriteTokens: int64(write), CacheWrite1hTokens: int64(write1h),
 		ImageInputTokens: int64(usage.PromptTokensDetails.ImageTokens), ImageOutputTokens: int64(usage.CompletionTokenDetails.ImageTokens),
 		AudioInputTokens: int64(usage.PromptTokensDetails.AudioTokens), AudioOutputTokens: int64(usage.CompletionTokenDetails.AudioTokens),
 		ReasoningTokens:    int64(usage.CompletionTokenDetails.ReasoningTokens),
 		InputIncludesCache: includesCache, Source: usage.UsageSource, Estimated: estimated, Complete: !unconfirmed && !estimated, Invalid: invalid, Quantities: map[string]string{}}
+	if observation != nil {
+		result.Source = observation.Source
+		result.Terminal = observation.Terminal
+		result.ObservationIDs = append([]string(nil), observation.ResponseIDs...)
+	}
+	for key, value := range measured {
+		result.Quantities[key] = value
+	}
+	return result
 }
 
 // An input-only price cannot discard output evidence carried by an alias or a

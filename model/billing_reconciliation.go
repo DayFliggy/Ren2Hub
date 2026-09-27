@@ -100,8 +100,11 @@ func ResolveBillingReconciliation(ctx context.Context, id int64, actor int, comm
 		if result.Status == BillingRecoveryStatusSettled || result.Status == BillingRecoveryStatusRefunded {
 			return ErrBillingRecoveryStateConflict
 		}
-		// Keep the known attribution and task link when a Root supplies the
-		// missing amount. Display delivery must use that same final amount.
+		if command.Action == "settle" && (result.QuoteSnapshot == "" || result.UsageSnapshot == "" || result.ChargeSnapshot == "" || result.ConsumptionFingerprint == "") {
+			return ErrBillingRecoveryStateConflict
+		}
+		// Manual settlement may retry confirmed evidence, never invent a charge.
+		// The final transaction validates the requested amount against that evidence.
 		var consumption BillingConsumption
 		if result.ConsumptionSnapshot != "" {
 			if err := common.UnmarshalJsonStr(result.ConsumptionSnapshot, &consumption); err != nil {

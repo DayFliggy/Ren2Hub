@@ -11,11 +11,32 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+func TestChatStreamUsageRequiresPresentCountersIncludingZero(t *testing.T) {
+	for _, test := range []struct {
+		raw      string
+		complete bool
+	}{
+		{`{}`, false}, {`{"prompt_tokens":3}`, false},
+		{`{"prompt_tokens":0,"completion_tokens":0}`, true},
+	} {
+		t.Run(test.raw, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			info := &relaycommon.RelayInfo{RelayFormat: types.RelayFormatOpenAI, RelayMode: relayconstant.RelayModeChatCompletions, DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "test"}}
+			body := "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}],\"usage\":" + test.raw + "}\n\ndata: [DONE]\n\n"
+			usage, apiErr := OaiStreamHandler(c, info, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))})
+			require.Nil(t, apiErr)
+			require.Equal(t, test.complete, service.NormalizedBillingUsage(usage, "openai").Complete)
+		})
+	}
+}
 
 func TestChatStreamUsageFilteringPreservesChoices(t *testing.T) {
 	for _, tc := range []struct {

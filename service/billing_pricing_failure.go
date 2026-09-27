@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -14,8 +15,9 @@ import (
 // HoldUnconfirmedResponseUsage preserves the observed evidence and reservation;
 // stream termination alone cannot turn estimated counters into actual charges.
 func HoldUnconfirmedResponseUsage(ctx *gin.Context, info *relaycommon.RelayInfo, usage *dto.Usage) {
+	billing.RecordUnknownUsage()
 	facts := NormalizedBillingUsage(usage, "openai")
-	facts.Complete, facts.Estimated = false, true
+	facts.Complete = false
 	info.PriceData.Usage = &facts
 	holdFailedBillingPrice(ctx, info, billingexpr.TokenParams{}, errors.New("final provider usage is unconfirmed"))
 }

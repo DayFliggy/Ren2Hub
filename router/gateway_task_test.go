@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -170,7 +171,10 @@ func TestGatewayTaskSettlementFailureKeepsTaskAndRecoversOnce(t *testing.T) {
 	assert.Contains(t, body, task.TaskID)
 	from := task.Status
 	task.Status, task.Progress = model.TaskStatusSuccess, "100%"
-	won, err := model.PersistTaskCompletion(context.Background(), &task, from, task.Quota, model.BillingConsumption{Log: model.Log{UserId: task.UserId, TokenId: task.PrivateData.TokenId, ChannelId: task.ChannelId}, CountUsage: true, LogEnabled: true})
+	usage := &billing.Usage{Source: "provider", Complete: true, Terminal: "completed", Quantities: map[string]string{"calls": "1"}}
+	charge, err := billing.Calculate(task.PrivateData.BillingContext.Quote, *usage)
+	require.NoError(t, err)
+	won, err := model.PersistTaskCompletion(context.Background(), &task, from, task.Quota, model.BillingConsumption{Log: model.Log{UserId: task.UserId, TokenId: task.PrivateData.TokenId, ChannelId: task.ChannelId}, Usage: usage, Charge: charge, CountUsage: true, LogEnabled: true})
 	require.NoError(t, err)
 	require.True(t, won)
 	_, err = service.RetryBillingRecovery(context.Background(), task.PrivateData.SubmissionRequestID)

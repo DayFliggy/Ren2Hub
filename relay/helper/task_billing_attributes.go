@@ -50,7 +50,7 @@ func FreezeTaskBillingAttributes(info *relaycommon.RelayInfo, contentType string
 			_ = part.Close()
 		}
 	} else {
-		if err := common.Unmarshal(body, &fields); err != nil {
+		if err := common.DecodeJsonNumbers(bytes.NewReader(body), &fields); err != nil {
 			return fmt.Errorf("invalid task JSON billing attributes")
 		}
 		if parameters, ok := fields["parameters"].(map[string]interface{}); ok {
