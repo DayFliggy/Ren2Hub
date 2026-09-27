@@ -83,6 +83,10 @@ func TestBillingPerformance(t *testing.T) {
 								return err
 							}
 							usage := BillingConsumption{Log: Log{UserId: id, TokenId: id, ChannelId: 1, Username: fmt.Sprintf("bench-%d", id), CreatedAt: 7200, Type: LogTypeConsume, ModelName: "benchmark", Quota: 300, PromptTokens: 10, CompletionTokens: 20}, CountUsage: true, LogEnabled: true, ExportEnabled: true, NodeName: "bench"}
+							usage, err = bindConsumptionEvidence(requestID, usage)
+							if err != nil {
+								return err
+							}
 							if err := PrepareBillingRecoveryConsumption(requestID, usage); err != nil {
 								return err
 							}

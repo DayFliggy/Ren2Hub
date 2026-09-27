@@ -189,8 +189,9 @@ func TestPriceWindowAndExpressionOverflowFailClosed(t *testing.T) {
 
 	quote, err = billing.NewQuote(billing.PriceVersion{Model: "precision", Mode: billing.ModeExpression, Expression: `v1:p * 0.0000000000000000001`}, "1", nil, start)
 	require.NoError(t, err)
-	_, err = billing.Calculate(quote, billing.Usage{InputTokens: 1, ContextTokens: 1, InputIncludesCache: true})
-	require.ErrorContains(t, err, "decimal range")
+	tiny, err := billing.Calculate(quote, billing.Usage{InputTokens: 1, ContextTokens: 1, InputIncludesCache: true})
+	require.NoError(t, err)
+	assert.Equal(t, common.Quota(1), tiny.FinalQuota)
 }
 
 func TestQuoteOwnsTierAndWindowCopies(t *testing.T) {
@@ -204,4 +205,94 @@ func TestQuoteOwnsTierAndWindowCopies(t *testing.T) {
 	charge, err := billing.Calculate(quote, billing.Usage{Quantities: map[string]string{"calls": "1"}})
 	require.NoError(t, err)
 	assert.Equal(t, "0.002", charge.TotalUSD)
+}
+
+func TestDecimalBillingRegressionAndAdjustmentEvidence(t *testing.T) {
+	at := time.Date(2026, 9, 27, 0, 0, 0, 0, time.UTC)
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "decimal", Mode: billing.ModeExpression, Expression: `p*0.7+c*0.9`}, "1", nil, at)
+	require.NoError(t, err)
+	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 3, OutputTokens: 1, ContextTokens: 3, InputIncludesCache: true})
+	require.NoError(t, err)
+	assert.Equal(t, "1.5", charge.UnroundedQuota)
+	assert.Equal(t, common.Quota(2), charge.FinalQuota)
+	for _, expression := range []string{`9223372036854775807*9223372036854775807`, `p*999999999999999999999999999999`} {
+		q, err := billing.NewQuote(billing.PriceVersion{Model: "range", Mode: billing.ModeExpression, Expression: expression}, "1", nil, at)
+		require.NoError(t, err)
+		_, err = billing.Calculate(q, billing.Usage{InputTokens: 1, InputIncludesCache: true})
+		require.ErrorContains(t, err, "request limit")
+	}
+	quote, err = billing.NewQuote(billing.PriceVersion{Model: "adjusted", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.1"}}}, "0.7", nil, at)
+	require.NoError(t, err)
+	charge, err = billing.Calculate(quote, billing.Usage{Quantities: map[string]string{"calls": "3"}})
+	require.NoError(t, err)
+	assert.Equal(t, "0.3", charge.BaseUSD)
+	assert.Equal(t, "0.21", charge.TotalUSD)
+	require.Len(t, charge.Adjustments, 1)
+	assert.Equal(t, billing.ChargeAdjustment{Kind: "channel_multiplier", Multiplier: "0.7", BaseUSD: "0.3", AmountUSD: "-0.09", ResultUSD: "0.21"}, charge.Adjustments[0])
+}
+
+func TestAudioCacheUsesDisjointPricingDimensions(t *testing.T) {
+	n := int64(30)
+	usage := billing.Usage{InputTokens: 100, ContextTokens: 100, CacheReadTokens: 50, AudioInputTokens: 40, AudioCacheReadTokens: &n, InputIncludesCache: true}
+	prices := []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "1"}, {Quantity: "cr", Unit: "per_million_tokens", Price: "2"}, {Quantity: "ai", Unit: "per_million_tokens", Price: "3"}, {Quantity: "ai_cr", Unit: "per_million_tokens", Price: "4"}}
+	q := quoteFor(t, prices)
+	charge, err := billing.Calculate(q, usage)
+	require.NoError(t, err)
+	// Text 40 + text cache 20*2 + uncached audio 10*3 + audio cache 30*4.
+	assert.Equal(t, "0.00023", charge.TotalUSD)
+	for _, expression := range []string{`p+cr*2+ai*3+ai_cr*4`, `false ? ai_cr*4 : p+cr*2+ai*3+ai_cr*4`} {
+		q, err := billing.NewQuote(billing.PriceVersion{Model: "audio-cache", Mode: billing.ModeExpression, Expression: expression}, "1", nil, time.Now())
+		require.NoError(t, err)
+		result, err := billing.Calculate(q, usage)
+		require.NoError(t, err)
+		assert.Equal(t, charge.TotalUSD, result.TotalUSD)
+	}
+	missing := usage
+	missing.AudioCacheReadTokens = nil
+	params, err := missing.TokenParams(map[string]bool{"ai_cr": true})
+	require.NoError(t, err)
+	assert.Zero(t, params.AICR)
+	invalid := int64(41)
+	usage.AudioCacheReadTokens = &invalid
+	_, err = billing.Calculate(q, usage)
+	require.ErrorContains(t, err, "audio cache")
+	usage.AudioCacheReadTokens = &n
+	imageCache := int64(25)
+	usage.ImageInputTokens = 25
+	usage.ImageCacheReadTokens = &imageCache
+	_, err = billing.Calculate(q, usage)
+	require.ErrorContains(t, err, "aggregate cache")
+}
+
+func TestExpressionOwnershipCannotHideBehindAnInactiveBranch(t *testing.T) {
+	for _, expression := range []string{`p+$env.cr`, `false?now():p`, `let f=fixed;f(1)`} {
+		_, err := billing.NewQuote(billing.PriceVersion{Model: "unsafe", Mode: billing.ModeExpression, Expression: expression}, "1", nil, time.Now())
+		require.Error(t, err)
+	}
+	q, err := billing.NewQuote(billing.PriceVersion{Model: "cache", Mode: billing.ModeExpression, Expression: `false ? cr*0 : p`}, "1", nil, time.Now())
+	require.NoError(t, err)
+	result, err := billing.Calculate(q, billing.Usage{InputTokens: 100, CacheReadTokens: 50, InputIncludesCache: true})
+	require.NoError(t, err)
+	assert.Equal(t, "0.00005", result.TotalUSD)
+}
+
+func TestQuoteRecoveryPreservesDecimalAttributeAndFrozenCalendar(t *testing.T) {
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	q, err := billing.NewQuote(billing.PriceVersion{Model: "exact-attribute", Mode: billing.ModeExpression, Expression: `attr_num("temperature") + hour("Asia/Shanghai")`}, "1", map[string]any{"temperature": "0.700000000000000001"}, at)
+	require.NoError(t, err)
+	encoded, err := common.Marshal(q)
+	require.NoError(t, err)
+	var restored billing.Quote
+	require.NoError(t, common.Unmarshal(encoded, &restored))
+	before, err := billing.Calculate(q, billing.Usage{})
+	require.NoError(t, err)
+	after, err := billing.Calculate(&restored, billing.Usage{})
+	require.NoError(t, err)
+	assert.Equal(t, before, after)
+	assert.Equal(t, "0.000008700000000000000001", after.TotalUSD)
+	calendar := restored.Calendars["Asia/Shanghai"]
+	calendar.Hour++
+	restored.Calendars["Asia/Shanghai"] = calendar
+	_, err = billing.Calculate(&restored, billing.Usage{})
+	require.ErrorContains(t, err, "integrity")
 }

@@ -387,6 +387,12 @@ func (e *Engine) call(
 
 	callArgs := make([]sobek.Value, len(args))
 	for i, arg := range args {
+		if len(members) == 0 && isUsageHook(exportName) {
+			arg, err = ExactUsageValue(arg)
+			if err != nil {
+				return nil, err
+			}
+		}
 		callArgs[i] = instance.runtime.ToValue(arg)
 	}
 
@@ -404,7 +410,11 @@ func (e *Engine) call(
 		}
 		return nil, wrapped
 	}
-	return value.Export(), nil
+	result = value.Export()
+	if len(members) == 0 && isUsageHook(exportName) {
+		return ExactUsageValue(result)
+	}
+	return result, nil
 }
 
 func (e *Engine) acquireCallSlot(ctx context.Context, admissionTimeout time.Duration) error {

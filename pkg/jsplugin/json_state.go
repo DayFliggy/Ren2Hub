@@ -2,6 +2,7 @@ package jsplugin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -162,14 +163,12 @@ func newJSONStateNode(value any, depth int, budget *jsonStateBudget) (*jsonState
 			node.array = append(node.array, item)
 		}
 	default:
-		switch number := value.(type) {
-		case int:
-			value = float64(number)
-		case int64:
-			value = float64(number)
-		}
 		switch scalar := value.(type) {
 		case nil, bool:
+		case int, int64, json.Number:
+			if _, err := pluginDecimal(scalar); err != nil {
+				return nil, err
+			}
 		case float64:
 			if math.IsNaN(scalar) || math.IsInf(scalar, 0) {
 				return nil, fmt.Errorf("JSON numbers must be finite")

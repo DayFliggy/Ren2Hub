@@ -153,7 +153,6 @@ export function parseSubmitResponse(ctx, resp) {
 }
 
 export function extractUsage(ctx) {
-  if (ctx.usagePurpose === "billing_ratios") return null;
   const model = trimmed(ctx.upstreamModel || ctx.model || (ctx.requestBody || {}).model).toLowerCase();
   const action = actionName(ctx).toLowerCase() || (model === "suno_lyrics" ? "lyrics" : "music");
   return { clips: action === "lyrics" ? 1 : 2, action: action };
@@ -180,7 +179,7 @@ export function buildQueryRequest(ctx) {
 
 export function parseBatchResult(ctx, body) {
   if (body.code !== "success") throw new Error(String(body.message || ""));
-  return (body.data || []).map(function (item) {
+  return (body.data || []).map(function (item, index) {
     return {
       taskId: item.task_id || "",
       action: item.action || "",
@@ -190,6 +189,7 @@ export function parseBatchResult(ctx, body) {
       startTime: item.start_time || 0,
       finishTime: item.finish_time || 0,
       data: item.data,
+      usagePath: ["data", index, "data"],
     };
   });
 }

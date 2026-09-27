@@ -147,11 +147,8 @@ func NormalizeUsageValue(field UsageField, value interface{}) (interface{}, erro
 			raw = number
 		case json.Number:
 			raw = string(number)
-		case float64:
-			if math.IsNaN(number) || math.IsInf(number, 0) {
-				return nil, fmt.Errorf("invalid billing usage number")
-			}
-			raw = decimal.NewFromFloat(number).String()
+		case decimal.Decimal:
+			raw = number.String()
 		case int:
 			raw = fmt.Sprint(number)
 		case int64:

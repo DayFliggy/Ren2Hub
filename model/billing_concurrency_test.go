@@ -74,7 +74,9 @@ func TestBillingAccountConcurrencyAcrossDatabases(t *testing.T) {
 			assert.EqualValues(t, 40, user.Quota)
 			assert.EqualValues(t, 60, user.ReservedQuota)
 			requestID := fmt.Sprintf("reserve-%d", winner)
-			require.NoError(t, PrepareBillingRecoveryConsumption(requestID, BillingConsumption{Log: Log{UserId: 1, TokenId: winner, Quota: 30, CreatedAt: 7200}, CountUsage: true}))
+			consumption, err := bindConsumptionEvidence(requestID, BillingConsumption{Log: Log{UserId: 1, TokenId: winner, Quota: 30, CreatedAt: 7200}, CountUsage: true})
+			require.NoError(t, err)
+			require.NoError(t, PrepareBillingRecoveryConsumption(requestID, consumption))
 			var recovery BillingRecovery
 			require.NoError(t, db.Where("request_id = ?", requestID).First(&recovery).Error)
 			command := BillingResolution{OperationID: "race-resolve", ExpectedVersion: recovery.Version, Action: "settle", Quota: 30, Reason: "provider amount verified"}

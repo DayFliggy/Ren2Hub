@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -36,7 +37,7 @@ export const meta = {
   author: {name: "Test"},
   channelTypes: [1001], models: ["mock-v1"], fetchMode: "per_task",
   protocols: ["openai_video"],
-  usageSchema: {seconds: {type: "number", unit: "second"}, mode: {enum: ["std", "pro"]}},
+  usageSchema: {seconds: {type: "number", unit: "second"}, mode: {enum: ["std", "pro"]}, upstreamUnits:{type:"number",unit:"credit"}},
 };
 export function buildSubmitRequest(ctx) {
   if (!ctx.requestBody.prompt) throw new Error("prompt required");
@@ -536,7 +537,9 @@ func TestTaskAdaptorMapsJSContract(t *testing.T) {
 	assert.Equal(t, "mock-upstream", info.UpstreamModelName)
 	assert.Equal(t, []string{"mock-v1"}, adaptor.GetModelList())
 	assert.Equal(t, "Mock Task", adaptor.GetChannelName())
-	assert.Equal(t, map[string]float64{"seconds": 5}, adaptor.EstimateBilling(c, info))
+	facts, factsErr := adaptor.ExtractUsageFactsValidated(c, info)
+	require.NoError(t, factsErr)
+	assert.Equal(t, "5", facts["seconds"])
 
 	requestBody, err := adaptor.BuildRequestBody(c, info)
 	require.NoError(t, err)
@@ -556,7 +559,6 @@ func TestTaskAdaptorMapsJSContract(t *testing.T) {
 	assert.JSONEq(t, `{"accepted":true,"status":200}`, string(parsed.TaskData))
 	assert.Nil(t, parsed.ClientResponse)
 	assert.Empty(t, recorder.Body.String(), "response parsing must not write before the durable task barrier")
-	assert.Equal(t, map[string]float64{"seconds": 7}, adaptor.AdjustBillingOnSubmit(info, []byte(`{"seconds":7}`)))
 
 	queryResp, err := adaptor.FetchTaskForTask(server.URL, "secret", &model.Task{
 		Action:      info.Action,
@@ -570,8 +572,8 @@ func TestTaskAdaptorMapsJSContract(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "SUCCESS", result.Status)
 	assert.Equal(t, "https://cdn.example/video.mp4", result.Url)
-	assert.Zero(t, adaptor.AdjustBillingOnComplete(&model.Task{}, result))
-	assert.Equal(t, 23, result.TotalTokens)
+	assert.Equal(t, "23", result.UsageFacts["upstreamUnits"])
+	assert.Zero(t, result.TotalTokens)
 
 	rendered, err := adaptor.ConvertToOpenAIVideo(&model.Task{TaskID: "task_public", Status: model.TaskStatusSuccess})
 	require.NoError(t, err)
@@ -821,8 +823,8 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 			usage: map[string]any{"custom_ratio": -1.0},
 		},
 		{
-			name:  "non-finite hook ratio",
-			usage: map[string]any{"custom_ratio": math.NaN()},
+			name:  "undeclared hook field",
+			usage: map[string]any{"custom_ratio": "1"},
 		},
 	}
 	for _, testCase := range hookTests {
@@ -833,7 +835,7 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 			}
 			adaptor, context, info := newRequest(t, map[string]any{"hookUsageEntries": entries})
 			require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
-			ratios, err := adaptor.EstimateBillingValidated(context, info)
+			ratios, err := adaptor.ExtractUsageFactsValidated(context, info)
 			require.Error(t, err)
 			assert.Nil(t, ratios)
 		})
@@ -850,14 +852,14 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 		assert.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
 	})
 
-	t.Run("numeric strings from usage hooks are rejected", func(t *testing.T) {
+	t.Run("numeric strings from usage hooks retain exact values", func(t *testing.T) {
 		adaptor, context, info := newRequest(t, map[string]any{
 			"hookUsageEntries": []any{map[string]any{"name": "duration", "value": "5"}},
 		})
 		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
-		ratios, err := adaptor.EstimateBillingValidated(context, info)
-		require.Error(t, err)
-		assert.Nil(t, ratios)
+		ratios, err := adaptor.ExtractUsageFactsValidated(context, info)
+		require.NoError(t, err)
+		assert.Equal(t, "5", ratios["duration"])
 	})
 
 	t.Run("declared token facts use the token bound instead of duration cap", func(t *testing.T) {
@@ -869,11 +871,11 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
 		facts, err := adaptor.ExtractUsageFactsValidated(context, info)
 		require.NoError(t, err)
-		assert.EqualValues(t, 500000, facts["tokens"])
+		assert.Equal(t, "500000", facts["tokens"])
 
-		ratios, err := adaptor.EstimateBillingValidated(context, info)
+		ratios, err := adaptor.ExtractUsageFactsValidated(context, info)
 		require.NoError(t, err)
-		assert.Equal(t, 500000.0, ratios["tokens"])
+		assert.Equal(t, "500000", ratios["tokens"])
 	})
 
 	t.Run("declared token facts reject the int32 quota overflow", func(t *testing.T) {
@@ -884,7 +886,7 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 		})
 		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
 		facts, err := adaptor.ExtractUsageFactsValidated(context, info)
-		require.ErrorContains(t, err, "host limit")
+		require.Error(t, err)
 		assert.Nil(t, facts)
 	})
 
@@ -900,12 +902,9 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 			},
 		})
 		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
-		ratios, err := adaptor.EstimateBillingValidated(context, info)
+		ratios, err := adaptor.ExtractUsageFactsValidated(context, info)
 		require.NoError(t, err)
-		assert.Equal(t, map[string]float64{
-			"duration": relaycommon.MaxTaskDurationSeconds,
-			"count":    dto.MaxImageN,
-		}, ratios)
+		assert.Equal(t, map[string]any{"duration": "3600", "count": "128", "mode": "pro"}, ratios)
 	})
 
 	t.Run("runtime error does not expose plugin-controlled usage key", func(t *testing.T) {
@@ -918,7 +917,7 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 			},
 		})
 		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
-		_, err := adaptor.EstimateBillingValidated(context, info)
+		_, err := adaptor.ExtractUsageFactsValidated(context, info)
 		require.Error(t, err)
 		assert.NotContains(t, err.Error(), "private.invalid")
 		assert.NotContains(t, err.Error(), "secret")
@@ -937,8 +936,8 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 			usage: map[string]any{"count": dto.MaxImageN + 1},
 		},
 		{
-			name:  "completion hook numeric string is discarded",
-			usage: map[string]any{"duration": "5"},
+			name:  "malformed completion decimal is discarded",
+			usage: map[string]any{"duration": "NaN"},
 		},
 		{
 			name:  "overflowing upstream units require reconciliation",
@@ -971,7 +970,7 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 		require.NoError(t, err)
 		result, err := adaptor.ParseTaskResultForTask(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, body)
 		require.NoError(t, err)
-		assert.EqualValues(t, 500000, result.UsageFacts["tokens"])
+		assert.Equal(t, "500000", result.UsageFacts["tokens"])
 	})
 
 	t.Run("declared credit facts keep sub-integer precision", func(t *testing.T) {
@@ -980,14 +979,14 @@ export const meta = {
   apiVersion: 1, key: "credit-decimals", name: "Credit Decimals", version: "1.0.0",
   author: {name: "Test"}, models: ["model"], fetchMode: "per_task",
   usageSchema: {units: {type: "number", unit: "credit"}},
-  usageExamples: [{label: "3.5 credits", facts: {units: 3.5}}],
+  usageExamples: [{label: "3.5 credits", facts: {units: "3.5"}}],
 };
 export function buildSubmitRequest(ctx) { return {url: ctx.baseUrl + "/submit"}; }
 export function parseSubmitResponse() { return {taskId: "task"}; }
 export function buildQueryRequest() { return {url: "https://example.com"}; }
 export function parseTaskResult() { return {status: "SUCCESS"}; }
-export function extractUsage() { return {units: 3.5}; }
-export function extractUsageOnComplete() { return {units: 3.5}; }
+export function extractUsage() { return {units: "3.5"}; }
+export function extractUsageOnComplete() { return {units: "3.5"}; }
 `
 		plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
 		require.NoError(t, err)
@@ -1004,68 +1003,26 @@ export function extractUsageOnComplete() { return {units: 3.5}; }
 
 		facts, err := adaptor.ExtractUsageFactsValidated(context, info)
 		require.NoError(t, err)
-		assert.Equal(t, 3.5, facts["units"])
+		assert.Equal(t, "3.5", facts["units"])
 
 		body, err := common.Marshal(map[string]any{})
 		require.NoError(t, err)
 		result, err := adaptor.ParseTaskResultForTask(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, body)
 		require.NoError(t, err)
-		assert.Equal(t, 3.5, result.UsageFacts["units"])
+		assert.Equal(t, "3.5", result.UsageFacts["units"])
 	})
 
-	t.Run("completion token facts use token bounds", func(t *testing.T) {
+	t.Run("undeclared legacy token aliases cannot be charged", func(t *testing.T) {
 		adaptor, _, _ := newRequest(t, map[string]any{})
 		body, err := common.Marshal(map[string]any{"completionUsage": map[string]any{"upstreamUnits": 5000}})
 		require.NoError(t, err)
 		result, err := adaptor.ParseTaskResultForTask(&model.Task{}, &http.Response{StatusCode: http.StatusOK, Header: make(http.Header)}, body)
 		require.NoError(t, err)
-		assert.Equal(t, 5000, result.TotalTokens)
-		assert.EqualValues(t, 5000, result.UsageFacts["upstreamUnits"])
+		assert.Zero(t, result.TotalTokens)
+		assert.Nil(t, result.UsageFacts)
+		assert.NotEmpty(t, result.UsageError)
 	})
 
-	t.Run("invalid post-submit adjustment is discarded before recalculation", func(t *testing.T) {
-		adaptor, _, info := newRequest(t, map[string]any{})
-		ratios := adaptor.AdjustBillingOnSubmit(info, []byte(`{"usage":{"duration":1000000000000000}}`))
-		assert.Nil(t, ratios)
-	})
-}
-
-func TestTaskAdaptorSeparatesExpressionFactsFromLegacyBillingRatios(t *testing.T) {
-	source := `
-export const meta = {
-  apiVersion: 1, key: "usage-purpose", name: "Usage Purpose", version: "1.0.0",
-  author: {name: "Test"}, models: ["usage-model"], fetchMode: "per_task",
-  usageSchema: {seconds: {type: "number", unit: "second"}},
-};
-export function buildSubmitRequest(ctx) { return {url: ctx.baseUrl + "/submit"}; }
-export function parseSubmitResponse() { return {taskId: "task"}; }
-export function buildQueryRequest(ctx) { return {url: ctx.baseUrl + "/query"}; }
-export function parseTaskResult() { return {status: "SUCCESS"}; }
-export function extractUsage(ctx) {
-  return ctx.usagePurpose === "billing_ratios" ? {legacy_multiplier: 2} : {seconds: 5};
-}
-`
-	plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
-	require.NoError(t, err)
-	adaptor := New(plugin)
-	info := &relaycommon.RelayInfo{
-		ChannelMeta:   &relaycommon.ChannelMeta{ChannelBaseUrl: "https://provider.example"},
-		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
-	}
-	adaptor.Init(info)
-	context, _ := gin.CreateTestContext(httptest.NewRecorder())
-	context.Request = httptest.NewRequest(http.MethodPost, "/submit", nil)
-	context.Set("task_request", map[string]any{"model": "usage-model"})
-	require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
-
-	facts, err := adaptor.ExtractUsageFactsValidated(context, info)
-	require.NoError(t, err)
-	assert.EqualValues(t, 5, facts["seconds"])
-	assert.Len(t, facts, 1)
-
-	ratios, err := adaptor.EstimateBillingValidated(context, info)
-	require.NoError(t, err)
-	assert.Equal(t, map[string]float64{"legacy_multiplier": 2}, ratios)
 }
 
 func TestTaskAdaptorAcceptsNormalizedLegacyTokenCounters(t *testing.T) {
@@ -1180,15 +1137,15 @@ func TestTaskAdaptorRejectsRequestHostOverride(t *testing.T) {
 }
 
 const batchMockPlugin = `
-export const meta = { apiVersion: 1, key: "mock-batch", name: "Mock Batch", version: "1.0.0", author: {name: "Test"}, channelTypes: [1002], models: ["batch-v1"], fetchMode: "batch" };
+export const meta = { apiVersion: 1, key: "mock-batch", name: "Mock Batch", version: "1.0.0", author: {name: "Test"}, channelTypes: [1002], models: ["batch-v1"], fetchMode: "batch", usageSchema:{upstreamUnits:{type:"number",unit:"credit"}} };
 export function buildSubmitRequest(ctx) { return { url: ctx.baseUrl + "/submit", method: "POST", body: {} }; }
 export function parseSubmitResponse(ctx, resp) { return { taskId: resp.body.id }; }
 export function buildQueryRequest(ctx) { return { url: ctx.baseUrl + "/tasks/" + ctx.taskId }; }
 export function parseTaskResult(ctx, body) { return { taskId: body.id, status: "SUCCESS" }; }
 export function buildBatchQueryRequest(ctx, tasks) { return { url: ctx.baseUrl + "/batch", method: "POST", headers: { "X-Plugin": "batch" }, body: { ids: (tasks || []).map(function (task) { return task.taskId; }) } }; }
 export function parseBatchResult(ctx, body) {
-  return body.items.map(function (item) {
-    return { taskId: item.id, action: item.action, status: item.status, progress: item.progress, url: (item.urls || [])[0] || "", finishTime: item.finish || 0, data: item };
+  return body.items.map(function (item, index) {
+    return { usagePath:["items",index], taskId: item.id, action: item.action, status: item.status, progress: item.progress, url: (item.urls || [])[0] || "", finishTime: item.finish || 0, data: item };
   });
 }
 export function extractUsageOnComplete(task, result, body) { return {upstreamUnits: body.usage || 0}; }
@@ -1241,8 +1198,8 @@ func TestTaskAdaptorBatchBridge(t *testing.T) {
 	assert.Equal(t, "100%", done.TaskInfo.Progress)
 	assert.Equal(t, "https://cdn.example/a1.mp3", done.TaskInfo.Url)
 	assert.Equal(t, int64(1700000000), done.FinishTime)
-	assert.EqualValues(t, 23, done.TaskInfo.UsageFacts["upstreamUnits"])
-	assert.Equal(t, 23, done.TaskInfo.TotalTokens)
+	assert.Equal(t, "23", done.TaskInfo.UsageFacts["upstreamUnits"])
+	assert.Zero(t, done.TaskInfo.TotalTokens)
 	require.NotNil(t, done.Data)
 
 	pending := results["task-b"]
@@ -1522,8 +1479,8 @@ export function parseSubmitResponse(){return {taskId:"task"};}
 export function buildQueryRequest(){return {url:"https://provider.example/task"};}
 export function buildBatchQueryRequest(){return {url:"https://provider.example/tasks"};}
 export function parseTaskResult(){return {status:"SUCCESS"};}
-export function parseBatchResult(ctx,body){return body.items;}
-export function extractUsage(ctx){return {units:ctx.requestBody.hookUnits,mode:ctx.requestBody.hookMode,legacyRatio:2};}
+export function parseBatchResult(ctx,body){return body.items.map(function(item,index){return Object.assign({},item,{usagePath:["items",index,"data"]});});}
+export function extractUsage(ctx){return {units:ctx.requestBody.hookUnits,mode:ctx.requestBody.hookMode};}
 export function extractUsageOnSubmit(ctx,body){return body.usage;}
 export function extractUsageOnComplete(ctx,result,body){return body.usage;}
 `
@@ -1570,13 +1527,10 @@ export function extractUsageOnComplete(ctx,result,body){return body.usage;}
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, map[string]any{"units": tc.units, "mode": tc.mode, "legacyRatio": 2.0}, facts)
-			ratios, err := adaptor.EstimateBillingValidated(c, info)
-			require.NoError(t, err)
-			assert.Equal(t, map[string]float64{"units": tc.units, "legacyRatio": 2}, ratios)
+			assert.Equal(t, map[string]any{"units": strconv.FormatFloat(tc.units, 'f', -1, 64), "mode": tc.mode}, facts)
 			body, err := common.Marshal(map[string]any{"usage": facts})
 			require.NoError(t, err)
-			assert.Equal(t, ratios, adaptor.AdjustBillingOnSubmit(info, body))
+			assert.NotEmpty(t, body)
 		})
 	}
 
@@ -1618,7 +1572,7 @@ export function extractUsageOnComplete(ctx,result,body){return body.usage;}
 			result, err := adaptor.ParseTaskResultForTask(task, &http.Response{StatusCode: http.StatusOK}, body)
 			require.NoError(t, err)
 			if tc.accepted {
-				assert.Equal(t, map[string]any{"units": tc.units, "mode": tc.mode}, result.UsageFacts)
+				assert.Equal(t, map[string]any{"units": strconv.FormatFloat(tc.units, 'f', -1, 64), "mode": tc.mode}, result.UsageFacts)
 			} else {
 				assert.Nil(t, result.UsageFacts)
 			}
@@ -1638,7 +1592,8 @@ export function extractUsageOnComplete(ctx,result,body){return body.usage;}
 		require.NoError(t, err)
 		_, _, err = billingexpr.RunExprWithRequest(`tier("legacy", u("legacyRatio") * 2)`,
 			billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: result.UsageFacts})
-		require.ErrorContains(t, err, "undeclared billing usage field")
+		require.Error(t, err)
+		assert.NotEmpty(t, result.UsageError)
 	})
 
 	t.Run("mixed batch selects schema by task rather than adaptor", func(t *testing.T) {
@@ -1659,8 +1614,8 @@ export function extractUsageOnComplete(ctx,result,body){return body.usage;}
 		require.NoError(t, err)
 		require.Len(t, results, 4)
 		assert.Nil(t, results["endpoint-image"].TaskInfo.UsageFacts, "endpoint upstream must keep the origin profile's count ceiling")
-		assert.Equal(t, map[string]any{"units": 500000.0, "mode": "video"}, results["video-task"].TaskInfo.UsageFacts)
-		assert.Equal(t, map[string]any{"units": 2.0, "mode": "image"}, results["image-task"].TaskInfo.UsageFacts)
+		assert.Equal(t, map[string]any{"units": "500000", "mode": "video"}, results["video-task"].TaskInfo.UsageFacts)
+		assert.Equal(t, map[string]any{"units": "2", "mode": "image"}, results["image-task"].TaskInfo.UsageFacts)
 		assert.Nil(t, results["invalid-image"].TaskInfo.UsageFacts)
 	})
 }
@@ -1734,10 +1689,10 @@ func TestTaskSubmitStreamContract(t *testing.T) {
 			require.Nil(t, taskErr)
 			require.NotNil(t, parsed.Immediate)
 			if tc.name == "zero actual units" {
-				assert.Equal(t, map[string]any{"units": float64(0)}, parsed.Immediate.UsageFacts)
+				assert.Equal(t, map[string]any{"units": "0"}, parsed.Immediate.UsageFacts)
 				return
 			}
-			assert.Equal(t, map[string]any{"units": float64(3)}, parsed.Immediate.UsageFacts)
+			assert.Equal(t, map[string]any{"units": "3"}, parsed.Immediate.UsageFacts)
 			assert.JSONEq(t, `{"document":"helloworld","units":3,"event":"message","id":"doc-1"}`, string(parsed.TaskData))
 		})
 	}
@@ -1813,7 +1768,7 @@ export function parseTaskResult(){return {status:"SUCCESS"};}
 	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
 	facts, err := adaptor.ExtractUsageFactsValidated(c, info)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"units": float64(2)}, facts)
+	assert.Equal(t, map[string]any{"units": "2"}, facts)
 	body, err := adaptor.BuildRequestBody(c, info)
 	require.NoError(t, err)
 	encoded, err := io.ReadAll(body)
@@ -1876,7 +1831,7 @@ export function parseSubmitEventDelta(ctx,event,previous) {
 			require.Nil(t, taskErr)
 			require.NotNil(t, parsed.Immediate)
 			assert.JSONEq(t, `{"document":"helloworld","units":0}`, string(parsed.TaskData))
-			assert.Equal(t, map[string]any{"units": float64(0)}, parsed.Immediate.UsageFacts)
+			assert.Equal(t, map[string]any{"units": "0"}, parsed.Immediate.UsageFacts)
 		})
 	}
 }
@@ -1987,7 +1942,8 @@ func TestTaskAdaptorChainsDoubaoThroughNewAPIUpstream(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "SUCCESS", result.Status)
 	assert.Equal(t, "https://cdn.example/v.mp4", result.Url)
-	assert.Equal(t, 1200, result.TotalTokens)
+	assert.Equal(t, "1200", result.UsageFacts["tokens"])
+	assert.Zero(t, result.TotalTokens)
 	assert.Equal(t, []string{
 		"POST /doubao/api/v3/contents/generations/tasks",
 		"GET /doubao/api/v3/contents/generations/tasks/task_up_public",

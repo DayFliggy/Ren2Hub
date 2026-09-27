@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billing"
@@ -53,7 +54,8 @@ func PrepareBillingSurcharge(ctx context.Context, input BillingRecoveryInput, ch
 }
 
 // A live Realtime session may keep replacing its cumulative snapshot until
-// final settlement. A stale session recovers this last confirmed consumption.
+// final settlement. A stale session retains this evidence without deciding
+// whether additional, unobserved provider usage occurred.
 func RecordRealtimeBillingConsumption(requestID string, consumption BillingConsumption) error {
 	return prepareBillingRecoveryConsumption(DB, requestID, consumption, false)
 }
@@ -77,6 +79,12 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 	if db == nil || requestID == "" || consumption.Log.UserId <= 0 || consumption.Log.Quota < 0 || consumption.TaskAdjustment != nil {
 		return errors.New("invalid billing consumption")
 	}
+	if consumption.Usage == nil || consumption.Charge == nil {
+		return errors.New("complete frozen billing evidence is required")
+	}
+	if final && (!consumption.Usage.Complete || consumption.Usage.Estimated || consumption.Usage.Invalid || strings.TrimSpace(consumption.Usage.Source) == "") {
+		return errors.New("final billing requires complete, non-estimated provider evidence")
+	}
 	consumption.Log.RequestId = requestID
 	data, err := common.Marshal(consumption)
 	if err != nil {
@@ -90,7 +98,7 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 	if err != nil {
 		return err
 	}
-	if consumption.Charge != nil && consumption.Charge.FinalQuota != common.Quota(consumption.Log.Quota) {
+	if consumption.Charge.FinalQuota != common.Quota(consumption.Log.Quota) {
 		return ErrBillingEventConflict
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
@@ -101,17 +109,28 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 		if recovery.UserID != consumption.Log.UserId || recovery.TokenID != consumption.Log.TokenId {
 			return ErrBillingRecoveryStateConflict
 		}
-		var evidenceHash string
-		if consumption.Usage != nil || consumption.Charge != nil {
-			var quote billing.Quote
-			if err := common.UnmarshalJsonStr(recovery.QuoteSnapshot, &quote); err != nil {
-				return fmt.Errorf("missing frozen billing quote: %w", err)
-			}
-			var err error
-			evidenceHash, err = BillingEvidenceFingerprint(requestID, quote.Hash, consumption.Usage, consumption.Charge)
-			if err != nil {
-				return err
-			}
+		var quote billing.Quote
+		if err := common.UnmarshalJsonStr(recovery.QuoteSnapshot, &quote); err != nil {
+			return fmt.Errorf("missing frozen billing quote: %w", err)
+		}
+		replayed, err := billing.Calculate(&quote, *consumption.Usage)
+		if err != nil {
+			return fmt.Errorf("invalid frozen billing evidence: %w", err)
+		}
+		expectedHash, err := billing.Hash(replayed)
+		if err != nil {
+			return err
+		}
+		actualHash, err := billing.Hash(consumption.Charge)
+		if err != nil {
+			return err
+		}
+		if actualHash != expectedHash {
+			return ErrBillingEventConflict
+		}
+		evidenceHash, err := BillingEvidenceFingerprint(requestID, quote.Hash, consumption.Usage, consumption.Charge)
+		if err != nil {
+			return err
 		}
 		if recovery.ConsumptionSnapshot != "" && !BillingRecoveryUsageCollecting(recovery.ConsumptionState) &&
 			!BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
@@ -149,7 +168,7 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 			if status != BillingRecoveryStatusActive {
 				return ErrBillingRecoveryStateConflict
 			}
-			state = BillingRecoveryStateCollecting
+			state = BillingRecoveryStateUsageCollecting
 			if recovery.ConsumptionState == BillingRecoveryStatePricingPending || recovery.ConsumptionState == BillingRecoveryStatePricingCollecting {
 				// Further Realtime output can still fail expression evaluation.
 				state = BillingRecoveryStatePricingCollecting
@@ -169,17 +188,9 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 			"status":                 status,
 			"updated_at":             common.GetTimestamp(),
 		}
-		// Recovery decodes the display outbox independently. Absent internal
-		// evidence must not erase the last persisted cumulative usage or charge.
-		if consumption.Usage != nil {
-			updates["usage_snapshot"] = string(usage)
-		}
-		if consumption.Charge != nil {
-			updates["charge_snapshot"] = string(charge)
-		}
-		if evidenceHash != "" {
-			updates["consumption_fingerprint"] = evidenceHash
-		}
+		updates["usage_snapshot"] = string(usage)
+		updates["charge_snapshot"] = string(charge)
+		updates["consumption_fingerprint"] = evidenceHash
 		return tx.Model(&recovery).Updates(updates).Error
 	})
 }

@@ -2,236 +2,330 @@ package billingexpr
 
 import (
 	"fmt"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/shopspring/decimal"
 	"math"
 	"strings"
 	"time"
-
-	"github.com/QuantumNous/new-api/relaykit/dto"
-
-	"github.com/expr-lang/expr"
-	"github.com/expr-lang/expr/vm"
-	"github.com/shopspring/decimal"
 )
 
-// RunExpr compiles (with cache) and executes an expression string.
-// The environment exposes:
-//   - p, c             — prompt / completion tokens (auto-excluding separately-priced sub-categories)
-//   - len              — total input context length for tier conditions (never reduced by sub-category exclusion)
-//   - cr, cc, cc1h     — cache read / creation / creation-1h tokens
-//   - tier(name, value) — trace callback that records which tier matched
-//   - max, min, abs, ceil, floor — standard math helpers
-//
-// Returns the resulting float64 quota (before group ratio) and a TraceResult
-// with side-channel info captured by tier() during execution.
-func RunExpr(exprStr string, params TokenParams) (float64, TraceResult, error) {
-	return RunExprWithRequest(exprStr, params, RequestInput{})
+func RunExpr(s string, p TokenParams) (decimal.Decimal, TraceResult, error) {
+	return RunExprWithRequest(s, p, RequestInput{})
 }
-
-func RunExprWithRequest(exprStr string, params TokenParams, request RequestInput) (float64, TraceResult, error) {
-	entry, err := compileEntryWithSchema(exprStr, ExprHashString(exprStr), request.UsageSchema)
-	if err != nil {
-		return 0, TraceResult{}, err
+func RunExprWithRequest(s string, p TokenParams, r RequestInput) (decimal.Decimal, TraceResult, error) {
+	return RunExprByHashWithRequest(s, ExprHashString(s), p, r)
+}
+func RunExprByHash(s, h string, p TokenParams) (decimal.Decimal, TraceResult, error) {
+	return RunExprByHashWithRequest(s, h, p, RequestInput{})
+}
+func RunExprByHashWithRequest(s, h string, p TokenParams, r RequestInput) (decimal.Decimal, TraceResult, error) {
+	plan, e := compilePlan(s, h, r.UsageSchema)
+	if e != nil {
+		return decimal.Zero, TraceResult{}, e
 	}
-	return runEntry(entry, params, request)
-}
-
-// RunExprByHash is like RunExpr but accepts a pre-computed hash for the cache
-// lookup, avoiding a redundant SHA-256 computation when the caller already
-// holds the frozen expression hash.
-func RunExprByHash(exprStr, hash string, params TokenParams) (float64, TraceResult, error) {
-	return RunExprByHashWithRequest(exprStr, hash, params, RequestInput{})
-}
-
-func RunExprByHashWithRequest(exprStr, hash string, params TokenParams, request RequestInput) (float64, TraceResult, error) {
-	entry, err := compileEntryWithSchema(exprStr, hash, request.UsageSchema)
-	if err != nil {
-		return 0, TraceResult{}, err
+	state := evaluation{request: r, trace: TraceResult{RequestRules: append([]RequestRuleTrace(nil), plan.rules...)}, usage: map[string]any{}}
+	if e = ValidateAttributes(r.Attributes); e != nil {
+		return decimal.Zero, state.trace, e
 	}
-	return runEntry(entry, params, request)
-}
-
-func runEntry(entry *cachedEntry, params TokenParams, request RequestInput) (float64, TraceResult, error) {
-	if entry.usedVars["image_count"] {
-		if request.ImageCount == nil || *request.ImageCount < 1 || *request.ImageCount > dto.MaxImageN {
-			return 0, TraceResult{}, fmt.Errorf("image_count requires an integer between 1 and %d", dto.MaxImageN)
-		}
-	} else {
-		request.ImageCount = nil
-	}
-	if entry.version == 2 {
-		for key := range entry.usedUsage {
-			value, exists := request.Usage[key]
-			if !exists || value == nil {
-				return 0, TraceResult{}, fmt.Errorf("billing usage %q is missing", key)
-			}
-			if _, err := NormalizeUsageValue(request.UsageSchema.Fields[key], value); err != nil {
-				return 0, TraceResult{}, err
-			}
+	state.tokens = map[string]int64{"p": p.P, "c": p.C, "len": p.Len, "cr": p.CR, "cc": p.CC, "cc1h": p.CC1h, "img": p.Img, "img_cr": p.ImgCR, "img_o": p.ImgO, "ai": p.AI, "ai_cr": p.AICR, "ao": p.AO, "reasoning": p.Reasoning}
+	for _, value := range state.tokens {
+		if value < 0 || value > math.MaxInt32 {
+			return decimal.Zero, state.trace, fmt.Errorf("invalid billing token quantity")
 		}
 	}
-	return runProgram(entry.prog, entry.requestRules, params, request)
+	if plan.usedVars["image_count"] {
+		if r.ImageCount == nil || *r.ImageCount < 1 || *r.ImageCount > dto.MaxImageN {
+			return decimal.Zero, state.trace, fmt.Errorf("image_count requires an integer between 1 and %d", dto.MaxImageN)
+		}
+		count := *r.ImageCount
+		state.tokens["image_count"] = int64(count)
+		state.trace.ImageCount = &count
+	}
+	for key := range plan.usedUsage {
+		raw, ok := r.Usage[key]
+		if !ok || raw == nil {
+			return decimal.Zero, state.trace, fmt.Errorf("billing usage %q is missing", key)
+		}
+		value, e := NormalizeUsageValue(r.UsageSchema.Fields[key], raw)
+		if e != nil {
+			return decimal.Zero, state.trace, e
+		}
+		if r.UsageSchema.Fields[key].Type == "number" {
+			value, e = decimal.NewFromString(value.(string))
+			if e != nil {
+				return decimal.Zero, state.trace, e
+			}
+		}
+		state.usage[key] = value
+	}
+	for zone := range plan.zones {
+		calendar, ok := r.Calendars[zone]
+		if !ok || r.FrozenAt.IsZero() {
+			return decimal.Zero, state.trace, fmt.Errorf("billing calendar is not frozen")
+		}
+		if e := validateCalendar(calendar, r.FrozenAt); e != nil {
+			return decimal.Zero, state.trace, e
+		}
+	}
+	value, e := state.eval(plan.root)
+	if e != nil {
+		return decimal.Zero, state.trace, e
+	}
+	number, ok := value.(decimal.Decimal)
+	if !ok || number.IsNegative() {
+		return decimal.Zero, state.trace, fmt.Errorf("invalid billing expression result")
+	}
+	return number, state.trace, nil
 }
 
-func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, params TokenParams, request RequestInput) (float64, TraceResult, error) {
-	trace := TraceResult{
-		RequestRules: append([]RequestRuleTrace(nil), requestRules...),
+// FreezeCalendars resolves timezone rules only while creating the quote. The
+// offset and calendar fields become part of its immutable hash.
+func FreezeCalendars(s string, schema *UsageSchema, at time.Time) (map[string]FrozenCalendar, error) {
+	plan, e := CompileWithUsageSchema(s, schema)
+	if e != nil {
+		return nil, e
 	}
-	imageCount := 0
-	if request.ImageCount != nil {
-		imageCount = *request.ImageCount
-		trace.ImageCount = &imageCount
+	if len(plan.zones) == 0 {
+		return nil, nil
 	}
-	if err := ValidateAttributes(request.Attributes); err != nil {
-		return 0, trace, err
+	if at.IsZero() {
+		return nil, fmt.Errorf("billing time is not frozen")
 	}
-	var probeErr error
-	inZone := func(tz string) time.Time {
-		if request.FrozenAt.IsZero() {
-			probeErr = fmt.Errorf("billing time is not frozen")
-			return time.Time{}
+	values := make(map[string]FrozenCalendar, len(plan.zones))
+	for zone := range plan.zones {
+		loc, e := time.LoadLocation(zone)
+		if e != nil {
+			return nil, e
 		}
-		loc, err := time.LoadLocation(strings.TrimSpace(tz))
-		if err != nil || strings.TrimSpace(tz) == "" {
-			probeErr = fmt.Errorf("invalid billing timezone")
-			return time.Time{}
-		}
-		return request.FrozenAt.In(loc)
+		t := at.In(loc)
+		_, offset := t.Zone()
+		values[zone] = FrozenCalendar{Year: t.Year(), Month: int(t.Month()), Day: t.Day(), Weekday: int(t.Weekday()), Hour: t.Hour(), Minute: t.Minute(), UTCOffsetSeconds: offset}
 	}
-
-	env := map[string]interface{}{
-		"image_count": float64(imageCount),
-		"p":           params.P,
-		"c":           params.C,
-		"len":         params.Len,
-		"cr":          params.CR,
-		"cc":          params.CC,
-		"cc1h":        params.CC1h,
-		"img":         params.Img,
-		"img_cr":      params.ImgCR,
-		"img_o":       params.ImgO,
-		"ai":          params.AI,
-		"ao":          params.AO,
-		"reasoning":   params.Reasoning,
-		"fixed":       func(usd float64) float64 { return usd * 1000000 },
-		"u": func(key string) interface{} {
-			if request.UsageSchema == nil {
-				probeErr = fmt.Errorf("billing usage schema is missing")
-				return nil
-			}
-			field, exists := request.UsageSchema.Fields[key]
-			if !exists {
-				probeErr = fmt.Errorf("undeclared billing usage field")
-				return nil
-			}
-			value, err := NormalizeUsageValue(field, request.Usage[key])
-			if err != nil {
-				probeErr = err
-				return nil
-			}
-			if field.Type == "number" {
-				number, err := decimal.NewFromString(value.(string))
-				if err != nil {
-					probeErr = err
-					return nil
-				}
-				return number.InexactFloat64()
-			}
-			return value
-		},
-		"tier": func(name string, value float64) float64 {
-			trace.MatchedTier = name
-			return value
-		},
-		requestRuleTraceFunction: func(ruleIndex int, matched bool, multiplier float64) float64 {
-			if matched && ruleIndex >= 0 && ruleIndex < len(trace.RequestRules) {
-				trace.RequestRules[ruleIndex].Matched = true
-			}
-			if matched {
-				return multiplier
-			}
-			return 1
-		},
-		requestRuleTraceIntFunction: func(ruleIndex int, matched bool, multiplier int) int {
-			if matched && ruleIndex >= 0 && ruleIndex < len(trace.RequestRules) {
-				trace.RequestRules[ruleIndex].Matched = true
-			}
-			if matched {
-				return multiplier
-			}
-			return 1
-		},
-		"attr": func(key string) interface{} {
-			if !AllowedAttribute(key) {
-				probeErr = fmt.Errorf("unregistered billing attribute")
-				return nil
-			}
-			return request.Attributes[key]
-		},
-		"has": func(source interface{}, substr string) bool {
-			if source == nil || substr == "" {
-				return false
-			}
-			return strings.Contains(fmt.Sprint(source), substr)
-		},
-		"hour":    func(tz string) int { return inZone(tz).Hour() },
-		"minute":  func(tz string) int { return inZone(tz).Minute() },
-		"weekday": func(tz string) int { return int(inZone(tz).Weekday()) },
-		"month":   func(tz string) int { return int(inZone(tz).Month()) },
-		"day":     func(tz string) int { return inZone(tz).Day() },
-		"max":     math.Max,
-		"min":     math.Min,
-		"abs":     math.Abs,
-		"ceil":    math.Ceil,
-		"floor":   math.Floor,
-	}
-
-	out, err := expr.Run(prog, env)
-	if probeErr != nil {
-		return 0, trace, probeErr
-	}
-	if err != nil {
-		return 0, trace, fmt.Errorf("expr run error: %w", err)
-	}
-	f, ok := out.(float64)
-	if !ok {
-		return 0, trace, fmt.Errorf("expr result is %T, want float64", out)
-	}
-	if math.IsNaN(f) || math.IsInf(f, 0) || f < 0 {
-		return 0, trace, fmt.Errorf("invalid billing expression result")
-	}
-	return f, trace, nil
+	return values, nil
 }
-
-func AllowedAttribute(name string) bool {
-	switch name {
-	case "service_tier", "quality", "resolution", "quantity", "duration", "tool_category", "effort", "thinking", "thinking_budget_tokens", "temperature", "top_p":
-		return true
+func validateCalendar(c FrozenCalendar, at time.Time) error {
+	if c.UTCOffsetSeconds < -86400 || c.UTCOffsetSeconds > 86400 {
+		return fmt.Errorf("invalid frozen billing calendar")
 	}
-	return false
-}
-
-func ValidateAttributes(attributes map[string]interface{}) error {
-	for name, value := range attributes {
-		if !AllowedAttribute(name) {
-			return fmt.Errorf("unregistered billing attribute")
-		}
-		switch v := value.(type) {
-		case string:
-			if len(v) > 128 {
-				return fmt.Errorf("billing attribute too long")
-			}
-		case float64:
-			if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > math.MaxInt32 {
-				return fmt.Errorf("invalid billing attribute")
-			}
-		case int:
-			if v < 0 || int64(v) > math.MaxInt32 {
-				return fmt.Errorf("invalid billing attribute")
-			}
-		case bool, nil:
-		default:
-			return fmt.Errorf("invalid billing attribute type")
-		}
+	t := at.UTC().Add(time.Duration(c.UTCOffsetSeconds) * time.Second)
+	if c.Year != t.Year() || c.Month != int(t.Month()) || c.Day != t.Day() || c.Weekday != int(t.Weekday()) || c.Hour != t.Hour() || c.Minute != t.Minute() {
+		return fmt.Errorf("invalid frozen billing calendar")
 	}
 	return nil
+}
+func checkDecimal(d decimal.Decimal) error {
+	// Bound work before an intermediate can allocate an unbounded power of ten.
+	if d.Exponent() < -512 || d.Exponent() > 512 || len(d.Coefficient().String()) > 512 {
+		return fmt.Errorf("billing decimal exceeds execution range")
+	}
+	return nil
+}
+
+type evaluation struct {
+	request RequestInput
+	trace   TraceResult
+	tokens  map[string]int64
+	usage   map[string]any
+}
+
+func (e *evaluation) eval(n *operation) (value any, err error) {
+	defer func() {
+		if d, ok := value.(decimal.Decimal); ok && err == nil {
+			err = checkDecimal(d)
+		}
+	}()
+	switch n.kind {
+	case "number":
+		return n.number, nil
+	case "string":
+		return n.text, nil
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	case "nil":
+		return nil, nil
+	case "variable":
+		return decimal.NewFromInt(e.tokens[n.text]), nil
+	case "conditional":
+		condition, err := e.eval(n.args[0])
+		if err != nil {
+			return nil, err
+		}
+		flag, ok := condition.(bool)
+		if !ok {
+			return nil, fmt.Errorf("billing condition must be boolean")
+		}
+		if flag {
+			if n.rule >= 0 {
+				e.trace.RequestRules[n.rule].Matched = true
+			}
+			return e.eval(n.args[1])
+		}
+		return e.eval(n.args[2])
+	case "unary":
+		value, err := e.eval(n.args[0])
+		if err != nil {
+			return nil, err
+		}
+		if n.text == "!" || n.text == "not" {
+			flag, ok := value.(bool)
+			if !ok {
+				return nil, fmt.Errorf("billing logical operand must be boolean")
+			}
+			return !flag, nil
+		}
+		d, ok := value.(decimal.Decimal)
+		if !ok {
+			return nil, fmt.Errorf("billing operand must be numeric")
+		}
+		if n.text == "-" {
+			return d.Neg(), nil
+		}
+		return d, nil
+	case "binary":
+		return e.binary(n)
+	case "call":
+		return e.call(n)
+	}
+	return nil, fmt.Errorf("unsupported billing operation")
+}
+func (e *evaluation) binary(n *operation) (any, error) {
+	left, err := e.eval(n.args[0])
+	if err != nil {
+		return nil, err
+	}
+	if n.text == "&&" || n.text == "and" || n.text == "||" || n.text == "or" {
+		flag, ok := left.(bool)
+		if !ok {
+			return nil, fmt.Errorf("billing logical operand must be boolean")
+		}
+		and := n.text == "&&" || n.text == "and"
+		if and && !flag || !and && flag {
+			return flag, nil
+		}
+		right, err := e.eval(n.args[1])
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := right.(bool); !ok {
+			return nil, fmt.Errorf("billing logical operand must be boolean")
+		}
+		return right, nil
+	}
+	right, err := e.eval(n.args[1])
+	if err != nil {
+		return nil, err
+	}
+	if n.text == "==" || n.text == "!=" {
+		equal := false
+		switch a := left.(type) {
+		case nil:
+			equal = right == nil
+		case decimal.Decimal:
+			b, ok := right.(decimal.Decimal)
+			equal = ok && a.Equal(b)
+		case string:
+			b, ok := right.(string)
+			equal = ok && a == b
+		case bool:
+			b, ok := right.(bool)
+			equal = ok && a == b
+		}
+		if n.text == "!=" {
+			equal = !equal
+		}
+		return equal, nil
+	}
+	a, ok := left.(decimal.Decimal)
+	b, ok2 := right.(decimal.Decimal)
+	if !ok || !ok2 {
+		return nil, fmt.Errorf("billing operands must be numeric")
+	}
+	switch n.text {
+	case "+":
+		return a.Add(b), nil
+	case "-":
+		return a.Sub(b), nil
+	case "*":
+		return a.Mul(b), nil
+	case "/":
+		if b.IsZero() {
+			return nil, fmt.Errorf("billing division by zero")
+		}
+		return a.DivRound(b, 36), nil
+	case "<":
+		return a.LessThan(b), nil
+	case "<=":
+		return a.LessThanOrEqual(b), nil
+	case ">":
+		return a.GreaterThan(b), nil
+	case ">=":
+		return a.GreaterThanOrEqual(b), nil
+	}
+	return nil, fmt.Errorf("unsupported billing operator")
+}
+func (e *evaluation) call(n *operation) (any, error) {
+	args := make([]any, len(n.args))
+	for i, node := range n.args {
+		value, err := e.eval(node)
+		if err != nil {
+			return nil, err
+		}
+		args[i] = value
+	}
+	switch n.text {
+	case "u":
+		return e.usage[n.args[0].text], nil
+	case "attr", "attr_num":
+		value := e.request.Attributes[n.args[0].text]
+		if n.text == "attr_num" {
+			return AttributeNumber(value)
+		}
+		return value, nil
+	case "hour", "minute", "weekday", "month", "day":
+		c := e.request.Calendars[n.args[0].text]
+		values := map[string]int{"hour": c.Hour, "minute": c.Minute, "weekday": c.Weekday, "month": c.Month, "day": c.Day}
+		return decimal.NewFromInt(int64(values[n.text])), nil
+	case "tier":
+		d, ok := args[1].(decimal.Decimal)
+		if !ok {
+			return nil, fmt.Errorf("billing tier must be numeric")
+		}
+		e.trace.MatchedTier = n.args[0].text
+		return d, nil
+	case "has":
+		text, ok := args[1].(string)
+		if !ok {
+			return nil, fmt.Errorf("billing substring must be text")
+		}
+		if args[0] == nil || text == "" {
+			return false, nil
+		}
+		return strings.Contains(fmt.Sprint(args[0]), text), nil
+	}
+	d, ok := args[0].(decimal.Decimal)
+	if !ok {
+		return nil, fmt.Errorf("billing function requires numeric operands")
+	}
+	switch n.text {
+	case "fixed":
+		return d.Shift(6), nil
+	case "abs":
+		return d.Abs(), nil
+	case "ceil":
+		return d.Ceil(), nil
+	case "floor":
+		return d.Floor(), nil
+	case "max", "min":
+		b, ok := args[1].(decimal.Decimal)
+		if !ok {
+			return nil, fmt.Errorf("billing function requires numeric operands")
+		}
+		if n.text == "max" && b.GreaterThan(d) || n.text == "min" && b.LessThan(d) {
+			return b, nil
+		}
+		return d, nil
+	}
+	return nil, fmt.Errorf("unsupported billing function")
 }

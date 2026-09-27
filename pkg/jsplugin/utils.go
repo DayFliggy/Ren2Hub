@@ -32,6 +32,7 @@ type volcSignRequest struct {
 func injectGlobals(runtime *sobek.Runtime, identity func() string, now func() time.Time, logOutput func(string)) error {
 	utils := map[string]any{
 		"hasCapability": HasCapability,
+		"decimal":       decimalHelpers(),
 		"json": map[string]any{
 			"clone": func(call sobek.FunctionCall) sobek.Value {
 				if sobek.IsUndefined(call.Argument(0)) {
