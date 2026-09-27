@@ -44,7 +44,7 @@ func TestMidjourneyCompletionRecoveryAcrossDatabases(t *testing.T) {
 				initCol()
 				require.NoError(t, connection.Close())
 			})
-			require.NoError(t, db.AutoMigrate(&Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}))
+			require.NoError(t, db.AutoMigrate(&Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &BillingPriceVersion{}, &BillingActivePrice{}))
 			t.Run("accepted-submission", func(t *testing.T) {
 				fixture := newMidjourneyCompletionFixture(t, db, "accepted", false, true)
 				testMidjourneyAcceptedSubmission(t, fixture)
@@ -240,7 +240,7 @@ func newMidjourneyCompletionFixture(t *testing.T, db *gorm.DB, identity string, 
 	require.NoError(t, db.Create(&fixture.token).Error)
 	fixture.channel = Channel{Name: "mj-" + identity}
 	require.NoError(t, db.Create(&fixture.channel).Error)
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "mj_imagine", ScopeKind: billing.PriceScopeChannel,
+	quote, err := publishedBillingTestQuote(billing.PriceVersion{Model: "mj_imagine", ScopeKind: billing.PriceScopeChannel,
 		ChannelID: fixture.channel.Id, Mode: billing.ModeUnitPrice,
 		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.00006"}}}, "1", nil, time.Unix(7200, 0))
 	require.NoError(t, err)
@@ -270,7 +270,7 @@ func newMidjourneyCompletionFixture(t *testing.T, db *gorm.DB, identity string, 
 			fixture.task.PrivateData.SubmissionRequestID+":attempt", fixture.channel.Id, fixture.quote))
 	}
 	require.NoError(t, db.Create(&fixture.task).Error)
-	usage := billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "provider", Complete: true}
+	usage := billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "provider", Complete: true, Terminal: "completed"}
 	charge, err := billing.Calculate(fixture.quote, usage)
 	require.NoError(t, err)
 	require.EqualValues(t, 30, charge.FinalQuota)

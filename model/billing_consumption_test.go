@@ -15,13 +15,24 @@ import (
 	"gorm.io/gorm"
 )
 
+func publishedBillingTestQuote(version billing.PriceVersion, ratio string, attributes map[string]interface{}, at time.Time) (*billing.Quote, error) {
+	if version.Provenance == nil {
+		version.Provenance = &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}
+	}
+	published, _, err := publishBillingPrice(context.Background(), version, billingPricePublication{origin: BillingPriceOriginManual, actor: 1})
+	if err != nil {
+		return nil, err
+	}
+	return billing.NewQuote(*published, ratio, attributes, at)
+}
+
 // Log-delivery fixtures still pass through a real frozen billing contract.
 func bindConsumptionEvidence(requestID string, consumption BillingConsumption) (BillingConsumption, error) {
 	name := consumption.Log.ModelName
 	if name == "" {
 		name = "fixture"
 	}
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice,
+	quote, err := publishedBillingTestQuote(billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice,
 		Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test charge"},
 		Prices:     []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: decimal.NewFromInt(int64(consumption.Log.Quota)).Div(decimal.NewFromInt(500000)).String()}},
 	}, "1", nil, time.Unix(7200, 0))

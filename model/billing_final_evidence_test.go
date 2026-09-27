@@ -19,6 +19,8 @@ func TestFinalConsumptionRequiresReplayableCompletedEvidence(t *testing.T) {
 		{"estimated", func(c *BillingConsumption) { c.Usage.Estimated = true }},
 		{"invalid", func(c *BillingConsumption) { c.Usage.Invalid = true }},
 		{"unknown source", func(c *BillingConsumption) { c.Usage.Source = "" }},
+		{"unknown terminal", func(c *BillingConsumption) { c.Usage.Terminal = "" }},
+		{"failed terminal", func(c *BillingConsumption) { c.Usage.Terminal = "failed" }},
 		{"altered monetary total", func(c *BillingConsumption) { c.Charge.TotalUSD = "0.9" }},
 		{"altered base detail", func(c *BillingConsumption) { c.Charge.BaseUSD = "0.9" }},
 		{"different quantity with old charge", func(c *BillingConsumption) { c.Usage.Quantities["calls"] = "2" }},
@@ -45,6 +47,51 @@ func TestFinalConsumptionRequiresReplayableCompletedEvidence(t *testing.T) {
 			assert.EqualValues(t, 60, user.Quota)
 			assert.EqualValues(t, 40, user.ReservedQuota)
 		})
+	}
+}
+
+func TestAmountOnlySettlementCannotBypassFinalEvidence(t *testing.T) {
+	db := setupBillingRecoveryTestDB(t)
+	seedBillingAccount(t, db, 100, 100, false)
+	newReservation(t, "no-evidence")
+	require.NoError(t, Reserve("no-evidence", 40))
+	require.ErrorIs(t, UpdateBillingRecoverySettlement("no-evidence", -10), ErrBillingRecoveryStateConflict)
+	// Defense in depth: even another writer setting pending cannot authorize
+	// the monetary event without the complete immutable evidence.
+	require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", "no-evidence").Updates(map[string]any{
+		"status": BillingRecoveryStatusSettlementPending, "settlement_delta": -10,
+	}).Error)
+	require.Error(t, Settle("no-evidence", 30))
+	var user User
+	require.NoError(t, db.First(&user, 1).Error)
+	assert.EqualValues(t, 60, user.Quota)
+	assert.EqualValues(t, 40, user.ReservedQuota)
+	assert.Zero(t, user.UsedQuota)
+	var events int64
+	require.NoError(t, db.Model(&BillingEvent{}).Where("request_id = ? AND operation = ?", "no-evidence", "settle").Count(&events).Error)
+	assert.Zero(t, events)
+}
+
+func TestFinalFundsTransactionReplaysStoredEvidence(t *testing.T) {
+	for _, update := range []map[string]any{
+		{"usage_snapshot": ""},
+		{"charge_snapshot": ""},
+		{"consumption_fingerprint": "changed"},
+		{"charge_snapshot": `{"final_quota":"30","total_usd":"1"}`},
+	} {
+		db := setupBillingRecoveryTestDB(t)
+		seedBillingAccount(t, db, 100, 100, false)
+		newReservation(t, "stored-evidence")
+		require.NoError(t, Reserve("stored-evidence", 40))
+		consumption, err := bindConsumptionEvidence("stored-evidence", BillingConsumption{Log: Log{UserId: 1, TokenId: 1, Quota: 30}})
+		require.NoError(t, err)
+		require.NoError(t, PrepareBillingRecoveryConsumption("stored-evidence", consumption))
+		require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", "stored-evidence").Updates(update).Error)
+		require.Error(t, Settle("stored-evidence", 30))
+		var user User
+		require.NoError(t, db.First(&user, 1).Error)
+		assert.EqualValues(t, 40, user.ReservedQuota)
+		assert.Zero(t, user.UsedQuota)
 	}
 }
 

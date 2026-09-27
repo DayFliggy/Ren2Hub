@@ -48,7 +48,7 @@ func TestBillingPerformance(t *testing.T) {
 				DB, LOG_DB, common.RedisEnabled = oldDB, oldLogs, oldRedis
 				common.SetDatabaseTypes(oldMain, oldLog)
 			}()
-			require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &Log{}, &Channel{}, &QuotaData{}))
+			require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &Log{}, &Channel{}, &QuotaData{}, &BillingPriceVersion{}, &BillingActivePrice{}))
 			for id := 1; id <= 8; id++ {
 				require.NoError(t, db.Create(&User{Id: id, Username: fmt.Sprintf("bench-%d", id), AffCode: fmt.Sprintf("b%d", id), Quota: 1000000000}).Error)
 				require.NoError(t, db.Create(&Token{Id: id, UserId: id, Key: fmt.Sprintf("bench-key-%d", id), RemainQuota: 1000000000}).Error)

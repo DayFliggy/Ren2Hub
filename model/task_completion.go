@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"gorm.io/gorm"
 )
 
@@ -113,6 +112,17 @@ func createTaskCompletionBilling(tx *gorm.DB, _ string, privateData TaskPrivateD
 	if release {
 		consumption.CountUsage = false
 		consumption.Log.Type = LogTypeRefund
+		// The task document retains failure observations. A release has no
+		// consumption charge and must not preserve a submission estimate as one.
+		consumption.Usage, consumption.Charge = nil, nil
+	}
+	var evidenceHash string
+	if !release {
+		var err error
+		evidenceHash, err = validateBillingConsumption(tx, recovery, consumption, true)
+		if err != nil {
+			return err
+		}
 	}
 	data, err := common.Marshal(consumption)
 	if err != nil {
@@ -139,15 +149,11 @@ func createTaskCompletionBilling(tx *gorm.DB, _ string, privateData TaskPrivateD
 			return err
 		}
 		updates["charge_snapshot"] = string(charge)
-		var quote billing.Quote
-		if err := common.UnmarshalJsonStr(recovery.QuoteSnapshot, &quote); err != nil {
-			return err
-		}
-		evidenceHash, err := BillingEvidenceFingerprint(recovery.RequestID, quote.Hash, consumption.Usage, consumption.Charge)
-		if err != nil {
-			return err
-		}
+	}
+	if !release {
 		updates["consumption_fingerprint"] = evidenceHash
+	} else {
+		updates["usage_snapshot"], updates["charge_snapshot"], updates["consumption_fingerprint"] = "", "", ""
 	}
 	return tx.Model(&recovery).Updates(updates).Error
 }

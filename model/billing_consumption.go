@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billing"
@@ -75,15 +74,87 @@ func BillingEvidenceFingerprint(requestID, quoteHash string, usage *billing.Usag
 	}{requestID, quoteHash, usage, charge})
 }
 
+// validateBillingConsumption is shared by ordinary requests, live observations,
+// task completion, and the final funds transaction. A quota alone is never
+// settlement evidence, even when a service already performed its own checks.
+func validateBillingConsumption(tx *gorm.DB, recovery BillingRecovery, consumption BillingConsumption, final bool) (string, error) {
+	if consumption.Usage == nil || consumption.Charge == nil {
+		return "", errors.New("complete frozen billing evidence is required")
+	}
+	if recovery.UserID != consumption.Log.UserId || recovery.TokenID != consumption.Log.TokenId {
+		return "", ErrBillingRecoveryStateConflict
+	}
+	if final && !consumption.Usage.ReadyForSettlement() {
+		return "", errors.New("final billing requires completed, non-estimated provider evidence")
+	}
+	if consumption.Log.Quota < 0 || consumption.Charge.FinalQuota != consumption.Log.Quota {
+		return "", ErrBillingEventConflict
+	}
+	var quote billing.Quote
+	if err := common.UnmarshalJsonStr(recovery.QuoteSnapshot, &quote); err != nil {
+		return "", fmt.Errorf("missing frozen billing quote: %w", err)
+	}
+	if err := validatePublishedBillingQuoteTx(tx, &quote); err != nil {
+		return "", err
+	}
+	var attempt BillingAttempt
+	if err := tx.Where("request_id = ? AND quote_hash = ? AND channel_id = ?", recovery.RequestID, quote.Hash, consumption.Log.ChannelId).First(&attempt).Error; err != nil {
+		return "", fmt.Errorf("frozen billing attempt is missing: %w", err)
+	}
+	var attemptQuote billing.Quote
+	if err := common.UnmarshalJsonStr(attempt.Quote, &attemptQuote); err != nil {
+		return "", err
+	}
+	attemptFingerprint, err := BillingAttemptFingerprint(recovery.RequestID, attempt.ChannelID, &attemptQuote)
+	if err != nil || attemptQuote.Hash != quote.Hash || attemptFingerprint != attempt.Fingerprint {
+		return "", ErrBillingEventConflict
+	}
+	replayed, err := billing.Calculate(&quote, *consumption.Usage)
+	if err != nil {
+		return "", fmt.Errorf("invalid frozen billing evidence: %w", err)
+	}
+	expectedHash, err := billing.Hash(replayed)
+	if err != nil {
+		return "", err
+	}
+	actualHash, err := billing.Hash(consumption.Charge)
+	if err != nil {
+		return "", err
+	}
+	if actualHash != expectedHash {
+		return "", ErrBillingEventConflict
+	}
+	return BillingEvidenceFingerprint(recovery.RequestID, quote.Hash, consumption.Usage, consumption.Charge)
+}
+
+func validateStoredBillingConsumption(tx *gorm.DB, recovery BillingRecovery, consumption *BillingConsumption) error {
+	var storedUsage billing.Usage
+	var storedCharge billing.ChargeResult
+	if err := common.UnmarshalJsonStr(recovery.UsageSnapshot, &storedUsage); err != nil {
+		return fmt.Errorf("missing final billing usage: %w", err)
+	}
+	if err := common.UnmarshalJsonStr(recovery.ChargeSnapshot, &storedCharge); err != nil {
+		return fmt.Errorf("missing final billing charge: %w", err)
+	}
+	// Usage and charge deliberately live in their own immutable snapshots;
+	// consumption JSON contains only delivery metadata.
+	consumption.Usage, consumption.Charge = &storedUsage, &storedCharge
+	fingerprint, err := validateBillingConsumption(tx, recovery, *consumption, true)
+	if err != nil {
+		return err
+	}
+	if fingerprint != recovery.ConsumptionFingerprint {
+		return ErrBillingEventConflict
+	}
+	return nil
+}
+
 func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumption BillingConsumption, final bool) error {
 	if db == nil || requestID == "" || consumption.Log.UserId <= 0 || consumption.Log.Quota < 0 || consumption.TaskAdjustment != nil {
 		return errors.New("invalid billing consumption")
 	}
 	if consumption.Usage == nil || consumption.Charge == nil {
 		return errors.New("complete frozen billing evidence is required")
-	}
-	if final && (!consumption.Usage.Complete || consumption.Usage.Estimated || consumption.Usage.Invalid || strings.TrimSpace(consumption.Usage.Source) == "") {
-		return errors.New("final billing requires complete, non-estimated provider evidence")
 	}
 	consumption.Log.RequestId = requestID
 	data, err := common.Marshal(consumption)
@@ -106,29 +177,7 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 		if err := lockForUpdate(tx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
 			return err
 		}
-		if recovery.UserID != consumption.Log.UserId || recovery.TokenID != consumption.Log.TokenId {
-			return ErrBillingRecoveryStateConflict
-		}
-		var quote billing.Quote
-		if err := common.UnmarshalJsonStr(recovery.QuoteSnapshot, &quote); err != nil {
-			return fmt.Errorf("missing frozen billing quote: %w", err)
-		}
-		replayed, err := billing.Calculate(&quote, *consumption.Usage)
-		if err != nil {
-			return fmt.Errorf("invalid frozen billing evidence: %w", err)
-		}
-		expectedHash, err := billing.Hash(replayed)
-		if err != nil {
-			return err
-		}
-		actualHash, err := billing.Hash(consumption.Charge)
-		if err != nil {
-			return err
-		}
-		if actualHash != expectedHash {
-			return ErrBillingEventConflict
-		}
-		evidenceHash, err := BillingEvidenceFingerprint(requestID, quote.Hash, consumption.Usage, consumption.Charge)
+		evidenceHash, err := validateBillingConsumption(tx, recovery, consumption, final)
 		if err != nil {
 			return err
 		}

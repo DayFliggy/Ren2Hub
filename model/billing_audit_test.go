@@ -23,7 +23,7 @@ func settledBillingAuditEvidence(t *testing.T) (BillingRecovery, []BillingAttemp
 	require.NoError(t, err)
 	quote, err := billing.NewQuote(*version, "1", nil, time.Now())
 	require.NoError(t, err)
-	usage := &billing.Usage{InputTokens: 100, Complete: true, Source: "provider"}
+	usage := &billing.Usage{InputTokens: 100, Complete: true, Source: "provider", Terminal: "completed"}
 	charge, err := billing.Calculate(quote, *usage)
 	require.NoError(t, err)
 	newReservation(t, "audit-request")

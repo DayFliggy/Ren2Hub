@@ -25,12 +25,18 @@ func prepareBillingCostRequest(t *testing.T, requestID string, attemptIDs ...str
 	t.Helper()
 	newReservation(t, requestID)
 	require.NoError(t, Reserve(requestID, 100))
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "cost-test-model", Mode: billing.ModeFree}, "1", nil, time.Now())
+	quote, err := publishedBillingTestQuote(billing.PriceVersion{Model: "cost-test-model", Mode: billing.ModeUnitPrice,
+		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.00004"}}}, "1", nil, time.Now())
 	require.NoError(t, err)
 	for _, id := range attemptIDs {
 		require.NoError(t, PrepareBillingAttempt(context.Background(), requestID, id, 7, quote))
 	}
-	require.NoError(t, UpdateBillingRecoverySettlement(requestID, -80))
+	usage := &billing.Usage{Source: "provider", Complete: true, Terminal: "completed", Quantities: map[string]string{"calls": "1"}}
+	charge, err := billing.Calculate(quote, *usage)
+	require.NoError(t, err)
+	require.NoError(t, PrepareBillingRecoveryConsumption(requestID, BillingConsumption{
+		Log: Log{UserId: 1, TokenId: 1, ChannelId: 7, ModelName: "cost-test-model", Quota: 20}, Usage: usage, Charge: charge,
+	}))
 	require.NoError(t, Settle(requestID, 20))
 }
 

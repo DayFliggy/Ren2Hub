@@ -54,7 +54,7 @@ type PriceTier struct {
 }
 
 type PriceVersion struct {
-	Metering *PriceMetering `json:"metering,omitempty"`
+	Metering           *PriceMetering           `json:"metering,omitempty"`
 	Provenance         *PriceProvenance         `json:"provenance,omitempty"`
 	Support            *PricingSupport          `json:"support,omitempty"`
 	ContractVersion    int                      `json:"contract_version"`
@@ -83,9 +83,17 @@ type PriceVersion struct {
 // expression, independently of its token dimensions and extra price lines.
 func (version PriceVersion) NeedsTokenUsage() bool {
 	if version.Mode == ModeExpression {
-		for name := range billingexpr.UsedVars(version.Expression) { if name == "len" || tokenDimension(name) { return true } }
+		for name := range billingexpr.UsedVars(version.Expression) {
+			if name == "len" || tokenDimension(name) {
+				return true
+			}
+		}
 	}
-	for _, price := range version.Prices { if tokenDimension(price.Quantity) { return true } }
+	for _, price := range version.Prices {
+		if tokenDimension(price.Quantity) {
+			return true
+		}
+	}
 	return false
 }
 
@@ -113,7 +121,7 @@ type Quote struct {
 // Quantities hold decimal counts for calls/images/seconds/tool:<name>. Tokens
 // retain the canonical input semantics independent from protocol projections.
 type Usage struct {
-	ActualServiceTier string `json:"actual_service_tier,omitempty"`
+	ActualServiceTier    string                 `json:"actual_service_tier,omitempty"`
 	Terminal             string                 `json:"terminal,omitempty"`
 	ObservationIDs       []string               `json:"observation_ids,omitempty"`
 	EstimatedFacts       map[string]interface{} `json:"estimated_facts,omitempty"`
@@ -137,6 +145,11 @@ type Usage struct {
 	Estimated            bool                   `json:"estimated"`
 	Complete             bool                   `json:"complete"`
 	Invalid              bool                   `json:"invalid,omitempty"`
+}
+
+func (usage Usage) ReadyForSettlement() bool {
+	return usage.Complete && !usage.Estimated && !usage.Invalid &&
+		strings.TrimSpace(usage.Source) != "" && usage.Terminal == "completed"
 }
 
 type ChargeLine struct {
@@ -192,7 +205,6 @@ func ParseAmountUSD(s string) (decimal.Decimal, error) {
 }
 
 func positiveDecimal(s string) (decimal.Decimal, error) { return ParseAmountUSD(s) }
-
 
 func tokenDimension(name string) bool {
 	switch name {
@@ -350,7 +362,10 @@ func PreparePriceVersion(version PriceVersion) (PriceVersion, error) {
 	if err := ValidateFrozenPriceVersion(version); err != nil {
 		return version, err
 	}
-	if version.Metering != nil { copyMetering := *version.Metering; version.Metering = &copyMetering }
+	if version.Metering != nil {
+		copyMetering := *version.Metering
+		version.Metering = &copyMetering
+	}
 	version.Provenance = ClonePriceProvenance(version.Provenance)
 	version.Support = ClonePricingSupport(version.Support)
 	version.Prices = append(make([]UnitPrice, 0, len(version.Prices)), version.Prices...)
@@ -507,12 +522,16 @@ func ValidateFrozenPriceVersion(version PriceVersion) error {
 		if _, err := unitDivisor(price.Unit); err != nil {
 			return err
 		}
-		if !quantityUnitAllowed(price.Quantity, price.Unit) { return fmt.Errorf("invalid billing quantity or unit") }
+		if !quantityUnitAllowed(price.Quantity, price.Unit) {
+			return fmt.Errorf("invalid billing quantity or unit")
+		}
 	}
 	if version.UsageScope == UsageScopeEmbedding && version.Mode == ModeUnitPrice && !seen["p"] {
 		return fmt.Errorf("embedding scope requires an input-token price")
 	}
-	if (seen["images"] || imageExpression || seen["tool:image_generation"]) && (seen["img_o"] || billingexpr.UsedVars(version.Expression)["img_o"]) { return fmt.Errorf("image output cannot be charged as both tokens and produced images") }
+	if (seen["images"] || imageExpression || seen["tool:image_generation"]) && (seen["img_o"] || billingexpr.UsedVars(version.Expression)["img_o"]) {
+		return fmt.Errorf("image output cannot be charged as both tokens and produced images")
+	}
 	return validatePriceMetering(version)
 }
 
@@ -617,6 +636,16 @@ func (u Usage) TokenParams(used map[string]bool) (billingexpr.TokenParams, error
 	if u.ReasoningTokens > u.OutputTokens {
 		return billingexpr.TokenParams{}, fmt.Errorf("invalid reasoning token quantity")
 	}
+	inputTotal := u.InputTokens
+	if !u.InputIncludesCache {
+		inputTotal += u.CacheReadTokens + u.CacheWriteTokens + u.CacheWrite1hTokens
+	}
+	// Image and audio buckets are disjoint modalities. Cache buckets may
+	// overlap a modality, but cannot explain modality totals above all input.
+	if u.ImageInputTokens+u.AudioInputTokens > inputTotal ||
+		u.ImageOutputTokens+u.AudioOutputTokens+u.ReasoningTokens > u.OutputTokens {
+		return billingexpr.TokenParams{}, fmt.Errorf("media token breakdown exceeds aggregate usage")
+	}
 	cr, img, ai := u.CacheReadTokens, u.ImageInputTokens, u.AudioInputTokens
 	imgCR, aiCR := int64(0), int64(0)
 	var cacheDetails int64
@@ -703,36 +732,46 @@ func Calculate(quote *Quote, usage Usage) (*ChargeResult, error) {
 	return result, err
 }
 
-func calculate(quote *Quote, usage Usage) (*ChargeResult, error) {
+// ValidateQuote checks frozen identity and policy without requiring usage. It
+// is used before reservation as well as by calculation and audit replay.
+func ValidateQuote(quote *Quote) error {
 	if quote == nil {
-		return nil, fmt.Errorf("missing frozen billing quote")
+		return fmt.Errorf("missing frozen billing quote")
 	}
 	if quote.ContractVersion != ContractVersion || quote.CalculationVersion != CalculationVersion {
-		return nil, fmt.Errorf("unsupported billing quote contract")
+		return fmt.Errorf("unsupported billing quote contract")
 	}
 	if err := ValidateFrozenPriceVersion(quote.PriceVersion); err != nil {
-		return nil, err
+		return err
 	}
 	if err := validatePriceWindow(quote.PriceVersion, quote.FrozenAt); err != nil {
-		return nil, err
+		return err
 	}
 	copyQuote := *quote
 	copyQuote.Hash = ""
 	hash, err := Hash(&copyQuote)
 	if err != nil || hash != quote.Hash {
-		return nil, fmt.Errorf("billing quote integrity mismatch")
+		return fmt.Errorf("billing quote integrity mismatch")
 	}
 	ratio, err := positiveDecimal(quote.ChannelRatio)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if quote.PriceVersion.ScopeKind == PriceScopeChannel && !ratio.Equal(decimal.NewFromInt(1)) {
-		return nil, fmt.Errorf("channel price requires multiplier 1")
+		return fmt.Errorf("channel price requires multiplier 1")
 	}
 	serviceTier, _ := quote.Attributes["service_tier"].(string)
 	if err := ValidatePricingRequirements(quote.PriceVersion, PricingRequirements{ServiceTier: serviceTier}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func calculate(quote *Quote, usage Usage) (*ChargeResult, error) {
+	if err := ValidateQuote(quote); err != nil {
 		return nil, err
 	}
+	ratio, _ := positiveDecimal(quote.ChannelRatio)
 	if quote.ChargeKind != "" {
 		if quote.ChargeKind != "violation_fee" || !quote.ViolationFeeEnabled || !usage.Complete || usage.Estimated || usage.Invalid || usage.Source != "confirmed_violation" || len(usage.Quantities) != 1 || usage.Quantities["calls"] != "1" {
 			return nil, fmt.Errorf("invalid frozen adjustment evidence")
@@ -768,12 +807,12 @@ func calculate(quote *Quote, usage Usage) (*ChargeResult, error) {
 			used[key] = value
 		}
 	}
+	if quote.PriceVersion.UsageScope == UsageScopeEmbedding && (usage.OutputTokens > 0 || usage.ImageOutputTokens > 0 || usage.AudioOutputTokens > 0 || usage.ReasoningTokens > 0) {
+		return nil, fmt.Errorf("embedding usage cannot contain output tokens")
+	}
 	params, err := usage.TokenParams(used)
 	if err != nil {
 		return nil, err
-	}
-	if quote.PriceVersion.UsageScope == UsageScopeEmbedding && (usage.OutputTokens > 0 || usage.ImageOutputTokens > 0 || usage.AudioOutputTokens > 0 || usage.ReasoningTokens > 0) {
-		return nil, fmt.Errorf("embedding usage cannot contain output tokens")
 	}
 	tokenCounts := map[string]int64{"p": params.P, "c": params.C, "cr": params.CR, "cc": params.CC, "cc1h": params.CC1h, "img": params.Img, "img_cr": params.ImgCR, "img_o": params.ImgO, "ai": params.AI, "ai_cr": params.AICR, "ao": params.AO, "reasoning": usage.ReasoningTokens}
 	counts := map[string]decimal.Decimal{}
@@ -797,7 +836,7 @@ func calculate(quote *Quote, usage Usage) (*ChargeResult, error) {
 			counts[name] = decimal.NewFromInt(n)
 		}
 	}
-	flatOnly := quote.PriceVersion.FlatFee != "" && len(quote.PriceVersion.Prices) == 0
+	flatOnly := quote.PriceVersion.Mode == ModeUnitPrice && quote.PriceVersion.FlatFee != "" && len(quote.PriceVersion.Prices) == 0
 	if quote.PriceVersion.UsageSchema == nil && quote.PriceVersion.Mode == ModeUnitPrice && !flatOnly && !used["calls"] && !used["images"] && !used["seconds"] && !used["characters"] && !used["credits"] {
 		for _, name := range []string{"p", "c"} {
 			if counts[name].IsPositive() && !used[name] {
@@ -820,17 +859,22 @@ func calculate(quote *Quote, usage Usage) (*ChargeResult, error) {
 			return nil, fmt.Errorf("embedding usage cannot contain non-token quantities")
 		}
 		counts[name] = n
-		if !n.IsZero() && !used[name] && !(name == "calls" && quote.PriceVersion.FlatFee != "") && quote.PriceVersion.Mode != ModeFree &&
+		fixedFeeFact := flatOnly && (name == "calls" || name == "images" || name == "seconds" || name == "characters" || name == "credits")
+		if !n.IsZero() && !used[name] && !fixedFeeFact && !(name == "calls" && quote.PriceVersion.FlatFee != "") && quote.PriceVersion.Mode != ModeFree &&
 			(quote.PriceVersion.Mode != ModeExpression || (name != "calls" && name != "images" && name != "seconds")) {
 			return nil, fmt.Errorf("missing price for quantity %s", name)
 		}
 	}
 	if contract := quote.PriceVersion.Metering; contract != nil {
 		count, present := counts[contract.Quantity]
-		if !present || contract.Quantity == "characters" && !count.IsInteger() { return nil, fmt.Errorf("missing or invalid audio metering quantity") }
+		if !present || contract.Quantity == "characters" && !count.IsInteger() {
+			return nil, fmt.Errorf("missing or invalid audio metering quantity")
+		}
 		if contract.Source == "request_fixed" && !usage.Estimated {
 			frozen, err := billingexpr.AttributeNumber(quote.Attributes["quantity"])
-			if err != nil || !count.Equal(frozen) { return nil, fmt.Errorf("request-fixed metering quantity changed") }
+			if err != nil || !count.Equal(frozen) {
+				return nil, fmt.Errorf("request-fixed metering quantity changed")
+			}
 		}
 	}
 	result := &ChargeResult{Lines: []ChargeLine{}, CalculationVersion: CalculationVersion, RoundingVersion: RoundingVersion}

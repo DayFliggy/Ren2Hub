@@ -195,19 +195,10 @@ func UpdateBillingRecoverySettlement(requestID string, delta int64) error {
 			}
 			return nil
 		}
-		if recovery.Status != BillingRecoveryStatusActive {
-			return ErrBillingRecoveryStateConflict
-		}
-		actual, err := common.AddQuota(recovery.FundingAmount, common.Quota(delta))
-		if err != nil || actual < 0 || actual > common.MaxQuota {
-			return ErrBillingRecoveryStateConflict
-		}
-		return tx.Model(&recovery).Updates(map[string]any{
-			"version":          recovery.Version + 1,
-			"settlement_delta": delta,
-			"status":           BillingRecoveryStatusSettlementPending,
-			"updated_at":       common.GetTimestamp(),
-		}).Error
+		// Only a complete, replayed consumption may create settlement intent.
+		// This amount-only entry point is an idempotent confirmation for callers
+		// which already prepared that evidence, never an alternate write path.
+		return ErrBillingRecoveryStateConflict
 	})
 }
 
@@ -446,9 +437,17 @@ func finalizeBillingTx(tx *gorm.DB, requestID string, actual common.Quota, relea
 			return ErrBillingEventConflict
 		}
 	} else {
+		if !release {
+			return errors.New("settlement requires complete frozen billing evidence")
+		}
 		consumption = BillingConsumption{Log: Log{RequestId: requestID, UserId: recovery.UserID, TokenId: recovery.TokenID, Quota: actual, Type: LogTypeConsume, CreatedAt: common.GetTimestamp()}, LogEnabled: !release && common.LogConsumeEnabled}
 		if release {
 			consumption.Log.Type = LogTypeRefund
+		}
+	}
+	if !release {
+		if err := validateStoredBillingConsumption(tx, recovery, &consumption); err != nil {
+			return err
 		}
 	}
 	consumption.Log.BillingEventID = &operationID
