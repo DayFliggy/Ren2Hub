@@ -49,12 +49,12 @@ type RouteEntryInput struct {
 }
 
 type RoutePolicyInput struct {
-	LoadBalance             bool    `json:"load_balance"`
-	MaxRatio                float64 `json:"max_ratio"`
-	RetryMode               string  `json:"retry_mode"`
-	MaxSameResourceAttempts int     `json:"max_same_resource_attempts"`
-	MaxFailoverAttempts     int     `json:"max_failover_attempts"`
-	Sticky                  bool    `json:"sticky"`
+	LoadBalance             bool   `json:"load_balance"`
+	MaxRatio                string `json:"max_ratio"`
+	RetryMode               string `json:"retry_mode"`
+	MaxSameResourceAttempts int    `json:"max_same_resource_attempts"`
+	MaxFailoverAttempts     int    `json:"max_failover_attempts"`
+	Sticky                  bool   `json:"sticky"`
 }
 
 type RouteProfileView struct {
@@ -540,7 +540,7 @@ func ValidatePlatformChannelEntitlement(userID, channelID int) error {
 func defaultRoutePolicy(groupID int) model.RoutePolicy {
 	return model.RoutePolicy{
 		GroupID:             groupID,
-		MaxRatio:            1,
+		MaxRatio:            "1",
 		RetryMode:           model.RoutePolicyRetryNextChannel,
 		MaxFailoverAttempts: 1,
 	}

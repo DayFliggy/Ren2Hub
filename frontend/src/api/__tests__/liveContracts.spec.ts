@@ -1,3 +1,4 @@
+import { offerFixture } from './pricingFixture'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -34,52 +35,72 @@ function pricingResponse(overrides: Record<string, unknown> = {}) {
     description: 'Fast model',
     owner_by: 'OpenAI',
     supported_endpoint_types: ['chat'],
+    offers: [
+      offerFixture({
+        contract_version: 3,
+        calculation_version: 'billing-v3',
+        result_unit: 'usd',
+        id: 1,
+        model: 'gpt-4o',
+        mode: 'unit_price' as const,
+        prices: [
+          { quantity: 'p', unit: 'per_million_tokens', price: '1' },
+          { quantity: 'c', unit: 'per_million_tokens', price: '1.2' },
+          { quantity: 'cr', unit: 'per_million_tokens', price: '0.25' },
+        ],
+        created_at: 1,
+        hash: 'fixture',
+      }),
+    ],
     ...overrides,
-    price_version: {
-      contract_version: 2,
-      calculation_version: 'billing-v2',
-      result_unit: 'usd',
-      id: 1,
-      model: 'gpt-4o',
-      mode: 'unit_price' as const,
-      prices: [
-        { quantity: 'p', unit: 'per_million_tokens', price: '1' },
-        { quantity: 'c', unit: 'per_million_tokens', price: '1.2' },
-        { quantity: 'cr', unit: 'per_million_tokens', price: '0.25' },
-      ],
-      created_at: 1,
-      hash: 'fixture',
-    },
   }
 }
 
 describe('live API contracts', () => {
-  it('retains all scoped prices and rejects ambiguous duplicate scopes', () => {
-    const response = pricingResponse()
-    const versions = [
-      { ...response.price_version, scope_kind: 'global_model', channel_id: 0 },
-      {
-        ...response.price_version,
-        scope_kind: 'channel_model',
-        channel_id: 9,
-        id: 2,
-      },
-    ]
-    expect(
-      parsePricingModels([{ ...response, price_versions: versions }])[0]
-        ?.price_versions
-    ).toEqual(versions)
+  it('retains alias offers and independent decimal adjustments without exposing channel identity', () => {
+    const response = pricingResponse({ model_name: 'gpt-4o-alias' })
+    const primary = response.offers[0]!
+    const discounted = {
+      ...primary,
+      offer_id: 'discounted',
+      adjustments: [
+        { kind: 'channel_multiplier', multiplier: '0.123456789012345678' },
+      ],
+      display_prices: primary.display_prices.map((line) => ({
+        ...line,
+        price: '0.123456789012345678',
+      })),
+    }
+    const rows = parsePricingModels([
+      { ...response, offers: [primary, discounted] },
+    ])
+    expect(rows[0]?.model_name).toBe('gpt-4o-alias')
+    expect(rows[0]?.offers).toHaveLength(2)
+    expect(rows[0]?.offers[1]?.adjustments[0]?.multiplier).toBe(
+      '0.123456789012345678'
+    )
+    expectInvalidResponse(() =>
+      parsePricingModels([{ ...response, offers: [primary, primary] }])
+    )
+    expectInvalidResponse(() =>
+      parsePricingModels([{ ...response, offers: [] }])
+    )
     expectInvalidResponse(() =>
       parsePricingModels([
-        { ...response, price_versions: [versions[1], versions[1]] },
+        { ...response, offers: [{ ...primary, priced_model: 'other' }] },
       ])
     )
     expectInvalidResponse(() =>
-      parsePricingModels([{ ...response, price_versions: [] }])
-    )
-    expectInvalidResponse(() =>
       parsePricingModels([
-        { ...response, price_versions: [{ ...versions[1], model: 'other' }] },
+        {
+          ...response,
+          offers: [
+            {
+              ...primary,
+              price_version: { ...primary.price_version, channel_id: 9 },
+            },
+          ],
+        },
       ])
     )
   })
@@ -95,12 +116,16 @@ describe('live API contracts', () => {
   it('parses model pricing and performance summaries with optional metadata', () => {
     expect(parsePricingModels([pricingResponse()])[0]).toMatchObject({
       model_name: 'gpt-4o',
-      price_version: {
-        mode: 'unit_price',
-        prices: expect.arrayContaining([
-          { quantity: 'p', unit: 'per_million_tokens', price: '1' },
-        ]),
-      },
+      offers: [
+        {
+          price_version: {
+            mode: 'unit_price',
+            prices: expect.arrayContaining([
+              { quantity: 'p', unit: 'per_million_tokens', price: '1' },
+            ]),
+          },
+        },
+      ],
       owner_by: 'OpenAI',
     })
     expect(
@@ -127,16 +152,20 @@ describe('live API contracts', () => {
   it('rejects missing and numeric prices instead of inferring a free model', () => {
     const response = pricingResponse()
     expectInvalidResponse(() =>
-      parsePricingModels([{ ...response, price_version: undefined }])
+      parsePricingModels([{ ...response, offers: undefined }])
     )
     expectInvalidResponse(() =>
       parsePricingModels([
         {
           ...response,
-          price_version: {
-            ...response.price_version,
-            prices: [{ quantity: 'p', unit: 'per_million_tokens', price: 0 }],
-          },
+          offers: [
+            {
+              ...response.offers[0],
+              display_prices: [
+                { quantity: 'p', unit: 'per_million_tokens', price: 0 },
+              ],
+            },
+          ],
         },
       ])
     )

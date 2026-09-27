@@ -11,6 +11,10 @@ import {
   type CatalogPrice,
   type PricingCatalog,
 } from '@/api/publicCatalog'
+import type { PricingOffer } from '@/api/liveContracts'
+
+type CatalogOffer = CatalogModel & { offer: PricingOffer }
+
 import PublicPage from '@/components/public/PublicPage.vue'
 import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
@@ -20,7 +24,7 @@ import SearchInput from '@/components/common/SearchInput.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
-import { formatDecimalUSD } from '@/utils/decimal'
+import { formatDecimal, formatDecimalUSD } from '@/utils/decimal'
 import { publicPageMessages } from '@/i18n/publicPages'
 
 const route = useRoute()
@@ -41,7 +45,7 @@ const page = ref(1)
 const pageSize = ref(20)
 const billing = ref('')
 const selectedVersion = ref(
-  typeof route.query.priceVersion === 'string' ? route.query.priceVersion : ''
+  typeof route.query.offer === 'string' ? route.query.offer : ''
 )
 let controller: AbortController | undefined
 const detailId = computed(() =>
@@ -49,10 +53,7 @@ const detailId = computed(() =>
 )
 const modelVersions = computed(() =>
   (catalog.value?.models ?? []).flatMap((model) =>
-    (model.price_versions ?? [model.price_version]).map((version) => ({
-      ...model,
-      price_version: version,
-    }))
+    model.offers.map((offer) => ({ ...model, offers: [offer], offer }))
   )
 )
 const detailVersions = computed(() =>
@@ -61,14 +62,13 @@ const detailVersions = computed(() =>
 const detail = computed(() =>
   detailVersions.value.find(
     (model) =>
-      !selectedVersion.value ||
-      String(model.price_version.id) === selectedVersion.value
+      !selectedVersion.value || model.offer.offer_id === selectedVersion.value
   )
 )
 const versionOptions = computed(() =>
   detailVersions.value.map((model) => ({
-    value: String(model.price_version.id),
-    label: `${model.price_version.scope_kind ?? 'global_model'}${model.price_version.channel_id ? ` · ${model.price_version.channel_id}` : ''} · v${model.price_version.id}`,
+    value: model.offer.offer_id,
+    label: `${model.offer.price_version.scope_kind ?? 'global_model'} · v${model.offer.price_version.id} · ×${formatDecimal(model.offer.adjustments[0]!.multiplier)}`,
   }))
 )
 const unitOptions = computed(() => [
@@ -91,12 +91,12 @@ const billingOptions = computed(() => [
   { value: 'expression', label: t('publicPage.dynamic') },
   { value: 'free', label: t('publicPage.free') },
 ])
-const billingMode = (model: CatalogModel) =>
-  model.price_version.mode === 'expression'
+const billingMode = (model: CatalogOffer) =>
+  model.offer.price_version.mode === 'expression'
     ? 'expression'
-    : model.price_version.mode === 'free'
+    : model.offer.price_version.mode === 'free'
       ? 'free'
-      : model.price_version.prices.some(
+      : model.offer.price_version.prices.some(
             (price) => price.unit === 'per_million_tokens'
           )
         ? 'token'
@@ -121,13 +121,18 @@ const pageModels = computed(() =>
   )
 )
 const money = (value: string) => formatDecimalUSD(value, 3)
-const prices = (model: CatalogModel) => {
+const prices = (model: CatalogOffer) => {
   const tokenUnit = unit.value === 'K' ? 'K' : 'M'
   const lines = catalogPrices(model, tokenUnit)
-  const version = model.price_version
   const flatFee: CatalogPrice[] =
-    version.flat_fee && version.flat_fee !== '0'
-      ? [{ key: 'flatFee', value: version.flat_fee, unit: 'per_call' }]
+    model.offer.display_flat_fee && model.offer.display_flat_fee !== '0'
+      ? [
+          {
+            key: 'flatFee',
+            value: model.offer.display_flat_fee,
+            unit: 'per_call',
+          },
+        ]
       : []
   return [...lines, ...flatFee].map((price) => ({
     ...price,
@@ -151,7 +156,7 @@ watch([keyword, vendor, billing, pageSize], () => {
   page.value = 1
 })
 watch(
-  () => route.query.priceVersion,
+  () => route.query.offer,
   (value) => {
     selectedVersion.value = typeof value === 'string' ? value : ''
   }
@@ -278,7 +283,7 @@ onScopeDispose(() => controller?.abort())
             <h2 class="mb-4 text-lg font-semibold">
               {{ t('publicPage.billing') }}
             </h2>
-            <template v-if="detail.price_version.mode === 'expression'"
+            <template v-if="detail.offer.price_version.mode === 'expression'"
               ><p class="mb-3 text-sm text-[var(--accent-text)]">
                 {{ t('publicPage.dynamic') }}
               </p>
@@ -288,7 +293,7 @@ onScopeDispose(() => controller?.abort())
                 </summary>
                 <pre
                   class="mt-3 overflow-x-auto whitespace-pre-wrap break-all bg-[var(--surface-muted)] p-4 text-xs"
-                  >{{ detail.price_version.expression }}</pre>
+                  >{{ detail.offer.price_version.expression }}</pre>
               </details></template
             >
             <dl
@@ -317,23 +322,67 @@ onScopeDispose(() => controller?.abort())
               <div>
                 <dt>{{ t('publicPage.priceScope') }}</dt>
                 <dd class="font-mono">
-                  {{ detail.price_version.scope_kind || 'global_model'
-                  }}<span v-if="detail.price_version.channel_id">
-                    · {{ detail.price_version.channel_id }}</span
-                  >
+                  {{ detail.offer.price_version.scope_kind || 'global_model' }}
                 </dd>
               </div>
               <div>
                 <dt>{{ t('publicPage.priceVersion') }}</dt>
-                <dd class="font-mono">{{ detail.price_version.id }}</dd>
+                <dd class="font-mono">{{ detail.offer.price_version.id }}</dd>
               </div>
               <div>
                 <dt>{{ t('publicPage.priceHash') }}</dt>
                 <dd class="break-all font-mono">
-                  {{ detail.price_version.hash }}
+                  {{ detail.offer.price_version.hash }}
                 </dd>
               </div>
             </dl>
+            <p class="mt-3 break-all text-sm">
+              {{ t('publicPage.pricedModel') }}:
+              {{ detail.offer.priced_model }} ·
+              {{ t('publicPage.channelAdjustment') }} ×
+              {{ formatDecimal(detail.offer.adjustments[0]!.multiplier) }}
+            </p>
+            <p
+              v-if="detail.offer.conditions.service_tiers?.length"
+              class="mt-2 text-sm"
+            >
+              {{ t('publicPage.serviceTiers') }}:
+              {{ detail.offer.conditions.service_tiers.join(', ') }}
+            </p>
+            <p
+              v-if="detail.offer.price_version.metering"
+              class="mt-2 break-all text-sm"
+            >
+              {{ t('publicPage.metering') }}:
+              {{ detail.offer.price_version.metering.request_kind }} /
+              {{ detail.offer.price_version.metering.quantity }} /
+              {{ detail.offer.price_version.metering.method }}
+            </p>
+            <details class="mt-3 text-xs">
+              <summary class="cursor-pointer focus-ring">
+                {{ t('publicPage.basePrices') }}
+              </summary>
+              <dl class="mt-2 space-y-1">
+                <div
+                  v-for="line in detail.offer.price_version.prices"
+                  :key="line.quantity"
+                >
+                  <dt>{{ line.quantity }} / {{ line.unit }}</dt>
+                  <dd>
+                    {{
+                      line.tiers
+                        ? line.tiers
+                            .map(
+                              (tier) =>
+                                `${tier.up_to ?? '∞'}: ${money(tier.unit_price)}`
+                            )
+                            .join(' / ')
+                        : money(line.price)
+                    }}
+                  </dd>
+                </div>
+              </dl>
+            </details>
           </section>
           <section v-if="detailEndpoints.length">
             <h2 class="mb-4 text-lg font-semibold">
@@ -379,10 +428,7 @@ onScopeDispose(() => controller?.abort())
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="model in pageModels"
-                :key="`${model.model_name}:${model.price_version.id}`"
-              >
+              <tr v-for="model in pageModels" :key="model.offer.offer_id">
                 <td class="max-w-96">
                   <RouterLink
                     :to="{
@@ -390,18 +436,17 @@ onScopeDispose(() => controller?.abort())
                       params: { modelId: model.model_name },
                       query: {
                         tokenUnit: unit,
-                        priceVersion: String(model.price_version.id),
+                        offer: model.offer.offer_id,
                       },
                     }"
                     class="break-words font-medium text-[var(--accent-text)]"
                     >{{ model.model_name }}</RouterLink
                   >
                   <p class="mt-1 text-xs text-[var(--text-tertiary)]">
-                    {{ model.price_version.scope_kind ?? 'global_model'
-                    }}<span v-if="model.price_version.channel_id">
-                      · {{ model.price_version.channel_id }}</span
-                    >
-                    · v{{ model.price_version.id }}
+                    {{ model.offer.price_version.scope_kind ?? 'global_model' }}
+                    · v{{ model.offer.price_version.id }} · ×{{
+                      formatDecimal(model.offer.adjustments[0]!.multiplier)
+                    }}
                   </p>
                 </td>
                 <td>

@@ -40,7 +40,7 @@ func TestGatewayManualQualificationPrecedesRetryPolicy(t *testing.T) {
 				Groups: []service.RouteGroupInput{{Name: "review", Enabled: true, Entries: []service.RouteEntryInput{
 					{ChannelID: 1, Source: model.RouteSourcePlatform, Enabled: true, Position: 0},
 					{ChannelID: 4, Source: model.RouteSourcePlatform, Enabled: true, Position: 1},
-				}, Policy: service.RoutePolicyInput{MaxRatio: 1, RetryMode: tc.mode, MaxFailoverAttempts: tc.maxFailover}}},
+				}, Policy: service.RoutePolicyInput{MaxRatio: "1", RetryMode: tc.mode, MaxFailoverAttempts: tc.maxFailover}}},
 			})
 			require.NoError(t, err)
 			body := `{"model":"gpt-4o-mini","messages":[{"role":"user","content":[{"type":"text","text":"fixture"},{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav"}}]}]}`

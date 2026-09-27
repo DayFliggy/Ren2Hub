@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { parseBillingCharge } from '@/api/billing'
 import { logEvidence, logModelObservation } from '@/utils/logModel'
 import LogModelMismatch from './LogModelMismatch.vue'
+import BillingAdjustments from './BillingAdjustments.vue'
 import type { LogItem } from '@/types/console'
 import { formatDecimal, formatDecimalUSD } from '@/utils/decimal'
 
@@ -36,6 +37,14 @@ const upstreamModel = computed(() => observation.value.upstream)
           {{ observation.response }}
         </dd></template
       >
+      <template v-if="evidence.requested_service_tier"
+        ><dt>{{ t('billing.requestedServiceTier') }}</dt>
+        <dd>{{ evidence.requested_service_tier }}</dd></template
+      >
+      <template v-if="evidence.actual_service_tier"
+        ><dt>{{ t('billing.actualServiceTier') }}</dt>
+        <dd>{{ evidence.actual_service_tier }}</dd></template
+      >
       <dt>{{ t('billing.priceTitle') }}</dt>
       <dd>{{ evidence.price_version_id ?? '—' }}</dd>
       <dt>{{ t('billing.priceScope') }}</dt>
@@ -57,6 +66,7 @@ const upstreamModel = computed(() => observation.value.upstream)
       {{ t('billing.chargePending') }}
     </p>
     <template v-else>
+      <BillingAdjustments :charge="charge" />
       <p class="text-sm">
         {{ t('billing.finalCharge') }}:
         {{ formatDecimalUSD(charge.total_usd) }} ·

@@ -1,3 +1,4 @@
+import { offerFixture } from './pricingFixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../client'
 import {
@@ -10,8 +11,8 @@ import { catalogPrices } from '../publicCatalog'
 import { compareDecimal, multiplyDecimal } from '@/utils/decimal'
 
 export const price: PriceVersion = {
-  contract_version: 2,
-  calculation_version: 'billing-v2',
+  contract_version: 3,
+  calculation_version: 'billing-v3',
   result_unit: 'usd',
   id: 3,
   model: 'test',
@@ -29,6 +30,52 @@ export const price: PriceVersion = {
 }
 afterEach(() => vi.restoreAllMocks())
 describe('immutable model pricing', () => {
+  it('requires explicit character metering and a reviewed reservation for provider facts', () => {
+    const speech: PriceVersion = {
+      ...price,
+      prices: [
+        { quantity: 'characters', unit: 'per_million_characters', price: '15' },
+      ],
+      metering: {
+        request_kind: 'speech',
+        quantity: 'characters',
+        source: 'request_fixed',
+        method: 'unicode_codepoints',
+      },
+    }
+    expect(parsePriceVersion(speech, '/prices').metering).toEqual(
+      speech.metering
+    )
+    expect(() =>
+      parsePriceVersion({ ...speech, metering: undefined }, '/prices')
+    ).toThrow()
+    const transcription: PriceVersion = {
+      ...price,
+      prices: [{ quantity: 'seconds', unit: 'per_minute', price: '0.006' }],
+      metering: {
+        request_kind: 'transcription',
+        quantity: 'seconds',
+        source: 'completion_fact',
+        method: 'provider_duration',
+        reservation_quantity: '600',
+      },
+    }
+    expect(parsePriceVersion(transcription, '/prices').metering).toEqual(
+      transcription.metering
+    )
+    expect(() =>
+      parsePriceVersion(
+        {
+          ...transcription,
+          metering: {
+            ...transcription.metering,
+            reservation_quantity: undefined,
+          },
+        },
+        '/prices'
+      )
+    ).toThrow()
+  })
   it('accepts an explicit flat fee without unit prices and rejects a missing charge definition', () => {
     const flatOnly = { ...price, flat_fee: '0.125', prices: [] }
     expect(parsePriceVersion(flatOnly, '/prices')).toEqual(flatOnly)
@@ -95,8 +142,7 @@ describe('immutable model pricing', () => {
       vendor_id: 0,
       owner_by: '',
       supported_endpoint_types: [],
-      billing_mode: 'unit_price',
-      price_version: scoped,
+      offers: [offerFixture(scoped)],
     }
     expect(catalogPrices(catalog, 'K')[0]?.tiers).toEqual([
       { up_to: '1000000', unit_price: '0.001000000000000000001' },
@@ -225,14 +271,15 @@ describe('immutable model pricing', () => {
       vendor_id: 0,
       owner_by: '',
       supported_endpoint_types: [],
-      billing_mode: 'unit_price',
-      price_version: {
-        ...price,
-        prices: [
-          { quantity: 'p', unit: 'per_million_tokens' as const, price: '1' },
-          { quantity: 'images', unit: 'per_image' as const, price: '0.02' },
-        ],
-      },
+      offers: [
+        offerFixture({
+          ...price,
+          prices: [
+            { quantity: 'p', unit: 'per_million_tokens' as const, price: '1' },
+            { quantity: 'images', unit: 'per_image' as const, price: '0.02' },
+          ],
+        }),
+      ],
     }
     expect(catalogPrices(row, 'K').map((line) => line.unit)).toEqual([
       'per_thousand_tokens',

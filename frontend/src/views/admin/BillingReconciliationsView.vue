@@ -13,10 +13,13 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import PageHero from '@/components/console/PageHero.vue'
+import BillingAuditPanel from '@/components/admin/BillingAuditPanel.vue'
+import BillingAdjustments from '@/components/console/log-ui/BillingAdjustments.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { formatQuota, formatTime } from '@/utils/format'
 import { formatBillingEvidence, formatDecimal } from '@/utils/decimal'
 import { isQuota } from '@/utils/quota'
+import { newBillingOperationId } from '@/utils/billingOperation'
 
 const { t } = useI18n()
 const metrics = ref<BillingMetrics | null>(null)
@@ -128,7 +131,7 @@ async function submit(retry: boolean) {
     ...body,
   })
   if (pendingOperation.value?.fingerprint !== fingerprint)
-    pendingOperation.value = { id: crypto.randomUUID(), fingerprint }
+    pendingOperation.value = { id: newBillingOperationId(), fingerprint }
   saving.value = true
   detailError.value = ''
   resultMessage.value = ''
@@ -174,6 +177,8 @@ watch([page, pageSize, status], load, { immediate: true })
     <dl class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
       <div
         v-for="key in [
+          'price_versions',
+          'quote_attempts',
           'pending',
           'reconciliations',
           'reserved_quota',
@@ -199,6 +204,26 @@ watch([page, pageSize, status], load, { immediate: true })
         </dd>
       </div>
     </dl>
+    <ul
+      v-if="metrics?.prices_by_origin.length"
+      class="mb-5 flex flex-wrap gap-3 text-xs"
+      data-prices-by-origin
+    >
+      <li
+        v-for="entry in metrics.prices_by_origin"
+        :key="`${entry.scope_kind}:${entry.origin}`"
+      >
+        {{ entry.scope_kind }} · {{ entry.origin }}: {{ entry.count }}
+      </li>
+    </ul>
+    <details v-if="metrics?.operational" class="mb-5 text-xs">
+      <summary class="cursor-pointer focus-ring">
+        {{ t('billing.operationalMetrics') }}
+      </summary>
+      <pre class="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all">{{
+        JSON.stringify(metrics.operational, null, 2)
+      }}</pre>
+    </details>
     <section
       class="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4 sm:p-6"
       :aria-busy="loading"
@@ -319,6 +344,11 @@ watch([page, pageSize, status], load, { immediate: true })
           >
             {{ detail.recovery.last_error }}
           </p>
+          <BillingAuditPanel
+            :key="detail.recovery.request_id"
+            :detail="detail"
+            @updated="detail = $event"
+          />
           <details
             v-for="section in ['quote', 'usage', 'attempts'] as const"
             :key="section"
@@ -348,6 +378,7 @@ watch([page, pageSize, status], load, { immediate: true })
               }}
             </p>
             <template v-else>
+              <BillingAdjustments :charge="detail.charge" />
               <ul class="space-y-3">
                 <li
                   v-for="(line, index) in detail.charge.lines"

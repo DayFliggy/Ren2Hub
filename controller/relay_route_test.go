@@ -26,20 +26,20 @@ import (
 
 func TestLiveRoutePriceRatioAllowedOnlyUsesManualPolicy(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	assert.True(t, liveRoutePriceRatioAllowed(ctx, 2))
+	assert.True(t, liveRoutePriceRatioAllowed(ctx, "2"))
 
 	ctx.Set("route_live_selection", service.LiveRouteSelection{
 		Source:   service.RouteSourceManual,
-		MaxRatio: 1.5,
+		MaxRatio: "1.5",
 	})
-	assert.True(t, liveRoutePriceRatioAllowed(ctx, 1.5))
-	assert.False(t, liveRoutePriceRatioAllowed(ctx, 2))
+	assert.True(t, liveRoutePriceRatioAllowed(ctx, "1.5"))
+	assert.False(t, liveRoutePriceRatioAllowed(ctx, "2"))
 
 	ctx.Set("route_live_selection", service.LiveRouteSelection{
 		Source:   service.RouteSourceAutoLab,
-		MaxRatio: 1,
+		MaxRatio: "1",
 	})
-	assert.True(t, liveRoutePriceRatioAllowed(ctx, 2))
+	assert.True(t, liveRoutePriceRatioAllowed(ctx, "2"))
 }
 
 func TestLiveRouteRuntimeQualificationRequiresPriceAndSecurityFacts(t *testing.T) {

@@ -1,4 +1,10 @@
-import { parsePriceVersion, type PriceVersion } from './modelPricing'
+import {
+  parsePublicPriceVersion,
+  parsePriceLines,
+  type PublicPriceVersion,
+  type UnitPrice,
+} from './modelPricing'
+import { isDecimal } from '@/utils/decimal'
 import type {
   DrawingLogItem,
   LogItem,
@@ -92,11 +98,116 @@ export interface PricingModelContract {
   icon: string
   tags: string
   vendor_id: number
-  price_version: PriceVersion
-  price_versions?: PriceVersion[]
+  offers: PricingOffer[]
   owner_by: string
   supported_endpoint_types: string[]
-  billing_mode: string
+}
+
+export interface PricingOffer {
+  offer_id: string
+  priced_model: string
+  price_version: PublicPriceVersion
+  conditions: {
+    usage_scope?: 'embedding'
+    dimensions?: string[]
+    service_tiers?: string[]
+    context_rule?: string
+  }
+  adjustments: Array<{ kind: 'channel_multiplier'; multiplier: string }>
+  display_prices: UnitPrice[]
+  display_flat_fee?: string
+  availability: { status: 'available' | 'unavailable'; reason?: string }
+}
+
+export function parsePricingOffer(
+  value: unknown,
+  endpoint: string
+): PricingOffer {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.conditions) ||
+    !Array.isArray(value.adjustments) ||
+    !isRecord(value.availability)
+  )
+    invalidResponse(endpoint)
+  const version = parsePublicPriceVersion(value.price_version, endpoint)
+  const pricedModel = requiredString(value.priced_model, endpoint, false)
+  if (version.model !== pricedModel) invalidResponse(endpoint)
+  const conditions: PricingOffer['conditions'] = {}
+  if (value.conditions.usage_scope !== undefined) {
+    if (value.conditions.usage_scope !== 'embedding') invalidResponse(endpoint)
+    conditions.usage_scope = 'embedding'
+  }
+  for (const key of ['dimensions', 'service_tiers'] as const) {
+    if (value.conditions[key] !== undefined)
+      conditions[key] = parseStringArray(value.conditions[key], endpoint)
+  }
+  if (value.conditions.context_rule !== undefined)
+    conditions.context_rule = requiredString(
+      value.conditions.context_rule,
+      endpoint
+    )
+  if (!['available', 'unavailable'].includes(String(value.availability.status)))
+    invalidResponse(endpoint)
+  const displayPrices = parsePriceLines(value.display_prices, endpoint)
+  if (displayPrices.length !== version.prices.length) invalidResponse(endpoint)
+  for (const [index, line] of displayPrices.entries()) {
+    const base = version.prices[index]!
+    if (
+      line.quantity !== base.quantity ||
+      line.unit !== base.unit ||
+      line.tier_mode !== base.tier_mode ||
+      Boolean(line.tiers) !== Boolean(base.tiers)
+    )
+      invalidResponse(endpoint)
+    if (line.tiers) {
+      if (
+        line.tiers.length !== base.tiers?.length ||
+        line.tiers.some(
+          (tier, i) =>
+            !isDecimal(tier.unit_price) || tier.up_to !== base.tiers?.[i]?.up_to
+        )
+      )
+        invalidResponse(endpoint)
+    } else if (!isDecimal(line.price)) invalidResponse(endpoint)
+  }
+  if (
+    value.display_flat_fee !== undefined &&
+    !isDecimal(value.display_flat_fee)
+  )
+    invalidResponse(endpoint)
+  const adjustments = value.adjustments.map((adjustment) => {
+    if (
+      !isRecord(adjustment) ||
+      adjustment.kind !== 'channel_multiplier' ||
+      !isDecimal(adjustment.multiplier) ||
+      /^0(?:\.0+)?$/.test(adjustment.multiplier)
+    )
+      invalidResponse(endpoint)
+    return {
+      kind: 'channel_multiplier' as const,
+      multiplier: adjustment.multiplier,
+    }
+  })
+  if (adjustments.length !== 1) invalidResponse(endpoint)
+  return {
+    offer_id: requiredString(value.offer_id, endpoint, false),
+    priced_model: pricedModel,
+    price_version: version,
+    conditions,
+    adjustments,
+    display_prices: displayPrices,
+    ...(value.display_flat_fee === undefined
+      ? {}
+      : { display_flat_fee: value.display_flat_fee }),
+    availability: {
+      status: value.availability
+        .status as PricingOffer['availability']['status'],
+      ...(value.availability.reason === undefined
+        ? {}
+        : { reason: requiredString(value.availability.reason, endpoint) }),
+    },
+  }
 }
 
 export interface PerfModelSummaryContract {
@@ -119,39 +230,22 @@ export function parsePricingModels(value: unknown): PricingModelContract[] {
       invalidResponse(endpoint)
     }
     const modelName = requiredString(item.model_name, endpoint, false)
-    const priceVersion = parsePriceVersion(item.price_version, endpoint)
-    if (
-      item.price_versions !== undefined &&
-      (!Array.isArray(item.price_versions) || !item.price_versions.length)
-    )
+    if (!Array.isArray(item.offers) || !item.offers.length)
       invalidResponse(endpoint)
-    const versions =
-      item.price_versions === undefined
-        ? [priceVersion]
-        : (item.price_versions as unknown[]).map((price) =>
-            parsePriceVersion(price, endpoint)
-          )
-    if (
-      versions.some((price) => price.model !== modelName) ||
-      priceVersion.model !== modelName
+    const offers = item.offers.map((offer) =>
+      parsePricingOffer(offer, endpoint)
     )
+    if (new Set(offers.map((offer) => offer.offer_id)).size !== offers.length)
       invalidResponse(endpoint)
-    const scopes = versions.map(
-      (price) =>
-        `${price.scope_kind ?? 'global_model'}:${price.channel_id ?? 0}`
-    )
-    if (new Set(scopes).size !== scopes.length) invalidResponse(endpoint)
     return {
       model_name: modelName,
       description: requiredString(item.description ?? '', endpoint),
       icon: requiredString(item.icon ?? '', endpoint),
       tags: requiredString(item.tags ?? '', endpoint),
       vendor_id: requiredInteger(item.vendor_id ?? 0, endpoint),
-      price_version: priceVersion,
-      price_versions: versions,
+      offers,
       owner_by: requiredString(item.owner_by ?? '', endpoint),
       supported_endpoint_types: [...endpoints],
-      billing_mode: requiredString(item.billing_mode ?? '', endpoint),
     }
   })
 }

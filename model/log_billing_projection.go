@@ -35,6 +35,12 @@ func userBillingLogMetadata(raw string) map[string]any {
 		result["charge_result"] = charge
 	}
 	var priceID int64
+	var multiplier string
+	if common.Unmarshal(fields["channel_multiplier"], &multiplier) == nil {
+		if normalized, err := NormalizeChannelRatio(multiplier, false); err == nil {
+			result["channel_multiplier"] = normalized
+		}
+	}
 	if common.Unmarshal(fields["price_version_id"], &priceID) == nil && priceID > 0 {
 		result["price_version_id"] = priceID
 	}
@@ -60,6 +66,12 @@ func userBillingLogMetadata(raw string) map[string]any {
 		var name string
 		if common.Unmarshal(fields[key], &name) == nil && len(name) <= 512 && !strings.ContainsAny(name, "\r\n\x00") {
 			result[key] = name
+		}
+	}
+	for _, key := range []string{"requested_service_tier", "actual_service_tier"} {
+		var tier string
+		if common.Unmarshal(fields[key], &tier) == nil && tier != "" && len(tier) <= 64 && !strings.ContainsAny(tier, "\r\n\x00") {
+			result[key] = tier
 		}
 	}
 	var usage billing.Usage

@@ -100,8 +100,12 @@ async function data(page: Page) {
           {
             id: 1,
             model: 'gpt-local',
-            contract_version: 2,
-            calculation_version: 'billing-v2',
+            provenance: {
+              kind: 'retail',
+              retail_reason: 'Reviewed visual fixture price',
+            },
+            contract_version: 3,
+            calculation_version: 'billing-v3',
             result_unit: 'usd',
             mode: 'unit_price',
             prices: [
@@ -140,11 +144,13 @@ async function data(page: Page) {
                 subtotal_usd: '0.001234567',
               },
             ],
+            base_usd: '0.001234567',
+            adjustments: [],
             total_usd: '0.001234567',
             final_quota: '617',
             unrounded_quota: '617.2835',
             rounding_delta: '-0.2835',
-            calculation_version: 'billing-v2',
+            calculation_version: 'billing-v3',
             rounding_version: 'half-up-positive-minimum-v1',
             trace: {
               matched_tier: 'night',
@@ -203,6 +209,9 @@ for (const theme of ['light', 'dark'] as const) {
       let config = { enabled: false, check_interval_minutes: 30 }
       const source = {
         source: 'sub2api',
+        snapshot_id: 1,
+        parser_version: 'sub2api-v3',
+        snapshot_count: 1,
         role: 'primary',
         url: 'https://example.test/sub2api/prices.json',
         hash: 'retained-valid-source-hash',
@@ -229,6 +238,9 @@ for (const theme of ['light', 'dark'] as const) {
                 source,
                 {
                   source: 'axonhub',
+                  snapshot_id: 1,
+                  parser_version: 'axonhub-v3',
+                  snapshot_count: 1,
                   role: 'fallback',
                   url: 'https://example.test/axonhub/prices.json',
                   hash: 'bundled-fallback-hash',
@@ -337,8 +349,12 @@ for (const theme of ['light', 'dark'] as const) {
               data: {
                 id: 2,
                 model: 'gpt-local',
-                contract_version: 2,
-                calculation_version: 'billing-v2',
+                provenance: {
+                  kind: 'retail',
+                  retail_reason: 'Reviewed visual fixture price',
+                },
+                contract_version: 3,
+                calculation_version: 'billing-v3',
                 result_unit: 'usd',
                 mode: 'unit_price',
                 prices: [
@@ -676,8 +692,12 @@ for (const mobile of [false, true]) {
       const embedding = {
         id: 1,
         model: 'gpt-local',
-        contract_version: 2,
-        calculation_version: 'billing-v2',
+        provenance: {
+          kind: 'retail',
+          retail_reason: 'Reviewed visual fixture price',
+        },
+        contract_version: 3,
+        calculation_version: 'billing-v3',
         result_unit: 'usd',
         usage_scope: 'embedding',
         mode: 'unit_price',
@@ -770,8 +790,12 @@ for (const mobile of [false, true]) {
               {
                 id: 1,
                 model: 'gpt-local',
-                contract_version: 2,
-                calculation_version: 'billing-v2',
+                provenance: {
+                  kind: 'retail',
+                  retail_reason: 'Reviewed visual fixture price',
+                },
+                contract_version: 3,
+                calculation_version: 'billing-v3',
                 result_unit: 'usd',
                 mode: 'unit_price',
                 prices: [
@@ -805,10 +829,12 @@ for (const mobile of [false, true]) {
                   },
                 ],
                 final_quota: '1000',
+                base_usd: '0.002',
+                adjustments: [],
                 total_usd: '0.002',
                 unrounded_quota: '1000',
                 rounding_delta: '0',
-                calculation_version: 'billing-v2',
+                calculation_version: 'billing-v3',
                 rounding_version: 'half-up-positive-minimum-v1',
                 trace: { matched_tier: '', image_count: 2 },
               },

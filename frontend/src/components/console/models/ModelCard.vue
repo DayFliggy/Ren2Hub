@@ -47,14 +47,9 @@ const typeTone: Record<MarketModelType, 'info' | 'success' | 'neutral'> = {
   audio: 'neutral',
 }
 
-const detailedPricing = computed(() => {
-  return ['unit_price', 'tiered'].includes(props.model.billing) ||
-    (props.model.priceVersions?.length ?? 0) > 1 ||
-    props.model.pricing?.flat_fee ||
-    props.model.pricing?.prices.some((line) => line.tier_mode)
-    ? (props.model.pricing ?? null)
-    : null
-})
+const detailedPricing = computed(() =>
+  props.model.offers?.length ? (props.model.pricing ?? null) : null
+)
 const billingLabel = computed(() => t(`models.billing.${props.model.billing}`))
 const typeLabel = computed(() => t(`models.type.${props.model.type}`))
 const tierCount = computed(() => props.model.price.tiers?.length ?? 0)
@@ -142,8 +137,7 @@ async function copyName() {
       <div class="mt-3">
         <ModelPriceItems
           v-if="detailedPricing"
-          :pricing="detailedPricing"
-          :versions="model.priceVersions"
+          :offers="model.offers ?? []"
           class="rounded-md border border-[var(--border-default)] bg-[var(--surface-table-header)] p-3"
           data-model-price-panel
         />
@@ -347,11 +341,7 @@ async function copyName() {
     </div>
     <!-- price (input/output) -->
     <div class="hidden w-32 shrink-0 text-right lg:block">
-      <ModelPriceItems
-        v-if="detailedPricing"
-        :pricing="detailedPricing"
-        :versions="model.priceVersions"
-      />
+      <ModelPriceItems v-if="detailedPricing" :offers="model.offers ?? []" />
       <p
         v-else-if="model.billing === 'per_call'"
         class="font-mono text-xs font-semibold text-[var(--text-primary)]"

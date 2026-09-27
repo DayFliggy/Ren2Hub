@@ -1,44 +1,100 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import type { PriceVersion } from '@/api/modelPricing'
+import type { PricingOffer } from '@/api/liveContracts'
 import { formatTokenPrice } from '@/utils/format'
-import { formatDecimalUSD } from '@/utils/decimal'
+import { formatDecimal, formatDecimalUSD } from '@/utils/decimal'
 
-defineProps<{ pricing: PriceVersion; versions?: PriceVersion[] }>()
+defineProps<{ offers: PricingOffer[] }>()
 const { t } = useI18n()
 </script>
 
 <template>
   <div class="space-y-3 text-xs" data-model-charge-items>
     <section
-      v-for="version in versions ?? [pricing]"
-      :key="version.id"
+      v-for="(offer, offerIndex) in offers"
+      :key="offer.offer_id"
       class="space-y-3"
     >
       <p class="text-[var(--text-tertiary)]" data-model-price-scope>
-        {{ t('billing.priceScope') }}: {{ version.scope_kind ?? 'global_model'
-        }}<span v-if="version.channel_id"> · {{ version.channel_id }}</span> ·
-        v{{ version.id }}
+        {{ t('billing.priceScope') }}:
+        {{ offer.price_version.scope_kind ?? 'global_model' }} · v{{
+          offer.price_version.id
+        }}
       </p>
-      <p v-if="version.mode === 'free'">{{ t('models.billing.free') }}</p>
-      <details v-if="version.mode === 'expression'">
+      <p class="break-all" data-model-offer>
+        {{ t('billing.offerLabel', { index: offerIndex + 1 }) }} ·
+        {{ t('billing.pricedModel') }}: {{ offer.priced_model }}
+      </p>
+      <p
+        v-for="adjustment in offer.adjustments"
+        :key="adjustment.kind"
+        class="text-[var(--text-secondary)]"
+        data-model-adjustment
+      >
+        {{ t('billing.channelAdjustment') }}: ×
+        {{ formatDecimal(adjustment.multiplier) }}
+      </p>
+      <p v-if="offer.conditions.service_tiers?.length" class="break-all">
+        {{ t('billing.supportedServiceTiers') }}:
+        {{ offer.conditions.service_tiers.join(', ') }}
+      </p>
+      <p
+        v-if="offer.availability.status !== 'available'"
+        class="text-[var(--status-warning-text)]"
+      >
+        {{ t('billing.priceUnavailable') }}: {{ offer.availability.reason }}
+      </p>
+      <p v-if="offer.price_version.mode === 'free'">
+        {{ t('models.billing.free') }}
+      </p>
+      <p v-if="offer.price_version.metering" class="break-all">
+        {{ t('billing.metering') }}:
+        {{
+          t(`billing.meteringMethods.${offer.price_version.metering.method}`)
+        }}
+      </p>
+      <details v-if="offer.price_version.prices.length" class="space-y-2">
+        <summary class="cursor-pointer focus-ring">
+          {{ t('billing.basePrices') }}
+        </summary>
+        <dl class="space-y-2">
+          <div v-for="line in offer.price_version.prices" :key="line.quantity">
+            <dt>{{ line.quantity }} / {{ line.unit }}</dt>
+            <dd class="font-mono">
+              {{
+                line.tiers
+                  ? line.tiers
+                      .map(
+                        (tier) =>
+                          `${tier.up_to ?? '∞'}: ${formatDecimalUSD(tier.unit_price)}`
+                      )
+                      .join(' / ')
+                  : formatDecimalUSD(line.price)
+              }}
+            </dd>
+          </div>
+        </dl>
+      </details>
+      <details v-if="offer.price_version.mode === 'expression'">
         <summary class="cursor-pointer focus-ring">
           {{ t('billing.expression') }}
         </summary>
         <pre class="mt-2 whitespace-pre-wrap break-all font-mono">{{
-          version.expression
+          offer.price_version.expression
         }}</pre>
       </details>
       <dl class="space-y-2">
         <div
-          v-if="version.flat_fee && version.flat_fee !== '0'"
+          v-if="offer.display_flat_fee && offer.display_flat_fee !== '0'"
           class="flex justify-between gap-3"
         >
           <dt>{{ t('billing.flatFee') }}</dt>
-          <dd class="font-mono">{{ formatDecimalUSD(version.flat_fee) }}</dd>
+          <dd class="font-mono">
+            {{ formatDecimalUSD(offer.display_flat_fee) }}
+          </dd>
         </div>
         <div
-          v-for="line in version.prices"
+          v-for="line in offer.display_prices"
           :key="line.quantity"
           :data-detail-cache-read="line.quantity === 'cr' ? '' : undefined"
           :data-detail-cache-write="line.quantity === 'cc' ? '' : undefined"

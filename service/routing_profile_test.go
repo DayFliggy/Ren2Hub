@@ -101,6 +101,13 @@ func seedRouteProfileFixture(t *testing.T, db *gorm.DB) (int, int, int) {
 	return user.Id, token.Id, channel.Id
 }
 
+func TestRoutePolicyInputRejectsFloatingPointJSON(t *testing.T) {
+	var input RoutePolicyInput
+	require.Error(t, common.Unmarshal([]byte(`{"max_ratio":1.000000000000000001}`), &input))
+	require.NoError(t, common.Unmarshal([]byte(`{"max_ratio":"1.000000000000000001"}`), &input))
+	require.Equal(t, "1.000000000000000001", input.MaxRatio)
+}
+
 func TestRouteProfileCreateUpdateAndVersionConflict(t *testing.T) {
 	db := setupRouteProfileTest(t)
 	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
@@ -120,13 +127,17 @@ func TestRouteProfileCreateUpdateAndVersionConflict(t *testing.T) {
 				Position:  0,
 				Weight:    100,
 			}},
-			Policy: RoutePolicyInput{RetryMode: model.RoutePolicyRetryNextChannel, MaxFailoverAttempts: 1},
+			Policy: RoutePolicyInput{MaxRatio: "1.000000000000000001", RetryMode: model.RoutePolicyRetryNextChannel, MaxFailoverAttempts: 1},
 		}},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, created)
 	assert.Equal(t, int64(1), created.Profile.Version)
 	require.Len(t, created.Groups, 1)
+	require.Equal(t, "1.000000000000000001", created.Groups[0].Policy.MaxRatio)
+	loaded, loadErr := GetUserRouteProfile(userID, created.Profile.ID)
+	require.NoError(t, loadErr)
+	require.Equal(t, created.Groups[0].Policy.MaxRatio, loaded.Groups[0].Policy.MaxRatio)
 	require.Len(t, created.Groups[0].Entries, 1)
 	assert.Equal(t, channelID, created.Groups[0].Entries[0].ChannelID)
 

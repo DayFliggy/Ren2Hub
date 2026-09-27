@@ -1,3 +1,4 @@
+import { offerFixture } from '@/api/__tests__/pricingFixture'
 import { describe, expect, it } from 'vitest'
 
 import { buildLiveModelCatalog } from '@/composables/useModelMarket'
@@ -16,20 +17,21 @@ describe('live model market adapter', () => {
           vendor_id: 1,
           owner_by: 'OpenAI',
           supported_endpoint_types: ['chat'],
-          billing_mode: '',
-          price_version: {
-            id: 1,
-            model: 'gpt-4o',
-            mode: 'unit_price' as const,
-            prices: [
-              { quantity: 'p', unit: 'per_million_tokens', price: '1' },
-              { quantity: 'c', unit: 'per_million_tokens', price: '1.2' },
-              { quantity: 'cr', unit: 'per_million_tokens', price: '0.25' },
-              { quantity: 'cc', unit: 'per_million_tokens', price: '0.5' },
-            ],
-            created_at: 1,
-            hash: 'fixture',
-          },
+          offers: [
+            offerFixture({
+              id: 1,
+              model: 'gpt-4o',
+              mode: 'unit_price' as const,
+              prices: [
+                { quantity: 'p', unit: 'per_million_tokens', price: '1' },
+                { quantity: 'c', unit: 'per_million_tokens', price: '1.2' },
+                { quantity: 'cr', unit: 'per_million_tokens', price: '0.25' },
+                { quantity: 'cc', unit: 'per_million_tokens', price: '0.5' },
+              ],
+              created_at: 1,
+              hash: 'fixture',
+            }),
+          ],
         },
         {
           model_name: 'text-embedding-3-small',
@@ -39,15 +41,18 @@ describe('live model market adapter', () => {
           vendor_id: 0,
           owner_by: '',
           supported_endpoint_types: ['embeddings'],
-          billing_mode: '',
-          price_version: {
-            id: 1,
-            model: 'text-embedding-3-small',
-            mode: 'unit_price' as const,
-            prices: [{ quantity: 'calls', unit: 'per_call', price: '0.0001' }],
-            created_at: 1,
-            hash: 'fixture',
-          },
+          offers: [
+            offerFixture({
+              id: 1,
+              model: 'text-embedding-3-small',
+              mode: 'unit_price' as const,
+              prices: [
+                { quantity: 'calls', unit: 'per_call', price: '0.0001' },
+              ],
+              created_at: 1,
+              hash: 'fixture',
+            }),
+          ],
         },
       ],
       [
@@ -103,18 +108,19 @@ describe('live model market adapter', () => {
         vendor_id: 1,
         owner_by: vendor,
         supported_endpoint_types: ['chat'],
-        billing_mode: '',
-        price_version: {
-          id: 1,
-          model: `model-${vendor}`,
-          mode: 'unit_price' as const,
-          prices: [
-            { quantity: 'p', unit: 'per_million_tokens', price: '2' },
-            { quantity: 'c', unit: 'per_million_tokens', price: '2' },
-          ],
-          created_at: 1,
-          hash: 'fixture',
-        },
+        offers: [
+          offerFixture({
+            id: 1,
+            model: `model-${vendor}`,
+            mode: 'unit_price' as const,
+            prices: [
+              { quantity: 'p', unit: 'per_million_tokens', price: '2' },
+              { quantity: 'c', unit: 'per_million_tokens', price: '2' },
+            ],
+            created_at: 1,
+            hash: 'fixture',
+          }),
+        ],
       })),
       []
     )
@@ -142,18 +148,19 @@ describe('live model market adapter', () => {
         owner_by:
           name === 'gpt-5.3-codex-openai-compact' ? 'Virtual' : 'OpenAI',
         supported_endpoint_types: ['chat'],
-        billing_mode: '',
-        price_version: {
-          id: 1,
-          model: name,
-          mode: 'unit_price' as const,
-          prices: [
-            { quantity: 'p', unit: 'per_million_tokens', price: '2' },
-            { quantity: 'c', unit: 'per_million_tokens', price: '2' },
-          ],
-          created_at: 1,
-          hash: 'fixture',
-        },
+        offers: [
+          offerFixture({
+            id: 1,
+            model: name,
+            mode: 'unit_price' as const,
+            prices: [
+              { quantity: 'p', unit: 'per_million_tokens', price: '2' },
+              { quantity: 'c', unit: 'per_million_tokens', price: '2' },
+            ],
+            created_at: 1,
+            hash: 'fixture',
+          }),
+        ],
       })),
       []
     )
@@ -174,20 +181,21 @@ describe('live model market adapter', () => {
           vendor_id: 1,
           owner_by: 'OpenAI',
           supported_endpoint_types: ['chat'],
-          billing_mode: '',
-          price_version: {
-            id: 1,
-            model: 'zero-cache-write',
-            mode: 'unit_price' as const,
-            prices: [
-              { quantity: 'p', unit: 'per_million_tokens', price: '4' },
-              { quantity: 'c', unit: 'per_million_tokens', price: '12' },
-              { quantity: 'cr', unit: 'per_million_tokens', price: '1' },
-              { quantity: 'cc', unit: 'per_million_tokens', price: '0' },
-            ],
-            created_at: 1,
-            hash: 'fixture',
-          },
+          offers: [
+            offerFixture({
+              id: 1,
+              model: 'zero-cache-write',
+              mode: 'unit_price' as const,
+              prices: [
+                { quantity: 'p', unit: 'per_million_tokens', price: '4' },
+                { quantity: 'c', unit: 'per_million_tokens', price: '12' },
+                { quantity: 'cr', unit: 'per_million_tokens', price: '1' },
+                { quantity: 'cc', unit: 'per_million_tokens', price: '0' },
+              ],
+              created_at: 1,
+              hash: 'fixture',
+            }),
+          ],
         },
         {
           model_name: 'missing-cache-write',
@@ -197,18 +205,19 @@ describe('live model market adapter', () => {
           vendor_id: 1,
           owner_by: 'OpenAI',
           supported_endpoint_types: ['chat'],
-          billing_mode: '',
-          price_version: {
-            id: 1,
-            model: 'missing-cache-write',
-            mode: 'unit_price' as const,
-            prices: [
-              { quantity: 'p', unit: 'per_million_tokens', price: '4' },
-              { quantity: 'c', unit: 'per_million_tokens', price: '12' },
-            ],
-            created_at: 1,
-            hash: 'fixture',
-          },
+          offers: [
+            offerFixture({
+              id: 1,
+              model: 'missing-cache-write',
+              mode: 'unit_price' as const,
+              prices: [
+                { quantity: 'p', unit: 'per_million_tokens', price: '4' },
+                { quantity: 'c', unit: 'per_million_tokens', price: '12' },
+              ],
+              created_at: 1,
+              hash: 'fixture',
+            }),
+          ],
         },
       ],
       []

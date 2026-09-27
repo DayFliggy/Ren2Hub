@@ -1,3 +1,4 @@
+import { offerFixture } from '@/api/__tests__/pricingFixture'
 import { flushPromises, mount } from '@vue/test-utils'
 import {
   afterEach,
@@ -45,22 +46,24 @@ describe('ModelsView live boundary', () => {
         {
           model_name: 'gpt-4o',
           description: 'General model',
-          price_version: {
-            contract_version: 2,
-            calculation_version: 'billing-v2',
-            result_unit: 'usd',
-            id: 1,
-            model: 'gpt-4o',
-            mode: 'unit_price',
-            prices: [
-              { quantity: 'p', unit: 'per_million_tokens', price: '1' },
-              { quantity: 'c', unit: 'per_million_tokens', price: '2' },
-              { quantity: 'cr', unit: 'per_million_tokens', price: '0.25' },
-              { quantity: 'cc', unit: 'per_million_tokens', price: '1.25' },
-            ],
-            created_at: 1,
-            hash: 'fixture',
-          },
+          offers: [
+            offerFixture({
+              contract_version: 3,
+              calculation_version: 'billing-v3',
+              result_unit: 'usd',
+              id: 1,
+              model: 'gpt-4o',
+              mode: 'unit_price',
+              prices: [
+                { quantity: 'p', unit: 'per_million_tokens', price: '1' },
+                { quantity: 'c', unit: 'per_million_tokens', price: '2' },
+                { quantity: 'cr', unit: 'per_million_tokens', price: '0.25' },
+                { quantity: 'cc', unit: 'per_million_tokens', price: '1.25' },
+              ],
+              created_at: 1,
+              hash: 'fixture',
+            }),
+          ],
           owner_by: 'OpenAI',
           supported_endpoint_types: ['chat'],
           enable_groups: ['default'],

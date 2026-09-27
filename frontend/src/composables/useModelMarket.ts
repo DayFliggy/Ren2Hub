@@ -45,7 +45,8 @@ function modelType(endpoints: string[]): MarketModel['type'] {
 }
 
 function modelPrice(pricing: PricingModelContract): MarketModel['price'] {
-  const version = pricing.price_version
+  const offer = pricing.offers[0]!
+  const version = offer.price_version
   if (version.mode === 'free') return { input: '0', output: '0' }
   const names: Record<string, keyof MarketModel['price']> = {
     p: 'input',
@@ -55,7 +56,7 @@ function modelPrice(pricing: PricingModelContract): MarketModel['price'] {
     calls: 'per_call',
   }
   const result: MarketModel['price'] = {}
-  for (const line of version.prices) {
+  for (const line of offer.display_prices) {
     const key = names[line.quantity]
     if (
       key &&
@@ -81,6 +82,7 @@ export function buildLiveModelCatalog(
   const models = names.map((name, index) => {
     const price = pricingByName.get(name)
     const metrics = performanceByName.get(name)
+    const primary = price?.offers[0]?.price_version
     const vendor = price?.owner_by.trim() || '平台'
     return {
       id: index + 1,
@@ -88,21 +90,21 @@ export function buildLiveModelCatalog(
       vendor,
       type: modelType(price?.supported_endpoint_types ?? []),
       billing:
-        price?.price_version.mode === 'expression'
+        primary?.mode === 'expression'
           ? ('tiered' as const)
-          : price?.price_version.mode === 'free'
+          : primary?.mode === 'free'
             ? ('free' as const)
-            : price?.price_version.prices.some(
+            : primary?.prices.some(
                   (line) => !['p', 'c', 'cr', 'cc'].includes(line.quantity)
                 )
-              ? price.price_version.prices.length === 1 &&
-                price.price_version.prices[0]?.quantity === 'calls'
+              ? primary.prices.length === 1 &&
+                primary.prices[0]?.quantity === 'calls'
                 ? ('per_call' as const)
                 : ('unit_price' as const)
               : ('token' as const),
       price: price ? modelPrice(price) : {},
-      pricing: price?.price_version,
-      priceVersions: price?.price_versions,
+      pricing: primary,
+      offers: price?.offers,
       context: 0,
       tagline: price?.description ?? '',
       latency: metrics ? Math.max(0, metrics.avg_latency_ms / 1000) : 0,

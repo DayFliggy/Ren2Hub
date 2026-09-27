@@ -223,7 +223,7 @@ func configureGatewayManualQueue(t *testing.T, key string, channelIDs ...int) {
 	_, err := service.CreateUserRouteProfile(service.RouteProfileInput{
 		UserID: token.UserId, TokenID: token.Id, Mode: model.RouteModeManual,
 		Groups: []service.RouteGroupInput{{Name: "queue", Enabled: true, Entries: entries,
-			Policy: service.RoutePolicyInput{MaxRatio: 1, RetryMode: model.RoutePolicyRetryNextChannel, MaxFailoverAttempts: 2}}},
+			Policy: service.RoutePolicyInput{MaxRatio: "1", RetryMode: model.RoutePolicyRetryNextChannel, MaxFailoverAttempts: 2}}},
 	})
 	require.NoError(t, err)
 }

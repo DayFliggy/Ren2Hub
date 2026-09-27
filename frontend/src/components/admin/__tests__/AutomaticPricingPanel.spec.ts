@@ -21,6 +21,9 @@ const status: AutomaticPricingStatus = {
   sources: [
     {
       source: 'sub2api',
+      snapshot_id: 1,
+      parser_version: 'sub2api-v3',
+      snapshot_count: 1,
       role: 'primary',
       url: 'https://example.com/prices.json',
       hash: 'last-valid-hash',
@@ -32,6 +35,9 @@ const status: AutomaticPricingStatus = {
     },
     {
       source: 'axonhub',
+      snapshot_id: 2,
+      parser_version: 'axonhub-v3',
+      snapshot_count: 1,
       role: 'fallback',
       url: 'https://example.com/fallback.json',
       hash: 'fallback-hash',

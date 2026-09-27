@@ -12,7 +12,7 @@ export type RouteHealthState = 'closed' | 'open' | 'half_open'
 export interface RoutePolicy {
   group_id: number
   load_balance: boolean
-  max_ratio: number
+  max_ratio: string
   retry_mode: RouteRetryMode
   max_same_resource_attempts: number
   max_failover_attempts: number

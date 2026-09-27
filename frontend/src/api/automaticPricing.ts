@@ -11,18 +11,16 @@ import { parseSystemTask } from './systemManagement'
 
 export const AUTOMATIC_PRICE_SOURCES = ['sub2api', 'axonhub'] as const
 export type AutomaticPriceSource = (typeof AUTOMATIC_PRICE_SOURCES)[number]
-const HISTORICAL_PRICE_SOURCES = ['models_dev', 'openrouter'] as const
-export type PriceOrigin =
-  | AutomaticPriceSource
-  | (typeof HISTORICAL_PRICE_SOURCES)[number]
-  | 'manual'
-  | 'legacy_seed'
+export type PriceOrigin = AutomaticPriceSource | 'manual'
 const SNAPSHOT_STATES = ['bundled', 'current', 'cached', 'unavailable'] as const
 export interface AutomaticPricingConfig {
   enabled: boolean
   check_interval_minutes: number
 }
 export interface AutomaticPricingSource {
+  snapshot_id: number
+  parser_version: string
+  snapshot_count: number
   source: AutomaticPriceSource
   url: string
   role: 'primary' | 'fallback'
@@ -81,6 +79,9 @@ export function parseAutomaticPricingStatus(
     )
       invalidResponse(endpoint)
     const result: AutomaticPricingSource = {
+      snapshot_id: requiredStrictInteger(source.snapshot_id, endpoint),
+      parser_version: requiredString(source.parser_version, endpoint),
+      snapshot_count: requiredStrictInteger(source.snapshot_count, endpoint),
       source: source.source as AutomaticPriceSource,
       url: requiredString(source.url, endpoint, false),
       role: source.role as AutomaticPricingSource['role'],
@@ -107,6 +108,8 @@ export function parseAutomaticPricingStatus(
     }
     if (
       [
+        result.snapshot_id,
+        result.snapshot_count,
         result.checked_at,
         result.updated_at,
         result.model_count,
@@ -119,12 +122,7 @@ export function parseAutomaticPricingStatus(
   const origins = value.origins.map((origin): ModelPriceOrigin => {
     if (
       !isRecord(origin) ||
-      ![
-        ...AUTOMATIC_PRICE_SOURCES,
-        ...HISTORICAL_PRICE_SOURCES,
-        'manual',
-        'legacy_seed',
-      ].includes(String(origin.origin))
+      ![...AUTOMATIC_PRICE_SOURCES, 'manual'].includes(String(origin.origin))
     )
       invalidResponse(endpoint)
     const result: ModelPriceOrigin = {
@@ -151,6 +149,11 @@ export function parseAutomaticPricingStatus(
 }
 
 export const automaticPricingApi = {
+  downloadSnapshot(id: number, signal?: AbortSignal) {
+    if (!Number.isSafeInteger(id) || id < 1)
+      throw new Error('Invalid snapshot ID')
+    return api.getBlob(`${endpoint}/snapshots/${id}?download=1`, { signal })
+  },
   async status(signal?: AbortSignal) {
     return parseAutomaticPricingStatus(
       await api.get<unknown>(endpoint, undefined, { signal })

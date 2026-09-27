@@ -33,6 +33,27 @@ const event = {
 }
 const detail = {
   recovery,
+  audit: {
+    status: 'unconfirmed',
+    attempts: [],
+    replayed_charge: null,
+    quoted_total_usd: null,
+    customer_charge_usd: '0',
+    customer_charge_quota: '0',
+    customer_charge_confirmed: false,
+    charge_difference_usd: null,
+    charge_difference_quota: null,
+    upstream_cost_usd: null,
+    profit_usd: null,
+    cost_status: 'unknown',
+  },
+  upstream_cost: {
+    attempt_count: 1,
+    confirmed_attempt_count: 0,
+    complete: false,
+    upstream_cost_usd: null,
+    records: [],
+  },
   attempts: [
     {
       id: 'attempt-channel-2',
@@ -60,8 +81,10 @@ const detail = {
     estimated: true,
   },
   charge: {
+    base_usd: '0.0013992',
+    adjustments: [],
     total_usd: '0.0013992',
-    calculation_version: 'billing-v1',
+    calculation_version: 'billing-v3',
     rounding_version: 'half-up-v1',
     final_quota: '700',
     unrounded_quota: '699.6',
@@ -93,6 +116,9 @@ for (const theme of ['light', 'dark'] as const) {
           json: {
             success: true,
             data: {
+              price_versions: 1,
+              quote_attempts: 1,
+              prices_by_origin: [],
               pending: 1,
               reconciliations: 1,
               reserved_quota: '250000',

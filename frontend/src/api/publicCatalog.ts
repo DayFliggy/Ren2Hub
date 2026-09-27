@@ -197,7 +197,8 @@ export function catalogPrices(
   model: CatalogModel,
   unit: 'M' | 'K'
 ): CatalogPrice[] {
-  const version = model.price_version
+  const offer = model.offers[0]!
+  const version = offer.price_version
   if (version.mode === 'free') return [{ key: 'free', value: '0', unit: '' }]
   const labels: Record<string, string> = {
     p: 'input',
@@ -214,7 +215,7 @@ export function catalogPrices(
     images: 'images',
     seconds: 'seconds',
   }
-  return version.prices.map((price) => ({
+  return offer.display_prices.map((price) => ({
     key: labels[price.quantity] ?? price.quantity,
     value: price.tier_mode
       ? ''

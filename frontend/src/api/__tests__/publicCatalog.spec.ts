@@ -1,3 +1,4 @@
+import { offerFixture } from './pricingFixture'
 import { describe, expect, it } from 'vitest'
 
 import { catalogPrices, parseRankings } from '@/api/publicCatalog'
@@ -13,19 +14,20 @@ describe('public catalog contracts', () => {
         vendor_id: 1,
         owner_by: 'Demo',
         supported_endpoint_types: [],
-        billing_mode: '',
-        price_version: {
-          id: 1,
-          model: 'demo',
-          mode: 'unit_price' as const,
-          prices: [
-            { quantity: 'p', unit: 'per_million_tokens', price: '4' },
-            { quantity: 'c', unit: 'per_million_tokens', price: '12' },
-            { quantity: 'cr', unit: 'per_million_tokens', price: '2' },
-          ],
-          created_at: 1,
-          hash: 'fixture',
-        },
+        offers: [
+          offerFixture({
+            id: 1,
+            model: 'demo',
+            mode: 'unit_price' as const,
+            prices: [
+              { quantity: 'p', unit: 'per_million_tokens', price: '4' },
+              { quantity: 'c', unit: 'per_million_tokens', price: '12' },
+              { quantity: 'cr', unit: 'per_million_tokens', price: '2' },
+            ],
+            created_at: 1,
+            hash: 'fixture',
+          }),
+        ],
       },
       'M'
     )

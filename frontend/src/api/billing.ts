@@ -41,7 +41,28 @@ export interface BillingEvent {
   created_at: number
 }
 
+export interface BillingAdjustment {
+  kind: 'channel_multiplier'
+  multiplier: string
+  base_usd: string
+  amount_usd: string
+  result_usd: string
+}
+function billingDecimal(
+  value: unknown,
+  endpoint: string,
+  signed = false
+): string {
+  if (
+    typeof value !== 'string' ||
+    !isDecimal(signed && value.startsWith('-') ? value.slice(1) : value)
+  )
+    invalidResponse(endpoint)
+  return value
+}
 export interface BillingCharge {
+  base_usd: string
+  adjustments: BillingAdjustment[]
   lines: Array<{
     quantity: string
     count: string
@@ -94,7 +115,24 @@ export function parseBillingCharge(
       })
     }
   }
+  if (
+    value.calculation_version !== 'billing-v3' ||
+    !Array.isArray(value.adjustments)
+  )
+    invalidResponse(endpoint)
   return {
+    base_usd: billingDecimal(value.base_usd, endpoint),
+    adjustments: value.adjustments.map((item) => {
+      if (!isRecord(item) || item.kind !== 'channel_multiplier')
+        invalidResponse(endpoint)
+      return {
+        kind: 'channel_multiplier',
+        multiplier: billingDecimal(item.multiplier, endpoint),
+        base_usd: billingDecimal(item.base_usd, endpoint),
+        amount_usd: billingDecimal(item.amount_usd, endpoint, true),
+        result_usd: billingDecimal(item.result_usd, endpoint),
+      }
+    }),
     lines: value.lines.map((line) => {
       if (!isRecord(line)) invalidResponse(endpoint)
       return {
@@ -116,6 +154,10 @@ export function parseBillingCharge(
 }
 
 export interface BillingMetrics {
+  operational?: BillingOperationalMetrics
+  price_versions: number
+  quote_attempts: number
+  prices_by_origin: Array<{ scope_kind: string; origin: string; count: number }>
   pending: number
   reconciliations: number
   reserved_quota: string
@@ -123,6 +165,54 @@ export interface BillingMetrics {
   idempotency_conflicts: number
   recovery_failures: number
   debt_events: number
+}
+export interface BillingOperationalMetrics {
+  counter_scope: 'instance'
+  started_at: number
+  source_refresh_failures_total: Record<string, number>
+  candidate_rejections_total: Record<string, number>
+  missing_price_total: number
+  unknown_usage_total: number
+  calculation_total: number
+  calculation_failures_total: number
+  replay_mismatches_total: number
+}
+function parseOperationalMetrics(
+  value: unknown,
+  endpoint: string
+): BillingOperationalMetrics {
+  if (!isRecord(value) || value.counter_scope !== 'instance')
+    invalidResponse(endpoint)
+  const count = (raw: unknown) => {
+    const parsed = requiredStrictInteger(raw, endpoint)
+    if (parsed < 0) invalidResponse(endpoint)
+    return parsed
+  }
+  const sourceCounts = (raw: unknown) => {
+    if (
+      !isRecord(raw) ||
+      Object.keys(raw).some(
+        (key) => !['sub2api', 'axonhub', 'other'].includes(key)
+      )
+    )
+      invalidResponse(endpoint)
+    return Object.fromEntries(
+      Object.entries(raw).map(([key, amount]) => [key, count(amount)])
+    )
+  }
+  return {
+    counter_scope: 'instance',
+    started_at: count(value.started_at),
+    source_refresh_failures_total: sourceCounts(
+      value.source_refresh_failures_total
+    ),
+    candidate_rejections_total: sourceCounts(value.candidate_rejections_total),
+    missing_price_total: count(value.missing_price_total),
+    unknown_usage_total: count(value.unknown_usage_total),
+    calculation_total: count(value.calculation_total),
+    calculation_failures_total: count(value.calculation_failures_total),
+    replay_mismatches_total: count(value.replay_mismatches_total),
+  }
 }
 
 export interface BillingDetail {
@@ -132,7 +222,183 @@ export interface BillingDetail {
   usage: unknown
   charge: BillingCharge | null
   chargeUnavailable: boolean
+  audit: BillingAudit
+  upstream_cost: BillingCostSummary
   events: BillingEvent[]
+}
+
+export interface BillingAuditAttempt {
+  id: string
+  channel_id: number
+  request_fingerprint: string
+  price_scope: string
+  price_version_id: number
+  price_version_hash: string
+  quote_hash: string
+  origin: string
+  source_hash: string
+}
+export interface BillingAudit {
+  status: 'unconfirmed' | 'verified' | 'mismatch' | 'invalid_evidence'
+  reason?: string
+  attempts: BillingAuditAttempt[]
+  quote_snapshot_hash?: string
+  usage_snapshot_hash?: string
+  charge_snapshot_hash?: string
+  replayed_charge: BillingCharge | null
+  quoted_total_usd: string | null
+  customer_charge_usd: string
+  customer_charge_quota: string
+  customer_charge_confirmed: boolean
+  charge_difference_usd: string | null
+  charge_difference_quota: string | null
+  upstream_cost_usd: string | null
+  profit_usd: string | null
+  cost_status: 'unknown' | 'confirmed'
+}
+export interface BillingCostCommand {
+  event_id: string
+  attempt_id: string
+  amount_usd: string
+  source: 'invoice' | 'provider_receipt'
+  reference: string
+}
+export interface BillingUpstreamCost extends BillingCostCommand {
+  id: number
+  request_id: string
+  actor_id: number
+  created_at: number
+}
+export interface BillingCostSummary {
+  attempt_count: number
+  confirmed_attempt_count: number
+  complete: boolean
+  upstream_cost_usd: string | null
+  records: BillingUpstreamCost[]
+}
+function parseBillingCost(
+  value: unknown,
+  endpoint: string
+): BillingUpstreamCost {
+  if (
+    !isRecord(value) ||
+    !['invoice', 'provider_receipt'].includes(String(value.source))
+  )
+    invalidResponse(endpoint)
+  return {
+    id: requiredStrictInteger(value.id, endpoint),
+    request_id: requiredString(value.request_id, endpoint),
+    actor_id: requiredStrictInteger(value.actor_id, endpoint),
+    created_at: requiredStrictInteger(value.created_at, endpoint),
+    event_id: requiredString(value.event_id, endpoint),
+    attempt_id: requiredString(value.attempt_id, endpoint),
+    amount_usd: billingDecimal(value.amount_usd, endpoint),
+    source: value.source as BillingCostCommand['source'],
+    reference: requiredString(value.reference, endpoint),
+  }
+}
+export function parseBillingCostSummary(
+  value: unknown,
+  endpoint: string
+): BillingCostSummary {
+  if (!isRecord(value) || !Array.isArray(value.records))
+    invalidResponse(endpoint)
+  return {
+    attempt_count: requiredStrictInteger(value.attempt_count, endpoint),
+    confirmed_attempt_count: requiredStrictInteger(
+      value.confirmed_attempt_count,
+      endpoint
+    ),
+    complete: requiredBoolean(value.complete, endpoint),
+    upstream_cost_usd:
+      value.upstream_cost_usd === null
+        ? null
+        : billingDecimal(value.upstream_cost_usd, endpoint),
+    records: value.records.map((row) => parseBillingCost(row, endpoint)),
+  }
+}
+export function parseBillingAudit(
+  value: unknown,
+  endpoint: string
+): BillingAudit {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.attempts) ||
+    !['unconfirmed', 'verified', 'mismatch', 'invalid_evidence'].includes(
+      String(value.status)
+    ) ||
+    !['unknown', 'confirmed'].includes(String(value.cost_status))
+  )
+    invalidResponse(endpoint)
+  const result: BillingAudit = {
+    status: value.status as BillingAudit['status'],
+    attempts: value.attempts.map((attempt) => {
+      if (!isRecord(attempt)) invalidResponse(endpoint)
+      return {
+        id: requiredString(attempt.id, endpoint),
+        channel_id: requiredStrictInteger(attempt.channel_id, endpoint),
+        request_fingerprint: requiredString(
+          attempt.request_fingerprint,
+          endpoint
+        ),
+        price_scope: requiredString(attempt.price_scope, endpoint),
+        price_version_id: requiredStrictInteger(
+          attempt.price_version_id,
+          endpoint
+        ),
+        price_version_hash: requiredString(
+          attempt.price_version_hash,
+          endpoint
+        ),
+        quote_hash: requiredString(attempt.quote_hash, endpoint),
+        origin: requiredString(attempt.origin, endpoint),
+        source_hash: requiredString(attempt.source_hash, endpoint),
+      }
+    }),
+    replayed_charge: parseBillingCharge(value.replayed_charge, endpoint),
+    quoted_total_usd:
+      value.quoted_total_usd === null
+        ? null
+        : billingDecimal(value.quoted_total_usd, endpoint),
+    customer_charge_usd: billingDecimal(value.customer_charge_usd, endpoint),
+    customer_charge_quota: requiredQuota(value.customer_charge_quota, endpoint),
+    customer_charge_confirmed: requiredBoolean(
+      value.customer_charge_confirmed,
+      endpoint
+    ),
+    charge_difference_usd:
+      value.charge_difference_usd === null
+        ? null
+        : billingDecimal(value.charge_difference_usd, endpoint, true),
+    charge_difference_quota:
+      value.charge_difference_quota === null
+        ? null
+        : requiredQuota(value.charge_difference_quota, endpoint),
+    upstream_cost_usd:
+      value.upstream_cost_usd === null
+        ? null
+        : billingDecimal(value.upstream_cost_usd, endpoint),
+    profit_usd:
+      value.profit_usd === null
+        ? null
+        : billingDecimal(value.profit_usd, endpoint, true),
+    cost_status: value.cost_status as BillingAudit['cost_status'],
+  }
+  for (const key of [
+    'reason',
+    'quote_snapshot_hash',
+    'usage_snapshot_hash',
+    'charge_snapshot_hash',
+  ] as const) {
+    if (value[key] !== undefined)
+      result[key] = requiredString(value[key], endpoint)
+  }
+  if (
+    result.profit_usd !== null &&
+    (!result.customer_charge_confirmed || result.cost_status !== 'confirmed')
+  )
+    invalidResponse(endpoint)
+  return result
 }
 
 export interface BillingPage<T> {
@@ -212,7 +478,18 @@ export const billingApi = {
     const endpoint = '/api/billing/metrics'
     const value = await api.get(endpoint, undefined, { signal })
     if (!isRecord(value)) invalidResponse(endpoint)
+    if (!Array.isArray(value.prices_by_origin)) invalidResponse(endpoint)
     const metrics = {
+      price_versions: requiredStrictInteger(value.price_versions, endpoint),
+      quote_attempts: requiredStrictInteger(value.quote_attempts, endpoint),
+      prices_by_origin: value.prices_by_origin.map((row) => {
+        if (!isRecord(row)) invalidResponse(endpoint)
+        return {
+          scope_kind: requiredString(row.scope_kind, endpoint),
+          origin: requiredString(row.origin, endpoint),
+          count: requiredStrictInteger(row.count, endpoint),
+        }
+      }),
       pending: requiredStrictInteger(value.pending, endpoint),
       reconciliations: requiredStrictInteger(value.reconciliations, endpoint),
       reserved_quota: requiredQuota(value.reserved_quota, endpoint),
@@ -230,9 +507,22 @@ export const billingApi = {
       ),
       debt_events: requiredStrictInteger(value.debt_events, endpoint),
     }
-    if (Object.values(metrics).some((value) => BigInt(value) < 0n))
+    if (
+      Object.entries(metrics).some(
+        ([key, value]) =>
+          key !== 'prices_by_origin' && BigInt(value as number | string) < 0n
+      ) ||
+      metrics.prices_by_origin.some((row) => row.count < 0)
+    )
       invalidResponse(endpoint)
-    return metrics
+    return {
+      ...metrics,
+      ...(value.operational === undefined
+        ? {}
+        : {
+            operational: parseOperationalMetrics(value.operational, endpoint),
+          }),
+    }
   },
   async reservations(
     offset: number,
@@ -294,6 +584,8 @@ export const billingApi = {
     )
       invalidResponse(endpoint)
     return {
+      audit: parseBillingAudit(value.audit, endpoint),
+      upstream_cost: parseBillingCostSummary(value.upstream_cost, endpoint),
       recovery: parseBillingReservation(value.recovery, endpoint),
       quote: value.quote,
       attempts: value.attempts,
@@ -306,6 +598,13 @@ export const billingApi = {
         isRecord(value.charge) && value.charge.unavailable === true,
       events: value.events.map((event) => parseBillingEvent(event, endpoint)),
     }
+  },
+  async recordCost(
+    id: string,
+    command: BillingCostCommand
+  ): Promise<BillingUpstreamCost> {
+    const endpoint = `${reconciliationPath}/${encodeURIComponent(id)}/cost`
+    return parseBillingCost(await api.post(endpoint, command), endpoint)
   },
   retry(id: string, operationId: string, expectedVersion: number) {
     return api.post(`${reconciliationPath}/${encodeURIComponent(id)}/retry`, {

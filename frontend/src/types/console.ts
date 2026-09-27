@@ -27,7 +27,7 @@ export interface TokenItem {
   model_limits: string[]
   ip_limits: string[]
   rate_limit: number // requests / minute, 0 = unlimited
-  max_ratio?: number // max accepted channel price ratio
+  max_ratio?: string // max accepted channel price ratio
   load_balance: boolean
   channels: TokenChannel[] // order = priority (auto: computed server-side)
   expired_time: number // -1 = never
@@ -491,8 +491,8 @@ export interface MarketModel {
   type: MarketModelType
   billing: MarketBilling
   price: MarketModelPrice
-  pricing?: import('@/api/modelPricing').PriceVersion
-  priceVersions?: import('@/api/modelPricing').PriceVersion[]
+  pricing?: import('@/api/modelPricing').PublicPriceVersion
+  offers?: import('@/api/liveContracts').PricingOffer[]
   context: number // context window in tokens (0 = n/a)
   tagline: string
   latency: number // seconds, snapshot

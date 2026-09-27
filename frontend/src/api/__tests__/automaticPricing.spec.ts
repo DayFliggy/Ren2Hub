@@ -10,6 +10,9 @@ const status = {
   sources: [
     {
       source: 'sub2api',
+      snapshot_id: 1,
+      parser_version: 'sub2api-v3',
+      snapshot_count: 1,
       role: 'primary',
       url: 'https://example.com/prices.json',
       hash: 'abc',
@@ -32,6 +35,16 @@ const status = {
 }
 afterEach(() => vi.restoreAllMocks())
 describe('automatic price contract', () => {
+  it('downloads immutable snapshots through the authenticated transport', async () => {
+    const blob = new Blob(['{"model":{}}'], { type: 'application/json' })
+    const download = vi.spyOn(api, 'getBlob').mockResolvedValue(blob)
+    expect(await automaticPricingApi.downloadSnapshot(42)).toBe(blob)
+    expect(download).toHaveBeenCalledWith(
+      '/api/billing/prices/automatic/snapshots/42?download=1',
+      { signal: undefined }
+    )
+    expect(() => automaticPricingApi.downloadSnapshot(0)).toThrow()
+  })
   it('keeps independent origins for the same model across channels', () => {
     const response = {
       ...status,
@@ -81,13 +94,13 @@ describe('automatic price contract', () => {
         'Invalid API response'
       )
   })
-  it('keeps retired sources readable in provenance but rejects them as active catalogs', () => {
+  it('rejects removed source identities in provenance and active catalogs', () => {
     for (const source of ['models_dev', 'openrouter']) {
       const historical = {
         ...status,
         origins: [{ ...status.origins[0], origin: source }],
       }
-      expect(parseAutomaticPricingStatus(historical)).toEqual(historical)
+      expect(() => parseAutomaticPricingStatus(historical)).toThrow()
       expect(() =>
         parseAutomaticPricingStatus({
           ...status,
@@ -133,8 +146,8 @@ describe('automatic price contract', () => {
   })
   it('restores a price with CAS and preserves exact decimal text', async () => {
     const price = {
-      contract_version: 2,
-      calculation_version: 'billing-v2',
+      contract_version: 3,
+      calculation_version: 'billing-v3',
       result_unit: 'usd',
       id: 4,
       model: 'test',

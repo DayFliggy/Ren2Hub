@@ -161,6 +161,27 @@ async function sync() {
     if (!disposed) syncing.value = false
   }
 }
+const downloadingSnapshot = ref(0)
+async function downloadSnapshot(id: number) {
+  if (downloadingSnapshot.value) return
+  downloadingSnapshot.value = id
+  error.value = ''
+  try {
+    const blob = await automaticPricingApi.downloadSnapshot(id)
+    if (disposed) return
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `pricing-snapshot-${id}.json`
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  } catch (cause) {
+    if (!disposed)
+      error.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    if (!disposed) downloadingSnapshot.value = 0
+  }
+}
 watch(task, (value) => {
   if (!value || isActiveSystemTask(value)) return
   const key = `${value.task_id}:${value.status}:${value.updated_at}`
@@ -328,8 +349,26 @@ defineExpose({ refresh })
           <h3>{{ t(`billing.automatic.origins.${source.source}`) }}</h3>
           <span>{{ t(`billing.automatic.roles.${source.role}`) }}</span>
         </div>
+        <ConsoleButton
+          v-if="source.snapshot_id > 0"
+          size="sm"
+          variant="ghost"
+          :disabled="Boolean(downloadingSnapshot)"
+          :loading="downloadingSnapshot === source.snapshot_id"
+          data-download-price-snapshot
+          @click="downloadSnapshot(source.snapshot_id)"
+          >{{ t('billing.automatic.downloadSnapshot') }}</ConsoleButton
+        >
         <p class="automatic-url">{{ source.url }}</p>
         <dl>
+          <div>
+            <dt>{{ t('billing.automatic.snapshotEvidence') }}</dt>
+            <dd>{{ source.snapshot_id }} · {{ source.parser_version }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('billing.automatic.snapshotCount') }}</dt>
+            <dd>{{ source.snapshot_count }}</dd>
+          </div>
           <div v-if="source.snapshot_state" class="automatic-snapshot">
             <dt>{{ t('billing.automatic.snapshotState') }}</dt>
             <dd :data-snapshot-state="source.snapshot_state">

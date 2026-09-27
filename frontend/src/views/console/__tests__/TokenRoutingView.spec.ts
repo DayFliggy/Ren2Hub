@@ -32,7 +32,8 @@ const mocks = vi.hoisted(() => ({
   previewToken: vi.fn(),
 }))
 
-vi.mock('@/api/routingApi', () => ({
+vi.mock('@/api/routingApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/routingApi')>()),
   routingApi: mocks,
 }))
 
@@ -87,7 +88,7 @@ const profile: RouteProfileView = {
       policy: {
         group_id: 4,
         load_balance: false,
-        max_ratio: 1,
+        max_ratio: '1',
         retry_mode: 'next_channel',
         max_same_resource_attempts: 0,
         max_failover_attempts: 1,
@@ -294,9 +295,15 @@ describe('TokenRoutingView', () => {
     const view = await mountView()
 
     await view.get('button[aria-label="Move down"]').trigger('click')
+    await view
+      .get('input[inputmode="decimal"]')
+      .setValue('1.000000000000000001')
     await buttonByText(view, 'Save').trigger('click')
     await flushPromises()
 
+    expect(mocks.update.mock.calls[0]?.[1].groups[0].policy.max_ratio).toBe(
+      '1.000000000000000001'
+    )
     expect(mocks.update).toHaveBeenCalledWith(
       1,
       expect.objectContaining({

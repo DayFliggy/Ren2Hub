@@ -398,15 +398,20 @@ func TestRecheckLiveRouteCandidateRejectsStaleActiveSnapshot(t *testing.T) {
 }
 
 func TestLiveRouteSelectionMaxRatioOnlyRestrictsManualRoutes(t *testing.T) {
-	manual := LiveRouteSelection{Source: RouteSourceManual, MaxRatio: 1.5}
-	assert.True(t, manual.AllowsPriceRatio(1.5))
-	assert.False(t, manual.AllowsPriceRatio(1.500001))
-	assert.False(t, manual.AllowsPriceRatio(-1))
+	manual := LiveRouteSelection{Source: RouteSourceManual, MaxRatio: "1.5"}
+	assert.True(t, manual.AllowsPriceRatio("1.5"))
+	assert.False(t, manual.AllowsPriceRatio("1.500001"))
+	assert.False(t, manual.AllowsPriceRatio("-1"))
+	manual.MaxRatio = "1.000000000000000001"
+	assert.True(t, manual.AllowsPriceRatio("1.000000000000000001"))
+	assert.False(t, manual.AllowsPriceRatio("1.000000000000000002"))
+	manual.MaxRatio = ""
+	assert.False(t, manual.AllowsPriceRatio("1"), "a missing manual ceiling must fail closed")
 
-	auto := LiveRouteSelection{Source: RouteSourceAutoLab, MaxRatio: 1}
-	assert.True(t, auto.AllowsPriceRatio(3))
-	legacy := LiveRouteSelection{Source: RouteSourceUnavailable, MaxRatio: 1}
-	assert.True(t, legacy.AllowsPriceRatio(3))
+	auto := LiveRouteSelection{Source: RouteSourceAutoLab, MaxRatio: "1"}
+	assert.True(t, auto.AllowsPriceRatio("3"))
+	legacy := LiveRouteSelection{Source: RouteSourceUnavailable, MaxRatio: "1"}
+	assert.True(t, legacy.AllowsPriceRatio("3"))
 }
 
 func TestManualRouteAttemptsHonorPolicyWithoutExpandingSystemLimit(t *testing.T) {

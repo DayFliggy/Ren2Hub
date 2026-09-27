@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"math"
 	"net"
 	"strings"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/modellab"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -345,7 +345,7 @@ type LiveRouteSelection struct {
 	// MaxRatio is a manual-profile admission ceiling. It is evaluated against
 	// the existing billing calculation at request time and never rewrites the
 	// selected channel, billing model, or group ratio.
-	MaxRatio float64
+	MaxRatio string
 	Retry    RouteLiveRetryPolicy
 }
 
@@ -384,14 +384,16 @@ func (policy RouteLiveRetryPolicy) Budget() RouteRetryBudget {
 	}
 }
 
-func (selection LiveRouteSelection) AllowsPriceRatio(actualRatio float64) bool {
-	if selection.Source != RouteSourceManual || selection.MaxRatio <= 0 {
+func (selection LiveRouteSelection) AllowsPriceRatio(actualRatio string) bool {
+	if selection.Source != RouteSourceManual {
 		return true
 	}
-	if math.IsNaN(actualRatio) || math.IsInf(actualRatio, 0) || actualRatio < 0 {
+	actual, err := decimal.NewFromString(actualRatio)
+	if err != nil || !actual.IsPositive() {
 		return false
 	}
-	return actualRatio <= selection.MaxRatio
+	limit, err := model.ParseRouteMaxRatio(selection.MaxRatio)
+	return err == nil && actual.LessThanOrEqual(limit)
 }
 
 func (selection LiveRouteSelection) CandidateForAttempt(attempt int) (RouteDecisionCandidate, bool) {

@@ -1,3 +1,4 @@
+import { offerFixture } from '@/api/__tests__/pricingFixture'
 import { mount } from '@vue/test-utils'
 import { beforeAll, describe, expect, it } from 'vitest'
 
@@ -47,7 +48,6 @@ describe('ModelCard billing metadata', () => {
       id: channel_id,
       model: 'scoped',
       scope_kind: 'channel_model',
-      channel_id,
       mode: 'unit_price',
       flat_fee: '0.01',
       created_at: 1,
@@ -69,14 +69,15 @@ describe('ModelCard billing metadata', () => {
           billing: 'token',
           price: {},
           pricing: versions[0],
-          priceVersions: versions,
+          offers: versions.map((price) => offerFixture(price)),
         },
       },
       global: { plugins: [i18n] },
     })
     expect(wrapper.findAll('[data-model-price-scope]')).toHaveLength(2)
-    expect(wrapper.text()).toContain('channel_model · 9')
-    expect(wrapper.text()).toContain('channel_model · 10')
+    expect(wrapper.text()).toContain('channel_model · v9')
+    expect(wrapper.text()).toContain('channel_model · v10')
+    expect(wrapper.text()).not.toContain('channel_id')
     expect(wrapper.text()).toContain('分段累加')
     expect(wrapper.text()).toContain('$0.010')
     expect(wrapper.text()).toContain('≤1000000: $2.000')
@@ -104,6 +105,20 @@ describe('ModelCard billing metadata', () => {
                 { quantity: 'images', unit: 'per_image', price: '0.1256789' },
               ],
             },
+            offers: [
+              offerFixture({
+                id: 1,
+                model: 'mixed',
+                mode: 'unit_price',
+                created_at: 1,
+                hash: 'hash',
+                prices: [
+                  { quantity: 'p', unit: 'per_million_tokens', price: '2' },
+                  { quantity: 'calls', unit: 'per_call', price: '0.01' },
+                  { quantity: 'images', unit: 'per_image', price: '0.1256789' },
+                ],
+              }),
+            ],
           },
         },
         global: { plugins: [i18n] },
@@ -132,6 +147,19 @@ describe('ModelCard billing metadata', () => {
             expression: 'p * 0.00123456789',
             prices: [{ quantity: 'seconds', unit: 'per_second', price: '0.1' }],
           },
+          offers: [
+            offerFixture({
+              id: 1,
+              model: 'expression',
+              mode: 'expression',
+              created_at: 1,
+              hash: 'hash',
+              expression: 'p * 0.00123456789',
+              prices: [
+                { quantity: 'seconds', unit: 'per_second', price: '0.1' },
+              ],
+            }),
+          ],
         },
       },
       global: { plugins: [i18n] },
