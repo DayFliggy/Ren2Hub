@@ -3,6 +3,7 @@ package jsplugin
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/grafana/sobek"
 	"github.com/shopspring/decimal"
 	"math"
 	"strconv"
@@ -14,6 +15,64 @@ const maxSafeInteger = int64(1<<53 - 1)
 // their source decimal text, while JS numbers are accepted only as safe integers.
 func ExactUsageValue(value any) (any, error) {
 	return exactUsageValue(value, 0)
+}
+
+// Protocol context can contain fractional settings unrelated to metering. Keep
+// these properties lazy: an unused setting must not reject the request, while
+// a usage hook that reads an imprecise number must fail before doing arithmetic.
+func usageArgumentValue(runtime *sobek.Runtime, value any, depth int) (sobek.Value, error) {
+	if depth > 64 {
+		return nil, fmt.Errorf("plugin billing JSON exceeds nesting limit")
+	}
+	exact, err := ExactUsageValue(value)
+	if err == nil {
+		return runtime.ToValue(exact), nil
+	}
+	var object *sobek.Object
+	var properties map[string]any
+	switch typed := value.(type) {
+	case map[string]any:
+		object, properties = runtime.NewObject(), typed
+	case []any:
+		object = runtime.NewArray()
+		properties = make(map[string]any, len(typed))
+		for index, item := range typed {
+			properties[strconv.Itoa(index)] = item
+		}
+		if err := object.Set("length", len(typed)); err != nil {
+			return nil, err
+		}
+	case []map[string]any:
+		items := make([]any, len(typed))
+		for index, item := range typed {
+			items[index] = item
+		}
+		return usageArgumentValue(runtime, items, depth)
+	default:
+		return nil, err
+	}
+	for name, item := range properties {
+		getter := runtime.ToValue(func(sobek.FunctionCall) sobek.Value {
+			converted, err := usageArgumentValue(runtime, item, depth+1)
+			if err != nil {
+				panic(runtime.NewTypeError("plugin billing input requires preserved decimal text or a safe integer"))
+			}
+			if err := object.DefineDataProperty(name, converted, sobek.FLAG_TRUE, sobek.FLAG_TRUE, sobek.FLAG_TRUE); err != nil {
+				panic(runtime.NewTypeError(err.Error()))
+			}
+			return converted
+		})
+		setter := runtime.ToValue(func(call sobek.FunctionCall) sobek.Value {
+			if err := object.DefineDataProperty(name, call.Argument(0), sobek.FLAG_TRUE, sobek.FLAG_TRUE, sobek.FLAG_TRUE); err != nil {
+				panic(runtime.NewTypeError(err.Error()))
+			}
+			return sobek.Undefined()
+		})
+		if err := object.DefineAccessorProperty(name, getter, setter, sobek.FLAG_TRUE, sobek.FLAG_TRUE); err != nil {
+			return nil, err
+		}
+	}
+	return object, nil
 }
 
 func exactUsageValue(value any, depth int) (any, error) {

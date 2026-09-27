@@ -83,3 +83,21 @@ func TestBatchCannotBillRoundedProtocolDataWithoutSourcePath(t *testing.T) {
 	assert.NotEmpty(t, results["job"].TaskInfo.UsageError)
 	assert.Nil(t, results["job"].TaskInfo.UsageFacts)
 }
+
+func TestSunoUsageDoesNotTreatContinuationOffsetAsBillableQuantity(t *testing.T) {
+	source, err := plugins.Source("sunoapi")
+	require.NoError(t, err)
+	plugin, err := pluginruntime.CompilePlugin(source, pluginruntime.Options{})
+	require.NoError(t, err)
+	adaptor := New(plugin)
+	request := map[string]any{"prompt": "continue", "continue_at": 12.5}
+	require.NoError(t, adaptor.validateResolvedUsageRequest(request))
+	info := &relaycommon.RelayInfo{OriginModelName: "suno_music", ChannelMeta: &relaycommon.ChannelMeta{}, TaskRelayInfo: &relaycommon.TaskRelayInfo{Action: "MUSIC"}}
+	adaptor.Init(info)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/suno/submit/music", nil)
+	ctx.Set("task_request", request)
+	facts, err := adaptor.ExtractUsageFactsValidated(ctx, info)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"clips": "2", "action": "music"}, facts)
+}

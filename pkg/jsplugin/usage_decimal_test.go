@@ -31,6 +31,23 @@ func TestUsageHooksPreserveDecimalTextAndRejectFloatingArithmetic(t *testing.T) 
 	}
 }
 
+func TestUsageHooksIgnoreUnrelatedSettingsButCannotReadImpreciseNumbers(t *testing.T) {
+	engine, err := Compile(`
+export function extractUsage(ctx){return {clips:ctx.request.count};}
+export function extractUsageOnComplete(ctx){return {clips:ctx.request.offset*10};}
+`, Options{})
+	require.NoError(t, err)
+	input := map[string]any{"request": map[string]any{"count": int64(2), "offset": 0.3, "unrelated": []any{map[string]any{"temperature": 0.7}}}}
+	value, err := engine.Call(t.Context(), "extractUsage", input)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"clips": int64(2)}, value)
+	_, err = engine.Call(t.Context(), "extractUsageOnComplete", input)
+	require.ErrorContains(t, err, "preserved decimal text", "rounding an imprecise input into a safe integer cannot authorize billing")
+	// A subsequent use of the pooled runtime retains the same boundary.
+	_, err = engine.Call(t.Context(), "extractUsageOnComplete", input)
+	require.Error(t, err)
+}
+
 func TestFactoryCompletionFactsUseExactProviderUnits(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -81,4 +98,12 @@ func TestPluginDecimalBoundsDoNotRoundInvalidIntegers(t *testing.T) {
 	result, err := engine.Call(t.Context(), "extractUsage", map[string]any{"count": json.Number("0")})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"count": "0"}, result)
+}
+
+func TestStreamJSONPreservesUsageNumbersBeforeJSCanRoundThem(t *testing.T) {
+	engine, err := Compile(`export function parseSubmitEvent(event){return utils.json.parseNumbers(event.data);}`, Options{})
+	require.NoError(t, err)
+	value, err := engine.Call(t.Context(), "parseSubmitEvent", map[string]any{"data": `{"count":1.000000000000000001,"seconds":7.500000000000000001,"tokens":9007199254740993}`})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"count": "1.000000000000000001", "seconds": "7.500000000000000001", "tokens": "9007199254740993"}, value)
 }

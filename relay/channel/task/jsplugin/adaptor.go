@@ -1394,7 +1394,7 @@ func (a *TaskAdaptor) submitContext(c *gin.Context, info *relaycommon.RelayInfo)
 
 func (a *TaskAdaptor) validateResolvedUsageRequest(request any, models ...string) error {
 	schema, _ := a.plugin.Meta.UsageForModels(models...)
-	value, err := exactJSONValue(request)
+	value, err := usageRequestValue(request)
 	if err != nil {
 		return err
 	}

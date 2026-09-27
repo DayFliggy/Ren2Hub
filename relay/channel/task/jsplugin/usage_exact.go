@@ -23,21 +23,23 @@ func decodeUsageJSON(data []byte) (any, error) {
 	return value, nil
 }
 
-func exactJSONValue(value any) (any, error) {
-	if exact, err := pluginruntime.ExactUsageValue(value); err == nil {
-		return exact, nil
-	}
-	// Structs originate in typed host DTOs. Maps and arrays must pass the
-	// strict boundary directly; re-encoding a float cannot recover its source.
+func usageRequestValue(value any) (any, error) {
+	// Preserve original scalar types. Schema fields are checked individually;
+	// unused protocol settings are not monetary facts. A float must never be
+	// re-encoded as json.Number and thereby pretend to recover source precision.
 	switch value.(type) {
 	case map[string]any, []any, float64:
-		return nil, fmt.Errorf("plugin usage lost its source numeric precision")
+		return value, nil
 	}
 	data, err := common.Marshal(value)
 	if err != nil {
 		return nil, err
 	}
-	return decodeUsageJSON(data)
+	var normalized any
+	if err := common.Unmarshal(data, &normalized); err != nil {
+		return nil, err
+	}
+	return normalized, nil
 }
 
 func (a *TaskAdaptor) submitUsageContext(c *gin.Context, info *relaycommon.RelayInfo) (map[string]any, error) {
@@ -45,7 +47,7 @@ func (a *TaskAdaptor) submitUsageContext(c *gin.Context, info *relaycommon.Relay
 	// Account preferences are protocol settings, not metering evidence.
 	delete(ctx, "userSetting")
 	if a.routeRequest != nil {
-		request, err := exactJSONValue(a.routeRequest.RequestBody)
+		request, err := usageRequestValue(a.routeRequest.RequestBody)
 		if err != nil {
 			return nil, err
 		}

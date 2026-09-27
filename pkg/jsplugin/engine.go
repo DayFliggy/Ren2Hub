@@ -388,10 +388,11 @@ func (e *Engine) call(
 	callArgs := make([]sobek.Value, len(args))
 	for i, arg := range args {
 		if len(members) == 0 && isUsageHook(exportName) {
-			arg, err = ExactUsageValue(arg)
+			callArgs[i], err = usageArgumentValue(instance.runtime, arg, 0)
 			if err != nil {
 				return nil, err
 			}
+			continue
 		}
 		callArgs[i] = instance.runtime.ToValue(arg)
 	}
