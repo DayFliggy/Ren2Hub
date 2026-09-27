@@ -87,6 +87,7 @@ type billingPricePublication struct {
 	expectedCatalog map[string]string
 	actor           int
 	automatic       bool
+	evidence        *automaticBillingPriceEvidence
 }
 
 func publishBillingPrice(ctx context.Context, version billing.PriceVersion, publication billingPricePublication) (*billing.PriceVersion, bool, error) {
@@ -142,14 +143,17 @@ func publishBillingPriceWithDB(tx *gorm.DB, version billing.PriceVersion, public
 		if version.Provenance == nil || version.Provenance.Kind != "source" || version.Provenance.ParserVersion == "" || version.Support == nil {
 			return nil, false, fmt.Errorf("automatic price requires field evidence and a support contract")
 		}
-		var snapshot BillingPricingSnapshot
-		if err := tx.Select("id").Where("source = ? AND hash = ?", publication.origin, publication.sourceHash).Take(&snapshot).Error; err != nil {
-			return nil, false, fmt.Errorf("automatic price snapshot: %w", err)
+		if publication.evidence == nil {
+			var err error
+			publication.evidence, err = loadAutomaticBillingPriceEvidence(tx, publication.origin, publication.sourceHash)
+			if err != nil {
+				return nil, false, err
+			}
 		}
-		if version.Provenance.SnapshotID != 0 && version.Provenance.SnapshotID != snapshot.ID {
+		if version.Provenance.SnapshotID != 0 && version.Provenance.SnapshotID != publication.evidence.snapshotID {
 			return nil, false, fmt.Errorf("automatic price snapshot mismatch")
 		}
-		version.Provenance.SnapshotID = snapshot.ID
+		version.Provenance.SnapshotID = publication.evidence.snapshotID
 	} else if version.Provenance == nil || (version.Provenance.Kind != "evidence" && version.Provenance.Kind != "retail") {
 		return nil, false, fmt.Errorf("manual price requires source evidence or a retail explanation")
 	}
@@ -157,18 +161,20 @@ func publishBillingPriceWithDB(tx *gorm.DB, version billing.PriceVersion, public
 	if err != nil {
 		return nil, false, err
 	}
+	if publication.automatic && (version.ScopeKind != billing.PriceScopeGlobal || version.ChannelID != 0) {
+		return nil, false, fmt.Errorf("automatic billing prices must use global model scope")
+	}
+	if publication.automatic {
+		if err := publication.evidence.verify(version, publication); err != nil {
+			return nil, false, err
+		}
+	}
 	now := time.Now()
 	if version.EffectiveFrom != nil && now.Before(*version.EffectiveFrom) {
 		return nil, false, fmt.Errorf("immediate publication cannot activate a future price")
 	}
 	if version.EffectiveTo != nil && !now.Before(*version.EffectiveTo) {
 		return nil, false, fmt.Errorf("immediate publication cannot activate an expired price")
-	}
-	// Automatic catalogs are global model prices. Channel-specific prices are
-	// explicit operator decisions and must not be overwritten by a source
-	// refresh that has no channel identity in its snapshot.
-	if publication.automatic && (version.ScopeKind != billing.PriceScopeGlobal || version.ChannelID != 0) {
-		return nil, false, fmt.Errorf("automatic billing prices must use global model scope")
 	}
 	if version.FlatFee != "" {
 		fee, err := decimal.NewFromString(version.FlatFee)

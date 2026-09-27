@@ -134,12 +134,15 @@ func PublishAutomaticBillingPrice(ctx context.Context, version billing.PriceVers
 
 // PublishAutomaticBillingPrices commits a bounded batch using one transaction.
 // Every entry shares the same catalog fence; any error rolls back the whole batch.
-func PublishAutomaticBillingPrices(ctx context.Context, entries []AutomaticBillingPrice, expectedCatalog map[string]string) (int, error) {
+func PublishAutomaticBillingPrices(ctx context.Context, entries []AutomaticBillingPrice, expectedCatalog map[string]string, prepared ...*AutomaticBillingPublicationEvidence) (int, error) {
 	if DB == nil {
 		return 0, fmt.Errorf("billing price database unavailable")
 	}
 	if len(entries) > 100 {
 		return 0, fmt.Errorf("automatic billing price batch exceeds 100 entries")
+	}
+	if len(prepared) > 1 || (len(prepared) == 1 && prepared[0] == nil) {
+		return 0, fmt.Errorf("invalid automatic publication evidence")
 	}
 	catalog, err := automaticBillingPricingCatalogFence([]map[string]string{expectedCatalog})
 	if err != nil {
@@ -161,9 +164,24 @@ func PublishAutomaticBillingPrices(ctx context.Context, entries []AutomaticBilli
 		if err := lockAutomaticBillingPricingSources(tx, catalog); err != nil {
 			return err
 		}
+		evidence := make(map[string]*automaticBillingPriceEvidence)
+		if len(prepared) == 1 {
+			evidence = prepared[0].sources
+		}
 		for _, entry := range entries {
+			if evidence[entry.Source] == nil {
+				if len(prepared) != 0 {
+					return fmt.Errorf("automatic source is absent from prepared evidence")
+				}
+				parsed, err := loadAutomaticBillingPriceEvidence(tx, entry.Source, entry.SourceHash)
+				if err != nil {
+					return err
+				}
+				evidence[entry.Source] = parsed
+			}
 			_, changed, err := publishBillingPriceWithDB(tx, entry.Price, billingPricePublication{
 				origin: entry.Source, sourceModel: entry.SourceModel, sourceHash: entry.SourceHash, automatic: true,
+				evidence: evidence[entry.Source],
 			})
 			if err != nil {
 				return fmt.Errorf("publish automatic billing price %q: %w", entry.Price.Model, err)

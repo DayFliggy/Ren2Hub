@@ -769,6 +769,40 @@ func TestAutomaticPricingRequiredDimensionsSelectOneCompleteSource(t *testing.T)
 	assert.Equal(t, manual.ID, retained.ID)
 }
 
+func TestAutomaticPricingFallbackPreservesDeclaredProviderIdentity(t *testing.T) {
+	for _, provider := range []string{"openai", "different-provider"} {
+		t.Run(provider, func(t *testing.T) {
+			automaticPricingTestDB(t)
+			ctx := context.Background()
+			for _, source := range []struct{ name, document string }{
+				{"sub2api", `{"same-name":{"litellm_provider":"openai","input_cost_per_token":0.000001,"output_cost_per_token":0.000002}}`},
+				{"axonhub", fmt.Sprintf(`{"%s":[{"id":"same-name","cost":{"input":3,"output":4,"cache_read":0}}]}`, provider)},
+			} {
+				require.NoError(t, model.EnsureBillingPricingSource(ctx, &model.BillingPricingSource{Source: source.name, Document: model.LongText(source.document), Hash: pricingDocumentHash([]byte(source.document)), ParserVersion: autopricing.ParserVersion}))
+			}
+			_, err := publishAutomaticPricingCatalog(ctx)
+			require.NoError(t, err)
+			before, err := model.GetActiveBillingPrice(ctx, "same-name")
+			require.NoError(t, err)
+			assert.Equal(t, "sub2api", before.Origin)
+			assert.Equal(t, "openai", before.Provenance.Provider)
+			selected, err := ResolveAndPublishAutomaticPrice(ctx, "same-name", billing.PricingRequirements{Dimensions: []string{"cr"}})
+			if provider == "openai" {
+				require.NoError(t, err)
+				assert.Equal(t, "axonhub", selected.Origin)
+				assert.Equal(t, "openai", selected.Provenance.Provider)
+			} else {
+				var ambiguous *billing.PricingError
+				require.ErrorAs(t, err, &ambiguous)
+				assert.Equal(t, "ambiguous_price_identity", ambiguous.Code)
+				after, err := model.GetActiveBillingPrice(ctx, "same-name")
+				require.NoError(t, err)
+				assert.Equal(t, before.ID, after.ID)
+			}
+		})
+	}
+}
+
 func TestAutomaticPricingUnconfiguredDiagnosticsFitDurableTaskHistory(t *testing.T) {
 	result := &AutomaticPricingSyncResult{Errors: []string{}}
 	for i := 0; i < 120; i++ {

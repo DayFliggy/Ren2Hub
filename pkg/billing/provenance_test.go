@@ -31,7 +31,7 @@ func TestPricingSupportAcceptsExplicitV2ServiceTierPolicy(t *testing.T) {
 	price := billing.PriceVersion{Model: "m", Mode: billing.ModeExpression,
 		Expression: `v2:attr("service_tier") == "priority" ? u("seconds") * 2 : u("seconds")`,
 		UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
-			"seconds": {Type: "number", Unit: "seconds", Source: billingexpr.UsageCompletionFact, Required: true, Minimum: "0", Maximum: "100"},
+			"seconds": {Type: "number", Unit: "second", Source: billingexpr.UsageCompletionFact, Required: true, Minimum: "0", Maximum: "100"},
 		}}, Support: &billing.PricingSupport{Dimensions: []string{"seconds"}, ServiceTiers: []string{"default", "priority"}}}
 	var err error
 	price.UsageSchema, err = billingexpr.FreezeUsageSchema(price.UsageSchema)

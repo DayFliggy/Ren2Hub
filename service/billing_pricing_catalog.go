@@ -22,6 +22,7 @@ type automaticPricingSourceCatalog struct {
 	rejections    map[string]string
 	rejectedNames []string
 	blocked       map[string]bool
+	providers     map[string]string
 }
 
 type automaticPriceCatalog struct {
@@ -52,7 +53,7 @@ func loadAutomaticPriceCatalog(ctx context.Context) (*automaticPriceCatalog, err
 		catalog.hashes[string(spec.Source)] = row.Hash
 		source := automaticPricingSourceCatalog{
 			source: spec.Source, entries: map[string]autopricing.Entry{},
-			rejections: map[string]string{}, blocked: map[string]bool{},
+			rejections: map[string]string{}, blocked: map[string]bool{}, providers: map[string]string{},
 		}
 		if row.Document != "" {
 			if pricingDocumentHash([]byte(row.Document)) != row.Hash {
@@ -68,8 +69,10 @@ func loadAutomaticPriceCatalog(ctx context.Context) (*automaticPriceCatalog, err
 			}
 			for _, rejection := range rejected {
 				source.rejections[rejection.Model] = rejection.Reason
+				source.providers[rejection.Model] = rejection.Provider
 			}
 			for name, entry := range entries {
+				source.providers[name] = entry.Price.Provenance.Provider
 				entry.Price.Provenance.SnapshotID = row.SnapshotID
 				entry.Price.Origin, entry.Price.SourceModel, entry.Price.SourceHash = string(spec.Source), entry.SourceModel, row.Hash
 				validationErr := reasoning.ValidateBillingModelName(name)
@@ -124,13 +127,29 @@ func (catalog *automaticPriceCatalog) resolve(name string, requirements ...billi
 		}
 	}
 	for _, candidate := range reasoning.BillingModelCandidates(name) {
+		candidateRequirements := required
+		if candidateRequirements.Provider == "" {
+			// The primary catalog's declared provider fixes this identity. A
+			// less complete price cannot be replaced by another provider's
+			// same-name product just because that product has more dimensions.
+			for _, source := range catalog.sources {
+				if provider, found := source.providers[candidate]; found {
+					candidateRequirements.Provider = provider
+					break
+				}
+				if entry, found := autopricing.Resolve(source.entries, candidate); found {
+					candidateRequirements.Provider = entry.Price.Provenance.Provider
+					break
+				}
+			}
+		}
 		// Exact identity in either source precedes a less-specific alias.
 		for i, source := range catalog.sources {
 			if blocked[i] {
 				continue
 			}
 			if entry, exists := source.entries[candidate]; exists {
-				if err := billing.ValidatePricingRequirements(entry.Price, required); err != nil {
+				if err := billing.ValidatePricingRequirements(entry.Price, candidateRequirements); err != nil {
 					billing.RecordCandidateRejection(string(source.source))
 					blocked[i], match.reasons[i].Reason = true, err.Error()
 					match.err = err
@@ -170,7 +189,7 @@ func (catalog *automaticPriceCatalog) resolve(name string, requirements ...billi
 				continue
 			}
 			entry.Price = price
-			if err := billing.ValidatePricingRequirements(entry.Price, required); err != nil {
+			if err := billing.ValidatePricingRequirements(entry.Price, candidateRequirements); err != nil {
 				billing.RecordCandidateRejection(string(source.source))
 				blocked[i], match.reasons[i].Reason = true, err.Error()
 				match.err = err
@@ -248,6 +267,9 @@ func ResolveAndPublishAutomaticPrice(ctx context.Context, name string, required 
 	}
 	if err := billing.ValidatePricingRequirements(*current, required); err == nil {
 		return current, nil
+	}
+	if current.Provenance != nil && current.Provenance.Provider != "" {
+		required.Provider = current.Provenance.Provider
 	}
 	catalog, err := loadAutomaticPriceCatalog(ctx)
 	if err != nil {

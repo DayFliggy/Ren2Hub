@@ -49,3 +49,26 @@ func TestBillingPreviewUsesFrozenEngineWithoutDatabase(t *testing.T) {
 	assert.Equal(t, "4", result.Data.Charge.TotalUSD)
 	assert.EqualValues(t, 2000000, result.Data.Charge.FinalQuota)
 }
+
+func TestBillingPreviewPreservesNumericJSONBeforeDecimalEvaluation(t *testing.T) {
+	for _, test := range []struct{ name, body, total string }{
+		{"numeric_attribute", `{"price":{"model":"numeric","mode":"expression","expression":"v1:attr_num(\"temperature\") * 3 + 0.9"},"usage":{"complete":true},"attributes":{"temperature":0.7},"channel_ratio":"1","frozen_at":"2026-09-27T00:00:00Z"}`, "0.000003"},
+		{"fractional_request_fact", `{"price":{"model":"precise","mode":"expression","expression":"v2:u(\"seconds\") * 0.01","usage_schema":{"version":1,"fields":{"seconds":{"type":"number","unit":"second","source":"request_fixed","required":true,"maximum":"1"}}}},"usage":{"complete":true},"request_facts":{"seconds":0.9007199254740993},"channel_ratio":"1","frozen_at":"2026-09-27T00:00:00Z"}`, "0.009007199254740993"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/billing/prices/preview", bytes.NewBufferString(test.body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			PreviewBillingPrice(c)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			var response struct {
+				Data struct {
+					Charge billing.ChargeResult `json:"charge"`
+				} `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(w.Body.Bytes(), &response))
+			assert.Equal(t, test.total, response.Data.Charge.TotalUSD)
+		})
+	}
+}

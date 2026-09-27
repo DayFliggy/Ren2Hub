@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func automaticPriceDraft(name, price string) billing.PriceVersion {
@@ -42,6 +44,9 @@ func TestAutomaticBillingPriceContractsAcrossDatabases(t *testing.T) {
 			require.NoError(t, err)
 			connection, err := db.DB()
 			require.NoError(t, err)
+			if backend.kind == common.DatabaseTypeSQLite {
+				connection.SetMaxOpenConns(1)
+			}
 			previous, kind := DB, common.MainDatabaseType()
 			DB = db
 			common.SetMainDatabaseType(backend.kind)
@@ -51,6 +56,21 @@ func TestAutomaticBillingPriceContractsAcrossDatabases(t *testing.T) {
 			t.Run("archive_and_cas", testPricingSnapshotArchive)
 			t.Run("versions_manual_and_restore", testPricingAutomaticOwnership)
 			t.Run("batch_and_deactivation_fences", testPricingAutomaticBatch)
+			t.Run("source_evidence_authenticity", testPricingSourceEvidence)
+			t.Run("concurrent_publication", testPricingConcurrentPublication)
+			t.Run("case_sensitive_identity", func(t *testing.T) {
+				ctx := context.Background()
+				upper, err := PublishBillingPrice(ctx, automaticPriceDraft("Case-Sensitive-Price", "1"), 0, 1)
+				require.NoError(t, err)
+				lower, err := PublishBillingPrice(ctx, automaticPriceDraft("case-sensitive-price", "2"), 0, 1)
+				require.NoError(t, err)
+				assert.NotEqual(t, upper.ID, lower.ID)
+				for _, expected := range []*billing.PriceVersion{upper, lower} {
+					actual, err := GetActiveBillingPrice(ctx, expected.Model)
+					require.NoError(t, err)
+					assert.Equal(t, expected.ID, actual.ID)
+				}
+			})
 			t.Run("channel_scope", func(t *testing.T) {
 				ctx := context.Background()
 				draft := automaticPriceDraft("scoped-model", "1")
@@ -173,11 +193,12 @@ func testPricingAutomaticBatch(t *testing.T) {
 	assert.Zero(t, count)
 	before, err := GetActiveBillingPrice(ctx, "batch-a")
 	require.NoError(t, err)
-	invalid := batch[1]
+	nextSource, nextEntries := installPricingSnapshot(t, "sub2api", `{"batch-a":{"input_cost_per_token":0.000008,"output_cost_per_token":0},"batch-b":{"input_cost_per_token":0.000002,"output_cost_per_token":0}}`)
+	guard["sub2api"] = nextSource.Hash
+	invalid := AutomaticBillingPrice{Price: nextEntries["batch-b"].Price, Source: "sub2api", SourceModel: "batch-b", SourceHash: nextSource.Hash}
 	invalid.Price.Model = "batch-invalid"
 	invalid.Price.Expression = "v1:p *"
-	changed := batch[0]
-	changed.Price.Expression = "v1:p * 8 + c * 0"
+	changed := AutomaticBillingPrice{Price: nextEntries["batch-a"].Price, Source: "sub2api", SourceModel: "batch-a", SourceHash: nextSource.Hash}
 	_, err = PublishAutomaticBillingPrices(ctx, []AutomaticBillingPrice{changed, invalid}, guard)
 	require.Error(t, err)
 	after, err := GetActiveBillingPrice(ctx, "batch-a")
@@ -200,4 +221,79 @@ func testPricingAutomaticBatch(t *testing.T) {
 	require.ErrorIs(t, err, ErrBillingPricingSourceConflict)
 	_, err = PublishAutomaticBillingPrices(ctx, make([]AutomaticBillingPrice, 101), guard)
 	require.Error(t, err)
+}
+
+func testPricingSourceEvidence(t *testing.T) {
+	ctx := context.Background()
+	source, entries := installPricingSnapshot(t, "sub2api", `{"evidence":{"litellm_provider":"openai","input_cost_per_token":0.000001,"output_cost_per_token":0}}`)
+	draft := entries["evidence"].Price
+	changed, err := PublishAutomaticBillingPrice(ctx, draft, "sub2api", "evidence", source.Hash)
+	require.NoError(t, err)
+	require.True(t, changed)
+	before, err := GetActiveBillingPrice(ctx, "evidence")
+	require.NoError(t, err)
+	for _, test := range []struct {
+		name   string
+		mutate func(*billing.PriceVersion)
+	}{
+		{"different_rate", func(price *billing.PriceVersion) { price.Expression = "v1:p * 999 + c * 0" }},
+		{"fabricated_path", func(price *billing.PriceVersion) { price.Provenance.Fields[0].SourcePath = "/not-present" }},
+		{"fabricated_raw_value", func(price *billing.PriceVersion) { price.Provenance.Fields[0].RawValue = "999" }},
+		{"fabricated_conversion", func(price *billing.PriceVersion) { price.Provenance.Fields[0].Conversion = "multiply_by_999" }},
+		{"different_provider", func(price *billing.PriceVersion) { price.Provenance.Provider = "other" }},
+		{"different_parser", func(price *billing.PriceVersion) { price.Provenance.ParserVersion = "unregistered" }},
+		{"added_fixed_fee", func(price *billing.PriceVersion) { price.FlatFee = "1" }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			forged := draft
+			forged.Provenance = billing.ClonePriceProvenance(draft.Provenance)
+			test.mutate(&forged)
+			_, err := PublishAutomaticBillingPrice(ctx, forged, "sub2api", "evidence", source.Hash)
+			require.Error(t, err)
+			after, err := GetActiveBillingPrice(ctx, "evidence")
+			require.NoError(t, err)
+			assert.Equal(t, before.ID, after.ID)
+		})
+	}
+	_, err = PublishAutomaticBillingPrice(ctx, draft, "sub2api", "wrong-model", source.Hash)
+	require.ErrorContains(t, err, "source model mismatch")
+	// An old version must keep its original archive after a successful refresh.
+	next, nextEntries := installPricingSnapshot(t, "sub2api", `{"evidence":{"litellm_provider":"openai","input_cost_per_token":0.000002,"output_cost_per_token":0}}`)
+	archived, err := GetBillingPricingSnapshot(ctx, before.Provenance.SnapshotID)
+	require.NoError(t, err)
+	assert.Equal(t, source.Document, archived.Document)
+	require.NoError(t, DB.Session(&gorm.Session{SkipHooks: true}).Model(&BillingPricingSnapshot{}).Where("id = ?", next.SnapshotID).Update("document", "{}").Error)
+	_, err = PublishAutomaticBillingPrice(ctx, nextEntries["evidence"].Price, "sub2api", "evidence", next.Hash)
+	require.ErrorContains(t, err, "snapshot integrity mismatch")
+	require.NoError(t, DB.Session(&gorm.Session{SkipHooks: true}).Model(&BillingPricingSnapshot{}).Where("id = ?", next.SnapshotID).Update("document", next.Document).Error)
+}
+
+func testPricingConcurrentPublication(t *testing.T) {
+	ctx := context.Background()
+	first, err := PublishBillingPrice(ctx, automaticPriceDraft("price-concurrency", "1"), 0, 1)
+	require.NoError(t, err)
+	start := make(chan struct{})
+	var wait sync.WaitGroup
+	var outcomes [2]error
+	for i := range 2 {
+		wait.Add(1)
+		go func(i int) {
+			defer wait.Done()
+			<-start
+			_, outcomes[i] = PublishBillingPrice(ctx, automaticPriceDraft("price-concurrency", fmt.Sprint(i+2)), first.ID, i+2)
+		}(i)
+	}
+	close(start)
+	wait.Wait()
+	assert.NotEqual(t, outcomes[0] == nil, outcomes[1] == nil, "one CAS publication wins")
+	for _, err := range outcomes {
+		if err != nil {
+			require.ErrorIs(t, err, ErrBillingPriceConflict)
+		}
+	}
+	var versions, pointers int64
+	require.NoError(t, DB.Model(&BillingPriceVersion{}).Where("model = ?", "price-concurrency").Count(&versions).Error)
+	require.NoError(t, DB.Model(&BillingActivePrice{}).Where("model = ?", "price-concurrency").Count(&pointers).Error)
+	assert.EqualValues(t, 2, versions)
+	assert.EqualValues(t, 1, pointers)
 }

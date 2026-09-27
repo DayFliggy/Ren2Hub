@@ -424,6 +424,31 @@ func TestMediaCacheAndSearchPrices(t *testing.T) {
 	assert.Equal(t, "0.02", charge.TotalUSD)
 }
 
+func TestUnenabledOptionalToolsDoNotDisableOrdinaryPricing(t *testing.T) {
+	entries, rejected, err := autopricing.ParseWithReport(autopricing.SourceSub2API, []byte(`{
+	 "maps":{"litellm_provider":"gemini","input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"google_maps_grounding_cost_per_query":0.01},
+	 "search":{"litellm_provider":"openai","input_cost_per_token":0.000001,"output_cost_per_token":0.000002,"search_context_cost_per_query":{"search_context_size_low":0.01,"search_context_size_medium":0.02,"search_context_size_high":0.03}}
+	}`))
+	require.NoError(t, err)
+	require.Empty(t, rejected)
+	for _, name := range []string{"maps", "search"} {
+		entry := entries[name]
+		require.NoError(t, billing.ValidatePricingRequirements(entry.Price, billing.PricingRequirements{Dimensions: []string{"p", "c"}}))
+		quote, err := billing.NewQuote(entry.Price, "1", nil, time.Unix(1, 0))
+		require.NoError(t, err)
+		charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 3, OutputTokens: 1})
+		require.NoError(t, err)
+		assert.Equal(t, "0.000005", charge.TotalUSD)
+	}
+	for _, test := range []struct{ model, dimension string }{{"maps", "tool:google_maps"}, {"search", "tool:web_search"}, {"search", "tool:web_search_preview"}} {
+		err := billing.ValidatePricingRequirements(entries[test.model].Price, billing.PricingRequirements{Dimensions: []string{test.dimension}})
+		var missing *billing.PricingError
+		require.ErrorAs(t, err, &missing)
+		assert.Equal(t, "missing_price_dimension", missing.Code)
+		assert.Equal(t, test.dimension, missing.Dimension)
+	}
+}
+
 func TestProviderAmbiguityDoesNotOverrideCanonicalPrices(t *testing.T) {
 	entries, rejections, err := autopricing.ParseWithReport(autopricing.SourceAxonHub, []byte(`{
 	 "a":{"models":{"m":{"cost":{"input":1,"output":2}},"same":{"cost":{"input":1,"output":2}}}},
@@ -458,7 +483,7 @@ func TestUnpricedProviderStillMakesBareIdentityAmbiguous(t *testing.T) {
 	assert.NotContains(t, entries, "b/m")
 	assert.NotContains(t, entries, "m")
 	assert.Contains(t, rejected, autopricing.Rejection{Model: "m", Reason: "ambiguous provider identity", BlockFallback: true})
-	assert.Contains(t, rejected, autopricing.Rejection{Model: "b/m", Reason: "missing cost", BlockFallback: false})
+	assert.Contains(t, rejected, autopricing.Rejection{Model: "b/m", Provider: "b", Reason: "missing cost", BlockFallback: false})
 }
 
 func TestConflictingDuplicateIdentityCannotDependOnArrayOrder(t *testing.T) {

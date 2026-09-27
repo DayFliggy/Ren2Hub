@@ -103,6 +103,10 @@ func publishAutomaticPricingCatalog(ctx context.Context) (*AutomaticPricingSyncR
 	if err := result.boundDiagnostics(); err != nil {
 		return result, err
 	}
+	evidence, err := model.PrepareAutomaticBillingPublicationEvidence(ctx, publications)
+	if err != nil {
+		return result, fmt.Errorf("verify automatic price source evidence: %w", err)
+	}
 	// Batches retain the existing source-before-price lock order and manual
 	// ownership checks. Failed batches remain retryable without duplicate versions.
 	for start := 0; start < len(deactivations); start += 100 {
@@ -115,7 +119,7 @@ func publishAutomaticPricingCatalog(ctx context.Context) (*AutomaticPricingSyncR
 	}
 	for start := 0; start < len(publications); start += 100 {
 		end := min(start+100, len(publications))
-		count, err := model.PublishAutomaticBillingPrices(ctx, publications[start:end], catalog.hashes)
+		count, err := model.PublishAutomaticBillingPrices(ctx, publications[start:end], catalog.hashes, evidence)
 		if err != nil {
 			return result, fmt.Errorf("publish automatic pricing batch: %w", err)
 		}

@@ -85,7 +85,7 @@ func axonHubRecord(provider, id string, item rawObject, err error, path string) 
 	if !strings.HasPrefix(id, provider+"/") {
 		qualified = provider + "/" + id
 	}
-	record := catalogRecord{key: qualified, model: id, alias: id, err: err}
+	record := catalogRecord{key: qualified, model: id, alias: id, provider: provider, err: err}
 	if err == nil {
 		record.plan, record.err = axonHubPlan(item)
 		for i := range record.plan.evidence {

@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // PreviewBillingPrice evaluates a draft without publishing or reserving funds.
@@ -23,7 +25,11 @@ func PreviewBillingPrice(c *gin.Context) {
 		FrozenAt     time.Time              `json:"frozen_at" binding:"required"`
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 256*1024)
-	if err := c.ShouldBindJSON(&request); err != nil {
+	if err := common.DecodeJsonNumbers(c.Request.Body, &request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid price preview"})
+		return
+	}
+	if err := binding.Validator.ValidateStruct(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid price preview"})
 		return
 	}

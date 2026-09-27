@@ -19,6 +19,7 @@ type PriceFieldEvidence struct {
 
 type PriceProvenance struct {
 	Kind          string               `json:"kind"`
+	Provider      string               `json:"provider,omitempty"`
 	SnapshotID    int64                `json:"snapshot_id,omitempty"`
 	ParserVersion string               `json:"parser_version,omitempty"`
 	Fields        []PriceFieldEvidence `json:"fields,omitempty"`
@@ -33,6 +34,7 @@ type PricingSupport struct {
 type PricingRequirements struct {
 	Dimensions  []string
 	ServiceTier string
+	Provider    string
 }
 
 type PricingError struct {
@@ -67,7 +69,7 @@ func ClonePricingSupport(value *PricingSupport) *PricingSupport {
 
 func ValidatePriceProvenance(version PriceVersion) error {
 	if p := version.Provenance; p != nil {
-		if p.SnapshotID < 0 || len(p.Fields) > 256 || len(p.RetailReason) > 2048 || len(p.ParserVersion) > 64 {
+		if p.SnapshotID < 0 || len(p.Fields) > 256 || len(p.RetailReason) > 2048 || len(p.ParserVersion) > 64 || len(p.Provider) > 255 || strings.TrimSpace(p.Provider) != p.Provider {
 			return fmt.Errorf("invalid price provenance")
 		}
 		switch p.Kind {
@@ -146,6 +148,9 @@ func priceDimensions(version PriceVersion) map[string]bool {
 // ValidatePricingRequirements checks one complete candidate. It never merges
 // dimensions or service policies from a different source or a live catalog.
 func ValidatePricingRequirements(version PriceVersion, required PricingRequirements) error {
+	if required.Provider != "" && (version.Provenance == nil || version.Provenance.Provider != required.Provider) {
+		return &PricingError{Code: "ambiguous_price_identity", Dimension: "provider"}
+	}
 	tier := strings.TrimSpace(required.ServiceTier)
 	if tier == "" || tier == "standard" {
 		tier = "default"

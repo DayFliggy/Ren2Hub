@@ -26,6 +26,7 @@ func sub2APICatalog(root rawObject) ([]catalogRecord, error) {
 		item, err := object(root[id])
 		record := catalogRecord{key: id, model: id, err: err}
 		if err == nil {
+			record.provider = rawString(item["litellm_provider"])
 			record.plan, record.err = sub2APIPlan(item)
 			for i := range record.plan.evidence {
 				record.plan.evidence[i].SourcePath = "/" + jsonPointerToken(id) + record.plan.evidence[i].SourcePath
@@ -60,6 +61,15 @@ func sub2APIPlan(item rawObject) (pricePlan, error) {
 			continue
 		}
 		if key == "search_context_cost_per_query" {
+			continue
+		}
+		if key == "google_maps_grounding_cost_per_query" {
+			if _, err := amount(item[key], 0); err != nil {
+				return plan, err
+			}
+			// Maps is a separately enabled tool. Preserve its source field,
+			// but do not claim a metering contract or disable ordinary text.
+			plan.evidence = append(plan.evidence, billing.PriceFieldEvidence{Target: "unsupported:tool:google_maps", SourcePath: "/" + key, RawValue: string(item[key]), SourceUnit: "usd_per_call", Conversion: "unpriced_optional_capability"})
 			continue
 		}
 		baseKey := key
@@ -120,14 +130,14 @@ func sub2APIPlan(item rawObject) (pricePlan, error) {
 		if err != nil {
 			return plan, err
 		}
-		price := ""
+		price, uniform := "", true
 		for _, size := range []string{"search_context_size_low", "search_context_size_medium", "search_context_size_high"} {
 			value, err := amount(search[size], 0)
 			if err != nil {
 				return plan, err
 			}
 			if price != "" && price != value.String() {
-				return plan, unsafePrice("unsupported search context price tiers")
+				uniform = false
 			}
 			price = value.String()
 		}
@@ -139,12 +149,19 @@ func sub2APIPlan(item rawObject) (pricePlan, error) {
 		if strings.HasPrefix(provider, "vertex_ai") || provider == "gemini" {
 			names = []string{"google_search"}
 		} else if provider != "openai" && provider != "anthropic" && provider != "azure" {
-			return plan, unsafePrice("unsupported search tool provider")
+			// The optional search product has no registered metering contract.
+			// Its missing dimension still rejects a request that enables it.
+			names = []string{"search"}
+			uniform = false
 		}
 		for _, name := range names {
-			plan.extras = append(plan.extras, billing.UnitPrice{Quantity: "tool:" + name, Unit: "per_call", Price: price})
+			conversion := "unpriced_search_context_schedule"
+			if uniform {
+				plan.extras = append(plan.extras, billing.UnitPrice{Quantity: "tool:" + name, Unit: "per_call", Price: price})
+				conversion = "equal_context_prices_provider_tool_mapping"
+			}
 			for _, size := range []string{"search_context_size_low", "search_context_size_medium", "search_context_size_high"} {
-				plan.evidence = append(plan.evidence, billing.PriceFieldEvidence{Target: "tool:" + name, SourcePath: "/search_context_cost_per_query/" + size, RawValue: string(search[size]), SourceUnit: "usd_per_call", Conversion: "equal_context_prices_provider_tool_mapping"})
+				plan.evidence = append(plan.evidence, billing.PriceFieldEvidence{Target: "tool:" + name, SourcePath: "/search_context_cost_per_query/" + size, RawValue: string(search[size]), SourceUnit: "usd_per_call", Conversion: conversion})
 			}
 		}
 	}
