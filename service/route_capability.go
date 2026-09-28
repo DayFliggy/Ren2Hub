@@ -91,13 +91,21 @@ func (d *capabilityRefreshDispatcher) enqueue(channelID int) {
 	}
 	d.running = true
 	d.mu.Unlock()
-	go d.run()
+	if !common.BackgroundWorkers.Go(d.run) {
+		d.mu.Lock()
+		d.running = false
+		d.queue = nil
+		clear(d.pending)
+		d.mu.Unlock()
+	}
 }
 
-func (d *capabilityRefreshDispatcher) run() {
+func (d *capabilityRefreshDispatcher) run(parent context.Context) {
 	for {
 		d.mu.Lock()
-		if len(d.queue) == 0 {
+		if len(d.queue) == 0 || parent.Err() != nil {
+			d.queue = nil
+			clear(d.pending)
 			d.running = false
 			d.mu.Unlock()
 			return
@@ -107,7 +115,7 @@ func (d *capabilityRefreshDispatcher) run() {
 		delete(d.pending, channelID)
 		d.mu.Unlock()
 
-		ctx, cancel := context.WithTimeout(context.Background(), d.timeout())
+		ctx, cancel := context.WithTimeout(parent, d.timeout())
 		err := d.refresh(ctx, channelID)
 		cancel()
 		if err != nil && d.onError != nil {

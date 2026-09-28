@@ -22,8 +22,14 @@ func initRouteDecisionEventQueue() {
 		size = 1024
 	}
 	routeDecisionEventQueue.queue = make(chan RouteDecision, size)
-	go func() {
-		for decision := range routeDecisionEventQueue.queue {
+	common.BackgroundWorkers.Go(func(ctx context.Context) {
+		for {
+			var decision RouteDecision
+			select {
+			case <-ctx.Done():
+				return
+			case decision = <-routeDecisionEventQueue.queue:
+			}
 			data, err := common.Marshal(decision)
 			if err != nil {
 				continue
@@ -31,10 +37,14 @@ func initRouteDecisionEventQueue() {
 			requestContext := context.WithValue(context.Background(), common.RequestIdKey, decision.RequestID)
 			logger.LogInfo(requestContext, string(data))
 		}
-	}()
+	})
 }
 
 func EnqueueRouteDecision(decision RouteDecision) {
+	if !common.BackgroundWorkers.Accepting() {
+		routeDecisionEventsDropped.Add(1)
+		return
+	}
 	routeDecisionEventQueue.Do(initRouteDecisionEventQueue)
 	select {
 	case routeDecisionEventQueue.queue <- decision:

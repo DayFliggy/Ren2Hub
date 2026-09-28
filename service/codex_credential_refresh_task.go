@@ -12,8 +12,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-
-	"github.com/bytedance/gopkg/util/gopool"
 )
 
 const (
@@ -38,27 +36,25 @@ func StartCodexCredentialAutoRefreshTask() {
 			return
 		}
 
-		gopool.Go(func() {
+		common.BackgroundWorkers.Go(func(ctx context.Context) {
 			logger.LogInfo(context.Background(), fmt.Sprintf("codex credential auto-refresh task started: tick=%s threshold=%s", codexCredentialRefreshTickInterval, codexCredentialRefreshThreshold))
 
-			ticker := time.NewTicker(codexCredentialRefreshTickInterval)
-			defer ticker.Stop()
-
-			runCodexCredentialAutoRefreshOnce()
-			for range ticker.C {
-				runCodexCredentialAutoRefreshOnce()
+			for ctx.Err() == nil {
+				runCodexCredentialAutoRefreshOnce(ctx)
+				if !common.WaitBackgroundInterval(ctx, codexCredentialRefreshTickInterval) {
+					return
+				}
 			}
 		})
 	})
 }
 
-func runCodexCredentialAutoRefreshOnce() {
+func runCodexCredentialAutoRefreshOnce(ctx context.Context) {
 	if !codexCredentialRefreshRunning.CompareAndSwap(false, true) {
 		return
 	}
 	defer codexCredentialRefreshRunning.Store(false)
 
-	ctx := context.Background()
 	now := time.Now()
 
 	var refreshed int
@@ -67,7 +63,7 @@ func runCodexCredentialAutoRefreshOnce() {
 	offset := 0
 	for {
 		var channels []*model.Channel
-		err := model.DB.
+		err := model.DB.WithContext(ctx).
 			Select("id", "name", "key", "status", "channel_info").
 			Where("type = ? AND (status = ? OR status = ?)",
 				constant.ChannelTypeCodex,
@@ -88,6 +84,9 @@ func runCodexCredentialAutoRefreshOnce() {
 		offset += codexCredentialRefreshBatchSize
 
 		for _, ch := range channels {
+			if ctx.Err() != nil {
+				return
+			}
 			if ch == nil {
 				continue
 			}

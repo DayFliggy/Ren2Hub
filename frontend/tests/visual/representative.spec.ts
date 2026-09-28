@@ -156,7 +156,11 @@ async function auditScenario(
     await trigger.click()
     const dialog = page.locator('[role="dialog"][aria-modal="true"]')
     await expect(dialog).toBeVisible()
-    await expect(dialog.locator('[data-log-detail-empty]')).toBeEmpty()
+    const evidence = dialog.locator('[data-log-billing-detail]')
+    await expect(evidence).toBeVisible()
+    await expect(evidence.getByText('gpt-4.1', { exact: true })).toBeVisible()
+    await expect(evidence.getByText('尚无已确认的费用结果。')).toBeVisible()
+    await expect(evidence.getByRole('table')).toHaveCount(0)
     await waitForStablePage(page)
   }
   if (scenario.path === '/usage-logs') {

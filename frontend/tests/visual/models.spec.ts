@@ -22,12 +22,18 @@ for (const theme of ['light', 'dark'] as const) {
       const gptCard = page.locator('[data-model-name="gpt-4.1"]')
       const claudeCard = page.locator('[data-model-name="claude-sonnet-4"]')
       const geminiCard = page.locator('[data-model-name="gemini-2.5-pro"]')
-      await expect(gptCard.locator('[data-model-cache-read]')).toBeVisible()
-      await expect(gptCard.locator('[data-model-cache-write]')).toBeVisible()
-      await expect(claudeCard.locator('[data-model-cache-write]')).toBeVisible()
-      await expect(geminiCard.locator('[data-model-cache-prices]')).toHaveCount(
-        0
+      await expect(gptCard.locator('[data-model-price-panel]')).toContainText(
+        '$0.625'
       )
+      await expect(gptCard.locator('[data-model-price-panel]')).toContainText(
+        '$3.125'
+      )
+      await expect(
+        claudeCard.locator('[data-model-price-panel]')
+      ).toContainText('$0.000')
+      await expect(
+        geminiCard.locator('[data-model-price-panel]')
+      ).not.toContainText('缓存读取')
 
       const tokenColors = await page.evaluate(() => {
         const probe = document.createElement('div')

@@ -22,8 +22,11 @@ for (const theme of ['light', 'dark'] as const) {
       await page.goto('/pricing', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
       const row = page.getByRole('row').filter({ hasText: 'gpt-4.1' })
-      await expect(row).toContainText('US$2.00 - US$3.00')
-      await expect(row).toContainText('US$8.00 - US$12.00')
+      await expect(row).toContainText('global_model · v1 · ×1.000')
+      await expect(row).toContainText('输入$2.500每百万 Token')
+      await expect(row).toContainText('输出$10.000每百万 Token')
+      await expect(row).toContainText('缓存读取$0.625每百万 Token')
+      await expect(row).toContainText('缓存写入$3.125每百万 Token')
       await assertNoHorizontalOverflow(page)
       await assertInteractiveCentersVisible(page)
       await page.screenshot({
@@ -36,7 +39,14 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(page.getByText('没有匹配的模型')).toBeVisible()
       await search.fill('gpt-4.1')
       await page.getByRole('link', { name: 'gpt-4.1', exact: true }).click()
-      await expect(page.getByText('渠道倍率: 0.8 - 1.2')).toBeVisible()
+      await expect(page).toHaveURL(/offer=offer-gpt-4\.1-1/)
+      const evidence = page.locator('[data-price-version-evidence]')
+      await expect(evidence).toBeVisible()
+      await expect(evidence).toContainText('global_model')
+      await expect(evidence).toContainText('fixture')
+      await expect(
+        page.getByText('gpt-4.1 · 渠道调整 × 1.000', { exact: false })
+      ).toBeVisible()
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('price-detail.png'),

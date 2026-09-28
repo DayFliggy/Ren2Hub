@@ -128,7 +128,7 @@ async function data(page: Page) {
   )
   await page.route('**/api/billing/prices/preview', async (route) => {
     expect(route.request().method()).toBe('POST')
-    expect(route.request().postDataJSON().price.contract_version).toBe(2)
+    expect(route.request().postDataJSON().price.contract_version).toBe(3)
     await route.fulfill({
       json: {
         success: true,

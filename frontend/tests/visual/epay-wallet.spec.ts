@@ -157,6 +157,9 @@ for (const theme of ['light', 'dark'] as const) {
         path: testInfo.outputPath('epay-records-completed.png'),
       })
       await page.goto('/system-settings/billing/payment')
+      await page
+        .getByRole('button', { name: 'EPay 易支付', exact: true })
+        .click()
       const settlementDescription = page.getByText(
         '允许支付网关回调确认已有订单并入账。异常订单由网关重试通知，或由管理员复查后补单。关闭后暂停回调结算，与新单支付方式独立控制。'
       )

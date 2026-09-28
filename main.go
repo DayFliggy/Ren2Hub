@@ -6,7 +6,6 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -31,7 +30,6 @@ import (
 	"github.com/QuantumNous/new-api/service/authz"
 	_ "github.com/QuantumNous/new-api/setting/performance_setting"
 
-	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
@@ -103,13 +101,13 @@ func main() {
 			model.InitChannelCache()
 		}()
 
-		go model.SyncChannelCache(common.SyncFrequency)
+		model.SyncChannelCache(common.SyncFrequency)
 	}
 	if err := controller.InitTaskPlugins(); err != nil {
 		common.FatalLog("failed to initialize task plugins: " + err.Error())
 		return
 	}
-	go controller.SyncTaskPlugins()
+	controller.SyncTaskPlugins()
 	if common.IsMasterNode {
 		if err := service.InitializeAutomaticPricing(context.Background()); err != nil {
 			// Published prices remain valid. Keep the scheduler alive so source
@@ -127,17 +125,17 @@ func main() {
 	model.GetPricing()
 
 	// 热更新配置
-	go model.SyncOptions(common.SyncFrequency)
+	model.SyncOptions(common.SyncFrequency)
 
 	// 周期性重载授权策略，保证多节点/多 master 部署下权限变更能传播到每个实例
-	go authz.StartPolicySync(common.SyncFrequency)
+	authz.StartPolicySync(common.SyncFrequency)
 
 	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("CHANNEL_UPDATE_FREQUENCY"))
 		if err != nil {
 			common.FatalLog("failed to parse CHANNEL_UPDATE_FREQUENCY: " + err.Error())
 		}
-		go controller.AutomaticallyUpdateChannels(frequency)
+		controller.AutomaticallyUpdateChannels(frequency)
 	}
 
 	// Codex credential auto-refresh check every 10 minutes, refresh when expires within 1 day
@@ -167,10 +165,21 @@ func main() {
 	service.StartSystemTaskRunner()
 
 	if os.Getenv("ENABLE_PPROF") == "true" {
-		gopool.Go(func() {
-			log.Println(http.ListenAndServe("0.0.0.0:8005", nil))
+		common.BackgroundWorkers.Go(func(ctx context.Context) {
+			pprofServer := &http.Server{Addr: "0.0.0.0:8005", Handler: nil}
+			result := make(chan error, 1)
+			go func() { result <- pprofServer.ListenAndServe() }()
+			select {
+			case err := <-result:
+				if !errors.Is(err, http.ErrServerClosed) {
+					common.SysError("pprof server stopped: " + err.Error())
+				}
+			case <-ctx.Done():
+				_ = pprofServer.Close()
+				<-result
+			}
 		})
-		go common.Monitor()
+		common.BackgroundWorkers.Go(common.MonitorWithContext)
 		common.SysLog("pprof enabled")
 	}
 
@@ -240,15 +249,9 @@ func main() {
 	shutdownTimeout := time.Duration(common.GetEnvOrDefault("SHUTDOWN_TIMEOUT_SECONDS", 120)) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-	service.BeginGatewayDrain()
-	if err := srv.Shutdown(ctx); err != nil {
-		common.SysError(fmt.Sprintf("server forced to shutdown: %v", err))
-	}
-	if err := service.WaitGatewayDrain(ctx); err != nil {
-		common.SysError("gateway drain deadline reached: " + err.Error())
-		if err := srv.Close(); err != nil {
-			common.SysError("server close failed: " + err.Error())
-		}
+	if err := shutdownApplication(ctx, srv); err != nil {
+		common.SysError("server shutdown incomplete: " + err.Error())
+		return
 	}
 	common.SysLog("server exited")
 }

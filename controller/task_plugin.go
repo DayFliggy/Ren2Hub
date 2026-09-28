@@ -942,8 +942,12 @@ func SyncTaskPluginsOnce() {
 func InitTaskPlugins() error { return syncTaskPluginsOnce() }
 
 func SyncTaskPlugins() {
-	SyncTaskPluginsOnce()
-	for range time.NewTicker(30 * time.Second).C {
-		SyncTaskPluginsOnce()
-	}
+	common.BackgroundWorkers.Go(func(ctx context.Context) {
+		for ctx.Err() == nil {
+			SyncTaskPluginsOnce()
+			if !common.WaitBackgroundInterval(ctx, 30*time.Second) {
+				return
+			}
+		}
+	})
 }

@@ -15,13 +15,15 @@ import (
 )
 
 var hotBuckets sync.Map
+var bucketsMu sync.Mutex
+var sampleWorkers = &common.WorkerGroup{}
 
 // seriesSchema is a stable client cache/schema marker. Do not change it when
 // hiding fields or making response-only privacy hardening changes.
 const seriesSchema = "dbcd0a3c01b55203"
 
 func Init() {
-	go flushLoop()
+	common.BackgroundWorkers.Go(flushLoop)
 }
 
 func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens int64) {
@@ -42,7 +44,7 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens i
 	if generationMs <= 0 {
 		generationMs = latencyMs
 	}
-	Record(Sample{
+	sample := Sample{
 		Model:        info.OriginModelName,
 		Group:        info.UsingGroup,
 		LatencyMs:    latencyMs,
@@ -51,7 +53,10 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens i
 		Success:      success,
 		OutputTokens: outputTokens,
 		GenerationMs: generationMs,
-	})
+	}
+	if !sampleWorkers.Go(func(context.Context) { Record(sample) }) {
+		common.SysError("performance sample rejected after producers stopped")
+	}
 }
 
 func Record(sample Sample) {
@@ -71,12 +76,19 @@ func Record(sample Sample) {
 		group:    sample.Group,
 		bucketTs: bucketStart(time.Now().Unix()),
 	}
+	bucketsMu.Lock()
 	actual, _ := hotBuckets.LoadOrStore(key, &atomicBucket{})
 	actual.(*atomicBucket).add(sample)
+	bucketsMu.Unlock()
 	recordRedis(key, sample)
 }
 
 func Query(params QueryParams) (QueryResult, error) {
+	unlock, err := lockMetricSnapshot()
+	if err != nil {
+		return QueryResult{}, err
+	}
+	defer unlock()
 	if params.Hours <= 0 {
 		params.Hours = 24
 	}
@@ -123,6 +135,11 @@ func Query(params QueryParams) (QueryResult, error) {
 }
 
 func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
+	unlock, err := lockMetricSnapshot()
+	if err != nil {
+		return SummaryAllResult{}, err
+	}
+	defer unlock()
 	if hours <= 0 {
 		hours = 24
 	}

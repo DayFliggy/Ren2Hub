@@ -90,6 +90,13 @@ func WaitGatewayDrain(ctx context.Context) error {
 	return gatewayRequests.drain(ctx, 5*time.Second)
 }
 
+// GatewayDrainComplete guards final flushes after the bounded cleanup window.
+func GatewayDrainComplete() bool {
+	gatewayRequests.Lock()
+	defer gatewayRequests.Unlock()
+	return gatewayRequests.draining && len(gatewayRequests.active) == 0
+}
+
 func (tracker *gatewayRequestTracker) wait(ctx context.Context) error {
 	for {
 		tracker.Lock()

@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
@@ -40,36 +41,44 @@ func init() {
 }
 
 func StartSystemMonitor() {
-	go startHostSystemMonitor()
-	go startNetworkSystemMonitor()
+	BackgroundWorkers.Go(startHostSystemMonitor)
+	BackgroundWorkers.Go(startNetworkSystemMonitor)
 }
 
-func startHostSystemMonitor() {
-	for {
+func startHostSystemMonitor(ctx context.Context) {
+	for ctx.Err() == nil {
 		config := GetPerformanceMonitorConfig()
 		if !config.Enabled {
 			latestSystemStatus.Store(SystemStatus{})
-			time.Sleep(30 * time.Second)
+			if !WaitBackgroundInterval(ctx, 30*time.Second) {
+				return
+			}
 			continue
 		}
 
 		updateSystemStatus()
-		time.Sleep(5 * time.Second)
+		if !WaitBackgroundInterval(ctx, 5*time.Second) {
+			return
+		}
 	}
 }
 
-func startNetworkSystemMonitor() {
-	for {
+func startNetworkSystemMonitor(ctx context.Context) {
+	for ctx.Err() == nil {
 		config := GetPerformanceMonitorConfig()
 		if !config.Enabled {
 			ResetNetworkBandwidthSampler()
 			latestNetworkBandwidth.Store(NetworkBandwidth{})
-			time.Sleep(30 * time.Second)
+			if !WaitBackgroundInterval(ctx, 30*time.Second) {
+				return
+			}
 			continue
 		}
 
 		latestNetworkBandwidth.Store(SampleNetworkBandwidth())
-		time.Sleep(5 * time.Second)
+		if !WaitBackgroundInterval(ctx, 5*time.Second) {
+			return
+		}
 	}
 }
 

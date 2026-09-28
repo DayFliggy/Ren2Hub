@@ -454,6 +454,7 @@ export async function configureStablePage(
       },
     ],
     ['/api/user/sessions', []],
+    ['/api/user/token/status', { exists: false, token_ref: '' }],
     ['/api/mj/self', { page: 1, page_size: 10, total: 0, items: [] }],
     ['/api/task/self', { page: 1, page_size: 10, total: 0, items: [] }],
     ['/api/about', 'Ren2Hub'],
@@ -738,6 +739,7 @@ export async function configureStablePage(
         today_quota: '92480',
       },
     ],
+    ['/api/log/self/groups', ['default', 'vip']],
     ['/api/audit', VISUAL_AUDIT_PAGE],
     ['/api/audit/self', VISUAL_AUDIT_PAGE],
     [

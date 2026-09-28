@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 
 	"github.com/QuantumNous/new-api/common"
@@ -394,8 +395,11 @@ func UpdateSystemTaskState(taskID string, lockedBy string, state any) error {
 }
 
 func RenewSystemTaskLock(taskID string, lockedBy string, lockUntil int64) error {
+	return RenewSystemTaskLockContext(context.Background(), taskID, lockedBy, lockUntil)
+}
+func RenewSystemTaskLockContext(ctx context.Context, taskID string, lockedBy string, lockUntil int64) error {
 	now := common.GetTimestamp()
-	result := DB.Model(&SystemTaskLock{}).
+	result := DB.WithContext(ctx).Model(&SystemTaskLock{}).
 		Where("task_id = ? AND locked_by = ? AND locked_until >= ?", taskID, lockedBy, now).
 		Updates(map[string]any{
 			"locked_until": lockUntil,

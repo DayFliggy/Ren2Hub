@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"strings"
@@ -214,11 +215,15 @@ func loadOptionsFromDatabase() {
 }
 
 func SyncOptions(frequency int) {
-	for {
-		time.Sleep(time.Duration(frequency) * time.Second)
-		common.SysLog("syncing options from database")
-		loadOptionsFromDatabase()
+	if frequency <= 0 {
+		return
 	}
+	common.BackgroundWorkers.Go(func(ctx context.Context) {
+		for common.WaitBackgroundInterval(ctx, time.Duration(frequency)*time.Second) {
+			common.SysLog("syncing options from database")
+			loadOptionsFromDatabase()
+		}
+	})
 }
 
 // Price versions are the only live model and tool pricing configuration.

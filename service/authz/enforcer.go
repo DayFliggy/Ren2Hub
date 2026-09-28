@@ -1,6 +1,7 @@
 package authz
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -85,10 +86,11 @@ func StartPolicySync(frequency int) {
 	if frequency <= 0 {
 		return
 	}
-	for {
-		time.Sleep(time.Duration(frequency) * time.Second)
-		if err := ReloadPolicy(); err != nil {
-			common.SysError("failed to reload authz policy: " + err.Error())
+	common.BackgroundWorkers.Go(func(ctx context.Context) {
+		for common.WaitBackgroundInterval(ctx, time.Duration(frequency)*time.Second) {
+			if err := ReloadPolicy(); err != nil {
+				common.SysError("failed to reload authz policy: " + err.Error())
+			}
 		}
-	}
+	})
 }

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -61,11 +62,15 @@ func InitChannelCache() {
 }
 
 func SyncChannelCache(frequency int) {
-	for {
-		time.Sleep(time.Duration(frequency) * time.Second)
-		common.SysLog("syncing channels from database")
-		InitChannelCache()
+	if frequency <= 0 {
+		return
 	}
+	common.BackgroundWorkers.Go(func(ctx context.Context) {
+		for common.WaitBackgroundInterval(ctx, time.Duration(frequency)*time.Second) {
+			common.SysLog("syncing channels from database")
+			InitChannelCache()
+		}
+	})
 }
 
 func CacheGetChannel(id int) (*Channel, error) {
