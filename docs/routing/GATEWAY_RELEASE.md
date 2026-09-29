@@ -1,6 +1,6 @@
 # 单实例网关切换与回退
 
-当前只允许一个网关进程承接业务流量，不支持新旧版本双活，也不含 Redis 用户/渠道并发后端。本文是发布契约；源码验证见[网关验证证据](SINGLE_INSTANCE_ACCEPTANCE.md)、[账务验证](../billing/VALIDATION.md)和[易支付验证](../billing/EPAY_VALIDATION.md)，实际运行版本由所属工作区服务器档案维护。
+当前只允许一个网关进程承接业务流量，不支持新旧版本双活，也不含 Redis 用户/渠道并发后端。本文是发布契约；复验方法见[网关验证步骤](GATEWAY_VALIDATION.md)和[账务复验](../billing/VALIDATION.md)，验收边界见[网关验收边界](SINGLE_INSTANCE_ACCEPTANCE.md)。实际运行版本和验收结果只由所属工作区服务器档案维护。
 
 ## 发布前记录
 
@@ -31,7 +31,7 @@
 4. 使用经过兼容核验的数据库和配置启动新进程。核对 API/前端、认证、网关运行态 `schema_version=2`、配置版本冲突、JSON/SSE/Realtime、满载拒绝及账务烟测。
 5. 核对授槽减释放等于活动数、等待已退登、账务恢复与投递积压正常，再记录发布结果。异常长持槽用于诊断，不强行清零。
 
-Provider RPM/TPM、逻辑频率和健康探测仍使用各自存储。本地并发成功不代表依赖 Redis 的其他边界也可用。
+Provider RPM/TPM、逻辑频率和健康探测使用各自存储。未设置 `REDIS_CONN_STRING` 时，Provider RPM/TPM 使用进程内有界预留（见[统一路由](UNIFIED_ROUTING.md#provider-额度预留)），重启后计数清零，因此同样只适用于单进程；启用逻辑频率限制但没有 Redis 时请求返回 503 `rate_limit_unavailable`，不改用内存计数；健康探测状态保存在主数据库。本地并发成功不代表依赖 Redis 的其他边界也可用。
 
 ## 旧 Redis 键清理
 

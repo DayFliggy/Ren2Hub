@@ -21,6 +21,12 @@
 
 计算器识别单位不代表所有协议或来源已支持该产品。任务 schema 另受冻结字段的单位和来源约束。原始用量按各上游缓存语义归一化，完整输入上下文单独作为 `len`；独立收费的子类从基础输入/输出剔除，避免重复计费。媒体缓存不得超过对应媒体量及通用缓存总量，图片与音频缓存之和也不得超过通用缓存。缺失和明确零分别保存。
 
+单价单位和 schema 数值字段单位只接受 `pkg/billingunits` 注册表中的 token、call、image、second/minute/hour、character、credit、count，以及千次调用、百万 token、百万字符；未注册单位在报价构造和发布前拒绝。数量与单价单位必须属于同一维度，时长只在秒、分钟、小时之间换算，不能跨维度；schema 价格单位必须与字段单位完全一致。
+
+图片与音频是互斥的模态：两者的输入 token 之和不得超过输入总量（上游输入不含缓存时加上缓存读写），图片、音频输出与 reasoning 之和不得超过输出总量。超出时计算直接失败，不把剩余文本量夹到零后继续收费；缓存与模态可以重叠，合法缓存集合不受此限制。
+
+`flat_fee` 只覆盖其对应的常规产品计量。无其他单价的纯固定费可以忽略已确认的 calls、images、seconds、characters、credits 事实，带固定费时 calls 无须另行定价；未定价的 `tool:*` 或其他未知数量仍以缺价失败，表达式加固定费同样不能吸收未定价工具调用。
+
 全部金额和表达式使用 Decimal，已移除 Expr VM/float64 结算入口。`v1:` 结果为微美元，`p * 2.5 + c * 10` 表示每百万输入 2.5 USD、输出 10 USD；`v2:` 使用冻结任务 schema，结果直接为 USD。数值属性使用 `attr_num`，时区日历及 UTC 偏移在报价时冻结。语法、资源限制和除法精度见[表达式契约](../../pkg/billingexpr/expr.md)。
 
 `ChargeResult.base_usd` 是分项合计；`adjustments` 记录渠道倍率、调整前金额、增减金额与调整后金额，`total_usd` 是调整后总额。最后乘 500000 并只舍入一次，正金额最低 1 quota，明确零为 0。无效或超过单请求 MaxInt32 的结果进入对账，不截断扣款。
@@ -40,7 +46,7 @@ PublicProviderConf 是参考目录。媒体能力标签或 `cost.input/output=0`
 
 自动 token 价格生成冻结表达式，默认只支持 `default`。源数据对全部已收费维度给出完整显式档位价时才加入 `priority/flex`；不生成 ×2/×0.5，不把 priority 当 fast/ultrafast，不用普通价补缺。上下文条件来自原字段，冲突阈值拒绝。`support.dimensions/service_tiers` 冻结能力，未知档位不得落入默认分支。请求档位用于锁价，响应实际档位单独审计，不追溯换价。
 
-自动版本冻结 `provenance.kind=source`、不可变 `snapshot_id`、`parser_version` 和 `fields[{target,source_path,raw_value,source_unit,conversion}]`，同时冻结 `origin/source_model/source_hash`。原文按来源与 SHA-256 归档于 `BillingPricingSnapshot`，`BillingPricingSource` 保存活动指针；刷新不覆盖历史原文，取回原文先核验 SHA。
+自动版本冻结 `provenance.kind=source`、不可变 `snapshot_id`、`parser_version` 和 `fields[{target,source_path,raw_value,source_unit,conversion}]`，同时冻结 `origin/source_model/source_hash`。原文按来源与 SHA-256 归档于 `BillingPricingSnapshot`，`BillingPricingSource` 保存活动指针；刷新不覆盖历史原文，取回原文先核验 SHA。自动发布的证据对象由服务端从归档快照构建：重新核验正文 SHA 并重新解析原文，待发布版本（含字段证据）的哈希必须与该快照的解析结果一致，被快照拒绝的身份不能发布；来源不符、正文损坏或计划不一致都拒绝，不能只凭哈希字符串发布。
 
 人工发布必须提供 `provenance.kind=evidence` 和完整字段证据，或 `kind=retail` 与非空 `retail_reason`。retail 不带源快照及字段证据，不能将运营售价伪装为来源事实。参考目录导入只形成草稿，保存须明确人工依据；恢复全局自动价携带当前 `expected_version`。
 
@@ -60,7 +66,24 @@ PublicProviderConf 是参考目录。媒体能力标签或 `cost.input/output=0`
 
 `reservation_quantity` 仅是经审阅的预留量，不补实际缺失，也不是费用上限。TTS token 计费要求能报告实际用量的 OpenAI SSE；二进制音频本身不提供 token 事实。STT token/时长计费要求可携带用量的 JSON 响应格式，缺失事实保持对账。Embedding 的 `usage_scope=embedding` 限制请求类型及输入用量。
 
-Realtime 支持已实现的累计 token/媒体用量，不能在会话中改变冻结价格属性或模型。Realtime 工具单独计费、输入转录附加产品尚无完整完成事实合同，当前拒绝。Code interpreter、computer use 与存储收费也不能从工具声明或目录字段推导为支持。没有可信实际 usage 的视频插件不按请求时长结算；只有完成 credits、没有可信预留估算的工厂价格不能发布。固定 calls 或 schema 任务价须各自通过当前插件合同。
+以下“可收费”均以该请求存在已发布且完整的价格或计量合同为前提，不代表目录中的模型默认可收费；最终消费仍需完整实际事实或明确的 `request_fixed` 合同。
+
+| 产品 | 可收费路径 | 边界 |
+| --- | --- | --- |
+| 文本与 Embedding | token、缓存读写、reasoning 及明确覆盖的媒体细分；固定费、单价、结构化阶梯或 Decimal 表达式 | Embedding 使用 `usage_scope=embedding`；缺失、估算或空 usage 不当作实际零值 |
+| 工具 | web search（含 search-preview 模型）、file search、Google search、图片生成及已配置函数维度，按适配器确认的完成调用计数 | 声明工具即要求对应 `tool:*` 价格，缺价在预留前拒绝，不退回基础 token 价；调用按 ID、call ID 与输出索引去重，身份缺失或冲突时不形成计费数量 |
+| Realtime | 已实现的累计 token/媒体用量；纯固定请求价覆盖常规 token 维度 | 只允许客户端执行的 function 声明；其他工具类型、已配置 `tool:<name>` 价格的函数、需要 `tool:*` 维度的请求，以及顶层 `input_audio_transcription` 或嵌套 `audio.input.transcription` 均以 `missing_usage_contract` 拒绝；会话中不能改变模型 |
+| 图片 | 图像 token/缓存细分，或已确认交付的 `images` 数量 | 同一版本不能同时按 `img_o` 与 `images`/`tool:image_generation` 收费，发布前拒绝 |
+| 视频、音乐与其他任务 | 通过插件合同的固定 calls 或 schema 数量价；冻结插件版本、计量字段与价格，按成功终态事实结算 | schema 中 `estimate_only` 字段只用于预留，不能定义最终费用 |
+
+以下产品当前拒绝或无法发布，不能用固定费、示例零值或参考目录价格绕过：
+
+- Code interpreter、computer use、Google Maps 工具：请求声明即在预留前以 `missing_usage_contract` 拒绝。自动来源中的地图查询价只作为未定价能力的字段证据保留。
+- Vidu credits 按量价：credits 只在完成时提供，没有可信预留估算，含 credits 的工厂价格被拒绝，应改用不带 usage_schema 的 calls/per_call 价格。
+- 存储量乘时间：注册表没有对应单位，无法发布。
+- Realtime 单独收费的工具与输入转写附加产品（见上表）。
+
+没有可信实际 usage 的视频插件不按请求时长结算。任务产物的存储与计费是不同边界：`service/task_artifact_store.go` 只有 `disabledArtifactStore`，`GetTaskArtifactStore()` 始终返回禁用实现，`Persist`/`Serve` 返回禁用错误；配置结构、代理下载或签名访问都不能说明已实现对象存储持久化。
 
 ## 公开展示与审计
 

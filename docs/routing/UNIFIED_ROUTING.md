@@ -1,6 +1,6 @@
 # 统一路由
 
-本文描述现行单实例网关的源码契约。只允许一个网关进程承接业务流量；新旧版本必须顺序排空切换。源码验证见[验证证据](SINGLE_INSTANCE_ACCEPTANCE.md)，当前运行版本由所属工作区的服务器档案维护。
+本文描述现行单实例网关的源码契约。只允许一个网关进程承接业务流量；新旧版本必须顺序排空切换。复验方法见[验证步骤](GATEWAY_VALIDATION.md)，验收边界见[网关验收边界](SINGLE_INSTANCE_ACCEPTANCE.md)，当前运行版本由所属工作区的服务器档案维护。
 
 ## 路由和权限
 
@@ -21,6 +21,14 @@ Token 的所有权、启停、到期、额度、IP 和模型限制继续生效�
 用户队列与一次渠道队列共享 `GatewayWaitBudget`。预算只扣等待和队列策略读取时间，上游使用逻辑请求 context。实际入队的策略读取与等待共用剩余预算子 context；路由扫描可刷新 Provider 与渠道队列配置，但不能延长原请求的等待预算。等待、取消和授槽在同一同步边界处理。取消先停止上游，再由生命周期拥有者释放；SSE/Realtime 持有到实际结束。视频 Remix、Suno 续作及 Midjourney 提交即使绑定原渠道也参与用户准入；查询、通知和未实现入口不占生成槽。后台任务不持续持有原 HTTP 槽。
 
 渠道尝试清理完健康探测和 Provider 预留后释放 Permit，再执行 retry backoff。内部重试共用同一计费会话；更高价格补充预扣，输出已经交付时不能因后续维护错误退款。用户/渠道本地占用不包含 Redis key、TTL 或续期；健康探测和 Provider/逻辑频率预留继续使用各自既有一致性机制。
+
+### Provider 额度预留
+
+取得渠道 Permit 并通过 TPM 预算检查后，发送前按[管理 API](GATEWAY_API.md#配置契约) 的渠道和凭据范围原子预留 RPM/TPM：额度不足返回 429，存储不可用返回 503，均不发送。配置了 Redis 时预留、续期和结束由 Redis 脚本执行；未设置 `REDIS_CONN_STRING` 时同一入口改用进程内实现，仍然执行限制，不跳过检查。内存计数只存在于当前进程，重启清零，不跨进程共享，因此只适用于单进程承接流量。
+
+内存实现按范围保留最近 60 秒的已发送尝试和结算 token。RPM 计入已发送尝试与在途预留，TPM 计入已结算用量、在途估算和本次估算。预留有效期为 `GatewayReservationTTL`（120 秒），随尝试心跳续期；未续期而过期的预留在下一次预留时释放在途额度。已结束或已过期的记录保留 60 秒后删除，状态规模随近期流量有界。结束时，发送前失败退回 RPM；已发送但用量未知按预留估算入账，已知用量按实际值入账；Retry-After 为该范围设置冷却。重复结束幂等，过期后续期或结束返回预留丢失。
+
+没有 Redis 时，选渠前的 Provider 可用性预筛和运行态读取不使用内存计数：候选不会因内存计数被提前跳过，发送前预留是唯一判定；`/api/gateway/runtime/channels/:id` 返回 `rate: null`、`rate_status: unavailable`，`/runtime/credentials/:id` 返回 503。
 
 ## 候选排序、排队和故障转移
 
@@ -48,7 +56,7 @@ Retry-After 只作用于所属渠道或已有渠道内 credential/模型健康�
 
 进程共享重试额度使用固定百分之一精度，初始/最大储备默认 20 次；每次首次真实发送补 0.1 次，额外发送消耗 1 次。发送前可撤销预留，进入发送边界后提交；结果未知不退款，重试本身不补额度。预留计入 burst，热更新不补满，禁用期间不积累。额度不足立即停止重试、保留最后真实上游错误，并记录 `retry_budget_exhausted`。
 
-钱包是唯一资金来源，Token 是附加消费限额。每次发送冻结价格作用域、不可变版本及哈希、渠道售价系数、安全属性与时间；查价先精确渠道价格，再使用明确发布的全局价格，渠道独立价格的系数为 1。`TaskBillingContext` 保存独立的 `Quote`、`Usage`、`Charge` 及原模型名，不再依赖旧 `group_ratio` 快照。普通请求、Realtime 与异步任务共用持久化预留和事件恢复。当前账务格式为 3，不迁移旧账务数据库，详见[账务架构](../billing/IMPLEMENTATION.md)。
+钱包是唯一资金来源，Token 是附加消费限额。每次发送冻结价格作用域、不可变版本及哈希、渠道售价系数、安全属性与时间；查价先精确渠道价格，再使用明确发布的全局价格，渠道独立价格的系数为 1。`TaskBillingContext` 保存独立的 `Quote`、`Usage`、`Charge` 及原模型名，不再依赖旧 `group_ratio` 快照。普通请求、Realtime 与异步任务共用持久化预留和事件恢复。当前账务安装格式为 4、价格合同为 3，不迁移旧账务数据库，详见[账务架构](../billing/IMPLEMENTATION.md)。
 
 ## 协议和重试
 
@@ -79,7 +87,7 @@ SSE 按事件空行组装多行 `data:`，支持 CRLF/LF/CR、注释、事件名
 - `/api/routing/*` 管理 Profile、候选目录和静态预览；预览不发送请求、不预扣、不持有 Permit。
 - `POST /api/routing/tokens/:id/preview` 覆盖自动、手动及无 Profile 的旧 Token，旧 Profile 预览委托同一入口。预览复用实际静态资格及排序，输出快照标识、时间、配置版本和动态复核提示；加权顺序不是下一次请求承诺。
 - `/api/channel/` 管理实际容量和 Decimal 字符串渠道售价系数；独立渠道价格通过 `/api/billing/prices` 管理，独立 `/route-policy` 接口已移除。
-- `/api/pricing` 返回已发布且当前可路由模型的 `price_versions`、首项投影 `price_version` 和 `billing_mode`。版本数组仅含调用方可见渠道的有效价格，纯渠道价格模型也可列出；旧模型倍率和渠道倍率区间不再作为公开契约。
+- `/api/pricing` 按模型返回 `model_name` 与 `offers[]`，每份 offer 含计价模型、公开 `price_version`、条件、渠道调整、展示价格和可用状态。只含调用方可路由渠道的有效已发布价格，纯渠道价格模型也可列出；旧模型倍率和渠道倍率区间不再作为公开契约，完整形状见[定价说明](../billing/PRICING.md#公开展示与审计)。
 
 不再使用 TOKEN_PRIVATE_ROUTING_ENABLED、ROUTE_LIVE_*、ROUTE_SHADOW_* 或 ROUTE_SCORE_* 灰度开关。能力刷新任务继续使用 ROUTE_CAPABILITY_REFRESH_*；ROUTE_DECISION_EVENT_QUEUE_SIZE 控制有界决策日志队列。
 
@@ -93,6 +101,6 @@ SSE 按事件空行组装多行 `data:`，支持 CRLF/LF/CR、注释、事件名
 
 源码和文档清理不删除数据库、账单、任务或审计数据。当前安装由 `model/billing_schema.go` 检查空库或匹配格式标记；旧组和旧倍率账务库不能直接升级。发布与回退须同时核对代码、数据格式和在途消费保护，不能只回滚镜像。
 
-`router/unified_routing_integration_test.go` 使用隔离 SQLite、Redis 和模拟 HTTP 上游，覆盖 Chat、Compact 阶段切换、Suno、视频、Midjourney、倍率计费、Permit 释放以及准入失败不发送、不扣费。其他测试覆盖 Profile 版本、资格撤销、Key 健康、表达式计费和退款。主模块与独立 RelayKit 必须分别验证；本地模拟测试不代表真实供应商或生产集群已验收。
+`router/unified_routing_integration_test.go` 使用隔离 SQLite、Redis 和模拟 HTTP 上游，覆盖 Chat、Compact 阶段切换、Suno、视频、Midjourney、渠道售价系数计费、Permit 释放以及准入失败不发送、不扣费。其他测试覆盖 Profile 版本、资格撤销、Key 健康、表达式计费和退款。主模块与独立 RelayKit 必须分别验证；本地模拟测试不代表真实供应商或生产集群已验收。
 
 工作区参考源码只用于研究。当前方案保持一个选择器、一套本地准入事实和已有尝试诊断，不引入第二套请求管线、持久化正文追踪或 Redis 容量缓存。旧 Redis 用户并发和配置变化重建活动池不属于当前方案。

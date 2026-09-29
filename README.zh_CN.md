@@ -55,9 +55,9 @@
 
 ## 📝 项目说明
 
-当前检出项目为 Ren2Hub，路由、准入、API 与发布契约请从[本地文档](docs/README.md)进入。下文保留上游项目介绍和署名；部署以 [Ren2Hub 安装文档](docs/installation/DOCKER.md)为准，上游镜像不包含本检出的改造。Ren2Hub 采用单进程本地 FIFO 准入，新旧版本必须顺序切换。RenAI 工作区使用独立部署资产和 PostgreSQL。
+当前检出项目为 Ren2Hub，路由、准入、API 与发布契约请从[本地文档](docs/README.md)进入。下文保留上游项目介绍和署名；部署以 [Ren2Hub 安装文档](docs/installation/DOCKER.md)为准，上游镜像不包含本检出的改造。Ren2Hub 采用单进程本地 FIFO 准入，新旧版本必须顺序切换。
 
-计费使用钱包余额，Token 额度作为附加消费限制。本站订阅与套餐管理已移除，历史账务数据继续保留并受保护；专属提交和验证边界见[现行验收记录](docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md)。
+计费使用钱包余额，Token 额度作为附加消费限制。本站订阅与套餐管理已移除，历史账务数据继续保留并受保护；现行账务合同见[账务架构](docs/billing/IMPLEMENTATION.md)。
 
 > [!IMPORTANT]
 > - 本项目仅面向合法授权的 AI API 网关、组织内部鉴权、多模型管理、用量统计、成本核算和私有化部署场景。

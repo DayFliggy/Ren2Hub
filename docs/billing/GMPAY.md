@@ -1,6 +1,6 @@
 # GMPay 加密货币充值
 
-本契约对应 2026-09-23 本地接入实现，以 `e164fc64d` 为基线。网关协议依据参考项目 `GMwalletApp/epusdt` 的 `aed4a970` 源码。GMPay 使用原生 HMAC-SHA256 接口，与现有 EPay 的 MD5 表单支付分别配置、分别下单，共同通过钱包账务事件入账。
+网关协议依据参考项目 `GMwalletApp/epusdt` 的 `aed4a970` 源码。GMPay 使用原生 HMAC-SHA256 接口，与现有 EPay 的 MD5 表单支付分别配置、分别下单，共同通过钱包账务事件入账。
 
 ## 接口和配置
 
@@ -62,23 +62,25 @@ epusdt 当前用商户数据库里的现密钥签发旧单通知；Ren2Hub 使�
 
 异常恢复仍由外部网关重试有效通知或管理员核查后使用现有补单入口完成；不增加用户验付、主动查单或自动退款。
 
-## 本地验证与未完成验收
+## 验证入口与未证明边界
 
-2026-09-23 已验证：协议与固定 HMAC 样例、创建响应绑定、未知结果保留、报价变化、资金幂等、提前回调、晚到结果、暂停与恢复结算、手工补单、最终证据一致性、事务回滚、SQLite 增量迁移与并发结算。后端单测统一使用 `-timeout 60s`。
+后端测试必须带 `-timeout 60s`：
 
-`controller/gmpay_integration_test.go` 使用隔离 SQLite 和真实本地 HTTP/TLS 服务，覆盖配置保存与密钥隐藏、EPay CNY/GMPay USD 独立报价、创建订单、停止新单后旧单通知、数字 JSON 回调、重复通知及管理员证据读取。该测试使用模拟网关，不涉及区块链或真实支付。
+```powershell
+go test ./pkg/gmpay -timeout 60s -count=1
+go test ./service ./controller ./model ./router -run 'Gmpay' -timeout 60s -count=1
+go test ./model -run '^TestGmpayMigrationsAndConcurrentSettlementAcrossDatabases$' -v -timeout 60s -count=1
+go test ./controller -run '^TestGmpay(HTTPConfigurationCheckoutAndSettlement|ConfigurationRejectsInvalidOrUncommittedChanges)$' -v -timeout 60s -count=1
+```
 
-前端验证包括 GMPay 配置保存、倍率校验、空资产停新单、资产分流、最低额度、报价变化和收银台跳转。完整 Vitest、类型、lint、格式、生产构建，以及 EPay/GMPay 桌面和手机、浅色和深色浏览器用例已执行。管理员对账详情另有定向用例。
+回归覆盖协议与固定 HMAC 样例、创建响应绑定、未知结果保留、报价变化、资金幂等、提前回调、晚到结果、暂停与恢复结算、手工补单、最终证据一致性、事务回滚、增量迁移与并发结算。三库测试的 MySQL/PostgreSQL 由 `GATEWAY_STARTUP_MYSQL_DSN`、`GATEWAY_STARTUP_POSTGRES_DSN` 指向隔离测试库，CI 已接入；缺失环境时显式跳过，不能称为该数据库验收通过。`controller/gmpay_integration_test.go` 使用隔离 SQLite、真实本地 HTTP/TLS 服务和模拟网关，覆盖配置保存与密钥隐藏、EPay CNY/GMPay USD 独立报价、创建订单、停止新单后旧单通知、数字 JSON 回调、重复通知及管理员证据读取。前端 Vitest 与 `tests/visual/gmpay-*.spec.ts` 浏览器用例使用模拟 API。
 
-数据库 CI 已接入 `TestGmpayMigrationsAndConcurrentSettlementAcrossDatabases`，从现有 MySQL/PostgreSQL 服务传入 `GATEWAY_STARTUP_MYSQL_DSN` / `GATEWAY_STARTUP_POSTGRES_DSN`。2026-09-23 在服务器临时隔离容器中完成 SQLite、MySQL 8.4、PostgreSQL 15 的迁移与并发结算实测，三项全部通过；测试结束后删除本次容器和网络，未连接已有业务数据库。
+本地测试不涉及区块链或真实支付，以下行为仍需在实际 epusdt 环境验收：
 
-服务器已完成真实 epusdt 商户配置、资产探测、USD 报价及原生签名下单，生成一笔 `1.00 USD` 的 `usdt.ethereum` 待付订单；钱包金额和版本均未提前变化。公网 IP HTTPS 收银台、静态资源和订单 API 可用，未签名公网回调被拒绝。网关停机备份后重建同版本容器，订单仍可读取，两个 SQLite 库完整性正常。这些结果不包含链上支付成功或已付款通知。
+- 小额真实链上支付、到账证据与一次入账核对，以及成功通知失败后的重试。
+- 新旧 PID 并存时的存量订单及密钥轮换流程。
+- 从备份恢复业务服务；归档检查、SQLite 完整性和容器重建不等同于恢复演练。
 
-上线前仍需完成：
-
-- 在已部署测试网关上完成小额真实链上支付、到账证据与一次入账核对，以及成功通知失败后的重试；本轮未执行有资金的支付。
-- 在实际 epusdt 环境验收新旧 PID 并存时的存量订单及密钥轮换流程。
-- 演练从备份恢复独立业务服务；已做的归档检查、SQLite 完整性和容器重建不等同于恢复演练。
-- 生产部署及业务验收；目前仅有独立测试环境，测试 PID、空钱包和密钥通过服务器私有配置注入，敏感值不写入仓库。
+执行结果和部署版本只由所属工作区服务器档案记录，旧的验证记录从 Git 历史读取。测试 PID、钱包和密钥只能通过服务器私有配置注入，敏感值不写入仓库。
 
 已有 EPay 约定见 [EPAY.md](EPAY.md)，共同账务事件约定见 [IMPLEMENTATION.md](IMPLEMENTATION.md)。

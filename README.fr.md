@@ -48,16 +48,16 @@
   <a href="#-fonctionnalités-clés">Fonctionnalités clés</a> •
   <a href="#-déploiement">Déploiement</a> •
   <a href="#-documentation">Documentation</a> •
-  <a href="#-aide-support">Aide</a>
+  <a href="#-aide-et-support">Aide</a>
 </p>
 
 </div>
 
 ## 📝 Description du projet
 
-Cette copie du projet est Ren2Hub. Consultez la [documentation locale](docs/README.md) pour les contrats actuels de routage, d'admission, d'API et de publication. La présentation et les attributions du projet amont sont conservées. Utilisez le [guide d'installation Ren2Hub](docs/installation/DOCKER.md) ; les images amont ne contiennent pas les modifications de cette copie. Ren2Hub utilise une admission FIFO locale dans un seul processus et impose un remplacement séquentiel des versions. L'espace RenAI utilise ses propres fichiers de déploiement et PostgreSQL.
+Cette copie du projet est Ren2Hub. Consultez la [documentation locale](docs/README.md) pour les contrats actuels de routage, d'admission, d'API et de publication. La présentation et les attributions du projet amont sont conservées. Utilisez le [guide d'installation Ren2Hub](docs/installation/DOCKER.md) ; les images amont ne contiennent pas les modifications de cette copie. Ren2Hub utilise une admission FIFO locale dans un seul processus et impose un remplacement séquentiel des versions.
 
-La facturation utilise le solde du portefeuille, avec un quota Token supplémentaire. Les abonnements et la gestion des forfaits du site ont été supprimés ; les données comptables historiques restent protégées. Le [rapport de validation](docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md) précise le commit et les limites des vérifications.
+La facturation utilise le solde du portefeuille, avec un quota Token supplémentaire. Les abonnements et la gestion des forfaits du site ont été supprimés ; les données comptables historiques restent protégées. L'[architecture de facturation](docs/billing/IMPLEMENTATION.md) décrit le contrat de facturation actuel.
 
 > [!IMPORTANT]
 > - Ce projet est exclusivement destiné aux scénarios de passerelle API d'IA légalement autorisés, d'authentification organisationnelle, de gestion multi-modèles, d'analyse d'utilisation, de comptabilisation des coûts et de déploiement privé.

@@ -67,6 +67,6 @@ go test ./controller -run TestEpayGatewayRetriesAfterSettlementFailure -v -timeo
 go test ./router -run TestRetiredEpayVerificationReturnsNotFound -v -timeout 60s
 ```
 
-三库测试使用独立测试数据库；MySQL/PostgreSQL 分别由 `GATEWAY_STARTUP_MYSQL_DSN`、`GATEWAY_STARTUP_POSTGRES_DSN` 指定。缺失环境时测试显式跳过，不能称为该数据库验收通过。回归覆盖回调失败后重试、暂停后恢复接收通知、管理员补单与重复通知、事务回滚和旧验付接口退休，不触发真实支付。根工作区的独立模拟网关提供真实 HTTP 验收入口。
+三库测试使用独立测试数据库；MySQL/PostgreSQL 分别由 `GATEWAY_STARTUP_MYSQL_DSN`、`GATEWAY_STARTUP_POSTGRES_DSN` 指定。缺失环境时测试显式跳过，不能称为该数据库验收通过。回归覆盖回调失败后重试、暂停后恢复接收通知、管理员补单与重复通知、事务回滚和旧验付接口退休，不触发真实支付。
 
-当次执行结果与未完成项见 [易支付验证记录](EPAY_VALIDATION.md)。
+这些测试只证明标准 MD5 表单和模拟通知，不证明任意网关的私有协议方言兼容，也不证明真实付款、网关通知重试或公网回调可达。执行结果和部署版本只由所属工作区服务器档案记录，旧的验证记录从 Git 历史读取。

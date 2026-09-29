@@ -32,7 +32,7 @@ Root 可以管理所有用户；其他管理员只能查看和修改角色低于
 
 ## 配置契约
 
-`PUT /config` 保留原有全量更新契约和乐观版本检查。新客户端先 GET 并保留所有字段；旧客户端省略本轮新增的四个字段时保留数据库当前值，显式 null 返回 400。`channel_rates` 按渠道 ID 配置，该渠道的所有模型共享额度。`credential_rates` 按稳定凭据 UUID 配置，同一渠道内使用该凭据的请求共享额度。两个范围原子准入。
+`PUT /config` 保留原有全量更新契约和乐观版本检查。新客户端先 GET 并保留所有字段；旧客户端省略 `total_queue_size` 和三个 `retry_budget_*` 字段时保留数据库当前值，显式 null 返回 400。`channel_rates` 按渠道 ID 配置，该渠道的所有模型共享额度。`credential_rates` 按稳定凭据 UUID 配置，同一渠道内使用该凭据的请求共享额度。两个范围原子准入。
 
 ```json
 {
@@ -78,7 +78,7 @@ Root 可以管理所有用户；其他管理员只能查看和修改角色低于
 
 rate 为 `{ rpm_used, tokens_used, tokens_reserved, cooldown_ms }`：RPM 统计最近 60 秒已准入尝试；发送前失败会退回。tokens_used 为最近 60 秒已结算用量，tokens_reserved 为仍有效的在途估算。发送后用量未知时保留估算，实际用量超过估算时按真实用量入账并限制后续请求。cooldown_ms 是当前渠道或渠道内凭据的 Retry-After 冷却剩余毫秒，独立渠道不共享冷却。
 
-用户和渠道并发运行态来自同一进程内 manager，返回 `in_flight`、`queued`、`capacity`、`config_version`、`revision`、`started_at`（Unix 秒）、`draining`。查询不创建池、不占容量。Provider rate 继续读取 Redis；渠道并发可读而 Provider 不可用时仍返回 200、真实本地计数及 `rate: null`、`rate_status: unavailable`；正常时 `rate_status: available`。独立凭据 rate 读取失败仍返回 503。无效输入返回 `400 VALIDATION_ERROR`；资源不存在返回 `404 NOT_FOUND`；无权管理目标用户返回 `403 FORBIDDEN`。
+用户和渠道并发运行态来自同一进程内 manager，返回 `in_flight`、`queued`、`capacity`、`config_version`、`revision`、`started_at`（Unix 秒）、`draining`。查询不创建池、不占容量。Provider rate 只从 Redis 读取；渠道并发可读而 Provider 不可用时仍返回 200、真实本地计数及 `rate: null`、`rate_status: unavailable`；正常时 `rate_status: available`。独立凭据 rate 读取失败仍返回 503。未配置 Redis 时实际准入改用进程内预留，但这两个接口不暴露内存计数，分别固定返回 `unavailable` 和 503，见[Provider 额度预留](UNIFIED_ROUTING.md#provider-额度预留)。无效输入返回 `400 VALIDATION_ERROR`；资源不存在返回 `404 NOT_FOUND`；无权管理目标用户返回 `403 FORBIDDEN`。
 
 生成入口的用户准入在 OpenAI 错误对象中返回明确 `code`，包括 `gateway_capacity_exhausted`、`gateway_queue_full`、`gateway_wait_timeout`、`gateway_total_queue_full` 和 `gateway_draining`。诊断 message 分别标记 `user admission` 或 `process admission`；渠道尝试错误保留 `channel admission` 原因，路由日志记录对应渠道。客户端已取消或已提交响应时不再追加错误。
 

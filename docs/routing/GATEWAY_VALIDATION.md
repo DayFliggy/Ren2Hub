@@ -1,6 +1,6 @@
 # 单实例网关验证步骤
 
-测试仅连接明确隔离的数据库、Redis 和模拟上游；本地夹具与服务器测试栈的数据各自独立，不使用生产数据或付费模型。本文是复验方法，已执行范围见[网关验证证据](SINGLE_INSTANCE_ACCEPTANCE.md)；资金与支付另见[账务验证](../billing/VALIDATION.md)和[易支付验证](../billing/EPAY_VALIDATION.md)。
+测试仅连接明确隔离的数据库、Redis 和模拟上游；本地夹具与服务器验收实例的数据各自独立，不使用生产数据或付费模型。本文是复验方法，判定规则见[网关验收边界](SINGLE_INSTANCE_ACCEPTANCE.md)；资金与支付另见[账务复验](../billing/VALIDATION.md)和[易支付验证入口](../billing/EPAY.md#验证入口)。
 
 ## 顺序与命令
 
@@ -16,17 +16,36 @@ go test ./model -run 'TestGatewayConfig|TestGatewayStartup' -timeout 60s
 go test ./service -run 'TestBillingDatabaseIntegration|TestGatewayMultiProcessSuccessReservation' -timeout 60s
 go test ./router -timeout 60s
 go test ./cmd/gateway-lease-cleanup -timeout 60s
+go test ./service -run 'TestGatewayProvider' -count=1 -timeout 60s
 go vet -p 4 ./...
 go build ./...
 ```
 
 涉及 RelayKit 或公共契约时，进入 `relaykit` 设置 `GOWORK=off`，单独运行 `go test ./... -timeout 60s` 和 `go build ./...`，随后恢复环境。最终全模块测试可使用 `go test -p 4 ./... -timeout 60s`。同代码和环境已通过的包不必因其他包结束而重复运行。
 
-rc.40 的协议、原生 Responses WebSocket、逐路由透传和响应模型回归按 [协议证据](../upstream/rc40-protocol-evidence.json) 的命令拆分执行，避免把多个测试集塞进同一 60 秒包预算。WS 的最小 race 名单也列于该文件。本地 httptest、SQLite、miniredis 和隔离子进程排空只证明相应边界；真实供应商、运行二进制及部署容器停机链路需要独立证据。协议与状态 API 字段见 [协议合同](../upstream/RC40_PROTOCOL_CONTRACT.md)。
+协议、原生 Responses WebSocket、逐路由透传、响应模型和 Claude effort 回归按下列命令拆分执行，避免把多个测试集塞进同一 60 秒包预算：
+
+```powershell
+go test -timeout 60s ./relay/helper ./relay/channel/openai ./relay/channel/claude ./relay/channel/ollama ./relay/channel/gemini ./relay/common -count=1
+go test -timeout 60s ./service ./controller ./router -run '^(TestResponsesWS|TestGatewayResponsesWS|Test.*Compact)' -count=1
+go test -timeout 60s ./router -run '^TestGateway(ResponsesWS|UnsupportedTokenCount|ResponseTerminals|ToolImageHoist|ResponsesNamespace|GeminiPartial|ReasoningAndSearch)' -count=1
+go test -timeout 60s ./relay ./router ./model ./service -run '^Test(ResponseModel|UserLogResponseModel|GatewayResponsesWS|ResponsesUsage)' -count=1
+go test -timeout 60s ./controller -run '^Test(VLLMStatus|SGLangStatus|ParseVLLM)' -count=1
+go test -timeout 60s ./router -run '^Test(GatewayAdvancedCustomRoutePassthrough|InferenceChannelStatus|GatewayClaudeEffectiveEffortBilling|GatewayClaudeMessageOutputConfigConversionBeforeBilling)' -count=1
+go test -timeout 60s ./service ./relay/common -run 'Test.*(Preview|PassThrough|Passthrough|ChannelMeta)' -count=1
+```
+
+RelayKit 侧的 `TestClaudeResolveEffectiveEffort*` 与 `TestClaudeMessageOutputConfig*` 随上文 `GOWORK=off` 全量测试执行。WebSocket 的最小 race 名单须在具备 cgo 的环境运行，不能用普通并发测试代替：
+
+```sh
+go test -race -timeout 60s ./router -run '^TestGatewayResponsesWS(PreviousResponseOwnership|ReconnectPreservesOnlySameOwner|RejectsChangedConnectionIdentity|KeepsUnknownUsageAndRejectsOverlappingCreate|RejectionHonorsSharedRetryBudget|ClientDisconnectPreservesUnknownUsage|DrainLifecycle)$' -count=1
+```
+
+本地 httptest、SQLite、miniredis 和隔离子进程排空只证明相应边界；真实供应商、运行二进制及部署容器停机链路需要独立证据。协议与状态 API 字段见 [协议合同](../upstream/RC40_PROTOCOL_CONTRACT.md)。
 
 ## 本地依赖
 
-复跑前准备专用隔离实例，核对数据库版本、监听端口和连接目标，不假定之前使用的进程仍在运行。测试创建临时数据库/表并按夹具清理；每次结果只证明记录的服务端版本与测试条件。所用版本和实际运行的套件应写入当次报告，不能由历史三库通过推导当前环境可用。
+复跑前准备专用隔离实例，核对数据库版本、监听端口和连接目标，不假定之前使用的进程仍在运行。测试创建临时数据库/表并按夹具清理；每次结果只证明记录的服务端版本与测试条件。所用版本和实际运行的套件只写入所属工作区服务器档案，不能由历史三库通过推导当前环境可用。
 
 | 检查 | 环境变量 |
 | --- | --- |
@@ -65,7 +84,7 @@ FIFO 公平、一次性释放、取消与授槽竞争、扩缩容、无限转有
 
 协议回归覆盖 Claude 全部内容块与连续工具索引、中断流输出估计及权威账务快照、Responses 缓存和模态明细与 reasoning summary、Gemini 同帧思考/正文分离、已完成图片在 EOF/取消后的单次结算。SSE 多行 data、换行变体、异常终止、大图片首帧及状态绑定失败不能仅靠基础文本成功路径证明；阶段超时须验证心跳不延长期限、关闭上游和资源释放。
 
-性能比较须使用相同工作负载并分别记录准入延迟、首个有效输出时间、成功/超时率、额外发送比例、SQL/Redis 调用量、CPU 和内存。微基准不能代替完整 HTTP 路径压测；当次结论与仍缺的环境或基线必须在报告中明确列出。
+性能比较须使用相同工作负载并分别记录准入延迟、首个有效输出时间、成功/超时率、额外发送比例、SQL/Redis 调用量、CPU 和内存。微基准不能代替完整 HTTP 路径压测；结论与仍缺的环境或基线必须随结果一起写入服务器档案。
 
 受控 HTTP 测试只允许回环 Redis，使用初始为空的隔离数据库编号。测试结束通过 SCAN/UNLINK 清理本次数据库，不使用 FLUSHDB：
 
@@ -78,8 +97,19 @@ powershell -NoProfile -File tests/admission-benchmark/compare.ps1 -RedisAddress 
 
 HTTP 夹具明确把内存 SQLite 限为单连接，不把此结果当作多连接 SQLite 负载已通过。核心比较说明和固定旧提交见 [基准说明](../../tests/admission-benchmark/README.md)；只恢复旧核心到独立临时包，结束删除临时源码，不恢复旧生产执行路径。
 
-## 服务器 PostgreSQL 验证
+## 工作区验收驱动
 
-RenAI 工作区提供 `scripts/server/build-ren2hub-test.sh` 和 `prepare-ren2hub-test.sh`，使用已发布 Git 提交、独立 PostgreSQL/Redis 数据目录和内部 Docker 网络。`run-ren2hub-test.sh` 调用的模拟器仍使用旧 `ModelPrice` 与 ratio/fixed 价格契约，须先适配当前账务 API，不能直接用作新版验收；具体边界见工作区 `routing-simulator/ADMISSION_LAB.md`。账务和支付分别使用对应专用验证脚本。实际版本、执行报告和资源条件统一查工作区 `docs/server/SERVER_PROFILE.md`，不要把旧 11 场景报告当作所有后续变更的复验结果。
+运行实例的 HTTP 验收由所属 RenAI 工作区 `scripts/server/` 下的驱动执行，上游均为回环模拟器，不调用真实供应商：
 
-重跑须记录应用 SHA、工作区 SHA、镜像 OCI revision、本地 image ID、数据库版本、负载参数及资源配置；只有存在 registry manifest 时才记录对应 digest，本地 image ID 不等于 registry digest。现行部署不设置 Docker CPU/内存配额；不同资源条件的结果不能混算性能。模拟渠道清理、配置恢复、账务、最终路由证据和槽位守恒必须全部通过，不能仅按 HTTP 成功率验收。
+| 驱动 | 验收范围 |
+| --- | --- |
+| `test_ren2hub_billing.py` | 每轮独立资源，重复验证真实 HTTP/SSE 与账务守恒 |
+| `test_ren2hub_ws.py` | Responses WebSocket 冒烟 |
+| `test_ren2hub_compact.py` | 原生 Compact HTTP 及其资金事件 |
+| `test_ren2hub_plugin.py` | 插件任务重启前后两阶段验收，重启由操作者完成 |
+| `test_ren2hub_preview_https.py` | 公开预览站点的 HTTPS、Cookie 与会话撤销 |
+| `test-ren2hub-integration-matrix.py` | 在两组独立容器中验证 MySQL/PostgreSQL 三库合同，不接触常驻数据库 |
+
+服务器拓扑、实际版本、执行报告和资源条件只查工作区[服务器档案](../../../docs/server/SERVER_PROFILE.md)。旧的负载报告与模拟器从 Git 历史读取，不作为后续变更的复验结果。
+
+重跑须记录应用 SHA、工作区 SHA、镜像 OCI revision、本地 image ID、数据库版本、负载参数及资源配置；只有存在 registry manifest 时才记录对应 digest，本地 image ID 不等于 registry digest。不同资源条件（包括是否设置 Docker CPU/内存配额）的结果不能混算性能。模拟渠道清理、配置恢复、账务、最终路由证据和槽位守恒必须全部通过，不能仅按 HTTP 成功率验收。

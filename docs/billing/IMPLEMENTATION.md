@@ -1,6 +1,6 @@
 # 钱包账务架构
 
-当前账务格式为 4，价格合同为 3，计算器为 `billing-v3`，表达式与单价均使用 Decimal。只支持空库初始化和匹配 `billing_schemas` 标记的重复启动，不自动迁移或清空旧库。早期验证见[账务验证](VALIDATION.md)，不能代表当前版本验收；服务器档案记录实际部署，本文描述源码契约。
+当前账务格式为 4，价格合同为 3，计算器为 `billing-v3`，表达式与单价均使用 Decimal。只支持空库初始化和匹配 `billing_schemas` 标记的重复启动，不自动迁移或清空旧库。本文描述源码契约，复验方法见[账务复验](VALIDATION.md)；实际部署和验收结果只由所属工作区服务器档案记录。
 
 ## 资金与计价边界
 
@@ -18,6 +18,8 @@
 | `service/billing_pricing_catalog.go` | 逐来源解析有效快照，供自动发布、参考草稿与恢复自动共用 |
 | `model/billing_event.go` | 唯一账户投影写入点；事件、钱包与 Token 同事务 |
 | `model/billing_recovery.go` | Reserve、IncreaseReservation、Settle、Release 及幂等恢复 |
+| `model/billing_consumption.go` | `validateBillingConsumption`：普通请求、实时观察、任务终态与最终资金事务共用的消费证据校验 |
+| `model/billing_quote.go` | `ValidatePublishedBillingQuote`：冻结 Quote 与数据库不可变版本的核对 |
 | `service/billing_session.go` | 协调逻辑请求、预留、发送保护与退出处理 |
 | `model.TaskBillingContext` | 异步任务的 Quote、Usage、Charge 与原模型名 |
 | `model/billing_schema.go` | 空库格式标记与重复启动守卫 |
@@ -27,6 +29,10 @@
 ## 请求与恢复
 
 付费请求发送前持久化预留与消费保护，更贵的重试先补足预留。已确认实际费用超出预估时可形成欠费，后续付费请求停止准入；未知接受或缺少最终用量时保留预留。显式免费请求也写发送保护。已交付内容、断流、超时或进程退出都不能单独成为退款依据。
+
+最终结算只接受 `Usage.ReadyForSettlement()` 为真的用量：`Complete` 为真、非估算、未标记非法、`Source` 非空，且 `Terminal` 为 `completed`。普通请求、实时观察、任务终态和最终资金事务共用 `validateBillingConsumption`：要求冻结的 Usage 与 Charge 同时存在、用户与 Token 一致、日志金额等于 `Charge.FinalQuota`，再核对已发布报价和同一请求、渠道、报价哈希的不可变尝试及其指纹，按冻结 Quote 重新计算 Charge 并比较哈希。任务失败释放不保留消费费用，成功任务同样经过该校验。`ValidatePublishedBillingQuote` 按版本 ID 读取数据库中的不可变版本并比较冻结定义哈希，不读取当前活动指针，之后发布的新版本不会使已接受的尝试失效；伪造版本 ID 或未发布预览不能成为收费依据。
+
+只提交金额的结算入口只能幂等确认已准备好的结算意图，不能新建结算意图。人工结算要求已保存 Quote、Usage、Charge 和消费指纹，并在最终资金事务中按冻结证据复核金额；管理员金额和说明不能把未知用量变成可扣款事实，明确放弃收费的释放仍可执行。
 
 同一请求首次使用某渠道时冻结该渠道的价格，切换渠道建立另一份报价，返回已尝试渠道时复用原价格。每次尝试独立保存报价证据，恢复快照管理累计预留目标。审计按冻结 Quote、Usage 和账本事件重放；请求指纹绑定请求 ID、渠道和报价，消费指纹覆盖完整用量与账单，不用舍入后的相同金额代替证据一致性。
 
@@ -38,4 +44,4 @@
 
 UI 展示最多保留 3 位小数，编辑、提交、导出和内部计算保留完整精度。钱包与 Token 分别展示可用、在途预留和已结算消费。
 
-接口见[账务 API](API.md)，定价见[单价与目录](PRICING.md)和[表达式契约](../../pkg/billingexpr/expr.md)，故障处理见[恢复与对账](RECONCILIATION.md)，前端见[账务说明](../../frontend/docs/BILLING.md)，已执行范围见[验证记录](VALIDATION.md)。
+接口见[账务 API](API.md)，定价见[单价与目录](PRICING.md)和[表达式契约](../../pkg/billingexpr/expr.md)，故障处理见[恢复与对账](RECONCILIATION.md)，前端见[账务说明](../../frontend/docs/BILLING.md)，复验方法见[账务复验](VALIDATION.md)。

@@ -55,9 +55,9 @@
 
 ## 📝 Project Description
 
-This checkout is Ren2Hub. Start with the [local documentation](docs/README.md) for its current routing, admission, API and release contracts. The upstream project introduction and attribution are retained. Deployment follows the [Ren2Hub installation guide](docs/installation/DOCKER.md); upstream images do not contain this checkout's changes. Ren2Hub uses single-process FIFO admission and requires sequential version replacement. The RenAI workspace deploys PostgreSQL using its own deployment assets.
+This checkout is Ren2Hub. Start with the [local documentation](docs/README.md) for its current routing, admission, API and release contracts. The upstream project introduction and attribution are retained. Deployment follows the [Ren2Hub installation guide](docs/installation/DOCKER.md); upstream images do not contain this checkout's changes. Ren2Hub uses single-process FIFO admission and requires sequential version replacement.
 
-Billing uses the wallet balance, with an additional Token quota limit. Site subscriptions and plan management have been removed; historical billing records remain protected. See the [current acceptance record](docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md) for the removal commit and validation boundaries.
+Billing uses the wallet balance, with an additional Token quota limit. Site subscriptions and plan management have been removed; historical billing records remain protected. See the [billing architecture](docs/billing/IMPLEMENTATION.md) for the current billing contract.
 
 > [!IMPORTANT]
 > - This project is intended solely for lawful and authorized AI API gateway, organization-level authentication, multi-model management, usage analytics, cost accounting, and private deployment scenarios.

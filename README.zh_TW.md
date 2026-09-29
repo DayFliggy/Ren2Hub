@@ -54,9 +54,9 @@
 
 ## 📝 項目說明
 
-目前檢出的專案為 Ren2Hub，路由、准入、API 與發布契約請從[本機文件](docs/README.md)進入。下文保留上游專案介紹和署名；部署以 [Ren2Hub 安裝文件](docs/installation/DOCKER.md)為準，上游映像不包含本次檢出的修改。Ren2Hub 採用單一程序本機 FIFO 准入，新舊版本必須依序切換。RenAI 工作區使用獨立部署資產和 PostgreSQL。
+目前檢出的專案為 Ren2Hub，路由、准入、API 與發布契約請從[本機文件](docs/README.md)進入。下文保留上游專案介紹和署名；部署以 [Ren2Hub 安裝文件](docs/installation/DOCKER.md)為準，上游映像不包含本次檢出的修改。Ren2Hub 採用單一程序本機 FIFO 准入，新舊版本必須依序切換。
 
-計費使用錢包餘額，Token 額度作為附加消費限制。本站訂閱與方案管理已移除，歷史帳務資料持續保留並受保護；專屬提交與驗證邊界見[現行驗收紀錄](docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md)。
+計費使用錢包餘額，Token 額度作為附加消費限制。本站訂閱與方案管理已移除，歷史帳務資料持續保留並受保護；現行帳務合約見[帳務架構](docs/billing/IMPLEMENTATION.md)。
 
 > [!IMPORTANT]
 > - 本專案僅面向合法授權的 AI API 閘道、組織內部鑑權、多模型管理、用量統計、成本核算和私有化部署場景。

@@ -1,10 +1,10 @@
 # 网关协议支持与验证边界
 
-本矩阵维护源码中的协议能力与专项测试边界。能力来自 `pkg/relaycapability`，预览和执行共用 `PlanChannelConversion`，宿主合同为 v12。“原生”表示宿主具备该协议入口，不保证所有上游模型、端点和账号提供相同功能。表内专项执行记录来自 2026-09-18 协议复审，不表示全部套件在最新提交重跑，也不替代后续账务格式验证。版本范围见[网关与协议验证证据](SINGLE_INSTANCE_ACCEPTANCE.md)，实际容器状态由所属工作区服务器档案维护。
+本矩阵维护源码中的协议能力与专项测试边界。能力来自 `pkg/relaycapability`，预览和执行共用 `PlanChannelConversion`，宿主合同为 v12。“原生”表示宿主具备该协议入口，不保证所有上游模型、端点和账号提供相同功能。表内列出源码中的回归入口及其证明范围，不表示全部套件已在最新提交重跑；复验命令见[验证步骤](GATEWAY_VALIDATION.md)，验收边界见[网关验收边界](SINGLE_INSTANCE_ACCEPTANCE.md)，执行结果和实际容器状态只由所属工作区服务器档案维护。
 
 ## 文本入口
 
-已执行范围按版本保留在[网关与协议验证证据](SINGLE_INSTANCE_ACCEPTANCE.md)，不代表当前全部套件重测或应用部署。工具媒体采用直接有序历史转换；缺失／重复调用 ID、不能表达的失败状态或图片 detail 不会因 `allow` 而放行。多候选响应必须逐个结束，不能由首个候选的 stop 证明整个请求完成。
+工具媒体采用直接有序历史转换；缺失／重复调用 ID、不能表达的失败状态或图片 detail 不会因 `allow` 而放行。多候选响应必须逐个结束，不能由首个候选的 stop 证明整个请求完成。
 
 | 语义合同 | 支持范围与拒绝边界 |
 |---|---|
@@ -13,11 +13,11 @@
 | 供应商暂停 | Claude 原生保留 pause_turn；无法表达的跨协议响应明确失败且不重放。跨协议请求 Claude 托管搜索因可预知的暂停风险发送前拒绝 |
 | 搜索引用 | Gemini grounding、Chat／Responses URL annotations 保留可表达 URL、标题、文本范围和顺序；Claude 带加密状态的引用需原生路径。不能将普通 URL 注释伪造成 Claude 原生引用或来源摘录 |
 | 托管工具 | 可表达搜索及 MCP 结果在多步转换旁传；Claude encrypted_content 搜索结果等续跑必需数据跨协议硬拒绝。Chat 不能表达的纯展示执行轨迹产生诊断，strict 拒绝展示损失 |
-| 流式合并 | 按块、输出项和工具身份累计；最终快照不重复追加引用或工具结果；本轮不自动续跑 |
+| 流式合并 | 按块、输出项和工具身份累计；最终快照不重复追加引用或工具结果；不自动续跑 |
 
 Responses 缓冲路径也保留独立 annotation、托管项及部分终态快照中的既有字段；无法识别输出身份时明确失败。流式转换和 SSE 缓冲遵守当前宿主响应大小限制，累计超限返回不可重试的转换错误。缺少终态仍属于上游响应异常；客户端取消优先归为取消，不因同时发生转换错误而改变归因。
 
-第二轮审计后，Responses 流式和缓冲共用同一输出项累计器。部分最终快照按输出身份合并，保留引用偏移；矛盾 incomplete 事件不借用 completed 状态，终态后不继续输出文本。Claude 搜索跨协议规划必须考虑原生引用与暂停能力，不仅检查输入工具是否能改名。原生引用的 encrypted_index 沿用既有状态摘要绑定和所有权复核。
+Responses 流式和缓冲共用同一输出项累计器。部分最终快照按输出身份合并，保留引用偏移；矛盾 incomplete 事件不借用 completed 状态，终态后不继续输出文本。Claude 搜索跨协议规划必须考虑原生引用与暂停能力，不仅检查输入工具是否能改名。原生引用的 encrypted_index 沿用既有状态摘要绑定和所有权复核。
 
 响应语义的无法实现项在所有策略下拒绝。`safe` 允许有诊断的纯展示损失，`strict` 拒绝所有已声明损失；`allow` 仅放宽已有实现声明的降级，不能伪造终态或绕过原生状态归属。文档／文件引用等没有等价目标表示的引用仍明确拒绝，不能由 URL 引用支持推导为所有引用均已支持。
 
@@ -57,7 +57,7 @@ Nova、Coze、Baidu、Cohere、Zhipu、Tencent TC3、Xunfei、PaLM 与 Dify 的�
 
 Cohere 保留历史 user 消息，Baidu 保留所有前导 system，旧 Zhipu 与讯飞不再插入虚构的对话。PaLM 输出其实际供应商 DTO，映射后的模型进入请求 URL。Dify 保留单轮文本和图片，多轮历史拼接会产生损失诊断；内联图片上传在准入和最终认证校验后执行，上传失败或取消不会继续生成，也不会因接受状态未知而重放。
 
-Nova 保留 system/user/assistant 文本、多段文本和已实现的采样上限；system 映射到顶层 `system`。Coze 保留 user/assistant 文本历史，未实现系统消息、工具、媒体及结构输出，也不能可靠执行请求输出上限，因此不支持 TPM。参考 [Nova 请求结构](https://docs.aws.amazon.com/nova/latest/userguide/complete-request-schema.html) 与 [Coze 官方 SDK 的消息和创建接口](https://github.com/coze-dev/coze-py/blob/main/cozepy/chat/__init__.py)，2026-09-12 核对；本次未调用真实供应商。
+Nova 保留 system/user/assistant 文本、多段文本和已实现的采样上限；system 映射到顶层 `system`。Coze 保留 user/assistant 文本历史，未实现系统消息、工具、媒体及结构输出，也不能可靠执行请求输出上限，因此不支持 TPM。参考 [Nova 请求结构](https://docs.aws.amazon.com/nova/latest/userguide/complete-request-schema.html) 与 [Coze 官方 SDK 的消息和创建接口](https://github.com/coze-dev/coze-py/blob/main/cozepy/chat/__init__.py)，2026-09-12 核对；回归不调用真实供应商。
 
 四种文本入口在转换前统一应用渠道系统提示词。Nova 会收到顶层系统提示；Coze 配置此字段时在预览和预扣前拒绝，`allow` 不放宽渠道要求。原生透传仍应用选定模型、提示词和参数覆盖，并保留原始消息上的扩展属性。AWS 不再重新读取未处理的原始请求。
 
@@ -75,7 +75,7 @@ Vertex llama / `-maas` 的开源模型入口要求服务账号 JSON，API Key �
 
 Responses `prompt` 只允许 OpenAI 类型原生渠道的已登记引用域。状态摘要增加实际传输身份，覆盖 Host、项目与自定义租户头；认证覆盖不得改换所选 Key，变化的追踪 ID 和已登记 SDK 遥测头不影响续轮。可信 OAuth 刷新、手动替换、压缩后的 Responses 续轮及覆盖后状态注入均有隔离 HTTP 回归。
 
-Google Files URI 与 `gs://` 引用要求已知、同 Token 的媒体归属绑定。原生续轮会保持已绑定 URI，未知或跨 Token 引用在发送前拒绝；两类引用的 8 条 HTTP 请求同时校验实际出站 URI。本次未新增 Files 产品 API。
+Google Files URI 与 `gs://` 引用要求已知、同 Token 的媒体归属绑定。原生续轮会保持已绑定 URI，未知或跨 Token 引用在发送前拒绝；两类引用的 8 条 HTTP 请求同时校验实际出站 URI。归属绑定不构成 Files 产品 API。
 
 TPM 只对登记了最终请求体解码器的操作开放。HTTP 和 AWS SDK 都在发送前读取最终请求体的独立副本，计算输入 JSON 估算和有效输出总上限；渠道提示词、参数覆盖、输出数量及协议切换均在此之前完成。Coze、Codex、未登记的旧投影或媒体格式不能配置有效 TPM；即使渠道支持文本 TPM，带未知扩展、无法估算的媒体/状态输入、缺少输出上限或生成非文本的请求仍会被拒绝。此估算不是供应商 tokenizer 的精确认证，结算使用可信 usage 修正。
 
@@ -83,7 +83,7 @@ TPM 只对登记了最终请求体解码器的操作开放。HTTP 和 AWS SDK �
 
 | 验证层 | 已覆盖 | 尚未证明 |
 |---|---|---|
-| 宿主请求矩阵 | `TestGatewayAdaptorRequestMatrix`：所有非自定义已登记渠道类型，Vertex 三模型域、AWS 两模型域，四协议及流式开关，400 场景通过；支持路径实际转换并序列化，其他路径规划拒绝。包含修正 NewAPI 登记后的 8 场景，早期 392 场景为历史证据 | 该层不发送请求，不证明响应或供应商认证；工具、媒体与状态按专项回归判断 |
+| 宿主请求矩阵 | `TestGatewayAdaptorRequestMatrix`：所有非自定义已登记渠道类型，Vertex 三模型域、AWS 两模型域，四协议及流式开关，共 400 场景；支持路径实际转换并序列化，其他路径规划拒绝 | 该层不发送请求，不证明响应或供应商认证；工具、媒体与状态按专项回归判断 |
 | 宿主响应与旧协议 | `TestGatewayStandardAdaptorResponseMatrix` 的 226 条标准协议实际适配器 JSON/SSE 路径；Baidu/Cohere/Tencent TC3/Zhipu/Dify 共 30 个正常和异常响应场景；讯飞 8 个 WebSocket 场景；PaLM 缓冲流 4 场景 | 标准矩阵使用基础文本，工具和媒体按专项证据判断；非标准认证及真实供应商未认证 |
 | 官方 Python / TypeScript SDK | 每语言 32 条文本 JSON/SSE、16 轮工具往返、16 条中断流、Responses 状态、未知/跨 Token 拒绝、前导失败切换 | OpenAI、Anthropic、Gemini、Ollama 四类模拟上游，非全部适配器或真实供应商认证 |
 | 官方 SDK 语义 | 两语言共 116 场景，每语言 34 条成功和 24 条拒绝；四入口图片 JSON/SSE、结构输出、配置型搜索、Responses custom tools、签名和私有文件；逐请求核对预扣会话、上游、钱包、Token、日志，拒绝全部零变化 | 使用标准协议本地上游，不推导所有适配器和模型支持这些特性；没有真实搜索、工具执行或文件上传，供应商专用签名仅验证归属与保留 |
@@ -112,7 +112,7 @@ TPM 只对登记了最终请求体解码器的操作开放。HTTP 和 AWS SDK �
 
 SDK 版本锁文件位于 `tests/gateway-sdk`：Python OpenAI 3.13.0、Anthropic 1.5.0、google-genai 2.23.0；TypeScript OpenAI 7.15.0、Anthropic 0.125.0、Google 2.22.0。
 
-云验收分为 `TestGatewayOfficialCloudSDK`、`TestGatewayOfficialCloudToolAndInterruptionSDK` 和 `TestGatewayOfficialCloudParallelToolSDK`；其他套件与锁定依赖统一从[SDK 测试说明](../../tests/gateway-sdk/README.md)运行。源码中的正式测试与脚本是复现入口，已执行范围由[网关验证证据](SINGLE_INSTANCE_ACCEPTANCE.md)按版本记录。
+云验收分为 `TestGatewayOfficialCloudSDK`、`TestGatewayOfficialCloudToolAndInterruptionSDK` 和 `TestGatewayOfficialCloudParallelToolSDK`；其他套件与锁定依赖统一从[SDK 测试说明](../../tests/gateway-sdk/README.md)运行。源码中的正式测试与脚本是复现入口，执行结果只由所属工作区服务器档案记录。
 
 双工具回归通过 OpenAI/Anthropic SDK 内置流累积器和 Google SDK 内容事件验证：首帧同时出现两个调用、后续分片组成参数 `0` 与 `false`、工具结果逆序回传，检查 ID 或经验证的 Vertex 名称关联、最终值、usage 和唯一终止事件。Google 返回的完整函数参数来自网关转换和官方 SDK 解析，没有手写 SSE 累积器。云工具场景中的“往返”包括流式工具请求和提交结果后的最终响应，不等同于额外两个独立能力路径。
 
