@@ -46,9 +46,10 @@ type memoryProviderRateScope struct {
 }
 
 type memoryProviderRateReservation struct {
-	scopes    []GatewayProviderRateScope
-	expiresAt time.Time
-	finished  bool
+	scopes     []GatewayProviderRateScope
+	expiresAt  time.Time
+	finished   bool
+	finishedAt time.Time
 }
 
 var memoryProviderRateState = struct {
@@ -86,11 +87,18 @@ func reserveMemoryProviderRate(scopes []GatewayProviderRateScope, estimatedToken
 	memoryProviderRateState.Lock()
 	defer memoryProviderRateState.Unlock()
 	for id, pending := range memoryProviderRateState.reservations {
-		if pending.expiresAt.Before(now) && !pending.finished {
+		if pending.finished {
+			if pending.finishedAt.Before(now.Add(-time.Minute)) {
+				delete(memoryProviderRateState.reservations, id)
+			}
+			continue
+		}
+		if pending.expiresAt.Before(now) {
 			for _, scope := range pending.scopes {
 				delete(memoryProviderScope(scope.ID).pending, id)
 			}
 			pending.finished = true
+			pending.finishedAt = now
 		}
 	}
 	for _, requested := range scopes {
@@ -163,6 +171,7 @@ func finishMemoryProviderRate(reservation GatewayProviderRateReservation, actual
 		}
 	}
 	state.finished = true
+	state.finishedAt = now
 	return nil
 }
 
