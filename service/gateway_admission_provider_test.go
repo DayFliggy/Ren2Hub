@@ -77,3 +77,16 @@ func TestGatewayProviderRenewAndSharedRetryAfter(t *testing.T) {
 	_, err = ReserveGatewayProviderRate(ctx, common.RDB, scope, 1)
 	require.NoError(t, err)
 }
+
+func TestGatewayProviderRateMemoryFallback(t *testing.T) {
+	ctx := context.Background()
+	scope := []GatewayProviderRateScope{{ID: "memory-test:" + t.Name(), RPM: 1, TPM: 100}}
+	first, err := ReserveGatewayProviderRate(ctx, nil, scope, 80)
+	require.NoError(t, err)
+	_, err = ReserveGatewayProviderRate(ctx, nil, scope, 1)
+	require.ErrorIs(t, err, ErrGatewayProviderRateLimit)
+	require.NoError(t, FinishGatewayProviderRate(ctx, nil, first, 40, true, true, 0))
+	require.NoError(t, FinishGatewayProviderRate(ctx, nil, first, 40, true, true, 0))
+	_, err = ReserveGatewayProviderRate(ctx, nil, scope, 1)
+	require.ErrorIs(t, err, ErrGatewayProviderRateLimit, "a sent request must retain its RPM")
+}
