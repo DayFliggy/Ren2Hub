@@ -12,4 +12,4 @@ powershell -NoProfile -File tests/admission-benchmark/compare.ps1 -RedisAddress 
 
 JSON 记录成功/拒绝/超时、成功获取的 p50/p95、墙钟时间、进程 CPU、Redis CPU、分配与堆内存及 Redis 客户端命令数。CPU 使用 Windows GetProcessTimes 和 Redis INFO CPU，短批次受到约 15.625ms 计时粒度影响，零值不是零成本。SQL、首个有效输出和重试不属于这个核心基准，不能从其结果推导完整网关的吞吐提升。
 
-完整 HTTP 场景另见 `router/gateway_single_instance_load_test.go` 与 [验收记录](../../docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md)。旧完整应用工作树未保存为可重建基线；本工具不能补造那份基线。
+完整 HTTP 场景另见 `router/gateway_single_instance_load_test.go` 与[网关验收边界](../../docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md)。旧完整应用工作树未保存为可重建基线；本工具不能补造那份基线。

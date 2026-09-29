@@ -17,9 +17,6 @@ logs
 .gocache-temp
 .gopath
 .test
-model_pricing_catalog*.json
-model_pricing_catalog*.tmp
-model_pricing_catalog*.version
 Makefile
 docs
 .eslintcache

@@ -46,9 +46,9 @@ RelayKit 是从 [new-api](https://github.com/QuantumNous/new-api) 中拆分出�
 
 Responses 流式和缓冲共用输出项累计器，部分最终快照按身份合并引用和文本偏移。明确的 incomplete 事件不能借用内嵌 completed 状态；观察到终态后拒绝新的非终态事件。原生引用和续跑状态的硬限制不受 allow 放宽，宿主仍负责其 Token、渠道和凭据归属。
 
-生成结果通过 `ResponseResult.Termination` 与 `ResponseStreamState.Termination()` 获取；传输结果继续使用 `StreamOutcome`。`ErrResponseTerminalMissing`／`ErrStreamTerminalMissing` 表示 JSON／流式上游缺少生成终态，不应归类为本地协议表达能力不足。宿主支持范围见[协议矩阵](../docs/routing/GATEWAY_SUPPORT_MATRIX.md)，已执行范围见[网关与协议验证证据](../docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md)。
+生成结果通过 `ResponseResult.Termination` 与 `ResponseStreamState.Termination()` 获取；传输结果继续使用 `StreamOutcome`。`ErrResponseTerminalMissing`／`ErrStreamTerminalMissing` 表示 JSON／流式上游缺少生成终态，不应归类为本地协议表达能力不足。宿主支持范围见[协议矩阵](../docs/routing/GATEWAY_SUPPORT_MATRIX.md)，验收判定见[网关验收边界](../docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md)。
 
-2026-09-14 兼容性修正：`AnalyzeRequest` 和 `ConversionPlan` 区分旧 OpenAI completion、moderation、edit 操作。这些操作没有跨协议转换器，即使使用 `allow` 也会拒绝转换，不能因复用 `GeneralOpenAIRequest` 而视为 Chat。Responses 历史中的 `function_call.namespace` 与工具声明采用相同的身份语义：原生保留；跨协议在默认 `safe` 和 `strict` 下拒绝，`allow` 接受已登记降级并返回结构化损失诊断，不提供可逆 namespace 映射。
+`AnalyzeRequest` 和 `ConversionPlan` 区分旧 OpenAI completion、moderation、edit 操作。这些操作没有跨协议转换器，即使使用 `allow` 也会拒绝转换，不能因复用 `GeneralOpenAIRequest` 而视为 Chat。Responses 历史中的 `function_call.namespace` 与工具声明采用相同的身份语义：原生保留；跨协议在默认 `safe` 和 `strict` 下拒绝，`allow` 接受已登记降级并返回结构化损失诊断，不提供可逆 namespace 映射。
 
 ## 安装
 

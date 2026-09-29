@@ -1,6 +1,6 @@
 # 官方 SDK 隔离验收
 
-本目录定义 SDK 复验入口与夹具覆盖范围，执行结果按版本记录在 [网关与协议验证证据](../../docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md)。测试通过真实本地网关连接模拟供应商，不使用生产 Key，也不认证真实模型兼容性。Python 版本固定在 `requirements.txt`；TypeScript SDK 固定在 `package.json` 和 `bun.lock`。Chat、Responses、Messages 使用 SDK 自带响应解析和流累积器；Gemini 使用官方 SDK 的内容事件对象，Realtime 使用官方类型化迭代器/事件接口，不把测试中的事件收集称作 SDK 内置累积器。
+本目录定义 SDK 复验入口与夹具覆盖范围，判定规则见[网关验收边界](../../docs/routing/SINGLE_INSTANCE_ACCEPTANCE.md)，执行结果只记在所属工作区服务器档案。测试通过真实本地网关连接模拟供应商，不使用生产 Key，也不认证真实模型兼容性。Python 版本固定在 `requirements.txt`；TypeScript SDK 固定在 `package.json` 和 `bun.lock`。Chat、Responses、Messages 使用 SDK 自带响应解析和流累积器；Gemini 使用官方 SDK 的内容事件对象，Realtime 使用官方类型化迭代器/事件接口，不把测试中的事件收集称作 SDK 内置累积器。
 
 在主模块目录设置 `GATEWAY_SDK_PYTHON`、`GATEWAY_SDK_NODE` 为已安装固定依赖的运行时路径；必要时设置 `PYTHONPATH` 指向隔离依赖目录。缺少运行时变量时 Go 测试会跳过，不能将 SKIP 记为通过。
 
