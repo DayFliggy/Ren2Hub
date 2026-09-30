@@ -188,11 +188,17 @@ func ReadBillingMetrics(ctx context.Context) (BillingMetrics, error) {
 		return result, err
 	}
 	result.PricesByOrigin = []BillingPriceOriginMetric{}
-	prices,err := GetModelPricingSnapshot(nil)
-	if err != nil { return result,err }
+	prices, err := GetModelPricingSnapshot(nil)
+	if err != nil {
+		return result, err
+	}
 	var configured int64
-	for _,entry := range prices.Entries { if ModelPriceConfigured(entry.Effective) {configured++} }
-	result.PricesByOrigin = append(result.PricesByOrigin,BillingPriceOriginMetric{ScopeKind:"global_model",Origin:"model_pricing",Count:configured})
+	for _, entry := range prices.Entries {
+		if ModelPriceConfigured(entry.Effective) {
+			configured++
+		}
+	}
+	result.PricesByOrigin = append(result.PricesByOrigin, BillingPriceOriginMetric{ScopeKind: "global_model", Origin: "model_pricing", Count: configured})
 
 	if err := q.Model(&BillingRecovery{}).Where("status IN ? OR (status IN ? AND consumption_state <> ?)", []string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending, BillingRecoveryStatusReconciliation}, []string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded}, BillingRecoveryStateCompleted).Select("COUNT(*) AS pending, COALESCE(MIN(created_at),0) AS oldest_created_at").Scan(&result).Error; err != nil {
 		return result, err

@@ -64,12 +64,21 @@ func availableRouteAbilities(ctx context.Context, userID, tokenID int) (*gorm.DB
 
 // AvailableRoutePrices keeps price disclosure under the same channel ownership
 // boundary as model discovery; account billing groups do not grant access.
-func AvailableRoutePrices(ctx context.Context,userID int) ([]model.Pricing,error) {
-	names,err := AvailableRouteModels(ctx,userID,0)
-	if err != nil { return nil,err }
-	visible:=make(map[string]bool,len(names)); for _,name:=range names {visible[name]=true}
-	result:=make([]model.Pricing,0)
-	for _,price:=range model.GetPricing() {if visible[price.ModelName] {result=append(result,price)}}
-	sort.Slice(result,func(i,j int)bool{return result[i].ModelName<result[j].ModelName})
-	return result,nil
+func AvailableRoutePrices(ctx context.Context, userID int) ([]model.Pricing, error) {
+	names, err := AvailableRouteModels(ctx, userID, 0)
+	if err != nil {
+		return nil, err
+	}
+	visible := make(map[string]bool, len(names))
+	for _, name := range names {
+		visible[name] = true
+	}
+	result := make([]model.Pricing, 0)
+	for _, price := range model.GetPricing() {
+		if visible[price.ModelName] {
+			result = append(result, price)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ModelName < result[j].ModelName })
+	return result, nil
 }

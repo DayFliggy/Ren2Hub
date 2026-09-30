@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/relaycapability"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -448,6 +449,14 @@ func relayAttemptOutcome(c *gin.Context, info *relaycommon.RelayInfo, apiErr *ty
 		if conversionLoss != nil {
 			c.Set("response_conversion_diagnostics", conversionLoss.Diagnostics)
 		}
+		return outcome
+	}
+	// Pricing keeps its specific public error code. Its local origin must not
+	// depend on that code or turn a pre-send 503 into provider health failure.
+	var pricingErr *billing.PricingError
+	if errors.As(apiErr, &pricingErr) {
+		outcome.Origin = service.AttemptOriginAdmission
+		outcome.RetryPermission = service.AttemptRetryForbidden
 		return outcome
 	}
 	switch apiErr.GetErrorCode() {

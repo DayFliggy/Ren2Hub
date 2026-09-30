@@ -3,12 +3,16 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -71,4 +75,73 @@ func TestRelayAttemptLegacyCallbackWriteFailureDoesNotPenalizeProvider(t *testin
 	assert.False(t, classification.MarkChannelModel)
 	assert.False(t, classification.MarkKey)
 	assert.False(t, classification.Failoverable)
+}
+
+func TestLocalPricingFailureDoesNotPoisonRouteHealthOrProviderCapacity(t *testing.T) {
+	for _, backend := range []string{"memory", "redis"} {
+		t.Run(backend, func(t *testing.T) {
+			db, _ := setupGatewayAPI(t)
+			require.NoError(t, db.AutoMigrate(&model.ChannelHealth{}))
+			previousDatabaseType := common.MainDatabaseType()
+			common.SetMainDatabaseType(common.DatabaseTypeSQLite)
+			t.Cleanup(func() { common.SetMainDatabaseType(previousDatabaseType) })
+			if backend == "memory" {
+				common.RDB, common.RedisEnabled = nil, false
+			}
+			const channelID = 93001
+			initial := model.ChannelHealth{ChannelID: channelID, Model: "pricing-model", State: model.RouteHealthStateClosed, HealthEpoch: 7}
+			require.NoError(t, db.Create(&initial).Error)
+			for index, tc := range []struct {
+				name string
+				err  error
+				code types.ErrorCode
+			}{
+				{"tool_price", fmt.Errorf("quote: %w", &billing.PricingError{Code: "missing_price_dimension", Dimension: "tool:web_search"}), "missing_price_dimension"},
+				{"usage_contract", &billing.PricingError{Code: "missing_usage_contract", Dimension: "audio_tokens"}, "missing_usage_contract"},
+				{"model_missing", errors.New("model price is not configured"), types.ErrorCodeModelPriceError},
+				{"invalid_expression", errors.New("invalid model billing expression"), types.ErrorCodeModelPriceError},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					ctx := context.Background()
+					owner := fmt.Sprintf("pricing-%s-%d", backend, index)
+					health, err := service.AcquireRouteAttemptHealth(ctx, channelID, "pricing-model", "pricing-key", owner, time.Minute)
+					require.NoError(t, err)
+					scopes := []service.GatewayProviderRateScope{{ID: owner, RPM: 1, TPM: 100}}
+					rate, err := service.ReserveGatewayProviderRate(ctx, common.RDB, scopes, 90)
+					require.NoError(t, err)
+					c, _ := gin.CreateTestContext(httptest.NewRecorder())
+					c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+					c.Set("route_live_selection", service.LiveRouteSelection{Source: service.RouteSourceManual})
+					c.Set("route_live_health", &routeAttemptHealthState{attempt: &health, rate: &rate})
+					info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelId: channelID}}
+					apiErr := helper.BillingPriceAPIError(tc.err)
+					apiErr = types.NewError(fmt.Errorf("before send: %w", apiErr), types.ErrorCodeDoRequestFailed)
+					apiErr.RetryAfter = time.Minute
+					assert.Equal(t, tc.code, apiErr.GetErrorCode())
+					assert.Equal(t, http.StatusServiceUnavailable, apiErr.StatusCode)
+					outcome := relayAttemptOutcome(c, info, apiErr, time.Now(), false)
+					assert.Equal(t, service.AttemptNotSent, outcome.Acceptance)
+					assert.Equal(t, service.AttemptOriginAdmission, outcome.Origin)
+					classification := service.ClassifyAttemptOutcome(outcome)
+					assert.Equal(t, service.RouteErrorAdmission, classification.Class)
+					assert.False(t, classification.MarkKey || classification.MarkCapability || classification.MarkChannelModel)
+					assert.False(t, classification.Retryable || classification.Failoverable)
+					observeLiveRouteAttempt(c, info, outcome)
+					assert.Zero(t, liveRouteRetryCounters(c).TotalAttempts)
+					var saved model.ChannelHealth
+					require.NoError(t, db.First(&saved, initial.ID).Error)
+					assert.Equal(t, model.RouteHealthStateClosed, saved.State)
+					assert.Zero(t, saved.FailureCount)
+					assert.Zero(t, saved.CooldownUntil)
+					assert.EqualValues(t, 7, saved.HealthEpoch)
+					nextHealth, err := service.AcquireRouteAttemptHealth(ctx, channelID, "pricing-model", "pricing-key", owner+"-next", time.Minute)
+					require.NoError(t, err, "local pricing rejection must leave the next paid request admissible")
+					require.NoError(t, service.ReleaseRouteAttemptHealth(ctx, nextHealth))
+					nextRate, err := service.ReserveGatewayProviderRate(ctx, common.RDB, scopes, 90)
+					require.NoError(t, err, "unsent requests must release RPM/TPM without provider cooldown")
+					require.NoError(t, service.FinishGatewayProviderRate(ctx, common.RDB, nextRate, 0, false, false, 0))
+				})
+			}
+		})
+	}
 }

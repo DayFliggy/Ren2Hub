@@ -25,6 +25,6 @@ func GetPricing(c *gin.Context) {
 		"vendors":            model.GetVendors(),
 		"supported_endpoint": model.GetSupportedEndpointMap(),
 		"pricing_version":    versionHash,
-		"group_ratio": map[string]float64{}, "usable_group": map[string]string{}, "auto_groups": []string{},
+		"group_ratio":        map[string]float64{}, "usable_group": map[string]string{}, "auto_groups": []string{},
 	})
 }

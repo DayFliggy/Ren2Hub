@@ -206,8 +206,13 @@ func ListModels(c *gin.Context, modelType int) {
 	availablePrices := make(map[string]bool)
 	if !acceptUnsetRatioModel {
 		snapshot, snapshotErr := model.GetModelPricingSnapshot(models)
-		if snapshotErr != nil { common.ApiError(c,snapshotErr); return }
-		for _, entry := range snapshot.Entries { availablePrices[entry.ModelName] = model.ModelPriceConfigured(entry.Effective) }
+		if snapshotErr != nil {
+			common.ApiError(c, snapshotErr)
+			return
+		}
+		for _, entry := range snapshot.Entries {
+			availablePrices[entry.ModelName] = model.ModelPriceConfigured(entry.Effective)
+		}
 	}
 	modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
 	var tokenModelLimit map[string]bool
