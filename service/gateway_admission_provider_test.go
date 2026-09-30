@@ -90,3 +90,77 @@ func TestGatewayProviderRateMemoryFallback(t *testing.T) {
 	_, err = ReserveGatewayProviderRate(ctx, nil, scope, 1)
 	require.ErrorIs(t, err, ErrGatewayProviderRateLimit, "a sent request must retain its RPM")
 }
+
+// useMemoryProviderClock isolates the process-local admission state and lets
+// tests cross the one-minute window and reservation TTL without sleeping.
+func useMemoryProviderClock(t *testing.T, start time.Time) *time.Time {
+	t.Helper()
+	now := start
+	memoryProviderRateState.Lock()
+	savedScopes, savedReservations := memoryProviderRateState.scopes, memoryProviderRateState.reservations
+	memoryProviderRateState.scopes = make(map[string]*memoryProviderRateScope)
+	memoryProviderRateState.reservations = make(map[string]*memoryProviderRateReservation)
+	memoryProviderRateState.Unlock()
+	savedClock := memoryProviderNow
+	memoryProviderNow = func() time.Time { return now }
+	t.Cleanup(func() {
+		memoryProviderNow = savedClock
+		memoryProviderRateState.Lock()
+		memoryProviderRateState.scopes, memoryProviderRateState.reservations = savedScopes, savedReservations
+		memoryProviderRateState.Unlock()
+	})
+	return &now
+}
+
+func TestGatewayProviderRateMemoryExpiredReservationIsReleasedAndLost(t *testing.T) {
+	now := useMemoryProviderClock(t, time.Unix(1200, 0))
+	ctx := context.Background()
+	scope := []GatewayProviderRateScope{{ID: "credential:abandoned", RPM: 1, TPM: 100}}
+	abandoned, err := ReserveGatewayProviderRate(ctx, nil, scope, 90)
+	require.NoError(t, err)
+	_, err = ReserveGatewayProviderRate(ctx, nil, scope, 1)
+	require.ErrorIs(t, err, ErrGatewayProviderRateLimit, "an open reservation holds RPM and TPM")
+
+	*now = now.Add(GatewayReservationTTL)
+	next, err := ReserveGatewayProviderRate(ctx, nil, scope, 100)
+	require.NoError(t, err, "an expired reservation must release its pending capacity")
+	require.ErrorIs(t, RenewGatewayProviderRate(ctx, nil, abandoned), ErrGatewayReservationLost)
+	require.ErrorIs(t, FinishGatewayProviderRate(ctx, nil, abandoned, 10, true, true, 0), ErrGatewayReservationLost,
+		"a late finish must not report success for a reservation that expired")
+	require.NoError(t, FinishGatewayProviderRate(ctx, nil, next, 10, true, true, 0))
+}
+
+func TestGatewayProviderRateMemoryStateStaysBounded(t *testing.T) {
+	now := useMemoryProviderClock(t, time.Unix(1200, 0))
+	ctx := context.Background()
+	scope := []GatewayProviderRateScope{{ID: "channel:bounded"}}
+	for round := 0; round < 5; round++ {
+		for i := 0; i < 10; i++ {
+			finished, err := ReserveGatewayProviderRate(ctx, nil, scope, 1)
+			require.NoError(t, err)
+			require.NoError(t, FinishGatewayProviderRate(ctx, nil, finished, 1, true, true, 0))
+			_, err = ReserveGatewayProviderRate(ctx, nil, scope, 1)
+			require.NoError(t, err)
+		}
+		*now = now.Add(GatewayReservationTTL)
+	}
+	_, err := ReserveGatewayProviderRate(ctx, nil, scope, 1)
+	require.NoError(t, err)
+
+	memoryProviderRateState.Lock()
+	defer memoryProviderRateState.Unlock()
+	assert.Len(t, memoryProviderRateState.reservations, 1, "finished and abandoned reservations must be dropped after one TTL")
+	assert.Len(t, memoryProviderRateState.scopes["channel:bounded"].pending, 1)
+	assert.Empty(t, memoryProviderRateState.scopes["channel:bounded"].events, "events older than one minute must be pruned")
+}
+
+func TestGatewayProviderRateMemoryPreSendFailureSetsNoCooldown(t *testing.T) {
+	useMemoryProviderClock(t, time.Unix(1200, 0))
+	ctx := context.Background()
+	scope := []GatewayProviderRateScope{{ID: "credential:presend", RPM: 1}}
+	notSent, err := ReserveGatewayProviderRate(ctx, nil, scope, 0)
+	require.NoError(t, err)
+	require.NoError(t, FinishGatewayProviderRate(ctx, nil, notSent, 0, false, false, time.Minute))
+	_, err = ReserveGatewayProviderRate(ctx, nil, scope, 0)
+	require.NoError(t, err, "an attempt that never reached the provider refunds RPM and cannot start a cooldown")
+}

@@ -61,6 +61,9 @@ var memoryProviderRateState = struct {
 	reservations: make(map[string]*memoryProviderRateReservation),
 }
 
+// Tests replace the clock to cross the one-minute window and reservation TTL.
+var memoryProviderNow = time.Now
+
 func memoryProviderScope(id string) *memoryProviderRateScope {
 	scope := memoryProviderRateState.scopes[id]
 	if scope == nil {
@@ -82,23 +85,25 @@ func pruneMemoryProviderScope(scope *memoryProviderRateScope, now time.Time) {
 }
 
 func reserveMemoryProviderRate(scopes []GatewayProviderRateScope, estimatedTokens int64) (GatewayProviderRateReservation, error) {
-	now := time.Now()
+	now := memoryProviderNow()
 	reservation := GatewayProviderRateReservation{ID: uuid.NewString(), Scopes: append([]GatewayProviderRateScope(nil), scopes...), EstimatedTokens: estimatedTokens}
 	memoryProviderRateState.Lock()
 	defer memoryProviderRateState.Unlock()
+	// Mirror the Redis keys: an expired reservation disappears, so a late
+	// renew or finish reports it lost; a finished marker keeps finish
+	// idempotent for one TTL.
 	for id, pending := range memoryProviderRateState.reservations {
 		if pending.finished {
-			if pending.finishedAt.Before(now.Add(-time.Minute)) {
+			if !pending.finishedAt.Add(GatewayReservationTTL).After(now) {
 				delete(memoryProviderRateState.reservations, id)
 			}
 			continue
 		}
-		if pending.expiresAt.Before(now) {
+		if !pending.expiresAt.After(now) {
 			for _, scope := range pending.scopes {
 				delete(memoryProviderScope(scope.ID).pending, id)
 			}
-			pending.finished = true
-			pending.finishedAt = now
+			delete(memoryProviderRateState.reservations, id)
 		}
 	}
 	for _, requested := range scopes {
@@ -129,7 +134,7 @@ func reserveMemoryProviderRate(scopes []GatewayProviderRateScope, estimatedToken
 }
 
 func renewMemoryProviderRate(reservation GatewayProviderRateReservation) error {
-	now := time.Now()
+	now := memoryProviderNow()
 	memoryProviderRateState.Lock()
 	defer memoryProviderRateState.Unlock()
 	state := memoryProviderRateState.reservations[reservation.ID]
@@ -140,8 +145,8 @@ func renewMemoryProviderRate(reservation GatewayProviderRateReservation) error {
 	return nil
 }
 
-func finishMemoryProviderRate(reservation GatewayProviderRateReservation, actualTokens int64, upstreamStarted, usageKnown bool, retryAfter time.Duration) error {
-	now := time.Now()
+func finishMemoryProviderRate(reservation GatewayProviderRateReservation, actualTokens int64, upstreamStarted bool, retryAfter time.Duration) error {
+	now := memoryProviderNow()
 	memoryProviderRateState.Lock()
 	defer memoryProviderRateState.Unlock()
 	state := memoryProviderRateState.reservations[reservation.ID]
@@ -153,9 +158,6 @@ func finishMemoryProviderRate(reservation GatewayProviderRateReservation, actual
 	}
 	if !state.expiresAt.After(now) {
 		return ErrGatewayReservationLost
-	}
-	if upstreamStarted && !usageKnown {
-		actualTokens = reservation.EstimatedTokens
 	}
 	for _, requested := range state.scopes {
 		scope := memoryProviderScope(requested.ID)
@@ -235,14 +237,14 @@ func FinishGatewayProviderRate(ctx context.Context, client *redis.Client, reserv
 	if reservation.ID == "" || len(reservation.Scopes) == 0 || actualTokens < 0 || actualTokens > 1_000_000_000 {
 		return ErrGatewayStorageUnavailable
 	}
-	if client == nil {
-		return finishMemoryProviderRate(reservation, actualTokens, upstreamStarted, usageKnown, retryAfter)
-	}
 	if upstreamStarted && !usageKnown {
 		actualTokens = reservation.EstimatedTokens
 	}
 	if !upstreamStarted {
 		retryAfter = 0
+	}
+	if client == nil {
+		return finishMemoryProviderRate(reservation, actualTokens, upstreamStarted, retryAfter)
 	}
 	result, err := gatewayProviderFinishScript.Run(ctx, client, gatewayProviderRateKeys(reservation), reservation.ID, actualTokens, upstreamStarted, max(retryAfter.Milliseconds(), 0)).Int()
 	if err != nil {
