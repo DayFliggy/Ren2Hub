@@ -25,9 +25,11 @@
 
 图片与音频是互斥的模态：两者的输入 token 之和不得超过输入总量（上游输入不含缓存时加上缓存读写），图片、音频输出与 reasoning 之和不得超过输出总量。超出时计算直接失败，不把剩余文本量夹到零后继续收费；缓存与模态可以重叠，合法缓存集合不受此限制。
 
+Realtime 用量在累加和计价前经 `NormalizeRealtimeUsage` 校验（`service/billing_realtime.go`）：计数须非负且不超过 MaxInt32，给出的 `total_tokens` 须等于输入与输出之和，缓存、图片与 reasoning 细分不得超过所在方向。方向总量为正时，文本、音频、图片细分之和超过总量即失败；总量为零时，完整且非估算的上游观察按明确零处理，细分非零即失败，本地估算或不完整观察才由细分补出总量。缺失的文本细分取方向总量减去音频与图片细分的余数。
+
 `flat_fee` 只覆盖其对应的常规产品计量。无其他单价的纯固定费可以忽略已确认的 calls、images、seconds、characters、credits 事实，带固定费时 calls 无须另行定价；未定价的 `tool:*` 或其他未知数量仍以缺价失败，表达式加固定费同样不能吸收未定价工具调用。
 
-全部金额和表达式使用 Decimal，已移除 Expr VM/float64 结算入口。`v1:` 结果为微美元，`p * 2.5 + c * 10` 表示每百万输入 2.5 USD、输出 10 USD；`v2:` 使用冻结任务 schema，结果直接为 USD。数值属性使用 `attr_num`，时区日历及 UTC 偏移在报价时冻结。语法、资源限制和除法精度见[表达式契约](../../pkg/billingexpr/expr.md)。
+全部金额和表达式使用 Decimal，已移除 Expr VM/float64 结算入口。`v1:` 结果为微美元，`p * 2.5 + c * 10` 表示每百万输入 2.5 USD、输出 10 USD；`v2:` 使用冻结任务 schema，结果直接为 USD。数值属性使用 `attr_num`，时区日历及 UTC 偏移在报价时冻结。语法、资源限制和除法精度见[表达式契约](../../pkg/billingexpr/expr.md)。价格预览 `PreviewBillingPrice` 用 `common.DecodeJsonNumbers` 读取请求体，数字保留为 `json.Number` 原文并拒绝多个 JSON 值，解码后仍执行必填字段校验。
 
 `ChargeResult.base_usd` 是分项合计；`adjustments` 记录渠道倍率、调整前金额、增减金额与调整后金额，`total_usd` 是调整后总额。最后乘 500000 并只舍入一次，正金额最低 1 quota，明确零为 0。无效或超过单请求 MaxInt32 的结果进入对账，不截断扣款。
 
@@ -52,7 +54,7 @@ PublicProviderConf 是参考目录。媒体能力标签或 `cost.input/output=0`
 
 启动仅在缺少来源记录时安装[双源离线快照](../../service/pricingdata/README.md)，不联网、不覆盖已有快照。默认每 30 分钟检查，Root 可设 5–1440 分钟或关闭计划，仍可手动检查。Sub2API 校验独立 SHA，AxonHub 使用条件请求与正文 SHA；正文上限 16 MiB，每源超时 40 秒，哈希请求 10 秒。
 
-单源下载或校验失败保留旧有效快照，并继续其他源。状态为 `bundled/current/cached/unavailable`，报告快照 ID、解析器版本、归档数及错误。所有源无有效快照时返回目录错误，不批量清空既有价格、不启用默认价。有效目录无法提供某模型完整价格时写入 `version_id=0,origin=unavailable`，阻断新请求借别名取得旧价；历史 Quote 仍可重放。来源视图和活动价格均参与并发校验，哈希未变也核对未完成发布。当前没有旧种子、旧倍率或历史来源迁移路径。
+单源下载或校验失败保留旧有效快照，并继续其他源。状态为 `bundled/current/cached/unavailable`，报告快照 ID、解析器版本、归档数及错误。所有源无有效快照时返回目录错误，不批量清空既有价格、不启用默认价。有效目录无法提供某模型完整价格时写入 `version_id=0,origin=unavailable`，阻断新请求借别名取得旧价；历史 Quote 仍可重放。来源视图和活动价格均参与并发校验，哈希未变也核对未完成发布。自动发布与活动版本哈希相同时复用原版本，只更新活动指针的来源归属，不新增版本；人工发布始终新建版本（`model/billing_pricing.go`）。当前没有旧种子、旧倍率或历史来源迁移路径。
 
 ## 音频、工具与任务边界
 
@@ -71,7 +73,7 @@ PublicProviderConf 是参考目录。媒体能力标签或 `cost.input/output=0`
 | 产品 | 可收费路径 | 边界 |
 | --- | --- | --- |
 | 文本与 Embedding | token、缓存读写、reasoning 及明确覆盖的媒体细分；固定费、单价、结构化阶梯或 Decimal 表达式 | Embedding 使用 `usage_scope=embedding`；缺失、估算或空 usage 不当作实际零值 |
-| 工具 | web search（含 search-preview 模型）、file search、Google search、图片生成及已配置函数维度，按适配器确认的完成调用计数 | 声明工具即要求对应 `tool:*` 价格，缺价在预留前拒绝，不退回基础 token 价；调用按 ID、call ID 与输出索引去重，身份缺失或冲突时不形成计费数量 |
+| 工具 | web search（含 search-preview 模型）、file search、Google search、图片生成及已配置函数维度，按适配器确认的完成调用计数 | 声明工具即要求对应 `tool:*` 价格，缺价在预留前拒绝，不退回基础 token 价；`ObserveBillableToolCall` 按 ID、call ID 与输出索引别名去重，item.done 与终态快照只计一次；身份全缺或别名的类型、名称、ID 冲突时整次请求的工具用量无效，计价失败并保留预留进入对账 |
 | Realtime | 已实现的累计 token/媒体用量；纯固定请求价覆盖常规 token 维度 | 只允许客户端执行的 function 声明；其他工具类型、已配置 `tool:<name>` 价格的函数、需要 `tool:*` 维度的请求，以及顶层 `input_audio_transcription` 或嵌套 `audio.input.transcription` 均以 `missing_usage_contract` 拒绝；会话中不能改变模型 |
 | 图片 | 图像 token/缓存细分，或已确认交付的 `images` 数量 | 同一版本不能同时按 `img_o` 与 `images`/`tool:image_generation` 收费，发布前拒绝 |
 | 视频、音乐与其他任务 | 通过插件合同的固定 calls 或 schema 数量价；冻结插件版本、计量字段与价格，按成功终态事实结算 | schema 中 `estimate_only` 字段只用于预留，不能定义最终费用 |

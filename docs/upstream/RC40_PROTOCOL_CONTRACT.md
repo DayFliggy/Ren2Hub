@@ -18,6 +18,8 @@
 
 原生 Claude/AWS/Vertex 消息体继续保留配置，beta 能力由客户端或管理员请求头提供，不自动注入。发送前从最终协议和完成参数覆盖的实际请求冻结 `effort` 属性及消费日志；尚未生效的尾部配置不参与计价，删除和重试不能沿用旧属性。旧 Quote、价格版本和已接受请求的结算不重新解释。Claude 输入跨协议后按真实目标请求计价，不能把已丢失的源配置带入报价。
 
+最终请求为 Claude 格式时，`ApplyParamOverrideWithRelayInfo` 在参数覆盖后重新解析当前回合 effort（`relay/common/override.go`）。覆盖产生的非法 effort 标记为客户端错误，中继入口返回 HTTP 400 `channel:param_override_invalid`，不重试、不发送、不预扣；其他覆盖错误保留既有分类。计价属性按实际协议选择解析方式：`FreezeOutboundBillingAttributes` 依最终发送协议，`BuildBillingExprRequestInputFromRequest` 依 DTO 类型（`relay/helper/billing_expr_request.go`）。只有 Claude 格式使用 `ResolveEffectiveEffort()`，其他协议读取各自的 effort 字段，effort 统一转为小写。显式 `thinking.type` 和 `budget_tokens` 等预算字段进入冻结属性：预算 0 为 `thinking=off`，正数为 `on`，-1 为 `adaptive` 且不保留预算值，显式 `type` 优先于预算推导。没有显式 thinking 时才由 effort 推导，`none` 为 off，其余为 on。
+
 跨协议出现任意消息级 `output_config`（包含空对象、null）时产生 `claude_message_output_config_not_portable`，路径为 `messages[i].output_config`，诊断不含正文或配置值。原生保留；默认 safe 和 strict 拒绝转换，allow 明确记录损失并沿用既有转换，不将消息级配置提升为全局 effort。规划、预览、直接转换及经过其他协议再回到 Claude 的多步路径采用同一损失保护。
 
 Claude、Gemini、OpenAI Chat 和 Responses 的推理、搜索、工具和图片按实际已实现字段转换。共享推理意图保留支持的 effort、预算及显式零值；不支持的语义继续进入损失诊断。工具返回中的图片可提升为后续用户内容，文本和调用关联保持原顺序；不把真实音频或视频改作图片。流完成、usage 和错误事件保留各自含义，成功终态包含输出不等于失败或中断流可以估算结算。

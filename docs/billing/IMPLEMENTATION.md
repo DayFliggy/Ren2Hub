@@ -32,6 +32,10 @@
 
 最终结算只接受 `Usage.ReadyForSettlement()` 为真的用量：`Complete` 为真、非估算、未标记非法、`Source` 非空，且 `Terminal` 为 `completed`。普通请求、实时观察、任务终态和最终资金事务共用 `validateBillingConsumption`：要求冻结的 Usage 与 Charge 同时存在、用户与 Token 一致、日志金额等于 `Charge.FinalQuota`，再核对已发布报价和同一请求、渠道、报价哈希的不可变尝试及其指纹，按冻结 Quote 重新计算 Charge 并比较哈希。任务失败释放不保留消费费用，成功任务同样经过该校验。`ValidatePublishedBillingQuote` 按版本 ID 读取数据库中的不可变版本并比较冻结定义哈希，不读取当前活动指针，之后发布的新版本不会使已接受的尝试失效；伪造版本 ID 或未发布预览不能成为收费依据。
 
+`Complete` 在传输边界按上游原始 JSON 的字段存在性判定（`relaykit/dto/usage_observation.go` 的 `HasJSONTokenCounts`）：两个方向的计数都须存在且为非负整数，明确零是完整事实，缺失、`null` 或空对象不是。Responses 与 Realtime 在解码时按 `input_tokens/output_tokens` 生成观察，Responses 仅在 `status=completed` 时标记完成终态；Chat SSE 缺少 `prompt_tokens/completion_tokens` 时标为 `partial`；token 型音频用量两组方向计数都不完整时直接报错。`UsageObservation` 字段为 `json:"-"`，不从上游 JSON 解码，也不改变转发给客户端的协议字段。
+
+渠道测试（`controller/channel-test.go`）与普通中继共用账务入口：发送前用 `ModelPriceHelper` 冻结报价，参数覆盖后用 `FreezeOutboundBillingAttributes` 冻结最终属性，发送边界经 `prepareLiveRouteSend` 建立预留、锁价与尝试记录。响应后先用 `TextUsageReadyForSettlement` 判定，未确认用量经 `HoldUnconfirmedResponseUsage` 保留预留；确认后 `PrepareFinalTextCharge` 调用与 `PostTextConsumeQuota` 相同的 `calculateTextQuotaSummary`（含 `flat_fee` 与单价的已交付按次处理），再由 `CompleteBillingConsumption` 结算。差异在计价失败：渠道测试直接返回错误，不像普通中继那样经 `holdFailedBillingPrice` 登记计算失败；已有有效输出时预留仍由退出处理保留。
+
 只提交金额的结算入口只能幂等确认已准备好的结算意图，不能新建结算意图。人工结算要求已保存 Quote、Usage、Charge 和消费指纹，并在最终资金事务中按冻结证据复核金额；管理员金额和说明不能把未知用量变成可扣款事实，明确放弃收费的释放仍可执行。
 
 同一请求首次使用某渠道时冻结该渠道的价格，切换渠道建立另一份报价，返回已尝试渠道时复用原价格。每次尝试独立保存报价证据，恢复快照管理累计预留目标。审计按冻结 Quote、Usage 和账本事件重放；请求指纹绑定请求 ID、渠道和报价，消费指纹覆盖完整用量与账单，不用舍入后的相同金额代替证据一致性。

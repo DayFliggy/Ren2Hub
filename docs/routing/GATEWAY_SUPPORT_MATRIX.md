@@ -118,7 +118,7 @@ SDK 版本锁文件位于 `tests/gateway-sdk`：Python OpenAI 3.13.0、Anthropic
 
 新增 `verify_media.py` / `verify_media.mjs` 各调用官方 SDK 验证 7 条正常媒体路径和 1 条图片中断路径：Embedding 浮点/base64、图片 JSON/SSE、TTS PCM、STT JSON 与 multipart `stream=true`。中断必须由 SDK 抛错；没有使用手写 SSE 累积器替代 SDK。音频参数依据本地固定版本类型及 [OpenAI 转写文档](https://developers.openai.com/api/docs/guides/speech-to-text)、[语音生成参数](https://developers.openai.com/api/reference/cli/resources/audio/subresources/speech/methods/create) 核对。
 
-图片最终预算读取适配器与渠道覆盖后的 `n`、`parameters.n`、`sampleCount`、`batch_size` 或 `num_outputs`；multipart 也按实际发送字段处理。该预算只证明可计费数量有界，不支持图片 TPM。JSON 转 SSE 表示网关包装已完成图片，不代表供应商原生提供渐进生成。Imagen 的既有 token 规则明确记为估算。Replicate 在上传前完成最终数量校验、准入和预扣，上传使用已验证的最终传输头；上传已接受或生成结果未知时不重放。
+图片最终预算读取适配器与渠道覆盖后的 `n`、`parameters.n`、`sampleCount`、`batch_size` 或 `num_outputs`；multipart 也按实际发送字段处理。`FinalImagePriceMeta`（`relay/helper/image_budget.go`）同时用该最终请求体冻结 `service_tier`、`quality`、归一化尺寸与数量作为计价属性，渠道覆盖写入的档位不会在报价中丢失。该预算只证明可计费数量有界，不支持图片 TPM。JSON 转 SSE 表示网关包装已完成图片，不代表供应商原生提供渐进生成。Imagen 的既有 token 规则明确记为估算。Replicate 在上传前完成最终数量校验、准入和预扣，上传使用已验证的最终传输头；上传已接受或生成结果未知时不重放。
 
 TTS 发送前读取最终 `input`、MiniMax `text` 或火山 `request.text`，按已有字符/token 规则预扣；音频输出仍无可靠有界预算，不开放 TPM。MiniMax/火山仅开放 speech，Cloudflare 仅开放非流式 transcriptions；预览和执行读取相同路径/流式登记。火山二进制输出中断会中止 HTTP 传输，已交付部分按估算结算并保存 `usage_source` 和终止状态。官方 Realtime SDK 使用 Python 类型化迭代器和 TypeScript 事件接口，未将测试汇总逻辑称为 SDK 内置累积器。
 
