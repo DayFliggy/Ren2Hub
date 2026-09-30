@@ -130,6 +130,18 @@ func FinalImagePriceMeta(c *gin.Context, info *relaycommon.RelayInfo, body io.Re
 		}
 	}
 	request.Size = strings.ReplaceAll(request.Size, "*", "x")
+	if source, ok := info.Request.(*dto.ImageRequest); ok && source.BillingParameters != nil {
+		parameters := *source.BillingParameters
+		request.BillingParameters = &parameters
+	}
+	if info.ApiType == constant.APITypeAli {
+		request.BillingParameters = &dto.ImageBillingParameters{N: &count}
+		if raw, exists := fields["prompt_extend"]; exists {
+			if err := common.Unmarshal(raw, &request.BillingParameters.PromptExtend); err != nil {
+				return nil, fmt.Errorf("invalid image prompt_extend")
+			}
+		}
+	}
 	// Preserve the final wire pricing conditions while normalizing provider-
 	// specific quantity fields. Dropping service_tier here would underquote.
 	for name, value := range map[string]any{"quantity": count, "quality": request.Quality, "resolution": request.Size} {
@@ -145,6 +157,18 @@ func FinalImagePriceMeta(c *gin.Context, info *relaycommon.RelayInfo, body io.Re
 	if err := FreezeOutboundBillingAttributes(info, pricingPayload); err != nil {
 		return nil, err
 	}
+	input, err := BuildBillingExprRequestInputFromRequest(&request, info.RequestHeaders)
+	if err != nil {
+		return nil, err
+	}
+	input.Body, err = imageBillingBody(&request, int(count))
+	if err != nil {
+		return nil, err
+	}
+	input.Attributes = info.BillingRequestInput.Attributes
+	imageCount := int(count)
+	input.ImageCount = &imageCount
+	info.BillingRequestInput = &input
 	meta := request.GetTokenCountMeta()
 	if info.ApiType == constant.APITypeAli && strings.Contains(info.UpstreamModelName, "z-image") {
 		var extend bool

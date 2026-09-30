@@ -176,6 +176,7 @@ func (t *Task) ResultRetrievable() bool { return t != nil && !t.PrivateData.Resu
 
 // TaskBillingContext keeps the accepted immutable quote and separate usage/result evidence.
 type TaskBillingContext struct {
+	AttemptID       string                `json:"attempt_id"`
 	Quote           *billing.Quote        `json:"quote"`
 	Usage           *billing.Usage        `json:"usage"`
 	Charge          *billing.ChargeResult `json:"charge,omitempty"`

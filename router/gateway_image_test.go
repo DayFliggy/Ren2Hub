@@ -12,7 +12,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,7 +51,7 @@ func TestGatewayImageFinalQuantityAndNativeMapping(t *testing.T) {
 			}).Error)
 			require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", 1).Update("available_quota", test.quota).Error)
 			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 100000}).Error)
-			require.NoError(t, publishGatewayImagePrice("gpt-4o-mini"))
+			require.NoError(t, configureGatewayImagePrice("gpt-4o-mini"))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			request, err := http.NewRequest(http.MethodPost, url+"/v1/images/generations", strings.NewReader(`{"model":"gpt-4o-mini","prompt":"draw a house","n":1,"vendor_flag":false}`))
 			require.NoError(t, err)
@@ -118,7 +117,7 @@ func TestGatewayImageDeliveryAndSettlement(t *testing.T) {
 				_, _ = io.WriteString(w, test.body)
 			})
 			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 100000}).Error)
-			require.NoError(t, publishGatewayImagePrice("gpt-4o-mini"))
+			require.NoError(t, configureGatewayImagePrice("gpt-4o-mini"))
 			request, err := http.NewRequest(http.MethodPost, url+"/v1/images/generations", strings.NewReader(fmt.Sprintf(`{"model":"gpt-4o-mini","prompt":"draw a house","n":3,"stream":%v}`, test.stream)))
 			require.NoError(t, err)
 			request.Header.Set("Authorization", "Bearer "+key)
@@ -197,9 +196,9 @@ func TestGatewayImageExpressionUsesActualCountAndRetainsInterruptedReservation(t
 				_, _ = io.WriteString(w, test.body)
 			})
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("models = ?", "gpt-4o-mini").Update("param_override", `{"n":3}`).Error)
-			current, err := model.GetActiveBillingPrice(t.Context(), "gpt-4o-mini")
+			_, err := model.GetActiveBillingPrice(t.Context(), "gpt-4o-mini")
 			require.NoError(t, err)
-			_, err = model.PublishBillingPrice(t.Context(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "gpt-4o-mini", Mode: billing.ModeExpression, Expression: `v1:tier("images", fixed(0.001)) * image_count`}, current.ID, 1)
+			_, err = setGatewayExpression("gpt-4o-mini", `v1:tier("images", fixed(0.001)) * image_count`)
 			require.NoError(t, err)
 			request, err := http.NewRequest(http.MethodPost, url+"/v1/images/generations", strings.NewReader(`{"model":"gpt-4o-mini","prompt":"draw","n":1}`))
 			require.NoError(t, err)

@@ -39,6 +39,7 @@ Vitest 检查 `src/` 下的行为测试。`bun run test:visual` 运行本地 Pla
 - `/oauth/:provider`：现有 OAuth 绑定回调
 - `/dashboard`、`/keys`、`/wallet`、`/usage-logs/*`、`/profile`：用户控制台
 - `/channels`、`/users`、`/models/metadata`、`/system-settings/*`：管理控制台
+- `/system-settings/billing/model-pricing`：Root 模型与工具定价、五源获取候选并回填草稿；空安装无价格，只有保存后生效，见[计费界面契约](docs/BILLING.md)
 - `/lab/*`：炼金室预留路由；后端 capability 未启用时拒绝访问
 
 旧 `/console/*`、`/auth/*` 和 NewAPI 历史书签统一转换为根路径并保留 query/hash。`/next` 前缀不再转换或加载业务页面。匿名访问转到 `/sign-in`，登录回跳由实际路由记录校验。页面使用相同 Console 布局；布局与语言包由 metadata 指定，不依赖 URL 前缀。

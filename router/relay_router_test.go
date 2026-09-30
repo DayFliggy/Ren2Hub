@@ -11,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -97,6 +98,7 @@ var relayTestTokenEncoders sync.Once
 
 func setupRelayRouterTestDB(t *testing.T) {
 	t.Helper()
+	t.Setenv("CRYPTO_SECRET", "router-billing-evidence-fixture-secret")
 	relayTestTokenEncoders.Do(service.InitTokenEncoders)
 
 	gin.SetMode(gin.TestMode)
@@ -116,14 +118,17 @@ func setupRelayRouterTestDB(t *testing.T) {
 	bootstrap, bootstrapErr := gorm.Open(sqlite.Open(common.SQLitePath), &gorm.Config{})
 	require.NoError(t, bootstrapErr)
 	require.NoError(t, bootstrap.AutoMigrate(&model.BillingSchema{}))
-	require.NoError(t, bootstrap.Create(&model.BillingSchema{ID: 1, Version: model.BillingSchemaVersion}).Error)
+	cipher, cipherErr := billing.NewEvidenceCipher([]byte(os.Getenv("CRYPTO_SECRET")))
+	require.NoError(t, cipherErr)
+	require.NoError(t, bootstrap.Create(&model.BillingSchema{ID: 1, Version: model.BillingSchemaVersion, EvidenceKeyID: cipher.KeyID()}).Error)
 	bootstrapSQL, bootstrapErr := bootstrap.DB()
 	require.NoError(t, bootstrapErr)
 	defer bootstrapSQL.Close()
 	require.NoError(t, model.InitDB())
 	model.LOG_DB = model.DB
-	require.NoError(t, model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.Ability{}, &model.Channel{}, &model.UserChannelEntitlement{}, &model.UserRouteProfile{}, &model.Option{}, &model.GatewayCredential{}, &model.GatewayStateBinding{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}, &model.BillingPriceVersion{}, &model.BillingActivePrice{}, &model.Log{}, &model.QuotaData{}))
+	require.NoError(t, model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.Ability{}, &model.Channel{}, &model.UserChannelEntitlement{}, &model.UserRouteProfile{}, &model.Option{}, &model.GatewayCredential{}, &model.GatewayStateBinding{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}, &model.BillingPriceVersion{}, &model.Log{}, &model.QuotaData{}, &model.AuditLog{}, &model.Model{}, &model.Vendor{}))
 
+	model.InitOptionMap()
 	t.Cleanup(func() {
 		if sqlDB, err := model.DB.DB(); err == nil {
 			_ = sqlDB.Close()

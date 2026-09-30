@@ -18,6 +18,8 @@ Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`�
 
 守卫先检查初始化状态，再检查模块能力、加载语言包并恢复登录会话。初始化检查失败进入 `/setup/error`，未完成初始化进入 `/setup`；需要登录的页面转到 `/sign-in`，回跳地址必须通过站内路由校验。
 
+Root 模型定价入口为 `/system-settings/billing/model-pricing`；旧 `billing/pricing`、自动价格设置书签跳转到此处并保留 query/hash。模型定价与 `/models/metadata` 独立。
+
 ## 兼容边界
 
 - `src/router/legacyRoutes.ts` 集中转换旧书签、日志 tab 和设置 section，守卫保留 query/hash。未知页面落入 404，不将未知控制台路径当作首页。

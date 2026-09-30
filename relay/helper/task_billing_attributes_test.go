@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -62,14 +61,4 @@ func TestFreezeTaskBillingRemixInheritsOnlyOmittedMediaFacts(t *testing.T) {
 	assert.Equal(t, map[string]interface{}{"duration": json.Number("8"), "resolution": "720p", "quantity": json.Number("2"), "quality": "high"}, info.BillingRequestInput.Attributes)
 	assert.Equal(t, json.Number("6"), inherit["duration"])
 	require.Error(t, FreezeTaskBillingAttributes(info, "application/json", []byte(`{}`), map[string]interface{}{"duration": -1}))
-}
-
-func TestTaskQuoteFreezesFinalDurationAndQuantity(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Model: "task-video", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "seconds", Unit: "per_second", Price: "0.001"}}})
-	require.NoError(t, FreezeTaskBillingAttributes(info, "application/json", []byte(`{"parameters":{"durationSeconds":6,"sampleCount":2}}`)))
-	price, err := ModelPriceHelperPerCall(c, info)
-	require.NoError(t, err)
-	assert.Equal(t, 6000, price.QuotaToPreConsume)
-	assert.Equal(t, "12", price.Usage.Quantities["seconds"])
-	assert.Equal(t, "6", price.Quote.Attributes["duration"])
 }

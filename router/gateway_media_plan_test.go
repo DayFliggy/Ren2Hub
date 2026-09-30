@@ -59,7 +59,7 @@ func TestGatewayMediaPlanRejectsBeforeSendAndPreservesImages(t *testing.T) {
 						}
 						require.NoError(t, model.DB.Model(channel).Updates(map[string]any{"type": channel.Type, "models": channel.Models}).Error)
 						require.NoError(t, channel.AddAbilities(model.DB))
-						require.NoError(t, publishGatewayFixturePrices(`{"media-plan":0.001}`, false))
+						require.NoError(t, configureGatewayFixturePrices(`{"media-plan":0.001}`, false))
 						require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"conversion_policy": policy, "unlimited_quota": false, "available_quota": 2000}).Error)
 						require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 						content, path := protocol.image, protocol.path

@@ -15,6 +15,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if err := os.Setenv("CRYPTO_SECRET", "billing-test-persistent-key"); err != nil {
+		panic("failed to initialize test encryption key")
+	}
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		panic("failed to open test db: " + err.Error())
@@ -37,7 +40,7 @@ func TestMain(m *testing.M) {
 	if err := db.AutoMigrate(
 		&Task{},
 		&TaskResultEvent{},
-		&BillingEvent{}, &BillingRecovery{}, &BillingAttempt{}, &BillingPriceVersion{}, &BillingActivePrice{},
+		&BillingEvent{}, &BillingRecovery{}, &BillingAttempt{}, &BillingPriceVersion{},
 		&User{},
 		&UserSession{},
 		&AuthFlow{},

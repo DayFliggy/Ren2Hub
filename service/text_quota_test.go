@@ -3,6 +3,7 @@ package service
 import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -16,20 +17,23 @@ import (
 	"time"
 )
 
-func quotedTextInfo(t *testing.T, prices []billing.UnitPrice) *relaycommon.RelayInfo {
+func quotedTextInfo(t *testing.T, values billing.PricingValues, tools ...billing.UnitPrice) *relaycommon.RelayInfo {
 	t.Helper()
-	q, err := billing.NewQuote(billing.PriceVersion{Model: "test", Mode: billing.ModeUnitPrice, Prices: prices}, "1", nil, time.Now())
+	t.Setenv("CRYPTO_SECRET", "text-billing-test-key")
+	version, err := billing.NewModelPriceVersion("test", values, false)
 	require.NoError(t, err)
-	return &relaycommon.RelayInfo{OriginModelName: "test", StartTime: time.Now(), PriceData: hosttypes.PriceData{Quote: q}}
+	version.Prices = tools
+	q, err := billing.NewQuote(version, "1", nil, time.Now())
+	require.NoError(t, err)
+	return &relaycommon.RelayInfo{RequestId: "text-request", BillingAttemptID: "text-attempt", BillingRequestInput: &billingexpr.RequestInput{}, OriginModelName: "test", StartTime: time.Now(), PriceData: hosttypes.PriceData{Quote: q}}
 }
 
 func TestDeliveredPerCallStreamChargesOnceWithoutTokenUsage(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	info := quotedTextInfo(t, []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.001"}})
+	info := quotedTextInfo(t, billing.PricingValues{"ModelPrice": "0.001"})
 	info.PriceData.UsePrice = true
-	before := calculateTextQuotaSummary(ctx, info, &dto.Usage{})
-	require.NoError(t, before.PricingError)
-	assert.Zero(t, before.Quota)
+	_, err := PrepareFinalTextCharge(ctx, info, &dto.Usage{})
+	require.Error(t, err, "a fixed fee still requires actual successful delivery")
 	info.MarkValidOutput()
 	after := calculateTextQuotaSummary(ctx, info, &dto.Usage{})
 	require.NoError(t, after.PricingError)
@@ -39,7 +43,7 @@ func TestDeliveredPerCallStreamChargesOnceWithoutTokenUsage(t *testing.T) {
 
 func TestTextQuoteUsesCanonicalProviderUsage(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	prices := []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}, {Quantity: "c", Unit: "per_million_tokens", Price: "4"}, {Quantity: "cr", Unit: "per_million_tokens", Price: "0.2"}, {Quantity: "cc", Unit: "per_million_tokens", Price: "2.5"}, {Quantity: "cc1h", Unit: "per_million_tokens", Price: "4"}}
+	prices := billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": "p*2+c*4+cr*0.2+cc*2.5+cc1h*4"}
 	for _, format := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatClaude} {
 		info := quotedTextInfo(t, prices)
 		info.RelayFormat = format
@@ -63,7 +67,7 @@ func TestTextQuoteUsesCanonicalProviderUsage(t *testing.T) {
 
 func TestTextQuoteCacheOverlapCannotCredit(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	info := quotedTextInfo(t, []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}, {Quantity: "cr", Unit: "per_million_tokens", Price: "1"}, {Quantity: "cc", Unit: "per_million_tokens", Price: "2"}})
+	info := quotedTextInfo(t, billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": "p*2+cr+cc*2"})
 	usage := &dto.Usage{PromptTokens: 100, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 80, CachedCreationTokens: 60}}
 	summary := calculateTextQuotaSummary(ctx, info, usage)
 	require.NoError(t, summary.PricingError)
@@ -73,7 +77,7 @@ func TestTextQuoteCacheOverlapCannotCredit(t *testing.T) {
 func TestTextToolQuoteBillsZeroTokenUsageAndFrozenPrices(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Set("claude_web_search_requests", 2)
-	info := quotedTextInfo(t, []billing.UnitPrice{{Quantity: "tool:web_search", Unit: "per_thousand_calls", Price: "10"}, {Quantity: "tool:google_search", Unit: "per_call", Price: "0.014"}})
+	info := quotedTextInfo(t, billing.PricingValues{"ModelPrice": 0.0}, billing.UnitPrice{Quantity: "tool:web_search", Unit: "per_thousand_calls", Price: "10"}, billing.UnitPrice{Quantity: "tool:google_search", Unit: "per_call", Price: "0.014"})
 	ctx.Set("gemini_google_search_call", true)
 	summary := calculateTextQuotaSummary(ctx, info, &dto.Usage{})
 	require.NoError(t, summary.PricingError)
@@ -92,12 +96,12 @@ func TestTextToolQuoteBillsZeroTokenUsageAndFrozenPrices(t *testing.T) {
 
 func TestTextQuoteRejectsNegativeCacheBeforeDisplayNormalization(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	info := quotedTextInfo(t, []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}})
+	info := quotedTextInfo(t, billing.PricingValues{"ModelRatio": 1.0})
 	usage := &dto.Usage{PromptTokens: 100, PromptTokensDetails: dto.InputTokenDetails{CachedCreationTokens: -1, CacheWriteTokens: 20}}
 	summary := calculateTextQuotaSummary(ctx, info, usage)
 	require.ErrorContains(t, summary.PricingError, "invalid provider")
 	assert.Zero(t, summary.Quota)
-	assert.True(t, info.PriceData.Usage.Invalid)
+	assert.Nil(t, info.PriceData.Charge, "invalid counters cannot create a charge")
 }
 
 func TestTextMissingQuoteCannotUseOldRatioOrPrice(t *testing.T) {
@@ -127,26 +131,20 @@ func TestEmbeddingScopeKeepsOutputEvidenceAcrossUsageAliases(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-			quote, err := billing.NewQuote(billing.PriceVersion{Model: "embedding-test", Mode: billing.ModeExpression, Expression: "p * 1", UsageScope: billing.UsageScopeEmbedding}, "1", nil, time.Now())
-			require.NoError(t, err)
-			info := &relaycommon.RelayInfo{OriginModelName: "embedding-test", StartTime: time.Now(), PriceData: hosttypes.PriceData{Quote: quote}}
+			info := quotedTextInfo(t, billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": "p"})
+			info.RelayMode = relayconstant.RelayModeEmbeddings
 			usage := test.output
 			usage.PromptTokens, usage.UsageSource = 1000, "provider"
 			summary := calculateTextQuotaSummary(ctx, info, &usage)
 			require.Error(t, summary.PricingError)
-			require.NotNil(t, info.PriceData.Usage)
-			assert.True(t, info.PriceData.Usage.Invalid, "persisted evidence must remain invalid during replay")
+			assert.Nil(t, info.PriceData.Charge, "embedding output evidence cannot be priced as ordinary text")
 			assert.Zero(t, summary.Quota)
-			_, err = billing.Calculate(quote, *info.PriceData.Usage)
-			require.Error(t, err)
 		})
 	}
 
 	t.Run("unscoped_manual_price", func(t *testing.T) {
 		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-		quote, err := billing.NewQuote(billing.PriceVersion{Model: "manual", Mode: billing.ModeExpression, Expression: "p * 1"}, "1", nil, time.Now())
-		require.NoError(t, err)
-		info := &relaycommon.RelayInfo{OriginModelName: "manual", StartTime: time.Now(), PriceData: hosttypes.PriceData{Quote: quote}}
+		info := quotedTextInfo(t, billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": "p"})
 		summary := calculateTextQuotaSummary(ctx, info, &dto.Usage{PromptTokens: 1000, CompletionTokens: 5, CompletionTokenDetails: dto.OutputTokenDetails{ReasoningTokens: 5}, UsageSource: "provider"})
 		require.NoError(t, summary.PricingError)
 		assert.Equal(t, 500, summary.Quota)

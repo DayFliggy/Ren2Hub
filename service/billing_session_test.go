@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -22,11 +24,16 @@ func durableSession(t *testing.T, quota int) (*gin.Context, *BillingSession) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
 	info := &relaycommon.RelayInfo{RequestId: "session", UserId: 1, TokenId: 1, TokenKey: "session"}
+	info.BillingRequestInput = &billingexpr.RequestInput{}
+	info.BillingAttemptID = info.RequestId + ":attempt"
 	info.PriceData.Quote = billingTestQuote(t, "p * 2")
 	session, err := NewBillingSession(c, info, quota)
 	require.Nil(t, err)
 	info.Billing = session
 	require.NoError(t, model.PrepareBillingAttempt(context.Background(), info.RequestId, info.RequestId+":attempt", 0, info.PriceData.Quote))
+	estimate, charge, evalErr := model.EvaluateBilling(info.PriceData.Quote, billing.Usage{InputTokens: int64(quota), ContextTokens: int64(quota), Estimated: true}, *info.BillingRequestInput, info.RequestId, info.BillingAttemptID, "estimate")
+	require.NoError(t, evalErr)
+	require.NoError(t, model.PersistBillingEstimate(info.BillingAttemptID, estimate, charge))
 	t.Cleanup(session.stopRecoveryHeartbeat)
 	return c, session
 }
@@ -108,8 +115,9 @@ func prepareSessionSettlement(t *testing.T, session *BillingSession, quota int) 
 	info := session.relayInfo
 	billingTestFinalUsage(t, info, int64(quota), 0)
 	require.NoError(t, model.PrepareBillingRecoveryConsumption(info.RequestId, model.BillingConsumption{
-		Log:   model.Log{UserId: info.UserId, TokenId: info.TokenId, ModelName: info.PriceData.Quote.PriceVersion.Model, Quota: common.Quota(quota)},
-		Usage: info.PriceData.Usage, Charge: info.PriceData.Charge,
+		AttemptID: info.BillingAttemptID,
+		Log:       model.Log{UserId: info.UserId, TokenId: info.TokenId, ModelName: info.PriceData.Quote.PriceVersion.Model, Quota: common.Quota(quota)},
+		Usage:     info.PriceData.Usage, Charge: info.PriceData.Charge,
 	}))
 }
 func TestBillingSessionMoreExpensiveRetryMustReserve(t *testing.T) {

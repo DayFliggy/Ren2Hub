@@ -108,7 +108,7 @@ func TestGatewayCompactionStateContinuesResponsesHTTP(t *testing.T) {
 		}
 		gatewaySDKUpstream(w, r)
 	})
-	require.NoError(t, publishGatewayFixturePrices(`{"gpt-4o-mini-openai-compact":0.001}`, false))
+	require.NoError(t, configureGatewayFixturePrices(`{"gpt-4o-mini-openai-compact":0.001}`, false))
 	status, body := gatewayStateHTTP(t, url, key, "/v1/responses/compact", `{"model":"gpt-4o-mini","input":[{"role":"user","content":"hello"}]}`)
 	require.Equal(t, 200, status, body)
 	require.Contains(t, body, "compact_cipher")

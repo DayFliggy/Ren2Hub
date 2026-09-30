@@ -46,6 +46,7 @@ func FinalizeTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo, task *m
 	if task.PrivateData.BillingContext == nil {
 		task.PrivateData.BillingContext = &model.TaskBillingContext{}
 	}
+	task.PrivateData.BillingContext.AttemptID = info.BillingAttemptID
 	task.PrivateData.BillingContext.Quote = info.PriceData.Quote
 	task.PrivateData.BillingContext.Usage = info.PriceData.Usage
 	task.PrivateData.SubmissionRequestID = info.RequestId
@@ -71,7 +72,7 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 			other["channel_multiplier"] = bc.Quote.ChannelRatio
 			other["billing_mode"] = bc.Quote.PriceVersion.Mode
 		}
-		other["billing_usage"] = bc.Usage
+		other["billing_usage"] = publicBillingUsage(bc.Usage)
 		other["charge_result"] = bc.Charge
 	}
 	props := task.Properties
@@ -133,6 +134,7 @@ func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model
 		ExportEnabled: common.LogConsumeEnabled && common.DataExportEnabled, NodeName: nodeName,
 	}
 	if snapshot := task.PrivateData.BillingContext; snapshot != nil {
+		consumption.AttemptID = snapshot.AttemptID
 		consumption.Usage, consumption.Charge = snapshot.Usage, snapshot.Charge
 	}
 	won, err = model.PersistTaskCompletion(ctx, task, fromStatus, actualQuota, consumption)
@@ -161,68 +163,41 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 	if snapshot == nil || snapshot.Quote == nil || snapshot.Usage == nil {
 		return 0, "", nil, fmt.Errorf("task %s has no frozen billing quote; reconciliation required", task.TaskID)
 	}
-	usage := *snapshot.Usage
-	usage.Quantities = map[string]string{}
-	if task.PrivateData.PluginRef == nil {
-		for _, price := range snapshot.Quote.PriceVersion.Prices {
-			if price.Quantity == "calls" {
-				usage.Quantities["calls"] = "1"
-				continue
-			}
-			if price.Unit != "per_million_tokens" {
-				return 0, "", nil, fmt.Errorf("task completion lacks a metering contract for %s", price.Quantity)
-			}
-		}
-		if snapshot.Quote.PriceVersion.UsesImageCount() {
-			return 0, "", nil, fmt.Errorf("task completion lacks confirmed image count")
-		}
-	}
-	usage.Source = "task_completed"
-	usage.Terminal = "completed"
-	usage.Complete = true
-	usage.Estimated = false
-	if task.PrivateData.PluginRef != nil {
-		if result == nil || result.UsageError != "" {
-			return 0, "", nil, fmt.Errorf("plugin completion usage unavailable; reconciliation required")
-		}
-		usage.Quantities = nil
-		if snapshot.Quote.PriceVersion.UsageSchema == nil {
-			usage.Quantities = map[string]string{"calls": "1"}
-		}
-		usage.EstimatedFacts = nil
-		usage.ActualFacts = nil
-		// A schema-free fixed call or free price has no provider fact inputs.
-		// Preserve the provider's evidence in CompletionUsage instead.
-		if snapshot.Quote.PriceVersion.UsageSchema != nil {
-			usage.ActualFacts = result.UsageFacts
-		}
+	usage := billing.Usage{Source: "task_completed", Terminal: "completed", Complete: true, Quantities: map[string]string{"calls": "1"}}
+	version := snapshot.Quote.PriceVersion
+	if result != nil && result.UsageError != "" {
+		return 0, "", nil, fmt.Errorf("plugin completion usage unavailable; reconciliation required")
 	}
 	if result != nil && (result.TotalTokens < 0 || result.CompletionTokens < 0 || result.CompletionTokens > result.TotalTokens) {
 		return 0, "", nil, fmt.Errorf("invalid task token usage")
 	}
-	if result != nil && result.TotalTokens > 0 {
+	if version.NeedsTokenUsage() {
+		if result == nil || result.TotalTokens == 0 {
+			return 0, "", nil, fmt.Errorf("task token usage unavailable; reconciliation required")
+		}
 		usage.OutputTokens = int64(result.CompletionTokens)
 		usage.InputTokens = int64(result.TotalTokens - result.CompletionTokens)
 		usage.ContextTokens = usage.InputTokens
-	} else {
-		usesTokens := false
-		if snapshot.Quote.PriceVersion.UsageSchema == nil {
-			for _, price := range snapshot.Quote.PriceVersion.Prices {
-				usesTokens = usesTokens || price.Unit == "per_million_tokens"
-			}
-			if snapshot.Quote.PriceVersion.Mode == billing.ModeExpression {
-				used := billingexpr.UsedVars(snapshot.Quote.PriceVersion.Expression)
-				for _, name := range []string{"p", "c", "reasoning", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ai_cr", "ao"} {
-					usesTokens = usesTokens || used[name]
-				}
-			}
-		}
-		if usesTokens {
-			return 0, "", nil, fmt.Errorf("task token usage unavailable; reconciliation required")
-		}
-		usage.InputTokens, usage.OutputTokens, usage.ContextTokens = 0, 0, 0
 	}
-	charge, err := billing.Calculate(snapshot.Quote, usage)
+	input := billingexpr.RequestInput{}
+	if version.TaskUsage {
+		if result == nil || result.UsageError != "" {
+			return 0, "", nil, fmt.Errorf("plugin completion usage unavailable; reconciliation required")
+		}
+		usage.ActualFacts = result.UsageFacts
+		var err error
+		input.Usage, err = TaskExpressionUsage(result.UsageFacts, version.UsageSchema)
+		if err != nil {
+			return 0, "", nil, err
+		}
+	}
+	var charge *billing.ChargeResult
+	var err error
+	if snapshot.Usage.ReadyForSettlement() && snapshot.Charge != nil {
+		usage, charge, err = replayIdenticalBillingUsage(snapshot.Quote, *snapshot.Usage, usage, task.PrivateData.SubmissionRequestID, snapshot.AttemptID)
+	} else {
+		usage, charge, err = model.EvaluateBilling(snapshot.Quote, usage, input, task.PrivateData.SubmissionRequestID, snapshot.AttemptID, "settlement")
+	}
 	if err != nil {
 		return 0, "", nil, err
 	}

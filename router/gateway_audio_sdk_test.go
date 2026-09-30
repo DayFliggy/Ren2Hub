@@ -71,7 +71,7 @@ func TestGatewayOfficialAudioSDK(t *testing.T) {
 				assert.Equal(t, "hello", request["text"])
 				_, _ = io.WriteString(w, `{"base_resp":{"status_code":0},"data":{"audio":"00010203","status":2}}`)
 			})
-			require.NoError(t, publishGatewayFixturePrices(`{"speech-minimax":0.001,"speech-volc-http":0.001,"speech-volc-ws":0.001,"whisper-cloudflare":0.001}`, false))
+			require.NoError(t, configureGatewayFixturePrices(`{"speech-minimax":0.001,"speech-volc-http":0.001,"speech-volc-ws":0.001,"whisper-cloudflare":0.001}`, false))
 			for _, config := range []struct {
 				id, channelType int
 				name, key       string

@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,16 +33,18 @@ func TestNormalizedUsageCalculatesProtocolCategoriesOnce(t *testing.T) {
 			usage: dto.Usage{PromptTokens: 5000, CompletionTokens: 2000, ClaudeCacheCreation5mTokens: 1000, ClaudeCacheCreation1hTokens: 500, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 3000, CachedCreationTokens: 1500}}, context: 9500, quota: 26325,
 		},
 		{
-			name: "OpenAI audio image and reasoning are distinct", semantic: "openai", expression: `p * 2 + c * 10 + cr * 0.25 + img * 3 + ai * 5 + img_o * 6 + ao * 7 + reasoning * 8`,
-			usage: dto.Usage{PromptTokens: 1000, CompletionTokens: 600, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 200, ImageTokens: 100, AudioTokens: 50}, CompletionTokenDetails: dto.OutputTokenDetails{ImageTokens: 30, AudioTokens: 100, ReasoningTokens: 20}}, context: 1000, quota: 3720,
+			name: "OpenAI media categories split once and reasoning stays in output", semantic: "openai", expression: `p * 2 + c * 10 + cr * 0.25 + img * 3 + ai * 5 + img_o * 6 + ao * 7`,
+			usage: dto.Usage{PromptTokens: 1000, CompletionTokens: 600, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 200, ImageTokens: 100, AudioTokens: 50}, CompletionTokenDetails: dto.OutputTokenDetails{ImageTokens: 30, AudioTokens: 100, ReasoningTokens: 20}}, context: 1000, quota: 3740,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			quote, err := billing.NewQuote(billing.PriceVersion{Model: "protocol-expression", Mode: billing.ModeExpression, Expression: test.expression}, "1", nil, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))
+			version, err := billing.NewModelPriceVersion("protocol-expression", billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": test.expression}, false)
+			require.NoError(t, err)
+			quote, err := billing.NewQuote(version, "1", nil, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))
 			require.NoError(t, err)
 			usage := NormalizedBillingUsage(&test.usage, test.semantic)
 			assert.Equal(t, test.context, usage.ContextTokens)
-			result, err := billing.Calculate(quote, usage)
+			_, result, err := model.EvaluateBilling(quote, usage, billingexpr.RequestInput{}, "normalization", "attempt", "settlement")
 			require.NoError(t, err)
 			assert.Equal(t, test.quota, result.FinalQuota)
 		})

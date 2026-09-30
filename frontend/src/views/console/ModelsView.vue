@@ -304,7 +304,7 @@ onMounted(load)
           </h3>
           <ModelPriceItems
             v-if="detailModel.pricing"
-            :offers="detailModel.offers ?? []"
+            :pricing="detailModel.pricing"
             class="rounded-xl border border-[var(--border-subtle)] p-4"
           />
           <p v-else class="text-sm text-[var(--text-tertiary)]">—</p>

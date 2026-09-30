@@ -2,284 +2,137 @@ package helper
 
 import (
 	"context"
-	"net/http/httptest"
-	"testing"
-	"time"
-
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	relayconstant "github.com/QuantumNous/new-api/relay/constant"
-	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
 )
 
-func pricingFixture(t *testing.T, version billing.PriceVersion) (*gin.Context, *relaycommon.RelayInfo) {
+func TestImageExpressionDoesNotApplyLegacyPromptExtendAgain(t *testing.T) {
+	c, info := pricingFixture(t, "image-test", model.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": `param("parameters.prompt_extend") == true ? tier("extended",fixed(0.02)) : tier("plain",fixed(0.01))`})
+	info.ChannelMeta = &relaycommon.ChannelMeta{ApiType: constant.APITypeAli, UpstreamModelName: "z-image-turbo"}
+	meta, err := FinalImagePriceMeta(c, info, strings.NewReader(`{"parameters":{"n":3,"prompt_extend":true}}`))
+	require.NoError(t, err)
+	price, err := ModelPriceHelper(c, info, 0, meta)
+	require.NoError(t, err)
+	assert.Equal(t, 10000, price.QuotaToPreConsume)
+	assert.Empty(t, price.Quote.OtherRatios)
+}
+
+func pricingFixture(t *testing.T, name string, values model.PricingValues) (*gin.Context, *relaycommon.RelayInfo) {
 	t.Helper()
+	t.Setenv("CRYPTO_SECRET", "pricing-helper-test-secret")
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.BillingPriceVersion{}, &model.BillingActivePrice{}))
-	previousDB := model.DB
-	previousType := common.MainDatabaseType()
-	previousLog := common.LogDatabaseType()
+	require.NoError(t, db.AutoMigrate(&model.BillingPriceVersion{}, &model.Option{}, &model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}))
+	previousOptions := common.OptionMap
+	common.OptionMap = map[string]string{}
+	t.Cleanup(func() { common.OptionMap = previousOptions })
+	previous := model.DB
+	mainKind, logKind := common.MainDatabaseType(), common.LogDatabaseType()
 	model.DB = db
 	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
 	t.Cleanup(func() {
-		model.DB = previousDB
-		common.SetDatabaseTypes(previousType, previousLog)
+		model.DB = previous
+		common.SetDatabaseTypes(mainKind, logKind)
 		sqlDB, err := db.DB()
 		require.NoError(t, err)
 		require.NoError(t, sqlDB.Close())
 	})
-	version.Provenance = &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}
-	_, err = model.PublishBillingPrice(context.Background(), version, 0, 1)
-	require.NoError(t, err)
+	saveHelperPricing(t, name, values)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
 	c.Set("channel_ratio", "1")
-	info := &relaycommon.RelayInfo{OriginModelName: version.Model, BillingRequestInput: &billingexpr.RequestInput{Attributes: map[string]interface{}{"service_tier": "default"}, FrozenAt: time.Date(2026, 9, 19, 3, 0, 0, 0, time.UTC)}}
+	info := &relaycommon.RelayInfo{OriginModelName: name, BillingRequestInput: &billingexpr.RequestInput{Body: []byte("{}"), Attributes: map[string]any{}, FrozenAt: time.Date(2026, 9, 19, 3, 0, 0, 0, time.UTC)}}
 	return c, info
 }
-
-func TestImageExpressionPrepaymentUsesFinalQuantity(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "image-count", Mode: billing.ModeExpression, Expression: `v1:fixed(0.001) * image_count`})
-	info.BillingRequestInput.Attributes["quantity"] = "1"
-	price, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{BillingQuantities: map[string]string{"n": "3"}})
+func saveHelperPricing(t *testing.T, name string, values model.PricingValues) {
+	t.Helper()
+	snapshot, err := model.GetModelPricingSnapshot([]string{name})
 	require.NoError(t, err)
-	assert.Equal(t, 1500, price.QuotaToPreConsume)
-	assert.Equal(t, "3", price.Usage.Quantities["images"])
-	for _, n := range []string{"0", "-1", "1.5", "129"} {
-		_, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{BillingQuantities: map[string]string{"n": n}})
-		require.Error(t, err)
+	version := snapshot.EmptyVersion
+	for _, entry := range snapshot.Entries {
+		if entry.ModelName == name {
+			version = entry.Version
+		}
 	}
-	delete(info.BillingRequestInput.Attributes, "quantity")
-	_, err = ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
-	require.ErrorContains(t, err, "image quantity", "missing final quantity cannot silently default")
+	err = model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: name, ExpectedVersion: version, Pricing: values}})
+	require.NoError(t, err)
 }
-
-func TestPublishedPricePrepaymentUsesFrozenAttributesAndDefaultOutputEstimate(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Support: &billing.PricingSupport{Dimensions: []string{"p", "c"}, ServiceTiers: []string{"default", "priority"}}, Model: "test", Mode: billing.ModeExpression, Expression: `p * 2 + c * (attr("service_tier") == "priority" ? 4 : 1)`})
-	info.BillingRequestInput.Attributes["service_tier"] = "priority"
-	price, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
+func TestModelPricingEmptyAndExplicitZero(t *testing.T) {
+	c, info := pricingFixture(t, "priced", model.PricingValues{"ModelPrice": "0"})
+	price, err := ModelPriceHelper(c, info, 10, nil)
 	require.NoError(t, err)
-	assert.Equal(t, 16484, price.QuotaToPreConsume)
-	require.NotNil(t, price.Quote)
-	assert.Equal(t, 3, price.Quote.FrozenAt.Hour())
-	assert.True(t, price.Usage.Estimated)
-	previous := price.Quote
-	_, err = model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "test", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "99"}, {Quantity: "c", Unit: "per_million_tokens", Price: "99"}}}, previous.PriceVersion.ID, 1)
-	require.NoError(t, err)
-	result, err := billing.Calculate(previous, *price.Usage)
-	require.NoError(t, err)
-	assert.Equal(t, common.Quota(16484), result.FinalQuota)
+	assert.Zero(t, price.Quota)
+	assert.NotNil(t, price.Usage.Evidence)
+	info.OriginModelName = "missing"
+	_, err = ModelPriceHelper(c, info, 10, nil)
+	require.ErrorContains(t, err, "not configured")
 }
-
-func TestPublishedPriceRejectsMissingModelOverflowAndInvalidChannelRatio(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "test", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "999999999999"}}})
-	_, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 1})
+func TestModelPricingEstimatesInputOnlyAndReplaysEncryptedProbe(t *testing.T) {
+	c, info := pricingFixture(t, "model", model.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": `p * float(param(header("x-path")) ?? 1) + c * 8`})
+	info.BillingRequestInput.Body = []byte(`{"rate":4,"private":"do-not-persist"}`)
+	info.BillingRequestInput.Headers = map[string]string{"x-path": "rate", "authorization": "private-key"}
+	price, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 9000})
+	require.NoError(t, err)
+	assert.Equal(t, 200, price.Quota)
+	assert.Zero(t, price.Usage.OutputTokens)
+	replayed, err := model.ReplayBilling(price.Quote, *price.Usage, info.RequestId, info.BillingAttemptID, "estimate")
+	require.NoError(t, err)
+	assert.Equal(t, price.Charge, replayed)
+	encoded, err := common.Marshal(price.Usage)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "private-key")
+	assert.NotContains(t, string(encoded), "do-not-persist")
+}
+func TestModelPricingRetryPinsDefinitionAndAppliesChannelOnce(t *testing.T) {
+	c, info := pricingFixture(t, "model", model.PricingValues{"ModelPrice": "0.002"})
+	c.Set("channel_ratio", "1.5")
+	first, err := ModelPriceHelper(c, info, 0, nil)
+	require.NoError(t, err)
+	require.NoError(t, PinBillingPrice(c, info))
+	firstAttempt := info.BillingAttemptID
+	saveHelperPricing(t, "model", model.PricingValues{"ModelPrice": "0.5"})
+	second, err := ModelPriceHelper(c, info, 0, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1500, second.Quota)
+	assert.Equal(t, first.Quote.PriceVersion, second.Quote.PriceVersion)
+	assert.NotEqual(t, firstAttempt, info.BillingAttemptID)
+	_, err = model.ReplayBilling(second.Quote, *second.Usage, info.RequestId, firstAttempt, "estimate")
 	require.Error(t, err)
-	info.OriginModelName = "not-published"
-	_, err = ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
-	require.Error(t, err)
-	info.OriginModelName = "test"
-	c.Set("channel_ratio", "-1.0")
-	_, err = ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
-	require.Error(t, err)
 }
-
-func TestPublishedPricePreservesExactChannelRatio(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "exact-ratio", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.001"}}})
-	c.Set("channel_ratio", "1.234567890123456789")
-	price, err := ModelPriceHelperPerCall(c, info)
+func TestModelPricingMultiplierNeverChangesSettlement(t *testing.T) {
+	c, info := pricingFixture(t, "model", model.PricingValues{"ModelRatio": "2", "CompletionRatio": "3"})
+	settings := operation_setting.GetQuotaSetting()
+	previous := settings.PreConsumeMultiplier
+	settings.PreConsumeMultiplier = 4
+	t.Cleanup(func() { settings.PreConsumeMultiplier = previous })
+	price, err := ModelPriceHelper(c, info, 100, nil)
 	require.NoError(t, err)
-	assert.Equal(t, "1.234567890123456789", price.Quote.ChannelRatio)
-	charge, err := billing.Calculate(price.Quote, *price.Usage)
+	assert.Equal(t, 800, price.Quota)
+	usage := billing.Usage{InputTokens: 100, OutputTokens: 10, ContextTokens: 100, InputIncludesCache: true, Complete: true, Terminal: "completed", Source: "provider"}
+	_, charge, err := model.EvaluateBilling(price.Quote, usage, *info.BillingRequestInput, info.RequestId, info.BillingAttemptID, "settlement")
 	require.NoError(t, err)
-	assert.Equal(t, "0.001234567890123456789", charge.TotalUSD)
-	c.Set("channel_ratio", 1.5)
-	_, err = ModelPriceHelperPerCall(c, info)
-	require.Error(t, err, "a float context must not become a financial default")
+	assert.EqualValues(t, 260, charge.FinalQuota)
 }
-
-func TestPublishedZeroPriceReservesZero(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "test", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0"}}})
-	price, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
+func TestReadOnlyPriceQualificationCreatesNoEvidence(t *testing.T) {
+	c, info := pricingFixture(t, "model", model.PricingValues{"ModelRatio": "1"})
+	_, err := QualifyPublishedPrice(c, info)
 	require.NoError(t, err)
-	assert.Zero(t, price.QuotaToPreConsume)
-	assert.False(t, price.FreeModel)
-	_, err = model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "test", Mode: billing.ModeFree}, price.Quote.PriceVersion.ID, 1)
-	require.NoError(t, err)
-	price, err = ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
-	require.NoError(t, err)
-	assert.Zero(t, price.QuotaToPreConsume)
-	assert.True(t, price.FreeModel)
-	require.NotNil(t, price.Quote)
-}
-
-func TestPublishedMixedCallAndTokenPricesReserveEveryKnownDimension(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "mixed", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{
-		{Quantity: "calls", Unit: "per_call", Price: "0.002"},
-		{Quantity: "p", Unit: "per_million_tokens", Price: "2"},
-		{Quantity: "c", Unit: "per_million_tokens", Price: "4"},
-	}})
-	price, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 50})
-	require.NoError(t, err)
-	assert.Equal(t, 1200, price.QuotaToPreConsume)
-	assert.EqualValues(t, 100, price.Usage.InputTokens)
-	assert.EqualValues(t, 50, price.Usage.OutputTokens)
-}
-
-func TestRetryPinsPublishedPriceAndClockButRepricesFinalAttributes(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "test", Mode: billing.ModeExpression, Expression: `p * (attr("quality") == "high" ? 4 : 2)`})
-	info.RequestId = "logical-request"
-	first, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 1})
-	require.NoError(t, err)
-	require.NoError(t, PinBillingPrice(c, info))
-	_, err = model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "test", Mode: billing.ModeFree}, first.Quote.PriceVersion.ID, 1)
-	require.NoError(t, err)
-	require.NoError(t, FreezeOutboundBillingAttributes(info, []byte(`{"quality":"high"}`)))
-	c.Set("channel_ratio", "2.0")
-	next, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 1})
-	require.NoError(t, err)
-	assert.Equal(t, first.Quote.PriceVersion.ID, next.Quote.PriceVersion.ID)
-	assert.Equal(t, first.Quote.FrozenAt, next.Quote.FrozenAt)
-	assert.Equal(t, 400, next.QuotaToPreConsume)
-	assert.False(t, next.FreeModel)
-	info.OriginModelName = "another"
-	_, err = ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 1})
-	require.ErrorContains(t, err, "identity")
-}
-
-func TestChannelRetryFreezesIndependentVersionsAndReserveEstimates(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "test", Mode: billing.ModeUnitPrice, FlatFee: "0.001"})
-	info.RequestId, info.ChannelMeta = "scoped-retry", &relaycommon.ChannelMeta{ChannelId: 7}
-	c.Set("channel_ratio", "2.0")
-	first, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
-	require.NoError(t, err)
-	require.NoError(t, PinBillingPrice(c, info))
-	assert.Equal(t, 1000, first.QuotaToPreConsume)
-	scoped, err := model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, ScopeKind: billing.PriceScopeChannel, ChannelID: 19, Model: "test", Mode: billing.ModeUnitPrice, FlatFee: "0.003"}, 0, 1)
-	require.NoError(t, err)
-	info.ChannelId = 19
-	next, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
-	require.NoError(t, err)
-	require.NoError(t, PinBillingPrice(c, info))
-	assert.Equal(t, scoped.ID, next.Quote.PriceVersion.ID)
-	assert.Equal(t, "1", next.Quote.ChannelRatio)
-	assert.Equal(t, 1500, next.QuotaToPreConsume)
-	assert.Equal(t, first.Quote.FrozenAt, next.Quote.FrozenAt)
-	assert.NotEqual(t, first.Quote.Hash, next.Quote.Hash)
-	_, err = model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, ScopeKind: billing.PriceScopeChannel, ChannelID: 19, Model: "test", Mode: billing.ModeFree}, scoped.ID, 1)
-	require.NoError(t, err)
-	again, err := ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
-	require.NoError(t, err)
-	assert.Equal(t, next.Quote.Hash, again.Quote.Hash)
-	info.ChannelId = 7
-	again, err = ModelPriceHelper(c, info, 0, &types.TokenCountMeta{})
-	require.NoError(t, err)
-	assert.Equal(t, first.Quote.Hash, again.Quote.Hash)
-}
-
-func TestReasoningPrepaymentUsesMoreExpensiveOutputEstimate(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "test", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{
-		{Quantity: "p", Unit: "per_million_tokens", Price: "1"},
-		{Quantity: "c", Unit: "per_million_tokens", Price: "2"},
-		{Quantity: "reasoning", Unit: "per_million_tokens", Price: "10"},
-	}})
-	price, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 20})
-	require.NoError(t, err)
-	assert.Equal(t, 150, price.QuotaToPreConsume)
-	assert.EqualValues(t, 20, price.Usage.ReasoningTokens)
-}
-
-func TestAutomaticUnavailablePriceStopsFallbackUntilManualPublication(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "gpt-5.4", Mode: billing.ModeExpression, Expression: "p + c"})
-	for _, name := range []string{"gpt-5.4-high", "gpt-5.4@effort:high@thinking:on"} {
-		require.NoError(t, model.DB.Create(&model.BillingActivePrice{Model: name, Origin: "unavailable"}).Error)
-	}
-	for _, name := range []string{"gpt-5.4-high", "gpt-5.4@effort:high"} {
-		info.OriginModelName = name
-		assert.False(t, HasModelBillingConfig(name), name)
-		assert.False(t, HasExplicitModelBillingConfig(name), name)
-		_, err := ModelPriceHelper(c, info, 1000, &types.TokenCountMeta{MaxTokens: 1})
-		require.ErrorContains(t, err, "Model price is not configured", name)
-		assert.Nil(t, info.PriceData.Quote)
-	}
-	assert.True(t, HasModelBillingConfig("gpt-5.4"), "an unavailable alias cannot disable a valid base price")
-	for _, name := range []string{"gpt-5.4-high", "gpt-5.4@effort:high@thinking:on"} {
-		_, err := model.PublishBillingPrice(c.Request.Context(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: name, Mode: billing.ModeExpression, Expression: "p * 3"}, 0, 1)
-		require.NoError(t, err)
-	}
-	for _, name := range []string{"gpt-5.4-high", "gpt-5.4@effort:high"} {
-		info.OriginModelName, info.PricingModelName = name, ""
-		assert.True(t, HasModelBillingConfig(name), name)
-		price, err := ModelPriceHelper(c, info, 1000, &types.TokenCountMeta{MaxTokens: 1})
-		require.NoError(t, err)
-		assert.Equal(t, 1500, price.QuotaToPreConsume)
-	}
-}
-
-func TestPinnedQuoteSurvivesAutomaticPriceBecomingUnavailable(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "gpt-5.4-high", Mode: billing.ModeExpression, Expression: "p * 3"})
-	info.RequestId = "already-dispatched"
-	first, err := ModelPriceHelper(c, info, 1000, &types.TokenCountMeta{MaxTokens: 1})
-	require.NoError(t, err)
-	require.NoError(t, PinBillingPrice(c, info))
-	require.NoError(t, model.DB.Model(&model.BillingActivePrice{}).Where("model = ?", "gpt-5.4-high").Updates(map[string]any{"version_id": 0, "origin": "unavailable"}).Error)
-	assert.False(t, HasModelBillingConfig("gpt-5.4-high"))
-	next, err := ModelPriceHelper(c, info, 1000, &types.TokenCountMeta{MaxTokens: 1})
-	require.NoError(t, err)
-	assert.Equal(t, first.Quote.Hash, next.Quote.Hash)
-	charge, err := billing.Calculate(first.Quote, billing.Usage{InputTokens: 1000, ContextTokens: 1000, Complete: true, InputIncludesCache: true})
-	require.NoError(t, err)
-	assert.EqualValues(t, 1500, charge.FinalQuota)
-}
-
-func TestEmbeddingScopedPriceRejectsOtherOperationsBeforeReservation(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "embedding", Mode: billing.ModeExpression, Expression: `v1:p * 0.1`, UsageScope: billing.UsageScopeEmbedding})
-	for _, mode := range []int{relayconstant.RelayModeChatCompletions, relayconstant.RelayModeResponses, relayconstant.RelayModeGemini, relayconstant.RelayModeRerank, relayconstant.RelayModeImagesGenerations} {
-		info.RelayMode = mode
-		price, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
-		require.ErrorContains(t, err, "request type")
-		assert.Nil(t, price.Quote)
-		assert.Nil(t, info.PriceData.Quote)
-		assert.False(t, info.UpstreamSent)
-	}
-}
-
-func TestEmbeddingScopedPriceAllowsOpenAIAndNativeGeminiWithoutOutputEstimate(t *testing.T) {
-	for _, test := range []struct {
-		name    string
-		path    string
-		request dto.Request
-	}{
-		{"openai", "/v1/embeddings", &dto.EmbeddingRequest{Model: "embedding", Input: "hello"}},
-		{"gemini", "/v1beta/models/embedding:embedContent", &dto.GeminiEmbeddingRequest{}},
-		{"gemini_batch", "/v1beta/models/embedding:batchEmbedContents", &dto.GeminiBatchEmbeddingRequest{}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			c, info := pricingFixture(t, billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "test retail price"}, Model: "embedding", Mode: billing.ModeExpression, Expression: `v1:p * 0.1`, UsageScope: billing.UsageScopeEmbedding})
-			c.Request = httptest.NewRequest("POST", test.path, nil)
-			info.RelayMode = relayconstant.Path2RelayMode(test.path)
-			info.Request = test.request
-			price, err := ModelPriceHelper(c, info, 100, &types.TokenCountMeta{MaxTokens: 8192})
-			require.NoError(t, err)
-			assert.Equal(t, 5, price.QuotaToPreConsume)
-			assert.Zero(t, price.Usage.OutputTokens)
-			assert.Empty(t, price.Usage.Quantities)
-			assert.Equal(t, billing.UsageScopeEmbedding, price.Quote.PriceVersion.UsageScope)
-			info.RequestId = "embedding-request"
-			require.NoError(t, PinBillingPrice(c, info))
-			info.RelayMode = relayconstant.RelayModeChatCompletions
-			_, err = ModelPriceHelper(c, info, 100, &types.TokenCountMeta{})
-			require.ErrorContains(t, err, "request type", "pinned retry keeps the original scope")
-		})
-	}
+	var count int64
+	require.NoError(t, model.DB.WithContext(context.Background()).Model(&model.BillingPriceVersion{}).Count(&count).Error)
+	assert.Zero(t, count)
 }

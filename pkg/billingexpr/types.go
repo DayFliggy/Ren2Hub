@@ -7,12 +7,14 @@ import (
 )
 
 type RequestInput struct {
-	Attributes  map[string]interface{}    `json:"attributes,omitempty"`
-	Calendars   map[string]FrozenCalendar `json:"calendars,omitempty"`
-	FrozenAt    time.Time                 `json:"frozen_at"`
-	Usage       map[string]interface{}    `json:"usage,omitempty"`
-	UsageSchema *UsageSchema              `json:"usage_schema,omitempty"`
-	ImageCount  *int                      `json:"image_count,omitempty"`
+	Headers     map[string]string      `json:"headers,omitempty"`
+	Body        []byte                 `json:"body,omitempty"`
+	Evaluation  *Evaluation            `json:"-"`
+	Attributes  map[string]interface{} `json:"attributes,omitempty"`
+	FrozenAt    time.Time              `json:"frozen_at"`
+	Usage       map[string]interface{} `json:"usage,omitempty"`
+	UsageSchema *UsageSchema           `json:"usage_schema,omitempty"`
+	ImageCount  *int                   `json:"image_count,omitempty"`
 }
 
 // TokenParams holds all token dimensions passed into an Expr evaluation.
@@ -43,24 +45,23 @@ type RequestRuleTrace struct {
 
 // TraceResult holds side-channel info captured while an expression runs.
 type TraceResult struct {
+	BillingUnit  BillingUnit        `json:"billing_unit"`
+	FixedPrice   *float64           `json:"fixed_price,omitempty"`
+	Cost         float64            `json:"cost,omitempty"`
 	MatchedTier  string             `json:"matched_tier"`
 	ImageCount   *int               `json:"image_count,omitempty"`
 	RequestRules []RequestRuleTrace `json:"request_rules,omitempty"`
 }
 
+type BillingUnit string
+
+const (
+	BillingUnitToken   BillingUnit = "token"
+	BillingUnitRequest BillingUnit = "request"
+)
+
 // ExprHashString returns the SHA-256 hex digest of an expression string.
 func ExprHashString(expr string) string {
 	h := sha256.Sum256([]byte(expr))
 	return fmt.Sprintf("%x", h)
-}
-
-// FrozenCalendar is computed once at quote creation; replay never consults tzdata.
-type FrozenCalendar struct {
-	Year             int `json:"year"`
-	Month            int `json:"month"`
-	Day              int `json:"day"`
-	Weekday          int `json:"weekday"`
-	Hour             int `json:"hour"`
-	Minute           int `json:"minute"`
-	UTCOffsetSeconds int `json:"utc_offset_seconds"`
 }

@@ -12,7 +12,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,12 +50,11 @@ func TestGatewaySpeechFinalInputAccounting(t *testing.T) {
 					common.PreConsumedQuota, constant.CountToken = oldPreconsume, oldCount
 				})
 				common.PreConsumedQuota, constant.CountToken = 1, false
-				_, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{
-					Model: "tts-budget", Mode: billing.ModeUnitPrice,
-					Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "reviewed character-count test contract"},
-					Metering:   &billing.PriceMetering{RequestKind: "speech", Quantity: "characters", Source: "request_fixed", Method: "unicode_codepoints"},
-					Prices:     []billing.UnitPrice{{Quantity: "characters", Unit: "per_million_characters", Price: "2"}},
-				}, 0, 1)
+				parameter := "metadata.text"
+				if provider.name == "volc" {
+					parameter = "metadata.request.text"
+				}
+				_, err := setGatewayExpression("tts-budget", fmt.Sprintf(`param(%q) == %q ? tier("final", fixed(0.0008)) : tier("short", fixed(0.000002))`, parameter, finalText))
 				require.NoError(t, err)
 				channel, err := model.GetChannelById(1, true)
 				require.NoError(t, err)
@@ -102,7 +100,7 @@ func TestGatewaySpeechFinalInputAccounting(t *testing.T) {
 					assert.Empty(t, logs)
 				} else {
 					require.Len(t, logs, 1)
-					assert.Contains(t, logs[0].Other, `"characters":"400"`)
+					assert.Contains(t, logs[0].Other, `"matched_tier":"final"`)
 				}
 			})
 		}

@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -60,13 +61,14 @@ type realtimeTestResult struct {
 }
 
 func runRealtimeHandler(t *testing.T, quota int) (*websocket.Conn, *websocket.Conn, context.CancelFunc, <-chan realtimeTestResult) {
+	t.Setenv("CRYPTO_SECRET", "relay-realtime-test-secret")
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}, &model.Log{}, &model.QuotaData{}, &model.Channel{}, &model.BillingPriceVersion{}, &model.BillingActivePrice{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}, &model.Log{}, &model.QuotaData{}, &model.Channel{}, &model.BillingPriceVersion{}))
 	previousDB := model.DB
 	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
 	previousRedis, previousBatch := common.RedisEnabled, common.BatchUpdateEnabled
@@ -93,14 +95,22 @@ func runRealtimeHandler(t *testing.T, quota int) (*websocket.Conn, *websocket.Co
 		OriginModelName: "realtime-test-model", PriceData: hosttypes.PriceData{Quote: &billing.Quote{ChannelRatio: "1"}},
 		ChannelMeta: &relaycommon.ChannelMeta{ChannelId: 1, UpstreamModelName: "realtime-test-model"},
 	}
-	version, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "realtime-test-model", Mode: billing.ModeExpression, Expression: "p * 2 + c * 2 + ai * 2 + ao * 2", Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "realtime test price"}}, 0, 0)
+	definition, err := billing.NewModelPriceVersion("realtime-test-model", billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": "p * 2 + c * 2 + ai * 2 + ao * 2"}, false)
+	require.NoError(t, err)
+	version, err := model.StoreBillingPriceEvidence(t.Context(), definition)
 	require.NoError(t, err)
 	quote, err := billing.NewQuote(*version, "1", nil, time.Unix(1700000000, 0))
 	require.NoError(t, err)
 	info.PriceData.Quote = quote
+	info.BillingRequestInput = &billingexpr.RequestInput{}
+	info.BillingAttemptID = info.RequestId + ":attempt"
+	estimate, charge, err := model.EvaluateBilling(quote, billing.Usage{InputTokens: 5, ContextTokens: 5, Estimated: true, Source: "request_estimate"}, *info.BillingRequestInput, info.RequestId, info.BillingAttemptID, "estimate")
+	require.NoError(t, err)
+	info.PriceData.Usage, info.PriceData.Charge = &estimate, charge
 	require.Nil(t, service.PreConsumeBilling(c, 5, info))
 	info.BillingAttemptID = info.RequestId + ":attempt"
 	require.NoError(t, model.PrepareBillingAttempt(context.Background(), info.RequestId, info.BillingAttemptID, info.ChannelMeta.ChannelId, quote))
+	require.NoError(t, model.PersistBillingEstimate(info.BillingAttemptID, estimate, charge))
 	done := make(chan realtimeTestResult, 1)
 	go func() {
 		err, usage := OpenaiRealtimeHandler(c, info)

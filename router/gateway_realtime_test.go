@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
@@ -32,12 +31,7 @@ func setupGatewayRealtime(t *testing.T) (string, string, <-chan *websocket.Conn,
 			accepted <- conn
 		}
 	})
-	version, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
-	require.NoError(t, err)
-	expected := version.ID
-	version.Prices = append(version.Prices, billing.UnitPrice{Quantity: "ai", Unit: "per_million_tokens", Price: "0"}, billing.UnitPrice{Quantity: "ao", Unit: "per_million_tokens", Price: "0"})
-	_, err = model.PublishBillingPrice(context.Background(), *version, expected, 1)
-	require.NoError(t, err)
+	require.NoError(t, setGatewayModelPrice("gpt-4o-mini", model.PricingValues{"ModelPrice": "0.001", "AudioRatio": "0", "AudioCompletionRatio": "0"}))
 	return url, key, accepted, sends
 }
 

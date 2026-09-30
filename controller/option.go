@@ -412,7 +412,7 @@ func validateChannelAffinitySettingValue(key, value string) error {
 func validateOptionPatch(values map[string]string) error {
 	for key := range values {
 		if model.IsRetiredBillingOption(key) {
-			return errors.New("pricing must be published as an immutable billing price version")
+			return errors.New("automatic price publication is no longer supported")
 		}
 		if key == "QuotaPerUnit" {
 			return errors.New("quota conversion is fixed at 500000 per USD")
@@ -420,6 +420,14 @@ func validateOptionPatch(values map[string]string) error {
 	}
 	snapshot := optionSnapshot(values)
 	for key, value := range values {
+		if key == operation_setting.ToolPriceOptionKey {
+			if err := operation_setting.ValidateToolPricesJSON(value); err != nil {
+				return err
+			}
+		}
+		if err := operation_setting.ValidateQuotaOption(key, value); err != nil {
+			return err
+		}
 		if key == "" {
 			return fmt.Errorf("配置项名称不能为空")
 		}

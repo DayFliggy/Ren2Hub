@@ -169,7 +169,7 @@ func TestGatewayOfficialLegacySDK(t *testing.T) {
 			}
 			priceJSON, err := common.Marshal(prices)
 			require.NoError(t, err)
-			require.NoError(t, publishGatewayFixturePrices(string(priceJSON), false))
+			require.NoError(t, configureGatewayFixturePrices(string(priceJSON), false))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 			defer cancel()

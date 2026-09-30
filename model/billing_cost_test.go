@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -25,17 +26,20 @@ func prepareBillingCostRequest(t *testing.T, requestID string, attemptIDs ...str
 	t.Helper()
 	newReservation(t, requestID)
 	require.NoError(t, Reserve(requestID, 100))
-	quote, err := publishedBillingTestQuote(billing.PriceVersion{Model: "cost-test-model", Mode: billing.ModeUnitPrice,
-		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.00004"}}}, "1", nil, time.Now())
+	version, err := billing.NewModelPriceVersion("cost-test-model", billing.PricingValues{"ModelPrice": "0.00004"}, false)
+	require.NoError(t, err)
+	quote, err := publishedBillingTestQuote(version, "1", nil, time.Now())
 	require.NoError(t, err)
 	for _, id := range attemptIDs {
 		require.NoError(t, PrepareBillingAttempt(context.Background(), requestID, id, 7, quote))
+		estimate, charge, err := EvaluateBilling(quote, billing.Usage{Estimated: true, Quantities: map[string]string{"calls": "1"}}, billingexpr.RequestInput{}, requestID, id, "estimate")
+		require.NoError(t, err)
+		require.NoError(t, PersistBillingEstimate(id, estimate, charge))
 	}
-	usage := &billing.Usage{Source: "provider", Complete: true, Terminal: "completed", Quantities: map[string]string{"calls": "1"}}
-	charge, err := billing.Calculate(quote, *usage)
+	usage, charge, err := EvaluateBilling(quote, billing.Usage{Source: "provider", Complete: true, Terminal: "completed", Quantities: map[string]string{"calls": "1"}}, billingexpr.RequestInput{}, requestID, attemptIDs[len(attemptIDs)-1], "settlement")
 	require.NoError(t, err)
 	require.NoError(t, PrepareBillingRecoveryConsumption(requestID, BillingConsumption{
-		Log: Log{UserId: 1, TokenId: 1, ChannelId: 7, ModelName: "cost-test-model", Quota: 20}, Usage: usage, Charge: charge,
+		AttemptID: attemptIDs[len(attemptIDs)-1], Log: Log{UserId: 1, TokenId: 1, ChannelId: 7, ModelName: "cost-test-model", Quota: 20}, Usage: &usage, Charge: charge,
 	}))
 	require.NoError(t, Settle(requestID, 20))
 }
@@ -178,7 +182,9 @@ func TestBillingCostRefundedAttemptNeedsExplicitEvidence(t *testing.T) {
 	ctx := context.Background()
 	newReservation(t, "refunded-cost")
 	require.NoError(t, Reserve("refunded-cost", 10))
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "cost-test-model", Mode: billing.ModeFree}, "1", nil, time.Now())
+	version, err := billing.NewModelPriceVersion("cost-test-model", billing.PricingValues{"ModelPrice": 0.0}, false)
+	require.NoError(t, err)
+	quote, err := publishedBillingTestQuote(version, "1", nil, time.Now())
 	require.NoError(t, err)
 	require.NoError(t, PrepareBillingAttempt(ctx, "refunded-cost", "refunded-attempt", 7, quote))
 	require.NoError(t, MarkBillingRecoveryRefundPending("refunded-cost", nil))

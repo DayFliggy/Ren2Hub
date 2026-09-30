@@ -1,5 +1,4 @@
 import { api } from './client'
-import type { PriceVersion } from './modelPricing'
 import { ApiError } from './types'
 
 export interface TaskPluginUsage {
@@ -154,11 +153,6 @@ export const taskPluginsApi = {
     api.delete(`${keyPath(key)}/versions/${encodeURIComponent(version)}`),
   dryRun: (key: string, hook: string, member: string, args: unknown[]) =>
     api.post(`${keyPath(key)}/dryrun`, { hook, member, args }),
-  priceDraft: (key: string, model: string, expression: string) =>
-    api.post<{ price_version: PriceVersion }>(`${keyPath(key)}/price-draft`, {
-      model,
-      expression,
-    }),
   options: (signal?: AbortSignal) =>
     api.get<PluginMeta[]>('/api/task_plugin_options', {}, { signal }),
 }

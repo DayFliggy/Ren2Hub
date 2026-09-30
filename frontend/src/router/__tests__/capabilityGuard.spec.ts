@@ -343,7 +343,9 @@ describe('capability route guard', () => {
       await router.push(
         `${path}${path.includes('?') ? '&' : '?'}audit=1#pricing`
       )
-      expect(router.currentRoute.value.path).toBe('/models/metadata')
+      expect(router.currentRoute.value.path).toBe(
+        '/system-settings/billing/model-pricing'
+      )
       expect(router.currentRoute.value.query.audit).toBe('1')
       expect(router.currentRoute.value.hash).toBe('#pricing')
     }

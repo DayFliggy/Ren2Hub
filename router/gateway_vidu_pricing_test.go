@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"sync/atomic"
@@ -10,7 +11,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	taskplugin "github.com/QuantumNous/new-api/relay/channel/task/jsplugin"
 	"github.com/QuantumNous/new-api/service"
@@ -34,20 +34,15 @@ func TestGatewayViduFixedPriceReservesAndSettlesOnce(t *testing.T) {
 		require.NoError(t, channel.AddAbilities(model.DB))
 	}
 	require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
-	price, err := service.ValidateTaskPluginPricePublication(billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
-		Model: "viduq2", Mode: billing.ModeUnitPrice,
-		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.25"}},
-	}, "vidu")
-	require.NoError(t, err)
-	published, err := model.PublishBillingPrice(context.Background(), price, 0, 1)
-	require.NoError(t, err)
+	require.NoError(t, setGatewayModelPrice("viduq2", model.PricingValues{"ModelPrice": "0.25"}))
 	code, body := postGatewayTask(t, base, key, "/v1/videos", `{"model":"viduq2","prompt":"isolated fixture","duration":5,"resolution":"720p"}`)
 	require.Equal(t, http.StatusOK, code, body)
 	assert.EqualValues(t, 1, sends.Load())
 	var task model.Task
 	require.NoError(t, model.DB.First(&task).Error)
 	require.NotNil(t, task.PrivateData.BillingContext)
-	assert.Equal(t, published.ID, task.PrivateData.BillingContext.Quote.PriceVersion.ID)
+	assert.Positive(t, task.PrivateData.BillingContext.Quote.PriceVersion.ID)
+	assert.Equal(t, "0.25", fmt.Sprint(task.PrivateData.BillingContext.Quote.PriceVersion.Pricing["ModelPrice"]))
 	assert.Nil(t, task.PrivateData.BillingContext.Quote.PriceVersion.UsageSchema)
 	assert.EqualValues(t, 125000, task.Quota)
 	var user model.User

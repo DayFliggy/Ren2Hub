@@ -57,6 +57,7 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 		info.PriceData.QuotaToPreConsume = 0
 		quota = 0
 	}
+	billingTestEstimate(t, info)
 	if scenario == "dispatch_guard_write_failure" {
 		remove, writes := failBillingStateWrite(t, "consumption_state", model.BillingRecoveryStateUsagePending)
 		require.NotNil(t, PrepareBillingForSelectedModel(c, info))

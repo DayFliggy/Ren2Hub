@@ -56,7 +56,7 @@ Retry-After 只作用于所属渠道或已有渠道内 credential/模型健康�
 
 进程共享重试额度使用固定百分之一精度，初始/最大储备默认 20 次；每次首次真实发送补 0.1 次，额外发送消耗 1 次。发送前可撤销预留，进入发送边界后提交；结果未知不退款，重试本身不补额度。预留计入 burst，热更新不补满，禁用期间不积累。额度不足立即停止重试、保留最后真实上游错误，并记录 `retry_budget_exhausted`。
 
-钱包是唯一资金来源，Token 是附加消费限额。每次发送冻结价格作用域、不可变版本及哈希、渠道售价系数、安全属性与时间；查价先精确渠道价格，再使用明确发布的全局价格，渠道独立价格的系数为 1。`TaskBillingContext` 保存独立的 `Quote`、`Usage`、`Charge` 及原模型名，不再依赖旧 `group_ratio` 快照。普通请求、Realtime 与异步任务共用持久化预留和事件恢复。当前账务安装格式为 4、价格合同为 3，不迁移旧账务数据库，详见[账务架构](../billing/IMPLEMENTATION.md)。
+钱包是唯一资金来源，Token 是附加消费限额。每次发送从唯一 `model_pricing` 配置派生不可变价格证据，冻结实际模型、插件用量合同、工具价格及渠道售价系数；渠道系数在模型与工具费用合计后应用一次，没有独立渠道价格。`TaskBillingContext` 分别保存真实 attempt、`Quote`、`Usage`、`Charge` 及原模型名，不依赖旧 `group_ratio` 快照。预扣与实际求值输入加密绑定请求、尝试、配置和阶段，恢复重跑同一计算器；证据不一致时保留待处理状态。普通请求、Realtime 与异步任务共用持久化预留和事件恢复。当前为 schema 5、价格合同 4、`newapi-c71eefbc-v1`，不迁移旧账务数据库，详见[账务架构](../billing/IMPLEMENTATION.md)。
 
 ## 协议和重试
 
@@ -78,7 +78,7 @@ Compact 使用原生 `/v1/responses/compact` 和普通模型映射，不生成�
 
 SSE 按事件空行组装多行 `data:`，支持 CRLF/LF/CR、注释、事件名和 BOM，整事件受大小上限约束；NDJSON 使用独立解码路径。正常 EOF 可处理最后一个未以空行结束的完整事件，读取失败或取消不补交未完成事件。已验证的大图片帧可越过前导缓冲限制；畸形帧或状态绑定失败不得暴露前导内容。
 
-所有计价模式在发送前持久化消费保护，最终证据不足时保留预留，不凭缺少记录推定可释放。实际用量使计价失败时保存待对账状态、冻结价格与规范用量，不生成成功消费日志，也不保存正文、请求头或原始表达式错误。修正价格配置不会自动解锁旧记录，须按该记录明确对账。任务接受不明、Realtime 累计与前置上传的处理见[恢复与对账](../billing/RECONCILIATION.md#发送与任务故障边界)。
+所有计价模式在发送前持久化消费保护，最终证据不足时保留预留，不凭缺少记录推定可释放。实际用量使计价失败时保存待对账状态、冻结价格与规范用量，不生成成功消费日志。账务重放所需请求输入只保存为经过身份绑定的密文，正文、请求头及原始表达式错误不得明文进入快照、日志或 API。修正价格配置不会自动解锁旧记录，须按该记录明确对账。任务接受不明、Realtime 累计与前置上传的处理见[恢复与对账](../billing/RECONCILIATION.md#发送与任务故障边界)。
 
 ## 接口和运行依赖
 
@@ -86,8 +86,8 @@ SSE 按事件空行组装多行 `data:`，支持 CRLF/LF/CR、注释、事件名
 - `/api/token/*` 返回 `type: auto | manual`，不返回旧分组字段。
 - `/api/routing/*` 管理 Profile、候选目录和静态预览；预览不发送请求、不预扣、不持有 Permit。
 - `POST /api/routing/tokens/:id/preview` 覆盖自动、手动及无 Profile 的旧 Token，旧 Profile 预览委托同一入口。预览复用实际静态资格及排序，输出快照标识、时间、配置版本和动态复核提示；加权顺序不是下一次请求承诺。
-- `/api/channel/` 管理实际容量和 Decimal 字符串渠道售价系数；独立渠道价格通过 `/api/billing/prices` 管理，独立 `/route-policy` 接口已移除。
-- `/api/pricing` 按模型返回 `model_name` 与 `offers[]`，每份 offer 含计价模型、公开 `price_version`、条件、渠道调整、展示价格和可用状态。只含调用方可路由渠道的有效已发布价格，纯渠道价格模型也可列出；旧模型倍率和渠道倍率区间不再作为公开契约，完整形状见[定价说明](../billing/PRICING.md#公开展示与审计)。
+- `/api/channel/` 管理实际容量和 Decimal 字符串渠道售价系数；模型定价通过 Root `GET/PATCH /api/option/model_pricing` 管理。独立 `/route-policy` 接口已移除。
+- `/api/pricing` 恢复 NewAPI 模型行，返回模型元数据、倍率或按次价格、表达式、插件变体和 `pricing_version`。空配置不补零，明确零价有效；可路由性仍由共同选择器核验。Root `POST /api/ratio_sync/fetch` 只返回五源价格候选，选单源填草稿后保存才生效，详见[定价说明](../billing/PRICING.md#公开展示与审计)。
 
 不再使用 TOKEN_PRIVATE_ROUTING_ENABLED、ROUTE_LIVE_*、ROUTE_SHADOW_* 或 ROUTE_SCORE_* 灰度开关。能力刷新任务继续使用 ROUTE_CAPABILITY_REFRESH_*；ROUTE_DECISION_EVENT_QUEUE_SIZE 控制有界决策日志队列。
 
@@ -99,8 +99,8 @@ SSE 按事件空行组装多行 `data:`，支持 CRLF/LF/CR、注释、事件名
 
 ## 数据和验证
 
-源码和文档清理不删除数据库、账单、任务或审计数据。当前安装由 `model/billing_schema.go` 检查空库或匹配格式标记；旧组和旧倍率账务库不能直接升级。发布与回退须同时核对代码、数据格式和在途消费保护，不能只回滚镜像。
+源码和文档清理不删除数据库、账单、任务或审计数据。当前安装由 `model/billing_schema.go` 检查空库或 schema 5 与 `EvidenceKeyID` 匹配标记；旧账务库不能直接升级。发布与回退须同时核对代码、数据格式、稳定 `CRYPTO_SECRET` 和在途消费保护，不能只回滚镜像。
 
 `router/unified_routing_integration_test.go` 使用隔离 SQLite、Redis 和模拟 HTTP 上游，覆盖 Chat、Compact 阶段切换、Suno、视频、Midjourney、渠道售价系数计费、Permit 释放以及准入失败不发送、不扣费。其他测试覆盖 Profile 版本、资格撤销、Key 健康、表达式计费和退款。主模块与独立 RelayKit 必须分别验证；本地模拟测试不代表真实供应商或生产集群已验收。
 
-工作区参考源码只用于研究。当前方案保持一个选择器、一套本地准入事实和已有尝试诊断，不引入第二套请求管线、持久化正文追踪或 Redis 容量缓存。旧 Redis 用户并发和配置变化重建活动池不属于当前方案。
+工作区参考源码只用于研究。当前方案保持一个选择器、一套本地准入事实和已有尝试诊断，不引入第二套请求管线或 Redis 容量缓存。路由诊断不持久化正文；账务专用加密求值上下文只用于身份验证和计算重放。旧 Redis 用户并发和配置变化重建活动池不属于当前方案。

@@ -95,7 +95,7 @@ func TestGatewayVectorAccountingAndRequestBoundaries(t *testing.T) {
 				require.NoError(t, channel.UpdateAbilities(model.DB))
 				prices, err := common.Marshal(map[string]float64{operation.model: 0.001, operation.mappedModel: 0.001})
 				require.NoError(t, err)
-				require.NoError(t, publishGatewayFixturePrices(string(prices), false))
+				require.NoError(t, configureGatewayFixturePrices(string(prices), false))
 				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 1000000}).Error)
 				require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 				requestBody := operation.request

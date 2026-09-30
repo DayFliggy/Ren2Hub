@@ -14,6 +14,7 @@ import (
 )
 
 func TestMidjourneyCompletionRecoveryAcrossDatabases(t *testing.T) {
+	t.Setenv("CRYPTO_SECRET", "billing-test-persistent-key")
 	for _, database := range []struct {
 		kind common.DatabaseType
 		env  string
@@ -44,7 +45,7 @@ func TestMidjourneyCompletionRecoveryAcrossDatabases(t *testing.T) {
 				initCol()
 				require.NoError(t, connection.Close())
 			})
-			require.NoError(t, db.AutoMigrate(&Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &BillingPriceVersion{}, &BillingActivePrice{}))
+			require.NoError(t, db.AutoMigrate(&Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &BillingPriceVersion{}))
 			t.Run("accepted-submission", func(t *testing.T) {
 				fixture := newMidjourneyCompletionFixture(t, db, "accepted", false, true)
 				testMidjourneyAcceptedSubmission(t, fixture)
@@ -152,6 +153,8 @@ func newMidjourneySubmission(t *testing.T, fixture midjourneyCompletionFixture, 
 	require.NoError(t, PrepareBillingAttempt(context.Background(), requestID, requestID+":attempt", task.ChannelId, fixture.quote))
 	consumption := fixture.consumption
 	consumption.Log.Quota = task.Quota
+	consumption, err = bindConsumptionEvidence(requestID, consumption)
+	require.NoError(t, err)
 	return task, consumption
 }
 
@@ -240,9 +243,9 @@ func newMidjourneyCompletionFixture(t *testing.T, db *gorm.DB, identity string, 
 	require.NoError(t, db.Create(&fixture.token).Error)
 	fixture.channel = Channel{Name: "mj-" + identity}
 	require.NoError(t, db.Create(&fixture.channel).Error)
-	quote, err := publishedBillingTestQuote(billing.PriceVersion{Model: "mj_imagine", ScopeKind: billing.PriceScopeChannel,
-		ChannelID: fixture.channel.Id, Mode: billing.ModeUnitPrice,
-		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.00006"}}}, "1", nil, time.Unix(7200, 0))
+	version, err := billing.NewModelPriceVersion("mj_imagine", billing.PricingValues{"ModelPrice": "0.00006"}, false)
+	require.NoError(t, err)
+	quote, err := publishedBillingTestQuote(version, "1", nil, time.Unix(7200, 0))
 	require.NoError(t, err)
 	fixture.quote = quote
 	fixture.task = Midjourney{MjId: "provider-" + identity, UserId: fixture.user.Id, ChannelId: fixture.channel.Id,
@@ -274,10 +277,12 @@ func newMidjourneyCompletionFixture(t *testing.T, db *gorm.DB, identity string, 
 	charge, err := billing.Calculate(fixture.quote, usage)
 	require.NoError(t, err)
 	require.EqualValues(t, 30, charge.FinalQuota)
-	fixture.consumption = BillingConsumption{Log: Log{UserId: fixture.user.Id, TokenId: logTokenID, ChannelId: fixture.channel.Id,
+	fixture.consumption = BillingConsumption{Log: Log{UserId: fixture.user.Id, TokenId: logTokenID, ChannelId: fixture.channel.Id, Quota: 30,
 		Username: fixture.user.Username, ModelName: "mj_imagine", CreatedAt: 7200}, CountUsage: true, LogEnabled: true, ExportEnabled: true,
 		Usage: &usage, Charge: charge}
 	if !legacy {
+		fixture.consumption, err = bindConsumptionEvidence(fixture.task.PrivateData.SubmissionRequestID, fixture.consumption)
+		require.NoError(t, err)
 		accepted := fixture.consumption
 		accepted.Log.Quota = fixture.task.Quota
 		require.NoError(t, db.Transaction(func(tx *gorm.DB) error {

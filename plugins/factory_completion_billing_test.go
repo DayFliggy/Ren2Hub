@@ -1,7 +1,6 @@
 package plugins_test
 
 import (
-	"context"
 	"crypto/sha256"
 	"fmt"
 	"maps"
@@ -44,13 +43,10 @@ func TestFactoryCompletionFactsPreserveInvalidAndZeroUsage(t *testing.T) {
 			if factory.unit == "second" {
 				maximum = relaycommon.MaxTaskDurationSeconds
 			}
-			// A persisted quote is evaluated independently of whether today's
-			// publication policy permits this factory's reservation estimate.
-			quote, err := billing.NewQuote(billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: factory.model, Mode: billing.ModeExpression,
-				Expression: fmt.Sprintf(`v2:u(%q) * 0.4`, factory.field),
-				UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
-					factory.field: {Type: "number", Unit: factory.unit, Source: billingexpr.UsageCompletionFact, Required: true, Minimum: "0", Maximum: fmt.Sprint(maximum)},
-				}}}, "1", nil, time.Now())
+			definition, err := billing.NewModelPriceVersion(factory.model, billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": fmt.Sprintf("u(%q) * 0.4", factory.field)}, true)
+			require.NoError(t, err)
+			definition.UsageSchema = &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{factory.field: {Type: "number", Unit: factory.unit, Source: billingexpr.UsageCompletionFact, Required: true, Minimum: "0", Maximum: fmt.Sprint(maximum)}}}
+			quote, err := billing.NewQuote(definition, "1", nil, time.Now())
 			require.NoError(t, err)
 			for _, test := range []struct {
 				name    string
@@ -85,7 +81,7 @@ func TestFactoryCompletionFactsPreserveInvalidAndZeroUsage(t *testing.T) {
 					result, err := adaptor.ParseTaskResultForTask(&model.Task{Properties: model.Properties{OriginModelName: factory.model, UpstreamModelName: factory.model}}, nil, encoded)
 					require.NoError(t, err)
 					assert.Equal(t, "SUCCESS", result.Status, "retain the provider result while accounting is held")
-					charge, chargeErr := billing.Calculate(quote, billing.Usage{Complete: true, ActualFacts: result.UsageFacts})
+					charge, chargeErr := evaluateFactoryCharge(t, quote, result.UsageFacts)
 					if test.wantUSD == "" {
 						if test.name != "missing" {
 							assert.NotEmpty(t, result.UsageError, "malformed facts cannot be reported as confirmed zero")
@@ -151,9 +147,14 @@ func TestHailuoUsageFactsMatchEveryModelProfile(t *testing.T) {
 
 func factoryPriceDatabase(t *testing.T) {
 	t.Helper()
+	t.Setenv("CRYPTO_SECRET", "factory-pricing-test-secret")
+	previousOptions, previousRegistry := common.OptionMap, jsplugin.DefaultRegistry
+	common.OptionMap = map[string]string{}
+	jsplugin.DefaultRegistry = jsplugin.NewRegistry()
+	t.Cleanup(func() { common.OptionMap = previousOptions; jsplugin.DefaultRegistry = previousRegistry })
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.BillingPriceVersion{}, &model.BillingActivePrice{}, &model.TaskPluginNamespace{}, &model.TaskPlugin{}))
+	require.NoError(t, db.AutoMigrate(&model.BillingPriceVersion{}, &model.Option{}, &model.Channel{}, &model.TaskPluginNamespace{}, &model.TaskPlugin{}))
 	previousDB := model.DB
 	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
 	model.DB = db
@@ -170,18 +171,18 @@ func factoryPriceDatabase(t *testing.T) {
 func TestHailuoPublishedResolutionPriceReachesPrecharge(t *testing.T) {
 	factoryPriceDatabase(t)
 	plugin := loadHailuoPlugin(t)
-	price, err := builtinplugins.FrozenTaskPriceVersion(plugin.Meta, "MiniMax-Hailuo-2.3", `v2:u("resolution") == "768P" ? 1 : 2`)
+	_, err := jsplugin.DefaultRegistry.RegisterFactory(plugin.Source, jsplugin.Options{Key: "hailuo"})
 	require.NoError(t, err)
-	price, err = service.ValidateTaskPluginPricePublication(price, "hailuo")
-	require.NoError(t, err)
-	price.Provenance = &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test resolution price"}
-	_, err = model.PublishBillingPrice(context.Background(), price, 0, 1)
+	name := "MiniMax-Hailuo-2.3"
+	values := model.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": `u("resolution") == "768P" ? 1 : 2`}
+	require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: name, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}), Pricing: values}}))
+	price, err := model.ResolveModelBillingPrice(t.Context(), name, "hailuo")
 	require.NoError(t, err)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
 	c.Set("channel_ratio", "1")
 	c.Set("task_request", map[string]any{"model": price.Model, "prompt": "p", "duration": 10, "resolution": "768P"})
-	info := &relaycommon.RelayInfo{OriginModelName: price.Model,
+	info := &relaycommon.RelayInfo{OriginModelName: price.Model, TaskPluginRef: &model.TaskPluginRef{Key: "hailuo", Version: plugin.Meta.Version, SourceHash: plugin.SourceHash},
 		ChannelMeta:         &relaycommon.ChannelMeta{UpstreamModelName: price.Model, ApiKey: "test-key", ChannelBaseUrl: "https://provider.example"},
 		TaskRelayInfo:       &relaycommon.TaskRelayInfo{PublicTaskID: "profile-price-test"},
 		BillingRequestInput: &billingexpr.RequestInput{Attributes: map[string]any{}, FrozenAt: time.Now()}}
@@ -196,7 +197,7 @@ func TestHailuoPublishedResolutionPriceReachesPrecharge(t *testing.T) {
 	result, err := adaptor.ParseTaskResultForTask(&model.Task{Properties: model.Properties{OriginModelName: price.Model, UpstreamModelName: price.Model}}, nil,
 		[]byte(`{"status":"Success","video_width":1366,"video_height":768}`))
 	require.NoError(t, err)
-	charge, err := billing.Calculate(prepared.Quote, billing.Usage{Complete: true, ActualFacts: result.UsageFacts})
+	charge, err := evaluateFactoryCharge(t, prepared.Quote, result.UsageFacts)
 	require.NoError(t, err)
 	assert.Equal(t, "1", charge.TotalUSD)
 }
@@ -246,12 +247,13 @@ export function extractUsageOnComplete(ctx,result,body){return {resolution:body.
 	updated := model.TaskPlugin{Key: "hailuo", Version: current.Meta.Version, Factory: true,
 		Source: model.LongText(currentSource), SourceHash: current.SourceHash}
 	require.NoError(t, model.SaveTaskPlugin(&updated))
-	price, err := model.PublishBillingPrice(t.Context(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "T2V-01", Mode: billing.ModeExpression,
-		Expression: `v2:u("resolution") == "720P" ? 1 + u("input_images") * 0.2 : 2`,
-		UsageSchema: &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
-			"resolution":   {Type: "string", Source: billingexpr.UsageCompletionFact, Enum: []string{"720P"}, Required: true},
-			"input_images": {Type: "number", Unit: "count", Source: billingexpr.UsageCompletionFact, Minimum: "0", Maximum: "128", Required: true},
-		}}}, 0, 1)
+	definition, err := billing.NewModelPriceVersion("T2V-01", billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": `u("resolution") == "720P" ? 1 + u("input_images") * 0.2 : 2`}, true)
+	require.NoError(t, err)
+	definition.UsageSchema = &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
+		"resolution":   {Type: "string", Source: billingexpr.UsageCompletionFact, Enum: []string{"720P"}, Required: true},
+		"input_images": {Type: "number", Unit: "count", Source: billingexpr.UsageCompletionFact, Minimum: "0", Maximum: "128", Required: true},
+	}}
+	price, err := model.StoreBillingPriceEvidence(t.Context(), definition)
 	require.NoError(t, err)
 	quote, err := billing.NewQuote(*price, "1", nil, time.Now())
 	require.NoError(t, err)
@@ -263,12 +265,22 @@ export function extractUsageOnComplete(ctx,result,body){return {resolution:body.
 	assert.Equal(t, legacy.SourceHash, pinned.SourceHash)
 	result, err := taskplugin.New(pinned).ParseTaskResultForTask(task, nil, []byte(`{"resolution":"720P","input_images":0}`))
 	require.NoError(t, err)
-	charge, err := billing.Calculate(quote, billing.Usage{Complete: true, ActualFacts: result.UsageFacts})
+	charge, err := evaluateFactoryCharge(t, quote, result.UsageFacts)
 	require.NoError(t, err)
 	assert.Equal(t, "1", charge.TotalUSD)
 	assert.Equal(t, quoteHash, quote.Hash)
 	assert.Equal(t, schemaHash, quote.PriceVersion.UsageSchema.Hash)
-	stored, err := model.GetActiveBillingPrice(t.Context(), "T2V-01")
+	require.NoError(t, model.ValidatePublishedBillingQuote(t.Context(), quote))
+}
+
+func evaluateFactoryCharge(t *testing.T, quote *billing.Quote, facts map[string]any) (*billing.ChargeResult, error) {
+	t.Helper()
+	values, err := service.TaskExpressionUsage(facts, quote.PriceVersion.UsageSchema)
+	if err != nil {
+		return nil, err
+	}
+	cipher, err := billing.NewEvidenceCipher([]byte("factory-charge-test"))
 	require.NoError(t, err)
-	assert.Equal(t, price, stored, "factory upgrade cannot rewrite an already published union schema")
+	_, charge, err := cipher.Evaluate(quote, billing.Usage{Complete: true, Source: "provider", Terminal: "completed", ActualFacts: facts}, billingexpr.RequestInput{Usage: values}, billing.EvidenceBinding{RequestID: "factory-request", AttemptID: "factory-attempt", ConfigHash: billing.PricingConfigHash(quote), Phase: "settlement"})
+	return charge, err
 }

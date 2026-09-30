@@ -12,7 +12,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,9 +59,9 @@ func TestGatewayChannelProbeMissingUsageRemainsReserved(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprint(w, `{"id":"test","object":"chat.completion","model":"gpt-4o-mini","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`)
 	})
-	old, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
+	_, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
 	require.NoError(t, err)
-	_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "gpt-4o-mini", Mode: billing.ModeExpression, Expression: "p * 2 + c * 4"}, old.ID, 1)
+	_, err = setGatewayExpression("gpt-4o-mini", "p * 2 + c * 4")
 	require.NoError(t, err)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)

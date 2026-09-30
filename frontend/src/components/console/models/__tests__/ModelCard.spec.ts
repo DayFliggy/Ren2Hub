@@ -1,11 +1,10 @@
-import { offerFixture } from '@/api/__tests__/pricingFixture'
 import { mount } from '@vue/test-utils'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import ModelCard from '@/components/console/models/ModelCard.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import type { MarketModel } from '@/types/console'
-import type { PriceVersion } from '@/api/modelPricing'
+import { parsePricingModels } from '@/api/liveContracts'
 
 const tieredModel: MarketModel = {
   id: 1,
@@ -43,133 +42,110 @@ function render(layout: 'grid' | 'list') {
 }
 
 describe('ModelCard billing metadata', () => {
-  it('displays each channel price with its flat fee and graduated bands', () => {
-    const versions: PriceVersion[] = [9, 10].map((channel_id) => ({
-      id: channel_id,
-      model: 'scoped',
-      scope_kind: 'channel_model',
-      mode: 'unit_price',
-      flat_fee: '0.01',
-      created_at: 1,
-      hash: `hash-${channel_id}`,
-      prices: [
-        {
-          quantity: 'p',
-          unit: 'per_million_tokens',
-          price: '',
-          tier_mode: 'graduated',
-          tiers: [{ up_to: '1000000', unit_price: '2' }, { unit_price: '1' }],
-        },
-      ],
-    }))
+  it('shows a task provider inheriting the configured model price as available', () => {
+    const [pricing] = parsePricingModels([
+      {
+        model_name: 'shared-task',
+        quota_type: 1,
+        model_price: 0.2,
+        billing_plugin_variants: [
+          {
+            plugin_key: 'inherited',
+            plugin_name: 'Inherited',
+            billing_mode: 'ratio',
+            billing_expr: '',
+          },
+        ],
+      },
+    ])
     const wrapper = mount(ModelCard, {
       props: {
         model: {
           ...tieredModel,
-          billing: 'token',
-          price: {},
-          pricing: versions[0],
-          offers: versions.map((price) => offerFixture(price)),
+          billing: 'per_call',
+          price: { per_call: '0.2' },
+          pricing,
         },
       },
       global: { plugins: [i18n] },
     })
-    expect(wrapper.findAll('[data-model-price-scope]')).toHaveLength(2)
-    expect(wrapper.text()).toContain('channel_model · v9')
-    expect(wrapper.text()).toContain('channel_model · v10')
-    expect(wrapper.text()).not.toContain('channel_id')
-    expect(wrapper.text()).toContain('分段累加')
-    expect(wrapper.text()).toContain('$0.010')
-    expect(wrapper.text()).toContain('≤1000000: $2.000')
+    expect(wrapper.text()).toContain('$0.200')
+    expect(wrapper.get('details').text()).toContain('使用上方模型单价')
+    expect(wrapper.text()).not.toContain('价格未配置')
     wrapper.unmount()
   })
   it.each(['grid', 'list'] as const)(
-    'retains mixed token, media and call prices in %s layout',
+    'marks unconfigured model and plugin prices unavailable in %s layout',
     (layout) => {
+      const [pricing] = parsePricingModels([
+        {
+          model_name: 'unpriced',
+          quota_type: 0,
+          billing_mode: 'unconfigured',
+          model_ratio: 0,
+          completion_ratio: 0,
+          billing_plugin_variants: [
+            {
+              plugin_key: 'incompatible',
+              plugin_name: 'Incompatible',
+              billing_mode: 'unconfigured',
+              billing_expr: 'u("removed") * 0.4',
+            },
+            {
+              plugin_key: 'active',
+              plugin_name: 'Active',
+              billing_mode: 'tiered_expr',
+              billing_expr: 'u("seconds") * 0.2',
+            },
+          ],
+        },
+      ])
       const wrapper = mount(ModelCard, {
         props: {
-          layout,
           model: {
             ...tieredModel,
-            billing: 'unit_price',
-            price: { input: '2', per_call: '0.01' },
-            pricing: {
-              id: 1,
-              model: 'mixed',
-              mode: 'unit_price',
-              created_at: 1,
-              hash: 'hash',
-              prices: [
-                { quantity: 'p', unit: 'per_million_tokens', price: '2' },
-                { quantity: 'calls', unit: 'per_call', price: '0.01' },
-                { quantity: 'images', unit: 'per_image', price: '0.1256789' },
-              ],
-            },
-            offers: [
-              offerFixture({
-                id: 1,
-                model: 'mixed',
-                mode: 'unit_price',
-                created_at: 1,
-                hash: 'hash',
-                prices: [
-                  { quantity: 'p', unit: 'per_million_tokens', price: '2' },
-                  { quantity: 'calls', unit: 'per_call', price: '0.01' },
-                  { quantity: 'images', unit: 'per_image', price: '0.1256789' },
-                ],
-              }),
-            ],
+            billing: 'unconfigured',
+            price: {},
+            pricing,
           },
+          layout,
         },
         global: { plugins: [i18n] },
       })
-      expect(wrapper.text()).toContain('$2.000')
-      expect(wrapper.text()).toContain('$0.010')
-      expect(wrapper.text()).toContain('$0.126')
-      expect(wrapper.text()).toContain('每张图片')
-      expect(wrapper.get('[data-model-billing]').text()).toBe('明确单价')
+      expect(wrapper.get('[data-model-billing]').text()).toBe('未配置价格')
+      expect(wrapper.text()).toContain('价格未配置')
+      expect(wrapper.text()).not.toContain('$0.000')
+      expect(wrapper.text()).not.toContain('u("removed")')
+      expect(wrapper.text()).toContain('u("seconds") * 0.2')
       wrapper.unmount()
     }
   )
-
-  it('shows an expression with supplemental prices without inventing token unit prices', () => {
+  it('shows an expression without inventing token unit prices', () => {
     const wrapper = mount(ModelCard, {
       props: {
         model: {
           ...tieredModel,
           price: {},
           pricing: {
-            id: 1,
-            model: 'expression',
-            mode: 'expression',
-            created_at: 1,
-            hash: 'hash',
-            expression: 'p * 0.00123456789',
-            prices: [{ quantity: 'seconds', unit: 'per_second', price: '0.1' }],
+            model_name: 'gpt-4o',
+            description: '',
+            icon: '',
+            tags: '',
+            vendor_id: 0,
+            owner_by: 'OpenAI',
+            supported_endpoint_types: [],
+            quota_type: 0,
+            billing_mode: 'tiered_expr',
+            billing_expr: 'p * 0.00123456789',
           },
-          offers: [
-            offerFixture({
-              id: 1,
-              model: 'expression',
-              mode: 'expression',
-              created_at: 1,
-              hash: 'hash',
-              expression: 'p * 0.00123456789',
-              prices: [
-                { quantity: 'seconds', unit: 'per_second', price: '0.1' },
-              ],
-            }),
-          ],
         },
       },
       global: { plugins: [i18n] },
     })
     expect(wrapper.get('pre').text()).toBe('p * 0.00123456789')
-    expect(wrapper.text()).toContain('每秒')
-    expect(wrapper.text()).toContain('$0.100')
+    expect(wrapper.text()).not.toContain('$0.000')
     wrapper.unmount()
   })
-
   it.each(['grid', 'list'] as const)(
     'shows one billing label with its tier count in %s layout',
     (layout) => {

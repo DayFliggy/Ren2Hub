@@ -156,6 +156,14 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         icon: 'M4 4h16v16H4zM8 8h8M8 12h8M8 16h4',
       },
       {
+        name: 'model-pricing',
+        labelKey: 'billing.modelPricing',
+        route: 'model-pricing',
+        feature: 'admin',
+        rootOnly: true,
+        icon: 'M4 4h16v16H4zM8 8h8M8 12h8M8 16h4',
+      },
+      {
         name: 'system-settings',
         labelKey: 'nav.systemSettings',
         route: 'system-settings-site',

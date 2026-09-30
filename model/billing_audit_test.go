@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,23 +15,21 @@ import (
 func settledBillingAuditEvidence(t *testing.T) (BillingRecovery, []BillingAttempt, []BillingEvent) {
 	t.Helper()
 	db := setupBillingRecoveryTestDB(t)
-	require.NoError(t, db.AutoMigrate(&BillingPriceVersion{}, &BillingActivePrice{}))
 	seedBillingAccount(t, db, 1000, 1000, false)
-	version, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
-		Model: "audit-model", ScopeKind: billing.PriceScopeChannel, ChannelID: 7,
-		Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}},
-	}, 0, 1)
+	version, err := billing.NewModelPriceVersion("audit-model", billing.PricingValues{"ModelRatio": 1.0, "CompletionRatio": 1.0}, false)
 	require.NoError(t, err)
-	quote, err := billing.NewQuote(*version, "1", nil, time.Now())
-	require.NoError(t, err)
-	usage := &billing.Usage{InputTokens: 100, Complete: true, Source: "provider", Terminal: "completed"}
-	charge, err := billing.Calculate(quote, *usage)
+	quote, err := publishedBillingTestQuote(version, "1", nil, time.Now())
 	require.NoError(t, err)
 	newReservation(t, "audit-request")
 	require.NoError(t, Reserve("audit-request", 100))
 	require.NoError(t, PrepareBillingAttempt(context.Background(), "audit-request", "audit-attempt", 7, quote))
+	estimate, estimateCharge, err := EvaluateBilling(quote, billing.Usage{InputTokens: 100, Estimated: true}, billingexpr.RequestInput{}, "audit-request", "audit-attempt", "estimate")
+	require.NoError(t, err)
+	require.NoError(t, PersistBillingEstimate("audit-attempt", estimate, estimateCharge))
+	usage, charge, err := EvaluateBilling(quote, billing.Usage{InputTokens: 100, Complete: true, Source: "provider", Terminal: "completed"}, billingexpr.RequestInput{}, "audit-request", "audit-attempt", "settlement")
+	require.NoError(t, err)
 	require.NoError(t, PrepareBillingRecoveryConsumption("audit-request", BillingConsumption{
-		Usage: usage, Charge: charge,
+		AttemptID: "audit-attempt", Usage: &usage, Charge: charge,
 		Log:        Log{UserId: 1, TokenId: 1, ChannelId: 7, ModelName: "audit-model", Quota: charge.FinalQuota, Type: LogTypeConsume},
 		CountUsage: true,
 	}))
@@ -48,9 +47,9 @@ func TestBillingAuditReplaysFrozenPricesAndSeparatesActualCost(t *testing.T) {
 	recovery, attempts, events := settledBillingAuditEvidence(t)
 	var quote billing.Quote
 	require.NoError(t, common.UnmarshalJsonStr(recovery.QuoteSnapshot, &quote))
-	changed := quote.PriceVersion
-	changed.Prices[0].Price = "1000"
-	_, err := PublishBillingPrice(context.Background(), changed, quote.PriceVersion.ID, 1)
+	changed, err := billing.NewModelPriceVersion("audit-model", billing.PricingValues{"ModelRatio": 1000.0}, false)
+	require.NoError(t, err)
+	_, err = StoreBillingPriceEvidence(context.Background(), changed)
 	require.NoError(t, err)
 
 	audit := AuditBillingEvidence(recovery, attempts, events)
@@ -63,7 +62,7 @@ func TestBillingAuditReplaysFrozenPricesAndSeparatesActualCost(t *testing.T) {
 	require.NotNil(t, audit.ChargeDifferenceQuota)
 	assert.Zero(t, *audit.ChargeDifferenceQuota)
 	assert.Equal(t, quote.PriceVersion.ID, audit.Attempts[0].PriceVersionID)
-	assert.Equal(t, BillingPriceOriginManual, audit.Attempts[0].Origin)
+	assert.Equal(t, billing.PriceScopeGlobal, audit.Attempts[0].PriceScope)
 	assert.NotEmpty(t, audit.Attempts[0].RequestFingerprint)
 	assert.NotEmpty(t, audit.UsageSnapshotHash)
 	assert.Nil(t, audit.UpstreamCostUSD)
@@ -93,11 +92,11 @@ func TestBillingAuditRejectsTamperedEvidence(t *testing.T) {
 		}},
 		{"usage_unpriced_field", func(r *BillingRecovery, _ []BillingAttempt, _ []BillingEvent) {
 			var usage billing.Usage
-			require.NoError(t, common.UnmarshalJsonStr(r.UsageSnapshot, &usage))
+			require.NoError(t, common.UnmarshalJsonStr(string(r.UsageSnapshot), &usage))
 			usage.Source = "altered-source"
 			raw, err := common.Marshal(usage)
 			require.NoError(t, err)
-			r.UsageSnapshot = string(raw)
+			r.UsageSnapshot = LongText(raw)
 		}},
 		{"charge", func(r *BillingRecovery, _ []BillingAttempt, _ []BillingEvent) {
 			var charge billing.ChargeResult
@@ -127,14 +126,16 @@ func TestBillingAuditRequiresCompleteUsageAndConfirmedSettlement(t *testing.T) {
 	var usage billing.Usage
 	var charge billing.ChargeResult
 	require.NoError(t, common.UnmarshalJsonStr(recovery.QuoteSnapshot, &quote))
-	require.NoError(t, common.UnmarshalJsonStr(recovery.UsageSnapshot, &usage))
+	require.NoError(t, common.UnmarshalJsonStr(string(recovery.UsageSnapshot), &usage))
 	require.NoError(t, common.UnmarshalJsonStr(recovery.ChargeSnapshot, &charge))
 	t.Run("partial_usage", func(t *testing.T) {
 		r, partial := recovery, usage
 		partial.Complete = false
+		partial, _, err := EvaluateBilling(&quote, partial, billingexpr.RequestInput{}, r.RequestID, "audit-attempt", "settlement")
+		require.NoError(t, err)
 		raw, err := common.Marshal(partial)
 		require.NoError(t, err)
-		r.UsageSnapshot = string(raw)
+		r.UsageSnapshot = LongText(raw)
 		r.ConsumptionFingerprint, err = BillingEvidenceFingerprint(r.RequestID, quote.Hash, &partial, &charge)
 		require.NoError(t, err)
 		e := append([]BillingEvent(nil), events...)

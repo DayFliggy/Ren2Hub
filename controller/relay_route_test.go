@@ -185,7 +185,7 @@ func TestRecoveredKeyProbeIsClaimedOnlyAtSend(t *testing.T) {
 	require.Nil(t, middleware.SetupContextForSelectedChannel(second, &channel, "gpt-test"))
 	firstInfo := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelId: channel.Id}, RouteCapabilityModel: "gpt-test"}
 	secondInfo := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelId: channel.Id}, RouteCapabilityModel: "gpt-test"}
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "gpt-test", Mode: billing.ModeFree}, "1", nil, time.Now())
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "gpt-test", Mode: billing.ModePerCall, Pricing: billing.PricingValues{"ModelPrice": "0"}}, "1", nil, time.Now())
 	require.NoError(t, err)
 	firstInfo.PriceData.Quote, secondInfo.PriceData.Quote = quote, quote
 	state := &routeAttemptHealthState{}

@@ -29,7 +29,7 @@ func TestTextSettlementRequiresActualTerminalUsage(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-			info := quotedTextInfo(t, []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "1"}})
+			info := quotedTextInfo(t, billing.PricingValues{"ModelRatio": "0.5"})
 			info.IsStream = test.stream
 			info.MarkValidOutput()
 			if test.terminal {
@@ -48,7 +48,7 @@ func TestTextSettlementRequiresActualTerminalUsage(t *testing.T) {
 }
 func TestPurePerCallSettlementRequiresTrustedSuccess(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	info := quotedTextInfo(t, []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.1"}})
+	info := quotedTextInfo(t, billing.PricingValues{"ModelPrice": "0.1"})
 	info.MarkValidOutput()
 	assert.True(t, TextUsageReadyForSettlement(ctx, info, nil))
 	info.IsStream = true
@@ -61,7 +61,7 @@ func TestBinaryAudioPerCallSettlementRequiresCompleteTransport(t *testing.T) {
 	for _, reason := range []relaycommon.StreamEndReason{relaycommon.StreamEndReasonDone, relaycommon.StreamEndReasonEOF, relaycommon.StreamEndReasonClientGone} {
 		t.Run(string(reason), func(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-			info := quotedTextInfo(t, []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.1"}})
+			info := quotedTextInfo(t, billing.PricingValues{"ModelPrice": "0.1"})
 			info.MarkValidOutput()
 			info.StreamStatus = relaycommon.NewStreamStatus()
 			info.StreamStatus.SetEndReason(reason, nil)
@@ -100,7 +100,9 @@ func TestImageCacheUsageRetainsMissingAndExplicitZero(t *testing.T) {
 
 func TestImagesWithoutTokenUsageRequireConfirmedCountAndTerminal(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	info := quotedTextInfo(t, []billing.UnitPrice{{Quantity: "images", Unit: "per_image", Price: "0.001"}})
+	info := quotedTextInfo(t, billing.PricingValues{"ModelPrice": "0.001"})
+	requested := 2
+	info.BillingRequestInput.ImageCount = &requested
 	info.MarkValidOutput()
 	info.PriceData.Usage = &billing.Usage{Source: "provider_image_count", Complete: true, Quantities: map[string]string{"images": "2"}}
 	assert.True(t, TextUsageReadyForSettlement(ctx, info, &dto.Usage{UsageSource: "missing"}))
@@ -114,19 +116,16 @@ func TestImagesWithoutTokenUsageRequireConfirmedCountAndTerminal(t *testing.T) {
 }
 
 func TestImageExpressionSettlementRequiresEachActualDimension(t *testing.T) {
-	for _, expression := range []string{`v1:fixed(0.001) * image_count`, `v1:p * 2 + fixed(0.001) * image_count`} {
+	for _, expression := range []string{`v1:tier("images",fixed(0.001)) * image_count`, `v1:len <= 100 ? tier("images",fixed(0.001))*image_count : tier("tokens",p*2)`} {
 		t.Run(expression, func(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-			info := quotedTextInfo(t, []billing.UnitPrice{{Quantity: "images", Unit: "per_image", Price: "0.001"}})
-			quote, err := billing.NewQuote(billing.PriceVersion{Model: "image", Mode: billing.ModeExpression, Expression: expression}, "1", map[string]any{"quantity": 3}, time.Now())
-			require.NoError(t, err)
-			info.PriceData.Quote = quote
+			info := quotedTextInfo(t, billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": expression})
 			info.MarkValidOutput()
 			actualTokens := &dto.Usage{PromptTokens: 5, UsageSource: "provider"}
 			assert.False(t, TextUsageReadyForSettlement(ctx, info, actualTokens), "request n cannot stand in for an observed image count")
 			info.PriceData.Usage = &billing.Usage{Source: "provider_image_count", Complete: true, Quantities: map[string]string{"images": "2"}}
 			assert.True(t, TextUsageReadyForSettlement(ctx, info, actualTokens))
-			assert.Equal(t, expression == `v1:fixed(0.001) * image_count`, TextUsageReadyForSettlement(ctx, info, &dto.Usage{UsageSource: "missing"}))
+			assert.Equal(t, expression == `v1:tier("images",fixed(0.001)) * image_count`, TextUsageReadyForSettlement(ctx, info, &dto.Usage{UsageSource: "missing"}))
 			for _, invalid := range []string{"", "0", "1.5", "129"} {
 				info.PriceData.Usage.Quantities["images"] = invalid
 				assert.False(t, TextUsageReadyForSettlement(ctx, info, actualTokens), invalid)
@@ -142,9 +141,10 @@ func TestFlatFeeUsesConfirmedBusinessTerminalAndSettlesOnce(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		t.Run(map[bool]string{false: "http", true: "sse"}[stream], func(t *testing.T) {
 			ctx, info := reservedRealtimeBillingSession(t)
-			quote, err := billing.NewQuote(billingTestPublishedPrice(t, billing.PriceVersion{Model: "flat", Mode: billing.ModeUnitPrice, FlatFee: "0.000006"}), "1", nil, time.Now())
+			quote, err := billing.NewQuote(billingTestStoredPrice(t, "flat", billing.PricingValues{"ModelPrice": "0.000006"}), "1", nil, time.Now())
 			require.NoError(t, err)
 			info.PriceData.Quote, info.PriceData.UsePrice, info.IsStream = quote, true, stream
+			billingTestEstimate(t, info)
 			require.Nil(t, PrepareBillingForSelectedModel(ctx, info))
 			info.MarkValidOutput()
 			if stream {

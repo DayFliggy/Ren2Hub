@@ -73,6 +73,7 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 					}
 					if scenario == "pricing_reconciliation" {
 						info.PriceData.Quote = billingTestQuote(t, `c == 13 ? 1 / (c - 13) : p * 2 + c * 10`)
+						billingTestEstimate(t, info)
 						require.Nil(t, PrepareBillingForSelectedModel(c, info))
 						usage := &dto.Usage{PromptTokens: 10, CompletionTokens: 13, TotalTokens: 23}
 						cancel()
@@ -145,6 +146,7 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 						return
 					}
 					info.PriceData.QuotaToPreConsume = info.Billing.GetPreConsumedQuota()
+					billingTestEstimate(t, info)
 					require.Nil(t, PrepareBillingForSelectedModel(c, info))
 					billingTestFinalUsage(t, info, 17, 3)
 					if scenario == "canceled_request" {
@@ -304,7 +306,7 @@ func bindBillingIntegrationDatabases(t *testing.T, mainDB, logDB *gorm.DB, kind 
 		common.SetDatabaseTypes(previousMainType, previousLogType)
 		common.RedisEnabled, common.BatchUpdateEnabled, common.LogConsumeEnabled, common.DataExportEnabled = previousRedis, previousBatch, previousLog, previousExport
 	})
-	require.NoError(t, mainDB.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.QuotaData{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}, &model.BillingPriceVersion{}, &model.BillingActivePrice{}))
+	require.NoError(t, mainDB.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.QuotaData{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}, &model.BillingPriceVersion{}))
 	require.NoError(t, logDB.AutoMigrate(&model.Log{}))
 	// Existing non-consumption logs retain NULL idempotency keys after migration.
 	require.NoError(t, logDB.Create(&model.Log{Type: model.LogTypeSystem}).Error)
@@ -324,6 +326,8 @@ func seedBillingIntegrationRequest(t *testing.T, id int, scenario string) (*gin.
 		IsPlayground: scenario == "playground_token_identity", ChannelMeta: &relaycommon.ChannelMeta{ChannelId: id},
 	}
 	info.PriceData.Quote = billingTestQuote(t, "p * 2 + c * 2")
+	info.PriceData.QuotaToPreConsume = 5
+	billingTestEstimate(t, info)
 	precharge := 5
 	if scenario == "zero_precharge_refund" || scenario == "zero_precharge_refund_completion_failure" {
 		precharge = 0

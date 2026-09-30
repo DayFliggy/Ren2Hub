@@ -24,8 +24,6 @@ type BillingAuditAttempt struct {
 	PriceVersionID     int64  `json:"price_version_id"`
 	PriceVersionHash   string `json:"price_version_hash"`
 	QuoteHash          string `json:"quote_hash"`
-	Origin             string `json:"origin"`
-	SourceHash         string `json:"source_hash"`
 }
 
 // BillingAudit reports evidence consistency, never a replacement accounting
@@ -58,7 +56,7 @@ func AuditBillingEvidence(recovery BillingRecovery, attempts []BillingAttempt, e
 		hash *string
 	}{
 		{recovery.QuoteSnapshot, &audit.QuoteSnapshotHash},
-		{recovery.UsageSnapshot, &audit.UsageSnapshotHash},
+		{string(recovery.UsageSnapshot), &audit.UsageSnapshotHash},
 		{recovery.ChargeSnapshot, &audit.ChargeSnapshotHash},
 	} {
 		if snapshot.raw != "" {
@@ -102,14 +100,16 @@ func AuditBillingEvidence(recovery BillingRecovery, attempts []BillingAttempt, e
 		}
 	}
 	matched := false
+	var consumption BillingConsumption
+	if recovery.ConsumptionSnapshot != "" && common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &consumption) != nil {
+		audit.Status, audit.Reason = BillingAuditInvalidEvidence, "consumption_snapshot_invalid"
+		return audit
+	}
+	var selectedAttempt string
 	for _, attempt := range attempts {
 		var quote billing.Quote
 		if attempt.RequestID != recovery.RequestID || common.UnmarshalJsonStr(attempt.Quote, &quote) != nil || attempt.QuoteHash != quote.Hash || validateBillingAuditQuote(quote) != nil {
 			audit.Status, audit.Reason = BillingAuditInvalidEvidence, "attempt_quote_invalid"
-			return audit
-		}
-		if quote.PriceVersion.ScopeKind == billing.PriceScopeChannel && quote.PriceVersion.ChannelID != attempt.ChannelID {
-			audit.Status, audit.Reason = BillingAuditInvalidEvidence, "attempt_scope_mismatch"
 			return audit
 		}
 		fingerprint, err := BillingAttemptFingerprint(attempt.RequestID, attempt.ChannelID, &quote)
@@ -117,15 +117,20 @@ func AuditBillingEvidence(recovery BillingRecovery, attempts []BillingAttempt, e
 			audit.Status, audit.Reason = BillingAuditInvalidEvidence, "attempt_fingerprint_invalid"
 			return audit
 		}
-		audit.Attempts = append(audit.Attempts, BillingAuditAttempt{ID: attempt.ID, ChannelID: attempt.ChannelID, RequestFingerprint: attempt.Fingerprint, PriceScope: quote.PriceVersion.ScopeKind, PriceVersionID: quote.PriceVersion.ID, PriceVersionHash: quote.PriceVersion.Hash, QuoteHash: quote.Hash, Origin: quote.PriceVersion.Origin, SourceHash: quote.PriceVersion.SourceHash})
-		if selected != nil && quote.Hash == selected.Hash {
+		audit.Attempts = append(audit.Attempts, BillingAuditAttempt{ID: attempt.ID, ChannelID: attempt.ChannelID, RequestFingerprint: attempt.Fingerprint, PriceScope: quote.PriceVersion.ScopeKind, PriceVersionID: quote.PriceVersion.ID, PriceVersionHash: quote.PriceVersion.Hash, QuoteHash: quote.Hash})
+		if selected != nil && quote.Hash == selected.Hash && attempt.ID == consumption.AttemptID {
+			if quote.ChargeKind == "" && validateBillingAttemptEstimate(attempt, &quote) != nil {
+				audit.Status, audit.Reason = BillingAuditInvalidEvidence, "attempt_estimate_invalid"
+				return audit
+			}
 			matched = true
+			selectedAttempt = attempt.ID
 		}
 	}
 	if selected == nil {
 		return audit
 	}
-	if validateBillingAuditQuote(*selected) != nil || !matched {
+	if validateBillingAuditQuote(*selected) != nil || recovery.ConsumptionFingerprint != "" && !matched {
 		audit.Status, audit.Reason = BillingAuditInvalidEvidence, "selected_quote_invalid"
 		return audit
 	}
@@ -134,7 +139,7 @@ func AuditBillingEvidence(recovery BillingRecovery, attempts []BillingAttempt, e
 	if recovery.UsageSnapshot == "" || recovery.ChargeSnapshot == "" {
 		return audit
 	}
-	if common.UnmarshalJsonStr(recovery.UsageSnapshot, &usage) != nil || common.UnmarshalJsonStr(recovery.ChargeSnapshot, &saved) != nil {
+	if common.UnmarshalJsonStr(string(recovery.UsageSnapshot), &usage) != nil || common.UnmarshalJsonStr(recovery.ChargeSnapshot, &saved) != nil {
 		audit.Status, audit.Reason = BillingAuditInvalidEvidence, "calculation_snapshot_invalid"
 		return audit
 	}
@@ -153,7 +158,7 @@ func AuditBillingEvidence(recovery BillingRecovery, attempts []BillingAttempt, e
 		audit.Status, audit.Reason = BillingAuditInvalidEvidence, "settlement_evidence_mismatch"
 		return audit
 	}
-	replayed, err := billing.Calculate(selected, *usage)
+	replayed, err := ReplayBilling(selected, *usage, recovery.RequestID, selectedAttempt, "settlement")
 	if err != nil {
 		audit.Status, audit.Reason = BillingAuditInvalidEvidence, "frozen_calculation_invalid"
 		return audit

@@ -15,21 +15,16 @@ func GetPricing(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	public := make([]gin.H, 0, len(pricing))
-	for _, row := range pricing {
-		public = append(public, gin.H{"model_name": row.ModelName, "description": row.Description, "icon": row.Icon, "tags": row.Tags,
-			"vendor_id": row.VendorID, "owner_by": row.OwnerBy, "supported_endpoint_types": row.SupportedEndpointTypes,
-			"offers": row.Offers})
-	}
-	versionHash, err := billing.Hash(public)
+	versionHash, err := billing.Hash(pricing)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	c.JSON(200, gin.H{
-		"success": true, "data": public,
+		"success": true, "data": pricing,
 		"vendors":            model.GetVendors(),
 		"supported_endpoint": model.GetSupportedEndpointMap(),
 		"pricing_version":    versionHash,
+		"group_ratio": map[string]float64{}, "usable_group": map[string]string{}, "auto_groups": []string{},
 	})
 }

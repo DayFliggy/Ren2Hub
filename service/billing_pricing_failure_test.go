@@ -18,8 +18,9 @@ func TestFailedExpressionRetainsReservationForReconciliation(t *testing.T) {
 			c, info := reservedRealtimeBillingSession(t)
 			expr := `c == 13 ? 1 / (c - 13) : p * 2 + c * 10`
 			info.PriceData.Quote = billingTestQuote(t, expr)
+			billingTestEstimate(t, info)
 			require.Nil(t, PrepareBillingForSelectedModel(c, info))
-			info.BillingRequestInput = &billingexpr.RequestInput{Attributes: map[string]interface{}{"quality": "private-fixture"}}
+			info.BillingRequestInput = &billingexpr.RequestInput{Headers: map[string]string{"X-Private-Fixture": "private-fixture"}, Body: []byte(`{"prompt":"private-fixture"}`)}
 			usage := &dto.Usage{PromptTokens: 10, CompletionTokens: 13, TotalTokens: 23}
 			info.MarkValidOutput()
 			realtime := &dto.RealtimeUsage{InputTokens: 10, OutputTokens: 13, TotalTokens: 23, Observation: confirmedRealtimeObservation()}

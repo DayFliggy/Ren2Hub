@@ -9,7 +9,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billing"
-	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -150,8 +149,8 @@ func BillingRequestAPIError(err error) *types.NewAPIError {
 	return types.NewErrorWithStatusCode(err, types.ErrorCodeInvalidRequest, 400, types.ErrOptionWithSkipRetry())
 }
 
-// A long-lived Realtime connection cannot mutate its already accepted pricing
-// attributes or enable a product for which its quote has no usage contract.
+// A Realtime connection keeps its model identity and cannot enable a product
+// for which the protocol provides no independent usage contract.
 func ValidateRealtimeBillingEvent(info *relaycommon.RelayInfo, body []byte) error {
 	quote := info.PriceData.Quote
 	if quote == nil {
@@ -224,16 +223,5 @@ func ValidateRealtimeBillingEvent(info *relaycommon.RelayInfo, body []byte) erro
 			}
 		}
 	}
-	attrs, err := BillingAttributesFromBody(wire)
-	if err != nil {
-		return err
-	}
-	used := billingexpr.UsedAttributes(quote.PriceVersion.Expression, quote.PriceVersion.UsageSchema)
-	for name, value := range attrs {
-		if (name == "service_tier" || used[name]) && fmt.Sprint(quote.Attributes[name]) != fmt.Sprint(value) {
-			return fmt.Errorf("realtime billing attribute %s cannot change within a frozen quote", name)
-		}
-	}
-	required.ServiceTier, _ = quote.Attributes["service_tier"].(string)
 	return billing.ValidatePricingRequirements(quote.PriceVersion, required)
 }

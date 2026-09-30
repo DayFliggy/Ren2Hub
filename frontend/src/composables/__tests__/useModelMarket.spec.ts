@@ -1,234 +1,93 @@
-import { offerFixture } from '@/api/__tests__/pricingFixture'
 import { describe, expect, it } from 'vitest'
-
 import { buildLiveModelCatalog } from '@/composables/useModelMarket'
-import { vendorMeta } from '@/constants/console'
-
+import { parsePricingModels } from '@/api/liveContracts'
 describe('live model market adapter', () => {
-  it('combines pricing and performance without dropping models lacking metrics', () => {
+  it('keeps unconfigured and missing model prices out of token billing', () => {
     const catalog = buildLiveModelCatalog(
-      ['gpt-4o', 'text-embedding-3-small'],
-      [
+      ['unpriced', 'missing'],
+      parsePricingModels([
         {
-          model_name: 'gpt-4o',
-          description: 'General model',
-          icon: '',
-          tags: '',
-          vendor_id: 1,
+          model_name: 'unpriced',
+          quota_type: 0,
+          billing_mode: 'unconfigured',
+          model_ratio: 0,
+          completion_ratio: 0,
+        },
+      ]),
+      []
+    )
+    expect(catalog.models.map((model) => model.billing)).toEqual([
+      'unconfigured',
+      'unconfigured',
+    ])
+    expect(catalog.models.map((model) => model.price)).toEqual([{}, {}])
+  })
+  it('combines pricing and performance while preserving unpriced models', () => {
+    const catalog = buildLiveModelCatalog(
+      ['chat', 'audio', 'missing'],
+      parsePricingModels([
+        {
+          model_name: 'chat',
+          quota_type: 0,
+          model_ratio: 0.5,
+          completion_ratio: 1.2,
+          cache_ratio: 0.25,
+          create_cache_ratio: 0,
           owner_by: 'OpenAI',
-          supported_endpoint_types: ['chat'],
-          offers: [
-            offerFixture({
-              id: 1,
-              model: 'gpt-4o',
-              mode: 'unit_price' as const,
-              prices: [
-                { quantity: 'p', unit: 'per_million_tokens', price: '1' },
-                { quantity: 'c', unit: 'per_million_tokens', price: '1.2' },
-                { quantity: 'cr', unit: 'per_million_tokens', price: '0.25' },
-                { quantity: 'cc', unit: 'per_million_tokens', price: '0.5' },
-              ],
-              created_at: 1,
-              hash: 'fixture',
-            }),
-          ],
         },
         {
-          model_name: 'text-embedding-3-small',
-          description: '',
-          icon: '',
-          tags: '',
-          vendor_id: 0,
-          owner_by: '',
-          supported_endpoint_types: ['embeddings'],
-          offers: [
-            offerFixture({
-              id: 1,
-              model: 'text-embedding-3-small',
-              mode: 'unit_price' as const,
-              prices: [
-                { quantity: 'calls', unit: 'per_call', price: '0.0001' },
-              ],
-              created_at: 1,
-              hash: 'fixture',
-            }),
-          ],
+          model_name: 'audio',
+          quota_type: 1,
+          model_price: 0.0001,
+          supported_endpoint_types: ['audio'],
         },
-      ],
+      ]),
       [
         {
-          model_name: 'gpt-4o',
+          model_name: 'chat',
           avg_latency_ms: 800,
           success_rate: 98,
           avg_tps: 40,
         },
       ]
     )
-
-    expect(catalog.vendors).toEqual(['OpenAI', '平台'])
-    expect(catalog).not.toHaveProperty('channels')
     expect(catalog.models[0]).toMatchObject({
-      type: 'chat',
       billing: 'token',
       price: {
         input: '1',
         output: '1.2',
         cache_read: '0.25',
-        cache_write: '0.5',
+        cache_write: '0',
       },
       latency: 0.8,
       tps: 40,
       health: 98,
     })
     expect(catalog.models[1]).toMatchObject({
-      type: 'embedding',
       billing: 'per_call',
       price: { per_call: '0.0001' },
       health: 0,
     })
-    expect(catalog.models[1].price).not.toHaveProperty('cache_read')
-    expect(catalog.models[1].price).not.toHaveProperty('cache_write')
+    expect(catalog.models[2]?.price).toEqual({})
   })
-
-  it('preserves canonical Model Lab vendor names from pricing', () => {
-    const vendors = [
-      'Alibaba',
-      'Moonshot AI',
-      'Zhipu AI',
-      'Bytedance Seed',
-      'Tencent',
-    ]
-    const catalog = buildLiveModelCatalog(
-      vendors.map((vendor) => `model-${vendor}`),
-      vendors.map((vendor) => ({
-        model_name: `model-${vendor}`,
-        description: '',
-        icon: '',
-        tags: '',
-        vendor_id: 1,
-        owner_by: vendor,
-        supported_endpoint_types: ['chat'],
-        offers: [
-          offerFixture({
-            id: 1,
-            model: `model-${vendor}`,
-            mode: 'unit_price' as const,
-            prices: [
-              { quantity: 'p', unit: 'per_million_tokens', price: '2' },
-              { quantity: 'c', unit: 'per_million_tokens', price: '2' },
-            ],
-            created_at: 1,
-            hash: 'fixture',
-          }),
-        ],
-      })),
-      []
-    )
-
-    expect(catalog.vendors).toEqual(vendors)
-    for (const vendor of vendors) expect(vendorMeta[vendor]).toBeTruthy()
-  })
-
-  it('preserves every explicitly published model name including literal suffixes', () => {
-    const names = [
-      'gpt-5.3-codex',
-      'gpt-5.3-codex-openai-compact',
-      'claude-3-openai-compact',
-      'gpt--openai-compact',
-      'gpt-5.3-openai-compact-preview',
-    ]
+  it('preserves model IDs and vendor names without inventing expression unit prices', () => {
+    const names = ['provider/model-openai-compact', 'model-preview']
     const catalog = buildLiveModelCatalog(
       names,
-      names.map((name, index) => ({
-        model_name: name,
-        description: '',
-        icon: '',
-        tags: '',
-        vendor_id: index + 1,
-        owner_by:
-          name === 'gpt-5.3-codex-openai-compact' ? 'Virtual' : 'OpenAI',
-        supported_endpoint_types: ['chat'],
-        offers: [
-          offerFixture({
-            id: 1,
-            model: name,
-            mode: 'unit_price' as const,
-            prices: [
-              { quantity: 'p', unit: 'per_million_tokens', price: '2' },
-              { quantity: 'c', unit: 'per_million_tokens', price: '2' },
-            ],
-            created_at: 1,
-            hash: 'fixture',
-          }),
-        ],
-      })),
+      parsePricingModels(
+        names.map((model_name) => ({
+          model_name,
+          owner_by: 'Moonshot AI',
+          quota_type: 0,
+          billing_mode: 'tiered_expr',
+          billing_expr: 'len > 100 ? tier("long",p * 4) : tier("short",p * 2)',
+        }))
+      ),
       []
     )
-
     expect(catalog.models.map((model) => model.name)).toEqual(names)
-    expect(catalog.vendors).toEqual(['OpenAI', 'Virtual'])
-  })
-
-  it('preserves zero cache-write prices and omits unavailable cache prices', () => {
-    const catalog = buildLiveModelCatalog(
-      ['zero-cache-write', 'missing-cache-write'],
-      [
-        {
-          model_name: 'zero-cache-write',
-          description: '',
-          icon: '',
-          tags: '',
-          vendor_id: 1,
-          owner_by: 'OpenAI',
-          supported_endpoint_types: ['chat'],
-          offers: [
-            offerFixture({
-              id: 1,
-              model: 'zero-cache-write',
-              mode: 'unit_price' as const,
-              prices: [
-                { quantity: 'p', unit: 'per_million_tokens', price: '4' },
-                { quantity: 'c', unit: 'per_million_tokens', price: '12' },
-                { quantity: 'cr', unit: 'per_million_tokens', price: '1' },
-                { quantity: 'cc', unit: 'per_million_tokens', price: '0' },
-              ],
-              created_at: 1,
-              hash: 'fixture',
-            }),
-          ],
-        },
-        {
-          model_name: 'missing-cache-write',
-          description: '',
-          icon: '',
-          tags: '',
-          vendor_id: 1,
-          owner_by: 'OpenAI',
-          supported_endpoint_types: ['chat'],
-          offers: [
-            offerFixture({
-              id: 1,
-              model: 'missing-cache-write',
-              mode: 'unit_price' as const,
-              prices: [
-                { quantity: 'p', unit: 'per_million_tokens', price: '4' },
-                { quantity: 'c', unit: 'per_million_tokens', price: '12' },
-              ],
-              created_at: 1,
-              hash: 'fixture',
-            }),
-          ],
-        },
-      ],
-      []
-    )
-
-    expect(catalog.models[0].price).toEqual({
-      input: '4',
-      output: '12',
-      cache_read: '1',
-      cache_write: '0',
-    })
-    expect(catalog.models[1].price).toEqual({ input: '4', output: '12' })
+    expect(catalog.vendors).toEqual(['Moonshot AI'])
+    expect(catalog.models[0]?.price).toEqual({})
+    expect(catalog.models[0]?.pricing?.billing_expr).toContain('len > 100')
   })
 })

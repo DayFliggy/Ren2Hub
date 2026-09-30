@@ -16,12 +16,13 @@ import (
 
 func setupBillingRecoveryTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
+	t.Setenv("CRYPTO_SECRET", "billing-test-persistent-key")
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
-		&User{}, &Token{},
+		&User{}, &Token{}, &Option{},
 		&BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &Log{}, &QuotaData{}, &Channel{},
-		&BillingPriceVersion{}, &BillingActivePrice{},
+		&BillingPriceVersion{},
 	))
 
 	previousDB := DB

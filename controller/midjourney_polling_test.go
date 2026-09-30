@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,6 +23,7 @@ import (
 
 func setupMidjourneyPoll(t *testing.T) *gorm.DB {
 	t.Helper()
+	t.Setenv("CRYPTO_SECRET", "midjourney-controller-test-evidence-key")
 	db, _ := setupGatewayAPI(t)
 	previousBatch, previousLogging := common.BatchUpdateEnabled, common.LogConsumeEnabled
 	common.BatchUpdateEnabled, common.LogConsumeEnabled = false, true
@@ -29,7 +31,7 @@ func setupMidjourneyPoll(t *testing.T) *gorm.DB {
 	connection, err := db.DB()
 	require.NoError(t, err)
 	connection.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.Midjourney{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingAttempt{}, &model.BillingEvent{}, &model.QuotaData{}, &model.BillingPriceVersion{}, &model.BillingActivePrice{}))
+	require.NoError(t, db.AutoMigrate(&model.Midjourney{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingAttempt{}, &model.BillingEvent{}, &model.QuotaData{}, &model.BillingPriceVersion{}))
 	require.NoError(t, db.Model(&model.User{}).Where("id = ?", 1).Updates(map[string]any{"available_quota": 100, "used_quota": 0, "request_count": 0}).Error)
 	service.InitHttpClient()
 	return db
@@ -46,12 +48,9 @@ func seedMidjourneyPollTask(t *testing.T, db *gorm.DB, endpoint, key, id string)
 	task.PrivateData.BillingSource = "wallet"
 	task.PrivateData.SubmissionRequestID = fmt.Sprintf("mj-submit-%d", channel.Id)
 	require.NoError(t, db.Create(&model.Token{Id: channel.Id, UserId: 1, Key: fmt.Sprintf("mj-token-%d", channel.Id), RemainQuota: 100}).Error)
-	price, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{
-		Model: "mj_imagine", ScopeKind: billing.PriceScopeChannel, ChannelID: channel.Id,
-		Mode:       billing.ModeUnitPrice,
-		Prices:     []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.00004"}},
-		Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "Reviewed Midjourney polling fixture"},
-	}, 0, 1)
+	version, err := billing.NewModelPriceVersion("mj_imagine", billing.PricingValues{"ModelPrice": "0.00004"}, false)
+	require.NoError(t, err)
+	price, err := model.StoreBillingPriceEvidence(context.Background(), version)
 	require.NoError(t, err)
 	quote, err := billing.NewQuote(*price, "1", nil, time.Now())
 	require.NoError(t, err)
@@ -60,7 +59,11 @@ func seedMidjourneyPollTask(t *testing.T, db *gorm.DB, endpoint, key, id string)
 	require.NoError(t, err)
 	require.NoError(t, model.Reserve(task.PrivateData.SubmissionRequestID, 20))
 	require.NoError(t, model.PrepareBillingAttempt(context.Background(), task.PrivateData.SubmissionRequestID, task.PrivateData.SubmissionRequestID+":attempt", task.ChannelId, quote))
-	require.NoError(t, model.PersistAcceptedMidjourney(&task, task.PrivateData.SubmissionRequestID, model.BillingConsumption{Log: model.Log{UserId: 1, TokenId: task.TokenId, ChannelId: channel.Id, Quota: 20}, CountUsage: true, LogEnabled: true}))
+	task.PrivateData.BillingContext.AttemptID = task.PrivateData.SubmissionRequestID + ":attempt"
+	estimate, estimateCharge, err := model.EvaluateBilling(quote, billing.Usage{Estimated: true, Quantities: map[string]string{"calls": "1"}}, billingexpr.RequestInput{}, task.PrivateData.SubmissionRequestID, task.PrivateData.BillingContext.AttemptID, "estimate")
+	require.NoError(t, err)
+	require.NoError(t, model.PersistBillingEstimate(task.PrivateData.BillingContext.AttemptID, estimate, estimateCharge))
+	require.NoError(t, model.PersistAcceptedMidjourney(&task, task.PrivateData.SubmissionRequestID, model.BillingConsumption{AttemptID: task.PrivateData.BillingContext.AttemptID, Log: model.Log{UserId: 1, TokenId: task.TokenId, ChannelId: channel.Id, Quota: 20}, CountUsage: true, LogEnabled: true}))
 	return task
 }
 

@@ -20,7 +20,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-func TestGatewayClaudeEffectiveEffortBilling(t *testing.T) {
+func TestGatewayClaudeEffortProtocolAndIncomingParamBilling(t *testing.T) {
 	const beta = "mid-conversation-output-config-2026-07-01"
 	const user = `{"role":"user","content":"continue"}`
 	const high = `{"role":"system","content":[],"output_config":{"effort":"high"}}`
@@ -32,13 +32,13 @@ func TestGatewayClaudeEffectiveEffortBilling(t *testing.T) {
 		retry                                         bool
 	}{
 		{name: "message overrides top level", messages: high + "," + user, effort: "high", quota: 5000},
-		{name: "pending switch", messages: user + "," + high, effort: "medium", quota: 500},
+		{name: "pending switch", messages: user + "," + high, effort: "medium", quota: 5000},
 		{name: "pending switch preserves active effort", messages: high + "," + user + "," + low, effort: "high", quota: 5000},
 		{name: "override adds message effort", messages: user, override: `{"messages":[` + high + "," + user + `]}`, effort: "high", quota: 5000},
-		{name: "override changes message effort", messages: high + "," + user, override: `{"messages":[` + low + "," + user + `]}`, effort: "low", quota: 500},
-		{name: "override removes message effort", messages: high + "," + user, override: `{"messages":[` + user + `]}`, effort: "medium", quota: 500},
-		{name: "override removes all effort", messages: high + "," + user, override: `{"output_config":null,"messages":[` + user + `]}`, quota: 500},
-		{name: "override changes activation order", messages: high + "," + user, override: `{"messages":[` + user + "," + high + `]}`, effort: "medium", quota: 500},
+		{name: "override changes message effort", messages: high + "," + user, override: `{"messages":[` + low + "," + user + `]}`, effort: "low", quota: 5000},
+		{name: "override removes message effort", messages: high + "," + user, override: `{"messages":[` + user + `]}`, effort: "medium", quota: 5000},
+		{name: "override removes all effort", messages: high + "," + user, override: `{"output_config":null,"messages":[` + user + `]}`, quota: 5000},
+		{name: "override changes activation order", messages: high + "," + user, override: `{"messages":[` + user + "," + high + `]}`, effort: "medium", quota: 5000},
 		{name: "retry rebuilds source messages", messages: high + "," + user, override: `{"messages":[` + low + "," + user + `]}`, effort: "high", quota: 5000, retry: true},
 		{name: "invalid message effort", messages: invalid + "," + user, invalidPath: "messages[0].output_config.effort"},
 		{name: "invalid overridden message effort", messages: high + "," + user, override: `{"messages":[` + invalid + "," + user + `]}`, invalidPath: "messages[0].output_config.effort"},
@@ -84,7 +84,7 @@ func TestGatewayClaudeEffectiveEffortBilling(t *testing.T) {
 					require.NoError(t, model.DB.Create(&fallback).Error)
 					require.NoError(t, fallback.AddAbilities(model.DB))
 				}
-				price, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: channel.Models, Mode: billing.ModeExpression, Expression: `v1:p * (attr("effort") == "high" ? 10 : 1)`}, 0, 1)
+				_, err = setGatewayExpression(channel.Models, `v1:p * (param("output_config.effort") == "medium" ? 10 : 1)`)
 				require.NoError(t, err)
 				require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 				var before, after model.User
@@ -160,11 +160,13 @@ func TestGatewayClaudeEffectiveEffortBilling(t *testing.T) {
 					assert.False(t, gjson.Get(log.Other, "reasoning_effort").Exists())
 				}
 				if test.name == "message overrides top level" && !passthrough {
-					_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: channel.Models, Mode: billing.ModeExpression, Expression: `v1:p * 100`}, price.ID, 1)
+					_, err = setGatewayExpression(channel.Models, `v1:p * 100`)
 					require.NoError(t, err)
 					var usage billing.Usage
-					require.NoError(t, common.UnmarshalJsonStr(recovery.UsageSnapshot, &usage))
-					replayed, err := billing.Calculate(&quote, usage)
+					require.NoError(t, common.UnmarshalJsonStr(string(recovery.UsageSnapshot), &usage))
+					var attempt model.BillingAttempt
+					require.NoError(t, model.DB.Where("request_id = ? AND quote_hash = ?", recovery.RequestID, quote.Hash).First(&attempt).Error)
+					replayed, err := model.ReplayBilling(&quote, usage, recovery.RequestID, attempt.ID, "settlement")
 					require.NoError(t, err)
 					assert.Equal(t, charge, *replayed, "frozen quote must ignore later price publication")
 					_, err = service.RetryBillingRecovery(context.Background(), recovery.RequestID)

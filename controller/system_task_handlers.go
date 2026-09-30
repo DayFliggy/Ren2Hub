@@ -25,7 +25,6 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(routeCapabilityRefreshHandler{})
 	service.RegisterSystemTaskHandler(billingRecoveryHandler{})
 	service.RegisterSystemTaskHandler(gatewayStateCleanupHandler{})
-	service.RegisterSystemTaskHandler(billingPricingSyncHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and

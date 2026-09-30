@@ -1,8 +1,8 @@
 # 计费界面与金额契约
 
-本界面对应账务格式 4。额度字段使用有符号 int64 范围内的十进制整数字符串，换算固定为 `500000 quota = 1 USD`。接口不会同时读取旧余额字段；用户使用 `available_quota`、`reserved_quota`、`used_quota`，Token 使用相同字段，其中无限 Token 的 `available_quota` 必须为 `null`。账户版本字段为 `quota_version`。
+本界面对应账务格式 5。额度字段使用有符号 int64 范围内的十进制整数字符串，换算固定为 `500000 quota = 1 USD`。接口不会同时读取旧余额字段；用户使用 `available_quota`、`reserved_quota`、`used_quota`，Token 使用相同字段，其中无限 Token 的 `available_quota` 必须为 `null`。账户版本字段为 `quota_version`。
 
-展示数字最多保留 3 位小数。`formatQuota` 与 Decimal 展示函数统一限制显示精度；原始 quota 整数、价格版本、快照与编辑输入保留原始精度。比如额度 `9007199254740993` 在列表显示 `$18,014,398,509.482`，编辑时仍是 `18014398509.481986` USD，保存后仍是原始整数。只读证据 JSON 使用展示投影，不会改写原始报价、用量或结果；表达式文本保持原样。
+展示数字最多保留 3 位小数。`formatQuota` 与 Decimal 展示函数统一限制显示精度；原始 quota 整数、计价配置、快照与编辑输入保留原始精度。比如额度 `9007199254740993` 在列表显示 `$18,014,398,509.482`，编辑时仍是 `18014398509.481986` USD，保存后仍是原始整数。只读证据 JSON 使用展示投影，不会改写原始报价、用量或结果；表达式文本保持原样。
 
 金额输入、加总与比较使用 BigInt，明确单价及渠道系数展示使用 Decimal 字符串运算。`quotaForChart` 只在图表呈现边界转换为 Number；不能将图表数据作为资金更新的输入。金额溢出、数字类型的 quota、指数写法、非规范字符串及转换后并非整数 quota 的输入均明确拒绝。
 
@@ -14,23 +14,19 @@
 
 管理员调账提交增减差额、原因、稳定操作 ID 和预期版本；界面不会直接设置钱包投影。兑换码创建中的 `amount` 是十进制 USD 字符串。返利转入中的 `amount` 则是 quota 整数字符串，沿用该业务 API 的单位约定。
 
-## 价格发布
+## 模型定价
 
-Root 在模型元数据编辑器中按 `(scope_kind, channel_id, model)` 维护各自的活动价格版本：明确单价、高级表达式或明确免费。编辑器可选择全局模型作用域或指定渠道；渠道价格独立计价，报价系数固定为 1。人工发布优先于自动更新，编辑器显示当前版本的来源、来源模型与 SHA。单价项选择规范用量和对应单位，未知单位、重复维度、无效价格、缺少表达式均阻止保存。表达式负责 token 定价时，不再同时加入 token 单价项；非 token 附加项仍可使用明确单价。
+Root 在 /system-settings/billing/model-pricing 维护 NewAPI 模型定价。页面沿用模型列表与右侧编辑器布局，手机使用抽屉；支持模型与未定价模型、可视化与 JSON、按 Token、按次、表达式、币种显示、缓存/图像/音频价格、阶梯与请求条件、任务 usage schema 与插件变体。元数据编辑只保存元数据。
 
-`GET /api/billing/prices` 返回活动版本数组；发布使用 `POST /api/billing/prices`，请求为 `{ price, expected_version }`，expected_version 属于正在编辑的作用域，冲突返回 409。保存发布新版本，已发送请求继续使用冻结报价。关闭编辑器取消尚未完成的读取。
+GET /api/option/model_pricing 返回 entries、options、empty_version；PATCH 同一路径提交 changes，每项为 model_name、expected_version、pricing 和可选 reset。唯一价格源为管理员保存的 11 项模型定价配置；保存冲突保留草稿。空安装无价格，清空不恢复内置目录或默认模型主价，空表达式不能当作免费；显式填写 0 才表示免费。实际模式为 ratio、per_call、expression；对外 billing_mode 使用 ratio 或 tiered_expr。
 
-编辑器保留 `flat_fee`、`effective_from`、`effective_to`；结构化价格使用 JSON 编辑，支持 `volume` 整量选档和 `graduated` 分档累计。生效窗口在创建报价时检查，历史请求按冻结时间计价。完整字段与预览约束见[计价接口](../../pkg/billing/API.md)。
+按次/倍率转表达式通过 POST /api/option/model_pricing/convert 生成待确认草稿，现有保存操作才生效。POST /api/option/model_pricing/preview 解释有效价格，/simulate 使用草稿、用量、原始请求参数、请求头、时间和可选 plugin_key 计算费用，不调用网关或扣费。表达式沿用上游 param/header/time 语义；任务表达式直接使用 u 字段，USD 单位由任务计价上下文确定，不添加 v2 前缀。
 
-可选 `usage_scope: "embedding"` 随加载、参考目录导入、转换、复制、预览和保存保留。编辑器展示输入型模型限制，并将默认预览输出量设为零；序列化导出同样保留该字段。省略时维持旧行为。
+“自动获取”通过 POST /api/ratio_sync/fetch 拉取 Sub2API、AxonHub、basellm、models.dev、OpenRouter，展示来源状态与失败原因。管理员选择一个来源及模型范围，核对覆盖项后只回填当前草稿；点击“保存模型价格”才写入。来源没有默认优先级、不自动选择最低价格、不拼接来源；不支持的条目禁选，同一模型 ID 的多供应商候选必须消歧。大目录分页展示，取消、失败和过期响应均不得丢失既有草稿。
 
-模型管理页的自动定价面板通过 `GET /api/billing/prices/automatic` 读取配置、来源检查状态及模型价格来源；`PUT` 同一路径保存 `{ enabled, check_interval_minutes }`，默认 30 分钟、允许 5 至 1440 分钟。活动来源只有 Sub2API 主源和 AxonHub 补缺源；models.dev、OpenRouter 只保留历史归属。来源 URL 只读；版本定义与来源哈希均相同时不重复发布，哈希不变仍核对发布状态。整源下载或校验失败显示错误并保留有效快照；无缓存的单源标为 unavailable，继续读取其他来源。有效目录无该模型完整价格时停用全局自动价；全部来源都无有效快照时显示目录错误，不批量清空已发布价格。
+工具价格仍由通用 option 的 tool_price_setting.prices 保存，格式为工具名到 USD/千次调用单价的数值映射，支持表格与 JSON。初始为空，未填写的单价不能隐式成为 0；显式 0 保留。未定价收费工具由后端拒绝。
 
-“立即检查价格”调用 `POST /api/billing/prices/automatic/sync`，即使关闭定时更新也可执行。页面加载、面板刷新和页面顶部刷新均回载最近的定时或手动任务，通过 `/api/system-task/:id` 继续轮询；完成后刷新来源和模型价格状态。面板显示同步统计、任务失败及最多 100 个待配置模型的逐来源原因，完整数量使用 `unconfigured_count`。加载错误不得显示为成功，过期响应不得覆盖新任务或未保存的配置草稿。
-
-人工价格不会被同步覆盖；全局价格的“恢复自动定价”经确认后调用 `POST /api/billing/prices/automatic/restore`，提交 `{ model, expected_version }`，成功后显示返回的新价格版本。渠道独立价格不交给自动来源管理。409 保留编辑内容并要求刷新，不重试覆盖。旧倍率公开设置和同步入口已移除。
-
-“与实时参考目录比较”调用 `GET /api/billing/prices/seed` 获取当前合并参考快照，只生成当前模型的比较草稿，应用后保存才发布人工价格。未能确定性转换的模型明确提示待配置。公开价格页展示所有费用项目及计价单位；切换每千／每百万 Token 仅改变 token 单价的展示尺度，图片、时长和调用费用不受影响。
+公开 /api/pricing 使用上游扁平模型定价字段，Vue 公开价格页和模型目录共享解释；表达式显示原式，不伪造固定 Token 单价。每千/每百万 Token 切换只改变显示尺度。渠道售价倍率由后端应用一次；前端不再管理独立渠道价格、活动 PriceVersion 指针、来源证据发布或定时自动发布。账务执行仍保存冻结计价配置和加密求值证据，用于实际结算与恢复。
 
 ## 人工对账
 

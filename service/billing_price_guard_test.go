@@ -49,6 +49,7 @@ func runBillingPricingGuardScenario(t *testing.T, c *gin.Context, info *relaycom
 		require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", info.TokenId).Update("available_quota", 0).Error)
 	}
 	var stale model.BillingRecovery
+	billingTestEstimate(t, info)
 	if scenario == "pricing_explicit_refund" {
 		require.NoError(t, model.DB.Where("request_id = ?", info.RequestId).First(&stale).Error)
 	}

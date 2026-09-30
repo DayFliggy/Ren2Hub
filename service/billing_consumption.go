@@ -75,7 +75,7 @@ func billingConsumptionSnapshot(ctx *gin.Context, info *relaycommon.RelayInfo, p
 	if err != nil {
 		return model.BillingConsumption{}, err
 	}
-	return model.BillingConsumption{Log: *log, CountUsage: countUsage, Usage: info.PriceData.Usage, Charge: info.PriceData.Charge,
+	return model.BillingConsumption{AttemptID: info.BillingAttemptID, Log: *log, CountUsage: countUsage, Usage: info.PriceData.Usage, Charge: info.PriceData.Charge,
 		LogEnabled: common.LogConsumeEnabled, ExportEnabled: common.LogConsumeEnabled && common.DataExportEnabled,
 		NodeName: common.NodeName,
 	}, nil

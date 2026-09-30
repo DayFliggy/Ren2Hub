@@ -20,7 +20,7 @@ func FinalizeMidjourneySubmission(c *gin.Context, info *relaycommon.RelayInfo, t
 	task.PrivateData.NodeName = common.NodeName
 	task.PrivateData.SubmissionRequestID = info.RequestId
 	task.PrivateData.BillingContext = &model.TaskBillingContext{
-		Quote: info.PriceData.Quote, Usage: info.PriceData.Usage, OriginModelName: info.OriginModelName,
+		AttemptID: info.BillingAttemptID, Quote: info.PriceData.Quote, Usage: info.PriceData.Usage, OriginModelName: info.OriginModelName,
 	}
 	params := taskConsumptionParams(c, info)
 	params.Quota = task.Quota
@@ -71,6 +71,7 @@ func CompleteMidjourneyBilling(ctx context.Context, task *model.Midjourney, from
 		ExportEnabled: common.LogConsumeEnabled && common.DataExportEnabled, NodeName: nodeName,
 	}
 	if snapshot := task.PrivateData.BillingContext; snapshot != nil && task.Status == "SUCCESS" {
+		consumption.AttemptID = snapshot.AttemptID
 		consumption.Usage, consumption.Charge = snapshot.Usage, snapshot.Charge
 	}
 	won, err := model.PersistMidjourneyCompletion(ctx, task, fromStatus, consumption)

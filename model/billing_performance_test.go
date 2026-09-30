@@ -28,6 +28,7 @@ func (l *billingPerformanceSQL) Trace(_ context.Context, _ time.Time, _ func() (
 // Run explicitly to compare this complete durable accounting workload against
 // the baseline harness documented in docs/billing/VALIDATION.md.
 func TestBillingPerformance(t *testing.T) {
+	t.Setenv("CRYPTO_SECRET", "billing-test-persistent-key")
 	if os.Getenv("BILLING_PERFORMANCE") != "1" {
 		t.Skip("explicit performance run")
 	}
@@ -48,7 +49,7 @@ func TestBillingPerformance(t *testing.T) {
 				DB, LOG_DB, common.RedisEnabled = oldDB, oldLogs, oldRedis
 				common.SetDatabaseTypes(oldMain, oldLog)
 			}()
-			require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &Log{}, &Channel{}, &QuotaData{}, &BillingPriceVersion{}, &BillingActivePrice{}))
+			require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &Log{}, &Channel{}, &QuotaData{}, &BillingPriceVersion{}))
 			for id := 1; id <= 8; id++ {
 				require.NoError(t, db.Create(&User{Id: id, Username: fmt.Sprintf("bench-%d", id), AffCode: fmt.Sprintf("b%d", id), Quota: 1000000000}).Error)
 				require.NoError(t, db.Create(&Token{Id: id, UserId: id, Key: fmt.Sprintf("bench-key-%d", id), RemainQuota: 1000000000}).Error)

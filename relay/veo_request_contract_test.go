@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/plugins"
 	"github.com/stretchr/testify/assert"
@@ -26,7 +27,7 @@ func TestVeoPluginRequestAndFrozenUsageContract(t *testing.T) {
 			facts, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", nil, nil, map[string]any{})
 			require.NoError(t, err)
 			assert.Nil(t, facts, "missing actual duration must not be invented")
-			_, err = plugins.FrozenTaskPriceVersion(plugin.Meta, plugin.Meta.Models[0], `u("seconds") * 0.1`)
+			_, _, err = billingexpr.RunExprWithRequest(`u("seconds") * 0.1`, billingexpr.TokenParams{}, billingexpr.RequestInput{})
 			require.Error(t, err, "estimated duration cannot become a final charge")
 		})
 	}

@@ -12,7 +12,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,9 +28,9 @@ func TestGatewayResponsesWSFinalQuoteAndPersistentConnection(t *testing.T) {
 		}
 	})
 	require.NoError(t, model.DB.Model(&model.Channel{}).Where("type = ?", constant.ChannelTypeOpenAI).Update("setting", `{"responses_websocket_enabled":true,"http2_connection_shards":2}`).Error)
-	old, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
+	_, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
 	require.NoError(t, err)
-	_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "gpt-4o-mini", Mode: billing.ModeExpression, Expression: `p * 2 + c * 4`}, old.ID, 1)
+	_, err = setGatewayExpression("gpt-4o-mini", `p * 2 + c * 4`)
 	require.NoError(t, err)
 	client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(base, "http")+"/v1/responses", http.Header{"Authorization": {"Bearer " + key}})
 	require.NoError(t, err)
@@ -39,9 +38,9 @@ func TestGatewayResponsesWSFinalQuoteAndPersistentConnection(t *testing.T) {
 	var upstream *websocket.Conn
 	for round := 1; round <= 2; round++ {
 		if round == 2 {
-			active, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
+			_, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
 			require.NoError(t, err)
-			_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "gpt-4o-mini", Mode: billing.ModeExpression, Expression: `p * 4 + c * 8`}, active.ID, 1)
+			_, err = setGatewayExpression("gpt-4o-mini", `p * 4 + c * 8`)
 			require.NoError(t, err)
 		}
 		request := fmt.Sprintf(`{"type":"response.create","stream_id":"stream%d","model":"gpt-4o-mini","input":"hello","max_output_tokens":10}`, round)
@@ -102,9 +101,9 @@ func TestGatewayResponsesWSKeepsUnknownUsageAndRejectsOverlappingCreate(t *testi
 				}
 			})
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("type = ?", constant.ChannelTypeOpenAI).Update("setting", `{"responses_websocket_enabled":true}`).Error)
-			old, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
+			_, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
 			require.NoError(t, err)
-			_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "gpt-4o-mini", Mode: billing.ModeExpression, Expression: `p * 2 + c * 4`}, old.ID, 1)
+			_, err = setGatewayExpression("gpt-4o-mini", `p * 2 + c * 4`)
 			require.NoError(t, err)
 			client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(base, "http")+"/v1/responses", http.Header{"Authorization": {"Bearer " + key}})
 			require.NoError(t, err)
@@ -248,6 +247,9 @@ func TestGatewayResponsesWSReauthenticatesEveryCreate(t *testing.T) {
 }
 
 func TestGatewayResponsesWSRejectsFinalBudgetBeforeGeneration(t *testing.T) {
+	previousCount := constant.CountToken
+	constant.CountToken = true
+	t.Cleanup(func() { constant.CountToken = previousCount })
 	accepted := make(chan *websocket.Conn, 1)
 	base, key, _ := setupGatewaySDKWithUpstream(t, func(w http.ResponseWriter, r *http.Request) {
 		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
@@ -255,10 +257,10 @@ func TestGatewayResponsesWSRejectsFinalBudgetBeforeGeneration(t *testing.T) {
 			accepted <- conn
 		}
 	})
-	require.NoError(t, model.DB.Model(&model.Channel{}).Where("type = ?", constant.ChannelTypeOpenAI).Updates(map[string]interface{}{"setting": `{"responses_websocket_enabled":true}`, "param_override": `{"max_output_tokens":1000000}`}).Error)
-	old, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
+	require.NoError(t, model.DB.Model(&model.Channel{}).Where("type = ?", constant.ChannelTypeOpenAI).Updates(map[string]interface{}{"setting": `{"responses_websocket_enabled":true}`, "param_override": fmt.Sprintf(`{"input":%q}`, strings.Repeat("large input ", 256))}).Error)
+	_, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
 	require.NoError(t, err)
-	_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "gpt-4o-mini", Mode: billing.ModeExpression, Expression: "p * 2 + c * 4"}, old.ID, 1)
+	_, err = setGatewayExpression("gpt-4o-mini", "p * 2 + c * 4")
 	require.NoError(t, err)
 	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", 1).Update("available_quota", 100).Error)
 	client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(base, "http")+"/v1/responses", http.Header{"Authorization": {"Bearer " + key}})

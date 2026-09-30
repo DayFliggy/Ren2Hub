@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,15 +108,19 @@ func TestBillingProcessExitWorker(t *testing.T) {
 	}
 	quote := billingTestQuote(t, "p * 2")
 	require.NoError(t, model.PrepareBillingAttempt(context.Background(), "crash", "attempt-1", 0, quote))
+	estimate, estimateCharge, err := model.EvaluateBilling(quote, billing.Usage{InputTokens: 20, ContextTokens: 20, Estimated: true}, billingexpr.RequestInput{}, "crash", "attempt-1", "estimate")
+	require.NoError(t, err)
+	require.NoError(t, model.PersistBillingEstimate("attempt-1", estimate, estimateCharge))
 	if stage == "dispatch" {
 		os.Exit(73)
 	}
-	usage := &billing.Usage{InputTokens: 30, ContextTokens: 30, Source: "provider", Complete: true, Terminal: "completed"}
-	charge, err := billing.Calculate(quote, *usage)
+	usage := billing.Usage{InputTokens: 30, ContextTokens: 30, Source: "provider", Complete: true, Terminal: "completed"}
+	usage, charge, err := model.EvaluateBilling(quote, usage, billingexpr.RequestInput{}, "crash", "attempt-1", "settlement")
 	require.NoError(t, err)
 	require.NoError(t, model.PrepareBillingRecoveryConsumption("crash", model.BillingConsumption{
-		Log:   model.Log{UserId: 1, TokenId: 1, Quota: charge.FinalQuota, ModelName: "test", CreatedAt: 7200},
-		Usage: usage, Charge: charge, CountUsage: true, LogEnabled: true, ExportEnabled: true,
+		AttemptID: "attempt-1",
+		Log:       model.Log{UserId: 1, TokenId: 1, Quota: charge.FinalQuota, ModelName: "test", CreatedAt: 7200},
+		Usage:     &usage, Charge: charge, CountUsage: true, LogEnabled: true, ExportEnabled: true,
 	}))
 	if stage == "intent" {
 		os.Exit(73)

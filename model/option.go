@@ -36,6 +36,10 @@ func AllOption() ([]*Option, error) {
 func InitOptionMap() {
 	common.OptionMapRWMutex.Lock()
 	common.OptionMap = make(map[string]string)
+	for _, key := range modelPricingOptionKeys {
+		common.OptionMap[key] = "{}"
+	}
+	common.OptionMap["ExposeRatioEnabled"] = strconv.FormatBool(ratio_setting.IsExposeRatioEnabled())
 	common.OptionMap["TaskPluginEnabled"] = strconv.FormatBool(constant.TaskPluginEnabled)
 	common.OptionMap["TaskPublicAddress"] = system_setting.TaskPublicAddress
 	common.OptionMap[setting.TaskPluginMarketplaceSourcesKey] = setting.TaskPluginMarketplaceSources2JsonString()
@@ -226,16 +230,9 @@ func SyncOptions(frequency int) {
 	})
 }
 
-// Price versions are the only live model and tool pricing configuration.
+// Removed automatic-publication options cannot re-enable the retired scheduler.
 func IsRetiredBillingOption(key string) bool {
-	if strings.HasPrefix(key, "auto_pricing.") || strings.HasPrefix(key, "billing_setting.") {
-		return true
-	}
-	switch key {
-	case "ModelRatio", "ModelPrice", "CompletionRatio", "CompletionRatioMeta", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "ExposeRatioEnabled", "tool_price_setting.prices":
-		return true
-	}
-	return false
+	return strings.HasPrefix(key, "auto_pricing.")
 }
 
 func validateOptionValue(key string, value string) error {
@@ -310,7 +307,7 @@ func validateOptionValue(key string, value string) error {
 		return err
 	}
 	if IsRetiredBillingOption(key) {
-		return errors.New("pricing must be published as an immutable billing price version")
+		return errors.New("automatic price publication is no longer supported")
 	}
 	if key == "QuotaPerUnit" {
 		return errors.New("quota conversion is fixed at 500000 per USD")
@@ -332,6 +329,14 @@ func validateOptionValue(key string, value string) error {
 }
 
 func UpdateOption(key string, value string) error {
+	if key == operation_setting.ToolPriceOptionKey {
+		if err := operation_setting.ValidateToolPricesJSON(value); err != nil {
+			return err
+		}
+	}
+	if IsModelPricingOption(key) {
+		return UpdateModelPricingOptions(map[string]string{key: value})
+	}
 	return UpdateOptionsBulk(map[string]string{key: value})
 }
 
@@ -353,6 +358,18 @@ func containsGatewaySecret(values map[string]string) bool {
 }
 
 func UpdateOptionsBulk(values map[string]string) error {
+	pricingCount := 0
+	for key := range values {
+		if IsModelPricingOption(key) {
+			pricingCount++
+		}
+	}
+	if pricingCount > 0 {
+		if pricingCount != len(values) {
+			return errors.New("pricing must be saved separately from other settings")
+		}
+		return UpdateModelPricingOptions(values)
+	}
 	for key := range values {
 		if IsPasskeyDomainOption(key) {
 			_, err := UpdatePasskeyDomainOptions(values, false, "")
@@ -415,6 +432,13 @@ func updateOptionMap(key string, value string) (err error) {
 	}
 	common.OptionMapRWMutex.Lock()
 	defer common.OptionMapRWMutex.Unlock()
+	if key == operation_setting.ToolPriceOptionKey {
+		if err = operation_setting.LoadToolPricesFromJSONString(value); err != nil {
+			return err
+		}
+		common.OptionMap[key] = value
+		return nil
+	}
 	common.OptionMap[key] = value
 
 	// 检查是否是模型配置 - 使用更规范的方式处理
@@ -511,6 +535,8 @@ func updateOptionMap(key string, value string) (err error) {
 			operation_setting.SelfUseModeEnabled = boolValue
 		case "CheckSensitiveOnPromptEnabled":
 			setting.CheckSensitiveOnPromptEnabled = boolValue
+		case "ExposeRatioEnabled":
+			ratio_setting.SetExposeRatioEnabled(boolValue)
 		case "ModelRequestRateLimitEnabled":
 			setting.ModelRequestRateLimitEnabled = boolValue
 		case "StopOnSensitiveEnabled":
@@ -730,6 +756,22 @@ func updateOptionMap(key string, value string) (err error) {
 		common.DataExportInterval, _ = strconv.Atoi(value)
 	case "DataExportDefaultTime":
 		common.DataExportDefaultTime = value
+	case "ModelRatio":
+		err = ratio_setting.UpdateModelRatioByJSONString(value)
+	case "ModelPrice":
+		err = ratio_setting.UpdateModelPriceByJSONString(value)
+	case "CompletionRatio":
+		err = ratio_setting.UpdateCompletionRatioByJSONString(value)
+	case "CacheRatio":
+		err = ratio_setting.UpdateCacheRatioByJSONString(value)
+	case "CreateCacheRatio":
+		err = ratio_setting.UpdateCreateCacheRatioByJSONString(value)
+	case "ImageRatio":
+		err = ratio_setting.UpdateImageRatioByJSONString(value)
+	case "AudioRatio":
+		err = ratio_setting.UpdateAudioRatioByJSONString(value)
+	case "AudioCompletionRatio":
+		err = ratio_setting.UpdateAudioCompletionRatioByJSONString(value)
 	case "GroupRatio":
 		err = ratio_setting.UpdateGroupRatioByJSONString(value)
 	case "TopUpLink":

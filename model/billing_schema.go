@@ -7,11 +7,12 @@ import (
 	"gorm.io/gorm"
 )
 
-const BillingSchemaVersion = 4
+const BillingSchemaVersion = 5
 
 type BillingSchema struct {
-	ID      int `gorm:"primaryKey"`
-	Version int `gorm:"not null"`
+	ID            int    `gorm:"primaryKey"`
+	Version       int    `gorm:"not null"`
+	EvidenceKeyID string `gorm:"type:varchar(64);not null"`
 }
 
 // This release is an installation format, not an upgrade migration. The
@@ -20,6 +21,10 @@ type BillingSchema struct {
 func prepareBillingSchema(db *gorm.DB) error {
 	if db == nil {
 		return errors.New("billing database unavailable")
+	}
+	cipher, err := billingEvidenceCipher()
+	if err != nil {
+		return err
 	}
 	if db.Migrator().HasTable(&BillingSchema{}) {
 		var count int64
@@ -43,7 +48,7 @@ func prepareBillingSchema(db *gorm.DB) error {
 	if err := db.AutoMigrate(&BillingSchema{}); err != nil {
 		return err
 	}
-	return db.Create(&BillingSchema{ID: 1, Version: BillingSchemaVersion}).Error
+	return db.Create(&BillingSchema{ID: 1, Version: BillingSchemaVersion, EvidenceKeyID: cipher.KeyID()}).Error
 }
 
 // A process that does not initialize tables must still reject old databases.
@@ -57,6 +62,13 @@ func requireBillingSchema(db *gorm.DB) error {
 	}
 	if schema.Version != BillingSchemaVersion {
 		return errors.New("unsupported billing schema version")
+	}
+	cipher, err := billingEvidenceCipher()
+	if err != nil {
+		return err
+	}
+	if schema.EvidenceKeyID == "" || schema.EvidenceKeyID != cipher.KeyID() {
+		return errors.New("billing encryption key does not match this database")
 	}
 	return nil
 }

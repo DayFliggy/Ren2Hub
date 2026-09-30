@@ -13,7 +13,7 @@
 | 模型路由 | [统一路由](routing/UNIFIED_ROUTING.md)、[网关 API](routing/GATEWAY_API.md) | 自动/手动路由、本地 FIFO、资格重检、队列与故障转移 |
 | 协议和渠道 | [支持矩阵](routing/GATEWAY_SUPPORT_MATRIX.md)、[rc.40 协议合同](upstream/RC40_PROTOCOL_CONTRACT.md)、[RelayKit](../relaykit/README.md)、[渠道设置](channel/other_setting.md) | 实际实现的协议转换、Responses WebSocket、供应商入口和边界 |
 | 账务架构 | [实现边界](billing/IMPLEMENTATION.md)、[账务 API](billing/API.md)、[恢复与对账](billing/RECONCILIATION.md) | 冻结报价、持久化预留、事件、原子结算与人工决定 |
-| 定价 | [单价与初始目录](billing/PRICING.md)、[计价接口](../pkg/billing/API.md)、[表达式](../pkg/billingexpr/expr.md) | 不可变价格版本、规范用量、精确金额与安全属性 |
+| 定价 | [模型定价与价格获取](billing/PRICING.md)、[计价接口](../pkg/billing/API.md)、[表达式](../pkg/billingexpr/expr.md) | NewAPI 配置、五源草稿、三模式计算、空默认与加密重放 |
 | 易支付充值 | [支付契约](billing/EPAY.md) | 报价、订单快照、商户版本、通知重试与管理员补单 |
 | GMPay 加密货币充值 | [接入契约](billing/GMPAY.md) | 独立配置、多链资产、USD 报价、到账证据和未证明边界 |
 | 支付系统设置 | [EPay / GMPay 配置清单](billing/PAYMENT_SETTINGS.md) | 控制台入口、默认值、金额单位、保存与启停边界 |
@@ -27,7 +27,7 @@
 
 AI 请求按 `router/relay-router.go` → 鉴权/限流 → `middleware/gateway_admission.go` → `middleware/distributor.go` → `service/request_route.go` → `controller/relay.go` 阅读。宿主在 `relay/` 发送请求和处理传输，`relaykit/` 负责协议语义；后台作业从 `controller/system_task_handlers.go` 进入系统任务框架。
 
-Vue 从 `frontend/src/router/`、`frontend/src/stores/app.ts` 和 `frontend/src/api/` 核对页面、能力状态与真实 API。后端入口存在不代表当前 UI 开放。当前账务格式为 4，仅接受空库初始化或匹配 `billing_schemas` 标记的数据库；价格合同为 3，计算器为 `billing-v3`。不能把旧计费数据库直接接给新代码。公开定价采用 `model_name + offers[]`，来源原文与字段证据只在授权管理接口读取。
+Vue 从 `frontend/src/router/`、`frontend/src/stores/app.ts` 和 `frontend/src/api/` 核对页面、能力状态与真实 API。后端入口存在不代表当前 UI 开放。当前账务格式为 schema 5，仅接受空库初始化或版本、密钥指纹均匹配的 `billing_schemas` 数据库；价格合同为 4，计算器为 `newapi-c71eefbc-v1`。不能把旧计费数据库直接接给新代码。模型定价只从 `model_pricing` 保存，公开接口恢复 NewAPI 模型行；五源价格获取只填入前端草稿。请求求值上下文加密保存供重放，日志和 API 不暴露明文或证据密文。
 
 ## 文档与部署状态
 

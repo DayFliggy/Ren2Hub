@@ -50,7 +50,7 @@ func TestOaiResponsesHandlerCountsOutputCallsNotDeclarations(t *testing.T) {
 			},
 		},
 	}
-	info.PriceData.Quote, err = billing.NewQuote(billing.PriceVersion{Model: info.OriginModelName, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "tool:priced_fn", Unit: "per_call", Price: "0.005"}}}, "1", nil, time.Unix(1700000000, 0))
+	info.PriceData.Quote, err = billing.NewQuote(billing.PriceVersion{Model: info.OriginModelName, Mode: billing.ModePerCall, Pricing: billing.PricingValues{"ModelPrice": "0"}, Prices: []billing.UnitPrice{{Quantity: "tool:priced_fn", Unit: "per_call", Price: "0.005"}}}, "1", nil, time.Unix(1700000000, 0))
 	require.NoError(t, err)
 	resp := &http.Response{
 		StatusCode: http.StatusOK,

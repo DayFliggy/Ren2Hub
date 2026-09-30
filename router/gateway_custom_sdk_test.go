@@ -163,7 +163,7 @@ func TestGatewayOfficialCustomSDK(t *testing.T) {
 			}
 			priceJSON, err := common.Marshal(prices)
 			require.NoError(t, err)
-			require.NoError(t, publishGatewayFixturePrices(string(priceJSON), false))
+			require.NoError(t, configureGatewayFixturePrices(string(priceJSON), false))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			caseJSON, err := common.Marshal(cases)
 			require.NoError(t, err)

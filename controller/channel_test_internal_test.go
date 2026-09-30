@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
@@ -402,12 +403,14 @@ func TestDeleteChannelBatchReportsAndAuditsActualDeletedCount(t *testing.T) {
 	assert.JSONEq(t, "1", string(encoded))
 }
 
-func TestSettleTestQuotaUsesFrozenSafeAttributes(t *testing.T) {
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "test", Mode: billing.ModeExpression,
-		Support:    &billing.PricingSupport{Dimensions: []string{"p"}, ServiceTiers: []string{"default", "fast"}},
-		Expression: `attr("service_tier") == "fast" ? p * 3 : p * 2`}, "1", map[string]interface{}{"service_tier": "fast"}, time.Unix(1700000000, 0))
+func TestSettleTestQuotaUsesFrozenRequestParameters(t *testing.T) {
+	t.Setenv("CRYPTO_SECRET", "channel-pricing-test-secret")
+	expression := `param("service_tier") == "fast" ? p * 3 : p * 2`
+	version, err := billing.NewModelPriceVersion("test", billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": expression}, false)
 	require.NoError(t, err)
-	info := &relaycommon.RelayInfo{PriceData: types.PriceData{Quote: quote}, ChannelMeta: &relaycommon.ChannelMeta{}}
+	quote, err := billing.NewQuote(version, "1", nil, time.Unix(1700000000, 0))
+	require.NoError(t, err)
+	info := &relaycommon.RelayInfo{RequestId: "channel-test", BillingAttemptID: "channel-attempt", BillingRequestInput: &billingexpr.RequestInput{Body: []byte(`{"service_tier":"fast"}`)}, PriceData: types.PriceData{Quote: quote}, ChannelMeta: &relaycommon.ChannelMeta{}}
 	info.MarkValidOutput()
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	quota, err := service.PrepareFinalTextCharge(ctx, info, &dto.Usage{PromptTokens: 1000, UsageSource: "provider"})
@@ -418,12 +421,13 @@ func TestSettleTestQuotaUsesFrozenSafeAttributes(t *testing.T) {
 }
 
 func TestChannelTestLogPreservesFrozenPricingEvidence(t *testing.T) {
+	t.Setenv("CRYPTO_SECRET", "channel-pricing-test-secret")
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 
-	quote, err := billing.NewQuote(billing.PriceVersion{ID: 7, ScopeKind: billing.PriceScopeChannel, ChannelID: 9, Model: "test", ContractVersion: billing.ContractVersion, CalculationVersion: billing.CalculationVersion, ResultUnit: billing.ResultMicroUSD, Mode: billing.ModeExpression, Expression: `tier("base", p * 2)`}, "1", nil, time.Unix(1700000000, 0))
+	quote, err := billing.NewQuote(billing.PriceVersion{ID: 7, ScopeKind: billing.PriceScopeGlobal, Model: "test", ContractVersion: billing.ContractVersion, CalculationVersion: billing.CalculationVersion, ResultUnit: billing.ResultMicroUSD, Mode: billing.ModeExpression, Expression: `tier("base", p * 2)`, Pricing: billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": `tier("base", p * 2)`}}, "1", nil, time.Unix(1700000000, 0))
 	require.NoError(t, err)
-	info := &relaycommon.RelayInfo{PriceData: types.PriceData{Quote: quote}, ChannelMeta: &relaycommon.ChannelMeta{}}
+	info := &relaycommon.RelayInfo{RequestId: "channel-log", BillingAttemptID: "channel-log-attempt", BillingRequestInput: &billingexpr.RequestInput{}, PriceData: types.PriceData{Quote: quote}, ChannelMeta: &relaycommon.ChannelMeta{}}
 	usage := &dto.Usage{
 		PromptTokens: 20,
 		PromptTokensDetails: dto.InputTokenDetails{
@@ -435,7 +439,7 @@ func TestChannelTestLogPreservesFrozenPricingEvidence(t *testing.T) {
 	_, err = service.PrepareFinalTextCharge(ctx, info, usage)
 	require.NoError(t, err)
 	other := service.GenerateTextOtherInfo(ctx, info, usage.PromptTokensDetails.CachedTokens)
-	assert.Equal(t, billing.PriceScopeChannel, other["price_scope"])
+	assert.Equal(t, billing.PriceScopeGlobal, other["price_scope"])
 	assert.Equal(t, int64(7), other["price_version_id"])
 	assert.Equal(t, quote.Hash, other["quote_hash"])
 	assert.Equal(t, quote.PriceVersion.Hash, other["price_version_hash"])

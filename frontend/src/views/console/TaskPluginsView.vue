@@ -21,12 +21,10 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import PageHero from '@/components/console/PageHero.vue'
-import ModelPricingEditor from '@/components/admin/ModelPricingEditor.vue'
 import PluginIcon from '@/components/console/plugins/PluginIcon.vue'
 import PluginChangelog from '@/components/console/plugins/PluginChangelog.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import { localizedText } from '@/utils/localizedText'
-import type { PriceVersion } from '@/api/modelPricing'
 
 const { t, locale } = useI18n()
 const tab = ref<'installed' | 'market' | 'editor' | 'sources'>('installed')
@@ -57,19 +55,6 @@ const selectedVersions = ref<Record<string, string>>({})
 const busy = ref(false),
   error = ref(''),
   message = ref('')
-const priceModel = ref(''),
-  priceExpression = ref(''),
-  priceDraft = ref<PriceVersion>()
-const priceEditor = ref<InstanceType<typeof ModelPricingEditor> | null>(null)
-const selectedModels = computed(
-  () =>
-    rows.value.find((row) => row.meta.key === selected.value)?.meta.models ?? []
-)
-let priceDraftSequence = 0
-watch([selected, priceModel, priceExpression], () => {
-  priceDraftSequence++
-  priceDraft.value = undefined
-})
 const abort = new AbortController()
 let sequence = 0
 let detailSequence = 0
@@ -278,21 +263,6 @@ async function runDebug() {
     2
   )
 }
-async function createPriceDraft() {
-  const current = ++priceDraftSequence
-  const result = await taskPluginsApi.priceDraft(
-    selected.value,
-    priceModel.value,
-    priceExpression.value
-  )
-  if (current !== priceDraftSequence || abort.signal.aborted) return
-  priceDraft.value = result.price_version
-}
-async function savePrice() {
-  if (!priceEditor.value) return
-  await priceEditor.value.save(priceModel.value)
-  message.value = t('taskPlugins.saved')
-}
 void action(load)
 onBeforeUnmount(() => {
   sequence++
@@ -436,45 +406,9 @@ onBeforeUnmount(() => {
         <h2 class="font-semibold">
           {{ selected }} · {{ t('taskPlugins.versions') }}
         </h2>
-        <details>
-          <summary class="cursor-pointer text-sm">
-            {{ t('taskPlugins.priceDraft') }}
-          </summary>
-          <p class="my-3 text-sm">{{ t('taskPlugins.pricing') }}</p>
-          <div class="grid gap-3 sm:grid-cols-2">
-            <FormField :label="t('taskPlugins.models')"
-              ><select v-model="priceModel" class="plugin-textarea">
-                <option value="">{{ t('taskPlugins.none') }}</option>
-                <option
-                  v-for="name in selectedModels"
-                  :key="name"
-                  :value="name"
-                >
-                  {{ name }}
-                </option>
-              </select></FormField
-            ><FormField :label="t('taskPlugins.expression')"
-              ><TextInput v-model="priceExpression"
-            /></FormField>
-          </div>
-          <ConsoleButton
-            class="mt-3"
-            :disabled="busy || !priceModel || !priceExpression"
-            @click="action(createPriceDraft)"
-            >{{ t('taskPlugins.priceDraft') }}</ConsoleButton
-          ><ModelPricingEditor
-            v-if="priceDraft"
-            ref="priceEditor"
-            :model-name="priceModel"
-            :seed-draft="priceDraft"
-          /><ConsoleButton
-            v-if="priceDraft"
-            class="mt-3"
-            :loading="busy"
-            @click="action(savePrice)"
-            >{{ t('taskPlugins.publishPrice') }}</ConsoleButton
-          >
-        </details>
+        <RouterLink class="text-sm underline" :to="{ name: 'model-pricing' }">{{
+          t('billing.modelPricing')
+        }}</RouterLink>
         <div
           v-for="version in versions"
           :key="version.version"

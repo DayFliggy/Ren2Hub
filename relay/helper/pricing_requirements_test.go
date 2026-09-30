@@ -1,17 +1,16 @@
 package helper
 
 import (
-	"testing"
-
-	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 func TestPricingRequirementsRejectMissingSearchBeforeReservation(t *testing.T) {
 	for _, name := range []string{"gpt-4o-mini-search-preview", "gpt-4o-search-preview"} {
 		t.Run(name, func(t *testing.T) {
-			c, info := pricingFixture(t, billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "1"}, {Quantity: "c", Unit: "per_million_tokens", Price: "2"}}})
+			c, info := pricingFixture(t, name, model.PricingValues{"ModelRatio": "0.5", "CompletionRatio": "2"})
 			_, err := ModelPriceHelper(c, info, 10, &types.TokenCountMeta{MaxTokens: 5})
 			require.ErrorContains(t, err, "missing_price_dimension")
 			require.Equal(t, 503, BillingPriceAPIError(err).StatusCode)
@@ -22,7 +21,7 @@ func TestPricingRequirementsRejectMissingSearchBeforeReservation(t *testing.T) {
 }
 
 func TestPricingRequirementsUseFinalTierAndEnabledTools(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Model: "model", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "1"}, {Quantity: "c", Unit: "per_million_tokens", Price: "2"}}})
+	c, info := pricingFixture(t, "model", model.PricingValues{"ModelRatio": "0.5", "CompletionRatio": "2"})
 	info.BillingRequestInput.Attributes["service_tier"] = "priority"
 	_, err := QualifyPublishedPrice(c, info)
 	require.NoError(t, err)
@@ -34,14 +33,14 @@ func TestPricingRequirementsUseFinalTierAndEnabledTools(t *testing.T) {
 	require.ErrorContains(t, err, "missing_price_dimension")
 	require.NoError(t, FreezeOutboundBillingAttributes(info, []byte(`{"service_tier":"priority"}`)))
 	_, err = ModelPriceHelper(c, info, 10, &types.TokenCountMeta{MaxTokens: 5})
-	require.ErrorContains(t, err, "unverified_service_tier")
+	require.NoError(t, err, "explicit manual pricing applies without a source tier allowlist")
 	err = FreezeOutboundBillingAttributes(info, []byte(`{"service_tier":3}`))
 	require.Error(t, err)
 	require.Equal(t, 400, BillingRequestAPIError(err).StatusCode)
 }
 
 func TestGoogleMapsRequiresItsOwnUsageContract(t *testing.T) {
-	_, info := pricingFixture(t, billing.PriceVersion{Model: "model", Mode: billing.ModeFree})
+	_, info := pricingFixture(t, "model", model.PricingValues{"ModelPrice": "0"})
 	for _, body := range []string{`{"tools":[{"googleMaps":{}}]}`, `{"tools":[{"google_maps":{}}]}`} {
 		_, err := PricingRequirementsFromBody(info, []byte(body))
 		require.ErrorContains(t, err, "missing_usage_contract")
@@ -50,11 +49,8 @@ func TestGoogleMapsRequiresItsOwnUsageContract(t *testing.T) {
 }
 
 func TestRealtimeFixedRequestPriceQualifiesWithoutSeparateTokenPrices(t *testing.T) {
-	for _, version := range []billing.PriceVersion{
-		{Model: "realtime", Mode: billing.ModeUnitPrice, FlatFee: "0.000006"},
-		{Model: "realtime", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.000006"}}},
-	} {
-		c, info := pricingFixture(t, version)
+	for _, version := range []model.PricingValues{{"ModelPrice": "0.000006"}} {
+		c, info := pricingFixture(t, "realtime", version)
 		info.RelayFormat = types.RelayFormatOpenAIRealtime
 		price, err := ModelPriceHelper(c, info, 10, nil)
 		require.NoError(t, err)
@@ -75,7 +71,7 @@ func TestRealtimeFixedRequestPriceQualifiesWithoutSeparateTokenPrices(t *testing
 }
 
 func TestRealtimeImageInputUsesRegisteredPriceDimension(t *testing.T) {
-	c, info := pricingFixture(t, billing.PriceVersion{Model: "realtime", Mode: billing.ModeExpression, Expression: "p+c+ai+ao+img"})
+	c, info := pricingFixture(t, "realtime", model.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": "p+c+ai+ao+img"})
 	info.RelayFormat = types.RelayFormatOpenAIRealtime
 	_, err := ModelPriceHelper(c, info, 1, nil)
 	require.NoError(t, err)

@@ -14,6 +14,7 @@ import (
 )
 
 func TestBillingAccountConcurrencyAcrossDatabases(t *testing.T) {
+	t.Setenv("CRYPTO_SECRET", "billing-test-persistent-key")
 	for _, backend := range []struct {
 		kind common.DatabaseType
 		env  string
@@ -43,7 +44,7 @@ func TestBillingAccountConcurrencyAcrossDatabases(t *testing.T) {
 				initCol()
 				require.NoError(t, connection.Close())
 			})
-			require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &Log{}, &QuotaData{}, &Channel{}, &BillingPriceVersion{}, &BillingActivePrice{}))
+			require.NoError(t, db.AutoMigrate(&User{}, &Token{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &Log{}, &QuotaData{}, &Channel{}, &BillingPriceVersion{}))
 			require.NoError(t, db.Create(&User{Id: 1, Username: "concurrent-wallet", Quota: 100}).Error)
 			for id := 1; id <= 2; id++ {
 				require.NoError(t, db.Create(&Token{Id: id, UserId: 1, Key: fmt.Sprintf("concurrent-%d", id), RemainQuota: 100}).Error)

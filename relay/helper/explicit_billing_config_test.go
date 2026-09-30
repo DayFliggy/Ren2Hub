@@ -1,10 +1,9 @@
 package helper
 
 import (
-	"testing"
-
-	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -34,7 +33,7 @@ func TestExplicitBillingConfigRequiresPublishedVersion(t *testing.T) {
 
 func TestExplicitBillingConfigHonorsManualEntries(t *testing.T) {
 	installExplicitConfigFixture(t)
-	pricingFixture(t, billing.PriceVersion{Model: "gpt-4o", Mode: billing.ModeFree})
+	pricingFixture(t, "gpt-4o", model.PricingValues{"ModelPrice": "0"})
 	assert.True(t, HasExplicitModelBillingConfig("gpt-4o"))
 	assert.False(t, HasExplicitModelBillingConfig("model-nobody-has-heard-of"))
 }

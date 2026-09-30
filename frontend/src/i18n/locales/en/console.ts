@@ -4,6 +4,7 @@ export default {
   taskPlugins: taskPluginMessages.en,
   security: securityMessages['en'],
   billing: {
+    modelPricing: 'Model pricing',
     requestedServiceTier: 'Requested service tier (pricing basis)',
     actualServiceTier: 'Reported service tier (audit only)',
     operationalMetrics: 'Operational counters for this running instance',
@@ -994,6 +995,7 @@ export default {
     channelTitle: 'Available channels ({count})',
     billing: {
       token: 'Pay as you go',
+      unconfigured: 'Price not configured',
       unit_price: 'Unit prices',
       tiered: 'Tiered pricing',
       free: 'Free',

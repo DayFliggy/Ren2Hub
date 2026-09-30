@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -28,7 +29,7 @@ func setupGatewayTask(t *testing.T, upstream http.HandlerFunc) (string, string, 
 	_, key, otherKey := setupGatewaySDKWithUpstream(t, upstream)
 	require.NoError(t, model.DB.AutoMigrate(&model.Task{}, &model.TaskResultEvent{}, &model.PerfMetric{}, &model.TaskPlugin{}, &model.TaskPluginNamespace{}, &model.TaskPluginExecution{}))
 	require.NoError(t, controller.InitTaskPlugins())
-	require.NoError(t, publishGatewayFixturePrices(`{"sora-2":0.001}`, false))
+	require.NoError(t, configureGatewayFixturePrices(`{"sora-2":0.001}`, false))
 	for _, id := range []int{1, 4} {
 		ch, err := model.GetChannelById(id, true)
 		require.NoError(t, err)
@@ -172,9 +173,10 @@ func TestGatewayTaskSettlementFailureKeepsTaskAndRecoversOnce(t *testing.T) {
 	from := task.Status
 	task.Status, task.Progress = model.TaskStatusSuccess, "100%"
 	usage := &billing.Usage{Source: "provider", Complete: true, Terminal: "completed", Quantities: map[string]string{"calls": "1"}}
-	charge, err := billing.Calculate(task.PrivateData.BillingContext.Quote, *usage)
+	actual, charge, err := model.EvaluateBilling(task.PrivateData.BillingContext.Quote, *usage, billingexpr.RequestInput{}, task.PrivateData.SubmissionRequestID, task.PrivateData.BillingContext.AttemptID, "settlement")
+	usage = &actual
 	require.NoError(t, err)
-	won, err := model.PersistTaskCompletion(context.Background(), &task, from, task.Quota, model.BillingConsumption{Log: model.Log{UserId: task.UserId, TokenId: task.PrivateData.TokenId, ChannelId: task.ChannelId}, Usage: usage, Charge: charge, CountUsage: true, LogEnabled: true})
+	won, err := model.PersistTaskCompletion(context.Background(), &task, from, task.Quota, model.BillingConsumption{AttemptID: task.PrivateData.BillingContext.AttemptID, Log: model.Log{UserId: task.UserId, TokenId: task.PrivateData.TokenId, ChannelId: task.ChannelId, Quota: charge.FinalQuota}, Usage: usage, Charge: charge, CountUsage: true, LogEnabled: true})
 	require.NoError(t, err)
 	require.True(t, won)
 	_, err = service.RetryBillingRecovery(context.Background(), task.PrivateData.SubmissionRequestID)

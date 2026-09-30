@@ -1,13 +1,11 @@
 package model
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,16 +15,10 @@ func resetPricingEndpointTestTables(t *testing.T) {
 	t.Helper()
 	originalMemoryCacheEnabled := common.MemoryCacheEnabled
 	common.MemoryCacheEnabled = true
-	require.NoError(t, DB.AutoMigrate(&Channel{}, &Ability{}, &Model{}, &Vendor{}, &BillingPriceVersion{}, &BillingActivePrice{}))
-	for _, table := range []string{"abilities", "channels", "models", "vendors", "billing_active_prices", "billing_price_versions"} {
-		require.NoError(t, DB.Exec("DELETE FROM "+table).Error)
-	}
+	modelPricingConfigDB(t)
 	InitChannelCache()
 	InvalidatePricingCache()
 	t.Cleanup(func() {
-		for _, table := range []string{"abilities", "channels", "models", "vendors", "billing_active_prices", "billing_price_versions"} {
-			require.NoError(t, DB.Exec("DELETE FROM "+table).Error)
-		}
 		InitChannelCache()
 		InvalidatePricingCache()
 		common.MemoryCacheEnabled = originalMemoryCacheEnabled
@@ -203,8 +195,7 @@ func TestPricingNativeChannelEndpointTypesUnchanged(t *testing.T) {
 
 func TestPricingDoesNotCreateVirtualCompactModel(t *testing.T) {
 	resetPricingEndpointTestTables(t)
-	_, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit endpoint test price"}, Model: "gpt-pricing-base", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.1"}}}, 0, 1)
-	require.NoError(t, err)
+	require.NoError(t, UpdateModelPricing([]ModelPricingChange{{ModelName: "gpt-pricing-base", ExpectedVersion: ModelPricingVersion(PricingValues{}), Pricing: PricingValues{"ModelPrice": "0.1"}}}))
 	require.NoError(t, DB.Create(&Model{ModelName: "gpt-pricing-base", Description: "base description", Status: 1, NameRule: NameRuleExact}).Error)
 	insertPricingEndpointChannel(t, 205, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointAbility(t, 205, "gpt-pricing-base")
@@ -214,22 +205,23 @@ func TestPricingDoesNotCreateVirtualCompactModel(t *testing.T) {
 	require.NotContains(t, byName, "gpt-pricing-base-openai-compact")
 	base := byName["gpt-pricing-base"]
 	require.Contains(t, base.SupportedEndpointTypes, constant.EndpointTypeOpenAIResponseCompact)
-	require.NotNil(t, base.PriceVersion)
-	require.Equal(t, "gpt-pricing-base", base.PriceVersion.Model)
-	require.Equal(t, "0.1", base.PriceVersion.Prices[0].Price)
+	require.NotEmpty(t, base.PricingVersion)
+	require.Equal(t, 1, base.QuotaType)
+	require.Equal(t, 0.1, base.ModelPrice)
 }
 
-func TestPricingCacheIncludesChannelScopedPrices(t *testing.T) {
+func TestPricingCacheUsesOneModelPriceAcrossChannels(t *testing.T) {
 	resetPricingEndpointTestTables(t)
 	insertPricingEndpointChannel(t, 206, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
 	insertPricingEndpointAbility(t, 206, "channel-priced-model")
-	version, err := PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit channel endpoint test price"}, ScopeKind: billing.PriceScopeChannel, ChannelID: 206,
-		Model: "channel-priced-model", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}}}, 0, 1)
-	require.NoError(t, err)
+	insertPricingEndpointChannel(t, 207, constant.ChannelTypeOpenAI, dto.ChannelOtherSettings{})
+	insertPricingEndpointAbility(t, 207, "channel-priced-model")
+	require.NoError(t, UpdateModelPricing([]ModelPricingChange{{ModelName: "channel-priced-model", ExpectedVersion: ModelPricingVersion(PricingValues{}), Pricing: PricingValues{"ModelRatio": "1", "CompletionRatio": "2"}}}))
 	InitChannelCache()
-	price := pricingByName(GetPricing())[version.Model]
-	require.Equal(t, version, price.PriceVersion)
-	require.Equal(t, []billing.PriceVersion{*version}, price.PriceVersions)
+	prices := GetPricing()
+	require.Len(t, prices, 1)
+	require.Equal(t, 1.0, prices[0].ModelRatio)
+	require.Equal(t, 2.0, prices[0].CompletionRatio)
 }
 
 func TestInitChannelCacheInvalidatesPricingCache(t *testing.T) {

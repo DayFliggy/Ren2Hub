@@ -2,448 +2,385 @@ package billingexpr
 
 import (
 	"fmt"
-	"github.com/expr-lang/expr/file"
-	"github.com/expr-lang/expr/parser/lexer"
-	"github.com/shopspring/decimal"
+	"maps"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/expr-lang/expr"
+	"github.com/expr-lang/expr/ast"
+	"github.com/expr-lang/expr/parser"
+	"github.com/expr-lang/expr/vm"
 )
 
+const maxCacheSize = 256
+
+// DefaultExprVersion is used when an expression string has no version prefix.
 const DefaultExprVersion = 1
 
-// Plan is a restricted, unoptimized Decimal execution plan. Only the Expr
-// lexer is reused: numeric literal text never passes through its VM or float AST.
-type Plan struct {
-	root                       *operation
-	version                    int
-	usedVars, usedUsage, zones map[string]bool
-	rules                      []RequestRuleTrace
-}
-type operation struct {
-	kind, text string
-	number     decimal.Decimal
-	args       []*operation
-	rule       int
+const (
+	requestRuleTraceFunction    = "_trace"
+	requestRuleTraceIntFunction = "_trace_int"
+)
+
+// ParseExprVersion extracts the version tag and body from an expression string.
+// Format: "v1:tier(...)" → version=1, body="tier(...)".
+// No prefix defaults to DefaultExprVersion.
+func ParseExprVersion(exprStr string) (version int, body string) {
+	if strings.HasPrefix(exprStr, "v1:") {
+		return 1, exprStr[3:]
+	}
+	return DefaultExprVersion, exprStr
 }
 
-var cacheMu sync.RWMutex
-var cache = map[string]*Plan{}
+// requestRulePatcher adds trace side effects to existing request multipliers
+// without changing the stored expression or its numeric result.
+type requestRulePatcher struct {
+	requestRules         []RequestRuleTrace
+	restrictedIdentifier string
+}
 
-func ParseExprVersion(s string) (int, string) {
-	if prefix, body, ok := strings.Cut(s, ":"); ok && strings.HasPrefix(prefix, "v") {
-		if v, e := strconv.Atoi(prefix[1:]); e == nil {
-			return v, body
+func (p *requestRulePatcher) Visit(node *ast.Node) {
+	if identifier, ok := (*node).(*ast.IdentifierNode); ok {
+		switch identifier.Value {
+		case requestRuleTraceFunction, requestRuleTraceIntFunction:
+			p.restrictedIdentifier = identifier.Value
+		}
+		return
+	}
+
+	conditional, ok := (*node).(*ast.ConditionalNode)
+	if !ok || !conditional.Ternary || !usesRequestProbe(conditional.Cond) {
+		return
+	}
+	multiplier, ok := requestRuleNumber(conditional.Exp1)
+	fallback, fallbackOK := requestRuleNumber(conditional.Exp2)
+	if !ok || !fallbackOK || fallback != 1 {
+		return
+	}
+
+	ruleIndex := len(p.requestRules)
+	p.requestRules = append(p.requestRules, RequestRuleTrace{
+		Cond:       conditional.Cond.String(),
+		Multiplier: strconv.FormatFloat(multiplier, 'g', -1, 64),
+	})
+
+	traceFunction := requestRuleTraceFunction
+	var multiplierNode ast.Node = &ast.FloatNode{Value: multiplier}
+	if _, multiplierIsInt := conditional.Exp1.(*ast.IntegerNode); multiplierIsInt {
+		if _, fallbackIsInt := conditional.Exp2.(*ast.IntegerNode); fallbackIsInt {
+			traceFunction = requestRuleTraceIntFunction
+			multiplierNode = conditional.Exp1
 		}
 	}
-	return DefaultExprVersion, s
+
+	ast.Patch(node, &ast.CallNode{
+		Callee: &ast.IdentifierNode{Value: traceFunction},
+		Arguments: []ast.Node{
+			&ast.IntegerNode{Value: ruleIndex},
+			conditional.Cond,
+			multiplierNode,
+		},
+	})
 }
-func ExprVersion(s string) int                          { v, _ := ParseExprVersion(s); return v }
-func CompileFromCache(s string) (*Plan, error)          { return compilePlan(s, ExprHashString(s), nil) }
-func CompileFromCacheByHash(s, h string) (*Plan, error) { return compilePlan(s, h, nil) }
-func CompileWithUsageSchema(s string, schema *UsageSchema) (*Plan, error) {
-	return compilePlan(s, ExprHashString(s), schema)
+
+func requestRuleNumber(node ast.Node) (float64, bool) {
+	switch value := node.(type) {
+	case *ast.IntegerNode:
+		return float64(value.Value), true
+	case *ast.FloatNode:
+		return value.Value, true
+	default:
+		return 0, false
+	}
 }
-func compilePlan(s, h string, schema *UsageSchema) (*Plan, error) {
-	if h != ExprHashString(s) {
-		return nil, fmt.Errorf("billing expression hash mismatch")
-	}
-	v, body := ParseExprVersion(s)
-	if v != 1 && v != 2 {
-		return nil, fmt.Errorf("unsupported billing expression version")
-	}
-	if len(body) == 0 || len(body) > 16384 {
-		return nil, fmt.Errorf("invalid billing expression length")
-	}
-	if v == 2 {
-		if e := ValidateUsageSchema(schema); e != nil {
-			return nil, e
+
+func usesRequestProbe(node ast.Node) bool {
+	return ast.Find(node, func(node ast.Node) bool {
+		identifier, ok := node.(*ast.IdentifierNode)
+		if !ok {
+			return false
 		}
-		h += ":" + schema.Hash
-	} else if schema != nil {
-		return nil, fmt.Errorf("token expressions cannot use a task usage schema")
-	}
-	cacheMu.RLock()
-	hit := cache[h]
-	cacheMu.RUnlock()
-	if hit != nil {
-		return hit, nil
-	}
-	tokens, e := lexer.Lex(file.NewSource(body))
-	if e != nil {
-		return nil, e
-	}
-	if len(tokens) > 2048 {
-		return nil, fmt.Errorf("billing expression too complex")
-	}
-	plan := &Plan{version: v, usedVars: map[string]bool{}, usedUsage: map[string]bool{}, zones: map[string]bool{}}
-	p := planParser{tokens: tokens, plan: plan, schema: schema}
-	plan.root, e = p.expression(0, 0)
-	if e != nil {
-		return nil, e
-	}
-	if p.peek().Kind != lexer.EOF {
-		return nil, fmt.Errorf("unsupported billing syntax %q", p.peek().Value)
-	}
-	resultType, err := operationType(plan.root, schema)
+		switch identifier.Value {
+		case "param", "header", "hour", "minute", "weekday", "month", "day":
+			return true
+		default:
+			return false
+		}
+	}) != nil
+}
+
+type cachedEntry struct {
+	prog          *vm.Program
+	usedVars      map[string]bool
+	usedUsageKeys map[string]bool
+	requestRules  []RequestRuleTrace
+	version       int
+	fixedPricing  bool
+	staticTiers   map[string]bool
+}
+
+var (
+	cacheMu sync.RWMutex
+	cache   = make(map[string]*cachedEntry, 64)
+)
+
+// compileEnvPrototypeV1 is the v1 type-checking prototype used at compile time.
+var compileEnvPrototypeV1 = map[string]any{
+	"image_count": float64(1),
+	"p":           float64(0),
+	"c":           float64(0),
+	"len":         float64(0),
+	"cr":          float64(0),
+	"cc":          float64(0),
+	"cc1h":        float64(0),
+	"img":         float64(0),
+	"img_cr":      float64(0),
+	"img_o":       float64(0),
+	"ai":          float64(0),
+	"ao":          float64(0),
+	"tier":        func(string, float64) float64 { return 0 },
+	"fixed":       func(float64) float64 { return 0 },
+	"_trace":      func(int, bool, float64) float64 { return 1 },
+	"_trace_int":  func(int, bool, int) int { return 1 },
+	"header":      func(string) string { return "" },
+	"param":       func(string) any { return nil },
+	"u":           func(string) any { return nil },
+	"has":         func(any, string) bool { return false },
+	"hour":        func(string) int { return 0 },
+	"minute":      func(string) int { return 0 },
+	"weekday":     func(string) int { return 0 },
+	"month":       func(string) int { return 0 },
+	"day":         func(string) int { return 0 },
+	"max":         math.Max,
+	"min":         math.Min,
+	"abs":         math.Abs,
+	"ceil":        math.Ceil,
+	"floor":       math.Floor,
+}
+
+func getCompileEnv(version int) map[string]any {
+	env := maps.Clone(compileEnvPrototypeV1)
+	bindEnvironment(env, nil)
+	return env
+}
+
+// CompileFromCache compiles an expression string, using a cached program when
+// available. The cache is keyed by the SHA-256 hex digest of the expression.
+func CompileFromCache(exprStr string) (*vm.Program, error) {
+	return compileFromCacheByHash(exprStr, ExprHashString(exprStr))
+}
+
+// CompileFromCacheByHash is like CompileFromCache but accepts a pre-computed
+// hash, useful when the caller already has the BillingSnapshot.ExprHash.
+func CompileFromCacheByHash(exprStr, hash string) (*vm.Program, error) {
+	return compileFromCacheByHash(exprStr, hash)
+}
+
+func compileFromCacheByHash(exprStr, hash string) (*vm.Program, error) {
+	entry, err := compileEntryFromCacheByHash(exprStr, hash)
 	if err != nil {
 		return nil, err
 	}
-	if resultType != "number" {
-		return nil, fmt.Errorf("billing expression must return a number")
+	return entry.prog, nil
+}
+
+func compileEntryFromCacheByHash(exprStr, hash string) (*cachedEntry, error) {
+	if hash != ExprHashString(exprStr) {
+		return nil, fmt.Errorf("billing expression hash mismatch")
+	}
+	cacheMu.RLock()
+	if entry, ok := cache[hash]; ok {
+		cacheMu.RUnlock()
+		return entry, nil
+	}
+	cacheMu.RUnlock()
+
+	version, body := ParseExprVersion(exprStr)
+	// Validate before optimization so unreachable fixed-price branches cannot
+	// bypass validation or a host's unsupported-protocol checks.
+	tree, err := parser.Parse(body)
+	if err != nil {
+		return nil, fmt.Errorf("expr compile error: %w", err)
+	}
+	if ast.Find(tree.Node, func(node ast.Node) bool {
+		identifier, ok := node.(*ast.IdentifierNode)
+		return ok && identifier.Value == timeMembersFunction
+	}) != nil {
+		return nil, fmt.Errorf("expr compile error: reserved environment identifier")
+	}
+	fixedPricing := ast.Find(tree.Node, func(node ast.Node) bool {
+		identifier, ok := node.(*ast.IdentifierNode)
+		return ok && identifier.Value == "fixed"
+	}) != nil
+	if fixedPricing {
+		if err := validateFixedPricingTree(tree.Node); err != nil {
+			return nil, fmt.Errorf("expr compile error: %w", err)
+		}
+	}
+	patcher := &requestRulePatcher{}
+	staticTiers := map[string]bool{}
+	ast.Find(tree.Node, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallNode)
+		if !ok || len(call.Arguments) < 1 {
+			return false
+		}
+		callee, ok := call.Callee.(*ast.IdentifierNode)
+		if !ok || callee.Value != "tier" {
+			return false
+		}
+		if label, ok := call.Arguments[0].(*ast.StringNode); ok {
+			staticTiers[label.Value] = true
+		}
+		return false
+	})
+	env := getCompileEnv(version)
+	options := []expr.Option{expr.Env(env), expr.Patch(patcher), expr.Patch(&timeMemberPatcher{}), expr.AsFloat64()}
+	options = append(options, replayCompileOptions()...)
+	prog, err := expr.Compile(body, options...)
+	if patcher.restrictedIdentifier != "" {
+		return nil, fmt.Errorf("expr compile error: identifier %q is reserved for internal use", patcher.restrictedIdentifier)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("expr compile error: %w", err)
+	}
+
+	entry := &cachedEntry{
+		prog:          prog,
+		usedVars:      extractUsedVars(prog),
+		usedUsageKeys: extractUsedUsageKeys(prog),
+		requestRules:  patcher.requestRules,
+		version:       version,
+		fixedPricing:  fixedPricing,
+		staticTiers:   staticTiers,
 	}
 	cacheMu.Lock()
-	if len(cache) >= 256 {
-		cache = map[string]*Plan{}
+	if len(cache) >= maxCacheSize {
+		cache = make(map[string]*cachedEntry, 64)
 	}
-	cache[h] = plan
+	cache[hash] = entry
 	cacheMu.Unlock()
-	return plan, nil
+
+	return entry, nil
 }
 
-type planParser struct {
-	tokens []lexer.Token
-	pos    int
-	plan   *Plan
-	schema *UsageSchema
-}
-
-func (p *planParser) peek() lexer.Token {
-	if p.pos >= len(p.tokens) {
-		return lexer.Token{Kind: lexer.EOF}
+// ExprVersion returns the version of a cached expression. Returns DefaultExprVersion
+// if the expression hasn't been compiled yet or is empty.
+func ExprVersion(exprStr string) int {
+	if exprStr == "" {
+		return DefaultExprVersion
 	}
-	return p.tokens[p.pos]
+	hash := ExprHashString(exprStr)
+	cacheMu.RLock()
+	if entry, ok := cache[hash]; ok {
+		cacheMu.RUnlock()
+		return entry.version
+	}
+	cacheMu.RUnlock()
+	v, _ := ParseExprVersion(exprStr)
+	return v
 }
-func (p *planParser) take(s string) bool {
-	if p.peek().Value != s {
+
+func extractUsedVars(prog *vm.Program) map[string]bool {
+	vars := make(map[string]bool)
+	node := prog.Node()
+	ast.Find(node, func(n ast.Node) bool {
+		if id, ok := n.(*ast.IdentifierNode); ok {
+			switch id.Value {
+			case requestRuleTraceFunction, requestRuleTraceIntFunction:
+				return false
+			}
+			vars[id.Value] = true
+		}
 		return false
-	}
-	p.pos++
-	return true
-}
-func precedence(s string) int {
-	switch s {
-	case "||", "or":
-		return 1
-	case "&&", "and":
-		return 2
-	case "==", "!=":
-		return 3
-	case "<", "<=", ">", ">=":
-		return 4
-	case "+", "-":
-		return 5
-	case "*", "/":
-		return 6
-	}
-	return -1
-}
-func (p *planParser) expression(min, depth int) (*operation, error) {
-	if depth > 128 {
-		return nil, fmt.Errorf("billing nesting exceeds limit")
-	}
-	t := p.peek()
-	p.pos++
-	var n *operation
-	var e error
-	switch {
-	case t.Kind == lexer.Bracket && t.Value == "(":
-		n, e = p.expression(0, depth+1)
-		if e == nil && !p.take(")") {
-			e = fmt.Errorf("missing billing parenthesis")
-		}
-	case t.Kind == lexer.Operator && (t.Value == "+" || t.Value == "-" || t.Value == "!" || t.Value == "not"):
-		var child *operation
-		child, e = p.expression(7, depth+1)
-		n = &operation{kind: "unary", text: t.Value, args: []*operation{child}, rule: -1}
-	case t.Kind == lexer.Number:
-		if len(t.Value) > 256 {
-			return nil, fmt.Errorf("billing literal exceeds limit")
-		}
-		var d decimal.Decimal
-		d, e = decimal.NewFromString(t.Value)
-		if e == nil {
-			e = checkDecimal(d)
-		}
-		n = &operation{kind: "number", text: t.Value, number: d, rule: -1}
-	case t.Kind == lexer.String:
-		if len(t.Value) > 128 {
-			return nil, fmt.Errorf("billing string exceeds limit")
-		}
-		n = &operation{kind: "string", text: t.Value, rule: -1}
-	case t.Kind == lexer.Identifier:
-		switch t.Value {
-		case "true", "false", "nil":
-			n = &operation{kind: t.Value, rule: -1}
-		default:
-			if p.take("(") {
-				n, e = p.call(t.Value, depth+1)
-			} else {
-				if p.plan.version != 1 || !isTokenVariable(t.Value) {
-					return nil, fmt.Errorf("unsupported billing identifier %q", t.Value)
-				}
-				p.plan.usedVars[t.Value] = true
-				n = &operation{kind: "variable", text: t.Value, rule: -1}
-			}
-		}
-	default:
-		return nil, fmt.Errorf("unsupported billing syntax %q", t.Value)
-	}
-	if e != nil {
-		return nil, e
-	}
-	for {
-		op := p.peek().Value
-		priority := precedence(op)
-		if p.peek().Kind != lexer.Operator || priority < min || priority < 0 {
-			break
-		}
-		p.pos++
-		right, e := p.expression(priority+1, depth+1)
-		if e != nil {
-			return nil, e
-		}
-		n = &operation{kind: "binary", text: op, args: []*operation{n, right}, rule: -1}
-	}
-	if min == 0 && p.take("?") {
-		yes, e := p.expression(0, depth+1)
-		if e != nil {
-			return nil, e
-		}
-		if !p.take(":") {
-			return nil, fmt.Errorf("missing billing conditional alternative")
-		}
-		no, e := p.expression(0, depth+1)
-		if e != nil {
-			return nil, e
-		}
-		n = &operation{kind: "conditional", args: []*operation{n, yes, no}, rule: -1}
-		if usesProbe(n.args[0]) && yes.kind == "number" && no.kind == "number" && no.number.Equal(decimal.NewFromInt(1)) {
-			n.rule = len(p.plan.rules)
-			p.plan.rules = append(p.plan.rules, RequestRuleTrace{Cond: renderOperation(n.args[0]), Multiplier: yes.number.String()})
-		}
-	}
-	return n, nil
-}
-func (p *planParser) call(name string, depth int) (*operation, error) {
-	counts := map[string]int{"tier": 2, "fixed": 1, "u": 1, "attr": 1, "attr_num": 1, "has": 2, "hour": 1, "minute": 1, "weekday": 1, "month": 1, "day": 1, "max": 2, "min": 2, "abs": 1, "ceil": 1, "floor": 1}
-	count, ok := counts[name]
-	if !ok || (name == "fixed" && p.plan.version != 1) || (name == "u" && p.plan.version != 2) {
-		return nil, fmt.Errorf("unsupported billing function %q", name)
-	}
-	n := &operation{kind: "call", text: name, rule: -1}
-	if !p.take(")") {
-		for {
-			a, e := p.expression(0, depth+1)
-			if e != nil {
-				return nil, e
-			}
-			n.args = append(n.args, a)
-			if len(n.args) > count {
-				return nil, fmt.Errorf("invalid billing function arguments")
-			}
-			if p.take(")") {
-				break
-			}
-			if !p.take(",") {
-				return nil, fmt.Errorf("invalid billing function arguments")
-			}
-		}
-	}
-	if len(n.args) != count {
-		return nil, fmt.Errorf("invalid billing function arguments")
-	}
-	p.plan.usedVars[name] = true
-	switch name {
-	case "u", "attr", "attr_num", "hour", "minute", "weekday", "month", "day", "tier":
-		if n.args[0].kind != "string" {
-			return nil, fmt.Errorf("billing probe requires a literal argument")
-		}
-		key := n.args[0].text
-		switch name {
-		case "u":
-			if _, ok := p.schema.Fields[key]; !ok {
-				return nil, fmt.Errorf("undeclared billing usage field %q", key)
-			}
-			p.plan.usedUsage[key] = true
-		case "attr", "attr_num":
-			if !AllowedAttribute(key) || (name == "attr_num" && !numericAttribute(key)) {
-				return nil, fmt.Errorf("unregistered billing attribute")
-			}
-		case "tier":
-		default:
-			if !validZoneName(key) {
-				return nil, fmt.Errorf("invalid billing timezone")
-			}
-			p.plan.zones[key] = true
-		}
-	}
-	return n, nil
-}
-func isTokenVariable(s string) bool {
-	switch s {
-	case "p", "c", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ai_cr", "ao", "reasoning", "image_count":
-		return true
-	}
-	return false
-}
-func usesProbe(n *operation) bool {
-	if n.kind == "call" {
-		switch n.text {
-		case "attr", "attr_num", "hour", "minute", "weekday", "month", "day":
-			return true
-		}
-	}
-	for _, a := range n.args {
-		if usesProbe(a) {
-			return true
-		}
-	}
-	return false
-}
-func renderOperation(n *operation) string {
-	switch n.kind {
-	case "string":
-		return strconv.Quote(n.text)
-	case "number", "variable":
-		return n.text
-	case "call":
-		parts := make([]string, len(n.args))
-		for i, a := range n.args {
-			parts[i] = renderOperation(a)
-		}
-		return n.text + "(" + strings.Join(parts, ", ") + ")"
-	case "binary":
-		return "(" + renderOperation(n.args[0]) + " " + n.text + " " + renderOperation(n.args[1]) + ")"
-	case "unary":
-		return n.text + renderOperation(n.args[0])
-	}
-	return n.kind
-}
-func cloneSet(m map[string]bool) map[string]bool {
-	r := make(map[string]bool, len(m))
-	for k, v := range m {
-		r[k] = v
-	}
-	return r
-}
-func UsedVars(s string) map[string]bool {
-	p, e := CompileFromCache(s)
-	if e != nil {
-		return nil
-	}
-	return cloneSet(p.usedVars)
-}
-func UsedUsageFields(s string, schema *UsageSchema) (map[string]bool, error) {
-	p, e := CompileWithUsageSchema(s, schema)
-	if e != nil {
-		return nil, e
-	}
-	return cloneSet(p.usedUsage), nil
-}
-func InvalidateCache() { cacheMu.Lock(); cache = map[string]*Plan{}; cacheMu.Unlock() }
-
-// Type-check every branch before execution. Unknown request attributes stay
-// nullable scalars; numeric arithmetic requires attr_num explicitly.
-func operationType(n *operation, schema *UsageSchema) (string, error) {
-	types := make([]string, len(n.args))
-	for i, child := range n.args {
-		typ, err := operationType(child, schema)
-		if err != nil {
-			return "", err
-		}
-		types[i] = typ
-	}
-	err := fmt.Errorf("invalid types in billing expression")
-	switch n.kind {
-	case "number", "variable":
-		return "number", nil
-	case "string":
-		return "string", nil
-	case "true", "false":
-		return "boolean", nil
-	case "nil":
-		return "nil", nil
-	case "unary":
-		if n.text == "!" || n.text == "not" {
-			if types[0] != "boolean" {
-				return "", err
-			}
-			return "boolean", nil
-		}
-		if types[0] != "number" {
-			return "", err
-		}
-		return "number", nil
-	case "conditional":
-		if types[0] != "boolean" || types[1] != types[2] {
-			return "", err
-		}
-		return types[1], nil
-	case "binary":
-		switch n.text {
-		case "==", "!=":
-			return "boolean", nil
-		case "&&", "and", "||", "or":
-			if types[0] != "boolean" || types[1] != "boolean" {
-				return "", err
-			}
-			return "boolean", nil
-		}
-		if types[0] != "number" || types[1] != "number" {
-			return "", err
-		}
-		switch n.text {
-		case "<", "<=", ">", ">=":
-			return "boolean", nil
-		}
-		return "number", nil
-	case "call":
-		switch n.text {
-		case "u":
-			return schema.Fields[n.args[0].text].Type, nil
-		case "attr":
-			return "scalar", nil
-		case "attr_num", "hour", "minute", "weekday", "month", "day":
-			return "number", nil
-		case "has":
-			if types[1] != "string" {
-				return "", err
-			}
-			return "boolean", nil
-		case "tier":
-			if types[1] != "number" {
-				return "", err
-			}
-			return "number", nil
-		default:
-			for _, typ := range types {
-				if typ != "number" {
-					return "", err
-				}
-			}
-			return "number", nil
-		}
-	}
-	return "", err
+	})
+	return vars
 }
 
-// UsedAttributes shares the validated, unoptimized plan with execution.
-func UsedAttributes(expression string, schema *UsageSchema) map[string]bool {
-	plan, err := CompileWithUsageSchema(expression, schema)
-	if err != nil {
+func extractUsedUsageKeys(prog *vm.Program) map[string]bool {
+	keys := make(map[string]bool)
+	ast.Find(prog.Node(), func(node ast.Node) bool {
+		call, ok := node.(*ast.CallNode)
+		if !ok || len(call.Arguments) != 1 {
+			return false
+		}
+		callee, ok := call.Callee.(*ast.IdentifierNode)
+		if !ok || callee.Value != "u" {
+			return false
+		}
+		literal, ok := call.Arguments[0].(*ast.StringNode)
+		if !ok {
+			return false
+		}
+		keys[strings.TrimSpace(literal.Value)] = true
+		return false
+	})
+	return keys
+}
+
+// UsedVars returns the set of identifier names referenced by an expression.
+// The result is cached alongside the compiled program. Returns nil for empty input.
+func UsedVars(exprStr string) map[string]bool {
+	return UsedVarsByHash(exprStr, ExprHashString(exprStr))
+}
+
+// UsedVarsByHash reuses the digest captured by the host's billing snapshot.
+func UsedVarsByHash(exprStr, hash string) map[string]bool {
+	if exprStr == "" {
 		return nil
 	}
-	result := map[string]bool{}
-	var collect func(*operation)
-	collect = func(node *operation) {
-		if node.kind == "call" && (node.text == "attr" || node.text == "attr_num") {
-			result[node.args[0].text] = true
-		}
-		for _, child := range node.args {
-			collect(child)
-		}
+	cacheMu.RLock()
+	if entry, ok := cache[hash]; ok {
+		cacheMu.RUnlock()
+		return entry.usedVars
 	}
-	collect(plan.root)
-	return result
+	cacheMu.RUnlock()
+
+	// Compile (and cache) to populate usedVars
+	if _, err := compileFromCacheByHash(exprStr, hash); err != nil {
+		return nil
+	}
+	cacheMu.RLock()
+	entry, ok := cache[hash]
+	cacheMu.RUnlock()
+	if ok {
+		return entry.usedVars
+	}
+	return nil
+}
+
+// UsedUsageKeys returns literal keys referenced by u("...") calls. Calls with
+// dynamic arguments are intentionally omitted because they cannot be
+// validated statically.
+func UsedUsageKeys(exprStr string) map[string]bool {
+	if exprStr == "" {
+		return nil
+	}
+	hash := ExprHashString(exprStr)
+	cacheMu.RLock()
+	if entry, ok := cache[hash]; ok {
+		cacheMu.RUnlock()
+		return entry.usedUsageKeys
+	}
+	cacheMu.RUnlock()
+
+	if _, err := compileFromCacheByHash(exprStr, hash); err != nil {
+		return nil
+	}
+	cacheMu.RLock()
+	entry, ok := cache[hash]
+	cacheMu.RUnlock()
+	if ok {
+		return entry.usedUsageKeys
+	}
+	return nil
+}
+
+// InvalidateCache clears the compiled-expression cache.
+// Called when billing rules are updated.
+func InvalidateCache() {
+	cacheMu.Lock()
+	cache = make(map[string]*cachedEntry, 64)
+	cacheMu.Unlock()
 }

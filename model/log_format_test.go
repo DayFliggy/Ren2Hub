@@ -5,24 +5,45 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/billing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestFormatUserLogsProjectsFrozenBillingEvidence(t *testing.T) {
-	logs := []*Log{{Other: `{"price_scope":"channel_model","price_channel_id":9,"price_version_hash":"` + strings.Repeat("b", 64) + `","price_version_id":42,"quote_hash":"` + strings.Repeat("a", 64) + `","billing_mode":"expression","upstream_model_name":"upstream-model","billing_usage":{"input_tokens":9,"source":"provider","actual_facts":{"secret":"hidden"},"headers":{"authorization":"hidden"}},"charge_result":{"calculation_version":"billing-v3","final_quota":"9007199254740993","base_usd":"1","adjustments":[{"kind":"channel_multiplier","multiplier":"1","base_usd":"1","amount_usd":"0","result_usd":"1"}],"total_usd":"1","lines":[],"unknown":{"secret":"hidden"},"trace":{"cost":1,"matched_tier":"standard","request_rules":[{"cond":"param(\"secret\")","multiplier":"2","matched":true}]}},"unknown":"hidden"}`}}
+	logs := []*Log{{Other: `{"price_scope":"global_model","price_channel_id":0,"price_version_hash":"` + strings.Repeat("b", 64) + `","price_version_id":42,"quote_hash":"` + strings.Repeat("a", 64) + `","billing_mode":"expression","upstream_model_name":"upstream-model","billing_usage":{"input_tokens":9,"source":"provider","actual_facts":{"secret":"hidden"},"headers":{"authorization":"hidden"}},"charge_result":{"calculation_version":"newapi-c71eefbc-v1","final_quota":"9007199254740993","base_usd":"1","adjustments":[{"kind":"channel_multiplier","multiplier":"1","base_usd":"1","amount_usd":"0","result_usd":"1"}],"total_usd":"1","lines":[],"unknown":{"secret":"hidden"},"trace":{"cost":1,"matched_tier":"standard","request_rules":[{"cond":"param(\"secret\")","multiplier":"2","matched":true}]}},"unknown":"hidden"}`}}
 	formatUserLogs(logs, 0)
 	require.NotContains(t, logs[0].Other, "hidden")
 	require.NotContains(t, logs[0].Other, "param(")
 	require.NotContains(t, logs[0].Other, "actual_facts")
 	require.Contains(t, logs[0].Other, `"final_quota":"9007199254740993"`)
 	require.Contains(t, logs[0].Other, `"input_tokens":9`)
-	require.Contains(t, logs[0].Other, `"price_scope":"channel_model"`)
-	require.Contains(t, logs[0].Other, `"price_channel_id":9`)
+	require.Contains(t, logs[0].Other, `"price_scope":"global_model"`)
+	require.Contains(t, logs[0].Other, `"price_channel_id":0`)
 	require.Contains(t, logs[0].Other, `"price_version_hash":"`+strings.Repeat("b", 64)+`"`)
 	require.NotContains(t, logs[0].Other, `"cost"`)
 	require.Contains(t, logs[0].Other, `"upstream_model_name":"upstream-model"`)
 	formatUserLogs([]*Log{{Other: "invalid"}}, 0)
+}
+
+func TestUserBillingLogOmitsEncryptedInputsAndTaskFacts(t *testing.T) {
+	usage := billing.Usage{
+		InputTokens: 7,
+		Evidence: &billing.EncryptedEvaluation{
+			Version: 1, KeyID: "private-key-marker", Nonce: []byte("nonce"), Ciphertext: []byte("ciphertext"),
+		},
+		EstimatedFacts: map[string]interface{}{"secret": "estimate-private"},
+		ActualFacts:    map[string]interface{}{"secret": "actual-private"},
+		Quantities:     map[string]string{"private-task-field": "1"},
+	}
+	encoded, err := common.Marshal(map[string]any{"billing_usage": usage})
+	require.NoError(t, err)
+	logs := []*Log{{Other: string(encoded)}}
+	formatUserLogs(logs, 0)
+	for _, field := range []string{"evaluation_evidence", "key_id", "ciphertext", "estimated_facts", "actual_facts", "quantities"} {
+		require.NotContains(t, logs[0].Other, field)
+	}
+	require.Contains(t, logs[0].Other, `"input_tokens":7`)
 }
 
 // TestFormatUserLogsStripsQuotaSaturation verifies the admin-only quota

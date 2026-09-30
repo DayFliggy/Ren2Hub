@@ -1,7 +1,6 @@
 package model
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -10,25 +9,45 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/types"
 )
 
+type PricingPluginVariant struct {
+	PluginKey            string                               `json:"plugin_key"`
+	PluginName           string                               `json:"plugin_name"`
+	Icon                 string                               `json:"icon,omitempty"`
+	BillingExpr          string                               `json:"billing_expr"`
+	BillingMode          string                               `json:"billing_mode"`
+	BillingUsageSchema   map[string]jsplugin.UsageFieldSchema `json:"billing_usage_schema"`
+	BillingUsageExamples []jsplugin.UsageExample              `json:"billing_usage_examples,omitempty"`
+}
+
 type Pricing struct {
-	ModelName              string                  `json:"model_name"`
-	Description            string                  `json:"description,omitempty"`
-	Icon                   string                  `json:"icon,omitempty"`
-	Tags                   string                  `json:"tags,omitempty"`
-	VendorID               int                     `json:"vendor_id,omitempty"`
-	QuotaType              int                     `json:"quota_type"`
-	OwnerBy                string                  `json:"owner_by"`
-	EnableGroup            []string                `json:"-"`
-	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
-	BillingMode            string                  `json:"billing_mode,omitempty"`
-	BillingExpr            string                  `json:"billing_expr,omitempty"`
-	PriceVersion           *billing.PriceVersion   `json:"price_version,omitempty"`
-	PriceVersions          []billing.PriceVersion  `json:"price_versions,omitempty"`
+	BillingPluginVariants  []PricingPluginVariant               `json:"billing_plugin_variants,omitempty"`
+	ModelName              string                               `json:"model_name"`
+	Description            string                               `json:"description,omitempty"`
+	Icon                   string                               `json:"icon,omitempty"`
+	Tags                   string                               `json:"tags,omitempty"`
+	VendorID               int                                  `json:"vendor_id,omitempty"`
+	QuotaType              int                                  `json:"quota_type"`
+	ModelRatio             float64                              `json:"model_ratio"`
+	ModelPrice             float64                              `json:"model_price"`
+	OwnerBy                string                               `json:"owner_by"`
+	CompletionRatio        float64                              `json:"completion_ratio"`
+	CacheRatio             *float64                             `json:"cache_ratio,omitempty"`
+	CreateCacheRatio       *float64                             `json:"create_cache_ratio,omitempty"`
+	ImageRatio             *float64                             `json:"image_ratio,omitempty"`
+	AudioRatio             *float64                             `json:"audio_ratio,omitempty"`
+	AudioCompletionRatio   *float64                             `json:"audio_completion_ratio,omitempty"`
+	EnableGroup            []string                             `json:"enable_groups"`
+	SupportedEndpointTypes []constant.EndpointType              `json:"supported_endpoint_types"`
+	BillingMode            string                               `json:"billing_mode,omitempty"`
+	BillingExpr            string                               `json:"billing_expr,omitempty"`
+	BillingUsageSchema     map[string]jsplugin.UsageFieldSchema `json:"billing_usage_schema,omitempty"`
+	BillingUsageExamples   []jsplugin.UsageExample              `json:"billing_usage_examples,omitempty"`
+	PricingVersion         string                               `json:"pricing_version,omitempty"`
 }
 
 type PricingVendor struct {
@@ -346,30 +365,18 @@ func updatePricing() {
 		}
 	}
 
-	versions, err := ListActiveBillingPrices(context.Background())
+	names := make([]string, 0, len(modelGroupsMap))
+	for name := range modelGroupsMap {
+		names = append(names, name)
+	}
+	snapshot, err := GetModelPricingSnapshot(names)
 	if err != nil {
-		common.SysLog(fmt.Sprintf("load published billing prices error: %v", err))
+		common.SysError("load model pricing: " + err.Error())
 		return
 	}
-	byModel := make(map[string]map[int]billing.PriceVersion, len(versions))
-	for i := range versions {
-		version := versions[i]
-		if byModel[version.Model] == nil {
-			byModel[version.Model] = make(map[int]billing.PriceVersion)
-		}
-		byModel[version.Model][version.ChannelID] = version
-	}
-	modelPrices := make(map[string][]billing.PriceVersion)
-	seenVersions := make(map[int64]bool)
-	for _, ability := range enableAbilities {
-		version, exists := byModel[ability.Model][ability.ChannelId]
-		if !exists {
-			version, exists = byModel[ability.Model][0]
-		}
-		if exists && !seenVersions[version.ID] {
-			modelPrices[ability.Model] = append(modelPrices[ability.Model], version)
-			seenVersions[version.ID] = true
-		}
+	entries := make(map[string]ModelPricingEntry, len(snapshot.Entries))
+	for _, entry := range snapshot.Entries {
+		entries[entry.ModelName] = entry
 	}
 	pricingMap = make([]Pricing, 0)
 	for model, groups := range modelGroupsMap {
@@ -394,17 +401,50 @@ func updatePricing() {
 				pricing.OwnerBy = vendor.Name
 			}
 		}
-		pricing.PriceVersions = modelPrices[model]
-		if len(pricing.PriceVersions) != 0 {
-			version := &pricing.PriceVersions[0]
-			pricing.BillingMode = version.Mode
-			pricing.BillingExpr = version.Expression
-			pricing.PriceVersion = version
-			for _, price := range version.Prices {
-				if price.Quantity == "calls" {
-					pricing.QuotaType = 1
+		entry := entries[model]
+		values := entry.Effective
+		pricing.PricingVersion = entry.Version
+		for key, dest := range map[string]*float64{"ModelRatio": &pricing.ModelRatio, "CompletionRatio": &pricing.CompletionRatio, "ModelPrice": &pricing.ModelPrice} {
+			if raw, exists := values[key]; exists {
+				number, err := modelPricingDecimal(raw)
+				if err != nil {
+					common.SysError("invalid saved model pricing")
+					return
 				}
+				*dest = number.InexactFloat64()
 			}
+		}
+		pricing.BillingMode, _ = values["billing_setting.billing_mode"].(string)
+		pricing.BillingExpr, _ = values["billing_setting.billing_expr"].(string)
+		if _, exists := values["ModelPrice"]; exists {
+			pricing.QuotaType = 1
+		}
+		if _, ratio := values["ModelRatio"]; !ratio && pricing.BillingExpr == "" && pricing.QuotaType != 1 {
+			pricing.BillingMode = "unconfigured"
+		}
+		for key, dest := range map[string]**float64{"CacheRatio": &pricing.CacheRatio, "CreateCacheRatio": &pricing.CreateCacheRatio, "ImageRatio": &pricing.ImageRatio, "AudioRatio": &pricing.AudioRatio, "AudioCompletionRatio": &pricing.AudioCompletionRatio} {
+			if raw, exists := values[key]; exists {
+				number, err := modelPricingDecimal(raw)
+				if err != nil {
+					common.SysError("invalid saved model pricing")
+					return
+				}
+				value := number.InexactFloat64()
+				*dest = &value
+			}
+		}
+		pricing.BillingUsageSchema = entry.UsageSchema
+		for _, variant := range entry.PluginVariants {
+			if variant.Stale {
+				continue
+			}
+			mode := "unconfigured"
+			if variant.Compatible && variant.Effective != "" {
+				mode = "tiered_expr"
+			} else if variant.Configured == "" && values["billing_setting.billing_mode"] != "tiered_expr" && ModelPriceConfigured(values) {
+				mode = "ratio"
+			}
+			pricing.BillingPluginVariants = append(pricing.BillingPluginVariants, PricingPluginVariant{PluginKey: variant.PluginKey, PluginName: variant.PluginName, Icon: variant.Icon, BillingExpr: variant.Effective, BillingMode: mode, BillingUsageSchema: variant.UsageSchema, BillingUsageExamples: variant.UsageExamples})
 		}
 
 		pricingMap = append(pricingMap, pricing)

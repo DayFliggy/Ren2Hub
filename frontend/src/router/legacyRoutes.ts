@@ -50,7 +50,7 @@ const settingsTabs: Record<string, string> = {
 
 const settingsSections: Record<string, string> = {
   'billing/currency': 'billing/quota',
-  'billing/model-pricing': 'billing/pricing',
+  'billing/pricing': 'billing/model-pricing',
   'billing/group-pricing': 'billing/pricing',
   'models/global': 'models/routing',
   'models/routing-reliability': 'models/routing',
@@ -112,7 +112,7 @@ export function canonicalLegacyPath(
     path === '/system-settings/models/auto-pricing' ||
     path === '/system-settings/billing/pricing'
   )
-    path = '/models/metadata'
+    path = '/system-settings/billing/model-pricing'
   if (
     /^\/(next|playground|chat|chat2link|chat-presets)(\/|$)/.test(path) ||
     /^\/(models\/deployments|deployment|admin\/deployments)(\/|$)/.test(path) ||

@@ -19,6 +19,7 @@ describe('console navigation', () => {
       'redemption-management',
       'order-management',
       'billing-reconciliations',
+      'model-pricing',
       'system-settings',
       'task-plugins',
       'models-admin',

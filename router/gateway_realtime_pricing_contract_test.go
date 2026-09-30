@@ -1,31 +1,24 @@
 package router
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGatewayRealtimeFixedPriceCoversAudioAndSettlesOnce(t *testing.T) {
-	for _, mode := range []string{"flat_fee", "calls"} {
+	for _, mode := range []string{"expression", "calls"} {
 		t.Run(mode, func(t *testing.T) {
 			url, key, accepted, sends := setupGatewayRealtime(t)
-			previous, err := model.GetActiveBillingPrice(context.Background(), "gpt-4o-mini")
-			require.NoError(t, err)
-			version := billing.PriceVersion{Model: "gpt-4o-mini", Mode: billing.ModeUnitPrice,
-				Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "fixed Realtime request price"}}
-			if mode == "flat_fee" {
-				version.FlatFee = "0.000006"
+			if mode == "expression" {
+				_, err := setGatewayExpression("gpt-4o-mini", `tier("base", fixed(0.000006))`)
+				require.NoError(t, err)
 			} else {
-				version.Prices = []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.000006"}}
+				require.NoError(t, setGatewayModelPrice("gpt-4o-mini", model.PricingValues{"ModelPrice": "0.000006"}))
 			}
-			_, err = model.PublishBillingPrice(context.Background(), version, previous.ID, 1)
-			require.NoError(t, err)
 			client, upstream := dialGatewayRealtime(t, url, key, accepted)
 			for _, id := range []string{"first", "second"} {
 				relayRealtimeEvent(t, upstream, client, `{"type":"response.output_text.delta","response_id":"`+id+`","delta":"hello"}`)

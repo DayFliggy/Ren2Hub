@@ -12,13 +12,15 @@ import (
 // An attempt has its own identity because retries may use different prices.
 // The complete quote is immutable even after another attempt is selected.
 type BillingAttempt struct {
-	ID          string `json:"id" gorm:"type:varchar(128);primaryKey"`
-	RequestID   string `json:"request_id" gorm:"type:varchar(128);not null;index"`
-	ChannelID   int    `json:"channel_id"`
-	Quote       string `json:"-" gorm:"type:text;not null"`
-	QuoteHash   string `json:"quote_hash" gorm:"type:varchar(64);not null"`
-	Fingerprint string `json:"request_fingerprint" gorm:"type:varchar(64);not null"`
-	CreatedAt   int64  `json:"created_at" gorm:"type:bigint;not null"`
+	EstimateUsage  LongText `json:"-"`
+	EstimateCharge string   `json:"-" gorm:"type:text"`
+	ID             string   `json:"id" gorm:"type:varchar(128);primaryKey"`
+	RequestID      string   `json:"request_id" gorm:"type:varchar(128);not null;index"`
+	ChannelID      int      `json:"channel_id"`
+	Quote          string   `json:"-" gorm:"type:text;not null"`
+	QuoteHash      string   `json:"quote_hash" gorm:"type:varchar(64);not null"`
+	Fingerprint    string   `json:"request_fingerprint" gorm:"type:varchar(64);not null"`
+	CreatedAt      int64    `json:"created_at" gorm:"type:bigint;not null"`
 }
 
 func PrepareBillingAttempt(ctx context.Context, requestID, attemptID string, channelID int, quote *billing.Quote) error {
@@ -43,9 +45,6 @@ func PrepareBillingAttemptWithPlugin(ctx context.Context, requestID, attemptID s
 func prepareBillingAttemptTx(tx *gorm.DB, requestID, attemptID string, channelID int, quote *billing.Quote) error {
 	if quote == nil || requestID == "" || attemptID == "" {
 		return errors.New("complete billing quote is required")
-	}
-	if quote.PriceVersion.ScopeKind == billing.PriceScopeChannel && quote.PriceVersion.ChannelID != channelID {
-		return ErrBillingEventConflict
 	}
 	fingerprint, err := BillingAttemptFingerprint(requestID, channelID, quote)
 	if err != nil {

@@ -100,5 +100,6 @@ export declare function buildContentRequest(ctx: ArtifactContentContext): Reques
 
 /** Host-owned persistence types, not writable fields of meta or hook return values. */
 export interface ImmutablePluginReference {key: string; version: string; source_hash: string}
-export interface FrozenUsageField {type: "number" | "string" | "boolean"; source: "request_fixed" | "estimate_only" | "completion_fact"; required: boolean; unit?: string; integer?: boolean; minimum?: string; maximum?: string; enum?: readonly string[]}
+export interface FrozenUsageField {type: "number" | "string" | "boolean"; source: "completion_fact"; required: boolean; unit?: string; integer?: boolean; minimum?: string; maximum?: string; enum?: readonly string[]}
+/** Included in the complete pricing definition hash; hash may be empty. */
 export interface FrozenUsageSchema {version: 1; fields: Readonly<Record<string, FrozenUsageField>>; hash: string}

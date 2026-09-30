@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"context"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
@@ -35,13 +35,21 @@ type userModelsResponse struct {
 
 func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
+	t.Setenv("CRYPTO_SECRET", "controller-pricing-test-evidence-key")
 	previousDB, previousLogDB := model.DB, model.LOG_DB
 	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
 	previousRedis := common.RedisEnabled
+	common.OptionMapRWMutex.Lock()
+	previousOptions := common.OptionMap
+	common.OptionMap = make(map[string]string)
+	common.OptionMapRWMutex.Unlock()
 	t.Cleanup(func() {
 		model.DB, model.LOG_DB = previousDB, previousLogDB
 		common.SetDatabaseTypes(previousMain, previousLog)
 		common.RedisEnabled = previousRedis
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap = previousOptions
+		common.OptionMapRWMutex.Unlock()
 	})
 
 	initModelListColumnNames(t)
@@ -56,7 +64,7 @@ func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	model.DB = db
 	model.LOG_DB = db
 
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}, &model.BillingPriceVersion{}, &model.BillingActivePrice{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}, &model.BillingPriceVersion{}, &model.Option{}))
 	require.NoError(t, db.AutoMigrate(&model.UserChannelEntitlement{}, &model.UserRouteProfile{}, &model.UserRouteGroup{}, &model.UserRouteEntry{}))
 
 	t.Cleanup(func() {
@@ -97,7 +105,9 @@ func initModelListColumnNames(t *testing.T) {
 	bootstrap, bootstrapErr := gorm.Open(sqlite.Open(common.SQLitePath), &gorm.Config{})
 	require.NoError(t, bootstrapErr)
 	require.NoError(t, bootstrap.AutoMigrate(&model.BillingSchema{}))
-	require.NoError(t, bootstrap.Create(&model.BillingSchema{ID: 1, Version: model.BillingSchemaVersion}).Error)
+	cipher, err := billing.NewEvidenceCipher([]byte(os.Getenv("CRYPTO_SECRET")))
+	require.NoError(t, err)
+	require.NoError(t, bootstrap.Create(&model.BillingSchema{ID: 1, Version: model.BillingSchemaVersion, EvidenceKeyID: cipher.KeyID()}).Error)
 	bootstrapSQL, bootstrapErr := bootstrap.DB()
 	require.NoError(t, bootstrapErr)
 	defer bootstrapSQL.Close()
@@ -115,7 +125,9 @@ func withTieredBillingConfig(t *testing.T, modes map[string]string, exprs map[st
 
 	for name, mode := range modes {
 		require.Equal(t, "tiered_expr", mode)
-		_, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: name, Mode: billing.ModeExpression, Expression: exprs[name]}, 0, 1)
+		snapshot, err := model.GetModelPricingSnapshot([]string{name})
+		require.NoError(t, err)
+		err = model.UpdateModelPricing([]model.ModelPricingChange{{ModelName: name, ExpectedVersion: snapshot.Entries[0].Version, Pricing: model.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": exprs[name]}}})
 		if strings.TrimSpace(exprs[name]) == "" {
 			require.Error(t, err)
 		} else {
@@ -453,17 +465,17 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 	pricingByName := pricingByModelName(model.GetPricing())
 	visiblePricing, ok := pricingByName["zz-tiered-visible-model"]
 	require.True(t, ok)
-	require.Equal(t, "expression", visiblePricing.BillingMode)
+	require.Equal(t, "tiered_expr", visiblePricing.BillingMode)
 	require.NotEmpty(t, visiblePricing.BillingExpr)
 
 	emptyExprPricing, ok := pricingByName["zz-tiered-empty-expr-model"]
 	require.True(t, ok)
-	require.Empty(t, emptyExprPricing.BillingMode)
+	require.Equal(t, "unconfigured", emptyExprPricing.BillingMode)
 	require.Empty(t, emptyExprPricing.BillingExpr)
 
 	missingExprPricing, ok := pricingByName["zz-tiered-missing-expr-model"]
 	require.True(t, ok)
-	require.Empty(t, missingExprPricing.BillingMode)
+	require.Equal(t, "unconfigured", missingExprPricing.BillingMode)
 	require.Empty(t, missingExprPricing.BillingExpr)
 }
 

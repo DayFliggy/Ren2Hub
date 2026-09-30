@@ -1,4 +1,3 @@
-import { offerFixture } from './pricingFixture'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -8,72 +7,62 @@ import {
 } from '@/api/publicCatalog'
 
 describe('public catalog contracts', () => {
-  it('returns a partial directory with explicit unavailable records', () => {
-    const offer = offerFixture({
-      id: 1,
-      model: 'priced-model',
-      mode: 'unit_price',
-      prices: [{ quantity: 'ai_cr', unit: 'per_million_tokens', price: '0.4' }],
-      created_at: 1,
-      hash: 'audio-cache',
-    })
-    const result = parsePricingCatalog({
+  it('distinguishes an unconfigured backend zero from an explicitly free price', () => {
+    const catalog = parsePricingCatalog({
       success: true,
       supported_endpoint: {},
       data: [
-        { model_name: 'request-alias', offers: [offer] },
-        { model_name: 'unavailable', offers: [] },
+        {
+          model_name: 'unpriced',
+          quota_type: 0,
+          billing_mode: 'unconfigured',
+          model_ratio: 0,
+          model_price: 0,
+          completion_ratio: 0,
+        },
+        {
+          model_name: 'free',
+          quota_type: 0,
+          billing_mode: 'ratio',
+          model_ratio: 0,
+          completion_ratio: 1,
+        },
       ],
     })
-    expect(result.models.map((model) => model.model_name)).toEqual([
-      'request-alias',
-    ])
-    expect(result.issues).toEqual([
-      {
-        model_name: 'unavailable',
-        offer_id: null,
-        reason: 'invalid_model_record',
-      },
-    ])
-    expect(catalogPrices(result.models[0]!, 'M')).toEqual([
-      { key: 'audioCacheRead', value: '0.4', unit: 'per_million_tokens' },
-    ])
+    expect(catalog.issues).toEqual([])
+    expect(catalogPrices(catalog.models[0]!, 'M')).toEqual([])
+    expect(catalogPrices(catalog.models[1]!, 'M')[0]).toEqual({
+      key: 'input',
+      value: '0',
+      unit: 'per_million_tokens',
+    })
   })
-
-  it('renders version prices without mutable channel multipliers', () => {
-    const prices = catalogPrices(
-      {
-        model_name: 'demo',
-        description: '',
-        icon: '',
-        tags: '',
-        vendor_id: 1,
-        owner_by: 'Demo',
-        supported_endpoint_types: [],
-        offers: [
-          offerFixture({
-            id: 1,
-            model: 'demo',
-            mode: 'unit_price' as const,
-            prices: [
-              { quantity: 'p', unit: 'per_million_tokens', price: '4' },
-              { quantity: 'c', unit: 'per_million_tokens', price: '12' },
-              { quantity: 'cr', unit: 'per_million_tokens', price: '2' },
-            ],
-            created_at: 1,
-            hash: 'fixture',
-          }),
-        ],
-      },
-      'M'
-    )
-    expect(prices).toEqual([
+  it('reports malformed model prices separately and preserves cache dimensions', () => {
+    const parsed = parsePricingCatalog({
+      success: true,
+      supported_endpoint: {},
+      data: [
+        {
+          model_name: 'model',
+          quota_type: 0,
+          model_ratio: 2,
+          completion_ratio: 3,
+          cache_ratio: 0,
+          create_cache_ratio: 0.5,
+        },
+        { model_name: 'missing' },
+      ],
+    })
+    expect(parsed.models).toHaveLength(1)
+    expect(parsed.issues[0]?.model_name).toBe('missing')
+    expect(catalogPrices(parsed.models[0]!, 'M')).toEqual([
       { key: 'input', value: '4', unit: 'per_million_tokens' },
       { key: 'output', value: '12', unit: 'per_million_tokens' },
-      { key: 'cacheRead', value: '2', unit: 'per_million_tokens' },
+      { key: 'cacheRead', value: '0', unit: 'per_million_tokens' },
+      { key: 'cacheWrite', value: '2', unit: 'per_million_tokens' },
     ])
+    expect(catalogPrices(parsed.models[0]!, 'K')[0]?.value).toBe('0.004')
   })
-
   it('rejects malformed ranking shares and accepts valid history', () => {
     const parsed = parseRankings({
       models: [

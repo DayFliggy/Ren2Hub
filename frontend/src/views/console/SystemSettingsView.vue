@@ -23,7 +23,11 @@ const tabs = computed(() =>
   }))
 )
 
-const activeTab = computed(() => String(route.name ?? ''))
+const activeTab = computed(() =>
+  route.name === 'model-pricing'
+    ? 'system-settings-billing'
+    : String(route.name ?? '')
+)
 
 // Pre-fetch all options once on mount so sub-views share the same data
 onMounted(() => load())

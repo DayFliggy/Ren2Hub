@@ -23,7 +23,7 @@ import (
 func setupGatewayVolcSpeech(t *testing.T, handler http.HandlerFunc) (string, string) {
 	t.Helper()
 	url, key, _ := setupGatewaySDKWithUpstream(t, handler)
-	require.NoError(t, publishGatewayFixturePrices(`{"tts-volc":0.001}`, false))
+	require.NoError(t, configureGatewayFixturePrices(`{"tts-volc":0.001}`, false))
 	channel, err := model.GetChannelById(1, true)
 	require.NoError(t, err)
 	baseURL := "ws" + strings.TrimPrefix(*channel.BaseURL, "http")

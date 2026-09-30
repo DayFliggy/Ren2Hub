@@ -20,7 +20,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
@@ -66,7 +65,7 @@ func TestGatewayVeoFinalParametersAndPrecharge(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = fmt.Fprintf(w, `{"name":"models/%s/operations/local-%d"}`, requestModel, index)
 			})
-			_, priceErr := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: requestModel, Mode: billing.ModeExpression, Expression: `attr_num("duration") * 1000 * (attr("resolution") == "4k" ? 1.5 : 1)`}, 0, 1)
+			priceErr := setGatewayModelPrice(requestModel, model.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": `u("seconds") * 0.001 * (u("resolution") == "4k" ? 1.5 : 1)`})
 			require.NoError(t, priceErr)
 			ch, err := model.GetChannelById(1, true)
 			require.NoError(t, err)

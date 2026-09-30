@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/shopspring/decimal"
-	"strings"
 )
 
 func AllowedAttribute(name string) bool {
@@ -85,10 +84,4 @@ func FreezeAttributes(attributes map[string]interface{}) (map[string]interface{}
 		}
 	}
 	return result, nil
-}
-
-// Calendar zone names remain data while replaying. Only FreezeCalendars reads
-// the timezone database; a frozen offset is sufficient to verify the fields.
-func validZoneName(name string) bool {
-	return name != "" && name != "Local" && strings.TrimSpace(name) == name && !strings.ContainsAny(name, "\\\x00")
 }

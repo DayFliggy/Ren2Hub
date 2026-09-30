@@ -112,7 +112,13 @@ func GetBillingReconciliation(c *gin.Context) {
 		billingAPIError(c, err)
 		return
 	}
-	common.ApiSuccess(c, gin.H{"recovery": billingRecoveryDTO(recovery), "quote": decode(recovery.QuoteSnapshot), "usage": decode(recovery.UsageSnapshot), "charge": decode(recovery.ChargeSnapshot), "events": events, "attempts": quotes, "audit": audit, "upstream_cost": costs})
+	usage := decode(string(recovery.UsageSnapshot))
+	if fields, ok := usage.(map[string]any); ok {
+		delete(fields, "evaluation_evidence")
+		delete(fields, "estimated_facts")
+		delete(fields, "actual_facts")
+	}
+	common.ApiSuccess(c, gin.H{"recovery": billingRecoveryDTO(recovery), "quote": decode(recovery.QuoteSnapshot), "usage": usage, "charge": decode(recovery.ChargeSnapshot), "events": events, "attempts": quotes, "audit": audit, "upstream_cost": costs})
 }
 
 func ResolveBillingReconciliation(c *gin.Context) {

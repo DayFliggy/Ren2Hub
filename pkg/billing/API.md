@@ -1,59 +1,43 @@
-# 计价接口
+# Ren2Hub 计价接口
 
-## 结构化价格
+唯一可编辑价格来源是 NewAPI 风格的 `model_pricing`。`PriceVersion` 只是该配置在请求边界的不可变执行证据，没有独立的价格发布、活动价格指针或自动发布业务。
 
-`PriceVersion` 可选 `flat_fee`（一次请求的 USD 固定费）和 `effective_from`/`effective_to`（RFC3339 窗口）。发布立即生效，拒绝未来开始或已到期的版本，没有排期切换器。创建报价须落在窗口内，结算只读冻结版本和 `FrozenAt`。
+## 管理与草稿
 
-`UnitPrice` 可使用 `tier_mode:'volume'|'graduated'` 与 `tiers:[{up_to?,unit_price}]`。`volume` 按完整数量选择一个档位；`graduated` 按各档实际占用数量累加。`up_to` 必须严格递增，最后一档可省略以表示无上限；有限档位超出范围时结算失败。阶梯价不能同时填写 `price`，固定单价仍使用原有 `price` 字段。
+`GET/PATCH /api/option/model_pricing` 读取／保存模型配置，保存沿用 `expected_version` 冲突检查。`convert`、`preview` 与模拟只处理草稿。价格抓取只提供候选；管理员选取来源后填入草稿，仍由保存接口生效。初始模型价格为空；没有配置不能按免费价格执行，明确零价则有效。
 
-`Usage.ReasoningTokens` 是规范化输出用量。声明 `reasoning` 单价时，该数量会从普通 completion 数量中排除后独立计费；数量必须非负且不超过 `OutputTokens`。表达式和阶梯金额在最终转为 quota 前经过有限性、范围和 Decimal 校验。
-`PriceVersion` 是不可变模型价格版本，`Quote` 冻结版本、完整价格、渠道售价系数、安全属性、发送时间和违规附加费规则；`Usage` 保存规范化数量、来源和完整性，`ChargeResult` 保存分项、精确总额、最终额度和计算版本。这三类证据分别序列化，不能覆盖为同一快照。
+`PricingValues` 包含上游 ModelRatio、ModelPrice、CompletionRatio、CacheRatio、CreateCacheRatio、ImageRatio、AudioRatio、AudioCompletionRatio、billing mode、expression 与插件表达式配置。宿主解析生效默认、模型名称及执行插件，纯计价器不查询当前设置。
 
-Root 价格管理接口：
+## 冻结合同
 
-| 请求 | 结果 |
-| --- | --- |
-| `GET /api/billing/prices` | `{success:true,data:PriceVersion[]}` |
-| `POST /api/billing/prices`，正文 `{price:PriceVersion,expected_version:number}` | 发布后返回 `{success:true,data:PriceVersion}`；版本冲突返回 409 |
-| `GET /api/billing/prices/seed` | `{success:true,data:{prices:PriceVersion[],unconfigured:string[],source:string}}` |
-| `POST /api/billing/prices/preview` | 只读预览，返回 `{success:true,data:{quote:Quote,charge:ChargeResult}}`；不发布、不预留、不调用供应商 |
+`NewModelPriceVersion(model, effective, taskUsage)` 构造倍率、按次或表达式合同；`PreparePriceVersion` 深拷贝配置并生成定义哈希；`NewQuote` 冻结渠道系数和报价身份。合同版本为 4，计算版本为 `newapi-c71eefbc-v1`。旧 unit_price/free、独立单价维度和 v2 合同拒绝执行，新库不提供兼容分支。
 
-`PriceVersion = {id:number,scope_kind:'global_model'|'channel_model',channel_id?:number,model:string,mode:'unit_price'|'expression'|'free',prices:UnitPrice[],expression?:string,created_at:number,hash:string}`。发布时 ID、创建时间、来源和哈希由服务器设置；首次发布该作用域时 `expected_version=0`，更新时传该作用域的当前 ID。没有原地修改和删除版本接口。查价先精确匹配渠道作用域，再使用已明确发布的全局作用域；渠道价格的报价系数固定为字符串 `"1"`。
+`Quote.PreConsumeMultiplier` 仅作用于估算的 token 分支；`OtherRatios` 为宿主已验证的额外请求倍率；`AudioInputPrice` 只有明确配置时才可冻结。工具附加费使用 `PriceVersion.Prices` 的 `tool:*` 项，支持 `per_call` 和 `per_thousand_calls`。宿主的配置入口是独立上游 option `tool_price_setting.prices`，单位 USD/千次调用，初始为空；`tool:model_prefix*` 以最长前缀覆盖工具通用价格，显式零有效。声明工具缺价时拒绝发送，实际调用量缺价时拒绝计价，不能从声明补造实际次数。
 
-安装格式为 4，不迁移旧数据库。PriceVersion 包含 `contract_version:3`、`calculation_version:'billing-v3'`、`result_unit:'micro_usd'|'usd'`、可选 `usage_schema`、`metering`、`provenance`、`support` 和 `origin/source_model/source_hash`。Quote 另冻结 `request_facts` 和时间函数的 `calendars`，均纳入哈希。新草稿可省略当前版本字段，由服务器物化；已保存价格与报价缺失或未知版本直接拒绝。
+模型费用和工具费用合计后应用渠道系数一次。倍率、按次、表达式分别保持上游舍入，不能统一改成 Decimal 四舍五入或所有正价最低 1 quota；具体分支见[模型定价](../../docs/billing/PRICING.md#工具渠道系数与舍入)。资金账户、预留和事件仍是精确 int64，API quota 保持十进制整数字符串。
 
-人工发布必须提供 `provenance:{kind:'retail',retail_reason:string}` 或 `{kind:'evidence',fields:[{target,source_path,raw_value,source_unit,conversion}]}`。retail 理由非空且不能混入快照 ID 或字段证据；evidence 至少一项，五个字段均是非空字符串。自动 source 证据由服务器绑定不可变快照 ID、解析器版本和字段映射，不能通过人工入口伪造。`support:{dimensions:string[],service_tiers:string[]}` 明确适用维度和档位；非默认档位须有相应表达式政策，不提供隐式倍率。
+图片按次数量来自 `Usage.Quantities.images`，DALL-E 历史尺寸／质量系数由 `LegacyImagePriceRatio` 统一提供。不能同时在 OtherRatios 再写 n/image_count 或重复的尺寸质量系数。表达式图片数量通过实际 RequestInput.ImageCount 输入。
 
-可选 `usage_scope:'embedding'` 将价格限定到已有向量请求；缺省为空且序列化省略。只接受当前合同，不兼容旧价格或报价。该范围仅接受无任务 schema 的输入 token 单价、v1 输入 token 表达式或明确免费，禁止输出 token、工具、按张和其他非 token 收费。报价前核对请求类型，原生 Gemini 向量请求仍保留原协议模式；冻结后的范围参与哈希，任何实际输出 token（包括图片和音频输出）或非零非 token 数量均拒绝结算。
+## 求值与重放
 
-预览正文为 `{price,usage,attributes,request_facts,channel_ratio,frozen_at}`；渠道倍率为明确十进制字符串，时间为非零 RFC3339，载荷上限 256 KiB。调用 `NewQuoteWithFacts` 和实际 `Calculate`，无需数据库写入。schema 数量使用 `estimated_facts` 或 `actual_facts`，不能同时在 `quantities` 再次表示。numeric facts 保持精确十进制字符串，表达式直接使用 Decimal。
+```go
+cipher, err := billing.NewEvidenceCipher(secret)
+binding := billing.EvidenceBinding{
+    RequestID: requestID,
+    AttemptID: attemptID,
+    ConfigHash: billing.PricingConfigHash(quote),
+    Phase: "settlement", // 实际预扣使用 estimate；只读模拟可用 preview
+}
+usage, charge, err := cipher.Evaluate(quote, usage, actualRequestInput, binding)
+replayed, err := cipher.Replay(quote, usage, binding)
+```
 
-固定单价结构为 `UnitPrice={quantity,unit,price}`；阶梯以 `tier_mode/tiers` 替代 `price`。token 维度为 `p,c,reasoning,cr,cc,cc1h,img,img_cr,img_o,ai,ai_cr,ao`，使用 `per_million_tokens`。`calls/tool:<工具名>` 使用 `per_call/per_thousand_calls`，`images` 使用 `per_image`，`seconds` 使用 `per_second/per_minute/per_hour`，`characters` 使用 `per_character/per_million_characters`，`credits` 使用 `per_credit`。金额及非 token 数量为 Decimal 字符串，不跨物理维度转换。表达式拥有 token 项，不得重复添加 token 单价。
+`Evaluate` 返回包含 `evaluation_evidence` 密文的 Usage。AES-GCM 密钥通过 HKDF 派生，AAD 包含请求、真实尝试、配置哈希与阶段。`Replay` 校验 AAD、报价与用量哈希后重跑相同计算器，动态 `param/header/time` 使用保存的环境调用结果；不能将密文 Usage 直接交给无密钥的 Calculate，也不能仅相信历史金额。身份、内容或结果不一致保持待处理。`KeyID()` 返回公开指纹，用于安装标记，不能用于解密。请求体及头不会进入公开 Quote。
 
-物理音频计量须显式声明 `metering:{request_kind,quantity,source,method,reservation_quantity?}`。合法组合为 `speech/characters/request_fixed/unicode_codepoints`、`speech/characters/completion_fact/provider_usage` 和 `transcription/seconds/completion_fact/provider_duration`。completion_fact 必须给出正数 `reservation_quantity`；request_fixed 禁止该字段。价格仅能为无 schema 的 unit_price，单价维度限合同数量及 calls。该合同不等于所有渠道都能提供事实，当前具体适配与未支持产品见[定价边界](../../docs/billing/PRICING.md)。
+计算错误也返回包含该次实际输入的加密 Usage，ChargeResult 为空；调用方必须保存失败证据，不能沿用预扣金额。时间对象保留墙钟、单调计数和时区对象身份，重放要求与首次求值完全相同的 Go 工具链版本；升级工具链前需验证或处理在途时间证据，参见[表达式契约](../billingexpr/expr.md)。
 
-v1 token 表达式结果除以一百万得到 USD，例如 `p * 2 + c * 8`。v2 schema 表达式直接返回 USD，例如 `v2:u("seconds") * 0.4`，禁止混用 token/fixed。schema 单价必须对应声明的最终数值事实。字符串属性用 `attr("service_tier")`，数值属性用 `attr_num("duration")`；禁止任意正文和请求头访问。时间函数在创建 Quote 时固化日历，重放不依赖当前时钟或时区库。详细语法见[表达式说明](../billingexpr/expr.md)。
+宿主使用 `model.EvaluateBilling/ReplayBilling`，并从恢复记录和真实 BillingAttempt.ID 推导身份，不信任调用方提交的证据元信息。`PersistBillingEstimate` 在发送前验证并保存估算证据，要求已预留额度覆盖估算。BillingConsumption 必须保存对应 AttemptID，资金事务再次验证估算和实际费用。
 
-v1 按张价格使用 `fixed(usd) * image_count`；预览/计价传 `usage.quantities.images` 十进制整数字符串，范围 1–128，缺失或零不按默认数收费。该表达式不得再带 images/per_image 附加行；服务器校验全部分支。请求固定数量仍在 Quote.Attributes.quantity，实际数写 Trace.image_count，两者分别保留。示例用量：`{"quantities":{"images":"2"},"complete":true}`。Vue 的单价转换先显示草稿预览，显式确认后才应用，保存才发布新版本。
+schema 5 安装必须配置稳定的 CRYPTO_SECRET，并在数据库 marker 保存 KeyID。更换或丢失密钥会阻止旧证据的验证，不能自动生成新密钥继续扣款。大型密文快照使用跨数据库 LongText。普通 API、日志与审计报告只返回费用和验证状态，不返回解密上下文。
 
-纯计算入口 `billing.Calculate(*Quote, Usage) (*ChargeResult,error)` 只读冻结数据，不访问数据库或配置。全部项目先用 Decimal 合计，再乘渠道系数与 `500000`，只对总额四舍五入一次。正数最低收 1 quota，明确为零收 0；超过 MaxInt32 的单请求费用返回错误，交由账务对账处理。`ChargeResult.FinalQuota` 为 `common.Quota`，JSON 是十进制整数字符串。`billing.RoundCharge` 是统一计算器的舍入边界；违规附加费也通过派生 Quote 和 `Calculate` 计价。`billing.RequestQuota` 是原 relay int 接口的有界转换。
-
-接入点为 `info.PriceData.Quote`、`.Usage`、`.Charge`。文本与音频通过 `service.NormalizedBillingUsage` 统一事实；最终预算检查在 `AnalyzeOutboundTokenBudget`、`FinalImagePriceMeta`、`FinalAudioPriceMeta` 冻结已发送参数中的安全属性。任务使用 `model.TaskBillingContext.Quote/Usage`，终态计算不得调用适配器货币倍率或重新查询价格。
-
-主库包含 `BillingPriceVersion`、`BillingActivePrice`、`BillingPricingSource`、`BillingPricingSnapshot` 和 `BillingPricingConfig`。启动安装缺失的离线目录并发布有效全局价，系统任务默认每 30 分钟检查远端。人工价优先，同身份先 Sub2API 后 AxonHub；单源不可用不阻断其他来源，更新不改冻结证据。详细规则见[自动定价](../../docs/billing/PRICING.md)。
-
-自动定价管理均要求 Root：`GET /api/billing/prices/automatic` 返回 `{config,sources,origins}`；`PUT` 同地址提交 `{enabled,check_interval_minutes}`（5–1440）。`POST /automatic/sync` 返回标准系统任务，按任务 API 查询结果；关闭计划不禁止手动检查。`POST /automatic/restore` 提交 `{model,expected_version}` 恢复当前目录价，版本冲突 409。`GET /prices/seed` 保留接口形状，但返回当前合并参考目录及来源哈希，不再返回旧种子。所有路径均以 `/api/billing/prices` 为基准。
-
-`GET /api/billing/prices/automatic/snapshots?source=sub2api&limit=20` 返回归档元数据数组；省略 source 可查两个来源。`GET /api/billing/prices/automatic/snapshots/:id` 返回元数据与 `document` 原文字符串；加 `?download=1` 返回 JSON 附件及 `X-Pricing-SHA256`。三者均要求 Root，读取原文先核验 SHA；只有元数据不能重放目录。来源状态另含 `snapshot_id/parser_version/snapshot_count`。
-
-公开 `GET /api/pricing` 每个模型返回 `{model_name,...metadata,offers:[...]}`，只含调用方可路由、当前有效的已发布价格。每份 offer 为 `{offer_id,priced_model,price_version,conditions,adjustments,display_prices,display_flat_fee?,availability}`。`price_version` 是公开投影，含版本 ID/hash、计价合同、单价、表达式、窗口、schema/metering，省略渠道 ID 和来源证据；其 hash 指向原始冻结版本，不能对投影重新验原始哈希。`conditions` 含可用的 usage_scope、dimensions、service_tiers、context_rule；`availability.status='available'`。
-
-`adjustments=[{kind:'channel_multiplier',multiplier:string}]` 与服务端精确计算的 `display_prices/display_flat_fee` 区分原价和售价。表达式保持原文，调整另列，不伪造单一 token 价。请求模型别名不必等于 `priced_model`；同版本不同倍率保留独立 offer，同价同版本可去重。`offer_id` 是不透明哈希，禁止借其推断渠道身份。旧 `price_version/price_versions/billing_mode` 模型顶层字段已移除。
-
-Root 对账接口 `GET /api/billing/reconciliations/:id` 返回 `audit` 和 `upstream_cost`。`audit` 校验冻结价格、报价、尝试的 request_fingerprint、完整消费指纹及最终账本事件，并重算明细；状态为 `verified|mismatch|invalid_evidence|unconfirmed`。请求指纹绑定账务请求身份，不提供跨请求 ID 的正文去重。重放不读取实时目录，不修改钱包或恢复状态。
-
-`POST /api/billing/reconciliations/:id/cost` 正文为 `{event_id,attempt_id,amount_usd,source,reference}`。`amount_usd` 是非负 Decimal 字符串，`source` 为 `invoice` 或 `provider_receipt`，`reference` 是外部凭据引用。只允许为已 settled/refunded 请求登记属于该请求的尝试成本，每个尝试一条不可变记录；重复相同事件幂等，冲突返回 409，不影响客户余额。全部尝试的成本明确后报告 `upstream_cost_usd`；客户实收也确认后才报告 `profit_usd`，否则为 null。
-
-`ChargeResult` 增加 `base_usd` 与 `adjustments:[{kind,multiplier,base_usd,amount_usd,result_usd}]`。渠道调整的 kind 为 `channel_multiplier`，amount_usd 可为负的折扣增减额；最终费用仍不可为负，倍率 1 也保留记录。
-
-`GET /api/billing/metrics` 包括 `price_versions`、`quote_attempts`、`prices_by_origin:[{scope_kind,origin,count}]`，以及可选 `operational` 当前实例累计指标。来源标签有界，不使用模型名或请求 ID 作指标标签；来源健康及失败仍由自动定价接口提供。
+完整表达式和时间语义见 [表达式契约](../billingexpr/expr.md)。

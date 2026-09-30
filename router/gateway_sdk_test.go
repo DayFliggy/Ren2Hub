@@ -59,7 +59,7 @@ func setupGatewaySDKWithUpstream(t *testing.T, handler http.HandlerFunc) (string
 		common.RDB, common.MemoryCacheEnabled = oldRedis, oldMemory
 		_ = client.Close()
 	})
-	require.NoError(t, publishGatewayFixturePrices(`{"gpt-4o-mini":0.001,"claude-3-5-sonnet":0.001,"gemini-2.5-flash":0.001,"llama3.1":0.001}`, false))
+	require.NoError(t, configureGatewayFixturePrices(`{"gpt-4o-mini":0.001,"claude-3-5-sonnet":0.001,"gemini-2.5-flash":0.001,"llama3.1":0.001}`, false))
 	service.InitHttpClient()
 	upstream := httptest.NewServer(handler)
 	t.Cleanup(upstream.Close)

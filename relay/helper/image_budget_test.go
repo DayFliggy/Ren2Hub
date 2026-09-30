@@ -9,12 +9,28 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestFinalImagePricingPreservesValidatedProviderParameters(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/images/generations", nil)
+	info := &relaycommon.RelayInfo{OriginModelName: "image-test", ChannelMeta: &relaycommon.ChannelMeta{ApiType: constant.APITypeAli}}
+	_, err := FinalImagePriceMeta(c, info, strings.NewReader(`{"parameters":{"n":3,"prompt_extend":false},"input":{"prompt":"private-prompt"}}`))
+	require.NoError(t, err)
+	input := info.BillingRequestInput
+	require.NotNil(t, input)
+	assert.JSONEq(t, `{"model":"image-test","n":3,"size":"","quality":"","parameters":{"n":3,"prompt_extend":false}}`, string(input.Body))
+	assert.NotContains(t, string(input.Body), "private-prompt")
+	amount, _, err := billingexpr.RunExprWithRequest(`param("parameters.n") == 3 && param("parameters.prompt_extend") == false ? tier("many",fixed(0.02)) : tier("one",fixed(0.01))`, billingexpr.TokenParams{}, *input)
+	require.NoError(t, err)
+	assert.Equal(t, 20000.0, amount)
+}
 
 func TestFinalImagePriceUsesWireQuantities(t *testing.T) {
 	for _, test := range []struct {

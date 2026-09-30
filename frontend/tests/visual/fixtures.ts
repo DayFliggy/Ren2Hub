@@ -1,4 +1,3 @@
-import { pricingOfferFixture } from './pricingFixtures'
 import { expect, type ConsoleMessage, type Page } from '@playwright/test'
 
 export type VisualTheme = 'light' | 'dark'
@@ -392,46 +391,6 @@ export async function configureStablePage(
         queued: 0,
       },
     ],
-    ['/api/billing/prices', []],
-    [
-      '/api/billing/prices/automatic',
-      {
-        config: { enabled: true, check_interval_minutes: 30 },
-        sources: [
-          {
-            source: 'sub2api',
-            snapshot_id: 1,
-            parser_version: 'sub2api-v3',
-            snapshot_count: 1,
-            role: 'primary',
-            url: 'https://example.test/sub2api/prices.json',
-            hash: 'sub2api-sha',
-            checked_at: 1785114000,
-            updated_at: 1785114000,
-            last_error: '',
-            model_count: 1400,
-            rejected_count: 2,
-            snapshot_state: 'current',
-          },
-          {
-            source: 'axonhub',
-            snapshot_id: 2,
-            parser_version: 'axonhub-v3',
-            snapshot_count: 1,
-            role: 'fallback',
-            url: 'https://example.test/axonhub/prices.json',
-            hash: 'axonhub-sha',
-            checked_at: 1785114000,
-            updated_at: 1785114000,
-            last_error: '',
-            model_count: 900,
-            rejected_count: 0,
-            snapshot_state: 'current',
-          },
-        ],
-        origins: [],
-      },
-    ],
     ['/api/billing/self/reservations', { items: [], total: 0 }],
     ['/api/billing/self/events', { items: [], total: 0 }],
     ['/api/option/catalog', []],
@@ -533,24 +492,12 @@ export async function configureStablePage(
           tags: 'reasoning,tools',
           vendor_id: 1,
           owner_by: 'OpenAI',
-
           supported_endpoint_types: ['openai'],
-          billing_mode: 'token',
-          offers: [
-            pricingOfferFixture({
-              id: 1,
-              model: 'gpt-4.1',
-              mode: 'unit_price' as const,
-              prices: [
-                { quantity: 'p', unit: 'per_million_tokens', price: '2.5' },
-                { quantity: 'c', unit: 'per_million_tokens', price: '10' },
-                { quantity: 'cr', unit: 'per_million_tokens', price: '0.625' },
-                { quantity: 'cc', unit: 'per_million_tokens', price: '3.125' },
-              ],
-              created_at: 1,
-              hash: 'fixture',
-            }),
-          ],
+          quota_type: 0,
+          model_ratio: 1.25,
+          completion_ratio: 4,
+          cache_ratio: 0.25,
+          create_cache_ratio: 1.25,
         },
         {
           model_name: 'claude-sonnet-4',
@@ -559,28 +506,12 @@ export async function configureStablePage(
           tags: 'analysis,code',
           vendor_id: 2,
           owner_by: 'Anthropic',
-
           supported_endpoint_types: ['openai'],
-          billing_mode: 'token',
-          offers: [
-            pricingOfferFixture({
-              id: 1,
-              model: 'claude-sonnet-4',
-              mode: 'unit_price' as const,
-              prices: [
-                { quantity: 'p', unit: 'per_million_tokens', price: '3' },
-                { quantity: 'c', unit: 'per_million_tokens', price: '15' },
-                {
-                  quantity: 'cr',
-                  unit: 'per_million_tokens',
-                  price: '0.30000000000000004',
-                },
-                { quantity: 'cc', unit: 'per_million_tokens', price: '0' },
-              ],
-              created_at: 1,
-              hash: 'fixture',
-            }),
-          ],
+          quota_type: 0,
+          model_ratio: 1.5,
+          completion_ratio: 5,
+          cache_ratio: 0.1,
+          create_cache_ratio: 0,
         },
         {
           model_name: 'gemini-2.5-pro',
@@ -589,22 +520,10 @@ export async function configureStablePage(
           tags: 'multimodal,long-context',
           vendor_id: 3,
           owner_by: 'Google',
-
           supported_endpoint_types: ['openai'],
-          billing_mode: 'token',
-          offers: [
-            pricingOfferFixture({
-              id: 1,
-              model: 'gemini-2.5-pro',
-              mode: 'unit_price' as const,
-              prices: [
-                { quantity: 'p', unit: 'per_million_tokens', price: '1.7' },
-                { quantity: 'c', unit: 'per_million_tokens', price: '6.8' },
-              ],
-              created_at: 1,
-              hash: 'fixture',
-            }),
-          ],
+          quota_type: 0,
+          model_ratio: 0.85,
+          completion_ratio: 4,
         },
       ],
     ],

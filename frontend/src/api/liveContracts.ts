@@ -1,10 +1,3 @@
-import {
-  parsePublicPriceVersion,
-  parsePriceLines,
-  type PublicPriceVersion,
-  type UnitPrice,
-} from './modelPricing'
-import { isDecimal } from '@/utils/decimal'
 import type {
   DrawingLogItem,
   LogItem,
@@ -98,211 +91,142 @@ export interface PricingModelContract {
   icon: string
   tags: string
   vendor_id: number
-  offers: PricingOffer[]
   owner_by: string
   supported_endpoint_types: string[]
+  quota_type: number
+  model_ratio?: number
+  model_price?: number
+  completion_ratio?: number
+  cache_ratio?: number
+  create_cache_ratio?: number
+  image_ratio?: number
+  audio_ratio?: number
+  audio_completion_ratio?: number
+  billing_mode?: string
+  billing_expr?: string
+  billing_usage_schema?: import('@/features/pricing/types').BillingUsageSchema
+  billing_plugin_variants?: Array<{
+    plugin_key: string
+    plugin_name: string
+    billing_expr: string
+    billing_mode: 'ratio' | 'tiered_expr' | 'unconfigured'
+  }>
 }
-
-export interface PricingOffer {
-  offer_id: string
-  priced_model: string
-  price_version: PublicPriceVersion
-  conditions: {
-    usage_scope?: 'embedding'
-    dimensions?: string[]
-    service_tiers?: string[]
-    context_rule?: string
-  }
-  adjustments: Array<{ kind: 'channel_multiplier'; multiplier: string }>
-  display_prices: UnitPrice[]
-  display_flat_fee?: string
-  availability: { status: 'available' | 'unavailable'; reason?: string }
-}
-
-export function parsePricingOffer(
-  value: unknown,
-  endpoint: string
-): PricingOffer {
-  if (
-    !isRecord(value) ||
-    !isRecord(value.conditions) ||
-    !Array.isArray(value.adjustments) ||
-    !isRecord(value.availability)
-  )
-    invalidResponse(endpoint)
-  const version = parsePublicPriceVersion(value.price_version, endpoint)
-  const pricedModel = requiredString(value.priced_model, endpoint, false)
-  if (version.model !== pricedModel) invalidResponse(endpoint)
-  const conditions: PricingOffer['conditions'] = {}
-  if (value.conditions.usage_scope !== undefined) {
-    if (value.conditions.usage_scope !== 'embedding') invalidResponse(endpoint)
-    conditions.usage_scope = 'embedding'
-  }
-  for (const key of ['dimensions', 'service_tiers'] as const) {
-    if (value.conditions[key] !== undefined)
-      conditions[key] = parseStringArray(value.conditions[key], endpoint)
-  }
-  if (value.conditions.context_rule !== undefined)
-    conditions.context_rule = requiredString(
-      value.conditions.context_rule,
-      endpoint
-    )
-  if (!['available', 'unavailable'].includes(String(value.availability.status)))
-    invalidResponse(endpoint)
-  const displayPrices = parsePriceLines(value.display_prices, endpoint)
-  if (displayPrices.length !== version.prices.length) invalidResponse(endpoint)
-  for (const [index, line] of displayPrices.entries()) {
-    const base = version.prices[index]!
-    if (
-      line.quantity !== base.quantity ||
-      line.unit !== base.unit ||
-      line.tier_mode !== base.tier_mode ||
-      Boolean(line.tiers) !== Boolean(base.tiers)
-    )
-      invalidResponse(endpoint)
-    if (line.tiers) {
-      if (
-        line.tiers.length !== base.tiers?.length ||
-        line.tiers.some(
-          (tier, i) =>
-            !isDecimal(tier.unit_price) || tier.up_to !== base.tiers?.[i]?.up_to
-        )
-      )
-        invalidResponse(endpoint)
-    } else if (!isDecimal(line.price)) invalidResponse(endpoint)
-  }
-  if (
-    value.display_flat_fee !== undefined &&
-    !isDecimal(value.display_flat_fee)
-  )
-    invalidResponse(endpoint)
-  const adjustments = value.adjustments.map((adjustment) => {
-    if (
-      !isRecord(adjustment) ||
-      adjustment.kind !== 'channel_multiplier' ||
-      !isDecimal(adjustment.multiplier) ||
-      /^0(?:\.0+)?$/.test(adjustment.multiplier)
-    )
-      invalidResponse(endpoint)
-    return {
-      kind: 'channel_multiplier' as const,
-      multiplier: adjustment.multiplier,
-    }
-  })
-  if (adjustments.length !== 1) invalidResponse(endpoint)
-  return {
-    offer_id: requiredString(value.offer_id, endpoint, false),
-    priced_model: pricedModel,
-    price_version: version,
-    conditions,
-    adjustments,
-    display_prices: displayPrices,
-    ...(value.display_flat_fee === undefined
-      ? {}
-      : { display_flat_fee: value.display_flat_fee }),
-    availability: {
-      status: value.availability
-        .status as PricingOffer['availability']['status'],
-      ...(value.availability.reason === undefined
-        ? {}
-        : { reason: requiredString(value.availability.reason, endpoint) }),
-    },
-  }
-}
-
 export interface PerfModelSummaryContract {
   model_name: string
   avg_latency_ms: number
   success_rate: number
   avg_tps: number
 }
-
 export function parsePricingModels(value: unknown): PricingModelContract[] {
   const endpoint = '/api/pricing'
   if (!Array.isArray(value)) invalidResponse(endpoint)
   return value.map((item) => {
     if (!isRecord(item)) invalidResponse(endpoint)
-    const endpoints = item.supported_endpoint_types ?? []
-    if (
-      !Array.isArray(endpoints) ||
-      endpoints.some((entry) => typeof entry !== 'string')
-    ) {
-      invalidResponse(endpoint)
-    }
-    const modelName = requiredString(item.model_name, endpoint, false)
-    if (!Array.isArray(item.offers) || !item.offers.length)
-      invalidResponse(endpoint)
-    const offers = item.offers.map((offer) =>
-      parsePricingOffer(offer, endpoint)
-    )
-    if (new Set(offers.map((offer) => offer.offer_id)).size !== offers.length)
-      invalidResponse(endpoint)
-    return {
-      model_name: modelName,
+    const quotaType = requiredStrictInteger(item.quota_type, endpoint)
+    if (quotaType !== 0 && quotaType !== 1) invalidResponse(endpoint)
+    const result: PricingModelContract = {
+      model_name: requiredString(item.model_name, endpoint, false),
       description: requiredString(item.description ?? '', endpoint),
       icon: requiredString(item.icon ?? '', endpoint),
       tags: requiredString(item.tags ?? '', endpoint),
       vendor_id: requiredInteger(item.vendor_id ?? 0, endpoint),
-      offers,
       owner_by: requiredString(item.owner_by ?? '', endpoint),
-      supported_endpoint_types: [...endpoints],
+      supported_endpoint_types: parseStringArray(
+        item.supported_endpoint_types ?? [],
+        endpoint
+      ),
+      quota_type: quotaType,
     }
+    for (const key of [
+      'model_ratio',
+      'model_price',
+      'completion_ratio',
+      'cache_ratio',
+      'create_cache_ratio',
+      'image_ratio',
+      'audio_ratio',
+      'audio_completion_ratio',
+    ] as const) {
+      if (item[key] !== undefined) {
+        const number = requiredNumber(item[key], endpoint)
+        if (number < 0) invalidResponse(endpoint)
+        result[key] = number
+      }
+    }
+    for (const key of ['billing_mode', 'billing_expr'] as const)
+      if (item[key] !== undefined)
+        result[key] = requiredString(item[key], endpoint)
+    if (
+      result.billing_mode === 'unconfigured'
+        ? false
+        : result.billing_mode === 'tiered_expr'
+          ? !result.billing_expr?.trim()
+          : result.quota_type === 1
+            ? result.model_price === undefined
+            : result.model_ratio === undefined
+    )
+      invalidResponse(endpoint)
+    if (item.billing_usage_schema !== undefined) {
+      if (!isRecord(item.billing_usage_schema)) invalidResponse(endpoint)
+      result.billing_usage_schema =
+        item.billing_usage_schema as PricingModelContract['billing_usage_schema']
+    }
+    if (item.billing_plugin_variants !== undefined) {
+      if (!Array.isArray(item.billing_plugin_variants))
+        invalidResponse(endpoint)
+      result.billing_plugin_variants = item.billing_plugin_variants.map(
+        (raw) => {
+          if (!isRecord(raw)) invalidResponse(endpoint)
+          const mode = requiredString(raw.billing_mode, endpoint)
+          if (
+            mode !== 'ratio' &&
+            mode !== 'tiered_expr' &&
+            mode !== 'unconfigured'
+          )
+            invalidResponse(endpoint)
+          const expression = requiredString(raw.billing_expr ?? '', endpoint)
+          if (mode === 'tiered_expr' && !expression.trim())
+            invalidResponse(endpoint)
+          return {
+            plugin_key: requiredString(raw.plugin_key, endpoint),
+            plugin_name: requiredString(raw.plugin_name, endpoint),
+            billing_expr: expression,
+            billing_mode: mode,
+          }
+        }
+      )
+    }
+    return result
   })
 }
-
 export interface PricingCatalogIssue {
   model_name: string | null
-  offer_id: string | null
-  reason: 'invalid_price_offer' | 'invalid_model_record'
+  offer_id: null
+  reason: 'invalid_model_record'
 }
-
-// One unsupported offer must not hide unrelated prices. Keep the failure
-// separate from validated offers so it cannot be mistaken for a free price.
 export function parsePricingModelsPartial(value: unknown): {
   models: PricingModelContract[]
   issues: PricingCatalogIssue[]
 } {
-  const endpoint = '/api/pricing'
-  if (!Array.isArray(value)) invalidResponse(endpoint)
-  const models: PricingModelContract[] = []
-  const issues: PricingCatalogIssue[] = []
+  if (!Array.isArray(value)) invalidResponse('/api/pricing')
+  const models: PricingModelContract[] = [],
+    issues: PricingCatalogIssue[] = []
   for (const raw of value) {
-    const modelName =
-      isRecord(raw) && typeof raw.model_name === 'string'
-        ? raw.model_name
-        : null
-    if (!isRecord(raw) || !Array.isArray(raw.offers) || !raw.offers.length) {
+    try {
+      models.push(...parsePricingModels([raw]))
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.code !== 'INVALID_RESPONSE')
+        throw error
       issues.push({
-        model_name: modelName,
+        model_name:
+          isRecord(raw) && typeof raw.model_name === 'string'
+            ? raw.model_name
+            : null,
         offer_id: null,
         reason: 'invalid_model_record',
       })
-      continue
     }
-    let model: PricingModelContract | undefined
-    const seen = new Set<string>()
-    for (const offer of raw.offers) {
-      try {
-        const parsed = parsePricingModels([{ ...raw, offers: [offer] }])[0]!
-        const parsedOffer = parsed.offers[0]!
-        if (seen.has(parsedOffer.offer_id)) invalidResponse(endpoint)
-        seen.add(parsedOffer.offer_id)
-        if (model) model.offers.push(parsedOffer)
-        else model = parsed
-      } catch (error) {
-        if (!(error instanceof ApiError) || error.code !== 'INVALID_RESPONSE')
-          throw error
-        issues.push({
-          model_name: modelName,
-          offer_id:
-            isRecord(offer) && typeof offer.offer_id === 'string'
-              ? offer.offer_id
-              : null,
-          reason: 'invalid_price_offer',
-        })
-      }
-    }
-    if (model) models.push(model)
   }
   return { models, issues }
 }

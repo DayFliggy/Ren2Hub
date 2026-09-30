@@ -176,7 +176,7 @@ func TestGatewayOfficialCompatibleSDK(t *testing.T) {
 			}
 			priceJSON, err := common.Marshal(prices)
 			require.NoError(t, err)
-			require.NoError(t, publishGatewayFixturePrices(string(priceJSON), false))
+			require.NoError(t, configureGatewayFixturePrices(string(priceJSON), false))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			configJSON, err := common.Marshal(config)
 			require.NoError(t, err)
@@ -279,7 +279,7 @@ func TestGatewayCompatibleInvalidUsageIsNotDeliveredOrCharged(t *testing.T) {
 				channel.Type, channel.Models, channel.Other = provider.kind, "compatible-usage", "isolated-account"
 				require.NoError(t, model.DB.Model(channel).Updates(map[string]any{"type": channel.Type, "models": channel.Models, "other": channel.Other}).Error)
 				require.NoError(t, channel.AddAbilities(model.DB))
-				require.NoError(t, publishGatewayFixturePrices(`{"compatible-usage":0.001}`, false))
+				require.NoError(t, configureGatewayFixturePrices(`{"compatible-usage":0.001}`, false))
 				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 2000}).Error)
 				require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 				status, output := postGatewayTask(t, gatewayURL, key, "/v1/chat/completions", `{"model":"compatible-usage","messages":[{"role":"user","content":"hello"}],"max_tokens":32}`)
@@ -342,7 +342,7 @@ func TestGatewayCompatibleJSONClientFailureHoldsWithoutHealthPenalty(t *testing.
 				channel.Type, channel.Models, channel.Other = provider.kind, "compatible-usage", "isolated-account"
 				require.NoError(t, model.DB.Model(channel).Updates(map[string]any{"type": channel.Type, "models": channel.Models, "other": channel.Other}).Error)
 				require.NoError(t, channel.AddAbilities(model.DB))
-				require.NoError(t, publishGatewayFixturePrices(`{"compatible-usage":0.001}`, false))
+				require.NoError(t, configureGatewayFixturePrices(`{"compatible-usage":0.001}`, false))
 				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 2000}).Error)
 				require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 				engine := gin.New()

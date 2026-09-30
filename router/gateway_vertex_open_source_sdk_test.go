@@ -80,7 +80,7 @@ func setupGatewayVertexOpenSource(t *testing.T) *gatewayVertexOpenSourceFixture 
 	}
 	priceJSON, err := common.Marshal(prices)
 	require.NoError(t, err)
-	require.NoError(t, publishGatewayFixturePrices(string(priceJSON), false))
+	require.NoError(t, configureGatewayFixturePrices(string(priceJSON), false))
 	require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 	client := service.GetHttpClient()
 	original := client.Transport

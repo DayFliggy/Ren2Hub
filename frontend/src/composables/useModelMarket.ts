@@ -1,3 +1,4 @@
+import { catalogPrices } from '@/api/publicCatalog'
 import { compareDecimal } from '@/utils/decimal'
 import { computed, ref } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
@@ -46,27 +47,20 @@ function modelType(endpoints: string[]): MarketModel['type'] {
 }
 
 function modelPrice(pricing: PricingModelContract): MarketModel['price'] {
-  const offer = pricing.offers[0]!
-  const version = offer.price_version
-  if (version.mode === 'free') return { input: '0', output: '0' }
-  const names: Record<string, keyof MarketModel['price']> = {
-    p: 'input',
-    c: 'output',
-    cr: 'cache_read',
-    cc: 'cache_write',
-    calls: 'per_call',
-  }
   const result: MarketModel['price'] = {}
-  for (const line of offer.display_prices) {
-    const key = names[line.quantity]
-    if (
-      key &&
-      !line.tier_mode &&
-      key !== 'tiers' &&
-      (line.unit === 'per_million_tokens' ||
-        (key === 'per_call' && line.unit === 'per_call'))
-    )
-      result[key] = line.price
+  const names: Record<
+    string,
+    'input' | 'output' | 'cache_read' | 'cache_write' | 'per_call'
+  > = {
+    input: 'input',
+    output: 'output',
+    cacheRead: 'cache_read',
+    cacheWrite: 'cache_write',
+    request: 'per_call',
+  }
+  for (const line of catalogPrices(pricing, 'M')) {
+    const key = names[line.key]
+    if (key) result[key] = line.value
   }
   return result
 }
@@ -83,7 +77,6 @@ export function buildLiveModelCatalog(
   const models = names.map((name, index) => {
     const price = pricingByName.get(name)
     const metrics = performanceByName.get(name)
-    const primary = price?.offers[0]?.price_version
     const vendor = price?.owner_by.trim() || '平台'
     return {
       id: index + 1,
@@ -91,21 +84,15 @@ export function buildLiveModelCatalog(
       vendor,
       type: modelType(price?.supported_endpoint_types ?? []),
       billing:
-        primary?.mode === 'expression'
-          ? ('tiered' as const)
-          : primary?.mode === 'free'
-            ? ('free' as const)
-            : primary?.prices.some(
-                  (line) => !['p', 'c', 'cr', 'cc'].includes(line.quantity)
-                )
-              ? primary.prices.length === 1 &&
-                primary.prices[0]?.quantity === 'calls'
-                ? ('per_call' as const)
-                : ('unit_price' as const)
+        !price || price.billing_mode === 'unconfigured'
+          ? ('unconfigured' as const)
+          : price.billing_mode === 'tiered_expr'
+            ? ('tiered' as const)
+            : price?.quota_type === 1
+              ? ('per_call' as const)
               : ('token' as const),
       price: price ? modelPrice(price) : {},
-      pricing: primary,
-      offers: price?.offers,
+      pricing: price,
       context: 0,
       tagline: price?.description ?? '',
       latency: metrics ? Math.max(0, metrics.avg_latency_ms / 1000) : 0,

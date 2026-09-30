@@ -38,7 +38,7 @@ func TestCountBillableToolCallWebSearchDefaultsToPreview(t *testing.T) {
 
 func TestCountBillableToolCallFunctionCallRequiresFrozenPrice(t *testing.T) {
 	info := &RelayInfo{OriginModelName: "gpt-5.1"}
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "gpt-5.1", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "tool:my_priced_fn", Unit: "per_call", Price: "0.005"}}}, "1", nil, time.Unix(1700000000, 0))
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: "gpt-5.1", Mode: billing.ModePerCall, Pricing: billing.PricingValues{"ModelPrice": "0"}, Prices: []billing.UnitPrice{{Quantity: "tool:my_priced_fn", Unit: "per_call", Price: "0.005"}}}, "1", nil, time.Unix(1700000000, 0))
 	require.NoError(t, err)
 	info.PriceData.Quote = quote
 	info.CountBillableToolCall(dto.BuildInCallFunctionCall, "my_priced_fn")

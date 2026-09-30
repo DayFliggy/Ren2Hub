@@ -95,7 +95,9 @@ func TestPerfMetricFlushReceiptAcrossDatabases(t *testing.T) {
 func TestPerfMetricReceiptMigrationPreservesBillingFormat(t *testing.T) {
 	withTaskBillingDatabases(t, func(t *testing.T, db *gorm.DB) {
 		require.NoError(t, db.AutoMigrate(&BillingSchema{}))
-		require.NoError(t, db.Create(&BillingSchema{ID: 1, Version: BillingSchemaVersion}).Error)
+		cipher, err := billingEvidenceCipher()
+		require.NoError(t, err)
+		require.NoError(t, db.Create(&BillingSchema{ID: 1, Version: BillingSchemaVersion, EvidenceKeyID: cipher.KeyID()}).Error)
 		metric := PerfMetric{ModelName: "existing", Group: "default", BucketTs: 3600, RequestCount: 7}
 		require.NoError(t, db.Create(&metric).Error)
 		for range 2 {
@@ -105,7 +107,7 @@ func TestPerfMetricReceiptMigrationPreservesBillingFormat(t *testing.T) {
 		}
 		var marker BillingSchema
 		require.NoError(t, db.First(&marker, 1).Error)
-		assert.Equal(t, 4, marker.Version)
+		assert.Equal(t, BillingSchemaVersion, marker.Version)
 		require.NoError(t, db.First(&metric, metric.Id).Error)
 		assert.EqualValues(t, 7, metric.RequestCount)
 	})

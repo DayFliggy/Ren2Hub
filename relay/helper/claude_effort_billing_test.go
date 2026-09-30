@@ -2,10 +2,9 @@ package helper
 
 import (
 	"testing"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/pkg/billing"
+
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -74,24 +73,4 @@ func TestClaudeEffortBillingRejectsMalformedConfiguration(t *testing.T) {
 		require.Error(t, FreezeOutboundBillingAttributes(info, []byte(body)))
 		assert.Nil(t, info.BillingRequestInput)
 	}
-}
-
-func TestClaudeEffortRetryDoesNotRewriteFrozenQuote(t *testing.T) {
-	info := &relaycommon.RelayInfo{RelayFormat: types.RelayFormatClaude}
-	require.NoError(t, FreezeOutboundBillingAttributes(info, []byte(`{"output_config":{"effort":"medium"}}`)))
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "test", Mode: billing.ModeExpression, Expression: `v1:p * (attr("effort") == "high" ? 10 : 1)`}, "1", info.BillingRequestInput.Attributes, time.Now().UTC())
-	require.NoError(t, err)
-	before, err := common.Marshal(quote)
-	require.NoError(t, err)
-	require.NoError(t, FreezeOutboundBillingAttributes(info, []byte(`{"messages":[{"role":"system","output_config":{"effort":"high"}},{"role":"user"}]}`)))
-	assert.Equal(t, "high", info.ReasoningEffort)
-	charge, err := billing.Calculate(quote, billing.Usage{InputTokens: 1000, ContextTokens: 1000, InputIncludesCache: true})
-	require.NoError(t, err)
-	assert.Equal(t, "0.001", charge.TotalUSD)
-	after, err := common.Marshal(quote)
-	require.NoError(t, err)
-	assert.Equal(t, before, after)
-	require.NoError(t, FreezeOutboundBillingAttributes(info, []byte(`{"messages":[{"role":"user"}]}`)))
-	assert.Empty(t, info.ReasoningEffort)
-	assert.NotContains(t, info.BillingRequestInput.Attributes, "effort")
 }

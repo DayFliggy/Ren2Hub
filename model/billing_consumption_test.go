@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/shopspring/decimal"
 
 	"github.com/glebarez/sqlite"
@@ -16,10 +17,7 @@ import (
 )
 
 func publishedBillingTestQuote(version billing.PriceVersion, ratio string, attributes map[string]interface{}, at time.Time) (*billing.Quote, error) {
-	if version.Provenance == nil {
-		version.Provenance = &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}
-	}
-	published, _, err := publishBillingPrice(context.Background(), version, billingPricePublication{origin: BillingPriceOriginManual, actor: 1})
+	published, err := StoreBillingPriceEvidence(context.Background(), version)
 	if err != nil {
 		return nil, err
 	}
@@ -32,10 +30,20 @@ func bindConsumptionEvidence(requestID string, consumption BillingConsumption) (
 	if name == "" {
 		name = "fixture"
 	}
-	quote, err := publishedBillingTestQuote(billing.PriceVersion{Model: name, Mode: billing.ModeUnitPrice,
-		Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test charge"},
-		Prices:     []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: decimal.NewFromInt(int64(consumption.Log.Quota)).Div(decimal.NewFromInt(500000)).String()}},
-	}, "1", nil, time.Unix(7200, 0))
+	var recovery BillingRecovery
+	if err := DB.First(&recovery, "request_id = ?", requestID).Error; err != nil {
+		return consumption, err
+	}
+	values := billing.PricingValues{"ModelPrice": decimal.NewFromInt(int64(consumption.Log.Quota)).Div(decimal.NewFromInt(500000)).String()}
+	overrun := consumption.Log.Quota > recovery.FundingAmount
+	if overrun {
+		values = billing.PricingValues{"ModelRatio": 1.0, "CompletionRatio": 0.0}
+	}
+	version, err := billing.NewModelPriceVersion(name, values, false)
+	if err != nil {
+		return consumption, err
+	}
+	quote, err := publishedBillingTestQuote(version, "1", nil, time.Unix(7200, 0))
 	if err != nil {
 		return consumption, err
 	}
@@ -43,7 +51,29 @@ func bindConsumptionEvidence(requestID string, consumption BillingConsumption) (
 		return consumption, err
 	}
 	consumption.Usage = &billing.Usage{Complete: true, Source: "provider", Terminal: "completed", Quantities: map[string]string{"calls": "1"}, InputTokens: int64(consumption.Log.PromptTokens), OutputTokens: int64(consumption.Log.CompletionTokens)}
-	consumption.Charge, err = billing.Calculate(quote, *consumption.Usage)
+	if overrun {
+		consumption.Usage.InputTokens = int64(consumption.Log.Quota)
+		consumption.Usage.OutputTokens = 0
+	}
+	consumption.AttemptID = requestID + ":attempt"
+	estimate := *consumption.Usage
+	estimate.Estimated = true
+	estimate.Complete = false
+	estimate.Terminal = ""
+	estimate.Source = "request_estimate"
+	if overrun {
+		estimate.InputTokens = int64(recovery.FundingAmount)
+	}
+	estimate, estimateCharge, err := EvaluateBilling(quote, estimate, billingexpr.RequestInput{}, requestID, consumption.AttemptID, "estimate")
+	if err != nil {
+		return consumption, err
+	}
+	if err = PersistBillingEstimate(consumption.AttemptID, estimate, estimateCharge); err != nil {
+		return consumption, err
+	}
+	usage, charge, err := EvaluateBilling(quote, *consumption.Usage, billingexpr.RequestInput{}, requestID, consumption.AttemptID, "settlement")
+	consumption.Usage = &usage
+	consumption.Charge = charge
 	return consumption, err
 }
 

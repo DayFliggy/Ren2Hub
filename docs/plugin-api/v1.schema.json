@@ -946,8 +946,6 @@
         },
         "source": {
           "enum": [
-            "request_fixed",
-            "estimate_only",
             "completion_fact"
           ]
         },
@@ -983,70 +981,7 @@
           }
         }
       },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "const": "number"
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "unit"
-            ],
-            "not": {
-              "required": [
-                "enum"
-              ]
-            }
-          },
-          "else": {
-            "not": {
-              "anyOf": [
-                {
-                  "required": [
-                    "unit"
-                  ]
-                },
-                {
-                  "required": [
-                    "integer"
-                  ]
-                },
-                {
-                  "required": [
-                    "minimum"
-                  ]
-                },
-                {
-                  "required": [
-                    "maximum"
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "const": "boolean"
-              }
-            }
-          },
-          "then": {
-            "not": {
-              "required": [
-                "enum"
-              ]
-            }
-          }
-        }
-      ],
-      "description": "Host-owned PriceVersion field, not plugin meta. Decimal bounds are strings; host validates nonnegative bounds, integer quantities, range and hash."
+      "description": "Host-owned field derived from the selected plugin manifest and model profile, not writable plugin meta. Numeric bounds are decimal strings; completion facts are validated separately from estimates."
     },
     "frozenUsageSchema": {
       "type": "object",
@@ -1062,7 +997,7 @@
         },
         "fields": {
           "type": "object",
-          "minProperties": 1,
+          "minProperties": 0,
           "maxProperties": 64,
           "propertyNames": {
             "pattern": "^[a-z][a-z0-9_]{0,63}$"
@@ -1073,10 +1008,10 @@
         },
         "hash": {
           "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
+          "pattern": "^([0-9a-f]{64})?$"
         }
       },
-      "description": "Frozen in the accepted quote. Completion cannot overwrite request_fixed facts or use estimate_only as actual usage."
+      "description": "Frozen in the accepted quote and covered by the complete pricing definition hash. The separate hash may be empty. Missing actual usage cannot be filled from estimates."
     }
   },
   "description": "Based on upstream d04c118c; local immutable execution and frozen billing contract. The host performs semantic URL, namespace, model ownership and export validation in addition to this schema."

@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"gorm.io/gorm"
 	"strings"
 	"time"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
 
@@ -95,7 +98,21 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, info *relaycommon.RelayInfo, a
 		return false
 	}
 	usage := billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "confirmed_violation", Complete: true, Terminal: "completed"}
-	charge, err := billing.Calculate(quote, usage)
+	requestID := info.RequestId + ":violation"
+	var recovery model.BillingRecovery
+	var charge *billing.ChargeResult
+	lookupErr := model.DB.WithContext(context.WithoutCancel(ctx.Request.Context())).Where("request_id = ?", requestID).First(&recovery).Error
+	if lookupErr == nil && recovery.UsageSnapshot != "" {
+		var stored billing.Usage
+		err = common.UnmarshalJsonStr(string(recovery.UsageSnapshot), &stored)
+		if err == nil {
+			usage, charge, err = replayIdenticalBillingUsage(quote, stored, usage, requestID, requestID)
+		}
+	} else if lookupErr != nil && !errors.Is(lookupErr, gorm.ErrRecordNotFound) {
+		err = lookupErr
+	} else {
+		usage, charge, err = model.EvaluateBilling(quote, usage, billingexpr.RequestInput{}, requestID, requestID, "settlement")
+	}
 	if err != nil {
 		logger.LogError(ctx, "invalid frozen violation charge")
 		return false
@@ -103,7 +120,6 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, info *relaycommon.RelayInfo, a
 	if charge.FinalQuota == 0 {
 		return false
 	}
-	requestID := info.RequestId + ":violation"
 	other := map[string]any{
 		"violation_fee": true, "violation_fee_code": string(types.ErrorCodeViolationFeeGrokCSAM),
 		"fee_quota": charge.FinalQuota, "base_amount": original.ViolationFeeUSD,
@@ -125,7 +141,7 @@ func ChargeViolationFeeIfNeeded(ctx *gin.Context, info *relaycommon.RelayInfo, a
 			RequestID: requestID, UserID: info.UserId, TokenID: info.TokenId,
 			TokenRequired: !info.IsPlayground && info.TokenId > 0, Source: BillingSourceWallet,
 		}, info.ChannelId, quote, model.BillingConsumption{
-			Usage: &usage, Charge: charge, Log: *log, LogEnabled: common.LogConsumeEnabled,
+			AttemptID: requestID, Usage: &usage, Charge: charge, Log: *log, LogEnabled: common.LogConsumeEnabled,
 			CountUsage: false, NodeName: common.NodeName,
 		})
 	}

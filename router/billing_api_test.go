@@ -45,10 +45,11 @@ func TestBillingAPIRootResolutionAndOwnerIsolation(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, call(actor, http.MethodPost, "/api/billing/reconciliations/billing-role-1/resolve", `{}`).Code)
 	}
 	for _, route := range []struct{ method, path string }{
-		{http.MethodGet, "/api/billing/prices/automatic"},
-		{http.MethodPut, "/api/billing/prices/automatic"},
-		{http.MethodPost, "/api/billing/prices/automatic/sync"},
-		{http.MethodPost, "/api/billing/prices/automatic/restore"},
+		{http.MethodGet, "/api/option/model_pricing"},
+		{http.MethodPatch, "/api/option/model_pricing"},
+		{http.MethodPost, "/api/option/model_pricing/preview"},
+		{http.MethodPost, "/api/option/model_pricing/simulate"},
+		{http.MethodPost, "/api/ratio_sync/fetch"},
 	} {
 		for _, actor := range []int{1, 2} {
 			assert.Equal(t, http.StatusForbidden, call(actor, route.method, route.path, `{}`).Code)
@@ -57,6 +58,21 @@ func TestBillingAPIRootResolutionAndOwnerIsolation(t *testing.T) {
 		engine.ServeHTTP(recorder, httptest.NewRequest(route.method, route.path, strings.NewReader(`{}`)))
 		assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 	}
+	for _, retired := range []string{"/api/billing/prices", "/api/billing/prices/automatic", "/api/billing/prices/seed"} {
+		assert.Equal(t, http.StatusNotFound, call(3, http.MethodGet, retired, "").Code)
+	}
+	preview := call(3, http.MethodPost, "/api/option/model_pricing/preview", `{"model_name":"preview-only","pricing":{"ModelPrice":"0.1"}}`)
+	require.Equal(t, http.StatusOK, preview.Code, preview.Body.String())
+	var snapshot struct {
+		Success bool                       `json:"success"`
+		Data    model.ModelPricingSnapshot `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(call(3, http.MethodGet, "/api/option/model_pricing", "").Body.Bytes(), &snapshot))
+	require.True(t, snapshot.Success)
+	assert.Empty(t, snapshot.Data.Entries, "price previews must not configure an empty installation")
+	var evidenceCount int64
+	require.NoError(t, model.DB.Model(&model.BillingPriceVersion{}).Count(&evidenceCount).Error)
+	assert.Zero(t, evidenceCount, "price previews must not create execution evidence")
 	for _, path := range []string{"reservations", "events"} {
 		response := call(1, http.MethodGet, "/api/billing/self/"+path, "")
 		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -69,15 +85,15 @@ func TestBillingAPIRootResolutionAndOwnerIsolation(t *testing.T) {
 	body := fmt.Sprintf(`{"operation_id":"resolve-once","expected_version":%d,"action":"settle","quota":"30","reason":"confirmed provider invoice"}`, recovery.Version)
 	path := "/api/billing/reconciliations/billing-role-1/resolve"
 	assert.Equal(t, http.StatusConflict, call(3, http.MethodPost, path, body).Code, "administrator amounts cannot substitute for usage evidence")
-	version, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Model: "resolution-test", Mode: billing.ModeExpression, Expression: "p * 2", Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "resolution test price"}}, 0, 1)
+	version, err := setGatewayExpression("resolution-test", "p * 2")
 	require.NoError(t, err)
 	quote, err := billing.NewQuote(*version, "1", nil, time.Now())
 	require.NoError(t, err)
 	require.NoError(t, model.PrepareBillingAttempt(context.Background(), recovery.RequestID, "resolution-attempt", 0, quote))
 	usage := &billing.Usage{InputTokens: 30, ContextTokens: 30, Source: "provider", Complete: true, Terminal: "completed"}
-	charge, err := billing.Calculate(quote, *usage)
+	usage, charge, err := evaluateGatewayFixtureUsage(recovery.RequestID, "resolution-attempt", quote, billing.Usage{InputTokens: 20, ContextTokens: 20}, *usage)
 	require.NoError(t, err)
-	require.NoError(t, model.PrepareBillingRecoveryConsumption(recovery.RequestID, model.BillingConsumption{Log: model.Log{UserId: 1, ModelName: "resolution-test", Quota: 30}, Usage: usage, Charge: charge}))
+	require.NoError(t, model.PrepareBillingRecoveryConsumption(recovery.RequestID, model.BillingConsumption{AttemptID: "resolution-attempt", Log: model.Log{UserId: 1, ModelName: "resolution-test", Quota: 30}, Usage: usage, Charge: charge}))
 	require.NoError(t, model.DB.Where("request_id = ?", recovery.RequestID).First(&recovery).Error)
 	body = fmt.Sprintf(`{"operation_id":"resolve-once","expected_version":%d,"action":"settle","quota":"30","reason":"confirmed provider invoice"}`, recovery.Version)
 	for range 2 {

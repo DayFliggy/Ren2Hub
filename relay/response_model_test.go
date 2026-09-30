@@ -84,7 +84,7 @@ func TestResponseModelLogOmitsUnchangedModel(t *testing.T) {
 	quote, err := billing.NewQuote(billing.PriceVersion{
 		ID: 7, Model: "requested", ScopeKind: billing.PriceScopeGlobal,
 		ContractVersion: billing.ContractVersion, CalculationVersion: billing.CalculationVersion, ResultUnit: billing.ResultUSD,
-		Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "p", Unit: "per_million_tokens", Price: "2"}},
+		Mode: billing.ModeRatio, Pricing: billing.PricingValues{"ModelRatio": "1"},
 	}, "1", nil, time.Unix(1700000000, 0))
 	require.NoError(t, err)
 	for _, tc := range []struct {

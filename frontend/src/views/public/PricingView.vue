@@ -1,520 +1,235 @@
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, Check, Copy } from 'lucide-vue-next'
-import { useClipboard } from '@vueuse/core'
-import {
-  catalogPrices,
-  publicCatalogApi,
-  type CatalogModel,
-  type CatalogPrice,
-  type PricingCatalog,
-} from '@/api/publicCatalog'
-import type { PricingOffer } from '@/api/liveContracts'
-
-type CatalogOffer = CatalogModel & { offer: PricingOffer }
-
+import { publicCatalogApi, type PricingCatalog } from '@/api/publicCatalog'
+import { modelPricingMessages } from '@/i18n/modelPricing'
 import PublicPage from '@/components/public/PublicPage.vue'
+import ModelPriceItems from '@/components/console/models/ModelPriceItems.vue'
 import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
-import FilterSelect from '@/components/common/FilterSelect.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
-import { formatDecimal, formatDecimalUSD } from '@/utils/decimal'
-import { publicPageMessages } from '@/i18n/publicPages'
-
-const route = useRoute()
-const { t } = useI18n({
-  useScope: 'local',
-  messages: publicPageMessages,
-})
-const { copy, copied } = useClipboard()
-const catalog = ref<PricingCatalog | null>(null)
-const error = ref('')
-const loading = ref(false)
-const keyword = ref(typeof route.query.q === 'string' ? route.query.q : '')
-const vendor = ref(
-  typeof route.query.vendor === 'string' ? route.query.vendor : ''
-)
-const unit = ref(route.query.tokenUnit === 'K' ? 'K' : 'M')
-const page = ref(1)
-const pageSize = ref(20)
-const billing = ref('')
-const selectedVersion = ref(
-  typeof route.query.offer === 'string' ? route.query.offer : ''
-)
+const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages }),
+  route = useRoute()
+const catalog = ref<PricingCatalog | null>(null),
+  loading = ref(false),
+  error = ref('')
+const search = ref(typeof route.query.q === 'string' ? route.query.q : ''),
+  vendor = ref(''),
+  mode = ref(''),
+  unit = ref<'M' | 'K'>(route.query.tokenUnit === 'K' ? 'K' : 'M'),
+  page = ref(1),
+  pageSize = ref(20)
 let controller: AbortController | undefined
-const detailId = computed(() =>
-  typeof route.params.modelId === 'string' ? route.params.modelId : ''
-)
-const modelVersions = computed(() =>
-  (catalog.value?.models ?? []).flatMap((model) =>
-    model.offers.map((offer) => ({ ...model, offers: [offer], offer }))
-  )
-)
-const detailVersions = computed(() =>
-  modelVersions.value.filter((model) => model.model_name === detailId.value)
-)
+const detailId = computed(() => String(route.params.modelId ?? ''))
 const detail = computed(() =>
-  detailVersions.value.find(
+  catalog.value?.models.find((model) => model.model_name === detailId.value)
+)
+const models = computed(() =>
+  (catalog.value?.models ?? []).filter(
     (model) =>
-      !selectedVersion.value || model.offer.offer_id === selectedVersion.value
+      (!search.value ||
+        `${model.model_name} ${model.description} ${model.tags}`
+          .toLowerCase()
+          .includes(search.value.toLowerCase())) &&
+      (!vendor.value || String(model.vendor_id) === vendor.value) &&
+      (!mode.value ||
+        (model.billing_mode === 'unconfigured'
+          ? 'unconfigured'
+          : model.billing_mode === 'tiered_expr'
+            ? 'expression'
+            : model.quota_type === 1
+              ? 'request'
+              : 'token') === mode.value)
   )
 )
-const versionOptions = computed(() =>
-  detailVersions.value.map((model) => ({
-    value: model.offer.offer_id,
-    label: `${model.offer.price_version.scope_kind ?? 'global_model'} · v${model.offer.price_version.id} · ×${formatDecimal(model.offer.adjustments[0]!.multiplier)}`,
-  }))
-)
-const unitOptions = computed(() => [
-  { value: 'M', label: t('publicPage.million') },
-  { value: 'K', label: t('publicPage.thousand') },
-])
-const vendorName = (model: CatalogModel) =>
-  catalog.value?.vendors.find((entry) => entry.id === model.vendor_id)?.name ||
-  model.owner_by
-const vendorOptions = computed(() => [
-  { value: '', label: t('publicPage.all') },
-  ...[...new Set((catalog.value?.models ?? []).map(vendorName))]
-    .sort()
-    .map((name) => ({ value: name, label: name })),
-])
-const billingOptions = computed(() => [
-  { value: '', label: t('publicPage.all') },
-  { value: 'token', label: t('publicPage.tokenBilling') },
-  { value: 'request', label: t('publicPage.requestBilling') },
-  { value: 'expression', label: t('publicPage.dynamic') },
-  { value: 'free', label: t('publicPage.free') },
-])
-const billingMode = (model: CatalogOffer) =>
-  model.offer.price_version.mode === 'expression'
-    ? 'expression'
-    : model.offer.price_version.mode === 'free'
-      ? 'free'
-      : model.offer.price_version.prices.some(
-            (price) => price.unit === 'per_million_tokens'
-          )
-        ? 'token'
-        : 'request'
-const filtered = computed(() =>
-  modelVersions.value.filter((model) => {
-    const search = keyword.value.trim().toLowerCase()
-    return (
-      (!search ||
-        `${model.model_name} ${vendorName(model)} ${model.description} ${model.tags}`
-          .toLowerCase()
-          .includes(search)) &&
-      (!vendor.value || vendorName(model) === vendor.value) &&
-      (!billing.value || billingMode(model) === billing.value)
-    )
-  })
-)
-const pageModels = computed(() =>
-  filtered.value.slice(
+const visible = computed(() =>
+  models.value.slice(
     (page.value - 1) * pageSize.value,
     page.value * pageSize.value
   )
 )
-const money = (value: string) => formatDecimalUSD(value, 3)
-const prices = (model: CatalogOffer) => {
-  const tokenUnit = unit.value === 'K' ? 'K' : 'M'
-  const lines = catalogPrices(model, tokenUnit)
-  const flatFee: CatalogPrice[] =
-    model.offer.display_flat_fee && model.offer.display_flat_fee !== '0'
-      ? [
-          {
-            key: 'flatFee',
-            value: model.offer.display_flat_fee,
-            unit: 'per_call',
-          },
-        ]
-      : []
-  return [...lines, ...flatFee].map((price) => ({
-    ...price,
-    formatted: price.tiers?.length
-      ? price.tiers
-          .map((tier) => {
-            const bound = tier.up_to ? `≤${tier.up_to}` : '∞'
-            return `${bound}: ${money(tier.unit_price)}`
-          })
-          .join(' / ')
-      : money(price.value),
-  }))
-}
-const detailEndpoints = computed(() =>
-  (detail.value?.supported_endpoint_types ?? []).map((name) => ({
-    name,
-    ...catalog.value?.endpoints[name],
-  }))
-)
-watch([keyword, vendor, billing, pageSize], () => {
+watch([search, vendor, mode, pageSize], () => {
   page.value = 1
 })
-watch(
-  () => route.query.offer,
-  (value) => {
-    selectedVersion.value = typeof value === 'string' ? value : ''
-  }
-)
-
 async function load() {
   controller?.abort()
-  const request = new AbortController()
-  controller = request
+  controller = new AbortController()
+  const request = controller
   loading.value = true
   error.value = ''
   try {
-    const result = await publicCatalogApi.pricing(request.signal)
-    if (request.signal.aborted) return
-    catalog.value = result
+    const value = await publicCatalogApi.pricing(request.signal)
+    if (!request.signal.aborted) catalog.value = value
   } catch (cause) {
     if (!request.signal.aborted)
-      error.value =
-        cause instanceof Error ? cause.message : t('common.loadFailed')
+      error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
-    if (!request.signal.aborted) loading.value = false
+    if (controller === request) loading.value = false
   }
 }
-async function copyName(name: string) {
+async function copy(name: string) {
   try {
-    await copy(name)
+    await navigator.clipboard.writeText(name)
   } catch (cause) {
-    error.value =
-      cause instanceof Error ? cause.message : t('common.loadFailed')
+    error.value = cause instanceof Error ? cause.message : String(cause)
   }
 }
 onMounted(load)
-onScopeDispose(() => controller?.abort())
+onBeforeUnmount(() => controller?.abort())
 </script>
-
 <template>
-  <PublicPage :title="detailId || t('publicPage.pricing')">
-    <template #actions>
-      <RouterLink
-        v-if="detailId"
-        :to="{ name: 'pricing', query: { tokenUnit: unit } }"
-        class="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--accent-text)]"
-        ><ArrowLeft :size="16" />{{ t('publicPage.pricing') }}</RouterLink
-      >
-      <span v-else class="text-sm text-[var(--text-secondary)]">{{
-        t('publicPage.pricesCount', { count: filtered.length })
-      }}</span>
-    </template>
-    <div
-      v-if="loading"
-      role="status"
-      :aria-label="t('publicPage.loading')"
-      class="space-y-4"
+  <PublicPage :title="detailId || t('title')">
+    <template #actions
+      ><RouterLink v-if="detailId" :to="{ name: 'pricing' }">{{
+        t('title')
+      }}</RouterLink
+      ><span v-else>{{ t('total', { count: models.length }) }}</span></template
     >
-      <SkeletonBlock class="h-12 w-full" /><SkeletonBlock class="h-80 w-full" />
-    </div>
-    <ErrorBanner v-else-if="error" :message="error" @retry="load" />
-    <template v-else-if="catalog">
-      <details
-        v-if="catalog.issues.length"
-        class="mb-4 rounded-lg border border-[var(--border-subtle)] p-3 text-sm"
-        data-pricing-issues
-      >
-        <summary class="cursor-pointer focus-ring">
-          {{ t('publicPage.partialPricing', { count: catalog.issues.length }) }}
-        </summary>
-        <ul class="mt-2 space-y-1">
-          <li
-            v-for="(issue, index) in catalog.issues"
-            :key="index"
-            class="break-all"
-          >
-            {{ issue.model_name || t('publicPage.unknownModel') }} ·
-            {{ t(`publicPage.pricingIssues.${issue.reason}`) }}
-          </li>
-        </ul>
-      </details>
-      <div class="mb-6 flex flex-wrap items-center gap-3">
-        <SearchInput
-          v-if="!detailId"
-          v-model="keyword"
-          :placeholder="t('publicPage.search')"
-          :aria-label="t('publicPage.search')"
-          class="w-full sm:w-64"
-        />
-        <FilterSelect
-          v-if="!detailId"
-          v-model="vendor"
-          :options="vendorOptions"
-          :label="t('publicPage.vendor')"
-          :prefix-label="t('publicPage.vendor')"
-        />
-        <FilterSelect
-          v-if="!detailId"
-          v-model="billing"
-          :options="billingOptions"
-          :label="t('publicPage.billing')"
-          :prefix-label="t('publicPage.billing')"
-        />
-        <FilterSelect
-          v-if="detailId && versionOptions.length > 1"
-          v-model="selectedVersion"
-          :options="versionOptions"
-          :label="t('publicPage.priceScope')"
-        />
-        <FilterSelect
-          v-model="unit"
-          :options="unitOptions"
-          :label="t('publicPage.unit')"
-        />
-        <span class="text-xs text-[var(--text-tertiary)]">{{
-          t('publicPage.usd')
-        }}</span>
-      </div>
-      <template v-if="detailId">
-        <EmptyState v-if="!detail" :title="t('publicPage.detailMissing')" />
-        <article v-else class="space-y-8">
-          <div class="flex items-start gap-4">
-            <VendorLogo :vendor="vendorName(detail)" :size="48" />
-            <div class="min-w-0 flex-1">
-              <h2 class="text-lg font-semibold">{{ vendorName(detail) }}</h2>
-              <p
-                class="mt-2 whitespace-pre-line break-words text-sm leading-6 text-[var(--text-secondary)]"
-              >
-                {{ detail.description }}
-              </p>
-              <p
-                v-if="detail.tags"
-                class="mt-2 break-words text-xs text-[var(--text-tertiary)]"
-              >
-                {{ detail.tags }}
-              </p>
-            </div>
-            <ConsoleButton
-              variant="ghost"
-              :aria-label="t('publicPage.copy')"
-              :title="copied ? t('publicPage.copied') : t('publicPage.copy')"
-              @click="copyName(detail.model_name)"
-              ><Check v-if="copied" :size="18" /><Copy v-else :size="18"
-            /></ConsoleButton>
-          </div>
-          <section>
-            <h2 class="mb-4 text-lg font-semibold">
-              {{ t('publicPage.billing') }}
-            </h2>
-            <template v-if="detail.offer.price_version.mode === 'expression'"
-              ><p class="mb-3 text-sm text-[var(--accent-text)]">
-                {{ t('publicPage.dynamic') }}
-              </p>
-              <details>
-                <summary class="cursor-pointer text-sm">
-                  {{ t('publicPage.expression') }}
-                </summary>
-                <pre
-                  class="mt-3 overflow-x-auto whitespace-pre-wrap break-all bg-[var(--surface-muted)] p-4 text-xs"
-                  >{{ detail.offer.price_version.expression }}</pre>
-              </details></template
-            >
-            <dl
-              v-if="prices(detail).length"
-              class="grid grid-cols-2 gap-x-8 gap-y-5 border-y border-[var(--border-subtle)] py-5 sm:grid-cols-3 lg:grid-cols-4"
-            >
-              <div v-for="price in prices(detail)" :key="price.key">
-                <dt class="text-xs text-[var(--text-secondary)]">
-                  {{ t(`publicPage.${price.key}`, price.key) }}
-                  <span v-if="price.tier_mode">
-                    · {{ t(`publicPage.tierModes.${price.tier_mode}`) }}</span
-                  >
-                </dt>
-                <dd class="mt-2 break-words font-mono text-sm">
-                  {{ price.formatted }}
-                  <span class="block text-xs text-[var(--text-tertiary)]">{{
-                    price.unit ? t(`publicPage.units.${price.unit}`) : ''
-                  }}</span>
-                </dd>
-              </div>
-            </dl>
-            <dl
-              class="mt-4 grid gap-2 text-xs text-[var(--text-tertiary)] sm:grid-cols-3"
-              data-price-version-evidence
-            >
-              <div>
-                <dt>{{ t('publicPage.priceScope') }}</dt>
-                <dd class="font-mono">
-                  {{ detail.offer.price_version.scope_kind || 'global_model' }}
-                </dd>
-              </div>
-              <div>
-                <dt>{{ t('publicPage.priceVersion') }}</dt>
-                <dd class="font-mono">{{ detail.offer.price_version.id }}</dd>
-              </div>
-              <div>
-                <dt>{{ t('publicPage.priceHash') }}</dt>
-                <dd class="break-all font-mono">
-                  {{ detail.offer.price_version.hash }}
-                </dd>
-              </div>
-            </dl>
-            <p class="mt-3 break-all text-sm">
-              {{ t('publicPage.pricedModel') }}:
-              {{ detail.offer.priced_model }} ·
-              {{ t('publicPage.channelAdjustment') }} ×
-              {{ formatDecimal(detail.offer.adjustments[0]!.multiplier) }}
-            </p>
-            <p
-              v-if="detail.offer.conditions.service_tiers?.length"
-              class="mt-2 text-sm"
-            >
-              {{ t('publicPage.serviceTiers') }}:
-              {{ detail.offer.conditions.service_tiers.join(', ') }}
-            </p>
-            <p
-              v-if="detail.offer.price_version.metering"
-              class="mt-2 break-all text-sm"
-            >
-              {{ t('publicPage.metering') }}:
-              {{ detail.offer.price_version.metering.request_kind }} /
-              {{ detail.offer.price_version.metering.quantity }} /
-              {{ detail.offer.price_version.metering.method }}
-            </p>
-            <details class="mt-3 text-xs">
-              <summary class="cursor-pointer focus-ring">
-                {{ t('publicPage.basePrices') }}
-              </summary>
-              <dl class="mt-2 space-y-1">
-                <div
-                  v-for="line in detail.offer.price_version.prices"
-                  :key="line.quantity"
-                >
-                  <dt>{{ line.quantity }} / {{ line.unit }}</dt>
-                  <dd>
-                    {{
-                      line.tiers
-                        ? line.tiers
-                            .map(
-                              (tier) =>
-                                `${tier.up_to ?? '∞'}: ${money(tier.unit_price)}`
-                            )
-                            .join(' / ')
-                        : money(line.price)
-                    }}
-                  </dd>
-                </div>
-              </dl>
-            </details>
-          </section>
-          <section v-if="detailEndpoints.length">
-            <h2 class="mb-4 text-lg font-semibold">
-              {{ t('publicPage.endpoint') }}
-            </h2>
-            <div class="overflow-x-auto">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{{ t('publicPage.endpoint') }}</th>
-                    <th>{{ t('publicPage.method') }}</th>
-                    <th>{{ t('publicPage.path') }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="endpoint in detailEndpoints" :key="endpoint.name">
-                    <td>{{ endpoint.name }}</td>
-                    <td>{{ endpoint.method || '--' }}</td>
-                    <td class="font-mono">{{ endpoint.path || '--' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </article>
-      </template>
-      <template v-else>
-        <EmptyState v-if="!filtered.length" :title="t('publicPage.noModels')" />
-        <div
-          v-else
-          class="overflow-x-auto"
-          tabindex="0"
-          role="region"
-          :aria-label="t('publicPage.pricing')"
-        >
-          <table class="min-w-[660px]">
-            <thead>
-              <tr>
-                <th>{{ t('publicPage.model') }}</th>
-                <th>{{ t('publicPage.vendor') }}</th>
-                <th>{{ t('publicPage.billing') }}</th>
-                <th>{{ t('publicPage.prices') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="model in pageModels" :key="model.offer.offer_id">
-                <td class="max-w-96">
-                  <RouterLink
-                    :to="{
-                      name: 'pricing-model',
-                      params: { modelId: model.model_name },
-                      query: {
-                        tokenUnit: unit,
-                        offer: model.offer.offer_id,
-                      },
-                    }"
-                    class="break-words font-medium text-[var(--accent-text)]"
-                    >{{ model.model_name }}</RouterLink
-                  >
-                  <p class="mt-1 text-xs text-[var(--text-tertiary)]">
-                    {{ model.offer.price_version.scope_kind ?? 'global_model' }}
-                    · v{{ model.offer.price_version.id }} · ×{{
-                      formatDecimal(model.offer.adjustments[0]!.multiplier)
-                    }}
-                  </p>
-                </td>
-                <td>
-                  <span class="flex items-center gap-2"
-                    ><VendorLogo :vendor="vendorName(model)" :size="28" />{{
-                      vendorName(model)
-                    }}</span
-                  >
-                </td>
-                <td>
-                  {{
-                    t(
-                      `publicPage.${billingMode(model) === 'expression' ? 'dynamic' : billingMode(model) === 'request' ? 'requestBilling' : billingMode(model) === 'free' ? 'free' : 'tokenBilling'}`
-                    )
-                  }}
-                </td>
-                <td>
-                  <p
-                    v-for="price in prices(model)"
-                    :key="price.key"
-                    class="mb-1 flex flex-wrap gap-x-2 text-xs"
-                  >
-                    <span
-                      >{{ t(`publicPage.${price.key}`, price.key)
-                      }}<span v-if="price.tier_mode">
-                        ·
-                        {{ t(`publicPage.tierModes.${price.tier_mode}`) }}</span
-                      ></span
-                    ><span class="font-mono">{{ price.formatted }}</span
-                    ><span
-                      v-if="price.unit"
-                      class="text-[var(--text-tertiary)]"
-                      >{{ t(`publicPage.units.${price.unit}`) }}</span
-                    >
-                  </p>
-                  <span v-if="!prices(model).length">{{
-                    t('publicPage.dynamic')
-                  }}</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+    <ErrorBanner v-if="error" :message="error" />
+    <p v-if="loading" role="status">{{ t('loading') }}</p>
+    <p
+      v-if="catalog?.issues.length"
+      role="status"
+      class="text-sm text-[var(--text-secondary)]"
+    >
+      {{ t('unsupportedPrice') }}: {{ catalog.issues.length }}
+    </p>
+    <template v-if="detail"
+      ><div class="public-pricing-detail">
+        <VendorLogo :vendor="detail.owner_by" />
+        <div>
+          <h2>{{ detail.model_name }}</h2>
+          <p>{{ detail.description }}</p>
         </div>
-        <TablePagination
-          v-model:page="page"
-          v-model:page-size="pageSize"
-          :total="filtered.length"
-        />
-      </template>
-    </template>
+        <ConsoleButton variant="ghost" @click="copy(detail.model_name)">{{
+          t('copy')
+        }}</ConsoleButton>
+      </div>
+      <ModelPriceItems
+        :pricing="detail"
+        :unit="unit"
+        class="public-pricing-card"
+      />
+      <dl class="public-pricing-endpoints">
+        <div
+          v-for="endpoint in detail.supported_endpoint_types"
+          :key="endpoint"
+        >
+          <dt>{{ endpoint }}</dt>
+          <dd>
+            {{ catalog?.endpoints[endpoint]?.method }}
+            {{ catalog?.endpoints[endpoint]?.path }}
+          </dd>
+        </div>
+      </dl></template
+    >
+    <template v-else-if="!detailId"
+      ><div class="public-pricing-filters">
+        <SearchInput v-model="search" :placeholder="t('search')" /><select
+          v-model="vendor"
+          :aria-label="t('provider')"
+        >
+          <option value="">{{ t('all') }}</option>
+          <option
+            v-for="item in catalog?.vendors ?? []"
+            :key="item.id"
+            :value="String(item.id)"
+          >
+            {{ item.name }}
+          </option></select
+        ><select v-model="mode" :aria-label="t('mode')">
+          <option value="">{{ t('all') }}</option>
+          <option value="expression">{{ t('expression') }}</option>
+          <option value="token">{{ t('perToken') }}</option>
+          <option value="request">{{ t('perCall') }}</option>
+          <option value="unconfigured">{{ t('unpriced') }}</option></select
+        ><select v-model="unit" :aria-label="t('unit')">
+          <option value="M">1M tokens</option>
+          <option value="K">1K tokens</option>
+        </select>
+      </div>
+      <div class="public-pricing-grid">
+        <article
+          v-for="model in visible"
+          :key="model.model_name"
+          class="public-pricing-card"
+        >
+          <RouterLink
+            :to="{
+              name: 'pricing-model',
+              params: { modelId: model.model_name },
+              query: { tokenUnit: unit },
+            }"
+            ><h2>{{ model.model_name }}</h2></RouterLink
+          >
+          <p>{{ model.description }}</p>
+          <ModelPriceItems :pricing="model" :unit="unit" />
+        </article>
+      </div>
+      <TablePagination
+        :page="page"
+        :page-size="pageSize"
+        :total="models.length"
+        @update:page="page = $event"
+        @update:page-size="pageSize = $event"
+    /></template>
+    <EmptyState
+      v-if="!loading && !error && (detailId ? !detail : !models.length)"
+      :title="t('emptyPublished')"
+      :hint="t('noDefault')"
+    />
   </PublicPage>
 </template>
+<style scoped>
+.public-pricing-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.public-pricing-filters select {
+  background: var(--surface-solid);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  max-width: 100%;
+}
+.public-pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+}
+.public-pricing-card {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  background: var(--surface-solid);
+  display: grid;
+  gap: 0.75rem;
+}
+h2 {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.public-pricing-card > p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.public-pricing-detail {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.public-pricing-endpoints {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+</style>

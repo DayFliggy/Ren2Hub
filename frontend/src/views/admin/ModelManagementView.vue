@@ -23,7 +23,6 @@ import FieldVisibilityMenu from '@/components/common/FieldVisibilityMenu.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import MetadataSyncDialog from '@/components/admin/MetadataSyncDialog.vue'
-import AutomaticPricingPanel from '@/components/admin/AutomaticPricingPanel.vue'
 import ModelMetadataDrawer from '@/components/admin/ModelMetadataDrawer.vue'
 import ModelMetadataCell from '@/components/admin/ModelMetadataCell.vue'
 import MissingModelsDialog from '@/components/admin/MissingModelsDialog.vue'
@@ -35,17 +34,12 @@ import {
   type ModelVendor,
 } from '@/api/adminManagement'
 import { useAdminRequest } from '@/composables/useAdminRequest'
-import { useAuthStore } from '@/stores/auth'
 import { modelMetadataMessages } from '@/i18n/modelMetadata'
 import '@/components/admin/admin.css'
 
 const { t } = useI18n({ useScope: 'local', messages: modelMetadataMessages })
 const route = useRoute()
 const router = useRouter()
-const auth = useAuthStore()
-const automaticPricing = ref<InstanceType<typeof AutomaticPricingPanel> | null>(
-  null
-)
 const { loading, error, run } = useAdminRequest()
 const vendorRequest = useAdminRequest()
 const rows = ref<ModelMetadata[]>([])
@@ -174,7 +168,7 @@ async function load() {
   })
 }
 async function refreshPage() {
-  await Promise.all([load(), automaticPricing.value?.refresh()])
+  await load()
 }
 async function loadVendors() {
   await vendorRequest.run(async (signal) => {
@@ -298,11 +292,6 @@ async function mutate(
         ><Plus :size="16" />{{ t('create') }}</ConsoleButton
       >
     </div>
-    <AutomaticPricingPanel
-      v-if="auth.isRoot"
-      ref="automaticPricing"
-      @updated="load"
-    />
     <form class="metadata-filters" @submit.prevent="applyFilters">
       <label class="admin-field metadata-search"
         ><span class="sr-only">{{ t('search') }}</span

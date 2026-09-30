@@ -188,12 +188,12 @@ func ReadBillingMetrics(ctx context.Context) (BillingMetrics, error) {
 		return result, err
 	}
 	result.PricesByOrigin = []BillingPriceOriginMetric{}
-	if err := q.Model(&BillingActivePrice{}).
-		Select("CASE WHEN channel_id = 0 THEN 'global_model' ELSE 'channel_model' END AS scope_kind, origin, COUNT(*) AS count").
-		Group("CASE WHEN channel_id = 0 THEN 'global_model' ELSE 'channel_model' END, origin").
-		Order("scope_kind, origin").Scan(&result.PricesByOrigin).Error; err != nil {
-		return result, err
-	}
+	prices,err := GetModelPricingSnapshot(nil)
+	if err != nil { return result,err }
+	var configured int64
+	for _,entry := range prices.Entries { if ModelPriceConfigured(entry.Effective) {configured++} }
+	result.PricesByOrigin = append(result.PricesByOrigin,BillingPriceOriginMetric{ScopeKind:"global_model",Origin:"model_pricing",Count:configured})
+
 	if err := q.Model(&BillingRecovery{}).Where("status IN ? OR (status IN ? AND consumption_state <> ?)", []string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending, BillingRecoveryStatusReconciliation}, []string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded}, BillingRecoveryStateCompleted).Select("COUNT(*) AS pending, COALESCE(MIN(created_at),0) AS oldest_created_at").Scan(&result).Error; err != nil {
 		return result, err
 	}
@@ -206,7 +206,7 @@ func ReadBillingMetrics(ctx context.Context) (BillingMetrics, error) {
 	if err := q.Model(&BillingRecovery{}).Where("attempts > 0 AND (status NOT IN ? OR consumption_state <> ?)", []string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded}, BillingRecoveryStateCompleted).Count(&result.RecoveryFailures).Error; err != nil {
 		return result, err
 	}
-	err := q.Model(&BillingEvent{}).Where("available_after < 0 AND used_delta > 0").Count(&result.DebtEvents).Error
+	err = q.Model(&BillingEvent{}).Where("available_after < 0 AND used_delta > 0").Count(&result.DebtEvents).Error
 	result.IdempotencyConflicts = billingIdempotencyConflicts.Load()
 	if result.OldestCreatedAt > 0 {
 		result.OldestWaitSeconds = max(0, common.GetTimestamp()-result.OldestCreatedAt)

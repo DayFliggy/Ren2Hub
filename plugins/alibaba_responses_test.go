@@ -20,6 +20,7 @@ import (
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	taskplugin "github.com/QuantumNous/new-api/relay/channel/task/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -858,9 +859,11 @@ func TestAlibabaImageResults(t *testing.T) {
 			// A reservation for four images can settle to the two actual successes.
 			schema, err := billingexpr.FreezeUsageSchema(&billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{"image_count": {Type: "number", Unit: "image", Source: billingexpr.UsageCompletionFact, Required: true, Integer: true, Maximum: "16"}}})
 			require.NoError(t, err)
-			cost, _, err := billingexpr.RunExprWithRequest(`v2:tier("image", u("image_count") * 0.1)`, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: result.UsageFacts, UsageSchema: schema})
+			facts, err := service.TaskExpressionUsage(result.UsageFacts, schema)
 			require.NoError(t, err)
-			assert.Equal(t, "0.2", cost.String())
+			cost, _, err := billingexpr.RunExprWithRequest(`tier("image", u("image_count") * 0.1)`, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: facts, UsageSchema: schema})
+			require.NoError(t, err)
+			assert.Equal(t, 0.2, cost)
 			artifacts, err := adaptor.ListArtifacts(task)
 			require.NoError(t, err)
 			require.Len(t, artifacts, 2)

@@ -8,7 +8,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/relay/channel/ai360"
 	"github.com/QuantumNous/new-api/relay/channel/lingyiwanwu"
@@ -204,13 +203,11 @@ func ListModels(c *gin.Context, modelType int) {
 		common.ApiError(c, err)
 		return
 	}
-	var availablePrices map[string][]billing.PriceVersion
+	availablePrices := make(map[string]bool)
 	if !acceptUnsetRatioModel {
-		availablePrices, err = service.AvailableRoutePriceVersions(c.Request.Context(), c.GetInt("id"), common.GetContextKeyInt(c, constant.ContextKeyTokenId))
-		if err != nil {
-			common.ApiError(c, err)
-			return
-		}
+		snapshot, snapshotErr := model.GetModelPricingSnapshot(models)
+		if snapshotErr != nil { common.ApiError(c,snapshotErr); return }
+		for _, entry := range snapshot.Entries { availablePrices[entry.ModelName] = model.ModelPriceConfigured(entry.Effective) }
 	}
 	modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
 	var tokenModelLimit map[string]bool
@@ -233,7 +230,7 @@ func ListModels(c *gin.Context, modelType int) {
 		if !visible {
 			continue
 		}
-		if !acceptUnsetRatioModel && len(availablePrices[modelName]) == 0 {
+		if !acceptUnsetRatioModel && !availablePrices[modelName] {
 			continue
 		}
 		userModelNames = append(userModelNames, modelName)

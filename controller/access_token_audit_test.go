@@ -632,6 +632,7 @@ func TestAuditOtherDatabaseEncoding(t *testing.T) {
 }
 
 func TestAuditDatabaseMatrix(t *testing.T) {
+	t.Setenv("CRYPTO_SECRET", "audit-database-matrix-test-secret")
 	previousDB, previousLogDB := model.DB, model.LOG_DB
 	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
 	previousRedis := common.RedisEnabled

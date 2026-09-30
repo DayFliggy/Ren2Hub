@@ -25,7 +25,7 @@ import (
 func setupGatewayAudio(t *testing.T, handler http.HandlerFunc) (string, string) {
 	t.Helper()
 	url, key, _ := setupGatewaySDKWithUpstream(t, handler)
-	require.NoError(t, publishGatewayFixturePrices(`{"gpt-4o-mini-tts":0.001,"gpt-4o-transcribe":0.001}`, false))
+	require.NoError(t, configureGatewayFixturePrices(`{"gpt-4o-mini-tts":0.001,"gpt-4o-transcribe":0.001}`, false))
 	for _, id := range []int{1, 4} {
 		channel, err := model.GetChannelById(id, true)
 		require.NoError(t, err)

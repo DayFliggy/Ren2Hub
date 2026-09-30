@@ -75,13 +75,13 @@ func buildWssConsumptionParams(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		facts.Quantities["calls"] = "1"
 	}
 	facts.ActualServiceTier = relayInfo.ActualServiceTier
-	relayInfo.PriceData.Usage = &facts
-	result, err := billing.Calculate(relayInfo.PriceData.Quote, facts)
+	facts.PricingKind = "realtime"
+	facts, result, err := evaluateRequestBilling(relayInfo, facts)
+	relayInfo.PriceData.Usage, relayInfo.PriceData.Charge = &facts, result
 	if err != nil {
 		holdFailedBillingPrice(ctx, relayInfo, billingexpr.TokenParams{}, err)
 		return model.RecordConsumeLogParams{}, relayInfo.BillingSettlementError
 	}
-	relayInfo.PriceData.Charge = result
 	quota, err := billing.RequestQuota(result.FinalQuota)
 	if err != nil {
 		return model.RecordConsumeLogParams{}, err

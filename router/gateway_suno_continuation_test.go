@@ -26,7 +26,7 @@ func setupGatewaySunoContinuation(t *testing.T, upstream http.HandlerFunc) (stri
 	_, key, otherKey := setupGatewaySDKWithUpstream(t, upstream)
 	require.NoError(t, model.DB.AutoMigrate(&model.Task{}, &model.TaskPlugin{}, &model.TaskPluginNamespace{}, &model.TaskPluginExecution{}))
 	require.NoError(t, controller.InitTaskPlugins())
-	require.NoError(t, publishGatewayFixturePrices(`{"suno_music":0.001,"suno_lyrics":0.001}`, false))
+	require.NoError(t, configureGatewayFixturePrices(`{"suno_music":0.001,"suno_lyrics":0.001}`, false))
 	for _, id := range []int{1, 4} {
 		channel, err := model.GetChannelById(id, true)
 		require.NoError(t, err)

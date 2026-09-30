@@ -10,13 +10,15 @@ import (
 	"testing"
 )
 
-func TestBillingAttributesExcludeRawPayloadAndHeaders(t *testing.T) {
+func TestBillingInputRetainsProbesButRelaySerializationExcludesThem(t *testing.T) {
 	attrs, err := BillingAttributesFromBody([]byte(`{"service_tier":"priority","messages":[{"content":"private"}],"password":"private","n":3,"size":"1024x1024"}`))
 	require.NoError(t, err)
 	assert.Equal(t, map[string]interface{}{"service_tier": "priority", "quantity": json.Number("3"), "resolution": "1024x1024"}, attrs)
 	input, err := BuildBillingExprRequestInputFromRequest(&dto.GeneralOpenAIRequest{Model: "test", Messages: []dto.Message{{Role: "user", Content: "private"}}}, map[string]string{"Authorization": "private"})
 	require.NoError(t, err)
-	encoded, err := common.Marshal(input)
+	assert.Contains(t, string(input.Body), "private")
+	assert.Equal(t, "private", input.Headers["Authorization"])
+	encoded, err := common.Marshal(&relaycommon.RelayInfo{BillingRequestInput: &input})
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), "private")
 }

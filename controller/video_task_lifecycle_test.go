@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/system_setting"
@@ -24,9 +25,10 @@ import (
 )
 
 func setupVideoTaskLifecycle(t *testing.T) *gorm.DB {
+	t.Setenv("CRYPTO_SECRET", "video-lifecycle-test-secret")
 	t.Helper()
 	db, _ := setupGatewayAPI(t)
-	require.NoError(t, db.AutoMigrate(&model.TaskPlugin{}, &model.TaskPluginNamespace{}, &model.TaskPluginExecution{}, &model.Task{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingAttempt{}, &model.BillingEvent{}, &model.QuotaData{}))
+	require.NoError(t, db.AutoMigrate(&model.TaskPlugin{}, &model.TaskPluginNamespace{}, &model.TaskPluginExecution{}, &model.Task{}, &model.Token{}, &model.BillingRecovery{}, &model.BillingAttempt{}, &model.BillingEvent{}, &model.QuotaData{}, &model.BillingPriceVersion{}))
 	connection, err := db.DB()
 	require.NoError(t, err)
 	connection.SetMaxOpenConns(1)
@@ -68,14 +70,21 @@ func seedBoundVideoTask(t *testing.T, db *gorm.DB, channelType int, endpoint str
 	task.PrivateData.PluginRef = &ref
 	task.PrivateData.PluginAttemptID = "video-attempt"
 	task.Data = []byte("{}")
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: "video-fixture", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.00004"}}}, "1", nil, time.Unix(1700000000, 0))
+	definition, err := billing.NewModelPriceVersion("video-fixture", billing.PricingValues{"ModelPrice": "0.00004"}, false)
 	require.NoError(t, err)
-	task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "request_quantity", Complete: true}}
+	saved, err := model.StoreBillingPriceEvidence(t.Context(), definition)
+	require.NoError(t, err)
+	quote, err := billing.NewQuote(*saved, "1", nil, time.Unix(1700000000, 0))
+	require.NoError(t, err)
+	estimated, charge, err := model.EvaluateBilling(quote, billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "request_estimate", Estimated: true}, billingexpr.RequestInput{}, task.PrivateData.SubmissionRequestID, task.PrivateData.PluginAttemptID, "estimate")
+	require.NoError(t, err)
+	task.PrivateData.BillingContext = &model.TaskBillingContext{AttemptID: task.PrivateData.PluginAttemptID, Quote: quote, Usage: &estimated, Charge: charge}
 	_, err = model.EnsureBillingRecovery(model.BillingRecoveryInput{RequestID: task.PrivateData.SubmissionRequestID, UserID: 1, TokenID: 1, TokenRequired: true, Source: "wallet"})
 	require.NoError(t, err)
 	require.NoError(t, model.Reserve(task.PrivateData.SubmissionRequestID, 20))
 	require.NoError(t, model.PrepareBillingAttemptWithPlugin(context.Background(), task.PrivateData.SubmissionRequestID, task.PrivateData.PluginAttemptID, task.ChannelId, quote, &ref))
-	require.NoError(t, model.PersistAcceptedTask(task, task.PrivateData.SubmissionRequestID, model.BillingConsumption{Log: model.Log{UserId: 1, TokenId: 1, ChannelId: channel.Id, Quota: 20}, CountUsage: true, LogEnabled: true}))
+	require.NoError(t, model.PersistBillingEstimate(task.PrivateData.PluginAttemptID, estimated, charge))
+	require.NoError(t, model.PersistAcceptedTask(task, task.PrivateData.SubmissionRequestID, model.BillingConsumption{AttemptID: task.PrivateData.PluginAttemptID, Usage: &estimated, Charge: charge, Log: model.Log{UserId: 1, TokenId: 1, ChannelId: channel.Id, Quota: 20}, CountUsage: true, LogEnabled: true}))
 	return channel, task
 }
 

@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -19,7 +20,7 @@ func acceptedMidjourneyBillingFixture(t *testing.T, price string) *model.Midjour
 	seedUser(t, 1, 100)
 	seedToken(t, 1, 1, "mj-quota", 100)
 	seedChannel(t, 1)
-	quote, err := billing.NewQuote(billingTestPublishedPrice(t, billing.PriceVersion{Model: "mj_imagine", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: price}}}), "1", nil, time.Unix(1700000000, 0))
+	quote, err := billing.NewQuote(billingTestStoredPrice(t, "mj_imagine", billing.PricingValues{"ModelPrice": price}), "1", nil, time.Unix(1700000000, 0))
 	require.NoError(t, err)
 	task := &model.Midjourney{UserId: 1, ChannelId: 1, BillingChannelId: 1, TokenId: 1, MjId: "mj-final", Action: "IMAGINE", Status: "SUBMITTED", Quota: 20,
 		PrivateData: model.TaskPrivateData{TokenId: 1, BillingSource: "wallet", SubmissionRequestID: "mj-submit-final", CredentialVersion: 1, CredentialID: "credential", EndpointID: "endpoint",
@@ -28,7 +29,12 @@ func acceptedMidjourneyBillingFixture(t *testing.T, price string) *model.Midjour
 	require.NoError(t, err)
 	require.NoError(t, model.Reserve(task.PrivateData.SubmissionRequestID, task.Quota))
 	require.NoError(t, model.PrepareBillingAttempt(context.Background(), task.PrivateData.SubmissionRequestID, task.PrivateData.SubmissionRequestID+":attempt", task.ChannelId, quote))
-	require.NoError(t, model.PersistAcceptedMidjourney(task, task.PrivateData.SubmissionRequestID, model.BillingConsumption{Log: model.Log{UserId: 1, ChannelId: 1, TokenId: 1, Quota: task.Quota}, CountUsage: true, LogEnabled: true}))
+	task.PrivateData.BillingContext.AttemptID = task.PrivateData.SubmissionRequestID + ":attempt"
+	estimate, charge, err := model.EvaluateBilling(quote, *task.PrivateData.BillingContext.Usage, billingexpr.RequestInput{}, task.PrivateData.SubmissionRequestID, task.PrivateData.BillingContext.AttemptID, "estimate")
+	require.NoError(t, err)
+	require.NoError(t, model.PersistBillingEstimate(task.PrivateData.BillingContext.AttemptID, estimate, charge))
+	task.PrivateData.BillingContext.Usage = &estimate
+	require.NoError(t, model.PersistAcceptedMidjourney(task, task.PrivateData.SubmissionRequestID, model.BillingConsumption{AttemptID: task.PrivateData.BillingContext.AttemptID, Log: model.Log{UserId: 1, ChannelId: 1, TokenId: 1, Quota: task.Quota}, CountUsage: true, LogEnabled: true}))
 	return task
 }
 

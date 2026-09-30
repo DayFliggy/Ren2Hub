@@ -11,9 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
-	"github.com/QuantumNous/new-api/plugins"
 	taskplugin "github.com/QuantumNous/new-api/relay/channel/task/jsplugin"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
@@ -26,10 +24,10 @@ func TestGatewayFactoryCompletionFactsProtectReservedFunds(t *testing.T) {
 		channelType                                      int
 		invalid                                          bool
 	}{
-		{"kling invalid suffix", "kling", "kling-v1", `v2:u("units") * 0.4`, `{"code":0,"data":{"task_id":"job"}}`, `{"data":{"task_status":"succeed","final_unit_deduction":"10INVALID"}}`, constant.ChannelTypeKling, true},
-		{"kling confirmed zero", "kling", "kling-v1", `v2:u("units") * 0.4`, `{"code":0,"data":{"task_id":"job"}}`, `{"data":{"task_status":"succeed","final_unit_deduction":"0"}}`, constant.ChannelTypeKling, false},
-		{"sora overflow", "sora", "sora-2", `v2:u("seconds") * 0.4`, `{"id":"job","status":"queued"}`, `{"status":"completed","seconds":999999}`, constant.ChannelTypeSora, true},
-		{"sora confirmed zero", "sora", "sora-2", `v2:u("seconds") * 0.4`, `{"id":"job","status":"queued"}`, `{"status":"completed","seconds":0}`, constant.ChannelTypeSora, false},
+		{"kling invalid suffix", "kling", "kling-v1", `u("units") * 0.4`, `{"code":0,"data":{"task_id":"job"}}`, `{"data":{"task_status":"succeed","final_unit_deduction":"10INVALID"}}`, constant.ChannelTypeKling, true},
+		{"kling confirmed zero", "kling", "kling-v1", `u("units") * 0.4`, `{"code":0,"data":{"task_id":"job"}}`, `{"data":{"task_status":"succeed","final_unit_deduction":"0"}}`, constant.ChannelTypeKling, false},
+		{"sora overflow", "sora", "sora-2", `u("seconds") * 0.4`, `{"id":"job","status":"queued"}`, `{"status":"completed","seconds":999999}`, constant.ChannelTypeSora, true},
+		{"sora confirmed zero", "sora", "sora-2", `u("seconds") * 0.4`, `{"id":"job","status":"queued"}`, `{"status":"completed","seconds":0}`, constant.ChannelTypeSora, false},
 		{"vidu empty string", "vidu", "viduq2", "", `{"task_id":"job","state":"created"}`, `{"state":"success","credits":""}`, constant.ChannelTypeVidu, true},
 		{"vidu boolean", "vidu", "viduq2", "", `{"task_id":"job","state":"created"}`, `{"state":"success","credits":false}`, constant.ChannelTypeVidu, true},
 	} {
@@ -50,21 +48,11 @@ func TestGatewayFactoryCompletionFactsProtectReservedFunds(t *testing.T) {
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			plugin, ok := jsplugin.DefaultRegistry.Get(test.key)
 			require.True(t, ok)
-			price := billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: test.model, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.25"}}}
-			var err error
+			pricing := model.PricingValues{"ModelPrice": "0.25"}
 			if test.expression != "" {
-				price, err = plugins.FrozenTaskPriceVersion(plugin.Meta, test.model, test.expression)
-				require.NoError(t, err)
+				pricing = model.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": test.expression}
 			}
-			price.Provenance = &billing.PriceProvenance{Kind: "retail", RetailReason: "reviewed mock task contract"}
-			price, err = service.ValidateTaskPluginPricePublication(price, test.key)
-			require.NoError(t, err)
-			var expected int64
-			if active, lookupErr := model.GetActiveBillingPrice(context.Background(), test.model); lookupErr == nil {
-				expected = active.ID
-			}
-			_, err = model.PublishBillingPrice(context.Background(), price, expected, 1)
-			require.NoError(t, err)
+			require.NoError(t, setGatewayModelPrice(test.model, pricing))
 			code, body := postGatewayTask(t, base, key, "/v1/videos", fmt.Sprintf(`{"model":%q,"prompt":"isolated fixture","seconds":5}`, test.model))
 			require.Equal(t, http.StatusOK, code, body)
 			assert.EqualValues(t, 1, sends.Load())

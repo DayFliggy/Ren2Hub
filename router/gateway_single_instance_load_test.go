@@ -33,7 +33,7 @@ type gatewayLoadRedisHook struct{ commands, legacy atomic.Int64 }
 func (h *gatewayLoadRedisHook) count(cmd redis.Cmder) {
 	h.commands.Add(1)
 	for _, arg := range cmd.Args() {
-		if text, ok := arg.(string); ok && strings.Contains(text, "route:lease:v2:") {
+		if text, ok := arg.(string); ok && strings.Contains(text, "route:lease:") {
 			h.legacy.Add(1)
 		}
 	}
@@ -398,7 +398,7 @@ func runGatewayControlledLoad(t *testing.T, scenario string) {
 	// Validation reads are outside the command measurement window.
 	var legacyCursor uint64
 	for {
-		keys, next, err := common.RDB.Scan(context.Background(), legacyCursor, "route:lease:v2:*", 100).Result()
+		keys, next, err := common.RDB.Scan(context.Background(), legacyCursor, "route:lease:*", 100).Result()
 		require.NoError(t, err)
 		require.Empty(t, keys, "HTTP traffic must not create legacy concurrency keys")
 		legacyCursor = next

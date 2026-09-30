@@ -79,7 +79,7 @@ func TestGatewayReplicateUploadAdmissionAndAcceptance(t *testing.T) {
 			}).Error)
 			require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", 1).Update("available_quota", scenario.quota).Error)
 			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 100000}).Error)
-			require.NoError(t, publishGatewayImagePrice("gpt-4o-mini"))
+			require.NoError(t, configureGatewayImagePrice("gpt-4o-mini"))
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 			var body bytes.Buffer
 			writer := multipart.NewWriter(&body)
@@ -111,6 +111,11 @@ func TestGatewayReplicateUploadAdmissionAndAcceptance(t *testing.T) {
 			charge := 0
 			if scenario.name == "success" {
 				charge = 500
+				assert.Zero(t, user.ReservedQuota, "a confirmed image response must finish settlement")
+				assert.EqualValues(t, 500, user.UsedQuota, "charge the delivered image, not the requested output count")
+				var recovery model.BillingRecovery
+				require.NoError(t, model.DB.First(&recovery).Error)
+				assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
 			}
 			if scenario.name == "unknown_generation_result" {
 				charge = 1500

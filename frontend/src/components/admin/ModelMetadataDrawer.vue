@@ -13,10 +13,8 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import MetadataIcon from './MetadataIcon.vue'
 import StringListEditor from './StringListEditor.vue'
 import MetadataEndpointEditor from './MetadataEndpointEditor.vue'
-import ModelPricingEditor from './ModelPricingEditor.vue'
 import { parseMetadataTags } from './modelMetadataForm'
 import { modelMetadataMessages } from '@/i18n/modelMetadata'
-import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{
   model: ModelMetadata | null
@@ -28,7 +26,6 @@ const { t, te } = useI18n({
   useScope: 'local',
   messages: modelMetadataMessages,
 })
-const auth = useAuthStore()
 const form = reactive<ModelInput>({
   model_name: props.initialName ?? '',
   description: '',
@@ -44,11 +41,9 @@ const tags = ref<string[]>([])
 const endpointEditor = ref<InstanceType<typeof MetadataEndpointEditor> | null>(
   null
 )
-const pricingEditor = ref<InstanceType<typeof ModelPricingEditor> | null>(null)
 const loading = ref(Boolean(props.model))
 const saving = ref(false)
 const error = ref('')
-const metadataCommitted = ref(false)
 const loadFailed = ref(false)
 const controller = new AbortController()
 const rules = ['exact', 'prefix', 'contains', 'suffix']
@@ -99,27 +94,20 @@ async function save() {
   saving.value = true
   error.value = ''
   try {
-    if (!metadataCommitted.value) {
-      form.model_name = form.model_name.trim()
-      if (!form.model_name) throw new Error(t('nameRequired'))
-      const cleanTags = tags.value.map((tag) => tag.trim()).filter(Boolean)
-      if (new Set(cleanTags).size !== cleanTags.length)
-        throw new Error(t('duplicateTags'))
-      form.tags = cleanTags.join(',')
-      form.endpoints = endpointEditor.value?.validate() ?? form.endpoints
-      await pricingEditor.value?.validate(form.model_name)
-      const saved = await metadataApi.saveModel({ ...form })
-      form.id = saved.id
-      metadataCommitted.value = true
-      emit('changed')
-    }
-    await pricingEditor.value?.save(form.model_name)
+    form.model_name = form.model_name.trim()
+    if (!form.model_name) throw new Error(t('nameRequired'))
+    const cleanTags = tags.value.map((tag) => tag.trim()).filter(Boolean)
+    if (new Set(cleanTags).size !== cleanTags.length)
+      throw new Error(t('duplicateTags'))
+    form.tags = cleanTags.join(',')
+    form.endpoints = endpointEditor.value?.validate() ?? form.endpoints
+    const saved = await metadataApi.saveModel({ ...form })
+    form.id = saved.id
+    emit('changed')
     emit('saved')
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause)
-    error.value = metadataCommitted.value
-      ? `${t('partialSaved')} ${message}`
-      : message
+    error.value = message
   } finally {
     saving.value = false
   }
@@ -148,7 +136,7 @@ async function save() {
       <fieldset
         v-if="!loadFailed"
         class="admin-form min-w-0"
-        :disabled="saving || metadataCommitted"
+        :disabled="saving"
       >
         <div class="admin-fields">
           <label class="admin-field admin-field-wide"
@@ -215,20 +203,9 @@ async function save() {
           <MetadataEndpointEditor
             ref="endpointEditor"
             v-model="form.endpoints"
-            :disabled="saving || metadataCommitted"
+            :disabled="saving"
           />
         </section>
-      </fieldset>
-      <fieldset
-        v-if="auth.isRoot && !loadFailed"
-        :disabled="saving"
-        class="min-w-0"
-      >
-        <ModelPricingEditor
-          ref="pricingEditor"
-          :open="true"
-          :model-name="form.model_name"
-        />
       </fieldset>
     </form>
     <template #footer
@@ -240,9 +217,7 @@ async function save() {
           form="model-metadata-form"
           :loading="saving"
           :disabled="loading || loadFailed"
-          ><Save :size="16" />{{
-            metadataCommitted ? t('retryPricing') : t('save')
-          }}</ConsoleButton
+          ><Save :size="16" />{{ t('save') }}</ConsoleButton
         >
       </div></template
     >

@@ -9,13 +9,16 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGatewayOllamaUsagePresenceAccounting(t *testing.T) {
+	previousCount := constant.CountToken
+	constant.CountToken = false
+	t.Cleanup(func() { constant.CountToken = previousCount })
 	for _, test := range []struct {
 		name, counts string
 		known        bool
@@ -38,7 +41,10 @@ func TestGatewayOllamaUsagePresenceAccounting(t *testing.T) {
 					var user model.User
 					if assert.NoError(t, model.DB.First(&user, 1).Error) {
 						reservedAtSend.Store(int64(user.ReservedQuota))
-						assert.Positive(t, user.ReservedQuota, "reservation must precede the provider request")
+						assert.Zero(t, user.ReservedQuota, "upstream input-only estimation is zero when token counting is disabled")
+						var recovery model.BillingRecovery
+						require.NoError(t, model.DB.First(&recovery).Error)
+						assert.Equal(t, model.BillingRecoveryPreConsumeCommitted, recovery.PreConsumeState)
 					}
 					contentType := "application/json"
 					if stream {
@@ -47,9 +53,9 @@ func TestGatewayOllamaUsagePresenceAccounting(t *testing.T) {
 					w.Header().Set("Content-Type", contentType)
 					_, _ = io.WriteString(w, `{"model":"llama3.1","message":{"role":"assistant","content":"paid answer"},"done":true,"done_reason":"stop"`+test.counts+"}\n")
 				})
-				current, err := model.GetActiveBillingPrice(context.Background(), "llama3.1")
+				_, err := model.GetActiveBillingPrice(context.Background(), "llama3.1")
 				require.NoError(t, err)
-				_, err = model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"}, Model: "llama3.1", Mode: billing.ModeExpression, Expression: "p * 2 + c * 4"}, current.ID, 1)
+				_, err = setGatewayExpression("llama3.1", "p * 2 + c * 4")
 				require.NoError(t, err)
 				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 1000000}).Error)
 				code, body := gatewayStateHTTP(t, base, key, "/v1/chat/completions", fmt.Sprintf(`{"model":"llama3.1","max_tokens":32,"stream":%t,"messages":[{"role":"user","content":"fixture"}]}`, stream))
@@ -71,7 +77,7 @@ func TestGatewayOllamaUsagePresenceAccounting(t *testing.T) {
 				} else {
 					assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
 					assert.True(t, model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState))
-					assert.Positive(t, held)
+					assert.Zero(t, held, "unknown provider usage retains reconciliation even with a zero estimate")
 				}
 				assert.Equal(t, test.charge, user.UsedQuota)
 				assert.Equal(t, held, user.ReservedQuota)

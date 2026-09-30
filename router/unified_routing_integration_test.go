@@ -60,7 +60,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 			channelType:      constant.ChannelTypeMidjourney, quota: 1000, calls: 1,
 		},
 	}
-	for _, scope := range []string{billing.PriceScopeGlobal, billing.PriceScopeChannel} {
+	for _, scope := range []string{billing.PriceScopeGlobal} {
 		for _, test := range cases {
 			t.Run(scope+"/"+test.name, func(t *testing.T) {
 				setupRelayRouterTestDB(t)
@@ -88,7 +88,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 				priceJSON, err := common.Marshal(prices)
 				require.NoError(t, err)
 				if scope == billing.PriceScopeGlobal {
-					require.NoError(t, publishGatewayFixturePrices(string(priceJSON), false))
+					require.NoError(t, configureGatewayFixturePrices(string(priceJSON), false))
 				}
 				var calls atomic.Int32
 				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -113,15 +113,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 					channel.ModelMapping = &mapping
 				}
 				require.NoError(t, db.Create(channel).Error)
-				if scope == billing.PriceScopeChannel {
-					for _, name := range strings.Split(test.models, ",") {
-						_, err := model.PublishBillingPrice(context.Background(), billing.PriceVersion{Provenance: &billing.PriceProvenance{Kind: "retail", RetailReason: "explicit test retail price"},
-							ScopeKind: scope, ChannelID: channel.Id, Model: name, Mode: billing.ModeUnitPrice,
-							Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.0006"}},
-						}, 0, 1)
-						require.NoError(t, err)
-					}
-				}
+
 				require.NoError(t, channel.AddAbilities(db))
 				require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))
 				engine := gin.New()
@@ -139,10 +131,7 @@ func TestUnifiedRoutingPreservesRelayProtocolsAndChannelBilling(t *testing.T) {
 				require.NoError(t, db.First(user, user.Id).Error)
 				wantQuota := test.quota
 				wantMultiplier := "2"
-				if scope == billing.PriceScopeChannel {
-					wantQuota = 300
-					wantMultiplier = "1"
-				}
+
 				if test.name == "suno" || test.name == "video" || test.name == "midjourney" {
 					assert.Zero(t, user.UsedQuota)
 					assert.EqualValues(t, wantQuota, user.ReservedQuota)

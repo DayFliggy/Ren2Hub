@@ -108,13 +108,6 @@ func main() {
 		return
 	}
 	controller.SyncTaskPlugins()
-	if common.IsMasterNode {
-		if err := service.InitializeAutomaticPricing(context.Background()); err != nil {
-			// Published prices remain valid. Keep the scheduler alive so source
-			// conflicts or temporary database failures can recover on its next run.
-			common.SysError("automatic pricing initialization incomplete; published prices retained: " + err.Error())
-		}
-	}
 	if err := service.InitRouteCapabilityIndex(context.Background()); err != nil {
 		common.SysError(fmt.Sprintf("initial route capability index rebuild failed: %v", err))
 	}

@@ -4,6 +4,7 @@ export default {
   taskPlugins: taskPluginMessages['zh-CN'],
   security: securityMessages['zh-CN'],
   billing: {
+    modelPricing: '模型定价',
     requestedServiceTier: '请求服务等级（计价依据）',
     actualServiceTier: '上游返回服务等级（仅审计）',
     operationalMetrics: '当前运行实例的计费指标',
@@ -957,6 +958,7 @@ export default {
     channelTitle: '可用渠道（{count} 条）',
     billing: {
       token: '按量计费',
+      unconfigured: '未配置价格',
       unit_price: '明确单价',
       tiered: '分档动态计费',
       free: '免费',

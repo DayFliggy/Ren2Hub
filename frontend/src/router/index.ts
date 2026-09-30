@@ -329,6 +329,12 @@ const router = createRouter({
           meta: { wide: true, feature: 'admin', requiresRoot: true },
           children: [
             {
+              path: 'billing/model-pricing',
+              name: 'model-pricing',
+              component: () => import('@/views/admin/ModelPricingView.vue'),
+              meta: { wide: true, feature: 'admin', requiresRoot: true },
+            },
+            {
               path: 'site/:section?',
               name: 'system-settings-site',
               component: () =>

@@ -35,15 +35,15 @@ const (
 )
 
 // BillingRecovery is the durable state for a request's pre-consume and
-// settlement components and the sanitized consumption log snapshot. Token
-// keys, headers, request bodies, and provider credentials are never stored.
+// settlement components and the sanitized consumption log snapshot. Request
+// inputs needed for replay exist only in authenticated encrypted usage evidence.
 type BillingRecovery struct {
-	Version                int64  `json:"version" gorm:"type:bigint;not null;default:0"`
-	QuoteSnapshot          string `json:"-" gorm:"type:text"`
-	UsageSnapshot          string `json:"-" gorm:"type:text"`
-	ChargeSnapshot         string `json:"-" gorm:"type:text"`
-	FinalEventID           string `json:"event_id" gorm:"type:varchar(192)"`
-	ConsumptionFingerprint string `json:"consumption_fingerprint" gorm:"type:varchar(64)"`
+	Version                int64    `json:"version" gorm:"type:bigint;not null;default:0"`
+	QuoteSnapshot          string   `json:"-" gorm:"type:text"`
+	UsageSnapshot          LongText `json:"-"`
+	ChargeSnapshot         string   `json:"-" gorm:"type:text"`
+	FinalEventID           string   `json:"event_id" gorm:"type:varchar(192)"`
+	ConsumptionFingerprint string   `json:"consumption_fingerprint" gorm:"type:varchar(64)"`
 
 	ID                    int64        `json:"id" gorm:"primaryKey"`
 	RequestID             string       `json:"request_id" gorm:"type:varchar(128);uniqueIndex;not null"`

@@ -17,6 +17,7 @@ import (
 // Each database runs identical transaction contracts; missing servers are explicit skips.
 func withTaskBillingDatabases(t *testing.T, run func(*testing.T, *gorm.DB)) {
 	t.Helper()
+	t.Setenv("CRYPTO_SECRET", "billing-test-persistent-key")
 	for _, database := range []struct {
 		kind common.DatabaseType
 		env  string
@@ -50,7 +51,7 @@ func withTaskBillingDatabases(t *testing.T, run func(*testing.T, *gorm.DB)) {
 				initCol()
 				assert.NoError(t, connection.Close())
 			})
-			require.NoError(t, db.AutoMigrate(&Task{}, &TaskResultEvent{}, &PerfMetric{}, &Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &BillingPriceVersion{}, &BillingActivePrice{}))
+			require.NoError(t, db.AutoMigrate(&Task{}, &TaskResultEvent{}, &PerfMetric{}, &Midjourney{}, &User{}, &Token{}, &Channel{}, &Log{}, &QuotaData{}, &BillingRecovery{}, &BillingEvent{}, &BillingAttempt{}, &BillingPriceVersion{}))
 			run(t, db)
 		})
 	}

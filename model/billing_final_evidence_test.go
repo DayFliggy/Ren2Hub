@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -103,6 +105,13 @@ func TestLiveConsumptionKeepsUnknownUsageCollectingUntilFinalEvidence(t *testing
 	consumption, err := bindConsumptionEvidence("live-final", BillingConsumption{Log: Log{UserId: 1, TokenId: 1, Quota: 30}})
 	require.NoError(t, err)
 	consumption.Usage.Estimated, consumption.Usage.Complete = true, false
+	var attempt BillingAttempt
+	require.NoError(t, db.First(&attempt, "id = ?", consumption.AttemptID).Error)
+	var quote billing.Quote
+	require.NoError(t, common.UnmarshalJsonStr(attempt.Quote, &quote))
+	usage, charge, err := EvaluateBilling(&quote, *consumption.Usage, billingexpr.RequestInput{}, "live-final", consumption.AttemptID, "settlement")
+	require.NoError(t, err)
+	consumption.Usage, consumption.Charge = &usage, charge
 	require.NoError(t, RecordRealtimeBillingConsumption("live-final", consumption))
 	var collecting BillingRecovery
 	require.NoError(t, db.Where("request_id = ?", "live-final").First(&collecting).Error)
@@ -110,6 +119,9 @@ func TestLiveConsumptionKeepsUnknownUsageCollectingUntilFinalEvidence(t *testing
 	assert.Equal(t, BillingRecoveryStateUsageCollecting, collecting.ConsumptionState)
 	require.Error(t, PrepareBillingRecoveryConsumption("live-final", consumption))
 	consumption.Usage.Estimated, consumption.Usage.Complete = false, true
+	usage, charge, err = EvaluateBilling(&quote, *consumption.Usage, billingexpr.RequestInput{}, "live-final", consumption.AttemptID, "settlement")
+	require.NoError(t, err)
+	consumption.Usage, consumption.Charge = &usage, charge
 	require.NoError(t, PrepareBillingRecoveryConsumption("live-final", consumption))
 	require.NoError(t, PrepareBillingRecoveryConsumption("live-final", consumption))
 	require.NoError(t, Settle("live-final", consumption.Charge.FinalQuota))

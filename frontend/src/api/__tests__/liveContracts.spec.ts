@@ -1,4 +1,3 @@
-import { offerFixture } from './pricingFixture'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -36,127 +35,62 @@ function pricingResponse(overrides: Record<string, unknown> = {}) {
     description: 'Fast model',
     owner_by: 'OpenAI',
     supported_endpoint_types: ['chat'],
-    offers: [
-      offerFixture({
-        contract_version: 3,
-        calculation_version: 'billing-v3',
-        result_unit: 'usd',
-        id: 1,
-        model: 'gpt-4o',
-        mode: 'unit_price' as const,
-        prices: [
-          { quantity: 'p', unit: 'per_million_tokens', price: '1' },
-          { quantity: 'c', unit: 'per_million_tokens', price: '1.2' },
-          { quantity: 'cr', unit: 'per_million_tokens', price: '0.25' },
-        ],
-        created_at: 1,
-        hash: 'fixture',
-      }),
-    ],
+    quota_type: 0,
+    model_ratio: 0.5,
+    completion_ratio: 1.2,
+    cache_ratio: 0.25,
     ...overrides,
   }
 }
 
 describe('live API contracts', () => {
-  it('retains valid offers and records failures without inventing prices', () => {
-    const normal = pricingResponse()
-    const primary = normal.offers[0]!
-    const cachedAudio = {
-      ...primary,
-      offer_id: 'cached-audio',
-      price_version: {
-        ...primary.price_version,
-        prices: [
-          { quantity: 'ai_cr', unit: 'per_million_tokens', price: '0.4' },
+  it('preserves unconfigured models and plugin availability without inventing a price', () => {
+    const [parsed] = parsePricingModels([
+      pricingResponse({
+        billing_mode: 'unconfigured',
+        model_ratio: undefined,
+        billing_plugin_variants: [
+          {
+            plugin_key: 'available',
+            plugin_name: 'Available',
+            billing_mode: 'tiered_expr',
+            billing_expr: 'u("seconds") * 0.4',
+          },
+          {
+            plugin_key: 'incompatible',
+            plugin_name: 'Incompatible',
+            billing_mode: 'unconfigured',
+            billing_expr: 'u("removed") * 0.4',
+          },
         ],
-      },
-      display_prices: [
-        { quantity: 'ai_cr', unit: 'per_million_tokens', price: '0.4' },
-      ],
-    }
-    const unsupported = {
-      ...primary,
-      offer_id: 'future-price',
-      price_version: {
-        ...primary.price_version,
-        calculation_version: 'future',
-      },
-    }
+      }),
+    ])
+    expect(parsed?.billing_mode).toBe('unconfigured')
+    expect(parsed?.model_ratio).toBeUndefined()
+    expect(
+      parsed?.billing_plugin_variants?.map((item) => item.billing_mode)
+    ).toEqual(['tiered_expr', 'unconfigured'])
+  })
+  it('retains valid models and reports malformed prices without inventing free prices', () => {
     const parsed = parsePricingModelsPartial([
-      { ...normal, offers: [cachedAudio, unsupported, primary] },
-      { ...normal, model_name: 'unsupported-only', offers: [unsupported] },
-      { model_name: 'missing-prices' },
+      pricingResponse(),
+      { model_name: 'missing' },
+      pricingResponse({ model_name: 'bad', model_ratio: -1 }),
     ])
     expect(parsed.models).toHaveLength(1)
-    expect(parsed.models[0]?.offers.map((offer) => offer.offer_id)).toEqual([
-      'cached-audio',
-      primary.offer_id,
-    ])
-    expect(parsed.models[0]?.offers[0]?.display_prices[0]?.price).toBe('0.4')
-    expect(parsed.issues).toEqual([
-      {
-        model_name: normal.model_name,
-        offer_id: 'future-price',
-        reason: 'invalid_price_offer',
-      },
-      {
-        model_name: 'unsupported-only',
-        offer_id: 'future-price',
-        reason: 'invalid_price_offer',
-      },
-      {
-        model_name: 'missing-prices',
-        offer_id: null,
-        reason: 'invalid_model_record',
-      },
+    expect(parsed.issues.map((issue) => issue.model_name)).toEqual([
+      'missing',
+      'bad',
     ])
     expectInvalidResponse(() => parsePricingModelsPartial({ data: [] }))
   })
-
-  it('retains alias offers and independent decimal adjustments without exposing channel identity', () => {
-    const response = pricingResponse({ model_name: 'gpt-4o-alias' })
-    const primary = response.offers[0]!
-    const discounted = {
-      ...primary,
-      offer_id: 'discounted',
-      adjustments: [
-        { kind: 'channel_multiplier', multiplier: '0.123456789012345678' },
-      ],
-      display_prices: primary.display_prices.map((line) => ({
-        ...line,
-        price: '0.123456789012345678',
-      })),
-    }
-    const rows = parsePricingModels([
-      { ...response, offers: [primary, discounted] },
-    ])
-    expect(rows[0]?.model_name).toBe('gpt-4o-alias')
-    expect(rows[0]?.offers).toHaveLength(2)
-    expect(rows[0]?.offers[1]?.adjustments[0]?.multiplier).toBe(
-      '0.123456789012345678'
-    )
-    expectInvalidResponse(() =>
-      parsePricingModels([{ ...response, offers: [primary, primary] }])
-    )
-    expectInvalidResponse(() =>
-      parsePricingModels([{ ...response, offers: [] }])
-    )
+  it('preserves explicit zero and rejects incomplete expressions', () => {
+    expect(
+      parsePricingModels([pricingResponse({ model_ratio: 0 })])[0]?.model_ratio
+    ).toBe(0)
     expectInvalidResponse(() =>
       parsePricingModels([
-        { ...response, offers: [{ ...primary, priced_model: 'other' }] },
-      ])
-    )
-    expectInvalidResponse(() =>
-      parsePricingModels([
-        {
-          ...response,
-          offers: [
-            {
-              ...primary,
-              price_version: { ...primary.price_version, channel_id: 9 },
-            },
-          ],
-        },
+        pricingResponse({ billing_mode: 'tiered_expr', billing_expr: '' }),
       ])
     )
   })
@@ -172,16 +106,7 @@ describe('live API contracts', () => {
   it('parses model pricing and performance summaries with optional metadata', () => {
     expect(parsePricingModels([pricingResponse()])[0]).toMatchObject({
       model_name: 'gpt-4o',
-      offers: [
-        {
-          price_version: {
-            mode: 'unit_price',
-            prices: expect.arrayContaining([
-              { quantity: 'p', unit: 'per_million_tokens', price: '1' },
-            ]),
-          },
-        },
-      ],
+      model_ratio: 0.5,
       owner_by: 'OpenAI',
     })
     expect(
@@ -205,25 +130,12 @@ describe('live API contracts', () => {
     expectInvalidResponse(() => parsePerfMetricsSummary({ models: [{}] }))
   })
 
-  it('rejects missing and numeric prices instead of inferring a free model', () => {
-    const response = pricingResponse()
+  it('rejects missing and negative model prices', () => {
     expectInvalidResponse(() =>
-      parsePricingModels([{ ...response, offers: undefined }])
+      parsePricingModels([pricingResponse({ model_ratio: undefined })])
     )
     expectInvalidResponse(() =>
-      parsePricingModels([
-        {
-          ...response,
-          offers: [
-            {
-              ...response.offers[0],
-              display_prices: [
-                { quantity: 'p', unit: 'per_million_tokens', price: 0 },
-              ],
-            },
-          ],
-        },
-      ])
+      parsePricingModels([pricingResponse({ quota_type: 1, model_price: -1 })])
     )
   })
 

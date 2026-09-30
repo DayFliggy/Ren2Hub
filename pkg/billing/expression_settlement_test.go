@@ -11,8 +11,8 @@ import (
 )
 
 func TestExpressionSettlementUsesActualContextTierWithFrozenAdjustment(t *testing.T) {
-	version := billing.PriceVersion{Model: "context-tiers", Mode: billing.ModeExpression,
-		Expression: `len <= 100000 ? tier("small", p + cr * 0.1) : tier("large", p * 2 + cr * 0.2)`}
+	version, err := billing.NewModelPriceVersion("context-tiers", billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": `len <= 100000 ? tier("small", p + cr * 0.1) : tier("large", p * 2 + cr * 0.2)`}, false)
+	require.NoError(t, err)
 	quote, err := billing.NewQuote(version, "1.5", nil, time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 	for _, test := range []struct {

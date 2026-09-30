@@ -1,4 +1,3 @@
-import { pricingOfferFixture } from './pricingFixtures'
 import { expect, test } from '@playwright/test'
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 
@@ -80,74 +79,6 @@ for (const theme of ['light', 'dark'] as const) {
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('exact-token-budget.png'),
-        fullPage: true,
-      })
-      expect(errors).toEqual([])
-    })
-
-    test(`public unit prices ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
-      page,
-    }, testInfo) => {
-      await page.setViewportSize(
-        mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
-      )
-      await configureStablePage(page, { theme, authenticated: false })
-      const version = {
-        id: 3,
-        model: 'media-exact',
-        mode: 'unit_price',
-        prices: [
-          {
-            quantity: 'p',
-            unit: 'per_million_tokens',
-            price: '1.000000000000000001',
-          },
-          { quantity: 'images', unit: 'per_image', price: '0.125' },
-          { quantity: 'cc1h', unit: 'per_million_tokens', price: '2.5' },
-        ],
-        created_at: 1785114000,
-        hash: 'fixture',
-      }
-      await page.route('**/api/pricing', (route) =>
-        route.fulfill({
-          json: {
-            success: true,
-            data: [
-              {
-                model_name: 'media-exact',
-                description: '',
-                icon: '',
-                tags: '',
-                vendor_id: 1,
-                owner_by: 'OpenAI',
-                supported_endpoint_types: ['openai'],
-                billing_mode: 'unit_price',
-                offers: [pricingOfferFixture(version)],
-              },
-            ],
-            vendors: [{ id: 1, name: 'OpenAI' }],
-            supported_endpoint: {
-              openai: { path: '/v1/chat/completions', method: 'POST' },
-            },
-          },
-        })
-      )
-      const errors: string[] = []
-      page.on('pageerror', (error) => errors.push(error.message))
-      await page.goto('/pricing?tokenUnit=K')
-      await expect(page.getByText('$0.001', { exact: true })).toBeVisible()
-      await expect(page.getByText('$0.125', { exact: true })).toBeVisible()
-      await expect(page.getByText('每张图片', { exact: true })).toBeVisible()
-      await page.getByRole('link', { name: 'media-exact', exact: true }).click()
-      await expect(
-        page.getByText('缓存写入（1h）', { exact: true })
-      ).toBeVisible()
-      await expect(
-        page.getByText('每千 Token', { exact: true }).first()
-      ).toBeVisible()
-      await assertNoHorizontalOverflow(page)
-      await page.screenshot({
-        path: testInfo.outputPath('public-unit-prices.png'),
         fullPage: true,
       })
       expect(errors).toEqual([])

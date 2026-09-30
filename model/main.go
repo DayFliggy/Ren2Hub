@@ -323,10 +323,6 @@ func migrateDB() error {
 		&BillingUpstreamCost{},
 		&BillingEvent{},
 		&BillingPriceVersion{},
-		&BillingActivePrice{},
-		&BillingPricingSource{},
-		&BillingPricingSnapshot{},
-		&BillingPricingConfig{},
 		&CustomOAuthProvider{},
 		&UserOAuthBinding{},
 		&PerfMetric{},
@@ -342,9 +338,6 @@ func migrateDB() error {
 		&ActivityClaim{},
 	)
 	if err != nil {
-		return err
-	}
-	if err := migrateBillingPriceModelIdentity(DB); err != nil {
 		return err
 	}
 	if err := migrateRoutingModels(DB); err != nil {

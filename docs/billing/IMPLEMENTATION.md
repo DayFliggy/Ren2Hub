@@ -1,51 +1,62 @@
 # 钱包账务架构
 
-当前账务格式为 4，价格合同为 3，计算器为 `billing-v3`，表达式与单价均使用 Decimal。只支持空库初始化和匹配 `billing_schemas` 标记的重复启动，不自动迁移或清空旧库。本文描述源码契约，复验方法见[账务复验](VALIDATION.md)；实际部署和验收结果只由所属工作区服务器档案记录。
+当前安装格式为 schema 5，价格合同版本为 4，计算版本为 `newapi-c71eefbc-v1`。模型定价配置与 Expr VM 跟随固定 NewAPI 参考版本；Ren2Hub 保留钱包、Token 预留、资金事件、恢复和终态投递合同。本文描述源码行为，复验方法见[账务复验](VALIDATION.md)；实际部署和验收结果只由所属工作区服务器档案记录。
 
-## 资金与计价边界
+## 配置与资金边界
 
-钱包是唯一资金来源，Token 是附加消费限额。账户、预留、流水和统计金额使用 `common.Quota`（int64 / SQL BIGINT），固定 500000 quota/USD；API 金额是十进制整数字符串，无限 Token 的可用额度为 `null`。
+钱包是唯一资金来源，Token 是附加消费限额。账户、预留、流水和统计金额使用 `common.Quota`（int64 / SQL BIGINT），固定 500000 quota/USD；API quota 是十进制整数字符串，无限 Token 的可用额度为 `null`。
 
-模型价格只能来自已发布的不可变 `PriceVersion`：明确单价、高级表达式或显式免费。活动版本以 `(scope_kind, channel_id, model)` 为身份；先取精确渠道价格，再取明确发布的全局模型价格。渠道价格的报价系数固定为 1，全局价格可使用冻结的 Decimal 渠道售价系数。每次真实发送前冻结 `Quote`、作用域、版本及哈希、最终安全属性与时间；实际规范用量保存为 `Usage`，费用结果保存为 `ChargeResult`。这些证据各自持久化，不能相互覆盖。全部费用用 Decimal 合计后只舍入一次，正费用最低 1 quota；无效或超过单请求上限的金额进入对账，不按饱和值结算。
+`model_pricing` 是唯一模型价格编辑来源，覆盖倍率、按次和表达式三种模式。工具附加费独立来自 `tool_price_setting.prices`。两者初始均为空，明确零有效，缺价拒绝。外部价格获取只返回草稿候选，不写配置。渠道售价系数在合计费用后应用一次，没有独立渠道价格或活动版本切换器。
+
+请求边界从已保存配置解析生效辅助倍率及任务插件，再派生不可变 `PriceVersion` 和 `Quote`。这些记录是执行证据，不是第二份可编辑价格目录。已有尝试只使用其冻结配置，后续管理员修改不追溯改变费用。纯计算与各模式舍入见[模型定价](PRICING.md)。
 
 ## 实现入口
 
 | 入口 | 职责 |
 | --- | --- |
-| `pkg/billing/` | 规范用量、不可变报价和纯计算；不查询实时配置 |
-| `pkg/billingexpr/` | 仅读取规范用量、已登记属性及冻结时间的表达式 |
-| `model/billing_pricing.go` | 按价格作用域发布不可变版本、维护活动指针及并发保护 |
-| `service/billing_pricing_catalog.go` | 逐来源解析有效快照，供自动发布、参考草稿与恢复自动共用 |
+| `model/model_pricing_config.go` | 模型配置、精确数字、乐观版本检查；首次 option 行创建后锁行重读 |
+| `pkg/pricesource/`、`service/model_price_fetch.go` | 五个固定公开来源的下载和草稿转换，无价格写入 |
+| `pkg/billing/model_pricing.go` | 冻结配置的三模式纯计算，不查询现行设置 |
+| `pkg/billingexpr/` | 原样上游 Expr VM、动态请求探针与环境调用重放 |
+| `model/billing_pricing.go` | 从唯一配置构造价格，保存按定义哈希识别的不可变执行证据 |
+| `pkg/billing/evidence.go`、`model/billing_evidence.go` | 加密求值输入，绑定请求/尝试/配置/阶段，验证和重放 |
 | `model/billing_event.go` | 唯一账户投影写入点；事件、钱包与 Token 同事务 |
-| `model/billing_recovery.go` | Reserve、IncreaseReservation、Settle、Release 及幂等恢复 |
-| `model/billing_consumption.go` | `validateBillingConsumption`：普通请求、实时观察、任务终态与最终资金事务共用的消费证据校验 |
-| `model/billing_quote.go` | `ValidatePublishedBillingQuote`：冻结 Quote 与数据库不可变版本的核对 |
+| `model/billing_recovery.go` | 预留、补足、结算、释放及幂等恢复 |
+| `model/billing_consumption.go` | 普通请求、实时观察、任务终态与最终资金事务共用的消费证据校验 |
 | `service/billing_session.go` | 协调逻辑请求、预留、发送保护与退出处理 |
-| `model.TaskBillingContext` | 异步任务的 Quote、Usage、Charge 与原模型名 |
-| `model/billing_schema.go` | 空库格式标记与重复启动守卫 |
+| `model.TaskBillingContext` | 异步任务的实际 attempt、Quote、Usage、Charge 与原模型名 |
+| `model/billing_schema.go` | 空库格式与加密密钥指纹守卫 |
 
 充值、兑换、奖励和管理调账通过 `ApplyWalletAdjustment` / `ApplyWalletAdjustmentTx` 进入同一事件；业务凭据与入账使用同一事务。锁顺序为恢复/业务状态 → 钱包 → Token。资金事务内不调用 Redis、支付网关、日志库或通知服务。
 
+## 求值证据
+
+表达式可以访问真实请求正文、请求头、动态路径和时间函数。这些输入只进入用于账务重放的加密上下文，不写进公开 Quote、消费日志、路由诊断或管理详情的明文响应。不能通过参数白名单改写原表达式语义。
+
+`EvidenceCipher` 使用 AES-GCM，密钥由稳定且显式配置的 `CRYPTO_SECRET` 经 HKDF 派生。AAD 绑定逻辑请求 ID、真实 `BillingAttempt.ID`、配置哈希和求值阶段；加密载荷另绑定报价与用量哈希。预扣为 `estimate`，实际结算为 `settlement`，只读模拟为 `preview`。预扣和实际结算分别记录真实环境，不能互换证据。
+
+发送前 `PersistBillingEstimate` 校验并保存预估用量和费用；资金保护要求预留覆盖该估算。最终消费记录携带真实 AttemptID 和实际加密证据。恢复解密后执行同一表达式与计算器，时间和动态读取按已保存的调用记录重放。它不是直接接受历史金额：身份、配置、用量、调用记录或金额不一致时，不能扣款或伪装验证成功，记录保留待恢复或待对账状态。
+
+`PriceVersion`、Quote、Usage 和 Charge 分别保存，不能相互覆盖。请求体/请求头不得明文落到快照、错误或日志；密文快照使用跨数据库 `LongText`。重复完成和恢复重试复用已提交的证据与操作身份，不能靠重新求值产生另一份消费。
+
 ## 请求与恢复
 
-付费请求发送前持久化预留与消费保护，更贵的重试先补足预留。已确认实际费用超出预估时可形成欠费，后续付费请求停止准入；未知接受或缺少最终用量时保留预留。显式免费请求也写发送保护。已交付内容、断流、超时或进程退出都不能单独成为退款依据。
+所有请求，包括明确零价请求，都建立持久化发送保护。更贵的重试必须先补足预留；已确认实际费用超出预估时可形成欠费，后续付费请求停止准入。未知是否接受或缺少最终用量时保留预留；交付部分内容、断流、超时或进程退出本身不能证明应退款。
 
-最终结算只接受 `Usage.ReadyForSettlement()` 为真的用量：`Complete` 为真、非估算、未标记非法、`Source` 非空，且 `Terminal` 为 `completed`。普通请求、实时观察、任务终态和最终资金事务共用 `validateBillingConsumption`：要求冻结的 Usage 与 Charge 同时存在、用户与 Token 一致、日志金额等于 `Charge.FinalQuota`，再核对已发布报价和同一请求、渠道、报价哈希的不可变尝试及其指纹，按冻结 Quote 重新计算 Charge 并比较哈希。任务失败释放不保留消费费用，成功任务同样经过该校验。`ValidatePublishedBillingQuote` 按版本 ID 读取数据库中的不可变版本并比较冻结定义哈希，不读取当前活动指针，之后发布的新版本不会使已接受的尝试失效；伪造版本 ID 或未发布预览不能成为收费依据。
+最终结算要求 `Usage.ReadyForSettlement()`：完整、非估算、未标记非法、来源非空且终态为 completed。`validateBillingConsumption` 核对用户、Token、日志金额、真实尝试、配置/报价哈希及消费指纹，再通过加密证据重放验证费用。`ValidatePublishedBillingQuote` 这一历史函数名只核对请求执行证据，不查询活动价格目录。未保存的预览不能作为实际收费依据。
 
-`Complete` 在传输边界按上游原始 JSON 的字段存在性判定（`relaykit/dto/usage_observation.go` 的 `HasJSONTokenCounts`）：两个方向的计数都须存在且为非负整数，明确零是完整事实，缺失、`null` 或空对象不是。Responses 与 Realtime 在解码时按 `input_tokens/output_tokens` 生成观察，Responses 仅在 `status=completed` 时标记完成终态；Chat SSE 缺少 `prompt_tokens/completion_tokens` 时标为 `partial`；token 型音频用量两组方向计数都不完整时直接报错。`UsageObservation` 字段为 `json:"-"`，不从上游 JSON 解码，也不改变转发给客户端的协议字段。
+协议用量的“完整”依赖原始字段是否存在：明确零是事实，缺失、null 或空对象不是。Responses、Chat SSE、音频和 Realtime 保持各自的完成观察与方向计数校验。规范化缓存、图片和音频子类仅扣除一次，计价失败不得生成成功消费日志。
 
-渠道测试（`controller/channel-test.go`）与普通中继共用账务入口：发送前用 `ModelPriceHelper` 冻结报价，参数覆盖后用 `FreezeOutboundBillingAttributes` 冻结最终属性，发送边界经 `prepareLiveRouteSend` 建立预留、锁价与尝试记录。响应后先用 `TextUsageReadyForSettlement` 判定，未确认用量经 `HoldUnconfirmedResponseUsage` 保留预留；确认后 `PrepareFinalTextCharge` 调用与 `PostTextConsumeQuota` 相同的 `calculateTextQuotaSummary`（含 `flat_fee` 与单价的已交付按次处理），再由 `CompleteBillingConsumption` 结算。差异在计价失败：渠道测试直接返回错误，不像普通中继那样经 `holdFailedBillingPrice` 登记计算失败；已有有效输出时预留仍由退出处理保留。
+渠道测试与普通中继共用模型报价、最终发送参数、预留及证据边界；确认用量才结算，未知用量继续保留预留。仅提交金额的结算接口只能确认已准备的意图，不能用金额创建缺少证据的新消费。人工结算也须已有可重放证据，并在最终资金事务验证；明确放弃收费时可以释放。
 
-只提交金额的结算入口只能幂等确认已准备好的结算意图，不能新建结算意图。人工结算要求已保存 Quote、Usage、Charge 和消费指纹，并在最终资金事务中按冻结证据复核金额；管理员金额和说明不能把未知用量变成可扣款事实，明确放弃收费的释放仍可执行。
+异步任务把供应商终态与账务分开：已知成功结果即使不能计价也保存真实终态和待对账证据，不重放上游。任务结果事件与 PerfMetric 在独立幂等 outbox 中投递；资金提交、消费日志、统计和缓存各自恢复。SQL 日志按事件 ID 幂等，ClickHouse 写入结果不明时保留保护，不盲目重发。
 
-同一请求首次使用某渠道时冻结该渠道的价格，切换渠道建立另一份报价，返回已尝试渠道时复用原价格。每次尝试独立保存报价证据，恢复快照管理累计预留目标。审计按冻结 Quote、Usage 和账本事件重放；请求指纹绑定请求 ID、渠道和报价，消费指纹覆盖完整用量与账单，不用舍入后的相同金额代替证据一致性。
+## 安装与运行状态
 
-消费结果以恢复记录作为持久化待投递记录。资金事件与账户投影提交后，日志、统计和缓存独立恢复；SQL 日志按事件 ID 幂等，ClickHouse 写入结果不明时保持保护。任务终态与账务意图保持关联，Root 人工决定继续驱动同一任务费用及消费结果。
+schema 5 只接受空库初始化，或版本及 `EvidenceKeyID` 匹配的重复启动。程序不会自动迁移或清空旧库。重装和旧数据处置由明确授权的部署流程执行；文档更新不表示数据库已经重置。
 
-当前结算路径不读取旧模型倍率或实时目录，不使用无持久化资金来源、拆分钱包/Token 退款或内存资金批量写入。目录检查仅发布新不可变价格，保存源原文历史和字段转换证据；之后的请求才使用新版本。旧种子和归属迁移路径已删除。易支付依赖冻结订单和有效通知，不主动查单。
+必须保留配置好的 `CRYPTO_SECRET`，不能在重启时随机替换。更换或丢失密钥会阻止旧证据验证；备份和回退必须同时保留数据库、应用格式与对应密钥。不能只回滚镜像，也不能删除证据来绕过恢复守卫。
 
-来源只声明有据的支持维度和服务档，请求最终参数在预留前核对。人工发布必须有来源证据或明确零售价理由；未来生效版本直接拒绝，未实现计划调度。字符、时长及任务完成事实各自冻结计量合同，不能用请求估算补缺。媒体、Realtime 和工具的具体边界见[定价说明](PRICING.md)。
+钱包与 Token 分别显示可用、在途预留和已结算消费。金额展示最多保留 3 位小数，编辑、提交及导出保留原始精度。Expr VM 的浮点计算语义与资金 int64 精确存储是不同边界，不能混称所有计费都是 Decimal 运算。
 
-UI 展示最多保留 3 位小数，编辑、提交、导出和内部计算保留完整精度。钱包与 Token 分别展示可用、在途预留和已结算消费。
-
-接口见[账务 API](API.md)，定价见[单价与目录](PRICING.md)和[表达式契约](../../pkg/billingexpr/expr.md)，故障处理见[恢复与对账](RECONCILIATION.md)，前端见[账务说明](../../frontend/docs/BILLING.md)，复验方法见[账务复验](VALIDATION.md)。
+接口见[账务 API](API.md)，计算见[计价接口](../../pkg/billing/API.md)，故障处理见[恢复与对账](RECONCILIATION.md)，前端见[账务说明](../../frontend/docs/BILLING.md)。

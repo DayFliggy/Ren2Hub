@@ -17,7 +17,7 @@ import (
 )
 
 // BillingAttributesFromBody projects only registered scalar attributes. Request
-// bodies and headers never become expression inputs or persisted evidence.
+// routing checks. Full expression inputs are persisted only as encrypted evidence.
 func BillingAttributesFromBody(body []byte) (map[string]interface{}, error) {
 	return billingAttributesFromBody(body, "")
 }
@@ -145,34 +145,60 @@ func projectReasoningBillingAttributes(fields, attrs map[string]interface{}) {
 }
 
 func ResolveIncomingBillingExprRequestInput(c *gin.Context, info *relaycommon.RelayInfo) (billingexpr.RequestInput, error) {
-	if info != nil && info.BillingRequestInput != nil {
-		return cloneRequestInput(*info.BillingRequestInput), nil
-	}
-	if info != nil && info.Request != nil {
-		return BuildBillingExprRequestInputFromRequest(info.Request, nil)
-	}
 	input := billingexpr.RequestInput{FrozenAt: time.Now().UTC(), Attributes: map[string]interface{}{}}
-	if c == nil || c.Request == nil || !isJSONContentType(c.Request.Header.Get("Content-Type")) {
-		return input, nil
+	if info != nil && info.BillingRequestInput != nil {
+		var err error
+		input, err = billingexpr.CloneRequestInput(*info.BillingRequestInput)
+		if err != nil {
+			return input, err
+		}
 	}
-	storage, err := common.GetBodyStorage(c)
-	if err != nil {
-		return input, err
+	if input.Headers == nil {
+		input.Headers = map[string]string{}
 	}
-	body, err := storage.Bytes()
-	if err != nil {
-		return input, err
-	}
-	var format types.RelayFormat
 	if info != nil {
-		format = info.RelayFormat
+		for key, value := range info.RequestHeaders {
+			if _, exists := input.Headers[key]; !exists {
+				input.Headers[key] = value
+			}
+		}
 	}
-	input.Attributes, err = billingAttributesFromBody(body, format)
-	return input, err
+	if len(input.Body) == 0 && c != nil && c.Request != nil && isJSONContentType(c.Request.Header.Get("Content-Type")) {
+		storage, err := common.GetBodyStorage(c)
+		if err != nil {
+			return input, err
+		}
+		input.Body, err = storage.Bytes()
+		if err != nil {
+			return input, err
+		}
+	}
+	if len(input.Body) == 0 && info != nil && info.Request != nil {
+		var err error
+		input.Body, err = common.Marshal(info.Request)
+		if err != nil {
+			return input, err
+		}
+	}
+	if input.Attributes == nil {
+		var format types.RelayFormat
+		if info != nil {
+			format = info.RelayFormat
+		}
+		var err error
+		input.Attributes, err = billingAttributesFromBody(input.Body, format)
+		if err != nil {
+			return input, err
+		}
+	}
+	return input, nil
 }
 
-func BuildBillingExprRequestInputFromRequest(request dto.Request, _ map[string]string) (billingexpr.RequestInput, error) {
-	input := billingexpr.RequestInput{FrozenAt: time.Now().UTC(), Attributes: map[string]interface{}{}}
+func BuildBillingExprRequestInputFromRequest(request dto.Request, headers map[string]string) (billingexpr.RequestInput, error) {
+	input := billingexpr.RequestInput{FrozenAt: time.Now().UTC(), Headers: map[string]string{}, Attributes: map[string]interface{}{}}
+	for key, value := range headers {
+		input.Headers[key] = value
+	}
 	if request == nil {
 		return input, nil
 	}
@@ -180,17 +206,29 @@ func BuildBillingExprRequestInputFromRequest(request dto.Request, _ map[string]s
 	if err != nil {
 		return input, err
 	}
+	input.Body = body
 	format, _ := relaycommon.GuessRelayFormatFromRequest(request)
 	input.Attributes, err = billingAttributesFromBody(body, format)
 	return input, err
 }
 
-func cloneRequestInput(src billingexpr.RequestInput) billingexpr.RequestInput {
-	input := billingexpr.RequestInput{FrozenAt: src.FrozenAt, Attributes: map[string]interface{}{}}
-	for name, value := range src.Attributes {
-		input.Attributes[name] = value
+// Image pricing follows the upstream validated scalar projection, including
+// multipart requests. File data is never needed to price an image count.
+func ResolveImageBillingRequestInput(c *gin.Context, info *relaycommon.RelayInfo, input billingexpr.RequestInput) (billingexpr.RequestInput, error) {
+	if input.ImageCount != nil {
+		return input, nil
 	}
-	return input
+	request, ok := info.Request.(*dto.ImageRequest)
+	if !ok {
+		return input, nil
+	}
+	count, err := request.ImageCount(false)
+	if err != nil {
+		return input, err
+	}
+	input.Body, err = imageBillingBody(request, count)
+	input.ImageCount = &count
+	return input, err
 }
 
 func isJSONContentType(contentType string) bool {
@@ -216,4 +254,12 @@ func FreezeOutboundBillingAttributes(info *relaycommon.RelayInfo, body []byte) e
 		info.SetReasoningEffort(effort)
 	}
 	return nil
+}
+
+func imageBillingBody(request *dto.ImageRequest, count int) ([]byte, error) {
+	body := map[string]any{"model": request.Model, "n": count, "size": request.Size, "quality": request.Quality}
+	if request.BillingParameters != nil {
+		body["parameters"] = request.BillingParameters
+	}
+	return common.Marshal(body)
 }

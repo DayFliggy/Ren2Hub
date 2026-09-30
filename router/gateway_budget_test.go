@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
@@ -28,7 +30,7 @@ func TestGatewayFinalBudgetRejectsBeforeDebitOrSend(t *testing.T) {
 		{"claude", "claude-3-5-sonnet", "/v1/messages", `{"model":"claude-3-5-sonnet","messages":[{"role":"user","content":"hello"}],"max_tokens":10}`, `{"max_tokens":2048}`, 429, 500, 0},
 		{"gemini", "gemini-2.5-flash", "/v1beta/models/gemini-2.5-flash:generateContent", `{"contents":[{"role":"user","parts":[{"text":"hello"}]}],"generationConfig":{"maxOutputTokens":10}}`, `{"generationConfig":{"maxOutputTokens":2048}}`, 429, 500, 0},
 		{"invalid_override", "gpt-4o-mini", "/v1/chat/completions", `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}],"max_tokens":10}`, `{"max_tokens":-1}`, 400, 0, 0},
-		{"insufficient_final_quota", "gpt-4o-mini", "/v1/chat/completions", `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}],"max_tokens":10}`, `{"max_tokens":20480}`, 403, 0, 1000},
+		{"insufficient_final_quota", "gpt-4o-mini", "/v1/chat/completions", `{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}],"max_tokens":10}`, fmt.Sprintf(`{"messages":[{"role":"user","content":%q}]}`, strings.Repeat("large input ", 2048)), 403, 0, 1000},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var sends atomic.Int64
@@ -45,8 +47,11 @@ func TestGatewayFinalBudgetRejectsBeforeDebitOrSend(t *testing.T) {
 			}
 			require.NoError(t, model.SaveGatewayConfig(config))
 			if test.quota > 0 {
-				require.NoError(t, publishGatewayFixturePrices(`{"gpt-4o-mini":1}`, true))
-				require.NoError(t, publishGatewayFixturePrices(`{}`, false))
+				previousCount := constant.CountToken
+				constant.CountToken = true
+				t.Cleanup(func() { constant.CountToken = previousCount })
+				require.NoError(t, configureGatewayFixturePrices(`{"gpt-4o-mini":1}`, true))
+				require.NoError(t, configureGatewayFixturePrices(`{}`, false))
 				require.NoError(t, model.DB.Model(&model.User{}).Where("username = ?", "sdk-isolated").Update("available_quota", test.quota).Error)
 			}
 			require.NoError(t, service.InitRouteCapabilityIndex(context.Background()))

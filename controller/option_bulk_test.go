@@ -176,11 +176,14 @@ func TestUpdateOptionsBulkRejectsInvalidEpayPricing(t *testing.T) {
 	assert.Equal(t, `{"default":1}`, common.OptionMap["TopupGroupRatio"])
 }
 
-func TestValidateOptionPatchRejectsRetiredPricing(t *testing.T) {
-	for _, key := range []string{"ModelRatio", "ModelPrice", "CompletionRatio", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "billing_setting.billing_expr", "billing_setting.billing_mode", "auto_pricing.models_dev_url", "QuotaPerUnit"} {
+func TestValidateOptionPatchAcceptsRestoredPricing(t *testing.T) {
+	for _, key := range []string{"ModelRatio", "ModelPrice", "CompletionRatio", "CacheRatio", "CreateCacheRatio", "ImageRatio", "AudioRatio", "AudioCompletionRatio", "billing_setting.billing_expr", "billing_setting.billing_mode"} {
 		t.Run(key, func(t *testing.T) {
-			require.Error(t, validateOptionPatch(map[string]string{key: "{}"}))
+			require.NoError(t, validateOptionPatch(map[string]string{key: "{}"}))
 		})
+	}
+	for _, key := range []string{"auto_pricing.models_dev_url", "QuotaPerUnit"} {
+		require.Error(t, validateOptionPatch(map[string]string{key: "{}"}))
 	}
 }
 

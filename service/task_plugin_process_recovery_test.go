@@ -18,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -150,6 +151,9 @@ func TestTaskPluginProcessExitWorker(t *testing.T) {
 	require.NoError(t, model.Reserve(pluginExitRequestID, 40))
 	quote := billingTestCallQuote(t)
 	require.NoError(t, model.PrepareBillingAttemptWithPlugin(ctx, pluginExitRequestID, "plugin-attempt", 1, quote, &ref))
+	estimate, estimateCharge, err := model.EvaluateBilling(quote, billing.Usage{Estimated: true, Quantities: map[string]string{"calls": "1"}}, billingexpr.RequestInput{}, pluginExitRequestID, "plugin-attempt", "estimate")
+	require.NoError(t, err)
+	require.NoError(t, model.PersistBillingEstimate("plugin-attempt", estimate, estimateCharge))
 
 	plugin, err := LoadTaskPluginExact(ref)
 	require.NoError(t, err)
@@ -176,7 +180,7 @@ func TestTaskPluginProcessExitWorker(t *testing.T) {
 	providerID, ok := result["taskId"].(string)
 	require.True(t, ok)
 	require.Equal(t, "provider-accepted", providerID)
-	consumption := model.BillingConsumption{Log: model.Log{UserId: 1, TokenId: 1, ChannelId: 1,
+	consumption := model.BillingConsumption{AttemptID: "plugin-attempt", Log: model.Log{UserId: 1, TokenId: 1, ChannelId: 1,
 		Quota: 20, ModelName: "test", CreatedAt: 7200}, CountUsage: true, LogEnabled: true, ExportEnabled: true}
 	task := model.Task{TaskID: "task-plugin-exit", UserId: 1, ChannelId: 1, Quota: 20, Status: model.TaskStatusInProgress,
 		SubmitTime: 7200, StartTime: 7210, Properties: model.Properties{OriginModelName: "test"},
@@ -197,16 +201,16 @@ func TestTaskPluginProcessExitWorker(t *testing.T) {
 	}
 	require.NoError(t, model.PersistAcceptedTask(&task, pluginExitRequestID, consumption))
 	require.Equal(t, "terminal_metrics", stage, "the requested pre-task crash was not reached")
-	usage := &billing.Usage{Quantities: map[string]string{"calls": fmt.Sprint(accepted["calls"])}, Source: "provider", Complete: true, Terminal: "completed"}
-	charge, err := billing.Calculate(quote, *usage)
+	usage := billing.Usage{Quantities: map[string]string{"calls": fmt.Sprint(accepted["calls"])}, Source: "provider", Complete: true, Terminal: "completed"}
+	usage, charge, err := model.EvaluateBilling(quote, usage, billingexpr.RequestInput{}, pluginExitRequestID, "plugin-attempt", "settlement")
 	require.NoError(t, err)
 	require.EqualValues(t, 20, charge.FinalQuota)
-	consumption.Usage, consumption.Charge = usage, charge
+	consumption.Usage, consumption.Charge = &usage, charge
 	task.Status, task.Progress, task.FinishTime = model.TaskStatusSuccess, "100%", 7230
 	task.Data = []byte(`{"result":"completed"}`)
 	task.PrivateData.PluginState = []byte(`{"cursor":"final"}`)
 	task.PrivateData.CompletionUsage = &model.TaskCompletionUsage{Facts: map[string]any{"calls": "1"}}
-	task.PrivateData.BillingContext.Usage, task.PrivateData.BillingContext.Charge = usage, charge
+	task.PrivateData.BillingContext.Usage, task.PrivateData.BillingContext.Charge = &usage, charge
 	won, err := model.PersistTaskCompletion(ctx, &task, model.TaskStatusInProgress, charge.FinalQuota, consumption)
 	require.NoError(t, err)
 	require.True(t, won)
@@ -244,7 +248,7 @@ func assertTaskPluginExitState(t *testing.T, db *gorm.DB, stage string) {
 	require.NoError(t, common.UnmarshalJsonStr(attempt.Quote, &quote))
 	require.NoError(t, model.ValidatePublishedBillingQuote(context.Background(), &quote))
 	assert.Equal(t, quote.Hash, attempt.QuoteHash)
-	assert.Equal(t, []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.00004"}}, quote.PriceVersion.Prices)
+	assert.Equal(t, "0.00004", quote.PriceVersion.Pricing["ModelPrice"])
 	assert.Equal(t, attempt.Quote, recovery.QuoteSnapshot)
 	for _, row := range []any{&model.BillingAttempt{}, &model.TaskPluginExecution{}} {
 		var count int64

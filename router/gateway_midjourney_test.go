@@ -23,7 +23,7 @@ func setupGatewayMidjourney(t *testing.T, upstream http.HandlerFunc) (string, st
 	t.Helper()
 	url, key, other := setupGatewaySDKWithUpstream(t, upstream)
 	require.NoError(t, model.DB.AutoMigrate(&model.Midjourney{}))
-	require.NoError(t, publishGatewayFixturePrices(`{"mj_imagine":0.001,"mj_upscale":0.001,"mj_upload":0.001,"swap_face":0.001}`, false))
+	require.NoError(t, configureGatewayFixturePrices(`{"mj_imagine":0.001,"mj_upscale":0.001,"mj_upload":0.001,"swap_face":0.001}`, false))
 	for _, id := range []int{1, 4} {
 		channel, err := model.GetChannelById(id, true)
 		require.NoError(t, err)

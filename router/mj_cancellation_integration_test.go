@@ -50,7 +50,7 @@ func TestMidjourneyUnknownAcceptanceCancellation(t *testing.T) {
 			})
 			prices, err := common.Marshal(map[string]float64{test.model: 0.001})
 			require.NoError(t, err)
-			require.NoError(t, publishGatewayFixturePrices(string(prices), false))
+			require.NoError(t, configureGatewayFixturePrices(string(prices), false))
 
 			accepted := make(chan struct{})
 			release := make(chan struct{})

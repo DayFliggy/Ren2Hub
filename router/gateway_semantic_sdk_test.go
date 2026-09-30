@@ -151,7 +151,7 @@ func runGatewaySemanticSDK(t *testing.T, runtime, script string) {
 	}
 	priceJSON, err := common.Marshal(prices)
 	require.NoError(t, err)
-	require.NoError(t, publishGatewayFixturePrices(string(priceJSON), false))
+	require.NoError(t, configureGatewayFixturePrices(string(priceJSON), false))
 	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 1000000}).Error)
 	strict := &model.Token{UserId: 1, Key: "semanticstrictlocal", Name: "semantic strict", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true, ConversionPolicy: "strict"}
 	require.NoError(t, model.DB.Create(strict).Error)

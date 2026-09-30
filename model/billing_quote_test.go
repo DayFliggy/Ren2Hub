@@ -13,8 +13,8 @@ import (
 
 func TestPublishedQuoteRequiresMatchingDatabaseVersion(t *testing.T) {
 	setupBillingRecoveryTestDB(t)
-	price := billing.PriceVersion{Model: "identity", Mode: billing.ModeUnitPrice,
-		Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "0.000006"}}}
+	price, err := billing.NewModelPriceVersion("identity", billing.PricingValues{"ModelPrice": "0.000006"}, false)
+	require.NoError(t, err)
 	preview, err := billing.NewQuote(price, "1", nil, time.Unix(7200, 0))
 	require.NoError(t, err)
 	require.Error(t, ValidatePublishedBillingQuote(context.Background(), preview))
@@ -28,7 +28,7 @@ func TestPublishedQuoteRequiresMatchingDatabaseVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorContains(t, ValidatePublishedBillingQuote(context.Background(), &copyQuote), "published billing price is missing")
 	copyQuote = *quote
-	copyQuote.PriceVersion.Prices = []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "1"}}
+	copyQuote.PriceVersion.Pricing = billing.PricingValues{"ModelPrice": "1"}
 	definition := copyQuote.PriceVersion
 	definition.ID, definition.CreatedAt, definition.Hash = 0, 0, ""
 	copyQuote.PriceVersion.Hash, err = billing.Hash(definition)
@@ -38,7 +38,7 @@ func TestPublishedQuoteRequiresMatchingDatabaseVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorIs(t, ValidatePublishedBillingQuote(context.Background(), &copyQuote), ErrBillingEventConflict)
 	// A different active plan does not rewrite or invalidate the accepted one.
-	price.Prices[0].Price = "2"
+	price.Pricing["ModelPrice"] = "2"
 	_, err = publishedBillingTestQuote(price, "1", nil, time.Unix(7201, 0))
 	require.NoError(t, err)
 	require.NoError(t, ValidatePublishedBillingQuote(context.Background(), quote))

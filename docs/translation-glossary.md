@@ -24,15 +24,18 @@
 | 可用额度 | Available quota | 扣除在途预留后的可用预算 |
 | 预留 | Reservation | 发送前持久化保留的预算 |
 | 已结算消费 | Settled usage | 已确认并计入账户的费用 |
-| 价格版本 | Price version | 不可变的模型售价配置 |
-| 冻结报价 | Frozen quote | 每次发送接受的完整价格与安全属性快照 |
+| 价格版本 | Price version | 从模型配置派生的不可变执行证据，不是独立发布目录 |
+| 冻结报价 | Frozen quote | 每次尝试的有效模型配置、任务用量合同、工具价格和渠道系数快照 |
 | 渠道倍率 | Channel ratio | 冻结报价中的渠道售价系数 |
-| 明确单价 | Unit price | USD 计价的 token、次数、图片或时长单价 |
+| 模型倍率 | Model ratio | 基础输入价格；每百万 token 的 USD 单价为倍率乘 2 |
+| 输出倍率 | Completion ratio | 输出相对于基础输入价格的倍率 |
+| 按次价格 | Per-call price | 每次请求的 USD 单价；图片适用数量与历史尺寸质量规则 |
+| 自动获取 | Fetch prices | 获取五源候选；管理员选单源填入草稿，保存才生效 |
 | 对账 | Reconciliation | 对未知消费或失败处理证据作出明确决定 |
 | 资金流水 | Billing event | 与钱包/Token 投影同事务保存的不可变事件 |
 | 充值 | Top-up | 经业务凭据向钱包入账 |
 | 兑换码 | Redemption code | 可兑换钱包额度的代码 |
-| 超级管理员 | Root | 最高管理权限；对账和价格发布由服务端核验 |
+| 超级管理员 | Root | 最高管理权限；对账和价格配置保存由服务端核验 |
 | 两步验证 | Two-factor authentication | 登录或敏感操作的附加验证 |
 
-旧 Model Ratio、Completion Ratio 和订阅套餐用语只用于准确说明历史数据或兼容协议，不应作为当前模型定价或钱包产品文案。金额展示最多 3 位小数，编辑、提交和导出必须保留原始精度；翻译不得改变单位。
+Model Ratio、Completion Ratio 属于当前 NewAPI 定价界面；订阅套餐不属于当前钱包资金来源。明确零价与未配置价格必须用不同文案，获取候选不能写成已发布。金额展示最多 3 位小数，编辑、提交和导出必须保留原始精度；翻译不得改变单位。

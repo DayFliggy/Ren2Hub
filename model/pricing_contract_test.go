@@ -4,21 +4,20 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/stretchr/testify/require"
 )
 
-func TestPricingJSONPublishesDecimalVersionWithoutRatioFields(t *testing.T) {
-	payload, err := common.Marshal(Pricing{ModelName: "priced-model",
-		PriceVersion: &billing.PriceVersion{Model: "priced-model", Mode: billing.ModeUnitPrice,
-			Prices: []billing.UnitPrice{{Quantity: "cc", Unit: "per_million_tokens", Price: "0.750000000000000001"}}}})
+func TestPricingJSONPublishesNewAPIModelConfiguration(t *testing.T) {
+	cache := 0.25
+	payload, err := common.Marshal(Pricing{ModelName: "priced-model", ModelRatio: 1.5, CompletionRatio: 2, CacheRatio: &cache, PricingVersion: "configuration-hash", BillingMode: "ratio"})
 	require.NoError(t, err)
 	var response map[string]interface{}
 	require.NoError(t, common.Unmarshal(payload, &response))
-	version := response["price_version"].(map[string]interface{})
-	price := version["prices"].([]interface{})[0].(map[string]interface{})
-	require.Equal(t, "0.750000000000000001", price["price"])
-	for _, field := range []string{"model_ratio", "model_price", "completion_ratio", "cache_ratio", "create_cache_ratio", "image_ratio", "audio_ratio", "audio_completion_ratio"} {
+	require.Equal(t, 1.5, response["model_ratio"])
+	require.Equal(t, 2.0, response["completion_ratio"])
+	require.Equal(t, 0.25, response["cache_ratio"])
+	require.Equal(t, "configuration-hash", response["pricing_version"])
+	for _, field := range []string{"price_version", "price_versions", "offers", "provenance", "channel_id"} {
 		require.NotContains(t, response, field)
 	}
 }

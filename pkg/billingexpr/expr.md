@@ -1,80 +1,37 @@
-# 计费表达式契约
+# Ren2Hub 计费表达式契约
 
-Ren2Hub 的计价来源是数据库中发布的不可变 PriceVersion，模式为 unit_price、expression 或显式 free。表达式作为计价器的一种，读取与明确单价相同的规范化用量、已登记安全属性和报价冻结时间。结算绝不读取实时倍率、价格设置、请求正文或请求头。
+模型定价配置采用 NewAPI 的倍率、按次和 `tiered_expr` 模式。表达式唯一执行引擎是 Expr VM；不再支持原来的 Decimal 表达式语言、`attr/attr_num` 或 `v2:` 方言。任务表达式通过冻结合同的 `task_usage` 标记选择美元结果单位。
 
-## 表达式变量与归一化
+## 表达式行为
 
-| 变量 | 含义 |
-|---|---|
-| p、c | 未单独定价的输入、输出 token |
-| len | 完整输入上下文长度，阶梯条件应使用此字段 |
-| cr | 缓存读取 token |
-| cc、cc1h | 默认/5 分钟、1 小时缓存写入 token |
-| img、img_o | 图片输入、输出 token |
-| img_cr | 明确报告的图片缓存读取 token，单独定价时从 cr 与 img 中移出 |
-| ai、ao | 音频输入、输出 token |
-| ai_cr | 明确报告的音频缓存读取 token，独立计价时从 cr 与 ai 同时移出 |
-| reasoning | 推理输出 token；单独定价时从 c 中移出 |
-| image_count | 图片实际数量，整数 1–128；发送前使用最终请求的已验证数量 |
+`v1:` 可省略。token 系数为 USD/百万 token；`p * 2 + c * 8` 表示输入 2 USD/百万、输出 8 USD/百万。`tier("request", fixed(0.01))` 表示每次成功请求的固定价格。`image_count` 独立于 token，省略时按上游语义为 1，明确提供时必须为 1–128 的整数。图片按次表达式示例为 `tier("image", fixed(0.04)) * image_count`。
 
-子类别在表达式中出现时，从 p/c 排除；未出现时仍按基础输入/输出价格计费。OpenAI/Gemini 输入为包含缓存的总量；Claude 输入不包含缓存，因此未独立定价的缓存需要加回基础输入量。归一化在 pkg/billing.Usage.TokenParams 中统一执行。缓存重叠可将剩余文本降到零，不得产生负费用；原始负数或超范围数量直接拒绝计价。
+变量为 `p/c/len/cr/cc/cc1h/img/img_cr/img_o/ai/ao`。`len` 是完整输入上下文，用于阶梯条件；其他子类别仅在表达式引用时从基础 token 中排除。Claude 输入不含缓存，未单独定价的缓存读取加回 `p`；完整上下文另包含缓存写入。图像缓存拆分保持缺失与显式零，不推测未知图片缓存比例。
 
-图片缓存遵循目标上游的显式拆分：仅在 img_cr 被定价且 OpenAI 包含缓存语义下，将实际图片缓存从 cr 和 img 同时移出，再从 p 扣除互不重叠的已定价类别。缺少图片缓存细分时不估算其比例，img_cr=0，保留上游通用缓存语义；显式零与缺失仍分别持久化。负数、超出缓存/图片总量或无法组成合法集合的细分拒绝计算并待核对，不按降级猜测扣款。
+`param(path)` 使用 gjson 读取本次实际计价 RequestInput.Body，`header(name)` 大小写不敏感地读取 RequestInput.Headers，`u(name)` 读取 RequestInput.Usage。保留 NewAPI 的任意／动态路径、集合语法与数学运算；不添加安全字段白名单。缺失、null、零和 false 继续按各函数原有语义区分。
 
-`v1:` 表达式系数为 USD / 百万 token，例如 p * 2.5 表示输入单价每百万 token 2.5 USD；表达式结果为微美元。没有前缀的 token 草稿按 v1。`fixed(usd)` 返回 `usd × 1000000`，仍由同一结算器转换到美元。
+`hour/minute/weekday/month/day` 使用本次求值时刻；预扣和实际结算可命中不同时间规则。Expr 内置的 `now/date/timezone` 也可使用。`fixed()` 的分支结构约束与 NewAPI 相同；Realtime 和任务入口的不支持范围由宿主在发送前校验。
 
-按张表达式可写 `v1:tier("images", fixed(0.04)) * image_count`。数量来自同一 `Usage.Quantities["images"]`，不是新价格或请求体来源；只在表达式使用该变量时必需，缺失、零、负数、小数和超过 128 均拒绝。正常图片请求省略 n 时，由协议验证器先解析默认值 1；纯计算器不从缺失用量猜 1。发送前按最终转换和覆盖后的 n 预留；成功终态按有效图片载荷确认实际数量，缺失/非法/断流保持待核对。实际数不会改写 `Quote.Attributes.quantity` 的冻结请求条件。token 表达式不额外乘数量；使用 image_count 时禁止附加 images/per_image 行重复收费，包括未执行分支中的引用。Trace.image_count 保存实际求值数量，所有费用仍一次最终舍入。Vue 转换只更新待确认草稿，原已发布价格保持不变。
+任务 `u("seconds") * 0.4` 的结果直接为 USD。任务表达式始终接收空 TokenParams；即使用量中存在 token 统计，`p/c/len` 等 token 变量仍为零。需要按实际任务 token 收费时必须通过 schema 声明的 `u()` 字段提供。schema 用于验证插件声明的字面量 usage 字段；动态字段保持运行时语义。宿主先验证和合并对应阶段事实，再将实际 RequestInput 交给唯一计价器。不要把提交时正文或头额外带入上游原本仅使用 Usage 的任务完成阶段。
 
-`v2:` 为任务 schema 表达式，结果直接为 USD，不再除以一百万。`u("seconds") * 0.4` 对实际 10 秒得到 4 USD。此方言没有 token 变量和 fixed；固定任务采用 calls/per_call。未知版本拒绝。
+## 可重放执行
 
-v2 必须附带冻结 UsageSchema（版本 1、字段定义及 SHA-256 哈希）。字段声明 number/string/boolean、数值单位、范围、整数约束、可选枚举、必需性及来源 request_fixed / estimate_only / completion_fact。u 只能直接使用已声明的字面量键；全部 AST 分支验证，不允许动态名称、函数别名或未声明字段。编译缓存按表达式哈希与 schema 哈希隔离。
+每个预扣／结算阶段分别创建 `Evaluation`。首次执行时，时间函数和 `keys/values/toPairs` 按原行为计算，记录调用顺序、实参类型及结果。回放运行同一表达式，只将非确定环境读取替换为已记录的值；缺失、多余或不匹配的调用记录直接失败。
 
-Quote.RequestFacts 仅存请求固定值；Usage.EstimatedFacts 与 ActualFacts 分开。实际结算不从估算补缺；缺失、null、非法和明确零分别处理。完成事实不得覆盖冻结条件，只有完整实际事实才能结算；价格引用的事实缺失则待核对。estimate_only 字段不能定义最终收费。表达式与单价行不得同时收取同一维度。
+时间对象附带当时的 TZif 规则快照，回放不读取当前时钟或系统时区数据。Windows Local 和固定偏移时区使用标准时区边界生成有限 TZif，保持后续 `AddDate/In/Format` 的语义。时区以本次求值内的编号保留对象身份，不持久化指针；`Local()` 和 `GoString()` 对当前进程 Local 的读取也作为环境调用保存，动态成员名和可选成员的求值顺序不变。
 
-Vidu 工厂插件仅在完成时提供 credits，提交阶段没有可信的估算或预留上界。新工厂价格草稿和发布中，只要 schema 将 credits 标为必需、表达式任意分支引用 credits 或单价行按 credits 收费，就拒绝该方案；不能把示例中的 0 当预留依据。未引用 credits 的 `v2:0` 仍可用于 schema 发现。已发布价格与在途 Quote 不改写，再次发布则必须通过当前校验。
+`time_snapshot.go` 单独封装 Go `time.Time` 的墙钟与单调时钟整数读取。使用 unsafe 前逐项核对字段名、类型、偏移、大小与布局；回放仅在记录的 Go 工具链版本与当前版本完全相同时恢复，Location 使用已冻结的 TZif 重建。这样跨进程 `Sub/Before/Equal/String` 保留原始单调计数，不把它们改成墙钟差值。升级 Go 工具链前必须处理或验证现有时间证据；版本或布局不匹配时拒绝自动结算并保持待对账。整数、浮点数、时间、时区、数组与映射均使用类型化记录，避免 JSON 解码改变运算类型。
 
-固定任务价使用不带 UsageSchema 的 unit_price，且仅含一条明确的 calls/per_call 单价；发送前和成功完成均按 calls=1 计价。供应商完成事实保存在 CompletionUsage 中，不作为这类价格的 ActualFacts，也不追加收费；hook 失败或非法完成事实仍进入待核对。插件升级不替换在途任务固定的 key/version/hash，新工厂解析修正不会追溯改写旧执行引用。
+完整 RequestInput 与环境记录仅保存在加密证据中。AES-GCM 密钥从显式稳定的 `CRYPTO_SECRET` 经 HKDF-SHA256 派生；随机 nonce 与 request/attempt/config/phase 的 AAD 防止替换和跨请求重用。不得在日志、普通 API、报价属性或错误消息中输出明文正文、请求头或解密结果。
 
-## 函数与安全属性
+`tier()` 的名称仍可动态计算，但只有表达式中声明的静态字符串标签可以进入明文 ChargeResult。动态标签只在解密后求值时存在，防止 `tier(header(...), ...)` 将秘密请求头复制到金额追踪中；这不改变分支选择或费用。
 
-支持 tier(name,value)、max/min/abs/ceil/floor、has(value,substring)。tier 记录命中档位，符合条件的倍率表达式记录 request_rules。数字采用 Decimal，运算限定为加减乘除、数值比较、布尔组合及条件分支；成员访问、集合、函数别名、动态探针、未知内置、now() 和 $env 均拒绝。全部分支共用类型和依赖检查，零系数与不可达分支仍拥有引用的计价维度。
+## 资金边界
 
-数值属性计算使用 attr_num(name)，仅支持 quantity、duration、thinking_budget_tokens、temperature、top_p。数值属性接受整数、json.Number、Decimal 或精确小数字符串，拒绝 float64；Quote 冻结为小数字符串。attr(name) 保留安全标量访问，不隐式执行数值转换。
+`Quote` 冻结配置、渠道系数和其他已解析收费条件；`Usage` 保存规范用量及加密求值证据；`ChargeResult` 保存计算结果。这三类对象分别持久化。修改当前价格不能改写在途合同。
 
-attr(name) 只接受登记名称的字面量：service_tier、quality、resolution、quantity、duration、tool_category、effort、thinking、thinking_budget_tokens、temperature、top_p。适配器从完成转换和参数覆盖后的最终发送参数提取这些属性；缺失参数不补默认值，明确零值保留。thinking 为 on/off/adaptive，Gemini 自动预算 -1 记录为 adaptive 而不记录负用量。未知名称、动态名称、复合对象均拒绝。param() 和 header() 已删除，任意正文、原始请求头和密钥不会进入报价和恢复证据。
+正常费用按 NewAPI 对应模式的换算与舍入计算。任何负数、非有限结果或超出单请求额度上限的结果直接失败；不以饱和金额结算。只有完整、终态明确的真实用量才能进入最终资金事务；证据或密钥缺失、未知接受状态及无法重算均保留预留，交由对账。
 
-Claude 的 effort 取最终请求当前回合的有效值：顶层作为初始设置，消息级 system 设置从其后第一个 user 开始生效并持续；尾部未遇到 user 的配置不覆盖当前值。该只读解析由 RelayKit 统一提供，计价与最终日志共用结果；配置缺省不猜模型默认值，非法结构在预留和发送前拒绝。跨协议采用实际目标参数，不用已丢失的源消息配置计价。参数覆盖和重试仅影响新尝试，历史 Quote 的属性、哈希及恢复结算不追溯更改。
+资金事务必须解密并完整重算，再核对已保存 ChargeResult。只保存最终金额、退回预扣金额或跳过失败表达式，都不能替代计价证据。
 
-hour/minute/weekday/month/day 只接受时区字面量。创建 Quote 时 FreezeCalendars 使用 FrozenAt 和有效 IANA 时区，固化日历字段及 UTC 偏移并纳入报价哈希。重放仅读取冻结日历，检查与冻结时间和偏移一致，不读取时区数据库或当前时钟。缺少冻结日历、空值、Local 和无效时区均拒绝，不回退 UTC。
-
-示例：
-
-~~~text
-tier("base", p * 2.5 + c * 15 + cr * 0.25)
-
-len <= 200000
-  ? tier("standard", p * 3 + c * 15 + cr * 0.3 + cc * 3.75 + cc1h * 6)
-  : tier("long_context", p * 6 + c * 22.5 + cr * 0.6 + cc * 7.5 + cc1h * 12)
-
-tier("base", p * 2 + c * 10)
-  * (attr("service_tier") == "priority" ? 2 : 1)
-  * (hour("Asia/Shanghai") < 6 ? 0.8 : 1)
-~~~
-
-## 计算和持久化
-
-发送前的 Quote 保存完整价格版本、全部单价、渠道倍率、安全属性、固定事实、时间与时区日历，并计算 SHA-256 哈希。价格与报价均冻结合同版本 3 和计算器 billing-v3；价格额外冻结表达式结果单位及用量 schema。每次结算严格检查版本和哈希，旧报价不能自动补版本。新草稿由发布入口补齐当前合同，数据库解码必须验证已保存合同。Usage 与 ChargeResult 分别保存规范化用量和费用结果，不能覆盖原报价。
-
-表达式数字从词法原文直接构造 Decimal；token 参数使用 int64，schema 数值事实保存精确字符串，不存在 Expr VM 或 float64 结算兼容入口。加减乘精确执行，除法使用 DivRound(36)，除零报错。计划限制 16384 字符、2048 词法项和 128 层语法嵌套；中间 Decimal 系数和指数有资源上界，超限报错而不饱和。非负结果与报价中的工具/媒体单价费用合计，乘渠道倍率及固定 500000 quota/USD。总额只四舍五入一次；正费用最低 1 quota，零费用为零。超过 MaxInt32 单次限额直接报错并进入对账，不按饱和值扣款。
-
-工具费用与表达式共享一次最终舍入；表达式版本的 prices 不得再次列出 token 单价。费用分项保存精确基础 USD 小计，base_usd 是分项合计；adjustments 记录渠道乘数、调整前金额、增减金额及调整后金额。total_usd 是调整后的总额，并记录未舍入 quota、最终 quota、舍入差额和计算版本。
-
-自动目录保存来源证据及支持的维度和服务档位。缺少可验证档位或所需维度时，必须在预留前拒绝，不使用硬编码 priority/flex/ultrafast 倍率补齐。手工非默认服务档位也须显式声明支持合同。结算仅读冻结报价，不重新查价。
-
-音频缓存 ai_cr 与图片缓存 img_cr 分别验证非负、不得超过对应媒体量及通用缓存总量，两个细分之和不得超过通用缓存。独立定价且输入包含缓存时，细分从通用缓存和对应媒体量同时移出，再从基础输入扣除各已定价类别。缺失细分不猜测比例，明确零与缺失分别保存。
-
-可选 usage_scope=embedding 参与价格及 Quote 的冻结哈希，省略时保留旧序列化。输入型价格不得引用输出变量、图片数量、fixed 或任务 schema；全部 AST 分支都检查，即使零系数或不可达分支也不能隐藏输出引用。实际结算拒绝输出用量，发送前拒绝非 embedding 请求。
-
-计算错误只向恢复记录暴露类别及冻结证据，不保存原始求值异常。未知接受状态或金额不明时保留预留，必须经过明确对账决定。
-
-相关实现：pkg/billing/pricing.go、pkg/billingexpr、model/billing_pricing.go、relay/helper/price.go、service/billing_usage.go。
+首次表达式计算失败时，同样保存本次实际输入和已经执行的环境读取密文，返回错误及空 ChargeResult。后续重放仍需运行失败的分支；不得用旧预扣用量或旧金额覆盖实际失败证据。

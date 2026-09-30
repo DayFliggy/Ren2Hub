@@ -22,7 +22,6 @@ func RegisterTaskPluginManagementRoutes(api *gin.RouterGroup) {
 	plugins.POST("/:key/activate", controller.ActivateTaskPlugin)
 	plugins.POST("/:key/status", controller.SetTaskPluginStatus)
 	plugins.POST("/:key/dryrun", controller.DryRunTaskPlugin)
-	plugins.POST("/:key/price-draft", controller.TaskPluginPriceDraft)
 	plugins.DELETE("/:key/versions/:version", controller.DeleteTaskPluginVersion)
 	api.GET("/task_plugin_options", middleware.AdminAuth(), middleware.RequirePermission(authz.TaskPluginBind), controller.GetTaskPluginOptions)
 }

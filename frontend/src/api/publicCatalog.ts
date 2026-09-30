@@ -1,5 +1,5 @@
-import { shiftDecimal } from '@/utils/decimal'
-import type { PriceTier, PriceTierMode } from './modelPricing'
+import { decimalText } from '@/features/pricing/draft'
+import { shiftDecimal, multiplyDecimal } from '@/utils/decimal'
 import { createApiClient } from './createClient'
 import { httpTransport, publicHttpTransport } from './httpTransport'
 import {
@@ -23,8 +23,6 @@ export interface CatalogPrice {
   key: string
   value: string
   unit: string
-  tier_mode?: PriceTierMode
-  tiers?: PriceTier[]
 }
 export interface PricingCatalog {
   models: CatalogModel[]
@@ -202,49 +200,53 @@ export function catalogPrices(
   model: CatalogModel,
   unit: 'M' | 'K'
 ): CatalogPrice[] {
-  const offer = model.offers[0]!
-  const version = offer.price_version
-  if (version.mode === 'free') return [{ key: 'free', value: '0', unit: '' }]
-  const labels: Record<string, string> = {
-    p: 'input',
-    c: 'output',
-    cr: 'cacheRead',
-    cc: 'cacheWrite',
-    cc1h: 'cacheWrite1h',
-    img: 'image',
-    img_o: 'imageOutput',
-    ai: 'audioInput',
-    ai_cr: 'audioCacheRead',
-    ao: 'audioOutput',
-    reasoning: 'reasoning',
-    calls: 'request',
-    images: 'images',
-    seconds: 'seconds',
+  if (
+    model.billing_mode === 'tiered_expr' ||
+    model.billing_mode === 'unconfigured'
+  )
+    return []
+  if (model.quota_type === 1)
+    return model.model_price === undefined
+      ? []
+      : [
+          {
+            key: 'request',
+            value: decimalText(model.model_price),
+            unit: 'per_call',
+          },
+        ]
+  if (model.model_ratio === undefined) return []
+  const input = multiplyDecimal(decimalText(model.model_ratio), '2')
+  const prices: CatalogPrice[] = [
+    { key: 'input', value: input, unit: 'per_million_tokens' },
+  ]
+  for (const [field, key] of [
+    ['completion_ratio', 'output'],
+    ['cache_ratio', 'cacheRead'],
+    ['create_cache_ratio', 'cacheWrite'],
+    ['image_ratio', 'image'],
+    ['audio_ratio', 'audioInput'],
+    ['audio_completion_ratio', 'audioOutput'],
+  ] as const) {
+    const ratio = model[field]
+    if (ratio === undefined) continue
+    const base =
+      field === 'audio_completion_ratio'
+        ? model.audio_ratio === undefined
+          ? undefined
+          : multiplyDecimal(input, decimalText(model.audio_ratio))
+        : input
+    if (base !== undefined)
+      prices.push({
+        key,
+        value: multiplyDecimal(base, decimalText(ratio)),
+        unit: 'per_million_tokens',
+      })
   }
-  return offer.display_prices.map((price) => ({
-    key: labels[price.quantity] ?? price.quantity,
-    value: price.tier_mode
-      ? ''
-      : shiftDecimal(
-          price.price,
-          unit === 'K' && price.unit === 'per_million_tokens' ? 3 : 0
-        ),
-    unit:
-      unit === 'K' && price.unit === 'per_million_tokens'
-        ? 'per_thousand_tokens'
-        : price.unit,
-    ...(price.tier_mode
-      ? {
-          tier_mode: price.tier_mode,
-          tiers: (price.tiers ?? []).map((tier) => ({
-            ...tier,
-            unit_price: shiftDecimal(
-              tier.unit_price,
-              unit === 'K' && price.unit === 'per_million_tokens' ? 3 : 0
-            ),
-          })),
-        }
-      : {}),
+  return prices.map((price) => ({
+    ...price,
+    value: unit === 'K' ? shiftDecimal(price.value, 3) : price.value,
+    unit: unit === 'K' ? 'per_thousand_tokens' : price.unit,
   }))
 }
 

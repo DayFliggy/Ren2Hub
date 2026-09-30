@@ -47,38 +47,6 @@ func PreviewTaskPlugin(c *gin.Context) {
 	common.ApiSuccess(c, gin.H{"meta": meta, "unresolved": unresolved, "source_hash": fmt.Sprintf("%x", sha256.Sum256([]byte(request.Source)))})
 }
 
-func TaskPluginPriceDraft(c *gin.Context) {
-	var request struct {
-		Model      string `json:"model" binding:"required"`
-		Expression string `json:"expression" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&request); err != nil {
-		common.ApiErrorMsg(c, "model and expression are required")
-		return
-	}
-	source, err := plugins.Source(c.Param("key"))
-	if err != nil {
-		common.ApiErrorMsg(c, "custom plugin pricing requires an explicitly reviewed usage contract")
-		return
-	}
-	loaded, err := jsplugin.CompilePlugin(source, jsplugin.Options{Key: c.Param("key")})
-	if err != nil {
-		taskPluginCompileError(c, err)
-		return
-	}
-	active, ok := jsplugin.DefaultRegistry.Get(c.Param("key"))
-	if !ok || active.SourceHash != loaded.SourceHash {
-		common.ApiErrorMsg(c, "active plugin differs from the reviewed factory usage contract")
-		return
-	}
-	price, err := plugins.FrozenTaskPriceVersion(loaded.Meta, request.Model, request.Expression)
-	if err != nil {
-		common.ApiErrorMsg(c, err.Error())
-		return
-	}
-	common.ApiSuccess(c, gin.H{"price_version": price})
-}
-
 func taskPluginCompileError(c *gin.Context, err error) {
 	var unknownField *jsplugin.UnknownMetaFieldError
 	if errors.As(err, &unknownField) {

@@ -23,7 +23,7 @@ func TestHandleClaudeResponseDataCountsToolUse(t *testing.T) {
 		OriginModelName: "claude-3-7-sonnet",
 		RelayFormat:     types.RelayFormatClaude,
 	}
-	quote, quoteErr := billing.NewQuote(billing.PriceVersion{Model: info.OriginModelName, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "tool:lookup_fn", Unit: "per_call", Price: "0.003"}}}, "1", nil, time.Unix(1700000000, 0))
+	quote, quoteErr := billing.NewQuote(billing.PriceVersion{Model: info.OriginModelName, Mode: billing.ModePerCall, Pricing: billing.PricingValues{"ModelPrice": "0"}, Prices: []billing.UnitPrice{{Quantity: "tool:lookup_fn", Unit: "per_call", Price: "0.003"}}}, "1", nil, time.Unix(1700000000, 0))
 	require.NoError(t, quoteErr)
 	info.PriceData.Quote = quote
 	claudeInfo := &ClaudeResponseInfo{Usage: &dto.Usage{}}
@@ -51,7 +51,7 @@ func TestCountClaudeStreamBillableToolsSetsWebSearchRequests(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	info := &relaycommon.RelayInfo{OriginModelName: "claude-3-7-sonnet"}
-	quote, err := billing.NewQuote(billing.PriceVersion{Model: info.OriginModelName, Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "tool:stream_fn", Unit: "per_call", Price: "0.002"}}}, "1", nil, time.Unix(1700000000, 0))
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: info.OriginModelName, Mode: billing.ModePerCall, Pricing: billing.PricingValues{"ModelPrice": "0"}, Prices: []billing.UnitPrice{{Quantity: "tool:stream_fn", Unit: "per_call", Price: "0.002"}}}, "1", nil, time.Unix(1700000000, 0))
 	require.NoError(t, err)
 	info.PriceData.Quote = quote
 

@@ -118,7 +118,7 @@ type RelayInfo struct {
 	PricingModelName       string
 	ModelPricingSource     string
 	RequestURLPath         string
-	RequestHeaders         map[string]string
+	RequestHeaders         map[string]string `json:"-"`
 	ShouldIncludeUsage     bool
 	DisablePing            bool // 是否禁止向下游发送自定义 Ping
 	ClientWs               *websocket.Conn
@@ -182,7 +182,7 @@ type RelayInfo struct {
 	// It is surfaced onto the consume/task log's admin_info for auditing.
 	QuotaClamp *common.QuotaClamp
 
-	BillingRequestInput        *billingexpr.RequestInput
+	BillingRequestInput        *billingexpr.RequestInput        `json:"-"`
 	BillingRequirements        *billing.PricingRequirements     `json:"-"`
 	BillingAudioResponseFormat string                           `json:"-"`
 	BillingAudioStreamFormat   string                           `json:"-"`

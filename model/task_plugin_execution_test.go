@@ -121,7 +121,9 @@ func TestTaskPluginAttemptPinRollsBackSendingRecord(t *testing.T) {
 	withTaskPluginDatabases(t, func(t *testing.T, db *gorm.DB, _ func() (*gorm.DB, error)) {
 		plugin := persistedPlugin(t, "1.0.0")
 		require.NoError(t, db.Create(&BillingRecovery{RequestID: "request", Status: BillingRecoveryStatusActive, PreConsumeState: BillingRecoveryPreConsumeCommitted, ConsumptionState: BillingRecoveryStateUnprepared, Source: "wallet"}).Error)
-		quote, err := billing.NewQuote(billing.PriceVersion{Model: "fixture", Mode: billing.ModeUnitPrice, Prices: []billing.UnitPrice{{Quantity: "calls", Unit: "per_call", Price: "1"}}}, "1", nil, time.Now())
+		version, err := billing.NewModelPriceVersion("fixture", billing.PricingValues{"ModelPrice": 1.0}, false)
+		require.NoError(t, err)
+		quote, err := billing.NewQuote(version, "1", nil, time.Now())
 		require.NoError(t, err)
 		ref := TaskPluginRef{Key: plugin.Key, Version: plugin.Version, SourceHash: fmt.Sprintf("%064d", 1)}
 		require.Error(t, PrepareBillingAttemptWithPlugin(context.Background(), "request", "attempt", 1, quote, &ref))
