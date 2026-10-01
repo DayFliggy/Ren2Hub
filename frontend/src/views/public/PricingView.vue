@@ -89,7 +89,7 @@ onBeforeUnmount(() => controller?.abort())
       }}</RouterLink
       ><span v-else>{{ t('total', { count: models.length }) }}</span></template
     >
-    <ErrorBanner v-if="error" :message="error" />
+    <ErrorBanner v-if="error" :message="error" @retry="load" />
     <p v-if="loading" role="status">{{ t('loading') }}</p>
     <p
       v-if="catalog?.issues.length"
