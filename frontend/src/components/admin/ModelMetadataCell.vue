@@ -1,201 +1,196 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+/** One NewAPI model-management column for a metadata row. */
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Copy } from 'lucide-vue-next'
 import type { ModelMetadata, ModelVendor } from '@/api/adminManagement'
-import MetadataIcon from './MetadataIcon.vue'
 import IconButton from '@/components/common/IconButton.vue'
+import StatusChip from '@/components/common/StatusChip.vue'
+import { adminChannelTypeMeta } from '@/constants/adminChannels'
 import { modelMetadataMessages } from '@/i18n/modelMetadata'
-import { parseMetadataTags } from './modelMetadataForm'
 import { parseModelEndpoints } from '@/utils/modelEndpoints'
+import MetadataIcon from './MetadataIcon.vue'
+import { parseMetadataTags } from './modelMetadataForm'
+
+export type ModelMetadataField =
+  | 'model'
+  | 'connections'
+  | 'tags'
+  | 'sync_official'
+  | 'status'
+  | 'id'
+  | 'vendor'
+  | 'name_rule'
+  | 'description'
+  | 'endpoints'
+  | 'created_time'
+  | 'updated_time'
 
 const props = defineProps<{
   row: ModelMetadata
-  field: string
+  field: ModelMetadataField
   vendor?: ModelVendor
 }>()
-const emit = defineEmits<{ copy: [name: string] }>()
+const emit = defineEmits<{ copy: [name: string]; edit: [] }>()
 const { t, locale } = useI18n({
   useScope: 'local',
   messages: modelMetadataMessages,
 })
-const ruleNames = ['exact', 'prefix', 'contains', 'suffix']
+const RULES = ['exact', 'prefix', 'contains', 'suffix'] as const
+const tagsOpen = ref(false)
+
 const tags = computed(() => {
   try {
-    return { items: parseMetadataTags(props.row.tags), invalid: false }
+    return parseMetadataTags(props.row.tags)
   } catch {
-    return { items: [props.row.tags], invalid: true }
+    return [props.row.tags]
   }
 })
-const endpoints = computed(() => {
-  if (!props.row.endpoints) return { items: [], invalid: false }
+// Only explicitly configured endpoints are "custom"; the API returns a plain
+// type array when it inferred them from channels.
+const endpointKeys = computed(() => {
+  if (!props.row.endpoints.trim()) return []
   try {
     const value = parseModelEndpoints(props.row.endpoints)
-    return {
-      items: Array.isArray(value)
-        ? value
-        : Object.entries(value).map(
-            ([type, item]) => `${type}: ${item.method} ${item.path}`
-          ),
-      invalid: false,
-    }
+    return Array.isArray(value) ? [] : Object.keys(value)
   } catch {
-    return { items: [props.row.endpoints], invalid: true }
+    return []
   }
 })
-const items = computed(() => {
-  switch (props.field) {
-    case 'tags':
-      return tags.value.items
-    case 'endpoints':
-      return endpoints.value.items
-    case 'bound_channels':
-      return props.row.bound_channels.map(
-        (channel) => `${channel.name} (${channel.type})`
-      )
-    case 'enable_groups':
-      return props.row.enable_groups
-    case 'quota_types':
-      return props.row.quota_types.map((type) =>
-        type === 0 ? t('usage') : type === 1 ? t('perCall') : String(type)
-      )
-    default:
-      return []
-  }
-})
+const visibleTags = computed(() =>
+  tagsOpen.value ? tags.value : tags.value.slice(0, 1)
+)
+const ruleLabel = computed(() => t(RULES[props.row.name_rule] ?? 'exact'))
+const connectionsTitle = computed(() =>
+  [
+    ...props.row.bound_channels.map(
+      (channel) =>
+        `${channel.name} (${adminChannelTypeMeta(channel.type).label})`
+    ),
+    ...props.row.enable_groups,
+  ].join('\n')
+)
+
 function formatTime(value: number | null) {
-  return value == null || value <= 0
-    ? t('unknown')
-    : new Intl.DateTimeFormat(locale.value, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }).format(new Date(value * 1000))
+  if (value == null || value <= 0) return '—'
+  return new Intl.DateTimeFormat(locale.value, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value * 1000))
 }
 </script>
 <template>
-  <div v-if="field === 'model_name'" class="metadata-name">
+  <div v-if="field === 'model'" class="flex min-w-0 items-center gap-2.5">
     <MetadataIcon
       :icon="row.icon || vendor?.icon"
       :name="vendor?.name || row.model_name"
-      :size="28"
-    /><strong>{{ row.model_name }}</strong
-    ><IconButton :label="t('copy')" @click="emit('copy', row.model_name)"
-      ><Copy :size="14"
-    /></IconButton>
+      :size="24"
+    />
+    <div class="min-w-0">
+      <div class="flex min-w-0 items-center gap-1">
+        <button
+          type="button"
+          class="min-w-0 truncate font-mono text-sm font-semibold text-[var(--text-primary)] underline-offset-4 hover:underline focus-ring"
+          :title="row.model_name"
+          @click="emit('edit')"
+        >
+          {{ row.model_name }}
+        </button>
+        <IconButton
+          :label="t('copyModelName')"
+          class="shrink-0"
+          @click="emit('copy', row.model_name)"
+          ><Copy :size="13"
+        /></IconButton>
+      </div>
+      <p class="truncate text-xs text-[var(--text-tertiary)]">
+        {{ vendor?.name || t('noVendor')
+        }}<template v-if="row.name_rule !== 0">
+          ·
+          {{ t('ruleMatches', { rule: ruleLabel, count: row.matched_count }) }}
+        </template>
+      </p>
+    </div>
   </div>
-  <template v-else-if="field === 'id'">{{ row.id }}</template>
   <span
-    v-else-if="field === 'status'"
-    class="metadata-badge"
-    :class="row.status === 1 ? 'metadata-positive' : ''"
-    >{{ t(row.status === 1 ? 'enabled' : 'disabled') }}</span
+    v-else-if="field === 'connections'"
+    class="text-xs tabular-nums text-[var(--text-secondary)]"
+    :title="connectionsTitle || undefined"
+    >{{
+      t('connectionsSummary', {
+        channels: row.bound_channels.length,
+        groups: row.enable_groups.length,
+      })
+    }}</span
   >
+  <div
+    v-else-if="field === 'tags'"
+    class="flex min-w-0 flex-wrap items-center gap-1"
+  >
+    <StatusChip v-for="(tag, index) in visibleTags" :key="index">{{
+      tag
+    }}</StatusChip>
+    <button
+      v-if="tags.length > 1"
+      type="button"
+      class="rounded-md px-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] focus-ring"
+      :aria-expanded="tagsOpen"
+      @click="tagsOpen = !tagsOpen"
+    >
+      {{ tagsOpen ? '−' : t('moreTags', { count: tags.length - 1 }) }}
+    </button>
+    <span v-if="!tags.length" class="text-xs text-[var(--text-tertiary)]"
+      >—</span
+    >
+  </div>
   <span
     v-else-if="field === 'sync_official'"
-    class="metadata-badge"
-    :class="row.sync_official === 1 ? 'metadata-positive' : ''"
-    >{{ t(row.sync_official === 1 ? 'syncEnabled' : 'syncDisabled') }}</span
+    class="text-xs text-[var(--text-tertiary)]"
+    >{{ t(row.sync_official === 1 ? 'allowUpdates' : 'keepLocal') }}</span
   >
-  <div v-else-if="field === 'vendor_id'" class="metadata-name">
+  <StatusChip
+    v-else-if="field === 'status'"
+    :tone="row.status === 1 ? 'success' : 'neutral'"
+    >{{ t(row.status === 1 ? 'allowed' : 'notListed') }}</StatusChip
+  >
+  <span
+    v-else-if="field === 'id'"
+    class="font-mono text-xs tabular-nums text-[var(--text-secondary)]"
+    >{{ row.id }}</span
+  >
+  <div v-else-if="field === 'vendor'" class="flex min-w-0 items-center gap-2">
     <MetadataIcon
       v-if="vendor"
       :icon="vendor.icon"
       :name="vendor.name"
-      :size="22"
-    /><span>{{ vendor?.name || t('noVendor') }}</span>
-  </div>
-  <div v-else-if="field === 'name_rule'">
-    <span class="metadata-badge">{{ t(ruleNames[row.name_rule]) }}</span>
-    <details v-if="row.name_rule !== 0" class="metadata-details">
-      <summary>{{ t('matchCount', { count: row.matched_count }) }}</summary>
-      <ul>
-        <li v-for="name in row.matched_models" :key="name">{{ name }}</li>
-      </ul>
-    </details>
-  </div>
-  <template v-else-if="field === 'created_time' || field === 'updated_time'">{{
-    formatTime(row[field])
-  }}</template>
-  <details
-    v-else-if="field === 'description' && row.description"
-    class="metadata-description"
-  >
-    <summary>{{ row.description }}</summary>
-    <p>{{ row.description }}</p>
-  </details>
-  <template v-else-if="field === 'description'">{{ t('unknown') }}</template>
-  <div v-else class="metadata-values">
-    <span v-if="field === 'tags' && tags.invalid" class="admin-error">{{
-      t('invalidTags')
+      :size="18"
+    /><span class="truncate text-xs text-[var(--text-secondary)]">{{
+      vendor?.name || t('noVendor')
     }}</span>
-    <span
-      v-if="field === 'endpoints' && endpoints.invalid"
-      class="admin-error"
-      >{{ t('endpointInvalidJson') }}</span
-    >
-    <span v-for="item in items" :key="item" class="metadata-badge">{{
-      item
-    }}</span
-    ><span v-if="!items.length" class="admin-muted">{{ t('unknown') }}</span>
   </div>
+  <span
+    v-else-if="field === 'name_rule'"
+    class="text-xs text-[var(--text-secondary)]"
+    >{{ ruleLabel }}</span
+  >
+  <span
+    v-else-if="field === 'description'"
+    class="line-clamp-2 text-xs text-[var(--text-secondary)]"
+    :title="row.description || undefined"
+    >{{ row.description || '—' }}</span
+  >
+  <div
+    v-else-if="field === 'endpoints'"
+    class="flex min-w-0 flex-wrap items-center gap-1"
+  >
+    <StatusChip v-for="key in endpointKeys" :key="key">{{ key }}</StatusChip>
+    <span
+      v-if="!endpointKeys.length"
+      class="text-xs text-[var(--text-tertiary)]"
+      >—</span
+    >
+  </div>
+  <span v-else class="text-xs tabular-nums text-[var(--text-secondary)]">{{
+    formatTime(row[field as 'created_time' | 'updated_time'])
+  }}</span>
 </template>
-<style scoped>
-.metadata-name {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-.metadata-name strong {
-  overflow-wrap: anywhere;
-  font-size: 0.875rem;
-}
-.metadata-name button {
-  flex-shrink: 0;
-}
-.metadata-values {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-.metadata-badge {
-  display: inline-block;
-  max-width: 100%;
-  padding: 0.2rem 0.45rem;
-  border-radius: var(--shape-small);
-  font-size: 0.75rem;
-  background: var(--surface-container-high);
-  color: var(--text-secondary);
-  overflow-wrap: anywhere;
-}
-.metadata-positive {
-  background: var(--status-success-soft);
-  color: var(--status-success-text);
-}
-.metadata-details {
-  margin-top: 0.35rem;
-  font-size: 0.75rem;
-}
-.metadata-details ul {
-  max-height: 10rem;
-  overflow-y: auto;
-  padding-top: 0.5rem;
-}
-.metadata-description summary {
-  max-width: 16rem;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  cursor: pointer;
-}
-.metadata-description p {
-  min-width: 12rem;
-  max-width: 24rem;
-  white-space: pre-wrap;
-  margin-top: 0.5rem;
-}
-summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-</style>

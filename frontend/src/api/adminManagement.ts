@@ -34,6 +34,8 @@ export interface ModelVendor {
   description: string
   icon: string
   status: number
+  created_time: number | null
+  updated_time: number | null
 }
 interface PrefillBase {
   id: number
@@ -56,7 +58,10 @@ export type ModelInput = Omit<
   | 'created_time'
   | 'updated_time'
 > & { id?: number }
-export type VendorInput = Omit<ModelVendor, 'id'> & { id?: number }
+export type VendorInput = Omit<
+  ModelVendor,
+  'id' | 'created_time' | 'updated_time'
+> & { id?: number }
 export type PrefillInput = Omit<PrefillBase, 'id'> & { id?: number } & (
     | { type: 'model' | 'tag'; items: string[] }
     | { type: 'endpoint'; items: string }
@@ -78,6 +83,9 @@ function optionalText(value: unknown, endpoint: string): string {
   return value === undefined || value === null
     ? ''
     : requiredString(value, endpoint)
+}
+function optionalTime(value: unknown, endpoint: string): number | null {
+  return value == null ? null : requiredStrictInteger(value, endpoint)
 }
 function flag(value: unknown, endpoint: string): number {
   const result = requiredStrictInteger(value, endpoint)
@@ -124,14 +132,8 @@ export function parseModelMetadata(
       if (quota !== 0 && quota !== 1) invalidResponse(endpoint)
       return quota
     }),
-    created_time:
-      row.created_time == null
-        ? null
-        : requiredStrictInteger(row.created_time, endpoint),
-    updated_time:
-      row.updated_time == null
-        ? null
-        : requiredStrictInteger(row.updated_time, endpoint),
+    created_time: optionalTime(row.created_time, endpoint),
+    updated_time: optionalTime(row.updated_time, endpoint),
   }
 }
 export function parseModelVendor(
@@ -145,6 +147,8 @@ export function parseModelVendor(
     description: optionalText(row.description, endpoint),
     icon: optionalText(row.icon, endpoint),
     status: flag(row.status, endpoint),
+    created_time: optionalTime(row.created_time, endpoint),
+    updated_time: optionalTime(row.updated_time, endpoint),
   }
 }
 export function parsePrefillGroup(
@@ -238,6 +242,12 @@ export const metadataApi = {
     ))
       vendor_counts[id] = requiredStrictInteger(count, endpoint)
     return { ...parsePage(data, endpoint, parseModelMetadata), vendor_counts }
+  },
+  /** Linked-model count per vendor id; the search response always carries
+      the unfiltered counts, so one row is enough. */
+  async vendorCounts(signal?: AbortSignal) {
+    return (await metadataApi.models({ p: 1, page_size: 1 }, signal))
+      .vendor_counts
   },
   async model(id: number, signal?: AbortSignal) {
     const endpoint = `/api/models/${id}`

@@ -332,9 +332,7 @@ export default {
     },
   },
   nav: {
-    modelMetadata: 'Model metadata',
-    vendors: 'Vendors',
-    prefillGroups: 'Prefill groups',
+    adminModels: 'Models',
     opsMonitor: 'Ops monitor',
     dashboard: 'Dashboard',
     keys: 'Tokens',

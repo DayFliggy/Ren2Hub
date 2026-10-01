@@ -12,20 +12,25 @@ export const adminRoutes: RouteRecordRaw[] = [
       protected: true,
     },
   },
+  // NewAPI model management: "Models" and "Vendors" sections of one page.
   {
     path: '/models/metadata',
     name: 'models-admin',
     component: () => import('@/views/admin/ModelManagementView.vue'),
+    props: { section: 'metadata' },
     meta: { requiresAdmin: true, feature: 'admin', protected: true },
   },
   {
     path: '/models/vendors',
     name: 'vendors-admin',
-    redirect: (to) => ({
-      path: '/models/metadata',
-      query: { ...to.query, manage: 'vendors' },
-      hash: to.hash,
-    }),
+    component: () => import('@/views/admin/ModelManagementView.vue'),
+    props: { section: 'vendors' },
+    meta: {
+      requiresAdmin: true,
+      feature: 'admin',
+      protected: true,
+      nav: 'models-admin',
+    },
   },
   {
     path: '/models/prefill-groups',

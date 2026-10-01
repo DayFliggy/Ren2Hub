@@ -102,6 +102,15 @@ describe('system settings catalog', () => {
     ).toBe(true)
   })
 
+  it('lists model pricing once, as a billing section', () => {
+    const owners = SYSTEM_SETTINGS_DOMAINS.flatMap((domain) =>
+      domain.sections
+        .filter((section) => section.integration === 'model-pricing')
+        .map((section) => `${domain.id}/${section.id}`)
+    )
+    expect(owners).toEqual(['billing/model-pricing'])
+  })
+
   it('excludes retired automatic pricing options and editable deployment settings', () => {
     const sections = SYSTEM_SETTINGS_DOMAINS.flatMap(
       (domain) => domain.sections

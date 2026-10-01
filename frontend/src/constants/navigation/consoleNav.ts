@@ -119,6 +119,16 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         icon: 'M4 6h16M4 12h16M4 18h16M7 3v6M17 9v6M10 15v6',
       },
       {
+        // NewAPI "Models" admin entry, right after Channels: metadata and
+        // vendor management.
+        name: 'models-admin',
+        labelKey: 'nav.adminModels',
+        route: 'models-admin',
+        feature: 'admin',
+        // Lucide "box"
+        icon: 'M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16ZM3.3 7l8.7 5 8.7-5M12 22V12',
+      },
+      {
         name: 'ticket-management',
         labelKey: 'nav.ticketManagement',
         route: 'ticket-management',
@@ -148,14 +158,6 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         icon: 'M9 5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 3h6v4H9zM9 12h6M9 16h6',
       },
       {
-        name: 'model-pricing',
-        labelKey: 'billing.modelPricing',
-        route: 'model-pricing',
-        feature: 'admin',
-        rootOnly: true,
-        icon: 'M4 4h16v16H4zM8 8h8M8 12h8M8 16h4',
-      },
-      {
         name: 'system-settings',
         labelKey: 'nav.systemSettings',
         route: 'system-settings-site',
@@ -170,13 +172,6 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         feature: 'taskPlugins',
         rootOnly: true,
         icon: 'M8 3h8v5h5v8h-5v5H8v-5H3V8h5z',
-      },
-      {
-        name: 'models-admin',
-        labelKey: 'nav.modelMetadata',
-        route: 'models-admin',
-        feature: 'admin',
-        icon: 'M4 4h16v16H4zM4 10h16M10 10v10',
       },
     ],
   },

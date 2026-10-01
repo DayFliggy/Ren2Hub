@@ -404,3 +404,70 @@ test('blank expressions and server conflicts keep a recoverable draft', async ({
     editor.getByRole('textbox', { name: 'Expression source', exact: true })
   ).toHaveValue('0')
 })
+
+test('model pricing is a billing settings section that guards its draft', async ({
+  page,
+}) => {
+  // Narrowest width with the console sidebar and the settings rail together.
+  await page.setViewportSize({ width: 1024, height: 900 })
+  await configureStablePage(page, { theme: 'light' })
+  await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
+  const pricing = { ModelPrice: '0.2' }
+  await page.route('**/api/channel/models_enabled', (route) =>
+    route.fulfill({ json: { success: true, data: ['test-model'] } })
+  )
+  await page.route('**/api/option/model_pricing**', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          entries: [
+            {
+              model_name: 'test-model',
+              version: 'v1',
+              configured: pricing,
+              effective: pricing,
+            },
+          ],
+          options: Object.fromEntries(PRICING_KEYS.map((key) => [key, '{}'])),
+          empty_version: 'empty',
+        },
+      },
+    })
+  )
+  await page.goto('/system-settings/billing/quota')
+  // Sidebar and mobile strip both render the entry; every copy must be current.
+  const expectSettingsCurrent = async () => {
+    await expect(
+      page.locator('[data-console-nav-item="system-settings"]').first()
+    ).toBeVisible()
+    await expect(
+      page.locator(
+        '[data-console-nav-item="system-settings"]:not([aria-current="page"])'
+      )
+    ).toHaveCount(0)
+  }
+  await expectSettingsCurrent()
+  await expect(
+    page.locator('[data-console-nav-item="model-pricing"]')
+  ).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Model pricing', exact: true }).click()
+  await expect(page).toHaveURL(/\/system-settings\/billing\/model-pricing$/)
+  await expect(
+    page.getByRole('heading', { name: 'Model pricing', exact: true })
+  ).toBeVisible()
+  await expectSettingsCurrent()
+  await assertNoHorizontalOverflow(page)
+
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await expect(page.getByText('Unsaved prices', { exact: true })).toBeVisible()
+  const quota = page.getByRole('button', { name: '配额与展示', exact: true })
+  page.once('dialog', (dialog) => void dialog.dismiss())
+  await quota.click()
+  await expect(page).toHaveURL(/\/billing\/model-pricing$/)
+  await expect(page.getByText('Unsaved prices', { exact: true })).toBeVisible()
+  page.once('dialog', (dialog) => void dialog.accept())
+  await quota.click()
+  await expect(page).toHaveURL(/\/billing\/quota$/)
+})

@@ -27,6 +27,8 @@ const vendors = [
     description: 'Model provider',
     icon: 'OpenAI',
     status: 1,
+    created_time: 1700000000,
+    updated_time: 1700000300,
   },
 ]
 const groups = [
@@ -45,18 +47,16 @@ const groups = [
     items: model.endpoints,
   },
 ]
+const page1 = (items: unknown[]) => ({
+  success: true,
+  data: { page: 1, page_size: 20, total: items.length, items },
+})
 async function data(page: Page) {
   await page.route('**/api/models/search?*', (route) =>
     route.fulfill({
       json: {
-        success: true,
-        data: {
-          page: 1,
-          page_size: 20,
-          total: 1,
-          items: [model],
-          vendor_counts: { 1: 1 },
-        },
+        ...page1([model]),
+        data: { ...page1([model]).data, vendor_counts: { 1: 1 } },
       },
     })
   )
@@ -64,17 +64,9 @@ async function data(page: Page) {
     route.fulfill({ json: { success: true, data: model } })
   )
   await page.route('**/api/vendors/search?*', (route) =>
-    route.fulfill({
-      json: {
-        success: true,
-        data: { page: 1, page_size: 100, total: 1, items: vendors },
-      },
-    })
+    route.fulfill({ json: page1(vendors) })
   )
-  await page.route('**/api/prefill_group/?*', (route) =>
-    route.fulfill({ json: { success: true, data: groups } })
-  )
-  await page.route('**/api/prefill_group/', (route) =>
+  await page.route(/\/api\/prefill_group\/(\?.*)?$/, (route) =>
     route.fulfill({ json: { success: true, data: groups } })
   )
   await page.route('**/api/models/missing', (route) =>
@@ -103,6 +95,29 @@ async function data(page: Page) {
     })
   )
 }
+async function setupPage(
+  page: Page,
+  options: { language: string; theme: 'light' | 'dark'; mobile: boolean }
+) {
+  await page.setViewportSize(
+    options.mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
+  )
+  await configureStablePage(page, { theme: options.theme })
+  await page.addInitScript(
+    (locale) => localStorage.setItem('ren2hub_locale', locale),
+    options.language
+  )
+  await data(page)
+  const failures: string[] = []
+  page.on('pageerror', (error) => failures.push(error.message))
+  page.on('response', (response) => {
+    if (response.status() === 404 && response.url().includes('127.0.0.1'))
+      failures.push(response.url())
+  })
+  return failures
+}
+const visible = (page: Page, text: string) =>
+  page.getByText(text, { exact: true }).filter({ visible: true }).first()
 
 for (const language of ['zh-CN', 'en']) {
   for (const theme of ['light', 'dark'] as const) {
@@ -110,91 +125,120 @@ for (const language of ['zh-CN', 'en']) {
       test(`model management ${language} ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
         page,
       }, testInfo) => {
-        await page.setViewportSize(
-          mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
-        )
-        await configureStablePage(page, { theme })
-        await page.addInitScript(
-          (locale) => localStorage.setItem('ren2hub_locale', locale),
-          language
-        )
-        await data(page)
-        const failures: string[] = []
-        page.on('pageerror', (error) => failures.push(error.message))
-        page.on('response', (response) => {
-          if (response.status() === 404 && response.url().includes('127.0.0.1'))
-            failures.push(response.url())
-        })
+        const failures = await setupPage(page, { language, theme, mobile })
         const zh = language === 'zh-CN'
+        const shot = (name: string) =>
+          page.screenshot({ path: testInfo.outputPath(name), fullPage: true })
         await page.goto('/models/metadata')
+        await expect(visible(page, 'gpt-local')).toBeVisible()
+        // NewAPI naming: sidebar "Models", page "Model management".
         await expect(
           page
-            .getByText('gpt-local', { exact: true })
+            .locator('[data-console-nav-item="models-admin"]')
+            .filter({ visible: true })
+            .first()
+        ).toContainText(zh ? '模型' : 'Models')
+        await expect(
+          visible(page, zh ? '模型管理' : 'Model management')
+        ).toBeVisible()
+        await expect(
+          page.getByRole('tab', {
+            name: zh ? '供应商' : 'Vendors',
+            exact: true,
+          })
+        ).toBeVisible()
+        await assertNoHorizontalOverflow(page)
+        await shot('models.png')
+        await page
+          .getByRole('button', { name: zh ? '编辑' : 'Edit', exact: true })
+          .filter({ visible: true })
+          .first()
+          .click()
+        const drawer = page.getByRole('dialog')
+        await expect(
+          drawer.getByLabel(zh ? '模型名称' : 'Model Name', { exact: true })
+        ).toHaveValue('gpt-local')
+        await expect(
+          drawer.getByText(zh ? '基本信息' : 'Basic Information', {
+            exact: true,
+          })
+        ).toBeVisible()
+        await drawer.getByRole('radio', { name: 'JSON', exact: true }).click()
+        await drawer.getByLabel('JSON', { exact: true }).fill('{')
+        await drawer
+          .getByRole('button', {
+            name: zh ? '保存资料' : 'Save metadata',
+            exact: true,
+          })
+          .click()
+        await expect(drawer.getByRole('alert').first()).toBeVisible()
+        await assertNoHorizontalOverflow(page)
+        await shot('model-drawer.png')
+        await drawer
+          .getByRole('tab', {
+            name: zh ? '渠道与分组' : 'Channels and groups',
+            exact: true,
+          })
+          .click()
+        await expect(drawer.getByText('primary', { exact: true })).toBeVisible()
+        await expect(
+          drawer.getByText('gpt-local-2', { exact: true })
+        ).toBeVisible()
+        await shot('model-connections.png')
+        // The broken endpoint draft is unsaved, so closing asks first.
+        await page.keyboard.press('Escape')
+        await page
+          .getByRole('button', {
+            name: zh ? '放弃修改' : 'Discard changes',
+            exact: true,
+          })
+          .click()
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+        // Vendors is its own section in NewAPI; bookmarks keep query and hash.
+        await page.goto('/models/vendors?vFilter=open&source=bookmark#details')
+        await expect(page).toHaveURL(
+          /\/models\/vendors\?vFilter=open&source=bookmark#details$/
+        )
+        await expect(
+          page.getByRole('tab', {
+            name: zh ? '供应商' : 'Vendors',
+            exact: true,
+          })
+        ).toHaveAttribute('aria-selected', 'true')
+        await expect(visible(page, 'Model provider')).toBeVisible()
+        await assertNoHorizontalOverflow(page)
+        await shot('vendors.png')
+        await page
+          .getByRole('button', { name: 'OpenAI', exact: true })
+          .filter({ visible: true })
+          .first()
+          .click()
+        const vendorDrawer = page.getByRole('dialog')
+        await expect(
+          vendorDrawer.getByRole('tab', {
+            name: zh ? '供应商资料' : 'Vendor details',
+          })
+        ).toBeVisible()
+        await assertNoHorizontalOverflow(page)
+        await shot('vendor-drawer.png')
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+        await page.goto('/models/prefill-groups?source=bookmark#details')
+        await expect(page).toHaveURL(
+          /\/models\/metadata\?.*manage=prefill-groups.*#details$/
+        )
+        const groupsDialog = page.getByRole('dialog')
+        await expect(
+          groupsDialog
+            .getByText('Standard models', { exact: true })
             .filter({ visible: true })
             .first()
         ).toBeVisible()
         await assertNoHorizontalOverflow(page)
-        await page.screenshot({
-          path: testInfo.outputPath('models.png'),
-          fullPage: true,
-        })
-        const edit = page
-          .getByRole('button', {
-            name: zh ? '编辑模型' : 'Edit model',
-            exact: true,
-          })
-          .filter({ visible: true })
-          .first()
-        await edit.click()
-        const drawer = page.getByRole('dialog')
-        await expect(
-          drawer.getByLabel(zh ? '模型名称' : 'Model name', { exact: true })
-        ).toHaveValue('gpt-local')
-        await expect(drawer.locator('[data-price-scope]')).toHaveCount(0)
-        await drawer.getByRole('button', { name: 'JSON', exact: true }).click()
-        await drawer.getByLabel('JSON', { exact: true }).fill('{')
-        await drawer
-          .getByRole('button', { name: zh ? '保存' : 'Save', exact: true })
-          .click()
-        await expect(drawer.getByRole('alert').first()).toBeVisible()
-        await assertNoHorizontalOverflow(page)
-        await page.screenshot({
-          path: testInfo.outputPath('model-drawer.png'),
-          fullPage: true,
-        })
+        await shot('prefill-groups.png')
         await page.keyboard.press('Escape')
-        await expect(drawer).toHaveCount(0)
-        await expect(edit).toBeFocused()
-        for (const kind of ['vendors', 'prefill-groups']) {
-          await page.goto(`/models/${kind}?keyword=gpt&source=bookmark#details`)
-          await expect(page).toHaveURL(
-            new RegExp(`/models/metadata\\?.*manage=${kind}.*#details$`)
-          )
-          const manager = page.getByRole('dialog')
-          await expect(manager).toBeVisible()
-          await expect(
-            manager
-              .getByText(kind === 'vendors' ? 'OpenAI' : 'Standard models', {
-                exact: true,
-              })
-              .first()
-          ).toBeVisible()
-          await manager
-            .getByRole('button', { name: zh ? '编辑' : 'Edit', exact: true })
-            .first()
-            .click()
-          await expect(page.getByRole('dialog')).toHaveCount(2)
-          await assertNoHorizontalOverflow(page)
-          await page.screenshot({
-            path: testInfo.outputPath(`${kind}.png`),
-            fullPage: true,
-          })
-          await page.keyboard.press('Escape')
-          await expect(page.getByRole('dialog')).toHaveCount(1)
-          await page.keyboard.press('Escape')
-          await expect(page.getByRole('dialog')).toHaveCount(0)
-          await expect(page).not.toHaveURL(/manage=/)
-        }
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+        await expect(page).not.toHaveURL(/manage=/)
         expect(
           await page
             .locator('img')
@@ -209,13 +253,10 @@ for (const language of ['zh-CN', 'en']) {
     }
   }
 }
-
-test('sync cancellation and missing-model creation preserve the draft boundary', async ({
+test('sync preview and missing-model creation write nothing until applied', async ({
   page,
-}) => {
-  await configureStablePage(page, { theme: 'dark' })
-  await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
-  await data(page)
+}, testInfo) => {
+  await setupPage(page, { language: 'en', theme: 'dark', mobile: false })
   const writes: string[] = []
   page.on('request', (request) => {
     if (request.url().includes('/api/models') && request.method() !== 'GET')
@@ -224,25 +265,37 @@ test('sync cancellation and missing-model creation preserve the draft boundary',
   await page.goto('/models/metadata')
   await page.getByRole('button', { name: 'Sync metadata', exact: true }).click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.locator('option[value=config]')).toHaveAttribute(
-    'disabled',
-    ''
-  )
-  await dialog.getByRole('button', { name: 'Get sync preview' }).click()
+  await dialog
+    .getByRole('button', { name: 'Load metadata preview', exact: true })
+    .click()
+  await expect(dialog.getByText('missing-local', { exact: true })).toBeVisible()
+  await dialog.getByRole('checkbox', { name: 'Select gpt-local' }).check()
+  await dialog
+    .getByRole('button', { name: 'Preview selected changes', exact: true })
+    .click()
   await expect(
     dialog.getByText('Upstream description', { exact: true })
   ).toBeVisible()
-  await dialog.getByRole('checkbox').last().check()
+  await assertNoHorizontalOverflow(page)
+  await page.screenshot({
+    path: testInfo.outputPath('sync-preview.png'),
+    fullPage: true,
+  })
   await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   expect(writes).toEqual([])
+  // The page-header menu comes before the per-row menus.
   await page
-    .getByRole('button', { name: 'Missing models', exact: true })
+    .getByRole('button', { name: 'Open menu', exact: true })
+    .first()
     .click()
-  await dialog
-    .getByRole('button', { name: 'Create metadata', exact: true })
+  await page.getByRole('menuitem', { name: 'Missing Models' }).click()
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Configure', exact: true })
     .click()
   await expect(
-    page.getByRole('dialog').getByLabel('Model name', { exact: true })
+    page.getByRole('dialog').getByLabel('Model Name', { exact: true })
   ).toHaveValue('missing-local')
   await page.keyboard.press('Escape')
   expect(writes).toEqual([])
