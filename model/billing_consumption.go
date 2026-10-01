@@ -85,8 +85,8 @@ func validateBillingConsumption(tx *gorm.DB, recovery BillingRecovery, consumpti
 	if recovery.UserID != consumption.Log.UserId || recovery.TokenID != consumption.Log.TokenId {
 		return "", ErrBillingRecoveryStateConflict
 	}
-	if final && !consumption.Usage.ReadyForSettlement() {
-		return "", errors.New("final billing requires completed, non-estimated provider evidence")
+	if final && !consumption.Usage.Settleable() {
+		return "", errors.New("final billing requires labeled, valid usage evidence")
 	}
 	if consumption.Log.Quota < 0 || consumption.Charge.FinalQuota != consumption.Log.Quota {
 		return "", ErrBillingEventConflict
@@ -115,7 +115,15 @@ func validateBillingConsumption(tx *gorm.DB, recovery BillingRecovery, consumpti
 			return "", err
 		}
 	}
-	replayed, err := ReplayBilling(&quote, *consumption.Usage, recovery.RequestID, attempt.ID, "settlement")
+	phase := "settlement"
+	if consumption.Usage.Source == billing.UsageSourceRequestEstimate {
+		// A frozen fallback charge is exactly the attempt's own pre-send estimate.
+		if err := requireAttemptEstimate(attempt, consumption.Usage, consumption.Charge); err != nil {
+			return "", err
+		}
+		phase = "estimate"
+	}
+	replayed, err := ReplayBilling(&quote, *consumption.Usage, recovery.RequestID, attempt.ID, phase)
 	if err != nil {
 		return "", fmt.Errorf("invalid frozen billing evidence: %w", err)
 	}
@@ -133,7 +141,37 @@ func validateBillingConsumption(tx *gorm.DB, recovery BillingRecovery, consumpti
 	return BillingEvidenceFingerprint(recovery.RequestID, quote.Hash, consumption.Usage, consumption.Charge)
 }
 
-func validateStoredBillingConsumption(tx *gorm.DB, recovery BillingRecovery, consumption *BillingConsumption) error {
+func requireAttemptEstimate(attempt BillingAttempt, usage *billing.Usage, charge *billing.ChargeResult) error {
+	var estimateUsage billing.Usage
+	var estimateCharge billing.ChargeResult
+	if common.UnmarshalJsonStr(string(attempt.EstimateUsage), &estimateUsage) != nil || common.UnmarshalJsonStr(attempt.EstimateCharge, &estimateCharge) != nil {
+		return billing.ErrEvaluationEvidence
+	}
+	if err := requireSameBillingHash(&estimateUsage, usage); err != nil {
+		return err
+	}
+	return requireSameBillingHash(&estimateCharge, charge)
+}
+
+func requireSameBillingHash(want, got any) error {
+	wantHash, err := billing.Hash(want)
+	if err != nil {
+		return err
+	}
+	gotHash, err := billing.Hash(got)
+	if err != nil {
+		return err
+	}
+	if wantHash != gotHash {
+		return ErrBillingEventConflict
+	}
+	return nil
+}
+
+// The settlement intent was replayed when it was prepared. The funds
+// transaction confirms that the stored evidence is that intent, so a later
+// process or toolchain can always complete an accepted decision.
+func verifyStoredBillingConsumption(recovery BillingRecovery, consumption *BillingConsumption) error {
 	var storedUsage billing.Usage
 	var storedCharge billing.ChargeResult
 	if err := common.UnmarshalJsonStr(string(recovery.UsageSnapshot), &storedUsage); err != nil {
@@ -142,16 +180,20 @@ func validateStoredBillingConsumption(tx *gorm.DB, recovery BillingRecovery, con
 	if err := common.UnmarshalJsonStr(recovery.ChargeSnapshot, &storedCharge); err != nil {
 		return fmt.Errorf("missing final billing charge: %w", err)
 	}
-	// Usage and charge deliberately live in their own immutable snapshots;
-	// consumption JSON contains only delivery metadata.
-	consumption.Usage, consumption.Charge = &storedUsage, &storedCharge
-	fingerprint, err := validateBillingConsumption(tx, recovery, *consumption, true)
+	var quote billing.Quote
+	if err := common.UnmarshalJsonStr(recovery.QuoteSnapshot, &quote); err != nil {
+		return fmt.Errorf("missing frozen billing quote: %w", err)
+	}
+	fingerprint, err := BillingEvidenceFingerprint(recovery.RequestID, quote.Hash, &storedUsage, &storedCharge)
 	if err != nil {
 		return err
 	}
-	if fingerprint != recovery.ConsumptionFingerprint {
+	if fingerprint != recovery.ConsumptionFingerprint || storedCharge.FinalQuota != consumption.Log.Quota {
 		return ErrBillingEventConflict
 	}
+	// Usage and charge deliberately live in their own immutable snapshots;
+	// consumption JSON contains only delivery metadata.
+	consumption.Usage, consumption.Charge = &storedUsage, &storedCharge
 	return nil
 }
 
@@ -224,12 +266,6 @@ func prepareBillingRecoveryConsumption(db *gorm.DB, requestID string, consumptio
 				return ErrBillingRecoveryStateConflict
 			}
 			state = BillingRecoveryStateUsageCollecting
-			if recovery.ConsumptionState == BillingRecoveryStatePricingPending || recovery.ConsumptionState == BillingRecoveryStatePricingCollecting {
-				// Further Realtime output can still fail expression evaluation.
-				state = BillingRecoveryStatePricingCollecting
-			} else if BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
-				state = BillingRecoveryStateUsageCollecting
-			}
 		} else if status == BillingRecoveryStatusActive {
 			status = BillingRecoveryStatusSettlementPending
 		}
@@ -274,8 +310,8 @@ func ApplyBillingRecoveryConsumption(requestID string) error {
 	return nil
 }
 
-// Preserve an explicit reconciliation record if no complete snapshot could be
-// persisted. Recovery must not silently treat the monetary settlement as done.
+// Record why no settlement intent could be persisted. The reservation stays
+// in place until recovery charges the best persisted evidence.
 func RecordBillingConsumptionPreparationFailure(requestID string, cause error) error {
 	if DB == nil || requestID == "" || cause == nil {
 		return errors.New("invalid billing consumption preparation failure")
@@ -306,7 +342,7 @@ func applyBillingConsumptionStatistics(requestID string) error {
 			return err
 		}
 		if BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
-			return errors.New("billing consumption is unconfirmed; reconciliation is required")
+			return errors.New("billing consumption is not final yet")
 		}
 		if recovery.ConsumptionSnapshot == "" || recovery.ConsumptionStatistics == BillingRecoveryStateCompleted {
 			return nil
@@ -459,7 +495,7 @@ func applyBillingConsumptionLog(requestID string) error {
 					return claim.Error
 				}
 				if claim.RowsAffected != 1 {
-					return errors.New("ClickHouse consumption insert outcome is unknown; reconciliation is required")
+					return errors.New("ClickHouse consumption insert outcome is unknown; delivery stays pending")
 				}
 				if err := createLog(&log); err != nil {
 					return fmt.Errorf("ClickHouse consumption insert outcome is unknown: %w", err)

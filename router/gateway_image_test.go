@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestGatewayImageFinalQuantityAndNativeMapping(t *testing.T) {
@@ -90,19 +91,21 @@ func TestGatewayImageFinalQuantityAndNativeMapping(t *testing.T) {
 // Exercise the public endpoint and durable settlement together. A bounded Token
 // deliberately disables the trusted-quota shortcut in the shared SDK fixture.
 func TestGatewayImageDeliveryAndSettlement(t *testing.T) {
+	// The n=3 reservation is 1500. Delivered output whose image count cannot be
+	// confirmed settles at that frozen estimate; failures without output release it.
 	for _, test := range []struct {
-		name, contentType, body string
-		stream, interrupted     bool
-		status, charge          int
+		name, contentType, body     string
+		stream, interrupted, frozen bool
+		status, charge              int
 	}{
-		{"json", "application/json", `{"data":[{"b64_json":"first"},{"b64_json":"second"}]}`, false, false, 200, 1000},
-		{"json_as_stream", "application/json", `{"data":[{"b64_json":"first"}]}`, true, false, 200, 500},
-		{"empty_json", "application/json", `{"data":[]}`, false, true, 502, 0},
-		{"malformed_json", "application/json", `{broken`, false, true, 502, 0},
-		{"completed_stream", "text/event-stream", "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"first\"}\n\n", true, false, 200, 500},
-		{"partial_eof", "text/event-stream", "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"partial\"}\n\n", true, true, 200, 0},
-		{"error_after_partial", "text/event-stream", "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"partial\"}\n\ndata: {\"type\":\"error\",\"error\":{\"message\":\"upstream broke\"}}\n\n", true, true, 200, 0},
-		{"negative_usage", "text/event-stream", "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"image\",\"usage\":{\"output_tokens\":-3}}\n\n", true, true, 502, 0},
+		{"json", "application/json", `{"data":[{"b64_json":"first"},{"b64_json":"second"}]}`, false, false, false, 200, 1000},
+		{"json_as_stream", "application/json", `{"data":[{"b64_json":"first"}]}`, true, false, false, 200, 500},
+		{"empty_json", "application/json", `{"data":[]}`, false, true, false, 502, 0},
+		{"malformed_json", "application/json", `{broken`, false, true, false, 502, 0},
+		{"completed_stream", "text/event-stream", "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"first\"}\n\n", true, false, false, 200, 500},
+		{"partial_eof", "text/event-stream", "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"partial\"}\n\n", true, true, true, 200, 1500},
+		{"error_after_partial", "text/event-stream", "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"partial\"}\n\ndata: {\"type\":\"error\",\"error\":{\"message\":\"upstream broke\"}}\n\n", true, true, true, 200, 1500},
+		{"negative_usage", "text/event-stream", "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"image\",\"usage\":{\"output_tokens\":-3}}\n\n", true, true, false, 502, 0},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var sends atomic.Int32
@@ -140,33 +143,27 @@ func TestGatewayImageDeliveryAndSettlement(t *testing.T) {
 			assert.EqualValues(t, 1, sends.Load(), "accepted image generation cannot replay")
 			var user model.User
 			var token model.Token
+			var recovery model.BillingRecovery
 			var logs []model.Log
 			require.NoError(t, model.DB.First(&user, 1).Error)
 			require.NoError(t, model.DB.First(&token, 1).Error)
+			require.NoError(t, model.DB.First(&recovery).Error)
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
-			heldOrCharged := test.charge
-			if test.charge == 0 {
-				heldOrCharged = 1500
-				var recovery model.BillingRecovery
-				require.NoError(t, model.DB.First(&recovery).Error)
-				if test.name == "partial_eof" || test.name == "error_after_partial" {
-					assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
-					assert.Equal(t, model.BillingRecoveryStateUnprepared, recovery.ConsumptionState)
-				} else {
-					assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
-					assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
-				}
-			}
-			assert.EqualValues(t, 10000000-heldOrCharged, user.Quota)
-			assert.EqualValues(t, 100000-heldOrCharged, token.RemainQuota)
+			assert.Zero(t, user.ReservedQuota)
+			assert.Zero(t, token.ReservedQuota)
+			assert.EqualValues(t, 10000000-test.charge, user.Quota)
+			assert.EqualValues(t, 100000-test.charge, token.RemainQuota)
 			assert.EqualValues(t, test.charge, user.UsedQuota)
 			if test.charge == 0 {
+				assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status, "no image reached the client")
 				assert.Empty(t, logs)
 				assert.Zero(t, user.RequestCount)
 			} else {
+				assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
 				require.Len(t, logs, 1)
 				assert.EqualValues(t, test.charge, logs[0].Quota)
 				assert.Equal(t, 1, user.RequestCount)
+				assert.Equal(t, test.frozen, gjson.Get(logs[0].Other, "admin_info.usage_billing_path").String() == "frozen_estimate")
 			}
 			var failures int64
 			require.NoError(t, model.DB.Model(&model.ChannelHealth{}).Where("failure_count > 0").Count(&failures).Error)
@@ -179,13 +176,14 @@ func TestGatewayImageDeliveryAndSettlement(t *testing.T) {
 	}
 }
 
-func TestGatewayImageExpressionUsesActualCountAndRetainsInterruptedReservation(t *testing.T) {
+func TestGatewayImageExpressionUsesActualCountAndSettlesInterruptedAtEstimate(t *testing.T) {
 	for _, test := range []struct {
 		name, contentType, body string
 		charge                  int64
 	}{
 		{"completed", "application/json", `{"data":[{"b64_json":"first"},{"b64_json":"second"}]}`, 1000},
-		{"partial", "text/event-stream", "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"partial\"}\n\n", 0},
+		// The overridden n=3 estimate is the only price evidence for a partial image.
+		{"partial", "text/event-stream", "data: {\"type\":\"image_generation.partial_image\",\"b64_json\":\"partial\"}\n\n", 1500},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			url, key, _ := setupGatewaySDKWithUpstream(t, func(w http.ResponseWriter, r *http.Request) {
@@ -214,13 +212,13 @@ func TestGatewayImageExpressionUsesActualCountAndRetainsInterruptedReservation(t
 			var user model.User
 			require.NoError(t, model.DB.First(&user, 1).Error)
 			assert.EqualValues(t, test.charge, user.UsedQuota)
-			if test.charge == 0 {
-				assert.EqualValues(t, 1500, user.ReservedQuota)
-				return
-			}
 			assert.Zero(t, user.ReservedQuota)
 			var log model.Log
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).First(&log).Error)
+			if test.name == "partial" {
+				assert.Equal(t, "frozen_estimate", gjson.Get(log.Other, "admin_info.usage_billing_path").String())
+				return
+			}
 			assert.Contains(t, log.Other, `"image_count":2`)
 		})
 	}

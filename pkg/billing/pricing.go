@@ -134,9 +134,22 @@ type Usage struct {
 	Invalid              bool                   `json:"invalid,omitempty"`
 }
 
-func (usage Usage) ReadyForSettlement() bool {
+// UsageSourceRequestEstimate marks the pre-send estimate. Only this usage
+// carries the pre-consume multiplier, and only it can be the frozen fallback.
+const UsageSourceRequestEstimate = "request_estimate"
+
+// Confirmed reports complete, non-estimated provider evidence of a completed
+// request. Settlement does not require it; it labels how exact a charge is.
+func (usage Usage) Confirmed() bool {
 	return usage.Complete && !usage.Estimated && !usage.Invalid &&
 		strings.TrimSpace(usage.Source) != "" && usage.Terminal == "completed"
+}
+
+// Settleable reports usage that may become a final charge. Estimated or
+// partial counters settle as the best available evidence; invalid counters
+// and unlabeled usage do not.
+func (usage Usage) Settleable() bool {
+	return !usage.Invalid && strings.TrimSpace(usage.Source) != ""
 }
 
 type ChargeLine struct {

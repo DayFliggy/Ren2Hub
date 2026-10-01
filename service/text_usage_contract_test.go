@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func TestTextSettlementRequiresActualTerminalUsage(t *testing.T) {
+func TestTextUsageConfirmationRequiresActualTerminalUsage(t *testing.T) {
 	for _, test := range []struct {
 		name, source                    string
 		stream, terminal, success, want bool
@@ -42,7 +42,7 @@ func TestTextSettlementRequiresActualTerminalUsage(t *testing.T) {
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 			}
 			usage := &dto.Usage{PromptTokens: 1, UsageSource: test.source}
-			assert.Equal(t, test.want, TextUsageReadyForSettlement(ctx, info, usage))
+			assert.Equal(t, test.want, TextUsageConfirmed(ctx, info, usage))
 		})
 	}
 }
@@ -50,11 +50,11 @@ func TestPurePerCallSettlementRequiresTrustedSuccess(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	info := quotedTextInfo(t, billing.PricingValues{"ModelPrice": "0.1"})
 	info.MarkValidOutput()
-	assert.True(t, TextUsageReadyForSettlement(ctx, info, nil))
+	assert.True(t, TextUsageConfirmed(ctx, info, nil))
 	info.IsStream = true
-	assert.False(t, TextUsageReadyForSettlement(ctx, info, nil))
+	assert.False(t, TextUsageConfirmed(ctx, info, nil))
 	ctx.Set("response_termination", types.ResponseTermination{Kind: types.ResponseCompleted})
-	assert.True(t, TextUsageReadyForSettlement(ctx, info, nil))
+	assert.True(t, TextUsageConfirmed(ctx, info, nil))
 }
 
 func TestBinaryAudioPerCallSettlementRequiresCompleteTransport(t *testing.T) {
@@ -65,7 +65,7 @@ func TestBinaryAudioPerCallSettlementRequiresCompleteTransport(t *testing.T) {
 			info.MarkValidOutput()
 			info.StreamStatus = relaycommon.NewStreamStatus()
 			info.StreamStatus.SetEndReason(reason, nil)
-			assert.Equal(t, reason == relaycommon.StreamEndReasonDone, TextUsageReadyForSettlement(ctx, info, nil))
+			assert.Equal(t, reason == relaycommon.StreamEndReasonDone, TextUsageConfirmed(ctx, info, nil))
 		})
 	}
 }
@@ -105,14 +105,14 @@ func TestImagesWithoutTokenUsageRequireConfirmedCountAndTerminal(t *testing.T) {
 	info.BillingRequestInput.ImageCount = &requested
 	info.MarkValidOutput()
 	info.PriceData.Usage = &billing.Usage{Source: "provider_image_count", Complete: true, Quantities: map[string]string{"images": "2"}}
-	assert.True(t, TextUsageReadyForSettlement(ctx, info, &dto.Usage{UsageSource: "missing"}))
+	assert.True(t, TextUsageConfirmed(ctx, info, &dto.Usage{UsageSource: "missing"}))
 	info.IsStream = true
-	assert.False(t, TextUsageReadyForSettlement(ctx, info, &dto.Usage{UsageSource: "missing"}))
+	assert.False(t, TextUsageConfirmed(ctx, info, &dto.Usage{UsageSource: "missing"}))
 	info.StreamStatus = relaycommon.NewStreamStatus()
 	info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
-	assert.True(t, TextUsageReadyForSettlement(ctx, info, &dto.Usage{UsageSource: "missing"}))
+	assert.True(t, TextUsageConfirmed(ctx, info, &dto.Usage{UsageSource: "missing"}))
 	info.PriceData.Usage.Estimated = true
-	assert.False(t, TextUsageReadyForSettlement(ctx, info, &dto.Usage{UsageSource: "missing"}))
+	assert.False(t, TextUsageConfirmed(ctx, info, &dto.Usage{UsageSource: "missing"}))
 }
 
 func TestImageExpressionSettlementRequiresEachActualDimension(t *testing.T) {
@@ -122,17 +122,17 @@ func TestImageExpressionSettlementRequiresEachActualDimension(t *testing.T) {
 			info := quotedTextInfo(t, billing.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": expression})
 			info.MarkValidOutput()
 			actualTokens := &dto.Usage{PromptTokens: 5, UsageSource: "provider"}
-			assert.False(t, TextUsageReadyForSettlement(ctx, info, actualTokens), "request n cannot stand in for an observed image count")
+			assert.False(t, TextUsageConfirmed(ctx, info, actualTokens), "request n cannot stand in for an observed image count")
 			info.PriceData.Usage = &billing.Usage{Source: "provider_image_count", Complete: true, Quantities: map[string]string{"images": "2"}}
-			assert.True(t, TextUsageReadyForSettlement(ctx, info, actualTokens))
-			assert.Equal(t, expression == `v1:tier("images",fixed(0.001)) * image_count`, TextUsageReadyForSettlement(ctx, info, &dto.Usage{UsageSource: "missing"}))
+			assert.True(t, TextUsageConfirmed(ctx, info, actualTokens))
+			assert.Equal(t, expression == `v1:tier("images",fixed(0.001)) * image_count`, TextUsageConfirmed(ctx, info, &dto.Usage{UsageSource: "missing"}))
 			for _, invalid := range []string{"", "0", "1.5", "129"} {
 				info.PriceData.Usage.Quantities["images"] = invalid
-				assert.False(t, TextUsageReadyForSettlement(ctx, info, actualTokens), invalid)
+				assert.False(t, TextUsageConfirmed(ctx, info, actualTokens), invalid)
 			}
 			info.PriceData.Usage.Quantities["images"] = "2"
 			info.PriceData.Usage.Estimated = true
-			assert.False(t, TextUsageReadyForSettlement(ctx, info, actualTokens))
+			assert.False(t, TextUsageConfirmed(ctx, info, actualTokens))
 		})
 	}
 }

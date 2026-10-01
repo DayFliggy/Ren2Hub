@@ -6,15 +6,19 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
+// A successful task whose completion usage cannot be priced settles at its
+// submission estimate. Its terminal result and metrics outbox commit with that
+// intent, and metric delivery retries independently of funds settlement.
 func TestTaskResultEventSurvivesReconciliationAndMetricDeliveryRetry(t *testing.T) {
 	withTaskBillingDatabases(t, func(t *testing.T, db *gorm.DB) {
 		ctx := context.Background()
-		user, token, _, task, _ := newAcceptedTaskFixture(t, db, "terminal-evidence")
+		user, token, _, task, consumption := newAcceptedTaskFixture(t, db, "terminal-evidence")
 		task.Properties.OriginModelName = "result-model"
 		task.PrivateData.PluginRef = &TaskPluginRef{Key: "pinned-plugin", Version: "1.0.0", SourceHash: strings.Repeat("a", 64)}
 		require.NoError(t, db.Model(&Task{}).Where("id = ?", task.ID).Updates(map[string]any{"private_data": task.PrivateData, "properties": task.Properties}).Error)
@@ -24,9 +28,16 @@ func TestTaskResultEventSurvivesReconciliationAndMetricDeliveryRetry(t *testing.
 		task.Data = []byte(`{"output":"completed"}`)
 		task.PrivateData.PluginState = []byte(`{"cursor":"final"}`)
 		task.PrivateData.CompletionUsage = &TaskCompletionUsage{Facts: map[string]any{"seconds": 10.0}, Error: "price requires an unavailable fact"}
-		for range 2 {
-			require.NoError(t, HoldTaskBilling(ctx, &task, from, "task_final_usage_invalid"))
-		}
+		estimate, estimateCharge, err := FrozenTaskBillingEstimate(task.PrivateData.SubmissionRequestID, consumption.AttemptID)
+		require.NoError(t, err)
+		assert.Equal(t, billing.UsageSourceRequestEstimate, estimate.Source)
+		consumption.Usage, consumption.Charge, consumption.Log.Quota = estimate, estimateCharge, estimateCharge.FinalQuota
+		won, err := PersistTaskCompletion(ctx, &task, from, estimateCharge.FinalQuota, consumption)
+		require.NoError(t, err)
+		assert.True(t, won)
+		won, err = PersistTaskCompletion(ctx, &task, from, estimateCharge.FinalQuota, consumption)
+		require.NoError(t, err)
+		assert.False(t, won, "a repeated poll cannot add a second terminal intent")
 		var persisted Task
 		require.NoError(t, db.First(&persisted, task.ID).Error)
 		assert.EqualValues(t, TaskStatusSuccess, persisted.Status)
@@ -70,22 +81,14 @@ func TestTaskResultEventSurvivesReconciliationAndMetricDeliveryRetry(t *testing.
 		assert.EqualValues(t, 30000, metric.TotalLatencyMs)
 		assert.EqualValues(t, 20000, metric.GenerationMs)
 		assert.Zero(t, metric.OutputTokens, "invalid usage is not published as token evidence")
-		var recovery BillingRecovery
-		require.NoError(t, db.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
-		command := BillingResolution{OperationID: "terminal-evidence-resolution", ExpectedVersion: recovery.Version, Action: "settle", Quota: 15, Reason: "verified provider usage"}
-		_, err := ResolveBillingReconciliation(ctx, recovery.ID, 1, command)
-		require.Error(t, err, "a reason and amount do not replace missing actual usage")
-		assertTaskAccountProjection(t, db, user.Id, token.Id, 60, 40, 0)
-		command.Action, command.Quota, command.Reason = "release", 0, "explicitly waive charge because provider usage is unavailable"
 		for range 2 {
-			_, err := ResolveBillingReconciliation(ctx, recovery.ID, 1, command)
-			require.NoError(t, err)
-			require.NoError(t, ApplyBillingRecoveryConsumption(recovery.RequestID))
+			require.NoError(t, Settle(task.PrivateData.SubmissionRequestID, estimateCharge.FinalQuota))
+			require.NoError(t, ApplyBillingRecoveryConsumption(task.PrivateData.SubmissionRequestID))
 			require.NoError(t, RecoverTaskResultMetrics(ctx, 10))
 		}
-		assertTaskAccountProjection(t, db, user.Id, token.Id, 100, 0, 0)
+		assertTaskAccountProjection(t, db, user.Id, token.Id, 70, 0, 30)
 		require.NoError(t, db.First(&persisted, task.ID).Error)
-		assert.Zero(t, persisted.Quota)
+		assert.EqualValues(t, 30, persisted.Quota)
 		assert.EqualValues(t, 7230, persisted.FinishTime)
 		require.NoError(t, db.First(&metric, metric.Id).Error)
 		assert.EqualValues(t, 1, metric.RequestCount)
@@ -96,28 +99,20 @@ func TestTaskResultEventSurvivesReconciliationAndMetricDeliveryRetry(t *testing.
 
 func TestTaskTerminalRejectsChangedPinnedIdentity(t *testing.T) {
 	withTaskBillingDatabases(t, func(t *testing.T, db *gorm.DB) {
-		for _, mode := range []string{"completion", "hold"} {
-			t.Run(mode, func(t *testing.T) {
-				_, _, _, task, consumption := newAcceptedTaskFixture(t, db, "identity-"+mode)
-				task.PrivateData.PluginRef = &TaskPluginRef{Key: "pinned-plugin", Version: "1.0.0", SourceHash: strings.Repeat("a", 64)}
-				require.NoError(t, db.Model(&Task{}).Where("id = ?", task.ID).Update("private_data", task.PrivateData).Error)
-				from := task.Status
-				task.Status, task.Progress = TaskStatusSuccess, "100%"
-				task.PrivateData.PluginRef.Version = "2.0.0"
-				if mode == "completion" {
-					won, err := PersistTaskCompletion(context.Background(), &task, from, 15, consumption)
-					require.ErrorIs(t, err, ErrBillingRecoveryStateConflict)
-					assert.False(t, won)
-				} else {
-					require.ErrorIs(t, HoldTaskBilling(context.Background(), &task, from, "invalid_usage"), ErrBillingRecoveryStateConflict)
-				}
-				var persisted Task
-				require.NoError(t, db.First(&persisted, task.ID).Error)
-				assert.Equal(t, from, persisted.Status)
-				var count int64
-				require.NoError(t, db.Model(&TaskResultEvent{}).Where("task_id = ?", task.ID).Count(&count).Error)
-				assert.Zero(t, count)
-			})
-		}
+		_, _, _, task, consumption := newAcceptedTaskFixture(t, db, "identity-completion")
+		task.PrivateData.PluginRef = &TaskPluginRef{Key: "pinned-plugin", Version: "1.0.0", SourceHash: strings.Repeat("a", 64)}
+		require.NoError(t, db.Model(&Task{}).Where("id = ?", task.ID).Update("private_data", task.PrivateData).Error)
+		from := task.Status
+		task.Status, task.Progress = TaskStatusSuccess, "100%"
+		task.PrivateData.PluginRef.Version = "2.0.0"
+		won, err := PersistTaskCompletion(context.Background(), &task, from, 15, consumption)
+		require.ErrorIs(t, err, ErrBillingRecoveryStateConflict)
+		assert.False(t, won)
+		var persisted Task
+		require.NoError(t, db.First(&persisted, task.ID).Error)
+		assert.Equal(t, from, persisted.Status)
+		var count int64
+		require.NoError(t, db.Model(&TaskResultEvent{}).Where("task_id = ?", task.ID).Count(&count).Error)
+		assert.Zero(t, count)
 	})
 }

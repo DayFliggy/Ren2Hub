@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 )
 
@@ -60,8 +62,8 @@ func BillingRecoveryBatchLimit() int {
 }
 
 // RecoverStaleBillingRecoveries resumes durable accounting after a process
-// restart. Each adjustment is fenced in the immutable BillingEvent,
-// so rerunning this pass cannot apply a balance change twice.
+// restart or a request that ended without settlement. Each adjustment is
+// fenced in the immutable BillingEvent, so rerunning cannot apply it twice.
 func RecoverStaleBillingRecoveries(ctx context.Context, cutoff int64, limit int) (BillingRecoverySummary, error) {
 	var summary BillingRecoverySummary
 	if ctx == nil {
@@ -79,6 +81,10 @@ func RecoverStaleBillingRecoveries(ctx context.Context, cutoff int64, limit int)
 		status, err := recoverOneBillingRecovery(ctx, recovery.RequestID)
 		if err != nil {
 			summary.Failed++
+			logger.LogError(ctx, fmt.Sprintf("billing recovery failed (request_id=%s): %v", recovery.RequestID, err))
+			if deferErr := model.DeferBillingRecovery(recovery.RequestID); deferErr != nil {
+				logger.LogError(ctx, fmt.Sprintf("billing recovery deferral failed (request_id=%s): %v", recovery.RequestID, deferErr))
+			}
 			continue
 		}
 		switch status {
@@ -97,54 +103,34 @@ func recoverOneBillingRecovery(ctx context.Context, requestID string) (string, e
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	var recovery model.BillingRecovery
-	if model.DB == nil {
-		return "", errors.New("billing recovery database is unavailable")
-	}
-	if err := model.DB.WithContext(ctx).Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
+	recovery, err := loadBillingRecovery(requestID)
+	if err != nil {
 		return "", err
-	}
-	if recovery.Source != "wallet" {
-		// Preserve retired-source evidence; never reinterpret it as wallet money.
-		err := model.DB.WithContext(ctx).Model(&model.BillingRecovery{}).
-			Where("request_id = ? AND source <> ?", requestID, "wallet").
-			Updates(map[string]any{"status": model.BillingRecoveryStatusReconciliation, "last_error": model.ErrUnsupportedBillingSource.Error()}).Error
-		if err != nil {
-			return recovery.Status, err
-		}
-		return model.BillingRecoveryStatusReconciliation, model.ErrUnsupportedBillingSource
 	}
 	switch recovery.Status {
 	case model.BillingRecoveryStatusSettlementPending:
-		return recoverBillingSettlement(recovery)
-	case model.BillingRecoveryStatusActive:
-		if recovery.PreConsumeState == model.BillingRecoveryPreConsumePrepared {
-			return model.BillingRecoveryStatusRefunded, model.AbortPreparedBillingRecovery(recovery.RequestID, nil)
-		}
-		if recovery.ConsumptionState == model.BillingRecoveryStateTaskPending {
-			return recovery.Status, nil
-		}
-		if model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
-			return recovery.Status, nil
-		}
-		return recoverBillingRefund(recovery)
+		return recoverBillingSettlement(requestID)
 	case model.BillingRecoveryStatusRefundPending:
-		return recoverBillingRefund(recovery)
+		return recoverBillingRefund(requestID)
 	case model.BillingRecoveryStatusSettled, model.BillingRecoveryStatusRefunded:
-		return recovery.Status, model.ApplyBillingRecoveryConsumption(recovery.RequestID)
+		return recovery.Status, model.ApplyBillingRecoveryConsumption(requestID)
+	case model.BillingRecoveryStatusActive:
+		return recoverActiveBilling(ctx, recovery)
 	default:
-		return recovery.Status, nil
+		return recovery.Status, fmt.Errorf("unsupported billing recovery status %q", recovery.Status)
 	}
 }
 
-func RetryBillingRecovery(ctx context.Context, requestID string) (string, error) {
-	return recoverOneBillingRecovery(ctx, requestID)
+// recoverActiveBilling finishes a stale request from durable evidence alone.
+func recoverActiveBilling(ctx context.Context, recovery model.BillingRecovery) (string, error) {
+	template := model.Log{Content: "恢复任务按发送前估算结算", Other: billingFallbackOther(billingFallbackStale)}
+	return finishActiveBilling(ctx, recovery.RequestID, "", template)
 }
 
-func recoverBillingSettlement(recovery model.BillingRecovery) (string, error) {
-	current, err := loadBillingRecovery(recovery.RequestID)
+func recoverBillingSettlement(requestID string) (string, error) {
+	current, err := loadBillingRecovery(requestID)
 	if err != nil {
-		return recovery.Status, err
+		return "", err
 	}
 	actual, err := common.AddQuota(current.FundingAmount, current.SettlementDelta)
 	if err != nil {
@@ -155,14 +141,28 @@ func recoverBillingSettlement(recovery model.BillingRecovery) (string, error) {
 	}
 	return model.BillingRecoveryStatusSettled, model.ApplyBillingRecoveryConsumption(current.RequestID)
 }
-func recoverBillingRefund(recovery model.BillingRecovery) (string, error) {
-	if err := model.MarkBillingRecoveryAutomaticRefundPending(recovery.RequestID); err != nil {
-		return recovery.Status, err
+
+func recoverBillingRefund(requestID string) (string, error) {
+	if err := model.MarkBillingRecoveryRefundPending(requestID, nil); err != nil {
+		return model.BillingRecoveryStatusActive, err
 	}
-	if err := model.Release(recovery.RequestID); err != nil {
+	return releaseBillingRecovery(requestID)
+}
+
+// releaseUnsentBilling releases a request on recovery's own evidence. The
+// model rechecks under the row lock that no frozen estimate exists.
+func releaseUnsentBilling(requestID string) (string, error) {
+	if err := model.MarkUnsentBillingRecoveryRefundPending(requestID); err != nil {
+		return model.BillingRecoveryStatusActive, err
+	}
+	return releaseBillingRecovery(requestID)
+}
+
+func releaseBillingRecovery(requestID string) (string, error) {
+	if err := model.Release(requestID); err != nil {
 		return model.BillingRecoveryStatusRefundPending, err
 	}
-	return model.BillingRecoveryStatusRefunded, model.ApplyBillingRecoveryConsumption(recovery.RequestID)
+	return model.BillingRecoveryStatusRefunded, model.ApplyBillingRecoveryConsumption(requestID)
 }
 
 func loadBillingRecovery(requestID string) (model.BillingRecovery, error) {

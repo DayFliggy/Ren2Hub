@@ -87,12 +87,13 @@ func TestGatewayMidjourneyUnknownAcceptanceDoesNotReplay(t *testing.T) {
 			var count int64
 			require.NoError(t, model.DB.Model(&model.Midjourney{}).Count(&count).Error)
 			assert.Zero(t, count)
-			assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusActive)
+			// No upstream job identity was returned, so nothing billable exists.
+			assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusRefunded, 0)
 		})
 	}
 }
 
-func TestGatewayMidjourneyInterruptedSubmissionKeepsReservation(t *testing.T) {
+func TestGatewayMidjourneyInterruptedSubmissionReleasesReservation(t *testing.T) {
 	var sends atomic.Int32
 	url, key, _ := setupGatewayMidjourney(t, func(w http.ResponseWriter, r *http.Request) {
 		sends.Add(1)
@@ -104,7 +105,8 @@ func TestGatewayMidjourneyInterruptedSubmissionKeepsReservation(t *testing.T) {
 	code, body := postGatewayTask(t, url, key, "/mj/submit/imagine", `{"prompt":"local fixture"}`)
 	assert.Equal(t, http.StatusBadGateway, code, body)
 	assert.EqualValues(t, 1, sends.Load())
-	assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusActive)
+	// A connection reset after send without a job identity releases funds.
+	assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusRefunded, 0)
 }
 
 func TestGatewayMidjourneyExplicitRejectionRefunds(t *testing.T) {
@@ -119,7 +121,7 @@ func TestGatewayMidjourneyExplicitRejectionRefunds(t *testing.T) {
 			code, body := postGatewayTask(t, url, key, "/mj/submit/imagine", `{"prompt":"local fixture"}`)
 			assert.Equal(t, http.StatusBadRequest, code, body)
 			assert.EqualValues(t, 1, sends.Load())
-			assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusRefunded)
+			assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusRefunded, 0)
 		})
 	}
 }
@@ -167,7 +169,9 @@ func TestGatewayMidjourneyPersistenceAndSettlementRecovery(t *testing.T) {
 			}
 			assert.EqualValues(t, 1, sends.Load())
 			if failure == "task" {
-				assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusActive)
+				// The provider accepted a job that could not be saved; it runs
+				// and is billed at the frozen 500-quota submission estimate.
+				assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusSettled, 500)
 			} else {
 				var task model.Midjourney
 				require.NoError(t, model.DB.First(&task).Error)
@@ -237,6 +241,39 @@ func TestGatewayMidjourneyUploadPreservesArrayAndExtensions(t *testing.T) {
 	require.NoError(t, model.DB.First(&task).Error)
 	assert.Equal(t, "SUCCESS", task.Status)
 	assert.True(t, strings.HasPrefix(task.MjId, "task_"))
+	assertGatewayMidjourneyImmediateSettlement(t, task)
+}
+
+// Upstream code 21 reports a job that already finished. Polling never revisits
+// a SUCCESS row, so submission itself must settle the reservation.
+func TestGatewayMidjourneyExistingSuccessSettlesOnSubmit(t *testing.T) {
+	url, key, _ := setupGatewayMidjourney(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"code":21,"result":"finished-job","properties":{"status":"SUCCESS","imageUrl":"https://fixture.invalid/done.png"}}`)
+	})
+	code, body := postGatewayTask(t, url, key, "/mj/submit/imagine", `{"prompt":"local fixture"}`)
+	require.Equal(t, 200, code, body)
+	assert.Contains(t, body, `"code":1`)
+	var task model.Midjourney
+	require.NoError(t, model.DB.First(&task).Error)
+	assert.Equal(t, "finished-job", task.MjId)
+	assert.Equal(t, "SUCCESS", task.Status)
+	assert.Equal(t, "https://fixture.invalid/done.png", task.ImageUrl)
+	assertGatewayMidjourneyImmediateSettlement(t, task)
+}
+
+func assertGatewayMidjourneyImmediateSettlement(t *testing.T, task model.Midjourney) {
+	t.Helper()
+	require.EqualValues(t, 500, task.Quota, "fixture price is 0.001 USD per job")
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.First(&recovery, "request_id = ?", task.PrivateData.SubmissionRequestID).Error)
+	assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
+	assert.Equal(t, model.BillingRecoveryStateCompleted, recovery.ConsumptionState)
+	var user model.User
+	require.NoError(t, model.DB.First(&user, task.UserId).Error)
+	assert.Zero(t, user.ReservedQuota)
+	assert.EqualValues(t, 500, user.UsedQuota)
+	assert.EqualValues(t, 10000000-500, user.Quota)
+	assert.Equal(t, 1, user.RequestCount)
 }
 
 func TestGatewayMidjourneyExplicitRejectionCanAdvance(t *testing.T) {

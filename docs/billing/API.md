@@ -83,37 +83,19 @@ Token 用量支持 `p/c/len/cr/cc/cc1h/img/img_cr/img_o/ai/ai_cr/ao/reasoning` �
 
 工具价格独立保存为完整 JSON 映射，例如 `{ "key":"tool_price_setting.prices", "value":"{\"web_search\":10}" }`，单位 USD/千次调用。映射内部使用非负有限 JSON 数字。`tool_name:model_prefix*` 按最长前缀覆盖 `tool_name`，显式零有效。初始工具价格为空，声明工具缺价时拒绝发送；实际调用量随冻结工具价格结算。
 
-## 预留、事件和人工对账
+## 预留、事件与结算观察
 
 | 方法与路径 | 权限 | 请求与结果 |
 | --- | --- | --- |
 | GET `/api/billing/self/reservations` | 登录用户 | 当前预留，支持 offset、limit、token_id |
 | GET `/api/billing/self/events` | 登录用户 | 不可变流水，支持 offset、limit、token_id |
-| GET `/api/billing/reconciliations` | Root | 默认待处理列表，支持 status、offset、limit |
-| GET `/api/billing/reconciliations/:id` | Root | recovery、quote、usage、charge、events、attempts、audit、upstream_cost |
-| POST `/api/billing/reconciliations/:id/cost` | Root | 登记已结束请求的尝试成本；不可变、幂等，不修改钱包 |
-| POST `/api/billing/reconciliations/:id/retry` | Root | 重放已保存的处理意图 |
-| POST `/api/billing/reconciliations/:id/resolve` | Root | 人工结算或释放 |
-| GET `/api/billing/metrics` | Root | 待恢复、对账、预留、等待、冲突、恢复失败、欠费事件和执行证据指标 |
+| GET `/api/log/` | 管理员 | 消费日志；`other.charge_result` 为结算费用，`other.admin_info.usage_billing_path` 标明实际、估算或 `frozen_estimate` 依据 |
+| GET `/api/gateway/metrics` | Root | `billing.settlements_total` 按依据计数，`billing_recovery` 为超时未结束记录积压 |
 
-`:id` 为请求 ID，客户端必须 URL 编码。列表返回 `{items,total}`；limit 默认 20、最大 100。预留项包含 `request_id`、`user_id`、`token_id`、`state`、`funding_amount`、`token_amount`、`version`、时间和 `manual_review_required`。
+列表返回 `{items,total}`；limit 默认 20、最大 100。预留项包含 `request_id`、`user_id`、`token_id`、`state`、`funding_amount`、`token_amount`、`version`、时间和 `last_error`。账务不提供人工结算、释放或成本登记接口，每个请求按[结算兜底与恢复](RECOVERY.md)自动结束。
 
-重试请求为 `{ "operation_id":"operator-generated-unique-id", "expected_version":4 }`。人工处理请求：
+求值输入使用 AES-GCM 与 HKDF 加密，绑定请求 ID、真实 attempt、配置哈希及 `estimate/settlement` 阶段。准备结算意图时解密重跑同一计算器，验证报价、用量与费用；不一致时改按冻结估算结算，不根据外部金额补造证据。日志和公开 API 不返回解密请求正文、原始头、密钥或证据密文。稳定 `CRYPTO_SECRET` 与 schema 5 的 `EvidenceKeyID` 必须匹配，见[账务架构](IMPLEMENTATION.md)。
 
-```json
-{
-  "operation_id": "operator-generated-unique-id",
-  "expected_version": 4,
-  "action": "settle",
-  "quota": "127",
-  "reason": "已核对供应商用量，并通过冻结证据重放"
-}
-```
-
-`release` 必须提交 quota `"0"`。`settle` 接受 0 至 2147483647 quota，必须与已有可重放证据一致。理由必填。同一操作 ID、同一内容重试返回原结果；改内容、旧版本、证据不足或已结束记录的新操作返回 409。无效输入 400、无权限 403、记录不存在 404；数据库异常 500，指标查询异常 503，不能显示为零。
-
-求值输入使用 AES-GCM 与 HKDF 加密，绑定请求 ID、真实 attempt、配置哈希及 `estimate/settlement` 阶段。审计解密后重跑同一计算器，验证报价、用量与费用；不一致保持待处理，不根据人工金额补造证据。管理详情、日志和公开 API 不返回解密请求正文、原始头、密钥或证据密文。稳定 `CRYPTO_SECRET` 与 schema 5 的 `EvidenceKeyID` 必须匹配，见[账务架构](IMPLEMENTATION.md)。
-
-资金事务成功后，即使日志库不可用也不会再次扣款；记录保留待投递状态，稍后用 retry 完成投递。管理员设置余额必须携带操作 ID、预期账户版本，通过差额事件记账。支付、兑换和奖励继续维护资格和业务凭据，并与钱包事件使用同一事务。返利额度仍归返利权益账本管理，转入钱包时建立关联事件。
+资金事务成功后，即使日志库不可用也不会再次扣款；记录保留待投递状态，由恢复任务完成投递。管理员设置余额必须携带操作 ID、预期账户版本，通过差额事件记账。支付、兑换和奖励继续维护资格和业务凭据，并与钱包事件使用同一事务。返利额度仍归返利权益账本管理，转入钱包时建立关联事件。
 
 易支付报价、下单、回调和管理员补单遵循[易支付契约](EPAY.md)。不提供用户验付或后台主动查单；异常由外部网关重试通知或管理员核查补单。预期 quota 冻结于订单快照，实际 `credited_quota` 由钱包事件生成；支付金额以人民币分保存和比较，不能从展示设置反推入账额度。

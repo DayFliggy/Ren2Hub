@@ -74,60 +74,97 @@ func TestAmountOnlySettlementCannotBypassFinalEvidence(t *testing.T) {
 	assert.Zero(t, events)
 }
 
+// Evidence is replayed when the settlement intent is prepared. The funds
+// transaction only accepts the stored intent that matches its fingerprint and
+// amount, so a later process or key rotation can still finish the request.
 func TestFinalFundsTransactionReplaysStoredEvidence(t *testing.T) {
-	for _, update := range []map[string]any{
-		{"usage_snapshot": ""},
-		{"charge_snapshot": ""},
-		{"consumption_fingerprint": "changed"},
-		{"charge_snapshot": `{"final_quota":"30","total_usd":"1"}`},
+	for _, tc := range []struct {
+		name   string
+		update map[string]any
+	}{
+		{"missing usage", map[string]any{"usage_snapshot": ""}},
+		{"missing charge", map[string]any{"charge_snapshot": ""}},
+		{"fingerprint mismatch", map[string]any{"consumption_fingerprint": "changed"}},
+		{"tampered charge", map[string]any{"charge_snapshot": `{"final_quota":"30","total_usd":"1"}`}},
+		{"tampered usage", map[string]any{"usage_snapshot": `{"source":"provider","complete":true,"terminal":"completed","quantities":{"calls":"2"}}`}},
+		{"prepared intent after key rotation", nil},
 	} {
-		db := setupBillingRecoveryTestDB(t)
-		seedBillingAccount(t, db, 100, 100, false)
-		newReservation(t, "stored-evidence")
-		require.NoError(t, Reserve("stored-evidence", 40))
-		consumption, err := bindConsumptionEvidence("stored-evidence", BillingConsumption{Log: Log{UserId: 1, TokenId: 1, Quota: 30}})
-		require.NoError(t, err)
-		require.NoError(t, PrepareBillingRecoveryConsumption("stored-evidence", consumption))
-		require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", "stored-evidence").Updates(update).Error)
-		require.Error(t, Settle("stored-evidence", 30))
-		var user User
-		require.NoError(t, db.First(&user, 1).Error)
-		assert.EqualValues(t, 40, user.ReservedQuota)
-		assert.Zero(t, user.UsedQuota)
+		t.Run(tc.name, func(t *testing.T) {
+			db := setupBillingRecoveryTestDB(t)
+			seedBillingAccount(t, db, 100, 100, false)
+			newReservation(t, "stored-evidence")
+			require.NoError(t, Reserve("stored-evidence", 40))
+			consumption, err := bindConsumptionEvidence("stored-evidence", BillingConsumption{Log: Log{UserId: 1, TokenId: 1, Quota: 30}})
+			require.NoError(t, err)
+			require.NoError(t, PrepareBillingRecoveryConsumption("stored-evidence", consumption))
+			var user User
+			if tc.update == nil {
+				t.Setenv("CRYPTO_SECRET", "rotated-after-prepare")
+				require.NoError(t, Settle("stored-evidence", 30))
+				require.NoError(t, db.First(&user, 1).Error)
+				assert.Equal(t, []common.Quota{70, 0, 30}, []common.Quota{user.Quota, user.ReservedQuota, user.UsedQuota})
+				return
+			}
+			require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", "stored-evidence").Updates(tc.update).Error)
+			require.Error(t, Settle("stored-evidence", 30))
+			require.NoError(t, db.First(&user, 1).Error)
+			assert.EqualValues(t, 40, user.ReservedQuota)
+			assert.Zero(t, user.UsedQuota)
+		})
 	}
 }
 
+// A live session's cumulative snapshot can neither be released nor settled
+// while it is collecting. It ends with the exact final usage, or with the last
+// collected snapshot when the session cannot price a newer observation.
 func TestLiveConsumptionKeepsUnknownUsageCollectingUntilFinalEvidence(t *testing.T) {
-	db := setupBillingRecoveryTestDB(t)
-	seedBillingAccount(t, db, 100, 100, false)
-	newReservation(t, "live-final")
-	require.NoError(t, Reserve("live-final", 40))
-	consumption, err := bindConsumptionEvidence("live-final", BillingConsumption{Log: Log{UserId: 1, TokenId: 1, Quota: 30}})
-	require.NoError(t, err)
-	consumption.Usage.Estimated, consumption.Usage.Complete = true, false
-	var attempt BillingAttempt
-	require.NoError(t, db.First(&attempt, "id = ?", consumption.AttemptID).Error)
-	var quote billing.Quote
-	require.NoError(t, common.UnmarshalJsonStr(attempt.Quote, &quote))
-	usage, charge, err := EvaluateBilling(&quote, *consumption.Usage, billingexpr.RequestInput{}, "live-final", consumption.AttemptID, "settlement")
-	require.NoError(t, err)
-	consumption.Usage, consumption.Charge = &usage, charge
-	require.NoError(t, RecordRealtimeBillingConsumption("live-final", consumption))
-	var collecting BillingRecovery
-	require.NoError(t, db.Where("request_id = ?", "live-final").First(&collecting).Error)
-	assert.Equal(t, BillingRecoveryStatusActive, collecting.Status)
-	assert.Equal(t, BillingRecoveryStateUsageCollecting, collecting.ConsumptionState)
-	require.Error(t, PrepareBillingRecoveryConsumption("live-final", consumption))
-	consumption.Usage.Estimated, consumption.Usage.Complete = false, true
-	usage, charge, err = EvaluateBilling(&quote, *consumption.Usage, billingexpr.RequestInput{}, "live-final", consumption.AttemptID, "settlement")
-	require.NoError(t, err)
-	consumption.Usage, consumption.Charge = &usage, charge
-	require.NoError(t, PrepareBillingRecoveryConsumption("live-final", consumption))
-	require.NoError(t, PrepareBillingRecoveryConsumption("live-final", consumption))
-	require.NoError(t, Settle("live-final", consumption.Charge.FinalQuota))
-	require.NoError(t, Settle("live-final", consumption.Charge.FinalQuota))
-	var user User
-	require.NoError(t, db.First(&user, 1).Error)
-	assert.Equal(t, common.Quota(70), user.Quota)
-	assert.Zero(t, user.ReservedQuota)
+	for _, ending := range []string{"exact final usage", "last collected snapshot"} {
+		t.Run(ending, func(t *testing.T) {
+			db := setupBillingRecoveryTestDB(t)
+			seedBillingAccount(t, db, 100, 100, false)
+			newReservation(t, "live-final")
+			require.NoError(t, Reserve("live-final", 40))
+			consumption, err := bindConsumptionEvidence("live-final", BillingConsumption{Log: Log{UserId: 1, TokenId: 1, Quota: 30}})
+			require.NoError(t, err)
+			consumption.Usage.Estimated, consumption.Usage.Complete = true, false
+			var attempt BillingAttempt
+			require.NoError(t, db.First(&attempt, "id = ?", consumption.AttemptID).Error)
+			var quote billing.Quote
+			require.NoError(t, common.UnmarshalJsonStr(attempt.Quote, &quote))
+			usage, charge, err := EvaluateBilling(&quote, *consumption.Usage, billingexpr.RequestInput{}, "live-final", consumption.AttemptID, "settlement")
+			require.NoError(t, err)
+			consumption.Usage, consumption.Charge = &usage, charge
+			require.NoError(t, RecordRealtimeBillingConsumption("live-final", consumption))
+			var collecting BillingRecovery
+			require.NoError(t, db.Where("request_id = ?", "live-final").First(&collecting).Error)
+			assert.Equal(t, BillingRecoveryStatusActive, collecting.Status)
+			assert.Equal(t, BillingRecoveryStateUsageCollecting, collecting.ConsumptionState)
+			assert.ErrorIs(t, MarkBillingRecoveryRefundPending("live-final", nil), ErrBillingRecoveryStateConflict)
+			assert.ErrorIs(t, Settle("live-final", consumption.Charge.FinalQuota), ErrBillingRecoveryStateConflict)
+
+			collected := ending == "last collected snapshot"
+			if collected {
+				require.NoError(t, FinalizeCollectedBillingConsumption("live-final"))
+				require.ErrorIs(t, FinalizeCollectedBillingConsumption("live-final"), ErrNoCollectedBillingUsage)
+			} else {
+				consumption.Usage.Estimated, consumption.Usage.Complete = false, true
+				usage, charge, err = EvaluateBilling(&quote, *consumption.Usage, billingexpr.RequestInput{}, "live-final", consumption.AttemptID, "settlement")
+				require.NoError(t, err)
+				consumption.Usage, consumption.Charge = &usage, charge
+				require.NoError(t, PrepareBillingRecoveryConsumption("live-final", consumption))
+				require.NoError(t, PrepareBillingRecoveryConsumption("live-final", consumption))
+			}
+			require.NoError(t, Settle("live-final", consumption.Charge.FinalQuota))
+			require.NoError(t, Settle("live-final", consumption.Charge.FinalQuota))
+			var user User
+			require.NoError(t, db.First(&user, 1).Error)
+			assert.Equal(t, common.Quota(70), user.Quota)
+			assert.Zero(t, user.ReservedQuota)
+			var settled BillingRecovery
+			require.NoError(t, db.Where("request_id = ?", "live-final").First(&settled).Error)
+			var stored billing.Usage
+			require.NoError(t, common.UnmarshalJsonStr(string(settled.UsageSnapshot), &stored))
+			assert.Equal(t, collected, stored.Estimated, "the charged evidence is the one that ended the session")
+		})
+	}
 }

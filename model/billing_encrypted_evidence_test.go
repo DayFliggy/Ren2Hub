@@ -62,14 +62,15 @@ func TestBillingWrongKeyAndAttemptCannotSettleOrReleaseReservation(t *testing.T)
 	wrong := consumption
 	wrong.AttemptID = "another-attempt"
 	require.Error(t, PrepareBillingRecoveryConsumption("encrypted-request", wrong))
-	require.NoError(t, PrepareBillingRecoveryConsumption("encrypted-request", consumption))
+	// Evidence is authenticated when the settlement intent is prepared.
 	t.Setenv("CRYPTO_SECRET", "wrong-test-key")
-	require.Error(t, Settle("encrypted-request", 30))
+	require.Error(t, PrepareBillingRecoveryConsumption("encrypted-request", consumption))
 	var user User
 	require.NoError(t, db.First(&user, 1).Error)
 	assert.EqualValues(t, 40, user.ReservedQuota)
 	assert.Zero(t, user.UsedQuota)
 	t.Setenv("CRYPTO_SECRET", "billing-test-persistent-key")
+	require.NoError(t, PrepareBillingRecoveryConsumption("encrypted-request", consumption))
 	require.NoError(t, Settle("encrypted-request", 30))
 	require.NoError(t, Settle("encrypted-request", 30))
 	require.NoError(t, db.First(&user, 1).Error)

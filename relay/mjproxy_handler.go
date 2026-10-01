@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -422,6 +424,7 @@ func submitMidjourneyJob(c *gin.Context, info *relaycommon.RelayInfo, action, pr
 	if err != nil {
 		return &response.Response
 	}
+	info.UpstreamTaskAccepted = true
 	result := response.Response
 	now := time.Now().UnixMilli()
 	task := &model.Midjourney{
@@ -430,17 +433,27 @@ func submitMidjourneyJob(c *gin.Context, info *relaycommon.RelayInfo, action, pr
 		SubmitTime: now, Status: "SUBMITTED", Progress: "0%", Quota: common.Quota(info.PriceData.Quota),
 		PrivateData: credential,
 	}
+	immediate := info.RelayMode == relayconstant.RelayModeMidjourneyUpload
 	if result.Code == 21 {
 		if props, ok := result.Properties.(map[string]any); ok && props["status"] == "SUCCESS" {
 			task.ImageUrl, _ = props["imageUrl"].(string)
-			task.Status, task.Progress, task.FinishTime = "SUCCESS", "100%", now
+			immediate = true
 		}
-	}
-	if info.RelayMode == relayconstant.RelayModeMidjourneyUpload {
-		task.Status, task.Progress, task.FinishTime = "SUCCESS", "100%", now
 	}
 	if err := service.FinalizeMidjourneySubmission(c, info, task); err != nil {
 		return service.MidjourneyRequestError(info, errors.New("accepted Midjourney task could not be saved; do not resubmit automatically"), types.ErrorCodeUpdateDataError, http.StatusServiceUnavailable)
+	}
+	// An already finished job completes through the same terminal accounting
+	// as polling; polling never revisits a task stored as SUCCESS.
+	if immediate {
+		from := task.Status
+		task.Status, task.Progress, task.FinishTime = "SUCCESS", "100%", now
+		completionCtx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 30*time.Second)
+		_, err := service.CompleteMidjourneyBilling(completionCtx, task, from)
+		cancel()
+		if err != nil {
+			logger.LogError(c, fmt.Sprintf("Midjourney immediate completion remains pending (row_id=%d): %v", task.Id, err))
+		}
 	}
 	// Preserve extensions and array upload results when normalizing proxy codes.
 	if result.Code == 22 || result.Code == 21 && bill {

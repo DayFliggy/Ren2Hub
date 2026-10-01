@@ -103,7 +103,7 @@ func createTaskCompletionBilling(tx *gorm.DB, _ string, privateData TaskPrivateD
 	if privateData.BillingSource != "wallet" || recovery.Source != "wallet" {
 		return ErrUnsupportedBillingSource
 	}
-	if recovery.UserID != consumption.Log.UserId || recovery.TokenID != privateData.TokenId || (recovery.Status != BillingRecoveryStatusActive && recovery.Status != BillingRecoveryStatusReconciliation) || recovery.ConsumptionState != BillingRecoveryStateTaskPending {
+	if recovery.UserID != consumption.Log.UserId || recovery.TokenID != privateData.TokenId || recovery.Status != BillingRecoveryStatusActive || recovery.ConsumptionState != BillingRecoveryStateTaskPending {
 		return ErrBillingRecoveryStateConflict
 	}
 	consumption.Log.RequestId = recovery.RequestID

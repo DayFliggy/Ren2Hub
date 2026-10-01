@@ -11,7 +11,6 @@ Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`�
 | 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                                   | Admin 和已有权限规则                                                  |
 | 模型管理 | `/models/metadata`、`/models/vendors`、`/models/prefill-groups`                                                                    | Admin，admin capability                                               |
 | 系统     | `/system-settings/:domain/:section?`、`/system-info`                                                                               | Root，admin capability                                                |
-| 账务对账 | `/billing/reconciliations`                                                                                                         | Root，billing_reconciliation capability                               |
 | 延期模块 | 市场、发票、Farm、Bigame、Lab                                                                                                      | 保留源码，capability 未开放时拒绝进入                                 |
 
 普通用户模型目录使用 `/models`，管理 metadata 使用 `/models/metadata`；供应商与预填组路径跳转到模型管理页的对应视图。控制台共享布局，页面路径使用根路径，布局与语言包由 metadata 指定。Admin 为角色值 ≥10，Root 为 ≥100；渠道和工单管理还检查相应资源权限。

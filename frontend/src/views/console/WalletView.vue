@@ -193,25 +193,15 @@ onMounted(() => void loadStats())
       </template>
     </PageHero>
 
-    <dl v-if="auth.user && !hidden" class="mb-6 grid gap-3 sm:grid-cols-3">
+    <dl v-if="auth.user && !hidden" class="mb-6 grid gap-3 sm:grid-cols-2">
       <div
-        v-for="key in [
-          'available_quota',
-          'reserved_quota',
-          'used_quota',
-        ] as const"
+        v-for="key in ['available_quota', 'used_quota'] as const"
         :key="key"
         class="min-w-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
       >
         <dt class="text-xs text-[var(--text-tertiary)]">
           {{
-            t(
-              key === 'available_quota'
-                ? 'billing.available'
-                : key === 'reserved_quota'
-                  ? 'billing.reserved'
-                  : 'billing.used'
-            )
+            t(key === 'available_quota' ? 'billing.available' : 'billing.used')
           }}
         </dt>
         <dd class="mt-2 break-all font-mono text-sm">

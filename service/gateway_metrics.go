@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 )
 
 type gatewayQueueCounters struct {
@@ -63,6 +64,9 @@ type GatewayMetricsSnapshot struct {
 	StateBindingFailures       uint64                       `json:"state_binding_failure_total"`
 	RecoveryScope              string                       `json:"recovery_scope"`
 	Recovery                   model.BillingRecoveryBacklog `json:"billing_recovery"`
+	// Billing counts settlements by evidence basis, the operator view that
+	// replaces per-request reconciliation.
+	Billing billing.OperationalMetrics `json:"billing"`
 }
 
 // Counters belong to this process; the recovery gauge belongs to the shared
@@ -78,6 +82,6 @@ func ReadGatewayMetrics(ctx context.Context) (GatewayMetricsSnapshot, error) {
 		Maintenance: ReadAttemptMaintenanceMetrics(),
 		UserQueue:   gatewayMetrics.user.snapshot(), ChannelQueue: gatewayMetrics.channel.snapshot(),
 		SchemaVersion: 2, Admission: gatewayAdmission.Metrics(), RetryBudget: gatewayRetries.Snapshot(), StateBindingFailures: gatewayMetrics.stateBindingFailures.Load(),
-		RecoveryScope: "database", Recovery: backlog,
+		RecoveryScope: "database", Recovery: backlog, Billing: billing.ReadOperationalMetrics(),
 	}, nil
 }

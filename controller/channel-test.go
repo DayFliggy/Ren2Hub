@@ -516,13 +516,11 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	info.SetEstimatePromptTokens(usage.PromptTokens)
 	info.MarkValidOutput()
 	info.CaptureResponseUsage(usage, "text", nil)
-	if !service.TextUsageReadyForSettlement(c, info, usage) {
-		service.HoldUnconfirmedResponseUsage(c, info, usage)
-		return testResult{context: c, localErr: info.BillingSettlementError, newAPIError: types.NewError(info.BillingSettlementError, types.ErrorCodeModelPriceError)}
-	}
-
 	quota, settleErr := service.PrepareFinalTextCharge(c, info, usage)
 	if settleErr != nil {
+		// The probe consumed provider work; it is billed like a relayed request
+		// while the pricing failure is still reported to the administrator.
+		service.SettleBillingFallback(c, info, "channel_probe_unpriced", settleErr)
 		return testResult{context: c, localErr: settleErr, newAPIError: types.NewError(settleErr, types.ErrorCodeModelPriceError)}
 	}
 	tok := time.Now()

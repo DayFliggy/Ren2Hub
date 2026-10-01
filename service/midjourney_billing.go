@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
@@ -46,7 +45,7 @@ func CompleteMidjourneyBilling(ctx context.Context, task *model.Midjourney, from
 	billingTask := &model.Task{TaskID: task.MjId, Status: model.TaskStatus(task.Status), PrivateData: task.PrivateData}
 	actualQuota, _, _, err := taskCompletionQuota(nil, billingTask, nil)
 	if err != nil {
-		return false, errors.Join(err, model.HoldMidjourneyBilling(ctx, task, fromStatus, "midjourney_final_usage_invalid"))
+		return false, err
 	}
 	username, err := model.GetUsernameById(task.UserId, false)
 	if err != nil {

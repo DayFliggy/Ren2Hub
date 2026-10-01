@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 )
@@ -32,23 +33,22 @@ func settleBillingConsumption(ctx *gin.Context, info *relaycommon.RelayInfo, par
 			}
 		}
 	}
-	// Without a durable calculation/outbox, keep the reservation for recovery.
-	// Wallet settlement must never race ahead of its consumption evidence.
-	var settleErr error
-	if prepareErr == nil && info.Billing != nil {
-		settleErr = SettleBilling(ctx, info, int(params.Quota))
-	}
+	// Wallet settlement never races ahead of its consumption evidence. Evidence
+	// that cannot be persisted falls back to the frozen pre-send estimate.
 	if prepareErr != nil {
-		if session, ok := info.Billing.(*BillingSession); ok {
-			session.mu.Lock()
-			session.settlementStarted = true
-			session.mu.Unlock()
-			session.stopRecoveryHeartbeat()
+		SettleBillingFallback(ctx, info, billingFallbackPrepareFailed, prepareErr)
+		if info.BillingSettlementError != nil {
+			info.BillingSettlementError = errors.Join(prepareErr, info.BillingSettlementError,
+				model.RecordBillingConsumptionPreparationFailure(info.RequestId, prepareErr))
 		}
-		prepareErr = errors.Join(prepareErr, model.RecordBillingConsumptionPreparationFailure(info.RequestId, prepareErr))
+		return
 	}
-	err := errors.Join(prepareErr, settleErr)
+	var err error
+	if info.Billing != nil {
+		err = SettleBilling(ctx, info, int(params.Quota))
+	}
 	if err == nil {
+		billing.RecordSettlement(billing.SettlementBasis(consumption.Usage))
 		err = model.ApplyBillingRecoveryConsumption(info.RequestId)
 	}
 	info.BillingSettlementError = err

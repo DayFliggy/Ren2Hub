@@ -169,7 +169,7 @@ func TestGatewayClaudeEffortProtocolAndIncomingParamBilling(t *testing.T) {
 					replayed, err := model.ReplayBilling(&quote, usage, recovery.RequestID, attempt.ID, "settlement")
 					require.NoError(t, err)
 					assert.Equal(t, charge, *replayed, "frozen quote must ignore later price publication")
-					_, err = service.RetryBillingRecovery(context.Background(), recovery.RequestID)
+					_, err = service.RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+3600, 100)
 					require.NoError(t, err)
 					var afterReplay model.User
 					require.NoError(t, model.DB.First(&afterReplay, before.Id).Error)

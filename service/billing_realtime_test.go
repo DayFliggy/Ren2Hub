@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"net/http/httptest"
 	"testing"
@@ -137,42 +136,22 @@ func TestRealtimeConsumptionRecoveryFinishesAfterLostProcess(t *testing.T) {
 	assert.Zero(t, summary.Scanned)
 }
 
-func TestRealtimeRecoveryRetainsLastUsageUntilSessionOutcomeConfirmed(t *testing.T) {
+// A stale live session settles its last cumulative snapshot; a final report
+// arriving after recovery cannot charge the request a second time.
+func TestRealtimeStaleSessionSettlesLastCumulativeUsage(t *testing.T) {
 	c, info := realtimeBillingSession(t)
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 10}))
 	require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 20}))
-	assert.ErrorIs(t, model.MarkBillingRecoveryRefundPending(info.RequestId, nil), model.ErrBillingRecoveryStateConflict)
+	assert.ErrorIs(t, model.MarkBillingRecoveryRefundPending(info.RequestId, nil), model.ErrBillingRecoveryStateConflict, "collected usage is never released")
 	info.Billing.(*BillingSession).stopRecoveryHeartbeat()
 	summary, err := RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+1, 100)
 	require.NoError(t, err)
-	assert.Zero(t, summary.Settled)
-	assert.Zero(t, summary.Refunded)
-	var user model.User
-	var logs []model.Log
-	var recovery model.BillingRecovery
-	require.NoError(t, model.DB.First(&user, 880).Error)
-	require.NoError(t, model.LOG_DB.Where("request_id = ?", info.RequestId).Find(&logs).Error)
-	require.NoError(t, model.DB.Where("request_id = ?", info.RequestId).First(&recovery).Error)
-	assert.EqualValues(t, 80, user.Quota)
-	assert.EqualValues(t, 20, user.ReservedQuota)
-	assert.Zero(t, user.UsedQuota)
-	assert.Zero(t, user.RequestCount)
-	assert.Empty(t, logs)
-	assert.Equal(t, model.BillingRecoveryStateUsageCollecting, recovery.ConsumptionState)
-	assert.NotEmpty(t, recovery.ConsumptionFingerprint)
-	var savedUsage billing.Usage
-	require.NoError(t, common.UnmarshalJsonStr(string(recovery.UsageSnapshot), &savedUsage))
-	assert.EqualValues(t, 20, savedUsage.InputTokens, "the last known cumulative usage remains available for reconciliation")
+	assert.Equal(t, 1, summary.Settled)
+	assertBillingIntegrationBalances(t, info, 80, 80, 20, 20, 1, 1)
 
 	PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 20, Observation: confirmedRealtimeObservation()}, "confirmed final usage")
 	require.NoError(t, info.BillingSettlementError)
-	require.NoError(t, model.DB.First(&user, 880).Error)
-	require.NoError(t, model.LOG_DB.Where("request_id = ?", info.RequestId).Find(&logs).Error)
-	assert.Zero(t, user.ReservedQuota)
-	assert.EqualValues(t, 20, user.UsedQuota)
-	assert.EqualValues(t, 1, user.RequestCount)
-	require.Len(t, logs, 1)
-	assert.EqualValues(t, 20, logs[0].Quota)
+	assertBillingIntegrationBalances(t, info, 80, 80, 20, 20, 1, 1)
 }
 
 func TestRealtimeUsageRejectsNegativeAndOverflowCounts(t *testing.T) {
@@ -227,25 +206,33 @@ func confirmedRealtimeObservation() *dto.UsageObservation {
 	return &dto.UsageObservation{Source: "provider", Complete: true, Terminal: "completed"}
 }
 
-func TestRealtimeUnknownOrEstimatedUsageNeverSettles(t *testing.T) {
-	for _, observation := range []*dto.UsageObservation{nil,
-		{Source: "estimated", Estimated: true, Complete: true, Terminal: "completed"},
-		{Source: "provider_and_estimated", Estimated: true, Terminal: "unknown"},
-		{Source: "provider", Complete: false, Terminal: "unknown"}} {
-		t.Run(fmt.Sprintf("%v", observation), func(t *testing.T) {
+// Unknown or estimated final usage settles the observed cumulative total once
+// and keeps the unconfirmed label on the settled evidence.
+func TestRealtimeUnconfirmedUsageSettlesObservedTotal(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		observation *dto.UsageObservation
+	}{
+		{"missing observation", nil},
+		{"estimated", &dto.UsageObservation{Source: "estimated", Estimated: true, Complete: true, Terminal: "completed"}},
+		{"partially estimated", &dto.UsageObservation{Source: "provider_and_estimated", Estimated: true, Terminal: "unknown"}},
+		{"incomplete provider", &dto.UsageObservation{Source: "provider", Complete: false, Terminal: "unknown"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			c, info := realtimeBillingSession(t)
 			require.NoError(t, PreWssConsumeQuota(c, info, &dto.RealtimeUsage{InputTokens: 20}))
-			PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 20, Observation: observation}, "")
-			require.Error(t, info.BillingSettlementError)
+			PostWssConsumeQuota(c, info, info.OriginModelName, &dto.RealtimeUsage{InputTokens: 20, Observation: test.observation}, "")
+			require.NoError(t, info.BillingSettlementError)
 			info.Billing.Refund(c)
 			summary, err := RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+1, 100)
 			require.NoError(t, err)
-			require.Zero(t, summary.Settled)
-			require.Zero(t, summary.Refunded)
-			var user model.User
-			require.NoError(t, model.DB.First(&user, info.UserId).Error)
-			require.Zero(t, user.UsedQuota)
-			require.EqualValues(t, 20, user.ReservedQuota)
+			assert.Zero(t, summary.Scanned)
+			assertBillingIntegrationBalances(t, info, 80, 80, 20, 20, 1, 1)
+			var recovery model.BillingRecovery
+			require.NoError(t, model.DB.Where("request_id = ?", info.RequestId).First(&recovery).Error)
+			var settled billing.Usage
+			require.NoError(t, common.UnmarshalJsonStr(string(recovery.UsageSnapshot), &settled))
+			assert.False(t, settled.Confirmed())
 		})
 	}
 }

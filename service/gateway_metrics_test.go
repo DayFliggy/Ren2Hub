@@ -2,13 +2,16 @@ package service
 
 import (
 	"context"
+	"maps"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -42,16 +45,17 @@ func TestGatewayMetricsShareRecoveryPredicateAndLatchStateFailure(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, "instance", before.CounterScope)
 	assert.Equal(t, "database", before.RecoveryScope)
-	assert.Equal(t, int64(7), before.Recovery.Pending)
+	assert.Equal(t, int64(6), before.Recovery.Pending)
 	assert.Equal(t, stale, before.Recovery.OldestUpdated)
+	assert.ElementsMatch(t, []string{billing.SettlementConfirmed, billing.SettlementEstimated, billing.SettlementFrozenEstimate}, slices.Collect(maps.Keys(before.Billing.Settlements)))
 	rows, err := model.ListStaleBillingRecoveries(time.Now().Add(-BillingRecoveryStaleAfter()).Unix(), 100)
 	require.NoError(t, err)
 	requestIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
 		requestIDs = append(requestIDs, row.RequestID)
 	}
-	assert.ElementsMatch(t, []string{"active-stale", "settle-stale", "refund-stale", "log-pending"}, requestIDs,
-		"unconfirmed consumption stays in metrics without occupying automatic recovery batches")
+	assert.ElementsMatch(t, []string{"active-stale", "settle-stale", "refund-stale", "log-pending", "usage-unconfirmed", "usage-partial"}, requestIDs,
+		"recovery batches finish every stale request that metrics report as backlog")
 	encoded, err := common.Marshal(before)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), "active-stale")

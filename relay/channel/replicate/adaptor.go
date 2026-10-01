@@ -207,7 +207,6 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 	a.upload.Header.Set("Content-Type", contentType)
 	a.upload.Header.Del("Content-Length")
 	info.UpstreamSideEffecting = true
-	info.UpstreamPreparationOnly = true
 	if err := info.PrepareUpstreamSend(bytes.NewReader(data)); err != nil {
 		return nil, err
 	}
@@ -233,7 +232,6 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 	request.ContentLength = int64(len(data))
 	request.Header.Del("Content-Length")
 	request.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(data)), nil }
-	info.UpstreamPreparationOnly = false
 	return channel.DoRequest(c, request, info)
 }
 

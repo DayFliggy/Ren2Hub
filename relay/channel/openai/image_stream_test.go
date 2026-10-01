@@ -251,7 +251,7 @@ func TestOpenaiImageStreamHandlerClientDisconnectBillsDeliveredCount(t *testing.
 		[]relaycommon.StreamEndReason{relaycommon.StreamEndReasonClientGone, relaycommon.StreamEndReasonHandlerStop},
 		info.StreamStatus.EndReason)
 	require.Contains(t, recorder.Body.String(), `"b64_json":"first"`)
-	require.Equal(t, "3", info.PriceData.Usage.Quantities["images"], "interruption retains the estimate for reconciliation")
+	require.Equal(t, "3", info.PriceData.Usage.Quantities["images"], "an interrupted stream keeps the requested estimate as its usage")
 	assert.False(t, info.PriceData.Usage.Complete)
 }
 

@@ -47,7 +47,7 @@ func TaskSubmissionReady(ctx context.Context, task *Task) (bool, error) {
 	if recovery.UserID != task.UserId || recovery.TokenID != task.PrivateData.TokenId {
 		return false, ErrBillingRecoveryStateConflict
 	}
-	return (recovery.Status == BillingRecoveryStatusActive || recovery.Status == BillingRecoveryStatusReconciliation) && recovery.ConsumptionState == BillingRecoveryStateTaskPending, nil
+	return recovery.Status == BillingRecoveryStatusActive && recovery.ConsumptionState == BillingRecoveryStateTaskPending, nil
 }
 
 // PersistAcceptedTask saves the provider job and its accounting intent together.

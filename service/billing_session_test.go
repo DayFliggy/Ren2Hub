@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
@@ -31,7 +30,7 @@ func durableSession(t *testing.T, quota int) (*gin.Context, *BillingSession) {
 	require.Nil(t, err)
 	info.Billing = session
 	require.NoError(t, model.PrepareBillingAttempt(context.Background(), info.RequestId, info.RequestId+":attempt", 0, info.PriceData.Quote))
-	estimate, charge, evalErr := model.EvaluateBilling(info.PriceData.Quote, billing.Usage{InputTokens: int64(quota), ContextTokens: int64(quota), Estimated: true}, *info.BillingRequestInput, info.RequestId, info.BillingAttemptID, "estimate")
+	estimate, charge, evalErr := model.EvaluateBilling(info.PriceData.Quote, billing.Usage{InputTokens: int64(quota), ContextTokens: int64(quota), Estimated: true, Source: billing.UsageSourceRequestEstimate}, *info.BillingRequestInput, info.RequestId, info.BillingAttemptID, "estimate")
 	require.NoError(t, evalErr)
 	require.NoError(t, model.PersistBillingEstimate(info.BillingAttemptID, estimate, charge))
 	t.Cleanup(session.stopRecoveryHeartbeat)
@@ -127,14 +126,19 @@ func TestBillingSessionMoreExpensiveRetryMustReserve(t *testing.T) {
 	assert.Equal(t, 20, getUserQuota(t, 1))
 	assert.Equal(t, 0, getTokenUsedQuota(t, 1))
 }
-func TestBillingSessionUnknownAcceptanceKeepsReservation(t *testing.T) {
+
+// Upstream errors, timeouts and resets after send produced no output.
+func TestBillingSessionSentWithoutOutputReleasesReservation(t *testing.T) {
 	c, s := durableSession(t, 40)
 	s.relayInfo.UpstreamSent = true
+	s.relayInfo.UpstreamAccepted = true
 	s.Refund(c)
-	assert.Equal(t, 60, getUserQuota(t, 1))
+	require.NoError(t, s.relayInfo.BillingRefundError)
+	assert.Equal(t, 100, getUserQuota(t, 1))
+	assert.Zero(t, getTokenUsedQuota(t, 1))
 	var r model.BillingRecovery
 	require.NoError(t, model.DB.Where("request_id = ?", s.recoveryID).First(&r).Error)
-	assert.Equal(t, model.BillingRecoveryStatusActive, r.Status)
+	assert.Equal(t, model.BillingRecoveryStatusRefunded, r.Status)
 }
 func TestBillingSessionConfirmedUnsentRelease(t *testing.T) {
 	c, s := durableSession(t, 40)
@@ -145,18 +149,36 @@ func TestBillingSessionConfirmedUnsentRelease(t *testing.T) {
 	assert.False(t, s.NeedsRefund())
 }
 
-func TestBillingSessionAcceptedTaskCannotBeReleasedByContradictoryRejection(t *testing.T) {
-	for _, staleFlag := range []bool{false, true} {
-		t.Run(fmt.Sprintf("rejection_flag_%t", staleFlag), func(t *testing.T) {
+// Delivered output or an accepted async task is billable work: an unfinished
+// request settles at its frozen estimate, even with a contradictory rejection.
+func TestBillingSessionBillableWorkSettlesAtFrozenEstimate(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		setup func(*relaycommon.RelayInfo)
+	}{
+		{"valid output", func(info *relaycommon.RelayInfo) { info.MarkValidOutput() }},
+		{"accepted task", func(info *relaycommon.RelayInfo) { info.UpstreamTaskAccepted = true }},
+		{"accepted task with rejection flag", func(info *relaycommon.RelayInfo) {
+			info.UpstreamTaskAccepted, info.UpstreamRejected = true, true
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			c, s := durableSession(t, 40)
-			s.relayInfo.UpstreamSent = true
-			s.relayInfo.UpstreamAccepted = true
-			s.relayInfo.UpstreamSideEffecting = true
-			s.relayInfo.UpstreamRejected = staleFlag
+			s.relayInfo.UpstreamSent, s.relayInfo.UpstreamAccepted = true, true
+			test.setup(s.relayInfo)
 			c.Set("gateway_last_attempt_outcome", AttemptOutcome{Acceptance: AttemptRejected})
 			s.Refund(c)
+			s.Refund(c)
+			require.NoError(t, s.relayInfo.BillingSettlementError)
+			assert.False(t, s.NeedsRefund())
 			assert.Equal(t, 60, getUserQuota(t, 1))
-			assert.True(t, s.NeedsRefund())
+			assert.Equal(t, 40, getTokenUsedQuota(t, 1))
+			used, requests := getUserUsageAccounting(t, 1)
+			assert.Equal(t, 40, used)
+			assert.Equal(t, 1, requests)
+			var r model.BillingRecovery
+			require.NoError(t, model.DB.Where("request_id = ?", s.recoveryID).First(&r).Error)
+			assert.Equal(t, model.BillingRecoveryStatusSettled, r.Status)
 		})
 	}
 }

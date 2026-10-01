@@ -60,7 +60,10 @@ func postGatewayTask(t *testing.T, url, key, path, body string) (int, string) {
 	return resp.StatusCode, string(data)
 }
 
-func assertGatewaySubmissionBilling(t *testing.T, expectedStatus string) {
+// assertGatewaySubmissionBilling checks that a failed submission holds no
+// funds and that later recovery passes never change the decision. A settled
+// submission charged the frozen estimate; a released one charged nothing.
+func assertGatewaySubmissionBilling(t *testing.T, expectedStatus string, charge common.Quota) {
 	t.Helper()
 	for pass := range 3 {
 		if pass > 0 {
@@ -70,29 +73,20 @@ func assertGatewaySubmissionBilling(t *testing.T, expectedStatus string) {
 		var recovery model.BillingRecovery
 		require.NoError(t, model.DB.First(&recovery).Error)
 		assert.Equal(t, expectedStatus, recovery.Status)
-		fundingHeld, tokenHeld := int(recovery.FundingAmount), int(recovery.TokenAmount)
-		if expectedStatus == model.BillingRecoveryStatusRefunded {
-			assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
-			assert.NotEmpty(t, recovery.FinalEventID)
-			fundingHeld, tokenHeld = 0, 0
-		} else {
-			assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
-			assert.Positive(t, fundingHeld)
-			var refunds int64
-			require.NoError(t, model.DB.Model(&model.BillingEvent{}).
-				Where("request_id = ? AND operation = ?", recovery.RequestID, model.BillingRecoveryOperationRefund).Count(&refunds).Error)
-			assert.Zero(t, refunds)
-		}
+		assert.NotEmpty(t, recovery.FinalEventID)
 		var user model.User
 		var token model.Token
 		require.NoError(t, model.DB.First(&user, recovery.UserID).Error)
 		require.NoError(t, model.DB.First(&token, recovery.TokenID).Error)
-		assert.EqualValues(t, 10000000-fundingHeld, user.Quota)
-		assert.Zero(t, user.RequestCount)
-		assert.Zero(t, user.UsedQuota)
+		assert.Equal(t, 10000000-charge, user.Quota)
+		assert.Equal(t, charge, user.UsedQuota)
+		assert.Zero(t, user.ReservedQuota)
 		assert.Zero(t, token.RemainQuota, "unlimited token has no debited balance")
-		assert.Zero(t, token.UsedQuota)
-		assert.EqualValues(t, tokenHeld, token.ReservedQuota)
+		assert.Zero(t, token.ReservedQuota)
+		var settlements int64
+		require.NoError(t, model.DB.Model(&model.BillingEvent{}).
+			Where("request_id = ? AND operation = ?", recovery.RequestID, model.BillingRecoveryOperationSettle).Count(&settlements).Error)
+		assert.Equal(t, charge > 0, settlements == 1)
 	}
 }
 
@@ -150,7 +144,9 @@ func TestGatewayTaskPersistenceFailureDoesNotExposeSuccessOrReplay(t *testing.T)
 	var count int64
 	require.NoError(t, model.DB.Model(&model.Task{}).Count(&count).Error)
 	assert.Zero(t, count)
-	assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusActive)
+	// The provider accepted a job that could not be saved; it runs and is
+	// billed at the frozen 500-quota submission estimate.
+	assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusSettled, 500)
 }
 
 func TestGatewayTaskSettlementFailureKeepsTaskAndRecoversOnce(t *testing.T) {
@@ -179,8 +175,10 @@ func TestGatewayTaskSettlementFailureKeepsTaskAndRecoversOnce(t *testing.T) {
 	won, err := model.PersistTaskCompletion(context.Background(), &task, from, task.Quota, model.BillingConsumption{AttemptID: task.PrivateData.BillingContext.AttemptID, Log: model.Log{UserId: task.UserId, TokenId: task.PrivateData.TokenId, ChannelId: task.ChannelId, Quota: charge.FinalQuota}, Usage: usage, Charge: charge, CountUsage: true, LogEnabled: true})
 	require.NoError(t, err)
 	require.True(t, won)
-	_, err = service.RetryBillingRecovery(context.Background(), task.PrivateData.SubmissionRequestID)
-	require.ErrorIs(t, err, assert.AnError)
+	summary, err := service.RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+3600, 10)
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.Failed, "the injected settlement failure surfaces in recovery")
+	assert.Zero(t, summary.Settled)
 
 	var recovery model.BillingRecovery
 	require.NoError(t, model.DB.First(&recovery).Error)
@@ -270,7 +268,8 @@ func TestGatewayTaskUnknownAcceptanceIsNotReplayed(t *testing.T) {
 			code, _ := postGatewayTask(t, url, key, "/v1/videos", `{"model":"sora-2","prompt":"local fixture"}`)
 			assert.GreaterOrEqual(t, code, 400)
 			assert.EqualValues(t, 1, sends.Load())
-			assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusActive)
+			// Without an accepted job identity nothing billable exists.
+			assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusRefunded, 0)
 		})
 	}
 }
@@ -285,7 +284,7 @@ func TestGatewayTaskExplicitRejectionRefunds(t *testing.T) {
 	code, body := postGatewayTask(t, url, key, "/v1/videos", `{"model":"sora-2","prompt":"local fixture"}`)
 	assert.Equal(t, http.StatusBadRequest, code, body)
 	assert.EqualValues(t, 1, sends.Load())
-	assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusRefunded)
+	assertGatewaySubmissionBilling(t, model.BillingRecoveryStatusRefunded, 0)
 }
 
 func TestGatewayTaskProviderRPMRejectsBeforeBilling(t *testing.T) {

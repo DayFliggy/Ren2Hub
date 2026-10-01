@@ -18,7 +18,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGatewayFactoryCompletionFactsProtectReservedFunds(t *testing.T) {
+// Valid completion facts settle from the frozen quote; unpriceable facts of a
+// successful task settle at the submission estimate instead of holding funds.
+func TestGatewayFactoryCompletionFactsSettleSuccessfulTasks(t *testing.T) {
 	for _, test := range []struct {
 		name, key, model, expression, submit, completion string
 		channelType                                      int
@@ -68,12 +70,7 @@ func TestGatewayFactoryCompletionFactsProtectReservedFunds(t *testing.T) {
 				require.Empty(t, result.UsageError)
 			}
 			for range 2 {
-				err := service.CompleteImmediateTask(context.Background(), &task, result)
-				if test.invalid {
-					require.ErrorContains(t, err, "reconciliation required")
-				} else {
-					require.NoError(t, err)
-				}
+				require.NoError(t, service.CompleteImmediateTask(context.Background(), &task, result))
 			}
 			var user model.User
 			var token model.Token
@@ -81,21 +78,21 @@ func TestGatewayFactoryCompletionFactsProtectReservedFunds(t *testing.T) {
 			require.NoError(t, model.DB.First(&user, task.UserId).Error)
 			require.NoError(t, model.DB.First(&token, task.PrivateData.TokenId).Error)
 			require.NoError(t, model.DB.First(&recovery, "request_id = ?", task.PrivateData.SubmissionRequestID).Error)
-			wantReserved, wantSettlements := common.Quota(0), int64(1)
+			// Confirmed zero usage costs nothing; unpriceable facts cost the
+			// reserved submission estimate.
+			wantCharge := common.Quota(0)
 			if test.invalid {
-				wantReserved, wantSettlements = reserved, 0
-				assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
-			} else {
-				assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
+				wantCharge = reserved
 			}
-			assert.Equal(t, wantReserved, user.ReservedQuota)
-			assert.Equal(t, wantReserved, token.ReservedQuota)
-			assert.Equal(t, common.Quota(10000000)-wantReserved, user.Quota)
-			assert.Zero(t, user.UsedQuota)
-			assert.Zero(t, token.UsedQuota)
+			assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
+			assert.Zero(t, user.ReservedQuota)
+			assert.Zero(t, token.ReservedQuota)
+			assert.Equal(t, common.Quota(10000000)-wantCharge, user.Quota)
+			assert.Equal(t, wantCharge, user.UsedQuota)
+			assert.Equal(t, wantCharge, token.UsedQuota)
 			var count int64
 			require.NoError(t, model.DB.Model(&model.BillingEvent{}).Where("request_id = ? AND operation = ?", task.PrivateData.SubmissionRequestID, "settle").Count(&count).Error)
-			assert.Equal(t, wantSettlements, count)
+			assert.EqualValues(t, 1, count)
 			require.NoError(t, model.DB.Model(&model.BillingEvent{}).Where("request_id = ? AND operation = ?", task.PrivateData.SubmissionRequestID, "release").Count(&count).Error)
 			assert.Zero(t, count)
 			require.NoError(t, model.DB.Model(&model.TaskResultEvent{}).Where("task_id = ?", task.ID).Count(&count).Error)

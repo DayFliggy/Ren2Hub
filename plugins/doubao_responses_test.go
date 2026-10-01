@@ -559,12 +559,12 @@ func TestDoubaoImageResults(t *testing.T) {
 		assert.Equal(t, map[string]any{"images_up_to_1_5k": "1", "images_above_1_5k": "0", "input_images": "2"}, immediate.UsageFacts)
 	})
 
-	t.Run("invalid completion counts retain the reservation", func(t *testing.T) {
+	t.Run("invalid completion counts settle at the submission estimate", func(t *testing.T) {
 		for _, count := range []any{-1, 0, 1.5, 99, "2", 3} {
 			payload := map[string]any{"data": []any{map[string]any{"url": first, "size": "2048x2048"}}, "usage": map[string]any{"generated_images": count}}
 			immediate := parseResponse(t, lite, groupRequest, payload)
 			assert.Equal(t, "SUCCESS", immediate.Status)
-			assert.Nil(t, immediate.UsageFacts, "count %v must not replace the reservation", count)
+			assert.Nil(t, immediate.UsageFacts, "count %v is not settlement evidence; the host charges the submission estimate", count)
 		}
 	})
 

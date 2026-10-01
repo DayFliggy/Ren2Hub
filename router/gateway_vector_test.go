@@ -116,13 +116,15 @@ func TestGatewayVectorAccountingAndRequestBoundaries(t *testing.T) {
 					assert.Zero(t, sends.Load())
 				} else {
 					assert.EqualValues(t, 1, sends.Load())
+					// Delivered JSON settles; an invalid response is never
+					// delivered, so its reservation is released.
 					require.Eventually(t, func() bool {
 						var recovery model.BillingRecovery
 						if model.DB.First(&recovery).Error != nil {
 							return false
 						}
-						return model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) && scenario.status == http.StatusBadGateway || (recovery.Status == model.BillingRecoveryStatusSettled && recovery.ConsumptionState == model.BillingRecoveryStateCompleted)
-					}, 2*time.Second, 10*time.Millisecond, "logical request must finish settlement after delivering the JSON response")
+						return recovery.ConsumptionState == model.BillingRecoveryStateCompleted && (recovery.Status == model.BillingRecoveryStatusSettled || recovery.Status == model.BillingRecoveryStatusRefunded)
+					}, 2*time.Second, 10*time.Millisecond, "logical request must finish accounting")
 				}
 				var user model.User
 				var token model.Token
@@ -133,15 +135,11 @@ func TestGatewayVectorAccountingAndRequestBoundaries(t *testing.T) {
 					charged = 500
 				}
 				assert.EqualValues(t, charged, user.UsedQuota)
-				held := 0
-				if scenario.status == http.StatusBadGateway {
-					held = 500
-				}
-				assert.EqualValues(t, held, user.ReservedQuota)
-				assert.EqualValues(t, 10000000-charged-held, user.Quota)
+				assert.Zero(t, user.ReservedQuota)
+				assert.EqualValues(t, 10000000-charged, user.Quota)
 				assert.EqualValues(t, charged, token.UsedQuota)
-				assert.EqualValues(t, 1000000-charged-held, token.RemainQuota)
-				assert.EqualValues(t, held, token.ReservedQuota)
+				assert.EqualValues(t, 1000000-charged, token.RemainQuota)
+				assert.Zero(t, token.ReservedQuota)
 				var failures int64
 				require.NoError(t, model.DB.Model(&model.ChannelHealth{}).Where("failure_count > 0").Count(&failures).Error)
 				assert.Equal(t, scenario.status == http.StatusBadGateway, failures > 0)
@@ -152,12 +150,12 @@ func TestGatewayVectorAccountingAndRequestBoundaries(t *testing.T) {
 					return
 				}
 				require.Len(t, recoveries, 1)
+				wantStatus := model.BillingRecoveryStatusRefunded
 				if scenario.status == http.StatusOK {
-					assert.Equal(t, model.BillingRecoveryStatusSettled, recoveries[0].Status)
-					assert.Equal(t, model.BillingRecoveryStateCompleted, recoveries[0].ConsumptionState)
-				} else {
-					assert.True(t, model.BillingRecoveryUsageUnconfirmed(recoveries[0].ConsumptionState))
+					wantStatus = model.BillingRecoveryStatusSettled
 				}
+				assert.Equal(t, wantStatus, recoveries[0].Status)
+				assert.Equal(t, model.BillingRecoveryStateCompleted, recoveries[0].ConsumptionState)
 			})
 		}
 	}

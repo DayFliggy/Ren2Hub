@@ -93,21 +93,9 @@ func taskModelName(task *model.Task) string {
 
 // completeTaskBilling keeps provider completion separate from recoverable
 // accounting. Once the intent commits, polling must never replay the job.
-func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model.TaskStatus, actualQuota common.Quota, reason string, clamps ...*common.QuotaClamp) (won bool, completionErr error) {
-	defer func() {
-		if completionErr == nil || won {
-			return
-		}
-		// A failed accounting preparation cannot erase confirmed provider
-		// completion. Preserve it with the reservation for reconciliation.
-		holdErr := model.HoldTaskBilling(ctx, task, fromStatus, "task_terminal_accounting_pending")
-		completionErr = errors.Join(completionErr, holdErr)
-		if holdErr == nil {
-			if err := model.DeliverTaskResultMetrics(ctx, task.ID); err != nil {
-				logger.LogError(ctx, fmt.Sprintf("task result metrics remain pending (task_id=%s): %v", task.TaskID, err))
-			}
-		}
-	}()
+// A failed completion transaction leaves the task non-terminal, so the next
+// poll or the timeout sweep finishes it.
+func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model.TaskStatus, actualQuota common.Quota, reason string, clamps ...*common.QuotaClamp) (bool, error) {
 	other := taskBillingOther(task)
 	other["task_id"], other["reason"] = task.TaskID, reason
 	other["pre_consumed_quota"], other["actual_quota"] = task.Quota, actualQuota
@@ -137,9 +125,12 @@ func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model
 		consumption.AttemptID = snapshot.AttemptID
 		consumption.Usage, consumption.Charge = snapshot.Usage, snapshot.Charge
 	}
-	won, err = model.PersistTaskCompletion(ctx, task, fromStatus, actualQuota, consumption)
+	won, err := model.PersistTaskCompletion(ctx, task, fromStatus, actualQuota, consumption)
 	if err != nil || !won {
 		return won, err
+	}
+	if task.Status == model.TaskStatusSuccess {
+		billing.RecordSettlement(billing.SettlementBasis(consumption.Usage))
 	}
 	if err := model.DeliverTaskResultMetrics(ctx, task.ID); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("task result metrics remain pending (task_id=%s): %v", task.TaskID, err))
@@ -154,26 +145,39 @@ func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model
 }
 
 // taskCompletionQuota never accepts an adaptor-computed monetary value. A
-// completed task consumes its accepted quote and the provider's usage facts.
+// completed task consumes its accepted quote and the provider's usage facts;
+// when those facts cannot be priced it consumes its submission estimate.
 func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relaycommon.TaskInfo) (common.Quota, string, *common.QuotaClamp, error) {
 	if task.Status == model.TaskStatusFailure {
 		return 0, task.FailReason, nil, nil
 	}
+	quota, err := actualTaskCompletionQuota(task, result)
+	if err == nil {
+		return quota, "按冻结报价结算", nil, nil
+	}
+	quota, estimateErr := frozenTaskCompletionQuota(task)
+	if estimateErr != nil {
+		return 0, "", nil, errors.Join(err, estimateErr)
+	}
+	return quota, "完成用量无法计价，按提交时估算结算", nil, nil
+}
+
+func actualTaskCompletionQuota(task *model.Task, result *relaycommon.TaskInfo) (common.Quota, error) {
 	snapshot := task.PrivateData.BillingContext
 	if snapshot == nil || snapshot.Quote == nil || snapshot.Usage == nil {
-		return 0, "", nil, fmt.Errorf("task %s has no frozen billing quote; reconciliation required", task.TaskID)
+		return 0, fmt.Errorf("task %s has no frozen billing quote", task.TaskID)
 	}
 	usage := billing.Usage{Source: "task_completed", Terminal: "completed", Complete: true, Quantities: map[string]string{"calls": "1"}}
 	version := snapshot.Quote.PriceVersion
 	if result != nil && result.UsageError != "" {
-		return 0, "", nil, fmt.Errorf("plugin completion usage unavailable; reconciliation required")
+		return 0, fmt.Errorf("plugin completion usage unavailable")
 	}
 	if result != nil && (result.TotalTokens < 0 || result.CompletionTokens < 0 || result.CompletionTokens > result.TotalTokens) {
-		return 0, "", nil, fmt.Errorf("invalid task token usage")
+		return 0, fmt.Errorf("invalid task token usage")
 	}
 	if version.NeedsTokenUsage() {
 		if result == nil || result.TotalTokens == 0 {
-			return 0, "", nil, fmt.Errorf("task token usage unavailable; reconciliation required")
+			return 0, fmt.Errorf("task token usage unavailable")
 		}
 		usage.OutputTokens = int64(result.CompletionTokens)
 		usage.InputTokens = int64(result.TotalTokens - result.CompletionTokens)
@@ -181,33 +185,46 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 	}
 	input := billingexpr.RequestInput{}
 	if version.TaskUsage {
-		if result == nil || result.UsageError != "" {
-			return 0, "", nil, fmt.Errorf("plugin completion usage unavailable; reconciliation required")
+		if result == nil {
+			return 0, fmt.Errorf("plugin completion usage unavailable")
 		}
 		usage.ActualFacts = result.UsageFacts
 		var err error
 		input.Usage, err = TaskExpressionUsage(result.UsageFacts, version.UsageSchema)
 		if err != nil {
-			return 0, "", nil, err
+			return 0, err
 		}
 	}
 	var charge *billing.ChargeResult
 	var err error
-	if snapshot.Usage.ReadyForSettlement() && snapshot.Charge != nil {
+	if snapshot.Usage.Confirmed() && snapshot.Charge != nil {
 		usage, charge, err = replayIdenticalBillingUsage(snapshot.Quote, *snapshot.Usage, usage, task.PrivateData.SubmissionRequestID, snapshot.AttemptID)
 	} else {
 		usage, charge, err = model.EvaluateBilling(snapshot.Quote, usage, input, task.PrivateData.SubmissionRequestID, snapshot.AttemptID, "settlement")
 	}
 	if err != nil {
-		return 0, "", nil, err
+		return 0, err
 	}
 	snapshot.Usage = &usage
 	snapshot.Charge = charge
-	return charge.FinalQuota, "按冻结报价结算", nil, nil
+	return charge.FinalQuota, nil
+}
+
+func frozenTaskCompletionQuota(task *model.Task) (common.Quota, error) {
+	snapshot := task.PrivateData.BillingContext
+	if snapshot == nil {
+		return 0, model.ErrBillingEstimateMissing
+	}
+	usage, charge, err := model.FrozenTaskBillingEstimate(task.PrivateData.SubmissionRequestID, snapshot.AttemptID)
+	if err != nil {
+		return 0, err
+	}
+	snapshot.Usage, snapshot.Charge = usage, charge
+	return charge.FinalQuota, nil
 }
 
 // CompleteImmediateTask uses exactly the same durable terminal accounting as
-// polling. An invalid completion retains its reservation for reconciliation.
+// polling, including the submission-estimate fallback.
 func CompleteImmediateTask(ctx context.Context, task *model.Task, result *relaycommon.TaskInfo) error {
 	if result == nil || (result.Status != string(model.TaskStatusSuccess) && result.Status != string(model.TaskStatusFailure)) {
 		return fmt.Errorf("immediate task requires an explicit terminal status")
@@ -227,12 +244,6 @@ func CompleteImmediateTask(ctx context.Context, task *model.Task, result *relayc
 	}
 	quota, reason, clamp, err := taskCompletionQuota(nil, task, result)
 	if err != nil {
-		if holdErr := model.HoldTaskBilling(ctx, task, from, "task_final_usage_invalid"); holdErr != nil {
-			return fmt.Errorf("%w; retain reservation: %v", err, holdErr)
-		}
-		if metricErr := model.DeliverTaskResultMetrics(ctx, task.ID); metricErr != nil {
-			logger.LogError(ctx, fmt.Sprintf("task result metrics remain pending (task_id=%s): %v", task.TaskID, metricErr))
-		}
 		return err
 	}
 	_, err = completeTaskBilling(ctx, task, from, quota, reason, clamp)

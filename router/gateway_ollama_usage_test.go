@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,10 +25,12 @@ func TestGatewayOllamaUsagePresenceAccounting(t *testing.T) {
 		known        bool
 		charge       common.Quota
 	}{
+		// "p * 2 + c * 4" in quota is half the sum. Unconfirmed counters still
+		// settle as the best evidence: 5 prompt tokens cost 5, 7 output tokens 14.
 		{"missing", "", false, 0},
 		{"null", `,"prompt_eval_count":null,"eval_count":null`, false, 0},
-		{"missing_output", `,"prompt_eval_count":5`, false, 0},
-		{"missing_input", `,"eval_count":7`, false, 0},
+		{"missing_output", `,"prompt_eval_count":5`, false, 5},
+		{"missing_input", `,"eval_count":7`, false, 14},
 		{"zero", `,"prompt_eval_count":0,"eval_count":0`, true, 0},
 		{"complete", `,"prompt_eval_count":5,"eval_count":7`, true, 19},
 	} {
@@ -69,31 +72,23 @@ func TestGatewayOllamaUsagePresenceAccounting(t *testing.T) {
 				require.NoError(t, model.DB.First(&recovery).Error)
 				require.NoError(t, model.DB.First(&user, 1).Error)
 				require.NoError(t, model.DB.First(&token, 1).Error)
-				held := common.Quota(reservedAtSend.Load())
-				if test.known {
-					assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
-					assert.Equal(t, model.BillingRecoveryStateCompleted, recovery.ConsumptionState)
-					held = 0
-				} else {
-					assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
-					assert.True(t, model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState))
-					assert.Zero(t, held, "unknown provider usage retains reconciliation even with a zero estimate")
-				}
+				assert.Zero(t, reservedAtSend.Load())
+				assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
+				assert.Equal(t, model.BillingRecoveryStateCompleted, recovery.ConsumptionState)
 				assert.Equal(t, test.charge, user.UsedQuota)
-				assert.Equal(t, held, user.ReservedQuota)
-				assert.EqualValues(t, 10000000-test.charge-held, user.Quota)
+				assert.Zero(t, user.ReservedQuota)
+				assert.EqualValues(t, 10000000-test.charge, user.Quota)
 				assert.Equal(t, test.charge, token.UsedQuota)
-				assert.Equal(t, held, token.ReservedQuota)
-				assert.EqualValues(t, 1000000-test.charge-held, token.RemainQuota)
+				assert.Zero(t, token.ReservedQuota)
+				assert.EqualValues(t, 1000000-test.charge, token.RemainQuota)
 				var settled, released int64
 				require.NoError(t, model.DB.Model(&model.BillingEvent{}).Where("request_id = ? AND operation = ?", recovery.RequestID, "settle").Count(&settled).Error)
 				require.NoError(t, model.DB.Model(&model.BillingEvent{}).Where("request_id = ? AND operation = ?", recovery.RequestID, "release").Count(&released).Error)
-				assert.Zero(t, released, "accepted generation must never be automatically released")
-				if test.known {
-					assert.EqualValues(t, 1, settled)
-				} else {
-					assert.Zero(t, settled, "unconfirmed usage must not settle, even at zero")
-				}
+				assert.Zero(t, released, "delivered generation is billed, never released")
+				assert.EqualValues(t, 1, settled)
+				var usage billing.Usage
+				require.NoError(t, common.UnmarshalJsonStr(string(recovery.UsageSnapshot), &usage))
+				assert.Equal(t, test.known, usage.Confirmed(), "only provider counters label the charge as confirmed")
 			})
 		}
 	}

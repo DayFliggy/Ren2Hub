@@ -54,10 +54,14 @@ func TestFinalConsumptionRequiresBoundImmutableAttempt(t *testing.T) {
 	consumption.Log.ChannelId = 8
 	require.ErrorContains(t, PrepareBillingRecoveryConsumption("bound-attempt", consumption), "frozen billing attempt is missing")
 	consumption.Log.ChannelId = 7
-	require.NoError(t, PrepareBillingRecoveryConsumption("bound-attempt", consumption))
-	// Simulate a damaged stored attempt after evidence preparation.
+	// The intent is replayed against its attempt when prepared; a damaged
+	// stored attempt cannot back a settlement intent.
 	require.NoError(t, db.Model(&BillingAttempt{}).Where("request_id = ?", "bound-attempt").Update("fingerprint", "changed").Error)
-	require.ErrorIs(t, Settle("bound-attempt", 30), ErrBillingEventConflict)
+	require.ErrorIs(t, PrepareBillingRecoveryConsumption("bound-attempt", consumption), ErrBillingEventConflict)
+	var recovery BillingRecovery
+	require.NoError(t, db.First(&recovery, "request_id = ?", "bound-attempt").Error)
+	assert.Equal(t, BillingRecoveryStatusActive, recovery.Status)
+	assert.Empty(t, recovery.ConsumptionSnapshot)
 	var user User
 	require.NoError(t, db.First(&user, 1).Error)
 	assert.Equal(t, common.Quota(40), user.ReservedQuota)
