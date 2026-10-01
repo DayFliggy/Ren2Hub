@@ -28,8 +28,14 @@ GET /api/option/model_pricing 返回 entries、options、empty_version；PATCH �
 
 公开 /api/pricing 使用上游扁平模型定价字段，Vue 公开价格页和模型目录共享解释；表达式显示原式，不伪造固定 Token 单价。每千/每百万 Token 切换只改变显示尺度。渠道售价倍率由后端应用一次；前端不再管理独立渠道价格、活动 PriceVersion 指针、来源证据发布或定时自动发布。账务执行仍保存冻结计价配置和加密求值证据，用于实际结算与恢复。
 
+## 已保存的计费结果
+
+日志详情只展示已保存的 `charge_result`，不读取当前价格重算。解析器校验金额、数量、版本组合和追踪字段；当前普通费用使用 `newapi-c71eefbc-v1 / newapi-v1`，当前违规费用保留 `newapi-c71eefbc-v1 / half-up-positive-minimum-v1`，历史 `billing-v3 / half-up-positive-minimum-v1` 只用于读取。未知或错配版本明确显示证据无效，缺失结果与畸形结果分别展示，不补成零费用。
+
+金额字段保持规范十进制字符串；只有费用调整差额和舍入差额允许负号。表达式追踪的规则倍率沿用后端 `FormatFloat('g')` 输出，允许有限正指数形式，保留原字符串且不用于重算金额。图片计数范围为 1–128，规则是否命中必须为布尔值，非法追踪不能被默认值隐藏。
+
 ## 验证边界
 
-前端金额测试应覆盖 int64 边界、超过 JavaScript 安全整数的输入、溢出、舍入、严格 API 字段、不可变价格发布和路由权限。可按[前端文档](../README.md)的顺序运行 Vitest、类型检查、lint、格式检查和生产构建；涉及页面时再运行 Playwright 桌面/移动端与明暗主题用例。
+前端金额测试应覆盖 int64 边界、超过 JavaScript 安全整数的输入、溢出、舍入、严格 API 字段、价格草稿保存、版本冲突和路由权限。可按[前端文档](../README.md)的顺序运行 Vitest、类型检查、lint、格式检查和生产构建；涉及页面时再运行 Playwright 桌面/移动端与明暗主题用例。
 
 浏览器用例可以拦截符合真实 wire contract 的 API 形状，用于验证展示、请求参数、错误状态、409 重试身份、权限和布局；它们不替代主数据库事务、真实支付回调或三库集成验证。主数据库与计费接口见[计费 API](../../docs/billing/API.md)，服务端验证范围见[计费验证](../../docs/billing/VALIDATION.md)。

@@ -3,7 +3,7 @@
  * NewAPI model management: "Models" (/models/metadata) and "Vendors"
  * (/models/vendors) sections. The retired Deployments section is not shown.
  */
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { AlertCircle, List, Plus, RefreshCw } from 'lucide-vue-next'
@@ -35,6 +35,15 @@ const editingId = ref<number | null>(null)
 const initialName = ref('')
 const syncOpen = ref(false)
 const missingOpen = ref(false)
+
+// Both sections reuse this view. Only a committed navigation may discard
+// the editor; canceled or busy navigation leaves its section unchanged.
+watch(
+  () => props.section,
+  () => {
+    drawerOpen.value = false
+  }
+)
 
 const tabs = computed(() => [
   { key: 'metadata', label: t('models') },

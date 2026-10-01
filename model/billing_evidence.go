@@ -97,6 +97,13 @@ func PersistBillingEstimate(attemptID string, usage billing.Usage, charge *billi
 		if recovery.Status != BillingRecoveryStatusActive || recovery.PreConsumeState != BillingRecoveryPreConsumeCommitted {
 			return ErrBillingRecoveryStateConflict
 		}
+		currentID, err := billingRecoveryAttemptID(recovery)
+		if err != nil {
+			return err
+		}
+		if currentID != "" && currentID != attemptID {
+			return ErrBillingEventConflict
+		}
 		var quote billing.Quote
 		if err := common.UnmarshalJsonStr(attempt.Quote, &quote); err != nil {
 			return billing.ErrEvaluationEvidence

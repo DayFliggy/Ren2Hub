@@ -10,7 +10,7 @@
 
 明确的供应商拒绝按既有共享重试预算处理。部分输出、客户端断连或缺少可靠用量时按观察到的用量估算结算，没有输出的失败请求释放预留；这些情况都不重放生成。失败的取消操作不能把仍在运行的生成当作已取消。收到不完整的入站帧不产生供应商发送或预留。
 
-排空期间拒绝新生成，允许活动生成在期限内结束；超时关闭连接后仍按未知接受/用量保持账务状态。`TestGatewayResponsesWSDrainLifecycle` 用本地隔离子进程覆盖该生命周期，部署容器的停止信号和宽限期仍须独立验证。普通 HTTP shutdown 结果不能代替 hijacked WebSocket 验收。
+排空期间拒绝新生成，允许活动生成在期限内结束；超时关闭连接后，已交付有效输出的调用按观察用量或冻结估算结算，没有输出的失败调用释放预留。`response.failed` / `response.incomplete` 即使包含用量也不代表正常完成，仍以是否交付有效输出决定结算或释放。`TestGatewayResponsesWSDrainLifecycle` 与 `TestGatewayResponsesWSUnsuccessfulTerminalChargesOnlyDeliveredOutput` 覆盖这些边界；部署容器的停止信号和宽限期仍须独立验证，普通 HTTP shutdown 结果不能代替 hijacked WebSocket 验收。
 
 ## 协议转换与模型诊断
 

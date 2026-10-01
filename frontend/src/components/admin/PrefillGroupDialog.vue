@@ -30,6 +30,7 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useAdminRequest } from '@/composables/useAdminRequest'
 import { useToast } from '@/composables/useToast'
+import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import { adminManagementMessages } from '@/i18n/adminManagement'
 import {
   MODEL_ENDPOINT_TEMPLATES,
@@ -126,6 +127,13 @@ const form = reactive({
 })
 const saving = ref(false)
 const formError = ref('')
+const baseline = ref('')
+const dirty = computed(
+  () =>
+    props.open &&
+    view.value === 'form' &&
+    JSON.stringify(form) !== baseline.value
+)
 const typeModel = computed({
   get: () => form.type,
   set: (value: string) => {
@@ -143,10 +151,13 @@ function openForm(group?: PrefillGroup) {
     json: group?.type === 'endpoint' ? group.items : '{}',
   })
   formError.value = ''
+  baseline.value = JSON.stringify(form)
   view.value = 'form'
 }
 function closeForm() {
-  if (!saving.value) view.value = 'list'
+  if (saving.value || (dirty.value && !window.confirm(t('discardMessage'))))
+    return
+  view.value = 'list'
 }
 function fillTemplate() {
   form.json = JSON.stringify(MODEL_ENDPOINT_TEMPLATES, null, 2)
@@ -190,6 +201,14 @@ async function save() {
 const deleting = ref<PrefillGroup | null>(null)
 const deleteError = ref('')
 const deleteBusy = ref(false)
+useUnsavedChanges({
+  dirty: () => dirty.value,
+  busy: () => props.open && (saving.value || deleteBusy.value),
+  message: () => t('discardMessage'),
+  leaves: (to, from) =>
+    props.open &&
+    (to.path !== from.path || to.query.manage !== from.query.manage),
+})
 function requestDelete(group: PrefillGroup) {
   deleting.value = group
   deleteError.value = ''

@@ -34,7 +34,8 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 		if info != nil {
 			// Same rule as HTTP relay: delivered output is billed, a failed call
 			// without output is released.
-			if info.ResponseUsage != nil && (apiErr == nil || info.HasValidOutput()) {
+			completedNormally := apiErr == nil && info.StreamStatus.IsNormalEnd()
+			if info.ResponseUsage != nil && (completedNormally || info.HasValidOutput()) {
 				service.PostTextConsumeQuota(c, info, info.ResponseUsage, nil)
 			} else if info.Billing != nil {
 				info.Billing.Refund(c)

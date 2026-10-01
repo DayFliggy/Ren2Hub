@@ -97,6 +97,14 @@ func TestMidjourneyUnpricedSuccessSettlesAtSubmissionEstimate(t *testing.T) {
 	assert.Equal(t, "SUCCESS", stored.Status)
 	assert.EqualValues(t, 3, stored.Quota)
 	require.NotNil(t, stored.PrivateData.BillingContext.Quote, "an incomplete poller cannot erase the accepted quote")
+	var log model.Log
+	require.NoError(t, model.LOG_DB.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&log).Error)
+	var other map[string]any
+	require.NoError(t, common.UnmarshalJsonStr(log.Other, &other))
+	admin, ok := other["admin_info"].(map[string]any)
+	require.True(t, ok, "a task fallback must label the actual charged evidence")
+	assert.Equal(t, billing.SettlementFrozenEstimate, admin["usage_billing_path"])
+	assert.Equal(t, billingFallbackUnpriced, admin["billing_fallback_reason"])
 }
 
 func TestMidjourneySettlementFailureRecoversWithConsistentTaskAndLogAmounts(t *testing.T) {

@@ -266,6 +266,9 @@ func TestTaskBillingAcceptedHoldAndSingleTerminalCharge(t *testing.T) {
 			task := makeTask(1, 1, 40, 1, BillingSourceWallet)
 			acceptTestTask(t, task)
 			before := billing.ReadOperationalMetrics().Settlements[billing.SettlementConfirmed]
+			require.ErrorIs(t, model.PrepareBillingAttempt(context.Background(), task.PrivateData.SubmissionRequestID,
+				task.PrivateData.SubmissionRequestID+":replacement", task.ChannelId, task.PrivateData.BillingContext.Quote),
+				model.ErrBillingRecoveryStateConflict, "an accepted task owns terminal accounting and cannot become a new request attempt")
 			assert.Equal(t, 60, getUserQuota(t, 1))
 			used, count := getUserUsageAccounting(t, 1)
 			assert.Zero(t, used)

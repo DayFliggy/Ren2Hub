@@ -256,6 +256,33 @@ func TestGatewayResponsesWSRejectionHonorsSharedRetryBudget(t *testing.T) {
 	}
 }
 
+func TestGatewayResponsesWSUnsuccessfulTerminalChargesOnlyDeliveredOutput(t *testing.T) {
+	for _, status := range []string{"failed", "incomplete"} {
+		for _, partial := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/partial=%t", status, partial), func(t *testing.T) {
+				base, key, _, accepted := setupResponsesWSAudit(t)
+				client := dialResponsesWSAudit(t, base, key)
+				writeResponsesWSAudit(t, client, `{"type":"response.create","stream_id":"active","model":"gpt-4o-mini","input":"hello","max_output_tokens":10}`)
+				upstream := acceptResponsesWSAudit(t, accepted)
+				readResponsesWSAudit(t, upstream)
+				if partial {
+					payload := `{"type":"response.output_text.delta","stream_id":"active","delta":"partial"}`
+					writeResponsesWSAudit(t, upstream, payload)
+					assert.JSONEq(t, payload, readResponsesWSAudit(t, client))
+				}
+				terminal := fmt.Sprintf(`{"type":"response.%s","stream_id":"active","response":{"id":"terminal-audit","object":"response","status":"%s","output":[],"usage":{"input_tokens":10,"output_tokens":0,"total_tokens":10}}}`, status, status)
+				writeResponsesWSAudit(t, upstream, terminal)
+				assert.JSONEq(t, terminal, readResponsesWSAudit(t, client), "the original unsuccessful protocol terminal remains visible")
+				want := model.BillingRecoveryStatusRefunded
+				if partial {
+					want = model.BillingRecoveryStatusSettled
+				}
+				assertResponsesWSAuditAccounting(t, want, 1)
+			})
+		}
+	}
+}
+
 func TestGatewayResponsesWSClientDisconnectSettlesDeliveredOutput(t *testing.T) {
 	base, key, _, accepted := setupResponsesWSAudit(t)
 	client := dialResponsesWSAudit(t, base, key)

@@ -74,6 +74,12 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 		}
 		other["billing_usage"] = publicBillingUsage(bc.Usage)
 		other["charge_result"] = bc.Charge
+		if task.Status == model.TaskStatusSuccess && bc.Usage != nil && bc.Usage.Source == billing.UsageSourceRequestEstimate {
+			other["admin_info"] = map[string]any{
+				"usage_billing_path":      billing.SettlementFrozenEstimate,
+				"billing_fallback_reason": billingFallbackUnpriced,
+			}
+		}
 	}
 	props := task.Properties
 	if props.UpstreamModelName != "" && props.UpstreamModelName != props.OriginModelName {

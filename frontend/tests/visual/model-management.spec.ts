@@ -119,6 +119,17 @@ async function setupPage(
 const visible = (page: Page, text: string) =>
   page.getByText(text, { exact: true }).filter({ visible: true }).first()
 
+async function confirmHistoryBack(page: Page, discard: boolean) {
+  const confirmation = page.waitForEvent('dialog')
+  const navigation = page.goBack()
+  const dialog = await confirmation
+  expect(dialog.type()).toBe('confirm')
+  expect(dialog.message()).toBe('Your changes have not been saved.')
+  if (discard) await dialog.accept()
+  else await dialog.dismiss()
+  await navigation
+}
+
 for (const language of ['zh-CN', 'en']) {
   for (const theme of ['light', 'dark'] as const) {
     for (const mobile of [false, true]) {
@@ -243,7 +254,7 @@ for (const language of ['zh-CN', 'en']) {
           await page
             .locator('img')
             .evaluateAll((images) =>
-              images
+              (images as HTMLImageElement[])
                 .filter((image) => !image.complete || image.naturalWidth === 0)
                 .map((image) => image.src)
             )
@@ -299,4 +310,179 @@ test('sync preview and missing-model creation write nothing until applied', asyn
   ).toHaveValue('missing-local')
   await page.keyboard.press('Escape')
   expect(writes).toEqual([])
+})
+
+for (const theme of ['light', 'dark'] as const) {
+  for (const mobile of [false, true]) {
+    test(`model and vendor drafts guard browser history ${theme} ${mobile ? 'mobile' : 'desktop'}`, async ({
+      page,
+    }) => {
+      const failures = await setupPage(page, {
+        language: 'en',
+        theme,
+        mobile,
+      })
+      const writes: string[] = []
+      page.on('request', (request) => {
+        if (
+          /\/api\/(models|vendors)\//.test(request.url()) &&
+          request.method() !== 'GET'
+        )
+          writes.push(request.url())
+      })
+      // Stay in one document so Back exercises the Vue route guard.
+      await page.goto('/keys')
+      const modelsLink = page
+        .locator('[data-console-nav-item="models-admin"]')
+        .filter({ visible: true })
+        .first()
+      await modelsLink.click()
+      await expect(page).toHaveURL(/\/models\/metadata$/)
+      await page
+        .getByRole('button', { name: 'Edit', exact: true })
+        .filter({ visible: true })
+        .first()
+        .click()
+      const modelDescription = page
+        .getByRole('dialog')
+        .getByLabel('Description', { exact: true })
+      await modelDescription.fill('Unsaved model description')
+      await confirmHistoryBack(page, false)
+      await expect(page).toHaveURL(/\/models\/metadata$/)
+      await expect(modelDescription).toHaveValue('Unsaved model description')
+      await confirmHistoryBack(page, true)
+      await expect(page).toHaveURL(/\/keys$/)
+      await expect(page.getByRole('dialog')).toHaveCount(0)
+
+      await modelsLink.click()
+      await page.getByRole('tab', { name: 'Vendors', exact: true }).click()
+      await expect(page).toHaveURL(/\/models\/vendors$/)
+      await page
+        .getByRole('button', { name: 'OpenAI', exact: true })
+        .filter({ visible: true })
+        .first()
+        .click()
+      const vendorName = page
+        .getByRole('dialog')
+        .getByLabel('Vendor Name', { exact: true })
+      await vendorName.fill('Unsaved vendor name')
+      await confirmHistoryBack(page, false)
+      await expect(page).toHaveURL(/\/models\/vendors$/)
+      await expect(vendorName).toHaveValue('Unsaved vendor name')
+      await confirmHistoryBack(page, true)
+      await expect(page).toHaveURL(/\/models\/metadata$/)
+      await expect(page.getByRole('dialog')).toHaveCount(0)
+      // An unmounted editor must not leave a stale confirmation guard behind.
+      await page.goBack()
+      await expect(page).toHaveURL(/\/keys$/)
+      expect(writes).toEqual([])
+      expect(failures).toEqual([])
+    })
+  }
+}
+
+test('a pending model save blocks browser history and closes only after success', async ({
+  page,
+}) => {
+  const failures = await setupPage(page, {
+    language: 'en',
+    theme: 'dark',
+    mobile: true,
+  })
+  let finishSave!: () => void
+  const saving = new Promise<void>((resolve) => {
+    finishSave = resolve
+  })
+  const description = 'Saved after the pending request finishes'
+  await page.route('**/api/models/', async (route) => {
+    expect(route.request().method()).toBe('PUT')
+    expect(route.request().postDataJSON()).toMatchObject({ id: 1, description })
+    await saving
+    await route.fulfill({
+      json: { success: true, data: { ...model, description } },
+    })
+  })
+  const confirmations: string[] = []
+  page.on('dialog', async (dialog) => {
+    confirmations.push(dialog.type())
+    await dialog.accept()
+  })
+  await page.goto('/keys')
+  await page
+    .locator('[data-console-nav-item="models-admin"]')
+    .filter({ visible: true })
+    .first()
+    .click()
+  await page
+    .getByRole('button', { name: 'Edit', exact: true })
+    .filter({ visible: true })
+    .first()
+    .click()
+  const drawer = page.getByRole('dialog')
+  const descriptionInput = drawer.getByLabel('Description', { exact: true })
+  await descriptionInput.fill(description)
+  const request = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === '/api/models/' &&
+      request.method() === 'PUT'
+  )
+  try {
+    await drawer
+      .getByRole('button', { name: 'Save metadata', exact: true })
+      .click()
+    await request
+    await expect(descriptionInput).toBeDisabled()
+    await page.goBack()
+    await expect(page).toHaveURL(/\/models\/metadata$/)
+    await expect(descriptionInput).toHaveValue(description)
+    await page.keyboard.press('Escape')
+    await expect(drawer).toBeVisible()
+    expect(confirmations).toEqual([])
+  } finally {
+    finishSave()
+  }
+  await expect(drawer).toHaveCount(0)
+  await page.goBack()
+  await expect(page).toHaveURL(/\/keys$/)
+  expect(confirmations).toEqual([])
+  expect(failures).toEqual([])
+})
+
+test('a dirty vendor draft can cancel or confirm a real browser reload', async ({
+  page,
+}) => {
+  const failures = await setupPage(page, {
+    language: 'en',
+    theme: 'light',
+    mobile: false,
+  })
+  await page.goto('/models/vendors')
+  await page
+    .getByRole('button', { name: 'OpenAI', exact: true })
+    .filter({ visible: true })
+    .first()
+    .click()
+  const vendorName = page
+    .getByRole('dialog')
+    .getByLabel('Vendor Name', { exact: true })
+  await vendorName.fill('Draft survives canceled reload')
+
+  const canceledConfirmation = page.waitForEvent('dialog')
+  const canceledReload = expect(page.reload()).rejects.toThrow(/ERR_ABORTED/)
+  const canceledDialog = await canceledConfirmation
+  expect(canceledDialog.type()).toBe('beforeunload')
+  await canceledDialog.dismiss()
+  await canceledReload
+  await expect(vendorName).toHaveValue('Draft survives canceled reload')
+
+  const acceptedConfirmation = page.waitForEvent('dialog')
+  const acceptedReload = page.reload()
+  const acceptedDialog = await acceptedConfirmation
+  expect(acceptedDialog.type()).toBe('beforeunload')
+  await acceptedDialog.accept()
+  await acceptedReload
+  await expect(page).toHaveURL(/\/models\/vendors$/)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(visible(page, 'Model provider')).toBeVisible()
+  expect(failures).toEqual([])
 })

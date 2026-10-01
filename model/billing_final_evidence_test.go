@@ -43,7 +43,8 @@ func TestFinalConsumptionRequiresReplayableCompletedEvidence(t *testing.T) {
 			assert.Equal(t, before.Version, after.Version)
 			assert.Equal(t, BillingRecoveryStatusActive, after.Status)
 			assert.Equal(t, BillingRecoveryStateUsagePending, after.ConsumptionState)
-			assert.Empty(t, after.ConsumptionSnapshot)
+			assert.Equal(t, before.ConsumptionSnapshot, after.ConsumptionSnapshot, "invalid evidence cannot replace the pending attempt")
+			assert.Empty(t, after.ChargeSnapshot)
 			var user User
 			require.NoError(t, db.First(&user, 1).Error)
 			assert.EqualValues(t, 60, user.Quota)

@@ -259,7 +259,11 @@ func TestFrozenEstimateSettlesOnlyTheAttemptEstimate(t *testing.T) {
 		var recovery BillingRecovery
 		require.NoError(t, db.First(&recovery, "request_id = ?", "unsent").Error)
 		assert.Equal(t, BillingRecoveryStatusActive, recovery.Status)
-		assert.Empty(t, recovery.ConsumptionSnapshot)
+		var pending BillingConsumption
+		require.NoError(t, common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &pending))
+		assert.Equal(t, "unsent:attempt", pending.AttemptID)
+		assert.Empty(t, recovery.ChargeSnapshot)
+		assert.Empty(t, recovery.ConsumptionFingerprint, "a pending attempt without an estimate is not a charge")
 		require.NoError(t, MarkBillingRecoveryRefundPending("unsent", nil))
 		require.NoError(t, Release("unsent"))
 		var user User

@@ -22,6 +22,7 @@ import TablePagination from '@/components/common/TablePagination.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useAdminRequest } from '@/composables/useAdminRequest'
 import { useToast } from '@/composables/useToast'
+import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import { adminManagementMessages } from '@/i18n/adminManagement'
 import { formatTime } from '@/utils/format'
 import MetadataIcon from './MetadataIcon.vue'
@@ -59,6 +60,11 @@ const saving = ref(false)
 const saveError = ref('')
 const pendingLeave = ref<(() => void) | null>(null)
 const rules = ['exact', 'prefix', 'contains', 'suffix'] as const
+useUnsavedChanges({
+  dirty: () => dirty.value,
+  busy: () => saving.value,
+  message: () => t('discardMessage'),
+})
 
 async function save() {
   if (saving.value) return
@@ -101,6 +107,7 @@ function leave(action: () => void) {
 function discard() {
   const action = pendingLeave.value
   pendingLeave.value = null
+  initial.value = snapshot()
   action?.()
 }
 const requestClose = () => leave(() => emit('close'))

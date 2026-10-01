@@ -507,6 +507,8 @@ func activeSystemTaskStatuses() []string {
 type SystemTaskActivity struct {
 	LastSuccessAt int64
 	LastFailureAt int64
+	LastSuccessID int64
+	LastFailureID int64
 	LastError     string
 	Active        bool
 }
@@ -520,8 +522,9 @@ func SummarizeSystemTaskActivity(taskTypes []string) (map[string]SystemTaskActiv
 		Type   string
 		Status SystemTaskStatus
 		LastAt int64
+		LastID int64
 	}
-	if err := DB.Model(&SystemTask{}).Select("type, status, MAX(updated_at) AS last_at").
+	if err := DB.Model(&SystemTask{}).Select("type, status, MAX(updated_at) AS last_at, MAX(id) AS last_id").
 		Where("type IN ?", taskTypes).Group("type, status").Scan(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -530,8 +533,10 @@ func SummarizeSystemTaskActivity(taskTypes []string) (map[string]SystemTaskActiv
 		switch row.Status {
 		case SystemTaskStatusSucceeded:
 			item.LastSuccessAt = row.LastAt
+			item.LastSuccessID = row.LastID
 		case SystemTaskStatusFailed:
 			item.LastFailureAt = row.LastAt
+			item.LastFailureID = row.LastID
 		case SystemTaskStatusPending, SystemTaskStatusRunning:
 			item.Active = true
 		}

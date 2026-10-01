@@ -194,3 +194,107 @@ func TestFailedRecoveryDoesNotStarveOtherRows(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
 }
+
+// Losing one side of an already persisted estimate is corruption, not proof
+// that dispatch never happened. Recovery must retain the reserved funds.
+func TestDamagedAttemptEstimateCannotAuthorizeRecoveryRelease(t *testing.T) {
+	for _, column := range []string{"estimate_charge", "estimate_usage", "quote_hash"} {
+		t.Run(column, func(t *testing.T) {
+			_, session := durableSession(t, 40)
+			session.stopRecoveryHeartbeat()
+			require.NoError(t, model.DB.Model(&model.BillingAttempt{}).
+				Where("id = ?", session.relayInfo.BillingAttemptID).Update(column, "").Error)
+
+			status, err := recoverOneBillingRecovery(context.Background(), session.recoveryID)
+			require.Error(t, err)
+			assert.Equal(t, model.BillingRecoveryStatusActive, status)
+			var user model.User
+			require.NoError(t, model.DB.First(&user, session.relayInfo.UserId).Error)
+			assert.Equal(t, []common.Quota{60, 40, 0}, []common.Quota{user.Quota, user.ReservedQuota, user.UsedQuota})
+			var events int64
+			require.NoError(t, model.DB.Model(&model.BillingEvent{}).
+				Where("request_id = ? AND operation IN ?", session.recoveryID, []string{"settle", "release"}).Count(&events).Error)
+			assert.Zero(t, events)
+		})
+	}
+}
+
+// Two attempts can share both their immutable quote and creation second while
+// dynamic request inputs produce different estimates. Recovery owes the last
+// dispatched attempt, never whichever primary key happens to sort first.
+func TestRecoveryChargesLatestAttemptWithTheSameQuote(t *testing.T) {
+	_, session := durableSession(t, 40)
+	info := session.relayInfo
+	session.stopRecoveryHeartbeat()
+	latestID := info.RequestId + ":retry"
+	require.NoError(t, model.PrepareBillingAttempt(context.Background(), info.RequestId, latestID, 0, info.PriceData.Quote))
+	estimate, charge, err := model.EvaluateBilling(info.PriceData.Quote,
+		billing.Usage{InputTokens: 15, ContextTokens: 15, Estimated: true, Source: billing.UsageSourceRequestEstimate},
+		billingexpr.RequestInput{}, info.RequestId, latestID, "estimate")
+	require.NoError(t, err)
+	require.NoError(t, model.PersistBillingEstimate(latestID, estimate, charge))
+	require.NoError(t, model.DB.Model(&model.BillingAttempt{}).Where("request_id = ?", info.RequestId).Update("created_at", 1700000000).Error)
+	// A delayed exit path from the previous attempt cannot replace the current
+	// one, even when both quotes are byte-for-byte identical.
+	require.ErrorIs(t, model.PrepareFrozenEstimateConsumption(info.RequestId, info.BillingAttemptID, model.Log{}, true), model.ErrBillingEventConflict)
+
+	for range 2 {
+		status, err := recoverOneBillingRecovery(context.Background(), info.RequestId)
+		require.NoError(t, err)
+		assert.Equal(t, model.BillingRecoveryStatusSettled, status)
+	}
+	assert.Equal(t, 85, getUserQuota(t, 1))
+	assert.Equal(t, 15, getTokenUsedQuota(t, 1))
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.First(&recovery, "request_id = ?", info.RequestId).Error)
+	var consumption model.BillingConsumption
+	require.NoError(t, common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &consumption))
+	assert.Equal(t, latestID, consumption.AttemptID)
+	var events int64
+	require.NoError(t, model.DB.Model(&model.BillingEvent{}).Where("request_id = ? AND operation = ?", info.RequestId, "settle").Count(&events).Error)
+	assert.EqualValues(t, 1, events)
+}
+
+func TestRecoveryWithoutAttemptMarkerRequiresUniqueEvidence(t *testing.T) {
+	for _, multiple := range []bool{false, true} {
+		name := "unique"
+		if multiple {
+			name = "ambiguous"
+		}
+		t.Run(name, func(t *testing.T) {
+			_, session := durableSession(t, 40)
+			session.stopRecoveryHeartbeat()
+			info := session.relayInfo
+			if multiple {
+				require.NoError(t, model.PrepareBillingAttempt(context.Background(), info.RequestId, "later-without-estimate", 0, info.PriceData.Quote))
+			}
+			require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Where("request_id = ?", info.RequestId).
+				Update("consumption_snapshot", "").Error)
+			status, err := recoverOneBillingRecovery(context.Background(), info.RequestId)
+			if multiple {
+				require.Error(t, err)
+				assert.Equal(t, model.BillingRecoveryStatusActive, status)
+				var user model.User
+				require.NoError(t, model.DB.First(&user, info.UserId).Error)
+				assert.Equal(t, []common.Quota{60, 40, 0}, []common.Quota{user.Quota, user.ReservedQuota, user.UsedQuota})
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, model.BillingRecoveryStatusSettled, status)
+			assert.Equal(t, 60, getUserQuota(t, info.UserId))
+			assert.Equal(t, 40, getTokenUsedQuota(t, info.TokenId))
+		})
+	}
+}
+
+func TestRecoveryCannotReleaseDispatchWithDamagedState(t *testing.T) {
+	_, session := durableSession(t, 40)
+	session.stopRecoveryHeartbeat()
+	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Where("request_id = ?", session.recoveryID).
+		Update("consumption_state", "").Error)
+	_, err := recoverOneBillingRecovery(context.Background(), session.recoveryID)
+	require.Error(t, err)
+	var user model.User
+	require.NoError(t, model.DB.First(&user, session.relayInfo.UserId).Error)
+	assert.Equal(t, []common.Quota{60, 40, 0}, []common.Quota{user.Quota, user.ReservedQuota, user.UsedQuota})
+}

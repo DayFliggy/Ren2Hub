@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -62,7 +63,11 @@ func runBillingPricingGuardScenario(t *testing.T, c *gin.Context, info *relaycom
 	require.NoError(t, model.DB.Where("request_id = ?", info.RequestId).First(&pending).Error)
 	require.EqualValues(t, model.BillingRecoveryStateUsagePending, pending.ConsumptionState)
 	assert.NotEmpty(t, pending.QuoteSnapshot)
-	assert.Empty(t, pending.ConsumptionSnapshot)
+	var dispatch model.BillingConsumption
+	require.NoError(t, common.UnmarshalJsonStr(pending.ConsumptionSnapshot, &dispatch))
+	assert.Equal(t, info.BillingAttemptID, dispatch.AttemptID)
+	assert.Empty(t, pending.ChargeSnapshot)
+	assert.Empty(t, pending.ConsumptionFingerprint, "dispatch must not create a final charge")
 
 	switch scenario {
 	case "pricing_refund_resume":

@@ -7,6 +7,7 @@ import FilterSelect from '@/components/common/FilterSelect.vue'
 import VendorDrawer from '@/components/admin/VendorDrawer.vue'
 import VendorsSection from '@/components/admin/VendorsSection.vue'
 import ModelMetadataDrawer from '@/components/admin/ModelMetadataDrawer.vue'
+import ModelsSection from '@/components/admin/ModelsSection.vue'
 
 const mocks = vi.hoisted(() => ({
   models: vi.fn(),
@@ -15,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   deleteModel: vi.fn(),
   vendors: vi.fn(),
   vendorCounts: vi.fn(),
+  model: vi.fn(),
+  saveModel: vi.fn(),
 }))
 vi.mock('@/api/adminManagement', () => ({ metadataApi: mocks }))
 const rows = [1, 2].map((id) => ({
@@ -36,7 +39,7 @@ const rows = [1, 2].map((id) => ({
   created_time: null,
   updated_time: null,
 }))
-async function setup(path = '/models/metadata') {
+async function setup(path = '/models/metadata', realModelDrawer = false) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -63,7 +66,10 @@ async function setup(path = '/models/metadata') {
           createI18n({ legacy: false, locale: 'en', messages: { en: {} } }),
         ],
         stubs: {
-          ModelMetadataDrawer: true,
+          ModelMetadataDrawer: !realModelDrawer,
+          ConsoleModal: {
+            template: '<div><slot /><slot name="footer" /></div>',
+          },
           MetadataSyncDialog: true,
           MissingModelsDialog: true,
           PrefillGroupDialog: true,
@@ -106,11 +112,148 @@ beforeEach(() => {
     total: 2,
   })
   mocks.vendorCounts.mockResolvedValue({ '1': 2, '2': 0 })
+  mocks.model.mockResolvedValue(rows[0])
+  mocks.saveModel.mockResolvedValue(rows[0])
   mocks.setModelStatus.mockImplementation(async (id: number) => {
     if (id === 2) throw new Error('permission denied')
   })
 })
 describe('model management sections', () => {
+  it.each(['metadata', 'vendors'] as const)(
+    'discards the model draft only after a confirmed section change from %s',
+    async (section) => {
+      const originalPath = `/models/${section}`
+      const destination = `/models/${section === 'metadata' ? 'vendors' : 'metadata'}`
+      const { wrapper, router } = await setup(originalPath, true)
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      try {
+        if (section === 'metadata')
+          wrapper.getComponent(ModelsSection).vm.$emit('edit', 1)
+        else
+          wrapper.getComponent(VendorsSection).vm.$emit('open-model', { id: 1 })
+        await flushPromises()
+        await wrapper.get('#model-metadata-name').setValue('unsaved-model')
+
+        await router.push(destination)
+        await flushPromises()
+        expect(router.currentRoute.value.path).toBe(originalPath)
+        expect(wrapper.get('#model-metadata-name').element).toHaveProperty(
+          'value',
+          'unsaved-model'
+        )
+        expect(confirm).toHaveBeenCalledTimes(1)
+
+        confirm.mockReturnValue(true)
+        await router.push(destination)
+        await flushPromises()
+        expect(router.currentRoute.value.path).toBe(destination)
+        expect(wrapper.findComponent(ModelMetadataDrawer).exists()).toBe(false)
+        expect(confirm).toHaveBeenCalledTimes(2)
+
+        await router.push(originalPath)
+        await flushPromises()
+        expect(confirm).toHaveBeenCalledTimes(2)
+        if (section === 'metadata')
+          wrapper.getComponent(ModelsSection).vm.$emit('edit', 1)
+        else
+          wrapper.getComponent(VendorsSection).vm.$emit('open-model', { id: 1 })
+        await flushPromises()
+        expect(wrapper.get('#model-metadata-name').element).toHaveProperty(
+          'value',
+          'model-1'
+        )
+        expect(mocks.model).toHaveBeenCalledTimes(2)
+        expect(mocks.saveModel).not.toHaveBeenCalled()
+      } finally {
+        wrapper.unmount()
+        confirm.mockRestore()
+      }
+    }
+  )
+
+  it('keeps the model drawer and section while its save is pending', async () => {
+    const { wrapper, router } = await setup('/models/metadata', true)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let finishSave!: (value: (typeof rows)[number]) => void
+    mocks.saveModel.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishSave = resolve
+      })
+    )
+    try {
+      wrapper.getComponent(ModelsSection).vm.$emit('edit', 1)
+      await flushPromises()
+      await wrapper.get('#model-metadata-name').setValue('saved-model')
+      await wrapper.get('#model-metadata-form').trigger('submit')
+      await flushPromises()
+      expect(mocks.saveModel).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 1, model_name: 'saved-model' })
+      )
+
+      await router.push('/models/vendors')
+      await flushPromises()
+      expect(router.currentRoute.value.path).toBe('/models/metadata')
+      expect(wrapper.findComponent(ModelMetadataDrawer).exists()).toBe(true)
+      expect(confirm).not.toHaveBeenCalled()
+
+      finishSave(rows[0]!)
+      await flushPromises()
+      expect(wrapper.findComponent(ModelMetadataDrawer).exists()).toBe(false)
+      await router.push('/models/vendors')
+      expect(router.currentRoute.value.path).toBe('/models/vendors')
+      expect(confirm).not.toHaveBeenCalled()
+    } finally {
+      finishSave(rows[0]!)
+      wrapper.unmount()
+      confirm.mockRestore()
+    }
+  })
+
+  it('cancels a pending model search when switching to the vendor section', async () => {
+    const { wrapper, router } = await setup()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      await wrapper
+        .get('input[name="admin-model-filter"]')
+        .setValue('pending-model')
+      await router.push('/models/vendors?vFilter=kept#vendors')
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(500)
+      await flushPromises()
+      expect(router.currentRoute.value.fullPath).toBe(
+        '/models/vendors?vFilter=kept#vendors'
+      )
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it('returns to the last valid model page after its final row is deleted', async () => {
+    mocks.models
+      .mockResolvedValueOnce({ items: [rows[0]], total: 21, vendor_counts: {} })
+      .mockResolvedValueOnce({ items: [], total: 20, vendor_counts: {} })
+      .mockResolvedValueOnce({ items: [rows[1]], total: 20, vendor_counts: {} })
+    const { wrapper, router } = await setup('/models/metadata?page=2#models')
+    await wrapper.get('input[aria-label="Select model-1"]').setValue(true)
+    await wrapper
+      .get('button[aria-label="Delete selected models"]')
+      .trigger('click')
+    wrapper.getComponent({ name: 'ConfirmDialog' }).vm.$emit('confirm')
+    await flushPromises()
+    expect(mocks.deleteModel).toHaveBeenCalledWith(1)
+    expect(router.currentRoute.value.query.page).toBeUndefined()
+    expect(router.currentRoute.value.hash).toBe('#models')
+    expect(mocks.models).toHaveBeenLastCalledWith(
+      expect.objectContaining({ p: 1 }),
+      expect.any(AbortSignal)
+    )
+    expect(wrapper.find('input[aria-label="Select model-2"]').exists()).toBe(
+      true
+    )
+    wrapper.unmount()
+  })
+
   it('restores NewAPI filter keys from the URL and keeps the hash', async () => {
     const { wrapper, router } = await setup(
       '/models/metadata?filter=model&status=1&page=2#models'
