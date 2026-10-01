@@ -310,16 +310,17 @@ describe('capability route guard', () => {
     }
   })
 
-  it('opens consolidated model managers from bookmarks without losing query or hash', async () => {
+  it('opens model management sections from bookmarks without losing query or hash', async () => {
     useAuthStore().user!.role = 10
-    for (const [source, manage] of [
-      ['/models/vendors', 'vendors'],
-      ['/models/prefill-groups', 'prefill-groups'],
-      ['/console/admin/vendors', 'vendors'],
-      ['/console/admin/prefill-groups', 'prefill-groups'],
+    // Vendors is its own section, as in NewAPI; prefill groups open as a dialog.
+    for (const [source, path, manage] of [
+      ['/models/vendors', '/models/vendors', 'other'],
+      ['/console/admin/vendors', '/models/vendors', 'other'],
+      ['/models/prefill-groups', '/models/metadata', 'prefill-groups'],
+      ['/console/admin/prefill-groups', '/models/metadata', 'prefill-groups'],
     ]) {
       await router.push(`${source}?q=alpha&p=2&manage=other#details`)
-      expect(router.currentRoute.value.path).toBe('/models/metadata')
+      expect(router.currentRoute.value.path).toBe(path)
       expect(router.currentRoute.value.query).toEqual({
         q: 'alpha',
         p: '2',
@@ -327,6 +328,10 @@ describe('capability route guard', () => {
       })
       expect(router.currentRoute.value.hash).toBe('#details')
     }
+    expect(router.currentRoute.value.meta.nav).toBeUndefined()
+    await router.push('/models/vendors')
+    // The vendors section highlights the one "Models" sidebar entry.
+    expect(router.currentRoute.value.meta.nav).toBe('models-admin')
   })
 
   it('redirects former automatic pricing settings to the model pricing page', async () => {
@@ -346,6 +351,10 @@ describe('capability route guard', () => {
       expect(router.currentRoute.value.path).toBe(
         '/system-settings/billing/model-pricing'
       )
+      // Pricing is a billing settings section, highlighted as system settings.
+      expect(router.currentRoute.value.name).toBe('system-settings-billing')
+      expect(router.currentRoute.value.params.section).toBe('model-pricing')
+      expect(router.currentRoute.value.meta.nav).toBe('system-settings-site')
       expect(router.currentRoute.value.query.audit).toBe('1')
       expect(router.currentRoute.value.hash).toBe('#pricing')
     }

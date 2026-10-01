@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { adminManagementMessages } from '@/i18n/adminManagement'
 import IconButton from '@/components/common/IconButton.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
+import './admin.css'
 const props = defineProps<{ modelValue: string[]; label: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string[]] }>()
 const { t } = useI18n({ useScope: 'local', messages: adminManagementMessages })

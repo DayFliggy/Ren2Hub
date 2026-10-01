@@ -406,9 +406,14 @@ onBeforeUnmount(() => {
         <h2 class="font-semibold">
           {{ selected }} · {{ t('taskPlugins.versions') }}
         </h2>
-        <RouterLink class="text-sm underline" :to="{ name: 'model-pricing' }">{{
-          t('billing.modelPricing')
-        }}</RouterLink>
+        <RouterLink
+          class="text-sm underline"
+          :to="{
+            name: 'system-settings-billing',
+            params: { section: 'model-pricing' },
+          }"
+          >{{ t('billing.modelPricing') }}</RouterLink
+        >
         <div
           v-for="version in versions"
           :key="version.version"

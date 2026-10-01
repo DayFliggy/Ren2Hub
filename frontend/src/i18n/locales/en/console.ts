@@ -415,9 +415,7 @@ export default {
     },
   },
   nav: {
-    modelMetadata: 'Model metadata',
-    vendors: 'Vendors',
-    prefillGroups: 'Prefill groups',
+    adminModels: 'Models',
     systemInfo: 'System instances',
     dashboard: 'Dashboard',
     keys: 'Tokens',

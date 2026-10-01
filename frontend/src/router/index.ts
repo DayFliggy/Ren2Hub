@@ -326,14 +326,14 @@ const router = createRouter({
             params: { section: 'system-info' },
           },
           component: () => import('@/views/console/SystemSettingsView.vue'),
-          meta: { wide: true, feature: 'admin', requiresRoot: true },
+          // Every settings domain highlights the one sidebar entry.
+          meta: {
+            wide: true,
+            feature: 'admin',
+            requiresRoot: true,
+            nav: 'system-settings-site',
+          },
           children: [
-            {
-              path: 'billing/model-pricing',
-              name: 'model-pricing',
-              component: () => import('@/views/admin/ModelPricingView.vue'),
-              meta: { wide: true, feature: 'admin', requiresRoot: true },
-            },
             {
               path: 'site/:section?',
               name: 'system-settings-site',

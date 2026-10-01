@@ -1,361 +1,733 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowDownToLine, RefreshCw, X } from 'lucide-vue-next'
+import { AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
-import TablePagination from '@/components/common/TablePagination.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
+import FilterSelect from '@/components/common/FilterSelect.vue'
+import IconButton from '@/components/common/IconButton.vue'
+import SearchInput from '@/components/common/SearchInput.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
+import StatusChip from '@/components/common/StatusChip.vue'
 import {
   metadataApi,
   type SyncPreview,
   type SyncResult,
 } from '@/api/adminManagement'
-import { modelMetadataMessages } from '@/i18n/modelMetadata'
+import { modelMetadataSyncMessages } from '@/i18n/modelMetadataSync'
+
+type Conflict = SyncPreview['conflicts'][number]
+type ConflictField = Conflict['fields'][number]
+// Ren2Hub's sync always creates every missing model the upstream knows, so
+// only `update` candidates carry a selection; `create` rows are informational.
+type Candidate =
+  | { kind: 'create'; model_name: string }
+  | { kind: 'update'; model_name: string; fields: ConflictField[] }
+
+const PAGE_SIZE = 20
+// The backend ignores `source`; the official repository is the only source.
+const SOURCE = 'official'
+const STEPS = ['stepSelect', 'stepPreview', 'stepConfirm', 'stepResult']
+const FIELD_LABELS: Record<string, string> = {
+  description: 'fieldDescription',
+  icon: 'fieldIcon',
+  tags: 'fieldTags',
+  vendor: 'fieldVendor',
+  name_rule: 'fieldNameRule',
+  status: 'fieldStatus',
+}
+const NAME_RULES = ['ruleExact', 'rulePrefix', 'ruleContains', 'ruleSuffix']
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 const { t, locale } = useI18n({
   useScope: 'local',
-  messages: modelMetadataMessages,
+  messages: modelMetadataSyncMessages,
 })
 const language = ref(locale.value === 'zh-CN' ? 'zh-CN' : 'en')
-const source = ref('official')
+const step = ref(0)
 const preview = ref<SyncPreview | null>(null)
 const result = ref<SyncResult | null>(null)
-const selected = ref<string[]>([])
-const saving = ref(false)
-const loading = ref(false)
-const error = ref('')
+// model_name -> overwrite fields; presence of a key means the model is chosen.
+const selection = ref<Record<string, string[]>>({})
 const search = ref('')
 const page = ref(1)
-const pageSize = ref(10)
-const missingPage = ref(1)
-const missingPageSize = ref(10)
+const loading = ref(false)
+const saving = ref(false)
+const loadError = ref('')
+const syncError = ref('')
 let controller: AbortController | undefined
-const conflicts = computed(() =>
-  (preview.value?.conflicts ?? []).flatMap((model) =>
-    model.fields.map((field) => ({
-      ...field,
-      model_name: model.model_name,
-      key: JSON.stringify([model.model_name, field.field]),
-    }))
+
+const languageOptions = computed(() => [
+  { value: 'zh-CN', label: t('localeZh') },
+  { value: 'en', label: t('localeEn') },
+  { value: 'ja', label: t('localeJa') },
+])
+const candidates = computed<Candidate[]>(() => [
+  ...(preview.value?.missing ?? []).map((model_name) => ({
+    kind: 'create' as const,
+    model_name,
+  })),
+  ...(preview.value?.conflicts ?? []).map((conflict) => ({
+    kind: 'update' as const,
+    ...conflict,
+  })),
+])
+const filtered = computed(() => {
+  const keyword = search.value.trim().toLocaleLowerCase()
+  return candidates.value.filter((item) =>
+    item.model_name.toLocaleLowerCase().includes(keyword)
   )
+})
+const filteredUpdates = computed(() =>
+  filtered.value.filter((item) => item.kind === 'update')
 )
-const filtered = computed(() =>
-  conflicts.value.filter((field) =>
-    `${field.model_name} ${field.field}`
-      .toLocaleLowerCase()
-      .includes(search.value.toLocaleLowerCase())
-  )
+const pageCount = computed(() =>
+  Math.max(1, Math.ceil(filtered.value.length / PAGE_SIZE))
 )
 const visible = computed(() =>
-  filtered.value.slice(
-    (page.value - 1) * pageSize.value,
-    page.value * pageSize.value
+  filtered.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE)
+)
+const pageUpdates = computed(() =>
+  visible.value.filter((item) => item.kind === 'update')
+)
+const pageChosenCount = computed(
+  () => pageUpdates.value.filter(isSelected).length
+)
+const missingNames = computed(() => preview.value?.missing ?? [])
+const chosenUpdates = computed(() =>
+  (preview.value?.conflicts ?? []).filter((item) =>
+    Object.hasOwn(selection.value, item.model_name)
   )
 )
-const visibleMissing = computed(() =>
-  (preview.value?.missing ?? []).slice(
-    (missingPage.value - 1) * missingPageSize.value,
-    missingPage.value * missingPageSize.value
-  )
+const selectedCount = computed(
+  () => missingNames.value.length + chosenUpdates.value.length
 )
-const allVisibleSelected = computed(
-  () =>
-    visible.value.length > 0 &&
-    visible.value.every((field) => selected.value.includes(field.key))
+const hiddenSelectedCount = computed(
+  () => selectedCount.value - filtered.value.filter(isSelected).length
 )
+const changedFieldCount = computed(() =>
+  chosenUpdates.value.reduce((total, item) => total + item.fields.length, 0)
+)
+// Follows the preview's field order so the request is independent of click order.
+const overwrite = computed(() =>
+  chosenUpdates.value
+    .map((item) => ({
+      model_name: item.model_name,
+      fields: item.fields
+        .map((field) => field.field)
+        .filter((field) => selection.value[item.model_name].includes(field)),
+    }))
+    .filter((item) => item.fields.length)
+)
+const selectedFieldCount = computed(() =>
+  overwrite.value.reduce((total, item) => total + item.fields.length, 0)
+)
+const planCount = computed(
+  () => missingNames.value.length + overwrite.value.length
+)
+const busy = computed(() => loading.value || saving.value)
+const canAdvance = computed(() =>
+  step.value === 0 ? selectedCount.value > 0 : planCount.value > 0
+)
+const primaryLabel = computed(() => {
+  if (step.value === 0) return t('previewSelected')
+  if (step.value === 1) return t('reviewConfirm')
+  if (saving.value) return t('applying')
+  return t('applyChanges', { count: planCount.value })
+})
+
 watch(search, () => {
   page.value = 1
 })
 watch(
-  [source, language, () => props.open],
+  [language, () => props.open],
   (_, __, cleanup) => {
-    controller?.abort()
-    loading.value = false
-    preview.value = null
-    result.value = null
-    selected.value = []
-    search.value = ''
-    page.value = 1
-    missingPage.value = 1
-    error.value = ''
+    reset()
     cleanup(() => controller?.abort())
   },
   { immediate: true }
 )
-function togglePage() {
-  const keys = visible.value.map((field) => field.key)
-  selected.value = allVisibleSelected.value
-    ? selected.value.filter((key) => !keys.includes(key))
-    : [...new Set([...selected.value, ...keys])]
+function reset() {
+  controller?.abort()
+  loading.value = false
+  step.value = 0
+  preview.value = null
+  result.value = null
+  selection.value = {}
+  search.value = ''
+  page.value = 1
+  loadError.value = ''
+  syncError.value = ''
 }
 async function load() {
   controller?.abort()
   const current = new AbortController()
   controller = current
   loading.value = true
-  error.value = ''
+  loadError.value = ''
   preview.value = null
-  result.value = null
+  selection.value = {}
+  page.value = 1
   try {
     const data = await metadataApi.preview(
-      source.value,
+      SOURCE,
       language.value,
       current.signal
     )
-    if (current.signal.aborted) return
-    preview.value = data
-    selected.value = []
-    page.value = 1
-    missingPage.value = 1
+    if (!current.signal.aborted) preview.value = data
   } catch (cause) {
-    if (!current.signal.aborted)
-      error.value = cause instanceof Error ? cause.message : String(cause)
+    if (!current.signal.aborted) loadError.value = messageOf(cause)
   } finally {
     if (!current.signal.aborted) loading.value = false
   }
 }
 async function synchronize() {
-  if (!preview.value || saving.value) return
+  if (saving.value || !planCount.value) return
   saving.value = true
-  error.value = ''
+  syncError.value = ''
   try {
-    const overwrite = preview.value.conflicts
-      .map((conflict) => ({
-        model_name: conflict.model_name,
-        fields: conflict.fields
-          .filter((field) =>
-            selected.value.includes(
-              JSON.stringify([conflict.model_name, field.field])
-            )
-          )
-          .map((field) => field.field),
-      }))
-      .filter((item) => item.fields.length)
     result.value = await metadataApi.sync(
-      source.value,
+      SOURCE,
       language.value,
-      overwrite
+      overwrite.value
     )
-    preview.value = null
+    step.value = 3
     emit('saved')
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    syncError.value = messageOf(cause)
   } finally {
     saving.value = false
   }
+}
+function next() {
+  if (step.value < 2) step.value++
+  else void synchronize()
+}
+function previewAgain() {
+  step.value = 0
+  syncError.value = ''
+  void load()
+}
+function messageOf(cause: unknown) {
+  return cause instanceof Error ? cause.message : String(cause)
+}
+function isSelected(item: Candidate) {
+  return (
+    item.kind === 'create' || Object.hasOwn(selection.value, item.model_name)
+  )
+}
+function chooseModels(items: Candidate[], checked: boolean) {
+  const names = items
+    .filter((item) => item.kind === 'update')
+    .map((item) => item.model_name)
+  const rest = Object.entries(selection.value).filter(
+    ([name]) => !names.includes(name)
+  )
+  // Re-checking a model keeps the fields already picked for it.
+  const added = checked
+    ? names.map((name): [string, string[]] => [
+        name,
+        selection.value[name] ?? [],
+      ])
+    : []
+  selection.value = Object.fromEntries([...rest, ...added])
+}
+function chooseField(name: string, field: string, checked: boolean) {
+  const fields = selection.value[name].filter((value) => value !== field)
+  selection.value = {
+    ...selection.value,
+    [name]: checked ? [...fields, field] : fields,
+  }
+}
+function chooseAllFields(checked: boolean) {
+  const next = { ...selection.value }
+  for (const item of chosenUpdates.value)
+    next[item.model_name] = checked
+      ? item.fields.map((field) => field.field)
+      : []
+  selection.value = next
+}
+function fieldChosen(name: string, field: string) {
+  return selection.value[name]?.includes(field) ?? false
+}
+function checkedOf(event: Event) {
+  return (event.target as HTMLInputElement).checked
+}
+// Unknown fields from a newer backend still render, under their raw name.
+function fieldLabel(field: string) {
+  const key = FIELD_LABELS[field]
+  return key ? t(key) : field
+}
+function impact(field: string) {
+  if (field === 'name_rule') return t('nameRuleImpact')
+  if (field === 'status') return t('statusImpact')
+  return ''
+}
+function display(field: string, value: string | number) {
+  if (field === 'status') return value === 1 ? t('shown') : t('notShown')
+  const rule = NAME_RULES[Number(value)]
+  if (field === 'name_rule' && rule) return t(rule)
+  return String(value) || '—'
 }
 </script>
 <template>
   <ConsoleModal
     :open="open"
-    :title="t('synchronize')"
+    :title="t('syncTitle')"
+    :subtitle="t('syncSubtitle')"
     size="xl"
     :close-disabled="saving"
     @close="emit('close')"
   >
-    <div class="admin-form">
-      <div class="admin-fields">
-        <label class="admin-field"
-          ><span>{{ t('source') }}</span
-          ><select v-model="source" :disabled="saving">
-            <option value="official">{{ t('official') }}</option>
-            <option value="config" disabled>{{ t('config') }}</option>
-          </select></label
-        >
-        <label class="admin-field"
-          ><span>{{ t('language') }}</span
-          ><select v-model="language" :disabled="saving">
-            <option value="zh-CN">中文</option>
-            <option value="en">English</option>
-            <option value="ja">日本語</option>
-          </select></label
-        >
-      </div>
-      <p v-if="error" class="admin-error" role="alert">{{ error }}</p>
-      <ConsoleButton
-        variant="ghost"
-        :loading="loading"
-        :disabled="saving"
-        @click="load"
-        ><RefreshCw :size="16" />{{ t('preview') }}</ConsoleButton
+    <ol
+      class="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4"
+      :aria-label="t('syncSteps')"
+    >
+      <li
+        v-for="(label, index) in STEPS"
+        :key="label"
+        :aria-current="step === index ? 'step' : undefined"
+        class="rounded-lg border p-2 text-sm"
+        :class="
+          step === index
+            ? 'border-[var(--accent)] bg-[var(--accent-soft)] font-medium text-[var(--text-primary)]'
+            : 'border-[var(--border-subtle)] text-[var(--text-tertiary)]'
+        "
       >
-      <template v-if="preview">
-        <section class="admin-section">
-          <h3>{{ t('missingCount', { count: preview.missing.length }) }}</h3>
-          <ul class="sync-missing">
-            <li v-for="name in visibleMissing" :key="name">{{ name }}</li>
-          </ul>
-          <TablePagination
-            v-if="preview.missing.length"
-            v-model:page="missingPage"
-            v-model:page-size="missingPageSize"
-            :total="preview.missing.length"
+        {{ index + 1 }}. {{ t(label) }}
+      </li>
+    </ol>
+    <div v-if="step === 0" class="grid gap-4">
+      <div class="flex flex-wrap items-end gap-3">
+        <div class="grid gap-1">
+          <span class="text-sm text-[var(--text-secondary)]">{{
+            t('metadataLanguage')
+          }}</span>
+          <FilterSelect
+            v-model="language"
+            :options="languageOptions"
+            :label="t('metadataLanguage')"
+            :disabled="busy"
+            class="w-44"
           />
-        </section>
-        <section class="admin-section">
-          <div class="sync-section-title">
-            <h3>{{ t('conflicts') }}</h3>
-            <span class="admin-muted">{{
-              t('selectedFields', { count: selected.length })
-            }}</span>
-          </div>
-          <label class="admin-field"
-            ><span class="sr-only">{{ t('conflictSearch') }}</span
-            ><input
-              v-model="search"
-              :placeholder="t('conflictSearch')"
-              :disabled="saving"
-          /></label>
-          <label v-if="visible.length" class="admin-check"
-            ><input
-              type="checkbox"
-              :checked="allVisibleSelected"
-              :disabled="saving"
-              @change="togglePage"
-            />{{ t('selectConflicts') }}</label
+        </div>
+        <ConsoleButton variant="secondary" :disabled="busy" @click="load">
+          {{ t('loadPreview') }}
+        </ConsoleButton>
+      </div>
+      <div v-if="loading" class="grid gap-2" role="status">
+        <span class="sr-only">{{ t('loading') }}</span>
+        <SkeletonBlock v-for="i in 4" :key="i" rounded="lg" class="h-10" />
+      </div>
+      <div
+        v-else-if="loadError"
+        class="flex flex-col items-center justify-center px-6 py-10 text-center"
+        role="alert"
+      >
+        <AlertTriangle :size="28" class="text-[var(--status-danger-text)]" />
+        <p class="mt-3 font-semibold text-[var(--text-primary)]">
+          {{ t('previewFailed') }}
+        </p>
+        <p class="mt-1 max-w-md text-sm text-[var(--text-tertiary)]">
+          {{ loadError }}
+        </p>
+        <ConsoleButton class="mt-5" variant="secondary" @click="load">
+          {{ t('retry') }}
+        </ConsoleButton>
+      </div>
+      <template v-else-if="preview">
+        <SearchInput
+          v-model="search"
+          :placeholder="t('searchModels')"
+          :aria-label="t('searchModelsLabel')"
+          name="metadata-sync-search"
+          class="w-full sm:w-64"
+        />
+        <div class="flex flex-wrap items-center gap-3">
+          <p class="text-xs text-[var(--text-tertiary)]" role="status">
+            {{
+              t('candidateStats', {
+                total: filtered.length,
+                create: filtered.length - filteredUpdates.length,
+                update: filteredUpdates.length,
+              })
+            }}
+          </p>
+          <ConsoleButton
+            variant="secondary"
+            size="sm"
+            :disabled="busy || !filteredUpdates.length"
+            @click="chooseModels(filteredUpdates, true)"
           >
-          <div class="admin-table-scroll">
-            <table v-if="visible.length" class="admin-table sync-table">
-              <thead>
-                <tr>
-                  <th>{{ t('model_name') }}</th>
-                  <th>{{ t('field') }}</th>
-                  <th>{{ t('local') }}</th>
-                  <th>{{ t('upstream') }}</th>
+            {{ t('selectAllSyncable', { count: filtered.length }) }}
+          </ConsoleButton>
+          <ConsoleButton
+            variant="ghost"
+            size="sm"
+            :disabled="busy || !chosenUpdates.length"
+            @click="selection = {}"
+          >
+            {{ t('clearSelection') }}
+          </ConsoleButton>
+        </div>
+        <EmptyState
+          v-if="!filtered.length"
+          :title="candidates.length ? t('noFilterMatch') : t('noSyncable')"
+          :hint="candidates.length ? t('adjustSearch') : ''"
+        />
+        <template v-else>
+          <div
+            class="overflow-x-auto rounded-lg border border-[var(--border-subtle)]"
+          >
+            <table class="w-full text-sm">
+              <thead class="bg-[var(--surface-muted)] text-left">
+                <tr class="text-[var(--text-secondary)]">
+                  <th class="w-12 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      class="h-4 w-4 accent-[var(--accent)]"
+                      :checked="
+                        pageUpdates.length > 0 &&
+                        pageChosenCount === pageUpdates.length
+                      "
+                      :indeterminate="
+                        pageChosenCount > 0 &&
+                        pageChosenCount < pageUpdates.length
+                      "
+                      :disabled="busy || !pageUpdates.length"
+                      :aria-label="t('selectPageSyncable')"
+                      @change="chooseModels(pageUpdates, checkedOf($event))"
+                    />
+                  </th>
+                  <th class="px-3 py-2 font-medium">{{ t('model') }}</th>
+                  <th class="px-3 py-2 font-medium">
+                    {{ t('plannedAction') }}
+                  </th>
                 </tr>
               </thead>
-              <tbody>
-                <tr v-for="field in visible" :key="field.key">
-                  <td :data-label="t('model_name')">{{ field.model_name }}</td>
-                  <td :data-label="t('field')">
-                    <label class="admin-check"
-                      ><input
-                        v-model="selected"
-                        type="checkbox"
-                        :value="field.key"
-                        :disabled="saving"
-                        :aria-label="`${t('overwrite')} ${field.model_name} ${field.field}`"
-                      />{{ t(field.field) }}</label
-                    >
+              <tbody class="divide-y divide-[var(--border-subtle)]">
+                <tr v-for="item in visible" :key="item.model_name">
+                  <td class="px-3 py-2">
+                    <input
+                      v-if="item.kind === 'create'"
+                      type="checkbox"
+                      class="h-4 w-4 accent-[var(--accent)]"
+                      checked
+                      disabled
+                      :aria-label="t('autoIncluded', { name: item.model_name })"
+                    />
+                    <input
+                      v-else
+                      type="checkbox"
+                      class="h-4 w-4 accent-[var(--accent)]"
+                      :checked="isSelected(item)"
+                      :disabled="busy"
+                      :aria-label="t('selectModel', { name: item.model_name })"
+                      @change="chooseModels([item], checkedOf($event))"
+                    />
                   </td>
-                  <td :data-label="t('local')">
-                    <pre>{{ field.local }}</pre>
+                  <td
+                    class="break-all px-3 py-2 font-mono text-[var(--text-primary)]"
+                  >
+                    {{ item.model_name }}
                   </td>
-                  <td :data-label="t('upstream')">
-                    <pre>{{ field.upstream }}</pre>
+                  <td class="px-3 py-2">
+                    <StatusChip>
+                      {{
+                        item.kind === 'create'
+                          ? t('kindCreate')
+                          : t('kindUpdate')
+                      }}
+                    </StatusChip>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p v-if="!visible.length" class="admin-muted">
-            {{ t('noConflict') }}
-          </p>
-          <TablePagination
-            v-model:page="page"
-            v-model:page-size="pageSize"
-            :total="filtered.length"
-          />
-        </section>
+          <div class="flex items-center justify-end gap-2 text-sm">
+            <span class="text-[var(--text-tertiary)]">
+              {{ t('modelCount', { count: filtered.length }) }}
+            </span>
+            <IconButton
+              :label="t('previousPage')"
+              :disabled="page <= 1"
+              @click="page--"
+            >
+              <ChevronLeft :size="16" />
+            </IconButton>
+            <span class="tabular-nums text-[var(--text-secondary)]">
+              {{ page }} / {{ pageCount }}
+            </span>
+            <IconButton
+              :label="t('nextPage')"
+              :disabled="page >= pageCount"
+              @click="page++"
+            >
+              <ChevronRight :size="16" />
+            </IconButton>
+          </div>
+        </template>
       </template>
-      <section v-if="result" class="admin-section" role="status">
-        <h3>{{ t('syncFinished') }}</h3>
-        <p>
-          {{
-            t('syncResult', {
-              created: result.created_models,
-              updated: result.updated_models,
-              vendors: result.created_vendors,
-            })
-          }}
+    </div>
+    <div v-else-if="step === 1" class="grid gap-5">
+      <p v-if="missingNames.length" class="text-sm text-[var(--text-tertiary)]">
+        {{ t('newModelsHint') }}
+      </p>
+      <div v-if="changedFieldCount" class="grid gap-3">
+        <p class="text-sm text-[var(--text-tertiary)]">
+          {{ t('existingModelsHint') }}
         </p>
-        <template v-if="result.skipped_models.length"
-          ><h4>{{ t('skipped') }}</h4>
-          <ul class="sync-missing">
-            <li v-for="name in result.skipped_models" :key="name">
-              {{ name }}
-            </li>
-          </ul></template
+        <div class="flex flex-wrap items-center gap-2">
+          <ConsoleButton
+            variant="secondary"
+            size="sm"
+            :disabled="busy || selectedFieldCount === changedFieldCount"
+            @click="chooseAllFields(true)"
+          >
+            {{ t('selectAllFields') }}
+          </ConsoleButton>
+          <ConsoleButton
+            variant="ghost"
+            size="sm"
+            :disabled="busy || !selectedFieldCount"
+            @click="chooseAllFields(false)"
+          >
+            {{ t('clearFieldSelection') }}
+          </ConsoleButton>
+          <p class="text-xs text-[var(--text-tertiary)]" role="status">
+            {{
+              t('fieldsSelected', {
+                selected: selectedFieldCount,
+                total: changedFieldCount,
+              })
+            }}
+          </p>
+        </div>
+      </div>
+      <section v-if="missingNames.length" class="grid gap-2">
+        <h3 class="text-sm font-semibold text-[var(--text-primary)]">
+          {{ t('kindCreate') }} ·
+          {{ t('modelCount', { count: missingNames.length }) }}
+        </h3>
+        <ul class="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+          <li v-for="name in missingNames" :key="name" class="max-w-full">
+            <StatusChip class="max-w-full">
+              <span class="break-all font-mono text-[var(--text-primary)]">{{
+                name
+              }}</span>
+            </StatusChip>
+          </li>
+        </ul>
+      </section>
+      <section
+        v-for="item in chosenUpdates"
+        :key="item.model_name"
+        class="grid gap-2"
+      >
+        <h3 class="break-all text-sm font-semibold text-[var(--text-primary)]">
+          <span class="font-mono">{{ item.model_name }}</span> ·
+          {{ t('kindUpdate') }}
+        </h3>
+        <div
+          class="overflow-x-auto rounded-lg border border-[var(--border-subtle)]"
         >
+          <table class="w-full min-w-[40rem] text-sm">
+            <thead class="bg-[var(--surface-muted)] text-left">
+              <tr class="text-[var(--text-secondary)]">
+                <th class="w-16 px-3 py-2 font-medium">{{ t('apply') }}</th>
+                <th class="px-3 py-2 font-medium">{{ t('field') }}</th>
+                <th class="px-3 py-2 font-medium">{{ t('currentValue') }}</th>
+                <th class="px-3 py-2 font-medium">{{ t('changeTo') }}</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[var(--border-subtle)] align-top">
+              <tr v-for="field in item.fields" :key="field.field">
+                <td class="px-3 py-2">
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 accent-[var(--accent)]"
+                    :checked="fieldChosen(item.model_name, field.field)"
+                    :disabled="busy"
+                    :aria-label="
+                      t('applyField', {
+                        field: fieldLabel(field.field),
+                        name: item.model_name,
+                      })
+                    "
+                    @change="
+                      chooseField(
+                        item.model_name,
+                        field.field,
+                        checkedOf($event)
+                      )
+                    "
+                  />
+                </td>
+                <td class="w-48 px-3 py-2">
+                  <span class="text-[var(--text-primary)]">{{
+                    fieldLabel(field.field)
+                  }}</span>
+                  <p
+                    v-if="impact(field.field)"
+                    class="mt-1 text-xs text-[var(--status-warning-text)]"
+                  >
+                    {{ impact(field.field) }}
+                  </p>
+                </td>
+                <td class="px-3 py-2">
+                  <pre class="sync-value text-[var(--text-tertiary)]">{{
+                    display(field.field, field.local)
+                  }}</pre>
+                </td>
+                <td class="px-3 py-2">
+                  <pre class="sync-value text-[var(--text-primary)]">{{
+                    display(field.field, field.upstream)
+                  }}</pre>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
-    <template #footer
-      ><div class="sync-footer">
-        <ConsoleButton variant="ghost" :disabled="saving" @click="emit('close')"
-          ><X :size="16" />{{
-            result ? t('close') : t('cancel')
-          }}</ConsoleButton
-        ><ConsoleButton
-          v-if="preview"
-          :loading="saving"
-          :disabled="loading || (!preview.missing.length && !selected.length)"
-          @click="synchronize"
-          ><ArrowDownToLine :size="16" />{{ t('syncCreate') }}</ConsoleButton
+    <div v-else-if="step === 2" class="grid gap-4">
+      <p class="text-sm text-[var(--text-primary)]">{{ t('confirmNote') }}</p>
+      <ul class="grid gap-1 text-sm text-[var(--text-primary)]">
+        <li>{{ t('planCreate', { count: missingNames.length }) }}</li>
+        <li>
+          {{
+            t('planOverwrite', {
+              models: overwrite.length,
+              fields: selectedFieldCount,
+            })
+          }}
+        </li>
+      </ul>
+      <div
+        v-if="overwrite.length"
+        class="overflow-x-auto rounded-lg border border-[var(--border-subtle)]"
+      >
+        <table class="w-full text-sm">
+          <thead class="bg-[var(--surface-muted)] text-left">
+            <tr class="text-[var(--text-secondary)]">
+              <th class="px-3 py-2 font-medium">{{ t('model') }}</th>
+              <th class="px-3 py-2 font-medium">{{ t('fields') }}</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[var(--border-subtle)]">
+            <tr v-for="item in overwrite" :key="item.model_name">
+              <td
+                class="break-all px-3 py-2 font-mono text-[var(--text-primary)]"
+              >
+                {{ item.model_name }}
+              </td>
+              <td class="px-3 py-2 text-[var(--text-secondary)]">
+                {{ item.fields.map(fieldLabel).join(', ') }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-sm text-[var(--text-tertiary)]">{{ t('importNote') }}</p>
+      <div
+        v-if="syncError"
+        class="flex flex-col items-center justify-center px-6 py-8 text-center"
+        role="alert"
+      >
+        <AlertTriangle :size="28" class="text-[var(--status-danger-text)]" />
+        <p class="mt-3 font-semibold text-[var(--text-primary)]">
+          {{ t('syncFailed') }}
+        </p>
+        <p class="mt-1 max-w-md text-sm text-[var(--text-tertiary)]">
+          {{ syncError }}
+        </p>
+        <ConsoleButton
+          class="mt-5"
+          variant="secondary"
+          :disabled="busy"
+          @click="previewAgain"
         >
-      </div></template
-    >
+          {{ t('previewAgain') }}
+        </ConsoleButton>
+      </div>
+    </div>
+    <div v-else-if="result" class="grid gap-4" role="status">
+      <h3 class="font-semibold text-[var(--text-primary)]">
+        {{ t('syncCompleted') }}
+      </h3>
+      <p class="text-sm text-[var(--text-primary)]">
+        {{
+          t('syncSummary', {
+            created: result.created_models,
+            updated: result.updated_models,
+            vendors: result.created_vendors,
+          })
+        }}
+      </p>
+      <section v-if="result.skipped_models.length" class="grid gap-2">
+        <h4 class="text-sm font-medium text-[var(--text-secondary)]">
+          {{ t('skippedModels') }}
+        </h4>
+        <ul class="flex flex-wrap gap-2">
+          <li
+            v-for="name in result.skipped_models"
+            :key="name"
+            class="max-w-full"
+          >
+            <StatusChip class="max-w-full">
+              <span class="break-all font-mono text-[var(--text-primary)]">{{
+                name
+              }}</span>
+            </StatusChip>
+          </li>
+        </ul>
+      </section>
+    </div>
+    <template #footer>
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <div class="mr-auto min-w-0 text-sm text-[var(--text-tertiary)]">
+          <p>{{ t('selectedModels', { count: selectedCount }) }}</p>
+          <p v-if="step === 0 && hiddenSelectedCount" class="text-xs">
+            {{ t('hiddenSelected', { count: hiddenSelectedCount }) }}
+          </p>
+        </div>
+        <ConsoleButton
+          variant="ghost"
+          :disabled="saving"
+          @click="emit('close')"
+        >
+          {{ t('close') }}
+        </ConsoleButton>
+        <ConsoleButton
+          v-if="step === 1 || step === 2"
+          variant="ghost"
+          :disabled="busy"
+          @click="step--"
+        >
+          {{ t('back') }}
+        </ConsoleButton>
+        <ConsoleButton
+          v-if="step < 3"
+          :loading="saving"
+          :disabled="busy || !preview || !canAdvance"
+          @click="next"
+        >
+          {{ primaryLabel }}
+        </ConsoleButton>
+      </div>
+    </template>
   </ConsoleModal>
 </template>
 <style scoped>
-.sync-section-title,
-.sync-footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-  justify-content: space-between;
-}
-.sync-footer {
-  justify-content: flex-end;
-}
-.sync-missing {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.sync-missing li {
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  padding: 0.25rem 0.5rem;
-  background: var(--surface-container-low);
-  border-radius: var(--shape-small);
-  font-size: 0.875rem;
-}
-.sync-table {
-  table-layout: fixed;
-}
-.sync-table pre {
+.sync-value {
+  max-height: 8rem;
+  max-width: 16rem;
+  overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 10rem;
-  overflow-y: auto;
   font: inherit;
-}
-@media (max-width: 640px) {
-  .sync-table,
-  .sync-table tbody {
-    display: block;
-  }
-  .sync-table thead {
-    display: none;
-  }
-  .sync-table tr {
-    display: grid;
-    margin-bottom: 1rem;
-    border-bottom: 1px solid var(--border-default);
-  }
-  .sync-table td {
-    display: block;
-    max-width: none;
-  }
-  .sync-table td::before {
-    content: attr(data-label);
-    display: block;
-    margin-bottom: 0.25rem;
-    color: var(--text-tertiary);
-    font-size: 0.75rem;
-  }
+  font-size: 0.75rem;
 }
 </style>

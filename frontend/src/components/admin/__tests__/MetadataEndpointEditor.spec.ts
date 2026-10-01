@@ -19,7 +19,7 @@ describe('metadata inferred endpoint compatibility', () => {
     const source = '["openai", "custom-endpoint"]'
     const wrapper = editor(source)
     expect(wrapper.vm.validate()).toBe(source)
-    await wrapper.get('button[aria-pressed="false"]').trigger('click')
+    await wrapper.get('[role="radio"][aria-checked="false"]').trigger('click')
     expect(JSON.parse(wrapper.vm.validate())).toEqual([
       'openai',
       'custom-endpoint',
@@ -35,6 +35,20 @@ describe('metadata inferred endpoint compatibility', () => {
     expect(JSON.parse(wrapper.vm.validate())).toEqual({
       'custom-endpoint': { path: '/v1/responses', method: 'POST' },
     })
+    wrapper.unmount()
+  })
+
+  it('reports table edits as unsaved until the parent replaces the value', async () => {
+    const source = JSON.stringify({
+      openai: { path: '/v1/chat/completions', method: 'POST' },
+    })
+    const wrapper = editor(source)
+    expect(wrapper.vm.isDirty()).toBe(false)
+    await wrapper.findAll('input')[1].setValue('/v1/responses')
+    expect(wrapper.vm.isDirty()).toBe(true)
+    // A loaded template replaces the whole value and resets the baseline.
+    await wrapper.setProps({ modelValue: '' })
+    expect(wrapper.vm.isDirty()).toBe(false)
     wrapper.unmount()
   })
 })

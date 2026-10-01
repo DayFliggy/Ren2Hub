@@ -4,9 +4,10 @@ import { useI18n } from 'vue-i18n'
 import { Plus, Trash2 } from 'lucide-vue-next'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import IconButton from '@/components/common/IconButton.vue'
+import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import { modelMetadataMessages } from '@/i18n/modelMetadata'
+import './admin.css'
 import {
-  endpointTemplates,
   endpointMethods,
   parseMetadataEndpoints,
   serializeMetadataEndpoints,
@@ -20,13 +21,14 @@ const mode = ref<'table' | 'json'>('table')
 const rows = ref<MetadataEndpointRow[]>([])
 const source = ref('')
 const error = ref('')
-const template = ref('')
 let inferredSource: string | null = null
 let initialRows = ''
+let initialSource = ''
 watch(
   () => props.modelValue,
   (value) => {
     source.value = value
+    initialSource = value
     try {
       rows.value = parseMetadataEndpoints(value)
       inferredSource = value.trim().startsWith('[') ? value : null
@@ -45,34 +47,22 @@ function serializeTable(): string {
     return inferredSource
   return serializeMetadataEndpoints(rows.value)
 }
-function switchMode(value: 'table' | 'json') {
+function switchMode(value: string) {
   if (mode.value === value) return
   try {
     if (value === 'table') rows.value = parseMetadataEndpoints(source.value)
     else source.value = serializeTable()
-    mode.value = value
+    mode.value = value as 'table' | 'json'
     error.value = ''
   } catch (cause) {
     error.value = t((cause as Error).message)
   }
 }
-function addTemplate() {
-  if (!template.value) return
-  try {
-    const current =
-      mode.value === 'json'
-        ? parseMetadataEndpoints(source.value)
-        : [...rows.value]
-    if (current.some((row) => row.type === template.value))
-      throw new Error('endpointTemplateDuplicate')
-    current.push({ type: template.value, ...endpointTemplates[template.value] })
-    rows.value = current
-    source.value = serializeMetadataEndpoints(current)
-    error.value = ''
-    template.value = ''
-  } catch (cause) {
-    error.value = t((cause as Error).message)
-  }
+/** Unsaved edits that have not been written back through validate(). */
+function isDirty(): boolean {
+  return mode.value === 'json'
+    ? source.value !== initialSource
+    : JSON.stringify(rows.value) !== initialRows
 }
 function validate(): string {
   try {
@@ -91,37 +81,20 @@ function validate(): string {
     throw new Error(error.value, { cause })
   }
 }
-defineExpose({ validate })
+defineExpose({ validate, isDirty })
 </script>
 <template>
-  <div class="admin-form">
-    <div class="endpoint-toolbar">
-      <div class="endpoint-modes" role="group" :aria-label="t('endpoints')">
-        <button
-          v-for="item in ['table', 'json'] as const"
-          :key="item"
-          type="button"
-          :aria-pressed="mode === item"
-          :disabled="disabled"
-          @click="switchMode(item)"
-        >
-          {{ t(item === 'table' ? 'endpointTable' : 'endpointJson') }}
-        </button>
-      </div>
-      <label class="admin-field endpoint-template"
-        ><span class="sr-only">{{ t('endpointTemplate') }}</span
-        ><select v-model="template" :disabled="disabled" @change="addTemplate">
-          <option value="">{{ t('endpointTemplate') }}</option>
-          <option
-            v-for="(_, name) in endpointTemplates"
-            :key="name"
-            :value="name"
-          >
-            {{ name }}
-          </option>
-        </select></label
-      >
-    </div>
+  <div class="space-y-3">
+    <SegmentedToggle
+      :model-value="mode"
+      :options="[
+        { value: 'table', label: t('endpointTable') },
+        { value: 'json', label: t('endpointJson') },
+      ]"
+      :label="t('endpointConfiguration')"
+      size="sm"
+      @update:model-value="switchMode"
+    />
     <label v-if="mode === 'json'" class="admin-field"
       ><span class="sr-only">{{ t('endpointJson') }}</span
       ><textarea
@@ -131,7 +104,13 @@ defineExpose({ validate })
         class="endpoint-source"
       />
     </label>
-    <div v-else class="admin-form">
+    <div v-else class="space-y-2">
+      <p
+        v-if="!rows.length"
+        class="rounded-xl border border-dashed border-[var(--border-subtle)] px-4 py-5 text-center text-xs text-[var(--text-tertiary)]"
+      >
+        {{ t('endpointsEmpty') }}
+      </p>
       <div v-for="(row, index) in rows" :key="index" class="endpoint-row">
         <label class="admin-field"
           ><span>{{ t('endpointType') }}</span
@@ -150,7 +129,7 @@ defineExpose({ validate })
           </select></label
         >
         <IconButton
-          :label="t('remove')"
+          :label="t('endpointRemove')"
           :disabled="disabled"
           tone="danger"
           @click="rows.splice(index, 1)"
@@ -165,39 +144,13 @@ defineExpose({ validate })
         ><Plus :size="16" />{{ t('endpointAdd') }}</ConsoleButton
       >
     </div>
+    <p class="text-xs text-[var(--text-tertiary)]">
+      {{ t('endpointsHint') }}
+    </p>
     <p v-if="error" class="admin-error" role="alert">{{ error }}</p>
   </div>
 </template>
 <style scoped>
-.endpoint-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-}
-.endpoint-modes {
-  display: flex;
-  border: 1px solid var(--border-default);
-  border-radius: var(--shape-small);
-  overflow: hidden;
-}
-.endpoint-modes button {
-  min-height: 2.5rem;
-  padding: 0.5rem 1rem;
-  color: var(--text-secondary);
-}
-.endpoint-modes button[aria-pressed='true'] {
-  background: var(--accent-soft);
-  color: var(--accent-text);
-}
-.endpoint-modes button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-.endpoint-template {
-  flex: 1;
-  min-width: 12rem;
-}
 .endpoint-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) 6.5rem 2rem;

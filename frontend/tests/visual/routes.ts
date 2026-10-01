@@ -21,7 +21,7 @@ export const VISUAL_ROUTES: VisualRoute[] = [
     path: `/${status}`,
   })),
   { name: 'metadata', path: '/models/metadata' },
-  { name: 'vendors', path: '/models/metadata?manage=vendors' },
+  { name: 'vendors', path: '/models/vendors' },
   {
     name: 'prefill-groups',
     path: '/models/metadata?manage=prefill-groups',

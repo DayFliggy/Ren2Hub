@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import PasskeyDomainsPanel from '@/components/console/systemSettings/PasskeyDomainsPanel.vue'
@@ -22,6 +22,11 @@ import {
 import { useToast } from '@/composables/useToast'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import GatewayConfigPanel from '@/components/console/gateway/GatewayConfigPanel.vue'
+
+// The pricing workspace is large; keep it in its own chunk as when it had a route.
+const ModelPricingView = defineAsyncComponent(
+  () => import('@/views/admin/ModelPricingView.vue')
+)
 
 const props = defineProps<{ domain: SystemSettingsDomainId }>()
 
@@ -205,7 +210,13 @@ onMounted(() => load())
       </nav>
     </aside>
 
-    <div class="min-w-0 flex-1">
+    <div
+      v-if="activeSection.integration === 'model-pricing'"
+      class="min-w-0 flex-1"
+    >
+      <ModelPricingView />
+    </div>
+    <div v-else class="min-w-0 flex-1">
       <SysSettingsFormCard
         :title="
           activeSection.titleKey

@@ -14,15 +14,14 @@ describe('console navigation', () => {
 
     expect(adminGroup?.items.map((item) => item.name)).toEqual([
       'channel-management',
+      'models-admin',
       'ticket-management',
       'user-management',
       'redemption-management',
       'order-management',
       'billing-reconciliations',
-      'model-pricing',
       'system-settings',
       'task-plugins',
-      'models-admin',
       'system-info',
     ])
     expect(adminGroup?.items[0]).toEqual(
@@ -31,14 +30,22 @@ describe('console navigation', () => {
         route: 'channels',
       })
     )
+    // NewAPI naming for the metadata manager: "Models" right after Channels.
     expect(adminGroup?.items[1]).toEqual(
+      expect.objectContaining({
+        name: 'models-admin',
+        route: 'models-admin',
+        labelKey: 'nav.adminModels',
+      })
+    )
+    expect(adminGroup?.items[2]).toEqual(
       expect.objectContaining({
         name: 'ticket-management',
         route: 'ticket-management',
         permission: { resource: 'ticket', action: 'read' },
       })
     )
-    expect(adminGroup?.items[2]).toEqual(
+    expect(adminGroup?.items[3]).toEqual(
       expect.objectContaining({
         name: 'user-management',
         route: 'users',

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRoute } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { useMediaQuery } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api/client'
@@ -289,7 +289,13 @@ function reload() {
 function beforeUnload(event: BeforeUnloadEvent) {
   if (dirty.value) event.preventDefault()
 }
-onBeforeRouteLeave(() => !dirty.value || window.confirm(t('unsaved')))
+const keepDraft = () => !dirty.value || window.confirm(t('unsaved'))
+onBeforeRouteLeave(keepDraft)
+// Billing sections share one route record, so switching to another section
+// is a route update that unmounts this workspace.
+onBeforeRouteUpdate((to, from) =>
+  to.params.section === from.params.section ? true : keepDraft()
+)
 onMounted(() => {
   void load()
   void settings.load().then(() => {
@@ -554,6 +560,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .model-pricing-page {
   min-width: 0;
+  /* The settings rail narrows this page, so the split follows its own width. */
+  container-type: inline-size;
 }
 .pricing-top-actions,
 .pricing-filter {
@@ -634,6 +642,11 @@ tr[data-active='true'] {
 }
 textarea {
   font-family: monospace;
+}
+@container (max-width: 760px) {
+  .pricing-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 @media (max-width: 767px) {
   .pricing-workspace,
