@@ -76,26 +76,6 @@ describe('capability route guard', () => {
     15000
   )
 
-  it.each([1, 10])(
-    'denies reconciliation access to role %s',
-    async (role) => {
-      useAuthStore().user!.role = role
-      publicApi.status.mockResolvedValue({
-        frontend_capabilities: {
-          dashboard_basic: 'live',
-          billing_reconciliation: 'live',
-        },
-      })
-      await router.push('/billing/reconciliations')
-      expect(router.currentRoute.value.name).toBe('dashboard')
-    },
-    15000
-  )
-  it('requires the reconciliation capability even for root', async () => {
-    useAuthStore().user!.role = 100
-    await router.push('/billing/reconciliations')
-    expect(router.currentRoute.value.name).toBe('dashboard')
-  })
   it.each([
     '/subscription',
     '/plan-management',

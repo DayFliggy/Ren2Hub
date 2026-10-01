@@ -669,7 +669,7 @@ func TestAlibabaWanCompletionFactsAndArtifacts(t *testing.T) {
 		{"flash silent output settles as silent", "wan2.6-i2v-flash", map[string]any{"duration": 5, "SR": 720, "audio": false}, map[string]any{"seconds": "5", "resolution": "720P", "audio": false}},
 		{"flash without audio flag keeps the estimate", "wan2.6-i2v-flash", map[string]any{"duration": 5, "SR": 1080}, map[string]any{"seconds": "5", "resolution": "1080P"}},
 		{"audio flag is ignored for models priced without it", "wan2.6-i2v", map[string]any{"duration": 5, "SR": 1080, "audio": false}, map[string]any{"seconds": "5", "resolution": "1080P"}},
-		{"missing usage keeps reservation", "wan2.7-t2v", map[string]any{}, nil},
+		{"missing usage settles at the submission estimate", "wan2.7-t2v", map[string]any{}, nil},
 		{"oversized duration rejected by host", "wan2.2-s2v", map[string]any{"duration": 1e30, "SR": 480}, nil},
 		{"negative input cannot reduce Wan3 charge", "wan3.0-video", map[string]any{"input_video_duration": -5, "output_video_duration": 10}, nil},
 		{"negative output cannot reduce Wan3 charge", "wan3.0-video", map[string]any{"input_video_duration": 10, "output_video_duration": -5}, nil},
@@ -934,7 +934,7 @@ func TestAlibabaImageResults(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid completion counts retain the reservation", func(t *testing.T) {
+	t.Run("invalid completion counts settle at the submission estimate", func(t *testing.T) {
 		adaptor := taskplugin.New(plugin)
 		task := &model.Task{Properties: model.Properties{UpstreamModelName: "wan2.6-t2i"}}
 		for _, count := range []any{-1, 0, 1.5, 1e30, "2"} {
@@ -943,7 +943,7 @@ func TestAlibabaImageResults(t *testing.T) {
 			result, err := adaptor.ParseTaskResultForTask(task, &http.Response{StatusCode: http.StatusOK}, encoded)
 			require.NoError(t, err)
 			assert.Equal(t, "SUCCESS", result.Status)
-			assert.Nil(t, result.UsageFacts, "invalid count %v must not replace the reservation", count)
+			assert.Nil(t, result.UsageFacts, "invalid count %v is not settlement evidence; the host charges the submission estimate", count)
 		}
 	})
 
@@ -1300,7 +1300,8 @@ func TestAlibabaOpenAIImageDecodeAndSubmission(t *testing.T) {
 // Count derivation for synchronous image results: usage.image_count first,
 // then the Qwen-Image-3.0 usage.output_image_count, then image payloads
 // flattened across every choice; payload-less parts never count and an
-// inconsistent count retains the reservation. The response renderer emits one
+// inconsistent count yields no facts, so the host settles the submission
+// estimate. The response renderer emits one
 // OpenAI data entry per image, so the client sees as many images as are billed.
 func TestAlibabaOpenAIImageCountDerivationAndRender(t *testing.T) {
 	plugin := newAlibabaPlugin(t)
@@ -1325,9 +1326,9 @@ func TestAlibabaOpenAIImageCountDerivationAndRender(t *testing.T) {
 			map[string]any{"image_count": "1"}, 1, false},
 		{"z-image keeps its count", "z-image-turbo", map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": []any{map[string]any{"image": first}}}}}}, map[string]any{"image_count": 1, "width": 1024, "height": 1536},
 			map[string]any{"image_count": "1"}, 1, false},
-		{"inconsistent zero count retains the reservation", "qwen-image-3.0-pro", map[string]any{"choices": twoImagesOneChoice}, map[string]any{"output_image_count": 0},
+		{"inconsistent zero count settles at the submission estimate", "qwen-image-3.0-pro", map[string]any{"choices": twoImagesOneChoice}, map[string]any{"output_image_count": 0},
 			nil, 2, true},
-		{"fractional count retains the reservation", "wan2.6-t2i", map[string]any{"choices": twoImagesOneChoice}, map[string]any{"image_count": 1.5},
+		{"fractional count settles at the submission estimate", "wan2.6-t2i", map[string]any{"choices": twoImagesOneChoice}, map[string]any{"image_count": 1.5},
 			nil, 2, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1358,7 +1359,7 @@ func TestAlibabaOpenAIImageCountDerivationAndRender(t *testing.T) {
 			assert.Equal(t, "SUCCESS", parsed.Immediate.Status)
 			assert.Equal(t, "task_public", parsed.UpstreamTaskID, "synchronous results keep the host task id")
 			if tc.wantErr {
-				assert.Nil(t, parsed.Immediate.UsageFacts, "an unrecognized count must not replace the reservation")
+				assert.Nil(t, parsed.Immediate.UsageFacts, "an unrecognized count is not settlement evidence; the host charges the submission estimate")
 			} else {
 				assert.Equal(t, tc.wantFacts, parsed.Immediate.UsageFacts)
 			}

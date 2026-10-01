@@ -28,7 +28,7 @@ func TestAttemptResetRetainsLogicalBillingAndDropsUndeliveredToolUsage(t *testin
 		RequestId: "logical-request", Billing: billing, FinalPreConsumedQuota: 100,
 		StartTime: time.Now(), RelayFormat: types.RelayFormatClaude,
 		ClaudeConvertInfo:     &ClaudeConvertInfo{MessageStarted: true},
-		UpstreamSideEffecting: true, UpstreamPreparationOnly: true,
+		UpstreamSideEffecting: true, UpstreamTaskAccepted: true,
 		ResponsesUsageInfo: &ResponsesUsageInfo{BuiltInTools: map[string]*BuildInToolInfo{
 			dto.BuildInToolWebSearch: {ToolName: dto.BuildInToolWebSearch, CallCount: 2, SearchContextSize: "low"},
 		}},
@@ -39,7 +39,7 @@ func TestAttemptResetRetainsLogicalBillingAndDropsUndeliveredToolUsage(t *testin
 	assert.Equal(t, 100, info.FinalPreConsumedQuota)
 	assert.False(t, info.EnsureClaudeConvertInfo().MessageStarted)
 	assert.False(t, info.UpstreamSideEffecting)
-	assert.False(t, info.UpstreamPreparationOnly, "a new attempt cannot inherit proof that generation has not started")
+	assert.False(t, info.UpstreamTaskAccepted, "a new attempt cannot inherit another attempt's accepted task")
 	assert.Zero(t, info.BuiltInTools[dto.BuildInToolWebSearch].CallCount)
 	assert.Equal(t, "low", info.BuiltInTools[dto.BuildInToolWebSearch].SearchContextSize)
 	info.MarkValidOutput()

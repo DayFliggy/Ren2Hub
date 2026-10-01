@@ -15,7 +15,7 @@ import (
 var ErrBillingRecoveryStateConflict = errors.New("billing recovery state conflict")
 var ErrBillingRecoveryTokenQuota = errors.New("billing recovery token quota insufficient")
 var ErrBillingRecoveryFundingQuota = errors.New("billing recovery funding quota insufficient")
-var ErrUnsupportedBillingSource = errors.New("billing source is retired; manual reconciliation is required")
+var ErrUnsupportedBillingSource = errors.New("billing source is not the wallet")
 
 const (
 	BillingRecoveryStatusActive            = "active"
@@ -225,15 +225,22 @@ func TouchBillingRecovery(requestID string) error {
 	return nil
 }
 
+// MarkBillingRecoveryRefundPending records a release decision made by the
+// request itself, which knows that it produced no billable provider work.
 func MarkBillingRecoveryRefundPending(requestID string, lastError error) error {
 	return markBillingRecoveryRefundPending(requestID, lastError, false)
 }
 
-func MarkBillingRecoveryAutomaticRefundPending(requestID string) error {
+// MarkUnsentBillingRecoveryRefundPending records a release decision made
+// without the request. Under the row lock it proves that nothing was sent:
+// dispatch persists the frozen estimate, under the same lock, before any
+// provider I/O. A concurrent dispatch therefore either sees this decision and
+// aborts, or has an estimate that recovery charges instead.
+func MarkUnsentBillingRecoveryRefundPending(requestID string) error {
 	return markBillingRecoveryRefundPending(requestID, nil, true)
 }
 
-func markBillingRecoveryRefundPending(requestID string, lastError error, automatic bool) error {
+func markBillingRecoveryRefundPending(requestID string, lastError error, requireUnsent bool) error {
 	if DB == nil || strings.TrimSpace(requestID) == "" {
 		return errors.New("invalid billing recovery refund")
 	}
@@ -255,8 +262,14 @@ func markBillingRecoveryRefundPending(requestID string, lastError error, automat
 		if BillingRecoveryUsageCollecting(recovery.ConsumptionState) || recovery.ConsumptionState == BillingRecoveryStateTaskPending {
 			return ErrBillingRecoveryStateConflict
 		}
-		if automatic && recovery.Status == BillingRecoveryStatusActive && BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState) {
-			return ErrBillingRecoveryStateConflict
+		if requireUnsent && recovery.Status == BillingRecoveryStatusActive && recovery.ConsumptionState != "" {
+			_, _, _, err := frozenBillingEstimateTx(tx, recovery, "")
+			if err == nil {
+				return ErrBillingRecoveryStateConflict
+			}
+			if !errors.Is(err, ErrBillingEstimateMissing) {
+				return err
+			}
 		}
 		updates := map[string]any{
 			"status":     BillingRecoveryStatusRefundPending,
@@ -271,6 +284,16 @@ func markBillingRecoveryRefundPending(requestID string, lastError error, automat
 	})
 }
 
+// DeferBillingRecovery moves a row whose recovery failed behind the rows that
+// are still waiting, so one persistent failure cannot occupy every batch.
+func DeferBillingRecovery(requestID string) error {
+	if DB == nil || strings.TrimSpace(requestID) == "" {
+		return errors.New("invalid billing recovery deferral")
+	}
+	return DB.Model(&BillingRecovery{}).Where("request_id = ?", requestID).
+		Updates(map[string]any{"attempts": gorm.Expr("attempts + 1"), "updated_at": common.GetTimestamp()}).Error
+}
+
 func ListStaleBillingRecoveries(cutoff int64, limit int) ([]BillingRecovery, error) {
 	if DB == nil {
 		return nil, errors.New("billing recovery database is unavailable")
@@ -279,19 +302,18 @@ func ListStaleBillingRecoveries(cutoff int64, limit int) ([]BillingRecovery, err
 		limit = 100
 	}
 	var rows []BillingRecovery
+	// Async task polling owns task_pending; every other stale row is finished
+	// by recovery without waiting for an operator.
 	err := staleBillingRecoveries(DB, cutoff).
 		Where("consumption_state IS NULL OR consumption_state <> ?", BillingRecoveryStateTaskPending).
-		Where("status <> ?", BillingRecoveryStatusReconciliation).
-		Where("status NOT IN ? OR consumption_state IS NULL OR consumption_state NOT IN ?",
-			[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettled}, billingRecoveryUnconfirmedStates()).
 		Order("updated_at asc").Limit(limit).Find(&rows).Error
 	return rows, err
 }
 
 func staleBillingRecoveries(db *gorm.DB, cutoff int64) *gorm.DB {
-	return db.Model(&BillingRecovery{}).Where("(status IN ? OR (status IN ? AND consumption_state IN ?)) AND updated_at < ?",
-		[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending, BillingRecoveryStatusReconciliation},
-		[]string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded}, append(billingRecoveryUnconfirmedStates(), BillingRecoveryStatePending), cutoff)
+	return db.Model(&BillingRecovery{}).Where("(status IN ? OR (status IN ? AND consumption_state = ?)) AND updated_at < ?",
+		[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending},
+		[]string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded}, BillingRecoveryStatePending, cutoff)
 }
 
 type BillingRecoveryBacklog struct {
@@ -355,7 +377,7 @@ func ReserveTx(tx *gorm.DB, requestID string, target common.Quota) error {
 	}
 	event.Fingerprint = fingerprint
 	// Zero holds for explicit free requests still have a durable event, and
-	// therefore the same dispatch and reconciliation protections as paid calls.
+	// therefore the same dispatch and recovery protections as paid calls.
 	if _, err := applyAccountEventTx(tx, event, nil, target > 0); err != nil {
 		return err
 	}
@@ -445,7 +467,7 @@ func finalizeBillingTx(tx *gorm.DB, requestID string, actual common.Quota, relea
 		}
 	}
 	if !release {
-		if err := validateStoredBillingConsumption(tx, recovery, &consumption); err != nil {
+		if err := verifyStoredBillingConsumption(recovery, &consumption); err != nil {
 			return err
 		}
 	}

@@ -122,10 +122,40 @@ func TestFrozenModifiersApplyOnceAndOnlyToTheirPhase(t *testing.T) {
 
 func TestCanonicalUsageConfirmationRemainsIndependentFromPrice(t *testing.T) {
 	usage := billing.Usage{Source: "provider", Terminal: "completed", Complete: true}
-	assert.True(t, usage.ReadyForSettlement())
-	for _, invalid := range []billing.Usage{{Source: "provider", Terminal: "completed"}, {Source: "provider", Terminal: "completed", Complete: true, Estimated: true}, {Source: "provider", Terminal: "failed", Complete: true}, {Terminal: "completed", Complete: true}, {Source: "provider", Terminal: "completed", Complete: true, Invalid: true}} {
-		assert.False(t, invalid.ReadyForSettlement())
+	assert.True(t, usage.Confirmed())
+	assert.True(t, usage.Settleable())
+	for _, estimated := range []billing.Usage{{Source: "provider", Terminal: "completed"}, {Source: "provider", Terminal: "completed", Complete: true, Estimated: true}, {Source: "provider", Terminal: "failed", Complete: true}} {
+		assert.False(t, estimated.Confirmed())
+		assert.True(t, estimated.Settleable(), "best available evidence settles as an estimate")
 	}
+	for _, invalid := range []billing.Usage{{Terminal: "completed", Complete: true}, {Source: "provider", Terminal: "completed", Complete: true, Invalid: true}} {
+		assert.False(t, invalid.Confirmed())
+		assert.False(t, invalid.Settleable())
+	}
+}
+
+func TestPreConsumeMultiplierOnlySizesTheReservation(t *testing.T) {
+	version, err := billing.NewModelPriceVersion("ratio-model", billing.PricingValues{"ModelRatio": 1.0}, false)
+	require.NoError(t, err)
+	quote, err := billing.NewQuote(version, "1", nil, time.Now())
+	require.NoError(t, err)
+	quote.PreConsumeMultiplier = "2"
+	quote.Hash = ""
+	quote.Hash, err = billing.Hash(quote)
+	require.NoError(t, err)
+	cipher, err := billing.NewEvidenceCipher([]byte("test-key"))
+	require.NoError(t, err)
+	evaluate := func(source, phase string) *billing.ChargeResult {
+		usage := billing.Usage{Source: source, Estimated: true, InputTokens: 1000, ContextTokens: 1000, InputIncludesCache: true, Quantities: map[string]string{}}
+		bind := billing.EvidenceBinding{RequestID: "r", AttemptID: "a", ConfigHash: billing.PricingConfigHash(quote), Phase: phase}
+		_, charge, err := cipher.Evaluate(quote, usage, billingexpr.RequestInput{}, bind)
+		require.NoError(t, err)
+		return charge
+	}
+	reservation := evaluate(billing.UsageSourceRequestEstimate, "estimate")
+	settlement := evaluate("estimated", "settlement")
+	require.Positive(t, settlement.FinalQuota)
+	assert.Equal(t, 2*settlement.FinalQuota, reservation.FinalQuota)
 }
 
 func TestPricingRequirementsUseUpstreamModalitiesAndExplicitToolPrices(t *testing.T) {

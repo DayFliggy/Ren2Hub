@@ -117,18 +117,14 @@ func TestGatewayReplicateUploadAdmissionAndAcceptance(t *testing.T) {
 				require.NoError(t, model.DB.First(&recovery).Error)
 				assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
 			}
-			if scenario.name == "unknown_generation_result" {
-				charge = 1500
-				var recovery model.BillingRecovery
-				require.NoError(t, model.DB.First(&recovery).Error)
-				assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
-				assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
-				assert.Zero(t, user.UsedQuota, "unknown generation holds the reservation without final settlement")
-			}
-			if scenario.name == "invalid_upload_response" {
+			if scenario.name == "unknown_generation_result" || scenario.name == "invalid_upload_response" {
+				// A 5xx prediction or a failed upload delivered no image, so the
+				// reservation is released rather than held.
 				var recovery model.BillingRecovery
 				require.NoError(t, model.DB.First(&recovery).Error)
 				assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
+				assert.Zero(t, user.UsedQuota)
+				assert.Zero(t, user.ReservedQuota)
 			}
 			assert.EqualValues(t, scenario.quota-charge, user.Quota)
 			assert.EqualValues(t, 100000-charge, token.RemainQuota)

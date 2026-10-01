@@ -8,7 +8,6 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
-	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 
@@ -54,16 +53,14 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	var err error
 	usage, err = NormalizeRealtimeUsage(usage)
 	if err != nil {
-		relayInfo.BillingSettlementError = err
-		logger.LogError(ctx, "invalid realtime billing usage: "+err.Error())
+		SettleBillingFallback(ctx, relayInfo, billingFallbackPricingFailed, err)
 		return
 	}
-	if usage.Observation == nil || !usage.Observation.Complete || usage.Observation.Estimated || usage.Observation.Terminal != "completed" {
-		HoldUnconfirmedResponseUsage(ctx, relayInfo, usage.CanonicalUsage())
-		return
-	}
+	// An incomplete session settles its observed cumulative usage as an
+	// estimate; the usage snapshot keeps the incomplete observation label.
 	params, err := buildWssConsumptionParams(ctx, relayInfo, usage, extraContent)
 	if err != nil {
+		SettleBillingFallback(ctx, relayInfo, billingFallbackPricingFailed, err)
 		return
 	}
 	settleBillingConsumption(ctx, relayInfo, params, usage.TotalTokens > 0 || relayInfo.PriceData.UsePrice && relayInfo.HasValidOutput())
@@ -79,8 +76,7 @@ func buildWssConsumptionParams(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	facts, result, err := evaluateRequestBilling(relayInfo, facts)
 	relayInfo.PriceData.Usage, relayInfo.PriceData.Charge = &facts, result
 	if err != nil {
-		holdFailedBillingPrice(ctx, relayInfo, billingexpr.TokenParams{}, err)
-		return model.RecordConsumeLogParams{}, relayInfo.BillingSettlementError
+		return model.RecordConsumeLogParams{}, err
 	}
 	quota, err := billing.RequestQuota(result.FinalQuota)
 	if err != nil {

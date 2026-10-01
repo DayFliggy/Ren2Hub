@@ -31,11 +31,11 @@
 | 输出倍率 | Completion ratio | 输出相对于基础输入价格的倍率 |
 | 按次价格 | Per-call price | 每次请求的 USD 单价；图片适用数量与历史尺寸质量规则 |
 | 自动获取 | Fetch prices | 获取五源候选；管理员选单源填入草稿，保存才生效 |
-| 对账 | Reconciliation | 对未知消费或失败处理证据作出明确决定 |
+| 估算结算 | Estimated settlement | 用量不完整或无法计价时按观察用量或发送前冻结估算结算 |
 | 资金流水 | Billing event | 与钱包/Token 投影同事务保存的不可变事件 |
 | 充值 | Top-up | 经业务凭据向钱包入账 |
 | 兑换码 | Redemption code | 可兑换钱包额度的代码 |
-| 超级管理员 | Root | 最高管理权限；对账和价格配置保存由服务端核验 |
+| 超级管理员 | Root | 最高管理权限；价格配置保存由服务端核验 |
 | 两步验证 | Two-factor authentication | 登录或敏感操作的附加验证 |
 
 Model Ratio、Completion Ratio 属于当前 NewAPI 定价界面；订阅套餐不属于当前钱包资金来源。明确零价与未配置价格必须用不同文案，获取候选不能写成已发布。金额展示最多 3 位小数，编辑、提交和导出必须保留原始精度；翻译不得改变单位。

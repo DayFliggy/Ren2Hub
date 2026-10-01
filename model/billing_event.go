@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -15,9 +14,8 @@ import (
 
 var ErrBillingEventConflict = errors.New("billing event identity conflict")
 var ErrBillingVersionConflict = errors.New("billing account version conflict")
-var billingIdempotencyConflicts atomic.Int64
 
-// Automatic settlement and manual reconciliation share one event identity.
+// Request settlement and its recovery share one event identity.
 type billingFinalizationIdentity struct {
 	RequestID, Operation string
 	Quota                common.Quota
@@ -246,7 +244,6 @@ func findBillingEvent(tx *gorm.DB, id, fingerprint string) (*BillingEvent, error
 		return nil, err
 	}
 	if existing.Fingerprint != fingerprint {
-		billingIdempotencyConflicts.Add(1)
 		return nil, ErrBillingEventConflict
 	}
 	return &existing, nil

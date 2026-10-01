@@ -52,8 +52,9 @@ func TestBillingProcessExitRecovery(t *testing.T) {
 			case "reserve_transaction", "reserved":
 				available, reserved, used, logs = 100, 0, 0, 0
 			case "dispatch":
-				available, reserved, used, logs = 80, 20, 0, 0
-				assert.True(t, model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState))
+				// The request may have reached the provider; it settles at its frozen estimate.
+				available, reserved, used = 80, 0, 20
+				assert.Equal(t, model.BillingRecoveryStateCompleted, recovery.ConsumptionState)
 			}
 			assert.Equal(t, []common.Quota{available, reserved, used}, []common.Quota{user.Quota, user.ReservedQuota, user.UsedQuota})
 			assert.Equal(t, []common.Quota{available, reserved, used}, []common.Quota{token.RemainQuota, token.ReservedQuota, token.UsedQuota})
@@ -108,7 +109,7 @@ func TestBillingProcessExitWorker(t *testing.T) {
 	}
 	quote := billingTestQuote(t, "p * 2")
 	require.NoError(t, model.PrepareBillingAttempt(context.Background(), "crash", "attempt-1", 0, quote))
-	estimate, estimateCharge, err := model.EvaluateBilling(quote, billing.Usage{InputTokens: 20, ContextTokens: 20, Estimated: true}, billingexpr.RequestInput{}, "crash", "attempt-1", "estimate")
+	estimate, estimateCharge, err := model.EvaluateBilling(quote, billing.Usage{InputTokens: 20, ContextTokens: 20, Estimated: true, Source: billing.UsageSourceRequestEstimate}, billingexpr.RequestInput{}, "crash", "attempt-1", "estimate")
 	require.NoError(t, err)
 	require.NoError(t, model.PersistBillingEstimate("attempt-1", estimate, estimateCharge))
 	if stage == "dispatch" {

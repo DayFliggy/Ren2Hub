@@ -940,15 +940,15 @@ export function extractUsageOnComplete(task, result, body) { return (body || {})
 			usage: map[string]any{"duration": "NaN"},
 		},
 		{
-			name:  "overflowing upstream units require reconciliation",
+			name:  "overflowing upstream units are not settlement evidence",
 			usage: map[string]any{"upstreamUnits": float64(common.MaxQuota) + 1},
 		},
 		{
-			name:  "negative token facts require reconciliation",
+			name:  "negative token facts are not settlement evidence",
 			usage: map[string]any{"completionTokens": -1, "totalTokens": 2},
 		},
 		{
-			name:  "fractional token facts require reconciliation",
+			name:  "fractional token facts are not settlement evidence",
 			usage: map[string]any{"completionTokens": 1.5, "totalTokens": 2},
 		},
 	} {

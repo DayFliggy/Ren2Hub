@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,7 +91,7 @@ func TestGatewayResponsesWSFinalQuoteAndPersistentConnection(t *testing.T) {
 	}
 }
 
-func TestGatewayResponsesWSKeepsUnknownUsageAndRejectsOverlappingCreate(t *testing.T) {
+func TestGatewayResponsesWSSettlesObservedUsageAndRejectsOverlappingCreate(t *testing.T) {
 	for _, ending := range []string{"unacknowledged", "partial", "terminal_without_usage"} {
 		t.Run(ending, func(t *testing.T) {
 			accepted := make(chan *websocket.Conn, 1)
@@ -139,11 +140,25 @@ func TestGatewayResponsesWSKeepsUnknownUsageAndRejectsOverlappingCreate(t *testi
 			awaitGatewayPermitsReleased(t)
 			var recovery model.BillingRecovery
 			require.NoError(t, model.DB.First(&recovery).Error)
-			assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
 			var user model.User
 			require.NoError(t, model.DB.First(&user, 1).Error)
-			assert.Zero(t, user.UsedQuota)
-			assert.Positive(t, user.ReservedQuota)
+			assert.Zero(t, user.ReservedQuota)
+			if ending == "unacknowledged" {
+				// The connection ended after send without any output.
+				assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
+				assert.Zero(t, user.UsedQuota)
+			} else {
+				// Without terminal usage the observed counters settle as an
+				// estimate under "p * 2 + c * 4" (quota is half the sum): the
+				// partial delta adds one output token to the 5-token prompt
+				// estimate; a terminal without usage or output observed nothing.
+				want := map[string]common.Quota{"partial": 7, "terminal_without_usage": 0}[ending]
+				assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
+				assert.Equal(t, want, user.UsedQuota)
+				var usage billing.Usage
+				require.NoError(t, common.UnmarshalJsonStr(string(recovery.UsageSnapshot), &usage))
+				assert.False(t, usage.Confirmed())
+			}
 			var attempts int64
 			require.NoError(t, model.DB.Model(&model.BillingAttempt{}).Count(&attempts).Error)
 			assert.EqualValues(t, 1, attempts)

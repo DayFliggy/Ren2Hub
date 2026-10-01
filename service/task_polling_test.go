@@ -457,7 +457,9 @@ func TestRunTaskPollingOnceDoesNotRefundHistoricalFailedTask(t *testing.T) {
 	assert.Equal(t, int64(0), countLogs(t))
 }
 
-func TestTimedOutAcceptedTasksKeepReservationsUntilEvidenceArrives(t *testing.T) {
+// A task that never returned a result fails at the timeout and releases its
+// reservation exactly once; no output reached the user.
+func TestTimedOutAcceptedTasksFailAndReleaseReservation(t *testing.T) {
 	truncate(t)
 	seedUser(t, 403, 10000)
 	task := makeTask(403, 0, 1200, 0, BillingSourceWallet)
@@ -470,13 +472,14 @@ func TestTimedOutAcceptedTasksKeepReservationsUntilEvidenceArrives(t *testing.T)
 	sweepTimedOutTasks(context.Background())
 	var stored model.Task
 	require.NoError(t, model.DB.First(&stored, task.ID).Error)
-	assert.EqualValues(t, model.TaskStatusInProgress, stored.Status)
-	assert.Equal(t, 8800, getUserQuota(t, 403))
-	assert.Zero(t, countLogs(t))
+	assert.EqualValues(t, model.TaskStatusFailure, stored.Status)
+	assert.Zero(t, stored.Quota)
+	assert.Equal(t, 10000, getUserQuota(t, 403))
+	used, requests := getUserUsageAccounting(t, 403)
+	assert.Zero(t, used)
+	assert.Zero(t, requests)
+	assert.EqualValues(t, 1, countLogs(t))
 	var recovery model.BillingRecovery
 	require.NoError(t, model.DB.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
-	assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
-	assert.EqualValues(t, 1200, recovery.FundingAmount)
-	require.NoError(t, completeTestTask(t, context.Background(), task, model.TaskStatusFailure, 0, "provider confirmed failure"))
-	assert.Equal(t, 10000, getUserQuota(t, 403))
+	assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
 }

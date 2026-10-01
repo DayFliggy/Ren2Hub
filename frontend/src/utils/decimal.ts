@@ -75,29 +75,3 @@ export function formatDecimal(value: string): string {
     .replaceAll(',', '')
   return (negative ? '-' : '') + result
 }
-
-export function formatBillingEvidence(value: unknown): string {
-  return JSON.stringify(
-    value,
-    (key, item: unknown) => {
-      if (
-        [
-          'expression',
-          'model',
-          'model_name',
-          'id',
-          'request_id',
-          'hash',
-          'quote_hash',
-        ].includes(key)
-      )
-        return item
-      if (typeof item === 'number' && Number.isFinite(item))
-        return Number(item.toFixed(3))
-      if (typeof item === 'string' && /^-?(?:0|[1-9]\d*)\.\d+$/.test(item))
-        return formatDecimal(item)
-      return item
-    },
-    2
-  )
-}

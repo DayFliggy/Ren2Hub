@@ -135,7 +135,7 @@ func TestTaskPluginProcessExitWorker(t *testing.T) {
 		plugin, err := LoadTaskPluginExact(ref)
 		require.NoError(t, err)
 		require.Equal(t, "1.0.0", plugin.Meta.Version)
-		_, err = RetryBillingRecovery(ctx, pluginExitRequestID)
+		_, err = recoverOneBillingRecovery(ctx, pluginExitRequestID)
 		require.NoError(t, err)
 		require.NoError(t, model.RecoverTaskResultMetrics(ctx, 10))
 		return
@@ -151,7 +151,7 @@ func TestTaskPluginProcessExitWorker(t *testing.T) {
 	require.NoError(t, model.Reserve(pluginExitRequestID, 40))
 	quote := billingTestCallQuote(t)
 	require.NoError(t, model.PrepareBillingAttemptWithPlugin(ctx, pluginExitRequestID, "plugin-attempt", 1, quote, &ref))
-	estimate, estimateCharge, err := model.EvaluateBilling(quote, billing.Usage{Estimated: true, Quantities: map[string]string{"calls": "1"}}, billingexpr.RequestInput{}, pluginExitRequestID, "plugin-attempt", "estimate")
+	estimate, estimateCharge, err := model.EvaluateBilling(quote, billing.Usage{Estimated: true, Source: billing.UsageSourceRequestEstimate, Quantities: map[string]string{"calls": "1"}}, billingexpr.RequestInput{}, pluginExitRequestID, "plugin-attempt", "estimate")
 	require.NoError(t, err)
 	require.NoError(t, model.PersistBillingEstimate("plugin-attempt", estimate, estimateCharge))
 
@@ -238,8 +238,16 @@ func assertTaskPluginExitState(t *testing.T, db *gorm.DB, stage string) {
 	loaded, err := model.GetTaskPluginExact(ref)
 	require.NoError(t, err)
 	assert.Equal(t, version.Source, loaded.Source)
+	// A durable task keeps its executable. A settled attempt without a task
+	// no longer pins the old version, so it may be deleted.
+	executions := int64(1)
 	_, err = model.DeleteTaskPluginVersion(ref.Key, ref.Version)
-	assert.ErrorIs(t, err, model.ErrTaskPluginInUse)
+	if stage == "accepted_before_task" {
+		require.NoError(t, err)
+		executions = 0
+	} else {
+		assert.ErrorIs(t, err, model.ErrTaskPluginInUse)
+	}
 	var recovery model.BillingRecovery
 	var attempt model.BillingAttempt
 	require.NoError(t, db.Where("request_id = ?", pluginExitRequestID).First(&recovery).Error)
@@ -250,11 +258,11 @@ func assertTaskPluginExitState(t *testing.T, db *gorm.DB, stage string) {
 	assert.Equal(t, quote.Hash, attempt.QuoteHash)
 	assert.Equal(t, "0.00004", quote.PriceVersion.Pricing["ModelPrice"])
 	assert.Equal(t, attempt.Quote, recovery.QuoteSnapshot)
-	for _, row := range []any{&model.BillingAttempt{}, &model.TaskPluginExecution{}} {
-		var count int64
-		require.NoError(t, db.Model(row).Count(&count).Error)
-		assert.EqualValues(t, 1, count, "recovery retains the original attempt and plugin pin")
-	}
+	var attempts, pins int64
+	require.NoError(t, db.Model(&model.BillingAttempt{}).Count(&attempts).Error)
+	require.NoError(t, db.Model(&model.TaskPluginExecution{}).Count(&pins).Error)
+	assert.EqualValues(t, 1, attempts, "recovery retains the original attempt")
+	assert.Equal(t, executions, pins)
 	var user model.User
 	var token model.Token
 	require.NoError(t, db.First(&user, 1).Error)
@@ -267,29 +275,26 @@ func assertTaskPluginExitState(t *testing.T, db *gorm.DB, stage string) {
 	require.NoError(t, db.Where("request_id = ?", pluginExitRequestID).Find(&logs).Error)
 	require.NoError(t, db.Find(&results).Error)
 	require.NoError(t, db.Find(&metrics).Error)
-	expected := []common.Quota{60, 40, 0}
+	// The provider accepted the job in both stages, so recovery charges it once:
+	// the frozen per-call estimate, or the persisted completion charge.
+	expected := []common.Quota{80, 0, 20}
+	assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
+	assert.Equal(t, model.BillingRecoveryStateCompleted, recovery.ConsumptionState)
+	require.Len(t, events, 2)
+	assert.Equal(t, model.BillingRecoveryOperationReserve, events[0].Operation)
+	assert.Equal(t, model.BillingRecoveryOperationSettle, events[1].Operation)
+	require.Len(t, logs, 1)
+	assert.EqualValues(t, 20, logs[0].Quota)
+	assert.EqualValues(t, 1, user.RequestCount)
 	if stage == "accepted_before_task" {
 		var taskCount int64
 		require.NoError(t, db.Model(&model.Task{}).Count(&taskCount).Error)
 		assert.Zero(t, taskCount)
 		assert.Empty(t, execution.TaskID)
-		assert.True(t, model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState))
-		assert.ErrorIs(t, model.MarkBillingRecoveryAutomaticRefundPending(pluginExitRequestID), model.ErrBillingRecoveryStateConflict)
-		require.Len(t, events, 1)
-		assert.Equal(t, model.BillingRecoveryOperationReserve, events[0].Operation)
-		assert.Empty(t, logs)
 		assert.Empty(t, results)
 		assert.Empty(t, metrics)
-		assert.Zero(t, user.RequestCount)
 	} else {
-		expected = []common.Quota{80, 0, 20}
 		assert.Equal(t, "task-plugin-exit", execution.TaskID)
-		assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
-		require.Len(t, events, 2)
-		assert.Equal(t, model.BillingRecoveryOperationReserve, events[0].Operation)
-		assert.Equal(t, model.BillingRecoveryOperationSettle, events[1].Operation)
-		require.Len(t, logs, 1)
-		assert.EqualValues(t, 20, logs[0].Quota)
 		require.Len(t, results, 1)
 		assert.Equal(t, model.BillingRecoveryStateCompleted, results[0].MetricsState)
 		assert.Equal(t, ref.SourceHash, results[0].PluginHash)
@@ -300,7 +305,6 @@ func assertTaskPluginExitState(t *testing.T, db *gorm.DB, stage string) {
 		assert.EqualValues(t, 1, metrics[0].SuccessCount)
 		assert.EqualValues(t, 30000, metrics[0].TotalLatencyMs)
 		assert.EqualValues(t, 20000, metrics[0].GenerationMs)
-		assert.EqualValues(t, 1, user.RequestCount)
 		var task model.Task
 		require.NoError(t, db.First(&task, results[0].TaskID).Error)
 		assert.EqualValues(t, model.TaskStatusSuccess, task.Status)

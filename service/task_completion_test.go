@@ -58,7 +58,9 @@ func TestTaskTerminalRecoveryResumesAfterLogFailure(t *testing.T) {
 	assert.Zero(t, summary.Scanned)
 }
 
-func TestTaskTerminalSurvivesAccountingPreparationFailure(t *testing.T) {
+// A failed accounting preparation leaves the job non-terminal with its
+// reservation, so the next poll completes and settles it once.
+func TestTaskAccountingPreparationFailureLeavesTaskForNextPoll(t *testing.T) {
 	truncate(t)
 	const id = 852
 	seedUser(t, id, 100)
@@ -77,13 +79,21 @@ func TestTaskTerminalSurvivesAccountingPreparationFailure(t *testing.T) {
 	require.NoError(t, model.DB.Callback().Query().Remove("terminal_username_failure"))
 	var persisted model.Task
 	require.NoError(t, model.DB.First(&persisted, task.ID).Error)
-	assert.EqualValues(t, model.TaskStatusSuccess, persisted.Status)
-	assert.Equal(t, 70, getUserQuota(t, id), "keep reservation when accounting preparation failed")
+	assert.EqualValues(t, model.TaskStatusInProgress, persisted.Status)
+	assert.Equal(t, 70, getUserQuota(t, id))
 	var recovery model.BillingRecovery
 	require.NoError(t, model.DB.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
-	assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
+	assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
+	assert.Equal(t, model.BillingRecoveryStateTaskPending, recovery.ConsumptionState)
+	var events int64
+	require.NoError(t, model.DB.Model(&model.TaskResultEvent{}).Where("task_id = ?", task.ID).Count(&events).Error)
+	assert.Zero(t, events)
+
+	require.NoError(t, completeTestTask(t, context.Background(), &persisted, model.TaskStatusSuccess, 15, "actual usage"))
+	assert.Equal(t, 85, getUserQuota(t, id))
+	assert.EqualValues(t, 1, countLogs(t))
 	var event model.TaskResultEvent
-	require.NoError(t, model.DB.First(&event, task.ID).Error)
+	require.NoError(t, model.DB.Where("task_id = ?", task.ID).First(&event).Error)
 	assert.EqualValues(t, model.TaskStatusSuccess, event.Status)
 	assert.Equal(t, model.BillingRecoveryStateCompleted, event.MetricsState)
 }

@@ -148,14 +148,6 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         icon: 'M9 5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 3h6v4H9zM9 12h6M9 16h6',
       },
       {
-        name: 'billing-reconciliations',
-        labelKey: 'billing.reconciliations',
-        route: 'billing-reconciliations',
-        feature: 'billing_reconciliation',
-        rootOnly: true,
-        icon: 'M4 4h16v16H4zM8 8h8M8 12h8M8 16h4',
-      },
-      {
         name: 'model-pricing',
         labelKey: 'billing.modelPricing',
         route: 'model-pricing',

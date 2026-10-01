@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func enableGeminiSignalSuccessLimit(t *testing.T) {
@@ -102,24 +103,21 @@ func TestGatewayGeminiSignalFailures(t *testing.T) {
 						require.Equal(t, tc.status, response.StatusCode, "%s", data)
 						require.Positive(t, sends.Load())
 						require.Contains(t, string(data), `"error"`)
+						// No output reached the client, so every failure releases the
+						// reservation, including an empty response after send.
 						var recovery model.BillingRecovery
 						require.Eventually(t, func() bool {
-							return model.DB.First(&recovery).Error == nil && ((tc.name == "empty" && model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState)) || (tc.name != "empty" && recovery.Status == model.BillingRecoveryStatusRefunded))
+							return model.DB.First(&recovery).Error == nil && recovery.Status == model.BillingRecoveryStatusRefunded
 						}, 2*time.Second, 10*time.Millisecond)
 						var user model.User
 						require.NoError(t, model.DB.First(&user).Error)
 						require.Zero(t, user.UsedQuota)
-						held := common.Quota(0)
-						if tc.name == "empty" {
-							held = recovery.FundingAmount
-							require.Positive(t, held)
-						}
-						require.EqualValues(t, 10000000-held, user.Quota)
-						require.Equal(t, held, user.ReservedQuota)
+						require.EqualValues(t, 10000000, user.Quota)
+						require.Zero(t, user.ReservedQuota)
 						var token model.Token
 						require.NoError(t, model.DB.First(&token).Error)
-						require.EqualValues(t, 100000-held, token.RemainQuota)
-						require.Equal(t, held, token.ReservedQuota)
+						require.EqualValues(t, 100000, token.RemainQuota)
+						require.Zero(t, token.ReservedQuota)
 						require.Zero(t, token.UsedQuota)
 						var health []model.ChannelHealth
 						require.NoError(t, model.DB.Where("channel_id = ?", channelID).Find(&health).Error)
@@ -189,23 +187,18 @@ func TestGatewayGeminiPartialAndNormalTermination(t *testing.T) {
 					}
 					var recovery model.BillingRecovery
 					require.Eventually(t, func() bool {
-						if model.DB.First(&recovery).Error != nil {
-							return false
-						}
-						if reason == "error" {
-							return recovery.Status == model.BillingRecoveryStatusReconciliation
-						}
-						return recovery.Status == model.BillingRecoveryStatusSettled && recovery.ConsumptionState == model.BillingRecoveryStateCompleted
+						return model.DB.First(&recovery).Error == nil && recovery.Status == model.BillingRecoveryStatusSettled && recovery.ConsumptionState == model.BillingRecoveryStateCompleted
 					}, 2*time.Second, 10*time.Millisecond)
 					var user model.User
 					require.NoError(t, model.DB.First(&user).Error)
+					// A fixed-price call cannot be priced from an interrupted stream,
+					// so delivered partial output settles at the frozen estimate.
+					require.EqualValues(t, 500, user.UsedQuota, "delivered output settles exactly one fixed-price call")
+					require.Zero(t, user.ReservedQuota)
 					if reason == "error" {
-						require.Zero(t, user.UsedQuota, "partial output cannot confirm final consumption")
-						require.Equal(t, recovery.FundingAmount, user.ReservedQuota)
-						require.Positive(t, user.ReservedQuota)
-					} else {
-						require.EqualValues(t, 500, user.UsedQuota, "confirmed terminal settles exactly one fixed-price call")
-						require.Zero(t, user.ReservedQuota)
+						var log model.Log
+						require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).First(&log).Error)
+						require.Equal(t, "frozen_estimate", gjson.Get(log.Other, "admin_info.usage_billing_path").String())
 					}
 					var health []model.ChannelHealth
 					require.NoError(t, model.DB.Where("channel_id = ?", channelID).Find(&health).Error)

@@ -97,18 +97,3 @@ func BillingAttemptFingerprint(requestID string, channelID int, quote *billing.Q
 		QuoteHash string `json:"quote_hash"`
 	}{requestID, channelID, quote.Hash})
 }
-
-func RecordBillingCalculationFailure(requestID string, usage *billing.Usage) error {
-	data, err := common.Marshal(usage)
-	if err != nil {
-		return err
-	}
-	result := DB.Model(&BillingRecovery{}).Where("request_id = ? AND status IN ?", requestID, []string{BillingRecoveryStatusActive, BillingRecoveryStatusReconciliation}).Updates(map[string]any{"usage_snapshot": string(data), "status": BillingRecoveryStatusReconciliation, "consumption_state": BillingRecoveryStateUnprepared, "last_error": "billing_calculation_invalid", "consumption_error": "billing_calculation_invalid", "version": gorm.Expr("version + 1"), "updated_at": common.GetTimestamp()})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected != 1 {
-		return ErrBillingRecoveryStateConflict
-	}
-	return nil
-}

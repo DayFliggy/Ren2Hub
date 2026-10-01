@@ -72,6 +72,8 @@ func completeResponsesWSAudit(t *testing.T, upstream, client *websocket.Conn, id
 	assert.JSONEq(t, body, readResponsesWSAudit(t, client))
 }
 
+// Every call ends without holding funds: a settled call charges the fixture's
+// fixed 500-quota price, a released call charges nothing.
 func assertResponsesWSAuditAccounting(t *testing.T, status string, attempts int64) {
 	t.Helper()
 	awaitGatewayPermitsReleased(t)
@@ -80,12 +82,11 @@ func assertResponsesWSAuditAccounting(t *testing.T, status string, attempts int6
 	assert.Equal(t, status, recovery.Status)
 	var user model.User
 	require.NoError(t, model.DB.First(&user, 1).Error)
-	if status == model.BillingRecoveryStatusReconciliation {
+	assert.Zero(t, user.ReservedQuota)
+	if status == model.BillingRecoveryStatusSettled {
+		assert.EqualValues(t, 500, user.UsedQuota)
+	} else {
 		assert.Zero(t, user.UsedQuota)
-		assert.Positive(t, user.ReservedQuota)
-	} else if status == model.BillingRecoveryStatusRefunded {
-		assert.Zero(t, user.UsedQuota)
-		assert.Zero(t, user.ReservedQuota)
 	}
 	var count int64
 	require.NoError(t, model.DB.Model(&model.BillingAttempt{}).Count(&count).Error)
@@ -247,18 +248,15 @@ func TestGatewayResponsesWSRejectionHonorsSharedRetryBudget(t *testing.T) {
 			rejection := fmt.Sprintf(`{"type":"error","status":%d,"event_id":"create-one","stream_id":"active","error":{"type":"upstream_error","code":"fixture_rejected","message":"fixture rejected generation"}}`, code)
 			writeResponsesWSAudit(t, upstream, rejection)
 			assert.JSONEq(t, rejection, readResponsesWSAudit(t, client))
-			status := model.BillingRecoveryStatusRefunded
-			if code == 408 || code >= 500 {
-				status = model.BillingRecoveryStatusReconciliation
-			}
-			assertResponsesWSAuditAccounting(t, status, 1)
+			// A rejection without output releases funds, including 408 and 5xx.
+			assertResponsesWSAuditAccounting(t, model.BillingRecoveryStatusRefunded, 1)
 			assert.Equal(t, 0, service.DefaultSameKeyAttempts)
 			assert.Empty(t, accepted, "the locked WS credential must not bypass the shared zero same-key retry budget or change its connection owner")
 		})
 	}
 }
 
-func TestGatewayResponsesWSClientDisconnectPreservesUnknownUsage(t *testing.T) {
+func TestGatewayResponsesWSClientDisconnectSettlesDeliveredOutput(t *testing.T) {
 	base, key, _, accepted := setupResponsesWSAudit(t)
 	client := dialResponsesWSAudit(t, base, key)
 	writeResponsesWSAudit(t, client, `{"type":"response.create","stream_id":"active","model":"gpt-4o-mini","input":"hello","max_output_tokens":10}`)
@@ -278,7 +276,9 @@ func TestGatewayResponsesWSClientDisconnectPreservesUnknownUsage(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("upstream write did not unblock after client disconnect")
 	}
-	assertResponsesWSAuditAccounting(t, model.BillingRecoveryStatusReconciliation, 1)
+	// Output reached the client before the disconnect; the fixed-price call
+	// has no terminal event and settles at its frozen estimate.
+	assertResponsesWSAuditAccounting(t, model.BillingRecoveryStatusSettled, 1)
 }
 
 func TestGatewayResponsesWSIncompleteClientFrameNeverSends(t *testing.T) {
@@ -336,5 +336,6 @@ func TestGatewayResponsesWSDrainLifecycle(t *testing.T) {
 	require.NoError(t, client.SetReadDeadline(time.Now().Add(time.Second)))
 	_, _, err := client.ReadMessage()
 	require.Error(t, err)
-	assertResponsesWSAuditAccounting(t, model.BillingRecoveryStatusReconciliation, 1)
+	// The drain deadline closed a call that produced no output.
+	assertResponsesWSAuditAccounting(t, model.BillingRecoveryStatusRefunded, 1)
 }

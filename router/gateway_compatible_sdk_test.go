@@ -287,11 +287,16 @@ func TestGatewayCompatibleInvalidUsageIsNotDeliveredOrCharged(t *testing.T) {
 				assert.NotContains(t, output, "must-not-be-delivered")
 				assert.EqualValues(t, 1, sends.Load())
 				awaitGatewayPermitsReleased(t)
+				// Invalid usage is rejected before delivery, so the reservation
+				// is released instead of charged or held.
 				var user model.User
 				var token model.Token
 				require.Eventually(t, func() bool {
-					return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == 9999500 && token.RemainQuota == 1500 && user.ReservedQuota == 500 && token.ReservedQuota == 500
+					return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == 10000000 && token.RemainQuota == 2000 && user.ReservedQuota == 0 && token.ReservedQuota == 0
 				}, time.Second, 10*time.Millisecond)
+				var recovery model.BillingRecovery
+				require.NoError(t, model.DB.First(&recovery).Error)
+				assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
 				assert.Zero(t, user.UsedQuota)
 				assert.Zero(t, user.RequestCount)
 				var logs []model.Log
@@ -325,7 +330,7 @@ func (writer *gatewayCompatibleFailureWriter) Write(body []byte) (int, error) {
 	}
 }
 
-func TestGatewayCompatibleJSONClientFailureHoldsWithoutHealthPenalty(t *testing.T) {
+func TestGatewayCompatibleJSONClientFailureReleasesWithoutHealthPenalty(t *testing.T) {
 	for _, provider := range []struct {
 		name string
 		kind int
@@ -357,11 +362,16 @@ func TestGatewayCompatibleJSONClientFailureHoldsWithoutHealthPenalty(t *testing.
 				engine.ServeHTTP(httptest.NewRecorder(), request)
 				assert.EqualValues(t, 1, sends.Load(), "a client write failure must not retry the provider")
 				awaitGatewayPermitsReleased(t)
+				// The response never completed delivery to the client, so no
+				// valid output exists and the reservation is released.
 				var user model.User
 				var token model.Token
 				require.Eventually(t, func() bool {
-					return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == 9999500 && token.RemainQuota == 1500 && user.ReservedQuota == 500 && token.ReservedQuota == 500
+					return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == 10000000 && token.RemainQuota == 2000 && user.ReservedQuota == 0 && token.ReservedQuota == 0
 				}, time.Second, 10*time.Millisecond)
+				var recovery model.BillingRecovery
+				require.NoError(t, model.DB.First(&recovery).Error)
+				assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
 				assert.Zero(t, user.UsedQuota)
 				assert.Zero(t, user.RequestCount)
 				var logs []model.Log

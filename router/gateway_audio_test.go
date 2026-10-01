@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func setupGatewayAudio(t *testing.T, handler http.HandlerFunc) (string, string) {
@@ -104,33 +105,36 @@ func TestGatewayAudioSpeechAccounting(t *testing.T) {
 				assert.Equal(t, "\x00\x01\x02\x03", output)
 			}
 			awaitGatewayPermitsReleased(t)
-			wantQuota, heldQuota := 0, 0
-			settled := scenario == "binary" || scenario == "sse"
-			if settled {
+			// Delivered audio bills the fixed 500-quota call: a confirmed terminal
+			// settles normally, an interrupted or unpriceable stream settles at
+			// the frozen estimate. Failures without delivered audio release.
+			wantQuota := 0
+			if delivered {
 				wantQuota = 500
-			} else if scenario != "invalid_input" {
-				heldQuota = 500
 			}
+			frozen := scenario == "interrupted" || scenario == "negative_usage"
 			require.Eventually(t, func() bool {
 				var user model.User
-				return model.DB.First(&user, 1).Error == nil && user.Quota == common.Quota(10000000-wantQuota-heldQuota)
+				return model.DB.First(&user, 1).Error == nil && user.Quota == common.Quota(10000000-wantQuota) && user.ReservedQuota == 0
 			}, time.Second, 10*time.Millisecond)
 			var user model.User
 			require.NoError(t, model.DB.First(&user, 1).Error)
 			assert.EqualValues(t, wantQuota, user.UsedQuota)
-			assert.EqualValues(t, heldQuota, user.ReservedQuota)
 			var logs []model.Log
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
-			if settled {
+			if delivered {
 				require.Len(t, logs, 1)
 				assert.Equal(t, 1, user.RequestCount)
-				if scenario == "sse" {
+				assert.Equal(t, frozen, gjson.Get(logs[0].Other, "admin_info.usage_billing_path").String() == "frozen_estimate")
+				switch {
+				case scenario == "sse":
 					assert.Equal(t, 20, logs[0].CompletionTokens)
-				} else {
-					assert.Zero(t, logs[0].CompletionTokens, "binary audio has no actual token count")
+				default:
+					assert.Zero(t, logs[0].CompletionTokens, "binary audio and frozen estimates have no actual token count")
 				}
 			} else {
 				assert.Empty(t, logs)
+				assert.Zero(t, user.RequestCount)
 			}
 			var failures int64
 			require.NoError(t, model.DB.Model(&model.ChannelHealth{}).Where("failure_count > 0").Count(&failures).Error)
@@ -180,9 +184,11 @@ func TestGatewayAudioCancellationReleasesAdmission(t *testing.T) {
 		t.Fatal("upstream did not observe cancellation")
 	}
 	awaitGatewayPermitsReleased(t)
+	// Audio reached the client before cancellation, so the fixed-price call
+	// settles at its frozen 500-quota estimate.
 	require.Eventually(t, func() bool {
 		var user model.User
-		return model.DB.First(&user, 1).Error == nil && user.UsedQuota == 0 && user.ReservedQuota == 500 && user.Quota == 9999500
+		return model.DB.First(&user, 1).Error == nil && user.UsedQuota == 500 && user.ReservedQuota == 0 && user.Quota == 9999500
 	}, time.Second, 10*time.Millisecond)
 	var failures int64
 	require.NoError(t, model.DB.Model(&model.ChannelHealth{}).Where("failure_count > 0").Count(&failures).Error)

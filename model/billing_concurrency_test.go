@@ -1,7 +1,6 @@
 package model
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -77,17 +76,19 @@ func TestBillingAccountConcurrencyAcrossDatabases(t *testing.T) {
 			requestID := fmt.Sprintf("reserve-%d", winner)
 			consumption, err := bindConsumptionEvidence(requestID, BillingConsumption{Log: Log{UserId: 1, TokenId: winner, Quota: 30, CreatedAt: 7200}, CountUsage: true})
 			require.NoError(t, err)
-			require.NoError(t, PrepareBillingRecoveryConsumption(requestID, consumption))
-			var recovery BillingRecovery
-			require.NoError(t, db.Where("request_id = ?", requestID).First(&recovery).Error)
-			command := BillingResolution{OperationID: "race-resolve", ExpectedVersion: recovery.Version, Action: "settle", Quota: 30, Reason: "provider amount verified"}
+			// The request's own settlement races the stale-request fallback; exactly
+			// one settlement intent may commit and it is charged once.
 			start = make(chan struct{})
 			wg.Add(2)
-			go func() { defer wg.Done(); <-start; outcomes[0] = Settle(requestID, 30) }()
 			go func() {
 				defer wg.Done()
 				<-start
-				_, outcomes[1] = ResolveBillingReconciliation(context.Background(), recovery.ID, 1, command)
+				outcomes[0] = PrepareBillingRecoveryConsumption(requestID, consumption)
+			}()
+			go func() {
+				defer wg.Done()
+				<-start
+				outcomes[1] = PrepareFrozenEstimateConsumption(requestID, "", Log{CreatedAt: 7200}, true)
 			}()
 			close(start)
 			wg.Wait()
@@ -96,7 +97,9 @@ func TestBillingAccountConcurrencyAcrossDatabases(t *testing.T) {
 					assert.True(t, errors.Is(err, ErrBillingEventConflict) || errors.Is(err, ErrBillingVersionConflict) || errors.Is(err, ErrBillingRecoveryStateConflict), err)
 				}
 			}
-			assert.NotEqual(t, outcomes[0] == nil, outcomes[1] == nil, "one finalization wins")
+			assert.NotEqual(t, outcomes[0] == nil, outcomes[1] == nil, "one settlement intent wins")
+			require.NoError(t, Settle(requestID, 30))
+			require.NoError(t, Settle(requestID, 30))
 			require.NoError(t, ApplyBillingRecoveryConsumption(requestID))
 			require.NoError(t, ApplyBillingRecoveryConsumption(requestID))
 			require.NoError(t, db.First(&user, 1).Error)

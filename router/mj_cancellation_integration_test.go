@@ -109,22 +109,23 @@ func TestMidjourneyUnknownAcceptanceCancellation(t *testing.T) {
 
 			assert.True(t, upstreamCancelled.Load())
 			assert.Empty(t, response.Body.String(), "client cancellation must not write another error response")
+			// The gateway never received a job identity, so the reservation is
+			// released and later recovery passes cannot charge it.
 			var recovery model.BillingRecovery
 			for range 2 {
 				require.NoError(t, db.First(&recovery).Error)
-				assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
-				assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
-				assert.Positive(t, recovery.FundingAmount)
+				assert.Equal(t, model.BillingRecoveryStatusRefunded, recovery.Status)
 				require.NoError(t, db.First(user, user.Id).Error)
 				require.NoError(t, db.First(token, token.Id).Error)
-				assert.EqualValues(t, 1_000_000-int(recovery.FundingAmount), user.Quota)
-				assert.EqualValues(t, 1_000_000-int(recovery.TokenAmount), token.RemainQuota)
+				assert.EqualValues(t, 1_000_000, user.Quota)
+				assert.EqualValues(t, 1_000_000, token.RemainQuota)
+				assert.Zero(t, user.ReservedQuota)
+				assert.Zero(t, token.ReservedQuota)
 				_, err := service.RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+3600, 10)
 				require.NoError(t, err)
 			}
 			assert.Zero(t, user.UsedQuota)
 			assert.Zero(t, token.UsedQuota)
-			assert.EqualValues(t, recovery.TokenAmount, token.ReservedQuota)
 			var taskCount int64
 			require.NoError(t, db.Model(&model.Midjourney{}).Count(&taskCount).Error)
 			assert.Zero(t, taskCount)

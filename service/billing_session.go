@@ -56,6 +56,10 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	return nil
 }
 
+// Refund ends a request that did not reach normal settlement. Delivered output
+// or an accepted async task is billable work and settles from persisted
+// evidence; any other failure releases the reservation, including provider
+// errors and timeouts after send that produced no output.
 func (s *BillingSession) Refund(c *gin.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -63,21 +67,12 @@ func (s *BillingSession) Refund(c *gin.Context) {
 		return
 	}
 	info := s.relayInfo
-	rejected := info.UpstreamRejected
-	if c != nil {
-		value, _ := c.Get("gateway_last_attempt_outcome")
-		outcome, _ := value.(AttemptOutcome)
-		rejected = rejected || outcome.Acceptance == AttemptRejected
-	}
-	// An accepted task may continue running despite a contradictory rejection
-	// signal. Keep its reservation until task evidence resolves the outcome.
-	acceptedTask := info.UpstreamSideEffecting && info.UpstreamAccepted
-	if info.HasValidOutput() || !info.UpstreamPreparationOnly && (acceptedTask || !rejected && (info.UpstreamAccepted || info.UpstreamSent)) {
-		s.stopRecoveryHeartbeat()
-		logger.LogError(c, "billing requires reconciliation (request_id="+info.RequestId+"): upstream acceptance or consumption is unknown")
+	s.stopRecoveryHeartbeat()
+	if info.HasValidOutput() || info.UpstreamTaskAccepted {
+		s.settlementStarted = true
+		settleBillingFallback(c, info, billingFallbackNoTerminal, nil)
 		return
 	}
-	s.stopRecoveryHeartbeat()
 	err := model.MarkBillingRecoveryRefundPending(s.recoveryID, nil)
 	if err == nil {
 		err = model.Release(s.recoveryID)

@@ -24,7 +24,7 @@ func acceptedMidjourneyBillingFixture(t *testing.T, price string) *model.Midjour
 	require.NoError(t, err)
 	task := &model.Midjourney{UserId: 1, ChannelId: 1, BillingChannelId: 1, TokenId: 1, MjId: "mj-final", Action: "IMAGINE", Status: "SUBMITTED", Quota: 20,
 		PrivateData: model.TaskPrivateData{TokenId: 1, BillingSource: "wallet", SubmissionRequestID: "mj-submit-final", CredentialVersion: 1, CredentialID: "credential", EndpointID: "endpoint",
-			BillingContext: &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: "accepted_parameters", Estimated: true}}}}
+			BillingContext: &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Quantities: map[string]string{"calls": "1"}, Source: billing.UsageSourceRequestEstimate, Estimated: true}}}}
 	_, err = model.EnsureBillingRecovery(model.BillingRecoveryInput{RequestID: task.PrivateData.SubmissionRequestID, UserID: 1, TokenID: 1, TokenRequired: true, Source: "wallet"})
 	require.NoError(t, err)
 	require.NoError(t, model.Reserve(task.PrivateData.SubmissionRequestID, task.Quota))
@@ -74,47 +74,30 @@ func TestMidjourneyExplicitFailureReleasesReservation(t *testing.T) {
 	assert.Zero(t, getTokenUsedQuota(t, 1))
 }
 
-func TestMidjourneyMissingQuoteRetainsReservationForReconciliation(t *testing.T) {
+func TestMidjourneyUnpricedSuccessSettlesAtSubmissionEstimate(t *testing.T) {
 	task := acceptedMidjourneyBillingFixture(t, "0.000006")
 	task.PrivateData.BillingContext.Quote = nil
 	task.Status = "SUCCESS"
 	won, err := CompleteMidjourneyBilling(context.Background(), task, "SUBMITTED")
-	require.ErrorContains(t, err, "frozen billing quote")
-	assert.False(t, won)
-	assert.Equal(t, 80, getUserQuota(t, 1))
-	assert.Zero(t, getTokenUsedQuota(t, 1))
+	require.NoError(t, err)
+	assert.True(t, won)
+	assert.EqualValues(t, 3, task.Quota)
+	assert.Equal(t, 97, getUserQuota(t, 1))
+	assert.Equal(t, 3, getTokenUsedQuota(t, 1))
 	var recovery model.BillingRecovery
 	require.NoError(t, model.DB.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
-	assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
-	assert.Empty(t, recovery.ChargeSnapshot)
+	assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
+	var settled billing.Usage
+	require.NoError(t, common.UnmarshalJsonStr(string(recovery.UsageSnapshot), &settled))
+	assert.Equal(t, billing.UsageSourceRequestEstimate, settled.Source)
 	var stored model.Midjourney
 	require.NoError(t, model.DB.First(&stored, task.Id).Error)
-	assert.Equal(t, "SUCCESS", stored.Status, "confirmed provider completion must stop polling even when accounting is pending")
+	assert.Equal(t, "SUCCESS", stored.Status)
+	assert.EqualValues(t, 3, stored.Quota)
 	require.NotNil(t, stored.PrivateData.BillingContext.Quote, "an incomplete poller cannot erase the accepted quote")
 }
 
-func TestMidjourneyManualAmountCannotReplaceMissingCompletionEvidence(t *testing.T) {
-	task := acceptedMidjourneyBillingFixture(t, "0.000006")
-	task.PrivateData.BillingContext.Quote = nil
-	task.Status = "SUCCESS"
-	_, err := CompleteMidjourneyBilling(context.Background(), task, "SUBMITTED")
-	require.Error(t, err)
-	var recovery model.BillingRecovery
-	require.NoError(t, model.DB.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
-	command := model.BillingResolution{OperationID: "mj-manual", ExpectedVersion: recovery.Version, Action: "settle", Quota: 7, Reason: "provider invoice confirmed"}
-	_, err = model.ResolveBillingReconciliation(context.Background(), recovery.ID, 1, command)
-	require.ErrorIs(t, err, model.ErrBillingRecoveryStateConflict)
-	assert.Equal(t, 80, getUserQuota(t, 1))
-	assert.Zero(t, getTokenUsedQuota(t, 1))
-	require.NoError(t, model.DB.Where("request_id = ?", recovery.RequestID).First(&recovery).Error)
-	assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
-	assert.Empty(t, recovery.ChargeSnapshot)
-	var events int64
-	require.NoError(t, model.DB.Model(&model.BillingEvent{}).Where("request_id = ? AND operation = ?", recovery.RequestID, "settle").Count(&events).Error)
-	assert.Zero(t, events)
-}
-
-func TestMidjourneyManualReconciliationKeepsTaskAndLogAmountsConsistent(t *testing.T) {
+func TestMidjourneySettlementFailureRecoversWithConsistentTaskAndLogAmounts(t *testing.T) {
 	task := acceptedMidjourneyBillingFixture(t, "0.000006")
 	callback := "test:mj_settle_failure"
 	require.NoError(t, model.DB.Callback().Create().Before("gorm:create").Register(callback, func(tx *gorm.DB) {
@@ -132,14 +115,11 @@ func TestMidjourneyManualReconciliationKeepsTaskAndLogAmountsConsistent(t *testi
 	require.NoError(t, model.DB.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
 	require.NotEmpty(t, recovery.ChargeSnapshot)
 	assert.Equal(t, 80, getUserQuota(t, 1))
-	command := model.BillingResolution{OperationID: "mj-manual", ExpectedVersion: recovery.Version, Action: "settle", Quota: 7, Reason: "retry confirmed completion evidence"}
-	_, err = model.ResolveBillingReconciliation(context.Background(), recovery.ID, 1, command)
-	require.Error(t, err, "manual settlement cannot override the frozen three-quota charge")
-	command.Quota = 3
+	// Recovery settles the stored three-quota intent once, without an operator.
 	for range 2 {
-		_, err = model.ResolveBillingReconciliation(context.Background(), recovery.ID, 1, command)
+		status, err := recoverOneBillingRecovery(context.Background(), recovery.RequestID)
 		require.NoError(t, err)
-		require.NoError(t, model.ApplyBillingRecoveryConsumption(recovery.RequestID))
+		assert.Equal(t, model.BillingRecoveryStatusSettled, status)
 	}
 	var stored model.Midjourney
 	require.NoError(t, model.DB.First(&stored, task.Id).Error)

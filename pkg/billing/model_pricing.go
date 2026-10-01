@@ -254,7 +254,9 @@ func calculateModelPricing(quote *Quote, usage Usage) (*ChargeResult, error) {
 		usd = usd.Mul(factor)
 		expressionQuota *= factor.InexactFloat64()
 	}
-	if usage.Estimated && quote.PreConsumeMultiplier != "" && (version.Mode == ModeRatio || version.Mode == ModeExpression && result.Trace.BillingUnit == billingexpr.BillingUnitToken) {
+	// The multiplier sizes the pre-send reservation. An estimated settlement is a
+	// charge, so it must not inherit the reservation buffer.
+	if usage.Source == UsageSourceRequestEstimate && quote.PreConsumeMultiplier != "" && (version.Mode == ModeRatio || version.Mode == ModeExpression && result.Trace.BillingUnit == billingexpr.BillingUnitToken) {
 		factor, _ := positiveDecimal(quote.PreConsumeMultiplier)
 		usd = usd.Mul(factor)
 		expressionQuota *= factor.InexactFloat64()

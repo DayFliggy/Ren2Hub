@@ -217,7 +217,7 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 	if err != nil {
 		return hosttypes.PriceData{}, err
 	}
-	usage := billing.Usage{InputTokens: int64(promptTokens), ContextTokens: int64(promptTokens), InputIncludesCache: true, Quantities: map[string]string{}, Source: "request_estimate", Estimated: true}
+	usage := billing.Usage{InputTokens: int64(promptTokens), ContextTokens: int64(promptTokens), InputIncludesCache: true, Quantities: map[string]string{}, Source: billing.UsageSourceRequestEstimate, Estimated: true}
 	if version.TaskUsage {
 		input = billingexpr.RequestInput{FrozenAt: input.FrozenAt, Attributes: input.Attributes}
 		input.Usage, err = service.TaskExpressionUsage(facts, version.UsageSchema)

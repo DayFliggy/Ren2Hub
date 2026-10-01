@@ -22,7 +22,7 @@ func validatePublishedBillingQuoteTx(tx *gorm.DB, quote *billing.Quote) error {
 	if quote == nil {
 		return fmt.Errorf("published billing quote is required")
 	}
-	if err := validateBillingAuditQuote(*quote); err != nil {
+	if err := validatePublishedQuoteIdentity(*quote); err != nil {
 		return err
 	}
 	var row BillingPriceVersion
@@ -45,4 +45,19 @@ func validatePublishedBillingQuoteTx(tx *gorm.DB, quote *billing.Quote) error {
 		return ErrBillingEventConflict
 	}
 	return nil
+}
+
+// validatePublishedQuoteIdentity checks the frozen price version identity and
+// quote integrity without reading any database row.
+func validatePublishedQuoteIdentity(quote billing.Quote) error {
+	version := quote.PriceVersion
+	if version.ID <= 0 || version.Hash == "" {
+		return fmt.Errorf("published price identity missing")
+	}
+	version.ID, version.CreatedAt, version.Hash = 0, 0, ""
+	hash, err := billing.Hash(version)
+	if err != nil || hash != quote.PriceVersion.Hash {
+		return fmt.Errorf("price version hash mismatch")
+	}
+	return billing.ValidateQuote(&quote)
 }

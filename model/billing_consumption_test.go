@@ -220,25 +220,31 @@ func TestBillingLogIdempotencyAllowsLegacyNullKeys(t *testing.T) {
 	assert.EqualValues(t, int64(3), count)
 }
 
-func TestMissingBillingConsumptionSnapshotRemainsVisibleForReconciliation(t *testing.T) {
-	db, _, _ := setupBillingConsumptionTest(t)
-	completeConsumptionFunds(t)
-	require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", "consume-once").Updates(map[string]any{
-		"consumption_snapshot": "", "consumption_state": "",
-	}).Error)
-	require.NoError(t, RecordBillingConsumptionPreparationFailure("consume-once", assert.AnError))
-	assert.ErrorContains(t, ApplyBillingRecoveryConsumption("consume-once"), "reconciliation")
+// A request whose settlement intent could not be persisted keeps its
+// reservation and stays listed for automatic recovery; nothing is delivered.
+func TestBillingPreparationFailureStaysListedForAutomaticRecovery(t *testing.T) {
+	db := setupBillingRecoveryTestDB(t)
+	seedBillingAccount(t, db, 100, 100, false)
+	newReservation(t, "unprepared")
+	require.NoError(t, Reserve("unprepared", 40))
+	require.NoError(t, RecordBillingConsumptionPreparationFailure("unprepared", assert.AnError))
+	require.ErrorContains(t, ApplyBillingRecoveryConsumption("unprepared"), "not final")
 	rows, err := ListStaleBillingRecoveries(1<<62, 100)
 	require.NoError(t, err)
-	assert.Empty(t, rows, "missing evidence requires reconciliation, not repeated automatic attempts")
+	require.Len(t, rows, 1)
+	assert.Equal(t, "unprepared", rows[0].RequestID)
 	backlog, err := ReadBillingRecoveryBacklog(context.Background(), 1<<62)
 	require.NoError(t, err)
-	assert.EqualValues(t, int64(1), backlog.Pending)
+	assert.EqualValues(t, 1, backlog.Pending)
 	var pending BillingRecovery
-	require.NoError(t, db.Where("request_id = ?", "consume-once").First(&pending).Error)
-	assert.EqualValues(t, "unprepared", pending.ConsumptionState)
+	require.NoError(t, db.Where("request_id = ?", "unprepared").First(&pending).Error)
+	assert.Equal(t, BillingRecoveryStatusActive, pending.Status)
+	assert.Equal(t, BillingRecoveryStateUnprepared, pending.ConsumptionState)
 	assert.NotEmpty(t, pending.ConsumptionError)
-	assert.EqualValues(t, BillingRecoveryStatusSettled, pending.Status)
+	var user User
+	require.NoError(t, db.First(&user, 1).Error)
+	assert.Equal(t, []common.Quota{60, 40, 0}, []common.Quota{user.Quota, user.ReservedQuota, user.UsedQuota})
+	assert.Zero(t, user.RequestCount)
 }
 
 // Exercise the ClickHouse delivery policy with an isolated SQL-backed store.
@@ -256,10 +262,13 @@ func TestBillingAmbiguousClickHouseWriteIsConfirmedBeforeRetry(t *testing.T) {
 	var count int64
 	require.NoError(t, logs.Model(&Log{}).Count(&count).Error)
 	assert.Zero(t, count)
-	metrics, err := ReadBillingMetrics(context.Background())
+	backlog, err := ReadBillingRecoveryBacklog(context.Background(), 1<<62)
 	require.NoError(t, err)
-	assert.EqualValues(t, 1, metrics.Pending)
-	assert.EqualValues(t, 1, metrics.RecoveryFailures)
+	assert.EqualValues(t, 1, backlog.Pending)
+	var pending BillingRecovery
+	require.NoError(t, db.Where("request_id = ?", "consume-once").First(&pending).Error)
+	assert.Equal(t, BillingRecoveryStatePending, pending.ConsumptionState)
+	assert.NotEmpty(t, pending.ConsumptionError)
 	// An initially invisible insert becomes visible by its stable event ID.
 	eventID := "consume-once:settle"
 	consumption.Log.RequestId, consumption.Log.BillingEventID = "consume-once", &eventID
@@ -273,8 +282,11 @@ func TestBillingAmbiguousClickHouseWriteIsConfirmedBeforeRetry(t *testing.T) {
 	require.NoError(t, db.First(&user, 1).Error)
 	assert.EqualValues(t, 70, user.Quota)
 	assert.EqualValues(t, 30, user.UsedQuota)
-	metrics, err = ReadBillingMetrics(context.Background())
+	backlog, err = ReadBillingRecoveryBacklog(context.Background(), 1<<62)
 	require.NoError(t, err)
-	assert.Zero(t, metrics.Pending)
-	assert.Zero(t, metrics.RecoveryFailures)
+	assert.Zero(t, backlog.Pending)
+	var delivered BillingRecovery
+	require.NoError(t, db.Where("request_id = ?", "consume-once").First(&delivered).Error)
+	assert.Equal(t, BillingRecoveryStateCompleted, delivered.ConsumptionState)
+	assert.Empty(t, delivered.ConsumptionError)
 }

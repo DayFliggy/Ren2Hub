@@ -108,13 +108,18 @@ func TestGatewayRealtimeTerminationAndAccounting(t *testing.T) {
 			}
 			awaitGatewayPermitsReleased(t)
 			assert.EqualValues(t, 1, sends.Load(), "a committed WebSocket session must never replay")
+			// Delivered output settles the fixed 500-quota call from the observed
+			// counters; a session that produced no output releases the reservation.
 			var user model.User
 			var logs []model.Log
-			require.NoError(t, model.DB.First(&user, 1).Error)
+			require.Eventually(t, func() bool {
+				return model.DB.First(&user, 1).Error == nil && user.ReservedQuota == 0
+			}, 2*time.Second, 10*time.Millisecond)
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
-			if ending == "completed" {
+			if hasOutput {
 				assert.Equal(t, 1, user.RequestCount)
 				assert.EqualValues(t, 500, user.UsedQuota)
+				assert.EqualValues(t, 10000000-500, user.Quota)
 				require.Len(t, logs, 1)
 				if ending == "completed" {
 					assert.Equal(t, 10, logs[0].PromptTokens)
@@ -126,8 +131,9 @@ func TestGatewayRealtimeTerminationAndAccounting(t *testing.T) {
 				}
 			} else {
 				assert.Zero(t, user.RequestCount)
-				assert.EqualValues(t, 9999500, user.Quota, "an accepted session with unknown consumption keeps its reservation")
-				assert.EqualValues(t, 500, user.ReservedQuota)
+				assert.Zero(t, user.UsedQuota)
+				assert.EqualValues(t, 10000000, user.Quota)
+				assert.Empty(t, logs)
 			}
 			var failures int64
 			require.NoError(t, model.DB.Model(&model.ChannelHealth{}).Where("failure_count > 0").Count(&failures).Error)

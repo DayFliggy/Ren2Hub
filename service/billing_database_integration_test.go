@@ -53,7 +53,7 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 				"statistics_failure", "log_insert_failure", "log_completion_failure", "canceled_request",
 				"playground_token_identity", "free_consumption", "concurrent_delivery", "refund_before_settlement",
 				"zero_precharge_refund", "zero_precharge_refund_completion_failure",
-				"pricing_reconciliation",
+				"pricing_fallback",
 			}, billingPricingGuardScenarios...)
 			scenarios = append(scenarios, billingDispatchGuardScenarios...)
 			for index, scenario := range scenarios {
@@ -71,28 +71,27 @@ func TestBillingDatabaseIntegration(t *testing.T) {
 							return
 						}
 					}
-					if scenario == "pricing_reconciliation" {
+					if scenario == "pricing_fallback" {
+						// A canceled request whose final usage cannot be priced still
+						// settles once at the frozen pre-send estimate.
 						info.PriceData.Quote = billingTestQuote(t, `c == 13 ? 1 / (c - 13) : p * 2 + c * 10`)
 						billingTestEstimate(t, info)
 						require.Nil(t, PrepareBillingForSelectedModel(c, info))
 						usage := &dto.Usage{PromptTokens: 10, CompletionTokens: 13, TotalTokens: 23}
 						cancel()
-						PostTextConsumeQuota(c, info, usage, nil)
-						require.Error(t, info.BillingSettlementError)
-						PostTextConsumeQuota(c, info, usage, nil)
-						require.Error(t, info.BillingSettlementError)
+						for range 2 {
+							PostTextConsumeQuota(c, info, usage, nil)
+							require.NoError(t, info.BillingSettlementError)
+						}
 						info.Billing.Refund(c)
 						status, err := recoverOneBillingRecovery(context.Background(), info.RequestId)
 						require.NoError(t, err)
-						assert.EqualValues(t, model.BillingRecoveryStatusReconciliation, status)
-						assert.ErrorIs(t, model.MarkBillingRecoveryRefundPending(info.RequestId, nil), model.ErrBillingRecoveryStateConflict)
-						assert.ErrorIs(t, model.UpdateBillingRecoverySettlement(info.RequestId, 0), model.ErrBillingRecoveryStateConflict)
+						assert.EqualValues(t, model.BillingRecoveryStatusSettled, status)
 						var recovery model.BillingRecovery
 						require.NoError(t, mainDB.Where("request_id = ?", info.RequestId).First(&recovery).Error)
-						assert.Contains(t, recovery.UsageSnapshot, `"output_tokens":13`)
-						assert.NotEmpty(t, recovery.QuoteSnapshot)
-
-						assertBillingIntegrationBalances(t, info, 95, 95, 0, 0, 0, 0)
+						assert.Contains(t, recovery.UsageSnapshot, `"source":"request_estimate"`)
+						assert.Equal(t, model.BillingRecoveryStateCompleted, recovery.ConsumptionState)
+						assertBillingIntegrationBalances(t, info, 95, 95, 5, 5, 1, 1)
 						return
 					}
 					if scenario == "zero_precharge_refund" || scenario == "zero_precharge_refund_completion_failure" {

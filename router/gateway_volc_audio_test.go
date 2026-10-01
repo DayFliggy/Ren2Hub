@@ -18,6 +18,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func setupGatewayVolcSpeech(t *testing.T, handler http.HandlerFunc) (string, string) {
@@ -49,18 +50,19 @@ func gatewayVolcAudioFrame(t *testing.T, sequence int32) []byte {
 	return frame
 }
 
-func assertGatewayVolcSpeechAccounting(t *testing.T, charge, tokenQuota int, healthFailure bool) {
+// assertGatewayVolcSpeechAccounting checks a finished speech request. A
+// confirmed call charges the fixed 500-quota fee; delivered audio without a
+// normal terminal settles at the same frozen estimate; anything else releases.
+func assertGatewayVolcSpeechAccounting(t *testing.T, charge, tokenQuota int, frozen, healthFailure bool) {
 	t.Helper()
 	awaitGatewayPermitsReleased(t)
 	var user model.User
 	var token model.Token
-	held := 0
-	if charge == 0 && tokenQuota >= 500 {
-		held = 500
-	}
 	require.Eventually(t, func() bool {
-		return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == common.Quota(10000000-charge-held) && user.UsedQuota == common.Quota(charge) && token.RemainQuota == common.Quota(tokenQuota-charge-held)
+		return model.DB.First(&user, 1).Error == nil && model.DB.First(&token, 1).Error == nil && user.Quota == common.Quota(10000000-charge) && user.UsedQuota == common.Quota(charge) && token.RemainQuota == common.Quota(tokenQuota-charge)
 	}, time.Second, 10*time.Millisecond)
+	assert.Zero(t, user.ReservedQuota)
+	assert.Zero(t, token.ReservedQuota)
 	var logs []model.Log
 	require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
 	if charge == 0 {
@@ -73,14 +75,15 @@ func assertGatewayVolcSpeechAccounting(t *testing.T, charge, tokenQuota int, hea
 		assert.EqualValues(t, charge, logs[0].Quota)
 		assert.Zero(t, logs[0].PromptTokens, "a fixed business fee does not settle estimated token counters")
 		assert.Zero(t, logs[0].CompletionTokens)
-		var other map[string]any
-		require.NoError(t, common.UnmarshalJsonStr(logs[0].Other, &other))
-		assert.Equal(t, "estimated", other["usage_source"])
-		streamStatus, ok := other["stream_status"].(map[string]any)
-		require.True(t, ok, "binary audio terminal status must also be persisted")
-		if healthFailure {
-			assert.Equal(t, "error", streamStatus["status"])
+		if frozen {
+			assert.Equal(t, "frozen_estimate", gjson.Get(logs[0].Other, "admin_info.usage_billing_path").String())
+			assert.NotEmpty(t, gjson.Get(logs[0].Other, "admin_info.billing_fallback_reason").String())
 		} else {
+			var other map[string]any
+			require.NoError(t, common.UnmarshalJsonStr(logs[0].Other, &other))
+			assert.Equal(t, "estimated", other["usage_source"])
+			streamStatus, ok := other["stream_status"].(map[string]any)
+			require.True(t, ok, "binary audio terminal status must also be persisted")
 			assert.Equal(t, "ok", streamStatus["status"])
 			assert.Equal(t, "done", streamStatus["end_reason"])
 		}
@@ -93,13 +96,8 @@ func assertGatewayVolcSpeechAccounting(t *testing.T, charge, tokenQuota int, hea
 		assert.Equal(t, 1, health.FailureCount, "one failed provider send must not be counted twice in a health scope")
 	}
 	var pending int64
-	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Where("status IN ?", []string{model.BillingRecoveryStatusActive, model.BillingRecoveryStatusSettlementPending, model.BillingRecoveryStatusRefundPending, model.BillingRecoveryStatusReconciliation}).Count(&pending).Error)
-	if held > 0 {
-		assert.EqualValues(t, 1, pending)
-		assert.EqualValues(t, held, user.ReservedQuota)
-	} else {
-		assert.Zero(t, pending)
-	}
+	require.NoError(t, model.DB.Model(&model.BillingRecovery{}).Where("status IN ?", []string{model.BillingRecoveryStatusActive, model.BillingRecoveryStatusSettlementPending, model.BillingRecoveryStatusRefundPending}).Count(&pending).Error)
+	assert.Zero(t, pending)
 }
 
 func TestGatewayVolcSpeechWebSocketAccounting(t *testing.T) {
@@ -173,10 +171,9 @@ func TestGatewayVolcSpeechWebSocketAccounting(t *testing.T) {
 					require.NoError(t, readErr)
 				}
 				assert.EqualValues(t, 1, sends.Load())
+				// Interrupted audio reached the client and settles at the frozen
+				// estimate; a truncated frame never produced output and releases.
 				charge := 500
-				if scenario == "interrupted" {
-					charge = 0
-				}
 				if scenario == "truncated" {
 					charge = 0
 					assert.Equal(t, http.StatusBadGateway, response.StatusCode, string(output))
@@ -192,7 +189,7 @@ func TestGatewayVolcSpeechWebSocketAccounting(t *testing.T) {
 						assert.Equal(t, []byte{0, 1, 2, 3}, output)
 					}
 				}
-				assertGatewayVolcSpeechAccounting(t, charge, 2000, scenario != "completed")
+				assertGatewayVolcSpeechAccounting(t, charge, 2000, scenario == "interrupted", scenario != "completed")
 			})
 		}
 	}
@@ -208,7 +205,7 @@ func TestGatewayVolcSpeechQuotaDeniedBeforeWebSocket(t *testing.T) {
 	code, output := postGatewayTask(t, url, key, "/v1/audio/speech", `{"model":"tts-volc","input":"hello","voice":"alloy","response_format":"pcm"}`)
 	assert.Equal(t, http.StatusForbidden, code, output)
 	assert.Zero(t, sends.Load())
-	assertGatewayVolcSpeechAccounting(t, 0, 100, false)
+	assertGatewayVolcSpeechAccounting(t, 0, 100, false, false)
 }
 
 func TestGatewayVolcSpeechCancelledBeforeOutput(t *testing.T) {
@@ -265,7 +262,8 @@ func TestGatewayVolcSpeechCancelledBeforeOutput(t *testing.T) {
 				t.Fatal("client cancellation did not close the upstream WebSocket")
 			}
 			assert.EqualValues(t, 1, sends.Load())
-			assertGatewayVolcSpeechAccounting(t, 0, 2000, false)
+			// Cancellation before any audio releases the reservation.
+			assertGatewayVolcSpeechAccounting(t, 0, 2000, false, false)
 		})
 	}
 }

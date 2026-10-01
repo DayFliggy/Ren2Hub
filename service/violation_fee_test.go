@@ -45,11 +45,16 @@ func TestViolationFeeUsesIndependentFrozenEventAfterPrimaryRelease(t *testing.T)
 	assert.NotEmpty(t, fee.QuoteSnapshot)
 	assert.NotEmpty(t, fee.UsageSnapshot)
 	assert.NotEmpty(t, fee.ChargeSnapshot)
+	// The fee owns one frozen attempt and exactly one final settle event.
 	var attempts []model.BillingAttempt
-	var events []model.BillingEvent
+	var settles []model.BillingEvent
 	require.NoError(t, model.DB.Where("request_id = ?", fee.RequestID).Find(&attempts).Error)
-	require.NoError(t, model.DB.Where("request_id = ?", fee.RequestID).Find(&events).Error)
-	assert.Equal(t, model.BillingAuditVerified, model.AuditBillingEvidence(fee, attempts, events).Status)
+	require.NoError(t, model.DB.Where("request_id = ? AND operation = ?", fee.RequestID, model.BillingRecoveryOperationSettle).Find(&settles).Error)
+	require.Len(t, attempts, 1)
+	assert.Equal(t, fee.QuoteSnapshot, attempts[0].Quote)
+	require.Len(t, settles, 1)
+	assert.Equal(t, fee.FinalEventID, settles[0].EventID)
+	assert.EqualValues(t, 4, settles[0].UsedDelta)
 	info.PriceData.Quote.ViolationFeeUSD = "0.000010"
 	assert.False(t, ChargeViolationFeeIfNeeded(c, info, apiErr), "same event with changed frozen fee must conflict")
 	assert.Equal(t, 96, getUserQuota(t, 1))

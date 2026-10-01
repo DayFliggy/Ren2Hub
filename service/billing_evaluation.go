@@ -51,7 +51,10 @@ func evaluateRequestBilling(info *relaycommon.RelayInfo, usage billing.Usage) (b
 		session.mu.Lock()
 		settling := session.settlementStarted || session.settled
 		session.mu.Unlock()
-		if settling && info.PriceData.Usage != nil && info.PriceData.Usage.ReadyForSettlement() && info.PriceData.Usage.Evidence != nil && info.PriceData.Charge != nil {
+		// A settled observation is replayed rather than re-evaluated. The
+		// pre-send estimate is not an observation and is never reused here.
+		if settling && info.PriceData.Usage != nil && info.PriceData.Usage.Settleable() && info.PriceData.Usage.Source != billing.UsageSourceRequestEstimate &&
+			info.PriceData.Usage.Evidence != nil && info.PriceData.Charge != nil {
 			return replayIdenticalBillingUsage(info.PriceData.Quote, *info.PriceData.Usage, usage, info.RequestId, info.BillingAttemptID)
 		}
 	}

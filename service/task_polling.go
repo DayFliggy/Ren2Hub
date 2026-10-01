@@ -73,11 +73,22 @@ func sweepTimedOutTasks(ctx context.Context) {
 	}
 
 	for _, task := range tasks {
-		if err := model.HoldTaskBilling(ctx, task, task.Status, "task_timeout_outcome_unknown"); err != nil {
-			logger.LogError(ctx, fmt.Sprintf("task timeout reconciliation failed (task_id=%s): %v", task.TaskID, err))
+		if err := failTaskWithoutResult(ctx, task, "任务超时，未返回结果"); err != nil {
+			logger.LogError(ctx, fmt.Sprintf("task timeout release failed (task_id=%s): %v", task.TaskID, err))
 		}
 	}
+}
 
+// failTaskWithoutResult ends a task that never produced a provider result.
+// Bill-first releases it: no output reached the user.
+func failTaskWithoutResult(ctx context.Context, task *model.Task, reason string) error {
+	from := task.Status
+	task.Status, task.Progress, task.FailReason = model.TaskStatusFailure, taskcommon.ProgressComplete, reason
+	if task.FinishTime == 0 {
+		task.FinishTime = time.Now().Unix()
+	}
+	_, err := completeTaskBilling(ctx, task, from, 0, reason)
+	return err
 }
 
 // TaskPollSummary is the result recorded on an async_task_poll system task row,
@@ -143,8 +154,8 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 		owners := make(map[owner][]*model.Task)
 		for _, task := range tasks {
 			if task.GetUpstreamTaskID() == "" {
-				if err := model.HoldTaskBilling(ctx, task, task.Status, "task_upstream_identity_missing"); err != nil {
-					logger.LogError(ctx, fmt.Sprintf("task reconciliation failed (task_id=%s): %v", task.TaskID, err))
+				if err := failTaskWithoutResult(ctx, task, "缺少上游任务标识"); err != nil {
+					logger.LogError(ctx, fmt.Sprintf("task release failed (task_id=%s): %v", task.TaskID, err))
 				}
 				continue
 			}
@@ -351,8 +362,7 @@ func pollSunoCredentialGroup(ctx context.Context, adaptor TaskPollingAdaptor, ch
 			if !isFailure {
 				actualQuota, _, _, err = taskCompletionQuota(nil, task, nil)
 				if err != nil {
-					err = errors.Join(err, model.HoldTaskBilling(ctx, task, prevStatus, "task_final_usage_invalid"))
-					logger.LogError(ctx, fmt.Sprintf("Suno task %s requires billing reconciliation: %v", task.TaskID, err))
+					logger.LogError(ctx, fmt.Sprintf("Suno task %s billing remains pending: %v", task.TaskID, err))
 					continue
 				}
 			}
@@ -647,7 +657,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		task.PrivateData.CompletionUsage = &model.TaskCompletionUsage{CompletionTokens: taskResult.CompletionTokens, TotalTokens: taskResult.TotalTokens, Facts: taskResult.UsageFacts, Error: taskResult.UsageError}
 		quota, reason, clamp, err := taskCompletionQuota(adaptor, task, taskResult)
 		if err != nil {
-			return errors.Join(err, model.HoldTaskBilling(ctx, task, snap.Status, "task_final_usage_invalid"))
+			return err
 		}
 		_, err = completeTaskBilling(ctx, task, snap.Status, quota, reason, clamp)
 		return err

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
@@ -52,11 +53,15 @@ func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, tot
 			}
 			continue
 		}
-		if task.MjId == "" {
+		if reason := midjourneyUnfinishableReason(task); reason != "" {
+			// No result reached the user, so bill-first releases the job.
 			from := task.Status
-			task.Status, task.Progress, task.FailReason = "FAILURE", "100%", "missing upstream task identifier"
+			task.Status, task.Progress, task.FailReason = "FAILURE", "100%", reason
+			if task.FinishTime == 0 {
+				task.FinishTime = time.Now().UnixMilli()
+			}
 			if won, err := service.CompleteMidjourneyBilling(ctx, task, from); err != nil {
-				pollErrors = append(pollErrors, fmt.Errorf("complete invalid Midjourney task (row_id=%d): %w", task.Id, err))
+				pollErrors = append(pollErrors, fmt.Errorf("release unfinished Midjourney task (row_id=%d): %w", task.Id, err))
 			} else if won {
 				summary.NullTasksFailed++
 			}
@@ -87,6 +92,19 @@ func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, tot
 		}
 	}
 	return summary, errors.Join(append(pollErrors, ctx.Err())...)
+}
+
+// midjourneyUnfinishableReason uses the same timeout as other async tasks.
+// Midjourney submit times are Unix milliseconds.
+func midjourneyUnfinishableReason(task *model.Midjourney) string {
+	if task.MjId == "" {
+		return "missing upstream task identifier"
+	}
+	if constant.TaskTimeoutMinutes > 0 && task.SubmitTime > 0 &&
+		time.Now().UnixMilli()-task.SubmitTime > int64(constant.TaskTimeoutMinutes)*60*1000 {
+		return "任务超时，未返回结果"
+	}
+	return ""
 }
 
 func pollMidjourneyChannel(ctx context.Context, channelID int, tasks []*model.Midjourney) error {

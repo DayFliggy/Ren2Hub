@@ -66,7 +66,7 @@ export function parseBatchResult(ctx, body) { return [result(body)]; }
 					result = response.Immediate
 				}
 				require.NotNil(t, result)
-				assert.Equal(t, "SUCCESS", result.Status, "retain terminal evidence for reconciliation")
+				assert.Equal(t, "SUCCESS", result.Status, "invalid counters do not turn a provider success into a failure")
 				if test.invalid {
 					assert.NotEmpty(t, result.UsageError)
 					assert.Zero(t, result.CompletionTokens)
@@ -81,7 +81,7 @@ export function parseBatchResult(ctx, body) { return [result(body)]; }
 	}
 }
 
-func TestTaskAdaptorImmediateCompletionUsageFailureRequiresReconciliation(t *testing.T) {
+func TestTaskAdaptorImmediateCompletionUsageFailureIsNotSettlementEvidence(t *testing.T) {
 	const source = `
 export const meta = {apiVersion:1,key:"completion-failure",name:"Completion",version:"1.0.0",author:{name:"Test"},models:["m"],fetchMode:"per_task"};
 export function buildSubmitRequest(ctx) { return {url:ctx.baseUrl+"/submit"}; }

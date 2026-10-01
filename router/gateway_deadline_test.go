@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGatewayPhaseDeadlineReleasesAdmissionAndHoldsReservation(t *testing.T) {
+func TestGatewayPhaseDeadlineReleasesAdmissionAndReservation(t *testing.T) {
 	for _, phase := range []string{"headers", "non_stream_body", "stream_heartbeats"} {
 		t.Run(phase, func(t *testing.T) {
 			oldHeader, oldBody, oldFirst := common.RelayResponseHeaderTimeout, common.RelayNonStreamTimeout, common.StreamingFirstOutputTimeout
@@ -89,17 +89,20 @@ func TestGatewayPhaseDeadlineReleasesAdmissionAndHoldsReservation(t *testing.T) 
 			require.Eventually(t, func() bool { return cancellations.Load() == sends.Load() }, time.Second, time.Millisecond)
 			assert.Zero(t, service.ReadGatewayAdmissionRuntime(service.UserAdmissionKey(1)).InFlight)
 			assert.Zero(t, service.ReadGatewayAdmissionRuntime(service.ChannelAdmissionKey(1)).InFlight)
+			// A timeout after send that produced no output releases the reservation.
 			var user model.User
 			var token model.Token
+			var recovery model.BillingRecovery
+			require.Eventually(t, func() bool {
+				return model.DB.First(&recovery).Error == nil && recovery.Status == model.BillingRecoveryStatusRefunded
+			}, time.Second, 10*time.Millisecond)
 			require.NoError(t, model.DB.First(&user, 1).Error)
 			require.NoError(t, model.DB.First(&token, 1).Error)
-			assert.EqualValues(t, 9999500, user.Quota)
-			assert.EqualValues(t, 500, user.ReservedQuota)
-			assert.EqualValues(t, 1500, token.RemainQuota)
-			assert.EqualValues(t, 500, token.ReservedQuota)
-			var recovery model.BillingRecovery
-			require.NoError(t, model.DB.First(&recovery).Error)
-			assert.True(t, model.BillingRecoveryUsageUnconfirmed(recovery.ConsumptionState))
+			assert.EqualValues(t, 10000000, user.Quota)
+			assert.Zero(t, user.ReservedQuota)
+			assert.Zero(t, user.UsedQuota)
+			assert.EqualValues(t, 2000, token.RemainQuota)
+			assert.Zero(t, token.ReservedQuota)
 		})
 	}
 }

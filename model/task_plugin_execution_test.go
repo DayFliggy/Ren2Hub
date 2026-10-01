@@ -151,7 +151,7 @@ func TestTaskPluginDeletionRequiresTerminalRecoveryAndRetainsArtifacts(t *testin
 		name, status, task string
 		allow              bool
 	}{
-		{"unknown", BillingRecoveryStatusReconciliation, "", false},
+		{"unfinished", BillingRecoveryStatusActive, "", false},
 		{"released", BillingRecoveryStatusRefunded, "", true},
 		{"settled_artifact", BillingRecoveryStatusSettled, "task-artifact", false},
 	} {

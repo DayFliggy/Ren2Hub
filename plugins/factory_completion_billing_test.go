@@ -80,7 +80,7 @@ func TestFactoryCompletionFactsPreserveInvalidAndZeroUsage(t *testing.T) {
 					adaptor := taskplugin.New(plugin)
 					result, err := adaptor.ParseTaskResultForTask(&model.Task{Properties: model.Properties{OriginModelName: factory.model, UpstreamModelName: factory.model}}, nil, encoded)
 					require.NoError(t, err)
-					assert.Equal(t, "SUCCESS", result.Status, "retain the provider result while accounting is held")
+					assert.Equal(t, "SUCCESS", result.Status, "the provider result stays successful even when its facts cannot be priced")
 					charge, chargeErr := evaluateFactoryCharge(t, quote, result.UsageFacts)
 					if test.wantUSD == "" {
 						if test.name != "missing" {

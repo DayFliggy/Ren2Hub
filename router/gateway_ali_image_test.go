@@ -79,29 +79,34 @@ func TestGatewayAliAsyncImageAcceptance(t *testing.T) {
 			assert.EqualValues(t, wantCreates, creates.Load(), "accepted or unknown creation must not replay after failure")
 			assert.EqualValues(t, wantPolls, polls.Load())
 			awaitGatewayPermitsReleased(t)
-			var user model.User
-			var token model.Token
-			require.NoError(t, model.DB.First(&user, 1).Error)
-			require.NoError(t, model.DB.First(&token, 1).Error)
-			assert.EqualValues(t, 10000000-500, user.Quota, "accepted or unknown creation retains its reservation")
-			assert.EqualValues(t, 2000-500, token.RemainQuota)
-			assert.EqualValues(t, charge, user.UsedQuota)
-			assert.EqualValues(t, charge, token.UsedQuota)
-			assert.EqualValues(t, 500-charge, token.ReservedQuota)
 			var logs []model.Log
 			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
 			if success {
 				assert.Len(t, logs, 1)
 			} else {
 				assert.Empty(t, logs)
-				for range 2 {
-					var recovery model.BillingRecovery
-					require.NoError(t, model.DB.First(&recovery).Error)
-					assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
-					assert.Equal(t, model.BillingRecoveryStateUsagePending, recovery.ConsumptionState)
-					_, err := service.RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+3600, 10)
-					require.NoError(t, err)
-				}
+			}
+			// No image reached the client on failure, so the reservation is
+			// released and later recovery passes cannot charge it.
+			wantStatus := model.BillingRecoveryStatusRefunded
+			if success {
+				wantStatus = model.BillingRecoveryStatusSettled
+			}
+			for range 2 {
+				var recovery model.BillingRecovery
+				var user model.User
+				var token model.Token
+				require.NoError(t, model.DB.First(&recovery).Error)
+				require.NoError(t, model.DB.First(&user, 1).Error)
+				require.NoError(t, model.DB.First(&token, 1).Error)
+				assert.Equal(t, wantStatus, recovery.Status)
+				assert.EqualValues(t, 10000000-charge, user.Quota)
+				assert.EqualValues(t, 2000-charge, token.RemainQuota)
+				assert.EqualValues(t, charge, user.UsedQuota)
+				assert.EqualValues(t, charge, token.UsedQuota)
+				assert.Zero(t, token.ReservedQuota)
+				_, err := service.RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+3600, 10)
+				require.NoError(t, err)
 			}
 		})
 	}

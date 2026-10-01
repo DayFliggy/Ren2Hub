@@ -43,7 +43,8 @@ func TestAcceptedTaskAndAccountingCommitTogether(t *testing.T) {
 		assert.Equal(t, BillingRecoveryStatusActive, recovery.Status)
 		assert.Equal(t, BillingRecoveryStateTaskPending, recovery.ConsumptionState)
 		assert.ErrorIs(t, MarkBillingRecoveryRefundPending("task-txn", nil), ErrBillingRecoveryStateConflict)
-		assert.ErrorIs(t, MarkBillingRecoveryAutomaticRefundPending("task-txn"), ErrBillingRecoveryStateConflict)
+		// Recovery fallbacks leave an accepted task's accounting to its polling.
+		assert.ErrorIs(t, PrepareFrozenEstimateConsumption("task-txn", "", Log{}, true), ErrBillingTaskPending)
 		ready, err := TaskSubmissionReady(context.Background(), task)
 		require.NoError(t, err)
 		assert.True(t, ready)

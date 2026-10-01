@@ -236,6 +236,10 @@ func acceptTestTask(t *testing.T, task *model.Task) {
 	require.NoError(t, model.Reserve(task.PrivateData.SubmissionRequestID, task.Quota))
 	require.NoError(t, model.PrepareBillingAttempt(context.Background(), task.PrivateData.SubmissionRequestID, task.PrivateData.SubmissionRequestID+":attempt", task.ChannelId, task.PrivateData.BillingContext.Quote))
 	task.PrivateData.BillingContext.AttemptID = task.PrivateData.SubmissionRequestID + ":attempt"
+	if task.PrivateData.BillingContext.Usage.Source == "" {
+		// Submission pricing labels its estimate this way; the frozen fallback relies on it.
+		task.PrivateData.BillingContext.Usage.Source = billing.UsageSourceRequestEstimate
+	}
 	input := billingexpr.RequestInput{}
 	if task.PrivateData.BillingContext.Quote.PriceVersion.TaskUsage {
 		var err error
@@ -265,7 +269,7 @@ func TestTaskBillingAcceptedHoldAndSingleTerminalCharge(t *testing.T) {
 			used, count := getUserUsageAccounting(t, 1)
 			assert.Zero(t, used)
 			assert.Zero(t, count)
-			assert.ErrorIs(t, model.MarkBillingRecoveryAutomaticRefundPending(task.PrivateData.SubmissionRequestID), model.ErrBillingRecoveryStateConflict)
+			assert.ErrorIs(t, model.MarkBillingRecoveryRefundPending(task.PrivateData.SubmissionRequestID, nil), model.ErrBillingRecoveryStateConflict)
 			status := model.TaskStatus(model.TaskStatusSuccess)
 			if actual == 0 {
 				status = model.TaskStatusFailure
@@ -305,9 +309,12 @@ func TestTaskPriceUsesFrozenUsageInsteadOfAdaptorMoney(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 20, quota)
 	require.NotNil(t, task.PrivateData.BillingContext.Charge)
+	// Completion that cannot be priced consumes the persisted submission estimate.
 	task.PrivateData.BillingContext.Quote = nil
-	_, _, _, err = taskCompletionQuota(nil, task, nil)
-	require.Error(t, err)
+	quota, _, _, err = taskCompletionQuota(nil, task, nil)
+	require.NoError(t, err)
+	assert.EqualValues(t, 20, quota)
+	assert.Equal(t, billing.UsageSourceRequestEstimate, task.PrivateData.BillingContext.Usage.Source)
 }
 
 func taskExpressionTestQuote(t *testing.T, expression string, schema *billingexpr.UsageSchema) *billing.Quote {
@@ -354,7 +361,7 @@ func TestPluginTaskCompletionUsesOnlyFrozenSchemaFacts(t *testing.T) {
 	}
 }
 
-func TestTaskTokenExpressionCannotSettleWithoutCompletionUsage(t *testing.T) {
+func TestTaskTokenExpressionCannotPriceWithoutCompletionUsage(t *testing.T) {
 	for _, dimension := range []string{"p", "c", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao"} {
 		t.Run(dimension, func(t *testing.T) {
 			quote := billingTestQuote(t, dimension+" * 2")
@@ -408,16 +415,19 @@ func TestExplicitFreePluginDoesNotSuppressFailedUsageHooks(t *testing.T) {
 }
 
 func TestTaskCompletionUsageBoundariesPreserveFundsAndTerminalEvidence(t *testing.T) {
+	imageCacheEstimate := int64(15)
 	for _, test := range []struct {
-		name               string
-		facts              map[string]any
-		reserved, actual   int
-		invalid, taskUsage bool
-		expression         string
+		name             string
+		facts            map[string]any
+		reserved, actual int
+		taskUsage        bool
+		expression       string
+		estimate         billing.Usage
 	}{
 		{name: "schema quantity retains its unit", facts: map[string]any{"seconds": 10}, reserved: 6000000, actual: 2000000, taskUsage: true, expression: `u("seconds") * 0.4`},
 		{name: "free keeps provider facts", facts: map[string]any{"seconds": 10}},
-		{name: "missing image cache usage retains reservation", reserved: 30, invalid: true, expression: "img_cr * 2"},
+		{name: "missing image cache usage settles at submission estimate", reserved: 30, actual: 15, expression: "img_cr * 2",
+			estimate: billing.Usage{InputTokens: 15, ContextTokens: 15, InputIncludesCache: true, ImageInputTokens: 15, CacheReadTokens: 15, ImageCacheReadTokens: &imageCacheEstimate}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			truncate(t)
@@ -437,17 +447,14 @@ func TestTaskCompletionUsageBoundariesPreserveFundsAndTerminalEvidence(t *testin
 				quote, err = billing.NewQuote(version, "1", nil, time.Now())
 				require.NoError(t, err)
 			}
-			task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Estimated: true, EstimatedFacts: map[string]any{"seconds": 30}}}
+			estimate := test.estimate
+			estimate.Estimated, estimate.EstimatedFacts = true, map[string]any{"seconds": 30}
+			task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &estimate}
 			acceptTestTask(t, task)
 			task.PrivateData.PluginRef = &model.TaskPluginRef{Key: "usage-boundaries", Version: "1.0.0", SourceHash: quote.Hash}
 			require.NoError(t, model.DB.Model(task).Update("private_data", task.PrivateData).Error)
 			for range 2 {
-				err := CompleteImmediateTask(context.Background(), task, &relaycommon.TaskInfo{Status: model.TaskStatusSuccess, UsageFacts: test.facts})
-				if test.invalid {
-					require.ErrorContains(t, err, "task token usage unavailable")
-				} else {
-					require.NoError(t, err)
-				}
+				require.NoError(t, CompleteImmediateTask(context.Background(), task, &relaycommon.TaskInfo{Status: model.TaskStatusSuccess, UsageFacts: test.facts}))
 			}
 			var persisted model.Task
 			require.NoError(t, model.DB.First(&persisted, task.ID).Error)
@@ -460,23 +467,14 @@ func TestTaskCompletionUsageBoundariesPreserveFundsAndTerminalEvidence(t *testin
 			assert.JSONEq(t, string(wantFacts), string(gotFacts))
 			var recovery model.BillingRecovery
 			require.NoError(t, model.DB.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
-			settlements := int64(1)
-			if test.invalid {
-				assert.Equal(t, model.BillingRecoveryStatusReconciliation, recovery.Status)
-				assert.Nil(t, persisted.PrivateData.BillingContext.Charge)
-				assert.Equal(t, balance-test.reserved, getUserQuota(t, id))
-				assert.Equal(t, balance-test.reserved, getTokenRemainQuota(t, id))
-				settlements = 0
-			} else {
-				assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
-				assert.EqualValues(t, test.actual, persisted.Quota)
-				assert.Equal(t, balance-test.actual, getUserQuota(t, id))
-				assert.Equal(t, balance-test.actual, getTokenRemainQuota(t, id))
-			}
+			assert.Equal(t, model.BillingRecoveryStatusSettled, recovery.Status)
+			assert.EqualValues(t, test.actual, persisted.Quota)
+			assert.Equal(t, balance-test.actual, getUserQuota(t, id))
+			assert.Equal(t, balance-test.actual, getTokenRemainQuota(t, id))
 			assert.Equal(t, test.actual, getTokenUsedQuota(t, id))
 			var count int64
 			require.NoError(t, model.DB.Model(&model.BillingEvent{}).Where("request_id = ? AND operation = ?", task.PrivateData.SubmissionRequestID, "settle").Count(&count).Error)
-			assert.Equal(t, settlements, count)
+			assert.EqualValues(t, 1, count)
 			require.NoError(t, model.DB.Model(&model.TaskResultEvent{}).Where("task_id = ?", task.ID).Count(&count).Error)
 			assert.EqualValues(t, 1, count)
 			var metric model.PerfMetric

@@ -6,8 +6,11 @@ import (
 	"math"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,12 +59,12 @@ func TestBillingAbortedReservationHasNoPendingDelivery(t *testing.T) {
 	require.ErrorIs(t, Reserve("unfunded", 2), ErrBillingRecoveryFundingQuota)
 	require.NoError(t, AbortPreparedBillingRecovery("unfunded", ErrBillingRecoveryFundingQuota))
 	require.NoError(t, AbortPreparedBillingRecovery("unfunded", ErrBillingRecoveryFundingQuota))
-	metrics, err := ReadBillingMetrics(context.Background())
+	backlog, err := ReadBillingRecoveryBacklog(context.Background(), 1<<62)
 	require.NoError(t, err)
-	assert.Zero(t, metrics.Pending)
-	assert.Zero(t, metrics.Reconciliations)
-	assert.Equal(t, "instance", metrics.Operational.CounterScope, "the backlog query must not reset values read before it")
-	assert.Len(t, metrics.PricesByOrigin, 1)
+	assert.Zero(t, backlog.Pending)
+	rows, err := ListStaleBillingRecoveries(1<<62, 100)
+	require.NoError(t, err)
+	assert.Empty(t, rows)
 	var recovery BillingRecovery
 	require.NoError(t, db.Where("request_id = ?", "unfunded").First(&recovery).Error)
 	assert.Equal(t, BillingRecoveryStateCompleted, recovery.ConsumptionState)
@@ -207,23 +210,61 @@ func TestBillingConcurrentReservationsCannotOverspend(t *testing.T) {
 	assertBillingProjection(t, db, 100, 100)
 }
 
-func TestBillingManualResolutionIdempotencyAndVersion(t *testing.T) {
-	db := setupBillingRecoveryTestDB(t)
-	seedBillingAccount(t, db, 100, 100, false)
-	newReservation(t, "bill")
-	require.NoError(t, Reserve("bill", 40))
-	consumption, err := bindConsumptionEvidence("bill", BillingConsumption{Log: Log{UserId: 1, TokenId: 1, Quota: 25}})
-	require.NoError(t, err)
-	require.NoError(t, PrepareBillingRecoveryConsumption("bill", consumption))
-	var row BillingRecovery
-	require.NoError(t, db.Where("request_id = ?", "bill").First(&row).Error)
-	command := BillingResolution{OperationID: "manual-1", ExpectedVersion: row.Version, Action: "settle", Quota: 25, Reason: "Provider usage confirmed"}
-	_, err = ResolveBillingReconciliation(context.Background(), row.ID, 1, command)
-	require.NoError(t, err)
-	_, err = ResolveBillingReconciliation(context.Background(), row.ID, 1, command)
-	require.NoError(t, err)
-	command.Quota = 26
-	_, err = ResolveBillingReconciliation(context.Background(), row.ID, 1, command)
-	require.ErrorIs(t, err, ErrBillingEventConflict)
-	assertBillingProjection(t, db, 100, 100)
+// The bill-first fallback charges exactly the attempt's persisted pre-send
+// estimate. An attempt without that estimate was never sent and is released.
+func TestFrozenEstimateSettlesOnlyTheAttemptEstimate(t *testing.T) {
+	t.Run("persisted estimate", func(t *testing.T) {
+		db := setupBillingRecoveryTestDB(t)
+		seedBillingAccount(t, db, 100, 100, false)
+		newReservation(t, "frozen")
+		require.NoError(t, Reserve("frozen", 40))
+		consumption, err := bindConsumptionEvidence("frozen", BillingConsumption{Log: Log{UserId: 1, TokenId: 1, Quota: 30}})
+		require.NoError(t, err)
+		var attempt BillingAttempt
+		require.NoError(t, db.First(&attempt, "id = ?", consumption.AttemptID).Error)
+		var quote billing.Quote
+		require.NoError(t, common.UnmarshalJsonStr(attempt.Quote, &quote))
+		var estimate billing.Usage
+		require.NoError(t, common.UnmarshalJsonStr(string(attempt.EstimateUsage), &estimate))
+		forged := estimate
+		forged.Quantities = map[string]string{"calls": "2"}
+		forgedUsage, forgedCharge, err := EvaluateBilling(&quote, forged, billingexpr.RequestInput{}, "frozen", consumption.AttemptID, "estimate")
+		require.NoError(t, err)
+		consumption.Usage, consumption.Charge, consumption.Log.Quota = &forgedUsage, forgedCharge, forgedCharge.FinalQuota
+		require.ErrorIs(t, PrepareBillingRecoveryConsumption("frozen", consumption), ErrBillingEventConflict, "an estimate label cannot carry another charge")
+
+		require.NoError(t, PrepareFrozenEstimateConsumption("frozen", "", Log{}, true))
+		require.NoError(t, Settle("frozen", 30))
+		var settled BillingRecovery
+		require.NoError(t, db.First(&settled, "request_id = ?", "frozen").Error)
+		assert.Equal(t, BillingRecoveryStatusSettled, settled.Status)
+		assert.JSONEq(t, attempt.EstimateCharge, settled.ChargeSnapshot)
+		var user User
+		require.NoError(t, db.First(&user, 1).Error)
+		assert.Equal(t, []common.Quota{70, 0, 30}, []common.Quota{user.Quota, user.ReservedQuota, user.UsedQuota})
+		assertBillingProjection(t, db, 100, 100)
+	})
+
+	t.Run("attempt without estimate", func(t *testing.T) {
+		db := setupBillingRecoveryTestDB(t)
+		seedBillingAccount(t, db, 100, 100, false)
+		newReservation(t, "unsent")
+		require.NoError(t, Reserve("unsent", 40))
+		version, err := billing.NewModelPriceVersion("fixture", billing.PricingValues{"ModelPrice": "0.00006"}, false)
+		require.NoError(t, err)
+		quote, err := publishedBillingTestQuote(version, "1", nil, time.Unix(7200, 0))
+		require.NoError(t, err)
+		require.NoError(t, PrepareBillingAttempt(context.Background(), "unsent", "unsent:attempt", 0, quote))
+		require.ErrorIs(t, PrepareFrozenEstimateConsumption("unsent", "", Log{}, true), ErrBillingEstimateMissing)
+		var recovery BillingRecovery
+		require.NoError(t, db.First(&recovery, "request_id = ?", "unsent").Error)
+		assert.Equal(t, BillingRecoveryStatusActive, recovery.Status)
+		assert.Empty(t, recovery.ConsumptionSnapshot)
+		require.NoError(t, MarkBillingRecoveryRefundPending("unsent", nil))
+		require.NoError(t, Release("unsent"))
+		var user User
+		require.NoError(t, db.First(&user, 1).Error)
+		assert.Equal(t, []common.Quota{100, 0, 0}, []common.Quota{user.Quota, user.ReservedQuota, user.UsedQuota})
+		assertBillingProjection(t, db, 100, 100)
+	})
 }

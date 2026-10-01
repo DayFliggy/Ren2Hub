@@ -14,7 +14,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relay"
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -33,9 +32,11 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 	var info *relaycommon.RelayInfo
 	defer func() {
 		if info != nil {
-			if info.ResponseUsage != nil && info.BillingSettlementError == nil {
+			// Same rule as HTTP relay: delivered output is billed, a failed call
+			// without output is released.
+			if info.ResponseUsage != nil && (apiErr == nil || info.HasValidOutput()) {
 				service.PostTextConsumeQuota(c, info, info.ResponseUsage, nil)
-			} else if info.Billing != nil && info.BillingSettlementError == nil {
+			} else if info.Billing != nil {
 				info.Billing.Refund(c)
 			}
 			observeLiveRouteAttempt(c, info, relayAttemptOutcome(c, info, apiErr, started, false))
@@ -343,20 +344,11 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 	}
 	idle := time.NewTimer(timeout)
 	defer idle.Stop()
-	terminalObserved, usageConfirmed := false, false
 	defer func() {
+		// Settlement uses these counters as an estimate when the terminal
+		// event or its usage never arrived.
 		if !info.UpstreamRejected {
 			info.CaptureResponseUsage(accumulator.Finish(), "text", nil)
-			needsUsage := false
-			for _, price := range info.PriceData.Quote.PriceVersion.Prices {
-				needsUsage = needsUsage || price.Unit == "per_million_tokens"
-			}
-			for _, key := range []string{"p", "c", "len", "cr", "cc", "cc1h", "img", "img_cr", "img_o", "ai", "ao"} {
-				needsUsage = needsUsage || billingexpr.UsedVars(info.PriceData.Quote.PriceVersion.Expression)[key]
-			}
-			if !terminalObserved || (needsUsage && !usageConfirmed) {
-				service.HoldUnconfirmedResponseUsage(c, info, info.ResponseUsage)
-			}
 		}
 	}()
 	var responseID string
@@ -431,8 +423,6 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 			accumulator.Observe(&event.ResponsesStreamResponse)
 			termination := relayconvert.TerminationFromResponse(&event.ResponsesStreamResponse)
 			if termination.IsTerminal() {
-				terminalObserved = true
-				usageConfirmed = event.Response != nil && event.Response.Usage != nil
 				c.Set("response_termination", termination)
 			}
 			if err := service.BindGatewayOutput(c, incoming.body); err != nil {

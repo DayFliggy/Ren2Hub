@@ -322,6 +322,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if parsed == nil || strings.TrimSpace(parsed.UpstreamTaskID) == "" || (parsed.ClientResponse == nil && info.TaskPluginRef == nil) {
 		return nil, service.TaskErrorWrapper(errors.New("accepted task response is incomplete"), "invalid_response", http.StatusBadGateway)
 	}
+	info.UpstreamTaskAccepted = true
 
 	finalQuota := info.PriceData.Quota
 

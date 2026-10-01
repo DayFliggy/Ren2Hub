@@ -12,7 +12,6 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
-	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -136,7 +135,7 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			facts.Estimated = false
 		}
 	}
-	if imageOrCallOnlyPrice(relayInfo.PriceData.Quote.PriceVersion) && TextUsageReadyForSettlement(ctx, relayInfo, usage) {
+	if imageOrCallOnlyPrice(relayInfo.PriceData.Quote.PriceVersion) && TextUsageConfirmed(ctx, relayInfo, usage) {
 		// Only business completion and any explicitly metered quantities are
 		// required here. Missing token counters are irrelevant to a fixed fee.
 		if facts.Estimated || !facts.Complete || facts.Invalid {
@@ -146,7 +145,7 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		summary.DeliveredPerCall = true
 	}
 	facts.ActualServiceTier = relayInfo.ActualServiceTier
-	if facts.Complete && !facts.Estimated && !facts.Invalid && TextUsageReadyForSettlement(ctx, relayInfo, usage) {
+	if facts.Complete && !facts.Estimated && !facts.Invalid && TextUsageConfirmed(ctx, relayInfo, usage) {
 		facts.Terminal = "completed"
 	}
 	facts, result, err := evaluateRequestBilling(relayInfo, facts)
@@ -237,9 +236,10 @@ func imageOrCallOnlyPrice(version billing.PriceVersion) bool {
 	return version.Mode == billing.ModePerCall || version.Mode == billing.ModeExpression && !version.TaskUsage && !version.NeedsTokenUsage()
 }
 
-// TextUsageReadyForSettlement requires an explicit successful protocol terminal
-// for a stream and actual provider counters for token-dependent prices.
-func TextUsageReadyForSettlement(ctx *gin.Context, info *relaycommon.RelayInfo, usage *dto.Usage) bool {
+// TextUsageConfirmed requires an explicit successful protocol terminal for a
+// stream and actual provider counters for token-dependent prices. Unconfirmed
+// usage still settles as an estimate when textUsageCanPrice allows it.
+func TextUsageConfirmed(ctx *gin.Context, info *relaycommon.RelayInfo, usage *dto.Usage) bool {
 	if info == nil || info.PriceData.Quote == nil {
 		return false
 	}
@@ -285,19 +285,37 @@ func TextUsageReadyForSettlement(ctx *gin.Context, info *relaycommon.RelayInfo, 
 		(usage.UsageSource != "" || dto.HasOpenAIUsageTokens(usage) || usage.BillingUsage != nil)
 }
 
+// textUsageCanPrice reports whether observed counters can express the price.
+// Fixed-fee and image-count prices need a confirmed completion; token prices
+// cannot be derived from duration or character counts. Unconfirmed token
+// counters remain usable as an estimate.
+func textUsageCanPrice(ctx *gin.Context, info *relaycommon.RelayInfo, usage *dto.Usage) bool {
+	if info == nil || info.PriceData.Quote == nil {
+		return false
+	}
+	if TextUsageConfirmed(ctx, info, usage) {
+		return true
+	}
+	version := info.PriceData.Quote.PriceVersion
+	if imageOrCallOnlyPrice(version) || version.UsesImageCount() {
+		return false
+	}
+	return usage == nil || usage.UsageSource != "provider_duration" && usage.UsageSource != "provider_characters"
+}
+
 // PrepareFinalTextCharge lets administrative channel probes use the same
-// protocol completion, actual usage and quantity handling as relay requests.
+// protocol completion, usage and quantity handling as relay requests.
 func PrepareFinalTextCharge(ctx *gin.Context, info *relaycommon.RelayInfo, usage *dto.Usage) (int, error) {
-	if !TextUsageReadyForSettlement(ctx, info, usage) {
-		return 0, fmt.Errorf("completed billing evidence required")
+	if !textUsageCanPrice(ctx, info, usage) {
+		return 0, fmt.Errorf("observed usage cannot price this request")
 	}
 	summary := calculateTextQuotaSummary(ctx, info, usage)
 	return summary.Quota, summary.PricingError
 }
 
 func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []string) {
-	if !TextUsageReadyForSettlement(ctx, relayInfo, usage) {
-		HoldUnconfirmedResponseUsage(ctx, relayInfo, usage)
+	if !textUsageCanPrice(ctx, relayInfo, usage) {
+		SettleBillingFallback(ctx, relayInfo, billingFallbackUnpriced, nil)
 		return
 	}
 	originUsage := usage
@@ -312,14 +330,14 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	adminRejectReason := common.GetContextKeyString(ctx, constant.ContextKeyAdminRejectReason)
 	summary := calculateTextQuotaSummary(ctx, relayInfo, originUsage)
 	if summary.PricingError != nil {
-		holdFailedBillingPrice(ctx, relayInfo, billingexpr.TokenParams{}, summary.PricingError)
+		SettleBillingFallback(ctx, relayInfo, billingFallbackPricingFailed, summary.PricingError)
 		return
 	}
 
 	for _, item := range summary.ToolSurchargeItems {
 		subtotal, err := decimal.NewFromString(item.SubtotalUSD)
 		if err != nil {
-			holdFailedBillingPrice(ctx, relayInfo, billingexpr.TokenParams{}, err)
+			SettleBillingFallback(ctx, relayInfo, billingFallbackPricingFailed, err)
 			return
 		}
 		q := subtotal.Mul(decimal.NewFromInt(billing.QuotaPerUSD))

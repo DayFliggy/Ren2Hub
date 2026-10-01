@@ -73,10 +73,15 @@ func TestGatewayStateBindingFailureNeverExposesIdentifier(t *testing.T) {
 			assert.NotContains(t, body, "isolated binding failure", "internal storage errors must not reach SDKs")
 			assert.NotContains(t, body, "response.completed")
 			assert.EqualValues(t, 1, sends.Load(), "accounting/ownership failure cannot resend the generation")
+			// The generation never reached the client, so the reservation is
+			// released instead of charged or held.
 			require.EventuallyWithT(t, func(collect *assert.CollectT) {
-				if assert.NoError(collect, model.DB.First(&after, before.Id).Error) {
-					assert.EqualValues(collect, before.Quota-500, after.Quota)
-					assert.EqualValues(collect, 500, after.ReservedQuota)
+				var recovery model.BillingRecovery
+				if assert.NoError(collect, model.DB.First(&after, before.Id).Error) && assert.NoError(collect, model.DB.First(&recovery).Error) {
+					assert.Equal(collect, model.BillingRecoveryStatusRefunded, recovery.Status)
+					assert.Equal(collect, before.Quota, after.Quota)
+					assert.Equal(collect, before.UsedQuota, after.UsedQuota)
+					assert.Zero(collect, after.ReservedQuota)
 				}
 			}, time.Second, 5*time.Millisecond)
 		})

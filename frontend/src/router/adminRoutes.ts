@@ -13,17 +13,6 @@ export const adminRoutes: RouteRecordRaw[] = [
     },
   },
   {
-    path: '/billing/reconciliations',
-    name: 'billing-reconciliations',
-    component: () => import('@/views/admin/BillingReconciliationsView.vue'),
-    meta: {
-      requiresAdmin: true,
-      requiresRoot: true,
-      feature: 'billing_reconciliation',
-      protected: true,
-    },
-  },
-  {
     path: '/models/metadata',
     name: 'models-admin',
     component: () => import('@/views/admin/ModelManagementView.vue'),
