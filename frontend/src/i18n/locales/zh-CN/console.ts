@@ -168,6 +168,7 @@ export default {
     previewFailed: '价格预览失败。',
     budgetUSD: '可用额度（USD）',
     chargePending: '尚无已确认的费用结果。',
+    chargeInvalid: '已保存的计费证据无效。',
     finalCharge: '最终费用',
     priceTitle: '模型价格版本',
     priceScope: '价格作用域',

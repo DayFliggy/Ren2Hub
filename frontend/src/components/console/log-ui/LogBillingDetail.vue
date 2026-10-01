@@ -12,13 +12,20 @@ const props = defineProps<{ log: LogItem }>()
 const { t } = useI18n()
 const evidence = computed(() => logEvidence(props.log))
 const observation = computed(() => logModelObservation(props.log))
-const charge = computed(() => {
+const chargeState = computed(() => {
+  const saved = evidence.value.charge_result
+  if (saved === null || saved === undefined)
+    return { charge: null, invalid: false }
   try {
-    return parseBillingCharge(evidence.value.charge_result, 'saved log charge')
+    return {
+      charge: parseBillingCharge(saved, 'saved log charge'),
+      invalid: false,
+    }
   } catch {
-    return null
+    return { charge: null, invalid: true }
   }
 })
+const charge = computed(() => chargeState.value.charge)
 const upstreamModel = computed(() => observation.value.upstream)
 </script>
 
@@ -62,8 +69,22 @@ const upstreamModel = computed(() => observation.value.upstream)
       </dd>
     </dl>
     <LogModelMismatch :log="log" />
-    <p v-if="!charge" class="text-sm text-[var(--text-secondary)]">
-      {{ t('billing.chargePending') }}
+    <p
+      v-if="!charge"
+      class="text-sm"
+      :class="
+        chargeState.invalid
+          ? 'text-[var(--status-danger-text)]'
+          : 'text-[var(--text-secondary)]'
+      "
+    >
+      {{
+        t(
+          chargeState.invalid
+            ? 'billing.chargeInvalid'
+            : 'billing.chargePending'
+        )
+      }}
     </p>
     <template v-else>
       <BillingAdjustments :charge="charge" />
