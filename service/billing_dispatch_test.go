@@ -72,7 +72,11 @@ func runBillingDispatchGuardScenario(t *testing.T, c *gin.Context, info *relayco
 	require.NoError(t, model.DB.Where("request_id = ?", info.RequestId).First(&pending).Error)
 	require.EqualValues(t, model.BillingRecoveryStateUsagePending, pending.ConsumptionState)
 	assert.NotEmpty(t, pending.QuoteSnapshot)
-	assert.Empty(t, pending.ConsumptionSnapshot)
+	var dispatch model.BillingConsumption
+	require.NoError(t, common.UnmarshalJsonStr(pending.ConsumptionSnapshot, &dispatch))
+	assert.Equal(t, info.BillingAttemptID, dispatch.AttemptID)
+	assert.Empty(t, pending.ChargeSnapshot)
+	assert.Empty(t, pending.ConsumptionFingerprint, "dispatch must not create a final charge")
 	var attempts int64
 	require.NoError(t, model.DB.Model(&model.BillingAttempt{}).Where("request_id = ?", info.RequestId).Count(&attempts).Error)
 	assert.EqualValues(t, 1, attempts)

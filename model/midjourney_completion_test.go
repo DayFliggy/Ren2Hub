@@ -162,6 +162,8 @@ func testMidjourneyAcceptedSubmission(t *testing.T, fixture midjourneyCompletion
 	t.Helper()
 	task, consumption := newMidjourneySubmission(t, fixture, "mj-accepted-new")
 	db := fixture.db
+	var beforeUser User
+	require.NoError(t, db.First(&beforeUser, task.UserId).Error)
 	require.NoError(t, db.Callback().Create().Before("gorm:create").Register("mj_submit_fault", func(tx *gorm.DB) {
 		if tx.Statement.Table == "midjourneys" {
 			tx.AddError(assert.AnError)
@@ -172,7 +174,16 @@ func testMidjourneyAcceptedSubmission(t *testing.T, fixture midjourneyCompletion
 	var recovery BillingRecovery
 	require.NoError(t, db.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
 	assert.Equal(t, BillingRecoveryStatusActive, recovery.Status)
-	assert.Empty(t, recovery.ConsumptionSnapshot)
+	assert.Equal(t, BillingRecoveryStateUsagePending, recovery.ConsumptionState)
+	var pending BillingConsumption
+	require.NoError(t, common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &pending))
+	assert.Equal(t, consumption.AttemptID, pending.AttemptID)
+	assert.Empty(t, recovery.ChargeSnapshot)
+	assert.Empty(t, recovery.ConsumptionFingerprint)
+	var user User
+	require.NoError(t, db.First(&user, task.UserId).Error)
+	assert.Equal(t, []common.Quota{beforeUser.Quota, beforeUser.ReservedQuota, beforeUser.UsedQuota},
+		[]common.Quota{user.Quota, user.ReservedQuota, user.UsedQuota})
 	require.NoError(t, db.Callback().Create().Remove("mj_submit_fault"))
 	require.NoError(t, PersistAcceptedMidjourney(&task, task.PrivateData.SubmissionRequestID, consumption))
 	id := task.Id

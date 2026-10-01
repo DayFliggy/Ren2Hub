@@ -263,7 +263,8 @@ func markBillingRecoveryRefundPending(requestID string, lastError error, require
 		if BillingRecoveryUsageCollecting(recovery.ConsumptionState) || recovery.ConsumptionState == BillingRecoveryStateTaskPending {
 			return ErrBillingRecoveryStateConflict
 		}
-		if requireUnsent && recovery.Status == BillingRecoveryStatusActive && recovery.ConsumptionState != "" {
+		if requireUnsent && recovery.Status == BillingRecoveryStatusActive &&
+			(recovery.ConsumptionState != "" || recovery.QuoteSnapshot != "" || recovery.ConsumptionSnapshot != "") {
 			_, _, _, err := frozenBillingEstimateTx(tx, recovery, "")
 			if err == nil {
 				return ErrBillingRecoveryStateConflict

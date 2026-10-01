@@ -116,8 +116,8 @@ func gatewayStartupOpsQueries(t *testing.T, db *gorm.DB) {
 		{Id: 502, Name: "ops-backup", Status: common.ChannelStatusAutoDisabled, Key: "test-only-key-b"},
 	}).Error)
 	require.NoError(t, db.Create(&[]ChannelHealth{
-		{ChannelID: 501, Model: "ops-model", KeyScope: "test-scope-a", State: RouteHealthStateOpen, FailureCount: 3, UpdatedAt: 200},
-		{ChannelID: 501, Model: "ops-model", KeyScope: "test-scope-b", State: RouteHealthStateHalfOpen, FailureCount: 1, UpdatedAt: 190},
+		{ChannelID: 501, Model: "ops-model", KeyScope: "test-scope-a", State: RouteHealthStateOpen, FailureCount: 3, UpdatedAt: 190, LastLatencyMS: 900},
+		{ChannelID: 501, Model: "ops-model", KeyScope: "test-scope-b", State: RouteHealthStateHalfOpen, FailureCount: 1, UpdatedAt: 200, LastLatencyMS: 400},
 		{ChannelID: 502, Model: "ops-model", KeyScope: "test-scope-c", State: RouteHealthStateClosed, UpdatedAt: 300},
 	}).Error)
 	health, err := ReadOpsChannelHealth(1)
@@ -128,15 +128,18 @@ func gatewayStartupOpsQueries(t *testing.T, db *gorm.DB) {
 	assert.Equal(t, "ops-primary", health.Unhealthy[0].ChannelName)
 	assert.Equal(t, RouteHealthStateOpen, health.Unhealthy[0].State)
 	assert.Equal(t, 3, health.Unhealthy[0].FailureCount)
+	require.NotNil(t, health.Unhealthy[0].LastLatencyMS)
+	assert.Equal(t, int64(400), *health.Unhealthy[0].LastLatencyMS, "the newest latency remains independent of the worst breaker state")
 
-	require.NoError(t, db.Create(&[]SystemTask{
+	tasks := []SystemTask{
 		{TaskID: "ops-success", Type: SystemTaskTypeChannelTest, Status: SystemTaskStatusSucceeded, UpdatedAt: 100},
 		{TaskID: "ops-failure", Type: SystemTaskTypeChannelTest, Status: SystemTaskStatusFailed, Error: "test task failed", UpdatedAt: 200},
 		{TaskID: "ops-active", Type: SystemTaskTypeModelUpdate, Status: SystemTaskStatusRunning, UpdatedAt: 300},
-	}).Error)
+	}
+	require.NoError(t, db.Create(&tasks).Error)
 	activity, err := SummarizeSystemTaskActivity([]string{SystemTaskTypeChannelTest, SystemTaskTypeModelUpdate})
 	require.NoError(t, err)
-	assert.Equal(t, SystemTaskActivity{LastSuccessAt: 100, LastFailureAt: 200, LastError: "test task failed"}, activity[SystemTaskTypeChannelTest])
+	assert.Equal(t, SystemTaskActivity{LastSuccessAt: 100, LastFailureAt: 200, LastSuccessID: tasks[0].ID, LastFailureID: tasks[1].ID, LastError: "test task failed"}, activity[SystemTaskTypeChannelTest])
 	assert.Equal(t, SystemTaskActivity{Active: true}, activity[SystemTaskTypeModelUpdate])
 
 	require.NoError(t, db.Create(&[]PerfMetric{

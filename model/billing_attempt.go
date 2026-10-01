@@ -69,13 +69,36 @@ func prepareBillingAttemptTx(tx *gorm.DB, requestID, attemptID string, channelID
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
-	if recovery.Status != BillingRecoveryStatusActive || recovery.PreConsumeState != BillingRecoveryPreConsumeCommitted || BillingRecoveryUsageCollecting(recovery.ConsumptionState) {
+	if recovery.Status != BillingRecoveryStatusActive || recovery.PreConsumeState != BillingRecoveryPreConsumeCommitted ||
+		BillingRecoveryUsageCollecting(recovery.ConsumptionState) || recovery.ConsumptionState == BillingRecoveryStateTaskPending {
 		return ErrBillingRecoveryStateConflict
 	}
 	if err := tx.Create(&BillingAttempt{ID: attemptID, RequestID: requestID, ChannelID: channelID, Quote: string(data), QuoteHash: quote.Hash, Fingerprint: fingerprint, CreatedAt: common.GetTimestamp()}).Error; err != nil {
 		return err
 	}
-	return tx.Model(&recovery).Updates(map[string]any{"quote_snapshot": string(data), "consumption_state": BillingRecoveryStateUsagePending, "version": recovery.Version + 1, "updated_at": common.GetTimestamp()}).Error
+	// The pending consumption starts with its actual attempt identity. Retries
+	// can share a quote and creation second, so recovery cannot select one by
+	// timestamp or by the presence of a charge. Final evidence replaces this
+	// same snapshot once the request reaches settlement or task acceptance.
+	pending, err := common.Marshal(BillingConsumption{AttemptID: attemptID})
+	if err != nil {
+		return err
+	}
+	return tx.Model(&recovery).Updates(map[string]any{"quote_snapshot": string(data), "consumption_snapshot": string(pending), "consumption_state": BillingRecoveryStateUsagePending, "version": recovery.Version + 1, "updated_at": common.GetTimestamp()}).Error
+}
+
+func billingRecoveryAttemptID(recovery BillingRecovery) (string, error) {
+	if recovery.ConsumptionSnapshot == "" {
+		return "", nil
+	}
+	var consumption BillingConsumption
+	if err := common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &consumption); err != nil {
+		return "", billing.ErrEvaluationEvidence
+	}
+	if consumption.AttemptID == "" {
+		return "", billing.ErrEvaluationEvidence
+	}
+	return consumption.AttemptID, nil
 }
 
 // BillingAttemptFingerprint binds an attempt to its logical request and frozen

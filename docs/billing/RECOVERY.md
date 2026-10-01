@@ -19,6 +19,8 @@ Realtime 会话保存累计用量快照；会话无法给出最终计价时，�
 
 结算意图在准备时解密求值证据并重放同一计算器；最终资金事务只核对证据指纹与金额，保证已接受的意图在进程重启后仍能完成。所有资金变动经不可变事件幂等，重复执行不会重复扣款或释放。报价或估算证据无法解析、身份不符或不能重放时保持恢复积压；证据损坏不能当作“从未发送”自动释放。
 
+派发准备在同一事务中保存当前 attempt 身份、报价和 `usage_pending` 状态；身份沿用消费快照的 `attempt_id`，实际用量、Realtime 累计观察与任务接受随后替换同一快照。恢复不按创建时间或字符串 ID 猜测最新重试。旧在途记录没有 attempt 标记时，仅在冻结报价对应唯一 attempt 的情况下恢复；多个候选、身份冲突、部分估算字段缺失都保留积压。只有已验证身份的 attempt 的用量与金额估算均未写入，才能证明该次尝试未发送并释放。
+
 ## 观察与处置
 
 Root 通过 `GET /api/gateway/metrics` 查看 `billing.settlements_total`（`confirmed`、`estimated`、`frozen_estimate` 计数，进程级）和 `billing_recovery`（超时未结束记录数与最早更新时间）。积压持续不降表示恢复失败，原因在服务日志的 `billing fallback remains pending` 或 `billing consumption remains pending`。缓存、日志与统计不能作为余额来源；故障排查可读取事件与状态，不得直接 UPDATE 余额修账，调账使用管理员差额事件。

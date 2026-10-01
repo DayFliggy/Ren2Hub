@@ -449,8 +449,12 @@ func submitMidjourneyJob(c *gin.Context, info *relaycommon.RelayInfo, action, pr
 		from := task.Status
 		task.Status, task.Progress, task.FinishTime = "SUCCESS", "100%", now
 		completionCtx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 30*time.Second)
-		_, err := service.CompleteMidjourneyBilling(completionCtx, task, from)
+		committed, err := service.CompleteMidjourneyBilling(completionCtx, task, from)
 		cancel()
+		if !committed {
+			// A result must not escape before its terminal accounting is durable.
+			return service.MidjourneyRequestError(info, errors.New("accepted Midjourney result could not be committed; do not resubmit automatically"), types.ErrorCodeUpdateDataError, http.StatusServiceUnavailable)
+		}
 		if err != nil {
 			logger.LogError(c, fmt.Sprintf("Midjourney immediate completion remains pending (row_id=%d): %v", task.Id, err))
 		}

@@ -17,8 +17,9 @@ var ErrBillingEstimateMissing = errors.New("no frozen billing estimate was persi
 var ErrNoCollectedBillingUsage = errors.New("no collected billing usage")
 var ErrBillingTaskPending = errors.New("accepted task owns its terminal accounting")
 
-// frozenBillingEstimateTx returns the attempt estimate bound to the frozen quote.
-// An empty attemptID selects the latest attempt of that quote, as recovery does.
+// frozenBillingEstimateTx returns the current attempt's estimate. Older pending
+// rows without an attempt marker are recoverable only when the quote identifies
+// exactly one attempt; ambiguous or damaged evidence never authorizes a refund.
 func frozenBillingEstimateTx(tx *gorm.DB, recovery BillingRecovery, attemptID string) (BillingAttempt, *billing.Usage, *billing.ChargeResult, error) {
 	var quote billing.Quote
 	if err := common.UnmarshalJsonStr(recovery.QuoteSnapshot, &quote); err != nil {
@@ -27,17 +28,43 @@ func frozenBillingEstimateTx(tx *gorm.DB, recovery BillingRecovery, attemptID st
 	if err := validatePublishedQuoteIdentity(quote); err != nil {
 		return BillingAttempt{}, nil, nil, billing.ErrEvaluationEvidence
 	}
-	query := tx.Where("request_id = ? AND quote_hash = ? AND estimate_charge <> ''", recovery.RequestID, quote.Hash)
-	if attemptID != "" {
-		query = query.Where("id = ?", attemptID)
-	}
-	var attempt BillingAttempt
-	err := query.Order("created_at desc").First(&attempt).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return BillingAttempt{}, nil, nil, ErrBillingEstimateMissing
-	}
+	currentID, err := billingRecoveryAttemptID(recovery)
 	if err != nil {
 		return BillingAttempt{}, nil, nil, err
+	}
+	if attemptID != "" && currentID != "" && attemptID != currentID {
+		return BillingAttempt{}, nil, nil, ErrBillingEventConflict
+	}
+	if attemptID == "" {
+		attemptID = currentID
+	}
+	var attempt BillingAttempt
+	query := tx.Where("request_id = ?", recovery.RequestID)
+	if attemptID == "" {
+		var candidates []BillingAttempt
+		if err := query.Where("quote_hash = ?", quote.Hash).Limit(2).Find(&candidates).Error; err != nil {
+			return BillingAttempt{}, nil, nil, err
+		}
+		if len(candidates) != 1 {
+			return BillingAttempt{}, nil, nil, billing.ErrEvaluationEvidence
+		}
+		attempt = candidates[0]
+	} else if err := query.Where("id = ?", attemptID).First(&attempt).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return BillingAttempt{}, nil, nil, billing.ErrEvaluationEvidence
+		}
+		return BillingAttempt{}, nil, nil, err
+	}
+	var attemptQuote billing.Quote
+	if common.UnmarshalJsonStr(attempt.Quote, &attemptQuote) != nil || attempt.QuoteHash != quote.Hash || attemptQuote.Hash != quote.Hash {
+		return BillingAttempt{}, nil, nil, billing.ErrEvaluationEvidence
+	}
+	fingerprint, err := BillingAttemptFingerprint(recovery.RequestID, attempt.ChannelID, &attemptQuote)
+	if err != nil || fingerprint != attempt.Fingerprint {
+		return BillingAttempt{}, nil, nil, billing.ErrEvaluationEvidence
+	}
+	if attempt.EstimateUsage == "" && attempt.EstimateCharge == "" {
+		return BillingAttempt{}, nil, nil, ErrBillingEstimateMissing
 	}
 	var usage billing.Usage
 	var charge billing.ChargeResult

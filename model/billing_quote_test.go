@@ -61,7 +61,11 @@ func TestFinalConsumptionRequiresBoundImmutableAttempt(t *testing.T) {
 	var recovery BillingRecovery
 	require.NoError(t, db.First(&recovery, "request_id = ?", "bound-attempt").Error)
 	assert.Equal(t, BillingRecoveryStatusActive, recovery.Status)
-	assert.Empty(t, recovery.ConsumptionSnapshot)
+	var pending BillingConsumption
+	require.NoError(t, common.UnmarshalJsonStr(recovery.ConsumptionSnapshot, &pending))
+	assert.Equal(t, consumption.AttemptID, pending.AttemptID)
+	assert.Empty(t, recovery.ChargeSnapshot)
+	assert.Empty(t, recovery.ConsumptionFingerprint, "a damaged attempt cannot authorize a final charge")
 	var user User
 	require.NoError(t, db.First(&user, 1).Error)
 	assert.Equal(t, common.Quota(40), user.ReservedQuota)

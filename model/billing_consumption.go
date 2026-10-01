@@ -82,6 +82,13 @@ func validateBillingConsumption(tx *gorm.DB, recovery BillingRecovery, consumpti
 	if consumption.Usage == nil || consumption.Charge == nil || consumption.AttemptID == "" {
 		return "", errors.New("complete frozen billing evidence is required")
 	}
+	currentID, err := billingRecoveryAttemptID(recovery)
+	if err != nil {
+		return "", err
+	}
+	if currentID != "" && currentID != consumption.AttemptID {
+		return "", ErrBillingEventConflict
+	}
 	if recovery.UserID != consumption.Log.UserId || recovery.TokenID != consumption.Log.TokenId {
 		return "", ErrBillingRecoveryStateConflict
 	}

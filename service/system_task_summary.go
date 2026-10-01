@@ -64,7 +64,9 @@ func systemTaskHealth(summary SystemTaskTypeSummary, run model.SystemTaskActivit
 		return "running"
 	case summary.Scheduled && !summary.Enabled:
 		return "inactive"
-	case run.LastFailureAt > run.LastSuccessAt:
+	// Runs of one type are serialized, so their IDs disambiguate terminal
+	// outcomes that share the model's second-resolution update timestamp.
+	case run.LastFailureAt > run.LastSuccessAt || run.LastFailureAt == run.LastSuccessAt && run.LastFailureID > run.LastSuccessID:
 		return "failing"
 	case summary.Scheduled && now-max(run.LastSuccessAt, common.StartTime) > 2*summary.IntervalSeconds+systemTaskStaleSlackSeconds:
 		return "stale"

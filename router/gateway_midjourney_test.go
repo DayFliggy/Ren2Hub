@@ -261,6 +261,68 @@ func TestGatewayMidjourneyExistingSuccessSettlesOnSubmit(t *testing.T) {
 	assertGatewayMidjourneyImmediateSettlement(t, task)
 }
 
+func TestGatewayMidjourneyImmediateResultRequiresDurableCompletion(t *testing.T) {
+	for _, failure := range []string{"completion", "settlement"} {
+		t.Run(failure, func(t *testing.T) {
+			var sends atomic.Int32
+			url, key, _ := setupGatewayMidjourney(t, func(w http.ResponseWriter, r *http.Request) {
+				sends.Add(1)
+				_, _ = io.WriteString(w, `{"code":21,"result":"finished-job","properties":{"status":"SUCCESS","imageUrl":"https://fixture.invalid/done.png"}}`)
+			})
+			const callback = "test:mj_immediate_completion"
+			require.NoError(t, model.DB.Callback().Update().Before("gorm:update").Register(callback, func(tx *gorm.DB) {
+				if failure == "completion" && tx.Statement.Table == "midjourneys" {
+					tx.AddError(assert.AnError)
+				}
+			}))
+			require.NoError(t, model.DB.Callback().Create().Before("gorm:create").Register(callback, func(tx *gorm.DB) {
+				if event, ok := tx.Statement.Dest.(*model.BillingEvent); ok && failure == "settlement" && event.Operation == model.BillingRecoveryOperationSettle {
+					tx.AddError(assert.AnError)
+				}
+			}))
+			t.Cleanup(func() {
+				_ = model.DB.Callback().Update().Remove(callback)
+				_ = model.DB.Callback().Create().Remove(callback)
+			})
+
+			code, body := postGatewayTask(t, url, key, "/mj/submit/imagine", `{"prompt":"local fixture"}`)
+			var task model.Midjourney
+			require.NoError(t, model.DB.First(&task).Error)
+			if failure == "completion" {
+				assert.Equal(t, http.StatusServiceUnavailable, code, body)
+				assert.NotContains(t, body, "https://fixture.invalid/done.png")
+				assert.NotContains(t, body, "finished-job")
+				assert.Contains(t, body, "do not resubmit")
+				assert.Equal(t, "SUBMITTED", task.Status)
+			} else {
+				assert.Equal(t, http.StatusOK, code, body)
+				assert.Contains(t, body, "https://fixture.invalid/done.png")
+				assert.Equal(t, "SUCCESS", task.Status)
+			}
+			var user model.User
+			require.NoError(t, model.DB.First(&user, task.UserId).Error)
+			assert.Zero(t, user.UsedQuota)
+			assert.EqualValues(t, 500, user.ReservedQuota)
+			require.NoError(t, model.DB.Callback().Update().Remove(callback))
+			require.NoError(t, model.DB.Callback().Create().Remove(callback))
+
+			if failure == "completion" {
+				task.Status, task.Progress, task.ImageUrl = "SUCCESS", "100%", "https://fixture.invalid/done.png"
+				won, err := service.CompleteMidjourneyBilling(context.Background(), &task, "SUBMITTED")
+				require.NoError(t, err)
+				require.True(t, won)
+			}
+			for range 2 {
+				_, err := service.RecoverStaleBillingRecoveries(context.Background(), time.Now().Unix()+3600, 10)
+				require.NoError(t, err)
+			}
+			require.NoError(t, model.DB.First(&task, task.Id).Error)
+			assertGatewayMidjourneyImmediateSettlement(t, task)
+			assert.EqualValues(t, 1, sends.Load(), "local persistence failures must never resubmit accepted work")
+		})
+	}
+}
+
 func assertGatewayMidjourneyImmediateSettlement(t *testing.T, task model.Midjourney) {
 	t.Helper()
 	require.EqualValues(t, 500, task.Quota, "fixture price is 0.001 USD per job")

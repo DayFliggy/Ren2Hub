@@ -5,6 +5,7 @@ import (
 	"math"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -217,4 +218,43 @@ func TestOpsProbesReportCategoriesWithoutDriverDetails(t *testing.T) {
 	redis := sampler.probeRedis(context.Background())
 	assert.False(t, redis.Enabled)
 	assert.Equal(t, OpsStatusUnknown, redis.Status)
+}
+
+func TestSystemTaskSummaryOrdersOutcomesThatFinishInTheSameSecond(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "task-summary.db")), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.SystemTask{}))
+	previousDB := model.DB
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = previousDB
+		sqlDB, err := db.DB()
+		require.NoError(t, err)
+		assert.NoError(t, sqlDB.Close())
+	})
+	withSystemTaskRegistry(t, logCleanupHandler{})
+
+	for _, tc := range []struct {
+		name     string
+		statuses []model.SystemTaskStatus
+		want     string
+	}{
+		{"success then failure", []model.SystemTaskStatus{model.SystemTaskStatusSucceeded, model.SystemTaskStatusFailed}, "failing"},
+		{"failure then success", []model.SystemTaskStatus{model.SystemTaskStatusFailed, model.SystemTaskStatusSucceeded}, "ok"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, db.Where("type = ?", model.SystemTaskTypeLogCleanup).Delete(&model.SystemTask{}).Error)
+			// On-demand tasks can finish and be started again within a second;
+			// UpdatedAt intentionally preserves the model's second precision.
+			for _, status := range tc.statuses {
+				require.NoError(t, db.Create(&model.SystemTask{
+					TaskID: string(status), Type: model.SystemTaskTypeLogCleanup, Status: status, UpdatedAt: 100,
+				}).Error)
+			}
+			summaries, err := SummarizeSystemTasks(time.Unix(101, 0))
+			require.NoError(t, err)
+			require.Len(t, summaries, 1)
+			assert.Equal(t, tc.want, summaries[0].Status)
+		})
+	}
 }
