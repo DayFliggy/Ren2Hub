@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -48,6 +49,43 @@ func ModelPriceConfigured(values PricingValues) bool {
 	return ratio || price
 }
 
+// ResolveTaskPricingValues applies the executing plugin's precedence to an
+// ordered model/alias snapshot. It never reads mutable settings or changes the
+// snapshot, so quoting and model discovery share the same selection contract.
+func ResolveTaskPricingValues(pluginKey string, schema map[string]jsplugin.UsageFieldSchema, candidates ...PricingValues) (PricingValues, bool, error) {
+	effective := make(PricingValues)
+	if len(candidates) > 0 {
+		maps.Copy(effective, candidates[0])
+	}
+	var expression any
+	selected := false
+	for _, candidate := range candidates {
+		variants, _ := candidate[billing_setting.PluginBillingExprOption].(map[string]any)
+		if configured, exists := variants[pluginKey]; exists {
+			expression, selected = configured, true
+			break
+		}
+	}
+	if !selected {
+		for _, candidate := range candidates {
+			if candidate["billing_setting.billing_mode"] == billing_setting.BillingModeTieredExpr {
+				expression, selected = candidate["billing_setting.billing_expr"], true
+				break
+			}
+		}
+	}
+	if !selected {
+		return effective, false, nil
+	}
+	text, _ := expression.(string)
+	if !billing_setting.TaskExprCompatible(text, schema) {
+		return nil, false, errors.New("model expression is not configured for the executing task plugin")
+	}
+	effective["billing_setting.billing_mode"] = billing_setting.BillingModeTieredExpr
+	effective["billing_setting.billing_expr"] = text
+	return effective, true, nil
+}
+
 // ResolveModelBillingPrice reads the sole administrator pricing configuration.
 // Evidence is stored at the actual request boundary, never by a price preview.
 func ResolveModelBillingPrice(ctx context.Context, modelName, pluginKey string) (*billing.PriceVersion, error) {
@@ -78,38 +116,17 @@ func resolveModelBillingPrice(ctx context.Context, modelName, pluginKey, mappedM
 		if ref != nil && (plugin.Meta.Version != ref.Version || plugin.SourceHash != ref.SourceHash) {
 			return nil, fmt.Errorf("task pricing plugin changed before quoting")
 		}
-		names := []string{modelName}
+		candidates := []PricingValues{effective}
 		if mappedModel != "" && mappedModel != modelName {
-			names = append(names, mappedModel)
+			candidates = append(candidates, effectiveModelPricing(values, mappedModel))
 		}
-		var expression any
-		for _, name := range names {
-			if configured, exists := values[billing_setting.PluginBillingExprOption][billing_setting.PluginBillingExprKey(pluginKey, name)]; exists {
-				expression = configured
-				break
-			}
+		schema, _ := plugin.Meta.UsageForModels(mappedModel, modelName)
+		effective, taskUsage, err = ResolveTaskPricingValues(pluginKey, schema, candidates...)
+		if err != nil {
+			return nil, err
 		}
-		if expression == nil {
-			for _, name := range names {
-				candidate := effectiveModelPricing(values, name)
-				if candidate["billing_setting.billing_mode"] == billing_setting.BillingModeTieredExpr {
-					expression = candidate["billing_setting.billing_expr"]
-					break
-				}
-			}
-		}
-		if expression != nil {
-			effective["billing_setting.billing_mode"] = billing_setting.BillingModeTieredExpr
-			effective["billing_setting.billing_expr"] = expression
-		}
-		if effective["billing_setting.billing_mode"] == billing_setting.BillingModeTieredExpr {
-			expression, _ := effective["billing_setting.billing_expr"].(string)
-			schema, _ := plugin.Meta.UsageForModels(mappedModel, modelName)
+		if taskUsage {
 			usageSchema = ModelPricingUsageSchema(schema)
-			if !billing_setting.TaskExprCompatible(expression, schema) {
-				return nil, fmt.Errorf("model expression is not configured for the executing task plugin")
-			}
-			taskUsage = true
 		}
 	}
 	if !ModelPriceConfigured(effective) {

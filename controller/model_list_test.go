@@ -525,6 +525,60 @@ func TestListModelsIncludesPluginPricedTaskModel(t *testing.T) {
 	require.NotContains(t, listed, aliasOnlyModel)
 }
 
+func TestListModelsHidesTaskPricesIncompatibleWithUpdatedPlugin(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	withSelfUseModeDisabled(t)
+	const baseModel = "zz-task-base-schema-change"
+	const overrideModel = "zz-task-override-schema-change"
+	const freeModel = "zz-task-free-schema-change"
+	const pluginKey = "model-list-schema-change"
+	source := `export const meta={apiVersion:1,key:"model-list-schema-change",name:"Schema Change",version:"1.0.0",author:{name:"Test"},models:["zz-task-base-schema-change","zz-task-override-schema-change","zz-task-free-schema-change"],fetchMode:"per_task",usageSchema:{count:{type:"number",unit:"count"}}};export function buildSubmitRequest(){return {}};export function parseSubmitResponse(){return {}};export function buildQueryRequest(){return {}};export function parseTaskResult(){return {}};`
+	_, err := jsplugin.DefaultRegistry.Register(source, jsplugin.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister(pluginKey)) })
+	require.NoError(t, db.Create(&model.User{Id: 1012, Username: "task-schema-change-user", Password: "password", Group: "default", Status: common.UserStatusEnabled}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: 712, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI, Models: strings.Join([]string{baseModel, overrideModel, freeModel}, ",")}).Error)
+	require.NoError(t, db.Create(&[]model.Ability{
+		{Group: "default", Model: baseModel, ChannelId: 712, Enabled: true},
+		{Group: "default", Model: overrideModel, ChannelId: 712, Enabled: true},
+		{Group: "default", Model: freeModel, ChannelId: 712, Enabled: true},
+	}).Error)
+	require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{
+		{ModelName: baseModel, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}), Pricing: model.PricingValues{
+			"billing_setting.billing_mode": billing_setting.BillingModeTieredExpr,
+			"billing_setting.billing_expr": `u("count") * 0.02`,
+		}},
+		{ModelName: overrideModel, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}), Pricing: model.PricingValues{
+			"ModelPrice":                            "1",
+			billing_setting.PluginBillingExprOption: map[string]any{pluginKey: `u("count") * 0.02`},
+		}},
+		{ModelName: freeModel, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}), Pricing: model.PricingValues{"ModelPrice": "0"}},
+	}))
+	for _, updated := range []bool{false, true} {
+		if updated {
+			_, err = jsplugin.DefaultRegistry.Register(strings.Replace(source, "usageSchema:{count:", "usageSchema:{duration:", 1), jsplugin.Options{})
+			require.NoError(t, err)
+		}
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		ctx.Set("id", 1012)
+		ListModels(ctx, constant.ChannelTypeOpenAI)
+		listed := decodeListModelsResponse(t, recorder)
+		assert.Contains(t, listed, freeModel, "an explicit free per-call price does not depend on the usage schema")
+		for _, name := range []string{baseModel, overrideModel} {
+			_, priceErr := model.ResolveModelBillingPrice(ctx.Request.Context(), name, pluginKey)
+			if updated {
+				assert.Error(t, priceErr)
+				assert.NotContains(t, listed, name, "a rejected plugin expression must not expose a callable model")
+			} else {
+				require.NoError(t, priceErr)
+				assert.Contains(t, listed, name)
+			}
+		}
+	}
+}
+
 func TestListModelsUsesAdvancedCustomEndpointTypesFromPricingCache(t *testing.T) {
 	withSelfUseModeEnabled(t)
 	db := setupModelListControllerTestDB(t)

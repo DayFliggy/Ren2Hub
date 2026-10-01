@@ -184,11 +184,15 @@ func planMediaConversion(req RequestRequirements, target types.RelayFormat) ([]t
 					Message: "the Responses to Gemini converter cannot preserve tool result media as a media part", Severity: types.ConversionDiagnosticError, From: req.Format, To: target}
 				return []types.ConversionDiagnostic{diagnostic}, &types.ConversionLossError{Diagnostics: []types.ConversionDiagnostic{diagnostic}}
 			}
-			// Other tool output media is preserved by its converter or hoisted after the result.
-			continue
+			// Chat tool content and Gemini function-response parts have no media
+			// conversion path; native forwarding retains their original semantics.
+			canConvert = canConvert && req.Format != types.RelayFormatOpenAI && req.Format != types.RelayFormatGemini
 		}
 		if media.Kind == "image" {
 			canConvert = canConvert && (media.MIMEType == "" || strings.HasPrefix(media.MIMEType, "image/"))
+		} else if media.ToolResult && req.Format == types.RelayFormatClaude && target == types.RelayFormatOpenAIResponses {
+			// This direct converter preserves document sources without routing through Chat.
+			canConvert = canConvert && media.Kind == "document"
 		} else {
 			// Claude and Gemini route through Chat, whose existing converters
 			// only preserve images from these protocols.

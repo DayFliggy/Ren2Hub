@@ -69,3 +69,70 @@ func TestClaudeToolImageReachesGeminiImagePart(t *testing.T) {
 	require.True(t, hasFunctionResponse)
 	require.True(t, hasImage)
 }
+
+func TestToolMediaRejectsUnsupportedSourcesAndRoutes(t *testing.T) {
+	for _, test := range []struct {
+		name, body string
+		request    any
+		target     types.RelayFormat
+	}{
+		{"claude_tool_image_with_unknown_block", `{"model":"fixture","messages":[{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"read","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"YWJj"}},{"type":"unknown","value":"metadata"}]}]}]}`, &dto.ClaudeRequest{}, types.RelayFormatOpenAI},
+		{"responses_tool_image_with_unknown_block", `{"model":"fixture","input":[{"type":"function_call","call_id":"call_1","name":"read","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"unknown","value":"metadata"}]}]}`, &dto.OpenAIResponsesRequest{}, types.RelayFormatOpenAI},
+		{"chat_tool_image_to_responses", `{"model":"fixture","messages":[{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"read","arguments":"{}"}}]},{"role":"tool","tool_call_id":"call_1","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,YWJj"}}]}]}`, &dto.GeneralOpenAIRequest{}, types.RelayFormatOpenAIResponses},
+		{"gemini_tool_image_to_chat", `{"contents":[{"role":"model","parts":[{"functionCall":{"name":"read","args":{}}}]},{"role":"user","parts":[{"functionResponse":{"name":"read","response":{"result":"image"},"parts":[{"inlineData":{"mimeType":"image/png","data":"YWJj"}}]}}]}]}`, &dto.GeminiChatRequest{}, types.RelayFormatOpenAI},
+		{"claude_document_to_chat", `{"model":"fixture","messages":[{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"read","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":[{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"JVBERg=="}}]}]}]}`, &dto.ClaudeRequest{}, types.RelayFormatOpenAI},
+		{"claude_document_to_gemini", `{"model":"fixture","messages":[{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"read","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":[{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"JVBERg=="}}]}]}]}`, &dto.ClaudeRequest{}, types.RelayFormatGemini},
+		{"claude_missing_image", `{"model":"fixture","messages":[{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"read","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":[{"type":"image"}]}]}]}`, &dto.ClaudeRequest{}, types.RelayFormatOpenAIResponses},
+		{"responses_remote_file_to_chat", `{"model":"fixture","input":[{"type":"function_call","call_id":"call_1","name":"read","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_file","file_url":"https://example.test/one.pdf"}]}]}`, &dto.OpenAIResponsesRequest{}, types.RelayFormatOpenAI},
+		{"responses_audio_to_claude", `{"model":"fixture","input":[{"type":"function_call","call_id":"call_1","name":"read","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_audio","input_audio":{"data":"YWJj","format":"wav"}}]}]}`, &dto.OpenAIResponsesRequest{}, types.RelayFormatClaude},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			require.NoError(t, kitutil.Unmarshal([]byte(test.body), test.request))
+			requirements, err := AnalyzeRequest(test.request)
+			require.NoError(t, err)
+			require.Len(t, requirements.Media, 1)
+			assert.True(t, requirements.Media[0].ToolResult)
+			for _, policy := range []types.ConversionLossPolicy{types.ConversionLossPolicySafe, types.ConversionLossPolicyStrict, types.ConversionLossPolicyAllow} {
+				plan, err := PlanConversion(requirements, test.target, policy)
+				require.Error(t, err, string(policy))
+				require.NotEmpty(t, plan.Diagnostics)
+				assert.Equal(t, "media_conversion_unavailable", plan.Diagnostics[0].Code)
+				_, err = ExecuteConversionPlan(context.Background(), nil, plan, test.request)
+				require.Error(t, err, "replaying a rejected plan must not stringify media")
+			}
+		})
+	}
+}
+
+func TestClaudeToolDocumentReachesResponsesFilePart(t *testing.T) {
+	for _, test := range []struct {
+		name, source, field, value string
+	}{
+		{"inline", `{"type":"base64","media_type":"application/pdf","data":"JVBERg=="}`, "file_data", "data:application/pdf;base64,JVBERg=="},
+		{"url", `{"type":"url","url":"https://example.test/one.pdf"}`, "file_url", "https://example.test/one.pdf"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var request dto.ClaudeRequest
+			body := `{"model":"fixture","messages":[{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"read","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":[{"type":"document","source":` + test.source + `}]}]}]}`
+			require.NoError(t, kitutil.Unmarshal([]byte(body), &request))
+			result, err := ConvertRequest(context.Background(), nil, types.RelayFormatOpenAIResponses, &request)
+			require.NoError(t, err)
+			responses, ok := result.Value.(*dto.OpenAIResponsesRequest)
+			require.True(t, ok)
+			var items []map[string]any
+			require.NoError(t, kitutil.Unmarshal(responses.Input, &items))
+			var output []any
+			for _, item := range items {
+				if item["type"] == "function_call_output" {
+					output, ok = item["output"].([]any)
+					require.True(t, ok)
+				}
+			}
+			require.Len(t, output, 1)
+			part, ok := output[0].(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, "input_file", part["type"])
+			assert.Equal(t, test.value, part[test.field])
+		})
+	}
+}

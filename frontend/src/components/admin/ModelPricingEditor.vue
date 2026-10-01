@@ -87,6 +87,7 @@ const simulation = ref(''),
   simulationError = ref(''),
   simulating = ref(false)
 let baseline = '',
+  defaultBaseline = '',
   hydrating = false,
   previewTimer: ReturnType<typeof setTimeout> | undefined,
   previewController: AbortController | undefined
@@ -124,15 +125,28 @@ const label = (value: unknown) =>
             ''
         )
       : ''
-function formSnapshot() {
+function defaultPricingSnapshot() {
   return JSON.stringify([
-    name.value,
     mode.value,
     prices,
     enabled,
     fixed.value,
     expression.value,
+  ])
+}
+function formSnapshot() {
+  return JSON.stringify([
+    name.value,
+    defaultPricingSnapshot(),
     pluginExpressions.value,
+  ])
+}
+function captureDefaultBaseline() {
+  defaultBaseline = defaultPricingSnapshot()
+  baseline = JSON.stringify([
+    props.modelName,
+    defaultBaseline,
+    props.pricing['billing_setting.plugin_billing_expr'] ?? {},
   ])
 }
 watch(
@@ -161,7 +175,7 @@ watch(
     Object.assign(prices, tokenPrices(props.pricing))
     for (const lane of TOKEN_LANES)
       enabled[lane.key] = props.pricing[lane.key] !== undefined
-    baseline = formSnapshot()
+    captureDefaultBaseline()
     hydrating = false
   },
   { immediate: true }
@@ -172,8 +186,18 @@ watch(schema, () => {
   taskMultiplier.value = ''
 })
 function build(): PricingValues {
+  const plugins = Object.fromEntries(
+    Object.entries(pluginExpressions.value).filter(([, value]) => value.trim())
+  )
   let result: PricingValues
-  if (mode.value === 'tiered_expr')
+  if (
+    defaultBaseline === defaultPricingSnapshot() &&
+    (Object.keys(props.pricing).length || Object.keys(plugins).length)
+  ) {
+    // Editing a plugin must preserve an absent default or its exact prices.
+    result = clonePricing(props.pricing)
+    delete result['billing_setting.plugin_billing_expr']
+  } else if (mode.value === 'tiered_expr')
     result = {
       'billing_setting.billing_mode': 'tiered_expr',
       'billing_setting.billing_expr': expression.value.trim(),
@@ -196,9 +220,6 @@ function build(): PricingValues {
             : (prices[lane.key] ?? '')
     result = tokenPricing(usd)
   }
-  const plugins = Object.fromEntries(
-    Object.entries(pluginExpressions.value).filter(([, value]) => value.trim())
-  )
   if (Object.keys(plugins).length)
     result['billing_setting.plugin_billing_expr'] = plugins
   validatePricing(result)
@@ -222,12 +243,13 @@ function commit(): { name: string; pricing: PricingValues } | null {
     return null
   }
 }
-watch(formSnapshot, () => {
+watch([formSnapshot, plugin], () => {
   if (hydrating) return
   emit('dirty', baseline !== formSnapshot())
   preview.value = null
   previewError.value = ''
   simulation.value = ''
+  simulationError.value = ''
   clearTimeout(previewTimer)
   previewController?.abort()
   previewTimer = setTimeout(async () => {
@@ -261,12 +283,20 @@ function changeCurrency(event: Event) {
     error.value = t('invalid')
     return
   }
-  const factor = divideDecimal(nextRate, rate.value)
-  for (const key of Object.keys(prices))
-    if (isDecimal(prices[key]))
-      prices[key] = multiplyDecimal(prices[key]!, factor)
-  if (isDecimal(fixed.value)) fixed.value = multiplyDecimal(fixed.value, factor)
+  const unchanged = defaultBaseline === defaultPricingSnapshot()
+  const sourcePrices = unchanged ? tokenPrices(props.pricing) : prices
+  const sourceFixed = unchanged
+    ? props.pricing.ModelPrice === undefined
+      ? ''
+      : decimalText(props.pricing.ModelPrice)
+    : fixed.value
+  const factor = unchanged ? nextRate : divideDecimal(nextRate, rate.value)
+  for (const key of Object.keys(sourcePrices))
+    if (isDecimal(sourcePrices[key]))
+      prices[key] = multiplyDecimal(sourcePrices[key]!, factor)
+  if (isDecimal(sourceFixed)) fixed.value = multiplyDecimal(sourceFixed, factor)
   currency.value = next
+  if (unchanged) captureDefaultBaseline()
 }
 async function convert() {
   error.value = ''
@@ -352,11 +382,8 @@ function applyTaskConditions() {
     taskMultiplier.value +
     ' : 1)'
 }
-async function simulate() {
-  simulationError.value = ''
-  simulation.value = ''
-  simulating.value = true
-  const before = JSON.stringify([
+function simulationSnapshot() {
+  return JSON.stringify([
     formSnapshot(),
     plugin.value,
     usage.value,
@@ -364,6 +391,12 @@ async function simulate() {
     headers.value,
     time.value,
   ])
+}
+async function simulate() {
+  simulationError.value = ''
+  simulation.value = ''
+  simulating.value = true
+  const before = simulationSnapshot()
   try {
     const draft = build(),
       parsedUsage: unknown = JSON.parse(usage.value),
@@ -391,22 +424,12 @@ async function simulate() {
       },
       time: time.value,
     })
-    if (
-      before !==
-      JSON.stringify([
-        formSnapshot(),
-        plugin.value,
-        usage.value,
-        params.value,
-        headers.value,
-        time.value,
-      ])
-    )
-      return
+    if (before !== simulationSnapshot()) return
     simulation.value = isDecimal(result.amount_usd)
       ? formatDecimalUSD(result.amount_usd)
       : String(result.amount_usd)
   } catch (cause) {
+    if (before !== simulationSnapshot()) return
     simulationError.value =
       cause instanceof Error
         ? te(cause.message)
@@ -436,7 +459,20 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
           :disabled="Boolean(modelName)"
           :placeholder="t('inputPrompt')"
       /></label>
-      <label class="admin-field"
+      <label v-if="entry?.plugin_variants?.length" class="admin-field"
+        ><span>{{ t('plugin') }}</span
+        ><select v-model="plugin">
+          <option value="">{{ t('modelDefault') }}</option>
+          <option
+            v-for="item in entry.plugin_variants"
+            :key="item.plugin_key"
+            :value="item.plugin_key"
+          >
+            {{ item.plugin_name }}
+          </option>
+        </select></label
+      >
+      <label v-if="!plugin" class="admin-field"
         ><span>{{ t('currency') }}</span
         ><select :value="currency" @change="changeCurrency">
           <option value="USD">USD</option>
@@ -445,8 +481,13 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
           </option>
         </select></label
       >
-      <p class="admin-muted">{{ t('currencyHint') }}</p>
-      <div class="pricing-mode" role="tablist" :aria-label="t('mode')">
+      <p v-if="!plugin" class="admin-muted">{{ t('currencyHint') }}</p>
+      <div
+        v-if="!plugin"
+        class="pricing-mode"
+        role="tablist"
+        :aria-label="t('mode')"
+      >
         <button
           v-for="item in [
             { id: 'tiered_expr', label: 'expression' },
@@ -462,7 +503,7 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
           {{ t(item.label) }}
         </button>
       </div>
-      <div v-if="mode !== 'tiered_expr'" class="pricing-convert">
+      <div v-if="!plugin && mode !== 'tiered_expr'" class="pricing-convert">
         <p>{{ t('conversionHint') }}</p>
         <ConsoleButton
           size="sm"
@@ -472,7 +513,7 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
           >{{ t('convert') }}</ConsoleButton
         >
       </div>
-      <template v-if="mode === 'per-token'">
+      <template v-if="!plugin && mode === 'per-token'">
         <p class="admin-muted">{{ t('noDefault') }}</p>
         <label class="admin-field"
           ><span>{{ t('input') }} · {{ currency }} {{ t('perMillion') }}</span
@@ -501,7 +542,7 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
           /><small>{{ currency }} {{ t('perMillion') }}</small>
         </div>
       </template>
-      <label v-else-if="mode === 'per-request'" class="admin-field"
+      <label v-else-if="!plugin && mode === 'per-request'" class="admin-field"
         ><span>{{ t('fixed') }} · {{ currency }} {{ t('perRequest') }}</span
         ><input
           v-model="fixed"
@@ -509,19 +550,6 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
           :placeholder="t('zeroHint')"
       /></label>
       <template v-else>
-        <label v-if="entry?.plugin_variants?.length" class="admin-field"
-          ><span>{{ t('plugin') }}</span
-          ><select v-model="plugin">
-            <option value="">{{ t('modelDefault') }}</option>
-            <option
-              v-for="item in entry.plugin_variants"
-              :key="item.plugin_key"
-              :value="item.plugin_key"
-            >
-              {{ item.plugin_name }}
-            </option>
-          </select></label
-        >
         <p v-if="variant?.stale" class="admin-error">{{ t('stale') }}</p>
         <p v-if="variant && !variant.compatible" class="admin-error">
           {{ t('unavailable') }}

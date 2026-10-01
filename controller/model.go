@@ -18,7 +18,6 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/gin-gonic/gin"
@@ -225,41 +224,29 @@ func ListModels(c *gin.Context, modelType int) {
 		for _, entry := range snapshot.Entries {
 			entries[entry.ModelName] = entry
 			priced := model.ModelPriceConfigured(entry.Effective)
-			for _, variant := range entry.PluginVariants {
-				if !variant.Stale && variant.Compatible && strings.TrimSpace(variant.Effective) != "" {
-					priced = true
-					break
+			if plugins := generation.PluginsByModel(entry.ModelName); len(plugins) > 0 {
+				priced = false
+				for _, plugin := range plugins {
+					schema, _ := plugin.Meta.UsageForModel(entry.ModelName)
+					effective, _, priceErr := model.ResolveTaskPricingValues(plugin.Meta.Key, schema, entry.Effective)
+					if priceErr == nil && model.ModelPriceConfigured(effective) {
+						priced = true
+						break
+					}
 				}
 			}
 			availablePrices[entry.ModelName] = priced
 		}
 		for alias, target := range aliasTargets {
 			aliasEntry, targetEntry := entries[alias], entries[target.Declared]
-			priced := false
-			resolved := false
-			for _, entry := range []model.ModelPricingEntry{aliasEntry, targetEntry} {
-				variants, _ := entry.Configured[billing_setting.PluginBillingExprOption].(map[string]any)
-				if configured, ok := variants[target.PluginKey]; ok {
-					expression, _ := configured.(string)
-					priced = strings.TrimSpace(expression) != "" && billing_setting.TaskExprCompatible(expression, aliasEntry.UsageSchema)
-					resolved = true
-					break
-				}
+			plugin, ok := generation.Get(target.PluginKey)
+			if !ok {
+				availablePrices[alias] = false
+				continue
 			}
-			if !resolved {
-				for _, entry := range []model.ModelPricingEntry{aliasEntry, targetEntry} {
-					if entry.Effective["billing_setting.billing_mode"] == billing_setting.BillingModeTieredExpr {
-						expression, _ := entry.Effective["billing_setting.billing_expr"].(string)
-						priced = strings.TrimSpace(expression) != "" && billing_setting.TaskExprCompatible(expression, aliasEntry.UsageSchema)
-						resolved = true
-						break
-					}
-				}
-			}
-			if !resolved {
-				priced = model.ModelPriceConfigured(aliasEntry.Effective)
-			}
-			availablePrices[alias] = priced
+			schema, _ := plugin.Meta.UsageForModels(target.Declared, alias)
+			effective, _, priceErr := model.ResolveTaskPricingValues(target.PluginKey, schema, aliasEntry.Effective, targetEntry.Effective)
+			availablePrices[alias] = priceErr == nil && model.ModelPriceConfigured(effective)
 		}
 	}
 	modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)

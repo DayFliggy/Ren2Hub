@@ -22,6 +22,98 @@ function setup(pricing: PricingValues = {}) {
   })
 }
 describe('manual model price editor', () => {
+  it.each([
+    {},
+    { ModelRatio: '0.123456789012345678901', CompletionRatio: '3' },
+    { ModelPrice: '0.123456789012345678901' },
+    {
+      'billing_setting.billing_mode': 'tiered_expr',
+      'billing_setting.billing_expr': 'v1:p * 2',
+    },
+  ] satisfies PricingValues[])(
+    'edits a plugin price independently of the default price %j',
+    async (defaultPricing) => {
+      const pricing: PricingValues = {
+        ...defaultPricing,
+        'billing_setting.plugin_billing_expr': { provider: 'u("seconds")' },
+      }
+      const wrapper = setup(pricing)
+      await wrapper.setProps({
+        siteCurrency: 'CNY',
+        exchangeRate: '7',
+        entry: {
+          model_name: 'test-model',
+          version: 'version',
+          configured: pricing,
+          effective: pricing,
+          plugin_variants: [
+            {
+              plugin_key: 'provider',
+              plugin_name: 'Task provider',
+              usage_schema: { seconds: { type: 'number', unit: 'second' } },
+              configured: 'u("seconds")',
+              effective: 'u("seconds")',
+              compatible: true,
+            },
+          ],
+        },
+      })
+      await wrapper
+        .findAll('label')
+        .find((label) => label.text().startsWith('Display currency'))!
+        .get('select')
+        .setValue('CNY')
+      expect(wrapper.vm.dirty()).toBe(false)
+      await wrapper
+        .findAll('label')
+        .find((label) => label.text().startsWith('Plugin pricing'))!
+        .get('select')
+        .setValue('provider')
+      await wrapper
+        .get('.price-expression textarea')
+        .setValue('u("seconds") * 2')
+      expect(wrapper.vm.commit()?.pricing).toEqual({
+        ...defaultPricing,
+        'billing_setting.plugin_billing_expr': {
+          provider: 'u("seconds") * 2',
+        },
+      })
+      await wrapper.get('.price-expression textarea').setValue('')
+      expect(wrapper.vm.commit()?.pricing).toEqual(defaultPricing)
+      wrapper.unmount()
+    }
+  )
+  it('creates only a plugin price for an unconfigured task model', async () => {
+    const wrapper = setup()
+    await wrapper.setProps({
+      entry: {
+        model_name: 'test-model',
+        version: 'empty',
+        configured: {},
+        effective: {},
+        plugin_variants: [
+          {
+            plugin_key: 'provider',
+            plugin_name: 'Task provider',
+            usage_schema: { seconds: { type: 'number', unit: 'second' } },
+            configured: '',
+            effective: '',
+            compatible: true,
+          },
+        ],
+      },
+    })
+    await wrapper
+      .findAll('label')
+      .find((label) => label.text().startsWith('Plugin pricing'))!
+      .get('select')
+      .setValue('provider')
+    await wrapper.get('.price-expression textarea').setValue('u("seconds") * 2')
+    expect(wrapper.vm.commit()?.pricing).toEqual({
+      'billing_setting.plugin_billing_expr': { provider: 'u("seconds") * 2' },
+    })
+    wrapper.unmount()
+  })
   it('simulates task facts without hidden request fields while keeping the clock', async () => {
     const simulate = vi
       .spyOn(pricingConfigApi, 'simulate')
@@ -121,6 +213,26 @@ describe('manual model price editor', () => {
     expect(save).not.toHaveBeenCalled()
     wrapper.unmount()
   })
+  it('preserves exact USD input through display-currency round trips', async () => {
+    const price = '0.123456789012345678901'
+    const wrapper = setup({ ModelPrice: price })
+    await wrapper.setProps({ siteCurrency: 'CNY', exchangeRate: '7' })
+    const currency = wrapper
+      .findAll('label')
+      .find((label) => label.text().startsWith('Display currency'))!
+      .get('select')
+    await currency.setValue('CNY')
+    expect(wrapper.vm.dirty()).toBe(false)
+    expect(wrapper.vm.commit()?.pricing).toEqual({ ModelPrice: price })
+    await currency.setValue('USD')
+    expect(wrapper.get('input[inputmode="decimal"]').element).toHaveProperty(
+      'value',
+      price
+    )
+    expect(wrapper.vm.dirty()).toBe(false)
+    expect(wrapper.vm.commit()?.pricing).toEqual({ ModelPrice: price })
+    wrapper.unmount()
+  })
   it('keeps conversion a draft requiring existing save', async () => {
     const convert = vi
       .spyOn(pricingConfigApi, 'convert')
@@ -158,6 +270,28 @@ describe('manual model price editor', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('missing usage')
     expect(wrapper.text()).not.toContain('$0.000')
+    wrapper.unmount()
+  })
+  it('ignores a failed simulation after its pricing draft has changed', async () => {
+    let rejectSimulation!: (reason: Error) => void
+    vi.spyOn(pricingConfigApi, 'simulate').mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          rejectSimulation = reject
+        })
+    )
+    const wrapper = setup({
+      'billing_setting.billing_mode': 'tiered_expr',
+      'billing_setting.billing_expr': 'p * 2',
+    })
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Calculate draft charge')!
+      .trigger('click')
+    await wrapper.get('.price-expression textarea').setValue('p * 3')
+    rejectSimulation(new Error('old draft error'))
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('old draft error')
     wrapper.unmount()
   })
 })

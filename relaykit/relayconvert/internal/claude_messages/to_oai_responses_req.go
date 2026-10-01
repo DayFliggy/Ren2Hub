@@ -302,7 +302,11 @@ func claudeToolResultToResponsesOutput(content any) (any, error) {
 			}
 		case "document":
 			if source := claudeSourceURL(block.Source); source != "" {
-				parts = append(parts, map[string]any{"type": "input_file", "file_data": source})
+				field := "file_data"
+				if strings.TrimSpace(block.Source.Url) != "" {
+					field = "file_url"
+				}
+				parts = append(parts, map[string]any{"type": "input_file", field: source})
 			}
 		}
 	}

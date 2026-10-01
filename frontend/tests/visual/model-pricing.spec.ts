@@ -4,125 +4,151 @@ import {
   PRICING_KEYS,
   type ModelPricingChange,
   type ModelPricingEntry,
+  type PricingValues,
 } from '../../src/api/pricingConfig'
 
-test('task plugin schema creates and simulates a conditional draft', async ({
-  page,
-}) => {
-  await configureStablePage(page, { theme: 'dark' })
-  await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
-  const pricing = {
-    'billing_setting.billing_mode': 'tiered_expr',
-    'billing_setting.billing_expr': 'u("seconds") * 1',
-  }
-  const usage_schema = {
-    seconds: {
-      type: 'number',
-      unit: 'second',
-      description: 'Duration unit price',
-    },
-    resolution: { enum: ['720p', '1080p'], description: 'Resolution' },
-  }
-  const writes: ModelPricingChange[][] = []
-  const simulations: Record<string, unknown>[] = []
-  await page.route('**/api/channel/models_enabled', (route) =>
-    route.fulfill({ json: { success: true, data: ['task-model'] } })
-  )
-  await page.route('**/api/option/model_pricing**', (route) => {
-    const path = new URL(route.request().url()).pathname
-    if (path.endsWith('/simulate')) {
-      simulations.push(route.request().postDataJSON())
-      return route.fulfill({
-        json: { success: true, data: { amount_usd: '2.5' } },
-      })
-    }
-    if (path.endsWith('/preview'))
-      return route.fulfill({
-        json: { success: true, data: { effective: pricing } },
-      })
-    if (route.request().method() === 'PATCH') {
-      writes.push(route.request().postDataJSON().changes)
-      return route.fulfill({ json: { success: true } })
-    }
-    return route.fulfill({
-      json: {
-        success: true,
-        data: {
-          entries: [
-            {
-              model_name: 'task-model',
-              version: 'v1',
-              configured: pricing,
-              effective: pricing,
-              usage_schema,
-              plugin_variants: [
+for (const theme of ['light', 'dark'] as const)
+  for (const width of [1440, 390]) {
+    test(`plugin-only task price creates and simulates a conditional draft ${theme} ${width}`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 })
+      await configureStablePage(page, { theme })
+      await page.addInitScript(() =>
+        localStorage.setItem('ren2hub_locale', 'en')
+      )
+      const pricing: PricingValues = {
+        'billing_setting.plugin_billing_expr': { provider: 'u("seconds") * 1' },
+      }
+      const usage_schema = {
+        seconds: {
+          type: 'number',
+          unit: 'second',
+          description: 'Duration unit price',
+        },
+        resolution: { enum: ['720p', '1080p'], description: 'Resolution' },
+      }
+      const writes: ModelPricingChange[][] = []
+      const simulations: Record<string, unknown>[] = []
+      await page.route('**/api/channel/models_enabled', (route) =>
+        route.fulfill({ json: { success: true, data: ['task-model'] } })
+      )
+      await page.route('**/api/option/model_pricing**', (route) => {
+        const path = new URL(route.request().url()).pathname
+        if (path.endsWith('/simulate')) {
+          simulations.push(route.request().postDataJSON())
+          return route.fulfill({
+            json: { success: true, data: { amount_usd: '2.5' } },
+          })
+        }
+        if (path.endsWith('/preview'))
+          return route.fulfill({
+            json: { success: true, data: { effective: pricing } },
+          })
+        if (route.request().method() === 'PATCH') {
+          writes.push(route.request().postDataJSON().changes)
+          return route.fulfill({ json: { success: true } })
+        }
+        return route.fulfill({
+          json: {
+            success: true,
+            data: {
+              entries: [
                 {
-                  plugin_key: 'provider',
-                  plugin_name: 'Task provider',
+                  model_name: 'task-model',
+                  version: 'v1',
+                  configured: pricing,
+                  effective: pricing,
                   usage_schema,
-                  configured: '',
-                  effective: pricing['billing_setting.billing_expr'],
-                  compatible: true,
+                  plugin_variants: [
+                    {
+                      plugin_key: 'provider',
+                      plugin_name: 'Task provider',
+                      usage_schema,
+                      configured: 'u("seconds") * 1',
+                      effective: 'u("seconds") * 1',
+                      compatible: true,
+                    },
+                  ],
                 },
               ],
+              options: Object.fromEntries(
+                PRICING_KEYS.map((key) => [key, '{}'])
+              ),
+              empty_version: 'empty',
             },
-          ],
-          options: Object.fromEntries(PRICING_KEYS.map((key) => [key, '{}'])),
-          empty_version: 'empty',
+          },
+        })
+      })
+      await page.goto('/system-settings/billing/model-pricing')
+      await page
+        .getByRole('button', { name: 'task-model', exact: true })
+        .click()
+      const editor = page.locator('.pricing-editor')
+      await editor
+        .getByRole('combobox', { name: 'Plugin pricing', exact: true })
+        .selectOption('provider')
+      await editor
+        .getByRole('combobox', { name: 'Plugin pricing', exact: true })
+        .focus()
+      await page.keyboard.press('Tab')
+      await expect(
+        editor.getByRole('button', { name: 'Expression source', exact: true })
+      ).toBeFocused()
+      await page.screenshot({
+        path: testInfo.outputPath('plugin-selector.png'),
+      })
+      await editor.locator('summary').filter({ hasText: 'Task usage' }).click()
+      await editor.getByPlaceholder('Usage unit price').fill('0.125')
+      await editor
+        .getByRole('button', { name: 'Generate task pricing draft' })
+        .click()
+      await editor
+        .getByRole('button', { name: 'Add condition', exact: true })
+        .click()
+      await editor
+        .getByRole('combobox', { name: 'Usage field', exact: true })
+        .selectOption('resolution')
+      await editor
+        .getByRole('combobox', { name: 'Value', exact: true })
+        .selectOption('1080p')
+      await editor.getByLabel('Multiplier', { exact: true }).fill('2')
+      await editor.getByRole('button', { name: 'Apply', exact: true }).click()
+      await expect(
+        editor.getByRole('textbox', { name: 'Expression source', exact: true })
+      ).toHaveValue(/u\("resolution"\) == "1080p"/)
+      await editor
+        .locator('summary')
+        .filter({ hasText: 'Request simulation' })
+        .click()
+      await editor
+        .getByLabel('Usage JSON', { exact: true })
+        .fill('{"seconds":10,"resolution":"1080p"}')
+      await editor
+        .getByRole('button', { name: 'Calculate draft charge' })
+        .click()
+      await expect(
+        editor.getByText('Simulated charge: $2.500', { exact: true })
+      ).toBeVisible()
+      expect(simulations[0]).toMatchObject({
+        plugin_key: 'provider',
+        usage: { seconds: 10, resolution: '1080p' },
+      })
+      await assertNoHorizontalOverflow(page)
+      await page.screenshot({ path: testInfo.outputPath('plugin-pricing.png') })
+      await editor
+        .getByRole('button', { name: 'Save model prices', exact: true })
+        .click()
+      await expect(
+        page.getByText('Model prices saved', { exact: true })
+      ).toBeVisible()
+      expect(writes[0]?.[0]?.pricing).toEqual({
+        'billing_setting.plugin_billing_expr': {
+          provider: expect.stringContaining('u("resolution")'),
         },
-      },
+      })
     })
-  })
-  await page.goto('/system-settings/billing/model-pricing')
-  await page.getByRole('button', { name: 'task-model', exact: true }).click()
-  const editor = page.locator('.pricing-editor')
-  await editor
-    .getByRole('combobox', { name: 'Plugin pricing', exact: true })
-    .selectOption('provider')
-  await editor.locator('summary').filter({ hasText: 'Task usage' }).click()
-  await editor.getByPlaceholder('Usage unit price').fill('0.125')
-  await editor
-    .getByRole('button', { name: 'Generate task pricing draft' })
-    .click()
-  await editor
-    .getByRole('button', { name: 'Add condition', exact: true })
-    .click()
-  await editor
-    .getByRole('combobox', { name: 'Usage field', exact: true })
-    .selectOption('resolution')
-  await editor
-    .getByRole('combobox', { name: 'Value', exact: true })
-    .selectOption('1080p')
-  await editor.getByLabel('Multiplier', { exact: true }).fill('2')
-  await editor.getByRole('button', { name: 'Apply', exact: true }).click()
-  await expect(
-    editor.getByRole('textbox', { name: 'Expression source', exact: true })
-  ).toHaveValue(/u\("resolution"\) == "1080p"/)
-  await editor
-    .locator('summary')
-    .filter({ hasText: 'Request simulation' })
-    .click()
-  await editor
-    .getByLabel('Usage JSON', { exact: true })
-    .fill('{"seconds":10,"resolution":"1080p"}')
-  await editor.getByRole('button', { name: 'Calculate draft charge' }).click()
-  await expect(
-    editor.getByText('Simulated charge: $2.500', { exact: true })
-  ).toBeVisible()
-  expect(simulations[0]).toMatchObject({
-    plugin_key: 'provider',
-    usage: { seconds: 10, resolution: '1080p' },
-  })
-  await editor
-    .getByRole('button', { name: 'Save model prices', exact: true })
-    .click()
-  await expect(
-    page.getByText('Model prices saved', { exact: true })
-  ).toBeVisible()
-  expect(
-    writes[0]?.[0]?.pricing['billing_setting.plugin_billing_expr']?.provider
-  ).toContain('u("resolution")')
-})
+  }
 
 for (const theme of ['light', 'dark'] as const)
   for (const width of [1440, 390]) {

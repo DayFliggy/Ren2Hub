@@ -421,8 +421,30 @@ func (r *RequestRequirements) inspectContent(value any, path string) {
 func (r *RequestRequirements) inspectContentContext(value any, path string, toolResult bool) {
 	switch value := value.(type) {
 	case []any:
+		mediaStart := len(r.Media)
+		unsupportedToolContent := false
 		for index, item := range value {
 			r.inspectContentContext(item, fmt.Sprintf("%s[%d]", path, index), toolResult)
+			if !toolResult {
+				continue
+			}
+			block, _ := item.(map[string]any)
+			kind, _ := block["type"].(string)
+			switch r.Format {
+			case types.RelayFormatClaude:
+				unsupportedToolContent = unsupportedToolContent || !slices.Contains([]string{"text", "input_text", "image", "document"}, kind)
+			case types.RelayFormatOpenAIResponses:
+				unsupportedToolContent = unsupportedToolContent || !slices.Contains([]string{"text", "input_text", "output_text", "input_image", "input_file", "input_audio", "input_video"}, kind)
+			}
+		}
+		if unsupportedToolContent {
+			// The converter falls back to text for the whole result when any
+			// sibling is unknown, so otherwise valid media also becomes unusable.
+			for index := mediaStart; index < len(r.Media); index++ {
+				if r.Media[index].SourceKind != "owned" {
+					r.Media[index].SourceKind = "unsupported"
+				}
+			}
 		}
 	case map[string]any:
 		toolResult = toolResult || (r.Format == types.RelayFormatOpenAI && value["role"] == "tool")
