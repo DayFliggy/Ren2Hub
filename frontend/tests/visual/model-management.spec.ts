@@ -468,11 +468,13 @@ test('a dirty vendor draft can cancel or confirm a real browser reload', async (
   await vendorName.fill('Draft survives canceled reload')
 
   const canceledConfirmation = page.waitForEvent('dialog')
-  const canceledReload = expect(page.reload()).rejects.toThrow(/ERR_ABORTED/)
+  // A canceled reload has no load event for page.reload() to await.
+  const canceledReload = page.evaluate(() => window.location.reload())
   const canceledDialog = await canceledConfirmation
   expect(canceledDialog.type()).toBe('beforeunload')
   await canceledDialog.dismiss()
   await canceledReload
+  await expect(page).toHaveURL(/\/models\/vendors$/)
   await expect(vendorName).toHaveValue('Draft survives canceled reload')
 
   const acceptedConfirmation = page.waitForEvent('dialog')
