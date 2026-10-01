@@ -18,6 +18,7 @@ import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import { adminChannelTypeMeta } from '@/constants/adminChannels'
 import { vendorLogoMeta } from '@/constants/console'
+import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import { modelMetadataMessages } from '@/i18n/modelMetadata'
 import { parseModelEndpoints } from '@/utils/modelEndpoints'
 import MetadataEndpointEditor from './MetadataEndpointEditor.vue'
@@ -118,9 +119,16 @@ function snapshot() {
 }
 function dirty() {
   return (
-    snapshot() !== baseline.value || Boolean(endpointEditor.value?.isDirty())
+    snapshot() !== baseline.value ||
+    Boolean(endpointEditor.value?.isDirty()) ||
+    Boolean(tagInput.value?.isDirty())
   )
 }
+useUnsavedChanges({
+  dirty: () => !loading.value && !loadFailed.value && dirty(),
+  busy: () => saving.value,
+  message: () => t('discardMessage'),
+})
 function message(cause: unknown) {
   const text = cause instanceof Error ? cause.message : String(cause)
   return te(text) ? t(text) : text

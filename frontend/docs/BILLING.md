@@ -30,6 +30,6 @@ GET /api/option/model_pricing 返回 entries、options、empty_version；PATCH �
 
 ## 验证边界
 
-前端金额测试应覆盖 int64 边界、超过 JavaScript 安全整数的输入、溢出、舍入、严格 API 字段、不可变价格发布和路由权限。可按[前端文档](../README.md)的顺序运行 Vitest、类型检查、lint、格式检查和生产构建；涉及页面时再运行 Playwright 桌面/移动端与明暗主题用例。
+前端金额测试应覆盖 int64 边界、超过 JavaScript 安全整数的输入、溢出、舍入、严格 API 字段、价格草稿保存、版本冲突和路由权限。可按[前端文档](../README.md)的顺序运行 Vitest、类型检查、lint、格式检查和生产构建；涉及页面时再运行 Playwright 桌面/移动端与明暗主题用例。
 
 浏览器用例可以拦截符合真实 wire contract 的 API 形状，用于验证展示、请求参数、错误状态、409 重试身份、权限和布局；它们不替代主数据库事务、真实支付回调或三库集成验证。主数据库与计费接口见[计费 API](../../docs/billing/API.md)，服务端验证范围见[计费验证](../../docs/billing/VALIDATION.md)。

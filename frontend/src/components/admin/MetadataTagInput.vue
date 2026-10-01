@@ -22,6 +22,7 @@ function commit() {
 }
 
 function onKeydown(event: KeyboardEvent) {
+  if (event.isComposing) return
   if (event.key === 'Enter' || event.key === ',') {
     event.preventDefault()
     commit()
@@ -35,7 +36,7 @@ function remove(index: number) {
 }
 
 /** Commits pending text so a save never drops what the user typed. */
-defineExpose({ commit })
+defineExpose({ commit, isDirty: () => Boolean(draft.value.trim()) })
 </script>
 <template>
   <div

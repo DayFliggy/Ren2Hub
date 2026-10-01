@@ -130,6 +130,25 @@ describe('VendorDrawer details', () => {
 })
 
 describe('VendorDrawer leave guard', () => {
+  it('keeps edits when route navigation is canceled and releases its guard on unmount', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { wrapper, router } = await setup({ vendor, linkedCount: 0 })
+    await wrapper.get('input[name="vendor-name"]').setValue('Unsaved vendor')
+    await router.push('/dashboard')
+    expect(router.currentRoute.value.path).toBe('/models/vendors')
+    expect(confirm).toHaveBeenCalledTimes(1)
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(true)
+    wrapper.unmount()
+    await router.push('/dashboard')
+    expect(router.currentRoute.value.path).toBe('/dashboard')
+    const afterUnmount = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(afterUnmount)
+    expect(afterUnmount.defaultPrevented).toBe(false)
+    confirm.mockRestore()
+  })
+
   it('closes immediately when nothing changed', async () => {
     const { wrapper } = await setup({ vendor, linkedCount: 0 })
     await button(wrapper, 'Close').trigger('click')

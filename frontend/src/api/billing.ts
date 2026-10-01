@@ -1,9 +1,7 @@
 import { api } from './client'
-import { isDecimal } from '@/utils/decimal'
 import {
   invalidResponse,
   isRecord,
-  requiredBoolean,
   requiredStrictInteger,
   requiredQuota,
   requiredString,
@@ -25,118 +23,6 @@ export interface BillingEvent {
   used_after: string
   reason: string
   created_at: number
-}
-
-export interface BillingAdjustment {
-  kind: 'channel_multiplier'
-  multiplier: string
-  base_usd: string
-  amount_usd: string
-  result_usd: string
-}
-function billingDecimal(
-  value: unknown,
-  endpoint: string,
-  signed = false
-): string {
-  if (
-    typeof value !== 'string' ||
-    !isDecimal(signed && value.startsWith('-') ? value.slice(1) : value)
-  )
-    invalidResponse(endpoint)
-  return value
-}
-export interface BillingCharge {
-  base_usd: string
-  adjustments: BillingAdjustment[]
-  lines: Array<{
-    quantity: string
-    count: string
-    unit: string
-    unit_price: string
-    subtotal_usd: string
-  }>
-  final_quota: string
-  total_usd: string
-  unrounded_quota: string
-  rounding_delta: string
-  calculation_version: string
-  rounding_version: string
-  trace?: {
-    matched_tier: string
-    image_count?: number
-    request_rules?: Array<{
-      cond: string
-      multiplier: string
-      matched: boolean
-    }>
-  }
-}
-
-export function parseBillingCharge(
-  value: unknown,
-  endpoint: string
-): BillingCharge | null {
-  if (value === null || value === undefined) return null
-  if (!isRecord(value) || !Array.isArray(value.lines)) invalidResponse(endpoint)
-  let trace: BillingCharge['trace']
-  if (value.trace != null) {
-    if (!isRecord(value.trace)) invalidResponse(endpoint)
-    trace = { matched_tier: requiredString(value.trace.matched_tier, endpoint) }
-    if (value.trace.image_count !== undefined) {
-      const count = requiredStrictInteger(value.trace.image_count, endpoint)
-      if (count < 1 || count > 128) invalidResponse(endpoint)
-      trace.image_count = count
-    }
-    if (value.trace.request_rules !== undefined) {
-      if (!Array.isArray(value.trace.request_rules)) invalidResponse(endpoint)
-      trace.request_rules = value.trace.request_rules.map((rule) => {
-        if (!isRecord(rule) || !isDecimal(rule.multiplier))
-          invalidResponse(endpoint)
-        return {
-          cond: requiredString(rule.cond, endpoint),
-          multiplier: rule.multiplier,
-          matched: requiredBoolean(rule.matched, endpoint),
-        }
-      })
-    }
-  }
-  if (
-    value.calculation_version !== 'billing-v3' ||
-    !Array.isArray(value.adjustments)
-  )
-    invalidResponse(endpoint)
-  return {
-    base_usd: billingDecimal(value.base_usd, endpoint),
-    adjustments: value.adjustments.map((item) => {
-      if (!isRecord(item) || item.kind !== 'channel_multiplier')
-        invalidResponse(endpoint)
-      return {
-        kind: 'channel_multiplier',
-        multiplier: billingDecimal(item.multiplier, endpoint),
-        base_usd: billingDecimal(item.base_usd, endpoint),
-        amount_usd: billingDecimal(item.amount_usd, endpoint, true),
-        result_usd: billingDecimal(item.result_usd, endpoint),
-      }
-    }),
-    lines: value.lines.map((line) => {
-      if (!isRecord(line)) invalidResponse(endpoint)
-      return {
-        quantity: requiredString(line.quantity, endpoint),
-        count: requiredString(line.count, endpoint),
-        unit: requiredString(line.unit, endpoint),
-        unit_price: requiredString(line.unit_price, endpoint),
-        subtotal_usd: requiredString(line.subtotal_usd, endpoint),
-      }
-    }),
-    final_quota: requiredQuota(value.final_quota, endpoint),
-    total_usd: requiredString(value.total_usd, endpoint),
-    unrounded_quota: requiredString(value.unrounded_quota, endpoint),
-    rounding_delta: requiredString(value.rounding_delta, endpoint),
-    calculation_version: requiredString(value.calculation_version, endpoint),
-    rounding_version: requiredString(value.rounding_version, endpoint),
-    ...(trace ? { trace } : {}),
-  }
 }
 
 export interface BillingPage<T> {

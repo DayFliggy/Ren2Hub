@@ -111,6 +111,51 @@ beforeEach(() => {
   })
 })
 describe('model management sections', () => {
+  it('cancels a pending model search when switching to the vendor section', async () => {
+    const { wrapper, router } = await setup()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      await wrapper
+        .get('input[name="admin-model-filter"]')
+        .setValue('pending-model')
+      await router.push('/models/vendors?vFilter=kept#vendors')
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(500)
+      await flushPromises()
+      expect(router.currentRoute.value.fullPath).toBe(
+        '/models/vendors?vFilter=kept#vendors'
+      )
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it('returns to the last valid model page after its final row is deleted', async () => {
+    mocks.models
+      .mockResolvedValueOnce({ items: [rows[0]], total: 21, vendor_counts: {} })
+      .mockResolvedValueOnce({ items: [], total: 20, vendor_counts: {} })
+      .mockResolvedValueOnce({ items: [rows[1]], total: 20, vendor_counts: {} })
+    const { wrapper, router } = await setup('/models/metadata?page=2#models')
+    await wrapper.get('input[aria-label="Select model-1"]').setValue(true)
+    await wrapper
+      .get('button[aria-label="Delete selected models"]')
+      .trigger('click')
+    wrapper.getComponent({ name: 'ConfirmDialog' }).vm.$emit('confirm')
+    await flushPromises()
+    expect(mocks.deleteModel).toHaveBeenCalledWith(1)
+    expect(router.currentRoute.value.query.page).toBeUndefined()
+    expect(router.currentRoute.value.hash).toBe('#models')
+    expect(mocks.models).toHaveBeenLastCalledWith(
+      expect.objectContaining({ p: 1 }),
+      expect.any(AbortSignal)
+    )
+    expect(wrapper.get('input[aria-label="Select model-2"]').exists()).toBe(
+      true
+    )
+    wrapper.unmount()
+  })
+
   it('restores NewAPI filter keys from the URL and keeps the hash', async () => {
     const { wrapper, router } = await setup(
       '/models/metadata?filter=model&status=1&page=2#models'

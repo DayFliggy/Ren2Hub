@@ -1,6 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { MODEL_ENDPOINT_TEMPLATES } from '@/utils/modelEndpoints'
 import PrefillGroupDialog from '../PrefillGroupDialog.vue'
@@ -53,6 +54,12 @@ function setup() {
     global: {
       plugins: [
         createI18n({ legacy: false, locale: 'en', missingWarn: false }),
+        createRouter({
+          history: createMemoryHistory(),
+          routes: [
+            { path: '/:pathMatch(.*)*', component: { template: '<div />' } },
+          ],
+        }),
       ],
       stubs: { ConsoleModal: ModalStub },
     },
@@ -87,6 +94,27 @@ beforeEach(() => {
 })
 
 describe('PrefillGroupDialog list', () => {
+  it('keeps an edited group when returning to the list is canceled', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const wrapper = setup()
+    await flushPromises()
+    await button(wrapper, 'New Group').trigger('click')
+    await wrapper
+      .get('input[name="prefill-group-name"]')
+      .setValue('Unsaved group')
+    await button(wrapper, 'Cancel').trigger('click')
+    expect(formModal(wrapper).exists()).toBe(true)
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(
+      wrapper.get('input[name="prefill-group-name"]').element
+    ).toHaveProperty('value', 'Unsaved group')
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(true)
+    wrapper.unmount()
+    confirm.mockRestore()
+  })
+
   it('sorts by type then name and previews at most six items', async () => {
     const wrapper = setup()
     await flushPromises()

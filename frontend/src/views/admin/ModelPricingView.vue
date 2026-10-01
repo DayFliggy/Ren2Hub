@@ -58,6 +58,8 @@ const json = ref(pricingJSON({})),
   fetchOpen = ref(false),
   clearOpen = ref(false)
 const toolsDirty = ref(false)
+const ready = ref(false)
+const toolsRevision = ref(0)
 const page = ref(1),
   pageSize = ref(20),
   expose = ref(false),
@@ -124,25 +126,37 @@ function summary(value: PricingValues) {
   if (raw === undefined || !isDecimal(String(raw))) return t('unpriced')
   return `${formatDecimalUSD(value.ModelPrice === undefined ? multiplyDecimal(String(raw), '2') : String(raw))} ${t(value.ModelPrice === undefined ? 'perMillion' : 'perRequest')}`
 }
-async function load() {
+async function load(forceSettings = false) {
   controller?.abort()
   controller = new AbortController()
   const request = controller
   loading.value = true
+  ready.value = false
   error.value = ''
   try {
-    const [config, names] = await Promise.all([
+    const [config, names, settingsLoaded] = await Promise.all([
       pricingConfigApi.load(request.signal),
       api.get<string[]>('/api/channel/models_enabled', undefined, {
         signal: request.signal,
       }),
+      settings.load(forceSettings),
     ])
     if (request.signal.aborted) return
+    if (!settingsLoaded) throw new Error(t('loadError'))
     baseline.value = config
     draft.value = initialPricingDraft(config)
     enabledModels.value = names
     json.value = pricingJSON(draft.value)
     editorDirty.value = false
+    expose.value = ['true', '1'].includes(
+      String(settings.rawValue('ExposeRatioEnabled', false))
+    )
+    toolsJSON.value = String(
+      settings.rawValue('tool_price_setting.prices', '{}')
+    )
+    toolsDirty.value = false
+    toolsRevision.value++
+    ready.value = true
     revision.value++
     if (typeof route.query.model === 'string') editing.value = route.query.model
   } catch (cause) {
@@ -190,7 +204,7 @@ function switchMode() {
   }
 }
 async function save() {
-  if (!baseline.value || saving.value) return
+  if (!baseline.value || !ready.value || loading.value || saving.value) return
   error.value = ''
   message.value = ''
   if (!commitOpen()) return
@@ -276,20 +290,28 @@ async function changeExpose() {
     expose.value = !expose.value
 }
 async function saveTools(value: string) {
+  if (!ready.value || loading.value || saving.value || settings.saving.value)
+    return
   error.value = ''
   if (await settings.saveOptions({ 'tool_price_setting.prices': value })) {
     toolsJSON.value = value
     toolsDirty.value = false
+    toolsRevision.value++
     message.value = t('toolsSaved')
   }
 }
 function reload() {
-  if (!dirty.value || window.confirm(t('refreshConfirm'))) void load()
+  if (saving.value || settings.saving.value) return
+  if (!dirty.value || window.confirm(t('refreshConfirm'))) void load(true)
 }
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (dirty.value) event.preventDefault()
+  if (dirty.value || saving.value || settings.saving.value)
+    event.preventDefault()
 }
-const keepDraft = () => !dirty.value || window.confirm(t('unsaved'))
+const keepDraft = () =>
+  !saving.value &&
+  !settings.saving.value &&
+  (!dirty.value || window.confirm(t('unsaved')))
 onBeforeRouteLeave(keepDraft)
 // Billing sections share one route record, so switching to another section
 // is a route update that unmounts this workspace.
@@ -298,14 +320,6 @@ onBeforeRouteUpdate((to, from) =>
 )
 onMounted(() => {
   void load()
-  void settings.load().then(() => {
-    expose.value = ['true', '1'].includes(
-      String(settings.rawValue('ExposeRatioEnabled', false))
-    )
-    toolsJSON.value = String(
-      settings.rawValue('tool_price_setting.prices', '{}')
-    )
-  })
   window.addEventListener('beforeunload', beforeUnload)
 })
 onBeforeUnmount(() => {
@@ -320,227 +334,249 @@ onBeforeUnmount(() => {
       <span v-if="dirty" class="admin-muted" role="status">{{
         t('dirty')
       }}</span
-      ><ConsoleButton variant="ghost" :loading="loading" @click="reload">{{
-        t('reload')
-      }}</ConsoleButton
+      ><ConsoleButton
+        variant="ghost"
+        :loading="loading"
+        :disabled="saving || settings.saving.value"
+        @click="reload"
+        >{{ t('reload') }}</ConsoleButton
       ><ConsoleButton
         v-if="tab !== 'tools'"
         variant="secondary"
-        :disabled="loading || !baseline"
+        :disabled="loading || saving || !ready"
         @click="beginFetch"
         >{{ t('fetch') }}</ConsoleButton
       ><ConsoleButton
         v-if="tab !== 'tools'"
         :loading="saving"
-        :disabled="loading || !baseline"
+        :disabled="loading || !ready"
         @click="save"
         >{{ t('save') }}</ConsoleButton
       >
     </div>
-    <ConsoleTabs
-      :model-value="tab"
-      :items="tabs"
-      panel-id="model-pricing-panel"
-      @update:model-value="
-        (value) => {
-          if (commitOpen()) tab = value
-        }
-      "
-    />
-    <p v-if="error" role="alert" class="admin-error">{{ error }}</p>
-    <p v-if="message" role="status" class="admin-muted">{{ message }}</p>
-    <section id="model-pricing-panel" role="tabpanel">
-      <ToolPricingEditor
-        v-show="tab === 'tools'"
-        :value="toolsJSON"
-        @save="saveTools"
-        @dirty="toolsDirty = $event"
+    <fieldset
+      class="pricing-controls"
+      :disabled="loading || saving || settings.saving.value || !ready"
+    >
+      <ConsoleTabs
+        :model-value="tab"
+        :items="tabs"
+        panel-id="model-pricing-panel"
+        @update:model-value="
+          (value) => {
+            if (commitOpen()) tab = value
+          }
+        "
       />
-      <template v-if="tab !== 'tools'">
-        <div class="pricing-top-actions">
-          <label class="admin-check" :title="t('exposeHint')"
-            ><input v-model="expose" type="checkbox" @change="changeExpose" />{{
-              t('expose')
-            }}</label
-          ><ConsoleButton variant="ghost" size="sm" @click="clearOpen = true">{{
-            t('clear')
-          }}</ConsoleButton
-          ><ConsoleButton variant="secondary" size="sm" @click="switchMode">{{
-            t(mode === 'visual' ? 'json' : 'visual')
-          }}</ConsoleButton>
-        </div>
-        <div v-if="mode === 'json'" class="pricing-json">
-          <label v-for="key in PRICING_KEYS" :key="key" class="admin-field"
-            ><span>{{ key }}</span
-            ><textarea v-model="json[key]" rows="7" spellcheck="false" />
-          </label>
-        </div>
-        <div v-else class="pricing-workspace">
-          <div class="pricing-models">
-            <div class="pricing-filter">
-              <label class="admin-field"
-                ><span class="sr-only">{{ t('search') }}</span
-                ><input v-model="search" :placeholder="t('search')" /></label
-              ><select v-model="filter" :aria-label="t('mode')">
-                <option value="">{{ t('all') }}</option>
-                <option value="tiered_expr">{{ t('expression') }}</option>
-                <option value="per-token">{{ t('token') }}</option>
-                <option value="per-request">{{ t('request') }}</option></select
-              ><ConsoleButton
-                v-if="tab === 'models'"
-                size="sm"
-                @click="open('__new__')"
-                >{{ t('add') }}</ConsoleButton
-              >
-            </div>
-            <div class="pricing-table">
-              <table class="admin-table">
-                <thead>
-                  <tr>
-                    <th>
-                      <input
-                        type="checkbox"
-                        :aria-label="t('chooseAll')"
-                        :checked="
-                          pageRows.length > 0 &&
-                          pageRows.every((name) => selected.includes(name))
-                        "
-                        @change="
-                          selected = ($event.target as HTMLInputElement).checked
-                            ? [...new Set([...selected, ...pageRows])]
-                            : selected.filter(
-                                (name) => !pageRows.includes(name)
-                              )
-                        "
-                      />
-                    </th>
-                    <th>{{ t('name') }}</th>
-                    <th>{{ t('mode') }}</th>
-                    <th>{{ t('summary') }}</th>
-                    <th>{{ t('actions') }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="name in pageRows"
-                    :key="name"
-                    :data-active="editing === name"
-                  >
-                    <td>
-                      <input
-                        v-model="selected"
-                        type="checkbox"
-                        :value="name"
-                        :aria-label="`${t('choose')} ${name}`"
-                      />
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        class="pricing-model-name"
-                        @click="open(name)"
-                      >
-                        {{ name }}
-                      </button>
-                    </td>
-                    <td>
-                      {{
-                        t(
-                          !Object.keys(draft[name] ?? {}).length
-                            ? 'unpriced'
-                            : pricingMode(draft[name]!) === 'tiered_expr'
-                              ? 'expression'
-                              : pricingMode(draft[name]!) === 'per-request'
-                                ? 'perCall'
-                                : 'perToken'
-                        )
-                      }}
-                    </td>
-                    <td
-                      class="pricing-summary"
-                      :title="summary(draft[name] ?? {})"
-                    >
-                      {{ summary(draft[name] ?? {}) }}
-                    </td>
-                    <td>
-                      <ConsoleButton
-                        variant="ghost"
-                        size="sm"
-                        @click="remove(name)"
-                        >{{ t('remove') }}</ConsoleButton
-                      >
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div v-if="!loading && !rows.length" class="pricing-empty">
-              <p>{{ t(search ? 'noResults' : 'empty') }}</p>
-              <p>{{ t('emptyHint') }}</p>
-            </div>
-            <TablePagination
-              :page="page"
-              :page-size="pageSize"
-              :total="rows.length"
-              @update:page="page = $event"
-              @update:page-size="pageSize = $event"
-            />
-            <div v-if="selected.length" class="pricing-top-actions">
-              <span>{{ t('selected', { count: selected.length }) }}</span
-              ><ConsoleButton
-                variant="secondary"
-                size="sm"
-                :disabled="!editing"
-                @click="copy"
-                >{{ t('copy') }}</ConsoleButton
-              >
-            </div>
+      <p v-if="error" role="alert" class="admin-error">{{ error }}</p>
+      <p v-if="message" role="status" class="admin-muted">{{ message }}</p>
+      <section id="model-pricing-panel" role="tabpanel">
+        <ToolPricingEditor
+          :key="toolsRevision"
+          v-show="tab === 'tools'"
+          :value="toolsJSON"
+          @save="saveTools"
+          @dirty="toolsDirty = $event"
+        />
+        <template v-if="tab !== 'tools'">
+          <div class="pricing-top-actions">
+            <label class="admin-check" :title="t('exposeHint')"
+              ><input
+                v-model="expose"
+                type="checkbox"
+                @change="changeExpose"
+              />{{ t('expose') }}</label
+            ><ConsoleButton
+              variant="ghost"
+              size="sm"
+              @click="clearOpen = true"
+              >{{ t('clear') }}</ConsoleButton
+            ><ConsoleButton variant="secondary" size="sm" @click="switchMode">{{
+              t(mode === 'visual' ? 'json' : 'visual')
+            }}</ConsoleButton>
           </div>
-          <template v-if="!mobile"
-            ><ModelPricingEditor
-              v-if="editing !== null"
-              ref="editor"
-              :model-name="activeName"
-              :pricing="activePricing"
-              :entry="activeEntry"
-              :revision="revision"
-              :saving="saving"
-              :site-currency="siteCurrency"
-              :exchange-rate="exchangeRate"
-              @update="updateDraft"
-              @dirty="editorDirty = $event"
-              @save="save"
-            />
-            <div v-else class="pricing-empty pricing-editor-empty">
-              <p>{{ t('select') }}</p>
-              <ConsoleButton variant="secondary" @click="open('__new__')">{{
-                t('add')
-              }}</ConsoleButton>
-            </div></template
-          >
-        </div>
-      </template>
-    </section>
+          <div v-if="mode === 'json'" class="pricing-json">
+            <label v-for="key in PRICING_KEYS" :key="key" class="admin-field"
+              ><span>{{ key }}</span
+              ><textarea v-model="json[key]" rows="7" spellcheck="false" />
+            </label>
+          </div>
+          <div v-else class="pricing-workspace">
+            <div class="pricing-models">
+              <div class="pricing-filter">
+                <label class="admin-field"
+                  ><span class="sr-only">{{ t('search') }}</span
+                  ><input v-model="search" :placeholder="t('search')" /></label
+                ><select v-model="filter" :aria-label="t('mode')">
+                  <option value="">{{ t('all') }}</option>
+                  <option value="tiered_expr">{{ t('expression') }}</option>
+                  <option value="per-token">{{ t('token') }}</option>
+                  <option value="per-request">
+                    {{ t('request') }}
+                  </option></select
+                ><ConsoleButton
+                  v-if="tab === 'models'"
+                  size="sm"
+                  @click="open('__new__')"
+                  >{{ t('add') }}</ConsoleButton
+                >
+              </div>
+              <div class="pricing-table">
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>
+                        <input
+                          type="checkbox"
+                          :aria-label="t('chooseAll')"
+                          :checked="
+                            pageRows.length > 0 &&
+                            pageRows.every((name) => selected.includes(name))
+                          "
+                          @change="
+                            selected = ($event.target as HTMLInputElement)
+                              .checked
+                              ? [...new Set([...selected, ...pageRows])]
+                              : selected.filter(
+                                  (name) => !pageRows.includes(name)
+                                )
+                          "
+                        />
+                      </th>
+                      <th>{{ t('name') }}</th>
+                      <th>{{ t('mode') }}</th>
+                      <th>{{ t('summary') }}</th>
+                      <th>{{ t('actions') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="name in pageRows"
+                      :key="name"
+                      :data-active="editing === name"
+                    >
+                      <td>
+                        <input
+                          v-model="selected"
+                          type="checkbox"
+                          :value="name"
+                          :aria-label="`${t('choose')} ${name}`"
+                        />
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          class="pricing-model-name"
+                          @click="open(name)"
+                        >
+                          {{ name }}
+                        </button>
+                      </td>
+                      <td>
+                        {{
+                          t(
+                            !Object.keys(draft[name] ?? {}).length
+                              ? 'unpriced'
+                              : pricingMode(draft[name]!) === 'tiered_expr'
+                                ? 'expression'
+                                : pricingMode(draft[name]!) === 'per-request'
+                                  ? 'perCall'
+                                  : 'perToken'
+                          )
+                        }}
+                      </td>
+                      <td
+                        class="pricing-summary"
+                        :title="summary(draft[name] ?? {})"
+                      >
+                        {{ summary(draft[name] ?? {}) }}
+                      </td>
+                      <td>
+                        <ConsoleButton
+                          variant="ghost"
+                          size="sm"
+                          @click="remove(name)"
+                          >{{ t('remove') }}</ConsoleButton
+                        >
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-if="!loading && !rows.length" class="pricing-empty">
+                <p>{{ t(search ? 'noResults' : 'empty') }}</p>
+                <p>{{ t('emptyHint') }}</p>
+              </div>
+              <TablePagination
+                :page="page"
+                :page-size="pageSize"
+                :total="rows.length"
+                @update:page="page = $event"
+                @update:page-size="pageSize = $event"
+              />
+              <div v-if="selected.length" class="pricing-top-actions">
+                <span>{{ t('selected', { count: selected.length }) }}</span
+                ><ConsoleButton
+                  variant="secondary"
+                  size="sm"
+                  :disabled="!editing"
+                  @click="copy"
+                  >{{ t('copy') }}</ConsoleButton
+                >
+              </div>
+            </div>
+            <template v-if="!mobile"
+              ><ModelPricingEditor
+                v-if="editing !== null"
+                ref="editor"
+                :model-name="activeName"
+                :pricing="activePricing"
+                :entry="activeEntry"
+                :revision="revision"
+                :saving="saving"
+                :site-currency="siteCurrency"
+                :exchange-rate="exchangeRate"
+                @update="updateDraft"
+                @dirty="editorDirty = $event"
+                @save="save"
+              />
+              <div v-else class="pricing-empty pricing-editor-empty">
+                <p>{{ t('select') }}</p>
+                <ConsoleButton variant="secondary" @click="open('__new__')">{{
+                  t('add')
+                }}</ConsoleButton>
+              </div></template
+            >
+          </div>
+        </template>
+      </section>
+    </fieldset>
     <ConsoleModal
       v-if="mobile && editing !== null"
       :open="true"
       :title="t('edit')"
       presentation="drawer"
       size="xl"
+      :close-disabled="loading || saving"
       @close="closeEditor"
-      ><ModelPricingEditor
-        ref="editor"
-        :model-name="activeName"
-        :pricing="activePricing"
-        :entry="activeEntry"
-        :revision="revision"
-        :saving="saving"
-        :site-currency="siteCurrency"
-        :exchange-rate="exchangeRate"
-        @update="updateDraft"
-        @dirty="editorDirty = $event"
-        @save="save"
-    /></ConsoleModal>
+      ><fieldset
+        class="pricing-controls"
+        :disabled="loading || saving || !ready"
+      >
+        <ModelPricingEditor
+          ref="editor"
+          :model-name="activeName"
+          :pricing="activePricing"
+          :entry="activeEntry"
+          :revision="revision"
+          :saving="saving"
+          :site-currency="siteCurrency"
+          :exchange-rate="exchangeRate"
+          @update="updateDraft"
+          @dirty="editorDirty = $event"
+          @save="save"
+        /></fieldset
+    ></ConsoleModal>
     <PriceFetchDialog
       v-if="fetchOpen"
       :draft="draft"
@@ -558,6 +594,12 @@ onBeforeUnmount(() => {
   </main>
 </template>
 <style scoped>
+.pricing-controls {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
 .model-pricing-page {
   min-width: 0;
   /* The settings rail narrows this page, so the split follows its own width. */

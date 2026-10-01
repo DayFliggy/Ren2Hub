@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/client'
-import {
-  billingApi,
-  parseBillingCharge,
-  parseBillingEvent,
-} from '@/api/billing'
+import { billingApi, parseBillingEvent } from '@/api/billing'
 
 const event = {
   event_id: 'settle:request-1',
@@ -26,89 +22,6 @@ const event = {
 afterEach(() => vi.restoreAllMocks())
 
 describe('billing API', () => {
-  it('keeps saved rule multipliers as decimal strings and rejects floating point projections', () => {
-    const charge = {
-      lines: [],
-      final_quota: '1',
-      base_usd: '0.000002',
-      adjustments: [
-        {
-          kind: 'channel_multiplier',
-          multiplier: '1',
-          base_usd: '0.000002',
-          amount_usd: '0',
-          result_usd: '0.000002',
-        },
-      ],
-      total_usd: '0.000002',
-      unrounded_quota: '1',
-      rounding_delta: '0',
-      calculation_version: 'billing-v3',
-      rounding_version: 'half-up-positive-minimum-v1',
-      trace: {
-        matched_tier: '',
-        request_rules: [
-          {
-            cond: 'hour("UTC") < 6',
-            multiplier: '0.123456789012345678',
-            matched: true,
-          },
-        ],
-      },
-    }
-    expect(
-      parseBillingCharge(charge, '/billing')?.trace?.request_rules?.[0]
-        ?.multiplier
-    ).toBe('0.123456789012345678')
-    for (const multiplier of [0.5, 'NaN', '1e9', '-1'])
-      expect(() =>
-        parseBillingCharge(
-          {
-            ...charge,
-            trace: {
-              ...charge.trace,
-              request_rules: [{ ...charge.trace.request_rules[0], multiplier }],
-            },
-          },
-          '/billing'
-        )
-      ).toThrow()
-  })
-  it('retains a confirmed image count without inventing missing trace evidence', () => {
-    const charge = {
-      lines: [],
-      final_quota: '1000',
-      base_usd: '0.002',
-      adjustments: [
-        {
-          kind: 'channel_multiplier',
-          multiplier: '1',
-          base_usd: '0.002',
-          amount_usd: '0',
-          result_usd: '0.002',
-        },
-      ],
-      total_usd: '0.002',
-      unrounded_quota: '1000',
-      rounding_delta: '0',
-      calculation_version: 'billing-v3',
-      rounding_version: 'half-up-positive-minimum-v1',
-      trace: { matched_tier: '', image_count: 2 },
-    }
-    expect(parseBillingCharge(charge, '/billing')?.trace?.image_count).toBe(2)
-    expect(
-      parseBillingCharge({ ...charge, trace: { matched_tier: '' } }, '/billing')
-        ?.trace?.image_count
-    ).toBeUndefined()
-    for (const image_count of [null, 0, -1, 1.5, 129, '2']) {
-      expect(() =>
-        parseBillingCharge(
-          { ...charge, trace: { matched_tier: '', image_count } },
-          '/billing'
-        )
-      ).toThrow('Invalid API response')
-    }
-  })
   it('keeps exact fund-flow amounts and rejects malformed events', () => {
     expect(parseBillingEvent(event, '/billing').used_delta).toBe(
       '9007199254740993'
@@ -120,6 +33,29 @@ describe('billing API', () => {
       parseBillingEvent({ ...event, created_at: null }, '/billing')
     ).toThrow()
     expect(() => parseBillingEvent({ event_id: 'e' }, '/billing')).toThrow()
+    for (const field of [
+      'available_delta',
+      'used_delta',
+      'token_available_delta',
+      'token_used_delta',
+    ] as const) {
+      expect(
+        parseBillingEvent(
+          { ...event, [field]: '-9223372036854775808' },
+          '/billing'
+        )[field]
+      ).toBe('-9223372036854775808')
+      for (const invalid of [
+        '9223372036854775808',
+        '-9223372036854775809',
+        '1e6',
+        '0.1',
+        100,
+      ])
+        expect(() =>
+          parseBillingEvent({ ...event, [field]: invalid }, '/billing')
+        ).toThrow('Invalid API response')
+    }
   })
 
   it('scopes token history queries and propagates request cancellation', async () => {

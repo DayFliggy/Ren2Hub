@@ -3,7 +3,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useStorage, watchDebounced } from '@vueuse/core'
+import { useStorage } from '@vueuse/core'
 import { AlertTriangle, Copy, Eye, EyeOff, Trash2, X } from 'lucide-vue-next'
 import {
   metadataApi,
@@ -164,6 +164,9 @@ async function load() {
     rows.value = result.items
     total.value = result.total
     vendorCounts.value = result.vendor_counts
+    const lastPage = Math.max(1, Math.ceil(result.total / pageSize.value))
+    if (page.value > lastPage)
+      void updateQuery({ page: lastPage > 1 ? String(lastPage) : undefined })
     selection.value = selection.value.filter((id) =>
       result.items.some((row) => row.id === id)
     )
@@ -263,15 +266,14 @@ watch(
   { immediate: true, deep: true }
 )
 // NewAPI debounces the model-name filter by 500 ms.
-watchDebounced(
-  search,
-  (value) => {
+watch(search, (value, _previous, cleanup) => {
+  const timer = setTimeout(() => {
     const keyword = value.trim()
     if (keyword !== filters.value.keyword)
       void updateQuery({ filter: keyword || undefined, page: undefined })
-  },
-  { debounce: 500 }
-)
+  }, 500)
+  cleanup(() => clearTimeout(timer))
+})
 
 defineExpose({ reload: load })
 </script>

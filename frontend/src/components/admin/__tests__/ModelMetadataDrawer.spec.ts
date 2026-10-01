@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createI18n } from 'vue-i18n'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import ModelMetadataDrawer from '../ModelMetadataDrawer.vue'
 const mocks = vi.hoisted(() => ({ save: vi.fn(), model: vi.fn() }))
 vi.mock('@/api/adminManagement', () => ({
@@ -46,6 +47,12 @@ function setup(modelId: number | null = null) {
     global: {
       plugins: [
         createI18n({ legacy: false, locale: 'en', messages: { en: {} } }),
+        createRouter({
+          history: createMemoryHistory(),
+          routes: [
+            { path: '/:pathMatch(.*)*', component: { template: '<div />' } },
+          ],
+        }),
       ],
       stubs: {
         ConsoleModal: { template: '<div><slot /><slot name="footer" /></div>' },
@@ -63,6 +70,19 @@ const closeButton = (wrapper: ReturnType<typeof setup>) =>
   wrapper.findAll('button').find((button) => button.text() === 'Close')!
 
 describe('model metadata drawer', () => {
+  it('protects uncommitted tag text from browser unload and releases the listener', async () => {
+    const wrapper = setup(42)
+    await flushPromises()
+    await wrapper.get('input[aria-label="Tags"]').setValue('still typing')
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    wrapper.unmount()
+    const afterUnmount = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(afterUnmount)
+    expect(afterUnmount.defaultPrevented).toBe(false)
+  })
+
   it('saves a trimmed name with typed tags committed on save', async () => {
     const wrapper = setup()
     await wrapper.get('input[aria-label="Tags"]').setValue('chat')

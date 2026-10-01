@@ -57,8 +57,7 @@ export const adminManagementMessages = {
     noLinkedModels: '暂无关联模型',
     noLinkedModelsHint: '在模型列表中设置供应商归属后，模型将显示在此处。',
     prefillTitle: '预填充分组管理',
-    prefillSubtitle:
-      '创建模型、标签、端点和用户分组的可重用捆绑包，以加快控制台中其他地方的配置速度。',
+    prefillSubtitle: '创建可复用的模型、标签或端点分组，供控制台其他配置使用。',
     newGroup: '新建分组',
     groupCount: '{count} 个分组',
     group: '分组',
@@ -160,7 +159,7 @@ export const adminManagementMessages = {
     noLinkedModelsHint: 'Assign models from the model list to see them here.',
     prefillTitle: 'Prefill Group Management',
     prefillSubtitle:
-      'Create reusable bundles of models, tags, endpoints, and user groups to speed up configuration elsewhere in the console.',
+      'Create reusable model, tag, or endpoint groups for other console settings.',
     newGroup: 'New Group',
     groupCount: '{count} group | {count} groups',
     group: 'Group',

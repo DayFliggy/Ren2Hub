@@ -3,7 +3,7 @@
  * Overflow ("⋯") action menu. The panel is teleported and fixed-positioned so
  * scrolling table regions cannot clip it; any scroll or resize closes it.
  */
-import { nextTick, ref, useId } from 'vue'
+import { nextTick, ref, useId, watch } from 'vue'
 import { onClickOutside, useEventListener } from '@vueuse/core'
 import { MoreHorizontal } from 'lucide-vue-next'
 import type { Component } from 'vue'
@@ -73,7 +73,7 @@ function close(restoreFocus = false) {
 }
 
 function choose(item: ActionMenuItem) {
-  if (item.disabled) return
+  if (props.disabled || item.disabled) return
   close(true)
   emit('select', item.key)
 }
@@ -98,6 +98,12 @@ function dismiss() {
   close()
 }
 
+watch(
+  () => props.disabled,
+  (disabled) => {
+    if (disabled) close()
+  }
+)
 onClickOutside(panel, dismiss, { ignore: [trigger] })
 useEventListener(window, 'resize', dismiss)
 useEventListener(window, 'scroll', dismiss, { capture: true, passive: true })
