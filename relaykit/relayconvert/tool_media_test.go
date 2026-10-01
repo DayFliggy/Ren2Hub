@@ -52,3 +52,20 @@ func TestToolImageResultPreservesStructureAcrossClaudeResponses(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeToolImageReachesGeminiImagePart(t *testing.T) {
+	var request dto.ClaudeRequest
+	require.NoError(t, kitutil.Unmarshal([]byte(`{"model":"fixture","max_tokens":100,"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"call_image","name":"screenshot","input":{}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_image","content":[{"type":"text","text":"before"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aGVsbG8="}}]}]}]}`), &request))
+	result, err := ConvertRequest(context.Background(), nil, types.RelayFormatGemini, &request)
+	require.NoError(t, err)
+	gemini := result.Value.(*dto.GeminiChatRequest)
+	var hasFunctionResponse, hasImage bool
+	for _, content := range gemini.Contents {
+		for _, part := range content.Parts {
+			hasFunctionResponse = hasFunctionResponse || part.FunctionResponse != nil
+			hasImage = hasImage || part.InlineData != nil && part.InlineData.MimeType == "image/png" && part.InlineData.Data == "aGVsbG8="
+		}
+	}
+	require.True(t, hasFunctionResponse)
+	require.True(t, hasImage)
+}

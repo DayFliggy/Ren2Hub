@@ -14,7 +14,7 @@ import (
 func TestToolMediaUpstreamHoistRetainsResultAndImage(t *testing.T) {
 	var req dto.OpenAIResponsesRequest
 	require.NoError(t, kitutil.Unmarshal([]byte(`{"model":"test","max_output_tokens":4096,"input":[{"type":"function_call","call_id":"call_1","name":"screen","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_text","text":"before"},{"type":"input_image","image_url":"https://example.test/p.png"},{"type":"input_text","text":"after"}]}]}`), &req))
-	for _, target := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatClaude, types.RelayFormatGemini} {
+	for _, target := range []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatClaude} {
 		t.Run(string(target), func(t *testing.T) {
 			result, err := ConvertRequest(context.Background(), nil, target, &req)
 			require.NoError(t, err)
@@ -41,4 +41,16 @@ func TestToolMediaUpstreamHoistRetainsResultAndImage(t *testing.T) {
 			}
 		})
 	}
+	requirements, err := AnalyzeRequest(&req)
+	require.NoError(t, err)
+	for _, policy := range []types.ConversionLossPolicy{types.ConversionLossPolicySafe, types.ConversionLossPolicyAllow} {
+		plan, err := PlanConversion(requirements, types.RelayFormatGemini, policy)
+		require.Error(t, err)
+		var loss *types.ConversionLossError
+		require.ErrorAs(t, err, &loss)
+		require.Len(t, plan.Diagnostics, 1)
+		assert.Equal(t, "media_conversion_unavailable", plan.Diagnostics[0].Code)
+	}
+	_, err = ConvertRequest(context.Background(), nil, types.RelayFormatGemini, &req)
+	require.Error(t, err)
 }

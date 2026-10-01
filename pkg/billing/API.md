@@ -12,7 +12,7 @@
 
 `NewModelPriceVersion(model, effective, taskUsage)` 构造倍率、按次或表达式合同；`PreparePriceVersion` 深拷贝配置并生成定义哈希；`NewQuote` 冻结渠道系数和报价身份。合同版本为 4，计算版本为 `newapi-c71eefbc-v1`。旧 unit_price/free、独立单价维度和 v2 合同拒绝执行，新库不提供兼容分支。
 
-`Quote.PreConsumeMultiplier` 仅作用于估算的 token 分支；`OtherRatios` 为宿主已验证的额外请求倍率；`AudioInputPrice` 只有明确配置时才可冻结。工具附加费使用 `PriceVersion.Prices` 的 `tool:*` 项，支持 `per_call` 和 `per_thousand_calls`。宿主的配置入口是独立上游 option `tool_price_setting.prices`，单位 USD/千次调用，初始为空；`tool:model_prefix*` 以最长前缀覆盖工具通用价格，显式零有效。声明工具缺价时拒绝发送，实际调用量缺价时拒绝计价，不能从声明补造实际次数。
+`Quote.PreConsumeMultiplier` 仅作用于 `request_estimate` 的 token 分支。宿主以此计算预留额度，另以 `frozen_estimate` 保存不含预留倍率的可结算估算；预留额不得低于可结算估算。历史 `request_estimate` 证据继续按原算法重放。`OtherRatios` 为宿主已验证的额外请求倍率；`AudioInputPrice` 只有明确配置时才可冻结。工具附加费使用 `PriceVersion.Prices` 的 `tool:*` 项，支持 `per_call` 和 `per_thousand_calls`。宿主的配置入口是独立上游 option `tool_price_setting.prices`，单位 USD/千次调用，初始为空；`tool:model_prefix*` 以最长前缀覆盖工具通用价格，显式零有效。声明工具缺价时拒绝发送，实际调用量缺价时拒绝计价，不能从声明补造实际次数。
 
 模型费用和工具费用合计后应用渠道系数一次。倍率、按次、表达式分别保持上游舍入，不能统一改成 Decimal 四舍五入或所有正价最低 1 quota；具体分支见[模型定价](../../docs/billing/PRICING.md#工具渠道系数与舍入)。资金账户、预留和事件仍是精确 int64，API quota 保持十进制整数字符串。
 

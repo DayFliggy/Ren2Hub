@@ -264,6 +264,7 @@ describe('saved billing detail', () => {
       log: { model: 'test', other: { charge_result } } as unknown as LogItem,
     })
     expect(wrapper.text()).toContain('1e-06')
+    expect(wrapper.text()).toContain('<$0.001 / per_call')
     expect(wrapper.text()).toContain('$0.000')
     expect(wrapper.text()).toContain('0 quota')
     expect(wrapper.text()).not.toContain('invalid')

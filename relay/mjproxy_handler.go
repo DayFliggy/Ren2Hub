@@ -414,9 +414,8 @@ func submitMidjourneyJob(c *gin.Context, info *relaycommon.RelayInfo, action, pr
 	}
 	info.PriceData = price
 	if !bill {
-		info.PriceData.Quota = 0
+		info.PriceData.Quota, info.PriceData.QuotaToPreConsume = 0, 0
 	}
-	info.PriceData.QuotaToPreConsume = info.PriceData.Quota
 	info.ForcePreConsume, info.DeferBillingToSend, info.UpstreamSideEffecting = true, true, true
 	var credential model.TaskPrivateData
 	response, body, err := service.DoMidjourneyHttpRequest(c, info, 60*time.Second,

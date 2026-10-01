@@ -233,7 +233,20 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 		}
 		usage.Quantities["images"] = strconv.Itoa(*input.ImageCount)
 	}
+	_, reservationCharge, err := model.EvaluateBilling(quote, usage, input, info.RequestId, info.BillingAttemptID, "estimate")
+	if err != nil {
+		return hosttypes.PriceData{}, err
+	}
+	usage.Source = billing.UsageSourceFrozenEstimate
 	usage, result, err := model.EvaluateBilling(quote, usage, input, info.RequestId, info.BillingAttemptID, "estimate")
+	if err != nil {
+		return hosttypes.PriceData{}, err
+	}
+	reservation := reservationCharge.FinalQuota
+	if result.FinalQuota > reservation {
+		reservation = result.FinalQuota
+	}
+	reserveQuota, err := billing.RequestQuota(reservation)
 	if err != nil {
 		return hosttypes.PriceData{}, err
 	}
@@ -242,7 +255,7 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 		return hosttypes.PriceData{}, err
 	}
 	perCall := version.Mode == billing.ModePerCall || result.Trace != nil && result.Trace.BillingUnit == billingexpr.BillingUnitRequest
-	price := hosttypes.PriceData{Quote: quote, Usage: &usage, Charge: result, UsePrice: perCall, QuotaToPreConsume: quota, Quota: quota}
+	price := hosttypes.PriceData{Quote: quote, Usage: &usage, Charge: result, UsePrice: perCall, QuotaToPreConsume: reserveQuota, Quota: quota}
 	info.PricingModelName, info.ModelPricingSource = version.Model, "model_pricing"
 	info.PriceData, info.BillingRequestInput = price, &input
 	return price, nil

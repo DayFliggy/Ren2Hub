@@ -8,7 +8,7 @@
 
 | 语义合同 | 支持范围与拒绝边界 |
 |---|---|
-| 工具返回图片 | Claude ↔ Responses 保留结构化文本／图片顺序、调用 ID、URL 或内联来源；Chat、Gemini 目的转换发送前拒绝，`allow` 不能字符串化媒体 |
+| 工具返回图片 | Claude ↔ Responses 保留结构化文本／图片顺序、调用 ID、URL 或内联来源；Claude／Responses 转 Chat 时将图片提升到工具结果之后的用户消息，文本仍留在工具结果中；Claude 转 Gemini 经 Chat 路径，Responses 直转 Gemini 因无法保留图片语义而发送前拒绝；无法保留的附加语义也发送前拒绝，`allow` 不能将媒体字符串化 |
 | 受限终态 | Responses 的 max_output_tokens/content_filter 在 JSON、SSE、SSE 缓冲 JSON 保留正文、usage 及对应原因，不计供应商故障 |
 | 供应商暂停 | Claude 原生保留 pause_turn；无法表达的跨协议响应明确失败且不重放。跨协议请求 Claude 托管搜索因可预知的暂停风险发送前拒绝 |
 | 搜索引用 | Gemini grounding、Chat／Responses URL annotations 保留可表达 URL、标题、文本范围和顺序；Claude 带加密状态的引用需原生路径。不能将普通 URL 注释伪造成 Claude 原生引用或来源摘录 |

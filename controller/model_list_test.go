@@ -12,8 +12,10 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -477,6 +479,50 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "unconfigured", missingExprPricing.BillingMode)
 	require.Empty(t, missingExprPricing.BillingExpr)
+}
+
+func TestListModelsIncludesPluginPricedTaskModel(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	withSelfUseModeDisabled(t)
+	const name = "zz-plugin-priced-task-model"
+	const alias = "zz-plugin-priced-task-alias"
+	const aliasOnlyModel = "zz-plugin-alias-priced-task-model"
+	const aliasOnly = "zz-plugin-alias-priced-task-alias"
+	const key = "model-list-price-plugin"
+	source := `export const meta={apiVersion:1,key:"model-list-price-plugin",name:"Model List Price",version:"1.0.0",author:{name:"Test"},models:["zz-plugin-priced-task-model","zz-plugin-alias-priced-task-model"],fetchMode:"per_task",usageSchema:{count:{type:"number",unit:"count"}}};export function buildSubmitRequest(){return {}};export function parseSubmitResponse(){return {}};export function buildQueryRequest(){return {}};export function parseTaskResult(){return {}};`
+	_, err := jsplugin.DefaultRegistry.Register(source, jsplugin.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister(key)) })
+	require.NoError(t, db.Create(&model.User{Id: 1011, Username: "plugin-priced-task-user", Password: "password", Group: "default", Status: common.UserStatusEnabled}).Error)
+	mapping := `{"zz-plugin-priced-task-alias":"zz-plugin-priced-task-model","zz-plugin-alias-priced-task-alias":"zz-plugin-alias-priced-task-model"}`
+	require.NoError(t, db.Create(&model.Channel{Id: 711, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI, Models: name + "," + alias + "," + aliasOnly + "," + aliasOnlyModel, ModelMapping: &mapping}).Error)
+	require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{
+		{
+			ModelName: name, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}),
+			Pricing: model.PricingValues{billing_setting.PluginBillingExprOption: map[string]any{key: `u("count") * 0.02`}},
+		},
+		{
+			ModelName: aliasOnly, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}),
+			Pricing: model.PricingValues{"billing_setting.billing_mode": billing_setting.BillingModeTieredExpr, "billing_setting.billing_expr": `u("count") * 0.03`},
+		},
+	}))
+	require.NoError(t, db.Create(&[]model.Ability{
+		{Group: "default", Model: name, ChannelId: 711, Enabled: true},
+		{Group: "default", Model: alias, ChannelId: 711, Enabled: true},
+		{Group: "default", Model: aliasOnly, ChannelId: 711, Enabled: true},
+		{Group: "default", Model: aliasOnlyModel, ChannelId: 711, Enabled: true},
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	ctx.Set("id", 1011)
+	ListModels(ctx, constant.ChannelTypeOpenAI)
+	listed := decodeListModelsResponse(t, recorder)
+	require.Contains(t, listed, name)
+	require.Contains(t, listed, alias)
+	require.Contains(t, listed, aliasOnly)
+	require.NotContains(t, listed, aliasOnlyModel)
 }
 
 func TestListModelsUsesAdvancedCustomEndpointTypesFromPricingCache(t *testing.T) {

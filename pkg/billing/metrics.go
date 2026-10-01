@@ -78,7 +78,7 @@ func SettlementBasis(usage *Usage) string {
 		return SettlementEstimated
 	case usage.Confirmed():
 		return SettlementConfirmed
-	case usage.Source == UsageSourceRequestEstimate:
+	case IsFrozenEstimateSource(usage.Source):
 		return SettlementFrozenEstimate
 	default:
 		return SettlementEstimated

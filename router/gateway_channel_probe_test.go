@@ -106,7 +106,7 @@ func TestGatewayChannelProbeSettlesWithoutConfirmedUsage(t *testing.T) {
 			var usage billing.Usage
 			require.NoError(t, common.UnmarshalJsonStr(string(recovery.UsageSnapshot), &usage))
 			assert.False(t, usage.Confirmed())
-			assert.Equal(t, test.frozen, usage.Source == billing.UsageSourceRequestEstimate)
+			assert.Equal(t, test.frozen, billing.IsFrozenEstimateSource(usage.Source))
 			assert.Equal(t, test.frozen, gjson.Get(log.Other, "admin_info.usage_billing_path").String() == "frozen_estimate")
 			if test.frozen {
 				var estimate billing.ChargeResult

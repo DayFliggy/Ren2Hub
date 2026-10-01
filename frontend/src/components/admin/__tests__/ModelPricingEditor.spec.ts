@@ -75,6 +75,43 @@ describe('manual model price editor', () => {
     })
     wrapper.unmount()
   })
+  it('keeps the version prefix at the start when applying a task condition', async () => {
+    const pricing: PricingValues = {
+      'billing_setting.billing_mode': 'tiered_expr',
+      'billing_setting.billing_expr': 'v1:u("seconds") * 0.4',
+    }
+    const wrapper = setup(pricing)
+    await wrapper.setProps({
+      entry: {
+        model_name: 'test-model',
+        version: 'version',
+        configured: pricing,
+        effective: pricing,
+        usage_schema: { seconds: { type: 'number', unit: 'second' } },
+      },
+    })
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Add condition')!
+      .trigger('click')
+    const condition = wrapper.get('.pricing-task-condition')
+    await condition.findAll('select')[0]!.setValue('seconds')
+    await condition.get('input').setValue('10')
+    await wrapper
+      .findAll('label')
+      .find((label) => label.text() === 'Multiplier')!
+      .get('input')
+      .setValue('2')
+    await wrapper
+      .findAll('button')
+      .filter((button) => button.text() === 'Apply')
+      .at(-1)!
+      .trigger('click')
+    expect(wrapper.vm.commit()?.pricing['billing_setting.billing_expr']).toBe(
+      'v1:(u("seconds") * 0.4) * ((u("seconds") == 10) ? 2 : 1)'
+    )
+    wrapper.unmount()
+  })
   it('preserves input precision and emits a draft without saving', async () => {
     const save = vi.spyOn(pricingConfigApi, 'save')
     const wrapper = setup({ ModelPrice: '0.000000123456789012' })

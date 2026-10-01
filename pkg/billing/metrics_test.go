@@ -37,6 +37,7 @@ func TestSettlementBasisLabelsEvidence(t *testing.T) {
 		{&billing.Usage{Source: "provider", Terminal: "completed", Complete: true}, billing.SettlementConfirmed},
 		{&billing.Usage{Source: "estimated_partial", Estimated: true}, billing.SettlementEstimated},
 		{&billing.Usage{Source: billing.UsageSourceRequestEstimate, Estimated: true}, billing.SettlementFrozenEstimate},
+		{&billing.Usage{Source: billing.UsageSourceFrozenEstimate, Estimated: true}, billing.SettlementFrozenEstimate},
 	} {
 		assert.Equal(t, test.want, billing.SettlementBasis(test.usage))
 	}

@@ -6,7 +6,11 @@ import { logEvidence, logModelObservation } from '@/utils/logModel'
 import LogModelMismatch from './LogModelMismatch.vue'
 import BillingAdjustments from './BillingAdjustments.vue'
 import type { LogItem } from '@/types/console'
-import { formatDecimal, formatDecimalUSD } from '@/utils/decimal'
+import {
+  formatDecimal,
+  formatDecimalUSD,
+  formatUnitPriceUSD,
+} from '@/utils/decimal'
 
 const props = defineProps<{ log: LogItem }>()
 const { t } = useI18n()
@@ -111,7 +115,9 @@ const upstreamModel = computed(() => observation.value.upstream)
               <td class="py-2">
                 {{ line.quantity }} × {{ formatDecimal(line.count) }}
               </td>
-              <td>{{ formatDecimalUSD(line.unit_price) }} / {{ line.unit }}</td>
+              <td>
+                {{ formatUnitPriceUSD(line.unit_price) }} / {{ line.unit }}
+              </td>
               <td>{{ formatDecimalUSD(line.subtotal_usd) }}</td>
             </tr>
           </tbody>

@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/relay/channel/ai360"
 	"github.com/QuantumNous/new-api/relay/channel/lingyiwanwu"
@@ -17,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/gin-gonic/gin"
@@ -205,13 +207,59 @@ func ListModels(c *gin.Context, modelType int) {
 	}
 	availablePrices := make(map[string]bool)
 	if !acceptUnsetRatioModel {
-		snapshot, snapshotErr := model.GetModelPricingSnapshot(models)
+		snapshotNames := append([]string(nil), models...)
+		aliasTargets := make(map[string]model.TaskAliasTarget)
+		generation := jsplugin.DefaultRegistry.Generation()
+		for _, name := range models {
+			if target, ok := model.ResolveTaskModelAlias(generation, name); ok && target.Declared != "" {
+				aliasTargets[name] = target
+				snapshotNames = append(snapshotNames, target.Declared)
+			}
+		}
+		snapshot, snapshotErr := model.GetModelPricingSnapshot(snapshotNames)
 		if snapshotErr != nil {
 			common.ApiError(c, snapshotErr)
 			return
 		}
+		entries := make(map[string]model.ModelPricingEntry, len(snapshot.Entries))
 		for _, entry := range snapshot.Entries {
-			availablePrices[entry.ModelName] = model.ModelPriceConfigured(entry.Effective)
+			entries[entry.ModelName] = entry
+			priced := model.ModelPriceConfigured(entry.Effective)
+			for _, variant := range entry.PluginVariants {
+				if !variant.Stale && variant.Compatible && strings.TrimSpace(variant.Effective) != "" {
+					priced = true
+					break
+				}
+			}
+			availablePrices[entry.ModelName] = priced
+		}
+		for alias, target := range aliasTargets {
+			aliasEntry, targetEntry := entries[alias], entries[target.Declared]
+			priced := false
+			resolved := false
+			for _, entry := range []model.ModelPricingEntry{aliasEntry, targetEntry} {
+				variants, _ := entry.Configured[billing_setting.PluginBillingExprOption].(map[string]any)
+				if configured, ok := variants[target.PluginKey]; ok {
+					expression, _ := configured.(string)
+					priced = strings.TrimSpace(expression) != "" && billing_setting.TaskExprCompatible(expression, aliasEntry.UsageSchema)
+					resolved = true
+					break
+				}
+			}
+			if !resolved {
+				for _, entry := range []model.ModelPricingEntry{aliasEntry, targetEntry} {
+					if entry.Effective["billing_setting.billing_mode"] == billing_setting.BillingModeTieredExpr {
+						expression, _ := entry.Effective["billing_setting.billing_expr"].(string)
+						priced = strings.TrimSpace(expression) != "" && billing_setting.TaskExprCompatible(expression, aliasEntry.UsageSchema)
+						resolved = true
+						break
+					}
+				}
+			}
+			if !resolved {
+				priced = model.ModelPriceConfigured(aliasEntry.Effective)
+			}
+			availablePrices[alias] = priced
 		}
 	}
 	modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)

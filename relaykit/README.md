@@ -34,7 +34,7 @@ RelayKit 是从 [new-api](https://github.com/QuantumNous/new-api) 中拆分出�
 
 | 专项能力 | 当前边界 |
 |---|---|
-| 工具结果图片 | Claude ↔ Responses 直接按历史顺序转换结构化文本和图片，保留调用 ID；其他跨协议路径拒绝，`allow` 不放宽 |
+| 工具结果图片 | Claude ↔ Responses 保留结构化文本、图片顺序和调用 ID；Claude／Responses 转 Chat 时将图片提升到工具结果之后的用户消息，文本留在工具结果中；Claude 转 Gemini 经 Chat 路径，Responses 直转 Gemini 因无法保留图片语义而发送前拒绝；无法保留的附加语义仍拒绝 |
 | 工具媒体附加语义 | 重复／缺失 ID、无法表达的工具失败状态、非默认图片 detail 和未知内容块明确拒绝；不下载或上传媒体 |
 | 引用 | 保留可表达的 URL、标题、范围和顺序；Claude 加密引用／搜索结果需原生路径。普通 URL 注释不能凭生成答案补造来源摘录或加密引用 |
 | 托管工具 | 保留可表达的搜索和 MCP 结构；Chat 内部执行轨迹省略会产生诊断，strict 拒绝；不能把托管工具伪造成客户端函数 |

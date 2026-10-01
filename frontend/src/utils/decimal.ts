@@ -67,6 +67,12 @@ export function formatDecimalUSD(value: string, digits = 3): string {
   return `$${whole}${digits ? `.${text.slice(-digits)}` : ''}`
 }
 
+export function formatUnitPriceUSD(value: string): string {
+  return compareDecimal(value, '0') > 0 && compareDecimal(value, '0.001') < 0
+    ? '<$0.001'
+    : formatDecimalUSD(value)
+}
+
 /** Read-only decimal display; raw input and billing snapshots remain unchanged. */
 export function formatDecimal(value: string): string {
   const negative = value.startsWith('-')

@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { catalogPrices } from '@/api/publicCatalog'
 import type { PricingModelContract } from '@/api/liveContracts'
-import { formatDecimalUSD } from '@/utils/decimal'
+import { formatUnitPriceUSD } from '@/utils/decimal'
 import { modelPricingMessages } from '@/i18n/modelPricing'
 const props = withDefaults(
   defineProps<{ pricing: PricingModelContract; unit?: 'M' | 'K' }>(),
@@ -40,7 +40,7 @@ const labels: Record<string, string> = {
       >
         <dt>{{ t(labels[line.key] ?? line.key) }}</dt>
         <dd>
-          {{ formatDecimalUSD(line.value) }}
+          {{ formatUnitPriceUSD(line.value) }}
           {{
             line.unit === 'per_call'
               ? t('perRequest')

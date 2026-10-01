@@ -178,10 +178,15 @@ func planMediaConversion(req RequestRequirements, target types.RelayFormat) ([]t
 	var diagnostics []types.ConversionDiagnostic
 	for _, media := range req.Media {
 		canConvert := media.SourceKind == "inline" || media.SourceKind == "url"
-        // Tool output media is hoisted by the adopted protocol converter.
-        if media.ToolResult && media.SourceKind != "owned" {
-            continue
-        }
+		if media.ToolResult && media.SourceKind != "owned" {
+			if req.Format == types.RelayFormatOpenAIResponses && target == types.RelayFormatGemini {
+				diagnostic := types.ConversionDiagnostic{Code: "media_conversion_unavailable", Path: media.Path,
+					Message: "the Responses to Gemini converter cannot preserve tool result media as a media part", Severity: types.ConversionDiagnosticError, From: req.Format, To: target}
+				return []types.ConversionDiagnostic{diagnostic}, &types.ConversionLossError{Diagnostics: []types.ConversionDiagnostic{diagnostic}}
+			}
+			// Other tool output media is preserved by its converter or hoisted after the result.
+			continue
+		}
 		if media.Kind == "image" {
 			canConvert = canConvert && (media.MIMEType == "" || strings.HasPrefix(media.MIMEType, "image/"))
 		} else {

@@ -123,7 +123,7 @@ func validateBillingConsumption(tx *gorm.DB, recovery BillingRecovery, consumpti
 		}
 	}
 	phase := "settlement"
-	if consumption.Usage.Source == billing.UsageSourceRequestEstimate {
+	if billing.IsFrozenEstimateSource(consumption.Usage.Source) {
 		// A frozen fallback charge is exactly the attempt's own pre-send estimate.
 		if err := requireAttemptEstimate(attempt, consumption.Usage, consumption.Charge); err != nil {
 			return "", err

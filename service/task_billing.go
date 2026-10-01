@@ -74,7 +74,7 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 		}
 		other["billing_usage"] = publicBillingUsage(bc.Usage)
 		other["charge_result"] = bc.Charge
-		if task.Status == model.TaskStatusSuccess && bc.Usage != nil && bc.Usage.Source == billing.UsageSourceRequestEstimate {
+		if task.Status == model.TaskStatusSuccess && bc.Usage != nil && billing.IsFrozenEstimateSource(bc.Usage.Source) {
 			other["admin_info"] = map[string]any{
 				"usage_billing_path":      billing.SettlementFrozenEstimate,
 				"billing_fallback_reason": billingFallbackUnpriced,

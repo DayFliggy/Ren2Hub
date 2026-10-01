@@ -339,8 +339,11 @@ function applyTaskConditions() {
         value
     )
   }
-  const body = activeExpression.value.replace(/^v2:/, '')
+  const source = activeExpression.value.trim()
+  const prefix = source.startsWith('v1:') ? 'v1:' : ''
+  const body = source.slice(prefix.length)
   activeExpression.value =
+    prefix +
     '(' +
     body +
     ') * ((' +

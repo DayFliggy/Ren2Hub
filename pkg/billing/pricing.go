@@ -134,9 +134,17 @@ type Usage struct {
 	Invalid              bool                   `json:"invalid,omitempty"`
 }
 
-// UsageSourceRequestEstimate marks the pre-send estimate. Only this usage
-// carries the pre-consume multiplier, and only it can be the frozen fallback.
+// UsageSourceRequestEstimate is the legacy pre-send estimate, including its
+// reservation multiplier. Existing evidence must keep replaying unchanged.
 const UsageSourceRequestEstimate = "request_estimate"
+
+// UsageSourceFrozenEstimate is the pre-send charge retained for fallback
+// settlement. It excludes the reservation-only multiplier.
+const UsageSourceFrozenEstimate = "frozen_estimate"
+
+func IsFrozenEstimateSource(source string) bool {
+	return source == UsageSourceRequestEstimate || source == UsageSourceFrozenEstimate
+}
 
 // Confirmed reports complete, non-estimated provider evidence of a completed
 // request. Settlement does not require it; it labels how exact a charge is.

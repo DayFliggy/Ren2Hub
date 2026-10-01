@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { formatDecimal, formatDecimalUSD, divideDecimal } from '../decimal'
+import {
+  formatDecimal,
+  formatDecimalUSD,
+  formatUnitPriceUSD,
+  divideDecimal,
+} from '../decimal'
 import { decimalToQuota, quotaToDecimal } from '../quota'
 import { formatQuota } from '../format'
 
@@ -16,6 +21,11 @@ describe('billing presentation precision', () => {
     expect(formatDecimalUSD('0.000499999', 8)).toBe('$0.000')
     expect(formatDecimal('-0.0005')).toBe('-0.001')
     expect(formatQuota('9007199254740993', 6)).toBe('$18,014,398,509.482')
+  })
+  it('marks nonzero unit prices below one thousandth without displaying extra digits', () => {
+    expect(formatUnitPriceUSD('0')).toBe('$0.000')
+    expect(formatUnitPriceUSD('0.0009999')).toBe('<$0.001')
+    expect(formatUnitPriceUSD('0.001')).toBe('$0.001')
   })
   it('round-trips integer quota beyond the JavaScript safe integer range', () => {
     expect(quotaToDecimal('9007199254740993')).toBe('18014398509.481986')

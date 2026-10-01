@@ -122,11 +122,49 @@ func TestModelPricingMultiplierNeverChangesSettlement(t *testing.T) {
 	t.Cleanup(func() { settings.PreConsumeMultiplier = previous })
 	price, err := ModelPriceHelper(c, info, 100, nil)
 	require.NoError(t, err)
-	assert.Equal(t, 800, price.Quota)
+	assert.Equal(t, 800, price.QuotaToPreConsume)
+	assert.Equal(t, 200, price.Quota)
 	usage := billing.Usage{InputTokens: 100, OutputTokens: 10, ContextTokens: 100, InputIncludesCache: true, Complete: true, Terminal: "completed", Source: "provider"}
 	_, charge, err := model.EvaluateBilling(price.Quote, usage, *info.BillingRequestInput, info.RequestId, info.BillingAttemptID, "settlement")
 	require.NoError(t, err)
 	assert.EqualValues(t, 260, charge.FinalQuota)
+}
+
+func TestModelPricingFreezesUnbufferedFallbackAndCoversItWithReservation(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		multiplier float64
+		reserve    int
+	}{
+		{name: "buffered", multiplier: 2, reserve: 400},
+		{name: "below one", multiplier: 0.5, reserve: 200},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			c, info := pricingFixture(t, "model", model.PricingValues{"ModelRatio": "2"})
+			settings := operation_setting.GetQuotaSetting()
+			previous := settings.PreConsumeMultiplier
+			settings.PreConsumeMultiplier = test.multiplier
+			t.Cleanup(func() { settings.PreConsumeMultiplier = previous })
+			price, err := ModelPriceHelper(c, info, 100, nil)
+			require.NoError(t, err)
+			assert.Equal(t, test.reserve, price.QuotaToPreConsume)
+			assert.Equal(t, 200, price.Quota)
+			assert.EqualValues(t, 200, price.Charge.FinalQuota)
+			assert.Equal(t, billing.UsageSourceFrozenEstimate, price.Usage.Source)
+			replayed, err := model.ReplayBilling(price.Quote, *price.Usage, info.RequestId, info.BillingAttemptID, "estimate")
+			require.NoError(t, err)
+			assert.Equal(t, price.Charge, replayed)
+
+			legacy := *price.Usage
+			legacy.Source, legacy.Evidence = billing.UsageSourceRequestEstimate, nil
+			legacy, oldCharge, err := model.EvaluateBilling(price.Quote, legacy, *info.BillingRequestInput, info.RequestId, info.BillingAttemptID, "estimate")
+			require.NoError(t, err)
+			oldReplay, err := model.ReplayBilling(price.Quote, legacy, info.RequestId, info.BillingAttemptID, "estimate")
+			require.NoError(t, err)
+			assert.Equal(t, oldCharge, oldReplay)
+			assert.EqualValues(t, int(float64(200)*test.multiplier), oldCharge.FinalQuota)
+		})
+	}
 }
 func TestReadOnlyPriceQualificationCreatesNoEvidence(t *testing.T) {
 	c, info := pricingFixture(t, "model", model.PricingValues{"ModelRatio": "1"})
