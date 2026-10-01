@@ -177,6 +177,7 @@ export default {
     previewFailed: 'Price preview failed.',
     budgetUSD: 'Available budget (USD)',
     chargePending: 'A confirmed charge is not available yet.',
+    chargeInvalid: 'Saved billing evidence is invalid.',
     finalCharge: 'Final charge',
     priceTitle: 'Model price version',
     priceScope: 'Price scope',
