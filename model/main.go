@@ -327,7 +327,6 @@ func migrateDB() error {
 		&UserOAuthBinding{},
 		&PerfMetric{},
 		&PerfMetricFlushReceipt{},
-		&SystemInstance{},
 		&SystemTask{},
 		&SystemTaskLock{},
 		&CasbinRule{},
@@ -338,6 +337,9 @@ func migrateDB() error {
 		&ActivityClaim{},
 	)
 	if err != nil {
+		return err
+	}
+	if err := dropRetiredSystemInstances(DB); err != nil {
 		return err
 	}
 	if err := migrateRoutingModels(DB); err != nil {
@@ -365,6 +367,15 @@ func migrateDB() error {
 		return err
 	}
 	return nil
+}
+
+// The single-instance gateway reads its own state in process, so the
+// multi-node heartbeat registry is retired and its rows are discarded.
+func dropRetiredSystemInstances(db *gorm.DB) error {
+	if !db.Migrator().HasTable("system_instances") {
+		return nil
+	}
+	return db.Migrator().DropTable("system_instances")
 }
 
 func migrateRoutingModels(db *gorm.DB) error {

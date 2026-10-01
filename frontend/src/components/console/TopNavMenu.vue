@@ -3,53 +3,27 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
-import { consoleEntryRoute } from '@/constants/navigation/consoleNav'
-import { labEntryRoute } from '@/constants/navigation/labNav'
-import { useFeatureAccess } from '@/composables/useFeatureAccess'
-
-interface NavChild {
-  name: string
-  labelKey: string
-  route?: string
-  disabled?: boolean
-  icon?: string
-}
-
-interface NavGroup {
-  name: string
-  labelKey: string
-  route?: string
-  disabled?: boolean
-  children?: NavChild[]
-}
+import {
+  getVisibleTopNavItems,
+  type TopNavChild as NavChild,
+  type TopNavItem as NavGroup,
+} from '@/constants/navigation/topNav'
+import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const { disabled: labDisabled } = useFeatureAccess('lab', 'disabled')
+const app = useAppStore()
+const auth = useAuthStore()
 
-const navGroups = computed<NavGroup[]>(() => [
-  { name: 'activities', labelKey: 'nav.activities', route: 'activity' },
-  { name: 'dashboard', labelKey: 'nav.dashboard', route: 'dashboard' },
-  {
-    // Direct link into the workspace layout; its sub-nav lives in the
-    // Ledger Spine sidebar there, not in a dropdown here.
-    name: 'console',
-    labelKey: 'nav.console',
-    route: consoleEntryRoute,
-  },
-  {
-    name: 'alchemy',
-    labelKey: 'nav.alchemy',
-    route: labEntryRoute,
-    disabled: labDisabled.value,
-  },
-  {
-    name: 'community',
-    labelKey: 'nav.community',
-    children: [{ name: 'docs', labelKey: 'nav.docs', disabled: true }],
-  },
-])
+const navGroups = computed<NavGroup[]>(() =>
+  getVisibleTopNavItems({
+    isAdmin: auth.isAdmin,
+    surface: 'desktop',
+    featureStatus: (feature) => app.featureStatus(feature),
+  })
+)
 
 const openGroup = ref<string | null>(null)
 const root = ref<HTMLElement | null>(null)
@@ -104,7 +78,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="root" class="flex items-center justify-center gap-1">
+  <div
+    ref="root"
+    class="flex items-center justify-center gap-1"
+    data-top-nav="desktop"
+  >
     <div v-for="group in navGroups" :key="group.name" class="relative">
       <button
         type="button"

@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -14,6 +15,15 @@ type DiskSpaceInfo struct {
 	Free        uint64  `json:"free"`
 	Used        uint64  `json:"used"`
 	UsedPercent float64 `json:"used_percent"`
+}
+
+// DiskSpacePath is the directory whose filesystem the disk metric measures:
+// the request-body disk cache, or the OS temp directory when none is set.
+func DiskSpacePath() string {
+	if path := GetDiskCachePath(); path != "" {
+		return path
+	}
+	return os.TempDir()
 }
 
 // SystemStatus is the latest sampled host state. Availability flags prevent a

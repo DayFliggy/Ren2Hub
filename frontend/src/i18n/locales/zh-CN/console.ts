@@ -392,7 +392,7 @@ export default {
     modelMetadata: '模型元数据',
     vendors: '供应商',
     prefillGroups: '预填充组',
-    systemInfo: '系统实例',
+    opsMonitor: '运维监控',
     dashboard: '仪表盘',
     keys: '令牌',
     logs: '日志',
@@ -3083,6 +3083,9 @@ export default {
     },
     operations: {
       title: '运维',
+      monitorNote:
+        '系统任务、日志清理和运行状态已移至运维监控页面。Root 可在该页面管理系统任务。',
+      monitorLink: '打开运维监控',
       behavior: '系统行为',
       defaultCollapseSidebar: '默认折叠侧边栏',
       defaultCollapseSidebarDesc: '新用户默认以折叠侧边栏状态进入控制台',

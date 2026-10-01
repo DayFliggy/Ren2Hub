@@ -30,6 +30,17 @@ var applicationTraffic struct {
 	responseBytes atomic.Uint64
 }
 
+// Process-lifetime relay outcome counters; samplers derive windowed rates
+// from their deltas.
+var requestOutcomeTotals struct {
+	total   atomic.Uint64
+	success atomic.Uint64
+}
+
+func RequestOutcomeTotals() (total, success uint64) {
+	return requestOutcomeTotals.total.Load(), requestOutcomeTotals.success.Load()
+}
+
 func ObserveApplicationRequestBytes(n int) {
 	if n > 0 {
 		applicationTraffic.requestBytes.Add(uint64(n))
@@ -51,6 +62,10 @@ func ObserveRequest(status int) {
 }
 
 func ObserveRequestOutcome(success bool) {
+	requestOutcomeTotals.total.Add(1)
+	if success {
+		requestOutcomeTotals.success.Add(1)
+	}
 	now := time.Now().Unix()
 	start := now - now%int64(requestMetricsBucket.Seconds())
 	requestMetrics.Lock()

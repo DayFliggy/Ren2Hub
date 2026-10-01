@@ -47,15 +47,10 @@ export const adminRoutes: RouteRecordRaw[] = [
       hash: to.hash,
     }),
   },
+  // The single-instance gateway has no instance list; its monitor lives at /ops.
   {
     path: '/system-info',
     name: 'system-info',
-    component: () => import('@/views/admin/SystemManagementView.vue'),
-    meta: {
-      requiresAdmin: true,
-      requiresRoot: true,
-      feature: 'admin',
-      protected: true,
-    },
+    redirect: { name: 'ops-monitor' },
   },
 ]

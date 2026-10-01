@@ -179,17 +179,13 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         rootOnly: true,
         icon: 'M8 3h8v5h5v8h-5v5H8v-5H3V8h5z',
       },
-      ...[
-        ['models-admin', 'nav.modelMetadata'],
-        ['system-info', 'nav.systemInfo'],
-      ].map(([route, labelKey]) => ({
-        name: route!,
-        route,
-        labelKey: labelKey!,
+      {
+        name: 'models-admin',
+        labelKey: 'nav.modelMetadata',
+        route: 'models-admin',
         feature: 'admin',
-        rootOnly: route === 'system-info',
         icon: 'M4 4h16v16H4zM4 10h16M10 10v10',
-      })),
+      },
     ],
   },
 ]

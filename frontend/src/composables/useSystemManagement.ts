@@ -1,101 +1,33 @@
-import {
-  computed,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  shallowRef,
-  watch,
-} from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   isActiveSystemTask,
   systemManagementApi,
   type SystemTask,
 } from '@/api/systemManagement'
+import { usePolledFeed } from './usePolledFeed'
 
-// Each section owns its request and timer so a failing feed never blocks its peers.
-function useSystemFeed<T>(
-  fetch: (signal: AbortSignal) => Promise<T[]>,
-  interval: (rows: T[]) => number | null
-) {
-  const rows = shallowRef<T[]>([])
-  const loading = ref(false)
-  const loaded = ref(false)
-  const error = ref('')
-  const updatedAt = ref(0)
-  let controller: AbortController | undefined
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let mounted = false
+const SUMMARY_INTERVAL_MS = 60_000
+const ACTIVE_INTERVAL_MS = 8000
 
-  function stop() {
-    clearTimeout(timer)
-    timer = undefined
-    controller?.abort()
-    controller = undefined
-    loading.value = false
-  }
-
-  async function refresh() {
-    stop()
-    if (!mounted || document.hidden) return
-    const request = new AbortController()
-    controller = request
-    loading.value = true
-    error.value = ''
-    try {
-      const data = await fetch(request.signal)
-      if (request.signal.aborted || controller !== request) return
-      rows.value = data
-      loaded.value = true
-      updatedAt.value = Date.now()
-    } catch (cause) {
-      if (!request.signal.aborted && controller === request)
-        error.value = cause instanceof Error ? cause.message : String(cause)
-    } finally {
-      if (controller === request) {
-        loading.value = false
-        controller = undefined
-        const delay = interval(rows.value)
-        if (mounted && !document.hidden && delay !== null)
-          timer = setTimeout(() => void refresh(), delay)
-      }
-    }
-  }
-
-  function onVisibilityChange() {
-    if (document.hidden) stop()
-    else void refresh()
-  }
-
-  onMounted(() => {
-    mounted = true
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    void refresh()
-  })
-  onBeforeUnmount(() => {
-    mounted = false
-    document.removeEventListener('visibilitychange', onVisibilityChange)
-    stop()
-  })
-
-  return { rows, loading, loaded, error, updatedAt, refresh }
-}
-
+/** Root-only system-task state for the ops monitor. */
 export function useSystemManagement() {
-  const instances = useSystemFeed(systemManagementApi.instances, () => 30_000)
-  const taskInterval = (rows: SystemTask[]) =>
-    rows.some(isActiveSystemTask) ? 8000 : null
-  const active = useSystemFeed(
+  const summary = usePolledFeed(
+    systemManagementApi.summary,
+    () => SUMMARY_INTERVAL_MS
+  )
+  const active = usePolledFeed(
     async (signal) =>
       (await systemManagementApi.tasks({ scope: 'active', limit: 100 }, signal))
         .items,
-    taskInterval
+    (rows: SystemTask[] | null) =>
+      rows?.some(isActiveSystemTask) ? ACTIVE_INTERVAL_MS : null
   )
   const historyType = ref('')
   const historyStatus = ref<'' | 'succeeded' | 'failed'>('')
   const historyPage = ref(1)
   const historyPageSize = ref(20)
   const historyTotal = ref(0)
-  const history = useSystemFeed(
+  const history = usePolledFeed(
     async (signal) => {
       const page = await systemManagementApi.tasks(
         {
@@ -112,53 +44,46 @@ export function useSystemManagement() {
     },
     () => null
   )
+  const activeTasks = computed(() =>
+    (active.data.value ?? []).filter(isActiveSystemTask)
+  )
+  const historyTasks = computed(() =>
+    (history.data.value ?? []).filter((row) => !isActiveSystemTask(row))
+  )
+  /** Registered handler types drive the history filter. */
+  const taskTypes = computed(() =>
+    (summary.data.value ?? []).map((row) => row.type)
+  )
   watch([historyType, historyStatus, historyPageSize], () => {
     if (historyPage.value !== 1) historyPage.value = 1
     else void history.refresh()
   })
   watch(historyPage, () => void history.refresh())
-  watch(active.rows, (_rows, previous) => {
-    if (previous.some(isActiveSystemTask) && !history.loading.value)
+  watch(active.data, (_rows, previous) => {
+    if (previous?.some(isActiveSystemTask) && !history.loading.value)
       void history.refresh()
   })
-  const activeTasks = computed(() =>
-    active.rows.value.filter(isActiveSystemTask)
-  )
-  const historyTasks = computed(() =>
-    history.rows.value.filter((row) => !isActiveSystemTask(row))
-  )
-  const staleCount = computed(
-    () => instances.rows.value.filter((row) => row.status === 'stale').length
-  )
+  // Scheduled runs start on the server; the summary reveals them, so restart
+  // active polling when it reports work the active list has not seen yet.
+  watch(summary.data, (types) => {
+    if (
+      types?.some((type) => type.active) &&
+      !activeTasks.value.length &&
+      !active.loading.value
+    )
+      void active.refresh()
+  })
   return {
-    instances,
+    summary,
     active,
     history,
     activeTasks,
     historyTasks,
-    staleCount,
+    taskTypes,
     historyType,
     historyStatus,
     historyPage,
     historyPageSize,
     historyTotal,
   }
-}
-
-export function useSystemTask() {
-  const taskId = ref('')
-  const feed = useSystemFeed<SystemTask>(
-    async (signal) =>
-      taskId.value
-        ? [await systemManagementApi.task(taskId.value, signal)]
-        : [],
-    (rows) => (rows.some(isActiveSystemTask) ? 8000 : null)
-  )
-  const task = computed(() => feed.rows.value[0] ?? null)
-  function follow(value: SystemTask) {
-    taskId.value = value.task_id
-    feed.rows.value = [value]
-    void feed.refresh()
-  }
-  return { task, error: feed.error, refresh: feed.refresh, follow }
 }

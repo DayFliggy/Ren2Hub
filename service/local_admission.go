@@ -293,10 +293,13 @@ func (m *AdmissionManager) Acquire(ctx context.Context, key string, policy Admis
 	return w.permit, nil
 }
 
-// Bounds are cumulative milliseconds: 1, 5, 20, 100, 500, 1000, 5000, +Inf.
+// AdmissionWaitBucketBoundsMS are the cumulative upper bounds of
+// AdmissionMetrics.WaitBuckets; the last bucket is unbounded (+Inf).
+var AdmissionWaitBucketBoundsMS = [8]int64{1, 5, 20, 100, 500, 1000, 5000, math.MaxInt64}
+
 func (m *AdmissionManager) recordWait(key string, waiter *admissionWaiter) {
 	waited := time.Since(waiter.started).Milliseconds()
-	for i, bound := range [...]int64{1, 5, 20, 100, 500, 1000, 5000, math.MaxInt64} {
+	for i, bound := range AdmissionWaitBucketBoundsMS {
 		if waited <= bound {
 			m.waitBuckets[i]++
 		}

@@ -8,29 +8,6 @@ import {
   requiredString,
 } from './contracts'
 
-export interface SystemInstance {
-  node_name: string
-  display_name: string
-  status: 'online' | 'stale'
-  stale_after_seconds: number | null
-  last_seen_at: number
-  started_at: number
-  name_source: string
-  manually_configured: boolean | null
-  should_configure_manually: boolean | null
-  version: string
-  hostname: string
-  goos: string
-  goarch: string
-  master: boolean | null
-  cpu: number | null
-  memory: number | null
-  storage: number | null
-  storage_total: number | null
-  storage_used: number | null
-  storage_free: number | null
-}
-
 export type SystemTaskStatus = 'pending' | 'running' | 'succeeded' | 'failed'
 export interface SystemTaskQuery {
   scope?: 'active' | 'history'
@@ -43,16 +20,27 @@ export interface SystemTaskPage {
   items: SystemTask[]
   total: number
 }
-export const SYSTEM_TASK_TYPES = [
-  'log_cleanup',
-  'channel_test',
-  'model_update',
-  'midjourney_poll',
-  'async_task_poll',
-  'route_capability_refresh',
-  'billing_recovery',
-  'billing_pricing_sync',
+export const SYSTEM_TASK_HEALTH = [
+  'ok',
+  'failing',
+  'stale',
+  'idle',
+  'running',
+  'inactive',
 ] as const
+export type SystemTaskHealth = (typeof SYSTEM_TASK_HEALTH)[number]
+/** One registered handler; the summary endpoint is the source of task types. */
+export interface SystemTaskTypeSummary {
+  type: string
+  scheduled: boolean
+  enabled: boolean
+  interval_seconds: number | null
+  last_success_at: number | null
+  last_failure_at: number | null
+  last_error: string
+  active: boolean
+  status: SystemTaskHealth
+}
 export interface SystemTask {
   task_id: string
   type: string
@@ -141,10 +129,6 @@ function optionalText(value: unknown, endpoint: string): string {
   return value == null ? '' : requiredString(value, endpoint)
 }
 
-function optionalBoolean(value: unknown, endpoint: string): boolean | null {
-  return value == null ? null : requiredBoolean(value, endpoint)
-}
-
 function optionalNumber(value: unknown, endpoint: string): number | null {
   if (value == null) return null
   const number = requiredStrictNumber(value, endpoint)
@@ -159,48 +143,28 @@ function optionalInteger(value: unknown, endpoint: string): number | null {
   return number
 }
 
-export function parseSystemInstance(
+export function parseSystemTaskSummary(
   value: unknown,
-  endpoint = '/api/system-info/instances'
-): SystemInstance {
-  const row = record(value, endpoint)
-  if (row.status !== 'online' && row.status !== 'stale')
-    invalidResponse(endpoint)
-  const info = record(row.info ?? {}, endpoint)
-  const node = record(info.node ?? {}, endpoint)
-  const runtime = record(info.runtime ?? {}, endpoint)
-  const host = record(info.host ?? {}, endpoint)
-  const role = record(info.role ?? {}, endpoint)
-  const resources = record(info.resources ?? {}, endpoint)
-  const cpu = record(resources.cpu ?? {}, endpoint)
-  const memory = record(resources.memory ?? {}, endpoint)
-  const storage = record(resources.storage ?? {}, endpoint)
-  const nodeName = requiredString(row.node_name, endpoint, false)
-  return {
-    node_name: nodeName,
-    display_name: optionalText(node.name, endpoint) || nodeName,
-    status: row.status,
-    stale_after_seconds: optionalInteger(row.stale_after_seconds, endpoint),
-    last_seen_at: requiredStrictInteger(row.last_seen_at, endpoint),
-    started_at: requiredStrictInteger(row.started_at, endpoint),
-    name_source: optionalText(node.source, endpoint),
-    manually_configured: optionalBoolean(node.manually_configured, endpoint),
-    should_configure_manually: optionalBoolean(
-      node.should_configure_manually,
-      endpoint
-    ),
-    version: optionalText(runtime.version, endpoint),
-    hostname: optionalText(host.hostname, endpoint),
-    goos: optionalText(runtime.goos, endpoint),
-    goarch: optionalText(runtime.goarch, endpoint),
-    master: optionalBoolean(role.is_master, endpoint),
-    cpu: optionalNumber(cpu.usage_percent, endpoint),
-    memory: optionalNumber(memory.usage_percent, endpoint),
-    storage: optionalNumber(storage.used_percent, endpoint),
-    storage_total: optionalInteger(storage.total_bytes, endpoint),
-    storage_used: optionalInteger(storage.used_bytes, endpoint),
-    storage_free: optionalInteger(storage.free_bytes, endpoint),
-  }
+  endpoint = '/api/system-task/summary'
+): SystemTaskTypeSummary[] {
+  const data = record(value, endpoint)
+  if (!Array.isArray(data.types)) invalidResponse(endpoint)
+  return data.types.map((raw) => {
+    const row = record(raw, endpoint)
+    if (!SYSTEM_TASK_HEALTH.includes(row.status as SystemTaskHealth))
+      invalidResponse(endpoint)
+    return {
+      type: requiredString(row.type, endpoint, false),
+      scheduled: requiredBoolean(row.scheduled, endpoint),
+      enabled: requiredBoolean(row.enabled, endpoint),
+      interval_seconds: optionalInteger(row.interval_seconds, endpoint),
+      last_success_at: optionalInteger(row.last_success_at, endpoint),
+      last_failure_at: optionalInteger(row.last_failure_at, endpoint),
+      last_error: optionalText(row.last_error, endpoint),
+      active: requiredBoolean(row.active, endpoint),
+      status: row.status as SystemTaskHealth,
+    }
+  })
 }
 
 export function parseSystemTask(
@@ -237,11 +201,12 @@ export function isActiveSystemTask(task: SystemTask): boolean {
 }
 
 export const systemManagementApi = {
-  async instances(signal?: AbortSignal): Promise<SystemInstance[]> {
-    const endpoint = '/api/system-info/instances'
-    const data = await api.get(endpoint, undefined, { signal })
-    if (!Array.isArray(data)) invalidResponse(endpoint)
-    return data.map((item) => parseSystemInstance(item, endpoint))
+  async summary(signal?: AbortSignal): Promise<SystemTaskTypeSummary[]> {
+    const endpoint = '/api/system-task/summary'
+    return parseSystemTaskSummary(
+      await api.get(endpoint, undefined, { signal }),
+      endpoint
+    )
   },
   async tasks(
     query: SystemTaskQuery,
@@ -275,15 +240,6 @@ export const systemManagementApi = {
       await api.get(endpoint, undefined, { signal }),
       endpoint
     )
-  },
-  async deleteStale(name?: string): Promise<number> {
-    const endpoint = name
-      ? `/api/system-info/instances/${encodeURIComponent(name)}`
-      : '/api/system-info/stale-instances'
-    const data = record(await api.delete(endpoint), endpoint)
-    const count = requiredStrictInteger(data.deleted_count, endpoint)
-    if (count < 0) invalidResponse(endpoint)
-    return count
   },
   async cleanup(target: number): Promise<SystemTask> {
     if (

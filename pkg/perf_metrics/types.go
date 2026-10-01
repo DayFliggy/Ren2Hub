@@ -76,6 +76,16 @@ type counters struct {
 	generationMs   int64
 }
 
+func (c *counters) add(value counters) {
+	c.requestCount += value.requestCount
+	c.successCount += value.successCount
+	c.totalLatencyMs += value.totalLatencyMs
+	c.ttftSumMs += value.ttftSumMs
+	c.ttftCount += value.ttftCount
+	c.outputTokens += value.outputTokens
+	c.generationMs += value.generationMs
+}
+
 // A request count and its latency/tokens move together across each flush.
 type atomicBucket struct {
 	mu    sync.Mutex

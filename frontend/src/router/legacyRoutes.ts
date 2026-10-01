@@ -30,7 +30,7 @@ const aliases: Record<string, string> = {
   '/models/models': '/models/metadata',
   '/admin/vendors': '/models/vendors',
   '/admin/prefill-groups': '/models/prefill-groups',
-  '/admin/system-info': '/system-info',
+  '/admin/system-info': '/ops',
 }
 
 const settingsTabs: Record<string, string> = {

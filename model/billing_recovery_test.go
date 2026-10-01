@@ -60,6 +60,8 @@ func TestBillingAbortedReservationHasNoPendingDelivery(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, metrics.Pending)
 	assert.Zero(t, metrics.Reconciliations)
+	assert.Equal(t, "instance", metrics.Operational.CounterScope, "the backlog query must not reset values read before it")
+	assert.Len(t, metrics.PricesByOrigin, 1)
 	var recovery BillingRecovery
 	require.NoError(t, db.Where("request_id = ?", "unfunded").First(&recovery).Error)
 	assert.Equal(t, BillingRecoveryStateCompleted, recovery.ConsumptionState)

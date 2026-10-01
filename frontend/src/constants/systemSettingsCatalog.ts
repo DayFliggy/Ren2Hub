@@ -925,7 +925,7 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
       {
         id: 'maintenance',
         title: '系统维护',
-        description: '执行系统任务和多实例维护操作。',
+        description: '系统任务与运行状态的入口。',
         fields: [],
         integration: 'operations-maintenance',
       },

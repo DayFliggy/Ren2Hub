@@ -15,7 +15,7 @@ declare module 'vue-router' {
     /** A protected capability is denied when the backend reports disabled. */
     capability?: string
     nav?: string
-    topNav?: 'activities' | 'dashboard' | 'console' | 'alchemy'
+    topNav?: 'activities' | 'dashboard' | 'ops' | 'console' | 'alchemy'
     setupRoute?: boolean
     setupError?: boolean
     messageDomain?: 'auth' | 'console' | 'lab'

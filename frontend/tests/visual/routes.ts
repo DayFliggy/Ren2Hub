@@ -26,7 +26,8 @@ export const VISUAL_ROUTES: VisualRoute[] = [
     name: 'prefill-groups',
     path: '/models/metadata?manage=prefill-groups',
   },
-  { name: 'system-info', path: '/system-info' },
+  { name: 'ops-monitor', path: '/ops' },
+  { name: 'system-info-redirect', path: '/system-info' },
   ...[
     'site',
     'auth',

@@ -5,10 +5,9 @@ import { useRoute } from 'vue-router'
 
 import LanguageSelector from '@/components/common/LanguageSelector.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
-import { consoleEntryRoute } from '@/constants/navigation/consoleNav'
-import { labEntryRoute } from '@/constants/navigation/labNav'
-import { useFeatureAccess } from '@/composables/useFeatureAccess'
+import { getVisibleTopNavItems } from '@/constants/navigation/topNav'
 import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
 
 import CommandPaletteModal from './CommandPaletteModal.vue'
 import TopNavMenu from './TopNavMenu.vue'
@@ -17,33 +16,22 @@ import UserMenu from './UserMenu.vue'
 const { t } = useI18n()
 const route = useRoute()
 const app = useAppStore()
-const { disabled: labDisabled } = useFeatureAccess('lab', 'disabled')
+const auth = useAuthStore()
 
 const searchOpen = ref(false)
-
-interface MobileItem {
-  name: string
-  labelKey: string
-  route: string
-  disabled?: boolean
-}
 
 const isApplePlatform = /Mac|iPhone|iPad|iPod/.test(
   window.navigator.platform || window.navigator.userAgent
 )
 const searchShortcut = isApplePlatform ? '⌘K' : 'Ctrl+K'
 
-const mobileItems = computed<MobileItem[]>(() => [
-  { name: 'activities', labelKey: 'nav.activities', route: 'activity' },
-  { name: 'dashboard', labelKey: 'nav.dashboard', route: 'dashboard' },
-  { name: 'console', labelKey: 'nav.console', route: consoleEntryRoute },
-  {
-    name: 'alchemy',
-    labelKey: 'nav.alchemy',
-    route: labEntryRoute,
-    disabled: labDisabled.value,
-  },
-])
+const mobileItems = computed(() =>
+  getVisibleTopNavItems({
+    isAdmin: auth.isAdmin,
+    surface: 'mobile',
+    featureStatus: (feature) => app.featureStatus(feature),
+  }).flatMap((item) => (item.route ? [{ ...item, route: item.route }] : []))
+)
 
 const activeName = computed(() => {
   if (route.meta.topNav) return route.meta.topNav
@@ -141,6 +129,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
     <div
       class="flex gap-1 overflow-x-auto border-t border-[var(--border-subtle)] px-3 py-2 lg:hidden"
       data-handdrawn="navigation-strip"
+      data-top-nav="mobile"
     >
       <template v-for="item in mobileItems" :key="item.name">
         <button

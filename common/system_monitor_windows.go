@@ -3,18 +3,12 @@
 package common
 
 import (
-	"os"
 	"syscall"
 	"unsafe"
 )
 
 // GetDiskSpaceInfo 获取缓存目录所在磁盘的空间信息 (Windows)
 func GetDiskSpaceInfo() DiskSpaceInfo {
-	cachePath := GetDiskCachePath()
-	if cachePath == "" {
-		cachePath = os.TempDir()
-	}
-
 	info := DiskSpaceInfo{}
 
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
@@ -22,7 +16,7 @@ func GetDiskSpaceInfo() DiskSpaceInfo {
 
 	var freeBytesAvailable, totalBytes, totalFreeBytes uint64
 
-	pathPtr, err := syscall.UTF16PtrFromString(cachePath)
+	pathPtr, err := syscall.UTF16PtrFromString(DiskSpacePath())
 	if err != nil {
 		return info
 	}

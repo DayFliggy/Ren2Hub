@@ -278,12 +278,37 @@ describe('capability route guard', () => {
       '/models/metadata',
       '/models/vendors',
       '/models/prefill-groups',
+      '/ops',
       '/system-info',
     ]) {
       await router.push(path)
       expect(router.currentRoute.value.name, path).toBe('dashboard')
     }
   })
+
+  it('opens the ops monitor for administrators only', async () => {
+    await router.push('/ops')
+    expect(router.currentRoute.value.name).toBe('dashboard')
+    useAuthStore().user!.role = 10
+    await router.push('/ops')
+    expect(router.currentRoute.value.name).toBe('ops-monitor')
+    expect(router.currentRoute.value.meta.topNav).toBe('ops')
+  }, 15000)
+
+  it('sends retired system instance bookmarks to the ops monitor', async () => {
+    useAuthStore().user!.role = 10
+    for (const path of [
+      '/system-info',
+      '/console/system-info',
+      '/admin/system-info',
+      '/console/admin/system-info',
+    ]) {
+      await router.push('/dashboard')
+      await router.push(path)
+      expect(router.currentRoute.value.path, path).toBe('/ops')
+    }
+    expect(sanitizeRedirect('/admin/system-info')).toBe('/ops')
+  }, 15000)
 
   it('never revives retired pages through old prefixes or settings sections', async () => {
     for (const path of [

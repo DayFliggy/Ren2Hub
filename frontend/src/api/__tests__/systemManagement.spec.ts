@@ -1,17 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../client'
 import {
-  parseSystemInstance,
   parseSystemTask,
+  parseSystemTaskSummary,
   systemManagementApi,
 } from '../systemManagement'
+import { summaryFixture } from './opsFixtures'
 
-const instance = {
-  node_name: 'node-1',
-  status: 'online',
-  started_at: 1,
-  last_seen_at: 2,
-}
 const task = {
   task_id: 'task-1',
   type: 'billing_recovery',
@@ -22,86 +17,37 @@ const task = {
 afterEach(() => vi.restoreAllMocks())
 
 describe('system management response contracts', () => {
-  it('preserves absent metrics and role as unknown instead of inventing zero or worker values', () => {
-    expect(parseSystemInstance(instance)).toMatchObject({
-      cpu: null,
-      memory: null,
-      storage: null,
-      storage_total: null,
-      master: null,
-      manually_configured: null,
+  it('lists registered task types with unrecorded runs left as null', () => {
+    const [channelTest, cleanup] = parseSystemTaskSummary(summaryFixture())
+    expect(channelTest).toMatchObject({
+      type: 'channel_test',
+      interval_seconds: 600,
+      last_failure_at: null,
+      status: 'ok',
     })
-    expect(
-      parseSystemInstance({
-        ...instance,
-        info: {
-          role: { is_master: false },
-          resources: { cpu: { usage_percent: 0 }, storage: { total_bytes: 0 } },
-        },
-      })
-    ).toMatchObject({ cpu: 0, storage_total: 0, master: false })
-  })
-
-  it('retains node identity, platform and complete storage details from the backend', () => {
-    expect(
-      parseSystemInstance({
-        ...instance,
-        stale_after_seconds: 90,
-        info: {
-          node: {
-            name: 'primary',
-            source: 'manual',
-            manually_configured: true,
-            should_configure_manually: false,
-          },
-          role: { is_master: true },
-          runtime: { goos: 'linux', goarch: 'amd64', version: 'v1' },
-          host: { hostname: 'host' },
-          resources: {
-            cpu: { usage_percent: 12.5 },
-            memory: { usage_percent: 20 },
-            storage: {
-              total_bytes: 1024,
-              used_bytes: 256,
-              free_bytes: 768,
-              used_percent: 25,
-            },
-          },
-        },
-      })
-    ).toMatchObject({
-      display_name: 'primary',
-      name_source: 'manual',
-      manually_configured: true,
-      should_configure_manually: false,
-      master: true,
-      goos: 'linux',
-      goarch: 'amd64',
-      storage_total: 1024,
-      storage_used: 256,
-      storage_free: 768,
+    expect(cleanup).toMatchObject({
+      type: 'gateway_state_cleanup',
+      last_success_at: null,
+      last_error: 'lock lost',
+      status: 'failing',
     })
   })
 
-  it('rejects malformed metrics, node flags, statuses and task fields', () => {
-    expect(() =>
-      parseSystemInstance({
-        ...instance,
-        info: { resources: { cpu: { usage_percent: '10' } } },
-      })
-    ).toThrow()
-    expect(() =>
-      parseSystemInstance({
-        ...instance,
-        info: { node: { manually_configured: 'false' } },
-      })
-    ).toThrow()
-    expect(() =>
-      parseSystemInstance({
-        ...instance,
-        info: { resources: { storage: { total_bytes: -1 } } },
-      })
-    ).toThrow()
+  it('rejects summaries with unknown health or malformed handler fields', () => {
+    const [row] = summaryFixture().types
+    for (const invalid of [
+      { ...row, status: 'healthy' },
+      { ...row, type: '' },
+      { ...row, active: 'false' },
+      { ...row, last_success_at: '1767225000' },
+    ])
+      expect(() => parseSystemTaskSummary({ types: [invalid] })).toThrow(
+        'Invalid API response'
+      )
+    expect(() => parseSystemTaskSummary([row])).toThrow()
+  })
+
+  it('rejects malformed task statuses and fields', () => {
     expect(() => parseSystemTask({ ...task, status: 'unknown' })).toThrow()
     expect(() =>
       parseSystemTask({ ...task, state: { progress: '20' } })
@@ -216,19 +162,10 @@ describe('system management response contracts', () => {
       },
       { signal }
     )
-    const remove = vi
-      .spyOn(api, 'delete')
-      .mockResolvedValue({ deleted_count: 1 } as never)
-    expect(await systemManagementApi.deleteStale('node/one')).toBe(1)
-    expect(remove).toHaveBeenCalledWith('/api/system-info/instances/node%2Fone')
-    remove.mockRejectedValueOnce(
-      new Error('instance is not stale or no longer exists')
-    )
-    await expect(systemManagementApi.deleteStale('recovered')).rejects.toThrow(
-      'not stale'
-    )
-    remove.mockResolvedValueOnce({} as never)
-    await expect(systemManagementApi.deleteStale()).rejects.toThrow()
+    const remove = vi.spyOn(api, 'delete').mockResolvedValueOnce({} as never)
+    await expect(
+      systemManagementApi.deleteHistory({ type: '', status: '' })
+    ).rejects.toThrow()
     remove.mockResolvedValueOnce({ deleted_count: 3 } as never)
     expect(
       await systemManagementApi.deleteHistory({

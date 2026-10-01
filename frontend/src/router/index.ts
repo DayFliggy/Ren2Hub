@@ -6,6 +6,7 @@ import {
 
 import HomeView from '@/views/HomeView.vue'
 import { getConsoleRouteAccessMeta } from '@/constants/navigation/consoleNav'
+import { getTopNavRouteMeta } from '@/constants/navigation/topNav'
 import { loadMessageDomain } from '@/i18n'
 import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
@@ -135,6 +136,12 @@ const router = createRouter({
           name: 'dashboard',
           component: () => import('@/views/console/DashboardView.vue'),
           meta: { topNav: 'dashboard', feature: 'dashboard_basic' },
+        },
+        {
+          path: '/ops',
+          name: 'ops-monitor',
+          component: () => import('@/views/admin/OpsMonitorView.vue'),
+          meta: { wide: true, ...getTopNavRouteMeta('ops') },
         },
         {
           path: '/activity',

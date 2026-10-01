@@ -423,14 +423,17 @@ func SetApiRouter(router *gin.Engine) {
 			systemTaskRoute.GET("/list", controller.ListSystemTasks)
 			systemTaskRoute.DELETE("/history", controller.DeleteSystemTaskHistory)
 			systemTaskRoute.GET("/current", controller.GetCurrentSystemTask)
+			systemTaskRoute.GET("/summary", middleware.DisableCache(), controller.GetSystemTaskSummary)
 			systemTaskRoute.GET("/:task_id", controller.GetSystemTask)
 		}
-		systemInfoRoute := apiRouter.Group("/system-info")
-		systemInfoRoute.Use(middleware.RootAuth())
+		// Ops monitoring for administrators. System tasks and billing health
+		// stay behind their own Root routes.
+		opsRoute := apiRouter.Group("/ops")
+		opsRoute.Use(middleware.DisableCache(), middleware.AdminAuth())
 		{
-			systemInfoRoute.GET("/instances", controller.ListSystemInstances)
-			systemInfoRoute.DELETE("/stale-instances", controller.DeleteStaleSystemInstances)
-			systemInfoRoute.DELETE("/instances/:node_name", controller.DeleteStaleSystemInstance)
+			opsRoute.GET("/overview", controller.GetOpsOverview)
+			opsRoute.GET("/requests", controller.GetOpsRequests)
+			opsRoute.GET("/channels", middleware.RequirePermission(authz.ChannelRead), controller.GetOpsChannels)
 		}
 
 		dataRoute := apiRouter.Group("/data")

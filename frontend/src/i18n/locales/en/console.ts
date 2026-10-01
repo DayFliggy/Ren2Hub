@@ -418,7 +418,7 @@ export default {
     modelMetadata: 'Model metadata',
     vendors: 'Vendors',
     prefillGroups: 'Prefill groups',
-    systemInfo: 'System instances',
+    opsMonitor: 'Ops monitor',
     dashboard: 'Dashboard',
     keys: 'Tokens',
     logs: 'Logs',
@@ -3201,6 +3201,9 @@ export default {
     },
     operations: {
       title: 'Operations',
+      monitorNote:
+        'System tasks, log cleanup and runtime status now live on the ops monitor page. Root users manage system tasks there.',
+      monitorLink: 'Open ops monitor',
       behavior: 'System Behavior',
       defaultCollapseSidebar: 'Default Collapsed Sidebar',
       defaultCollapseSidebarDesc:

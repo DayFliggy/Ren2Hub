@@ -502,6 +502,55 @@ func activeSystemTaskStatuses() []string {
 	return []string{string(SystemTaskStatusPending), string(SystemTaskStatusRunning)}
 }
 
+// SystemTaskActivity is the run history that matters for health: the latest
+// success and failure, the latest failure message and whether a run is active.
+type SystemTaskActivity struct {
+	LastSuccessAt int64
+	LastFailureAt int64
+	LastError     string
+	Active        bool
+}
+
+func SummarizeSystemTaskActivity(taskTypes []string) (map[string]SystemTaskActivity, error) {
+	activity := map[string]SystemTaskActivity{}
+	if len(taskTypes) == 0 {
+		return activity, nil
+	}
+	var rows []struct {
+		Type   string
+		Status SystemTaskStatus
+		LastAt int64
+	}
+	if err := DB.Model(&SystemTask{}).Select("type, status, MAX(updated_at) AS last_at").
+		Where("type IN ?", taskTypes).Group("type, status").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		item := activity[row.Type]
+		switch row.Status {
+		case SystemTaskStatusSucceeded:
+			item.LastSuccessAt = row.LastAt
+		case SystemTaskStatusFailed:
+			item.LastFailureAt = row.LastAt
+		case SystemTaskStatusPending, SystemTaskStatusRunning:
+			item.Active = true
+		}
+		activity[row.Type] = item
+	}
+	var failures []*SystemTask
+	latestFailures := DB.Model(&SystemTask{}).Select("MAX(id)").
+		Where("type IN ? AND status = ?", taskTypes, SystemTaskStatusFailed).Group("type")
+	if err := DB.Select("type", "error").Where("id IN (?)", latestFailures).Find(&failures).Error; err != nil {
+		return nil, err
+	}
+	for _, failure := range failures {
+		item := activity[failure.Type]
+		item.LastError = failure.Error
+		activity[failure.Type] = item
+	}
+	return activity, nil
+}
+
 func marshalSystemTaskJSON(v any) (string, error) {
 	if v == nil {
 		return "", nil

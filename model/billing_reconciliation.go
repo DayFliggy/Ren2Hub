@@ -200,9 +200,16 @@ func ReadBillingMetrics(ctx context.Context) (BillingMetrics, error) {
 	}
 	result.PricesByOrigin = append(result.PricesByOrigin, BillingPriceOriginMetric{ScopeKind: "global_model", Origin: "model_pricing", Count: configured})
 
-	if err := q.Model(&BillingRecovery{}).Where("status IN ? OR (status IN ? AND consumption_state <> ?)", []string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending, BillingRecoveryStatusReconciliation}, []string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded}, BillingRecoveryStateCompleted).Select("COUNT(*) AS pending, COALESCE(MIN(created_at),0) AS oldest_created_at").Scan(&result).Error; err != nil {
+	// Scan into a separate row: scanning into result would reset the counters
+	// and price origins already collected above.
+	var backlog struct {
+		Pending         int64
+		OldestCreatedAt int64
+	}
+	if err := q.Model(&BillingRecovery{}).Where("status IN ? OR (status IN ? AND consumption_state <> ?)", []string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending, BillingRecoveryStatusReconciliation}, []string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded}, BillingRecoveryStateCompleted).Select("COUNT(*) AS pending, COALESCE(MIN(created_at),0) AS oldest_created_at").Scan(&backlog).Error; err != nil {
 		return result, err
 	}
+	result.Pending, result.OldestCreatedAt = backlog.Pending, backlog.OldestCreatedAt
 	if err := q.Model(&BillingRecovery{}).Where("status = ? OR consumption_state IN ?", BillingRecoveryStatusReconciliation, billingRecoveryUnconfirmedStates()).Count(&result.Reconciliations).Error; err != nil {
 		return result, err
 	}

@@ -23,7 +23,6 @@ describe('console navigation', () => {
       'system-settings',
       'task-plugins',
       'models-admin',
-      'system-info',
     ])
     expect(adminGroup?.items[0]).toEqual(
       expect.objectContaining({

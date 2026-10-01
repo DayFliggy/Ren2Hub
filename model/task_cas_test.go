@@ -60,7 +60,6 @@ func TestMain(m *testing.M) {
 		&AffiliateLedger{},
 		&UserOAuthBinding{},
 		&PerfMetric{},
-		&SystemInstance{},
 		&SystemTask{},
 		&SystemTaskLock{},
 	); err != nil {
@@ -98,7 +97,6 @@ func truncateTables(t *testing.T) {
 		DB.Exec("DELETE FROM gmpay_merchant_versions")
 		DB.Exec("DELETE FROM affiliate_ledgers")
 		DB.Exec("DELETE FROM perf_metrics")
-		DB.Exec("DELETE FROM system_instances")
 		DB.Exec("DELETE FROM system_task_locks")
 		DB.Exec("DELETE FROM system_tasks")
 	})

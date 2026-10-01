@@ -1,5 +1,13 @@
 import { expect, type ConsoleMessage, type Page } from '@playwright/test'
 
+import {
+  opsBillingMetrics,
+  opsChannels,
+  opsOverview,
+  opsRequests,
+  opsTaskSummary,
+} from './opsFixtures'
+
 export type VisualTheme = 'light' | 'dark'
 
 const FIXED_NOW = new Date('2026-07-27T12:00:00+08:00').getTime()
@@ -274,7 +282,9 @@ const VISUAL_AUDIT_PAGE = {
 
 interface StablePageOptions {
   theme: VisualTheme
-  user?: Partial<typeof VISUAL_USER>
+  user?: Partial<typeof VISUAL_USER> & {
+    permissions?: { admin_permissions: Record<string, Record<string, boolean>> }
+  }
   authenticated?: boolean
   routeAwareAuth?: boolean
   setupInitialized?: boolean
@@ -355,7 +365,11 @@ export async function configureStablePage(
     ['/api/models/search', { page: 1, page_size: 20, total: 0, items: [] }],
     ['/api/vendors/search', { page: 1, page_size: 20, total: 0, items: [] }],
     ['/api/prefill_group/', []],
-    ['/api/system-info/instances', []],
+    ['/api/ops/overview', opsOverview()],
+    ['/api/ops/requests', opsRequests()],
+    ['/api/ops/channels', opsChannels()],
+    ['/api/system-task/summary', opsTaskSummary()],
+    ['/api/billing/metrics', opsBillingMetrics()],
     ['/api/system-task/list', []],
     ['/api/option/', []],
     [

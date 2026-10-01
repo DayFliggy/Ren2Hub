@@ -5,10 +5,7 @@ import type { SystemTask } from '@/api/systemManagement'
 import IconButton from '@/components/common/IconButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import { systemManagementMessages } from '@/i18n/systemManagement'
-import {
-  formatSystemRelative,
-  formatSystemTimestamp,
-} from '@/utils/systemManagement'
+import { formatRelative, formatTimestamp } from '@/utils/opsFormat'
 
 defineProps<{
   title: string
@@ -106,9 +103,9 @@ const tones = {
             </td>
             <td
               :data-label="t('updated')"
-              :title="formatSystemTimestamp(task.updated_at, locale)"
+              :title="formatTimestamp(task.updated_at, locale)"
             >
-              {{ formatSystemRelative(task.updated_at, updatedAt, locale) }}
+              {{ formatRelative(task.updated_at, updatedAt, locale) }}
             </td>
             <td :data-label="t('details')">
               <div class="task-detail">
