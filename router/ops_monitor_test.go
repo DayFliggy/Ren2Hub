@@ -43,7 +43,7 @@ func TestOpsMonitorRoutesFollowAdminChannelAndRootBoundaries(t *testing.T) {
 	}
 
 	adminPaths := []string{"/api/ops/overview", "/api/ops/requests", "/api/ops/channels"}
-	for _, path := range append(adminPaths, "/api/system-task/summary") {
+	for _, path := range append(adminPaths, "/api/system-task/summary", "/api/gateway/metrics") {
 		assert.Equal(t, http.StatusUnauthorized, call(0, path).Code, path)
 		assert.Equal(t, http.StatusForbidden, call(common.RoleCommonUser, path).Code, path)
 	}
@@ -54,6 +54,8 @@ func TestOpsMonitorRoutesFollowAdminChannelAndRootBoundaries(t *testing.T) {
 	}
 	assert.Equal(t, http.StatusForbidden, call(common.RoleAdminUser, "/api/system-task/summary").Code,
 		"task history can contain internal errors and stays Root-only")
+	assert.Equal(t, http.StatusForbidden, call(common.RoleAdminUser, "/api/gateway/metrics").Code,
+		"billing counters and recovery backlog remain Root-only")
 
 	requests := call(common.RoleAdminUser, "/api/ops/requests?hours=24")
 	assert.Contains(t, requests.Body.String(), `"success":true`)
@@ -63,6 +65,13 @@ func TestOpsMonitorRoutesFollowAdminChannelAndRootBoundaries(t *testing.T) {
 	}
 	assert.Contains(t, call(common.RoleAdminUser, "/api/ops/overview?window=7d").Body.String(), `"success":false`)
 	assert.Contains(t, call(common.RoleAdminUser, "/api/ops/channels").Body.String(), `"breakers"`)
+	require.NoError(t, authz.SetUserPermissions(common.RoleAdminUser, authz.PermissionsMap{
+		authz.ResourceChannel: {authz.ActionRead: false},
+	}))
+	assert.Equal(t, http.StatusForbidden, call(common.RoleAdminUser, "/api/ops/channels").Code,
+		"an admin role does not bypass an explicit channel.read denial")
+	assert.Equal(t, http.StatusOK, call(common.RoleAdminUser, "/api/ops/requests").Code)
+	assert.Equal(t, http.StatusOK, call(common.RoleRootUser, "/api/ops/channels").Code)
 
 	summary := call(common.RoleRootUser, "/api/system-task/summary")
 	require.Equal(t, http.StatusOK, summary.Code)

@@ -138,7 +138,7 @@ for (const theme of ['light', 'dark'] as const) {
         '/api/ops/requests',
         '/api/ops/channels',
         '/api/system-task/summary',
-        '/api/billing/metrics',
+        '/api/gateway/metrics',
       ])
         expect(api.has(path), path).toBe(true)
       expect(errors).toEqual([])
@@ -217,9 +217,12 @@ test('empty states read as healthy instead of zero-filled', async ({
   await page.route(/\/api\/system-task\/list\?/, (route) =>
     route.fulfill({ json: { success: true, data: [], total: 0 } })
   )
-  await page.route(/\/api\/billing\/metrics/, (route) =>
+  await page.route(/\/api\/gateway\/metrics/, (route) =>
     route.fulfill(
-      ok({ ...opsBillingMetrics(), pending: 0, reconciliations: 0 })
+      ok({
+        ...opsBillingMetrics(),
+        billing_recovery: { pending: 0, oldest_updated_at: 0 },
+      })
     )
   )
   await page.goto('/ops')
@@ -227,7 +230,7 @@ test('empty states read as healthy instead of zero-filled', async ({
   await expect(section(page, 'quality')).toContainText('请求日志未启用')
   await expect(section(page, 'tasks')).toContainText('没有已注册的系统任务')
   await expect(section(page, 'tasks')).toContainText('暂无等待或运行中的任务')
-  await expect(section(page, 'billing')).toContainText('没有待处理的计费恢复')
+  await expect(section(page, 'billing')).toContainText('没有逾期的计费恢复')
   await page.screenshot({ path: testInfo.outputPath('ops-empty.png') })
 })
 
@@ -255,7 +258,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.screenshot({ path: testInfo.outputPath('ops-admin.png') })
     expect(api.has('/api/system-task/summary')).toBe(false)
     expect(api.has('/api/system-task/list')).toBe(false)
-    expect(api.has('/api/billing/metrics')).toBe(false)
+    expect(api.has('/api/gateway/metrics')).toBe(false)
     expect(errors).toEqual([])
   })
 }

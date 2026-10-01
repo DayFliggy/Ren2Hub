@@ -276,26 +276,22 @@ export function opsTaskSummary() {
 
 export function opsBillingMetrics() {
   return {
-    price_versions: 14,
-    quote_attempts: 182_000,
-    prices_by_origin: [],
-    pending: 1,
-    reconciliations: 1,
-    reserved_quota: '150000',
-    oldest_wait_seconds: 340,
-    idempotency_conflicts: 0,
-    recovery_failures: 0,
-    debt_events: 2,
-    operational: {
+    schema_version: 2,
+    recovery_scope: 'database',
+    billing_recovery: { pending: 1, oldest_updated_at: NOW - 340 },
+    billing: {
       counter_scope: 'instance',
       started_at: NOW - 3000,
       source_refresh_failures_total: {},
       candidate_rejections_total: {},
       missing_price_total: 0,
-      unknown_usage_total: 1,
       calculation_total: 184_100,
       calculation_failures_total: 0,
-      replay_mismatches_total: 0,
+      settlements_total: {
+        confirmed: 180_000,
+        estimated: 3100,
+        frozen_estimate: 1000,
+      },
     },
   }
 }

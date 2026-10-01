@@ -223,7 +223,7 @@ async function confirmDelete() {
   }
 }
 
-defineExpose({ openCreate })
+defineExpose({ openCreate, reload: load })
 </script>
 
 <template>

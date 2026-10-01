@@ -129,9 +129,6 @@ func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model
 	if err != nil || !won {
 		return won, err
 	}
-	if task.Status == model.TaskStatusSuccess {
-		billing.RecordSettlement(billing.SettlementBasis(consumption.Usage))
-	}
 	if err := model.DeliverTaskResultMetrics(ctx, task.ID); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("task result metrics remain pending (task_id=%s): %v", task.TaskID, err))
 	}

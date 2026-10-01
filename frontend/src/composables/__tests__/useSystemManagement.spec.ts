@@ -90,6 +90,41 @@ describe('system task lifecycles', () => {
     )
   })
 
+  it.each(['succeeded', 'failed'] as const)(
+    'refreshes history when a short task %s between summary polls',
+    async (status) => {
+      wrapper = mount(Host)
+      await flushPromises()
+      const completed = { ...running, status }
+      vi.mocked(systemManagementApi.tasks).mockImplementation(
+        async (query) => ({
+          items: query.scope === 'history' ? [completed] : [],
+          total: query.scope === 'history' ? 1 : 0,
+        })
+      )
+      vi.mocked(systemManagementApi.summary).mockImplementation(async () =>
+        summary.map((row, i) =>
+          i === 0
+            ? {
+                ...row,
+                [status === 'succeeded'
+                  ? 'last_success_at'
+                  : 'last_failure_at']: 1_767_226_000,
+              }
+            : { ...row }
+        )
+      )
+      const before = vi.mocked(systemManagementApi.tasks).mock.calls.length
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(state.activeTasks.value).toEqual([])
+      expect(state.historyTasks.value).toEqual([completed])
+      expect(state.historyTotal.value).toBe(1)
+      expect(systemManagementApi.tasks).toHaveBeenCalledTimes(before + 1)
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(systemManagementApi.tasks).toHaveBeenCalledTimes(before + 1)
+    }
+  )
+
   it('uses server pagination and resets the offset when filters change', async () => {
     wrapper = mount(Host)
     await flushPromises()

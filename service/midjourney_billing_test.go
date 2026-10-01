@@ -40,6 +40,7 @@ func acceptedMidjourneyBillingFixture(t *testing.T, price string) *model.Midjour
 
 func TestMidjourneyFinalChargeUsesFrozenQuoteAndPersistsSeparateEvidence(t *testing.T) {
 	task := acceptedMidjourneyBillingFixture(t, "0.000006")
+	before := billing.ReadOperationalMetrics().Settlements[billing.SettlementConfirmed]
 	task.Status = "SUCCESS"
 	won, err := CompleteMidjourneyBilling(context.Background(), task, "SUBMITTED")
 	require.NoError(t, err)
@@ -61,6 +62,7 @@ func TestMidjourneyFinalChargeUsesFrozenQuoteAndPersistsSeparateEvidence(t *test
 	assert.False(t, won)
 	assert.Equal(t, 97, getUserQuota(t, 1))
 	assert.EqualValues(t, 1, countLogs(t))
+	assert.Equal(t, before+1, billing.ReadOperationalMetrics().Settlements[billing.SettlementConfirmed])
 }
 
 func TestMidjourneyExplicitFailureReleasesReservation(t *testing.T) {
@@ -99,6 +101,7 @@ func TestMidjourneyUnpricedSuccessSettlesAtSubmissionEstimate(t *testing.T) {
 
 func TestMidjourneySettlementFailureRecoversWithConsistentTaskAndLogAmounts(t *testing.T) {
 	task := acceptedMidjourneyBillingFixture(t, "0.000006")
+	before := billing.ReadOperationalMetrics().Settlements[billing.SettlementConfirmed]
 	callback := "test:mj_settle_failure"
 	require.NoError(t, model.DB.Callback().Create().Before("gorm:create").Register(callback, func(tx *gorm.DB) {
 		if event, ok := tx.Statement.Dest.(*model.BillingEvent); ok && event.Operation == "settle" {
@@ -110,6 +113,7 @@ func TestMidjourneySettlementFailureRecoversWithConsistentTaskAndLogAmounts(t *t
 	won, err := CompleteMidjourneyBilling(context.Background(), task, "SUBMITTED")
 	require.ErrorIs(t, err, assert.AnError)
 	require.True(t, won, "provider completion and final evidence survive settlement failure")
+	assert.Equal(t, before, billing.ReadOperationalMetrics().Settlements[billing.SettlementConfirmed], "rolled-back funds are not a settlement")
 	require.NoError(t, model.DB.Callback().Create().Remove(callback))
 	var recovery model.BillingRecovery
 	require.NoError(t, model.DB.Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error)
@@ -134,4 +138,5 @@ func TestMidjourneySettlementFailureRecoversWithConsistentTaskAndLogAmounts(t *t
 	require.Len(t, logs, 1)
 	assert.EqualValues(t, 3, logs[0].Quota)
 	assert.Equal(t, 1, logs[0].ChannelId)
+	assert.Equal(t, before+1, billing.ReadOperationalMetrics().Settlements[billing.SettlementConfirmed])
 }

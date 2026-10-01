@@ -4,9 +4,9 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
-import { billingApi } from '@/api/billing'
 import {
   opsMonitorApi,
+  parseOpsBillingMetrics,
   parseOpsChannels,
   parseOpsOverview,
   parseOpsRequests,
@@ -16,13 +16,13 @@ import {
   systemManagementApi,
 } from '@/api/systemManagement'
 import {
+  billingFixture,
   channelsFixture,
   overviewFixture,
   requestsFixture,
   summaryFixture,
 } from '@/api/__tests__/opsFixtures'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
-import { useAppStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import OpsMonitorView from '@/views/admin/OpsMonitorView.vue'
 
@@ -37,14 +37,7 @@ async function render(role: number, channelRead = false) {
   const pinia = createPinia()
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [
-      { path: '/ops', name: 'ops-monitor', component: Empty },
-      {
-        path: '/billing/reconciliations',
-        name: 'billing-reconciliations',
-        component: Empty,
-      },
-    ],
+    routes: [{ path: '/ops', name: 'ops-monitor', component: Empty }],
   })
   await router.push('/ops')
   setActivePinia(pinia)
@@ -54,9 +47,6 @@ async function render(role: number, channelRead = false) {
       admin_permissions: channelRead ? { channel: { read: true } } : {},
     },
   } as never)
-  useAppStore().status = {
-    frontend_capabilities: { billing_reconciliation: 'live' },
-  } as never
   wrapper = mount(OpsMonitorView, {
     global: { plugins: [pinia, router, i18n] },
   })
@@ -87,18 +77,9 @@ beforeEach(async () => {
     items: [],
     total: 0,
   })
-  vi.spyOn(billingApi, 'metrics').mockResolvedValue({
-    price_versions: 1,
-    quote_attempts: 1,
-    prices_by_origin: [],
-    pending: 0,
-    reconciliations: 2,
-    reserved_quota: '0',
-    oldest_wait_seconds: 0,
-    idempotency_conflicts: 0,
-    recovery_failures: 0,
-    debt_events: 0,
-  })
+  vi.spyOn(opsMonitorApi, 'billing').mockResolvedValue(
+    parseOpsBillingMetrics(billingFixture())
+  )
 })
 afterEach(() => {
   wrapper?.unmount()
@@ -120,7 +101,7 @@ describe('ops monitor access', () => {
     expect(opsMonitorApi.channels).not.toHaveBeenCalled()
     expect(systemManagementApi.summary).not.toHaveBeenCalled()
     expect(systemManagementApi.tasks).not.toHaveBeenCalled()
-    expect(billingApi.metrics).not.toHaveBeenCalled()
+    expect(opsMonitorApi.billing).not.toHaveBeenCalled()
     expect(section('upstream')).toBe(false)
     expect(section('tasks')).toBe(false)
     expect(section('billing')).toBe(false)
@@ -141,7 +122,7 @@ describe('ops monitor access', () => {
   it('gives Root the task registry and billing health', async () => {
     const view = await render(100)
     expect(systemManagementApi.summary).toHaveBeenCalledTimes(1)
-    expect(billingApi.metrics).toHaveBeenCalledTimes(1)
+    expect(opsMonitorApi.billing).toHaveBeenCalledTimes(1)
     const tasks = view.get('[data-ops-section="tasks"]')
     expect(tasks.text()).toContain('Gateway state cleanup')
     expect(tasks.text()).toContain('Failing')
@@ -151,11 +132,38 @@ describe('ops monitor access', () => {
         .findAll('option')
         .map((option) => option.text())
     ).toEqual(['All types', 'Batch channel test', 'Gateway state cleanup'])
-    expect(view.find('[data-ops-reconciliations-link]').exists()).toBe(true)
+    const billing = view.get('[data-ops-section="billing"]')
+    expect(billing.text()).toContain('Overdue recoveries')
+    expect(billing.text()).toContain('Current database state')
+    expect(billing.get('[data-ops-settlements]').text()).toContain(
+      'Confirmed usage'
+    )
+    expect(billing.get('[data-ops-settlements]').text()).toContain(
+      'Estimated usage'
+    )
+    expect(billing.get('[data-ops-settlements]').text()).toContain(
+      'Frozen estimate'
+    )
+    expect(billing.find('a').exists()).toBe(false)
   })
 })
 
 describe('ops monitor data states', () => {
+  it('shows an empty recovery backlog without claiming that no active billing exists', async () => {
+    const fixture = billingFixture()
+    fixture.billing_recovery = { pending: 0, oldest_updated_at: 0 }
+    vi.mocked(opsMonitorApi.billing).mockResolvedValue(
+      parseOpsBillingMetrics(fixture)
+    )
+    const view = await render(100)
+    const billing = view.get('[data-ops-section="billing"]')
+    expect(billing.text()).toContain('No overdue billing recovery')
+    expect(billing.text()).toContain(
+      'Only unfinished records past the recovery grace period are counted.'
+    )
+    expect(billing.text()).toContain('--')
+  })
+
   it('renders unmeasured readings as "--" instead of zero', async () => {
     const view = await render(10)
     expect(view.get('[data-ops-gauge="cpu"]').text()).toContain('--')

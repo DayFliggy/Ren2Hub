@@ -22,7 +22,10 @@ var ErrBillingTaskPending = errors.New("accepted task owns its terminal accounti
 func frozenBillingEstimateTx(tx *gorm.DB, recovery BillingRecovery, attemptID string) (BillingAttempt, *billing.Usage, *billing.ChargeResult, error) {
 	var quote billing.Quote
 	if err := common.UnmarshalJsonStr(recovery.QuoteSnapshot, &quote); err != nil {
-		return BillingAttempt{}, nil, nil, ErrBillingEstimateMissing
+		return BillingAttempt{}, nil, nil, billing.ErrEvaluationEvidence
+	}
+	if err := validatePublishedQuoteIdentity(quote); err != nil {
+		return BillingAttempt{}, nil, nil, billing.ErrEvaluationEvidence
 	}
 	query := tx.Where("request_id = ? AND quote_hash = ? AND estimate_charge <> ''", recovery.RequestID, quote.Hash)
 	if attemptID != "" {

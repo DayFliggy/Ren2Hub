@@ -91,7 +91,8 @@ function closePrefill() {
 async function modelSaved() {
   drawerOpen.value = false
   await nextTick()
-  await modelsSection.value?.reload()
+  if (props.section === 'vendors') await vendorsSection.value?.reload()
+  else await modelsSection.value?.reload()
 }
 async function metadataChanged() {
   await loadVendors()

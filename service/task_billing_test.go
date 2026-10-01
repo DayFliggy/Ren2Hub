@@ -265,6 +265,7 @@ func TestTaskBillingAcceptedHoldAndSingleTerminalCharge(t *testing.T) {
 			seedChannel(t, 1)
 			task := makeTask(1, 1, 40, 1, BillingSourceWallet)
 			acceptTestTask(t, task)
+			before := billing.ReadOperationalMetrics().Settlements[billing.SettlementConfirmed]
 			assert.Equal(t, 60, getUserQuota(t, 1))
 			used, count := getUserUsageAccounting(t, 1)
 			assert.Zero(t, used)
@@ -292,6 +293,11 @@ func TestTaskBillingAcceptedHoldAndSingleTerminalCharge(t *testing.T) {
 			assert.EqualValues(t, actual, r.FundingAmount+r.SettlementDelta)
 			assert.EqualValues(t, 1, countLogs(t))
 			assert.EqualValues(t, actual, getLastLog(t).Quota)
+			increment := uint64(0)
+			if status == model.TaskStatusSuccess {
+				increment = 1
+			}
+			assert.Equal(t, before+increment, billing.ReadOperationalMetrics().Settlements[billing.SettlementConfirmed])
 		})
 	}
 }

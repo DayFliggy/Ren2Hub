@@ -195,6 +195,22 @@ export function channelsFixture() {
   }
 }
 
+export function billingFixture() {
+  return {
+    schema_version: 2,
+    recovery_scope: 'database',
+    billing_recovery: { pending: 2, oldest_updated_at: 1_767_225_000 },
+    billing: {
+      counter_scope: 'instance',
+      started_at: 1_767_220_000,
+      calculation_total: 123,
+      calculation_failures_total: 1,
+      missing_price_total: 0,
+      settlements_total: { confirmed: 115, estimated: 5, frozen_estimate: 2 },
+    },
+  }
+}
+
 export function summaryFixture() {
   return {
     types: [

@@ -70,5 +70,28 @@ func requireBillingSchema(db *gorm.DB) error {
 	if schema.EvidenceKeyID == "" || schema.EvidenceKeyID != cipher.KeyID() {
 		return errors.New("billing encryption key does not match this database")
 	}
+	return requireSupportedBillingRecoveryStates(db)
+}
+
+// Schema 5 predates automatic finalization. Retired states cannot be silently
+// left outside recovery or reinterpreted as permission to charge or release.
+func requireSupportedBillingRecoveryStates(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&BillingRecovery{}) {
+		return nil // Interrupted empty installations may not have this table yet.
+	}
+	var incompatible int64
+	err := db.Model(&BillingRecovery{}).
+		Where("status IS NULL OR status NOT IN ? OR consumption_state IN ? OR (status IN ? AND (consumption_state IS NULL OR consumption_state NOT IN ?))",
+			[]string{BillingRecoveryStatusActive, BillingRecoveryStatusSettlementPending, BillingRecoveryStatusRefundPending, BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded},
+			[]string{"pricing_pending", "pricing_collect"},
+			[]string{BillingRecoveryStatusSettled, BillingRecoveryStatusRefunded},
+			[]string{BillingRecoveryStatePending, BillingRecoveryStateCompleted}).
+		Count(&incompatible).Error
+	if err != nil {
+		return err
+	}
+	if incompatible != 0 {
+		return errors.New("unsupported billing recovery states; finish recovery with the previous release before upgrading")
+	}
 	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/billing"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -391,22 +392,27 @@ func ReserveTx(tx *gorm.DB, requestID string, target common.Quota) error {
 // Settle applies actual consumption, including debt beyond the estimate. The
 // reservation, both account projections, event and recovery state commit once.
 func Settle(requestID string, actual common.Quota) error {
-	return BillingTransaction(context.Background(), func(tx *gorm.DB) error { return SettleTx(tx, requestID, actual) })
+	var basis string
+	err := BillingTransaction(context.Background(), func(tx *gorm.DB) error {
+		// A transaction retry must not retain a rolled-back settlement signal.
+		basis = ""
+		return finalizeBillingTx(tx, requestID, actual, false, "", 0, "", &basis)
+	})
+	if err == nil && basis != "" {
+		billing.RecordSettlement(basis)
+	}
+	return err
 }
 
 func Release(requestID string) error {
 	return BillingTransaction(context.Background(), func(tx *gorm.DB) error { return ReleaseTx(tx, requestID) })
 }
 
-// SettleTx and ReleaseTx let business documents share the accounting commit.
-func SettleTx(tx *gorm.DB, requestID string, actual common.Quota) error {
-	return finalizeBillingTx(tx, requestID, actual, false, "", 0, "")
-}
 func ReleaseTx(tx *gorm.DB, requestID string) error {
-	return finalizeBillingTx(tx, requestID, 0, true, "", 0, "")
+	return finalizeBillingTx(tx, requestID, 0, true, "", 0, "", nil)
 }
 
-func finalizeBillingTx(tx *gorm.DB, requestID string, actual common.Quota, release bool, operationID string, actor int, reason string, expectedVersion ...int64) error {
+func finalizeBillingTx(tx *gorm.DB, requestID string, actual common.Quota, release bool, operationID string, actor int, reason string, settlementBasis *string, expectedVersion ...int64) error {
 	if requestID == "" || actual < 0 || actual > math.MaxInt32 {
 		return errors.New("invalid settlement amount")
 	}
@@ -493,5 +499,11 @@ func finalizeBillingTx(tx *gorm.DB, requestID string, actual common.Quota, relea
 	if !consumption.CountUsage && !consumption.LogEnabled && !consumption.ExportEnabled && consumption.TaskAdjustment == nil {
 		updates["consumption_state"], updates["consumption_statistics"], updates["consumption_log"] = BillingRecoveryStateCompleted, BillingRecoveryStateCompleted, BillingRecoveryStateCompleted
 	}
-	return tx.Model(&recovery).Updates(updates).Error
+	if err := tx.Model(&recovery).Updates(updates).Error; err != nil {
+		return err
+	}
+	if !release && settlementBasis != nil {
+		*settlementBasis = billing.SettlementBasis(consumption.Usage)
+	}
+	return nil
 }

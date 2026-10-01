@@ -8,7 +8,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 )
@@ -48,7 +47,6 @@ func settleBillingConsumption(ctx *gin.Context, info *relaycommon.RelayInfo, par
 		err = SettleBilling(ctx, info, int(params.Quota))
 	}
 	if err == nil {
-		billing.RecordSettlement(billing.SettlementBasis(consumption.Usage))
 		err = model.ApplyBillingRecoveryConsumption(info.RequestId)
 	}
 	info.BillingSettlementError = err

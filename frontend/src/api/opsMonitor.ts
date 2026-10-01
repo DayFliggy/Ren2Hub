@@ -235,6 +235,27 @@ export interface OpsChannels {
   unhealthy: OpsUnhealthyChannel[]
 }
 
+export const OPS_SETTLEMENT_BASES = [
+  'confirmed',
+  'estimated',
+  'frozen_estimate',
+] as const
+
+/** Root-only projection of the gateway metrics contract. */
+export interface OpsBillingMetrics {
+  schema_version: 2
+  recovery_scope: 'database'
+  billing_recovery: { pending: number; oldest_updated_at: number }
+  billing: {
+    counter_scope: 'instance'
+    started_at: number
+    calculation_total: number
+    calculation_failures_total: number
+    missing_price_total: number
+    settlements_total: Record<(typeof OPS_SETTLEMENT_BASES)[number], number>
+  }
+}
+
 function record(value: unknown, endpoint: string): Record<string, unknown> {
   if (!isRecord(value)) invalidResponse(endpoint)
   return value
@@ -579,7 +600,53 @@ export function parseOpsChannels(
   }
 }
 
+export function parseOpsBillingMetrics(
+  value: unknown,
+  endpoint = '/api/gateway/metrics'
+): OpsBillingMetrics {
+  const row = record(value, endpoint)
+  const recovery = record(row.billing_recovery, endpoint)
+  const billing = record(row.billing, endpoint)
+  const settlements = record(billing.settlements_total, endpoint)
+  if (
+    row.schema_version !== 2 ||
+    row.recovery_scope !== 'database' ||
+    billing.counter_scope !== 'instance'
+  )
+    invalidResponse(endpoint)
+  return {
+    schema_version: 2,
+    recovery_scope: 'database',
+    billing_recovery: {
+      pending: count(recovery.pending, endpoint),
+      oldest_updated_at: count(recovery.oldest_updated_at, endpoint),
+    },
+    billing: {
+      counter_scope: 'instance',
+      started_at: count(billing.started_at, endpoint),
+      calculation_total: count(billing.calculation_total, endpoint),
+      calculation_failures_total: count(
+        billing.calculation_failures_total,
+        endpoint
+      ),
+      missing_price_total: count(billing.missing_price_total, endpoint),
+      settlements_total: {
+        confirmed: count(settlements.confirmed, endpoint),
+        estimated: count(settlements.estimated, endpoint),
+        frozen_estimate: count(settlements.frozen_estimate, endpoint),
+      },
+    },
+  }
+}
+
 export const opsMonitorApi = {
+  async billing(signal?: AbortSignal) {
+    const endpoint = '/api/gateway/metrics'
+    return parseOpsBillingMetrics(
+      await api.get(endpoint, undefined, { signal }),
+      endpoint
+    )
+  },
   async overview(window: OpsWindow, signal?: AbortSignal) {
     const endpoint = '/api/ops/overview'
     const overview = parseOpsOverview(

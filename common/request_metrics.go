@@ -23,6 +23,8 @@ type requestMetricsBucketState struct {
 var requestMetrics = struct {
 	sync.Mutex
 	buckets [requestMetricsBuckets]requestMetricsBucketState
+	total   uint64
+	success uint64
 }{}
 
 var applicationTraffic struct {
@@ -30,15 +32,12 @@ var applicationTraffic struct {
 	responseBytes atomic.Uint64
 }
 
-// Process-lifetime relay outcome counters; samplers derive windowed rates
-// from their deltas.
-var requestOutcomeTotals struct {
-	total   atomic.Uint64
-	success atomic.Uint64
-}
-
+// Counters are read together with the same lock used to record an outcome,
+// so a sampler never splits a successful request across rate windows.
 func RequestOutcomeTotals() (total, success uint64) {
-	return requestOutcomeTotals.total.Load(), requestOutcomeTotals.success.Load()
+	requestMetrics.Lock()
+	defer requestMetrics.Unlock()
+	return requestMetrics.total, requestMetrics.success
 }
 
 func ObserveApplicationRequestBytes(n int) {
@@ -62,14 +61,14 @@ func ObserveRequest(status int) {
 }
 
 func ObserveRequestOutcome(success bool) {
-	requestOutcomeTotals.total.Add(1)
-	if success {
-		requestOutcomeTotals.success.Add(1)
-	}
 	now := time.Now().Unix()
 	start := now - now%int64(requestMetricsBucket.Seconds())
 	requestMetrics.Lock()
 	defer requestMetrics.Unlock()
+	requestMetrics.total++
+	if success {
+		requestMetrics.success++
+	}
 
 	index := int((start / int64(requestMetricsBucket.Seconds())) % requestMetricsBuckets)
 	bucket := &requestMetrics.buckets[index]

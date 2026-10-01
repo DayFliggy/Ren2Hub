@@ -369,7 +369,7 @@ export async function configureStablePage(
     ['/api/ops/requests', opsRequests()],
     ['/api/ops/channels', opsChannels()],
     ['/api/system-task/summary', opsTaskSummary()],
-    ['/api/billing/metrics', opsBillingMetrics()],
+    ['/api/gateway/metrics', opsBillingMetrics()],
     ['/api/system-task/list', []],
     ['/api/option/', []],
     [

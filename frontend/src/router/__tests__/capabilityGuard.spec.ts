@@ -328,7 +328,7 @@ describe('capability route guard', () => {
       expect(router.currentRoute.value.path).toBe(path)
       expect(router.currentRoute.value.query).toEqual({
         q: 'alpha',
-        p: '2',
+        ...(path === '/models/metadata' ? { page: '2' } : { p: '2' }),
         manage,
       })
       expect(router.currentRoute.value.hash).toBe('#details')
@@ -337,6 +337,58 @@ describe('capability route guard', () => {
     await router.push('/models/vendors')
     // The vendors section highlights the one "Models" sidebar entry.
     expect(router.currentRoute.value.meta.nav).toBe('models-admin')
+  })
+
+  it('normalizes old model filters during navigation on the same route', async () => {
+    useAuthStore().user!.role = 10
+    await router.push('/models/metadata?filter=initial')
+    await router.push(
+      '/models/metadata?keyword=gpt&sync_official=0&p=2&page_size=50&vendor=3&tag=a&tag=b#models'
+    )
+    expect(router.currentRoute.value.path).toBe('/models/metadata')
+    expect(router.currentRoute.value.query).toEqual({
+      filter: 'gpt',
+      sync: '0',
+      page: '2',
+      pageSize: '50',
+      vendor: '3',
+      tag: ['a', 'b'],
+    })
+    expect(router.currentRoute.value.hash).toBe('#models')
+  })
+
+  it('prefers canonical model filter keys and removes their old aliases', async () => {
+    useAuthStore().user!.role = 10
+    await router.push(
+      '/console/admin/models?keyword=old&filter=new&sync_official=0&sync=1&p=2&page=3&page_size=50&pageSize=20&extra=yes#models'
+    )
+    expect(router.currentRoute.value.path).toBe('/models/metadata')
+    expect(router.currentRoute.value.query).toEqual({
+      filter: 'new',
+      sync: '1',
+      page: '3',
+      pageSize: '20',
+      extra: 'yes',
+    })
+    expect(router.currentRoute.value.hash).toBe('#models')
+  })
+
+  it('opens former vendor management links through the same redirect contract', async () => {
+    useAuthStore().user!.role = 10
+    const source =
+      '/console/admin/models?manage=vendors&keyword=gpt&vFilter=open&extra=yes#vendors'
+    await router.push(source)
+    expect(router.currentRoute.value.path).toBe('/models/vendors')
+    expect(router.currentRoute.value.query).toEqual({
+      filter: 'gpt',
+      vFilter: 'open',
+      extra: 'yes',
+    })
+    expect(router.currentRoute.value.hash).toBe('#vendors')
+    expect(sanitizeRedirect(source)).toBe(router.currentRoute.value.fullPath)
+    expect(sanitizeSetupRedirect(source)).toBe(
+      router.currentRoute.value.fullPath
+    )
   })
 
   it('redirects former automatic pricing settings to the model pricing page', async () => {

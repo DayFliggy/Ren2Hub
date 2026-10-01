@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../client'
 import {
   opsMonitorApi,
+  parseOpsBillingMetrics,
   parseOpsChannels,
   parseOpsOverview,
   parseOpsRequests,
 } from '../opsMonitor'
 import {
+  billingFixture,
   channelsFixture,
   overviewFixture,
   requestsFixture,
@@ -15,6 +17,50 @@ import {
 type Overview = ReturnType<typeof overviewFixture>
 
 afterEach(() => vi.restoreAllMocks())
+
+describe('ops billing health contract', () => {
+  it('reads recovery and settlement counters from the Root gateway endpoint', async () => {
+    const signal = new AbortController().signal
+    const get = vi.spyOn(api, 'get').mockResolvedValue(billingFixture())
+    const metrics = await opsMonitorApi.billing(signal)
+    expect(get).toHaveBeenCalledWith('/api/gateway/metrics', undefined, {
+      signal,
+    })
+    expect(metrics.billing_recovery).toEqual({
+      pending: 2,
+      oldest_updated_at: 1_767_225_000,
+    })
+    expect(metrics.billing.settlements_total).toEqual({
+      confirmed: 115,
+      estimated: 5,
+      frozen_estimate: 2,
+    })
+  })
+
+  it('rejects obsolete versions, wrong scopes and missing or invalid counters', () => {
+    const valid = billingFixture()
+    for (const value of [
+      { ...valid, schema_version: 1 },
+      { ...valid, recovery_scope: 'instance' },
+      { ...valid, billing: { ...valid.billing, counter_scope: 'database' } },
+      {
+        ...valid,
+        billing_recovery: { ...valid.billing_recovery, pending: -1 },
+      },
+      { ...valid, billing: { ...valid.billing, calculation_total: '123' } },
+      {
+        ...valid,
+        billing: {
+          ...valid.billing,
+          settlements_total: { confirmed: 1, estimated: 0 },
+        },
+      },
+    ])
+      expect(() => parseOpsBillingMetrics(value)).toThrow(
+        'Invalid API response'
+      )
+  })
+})
 
 describe('ops overview contract', () => {
   it('keeps unmeasured values as null and measured zeros as zero', () => {

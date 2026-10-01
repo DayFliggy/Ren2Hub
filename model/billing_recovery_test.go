@@ -268,3 +268,26 @@ func TestFrozenEstimateSettlesOnlyTheAttemptEstimate(t *testing.T) {
 		assertBillingProjection(t, db, 100, 100)
 	})
 }
+
+func TestCorruptQuoteCannotAuthorizeUnsentRelease(t *testing.T) {
+	for _, snapshot := range []string{"{broken", "{}", ""} {
+		t.Run(snapshot, func(t *testing.T) {
+			db := setupBillingRecoveryTestDB(t)
+			seedBillingAccount(t, db, 100, 100, false)
+			newReservation(t, "corrupt-quote")
+			require.NoError(t, Reserve("corrupt-quote", 40))
+			_, err := bindConsumptionEvidence("corrupt-quote", BillingConsumption{Log: Log{UserId: 1, TokenId: 1, Quota: 30}})
+			require.NoError(t, err)
+			require.NoError(t, db.Model(&BillingRecovery{}).Where("request_id = ?", "corrupt-quote").Update("quote_snapshot", snapshot).Error)
+			require.ErrorIs(t, PrepareFrozenEstimateConsumption("corrupt-quote", "", Log{}, true), billing.ErrEvaluationEvidence)
+			require.ErrorIs(t, MarkUnsentBillingRecoveryRefundPending("corrupt-quote"), billing.ErrEvaluationEvidence)
+			var recovery BillingRecovery
+			require.NoError(t, db.First(&recovery, "request_id = ?", "corrupt-quote").Error)
+			assert.Equal(t, BillingRecoveryStatusActive, recovery.Status)
+			var user User
+			require.NoError(t, db.First(&user, 1).Error)
+			assert.EqualValues(t, 40, user.ReservedQuota)
+			assert.Zero(t, user.UsedQuota)
+		})
+	}
+}

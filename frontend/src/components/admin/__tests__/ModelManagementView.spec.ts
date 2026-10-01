@@ -4,12 +4,17 @@ import { createI18n } from 'vue-i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ModelManagementView from '@/views/admin/ModelManagementView.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
+import VendorDrawer from '@/components/admin/VendorDrawer.vue'
+import VendorsSection from '@/components/admin/VendorsSection.vue'
+import ModelMetadataDrawer from '@/components/admin/ModelMetadataDrawer.vue'
 
 const mocks = vi.hoisted(() => ({
   models: vi.fn(),
   allVendors: vi.fn(),
   setModelStatus: vi.fn(),
   deleteModel: vi.fn(),
+  vendors: vi.fn(),
+  vendorCounts: vi.fn(),
 }))
 vi.mock('@/api/adminManagement', () => ({ metadataApi: mocks }))
 const rows = [1, 2].map((id) => ({
@@ -62,7 +67,7 @@ async function setup(path = '/models/metadata') {
           MetadataSyncDialog: true,
           MissingModelsDialog: true,
           PrefillGroupDialog: true,
-          VendorsSection: true,
+          VendorDrawer: true,
           ConfirmDialog: true,
           FieldVisibilityMenu: true,
           PageBreadcrumb: { template: '<div><slot name="action" /></div>' },
@@ -93,6 +98,14 @@ beforeEach(() => {
       updated_time: null,
     },
   ])
+  mocks.vendors.mockResolvedValue({
+    items: [
+      { id: 1, name: 'Test vendor', description: '', icon: '', status: 1 },
+      { id: 2, name: 'Other vendor', description: '', icon: '', status: 1 },
+    ],
+    total: 2,
+  })
+  mocks.vendorCounts.mockResolvedValue({ '1': 2, '2': 0 })
   mocks.setModelStatus.mockImplementation(async (id: number) => {
     if (id === 2) throw new Error('permission denied')
   })
@@ -145,7 +158,7 @@ describe('model management sections', () => {
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/models/vendors')
     expect(router.currentRoute.value.query).toEqual({ vFilter: 'open' })
-    expect(wrapper.find('vendors-section-stub').exists()).toBe(true)
+    expect(wrapper.findComponent(VendorsSection).exists()).toBe(true)
     wrapper.unmount()
   })
   it('opens prefill groups from the deep link and clears it on close', async () => {
@@ -157,6 +170,35 @@ describe('model management sections', () => {
     dialog.vm.$emit('close')
     await flushPromises()
     expect(router.currentRoute.value.query.manage).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('refreshes vendor model counts after editing a linked model', async () => {
+    const { wrapper } = await setup('/models/vendors')
+    expect(wrapper.get('a[href="/models/metadata?vendor=1"]').text()).toContain(
+      '2'
+    )
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text() === 'Test vendor')!
+      .trigger('click')
+    wrapper.getComponent(VendorDrawer).vm.$emit('open-model', { id: 1 })
+    await flushPromises()
+    const editor = wrapper.getComponent(ModelMetadataDrawer)
+    expect(editor.props('modelId')).toBe(1)
+
+    // Moving the linked model changes the count for both affected vendors.
+    mocks.vendorCounts.mockResolvedValue({ '1': 1, '2': 1 })
+    editor.vm.$emit('saved')
+    await flushPromises()
+
+    expect(wrapper.findComponent(ModelMetadataDrawer).exists()).toBe(false)
+    expect(mocks.vendorCounts).toHaveBeenCalledTimes(2)
+    for (const vendorId of [1, 2]) {
+      expect(
+        wrapper.get(`a[href="/models/metadata?vendor=${vendorId}"]`).text()
+      ).toContain('1')
+    }
     wrapper.unmount()
   })
 })

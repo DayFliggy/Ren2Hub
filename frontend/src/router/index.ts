@@ -1,6 +1,8 @@
 import {
   createRouter,
   createWebHistory,
+  parseQuery,
+  stringifyQuery,
   type RouteLocationRaw,
 } from 'vue-router'
 
@@ -13,7 +15,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useSetupStore } from '@/stores/setup'
 import { publicRoutes } from '@/router/publicRoutes'
 import { adminRoutes } from '@/router/adminRoutes'
-import { canonicalLegacyPath, legacyQueryDefaults } from '@/router/legacyRoutes'
+import { canonicalLegacyLocation } from '@/router/legacyRoutes'
 import { navigationError } from '@/router/navigationState'
 
 const CONSOLE_ENTRY: RouteLocationRaw = { name: 'dashboard' }
@@ -30,9 +32,9 @@ export function sanitizeSetupRedirect(value: unknown): string | null {
   try {
     const url = new URL(value, window.location.origin)
     if (url.origin !== window.location.origin) return null
-    const pathname = canonicalLegacyPath(url.pathname, url.searchParams)
-    if (pathname === '/setup/error') return null
-    return `${pathname}${url.search}${url.hash}`
+    const target = canonicalLegacyLocation(url.pathname, parseQuery(url.search))
+    if (target.path === '/setup/error') return null
+    return router.resolve({ ...target, hash: url.hash }).fullPath
   } catch {
     return null
   }
@@ -50,8 +52,10 @@ export function sanitizeRedirect(value: unknown): string | null {
   try {
     const url = new URL(value, window.location.origin)
     if (url.origin !== window.location.origin) return null
-    const pathname = canonicalLegacyPath(url.pathname, url.searchParams)
-    const target = router.resolve(pathname)
+    const target = router.resolve({
+      ...canonicalLegacyLocation(url.pathname, parseQuery(url.search)),
+      hash: url.hash,
+    })
     if (
       !target.matched.length ||
       target.name === 'not-found' ||
@@ -60,7 +64,7 @@ export function sanitizeRedirect(value: unknown): string | null {
       target.meta.setupError
     )
       return null
-    return `${pathname}${url.search}${url.hash}`
+    return target.fullPath
   } catch {
     return null
   }
@@ -485,13 +489,15 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  const query = new URL(to.fullPath, window.location.origin).searchParams
-  const canonical = canonicalLegacyPath(to.path, query)
-  if (canonical !== to.path)
+  const canonical = canonicalLegacyLocation(to.path, to.query)
+  if (
+    canonical.path !== to.path ||
+    stringifyQuery(canonical.query) !== stringifyQuery(to.query)
+  )
     return {
-      path: canonical,
-      query: { ...legacyQueryDefaults(to.path), ...to.query },
+      ...canonical,
       hash: to.hash,
+      replace: true,
     }
   if (to.meta.setupError) {
     await loadMessageDomain('setup')

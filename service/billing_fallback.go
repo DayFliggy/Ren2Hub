@@ -8,13 +8,12 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billing"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 )
 
 // Fallback reasons are fixed codes. Raw pricing errors can quote request
-// values, so they are logged by the caller and never copied into user logs.
+// values, so neither application logs nor consume logs copy their raw text.
 const (
 	billingFallbackUnpriced      = "usage_unpriced"
 	billingFallbackPricingFailed = "pricing_failed"
@@ -40,7 +39,7 @@ func SettleBillingFallback(ctx *gin.Context, info *relaycommon.RelayInfo, reason
 // releasing or settling the same request concurrently.
 func settleBillingFallback(ctx *gin.Context, info *relaycommon.RelayInfo, reason string, cause error) {
 	if cause != nil {
-		logger.LogError(ctx, fmt.Sprintf("billing settles from persisted evidence (request_id=%s, reason=%s): %v", info.RequestId, reason, cause))
+		logger.LogError(ctx, fmt.Sprintf("billing settles from persisted evidence (request_id=%s, reason=%s)", info.RequestId, reason))
 	}
 	template := model.Log{Content: "按发送前估算结算", Group: info.UsingGroup, ModelName: info.BillingModelName(),
 		IsStream: info.IsStream, UseTime: int(common.GetTimestamp() - info.StartTime.Unix()), Other: billingFallbackOther(reason)}
@@ -83,13 +82,11 @@ func finishActiveBilling(ctx context.Context, requestID, attemptID string, templ
 	case recovery.ConsumptionState == "":
 		return releaseUnsentBilling(requestID)
 	}
-	basis := billing.SettlementEstimated
 	err = model.FinalizeCollectedBillingConsumption(requestID)
 	if err != nil {
 		if !errors.Is(err, model.ErrNoCollectedBillingUsage) {
 			logger.LogError(ctx, fmt.Sprintf("collected billing usage cannot settle (request_id=%s): %v", requestID, err))
 		}
-		basis = billing.SettlementFrozenEstimate
 		err = model.PrepareFrozenEstimateConsumption(requestID, attemptID, template, true)
 	}
 	switch {
@@ -101,9 +98,5 @@ func finishActiveBilling(ctx context.Context, requestID, attemptID string, templ
 	case err != nil:
 		return model.BillingRecoveryStatusActive, err
 	}
-	status, err := recoverBillingSettlement(requestID)
-	if err == nil {
-		billing.RecordSettlement(basis)
-	}
-	return status, err
+	return recoverBillingSettlement(requestID)
 }

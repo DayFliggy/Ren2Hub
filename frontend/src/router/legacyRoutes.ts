@@ -1,4 +1,6 @@
 // Compatibility only. Canonical paths and access rules live in the route records.
+import { stringifyQuery, type LocationQuery } from 'vue-router'
+
 const aliases: Record<string, string> = {
   '/console': '/dashboard',
   '/auth/sign-in': '/sign-in',
@@ -120,4 +122,34 @@ export function canonicalLegacyPath(
   )
     return '/404'
   return path
+}
+
+/** Normalize bookmarks once for navigation and login/setup return links. */
+export function canonicalLegacyLocation(path: string, query: LocationQuery) {
+  const normalizedQuery: LocationQuery = {
+    ...legacyQueryDefaults(path),
+    ...query,
+  }
+  let normalizedPath = canonicalLegacyPath(
+    path,
+    new URLSearchParams(stringifyQuery(query))
+  )
+  if (normalizedPath === '/models/metadata') {
+    for (const [oldKey, key] of [
+      ['keyword', 'filter'],
+      ['sync_official', 'sync'],
+      ['p', 'page'],
+      ['page_size', 'pageSize'],
+    ] as const) {
+      if (!Object.hasOwn(normalizedQuery, oldKey)) continue
+      if (!Object.hasOwn(normalizedQuery, key))
+        normalizedQuery[key] = normalizedQuery[oldKey]!
+      delete normalizedQuery[oldKey]
+    }
+    if (normalizedQuery.manage === 'vendors') {
+      normalizedPath = '/models/vendors'
+      delete normalizedQuery.manage
+    }
+  }
+  return { path: normalizedPath, query: normalizedQuery }
 }
