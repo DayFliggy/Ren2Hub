@@ -5,7 +5,6 @@ import { useI18n } from 'vue-i18n'
 import { SERIES_TOKENS } from '@/charts/palette'
 import { useEChart } from '@/charts/useEChart'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
 import type { ModelShare } from '@/composables/useDashboard'
 import { quotaForChart, quotaRatio, sumQuota } from '@/utils/quota'
 import {
@@ -60,6 +59,8 @@ function modelShareRatio(quota: string): number {
 const slices = computed(() => {
   const head = ranked.value.slice(0, TOP_N)
   const tail = ranked.value.slice(TOP_N)
+  if (!head.length) return [{ name: t('dashboard.stats.noData'), value: 1 }]
+
   if (!tail.length)
     return head.map((m) => ({ name: m.model, value: quotaForChart(m.quota) }))
 
@@ -92,14 +93,16 @@ function swatchColor(rowIndex: number): string {
 const { dispatch } = useEChart(
   el,
   (p) => ({
-    color: p.series,
+    color: props.items.length ? p.series : [p.borderSubtle],
     tooltip: {
       trigger: 'item',
       backgroundColor: p.surfaceSolid,
       borderColor: p.borderSubtle,
       textStyle: { color: p.textPrimary, fontSize: 12 },
-      formatter: (params: { name: string; percent: number; value: number }) =>
-        `${escapeHtml(params.name)}<br/>${escapeHtml(formatMoney(params.value))} · ${escapeHtml(String(params.percent))}%`,
+      formatter: (params: { name: string; percent: number; value: number }) => {
+        if (!props.items.length) return escapeHtml(t('dashboard.stats.noData'))
+        return `${escapeHtml(params.name)}<br/>${escapeHtml(formatMoney(params.value))} · ${escapeHtml(String(params.percent))}%`
+      },
     },
     series: [
       {
@@ -114,7 +117,7 @@ const { dispatch } = useEChart(
         },
         label: { show: false },
         emphasis: {
-          scaleSize: 5,
+          scaleSize: props.items.length ? 5 : 0,
           itemStyle: {
             shadowBlur: p.isDark ? 12 : 6,
             shadowColor: p.isDark
@@ -152,7 +155,7 @@ const { dispatch } = useEChart(
       },
     ],
   }),
-  () => props.items
+  () => [props.items, slices.value]
 )
 
 /** Row hover lights up the matching donut slice. */
@@ -189,13 +192,6 @@ function highlight(rowIndex: number, on: boolean) {
         />
       </div>
     </div>
-
-    <EmptyState
-      v-else-if="!items.length"
-      class="grow"
-      :title="t('dashboard.stats.noData')"
-      :hint="t('dashboard.modelDist.emptyHint')"
-    />
 
     <div
       v-else
@@ -271,6 +267,14 @@ function highlight(rowIndex: number, on: boolean) {
             </tr>
           </thead>
           <tbody>
+            <tr v-if="!ranked.length">
+              <td
+                colspan="5"
+                class="py-12 text-center font-mono text-xs text-[var(--text-tertiary)]"
+              >
+                {{ t('dashboard.stats.noData') }}
+              </td>
+            </tr>
             <tr
               v-for="(m, i) in ranked"
               :key="m.model"

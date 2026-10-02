@@ -40,6 +40,15 @@ const successStatus = computed(() =>
 )
 const admissionStatus = computed(() => checkStatus(props.overview, 'admission'))
 
+const queueCapacityPercent = computed(() => {
+  const admission = gateway.value?.admission
+  if (!admission || admission.total_queue_size <= 0) return 0
+  return Math.min(
+    100,
+    Math.round((admission.queued / admission.total_queue_size) * 100)
+  )
+})
+
 function boundLabel(bound: number) {
   const latency = formatLatencyMs(bound, locale.value)
   return `${latency.value}${latency.unit}`
@@ -221,6 +230,36 @@ useEChart(
               size="lg"
             />
           </dl>
+        </div>
+      </div>
+      <div
+        v-if="gateway.admission.total_queue_size > 0"
+        class="ops-queue-progress-bar"
+      >
+        <div class="ops-queue-progress-label">
+          <span
+            >{{ t('gateway.queued') }} /
+            {{
+              t('gateway.queueCapacity', {
+                value: formatCount(gateway.admission.total_queue_size, locale),
+              })
+            }}</span
+          >
+          <span class="font-mono font-medium">{{ queueCapacityPercent }}%</span>
+        </div>
+        <div class="ops-queue-progress-track">
+          <div
+            class="ops-queue-progress-fill"
+            :style="{
+              width: `${queueCapacityPercent}%`,
+              background:
+                queueCapacityPercent >= 80
+                  ? 'var(--status-danger)'
+                  : queueCapacityPercent >= 40
+                    ? 'var(--status-warning)'
+                    : 'var(--signal)',
+            }"
+          />
         </div>
       </div>
       <p class="ops-footnote">

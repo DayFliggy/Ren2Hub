@@ -28,40 +28,28 @@ for (const theme of ['light', 'dark'] as const) {
         mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }
       )
       await configureStablePage(page, { theme })
-      let eventsAvailable = true
       await page.route('**/api/billing/self/events?*', (route) =>
-        eventsAvailable
-          ? route.fulfill({
-              json: { success: true, data: { items: [event], total: 1 } },
-            })
-          : route.fulfill({
-              status: 503,
-              json: { success: false, message: 'unavailable' },
-            })
+        route.fulfill({
+          json: { success: true, data: { items: [event], total: 1 } },
+        })
       )
       const failures: string[] = []
       page.on('pageerror', (error) => failures.push(error.message))
       await page.goto('/wallet')
+      // 资金流水列表与重复 quota 卡片已从钱包页面移除，验证其不再渲染
       const history = page
         .locator('section')
         .filter({ has: page.getByRole('heading', { name: '资金流水' }) })
-      await expect(
-        history.getByText(event.event_id, { exact: true })
-      ).toBeVisible()
-      await expect(history.getByText('$0.500', { exact: true })).toBeVisible()
+      await expect(history).toHaveCount(0)
       await expect(page.getByRole('tab')).toHaveCount(0)
       await expect(page.getByText('在途预留')).toHaveCount(0)
+      // 验证充值记录等核心区块正常显示
+      await expect(
+        page.getByRole('heading', { name: '充值记录' })
+      ).toBeVisible()
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: testInfo.outputPath('wallet-fund-flow.png'),
-        fullPage: true,
-      })
-      eventsAvailable = false
-      await history.getByRole('button', { name: '刷新' }).click()
-      await expect(history.getByRole('alert')).toContainText('账务数据暂不可用')
-      await assertNoHorizontalOverflow(page)
-      await page.screenshot({
-        path: testInfo.outputPath('wallet-error.png'),
         fullPage: true,
       })
       expect(failures).toEqual([])

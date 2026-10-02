@@ -13,7 +13,6 @@ import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useToast } from '@/composables/useToast'
 import { decimalToQuota, quotaToDecimal } from '@/utils/quota'
-import GatewayUserPanel from '@/components/console/gateway/GatewayUserPanel.vue'
 import ConversionPolicySelect from '@/components/console/gateway/ConversionPolicySelect.vue'
 import type { ConversionPolicy } from '@/types/gateway'
 
@@ -205,67 +204,79 @@ async function save() {
         </div>
       </fieldset>
 
-      <FormField :label="t('keys.nameLabel')">
-        <TextInput
-          v-model="form.name"
-          name="token-name"
-          :placeholder="t('keys.namePlaceholder')"
-        />
-      </FormField>
-      <ConversionPolicySelect
-        v-model="form.conversion_policy"
-        :disabled="saving"
-      />
-
-      <!-- expiry: toggle-hidden -->
-      <div
-        class="flex items-center justify-between rounded-xl border border-[var(--border-subtle)] px-4 py-2.5"
-      >
-        <span class="text-sm text-[var(--text-secondary)]">{{
-          t('keys.expireLabel')
-        }}</span>
-        <ConsoleToggle v-model="vis.expiry" :label="t('keys.expireLabel')" />
-      </div>
-      <div v-if="vis.expiry">
-        <input
-          v-model="form.expireDate"
-          type="date"
-          name="token-expiration"
-          :aria-label="t('keys.expireLabel')"
-          class="h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 text-sm text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus-ring"
-        />
-      </div>
-
-      <!-- quota: unlimited by default; toggle to set a cap -->
-      <div
-        class="overflow-hidden rounded-xl border border-[var(--border-subtle)]"
-      >
-        <div class="flex items-center justify-between px-4 py-2.5">
-          <span class="text-sm text-[var(--text-secondary)]">{{
-            t('billing.budgetUSD')
-          }}</span>
-          <label
-            class="flex items-center gap-2 text-xs text-[var(--text-secondary)]"
-          >
-            <ConsoleToggle
-              v-model="form.unlimited"
-              :label="t('keys.unlimitedQuota')"
-            />
-            {{ t('keys.unlimitedQuota') }}
-          </label>
-        </div>
-        <div
-          v-if="!form.unlimited"
-          class="border-t border-[var(--border-subtle)] px-4 pb-3 pt-2"
-        >
-          <input
-            v-model="form.quotaDollars"
-            inputmode="decimal"
-            class="w-full rounded-lg bg-[var(--surface-muted)] p-3 font-mono focus-ring"
-            name="token-quota"
-            :aria-label="t('billing.budgetUSD')"
-            placeholder="20"
+      <div class="grid gap-4 sm:grid-cols-2">
+        <FormField :label="t('keys.nameLabel')">
+          <TextInput
+            v-model="form.name"
+            name="token-name"
+            :placeholder="t('keys.namePlaceholder')"
           />
+        </FormField>
+        <ConversionPolicySelect
+          v-model="form.conversion_policy"
+          :disabled="saving"
+        />
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2 items-start">
+        <!-- expiry: toggle-hidden -->
+        <div
+          class="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
+        >
+          <div class="flex items-center justify-between px-4 py-2.5">
+            <span class="text-sm font-medium text-[var(--text-secondary)]">{{
+              t('keys.expireLabel')
+            }}</span>
+            <ConsoleToggle
+              v-model="vis.expiry"
+              :label="t('keys.expireLabel')"
+            />
+          </div>
+          <div
+            v-if="vis.expiry"
+            class="border-t border-[var(--border-subtle)] px-4 pb-3 pt-2"
+          >
+            <input
+              v-model="form.expireDate"
+              type="date"
+              name="token-expiration"
+              :aria-label="t('keys.expireLabel')"
+              class="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 text-sm text-[var(--text-primary)] focus-ring"
+            />
+          </div>
+        </div>
+
+        <!-- quota: unlimited by default; toggle to set a cap -->
+        <div
+          class="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
+        >
+          <div class="flex items-center justify-between px-4 py-2.5">
+            <span class="text-sm font-medium text-[var(--text-secondary)]">{{
+              t('billing.budgetUSD')
+            }}</span>
+            <label
+              class="flex items-center gap-2 text-xs text-[var(--text-secondary)]"
+            >
+              <ConsoleToggle
+                v-model="form.unlimited"
+                :label="t('keys.unlimitedQuota')"
+              />
+              {{ t('keys.unlimitedQuota') }}
+            </label>
+          </div>
+          <div
+            v-if="!form.unlimited"
+            class="border-t border-[var(--border-subtle)] px-4 pb-3 pt-2"
+          >
+            <input
+              v-model="form.quotaDollars"
+              inputmode="decimal"
+              class="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 font-mono text-sm text-[var(--text-primary)] focus-ring"
+              name="token-quota"
+              :aria-label="t('billing.budgetUSD')"
+              placeholder="20"
+            />
+          </div>
         </div>
       </div>
 
@@ -359,17 +370,25 @@ async function save() {
       </section>
     </div>
 
-    <GatewayUserPanel v-if="open" />
     <template #footer>
-      <ConsoleButton
-        size="lg"
-        block
-        :loading="saving"
-        :disabled="!form.name.trim()"
-        @click="save"
-      >
-        {{ t('common.confirm') }}
-      </ConsoleButton>
+      <div class="grid grid-cols-2 gap-3">
+        <ConsoleButton
+          variant="secondary"
+          size="lg"
+          :disabled="saving"
+          @click="emit('close')"
+        >
+          {{ t('common.cancel') }}
+        </ConsoleButton>
+        <ConsoleButton
+          size="lg"
+          :loading="saving"
+          :disabled="!form.name.trim()"
+          @click="save"
+        >
+          {{ t('common.confirm') }}
+        </ConsoleButton>
+      </div>
     </template>
   </ConsoleModal>
 </template>

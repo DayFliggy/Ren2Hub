@@ -238,6 +238,16 @@ export const opsMonitorMessages = {
         missing_price_total: '缺少价格',
       },
     },
+    hud: {
+      healthScore: '健康指数',
+      livePulse: '实时遥测',
+      activeConcurrency: '处理中并发',
+      grantedRate: '放行速率',
+      rejectedRate: '拒绝速率',
+      fullscreen: '大屏模式',
+      exitFullscreen: '退出全屏',
+      autoRefresh: '{seconds}s',
+    },
   },
   en: {
     title: 'Ops monitor',
@@ -478,6 +488,16 @@ export const opsMonitorMessages = {
         calculation_failures_total: 'Calculation failures',
         missing_price_total: 'Missing prices',
       },
+    },
+    hud: {
+      healthScore: 'Health Index',
+      livePulse: 'Live Telemetry',
+      activeConcurrency: 'In-flight',
+      grantedRate: 'Granted Rate',
+      rejectedRate: 'Rejected Rate',
+      fullscreen: 'Fullscreen NOC',
+      exitFullscreen: 'Exit Fullscreen',
+      autoRefresh: '{seconds}s',
     },
   },
 }

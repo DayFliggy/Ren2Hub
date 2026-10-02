@@ -5,7 +5,6 @@ import { useI18n } from 'vue-i18n'
 import { useEChart } from '@/charts/useEChart'
 import { areaGradient, lineMood } from '@/charts/themePreset'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
 import type { TokenTrendPoint } from '@/composables/useDashboard'
 import { formatCompact } from '@/utils/format'
 import { escapeHtml } from '@/utils/html'
@@ -17,6 +16,30 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const el = ref<HTMLElement | null>(null)
+
+function defaultPoints(days = 30): TokenTrendPoint[] {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(start)
+    date.setDate(start.getDate() - (days - index - 1))
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return {
+      date: `${year}-${month}-${day}`,
+      input: 0,
+      output: 0,
+      cache_create: 0,
+      cache_read: 0,
+      hit_rate: 0,
+    }
+  })
+}
+
+const displayPoints = computed(() =>
+  props.points.length > 0 ? props.points : defaultPoints(30)
+)
 
 const hasData = computed(() =>
   props.points.some(
@@ -54,7 +77,7 @@ useEChart(
   el,
   (p) => {
     const mood = lineMood(p)
-    const dates = props.points.map((d) => d.date)
+    const dates = displayPoints.value.map((d) => d.date)
     const labels = {
       input: t('dashboard.tokenTrend.input'),
       output: t('dashboard.tokenTrend.output'),
@@ -81,7 +104,7 @@ useEChart(
       symbol: mood.line.symbol,
       symbolSize: mood.line.symbolSize,
       yAxisIndex: 0,
-      data: props.points.map((d) => d[s.key]),
+      data: displayPoints.value.map((d) => d[s.key]),
       lineStyle: { color: s.color, ...mood.line.lineStyle },
       itemStyle: {
         color: s.color,
@@ -153,6 +176,7 @@ useEChart(
       yAxis: [
         {
           type: 'value',
+          minInterval: 1,
           splitLine: mood.splitLine,
           axisLabel: {
             color: p.textTertiary,
@@ -182,7 +206,7 @@ useEChart(
           showSymbol: !p.isDark,
           symbol: mood.line.symbol,
           symbolSize: mood.line.symbolSize,
-          data: props.points.map((d) => d.hit_rate),
+          data: displayPoints.value.map((d) => d.hit_rate),
           lineStyle: {
             color: p.support,
             ...mood.line.lineStyle,
@@ -197,7 +221,7 @@ useEChart(
       ],
     }
   },
-  () => props.points
+  () => displayPoints.value
 )
 </script>
 
@@ -208,11 +232,11 @@ useEChart(
     data-token-trend-card
   >
     <template #action>
-      <div v-if="hasData" class="flex items-center gap-3 text-xs">
+      <div class="flex items-center gap-3 text-xs">
         <span class="text-[var(--text-tertiary)]">
           {{ t('dashboard.tokenTrend.avgHitRate') }}
           <span class="font-semibold text-[var(--support)]"
-            >{{ avgHitRate }}%</span
+            >{{ hasData ? avgHitRate : 0 }}%</span
           >
         </span>
       </div>
@@ -221,12 +245,6 @@ useEChart(
     <div
       v-if="loading"
       class="h-[190px] grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-[196px]"
-    />
-    <EmptyState
-      v-else-if="!hasData"
-      class="grow"
-      :title="t('dashboard.stats.noData')"
-      :hint="t('dashboard.tokenTrend.emptyHint')"
     />
     <div
       v-else

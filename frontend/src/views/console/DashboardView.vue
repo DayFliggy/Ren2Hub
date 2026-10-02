@@ -19,7 +19,6 @@ import PageHero from '@/components/console/PageHero.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
-import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import { useDashboard } from '@/composables/useDashboard'
 import { useDashboardStats } from '@/composables/useDashboardStats'
 import { useUsageDistribution } from '@/composables/useUsageDistribution'
@@ -178,26 +177,9 @@ const rangeOptions = computed(() => [
           @switch-tab="activeTab = $event"
         />
 
-        <!-- Skeleton -->
-        <div v-if="loading" class="grid gap-4 sm:gap-5 xl:grid-cols-3">
-          <SkeletonBlock v-for="i in 6" :key="i" class="h-48" />
-        </div>
-
-        <!--
-        Row-aligned grid, one narrow + one wide card per row, so every row shares
-        a bottom edge and no column runs long leaving a blank strip beside the
-        other. The rows pair by meaning — balance next to the spend it burns,
-        system health next to token throughput, discount rate next to the
-        per-model actual-vs-list table it sums up. Each card absorbs its row's
-        height surplus internally (`stretch` + mt-auto/grow) instead of showing
-        it as dead space in the middle. min-w-0 on every card: a grid item's
-        automatic minimum size would let a chart canvas rendered at a wider
-        viewport prop the track open — the canvas waits for its container to
-        shrink and the container waits for the canvas, so the column never
-        comes back down.
-      -->
+        <!-- Error State -->
         <EmptyState
-          v-else-if="dashboardError"
+          v-if="dashboardError"
           class="min-h-64"
           :title="$t('dashboard.loadFailed')"
           :hint="dashboardError"

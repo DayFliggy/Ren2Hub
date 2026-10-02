@@ -32,7 +32,26 @@ const props = defineProps<{
 const { t } = useI18n()
 const el = ref<HTMLElement | null>(null)
 const mode = ref<ChartMode>('both')
-const data = computed(() => props.flow)
+
+function defaultFlow(days = 14): FlowPoint[] {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(start)
+    date.setDate(start.getDate() - (days - index - 1))
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return {
+      date: `${month}-${day}`,
+      consume: '0',
+      requests: 0,
+    }
+  })
+}
+
+const data = computed(() =>
+  props.flow.length > 0 ? props.flow : defaultFlow(14)
+)
 const modes = computed(() => [
   { key: 'both' as const, label: t('dashboard.trendBoth') },
   { key: 'consume' as const, label: t('dashboard.consumeShort') },
@@ -316,10 +335,10 @@ useEChart(
       class="mt-4 h-64 grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-56"
     />
     <EmptyState
-      v-else-if="error || !flow.length"
+      v-else-if="error"
       class="mt-4 grow"
-      :title="error ? t('dashboard.loadFailed') : t('dashboard.stats.noData')"
-      :hint="error || undefined"
+      :title="t('dashboard.loadFailed')"
+      :hint="error"
     />
     <div
       v-else

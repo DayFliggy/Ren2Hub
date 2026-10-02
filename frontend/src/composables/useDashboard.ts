@@ -154,8 +154,14 @@ export function useDashboard() {
   const flow = ref<FlowPoint[]>([])
   const tokenTrend = ref<TokenTrendPoint[]>([])
   const system = ref<SystemMetrics | null>(null)
-  const limits = ref<UserLimits | null>(null)
-  const discounts = ref<UserDiscounts | null>(null)
+  const limits = ref<UserLimits | null>({
+    rate_limit: 0,
+    current_rpm: 0,
+  })
+  const discounts = ref<UserDiscounts | null>({
+    global_ratio: 1.0,
+    effective_ratio: 1.0,
+  })
   const error = ref<string | null>(null)
 
   async function loadSystem() {

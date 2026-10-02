@@ -16,7 +16,17 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const el = ref<HTMLElement | null>(null)
-const data = computed(() => props.hourly)
+
+function defaultHourly(): HourlyPoint[] {
+  return Array.from({ length: 24 }, (_, i) => ({
+    hour: `${String(i).padStart(2, '0')}:00`,
+    requests: 0,
+  }))
+}
+
+const data = computed(() =>
+  props.hourly.length > 0 ? props.hourly : defaultHourly()
+)
 
 const peakHour = computed(() => {
   if (!props.hourly.length) return null
@@ -61,6 +71,7 @@ useEChart(
       },
       yAxis: {
         type: 'value',
+        minInterval: 1,
         splitLine: mood.splitLine,
         axisLabel: { color: p.textTertiary, fontSize: 10 },
       },
@@ -70,7 +81,7 @@ useEChart(
           data: values.map((v) => ({
             value: v,
             itemStyle: {
-              color: v === maxVal ? p.accent : `${p.accent}66`,
+              color: v > 0 && v === maxVal ? p.accent : `${p.accent}66`,
               borderRadius: mood.barRadius,
             },
           })),
@@ -89,7 +100,7 @@ useEChart(
   <ConsoleCard :title="t('dashboard.stats.hourlyDist')" stretch>
     <template #action>
       <span
-        v-if="peakHour"
+        v-if="peakHour && peakHour.requests > 0"
         class="rounded-lg bg-[var(--accent-soft)] px-2.5 py-1 text-xs text-[var(--accent-text)]"
       >
         {{ t('dashboard.stats.peakAt', { hour: peakHour.hour }) }}
@@ -102,10 +113,10 @@ useEChart(
       class="h-52 grow animate-pulse rounded-xl bg-[var(--surface-muted)] sm:h-44 xl:h-36"
     />
     <EmptyState
-      v-else-if="error || !hourly.length"
+      v-else-if="error"
       class="grow"
-      :title="error ? t('dashboard.loadFailed') : t('dashboard.stats.noData')"
-      :hint="error || undefined"
+      :title="t('dashboard.loadFailed')"
+      :hint="error"
     />
     <div
       v-else

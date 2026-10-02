@@ -161,7 +161,7 @@ describe('ModelDistributionCard', () => {
     }
   })
 
-  it('shows loading and empty states without initializing a table', () => {
+  it('keeps chart and table structure by default when empty instead of showing empty state', () => {
     const loading = mount(ModelDistributionCard, {
       props: { items: [], loading: true },
       global: { plugins: [i18n] },
@@ -170,8 +170,10 @@ describe('ModelDistributionCard', () => {
     expect(loading.find('table').exists()).toBe(false)
 
     const empty = render([])
-    expect(empty.find('[data-handdrawn="empty-state"]').exists()).toBe(true)
-    expect(empty.find('table').exists()).toBe(false)
+    expect(empty.find('[data-handdrawn="empty-state"]').exists()).toBe(false)
+    expect(empty.find('[data-model-distribution-chart]').exists()).toBe(true)
+    expect(empty.find('table').exists()).toBe(true)
+    expect(empty.text()).toContain('No data')
   })
 
   it('gives folded rows a neutral swatch instead of a slice colour', () => {

@@ -64,6 +64,33 @@ const latency = (value: number | null) => {
           size="sm"
         />
       </dl>
+      <div v-if="report.channels.total > 0" class="ops-channel-progress">
+        <div class="ops-channel-progress-bar">
+          <div
+            class="ops-channel-fill ops-channel-fill--enabled"
+            :style="{
+              width: `${(report.channels.enabled / report.channels.total) * 100}%`,
+            }"
+            :title="`${t('upstream.enabled')}: ${report.channels.enabled}`"
+          />
+          <div
+            v-if="report.channels.auto_disabled > 0"
+            class="ops-channel-fill ops-channel-fill--auto"
+            :style="{
+              width: `${(report.channels.auto_disabled / report.channels.total) * 100}%`,
+            }"
+            :title="`${t('upstream.autoDisabled')}: ${report.channels.auto_disabled}`"
+          />
+          <div
+            v-if="report.channels.manually_disabled > 0"
+            class="ops-channel-fill ops-channel-fill--manual"
+            :style="{
+              width: `${(report.channels.manually_disabled / report.channels.total) * 100}%`,
+            }"
+            :title="`${t('upstream.manuallyDisabled')}: ${report.channels.manually_disabled}`"
+          />
+        </div>
+      </div>
       <p class="ops-trend-title">{{ t('upstream.breakers') }}</p>
       <dl class="ops-metric-grid ops-metric-grid--3">
         <OpsMetric

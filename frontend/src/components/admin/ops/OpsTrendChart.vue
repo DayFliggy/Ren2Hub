@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEChart } from '@/charts/useEChart'
-import { lineMood } from '@/charts/themePreset'
+import { areaGradient, lineMood } from '@/charts/themePreset'
 
 export interface OpsTrendSeries {
   name: string
@@ -77,19 +77,30 @@ useEChart(
       showSymbol: false,
       symbol: 'circle',
       symbolSize: 4,
-      smooth: false,
+      smooth: mood.line.smooth,
       connectNulls: false,
       itemStyle: { color: palette[line.color] },
       lineStyle: { width: 1.75, color: palette[line.color] },
-      ...(props.kind === 'bar'
+      ...(props.kind === 'line'
         ? {
+            areaStyle: {
+              color: {
+                type: 'linear' as const,
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: areaGradient(palette, palette[line.color]),
+              },
+            },
+          }
+        : {
             barMaxWidth: 10,
             itemStyle: {
               color: palette[line.color],
               borderRadius: mood.barRadius,
             },
-          }
-        : {}),
+          }),
     }))
     const threshold =
       props.threshold && props.threshold > 0

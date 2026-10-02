@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { AlertTriangle, RefreshCw } from 'lucide-vue-next'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { AlertTriangle, Maximize2, Minimize2, RefreshCw } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import {
   OPS_WINDOWS,
@@ -13,12 +13,14 @@ import IconButton from '@/components/common/IconButton.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
+import MiniRing from '@/components/console/dashboard/MiniRing.vue'
 import { opsMonitorMessages } from '@/i18n/opsMonitor'
 import {
   STATUS_COLORS,
   STATUS_TONES,
   durationParts,
   formatClock,
+  formatCount,
   formatLatencyMs,
   formatPercent,
   formatRate,
@@ -41,6 +43,85 @@ const { t, locale } = useI18n({
 const windowOptions = computed(() =>
   OPS_WINDOWS.map((value) => ({ value, label: t(`window.${value}`) }))
 )
+
+const healthScore = computed<number | null>(() => {
+  if (!props.overview) return null
+  if (props.overview.status === 'ok') return 100
+  const criticals = (props.overview.checks ?? []).filter(
+    (c) => c.status === 'critical'
+  ).length
+  const warnings = (props.overview.checks ?? []).filter(
+    (c) => c.status === 'warning'
+  ).length
+  if (props.overview.status === 'critical') {
+    return Math.max(10, 60 - criticals * 20 - warnings * 5)
+  }
+  if (props.overview.status === 'warning') {
+    return Math.max(55, 95 - warnings * 10)
+  }
+  return null
+})
+
+const healthColor = computed(() => {
+  if (!props.overview) return 'var(--text-tertiary)'
+  return STATUS_COLORS[props.overview.status]
+})
+
+const isFullscreen = ref(false)
+function toggleFullscreen() {
+  if (typeof document === 'undefined') return
+  if (!document.fullscreenElement) {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {})
+    }
+    isFullscreen.value = true
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {})
+    }
+    isFullscreen.value = false
+  }
+}
+function onFullscreenChange() {
+  isFullscreen.value = Boolean(document.fullscreenElement)
+}
+
+const countdown = ref(10)
+let timer: number | null = null
+function resetCountdown() {
+  countdown.value = 10
+}
+
+watch(
+  () => props.updatedAt,
+  () => resetCountdown()
+)
+
+onMounted(() => {
+  if (typeof document !== 'undefined') {
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+  }
+  if (typeof window !== 'undefined') {
+    timer = window.setInterval(() => {
+      if (props.loading) {
+        countdown.value = 10
+      } else if (countdown.value > 1) {
+        countdown.value -= 1
+      } else {
+        countdown.value = 10
+      }
+    }, 1000)
+  }
+})
+
+onUnmounted(() => {
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('fullscreenchange', onFullscreenChange)
+  }
+  if (timer !== null) {
+    clearInterval(timer)
+  }
+})
 // The roll-up ignores unmeasured checks, so only graded problems are reasons.
 const reasons = computed(() =>
   (props.overview?.checks ?? [])
@@ -96,16 +177,83 @@ function checkDetail(check: OpsCheck): string {
   >
     <div class="ops-header-top">
       <div class="ops-header-heading">
-        <h1 class="display-title">{{ t('title') }}</h1>
-        <StatusChip
-          v-if="overview"
-          :tone="STATUS_TONES[overview.status]"
-          data-ops-overall-status
-          :data-status="overview.status"
-          ><span class="sr-only">{{ t('statusLabel') }}: </span
-          >{{ t(`status.${overview.status}`) }}</StatusChip
-        >
+        <div v-if="overview" class="ops-hud-health" aria-hidden="true">
+          <MiniRing
+            :percent="healthScore ?? 0"
+            :color="healthColor"
+            :size="46"
+            :stroke-width="4.5"
+            :indeterminate="healthScore === null"
+          >
+            <span class="ops-hud-score" :style="{ color: healthColor }">
+              {{ healthScore !== null ? healthScore : '--' }}
+            </span>
+          </MiniRing>
+        </div>
+        <div class="ops-header-title-block">
+          <div class="ops-header-title-row">
+            <h1 class="display-title">{{ t('title') }}</h1>
+            <StatusChip
+              v-if="overview"
+              :tone="STATUS_TONES[overview.status]"
+              data-ops-overall-status
+              :data-status="overview.status"
+              ><span class="sr-only">{{ t('statusLabel') }}: </span
+              >{{ t(`status.${overview.status}`) }}</StatusChip
+            >
+          </div>
+          <p class="ops-header-subtitle">{{ t('subtitle') }}</p>
+        </div>
       </div>
+
+      <!-- Realtime Telemetry HUD (Sub2API-inspired live pulse stats) -->
+      <div
+        v-if="overview"
+        class="ops-hud-telemetry"
+        role="region"
+        :aria-label="t('hud.livePulse')"
+      >
+        <div class="ops-hud-pulse-tag">
+          <span class="ops-live-pulse-dot" aria-hidden="true" />
+          <span>{{ t('hud.livePulse') }}</span>
+        </div>
+        <div class="ops-hud-metrics">
+          <div class="ops-hud-metric">
+            <span class="ops-hud-kpi-label">{{
+              t('hud.activeConcurrency')
+            }}</span>
+            <span class="ops-hud-kpi-value">{{
+              formatCount(overview.gateway.admission.in_flight, locale)
+            }}</span>
+          </div>
+          <div class="ops-hud-divider" aria-hidden="true" />
+          <div class="ops-hud-metric">
+            <span class="ops-hud-kpi-label">{{ t('hud.grantedRate') }}</span>
+            <span class="ops-hud-kpi-value"
+              >{{
+                formatRate(
+                  (overview.gateway.granted_per_minute ?? 0) / 60,
+                  locale
+                )
+              }}/s</span
+            >
+          </div>
+          <div class="ops-hud-divider" aria-hidden="true" />
+          <div class="ops-hud-metric">
+            <span class="ops-hud-kpi-label">{{
+              t('gateway.successRate')
+            }}</span>
+            <span class="ops-hud-kpi-value">
+              {{
+                overview.gateway.success_rate !== null
+                  ? `${formatPercent(overview.gateway.success_rate, locale).value}%`
+                  : '--'
+              }}
+            </span>
+          </div>
+        </div>
+      </div>
+
       <div class="ops-header-controls">
         <div class="ops-window">
           <SegmentedToggle
@@ -116,11 +264,20 @@ function checkDetail(check: OpsCheck): string {
           />
           <span class="ops-window-note">{{ t('window.note') }}</span>
         </div>
-        <span class="ops-updated" aria-live="polite">{{
-          updatedAt
-            ? t('updatedAt', { time: formatClock(updatedAt, locale) })
-            : t('neverLoaded')
-        }}</span>
+        <div class="ops-refresh-group">
+          <span class="ops-updated" aria-live="polite">{{
+            updatedAt
+              ? t('updatedAt', { time: formatClock(updatedAt, locale) })
+              : t('neverLoaded')
+          }}</span>
+          <span
+            v-if="!loading && updatedAt"
+            class="ops-countdown-badge"
+            :title="t('hud.autoRefresh', { seconds: countdown })"
+          >
+            {{ countdown }}s
+          </span>
+        </div>
         <IconButton
           :label="loading ? t('refreshing') : t('refresh')"
           :disabled="loading"
@@ -128,6 +285,14 @@ function checkDetail(check: OpsCheck): string {
           ><RefreshCw
             :size="16"
             :class="{ 'ops-spin': loading }"
+            aria-hidden="true"
+        /></IconButton>
+        <IconButton
+          :label="isFullscreen ? t('hud.exitFullscreen') : t('hud.fullscreen')"
+          @click="toggleFullscreen"
+          ><component
+            :is="isFullscreen ? Minimize2 : Maximize2"
+            :size="16"
             aria-hidden="true"
         /></IconButton>
       </div>

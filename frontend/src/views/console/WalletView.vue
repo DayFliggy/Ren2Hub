@@ -20,7 +20,6 @@ import {
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
-import BillingHistory from '@/components/console/wallet/BillingHistory.vue'
 import { addQuota, quotaToDecimal, sumQuota } from '@/utils/quota'
 import { formatNumber, formatQuota } from '@/utils/format'
 
@@ -193,25 +192,6 @@ onMounted(() => void loadStats())
       </template>
     </PageHero>
 
-    <dl v-if="auth.user && !hidden" class="mb-6 grid gap-3 sm:grid-cols-2">
-      <div
-        v-for="key in ['available_quota', 'used_quota'] as const"
-        :key="key"
-        class="min-w-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-4"
-      >
-        <dt class="text-xs text-[var(--text-tertiary)]">
-          {{
-            t(key === 'available_quota' ? 'billing.available' : 'billing.used')
-          }}
-        </dt>
-        <dd class="mt-2 break-all font-mono text-sm">
-          {{ formatQuota(auth.user[key], 3)
-          }}<span class="mt-1 block text-xs text-[var(--text-tertiary)]"
-            >{{ auth.user[key] }} quota</span
-          >
-        </dd>
-      </div>
-    </dl>
     <StatTileGrid class="mb-6" :tiles="statCards" :columns="4" />
 
     <div class="mb-6 grid gap-6 xl:grid-cols-[1fr_380px]">
@@ -228,7 +208,6 @@ onMounted(() => void loadStats())
     </div>
 
     <div class="space-y-6">
-      <BillingHistory :refresh-key="refreshKey" />
       <FlowChart :flow="flow" />
       <TopupRecords :refresh-key="refreshKey" />
     </div>

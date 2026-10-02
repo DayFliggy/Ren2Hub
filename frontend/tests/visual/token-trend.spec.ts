@@ -17,7 +17,7 @@ const EMPTY_TOKEN_TREND = Array.from({ length: 30 }, (_, index) => ({
 
 for (const theme of ['light', 'dark'] as const) {
   for (const viewport of ['desktop', 'mobile'] as const) {
-    test(`${theme} ${viewport} token trend shows a real empty state`, async ({
+    test(`${theme} ${viewport} token trend shows real chart canvas by default`, async ({
       page,
     }) => {
       await page.setViewportSize(
@@ -44,8 +44,7 @@ for (const theme of ['light', 'dark'] as const) {
 
       const card = page.locator('[data-token-trend-card]')
       await expect(card).toBeVisible()
-      await expect(card).toContainText('最近 30 天暂无 Token 使用记录')
-      await expect(card.locator('canvas')).toHaveCount(0)
+      await expect(card.locator('canvas')).toHaveCount(1)
       await assertNoHorizontalOverflow(page)
     })
   }

@@ -40,7 +40,7 @@ const colors = SERIES_TOKENS
       off the share column when it does.
     -->
     <div
-      v-else-if="models.length"
+      v-else
       class="subtle-scroll max-h-[22rem] overflow-y-auto overflow-x-auto pr-2 sm:max-h-64"
       role="region"
       tabindex="0"
@@ -84,6 +84,14 @@ const colors = SERIES_TOKENS
           </tr>
         </thead>
         <tbody>
+          <tr v-if="!models.length">
+            <td
+              colspan="5"
+              class="py-12 text-center font-mono text-xs text-[var(--text-tertiary)]"
+            >
+              {{ t('dashboard.stats.noData') }}
+            </td>
+          </tr>
           <tr
             v-for="(row, i) in models"
             :key="row.model"
@@ -143,9 +151,5 @@ const colors = SERIES_TOKENS
         </tbody>
       </table>
     </div>
-
-    <p v-else class="py-8 text-center text-sm text-[var(--text-tertiary)]">
-      {{ t('dashboard.stats.noData') }}
-    </p>
   </ConsoleCard>
 </template>

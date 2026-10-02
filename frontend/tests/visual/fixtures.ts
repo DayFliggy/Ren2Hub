@@ -1119,6 +1119,10 @@ export async function configureStablePage(
     ['/api/user/passkey', { enabled: false }],
     ['/api/user/2fa/status', { enabled: true, backup_codes_remaining: 8 }],
     ['/api/user/oauth/bindings', []],
+    ['/api/option/model_pricing', { model_pricing: [] }],
+    ['/api/channel/models_enabled', []],
+    ['/api/user/self/personal-access-tokens', []],
+    ['/api/user/self/personal-access-tokens/scopes', []],
   ])
 
   await page.route('**/api/user/auth/refresh*', (route) => {

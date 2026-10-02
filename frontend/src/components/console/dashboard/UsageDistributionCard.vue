@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
 import UsageHeatmapGrid from '@/components/console/dashboard/UsageHeatmapGrid.vue'
 import UsageSegmentBar from '@/components/console/dashboard/UsageSegmentBar.vue'
 import type { UsageDistributionPoint } from '@/composables/useUsageDistribution'
@@ -159,12 +158,6 @@ const weekdaySummary = computed(() => {
         <div class="h-48 animate-pulse rounded-xl bg-[var(--surface-muted)]" />
       </div>
     </div>
-
-    <EmptyState
-      v-else-if="!points.length"
-      :title="t('dashboard.distribution.emptyTitle')"
-      :hint="t('dashboard.distribution.emptyHint')"
-    />
 
     <div v-else class="flex grow flex-col" data-usage-content>
       <div class="flex flex-wrap items-center justify-between gap-3">

@@ -377,8 +377,8 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
 </script>
 
 <template>
-  <SecurityProofDialog ref="proofDialog" />
   <div>
+    <SecurityProofDialog ref="proofDialog" />
     <PageBreadcrumb :crumbs="[t('nav.groupAdmin'), t('nav.userManagement')]">
       <template #action>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">

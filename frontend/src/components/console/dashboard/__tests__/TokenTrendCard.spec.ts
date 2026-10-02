@@ -55,7 +55,7 @@ describe('TokenTrendCard', () => {
     expect(wrapper.find('[role="img"]').exists()).toBe(false)
   })
 
-  it('shows an explicit empty state instead of mounting an empty chart', () => {
+  it('mounts the chart by default even with zero values instead of an empty placeholder', () => {
     const wrapper = mount(TokenTrendCard, {
       props: {
         points: [
@@ -71,8 +71,8 @@ describe('TokenTrendCard', () => {
       global: { plugins: [i18n] },
     })
 
-    expect(wrapper.text()).toContain('No data')
-    expect(wrapper.find('[role="img"]').exists()).toBe(false)
+    expect(wrapper.find('[role="img"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('0%')
   })
 
   it('calculates the window hit rate weighted by readable input tokens', () => {

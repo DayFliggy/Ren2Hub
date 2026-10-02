@@ -176,12 +176,15 @@ describe('UsageDistributionCard', () => {
     expect(active.dataset.usageDate).toBe(dateKey(expected))
   })
 
-  it('shows stable loading and empty states', () => {
+  it('renders complete heatmap layout by default when empty', () => {
     const loading = render({ loading: true })
     expect(loading.find('[data-usage-loading]').exists()).toBe(true)
     loading.unmount()
 
     const empty = render({ points: [] })
-    expect(empty.text()).toContain('暂无调用分布')
+    expect(empty.find('[data-usage-content]').exists()).toBe(true)
+    expect(empty.find('[data-usage-layout="month"]').exists()).toBe(true)
+    expect(empty.findAll('[data-usage-date]')).toHaveLength(30)
+    expect(empty.get('[data-usage-footer]').text()).toContain('活跃 0 天')
   })
 })

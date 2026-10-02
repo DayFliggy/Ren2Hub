@@ -19,7 +19,7 @@ const id = useId()
       v-model="model"
       name="conversion-policy"
       :disabled="disabled"
-      class="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
+      class="h-11 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
     >
       <option
         v-for="policy in ['safe', 'allow', 'strict'] as const"

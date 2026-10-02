@@ -12,11 +12,7 @@ import { onClickOutside } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
-import {
-  parseLogPage,
-  parseLogStat,
-  type LogStatContract,
-} from '@/api/liveContracts'
+import { parseLogPage } from '@/api/liveContracts'
 import { ApiError, type PageResult } from '@/api/types'
 import type { LogItem, LogType } from '@/types/console'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -53,7 +49,7 @@ import LogPerformanceCell from '@/components/console/log-ui/LogPerformanceCell.v
 import LogUsageCell from '@/components/console/log-ui/LogUsageCell.vue'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
-import { formatNumber, formatQuota, formatTime } from '@/utils/format'
+import { formatQuota, formatTime } from '@/utils/format'
 import { serializeSpreadsheet } from '@/utils/spreadsheetExport'
 
 const { t } = useI18n()
@@ -69,7 +65,6 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const loading = ref(true)
-const stat = ref<LogStatContract | null>(null)
 
 const keyword = ref('')
 const group = ref('')
@@ -301,7 +296,6 @@ function currentParams() {
 }
 
 const listRequest = useLatestRequest()
-const statsRequest = useLatestRequest()
 
 async function load() {
   loading.value = true
@@ -445,7 +439,7 @@ async function doExport() {
   }
 }
 
-onMounted(async () => {
+onMounted(() => {
   window.addEventListener('resize', updateOpenColSettingsPanelMetrics, {
     passive: true,
   })
@@ -455,18 +449,6 @@ onMounted(async () => {
     { passive: true }
   )
   void load()
-  const result = await statsRequest.run((signal) =>
-    api.get<LogStatContract>('/api/log/self/stat', undefined, { signal })
-  )
-  if (result.stale) return
-  if (result.ok) {
-    stat.value = parseLogStat(result.value as unknown)
-  } else
-    toast.error(
-      result.error instanceof ApiError
-        ? result.error.message
-        : t('common.failed')
-    )
 })
 
 onBeforeUnmount(() => {
@@ -487,53 +469,6 @@ onBeforeUnmount(() => {
         <LogsNavTabs active="consume" />
       </template>
     </PageBreadcrumb>
-
-    <!-- stat strip -->
-    <ConsoleCard class="mb-5" :padded="false">
-      <div
-        class="flex divide-x divide-[var(--border-subtle)] overflow-x-auto"
-        role="region"
-        tabindex="0"
-        :aria-label="t('logs.breadcrumb.1')"
-      >
-        <div
-          v-for="card in [
-            {
-              label: t('logs.statTotalRequests'),
-              value: formatNumber(stat?.total_requests ?? 0),
-              tone: 'var(--text-primary)',
-            },
-            {
-              label: t('logs.statTotalQuota'),
-              value: formatQuota(stat?.total_quota ?? 0),
-              tone: 'var(--accent-text)',
-            },
-            {
-              label: t('logs.statTodayRequests'),
-              value: formatNumber(stat?.today_requests ?? 0),
-              tone: 'var(--signal)',
-            },
-            {
-              label: t('logs.statTodayQuota'),
-              value: formatQuota(stat?.today_quota ?? 0),
-              tone: 'var(--status-success)',
-            },
-          ]"
-          :key="card.label"
-          class="flex min-w-[180px] flex-1 items-center justify-between gap-4 px-5 py-4"
-        >
-          <p class="shrink-0 text-xs text-[var(--text-tertiary)]">
-            {{ card.label }}
-          </p>
-          <p
-            class="text-xl font-bold tracking-tight"
-            :style="{ color: card.tone }"
-          >
-            {{ card.value }}
-          </p>
-        </div>
-      </div>
-    </ConsoleCard>
 
     <!-- filter toolbar -->
     <div
