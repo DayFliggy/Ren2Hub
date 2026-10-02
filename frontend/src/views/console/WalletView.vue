@@ -164,7 +164,7 @@ onMounted(() => void loadStats())
           </p>
           <button
             type="button"
-            class="text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] focus-ring"
+            class="inline-flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring"
             :aria-label="
               hidden ? t('wallet.showBalance') : t('wallet.hideBalance')
             "

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
+import EmptyState from '@/components/common/EmptyState.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import { formatQuota } from '@/utils/format'
 import type { LeaderEntry, LeaderPeriod } from '@/types/farm'
 
@@ -55,14 +57,10 @@ function rankBadge(rank: number) {
 
     <!-- loading skeleton -->
     <div v-if="loading" class="space-y-2">
-      <div
-        v-for="i in 5"
-        :key="i"
-        class="h-10 animate-pulse rounded-xl bg-[var(--surface-muted)]"
-      />
+      <SkeletonBlock v-for="i in 5" :key="i" class="h-10" rounded="xl" />
     </div>
 
-    <div v-else class="space-y-1.5">
+    <div v-else-if="entries.length" class="space-y-1.5">
       <div
         v-for="entry in entries"
         :key="entry.uid"
@@ -113,5 +111,12 @@ function rankBadge(rank: number) {
         </span>
       </div>
     </div>
+
+    <EmptyState
+      v-else
+      :title="t('farm.leader.emptyTitle')"
+      :hint="t('farm.leader.emptyHint')"
+      class="py-6"
+    />
   </article>
 </template>

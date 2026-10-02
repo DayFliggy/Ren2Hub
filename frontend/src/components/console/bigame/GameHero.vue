@@ -52,7 +52,10 @@ const bigameBanner = useThemedAsset(bigameDayBanner, bigameNightBanner)
           <p class="text-xs text-[var(--text-tertiary)]">
             {{ t('bigame.coinBalance') }}
           </p>
-          <p class="mt-1 text-2xl font-bold" style="color: var(--accent-text)">
+          <p
+            class="display-number mt-1 text-2xl"
+            style="color: var(--accent-text)"
+          >
             🎰 {{ wallet.balance }}
           </p>
         </div>
@@ -62,7 +65,7 @@ const bigameBanner = useThemedAsset(bigameDayBanner, bigameNightBanner)
           <p class="text-xs text-[var(--text-tertiary)]">
             {{ t('bigame.totalEarned') }}
           </p>
-          <p class="mt-1 text-xl font-bold text-[var(--text-primary)]">
+          <p class="display-number mt-1 text-xl text-[var(--text-primary)]">
             {{ wallet.total_earned }}
           </p>
         </div>

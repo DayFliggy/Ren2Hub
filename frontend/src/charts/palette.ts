@@ -51,7 +51,9 @@ export function resolveToken(name: string, fallback = ''): string {
 }
 
 export function chartPalette(): ChartPalette {
-  const isDark = document.documentElement.dataset.theme === 'dark'
+  const isDark =
+    document.documentElement.dataset.theme === 'dark' ||
+    document.documentElement.classList.contains('dark')
   const p: ChartPalette = {
     accent: normalizeOpaqueColor(resolveToken('--accent'), '#d8984c'),
     signal: normalizeOpaqueColor(resolveToken('--signal'), '#74765a'),

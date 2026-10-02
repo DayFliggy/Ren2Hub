@@ -598,7 +598,7 @@ onMounted(() => void load())
           <div
             v-for="group in groups"
             :key="group.id || `new-${group.position}`"
-            class="border p-4 transition-colors"
+            class="rounded-xl border p-4 transition-colors"
             :class="
               activeGroup === group
                 ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
@@ -654,8 +654,7 @@ onMounted(() => void load())
                 <FormField :label="t('routing.addChannel')">
                   <select
                     v-model="selectedChannelId"
-                    class="h-10 w-full border bg-transparent px-3 text-sm text-[var(--text-primary)]"
-                    style="border-color: var(--border-default)"
+                    class="h-11 sm:h-10 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-3 text-sm text-[var(--text-primary)] focus-ring"
                     :disabled="!canEdit"
                   >
                     <option value="">{{ t('routing.selectChannel') }}</option>
@@ -835,8 +834,7 @@ onMounted(() => void load())
                       :aria-invalid="
                         !validRouteMaxRatio(group.policy.max_ratio)
                       "
-                      class="w-24 border bg-transparent px-2 py-1 text-sm text-[var(--text-primary)]"
-                      style="border-color: var(--border-default)"
+                      class="min-h-11 sm:min-h-8 w-24 rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 py-1 text-sm text-[var(--text-primary)] focus-ring"
                       :disabled="!canEdit"
                     />
                   </label>
@@ -844,8 +842,7 @@ onMounted(() => void load())
                     {{ t('routing.retryMode') }}
                     <select
                       v-model="group.policy.retry_mode"
-                      class="mt-1 h-9 w-full border bg-transparent px-2 text-sm text-[var(--text-primary)]"
-                      style="border-color: var(--border-default)"
+                      class="mt-1 min-h-11 sm:min-h-10 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 text-sm text-[var(--text-primary)] focus-ring"
                       :disabled="!canEdit"
                     >
                       <option value="none">none</option>

@@ -141,7 +141,7 @@ defineExpose({ request })
       <FormField :label="t('security.method')">
         <select
           v-model="method"
-          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-page)] p-2 text-[var(--text-primary)]"
+          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2 text-[var(--text-primary)]"
           :disabled="busy"
         >
           <option
@@ -176,7 +176,7 @@ defineExpose({ request })
       >
         <select
           v-model="rpID"
-          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-page)] p-2"
+          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2"
         >
           <option value="">{{ t('security.automaticDomain') }}</option>
           <option v-for="id in rpIDs" :key="id" :value="id">{{ id }}</option>
@@ -185,7 +185,7 @@ defineExpose({ request })
       <FormField v-if="method === 'oauth'" :label="t('security.provider')">
         <select
           v-model="provider"
-          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-page)] p-2"
+          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2"
         >
           <option
             v-for="item in requirements?.oauth_providers"

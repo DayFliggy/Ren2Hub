@@ -40,7 +40,7 @@ const canTransfer = computed(
       {{ t('invite.rewardBalanceSubtitle', { count: invited }) }}
     </p>
 
-    <p class="mt-4 text-3xl font-bold text-[var(--accent-text)]">
+    <p class="display-number mt-4 text-3xl text-[var(--accent-text)]">
       {{ formatQuota(transferable) }}
     </p>
 

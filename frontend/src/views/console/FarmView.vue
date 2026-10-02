@@ -10,7 +10,6 @@ import FishingPanel from '@/components/console/farm/FishingPanel.vue'
 import PetDock from '@/components/console/farm/PetDock.vue'
 import LeaderTable from '@/components/console/farm/LeaderTable.vue'
 import RewardTierCard from '@/components/console/farm/RewardTierCard.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import { useFarm } from '@/composables/useFarm'
@@ -143,11 +142,6 @@ onMounted(load)
             :period="leaderPeriod"
             :loading="leaderLoading"
             @change-period="onChangePeriod"
-          />
-          <EmptyState
-            v-if="!leaderLoading && leaderEntries.length === 0"
-            :title="t('farm.leader.emptyTitle')"
-            :hint="t('farm.leader.emptyHint')"
           />
         </div>
 

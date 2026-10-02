@@ -203,7 +203,7 @@ const tones = {
   width: 5rem;
   height: 0.375rem;
   border: 0;
-  border-radius: var(--shape-small);
+  border-radius: var(--shape-control, 8px);
   overflow: hidden;
   background: var(--surface-muted);
 }

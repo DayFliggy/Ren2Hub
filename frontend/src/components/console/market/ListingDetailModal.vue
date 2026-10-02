@@ -63,7 +63,7 @@ const priceUnit = computed(() =>
           <StatusChip :tone="'info'">{{ typeLabel }}</StatusChip>
           <ListingRating :value="listing.rating" :count="listing.reviewCount" />
         </div>
-        <p class="font-mono text-2xl font-bold text-[var(--accent-text)]">
+        <p class="display-number font-mono text-2xl text-[var(--accent-text)]">
           {{ formatPrice(listing.priceUSD) }}
           <span
             class="font-sans text-sm font-normal text-[var(--text-tertiary)]"

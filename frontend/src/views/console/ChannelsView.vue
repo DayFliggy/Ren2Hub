@@ -1017,7 +1017,6 @@ async function runBulkStatus(
                     supplierBalanceLabel((row as SupplierTableRow).supplier)
                   "
                   :disabled="!canRunBatch"
-                  class="h-7 w-7"
                   @click="
                     runSupplierBalance(
                       (row as SupplierTableRow).supplier,
@@ -1040,7 +1039,6 @@ async function runBulkStatus(
                       supplier: (row as SupplierTableRow).supplier,
                     })
                   "
-                  class="h-7 w-7"
                   @click="
                     openSupplierTest({
                       groupSlug: (row as SupplierTableRow).groupSlug,
@@ -1061,7 +1059,6 @@ async function runBulkStatus(
                   "
                   tone="danger"
                   :disabled="!canMutate"
-                  class="h-7 w-7"
                   @click="
                     requestClearSupplier({
                       groupSlug: (row as SupplierTableRow).groupSlug,
@@ -1253,7 +1250,7 @@ async function runBulkStatus(
                 :disabled="
                   isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
                 "
-                class="h-7 w-7 shrink-0"
+                class="shrink-0"
                 @click="
                   refreshBalance(channelFromRow(row as AdminChannelTableRow))
                 "
@@ -1309,7 +1306,7 @@ async function runBulkStatus(
               <IconButton
                 v-if="canOperate && isFieldVisible('rowResponseAction')"
                 :label="t('channels.testChannel')"
-                class="h-7 w-7 shrink-0"
+                class="shrink-0"
                 @click="openTest(channelFromRow(row as AdminChannelTableRow))"
               >
                 <Activity :size="14" />

@@ -25,11 +25,11 @@ const classes = computed(() => {
   // shadows with !important, which would erase the seal geometry below.
   const base = `${
     props.variant === 'stamp' ? '' : 'pencil-control '
-  }inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold transition-all focus-ring disabled:cursor-not-allowed disabled:opacity-50`
+  }inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold transition-all focus-ring disabled:cursor-not-allowed disabled:opacity-50 touch-snappy`
   const sizes = {
-    sm: 'h-8 px-3 text-xs',
-    md: 'h-10 px-4 text-sm',
-    lg: 'h-12 px-5 text-base',
+    sm: 'min-h-11 px-3 text-xs sm:min-h-8 sm:h-8',
+    md: 'min-h-11 px-4 text-sm sm:min-h-10 sm:h-10',
+    lg: 'min-h-12 px-5 text-base sm:h-12',
   }
   const variants = {
     // Solid CTA: accent background, hand-drawn irregular radius + pencil-pressure shadow

@@ -10,6 +10,7 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ErrorBanner from '@/components/common/ErrorBanner.vue'
+import SectionHeading from '@/components/common/SectionHeading.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
@@ -88,7 +89,7 @@ onMounted(load)
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('invite.invitedCount') }}
         </p>
-        <p class="mt-1.5 text-2xl font-bold text-[var(--text-primary)]">
+        <p class="display-number mt-1.5 text-2xl text-[var(--text-primary)]">
           {{ info ? t('invite.people', { count: info.invited }) : '--' }}
         </p>
         <p class="mt-1 text-xs text-[var(--text-tertiary)]">
@@ -102,7 +103,7 @@ onMounted(load)
             <p class="text-xs text-[var(--text-tertiary)]">
               {{ t('invite.transferable') }}
             </p>
-            <p class="mt-1.5 text-2xl font-bold text-[var(--accent-text)]">
+            <p class="display-number mt-1.5 text-2xl text-[var(--accent-text)]">
               {{ info ? formatQuota(info.transferable) : '--' }}
             </p>
           </div>
@@ -123,7 +124,7 @@ onMounted(load)
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('invite.rebateRate') }}
         </p>
-        <p class="mt-1.5 text-2xl font-bold text-[var(--accent-text)]">
+        <p class="display-number mt-1.5 text-2xl text-[var(--accent-text)]">
           {{ info ? `${info.effective_rate_percent}%` : '--' }}
         </p>
         <p class="mt-1 text-xs text-[var(--text-tertiary)]">
@@ -135,7 +136,7 @@ onMounted(load)
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('invite.frozenReward') }}
         </p>
-        <p class="mt-1.5 text-2xl font-bold text-[var(--text-primary)]">
+        <p class="display-number mt-1.5 text-2xl text-[var(--text-primary)]">
           {{ info ? formatQuota(info.frozen_reward) : '--' }}
         </p>
         <p class="mt-1 text-xs text-[var(--text-tertiary)]">
@@ -259,16 +260,16 @@ onMounted(load)
 
     <!-- how it works -->
     <section class="mt-8">
-      <h3 class="mb-4 text-lg font-bold text-[var(--text-primary)]">
+      <SectionHeading class="mb-4">
         {{ t('invite.howTitle') }}
-      </h3>
+      </SectionHeading>
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div
           v-for="n in howSteps"
           :key="n"
           class="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-5"
         >
-          <span class="text-2xl font-bold text-[var(--accent-text)]"
+          <span class="display-number text-2xl text-[var(--accent-text)]"
             >0{{ n }}</span
           >
           <p class="mt-2 text-sm font-semibold text-[var(--text-primary)]">

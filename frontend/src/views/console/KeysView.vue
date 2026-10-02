@@ -380,7 +380,7 @@ onBeforeUnmount(() => {
                 name: 'token-routing',
                 params: { id: (row as TokenSummary).id },
               }"
-              class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring"
+              class="inline-flex h-11 w-11 sm:h-8 sm:w-8 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--state-hover-layer)] hover:text-[var(--text-primary)] focus-ring"
               :aria-label="t('keys.routing')"
               :title="t('keys.routing')"
             >

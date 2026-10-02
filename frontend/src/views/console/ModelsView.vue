@@ -13,6 +13,9 @@ import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import HealthMeter from '@/components/common/HealthMeter.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
+import SegmentedToggle, {
+  type SegmentOption,
+} from '@/components/common/SegmentedToggle.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import VendorLogo from '@/components/console/models/VendorLogo.vue'
 import VendorSection from '@/components/console/models/VendorSection.vue'
@@ -63,6 +66,19 @@ const sortOptions = computed(() => [
   { value: 'latency', label: t('models.sortLatency') },
   { value: 'tps', label: t('models.sortTps') },
   { value: 'price', label: t('models.sortPrice') },
+])
+
+const viewOptions = computed<SegmentOption[]>(() => [
+  {
+    value: 'grid',
+    ariaLabel: t('models.viewGrid'),
+    icon: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
+  },
+  {
+    value: 'list',
+    ariaLabel: t('models.viewList'),
+    icon: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  },
 ])
 
 const detailTypeLabel = computed(() =>
@@ -137,59 +153,13 @@ onMounted(load)
           />
         </div>
         <!-- view toggle -->
-        <div
-          class="flex shrink-0 items-center gap-1 rounded-xl bg-[var(--surface-muted)] p-1"
-        >
-          <button
-            type="button"
-            :aria-label="t('models.viewGrid')"
-            :title="t('models.viewGrid')"
-            class="inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-ring"
-            :class="
-              view === 'grid'
-                ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-sm'
-                : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
-            "
-            @click="view = 'grid'"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <rect x="3" y="3" width="7" height="7" rx="1" />
-              <rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" />
-              <rect x="14" y="14" width="7" height="7" rx="1" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            :aria-label="t('models.viewList')"
-            :title="t('models.viewList')"
-            class="inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-ring"
-            :class="
-              view === 'list'
-                ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-sm'
-                : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
-            "
-            @click="view = 'list'"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-            </svg>
-          </button>
-        </div>
+        <SegmentedToggle
+          v-model="view"
+          :options="viewOptions"
+          :label="t('models.viewToggle', '视图切换')"
+          size="sm"
+          class="shrink-0"
+        />
       </div>
     </ConsoleCard>
 

@@ -15,6 +15,16 @@
   /* ===== 字号令牌 ===== */
   --text-label-sm: 14px;
 
+  /* ===== Apple / SwiftUI 物理弹簧与动力学令牌 ===== */
+  --ease-spring-snappy: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring-smooth: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-spring-bouncy: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --glass-specular-edge: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --glass-specular-hover: inset 0 1px 0 rgba(216, 152, 76, 0.35);
+  --glass-surface-thin: rgba(255, 253, 248, 0.7);
+  --glass-surface-regular: rgba(255, 253, 248, 0.88);
+  --glass-blur: 16px;
+
   /* ===== 日间主题：Desert Ledger（温和暖土） ===== */
   --page-background: #f6f3eb;
   --surface-solid: #fffdf8;
@@ -515,14 +525,26 @@ html.dark {
   --pencil-surface-shadow-hover: var(--elevation-3);
   --pencil-control-shadow: none;
   --pencil-progress-track: var(--border-default);
-  /* MD3 elevation：key(umbra) + ambient(penumbra) 双层 */
+  /* ===== Apple Liquid Glass 材质与暗场高光倒角令牌 ===== */
+  --glass-specular-edge: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-specular-hover: inset 0 1px 0 rgba(226, 188, 85, 0.28);
+  --glass-surface-thin: rgba(46, 50, 64, 0.68);
+  --glass-surface-regular: rgba(50, 54, 63, 0.85);
+  --glass-blur: 16px;
+  /* MD3 + Apple Specular Elevation */
   --elevation-0: none;
-  --elevation-1: 0 1px 2px rgba(0, 4, 16, 0.34), 0 1px 3px rgba(0, 4, 16, 0.2);
+  --elevation-1:
+    0 1px 2px rgba(0, 4, 16, 0.34), 0 1px 3px rgba(0, 4, 16, 0.2),
+    var(--glass-specular-edge);
   --elevation-2:
-    0 1px 2px rgba(0, 4, 16, 0.38), 0 4px 10px rgba(0, 4, 16, 0.28);
-  --elevation-3: 0 2px 4px rgba(0, 4, 16, 0.42), 0 8px 20px rgba(0, 4, 16, 0.3);
+    0 1px 2px rgba(0, 4, 16, 0.38), 0 4px 10px rgba(0, 4, 16, 0.28),
+    var(--glass-specular-edge);
+  --elevation-3:
+    0 2px 4px rgba(0, 4, 16, 0.42), 0 8px 20px rgba(0, 4, 16, 0.3),
+    var(--glass-specular-edge);
   --elevation-5:
-    0 4px 8px rgba(0, 4, 16, 0.48), 0 18px 42px rgba(0, 4, 16, 0.36);
+    0 4px 8px rgba(0, 4, 16, 0.48), 0 18px 42px rgba(0, 4, 16, 0.36),
+    var(--glass-specular-edge);
   --card-sketch-shadow: var(--elevation-2);
   --card-sketch-shadow-hover: var(--elevation-3);
   /* MD surface tint：海拔越高表面越暖亮（炭蓝 + 星辉金 5%/8%/11% 预计算） */
@@ -564,7 +586,9 @@ html.dark {
   --state-hover-layer: rgba(226, 188, 85, 0.08);
   --state-press-layer: rgba(226, 188, 85, 0.12);
   --state-focus-layer: rgba(226, 188, 85, 0.14);
-  --focus-halo: 0 0 0 4px var(--state-focus-layer);
+  /* 双层聚焦环（Apple Focus Halo 规范：内贴背景色 + 外扩散强调色） */
+  --focus-halo:
+    0 0 0 2px var(--page-background), 0 0 0 4px rgba(226, 188, 85, 0.35);
   --surface-hover: var(--state-hover-layer);
   --surface-warm-tile: var(--state-hover-layer);
   /* 手绘装饰在夜间熄灭/收敛 */

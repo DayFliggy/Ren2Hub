@@ -80,7 +80,9 @@ const { t } = useI18n()
             </p>
           </div>
           <div class="text-right">
-            <p class="text-2xl font-bold tabular-nums text-[var(--accent)]">
+            <p
+              class="display-number text-2xl tabular-nums text-[var(--accent)]"
+            >
               {{ discounts.effective_ratio.toFixed(3) }}×
             </p>
           </div>

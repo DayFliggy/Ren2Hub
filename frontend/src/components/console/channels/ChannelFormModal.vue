@@ -638,7 +638,7 @@ async function submit() {
           v-model="pluginKeys"
           multiple
           :size="Math.min(5, Math.max(2, availablePlugins.length))"
-          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-page)] p-2"
+          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2"
           @change="form.type === 61 && (pluginKeys = pluginKeys.slice(-1))"
         >
           <option

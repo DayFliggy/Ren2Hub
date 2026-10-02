@@ -33,12 +33,16 @@ const { t } = useI18n()
     </div>
   </div>
 
-  <EmptyState
+  <div
     v-else-if="orders.length === 0"
-    :title="t('orders.emptyTitle')"
-    :hint="t('orders.emptyHint')"
-    illustration="empty-search"
-  />
+    class="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)]"
+  >
+    <EmptyState
+      :title="t('orders.emptyTitle')"
+      :hint="t('orders.emptyHint')"
+      illustration="empty-search"
+    />
+  </div>
 
   <div v-else class="divide-y divide-[var(--border-subtle)]">
     <article

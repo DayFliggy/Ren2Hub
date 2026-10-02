@@ -15,7 +15,7 @@ import type { ChartPalette } from './palette'
 export interface LineMoodOptions {
   /** series-level props for line charts */
   line: {
-    smooth: boolean
+    smooth: boolean | number
     symbol: string
     symbolSize: number
     lineStyle: {

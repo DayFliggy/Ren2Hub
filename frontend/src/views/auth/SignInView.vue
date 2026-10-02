@@ -307,7 +307,7 @@ async function signInOAuth(provider: string) {
       >
         <select
           v-model="rpID"
-          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-page)] p-2"
+          class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2"
         >
           <option value="">{{ t('security.automaticDomain') }}</option>
           <option v-for="id in app.status.passkey_rp_ids" :key="id" :value="id">

@@ -52,7 +52,7 @@ const plate = computed(() => {
       />
       <p
         v-else
-        class="mt-0.5 truncate text-2xl font-bold tracking-tight text-[var(--text-primary)]"
+        class="display-number mt-0.5 truncate text-2xl tracking-tight text-[var(--text-primary)]"
         :title="value"
       >
         {{ value }}

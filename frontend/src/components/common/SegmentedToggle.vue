@@ -67,7 +67,7 @@ function onKeydown(event: KeyboardEvent, index: number) {
       :tabindex="model === opt.value ? 0 : -1"
       :aria-label="opt.ariaLabel"
       :title="opt.ariaLabel"
-      class="inline-flex items-center justify-center gap-1.5 font-semibold transition-colors focus-ring"
+      class="inline-flex items-center justify-center gap-1.5 font-semibold transition-all focus-ring touch-snappy"
       :class="[
         size === 'sm'
           ? 'h-11 px-2.5 text-xs sm:h-8'

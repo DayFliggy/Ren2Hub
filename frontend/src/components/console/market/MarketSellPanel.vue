@@ -140,7 +140,7 @@ onMounted(load)
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('market.sell.statActive') }}
         </p>
-        <p class="mt-1 text-2xl font-bold text-[var(--text-primary)]">
+        <p class="display-number mt-1 text-2xl text-[var(--text-primary)]">
           {{ stats?.active ?? 0 }}
         </p>
       </ConsoleCard>
@@ -148,7 +148,7 @@ onMounted(load)
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('market.sell.statSales') }}
         </p>
-        <p class="mt-1 text-2xl font-bold text-[var(--text-primary)]">
+        <p class="display-number mt-1 text-2xl text-[var(--text-primary)]">
           {{ stats?.totalSales ?? 0 }}
         </p>
       </ConsoleCard>
@@ -156,7 +156,7 @@ onMounted(load)
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('market.sell.statEarnings') }}
         </p>
-        <p class="mt-1 text-2xl font-bold text-[var(--accent-text)]">
+        <p class="display-number mt-1 text-2xl text-[var(--accent-text)]">
           {{ formatQuota(stats?.pendingEarnings ?? 0) }}
         </p>
       </ConsoleCard>

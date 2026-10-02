@@ -17,6 +17,15 @@
   transition-timing-function: ease;
 }
 
+html.dark *,
+html.dark *::before,
+html.dark *::after {
+  transition-timing-function: var(
+    --ease-spring-smooth,
+    cubic-bezier(0.25, 1, 0.5, 1)
+  );
+}
+
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -102,6 +111,21 @@ a {
 html.dark .focus-ring:focus-visible {
   outline-color: var(--focus-ring);
   box-shadow: var(--focus-halo);
+}
+
+/* Apple / SwiftUI 交互动效与触控实用类 */
+.touch-snappy {
+  transition:
+    transform 0.18s var(--ease-spring-snappy, cubic-bezier(0.16, 1, 0.3, 1)),
+    box-shadow 0.18s ease;
+}
+.touch-snappy:active:not(:disabled) {
+  transform: scale(0.98);
+}
+@media (prefers-reduced-motion: reduce) {
+  .touch-snappy:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 /* 手账纸纹：AI 和纸 tile（日间）/ 丝绒暗纹（夜间），透明度已烘焙进素材。 */

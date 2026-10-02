@@ -82,7 +82,7 @@
   color: var(--text-primary);
   background: var(--surface-container-low);
   border: 1px solid var(--outline-variant);
-  border-radius: var(--shape-small);
+  border-radius: var(--shape-control, 8px);
 }
 .admin-field textarea {
   resize: vertical;
@@ -149,7 +149,7 @@
   padding: 1rem;
   background: var(--surface-container-lowest);
   border: 1px solid var(--outline-variant);
-  border-radius: var(--shape-small);
+  border-radius: var(--shape-control, 8px);
   font-size: 0.75rem;
 }
 .admin-section {

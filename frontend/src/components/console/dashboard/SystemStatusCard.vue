@@ -408,7 +408,7 @@ const successColor = computed(() => rateColor(successRate.value))
           >
             <p class="flex min-w-0 items-baseline gap-1 whitespace-nowrap">
               <span
-                class="whitespace-nowrap text-2xl font-bold leading-none tabular-nums"
+                class="display-number whitespace-nowrap text-2xl leading-none tabular-nums"
                 :style="{ color: tile.color }"
               >
                 {{ tile.value }}

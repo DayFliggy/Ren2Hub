@@ -199,7 +199,7 @@ const rpmCaption = computed(() => {
             />
             <p
               v-else
-              class="mt-1 truncate text-2xl font-bold leading-tight tabular-nums tracking-tight"
+              class="display-number mt-1 truncate text-2xl leading-tight tabular-nums tracking-tight"
               :style="{ color: cell.color }"
             >
               {{ cell.value }}

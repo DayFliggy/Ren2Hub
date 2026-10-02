@@ -176,7 +176,7 @@ onBeforeUnmount(() => {
         :aria-describedby="subtitle ? subtitleId : undefined"
       >
         <div
-          class="absolute inset-0 backdrop-blur-[2px]"
+          class="absolute inset-0 backdrop-blur-sm sm:backdrop-blur-md"
           :style="{ background: 'var(--drawer-backdrop)' }"
           @click="requestClose"
         />

@@ -509,7 +509,7 @@ onBeforeUnmount(() => {
           <div class="mt-3 flex flex-wrap gap-2">
             <select
               v-model="selectedVersions[`${item.indexURL}:${item.key}`]"
-              class="max-w-full rounded border border-[var(--border-subtle)] bg-[var(--surface-page)] p-2"
+              class="max-w-full rounded border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2"
               :aria-label="t('taskPlugins.selectVersion')"
             >
               <option :value="undefined">{{ item.latest }}</option>
@@ -731,7 +731,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   border: 1px solid var(--border-subtle);
   border-radius: 0.6rem;
-  background: var(--surface-page);
+  background: var(--surface-solid);
   color: var(--text-primary);
   padding: 0.75rem;
   font: 0.8rem/1.5 monospace;

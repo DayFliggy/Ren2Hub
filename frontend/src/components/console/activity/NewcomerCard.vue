@@ -141,7 +141,7 @@ function confirmClaim() {
         <p class="text-xs text-[var(--text-tertiary)]">
           {{ t('activity.newcomer.claimConfirmLabel') }}
         </p>
-        <p class="mt-1 text-2xl font-bold text-[var(--accent-text)]">
+        <p class="display-number mt-1 text-2xl text-[var(--accent-text)]">
           +{{ pendingReward }}
         </p>
       </div>

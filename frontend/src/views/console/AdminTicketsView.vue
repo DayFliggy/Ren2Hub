@@ -9,6 +9,7 @@ import { ApiError, type PageResult } from '@/api/types'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
+import IconButton from '@/components/common/IconButton.vue'
 import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
@@ -382,10 +383,9 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
           <span class="hidden text-xs text-[var(--text-tertiary)] sm:inline">
             {{ t('tickets.admin.queueSummary', ticketQueue.summary) }}
           </span>
-          <button
-            type="button"
-            class="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] text-[var(--text-secondary)] shadow-[var(--card-shadow)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-ring"
-            :aria-label="t('common.refresh')"
+          <IconButton
+            :label="t('common.refresh')"
+            :disabled="queueLoading"
             @click="loadQueue"
           >
             <RefreshCw
@@ -393,7 +393,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
               :class="{ 'animate-spin': queueLoading }"
               aria-hidden="true"
             />
-          </button>
+          </IconButton>
         </div>
       </template>
     </PageBreadcrumb>

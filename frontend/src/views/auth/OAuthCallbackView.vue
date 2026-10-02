@@ -94,7 +94,7 @@ onBeforeUnmount(() => {
   place-items: center;
   padding: 2rem;
   color: var(--text-primary, #111827);
-  background: var(--surface-page, #f8fafc);
+  background: var(--page-background);
   font:
     500 0.95rem/1.5 system-ui,
     sans-serif;

@@ -105,7 +105,9 @@ useEChart(
       </div>
     </template>
 
-    <p class="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+    <p
+      class="display-number text-2xl tracking-tight text-[var(--text-primary)]"
+    >
       {{ t('invite.people', { count: totalNew }) }}
     </p>
     <p class="mt-0.5 text-xs text-[var(--text-tertiary)]">
