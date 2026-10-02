@@ -17,7 +17,6 @@ const SECTIONS = [
   'storage',
   'quality',
   'tasks',
-  'billing',
 ]
 
 function ok(data: unknown) {
@@ -76,7 +75,7 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(
         page.getByRole('heading', { level: 1, name: '运维监控' })
       ).toBeVisible()
-      await expect(section(page, 'billing')).toContainText('计费健康')
+      await expect(section(page, 'billing')).toHaveCount(0)
       await expect(section(page, 'tasks')).toContainText('网关状态清理')
       await expect(section(page, 'upstream')).toContainText('upstream-1')
 
@@ -138,9 +137,9 @@ for (const theme of ['light', 'dark'] as const) {
         '/api/ops/requests',
         '/api/ops/channels',
         '/api/system-task/summary',
-        '/api/gateway/metrics',
       ])
         expect(api.has(path), path).toBe(true)
+      expect(api.has('/api/gateway/metrics')).toBe(false)
       expect(errors).toEqual([])
     })
   }
@@ -230,7 +229,7 @@ test('empty states read as healthy instead of zero-filled', async ({
   await expect(section(page, 'quality')).toContainText('请求日志未启用')
   await expect(section(page, 'tasks')).toContainText('没有已注册的系统任务')
   await expect(section(page, 'tasks')).toContainText('暂无等待或运行中的任务')
-  await expect(section(page, 'billing')).toContainText('没有逾期的计费恢复')
+  await expect(section(page, 'billing')).toHaveCount(0)
   await page.screenshot({ path: testInfo.outputPath('ops-empty.png') })
 })
 

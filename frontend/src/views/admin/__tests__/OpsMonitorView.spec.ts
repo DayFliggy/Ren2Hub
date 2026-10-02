@@ -119,10 +119,9 @@ describe('ops monitor access', () => {
     expect(section('tasks')).toBe(false)
   })
 
-  it('gives Root the task registry and billing health', async () => {
+  it('gives Root the task registry without billing health', async () => {
     const view = await render(100)
     expect(systemManagementApi.summary).toHaveBeenCalledTimes(1)
-    expect(opsMonitorApi.billing).toHaveBeenCalledTimes(1)
     const tasks = view.get('[data-ops-section="tasks"]')
     expect(tasks.text()).toContain('Gateway state cleanup')
     expect(tasks.text()).toContain('Failing')
@@ -132,36 +131,14 @@ describe('ops monitor access', () => {
         .findAll('option')
         .map((option) => option.text())
     ).toEqual(['All types', 'Batch channel test', 'Gateway state cleanup'])
-    const billing = view.get('[data-ops-section="billing"]')
-    expect(billing.text()).toContain('Overdue recoveries')
-    expect(billing.text()).toContain('Current database state')
-    expect(billing.get('[data-ops-settlements]').text()).toContain(
-      'Confirmed usage'
-    )
-    expect(billing.get('[data-ops-settlements]').text()).toContain(
-      'Estimated usage'
-    )
-    expect(billing.get('[data-ops-settlements]').text()).toContain(
-      'Frozen estimate'
-    )
-    expect(billing.find('a').exists()).toBe(false)
+    expect(view.find('[data-ops-section="billing"]').exists()).toBe(false)
   })
 })
 
 describe('ops monitor data states', () => {
-  it('shows an empty recovery backlog without claiming that no active billing exists', async () => {
-    const fixture = billingFixture()
-    fixture.billing_recovery = { pending: 0, oldest_updated_at: 0 }
-    vi.mocked(opsMonitorApi.billing).mockResolvedValue(
-      parseOpsBillingMetrics(fixture)
-    )
+  it('does not mount billing health section for any user', async () => {
     const view = await render(100)
-    const billing = view.get('[data-ops-section="billing"]')
-    expect(billing.text()).toContain('No overdue billing recovery')
-    expect(billing.text()).toContain(
-      'Only unfinished records past the recovery grace period are counted.'
-    )
-    expect(billing.text()).toContain('--')
+    expect(view.find('[data-ops-section="billing"]').exists()).toBe(false)
   })
 
   it('renders unmeasured readings as "--" instead of zero', async () => {

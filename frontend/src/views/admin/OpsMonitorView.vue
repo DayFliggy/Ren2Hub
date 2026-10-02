@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { opsMonitorApi, type OpsWindow } from '@/api/opsMonitor'
-import OpsBillingCard from '@/components/admin/ops/OpsBillingCard.vue'
 import OpsGatewayCard from '@/components/admin/ops/OpsGatewayCard.vue'
 import OpsQualityCard from '@/components/admin/ops/OpsQualityCard.vue'
 import OpsResourcesCard from '@/components/admin/ops/OpsResourcesCard.vue'
@@ -59,8 +58,9 @@ const canReadChannels = computed(() => auth.hasPermission('channel', 'read'))
       v-bind="overviewState"
     />
     <template v-if="auth.isRoot">
-      <div class="ops-area ops-area--tasks"><OpsSystemTasksCard /></div>
-      <OpsBillingCard class="ops-area ops-area--billing" />
+      <div class="ops-area ops-area--tasks ops-area--full">
+        <OpsSystemTasksCard />
+      </div>
     </template>
   </div>
 </template>
