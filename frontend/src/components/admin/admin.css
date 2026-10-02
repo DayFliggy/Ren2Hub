@@ -15,20 +15,30 @@
   font-size: 1.25rem;
   font-weight: 600;
   min-width: 10rem;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
 }
 .admin-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
-  border-bottom: 1px solid var(--outline-variant);
+  gap: 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
 }
 .admin-tabs a {
-  padding: 0.75rem 0;
+  padding: 0.75rem 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
   color: var(--text-secondary);
   border-bottom: 2px solid transparent;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+.admin-tabs a:hover {
+  color: var(--text-primary);
 }
 .admin-tabs a.router-link-exact-active {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   border-bottom-color: var(--accent);
 }
 .admin-table-scroll {
@@ -38,19 +48,30 @@
 .admin-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 .admin-table th,
 .admin-table td {
-  padding: 0.75rem;
+  padding: 0.6875rem 0.875rem;
   text-align: left;
-  border-bottom: 1px solid var(--outline-variant);
+  border-bottom: 1px solid var(--border-subtle);
   overflow-wrap: anywhere;
 }
 .admin-table th {
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   color: var(--text-secondary);
-  background: var(--surface-container-high);
+  background: var(--surface-table-header, var(--surface-muted));
+}
+.admin-table tr {
+  transition: background-color 0.15s ease;
+}
+.admin-table tbody tr:hover td {
+  background: var(--surface-hover);
+}
+.admin-table tbody tr[data-active='true'] td {
+  background: var(--accent-soft);
 }
 .admin-table td:first-child {
   max-width: 18rem;
@@ -69,7 +90,8 @@
   gap: 0.375rem;
   min-width: 0;
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
 }
 .admin-field input:not([type='checkbox']),
 .admin-field select,
@@ -77,41 +99,61 @@
 .admin-input {
   width: 100%;
   min-width: 0;
-  min-height: 2.5rem;
-  padding: 0.5rem 0.75rem;
+  min-height: 2.375rem;
+  padding: 0.4375rem 0.75rem;
   color: var(--text-primary);
-  background: var(--surface-container-low);
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--shape-control, 8px);
+  background: var(--surface-solid);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
 }
 .admin-field textarea {
   resize: vertical;
   min-height: 5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 .admin-field input:focus-visible,
 .admin-field select:focus-visible,
 .admin-field textarea:focus-visible,
 .admin-input:focus-visible,
 .admin-tabs a:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--state-focus-layer, rgba(216, 152, 76, 0.18));
 }
 .admin-field-wide {
   grid-column: 1 / -1;
 }
 .admin-check {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.admin-check input[type='checkbox'] {
+  accent-color: var(--accent);
+  border-radius: 0.25rem;
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
 }
 .admin-error {
-  color: var(--status-danger);
+  color: var(--status-danger-text, var(--status-danger));
+  font-size: 0.8125rem;
   overflow-wrap: anywhere;
 }
 .admin-muted {
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
 }
 .admin-row-actions {
   display: flex;
@@ -123,7 +165,7 @@
   display: grid;
   gap: 0.75rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 .admin-values dt {
   color: var(--text-secondary);
@@ -147,15 +189,16 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   padding: 1rem;
-  background: var(--surface-container-lowest);
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--shape-control, 8px);
+  background: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
   font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 .admin-section {
   display: grid;
   gap: 0.75rem;
-  border-top: 1px solid var(--outline-variant);
+  border-top: 1px solid var(--border-subtle);
   padding-top: 1rem;
 }
 @media (max-width: 640px) {
@@ -166,10 +209,10 @@
   .admin-field input:not([type='checkbox']),
   .admin-field select,
   .admin-input {
-    min-height: 2.75rem;
+    min-height: 2.625rem;
   }
   .admin-table th,
   .admin-table td {
-    padding: 0.625rem 0.5rem;
+    padding: 0.5625rem 0.5rem;
   }
 }

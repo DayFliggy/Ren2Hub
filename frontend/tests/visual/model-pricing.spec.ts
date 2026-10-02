@@ -80,7 +80,7 @@ for (const theme of ['light', 'dark'] as const)
           },
         })
       })
-      await page.goto('/system-settings/billing/model-pricing')
+      await page.goto('/models/pricing')
       await page
         .getByRole('button', { name: 'task-model', exact: true })
         .click()
@@ -287,10 +287,10 @@ for (const theme of ['light', 'dark'] as const)
           },
         })
       )
-      await page.goto('/system-settings/billing/model-pricing')
+      await page.goto('/models/pricing')
       await expect(
-        page.getByRole('heading', { name: 'Model pricing', exact: true })
-      ).toBeVisible()
+        page.getByRole('tab', { name: 'Pricing', exact: true })
+      ).toHaveAttribute('aria-selected', 'true')
       await expect(
         page
           .getByText('No prices configured', { exact: true })
@@ -404,7 +404,7 @@ test('blank expressions and server conflicts keep a recoverable draft', async ({
       },
     })
   })
-  await page.goto('/system-settings/billing/model-pricing')
+  await page.goto('/models/pricing')
   await page
     .getByRole('button', { name: 'Add model', exact: true })
     .first()
@@ -431,10 +431,9 @@ test('blank expressions and server conflicts keep a recoverable draft', async ({
   ).toHaveValue('0')
 })
 
-test('model pricing is a billing settings section that guards its draft', async ({
+test('model pricing is a model management section that guards its draft', async ({
   page,
 }) => {
-  // Narrowest width with the console sidebar and the settings rail together.
   await page.setViewportSize({ width: 1024, height: 900 })
   await configureStablePage(page, { theme: 'light' })
   await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
@@ -461,39 +460,38 @@ test('model pricing is a billing settings section that guards its draft', async 
       },
     })
   )
-  await page.goto('/system-settings/billing/quota')
-  // Sidebar and mobile strip both render the entry; every copy must be current.
-  const expectSettingsCurrent = async () => {
+  await page.goto('/models/metadata')
+  const expectModelsAdminCurrent = async () => {
     await expect(
-      page.locator('[data-console-nav-item="system-settings"]').first()
+      page.locator('[data-console-nav-item="models-admin"]').first()
     ).toBeVisible()
     await expect(
       page.locator(
-        '[data-console-nav-item="system-settings"]:not([aria-current="page"])'
+        '[data-console-nav-item="models-admin"]:not([aria-current="page"])'
       )
     ).toHaveCount(0)
   }
-  await expectSettingsCurrent()
+  await expectModelsAdminCurrent()
   await expect(
     page.locator('[data-console-nav-item="model-pricing"]')
   ).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Model pricing', exact: true }).click()
-  await expect(page).toHaveURL(/\/system-settings\/billing\/model-pricing$/)
+  await page.getByRole('tab', { name: 'Pricing', exact: true }).click()
+  await expect(page).toHaveURL(/\/models\/pricing$/)
   await expect(
-    page.getByRole('heading', { name: 'Model pricing', exact: true })
-  ).toBeVisible()
-  await expectSettingsCurrent()
+    page.getByRole('tab', { name: 'Pricing', exact: true })
+  ).toHaveAttribute('aria-selected', 'true')
+  await expectModelsAdminCurrent()
   await assertNoHorizontalOverflow(page)
 
   await page.getByRole('button', { name: 'Delete', exact: true }).click()
   await expect(page.getByText('Unsaved prices', { exact: true })).toBeVisible()
-  const quota = page.getByRole('button', { name: '配额与展示', exact: true })
+  const modelsTab = page.getByRole('tab', { name: 'Models', exact: true })
   page.once('dialog', (dialog) => void dialog.dismiss())
-  await quota.click()
-  await expect(page).toHaveURL(/\/billing\/model-pricing$/)
+  await modelsTab.click()
+  await expect(page).toHaveURL(/\/models\/pricing$/)
   await expect(page.getByText('Unsaved prices', { exact: true })).toBeVisible()
   page.once('dialog', (dialog) => void dialog.accept())
-  await quota.click()
-  await expect(page).toHaveURL(/\/billing\/quota$/)
+  await modelsTab.click()
+  await expect(page).toHaveURL(/\/models\/metadata$/)
 })

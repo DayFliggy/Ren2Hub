@@ -312,7 +312,7 @@ export default {
     },
   },
   nav: {
-    adminModels: '模型',
+    adminModels: '模型管理',
     opsMonitor: '运维监控',
     dashboard: '仪表盘',
     keys: '令牌',
@@ -2735,6 +2735,8 @@ export default {
     },
     invalidConfiguration: '请先修正无效配置。',
     invalidJson: '{field} 不是有效的 JSON。',
+    searchPlaceholder: '搜索当前分类配置',
+    searchEmpty: '没有匹配的配置项。',
     loadFailed: '系统设置读取失败。重新读取成功前不能编辑或保存。',
     retryLoad: '重新读取设置',
     gmpayPanel: {

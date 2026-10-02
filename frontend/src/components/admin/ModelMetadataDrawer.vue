@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** NewAPI model-mutate drawer without the pricing tab (pricing lives in billing settings). */
+/** Model metadata drawer. Pricing is edited in Model management › Pricing. */
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RefreshCw } from 'lucide-vue-next'

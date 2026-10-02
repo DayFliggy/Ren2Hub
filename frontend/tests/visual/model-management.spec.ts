@@ -142,19 +142,24 @@ for (const language of ['zh-CN', 'en']) {
           page.screenshot({ path: testInfo.outputPath(name), fullPage: true })
         await page.goto('/models/metadata')
         await expect(visible(page, 'gpt-local')).toBeVisible()
-        // NewAPI naming: sidebar "Models", page "Model management".
         await expect(
           page
             .locator('[data-console-nav-item="models-admin"]')
             .filter({ visible: true })
             .first()
-        ).toContainText(zh ? '模型' : 'Models')
+        ).toContainText(zh ? '模型管理' : 'Model management')
         await expect(
           visible(page, zh ? '模型管理' : 'Model management')
         ).toBeVisible()
         await expect(
           page.getByRole('tab', {
             name: zh ? '供应商' : 'Vendors',
+            exact: true,
+          })
+        ).toBeVisible()
+        await expect(
+          page.getByRole('tab', {
+            name: zh ? '定价' : 'Pricing',
             exact: true,
           })
         ).toBeVisible()

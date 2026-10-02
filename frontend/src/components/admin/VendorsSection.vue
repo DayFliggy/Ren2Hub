@@ -311,7 +311,7 @@ defineExpose({ openCreate, reload: load })
           <template #cell-model_count="{ row }">
             <RouterLink
               :to="modelsLink(row as VendorRow)"
-              class="text-sm tabular-nums text-[var(--accent-text)] underline-offset-4 hover:underline focus-ring"
+              class="inline-flex items-center gap-1 rounded-md bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-semibold tabular-nums text-[var(--accent-text)] transition-colors hover:bg-[var(--accent-soft)]/80 focus-ring"
             >
               {{ linkedCount(row as VendorRow) }}
             </RouterLink>

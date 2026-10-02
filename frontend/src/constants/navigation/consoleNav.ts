@@ -119,8 +119,7 @@ export const consoleNavGroups: ConsoleNavGroup[] = [
         icon: 'M4 6h16M4 12h16M4 18h16M7 3v6M17 9v6M10 15v6',
       },
       {
-        // NewAPI "Models" admin entry, right after Channels: metadata and
-        // vendor management.
+        // Admin model workspace: metadata, vendors, and Root pricing.
         name: 'models-admin',
         labelKey: 'nav.adminModels',
         route: 'models-admin',

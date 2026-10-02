@@ -408,10 +408,7 @@ onBeforeUnmount(() => {
         </h2>
         <RouterLink
           class="text-sm underline"
-          :to="{
-            name: 'system-settings-billing',
-            params: { section: 'model-pricing' },
-          }"
+          :to="{ name: 'models-pricing' }"
           >{{ t('billing.modelPricing') }}</RouterLink
         >
         <div

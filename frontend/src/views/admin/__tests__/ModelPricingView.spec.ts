@@ -50,12 +50,12 @@ async function setup() {
     history: createMemoryHistory(),
     routes: [
       {
-        path: '/system-settings/billing/:section',
+        path: '/models/pricing',
         component: ModelPricingView,
       },
     ],
   })
-  await router.push('/system-settings/billing/model-pricing')
+  await router.push('/models/pricing')
   const wrapper = mount(
     { template: '<RouterView />' },
     {

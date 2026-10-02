@@ -51,7 +51,6 @@ export interface SystemSettingsSection {
     | 'gmpay'
     | 'payment-compliance'
     | 'operations-maintenance'
-    | 'model-pricing'
 }
 
 export interface SystemSettingsDomain {
@@ -437,16 +436,6 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             1
           ),
         ],
-      },
-      {
-        // Same position as NewAPI's billing/model-pricing section. The pricing
-        // workspace owns its drafts and saves through /api/option/model_pricing.
-        id: 'model-pricing',
-        title: '模型定价',
-        titleKey: 'billing.modelPricing',
-        description: '模型与工具价格、价格获取和草稿保存。',
-        fields: [],
-        integration: 'model-pricing',
       },
       {
         id: 'payment',

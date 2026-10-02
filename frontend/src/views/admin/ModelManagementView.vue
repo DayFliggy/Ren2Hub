@@ -1,9 +1,16 @@
 <script setup lang="ts">
 /**
- * NewAPI model management: "Models" (/models/metadata) and "Vendors"
- * (/models/vendors) sections. The retired Deployments section is not shown.
+ * Admin model workspace: metadata, vendors, and Root-only pricing.
+ * The retired Deployments section is not shown.
  */
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  nextTick,
+  onMounted,
+  ref,
+  watch,
+} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { AlertCircle, List, Plus, RefreshCw } from 'lucide-vue-next'
@@ -20,12 +27,18 @@ import PrefillGroupDialog from '@/components/admin/PrefillGroupDialog.vue'
 import VendorsSection from '@/components/admin/VendorsSection.vue'
 import { useAdminRequest } from '@/composables/useAdminRequest'
 import { modelMetadataMessages } from '@/i18n/modelMetadata'
+import { useAuthStore } from '@/stores/auth'
 
-const props = defineProps<{ section: 'metadata' | 'vendors' }>()
+const ModelPricingView = defineAsyncComponent(
+  () => import('@/views/admin/ModelPricingView.vue')
+)
+
+const props = defineProps<{ section: 'metadata' | 'vendors' | 'pricing' }>()
 const { t } = useI18n({ useScope: 'local', messages: modelMetadataMessages })
 const { t: tGlobal } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const vendorRequest = useAdminRequest()
 const vendors = ref<ModelVendor[]>([])
 const modelsSection = ref<InstanceType<typeof ModelsSection> | null>(null)
@@ -36,7 +49,7 @@ const initialName = ref('')
 const syncOpen = ref(false)
 const missingOpen = ref(false)
 
-// Both sections reuse this view. Only a committed navigation may discard
+// Sections reuse this view. Only a committed navigation may discard
 // the editor; canceled or busy navigation leaves its section unchanged.
 watch(
   () => props.section,
@@ -45,9 +58,17 @@ watch(
   }
 )
 
+const crumb = computed(() =>
+  props.section === 'vendors'
+    ? t('vendorManagement')
+    : props.section === 'pricing'
+      ? t('pricingManagement')
+      : t('modelManagement')
+)
 const tabs = computed(() => [
   { key: 'metadata', label: t('models') },
   { key: 'vendors', label: t('vendors') },
+  ...(auth.isRoot ? [{ key: 'pricing', label: t('pricing') }] : []),
 ])
 const prefillOpen = computed(() => route.query.manage === 'prefill-groups')
 const moreItems = computed(() => [
@@ -111,13 +132,8 @@ async function metadataChanged() {
 onMounted(loadVendors)
 </script>
 <template>
-  <div>
-    <PageBreadcrumb
-      :crumbs="[
-        tGlobal('nav.groupAdmin'),
-        t(section === 'vendors' ? 'vendorManagement' : 'modelManagement'),
-      ]"
-    >
+  <div class="model-management-page">
+    <PageBreadcrumb :crumbs="[tGlobal('nav.groupAdmin'), crumb]">
       <template #action>
         <div
           v-if="section === 'metadata'"
@@ -136,7 +152,11 @@ onMounted(loadVendors)
             @select="selectMore"
           />
         </div>
-        <ConsoleButton v-else size="sm" @click="vendorsSection?.openCreate()">
+        <ConsoleButton
+          v-else-if="section === 'vendors'"
+          size="sm"
+          @click="vendorsSection?.openCreate()"
+        >
           <Plus :size="14" aria-hidden="true" />{{ t('addVendor') }}
         </ConsoleButton>
       </template>
@@ -145,16 +165,16 @@ onMounted(loadVendors)
       :model-value="section"
       :items="tabs"
       panel-id="model-management-panel"
-      class="mb-5"
+      :class="section === 'pricing' ? 'mb-3' : 'mb-5'"
       :aria-label="t('sections')"
       @update:model-value="switchSection"
     />
     <div
-      v-if="vendorRequest.error.value"
+      v-if="vendorRequest.error.value && section !== 'pricing'"
       role="alert"
-      class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-subtle)] px-4 py-2.5 text-sm text-[var(--status-danger-text)]"
+      class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--status-danger)]/20 bg-[var(--status-danger-soft)] px-4 py-2.5 text-sm text-[var(--status-danger-text)]"
     >
-      <span class="mr-auto">{{ vendorRequest.error.value }}</span>
+      <span class="mr-auto font-medium">{{ vendorRequest.error.value }}</span>
       <ConsoleButton
         variant="ghost"
         size="sm"
@@ -177,11 +197,12 @@ onMounted(loadVendors)
         @edit="openDrawer"
       />
       <VendorsSection
-        v-else
+        v-else-if="section === 'vendors'"
         ref="vendorsSection"
         @changed="loadVendors"
         @open-model="openDrawer($event.id)"
       />
+      <ModelPricingView v-else-if="section === 'pricing'" embedded />
     </div>
     <ModelMetadataDrawer
       v-if="drawerOpen"
@@ -206,3 +227,9 @@ onMounted(loadVendors)
     <PrefillGroupDialog :open="prefillOpen" @close="closePrefill" />
   </div>
 </template>
+
+<style scoped>
+.model-management-page {
+  min-width: 0;
+}
+</style>

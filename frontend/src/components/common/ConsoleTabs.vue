@@ -6,10 +6,14 @@ export interface TabItem {
 
 const model = defineModel<string>({ default: '' })
 
-const props = defineProps<{
-  items: TabItem[]
-  panelId: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    items: TabItem[]
+    panelId: string
+    density?: 'default' | 'compact'
+  }>(),
+  { density: 'default' }
+)
 
 function onKeydown(e: KeyboardEvent, index: number) {
   let next: number
@@ -38,7 +42,8 @@ function onKeydown(e: KeyboardEvent, index: number) {
 
 <template>
   <div
-    class="console-tabs flex items-center gap-7 border-b border-[var(--border-subtle)]"
+    class="console-tabs flex items-center border-b border-[var(--border-subtle)]"
+    :class="density === 'compact' ? 'gap-4' : 'gap-7'"
     role="tablist"
     data-handdrawn="tabs"
   >
@@ -51,12 +56,15 @@ function onKeydown(e: KeyboardEvent, index: number) {
       :aria-controls="panelId"
       :aria-selected="model === item.key"
       :tabindex="model === item.key ? 0 : -1"
-      class="relative inline-flex min-h-11 items-center pb-3 text-sm font-medium transition-colors sm:min-h-0"
-      :class="
+      class="relative inline-flex items-center font-medium transition-colors sm:min-h-0"
+      :class="[
+        density === 'compact'
+          ? 'min-h-9 pb-2 text-xs'
+          : 'min-h-11 pb-3 text-sm',
         model === item.key
           ? 'text-[var(--text-primary)]'
-          : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
-      "
+          : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]',
+      ]"
       @click="model = item.key"
       @keydown="onKeydown($event, i)"
     >

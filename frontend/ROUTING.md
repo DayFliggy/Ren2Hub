@@ -9,15 +9,15 @@ Vue 是唯一 Web 前端，从 `/` 加载，静态构建资源位于 `/assets/`�
 | 用户     | `/dashboard`、`/models`、`/keys`、`/keys/:id/routing`、`/wallet`、`/activity`、`/invite`、`/profile`、`/settings`、`/tickets/:id?` | 会话和模块 capability                                                                                                   |
 | 日志     | `/usage-logs`、`/usage-logs/drawing`、`/usage-logs/task`、`/usage-logs/audit`                                                      | logs capability；审计日志需 audit capability，全部账号需 `audit:read`                                                   |
 | 管理     | `/channels`、`/users`、`/redemption-codes`、`/orders`、`/ticket-management/:id?`                                                   | Admin 和已有权限规则                                                                                                    |
-| 模型管理 | `/models/metadata`、`/models/vendors`、`/models/prefill-groups`                                                                    | Admin，admin capability                                                                                                 |
+| 模型管理 | `/models/metadata`、`/models/vendors`、`/models/pricing`、`/models/prefill-groups`                                                 | Admin，admin capability；定价分区仅 Root                                                                                |
 | 系统     | `/system-settings/:domain/:section?`、`/ops`                                                                                       | 设置：Root，admin capability；`/ops`：Admin，admin capability；其中系统任务与计费健康仅 Root，上游健康需 `channel:read` |
 | 延期模块 | 市场、发票、Farm、Bigame、Lab                                                                                                      | 保留源码，capability 未开放时拒绝进入                                                                                   |
 
-普通用户模型目录使用 `/models`。管理侧边栏的“模型”入口沿用 NewAPI 的“模型管理”页面，分为“模型”（`/models/metadata`）和“供应商”（`/models/vendors`）两个分区，切换分区时保留 query；上游的“部署”分区已停用。模型分区的筛选参数沿用上游的 `filter/vendor/status/sync/page/pageSize`，供应商分区为 `vFilter/vPage/vPageSize`。`/models/prefill-groups` 跳转到模型分区并以 `manage=prefill-groups` 打开预填充分组弹窗。控制台共享布局，页面路径使用根路径，布局与语言包由 metadata 指定。Admin 为角色值 ≥10，Root 为 ≥100；渠道和工单管理还检查相应资源权限。
+普通用户模型目录使用 `/models`。管理侧边栏的“模型管理”入口分为“模型”（`/models/metadata`）、“供应商”（`/models/vendors`）和 Root 可见的“定价”（`/models/pricing`），切换分区时保留 query；上游的“部署”分区已停用。模型分区的筛选参数沿用上游的 `filter/vendor/status/sync/page/pageSize`，供应商分区为 `vFilter/vPage/vPageSize`。`/models/prefill-groups` 跳转到模型分区并以 `manage=prefill-groups` 打开预填充分组弹窗。控制台共享布局，页面路径使用根路径，布局与语言包由 metadata 指定。Admin 为角色值 ≥10，Root 为 ≥100；渠道和工单管理还检查相应资源权限。
 
 守卫先检查初始化状态，再检查模块能力、加载语言包并恢复登录会话。初始化检查失败进入 `/setup/error`，未完成初始化进入 `/setup`；需要登录的页面转到 `/sign-in`，回跳地址必须通过站内路由校验。
 
-Root 模型定价是系统设置“计费”域的 `model-pricing` 分区，路径为 `/system-settings/billing/model-pricing`，与 NewAPI 位置一致；侧边栏不单独列出，系统设置各页面均高亮“系统设置”。切换分区时，若价格草稿未保存会先确认。旧 `billing/pricing`、自动价格设置书签跳转到此处并保留 query/hash。模型定价与 `/models/metadata` 独立。
+Root 模型定价是模型管理的 `pricing` 分区，路径为 `/models/pricing`；侧边栏高亮“模型管理”。切换分区时，若价格草稿未保存会先确认。旧 `/system-settings/billing/model-pricing`、`billing/pricing` 和自动价格设置书签跳转到此处并保留 query/hash。非 Root 管理员看不到定价分区，直接访问会回到控制台入口。
 
 ## 兼容边界
 

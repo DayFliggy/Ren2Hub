@@ -230,7 +230,7 @@ for (const theme of ['light', 'dark'] as const)
           },
         })
       )
-      await page.goto('/system-settings/billing/model-pricing')
+      await page.goto('/models/pricing')
       await page.getByRole('button', { name: '自动获取', exact: true }).click()
       const dialog = page.getByRole('dialog')
       await dialog.locator('input[value="sub2api"]').check()

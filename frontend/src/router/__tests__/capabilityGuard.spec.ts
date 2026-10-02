@@ -257,6 +257,7 @@ describe('capability route guard', () => {
     for (const path of [
       '/models/metadata',
       '/models/vendors',
+      '/models/pricing',
       '/models/prefill-groups',
       '/ops',
       '/system-info',
@@ -405,15 +406,21 @@ describe('capability route guard', () => {
       await router.push(
         `${path}${path.includes('?') ? '&' : '?'}audit=1#pricing`
       )
-      expect(router.currentRoute.value.path).toBe(
-        '/system-settings/billing/model-pricing'
-      )
-      // Pricing is a billing settings section, highlighted as system settings.
-      expect(router.currentRoute.value.name).toBe('system-settings-billing')
-      expect(router.currentRoute.value.params.section).toBe('model-pricing')
-      expect(router.currentRoute.value.meta.nav).toBe('system-settings-site')
+      expect(router.currentRoute.value.path).toBe('/models/pricing')
+      expect(router.currentRoute.value.name).toBe('models-pricing')
+      expect(router.currentRoute.value.meta.nav).toBe('models-admin')
       expect(router.currentRoute.value.query.audit).toBe('1')
       expect(router.currentRoute.value.hash).toBe('#pricing')
     }
+  })
+
+  it('keeps model pricing on the model management workspace for root only', async () => {
+    useAuthStore().user!.role = 10
+    await router.push('/models/pricing')
+    expect(router.currentRoute.value.name).toBe('dashboard')
+    useAuthStore().user!.role = 100
+    await router.push('/models/pricing')
+    expect(router.currentRoute.value.path).toBe('/models/pricing')
+    expect(router.currentRoute.value.meta.nav).toBe('models-admin')
   })
 })

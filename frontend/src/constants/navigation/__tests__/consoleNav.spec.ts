@@ -28,7 +28,7 @@ describe('console navigation', () => {
         route: 'channels',
       })
     )
-    // NewAPI naming for the metadata manager: "Models" right after Channels.
+    // Model management sits right after Channels.
     expect(adminGroup?.items[1]).toEqual(
       expect.objectContaining({
         name: 'models-admin',

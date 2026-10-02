@@ -49,8 +49,18 @@ function parseOptions(
   descriptors: SystemOptionDescriptor[] = []
 ): AllSystemSettings {
   const result = { ...defaults }
+  const descriptorKeys = new Set(
+    descriptors.map((descriptor) => descriptor.key)
+  )
   for (const opt of options) {
-    if (Object.prototype.hasOwnProperty.call(defaults, opt.key)) {
+    // Keep descriptor-backed options even when the Vue type snapshot has not
+    // declared a dedicated property yet. This lets integration and plugin
+    // settings retain their authoritative runtime value instead of silently
+    // disappearing from the shared settings cache.
+    if (
+      Object.prototype.hasOwnProperty.call(defaults, opt.key) ||
+      descriptorKeys.has(opt.key)
+    ) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(result as any)[opt.key] = castValue(
         opt.key,

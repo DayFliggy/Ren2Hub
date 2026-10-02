@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useMediaQuery } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
+import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import { api } from '@/api/client'
 import {
   pricingConfigApi,
@@ -25,6 +26,7 @@ import {
 import { modelPricingMessages } from '@/i18n/modelPricing'
 import { useSystemSettings } from '@/composables/useSystemSettings'
 import { formatDecimalUSD, multiplyDecimal, isDecimal } from '@/utils/decimal'
+import { Coins, Copy, Plus, RefreshCw, Save, Sparkles } from 'lucide-vue-next'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleTabs from '@/components/common/ConsoleTabs.vue'
@@ -34,6 +36,10 @@ import ModelPricingEditor from '@/components/admin/ModelPricingEditor.vue'
 import ToolPricingEditor from '@/components/admin/ToolPricingEditor.vue'
 import PriceFetchDialog from '@/components/admin/PriceFetchDialog.vue'
 import '@/components/admin/admin.css'
+
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
+  embedded: false,
+})
 const { t, te } = useI18n({ useScope: 'local', messages: modelPricingMessages })
 const route = useRoute(),
   mobile = useMediaQuery('(max-width: 767px)')
@@ -109,7 +115,7 @@ const pageRows = computed(() =>
   )
 )
 const tabs = computed(() => [
-  { key: 'models', label: t('models') },
+  { key: 'models', label: t(props.embedded ? 'priced' : 'models') },
   { key: 'unset', label: t('unset') },
   { key: 'tools', label: t('tools') },
 ])
@@ -304,123 +310,158 @@ function reload() {
   if (saving.value || settings.saving.value) return
   if (!dirty.value || window.confirm(t('refreshConfirm'))) void load(true)
 }
-function beforeUnload(event: BeforeUnloadEvent) {
-  if (dirty.value || saving.value || settings.saving.value)
-    event.preventDefault()
-}
-const keepDraft = () =>
-  !saving.value &&
-  !settings.saving.value &&
-  (!dirty.value || window.confirm(t('unsaved')))
-onBeforeRouteLeave(keepDraft)
-// Billing sections share one route record, so switching to another section
-// is a route update that unmounts this workspace.
-onBeforeRouteUpdate((to, from) =>
-  to.params.section === from.params.section ? true : keepDraft()
-)
+useUnsavedChanges({
+  dirty: () => dirty.value,
+  message: () => t('unsaved'),
+  busy: () => saving.value || settings.saving.value,
+})
 onMounted(() => {
   void load()
-  window.addEventListener('beforeunload', beforeUnload)
 })
 onBeforeUnmount(() => {
   controller?.abort()
-  window.removeEventListener('beforeunload', beforeUnload)
 })
 </script>
 <template>
-  <main class="admin-page model-pricing-page">
-    <div class="admin-toolbar">
-      <h1>{{ t('title') }}</h1>
-      <span v-if="dirty" class="admin-muted" role="status">{{
-        t('dirty')
-      }}</span
-      ><ConsoleButton
-        variant="ghost"
-        :loading="loading"
-        :disabled="saving || settings.saving.value"
-        @click="reload"
-        >{{ t('reload') }}</ConsoleButton
-      ><ConsoleButton
-        v-if="tab !== 'tools'"
-        variant="secondary"
-        :disabled="loading || saving || !ready"
-        @click="beginFetch"
-        >{{ t('fetch') }}</ConsoleButton
-      ><ConsoleButton
-        v-if="tab !== 'tools'"
-        :loading="saving"
-        :disabled="loading || !ready"
-        @click="save"
-        >{{ t('save') }}</ConsoleButton
-      >
+  <section
+    class="admin-page model-pricing-page"
+    :class="{ 'is-embedded': embedded }"
+    :aria-label="t('title')"
+  >
+    <div class="pricing-card-header">
+      <div class="admin-toolbar pricing-toolbar">
+        <h1 v-if="!embedded">{{ t('title') }}</h1>
+        <p v-else-if="dirty" class="pricing-lead" role="status">
+          <span class="pricing-dirty-dot" aria-hidden="true" />
+          {{ t('dirty') }}
+        </p>
+        <span v-else class="pricing-toolbar-spacer" aria-hidden="true" />
+        <div class="pricing-toolbar-actions">
+          <span v-if="dirty && !embedded" class="admin-muted" role="status">{{
+            t('dirty')
+          }}</span>
+          <ConsoleButton
+            variant="ghost"
+            size="sm"
+            :loading="loading"
+            :disabled="saving || settings.saving.value"
+            @click="reload"
+          >
+            <RefreshCw :size="13" class="mr-1.5" aria-hidden="true" />{{
+              t('reload')
+            }}
+          </ConsoleButton>
+          <ConsoleButton
+            v-if="tab !== 'tools'"
+            variant="secondary"
+            size="sm"
+            :disabled="loading || saving || !ready"
+            @click="beginFetch"
+          >
+            <Sparkles :size="13" class="mr-1.5" aria-hidden="true" />{{
+              t('fetch')
+            }}
+          </ConsoleButton>
+          <ConsoleButton
+            v-if="tab !== 'tools'"
+            size="sm"
+            :loading="saving"
+            :disabled="loading || !ready"
+            @click="save"
+          >
+            <Save :size="13" class="mr-1.5" aria-hidden="true" />{{ t('save') }}
+          </ConsoleButton>
+        </div>
+      </div>
+      <div class="pricing-tabs-wrap">
+        <ConsoleTabs
+          :model-value="tab"
+          :items="tabs"
+          panel-id="model-pricing-panel"
+          :density="embedded ? 'compact' : 'default'"
+          @update:model-value="
+            (value) => {
+              if (commitOpen()) tab = value
+            }
+          "
+        />
+      </div>
     </div>
+
     <fieldset
       class="pricing-controls"
       :disabled="loading || saving || settings.saving.value || !ready"
     >
-      <ConsoleTabs
-        :model-value="tab"
-        :items="tabs"
-        panel-id="model-pricing-panel"
-        @update:model-value="
-          (value) => {
-            if (commitOpen()) tab = value
-          }
-        "
-      />
-      <p v-if="error" role="alert" class="admin-error">{{ error }}</p>
-      <p v-if="message" role="status" class="admin-muted">{{ message }}</p>
+      <div
+        v-if="error"
+        role="alert"
+        class="mb-3 flex items-center gap-2 rounded-lg border border-[var(--status-danger)]/20 bg-[var(--status-danger-soft)] px-3.5 py-2.5 text-xs text-[var(--status-danger-text)]"
+      >
+        <span class="admin-error">{{ error }}</span>
+      </div>
+      <div
+        v-if="message"
+        role="status"
+        class="mb-3 flex items-center gap-2 rounded-lg border border-[var(--status-success)]/20 bg-[var(--status-success-soft)] px-3.5 py-2.5 text-xs text-[var(--status-success-text)]"
+      >
+        <span class="admin-muted">{{ message }}</span>
+      </div>
+
       <section id="model-pricing-panel" role="tabpanel">
-        <ToolPricingEditor
-          v-show="tab === 'tools'"
-          :key="toolsRevision"
-          :value="toolsJSON"
-          @save="saveTools"
-          @dirty="toolsDirty = $event"
-        />
+        <div v-show="tab === 'tools'" class="pricing-tools-wrap">
+          <ToolPricingEditor
+            :key="toolsRevision"
+            :value="toolsJSON"
+            @save="saveTools"
+            @dirty="toolsDirty = $event"
+          />
+        </div>
+
         <template v-if="tab !== 'tools'">
           <div class="pricing-top-actions">
-            <label class="admin-check" :title="t('exposeHint')"
-              ><input
-                v-model="expose"
-                type="checkbox"
-                @change="changeExpose"
-              />{{ t('expose') }}</label
-            ><ConsoleButton
-              variant="ghost"
-              size="sm"
-              @click="clearOpen = true"
-              >{{ t('clear') }}</ConsoleButton
-            ><ConsoleButton variant="secondary" size="sm" @click="switchMode">{{
-              t(mode === 'visual' ? 'json' : 'visual')
-            }}</ConsoleButton>
+            <label class="admin-check" :title="t('exposeHint')">
+              <input v-model="expose" type="checkbox" @change="changeExpose" />
+              {{ t('expose') }}
+            </label>
+            <ConsoleButton variant="ghost" size="sm" @click="clearOpen = true">
+              {{ t('clear') }}
+            </ConsoleButton>
+            <ConsoleButton variant="secondary" size="sm" @click="switchMode">
+              {{ t(mode === 'visual' ? 'json' : 'visual') }}
+            </ConsoleButton>
           </div>
+
           <div v-if="mode === 'json'" class="pricing-json">
-            <label v-for="key in PRICING_KEYS" :key="key" class="admin-field"
-              ><span>{{ key }}</span
-              ><textarea v-model="json[key]" rows="7" spellcheck="false" />
+            <label v-for="key in PRICING_KEYS" :key="key" class="admin-field">
+              <span>{{ key }}</span>
+              <textarea v-model="json[key]" rows="7" spellcheck="false" />
             </label>
           </div>
+
           <div v-else class="pricing-workspace">
             <div class="pricing-models">
               <div class="pricing-filter">
-                <label class="admin-field"
-                  ><span class="sr-only">{{ t('search') }}</span
-                  ><input v-model="search" :placeholder="t('search')" /></label
-                ><select v-model="filter" :aria-label="t('mode')">
+                <label class="admin-field pricing-search-label">
+                  <span class="sr-only">{{ t('search') }}</span>
+                  <input v-model="search" :placeholder="t('search')" />
+                </label>
+                <select v-model="filter" :aria-label="t('mode')">
                   <option value="">{{ t('all') }}</option>
                   <option value="tiered_expr">{{ t('expression') }}</option>
                   <option value="per-token">{{ t('token') }}</option>
-                  <option value="per-request">
-                    {{ t('request') }}
-                  </option></select
-                ><ConsoleButton
+                  <option value="per-request">{{ t('request') }}</option>
+                </select>
+                <ConsoleButton
                   v-if="tab === 'models'"
                   size="sm"
                   @click="open('__new__')"
-                  >{{ t('add') }}</ConsoleButton
                 >
+                  <Plus :size="13" class="mr-1" aria-hidden="true" />{{
+                    t('add')
+                  }}
+                </ConsoleButton>
               </div>
+
               <div class="pricing-table">
                 <table class="admin-table">
                   <thead>
@@ -473,17 +514,22 @@ onBeforeUnmount(() => {
                         </button>
                       </td>
                       <td>
-                        {{
-                          t(
-                            !Object.keys(draft[name] ?? {}).length
-                              ? 'unpriced'
-                              : pricingMode(draft[name]!) === 'tiered_expr'
-                                ? 'expression'
-                                : pricingMode(draft[name]!) === 'per-request'
-                                  ? 'perCall'
-                                  : 'perToken'
-                          )
-                        }}
+                        <span
+                          class="pricing-mode-pill"
+                          :class="`is-${pricingMode(draft[name] ?? {})}`"
+                        >
+                          {{
+                            t(
+                              !Object.keys(draft[name] ?? {}).length
+                                ? 'unpriced'
+                                : pricingMode(draft[name]!) === 'tiered_expr'
+                                  ? 'expression'
+                                  : pricingMode(draft[name]!) === 'per-request'
+                                    ? 'perCall'
+                                    : 'perToken'
+                            )
+                          }}
+                        </span>
                       </td>
                       <td
                         class="pricing-summary"
@@ -496,17 +542,27 @@ onBeforeUnmount(() => {
                           variant="ghost"
                           size="sm"
                           @click="remove(name)"
-                          >{{ t('remove') }}</ConsoleButton
                         >
+                          {{ t('remove') }}
+                        </ConsoleButton>
                       </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
+
               <div v-if="!loading && !rows.length" class="pricing-empty">
-                <p>{{ t(search ? 'noResults' : 'empty') }}</p>
-                <p>{{ t('emptyHint') }}</p>
+                <div class="pricing-empty-badge">
+                  <Coins :size="24" class="opacity-40" />
+                </div>
+                <p class="font-medium text-[var(--text-primary)]">
+                  {{ t(search ? 'noResults' : 'empty') }}
+                </p>
+                <p class="text-xs text-[var(--text-tertiary)]">
+                  {{ t('emptyHint') }}
+                </p>
               </div>
+
               <TablePagination
                 :page="page"
                 :page-size="pageSize"
@@ -514,43 +570,71 @@ onBeforeUnmount(() => {
                 @update:page="page = $event"
                 @update:page-size="pageSize = $event"
               />
-              <div v-if="selected.length" class="pricing-top-actions">
-                <span>{{ t('selected', { count: selected.length }) }}</span
-                ><ConsoleButton
+
+              <div v-if="selected.length" class="pricing-selected-strip">
+                <span
+                  class="text-xs font-semibold text-[var(--text-secondary)]"
+                >
+                  {{ t('selected', { count: selected.length }) }}
+                </span>
+                <ConsoleButton
                   variant="secondary"
                   size="sm"
                   :disabled="!editing"
                   @click="copy"
-                  >{{ t('copy') }}</ConsoleButton
                 >
+                  <Copy :size="13" class="mr-1" aria-hidden="true" />{{
+                    t('copy')
+                  }}
+                </ConsoleButton>
               </div>
             </div>
-            <template v-if="!mobile"
-              ><ModelPricingEditor
-                v-if="editing !== null"
-                ref="editor"
-                :model-name="activeName"
-                :pricing="activePricing"
-                :entry="activeEntry"
-                :revision="revision"
-                :saving="saving"
-                :site-currency="siteCurrency"
-                :exchange-rate="exchangeRate"
-                @update="updateDraft"
-                @dirty="editorDirty = $event"
-                @save="save"
-              />
-              <div v-else class="pricing-empty pricing-editor-empty">
-                <p>{{ t('select') }}</p>
-                <ConsoleButton variant="secondary" @click="open('__new__')">{{
-                  t('add')
-                }}</ConsoleButton>
-              </div></template
-            >
+
+            <div class="pricing-editor-container">
+              <template v-if="!mobile">
+                <ModelPricingEditor
+                  v-if="editing !== null"
+                  ref="editor"
+                  :model-name="activeName"
+                  :pricing="activePricing"
+                  :entry="activeEntry"
+                  :revision="revision"
+                  :saving="saving"
+                  :site-currency="siteCurrency"
+                  :exchange-rate="exchangeRate"
+                  @update="updateDraft"
+                  @dirty="editorDirty = $event"
+                  @save="save"
+                />
+                <div v-else class="pricing-empty pricing-editor-empty">
+                  <div class="pricing-empty-badge">
+                    <Coins :size="30" class="text-[var(--accent)]" />
+                  </div>
+                  <p class="text-sm font-semibold text-[var(--text-primary)]">
+                    {{ t('select') }}
+                  </p>
+                  <p
+                    class="max-w-xs text-center text-xs text-[var(--text-tertiary)]"
+                  >
+                    {{ t('emptyHint') }}
+                  </p>
+                  <ConsoleButton
+                    variant="secondary"
+                    size="sm"
+                    @click="open('__new__')"
+                  >
+                    <Plus :size="13" class="mr-1" aria-hidden="true" />{{
+                      t('add')
+                    }}
+                  </ConsoleButton>
+                </div>
+              </template>
+            </div>
           </div>
         </template>
       </section>
     </fieldset>
+
     <ConsoleModal
       v-if="mobile && editing !== null"
       :open="true"
@@ -559,7 +643,8 @@ onBeforeUnmount(() => {
       size="xl"
       :close-disabled="loading || saving"
       @close="closeEditor"
-      ><fieldset
+    >
+      <fieldset
         class="pricing-controls"
         :disabled="loading || saving || !ready"
       >
@@ -575,14 +660,17 @@ onBeforeUnmount(() => {
           @update="updateDraft"
           @dirty="editorDirty = $event"
           @save="save"
-        /></fieldset
-    ></ConsoleModal>
+        />
+      </fieldset>
+    </ConsoleModal>
+
     <PriceFetchDialog
       v-if="fetchOpen"
       :draft="draft"
       @close="fetchOpen = false"
       @fill="fill"
     />
+
     <ConfirmDialog
       :open="clearOpen"
       :title="t('clear')"
@@ -591,101 +679,256 @@ onBeforeUnmount(() => {
       @confirm="clear"
       @cancel="clearOpen = false"
     />
-  </main>
+  </section>
 </template>
+
 <style scoped>
 .pricing-controls {
   min-width: 0;
+  max-width: 100%;
   margin: 0;
   border: 0;
   padding: 0;
 }
+#model-pricing-panel {
+  min-width: 0;
+  max-width: 100%;
+}
 .model-pricing-page {
   min-width: 0;
-  /* The settings rail narrows this page, so the split follows its own width. */
+  max-width: 100%;
   container-type: inline-size;
 }
-.pricing-top-actions,
-.pricing-filter {
+.pricing-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--surface-solid);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+  box-shadow: var(--card-shadow);
+  margin-bottom: 1rem;
+  min-width: 0;
+  max-width: 100%;
+}
+.pricing-toolbar {
+  align-items: center;
+  width: 100%;
+}
+.pricing-lead {
+  flex: 1;
+  min-width: 8rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--status-warning-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.pricing-dirty-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--status-warning);
+  display: inline-block;
+  box-shadow: 0 0 0 2px var(--status-warning-soft);
+}
+.pricing-toolbar-spacer {
+  flex: 1;
+  min-width: 0;
+}
+.pricing-toolbar-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.65rem;
-  margin: 1rem 0;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+.pricing-tabs-wrap {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 0.625rem;
 }
 .pricing-top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
-}
-.pricing-filter label {
-  flex: 1 1 10rem;
+  gap: 0.625rem;
+  margin-bottom: 0.875rem;
 }
 .pricing-workspace {
   display: grid;
-  grid-template-columns: minmax(300px, 0.8fr) minmax(430px, 1.2fr);
+  grid-template-columns: minmax(320px, 0.85fr) minmax(440px, 1.15fr);
   gap: 1.25rem;
   align-items: start;
 }
 .pricing-models {
   min-width: 0;
+  background: var(--surface-solid);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+}
+.pricing-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-solid);
+}
+.pricing-search-label {
+  flex: 1;
+  margin: 0;
+}
+.pricing-filter select {
+  max-width: 9rem;
 }
 .pricing-table {
   overflow: auto;
-  max-height: 62vh;
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.65rem;
+  max-height: 60vh;
 }
 .pricing-table table {
-  min-width: 650px;
+  min-width: 580px;
   table-layout: fixed;
 }
 .pricing-table th:first-child {
-  width: 2.5rem;
+  width: 2.75rem;
+  text-align: center;
+}
+.pricing-table td:first-child {
+  text-align: center;
 }
 .pricing-table th:nth-child(2) {
-  width: 12rem;
+  width: 11rem;
 }
-.pricing-table th:nth-child(3),
+.pricing-table th:nth-child(3) {
+  width: 6.5rem;
+}
 .pricing-table th:last-child {
-  width: 5rem;
+  width: 5.5rem;
+  text-align: right;
+}
+.pricing-table td:last-child {
+  text-align: right;
+}
+.pricing-model-name {
+  text-align: start;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.pricing-model-name:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.pricing-mode-pill {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+.pricing-mode-pill.is-tiered_expr {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.pricing-mode-pill.is-per-token {
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+}
+.pricing-mode-pill.is-per-request {
+  background: var(--status-warning-soft);
+  color: var(--status-warning-text);
+}
+.pricing-mode-pill.is-unpriced {
+  background: var(--surface-muted);
+  color: var(--text-tertiary);
 }
 .pricing-summary {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: monospace;
-}
-.pricing-model-name {
-  text-align: start;
-  overflow-wrap: anywhere;
-}
-tr[data-active='true'] {
-  background: var(--surface-hover);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
 }
 .pricing-empty {
-  min-height: 10rem;
+  min-height: 12rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 1.5rem;
-  gap: 0.75rem;
-  border: 1px dashed var(--border-subtle);
+  padding: 2rem 1.5rem;
+  gap: 0.5rem;
   color: var(--text-secondary);
-  border-radius: 0.75rem;
+}
+.pricing-empty-badge {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 9999px;
+  background: var(--accent-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+.pricing-selected-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 1rem;
+  background: var(--accent-soft);
+  border-top: 1px solid var(--border-subtle);
+}
+.pricing-editor-container {
+  min-width: 0;
 }
 .pricing-editor-empty {
   min-height: 28rem;
-  margin-top: 1rem;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 0.75rem;
+  background: var(--surface-solid);
+  box-shadow: var(--card-shadow);
 }
 .pricing-json {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
+  background: var(--surface-solid);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  box-shadow: var(--card-shadow);
 }
-textarea {
-  font-family: monospace;
+.pricing-tools-wrap {
+  background: var(--surface-solid);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  box-shadow: var(--card-shadow);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
-@container (max-width: 760px) {
+@media (max-width: 640px) {
+  .pricing-tools-wrap {
+    padding: 0.875rem;
+  }
+}
+@container (max-width: 820px) {
   .pricing-workspace {
     grid-template-columns: minmax(0, 1fr);
   }

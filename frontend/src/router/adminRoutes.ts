@@ -33,6 +33,19 @@ export const adminRoutes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/models/pricing',
+    name: 'models-pricing',
+    component: () => import('@/views/admin/ModelManagementView.vue'),
+    props: { section: 'pricing' },
+    meta: {
+      requiresAdmin: true,
+      requiresRoot: true,
+      feature: 'admin',
+      protected: true,
+      nav: 'models-admin',
+    },
+  },
+  {
     path: '/models/prefill-groups',
     name: 'prefill-admin',
     redirect: (to) => ({

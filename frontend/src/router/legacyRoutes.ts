@@ -112,9 +112,10 @@ export function canonicalLegacyPath(
   }
   if (
     path === '/system-settings/models/auto-pricing' ||
-    path === '/system-settings/billing/pricing'
+    path === '/system-settings/billing/pricing' ||
+    path === '/system-settings/billing/model-pricing'
   )
-    path = '/system-settings/billing/model-pricing'
+    path = '/models/pricing'
   if (
     /^\/(next|playground|chat|chat2link|chat-presets)(\/|$)/.test(path) ||
     /^\/(models\/deployments|deployment|admin\/deployments)(\/|$)/.test(path) ||

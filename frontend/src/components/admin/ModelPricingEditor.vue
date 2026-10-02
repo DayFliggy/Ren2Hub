@@ -448,8 +448,14 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
 </script>
 <template>
   <section class="pricing-editor" :aria-label="t('edit')">
-    <header>
+    <header class="pricing-editor-header">
       <h2>{{ t(modelName ? 'edit' : 'add') }}</h2>
+      <span
+        v-if="modelName"
+        class="rounded-md border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-2 py-0.5 font-mono text-xs font-medium text-[var(--text-secondary)]"
+      >
+        {{ modelName }}
+      </span>
     </header>
     <div class="pricing-editor-scroll">
       <label class="admin-field"
@@ -729,16 +735,27 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
   border: 1px solid var(--border-subtle);
   border-radius: 0.75rem;
   background: var(--surface-solid);
+  box-shadow: var(--card-shadow);
   overflow: hidden;
 }
-header,
-footer {
-  padding: 1rem;
+.pricing-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1.25rem;
+  background: var(--surface-muted);
   border-bottom: 1px solid var(--border-subtle);
 }
+.pricing-editor-header h2 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
 footer {
+  padding: 0.875rem 1.25rem;
   border-top: 1px solid var(--border-subtle);
-  border-bottom: 0;
+  background: var(--surface-muted);
   display: flex;
   justify-content: flex-end;
 }
@@ -751,23 +768,34 @@ h3 {
   gap: 1rem;
   min-height: 0;
   overflow-y: auto;
-  padding: 1rem;
+  padding: 1.25rem;
   max-height: 66vh;
 }
 .pricing-mode {
   display: flex;
   gap: 0.25rem;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.25rem;
+  background: var(--surface-muted);
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-subtle);
 }
 .pricing-mode button {
   flex: 1;
-  padding: 0.75rem 0.4rem;
-  font-size: 0.8rem;
-  border-bottom: 2px solid transparent;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 .pricing-mode button[aria-selected='true'] {
-  border-color: var(--text-primary);
+  background: var(--surface-solid);
+  color: var(--text-primary);
   font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 .pricing-task-condition {
   display: flex;
@@ -775,31 +803,69 @@ h3 {
   align-items: end;
   gap: 0.5rem;
   margin: 0.75rem 0;
+  padding: 0.75rem;
+  background: var(--surface-muted);
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-subtle);
 }
 .pricing-task-condition label {
   flex: 1 1 7rem;
 }
 .pricing-lane {
   display: grid;
-  gap: 0.4rem;
-  padding: 0.75rem;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
   border: 1px solid var(--border-subtle);
   border-radius: 0.5rem;
+  background: var(--surface-solid);
 }
 .pricing-lane > input {
   width: 100%;
   border: 1px solid var(--border-subtle);
-  padding: 0.5rem;
-  border-radius: 0.4rem;
+  padding: 0.4375rem 0.75rem;
+  border-radius: 0.375rem;
   background: var(--surface-solid);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
 }
-.pricing-convert,
+.pricing-convert {
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--accent-soft);
+  border-radius: 0.5rem;
+  background: var(--accent-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.pricing-convert p {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
 .pricing-preview {
-  padding: 0.75rem;
+  padding: 1rem;
   border: 1px solid var(--border-subtle);
   border-radius: 0.5rem;
+  background: var(--surface-solid);
   display: grid;
   gap: 0.5rem;
+}
+.pricing-preview pre {
+  padding: 0.75rem;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  color: var(--text-primary);
+}
+.pricing-simulation {
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  padding: 0.875rem 1rem;
+  background: var(--surface-solid);
 }
 .pricing-simulation > * {
   margin-bottom: 0.75rem;
@@ -809,12 +875,22 @@ textarea {
   max-width: 100%;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  font-family: monospace;
-  font-size: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
 }
 summary {
   cursor: pointer;
-  padding: 0.5rem 0;
+  padding: 0.375rem 0;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  user-select: none;
+}
+details {
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface-solid);
 }
 @media (max-width: 767px) {
   .pricing-editor-scroll {

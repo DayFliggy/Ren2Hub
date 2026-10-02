@@ -38,6 +38,27 @@ describe('system settings load result', () => {
       '{"default":1,"vip":1,"svip":1}'
     )
   })
+  it('keeps descriptor-backed integration options in the shared settings snapshot', async () => {
+    const { useSystemSettings } = await import('../useSystemSettings')
+    const settings = useSystemSettings()
+    vi.mocked(api.get)
+      .mockResolvedValueOnce([{ key: 'GmpayId', value: 'merchant-1' }])
+      .mockResolvedValueOnce([
+        {
+          key: 'GmpayId',
+          value_type: 'string',
+          default_value: '',
+          editor: 'text',
+          sensitive: false,
+          editable: true,
+        },
+      ])
+      .mockResolvedValueOnce({ configured: [] })
+    expect(await settings.load()).toBe(true)
+    expect((settings.settings.value as Record<string, unknown>).GmpayId).toBe(
+      'merchant-1'
+    )
+  })
   it('rejects malformed or unavailable configuration metadata without enabling edits', async () => {
     const { useSystemSettings } = await import('../useSystemSettings')
     const settings = useSystemSettings()

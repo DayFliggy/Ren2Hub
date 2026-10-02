@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, reactive, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import PasskeyDomainsPanel from '@/components/console/systemSettings/PasskeyDomainsPanel.vue'
@@ -22,11 +22,6 @@ import {
 import { useToast } from '@/composables/useToast'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import GatewayConfigPanel from '@/components/console/gateway/GatewayConfigPanel.vue'
-
-// The pricing workspace is large; keep it in its own chunk as when it had a route.
-const ModelPricingView = defineAsyncComponent(
-  () => import('@/views/admin/ModelPricingView.vue')
-)
 
 const props = defineProps<{ domain: SystemSettingsDomainId }>()
 
@@ -60,6 +55,26 @@ const draft = reactive<Record<string, SystemSettingValue>>({})
 const baseline = reactive<Record<string, SystemSettingValue>>({})
 const draftValid = reactive<Record<string, boolean>>({})
 const saving = reactive({ value: false })
+const searchQuery = ref('')
+
+const visibleFields = computed(() => {
+  const fields = activeSection.value?.fields ?? []
+  const query = searchQuery.value.trim().toLocaleLowerCase()
+  if (!query) return fields
+  return fields.filter((field) => {
+    const text = [
+      field.key,
+      field.label,
+      field.description,
+      field.labelKey ? t(field.labelKey) : '',
+      field.descriptionKey ? t(field.descriptionKey) : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLocaleLowerCase()
+    return text.includes(query)
+  })
+})
 
 function readField(key: string, fallback: SystemSettingValue) {
   return rawValue(key, fallback)
@@ -210,13 +225,7 @@ onMounted(() => load())
       </nav>
     </aside>
 
-    <div
-      v-if="activeSection.integration === 'model-pricing'"
-      class="min-w-0 flex-1"
-    >
-      <ModelPricingView />
-    </div>
-    <div v-else class="min-w-0 flex-1">
+    <div class="min-w-0 flex-1">
       <SysSettingsFormCard
         :title="
           activeSection.titleKey
@@ -232,6 +241,27 @@ onMounted(() => load())
         :dirty="dirty && loaded && !loading && !sharedSaving"
         @save="saveSection"
       >
+        <div class="settings-search" role="search">
+          <label class="sr-only" :for="'settings-search-' + domain">
+            {{ t('systemSettings.searchPlaceholder') }}
+          </label>
+          <input
+            :id="'settings-search-' + domain"
+            v-model="searchQuery"
+            type="search"
+            class="settings-search-input"
+            :placeholder="t('systemSettings.searchPlaceholder')"
+            autocomplete="off"
+            @keydown.esc="searchQuery = ''"
+          />
+          <span
+            v-if="searchQuery.trim()"
+            class="settings-search-count"
+            role="status"
+          >
+            {{ visibleFields.length }}
+          </span>
+        </div>
         <p
           v-if="loading"
           role="status"
@@ -259,7 +289,7 @@ onMounted(() => load())
         >
           <div class="settings-fields-grid">
             <SystemSettingsField
-              v-for="field in activeSection.fields"
+              v-for="field in visibleFields"
               :key="field.key"
               v-model="draft[field.key]"
               :field="field"
@@ -270,6 +300,13 @@ onMounted(() => load())
               @validity="draftValid[field.key] = $event"
             />
           </div>
+          <p
+            v-if="searchQuery.trim() && visibleFields.length === 0"
+            class="settings-search-empty"
+            role="status"
+          >
+            {{ t('systemSettings.searchEmpty') }}
+          </p>
         </fieldset>
         <PasskeyDomainsPanel
           v-if="domain === 'auth' && activeSection?.id === 'passkey'"
@@ -374,6 +411,55 @@ onMounted(() => load())
 }
 .settings-fields-grid > :deep(.settings-field-wide) {
   grid-column: 1 / -1;
+}
+.settings-search {
+  position: relative;
+  margin-bottom: 1.25rem;
+}
+.settings-search-input {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-control);
+  background: var(--surface-container-low);
+  color: var(--text-primary);
+  padding: 0.625rem 3rem 0.625rem 0.875rem;
+  font-size: 0.8125rem;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+.settings-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+.settings-search-input:focus {
+  border-color: var(--accent);
+  background: var(--surface-container);
+  box-shadow: var(--focus-halo);
+}
+.settings-search-count {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  min-width: 1.5rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 9999px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem;
+  text-align: center;
+  transform: translateY(-50%);
+}
+.settings-search-empty {
+  padding: 1rem;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--shape-control);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  text-align: center;
 }
 @media (max-width: 860px) {
   .settings-domain-layout {

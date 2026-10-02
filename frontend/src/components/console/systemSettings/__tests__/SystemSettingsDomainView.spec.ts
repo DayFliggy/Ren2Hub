@@ -201,4 +201,17 @@ describe('EPay settings page', () => {
     expect(state.saveOptions).toHaveBeenCalledWith({ Price: 9 })
     wrapper.unmount()
   })
+
+  it('filters fields in the active settings section without changing the save scope', async () => {
+    const wrapper = await render()
+    const search = wrapper.get('input[type="search"]')
+    await search.setValue('merchant')
+    expect(wrapper.find('[id="setting-EpayId"]').exists()).toBe(true)
+    expect(wrapper.find('[id="setting-Price"]').exists()).toBe(false)
+    await search.setValue('does-not-exist')
+    expect(wrapper.get('.settings-search-empty').text()).toContain(
+      'No settings match this search'
+    )
+    wrapper.unmount()
+  })
 })

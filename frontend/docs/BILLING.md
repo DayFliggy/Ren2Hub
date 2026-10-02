@@ -16,7 +16,7 @@
 
 ## 模型定价
 
-Root 在 /system-settings/billing/model-pricing 维护 NewAPI 模型定价。页面沿用模型列表与右侧编辑器布局，手机使用抽屉；支持模型与未定价模型、可视化与 JSON、按 Token、按次、表达式、币种显示、缓存/图像/音频价格、阶梯与请求条件、任务 usage schema 与插件变体。元数据编辑只保存元数据。
+Root 在 /models/pricing 维护 NewAPI 模型定价，入口为控制台侧边栏“模型管理”的定价分区。页面沿用模型列表与右侧编辑器布局，手机使用抽屉；支持已定价与未定价模型、可视化与 JSON、按 Token、按次、表达式、币种显示、缓存/图像/音频价格、阶梯与请求条件、任务 usage schema 与插件变体。元数据编辑只保存元数据。旧 `/system-settings/billing/model-pricing` 书签进入此分区。
 
 GET /api/option/model_pricing 返回 entries、options、empty_version；PATCH 同一路径提交 changes，每项为 model_name、expected_version、pricing 和可选 reset。唯一价格源为管理员保存的 11 项模型定价配置；保存冲突保留草稿。空安装无价格，清空不恢复内置目录或默认模型主价，空表达式不能当作免费；显式填写 0 才表示免费。实际模式为 ratio、per_call、expression；对外 billing_mode 使用 ratio 或 tiered_expr。
 

@@ -287,7 +287,7 @@ defineExpose({ reload: load })
         :placeholder="t('filterPlaceholder')"
         :aria-label="t('filterPlaceholder')"
         name="admin-model-filter"
-        class="w-full xl:w-60"
+        class="w-full xl:w-72"
       />
       <div class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 xl:flex-1">
         <FilterSelect
@@ -332,7 +332,7 @@ defineExpose({ reload: load })
     </div>
     <div
       v-if="selection.length"
-      class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 py-2.5"
+      class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--accent-soft)]/50 px-4 py-2.5 transition-colors"
     >
       <IconButton
         :label="t('clearSelection')"
@@ -341,9 +341,11 @@ defineExpose({ reload: load })
         ><X :size="16"
       /></IconButton>
       <span
-        class="mr-auto text-xs font-semibold text-[var(--text-secondary)]"
+        class="mr-auto inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-text)]"
         aria-live="polite"
-        >{{ t('selected', { count: selection.length }) }}</span
+        ><span class="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />{{
+          t('selected', { count: selection.length })
+        }}</span
       >
       <IconButton
         :label="t('showSelected')"

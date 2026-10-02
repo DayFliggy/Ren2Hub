@@ -335,7 +335,7 @@ export default {
     },
   },
   nav: {
-    adminModels: 'Models',
+    adminModels: 'Model management',
     opsMonitor: 'Ops monitor',
     dashboard: 'Dashboard',
     keys: 'Tokens',
@@ -2817,6 +2817,8 @@ export default {
     },
     invalidConfiguration: 'Correct invalid settings before saving.',
     invalidJson: '{field} is not valid JSON.',
+    searchPlaceholder: 'Search settings in this section',
+    searchEmpty: 'No settings match this search.',
     loadFailed:
       'Settings could not be loaded. Editing and saving are disabled until a successful reload.',
     retryLoad: 'Reload settings',

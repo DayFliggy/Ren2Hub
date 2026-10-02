@@ -20,6 +20,10 @@ const mocks = vi.hoisted(() => ({
   saveModel: vi.fn(),
 }))
 vi.mock('@/api/adminManagement', () => ({ metadataApi: mocks }))
+const authState = vi.hoisted(() => ({ isRoot: true }))
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authState,
+}))
 const rows = [1, 2].map((id) => ({
   id,
   model_name: `model-${id}`,
@@ -53,6 +57,11 @@ async function setup(path = '/models/metadata', realModelDrawer = false) {
         component: ModelManagementView,
         props: { section: 'vendors' },
       },
+      {
+        path: '/models/pricing',
+        component: ModelManagementView,
+        props: { section: 'pricing' },
+      },
     ],
   })
   await router.push(path)
@@ -73,6 +82,7 @@ async function setup(path = '/models/metadata', realModelDrawer = false) {
           MetadataSyncDialog: true,
           MissingModelsDialog: true,
           PrefillGroupDialog: true,
+          ModelPricingView: true,
           VendorDrawer: true,
           ConfirmDialog: true,
           FieldVisibilityMenu: true,
@@ -88,6 +98,7 @@ async function setup(path = '/models/metadata', realModelDrawer = false) {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  authState.isRoot = true
   mocks.models.mockResolvedValue({
     items: rows,
     total: 2,
@@ -297,12 +308,28 @@ describe('model management sections', () => {
   })
   it('switches to the vendors section without dropping the query', async () => {
     const { wrapper, router } = await setup('/models/metadata?vFilter=open')
-    await wrapper.get('[role="tab"][aria-selected="false"]').trigger('click')
+    await wrapper.get('#model-management-panel-tab-vendors').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/models/vendors')
     expect(router.currentRoute.value.query).toEqual({ vFilter: 'open' })
     expect(wrapper.findComponent(VendorsSection).exists()).toBe(true)
     wrapper.unmount()
+  })
+
+  it('shows the pricing tab only to root and keeps it on the same workspace', async () => {
+    const { wrapper, router } = await setup()
+    await wrapper.get('#model-management-panel-tab-pricing').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/models/pricing')
+    expect(wrapper.findComponent(VendorsSection).exists()).toBe(false)
+    wrapper.unmount()
+
+    authState.isRoot = false
+    const admin = await setup()
+    expect(
+      admin.wrapper.find('#model-management-panel-tab-pricing').exists()
+    ).toBe(false)
+    admin.wrapper.unmount()
   })
   it('opens prefill groups from the deep link and clears it on close', async () => {
     const { wrapper, router } = await setup(

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Plus, Save, Trash2 } from 'lucide-vue-next'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import { isRecord } from '@/api/contracts'
 import { decimalText } from '@/features/pricing/draft'
@@ -107,82 +108,164 @@ function save() {
 </script>
 <template>
   <section class="tool-pricing">
-    <p>{{ t('toolHint') }}</p>
-    <p class="admin-muted">{{ t('noDefault') }}</p>
-    <div class="tool-actions">
-      <ConsoleButton variant="secondary" size="sm" @click="toggle">{{
-        t(mode === 'visual' ? 'json' : 'visual')
-      }}</ConsoleButton
-      ><ConsoleButton
-        v-if="mode === 'visual'"
-        size="sm"
-        @click="rows.push({ id: nextId++, key: '', price: '' })"
-        >{{ t('addPrice') }}</ConsoleButton
-      >
+    <div class="tool-header">
+      <div>
+        <p class="tool-title">{{ t('toolHint') }}</p>
+        <p class="admin-muted">{{ t('noDefault') }}</p>
+      </div>
+      <div class="tool-actions">
+        <ConsoleButton variant="secondary" size="sm" @click="toggle">
+          {{ t(mode === 'visual' ? 'json' : 'visual') }}
+        </ConsoleButton>
+        <ConsoleButton
+          v-if="mode === 'visual'"
+          size="sm"
+          @click="rows.push({ id: nextId++, key: '', price: '' })"
+        >
+          <Plus :size="13" class="mr-1" aria-hidden="true" />
+          {{ t('addPrice') }}
+        </ConsoleButton>
+      </div>
     </div>
-    <div v-if="mode === 'visual'" class="tool-table">
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>{{ t('toolName') }}</th>
-            <th>{{ t('price') }} (USD / 1K)</th>
-            <th>{{ t('actions') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(row, index) in rows" :key="row.id">
-            <td>
-              <label class="admin-field"
-                ><span class="sr-only">{{ t('toolName') }}</span
-                ><input v-model="row.key"
-              /></label>
-            </td>
-            <td>
-              <label class="admin-field"
-                ><span class="sr-only">{{ t('price') }}</span
-                ><input
-                  v-model="row.price"
-                  inputmode="decimal"
-                  :placeholder="t('zeroHint')"
-              /></label>
-            </td>
-            <td>
-              <ConsoleButton
-                variant="ghost"
-                size="sm"
-                @click="rows.splice(index, 1)"
-                >{{ t('remove') }}</ConsoleButton
-              >
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <p v-if="!rows.length" class="admin-muted">{{ t('empty') }}</p>
+
+    <div v-if="mode === 'visual'" class="tool-table-wrap">
+      <div class="tool-table">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>{{ t('toolName') }}</th>
+              <th>{{ t('price') }} (USD / 1K)</th>
+              <th class="w-20 text-right">{{ t('actions') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, index) in rows" :key="row.id">
+              <td>
+                <label class="admin-field m-0">
+                  <span class="sr-only">{{ t('toolName') }}</span>
+                  <input
+                    v-model="row.key"
+                    class="font-mono"
+                    :placeholder="t('toolName')"
+                  />
+                </label>
+              </td>
+              <td>
+                <label class="admin-field m-0">
+                  <span class="sr-only">{{ t('price') }}</span>
+                  <input
+                    v-model="row.price"
+                    inputmode="decimal"
+                    class="font-mono"
+                    :placeholder="t('zeroHint')"
+                  />
+                </label>
+              </td>
+              <td class="text-right">
+                <ConsoleButton
+                  variant="ghost"
+                  size="sm"
+                  @click="rows.splice(index, 1)"
+                >
+                  <Trash2
+                    :size="13"
+                    class="text-[var(--status-danger)]"
+                    aria-hidden="true"
+                  />
+                  <span class="sr-only sm:not-sr-only sm:ml-1">{{
+                    t('remove')
+                  }}</span>
+                </ConsoleButton>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="!rows.length" class="tool-empty">
+        <p class="admin-muted">{{ t('empty') }}</p>
+      </div>
     </div>
-    <label v-else class="admin-field"
-      ><span>{{ t('tools') }} (JSON)</span><textarea v-model="json" rows="14" />
+
+    <label v-else class="admin-field">
+      <span>{{ t('tools') }} (JSON)</span>
+      <textarea
+        v-model="json"
+        rows="14"
+        spellcheck="false"
+        class="font-mono text-xs"
+      />
     </label>
+
     <p v-if="error" role="alert" class="admin-error">{{ error }}</p>
-    <ConsoleButton @click="save">{{ t('toolSave') }}</ConsoleButton>
+
+    <div class="tool-footer">
+      <ConsoleButton @click="save">
+        <Save :size="13" class="mr-1.5" aria-hidden="true" />
+        {{ t('toolSave') }}
+      </ConsoleButton>
+    </div>
   </section>
 </template>
+
 <style scoped>
 .tool-pricing {
   display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.tool-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 1rem;
+  min-width: 0;
+}
+.tool-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
 }
 .tool-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  justify-content: flex-end;
+}
+.tool-table-wrap {
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.5rem;
+  background: var(--surface-solid);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .tool-table {
-  overflow: auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .tool-table table {
-  min-width: 480px;
+  width: 100%;
+  min-width: 380px;
+}
+.tool-table td {
+  padding: 0.5rem 0.75rem;
+}
+.tool-empty {
+  padding: 2rem;
+  text-align: center;
+}
+.tool-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 1rem;
 }
 textarea {
-  font-family: monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 </style>
