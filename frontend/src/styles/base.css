@@ -594,7 +594,7 @@ html.light [data-handdrawn='segments'] {
   box-shadow: inset 1px 1px 0 var(--pencil-line-erased);
 }
 
-html.light [data-handdrawn='toggle'] {
+html.light [data-handdrawn='toggle']:not(.console-toggle) {
   border: 1px solid var(--pencil-line-soft);
   box-shadow: 1px 1px 0 var(--pencil-line-faint);
 }
@@ -908,7 +908,7 @@ html.dark [data-handdrawn='segments'] {
   background: var(--surface-container-low);
 }
 
-html.dark [data-handdrawn='toggle'] {
+html.dark [data-handdrawn='toggle']:not(.console-toggle) {
   border: 1px solid var(--outline-variant);
 }
 
