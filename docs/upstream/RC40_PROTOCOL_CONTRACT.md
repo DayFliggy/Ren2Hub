@@ -1,6 +1,6 @@
-# rc.40 协议与推理服务合同
+# 上游协议与推理服务合同
 
-基准为固定上游 `d04c118c8803f49e0c9bab74dcf5b5efeab9464a`。本文件说明当前实现；分组复验命令见[网关验证步骤](../routing/GATEWAY_VALIDATION.md#顺序与命令)，逐提交处置从 Git 历史读取。本地测试使用模拟上游，不代表真实供应商或部署容器验收。工作区 `scripts/server/test_ren2hub_ws.py` 用于在服务器验证真实握手、同连接连续报价与结算、重叠拒绝及未知用量保留，执行结果只由所属工作区服务器档案记录。
+最初基准为 rc.40 `d04c118c8803f49e0c9bab74dcf5b5efeab9464a`，2026-10-02 的手工适配锁定 NewAPI `main` 的 `1a4166d8e8ba9802d2ca56fe8ecf0ed5404e80d5`；吸收、延期和参考实现差异见[同步账本](SYNC_LEDGER.md)。本文件说明当前实现；分组复验命令见[网关验证步骤](../routing/GATEWAY_VALIDATION.md#顺序与命令)。本地测试使用模拟上游，不代表真实供应商或部署容器验收。工作区 `scripts/server/test_ren2hub_ws.py` 用于在服务器验证真实握手、同连接连续报价与结算、重叠拒绝及未知用量保留，执行结果只由所属工作区服务器档案记录。
 
 ## Responses WebSocket
 
@@ -13,6 +13,12 @@
 排空期间拒绝新生成，允许活动生成在期限内结束；超时关闭连接后，已交付有效输出的调用按观察用量或冻结估算结算，没有输出的失败调用释放预留。`response.failed` / `response.incomplete` 即使包含用量也不代表正常完成，仍以是否交付有效输出决定结算或释放。`TestGatewayResponsesWSDrainLifecycle` 与 `TestGatewayResponsesWSUnsuccessfulTerminalChargesOnlyDeliveredOutput` 覆盖这些边界；部署容器的停止信号和宽限期仍须独立验证，普通 HTTP shutdown 结果不能代替 hijacked WebSocket 验收。
 
 ## 协议转换与模型诊断
+
+Responses custom/freeform 工具可在 Chat、Claude、Gemini 间以单一字符串 `input` 参数包装并还原，历史调用和结果保留关联，工具元数据按真实尝试重置。带 grammar 的输入格式不能仅凭描述提示视为等价约束：产生 `custom_tool_grammar_not_portable`，safe/strict 拒绝，allow 显式记录损失。无名称调用、非法包装和不完整终态不得伪造成成功工具输出。
+
+Claude 普通工具 `content_block_start.input` 为后备参数；有真正 `input_json_delta` 时使用 delta 累计值，无 delta 时在工具结束前发出后备，避免丢参或拼接两份 JSON。原生 `safeguards` 保留；跨协议产生 `claude_safeguards_not_portable`，沿用统一 safe/allow 边界。共享 OpenAI 能力表覆盖 Sol/Luna 及快照名的完成 token 与采样规则，不另建适配器专属模型表。
+
+转换为 Responses SSE 的文本输出遵守完整内容块生命周期：先发 `response.content_part.added`，再发文本 delta，结束时发完整 text/part done 与一致的最终响应，允许官方 SDK 累积器构造 `finalResponse()`。Responses 适配器中的转换损失错误使用统一错误映射，返回 HTTP 400 并跳过重试，不发送上游或输出伪成功；不能把合法的客户端拒绝映射为 HTTP 500。
 
 上游增量 `c2b7a9a9e` 的 Claude 消息级 `output_config` 保留后，本地同时维护当前回合计价与转换损失合同。`ClaudeRequest.ResolveEffectiveEffort()` 只读解析顶层配置和消息序列：system 中的 effort 从后续第一个 user 回合开始生效并持续；连续等待中的设置以最后一次为准，末尾没有 user 的配置不影响当前回合。缺省、空对象和配置对象 null 不重置已有值；明确 effort 必须为非空字符串，非法结构或非 system 角色设置 effort 返回带路径的错误，不返回原始值。解析不改变消息、缓存前缀或原始 JSON，不推断模型默认值；`GetEfforts()` 仍只读取顶层。
 
@@ -29,6 +35,20 @@ Claude、Gemini、OpenAI Chat 和 Responses 的推理、搜索、工具和图片
 Compact 使用普通模型名和 `/v1/responses/compact` 原生端点。Claude `/v1/messages/count_tokens`、Gemini `/v1/models/:model:countTokens` 和 `/v1beta/models/:model:countTokens` 返回 404，不进入生成、报价或预留。
 
 消费日志的 `other.response_model_name` 来自上游真实 JSON、SSE 或 WS 事件中的模型声明，在协议输出改写之前捕获。`model_name` 仍是请求/计价模型，`other.upstream_model_name` 是真实上游请求模型；响应模型诊断不改变路由或价格。字段在无声明或完全相同且无需映射时可以省略。界面按忽略大小写的前后缀兼容规则派生差异，不存储第二个 mismatch 真值。重试重置观测，第一份实质差异不会被后续普通帧覆盖。用户日志投影限制字段长度并拒绝控制字符。
+
+AxonHub `2bf8e2c9` 的 Playground 模型初始化问题按本地合同核查：浏览器无持久模型 Token 的请求仍以逻辑模型冻结价格，跨渠道重试分别映射上游请求模型，真实响应模型只用于诊断。已有等价实现由 `TestGatewayPlaygroundModelIdentity` 保护，包括首渠道失败后重映射、不同供应商模型价格不替换逻辑报价，以及未授权别名零发送；不引入第二个模型状态。
+
+## 豆包 Images 与插件用量
+
+豆包插件 1.2.1 保留 Seedream Flash、逐模型 profile 和 OpenAI Images generate/edit，并对齐 NewAPI `1a4166d8` 的结果保留边界，复用原有宿主路由、上传限制、任务状态和资金恢复。generate 接收 JSON；edit 接收 JSON/multipart 并要求参考图。不支持的 stream、mask、重复标量字段和非法计数在发送前拒绝，URL/Base64 结果由原宿主管线交付。
+
+`UsageProfile.compatibilitySchema` 仅声明明确兼容的历史事实；展示使用当前 schema，计量/价格资格/冻结计算统一使用当前字段与兼容字段的派生集合。拒绝重复字段、非法单位和未声明事实，不自动补零；旧图片和 `video_input` 保持其既有含义。单档图片模型按成功交付数量结算；非法或缺失事实依现有冻结估算结算，不重解释在途任务锁定的插件源码与报价。
+
+`retainResult` 仅允许出现在原生 submit/dynamic 路由声明；false 仅作用于 immediate 终态，异步结果继续保留并记录警告。协议声明出现该字段时加载失败，包括显式 true；不保留未发布扩展的兼容别名。OpenAI Images 的 immediate 结果由宿主自动一次性交付，数据库不保存结果正文；异步 Images 与 Responses 的 JSON、SSE、background 结果保留。已丢弃任务的后续结果及 artifact 检索返回 404，首次内存交付仍可用。
+
+immediate 任务创建、终态 CAS、完成用量和结算恢复意图共用一个事务，提交后才交付资金事件。事务失败不留下可被超时退款的非终态任务；已发送且确认结果的请求使用原冻结估算恢复，不重发。证据无法验证时保持积压，不猜测费用。取消、下载失败、重复终态及插件升级不触发第二次生成或重复资金事件。详细 ABI 见[插件 API](../plugin-api/v1.md)。
+
+Chat → Responses 的无名工具调用在 JSON 和 SSE 转换中返回明确协议错误，不能删掉调用后伪装为 completed。此项刻意保留 Ren2Hub 的严格失败合同，与 NewAPI 当前跳过无名调用的行为不同；已接受请求不重放，结算继续依据实际输出和冻结证据。
 
 ## vLLM 与 SGLang 状态
 

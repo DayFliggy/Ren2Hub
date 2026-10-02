@@ -10,6 +10,8 @@ import (
 // remains the source of truth for all existing fields and actions.
 type legacyChannelDTO struct {
 	*model.Channel
+	StatusReason  string                `json:"status_reason"`
+	StatusTime    int64                 `json:"status_time"`
 	LabGroupSlug  string                `json:"lab_group_slug"`
 	LabGroupName  string                `json:"lab_group_name"`
 	LabMatches    []modellab.LabMatch   `json:"lab_matches"`
@@ -20,8 +22,10 @@ type legacyChannelDTO struct {
 
 func buildLegacyChannelDTO(channel *model.Channel) legacyChannelDTO {
 	resolution := modellab.Resolve(channel.Models, channel.GetModelMapping())
+	reason, when := channelStatusSummary(channel)
 	return legacyChannelDTO{
-		Channel:       channel,
+		Channel:      channelWithSafeStatusInfo(channel),
+		StatusReason: reason, StatusTime: when,
 		LabGroupSlug:  resolution.GroupSlug,
 		LabGroupName:  labGroupName(resolution),
 		LabMatches:    resolution.Labs,

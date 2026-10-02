@@ -68,6 +68,8 @@ export interface AdminChannel extends Record<string, unknown> {
   type: number
   supplier: string
   status: AdminChannelStatus
+  readonly status_reason?: string
+  readonly status_time?: number
   priority: number
   weight: number
   // Capacity & ratio fields (Phase A backend fields)
@@ -362,6 +364,8 @@ export type LogOther = string | Record<string, unknown> | null
 
 export interface LogItem {
   id: number
+  /** Stable gateway request identity; absent on historical or non-request rows. */
+  request_id?: string
   type: LogType
   token_name: string // 使用的 API 令牌名称
   model: string

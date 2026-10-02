@@ -256,9 +256,18 @@ func executeTaskSubmission(c *gin.Context, relayInfo *relaycommon.RelayInfo) (*t
 				}
 			}
 		}
+		if value, ok := c.Get(pluginruntime.ContextKeyPinnedRoute); ok {
+			if pinned, valid := value.(pluginruntime.PinnedRoute); valid && pinned.Route.RetainResult != nil && !*pinned.Route.RetainResult {
+				if result.Immediate != nil {
+					task.PrivateData.ResultDiscarded = true
+				} else {
+					logger.LogWarn(c, "native retainResult:false ignored for an accepted asynchronous task")
+				}
+			}
+		}
 		if result.Immediate != nil {
-			if value, ok := c.Get(pluginruntime.ContextKeyPinnedRoute); ok {
-				if pinned, valid := value.(pluginruntime.PinnedRoute); valid && pinned.Route.RetainResult != nil && !*pinned.Route.RetainResult {
+			if value, ok := c.Get(pluginruntime.ContextKeyPinnedEndpoint); ok {
+				if pinned, valid := value.(pluginruntime.PinnedEndpoint); valid && pinned.Protocol == pluginruntime.ProtocolOpenAIImage {
 					task.PrivateData.ResultDiscarded = true
 				}
 			}
@@ -270,19 +279,23 @@ func executeTaskSubmission(c *gin.Context, relayInfo *relaycommon.RelayInfo) (*t
 		task.Quota = common.Quota(result.Quota)
 		task.Data = result.TaskData
 		task.Action = relayInfo.Action
-		if persistErr := service.FinalizeTaskSubmission(c, relayInfo, task); persistErr != nil {
-			common.SysError("persist accepted task error: " + persistErr.Error())
-			taskErr = service.TaskErrorWrapperLocal(errors.New("accepted task could not be saved; do not resubmit automatically"), "task_persistence_failed", http.StatusServiceUnavailable)
+		var persistErr error
+		if result.Immediate != nil {
+			completionCtx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 30*time.Second)
+			durable, persistErr = service.FinalizeImmediateTaskSubmission(completionCtx, c, relayInfo, task, result.Immediate)
+			cancel()
 		} else {
-			durable = true
-			if result.Immediate != nil {
-				completionCtx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 30*time.Second)
-				err := service.CompleteImmediateTask(completionCtx, task, result.Immediate)
-				cancel()
-				if err != nil {
-					return nil, service.TaskErrorWrapperLocal(err, "task_completion_pending", http.StatusServiceUnavailable)
-				}
+			persistErr = service.FinalizeTaskSubmission(c, relayInfo, task)
+			durable = persistErr == nil
+		}
+		if persistErr != nil {
+			common.SysError("persist accepted task error: " + persistErr.Error())
+			if durable {
+				taskErr = service.TaskErrorWrapperLocal(errors.New("accepted task is saved; accounting recovery is pending; do not resubmit automatically"), "task_completion_pending", http.StatusServiceUnavailable)
+			} else {
+				taskErr = service.TaskErrorWrapperLocal(errors.New("accepted task could not be saved; do not resubmit automatically"), "task_persistence_failed", http.StatusServiceUnavailable)
 			}
+		} else {
 			return &taskSubmissionOutcome{Result: result, Task: task, RelayInfo: relayInfo}, nil
 		}
 	}

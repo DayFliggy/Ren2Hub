@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -50,14 +51,14 @@ func performHeaderNavRequest(t *testing.T, handler gin.HandlerFunc, authenticate
 		previousDB, previousRedis := model.DB, common.RedisEnabled
 		db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 		require.NoError(t, err)
-		require.NoError(t, db.AutoMigrate(&model.User{}))
+		require.NoError(t, db.AutoMigrate(&model.User{}, &model.PersonalAccessToken{}))
 		model.DB = db
 		common.RedisEnabled = false
 		t.Cleanup(func() {
 			model.DB = previousDB
 			common.RedisEnabled = previousRedis
 		})
-		accessToken = "header-nav-pat"
+		accessToken = "pat_hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
 		user := model.User{
 			Username:    "tester",
 			Password:    "unused-password-hash",
@@ -66,8 +67,9 @@ func performHeaderNavRequest(t *testing.T, handler gin.HandlerFunc, authenticate
 			Group:       "default",
 			AuthVersion: 1,
 		}
-		user.SetAccessToken(accessToken)
 		require.NoError(t, db.Create(&user).Error)
+		require.NoError(t, db.Create(&model.PersonalAccessToken{UserID: user.Id, Name: "nav", Digest: model.PersonalAccessTokenDigest(accessToken), Scopes: []string{"profile:read"}, ExpiresAt: time.Now().Add(time.Hour).Unix()}).Error)
+		DeclarePATRoute("GET", "/api/test", "profile:read")
 	}
 
 	recorder := httptest.NewRecorder()

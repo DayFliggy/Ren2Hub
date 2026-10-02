@@ -70,6 +70,11 @@ func requireBillingSchema(db *gorm.DB) error {
 	if schema.EvidenceKeyID == "" || schema.EvidenceKeyID != cipher.KeyID() {
 		return errors.New("billing encryption key does not match this database")
 	}
+	// Management tokens are replaced only on a fresh installation. Refuse the
+	// previous user-row format before AutoMigrate can silently change the schema.
+	if db.Migrator().HasColumn("users", "access_token") {
+		return errors.New("legacy management token schema is unsupported; initialize a separate empty database")
+	}
 	return requireSupportedBillingRecoveryStates(db)
 }
 

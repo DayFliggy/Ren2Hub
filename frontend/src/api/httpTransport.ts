@@ -22,7 +22,11 @@ const http = axios.create({
 
 const publicHttp = axios.create({
   baseURL: '',
+  // XHR sends same-origin cookies even when withCredentials is false.
+  // Axios's fetch adapter maps false to credentials: 'omit'.
+  adapter: 'fetch',
   withCredentials: false,
+  withXSRFToken: false,
   timeout: 15_000,
 })
 

@@ -40,7 +40,7 @@ func serveTaskPluginImageProtocol(c *gin.Context, pinned pluginruntime.PinnedEnd
 	var relayInfoErr error
 	var outcome *taskSubmissionOutcome
 	var taskErr *dto.TaskError
-	// DashScope bills the images as soon as it accepts the upstream call. A
+	// Image providers bill accepted generation even if the client leaves. A
 	// client that gives up while the submission is in flight must not cancel
 	// that call, the task row, its settlement, or its consume log, so the
 	// submission runs on its own bounded context exactly like the Responses

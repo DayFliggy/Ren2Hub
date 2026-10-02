@@ -8,7 +8,6 @@ import { api } from '@/api/console'
 import {
   parsePerfMetricsSummary,
   parsePricingModelsPartial,
-  parseUserModels,
   type PerfModelSummaryContract,
   type PricingModelContract,
   type PricingCatalogIssue,
@@ -17,6 +16,8 @@ import { ApiError } from '@/api/types'
 import type { MarketModel } from '@/types/console'
 import { vendorMeta } from '@/constants/console'
 import { useToast } from '@/composables/useToast'
+import { useLatestRequest } from '@/composables/useLatestRequest'
+import { getModelManifest, type ModelManifestEntry } from '@/api/modelManifest'
 
 // Prefixed to stay distinct from useMarketplace's same-named exports — the two
 // composables cover different catalogs (models vs merchant listings).
@@ -68,13 +69,16 @@ function modelPrice(pricing: PricingModelContract): MarketModel['price'] {
 export function buildLiveModelCatalog(
   names: string[],
   pricing: PricingModelContract[],
-  performance: PerfModelSummaryContract[]
+  performance: PerfModelSummaryContract[],
+  capabilities: ModelManifestEntry[] = []
 ): ModelMarketCatalog {
   const pricingByName = new Map(pricing.map((item) => [item.model_name, item]))
   const performanceByName = new Map(
     performance.map((item) => [item.model_name, item])
   )
+  const manifestByName = new Map(capabilities.map((entry) => [entry.id, entry]))
   const models = names.map((name, index) => {
+    const manifest = manifestByName.get(name)
     const price = pricingByName.get(name)
     const metrics = performanceByName.get(name)
     const vendor = price?.owner_by.trim() || '平台'
@@ -82,7 +86,11 @@ export function buildLiveModelCatalog(
       id: index + 1,
       name,
       vendor,
-      type: modelType(price?.supported_endpoint_types ?? []),
+      type: modelType(
+        manifest?.supported_endpoint_types ??
+          price?.supported_endpoint_types ??
+          []
+      ),
       billing:
         !price || price.billing_mode === 'unconfigured'
           ? ('unconfigured' as const)
@@ -93,7 +101,7 @@ export function buildLiveModelCatalog(
               : ('token' as const),
       price: price ? modelPrice(price) : {},
       pricing: price,
-      context: 0,
+      context: manifest?.capabilities?.context_limit ?? 0,
       tagline: price?.description ?? '',
       latency: metrics ? Math.max(0, metrics.avg_latency_ms / 1000) : 0,
       tps: metrics ? Math.max(0, metrics.avg_tps) : 0,
@@ -142,17 +150,26 @@ export function useModelMarket() {
     'ren2hub_models_view',
     'grid'
   )
+  const request = useLatestRequest()
 
   async function load() {
     loading.value = true
-    try {
-      const names = parseUserModels(await api.get<unknown>('/api/user/models'))
+    const result = await request.run(async (signal) => {
+      const manifest = await getModelManifest(signal)
       const [pricingResult, performanceResult] = await Promise.allSettled([
-        api.get<unknown>('/api/pricing').then(parsePricingModelsPartial),
         api
-          .get<unknown>('/api/perf-metrics/summary')
+          .get<unknown>('/api/pricing', undefined, { signal })
+          .then(parsePricingModelsPartial),
+        api
+          .get<unknown>('/api/perf-metrics/summary', undefined, { signal })
           .then(parsePerfMetricsSummary),
       ])
+      return { manifest, pricingResult, performanceResult }
+    })
+    if (result.stale) return
+    loading.value = false
+    if (result.ok) {
+      const { manifest, pricingResult, performanceResult } = result.value
       if (
         pricingResult.status === 'rejected' ||
         performanceResult.status === 'rejected'
@@ -162,16 +179,19 @@ export function useModelMarket() {
       pricingIssues.value =
         pricingResult.status === 'fulfilled' ? pricingResult.value.issues : []
       catalog.value = buildLiveModelCatalog(
-        names,
+        manifest.models
+          .filter((entry) => entry.visible)
+          .map((entry) => entry.id),
         pricingResult.status === 'fulfilled' ? pricingResult.value.models : [],
-        performanceResult.status === 'fulfilled' ? performanceResult.value : []
+        performanceResult.status === 'fulfilled' ? performanceResult.value : [],
+        manifest.models
       )
-    } catch (error) {
+    } else {
       toast.error(
-        error instanceof ApiError ? error.message : t('common.failed')
+        result.error instanceof ApiError
+          ? result.error.message
+          : t('common.failed')
       )
-    } finally {
-      loading.value = false
     }
   }
 

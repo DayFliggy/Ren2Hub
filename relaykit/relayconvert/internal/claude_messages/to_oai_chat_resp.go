@@ -126,6 +126,7 @@ func StreamResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.ChatCo
 type ClaudeToChatStreamState struct {
 	toolIndexByContentBlock map[int]int
 	blockTypeByContentBlock map[int]string
+	toolInputSeeds          map[int]string
 	nextToolIndex           int
 }
 
@@ -133,6 +134,7 @@ func NewClaudeToChatStreamState() *ClaudeToChatStreamState {
 	return &ClaudeToChatStreamState{
 		toolIndexByContentBlock: make(map[int]int),
 		blockTypeByContentBlock: make(map[int]string),
+		toolInputSeeds:          make(map[int]string),
 	}
 }
 
@@ -148,6 +150,9 @@ func (s *ClaudeToChatStreamState) ConvertChunk(claudeResponse *dto.ClaudeRespons
 	}
 	if s.blockTypeByContentBlock == nil {
 		s.blockTypeByContentBlock = make(map[int]string)
+	}
+	if s.toolInputSeeds == nil {
+		s.toolInputSeeds = make(map[int]string)
 	}
 
 	converted := *claudeResponse
@@ -178,6 +183,13 @@ func (s *ClaudeToChatStreamState) ConvertChunk(claudeResponse *dto.ClaudeRespons
 			s.toolIndexByContentBlock[contentBlockIndex] = toolIndex
 		}
 		converted.Index = kitutil.GetPointer(toolIndex)
+		if claudeResponse.ContentBlock.Input != nil {
+			seed, err := kitutil.Marshal(claudeResponse.ContentBlock.Input)
+			if err != nil {
+				return nil, fmt.Errorf("invalid Claude tool-use input: %w", err)
+			}
+			s.toolInputSeeds[contentBlockIndex] = string(seed)
+		}
 	case "content_block_delta":
 		if claudeResponse.Delta == nil || claudeResponse.Delta.Type != "input_json_delta" {
 			break
@@ -197,9 +209,21 @@ func (s *ClaudeToChatStreamState) ConvertChunk(claudeResponse *dto.ClaudeRespons
 			return nil, fmt.Errorf("Claude tool-use stream delta references unknown content block index %d", contentBlockIndex)
 		}
 		converted.Index = kitutil.GetPointer(toolIndex)
+		// Initial input is only a fallback. Real deltas form the authoritative
+		// argument value and must never be concatenated with that snapshot.
+		delete(s.toolInputSeeds, contentBlockIndex)
 	case "content_block_stop":
 		if claudeResponse.Index != nil {
-			delete(s.blockTypeByContentBlock, *claudeResponse.Index)
+			index := *claudeResponse.Index
+			delete(s.blockTypeByContentBlock, index)
+			toolIndex := s.toolIndexByContentBlock[index]
+			delete(s.toolIndexByContentBlock, index)
+			if seed, exists := s.toolInputSeeds[index]; exists {
+				delete(s.toolInputSeeds, index)
+				converted.Type = "content_block_delta"
+				converted.Index = kitutil.GetPointer(toolIndex)
+				converted.Delta = &dto.ClaudeMediaMessage{Type: "input_json_delta", PartialJson: &seed}
+			}
 		}
 	}
 

@@ -154,10 +154,14 @@ func (s *ResponsesToClaudeStreamState) ConvertChunk(event *dto.ResponsesStreamRe
 		if err != nil {
 			return nil, s.Usage, err
 		}
-		if event.Arguments == nil {
+		final := event.Arguments
+		if event.Type == responsesEventCustomToolInputDone {
+			final = event.Input
+		}
+		if final == nil {
 			return nil, s.Usage, nil
 		}
-		return s.mergeFinalValue(block, *event.Arguments, estimatedInputTokens), s.Usage, nil
+		return s.mergeFinalValue(block, *final, estimatedInputTokens), s.Usage, nil
 	case responsesEventCompleted, responsesEventDone, responsesEventIncomplete:
 		responses, err := s.finish(event.Response, estimatedInputTokens)
 		return responses, s.Usage, err

@@ -415,9 +415,9 @@ func TestConvertRequestViaExecutesExplicitPath(t *testing.T) {
 	assert.Equal(t, []types.RelayFormat{types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses}, info.ConversionChain)
 }
 
-func TestConvertRequestResponsesToGeminiAppliesResponsesPreprocess(t *testing.T) {
+func TestConvertRequestResponsesToGeminiPreservesCustomHistory(t *testing.T) {
 	info := &convmeta.Values{
-		Options:             &convmeta.Options{ConversionPolicy: types.ConversionLossPolicyAllow, ToolLossPolicy: types.ConversionLossPolicyAllow},
+		Options:             &convmeta.Options{ConversionPolicy: types.ConversionLossPolicySafe},
 		ConversionChain:     []types.RelayFormat{types.RelayFormatOpenAIResponses},
 		ChannelMetaAttached: true,
 		UpstreamModelName:   "gemini-test",
@@ -456,11 +456,23 @@ func TestConvertRequestResponsesToGeminiAppliesResponsesPreprocess(t *testing.T)
 	require.NoError(t, err)
 	geminiReq, ok := result.Value.(*dto.GeminiChatRequest)
 	require.True(t, ok)
-	assert.Empty(t, geminiReq.GetTools())
-	require.Len(t, geminiReq.Contents, 1)
+	require.Len(t, geminiReq.GetTools(), 1)
+	assert.True(t, info.ResponsesToolState().IsCustomTool("apply_patch"))
+	require.Len(t, geminiReq.Contents, 3)
 	assert.Equal(t, "user", geminiReq.Contents[0].Role)
 	require.Len(t, geminiReq.Contents[0].Parts, 1)
 	assert.Equal(t, "next turn", geminiReq.Contents[0].Parts[0].Text)
+	call := geminiReq.Contents[1].Parts[0].FunctionCall
+	require.NotNil(t, call)
+	assert.Equal(t, "call_custom", call.ID)
+	assert.Equal(t, "apply_patch", call.FunctionName)
+	assert.Equal(t, map[string]any{"input": "patch body"}, call.Arguments)
+	require.Len(t, geminiReq.Contents[2].Parts, 2)
+	for _, part := range geminiReq.Contents[2].Parts {
+		require.NotNil(t, part.FunctionResponse)
+		assert.JSONEq(t, `"call_custom"`, string(part.FunctionResponse.ID))
+		assert.Equal(t, "apply_patch", part.FunctionResponse.Name)
+	}
 	assert.Equal(t, ConverterOpenAIResponsesToGemini, result.Converter)
 	assert.Equal(t, RequestConverterQualityFair, result.Quality)
 	assert.Equal(t, []RequestStep{

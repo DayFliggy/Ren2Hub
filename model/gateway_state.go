@@ -118,7 +118,7 @@ func RefreshGatewayCredential(ctx context.Context, channel *Channel, replacement
 		return err
 	}
 	return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&Channel{}).Where("id = ? AND "+commonKeyCol+" = ?", channel.Id, channel.Key).Update("key", replacement)
+		result := tx.Model(&Channel{}).Where(map[string]any{"id": channel.Id, "key": channel.Key}).Update("key", replacement)
 		if result.Error != nil {
 			return result.Error
 		}

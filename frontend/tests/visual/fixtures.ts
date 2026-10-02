@@ -604,6 +604,19 @@ export async function configureStablePage(
       { models: ['gpt-4.1', 'claude-sonnet-4', 'gemini-2.5-pro'] },
     ],
     [
+      '/api/user/model-manifest',
+      {
+        schema_version: 1,
+        models: ['gpt-4.1', 'claude-sonnet-4', 'gemini-2.5-pro'].map((id) => ({
+          id,
+          visible: true,
+          supported_endpoint_types: ['openai', 'openai-response'],
+          price_configured: true,
+          price_version: 'visual-v1',
+        })),
+      },
+    ],
+    [
       '/api/token/',
       {
         page: 1,

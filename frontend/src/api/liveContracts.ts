@@ -465,6 +465,9 @@ function parseLog(value: unknown, endpoint: string): LogItem {
   return {
     id: requiredInteger(value.id, endpoint),
     type,
+    ...(value.request_id == null || value.request_id === ''
+      ? {}
+      : { request_id: requiredString(value.request_id, endpoint, false) }),
     token_name: requiredString(value.token_name, endpoint),
     model: requiredString(value.model_name, endpoint),
     channel: requiredString(value.channel_name, endpoint),

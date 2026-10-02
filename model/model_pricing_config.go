@@ -367,7 +367,7 @@ func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
 				entry.PluginVariants = append(entry.PluginVariants, ModelPricingPluginVariant{
 					PluginKey: plugin.Meta.Key, PluginName: plugin.Meta.Name, Icon: plugin.Meta.Icon,
 					UsageSchema: schema, UsageExamples: examples, Configured: configuredExpr, Effective: expression,
-					Compatible: billing_setting.TaskExprCompatible(expression, schema),
+					Compatible: billing_setting.TaskExprCompatible(expression, plugin.Meta.UsageFactsForModels(name)),
 				})
 			}
 		}
@@ -430,6 +430,9 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 				return fmt.Errorf("model %s: plugin %s does not declare this model", name, key)
 			}
 			schema, _ := plugin.Meta.UsageForModel(name)
+			if previousVariants[key] == expression {
+				schema = plugin.Meta.UsageFactsForModels(name)
+			}
 			if err := billing_setting.SmokeTestTaskExpr(expression, schema); err != nil {
 				return fmt.Errorf("model %s: plugin %s: %w", name, key, err)
 			}
@@ -471,6 +474,9 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 						continue
 					}
 					schema, _ := plugin.Meta.UsageForModel(name)
+					if unchanged {
+						schema = plugin.Meta.UsageFactsForModels(name)
+					}
 					if err = billing_setting.SmokeTestTaskExpr(expression, schema); err != nil {
 						return fmt.Errorf("model %s: plugin %s: %w", name, plugin.Meta.Key, err)
 					}
@@ -479,6 +485,9 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 				if plugin, ok := generation.Get(target.PluginKey); ok {
 					if !unchanged || generation.SharedModel(target.Declared) {
 						schema, _ := plugin.Meta.UsageForModel(target.Declared)
+						if unchanged {
+							schema = plugin.Meta.UsageFactsForModels(target.Declared)
+						}
 						err = billing_setting.SmokeTestTaskExpr(expression, schema)
 					}
 				} else {

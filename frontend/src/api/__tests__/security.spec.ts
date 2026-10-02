@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '@/api/client'
-import { passwordPayload, securityApi } from '@/api/security'
+import { passwordPayload } from '@/api/security'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -80,20 +80,5 @@ describe('account security boundary', () => {
         decode(parts[3]!)
       )
     ).rejects.toThrow()
-  })
-
-  it('reads token status without writing and sends proof on revocation', async () => {
-    const get = vi
-      .spyOn(api, 'get')
-      .mockResolvedValue({ exists: true, token_ref: 'fingerprint' })
-    const del = vi.spyOn(api, 'delete').mockResolvedValue(null)
-    const post = vi.spyOn(api, 'post')
-    await securityApi.tokenStatus()
-    expect(get).toHaveBeenCalledWith('/api/user/token/status')
-    expect(post).not.toHaveBeenCalled()
-    await securityApi.revokeToken('one-use-proof')
-    expect(del).toHaveBeenCalledWith('/api/user/token', undefined, {
-      headers: { 'X-Security-Proof': 'one-use-proof' },
-    })
   })
 })

@@ -7,6 +7,7 @@ import {
   PowerOff,
   Route,
   Trash2,
+  CodeXml,
 } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
@@ -15,6 +16,7 @@ import IconButton from '@/components/common/IconButton.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import type { TokenSummary } from '@/types/console'
 import { formatDate, formatQuota } from '@/utils/format'
+import { clientConfigMessages } from '@/i18n/clientConfig'
 
 withDefaults(
   defineProps<{
@@ -29,12 +31,17 @@ withDefaults(
     editKey: (token: TokenSummary) => void
     deleteKey: (token: TokenSummary) => void
     viewBilling?: (token: TokenSummary) => void
+    exportConfig?: (token: TokenSummary) => void
     routingEnabled?: boolean
   }>(),
-  { routingEnabled: false, viewBilling: undefined }
+  { routingEnabled: false, viewBilling: undefined, exportConfig: undefined }
 )
 
 const { t } = useI18n()
+const { t: clientText } = useI18n({
+  useScope: 'local',
+  messages: clientConfigMessages,
+})
 </script>
 
 <template>
@@ -164,6 +171,12 @@ const { t } = useI18n()
           <IconButton :label="t('keys.viewKey')" @click="viewKey(token)">
             <Eye :size="16" />
           </IconButton>
+          <IconButton
+            v-if="exportConfig"
+            :label="clientText('title')"
+            @click="exportConfig(token)"
+            ><CodeXml :size="16"
+          /></IconButton>
           <IconButton :label="t('keys.editKey')" @click="editKey(token)">
             <Pencil :size="16" />
           </IconButton>

@@ -28,7 +28,8 @@ func TestPlanRequestForChannelRejectsUnavailableAndUnsafePaths(t *testing.T) {
 		{"Claude rejects embeddings", constant.ChannelTypeAnthropic, &dto.EmbeddingRequest{Model: "test", Input: "hi"}, true, ""},
 		{"native continuation", constant.ChannelTypeOpenAI, &dto.OpenAIResponsesRequest{Model: "gpt-test", PreviousResponseID: "resp_private"}, false, types.RelayFormatOpenAIResponses},
 		{"converted continuation", constant.ChannelTypeGemini, &dto.OpenAIResponsesRequest{Model: "gemini-test", PreviousResponseID: "resp_private"}, true, ""},
-		{"safe tool rejection", constant.ChannelTypeGemini, &dto.OpenAIResponsesRequest{Model: "gemini-test", Tools: []byte(`[{"type":"custom","name":"patch"}]`)}, true, ""},
+		{"safe freeform tool supported", constant.ChannelTypeGemini, &dto.OpenAIResponsesRequest{Model: "gemini-test", Tools: []byte(`[{"type":"custom","name":"patch","format":{"type":"text"}}]`)}, false, types.RelayFormatGemini},
+		{"safe grammar tool rejection", constant.ChannelTypeGemini, &dto.OpenAIResponsesRequest{Model: "gemini-test", Tools: []byte(`[{"type":"custom","name":"patch","format":{"type":"grammar","syntax":"lark","definition":"start: /.+/"}}]`)}, true, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			info := &relaycommon.RelayInfo{Request: tc.request.(dto.Request), OriginModelName: "test", ConversionPolicy: types.ConversionLossPolicySafe}
@@ -46,13 +47,18 @@ func TestPlanRequestForChannelRejectsUnavailableAndUnsafePaths(t *testing.T) {
 }
 
 func TestSelectedConversionPlanIsExecutedAndAudited(t *testing.T) {
-	req := &dto.OpenAIResponsesRequest{Model: "gemini-test", Input: []byte(`"hi"`), Tools: []byte(`[{"type":"custom","name":"patch"}]`)}
+	req := &dto.OpenAIResponsesRequest{Model: "gemini-test", Input: []byte(`"hi"`), Tools: []byte(`[{"type":"custom","name":"patch","format":{"type":"grammar","syntax":"lark","definition":"start: /.+/"}}]`)}
 	info := &relaycommon.RelayInfo{Request: req, OriginModelName: req.Model, ConversionPolicy: types.ConversionLossPolicyAllow}
 	require.NoError(t, PlanRequestForChannel(nil, info, &model.Channel{Id: 1, Type: constant.ChannelTypeGemini}))
 	result, err := service.ConvertRequest(nil, info, types.RelayFormatGemini, req)
 	require.NoError(t, err)
 	assert.Equal(t, info.ConversionPlan.RequestConverter, result.Converter)
 	assert.NotEmpty(t, info.ConversionDiagnostics)
+	codes := make([]string, 0, len(info.ConversionDiagnostics))
+	for _, diagnostic := range info.ConversionDiagnostics {
+		codes = append(codes, diagnostic.Code)
+	}
+	assert.Contains(t, codes, "custom_tool_grammar_not_portable")
 	req.PreviousResponseID = "resp_changed"
 	_, err = service.ConvertRequest(nil, info, types.RelayFormatGemini, req)
 	require.Error(t, err)

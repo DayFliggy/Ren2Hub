@@ -30,6 +30,10 @@ it('uses the administrator endpoints and never returns identity values', async (
     { key: 'oauth-9', name: 'Company', path: '/api/user/42/oauth/bindings/9' },
   ])
   const remove = vi.spyOn(api, 'delete').mockResolvedValue(undefined)
-  await adminUserBindingsApi.remove(bindings[1]!)
-  expect(remove).toHaveBeenCalledWith('/api/user/42/oauth/bindings/9')
+  await adminUserBindingsApi.remove(bindings[1]!, 'one-use-proof')
+  expect(remove).toHaveBeenCalledWith(
+    '/api/user/42/oauth/bindings/9',
+    undefined,
+    { headers: { 'X-Security-Proof': 'one-use-proof' } }
+  )
 })

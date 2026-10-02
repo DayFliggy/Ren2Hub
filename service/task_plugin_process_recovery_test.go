@@ -30,7 +30,7 @@ const pluginExitRequestID = "plugin-process-exit"
 // the accepted-send count. Each recovery runs in a fresh process and database
 // connection; no application shutdown handler or deferred rollback can run.
 func TestTaskPluginProcessExitRecovery(t *testing.T) {
-	for _, stage := range []string{"accepted_before_task", "terminal_metrics"} {
+	for _, stage := range []string{"accepted_before_task", "terminal_metrics", "immediate_before_commit", "immediate_after_commit"} {
 		t.Run(stage, func(t *testing.T) {
 			var sends atomic.Int32
 			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +57,7 @@ func TestTaskPluginProcessExitRecovery(t *testing.T) {
 			require.NoError(t, db.Model(&model.Task{}).Count(&taskCount).Error)
 			require.NoError(t, db.Model(&model.PerfMetric{}).Count(&metricCount).Error)
 			assert.Zero(t, metricCount, "the uncommitted metric projection must not survive exit")
-			if stage == "accepted_before_task" {
+			if stage == "accepted_before_task" || stage == "immediate_before_commit" {
 				assert.Zero(t, taskCount, "the accepted-task transaction was interrupted before commit")
 			} else {
 				assert.EqualValues(t, 1, taskCount)
@@ -140,7 +140,7 @@ func TestTaskPluginProcessExitWorker(t *testing.T) {
 		require.NoError(t, model.RecoverTaskResultMetrics(ctx, 10))
 		return
 	}
-	require.Contains(t, []string{"accepted_before_task", "terminal_metrics"}, stage)
+	require.Contains(t, []string{"accepted_before_task", "terminal_metrics", "immediate_before_commit", "immediate_after_commit"}, stage)
 	require.NoError(t, model.SaveTaskPlugin(&version))
 	require.NoError(t, db.Create(&model.User{Id: 1, Username: pluginExitRequestID, Quota: 100}).Error)
 	require.NoError(t, db.Create(&model.Token{Id: 1, UserId: 1, Key: "isolated-plugin-exit-token", RemainQuota: 100}).Error)
@@ -199,8 +199,10 @@ func TestTaskPluginProcessExitWorker(t *testing.T) {
 			}
 		}))
 	}
-	require.NoError(t, model.PersistAcceptedTask(&task, pluginExitRequestID, consumption))
-	require.Equal(t, "terminal_metrics", stage, "the requested pre-task crash was not reached")
+	if stage == "accepted_before_task" || stage == "terminal_metrics" {
+		require.NoError(t, model.PersistAcceptedTask(&task, pluginExitRequestID, consumption))
+		require.Equal(t, "terminal_metrics", stage, "the requested pre-task crash was not reached")
+	}
 	usage := billing.Usage{Quantities: map[string]string{"calls": fmt.Sprint(accepted["calls"])}, Source: "provider", Complete: true, Terminal: "completed"}
 	usage, charge, err := model.EvaluateBilling(quote, usage, billingexpr.RequestInput{}, pluginExitRequestID, "plugin-attempt", "settlement")
 	require.NoError(t, err)
@@ -211,9 +213,32 @@ func TestTaskPluginProcessExitWorker(t *testing.T) {
 	task.PrivateData.PluginState = []byte(`{"cursor":"final"}`)
 	task.PrivateData.CompletionUsage = &model.TaskCompletionUsage{Facts: map[string]any{"calls": "1"}}
 	task.PrivateData.BillingContext.Usage, task.PrivateData.BillingContext.Charge = &usage, charge
-	won, err := model.PersistTaskCompletion(ctx, &task, model.TaskStatusInProgress, charge.FinalQuota, consumption)
+	if stage == "immediate_before_commit" {
+		require.NoError(t, db.Callback().Create().Before("gorm:create").Register("immediate_exit_before_commit", func(tx *gorm.DB) {
+			if tx.Statement.Table != "task_result_events" {
+				return
+			}
+			var saved model.Task
+			var recovery model.BillingRecovery
+			require.NoError(t, tx.Session(&gorm.Session{NewDB: true}).First(&saved, task.ID).Error)
+			require.NoError(t, tx.Session(&gorm.Session{NewDB: true}).First(&recovery, "request_id = ?", pluginExitRequestID).Error)
+			require.EqualValues(t, model.TaskStatusSuccess, saved.Status)
+			require.NotNil(t, saved.PrivateData.CompletionUsage)
+			require.Equal(t, model.BillingRecoveryStatusSettlementPending, recovery.Status)
+			os.Exit(74)
+		}))
+	}
+	var won bool
+	if stage == "terminal_metrics" {
+		won, err = model.PersistTaskCompletion(ctx, &task, model.TaskStatusInProgress, charge.FinalQuota, consumption)
+	} else {
+		won, err = model.PersistImmediateTask(ctx, &task, model.TaskStatusInProgress, charge.FinalQuota, consumption, consumption)
+	}
 	require.NoError(t, err)
 	require.True(t, won)
+	if stage == "immediate_after_commit" {
+		os.Exit(74)
+	}
 	require.NoError(t, db.Callback().Update().Before("gorm:update").Register("plugin_exit_result_marker", func(tx *gorm.DB) {
 		if tx.Statement.Table != "task_result_events" {
 			return
@@ -242,7 +267,7 @@ func assertTaskPluginExitState(t *testing.T, db *gorm.DB, stage string) {
 	// no longer pins the old version, so it may be deleted.
 	executions := int64(1)
 	_, err = model.DeleteTaskPluginVersion(ref.Key, ref.Version)
-	if stage == "accepted_before_task" {
+	if stage == "accepted_before_task" || stage == "immediate_before_commit" {
 		require.NoError(t, err)
 		executions = 0
 	} else {
@@ -286,7 +311,7 @@ func assertTaskPluginExitState(t *testing.T, db *gorm.DB, stage string) {
 	require.Len(t, logs, 1)
 	assert.EqualValues(t, 20, logs[0].Quota)
 	assert.EqualValues(t, 1, user.RequestCount)
-	if stage == "accepted_before_task" {
+	if stage == "accepted_before_task" || stage == "immediate_before_commit" {
 		var taskCount int64
 		require.NoError(t, db.Model(&model.Task{}).Count(&taskCount).Error)
 		assert.Zero(t, taskCount)

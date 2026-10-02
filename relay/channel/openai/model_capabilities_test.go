@@ -23,6 +23,12 @@ func TestOpenAIChatCapabilitiesUseMappedModelAndEffort(t *testing.T) {
 		{"gpt-5.2", "high", false, true, true},
 		{"gpt-5.2-codex", "none", false, true, true},
 		{"gpt-6-astra", "none", false, true, true},
+		{"gpt-6-sol", "", true, true, true},
+		{"gpt-6-sol-2026-09-30", "none", true, true, true},
+		{"gpt-6-sol", "high", false, true, true},
+		{"gpt-6-luna", "none", true, true, true},
+		{"gpt-6-luna-2026-09-30", "high", false, true, true},
+		{"gpt-6-sol-preview", "none", true, false, false},
 		{"gpt-future", "high", true, false, false},
 	} {
 		t.Run(test.model+"/"+test.effort, func(t *testing.T) {

@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
+import { parseChannelStatusDetails } from '@/api/channelStatus'
 import { ApiError } from '@/api/types'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useFeatureAccess } from '@/composables/useFeatureAccess'
@@ -216,9 +217,17 @@ export function useAdminChannels() {
     if (rows.value.length === 0) initialError.value = ''
 
     const endpoint = '/api/next/admin/channels'
-    const result = await listRequest.run((signal) =>
-      api.get<AdminChannelPage>(endpoint, currentParams(), { signal })
-    )
+    const result = await listRequest.run(async (signal) => {
+      const response = await api.get<AdminChannelPage>(
+        endpoint,
+        currentParams(),
+        { signal }
+      )
+      return {
+        ...response,
+        items: response.items.map(parseChannelStatusDetails),
+      }
+    })
     if (result.stale) return
     loading.value = false
     refreshing.value = false

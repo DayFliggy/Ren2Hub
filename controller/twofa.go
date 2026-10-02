@@ -219,8 +219,11 @@ func AdminDisable2FA(c *gin.Context) {
 		return
 	}
 
+	if requireAdminUserProof(c, "disable_2fa", userId) == nil {
+		return
+	}
 	// 禁用2FA
-	if err := model.DisableTwoFAWithAuthVersion(userId); err != nil {
+	if err := model.DisableTwoFAWithAuthVersion(userId, adminUserAuthorization(c)...); err != nil {
 		if errors.Is(err, model.ErrTwoFANotEnabled) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,

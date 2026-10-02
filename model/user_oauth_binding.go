@@ -130,8 +130,13 @@ func UpdateUserOAuthBinding(userId, providerId int, newProviderUserId string) er
 }
 
 // DeleteUserOAuthBinding deletes an OAuth binding
-func DeleteUserOAuthBinding(userId, providerId int) error {
+func DeleteUserOAuthBinding(userId, providerId int, authorizations ...AuthSessionIdentity) error {
 	if err := DB.Transaction(func(tx *gorm.DB) error {
+		for _, authorization := range authorizations {
+			if err := ValidateManagedUserAuthorizationWithTx(tx, authorization, userId); err != nil {
+				return err
+			}
+		}
 		if _, err := IncrementUserAuthVersionWithTx(tx, userId); err != nil {
 			return err
 		}

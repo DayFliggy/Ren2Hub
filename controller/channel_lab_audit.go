@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
 	"github.com/QuantumNous/new-api/service/authz"
@@ -200,8 +201,7 @@ func RecordChannelLabAudit(c *gin.Context) {
 		common.ApiErrorMsg(c, "invalid lab audit action")
 		return
 	}
-	if !authz.Can(c.GetInt("id"), c.GetInt("role"), permission) {
-		common.ApiErrorMsg(c, "insufficient permission")
+	if !middleware.RequireCurrentUserPermission(c, permission) {
 		return
 	}
 	if err := recordChannelLabAudit(c, request.Action, request.ChannelIDs); err != nil {

@@ -126,6 +126,7 @@ func setupRelayRouterTestDB(t *testing.T) {
 	defer bootstrapSQL.Close()
 	require.NoError(t, model.InitDB())
 	model.LOG_DB = model.DB
+	require.NoError(t, model.DB.AutoMigrate(&model.GatewayRequestDiagnostic{}))
 	require.NoError(t, model.DB.AutoMigrate(&model.User{}, &model.Token{}, &model.Ability{}, &model.Channel{}, &model.UserChannelEntitlement{}, &model.UserRouteProfile{}, &model.Option{}, &model.GatewayCredential{}, &model.GatewayStateBinding{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.BillingAttempt{}, &model.BillingPriceVersion{}, &model.Log{}, &model.QuotaData{}, &model.AuditLog{}, &model.Model{}, &model.Vendor{}))
 
 	model.InitOptionMap()

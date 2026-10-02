@@ -128,9 +128,10 @@ func (m Meta) SupportsUpstream(kind string) bool {
 
 // UsageProfile replaces the plugin's default usage metadata for its models.
 type UsageProfile struct {
-	Models   []string                    `json:"models"`
-	Schema   map[string]UsageFieldSchema `json:"schema"`
-	Examples []UsageExample              `json:"examples,omitempty"`
+	Models              []string                    `json:"models"`
+	Schema              map[string]UsageFieldSchema `json:"schema"`
+	CompatibilitySchema map[string]UsageFieldSchema `json:"compatibilitySchema,omitempty"`
+	Examples            []UsageExample              `json:"examples,omitempty"`
 }
 
 // UsageForModel returns read-only usage metadata for a declared model. Aliases
@@ -146,17 +147,41 @@ func (m Meta) UsageForModel(model string) (map[string]UsageFieldSchema, []UsageE
 // vendor endpoint ID keeps the declared model's profile. When no candidate is
 // profiled, the plugin defaults apply.
 func (m Meta) UsageForModels(models ...string) (map[string]UsageFieldSchema, []UsageExample) {
+	if profile := m.usageProfileForModels(models...); profile != nil {
+		return profile.Schema, profile.Examples
+	}
+	return m.UsageSchema, m.UsageExamples
+}
+
+// UsageFactsForModels is the single execution schema for validation, pricing
+// eligibility and frozen quotes. Explicit compatibility fields keep released
+// facts valid without advertising unsupported capabilities in the editor.
+func (m Meta) UsageFactsForModels(models ...string) map[string]UsageFieldSchema {
+	profile := m.usageProfileForModels(models...)
+	if profile == nil {
+		return m.UsageSchema
+	}
+	if len(profile.CompatibilitySchema) == 0 {
+		return profile.Schema
+	}
+	schema := CloneUsageSchema(profile.Schema)
+	maps.Copy(schema, CloneUsageSchema(profile.CompatibilitySchema))
+	return schema
+}
+
+func (m Meta) usageProfileForModels(models ...string) *UsageProfile {
 	for _, model := range models {
 		folded := asciiFold(model)
-		for _, profile := range m.UsageProfiles {
+		for index := range m.UsageProfiles {
+			profile := &m.UsageProfiles[index]
 			for _, declared := range profile.Models {
 				if asciiFold(declared) == folded {
-					return profile.Schema, profile.Examples
+					return profile
 				}
 			}
 		}
 	}
-	return m.UsageSchema, m.UsageExamples
+	return nil
 }
 
 // ProtocolSupports reports whether the named protocol claim includes mode.
@@ -882,6 +907,10 @@ func cloneMeta(meta Meta) Meta {
 	meta.Routes = append([]Route(nil), meta.Routes...)
 	for index := range meta.Routes {
 		meta.Routes[index].Models = append([]string(nil), meta.Routes[index].Models...)
+		if retain := meta.Routes[index].RetainResult; retain != nil {
+			value := *retain
+			meta.Routes[index].RetainResult = &value
+		}
 	}
 	meta.Protocols = append([]ProtocolClaim(nil), meta.Protocols...)
 	for index := range meta.Protocols {
@@ -898,6 +927,7 @@ func cloneMeta(meta Meta) Meta {
 		profile := &meta.UsageProfiles[index]
 		profile.Models = append([]string(nil), profile.Models...)
 		profile.Schema = CloneUsageSchema(profile.Schema)
+		profile.CompatibilitySchema = CloneUsageSchema(profile.CompatibilitySchema)
 		profile.Examples = CloneUsageExamples(profile.Examples)
 	}
 	return meta
@@ -1447,6 +1477,14 @@ func normalizeV1Meta(meta *Meta) error {
 		if err := validateUsageSchema(profile.Schema); err != nil {
 			return fmt.Errorf("plugin meta usageProfiles[%d]: %w", index, err)
 		}
+		if err := validateUsageSchema(profile.CompatibilitySchema); err != nil {
+			return fmt.Errorf("plugin meta usageProfiles[%d] compatibilitySchema: %w", index, err)
+		}
+		for name := range profile.CompatibilitySchema {
+			if _, duplicate := profile.Schema[name]; duplicate {
+				return fmt.Errorf("plugin meta usageProfiles[%d] compatibilitySchema duplicates field %q", index, name)
+			}
+		}
 		if err := validateUsageExamples(profile.Schema, profile.Examples); err != nil {
 			return fmt.Errorf("plugin meta usageProfiles[%d]: %w", index, err)
 		}
@@ -1478,7 +1516,7 @@ func decodeUsageProfiles(value any) ([]UsageProfile, error) {
 			return nil, fmt.Errorf("plugin meta usageProfiles[%d] must be an object", index)
 		}
 		for key := range object {
-			if key != "models" && key != "schema" && key != "examples" {
+			if key != "models" && key != "schema" && key != "compatibilitySchema" && key != "examples" {
 				return nil, fmt.Errorf("plugin meta usageProfiles[%d] has unknown field %q", index, key)
 			}
 		}
@@ -1491,6 +1529,15 @@ func decodeUsageProfiles(value any) ([]UsageProfile, error) {
 			return nil, fmt.Errorf("plugin meta usageProfiles[%d]: %w", index, err)
 		}
 		profile := UsageProfile{Models: models, Schema: schema}
+		if compatibility, exists := object["compatibilitySchema"]; exists {
+			profile.CompatibilitySchema, err = decodeUsageSchema(compatibility)
+			if err != nil {
+				return nil, fmt.Errorf("plugin meta usageProfiles[%d] compatibilitySchema: %w", index, err)
+			}
+			if profile.CompatibilitySchema == nil {
+				return nil, fmt.Errorf("plugin meta usageProfiles[%d] compatibilitySchema must be an object", index)
+			}
+		}
 		if examples, exists := object["examples"]; exists {
 			profile.Examples, err = decodeUsageExamples(examples)
 			if err != nil {

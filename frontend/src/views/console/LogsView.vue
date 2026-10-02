@@ -36,6 +36,11 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import LogDetailTrigger from '@/components/console/log-ui/LogDetailTrigger.vue'
 import LogBillingDetail from '@/components/console/log-ui/LogBillingDetail.vue'
+import RequestDiagnosticsPanel from '@/components/console/log-ui/RequestDiagnosticsPanel.vue'
+import RequestDiagnosticsBrowser from '@/components/console/log-ui/RequestDiagnosticsBrowser.vue'
+import type { RequestDiagnosticFilter } from '@/api/requestDiagnostics'
+import { requestDiagnosticsMessages } from '@/i18n/requestDiagnostics'
+import { useAuthStore } from '@/stores/auth'
 import LogModelMismatch from '@/components/console/log-ui/LogModelMismatch.vue'
 import LogGroupFilter from '@/components/console/log-ui/LogGroupFilter.vue'
 import LogMobileCard from '@/components/console/log-ui/LogMobileCard.vue'
@@ -52,6 +57,11 @@ import { formatNumber, formatQuota, formatTime } from '@/utils/format'
 import { serializeSpreadsheet } from '@/utils/spreadsheetExport'
 
 const { t } = useI18n()
+const { t: diagnosticText } = useI18n({
+  useScope: 'local',
+  messages: requestDiagnosticsMessages,
+})
+const auth = useAuthStore()
 const toast = useToast()
 
 const rows = ref<LogItem[]>([])
@@ -69,6 +79,14 @@ const endDate = ref('')
 const exportOpen = ref(false)
 const exportType = ref('csv')
 const detailLog = ref<LogItem | null>(null)
+const diagnosticsOpen = ref(false)
+const diagnosticFilter = ref<RequestDiagnosticFilter>()
+
+function openDiagnostics(filter?: RequestDiagnosticFilter) {
+  detailLog.value = null
+  diagnosticFilter.value = filter
+  diagnosticsOpen.value = true
+}
 
 function openLogDetails(log: LogItem): void {
   detailLog.value = log
@@ -542,6 +560,9 @@ onBeforeUnmount(() => {
         class="w-full sm:w-64"
       />
       <div class="ml-auto flex w-full items-center justify-end gap-2 sm:w-auto">
+        <ConsoleButton variant="secondary" @click="openDiagnostics()">{{
+          diagnosticText('title')
+        }}</ConsoleButton>
         <div
           ref="colSettingsRef"
           class="relative hidden lg:block"
@@ -808,7 +829,13 @@ onBeforeUnmount(() => {
       size="md"
       @close="closeLogDetails"
     >
-      <LogBillingDetail v-if="detailLog" :log="detailLog" />
+      <template v-if="detailLog">
+        <LogBillingDetail :log="detailLog" />
+        <RequestDiagnosticsPanel
+          :request-id="detailLog.request_id"
+          @related="openDiagnostics"
+        />
+      </template>
       <template #footer>
         <div class="flex justify-end">
           <ConsoleButton variant="secondary" @click="closeLogDetails">
@@ -817,6 +844,13 @@ onBeforeUnmount(() => {
         </div>
       </template>
     </ConsoleModal>
+
+    <RequestDiagnosticsBrowser
+      v-if="diagnosticsOpen"
+      :can-read-all="auth.isAdmin"
+      :initial-filter="diagnosticFilter"
+      @close="diagnosticsOpen = false"
+    />
 
     <!-- export modal -->
     <ConsoleModal

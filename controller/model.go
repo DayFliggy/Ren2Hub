@@ -8,7 +8,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/relay/channel/ai360"
 	"github.com/QuantumNous/new-api/relay/channel/lingyiwanwu"
@@ -18,8 +17,6 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
 )
@@ -129,32 +126,6 @@ func channelOwnerName(channelType int) string {
 	return strings.ToLower(constant.GetChannelTypeName(channelType))
 }
 
-func getPreferredModelOwners(modelNames []string, groups []string) map[string]string {
-	channelTypes, err := model.GetPreferredModelOwnerChannelTypes(modelNames, groups)
-	if err != nil {
-		common.SysLog(fmt.Sprintf("GetPreferredModelOwnerChannelTypes error: %v", err))
-		return map[string]string{}
-	}
-
-	ownerByChannelType := make(map[int]string)
-	owners := make(map[string]string, len(channelTypes))
-	for modelName, channelType := range channelTypes {
-		owner, ok := ownerByChannelType[channelType]
-		if !ok {
-			owner = channelOwnerName(channelType)
-			ownerByChannelType[channelType] = owner
-		}
-		if owner != "" {
-			owners[modelName] = owner
-		}
-	}
-	return owners
-}
-
-func buildOpenAIModel(modelName string, ownerByModel map[string]string) dto.OpenAIModels {
-	return buildOpenAIModelWithEndpointTypes(modelName, ownerByModel, model.GetModelSupportEndpointTypes(modelName))
-}
-
 func buildOpenAIModelWithEndpointTypes(modelName string, ownerByModel map[string]string, endpointTypes []constant.EndpointType) dto.OpenAIModels {
 	var oaiModel dto.OpenAIModels
 	if staticModel, ok := openAIModelsMap[modelName]; ok {
@@ -174,113 +145,30 @@ func buildOpenAIModelWithEndpointTypes(modelName string, ownerByModel map[string
 	return oaiModel
 }
 
-func tokenAllowsModel(tokenModelLimit map[string]bool, modelName string) bool {
-	return tokenModelLimit[reasoning.ModelPermissionPattern(modelName)]
-}
-
-func projectModelEndpointTypesForToken(modelName string, tokenModelLimit map[string]bool, modelLimitEnabled bool) ([]constant.EndpointType, bool) {
-	endpointTypes := model.GetModelSupportEndpointTypes(modelName)
-	if !modelLimitEnabled {
-		return endpointTypes, true
+func requestModelManifest(c *gin.Context) ([]dto.OpenAIModels, error) {
+	limits, _ := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
+	modelLimits, _ := limits.(map[string]bool)
+	manifest, err := service.BuildModelManifest(c.Request.Context(), service.ModelManifestRequest{
+		UserID: c.GetInt("id"), TokenID: common.GetContextKeyInt(c, constant.ContextKeyTokenId),
+		ModelLimitEnabled: common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled),
+		ModelLimit:        modelLimits,
+	})
+	if err != nil {
+		return nil, err
 	}
-	return endpointTypes, tokenAllowsModel(tokenModelLimit, modelName)
+	result := make([]dto.OpenAIModels, 0, len(manifest.Models))
+	for _, entry := range manifest.Models {
+		owners := map[string]string{entry.ID: channelOwnerName(entry.OwnerChannelType)}
+		result = append(result, buildOpenAIModelWithEndpointTypes(entry.ID, owners, entry.SupportedEndpointTypes))
+	}
+	return result, nil
 }
 
 func ListModels(c *gin.Context, modelType int) {
-	acceptUnsetRatioModel := operation_setting.SelfUseModeEnabled
-	if !acceptUnsetRatioModel {
-		userId := c.GetInt("id")
-		if userId > 0 {
-			userSettings, _ := model.GetUserSetting(userId, false)
-			if userSettings.AcceptUnsetRatioModel {
-				acceptUnsetRatioModel = true
-			}
-		}
-	}
-
-	userModelNames := make([]string, 0)
-	models, err := service.AvailableRouteModels(c.Request.Context(), c.GetInt("id"), common.GetContextKeyInt(c, constant.ContextKeyTokenId))
+	userOpenAiModels, err := requestModelManifest(c)
 	if err != nil {
 		common.ApiError(c, err)
 		return
-	}
-	availablePrices := make(map[string]bool)
-	if !acceptUnsetRatioModel {
-		snapshotNames := append([]string(nil), models...)
-		aliasTargets := make(map[string]model.TaskAliasTarget)
-		generation := jsplugin.DefaultRegistry.Generation()
-		for _, name := range models {
-			if target, ok := model.ResolveTaskModelAlias(generation, name); ok && target.Declared != "" {
-				aliasTargets[name] = target
-				snapshotNames = append(snapshotNames, target.Declared)
-			}
-		}
-		snapshot, snapshotErr := model.GetModelPricingSnapshot(snapshotNames)
-		if snapshotErr != nil {
-			common.ApiError(c, snapshotErr)
-			return
-		}
-		entries := make(map[string]model.ModelPricingEntry, len(snapshot.Entries))
-		for _, entry := range snapshot.Entries {
-			entries[entry.ModelName] = entry
-			priced := model.ModelPriceConfigured(entry.Effective)
-			if plugins := generation.PluginsByModel(entry.ModelName); len(plugins) > 0 {
-				priced = false
-				for _, plugin := range plugins {
-					schema, _ := plugin.Meta.UsageForModel(entry.ModelName)
-					effective, _, priceErr := model.ResolveTaskPricingValues(plugin.Meta.Key, schema, entry.Effective)
-					if priceErr == nil && model.ModelPriceConfigured(effective) {
-						priced = true
-						break
-					}
-				}
-			}
-			availablePrices[entry.ModelName] = priced
-		}
-		for alias, target := range aliasTargets {
-			aliasEntry, targetEntry := entries[alias], entries[target.Declared]
-			plugin, ok := generation.Get(target.PluginKey)
-			if !ok {
-				availablePrices[alias] = false
-				continue
-			}
-			schema, _ := plugin.Meta.UsageForModels(target.Declared, alias)
-			effective, _, priceErr := model.ResolveTaskPricingValues(target.PluginKey, schema, aliasEntry.Effective, targetEntry.Effective)
-			availablePrices[alias] = priceErr == nil && model.ModelPriceConfigured(effective)
-		}
-	}
-	modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
-	var tokenModelLimit map[string]bool
-	if modelLimitEnable {
-		s, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
-		if ok {
-			tokenModelLimit, _ = s.(map[string]bool)
-		}
-		if tokenModelLimit == nil {
-			tokenModelLimit = map[string]bool{}
-		}
-	}
-	endpointTypesByModel := make(map[string][]constant.EndpointType, len(models))
-	for _, modelName := range models {
-		endpointTypes := model.GetModelSupportEndpointTypes(modelName)
-		visible := !modelLimitEnable || tokenAllowsModel(tokenModelLimit, modelName)
-		if modelType == constant.ChannelTypeOpenAI {
-			endpointTypes, visible = projectModelEndpointTypesForToken(modelName, tokenModelLimit, modelLimitEnable)
-		}
-		if !visible {
-			continue
-		}
-		if !acceptUnsetRatioModel && !availablePrices[modelName] {
-			continue
-		}
-		userModelNames = append(userModelNames, modelName)
-		endpointTypesByModel[modelName] = endpointTypes
-	}
-
-	ownerByModel := getPreferredModelOwners(userModelNames, nil)
-	userOpenAiModels := make([]dto.OpenAIModels, 0, len(userModelNames))
-	for _, modelName := range userModelNames {
-		userOpenAiModels = append(userOpenAiModels, buildOpenAIModelWithEndpointTypes(modelName, ownerByModel, endpointTypesByModel[modelName]))
 	}
 
 	switch modelType {
@@ -349,28 +237,29 @@ func EnabledListModels(c *gin.Context) {
 }
 
 func RetrieveModel(c *gin.Context, modelType int) {
-	modelId := c.Param("model")
-	if aiModel, ok := openAIModelsMap[modelId]; ok {
+	modelID := c.Param("model")
+	models, err := requestModelManifest(c)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	for _, item := range models {
+		if item.Id != modelID {
+			continue
+		}
 		switch modelType {
 		case constant.ChannelTypeAnthropic:
 			c.JSON(200, dto.AnthropicModel{
-				ID:          aiModel.Id,
-				CreatedAt:   time.Unix(int64(aiModel.Created), 0).UTC().Format(time.RFC3339),
-				DisplayName: aiModel.Id,
-				Type:        "model",
+				ID: item.Id, CreatedAt: time.Unix(int64(item.Created), 0).UTC().Format(time.RFC3339),
+				DisplayName: item.Id, Type: "model",
 			})
 		default:
-			c.JSON(200, aiModel)
+			c.JSON(200, item)
 		}
-	} else {
-		openAIError := types.OpenAIError{
-			Message: fmt.Sprintf("The model '%s' does not exist", modelId),
-			Type:    "invalid_request_error",
-			Param:   "model",
-			Code:    "model_not_found",
-		}
-		c.JSON(200, gin.H{
-			"error": openAIError,
-		})
+		return
 	}
+	c.JSON(200, gin.H{"error": types.OpenAIError{
+		Message: fmt.Sprintf("The model '%s' does not exist", modelID),
+		Type:    "invalid_request_error", Param: "model", Code: "model_not_found",
+	}})
 }

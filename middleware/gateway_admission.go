@@ -18,6 +18,16 @@ import (
 // before channel distribution. It owns the user permit for the entire logical request.
 func GatewayAdmission() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		for _, header := range []string{"X-Ren2Hub-Trace-Id", "X-Ren2Hub-Thread-Id"} {
+			values := c.Request.Header.Values(header)
+			if len(values) > 1 || len(values) == 1 && !service.ValidRequestCorrelationID(values[0]) {
+				abortWithOpenAiMessage(c, http.StatusBadRequest, "invalid request correlation identifier")
+				return
+			}
+			if len(values) == 1 {
+				c.Set(header, values[0])
+			}
+		}
 		_, _, parseErr := getModelRequest(c)
 		if parseErr != nil {
 			abortWithOpenAiMessage(c, http.StatusBadRequest, parseErr.Error())
@@ -53,6 +63,7 @@ func GatewayAdmission() gin.HandlerFunc {
 			return
 		}
 		defer permit.Release()
+		c.Set("gateway_user_queue_ms", permit.QueueWaitMS())
 		c.Request = c.Request.WithContext(ctx)
 		c.Writer = &gatewayTrackedWriter{ResponseWriter: c.Writer, ctx: ctx}
 		c.Next()

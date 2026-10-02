@@ -34,7 +34,9 @@ func validateSetupCredentials(req SetupRequest) string {
 	if req.Password != req.ConfirmPassword {
 		return "两次输入的密码不一致"
 	}
-	if err := common.ValidateNewAccountPassword(req.Password); err != nil { return err.Error() }
+	if err := common.ValidateNewAccountPassword(req.Password); err != nil {
+		return err.Error()
+	}
 	return ""
 }
 
@@ -110,7 +112,6 @@ func PostSetup(c *gin.Context) {
 				Role:           common.RoleRootUser,
 				Status:         common.UserStatusEnabled,
 				DisplayName:    "Root User",
-				AccessToken:    nil,
 				AffCode:        affCode,
 				AffCodeEnabled: true,
 			}

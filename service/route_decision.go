@@ -58,10 +58,18 @@ type RouteDecisionCandidate struct {
 // RouteDecisionAttempt contains only safe diagnostics for a dispatched attempt.
 // Successful response statuses and time to first token are not inferred.
 type RouteDecisionAttempt struct {
+	AttemptID         string                        `json:"attempt_id"`
+	CredentialID      string                        `json:"credential_id,omitempty"`
+	QueueMS           int64                         `json:"queue_ms"`
+	SendStartedAt     int64                         `json:"send_started_at"`
+	FirstOutputAt     *int64                        `json:"first_output_at,omitempty"`
+	FinishedAt        int64                         `json:"finished_at"`
+	TTFTMS            *int64                        `json:"ttft_ms,omitempty"`
+	UpstreamLatencyMS *int64                        `json:"upstream_latency_ms,omitempty"`
 	Termination       types.ResponseTerminationKind `json:"termination,omitempty"`
 	Diagnostics       []RouteDiagnosticSummary      `json:"response_diagnostics,omitempty"`
 	Sequence          int                           `json:"sequence"`
-	ChannelID         int                           `json:"channel_id"`
+	ChannelID         int                           `json:"channel_id,omitempty"`
 	Success           bool                          `json:"success"`
 	ErrorClass        RouteErrorClass               `json:"error_class,omitempty"`
 	ErrorHTTPStatus   int                           `json:"error_http_status,omitempty"`
@@ -69,7 +77,7 @@ type RouteDecisionAttempt struct {
 	LatencyMS         int64                         `json:"latency_ms"`
 	Acceptance        AttemptAcceptance             `json:"acceptance"`
 	RetryPermission   AttemptRetryPermission        `json:"retry_permission"`
-	ResponseCommitted bool                          `json:"response_committed,omitempty"`
+	ResponseCommitted bool                          `json:"response_committed"`
 }
 
 type RouteDiagnosticSummary struct {
@@ -78,6 +86,11 @@ type RouteDiagnosticSummary struct {
 }
 
 type RouteDecision struct {
+	UserID                   int                          `json:"user_id"`
+	TokenID                  int                          `json:"token_id"`
+	TraceID                  string                       `json:"trace_id,omitempty"`
+	ThreadID                 string                       `json:"thread_id,omitempty"`
+	UserQueueMS              int64                        `json:"user_queue_ms"`
 	RetryBudgetExhausted     bool                         `json:"retry_budget_exhausted,omitempty"`
 	Event                    string                       `json:"event"`
 	RequestID                string                       `json:"request_id"`

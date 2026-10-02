@@ -66,11 +66,20 @@ type AdmissionManager struct {
 }
 
 type Permit struct {
-	once      sync.Once
-	manager   *AdmissionManager
-	pool      *admissionPool
-	key       string
-	ChannelID int
+	once        sync.Once
+	manager     *AdmissionManager
+	pool        *admissionPool
+	key         string
+	ChannelID   int
+	queueWaitMS int64
+}
+
+// QueueWaitMS excludes policy reads, provider I/O and time holding the permit.
+func (permit *Permit) QueueWaitMS() int64 {
+	if permit == nil {
+		return 0
+	}
+	return permit.queueWaitMS
 }
 
 func NewAdmissionManager(totalLimit int) *AdmissionManager {
@@ -299,6 +308,7 @@ var AdmissionWaitBucketBoundsMS = [8]int64{1, 5, 20, 100, 500, 1000, 5000, math.
 
 func (m *AdmissionManager) recordWait(key string, waiter *admissionWaiter) {
 	waited := time.Since(waiter.started).Milliseconds()
+	waiter.permit.queueWaitMS = waited
 	for i, bound := range AdmissionWaitBucketBoundsMS {
 		if waited <= bound {
 			m.waitBuckets[i]++

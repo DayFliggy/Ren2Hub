@@ -26,6 +26,7 @@ import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import GatewayChannelPanel from '@/components/console/gateway/GatewayChannelPanel.vue'
+import CodexUsagePanel from './CodexUsagePanel.vue'
 import AdvancedChannelEditor from './AdvancedChannelEditor.vue'
 import FetchedModelsDialog from './FetchedModelsDialog.vue'
 import {
@@ -1360,6 +1361,17 @@ async function submit() {
       </section>
     </div>
 
+    <CodexUsagePanel
+      v-if="
+        open &&
+        editing?.type === 57 &&
+        !existingMultiKey &&
+        auth.hasPermission('channel', 'read')
+      "
+      :key="`usage-${editing.id}`"
+      :channel-id="editing.id"
+      :can-operate="auth.hasPermission('channel', 'operate')"
+    />
     <GatewayChannelPanel
       v-if="open && editing && auth.hasPermission('channel', 'read')"
       :key="editing.id"

@@ -1189,6 +1189,10 @@ func TestRegistryRejectsInvalidUsageProfiles(t *testing.T) {
 		{"noncanonical field", `[{models:["image"], schema:{" n":{type:"number", unit:"count"}}}]`, "canonical names"},
 		{"tokens need examples", `[{models:["image"], schema:{tokens:{type:"number", unit:"token"}}}]`, "usageExamples is required"},
 		{"examples use own schema", `[{models:["image"], schema:{n:{type:"number", unit:"count"}}, examples:[{label:"wrong", facts:{seconds:1}}]}]`, "usageProfiles[0]"},
+		{"null compatibility", `[{models:["image"],schema:{},compatibilitySchema:null}]`, "must be an object"},
+		{"duplicate compatibility field", `[{models:["image"],schema:{n:{type:"number",unit:"count"}},compatibilitySchema:{n:{type:"number",unit:"count"}}}]`, "duplicates field"},
+		{"invalid compatibility unit", `[{models:["image"],schema:{},compatibilitySchema:{old:{type:"number",unit:"dollar"}}}]`, "unit must be"},
+		{"compatibility is not advertised by examples", `[{models:["image"],schema:{n:{type:"number",unit:"count"}},compatibilitySchema:{old:{type:"number",unit:"count"}},examples:[{label:"old",facts:{old:1}}]}]`, "usageProfiles[0]"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			source := routingTestPluginSource("invalid-profile", 0, `["image", "video"]`,

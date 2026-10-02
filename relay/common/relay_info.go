@@ -146,9 +146,12 @@ type RelayInfo struct {
 	BeforeSend            func(io.Reader) error `json:"-"`
 	DeferBillingToSend    bool                  `json:"-"`
 	UpstreamSent          bool                  `json:"-"`
-	UpstreamAccepted      bool                  `json:"-"`
-	UpstreamRejected      bool                  `json:"-"`
-	UpstreamSideEffecting bool                  `json:"-"`
+	UpstreamSentAt        time.Time             `json:"-"`
+	firstValidOutputAt    atomic.Pointer[time.Time]
+	GatewayCredentialID   string `json:"-"`
+	UpstreamAccepted      bool   `json:"-"`
+	UpstreamRejected      bool   `json:"-"`
+	UpstreamSideEffecting bool   `json:"-"`
 	// The provider returned an async task identity. The job runs and costs money
 	// even if local persistence fails, so the request is billed, not released.
 	UpstreamTaskAccepted bool `json:"-"`
@@ -202,6 +205,7 @@ type RelayInfo struct {
 
 	StreamStatus       *StreamStatus
 	GeminiConvertState *convmeta.GeminiConvertInfo
+	ResponsesTools     *convmeta.ResponsesToolState
 
 	// convOptions caches the converter settings snapshot (see ConvOptions).
 	convOptions *convmeta.Options
@@ -298,7 +302,11 @@ func (info *RelayInfo) ResetAttemptState() error {
 	info.UpstreamSideEffecting = false
 	info.UpstreamTaskAccepted = false
 	info.UpstreamSent, info.UpstreamAccepted, info.UpstreamRejected = false, false, false
+	info.UpstreamSentAt = time.Time{}
+	info.firstValidOutputAt.Store(nil)
+	info.GatewayCredentialID = ""
 	info.StreamStatus, info.GeminiConvertState = nil, nil
+	info.ResponsesTools = nil
 	info.ClaudeConvertInfo = &ClaudeConvertInfo{LastMessagesType: LastMessageTypeNone}
 	info.FirstResponseTime = info.StartTime.Add(-time.Second)
 	info.isFirstResponse = true
@@ -862,6 +870,19 @@ func (info *RelayInfo) SetReasoningEffort(effort string) {
 	info.ReasoningEffort = strings.TrimSpace(effort)
 }
 
+func (info *RelayInfo) ResponsesToolState() *convmeta.ResponsesToolState {
+	if info == nil {
+		return nil
+	}
+	return info.ResponsesTools
+}
+
+func (info *RelayInfo) SetResponsesToolState(state *convmeta.ResponsesToolState) {
+	if info != nil {
+		info.ResponsesTools = state
+	}
+}
+
 func (info *RelayInfo) EnsureClaudeConvertInfo() *convmeta.ClaudeConvertInfo {
 	if info == nil {
 		return &convmeta.ClaudeConvertInfo{
@@ -946,6 +967,9 @@ func (info *RelayInfo) PrepareUpstreamSend(body ...io.Reader) error {
 		}
 	}
 	info.UpstreamSent = true
+	if info.UpstreamSentAt.IsZero() {
+		info.UpstreamSentAt = time.Now()
+	}
 	return nil
 }
 
@@ -982,8 +1006,22 @@ func (info *RelayInfo) HasSendResponse() bool {
 // frame or websocket message is first observed, before parsing succeeds.
 func (info *RelayInfo) MarkValidOutput() {
 	if info != nil {
+		now := time.Now()
+		info.firstValidOutputAt.CompareAndSwap(nil, &now)
 		info.validOutput.Store(true)
 	}
+}
+
+// FirstValidOutputTime excludes unparsed headers, heartbeat and malformed frames.
+func (info *RelayInfo) FirstValidOutputTime() (time.Time, bool) {
+	if info == nil {
+		return time.Time{}, false
+	}
+	value := info.firstValidOutputAt.Load()
+	if value == nil {
+		return time.Time{}, false
+	}
+	return *value, true
 }
 
 func (info *RelayInfo) HasValidOutput() bool {

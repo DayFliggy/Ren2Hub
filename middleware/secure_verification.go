@@ -37,7 +37,10 @@ func SecureVerificationRequired() gin.HandlerFunc {
 // RequireSecurityProof validates a proof against the authenticated dashboard
 // session and writes the shared proof error contract on failure.
 func RequireSecurityProof(c *gin.Context, operation service.VerificationOperation) *model.AuthFlowAuthorization {
-	identity, ok := GetSessionAuthIdentity(c)
+	identity, ok := GetAuthIdentity(c)
+	if !ok {
+		identity, ok = GetSessionAuthIdentity(c)
+	}
 	if !ok {
 		securityProofError(c, "SECURITY_PROOF_INVALID", "安全验证状态无效")
 		return nil

@@ -18,11 +18,11 @@
 
 多节点部署必须共用同一主数据库。登录 Session、账户级活跃 Session 上限和签发窗口计数都以数据库为权威，因此这些限制在应用节点间全局生效。Redis 中的 Session Hash（包含 `revoking`/`revoked` tombstone）只是缓存，其 TTL 为 Session 剩余寿命与有效 `SYNC_FREQUENCY` 中的较小值；`SYNC_FREQUENCY` 默认及非法值回退均为 `60` 秒。读取缓存不会续期，过期后会按 SID 回源数据库。延迟完成的 active 缓存回写只能使用其数据库观察窗口尚未消耗的 TTL，不能在撤销 tombstone 到期后重新启动一个完整缓存周期。
 
-| Redis 部署方式 | Session 状态传播 | 限流语义 |
-| --- | --- | --- |
-| 所有节点共享 Redis | 正常撤销和版本发布通过同一缓存即时传播 | Redis 限流额度在所有节点间共享 |
+| Redis 部署方式         | Session 状态传播                                                                                                                         | 限流语义                                                 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 所有节点共享 Redis     | 正常撤销和版本发布通过同一缓存即时传播                                                                                                   | Redis 限流额度在所有节点间共享                           |
 | 每个节点使用独立 Redis | 最迟在该节点 Session 缓存 TTL 到期后回源收敛，即不超过有效 `SYNC_FREQUENCY`；版本轮换期间，新 Token 在持有旧缓存的节点上可能短暂返回 401 | 每个节点独立计数，集群总额度最坏约为单节点阈值乘以节点数 |
-| 不使用 Redis | 每次 Session 校验直接读取数据库 | 使用各节点的内存限流器，额度同样按节点独立 |
+| 不使用 Redis           | 每次 Session 校验直接读取数据库                                                                                                          | 使用各节点的内存限流器，额度同样按节点独立               |
 
 `SYNC_FREQUENCY` 越大，独立 Redis 部署的陈旧窗口越长；值越小，每个活跃 SID 在每个节点上回源数据库的频率越高。默认配置下，持续活跃的 Session 每个节点最多约每 60 秒增加一次数据库主键点查。共享 Redis 时，撤销 tombstone 和版本发布仍保持即时传播。
 
@@ -58,13 +58,13 @@ Vue 登录入口依据服务端能力分别显示密码、Passkey 和已配置 O
 
 会话相关接口：
 
-| 接口 | 鉴权 | 用途 |
-| --- | --- | --- |
-| `POST /api/user/auth/refresh` | Refresh Cookie；Secure 模式附加 Origin 校验 | 轮换 Refresh Token 并签发新的 Access Token |
-| `POST /api/user/auth/logout` | Refresh Cookie；Secure 模式附加 Origin 校验，可同时携带 Bearer | 撤销当前登录会话并清除 Cookie |
-| `GET /api/user/sessions` | Bearer | 查看当前鉴权版本的有效登录会话，当前会话优先，最多 100 条 |
-| `DELETE /api/user/sessions/:sid` | Bearer | 撤销指定登录会话，包括当前会话 |
-| `POST /api/user/sessions/revoke-others` | Bearer | 保留当前会话并撤销其他会话 |
+| 接口                                    | 鉴权                                                           | 用途                                                      |
+| --------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------- |
+| `POST /api/user/auth/refresh`           | Refresh Cookie；Secure 模式附加 Origin 校验                    | 轮换 Refresh Token 并签发新的 Access Token                |
+| `POST /api/user/auth/logout`            | Refresh Cookie；Secure 模式附加 Origin 校验，可同时携带 Bearer | 撤销当前登录会话并清除 Cookie                             |
+| `GET /api/user/sessions`                | Bearer                                                         | 查看当前鉴权版本的有效登录会话，当前会话优先，最多 100 条 |
+| `DELETE /api/user/sessions/:sid`        | Bearer                                                         | 撤销指定登录会话，包括当前会话                            |
+| `POST /api/user/sessions/revoke-others` | Bearer                                                         | 保留当前会话并撤销其他会话                                |
 
 客户端内存中已有会话时，应在 refresh/logout 请求中发送 `X-Auth-Session: <sid>`。Refresh Cookie 与该 SID 不一致时，两个端点都返回 `409 AUTH_SESSION_MISMATCH`，且不会轮换、撤销或清除任何会话；客户端先通过 refresh 清除本标签页的旧 SID、恢复 Cookie 当前对应的会话，再重试 logout。冷启动尚无内存会话时可以省略该请求头。
 
@@ -144,9 +144,13 @@ Redis 限流使用原子 Lua 固定窗口，替代旧的近似滑动窗口 List 
 
 ## PAT 调用契约
 
-`User.AccessToken`（面板 PAT）继续支持 `Authorization: Bearer <pat>`，也兼容原有的单值 `Authorization: <pat>`。`New-Api-User` 不再参与鉴权，外部脚本不需要再发送 Bearer 与用户 ID 双请求头。这是有意的调用契约简化；旧 PAT 本身无需重新生成。
+管理 PAT 使用独立 `personal_access_tokens` 表，明文为随机 `pat_` 凭据，只在创建响应展示一次；数据库保存 SHA-256 摘要、用户归属、名称、scopes、创建/最后使用/过期/撤销时间。每用户最多 20 枚有效 PAT，默认 30 天过期，显式过期时间必须在未来。旧 `User.AccessToken`、生成/轮换及原值校验路径已删除，没有双写或旧令牌宽限期。调用使用 `Authorization: Bearer <pat>`；`New-Api-User` 不参与鉴权。
 
-PAT 不是浏览器登录会话，不能调用登录会话管理接口，也不能签发绑定具体登录会话的 Security Proof。
+每个管理路由按 HTTP method 与注册路径明确声明 PAT scope；没有声明时即使 Root 的 PAT 也拒绝。每次调用将已授予 scope 与拥有者当前角色、资源权限求交集，用户禁用/删除、PAT 过期/撤销均拒绝。模型调用 Token 与管理 PAT 不互换。
+
+PAT 不是浏览器登录会话，不能管理登录会话、创建或撤销其他 PAT。它可以经 `verification:write` scope 完成现有二次验证；所得 Proof 绑定 PAT ID、用户鉴权版本及操作上下文，不绑定或冒充浏览器 Session。后续业务事务会重新验证 PAT 有效性。浏览器 JWT、Refresh Cookie 和原有刷新机制保持独立。
+
+OAuth 和 Telegram 的二次验证回调复核发起时的浏览器或 PAT 身份，不能在回调末尾退回浏览器专属链路。撤销、过期、认证版本或上下文变化均拒绝；生成的 Proof 继续绑定身份、操作与目标且只能消费一次。账户绑定流程仍要求浏览器身份。
 
 ## 临时鉴权流程与二次验证
 
@@ -156,17 +160,37 @@ OAuth state、2FA pending、Passkey ceremony、Telegram bind 等临时状态存�
 
 敏感操作使用 `GET /api/verify/methods` 获取当前可用因子，通过对应验证流程取得有效期 5 分钟的 `X-Security-Proof`。作用域包括渠道密钥读取、PAT 生成/撤销、Passkey 注册/删除、2FA 设置/禁用/恢复码更新、账户绑定/解绑、设置/修改密码和账户删除。
 
-Proof 绑定用户、登录会话、用户鉴权版本、会话版本、操作及严格规范化的上下文。数据库一次性消费 Proof，随后各业务事务重新核对授权状态。消费后撤销会话会使业务写入失败；业务失败不会恢复 Proof。注册 Passkey 与 2FA 的 begin、finish 使用绑定的流程状态，不能因尚无第二因子而绕过验证。
+Proof 绑定用户、认证身份（浏览器 Session 或 PAT）、用户鉴权版本、身份版本、操作及严格规范化的上下文。数据库一次性消费 Proof，随后各业务事务重新核对授权状态。消费后撤销认证身份会使业务写入失败；业务失败不会恢复 Proof。注册 Passkey 与 2FA 的 begin、finish 使用绑定的流程状态，不能因尚无第二因子而绕过验证。
 
 账户密码使用 Argon2id，新密码校验 8–128 个 Unicode 字符，不裁剪空格。已有 bcrypt 哈希保留兼容校验。登录传输加密默认关闭；`GET /api/user/login/encryption-key` 只读且 `no-store`。启用后使用带 `kid` 的 v2 RSA-OAEP + AES-GCM 混合信封，拒绝明文降级、错误密钥标识和损坏密文，后续登录验证仍绑定同一流程。
 
-PAT 管理的 `GET /api/user/token/status` 只返回状态及指纹；旧 `GET /api/user/token` 也是只读。`POST /api/user/token` 要求 `access_token.generate` Proof，生成或轮换后仅一次返回明文；`DELETE /api/user/token` 要求 `access_token.revoke` Proof。个人与授权管理员审计存入独立 `audit_logs`，普通用量日志清理不会移除它。审计保留事件、指纹和必要上下文，不记录密码、Proof 或 PAT 原文。
+PAT 管理位于账户安全页，仅允许浏览器会话。规范前缀为 `/api/user/self/personal-access-tokens`；首批 `/api/user/personal-access-tokens` 保留为同处理器、同权限的别名。旧单令牌 `/api/user/token*` 路由已移除。
+
+| 方法与相对路径 | 请求与行为                                                                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /`        | 本人列表；不返回摘要或明文                                                                                                                         |
+| `GET /scopes`  | 服务端当前可授予的 scope 字符串数组、有效数量上限和默认有效天数；前端不复制角色定义                                                                |
+| `POST /`       | `{name, scopes, expires_at?}`，需 `pat.create` Proof；响应 `{token, personal_access_token}` 的 `token` 只显示一次                                  |
+| `PATCH /:id`   | `{name?, scopes?}` 至少一项；只改名称不需 Proof。提交 scopes 必须提供 `pat.update` Proof，其 context 为 `{id, scopes}`，scope 排序、去重后绑定目标 |
+| `DELETE /:id`  | 需 `pat.revoke` Proof，context 为 `{id}`                                                                                                           |
+
+PATCH 省略字段保留原值；空名称、null/空 scopes、未知字段以及修改过期时间均拒绝。更新在现有用户锁事务内重查浏览器身份、PAT 归属/有效性和最新授权；绑定错误的 Proof 不执行更新，消费后的 Proof 不能重放。过期或撤销 PAT 不能通过改名或改权限复活，续期必须新建并撤销旧 PAT。界面关闭、退出或会话变化会丢弃未完成请求的一次性明文，不存入浏览器持久存储。
+
+路由 scope 与字段权限分别求交集。例如 `ops:read` 允许管理员 PAT 读取请求诊断，但返回渠道和凭据内部 ID 还要求该 PAT 的 `channels:read` 及用户当前 `ChannelRead`。不能借拥有者更高权限扩大 PAT 的响应字段。个人与授权管理员审计存入独立 `audit_logs`，普通用量日志清理不会移除它；不记录密码、Proof、PAT 原文或摘要。
+
+管理员敏感用户操作使用 `admin.user.change` Proof，context 为 `{ids: [...], action}`，目标按序规范化。创建管理员使用目标 `[0]` 与 `create_admin`；更新敏感字段、删除、状态/角色、Passkey、2FA、解绑等使用各自 action。旧 `/api/user/` 与 `/api/next/admin/users` 共用有效角色和权限校验；验证失败不进入业务写入。普通资料与额度操作仍遵守各自已有权限及账务合同，不扩大 Proof 到无关操作。
+
+旧管理入口的状态和角色操作在持锁事务内重查当前权限，只更新目标列。降级的权限清理与角色修改原子提交；认证版本按锁内当前值提升。普通 `updatePassword=false` 更新排除密码列，不能把请求前读取的旧密码、账务或资料快照写回。
+
+模型调用 Token 的创建总量检查与每小时创建窗口位于同一用户锁事务内。`token_setting.max_token_creates_per_hour` 默认 60，0 明确关闭，负数拒绝创建；成功创建后即使软删除也继续占用该小时次数。数量上限返回 `TOKEN_COUNT_LIMIT`，频率上限返回 HTTP 429 `TOKEN_CREATION_RATE_LIMIT`。失败事务不会留下 Token、预算事件或路由 Profile。
+
+邮箱验证码与密码重置沿用现有单实例验证存储，条目仅保存 SHA-256 摘要。每个验证码累计失败最多 5 次，校验和失败计数在同一锁内完成，第 5 次失败使该码失效；发送接口原有限速继续有效。密码重置在任何账户写入前原子校验并消费 token，并发或重放请求最多一个进入密码修改。数据库写入失败不会恢复已消费 token，用户需要重新申请链接；成功后的鉴权版本提升和浏览器会话撤销沿用现有事务。
 
 登录、账号安全、管理操作、访问令牌请求和系统发放（签到、邀请奖励等）统一写入 `audit_logs`，控制台在日志子页 `/usage-logs/audit` 展示。`GET /api/audit/self` 只返回本人记录并去除管理员与请求元数据；`GET /api/audit` 查看全部账号，需要 `audit:read` 权限。非 Root 查看者看不到 Root 发起的事件和 `root_info`。读取时统一去除操作参数中疑似凭据的字段（如 password、secret、token、api_key、cookie）。旧 `logs` 表的管理、系统和登录记录（type 3/4/7）在启动迁移时一次性回填到 `audit_logs`，由 Option 标记保证幂等。
 
 ## 存储与兼容边界
 
-当前账务格式只接受空库初始化或匹配 `billing_schemas` 标记的数据库；旧账务库不能因认证表迁移兼容而直接升级。下列认证字段与旧凭据说明只描述认证子系统，整库安装与回退以[发布契约](routing/GATEWAY_RELEASE.md)为准。
+当前格式只接受空库初始化或匹配 `billing_schemas` 标记且已经采用新 PAT 表的安装。存在 `users.access_token` 的旧库会在任何初始化改表前被拒绝，不做数据迁移、列删除或数据库清空。资金 schema 仍为 5；新认证格式不改变资金计算器。下列历史认证兼容说明不构成整库升级支持，安装与回退以[发布契约](routing/GATEWAY_RELEASE.md)为准。
 
 - 旧 `session` Cookie 不再使用；升级后现有面板登录会失效，用户需要重新登录。
 - 数据库迁移会新增 `user_sessions`、`auth_flows`、`external_identity_claims` 和 `users.auth_version`，并为已有用户初始化鉴权版本、回填 Telegram 账号唯一归属；若历史数据中同一 Telegram ID 已绑定多个用户，迁移会拒绝继续启动，需先消除歧义。
@@ -176,4 +200,4 @@ PAT 管理的 `GET /api/user/token/status` 只返回状态及指纹；旧 `GET /
 - 未配置 `TRUSTED_PROXIES` 时会兼容信任回环和常见私网代理；使用公网负载均衡器、`100.64.0.0/10`、链路本地地址或自定义 CNI 网段的部署仍需显式配置。需要严格忽略所有转发头时设置为 `none`。
 - Redis 限流从近似滑动窗口改为原子固定窗口，存在明确的边界双倍突发语义。
 - 用户级模型限流及网关准入使用当前预留合同；本次不兼容格式切换采用独立空库和已确认归属的缓存重建，不支持混合版本滚动运行。
-- 自建客户端应按新的 AuthBundle、`flow_token` 和 Security Proof 契约升级；PAT 客户端可直接移除 `New-Api-User`。
+- 自建客户端应按 AuthBundle、`flow_token` 和 Security Proof 契约升级；管理脚本必须重新签发具有最小 scope 的新 PAT，旧单令牌不再接受。

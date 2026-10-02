@@ -15,25 +15,27 @@ import (
 )
 
 const (
-	VerificationMethodTwoFA              = "2fa"
-	VerificationMethodPasskey            = "passkey"
-	VerificationMethodPassword           = "password"
-	VerificationMethodOAuth              = "oauth"
-	VerificationMethodSession            = "session"
-	VerificationScopeChannelKeyRead      = "channel.key.read"
-	VerificationScopePasskeyRegister     = "passkey.register"
-	VerificationScopePasskeyDelete       = "passkey.delete"
-	VerificationScopeTwoFASetup          = "2fa.setup"
-	VerificationScopeTwoFADisable        = "2fa.disable"
-	VerificationScopeTwoFABackupCodes    = "2fa.backup_codes.regenerate"
-	VerificationScopeLogin               = "auth.login"
-	VerificationScopeAccessTokenGenerate = "access_token.generate"
-	VerificationScopeAccessTokenRevoke   = "access_token.revoke"
-	VerificationScopeAccountBind         = "account.binding.bind"
-	VerificationScopeAccountUnbind       = "account.binding.unbind"
-	VerificationScopePasswordSet         = "account.password.set"
-	VerificationScopePasswordChange      = "account.password.change"
-	VerificationScopeAccountDelete       = "account.delete"
+	VerificationMethodTwoFA           = "2fa"
+	VerificationMethodPasskey         = "passkey"
+	VerificationMethodPassword        = "password"
+	VerificationMethodOAuth           = "oauth"
+	VerificationMethodSession         = "session"
+	VerificationScopeChannelKeyRead   = "channel.key.read"
+	VerificationScopePasskeyRegister  = "passkey.register"
+	VerificationScopePasskeyDelete    = "passkey.delete"
+	VerificationScopeTwoFASetup       = "2fa.setup"
+	VerificationScopeTwoFADisable     = "2fa.disable"
+	VerificationScopeTwoFABackupCodes = "2fa.backup_codes.regenerate"
+	VerificationScopeLogin            = "auth.login"
+	VerificationScopePATCreate        = "pat.create"
+	VerificationScopePATRevoke        = "pat.revoke"
+	VerificationScopePATUpdate        = "pat.update"
+	VerificationScopeAdminUserChange  = "admin.user.change"
+	VerificationScopeAccountBind      = "account.binding.bind"
+	VerificationScopeAccountUnbind    = "account.binding.unbind"
+	VerificationScopePasswordSet      = "account.password.set"
+	VerificationScopePasswordChange   = "account.password.change"
+	VerificationScopeAccountDelete    = "account.delete"
 )
 
 var (
@@ -54,6 +56,16 @@ type VerificationOperation struct {
 
 type ChannelKeyReadContext struct {
 	ChannelID int `json:"channel_id"`
+}
+
+type PATUpdateContext struct {
+	ID     int      `json:"id"`
+	Scopes []string `json:"scopes"`
+}
+
+type AdminUserChangeContext struct {
+	IDs    []int  `json:"ids"`
+	Action string `json:"action"`
 }
 
 type AccountBindingContext struct {
@@ -82,6 +94,42 @@ func BindVerificationOperation(operation VerificationOperation) (VerificationBin
 	}
 	var normalized any
 	switch operation.Scope {
+	case VerificationScopeAdminUserChange:
+		var context AdminUserChangeContext
+		if len(fields) != 2 || common.Unmarshal(operation.Context, &context) != nil || len(context.IDs) == 0 || len(context.IDs) > 100 {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		switch context.Action {
+		case "create_admin", "update", "delete", "enable", "disable", "promote", "demote", "reset_passkey", "disable_2fa", "clear_binding":
+		default:
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		for _, id := range context.IDs {
+			if id < 0 || (id == 0 && context.Action != "create_admin") {
+				return VerificationBinding{}, ErrVerificationContextInvalid
+			}
+		}
+		sort.Ints(context.IDs)
+		normalized = context
+	case VerificationScopePATUpdate:
+		var context PATUpdateContext
+		if len(fields) != 2 || common.Unmarshal(operation.Context, &context) != nil || context.ID <= 0 {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		scopes, err := model.NormalizePATScopes(context.Scopes, common.RoleRootUser)
+		if err != nil {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		context.Scopes = scopes
+		normalized = context
+	case VerificationScopePATRevoke:
+		var context struct {
+			ID int `json:"id"`
+		}
+		if len(fields) != 1 || common.Unmarshal(operation.Context, &context) != nil || context.ID <= 0 {
+			return VerificationBinding{}, ErrVerificationContextInvalid
+		}
+		normalized = context
 	case VerificationScopeChannelKeyRead:
 		var context ChannelKeyReadContext
 		if len(fields) != 1 || common.Unmarshal(fields["channel_id"], &context.ChannelID) != nil || context.ChannelID <= 0 {
@@ -119,7 +167,7 @@ func BindVerificationOperation(operation VerificationOperation) (VerificationBin
 		normalized = context
 	case VerificationScopePasskeyRegister, VerificationScopePasskeyDelete, VerificationScopeTwoFASetup,
 		VerificationScopeTwoFADisable, VerificationScopeTwoFABackupCodes,
-		VerificationScopeAccessTokenGenerate, VerificationScopeAccessTokenRevoke,
+		VerificationScopePATCreate,
 		VerificationScopePasswordSet, VerificationScopePasswordChange, VerificationScopeAccountDelete:
 		if len(fields) != 0 {
 			return VerificationBinding{}, ErrVerificationContextInvalid
@@ -184,7 +232,7 @@ func securityVerificationPolicy(scope string, state model.UserVerificationState)
 			return nil, model.ErrTwoFANotEnabled
 		}
 	case VerificationScopePasskeyRegister, VerificationScopeTwoFASetup,
-		VerificationScopeAccessTokenGenerate, VerificationScopeAccessTokenRevoke,
+		VerificationScopePATCreate, VerificationScopePATRevoke, VerificationScopePATUpdate, VerificationScopeAdminUserChange,
 		VerificationScopeAccountBind, VerificationScopeAccountUnbind,
 		VerificationScopePasswordSet, VerificationScopePasswordChange, VerificationScopeAccountDelete:
 		if scope == VerificationScopeAccountDelete && state.Role == common.RoleRootUser {
@@ -224,6 +272,9 @@ func GetVerificationRequirements(identity AuthIdentity, scope string) (*Verifica
 	if scope == VerificationScopeLogin {
 		return nil, ErrProofScope
 	}
+	if identity.PersonalAccessTokenID > 0 && scope != VerificationScopeAdminUserChange && scope != VerificationScopeChannelKeyRead {
+		return nil, ErrVerificationForbidden
+	}
 	state, err := model.GetUserVerificationState(identity.UserID)
 	if err != nil {
 		return nil, err
@@ -232,6 +283,9 @@ func GetVerificationRequirements(identity AuthIdentity, scope string) (*Verifica
 		return nil, ErrAuthTokenInvalid
 	}
 	if scope == VerificationScopeChannelKeyRead && state.Role != common.RoleRootUser {
+		return nil, ErrVerificationForbidden
+	}
+	if scope == VerificationScopeAdminUserChange && state.Role < common.RoleAdminUser {
 		return nil, ErrVerificationForbidden
 	}
 	methods, err := securityVerificationPolicy(scope, *state)
@@ -330,7 +384,7 @@ func RequireVerificationMethod(identity AuthIdentity, scope, method string) (*Ve
 // CompleteSecurityVerification runs after the concrete authentication ceremony.
 // Recheck the session and policy after potentially slow external authentication.
 func CompleteSecurityVerification(identity AuthIdentity, binding VerificationBinding, method string) (*SecurityProof, error) {
-	if _, _, err := ValidateLoginSession(identity); err != nil {
+	if err := ValidateSecurityIdentity(identity); err != nil {
 		return nil, err
 	}
 	if _, err := RequireVerificationMethod(identity, binding.Scope, method); err != nil {
@@ -354,7 +408,7 @@ func ConsumeOperationProof(raw string, identity AuthIdentity, operation Verifica
 	if err != nil {
 		return nil, err
 	}
-	if _, _, err := ValidateLoginSession(identity); err != nil {
+	if err := ValidateSecurityIdentity(identity); err != nil {
 		return nil, err
 	}
 	if _, err := RequireVerificationMethod(identity, binding.Scope, claims.Method); err != nil {
@@ -398,7 +452,7 @@ func ValidateFlowAuthorization(identity AuthIdentity, operation VerificationOper
 	if authorization.Scope != binding.Scope || !hmac.Equal([]byte(authorization.ContextHash), []byte(binding.ContextHash)) {
 		return model.ErrAuthFlowInvalid
 	}
-	if _, _, err := ValidateLoginSession(identity); err != nil {
+	if err := ValidateSecurityIdentity(identity); err != nil {
 		return err
 	}
 	_, err = RequireVerificationMethod(identity, binding.Scope, authorization.Method)

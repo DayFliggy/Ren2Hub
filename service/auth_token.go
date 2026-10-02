@@ -41,13 +41,14 @@ var (
 type AuthIdentity = model.AuthSessionIdentity
 
 type authClaims struct {
-	TokenUse        string   `json:"token_use"`
-	SessionID       string   `json:"sid"`
-	UserAuthVersion int64    `json:"uv"`
-	SessionVersion  int64    `json:"sv"`
-	Method          string   `json:"method,omitempty"`
-	Scopes          []string `json:"scopes,omitempty"`
-	ContextHash     string   `json:"context_hash,omitempty"`
+	PersonalAccessTokenID int      `json:"pat_id,omitempty"`
+	TokenUse              string   `json:"token_use"`
+	SessionID             string   `json:"sid"`
+	UserAuthVersion       int64    `json:"uv"`
+	SessionVersion        int64    `json:"sv"`
+	Method                string   `json:"method,omitempty"`
+	Scopes                []string `json:"scopes,omitempty"`
+	ContextHash           string   `json:"context_hash,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -58,7 +59,7 @@ func authSigningKey(purpose string) []byte {
 }
 
 func IssueAccessToken(identity AuthIdentity) (string, int64, error) {
-	if identity.UserID <= 0 || identity.SessionID == "" || identity.UserAuthVersion <= 0 || identity.SessionVersion <= 0 {
+	if identity.PersonalAccessTokenID != 0 || identity.UserID <= 0 || identity.SessionID == "" || identity.UserAuthVersion <= 0 || identity.SessionVersion <= 0 {
 		return "", 0, ErrAuthTokenInvalid
 	}
 	now := time.Now()
@@ -88,7 +89,7 @@ func ParseAccessToken(raw string) (AuthIdentity, error) {
 		return AuthIdentity{}, err
 	}
 	userID, err := strconv.Atoi(claims.Subject)
-	if err != nil || userID <= 0 || claims.SessionID == "" || claims.UserAuthVersion <= 0 || claims.SessionVersion <= 0 {
+	if err != nil || claims.PersonalAccessTokenID != 0 || userID <= 0 || claims.SessionID == "" || claims.UserAuthVersion <= 0 || claims.SessionVersion <= 0 {
 		return AuthIdentity{}, ErrAuthTokenInvalid
 	}
 	return AuthIdentity{
@@ -142,13 +143,14 @@ func IssueSecurityProof(identity AuthIdentity, method string, binding Verificati
 		return "", 0, err
 	}
 	claims := authClaims{
-		TokenUse:        securityProofTokenUse,
-		SessionID:       identity.SessionID,
-		UserAuthVersion: identity.UserAuthVersion,
-		SessionVersion:  identity.SessionVersion,
-		Method:          method,
-		Scopes:          []string{binding.Scope},
-		ContextHash:     binding.ContextHash,
+		TokenUse:              securityProofTokenUse,
+		PersonalAccessTokenID: identity.PersonalAccessTokenID,
+		SessionID:             identity.SessionID,
+		UserAuthVersion:       identity.UserAuthVersion,
+		SessionVersion:        identity.SessionVersion,
+		Method:                method,
+		Scopes:                []string{binding.Scope},
+		ContextHash:           binding.ContextHash,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    authTokenIssuer,
 			Subject:   strconv.Itoa(identity.UserID),
@@ -169,7 +171,7 @@ func verifySecurityProof(raw string, identity AuthIdentity, binding Verification
 		return nil, err
 	}
 	userID, err := strconv.Atoi(claims.Subject)
-	if err != nil || userID != identity.UserID || claims.SessionID != identity.SessionID || claims.UserAuthVersion != identity.UserAuthVersion || claims.SessionVersion != identity.SessionVersion {
+	if err != nil || claims.PersonalAccessTokenID != identity.PersonalAccessTokenID || userID != identity.UserID || claims.SessionID != identity.SessionID || claims.UserAuthVersion != identity.UserAuthVersion || claims.SessionVersion != identity.SessionVersion {
 		return nil, ErrAuthTokenInvalid
 	}
 	if len(claims.Scopes) != 1 || claims.Scopes[0] != binding.Scope {

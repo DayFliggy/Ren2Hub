@@ -120,7 +120,7 @@ func resolveModelBillingPrice(ctx context.Context, modelName, pluginKey, mappedM
 		if mappedModel != "" && mappedModel != modelName {
 			candidates = append(candidates, effectiveModelPricing(values, mappedModel))
 		}
-		schema, _ := plugin.Meta.UsageForModels(mappedModel, modelName)
+		schema := plugin.Meta.UsageFactsForModels(mappedModel, modelName)
 		effective, taskUsage, err = ResolveTaskPricingValues(pluginKey, schema, candidates...)
 		if err != nil {
 			return nil, err

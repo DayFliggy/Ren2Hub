@@ -152,7 +152,7 @@ func TestPasskeyDomainsPreserveCredentialsAcrossVerificationFlows(t *testing.T) 
 				beginPath, finishPath = "/api/user/login/passkey/begin", "/api/user/login/passkey/finish"
 				beginHandler, finishHandler = LoginPasskeyBegin, LoginPasskeyFinish
 			} else if kind == "sensitive action" {
-				request["scope"] = service.VerificationScopeAccessTokenGenerate
+				request["scope"] = service.VerificationScopePATCreate
 				beginPath, finishPath = "/api/user/passkey/verify/begin", "/api/user/passkey/verify/finish"
 				beginHandler, finishHandler = PasskeyVerifyBegin, PasskeyVerifyFinish
 			}
@@ -179,7 +179,7 @@ func TestPasskeyDomainsPreserveCredentialsAcrossVerificationFlows(t *testing.T) 
 			if kind == "sensitive action" {
 				var proof service.SecurityProof
 				require.NoError(t, common.Unmarshal(result.Data, &proof))
-				assert.Equal(t, service.VerificationScopeAccessTokenGenerate, proof.Scope)
+				assert.Equal(t, service.VerificationScopePATCreate, proof.Scope)
 			}
 			count, err := model.CountActiveUserSessions(user.Id, time.Now().Unix())
 			require.NoError(t, err)

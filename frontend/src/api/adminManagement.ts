@@ -1,5 +1,6 @@
 import { api } from './client'
 import { parseModelEndpoints } from '@/utils/modelEndpoints'
+import { parseModelCapabilities, type ModelCapabilities } from './modelManifest'
 import {
   invalidResponse,
   isRecord,
@@ -10,6 +11,7 @@ import {
 } from './contracts'
 
 export interface ModelMetadata {
+  capabilities?: ModelCapabilities | null
   id: number
   model_name: string
   description: string
@@ -114,6 +116,7 @@ export function parseModelMetadata(
     status: flag(row.status, endpoint),
     sync_official: flag(row.sync_official, endpoint),
     name_rule: nameRule,
+    capabilities: parseModelCapabilities(row.capabilities, endpoint),
     bound_channels: array(row.bound_channels ?? [], endpoint, (item) => {
       const channel = record(item, endpoint)
       return {

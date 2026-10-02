@@ -650,6 +650,7 @@ func acquireRouteAttemptPermit(c *gin.Context, info *relaycommon.RelayInfo, chan
 		return releaseRejectedRouteAttempt(c, permit, err)
 	}
 	c.Set("route_channel_permit", permit)
+	c.Set("gateway_channel_queue_ms", permit.QueueWaitMS())
 	markLiveRouteAttempt(c, channel.Id, service.AdmissionStateAcquired)
 	// Provider reservations and health probes require maintenance while the
 	// actual upstream work is active; local permits never expire or renew.
@@ -1077,6 +1078,11 @@ func finalizeLiveRouteDecision(c *gin.Context, info *relaycommon.RelayInfo, apiE
 	// Keep attempt evidence on the logical request across channel reselection.
 	attempts, _ := c.Get(liveRouteAttemptEvidenceKey)
 	selection.Decision.Attempts, _ = attempts.([]service.RouteDecisionAttempt)
+	selection.Decision.UserID = c.GetInt("id")
+	selection.Decision.TokenID = common.GetContextKeyInt(c, constant.ContextKeyTokenId)
+	selection.Decision.TraceID = c.GetString("X-Ren2Hub-Trace-Id")
+	selection.Decision.ThreadID = c.GetString("X-Ren2Hub-Thread-Id")
+	selection.Decision.UserQueueMS = c.GetInt64("gateway_user_queue_ms")
 	if info != nil {
 		counters := liveRouteRetryCounters(c)
 		selection.Decision.ScannedCandidates = c.GetInt("gateway_scanned_candidates")

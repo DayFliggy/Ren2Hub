@@ -48,6 +48,18 @@ const IMAGE_MODELS = {
     tools: true,
     fastPromptMode: false,
   },
+  "doubao-seedream-5-0-flash-260915": {
+    presets: ["1K", "1.5K", "2K"],
+    minPixels: 921600,
+    maxPixels: 4624220,
+    maxReferenceImages: 10,
+    sequential: false,
+    layers: true,
+    outputFormat: true,
+    background: true,
+    tools: false,
+    fastPromptMode: false,
+  },
   "doubao-seedream-5-0-260128": {
     presets: ["2K", "3K", "4K"],
     minPixels: 3686400,
@@ -110,6 +122,7 @@ const IMAGE_TIER_MAX_PIXELS = 2610000;
 const MAX_IMAGE_OUTPUTS = 17;
 // Documented reference-image ceiling across Seedream models; bounds usage.input_images.
 const MAX_REFERENCE_IMAGES = 14;
+const MAX_INPUT_IMAGE_BYTES = 31457280;
 // Base64 references must be `data:image/<lowercase format>;base64,<payload>`.
 const IMAGE_DATA_URI = /^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/]+={0,2}$/;
 // Responses fields copied verbatim into the Ark body. `background` is excluded:
@@ -163,6 +176,51 @@ const IMAGE_USAGE_SCHEMA = {
     description: { en: "Whether layer decomposition is enabled", zh: "是否开启图层拆分" },
   },
 };
+
+function hasLowerImageTier(profile) {
+  return profile.minPixels <= IMAGE_TIER_MAX_PIXELS;
+}
+
+// Editor metadata advertises only the capabilities of this model. Released
+// facts omitted here remain explicit compatibility fields for old prices.
+function seedreamUsageSchema(profile) {
+  const schema = {};
+  if (hasLowerImageTier(profile)) {
+    schema.images_up_to_1_5k = IMAGE_USAGE_SCHEMA.images_up_to_1_5k;
+    schema.images_above_1_5k = IMAGE_USAGE_SCHEMA.images_above_1_5k;
+  } else {
+    schema.images_above_1_5k = Object.assign({}, IMAGE_USAGE_SCHEMA.images_above_1_5k, {
+      description: { en: "Image generation unit price", zh: "图片生成单价" },
+    });
+  }
+  schema.input_images = IMAGE_USAGE_SCHEMA.input_images;
+  if (profile.layers) schema.layer_decomposition = IMAGE_USAGE_SCHEMA.layer_decomposition;
+  return schema;
+}
+
+function seedreamUsageProfiles() {
+  return Object.keys(IMAGE_MODELS).map((model) => {
+    const profile = IMAGE_MODELS[model];
+    const schema = seedreamUsageSchema(profile);
+    const compatibilitySchema = {};
+    for (const key of Object.keys(IMAGE_USAGE_SCHEMA)) {
+      if (!Object.prototype.hasOwnProperty.call(schema, key)) compatibilitySchema[key] = IMAGE_USAGE_SCHEMA[key];
+    }
+    const examples = [{ label: "2K · 1 张", facts: { images_up_to_1_5k: 0, images_above_1_5k: 1, input_images: 0, layer_decomposition: false } }];
+    if (hasLowerImageTier(profile)) examples.push({ label: "1K · 1 张 · 2 张参考图", facts: { images_up_to_1_5k: 1, images_above_1_5k: 0, input_images: 2, layer_decomposition: false } });
+    else examples.push({ label: "2K · 1 张 · 2 张参考图", facts: { images_up_to_1_5k: 0, images_above_1_5k: 1, input_images: 2, layer_decomposition: false } });
+    if (profile.sequential) examples.push({ label: "2K · 4 张组图", facts: { images_up_to_1_5k: 0, images_above_1_5k: 4, input_images: 0, layer_decomposition: false } });
+    if (profile.layers) examples.push({ label: "图层拆分 · 2K 底图 + 4 层 1.5K", facts: { images_up_to_1_5k: 4, images_above_1_5k: 1, input_images: 1, layer_decomposition: true } });
+    return {
+      models: [model], schema: schema, compatibilitySchema: compatibilitySchema,
+      examples: examples.map((example) => {
+        const facts = {};
+        for (const key of Object.keys(schema)) facts[key] = example.facts[key];
+        return { label: example.label, facts: facts };
+      }),
+    };
+  });
+}
 
 // Usage facts for one Seedance capability profile: the pricing table then
 // lists only the resolutions and input kinds the model offers.
@@ -234,7 +292,10 @@ function seedanceUsageProfiles() {
     }
     profile.models.push(model);
   }
-  return profiles.map((profile) => ({ models: profile.models, schema: profile.schema, examples: profile.examples }));
+  return profiles.map((profile) => ({
+    models: profile.models, schema: profile.schema, examples: profile.examples,
+    compatibilitySchema: profile.schema.video_input ? {} : { video_input: seedanceUsageSchema(DEFAULT_VIDEO_PROFILE).video_input },
+  }));
 }
 
 export const meta = {
@@ -246,7 +307,7 @@ export const meta = {
     en: "Volcengine Doubao Seedance video generation and Seedream image generation",
     zh: "火山引擎豆包 Seedance 视频生成与 Seedream 图片生成",
   },
-  version: "1.1.0",
+  version: "1.2.1",
   author: { name: "QuantumNous" },
   channelTypes: [54, 45], // VolcEngine-type channels serve Ark video models with the same wire format
   models: Object.keys(VIDEO_MODELS).concat(Object.keys(IMAGE_MODELS)),
@@ -254,18 +315,7 @@ export const meta = {
   upstreams: ["vendor", "new_api"],
   usageSchema: seedanceUsageSchema(DEFAULT_VIDEO_PROFILE),
   usageExamples: seedanceUsageExamples(DEFAULT_VIDEO_PROFILE),
-  usageProfiles: seedanceUsageProfiles().concat([
-    {
-      models: Object.keys(IMAGE_MODELS),
-      schema: IMAGE_USAGE_SCHEMA,
-      examples: [
-        { label: "2K · 1 张", facts: { images_up_to_1_5k: 0, images_above_1_5k: 1, input_images: 0, layer_decomposition: false } },
-        { label: "1K · 1 张 · 2 张参考图", facts: { images_up_to_1_5k: 1, images_above_1_5k: 0, input_images: 2, layer_decomposition: false } },
-        { label: "2K · 4 张组图", facts: { images_up_to_1_5k: 0, images_above_1_5k: 4, input_images: 0, layer_decomposition: false } },
-        { label: "图层拆分 · 2K 底图 + 4 层 1.5K", facts: { images_up_to_1_5k: 4, images_above_1_5k: 1, input_images: 1, layer_decomposition: true } },
-      ],
-    },
-  ]),
+  usageProfiles: seedanceUsageProfiles().concat(seedreamUsageProfiles()),
   routes: [
     { method: "POST", path: "/doubao/api/v3/contents/generations/tasks", type: "submit", decode: "createTask", render: "taskCreated" },
     { method: "GET", path: "/doubao/api/v3/contents/generations/tasks/:task_id", type: "query", render: "taskStatus" },
@@ -276,6 +326,7 @@ export const meta = {
   protocols: [
     { name: "openai_responses", supports: ["stream", "sync", "background"] },
     { name: "openai_video", models: Object.keys(VIDEO_MODELS) },
+    { name: "openai_image", models: Object.keys(IMAGE_MODELS) },
   ],
 };
 
@@ -472,6 +523,8 @@ function convertImage(ctx) {
   if (!layered && !trimmed(body.prompt)) throw new Error("prompt is required");
   const images = body.image === undefined ? [] : Array.isArray(body.image) ? body.image : [body.image];
   for (const image of images) {
+    // The host validates and resolves uploaded file placeholders before send.
+    if (image && typeof image === "object" && typeof image.__fileRef === "string" && image.encoding === "dataUrl") continue;
     const value = typeof image === "string" ? trimmed(image) : "";
     if (!/^https?:\/\//i.test(value) && !IMAGE_DATA_URI.test(value))
       throw new Error("image must be an HTTP URL or a data:image/<format>;base64 URL with a lowercase format");
@@ -562,7 +615,7 @@ function imageURLEntries(body) {
 // never entries: failed group members carry only `error`. A
 // usage.generated_images count that is fractional, negative, oversized or
 // inconsistent with the delivered payloads means the response is not
-// understood; the host then keeps the reservation instead of settling on a guess.
+// understood; the host settles at the attempt's frozen estimate.
 function imagePayloads(body) {
   const payloads = imageEntries(body).filter((item) => trimmed(item.url) || trimmed(item.b64_json));
   if (payloads.length > MAX_IMAGE_OUTPUTS) throw new Error("too many output images");
@@ -574,16 +627,17 @@ function imagePayloads(body) {
 
 // Completion facts. Each successful image is counted at its own pixel tier from
 // data[].size (official pricing bills layers individually). Payloads without a
-// parseable size keep the submit-time tier estimate; usage.input_images
-// replaces the estimated reference count only when it is a bounded integer.
-function imageUsage(body) {
+// parseable size keep the frozen estimate on multi-tier models; single-tier
+// models count delivered payloads even without a size. usage.input_images is
+// accepted only as a bounded integer and is never inferred from the request.
+function imageUsage(body, profile) {
   const usage = body.usage || {};
   const payloads = imagePayloads(body);
   const facts = {};
   let lower = 0,
     higher = 0,
     sized = true;
-  for (const item of payloads) {
+  for (const item of hasLowerImageTier(profile) ? payloads : []) {
     const dims = imageSizePixels(item.size);
     if (!dims) {
       sized = false;
@@ -594,7 +648,7 @@ function imageUsage(body) {
   }
   if (sized) {
     facts.images_up_to_1_5k = lower;
-    facts.images_above_1_5k = higher;
+    facts.images_above_1_5k = hasLowerImageTier(profile) ? higher : payloads.length;
   }
   if (Number.isInteger(usage.input_images) && usage.input_images >= 0 && usage.input_images <= MAX_REFERENCE_IMAGES) facts.input_images = usage.input_images;
   return facts;
@@ -795,7 +849,7 @@ export function extractUsage(ctx) {
   const profile = videoProfile(ctx);
   const resolution = videoResolution(ctx);
   const facts = { tokens: estimateTokens(seconds, resolution), resolution: resolution };
-  if (profile.videoInput) facts.video_input = hasVideo(metadata.content) ? "video" : "none";
+  facts.video_input = hasVideo(metadata.content) ? "video" : "none";
   if (profile.audio) facts.generate_audio = metadata.generate_audio !== false;
   return facts;
 }
@@ -866,7 +920,7 @@ export function buildContentRequest(ctx) {
 }
 
 export function extractUsageOnComplete(task, taskResult, body) {
-  if (imageTask(task)) return imageUsage(body || {});
+  if (imageTask(task)) return imageUsage(body || {}, imageProfile(task));
   if (!body || body.status !== "succeeded") return {};
   const facts = {};
   const usage = body.usage || {};
@@ -963,6 +1017,75 @@ export const protocols = {
           },
         ],
         metadata: { vendor: "doubao" },
+      };
+    },
+  },
+  openai_image: {
+    decodeRequest: function (ctx) {
+      const model = trimmed(ctx.model);
+      if (!model) throw new Error("model is required");
+      let req = {};
+      const uploads = [];
+      if (ctx.body && ctx.body.kind === "json") {
+        req = ctx.body.value;
+        if (!req || typeof req !== "object" || Array.isArray(req)) throw new Error("request body must be an object");
+      } else if (ctx.body && ctx.body.kind === "multipart") {
+        const fields = ctx.body.fields || {};
+        for (const name of Object.keys(fields)) {
+          if (fields[name].length > 1) throw new Error(name + " must be provided once");
+          req[name] = fields[name][0];
+        }
+        for (const key of ["n", "seed", "guidance_scale"]) {
+          if (req[key] !== undefined) req[key] = Number(req[key]);
+        }
+        for (const key of ["stream", "watermark", "optimize_prompt", "layer_decomposition"]) {
+          if (req[key] === undefined) continue;
+          if (req[key] !== "true" && req[key] !== "false") throw new Error(key + " must be true or false");
+          req[key] = req[key] === "true";
+        }
+        for (const key of ["optimize_prompt_options", "sequential_image_generation_options", "tools"]) {
+          if (req[key] === undefined) continue;
+          try {
+            req[key] = JSON.parse(req[key]);
+          } catch (e) {
+            throw new Error(key + " must be a JSON string");
+          }
+        }
+        for (const file of ctx.body.files || []) {
+          if (!/^image(\[\d*\])?$/.test(file.field)) throw new Error(file.field + " is not supported");
+          // Ark reads Base64 references only as data:image/<lowercase format>;base64 URLs.
+          const mimeType = trimmed(file.mimeType).toLowerCase();
+          uploads.push({
+            __fileRef: file.ref,
+            encoding: "dataUrl",
+            mimeType: /^image\/[a-z0-9.+-]+$/.test(mimeType) ? mimeType : "image/png",
+            maxBytes: MAX_INPUT_IMAGE_BYTES,
+          });
+        }
+      } else throw new Error("JSON or multipart body required");
+      if (req.stream !== undefined && req.stream !== false)
+        throw new Error("stream is not supported; the complete image response is returned once all images are generated");
+      if (req.response_format !== undefined && req.response_format !== "url" && req.response_format !== "b64_json")
+        throw new Error("response_format must be url or b64_json");
+      // Seedream has no per-request image count; multiple images come from group generation.
+      if (req.n !== undefined && req.n !== null && req.n !== 1) throw new Error("n must be 1; use sequential_image_generation for multiple images");
+      if (req.mask !== undefined) throw new Error("mask is not supported");
+      const requestBody = { model: model };
+      for (const key of IMAGE_REQUEST_KEYS.concat(["prompt", "image", "background", "tools"])) {
+        // The host inlines b64_json from the upstream URLs; Ark always answers with URLs.
+        if (key !== "response_format" && Object.prototype.hasOwnProperty.call(req, key)) requestBody[key] = req[key];
+      }
+      if (uploads.length) requestBody.image = [].concat(requestBody.image === undefined ? [] : requestBody.image, uploads);
+      const converted = convertImage({ model: model, requestBody: requestBody });
+      if (ctx.operation === "edit" && converted.action !== "image_to_image") throw new Error("image is required");
+      return { kind: "submit", model: model, action: converted.action, requestBody: requestBody };
+    },
+    render: function (ctx, task) {
+      return {
+        created: task.created_at,
+        data: imageURLEntries(artifactData(task)).map(function (item) {
+          return { url: trimmed(item.url) };
+        }),
       };
     },
   },

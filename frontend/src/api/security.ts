@@ -22,12 +22,6 @@ export interface SecurityProof {
   method: string
   scope: string
 }
-export interface AccessTokenStatus {
-  exists: boolean
-  token_ref?: string
-  created_at?: number | null
-}
-
 function base64(bytes: ArrayBuffer | Uint8Array): string {
   return btoa(String.fromCharCode(...new Uint8Array(bytes)))
 }
@@ -100,7 +94,4 @@ export const securityApi = {
       ...credential,
     })
   },
-  tokenStatus: () => api.get<AccessTokenStatus>('/api/user/token/status'),
-  revokeToken: (proof: string) =>
-    api.delete('/api/user/token', undefined, proofOptions(proof)),
 }

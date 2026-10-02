@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
@@ -67,7 +69,7 @@ func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	model.LOG_DB = db
 
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}, &model.BillingPriceVersion{}, &model.Option{}))
-	require.NoError(t, db.AutoMigrate(&model.UserChannelEntitlement{}, &model.UserRouteProfile{}, &model.UserRouteGroup{}, &model.UserRouteEntry{}))
+	require.NoError(t, db.AutoMigrate(&model.UserChannelEntitlement{}, &model.UserRouteProfile{}, &model.UserRouteGroup{}, &model.UserRouteEntry{}, &model.ChannelModelCapability{}, &model.ChannelCapabilitySnapshot{}))
 
 	t.Cleanup(func() {
 		sqlDB, err := db.DB()
@@ -77,6 +79,20 @@ func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	})
 
 	return db
+}
+
+func refreshModelListCapabilities(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	var channels []model.Channel
+	require.NoError(t, db.Find(&channels).Error)
+	for _, channel := range channels {
+		if channel.Models == "" {
+			var names []string
+			require.NoError(t, db.Model(&model.Ability{}).Where("channel_id = ?", channel.Id).Pluck("model", &names).Error)
+			require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", channel.Id).Update("models", strings.Join(names, ",")).Error)
+		}
+		require.NoError(t, service.RefreshChannelCapabilitiesByID(context.Background(), channel.Id))
+	}
 }
 
 func initModelListColumnNames(t *testing.T) {
@@ -201,7 +217,8 @@ func decodeUserModelsResponse(t *testing.T, recorder *httptest.ResponseRecorder)
 
 func TestGetUserModelsIgnoresRetiredGroupQuery(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
-	require.NoError(t, db.Create(&model.Channel{Id: 1, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: 1, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI, Models: "zz-default-only-model,zz-disabled-model"}).Error)
+	require.NoError(t, db.Create(&model.Option{Key: "ModelPrice", Value: `{"zz-default-only-model":"0"}`}).Error)
 	require.NoError(t, db.Create(&model.User{
 		Id:       1002,
 		Username: "playground-model-user",
@@ -282,6 +299,7 @@ func TestGetUserModelsDoesNotAddCompactPermissionVariant(t *testing.T) {
 	standardCtx, _ := gin.CreateTestContext(standardRecorder)
 	standardCtx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	standardCtx.Set("id", 1004)
+	refreshModelListCapabilities(t, db)
 	ListModels(standardCtx, constant.ChannelTypeOpenAI)
 	require.Equal(t, map[string]struct{}{
 		"gpt-zz-compact-capable":    {},
@@ -320,9 +338,10 @@ func TestListModelsUsesSamePermissionForCompactEndpoint(t *testing.T) {
 			name:  "base only",
 			limit: map[string]bool{"gpt-zz-compact-token-model": true},
 			endpoints: []constant.EndpointType{
-				constant.EndpointTypeOpenAI,
-				constant.EndpointTypeOpenAIResponse,
-				constant.EndpointTypeOpenAIResponseCompact,
+				constant.EndpointTypeOpenAI, constant.EndpointTypeAnthropic, constant.EndpointTypeGemini,
+				constant.EndpointTypeOpenAIResponse, constant.EndpointTypeEmbeddings, constant.EndpointTypeJinaRerank,
+				constant.EndpointTypeAudio, constant.EndpointTypeImageGeneration, constant.EndpointTypeRealtime,
+				constant.EndpointTypeOpenAIResponseCompact, constant.EndpointTypeOpenAIVideo,
 			},
 			visible: true,
 		},
@@ -339,9 +358,10 @@ func TestListModelsUsesSamePermissionForCompactEndpoint(t *testing.T) {
 				"gpt-zz-compact-token-model-openai-compact": true,
 			},
 			endpoints: []constant.EndpointType{
-				constant.EndpointTypeOpenAI,
-				constant.EndpointTypeOpenAIResponse,
-				constant.EndpointTypeOpenAIResponseCompact,
+				constant.EndpointTypeOpenAI, constant.EndpointTypeAnthropic, constant.EndpointTypeGemini,
+				constant.EndpointTypeOpenAIResponse, constant.EndpointTypeEmbeddings, constant.EndpointTypeJinaRerank,
+				constant.EndpointTypeAudio, constant.EndpointTypeImageGeneration, constant.EndpointTypeRealtime,
+				constant.EndpointTypeOpenAIResponseCompact, constant.EndpointTypeOpenAIVideo,
 			},
 			visible: true,
 		},
@@ -357,6 +377,8 @@ func TestListModelsUsesSamePermissionForCompactEndpoint(t *testing.T) {
 			common.SetContextKey(ctx, constant.ContextKeyTokenModelLimitEnabled, true)
 			common.SetContextKey(ctx, constant.ContextKeyTokenModelLimit, test.limit)
 
+			refreshModelListCapabilities(t, db)
+
 			ListModels(ctx, constant.ChannelTypeOpenAI)
 			payload := decodeListModelsPayload(t, recorder)
 			if !test.visible {
@@ -368,15 +390,6 @@ func TestListModelsUsesSamePermissionForCompactEndpoint(t *testing.T) {
 			require.Equal(t, test.endpoints, payload.Data[0].SupportedEndpointTypes)
 		})
 	}
-}
-
-func TestTokenModelPermissionTreatsCompactSuffixAsLiteral(t *testing.T) {
-	base := "ordinary-model"
-	literal := base + "-openai-compact"
-	require.True(t, tokenAllowsModel(map[string]bool{base: true}, base))
-	require.False(t, tokenAllowsModel(map[string]bool{base: true}, literal))
-	require.True(t, tokenAllowsModel(map[string]bool{literal: true}, literal))
-	require.False(t, tokenAllowsModel(map[string]bool{literal: true}, base))
 }
 
 func TestListModelsDoesNotProjectCompactPermissionIntoAnthropicList(t *testing.T) {
@@ -407,6 +420,7 @@ func TestListModelsDoesNotProjectCompactPermissionIntoAnthropicList(t *testing.T
 		common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
 		common.SetContextKey(ctx, constant.ContextKeyTokenModelLimitEnabled, true)
 		common.SetContextKey(ctx, constant.ContextKeyTokenModelLimit, limit)
+		refreshModelListCapabilities(t, db)
 		ListModels(ctx, constant.ChannelTypeAnthropic)
 
 		var payload struct {
@@ -456,6 +470,8 @@ func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	ctx.Set("id", 1001)
 
+	refreshModelListCapabilities(t, db)
+
 	ListModels(ctx, constant.ChannelTypeOpenAI)
 
 	ids := decodeListModelsResponse(t, recorder)
@@ -495,7 +511,7 @@ func TestListModelsIncludesPluginPricedTaskModel(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister(key)) })
 	require.NoError(t, db.Create(&model.User{Id: 1011, Username: "plugin-priced-task-user", Password: "password", Group: "default", Status: common.UserStatusEnabled}).Error)
 	mapping := `{"zz-plugin-priced-task-alias":"zz-plugin-priced-task-model","zz-plugin-alias-priced-task-alias":"zz-plugin-alias-priced-task-model"}`
-	require.NoError(t, db.Create(&model.Channel{Id: 711, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI, Models: name + "," + alias + "," + aliasOnly + "," + aliasOnlyModel, ModelMapping: &mapping}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: 711, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeTaskPlugin, Setting: common.GetPointer(`{"task_plugin_key":"model-list-price-plugin"}`), Models: name + "," + alias + "," + aliasOnly + "," + aliasOnlyModel, ModelMapping: &mapping}).Error)
 	require.NoError(t, model.UpdateModelPricing([]model.ModelPricingChange{
 		{
 			ModelName: name, ExpectedVersion: model.ModelPricingVersion(model.PricingValues{}),
@@ -517,6 +533,7 @@ func TestListModelsIncludesPluginPricedTaskModel(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	ctx.Set("id", 1011)
+	refreshModelListCapabilities(t, db)
 	ListModels(ctx, constant.ChannelTypeOpenAI)
 	listed := decodeListModelsResponse(t, recorder)
 	require.Contains(t, listed, name)
@@ -537,7 +554,7 @@ func TestListModelsHidesTaskPricesIncompatibleWithUpdatedPlugin(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister(pluginKey)) })
 	require.NoError(t, db.Create(&model.User{Id: 1012, Username: "task-schema-change-user", Password: "password", Group: "default", Status: common.UserStatusEnabled}).Error)
-	require.NoError(t, db.Create(&model.Channel{Id: 712, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeOpenAI, Models: strings.Join([]string{baseModel, overrideModel, freeModel}, ",")}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: 712, Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeTaskPlugin, Setting: common.GetPointer(`{"task_plugin_key":"model-list-schema-change"}`), Models: strings.Join([]string{baseModel, overrideModel, freeModel}, ",")}).Error)
 	require.NoError(t, db.Create(&[]model.Ability{
 		{Group: "default", Model: baseModel, ChannelId: 712, Enabled: true},
 		{Group: "default", Model: overrideModel, ChannelId: 712, Enabled: true},
@@ -563,6 +580,7 @@ func TestListModelsHidesTaskPricesIncompatibleWithUpdatedPlugin(t *testing.T) {
 		ctx, _ := gin.CreateTestContext(recorder)
 		ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 		ctx.Set("id", 1012)
+		refreshModelListCapabilities(t, db)
 		ListModels(ctx, constant.ChannelTypeOpenAI)
 		listed := decodeListModelsResponse(t, recorder)
 		assert.Contains(t, listed, freeModel, "an explicit free per-call price does not depend on the usage schema")
@@ -579,7 +597,7 @@ func TestListModelsHidesTaskPricesIncompatibleWithUpdatedPlugin(t *testing.T) {
 	}
 }
 
-func TestListModelsUsesAdvancedCustomEndpointTypesFromPricingCache(t *testing.T) {
+func TestListModelsUsesAdvancedCustomEndpointTypesFromActiveCapabilities(t *testing.T) {
 	withSelfUseModeEnabled(t)
 	db := setupModelListControllerTestDB(t)
 
@@ -639,6 +657,8 @@ func TestListModelsUsesAdvancedCustomEndpointTypesFromPricingCache(t *testing.T)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	ctx.Set("id", 1003)
 
+	refreshModelListCapabilities(t, db)
+
 	ListModels(ctx, constant.ChannelTypeOpenAI)
 
 	payload := decodeListModelsPayload(t, recorder)
@@ -680,6 +700,8 @@ func TestListModelsTokenLimitIncludesTieredBillingModel(t *testing.T) {
 		"zz-token-tiered-missing-expr-model": true,
 		"zz-token-unpriced-model":            true,
 	})
+
+	refreshModelListCapabilities(t, db)
 
 	ListModels(ctx, constant.ChannelTypeOpenAI)
 

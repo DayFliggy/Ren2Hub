@@ -270,7 +270,7 @@ func AccessTokenAudit() gin.HandlerFunc {
 		if present {
 			_, internal, _ := service.ParseDashboardAccessToken(raw)
 			if !internal {
-				user, err := model.ValidateAccessToken(raw)
+				_, user, err := model.ValidatePersonalAccessToken(raw)
 				if err == nil && user != nil && user.Id > 0 {
 					beginAccessTokenAudit(c, user, raw)
 					defer finishAccessTokenAudit(c)

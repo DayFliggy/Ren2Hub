@@ -7,7 +7,7 @@ import {
 
 for (const theme of ['light', 'dark'] as const) {
   for (const width of [1440, 390]) {
-    test(`${theme} ${width} one-use PAT verification and audit`, async ({
+    test(`${theme} ${width} retired single-token entry and historical audit`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height: 900 })
@@ -31,52 +31,12 @@ for (const theme of ['light', 'dark'] as const) {
           },
         })
       })
-      let generated = 0
-      await page.route('**/api/user/token/status', (route) =>
-        route.fulfill({
-          json: { success: true, data: { exists: false, token_ref: '' } },
-        })
-      )
-      await page.route('**/api/user/token', async (route) => {
-        expect(route.request().method()).toBe('POST')
-        expect(route.request().headers()['x-security-proof']).toBe(
-          'one-use-proof'
-        )
-        generated++
-        await route.fulfill({
-          json: { success: true, data: 'visual-once-only-pat' },
-        })
-      })
-      await page.route('**/api/verify/methods?*', (route) =>
-        route.fulfill({
-          json: {
-            success: true,
-            data: {
-              scope: 'access_token.generate',
-              methods: [{ method: '2fa', available: true }],
-              oauth_providers: [],
-              password_encryption_enabled: false,
-            },
-          },
-        })
-      )
-      await page.route('**/api/verify', (route) => {
-        expect(route.request().postDataJSON()).toEqual({
-          scope: 'access_token.generate',
-          method: '2fa',
-          code: '123456',
-        })
-        return route.fulfill({
-          json: {
-            success: true,
-            data: {
-              scope: 'access_token.generate',
-              method: '2fa',
-              proof_token: 'one-use-proof',
-              expires_at: 2_000_000_000,
-            },
-          },
-        })
+      const retiredTokenRequests: string[] = []
+      page.on('request', (request) => {
+        const path = new URL(request.url()).pathname
+        if (path === '/api/user/token' || path.startsWith('/api/user/token/')) {
+          retiredTokenRequests.push(path)
+        }
       })
       await page.route('**/api/audit/self?*', (route) =>
         route.fulfill({
@@ -111,43 +71,24 @@ for (const theme of ['light', 'dark'] as const) {
       )
       await page.goto('/settings')
       await waitForStablePage(page)
-      await page.getByRole('button', { name: '管理密钥', exact: true }).click()
-      await page
-        .getByRole('button', { name: '重新生成密钥', exact: true })
-        .click()
-      await page
-        .getByRole('dialog')
-        .last()
-        .getByRole('button', { name: '重新生成密钥', exact: true })
-        .click()
-      const proof = page.getByRole('dialog').last()
       await expect(
-        proof.getByRole('heading', { name: '验证身份' })
+        page.getByRole('heading', { name: '登录与账户', exact: true })
       ).toBeVisible()
-      expect(generated).toBe(0)
-      await proof.getByRole('textbox').fill('123456')
-      await proof.getByRole('button', { name: '确认', exact: true }).click()
       await expect(
-        page.locator('input[aria-label="access-token"]')
-      ).toHaveValue('visual-once-only-pat')
-      expect(generated).toBe(1)
-      await expect(
-        page.getByRole('dialog', { name: '验证身份', exact: true })
+        page.getByRole('button', { name: '管理密钥', exact: true })
       ).toHaveCount(0)
       await expect(
-        page.getByRole('dialog', { name: '重新生成访问密钥？', exact: true })
+        page.getByRole('button', { name: '重新生成密钥', exact: true })
       ).toHaveCount(0)
       await expect(
-        page
-          .getByRole('dialog', { name: '个人访问密钥', exact: true })
-          .getByRole('button', { name: '关闭', exact: true })
-      ).toBeEnabled()
-      await page.keyboard.press('Escape')
+        page.getByRole('dialog', { name: '个人访问密钥', exact: true })
+      ).toHaveCount(0)
       await expect(
         page.locator('input[aria-label="access-token"]')
       ).toHaveCount(0)
+      expect(retiredTokenRequests).toEqual([])
       await assertNoHorizontalOverflow(page)
-      // The retired /audit bookmark lands on the merged log page.
+      // Keep historical single-token audit events readable after retiring its UI.
       await page.goto('/audit')
       await waitForStablePage(page)
       await expect(page).toHaveURL(/\/usage-logs\/audit$/)
@@ -158,6 +99,7 @@ for (const theme of ['light', 'dark'] as const) {
           .first()
       ).toBeVisible()
       await assertNoHorizontalOverflow(page)
+      expect(retiredTokenRequests).toEqual([])
     })
   }
 }

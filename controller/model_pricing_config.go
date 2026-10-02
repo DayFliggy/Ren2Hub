@@ -197,7 +197,7 @@ func simulateModelPricing(request modelPricingSimulationRequest) (*billing.Charg
 			effective["billing_setting.billing_expr"] = expression
 		}
 		if effective["billing_setting.billing_mode"] == "tiered_expr" {
-			manifest, _ := selected.Meta.UsageForModel(declaredModel)
+			manifest := selected.Meta.UsageFactsForModels(declaredModel)
 			schema = model.ModelPricingUsageSchema(manifest)
 			taskUsage = true
 		}

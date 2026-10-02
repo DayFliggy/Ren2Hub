@@ -2,7 +2,6 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const generateAccessToken = vi.hoisted(() => vi.fn())
 const apiGet = vi.hoisted(() => vi.fn())
 const apiPost = vi.hoisted(() => vi.fn())
 const publicStatus = vi.hoisted(() => vi.fn())
@@ -18,10 +17,6 @@ vi.mock('@/components/auth/SecurityProofDialog.vue', () => ({
 vi.mock('@/api/client', () => ({
   api: { get: apiGet, post: apiPost, delete: vi.fn() },
   setApiUnauthorizedHandler: vi.fn(),
-}))
-
-vi.mock('@/api/auth', () => ({
-  authApi: { generateAccessToken },
 }))
 
 vi.mock('@/api/console', () => ({
@@ -50,6 +45,14 @@ beforeEach(() => {
   setActivePinia(createPinia())
   requestProof.mockReset().mockResolvedValue('one-use-proof')
   apiGet.mockImplementation((url: string) => {
+    if (url === '/api/user/self/personal-access-tokens')
+      return Promise.resolve([])
+    if (url === '/api/user/self/personal-access-tokens/scopes')
+      return Promise.resolve({
+        scopes: ['profile:read'],
+        limit: 20,
+        default_lifetime_days: 30,
+      })
     if (url === '/api/user/token/status')
       return Promise.resolve({ exists: false, token_ref: '' })
     if (url === '/api/user/passkey') return Promise.resolve({ enabled: false })
@@ -58,7 +61,6 @@ beforeEach(() => {
     if (url === '/api/user/oauth/bindings') return Promise.resolve([])
     return Promise.resolve({})
   })
-  generateAccessToken.mockReset()
   apiPost.mockReset().mockResolvedValue({ flow_token: 'oauth-flow' })
   publicStatus.mockReset().mockResolvedValue({
     github_oauth: true,
@@ -92,58 +94,16 @@ function render() {
   })
 }
 
-describe('AccountSecurityPanel access token', () => {
-  it('only shows a generated token in the open modal and clears it on close', async () => {
-    generateAccessToken.mockResolvedValue('one-time-secret')
+describe('AccountSecurityPanel retired token management', () => {
+  it('does not offer or request the retired single-token API', async () => {
     const wrapper = render()
     await flushPromises()
-
-    await wrapper
-      .findAll('button')
-      .find((button) => button.text() === 'Manage token')
-      ?.trigger('click')
-    expect(document.body.textContent).toContain(
-      'For security, existing access tokens'
-    )
-
-    const regenerate = Array.from(
-      document.body.querySelectorAll('button')
-    ).find((button) => button.textContent?.trim() === 'Regenerate token')
-    regenerate?.click()
-    await flushPromises()
-    expect(document.body.textContent).toContain('Regenerate access token?')
-
-    const confirm = Array.from(document.body.querySelectorAll('button'))
-      .filter((button) => button.textContent?.trim() === 'Regenerate token')
-      .at(-1)
-    confirm?.click()
-    await flushPromises()
-
-    const input = document.body.querySelector<HTMLInputElement>(
-      'input[aria-label="access-token"]'
-    )
-    expect(requestProof).toHaveBeenCalledWith({
-      scope: 'access_token.generate',
-    })
-    expect(generateAccessToken).toHaveBeenCalledWith('one-use-proof')
-    expect(input?.value).toBe('one-time-secret')
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      'one-time-secret'
-    )
-
-    const close = Array.from(document.body.querySelectorAll('button')).find(
-      (button) =>
-        button.textContent?.trim() === 'Close' &&
-        button
-          .closest('[role="dialog"]')
-          ?.querySelector('input[aria-label="access-token"]')
-    )
-    close?.click()
-    await new Promise((resolve) => setTimeout(resolve, 250))
-    await flushPromises()
+    expect(wrapper.text()).not.toContain('Manage token')
     expect(
-      document.body.querySelector('input[aria-label="access-token"]')
-    ).toBeNull()
+      apiGet.mock.calls.some(([url]) =>
+        String(url).startsWith('/api/user/token')
+      )
+    ).toBe(false)
     wrapper.unmount()
   })
 })

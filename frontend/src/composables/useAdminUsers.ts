@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { api } from '@/api/console'
+import { proofOptions, type SecurityOperation } from '@/api/security'
 import { ApiError } from '@/api/types'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useFeatureAccess } from '@/composables/useFeatureAccess'
@@ -21,7 +22,16 @@ type UserRowAction = 'status' | 'quota'
 type UserCrudAction = 'create' | 'edit' | 'delete'
 type UserBulkAction = 'delete' | 'enable' | 'disable'
 
-export function useAdminUsers() {
+export function useAdminUsers(
+  requestProof: (operation: SecurityOperation) => Promise<string>
+) {
+  const authorize = async (action: string, ids: number[]) =>
+    proofOptions(
+      await requestProof({
+        scope: 'admin.user.change',
+        context: { ids, action },
+      })
+    )
   const { t } = useI18n()
   const toast = useToast()
   const auth = useAuthStore()
@@ -195,10 +205,12 @@ export function useAdminUsers() {
     return runRowAction(
       user,
       'status',
-      () =>
-        api.post<AdminUser>(`/api/next/admin/users/${user.id}/status`, {
-          status: nextStatus,
-        }),
+      async () =>
+        api.post<AdminUser>(
+          `/api/next/admin/users/${user.id}/status`,
+          { status: nextStatus },
+          await authorize(nextStatus === 1 ? 'enable' : 'disable', [user.id])
+        ),
       nextStatus === 1 ? 'users.enabled' : 'users.disabled'
     )
   }
@@ -248,7 +260,12 @@ export function useAdminUsers() {
 
   function createUser(input: AdminUserCreateInput): Promise<boolean> {
     return runCrudAction('create', null, async (signal) => {
-      await api.post<AdminUser>('/api/next/admin/users', input, { signal })
+      const security =
+        input.role === 10 ? await authorize('create_admin', [0]) : {}
+      await api.post<AdminUser>('/api/next/admin/users', input, {
+        signal,
+        ...security,
+      })
       toast.success(t('users.created'))
       if (page.value !== 1) page.value = 1
       else await load({ background: true })
@@ -260,10 +277,16 @@ export function useAdminUsers() {
     input: AdminUserUpdateInput
   ): Promise<boolean> {
     return runCrudAction('edit', user.id, async (signal) => {
+      const security =
+        input.password ||
+        input.role !== user.role ||
+        input.email.trim().toLowerCase() !== user.email.trim().toLowerCase()
+          ? await authorize('update', [user.id])
+          : {}
       const updated = await api.put<AdminUser>(
         '/api/next/admin/users',
         { id: user.id, ...input },
-        { signal }
+        { signal, ...security }
       )
       replaceUser(updated)
       toast.success(t('users.updated'))
@@ -276,7 +299,7 @@ export function useAdminUsers() {
       await api.post<number>(
         '/api/next/admin/users/delete/batch',
         { ids: [user.id] },
-        { signal }
+        { signal, ...(await authorize('delete', [user.id])) }
       )
       toast.success(t('users.deleted'))
       if (rows.value.length === 1 && page.value > 1) page.value -= 1
@@ -328,7 +351,13 @@ export function useAdminUsers() {
           ids: targets.map((user) => user.id),
           status: action === 'enable' ? 1 : 2,
         },
-        { signal }
+        {
+          signal,
+          ...(await authorize(
+            action,
+            targets.map((user) => user.id)
+          )),
+        }
       )
       toast.success(
         t(action === 'enable' ? 'users.bulkEnabled' : 'users.bulkDisabled', {
@@ -347,7 +376,7 @@ export function useAdminUsers() {
       const deleted = await api.post<number>(
         '/api/next/admin/users/delete/batch',
         { ids },
-        { signal }
+        { signal, ...(await authorize('delete', ids)) }
       )
       toast.success(t('users.bulkDeleted', { count: deleted }))
       const clearsPage = rows.value.every((user) => ids.includes(user.id))

@@ -332,8 +332,8 @@ func canManageTargetRole(myRole int, targetRole int) bool {
 
 func GetUser(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		common.ApiError(c, err)
+	if err != nil || id <= 0 {
+		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	user, err := model.GetSelfUserById(id)
@@ -556,12 +556,16 @@ func GetUserModels(c *gin.Context) {
 	if err != nil {
 		id = c.GetInt("id")
 	}
-	models, err := service.AvailableRouteModels(c.Request.Context(), id, 0)
+	manifest, err := service.BuildModelManifest(c.Request.Context(), service.ModelManifestRequest{UserID: id})
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, models)
+	names := make([]string, 0, len(manifest.Models))
+	for _, entry := range manifest.Models {
+		names = append(names, entry.ID)
+	}
+	common.ApiSuccess(c, names)
 }
 
 func UpdateUser(c *gin.Context) {
@@ -602,14 +606,28 @@ func UpdateUser(c *gin.Context) {
 		updatedUser.Password = "" // rollback to what it should be
 	}
 	updatePassword := updatedUser.Password != ""
+	if (updatePassword || updatedUser.AdminPermissions != nil) && requireAdminUserProof(c, "update", updatedUser.Id) == nil {
+		return
+	}
 	authzTouched := false
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
-		if err := updatedUser.EditWithTx(tx, updatePassword); err != nil {
+		if err := validateAdminWriteAuthorization(c, tx); err != nil {
 			return err
 		}
-		touched, err := updateAdminPermissionsForUserInTx(c, tx, updatedUser.Id, originUser.Role, updatedUser.AdminPermissions)
+		for _, identity := range adminUserAuthorization(c) {
+			if err := model.ValidateManagedUserAuthorizationWithTx(tx, identity, updatedUser.Id); err != nil {
+				return err
+			}
+		}
+		if err := updatedUser.EditWithTx(tx, updatePassword, myRole); err != nil {
+			return err
+		}
+		touched, err := updateAdminPermissionsForUserInTx(c, tx, updatedUser.Id, updatedUser.Role, updatedUser.AdminPermissions)
 		authzTouched = touched
-		return err
+		if err != nil {
+			return err
+		}
+		return tx.First(&updatedUser, updatedUser.Id).Error
 	}); err != nil {
 		common.ApiError(c, err)
 		return
@@ -667,7 +685,10 @@ func AdminClearUserBinding(c *gin.Context) {
 		return
 	}
 
-	if err := user.ClearBinding(bindingType); err != nil {
+	if requireAdminUserProof(c, "clear_binding", id) == nil {
+		return
+	}
+	if err := user.ClearBinding(bindingType, adminUserAuthorization(c)...); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -859,8 +880,8 @@ func checkUpdatePassword(originalPassword string, newPassword string, userId int
 
 func DeleteUser(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		common.ApiError(c, err)
+	if err != nil || id <= 0 {
+		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	originUser, err := model.GetUserById(id, false)
@@ -873,7 +894,10 @@ func DeleteUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
 		return
 	}
-	err = model.HardDeleteUserById(id)
+	if requireAdminUserProof(c, "delete", id) == nil {
+		return
+	}
+	_, err = model.HardDeleteManagedUsers([]int{id}, c.GetInt("id"), myRole, adminUserAuthorization(c)...)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -932,11 +956,14 @@ func CreateUser(c *gin.Context) {
 		user.DisplayName = user.Username
 	}
 	myRole := c.GetInt("role")
-	if user.Role >= myRole {
+	if !model.ValidManagedUserRole(user.Role) || user.Role >= myRole {
 		common.ApiErrorI18n(c, i18n.MsgUserCannotCreateHigherLevel)
 		return
 	}
-	// Even for admin users, we cannot fully trust them!
+	if user.Role == common.RoleAdminUser && requireAdminUserProof(c, "create_admin", 0) == nil {
+		return
+	}
+	// Only the explicitly writable fields enter the transaction.
 	cleanUser := model.User{
 		Username:    user.Username,
 		Password:    user.Password,
@@ -945,6 +972,9 @@ func CreateUser(c *gin.Context) {
 	}
 	authzTouched := false
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := validateAdminWriteAuthorization(c, tx); err != nil {
+			return err
+		}
 		if err := cleanUser.InsertWithTx(tx, 0); err != nil {
 			return err
 		}
@@ -987,7 +1017,11 @@ func updateAdminPermissionsForUserInTx(c *gin.Context, tx *gorm.DB, userID int, 
 	if userRole < common.RoleAdminUser {
 		return true, authz.ClearUserAuthorizationInTx(tx, userID)
 	}
-	return true, authz.SetUserPermissionsInTx(tx, userID, permissions)
+	if err := authz.SetUserPermissionsInTx(tx, userID, permissions); err != nil {
+		return false, err
+	}
+	_, err := model.IncrementUserAuthVersionWithTx(tx, userID)
+	return true, err
 }
 
 type ManageRequest struct {
@@ -1013,15 +1047,23 @@ func ManageUser(c *gin.Context) {
 		Id: req.Id,
 	}
 	// Fill attributes
-	model.DB.Unscoped().Where(&user).First(&user)
-	if user.Id == 0 {
-		common.ApiErrorI18n(c, i18n.MsgUserNotExists)
+	if err := model.DB.Unscoped().Where(&user).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.ApiErrorI18n(c, i18n.MsgUserNotExists)
+		} else {
+			common.ApiError(c, err)
+		}
 		return
 	}
 	myRole := c.GetInt("role")
 	if !canManageTargetRole(myRole, user.Role) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
 		return
+	}
+	if req.Action == "disable" || req.Action == "enable" || req.Action == "delete" || req.Action == "promote" || req.Action == "demote" {
+		if requireAdminUserProof(c, req.Action, req.Id) == nil {
+			return
+		}
 	}
 	switch req.Action {
 	case "disable":
@@ -1037,7 +1079,7 @@ func ManageUser(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgUserCannotDeleteRootUser)
 			return
 		}
-		if err := user.Delete(); err != nil {
+		if err := user.Delete(adminUserAuthorization(c)...); err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": err.Error(),
@@ -1124,35 +1166,46 @@ func ManageUser(c *gin.Context) {
 		return
 	}
 
-	if req.Action == "demote" {
+	if req.Action == "enable" || req.Action == "disable" {
+		result, err := model.UpdateManagedUserStatuses([]int{user.Id}, user.Status, c.GetInt("id"), myRole, adminUserAuthorization(c)...)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		user = result.Users[0]
+	} else {
+		role := user.Role
 		if err := model.DB.Transaction(func(tx *gorm.DB) error {
-			if err := user.UpdateWithTx(tx, false); err != nil {
+			updated, err := model.UpdateManagedUserRoleWithTx(tx, user.Id, role, c.GetInt("id"), myRole, adminUserAuthorization(c)...)
+			if err != nil {
 				return err
 			}
-			return authz.ClearUserAuthorizationInTx(tx, user.Id)
+			user = *updated
+			if req.Action == "demote" {
+				return authz.ClearUserAuthorizationInTx(tx, user.Id)
+			}
+			return nil
 		}); err != nil {
 			common.ApiError(c, err)
 			return
 		}
-		if err := authz.ReloadPolicy(); err != nil {
-			common.ApiError(c, err)
-			return
+		if req.Action == "demote" {
+			if err := authz.ReloadPolicy(); err != nil {
+				common.ApiError(c, err)
+				return
+			}
 		}
+		model.NotifyGatewayAdmissionChanged("user", user.Id)
 		if err := model.PublishUserAuthCache(user.Id); err != nil {
 			common.ApiError(c, err)
 			return
 		}
-		if _, err := model.RevokeAllUserSessions(user.Id, "admin_demote"); err != nil {
-			common.ApiError(c, err)
-			return
-		}
-	} else {
-		if err := user.Update(false); err != nil {
+		if _, err := model.RevokeAllUserSessions(user.Id, "admin_"+req.Action); err != nil {
 			common.ApiError(c, err)
 			return
 		}
 	}
-	// Update/UpdateWithTx has already published the new user hash and revoked
+	// The targeted update has already published the new user hash and revoked
 	// browser sessions exactly once. Only PAT/relay token caches still need an
 	// explicit invalidation; deleting the user hash here would discard the
 	// freshly published auth-version floor.

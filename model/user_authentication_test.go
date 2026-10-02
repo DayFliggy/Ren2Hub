@@ -28,6 +28,7 @@ func TestHardDeleteUserFailsClosedWhenAuthFenceCannotPublish(t *testing.T) {
 		return ClaimExternalIdentityWithTx(tx, ExternalIdentityProviderTelegram, user.TelegramId, user.Id)
 	}))
 	require.NoError(t, DB.Create(&Token{UserId: user.Id, Key: "hard-delete-token"}).Error)
+	require.NoError(t, DB.Create(&PersonalAccessToken{UserID: user.Id, Name: "retained-on-failure", Digest: PersonalAccessTokenDigest("hard-delete-pat"), Scopes: []string{"profile:read"}, ExpiresAt: time.Now().Add(time.Hour).Unix()}).Error)
 	require.NoError(t, DB.Create(&TwoFA{UserId: user.Id, Secret: "secret", IsEnabled: true}).Error)
 	require.NoError(t, DB.Create(&TwoFABackupCode{UserId: user.Id, CodeHash: "hash"}).Error)
 	require.NoError(t, DB.Create(&PasskeyCredential{UserID: user.Id, CredentialID: "credential", PublicKey: "public-key"}).Error)
@@ -62,6 +63,7 @@ func TestHardDeleteUserFailsClosedWhenAuthFenceCannotPublish(t *testing.T) {
 	assert.EqualValues(t, 1, count)
 	for _, record := range []any{
 		&Token{},
+		&PersonalAccessToken{},
 		&TwoFA{},
 		&TwoFABackupCode{},
 		&PasskeyCredential{},
@@ -88,6 +90,7 @@ func TestHardDeleteUserPublishesTombstoneAndPurgesAuthenticationData(t *testing.
 		return ClaimExternalIdentityWithTx(tx, ExternalIdentityProviderTelegram, user.TelegramId, user.Id)
 	}))
 	require.NoError(t, DB.Create(&Token{UserId: user.Id, Key: "hard-delete-success-token"}).Error)
+	require.NoError(t, DB.Create(&PersonalAccessToken{UserID: user.Id, Name: "removed-with-owner", Digest: PersonalAccessTokenDigest("hard-delete-success-pat"), Scopes: []string{"profile:read"}, ExpiresAt: time.Now().Add(time.Hour).Unix()}).Error)
 	require.NoError(t, DB.Create(&TwoFA{UserId: user.Id, Secret: "secret", IsEnabled: true}).Error)
 	require.NoError(t, DB.Create(&TwoFABackupCode{UserId: user.Id, CodeHash: "hash"}).Error)
 	require.NoError(t, DB.Create(&PasskeyCredential{UserID: user.Id, CredentialID: "credential-success", PublicKey: "public-key"}).Error)
@@ -113,6 +116,7 @@ func TestHardDeleteUserPublishesTombstoneAndPurgesAuthenticationData(t *testing.
 	assert.Zero(t, count)
 	for _, record := range []any{
 		&Token{},
+		&PersonalAccessToken{},
 		&TwoFA{},
 		&TwoFABackupCode{},
 		&PasskeyCredential{},

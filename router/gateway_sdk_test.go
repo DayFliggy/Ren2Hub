@@ -1,14 +1,17 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,7 +47,62 @@ func TestGatewayOfficialSDK(t *testing.T) {
 
 func setupGatewaySDK(t *testing.T) (string, string, string) {
 	t.Helper()
-	return setupGatewaySDKWithUpstream(t, gatewaySDKUpstream)
+	var lock sync.Mutex
+	owners := make(map[string]string)
+	sequence := 0
+	return setupGatewaySDKWithUpstream(t, func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "responses") {
+			gatewaySDKUpstream(w, r)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		var request map[string]any
+		if err := common.Unmarshal(body, &request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		credential := r.Header.Get("Authorization")
+		if request["input"] == "continue" {
+			previous, _ := request["previous_response_id"].(string)
+			lock.Lock()
+			owner, known := owners[previous]
+			lock.Unlock()
+			if !known || owner != credential {
+				http.Error(w, "native continuation reference changed or belongs to another credential", http.StatusBadRequest)
+				return
+			}
+			request["previous_response_id"] = "resp_fixture"
+			body, err = common.Marshal(request)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		recorder := httptest.NewRecorder()
+		gatewaySDKUpstream(recorder, r)
+		// Shared response templates contain fixed IDs. Each simulated provider
+		// request must own a distinct ID so real cross-credential isolation stays on.
+		lock.Lock()
+		sequence++
+		responseID := fmt.Sprintf("resp_sdk_%d", sequence)
+		owners[responseID] = credential
+		lock.Unlock()
+		payload := strings.NewReplacer(
+			"resp_fixture", responseID, "resp_tool_sdk", responseID,
+			"msg_response_fixture", "msg_"+responseID,
+			"fc_sdk", "fc_"+responseID,
+		).Replace(recorder.Body.String())
+		for name, values := range recorder.Header() {
+			w.Header()[name] = values
+		}
+		w.WriteHeader(recorder.Code)
+		_, _ = io.WriteString(w, payload)
+	})
 }
 
 func setupGatewaySDKWithUpstream(t *testing.T, handler http.HandlerFunc) (string, string, string) {

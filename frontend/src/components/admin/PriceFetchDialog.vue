@@ -12,6 +12,8 @@ import {
 } from '@/api/pricingConfig'
 import { modelPricingMessages } from '@/i18n/modelPricing'
 import type { PricingDraft } from '@/features/pricing/draft'
+import { pricingDiff } from '@/features/pricing/diff'
+import PriceDiffCell from './PriceDiffCell.vue'
 const props = defineProps<{ draft: PricingDraft }>()
 const emit = defineEmits<{ close: []; fill: [rows: FetchedModelPrice[]] }>()
 const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
@@ -50,6 +52,15 @@ const visibleRows = computed(() =>
   )
 )
 const selectedKeys = computed(() => new Set(selected.value))
+const comparisons = computed(
+  () =>
+    new Map(
+      visibleRows.value.map((model) => [
+        keyFor(model),
+        pricingDiff(props.draft[model.model_name] ?? {}, model.pricing),
+      ])
+    )
+)
 const chosen = computed(() =>
   (current.value?.models ?? []).filter((model) =>
     selectedKeys.value.has(keyFor(model))
@@ -204,15 +215,20 @@ onBeforeUnmount(() => controller?.abort())
                 <td>{{ model.model_name }}</td>
                 <td>{{ model.provider }}</td>
                 <td>
-                  <code>{{
-                    JSON.stringify(draft[model.model_name] ?? {})
-                  }}</code>
+                  <PriceDiffCell
+                    :fields="comparisons.get(keyFor(model)) ?? []"
+                    side="current"
+                  />
                 </td>
                 <td>
                   <p v-if="model.unsupported_reason" class="admin-error">
                     {{ model.unsupported_reason }}
                   </p>
-                  <code v-else>{{ JSON.stringify(model.pricing) }}</code>
+                  <PriceDiffCell
+                    v-else
+                    :fields="comparisons.get(keyFor(model)) ?? []"
+                    side="candidate"
+                  />
                   <p
                     v-for="warning in model.warnings ?? []"
                     :key="warning"

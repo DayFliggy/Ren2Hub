@@ -13,11 +13,11 @@ import (
 
 type Token struct {
 	Id                 int            `json:"id"`
-	UserId             int            `json:"user_id" gorm:"index"`
+	UserId             int            `json:"user_id" gorm:"index;index:idx_token_user_created,priority:1"`
 	Key                string         `json:"key" gorm:"type:varchar(128);uniqueIndex"`
 	Status             int            `json:"status" gorm:"default:1"`
 	Name               string         `json:"name" gorm:"index" `
-	CreatedTime        int64          `json:"created_time" gorm:"bigint"`
+	CreatedTime        int64          `json:"created_time" gorm:"bigint;index:idx_token_user_created,priority:2"`
 	AccessedTime       int64          `json:"accessed_time" gorm:"bigint"`
 	ExpiredTime        int64          `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
 	RemainQuota        common.Quota   `json:"available_quota" gorm:"column:available_quota;type:bigint;default:0"`
@@ -298,6 +298,13 @@ func (token *Token) insertWithBudgetEventTx(tx *gorm.DB) error {
 	if err := lockForUpdate(tx).First(&user, token.UserId).Error; err != nil {
 		return err
 	}
+	// Count inside the same user lock as creation. Soft-deleted tokens remain
+	// in the rolling-hour count so deleting a key cannot return a creation slot.
+	now := common.GetTimestamp()
+	if err := checkTokenCreationLimits(tx, token.UserId, now); err != nil {
+		return err
+	}
+	token.CreatedTime = now
 	initial := token.RemainQuota
 	token.RemainQuota = 0
 	if token.UnlimitedQuota {

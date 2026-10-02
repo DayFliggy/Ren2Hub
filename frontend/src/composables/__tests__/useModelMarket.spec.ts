@@ -2,6 +2,37 @@ import { describe, expect, it } from 'vitest'
 import { buildLiveModelCatalog } from '@/composables/useModelMarket'
 import { parsePricingModels } from '@/api/liveContracts'
 describe('live model market adapter', () => {
+  it('uses manifest capabilities and endpoints instead of broader pricing metadata', () => {
+    const catalog = buildLiveModelCatalog(
+      ['allowed'],
+      [],
+      [],
+      [
+        {
+          id: 'allowed',
+          visible: true,
+          supported_endpoint_types: ['embeddings'],
+          price_configured: true,
+          price_version: 'v1',
+          capabilities: {
+            reasoning_efforts: null,
+            input_modalities: null,
+            output_modalities: null,
+            context_limit: 32000,
+            output_limit: null,
+            tool_call: false,
+            source: null,
+            updated_at: 0,
+          },
+        },
+      ]
+    )
+    expect(catalog.models[0]).toMatchObject({
+      name: 'allowed',
+      type: 'embedding',
+      context: 32000,
+    })
+  })
   it('keeps unconfigured and missing model prices out of token billing', () => {
     const catalog = buildLiveModelCatalog(
       ['unpriced', 'missing'],

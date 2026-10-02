@@ -239,13 +239,17 @@ func TestDoubaoImageSubmission(t *testing.T) {
 		}
 	})
 
-	t.Run("image models are Responses-only host protocol models", func(t *testing.T) {
-		for _, name := range []string{"doubao-seedream-5-0-pro-260628", "doubao-seedream-5-0-lite-260128", "doubao-seedream-4-5-251128", "doubao-seedream-4-0-250828"} {
+	t.Run("image models share Responses and Images host pipelines", func(t *testing.T) {
+		for _, name := range []string{"doubao-seedream-5-0-pro-260628", "doubao-seedream-5-0-flash-260915", "doubao-seedream-5-0-lite-260128", "doubao-seedream-4-5-251128", "doubao-seedream-4-0-250828"} {
 			_, found := registry.Generation().LookupEndpoint(http.MethodPost, "/v1/responses", name)
 			assert.True(t, found, name)
 			_, found = registry.Generation().LookupEndpoint(http.MethodPost, "/v1/videos", name)
 			assert.False(t, found, name)
-			schema, _ := plugin.Meta.UsageForModel(name)
+			for _, path := range []string{"/v1/images/generations", "/v1/images/edits"} {
+				_, found = registry.Generation().LookupEndpoint(http.MethodPost, path, name)
+				assert.True(t, found, name)
+			}
+			schema := plugin.Meta.UsageFactsForModels(name)
 			assert.ElementsMatch(t, []string{"images_up_to_1_5k", "images_above_1_5k", "input_images", "layer_decomposition"}, keysOf(schema), name)
 		}
 		_, found := registry.Generation().LookupEndpoint(http.MethodPost, "/v1/videos", "doubao-seedance-2-0-260128")
@@ -315,15 +319,15 @@ func TestDoubaoSeedanceUsageFacts(t *testing.T) {
 		wantErr string
 	}{
 		{"1.5 pro defaults to audio", pro15, map[string]any{"metadata": map[string]any{"resolution": "720p"}},
-			map[string]any{"tokens": "108000", "resolution": "720p", "generate_audio": true}, ""},
+			map[string]any{"tokens": "108000", "resolution": "720p", "generate_audio": true, "video_input": "none"}, ""},
 		{"1.5 pro silent output", pro15, map[string]any{"metadata": map[string]any{"resolution": "720p", "generate_audio": false}},
-			map[string]any{"tokens": "108000", "resolution": "720p", "generate_audio": false}, ""},
+			map[string]any{"tokens": "108000", "resolution": "720p", "generate_audio": false, "video_input": "none"}, ""},
 		{"2.0 has no audio fact", v20, map[string]any{"metadata": map[string]any{"resolution": "720p", "generate_audio": false}},
 			map[string]any{"tokens": "108000", "resolution": "720p", "video_input": "none"}, ""},
 		{"2.0 offers 4k", v20, map[string]any{"metadata": map[string]any{"resolution": "4k"}},
 			map[string]any{"tokens": "972000", "resolution": "4k", "video_input": "none"}, ""},
-		{"1.0 pro has no reference video fact", pro10, map[string]any{"metadata": map[string]any{"resolution": "1080p"}},
-			map[string]any{"tokens": "243000", "resolution": "1080p"}, ""},
+		{"1.0 pro preserves the released reference fact", pro10, map[string]any{"metadata": map[string]any{"resolution": "1080p"}},
+			map[string]any{"tokens": "243000", "resolution": "1080p", "video_input": "none"}, ""},
 		{"mini reserves its highest tier when the resolution is left to Ark", mini20, map[string]any{},
 			map[string]any{"tokens": "108000", "resolution": "720p", "video_input": "none"}, ""},
 		{"mini rejects 1080p", mini20, map[string]any{"metadata": map[string]any{"resolution": "1080p"}}, nil, mini20 + " resolution must be one of 480p, 720p"},
@@ -541,7 +545,7 @@ func TestDoubaoImageResults(t *testing.T) {
 			},
 			"usage": map[string]any{"input_images": 1, "generated_images": 5},
 		}
-		value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", queryContext, map[string]any{"status": "SUCCESS"}, tieredBody)
+		value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{"model": pro, "upstreamModel": pro}, map[string]any{"status": "SUCCESS"}, tieredBody)
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(4), "images_above_1_5k": float64(1), "input_images": float64(1)}, alibabaObject(t, value), "raw plugin facts retain separate quantities before host normalization")
 	})
@@ -577,20 +581,20 @@ func TestDoubaoImageResults(t *testing.T) {
 				continue
 			}
 			require.NoError(t, err)
-			assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(1), "images_above_1_5k": float64(0)}, alibabaObject(t, value), "input_images %v", count)
+			assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(0), "images_above_1_5k": float64(1)}, alibabaObject(t, value), "input_images %v", count)
 		}
 	})
 
-	t.Run("missing sizes keep the estimated tiers", func(t *testing.T) {
+	t.Run("missing sizes keep the estimated tiers on multi-tier models", func(t *testing.T) {
 		payload := map[string]any{"data": []any{map[string]any{"url": first, "size": "2048x2048"}, map[string]any{"url": second}}, "usage": map[string]any{"generated_images": 2, "input_images": 1}}
-		value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", queryContext, map[string]any{"status": "SUCCESS"}, payload)
+		value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{"model": pro, "upstreamModel": pro}, map[string]any{"status": "SUCCESS"}, payload)
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{"input_images": float64(1)}, alibabaObject(t, value))
 	})
 
 	t.Run("missing usage settles from image payload sizes", func(t *testing.T) {
 		payload := map[string]any{"data": []any{map[string]any{"url": first, "size": "4096x4096"}, map[string]any{"url": second, "size": "1024x1024"}, map[string]any{"error": map[string]any{"code": "x"}}}}
-		value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", queryContext, map[string]any{"status": "SUCCESS"}, payload)
+		value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{"model": pro, "upstreamModel": pro}, map[string]any{"status": "SUCCESS"}, payload)
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(1), "images_above_1_5k": float64(1)}, alibabaObject(t, value))
 	})

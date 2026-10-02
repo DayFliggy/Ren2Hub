@@ -45,6 +45,18 @@ func TaskPluginCandidateChannelEligible(channel *model.Channel, key string, cand
 	return false
 }
 
+// A shared protocol endpoint binds the first eligible executable before pricing.
+// Discovery and request execution must not choose different plugins by price.
+func SelectTaskPluginEndpointCandidate(channel *model.Channel, candidates []jsplugin.ProtocolBinding) *jsplugin.ProtocolBinding {
+	for index := range candidates {
+		candidate := &candidates[index]
+		if candidate.Plugin != nil && TaskPluginChannelEligible(channel, candidate.Plugin.Meta.Key) {
+			return candidate
+		}
+	}
+	return nil
+}
+
 func TaskPluginChannelEligible(channel *model.Channel, key string) bool {
 	if key == "" {
 		return channel != nil && channel.Type != constant.ChannelTypeTaskPlugin

@@ -102,10 +102,18 @@ func (a *ResponsesBufferedAccumulator) rememberIndexedEvent(event *dto.Responses
 			a.err = fmt.Errorf("response output item is missing its type")
 		}
 		return true
-	case "response.function_call_arguments.delta", "response.custom_tool_call_input.delta":
+	case "response.function_call_arguments.delta":
 		item.Arguments, a.err = kitutil.Marshal(item.ArgumentsString() + event.Delta)
 		return true
-	case "response.function_call_arguments.done", "response.custom_tool_call_input.done":
+	case "response.custom_tool_call_input.delta":
+		item.Input, a.err = kitutil.Marshal(dto.ResponsesArgumentsString(item.Input) + event.Delta)
+		return true
+	case "response.custom_tool_call_input.done":
+		if event.Input != nil {
+			item.Input, a.err = kitutil.Marshal(*event.Input)
+		}
+		return true
+	case "response.function_call_arguments.done":
 		if event.Arguments != nil {
 			item.Arguments, a.err = kitutil.Marshal(*event.Arguments)
 		}
@@ -205,6 +213,9 @@ func mergeBufferedContent(target, previous *dto.ResponsesOutput) {
 	}
 	if len(target.Arguments) == 0 {
 		target.Arguments = previous.Arguments
+	}
+	if len(target.Input) == 0 {
+		target.Input = previous.Input
 	}
 	if len(target.Action) == 0 {
 		target.Action = previous.Action

@@ -21,6 +21,8 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -152,6 +154,14 @@ func runGatewaySemanticSDK(t *testing.T, runtime, script string) {
 	priceJSON, err := common.Marshal(prices)
 	require.NoError(t, err)
 	require.NoError(t, configureGatewayFixturePrices(string(priceJSON), false))
+	previousToolPrices := config.GlobalConfig.ExportAllConfigs()[operation_setting.ToolPriceOptionKey]
+	require.NotEmpty(t, previousToolPrices)
+	// These protocol fixtures intentionally charge only the configured request
+	// price. Missing tool dimensions are not an implicit free-tool setting.
+	require.NoError(t, model.UpdateOption(operation_setting.ToolPriceOptionKey, `{"web_search":0,"web_search_preview":0,"google_search":0}`))
+	t.Cleanup(func() {
+		require.NoError(t, model.UpdateOption(operation_setting.ToolPriceOptionKey, previousToolPrices))
+	})
 	require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Updates(map[string]any{"unlimited_quota": false, "available_quota": 1000000}).Error)
 	strict := &model.Token{UserId: 1, Key: "semanticstrictlocal", Name: "semantic strict", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true, ConversionPolicy: "strict"}
 	require.NoError(t, model.DB.Create(strict).Error)
@@ -302,9 +312,25 @@ func gatewaySemanticCases() []gatewaySemanticCase {
 					body["config"].(map[string]any)["tools"] = []any{map[string]any{"googleSearch": map[string]any{"timeRangeFilter": map[string]any{"startTime": "2026-01-01T00:00:00Z", "endTime": "2026-02-01T00:00:00Z"}}}}
 					test.Expected["tools"] = body["config"].(map[string]any)["tools"]
 				}
-			case "custom":
-				body["tools"] = []any{map[string]any{"type": "custom", "name": "shell", "format": map[string]any{"type": "text"}}}
-				test.Expected["tools"] = body["tools"]
+				if route == "converted" && (protocol == "chat" || protocol == "responses") {
+					test.Expected = map[string]any{"tools.0.name": "web_search"}
+					if protocol == "responses" {
+						test.Expected["tools.0.allowed_domains"] = []string{"example.com"}
+					}
+				}
+			case "custom", "custom_grammar":
+				format := map[string]any{"type": "text"}
+				if feature == "custom_grammar" {
+					format = map[string]any{"type": "grammar", "syntax": "lark", "definition": "start: /.+/"}
+				}
+				body["tools"] = []any{map[string]any{"type": "custom", "name": "shell", "format": format}}
+				if route == "converted" {
+					test.Expected["tools.0.name"] = "shell"
+					test.Expected["tools.0.input_schema.properties.input.type"] = "string"
+					test.Expected["tools.0.input_schema.required"] = []string{"input"}
+				} else {
+					test.Expected["tools"] = body["tools"]
+				}
 			case "state", "private_file":
 				if action != "seed" {
 					switch protocol {
@@ -332,13 +358,20 @@ func gatewaySemanticCases() []gatewaySemanticCase {
 		}
 		add("structured", "native", "safe", false, false)
 		add("structured", "converted", "safe", false, true)
-		for _, feature := range []string{"search", "custom"} {
-			if feature == "custom" && protocol != "responses" {
+		for _, feature := range []string{"search", "custom", "custom_grammar"} {
+			if feature != "search" && protocol != "responses" {
 				continue
 			}
 			add(feature, "native", "safe", false, false)
 			for _, policy := range []string{"safe", "strict"} {
-				add(feature, "converted", policy, false, true)
+				rejected := true
+				if policy == "safe" && (feature == "custom" || feature == "search" && (protocol == "chat" || protocol == "responses")) {
+					rejected = false
+				}
+				add(feature, "converted", policy, false, rejected)
+			}
+			if feature == "custom" || feature == "custom_grammar" {
+				add(feature, "converted", "safe", true, feature == "custom_grammar")
 			}
 		}
 		for _, feature := range []string{"state", "private_file"} {

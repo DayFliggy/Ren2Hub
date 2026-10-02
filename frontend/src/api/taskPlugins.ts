@@ -252,8 +252,28 @@ export async function readMarketText(
   limit: number,
   signal?: AbortSignal
 ): Promise<string> {
+  const { bytes } = await readMarketBytes(url, limit, signal)
+  return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+}
+
+export async function readMarketIcon(
+  url: string,
+  signal?: AbortSignal
+): Promise<Blob> {
+  const { bytes, type } = await readMarketBytes(url, 512 * 1024, signal)
+  if (!['image/png', 'image/svg+xml'].includes(type))
+    throw new Error('Invalid plugin icon')
+  return new Blob([bytes], { type })
+}
+
+async function readMarketBytes(
+  url: string,
+  limit: number,
+  signal?: AbortSignal
+) {
   const response = await fetch(marketSourceURL(url, url), {
     signal,
+    cache: 'no-cache',
     credentials: 'omit',
     redirect: 'error',
     referrerPolicy: 'no-referrer',
@@ -281,7 +301,13 @@ export async function readMarketText(
     bytes.set(chunk, offset)
     offset += chunk.length
   }
-  return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  return {
+    bytes,
+    type: (response.headers.get('Content-Type') ?? '')
+      .split(';')[0]!
+      .trim()
+      .toLowerCase(),
+  }
 }
 
 export async function pluginSourceHash(source: string): Promise<string> {

@@ -25,68 +25,67 @@ func TaskBillingRequestID(taskID int64) string {
 // PersistTaskCompletion commits the terminal transition and its accounting
 // intent together. A losing poller cannot replace the winner's result or charge.
 func PersistTaskCompletion(ctx context.Context, task *Task, fromStatus TaskStatus, actualQuota common.Quota, consumption BillingConsumption) (bool, error) {
+	won := false
+	err := BillingTransaction(ctx, func(tx *gorm.DB) error {
+		var err error
+		won, err = persistTaskCompletionTx(tx, task, fromStatus, actualQuota, consumption)
+		return err
+	})
+	return won && err == nil, err
+}
+
+func persistTaskCompletionTx(tx *gorm.DB, task *Task, fromStatus TaskStatus, actualQuota common.Quota, consumption BillingConsumption) (bool, error) {
 	if DB == nil || task == nil || task.ID <= 0 || actualQuota < 0 || actualQuota > common.MaxQuota ||
 		(task.Status != TaskStatusSuccess && task.Status != TaskStatusFailure) ||
 		(task.Status == TaskStatusFailure && actualQuota != 0) {
 		return false, errors.New("invalid task completion")
 	}
-	won := false
-	err := BillingTransaction(ctx, func(tx *gorm.DB) error {
-		won = false
-		// Lock request state before its task row, matching recovery delivery.
-		var guard BillingRecovery
-		if err := lockForUpdate(tx).Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&guard).Error; err != nil {
-			return err
-		}
-		var current Task
-		if err := lockForUpdate(tx).First(&current, task.ID).Error; err != nil {
-			return err
-		}
-		if err := validateTaskCompletionIdentity(&current, task); err != nil {
-			return err
-		}
-		if current.Status != fromStatus || current.Status == TaskStatusSuccess || current.Status == TaskStatusFailure {
-			return nil
-		}
-		if current.UserId != task.UserId || current.ChannelId != task.ChannelId || current.Quota != task.Quota || current.Quota < 0 || current.Quota > common.MaxQuota ||
-			current.PrivateData.TokenId != consumption.Log.TokenId || consumption.Log.UserId != current.UserId || consumption.Log.ChannelId != current.ChannelId {
-			return ErrBillingRecoveryStateConflict
-		}
-		consumption.TaskAdjustment = &TaskBillingAdjustment{TaskID: current.ID, PreviousQuota: current.Quota, FinalQuota: actualQuota}
-		if err := createTaskCompletionBilling(tx, TaskBillingRequestID(current.ID), current.PrivateData, consumption, task.Status == TaskStatusFailure); err != nil {
-			return err
-		}
-		privateData := current.PrivateData
-		privateData.ResultURL = task.PrivateData.ResultURL
-		privateData.PluginState = task.PrivateData.PluginState
-		privateData.PollFailures = task.PrivateData.PollFailures
-		privateData.CompletionUsage = task.PrivateData.CompletionUsage
-		privateData.BillingContext = task.PrivateData.BillingContext
-		privateData.ResultDiscarded = task.PrivateData.ResultDiscarded
-		storedData := task.Data
-		if privateData.ResultDiscarded {
-			storedData = nil
-			privateData.PluginState = nil
-			privateData.ResultURL = ""
-		}
-		result := tx.Model(&current).Where("status = ?", fromStatus).Updates(map[string]any{
-			"status": task.Status, "progress": task.Progress, "start_time": task.StartTime, "finish_time": task.FinishTime,
-			"submit_time": task.SubmitTime, "fail_reason": task.FailReason, "data": storedData,
-			"private_data": privateData, "updated_at": common.GetTimestamp(),
-		})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected != 1 {
-			return ErrBillingRecoveryStateConflict
-		}
-		if err := recordTaskResultEvent(tx, task); err != nil {
-			return err
-		}
-		won = true
-		return nil
+	// Lock request state before its task row, matching recovery delivery.
+	var guard BillingRecovery
+	if err := lockForUpdate(tx).Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&guard).Error; err != nil {
+		return false, err
+	}
+	var current Task
+	if err := lockForUpdate(tx).First(&current, task.ID).Error; err != nil {
+		return false, err
+	}
+	if err := validateTaskCompletionIdentity(&current, task); err != nil {
+		return false, err
+	}
+	if current.Status != fromStatus || current.Status == TaskStatusSuccess || current.Status == TaskStatusFailure {
+		return false, nil
+	}
+	if current.UserId != task.UserId || current.ChannelId != task.ChannelId || current.Quota != task.Quota || current.Quota < 0 || current.Quota > common.MaxQuota ||
+		current.PrivateData.TokenId != consumption.Log.TokenId || consumption.Log.UserId != current.UserId || consumption.Log.ChannelId != current.ChannelId {
+		return false, ErrBillingRecoveryStateConflict
+	}
+	consumption.TaskAdjustment = &TaskBillingAdjustment{TaskID: current.ID, PreviousQuota: current.Quota, FinalQuota: actualQuota}
+	if err := createTaskCompletionBilling(tx, TaskBillingRequestID(current.ID), current.PrivateData, consumption, task.Status == TaskStatusFailure); err != nil {
+		return false, err
+	}
+	privateData := current.PrivateData
+	privateData.ResultURL = task.PrivateData.ResultURL
+	privateData.PluginState = task.PrivateData.PluginState
+	privateData.PollFailures = task.PrivateData.PollFailures
+	privateData.CompletionUsage = task.PrivateData.CompletionUsage
+	privateData.BillingContext = task.PrivateData.BillingContext
+	privateData.ResultDiscarded = task.PrivateData.ResultDiscarded
+	storedData, privateData := taskResultForStorage(task.Data, privateData)
+	result := tx.Model(&current).Where("status = ?", fromStatus).Updates(map[string]any{
+		"status": task.Status, "progress": task.Progress, "start_time": task.StartTime, "finish_time": task.FinishTime,
+		"submit_time": task.SubmitTime, "fail_reason": task.FailReason, "data": storedData,
+		"private_data": privateData, "updated_at": common.GetTimestamp(),
 	})
-	return won && err == nil, err
+	if result.Error != nil {
+		return false, result.Error
+	}
+	if result.RowsAffected != 1 {
+		return false, ErrBillingRecoveryStateConflict
+	}
+	if err := recordTaskResultEvent(tx, task); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // Both task tables use the same funding, token and consumption recovery. Only

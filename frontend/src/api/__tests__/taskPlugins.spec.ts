@@ -3,6 +3,7 @@ import {
   marketSourceURL,
   parseMarketIndex,
   readMarketText,
+  readMarketIcon,
   taskPluginsApi,
 } from '../taskPlugins'
 import { api } from '../client'
@@ -48,8 +49,49 @@ describe('task plugin marketplace integrity', () => {
     ).rejects.toThrow('size limit')
     expect(fetcher).toHaveBeenCalledWith(
       'https://plugins.example/a.js',
-      expect.objectContaining({ credentials: 'omit', redirect: 'error' })
+      expect.objectContaining({
+        credentials: 'omit',
+        redirect: 'error',
+        cache: 'no-cache',
+      })
     )
+    fetcher.mockRestore()
+  })
+  it('revalidates marketplace icons with the same credential and cancellation boundary', async () => {
+    const signal = new AbortController().signal
+    const fetcher = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response('<svg/>', { headers: { 'Content-Type': 'image/svg+xml' } })
+      )
+    const blob = await readMarketIcon(
+      'https://plugins.example/icon.svg',
+      signal
+    )
+    expect(blob.type).toBe('image/svg+xml')
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://plugins.example/icon.svg',
+      expect.objectContaining({
+        signal,
+        credentials: 'omit',
+        cache: 'no-cache',
+        redirect: 'error',
+      })
+    )
+    fetcher.mockResolvedValueOnce(
+      new Response('not an icon', { headers: { 'Content-Type': 'text/html' } })
+    )
+    await expect(
+      readMarketIcon('https://plugins.example/icon.svg')
+    ).rejects.toThrow('Invalid plugin icon')
+    fetcher.mockResolvedValueOnce(
+      new Response(new Uint8Array(512 * 1024 + 1), {
+        headers: { 'Content-Type': 'image/png' },
+      })
+    )
+    await expect(
+      readMarketIcon('https://plugins.example/icon.png')
+    ).rejects.toThrow('size limit')
     fetcher.mockRestore()
   })
   it('sends marketplace sources in the backend array contract', async () => {

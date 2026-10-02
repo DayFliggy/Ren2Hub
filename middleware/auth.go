@@ -62,6 +62,9 @@ func authHelper(c *gin.Context, minRole int) {
 		return
 	}
 	setDashboardAuthContext(c, user, identity, useAccessToken)
+	if !authorizePATRoute(c, user) {
+		return
+	}
 
 	// 管理/root 写操作审计兜底：内聚在鉴权链路里，保证任何经过 AdminAuth/RootAuth
 	// 的写接口都会自动留痕（无需在路由上单独挂审计中间件，避免漏挂）。
@@ -88,6 +91,9 @@ func TryUserAuth() func(c *gin.Context) {
 		}
 		if credentialKind != dashboardCredentialUnmatched {
 			setDashboardAuthContext(c, user, identity, credentialKind == dashboardCredentialPAT)
+			if !authorizePATRoute(c, user) {
+				return
+			}
 		}
 		c.Next()
 	}
@@ -134,7 +140,7 @@ func GetSessionAuthIdentity(c *gin.Context) (service.AuthIdentity, bool) {
 			SessionVersion:  c.GetInt64("session_version"),
 		}
 	}
-	if identity.UserID <= 0 || identity.SessionID == "" || identity.UserAuthVersion <= 0 || identity.SessionVersion <= 0 {
+	if identity.PersonalAccessTokenID != 0 || identity.UserID <= 0 || identity.SessionID == "" || identity.UserAuthVersion <= 0 || identity.SessionVersion <= 0 {
 		return service.AuthIdentity{}, false
 	}
 	return identity, true
@@ -167,19 +173,20 @@ func classifyDashboardCredential(c *gin.Context) (*model.UserBase, service.AuthI
 		}
 		return user, identity, dashboardCredentialInternal, nil
 	}
-	patUser, err := model.ValidateAccessToken(raw)
+	pat, patUser, err := model.ValidatePersonalAccessToken(raw)
 	if err != nil {
+		if errors.Is(err, model.ErrPATInvalid) {
+			return nil, service.AuthIdentity{}, dashboardCredentialUnmatched, nil
+		}
 		return nil, service.AuthIdentity{}, dashboardCredentialPAT, err
 	}
 	if patUser == nil || patUser.Id <= 0 {
 		return nil, service.AuthIdentity{}, dashboardCredentialUnmatched, nil
 	}
 	beginAccessTokenAudit(c, patUser, raw)
-	user, err := model.GetUserCache(patUser.Id)
-	if err != nil {
-		return nil, service.AuthIdentity{}, dashboardCredentialPAT, err
-	}
-	return user, service.AuthIdentity{UserID: user.Id, UserAuthVersion: user.AuthVersion}, dashboardCredentialPAT, nil
+	c.Set("personal_access_token", pat)
+	user := patUser.ToBaseUser()
+	return user, service.AuthIdentity{UserID: user.Id, UserAuthVersion: user.AuthVersion, PersonalAccessTokenID: pat.ID, SessionID: fmt.Sprintf("pat:%d", pat.ID), SessionVersion: 1}, dashboardCredentialPAT, nil
 }
 
 func authorizationToken(header string) (string, bool) {
@@ -230,17 +237,9 @@ func writeDashboardAuthError(c *gin.Context, err error) {
 
 func RequirePermission(permission authz.Permission) func(c *gin.Context) {
 	return func(c *gin.Context) {
-		role := c.GetInt("role")
-		userID := c.GetInt("id")
-		if authz.Can(userID, role, permission) {
+		if RequireCurrentUserPermission(c, permission) {
 			c.Next()
-			return
 		}
-		c.JSON(http.StatusForbidden, gin.H{
-			"success": false,
-			"message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege),
-		})
-		c.Abort()
 	}
 }
 

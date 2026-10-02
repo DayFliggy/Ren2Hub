@@ -18,8 +18,20 @@ beforeAll(async () => {
   await setLocale('zh-CN')
 })
 
+const manifest = {
+  schema_version: 1,
+  models: [
+    {
+      id: 'gpt-4o',
+      visible: true,
+      supported_endpoint_types: ['openai'],
+      price_configured: true,
+      price_version: 'v1',
+    },
+  ],
+}
 beforeEach(() => {
-  vi.spyOn(api, 'get').mockResolvedValue({ models: ['gpt-4o'] })
+  vi.spyOn(api, 'get').mockResolvedValue(manifest)
 })
 
 afterEach(() => vi.restoreAllMocks())
@@ -32,7 +44,11 @@ describe('ModelsView live boundary', () => {
     })
     await flushPromises()
 
-    expect(api.get).toHaveBeenCalledWith('/api/user/models')
+    expect(api.get).toHaveBeenCalledWith(
+      '/api/user/model-manifest',
+      undefined,
+      { signal: expect.any(AbortSignal) }
+    )
     expect(wrapper.text()).toContain('gpt-4o')
     expect(wrapper.text()).toContain('共 1 个模型')
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
@@ -40,7 +56,7 @@ describe('ModelsView live boundary', () => {
 
   it('shows cache read and cache write prices in model details', async () => {
     vi.mocked(api.get)
-      .mockResolvedValueOnce({ models: ['gpt-4o'] })
+      .mockResolvedValueOnce(manifest)
       .mockResolvedValueOnce([
         {
           model_name: 'gpt-4o',

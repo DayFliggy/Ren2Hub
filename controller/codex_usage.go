@@ -18,12 +18,7 @@ import (
 )
 
 func GetCodexChannelUsage(c *gin.Context) {
-	fetchCodexChannelWhamData(
-		c,
-		service.FetchCodexWhamUsage,
-		"failed to fetch codex usage",
-		"获取用量信息失败，请稍后重试",
-	)
+	GetChannelProviderUsage(c)
 }
 
 func GetCodexChannelRateLimitResetCredits(c *gin.Context) {
@@ -119,30 +114,23 @@ func fetchCodexChannelWhamData(
 		refreshCtx, refreshCancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 		defer refreshCancel()
 
-		res, refreshErr := service.RefreshCodexOAuthTokenWithProxy(refreshCtx, oauthKey.RefreshToken, ch.GetSetting().Proxy)
-		if refreshErr == nil {
-			oauthKey.AccessToken = res.AccessToken
-			oauthKey.RefreshToken = res.RefreshToken
-			oauthKey.LastRefresh = time.Now().Format(time.RFC3339)
-			oauthKey.Expired = res.ExpiresAt.Format(time.RFC3339)
-			if strings.TrimSpace(oauthKey.Type) == "" {
-				oauthKey.Type = "codex"
+		refreshedKey, _, refreshErr := service.RefreshCodexChannelCredential(refreshCtx, ch.Id, service.CodexCredentialRefreshOptions{ResetCaches: true})
+		if refreshErr != nil || refreshedKey == nil {
+			message := "credential refresh returned no credential"
+			if refreshErr != nil {
+				message = common.MaskSensitiveInfo(refreshErr.Error())
 			}
-
-			encoded, encErr := common.Marshal(oauthKey)
-			if encErr == nil {
-				_ = model.DB.Model(&model.Channel{}).Where("id = ?", ch.Id).Update("key", string(encoded)).Error
-				model.InitChannelCache()
-			}
-
-			ctx2, cancel2 := context.WithTimeout(c.Request.Context(), 15*time.Second)
-			defer cancel2()
-			statusCode, body, err = fetch(ctx2, client, ch.GetBaseURL(), oauthKey.AccessToken, accountID)
-			if err != nil {
-				common.SysError(logPrefix + " after refresh: " + err.Error())
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": userMessage})
-				return
-			}
+			common.SysError(logPrefix + ": " + message)
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": userMessage})
+			return
+		}
+		ctx2, cancel2 := context.WithTimeout(c.Request.Context(), 15*time.Second)
+		defer cancel2()
+		statusCode, body, err = fetch(ctx2, client, ch.GetBaseURL(), refreshedKey.AccessToken, refreshedKey.AccountID)
+		if err != nil {
+			common.SysError(logPrefix + " after refresh: " + common.MaskSensitiveInfo(err.Error()))
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": userMessage})
+			return
 		}
 	}
 

@@ -54,7 +54,7 @@ func validateNextAdminUserWrite(request *nextAdminUserWriteRequest, creating boo
 	if request.Username == "" || (creating && request.Password == "") {
 		return fmt.Errorf("username and password are required")
 	}
-	if request.Role != common.RoleCommonUser && request.Role != common.RoleAdminUser {
+	if !model.ValidManagedUserRole(request.Role) {
 		return fmt.Errorf("invalid user role")
 	}
 	if request.Status != 0 && request.Status != common.UserStatusEnabled && request.Status != common.UserStatusDisabled {
@@ -97,6 +97,9 @@ func NextCreateAdminUser(c *gin.Context) {
 		nextBusinessError(c, "insufficient permission", "FORBIDDEN")
 		return
 	}
+	if request.Role == common.RoleAdminUser && requireAdminUserProof(c, "create_admin", 0) == nil {
+		return
+	}
 	if request.DisplayName == "" {
 		request.DisplayName = request.Username
 	}
@@ -105,6 +108,9 @@ func NextCreateAdminUser(c *gin.Context) {
 		Password: request.Password, Role: request.Role, Status: request.Status,
 	}
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := validateAdminWriteAuthorization(c, tx); err != nil {
+			return err
+		}
 		return user.InsertWithTx(tx, 0)
 	}); err != nil {
 		common.ApiError(c, err)
@@ -137,17 +143,20 @@ func NextUpdateAdminUser(c *gin.Context) {
 		nextBusinessError(c, "insufficient permission", "FORBIDDEN")
 		return
 	}
-	if request.Status == 0 {
-		request.Status = original.Status
-	}
 	user := &model.User{
 		Id: request.ID, Username: request.Username, DisplayName: request.DisplayName,
 		Email: request.Email, Password: request.Password, Role: request.Role, Status: request.Status,
 	}
+	if (request.Password != "" || request.Role != original.Role || request.Status != 0 && request.Status != original.Status || request.Email != model.NormalizeEmail(original.Email)) && requireAdminUserProof(c, "update", request.ID) == nil {
+		return
+	}
 	previousAuthVersion := original.AuthVersion
 	authzTouched := false
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
-		if err := user.UpdateManagedWithTx(tx, request.Password != "", operatorRole); err != nil {
+		if err := validateAdminWriteAuthorization(c, tx); err != nil {
+			return err
+		}
+		if err := user.UpdateManagedWithTx(tx, request.Password != "", operatorRole, adminUserAuthorization(c)...); err != nil {
 			return err
 		}
 		touched, err := updateAdminPermissionsForUserInTx(c, tx, user.Id, user.Role, nil)
@@ -201,7 +210,10 @@ func NextDeleteAdminUsersBatch(c *gin.Context) {
 		seen[id] = struct{}{}
 		ids = append(ids, id)
 	}
-	deleted, err := model.HardDeleteManagedUsers(ids, c.GetInt("id"), c.GetInt("role"))
+	if requireAdminUserProof(c, "delete", ids...) == nil {
+		return
+	}
+	deleted, err := model.HardDeleteManagedUsers(ids, c.GetInt("id"), c.GetInt("role"), adminUserAuthorization(c)...)
 	if err != nil {
 		writeManagedUserError(c, err)
 		return
@@ -309,7 +321,14 @@ func NextAdminUserStatus(c *gin.Context) {
 		nextBusinessError(c, "invalid user id", "VALIDATION_ERROR")
 		return
 	}
-	result, err := model.UpdateManagedUserStatuses([]int{id}, request.Status, c.GetInt("id"), c.GetInt("role"))
+	action := "disable"
+	if request.Status == common.UserStatusEnabled {
+		action = "enable"
+	}
+	if requireAdminUserProof(c, action, id) == nil {
+		return
+	}
+	result, err := model.UpdateManagedUserStatuses([]int{id}, request.Status, c.GetInt("id"), c.GetInt("role"), adminUserAuthorization(c)...)
 	if err != nil {
 		writeManagedUserError(c, err)
 		return
@@ -361,7 +380,14 @@ func NextAdminUserStatusBatch(c *gin.Context) {
 		seen[id] = struct{}{}
 		ids = append(ids, id)
 	}
-	result, err := model.UpdateManagedUserStatuses(ids, request.Status, c.GetInt("id"), c.GetInt("role"))
+	action := "disable"
+	if request.Status == common.UserStatusEnabled {
+		action = "enable"
+	}
+	if requireAdminUserProof(c, action, ids...) == nil {
+		return
+	}
+	result, err := model.UpdateManagedUserStatuses(ids, request.Status, c.GetInt("id"), c.GetInt("role"), adminUserAuthorization(c)...)
 	if err != nil {
 		writeManagedUserError(c, err)
 		return
@@ -376,6 +402,8 @@ func writeManagedUserError(c *gin.Context, err error) {
 		return
 	}
 	switch {
+	case errors.Is(err, model.ErrManagedUserVerificationRequired):
+		c.JSON(403, gin.H{"success": false, "code": "SECURITY_PROOF_REQUIRED", "message": "需要安全验证"})
 	case errors.Is(err, model.ErrManagedUserNotFound):
 		nextBusinessError(c, "user not found", "NOT_FOUND")
 	case errors.Is(err, model.ErrManagedUserForbidden):
@@ -388,6 +416,8 @@ func writeManagedUserError(c *gin.Context, err error) {
 }
 
 type nextAdminChannelDTO struct {
+	StatusReason  string                `json:"status_reason"`
+	StatusTime    int64                 `json:"status_time"`
 	ID            int                   `json:"id"`
 	Name          string                `json:"name"`
 	Type          int                   `json:"type"`
@@ -445,7 +475,9 @@ func buildNextAdminChannelDTO(channel *model.Channel) nextAdminChannelDTO {
 		modelMapping = *channel.ModelMapping
 	}
 	labResolution := modellab.Resolve(channel.Models, modelMapping)
+	reason, when := channelStatusSummary(channel)
 	return nextAdminChannelDTO{
+		StatusReason: reason, StatusTime: when,
 		ID: channel.Id, Name: channel.Name, Type: channel.Type, Supplier: constant.GetChannelTypeName(channel.Type),
 		Status: channel.Status, Priority: priority, Weight: weight,
 		UsedQuota: channel.UsedQuota, ChannelRatio: channel.ChannelRatio, Balance: channel.Balance,

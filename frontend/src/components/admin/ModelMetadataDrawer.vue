@@ -24,6 +24,7 @@ import { parseModelEndpoints } from '@/utils/modelEndpoints'
 import MetadataEndpointEditor from './MetadataEndpointEditor.vue'
 import MetadataIcon from './MetadataIcon.vue'
 import MetadataTagInput from './MetadataTagInput.vue'
+import ModelCapabilitiesEditor from './ModelCapabilitiesEditor.vue'
 import './admin.css'
 import {
   endpointTemplates,
@@ -157,6 +158,7 @@ async function load() {
       status: model.status,
       sync_official: model.sync_official,
       name_rule: model.name_rule,
+      capabilities: model.capabilities ?? undefined,
     })
     iconMode.value = model.icon ? 'custom' : 'inherit'
     tags.value = parseMetadataTags(model.tags)
@@ -456,6 +458,9 @@ onBeforeUnmount(() => controller.abort())
                 v-model="form.endpoints"
                 :disabled="saving"
               />
+            </section>
+            <section class="drawer-section">
+              <ModelCapabilitiesEditor v-model="form.capabilities" />
             </section>
             <section class="drawer-section">
               <h3 class="drawer-section-title">{{ t('statusSync') }}</h3>

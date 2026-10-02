@@ -515,14 +515,7 @@ func BindTaskPluginEndpointToChannel(c *gin.Context, channel *model.Channel) *ty
 	if len(candidates) == 0 || c.GetBool("task_plugin_endpoint_channel_bound") {
 		candidates = []pluginruntime.ProtocolBinding{{Plugin: pinned.Plugin, Protocol: pinned.Protocol, Operation: pinned.Operation, Model: pinned.Model}}
 	}
-	var selected *pluginruntime.ProtocolBinding
-	for index := range candidates {
-		candidate := &candidates[index]
-		if candidate.Plugin != nil && service.TaskPluginChannelEligible(channel, candidate.Plugin.Meta.Key) {
-			selected = candidate
-			break
-		}
-	}
+	selected := service.SelectTaskPluginEndpointCandidate(channel, candidates)
 	if selected == nil {
 		return types.NewErrorWithStatusCode(errors.New("channel is not bound to an accepted task plugin"), types.ErrorCode("plugin_channel_unavailable"), http.StatusServiceUnavailable)
 	}

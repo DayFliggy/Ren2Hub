@@ -152,8 +152,9 @@ func TestResponsesStreamLifecycleAndOutcome(t *testing.T) {
 			chunk := &dto.ChatCompletionsStreamResponse{Choices: []dto.ChatCompletionsStreamResponseChoice{{Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Content: &text}}}}
 			results, err := ConvertStreamResponseChunk(context.Background(), nil, state, chunk)
 			require.NoError(t, err)
-			require.Len(t, results, 3)
-			assert.Equal(t, "response.output_text.delta", results[2].Value.(ChatToResponsesStreamEvent).Type)
+			require.Len(t, results, 4)
+			assert.Equal(t, "response.content_part.added", results[2].Value.(ChatToResponsesStreamEvent).Type)
+			assert.Equal(t, "response.output_text.delta", results[3].Value.(ChatToResponsesStreamEvent).Type)
 			if outcome == StreamOutcomeCompleted {
 				stop := "stop"
 				terminal, err := ConvertStreamResponseChunk(context.Background(), nil, state, &dto.ChatCompletionsStreamResponse{Choices: []dto.ChatCompletionsStreamResponseChoice{{FinishReason: &stop}}})

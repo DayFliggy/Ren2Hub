@@ -1,6 +1,8 @@
 import { securityMessages } from '../../security'
 import { taskPluginMessages } from '../../taskPlugins'
+import { providerUsageMessages } from '../../providerUsage'
 export default {
+  providerUsage: providerUsageMessages.en,
   taskPlugins: taskPluginMessages.en,
   security: securityMessages['en'],
   billing: {
@@ -857,6 +859,7 @@ export default {
   },
 
   models: {
+    viewToggle: 'View mode',
     title: 'Model Plaza',
     breadcrumb: ['Console', 'Models'],
     searchPlaceholder: 'Search model or vendor…',
@@ -1281,6 +1284,9 @@ export default {
     batchFailed: '{action} failed for all {count} channels',
     enableChannel: 'Enable channel',
     disableChannel: 'Disable channel',
+    disabledReason: 'View automatic disable reason',
+    disabledReasonMissing: 'No disable reason was provided.',
+    disabledAt: 'Disabled at: {time}',
     editChannel: 'Edit channel',
     deleteChannel: 'Delete channel',
     createTitle: 'New channel',

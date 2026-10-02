@@ -1,4 +1,5 @@
 import { api } from './client'
+import { proofOptions } from './security'
 import { invalidResponse, isRecord } from './contracts'
 
 const builtins = [
@@ -55,5 +56,6 @@ export const adminUserBindingsApi = {
       })),
     ]
   },
-  remove: (binding: AdminUserBinding) => api.delete(binding.path),
+  remove: (binding: AdminUserBinding, proof: string) =>
+    api.delete(binding.path, undefined, proofOptions(proof)),
 }

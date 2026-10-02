@@ -13,6 +13,8 @@ import KeyFormModal from '@/components/console/keys/KeyFormModal.vue'
 import KeyEndpointStrip from '@/components/console/keys/KeyEndpointStrip.vue'
 import KeyMobileList from '@/components/console/keys/KeyMobileList.vue'
 import KeyRevealModal from '@/components/console/keys/KeyRevealModal.vue'
+import KeyClientConfigModal from '@/components/console/keys/KeyClientConfigModal.vue'
+import { clientConfigMessages } from '@/i18n/clientConfig'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -30,6 +32,10 @@ import { useAppStore } from '@/stores'
 import { formatDate, formatQuota } from '@/utils/format'
 
 const { t } = useI18n()
+const { t: clientText } = useI18n({
+  useScope: 'local',
+  messages: clientConfigMessages,
+})
 const toast = useToast()
 const app = useAppStore()
 const routingEnabled = computed(() =>
@@ -53,6 +59,7 @@ const deleting = ref<TokenSummary | null>(null)
 const batchDeleting = ref(false)
 const deleteLoading = ref(false)
 const revealTokenId = ref<number | null>(null)
+const clientConfigTokenId = ref<number | null>(null)
 
 const columns = computed<TableColumn[]>(() => [
   { key: 'name', label: t('keys.colName') },
@@ -65,7 +72,7 @@ const columns = computed<TableColumn[]>(() => [
     key: 'actions',
     label: t('keys.colActions'),
     align: 'right',
-    width: '140px',
+    width: '180px',
   },
 ])
 
@@ -401,6 +408,22 @@ onBeforeUnmount(() => {
               </svg>
             </RouterLink>
             <IconButton
+              :label="clientText('title')"
+              @click="clientConfigTokenId = (row as TokenSummary).id"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <path d="m8 5-7 7 7 7m8-14 7 7-7 7M14 3l-4 18" />
+              </svg>
+            </IconButton>
+            <IconButton
               :label="t('keys.editKey')"
               @click="openEdit(row as TokenSummary)"
             >
@@ -497,6 +520,7 @@ onBeforeUnmount(() => {
           :is-toggling="(row) => togglingIds.has(row.id)"
           :toggle-status="toggleStatus"
           :view-key="copyKey"
+          :export-config="(row) => (clientConfigTokenId = row.id)"
           :edit-key="openEdit"
           :delete-key="(row) => (deleting = row)"
           :routing-enabled="routingEnabled"
@@ -531,6 +555,11 @@ onBeforeUnmount(() => {
       :open="revealTokenId !== null"
       :token-id="revealTokenId"
       @close="revealTokenId = null"
+    />
+    <KeyClientConfigModal
+      v-if="clientConfigTokenId !== null"
+      :token-id="clientConfigTokenId"
+      @close="clientConfigTokenId = null"
     />
 
     <!-- delete confirm -->

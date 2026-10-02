@@ -29,7 +29,7 @@ func setupDashboardAuthMiddlewareTest(t *testing.T) {
 	previousSecret := common.SessionSecret
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.PersonalAccessToken{}, &model.UserSession{}))
 	model.DB = db
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
 	common.RedisEnabled = false
@@ -77,22 +77,24 @@ func createMiddlewarePATUser(t *testing.T, username, token string) *model.User {
 	t.Helper()
 	user := &model.User{
 		Username: username, Password: "password-placeholder", Role: common.RoleCommonUser,
-		Status: common.UserStatusEnabled, Group: "default", AccessToken: &token, AuthVersion: 1,
+		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
 		AffCode: "middleware-aff-" + username,
 	}
 	require.NoError(t, model.DB.Create(user).Error)
+	require.NoError(t, model.DB.Create(&model.PersonalAccessToken{UserID: user.Id, Name: "test", Digest: model.PersonalAccessTokenDigest(token), Scopes: []string{"profile:read"}, ExpiresAt: time.Now().Add(time.Hour).Unix()}).Error)
 	return user
 }
 
 func TestUserAuthAllowsOpaqueDottedPAT(t *testing.T) {
 	setupDashboardAuthMiddlewareTest(t)
-	user := createMiddlewarePATUser(t, "dotted-pat-user", "opaque.key.with-dots")
+	user := createMiddlewarePATUser(t, "dotted-pat-user", "pat_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	router := gin.New()
+	DeclarePATRoute("GET", "/protected", "profile:read")
 	router.GET("/protected", UserAuth(), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"id": c.GetInt("id")})
 	})
 	request := httptest.NewRequest(http.MethodGet, "/protected", nil)
-	request.Header.Set("Authorization", "Bearer opaque.key.with-dots")
+	request.Header.Set("Authorization", "Bearer pat_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	response := httptest.NewRecorder()
 
 	router.ServeHTTP(response, request)
@@ -130,7 +132,7 @@ func TestTryUserAuthCredentialClassification(t *testing.T) {
 	setupDashboardAuthMiddlewareTest(t)
 	gin.SetMode(gin.TestMode)
 
-	patUser := createMiddlewarePATUser(t, "optional-pat-user", "optional.pat.with-dots")
+	patUser := createMiddlewarePATUser(t, "optional-pat-user", "pat_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 	internalUser := createMiddlewarePATUser(t, "optional-session-user", "unrelated-pat")
 	now := time.Now().Unix()
 	session := &model.UserSession{
@@ -164,6 +166,7 @@ func TestTryUserAuthCredentialClassification(t *testing.T) {
 	require.NoError(t, err)
 
 	router := gin.New()
+	DeclarePATRoute("GET", "/optional", "profile:read")
 	router.GET("/optional", TryUserAuth(), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"id":               c.GetInt("id"),
@@ -183,7 +186,7 @@ func TestTryUserAuthCredentialClassification(t *testing.T) {
 		{name: "opaque unmatched credential", token: "opaque-relay-key", wantStatus: http.StatusOK},
 		{name: "dotted unmatched credential", token: "ordinary.key.with-dots", wantStatus: http.StatusOK},
 		{name: "third party jwt", token: externalToken, wantStatus: http.StatusOK},
-		{name: "valid pat", token: "optional.pat.with-dots", wantStatus: http.StatusOK, wantUserID: patUser.Id, wantPAT: true},
+		{name: "valid pat", token: "pat_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", wantStatus: http.StatusOK, wantUserID: patUser.Id, wantPAT: true},
 		{name: "valid internal access jwt", token: accessToken, wantStatus: http.StatusOK, wantUserID: internalUser.Id},
 		{name: "expired internal access jwt", token: issueExpiredDashboardAccessToken(t, identity), wantStatus: http.StatusUnauthorized, wantErrorCode: "AUTH_TOKEN_EXPIRED"},
 		{name: "tampered internal access jwt", token: tamperDashboardToken(accessToken), wantStatus: http.StatusUnauthorized, wantErrorCode: "AUTH_UNAUTHORIZED"},
@@ -228,12 +231,12 @@ func TestTryUserAuthCredentialClassification(t *testing.T) {
 			return
 		}
 		patUserQueries++
-		if patUserQueries == 2 {
+		if patUserQueries == 1 {
 			tx.AddError(forcedCacheError)
 		}
 	}))
 	cacheFailureRequest := httptest.NewRequest(http.MethodGet, "/optional", nil)
-	cacheFailureRequest.Header.Set("Authorization", "Bearer optional.pat.with-dots")
+	cacheFailureRequest.Header.Set("Authorization", "Bearer pat_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 	cacheFailureResponse := httptest.NewRecorder()
 	router.ServeHTTP(cacheFailureResponse, cacheFailureRequest)
 	model.DB.Callback().Query().Remove(callbackName)
@@ -244,7 +247,7 @@ func TestTryUserAuthCredentialClassification(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, sqlDB.Close())
 	databaseFailureRequest := httptest.NewRequest(http.MethodGet, "/optional", nil)
-	databaseFailureRequest.Header.Set("Authorization", "Bearer database-failure-key")
+	databaseFailureRequest.Header.Set("Authorization", "Bearer pat_cccccccccccccccccccccccccccccccccccccccccccccccc")
 	databaseFailureResponse := httptest.NewRecorder()
 	router.ServeHTTP(databaseFailureResponse, databaseFailureRequest)
 	assert.Equal(t, http.StatusInternalServerError, databaseFailureResponse.Code)

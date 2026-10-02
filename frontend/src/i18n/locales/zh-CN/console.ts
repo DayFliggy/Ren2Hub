@@ -1,6 +1,8 @@
 import { securityMessages } from '../../security'
 import { taskPluginMessages } from '../../taskPlugins'
+import { providerUsageMessages } from '../../providerUsage'
 export default {
+  providerUsage: providerUsageMessages['zh-CN'],
   taskPlugins: taskPluginMessages['zh-CN'],
   security: securityMessages['zh-CN'],
   billing: {
@@ -825,6 +827,7 @@ export default {
   },
 
   models: {
+    viewToggle: '视图切换',
     title: '模型广场',
     breadcrumb: ['控制台', '模型'],
     searchPlaceholder: '搜索模型名称 / 供应商…',
@@ -1239,6 +1242,9 @@ export default {
     batchFailed: '{action}失败：{count} 条渠道均未完成',
     enableChannel: '启用渠道',
     disableChannel: '禁用渠道',
+    disabledReason: '查看自动禁用原因',
+    disabledReasonMissing: '未提供禁用原因。',
+    disabledAt: '禁用时间：{time}',
     editChannel: '编辑渠道',
     deleteChannel: '删除渠道',
     createTitle: '新建渠道',

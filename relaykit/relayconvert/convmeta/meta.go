@@ -40,6 +40,11 @@ type Meta interface {
 	// nil receiver may return a temporary initialized state.
 	EnsureClaudeConvertInfo() *ClaudeConvertInfo
 
+	// ResponsesToolState records the custom tools encoded by the current
+	// attempt. Retries must clear it before selecting another upstream.
+	ResponsesToolState() *ResponsesToolState
+	SetResponsesToolState(state *ResponsesToolState)
+
 	// GetSendResponseCount / IncrSendResponseCount expose the shared
 	// downstream-chunk counter (the host may also increment it).
 	GetSendResponseCount() int
@@ -85,6 +90,20 @@ type ClaudeStreamToolCall struct {
 	Started          bool
 }
 
+type ResponsesToolState struct {
+	CustomToolNames map[string]struct{}
+}
+
+const CustomToolInputArgument = "input"
+
+func (s *ResponsesToolState) IsCustomTool(name string) bool {
+	if s == nil {
+		return false
+	}
+	_, ok := s.CustomToolNames[name]
+	return ok
+}
+
 type GeminiToolCall struct {
 	ID        string
 	Name      string
@@ -120,6 +139,7 @@ type Values struct {
 	EstimatePromptTokens int
 
 	ClaudeConvertInfo *ClaudeConvertInfo
+	ResponsesTools    *ResponsesToolState
 	SendResponseCount int
 	ConversionChain   []types.RelayFormat
 
@@ -201,6 +221,19 @@ func (v *Values) EnsureClaudeConvertInfo() *ClaudeConvertInfo {
 	return v.ClaudeConvertInfo
 }
 
+func (v *Values) ResponsesToolState() *ResponsesToolState {
+	if v == nil {
+		return nil
+	}
+	return v.ResponsesTools
+}
+
+func (v *Values) SetResponsesToolState(state *ResponsesToolState) {
+	if v != nil {
+		v.ResponsesTools = state
+	}
+}
+
 func (v *Values) EnsureGeminiConvertInfo() *GeminiConvertInfo {
 	if v == nil {
 		return &GeminiConvertInfo{}
@@ -267,6 +300,13 @@ func OptionsOf(m Meta) *Options {
 		return &Options{}
 	}
 	return m.ConvOptions()
+}
+
+func ResponsesToolStateOf(m Meta) *ResponsesToolState {
+	if m == nil {
+		return nil
+	}
+	return m.ResponsesToolState()
 }
 
 // ReasoningStateOf is a nil-safe reader for Meta.ReasoningState.

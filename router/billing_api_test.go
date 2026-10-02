@@ -19,10 +19,11 @@ func TestBillingAPIOwnerIsolationAndRetiredReconciliation(t *testing.T) {
 	previousMemory := common.MemoryCacheEnabled
 	common.MemoryCacheEnabled = false
 	t.Cleanup(func() { common.MemoryCacheEnabled = previousMemory })
+	access := map[int]string{}
 	for index, role := range []int{common.RoleCommonUser, common.RoleAdminUser, common.RoleRootUser} {
 		name := fmt.Sprintf("billing-role-%d", index+1)
-		pat := name + "-pat"
-		require.NoError(t, model.DB.Create(&model.User{Id: index + 1, Username: name, AffCode: name, Role: role, Status: common.UserStatusEnabled, AccessToken: &pat, Quota: 100}).Error)
+		require.NoError(t, model.DB.Create(&model.User{Id: index + 1, Username: name, AffCode: name, Role: role, Status: common.UserStatusEnabled, Quota: 100}).Error)
+		access[index+1] = createRouterBrowserSession(t, index+1)
 		_, err := model.EnsureBillingRecovery(model.BillingRecoveryInput{RequestID: name, UserID: index + 1, Source: "wallet"})
 		require.NoError(t, err)
 		require.NoError(t, model.Reserve(name, 20))
@@ -33,7 +34,7 @@ func TestBillingAPIOwnerIsolationAndRetiredReconciliation(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(method, path, strings.NewReader(body))
 		if actor > 0 {
-			request.Header.Set("Authorization", fmt.Sprintf("Bearer billing-role-%d-pat", actor))
+			request.Header.Set("Authorization", "Bearer "+access[actor])
 		}
 		request.Header.Set("Content-Type", "application/json")
 		engine.ServeHTTP(recorder, request)

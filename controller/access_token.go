@@ -1,69 +1,194 @@
 package controller
 
 import (
+	"encoding/json"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
 
-func GetAccessTokenStatus(c *gin.Context) {
-	status, err := model.GetUserAccessTokenStatus(c.GetInt("id"))
+func GetPersonalAccessTokenScopes(c *gin.Context) {
+	var owner model.User
+	if err := model.DB.Select("id", "role").First(&owner, c.GetInt("id")).Error; err != nil {
+		writeSecurityOperationError(c, err)
+		return
+	}
+	scopes := make([]string, 0, len(model.PATScopeRoles))
+	for scope := range model.PATScopeRoles {
+		allowed, err := service.CheckPATScope(owner.Id, owner.Role, scope)
+		if err != nil {
+			writeSecurityOperationError(c, err)
+			return
+		}
+		if allowed {
+			scopes = append(scopes, scope)
+		}
+	}
+	slices.Sort(scopes)
+	common.ApiSuccess(c, gin.H{"scopes": scopes, "limit": model.PersonalAccessTokenLimit, "default_lifetime_days": 30})
+}
+
+func UpdatePersonalAccessToken(c *gin.Context) {
+	identity, ok := middleware.GetSessionAuthIdentity(c)
+	if !ok {
+		writeSecurityOperationError(c, model.ErrPATInvalid)
+		return
+	}
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		writeSecurityOperationError(c, model.ErrPATNotFound)
+		return
+	}
+	var fields map[string]json.RawMessage
+	if common.DecodeJson(c.Request.Body, &fields) != nil || len(fields) < 1 || len(fields) > 2 {
+		writeSecurityOperationError(c, model.ErrPATInput)
+		return
+	}
+	for key := range fields {
+		if key != "name" && key != "scopes" {
+			writeSecurityOperationError(c, model.ErrPATInput)
+			return
+		}
+	}
+	var name *string
+	if raw, supplied := fields["name"]; supplied {
+		var value string
+		if common.Unmarshal(raw, &value) != nil {
+			writeSecurityOperationError(c, model.ErrPATInput)
+			return
+		}
+		value, err = model.NormalizePATName(value)
+		if err != nil {
+			writeSecurityOperationError(c, err)
+			return
+		}
+		name = &value
+	}
+	if _, err := model.GetActivePersonalAccessToken(identity.UserID, id); err != nil {
+		writeSecurityOperationError(c, err)
+		return
+	}
+	var scopes []string
+	if raw, supplied := fields["scopes"]; supplied {
+		if common.Unmarshal(raw, &scopes) != nil {
+			writeSecurityOperationError(c, model.ErrPATInput)
+			return
+		}
+		scopes, err = model.NormalizePATScopes(scopes, c.GetInt("role"))
+		if err != nil {
+			writeSecurityOperationError(c, err)
+			return
+		}
+		for _, scope := range scopes {
+			allowed, err := service.CheckPATScope(identity.UserID, c.GetInt("role"), scope)
+			if err != nil {
+				writeSecurityOperationError(c, err)
+				return
+			}
+			if !allowed {
+				writeSecurityOperationError(c, service.ErrVerificationForbidden)
+				return
+			}
+		}
+		context, err := common.Marshal(service.PATUpdateContext{ID: id, Scopes: scopes})
+		if err != nil {
+			writeSecurityOperationError(c, err)
+			return
+		}
+		authorization := middleware.RequireSecurityProof(c, service.VerificationOperation{Scope: service.VerificationScopePATUpdate, Context: context})
+		if authorization == nil {
+			return
+		}
+		identity = authorization.AuthSessionIdentity
+	}
+	token, err := model.UpdatePersonalAccessToken(identity, id, name, scopes, service.ValidatePATScopesWithTx)
 	if err != nil {
 		writeSecurityOperationError(c, err)
 		return
 	}
-	common.ApiSuccess(c, status)
+	action := "pat.rename"
+	if scopes != nil {
+		action = "pat.update"
+	}
+	recordUserSecurityAudit(c, identity.UserID, action, map[string]any{"pat_id": id})
+	common.ApiSuccess(c, token)
 }
 
-func GenerateAccessToken(c *gin.Context) {
-	authorization := middleware.RequireSecurityProof(c, service.VerificationOperation{Scope: service.VerificationScopeAccessTokenGenerate})
+func ListPersonalAccessTokens(c *gin.Context) {
+	items, err := model.ListPersonalAccessTokens(c.GetInt("id"))
+	if err != nil {
+		writeSecurityOperationError(c, err)
+		return
+	}
+	common.ApiSuccess(c, items)
+}
+
+func CreatePersonalAccessToken(c *gin.Context) {
+	var request struct {
+		Name      string   `json:"name"`
+		Scopes    []string `json:"scopes"`
+		ExpiresAt int64    `json:"expires_at"`
+	}
+	if common.DecodeJson(c.Request.Body, &request) != nil {
+		common.ApiErrorMsg(c, "Invalid personal access token input")
+		return
+	}
+	if _, _, _, err := model.NormalizePATInput(request.Name, request.Scopes, request.ExpiresAt, c.GetInt("role")); err != nil {
+		writeSecurityOperationError(c, err)
+		return
+	}
+	for _, scope := range request.Scopes {
+		allowed, err := service.CheckPATScope(c.GetInt("id"), c.GetInt("role"), scope)
+		if err != nil {
+			writeSecurityOperationError(c, err)
+			return
+		}
+		if !allowed {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": "PAT_SCOPE_DENIED", "message": "Scope exceeds current permissions."})
+			return
+		}
+	}
+	authorization := middleware.RequireSecurityProof(c, service.VerificationOperation{Scope: service.VerificationScopePATCreate})
 	if authorization == nil {
 		return
 	}
-	id := c.GetInt("id")
-	key, err := common.GenerateRandomCharsKey(32)
+	token, raw, err := model.CreatePersonalAccessToken(authorization.AuthSessionIdentity, request.Name, request.Scopes, request.ExpiresAt, service.ValidatePATScopesWithTx)
 	if err != nil {
 		writeSecurityOperationError(c, err)
 		return
 	}
-	var existing int64
-	if err := model.DB.Model(&model.User{}).Where("access_token = ?", key).Count(&existing).Error; err != nil {
-		writeSecurityOperationError(c, err)
-		return
-	}
-	if existing != 0 {
-		common.ApiErrorI18n(c, i18n.MsgUuidDuplicate)
-		return
-	}
-	if _, err := model.ChangeAccessTokenForSession(authorization.AuthSessionIdentity, &key); err != nil {
-		writeSecurityOperationError(c, err)
-		return
-	}
-	recordUserSecurityAudit(c, id, "access_token.generate", map[string]any{"token_ref": model.AccessTokenFingerprint(key)})
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": key})
+	recordUserSecurityAudit(c, c.GetInt("id"), "pat.create", map[string]any{"pat_id": token.ID})
+	common.ApiSuccess(c, gin.H{"token": raw, "personal_access_token": token})
 }
 
-func RevokeAccessToken(c *gin.Context) {
-	authorization := middleware.RequireSecurityProof(c, service.VerificationOperation{Scope: service.VerificationScopeAccessTokenRevoke})
+func RevokePersonalAccessToken(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		common.ApiErrorMsg(c, "Invalid personal access token ID")
+		return
+	}
+	context, err := common.Marshal(gin.H{"id": id})
+	if err != nil {
+		writeSecurityOperationError(c, err)
+		return
+	}
+	authorization := middleware.RequireSecurityProof(c, service.VerificationOperation{Scope: service.VerificationScopePATRevoke, Context: context})
 	if authorization == nil {
 		return
 	}
-	ref, err := model.ChangeAccessTokenForSession(authorization.AuthSessionIdentity, nil)
-	if err != nil {
+	if err := model.RevokePersonalAccessToken(authorization.AuthSessionIdentity, id); err != nil {
 		writeSecurityOperationError(c, err)
 		return
 	}
-	if ref != "" {
-		recordUserSecurityAudit(c, c.GetInt("id"), "access_token.revoke", map[string]any{"token_ref": ref})
-	}
+	recordUserSecurityAudit(c, c.GetInt("id"), "pat.revoke", map[string]any{"pat_id": id})
 	common.ApiSuccess(c, nil)
 }
 

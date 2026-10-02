@@ -287,20 +287,6 @@ func AddToken(c *gin.Context) {
 			return
 		}
 	}
-	// 检查用户令牌数量是否已达上限
-	maxTokens := operation_setting.GetMaxUserTokens()
-	count, err := model.CountUserTokens(c.GetInt("id"))
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	if int(count) >= maxTokens {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": fmt.Sprintf("已达到最大令牌数量限制 (%d)", maxTokens),
-		})
-		return
-	}
 	key, err := common.GenerateKey()
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgTokenGenerateFailed)
@@ -330,6 +316,14 @@ func AddToken(c *gin.Context) {
 	}
 	err = cleanToken.InsertWithRouteMode(mode)
 	if err != nil {
+		if errors.Is(err, model.ErrTokenCountLimit) {
+			c.JSON(http.StatusOK, gin.H{"success": false, "code": "TOKEN_COUNT_LIMIT", "message": fmt.Sprintf("已达到最大令牌数量限制 (%d)", operation_setting.GetMaxUserTokens())})
+			return
+		}
+		if errors.Is(err, model.ErrTokenCreationRateLimit) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"success": false, "code": "TOKEN_CREATION_RATE_LIMIT", "message": "令牌创建过于频繁，请稍后重试"})
+			return
+		}
 		if errors.Is(err, model.ErrBillingEventConflict) || errors.Is(err, model.ErrBillingVersionConflict) {
 			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
 			return

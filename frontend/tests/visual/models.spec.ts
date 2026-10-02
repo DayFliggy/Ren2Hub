@@ -76,7 +76,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.goto('/models', { waitUntil: 'domcontentloaded' })
     await waitForStablePage(page)
 
-    await page.getByRole('button', { name: '列表视图' }).click()
+    await page.getByRole('radio', { name: '列表视图' }).click()
     await expect(page.locator('[data-model-cache-prices]')).toHaveCount(0)
     await expect(page.locator('[data-model-card]')).toHaveCount(3)
     await assertNoHorizontalOverflow(page)

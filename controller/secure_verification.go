@@ -21,7 +21,10 @@ import (
 )
 
 func GetVerificationMethods(c *gin.Context) {
-	identity, ok := middleware.GetSessionAuthIdentity(c)
+	identity, ok := middleware.GetAuthIdentity(c)
+	if !ok {
+		identity, ok = middleware.GetSessionAuthIdentity(c)
+	}
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": "当前认证方式不支持安全验证"})
 		return
@@ -41,6 +44,14 @@ func writeSecurityOperationError(c *gin.Context, err error) {
 	var code, message string
 	var protocolError *protocol.Error
 	switch {
+	case errors.Is(err, model.ErrPATInput):
+		status, code, message = http.StatusBadRequest, "PAT_INPUT_INVALID", err.Error()
+	case errors.Is(err, model.ErrPATLimit):
+		status, code, message = http.StatusTooManyRequests, "PAT_LIMIT_REACHED", err.Error()
+	case errors.Is(err, model.ErrPATNotFound):
+		status, code, message = http.StatusNotFound, "PAT_NOT_FOUND", err.Error()
+	case errors.Is(err, model.ErrPATInvalid):
+		status, code, message = http.StatusForbidden, "PAT_INVALID", err.Error()
 	case errors.Is(err, passkeysvc.ErrRPIDUnavailable):
 		code, message = "PASSKEY_RP_ID_UNAVAILABLE", i18n.T(c, i18n.MsgPasskeyRPIDUnavailable)
 	case errors.Is(err, system_setting.ErrPasskeyRPIDInvalid):
@@ -136,7 +147,10 @@ func writeSecurityOperationError(c *gin.Context, err error) {
 }
 
 func UniversalVerify(c *gin.Context) {
-	identity, ok := middleware.GetSessionAuthIdentity(c)
+	identity, ok := middleware.GetAuthIdentity(c)
+	if !ok {
+		identity, ok = middleware.GetSessionAuthIdentity(c)
+	}
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": "当前认证方式不支持安全验证"})
 		return

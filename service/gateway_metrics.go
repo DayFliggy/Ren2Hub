@@ -53,6 +53,7 @@ func gatewayQueueCounter(resourceKey string) *gatewayQueueCounters {
 
 type GatewayMetricsSnapshot struct {
 	RouteDecisionEventsDropped uint64                       `json:"route_decision_events_dropped_total"`
+	RouteDecisionStorageFailed uint64                       `json:"route_decision_storage_failed_total"`
 	SchemaVersion              int                          `json:"schema_version"`
 	Admission                  AdmissionMetrics             `json:"admission"`
 	RetryBudget                RetryBudgetSnapshot          `json:"retry_budget"`
@@ -78,6 +79,7 @@ func ReadGatewayMetrics(ctx context.Context) (GatewayMetricsSnapshot, error) {
 	}
 	return GatewayMetricsSnapshot{
 		RouteDecisionEventsDropped: RouteDecisionEventsDropped(),
+		RouteDecisionStorageFailed: RouteDecisionStorageFailures(),
 		CounterScope:               "instance", StartedAt: gatewayMetrics.startedAt,
 		Maintenance: ReadAttemptMaintenanceMetrics(),
 		UserQueue:   gatewayMetrics.user.snapshot(), ChannelQueue: gatewayMetrics.channel.snapshot(),

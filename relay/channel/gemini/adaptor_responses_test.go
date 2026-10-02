@@ -103,7 +103,7 @@ func TestConvertOpenAIResponsesRequestToGeminiFunctionCallConversation(t *testin
 	assert.Equal(t, map[string]interface{}{"ok": true}, got.Contents[1].Parts[0].FunctionResponse.Response)
 }
 
-func TestConvertOpenAIResponsesRequestToGeminiRejectsCustomToolLoss(t *testing.T) {
+func TestConvertOpenAIResponsesRequestToGeminiPreservesCustomToolsAndRejectsUnknown(t *testing.T) {
 	request := dto.OpenAIResponsesRequest{
 		Model: "gemini-test",
 		Input: mustGeminiRawMessage(t, []map[string]any{
@@ -145,7 +145,17 @@ func TestConvertOpenAIResponsesRequestToGeminiRejectsCustomToolLoss(t *testing.T
 	require.ErrorAs(t, err, &loss)
 	assert.Nil(t, converted)
 	require.NotEmpty(t, info.ConversionDiagnostics)
-	assert.Contains(t, loss.Error(), "Gemini cannot preserve free-form tool execution")
+	assert.Contains(t, loss.Error(), "opaque tool")
+	request.Tools = mustGeminiRawMessage(t, []map[string]any{{"type": "custom", "name": "apply_patch"}})
+	converted, err = (&Adaptor{}).ConvertOpenAIResponsesRequest(nil, info, request)
+	require.NoError(t, err)
+	geminiRequest := converted.(*dto.GeminiChatRequest)
+	require.Len(t, geminiRequest.Contents[0].Parts, 2)
+	call := geminiRequest.Contents[0].Parts[0].FunctionCall
+	require.NotNil(t, call)
+	assert.Equal(t, "apply_patch", call.FunctionName)
+	assert.Equal(t, map[string]any{"input": "patch body"}, call.Arguments)
+	assert.True(t, info.ResponsesToolState().IsCustomTool("apply_patch"))
 }
 
 func mustConvertResponsesToGemini(t *testing.T, req dto.OpenAIResponsesRequest) *dto.GeminiChatRequest {

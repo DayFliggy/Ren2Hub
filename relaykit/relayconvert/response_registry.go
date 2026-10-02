@@ -618,7 +618,7 @@ func executeResponseSteps(c context.Context, info convmeta.Meta, from types.Rela
 			out.Output = nil
 			for _, block := range source.Content {
 				chat := ResponseClaude2OpenAI(&dto.ClaudeResponse{Content: []dto.ClaudeMediaMessage{block}, StopReason: "end_turn"})
-				converted, _, err := ChatCompletionsResponseToResponsesResponse(chat, out.ID)
+				converted, _, err := oaichat.ChatCompletionsResponseToResponsesResponseWithTools(chat, out.ID, convmeta.ResponsesToolStateOf(info))
 				if err != nil {
 					return nil, err
 				}
@@ -1039,7 +1039,7 @@ func usageFromClaudeResponse(resp *dto.ClaudeResponse) *dto.Usage {
 	return nil
 }
 
-func convertOAIChatResponseToOAIResponses(_ context.Context, _ convmeta.Meta, response any) (any, *dto.Usage, error) {
+func convertOAIChatResponseToOAIResponses(_ context.Context, info convmeta.Meta, response any) (any, *dto.Usage, error) {
 	chatResponse, err := asOAIChatResponse(response)
 	if err != nil {
 		return nil, nil, err
@@ -1053,7 +1053,7 @@ func convertOAIChatResponseToOAIResponses(_ context.Context, _ convmeta.Meta, re
 	if id == "" {
 		id = fmt.Sprintf("resp_%s", kitutil.GetUUID())
 	}
-	return ChatCompletionsResponseToResponsesResponse(chatResponse, id)
+	return oaichat.ChatCompletionsResponseToResponsesResponseWithTools(chatResponse, id, convmeta.ResponsesToolStateOf(info))
 }
 
 func convertOAIResponsesResponseToOAIChat(_ context.Context, _ convmeta.Meta, response any) (any, *dto.Usage, error) {
@@ -1089,7 +1089,7 @@ func newOAIChatToOAIResponsesStreamState(options ResponseStreamOptions) any {
 	return state
 }
 
-func convertOAIChatStreamResponseToOAIResponses(_ context.Context, _ convmeta.Meta, response any, state any) ([]any, *dto.Usage, error) {
+func convertOAIChatStreamResponseToOAIResponses(_ context.Context, info convmeta.Meta, response any, state any) ([]any, *dto.Usage, error) {
 	chatResponse, err := asOAIChatStreamResponse(response)
 	if err != nil {
 		return nil, nil, err
@@ -1102,6 +1102,9 @@ func convertOAIChatStreamResponseToOAIResponses(_ context.Context, _ convmeta.Me
 	streamState, ok := state.(*ChatToResponsesStreamState)
 	if !ok || streamState == nil {
 		return nil, nil, errors.New("OAI chat to OAI responses stream state is required")
+	}
+	if streamState.Tools == nil {
+		streamState.Tools = convmeta.ResponsesToolStateOf(info)
 	}
 	events, err := ChatCompletionsStreamChunkToResponsesEvents(chatResponse, streamState)
 	if err != nil {
@@ -1116,6 +1119,9 @@ func finalizeOAIChatStreamResponseToOAIResponses(_ context.Context, _ convmeta.M
 		return nil, nil, errors.New("OAI chat to OAI responses stream state is required")
 	}
 	events := FinalizeChatCompletionsStreamToResponses(streamState)
+	if err := streamState.ConversionError(); err != nil {
+		return nil, streamState.Usage, err
+	}
 	return streamValuesFromAny(events), streamState.Usage, nil
 }
 

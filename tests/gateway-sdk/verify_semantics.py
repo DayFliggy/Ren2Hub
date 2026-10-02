@@ -2,6 +2,7 @@ import base64
 import copy
 import json
 import os
+import re
 import time
 import urllib.request
 
@@ -29,6 +30,11 @@ counts = {}
 def observe():
     with urllib.request.urlopen(os.environ["GATEWAY_SEMANTIC_OBSERVER"], timeout=3) as response:
         return json.load(response)
+
+
+def quota_after_charge(value, charge):
+    assert isinstance(value, str) and re.fullmatch(r"0|-?[1-9]\d*", value), "quota must use the decimal string wire contract"
+    return str(int(value) - charge)
 
 
 def request_for(test):
@@ -124,7 +130,7 @@ for test in cases:
     else:
         assert not test["reject"], f"{test['label']}: rejected semantic request succeeded"
     charge = 0 if test["reject"] else 500
-    expected = {"sends": before["sends"] + int(not test["reject"]), "quota": before["quota"] - charge, "token": before["token"] - charge, "logs": before["logs"] + int(not test["reject"]), "billing_sessions": before["billing_sessions"] + int(not test["reject"])}
+    expected = {"sends": before["sends"] + int(not test["reject"]), "quota": quota_after_charge(before["quota"], charge), "token": quota_after_charge(before["token"], charge), "logs": before["logs"] + int(not test["reject"]), "billing_sessions": before["billing_sessions"] + int(not test["reject"])}
     deadline = time.monotonic() + 2
     after = observe()
     while after != expected and time.monotonic() < deadline:

@@ -2,24 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { authApi } from '@/api/auth'
 import { api } from '@/api/client'
-import { parseAccessToken, parseLoginSessions } from '@/api/contracts'
+import { parseLoginSessions } from '@/api/contracts'
 import { ApiError } from '@/api/types'
 
 beforeEach(() => vi.restoreAllMocks())
 
 describe('account security API', () => {
-  it('generates an access token and validates the one-time string response', async () => {
-    const post = vi.spyOn(api, 'post').mockResolvedValue('secret-token')
-
-    await expect(authApi.generateAccessToken('one-use-proof')).resolves.toBe(
-      'secret-token'
-    )
-    expect(post).toHaveBeenCalledWith('/api/user/token', undefined, {
-      headers: { 'X-Security-Proof': 'one-use-proof' },
-    })
-    expect(() => parseAccessToken('')).toThrow(ApiError)
-  })
-
   it('loads and revokes login sessions with encoded session ids', async () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue([
       {

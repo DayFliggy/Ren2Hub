@@ -90,13 +90,6 @@ export function parseStringArray(value: unknown, endpoint: string): string[] {
   return [...value]
 }
 
-export function parseAccessToken(
-  value: unknown,
-  endpoint = '/api/user/token'
-): string {
-  return requiredString(value, endpoint, false)
-}
-
 export function parseLoginSession(
   value: unknown,
   endpoint = '/api/user/sessions'

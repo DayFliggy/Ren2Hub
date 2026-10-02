@@ -559,7 +559,7 @@ func (a *TaskAdaptor) ParseResponse(c *gin.Context, resp *http.Response, info *r
 	ctx, err := a.queryContext(task, info.ApiKey, info.ChannelBaseUrl, info.ChannelSetting.Proxy)
 	if err != nil {
 		immediate.UsageError = "plugin completion usage context unavailable"
-		logger.LogWarn(c, fmt.Sprintf("task plugin %s completion context failed; retaining reserved quota: %v", a.plugin.Meta.Key, err))
+		logger.LogWarn(c, fmt.Sprintf("task plugin %s completion context failed; using the frozen estimate", a.plugin.Meta.Key))
 		return response, nil
 	}
 	usageContext, err := exactQueryContext(ctx, task)
@@ -572,11 +572,11 @@ func (a *TaskAdaptor) ParseResponse(c *gin.Context, resp *http.Response, info *r
 	}
 	if err != nil {
 		immediate.UsageError = "plugin completion usage hook failed"
-		logger.LogWarn(c, fmt.Sprintf("task plugin %s completion usage failed; retaining reserved quota: %v", a.plugin.Meta.Key, err))
+		logger.LogWarn(c, fmt.Sprintf("task plugin %s completion usage failed; using the frozen estimate", a.plugin.Meta.Key))
 		return response, nil
 	}
 	if err := a.applyCompletionUsageFacts(immediate, facts, info.UpstreamModelName, info.OriginModelName); err != nil {
-		logger.LogWarn(c, fmt.Sprintf("task plugin %s completion usage rejected; retaining reserved quota: %v", a.plugin.Meta.Key, err))
+		logger.LogWarn(c, fmt.Sprintf("task plugin %s completion usage rejected; using the frozen estimate", a.plugin.Meta.Key))
 	}
 	return response, nil
 }
@@ -1393,7 +1393,7 @@ func (a *TaskAdaptor) submitContext(c *gin.Context, info *relaycommon.RelayInfo)
 }
 
 func (a *TaskAdaptor) validateResolvedUsageRequest(request any, models ...string) error {
-	schema, _ := a.plugin.Meta.UsageForModels(models...)
+	schema := a.plugin.Meta.UsageFactsForModels(models...)
 	value, err := usageRequestValue(request)
 	if err != nil {
 		return err

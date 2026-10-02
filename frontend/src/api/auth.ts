@@ -12,7 +12,6 @@ import type {
 
 import { api } from './client'
 import {
-  parseAccessToken,
   parseLoginSessionBulkRevokeResult,
   parseLoginSessionRevokeResult,
   parseLoginSessions,
@@ -158,11 +157,6 @@ export const authApi = {
       proofOptions(proof)
     )
     return parseAuthRotation(value) ?? invalidAuthResponse('/api/user/self')
-  },
-  async generateAccessToken(proof: string): Promise<string> {
-    return parseAccessToken(
-      await api.post<unknown>('/api/user/token', undefined, proofOptions(proof))
-    )
   },
   async getLoginSessions(): Promise<LoginSession[]> {
     return parseLoginSessions(await api.get<unknown>('/api/user/sessions'))

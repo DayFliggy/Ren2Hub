@@ -19,11 +19,12 @@ func TestGmpayRoutesEnforceAuthenticationAndRootConfiguration(t *testing.T) {
 	previousMemory := common.MemoryCacheEnabled
 	common.MemoryCacheEnabled = false
 	t.Cleanup(func() { common.MemoryCacheEnabled = previousMemory })
+	access := map[int]string{}
 	for _, role := range []int{common.RoleCommonUser, common.RoleAdminUser, common.RoleRootUser} {
 		name := fmt.Sprintf("gmpay-role-%d", role)
-		pat := name + "-pat"
-		require.NoError(t, model.DB.Create(&model.User{Username: name, AffCode: name, Role: role,
-			Status: common.UserStatusEnabled, AccessToken: &pat}).Error)
+		user := model.User{Username: name, AffCode: name, Role: role, Status: common.UserStatusEnabled}
+		require.NoError(t, model.DB.Create(&user).Error)
+		access[role] = createRouterBrowserSession(t, user.Id)
 	}
 	engine := gin.New()
 	SetApiRouter(engine)
@@ -32,7 +33,7 @@ func TestGmpayRoutesEnforceAuthenticationAndRootConfiguration(t *testing.T) {
 		request := httptest.NewRequest(method, path, strings.NewReader(body))
 		request.Header.Set("Content-Type", "application/json")
 		if role != 0 {
-			request.Header.Set("Authorization", fmt.Sprintf("Bearer gmpay-role-%d-pat", role))
+			request.Header.Set("Authorization", "Bearer "+access[role])
 		}
 		engine.ServeHTTP(recorder, request)
 		return recorder

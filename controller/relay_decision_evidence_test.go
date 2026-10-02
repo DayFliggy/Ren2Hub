@@ -97,7 +97,7 @@ func TestRouteAttemptEvidenceExcludesUnsentAndProviderText(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 	selection := service.LiveRouteSelection{Source: service.RouteSourceAutoLab, Decision: service.NewRouteDecision(t.Name(), service.RouteSourceAutoLab, "test-model", 0)}
 	c.Set("route_live_selection", selection)
-	info := &relaycommon.RelayInfo{UpstreamSent: true}
+	info := &relaycommon.RelayInfo{UpstreamSent: true, RequestId: "evidence-request"}
 	beginLiveRouteUpstreamAttempt(c, 11)
 	observeLiveRouteAttempt(c, info, service.AttemptOutcome{
 		Origin: service.AttemptOriginProvider, StatusCode: http.StatusServiceUnavailable,
@@ -123,15 +123,19 @@ func TestRouteAttemptEvidenceExcludesUnsentAndProviderText(t *testing.T) {
 	case decision := <-capture.events:
 		require.Len(t, decision.Attempts, 2)
 		assert.Equal(t, service.RouteDecisionAttempt{
+			AttemptID: "evidence-request:1", FinishedAt: decision.Attempts[0].FinishedAt,
 			Sequence: 1, ChannelID: 11, ErrorClass: service.RouteErrorTransient,
 			ErrorHTTPStatus: http.StatusServiceUnavailable, Origin: service.AttemptOriginProvider,
 			LatencyMS: 25, Acceptance: service.AttemptAcceptanceUnknown, RetryPermission: service.AttemptRetryPolicy,
 		}, decision.Attempts[0])
 		assert.Equal(t, service.RouteDecisionAttempt{
+			AttemptID: "evidence-request:2", FinishedAt: decision.Attempts[1].FinishedAt,
 			Sequence: 2, ChannelID: 12, Success: true, Origin: service.AttemptOriginProvider,
 			LatencyMS: 12, Acceptance: service.AttemptAccepted, RetryPermission: service.AttemptRetryPolicy,
 			ResponseCommitted: true,
 		}, decision.Attempts[1])
+		assert.Positive(t, decision.Attempts[0].FinishedAt)
+		assert.GreaterOrEqual(t, decision.Attempts[1].FinishedAt, decision.Attempts[0].FinishedAt)
 		encoded, err := common.Marshal(decision)
 		require.NoError(t, err)
 		assert.NotContains(t, string(encoded), "private-provider")

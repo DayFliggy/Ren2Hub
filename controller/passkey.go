@@ -470,7 +470,10 @@ func AdminResetPasskey(c *gin.Context) {
 		return
 	}
 
-	if err := model.DeletePasskeyByUserIDWithAuthVersion(user.Id); err != nil {
+	if requireAdminUserProof(c, "reset_passkey", user.Id) == nil {
+		return
+	}
+	if err := model.DeletePasskeyByUserIDWithAuthVersion(user.Id, adminUserAuthorization(c)...); err != nil {
 		writeSecurityOperationError(c, err)
 		return
 	}
@@ -513,7 +516,10 @@ func PasskeyVerifyBegin(c *gin.Context) {
 		writeSecurityOperationError(c, err)
 		return
 	}
-	identity, ok := middleware.GetSessionAuthIdentity(c)
+	identity, ok := middleware.GetAuthIdentity(c)
+	if !ok {
+		identity, ok = middleware.GetSessionAuthIdentity(c)
+	}
 	if !ok {
 		writeSecurityOperationError(c, service.ErrAuthTokenInvalid)
 		return
@@ -606,7 +612,10 @@ func PasskeyVerifyFinish(c *gin.Context) {
 		return
 	}
 
-	identity, ok := middleware.GetSessionAuthIdentity(c)
+	identity, ok := middleware.GetAuthIdentity(c)
+	if !ok {
+		identity, ok = middleware.GetSessionAuthIdentity(c)
+	}
 	if !ok {
 		common.ApiErrorMsg(c, "当前认证方式不支持安全验证")
 		return

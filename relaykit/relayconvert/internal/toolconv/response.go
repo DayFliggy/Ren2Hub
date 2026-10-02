@@ -20,6 +20,14 @@ func InspectResponse(from types.RelayFormat, to types.RelayFormat, response any)
 	}
 	var diagnostics []types.ConversionDiagnostic
 	switch value := response.(type) {
+	case *dto.OpenAITextResponse:
+		diagnostics = inspectChatResponse(value)
+	case dto.OpenAITextResponse:
+		diagnostics = inspectChatResponse(&value)
+	case *dto.ChatCompletionsStreamResponse:
+		diagnostics = inspectChatStreamResponse(value)
+	case dto.ChatCompletionsStreamResponse:
+		diagnostics = inspectChatStreamResponse(&value)
 	case *dto.ClaudeResponse:
 		diagnostics = inspectClaudeResponse(value, to)
 	case dto.ClaudeResponse:
@@ -40,6 +48,45 @@ func InspectResponse(from types.RelayFormat, to types.RelayFormat, response any)
 	for index := range diagnostics {
 		diagnostics[index].From = from
 		diagnostics[index].To = to
+	}
+	return diagnostics
+}
+
+func inspectChatResponse(response *dto.OpenAITextResponse) []types.ConversionDiagnostic {
+	if response == nil {
+		return nil
+	}
+	var diagnostics []types.ConversionDiagnostic
+	for index, choice := range response.Choices {
+		diagnostics = append(diagnostics, inspectChatOutputFields(fmt.Sprintf("choices[%d].message", index), choice.Message.Refusal, choice.Message.Audio)...)
+		if rawJSONPresent(choice.Logprobs) {
+			diagnostics = append(diagnostics, responsePresentationLoss(fmt.Sprintf("choices[%d].logprobs", index), "chat_logprobs_not_portable", "conversion cannot preserve Chat log probabilities"))
+		}
+	}
+	return diagnostics
+}
+
+func inspectChatStreamResponse(response *dto.ChatCompletionsStreamResponse) []types.ConversionDiagnostic {
+	if response == nil {
+		return nil
+	}
+	var diagnostics []types.ConversionDiagnostic
+	for index, choice := range response.Choices {
+		diagnostics = append(diagnostics, inspectChatOutputFields(fmt.Sprintf("choices[%d].delta", index), choice.Delta.Refusal, choice.Delta.Audio)...)
+		if choice.Logprobs != nil && *choice.Logprobs != nil {
+			diagnostics = append(diagnostics, responsePresentationLoss(fmt.Sprintf("choices[%d].logprobs", index), "chat_logprobs_not_portable", "conversion cannot preserve Chat log probabilities"))
+		}
+	}
+	return diagnostics
+}
+
+func inspectChatOutputFields(path string, refusal *string, audio json.RawMessage) []types.ConversionDiagnostic {
+	var diagnostics []types.ConversionDiagnostic
+	if refusal != nil {
+		diagnostics = append(diagnostics, responseSemanticLoss(path+".refusal", "chat_refusal_not_portable", "conversion cannot preserve Chat refusal output"))
+	}
+	if rawJSONPresent(audio) {
+		diagnostics = append(diagnostics, responseSemanticLoss(path+".audio", "chat_audio_not_portable", "conversion cannot preserve Chat audio output"))
 	}
 	return diagnostics
 }

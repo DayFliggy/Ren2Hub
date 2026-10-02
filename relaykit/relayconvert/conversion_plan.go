@@ -207,9 +207,6 @@ func PlanConversion(req RequestRequirements, target types.RelayFormat, policy ty
 		return plan, types.RejectConversionLoss(policy, plan.Diagnostics)
 	}
 	for _, tool := range req.Tools {
-		if target == types.RelayFormatGemini && (tool.Type == "custom" || tool.Type == "custom_history") {
-			plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "unsupported_tool_semantics", Path: tool.Path, Message: "Gemini cannot preserve free-form tool execution", Severity: types.ConversionDiagnosticError, From: req.Format, To: target})
-		}
 		if tool.Type == "namespace" {
 			plan.Diagnostics = append(plan.Diagnostics, types.ConversionDiagnostic{Code: "unsupported_tool_semantics", Path: tool.Path, Message: "cannot preserve tool namespace and its configuration", Severity: types.ConversionDiagnosticError, From: req.Format, To: target})
 		}
@@ -272,6 +269,9 @@ func PlanConversion(req RequestRequirements, target types.RelayFormat, policy ty
 // ExecuteConversionPlan verifies the concrete DTO still satisfies the selected
 // plan. It never silently chooses a different converter or weaker policy.
 func ExecuteConversionPlan(ctx context.Context, meta convmeta.Meta, plan ConversionPlan, request any) (*RequestResult, error) {
+	if meta != nil {
+		meta.SetResponsesToolState(nil)
+	}
 	if err := types.RejectConversionLoss(plan.Policy, plan.Diagnostics); err != nil {
 		return &RequestResult{Diagnostics: plan.Diagnostics}, err
 	}
@@ -392,6 +392,12 @@ func (r *RequestRequirements) inspectTools(payload map[string]any) error {
 			continue
 		}
 		kind, _ := tool["type"].(string)
+		if r.Format == types.RelayFormatOpenAIResponses && kind == "custom" {
+			format, _ := tool["format"].(map[string]any)
+			if len(format) > 0 && format["type"] != "text" {
+				r.projectionLoss("custom_tool_grammar_not_portable", path+".format", "conversion cannot enforce the custom tool input format; it is retained only as a description hint", "")
+			}
+		}
 		if kind == "" && r.Format == types.RelayFormatClaude {
 			kind = "function"
 		}

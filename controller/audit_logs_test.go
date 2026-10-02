@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -81,7 +82,9 @@ func TestAuditReadStripsCredentialParams(t *testing.T) {
 }
 
 func TestSystemRewardAuditBelongsToRecipient(t *testing.T) {
-	admin, pat := setupAccessTokenAudit(t)
+	admin, _ := setupAccessTokenAudit(t)
+	session, err := service.CreateLoginSession(admin.Id, "password", "127.0.0.1", "reward-audit-test")
+	require.NoError(t, err)
 	member := &model.User{Username: "reward-member", Password: "placeholder", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, AffCode: "reward-member"}
 	require.NoError(t, model.DB.Create(member).Error)
 	router := gin.New()
@@ -90,7 +93,7 @@ func TestSystemRewardAuditBelongsToRecipient(t *testing.T) {
 		recordUserSystemAudit(c, c.GetInt("id"), "user.checkin", map[string]any{"quota": 25})
 		c.Status(http.StatusOK)
 	})
-	require.Equal(t, http.StatusOK, auditRequest(router, http.MethodPost, "/checkin", pat).Code)
+	require.Equal(t, http.StatusOK, auditRequest(router, http.MethodPost, "/checkin", session.AccessToken).Code)
 	// Registration rewards are granted outside a request context.
 	model.RecordAccountSystemAuditLog(member.Id, "Granted inviter quota", "user.inviter_bonus", map[string]any{"quota": 7, "invited_user_id": 99})
 
@@ -107,7 +110,7 @@ func TestSystemRewardAuditBelongsToRecipient(t *testing.T) {
 	assert.Equal(t, common.RoleAdminUser, checkin.ActorRole)
 	assert.Equal(t, "/checkin", checkin.Route)
 	assert.Equal(t, "192.0.2.8", checkin.Ip)
-	assert.Equal(t, "access_token", checkin.AuthMethod)
+	assert.Equal(t, "session", checkin.AuthMethod)
 	assert.Equal(t, "Completed daily check-in and received 25 quota", checkin.Content)
 	bonus := byAction["user.inviter_bonus"]
 	require.NotNil(t, bonus)

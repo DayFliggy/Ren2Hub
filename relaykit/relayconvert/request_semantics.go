@@ -24,6 +24,7 @@ type responsesInputEnvelope struct {
 	Namespace        *string         `json:"namespace"`
 	CallID           string          `json:"call_id"`
 	Arguments        json.RawMessage `json:"arguments"`
+	Input            json.RawMessage `json:"input"`
 	Output           json.RawMessage `json:"output"`
 	Status           string          `json:"status"`
 	Summary          json.RawMessage `json:"summary"`
@@ -62,6 +63,7 @@ type functionToolEnvelope struct {
 	dto.FunctionRequest
 	Type        string          `json:"type"`
 	InputSchema json.RawMessage `json:"input_schema"`
+	Format      json.RawMessage `json:"format"`
 }
 
 type toolChoiceEnvelope struct {
@@ -162,6 +164,17 @@ func (r *RequestRequirements) inspectRetainedRequestFields(request any, payload 
 }
 
 func (r *RequestRequirements) inspectProjectionSemantics(payload map[string]any) error {
+	if r.Format == types.RelayFormatOpenAI {
+		messages, _ := payload["messages"].([]any)
+		for index, value := range messages {
+			message, _ := value.(map[string]any)
+			for _, field := range []string{"refusal", "audio"} {
+				if message[field] != nil {
+					r.projectionLoss("chat_output_history_not_portable", fmt.Sprintf("messages[%d].%s", index, field), "conversion cannot preserve Chat refusal or audio history", "")
+				}
+			}
+		}
+	}
 
 	if r.Format == types.RelayFormatOpenAIResponses {
 		items, _ := payload["input"].([]any)
@@ -184,6 +197,9 @@ func (r *RequestRequirements) inspectProjectionSemantics(payload map[string]any)
 	if choice, ok := payload["tool_choice"].(map[string]any); ok {
 		kind, _ := choice["type"].(string)
 		allowed := []string{"function"}
+		if r.Format == types.RelayFormatOpenAIResponses {
+			allowed = append(allowed, "custom")
+		}
 		if r.Format == types.RelayFormatClaude {
 			allowed = []string{"auto", "none", "any", "tool"}
 		}
@@ -234,6 +250,9 @@ func (r *RequestRequirements) inspectProjectionSemantics(payload map[string]any)
 		}
 	case types.RelayFormatClaude:
 		messages, _ := payload["messages"].([]any)
+		if _, present := payload["safeguards"]; present {
+			r.projectionLoss("claude_safeguards_not_portable", "safeguards", "conversion cannot preserve Claude safeguards", "")
+		}
 		for index, item := range messages {
 			message, _ := item.(map[string]any)
 			if _, exists := message["output_config"]; exists {

@@ -21,14 +21,13 @@ import {
   type AdminChannelOptionalField,
   adminChannelResponseText,
   adminChannelResponseTone,
-  adminChannelStatusLabelKey,
-  adminChannelStatusTone,
   adminChannelTypeMeta,
 } from '@/constants/adminChannels'
 import type { AdminChannel } from '@/types/console'
 import { formatMoney, formatQuota, relativeTime } from '@/utils/format'
 
 import ChannelInlineNumber from './ChannelInlineNumber.vue'
+import ChannelStatusBadge from './ChannelStatusBadge.vue'
 
 type ChannelAction = 'priority' | 'weight' | 'status' | 'balance'
 
@@ -340,12 +339,11 @@ function responseDisplay(channel: AdminChannel): {
                   </p>
                 </div>
               </div>
-              <StatusChip
+              <ChannelStatusBadge
                 v-if="visibleFields.includes('status')"
-                :tone="adminChannelStatusTone(channel.status)"
-              >
-                {{ t(adminChannelStatusLabelKey(channel.status)) }}
-              </StatusChip>
+                :channel="channel"
+                mobile
+              />
             </header>
 
             <dl class="mt-4 grid min-w-0 grid-cols-2 gap-x-4 gap-y-4 text-xs">

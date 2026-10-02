@@ -411,6 +411,13 @@
           "items": {
             "$ref": "#/properties/usageExamples/items"
           }
+        },
+        "compatibilitySchema": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/usageField"
+          },
+          "description": "Explicit released fields omitted from the current display schema. Runtime facts, frozen quotes and price eligibility use the union; duplicate names are rejected."
         }
       },
       "description": "Complete usage metadata for declared models. The host validates model membership, unique profile ownership and examples, including required token-unit examples."

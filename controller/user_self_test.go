@@ -10,12 +10,10 @@ import (
 )
 
 func TestBuildSelfUserDataIncludesAccountOverviewFields(t *testing.T) {
-	accessToken := "management-token"
 	user := &model.User{
 		Id:           42,
 		Username:     "member-overview",
 		Password:     "password-hash",
-		AccessToken:  &accessToken,
 		Remark:       "administrator-only",
 		Role:         common.RoleCommonUser,
 		Status:       common.UserStatusEnabled,

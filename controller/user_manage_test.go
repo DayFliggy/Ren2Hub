@@ -10,6 +10,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +33,7 @@ func setupManageUserTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 	model.DB, model.LOG_DB = db, db
 	require.NoError(t, db.AutoMigrate(
-		&model.User{}, &model.UserSession{}, &model.Log{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.Token{},
+		&model.User{}, &model.PersonalAccessToken{}, &model.AuthFlow{}, &model.TwoFA{}, &model.PasskeyCredential{}, &model.UserSession{}, &model.Log{}, &model.AuditLog{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.BillingRecovery{}, &model.BillingEvent{}, &model.Token{},
 	))
 
 	t.Cleanup(func() {
@@ -44,6 +45,7 @@ func setupManageUserTestDB(t *testing.T) *gorm.DB {
 			_ = sqlDB.Close()
 		}
 	})
+	require.NoError(t, authz.Init(db))
 	return db
 }
 
@@ -57,6 +59,11 @@ func performManageUserRequest(t *testing.T, body string) *httptest.ResponseRecor
 	c.Set("id", 9999)
 	c.Set("role", common.RoleRootUser)
 	c.Set("username", "root-operator")
+	var input ManageRequest
+	require.NoError(t, common.UnmarshalJsonStr(body, &input))
+	if input.Action != "add_quota" && input.Action != "unknown" {
+		attachAdminOperationProof(t, c, input.Action, []int{input.Id})
+	}
 	ManageUser(c)
 	return recorder
 }
@@ -158,4 +165,37 @@ func TestManageUserDeleteReturnsImmediatelyAndUnknownActionFails(t *testing.T) {
 	require.NoError(t, db.First(&unchanged, unchanged.Id).Error)
 	assert.EqualValues(t, 1, unchanged.AuthVersion)
 	assert.Equal(t, common.UserStatusEnabled, unchanged.Status)
+}
+
+func attachAdminOperationProof(t *testing.T, c *gin.Context, action string, ids []int) {
+	t.Helper()
+	var owner model.User
+	err := model.DB.First(&owner, 9999).Error
+	if err != nil {
+		owner = model.User{Id: 9999, Username: "root-operator", Password: "test-hash", AffCode: "root-operator-aff", Role: common.RoleRootUser, Status: common.UserStatusEnabled, AuthVersion: 1}
+		require.NoError(t, model.DB.Create(&owner).Error)
+	}
+	bundle, err := service.CreateLoginSession(owner.Id, "password", "127.0.0.1", "admin-test")
+	require.NoError(t, err)
+	identity, err := service.ParseAccessToken(bundle.AccessToken)
+	require.NoError(t, err)
+	c.Set("session_id", identity.SessionID)
+	c.Set("auth_version", identity.UserAuthVersion)
+	c.Set("session_version", identity.SessionVersion)
+	unique := []int{}
+	for _, id := range ids {
+		found := false
+		for _, known := range unique {
+			if id == known {
+				found = true
+			}
+		}
+		if !found {
+			unique = append(unique, id)
+		}
+	}
+	context, err := common.Marshal(service.AdminUserChangeContext{IDs: unique, Action: action})
+	require.NoError(t, err)
+	proof := issueSecurityEnrollmentProof(t, identity, service.VerificationOperation{Scope: service.VerificationScopeAdminUserChange, Context: context}, "password")
+	c.Request.Header.Set("X-Security-Proof", proof)
 }

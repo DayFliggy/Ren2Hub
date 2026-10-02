@@ -922,7 +922,7 @@ func TestRetiredOperationLogRouteIsGone(t *testing.T) {
 func TestSecurityRoutesDisableCachingBeforeAuthentication(t *testing.T) {
 	outer := gin.New()
 	SetApiRouter(outer)
-	for _, path := range []string{"/api/user/token/status", "/api/user/token", "/api/audit/self", "/api/audit"} {
+	for _, path := range []string{"/api/user/personal-access-tokens", "/api/audit/self", "/api/audit"} {
 		t.Run(path, func(t *testing.T) {
 			response := performPluginRequest(outer, http.MethodGet, path)
 			assert.Equal(t, http.StatusUnauthorized, response.Code)

@@ -16,7 +16,9 @@ const scenarios = [
 
 for (const theme of ['light', 'dark'] as VisualTheme[]) {
   for (const viewport of scenarios) {
-    test(`${theme} ${viewport.name} account settings`, async ({ page }) => {
+    test(`${theme} ${viewport.name} account settings`, async ({
+      page,
+    }, testInfo) => {
       await page.setViewportSize(viewport)
       await configureStablePage(page, { theme, authenticated: true })
 
@@ -37,18 +39,57 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
 
       const panels = await Promise.all([
         page
-          .getByRole('heading', { name: '登录与账户', exact: true })
+          .locator('section[data-surface-variant]')
+          .filter({
+            has: page.getByRole('heading', {
+              name: '登录与账户',
+              exact: true,
+            }),
+          })
           .boundingBox(),
         page
-          .getByRole('heading', { name: '通知与偏好', exact: true })
+          .locator('section[data-surface-variant]')
+          .filter({
+            has: page.getByRole('heading', {
+              name: '通知与偏好',
+              exact: true,
+            }),
+          })
           .boundingBox(),
       ])
       expect(panels[0]).not.toBeNull()
       expect(panels[1]).not.toBeNull()
       if (viewport.name === 'wide') {
         expect(Math.abs(panels[0]!.y - panels[1]!.y)).toBeLessThanOrEqual(2)
+        expect(panels[1]!.x).toBeGreaterThanOrEqual(
+          panels[0]!.x + panels[0]!.width
+        )
       } else {
-        expect(panels[1]!.y).toBeGreaterThan(panels[0]!.y + 600)
+        expect(panels[1]!.y).toBeGreaterThanOrEqual(
+          panels[0]!.y + panels[0]!.height
+        )
+      }
+
+      if (process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true') {
+        await page.screenshot({
+          path: testInfo.outputPath('account-settings-top.png'),
+          fullPage: true,
+        })
+        await page
+          .locator('section[data-surface-variant]')
+          .filter({
+            has: page.getByRole('heading', {
+              name: '登录与账户',
+              exact: true,
+            }),
+          })
+          .locator('section')
+          .last()
+          .scrollIntoViewIfNeeded()
+        await page.screenshot({
+          path: testInfo.outputPath('account-security-bottom.png'),
+          fullPage: true,
+        })
       }
 
       const scrollZone = page.locator('.scroll-zone')

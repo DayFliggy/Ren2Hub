@@ -25,10 +25,11 @@ func TestOpsMonitorRoutesFollowAdminChannelAndRootBoundaries(t *testing.T) {
 	previousMemory := common.MemoryCacheEnabled
 	common.MemoryCacheEnabled = false
 	t.Cleanup(func() { common.MemoryCacheEnabled = previousMemory })
+	access := map[int]string{}
 	for _, role := range []int{common.RoleCommonUser, common.RoleAdminUser, common.RoleRootUser} {
 		name := fmt.Sprintf("ops-%d", role)
-		pat := name + "-pat"
-		require.NoError(t, model.DB.Create(&model.User{Id: role, Username: name, AffCode: name, Role: role, Status: common.UserStatusEnabled, AccessToken: &pat}).Error)
+		require.NoError(t, model.DB.Create(&model.User{Id: role, Username: name, AffCode: name, Role: role, Status: common.UserStatusEnabled}).Error)
+		access[role] = createRouterBrowserSession(t, role)
 	}
 	engine := gin.New()
 	SetApiRouter(engine)
@@ -36,7 +37,7 @@ func TestOpsMonitorRoutesFollowAdminChannelAndRootBoundaries(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		if role != 0 {
-			request.Header.Set("Authorization", fmt.Sprintf("Bearer ops-%d-pat", role))
+			request.Header.Set("Authorization", "Bearer "+access[role])
 		}
 		engine.ServeHTTP(recorder, request)
 		return recorder

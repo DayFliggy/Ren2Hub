@@ -96,7 +96,14 @@ func OpenAIResponsesRequestToClaudeMessages(c context.Context, info convmeta.Met
 		case ResponsesInputTypeFunctionCall:
 			claudeRequest.Messages = appendClaudeToolUse(claudeRequest.Messages, responsesFunctionCallItemToClaudeToolUse(item, "arguments"))
 		case ResponsesInputTypeCustomToolCall:
-			claudeRequest.Messages = appendClaudeToolUse(claudeRequest.Messages, responsesFunctionCallItemToClaudeToolUse(item, "input"))
+			name := strings.TrimSpace(kitutil.Interface2String(item["name"]))
+			if name == "" {
+				return nil, fmt.Errorf("custom_tool_call item is missing name")
+			}
+			claudeRequest.Messages = appendClaudeToolUse(claudeRequest.Messages, dto.ClaudeMediaMessage{
+				Type: "tool_use", Id: CallID(item), Name: name,
+				Input: map[string]any{convmeta.CustomToolInputArgument: responsesArgumentsString(item["input"])},
+			})
 		case ResponsesInputTypeFunctionCallOutput, ResponsesInputTypeCustomToolOutput:
 			toolResult := responsesFunctionOutputItemToClaudeToolResult(item)
 			if output, ok := item["output"].([]any); ok {

@@ -39,9 +39,23 @@ func taskConsumptionParams(c *gin.Context, info *relaycommon.RelayInfo) model.Re
 // FinalizeTaskSubmission returns an error only when the accepted job could not
 // be saved. Accounting errors after that point remain in durable recovery.
 func FinalizeTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo, task *model.Task) error {
-	consumption, err := billingConsumptionSnapshot(c, info, taskConsumptionParams(c, info), true)
+	consumption, err := prepareTaskSubmission(c, info, task)
 	if err != nil {
 		return err
+	}
+	if err := model.PersistAcceptedTask(task, info.RequestId, consumption); err != nil {
+		return err
+	}
+	if session, ok := info.Billing.(*BillingSession); ok {
+		session.stopRecoveryHeartbeat()
+	}
+	return nil
+}
+
+func prepareTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo, task *model.Task) (model.BillingConsumption, error) {
+	consumption, err := billingConsumptionSnapshot(c, info, taskConsumptionParams(c, info), true)
+	if err != nil {
+		return model.BillingConsumption{}, err
 	}
 	if task.PrivateData.BillingContext == nil {
 		task.PrivateData.BillingContext = &model.TaskBillingContext{}
@@ -50,13 +64,7 @@ func FinalizeTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo, task *m
 	task.PrivateData.BillingContext.Quote = info.PriceData.Quote
 	task.PrivateData.BillingContext.Usage = info.PriceData.Usage
 	task.PrivateData.SubmissionRequestID = info.RequestId
-	if err := model.PersistAcceptedTask(task, info.RequestId, consumption); err != nil {
-		return err
-	}
-	if session, ok := info.Billing.(*BillingSession); ok {
-		session.stopRecoveryHeartbeat()
-	}
-	return nil
+	return consumption, nil
 }
 
 // taskBillingOther 从 task 的 BillingContext 构建日志 Other 字段。
@@ -102,6 +110,18 @@ func taskModelName(task *model.Task) string {
 // A failed completion transaction leaves the task non-terminal, so the next
 // poll or the timeout sweep finishes it.
 func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model.TaskStatus, actualQuota common.Quota, reason string, clamps ...*common.QuotaClamp) (bool, error) {
+	consumption, err := taskCompletionConsumption(task, actualQuota, reason, clamps...)
+	if err != nil {
+		return false, err
+	}
+	won, err := model.PersistTaskCompletion(ctx, task, fromStatus, actualQuota, consumption)
+	if err != nil || !won {
+		return won, err
+	}
+	return true, deliverTaskCompletion(ctx, task, actualQuota)
+}
+
+func taskCompletionConsumption(task *model.Task, actualQuota common.Quota, reason string, clamps ...*common.QuotaClamp) (model.BillingConsumption, error) {
 	other := taskBillingOther(task)
 	other["task_id"], other["reason"] = task.TaskID, reason
 	other["pre_consumed_quota"], other["actual_quota"] = task.Quota, actualQuota
@@ -110,11 +130,11 @@ func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model
 	}
 	encoded, err := common.Marshal(other)
 	if err != nil {
-		return false, err
+		return model.BillingConsumption{}, err
 	}
 	username, err := model.GetUsernameById(task.UserId, false)
 	if err != nil {
-		return false, err
+		return model.BillingConsumption{}, err
 	}
 	nodeName := task.PrivateData.NodeName
 	if nodeName == "" {
@@ -131,20 +151,20 @@ func completeTaskBilling(ctx context.Context, task *model.Task, fromStatus model
 		consumption.AttemptID = snapshot.AttemptID
 		consumption.Usage, consumption.Charge = snapshot.Usage, snapshot.Charge
 	}
-	won, err := model.PersistTaskCompletion(ctx, task, fromStatus, actualQuota, consumption)
-	if err != nil || !won {
-		return won, err
-	}
+	return consumption, nil
+}
+
+func deliverTaskCompletion(ctx context.Context, task *model.Task, actualQuota common.Quota) error {
 	if err := model.DeliverTaskResultMetrics(ctx, task.ID); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("task result metrics remain pending (task_id=%s): %v", task.TaskID, err))
 	}
-	_, err = recoverOneBillingRecovery(ctx, task.PrivateData.SubmissionRequestID)
+	_, err := recoverOneBillingRecovery(ctx, task.PrivateData.SubmissionRequestID)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("task completion accounting remains pending (task_id=%s): %v", task.TaskID, err))
-		return true, err
+		return err
 	}
 	task.Quota = actualQuota
-	return true, nil
+	return nil
 }
 
 // taskCompletionQuota never accepts an adaptor-computed monetary value. A
@@ -229,10 +249,52 @@ func frozenTaskCompletionQuota(task *model.Task) (common.Quota, error) {
 // CompleteImmediateTask uses exactly the same durable terminal accounting as
 // polling, including the submission-estimate fallback.
 func CompleteImmediateTask(ctx context.Context, task *model.Task, result *relaycommon.TaskInfo) error {
+	from := task.Status
+	if err := applyImmediateTaskResult(task, result); err != nil {
+		return err
+	}
+	quota, reason, clamp, err := taskCompletionQuota(nil, task, result)
+	if err != nil {
+		return err
+	}
+	_, err = completeTaskBilling(ctx, task, from, quota, reason, clamp)
+	return err
+}
+
+// FinalizeImmediateTaskSubmission atomically saves the accepted terminal job,
+// its completion usage and the verified accounting intent. The bool reports
+// durable ownership even when delivery subsequently fails.
+func FinalizeImmediateTaskSubmission(ctx context.Context, c *gin.Context, info *relaycommon.RelayInfo, task *model.Task, result *relaycommon.TaskInfo) (bool, error) {
+	submission, err := prepareTaskSubmission(c, info, task)
+	if err != nil {
+		return false, err
+	}
+	from := task.Status
+	if err := applyImmediateTaskResult(task, result); err != nil {
+		return false, err
+	}
+	quota, reason, clamp, err := taskCompletionQuota(nil, task, result)
+	if err != nil {
+		return false, err
+	}
+	completion, err := taskCompletionConsumption(task, quota, reason, clamp)
+	if err != nil {
+		return false, err
+	}
+	committed, err := model.PersistImmediateTask(ctx, task, from, quota, submission, completion)
+	if err != nil || !committed {
+		return false, err
+	}
+	if session, ok := info.Billing.(*BillingSession); ok {
+		session.stopRecoveryHeartbeat()
+	}
+	return true, deliverTaskCompletion(ctx, task, quota)
+}
+
+func applyImmediateTaskResult(task *model.Task, result *relaycommon.TaskInfo) error {
 	if result == nil || (result.Status != string(model.TaskStatusSuccess) && result.Status != string(model.TaskStatusFailure)) {
 		return fmt.Errorf("immediate task requires an explicit terminal status")
 	}
-	from := task.Status
 	task.Status = model.TaskStatus(result.Status)
 	task.Progress = "100%"
 	task.FinishTime = common.GetTimestamp()
@@ -245,10 +307,5 @@ func CompleteImmediateTask(ctx context.Context, task *model.Task, result *relayc
 	if result.PluginState != nil {
 		task.PrivateData.PluginState = result.PluginState
 	}
-	quota, reason, clamp, err := taskCompletionQuota(nil, task, result)
-	if err != nil {
-		return err
-	}
-	_, err = completeTaskBilling(ctx, task, from, quota, reason, clamp)
-	return err
+	return nil
 }

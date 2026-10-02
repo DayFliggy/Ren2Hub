@@ -628,7 +628,10 @@ func UnbindCustomOAuthByAdmin(c *gin.Context) {
 		return
 	}
 
-	if err := model.DeleteUserOAuthBinding(userId, providerId); err != nil {
+	if requireAdminUserProof(c, "clear_binding", userId) == nil {
+		return
+	}
+	if err := model.DeleteUserOAuthBinding(userId, providerId, adminUserAuthorization(c)...); err != nil {
 		common.ApiError(c, err)
 		return
 	}

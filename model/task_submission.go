@@ -58,28 +58,68 @@ func PersistAcceptedTask(task *Task, requestID string, consumption BillingConsum
 		return errors.New("invalid accepted task")
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
-		if err := prepareTaskAcceptedBillingTx(tx, requestID, consumption); err != nil {
-			return err
-		}
-		if err := AttachTaskPluginExecution(tx, task); err != nil {
-			return err
-		}
-		var existing Task
-		err := tx.Where("task_id = ? AND user_id = ?", task.TaskID, task.UserId).First(&existing).Error
-		if err == nil {
-			if existing.ChannelId != task.ChannelId || existing.Quota != task.Quota ||
-				existing.PrivateData.UpstreamTaskID != task.PrivateData.UpstreamTaskID {
-				return errors.New("accepted task identity conflict")
-			}
-			task.ID = existing.ID
-			return nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		if task.PrivateData.ResultDiscarded {
-			return tx.Omit("data").Create(task).Error
-		}
-		return tx.Create(task).Error
+		return persistAcceptedTaskTx(tx, task, requestID, consumption)
 	})
+}
+
+func persistAcceptedTaskTx(tx *gorm.DB, task *Task, requestID string, consumption BillingConsumption) error {
+	if err := prepareTaskAcceptedBillingTx(tx, requestID, consumption); err != nil {
+		return err
+	}
+	if err := AttachTaskPluginExecution(tx, task); err != nil {
+		return err
+	}
+	var existing Task
+	err := tx.Where("task_id = ? AND user_id = ?", task.TaskID, task.UserId).First(&existing).Error
+	if err == nil {
+		if existing.ChannelId != task.ChannelId || existing.Quota != task.Quota ||
+			existing.PrivateData.UpstreamTaskID != task.PrivateData.UpstreamTaskID {
+			return errors.New("accepted task identity conflict")
+		}
+		task.ID = existing.ID
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	stored := *task
+	stored.Data, stored.PrivateData = taskResultForStorage(task.Data, task.PrivateData)
+	if err := tx.Create(&stored).Error; err != nil {
+		return err
+	}
+	task.ID, task.CreatedAt, task.UpdatedAt = stored.ID, stored.CreatedAt, stored.UpdatedAt
+	return nil
+}
+
+// PersistImmediateTask leaves no polling-visible non-terminal task between
+// accepting an immediate result and preparing its terminal accounting intent.
+// A rollback retains the already durable pre-send estimate for recovery.
+func PersistImmediateTask(ctx context.Context, task *Task, fromStatus TaskStatus, actualQuota common.Quota, submission, completion BillingConsumption) (bool, error) {
+	if DB == nil || task == nil || task.ID != 0 || task.TaskID == "" || task.PrivateData.UpstreamTaskID == "" ||
+		task.UserId != submission.Log.UserId || task.ChannelId != submission.Log.ChannelId || task.Quota != submission.Log.Quota ||
+		fromStatus == TaskStatusSuccess || fromStatus == TaskStatusFailure {
+		return false, errors.New("invalid immediate task")
+	}
+	committed := false
+	err := BillingTransaction(ctx, func(tx *gorm.DB) error {
+		committed = false
+		accepted := *task
+		accepted.ID = 0
+		accepted.Status = fromStatus
+		if err := persistAcceptedTaskTx(tx, &accepted, task.PrivateData.SubmissionRequestID, submission); err != nil {
+			return err
+		}
+		task.ID = accepted.ID
+		task.CreatedAt, task.UpdatedAt = accepted.CreatedAt, accepted.UpdatedAt
+		var err error
+		committed, err = persistTaskCompletionTx(tx, task, fromStatus, actualQuota, completion)
+		if err == nil && !committed {
+			return ErrBillingRecoveryStateConflict
+		}
+		return err
+	})
+	if err != nil {
+		task.ID = 0
+	}
+	return committed && err == nil, err
 }

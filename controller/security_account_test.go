@@ -131,7 +131,8 @@ func TestSecurityAccountDeletionAcceptsEitherFactorAndRevokesSessions(t *testing
 			}
 			otherSession, err := service.CreateLoginSession(user.Id, "password", "127.0.0.1", "second-session")
 			require.NoError(t, err)
-			require.NoError(t, model.UpdateUserAccessToken(user.Id, "account-delete-access-token"))
+			_, pat, err := model.CreatePersonalAccessToken(identity, "delete-test", []string{"profile:read"}, 0)
+			require.NoError(t, err)
 			response := securityEnrollmentRequest("DELETE", "/api/user/self", "", proof, identity, DeleteSelf)
 			var result securityEnrollmentResponse
 			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
@@ -153,8 +154,8 @@ func TestSecurityAccountDeletionAcceptsEitherFactorAndRevokesSessions(t *testing
 			count, err := model.CountActiveUserSessions(user.Id, time.Now().Unix())
 			require.NoError(t, err)
 			assert.Zero(t, count)
-			tokenUser, err := model.ValidateAccessToken("account-delete-access-token")
-			require.NoError(t, err)
+			_, tokenUser, err := model.ValidatePersonalAccessToken(pat)
+			require.ErrorIs(t, err, model.ErrPATInvalid)
 			assert.Nil(t, tokenUser)
 			var audit model.AuditLog
 			require.NoError(t, model.LOG_DB.Where("action = ?", "user.account_delete").Last(&audit).Error)
@@ -473,7 +474,7 @@ func TestSecurityAccountProfileReadsPasswordStatusInOneQuery(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			user, identity := setupSecurityEnrollmentTest(t)
-			updates := map[string]any{"access_token": "private-profile-token", "remark": "private-profile-remark"}
+			updates := map[string]any{"remark": "private-profile-remark"}
 			if !hasPassword {
 				updates["password"] = ""
 			}
@@ -487,7 +488,6 @@ func TestSecurityAccountProfileReadsPasswordStatusInOneQuery(t *testing.T) {
 			assert.Equal(t, 1, queries)
 			assert.Equal(t, hasPassword, profile.HasPassword)
 			assert.Empty(t, profile.Password)
-			assert.Nil(t, profile.AccessToken)
 			assert.Empty(t, profile.Remark)
 			assert.Equal(t, user.AuthVersion, profile.AuthVersion)
 			assert.Equal(t, user.Group, profile.Group)
@@ -511,7 +511,6 @@ func TestSecurityAccountProfileReadsPasswordStatusInOneQuery(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, hasPassword, refreshed.HasPassword)
 			assert.Empty(t, refreshed.Password)
-			assert.Nil(t, refreshed.AccessToken)
 		})
 	}
 }

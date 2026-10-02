@@ -5,6 +5,7 @@ import {
   adminUserBindingsApi,
   type AdminUserBinding,
 } from '@/api/adminUserBindings'
+import SecurityProofDialog from '@/components/auth/SecurityProofDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -13,6 +14,7 @@ import { adminOperatorLevel, canManageAdminUser } from '@/constants/adminUsers'
 import { useAuthStore } from '@/stores/auth'
 import type { AdminUser } from '@/types/console'
 
+const proofDialog = ref<InstanceType<typeof SecurityProofDialog> | null>(null)
 const props = defineProps<{ user: AdminUser }>()
 const emit = defineEmits<{ removed: [key: string] }>()
 const { t } = useI18n()
@@ -66,7 +68,13 @@ async function remove() {
   busy.value = true
   error.value = ''
   try {
-    await adminUserBindingsApi.remove(pending.value)
+    const binding = pending.value
+    const proof = await proofDialog.value!.request({
+      scope: 'admin.user.change',
+      context: { ids: [props.user.id], action: 'clear_binding' },
+    })
+    if (run !== epoch) return
+    await adminUserBindingsApi.remove(binding, proof)
     if (run !== epoch) return
     emit('removed', removedKey)
     pending.value = null
@@ -95,6 +103,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <SecurityProofDialog ref="proofDialog" />
   <ConsoleButton
     v-if="allowed"
     class="mt-4"

@@ -40,6 +40,8 @@ import PageBreadcrumb from '@/components/console/PageBreadcrumb.vue'
 import ChannelFormModal from '@/components/console/channels/ChannelFormModal.vue'
 import ChannelModelSyncDialog from '@/components/console/channels/ChannelModelSyncDialog.vue'
 import ChannelProviderStatus from '@/components/console/channels/ChannelProviderStatus.vue'
+import ChannelStatusBadge from '@/components/console/channels/ChannelStatusBadge.vue'
+import CodexUsagePanel from '@/components/console/channels/CodexUsagePanel.vue'
 import ChannelInlineNumber from '@/components/console/channels/ChannelInlineNumber.vue'
 import ChannelMobileList from '@/components/console/channels/ChannelMobileList.vue'
 import ChannelTestModal from '@/components/console/channels/ChannelTestModal.vue'
@@ -58,8 +60,6 @@ import {
   type AdminChannelOptionalField,
   adminChannelResponseText,
   adminChannelResponseTone,
-  adminChannelStatusLabelKey,
-  adminChannelStatusTone,
   adminChannelTypeMeta,
   sanitizeAdminChannelVisibleFields,
 } from '@/constants/adminChannels'
@@ -110,6 +110,7 @@ type DeleteTarget =
 
 const { t, locale } = useI18n()
 const auth = useAuthStore()
+const canRead = computed(() => auth.hasPermission('channel', 'read'))
 const canOperate = computed(() => auth.hasPermission('channel', 'operate'))
 const canWrite = computed(() => auth.hasPermission('channel', 'write'))
 const canSensitiveWrite = computed(() =>
@@ -162,6 +163,12 @@ const {
 const formOpen = ref(false)
 const editing = ref<AdminChannel | null>(null)
 const runtimeChannel = ref<AdminChannel | null>(null)
+watch(canRead, (allowed) => {
+  if (!allowed) runtimeChannel.value = null
+})
+function openRuntime(channel: AdminChannel) {
+  if (canRead.value) runtimeChannel.value = channel
+}
 const deleting = ref<DeleteTarget | null>(null)
 const testing = ref<AdminChannel | null>(null)
 const pickingGroup = ref<SupplierGroup | null>(null)
@@ -1143,21 +1150,9 @@ async function runBulkStatus(
             </div>
           </template>
           <template #cell-status="{ row }">
-            <StatusChip
-              :tone="
-                adminChannelStatusTone(
-                  channelFromRow(row as AdminChannelTableRow).status
-                )
-              "
-            >
-              {{
-                t(
-                  adminChannelStatusLabelKey(
-                    channelFromRow(row as AdminChannelTableRow).status
-                  )
-                )
-              }}
-            </StatusChip>
+            <ChannelStatusBadge
+              :channel="channelFromRow(row as AdminChannelTableRow)"
+            />
           </template>
           <template #cell-priority="{ row }">
             <ChannelInlineNumber
@@ -1325,9 +1320,10 @@ async function runBulkStatus(
                 ><RefreshCw :size="15"
               /></IconButton>
               <IconButton
+                v-if="canRead"
                 :label="t('gateway.channelRuntime')"
                 @click="
-                  runtimeChannel = channelFromRow(row as AdminChannelTableRow)
+                  openRuntime(channelFromRow(row as AdminChannelTableRow))
                 "
                 ><Gauge :size="15"
               /></IconButton>
@@ -1462,7 +1458,7 @@ async function runBulkStatus(
             :open-test="openTest"
             :edit-channel="openEdit"
             :sync-models="previewModelSync"
-            :show-runtime="(channel) => (runtimeChannel = channel)"
+            :show-runtime="openRuntime"
             :delete-channel="requestDelete"
           />
           <TablePagination
@@ -1477,19 +1473,29 @@ async function runBulkStatus(
     </ConsoleCard>
 
     <ConsoleModal
-      :open="runtimeChannel !== null"
+      :open="runtimeChannel !== null && canRead"
       :title="runtimeChannel?.name ?? t('gateway.channelRuntime')"
       size="lg"
       @close="runtimeChannel = null"
     >
       <GatewayChannelPanel
-        v-if="runtimeChannel"
+        v-if="runtimeChannel && canRead"
         :key="runtimeChannel.id"
         :channel-id="runtimeChannel.id"
       />
       <ChannelProviderStatus
         v-if="runtimeChannel && [62, 63].includes(runtimeChannel.type)"
         :channel="runtimeChannel"
+      />
+      <CodexUsagePanel
+        v-if="
+          runtimeChannel?.type === 57 &&
+          !runtimeChannel.channel_info?.is_multi_key &&
+          canRead
+        "
+        :key="`usage-${runtimeChannel.id}`"
+        :channel-id="runtimeChannel.id"
+        :can-operate="canOperate"
       />
     </ConsoleModal>
     <ConsoleModal

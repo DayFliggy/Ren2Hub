@@ -25,6 +25,35 @@ func performNextAdminJSON(t *testing.T, method, target, body string, handler gin
 	context.Set("id", 9999)
 	context.Set("role", common.RoleRootUser)
 	context.Set("username", "root-operator")
+	if strings.HasPrefix(target, "/api/next/admin/users") && !strings.HasSuffix(target, "/quota") {
+		var input struct {
+			ID     int   `json:"id"`
+			IDs    []int `json:"ids"`
+			Status int   `json:"status"`
+			Role   int   `json:"role"`
+		}
+		require.NoError(t, common.UnmarshalJsonStr(body, &input))
+		action := "update"
+		ids := input.IDs
+		if len(ids) == 0 {
+			ids = []int{input.ID}
+		}
+		switch {
+		case strings.Contains(target, "/delete/"):
+			action = "delete"
+		case strings.Contains(target, "/status"):
+			action = "disable"
+			if input.Status == 1 {
+				action = "enable"
+			}
+		case method == http.MethodPost:
+			action = "create_admin"
+			ids = []int{0}
+		}
+		if action != "create_admin" || input.Role == common.RoleAdminUser {
+			attachAdminOperationProof(t, context, action, ids)
+		}
+	}
 	handler(context)
 	return recorder
 }

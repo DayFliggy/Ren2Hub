@@ -157,7 +157,7 @@ type CapabilityRefreshSummary struct {
 // InitRouteCapabilityIndex performs the startup rebuild and publishes the
 // immutable in-memory active snapshot used by the unified live selector.
 func InitRouteCapabilityIndex(ctx context.Context) error {
-	_, err := refreshAllChannels(ctx, true, nil)
+	_, err := refreshChannelCapabilities(ctx, nil, nil)
 	return err
 }
 
@@ -192,21 +192,40 @@ func RefreshChannelCapabilitiesByID(ctx context.Context, channelID int) error {
 func RefreshStaleChannelCapabilities(ctx context.Context, report func(processed, total int)) (CapabilityRefreshSummary, error) {
 	capabilityRefreshMu.Lock()
 	defer capabilityRefreshMu.Unlock()
-	return refreshAllChannels(ctx, true, report)
+	return refreshChannelCapabilities(ctx, nil, report)
 }
 
-func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(processed, total int)) (CapabilityRefreshSummary, error) {
+// EnsureChannelCapabilities brings an already-authorized channel set into the
+// same active snapshots used by the live selector. It does not broaden access.
+func EnsureChannelCapabilities(ctx context.Context, channelIDs []int) error {
+	if len(channelIDs) == 0 {
+		return nil
+	}
+	capabilityRefreshMu.Lock()
+	defer capabilityRefreshMu.Unlock()
+	_, err := refreshChannelCapabilities(ctx, channelIDs, nil)
+	return err
+}
+
+func refreshChannelCapabilities(ctx context.Context, channelIDs []int, report func(processed, total int)) (CapabilityRefreshSummary, error) {
 	startedAt := time.Now()
 	defer func() {
-		scanDuration := time.Since(startedAt)
-		capabilityRefreshLagSeconds.Store(int64(scanDuration.Seconds()))
+		if channelIDs == nil {
+			capabilityRefreshLagSeconds.Store(int64(time.Since(startedAt).Seconds()))
+		}
 	}()
+	channelQuery := model.DB.WithContext(ctx)
+	abilityQuery := model.DB.WithContext(ctx)
+	if channelIDs != nil {
+		channelQuery = channelQuery.Where("id IN ?", channelIDs)
+		abilityQuery = abilityQuery.Where("channel_id IN ?", channelIDs)
+	}
 	var channels []model.Channel
-	if err := model.DB.WithContext(ctx).Find(&channels).Error; err != nil {
+	if err := channelQuery.Find(&channels).Error; err != nil {
 		return CapabilityRefreshSummary{}, err
 	}
 	var abilities []model.Ability
-	if err := model.DB.WithContext(ctx).Find(&abilities).Error; err != nil {
+	if err := abilityQuery.Find(&abilities).Error; err != nil {
 		return CapabilityRefreshSummary{}, err
 	}
 	byChannel := make(map[int][]model.Ability, len(channels))
@@ -229,7 +248,7 @@ func refreshAllChannels(ctx context.Context, fingerprintOnly bool, report func(p
 			}
 			continue
 		}
-		if fingerprintOnly && channelCapabilitySnapshotMatches(channel.Id, hash, catalog.Version) {
+		if channelCapabilitySnapshotMatches(channel.Id, hash, catalog.Version) {
 			summary.Skipped++
 			if report != nil {
 				report(index+1, len(channels))

@@ -5,6 +5,14 @@ import AdminUserBindings from '../AdminUserBindings.vue'
 import { adminUserBindingsApi } from '@/api/adminUserBindings'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import type { AdminUser } from '@/types/console'
+vi.mock('@/components/auth/SecurityProofDialog.vue', () => ({
+  default: {
+    setup(_: unknown, { expose }: { expose: (value: unknown) => void }) {
+      expose({ request: vi.fn().mockResolvedValue('one-use-proof') })
+      return () => null
+    },
+  },
+}))
 const state = vi.hoisted(() => ({
   isAdmin: true,
   isRoot: false,
@@ -83,7 +91,7 @@ describe('admin identity unbinding', () => {
     read.mockResolvedValue([])
     await wrapper.findComponent({ name: 'ConfirmDialog' }).vm.$emit('confirm')
     await flushPromises()
-    expect(remove).toHaveBeenLastCalledWith(binding)
+    expect(remove).toHaveBeenLastCalledWith(binding, 'one-use-proof')
     expect(wrapper.emitted('removed')).toEqual([['github']])
     expect(wrapper.text()).toContain('No bound sign-in')
     wrapper.unmount()

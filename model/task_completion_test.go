@@ -99,6 +99,13 @@ func TestTaskCompletionCannotBypassFinalBillingEvidence(t *testing.T) {
 
 func newAcceptedTaskFixture(t *testing.T, db *gorm.DB, identity string, finalQuota ...common.Quota) (User, Token, Channel, Task, BillingConsumption) {
 	t.Helper()
+	user, token, channel, task, consumption := newTaskBillingFixture(t, db, identity, finalQuota...)
+	require.NoError(t, PersistAcceptedTask(&task, identity, consumption))
+	return user, token, channel, task, consumption
+}
+
+func newTaskBillingFixture(t *testing.T, db *gorm.DB, identity string, finalQuota ...common.Quota) (User, Token, Channel, Task, BillingConsumption) {
+	t.Helper()
 	user := User{Username: identity, AffCode: identity, Quota: 100}
 	require.NoError(t, db.Create(&user).Error)
 	token := Token{UserId: user.Id, Key: identity, RemainQuota: 100}
@@ -116,7 +123,6 @@ func newAcceptedTaskFixture(t *testing.T, db *gorm.DB, identity string, finalQuo
 	consumption, err = bindConsumptionEvidence(identity, consumption)
 	require.NoError(t, err)
 	consumption.Log.Quota = task.Quota
-	require.NoError(t, PersistAcceptedTask(&task, identity, consumption))
 	return user, token, channel, task, consumption
 }
 

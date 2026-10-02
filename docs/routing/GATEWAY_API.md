@@ -2,19 +2,19 @@
 
 所有接口位于 `/api/gateway`。成功返回 `{ "success": true, "message": "", "data": ... }`；错误使用对应 HTTP 状态码，并返回 `success: false`、`message` 和 `code`。这些接口禁止浏览器缓存。
 
-| 方法和路径 | 权限 | data |
-|---|---|---|
-| `GET /self` | 登录用户 | 当前用户配置、有效值及来源 |
-| `GET /self/runtime` | 登录用户 | 当前用户的本地准入运行态 |
-| `GET /config` | Root | 全局网关配置 |
-| `GET /metrics` | Root | schema v2：本地准入、重试预算、尝试维护、状态绑定失败及账务恢复积压 |
-| `PUT /config` | Root | 保存后的完整配置，version 加一 |
-| `GET /users/:id` | 管理员 | 指定用户配置、有效值及来源 |
-| `PUT /users/:id` | 管理员 | 保存后的用户覆盖 |
-| `GET /runtime/users/:id` | 管理员 | 本地准入运行态 |
-| `GET /runtime/channels/:id` | 管理员且具备 channel.read | 本地准入运行态，加 `channel_id`、`rate`、`rate_status` |
-| `GET /channels/:id/credentials` | 管理员且具备 channel.read | 已登记凭据的 `[{ id }]`，id 为稳定 UUID |
-| `GET /runtime/credentials/:id` | 管理员且具备 channel.read | 凭据的 rate |
+| 方法和路径                      | 权限                      | data                                                                |
+| ------------------------------- | ------------------------- | ------------------------------------------------------------------- |
+| `GET /self`                     | 登录用户                  | 当前用户配置、有效值及来源                                          |
+| `GET /self/runtime`             | 登录用户                  | 当前用户的本地准入运行态                                            |
+| `GET /config`                   | Root                      | 全局网关配置                                                        |
+| `GET /metrics`                  | Root                      | schema v2：本地准入、重试预算、尝试维护、状态绑定失败及账务恢复积压 |
+| `PUT /config`                   | Root                      | 保存后的完整配置，version 加一                                      |
+| `GET /users/:id`                | 管理员                    | 指定用户配置、有效值及来源                                          |
+| `PUT /users/:id`                | 管理员                    | 保存后的用户覆盖                                                    |
+| `GET /runtime/users/:id`        | 管理员                    | 本地准入运行态                                                      |
+| `GET /runtime/channels/:id`     | 管理员且具备 channel.read | 本地准入运行态，加 `channel_id`、`rate`、`rate_status`              |
+| `GET /channels/:id/credentials` | 管理员且具备 channel.read | 已登记凭据的 `[{ id }]`，id 为稳定 UUID                             |
+| `GET /runtime/credentials/:id`  | 管理员且具备 channel.read | 凭据的 rate                                                         |
 
 Root 可以管理所有用户；其他管理员只能查看和修改角色低于自己的用户。`/self` 始终读取登录用户，不接受用户 ID。凭据列表返回已通过可信路径登记的身份，不返回密钥、指纹或可变密钥索引；它不是当前启用密钥列表。
 
@@ -67,8 +67,18 @@ Root 可以管理所有用户；其他管理员只能查看和修改角色低于
   "group": "team",
   "config_version": 2,
   "override": { "concurrency": 0, "wait_ms": null, "queue_size": null },
-  "effective": { "concurrency": 0, "wait_ms": 5000, "queue_size": 20, "channel_queue_size": 20 },
-  "sources": { "concurrency": "user", "wait_ms": "system", "queue_size": "system", "channel_queue_size": "system" }
+  "effective": {
+    "concurrency": 0,
+    "wait_ms": 5000,
+    "queue_size": 20,
+    "channel_queue_size": 20
+  },
+  "sources": {
+    "concurrency": "user",
+    "wait_ms": "system",
+    "queue_size": "system",
+    "channel_queue_size": "system"
+  }
 }
 ```
 
@@ -169,6 +179,44 @@ Gemini 转换器不再自动填入思考签名绕过标记，`allow` 也不会�
 
 新日志使用 `admission_state`，读取器兼容历史 `lease_state`。重试额度耗尽在管理日志记录 `retry_budget_exhausted: true`，保留最后一个真实上游错误，不追加供应商健康处罚。
 
-`route_decision.attempts` 按真实发送顺序记录渠道、成功状态、稳定错误类别、归一化错误 HTTP 状态、来源、耗时、接受状态、重试许可和响应是否提交；发送前拒绝不生成 attempt。旧日志可以没有此字段。耗时包含本轮准备，不代表纯上游延迟；成功 HTTP 码和 TTFT 不作推断。记录不包含供应商原始错误、正文、请求头或凭据，并沿用现有有界日志队列。
+`route_decision.attempts` 按真实发送顺序记录成功状态、稳定错误类别、归一化错误 HTTP 状态、来源、耗时、接受状态、重试许可和响应是否提交；发送前拒绝不生成 attempt。旧日志可以没有此字段。`latency_ms` 保持包含本轮准备的原语义，新增 `upstream_latency_ms` 才是实际发送至完成的测量值；缺证据时省略，不能把未知表示为零。成功 HTTP 码不作推断。内部观察保留渠道及稳定凭据 ID，但不记录凭据原文、供应商错误正文、请求体或请求头。
 
 所有计价模式在发送前持久化消费保护和冻结估算；最终用量无法计价或写入失败时按冻结估算结算。任务、图片及其他有副作用的生成请求交付有效输出或任务已被接受时按证据结算，没有输出且没有任务 ID 时释放；上传重放仍受限制。状态处理见[结算兜底与恢复](../billing/RECOVERY.md)，数据格式与切换要求见[发布契约](GATEWAY_RELEASE.md)。
+
+## 模型 manifest 与客户端配置
+
+`GET /api/user/model-manifest?token_id=...` 返回版本为 1 的权限过滤目录。省略 Token 时使用当前用户资格；指定 Token 必须属于当前用户且仍启用、未过期。模型集合由现有 Token 模型权限、渠道状态、手动路由、能力快照和价格资格共同计算，不存第二份目录。`GET /api/user/models` 继续返回名称数组；模型市场和 `/v1/models` 使用同一 manifest 决定集合，后者只投影 OpenAI 兼容字段。
+
+manifest 每项包含 `id`、`visible`、`supported_endpoint_types`、可选 `capabilities`、`price_configured` 和 `price_version`。能力卡的 null、false、空数组含义不同：未知不等于禁止，也不意味着已证明支持。元数据编辑器省略字段不清空；明确清空按模型能力合同执行。能力卡不修改价格、冻结报价或路由能力真相源，不导入默认供应商目录与价格。
+
+价格资格在实际端点、协议绑定和渠道执行器确定后计算。原生端点使用空插件作用域；插件端点复用该插件的用量 schema 和报价解析器，不能拿其他插件表达式代替。显式不兼容插件表达式拒绝该端点，不能退回原生价格掩盖。现有报价器允许的全局按次价格后备及显式允许未配置价格模型的设置保留；不额外引入另一套定价规则。协议声明的模型子集与别名使用请求中间件的同一索引。
+
+`GET /api/token/:id/client-config?format=codex|pi` 使用该 Token 的同一 manifest。Codex 导出 Responses TOML，可用 `model` 查询参数选择已授权模型；Pi 导出 Chat Completions JSON。响应包含 `filename`、`media_type`、`content`、`models` 和稳定诊断 `diagnostics`。Token 页提供预览、复制、下载。连接地址仅来自保存的 `ServerAddress`，不使用请求 Host 或转发头；密钥只使用 `REN2HUB_API_KEY` 环境变量引用。未知能力省略，不能移植的能力有诊断，价格一律省略并返回 `prices_omitted`，不虚构零价。PAT 分别要求 `profile:read`、`tokens:read`。
+
+## Codex 供应商用量窗口
+
+仅支持现有单凭据 Codex 渠道，其他类型明确返回 unsupported。该服务不建立账号池，不参与路由、健康、账务预留或自动重置额度。
+
+| 路径                                           | 权限与行为                                              |
+| ---------------------------------------------- | ------------------------------------------------------- |
+| `GET /api/channel/:id/provider-usage`          | `ChannelRead`；只读缓存，空缓存为 unknown，不发上游请求 |
+| `POST /api/channel/:id/provider-usage/refresh` | `ChannelOperate`；合并同凭据、端点的并发刷新            |
+| `PUT /api/channel/:id/provider-usage/settings` | `ChannelOperate`；`{auto_refresh: boolean}`，按渠道开关 |
+
+旧 Codex 用量读取入口与控制台使用同一服务，不再隐式发起 OAuth 刷新。自动刷新默认关闭，开启后默认每 5 分钟检查；手动刷新最短间隔 60 秒。429 遵守 `Retry-After`，失败指数退避，冷却持久化。单个浏览器取消不会取消共享采集；进程停止会取消并等待共享 HTTP/OAuth/数据库工作退出，停止后不能开启新采集。
+
+快照按稳定凭据与端点身份保存，状态为 `known/unknown/stale/error`，保留窗口百分比/长度/重置时间、最后成功和尝试时间、过期时间与下次允许刷新时间。更换身份使旧快照失效；可信 OAuth 刷新保持稳定身份并传播写库失败。错误仅输出稳定分类和 HTTP 状态，不保存上游错误正文或认证内容。读取错误不能用旧成功或零用量掩盖。
+
+渠道运行状态弹窗向 `ChannelRead` 开放缓存面板，编辑弹窗复用同一组件。刷新与自动采集仅额外要求 `ChannelOperate`，不要求 `ChannelWrite`。自动采集开关以服务端确认值显示，保存中禁止重复操作；失败恢复原值，取消、切换渠道或权限变化后的旧响应不覆盖当前状态。
+
+管理渠道列表在自动禁用时投影只读 `status_reason` 和 `status_time`（Unix 秒）。原因从现有状态事实派生，服务端去除凭据、账号、URL 和原始响应正文，最多 500 个字符；非自动禁用或无有效事实返回空串与 0。旧接口的 `other_info.status_reason` 同样脱敏，不新增原因存储。界面支持悬停、键盘和移动端点击查看，长文本可换行。
+
+## 请求诊断与关联
+
+生成请求可提供 `X-Ren2Hub-Trace-Id`、`X-Ren2Hub-Thread-Id`：各为 1–128 个 ASCII 字母、数字或 `-_.:`，重复头或非法值在准入前拒绝。关联键按 `(user_id, token_id, external_id)` 隔离；它不是鉴权凭据，也不替代供应商状态归属。
+
+本人读取使用 `GET /api/log/self/requests/:request_id/diagnostics` 和 `GET /api/log/self/request-diagnostics`；管理员使用去掉 `/self` 的对应路径。列表接受 `request_id`、`trace_id`、`thread_id`、`token_id`，按 Trace/Thread 查询必须指定正数 Token ID。自身入口始终绑定当前用户，不能通过查询参数跨用户。Playground 的临时 Token 0 只支持按 request_id 查看时间线，界面隐藏跨请求关联按钮，不跨临时请求聚合。
+
+诊断为独立无正文投影，默认保留 7 天，读取时立即过滤过期数据，后台每批最多清理 1000 行。本人只见脱敏字段；管理员的内部渠道/凭据标识还受当前 `ChannelRead` 和 PAT `channels:read` 交集约束。`ops:read` 本身不会授予这些字段。缺失或已过期的详情返回 `404 REQUEST_DIAGNOSTIC_UNAVAILABLE`；数据库故障返回错误，不伪装为空结果。
+
+`attempt_id` 对应真实发送，未发送候选不形成 attempt；`send_started_at`、`first_output_at`、`finished_at` 为 Unix 毫秒，缺失首个有效输出时不生成 TTFT。`ttft_ms` 从实际发送到首个有效语义输出，不把 HTTP 头、SSE 心跳或空前导帧视作输出。`queue_ms` 与 `user_queue_ms` 来自真实等待队列计时；`wait_ms` 是共享等待预算的消耗，不能解释为纯排队耗时。投影沿用有界观察队列，丢弃与存储失败独立计数，不阻塞发送/结算，不进入资金事务，也不删除消费日志或资金流水。

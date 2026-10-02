@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -15,6 +16,7 @@ var routeDecisionEventQueue struct {
 }
 
 var routeDecisionEventsDropped atomic.Uint64
+var routeDecisionStorageFailed atomic.Uint64
 
 func initRouteDecisionEventQueue() {
 	size := common.GetEnvOrDefault("ROUTE_DECISION_EVENT_QUEUE_SIZE", 1024)
@@ -32,10 +34,18 @@ func initRouteDecisionEventQueue() {
 			}
 			data, err := common.Marshal(decision)
 			if err != nil {
+				routeDecisionStorageFailed.Add(1)
+				common.SysError("route decision serialization failed")
 				continue
 			}
 			requestContext := context.WithValue(context.Background(), common.RequestIdKey, decision.RequestID)
 			logger.LogInfo(requestContext, string(data))
+			writeContext, cancel := context.WithTimeout(ctx, 2*time.Second)
+			if err := PersistRouteDecision(writeContext, decision); err != nil {
+				routeDecisionStorageFailed.Add(1)
+				common.SysError("route decision persistence failed")
+			}
+			cancel()
 		}
 	})
 }
@@ -58,3 +68,5 @@ func EnqueueRouteDecision(decision RouteDecision) {
 func RouteDecisionEventsDropped() uint64 {
 	return routeDecisionEventsDropped.Load()
 }
+
+func RouteDecisionStorageFailures() uint64 { return routeDecisionStorageFailed.Load() }

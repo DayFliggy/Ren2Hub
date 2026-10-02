@@ -30,24 +30,26 @@ foreach ($suite in $sdkSuites) {
 }
 ```
 
-| 脚本组 | 对应 Go 套件 | 夹具覆盖范围 |
-|---|---|---|
-| `verify.py` / `verify.mjs` | `TestGatewayOfficialSDK` | 每语言 32 条基础文本路径、16 轮工具往返、16 条中断流；四入口 × OpenAI/Claude/Gemini/Ollama，含状态归属和前导失败切换 |
-| `verify_media.py` / `verify_media.mjs` | `TestGatewayOfficialMediaSDK` | 每语言 7 条正常路径和 1 条图片中断；Embedding float/base64、图片 JSON/SSE、TTS PCM、STT JSON/multipart 流 |
-| `verify_audio.py` / `verify_audio.mjs` | `TestGatewayOfficialAudioSDK` | 两语言 16 场景；MiniMax、火山 HTTP/WS、Cloudflare 转写，不可执行路径零发送及二进制截断异常 |
-| `verify_realtime.py` / `verify_realtime.mjs` | `TestGatewayOfficialRealtimeSDK` | 两语言 8 场景；并发响应、工具、上游断开、供应商错误、客户端关闭和正常关闭码 |
-| `verify_cloud.py` / `verify_cloud.mjs`，基础阶段 | `TestGatewayOfficialCloudSDK` | 两语言 80 条路径；Azure、AWS Claude Bearer/SigV4、Vertex Claude/Gemini 五配置 × 四入口 × JSON/SSE |
-| 同上，工具与中断阶段 | `TestGatewayOfficialCloudToolAndInterruptionSDK` | 两语言 40 轮单工具往返和 40 条已交付中断，覆盖相同五配置与四入口 |
-| 同上，双工具阶段 | `TestGatewayOfficialCloudParallelToolSDK` | 两语言 40 轮双工具往返；首帧两个调用、分片参数 `0/false`、逆序工具结果、最终响应及唯一终止事件 |
-| `verify_legacy.py` / `verify_legacy.mjs` | `TestGatewayOfficialLegacySDK` | 两语言 108 场景；Baidu/Cohere/Tencent TC3/旧 Zhipu/Dify/PaLM，24 条 Chat JSON/SSE、72 条发送前拒绝、10 条已交付中断、2 条缓冲失败 |
-| `verify_compatible.py` / `verify_compatible.mjs` | `TestGatewayOfficialCompatibleSDK` | 28 配置，每语言 170 条 JSON/SSE 成功、54 条发送前拒绝；两语言合计 448 场景，验证实际适配器、模型/URL 映射、请求体、认证、输出和 usage |
-| `verify_special.py` / `verify_special.mjs` | `TestGatewayOfficialSpecialSDK` | Nova/Coze/讯飞，两语言 54 场景；10 条成功、38 条发送前拒绝、4 条已交付中断、2 条 Coze 已接受后查询失败不重放 |
-| `verify_codex.py` / `verify_codex.mjs` | `TestGatewayOfficialCodexSDK` | 两语言 32 场景；4 条 Responses JSON/SSE、12 条其他协议拒绝、4 条未知/跨 Token 拒绝、4 条凭据调序续轮、4 条停用/替换拒绝、2 条上游错误、2 条已交付中断 |
-| 复用 `verify_compatible.py` / `verify_compatible.mjs` | `TestGatewayOfficialVertexOpenSourceSDK` | llama 与非 llama `-maas`，服务账号/API Key 四配置；两语言 64 场景，24 条 JSON/SSE 成功、40 条发送前拒绝；实际适配器、本地 JWT 换取、账号、模型、URL 和输出上限 |
-| `verify_custom.py` / `verify_custom.mjs` | `TestGatewayOfficialCustomSDK` | 每语言 22 条成功路径和 10 条发送前拒绝；AdvancedCustom 四协议、模型映射、路径及传输配置 |
-| `verify_semantics.py` / `verify_semantics.mjs` | `TestGatewayOfficialSemanticPythonSDK` / `TestGatewayOfficialSemanticNodeSDK` | 每语言 58 场景：Chat 12、Responses 16、Anthropic 13、Gemini 17；34 条成功与 24 条拒绝，图片 JSON/SSE、结构输出、配置型搜索、custom tools、签名与私有文件 |
+| 脚本组                                                | 对应 Go 套件                                                                  | 夹具覆盖范围                                                                                                                                                                                                                                      |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verify.py` / `verify.mjs`                            | `TestGatewayOfficialSDK`                                                      | 每语言 32 条基础文本路径、16 轮工具往返、16 条中断流；四入口 × OpenAI/Claude/Gemini/Ollama，含状态归属和前导失败切换                                                                                                                              |
+| `verify_media.py` / `verify_media.mjs`                | `TestGatewayOfficialMediaSDK`                                                 | 每语言 7 条正常路径和 1 条图片中断；Embedding float/base64、图片 JSON/SSE、TTS PCM、STT JSON/multipart 流                                                                                                                                         |
+| `verify_audio.py` / `verify_audio.mjs`                | `TestGatewayOfficialAudioSDK`                                                 | 两语言 16 场景；MiniMax、火山 HTTP/WS、Cloudflare 转写，不可执行路径零发送及二进制截断异常                                                                                                                                                        |
+| `verify_realtime.py` / `verify_realtime.mjs`          | `TestGatewayOfficialRealtimeSDK`                                              | 两语言 8 场景；并发响应、工具、上游断开、供应商错误、客户端关闭和正常关闭码                                                                                                                                                                       |
+| `verify_cloud.py` / `verify_cloud.mjs`，基础阶段      | `TestGatewayOfficialCloudSDK`                                                 | 两语言 80 条路径；Azure、AWS Claude Bearer/SigV4、Vertex Claude/Gemini 五配置 × 四入口 × JSON/SSE                                                                                                                                                 |
+| 同上，工具与中断阶段                                  | `TestGatewayOfficialCloudToolAndInterruptionSDK`                              | 两语言 40 轮单工具往返和 40 条已交付中断，覆盖相同五配置与四入口                                                                                                                                                                                  |
+| 同上，双工具阶段                                      | `TestGatewayOfficialCloudParallelToolSDK`                                     | 两语言 40 轮双工具往返；首帧两个调用、分片参数 `0/false`、逆序工具结果、最终响应及唯一终止事件                                                                                                                                                    |
+| `verify_legacy.py` / `verify_legacy.mjs`              | `TestGatewayOfficialLegacySDK`                                                | 两语言 108 场景；Baidu/Cohere/Tencent TC3/旧 Zhipu/Dify/PaLM，24 条 Chat JSON/SSE、72 条发送前拒绝、10 条已交付中断、2 条缓冲失败                                                                                                                 |
+| `verify_compatible.py` / `verify_compatible.mjs`      | `TestGatewayOfficialCompatibleSDK`                                            | 28 配置，每语言 170 条 JSON/SSE 成功、54 条发送前拒绝；两语言合计 448 场景，验证实际适配器、模型/URL 映射、请求体、认证、输出和 usage                                                                                                             |
+| `verify_special.py` / `verify_special.mjs`            | `TestGatewayOfficialSpecialSDK`                                               | Nova/Coze/讯飞，两语言 54 场景；10 条成功、38 条发送前拒绝、4 条已交付中断、2 条 Coze 已接受后查询失败不重放                                                                                                                                      |
+| `verify_codex.py` / `verify_codex.mjs`                | `TestGatewayOfficialCodexSDK`                                                 | 两语言 32 场景；4 条 Responses JSON/SSE、12 条其他协议拒绝、4 条未知/跨 Token 拒绝、4 条凭据调序续轮、4 条停用/替换拒绝、2 条上游错误、2 条已交付中断                                                                                             |
+| 复用 `verify_compatible.py` / `verify_compatible.mjs` | `TestGatewayOfficialVertexOpenSourceSDK`                                      | llama 与非 llama `-maas`，服务账号/API Key 四配置；两语言 64 场景，24 条 JSON/SSE 成功、40 条发送前拒绝；实际适配器、本地 JWT 换取、账号、模型、URL 和输出上限                                                                                    |
+| `verify_custom.py` / `verify_custom.mjs`              | `TestGatewayOfficialCustomSDK`                                                | 每语言 22 条成功路径和 10 条发送前拒绝；AdvancedCustom 四协议、模型映射、路径及传输配置                                                                                                                                                           |
+| `verify_semantics.py` / `verify_semantics.mjs`        | `TestGatewayOfficialSemanticPythonSDK` / `TestGatewayOfficialSemanticNodeSDK` | Python 与 Node 各 63 场景：Chat 12、Responses 21、Anthropic 13、Gemini 17；39 条成功与 24 条拒绝，图片 JSON/SSE、结构输出、配置型搜索、plain custom tools、grammar custom tools、签名与私有文件。必须分别运行两种语言，不能由夹具相同推断均通过。 |
 
 兼容适配器可分别运行 Python 与 TypeScript 子测试。定向复验使用 `-run '^TestGatewayOfficialCompatibleSDK$/verify_compatible.py$'` 或对应 `.mjs` 子测试；仍保持单次 60 秒超时。
+
+基础套件的模拟 response/item ID 按每请求生成，并验证 `previous_response_id` 所属凭据。不同渠道重复使用固定 ID 会正确触发网关状态归属拒绝，因此不能通过放宽生产绑定规则修复夹具。共享 Codex/兼容适配器模板保留各自既有 ID 合同。
 
 语义套件中，每个请求由观察端点核对上游次数、预扣会话、钱包、Token 和消费日志；拒绝路径均无变化。图片按解码字节检查，Google Python SDK 的 URL-safe base64 在跨协议 data URI 中正规化，原生请求保留。固定 Python SDK 的搜索时间区间序列化为 `start_time/end_time` 和 `+00:00`，该原生保留测试仅证明 SDK 到网关的传输契约，不证明真实供应商接受该字段形态。Chat 文件引用由测试库预先建立绑定，未新增 Files API。
 

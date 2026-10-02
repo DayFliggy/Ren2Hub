@@ -143,7 +143,7 @@ func (a *TaskAdaptor) validatedCompletionUsageFacts(facts any, models ...string)
 	if !ok {
 		return nil, fmt.Errorf("plugin usage hook must return an object")
 	}
-	schema, _ := a.plugin.Meta.UsageForModels(models...)
+	schema := a.plugin.Meta.UsageFactsForModels(models...)
 	validated := make(map[string]any, len(values))
 	for key, value := range values {
 		field, declared := schema[key]

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -244,6 +245,7 @@ func prepareLiveRouteSend(c *gin.Context, info *relaycommon.RelayInfo, state *ro
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, 503, types.ErrOptionWithSkipRetry())
 		}
+		info.GatewayCredentialID = credential.ID
 		scopes, err := service.LoadGatewayProviderRateScopes(c.Request.Context(), info.ChannelId, credential.ID)
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeGetChannelFailed, 503, types.ErrOptionWithSkipRetry())
@@ -284,6 +286,7 @@ func prepareLiveRouteSend(c *gin.Context, info *relaycommon.RelayInfo, state *ro
 		service.RecordGatewayFirstSend()
 	}
 	info.UpstreamSent = true
+	info.UpstreamSentAt = time.Now()
 	return nil
 }
 
@@ -487,11 +490,27 @@ func observeLiveRouteAttempt(c *gin.Context, info *relaycommon.RelayInfo, outcom
 	if routeLiveSelectionActive(c) && info != nil && info.UpstreamSent {
 		value, _ := c.Get(liveRouteAttemptEvidenceKey)
 		attempts, _ := value.([]service.RouteDecisionAttempt)
+		finished := time.Now()
 		attempt := service.RouteDecisionAttempt{
+			AttemptID: info.BillingAttemptID, CredentialID: info.GatewayCredentialID,
+			QueueMS: c.GetInt64("gateway_channel_queue_ms"), FinishedAt: finished.UnixMilli(),
 			Sequence: c.GetInt(liveRouteAttemptCountKey), ChannelID: c.GetInt(liveRoutePreviousChannelKey),
 			Success: outcome.Success, Origin: outcome.Origin, LatencyMS: outcome.LatencyMS,
 			Acceptance: outcome.Acceptance, RetryPermission: outcome.RetryPermission,
 			ResponseCommitted: outcome.ResponseCommitted,
+		}
+		if attempt.AttemptID == "" {
+			attempt.AttemptID = info.RequestId + ":" + strconv.Itoa(attempt.Sequence)
+		}
+		if !info.UpstreamSentAt.IsZero() {
+			attempt.SendStartedAt = info.UpstreamSentAt.UnixMilli()
+			if elapsed := finished.Sub(info.UpstreamSentAt).Milliseconds(); elapsed >= 0 {
+				attempt.UpstreamLatencyMS = &elapsed
+			}
+			if outputAt, known := info.FirstValidOutputTime(); known && !outputAt.Before(info.UpstreamSentAt) {
+				first, elapsed := outputAt.UnixMilli(), outputAt.Sub(info.UpstreamSentAt).Milliseconds()
+				attempt.FirstOutputAt, attempt.TTFTMS = &first, &elapsed
+			}
 		}
 		if value, exists := c.Get("response_termination"); exists {
 			if terminal, valid := value.(types.ResponseTermination); valid {

@@ -47,10 +47,11 @@ func TestInferenceChannelStatusRequiresAdminReadAndFixedTarget(t *testing.T) {
 		}
 	}))
 	defer upstream.Close()
+	access := map[int]string{}
 	for _, role := range []int{common.RoleCommonUser, common.RoleAdminUser} {
 		name := fmt.Sprintf("inference-%d", role)
-		pat := name + "-pat"
-		require.NoError(t, model.DB.Create(&model.User{Id: role, Username: name, AffCode: name, Role: role, Status: common.UserStatusEnabled, AccessToken: &pat}).Error)
+		require.NoError(t, model.DB.Create(&model.User{Id: role, Username: name, AffCode: name, Role: role, Status: common.UserStatusEnabled}).Error)
+		access[role] = createRouterBrowserSession(t, role)
 	}
 	engine := gin.New()
 	registerChannelRoutes(engine.Group("/api"))
@@ -65,7 +66,7 @@ func TestInferenceChannelStatusRequiresAdminReadAndFixedTarget(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, path, nil)
 			if role != 0 {
-				req.Header.Set("Authorization", fmt.Sprintf("Bearer inference-%d-pat", role))
+				req.Header.Set("Authorization", "Bearer "+access[role])
 			}
 			engine.ServeHTTP(recorder, req)
 			return recorder

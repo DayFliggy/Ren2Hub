@@ -15,6 +15,12 @@ const state = new Map();
 const counts = {};
 const observe = async () => (await fetch(process.env.GATEWAY_SEMANTIC_OBSERVER)).json();
 
+function quotaAfterCharge(value, charge) {
+  assert.equal(typeof value, 'string', 'quota must use the decimal string wire contract');
+  assert.match(value, /^(0|-?[1-9]\d*)$/);
+  return (BigInt(value) - charge).toString();
+}
+
 function requestFor(test) {
   const request = structuredClone(test.body);
   const { protocol, feature, action, label } = test;
@@ -87,8 +93,8 @@ for (const test of cases) {
   } catch (error) {
     assert.ok(test.reject && (error.status ?? error.code) === 400, `${test.label}: ${error.stack}`);
   }
-  const charge = test.reject ? 0 : 500;
-  const expected = { sends: before.sends + Number(!test.reject), quota: before.quota - charge, token: before.token - charge, logs: before.logs + Number(!test.reject), billing_sessions: before.billing_sessions + Number(!test.reject) };
+  const charge = test.reject ? 0n : 500n;
+  const expected = { sends: before.sends + Number(!test.reject), quota: quotaAfterCharge(before.quota, charge), token: quotaAfterCharge(before.token, charge), logs: before.logs + Number(!test.reject), billing_sessions: before.billing_sessions + Number(!test.reject) };
   const deadline = Date.now() + 2000;
   let after = await observe();
   while (!Object.keys(expected).every(key => expected[key] === after[key]) && Date.now() < deadline) {

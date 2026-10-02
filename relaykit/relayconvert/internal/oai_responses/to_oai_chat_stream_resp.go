@@ -134,11 +134,11 @@ func ResponsesStreamEventToChatChunks(event *dto.ResponsesStreamResponse, state 
 		if event.Item == nil || !isResponsesToolOutputType(event.Item.Type) {
 			return nil, nil
 		}
-		return state.toolItem(event), nil
+		return state.toolItem(event)
 	case responsesEventFunctionArgsDelta, responsesEventCustomToolInputDelta:
 		return state.toolArgumentsDelta(event), nil
 	case responsesEventFunctionArgsDone, responsesEventCustomToolInputDone:
-		return state.flushPendingTool(event), nil
+		return state.flushPendingTool(event)
 	case responsesEventCompleted, responsesEventDone, responsesEventIncomplete:
 		response := event.Response
 		if event.Type == responsesEventIncomplete {
@@ -243,7 +243,11 @@ func (s *ResponsesToChatStreamState) terminalOutputChunks(response *dto.OpenAIRe
 		case out.Type == responsesOutputTypeReasoning && !hadSentReasoning:
 			chunks = append(chunks, s.reasoningDelta(reasoningOutputText(out))...)
 		case isResponsesToolOutputType(out.Type):
-			chunks = append(chunks, s.toolItem(&dto.ResponsesStreamResponse{Item: out})...)
+			toolChunks, err := s.toolItem(&dto.ResponsesStreamResponse{Item: out})
+			if err != nil {
+				return nil, err
+			}
+			chunks = append(chunks, toolChunks...)
 		}
 	}
 	return chunks, nil
@@ -332,16 +336,17 @@ func (s *ResponsesToChatStreamState) reasoningDelta(delta string) []dto.ChatComp
 	return chunks
 }
 
-func (s *ResponsesToChatStreamState) toolItem(event *dto.ResponsesStreamResponse) []dto.ChatCompletionsStreamResponse {
+func (s *ResponsesToChatStreamState) toolItem(event *dto.ResponsesStreamResponse) ([]dto.ChatCompletionsStreamResponse, error) {
 	tool := s.ensureToolForEvent(event)
 	if tool == nil {
-		return nil
+		return nil, nil
 	}
-	args := event.Item.ArgumentsString()
-	if args != "" {
-		tool.Arguments = args
+	if len(event.Item.Arguments) > 0 || len(event.Item.Input) > 0 {
+		if err := tool.mergeFinalArguments(event.Item.ArgumentsString()); err != nil {
+			return nil, err
+		}
 	}
-	return s.toolDelta(tool, "")
+	return s.toolDelta(tool, ""), nil
 }
 
 func (s *ResponsesToChatStreamState) toolArgumentsDelta(event *dto.ResponsesStreamResponse) []dto.ChatCompletionsStreamResponse {
@@ -361,15 +366,32 @@ func (s *ResponsesToChatStreamState) toolArgumentsDelta(event *dto.ResponsesStre
 	return s.toolDelta(tool, event.Delta)
 }
 
-func (s *ResponsesToChatStreamState) flushPendingTool(event *dto.ResponsesStreamResponse) []dto.ChatCompletionsStreamResponse {
+func (s *ResponsesToChatStreamState) flushPendingTool(event *dto.ResponsesStreamResponse) ([]dto.ChatCompletionsStreamResponse, error) {
 	tool := s.findToolForEvent(event)
 	if tool == nil {
 		tool = s.ensureFallbackToolForEvent(event)
 	}
 	if tool == nil {
-		return nil
+		return nil, nil
 	}
-	return s.toolDelta(tool, "")
+	final := event.Arguments
+	if event.Type == responsesEventCustomToolInputDone {
+		final = event.Input
+	}
+	if final != nil {
+		if err := tool.mergeFinalArguments(*final); err != nil {
+			return nil, err
+		}
+	}
+	return s.toolDelta(tool, ""), nil
+}
+
+func (tool *responsesStreamTool) mergeFinalArguments(final string) error {
+	if tool.ArgsSentAt > len(tool.Arguments) || tool.ArgsSentAt > len(final) || !strings.HasPrefix(final, tool.Arguments[:tool.ArgsSentAt]) {
+		return fmt.Errorf("tool-call final arguments conflict with emitted deltas")
+	}
+	tool.Arguments = final
+	return nil
 }
 
 func (s *ResponsesToChatStreamState) ensureToolForEvent(event *dto.ResponsesStreamResponse) *responsesStreamTool {

@@ -18,6 +18,7 @@ import {
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import SecurityProofDialog from '@/components/auth/SecurityProofDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
@@ -65,6 +66,7 @@ type DeleteTarget =
   { kind: 'single'; user: AdminUser } | { kind: 'bulk'; users: AdminUser[] }
 
 const { t, locale } = useI18n()
+const proofDialog = ref<InstanceType<typeof SecurityProofDialog> | null>(null)
 const {
   rows,
   total,
@@ -98,7 +100,7 @@ const {
   deleteUser,
   updateUsersStatus,
   deleteSelectedUsers,
-} = useAdminUsers()
+} = useAdminUsers((operation) => proofDialog.value!.request(operation))
 
 const formOpen = ref(false)
 const editing = ref<AdminUser | null>(null)
@@ -375,6 +377,7 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
 </script>
 
 <template>
+  <SecurityProofDialog ref="proofDialog" />
   <div>
     <PageBreadcrumb :crumbs="[t('nav.groupAdmin'), t('nav.userManagement')]">
       <template #action>

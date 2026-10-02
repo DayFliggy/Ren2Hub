@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { api } from '@/api/client'
+import { readMarketIcon } from '@/api/taskPlugins'
 import MetadataIcon from '@/components/admin/MetadataIcon.vue'
 
 const props = defineProps<{
@@ -31,15 +32,17 @@ watch(
   async () => {
     clear()
     failed.value = false
-    imageURL.value = props.sourceUrl ?? ''
-    if (!props.hasIcon || props.sourceUrl) return
+    imageURL.value = ''
+    if (!props.hasIcon && !props.sourceUrl) return
     const request = new AbortController()
     controller = request
     try {
-      const blob = await api.getBlob(
-        `/api/plugin/task/${encodeURIComponent(props.pluginKey)}/icon`,
-        { signal: request.signal }
-      )
+      const blob = props.sourceUrl
+        ? await readMarketIcon(props.sourceUrl, request.signal)
+        : await api.getBlob(
+            `/api/plugin/task/${encodeURIComponent(props.pluginKey)}/icon`,
+            { signal: request.signal }
+          )
       if (request.signal.aborted) return
       if (
         !['image/png', 'image/svg+xml'].includes(blob.type) ||

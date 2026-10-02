@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/ollama"
@@ -657,8 +658,7 @@ func AddChannel(c *gin.Context) {
 		})
 		return
 	}
-	if len(addChannelRequest.Channel.GetSetting().TaskPluginBindings()) > 0 && !authz.Can(c.GetInt("id"), c.GetInt("role"), authz.TaskPluginBind) {
-		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
+	if len(addChannelRequest.Channel.GetSetting().TaskPluginBindings()) > 0 && !middleware.RequireCurrentUserPermission(c, authz.TaskPluginBind) {
 		return
 	}
 
@@ -890,8 +890,7 @@ func EditTagChannels(c *gin.Context) {
 		return
 	}
 	if (channelTag.ParamOverride != nil || channelTag.HeaderOverride != nil) &&
-		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {
-		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
+		!middleware.RequireCurrentUserPermission(c, authz.ChannelSensitiveWrite) {
 		return
 	}
 	if channelTag.ParamOverride != nil {
@@ -1040,8 +1039,7 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	originProxy := originChannel.GetSetting().Proxy
-	if _, provided := requestData["setting"]; provided && !taskPluginBindingsEqual(channel.GetSetting().TaskPluginBindings(), originChannel.GetSetting().TaskPluginBindings()) && !authz.Can(c.GetInt("id"), c.GetInt("role"), authz.TaskPluginBind) {
-		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
+	if _, provided := requestData["setting"]; provided && !taskPluginBindingsEqual(channel.GetSetting().TaskPluginBindings(), originChannel.GetSetting().TaskPluginBindings()) && !middleware.RequireCurrentUserPermission(c, authz.TaskPluginBind) {
 		return
 	}
 	proxyChanged := false
@@ -1055,8 +1053,7 @@ func UpdateChannel(c *gin.Context) {
 	channel.ChannelInfo = originChannel.ChannelInfo
 
 	if channelHasSensitiveChanges(&channel, originChannel, requestData) &&
-		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {
-		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
+		!middleware.RequireCurrentUserPermission(c, authz.ChannelSensitiveWrite) {
 		return
 	}
 
@@ -1596,8 +1593,7 @@ func ManageMultiKeys(c *gin.Context) {
 		return
 	}
 	if multiKeyActionRequiresSensitiveWrite(request.Action) &&
-		!authz.Can(c.GetInt("id"), c.GetInt("role"), authz.ChannelSensitiveWrite) {
-		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
+		!middleware.RequireCurrentUserPermission(c, authz.ChannelSensitiveWrite) {
 		return
 	}
 

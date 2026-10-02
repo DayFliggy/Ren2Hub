@@ -174,6 +174,19 @@ type TaskPluginAuthorSnapshot struct {
 
 func (t *Task) ResultRetrievable() bool { return t != nil && !t.PrivateData.ResultDiscarded }
 
+// Clear discarded payloads before every database write, including an INSERT
+// inside an uncommitted terminal transaction. Keep the caller's response and
+// the result hash input intact; removing fields only in a later UPDATE would
+// still put the payload in database journals.
+func taskResultForStorage(data json.RawMessage, privateData TaskPrivateData) (json.RawMessage, TaskPrivateData) {
+	if privateData.ResultDiscarded {
+		data = nil
+		privateData.PluginState = nil
+		privateData.ResultURL = ""
+	}
+	return data, privateData
+}
+
 // TaskBillingContext keeps the accepted immutable quote and separate usage/result evidence.
 type TaskBillingContext struct {
 	AttemptID       string                `json:"attempt_id"`
