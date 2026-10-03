@@ -12,7 +12,6 @@ func ChannelSupportsCompactEndpoint(channel *model.Channel, requestedModel strin
 	switch channel.Type {
 	case constant.ChannelTypeOpenAI,
 		constant.ChannelTypeAzure,
-		constant.ChannelTypeCodex,
 		constant.ChannelTypeNewAPI,
 		constant.ChannelTypeSub2API, constant.ChannelTypeOllama:
 		return true
@@ -34,7 +33,6 @@ func ChannelSupportsNativeResponses(channel *model.Channel, requestedModel strin
 	switch channel.Type {
 	case constant.ChannelTypeOpenAI,
 		constant.ChannelTypeAzure,
-		constant.ChannelTypeCodex,
 		constant.ChannelTypeNewAPI,
 		constant.ChannelTypeSub2API, constant.ChannelTypeOllama, constant.ChannelTypeZhipu_v4:
 		return true

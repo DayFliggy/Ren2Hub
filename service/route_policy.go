@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
 )
@@ -18,7 +19,10 @@ func loadGatewayChannel(ctx context.Context, channelID int, probe bool) (model.C
 		return model.Channel{}, ErrAdmissionRuntime
 	}
 	var channel model.Channel
-	if err := model.DB.WithContext(ctx).Select("id", "status", "capacity_total", "channel_ratio").First(&channel, channelID).Error; err != nil {
+	if err := model.DB.WithContext(ctx).Select("id", "type", "status", "capacity_total", "channel_ratio").First(&channel, channelID).Error; err != nil {
+		return channel, err
+	}
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
 		return channel, err
 	}
 	capacity, ratio, err := channel.RoutingSettings()

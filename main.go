@@ -131,13 +131,9 @@ func main() {
 		controller.AutomaticallyUpdateChannels(frequency)
 	}
 
-	// Codex credential auto-refresh check every 10 minutes, refresh when expires within 1 day
-	service.StartCodexCredentialAutoRefreshTask()
-
 	// Sample host, gateway and storage health for the admin ops monitor.
 	service.StartOpsMonitor()
 	service.StartRequestDiagnosticsCleanup()
-	service.StartProviderUsageTask()
 
 	// Wire task polling adaptor factory (breaks service -> relay import cycle).
 	// Must run before the system task runner starts: the async_task_poll handler

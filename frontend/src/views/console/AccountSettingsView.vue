@@ -18,9 +18,13 @@ import PreferencesNotificationsPanel from '@/components/console/PreferencesNotif
 import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 
-const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
-  embedded: false,
-})
+const props = withDefaults(
+  defineProps<{ embedded?: boolean; securityOnly?: boolean }>(),
+  {
+    embedded: false,
+    securityOnly: false,
+  }
+)
 
 const { t } = useI18n()
 const router = useRouter()
@@ -110,7 +114,10 @@ async function deleteAccount(): Promise<void> {
       </p>
     </PageHero>
 
-    <div class="grid items-start gap-8 2xl:grid-cols-2 2xl:gap-10">
+    <div
+      v-if="!props.securityOnly"
+      class="grid items-start gap-8 2xl:grid-cols-2 2xl:gap-10"
+    >
       <AccountSecurityPanel
         :user="auth.user"
         @edit-profile="openProfile"
@@ -120,7 +127,7 @@ async function deleteAccount(): Promise<void> {
       <PreferencesNotificationsPanel :is-admin="auth.isAdmin" />
     </div>
 
-    <LoginSessionsPanel />
+    <LoginSessionsPanel v-if="props.securityOnly || !props.embedded" />
 
     <ConsoleModal
       :open="profileOpen"

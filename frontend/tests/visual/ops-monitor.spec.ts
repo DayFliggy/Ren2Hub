@@ -11,11 +11,11 @@ import {
 
 const SECTIONS = [
   'status',
-  'gateway',
-  'resources',
-  'upstream',
-  'storage',
   'quality',
+  'upstream',
+  'infrastructure',
+  'resources',
+  'storage',
   'tasks',
 ]
 
@@ -98,6 +98,11 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(nav.nth(2)).toHaveAttribute('aria-current', 'page')
 
       await expect(section(page, 'status')).toContainText('磁盘')
+      await expect(section(page, 'status')).not.toContainText('版本')
+      await expect(section(page, 'status')).not.toContainText('运行时长')
+      await expect(
+        section(page, 'status').locator('.ops-countdown-badge')
+      ).toHaveAttribute('title', '30s')
       await expect(page.locator('[data-ops-overall-status]')).toHaveAttribute(
         'data-status',
         'warning'
@@ -111,15 +116,13 @@ for (const theme of ['light', 'dark'] as const) {
         const tops = boxes.map((box) => box!.y)
         expect(tops).toEqual([...tops].sort((a, b) => a - b))
       } else {
-        const [status, gateway, resources] = boxes
-        // Header and core traffic fit the first screen.
-        const kpis = await section(page, 'gateway')
-          .locator('.ops-gateway-kpis')
-          .boundingBox()
-        expect(kpis!.y + kpis!.height).toBeLessThan(900)
-        expect(status!.y).toBeLessThan(gateway!.y)
-        expect(Math.abs(resources!.y - gateway!.y)).toBeLessThan(4)
-        expect(resources!.x).toBeLessThan(gateway!.x)
+        const [status, quality, , infrastructure, resources, , tasks] = boxes
+        // Header and request quality fit the first screen.
+        expect(status!.y).toBeLessThan(quality!.y)
+        expect(resources!.y).toBeGreaterThan(quality!.y)
+        expect(infrastructure!.y).toBeGreaterThan(quality!.y)
+        expect(tasks!.width).toBeGreaterThan(quality!.width)
+        await expect(section(page, 'infrastructure')).toBeVisible()
       }
 
       await page.screenshot({ path: testInfo.outputPath('ops-top.png') })
@@ -335,6 +338,8 @@ test('english labels render without raw keys', async ({ page }) => {
   await expect(
     page.getByRole('heading', { level: 1, name: 'Ops monitor' })
   ).toBeVisible()
+  await expect(section(page, 'status')).not.toContainText('Version')
+  await expect(section(page, 'status')).not.toContainText('Uptime')
   await expect(section(page, 'quality')).toContainText('Top models by traffic')
   await expect(section(page, 'tasks')).toContainText('Gateway state cleanup')
   const text = await page.locator('[data-ops-page]').innerText()

@@ -12,7 +12,7 @@ import (
 
 func TestResponsesWSRequiresEnabledNativeChannel(t *testing.T) {
 	require.False(t, ChannelSupportsResponsesWebSocket(nil, "gpt-5"))
-	for _, channelType := range []int{constant.ChannelTypeOpenAI, constant.ChannelTypeCodex, constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI} {
+	for _, channelType := range []int{constant.ChannelTypeOpenAI, constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI} {
 		channel := &model.Channel{Type: channelType}
 		require.False(t, ChannelSupportsResponsesWebSocket(channel, "gpt-5"))
 		channel.Setting = common.GetPointer(`{"responses_websocket_enabled":true}`)

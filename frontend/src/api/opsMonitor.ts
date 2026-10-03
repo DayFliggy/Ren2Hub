@@ -187,6 +187,8 @@ export interface OpsOverview {
   schema_version: 1
   sampled_at: number
   status: OpsStatus
+  /** Display-only score derived by the backend from the measured checks. */
+  health_score: number | null
   checks: OpsCheck[]
   runtime: OpsRuntime
   resources: OpsResources
@@ -291,6 +293,13 @@ function measured(value: unknown, endpoint: string): number | null {
 function measuredCount(value: unknown, endpoint: string): number | null {
   if (value === null) return null
   return count(value, endpoint)
+}
+
+function healthScore(value: unknown, endpoint: string): number | null {
+  if (value === null) return null
+  const parsed = requiredStrictInteger(value, endpoint)
+  if (parsed < 0 || parsed > 100) invalidResponse(endpoint)
+  return parsed
 }
 
 /** Healthy probes report "" and failed probes name the failure. */
@@ -498,6 +507,7 @@ export function parseOpsOverview(
     schema_version: 1,
     sampled_at: count(row.sampled_at, endpoint),
     status: oneOf(row.status, OPS_STATUSES, endpoint),
+    health_score: healthScore(row.health_score, endpoint),
     checks: row.checks.map((check) => parseCheck(check, endpoint)),
     runtime: parseRuntime(row.runtime, endpoint),
     resources: parseResources(row.resources, endpoint),

@@ -1,8 +1,6 @@
 import { securityMessages } from '../../security'
 import { taskPluginMessages } from '../../taskPlugins'
-import { providerUsageMessages } from '../../providerUsage'
 export default {
-  providerUsage: providerUsageMessages.en,
   taskPlugins: taskPluginMessages.en,
   security: securityMessages['en'],
   billing: {
@@ -366,6 +364,7 @@ export default {
     profile: 'Profile',
     home: 'Home',
     balance: 'Balance',
+    securityAccess: 'Security & access',
     rebate: 'Rebate',
     redeem: 'Redeem',
     collapse: 'Collapse sidebar',
@@ -1218,6 +1217,9 @@ export default {
     statusEnabled: 'Enabled',
     statusDisabled: 'Manually disabled',
     statusAutoDisabled: 'Auto disabled',
+    statusRetired: 'Retired',
+    retiredHint:
+      'This channel type is retired. Delete it and create an OpenAI API channel with an official API key; subscription credentials cannot be reused.',
     priorityFor: 'Priority for {name}',
     weightFor: 'Weight for {name}',
     notTested: 'Untested',

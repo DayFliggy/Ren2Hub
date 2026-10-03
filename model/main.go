@@ -292,8 +292,6 @@ func migrateDB() error {
 		&User{},
 		&PersonalAccessToken{},
 		&GatewayRequestDiagnostic{},
-		&ProviderUsageSnapshot{},
-		&ProviderUsageSetting{},
 		&UserSession{},
 		&AuthFlow{},
 		&ExternalIdentityClaim{},

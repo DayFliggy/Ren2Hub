@@ -46,6 +46,10 @@ const routeCapabilityMinimumConfidence = 0.9
 func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilterResult {
 	result := routeCapabilityFilterResult{}
 
+	if constant.IsRetiredChannelType(input.ChannelType) {
+		result.Reason = RouteFilterUnsupported
+		return result
+	}
 	if input.ChannelStatus != common.ChannelStatusEnabled {
 		result.Reason = RouteFilterChannelDisabled
 		return result

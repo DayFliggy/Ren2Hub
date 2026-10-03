@@ -2,8 +2,11 @@ package common
 
 import "github.com/QuantumNous/new-api/constant"
 
-// GetEndpointTypesByChannelType 获取渠道最优先端点类型（所有的渠道都支持 OpenAI 端点）
+// GetEndpointTypesByChannelType 返回渠道首选协议端点；已退役类型不提供端点。
 func GetEndpointTypesByChannelType(channelType int, modelName string) []constant.EndpointType {
+	if constant.IsRetiredChannelType(channelType) {
+		return nil
+	}
 	var endpointTypes []constant.EndpointType
 	switch channelType {
 	case constant.ChannelTypeOpenAI, constant.ChannelTypeAzure:
@@ -49,12 +52,6 @@ func GetEndpointTypesByChannelType(channelType int, modelName string) []constant
 			constant.EndpointTypeOpenAIResponseCompact,
 			constant.EndpointTypeAnthropic,
 			constant.EndpointTypeGemini,
-			constant.EndpointTypeOpenAIAlphaSearch,
-		}
-	case constant.ChannelTypeCodex:
-		endpointTypes = []constant.EndpointType{
-			constant.EndpointTypeOpenAIResponse,
-			constant.EndpointTypeOpenAIResponseCompact,
 			constant.EndpointTypeOpenAIAlphaSearch,
 		}
 	default:

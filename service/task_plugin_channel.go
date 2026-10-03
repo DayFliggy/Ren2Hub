@@ -58,11 +58,11 @@ func SelectTaskPluginEndpointCandidate(channel *model.Channel, candidates []jspl
 }
 
 func TaskPluginChannelEligible(channel *model.Channel, key string) bool {
-	if key == "" {
-		return channel != nil && channel.Type != constant.ChannelTypeTaskPlugin
-	}
-	if channel == nil {
+	if channel == nil || constant.IsRetiredChannelType(channel.Type) {
 		return false
+	}
+	if key == "" {
+		return channel.Type != constant.ChannelTypeTaskPlugin
 	}
 	plugin, ok := jsplugin.DefaultRegistry.Get(key)
 	if !ok {

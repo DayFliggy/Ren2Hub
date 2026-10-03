@@ -61,6 +61,9 @@ func validateGatewayChannelIdentity(c *gin.Context, channelID int, probe bool) e
 	if err := model.DB.WithContext(c.Request.Context()).First(&current, channelID).Error; err != nil {
 		return err
 	}
+	if err := constant.ValidateChannelTypeLifecycle(current.Type); err != nil {
+		return err
+	}
 	if !gatewayChannelStatusAllowsSend(current.Status, probe) || current.GatewayEndpointID() != endpoint {
 		return ErrAdmissionRuntime
 	}

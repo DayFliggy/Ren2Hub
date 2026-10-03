@@ -42,14 +42,14 @@ foreach ($suite in $sdkSuites) {
 | `verify_legacy.py` / `verify_legacy.mjs`              | `TestGatewayOfficialLegacySDK`                                                | 两语言 108 场景；Baidu/Cohere/Tencent TC3/旧 Zhipu/Dify/PaLM，24 条 Chat JSON/SSE、72 条发送前拒绝、10 条已交付中断、2 条缓冲失败                                                                                                                 |
 | `verify_compatible.py` / `verify_compatible.mjs`      | `TestGatewayOfficialCompatibleSDK`                                            | 28 配置，每语言 170 条 JSON/SSE 成功、54 条发送前拒绝；两语言合计 448 场景，验证实际适配器、模型/URL 映射、请求体、认证、输出和 usage                                                                                                             |
 | `verify_special.py` / `verify_special.mjs`            | `TestGatewayOfficialSpecialSDK`                                               | Nova/Coze/讯飞，两语言 54 场景；10 条成功、38 条发送前拒绝、4 条已交付中断、2 条 Coze 已接受后查询失败不重放                                                                                                                                      |
-| `verify_codex.py` / `verify_codex.mjs`                | `TestGatewayOfficialCodexSDK`                                                 | 两语言 32 场景；4 条 Responses JSON/SSE、12 条其他协议拒绝、4 条未知/跨 Token 拒绝、4 条凭据调序续轮、4 条停用/替换拒绝、2 条上游错误、2 条已交付中断                                                                                             |
+| `verify_codex.py` / `verify_codex.mjs` | `TestGatewayOfficialCodexSDK` | 标准 OpenAI 渠道上的两语言 24 场景；4 条 Chat JSON/SSE、4 条 Responses JSON/SSE、4 条未知/跨 Token 拒绝、4 条凭据调序续轮、4 条停用/替换拒绝、2 条上游错误、2 条已交付中断 |
 | 复用 `verify_compatible.py` / `verify_compatible.mjs` | `TestGatewayOfficialVertexOpenSourceSDK`                                      | llama 与非 llama `-maas`，服务账号/API Key 四配置；两语言 64 场景，24 条 JSON/SSE 成功、40 条发送前拒绝；实际适配器、本地 JWT 换取、账号、模型、URL 和输出上限                                                                                    |
 | `verify_custom.py` / `verify_custom.mjs`              | `TestGatewayOfficialCustomSDK`                                                | 每语言 22 条成功路径和 10 条发送前拒绝；AdvancedCustom 四协议、模型映射、路径及传输配置                                                                                                                                                           |
 | `verify_semantics.py` / `verify_semantics.mjs`        | `TestGatewayOfficialSemanticPythonSDK` / `TestGatewayOfficialSemanticNodeSDK` | Python 与 Node 各 63 场景：Chat 12、Responses 21、Anthropic 13、Gemini 17；39 条成功与 24 条拒绝，图片 JSON/SSE、结构输出、配置型搜索、plain custom tools、grammar custom tools、签名与私有文件。必须分别运行两种语言，不能由夹具相同推断均通过。 |
 
 兼容适配器可分别运行 Python 与 TypeScript 子测试。定向复验使用 `-run '^TestGatewayOfficialCompatibleSDK$/verify_compatible.py$'` 或对应 `.mjs` 子测试；仍保持单次 60 秒超时。
 
-基础套件的模拟 response/item ID 按每请求生成，并验证 `previous_response_id` 所属凭据。不同渠道重复使用固定 ID 会正确触发网关状态归属拒绝，因此不能通过放宽生产绑定规则修复夹具。共享 Codex/兼容适配器模板保留各自既有 ID 合同。
+基础套件的模拟 response/item ID 按每请求生成，并验证 `previous_response_id` 所属凭据。不同渠道重复使用固定 ID 会正确触发网关状态归属拒绝，因此不能通过放宽生产绑定规则修复夹具。标准 OpenAI Codex 模型与兼容适配器夹具保留各自的状态 ID 合同。
 
 语义套件中，每个请求由观察端点核对上游次数、预扣会话、钱包、Token 和消费日志；拒绝路径均无变化。图片按解码字节检查，Google Python SDK 的 URL-safe base64 在跨协议 data URI 中正规化，原生请求保留。固定 Python SDK 的搜索时间区间序列化为 `start_time/end_time` 和 `+00:00`，该原生保留测试仅证明 SDK 到网关的传输契约，不证明真实供应商接受该字段形态。Chat 文件引用由测试库预先建立绑定，未新增 Files API。
 
@@ -57,7 +57,7 @@ foreach ($suite in $sdkSuites) {
 
 Vertex Gemini 无 ID 投影仅放行按名称仍可唯一关联的工具历史，`safe/allow` 记录损失，`strict` 拒绝 ID 丢失；必须依赖 ID 消歧的历史在所有策略下拒绝。原生 Chat/Gemini 多候选可以保留，转 Claude/Responses 在规划阶段以 `multiple_candidates_unsupported` 拒绝。思考控制的已识别不等价转换由独立计划和 HTTP 回归验证，`safe/strict` 拒绝、`allow` 诊断，Chat/Responses 可保真的 effort 保留。云 SDK 场景本身未涵盖搜索/custom tools、媒体或供应商专用推理签名。
 
-特殊文本夹具验证 Nova 的流式请求在发送前返回 400，其他未登记协议返回 503；Coze 创建已接受后不因查询失败重新创建。Codex 仅使用本地 OAuth 格式测试 Key，所有上游及授权网络均被拦截，不会发起真实登录或刷新；账号头、后端 Responses 路径和稳定凭据续轮经过实际适配器验证，compact/alpha search 不计入本套场景。
+特殊文本夹具验证 Nova 的流式请求在发送前返回 400，其他未登记协议返回 503；Coze 创建已接受后不因查询失败重新创建。Codex 模型套件使用标准 OpenAI 渠道和本地测试 API Key，全部外部请求均被拦截。夹具验证 `/v1/responses`、Bearer 认证、无 ChatGPT 账号头，以及客户端 `store:false`、`instructions`、`max_output_tokens` 的保留；Chat 成功、稳定凭据续轮与断流亦通过实际 OpenAI 适配器。type 57 的 OAuth 与 ChatGPT 后端已撤下；Compact/WebSocket 由独立回归负责，不计入本套场景。
 
 Realtime 的本地 TLS 测试证书只加入当前夹具与 SDK 子进程信任，不修改系统根证书，也不全局关闭 TLS 校验。Suno 不使用这些文本 SDK；续作、公开/私有任务 ID、同 Token 歌曲归属、凭据调序和失效资源边界由 `TestGatewaySunoContinuation*` 的 HTTP 回归验证。
 

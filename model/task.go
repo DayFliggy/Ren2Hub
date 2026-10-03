@@ -322,6 +322,9 @@ func (p *TaskPrivateData) BindCredential(ctx context.Context, channel *Channel, 
 // ResolveTaskCredential keeps pre-binding task records readable while every
 // versioned record fails closed if its original credential or endpoint changed.
 func ResolveTaskCredential(ctx context.Context, channel *Channel, task *Task) (string, int, error) {
+	if channel != nil && constant.IsRetiredChannelType(channel.Type) {
+		return "", 0, constant.ErrRetiredChannelType
+	}
 	if task != nil && (task.PrivateData.CredentialVersion != 0 || task.PrivateData.CredentialID != "" || task.PrivateData.EndpointID != "") {
 		binding := task.PrivateData
 		if channel == nil || task.ChannelId != channel.Id || channel.Status != common.ChannelStatusEnabled ||

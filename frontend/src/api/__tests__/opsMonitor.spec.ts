@@ -65,6 +65,7 @@ describe('ops billing health contract', () => {
 describe('ops overview contract', () => {
   it('keeps unmeasured values as null and measured zeros as zero', () => {
     const overview = parseOpsOverview(overviewFixture())
+    expect(overview.health_score).toBe(85)
     expect(overview.resources.cpu.percent).toBeNull()
     expect(overview.resources.network).toEqual({
       up_mbps: null,
@@ -106,6 +107,11 @@ describe('ops overview contract', () => {
   it.each<[string, (value: Overview) => void]>([
     ['an unknown schema', (v) => void (v.schema_version = 2)],
     ['an unknown status', (v) => void (v.status = 'degraded')],
+    ['an out of range health score', (v) => void (v.health_score = 101)],
+    [
+      'a missing health score',
+      (v) => void delete (v as Record<string, unknown>).health_score,
+    ],
     ['an unknown check key', (v) => void (v.checks[0]!.key = 'gpu')],
     ['an unknown probe error', (v) => void (v.storage.redis.error = 'refused')],
     [

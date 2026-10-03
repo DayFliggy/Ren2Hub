@@ -99,10 +99,12 @@ func ReadOpsOverview(window string) (OpsOverview, error) {
 	gateway.SuccessRate = common.GetRequestSuccessRate()
 	gateway.GrantedPerMinute, gateway.RejectedPerMinute = opsRecentRates(points)
 	checks := deriveOpsChecks(latest.resources, gateway, latest.storage, common.IsMasterNode)
+	status := rollupOpsStatus(checks)
 	return OpsOverview{
 		SchemaVersion: opsSchemaVersion,
 		SampledAt:     latest.sampledAt,
-		Status:        rollupOpsStatus(checks),
+		Status:        status,
+		HealthScore:   opsHealthScore(status, checks),
 		Checks:        checks,
 		Runtime:       opsRuntimeInfo(now, gateway.Admission.Draining),
 		Resources:     latest.resources,

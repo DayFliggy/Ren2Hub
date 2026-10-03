@@ -13,7 +13,7 @@ node tests/upstream-sync/smoke.mjs "$env:TEMP\ren2hub-upstream-smoke.exe"
 
 - PAT 规范路由与旧别名、一次明文、scope 目录、改名、绑定目标权限的 PATCH Proof、越权拒绝和撤销。
 - 模型能力卡 CRUD、同源 manifest/旧名称列表/`/v1/models`、Codex/Pi 导出；可信服务器地址不能被转发头替换，配置不包含真实模型 Token。
-- 单凭据 Codex 空缓存返回 unknown、自动刷新默认关闭；GET 不触发上游请求。
+- 已退役的 type 57 创建被明确拒绝，不落库、不触发上游请求；旧 Codex/provider-usage 路由不再注册。
 - Trace/Thread 诊断持久化、脱敏投影、仅有 `ops:read` 的 PAT 无权读取渠道/凭据内部 ID。
 - Chat、Claude 工具和 Responses custom tool 共三次模拟上游发送。
 

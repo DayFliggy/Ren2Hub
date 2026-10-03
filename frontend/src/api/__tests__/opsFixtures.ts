@@ -4,6 +4,7 @@ export function overviewFixture() {
     schema_version: 1,
     sampled_at: 1_767_225_600,
     status: 'warning',
+    health_score: 85,
     checks: [
       { key: 'cpu', status: 'ok', value: 12.5, threshold: 90 },
       { key: 'redis', status: 'critical', error: 'timeout' },

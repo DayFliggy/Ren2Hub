@@ -236,7 +236,7 @@ function save() {
 }
 .tool-table-wrap {
   border: 1px solid var(--border-subtle);
-  border-radius: 0.5rem;
+  border-radius: 1rem;
   background: var(--surface-solid);
   min-width: 0;
   max-width: 100%;

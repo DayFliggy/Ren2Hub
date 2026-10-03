@@ -5,6 +5,7 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import {
   adminChannelStatusLabelKey,
   adminChannelStatusTone,
+  isRetiredChannelType,
 } from '@/constants/adminChannels'
 import type { AdminChannel } from '@/types/console'
 
@@ -61,7 +62,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <span v-if="channel.status === 3" class="inline-flex min-w-0">
+  <StatusChip
+    v-if="isRetiredChannelType(channel.type)"
+    tone="warning"
+    :title="t('channels.retiredHint')"
+    >{{ t('channels.statusRetired') }}</StatusChip
+  >
+  <span v-else-if="channel.status === 3" class="inline-flex min-w-0">
     <button
       ref="anchor"
       type="button"

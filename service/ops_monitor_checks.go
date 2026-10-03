@@ -102,3 +102,37 @@ func rollupOpsStatus(checks []OpsCheck) OpsStatus {
 	}
 	return worst
 }
+
+// opsHealthScore keeps the display score beside the checks that produce it.
+// Unknown means that there is not enough evidence to claim a score.
+func opsHealthScore(status OpsStatus, checks []OpsCheck) *int {
+	if status == OpsStatusUnknown {
+		return nil
+	}
+	if status == OpsStatusOK {
+		score := 100
+		return &score
+	}
+	criticals, warnings := 0, 0
+	for _, check := range checks {
+		switch check.Status {
+		case OpsStatusCritical:
+			criticals++
+		case OpsStatusWarning:
+			warnings++
+		}
+	}
+	score := 0
+	if status == OpsStatusCritical {
+		score = 60 - criticals*20 - warnings*5
+		if score < 10 {
+			score = 10
+		}
+	} else {
+		score = 95 - warnings*10
+		if score < 55 {
+			score = 55
+		}
+	}
+	return &score
+}

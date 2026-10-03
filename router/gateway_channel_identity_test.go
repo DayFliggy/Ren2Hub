@@ -17,7 +17,7 @@ import (
 )
 
 func TestQueuedRequestRejectsChangedChannelIdentity(t *testing.T) {
-	for _, change := range []string{"key", "endpoint", "disabled_key", "trusted_refresh"} {
+	for _, change := range []string{"key", "endpoint", "disabled_key"} {
 		t.Run(change, func(t *testing.T) {
 			var sends atomic.Int32
 			url, key, _ := setupGatewaySDKWithUpstream(t, func(w http.ResponseWriter, r *http.Request) {
@@ -60,12 +60,8 @@ func TestQueuedRequestRejectsChangedChannelIdentity(t *testing.T) {
 				channel.BaseURL = &endpoint
 			case "disabled_key":
 				channel.ChannelInfo.MultiKeyStatusList[0] = common.ChannelStatusManuallyDisabled
-			case "trusted_refresh":
-				require.NoError(t, model.RefreshGatewayCredential(context.Background(), channel, "refreshed-fixture"))
 			}
-			if change != "trusted_refresh" {
-				require.NoError(t, channel.Update())
-			}
+			require.NoError(t, channel.Update())
 			require.NoError(t, service.RefreshChannelCapabilitiesByID(context.Background(), 1))
 			holder.Release()
 			got := <-done

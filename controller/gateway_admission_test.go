@@ -120,7 +120,7 @@ func TestGatewayAPIRejectsTPMForUnboundedChannelAndCredential(t *testing.T) {
 	require.NoError(t, db.Create(&model.Channel{Id: 3, Type: constant.ChannelTypeSora, Key: "media-only-fixture"}).Error)
 	credential, err := model.EnsureGatewayCredential(context.Background(), 3, "media-only-fixture")
 	require.NoError(t, err)
-	for _, channelType := range []int{constant.ChannelTypeSora, constant.ChannelTypeReplicate, constant.ChannelTypeCoze, constant.ChannelTypeCodex} {
+	for _, channelType := range []int{constant.ChannelTypeSora, constant.ChannelTypeReplicate, constant.ChannelTypeCoze} {
 		require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", 3).Update("type", channelType).Error)
 		for _, credentialScope := range []bool{false, true} {
 			config := model.DefaultGatewayConfig()

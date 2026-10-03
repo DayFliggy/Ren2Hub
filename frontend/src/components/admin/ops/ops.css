@@ -10,26 +10,20 @@
 .ops-area--header {
   order: 0;
 }
-.ops-area--gateway {
+.ops-area--quality {
   order: 1;
 }
-.ops-area--resources {
+.ops-area--upstream {
   order: 2;
 }
-.ops-area--upstream {
+.ops-area--infrastructure {
   order: 3;
 }
-.ops-area--storage {
+.ops-area--tasks {
   order: 4;
 }
-.ops-area--quality {
-  order: 5;
-}
-.ops-area--tasks {
-  order: 6;
-}
 .ops-area--billing {
-  order: 7;
+  order: 5;
 }
 .ops-area {
   min-width: 0;
@@ -42,23 +36,36 @@
     order: 0;
   }
   .ops-area--header,
-  .ops-area--storage,
+  .ops-area--infrastructure,
   .ops-area--full {
     grid-column: span 12;
   }
-  .ops-area--resources,
   .ops-area--upstream {
     grid-column: span 4;
   }
-  .ops-area--gateway,
   .ops-area--quality {
     grid-column: span 8;
   }
   .ops-area--tasks {
-    grid-column: span 7;
+    grid-column: span 12;
   }
   .ops-area--billing {
     grid-column: span 5;
+  }
+}
+
+.ops-area--infrastructure {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-width: 0;
+}
+.ops-subarea {
+  min-width: 0;
+}
+@media (min-width: 1280px) {
+  .ops-area--infrastructure {
+    grid-template-columns: minmax(0, 7fr) minmax(18rem, 5fr);
   }
 }
 
@@ -242,22 +249,39 @@
 .ops-reason--ok {
   color: var(--text-tertiary);
 }
-.ops-runtime {
+.ops-diagnostics {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 0.625rem;
+}
+.ops-diagnostics > summary {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.75rem;
-  font-size: 0.8125rem;
-}
-.ops-runtime dt {
-  font-size: 0.6875rem;
-  color: var(--text-tertiary);
-}
-.ops-runtime dd {
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
   color: var(--text-secondary);
-  overflow-wrap: anywhere;
-}
-.ops-runtime code {
   font-size: 0.75rem;
+  font-weight: 600;
+  list-style: none;
+}
+.ops-diagnostics > summary::-webkit-details-marker {
+  display: none;
+}
+.ops-diagnostics > summary::before {
+  content: '+';
+  display: inline-grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, monospace);
+}
+.ops-diagnostics[open] > summary::before {
+  content: '-';
+}
+.ops-diagnostics > .ops-metric-grid {
+  margin-top: 0.75rem;
 }
 .ops-dot {
   display: inline-block;

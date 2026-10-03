@@ -36,7 +36,6 @@ Chat/Responses/Claude/Gemini 分别指 OpenAI Chat、OpenAI Responses、Anthropi
 | Vertex llama / -maas，服务账号 JSON                                        | 原生                   | 转 Chat        | 拒绝                        | 转 Chat        |
 | Vertex llama / -maas，API Key                                              | 拒绝                   | 拒绝           | 拒绝                        | 拒绝           |
 | NewAPI、Sub2API                                                            | 原生                   | 原生           | 原生                        | 原生           |
-| Codex                                                                      | 拒绝                   | 原生           | 拒绝                        | 拒绝           |
 | DeepSeek                                                                   | 原生                   | 原生           | 原生                        | 拒绝           |
 | Ali                                                                        | 原生                   | 原生           | 模型匹配时原生，否则转 Chat | 拒绝           |
 | VolcEngine                                                                 | 原生                   | 原生           | 已登记原生端点或转 Chat     | 拒绝           |
@@ -51,6 +50,8 @@ Chat/Responses/Claude/Gemini 分别指 OpenAI Chat、OpenAI Responses、Anthropi
 | Cohere、Baidu、Zhipu、PaLM、Tencent、Xunfei、Dify、Mistral、Coze、Submodel | 投影或适配器兼容入口   | 拒绝           | 拒绝                        | 拒绝           |
 | Jina、MokaAI、Replicate、Jimeng                                            | 拒绝                   | 拒绝           | 拒绝                        | 拒绝           |
 | AdvancedCustom                                                             | 按显式路径和转换器配置 | 同左           | 同左                        | 同左           |
+
+ChatGPT Subscription (Codex) type 57 已退役，不再属于协议能力矩阵。标准 OpenAI 渠道的 Codex 模型属于上表 OpenAI 行，不因模型名包含 Codex 而进入订阅后端。生命周期与迁移说明见[渠道接入类型](../channel/TYPES.md)。
 
 除 Nova 外，表内文本入口同时登记 JSON 和流式请求。登记不等于已完成全部响应语义验收。Tencent 纯单段 TokenHub Key 保留原生 Chat，未知或混合凭据采用 TC3 文本交集；AdvancedCustom 必须逐配置验证。
 
@@ -74,11 +75,11 @@ OpenAI `n > 1` 或 Gemini `generationConfig.candidateCount > 1`（含既有 `can
 
 Vertex llama / `-maas` 的开源模型入口要求服务账号 JSON，API Key 配置在能力快照、预览、执行和 TPM 配置中统一拒绝；认证模式修改会重建能力快照。服务账号缓存按渠道和凭据摘要区分，Key 调序保留原账号缓存，人工替换不复用旧账号 Token。输出上限通过同一适配器入口投影为 `max_tokens`，保留 `0/missing`；请求形式参考 [Vertex Llama 请求文档](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/partner-models/llama/use-llama)，2026-09-14 核对。
 
-Responses `prompt` 只允许 OpenAI 类型原生渠道的已登记引用域。状态摘要增加实际传输身份，覆盖 Host、项目与自定义租户头；认证覆盖不得改换所选 Key，变化的追踪 ID 和已登记 SDK 遥测头不影响续轮。可信 OAuth 刷新、手动替换、压缩后的 Responses 续轮及覆盖后状态注入均有隔离 HTTP 回归。
+Responses `prompt` 只允许 OpenAI 类型原生渠道的已登记引用域。状态摘要增加实际传输身份，覆盖 Host、项目与自定义租户头；认证覆盖不得改换所选 Key，变化的追踪 ID 和已登记 SDK 遥测头不影响续轮。稳定凭据调序、手动替换、压缩后的 Responses 续轮及覆盖后状态注入由隔离 HTTP 回归保护。
 
 Google Files URI 与 `gs://` 引用要求已知、同 Token 的媒体归属绑定。原生续轮会保持已绑定 URI，未知或跨 Token 引用在发送前拒绝；两类引用的 8 条 HTTP 请求同时校验实际出站 URI。归属绑定不构成 Files 产品 API。
 
-TPM 只对登记了最终请求体解码器的操作开放。HTTP 和 AWS SDK 都在发送前读取最终请求体的独立副本，计算输入 JSON 估算和有效输出总上限；渠道提示词、参数覆盖、输出数量及协议切换均在此之前完成。Coze、Codex、未登记的旧投影或媒体格式不能配置有效 TPM；即使渠道支持文本 TPM，带未知扩展、无法估算的媒体/状态输入、缺少输出上限或生成非文本的请求仍会被拒绝。此估算不是供应商 tokenizer 的精确认证，结算使用可信 usage 修正。
+TPM 只对登记了最终请求体解码器的操作开放。HTTP 和 AWS SDK 都在发送前读取最终请求体的独立副本，计算输入 JSON 估算和有效输出总上限；渠道提示词、参数覆盖、输出数量及协议切换均在此之前完成。Coze、未登记的旧投影或媒体格式不能配置有效 TPM；即使渠道支持文本 TPM，带未知扩展、无法估算的媒体/状态输入、缺少输出上限或生成非文本的请求仍会被拒绝。此估算不是供应商 tokenizer 的精确认证，结算使用可信 usage 修正。
 
 ## 专项覆盖与限制
 
@@ -93,7 +94,7 @@ TPM 只对登记了最终请求体解码器的操作开放。HTTP 和 AWS SDK �
 | 兼容适配器 SDK               | `TestGatewayOfficialCompatibleSDK`：28 配置 × 每语言 224 场景均通过；合计 340 条 JSON/SSE 成功路径和 108 条发送前拒绝。验证实际适配器的 URL、模型映射、请求体、认证头、流式输出和 usage                                                                                               | 本套覆盖基础文本，工具、异常流、媒体及供应商专有状态不由此推导；真实供应商未认证                                                                        |
 | 旧协议 SDK                   | Baidu、Cohere、Tencent TC3、旧 Zhipu、Dify、PaLM，两语言共 108 场景：24 条 Chat JSON/SSE、72 条其他协议发送前拒绝、10 条已交付中断及 2 条 PaLM 缓冲失败                                                                                                                               | 这六类的工具和媒体没有通过本套 SDK 验收；未声明的跨协议入口继续拒绝；真实供应商未认证                                                                   |
 | 特殊文本 SDK                 | `TestGatewayOfficialSpecialSDK`：Nova、Coze、讯飞，两语言共 54 场景；10 条成功、38 条发送前拒绝、4 条已交付中断、2 条 Coze 创建已接受后查询失败不重放                                                                                                                                 | Nova 流式明确返回 400，其他不支持协议返回 503；本套未验证工具/媒体、真实地区、OAuth 或真实供应商                                                        |
-| Codex SDK                    | `TestGatewayOfficialCodexSDK`：两语言共 32 场景；4 条 Responses JSON/SSE、12 条其他协议发送前拒绝、4 条未知/跨 Token 拒绝、4 条凭据调序续轮、4 条停用/凭据替换拒绝、2 条明确上游错误、2 条已交付中断；实际适配器验证 OAuth 格式 Key、账号头、模型和 URL                               | 使用本地测试凭据并拦截全部外部及 OAuth 请求；未进行真实授权、compact/alpha search 或工具/媒体 SDK 验收；不支持 TPM                                      |
+| 标准 OpenAI Codex SDK | `TestGatewayOfficialCodexSDK`：两语言共 24 场景；Chat/Responses JSON/SSE、未知/跨 Token 拒绝、凭据调序续轮、停用/替换拒绝、上游错误及已交付中断；标准 API Key、`/v1/responses` 与参数透传由实际 OpenAI 适配器验证 | 本地模拟上游，不是供应商认证；type 57 已退役；Compact/WebSocket 见各自专项回归，本套不计入 |
 | AdvancedCustom SDK           | 每语言 22 条成功路径及 10 条发送前拒绝；四入站与四上游协议、映射/路径/流式查询参数、Bearer/header/query/none 认证                                                                                                                                                                     | 全部自定义配置、工具/媒体特性、真实供应商                                                                                                               |
 | AWS                          | 事件流、取消、header 覆盖；Bearer/AKSK 各只发送一次；Nova 系统消息、文本段、零值、无输出、负 usage；投影策略回归                                                                                                                                                                      | 实际地区/端点、全部响应终止原因及完整特性                                                                                                               |
 | Ollama                       | 四协议 JSON/SSE、官方 SDK 工具往返与中断；共享投影/策略、角色、工具历史、大整数参数、结构输出校验、工具 ID、完成/截断/损坏/前导边界及 usage                                                                                                                                           | 真实版本与模型、全部扩展特性；未登记可靠输入预算，不支持 TPM                                                                                            |
@@ -110,7 +111,7 @@ TPM 只对登记了最终请求体解码器的操作开放。HTTP 和 AWS SDK �
 | 专有音频                     | Cloudflare 非流式转写 JSON/text；MiniMax 完整 hex 音频；火山 HTTP/WS、binary/转 SSE；73 个适配器场景、9 个火山网关场景、4 个最终输入计价 HTTP 场景；官方 OpenAI SDK 两语言共 16 个正常/拒绝/截断场景                                                                                  | Cloudflare translation/TTS、MiniMax 原生增量流/URL 输出明确拒绝；专有音频全部扩展与真实供应商未认证                                                     |
 | Embedding / Rerank           | 26 条适配器/协议路径，100 个响应场景、2 个客户端断开及 1 个 Gemini 模型映射分发回归；9 个 HTTP 场景覆盖映射、预扣、退款、空输入和不可执行能力；OpenAI SDK float/base64                                                                                                                | 厂商扩展向量格式及真实端点；Cloudflare Rerank 已在规划前拒绝                                                                                            |
 | Realtime                     | 本地 WS 正常/失败/取消/截断、并发响应隔离/重复完成/无 ID 歧义、终态输出估算、固定价格和账务恢复；官方 Python/TypeScript SDK 共 8 场景及正常关闭码                                                                                                                                     | 完整音频工具会话、全部供应商事件和真实供应商                                                                                                            |
-| 状态归属                     | 原生 Responses JSON/SSE 调序、停用、端点变化、过期；六类不透明状态 HTTP 续轮与未知/跨 Token 拒绝；JSON/SSE 绑定失败不暴露 ID、不重发且退款；签名分片按尝试隔离；Host/项目/自定义租户、认证覆盖、OAuth 刷新及账号不匹配、prompt 引用域、compact 续轮通过                               | 各供应商非标准引用域、全部自定义认证配置和真实供应商有效期                                                                                              |
+| 状态归属                     | 原生 Responses JSON/SSE 调序、停用、端点变化、过期；六类不透明状态 HTTP 续轮与未知/跨 Token 拒绝；JSON/SSE 绑定失败不暴露 ID、不重发且退款；签名分片按尝试隔离；Host/项目/自定义租户、认证覆盖、稳定凭据调序与替换、prompt 引用域、compact 续轮通过                               | 各供应商非标准引用域、全部自定义认证配置和真实供应商有效期                                                                                              |
 | 控制台                       | 预览 API/视图 19 条回归；API fixture 四组、真实准入四组和真实样本预览四组 Playwright；普通用户指标 403、跨用户预览 404、凭据及端点不外露                                                                                                                                              | 全部供应商投影的诊断展示矩阵                                                                                                                            |
 
 SDK 版本锁文件位于 `tests/gateway-sdk`：Python OpenAI 3.13.0、Anthropic 1.5.0、google-genai 2.23.0；TypeScript OpenAI 7.15.0、Anthropic 0.125.0、Google 2.22.0。

@@ -7,6 +7,7 @@ import { ApiError } from '@/api/types'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useFeatureAccess } from '@/composables/useFeatureAccess'
 import { useToast } from '@/composables/useToast'
+import { isRetiredChannelType } from '@/constants/adminChannels'
 import type {
   AdminChannel,
   AdminChannelCreateInput,
@@ -88,7 +89,11 @@ export function useAdminChannels() {
       !isBulkBusy.value &&
       busy.value.size === 0
   )
-  const canRunBatch = computed(() => rows.value.length > 0 && canMutate.value)
+  const canRunBatch = computed(
+    () =>
+      rows.value.some((channel) => !isRetiredChannelType(channel.type)) &&
+      canMutate.value
+  )
 
   let batchController: AbortController | null = null
   let crudController: AbortController | null = null
@@ -286,6 +291,7 @@ export function useAdminChannels() {
     field: 'priority' | 'weight',
     value: number
   ): Promise<boolean> {
+    if (isRetiredChannelType(channel.type)) return Promise.resolve(false)
     return runChannelAction(
       channel.id,
       field,
@@ -299,6 +305,7 @@ export function useAdminChannels() {
   }
 
   function toggleStatus(channel: AdminChannel): Promise<boolean> {
+    if (isRetiredChannelType(channel.type)) return Promise.resolve(false)
     const nextStatus = channel.status === 1 ? 2 : 1
     return runChannelAction(
       channel.id,
@@ -312,6 +319,7 @@ export function useAdminChannels() {
   }
 
   function refreshBalance(channel: AdminChannel): Promise<boolean> {
+    if (isRetiredChannelType(channel.type)) return Promise.resolve(false)
     return runChannelAction(
       channel.id,
       'balance',
@@ -341,6 +349,8 @@ export function useAdminChannels() {
     options: ChannelModelTestOptions = {},
     signal?: AbortSignal
   ): Promise<ChannelModelTestResult> {
+    if (isRetiredChannelType(channel.type))
+      return { ok: false, message: t('channels.retiredHint') }
     try {
       const data = await api.get<{ time?: number }>(
         `/api/next/admin/channels/test/${channel.id}`,
@@ -373,6 +383,7 @@ export function useAdminChannels() {
     channel: AdminChannel,
     modelsToRemove: string[]
   ): Promise<boolean> {
+    if (isRetiredChannelType(channel.type)) return Promise.resolve(false)
     const removal = new Set(modelsToRemove)
     const remaining = channel.models
       .split(',')
@@ -422,6 +433,7 @@ export function useAdminChannels() {
     input: AdminChannelCreateInput,
     options?: AdminChannelCreateOptions
   ): Promise<boolean> {
+    if (isRetiredChannelType(input.type)) return Promise.resolve(false)
     return runCrudAction('create', null, async (signal) => {
       await api.post<AdminChannel>(
         '/api/next/admin/channels',
@@ -448,6 +460,8 @@ export function useAdminChannels() {
     channel: AdminChannel,
     input: AdminChannelUpdateInput
   ): Promise<boolean> {
+    if (isRetiredChannelType(channel.type) || isRetiredChannelType(input.type))
+      return Promise.resolve(false)
     return runCrudAction('edit', channel.id, async (signal) => {
       await api.put<unknown>(
         '/api/next/admin/channels',
@@ -498,6 +512,12 @@ export function useAdminChannels() {
   async function fetchUpstreamModels(
     params: AdminChannelFetchModelsParams
   ): Promise<string[]> {
+    const channelType =
+      'channelId' in params
+        ? rows.value.find((channel) => channel.id === params.channelId)?.type
+        : params.type
+    if (channelType !== undefined && isRetiredChannelType(channelType))
+      throw new Error(t('channels.retiredHint'))
     const models =
       'channelId' in params && params.advancedCustom === undefined
         ? await api.get<string[]>(
@@ -554,7 +574,10 @@ export function useAdminChannels() {
     action: Extract<ChannelBulkAction, 'enable' | 'disable' | 'reset'>,
     channels: AdminChannel[]
   ): Promise<boolean> {
-    const targets = bulkStatusTargets(action, channels)
+    const targets = bulkStatusTargets(
+      action,
+      channels.filter((channel) => !isRetiredChannelType(channel.type))
+    )
     if (targets.length === 0) return Promise.resolve(false)
     const status = action === 'disable' ? 2 : 1
 
@@ -609,7 +632,10 @@ export function useAdminChannels() {
   ): Promise<void> {
     if (!canMutate.value || channels.length === 0) return
 
-    const targets = channels.map((channel) => ({ ...channel }))
+    const targets = channels
+      .filter((channel) => !isRetiredChannelType(channel.type))
+      .map((channel) => ({ ...channel }))
+    if (targets.length === 0) return
     try {
       await recordLabAudit('channel.lab_balance_sync', targets, groupSlug)
     } catch (error) {

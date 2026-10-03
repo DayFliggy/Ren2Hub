@@ -33,6 +33,9 @@ func PlanRequestForChannel(c *gin.Context, info *relaycommon.RelayInfo, selected
 		return fmt.Errorf("channel and relay info are required")
 	}
 	info.ConversionPlan, info.ConversionDiagnostics = nil, nil
+	if err := constant.ValidateChannelTypeLifecycle(selected.Type); err != nil {
+		return err
+	}
 	apiType, registered := common.ChannelType2APIType(selected.Type)
 	if !registered || GetAdaptor(apiType) == nil {
 		return fmt.Errorf("channel type %d has no adaptor", selected.Type)

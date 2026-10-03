@@ -416,31 +416,33 @@ func writeManagedUserError(c *gin.Context, err error) {
 }
 
 type nextAdminChannelDTO struct {
-	StatusReason  string                `json:"status_reason"`
-	StatusTime    int64                 `json:"status_time"`
-	ID            int                   `json:"id"`
-	Name          string                `json:"name"`
-	Type          int                   `json:"type"`
-	Supplier      string                `json:"supplier"`
-	Status        int                   `json:"status"`
-	Priority      int64                 `json:"priority"`
-	Weight        uint                  `json:"weight"`
-	UsedQuota     common.Quota          `json:"used_quota"`
-	ChannelRatio  string                `json:"channel_ratio"`
-	Balance       float64               `json:"balance"`
-	CapacityTotal int                   `json:"capacity_total"`
-	CapacityUsed  int                   `json:"capacity_used"`
-	ResponseTime  int                   `json:"response_time"`
-	TestTime      int64                 `json:"test_time"`
-	BaseURL       string                `json:"base_url"`
-	Models        string                `json:"models"`
-	ModelMapping  string                `json:"model_mapping"`
-	LabGroupSlug  string                `json:"lab_group_slug"`
-	LabGroupName  string                `json:"lab_group_name"`
-	LabMatches    []modellab.LabMatch   `json:"lab_matches"`
-	LabModels     []modellab.ModelMatch `json:"lab_models"`
-	LabUnresolved int                   `json:"lab_unresolved_count"`
-	LabCatalog    string                `json:"lab_catalog_version"`
+	Lifecycle     constant.ChannelLifecycle `json:"lifecycle"`
+	Category      constant.ChannelCategory  `json:"category"`
+	StatusReason  string                    `json:"status_reason"`
+	StatusTime    int64                     `json:"status_time"`
+	ID            int                       `json:"id"`
+	Name          string                    `json:"name"`
+	Type          int                       `json:"type"`
+	Supplier      string                    `json:"supplier"`
+	Status        int                       `json:"status"`
+	Priority      int64                     `json:"priority"`
+	Weight        uint                      `json:"weight"`
+	UsedQuota     common.Quota              `json:"used_quota"`
+	ChannelRatio  string                    `json:"channel_ratio"`
+	Balance       float64                   `json:"balance"`
+	CapacityTotal int                       `json:"capacity_total"`
+	CapacityUsed  int                       `json:"capacity_used"`
+	ResponseTime  int                       `json:"response_time"`
+	TestTime      int64                     `json:"test_time"`
+	BaseURL       string                    `json:"base_url"`
+	Models        string                    `json:"models"`
+	ModelMapping  string                    `json:"model_mapping"`
+	LabGroupSlug  string                    `json:"lab_group_slug"`
+	LabGroupName  string                    `json:"lab_group_name"`
+	LabMatches    []modellab.LabMatch       `json:"lab_matches"`
+	LabModels     []modellab.ModelMatch     `json:"lab_models"`
+	LabUnresolved int                       `json:"lab_unresolved_count"`
+	LabCatalog    string                    `json:"lab_catalog_version"`
 }
 
 func labGroupName(resolution modellab.Resolution) string {
@@ -479,7 +481,9 @@ func buildNextAdminChannelDTO(channel *model.Channel) nextAdminChannelDTO {
 	return nextAdminChannelDTO{
 		StatusReason: reason, StatusTime: when,
 		ID: channel.Id, Name: channel.Name, Type: channel.Type, Supplier: constant.GetChannelTypeName(channel.Type),
-		Status: channel.Status, Priority: priority, Weight: weight,
+		Status: channelWithSafeStatusInfo(channel).Status, Priority: priority, Weight: weight,
+		Lifecycle: constant.GetChannelTypeDefinition(channel.Type).Lifecycle,
+		Category:  constant.GetChannelTypeDefinition(channel.Type).Category,
 		UsedQuota: channel.UsedQuota, ChannelRatio: channel.ChannelRatio, Balance: channel.Balance,
 		CapacityTotal: capacityTotal, CapacityUsed: channel.CapacityUsed,
 		ResponseTime: channel.ResponseTime, TestTime: channel.TestTime,
@@ -500,9 +504,9 @@ func NextListAdminChannels(c *gin.Context) {
 		}
 		switch strings.ToLower(strings.TrimSpace(c.Query("status"))) {
 		case "enabled", strconv.Itoa(common.ChannelStatusEnabled):
-			query = query.Where("status = ?", common.ChannelStatusEnabled)
+			query = query.Where("status = ? AND type NOT IN ?", common.ChannelStatusEnabled, constant.RetiredChannelTypes())
 		case "disabled", strconv.Itoa(common.ChannelStatusManuallyDisabled):
-			query = query.Where("status <> ?", common.ChannelStatusEnabled)
+			query = query.Where("(status <> ? OR type IN ?)", common.ChannelStatusEnabled, constant.RetiredChannelTypes())
 		}
 		return query
 	}

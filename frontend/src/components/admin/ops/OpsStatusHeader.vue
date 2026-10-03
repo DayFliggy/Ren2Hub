@@ -18,21 +18,23 @@ import { opsMonitorMessages } from '@/i18n/opsMonitor'
 import {
   STATUS_COLORS,
   STATUS_TONES,
-  durationParts,
   formatClock,
   formatCount,
   formatLatencyMs,
   formatPercent,
   formatRate,
-  formatTimestamp,
 } from '@/utils/opsFormat'
 
-const props = defineProps<{
-  overview: OpsOverview | null
-  loading: boolean
-  error: string
-  updatedAt: number
-}>()
+const props = withDefaults(
+  defineProps<{
+    overview: OpsOverview | null
+    loading: boolean
+    error: string
+    updatedAt: number
+    refreshIntervalSeconds?: number
+  }>(),
+  { refreshIntervalSeconds: 30 }
+)
 const selectedWindow = defineModel<OpsWindow>('window', { required: true })
 const emit = defineEmits<{ refresh: [] }>()
 const { t, locale } = useI18n({
@@ -44,23 +46,7 @@ const windowOptions = computed(() =>
   OPS_WINDOWS.map((value) => ({ value, label: t(`window.${value}`) }))
 )
 
-const healthScore = computed<number | null>(() => {
-  if (!props.overview) return null
-  if (props.overview.status === 'ok') return 100
-  const criticals = (props.overview.checks ?? []).filter(
-    (c) => c.status === 'critical'
-  ).length
-  const warnings = (props.overview.checks ?? []).filter(
-    (c) => c.status === 'warning'
-  ).length
-  if (props.overview.status === 'critical') {
-    return Math.max(10, 60 - criticals * 20 - warnings * 5)
-  }
-  if (props.overview.status === 'warning') {
-    return Math.max(55, 95 - warnings * 10)
-  }
-  return null
-})
+const healthScore = computed(() => props.overview?.health_score ?? null)
 
 const healthColor = computed(() => {
   if (!props.overview) return 'var(--text-tertiary)'
@@ -86,10 +72,10 @@ function onFullscreenChange() {
   isFullscreen.value = Boolean(document.fullscreenElement)
 }
 
-const countdown = ref(10)
+const countdown = ref(props.refreshIntervalSeconds)
 let timer: number | null = null
 function resetCountdown() {
-  countdown.value = 10
+  countdown.value = props.refreshIntervalSeconds
 }
 
 watch(
@@ -104,11 +90,11 @@ onMounted(() => {
   if (typeof window !== 'undefined') {
     timer = window.setInterval(() => {
       if (props.loading) {
-        countdown.value = 10
+        countdown.value = props.refreshIntervalSeconds
       } else if (countdown.value > 1) {
         countdown.value -= 1
       } else {
-        countdown.value = 10
+        countdown.value = props.refreshIntervalSeconds
       }
     }, 1000)
   }
@@ -133,14 +119,6 @@ const reasons = computed(() =>
         Number(b.status === 'critical') - Number(a.status === 'critical')
     )
 )
-const uptime = computed(() =>
-  props.overview
-    ? durationParts(props.overview.runtime.uptime_seconds)
-        .map((part) => t(`duration.${part.unit}`, { n: part.amount }))
-        .join(' ')
-    : '--'
-)
-
 /** Check values carry the unit of their key. */
 function checkValue(check: OpsCheck, value: number): string {
   if (check.key === 'admission')
@@ -229,17 +207,16 @@ function checkDetail(check: OpsCheck): string {
           <div class="ops-hud-divider" aria-hidden="true" />
           <div class="ops-hud-metric">
             <span class="ops-hud-kpi-label">{{ t('hud.grantedRate') }}</span>
-            <span class="ops-hud-kpi-value"
-              >{{
-                formatRate(
-                  (overview.gateway.granted_per_minute ?? 0) / 60,
-                  locale
-                )
-              }}/s</span
-            >
+            <span class="ops-hud-kpi-value">
+              {{
+                overview.gateway.granted_per_minute !== null
+                  ? `${formatRate(overview.gateway.granted_per_minute / 60, locale)}/s`
+                  : '--'
+              }}
+            </span>
           </div>
           <div class="ops-hud-divider" aria-hidden="true" />
-          <div class="ops-hud-metric">
+          <div class="ops-hud-metric" data-ops-success-rate>
             <span class="ops-hud-kpi-label">{{
               t('gateway.successRate')
             }}</span>
@@ -344,48 +321,67 @@ function checkDetail(check: OpsCheck): string {
           {{ t('allChecksOk') }}
         </li>
       </ul>
-      <dl class="ops-runtime" :class="{ 'ops-card-stale': Boolean(error) }">
-        <div>
-          <dt>{{ t('runtime.version') }}</dt>
-          <dd>
-            <code>{{ overview.runtime.version || '--' }}</code>
-          </dd>
-        </div>
-        <div>
-          <dt>{{ t('runtime.node') }}</dt>
-          <dd>{{ overview.runtime.node_name || '--' }}</dd>
-        </div>
-        <div>
-          <dt>{{ t('runtime.role') }}</dt>
-          <dd>
-            {{ t(overview.runtime.master ? 'runtime.master' : 'runtime.slave')
-            }}<template v-if="overview.runtime.draining">
-              · {{ t('runtime.draining') }}</template
-            >
-          </dd>
-        </div>
-        <div>
-          <dt>{{ t('runtime.platform') }}</dt>
-          <dd>
-            <code
-              >{{ overview.runtime.goos }}/{{ overview.runtime.goarch }} ·
-              {{ overview.runtime.go_version }}</code
-            >
-          </dd>
-        </div>
-        <div>
-          <dt>{{ t('runtime.uptime') }}</dt>
-          <dd
-            :title="
-              t('runtime.started', {
-                time: formatTimestamp(overview.runtime.started_at, locale),
-              })
-            "
-          >
-            {{ uptime }}
-          </dd>
-        </div>
-      </dl>
+      <details
+        class="ops-diagnostics"
+        :class="{ 'ops-card-stale': Boolean(error) }"
+      >
+        <summary class="focus-ring">
+          {{ t('diagnostics.title') }}
+          <span class="ops-scope">{{ t('scope.process') }}</span>
+        </summary>
+        <dl class="ops-metric-grid ops-metric-grid--3">
+          <div class="ops-metric">
+            <dt class="ops-metric-label">{{ t('gateway.queued') }}</dt>
+            <dd class="ops-metric-value">
+              {{ formatCount(overview.gateway.admission.queued, locale) }}
+            </dd>
+          </div>
+          <div class="ops-metric">
+            <dt class="ops-metric-label">{{ t('gateway.queueFull') }}</dt>
+            <dd class="ops-metric-value">
+              {{
+                formatCount(overview.gateway.admission.queue_full_total, locale)
+              }}
+            </dd>
+          </div>
+          <div class="ops-metric">
+            <dt class="ops-metric-label">{{ t('gateway.waitTimeout') }}</dt>
+            <dd class="ops-metric-value">
+              {{
+                formatCount(
+                  overview.gateway.admission.wait_timeout_total,
+                  locale
+                )
+              }}
+            </dd>
+          </div>
+          <div class="ops-metric">
+            <dt class="ops-metric-label">{{ t('gateway.retryRejected') }}</dt>
+            <dd class="ops-metric-value">
+              {{
+                formatCount(
+                  overview.gateway.retry_budget.rejected_total,
+                  locale
+                )
+              }}
+            </dd>
+          </div>
+          <div class="ops-metric">
+            <dt class="ops-metric-label">{{ t('gateway.canceled') }}</dt>
+            <dd class="ops-metric-value">
+              {{
+                formatCount(overview.gateway.admission.canceled_total, locale)
+              }}
+            </dd>
+          </div>
+          <div class="ops-metric">
+            <dt class="ops-metric-label">{{ t('gateway.pools') }}</dt>
+            <dd class="ops-metric-value">
+              {{ formatCount(overview.gateway.admission.pools, locale) }}
+            </dd>
+          </div>
+        </dl>
+      </details>
     </template>
     <div
       v-else-if="!error"

@@ -2,6 +2,8 @@
 
 本文冻结推送部署授权之前的本地验收状态：已完成 9 项审计问题修复与 3 项上游能力补齐，交付本地工作树；当时 `candidate_sha=null`，未提交、推送、部署或操作生产数据库。用户已有主题提交 `e504860da84531e995eae283e6c03257aadbcba8` 保留。后续提交、隔离候选及正式发布单独记录在工作区服务器档案和发布证据中，不将本报告的历史空 SHA 解释为最新发布状态。
 
+后续批准的 type 57 退役移除了本报告 FCA-02/FCA-03 涉及的 Codex 订阅窗口及界面；以下实现与通过记录保留作历史追溯，不代表当前仍开放该功能。现行边界见[渠道接入类型](../channel/TYPES.md)和[同步账本](SYNC_LEDGER.md)。
+
 实施开始时读取 NewAPI `main`，仍为 `1a4166d8e8ba9802d2ca56fe8ecf0ed5404e80d5`。官方发布参照 rc.41（`2035a82aeb5414253a728bd937d4b8f97aa99b9b`），发布后 7 个提交；没有新增主干落后窗口。Release API 403 保持采集不完整，官方发布页是独立补证。本地参考树有改动，比较使用固定 SHA 的 Git 对象，未 fetch 或改写参考仓库。
 
 逐项来源、落点、风险和复评条件见[同步账本](SYNC_LEDGER.md#2026-10-02-审计修复与同步补齐)。上游来源：[rc.41 发布页](https://github.com/QuantumNous/new-api/releases/tag/v1.0.0-rc.41)、[锁定主干](https://github.com/QuantumNous/new-api/commit/1a4166d8e8ba9802d2ca56fe8ecf0ed5404e80d5)。

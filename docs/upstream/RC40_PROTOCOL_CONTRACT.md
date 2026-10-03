@@ -4,6 +4,8 @@
 
 ## Responses WebSocket
 
+标准 OpenAI 渠道继续支持 Codex 模型、Responses、Compact 和符合以下约束的 WebSocket 请求。ChatGPT Subscription (Codex) 渠道 type 57 已退役，其 OAuth、ChatGPT 后端及专用用量链路不再提供；这不改变标准 OpenAI 请求的参数、模型名、价格、路由和账务合同。Codex/Pi 客户端导出仍从统一 manifest 生成。退役编号与迁移边界见[渠道接入类型](../channel/TYPES.md)。
+
 原生连接使用 `GET /v1/responses` 升级，要求渠道启用 Responses WebSocket 且能生成最终原生 Responses 目标。同一连接的每个 `response.create` 都重新检查 Token、渠道、模型、状态归属、准入和最终请求预算，并建立该次生成的冻结报价与账务预留。建立连接不等于授权后续所有生成；重叠 `create` 被拒绝，不能重复报价或发送。
 
 最终模型、凭据、请求头、端点、代理及渠道配置参与连接身份摘要。同一 socket 身份变化要求重连；新连接只有身份和用户、Token、渠道、凭据、模型归属均匹配时才能继续旧 `previous_response_id`。更换凭据或端点不能通过重连接管旧状态；拒绝发生在报价和新上游握手之前。摘要不暴露密钥或原始请求头。

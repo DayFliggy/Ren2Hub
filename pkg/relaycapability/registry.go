@@ -156,10 +156,6 @@ func Describe(apiType int, model string) (Definition, bool) {
 			add(format, format, true)
 		}
 		media(types.RelayFormatOpenAIResponsesCompaction, types.RelayFormatOpenAIAlphaSearch, types.RelayFormatEmbedding, types.RelayFormatOpenAIImage)
-	case constant.APITypeCodex:
-		add(responses, responses, true)
-		d.Surfaces[0].UnboundedOutput = true
-		media(types.RelayFormatOpenAIResponsesCompaction, types.RelayFormatOpenAIAlphaSearch)
 	case constant.APITypeAdvancedCustom:
 		// Configured routes supply the actual surfaces and converter identifiers.
 	case constant.APITypeDeepSeek:

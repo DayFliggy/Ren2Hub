@@ -290,7 +290,6 @@ func TestResponsesCompactAPITypeSupport(t *testing.T) {
 		want    bool
 	}{
 		{name: "OpenAI", apiType: constant.APITypeOpenAI, want: true},
-		{name: "Codex", apiType: constant.APITypeCodex, want: true},
 		{name: "Advanced Custom", apiType: constant.APITypeAdvancedCustom, want: true},
 		{name: "Sub2API", apiType: constant.APITypeSub2API, want: true},
 		{name: "New API", apiType: constant.APITypeNewAPI, want: true},

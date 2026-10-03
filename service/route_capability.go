@@ -401,6 +401,9 @@ func RebuildRouteCapabilityIndex(ctx context.Context) error {
 }
 
 func projectChannelCapabilities(channel *model.Channel, abilities []model.Ability, catalog *modellab.Catalog, sourceHash string) []model.ChannelModelCapability {
+	if constant.IsRetiredChannelType(channel.Type) {
+		return nil
+	}
 	resolution := modellab.ResolveWithCatalog(catalog, channel.Models, channel.GetModelMapping())
 	type projection struct {
 		matches []modellab.ModelMatch
@@ -507,6 +510,9 @@ func projectChannelCapabilities(channel *model.Channel, abilities []model.Abilit
 }
 
 func endpointTypesForModel(channel *model.Channel, match modellab.ModelMatch) []constant.EndpointType {
+	if constant.IsRetiredChannelType(channel.Type) {
+		return nil
+	}
 	pluginEndpoints := taskPluginEndpointTypes(channel, match.InputModel, match.RealModel)
 	if channel.Type == constant.ChannelTypeTaskPlugin {
 		return pluginEndpoints

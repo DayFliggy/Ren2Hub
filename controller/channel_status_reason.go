@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 )
 
@@ -67,6 +68,9 @@ func sanitizeChannelStatusReason(reason string) string {
 }
 
 func channelStatusSummary(channel *model.Channel) (string, int64) {
+	if constant.IsRetiredChannelType(channel.Type) {
+		return constant.ErrRetiredChannelType.Error(), 0
+	}
 	if channel.Status != common.ChannelStatusAutoDisabled {
 		return "", 0
 	}
@@ -85,6 +89,9 @@ func channelStatusSummary(channel *model.Channel) (string, int64) {
 
 func channelWithSafeStatusInfo(channel *model.Channel) *model.Channel {
 	copy := *channel
+	if constant.IsRetiredChannelType(channel.Type) {
+		copy.Status = common.ChannelStatusManuallyDisabled
+	}
 	clearChannelInfo(&copy)
 	if copy.OtherInfo == "" {
 		return &copy

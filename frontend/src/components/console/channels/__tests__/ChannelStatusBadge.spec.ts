@@ -58,3 +58,14 @@ describe('automatic channel disable reason', () => {
     wrapper.unmount()
   })
 })
+
+it('shows retirement independently of the historical enabled state', async () => {
+  const wrapper = badge()
+  await wrapper.setProps({
+    channel: { id: 57, type: 57, status: 1 } as AdminChannel,
+  })
+  expect(wrapper.text()).toBe('channels.statusRetired')
+  expect(wrapper.find('button').exists()).toBe(false)
+  expect(wrapper.attributes('title')).toBe('channels.retiredHint')
+  wrapper.unmount()
+})

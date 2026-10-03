@@ -26,7 +26,6 @@ import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
 import FormField from '@/components/common/FormField.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import GatewayChannelPanel from '@/components/console/gateway/GatewayChannelPanel.vue'
-import CodexUsagePanel from './CodexUsagePanel.vue'
 import AdvancedChannelEditor from './AdvancedChannelEditor.vue'
 import FetchedModelsDialog from './FetchedModelsDialog.vue'
 import {
@@ -41,6 +40,7 @@ import { useToast } from '@/composables/useToast'
 import {
   ADMIN_CHANNEL_TYPE_META,
   adminChannelTypeMeta,
+  isRetiredChannelType,
 } from '@/constants/adminChannels'
 import type {
   AdminChannel,
@@ -105,7 +105,7 @@ const canSensitiveWrite = computed(() =>
 )
 const isAdvancedChannel = computed(() => [58, 62, 63].includes(form.type))
 const supportsResponsesWebSocket = computed(() =>
-  [1, 57, 58, 59, 60].includes(form.type)
+  [1, 58, 59, 60].includes(form.type)
 )
 const canBindPlugin = computed(
   () =>
@@ -162,6 +162,7 @@ const typeDropdownOpen = ref(false)
 
 const typeOptions = computed(() =>
   Object.entries(ADMIN_CHANNEL_TYPE_META)
+    .filter(([, meta]) => !meta.retired)
     .map(([value, meta]) => ({ value: Number(value), label: meta.label }))
     .sort((a, b) => a.label.localeCompare(b.label))
 )
@@ -173,6 +174,7 @@ const filteredTypeOptions = computed(() => {
 })
 
 function selectType(typeId: number) {
+  if (isRetiredChannelType(typeId)) return
   form.type = typeId
   if ([58, 62, 63].includes(typeId))
     advancedConfig.value = JSON.stringify(
@@ -418,6 +420,8 @@ const valid = computed(
     (props.editing !== null || modelTags.value.length > 0) &&
     Number.isSafeInteger(form.type) &&
     Object.hasOwn(ADMIN_CHANNEL_TYPE_META, form.type) &&
+    !isRetiredChannelType(form.type) &&
+    !isRetiredChannelType(props.editing?.type ?? form.type) &&
     Number.isSafeInteger(form.priority) &&
     form.priority >= 0 &&
     form.priority <= 1_000_000 &&
@@ -1361,17 +1365,6 @@ async function submit() {
       </section>
     </div>
 
-    <CodexUsagePanel
-      v-if="
-        open &&
-        editing?.type === 57 &&
-        !existingMultiKey &&
-        auth.hasPermission('channel', 'read')
-      "
-      :key="`usage-${editing.id}`"
-      :channel-id="editing.id"
-      :can-operate="auth.hasPermission('channel', 'operate')"
-    />
     <GatewayChannelPanel
       v-if="open && editing && auth.hasPermission('channel', 'read')"
       :key="editing.id"

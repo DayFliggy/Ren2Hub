@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
+import ConsoleModal from '@/components/common/ConsoleModal.vue'
+import AccountSettingsView from '@/views/console/AccountSettingsView.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { formatQuota } from '@/utils/format'
@@ -13,6 +15,7 @@ const auth = useAuthStore()
 const toast = useToast()
 
 const open = ref(false)
+const securityOpen = ref(false)
 const root = ref<HTMLElement | null>(null)
 
 const initial = computed(() =>
@@ -33,9 +36,9 @@ function goto(routeName: string) {
   router.push({ name: routeName })
 }
 
-function gotoRedeem() {
+function openSecurity() {
   open.value = false
-  router.push({ name: 'wallet', query: { panel: 'redeem' } })
+  securityOpen.value = true
 }
 
 function onClickOutside(e: MouseEvent) {
@@ -104,17 +107,9 @@ onBeforeUnmount(() => {
         type="button"
         class="block min-h-11 w-full rounded-none px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-muted)]"
         data-user-menu-item
-        @click="goto('invite')"
+        @click="openSecurity"
       >
-        {{ t('nav.rebate') }}
-      </button>
-      <button
-        type="button"
-        class="flex min-h-11 w-full items-center justify-between rounded-none px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-muted)]"
-        data-user-menu-item
-        @click="gotoRedeem"
-      >
-        {{ t('nav.redeem') }}
+        {{ t('nav.securityAccess') }}
       </button>
       <div class="mx-3 my-1 h-px bg-[var(--border-subtle)]" />
       <button
@@ -127,5 +122,15 @@ onBeforeUnmount(() => {
         {{ t('common.logout') }}
       </button>
     </div>
+
+    <ConsoleModal
+      :open="securityOpen"
+      :title="t('nav.securityAccess')"
+      :subtitle="t('settings.accountSecuritySubtitle')"
+      size="xl"
+      @close="securityOpen = false"
+    >
+      <AccountSettingsView embedded security-only />
+    </ConsoleModal>
   </div>
 </template>

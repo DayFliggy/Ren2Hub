@@ -92,7 +92,7 @@ rate 为 `{ rpm_used, tokens_used, tokens_reserved, cooldown_ms }`：RPM 统计�
 
 生成入口的用户准入在 OpenAI 错误对象中返回明确 `code`，包括 `gateway_capacity_exhausted`、`gateway_queue_full`、`gateway_wait_timeout`、`gateway_total_queue_full` 和 `gateway_draining`。诊断 message 分别标记 `user admission` 或 `process admission`；渠道尝试错误保留 `channel admission` 原因，路由日志记录对应渠道。客户端已取消或已提交响应时不再追加错误。
 
-TPM 要求宿主登记可解析的最终请求格式。仅支持媒体任务、Coze、Codex 及未登记旧投影的渠道或凭据不能配置 TPM，保存返回 `400 VALIDATION_ERROR`；RPM 不受此限制。运行时重新检查最终发送体：覆盖后的最大输出上限乘输出数量，加输入 JSON 估算；关闭 CountToken 不关闭准入计数。已登记的 Embedding 使用输入估算。未知扩展、无法估算的媒体/状态输入、非文本输出或缺少有效上限均不能伪装成有限预算。渠道类型变更后残留的无效 TPM 也在发送前拒绝。
+TPM 要求宿主登记可解析的最终请求格式。仅支持媒体任务、Coze 及未登记旧投影的渠道或凭据不能配置 TPM，保存返回 `400 VALIDATION_ERROR`；RPM 不受此限制。运行时重新检查最终发送体：覆盖后的最大输出上限乘输出数量，加输入 JSON 估算；关闭 CountToken 不关闭准入计数。已登记的 Embedding 使用输入估算。未知扩展、无法估算的媒体/状态输入、非文本输出或缺少有效上限均不能伪装成有限预算。渠道类型变更后残留的无效 TPM 也在发送前拒绝。
 
 预扣发生在转换、最终预算检查和供应商限流通过后。最终输入估算与输出上限同步刷新本次尝试的预扣金额；内部重试共用一个计费会话。`route_decision` 的 `token_budget`、`token_budget_source` 和 `rejection_origin` 记录估算及失败归属，不包含正文或密钥。
 
@@ -165,7 +165,7 @@ Chat 的 `content[].file.file_id`、Responses 的 `input_file.file_id` 与 Claud
 
 绑定新增 `transport_id`，保存最终 URL、Host、账号范围和可能选择租户的自定义覆盖头的哈希，不保存请求头值或密钥。标准追踪头变化不改变归属。Gemini JSON/SSE 路径及 Responses/compact 路径按同一资源域核验；压缩输出的 encrypted_content 可用于原渠道后续 Responses 请求。缺少传输摘要的旧绑定返回 400，要求建立新会话，迁移不会推测旧请求的真实传输身份。
 
-最终请求头中的认证必须与适配器使用的所选渠道凭据一致；静态或动态覆盖为另一凭据返回 400，且不发送、不预扣。`Bearer {api_key}` 等保持身份的覆盖仍可使用。实际密钥应配置在渠道 Key 中，避免绕过凭据级 RPM/TPM 和健康归属。Host、项目或租户变化导致旧状态返回 503；恢复到同一实际资源域后可重新尝试。可信 OAuth 刷新保留凭据 ID，若刷新结果包含不同账号则拒绝写入；人工替换 Key 使原绑定失效。
+最终请求头中的认证必须与适配器使用的所选渠道凭据一致；静态或动态覆盖为另一凭据返回 400，且不发送、不预扣。`Bearer {api_key}` 等保持身份的覆盖仍可使用。实际密钥应配置在渠道 Key 中，避免绕过凭据级 RPM/TPM 和健康归属。Host、项目或租户变化导致旧状态返回 503；恢复到同一实际资源域后可重新尝试。人工替换 Key 使原绑定失效。
 
 参数覆盖后的最终 JSON 会重新检查状态引用，不能通过覆盖注入未知状态或跨 Token 状态。Responses `prompt` 引用域目前仅登记 OpenAI 类型的原生 Responses 渠道；协议兼容渠道不自动继承该引用域。预览诊断为 `reference_domain_unsupported`，执行中的覆盖注入也会被拒绝。客户端只收到统一状态错误，内部存储故障保留在服务端日志。
 
@@ -193,21 +193,15 @@ manifest 每项包含 `id`、`visible`、`supported_endpoint_types`、可选 `ca
 
 `GET /api/token/:id/client-config?format=codex|pi` 使用该 Token 的同一 manifest。Codex 导出 Responses TOML，可用 `model` 查询参数选择已授权模型；Pi 导出 Chat Completions JSON。响应包含 `filename`、`media_type`、`content`、`models` 和稳定诊断 `diagnostics`。Token 页提供预览、复制、下载。连接地址仅来自保存的 `ServerAddress`，不使用请求 Host 或转发头；密钥只使用 `REN2HUB_API_KEY` 环境变量引用。未知能力省略，不能移植的能力有诊断，价格一律省略并返回 `prices_omitted`，不虚构零价。PAT 分别要求 `profile:read`、`tokens:read`。
 
-## Codex 供应商用量窗口
+Codex 客户端导出使用标准 OpenAI Responses 协议，不依赖 ChatGPT 订阅渠道、OAuth 或供应商用量窗口；Pi 继续使用标准 Chat Completions。导出只能包含当前 Token 有权使用且可路由的模型，退役 type 57 不会贡献可用端点。
 
-仅支持现有单凭据 Codex 渠道，其他类型明确返回 unsupported。该服务不建立账号池，不参与路由、健康、账务预留或自动重置额度。
+## 渠道生命周期
 
-| 路径                                           | 权限与行为                                              |
-| ---------------------------------------------- | ------------------------------------------------------- |
-| `GET /api/channel/:id/provider-usage`          | `ChannelRead`；只读缓存，空缓存为 unknown，不发上游请求 |
-| `POST /api/channel/:id/provider-usage/refresh` | `ChannelOperate`；合并同凭据、端点的并发刷新            |
-| `PUT /api/channel/:id/provider-usage/settings` | `ChannelOperate`；`{auto_refresh: boolean}`，按渠道开关 |
+渠道编号及分类见[渠道接入类型](../channel/TYPES.md)。整数 57 保留为已退役的 ChatGPT Subscription (Codex) 渠道，不会重新分配，也不会自动转成 OpenAI。历史记录仍可由授权管理员读取和显式删除；新建、编辑、复制、测试、模型抓取、同步和路由均拒绝该类型。管理入口沿用原渠道错误 envelope，返回 HTTP 200、`success:false` 和稳定消息 `retired channel type`；生成请求的选路失败继续使用现有网关协议错误格式。列表显示退役状态，隐藏编辑、刷新、测试和用量操作。
 
-旧 Codex 用量读取入口与控制台使用同一服务，不再隐式发起 OAuth 刷新。自动刷新默认关闭，开启后默认每 5 分钟检查；手动刷新最短间隔 60 秒。429 遵守 `Retry-After`，失败指数退避，冷却持久化。单个浏览器取消不会取消共享采集；进程停止会取消并等待共享 HTTP/OAuth/数据库工作退出，停止后不能开启新采集。
+Codex 订阅的刷新、用量、额度重置路由及无其他供应商实现的 provider-usage 路由已撤下，不再注册；旧 URL 不能触发 OAuth 或上游请求。现有钱包、付款和业务订阅接口不属于这项渠道退役。迁移方式是管理员删除旧渠道后，用官方 API Key 新建标准 OpenAI 渠道；不能复用旧 OAuth JSON 作为 API Key。
 
-快照按稳定凭据与端点身份保存，状态为 `known/unknown/stale/error`，保留窗口百分比/长度/重置时间、最后成功和尝试时间、过期时间与下次允许刷新时间。更换身份使旧快照失效；可信 OAuth 刷新保持稳定身份并传播写库失败。错误仅输出稳定分类和 HTTP 状态，不保存上游错误正文或认证内容。读取错误不能用旧成功或零用量掩盖。
-
-渠道运行状态弹窗向 `ChannelRead` 开放缓存面板，编辑弹窗复用同一组件。刷新与自动采集仅额外要求 `ChannelOperate`，不要求 `ChannelWrite`。自动采集开关以服务端确认值显示，保存中禁止重复操作；失败恢复原值，取消、切换渠道或权限变化后的旧响应不覆盖当前状态。
+## 渠道状态摘要
 
 管理渠道列表在自动禁用时投影只读 `status_reason` 和 `status_time`（Unix 秒）。原因从现有状态事实派生，服务端去除凭据、账号、URL 和原始响应正文，最多 500 个字符；非自动禁用或无有效事实返回空串与 0。旧接口的 `other_info.status_reason` 同样脱敏，不新增原因存储。界面支持悬停、键盘和移动端点击查看，长文本可换行。
 

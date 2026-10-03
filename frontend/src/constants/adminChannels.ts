@@ -43,6 +43,7 @@ export function sanitizeAdminChannelVisibleFields(
 export interface AdminChannelTypeMeta {
   label: string
   supplier: string
+  retired?: boolean
 }
 
 export const ADMIN_CHANNEL_TYPE_META: Record<number, AdminChannelTypeMeta> = {
@@ -59,7 +60,11 @@ export const ADMIN_CHANNEL_TYPE_META: Record<number, AdminChannelTypeMeta> = {
   41: { label: 'Vertex AI', supplier: 'Google' },
   43: { label: 'DeepSeek', supplier: 'DeepSeek' },
   48: { label: 'xAI', supplier: 'xAI' },
-  57: { label: 'Codex', supplier: 'OpenAI' },
+  57: {
+    label: 'ChatGPT Subscription (Codex)',
+    supplier: 'OpenAI',
+    retired: true,
+  },
   58: { label: 'Advanced Custom', supplier: 'Custom' },
   59: { label: 'Sub2API', supplier: 'Sub2API' },
   60: { label: 'New API', supplier: 'New API' },
@@ -83,6 +88,10 @@ export function adminChannelTypeMeta(type: number): AdminChannelTypeMeta {
       supplier: `Type ${type}`,
     }
   )
+}
+
+export function isRetiredChannelType(type: number): boolean {
+  return ADMIN_CHANNEL_TYPE_META[type]?.retired === true
 }
 
 export function adminChannelStatusTone(

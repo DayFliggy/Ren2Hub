@@ -333,6 +333,9 @@ func getFetchModelsResponseBody(method string, requestURL string, channel *model
 }
 
 func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return nil, err
+	}
 	baseURL := constant.ChannelBaseURLs[channel.Type]
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
@@ -364,10 +367,6 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 
 	if constant.IsAdvancedCustomChannel(channel.Type) {
 		return fetchAdvancedCustomUpstreamModelIDs(channel, baseURL)
-	}
-
-	if channel.Type == constant.ChannelTypeCodex {
-		return service.FetchCodexChannelModels(channel)
 	}
 
 	var url string
@@ -461,6 +460,9 @@ func fetchAdvancedCustomUpstreamModelIDs(channel *model.Channel, baseURL string)
 }
 
 func updateChannelUpstreamModelSettings(channel *model.Channel, settings dto.ChannelOtherSettings, updateModels bool) error {
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return err
+	}
 	channel.SetOtherSettings(settings)
 	updates := map[string]interface{}{
 		"settings": channel.OtherSettings,
@@ -477,6 +479,9 @@ func checkAndPersistChannelUpstreamModelUpdates(
 	force bool,
 	allowAutoApply bool,
 ) (modelsChanged bool, autoAdded int, err error) {
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return false, 0, err
+	}
 	now := common.GetTimestamp()
 	if !force {
 		minInterval := getUpstreamModelUpdateMinCheckIntervalSeconds()
@@ -665,7 +670,8 @@ func runChannelUpstreamModelUpdateTaskOnce(ctx context.Context, force bool, allo
 	// Count the enabled channels up front so progress can be reported as a
 	// percentage; a count error is non-fatal (progress just won't show a %).
 	var totalChannels int64
-	if err := model.DB.Model(&model.Channel{}).Where("status = ?", common.ChannelStatusEnabled).Count(&totalChannels).Error; err != nil {
+	if err := model.DB.Model(&model.Channel{}).Where("status = ?", common.ChannelStatusEnabled).
+		Where("type NOT IN ?", constant.RetiredChannelTypes()).Count(&totalChannels).Error; err != nil {
 		totalChannels = 0
 	}
 	processed := 0
@@ -680,6 +686,7 @@ scanLoop:
 		query := model.DB.
 			Select(channelUpstreamModelUpdateSelectFields).
 			Where("status = ?", common.ChannelStatusEnabled).
+			Where("type NOT IN ?", constant.RetiredChannelTypes()).
 			Order("id asc").
 			Limit(channelUpstreamModelUpdateTaskBatchSize)
 		if lastID > 0 {
@@ -929,6 +936,9 @@ func applyChannelUpstreamModelUpdates(
 	modelsChanged bool,
 	err error,
 ) {
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return nil, nil, nil, nil, false, err
+	}
 	settings := channel.GetOtherSettings()
 	pendingAddModels := normalizeModelNames(settings.UpstreamModelUpdateLastDetectedModels)
 	pendingRemoveModels := normalizeModelNames(settings.UpstreamModelUpdateLastRemovedModels)
@@ -975,6 +985,7 @@ func findEnabledChannelsAfterID(lastID int, batchSize int) ([]*model.Channel, er
 	query := model.DB.
 		Select(channelUpstreamModelUpdateSelectFields).
 		Where("status = ?", common.ChannelStatusEnabled).
+		Where("type NOT IN ?", constant.RetiredChannelTypes()).
 		Order("id asc").
 		Limit(batchSize)
 	if lastID > 0 {

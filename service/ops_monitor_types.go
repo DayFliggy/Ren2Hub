@@ -134,13 +134,16 @@ type OpsSeries struct {
 }
 
 type OpsOverview struct {
-	SchemaVersion int          `json:"schema_version"`
-	SampledAt     int64        `json:"sampled_at"`
-	Status        OpsStatus    `json:"status"`
-	Checks        []OpsCheck   `json:"checks"`
-	Runtime       OpsRuntime   `json:"runtime"`
-	Resources     OpsResources `json:"resources"`
-	Gateway       OpsGateway   `json:"gateway"`
-	Storage       OpsStorage   `json:"storage"`
-	Series        OpsSeries    `json:"series"`
+	SchemaVersion int       `json:"schema_version"`
+	SampledAt     int64     `json:"sampled_at"`
+	Status        OpsStatus `json:"status"`
+	// HealthScore is a display-only roll-up of the measured checks. A nil
+	// score means that no check has a measured result yet.
+	HealthScore *int         `json:"health_score"`
+	Checks      []OpsCheck   `json:"checks"`
+	Runtime     OpsRuntime   `json:"runtime"`
+	Resources   OpsResources `json:"resources"`
+	Gateway     OpsGateway   `json:"gateway"`
+	Storage     OpsStorage   `json:"storage"`
+	Series      OpsSeries    `json:"series"`
 }

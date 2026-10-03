@@ -37,7 +37,7 @@ func TestGatewayStandardAdaptorResponseMatrix(t *testing.T) {
 		switch apiType {
 		case constant.APITypeOpenAI, constant.APITypeOpenRouter, constant.APITypeXinference,
 			constant.APITypeAnthropic, constant.APITypeGemini, constant.APITypeVertexAi,
-			constant.APITypeNewAPI, constant.APITypeSub2API, constant.APITypeCodex,
+			constant.APITypeNewAPI, constant.APITypeSub2API,
 			constant.APITypeDeepSeek, constant.APITypeAli, constant.APITypeMoonshot,
 			constant.APITypeMiniMax, constant.APITypeSiliconFlow, constant.APITypeVolcEngine,
 			constant.APITypePerplexity, constant.APITypeXai, constant.APITypeBaiduV2,

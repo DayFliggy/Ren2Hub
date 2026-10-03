@@ -363,6 +363,9 @@ func PlanChannelConversion(requirements relayconvert.RequestRequirements, channe
 		requirements.Operation = operation
 	}
 	plan := relayconvert.ConversionPlan{From: requirements.Format, Operation: requirements.Operation, Policy: policy}
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return plan, err
+	}
 	apiType, registered := common.ChannelType2APIType(channel.Type)
 	if !registered {
 		return plan, fmt.Errorf("channel has no registered request adaptor")

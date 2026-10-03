@@ -33,6 +33,7 @@ export function opsOverview(window: '1h' | '6h' | '24h' = '1h') {
     schema_version: 1,
     sampled_at: NOW,
     status: 'warning',
+    health_score: 90,
     checks: [
       { key: 'cpu', status: 'ok', value: 36.2, threshold: 90 },
       { key: 'memory', status: 'ok', value: 58.9, threshold: 90 },

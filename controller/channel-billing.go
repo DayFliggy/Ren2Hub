@@ -410,6 +410,9 @@ func updateChannelMoonshotBalance(channel *model.Channel) (float64, error) {
 }
 
 func updateStandardChannelBalance(channel *model.Channel) (float64, error) {
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return 0, err
+	}
 	baseURL := constant.ChannelBaseURLs[channel.Type]
 	if channel.GetBaseURL() == "" {
 		channel.BaseURL = &baseURL
@@ -522,7 +525,7 @@ func updateAllChannelsBalance() error {
 		return err
 	}
 	for _, channel := range channels {
-		if channel.Status != common.ChannelStatusEnabled {
+		if constant.IsRetiredChannelType(channel.Type) || channel.Status != common.ChannelStatusEnabled {
 			continue
 		}
 		if channel.ChannelInfo.IsMultiKey {

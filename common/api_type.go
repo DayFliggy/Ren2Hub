@@ -3,6 +3,9 @@ package common
 import "github.com/QuantumNous/new-api/constant"
 
 func ChannelType2APIType(channelType int) (int, bool) {
+	if constant.IsRetiredChannelType(channelType) {
+		return -1, false
+	}
 	apiType := -1
 	switch channelType {
 	case constant.ChannelTypeOpenAI, constant.ChannelTypeAzure, constant.ChannelTypeOpenAIMax,
@@ -76,8 +79,6 @@ func ChannelType2APIType(channelType int) (int, bool) {
 		apiType = constant.APITypeMiniMax
 	case constant.ChannelTypeReplicate:
 		apiType = constant.APITypeReplicate
-	case constant.ChannelTypeCodex:
-		apiType = constant.APITypeCodex
 	case constant.ChannelTypeAdvancedCustom, constant.ChannelTypeVLLM, constant.ChannelTypeSGLang:
 		apiType = constant.APITypeAdvancedCustom
 	case constant.ChannelTypeSub2API:
@@ -99,7 +100,6 @@ func ChannelType2APIType(channelType int) (int, bool) {
 func IsResponsesCompactAPIType(apiType int) bool {
 	switch apiType {
 	case constant.APITypeOllama, constant.APITypeOpenAI,
-		constant.APITypeCodex,
 		constant.APITypeAdvancedCustom,
 		constant.APITypeSub2API,
 		constant.APITypeNewAPI:

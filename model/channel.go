@@ -114,6 +114,9 @@ func NormalizeChannelRatio(value string, create bool) (string, error) {
 }
 
 func (channel *Channel) BeforeCreate(*gorm.DB) error {
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return err
+	}
 	ratio, err := NormalizeChannelRatio(channel.ChannelRatio, true)
 	if err != nil {
 		return err
@@ -281,6 +284,9 @@ func (channel *Channel) enabledKeyIndexes(keys []string) []int {
 }
 
 func (channel *Channel) GetEnabledKeyIndexes() []int {
+	if constant.IsRetiredChannelType(channel.Type) {
+		return nil
+	}
 	if !channel.ChannelInfo.IsMultiKey {
 		return []int{0}
 	}
@@ -292,6 +298,9 @@ func (channel *Channel) GetEnabledKeyIndexes() []int {
 }
 
 func (channel *Channel) GetNextEnabledKeyExcluding(excluded map[int]struct{}) (string, int, *types.NewAPIError) {
+	if constant.IsRetiredChannelType(channel.Type) {
+		return "", 0, types.NewError(constant.ErrRetiredChannelType, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+	}
 	// If not in multi-key mode, return the original key string directly.
 	if !channel.ChannelInfo.IsMultiKey {
 		if _, skip := excluded[0]; skip {
@@ -424,6 +433,14 @@ func (channel *Channel) GetAutoBan() bool {
 }
 
 func (channel *Channel) Save() error {
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return err
+	}
+	if channel.Id != 0 {
+		if err := ValidateMutableChannels(DB.Model(&Channel{}).Where("id = ?", channel.Id)); err != nil {
+			return err
+		}
+	}
 	return DB.Save(channel).Error
 }
 
@@ -631,6 +648,9 @@ func (channel *Channel) Insert() error {
 }
 
 func (channel *Channel) Update() error {
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return err
+	}
 	if channel.ChannelRatio != "" {
 		ratio, err := NormalizeChannelRatio(channel.ChannelRatio, false)
 		if err != nil {
@@ -679,6 +699,9 @@ func (channel *Channel) Update() error {
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var previous Channel
 		if err := lockForUpdate(tx).First(&previous, channel.Id).Error; err != nil {
+			return err
+		}
+		if err := constant.ValidateChannelTypeLifecycle(previous.Type); err != nil {
 			return err
 		}
 		if err := tx.Model(channel).Omit("gateway_identity_version").Updates(channel).Error; err != nil {
@@ -851,7 +874,7 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 
 	if common.MemoryCacheEnabled {
 		channelCache, _ := CacheGetChannel(channelId)
-		if channelCache == nil {
+		if channelCache == nil || constant.IsRetiredChannelType(channelCache.Type) {
 			return false
 		}
 		if channelCache.ChannelInfo.IsMultiKey {
@@ -882,7 +905,7 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 		}
 	}()
 	channel, err := GetChannelById(channelId, true)
-	if err != nil {
+	if err != nil || constant.IsRetiredChannelType(channel.Type) {
 		return false
 	} else {
 		if channel.Status == status {
@@ -913,6 +936,9 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 }
 
 func EnableChannelByTag(tag string) error {
+	if err := ValidateMutableChannels(DB.Model(&Channel{}).Where("tag = ?", tag)); err != nil {
+		return err
+	}
 	err := DB.Model(&Channel{}).Where("tag = ?", tag).Update("status", common.ChannelStatusEnabled).Error
 	if err != nil {
 		return err
@@ -922,6 +948,9 @@ func EnableChannelByTag(tag string) error {
 }
 
 func DisableChannelByTag(tag string) error {
+	if err := ValidateMutableChannels(DB.Model(&Channel{}).Where("tag = ?", tag)); err != nil {
+		return err
+	}
 	err := DB.Model(&Channel{}).Where("tag = ?", tag).Update("status", common.ChannelStatusManuallyDisabled).Error
 	if err != nil {
 		return err
@@ -931,6 +960,9 @@ func DisableChannelByTag(tag string) error {
 }
 
 func EditChannelByTag(tag string, newTag *string, modelMapping *string, models *string, group *string, priority *int64, weight *uint, paramOverride *string, headerOverride *string) error {
+	if err := ValidateMutableChannels(DB.Model(&Channel{}).Where("tag = ?", tag)); err != nil {
+		return err
+	}
 	updateData := Channel{}
 	shouldReCreateAbilities := false
 	updatedTag := tag
@@ -1188,6 +1220,9 @@ func GetChannelsByIds(ids []int) ([]*Channel, error) {
 }
 
 func BatchSetChannelTag(ids []int, tag *string) error {
+	if err := ValidateMutableChannels(DB.Model(&Channel{}).Where("id IN ?", ids)); err != nil {
+		return err
+	}
 	// 开启事务
 	tx := DB.Begin()
 	if tx.Error != nil {

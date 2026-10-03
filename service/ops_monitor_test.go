@@ -69,6 +69,17 @@ func TestRollupOpsStatusReportsTheWorstMeasuredCheck(t *testing.T) {
 	assert.Equal(t, OpsStatusCritical, rollupOpsStatus([]OpsCheck{{Status: OpsStatusWarning}, {Status: OpsStatusCritical}, {Status: OpsStatusOK}}))
 }
 
+func TestOpsHealthScoreIsDerivedFromTheServerSideChecks(t *testing.T) {
+	assert.Nil(t, opsHealthScore(OpsStatusUnknown, []OpsCheck{{Status: OpsStatusUnknown}}))
+	assert.Equal(t, 100, *opsHealthScore(OpsStatusOK, []OpsCheck{{Status: OpsStatusOK}}))
+	assert.Equal(t, 85, *opsHealthScore(OpsStatusWarning, []OpsCheck{
+		{Status: OpsStatusCritical}, {Status: OpsStatusWarning},
+	}))
+	assert.Equal(t, 15, *opsHealthScore(OpsStatusCritical, []OpsCheck{
+		{Status: OpsStatusCritical}, {Status: OpsStatusCritical}, {Status: OpsStatusWarning},
+	}))
+}
+
 func TestBuildOpsSeriesAveragesGaugesAndDerivesRatesAcrossGaps(t *testing.T) {
 	nan := math.NaN()
 	points := []opsPoint{
@@ -158,6 +169,9 @@ func TestReadOpsOverviewServesTheLatestSampleForAValidWindow(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, opsSchemaVersion, overview.SchemaVersion)
 	assert.Equal(t, OpsStatusOK, overview.Storage.Database.Status)
+	require.NotNil(t, overview.HealthScore)
+	assert.GreaterOrEqual(t, *overview.HealthScore, 0)
+	assert.LessOrEqual(t, *overview.HealthScore, 100)
 	assert.Nil(t, overview.Storage.LogDatabase, "a shared log database is reported once")
 	require.Len(t, overview.Series.Points, 1)
 	require.Len(t, overview.Gateway.WaitBucketBoundsMS, 8)

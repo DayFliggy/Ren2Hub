@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
 )
@@ -10,14 +11,16 @@ import (
 // remains the source of truth for all existing fields and actions.
 type legacyChannelDTO struct {
 	*model.Channel
-	StatusReason  string                `json:"status_reason"`
-	StatusTime    int64                 `json:"status_time"`
-	LabGroupSlug  string                `json:"lab_group_slug"`
-	LabGroupName  string                `json:"lab_group_name"`
-	LabMatches    []modellab.LabMatch   `json:"lab_matches"`
-	LabModels     []modellab.ModelMatch `json:"lab_models"`
-	LabUnresolved int                   `json:"lab_unresolved_count"`
-	LabCatalog    string                `json:"lab_catalog_version"`
+	Lifecycle     constant.ChannelLifecycle `json:"lifecycle"`
+	Category      constant.ChannelCategory  `json:"category"`
+	StatusReason  string                    `json:"status_reason"`
+	StatusTime    int64                     `json:"status_time"`
+	LabGroupSlug  string                    `json:"lab_group_slug"`
+	LabGroupName  string                    `json:"lab_group_name"`
+	LabMatches    []modellab.LabMatch       `json:"lab_matches"`
+	LabModels     []modellab.ModelMatch     `json:"lab_models"`
+	LabUnresolved int                       `json:"lab_unresolved_count"`
+	LabCatalog    string                    `json:"lab_catalog_version"`
 }
 
 func buildLegacyChannelDTO(channel *model.Channel) legacyChannelDTO {
@@ -25,6 +28,8 @@ func buildLegacyChannelDTO(channel *model.Channel) legacyChannelDTO {
 	reason, when := channelStatusSummary(channel)
 	return legacyChannelDTO{
 		Channel:      channelWithSafeStatusInfo(channel),
+		Lifecycle:    constant.GetChannelTypeDefinition(channel.Type).Lifecycle,
+		Category:     constant.GetChannelTypeDefinition(channel.Type).Category,
 		StatusReason: reason, StatusTime: when,
 		LabGroupSlug:  resolution.GroupSlug,
 		LabGroupName:  labGroupName(resolution),

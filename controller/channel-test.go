@@ -39,17 +39,6 @@ type testResult struct {
 	newAPIError *types.NewAPIError
 }
 
-func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) string {
-	normalized := strings.TrimSpace(endpointType)
-	if normalized != "" {
-		return normalized
-	}
-	if channel != nil && channel.Type == constant.ChannelTypeCodex {
-		return string(constant.EndpointTypeOpenAIResponse)
-	}
-	return normalized
-}
-
 func resolveChannelTestUserID(c *gin.Context) (int, error) {
 	if c != nil {
 		if userID := c.GetInt("id"); userID > 0 {
@@ -68,6 +57,9 @@ func resolveChannelTestUserID(c *gin.Context) (int, error) {
 }
 
 func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) (outcome testResult) {
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return testResult{localErr: err}
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -105,7 +97,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 
-	endpointType = normalizeChannelTestEndpoint(channel, testModel, endpointType)
+	endpointType = strings.TrimSpace(endpointType)
 
 	requestPath := "/v1/chat/completions"
 
@@ -650,10 +642,6 @@ func validateTestResponseBody(respBody []byte, isStream bool) error {
 	return nil
 }
 
-func shouldUseStreamForAutomaticChannelTest(channel *model.Channel) bool {
-	return channel != nil && channel.Type == constant.ChannelTypeCodex
-}
-
 func detectErrorMessageFromJSONBytes(jsonBytes []byte) string {
 	if len(jsonBytes) == 0 {
 		return ""
@@ -841,6 +829,10 @@ func TestChannel(c *gin.Context) {
 			return
 		}
 	}
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	//defer func() {
 	//	if channel.ChannelInfo.IsMultiKey {
 	//		go func() { _ = channel.SaveChannelInfo() }()
@@ -976,7 +968,7 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 	}
 	results := runChannelTestBatch(ctx, channels, operation_setting.GetMonitorSetting().ChannelTestConcurrency, common.RequestInterval,
 		func(ctx context.Context, channel *model.Channel) testResult {
-			return testChannel(ctx, channel, testUserID, "", "", shouldUseStreamForAutomaticChannelTest(channel))
+			return testChannel(ctx, channel, testUserID, "", "", false)
 		})
 	for completed := range results {
 		channel, result, milliseconds := completed.channel, completed.result, completed.milliseconds
@@ -1061,7 +1053,7 @@ func runChannelTestTask(ctx context.Context, mode string, notify bool, report fu
 func selectChannelsForAutomaticTest(channels []*model.Channel, mode string) []*model.Channel {
 	selected := make([]*model.Channel, 0, len(channels))
 	for _, channel := range channels {
-		if channel.Status == common.ChannelStatusManuallyDisabled {
+		if constant.IsRetiredChannelType(channel.Type) || channel.Status == common.ChannelStatusManuallyDisabled {
 			continue
 		}
 		if mode == operation_setting.ChannelTestModeAutoBanOnly && !channel.GetAutoBan() {

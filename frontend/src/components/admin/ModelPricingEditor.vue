@@ -733,7 +733,7 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-subtle);
-  border-radius: 0.75rem;
+  border-radius: 1rem;
   background: var(--surface-solid);
   box-shadow: var(--card-shadow);
   overflow: hidden;
@@ -742,8 +742,9 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.875rem 1.25rem;
-  background: var(--surface-muted);
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: var(--surface-solid);
   border-bottom: 1px solid var(--border-subtle);
 }
 .pricing-editor-header h2 {
@@ -755,7 +756,7 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
 footer {
   padding: 0.875rem 1.25rem;
   border-top: 1px solid var(--border-subtle);
-  background: var(--surface-muted);
+  background: var(--surface-solid);
   display: flex;
   justify-content: flex-end;
 }

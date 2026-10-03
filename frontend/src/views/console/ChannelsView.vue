@@ -41,7 +41,6 @@ import ChannelFormModal from '@/components/console/channels/ChannelFormModal.vue
 import ChannelModelSyncDialog from '@/components/console/channels/ChannelModelSyncDialog.vue'
 import ChannelProviderStatus from '@/components/console/channels/ChannelProviderStatus.vue'
 import ChannelStatusBadge from '@/components/console/channels/ChannelStatusBadge.vue'
-import CodexUsagePanel from '@/components/console/channels/CodexUsagePanel.vue'
 import ChannelInlineNumber from '@/components/console/channels/ChannelInlineNumber.vue'
 import ChannelMobileList from '@/components/console/channels/ChannelMobileList.vue'
 import ChannelTestModal from '@/components/console/channels/ChannelTestModal.vue'
@@ -61,6 +60,7 @@ import {
   adminChannelResponseText,
   adminChannelResponseTone,
   adminChannelTypeMeta,
+  isRetiredChannelType,
   sanitizeAdminChannelVisibleFields,
 } from '@/constants/adminChannels'
 import type {
@@ -167,6 +167,7 @@ watch(canRead, (allowed) => {
   if (!allowed) runtimeChannel.value = null
 })
 function openRuntime(channel: AdminChannel) {
+  if (isReadOnlyChannel(channel)) return
   if (canRead.value) runtimeChannel.value = channel
 }
 const deleting = ref<DeleteTarget | null>(null)
@@ -205,14 +206,23 @@ const visibleFields = computed<AdminChannelOptionalField[]>({
   },
 })
 
-const selectedChannels = computed(() =>
-  rows.value.filter((channel) => selectedIds.value.includes(channel.id))
+function isReadOnlyChannel(channel: AdminChannel): boolean {
+  return isRetiredChannelType(channel.type)
+}
+
+const mutableRows = computed(() =>
+  rows.value.filter((channel) => !isReadOnlyChannel(channel))
 )
-const pageChannelIds = computed(() => rows.value.map((channel) => channel.id))
+const selectedChannels = computed(() =>
+  mutableRows.value.filter((channel) => selectedIds.value.includes(channel.id))
+)
+const pageChannelIds = computed(() =>
+  mutableRows.value.map((channel) => channel.id)
+)
 const allPageSelected = computed(
   () =>
-    rows.value.length > 0 &&
-    rows.value.every((channel) => selectedIds.value.includes(channel.id))
+    mutableRows.value.length > 0 &&
+    mutableRows.value.every((channel) => selectedIds.value.includes(channel.id))
 )
 const resettableSelectedCount = computed(
   () => selectedChannels.value.filter((channel) => channel.status === 3).length
@@ -220,11 +230,14 @@ const resettableSelectedCount = computed(
 
 function updateSelected(keys: Array<string | number>) {
   selectedIds.value = keys.filter(
-    (key): key is number => typeof key === 'number'
+    (key): key is number =>
+      typeof key === 'number' &&
+      mutableRows.value.some((channel) => channel.id === key)
   )
 }
 
 function toggleSelected(channel: AdminChannel) {
+  if (isReadOnlyChannel(channel)) return
   selectedIds.value = selectedIds.value.includes(channel.id)
     ? selectedIds.value.filter((id) => id !== channel.id)
     : [...selectedIds.value, channel.id]
@@ -233,7 +246,7 @@ function toggleSelected(channel: AdminChannel) {
 function toggleAllSelected() {
   selectedIds.value = allPageSelected.value
     ? []
-    : rows.value.map((channel) => channel.id)
+    : mutableRows.value.map((channel) => channel.id)
 }
 
 function clearSelection() {
@@ -446,13 +459,23 @@ function isSupplierRow(row: AdminChannelTableRow): boolean {
   return row.kind === 'supplier'
 }
 
+function isSelectableRow(row: AdminChannelTableRow): boolean {
+  return row.kind === 'channel' && !isReadOnlyChannel(row.channel)
+}
+
+function hasMutableChannels(channels: AdminChannel[]): boolean {
+  return channels.some((channel) => !isReadOnlyChannel(channel))
+}
+
 function channelFromRow(row: AdminChannelTableRow): AdminChannel {
   if (row.kind !== 'channel') throw new Error('Expected a channel table row')
   return row.channel
 }
 
 function channelRowClass(row: AdminChannelTableRow): string | undefined {
-  if (row.kind !== 'channel' || row.channel.status === 1) return undefined
+  if (row.kind !== 'channel') return undefined
+  if (row.channel.status === 1 && !isReadOnlyChannel(row.channel))
+    return undefined
   return 'opacity-75'
 }
 
@@ -474,7 +497,7 @@ function balanceButtonLabel(): string {
       total: batchProgress.value.total,
     })
   }
-  return t('channels.batchBalanceLabel', { count: rows.value.length })
+  return t('channels.batchBalanceLabel', { count: mutableRows.value.length })
 }
 
 function isPageBalance(): boolean {
@@ -506,14 +529,18 @@ function supplierBalanceLabel(supplier: string): string {
 }
 
 function openTest(channel: AdminChannel) {
-  if (!canOperate.value) return
+  if (!canOperate.value || isReadOnlyChannel(channel)) return
   testing.value = channel
 }
 
 function openSupplierTest(group: SupplierGroup) {
   if (!canOperate.value) return
   groupTestOverrides.value = {}
-  pickingGroup.value = group
+  const channels = group.channels.filter(
+    (channel) => !isReadOnlyChannel(channel)
+  )
+  if (channels.length === 0) return
+  pickingGroup.value = { ...group, channels }
 }
 
 function closeSupplierTest() {
@@ -597,12 +624,13 @@ function openCreate() {
 }
 
 function openEdit(channel: AdminChannel) {
-  if (!canMutate.value || !canWrite.value) return
+  if (!canMutate.value || !canWrite.value || isReadOnlyChannel(channel)) return
   editing.value = channel
   formOpen.value = true
 }
 const syncingModels = ref<AdminChannel | null>(null)
 function previewModelSync(channel: AdminChannel) {
+  if (isReadOnlyChannel(channel)) return
   if (canOperate.value && canMutate.value) syncingModels.value = channel
 }
 
@@ -642,11 +670,15 @@ function requestBulkDelete() {
 
 function requestClearSupplier(group: SupplierGroup) {
   if (!canMutate.value || !canSensitiveWrite.value) return
+  const channels = group.channels.filter(
+    (channel) => !isReadOnlyChannel(channel)
+  )
+  if (channels.length === 0) return
   deleting.value = {
     kind: 'supplier',
     supplier: group.supplier,
     groupSlug: group.groupSlug,
-    channels: group.channels.map((channel) => ({ ...channel })),
+    channels: channels.map((channel) => ({ ...channel })),
   }
 }
 
@@ -935,6 +967,7 @@ async function runBulkStatus(
           :selected="selectedIds"
           :selection-keys="pageChannelIds"
           :selection-disabled="!canMutate"
+          :row-selectable="isSelectableRow"
           :is-group-row="isSupplierRow"
           :loading="loading"
           :skeleton-rows="pageSize"
@@ -1019,7 +1052,10 @@ async function runBulkStatus(
                   {{ batchProgressText() }}
                 </span>
                 <IconButton
-                  v-if="canOperate"
+                  v-if="
+                    canOperate &&
+                    hasMutableChannels((row as SupplierTableRow).channels)
+                  "
                   :label="
                     supplierBalanceLabel((row as SupplierTableRow).supplier)
                   "
@@ -1040,7 +1076,10 @@ async function runBulkStatus(
                   <RefreshCw v-else :size="14" />
                 </IconButton>
                 <IconButton
-                  v-if="canOperate"
+                  v-if="
+                    canOperate &&
+                    hasMutableChannels((row as SupplierTableRow).channels)
+                  "
                   :label="
                     t('channels.testSupplier', {
                       supplier: (row as SupplierTableRow).supplier,
@@ -1058,7 +1097,10 @@ async function runBulkStatus(
                   <Activity :size="14" />
                 </IconButton>
                 <IconButton
-                  v-if="canSensitiveWrite"
+                  v-if="
+                    canSensitiveWrite &&
+                    hasMutableChannels((row as SupplierTableRow).channels)
+                  "
                   :label="
                     t('channels.clearSupplier', {
                       supplier: (row as SupplierTableRow).supplier,
@@ -1126,6 +1168,14 @@ async function runBulkStatus(
             >
               {{ channelFromRow(row as AdminChannelTableRow).name }}
             </span>
+            <p
+              v-if="
+                isReadOnlyChannel(channelFromRow(row as AdminChannelTableRow))
+              "
+              class="mt-1 whitespace-normal text-xs text-[var(--text-tertiary)]"
+            >
+              {{ t('channels.retiredHint') }}
+            </p>
           </template>
           <template #cell-type="{ row }">
             <div class="flex min-w-0 items-center gap-2">
@@ -1156,7 +1206,10 @@ async function runBulkStatus(
           </template>
           <template #cell-priority="{ row }">
             <ChannelInlineNumber
-              v-if="canWrite"
+              v-if="
+                canWrite &&
+                !isReadOnlyChannel(channelFromRow(row as AdminChannelTableRow))
+              "
               :value="channelFromRow(row as AdminChannelTableRow).priority"
               :label="
                 t('channels.priorityFor', {
@@ -1179,7 +1232,10 @@ async function runBulkStatus(
           </template>
           <template #cell-weight="{ row }">
             <ChannelInlineNumber
-              v-if="canWrite"
+              v-if="
+                canWrite &&
+                !isReadOnlyChannel(channelFromRow(row as AdminChannelTableRow))
+              "
               :value="channelFromRow(row as AdminChannelTableRow).weight"
               :label="
                 t('channels.weightFor', {
@@ -1240,7 +1296,13 @@ async function runBulkStatus(
                 </p>
               </div>
               <IconButton
-                v-if="canOperate && isFieldVisible('rowUpstreamAction')"
+                v-if="
+                  canOperate &&
+                  !isReadOnlyChannel(
+                    channelFromRow(row as AdminChannelTableRow)
+                  ) &&
+                  isFieldVisible('rowUpstreamAction')
+                "
                 :label="t('channels.refreshBalance')"
                 :disabled="
                   isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
@@ -1299,7 +1361,13 @@ async function runBulkStatus(
                 }}
               </StatusChip>
               <IconButton
-                v-if="canOperate && isFieldVisible('rowResponseAction')"
+                v-if="
+                  canOperate &&
+                  !isReadOnlyChannel(
+                    channelFromRow(row as AdminChannelTableRow)
+                  ) &&
+                  isFieldVisible('rowResponseAction')
+                "
                 :label="t('channels.testChannel')"
                 class="shrink-0"
                 @click="openTest(channelFromRow(row as AdminChannelTableRow))"
@@ -1311,7 +1379,12 @@ async function runBulkStatus(
           <template #cell-actions="{ row }">
             <div class="flex items-center justify-end gap-0.5">
               <IconButton
-                v-if="canOperate"
+                v-if="
+                  canOperate &&
+                  !isReadOnlyChannel(
+                    channelFromRow(row as AdminChannelTableRow)
+                  )
+                "
                 :label="t('channels.syncModelsTitle')"
                 :disabled="!canMutate"
                 @click="
@@ -1320,7 +1393,12 @@ async function runBulkStatus(
                 ><RefreshCw :size="15"
               /></IconButton>
               <IconButton
-                v-if="canRead"
+                v-if="
+                  canRead &&
+                  !isReadOnlyChannel(
+                    channelFromRow(row as AdminChannelTableRow)
+                  )
+                "
                 :label="t('gateway.channelRuntime')"
                 @click="
                   openRuntime(channelFromRow(row as AdminChannelTableRow))
@@ -1328,7 +1406,12 @@ async function runBulkStatus(
                 ><Gauge :size="15"
               /></IconButton>
               <IconButton
-                v-if="canWrite"
+                v-if="
+                  canWrite &&
+                  !isReadOnlyChannel(
+                    channelFromRow(row as AdminChannelTableRow)
+                  )
+                "
                 :label="t('channels.editChannel')"
                 :disabled="
                   isRowBusy(channelFromRow(row as AdminChannelTableRow).id)
@@ -1338,7 +1421,12 @@ async function runBulkStatus(
                 <Pencil :size="15" />
               </IconButton>
               <IconButton
-                v-if="canOperate"
+                v-if="
+                  canOperate &&
+                  !isReadOnlyChannel(
+                    channelFromRow(row as AdminChannelTableRow)
+                  )
+                "
                 :label="
                   channelFromRow(row as AdminChannelTableRow).status === 1
                     ? t('channels.disableChannel')
@@ -1486,16 +1574,6 @@ async function runBulkStatus(
       <ChannelProviderStatus
         v-if="runtimeChannel && [62, 63].includes(runtimeChannel.type)"
         :channel="runtimeChannel"
-      />
-      <CodexUsagePanel
-        v-if="
-          runtimeChannel?.type === 57 &&
-          !runtimeChannel.channel_info?.is_multi_key &&
-          canRead
-        "
-        :key="`usage-${runtimeChannel.id}`"
-        :channel-id="runtimeChannel.id"
-        :can-operate="canOperate"
       />
     </ConsoleModal>
     <ConsoleModal

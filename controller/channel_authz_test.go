@@ -92,6 +92,8 @@ func TestChannelHasSensitiveChanges(t *testing.T) {
 			"balance":       updated.Balance,
 			"used_quota":    updated.UsedQuota,
 			"response_time": updated.ResponseTime,
+			"lifecycle":     "active",
+			"category":      "openai-compatible",
 		}))
 	})
 }

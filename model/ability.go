@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 
 	"github.com/samber/lo"
 	"gorm.io/gorm"
@@ -33,6 +34,7 @@ func GetAllEnableAbilityWithChannels() ([]AbilityWithChannel, error) {
 	err := DB.Table("abilities").
 		Select("abilities.*, channels.type as channel_type").
 		Joins("left join channels on abilities.channel_id = channels.id").
+		Where("abilities.channel_id IN (?)", liveChannelIDs()).
 		Where("abilities.enabled = ?", true).
 		Scan(&abilities).Error
 	return abilities, err
@@ -41,24 +43,27 @@ func GetAllEnableAbilityWithChannels() ([]AbilityWithChannel, error) {
 func GetGroupEnabledModels(group string) []string {
 	var models []string
 	// Find distinct models
-	DB.Table("abilities").Where(commonGroupCol+" = ? and enabled = ?", group, true).Distinct("model").Pluck("model", &models)
+	DB.Table("abilities").Where("channel_id IN (?)", liveChannelIDs()).Where(commonGroupCol+" = ? and enabled = ?", group, true).Distinct("model").Pluck("model", &models)
 	return models
 }
 
 func GetEnabledModels() []string {
 	var models []string
 	// Find distinct models
-	DB.Table("abilities").Where("enabled = ?", true).Distinct("model").Pluck("model", &models)
+	DB.Table("abilities").Where("channel_id IN (?)", liveChannelIDs()).Where("enabled = ?", true).Distinct("model").Pluck("model", &models)
 	return models
 }
 
 func GetAllEnableAbilities() []Ability {
 	var abilities []Ability
-	DB.Find(&abilities, "enabled = ?", true)
+	DB.Where("channel_id IN (?)", liveChannelIDs()).Find(&abilities, "enabled = ?", true)
 	return abilities
 }
 
 func (channel *Channel) AddAbilities(tx *gorm.DB) error {
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return err
+	}
 	models_ := strings.Split(channel.Models, ",")
 	groups_ := strings.Split(channel.Group, ",")
 	abilitySet := make(map[string]struct{})
@@ -110,6 +115,9 @@ func (channel *Channel) DeleteAbilities() error {
 // UpdateAbilities updates abilities of this channel.
 // Make sure the channel is completed before calling this function.
 func (channel *Channel) UpdateAbilities(tx *gorm.DB) error {
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return err
+	}
 	isNewTx := false
 	// 如果没有传入事务，创建新的事务
 	if tx == nil {
@@ -183,6 +191,9 @@ func (channel *Channel) UpdateAbilities(tx *gorm.DB) error {
 }
 
 func UpdateAbilityStatus(channelId int, status bool) error {
+	if err := ValidateMutableChannels(DB.Model(&Channel{}).Where("id = ?", channelId)); err != nil {
+		return err
+	}
 	err := DB.Model(&Ability{}).Where("channel_id = ?", channelId).Select("enabled").Update("enabled", status).Error
 	if err == nil {
 		NotifyChannelCapabilityChanged(channelId)
@@ -191,6 +202,9 @@ func UpdateAbilityStatus(channelId int, status bool) error {
 }
 
 func UpdateAbilityStatusByTag(tag string, status bool) error {
+	if err := ValidateMutableChannels(DB.Model(&Channel{}).Where("tag = ?", tag)); err != nil {
+		return err
+	}
 	var channelIDs []int
 	if err := DB.Model(&Ability{}).Where("tag = ?", tag).Distinct("channel_id").Pluck("channel_id", &channelIDs).Error; err != nil {
 		return err
@@ -203,6 +217,9 @@ func UpdateAbilityStatusByTag(tag string, status bool) error {
 }
 
 func UpdateAbilityByTag(tag string, newTag *string, priority *int64, weight *uint) error {
+	if err := ValidateMutableChannels(DB.Model(&Channel{}).Where("tag = ?", tag)); err != nil {
+		return err
+	}
 	var channelIDs []int
 	if err := DB.Model(&Ability{}).Where("tag = ?", tag).Distinct("channel_id").Pluck("channel_id", &channelIDs).Error; err != nil {
 		return err

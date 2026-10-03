@@ -15,7 +15,6 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/baidu_v2"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	"github.com/QuantumNous/new-api/relay/channel/cloudflare"
-	"github.com/QuantumNous/new-api/relay/channel/codex"
 	"github.com/QuantumNous/new-api/relay/channel/cohere"
 	"github.com/QuantumNous/new-api/relay/channel/coze"
 	"github.com/QuantumNous/new-api/relay/channel/deepseek"
@@ -86,7 +85,6 @@ var adaptorRegistry = map[int]adaptorRegistration{
 	constant.APITypeSubmodel:       {new: func() channel.Adaptor { return &submodel.Adaptor{} }},
 	constant.APITypeMiniMax:        {new: func() channel.Adaptor { return &minimax.Adaptor{} }},
 	constant.APITypeReplicate:      {new: func() channel.Adaptor { return &replicate.Adaptor{} }},
-	constant.APITypeCodex:          {new: func() channel.Adaptor { return &codex.Adaptor{} }},
 	constant.APITypeAdvancedCustom: {new: func() channel.Adaptor { return &advancedcustom.Adaptor{} }},
 	constant.APITypeSub2API:        {new: func() channel.Adaptor { return &sub2api.Adaptor{} }},
 	constant.APITypeNewAPI:         {new: func() channel.Adaptor { return &newapi.Adaptor{} }},

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/modellab"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
@@ -132,6 +133,9 @@ func RecheckLiveRouteCandidate(input LiveRouteCandidateQualificationRequest) err
 		return err
 	}
 
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return err
+	}
 	if !TaskPluginChannelEligible(&channel, input.ExpectedTaskPluginKey) ||
 		(input.ResponsesWebSocketRequired && !ChannelSupportsResponsesWebSocket(&channel, input.RequestModel)) {
 		return &LiveRouteQualificationError{Reason: RouteFilterPathUnsupported}

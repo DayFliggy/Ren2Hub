@@ -487,6 +487,11 @@ func getTaskOriginModelName(c *gin.Context) string {
 }
 
 func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, modelName string) *types.NewAPIError {
+	if channel != nil {
+		if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+			return types.NewError(err, types.ErrorCodeGetChannelFailed)
+		}
+	}
 	c.Set("original_model", modelName) // for retry
 	if channel == nil {
 		return types.NewError(errors.New("channel is nil"), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())

@@ -2,6 +2,22 @@
 
 本账本的实施/验证段记录提交授权前的本地验收快照；其中 `candidate_sha=null` 指该快照。后续源码提交、服务器候选和正式切换由工作区服务器档案与实际发布记录另行追踪，不能把本地通过解释为已经部署。
 
+## 2026-10-02 Codex 订阅渠道退役
+
+本次按批准范围移除 ChatGPT Subscription (Codex) 的 type 57 链路，保留标准 OpenAI 渠道的 Codex 模型、Chat/Responses/Compact/WebSocket 及 Codex/Pi 导出。编号 57 保留为 retired/reserved，历史行可读、可显式删除，但不自动转换，不参与路由。渠道分类及迁移合同见[渠道接入类型](../channel/TYPES.md)。旧 P2 窗口和界面检查是当时功能的历史证据，不能用来证明退役后的代码已验证。
+
+2026-10-02 15:08:54 UTC 只读核实 NewAPI main 仍为 `1a4166d8e8ba9802d2ca56fe8ecf0ed5404e80d5`；发布参照沿用已核实的 `v1.0.0-rc.41`；本轮 Release API 403 继续标为采集 incomplete，不将它当作最新发布查询成功。参考 NewAPI 存在未跟踪 `grep.exe.stackdump`，比较只使用锁定 Git 对象，未修改参考目录。Sub2API main 新观察值为 `b8dece9000c68815a5b867ca5a1e6f236e173905`，AxonHub unstable 为 `89d36d610dc2ebf6d258e56bd1d051572a8c8449`；这些增量另排下轮审计，本次不扩张适配范围。
+
+| source_project / source_ref | category / priority / status | local_scope / contract | test_commands / validation | risk / follow_up |
+| --- | --- | --- | --- | --- |
+| NewAPI `2a15e3b152307debf42ee1ee9d7f67dd2b0f024a`、`1292b8b2d5e90480521d45af05ff0e8b38a199f6`；当前 `1a4166d8e8ba9802d2ca56fe8ecf0ed5404e80d5` | 渠道架构 / P2 / 刻意不吸收 | 上游仍保留订阅后端；本地移除 type 57 OAuth、ChatGPT 转发、模型发现、凭据刷新、Wham、provider-usage 和 UI；不删除业务订阅/付款代码 | 退役管理/历史快照零发送、隔离 SQLite/PostgreSQL、前端 950 项及 12 个 Playwright 用例通过；主模块分批与收尾增量回归通过 | OAuth JSON 不可降级为官方 API Key；只有独立批准订阅接入且重新明确认证、路由与资金边界后复评 |
+| Sub2API `d6adebd22de00478cd021119ba755f37bcb94fb5` 窗口参考 | 运维 / P2 / 刻意不吸收（撤下既有实现） | 原窗口只有 Codex 订阅供应商，本轮随渠道删除；保留将来适配的认证、隔离、退避和非账务边界说明，不保留无实现的 API | `node tests/upstream-sync/smoke.mjs <本轮二进制>` 通过：退役创建不落库、7 条旧路由 404/零发送，正常 Chat/Claude/Responses 共 3 次本地上游请求且唯一结算 | 不引入新供应商认证替代被删除链路；未来窗口须独立立项 |
+| Ren2Hub 标准 OpenAI 现有合同 | 协议 / P1 / 已吸收（等价保留） | SDK fixture 改用 type 1、标准 API Key 和 `/v1/responses`；客户端参数保留、Chat 成功、状态归属、凭据调序/撤销及中断合同继续保护 | `go test -p 4 -timeout 60s ./router -run '^TestGatewayOfficialCodexSDK$' -count=1 -v` 已通过 Python/Node 两语言 24 场景、0 SKIP；OpenAI SDK 3.13.0 / 7.15.0 | 不能把订阅渠道的拒绝行为迁入标准 OpenAI；`TestStandardOpenAICodexCompactAndWebSocket` 实际 HTTP/WS 与结算回归已通过 |
+
+本批交付边界为本地代码、合同与测试，`candidate_sha=null`；未取得本批提交、推送、远端部署或数据重建授权。运行结果只按实际检查补记，历史通过、SKIP 或静态检查不能替代本次运行证据。
+
+本轮本地验证已完成：主模块 `node scripts/test-go.mjs -p 4`（后端每次 60 秒）、最终增量回归、独立 RelayKit 测试/构建、Go 全模块构建、前端全检查、双语言 SDK、隔离两库及新二进制空库冒烟通过。未启用的其他外部集成不计作通过。执行记录、环境差异、保留内容和待提交范围见[退役验证记录](../../../docs/reviews/REN2HUB_CODEX_CHANNEL_RETIREMENT_2026-10-02.md)。
+
 ## 固定基线与范围
 
 2026-10-02 的首批同步从 Ren2Hub `c92691f8d5254218c8d46f3de5eb20305dd33847` 开始。完整 P2 实施前 HEAD 已由用户工作推进至 `e504860da84531e995eae283e6c03257aadbcba8`；其主题/布局提交保留，154 个既有未提交适配文件与独立归档逐项比对一致后继续实施。当前交付是未提交工作树，`candidate_sha=null`，不能用上述旧 HEAD 代表本轮代码。
@@ -51,7 +67,7 @@ PAT 后端接口和 Proof 见[鉴权合同](../authentication.md)。Token 的 `t
 | NewAPI `ae73ef8e25b957ea3291512b66664f418f33c180`、`87bb71e7fc83121fc995a048077e5c0e209b789f`，基线 `1a4166d8e8ba9802d2ca56fe8ecf0ed5404e80d5` | 插件/计量 / 已吸收 | `plugins/tasks/doubao` 1.2.1、`pkg/jsplugin`、Images 宿主；Flash 与逐模型档位、compatibilitySchema。retainResult 仅原生路由，Images immediate 自动清理，Responses 保留 | `go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin`；`go test -timeout 60s ./router -run '^TestGatewayDoubao'` | 旧表达式/冻结报价/重复提交；供应商变化独立验收，不自动导入价格 |
 | AxonHub `2bf8e2c916412df72252ac1514591dc47f692d7e`                                                                                             | 模型身份 / 已吸收（等价实现补回归） | `router/gateway_playground_model_identity_test.go`；浏览器无持久 Token、跨渠道映射、逻辑报价和实际响应模型分离                                               | `go test -timeout 60s ./router -run '^TestGatewayPlaygroundModelIdentity'`                                                               | 错价与别名越权；后续改变 Playground 初始化或路由时复验                           |
 | AxonHub `b5031b0f7ddc723ec583912d9a6e841d0f16f788` 与锁定 `2bf8e2c916412df72252ac1514591dc47f692d7e` | 目录 / 已吸收 | `service/model_manifest*.go`、目录/导出控制器、能力卡/市场/Keys UI；同一 manifest，未知保真、可信 ServerAddress、环境变量密钥 | `go test -timeout 60s ./service ./controller -run 'Test.*Manifest'`；ClientConfig 回归、目录 Vitest/Playwright | 无权模型或虚假能力；客户端格式变化仍只从 manifest 派生 |
-| Sub2API `d6adebd22de00478cd021119ba755f37bcb94fb5` 用量窗口思路                                                                                | 运维 / 已吸收（单凭据本地化）       | `model/provider_usage.go`、`service/provider_usage_window.go`、渠道 API/UI；缓存读取、显式刷新、退避、身份失效、受管退出                                     | `go test -timeout 60s ./service ./controller ./model -run '^TestProviderUsage'`；三库及 provider UI                                      | 过时/错误缓存；仅 Codex，后续供应商须有现有认证边界，不进入账务/路由             |
+| Sub2API `d6adebd22de00478cd021119ba755f37bcb94fb5` 用量窗口思路                                                                                | 运维 / 历史已吸收（现已撤下）       | `model/provider_usage.go`、`service/provider_usage_window.go`、渠道 API/UI；缓存读取、显式刷新、退避、身份失效、受管退出                                     | `go test -timeout 60s ./service ./controller ./model -run '^TestProviderUsage'`；三库及 provider UI                                      | 过时/错误缓存；仅 Codex，后续供应商须有现有认证边界，不进入账务/路由             |
 | AxonHub `2bf8e2c916412df72252ac1514591dc47f692d7e` attempt/关联思路                                                                            | 诊断 / 已吸收（本地事实投影）       | RouteDecision、有界观察器、`request_diagnostic` 模型/API、日志 UI；实际发送/排队/首个有效输出、7 天、用户与 Token 隔离                                       | `go test -timeout 60s ./controller ./service ./model -run '^TestRequestDiagnostic'`；诊断 Vitest/Playwright、三库清理                    | 内部 ID 泄露/后台阻塞；字段权限求交集，Token 0 仅单请求，不存正文或影响资金      |
 | Sub2API `fdce5b8d01ccd2dc523543fda05940288912d574`、`ad05eda15788e4eed2e4393120d58564061eeafa`                                                 | 供应商身份 / 刻意不吸收             | Grok CLI/OAuth 身份头与 billing probe；Ren2Hub xAI 使用官方 API，无对应 CLI 身份边界                                                                         | 静态合同核对，不伪造供应商运行验证                                                                                                       | 混用身份；只有独立批准 CLI/OAuth 产品能力和认证设计后复评                        |
 
@@ -89,8 +105,8 @@ PAT 后端接口和 Proof 见[鉴权合同](../authentication.md)。Token 的 `t
 | FCA-01 / P2 / 本地审计 | 已吸收；`service/model_manifest.go`、端点默认映射 | 原生与插件端点各用实际报价解析；`TestModelManifestEndpointPricingMatchesExecutingProtocol`、既有 manifest/导出回归 | 插件价格不能授权原生端点；全局按次后备仅沿用实际执行器规则，不建立新价格源 |
 | PB-3 / P2 / NewAPI `1a4166d8e8ba9802d2ca56fe8ecf0ed5404e80d5` | 已吸收；插件 ABI、豆包 1.2.1、宿主结果保留 | 协议级 retainResult 加载时拒绝；原生 false 仅同步，异步保留并告警；Images immediate 一次交付，Responses JSON/SSE/background 保留 | 后续检索、取消、下载失败与升级恢复有回归；不可变旧源码不重解释 |
 | PB-2 / P2 / NewAPI `1a4166d8` 差异、本地严格合同 | 已吸收（本地修复）；RelayKit Chat → Responses JSON/SSE | 无名工具返回协议错误，不能 completed 空输出；RelayKit 独立全测与官方工具 SDK | 刻意不吸收上游跳过无名调用的行为；已接受请求不可重放 |
-| FCA-02 / P2 / 本地审计 | 已吸收；渠道运行状态弹窗、共用 Codex 面板 | read 可查看，operate 可刷新/设置，无 write 仍可达；Vitest 与四布局 Playwright | 不拓宽配置写权限，不复制缓存来源 |
-| FCA-03 / P2 / 本地审计 | 已吸收；`CodexUsagePanel.vue` | 服务端确认值驱动；失败恢复，busy 禁重入，取消/切换/撤权忽略迟到响应 | Vitest 失败路径与真实浏览器交互；异步界面变更复验 |
+| FCA-02 / P2 / 本地审计 | 历史已吸收；现随订阅渠道撤下 | read 可查看，operate 可刷新/设置，无 write 仍可达；Vitest 与四布局 Playwright | 不拓宽配置写权限，不复制缓存来源 |
+| FCA-03 / P2 / 本地审计 | 历史已吸收；`CodexUsagePanel.vue` 现已移除 | 服务端确认值驱动；失败恢复，busy 禁重入，取消/切换/撤权忽略迟到响应 | Vitest 失败路径与真实浏览器交互；异步界面变更复验 |
 | ROOT-ENV-01 / P2 / 本地审计 | 已吸收；根技能候选验证器与正式 PS 测试 | 清除真实 DSN、Redis、vLLM、GATEWAY 端点/凭据及 opt-in；保留明确本地 SDK 路径与 PYTHONPATH；`Test-Ren2HubSyncCandidate.ps1` | 21 个验证器场景中哨兵不得进入子进程；新增外部集成开关时更新隔离边界 |
 | UP-01 / P2 / NewAPI `f5e54ccdb203e8d4469035e72cc48dfd25b4314d` | 已吸收；Vue 插件市场索引/源码/图标下载 | HTTP 重验证，仍保留取消、大小、credentials omit 与 SHA-256；市场定向 Vitest | 同路径重发布不命中过期字节；不绕过完整性校验 |
 | UP-02 / P3 / NewAPI `6c14c0762dc7f3bc77d0c80585f974e65ac2a571` | 已吸收；Vue 比价表及纯文本差异组件 | 按字段比较，表达式词段增删，保留精度与缺失/零；Vitest、四布局 Playwright | 不执行表达式、不注入 HTML、不改变选价/保存逻辑 |
@@ -102,7 +118,7 @@ PAT 后端接口和 Proof 见[鉴权合同](../authentication.md)。Token 的 `t
 
 - NewAPI `2ffc59590` 的 moejs alpha 运行时、AxonHub React/GraphQL/Ent 和全文请求存储、Sub2API 完整账号池/自动兑换暂不引入。
 - Redis 失败放行资金预占不吸收；只有保持现有预留/恢复不变量的证据充分时才复评，不能用可用性理由制造无担保发送。
-- 多凭据/其他供应商窗口、临时 Playground 跨请求聚合和更多客户端导出格式延期，进入条件分别为已有认证边界、明确用户隔离键及官方格式合同。现有单凭据 Codex 和持久 Token 功能闭环不依赖这些扩展。
+- 供应商窗口后续须独立立项；原单凭据 Codex 窗口随 type 57 退役撤下。临时 Playground 跨请求聚合和更多客户端导出格式继续延期，进入条件分别为明确用户隔离键及官方格式合同；标准 OpenAI Codex/Pi 导出仍保留。
 - 资金预留、Provider 配额、健康、模型返回名、TTFT 和 CSV 已有本地事实源，参考实现只能补合同，不能另建并行状态。
 - 项目权限与预算隔离独立立项，现有用户组、渠道组不当作租户。
 

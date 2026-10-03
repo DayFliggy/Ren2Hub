@@ -35,7 +35,7 @@ const (
 	APITypeSubmodel
 	APITypeMiniMax
 	APITypeReplicate
-	APITypeCodex
+	_ // retired subscription adaptor
 	APITypeAdvancedCustom
 	APITypeSub2API
 	APITypeNewAPI

@@ -5,8 +5,8 @@ import { PRICING_KEYS } from '../../src/api/pricingConfig'
 
 const channel = {
   id: 157,
-  name: 'Audit Codex Fixture',
-  type: 57,
+  name: 'Audit OpenAI Fixture',
+  type: 1,
   supplier: 'OpenAI',
   status: 3,
   status_reason: `供应商请求失败，已自动禁用。\n${'LongProviderErrorWithoutSpaces'.repeat(12)}`,
@@ -25,21 +25,6 @@ const channel = {
   setting: '{}',
   settings: '{}',
 }
-const usage = {
-  channel_id: 157,
-  provider: 'codex',
-  state: 'unknown',
-  plan_type: '',
-  windows: [],
-  fetched_at: 0,
-  expires_at: 0,
-  last_attempt_at: 0,
-  next_refresh_at: 0,
-  upstream_status: 0,
-  error_code: '',
-  auto_refresh: false,
-}
-
 for (const theme of ['light', 'dark'] as const)
   for (const width of [1440, 390]) {
     for (const operate of [false, true])
@@ -68,7 +53,7 @@ for (const theme of ['light', 'dark'] as const)
                 total: 1,
                 page: 1,
                 page_size: 20,
-                type_counts: { '57': 1 },
+                type_counts: { '1': 1 },
               },
             },
           })
@@ -94,22 +79,6 @@ for (const theme of ['light', 'dark'] as const)
               },
             },
           })
-        )
-        let reads = 0,
-          writes = 0
-        await page.route('**/api/channel/157/provider-usage', (route) => {
-          reads++
-          return route.fulfill({ json: { success: true, data: usage } })
-        })
-        await page.route(
-          '**/api/channel/157/provider-usage/settings',
-          (route) => {
-            writes++
-            return route.fulfill({
-              status: 503,
-              json: { success: false, message: 'fixture settings failure' },
-            })
-          }
         )
         await page.goto('/channels')
         expect(
@@ -138,29 +107,10 @@ for (const theme of ['light', 'dark'] as const)
           .filter({ visible: true })
           .click()
         const dialog = page.getByRole('dialog', { name: channel.name })
-        await expect(
-          dialog.getByRole('heading', { name: 'Codex 供应商用量', exact: true })
-        ).toBeVisible()
-        await expect.poll(() => reads).toBe(1)
-        const automatic = dialog.getByRole('checkbox', {
-          name: '每 5 分钟自动采集',
-        })
-        if (operate) {
-          await automatic.click()
-          await expect(dialog.getByRole('alert')).toContainText('用量操作失败')
-          await expect(automatic).not.toBeChecked()
-          expect(writes).toBe(1)
-        } else {
-          await expect(automatic).toHaveCount(0)
-          await expect(
-            dialog.getByRole('button', { name: '刷新供应商用量' })
-          ).toHaveCount(0)
-          expect(writes).toBe(0)
-        }
+        await expect(dialog).toBeVisible()
+        await expect(dialog.getByText('Codex 供应商用量')).toHaveCount(0)
         await assertNoHorizontalOverflow(page)
-        await page.screenshot({
-          path: info.outputPath('usage-settings-failure.png'),
-        })
+        await page.screenshot({ path: info.outputPath('channel-runtime.png') })
       })
 
     test(`price field and expression differences ${theme} ${width}`, async ({

@@ -10,7 +10,7 @@ func ChannelSupportsResponsesWebSocket(channel *model.Channel, requestedModel st
 		return false
 	}
 	switch channel.Type {
-	case constant.ChannelTypeOpenAI, constant.ChannelTypeCodex, constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI:
+	case constant.ChannelTypeOpenAI, constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI:
 		return true
 	case constant.ChannelTypeAdvancedCustom:
 		config := channel.GetOtherSettings().AdvancedCustom

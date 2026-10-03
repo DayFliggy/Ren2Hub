@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -96,6 +97,9 @@ func (channel *Channel) HasEnabledGatewayKey(key string) bool {
 }
 
 func (channel *Channel) enabledGatewayKey(fingerprint string) (string, int, error) {
+	if constant.IsRetiredChannelType(channel.Type) {
+		return "", 0, constant.ErrRetiredChannelType
+	}
 	keys := channel.GetKeys()
 	if !channel.ChannelInfo.IsMultiKey {
 		keys = []string{channel.Key}
@@ -109,24 +113,6 @@ func (channel *Channel) enabledGatewayKey(fingerprint string) (string, int, erro
 		}
 	}
 	return "", 0, ErrGatewayStateUnavailable
-}
-
-// RefreshGatewayCredential preserves identity only through the trusted refresh path.
-func RefreshGatewayCredential(ctx context.Context, channel *Channel, replacement string) error {
-	identity, err := EnsureGatewayCredential(ctx, channel.Id, channel.Key)
-	if err != nil {
-		return err
-	}
-	return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&Channel{}).Where(map[string]any{"id": channel.Id, "key": channel.Key}).Update("key", replacement)
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected != 1 {
-			return errors.New("credential changed during refresh")
-		}
-		return tx.Model(&GatewayCredential{}).Where("id = ? AND fingerprint = ?", identity.ID, identity.Fingerprint).Update("fingerprint", GatewayDigest(strings.TrimSpace(replacement))).Error
-	})
 }
 
 func FindGatewayState(ctx context.Context, userID, tokenID int, kind, value string) (GatewayStateBinding, error) {

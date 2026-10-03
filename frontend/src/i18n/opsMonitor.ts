@@ -43,18 +43,15 @@ export const opsMonitorMessages = {
       unavailable: '不可用',
     },
     disabledLimit: '阈值已关闭',
-    runtime: {
-      version: '版本',
-      node: '节点',
-      platform: '平台',
-      uptime: '运行时长',
-      started: '启动于 {time}',
-      role: '角色',
-      master: '主节点',
-      slave: '从节点',
-      draining: '排空中',
+    diagnostics: {
+      title: '网关诊断',
     },
-    duration: { d: '{n} 天', h: '{n} 小时', m: '{n} 分钟', s: '{n} 秒' },
+    duration: {
+      d: '{n} 天',
+      h: '{n} 小时',
+      m: '{n} 分钟',
+      s: '{n} 秒',
+    },
     window: {
       label: '趋势窗口',
       note: '仅影响趋势线；其余数值为当前值',
@@ -293,18 +290,15 @@ export const opsMonitorMessages = {
       unavailable: 'Unavailable',
     },
     disabledLimit: 'Limit disabled',
-    runtime: {
-      version: 'Version',
-      node: 'Node',
-      platform: 'Platform',
-      uptime: 'Uptime',
-      started: 'Started {time}',
-      role: 'Role',
-      master: 'Master',
-      slave: 'Slave',
-      draining: 'Draining',
+    diagnostics: {
+      title: 'Gateway diagnostics',
     },
-    duration: { d: '{n}d', h: '{n}h', m: '{n}m', s: '{n}s' },
+    duration: {
+      d: '{n}d',
+      h: '{n}h',
+      m: '{n}m',
+      s: '{n}s',
+    },
     window: {
       label: 'Trend window',
       note: 'Affects trend lines only; other values are current',

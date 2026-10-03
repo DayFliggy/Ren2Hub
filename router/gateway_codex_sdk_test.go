@@ -33,26 +33,21 @@ func TestGatewayOfficialCodexSDK(t *testing.T) {
 	for _, runtime := range []struct{ binary, script string }{{python, "verify_codex.py"}, {node, "verify_codex.mjs"}} {
 		t.Run(runtime.script, func(t *testing.T) {
 			base, token, otherToken := setupGatewaySDK(t)
-			credential := func(access, account string) string {
-				encoded, err := common.Marshal(service.CodexOAuthKey{AccessToken: access, RefreshToken: "fixture-refresh", AccountID: account})
-				require.NoError(t, err)
-				return string(encoded)
-			}
-			primaryKey := credential("fixture-access", "fixture-account")
-			spareKey := credential("fixture-spare-access", "fixture-spare-account")
+			primaryKey := "fixture-access"
+			spareKey := "fixture-spare-access"
 			endpoint := "https://codex-fixture.invalid"
 			mapping := `{"codex-fixture":"gpt-5-codex","codex-errors":"gpt-5-codex"}`
 			for _, id := range []int{1, 4} {
 				channel, err := model.GetChannelById(id, true)
 				require.NoError(t, err)
-				channel.Type, channel.Models, channel.Key, channel.BaseURL, channel.ModelMapping = constant.ChannelTypeCodex, "codex-fixture", primaryKey, &endpoint, &mapping
+				channel.Type, channel.Models, channel.Key, channel.BaseURL, channel.ModelMapping = constant.ChannelTypeOpenAI, "codex-fixture", primaryKey, &endpoint, &mapping
 				if id == 4 {
 					channel.Key = spareKey
 				}
 				require.NoError(t, model.DB.Save(channel).Error)
 				require.NoError(t, channel.AddAbilities(model.DB))
 			}
-			errorChannel := &model.Channel{Type: constant.ChannelTypeCodex, Models: "codex-errors", Key: credential("fixture-error-access", "fixture-error-account"),
+			errorChannel := &model.Channel{Type: constant.ChannelTypeOpenAI, Models: "codex-errors", Key: "fixture-error-access",
 				BaseURL: &endpoint, ModelMapping: &mapping, Status: common.ChannelStatusEnabled, Group: "default", ChannelRatio: "1", CapacityTotal: 10}
 			require.NoError(t, model.DB.Create(errorChannel).Error)
 			require.NoError(t, errorChannel.AddAbilities(model.DB))
@@ -72,22 +67,29 @@ func TestGatewayOfficialCodexSDK(t *testing.T) {
 					return nil, err
 				}
 				label := gjson.GetBytes(body, "input").String()
+				if request.URL.Path == "/v1/chat/completions" {
+					label = gjson.GetBytes(body, "messages.0.content").String()
+				}
 				lock.Lock()
 				counts[label]++
 				lock.Unlock()
-				valid := assert.Equal(t, "/backend-api/codex/responses", request.URL.Path)
-				valid = assert.Equal(t, "gpt-5-codex", gjson.GetBytes(body, "model").String()) && valid
-				valid = assert.Equal(t, "false", gjson.GetBytes(body, "store").Raw) && valid
-				valid = assert.Equal(t, `""`, gjson.GetBytes(body, "instructions").Raw) && valid
-				valid = assert.False(t, gjson.GetBytes(body, "max_output_tokens").Exists()) && valid
+				valid := assert.Equal(t, "gpt-5-codex", gjson.GetBytes(body, "model").String())
+				if label == "codex-chat" {
+					valid = assert.Equal(t, "/v1/chat/completions", request.URL.Path) && valid
+					valid = assert.Equal(t, int64(64), gjson.GetBytes(body, "max_completion_tokens").Int()) && valid
+				} else {
+					valid = assert.Equal(t, "/v1/responses", request.URL.Path) && valid
+					valid = assert.Equal(t, "false", gjson.GetBytes(body, "store").Raw) && valid
+					valid = assert.Equal(t, "standard OpenAI Codex", gjson.GetBytes(body, "instructions").String()) && valid
+					valid = assert.Equal(t, int64(64), gjson.GetBytes(body, "max_output_tokens").Int()) && valid
+				}
 				valid = assert.Equal(t, "application/json", request.Header.Get("Content-Type")) && valid
-				valid = assert.Equal(t, "responses=experimental", request.Header.Get("OpenAI-Beta")) && valid
-				expectedAccess, expectedAccount := "fixture-access", "fixture-account"
+				expectedAccess := "fixture-access"
 				if strings.HasPrefix(label, "codex-error-") {
-					expectedAccess, expectedAccount = "fixture-error-access", "fixture-error-account"
+					expectedAccess = "fixture-error-access"
 				}
 				valid = assert.Equal(t, "Bearer "+expectedAccess, request.Header.Get("Authorization")) && valid
-				valid = assert.Equal(t, expectedAccount, request.Header.Get("Chatgpt-Account-Id")) && valid
+				valid = assert.Empty(t, request.Header.Get("Chatgpt-Account-Id")) && valid
 				if strings.HasPrefix(label, "codex-continue-") {
 					valid = assert.Equal(t, "resp_codex-basic-json", gjson.GetBytes(body, "previous_response_id").String()) && valid
 					var channel model.Channel
@@ -95,7 +97,7 @@ func TestGatewayOfficialCodexSDK(t *testing.T) {
 					valid = assert.Equal(t, spareKey+"\n"+primaryKey, channel.Key) && valid
 				}
 				if !valid {
-					return nil, errors.New("invalid Codex adapter request")
+					return nil, errors.New("invalid standard OpenAI Codex request")
 				}
 				response := httptest.NewRecorder()
 				if label == "codex-error-rejected" {
@@ -104,7 +106,6 @@ func TestGatewayOfficialCodexSDK(t *testing.T) {
 					_, _ = io.WriteString(response, `{"error":{"type":"invalid_request_error","code":"invalid_prompt","message":"isolated provider rejection"}}`)
 				} else {
 					forward := request.Clone(request.Context())
-					forward.URL.Path = "/v1/responses"
 					forward.Body = io.NopCloser(bytes.NewReader(body))
 					gatewaySDKUpstream(response, forward)
 				}
@@ -161,7 +162,8 @@ func TestGatewayOfficialCodexSDK(t *testing.T) {
 			for _, label := range []string{"codex-basic-json", "codex-basic-stream", "codex-continue-json", "codex-continue-stream", "codex-error-rejected", "codex-error-interrupt"} {
 				assert.Equal(t, 1, counts[label], label)
 			}
-			assert.Len(t, counts, 6, fmt.Sprint(counts))
+			assert.Equal(t, 2, counts["codex-chat"])
+			assert.Len(t, counts, 7, fmt.Sprint(counts))
 		})
 	}
 }

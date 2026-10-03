@@ -100,3 +100,113 @@ describe('channel management contracts', () => {
     expect(state.balanceResponse.value).toBeNull()
   })
 })
+
+describe('retired subscription channels', () => {
+  const retired = {
+    ...channel,
+    id: 157,
+    type: 57,
+    status: 1,
+    models: 'gpt-5-codex',
+  } as AdminChannel
+  const active = {
+    ...channel,
+    id: 101,
+    type: 1,
+    status: 2,
+    models: 'gpt-5-codex',
+  } as AdminChannel
+  const input: AdminChannelCreateInput = {
+    name: 'Retired',
+    type: 57,
+    key: 'fixture',
+    models: 'gpt-5-codex',
+    status: 1,
+    base_url: '',
+    model_mapping: '',
+    priority: 0,
+    weight: 0,
+    capacity_total: 20,
+    channel_ratio: '1',
+  }
+
+  it('does not send retired mutations or upstream requests, but permits explicit deletion', async () => {
+    const get = vi
+      .spyOn(api, 'get')
+      .mockResolvedValue({ ...page, items: [retired] })
+    const post = vi.spyOn(api, 'post').mockResolvedValue(null)
+    const put = vi.spyOn(api, 'put').mockResolvedValue(null)
+    const remove = vi.spyOn(api, 'delete').mockResolvedValue({ id: retired.id })
+    const state = await setup()
+    expect(state.canRunBatch.value).toBe(false)
+    expect(await state.createChannel(input)).toBe(false)
+    expect(await state.updateChannelDetails(retired, input)).toBe(false)
+    expect(await state.updateChannelDetails(active, input)).toBe(false)
+    expect(await state.updateNumber(retired, 'priority', 2)).toBe(false)
+    expect(await state.toggleStatus(retired)).toBe(false)
+    expect(await state.refreshBalance(retired)).toBe(false)
+    expect((await state.testChannelModel(retired, 'gpt-5-codex')).ok).toBe(
+      false
+    )
+    expect(await state.removeChannelModels(retired, ['gpt-5-codex'])).toBe(
+      false
+    )
+    expect(await state.updateChannelsStatus('enable', [retired])).toBe(false)
+    await expect(
+      state.fetchUpstreamModels({ channelId: retired.id })
+    ).rejects.toThrow('channels.retiredHint')
+    await expect(
+      state.fetchUpstreamModels({ type: 57, key: 'fixture', baseUrl: '' })
+    ).rejects.toThrow('channels.retiredHint')
+    await state.runVisibleBalance()
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(post).not.toHaveBeenCalled()
+    expect(put).not.toHaveBeenCalled()
+    expect(await state.deleteChannel(retired)).toBe(true)
+    expect(remove).toHaveBeenCalledWith('/api/channel/157', undefined, {
+      signal: expect.any(AbortSignal),
+    })
+  })
+
+  it('filters retired rows from batches and still tests Codex models on standard OpenAI', async () => {
+    const listing = { ...page, items: [retired, active] }
+    const get = vi
+      .spyOn(api, 'get')
+      .mockImplementation(async (url) =>
+        url.includes('/test/') ? { time: 0.125 } : listing
+      )
+    const post = vi.spyOn(api, 'post').mockResolvedValue(1)
+    const state = await setup()
+    expect(
+      await state.testChannelModel(active, 'gpt-5-codex', {
+        endpointType: 'openai-response',
+        stream: true,
+      })
+    ).toEqual({ ok: true, timeMs: 125 })
+    expect(get).toHaveBeenCalledWith(
+      '/api/next/admin/channels/test/101',
+      {
+        model: 'gpt-5-codex',
+        endpoint_type: 'openai-response',
+        stream: 'true',
+      },
+      { signal: undefined }
+    )
+    await state.runVisibleBalance()
+    expect(
+      get.mock.calls
+        .filter(([url]) => url.includes('/balance/'))
+        .map(([url]) => url)
+    ).toEqual(['/api/next/admin/channels/balance/101'])
+    expect(post).toHaveBeenCalledWith(
+      '/api/next/admin/channels/lab-audit',
+      expect.objectContaining({ channel_ids: [101] })
+    )
+    await state.updateChannelsStatus('enable', [retired, active])
+    expect(post).toHaveBeenCalledWith(
+      '/api/next/admin/channels/status/batch',
+      expect.objectContaining({ ids: [101] }),
+      { signal: expect.any(AbortSignal) }
+    )
+  })
+})

@@ -142,6 +142,7 @@ func GetBoundChannelsByModelsMap(modelNames []string) (map[string][]BoundChannel
 	err := DB.Table("channels").
 		Select("abilities.model as model, channels.name as name, channels.type as type").
 		Joins("JOIN abilities ON abilities.channel_id = channels.id").
+		Where("channels.id IN (?)", liveChannelIDs()).
 		Where("abilities.model IN ? AND abilities.enabled = ?", modelNames, true).
 		Distinct().
 		Scan(&rows).Error
@@ -187,6 +188,7 @@ func GetPreferredModelOwnerChannelTypes(modelNames []string, groups []string) (m
 	query := DB.Table("abilities").
 		Select("abilities.model as model, channels.type as channel_type").
 		Joins("JOIN channels ON abilities.channel_id = channels.id").
+		Where("channels.id IN (?)", liveChannelIDs()).
 		Where("abilities.model IN ? AND abilities.enabled = ? AND channels.status = ?", modelNames, true, common.ChannelStatusEnabled).
 		Order("COALESCE(abilities.priority, 0) DESC").
 		Order("abilities.weight DESC").

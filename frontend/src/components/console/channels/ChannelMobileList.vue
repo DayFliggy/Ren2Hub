@@ -22,6 +22,7 @@ import {
   adminChannelResponseText,
   adminChannelResponseTone,
   adminChannelTypeMeta,
+  isRetiredChannelType,
 } from '@/constants/adminChannels'
 import type { AdminChannel } from '@/types/console'
 import { formatMoney, formatQuota, relativeTime } from '@/utils/format'
@@ -232,7 +233,12 @@ function responseDisplay(channel: AdminChannel): {
             class="flex shrink-0 items-center gap-0.5"
           >
             <IconButton
-              v-if="canOperate"
+              v-if="
+                canOperate &&
+                group.channels.some(
+                  (channel) => !isRetiredChannelType(channel.type)
+                )
+              "
               :label="t('channels.syncSupplier', { supplier: group.supplier })"
               :disabled="!canRunBatch"
               class="h-7 w-7"
@@ -255,7 +261,12 @@ function responseDisplay(channel: AdminChannel): {
               <RefreshCw v-else :size="14" />
             </IconButton>
             <IconButton
-              v-if="canOperate"
+              v-if="
+                canOperate &&
+                group.channels.some(
+                  (channel) => !isRetiredChannelType(channel.type)
+                )
+              "
               :label="t('channels.testSupplier', { supplier: group.supplier })"
               class="h-7 w-7"
               @click="pickSupplierTest(group)"
@@ -263,7 +274,12 @@ function responseDisplay(channel: AdminChannel): {
               <Activity :size="14" />
             </IconButton>
             <IconButton
-              v-if="canSensitiveWrite"
+              v-if="
+                canSensitiveWrite &&
+                group.channels.some(
+                  (channel) => !isRetiredChannelType(channel.type)
+                )
+              "
               :label="t('channels.clearSupplier', { supplier: group.supplier })"
               tone="danger"
               :disabled="!canMutate"
@@ -285,7 +301,9 @@ function responseDisplay(channel: AdminChannel): {
             data-channel-mobile-row
             class="min-w-0 px-4 py-4 transition-colors"
             :class="
-              channel.status === 1 ? '' : 'bg-[var(--surface-muted)] opacity-75'
+              channel.status === 1 && !isRetiredChannelType(channel.type)
+                ? ''
+                : 'bg-[var(--surface-muted)] opacity-75'
             "
           >
             <header class="flex min-w-0 items-start justify-between gap-3">
@@ -295,7 +313,9 @@ function responseDisplay(channel: AdminChannel): {
                   type="checkbox"
                   class="checkbox-round mt-2 shrink-0"
                   :checked="selectedIds.includes(channel.id)"
-                  :disabled="selectionDisabled"
+                  :disabled="
+                    selectionDisabled || isRetiredChannelType(channel.type)
+                  "
                   :aria-label="
                     t('channels.selectChannel', { name: channel.name })
                   "
@@ -340,11 +360,20 @@ function responseDisplay(channel: AdminChannel): {
                 </div>
               </div>
               <ChannelStatusBadge
-                v-if="visibleFields.includes('status')"
+                v-if="
+                  visibleFields.includes('status') ||
+                  isRetiredChannelType(channel.type)
+                "
                 :channel="channel"
                 mobile
               />
             </header>
+            <p
+              v-if="isRetiredChannelType(channel.type)"
+              class="mt-3 text-xs text-[var(--text-secondary)]"
+            >
+              {{ t('channels.retiredHint') }}
+            </p>
 
             <dl class="mt-4 grid min-w-0 grid-cols-2 gap-x-4 gap-y-4 text-xs">
               <div v-if="visibleFields.includes('priority')" class="min-w-0">
@@ -353,7 +382,7 @@ function responseDisplay(channel: AdminChannel): {
                 </dt>
                 <dd class="mt-1.5">
                   <ChannelInlineNumber
-                    v-if="canWrite"
+                    v-if="canWrite && !isRetiredChannelType(channel.type)"
                     :value="channel.priority"
                     :label="t('channels.priorityFor', { name: channel.name })"
                     :busy="isRowBusy(channel.id)"
@@ -372,7 +401,7 @@ function responseDisplay(channel: AdminChannel): {
                 </dt>
                 <dd class="mt-1.5">
                   <ChannelInlineNumber
-                    v-if="canWrite"
+                    v-if="canWrite && !isRetiredChannelType(channel.type)"
                     :value="channel.weight"
                     :label="t('channels.weightFor', { name: channel.name })"
                     :busy="isRowBusy(channel.id)"
@@ -409,7 +438,9 @@ function responseDisplay(channel: AdminChannel): {
                   </div>
                   <IconButton
                     v-if="
-                      canOperate && visibleFields.includes('rowUpstreamAction')
+                      canOperate &&
+                      !isRetiredChannelType(channel.type) &&
+                      visibleFields.includes('rowUpstreamAction')
                     "
                     :label="t('channels.refreshBalance')"
                     :disabled="isRowBusy(channel.id)"
@@ -445,7 +476,9 @@ function responseDisplay(channel: AdminChannel): {
                   </StatusChip>
                   <IconButton
                     v-if="
-                      canOperate && visibleFields.includes('rowResponseAction')
+                      canOperate &&
+                      !isRetiredChannelType(channel.type) &&
+                      visibleFields.includes('rowResponseAction')
                     "
                     :label="t('channels.testChannel')"
                     class="h-7 w-7 shrink-0"
@@ -461,19 +494,20 @@ function responseDisplay(channel: AdminChannel): {
               class="mt-4 flex items-center justify-end gap-1 border-t border-[var(--border-subtle)] pt-3"
             >
               <IconButton
-                v-if="canOperate"
+                v-if="canOperate && !isRetiredChannelType(channel.type)"
                 :label="t('channels.syncModelsTitle')"
                 :disabled="!canMutate"
                 @click="syncModels(channel)"
                 ><RefreshCw :size="16"
               /></IconButton>
               <IconButton
+                v-if="!isRetiredChannelType(channel.type)"
                 :label="t('gateway.channelRuntime')"
                 @click="showRuntime(channel)"
                 ><Gauge :size="16"
               /></IconButton>
               <IconButton
-                v-if="canWrite"
+                v-if="canWrite && !isRetiredChannelType(channel.type)"
                 :label="t('channels.editChannel')"
                 :disabled="isRowBusy(channel.id)"
                 @click="editChannel(channel)"
@@ -481,7 +515,7 @@ function responseDisplay(channel: AdminChannel): {
                 <Pencil :size="16" />
               </IconButton>
               <IconButton
-                v-if="canOperate"
+                v-if="canOperate && !isRetiredChannelType(channel.type)"
                 :label="
                   channel.status === 1
                     ? t('channels.disableChannel')

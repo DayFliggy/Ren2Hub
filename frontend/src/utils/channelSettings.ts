@@ -11,9 +11,9 @@ export interface AdvancedChannelConfig extends Record<string, unknown> {
   advanced_routes: AdvancedChannelRoute[]
 }
 
-const openAIFieldTypes = [1, 57, 58, 59, 60, 62, 63]
+const openAIFieldTypes = [1, 58, 59, 60, 62, 63]
 const claudeFieldTypes = [14, 58, 59, 60, 62, 63]
-const sharedFieldTypes = [1, 14, 57, 58, 59, 60, 62, 63]
+const sharedFieldTypes = [1, 14, 58, 59, 60, 62, 63]
 
 export const CHANNEL_SETTING_FIELDS = [
   { key: 'allow_service_tier', types: sharedFieldTypes },

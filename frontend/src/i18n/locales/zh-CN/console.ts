@@ -1,8 +1,6 @@
 import { securityMessages } from '../../security'
 import { taskPluginMessages } from '../../taskPlugins'
-import { providerUsageMessages } from '../../providerUsage'
 export default {
-  providerUsage: providerUsageMessages['zh-CN'],
   taskPlugins: taskPluginMessages['zh-CN'],
   security: securityMessages['zh-CN'],
   billing: {
@@ -343,6 +341,7 @@ export default {
     profile: '个人中心',
     home: '返回首页',
     balance: '余额',
+    securityAccess: '安全与访问',
     rebate: '入股返利',
     redeem: '兑换码',
     collapse: '收起侧栏',
@@ -1180,6 +1179,9 @@ export default {
     statusEnabled: '正常',
     statusDisabled: '手动禁用',
     statusAutoDisabled: '自动禁用',
+    statusRetired: '已退役',
+    retiredHint:
+      '该渠道类型已退役。请删除后使用官方 API Key 新建 OpenAI 渠道，订阅凭据不能直接复用。',
     priorityFor: '{name} 的优先级',
     weightFor: '{name} 的权重',
     notTested: '未测试',

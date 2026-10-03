@@ -1,14 +1,12 @@
 package controller
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -75,10 +73,10 @@ func clearChannelInfo(channel *model.Channel) {
 
 func applyChannelStatusFilter(query *gorm.DB, statusFilter int) *gorm.DB {
 	if statusFilter == common.ChannelStatusEnabled {
-		return query.Where("status = ?", common.ChannelStatusEnabled)
+		return query.Where("status = ? AND type NOT IN ?", common.ChannelStatusEnabled, constant.RetiredChannelTypes())
 	}
 	if statusFilter == 0 {
-		return query.Where("status != ?", common.ChannelStatusEnabled)
+		return query.Where("(status != ? OR type IN ?)", common.ChannelStatusEnabled, constant.RetiredChannelTypes())
 	}
 	return query
 }
@@ -447,6 +445,10 @@ func GetChannelKey(c *gin.Context) {
 		return
 	}
 
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	// 记录操作审计日志（高危：查看渠道密钥）
 	recordManageAudit(c, "channel.key_view", map[string]interface{}{
 		"id":   channelId,
@@ -484,6 +486,9 @@ func validateTwoFactorAuth(twoFA *model.TwoFA, code string) bool {
 func validateChannel(channel *model.Channel, isAdd bool) error {
 	if channel == nil {
 		return fmt.Errorf("channel cannot be empty")
+	}
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return err
 	}
 	if err := validateTaskPluginChannel(channel); err != nil {
 		return err
@@ -548,59 +553,7 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		}
 	}
 
-	// Codex OAuth key validation (optional, only when JSON object is provided)
-	if channel.Type == constant.ChannelTypeCodex {
-		trimmedKey := strings.TrimSpace(channel.Key)
-		if isAdd || trimmedKey != "" {
-			if !strings.HasPrefix(trimmedKey, "{") {
-				return fmt.Errorf("Codex key must be a valid JSON object")
-			}
-			var keyMap map[string]any
-			if err := common.Unmarshal([]byte(trimmedKey), &keyMap); err != nil {
-				return fmt.Errorf("Codex key must be a valid JSON object")
-			}
-			if v, ok := keyMap["access_token"]; !ok || v == nil || strings.TrimSpace(fmt.Sprintf("%v", v)) == "" {
-				return fmt.Errorf("Codex key JSON must include access_token")
-			}
-			if v, ok := keyMap["account_id"]; !ok || v == nil || strings.TrimSpace(fmt.Sprintf("%v", v)) == "" {
-				return fmt.Errorf("Codex key JSON must include account_id")
-			}
-		}
-	}
-
 	return nil
-}
-
-func RefreshCodexChannelCredential(c *gin.Context) {
-	channelId, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		common.ApiError(c, fmt.Errorf("invalid channel id: %w", err))
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-	defer cancel()
-
-	oauthKey, ch, err := service.RefreshCodexChannelCredential(ctx, channelId, service.CodexCredentialRefreshOptions{ResetCaches: true})
-	if err != nil {
-		common.SysError("failed to refresh codex channel credential: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "刷新凭证失败，请稍后重试"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "refreshed",
-		"data": gin.H{
-			"expires_at":   oauthKey.Expired,
-			"last_refresh": oauthKey.LastRefresh,
-			"account_id":   oauthKey.AccountID,
-			"email":        oauthKey.Email,
-			"channel_id":   ch.Id,
-			"channel_type": ch.Type,
-			"channel_name": ch.Name,
-		},
-	})
 }
 
 type AddChannelRequest struct {
@@ -1038,6 +991,10 @@ func UpdateChannel(c *gin.Context) {
 		})
 		return
 	}
+	if err := constant.ValidateChannelTypeLifecycle(originChannel.Type); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	originProxy := originChannel.GetSetting().Proxy
 	if _, provided := requestData["setting"]; provided && !taskPluginBindingsEqual(channel.GetSetting().TaskPluginBindings(), originChannel.GetSetting().TaskPluginBindings()) && !middleware.RequireCurrentUserPermission(c, authz.TaskPluginBind) {
 		return
@@ -1194,6 +1151,10 @@ func UpdateChannelStatus(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
+	if err := model.ValidateMutableChannels(model.DB.Model(&model.Channel{}).Where("id = ?", id)); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	changed := model.UpdateChannelStatus(id, "", req.Status, "manual operation")
 	if changed {
 		model.InitChannelCache()
@@ -1216,6 +1177,10 @@ func BatchUpdateChannelStatus(c *gin.Context) {
 	ids, idErr := normalizeChannelIDs(req.Ids)
 	if err != nil || idErr != nil || len(ids) == 0 || !isManageableChannelStatus(req.Status) {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if err := model.ValidateMutableChannels(model.DB.Model(&model.Channel{}).Where("id IN ?", ids)); err != nil {
+		common.ApiError(c, err)
 		return
 	}
 	changedCount := 0
@@ -1281,6 +1246,9 @@ func buildAdvancedCustomModelPreviewChannel(req fetchModelsRequest) (*model.Chan
 	if req.ChannelID > 0 {
 		savedChannel, err := model.GetChannelById(req.ChannelID, true)
 		if err != nil {
+			return nil, err
+		}
+		if err := constant.ValidateChannelTypeLifecycle(savedChannel.Type); err != nil {
 			return nil, err
 		}
 		if !constant.IsAdvancedCustomChannel(savedChannel.Type) {
@@ -1355,6 +1323,10 @@ func FetchModels(c *gin.Context) {
 		return
 	}
 
+	if err := constant.ValidateChannelTypeLifecycle(req.Type); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	var channel *model.Channel
 	if constant.IsAdvancedCustomChannel(req.Type) || req.ChannelID > 0 {
 		var err error
@@ -1380,9 +1352,7 @@ func FetchModels(c *gin.Context) {
 		}
 
 		key := strings.TrimSpace(req.Key)
-		if req.Type != constant.ChannelTypeCodex {
-			key = strings.Split(key, "\n")[0]
-		}
+		key = strings.Split(key, "\n")[0]
 		channel = &model.Channel{
 			Type:    req.Type,
 			Key:     key,
@@ -1502,6 +1472,11 @@ func CopyChannel(c *gin.Context) {
 		return
 	}
 
+	if err := constant.ValidateChannelTypeLifecycle(origin.Type); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
 	// clone channel
 	clone := *origin // shallow copy is sufficient as we will overwrite primitives
 	clone.Id = 0     // let DB auto-generate
@@ -1585,6 +1560,10 @@ func ManageMultiKeys(c *gin.Context) {
 		return
 	}
 
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	if !channel.ChannelInfo.IsMultiKey {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

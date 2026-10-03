@@ -31,6 +31,8 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleTabs from '@/components/common/ConsoleTabs.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import FilterSelect from '@/components/common/FilterSelect.vue'
+import SearchInput from '@/components/common/SearchInput.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import ModelPricingEditor from '@/components/admin/ModelPricingEditor.vue'
 import ToolPricingEditor from '@/components/admin/ToolPricingEditor.vue'
@@ -118,6 +120,12 @@ const tabs = computed(() => [
   { key: 'models', label: t(props.embedded ? 'priced' : 'models') },
   { key: 'unset', label: t('unset') },
   { key: 'tools', label: t('tools') },
+])
+const modeOptions = computed(() => [
+  { value: '', label: t('all') },
+  { value: 'tiered_expr', label: t('expression') },
+  { value: 'per-token', label: t('token') },
+  { value: 'per-request', label: t('request') },
 ])
 let controller: AbortController | undefined
 watch([search, filter, tab, pageSize], () => {
@@ -379,6 +387,7 @@ onBeforeUnmount(() => {
           :items="tabs"
           panel-id="model-pricing-panel"
           :density="embedded ? 'compact' : 'default'"
+          :aria-label="t('title')"
           @update:model-value="
             (value) => {
               if (commitOpen()) tab = value
@@ -441,24 +450,42 @@ onBeforeUnmount(() => {
           <div v-else class="pricing-workspace">
             <div class="pricing-models">
               <div class="pricing-filter">
-                <label class="admin-field pricing-search-label">
-                  <span class="sr-only">{{ t('search') }}</span>
-                  <input v-model="search" :placeholder="t('search')" />
-                </label>
-                <select v-model="filter" :aria-label="t('mode')">
-                  <option value="">{{ t('all') }}</option>
-                  <option value="tiered_expr">{{ t('expression') }}</option>
-                  <option value="per-token">{{ t('token') }}</option>
-                  <option value="per-request">{{ t('request') }}</option>
-                </select>
+                <SearchInput
+                  v-model="search"
+                  :placeholder="t('search')"
+                  :aria-label="t('search')"
+                  class="min-w-0 flex-1"
+                />
+                <FilterSelect
+                  v-model="filter"
+                  :options="modeOptions"
+                  :label="t('mode')"
+                  :prefix-label="t('mode')"
+                  size="sm"
+                />
                 <ConsoleButton
                   v-if="tab === 'models'"
                   size="sm"
                   @click="open('__new__')"
                 >
-                  <Plus :size="13" class="mr-1" aria-hidden="true" />{{
-                    t('add')
-                  }}
+                  <Plus :size="13" aria-hidden="true" />{{ t('add') }}
+                </ConsoleButton>
+              </div>
+
+              <div v-if="selected.length" class="pricing-selected-strip">
+                <span
+                  class="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-text)]"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+                  {{ t('selected', { count: selected.length }) }}
+                </span>
+                <ConsoleButton
+                  variant="secondary"
+                  size="sm"
+                  :disabled="!editing"
+                  @click="copy"
+                >
+                  <Copy :size="13" aria-hidden="true" />{{ t('copy') }}
                 </ConsoleButton>
               </div>
 
@@ -570,24 +597,6 @@ onBeforeUnmount(() => {
                 @update:page="page = $event"
                 @update:page-size="pageSize = $event"
               />
-
-              <div v-if="selected.length" class="pricing-selected-strip">
-                <span
-                  class="text-xs font-semibold text-[var(--text-secondary)]"
-                >
-                  {{ t('selected', { count: selected.length }) }}
-                </span>
-                <ConsoleButton
-                  variant="secondary"
-                  size="sm"
-                  :disabled="!editing"
-                  @click="copy"
-                >
-                  <Copy :size="13" class="mr-1" aria-hidden="true" />{{
-                    t('copy')
-                  }}
-                </ConsoleButton>
-              </div>
             </div>
 
             <div class="pricing-editor-container">
@@ -702,15 +711,13 @@ onBeforeUnmount(() => {
 .pricing-card-header {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  background: var(--surface-solid);
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.75rem;
-  padding: 0.875rem 1rem;
-  box-shadow: var(--card-shadow);
-  margin-bottom: 1rem;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
   min-width: 0;
   max-width: 100%;
+}
+.is-embedded .pricing-card-header {
+  margin-bottom: 0.5rem;
 }
 .pricing-toolbar {
   align-items: center;
@@ -748,8 +755,7 @@ onBeforeUnmount(() => {
   margin-left: auto;
 }
 .pricing-tabs-wrap {
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 0.625rem;
+  min-width: 0;
 }
 .pricing-top-actions {
   display: flex;
@@ -769,28 +775,26 @@ onBeforeUnmount(() => {
   min-width: 0;
   background: var(--surface-solid);
   border: 1px solid var(--border-subtle);
-  border-radius: 0.75rem;
+  border-radius: 1rem;
   box-shadow: var(--card-shadow);
   overflow: hidden;
 }
 .pricing-filter {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
+  gap: 0.75rem;
+  padding: 1rem;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-solid);
-}
-.pricing-search-label {
-  flex: 1;
-  margin: 0;
-}
-.pricing-filter select {
-  max-width: 9rem;
 }
 .pricing-table {
   overflow: auto;
   max-height: 60vh;
+}
+.pricing-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 .pricing-table table {
   min-width: 580px;
@@ -887,11 +891,12 @@ onBeforeUnmount(() => {
 }
 .pricing-selected-strip {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.5rem;
   padding: 0.625rem 1rem;
-  background: var(--accent-soft);
-  border-top: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--accent-soft) 50%, transparent);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .pricing-editor-container {
   min-width: 0;
@@ -899,7 +904,7 @@ onBeforeUnmount(() => {
 .pricing-editor-empty {
   min-height: 28rem;
   border: 1px dashed var(--border-subtle);
-  border-radius: 0.75rem;
+  border-radius: 1rem;
   background: var(--surface-solid);
   box-shadow: var(--card-shadow);
 }
@@ -909,14 +914,14 @@ onBeforeUnmount(() => {
   gap: 1rem;
   background: var(--surface-solid);
   border: 1px solid var(--border-subtle);
-  border-radius: 0.75rem;
+  border-radius: 1rem;
   padding: 1.25rem;
   box-shadow: var(--card-shadow);
 }
 .pricing-tools-wrap {
   background: var(--surface-solid);
   border: 1px solid var(--border-subtle);
-  border-radius: 0.75rem;
+  border-radius: 1rem;
   padding: 1.25rem;
   box-shadow: var(--card-shadow);
   min-width: 0;

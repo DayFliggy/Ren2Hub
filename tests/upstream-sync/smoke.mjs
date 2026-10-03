@@ -276,36 +276,63 @@ try {
       capacity_total: 2,
     },
   });
-  const codexChannelName = "isolated-codex-cache-only";
-  await call("POST", "/api/channel/", {
-    mode: "single",
-    channel: {
-      type: 57,
-      name: codexChannelName,
-      key: JSON.stringify({
-        access_token: "fixture-only",
-        account_id: "fixture-account",
-      }),
-      base_url: upstreamURL,
-      models: modelName,
-      status: 2,
-      group: "default",
-      channel_ratio: "1",
-      capacity_total: 1,
+  const retiredChannelName = "isolated-retired-channel";
+  const retiredResponse = await fetch(base + "/api/channel/", {
+    method: "POST",
+    signal: AbortSignal.timeout(15_000),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${bearer}`,
     },
+    body: JSON.stringify({
+      mode: "single",
+      channel: {
+        type: 57,
+        name: retiredChannelName,
+        key: "fixture-only-retired-key",
+        base_url: upstreamURL,
+        models: modelName,
+        status: 1,
+        group: "default",
+        channel_ratio: "1",
+        capacity_total: 1,
+      },
+    }),
   });
+  assert.equal(retiredResponse.status, 200);
+  const retired = await retiredResponse.json();
+  assert.equal(retired.success, false);
+  assert.equal(retired.message, "retired channel type");
   const channels = await call("GET", "/api/channel/");
-  const codexID = channels.data.items.find(
-    (channel) => channel.name === codexChannelName,
+  assert.equal(
+    channels.data.items.some((channel) => channel.name === retiredChannelName),
+    false,
+    "retired channel creation must not leave a database row",
+  );
+  const channelID = channels.data.items.find(
+    (channel) => channel.name === "isolated-smoke",
   ).id;
-  const window = await call("GET", `/api/channel/${codexID}/provider-usage`);
-  assert.equal(window.data.state, "unknown");
-  assert.equal(window.data.auto_refresh, false);
-  assert.deepEqual(window.data.windows, []);
+  for (const [method, suffix] of [
+    ["POST", "codex/refresh"],
+    ["GET", "codex/usage"],
+    ["GET", "codex/usage/reset-credits"],
+    ["POST", "codex/usage/reset"],
+    ["GET", "provider-usage"],
+    ["POST", "provider-usage/refresh"],
+    ["PUT", "provider-usage/settings"],
+  ]) {
+    const removed = await fetch(base + `/api/channel/${channelID}/${suffix}`, {
+      method,
+      signal: AbortSignal.timeout(15_000),
+      headers: { Authorization: `Bearer ${bearer}` },
+    });
+    assert.equal(removed.status, 404, `${method} ${suffix} must be removed`);
+    await removed.arrayBuffer();
+  }
   assert.equal(
     sent.length,
     0,
-    "reading an empty usage cache must not call a provider",
+    "retired creation and removed routes must not call a provider",
   );
   await call("POST", "/api/token/", {
     name: "smoke-relay",
@@ -492,7 +519,7 @@ try {
         "capability CRUD",
         "authorized models projection",
         "manifest and trusted client configuration exports",
-        "cache-only provider window",
+        "retired subscription creation and removed routes",
         "request diagnostics and PAT field permissions",
         "Chat",
         "Claude tool",
