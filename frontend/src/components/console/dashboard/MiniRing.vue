@@ -29,7 +29,9 @@ const props = withDefaults(
   }
 )
 
-const stroke = computed(() => props.strokeWidth ?? (props.size >= 40 ? 4 : 3))
+const stroke = computed(
+  () => props.strokeWidth ?? (props.size >= 40 ? 4 : props.size <= 28 ? 2 : 3)
+)
 const center = computed(() => props.size / 2)
 const radius = computed(() => center.value - stroke.value / 2 - 1)
 const circumference = computed(() => 2 * Math.PI * radius.value)

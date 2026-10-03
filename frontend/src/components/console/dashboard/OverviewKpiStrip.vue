@@ -116,7 +116,7 @@ const cells = computed<Cell[]>(() => [
   {
     key: 'rpm',
     label: t('dashboard.rpm.label'),
-    icon: 'M12 22a10 10 0 1 0-10-10M12 12l4.5-4.5',
+    icon: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z',
     value: props.limits ? formatNumber(props.limits.current_rpm) : '--',
     color: 'var(--text-primary)',
     skeleton: 'w-16',
@@ -206,20 +206,23 @@ const rpmCaption = computed(() => {
             </p>
           </div>
 
-          <div v-if="cell.key === 'rpm'" class="mt-2 flex items-center gap-2.5">
+          <div
+            v-if="cell.key === 'rpm'"
+            class="mt-2 flex h-[30px] items-center gap-2"
+          >
             <RpmRing
               v-if="limits"
               :current="limits.current_rpm"
               :limit="limits.rate_limit"
-              :size="34"
-              :show-inner-label="false"
+              :size="26"
+              :show-inner-label="true"
               :show-side-label="false"
             />
             <span class="truncate text-xs text-[var(--text-tertiary)]">
               {{ rpmCaption }}
             </span>
           </div>
-          <div v-else class="mt-2">
+          <div v-else class="mt-2 flex h-[30px] items-center">
             <MiniSparkline
               v-if="!loading && cell.series && cell.series.length > 1"
               :points="cell.series"

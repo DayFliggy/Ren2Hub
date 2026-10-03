@@ -100,7 +100,8 @@ const summary = computed(() =>
       >
         <span
           v-if="showInnerLabel || unmetered"
-          class="text-[11px] font-bold tabular-nums"
+          class="font-bold tabular-nums select-none"
+          :class="size <= 28 ? 'text-[10px]' : 'text-[11px]'"
           :style="{ color: unmetered ? 'var(--text-tertiary)' : color }"
         >
           {{ unmetered ? '∞' : `${Math.round(percent)}%` }}

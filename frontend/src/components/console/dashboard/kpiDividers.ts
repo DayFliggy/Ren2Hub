@@ -9,6 +9,7 @@
 export function kpiDividerClasses(i: number): string[] {
   return [
     'border-[var(--border-subtle)]',
+    'border-dashed',
     i % 2 === 0 ? 'border-l-0' : 'border-l',
     i < 2 ? 'border-t-0' : 'border-t',
     i % 3 === 0 ? 'sm:border-l-0' : 'sm:border-l',
