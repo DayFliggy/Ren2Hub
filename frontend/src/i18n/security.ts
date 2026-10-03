@@ -34,6 +34,22 @@ export const securityMessages = {
     domainsConfirm: 'Confirm removal',
     legacyDomains: 'Legacy RP IDs (comma separated)',
     origins: 'Allowed origins (comma separated)',
+    page: {
+      subtitle:
+        'Credentials, sign-in verification, sessions and access tokens in one place.',
+      eyebrowAccount: 'Auth & access',
+      eyebrowVerify: 'Verify',
+      signInVerification: 'Sign-in verification',
+      statusUnknown: 'Unknown',
+      loadFailed:
+        'Some security settings could not be loaded. Retry before changing them.',
+      passkeyCancelled: 'Passkey registration was cancelled.',
+      preferencesTitle: 'Privacy & notifications',
+      preferencesHint:
+        'IP logging and quota alerts are managed in account settings.',
+      openPreferences: 'Open account settings',
+      manage: 'Manage',
+    },
   },
   'zh-CN': {
     passwordLength: '密码须为 8–128 个字符。',
@@ -68,5 +84,18 @@ export const securityMessages = {
     domainsConfirm: '确认移除',
     legacyDomains: '旧 RP ID（逗号分隔）',
     origins: '允许的来源（逗号分隔）',
+    page: {
+      subtitle: '集中管理登录凭据、登录验证、会话与访问令牌。',
+      eyebrowAccount: '认证与访问',
+      eyebrowVerify: '验证',
+      signInVerification: '登录验证',
+      statusUnknown: '未知',
+      loadFailed: '部分安全设置未能加载，请重试后再修改。',
+      passkeyCancelled: '已取消注册通行密钥。',
+      preferencesTitle: '隐私与通知',
+      preferencesHint: '记录 IP 地址和额度提醒在账号设置中管理。',
+      openPreferences: '前往账号设置',
+      manage: '管理',
+    },
   },
 } as const

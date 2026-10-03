@@ -332,7 +332,7 @@ defineExpose({ reload: load })
     </div>
     <div
       v-if="selection.length"
-      class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--accent-soft)]/50 px-4 py-2.5 transition-colors"
+      class="flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--accent-soft)] px-4 py-2.5 transition-colors"
     >
       <IconButton
         :label="t('clearSelection')"
@@ -415,6 +415,9 @@ defineExpose({ reload: load })
         checkbox-shape="round"
         :selected="selection"
         :selection-disabled="busy"
+        :row-selection-label="
+          (row) => t('selectModel', { name: (row as ModelMetadata).model_name })
+        "
         :loading="loading"
         :skeleton-rows="pageSize"
         adaptive-scroll
@@ -493,14 +496,18 @@ defineExpose({ reload: load })
             class="space-y-3 border-b border-[var(--border-subtle)] px-4 py-3"
           >
             <div class="flex items-start gap-3">
-              <input
-                v-model="selection"
-                type="checkbox"
-                :value="row.id"
-                :aria-label="t('selectModel', { name: row.model_name })"
-                :disabled="busy"
-                class="mt-1.5 h-4 w-4 accent-[var(--accent)]"
-              />
+              <label
+                class="flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center -m-2.5 p-2.5 shrink-0"
+              >
+                <input
+                  v-model="selection"
+                  type="checkbox"
+                  :value="row.id"
+                  :aria-label="t('selectModel', { name: row.model_name })"
+                  :disabled="busy"
+                  class="checkbox-round shrink-0"
+                />
+              </label>
               <div class="min-w-0 flex-1">
                 <ModelMetadataCell
                   :row="row"

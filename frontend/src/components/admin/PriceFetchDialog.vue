@@ -3,6 +3,7 @@ import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
+import SearchInput from '@/components/common/SearchInput.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import {
   pricingConfigApi,
@@ -119,7 +120,7 @@ onBeforeUnmount(() => controller?.abort())
     @close="emit('close')"
   >
     <div class="price-fetch" :aria-busy="loading">
-      <p class="admin-muted">{{ t('sourceHint') }}</p>
+      <p class="text-xs text-[var(--text-tertiary)]">{{ t('sourceHint') }}</p>
       <fieldset class="price-source-list">
         <legend class="sr-only">{{ t('source') }}</legend>
         <label
@@ -164,11 +165,17 @@ onBeforeUnmount(() => controller?.abort())
           }}</small>
         </label>
       </fieldset>
-      <p v-if="error" class="admin-error" role="alert">{{ error }}</p>
+      <p
+        v-if="error"
+        class="text-xs text-[var(--status-danger-text)]"
+        role="alert"
+      >
+        {{ error }}
+      </p>
       <ul
         v-for="item in sources.filter((item) => item.errors.length)"
         :key="item.id"
-        class="admin-error"
+        class="text-xs text-[var(--status-danger-text)]"
       >
         <li v-for="message in item.errors" :key="message">
           {{ item.name }}: {{ message }}
@@ -176,10 +183,12 @@ onBeforeUnmount(() => controller?.abort())
       </ul>
       <template v-if="current">
         <div class="price-fetch-tools">
-          <label class="admin-field"
-            ><span class="sr-only">{{ t('search') }}</span
-            ><input v-model="search" :placeholder="t('search')"
-          /></label>
+          <SearchInput
+            v-model="search"
+            :placeholder="t('search')"
+            :aria-label="t('search')"
+            class="w-64"
+          />
           <ConsoleButton variant="ghost" size="sm" @click="selectVisible">{{
             t('chooseAll')
           }}</ConsoleButton>
@@ -188,7 +197,7 @@ onBeforeUnmount(() => controller?.abort())
           }}</ConsoleButton>
         </div>
         <div class="price-fetch-table">
-          <table class="admin-table">
+          <table>
             <thead>
               <tr>
                 <th>{{ t('choose') }}</th>
@@ -204,6 +213,7 @@ onBeforeUnmount(() => controller?.abort())
                   <input
                     v-model="selected"
                     type="checkbox"
+                    class="checkbox-round"
                     :value="keyFor(model)"
                     :aria-label="`${t('choose')} ${model.model_name} ${model.provider}`"
                     :disabled="
@@ -221,7 +231,10 @@ onBeforeUnmount(() => controller?.abort())
                   />
                 </td>
                 <td>
-                  <p v-if="model.unsupported_reason" class="admin-error">
+                  <p
+                    v-if="model.unsupported_reason"
+                    class="text-xs text-[var(--status-danger-text)]"
+                  >
                     {{ model.unsupported_reason }}
                   </p>
                   <PriceDiffCell
@@ -232,7 +245,7 @@ onBeforeUnmount(() => controller?.abort())
                   <p
                     v-for="warning in model.warnings ?? []"
                     :key="warning"
-                    class="admin-muted"
+                    class="text-xs text-[var(--text-tertiary)]"
                   >
                     {{ warning }}
                   </p>
@@ -240,7 +253,9 @@ onBeforeUnmount(() => controller?.abort())
               </tr>
             </tbody>
           </table>
-          <p v-if="!rows.length" class="admin-muted">{{ t('noResults') }}</p>
+          <p v-if="!rows.length" class="text-xs text-[var(--text-tertiary)]">
+            {{ t('noResults') }}
+          </p>
         </div>
         <TablePagination
           :page="page"
@@ -253,11 +268,17 @@ onBeforeUnmount(() => controller?.abort())
         <p v-if="overwrite" class="price-overwrite">
           {{ t('overwrite', { count: overwrite }) }}
         </p>
-        <p v-if="duplicate" role="alert" class="admin-error">
+        <p
+          v-if="duplicate"
+          role="alert"
+          class="text-xs text-[var(--status-danger-text)]"
+        >
           {{ t('duplicate') }}
         </p>
       </template>
-      <p v-else-if="!loading" class="admin-muted">{{ t('noSource') }}</p>
+      <p v-else-if="!loading" class="text-xs text-[var(--text-tertiary)]">
+        {{ t('noSource') }}
+      </p>
       <div class="price-fetch-tools price-fetch-footer">
         <ConsoleButton
           variant="ghost"
@@ -301,8 +322,8 @@ onBeforeUnmount(() => controller?.abort())
   min-width: 0;
 }
 .price-source[data-selected='true'] {
-  border-color: var(--text-primary);
-  background: var(--surface-hover);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 .price-source small {
   width: 100%;
@@ -322,9 +343,34 @@ onBeforeUnmount(() => controller?.abort())
 .price-fetch-table {
   max-height: 22rem;
   overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
 }
 .price-fetch-table table {
   min-width: 700px;
+  width: 100%;
+  border-collapse: collapse;
+}
+.price-fetch-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-table-header, var(--surface-muted));
+  padding: 0.625rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.price-fetch-table tbody td {
+  padding: 0.625rem 0.75rem;
+  font-size: 0.8125rem;
+  /* Dashed ledger line by day, solid hairline by night (tokens). */
+  border-bottom: 1px var(--row-divider-style, dashed) var(--border-subtle);
+}
+.price-fetch-table tbody tr:last-child td {
+  border-bottom: none;
 }
 .price-fetch-table code {
   display: block;

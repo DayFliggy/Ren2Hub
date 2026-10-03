@@ -199,6 +199,11 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			if reason := input.ExcludedChannelIDs[channel.Id]; reason != "" {
 				candidate.FilterReason = reason
 			}
+			// Path, snapshot and key checks above also fail for a retired type;
+			// diagnostics must report the cause, not the last check that ran.
+			if filtered.Reason == RouteFilterChannelRetired {
+				candidate.FilterReason = RouteFilterChannelRetired
+			}
 			if candidate.FilterReason == "" && input.Requirements != nil && input.ExpectedTaskPluginKey == "" {
 				plan, planErr := PlanChannelConversion(*input.Requirements, channel, input.RequestPath, candidate.ActualModel, input.ConversionPolicy)
 				if planErr != nil {

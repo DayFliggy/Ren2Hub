@@ -1,4 +1,5 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ChartPalette } from '@/charts/palette'
@@ -6,6 +7,12 @@ import type { OptionBuilder } from '@/charts/useEChart'
 import ModelDistributionCard from '@/components/console/dashboard/ModelDistributionCard.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
 import type { ModelShare } from '@/composables/useDashboard'
+import {
+  captureResizeObservers,
+  overflowScrollRegions,
+  resizeObservers,
+  setScrollGeometry,
+} from './scrollFadeTestUtils'
 
 /**
  * ECharts needs a real canvas, which jsdom does not provide. Capturing the
@@ -86,6 +93,7 @@ beforeAll(async () => {
 beforeEach(() => {
   captured.build = undefined
   captured.dispatch = vi.fn()
+  captureResizeObservers()
 })
 
 function render(items: ModelShare[]) {
@@ -93,6 +101,17 @@ function render(items: ModelShare[]) {
     props: { items },
     global: { plugins: [i18n] },
   })
+}
+
+/**
+ * useDashboard's order: `share` is assigned while still loading and `loading`
+ * flips afterwards, so the table appears with no items change of its own.
+ */
+async function renderAfterLoading(wrapper: ReturnType<typeof render>) {
+  await wrapper.setProps({ items: models(5) })
+  await flushPromises()
+  await wrapper.setProps({ loading: false })
+  await flushPromises()
 }
 
 describe('ModelDistributionCard', () => {
@@ -216,5 +235,114 @@ describe('ModelDistributionCard', () => {
       seriesIndex: 0,
       dataIndex: 10,
     })
+  })
+
+  it('keeps table rows, swatches and hovers in ring order when input is unsorted', async () => {
+    // Map insertion order from useDashboard, deliberately not spend order: the
+    // smallest spender arrives first and the largest arrives last.
+    const items = [
+      model('tail-small', 50),
+      ...Array.from({ length: 10 }, (_, i) =>
+        model(`head-${i + 1}`, (20 - i) * 1_000)
+      ),
+      model('tail-big', 900),
+      model('top', 99_000),
+    ]
+    const wrapper = render(items)
+    const rows = wrapper.findAll('tbody tr')
+    const rowNames = rows.map((row) => row.find('[title]').text())
+    const swatchOf = (name: string) =>
+      rows[rowNames.indexOf(name)]!.find('span > span').attributes('style')
+
+    // Rows follow the ring's spend ranking, so the head matches its slices.
+    expect(rowNames.slice(0, 10)).toEqual(
+      slices()
+        .slice(0, 10)
+        .map((s) => s.name)
+    )
+    expect(rowNames.at(-1)).toBe('tail-small')
+
+    // The biggest spender owns the first series colour and the first slice.
+    expect(swatchOf('top')).toContain('var(--accent)')
+    await rows[rowNames.indexOf('top')]!.trigger('mouseenter')
+    expect(captured.dispatch).toHaveBeenLastCalledWith({
+      type: 'highlight',
+      seriesIndex: 0,
+      dataIndex: 0,
+    })
+
+    // The smallest spender was first in the input but is folded on the ring.
+    expect(swatchOf('tail-small')).toContain('var(--text-tertiary)')
+    await rows[rowNames.indexOf('tail-small')]!.trigger('mouseenter')
+    expect(captured.dispatch).toHaveBeenLastCalledWith({
+      type: 'highlight',
+      seriesIndex: 0,
+      dataIndex: 10,
+    })
+  })
+
+  it('shows edge fade on horizontal overflow and hides it when scrolled to end or not overflowing', async () => {
+    const wrapper = render(models(5))
+    const scroll = wrapper.find('[data-model-distribution-scroll]')
+    const el = scroll.element as HTMLElement
+
+    // Default jsdom has scrollWidth === clientWidth === 0 -> no fade
+    expect(wrapper.find('[data-table-scroll-fade]').exists()).toBe(false)
+
+    setScrollGeometry(el, { clientWidth: 300, scrollWidth: 500 })
+    await scroll.trigger('scroll')
+    expect(wrapper.find('[data-table-scroll-fade]').exists()).toBe(true)
+
+    // Scrolled to end
+    el.scrollLeft = 200
+    await scroll.trigger('scroll')
+    expect(wrapper.find('[data-table-scroll-fade]').exists()).toBe(false)
+
+    // No overflow
+    setScrollGeometry(el, { clientWidth: 300, scrollWidth: 300 })
+    await scroll.trigger('scroll')
+    expect(wrapper.find('[data-table-scroll-fade]').exists()).toBe(false)
+  })
+
+  it('shows the fade on first paint when the table renders after loading and overflows', async () => {
+    // jsdom has no layout, so give every scroll region an overflowing box
+    // before the table exists; the fade must be computed once it is bound.
+    overflowScrollRegions('[data-model-distribution-scroll]', 300, 500)
+    const wrapper = mount(ModelDistributionCard, {
+      props: { items: [], loading: true },
+      global: { plugins: [i18n] },
+    })
+    expect(wrapper.find('[data-model-distribution-scroll]').exists()).toBe(
+      false
+    )
+
+    await renderAfterLoading(wrapper)
+
+    expect(wrapper.find('[data-table-scroll-fade]').exists()).toBe(true)
+  })
+
+  it('updates the fade when the table container is resized', async () => {
+    const wrapper = mount(ModelDistributionCard, {
+      props: { items: [], loading: true },
+      global: { plugins: [i18n] },
+    })
+    await renderAfterLoading(wrapper)
+
+    const el = wrapper.find('[data-model-distribution-scroll]')
+      .element as HTMLElement
+    const observer = resizeObservers.find((o) => o.targets.has(el))
+    expect(observer).toBeDefined()
+
+    // Sidebar collapses / rotation narrows the card: the table now overflows.
+    setScrollGeometry(el, { clientWidth: 300, scrollWidth: 500 })
+    observer!.fire()
+    await nextTick()
+    expect(wrapper.find('[data-table-scroll-fade]').exists()).toBe(true)
+
+    // Widened again: everything fits, so the fade goes away.
+    setScrollGeometry(el, { clientWidth: 600, scrollWidth: 600 })
+    observer!.fire()
+    await nextTick()
+    expect(wrapper.find('[data-table-scroll-fade]').exists()).toBe(false)
   })
 })

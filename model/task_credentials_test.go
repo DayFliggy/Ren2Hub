@@ -30,7 +30,7 @@ func TestInitTaskPersistsCredentialReferenceWithoutPlaintextKey(t *testing.T) {
 	assert.Empty(t, ResolveTaskChannelKey(&Channel{Id: 9, Key: "first\nsecond"}, task), "an unbound new task must never use a legacy key fallback")
 }
 
-func TestTaskCredentialBindingSurvivesKeyReorderAndTrustedRefresh(t *testing.T) {
+func TestTaskCredentialBindingSurvivesKeyReorderAndFailsClosedOnReplacedKey(t *testing.T) {
 	for _, test := range []struct {
 		kind common.DatabaseType
 		env  string

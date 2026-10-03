@@ -53,20 +53,23 @@ func ReadOpsChannelHealth(limit int) (OpsChannelHealth, error) {
 	var result OpsChannelHealth
 	var channelRows []struct {
 		Status int
+		Type   int
 		Total  int64
 	}
-	if err := DB.Model(&Channel{}).Select("status, COUNT(*) AS total").Group("status").Scan(&channelRows).Error; err != nil {
+	if err := DB.Model(&Channel{}).Select("status, type, COUNT(*) AS total").Group("status, type").Scan(&channelRows).Error; err != nil {
 		return result, err
 	}
+	// Counts use the same projection as the channel list: a retired row that
+	// still stores status 1 is counted as manually disabled.
 	for _, row := range channelRows {
 		result.Channels.Total += row.Total
-		switch row.Status {
+		switch (&Channel{Status: row.Status, Type: row.Type}).EffectiveStatus() {
 		case common.ChannelStatusEnabled:
-			result.Channels.Enabled = row.Total
+			result.Channels.Enabled += row.Total
 		case common.ChannelStatusManuallyDisabled:
-			result.Channels.ManuallyDisabled = row.Total
+			result.Channels.ManuallyDisabled += row.Total
 		case common.ChannelStatusAutoDisabled:
-			result.Channels.AutoDisabled = row.Total
+			result.Channels.AutoDisabled += row.Total
 		}
 	}
 	var breakerRows []struct {

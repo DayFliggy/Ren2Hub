@@ -47,7 +47,7 @@ func filterRouteCapability(input routeCapabilityFilterInput) routeCapabilityFilt
 	result := routeCapabilityFilterResult{}
 
 	if constant.IsRetiredChannelType(input.ChannelType) {
-		result.Reason = RouteFilterUnsupported
+		result.Reason = RouteFilterChannelRetired
 		return result
 	}
 	if input.ChannelStatus != common.ChannelStatusEnabled {

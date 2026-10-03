@@ -154,14 +154,10 @@ export function useDashboard() {
   const flow = ref<FlowPoint[]>([])
   const tokenTrend = ref<TokenTrendPoint[]>([])
   const system = ref<SystemMetrics | null>(null)
-  const limits = ref<UserLimits | null>({
-    rate_limit: 0,
-    current_rpm: 0,
-  })
-  const discounts = ref<UserDiscounts | null>({
-    global_ratio: 1.0,
-    effective_ratio: 1.0,
-  })
+  // No backend endpoint provides these yet; null renders "not connected"
+  // rather than a fabricated "unmetered" ceiling or a 1.0× rate.
+  const limits = ref<UserLimits | null>(null)
+  const discounts = ref<UserDiscounts | null>(null)
   const error = ref<string | null>(null)
 
   async function loadSystem() {

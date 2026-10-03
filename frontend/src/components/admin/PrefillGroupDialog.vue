@@ -279,9 +279,9 @@ watch(
           {{ t('refresh') }}
         </ConsoleButton>
       </div>
-      <StatusChip aria-live="polite">
+      <span class="text-xs text-[var(--text-tertiary)]" aria-live="polite">
         {{ t('groupCount', { count: groups.length }, groups.length) }}
-      </StatusChip>
+      </span>
     </div>
 
     <ErrorBanner v-if="error" :message="error" @retry="load" />
@@ -497,7 +497,7 @@ watch(
               rows="3"
               maxlength="255"
               :placeholder="t('groupDescriptionPlaceholder')"
-              class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none transition focus:border-[var(--border-strong)] focus-ring"
+              class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none transition focus:border-[var(--accent)] focus-ring"
             />
           </FormField>
         </section>
@@ -555,7 +555,7 @@ watch(
                 rows="12"
                 spellcheck="false"
                 :aria-label="t('items')"
-                class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 font-mono text-xs text-[var(--text-primary)] outline-none transition focus:border-[var(--border-strong)] focus-ring"
+                class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 font-mono text-xs text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus-ring"
               />
               <p class="text-xs text-[var(--text-tertiary)]">
                 {{ t('endpointItemsHint') }}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import './admin.css'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
@@ -710,7 +711,7 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
         </p>
       </details>
     </div>
-    <footer>
+    <footer class="pricing-editor-footer">
       <ConsoleButton :loading="saving" @click="commit() && emit('save')">{{
         t('save')
       }}</ConsoleButton>
@@ -732,11 +733,7 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
   min-width: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border-subtle);
-  border-radius: 1rem;
-  background: var(--surface-solid);
-  box-shadow: var(--card-shadow);
-  overflow: hidden;
+  background: transparent;
 }
 .pricing-editor-header {
   display: flex;
@@ -753,12 +750,24 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
   color: var(--text-primary);
   margin: 0;
 }
-footer {
+.pricing-editor-footer {
   padding: 0.875rem 1.25rem;
   border-top: 1px solid var(--border-subtle);
   background: var(--surface-solid);
   display: flex;
   justify-content: flex-end;
+}
+/* As in NewAPI's editor panel, Save stays in view while the form scrolls.
+   The page scrolls here instead of an inner panel, so the footer sticks to
+   the bottom of the scroll zone. The mobile drawer keeps it in flow. */
+@media (min-width: 768px) {
+  .pricing-editor-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    /* Matches the hosting ConsoleCard's rounded-2xl bottom corners. */
+    border-radius: 0 0 1rem 1rem;
+  }
 }
 h2,
 h3 {
@@ -768,9 +777,7 @@ h3 {
   display: grid;
   gap: 1rem;
   min-height: 0;
-  overflow-y: auto;
   padding: 1.25rem;
-  max-height: 66vh;
 }
 .pricing-mode {
   display: flex;
@@ -892,11 +899,5 @@ details {
   border-radius: 0.5rem;
   padding: 0.75rem 1rem;
   background: var(--surface-solid);
-}
-@media (max-width: 767px) {
-  .pricing-editor-scroll {
-    max-height: none;
-    overflow: visible;
-  }
 }
 </style>

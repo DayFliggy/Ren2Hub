@@ -69,7 +69,7 @@ for (const theme of ['light', 'dark'] as const) {
           },
         })
       )
-      await page.goto('/settings')
+      await page.goto('/security')
       await waitForStablePage(page)
       await expect(
         page.getByRole('heading', { name: '登录与账户', exact: true })

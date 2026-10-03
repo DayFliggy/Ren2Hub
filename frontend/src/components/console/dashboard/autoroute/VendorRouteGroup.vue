@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useId } from 'vue'
 import {
   ChevronDown,
   CircleCheck,
@@ -31,6 +31,16 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const expanded = ref(false)
+const showExtra = ref(false)
+const extraRowsId = useId()
+
+/**
+ * Rows shown before "more". `channels` already arrives ranked-then-inactive
+ * from buildRouteGroupList, so the collapsed view is simply its head.
+ */
+const COLLAPSED_ROWS = 3
+const topChannels = computed(() => props.channels.slice(0, COLLAPSED_ROWS))
+const extraChannels = computed(() => props.channels.slice(COLLAPSED_ROWS))
 
 const labLogo = computed(() => {
   const slug = props.groupSlug.trim().toLowerCase()
@@ -170,10 +180,43 @@ const availabilityLabel = computed(() =>
 
       <div v-if="expanded" class="mt-3 divide-y divide-[var(--border-subtle)]">
         <ChannelScoreRow
-          v-for="channel in channels"
+          v-for="channel in topChannels"
           :key="channel.id"
           :entry="channel"
         />
+
+        <!-- Always rendered when there are extras so aria-controls resolves. -->
+        <div
+          v-if="extraChannels.length"
+          v-show="showExtra"
+          :id="extraRowsId"
+          class="divide-y divide-[var(--border-subtle)] pt-2"
+          data-route-extra-channels
+        >
+          <ChannelScoreRow
+            v-for="channel in extraChannels"
+            :key="channel.id"
+            :entry="channel"
+            compact
+          />
+        </div>
+      </div>
+
+      <div v-if="expanded && extraChannels.length" class="mt-1 text-center">
+        <button
+          type="button"
+          class="focus-ring inline-flex min-h-11 items-center gap-1 rounded-md px-3 text-xs font-medium text-[var(--accent)] hover:underline sm:min-h-8 sm:px-2"
+          :aria-expanded="showExtra"
+          :aria-controls="extraRowsId"
+          data-route-more-toggle
+          @click="showExtra = !showExtra"
+        >
+          {{
+            showExtra
+              ? t('dashboard.autoRoute.hideExtraChannels')
+              : t('dashboard.autoRoute.showMoreChannels', extraChannels.length)
+          }}
+        </button>
       </div>
     </div>
   </ConsoleCard>

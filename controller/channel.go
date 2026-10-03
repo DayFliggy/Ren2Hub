@@ -73,10 +73,10 @@ func clearChannelInfo(channel *model.Channel) {
 
 func applyChannelStatusFilter(query *gorm.DB, statusFilter int) *gorm.DB {
 	if statusFilter == common.ChannelStatusEnabled {
-		return query.Where("status = ? AND type NOT IN ?", common.ChannelStatusEnabled, constant.RetiredChannelTypes())
+		return model.WhereChannelServable(query)
 	}
 	if statusFilter == 0 {
-		return query.Where("(status != ? OR type IN ?)", common.ChannelStatusEnabled, constant.RetiredChannelTypes())
+		return model.WhereChannelUnservable(query)
 	}
 	return query
 }
@@ -322,10 +322,10 @@ func SearchChannels(c *gin.Context) {
 	if statusFilter == common.ChannelStatusEnabled || statusFilter == 0 {
 		filtered := make([]*model.Channel, 0, len(channelData))
 		for _, ch := range channelData {
-			if statusFilter == common.ChannelStatusEnabled && ch.Status != common.ChannelStatusEnabled {
+			if statusFilter == common.ChannelStatusEnabled && !ch.IsServable() {
 				continue
 			}
-			if statusFilter == 0 && ch.Status == common.ChannelStatusEnabled {
+			if statusFilter == 0 && ch.IsServable() {
 				continue
 			}
 			filtered = append(filtered, ch)

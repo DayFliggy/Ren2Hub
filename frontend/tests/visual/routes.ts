@@ -60,6 +60,7 @@ export const VISUAL_ROUTES: VisualRoute[] = [
   { name: 'invite', path: '/invite' },
   { name: 'invoice', path: '/invoice' },
   { name: 'settings', path: '/settings' },
+  { name: 'security', path: '/security' },
   { name: 'profile', path: '/profile' },
   { name: 'farm', path: '/farm' },
   { name: 'bigame', path: '/bigame' },

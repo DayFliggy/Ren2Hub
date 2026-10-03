@@ -110,6 +110,61 @@ func TestRetiredChannelListProjectsLifecycleWithoutRewriting(t *testing.T) {
 	}
 }
 
+func TestRetiredChannelIsExcludedFromEligibleRouteChannels(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	const userID = 4301
+	require.NoError(t, db.Create(&model.User{Id: userID, Username: "retired-eligible-user", Password: "password", Status: common.UserStatusEnabled, Group: "default"}).Error)
+	require.NoError(t, db.Session(&gorm.Session{SkipHooks: true}).Create(&[]model.Channel{
+		{Id: 1, Type: constant.ChannelTypeOpenAI, Name: "official API", Key: "official-fixture", Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default"},
+		{Id: 57, Type: constant.ChannelTypeCodex, Name: "historical", Key: "fixture-secret", Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default"},
+	}).Error)
+	groups, err := common.Marshal([]string{"default"})
+	require.NoError(t, err)
+	endpoints, err := common.Marshal([]string{string(constant.EndpointTypeOpenAI)})
+	require.NoError(t, err)
+	for _, channelID := range []int{1, 57} {
+		require.NoError(t, db.Create(&model.Ability{ChannelId: channelID, Group: "default", Model: "gpt-test", Enabled: true}).Error)
+		// The retired row keeps a snapshot published before its type was retired.
+		require.NoError(t, model.PublishChannelCapabilitySnapshot(context.Background(), channelID, model.ChannelCapabilitySnapshotFence{}, fmt.Sprintf("source-%d", channelID), "catalog", []model.ChannelModelCapability{{
+			RequestModel: "gpt-test", ActualModel: "gpt-test", LabSlug: "openai", Source: "canonical", Confidence: 1,
+			AbilityGroups: string(groups), EndpointTypes: string(endpoints), ChannelStatus: common.ChannelStatusEnabled,
+			ChannelType: constant.ChannelTypeOpenAI, ProjectionVersion: model.ChannelCapabilityProjectionV1, State: model.RouteCapabilityStateEligible,
+		}}))
+	}
+	channels, err := listEligibleRouteChannels(userID)
+	require.NoError(t, err)
+	ids := make([]int, 0, len(channels))
+	for _, channel := range channels {
+		ids = append(ids, channel.ID)
+	}
+	assert.Equal(t, []int{1}, ids)
+}
+
+func TestRetiredChannelSearchStatusFilterMatchesList(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Session(&gorm.Session{SkipHooks: true}).Create(&[]model.Channel{
+		{Id: 1, Type: constant.ChannelTypeOpenAI, Name: "search-active", Key: "official-fixture", Status: common.ChannelStatusEnabled},
+		{Id: 57, Type: constant.ChannelTypeCodex, Name: "search-historical", Key: "fixture-secret", Status: common.ChannelStatusEnabled},
+	}).Error)
+	for status, wantIDs := range map[string][]float64{"enabled": {1}, "disabled": {57}} {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/channel/search?keyword=search&status="+status, nil)
+		SearchChannels(c)
+		var result struct {
+			Data struct {
+				Items []map[string]any `json:"items"`
+			} `json:"data"`
+		}
+		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &result), recorder.Body.String())
+		ids := make([]float64, 0, len(result.Data.Items))
+		for _, item := range result.Data.Items {
+			ids = append(ids, item["id"].(float64))
+		}
+		assert.Equal(t, wantIDs, ids, status)
+	}
+}
+
 func TestRetiredChannelIsExcludedFromAutomaticProbes(t *testing.T) {
 	legacy := &model.Channel{Type: constant.ChannelTypeCodex, Status: common.ChannelStatusEnabled}
 	active := &model.Channel{Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled}

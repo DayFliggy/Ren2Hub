@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -120,6 +121,94 @@ func TestRetiredChannelDatabaseContracts(t *testing.T) {
 			assert.Zero(t, count)
 		})
 	}
+}
+
+// seedRetiredLifecycleChannels stores one row per lifecycle case. Hooks are
+// skipped because a retired type can only exist as a historical row.
+func seedRetiredLifecycleChannels(t *testing.T, name string) *gorm.DB {
+	t.Helper()
+	db := useOpsTestDB(t, name)
+	require.NoError(t, db.AutoMigrate(&Channel{}, &Ability{}))
+	previousCache := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = false
+	t.Cleanup(func() { common.MemoryCacheEnabled = previousCache })
+	require.NoError(t, db.Session(&gorm.Session{SkipHooks: true}).Create(&[]Channel{
+		{Id: 1, Name: "enabled", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Key: "k1", Models: "gpt-a", Group: "default"},
+		{Id: 2, Name: "manual", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusManuallyDisabled, Key: "k2", Models: "gpt-a", Group: "default"},
+		{Id: 3, Name: "auto", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusAutoDisabled, Key: "k3", Models: "gpt-a", Group: "default"},
+		{Id: 57, Name: "retired", Type: constant.ChannelTypeCodex, Status: common.ChannelStatusEnabled, Key: "k57", Models: "gpt-5-codex", Group: "default"},
+	}).Error)
+	return db
+}
+
+func TestChannelServabilityExcludesRetiredTypesInMemoryAndSQL(t *testing.T) {
+	db := seedRetiredLifecycleChannels(t, "servable.db")
+	var rows []Channel
+	require.NoError(t, db.Order("id").Find(&rows).Error)
+	inMemory := map[bool][]int{}
+	for _, row := range rows {
+		inMemory[row.IsServable()] = append(inMemory[row.IsServable()], row.Id)
+	}
+	var servable, unservable []int
+	require.NoError(t, WhereChannelServable(db.Model(&Channel{})).Order("id").Pluck("id", &servable).Error)
+	require.NoError(t, WhereChannelUnservable(db.Model(&Channel{})).Order("id").Pluck("id", &unservable).Error)
+	assert.Equal(t, []int{1}, servable)
+	assert.Equal(t, []int{2, 3, 57}, unservable)
+	assert.Equal(t, servable, inMemory[true], "the SQL and in-memory forms must agree")
+	assert.Equal(t, unservable, inMemory[false])
+	retired := rows[3]
+	assert.Equal(t, common.ChannelStatusManuallyDisabled, retired.EffectiveStatus())
+	assert.Equal(t, common.ChannelStatusEnabled, retired.Status, "the stored historical status is not rewritten")
+}
+
+func TestExcludeChannelTypesAddsNoConditionForEmptyRetiredList(t *testing.T) {
+	db := seedRetiredLifecycleChannels(t, "exclude-empty.db")
+	var count int64
+	require.NoError(t, db.Model(&Channel{}).Where("type NOT IN ?", []int{}).Count(&count).Error)
+	assert.Zero(t, count, "an unguarded empty NOT IN matches no rows")
+	for _, test := range []struct {
+		name     string
+		excluded []int
+		want     int64
+	}{
+		{"nil list", nil, 4},
+		{"empty list", []int{}, 4},
+		{"retired list", []int{constant.ChannelTypeCodex}, 3},
+	} {
+		require.NoError(t, excludeChannelTypes(db.Model(&Channel{}), "type", test.excluded).Count(&count).Error)
+		assert.Equal(t, test.want, count, test.name)
+	}
+}
+
+func TestDeleteDisabledChannelIncludesRetiredRows(t *testing.T) {
+	db := seedRetiredLifecycleChannels(t, "delete-disabled.db")
+	deleted, err := DeleteDisabledChannel()
+	require.NoError(t, err)
+	assert.EqualValues(t, 3, deleted)
+	var remaining []int
+	require.NoError(t, db.Model(&Channel{}).Order("id").Pluck("id", &remaining).Error)
+	assert.Equal(t, []int{1}, remaining, "manual, auto and retired rows are all shown as disabled")
+}
+
+func TestFixAbilityKeepsRetiredChannelAbilities(t *testing.T) {
+	db := seedRetiredLifecycleChannels(t, "fix-ability.db")
+	require.NoError(t, db.Create(&[]Ability{
+		{ChannelId: 57, Group: "default", Model: "gpt-5-codex", Enabled: true},
+		{ChannelId: 1, Group: "default", Model: "stale-model", Enabled: true},
+		{ChannelId: 999, Group: "default", Model: "orphan", Enabled: true},
+	}).Error)
+	success, fails, err := FixAbility()
+	require.NoError(t, err)
+	assert.Equal(t, 3, success, "only the three live channels are repaired")
+	assert.Zero(t, fails, "a retired channel is skipped, not a failure")
+	var abilities []Ability
+	require.NoError(t, db.Order("channel_id").Find(&abilities).Error)
+	got := make([]string, 0, len(abilities))
+	for _, ability := range abilities {
+		got = append(got, fmt.Sprintf("%d:%s:%t", ability.ChannelId, ability.Model, ability.Enabled))
+	}
+	assert.Equal(t, []string{"1:gpt-a:true", "2:gpt-a:false", "3:gpt-a:false", "57:gpt-5-codex:true"}, got,
+		"live rows are rebuilt, the retired row is kept and the deleted channel's row is removed")
 }
 
 func TestRetiredChannelCannotResolveTaskCredentials(t *testing.T) {

@@ -72,8 +72,9 @@ func TestRollupOpsStatusReportsTheWorstMeasuredCheck(t *testing.T) {
 func TestOpsHealthScoreIsDerivedFromTheServerSideChecks(t *testing.T) {
 	assert.Nil(t, opsHealthScore(OpsStatusUnknown, []OpsCheck{{Status: OpsStatusUnknown}}))
 	assert.Equal(t, 100, *opsHealthScore(OpsStatusOK, []OpsCheck{{Status: OpsStatusOK}}))
+	// A warning roll-up has no critical check, by rollupOpsStatus.
 	assert.Equal(t, 85, *opsHealthScore(OpsStatusWarning, []OpsCheck{
-		{Status: OpsStatusCritical}, {Status: OpsStatusWarning},
+		{Status: OpsStatusOK}, {Status: OpsStatusWarning},
 	}))
 	assert.Equal(t, 15, *opsHealthScore(OpsStatusCritical, []OpsCheck{
 		{Status: OpsStatusCritical}, {Status: OpsStatusCritical}, {Status: OpsStatusWarning},
@@ -152,9 +153,16 @@ func TestReadOpsOverviewServesTheLatestSampleForAValidWindow(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "overview.db")), &gorm.Config{})
 	require.NoError(t, err)
 	previousDB, previousLogDB, previousMonitor := model.DB, model.LOG_DB, opsMonitor
+	previousConfig, previousMaster, previousRedis := common.GetPerformanceMonitorConfig(), common.IsMasterNode, common.RedisEnabled
 	model.DB, model.LOG_DB, opsMonitor = db, db, newOpsSampler(16)
+	// Pin every graded input: host readings are unknown when the monitor is off,
+	// Redis is not graded, and this node is master. Only the database is measured.
+	common.SetPerformanceMonitorConfig(common.PerformanceMonitorConfig{})
+	common.IsMasterNode, common.RedisEnabled = true, false
 	t.Cleanup(func() {
 		model.DB, model.LOG_DB, opsMonitor = previousDB, previousLogDB, previousMonitor
+		common.SetPerformanceMonitorConfig(previousConfig)
+		common.IsMasterNode, common.RedisEnabled = previousMaster, previousRedis
 		sqlDB, _ := db.DB()
 		assert.NoError(t, sqlDB.Close())
 	})
@@ -169,9 +177,9 @@ func TestReadOpsOverviewServesTheLatestSampleForAValidWindow(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, opsSchemaVersion, overview.SchemaVersion)
 	assert.Equal(t, OpsStatusOK, overview.Storage.Database.Status)
+	assert.Equal(t, OpsStatusOK, overview.Status)
 	require.NotNil(t, overview.HealthScore)
-	assert.GreaterOrEqual(t, *overview.HealthScore, 0)
-	assert.LessOrEqual(t, *overview.HealthScore, 100)
+	assert.Equal(t, 100, *overview.HealthScore)
 	assert.Nil(t, overview.Storage.LogDatabase, "a shared log database is reported once")
 	require.Len(t, overview.Series.Points, 1)
 	require.Len(t, overview.Gateway.WaitBucketBoundsMS, 8)

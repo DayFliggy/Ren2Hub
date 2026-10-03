@@ -130,7 +130,7 @@ for (const theme of ['light', 'dark'] as const) {
       page,
     }) => {
       const { operations } = await prepare(page, theme, mobile)
-      await page.goto('/settings')
+      await page.goto('/security')
       const panel = page.getByTestId('pat-panel')
       await expect(
         panel.getByText('existing automation', { exact: true })
@@ -230,7 +230,7 @@ test('PAT late creation cannot reveal a secret after session sign-out', async ({
       },
     })
   })
-  await page.goto('/settings')
+  await page.goto('/security')
   await page
     .getByTestId('pat-panel')
     .getByRole('button', { name: '创建访问令牌', exact: true })

@@ -670,8 +670,7 @@ func runChannelUpstreamModelUpdateTaskOnce(ctx context.Context, force bool, allo
 	// Count the enabled channels up front so progress can be reported as a
 	// percentage; a count error is non-fatal (progress just won't show a %).
 	var totalChannels int64
-	if err := model.DB.Model(&model.Channel{}).Where("status = ?", common.ChannelStatusEnabled).
-		Where("type NOT IN ?", constant.RetiredChannelTypes()).Count(&totalChannels).Error; err != nil {
+	if err := model.WhereChannelServable(model.DB.Model(&model.Channel{})).Count(&totalChannels).Error; err != nil {
 		totalChannels = 0
 	}
 	processed := 0
@@ -683,10 +682,8 @@ scanLoop:
 			break
 		}
 		var channels []*model.Channel
-		query := model.DB.
-			Select(channelUpstreamModelUpdateSelectFields).
-			Where("status = ?", common.ChannelStatusEnabled).
-			Where("type NOT IN ?", constant.RetiredChannelTypes()).
+		query := model.WhereChannelServable(model.DB.Model(&model.Channel{}).
+			Select(channelUpstreamModelUpdateSelectFields)).
 			Order("id asc").
 			Limit(channelUpstreamModelUpdateTaskBatchSize)
 		if lastID > 0 {
@@ -982,10 +979,8 @@ func collectPendingApplyUpstreamModelChanges(settings dto.ChannelOtherSettings) 
 
 func findEnabledChannelsAfterID(lastID int, batchSize int) ([]*model.Channel, error) {
 	var channels []*model.Channel
-	query := model.DB.
-		Select(channelUpstreamModelUpdateSelectFields).
-		Where("status = ?", common.ChannelStatusEnabled).
-		Where("type NOT IN ?", constant.RetiredChannelTypes()).
+	query := model.WhereChannelServable(model.DB.Model(&model.Channel{}).
+		Select(channelUpstreamModelUpdateSelectFields)).
 		Order("id asc").
 		Limit(batchSize)
 	if lastID > 0 {

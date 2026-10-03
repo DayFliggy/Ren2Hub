@@ -22,6 +22,27 @@ function setup(pricing: PricingValues = {}) {
   })
 }
 describe('manual model price editor', () => {
+  it('keeps its own save action and saves only a committed draft', async () => {
+    const wrapper = setup()
+    const save = () =>
+      wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Save model prices')!
+    // An empty expression is not free, so nothing is saved.
+    await save().trigger('click')
+    expect(wrapper.emitted('save')).toBeUndefined()
+    await wrapper.get('textarea').setValue('0')
+    await save().trigger('click')
+    expect(wrapper.emitted('update')?.at(-1)).toEqual([
+      'test-model',
+      {
+        'billing_setting.billing_mode': 'tiered_expr',
+        'billing_setting.billing_expr': '0',
+      },
+    ])
+    expect(wrapper.emitted('save')).toHaveLength(1)
+    wrapper.unmount()
+  })
   it.each([
     {},
     { ModelRatio: '0.123456789012345678901', CompletionRatio: '3' },

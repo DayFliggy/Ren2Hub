@@ -132,9 +132,12 @@ const cells = computed<Cell[]>(() => [
   },
 ])
 
-/** Caption sits under the figure; the RPM cell states its ceiling instead. */
+/**
+ * Caption sits under the figure; the RPM cell states its ceiling instead.
+ * Null limits means no data source, never "unmetered".
+ */
 const rpmCaption = computed(() => {
-  if (!props.limits) return t('dashboard.kpiCaption.rpm')
+  if (!props.limits) return t('dashboard.rpm.notConnected')
   if (props.limits.rate_limit === 0) return t('dashboard.rpm.unmetered')
   return t('dashboard.rpm.ofCeiling', { n: props.limits.rate_limit })
 })
@@ -158,6 +161,7 @@ const rpmCaption = computed(() => {
         v-for="(cell, i) in cells"
         :key="cell.key"
         :type="cell.drillDown ? 'button' : undefined"
+        :data-kpi-cell="cell.key"
         class="group relative flex flex-col px-5 py-4 text-left transition-colors"
         :class="[
           ...kpiDividerClasses(i),
@@ -169,7 +173,7 @@ const rpmCaption = computed(() => {
         <div
           :class="
             i === cells.length - 1
-              ? 'grid grid-cols-[minmax(0,1fr)_minmax(7rem,1fr)] items-end gap-4 sm:block'
+              ? 'min-[360px]:grid min-[360px]:grid-cols-[minmax(0,1fr)_minmax(7rem,1fr)] min-[360px]:items-end min-[360px]:gap-4 sm:block'
               : ''
           "
         >
@@ -208,7 +212,7 @@ const rpmCaption = computed(() => {
 
           <div
             v-if="cell.key === 'rpm'"
-            class="mt-2 flex h-[30px] items-center gap-2"
+            class="mt-2 flex h-[30px] min-w-0 items-center gap-2 overflow-hidden"
           >
             <RpmRing
               v-if="limits"
@@ -222,7 +226,10 @@ const rpmCaption = computed(() => {
               {{ rpmCaption }}
             </span>
           </div>
-          <div v-else class="mt-2 flex h-[30px] items-center">
+          <div
+            v-else
+            class="mt-2 flex h-[30px] min-w-0 items-center overflow-hidden"
+          >
             <MiniSparkline
               v-if="!loading && cell.series && cell.series.length > 1"
               :points="cell.series"

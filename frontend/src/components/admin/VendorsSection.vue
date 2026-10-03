@@ -230,14 +230,14 @@ defineExpose({ openCreate, reload: load })
   <div>
     <ConsoleCard :padded="false">
       <div
-        class="flex items-center gap-3 border-b border-[var(--border-subtle)] p-4"
+        class="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] p-4"
       >
         <SearchInput
           v-model="keyword"
           :placeholder="t('searchVendors')"
           :aria-label="t('searchVendors')"
           name="vendor-search"
-          class="min-w-0 flex-1 xl:max-w-sm"
+          class="w-full xl:w-72"
         />
         <FieldVisibilityMenu
           v-model="visibleFields"
@@ -370,44 +370,46 @@ defineExpose({ openCreate, reload: load })
             illustration="empty-search"
           />
           <template v-else>
-            <div
-              v-for="vendor in rows"
-              :key="vendor.id"
-              class="flex items-start gap-3 border-b border-[var(--border-subtle)] px-4 py-3"
-            >
-              <MetadataIcon
-                :icon="vendor.icon"
-                :name="vendor.name"
-                :size="28"
-              />
-              <div class="min-w-0 flex-1">
-                <button
-                  type="button"
-                  class="max-w-full truncate text-left font-mono text-sm text-[var(--text-primary)] focus-ring"
-                  @click="openEdit(vendor)"
-                >
-                  {{ vendor.name }}
-                </button>
-                <p
-                  class="mt-0.5 line-clamp-2 break-words text-xs text-[var(--text-tertiary)]"
-                >
-                  {{ vendor.description || '—' }}
-                </p>
-                <RouterLink
-                  :to="modelsLink(vendor)"
-                  class="mt-1 inline-block text-xs text-[var(--text-secondary)] underline-offset-4 hover:underline focus-ring"
-                >
-                  {{ t('linkedModels') }}
-                  <span class="tabular-nums text-[var(--accent-text)]">{{
-                    linkedCount(vendor)
-                  }}</span>
-                </RouterLink>
+            <div class="space-y-2.5 p-3">
+              <div
+                v-for="vendor in rows"
+                :key="vendor.id"
+                class="flex items-start gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-3.5 transition-colors hover:bg-[var(--surface-hover)]"
+              >
+                <MetadataIcon
+                  :icon="vendor.icon"
+                  :name="vendor.name"
+                  :size="28"
+                />
+                <div class="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    class="max-w-full truncate text-left font-mono text-sm text-[var(--text-primary)] focus-ring"
+                    @click="openEdit(vendor)"
+                  >
+                    {{ vendor.name }}
+                  </button>
+                  <p
+                    class="mt-0.5 line-clamp-2 break-words text-xs text-[var(--text-tertiary)]"
+                  >
+                    {{ vendor.description || '—' }}
+                  </p>
+                  <RouterLink
+                    :to="modelsLink(vendor)"
+                    class="mt-1 inline-block text-xs text-[var(--text-secondary)] underline-offset-4 hover:underline focus-ring"
+                  >
+                    {{ t('linkedModels') }}
+                    <span class="tabular-nums text-[var(--accent-text)]">{{
+                      linkedCount(vendor)
+                    }}</span>
+                  </RouterLink>
+                </div>
+                <ActionMenu
+                  :items="rowActions"
+                  :label="t('openMenu')"
+                  @select="onRowAction(vendor, $event)"
+                />
               </div>
-              <ActionMenu
-                :items="rowActions"
-                :label="t('openMenu')"
-                @select="onRowAction(vendor, $event)"
-              />
             </div>
             <TablePagination
               :page="page"

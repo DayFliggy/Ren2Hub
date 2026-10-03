@@ -8,6 +8,47 @@ export interface LoginSessionLabels {
   oauth: string
 }
 
+export type DeviceCategory = 'mobile' | 'tablet' | 'desktop' | 'unknown'
+
+/** iPadOS desktop mode reports "Macintosh"; only touch points reveal it. */
+function isIPadAgent(userAgent: string, maxTouchPoints: number): boolean {
+  return (
+    userAgent.includes('iPad') ||
+    (userAgent.includes('Macintosh') && maxTouchPoints > 1)
+  )
+}
+
+export function sessionDeviceCategory(
+  userAgent: string,
+  maxTouchPoints = 0
+): DeviceCategory {
+  if (!userAgent) return 'unknown'
+  if (
+    isIPadAgent(userAgent, maxTouchPoints) ||
+    // "Tablet PC" is a legacy Windows desktop token, not a tablet.
+    /\bTablet\b(?! PC)/.test(userAgent) ||
+    (userAgent.includes('Android') && !userAgent.includes('Mobile'))
+  ) {
+    return 'tablet'
+  }
+  if (
+    userAgent.includes('iPhone') ||
+    userAgent.includes('Android') ||
+    userAgent.includes('Mobile')
+  ) {
+    return 'mobile'
+  }
+  if (
+    userAgent.includes('Windows') ||
+    userAgent.includes('Mac OS') ||
+    userAgent.includes('Linux') ||
+    userAgent.includes('CrOS')
+  ) {
+    return 'desktop'
+  }
+  return 'unknown'
+}
+
 export function sessionDevice(
   userAgent: string,
   unknownDevice: string,
@@ -21,11 +62,9 @@ export function sessionDevice(
   else if (userAgent.includes('Firefox/')) browser = 'Firefox'
   else if (userAgent.includes('Safari/')) browser = 'Safari'
 
-  const isIPad =
-    userAgent.includes('iPad') ||
-    (userAgent.includes('Macintosh') && maxTouchPoints > 1)
   let system = ''
-  if (userAgent.includes('iPhone') || isIPad) system = 'iOS'
+  if (userAgent.includes('iPhone') || isIPadAgent(userAgent, maxTouchPoints))
+    system = 'iOS'
   else if (userAgent.includes('Android')) system = 'Android'
   else if (userAgent.includes('Windows')) system = 'Windows'
   else if (userAgent.includes('Mac OS')) system = 'macOS'

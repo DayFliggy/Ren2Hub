@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 
 import DiscountCard from '@/components/console/dashboard/DiscountCard.vue'
 import i18n, { loadMessageDomain, setLocale } from '@/i18n'
@@ -7,12 +7,17 @@ import type { UserDiscounts } from '@/composables/useDashboard'
 
 beforeAll(async () => {
   await loadMessageDomain('console')
-  setLocale('en')
+  await setLocale('en')
 })
 
+afterEach(async () => {
+  await setLocale('en')
+})
+
+/** Platform and effective differ, so each figure can be traced to its ratio. */
 const discounts: UserDiscounts = {
-  global_ratio: 0.88,
-  effective_ratio: 0.88,
+  global_ratio: 0.9,
+  effective_ratio: 0.72,
 }
 
 function render(props: Record<string, unknown> = {}) {
@@ -22,23 +27,109 @@ function render(props: Record<string, unknown> = {}) {
   })
 }
 
+/** The tile whose label reads `label`, as label/value/sub text. */
+function tile(wrapper: ReturnType<typeof render>, label: string) {
+  const match = wrapper.findAll('p').find((p) => p.text() === label)
+    ?.element.parentElement
+  if (!match) throw new Error(`no tile labelled ${label}`)
+  return match.textContent ?? ''
+}
+
 describe('DiscountCard', () => {
-  it('shows an explicit unavailable state without traffic price claims', () => {
+  it('shows a not-connected state inside the card when discounts are null', () => {
+    const wrapper = render({ discounts: null })
+    const state = wrapper.find('[data-discount-not-connected]')
+
+    expect(state.exists()).toBe(true)
+    // Contained in the card body rather than floating on the page.
+    expect(
+      wrapper.find('[data-discount-card]').element.contains(state.element)
+    ).toBe(true)
+    expect(state.text()).toContain('Not connected')
+    // No fabricated rate, bar or tiles.
+    expect(wrapper.text()).not.toContain('×')
+    expect(wrapper.find('[data-discount-effective-bar]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Global discount')
+    expect(wrapper.text()).not.toContain('At list price')
+  })
+
+  it('reads 未接入 in Chinese when discounts are null', async () => {
+    await setLocale('zh-CN')
     const wrapper = render({ discounts: null })
 
-    expect(wrapper.text()).toContain('Discount details are not available')
-    expect(wrapper.text()).not.toContain('Saved')
-    expect(wrapper.text()).not.toContain('At list price')
+    expect(wrapper.find('[data-discount-not-connected]').text()).toContain(
+      '未接入'
+    )
+    expect(wrapper.text()).not.toContain('按原价计费')
   })
 
   it('renders the platform discount without a plan discount', () => {
     const wrapper = render()
 
-    expect(wrapper.text()).toContain('0.88×')
     expect(wrapper.text()).not.toContain('Personal discount')
   })
 
-  it('still shows the headline rate', () => {
-    expect(render().text()).toContain('0.880×')
+  it('headlines the effective rate and draws its bar from that same rate', () => {
+    const wrapper = render()
+    const bar = wrapper.find('[data-discount-effective-bar]')
+
+    expect(wrapper.text()).toContain('0.720×')
+    // 28% off, scaled so 20% off fills the track.
+    expect(bar.attributes('aria-label')).toBe('28% off')
+    expect((bar.find('div').element as HTMLElement).style.width).toBe('100%')
   })
+
+  it('keeps the platform ratio and the effective depth in separate tiles', () => {
+    const wrapper = render()
+
+    const platform = tile(wrapper, 'Global discount')
+    expect(platform).toContain('0.90×')
+    expect(platform).toContain('Platform 10% off')
+    expect(platform).not.toContain('28%')
+
+    const effective = tile(wrapper, 'Effective discount')
+    expect(effective).toContain('28% off')
+    expect(effective).not.toContain('10%')
+  })
+
+  it('writes Chinese discounts in 折, not as the percentage off', async () => {
+    await setLocale('zh-CN')
+    const wrapper = render({
+      discounts: { global_ratio: 0.88, effective_ratio: 0.88 },
+    })
+
+    expect(tile(wrapper, '全局折扣')).toContain('平台 8.8 折')
+    expect(tile(wrapper, '综合折扣')).toContain('8.8 折')
+    expect(wrapper.text()).not.toContain('12折')
+    expect(wrapper.text()).not.toContain('12 折')
+  })
+
+  it.each([
+    {
+      locale: 'en',
+      globalCopy: 'No platform discount',
+      effectiveCopy: 'At list price',
+      forbidden: ['0% off'],
+    },
+    {
+      locale: 'zh-CN',
+      globalCopy: '平台暂无折扣',
+      effectiveCopy: '按原价计费',
+      forbidden: ['0 折', '10 折'],
+    },
+  ])(
+    'says there is no discount instead of a zero discount in $locale',
+    async ({ locale, globalCopy, effectiveCopy, forbidden }) => {
+      await setLocale(locale)
+      const wrapper = render({
+        discounts: { global_ratio: 1, effective_ratio: 1 },
+      })
+
+      expect(wrapper.text()).toContain(globalCopy)
+      expect(wrapper.text()).toContain(effectiveCopy)
+      for (const copy of forbidden) expect(wrapper.text()).not.toContain(copy)
+      const bar = wrapper.find('[data-discount-effective-bar] div')
+      expect((bar.element as HTMLElement).style.width).toBe('0%')
+    }
+  )
 })

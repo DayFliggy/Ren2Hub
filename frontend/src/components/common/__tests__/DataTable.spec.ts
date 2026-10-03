@@ -145,6 +145,61 @@ describe('DataTable keyboard rows', () => {
     expect(wrapper.emitted('update:selected')).toHaveLength(1)
   })
 
+  it('merges or removes only the current page with merge-page selection', async () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [{ key: 'name', label: 'Name' }],
+        rows: [
+          { id: 'c', name: 'C' },
+          { id: 'd', name: 'D' },
+        ],
+        rowKey: 'id',
+        selectable: true,
+        mergePageSelection: true,
+        selected: ['a'],
+        rowSelectionLabel: (row: Record<string, unknown>) =>
+          `Choose ${String(row.name)}`,
+      },
+      global: { plugins: [i18n] },
+    })
+    const header = wrapper.get('thead input[type="checkbox"]')
+
+    await header.setValue(true)
+    expect(wrapper.emitted('update:selected')?.at(-1)?.[0]).toEqual([
+      'a',
+      'c',
+      'd',
+    ])
+
+    await wrapper.setProps({ selected: ['a', 'c', 'd'] })
+    await header.setValue(false)
+    expect(wrapper.emitted('update:selected')?.at(-1)?.[0]).toEqual(['a'])
+    expect(
+      wrapper
+        .findAll('tbody input[type="checkbox"]')
+        .map((box) => box.attributes('aria-label'))
+    ).toEqual(['Choose C', 'Choose D'])
+  })
+
+  it('keeps replacing the selection and numbering rows by default', async () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [{ key: 'name', label: 'Name' }],
+        rows: [{ id: 'c', name: 'C' }],
+        rowKey: 'id',
+        selectable: true,
+        selected: ['a'],
+      },
+      global: { plugins: [i18n] },
+    })
+
+    await wrapper.get('thead input[type="checkbox"]').setValue(true)
+    expect(wrapper.emitted('update:selected')?.at(-1)?.[0]).toEqual(['c'])
+    expect(
+      wrapper.get('tbody input[type="checkbox"]').attributes('aria-label')
+    ).toBe(i18n.global.t('common.selectRow', { index: 1 }))
+  })
+
   it('hands programmatic header scrolling to the body viewport', async () => {
     const wrapper = mount(DataTable, {
       props: {

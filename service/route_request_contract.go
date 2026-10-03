@@ -19,6 +19,7 @@ const (
 	RouteFilterUnknownCapability   = "unknown_capability"
 	RouteFilterUnsupported         = "unsupported_capability"
 	RouteFilterChannelDisabled     = "channel_disabled"
+	RouteFilterChannelRetired      = "channel_type_retired"
 	RouteFilterAbilityDisabled     = "ability_disabled"
 	RouteFilterTokenForbidden      = "token_model_forbidden"
 	RouteFilterPathUnsupported     = "path_unsupported"

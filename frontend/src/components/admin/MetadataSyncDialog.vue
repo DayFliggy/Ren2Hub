@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { AlertTriangle } from 'lucide-vue-next'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
-import IconButton from '@/components/common/IconButton.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
+import TablePagination from '@/components/common/TablePagination.vue'
 import {
   metadataApi,
   type SyncPreview,
@@ -25,7 +25,6 @@ type Candidate =
   | { kind: 'create'; model_name: string }
   | { kind: 'update'; model_name: string; fields: ConflictField[] }
 
-const PAGE_SIZE = 20
 // The backend ignores `source`; the official repository is the only source.
 const SOURCE = 'official'
 const STEPS = ['stepSelect', 'stepPreview', 'stepConfirm', 'stepResult']
@@ -53,6 +52,7 @@ const result = ref<SyncResult | null>(null)
 const selection = ref<Record<string, string[]>>({})
 const search = ref('')
 const page = ref(1)
+const pageSize = ref(20)
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref('')
@@ -83,11 +83,11 @@ const filtered = computed(() => {
 const filteredUpdates = computed(() =>
   filtered.value.filter((item) => item.kind === 'update')
 )
-const pageCount = computed(() =>
-  Math.max(1, Math.ceil(filtered.value.length / PAGE_SIZE))
-)
 const visible = computed(() =>
-  filtered.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE)
+  filtered.value.slice(
+    (page.value - 1) * pageSize.value,
+    page.value * pageSize.value
+  )
 )
 const pageUpdates = computed(() =>
   visible.value.filter((item) => item.kind === 'update')
@@ -138,7 +138,7 @@ const primaryLabel = computed(() => {
   return t('applyChanges', { count: planCount.value })
 })
 
-watch(search, () => {
+watch([search, pageSize], () => {
   page.value = 1
 })
 watch(
@@ -158,6 +158,7 @@ function reset() {
   selection.value = {}
   search.value = ''
   page.value = 1
+  pageSize.value = 20
   loadError.value = ''
   syncError.value = ''
 }
@@ -282,21 +283,35 @@ function display(field: string, value: string | number) {
     @close="emit('close')"
   >
     <ol
-      class="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4"
+      class="mb-5 flex flex-wrap items-center gap-2 border-b border-[var(--border-subtle)] pb-3 text-xs sm:text-sm"
       :aria-label="t('syncSteps')"
     >
       <li
         v-for="(label, index) in STEPS"
         :key="label"
         :aria-current="step === index ? 'step' : undefined"
-        class="rounded-lg border p-2 text-sm"
+        class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-colors"
         :class="
           step === index
-            ? 'border-[var(--accent)] bg-[var(--accent-soft)] font-medium text-[var(--text-primary)]'
-            : 'border-[var(--border-subtle)] text-[var(--text-tertiary)]'
+            ? 'bg-[var(--accent-soft)] font-medium text-[var(--accent-text)]'
+            : step > index
+              ? 'text-[var(--text-secondary)]'
+              : 'text-[var(--text-tertiary)]'
         "
       >
-        {{ index + 1 }}. {{ t(label) }}
+        <span
+          class="flex h-5 w-5 items-center justify-center rounded-full text-[11px]"
+          :class="
+            step === index
+              ? 'bg-[var(--accent)] text-[var(--accent-contrast)] font-semibold'
+              : step > index
+                ? 'bg-[var(--accent-soft)] text-[var(--accent-text)]'
+                : 'border border-[var(--border-subtle)] bg-[var(--surface-muted)] text-[var(--text-tertiary)]'
+          "
+        >
+          {{ index + 1 }}
+        </span>
+        <span>{{ t(label) }}</span>
       </li>
     </ol>
     <div v-if="step === 0" class="grid gap-4">
@@ -321,9 +336,10 @@ function display(field: string, value: string | number) {
         <span class="sr-only">{{ t('loading') }}</span>
         <SkeletonBlock v-for="i in 4" :key="i" rounded="lg" class="h-10" />
       </div>
+      <!-- Same layout as the sync failure below, with the preview's own title. -->
       <div
         v-else-if="loadError"
-        class="flex flex-col items-center justify-center px-6 py-10 text-center"
+        class="flex flex-col items-center justify-center px-6 py-8 text-center"
         role="alert"
       >
         <AlertTriangle :size="28" class="text-[var(--status-danger-text)]" />
@@ -382,12 +398,14 @@ function display(field: string, value: string | number) {
             class="overflow-x-auto rounded-lg border border-[var(--border-subtle)]"
           >
             <table class="w-full text-sm">
-              <thead class="bg-[var(--surface-muted)] text-left">
+              <thead
+                class="bg-[var(--surface-table-header,var(--surface-muted))] text-left"
+              >
                 <tr class="text-[var(--text-secondary)]">
                   <th class="w-12 px-3 py-2">
                     <input
                       type="checkbox"
-                      class="h-4 w-4 accent-[var(--accent)]"
+                      class="checkbox-round"
                       :checked="
                         pageUpdates.length > 0 &&
                         pageChosenCount === pageUpdates.length
@@ -407,13 +425,13 @@ function display(field: string, value: string | number) {
                   </th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-[var(--border-subtle)]">
+              <tbody class="sync-rows">
                 <tr v-for="item in visible" :key="item.model_name">
                   <td class="px-3 py-2">
                     <input
                       v-if="item.kind === 'create'"
                       type="checkbox"
-                      class="h-4 w-4 accent-[var(--accent)]"
+                      class="checkbox-round"
                       checked
                       disabled
                       :aria-label="t('autoIncluded', { name: item.model_name })"
@@ -421,7 +439,7 @@ function display(field: string, value: string | number) {
                     <input
                       v-else
                       type="checkbox"
-                      class="h-4 w-4 accent-[var(--accent)]"
+                      class="checkbox-round"
                       :checked="isSelected(item)"
                       :disabled="busy"
                       :aria-label="t('selectModel', { name: item.model_name })"
@@ -446,28 +464,13 @@ function display(field: string, value: string | number) {
               </tbody>
             </table>
           </div>
-          <div class="flex items-center justify-end gap-2 text-sm">
-            <span class="text-[var(--text-tertiary)]">
-              {{ t('modelCount', { count: filtered.length }) }}
-            </span>
-            <IconButton
-              :label="t('previousPage')"
-              :disabled="page <= 1"
-              @click="page--"
-            >
-              <ChevronLeft :size="16" />
-            </IconButton>
-            <span class="tabular-nums text-[var(--text-secondary)]">
-              {{ page }} / {{ pageCount }}
-            </span>
-            <IconButton
-              :label="t('nextPage')"
-              :disabled="page >= pageCount"
-              @click="page++"
-            >
-              <ChevronRight :size="16" />
-            </IconButton>
-          </div>
+          <TablePagination
+            :page="page"
+            :page-size="pageSize"
+            :total="filtered.length"
+            @update:page="page = $event"
+            @update:page-size="pageSize = $event"
+          />
         </template>
       </template>
     </div>
@@ -534,7 +537,9 @@ function display(field: string, value: string | number) {
           class="overflow-x-auto rounded-lg border border-[var(--border-subtle)]"
         >
           <table class="w-full min-w-[40rem] text-sm">
-            <thead class="bg-[var(--surface-muted)] text-left">
+            <thead
+              class="bg-[var(--surface-table-header,var(--surface-muted))] text-left"
+            >
               <tr class="text-[var(--text-secondary)]">
                 <th class="w-16 px-3 py-2 font-medium">{{ t('apply') }}</th>
                 <th class="px-3 py-2 font-medium">{{ t('field') }}</th>
@@ -542,12 +547,12 @@ function display(field: string, value: string | number) {
                 <th class="px-3 py-2 font-medium">{{ t('changeTo') }}</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-[var(--border-subtle)] align-top">
+            <tbody class="sync-rows align-top">
               <tr v-for="field in item.fields" :key="field.field">
                 <td class="px-3 py-2">
                   <input
                     type="checkbox"
-                    class="h-4 w-4 accent-[var(--accent)]"
+                    class="checkbox-round"
                     :checked="fieldChosen(item.model_name, field.field)"
                     :disabled="busy"
                     :aria-label="
@@ -721,9 +726,13 @@ function display(field: string, value: string | number) {
   </ConsoleModal>
 </template>
 <style scoped>
+/* Ledger rows: dashed by day, solid by night (tokens --row-divider-style). */
+.sync-rows > tr + tr {
+  border-top: 1px var(--row-divider-style, dashed) var(--border-subtle);
+}
 .sync-value {
-  max-height: 8rem;
-  max-width: 16rem;
+  max-height: 12rem;
+  max-width: 24rem;
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

@@ -353,11 +353,17 @@ func RebuildRouteCapabilityIndex(ctx context.Context) error {
 		return err
 	}
 	var channels []model.Channel
-	if err := model.DB.WithContext(ctx).Select("id").Find(&channels).Error; err != nil {
+	if err := model.DB.WithContext(ctx).Select("id", "type").Find(&channels).Error; err != nil {
 		return err
 	}
+	// The current row type decides retirement. A snapshot published before the
+	// type was retired keeps its old fingerprint and is never re-projected, so
+	// it must be dropped here rather than relying on a contract bump.
 	channelExists := make(map[int]struct{}, len(channels))
 	for _, channel := range channels {
+		if constant.IsRetiredChannelType(channel.Type) {
+			continue
+		}
 		channelExists[channel.Id] = struct{}{}
 	}
 	index := &capabilityIndex{

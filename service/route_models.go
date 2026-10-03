@@ -26,9 +26,9 @@ func availableRouteAbilities(ctx context.Context, userID, tokenID int) (*gorm.DB
 	if model.DB == nil {
 		return nil, ErrRouteSelectionUnavailable
 	}
-	query := model.DB.WithContext(ctx).Table("abilities").
-		Joins("JOIN channels ON channels.id = abilities.channel_id").
-		Where("abilities.enabled = ? AND channels.status = ?", true, common.ChannelStatusEnabled)
+	query := model.WhereChannelServable(model.DB.WithContext(ctx).Table("abilities").
+		Joins("JOIN channels ON channels.id = abilities.channel_id")).
+		Where("abilities.enabled = ?", true)
 	if userID > 0 {
 		revoked := model.DB.Model(&model.UserChannelEntitlement{}).Select("channel_id").
 			Where("user_id = ? AND source = ?", userID, model.RouteSourcePlatform).

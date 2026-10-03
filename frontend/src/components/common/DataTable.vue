@@ -31,6 +31,13 @@ const props = withDefaults(
     selected?: Array<string | number>
     /** Keys affected by the header checkbox. Defaults to rendered data rows. */
     selectionKeys?: Array<string | number>
+    /**
+     * Header checkbox adds or removes only the current keys and keeps the rest
+     * of the selection, so a client-paginated list can select across pages.
+     */
+    mergePageSelection?: boolean
+    /** Accessible name for a row checkbox. Defaults to "Select row N". */
+    rowSelectionLabel?: (row: T) => string
     selectionDisabled?: boolean
     /**
      * Per-row selection guard. A row that fails it renders a disabled checkbox
@@ -82,6 +89,8 @@ const props = withDefaults(
     selectable: false,
     selected: () => [],
     selectionKeys: () => [],
+    mergePageSelection: false,
+    rowSelectionLabel: undefined,
     selectionDisabled: false,
     checkboxShape: 'square',
     rowClickable: false,
@@ -142,11 +151,13 @@ const allChecked = computed(
 
 function toggleAll() {
   if (props.selectionDisabled) return
-  if (allChecked.value) {
-    emit('update:selected', [])
-  } else {
-    emit('update:selected', [...effectiveSelectionKeys.value])
+  const keys = effectiveSelectionKeys.value
+  if (!props.mergePageSelection) {
+    emit('update:selected', allChecked.value ? [] : [...keys])
+    return
   }
+  const others = props.selected.filter((key) => !keys.includes(key))
+  emit('update:selected', allChecked.value ? others : [...others, ...keys])
 }
 
 /**
@@ -610,6 +621,7 @@ onBeforeUnmount(() => {
                   :checked="selected.includes(row[rowKey] as string | number)"
                   :disabled="selectionDisabled || !isRowSelectable(row)"
                   :aria-label="
+                    rowSelectionLabel?.(row) ??
                     t('common.selectRow', { index: dataRowNumber(row) })
                   "
                   @change="toggleRow(row)"

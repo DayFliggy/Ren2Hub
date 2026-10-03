@@ -65,6 +65,8 @@ function render(
       monitor: overrides.monitor ?? monitor,
     },
     global: { plugins: [i18n] },
+    // jsdom only refreshes computed style (and so isVisible) when attached.
+    attachTo: document.body,
   })
 }
 
@@ -192,4 +194,129 @@ describe('VendorRouteGroup', () => {
     await wrapper.find('button[aria-expanded]').trigger('click')
     expect(wrapper.text()).toContain('Auto-disabled')
   })
+
+  it('renders at most 3 top channels when long, and reveals remaining channels on toggle', async () => {
+    const scoredFive: RouteChannelRow[] = [
+      ...scoreChannels([
+        makeChannel({ id: 10, latency: 100, quota: 900 }),
+        makeChannel({ id: 20, latency: 200, quota: 800 }),
+        makeChannel({ id: 30, latency: 300, quota: 700 }),
+        makeChannel({ id: 40, latency: 400, quota: 600 }),
+      ]).map((ch, idx) => ({ ...ch, rank: idx + 1 })),
+      {
+        ...makeChannel({ id: 50, status: 2 }),
+        rank: null,
+        score: null,
+        breakdown: null,
+      },
+    ]
+
+    const wrapper = render({
+      channels: scoredFive,
+      activeCount: 4,
+    })
+
+    // Expand group
+    await wrapper.find('button[aria-expanded]').trigger('click')
+
+    // Only top 3 channels are shown by default
+    expect(visibleChannelNames(wrapper)).toHaveLength(3)
+    const toggle = wrapper.find('[data-route-more-toggle]')
+    expect(toggle.exists()).toBe(true)
+    expect(toggle.text()).toBe('Show 2 more channels')
+
+    // Click toggle to reveal the extra 2 channels
+    await toggle.trigger('click')
+    expect(visibleChannelNames(wrapper)).toHaveLength(5)
+    // The extra channels should be rendered in compact mode
+    expect(wrapper.findAll('[data-route-channel-compact]')).toHaveLength(2)
+    expect(toggle.text()).toBe('Hide extra channels')
+
+    // Click toggle again to collapse
+    await toggle.trigger('click')
+    expect(visibleChannelNames(wrapper)).toHaveLength(3)
+  })
+
+  it('does not display more-toggle button when channel count is <= 3', async () => {
+    const wrapper = render()
+    await wrapper.find('button[aria-expanded]').trigger('click')
+
+    expect(wrapper.findAll('[data-route-channel]')).toHaveLength(3)
+    expect(wrapper.find('[data-route-more-toggle]').exists()).toBe(false)
+  })
+
+  it('still shows three rows when every channel in the group is inactive', async () => {
+    const allInactive = [1, 2, 3, 4, 5].map((id) =>
+      inactiveRow({ id, name: `down-${id}` })
+    )
+    const wrapper = render({ channels: allInactive, activeCount: 0 })
+    await wrapper.find('button[aria-expanded]').trigger('click')
+
+    expect(visibleChannelNames(wrapper)).toEqual(['down-1', 'down-2', 'down-3'])
+    expect(wrapper.find('[data-route-more-toggle]').text()).toBe(
+      'Show 2 more channels'
+    )
+  })
+
+  it('fills the collapsed view with inactive rows after the ranked ones', async () => {
+    const mixed = [
+      ...scoreChannels([
+        makeChannel({ id: 1, name: 'fast', latency: 100, quota: 900 }),
+        makeChannel({ id: 2, name: 'slow', latency: 900, quota: 100 }),
+      ]).map((channel, index) => ({ ...channel, rank: index + 1 })),
+      inactiveRow({ id: 3, name: 'off-a' }),
+      inactiveRow({ id: 4, name: 'off-b' }),
+    ]
+    const wrapper = render({ channels: mixed, activeCount: 2 })
+    await wrapper.find('button[aria-expanded]').trigger('click')
+
+    // Upstream order is kept as-is: ranked first, then inactive.
+    expect(visibleChannelNames(wrapper)).toEqual(['fast', 'slow', 'off-a'])
+    expect(wrapper.find('[data-route-more-toggle]').text()).toBe(
+      'Show 1 more channel'
+    )
+  })
+
+  it('links the more toggle to the rows it reveals', async () => {
+    const wrapper = render({
+      channels: [
+        ...channels,
+        inactiveRow({ id: 4, name: 'off-a' }),
+        inactiveRow({ id: 5, name: 'off-b' }),
+      ],
+    })
+    await wrapper.find('button[aria-expanded]').trigger('click')
+
+    const toggle = wrapper.find('[data-route-more-toggle]')
+    const controlsId = toggle.attributes('aria-controls')
+    expect(controlsId).toBeTruthy()
+    const controlled = wrapper.find(`[id="${controlsId}"]`)
+    expect(controlled.exists()).toBe(true)
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(controlled.isVisible()).toBe(false)
+
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(controlled.isVisible()).toBe(true)
+    expect(controlled.findAll('[data-route-channel]')).toHaveLength(2)
+  })
 })
+
+function inactiveRow(
+  overrides: Partial<ChannelRoutingMetrics> = {}
+): RouteChannelRow {
+  return {
+    ...makeChannel({ status: 2, ...overrides }),
+    rank: null,
+    score: null,
+    breakdown: null,
+  }
+}
+
+/** Names of the channel rows a user can currently see, in display order. */
+function visibleChannelNames(wrapper: ReturnType<typeof render>): string[] {
+  return wrapper
+    .findAll('[data-route-channel]')
+    .filter((row) => row.isVisible())
+    .map((row) => row.find('p[title]').text())
+}

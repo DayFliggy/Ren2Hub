@@ -4,6 +4,8 @@
  * grid/list view toggle in ModelsView: a muted track with the active segment
  * lifted onto the solid surface. Used for the buy/sell switch and view mode.
  */
+import { nextTick } from 'vue'
+
 export interface SegmentOption {
   value: string
   label?: string
@@ -25,7 +27,7 @@ const props = withDefaults(
   { size: 'md' }
 )
 
-function onKeydown(event: KeyboardEvent, index: number) {
+async function onKeydown(event: KeyboardEvent, index: number) {
   const last = props.options.length - 1
   let next: number
   if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
@@ -43,11 +45,13 @@ function onKeydown(event: KeyboardEvent, index: number) {
   const option = props.options[next]
   if (!option) return
   event.preventDefault()
+  const group = (event.currentTarget as HTMLElement).parentElement
   model.value = option.value
-  const radios = (
-    event.currentTarget as HTMLElement
-  ).parentElement?.querySelectorAll<HTMLElement>('[role="radio"]')
-  radios?.[next]?.focus()
+  // A parent may refuse the change (e.g. an unsaved-draft guard). Focus
+  // follows the value that is actually selected after the update settles.
+  await nextTick()
+  const selected = props.options.findIndex((item) => item.value === model.value)
+  group?.querySelectorAll<HTMLElement>('[role="radio"]')[selected]?.focus()
 }
 </script>
 

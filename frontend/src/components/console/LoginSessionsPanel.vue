@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { Computer, LogOut, RefreshCw, ShieldCheck } from 'lucide-vue-next'
+import {
+  Computer,
+  Laptop,
+  LogOut,
+  RefreshCw,
+  ShieldCheck,
+  Smartphone,
+  Tablet,
+} from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -14,7 +22,11 @@ import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import type { LoginSession } from '@/types/auth'
 import { formatTime, relativeTime } from '@/utils/format'
-import { loginMethodLabel, sessionDevice } from '@/utils/loginSession'
+import {
+  loginMethodLabel,
+  sessionDevice,
+  sessionDeviceCategory,
+} from '@/utils/loginSession'
 
 const { t, locale } = useI18n()
 const toast = useToast()
@@ -98,17 +110,37 @@ function requestRevokeOthers(): void {
   if (hasOtherSessions.value) confirmOthers.value = true
 }
 
+// Touch points describe this browser only, so they apply to the current session.
+function sessionTouchPoints(session: LoginSession): number {
+  return session.current && typeof navigator !== 'undefined'
+    ? navigator.maxTouchPoints
+    : 0
+}
+
 function deviceName(session: LoginSession): string {
-  const touchPoints =
-    session.current && typeof navigator !== 'undefined'
-      ? navigator.maxTouchPoints
-      : 0
   return sessionDevice(
     session.user_agent,
     t('settings.unknownDevice'),
     t('settings.browser'),
-    touchPoints
+    sessionTouchPoints(session)
   )
+}
+
+function deviceIcon(session: LoginSession) {
+  const category = sessionDeviceCategory(
+    session.user_agent,
+    sessionTouchPoints(session)
+  )
+  switch (category) {
+    case 'mobile':
+      return Smartphone
+    case 'tablet':
+      return Tablet
+    case 'desktop':
+      return Laptop
+    default:
+      return Computer
+  }
 }
 
 function lastActive(session: LoginSession): string {
@@ -191,7 +223,7 @@ onMounted(() => void loadSessions())
         class="flex flex-col gap-4 py-5 sm:flex-row sm:items-center"
       >
         <span class="settings-icon-tile size-10">
-          <Computer :size="19" aria-hidden="true" />
+          <component :is="deviceIcon(session)" :size="19" aria-hidden="true" />
         </span>
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">

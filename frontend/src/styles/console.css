@@ -122,3 +122,23 @@ html.dark .checkbox-round {
   background: var(--scroll-thumb);
   background-clip: padding-box;
 }
+
+/* Table horizontal overflow edge fade. The gradient must end on the surface
+   the enclosing card actually paints, or it reads as a lighter band. Day cards
+   paint --surface-solid; night default cards are re-toned to
+   --surface-container-low by the Material night layer in base.css. */
+.table-scroll-fade {
+  --table-fade-surface: var(--surface-solid);
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 2rem;
+  background: linear-gradient(to left, var(--table-fade-surface), transparent);
+  z-index: 20;
+}
+
+html.dark [data-surface-variant='default'] .table-scroll-fade {
+  --table-fade-surface: var(--surface-container-low);
+}

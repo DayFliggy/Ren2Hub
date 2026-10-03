@@ -133,7 +133,7 @@ function formatTime(value: number | null) {
     <button
       v-if="tags.length > 1"
       type="button"
-      class="rounded-md px-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] focus-ring"
+      class="rounded-[var(--chip-radius)] px-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] focus-ring"
       :aria-expanded="tagsOpen"
       @click="tagsOpen = !tagsOpen"
     >

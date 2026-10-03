@@ -1,105 +1,22 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { ShieldCheck } from 'lucide-vue-next'
 
-import SecurityProofDialog from '@/components/auth/SecurityProofDialog.vue'
-import { ApiError } from '@/api/types'
-import PasswordStrengthMeter from '@/components/auth/PasswordStrengthMeter.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
-import ConsoleModal from '@/components/common/ConsoleModal.vue'
-import FormField from '@/components/common/FormField.vue'
-import TextInput from '@/components/common/TextInput.vue'
-import AccountSecurityPanel from '@/components/console/AccountSecurityPanel.vue'
-import LoginSessionsPanel from '@/components/console/LoginSessionsPanel.vue'
 import PageHero from '@/components/console/PageHero.vue'
 import PreferencesNotificationsPanel from '@/components/console/PreferencesNotificationsPanel.vue'
-import { useToast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 
-const props = withDefaults(
-  defineProps<{ embedded?: boolean; securityOnly?: boolean }>(),
-  {
-    embedded: false,
-    securityOnly: false,
-  }
-)
+// Credentials, verification, sessions and tokens live only on /security.
+// This view keeps notification and privacy preferences plus the way there.
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
+  embedded: false,
+})
 
 const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
-const toast = useToast()
-
-const proofDialog = ref<InstanceType<typeof SecurityProofDialog> | null>(null)
-const profileOpen = ref(false)
-const displayName = ref(auth.user?.display_name ?? '')
-const savingProfile = ref(false)
-const passwordOpen = ref(false)
-const oldPassword = ref('')
-const newPassword = ref('')
-const savingPassword = ref(false)
-const deleteOpen = ref(false)
-const deleteConfirmText = ref('')
-const deleting = ref(false)
-
-function openProfile(): void {
-  displayName.value = auth.user?.display_name ?? ''
-  profileOpen.value = true
-}
-
-async function saveProfile(): Promise<void> {
-  if (!displayName.value.trim()) return
-  savingProfile.value = true
-  try {
-    await auth.updateProfile({ display_name: displayName.value.trim() })
-    toast.success(t('settings.profileSaved'))
-    profileOpen.value = false
-  } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
-  } finally {
-    savingProfile.value = false
-  }
-}
-
-function openPassword(): void {
-  oldPassword.value = ''
-  newPassword.value = ''
-  passwordOpen.value = true
-}
-
-async function changePassword(): Promise<void> {
-  savingPassword.value = true
-  try {
-    const proof = await proofDialog.value!.request({
-      scope: auth.user?.has_password
-        ? 'account.password.change'
-        : 'account.password.set',
-    })
-    await auth.changePassword(oldPassword.value, newPassword.value, proof)
-    await auth.fetchSelf(false)
-    toast.success(t('settings.passwordChanged'))
-    passwordOpen.value = false
-  } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
-  } finally {
-    savingPassword.value = false
-  }
-}
-
-async function deleteAccount(): Promise<void> {
-  if (deleting.value || deleteConfirmText.value !== auth.user?.username) return
-  deleting.value = true
-  try {
-    const proof = await proofDialog.value!.request({ scope: 'account.delete' })
-    await auth.deleteAccount(proof)
-    await router.push({ name: 'sign-in' })
-  } catch (error) {
-    toast.error(error instanceof ApiError ? error.message : String(error))
-  } finally {
-    deleting.value = false
-  }
-}
 </script>
 
 <template>
@@ -115,112 +32,33 @@ async function deleteAccount(): Promise<void> {
     </PageHero>
 
     <div
-      v-if="!props.securityOnly"
-      class="grid items-start gap-8 2xl:grid-cols-2 2xl:gap-10"
+      class="flex flex-col items-start justify-between gap-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-4 sm:flex-row sm:items-center sm:px-6"
+      data-security-entry
     >
-      <AccountSecurityPanel
-        :user="auth.user"
-        @edit-profile="openProfile"
-        @change-password="openPassword"
-        @delete-account="deleteOpen = true"
-      />
-      <PreferencesNotificationsPanel :is-admin="auth.isAdmin" />
+      <div class="flex items-center gap-3">
+        <ShieldCheck
+          :size="20"
+          class="shrink-0 text-[var(--accent-text)]"
+          aria-hidden="true"
+        />
+        <div>
+          <p class="text-sm font-semibold text-[var(--text-primary)]">
+            {{ t('nav.securityAccess') }}
+          </p>
+          <p class="text-xs text-[var(--text-tertiary)]">
+            {{ t('security.page.subtitle') }}
+          </p>
+        </div>
+      </div>
+      <ConsoleButton
+        variant="secondary"
+        size="sm"
+        @click="router.push({ name: 'security' })"
+      >
+        {{ t('security.page.manage') }}
+      </ConsoleButton>
     </div>
 
-    <LoginSessionsPanel v-if="props.securityOnly || !props.embedded" />
-
-    <ConsoleModal
-      :open="profileOpen"
-      :title="t('settings.editDisplayName')"
-      size="sm"
-      @close="profileOpen = false"
-    >
-      <FormField :label="t('settings.displayName')">
-        <TextInput
-          v-model="displayName"
-          name="display-name"
-          maxlength="50"
-          autocomplete="name"
-        />
-      </FormField>
-      <template #footer>
-        <ConsoleButton
-          block
-          size="lg"
-          :loading="savingProfile"
-          :disabled="!displayName.trim()"
-          @click="saveProfile"
-        >
-          {{ t('settings.saveProfile') }}
-        </ConsoleButton>
-      </template>
-    </ConsoleModal>
-
-    <ConsoleModal
-      :open="passwordOpen"
-      :title="t('settings.changePassword')"
-      size="sm"
-      @close="passwordOpen = false"
-    >
-      <div class="space-y-4">
-        <FormField
-          v-if="auth.user?.has_password"
-          :label="t('settings.oldPassword')"
-        >
-          <TextInput
-            v-model="oldPassword"
-            type="password"
-            autocomplete="current-password"
-          />
-        </FormField>
-        <FormField
-          :label="t('auth.newPassword')"
-          :hint="t('auth.passwordHint')"
-        >
-          <TextInput
-            v-model="newPassword"
-            type="password"
-            autocomplete="new-password"
-          />
-        </FormField>
-        <PasswordStrengthMeter :password="newPassword" />
-      </div>
-      <template #footer>
-        <ConsoleButton
-          block
-          size="lg"
-          :loading="savingPassword"
-          :disabled="
-            (auth.user?.has_password && !oldPassword) ||
-            [...newPassword].length < 8 ||
-            [...newPassword].length > 128
-          "
-          @click="changePassword"
-        >
-          {{ t('common.save') }}
-        </ConsoleButton>
-      </template>
-    </ConsoleModal>
-
-    <ConfirmDialog
-      :open="deleteOpen"
-      :title="t('settings.deleteAccount')"
-      :message="t('settings.deleteAccountConfirm')"
-      :confirm-text="t('common.delete')"
-      :loading="deleting"
-      @confirm="deleteAccount"
-      @cancel="deleteOpen = false"
-    >
-      <FormField
-        :label="t('settings.typeNameToConfirm', { name: auth.user?.username })"
-        class="mt-4 w-full text-left"
-      >
-        <TextInput
-          v-model="deleteConfirmText"
-          :placeholder="auth.user?.username"
-        />
-      </FormField>
-    </ConfirmDialog>
-    <SecurityProofDialog ref="proofDialog" />
+    <PreferencesNotificationsPanel :is-admin="auth.isAdmin" />
   </div>
 </template>

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"gorm.io/gorm"
 )
@@ -507,13 +507,16 @@ func ensureRouteChannelEntitlement(tx *gorm.DB, userID, channelID int, source st
 		return fmt.Errorf("%w: unsupported channel source", ErrRouteProfileValidation)
 	}
 	var channel model.Channel
-	if err := tx.Select("id", "status").Where("id = ?", channelID).First(&channel).Error; err != nil {
+	if err := tx.Select("id", "type", "status").Where("id = ?", channelID).First(&channel).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrRouteProfileForbidden
 		}
 		return err
 	}
-	if channel.Status != common.ChannelStatusEnabled {
+	if err := constant.ValidateChannelTypeLifecycle(channel.Type); err != nil {
+		return fmt.Errorf("%w: channel %d: %w", ErrRouteProfileValidation, channel.Id, err)
+	}
+	if !channel.IsServable() {
 		return fmt.Errorf("%w: channel is disabled", ErrRouteProfileValidation)
 	}
 	var entitlement model.UserChannelEntitlement

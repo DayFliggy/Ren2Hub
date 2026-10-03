@@ -89,9 +89,7 @@ func channelStatusSummary(channel *model.Channel) (string, int64) {
 
 func channelWithSafeStatusInfo(channel *model.Channel) *model.Channel {
 	copy := *channel
-	if constant.IsRetiredChannelType(channel.Type) {
-		copy.Status = common.ChannelStatusManuallyDisabled
-	}
+	copy.Status = channel.EffectiveStatus()
 	clearChannelInfo(&copy)
 	if copy.OtherInfo == "" {
 		return &copy

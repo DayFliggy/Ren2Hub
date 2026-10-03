@@ -235,7 +235,7 @@ func parseRouteProfileID(c *gin.Context) (int, bool) {
 
 func listEligibleRouteChannels(userID int) ([]eligibleRouteChannel, error) {
 	var channels []model.Channel
-	if err := model.DB.Where("status = ?", common.ChannelStatusEnabled).Order("priority desc, id asc").Find(&channels).Error; err != nil {
+	if err := model.WhereChannelServable(model.DB.Model(&model.Channel{})).Order("priority desc, id asc").Find(&channels).Error; err != nil {
 		return nil, err
 	}
 	channelIDs := make([]int, 0, len(channels))

@@ -15,7 +15,7 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
     await waitForStablePage(page)
 
-    const card = page.locator('[data-model-distribution-table]').locator('..')
+    const card = page.locator('[data-model-distribution-card]')
     const chart = card.locator('[data-model-distribution-chart]')
     const table = card.locator('[data-model-distribution-table]')
     await expect(chart).toBeVisible()

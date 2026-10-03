@@ -1,18 +1,30 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import { useTableScrollFade } from '@/composables/useTableScrollFade'
 import { formatQuota, formatNumber } from '@/utils/format'
 import { SERIES_TOKENS } from '@/charts/palette'
 import type { StatsModelRow } from '@/composables/useDashboardStats'
 
-defineProps<{
+const props = defineProps<{
   models: StatsModelRow[]
   loading?: boolean
 }>()
 
 const { t } = useI18n()
 const colors = SERIES_TOKENS
+
+const tableScrollEl = ref<HTMLElement | null>(null)
+const { canScrollRight, updateScrollFade } = useTableScrollFade(tableScrollEl)
+
+watch(
+  () => props.models,
+  () => {
+    nextTick(updateScrollFade)
+  }
+)
 </script>
 
 <template>
@@ -39,117 +51,125 @@ const colors = SERIES_TOKENS
       subtle-scroll: trackless thumb that only shows on hover; pr-2 keeps it
       off the share column when it does.
     -->
-    <div
-      v-else
-      class="subtle-scroll max-h-[22rem] overflow-y-auto overflow-x-auto pr-2 sm:max-h-64"
-      role="region"
-      tabindex="0"
-      :aria-label="t('dashboard.stats.modelBreakdown')"
-      data-stats-model-scroll
-    >
-      <table class="w-full min-w-[600px] border-collapse text-sm xl:min-w-0">
-        <!--
-          Sticky lives on the cells, not on thead: with border-collapse the
-          rows scroll through a sticky thead's background instead of behind it.
-        -->
-        <thead>
-          <tr
-            class="border-b border-[var(--border-subtle)] text-[11px] tracking-wider text-[var(--text-tertiary)]"
-          >
-            <th
-              class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-3 py-2.5 text-left font-semibold"
+    <div v-else class="relative min-w-0">
+      <div
+        ref="tableScrollEl"
+        class="subtle-scroll max-h-[22rem] overflow-y-auto overflow-x-auto pr-2 sm:max-h-64"
+        role="region"
+        tabindex="0"
+        :aria-label="t('dashboard.stats.modelBreakdown')"
+        data-stats-model-scroll
+      >
+        <table class="w-full min-w-[600px] border-collapse text-sm xl:min-w-0">
+          <!--
+            Sticky lives on the cells, not on thead: with border-collapse the
+            rows scroll through a sticky thead's background instead of behind it.
+          -->
+          <thead>
+            <tr
+              class="border-b border-[var(--border-subtle)] text-[11px] tracking-wider text-[var(--text-tertiary)]"
             >
-              {{ t('dashboard.stats.model') }}
-            </th>
-            <th
-              class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-2.5 py-2.5 text-right font-semibold"
+              <th
+                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-3 py-2.5 text-left font-semibold"
+              >
+                {{ t('dashboard.stats.model') }}
+              </th>
+              <th
+                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-2.5 py-2.5 text-right font-semibold"
+              >
+                {{ t('dashboard.stats.tokens') }}
+              </th>
+              <th
+                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-3 py-2.5 text-right font-semibold"
+              >
+                {{ t('dashboard.stats.spend') }}
+              </th>
+              <th
+                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-2.5 py-2.5 text-right font-semibold"
+              >
+                {{ t('dashboard.stats.requests') }}
+              </th>
+              <th
+                class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-3 py-2.5 text-right font-semibold"
+              >
+                {{ t('dashboard.stats.share') }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!models.length">
+              <td
+                colspan="5"
+                class="py-12 text-center font-mono text-xs text-[var(--text-tertiary)]"
+              >
+                {{ t('dashboard.stats.noData') }}
+              </td>
+            </tr>
+            <tr
+              v-for="(row, i) in models"
+              :key="row.model"
+              class="group border-t border-[var(--border-subtle)] transition-colors hover:bg-[var(--surface-hover)]"
             >
-              {{ t('dashboard.stats.tokens') }}
-            </th>
-            <th
-              class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-3 py-2.5 text-right font-semibold"
-            >
-              {{ t('dashboard.stats.spend') }}
-            </th>
-            <th
-              class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-2.5 py-2.5 text-right font-semibold"
-            >
-              {{ t('dashboard.stats.requests') }}
-            </th>
-            <th
-              class="sticky top-0 z-10 whitespace-nowrap bg-[var(--surface-solid)] px-3 py-2.5 text-right font-semibold"
-            >
-              {{ t('dashboard.stats.share') }}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="!models.length">
-            <td
-              colspan="5"
-              class="py-12 text-center font-mono text-xs text-[var(--text-tertiary)]"
-            >
-              {{ t('dashboard.stats.noData') }}
-            </td>
-          </tr>
-          <tr
-            v-for="(row, i) in models"
-            :key="row.model"
-            class="group border-t border-[var(--border-subtle)] transition-colors hover:bg-[var(--surface-hover)]"
-          >
-            <td class="px-3 py-2.5">
-              <span class="flex min-w-0 items-center gap-2.5">
-                <span
-                  class="h-2 w-2 shrink-0 rounded-full ring-2 ring-[var(--surface-solid)] shadow-sm transition-transform group-hover:scale-125"
-                  :style="{ background: colors[i % colors.length] }"
-                />
-                <span
-                  class="min-w-0 max-w-[150px] truncate font-mono text-xs font-medium text-[var(--text-primary)]"
-                  :title="row.model"
-                >
-                  {{ row.model }}
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-2.5 py-2.5 text-right font-mono text-xs tabular-nums text-[var(--text-secondary)]"
-            >
-              {{ formatNumber(row.tokens) }}
-            </td>
-            <td
-              class="px-3 py-2.5 text-right font-mono text-xs font-semibold tabular-nums text-[var(--text-primary)] dark:text-[var(--accent-text)]"
-            >
-              {{ formatQuota(row.quota) }}
-            </td>
-            <td
-              class="px-2.5 py-2.5 text-right font-mono text-xs tabular-nums text-[var(--text-secondary)]"
-            >
-              {{ formatNumber(row.requests) }}
-            </td>
-            <td class="px-3 py-2.5 text-right">
-              <!-- mini progress bar -->
-              <div class="flex items-center justify-end gap-2">
-                <div
-                  class="pencil-progress h-1.5 w-16 overflow-hidden rounded-full bg-[var(--surface-muted)]"
-                >
-                  <div
-                    class="h-full rounded-full transition-all duration-300"
-                    :style="{
-                      width: `${row.share}%`,
-                      background: colors[i % colors.length],
-                    }"
+              <td class="px-3 py-2.5">
+                <span class="flex min-w-0 items-center gap-2.5">
+                  <span
+                    class="h-2 w-2 shrink-0 rounded-full ring-2 ring-[var(--surface-solid)] shadow-sm transition-transform group-hover:scale-125"
+                    :style="{ background: colors[i % colors.length] }"
                   />
-                </div>
-                <span
-                  class="w-10 shrink-0 text-right font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
-                >
-                  {{ row.share }}%
+                  <span
+                    class="min-w-0 max-w-[150px] truncate font-mono text-xs font-medium text-[var(--text-primary)]"
+                    :title="row.model"
+                  >
+                    {{ row.model }}
+                  </span>
                 </span>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+              </td>
+              <td
+                class="px-2.5 py-2.5 text-right font-mono text-xs tabular-nums text-[var(--text-secondary)]"
+              >
+                {{ formatNumber(row.tokens) }}
+              </td>
+              <td
+                class="px-3 py-2.5 text-right font-mono text-xs font-semibold tabular-nums text-[var(--text-primary)] dark:text-[var(--accent-text)]"
+              >
+                {{ formatQuota(row.quota) }}
+              </td>
+              <td
+                class="px-2.5 py-2.5 text-right font-mono text-xs tabular-nums text-[var(--text-secondary)]"
+              >
+                {{ formatNumber(row.requests) }}
+              </td>
+              <td class="px-3 py-2.5 text-right">
+                <!-- mini progress bar -->
+                <div class="flex items-center justify-end gap-2">
+                  <div
+                    class="pencil-progress h-1.5 w-16 overflow-hidden rounded-full bg-[var(--surface-muted)]"
+                  >
+                    <div
+                      class="h-full rounded-full transition-all duration-300"
+                      :style="{
+                        width: `${row.share}%`,
+                        background: colors[i % colors.length],
+                      }"
+                    />
+                  </div>
+                  <span
+                    class="w-10 shrink-0 text-right font-mono text-xs tabular-nums text-[var(--text-tertiary)]"
+                  >
+                    {{ row.share }}%
+                  </span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div
+        v-if="canScrollRight"
+        class="table-scroll-fade"
+        data-table-scroll-fade
+        aria-hidden="true"
+      />
     </div>
   </ConsoleCard>
 </template>

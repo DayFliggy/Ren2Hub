@@ -1,6 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import TablePagination from '@/components/common/TablePagination.vue'
 import MetadataSyncDialog from '../MetadataSyncDialog.vue'
 
 const mocks = vi.hoisted(() => ({ preview: vi.fn(), sync: vi.fn() }))
@@ -100,6 +101,32 @@ describe('metadata sync wizard', () => {
       'Confirm changes'
     )
     expect(wrapper.emitted('saved')).toBeUndefined()
+    wrapper.unmount()
+  })
+  it('names a failed preview and retries it', async () => {
+    mocks.preview.mockRejectedValueOnce(new Error('upstream unavailable'))
+    const wrapper = mountDialog()
+    await click(wrapper, 'Load metadata preview')
+    const alert = wrapper.get('[role="alert"]')
+    expect(alert.text()).toContain('Failed to preview metadata')
+    expect(alert.text()).toContain('upstream unavailable')
+    await alert.get('button').trigger('click')
+    await flushPromises()
+    expect(mocks.preview).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('shows more candidates after the page size grows', async () => {
+    mocks.preview.mockResolvedValueOnce({
+      missing: Array.from({ length: 25 }, (_, index) => `model-${index}`),
+      conflicts: [],
+    })
+    const wrapper = mountDialog()
+    await click(wrapper, 'Load metadata preview')
+    expect(wrapper.findAll('tbody tr')).toHaveLength(20)
+    wrapper.getComponent(TablePagination).vm.$emit('update:pageSize', 50)
+    await flushPromises()
+    expect(wrapper.findAll('tbody tr')).toHaveLength(25)
     wrapper.unmount()
   })
   it('aborts an in-flight preview on close and never writes on cancel', async () => {

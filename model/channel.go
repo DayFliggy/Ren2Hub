@@ -1030,12 +1030,17 @@ func DeleteChannelByStatus(status int64) (int64, error) {
 	return result.RowsAffected, result.Error
 }
 
+// DeleteDisabledChannel removes every row whose EffectiveStatus is auto or
+// manually disabled, so retired rows that still store status 1 are included.
 func DeleteDisabledChannel() (int64, error) {
+	const condition = "(status IN ? OR type IN ?)"
+	statuses := []int{common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled}
+	retired := constant.RetiredChannelTypes()
 	var ids []int
-	if err := DB.Model(&Channel{}).Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Pluck("id", &ids).Error; err != nil {
+	if err := DB.Model(&Channel{}).Where(condition, statuses, retired).Pluck("id", &ids).Error; err != nil {
 		return 0, err
 	}
-	result := DB.Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Delete(&Channel{})
+	result := DB.Where(condition, statuses, retired).Delete(&Channel{})
 	if result.Error == nil {
 		NotifyChannelCapabilityChanged(ids...)
 	}

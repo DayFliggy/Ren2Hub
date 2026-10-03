@@ -3,8 +3,6 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
-import ConsoleModal from '@/components/common/ConsoleModal.vue'
-import AccountSettingsView from '@/views/console/AccountSettingsView.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { formatQuota } from '@/utils/format'
@@ -15,7 +13,6 @@ const auth = useAuthStore()
 const toast = useToast()
 
 const open = ref(false)
-const securityOpen = ref(false)
 const root = ref<HTMLElement | null>(null)
 
 const initial = computed(() =>
@@ -34,11 +31,6 @@ async function logout() {
 function goto(routeName: string) {
   open.value = false
   router.push({ name: routeName })
-}
-
-function openSecurity() {
-  open.value = false
-  securityOpen.value = true
 }
 
 function onClickOutside(e: MouseEvent) {
@@ -107,7 +99,7 @@ onBeforeUnmount(() => {
         type="button"
         class="block min-h-11 w-full rounded-none px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-muted)]"
         data-user-menu-item
-        @click="openSecurity"
+        @click="goto('security')"
       >
         {{ t('nav.securityAccess') }}
       </button>
@@ -122,15 +114,5 @@ onBeforeUnmount(() => {
         {{ t('common.logout') }}
       </button>
     </div>
-
-    <ConsoleModal
-      :open="securityOpen"
-      :title="t('nav.securityAccess')"
-      :subtitle="t('settings.accountSecuritySubtitle')"
-      size="xl"
-      @close="securityOpen = false"
-    >
-      <AccountSettingsView embedded security-only />
-    </ConsoleModal>
   </div>
 </template>

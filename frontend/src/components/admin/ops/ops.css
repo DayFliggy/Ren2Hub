@@ -741,11 +741,17 @@
   min-width: 0;
 }
 .ops-cooling-head strong {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.8125rem;
   font-weight: 600;
+}
+/* A long channel name truncates; the state chip keeps its one-line width. */
+.ops-cooling-head > :last-child {
+  flex: none;
+  white-space: nowrap;
 }
 .ops-cooling-meta {
   display: flex;

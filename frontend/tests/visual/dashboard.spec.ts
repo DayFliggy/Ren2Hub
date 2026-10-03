@@ -351,6 +351,48 @@ test('statistics trend supports the single-series modes', async ({ page }) => {
   await assertInteractiveCentersVisible(page)
 })
 
+test('rate-limit and discount cards say 未接入 instead of fabricated values', async ({
+  page,
+}) => {
+  // Neither has a data source yet: no "0", "不限速", ring, 1.000× or tiles.
+  const rpmCell = page.locator('[data-overview-kpi] [data-kpi-cell="rpm"]')
+  await expect(rpmCell.locator('.display-number')).toHaveText('--')
+  await expect(rpmCell).toContainText('未接入')
+  await expect(rpmCell).not.toContainText('不限速')
+  await expect(rpmCell.locator('button')).toHaveCount(0)
+
+  const discountCard = page.locator('[data-discount-card]')
+  await expect(discountCard).toBeVisible()
+  await expect(
+    discountCard.locator('[data-discount-not-connected]')
+  ).toContainText('未接入')
+  await expect(discountCard).not.toContainText('×')
+  await expect(
+    discountCard.locator('[data-discount-effective-bar]')
+  ).toHaveCount(0)
+  await expect(discountCard).not.toContainText('全局折扣')
+})
+
+test('KPI dividers are solid at night and dashed ledger rules by day', async ({
+  page,
+}) => {
+  const cells = page.locator('[data-overview-kpi] > div > *')
+  await expect(cells).toHaveCount(5)
+  const dividerStyles = () =>
+    cells.evaluateAll((all) =>
+      all.map((cell) => getComputedStyle(cell).borderLeftStyle)
+    )
+
+  expect(new Set(await dividerStyles())).toEqual(new Set(['solid']))
+
+  // Flip the theme class the way useTheme does; the dividers key off it only.
+  await page.evaluate(() => {
+    document.documentElement.classList.remove('dark')
+    document.documentElement.classList.add('light')
+  })
+  expect(new Set(await dividerStyles())).toEqual(new Set(['dashed']))
+})
+
 test('all dashboard panels remain contained at compact width', async ({
   page,
 }) => {
@@ -359,11 +401,25 @@ test('all dashboard panels remain contained at compact width', async ({
   const overviewStrip = page.locator('[data-overview-kpi]')
   const overviewLastCell = overviewStrip.locator(':scope > div > :last-child')
   await expect(overviewLastCell).toBeVisible()
-  expect(
-    await overviewLastCell.evaluate(
-      (element) => element.getBoundingClientRect().width
-    )
-  ).toBeGreaterThan(300)
+  const lastCellLayout = await overviewLastCell.evaluate((element) => {
+    // Cell layout: wrapper > [label + figure block, mini-visual slot].
+    const [figure, visual] = [...(element.firstElementChild?.children ?? [])]
+    if (!figure || !visual) throw new Error('KPI cell parts missing')
+    const figureRect = figure.getBoundingClientRect()
+    const visualRect = visual.getBoundingClientRect()
+    return {
+      width: element.getBoundingClientRect().width,
+      visualBesideFigure: visualRect.left >= figureRect.right - 0.5,
+      sharedRow:
+        visualRect.top < figureRect.bottom &&
+        visualRect.bottom > figureRect.top,
+    }
+  })
+  // The fifth cell takes the full final row and puts its sparkline beside the
+  // figure rather than under it.
+  expect(lastCellLayout.width).toBeGreaterThan(300)
+  expect(lastCellLayout.visualBesideFigure).toBe(true)
+  expect(lastCellLayout.sharedRow).toBe(true)
 
   await page.getByRole('tab', { name: '统计数据', exact: true }).click()
   await waitForStablePage(page)
@@ -392,12 +448,34 @@ test('all dashboard panels remain contained at compact width', async ({
     'aria-expanded',
     'false'
   )
-  await firstGroup.locator('button[aria-expanded]').click()
-  await expect(firstGroup.locator('[data-route-channel]')).toHaveCount(7)
-  await expect(
-    firstGroup.locator('[data-route-channel]').first()
-  ).toContainText('OpenAI')
+  await firstGroup.locator('button[aria-expanded]').first().click()
+  // Seven channels (six ranked, one disabled) collapse to the top three.
+  const visibleChannels = firstGroup.locator('[data-route-channel]:visible')
+  await expect(visibleChannels).toHaveCount(3)
+  await expect(visibleChannels.first()).toContainText('OpenAI')
   await expect(firstGroup.locator('[data-route-channel] img')).toHaveCount(0)
+
+  const moreToggle = firstGroup.locator('[data-route-more-toggle]')
+  await expect(moreToggle).toHaveText('展开余下 4 条渠道')
+  await expect(moreToggle).toHaveAttribute('aria-expanded', 'false')
+  const controlsId = await moreToggle.getAttribute('aria-controls')
+  expect(controlsId).toBeTruthy()
+  // Mobile touch target floor.
+  expect(
+    await moreToggle.evaluate((el) => el.getBoundingClientRect().height)
+  ).toBeGreaterThanOrEqual(44)
+
+  await moreToggle.click()
+  await expect(moreToggle).toHaveAttribute('aria-expanded', 'true')
+  await expect(visibleChannels).toHaveCount(7)
+  await expect(
+    page.locator(`[id="${controlsId}"] [data-route-channel]`)
+  ).toHaveCount(4)
+  // The disabled channel keeps its upstream place after the ranked ones.
+  await expect(visibleChannels.last()).toContainText('已手动禁用')
+
+  await moreToggle.click()
+  await expect(visibleChannels).toHaveCount(3)
 
   await assertNoHorizontalOverflow(page)
   await assertInteractiveCentersVisible(page)

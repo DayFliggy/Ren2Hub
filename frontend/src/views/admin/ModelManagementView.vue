@@ -8,8 +8,11 @@ import {
   defineAsyncComponent,
   nextTick,
   onMounted,
+  provide,
   ref,
+  shallowRef,
   watch,
+  type Ref,
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -24,7 +27,12 @@ import MissingModelsDialog from '@/components/admin/MissingModelsDialog.vue'
 import ModelMetadataDrawer from '@/components/admin/ModelMetadataDrawer.vue'
 import ModelsSection from '@/components/admin/ModelsSection.vue'
 import PrefillGroupDialog from '@/components/admin/PrefillGroupDialog.vue'
+import PricingActionBar from '@/components/admin/PricingActionBar.vue'
 import VendorsSection from '@/components/admin/VendorsSection.vue'
+import {
+  pricingBarHostKey,
+  type PricingBarState,
+} from '@/components/admin/pricingActionBar'
 import { useAdminRequest } from '@/composables/useAdminRequest'
 import { modelMetadataMessages } from '@/i18n/modelMetadata'
 import { useAuthStore } from '@/stores/auth'
@@ -34,6 +42,7 @@ const ModelPricingView = defineAsyncComponent(
 )
 
 const props = defineProps<{ section: 'metadata' | 'vendors' | 'pricing' }>()
+// Pricing header text lives in PricingActionBar's own message scope.
 const { t } = useI18n({ useScope: 'local', messages: modelMetadataMessages })
 const { t: tGlobal } = useI18n()
 const route = useRoute()
@@ -43,11 +52,22 @@ const vendorRequest = useAdminRequest()
 const vendors = ref<ModelVendor[]>([])
 const modelsSection = ref<InstanceType<typeof ModelsSection> | null>(null)
 const vendorsSection = ref<InstanceType<typeof VendorsSection> | null>(null)
+// The embedded pricing view registers its live header state on setup and
+// clears it on unmount; this page only renders it.
+// Wrapped so the type checker does not treat the stored ref as unwrapped.
+const pricingBar = shallowRef<{
+  state: Readonly<Ref<PricingBarState>>
+} | null>(null)
+const pricingBarState = computed(() => pricingBar.value?.state.value ?? null)
 const drawerOpen = ref(false)
 const editingId = ref<number | null>(null)
 const initialName = ref('')
 const syncOpen = ref(false)
 const missingOpen = ref(false)
+
+provide(pricingBarHostKey, (state) => {
+  pricingBar.value = state ? { state } : null
+})
 
 // Sections reuse this view. Only a committed navigation may discard
 // the editor; canceled or busy navigation leaves its section unchanged.
@@ -159,6 +179,10 @@ onMounted(loadVendors)
         >
           <Plus :size="14" aria-hidden="true" />{{ t('addVendor') }}
         </ConsoleButton>
+        <PricingActionBar
+          v-else-if="section === 'pricing' && pricingBarState"
+          :state="pricingBarState"
+        />
       </template>
     </PageBreadcrumb>
     <ConsoleTabs

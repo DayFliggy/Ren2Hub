@@ -224,8 +224,8 @@ func FindActiveChannelCapabilities(ctx context.Context, channelIDs []int, reques
 	}
 	query := DB.WithContext(ctx).Model(&ChannelModelCapability{}).
 		Joins("JOIN channel_capability_snapshots AS capability_snapshots ON capability_snapshots.channel_id = channel_model_capabilities.channel_id AND capability_snapshots.active_version = channel_model_capabilities.snapshot_version").
-		Where("channel_model_capabilities.channel_type NOT IN ?", constant.RetiredChannelTypes()).
 		Where("channel_model_capabilities.channel_id IN ? AND capability_snapshots.active_version > 0 AND capability_snapshots.refresh_status = ?", channelIDs, RouteCapabilityRefreshActive)
+	query = excludeChannelTypes(query, "channel_model_capabilities.channel_type", constant.RetiredChannelTypes())
 	if requestModel != "" {
 		query = query.Where("channel_model_capabilities.request_model = ?", requestModel)
 	}

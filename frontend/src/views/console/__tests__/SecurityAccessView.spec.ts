@@ -1,0 +1,270 @@
+import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const apiGet = vi.hoisted(() => vi.fn())
+const apiPost = vi.hoisted(() => vi.fn())
+const apiPut = vi.hoisted(() => vi.fn())
+const apiDelete = vi.hoisted(() => vi.fn())
+const publicStatus = vi.hoisted(() => vi.fn())
+const requestProof = vi.hoisted(() => vi.fn())
+const routerPush = vi.hoisted(() => vi.fn())
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: routerPush }),
+}))
+
+vi.mock('@/components/auth/SecurityProofDialog.vue', () => ({
+  default: {
+    setup(_: unknown, { expose }: { expose: (value: unknown) => void }) {
+      expose({ request: requestProof })
+      return () => null
+    },
+  },
+}))
+
+// completeOAuth (api/oauth.ts) talks to the shared client directly.
+vi.mock('@/api/client', () => ({
+  api: { get: apiGet, post: apiPost, put: apiPut, delete: apiDelete },
+  setApiUnauthorizedHandler: vi.fn(),
+}))
+
+vi.mock('@/api/console', () => ({
+  api: {
+    get: apiGet,
+    post: apiPost,
+    put: apiPut,
+    delete: apiDelete,
+  },
+}))
+
+vi.mock('@/api/public', () => ({
+  publicApi: {
+    status: publicStatus,
+  },
+}))
+
+import i18n, { loadMessageDomain, setLocale } from '@/i18n'
+import { useAuthStore } from '@/stores/auth'
+import SecurityAccessView from '@/views/console/SecurityAccessView.vue'
+
+beforeAll(async () => {
+  await loadMessageDomain('console')
+  await setLocale('zh-CN')
+})
+
+function securityGet(url: string): Promise<unknown> {
+  if (url === '/api/user/passkey') {
+    return Promise.resolve({ enabled: false, last_used_at: null })
+  }
+  if (url === '/api/user/2fa/status') {
+    return Promise.resolve({ enabled: true, backup_codes_remaining: 6 })
+  }
+  if (url === '/api/user/oauth/bindings') return Promise.resolve([])
+  if (url === '/api/user/self/personal-access-tokens') {
+    return Promise.resolve([])
+  }
+  if (url === '/api/user/self/personal-access-tokens/scopes') {
+    return Promise.resolve({ scopes: [], limit: 10, default_lifetime_days: 30 })
+  }
+  return Promise.resolve({})
+}
+
+beforeEach(() => {
+  setActivePinia(createPinia())
+  routerPush.mockReset()
+  requestProof.mockReset().mockResolvedValue('test-proof')
+  apiGet.mockReset().mockImplementation(securityGet)
+  apiPost.mockReset().mockResolvedValue({ flow_token: 'oauth-flow' })
+  apiPut.mockReset().mockResolvedValue({})
+  publicStatus.mockReset().mockResolvedValue({
+    github_oauth: true,
+    github_client_id: 'github-client',
+    discord_oauth: false,
+    linuxdo_oauth: false,
+    oidc_enabled: false,
+    wechat_login: false,
+    telegram_oauth: false,
+    telegram_oauth_configured: false,
+    custom_oauth_providers: [],
+  })
+
+  const auth = useAuthStore()
+  auth.persist({
+    id: 1,
+    username: 'alice',
+    display_name: 'Alice',
+    email: 'alice@example.com',
+    role: 1,
+    status: 1,
+    available_quota: '1000',
+    reserved_quota: '0',
+    used_quota: '0',
+    quota_version: 0,
+    request_count: 0,
+    created_at: 1000,
+    has_password: true,
+    setting: JSON.stringify({ record_ip_log: false }),
+  })
+})
+
+function renderView() {
+  return mount(SecurityAccessView, {
+    attachTo: document.body,
+    global: {
+      plugins: [i18n],
+      stubs: {
+        LoginSessionsPanel: true,
+        PersonalAccessTokensPanel: true,
+      },
+    },
+  })
+}
+
+function buttonByText(
+  wrapper: ReturnType<typeof renderView>,
+  text: string
+): HTMLButtonElement | undefined {
+  return wrapper
+    .findAll('button')
+    .map((button) => button.element as HTMLButtonElement)
+    .find((button) => button.textContent?.trim() === text)
+}
+
+describe('SecurityAccessView', () => {
+  it('renders profile, credentials, bindings, passkey and 2fa', async () => {
+    const wrapper = renderView()
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('安全与访问')
+    expect(text).toContain('Alice')
+    expect(text).toContain('alice')
+    expect(text).toContain('••••••••••')
+    expect(text).toContain('alice@example.com')
+    expect(text).toContain('通行密钥认证')
+    expect(text).toContain('剩余备用码')
+    wrapper.unmount()
+  })
+
+  it('leaves IP logging to account settings instead of writing it here', async () => {
+    const wrapper = renderView()
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'ConsoleToggle' }).exists()).toBe(
+      false
+    )
+    buttonByText(wrapper, '前往账号设置')?.click()
+    expect(routerPush).toHaveBeenCalledWith({ name: 'settings' })
+    expect(apiPut).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('does not request the retired single-token API', async () => {
+    const wrapper = renderView()
+    await flushPromises()
+
+    expect(
+      apiGet.mock.calls.some(([url]) =>
+        String(url).startsWith('/api/user/token')
+      )
+    ).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows an unknown state instead of "disabled" when a status fails to load', async () => {
+    apiGet.mockImplementation((url: string) =>
+      url === '/api/user/passkey'
+        ? Promise.reject(new Error('passkey offline'))
+        : securityGet(url)
+    )
+    const wrapper = renderView()
+    await flushPromises()
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('passkey offline')
+    expect(wrapper.text()).toContain('未知')
+    expect(buttonByText(wrapper, '启用 Passkey')?.disabled).toBe(true)
+    // The 2FA status loaded on its own and is still shown.
+    expect(wrapper.text()).toContain('剩余备用码')
+    wrapper.unmount()
+  })
+
+  it('edits the display name through the profile API', async () => {
+    const auth = useAuthStore()
+    const updateProfile = vi
+      .spyOn(auth, 'updateProfile')
+      .mockResolvedValue(undefined)
+    const wrapper = renderView()
+    await flushPromises()
+
+    const editButtons = wrapper.findAll('button.settings-row-action')
+    await editButtons[0]!.trigger('click')
+    await flushPromises()
+    const input = document.body.querySelector<HTMLInputElement>(
+      'input[name="display-name"]'
+    )
+    expect(input?.value).toBe('Alice')
+    input!.value = 'Alice Chen'
+    input!.dispatchEvent(new Event('input'))
+    await flushPromises()
+    Array.from(document.body.querySelectorAll('button'))
+      .find((button) => button.textContent?.trim() === '保存资料')
+      ?.click()
+    await flushPromises()
+
+    expect(updateProfile).toHaveBeenCalledWith({ display_name: 'Alice Chen' })
+    wrapper.unmount()
+  })
+
+  it('opens the password modal from the credential row', async () => {
+    const wrapper = renderView()
+    await flushPromises()
+
+    const passwordButton = wrapper
+      .findAll('button.settings-row-action')
+      .find((button) => button.text() === '修改密码')
+    expect(passwordButton).toBeDefined()
+    await passwordButton!.trigger('click')
+    await flushPromises()
+
+    expect(
+      document.body.querySelector('[role="dialog"]')?.textContent
+    ).toContain('修改密码')
+    wrapper.unmount()
+  })
+
+  it('closes its OAuth popup and removes window handlers when unmounted', async () => {
+    const removeEventListener = vi.spyOn(window, 'removeEventListener')
+    const closePopup = vi.fn()
+    const openPopup = vi.spyOn(window, 'open').mockReturnValue({
+      close: closePopup,
+      location: { replace: vi.fn() },
+    } as unknown as Window)
+    const wrapper = renderView()
+    await flushPromises()
+
+    buttonByText(wrapper, '绑定')?.click()
+    await flushPromises()
+    Array.from(document.body.querySelectorAll('[role="dialog"] button'))
+      .filter((button) => button.textContent?.trim() === '绑定')
+      .at(-1)
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(openPopup).toHaveBeenCalledOnce()
+
+    wrapper.unmount()
+    await flushPromises()
+
+    expect(closePopup).toHaveBeenCalled()
+    expect(removeEventListener).toHaveBeenCalledWith(
+      'message',
+      expect.any(Function)
+    )
+    expect(removeEventListener).toHaveBeenCalledWith(
+      'beforeunload',
+      expect.any(Function)
+    )
+    openPopup.mockRestore()
+    removeEventListener.mockRestore()
+  })
+})

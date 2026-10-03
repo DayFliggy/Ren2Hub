@@ -504,9 +504,9 @@ func NextListAdminChannels(c *gin.Context) {
 		}
 		switch strings.ToLower(strings.TrimSpace(c.Query("status"))) {
 		case "enabled", strconv.Itoa(common.ChannelStatusEnabled):
-			query = query.Where("status = ? AND type NOT IN ?", common.ChannelStatusEnabled, constant.RetiredChannelTypes())
+			query = model.WhereChannelServable(query)
 		case "disabled", strconv.Itoa(common.ChannelStatusManuallyDisabled):
-			query = query.Where("(status <> ? OR type IN ?)", common.ChannelStatusEnabled, constant.RetiredChannelTypes())
+			query = model.WhereChannelUnservable(query)
 		}
 		return query
 	}

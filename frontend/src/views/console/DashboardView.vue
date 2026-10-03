@@ -211,12 +211,8 @@ const rangeOptions = computed(() => [
             :loading="loading"
           />
 
-          <!-- 折扣卡片 -->
-          <DiscountCard
-            class="min-w-0"
-            :discounts="discounts"
-            :loading="loading"
-          />
+          <!-- 折扣卡片：暂无数据源，不跟随 load() 的 loading，直接显示未接入 -->
+          <DiscountCard class="min-w-0" :discounts="discounts" />
           <!-- 模型消费分布 -->
           <ModelDistributionCard
             class="min-w-0 xl:col-span-2"

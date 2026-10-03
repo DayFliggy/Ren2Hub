@@ -96,4 +96,40 @@ describe('ChannelScoreRow', () => {
     expect(wrapper.text()).toContain('Excluded from auto routing')
     expect(wrapper.find('[aria-label^="Operating score"]').exists()).toBe(false)
   })
+
+  it('drops the factor breakdown in compact mode but keeps score, latency and balance', () => {
+    const wrapper = mount(ChannelScoreRow, {
+      props: { entry, compact: true },
+      global: { plugins: [i18n] },
+    })
+
+    expect(render().find('[aria-label^="Score composition"]').exists()).toBe(
+      true
+    )
+    expect(wrapper.find('[aria-label^="Score composition"]').exists()).toBe(
+      false
+    )
+    expect(wrapper.findAll('[title*="≈"]')).toHaveLength(0)
+    expect(
+      wrapper.find(`[aria-label="Operating score ${entry.score}"]`).text()
+    ).toContain(String(entry.score))
+    expect(wrapper.text()).toContain('200ms')
+    expect(wrapper.find('[data-route-balance]').text()).toContain('800.00')
+  })
+
+  it('keeps the disabled reason visible on a compact inactive row', () => {
+    const inactive: RouteChannelRow = {
+      ...makeChannel({ status: 3 }),
+      rank: null,
+      score: null,
+      breakdown: null,
+    }
+    const wrapper = mount(ChannelScoreRow, {
+      props: { entry: inactive, compact: true },
+      global: { plugins: [i18n] },
+    })
+
+    expect(wrapper.text()).toContain('Auto-disabled')
+    expect(wrapper.text()).not.toContain('Excluded from auto routing')
+  })
 })

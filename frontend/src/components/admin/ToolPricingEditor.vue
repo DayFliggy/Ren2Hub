@@ -111,7 +111,7 @@ function save() {
     <div class="tool-header">
       <div>
         <p class="tool-title">{{ t('toolHint') }}</p>
-        <p class="admin-muted">{{ t('noDefault') }}</p>
+        <p class="text-xs text-[var(--text-tertiary)]">{{ t('noDefault') }}</p>
       </div>
       <div class="tool-actions">
         <ConsoleButton variant="secondary" size="sm" @click="toggle">
@@ -130,38 +130,54 @@ function save() {
 
     <div v-if="mode === 'visual'" class="tool-table-wrap">
       <div class="tool-table">
-        <table class="admin-table">
+        <table class="w-full min-w-[380px] border-collapse">
           <thead>
             <tr>
-              <th>{{ t('toolName') }}</th>
-              <th>{{ t('price') }} (USD / 1K)</th>
-              <th class="w-20 text-right">{{ t('actions') }}</th>
+              <th
+                class="border-b border-[var(--border-subtle)] bg-[var(--surface-table-header,var(--surface-muted))] px-3.5 py-2.5 text-left text-xs font-semibold text-[var(--text-secondary)]"
+              >
+                {{ t('toolName') }}
+              </th>
+              <th
+                class="border-b border-[var(--border-subtle)] bg-[var(--surface-table-header,var(--surface-muted))] px-3.5 py-2.5 text-left text-xs font-semibold text-[var(--text-secondary)]"
+              >
+                {{ t('price') }} (USD / 1K)
+              </th>
+              <th
+                class="w-20 border-b border-[var(--border-subtle)] bg-[var(--surface-table-header,var(--surface-muted))] px-3.5 py-2.5 text-right text-xs font-semibold text-[var(--text-secondary)]"
+              >
+                {{ t('actions') }}
+              </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(row, index) in rows" :key="row.id">
-              <td>
-                <label class="admin-field m-0">
+            <tr
+              v-for="(row, index) in rows"
+              :key="row.id"
+              class="border-b border-[var(--border-subtle)] last:border-b-0 transition-colors hover:bg-[var(--surface-hover)]"
+            >
+              <td class="px-3.5 py-2">
+                <label class="block m-0">
                   <span class="sr-only">{{ t('toolName') }}</span>
                   <input
                     v-model="row.key"
-                    class="font-mono"
+                    class="h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 font-mono text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--accent)] focus-ring outline-none sm:h-8"
                     :placeholder="t('toolName')"
                   />
                 </label>
               </td>
-              <td>
-                <label class="admin-field m-0">
+              <td class="px-3.5 py-2">
+                <label class="block m-0">
                   <span class="sr-only">{{ t('price') }}</span>
                   <input
                     v-model="row.price"
                     inputmode="decimal"
-                    class="font-mono"
+                    class="h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 font-mono text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--accent)] focus-ring outline-none sm:h-8"
                     :placeholder="t('zeroHint')"
                   />
                 </label>
               </td>
-              <td class="text-right">
+              <td class="px-3.5 py-2 text-right">
                 <ConsoleButton
                   variant="ghost"
                   size="sm"
@@ -182,21 +198,29 @@ function save() {
         </table>
       </div>
       <div v-if="!rows.length" class="tool-empty">
-        <p class="admin-muted">{{ t('empty') }}</p>
+        <p class="text-xs text-[var(--text-tertiary)]">{{ t('empty') }}</p>
       </div>
     </div>
 
-    <label v-else class="admin-field">
-      <span>{{ t('tools') }} (JSON)</span>
+    <label v-else class="block space-y-1.5">
+      <span class="text-xs font-medium text-[var(--text-secondary)]"
+        >{{ t('tools') }} (JSON)</span
+      >
       <textarea
         v-model="json"
         rows="14"
         spellcheck="false"
-        class="font-mono text-xs"
+        class="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 font-mono text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--accent)] focus-ring outline-none"
       />
     </label>
 
-    <p v-if="error" role="alert" class="admin-error">{{ error }}</p>
+    <p
+      v-if="error"
+      role="alert"
+      class="text-xs text-[var(--status-danger-text)]"
+    >
+      {{ error }}
+    </p>
 
     <div class="tool-footer">
       <ConsoleButton @click="save">
@@ -248,13 +272,6 @@ function save() {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
-.tool-table table {
-  width: 100%;
-  min-width: 380px;
-}
-.tool-table td {
-  padding: 0.5rem 0.75rem;
-}
 .tool-empty {
   padding: 2rem;
   text-align: center;
@@ -264,8 +281,5 @@ function save() {
   justify-content: flex-end;
   border-top: 1px solid var(--border-subtle);
   padding-top: 1rem;
-}
-textarea {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 </style>

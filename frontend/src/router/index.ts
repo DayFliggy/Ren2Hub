@@ -330,6 +330,12 @@ const router = createRouter({
           meta: { feature: 'profile' },
         },
         {
+          path: '/security',
+          name: 'security',
+          component: () => import('@/views/console/SecurityAccessView.vue'),
+          meta: { feature: 'profile' },
+        },
+        {
           path: '/system-settings',
           name: 'system-settings',
           redirect: {

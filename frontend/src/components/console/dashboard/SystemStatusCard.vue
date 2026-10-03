@@ -350,33 +350,33 @@ const successColor = computed(() => rateColor(successRate.value))
       </div>
     </template>
 
-    <div class="flex grow flex-col px-5 pt-3 pb-3 sm:pb-3.5">
+    <div class="flex grow flex-col px-4 pt-2.5 pb-2.5 sm:px-5 sm:pt-3 sm:pb-3">
       <div
-        class="mb-3.5 grid grid-cols-2 content-start gap-2.5 sm:mb-4 sm:gap-3"
+        class="mb-2.5 grid grid-cols-2 content-start gap-2 sm:mb-3 sm:gap-2.5"
         data-system-status-grid
       >
         <div
           v-for="tile in tiles"
           :key="tile.key"
-          class="group relative flex h-[88px] min-w-0 flex-col overflow-hidden rounded-xl bg-[var(--surface-muted)] px-3 pt-2 pb-1.5 transition-colors duration-300 hover:bg-[var(--surface-hover)] sm:h-[92px] sm:py-2"
+          class="group relative flex h-[88px] min-w-0 flex-col overflow-hidden rounded-xl bg-[var(--surface-muted)] px-2.5 py-1.5 transition-colors duration-300 hover:bg-[var(--surface-hover)] sm:h-[92px] sm:px-3 sm:py-2"
           data-system-status-tile
           :data-metric="tile.key"
         >
-          <div class="flex items-center justify-between gap-1.5">
+          <div class="flex items-center justify-between gap-1">
             <p
-              class="flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--text-tertiary)]"
+              class="flex min-w-0 items-center gap-1 text-[11px] text-[var(--text-tertiary)]"
             >
               <ArrowUpDown
                 v-if="tile.key === 'bandwidth'"
-                :size="13"
+                :size="12"
                 :stroke-width="1.8"
                 aria-hidden="true"
                 data-bandwidth-icon
               />
               <svg
                 v-else-if="tile.icon"
-                width="13"
-                height="13"
+                width="12"
+                height="12"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -391,7 +391,7 @@ const successColor = computed(() => rateColor(successRate.value))
             </p>
             <span
               v-if="tile.percent !== null"
-              class="shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[9px] font-semibold tabular-nums"
+              class="shrink-0 rounded-md px-1 py-0.5 font-mono text-[10px] font-semibold tabular-nums sm:px-1.5"
               :style="{
                 color: tile.color,
                 background: `color-mix(in srgb, ${tile.color} 14%, transparent)`,
@@ -403,12 +403,12 @@ const successColor = computed(() => rateColor(successRate.value))
 
           <div
             v-if="tile.key === 'cpu'"
-            class="mt-auto flex items-end justify-between gap-2 pt-0.5"
+            class="mt-auto flex items-end justify-between gap-1.5 pt-0.5"
             data-cpu-gauge
           >
-            <p class="flex min-w-0 items-baseline gap-1 whitespace-nowrap">
+            <p class="flex min-w-0 items-baseline gap-0.5 whitespace-nowrap">
               <span
-                class="display-number whitespace-nowrap text-2xl leading-none tabular-nums"
+                class="display-number whitespace-nowrap text-xl leading-none tabular-nums sm:text-2xl"
                 :style="{ color: tile.color }"
               >
                 {{ tile.value }}
@@ -421,7 +421,7 @@ const successColor = computed(() => rateColor(successRate.value))
               </span>
             </p>
             <svg
-              class="h-9 w-16 shrink-0"
+              class="h-8 w-14 shrink-0 sm:h-9 sm:w-16"
               viewBox="0 0 64 38"
               fill="none"
               aria-hidden="true"
@@ -459,21 +459,21 @@ const successColor = computed(() => rateColor(successRate.value))
           <template v-else-if="tile.key === 'memory'">
             <div
               v-if="tile.memory"
-              class="mt-auto flex items-baseline gap-1 font-mono leading-none whitespace-nowrap pt-0.5"
+              class="mt-auto flex items-baseline gap-0.5 font-mono leading-none whitespace-nowrap pt-0.5 sm:gap-1"
             >
               <span
-                class="text-xl font-bold leading-none tabular-nums tracking-tight sm:text-2xl"
+                class="text-lg font-bold leading-none tabular-nums tracking-tight sm:text-2xl"
                 :style="{ color: tile.color }"
               >
                 {{ tile.memory.used }}
               </span>
               <span
-                class="text-xs font-normal text-[var(--text-tertiary)] opacity-40"
+                class="text-[10px] font-normal text-[var(--text-tertiary)] opacity-40 sm:text-xs"
               >
                 /
               </span>
               <span
-                class="text-xs font-semibold tabular-nums text-[var(--text-secondary)] sm:text-[13px]"
+                class="text-[11px] font-semibold tabular-nums text-[var(--text-secondary)] sm:text-[13px]"
               >
                 {{ tile.memory.total }}
               </span>
@@ -502,7 +502,7 @@ const successColor = computed(() => rateColor(successRate.value))
               </span>
             </p>
             <div
-              class="mt-1.5 grid h-2 grid-cols-10 gap-1"
+              class="mt-1 grid h-1.5 grid-cols-10 gap-0.5 sm:mt-1.5 sm:h-2 sm:gap-1"
               data-memory-segments
               aria-hidden="true"
             >
@@ -516,47 +516,53 @@ const successColor = computed(() => rateColor(successRate.value))
           </template>
 
           <template v-else-if="tile.key === 'bandwidth'">
-            <p
-              class="mt-auto flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pt-0.5 text-[11px] font-bold leading-tight tabular-nums"
-            >
-              <template v-if="tile.bandwidth">
-                <span
-                  data-bandwidth-direction="up"
-                  class="shrink-0 whitespace-nowrap"
-                  style="color: var(--accent)"
-                >
-                  ↑{{ tile.bandwidth.up }}
-                </span>
-                <span
-                  data-bandwidth-direction="down"
-                  class="shrink-0 whitespace-nowrap"
-                  style="color: var(--glow)"
-                >
-                  ↓{{ tile.bandwidth.down }}
-                </span>
-              </template>
-              <span v-else class="text-[var(--text-tertiary)]">--</span>
-            </p>
-            <div v-if="tile.series" class="mt-0.5" data-bandwidth-sparkline>
-              <MiniSparkline
-                :points="tile.series.down"
-                :secondary="tile.series.up"
-                color="var(--glow)"
-                secondary-color="var(--accent)"
-                :height="22"
-              />
+            <div class="mt-auto flex min-w-0 flex-col justify-end">
+              <p
+                class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-[10px] font-bold leading-tight tabular-nums sm:text-[11px]"
+              >
+                <template v-if="tile.bandwidth">
+                  <span
+                    data-bandwidth-direction="up"
+                    class="shrink-0 whitespace-nowrap"
+                    style="color: var(--accent)"
+                  >
+                    ↑{{ tile.bandwidth.up }}
+                  </span>
+                  <span
+                    data-bandwidth-direction="down"
+                    class="shrink-0 whitespace-nowrap"
+                    style="color: var(--glow)"
+                  >
+                    ↓{{ tile.bandwidth.down }}
+                  </span>
+                </template>
+                <span v-else class="text-[var(--text-tertiary)]">--</span>
+              </p>
+              <div
+                v-if="tile.series"
+                class="mt-0.5 overflow-hidden"
+                data-bandwidth-sparkline
+              >
+                <MiniSparkline
+                  :points="tile.series.down"
+                  :secondary="tile.series.up"
+                  color="var(--glow)"
+                  secondary-color="var(--accent)"
+                  :height="16"
+                />
+              </div>
             </div>
           </template>
 
           <div
             v-else
-            class="mt-auto flex items-center justify-between gap-2 pb-0.5"
+            class="mt-auto flex items-center justify-between gap-1.5 pb-0.5"
             data-disk-gauge
           >
             <div v-if="tile.disk" class="flex min-w-0 flex-col justify-center">
-              <div class="flex items-baseline gap-1 leading-none">
+              <div class="flex items-baseline gap-0.5 leading-none sm:gap-1">
                 <span
-                  class="font-mono text-xl font-bold leading-none tabular-nums tracking-tight sm:text-2xl"
+                  class="font-mono text-lg font-bold leading-none tabular-nums tracking-tight sm:text-2xl"
                   :style="{ color: tile.color }"
                 >
                   {{ tile.disk.used }}
@@ -570,13 +576,13 @@ const successColor = computed(() => rateColor(successRate.value))
                 </span>
               </div>
               <div
-                class="mt-1 flex items-baseline gap-1 font-mono text-[10px] font-medium leading-none text-[var(--text-tertiary)] sm:text-[11px]"
+                class="mt-0.5 flex items-baseline gap-0.5 font-mono text-[10px] font-medium leading-none text-[var(--text-tertiary)] sm:mt-1 sm:gap-1 sm:text-[11px]"
               >
                 <span class="opacity-50">/</span>
                 <span class="tabular-nums text-[var(--text-secondary)]">
                   {{ tile.disk.total }}
                 </span>
-                <span class="text-[9px] opacity-80">{{ tile.unit }}</span>
+                <span class="opacity-80">{{ tile.unit }}</span>
               </div>
             </div>
             <p
@@ -591,7 +597,7 @@ const successColor = computed(() => rateColor(successRate.value))
               </span>
               <span
                 v-if="tile.unit"
-                class="text-[9px] text-[var(--text-tertiary)]"
+                class="text-[10px] text-[var(--text-tertiary)]"
               >
                 {{ tile.unit }}
               </span>
@@ -599,7 +605,7 @@ const successColor = computed(() => rateColor(successRate.value))
             <MiniRing
               :percent="tile.percent ?? 0"
               :color="tile.color"
-              :size="34"
+              :size="32"
               :indeterminate="tile.percent === null"
             />
           </div>
@@ -607,7 +613,7 @@ const successColor = computed(() => rateColor(successRate.value))
       </div>
 
       <div
-        class="mt-auto flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-2.5 text-[11px] sm:pt-3"
+        class="mt-auto flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] pt-2 text-[11px] sm:pt-2.5"
       >
         <span class="flex items-center gap-1.5 text-[var(--text-tertiary)]">
           <svg

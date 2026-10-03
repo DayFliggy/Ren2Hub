@@ -14,8 +14,15 @@ import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 import ConsoleTabs from '@/components/common/ConsoleTabs.vue'
 import ConsoleToggle from '@/components/common/ConsoleToggle.vue'
+import DataTable from '@/components/common/DataTable.vue'
+import FilterSelect, {
+  type SelectOption,
+} from '@/components/common/FilterSelect.vue'
+import FormField from '@/components/common/FormField.vue'
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
+import TextInput from '@/components/common/TextInput.vue'
 import { adminChannelTypeMeta } from '@/constants/adminChannels'
 import { vendorLogoMeta } from '@/constants/console'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
@@ -25,7 +32,6 @@ import MetadataEndpointEditor from './MetadataEndpointEditor.vue'
 import MetadataIcon from './MetadataIcon.vue'
 import MetadataTagInput from './MetadataTagInput.vue'
 import ModelCapabilitiesEditor from './ModelCapabilitiesEditor.vue'
-import './admin.css'
 import {
   endpointTemplates,
   parseMetadataTags,
@@ -83,6 +89,19 @@ const controller = new AbortController()
 const vendor = computed(() =>
   props.vendors.find((item) => item.id === form.vendor_id)
 )
+const vendorModel = computed({
+  get: () => String(form.vendor_id),
+  set: (val: string) => {
+    form.vendor_id = Number(val) || 0
+  },
+})
+const vendorOptions = computed<SelectOption[]>(() => [
+  { value: '0', label: t('noVendor') },
+  ...props.vendors.map((item) => ({
+    value: String(item.id),
+    label: item.name,
+  })),
+])
 const tabs = computed(() => [
   { key: 'metadata', label: t('modelMetadata') },
   { key: 'connections', label: t('connections') },
@@ -238,9 +257,12 @@ onBeforeUnmount(() => controller.abort())
     :close-disabled="saving"
     @close="requestClose"
   >
-    <p v-if="loading" role="status" class="admin-muted">{{ t('loading') }}</p>
+    <div v-if="loading" role="status" class="space-y-4">
+      <span class="sr-only">{{ t('loading') }}</span>
+      <SkeletonBlock v-for="i in 6" :key="i" rounded="lg" class="h-12" />
+    </div>
     <div v-else-if="loadFailed" role="alert" class="space-y-3">
-      <p class="admin-error">{{ error }}</p>
+      <p class="text-sm text-[var(--status-danger-text)]">{{ error }}</p>
       <ConsoleButton variant="secondary" @click="load"
         ><RefreshCw :size="15" aria-hidden="true" />{{
           t('retry')
@@ -271,123 +293,157 @@ onBeforeUnmount(() => controller.abort())
                 {{ t('basicInformation') }}
               </h3>
               <div class="grid items-start gap-4 sm:grid-cols-2">
-                <div class="admin-field sm:col-span-2">
-                  <label for="model-metadata-name">{{ t('modelName') }}</label
-                  ><input
-                    id="model-metadata-name"
-                    v-model="form.model_name"
-                    required
-                    autocomplete="off"
-                    class="font-mono"
-                    :placeholder="t('modelNamePlaceholder')"
-                    :aria-describedby="
-                      renamed
-                        ? 'model-metadata-name-hint model-metadata-name-warning'
-                        : 'model-metadata-name-hint'
-                    "
-                  /><small
+                <div class="sm:col-span-2">
+                  <FormField :label="t('modelName')">
+                    <TextInput
+                      id="model-metadata-name"
+                      v-model="form.model_name"
+                      required
+                      autocomplete="off"
+                      class="font-mono"
+                      :placeholder="t('modelNamePlaceholder')"
+                      :aria-describedby="
+                        renamed
+                          ? 'model-metadata-name-hint model-metadata-name-warning'
+                          : 'model-metadata-name-hint'
+                      "
+                    />
+                  </FormField>
+                  <small
                     id="model-metadata-name-hint"
-                    class="text-xs text-[var(--text-tertiary)]"
+                    class="mt-1 block text-xs text-[var(--text-tertiary)]"
                     >{{ t('modelNameHint') }}</small
                   >
                   <small
                     v-if="renamed"
                     id="model-metadata-name-warning"
                     role="status"
-                    class="text-xs text-[var(--status-warning-text)]"
+                    class="mt-1 block text-xs text-[var(--status-warning-text)]"
                     >{{ t('renameWarning') }}</small
                   >
                 </div>
-                <label class="admin-field sm:col-span-2"
-                  ><span>{{ t('description') }}</span
-                  ><textarea
-                    v-model="form.description"
-                    rows="3"
-                    :placeholder="t('descriptionPlaceholder')"
-                  />
-                </label>
-                <div class="admin-field sm:col-span-2">
-                  <span>{{ t('icon') }}</span>
-                  <SegmentedToggle
-                    :model-value="iconMode"
-                    :options="[
-                      { value: 'inherit', label: t('inheritIcon') },
-                      { value: 'custom', label: t('customIcon') },
-                    ]"
-                    :label="t('icon')"
-                    size="sm"
-                    @update:model-value="setIconMode"
-                  />
-                  <div v-if="iconMode === 'custom'" class="flex gap-2">
-                    <input
-                      v-model="form.icon"
-                      list="model-icon-suggestions"
-                      class="admin-input min-w-0 flex-1"
-                      :aria-label="t('icon')"
-                      :placeholder="t('iconPlaceholder')"
-                    /><ConsoleButton
-                      variant="ghost"
-                      size="sm"
-                      :disabled="!form.icon"
-                      @click="form.icon = ''"
-                      >{{ t('clear') }}</ConsoleButton
-                    >
-                    <datalist id="model-icon-suggestions">
-                      <option
-                        v-for="name in iconSuggestions"
-                        :key="name"
-                        :value="name"
-                      />
-                    </datalist>
-                  </div>
-                  <small
-                    v-if="iconMode === 'custom'"
-                    class="text-xs text-[var(--text-tertiary)]"
-                    >{{ t('iconHint') }}</small
-                  >
-                  <div
-                    class="flex items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-2.5"
-                  >
-                    <MetadataIcon
-                      :icon="effectiveIcon"
-                      :name="vendor?.name || form.model_name || '?'"
-                      :size="32"
+                <div class="sm:col-span-2">
+                  <FormField :label="t('description')">
+                    <textarea
+                      v-model="form.description"
+                      rows="3"
+                      :placeholder="t('descriptionPlaceholder')"
+                      class="w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-solid)] p-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none focus:border-[var(--accent)] focus-ring"
                     />
-                    <div class="min-w-0 text-xs">
-                      <p class="text-[var(--text-tertiary)]">
-                        {{ t('effectiveIcon') }}
-                      </p>
-                      <p class="truncate font-mono text-[var(--text-primary)]">
-                        {{ effectiveIcon || t('defaultIcon') }}
-                      </p>
-                      <p
-                        v-if="iconMode === 'inherit'"
-                        class="text-[var(--text-tertiary)]"
+                  </FormField>
+                </div>
+                <!-- A group of controls, not one labelled input: a wrapping
+                     <label> would forward caption clicks to the first control
+                     and switch the icon back to inherit. -->
+                <fieldset
+                  class="min-w-0 sm:col-span-2"
+                  :aria-describedby="
+                    iconMode === 'custom'
+                      ? 'model-metadata-icon-hint'
+                      : undefined
+                  "
+                >
+                  <legend
+                    class="mb-1.5 block text-sm font-medium text-[var(--text-secondary)]"
+                  >
+                    {{ t('icon') }}
+                  </legend>
+                  <div class="space-y-3">
+                    <SegmentedToggle
+                      :model-value="iconMode"
+                      :options="[
+                        { value: 'inherit', label: t('inheritIcon') },
+                        { value: 'custom', label: t('customIcon') },
+                      ]"
+                      :label="t('icon')"
+                      size="sm"
+                      @update:model-value="setIconMode"
+                    />
+                    <div v-if="iconMode === 'custom'" class="flex gap-2">
+                      <TextInput
+                        v-model="form.icon"
+                        list="model-icon-suggestions"
+                        class="min-w-0 flex-1"
+                        :aria-label="t('icon')"
+                        :placeholder="t('iconPlaceholder')"
+                      />
+                      <ConsoleButton
+                        variant="ghost"
+                        size="sm"
+                        :disabled="!form.icon"
+                        @click="form.icon = ''"
                       >
-                        {{
-                          vendor
-                            ? t('inheritedFrom', { vendor: vendor.name })
-                            : t('noVendor')
-                        }}
-                      </p>
+                        {{ t('clear') }}
+                      </ConsoleButton>
+                      <datalist id="model-icon-suggestions">
+                        <option
+                          v-for="name in iconSuggestions"
+                          :key="name"
+                          :value="name"
+                        />
+                      </datalist>
+                    </div>
+                    <div
+                      class="flex items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-2.5"
+                    >
+                      <MetadataIcon
+                        :icon="effectiveIcon"
+                        :name="vendor?.name || form.model_name || '?'"
+                        :size="32"
+                      />
+                      <div class="min-w-0 text-xs">
+                        <p class="text-[var(--text-tertiary)]">
+                          {{ t('effectiveIcon') }}
+                        </p>
+                        <p
+                          class="truncate font-mono text-[var(--text-primary)]"
+                        >
+                          {{ effectiveIcon || t('defaultIcon') }}
+                        </p>
+                        <p
+                          v-if="iconMode === 'inherit'"
+                          class="text-[var(--text-tertiary)]"
+                        >
+                          {{
+                            vendor
+                              ? t('inheritedFrom', { vendor: vendor.name })
+                              : t('noVendor')
+                          }}
+                        </p>
+                      </div>
                     </div>
                   </div>
+                  <p
+                    v-if="iconMode === 'custom'"
+                    id="model-metadata-icon-hint"
+                    class="mt-1.5 block text-xs text-[var(--text-tertiary)]"
+                  >
+                    {{ t('iconHint') }}
+                  </p>
+                </fieldset>
+                <div>
+                  <span
+                    class="mb-1.5 block text-sm font-medium text-[var(--text-secondary)]"
+                    >{{ t('vendor') }}</span
+                  >
+                  <FilterSelect
+                    v-model="vendorModel"
+                    :options="vendorOptions"
+                    :label="t('vendor')"
+                    class="w-full"
+                  />
                 </div>
-                <label class="admin-field"
-                  ><span>{{ t('vendor') }}</span
-                  ><select v-model.number="form.vendor_id">
-                    <option :value="0">{{ t('noVendor') }}</option>
-                    <option
-                      v-for="item in vendors"
-                      :key="item.id"
-                      :value="item.id"
-                    >
-                      {{ item.name }}
-                    </option>
-                  </select></label
+                <!-- Same reason as the icon group: a <label> caption click
+                     would activate the first tag's delete button. -->
+                <fieldset
+                  class="min-w-0"
+                  aria-describedby="model-metadata-tags-hint"
                 >
-                <div class="admin-field">
-                  <span>{{ t('tags') }}</span>
+                  <legend
+                    class="mb-1.5 block text-sm font-medium text-[var(--text-secondary)]"
+                  >
+                    {{ t('tags') }}
+                  </legend>
                   <MetadataTagInput
                     ref="tagInput"
                     v-model="tags"
@@ -396,10 +452,13 @@ onBeforeUnmount(() => controller.abort())
                     :placeholder="t('tagsPlaceholder')"
                     :disabled="saving"
                   />
-                  <small class="text-xs text-[var(--text-tertiary)]">{{
-                    t('tagsHint')
-                  }}</small>
-                </div>
+                  <p
+                    id="model-metadata-tags-hint"
+                    class="mt-1.5 block text-xs text-[var(--text-tertiary)]"
+                  >
+                    {{ t('tagsHint') }}
+                  </p>
+                </fieldset>
               </div>
             </section>
             <section class="drawer-section">
@@ -412,20 +471,22 @@ onBeforeUnmount(() => controller.abort())
                   <label
                     v-for="(rule, index) in RULES"
                     :key="rule"
-                    class="flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2.5 text-sm transition-colors"
+                    class="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2.5 text-sm transition-colors"
                     :class="
                       form.name_rule === index
                         ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-text)]'
                         : 'border-[var(--border-subtle)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
                     "
-                    ><input
+                  >
+                    <input
                       v-model.number="form.name_rule"
                       type="radio"
                       name="model-name-rule"
                       :value="index"
-                      class="accent-[var(--accent)]"
-                    />{{ t(rule) }}</label
-                  >
+                      class="accent-[var(--accent)] shrink-0"
+                    />
+                    {{ t(rule) }}
+                  </label>
                 </div>
                 <small class="text-xs text-[var(--text-tertiary)]">{{
                   t('nameRuleHint')
@@ -435,9 +496,16 @@ onBeforeUnmount(() => controller.abort())
             <section class="drawer-section">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <h3 class="drawer-section-title">{{ t('endpoints') }}</h3>
-                <label class="admin-field w-52"
-                  ><span class="sr-only">{{ t('loadTemplate') }}</span
-                  ><select v-model="template" @change="loadTemplate">
+                <div class="w-52">
+                  <label class="sr-only" for="template-select">{{
+                    t('loadTemplate')
+                  }}</label>
+                  <select
+                    id="template-select"
+                    v-model="template"
+                    class="h-11 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-solid)] px-2.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)] focus-ring sm:h-8"
+                    @change="loadTemplate"
+                  >
                     <option value="">{{ t('loadTemplate') }}</option>
                     <option
                       v-for="(_, name) in endpointTemplates"
@@ -446,8 +514,8 @@ onBeforeUnmount(() => controller.abort())
                     >
                       {{ name }}
                     </option>
-                  </select></label
-                >
+                  </select>
+                </div>
               </div>
               <p class="mb-2 mt-1 text-sm text-[var(--text-secondary)]">
                 {{ t('endpointConfiguration') }}
@@ -503,26 +571,21 @@ onBeforeUnmount(() => controller.abort())
           </p>
           <section class="drawer-section">
             <h3 class="drawer-section-title">{{ t('boundChannels') }}</h3>
-            <table
+            <DataTable
               v-if="detail.bound_channels.length"
-              class="admin-table w-full"
-            >
-              <thead>
-                <tr>
-                  <th>{{ t('channel') }}</th>
-                  <th>{{ t('type') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="(channel, index) in detail.bound_channels"
-                  :key="index"
-                >
-                  <td>{{ channel.name }}</td>
-                  <td>{{ adminChannelTypeMeta(channel.type).label }}</td>
-                </tr>
-              </tbody>
-            </table>
+              :columns="[
+                { key: 'name', label: t('channel') },
+                { key: 'type', label: t('type') },
+              ]"
+              :rows="
+                detail.bound_channels.map((channel, index) => ({
+                  id: index,
+                  name: channel.name,
+                  type: adminChannelTypeMeta(channel.type).label,
+                }))
+              "
+              row-key="id"
+            />
             <p v-else class="text-sm text-[var(--text-tertiary)]">
               {{ t('noChannels') }}
             </p>
@@ -573,7 +636,7 @@ onBeforeUnmount(() => controller.abort())
         <p
           v-if="error && !loadFailed"
           role="alert"
-          class="admin-error mr-auto text-sm"
+          class="mr-auto text-sm text-[var(--status-danger-text)]"
         >
           {{ error }}
         </p>

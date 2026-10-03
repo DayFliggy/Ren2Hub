@@ -185,11 +185,10 @@ func GetPreferredModelOwnerChannelTypes(modelNames []string, groups []string) (m
 	}
 	var rows []row
 
-	query := DB.Table("abilities").
+	query := WhereChannelServable(DB.Table("abilities").
 		Select("abilities.model as model, channels.type as channel_type").
-		Joins("JOIN channels ON abilities.channel_id = channels.id").
-		Where("channels.id IN (?)", liveChannelIDs()).
-		Where("abilities.model IN ? AND abilities.enabled = ? AND channels.status = ?", modelNames, true, common.ChannelStatusEnabled).
+		Joins("JOIN channels ON abilities.channel_id = channels.id")).
+		Where("abilities.model IN ? AND abilities.enabled = ?", modelNames, true).
 		Order("COALESCE(abilities.priority, 0) DESC").
 		Order("abilities.weight DESC").
 		Order("abilities.channel_id ASC")

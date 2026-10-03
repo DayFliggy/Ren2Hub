@@ -22,14 +22,17 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await page.setViewportSize(viewport)
       await configureStablePage(page, { theme, authenticated: true })
 
+      // /settings keeps preferences only; credentials live on /security.
       await page.goto('/settings', { waitUntil: 'domcontentloaded' })
       await waitForStablePage(page)
-      await expect(
-        page.getByRole('heading', { name: '登录与账户', exact: true })
-      ).toBeVisible()
+      const securityEntry = page.locator('[data-security-entry]')
+      await expect(securityEntry).toBeVisible()
       await expect(
         page.getByRole('heading', { name: '通知与偏好', exact: true })
       ).toBeVisible()
+      await expect(
+        page.getByRole('heading', { name: '登录与账户', exact: true })
+      ).toHaveCount(0)
       await expect(page.getByText('演示功能', { exact: true })).toHaveCount(0)
       await expect(
         page.getByText('演示状态仅保存在当前浏览器会话', { exact: true })
@@ -37,16 +40,8 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await assertNoHorizontalOverflow(page)
       await assertInteractiveCentersVisible(page)
 
-      const panels = await Promise.all([
-        page
-          .locator('section[data-surface-variant]')
-          .filter({
-            has: page.getByRole('heading', {
-              name: '登录与账户',
-              exact: true,
-            }),
-          })
-          .boundingBox(),
+      const [entryBox, preferencesBox] = await Promise.all([
+        securityEntry.boundingBox(),
         page
           .locator('section[data-surface-variant]')
           .filter({
@@ -57,37 +52,33 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
           })
           .boundingBox(),
       ])
-      expect(panels[0]).not.toBeNull()
-      expect(panels[1]).not.toBeNull()
-      if (viewport.name === 'wide') {
-        expect(Math.abs(panels[0]!.y - panels[1]!.y)).toBeLessThanOrEqual(2)
-        expect(panels[1]!.x).toBeGreaterThanOrEqual(
-          panels[0]!.x + panels[0]!.width
-        )
-      } else {
-        expect(panels[1]!.y).toBeGreaterThanOrEqual(
-          panels[0]!.y + panels[0]!.height
-        )
-      }
+      expect(entryBox).not.toBeNull()
+      expect(preferencesBox).not.toBeNull()
+      expect(preferencesBox!.y).toBeGreaterThanOrEqual(
+        entryBox!.y + entryBox!.height
+      )
+
+      await securityEntry
+        .getByRole('button', { name: '管理', exact: true })
+        .click()
+      await expect(page).toHaveURL(/\/security$/)
+      await waitForStablePage(page)
+      await expect(
+        page.getByRole('heading', { name: '安全与访问', exact: true })
+      ).toBeVisible()
+      await expect(
+        page.getByRole('heading', { name: '登录与账户', exact: true })
+      ).toBeVisible()
+      await expect(
+        page.getByRole('heading', { name: '登录验证', exact: true })
+      ).toBeVisible()
+      await expect(page.getByRole('switch')).toHaveCount(0)
+      await assertNoHorizontalOverflow(page)
+      await assertInteractiveCentersVisible(page)
 
       if (process.env.PLAYWRIGHT_CAPTURE_SCREENSHOTS === 'true') {
         await page.screenshot({
-          path: testInfo.outputPath('account-settings-top.png'),
-          fullPage: true,
-        })
-        await page
-          .locator('section[data-surface-variant]')
-          .filter({
-            has: page.getByRole('heading', {
-              name: '登录与账户',
-              exact: true,
-            }),
-          })
-          .locator('section')
-          .last()
-          .scrollIntoViewIfNeeded()
-        await page.screenshot({
-          path: testInfo.outputPath('account-security-bottom.png'),
+          path: testInfo.outputPath('security-access-top.png'),
           fullPage: true,
         })
       }
@@ -117,7 +108,8 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await expect(userMenuTrigger).toHaveAttribute('aria-expanded', 'false')
       await userMenuTrigger.click()
       await expect(userMenuTrigger).toHaveAttribute('aria-expanded', 'true')
-      await expect(page.locator('[data-user-menu-item]')).toHaveCount(5)
+      // Balance, member center, security & access, sign out.
+      await expect(page.locator('[data-user-menu-item]')).toHaveCount(4)
       await page.keyboard.press('Escape')
       await expect(userMenuTrigger).toHaveAttribute('aria-expanded', 'false')
       await expect(page.locator('[data-user-menu-item]')).toHaveCount(0)
@@ -140,9 +132,7 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await expect(page.getByTestId('profile-stat-requests')).toContainText(
         '32.1K'
       )
-      await expect(
-        page.getByRole('heading', { name: '登录与账户', exact: true })
-      ).toBeVisible()
+      await expect(page.locator('[data-security-entry]')).toBeVisible()
       await expect(
         page.getByRole('heading', { name: '通知与偏好', exact: true })
       ).toBeVisible()
@@ -157,7 +147,7 @@ for (const theme of ['light', 'dark'] as VisualTheme[]) {
       await assertInteractiveCentersVisible(page)
 
       await page
-        .getByRole('heading', { name: '登录与账户', exact: true })
+        .getByRole('heading', { name: '通知与偏好', exact: true })
         .scrollIntoViewIfNeeded()
       await page.waitForTimeout(100)
       await assertNoHorizontalOverflow(page)

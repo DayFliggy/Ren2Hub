@@ -82,13 +82,6 @@ describe('OverviewKpiStrip', () => {
     expect(wrapper.text()).not.toContain('5.8')
   })
 
-  it('uses the full final row for the fifth metric on compact screens', () => {
-    const cells = render().findAll('[class*="px-5"]')
-
-    expect(cells.at(-1)?.classes()).toContain('col-span-2')
-    expect(cells.at(-1)?.classes()).toContain('sm:col-span-1')
-  })
-
   it('draws a sparkline for each series cell and a ring for RPM', () => {
     const wrapper = render({
       flow: flowPoints,
@@ -135,8 +128,24 @@ describe('OverviewKpiStrip', () => {
     expect(wrapper.text()).toContain('4.0M')
   })
 
-  it('renders a placeholder for RPM when limits have not loaded', () => {
-    expect(render().text()).toContain('--')
+  it('marks the rate-limit cell as not connected when limits are null', () => {
+    const wrapper = render({ limits: null })
+    const cell = wrapper.find('[data-kpi-cell="rpm"]')
+
+    expect(cell.find('.display-number').text()).toBe('--')
+    expect(cell.text()).toContain('Not connected')
+    // No fabricated reading: no "unmetered" ceiling and no ring.
+    expect(cell.text()).not.toContain('Unmetered')
+    expect(wrapper.findAllComponents(RpmRing)).toHaveLength(0)
+  })
+
+  it('reads 未接入 for null limits in Chinese', async () => {
+    await setLocale('zh-CN')
+    const text = render({ limits: null }).find('[data-kpi-cell="rpm"]').text()
+    await setLocale('en')
+
+    expect(text).toContain('未接入')
+    expect(text).not.toContain('不限速')
   })
 
   it('reads the observed RPM from limits', () => {

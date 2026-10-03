@@ -184,7 +184,7 @@ async function copyName(name: string) {
           </li>
         </ul>
         <div
-          class="flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] bg-[var(--surface-muted)] px-3 py-2 text-sm"
+          class="flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 py-2 text-sm"
         >
           <span class="text-[var(--text-tertiary)]">
             {{ t('pageOf', { current: page, total: pageCount }) }}

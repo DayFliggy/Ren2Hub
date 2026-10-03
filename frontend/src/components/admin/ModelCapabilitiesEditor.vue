@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import './admin.css'
 import { useI18n } from 'vue-i18n'
 import { reactive, watch } from 'vue'
 import type { ModelCapabilities } from '@/api/modelManifest'

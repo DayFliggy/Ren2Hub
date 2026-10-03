@@ -250,23 +250,16 @@ func FixAbility() (int, int, error) {
 	}
 	defer fixLock.Unlock()
 
-	// truncate abilities table
-	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
-		err := DB.Exec("DELETE FROM abilities").Error
-		if err != nil {
-			common.SysLog(fmt.Sprintf("Delete abilities failed: %s", err.Error()))
-			return 0, 0, err
-		}
-	} else {
-		err := DB.Exec("TRUNCATE TABLE abilities").Error
-		if err != nil {
-			common.SysLog(fmt.Sprintf("Truncate abilities failed: %s", err.Error()))
-			return 0, 0, err
-		}
+	// Retired channels cannot rebuild abilities, so their existing rows are kept
+	// as history and they are neither repaired nor counted as failures. Rows of
+	// deleted channels are still removed.
+	retired := DB.Model(&Channel{}).Select("id").Where("type IN ?", constant.RetiredChannelTypes())
+	if err := DB.Where("channel_id NOT IN (?)", retired).Delete(&Ability{}).Error; err != nil {
+		common.SysLog(fmt.Sprintf("Delete abilities failed: %s", err.Error()))
+		return 0, 0, err
 	}
 	var channels []*Channel
-	// Find all channels
-	err := DB.Model(&Channel{}).Find(&channels).Error
+	err := DB.Where("id IN (?)", liveChannelIDs()).Find(&channels).Error
 	if err != nil {
 		return 0, 0, err
 	}

@@ -4,6 +4,8 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { PRICING_KEYS, type ModelPricingConfig } from '@/api/pricingConfig'
+import TablePagination from '@/components/common/TablePagination.vue'
+import ModelManagementView from '../ModelManagementView.vue'
 import ModelPricingView from '../ModelPricingView.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -27,17 +29,20 @@ vi.mock('@/composables/useSystemSettings', () => ({
     saving: ref(false),
   }),
 }))
+// Only the embedded host (ModelManagementView) reads these.
+vi.mock('@/api/adminManagement', () => ({
+  metadataApi: { allVendors: vi.fn().mockResolvedValue([]) },
+}))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ isRoot: true }) }))
 
-function config(price = 1): ModelPricingConfig {
+function config(price = 1, names: string[] = ['model-a']): ModelPricingConfig {
   return {
-    entries: [
-      {
-        model_name: 'model-a',
-        version: 'v1',
-        configured: { ModelPrice: price },
-        effective: { ModelPrice: price },
-      },
-    ],
+    entries: names.map((model_name) => ({
+      model_name,
+      version: 'v1',
+      configured: { ModelPrice: price },
+      effective: { ModelPrice: price },
+    })),
     empty_version: 'empty',
     options: Object.fromEntries(
       PRICING_KEYS.map((key) => [key, '{}'])
@@ -45,14 +50,18 @@ function config(price = 1): ModelPricingConfig {
   }
 }
 
-async function setup() {
+async function setup(embedded = false) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      {
-        path: '/models/pricing',
-        component: ModelPricingView,
-      },
+      embedded
+        ? {
+            // Production route: the pricing section of model management.
+            path: '/models/pricing',
+            component: ModelManagementView,
+            props: { section: 'pricing' },
+          }
+        : { path: '/models/pricing', component: ModelPricingView },
     ],
   })
   await router.push('/models/pricing')
@@ -64,10 +73,17 @@ async function setup() {
           router,
           createI18n({ legacy: false, locale: 'en', messages: { en: {} } }),
         ],
-        stubs: { ModelPricingEditor: true, PriceFetchDialog: true },
+        stubs: {
+          ModelPricingEditor: true,
+          PriceFetchDialog: true,
+          MetadataSyncDialog: true,
+          MissingModelsDialog: true,
+          PrefillGroupDialog: true,
+        },
       },
     }
   )
+  await vi.dynamicImportSettled()
   await flushPromises()
   return wrapper
 }
@@ -175,6 +191,59 @@ describe('pricing workspace draft lifecycle', () => {
     expect(button(wrapper, 'Reload pricing').element.matches(':disabled')).toBe(
       false
     )
+    wrapper.unmount()
+  })
+
+  it('drives the model management header bar from the embedded pricing draft', async () => {
+    const wrapper = await setup(true)
+    const page = wrapper.get('.model-pricing-page')
+    const saves = () =>
+      wrapper
+        .findAll('button')
+        .filter((item) => item.text() === 'Save model prices')
+    // The host renders the only bar, outside the embedded pricing section.
+    expect(saves()).toHaveLength(1)
+    expect(page.text()).not.toContain('Reload pricing')
+    expect(wrapper.text()).not.toContain('Unsaved prices')
+
+    await button(wrapper, 'Delete').trigger('click')
+    expect(wrapper.text()).toContain('Unsaved prices')
+    await saves()[0]!.trigger('click')
+    await flushPromises()
+    expect(mocks.save).toHaveBeenCalledWith([
+      expect.objectContaining({ model_name: 'model-a', reset: true }),
+    ])
+
+    await wrapper
+      .findAll('[role="radio"]')
+      .find((item) => item.text() === 'Tool prices')!
+      .trigger('click')
+    expect(saves()).toHaveLength(0)
+    expect(button(wrapper, 'Reload pricing').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('keeps earlier pages selected when the header selects another page', async () => {
+    const names = Array.from(
+      { length: 21 },
+      (_, index) => `model-${String(index).padStart(2, '0')}`
+    )
+    mocks.load.mockResolvedValue(config(1, names))
+    mocks.get.mockResolvedValue(names)
+    const wrapper = await setup()
+    const header = () => wrapper.get('thead input[type="checkbox"]')
+
+    await header().setValue(true)
+    expect(wrapper.text()).toContain('20 models selected')
+    wrapper.getComponent(TablePagination).vm.$emit('update:page', 2)
+    await flushPromises()
+    expect(
+      wrapper.get('tbody input[type="checkbox"]').attributes('aria-label')
+    ).toBe('Select model-20')
+    await header().setValue(true)
+    expect(wrapper.text()).toContain('21 models selected')
+    await header().setValue(false)
+    expect(wrapper.text()).toContain('20 models selected')
     wrapper.unmount()
   })
 })

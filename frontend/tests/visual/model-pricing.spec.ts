@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator } from '@playwright/test'
 import { configureStablePage, assertNoHorizontalOverflow } from './fixtures'
 import {
   PRICING_KEYS,
@@ -6,6 +6,14 @@ import {
   type ModelPricingEntry,
   type PricingValues,
 } from '../../src/api/pricingConfig'
+
+async function expectInside(part: Locator, container: Locator) {
+  await expect(part).toBeVisible()
+  const inner = (await part.boundingBox())!
+  const outer = (await container.boundingBox())!
+  expect(inner.x).toBeGreaterThanOrEqual(outer.x)
+  expect(inner.x + inner.width).toBeLessThanOrEqual(outer.x + outer.width + 1)
+}
 
 for (const theme of ['light', 'dark'] as const)
   for (const width of [1440, 390]) {
@@ -136,9 +144,14 @@ for (const theme of ['light', 'dark'] as const)
       })
       await assertNoHorizontalOverflow(page)
       await page.screenshot({ path: testInfo.outputPath('plugin-pricing.png') })
-      await editor
-        .getByRole('button', { name: 'Save model prices', exact: true })
-        .click()
+      const editorSave = editor.getByRole('button', {
+        name: 'Save model prices',
+        exact: true,
+      })
+      // Desktop pins the editor footer, so Save is reachable without
+      // scrolling back after editing the lower sections.
+      if (width >= 768) await expect(editorSave).toBeInViewport()
+      await editorSave.click()
       await expect(
         page.getByText('Model prices saved', { exact: true })
       ).toBeVisible()
@@ -322,6 +335,16 @@ for (const theme of ['light', 'dark'] as const)
       await expect(
         page.getByText('1 models filled. Save to apply.')
       ).toBeVisible()
+      // Name, mode, price summary and Delete stay inside the list card at
+      // desktop and phone widths; the table never needs a hidden h-scroll.
+      const list = page.locator('.pricing-models')
+      const row = list.locator('tbody tr').filter({ hasText: 'test-model' })
+      await expect(row.getByText('Expression', { exact: true })).toBeVisible()
+      for (const part of [
+        row.locator('.pricing-summary'),
+        row.getByRole('button', { name: 'Delete', exact: true }),
+      ])
+        await expectInside(part, list)
       await page
         .getByRole('button', { name: 'test-model', exact: true })
         .click()
@@ -358,7 +381,9 @@ for (const theme of ['light', 'dark'] as const)
       await page.keyboard.press('Escape')
       await expect(fetch).toBeFocused()
       expect(writes).toHaveLength(1)
-      await page.getByRole('tab', { name: 'Tool prices', exact: true }).click()
+      await page
+        .getByRole('radio', { name: 'Tool prices', exact: true })
+        .click()
       await page
         .getByRole('button', { name: 'Add price dimension', exact: true })
         .click()

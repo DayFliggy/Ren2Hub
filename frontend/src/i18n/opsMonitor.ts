@@ -214,27 +214,6 @@ export const opsMonitorMessages = {
         inactive: '未激活',
       },
     },
-    billing: {
-      title: '计费健康',
-      allClear: '没有逾期的计费恢复',
-      recovery: '恢复积压',
-      databaseScope: '数据库当前状态',
-      pending: '逾期待恢复',
-      oldestUpdated: '最早记录更新时间',
-      recoveryHint: '仅统计超过恢复宽限期且尚未完成的记录。',
-      operational: '运行计数',
-      settlements: '结算依据',
-      bases: {
-        confirmed: '已确认用量',
-        estimated: '估算用量',
-        frozen_estimate: '冻结估算',
-      },
-      counters: {
-        calculation_total: '计费计算',
-        calculation_failures_total: '计算失败',
-        missing_price_total: '缺少价格',
-      },
-    },
     hud: {
       healthScore: '健康指数',
       livePulse: '实时遥测',
@@ -459,28 +438,6 @@ export const opsMonitorMessages = {
         idle: 'Never run',
         running: 'Running',
         inactive: 'Inactive',
-      },
-    },
-    billing: {
-      title: 'Billing health',
-      allClear: 'No overdue billing recovery',
-      recovery: 'Recovery backlog',
-      databaseScope: 'Current database state',
-      pending: 'Overdue recoveries',
-      oldestUpdated: 'Oldest record updated',
-      recoveryHint:
-        'Only unfinished records past the recovery grace period are counted.',
-      operational: 'Runtime counters',
-      settlements: 'Settlement basis',
-      bases: {
-        confirmed: 'Confirmed usage',
-        estimated: 'Estimated usage',
-        frozen_estimate: 'Frozen estimate',
-      },
-      counters: {
-        calculation_total: 'Calculations',
-        calculation_failures_total: 'Calculation failures',
-        missing_price_total: 'Missing prices',
       },
     },
     hud: {

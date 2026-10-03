@@ -68,6 +68,14 @@ function setup(modelId: number | null = null) {
 }
 const closeButton = (wrapper: ReturnType<typeof setup>) =>
   wrapper.findAll('button').find((button) => button.text() === 'Close')!
+/** Clicks a field caption or hint, never one of the controls it describes. */
+async function clickText(wrapper: ReturnType<typeof setup>, text: string) {
+  const target = wrapper
+    .findAll('legend, label, span, p, small')
+    .find((element) => element.text() === text)
+  if (!target) throw new Error(`Missing text: ${text}`)
+  await target.trigger('click')
+}
 
 describe('model metadata drawer', () => {
   it('preserves explicit capability values when saving unrelated metadata', async () => {
@@ -140,6 +148,30 @@ describe('model metadata drawer', () => {
     await flushPromises()
     expect(mocks.save).toHaveBeenCalledWith(
       expect.objectContaining({ id: 42, icon: '', tags: 'chat,fast' })
+    )
+    wrapper.unmount()
+  })
+  it('keeps tags and the custom icon when their caption or hint is clicked', async () => {
+    const wrapper = setup(42)
+    await flushPromises()
+    const iconHint =
+      'Select a suggested icon or keep an existing advanced icon key.'
+    for (const text of [iconHint, 'Icon']) await clickText(wrapper, text)
+    expect(wrapper.get('input[aria-label="Icon"]').element).toHaveProperty(
+      'value',
+      'Custom'
+    )
+    for (const text of ['Tags', 'Press Enter or comma to add tags'])
+      await clickText(wrapper, text)
+    expect(
+      wrapper
+        .findAll('button[aria-label^="Delete "]')
+        .map((button) => button.attributes('aria-label'))
+    ).toEqual(['Delete chat', 'Delete fast'])
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({ icon: 'Custom', tags: 'chat,fast' })
     )
     wrapper.unmount()
   })

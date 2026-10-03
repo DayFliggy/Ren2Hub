@@ -204,7 +204,7 @@ const timeLabel = (value: number | null) => (value ? formatTime(value) : '—')
               v-model="form.description"
               name="vendor-description"
               rows="4"
-              class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--border-strong)] focus-ring"
+              class="w-full resize-y rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus-ring"
             />
           </FormField>
           <FormField :label="t('icon')">

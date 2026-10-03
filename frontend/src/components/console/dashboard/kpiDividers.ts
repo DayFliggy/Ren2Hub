@@ -4,12 +4,13 @@
  * grid reflows across breakpoints, so each axis is stated explicitly at every
  * breakpoint: a cell that starts a row must drop its left border, and the
  * first row must drop its top border. The colour is always present so no
- * toggle can fall back to Tailwind's default grey.
+ * toggle can fall back to Tailwind's default grey. Dashed ledger rules belong
+ * to the day theme only; night keeps the preflight solid hairline.
  */
 export function kpiDividerClasses(i: number): string[] {
   return [
     'border-[var(--border-subtle)]',
-    'border-dashed',
+    '[html.light_&]:border-dashed',
     i % 2 === 0 ? 'border-l-0' : 'border-l',
     i < 2 ? 'border-t-0' : 'border-t',
     i % 3 === 0 ? 'sm:border-l-0' : 'sm:border-l',

@@ -7,9 +7,13 @@ import MiniRing from '@/components/console/dashboard/MiniRing.vue'
 import type { RouteChannelRow } from '@/composables/useAutoRoute'
 import { scoreBand, WEIGHTS } from '@/utils/routeScore'
 
-const props = defineProps<{
-  entry: RouteChannelRow
-}>()
+const props = withDefaults(
+  defineProps<{
+    entry: RouteChannelRow
+    compact?: boolean
+  }>(),
+  { compact: false }
+)
 
 const { t } = useI18n()
 function latencyLabel(ms: number): string {
@@ -64,8 +68,10 @@ const segments = computed(() => {
 
 <template>
   <div
-    class="flex items-center gap-2 py-3 first:pt-0 sm:gap-3"
+    class="flex items-center gap-2 first:pt-0 sm:gap-3"
+    :class="compact ? 'py-2' : 'py-3'"
     data-route-channel
+    :data-route-channel-compact="compact ? '' : undefined"
   >
     <span
       v-if="entry.rank === 1"
@@ -90,7 +96,7 @@ const segments = computed(() => {
       <span class="sr-only">{{ inactiveLabel }}</span>
     </span>
 
-    <div class="min-w-0 flex-1 space-y-2">
+    <div class="min-w-0 flex-1" :class="{ 'space-y-2': !compact }">
       <div class="flex min-w-0 items-center justify-between gap-2">
         <div class="min-w-0">
           <p
@@ -125,38 +131,41 @@ const segments = computed(() => {
         </span>
       </div>
 
-      <div
-        v-if="isRanked"
-        class="pencil-progress flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-[var(--surface-muted)]"
-        role="img"
-        :aria-label="`${t('dashboard.autoRoute.breakdownLabel')} ${entry.score}`"
-      >
+      <template v-if="!compact">
         <div
-          v-for="segment in segments"
-          :key="segment.key"
-          class="h-full shrink-0"
-          :style="{
-            width: `${segment.points}%`,
-            background: 'var(--accent)',
-            opacity: segment.opacity,
-          }"
-          :title="segment.title"
-        />
-      </div>
-      <p v-else class="text-[10px] font-medium text-[var(--text-tertiary)]">
-        {{ inactiveLabel }} · {{ t('dashboard.autoRoute.excluded') }}
-      </p>
+          v-if="isRanked"
+          class="pencil-progress flex h-1.5 w-full gap-px overflow-hidden rounded-full bg-[var(--surface-muted)]"
+          role="img"
+          :aria-label="`${t('dashboard.autoRoute.breakdownLabel')} ${entry.score}`"
+        >
+          <div
+            v-for="segment in segments"
+            :key="segment.key"
+            class="h-full shrink-0"
+            :style="{
+              width: `${segment.points}%`,
+              background: 'var(--accent)',
+              opacity: segment.opacity,
+            }"
+            :title="segment.title"
+          />
+        </div>
+        <p v-else class="text-[10px] font-medium text-[var(--text-tertiary)]">
+          {{ inactiveLabel }} · {{ t('dashboard.autoRoute.excluded') }}
+        </p>
+      </template>
     </div>
 
     <MiniRing
       v-if="entry.score !== null"
       :percent="entry.score"
       :color="scoreColor"
-      :size="40"
+      :size="compact ? 32 : 40"
       :aria-label="`${t('dashboard.autoRoute.score')} ${entry.score}`"
     >
       <span
-        class="text-xs font-bold tabular-nums"
+        class="font-bold tabular-nums"
+        :class="compact ? 'text-[11px]' : 'text-xs'"
         :style="{ color: scoreColor }"
       >
         {{ entry.score }}

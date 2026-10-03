@@ -70,6 +70,18 @@ func TestReadOpsChannelHealthGroupsBreakersWithoutExposingKeyScopes(t *testing.T
 	assert.NotContains(t, string(encoded), "scope-", "credential key scopes stay on the server")
 }
 
+func TestReadOpsChannelHealthCountsRetiredRowsAsManuallyDisabled(t *testing.T) {
+	db := seedRetiredLifecycleChannels(t, "ops-health-retired.db")
+	require.NoError(t, db.AutoMigrate(&ChannelHealth{}))
+	health, err := ReadOpsChannelHealth(0)
+	require.NoError(t, err)
+	assert.Equal(t, OpsChannelCounts{Total: 4, Enabled: 1, ManuallyDisabled: 2, AutoDisabled: 1}, health.Channels,
+		"the retired row stores status 1 but is counted where the channel list shows it")
+	var listedEnabled int64
+	require.NoError(t, WhereChannelServable(db.Model(&Channel{})).Count(&listedEnabled).Error)
+	assert.Equal(t, listedEnabled, health.Channels.Enabled)
+}
+
 func TestSummarizeSystemTaskActivityKeepsTheLatestOutcomePerType(t *testing.T) {
 	db := useOpsTestDB(t, "task-activity.db")
 	require.NoError(t, db.AutoMigrate(&SystemTask{}))

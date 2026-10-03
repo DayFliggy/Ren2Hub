@@ -31,7 +31,78 @@ func TestRetiredChannelRejectsCachedCapabilitiesAndTaskBindings(t *testing.T) {
 		SnapshotVersion: 1, ChannelType: constant.ChannelTypeCodex, ChannelStatus: common.ChannelStatusEnabled,
 		AbilityEnabled: true, Entitled: true, PriceEligibilityKnown: true, PriceEligible: true,
 	})
-	assert.Equal(t, RouteFilterUnsupported, result.Reason)
+	assert.Equal(t, RouteFilterChannelRetired, result.Reason)
+}
+
+// seedRetiredRouteChannel stores a historical retired row. Hooks are skipped
+// because new rows of a retired type are rejected.
+func seedRetiredRouteChannel(t *testing.T, db *gorm.DB, channelID int) {
+	t.Helper()
+	require.NoError(t, db.Session(&gorm.Session{SkipHooks: true}).Create(&model.Channel{
+		Id: channelID, Type: constant.ChannelTypeCodex, Key: "retired-route-key", Name: "retired-route",
+		Status: common.ChannelStatusEnabled, Models: "gpt-test", Group: "default",
+	}).Error)
+	require.NoError(t, db.Create(&model.Ability{Group: "default", Model: "gpt-test", ChannelId: channelID, Enabled: true}).Error)
+}
+
+func TestRetiredChannelCannotBeSavedInManualRouteGroup(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, _ := seedRouteProfileFixture(t, db)
+	seedRetiredRouteChannel(t, db, 57)
+	_, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{Name: "retired", Enabled: true,
+			Entries: []RouteEntryInput{{ChannelID: 57, Source: model.RouteSourcePlatform, Enabled: true}}}},
+	})
+	require.ErrorIs(t, err, ErrRouteProfileValidation)
+	assert.ErrorIs(t, err, constant.ErrRetiredChannelType)
+	assert.Contains(t, err.Error(), "retired channel type")
+	assert.NotContains(t, err.Error(), "disabled")
+	assert.ErrorIs(t, ValidatePlatformChannelEntitlement(userID, 57), constant.ErrRetiredChannelType)
+}
+
+func TestRetiredChannelRoutePreviewReportsRetiredReason(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, tokenID, activeChannelID := seedRouteProfileFixture(t, db)
+	retiredChannelID := seedRoutePreviewChannel(t, db, activeChannelID+1)
+	for _, channelID := range []int{activeChannelID, retiredChannelID} {
+		publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	}
+	created, err := CreateUserRouteProfile(RouteProfileInput{
+		UserID: userID, TokenID: tokenID, Mode: model.RouteModeManual,
+		Groups: []RouteGroupInput{{Name: "saved before retirement", Enabled: true, Entries: []RouteEntryInput{
+			{ChannelID: activeChannelID, Source: model.RouteSourcePlatform, Enabled: true, Position: 0},
+			{ChannelID: retiredChannelID, Source: model.RouteSourcePlatform, Enabled: true, Position: 1},
+		}}},
+	})
+	require.NoError(t, err)
+	// The row keeps its historical status and its pre-retirement snapshot.
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", retiredChannelID).Update("type", constant.ChannelTypeCodex).Error)
+
+	for _, phase := range []string{"stale index", "rebuilt index"} {
+		if phase == "rebuilt index" {
+			require.NoError(t, RebuildRouteCapabilityIndex(context.Background()))
+		}
+		preview, err := PreviewUserRouteProfile(context.Background(), userID, created.Profile.ID, RouteProfilePreviewInput{
+			Model: "gpt-test", Path: "/v1/chat/completions",
+		})
+		require.NoError(t, err, phase)
+		assert.Equal(t, []int{activeChannelID}, preview.CandidateChannelIDs, phase)
+		encoded, err := common.Marshal(findRoutePreviewEntry(t, preview, retiredChannelID))
+		require.NoError(t, err)
+		assert.Contains(t, string(encoded), `"filter_reason":"channel_type_retired"`, phase)
+		assert.Equal(t, 1, preview.FilterReasonCounts["channel_type_retired"], phase)
+	}
+}
+
+func TestRetiredChannelIsExcludedFromRouteModelDiscovery(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	userID, _, _ := seedRouteProfileFixture(t, db)
+	seedRetiredRouteChannel(t, db, 57)
+	require.NoError(t, db.Create(&model.Ability{Group: "default", Model: "retired-only-model", ChannelId: 57, Enabled: true}).Error)
+	models, err := AvailableRouteModels(context.Background(), userID, 0)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"gpt-test"}, models, "a model served only by a retired row is not discoverable")
 }
 
 func TestActiveChannelRouteAdmissionAfterSubscriptionRetirement(t *testing.T) {
