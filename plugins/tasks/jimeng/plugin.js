@@ -238,9 +238,9 @@ function submitReqKey(ctx) {
 function outboundSeconds(req, reqKey) {
   if (!isV3ReqKey(reqKey)) return 5;
   const metadata = (req && req.metadata) || {};
-  if (Number(metadata.frames) === 241) return 10;
-  if (Number(metadata.frames) === 121) return 5;
-  const seconds = Number(req && req.duration);
+  if (metadata.frames !== undefined && Number(utils.decimal.bounded(metadata.frames, 1, 86400, true)) === 241) return 10;
+  if (metadata.frames !== undefined && Number(utils.decimal.bounded(metadata.frames, 1, 86400, true)) === 121) return 5;
+  const seconds = !req || req.duration === undefined ? 5 : Number(utils.decimal.bounded(req.duration, 1, 3600, true));
   return seconds === 10 ? 10 : 5;
 }
 
@@ -290,7 +290,7 @@ function queryReqKey(ctx) {
 }
 
 function validateSecondsForReqKey(reqKey, seconds) {
-  const n = Number(seconds);
+  const n = Number(utils.decimal.bounded(seconds, 0, 3600, true));
   if (isV3ReqKey(reqKey)) {
     if (n !== 5 && n !== 10) throw new Error("seconds must be 5 or 10");
     return n;
@@ -530,8 +530,8 @@ protocols.openai_video = {
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
         req.metadata = parsed;
       }
-      if (req.seconds !== undefined) req.seconds = Number(req.seconds);
-      else if (req.duration !== undefined) req.seconds = Number(req.duration);
+      if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
+      else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
     }
     if (hasInputReferenceFile) {
       req.images = [{ __fileRef: "request_file:input_reference", encoding: "base64", maxBytes: 4928307 }];

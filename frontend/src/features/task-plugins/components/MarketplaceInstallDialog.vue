@@ -78,6 +78,7 @@ const fetched = ref<{
   icon: string | null
 } | null>(null)
 const preview = ref<PluginMetaPreview | undefined>()
+const previewMeta = ref<Record<string, unknown> | null>(null)
 const installedSource = ref<string | null>(null)
 const installedError = ref('')
 const installing = ref(false)
@@ -94,6 +95,7 @@ async function loadSource() {
   controller = request
   fetched.value = null
   preview.value = undefined
+  previewMeta.value = null
   fetchError.value = ''
   const version = entry.value
   if (!version) return
@@ -125,9 +127,9 @@ async function loadSource() {
     if (request.signal.aborted) return
     fetched.value = { text, digest, icon }
     try {
-      preview.value = previewFromServer(
-        await previewTaskPlugin(text, request.signal)
-      )
+      const serverPreview = await previewTaskPlugin(text, request.signal)
+      previewMeta.value = serverPreview.meta
+      preview.value = previewFromServer(serverPreview)
     } catch {
       // A source the preview cannot parse shows as unreadable; the gateway
       // still validates it on install.
@@ -172,12 +174,23 @@ const digestMismatch = computed(() =>
     fetched.value.digest.toLowerCase() !== entry.value.sha256.toLowerCase()
   )
 )
+const validationError = computed(() => {
+  const version = entry.value
+  if (!version) return ''
+  if ((version.minApiVersion ?? 1) > 1) return t('taskPlugins.unsupported')
+  const meta = previewMeta.value
+  if (!meta) return t('taskPlugins.identityMismatch')
+  if (meta.key !== plugin.key || meta.version !== selectedVersion.value)
+    return t('taskPlugins.identityMismatch')
+  return ''
+})
 const canInstall = computed(
   () =>
     Boolean(entry.value && fetched.value) &&
     !loading.value &&
     !fetchError.value &&
-    !digestMismatch.value
+    !digestMismatch.value &&
+    !validationError.value
 )
 const replaceReason = computed(() =>
   replaceConfirmationReason(plugin, state, selectedVersion.value)
@@ -218,7 +231,8 @@ async function install() {
   const version = entry.value
   confirmOpen.value = false
   // The digest gate is re-checked here so no caller can bypass it.
-  if (!source || !version || digestMismatch.value) return
+  if (!source || !version || digestMismatch.value || validationError.value)
+    return
   installing.value = true
   installError.value = ''
   try {
@@ -228,15 +242,23 @@ async function install() {
       remark: `${props.target.source.name} v${selectedVersion.value}`,
       icon: source.icon ?? undefined,
     })
-    if (detail.plugin && !detail.plugin.active)
-      await activateTaskPlugin(detail.meta.key, detail.meta.version)
+    // Refresh the installed list immediately after the upload. Activation is
+    // a separate operation and may fail even though the version was saved.
+    emit('installed')
+    if (detail.plugin && !detail.plugin.active) {
+      try {
+        await activateTaskPlugin(detail.meta.key, detail.meta.version)
+      } catch (error) {
+        installError.value = message(error)
+        return
+      }
+    }
     toast.success(
       t('taskPlugins.installedToast', {
         name: detail.meta.name,
         version: detail.meta.version,
       })
     )
-    emit('installed')
   } catch (error) {
     // Verbatim: preflight rejections name the conflicting plugin.
     installError.value = message(error)
@@ -317,6 +339,13 @@ async function install() {
             class="text-sm text-[var(--status-danger-text)]"
           >
             {{ fetchError }}
+          </p>
+          <p
+            v-if="validationError"
+            role="alert"
+            class="text-sm text-[var(--status-danger-text)]"
+          >
+            {{ validationError }}
           </p>
         </template>
         <MarketplaceCapabilities

@@ -820,7 +820,7 @@ function convert(ctx) {
   const rawDuration = nativeParameters.duration ?? (req.auto_duration === true ? -1 : (req.duration ?? req.seconds));
   if (rawDuration != null && ((typeof rawDuration !== "number" && typeof rawDuration !== "string") || String(rawDuration).trim() === ""))
     throw new Error("duration must be a number");
-  const duration = rawDuration == null ? 5 : Number(rawDuration);
+  const duration = rawDuration == null ? 5 : Number(utils.decimal.bounded(rawDuration, -1, 3600, profile.kind !== "speech"));
   if (duration === -1 && profile.kind !== "all") throw new Error("duration -1 (smart duration) is only supported by wan3.0 models");
   if (profile.kind === "speech") {
     if (rawDuration != null && (!Number.isFinite(duration) || duration <= 0 || duration >= 20))
@@ -1097,7 +1097,7 @@ export function extractUsage(ctx) {
     return ratios;
   }
   const resolution = body.parameters.size ? videoSize(body.parameters.size).resolution : body.parameters.resolution;
-  const facts = { seconds: seconds, resolution: resolution };
+  const facts = { seconds: utils.decimal.number(utils.decimal.bounded(seconds, 0, 3600, false)), resolution: resolution };
   if (WAN_AUDIO_VIDEO_MODELS.includes(modelKey(body.model))) facts.audio = body.parameters.audio !== false;
   return facts;
 }
@@ -1130,7 +1130,10 @@ export function extractUsageOnComplete(task, taskResult, body) {
     }
   } else {
     const seconds = usage.duration ?? usage.output_video_duration ?? output.duration ?? output.duration_seconds;
-    if (seconds != null) facts.seconds = seconds;
+    if (seconds !== undefined) {
+      const bounded = utils.decimal.bounded(seconds, 0, 3600, false);
+      facts.seconds = typeof seconds === "number" ? utils.decimal.number(bounded) : bounded;
+    }
   }
   const resolution = usage.SR ?? output.resolution;
   if (resolution != null) facts.resolution = normalizeResolution(resolution);
@@ -1495,9 +1498,9 @@ export const protocols = {
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
           req.metadata = parsed;
         }
-        if (req.seconds !== undefined) req.seconds = Number(req.seconds);
-        else if (req.duration !== undefined) req.seconds = Number(req.duration);
-        if (req.duration !== undefined) req.duration = Number(req.duration);
+        if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
+        else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+        if (req.duration !== undefined) req.duration = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
         if (req.seed !== undefined) req.seed = Number(req.seed);
         for (const key of ["prompt_extend", "watermark", "audio", "auto_duration"]) {
           if (req[key] === undefined) continue;

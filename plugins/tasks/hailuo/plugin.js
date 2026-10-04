@@ -160,9 +160,8 @@ function resolutionFor(size, model) {
 }
 
 function outboundDuration(req) {
-  const n = Number(req && req.duration);
-  if (Number.isFinite(n) && n > 0) return n;
-  return 6;
+  if (!req || req.duration === undefined) return 6;
+  return Number(utils.decimal.bounded(req.duration, 1, 3600, true));
 }
 
 function outboundResolution(req, model) {
@@ -207,7 +206,7 @@ function isH3(model) {
 function h3Duration(req) {
   const raw = req.duration;
   if (raw === undefined || raw === null || raw === "") return H3_DEFAULT_DURATION;
-  const seconds = Number(raw);
+  const seconds = Number(utils.decimal.bounded(raw, 0, 3600, false));
   if (!Number.isInteger(seconds) || seconds < H3_MIN_DURATION || seconds > H3_MAX_DURATION) {
     throw new Error(H3_MODEL + " duration must be an integer between " + H3_MIN_DURATION + " and " + H3_MAX_DURATION + " seconds");
   }
@@ -760,11 +759,11 @@ protocols.openai_video = {
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
         req.metadata = parsed;
       }
-      if (req.seconds !== undefined) req.seconds = Number(req.seconds);
-      else if (req.duration !== undefined) req.seconds = Number(req.duration);
+      if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
+      else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
     }
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
-    if (seconds !== undefined) req.duration = Number(seconds);
+    if (seconds !== undefined) req.duration = Number(utils.decimal.bounded(seconds, 0, 3600, true));
     if (hasInputReferenceFile) {
       req.metadata = Object.assign({}, req.metadata || {}, {
         first_frame_image: { __fileRef: "request_file:input_reference", encoding: "dataUrl", maxBytes: 20971520 },
@@ -777,7 +776,7 @@ protocols.openai_video = {
       }
     }
     const hasImage = hasHailuoImage(req, hasInputReferenceFile);
-    const duration = req.duration === undefined ? undefined : Number(req.duration);
+    const duration = req.duration === undefined ? undefined : Number(utils.decimal.bounded(req.duration, 0, 3600, true));
     const comboModel = ctx.upstreamModel || ctx.model;
     validateHailuoCombo(comboModel, duration, outboundResolution(req, comboModel), hasImage);
     return {

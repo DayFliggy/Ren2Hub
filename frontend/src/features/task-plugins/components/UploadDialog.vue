@@ -39,6 +39,7 @@ const remark = ref('')
 const icon = ref('')
 const iconFileName = ref('')
 const iconError = ref('')
+const iconInput = ref<HTMLInputElement | null>(null)
 const importUrl = ref('')
 const importError = ref('')
 // The hash of fetched URL text; dropped once the source is edited.
@@ -104,6 +105,10 @@ function clearIcon() {
   icon.value = ''
   iconFileName.value = ''
   iconError.value = ''
+}
+
+function chooseIcon() {
+  iconInput.value?.click()
 }
 
 async function upload() {
@@ -280,12 +285,26 @@ function close() {
             :plugin="{ key: 'upload', iconSrc: icon }"
             :size="32"
           />
+          <ConsoleButton
+            variant="secondary"
+            size="sm"
+            :aria-invalid="iconError ? true : undefined"
+            @click="chooseIcon"
+          >
+            <Upload :size="14" aria-hidden="true" />
+            {{
+              iconFileName
+                ? t('taskPlugins.chooseAnother')
+                : t('taskPlugins.chooseFile')
+            }}
+          </ConsoleButton>
           <input
             id="task-plugin-icon"
+            ref="iconInput"
             type="file"
             accept=".svg,.png,image/svg+xml,image/png"
-            class="min-w-0 max-w-full text-sm"
-            :aria-invalid="iconError ? true : undefined"
+            class="sr-only"
+            :aria-label="t('taskPlugins.pluginIcon')"
             @change="selectIcon"
           />
           <ConsoleButton

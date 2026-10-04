@@ -267,7 +267,7 @@ function seedanceUsageExamples(profile) {
   if (profile.videoInput) specs.push({ label: "720p · 5s (+4s 输入视频)", resolution: "720p", seconds: 9, video_input: "video" });
   if (profile.audio) specs.push({ label: "720p · 5s · 无声", resolution: "720p", seconds: 5, generate_audio: false });
   return specs.map((spec) => {
-    const facts = { tokens: Math.round(estimateTokens(spec.seconds, spec.resolution)), resolution: spec.resolution };
+    const facts = { tokens: utils.decimal.number(estimateTokens(spec.seconds, spec.resolution)), resolution: spec.resolution };
     if (profile.videoInput) facts.video_input = spec.video_input || "none";
     if (profile.audio) facts.generate_audio = spec.generate_audio !== false;
     return { label: spec.label, facts: facts };
@@ -440,7 +440,7 @@ function resolutionMaxPixels(resolution) {
 
 function estimateTokens(seconds, resolution) {
   const dims = resolutionMaxPixels(resolution);
-  return (seconds * dims[0] * dims[1] * 24) / 1024;
+  return utils.decimal.divide(utils.decimal.multiply(utils.decimal.multiply(utils.decimal.multiply(seconds, dims[0]), dims[1]), 24), 1024);
 }
 
 function videoInputRatio(model, resolution, content) {
@@ -866,16 +866,14 @@ export function extractUsage(ctx) {
     const ratio = videoInputRatio(ctx.upstreamModel || ctx.model, metadata.resolution, metadata.content);
     return ratio === 1 ? null : { video_input_ratio: ratio };
   }
-  let seconds = Number(req.seconds || req.duration || metadata.duration || 0);
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    const frames = Number(metadata.frames);
-    seconds = Number.isFinite(frames) && frames > 0 ? Math.floor(frames / 24) : 15;
-  }
-  if (seconds <= 0) seconds = 5;
-  seconds = Math.min(seconds, 3600);
+  const raw = req.seconds !== undefined ? req.seconds : req.duration !== undefined ? req.duration : metadata.duration;
+  let seconds;
+  if (raw !== undefined) seconds = utils.decimal.bounded(raw, 0, 3600, false);
+  else if (metadata.frames !== undefined) seconds = utils.decimal.divide(utils.decimal.bounded(metadata.frames, 1, 86400, true), 24);
+  else seconds = "15";
   const profile = videoProfile(ctx);
   const resolution = videoResolution(ctx);
-  const facts = { tokens: estimateTokens(seconds, resolution), resolution: resolution };
+  const facts = { tokens: utils.decimal.number(estimateTokens(seconds, resolution)), resolution: resolution };
   // Every model reports video_input, including those whose profile omits it:
   // expressions saved when all Seedance models declared the field then keep
   // matching their no-video tier.
@@ -965,9 +963,11 @@ export function extractUsageOnComplete(task, taskResult, body) {
   if (!body || body.status !== "succeeded") return {};
   const facts = {};
   const usage = body.usage || {};
-  let tokens = Number(usage.completion_tokens);
-  if (!Number.isFinite(tokens) || tokens <= 0) tokens = Number(usage.total_tokens);
-  if (Number.isFinite(tokens) && tokens > 0) facts.tokens = tokens;
+  const tokens = usage.completion_tokens !== undefined ? usage.completion_tokens : usage.total_tokens;
+  if (tokens !== undefined) {
+    const bounded = utils.decimal.bounded(tokens, 0, 2147483647, true);
+    facts.tokens = typeof tokens === "number" ? utils.decimal.number(bounded) : bounded;
+  }
   const content = body.content || {};
   const resolution = trimmed(content.resolution || body.resolution).toLowerCase();
   if (videoProfile(task).resolutions.includes(resolution)) facts.resolution = resolution;
@@ -1161,7 +1161,7 @@ protocols.openai_video = {
       if (!ctx.body.value || Array.isArray(ctx.body.value)) throw new Error("JSON object required");
       const req = ctx.body.value;
       const seconds = req.seconds === undefined ? req.duration : req.seconds;
-      if (seconds !== undefined && (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0 || Number(seconds) > 3600))
+      if (seconds !== undefined && (!Number.isFinite(Number(utils.decimal.bounded(seconds, 0, 3600, true))) || Number(utils.decimal.bounded(seconds, 0, 3600, true)) <= 0 || Number(utils.decimal.bounded(seconds, 0, 3600, true)) > 3600))
         throw new Error("seconds must be between 1 and 3600");
       return {
         kind: "submit",
@@ -1191,10 +1191,10 @@ protocols.openai_video = {
       req.metadata = parsed;
     }
     if ((ctx.body.files || []).length) throw new Error("Doubao requires image and video references to be URLs inside metadata.content");
-    if (req.seconds !== undefined) req.seconds = Number(req.seconds);
-    else if (req.duration !== undefined) req.seconds = Number(req.duration);
+    if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
+    else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
-    if (seconds !== undefined && (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0 || Number(seconds) > 3600))
+    if (seconds !== undefined && (!Number.isFinite(Number(utils.decimal.bounded(seconds, 0, 3600, true))) || Number(utils.decimal.bounded(seconds, 0, 3600, true)) <= 0 || Number(utils.decimal.bounded(seconds, 0, 3600, true)) > 3600))
       throw new Error("seconds must be between 1 and 3600");
     return {
       kind: "submit",

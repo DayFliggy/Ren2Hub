@@ -13,11 +13,11 @@ const tones = {
   neutral:
     'border-[var(--border-subtle)] bg-[var(--surface-muted)] text-[var(--text-primary)]',
   danger:
-    'border-[var(--status-danger)]/25 bg-[var(--status-danger-soft)] text-[var(--status-danger-text)]',
+    'border-[var(--status-danger)] bg-[var(--status-danger-soft)] text-[var(--status-danger-text)]',
   warning:
-    'border-[var(--status-warning)]/25 bg-[var(--status-warning-soft)] text-[var(--status-warning-text)]',
+    'border-[var(--status-warning)] bg-[var(--status-warning-soft)] text-[var(--status-warning-text)]',
   success:
-    'border-[var(--status-success)]/25 bg-[var(--status-success-soft)] text-[var(--status-success-text)]',
+    'border-[var(--status-success)] bg-[var(--status-success-soft)] text-[var(--status-success-text)]',
 }
 </script>
 

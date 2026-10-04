@@ -270,9 +270,11 @@ function channelSummary(plugin: TaskPluginListItem) {
       </template>
       <template #cell-enabled="{ row }">
         <ConsoleToggle
-          :model-value="row.plugin.enabled"
+          :model-value="
+            row.plugin.enabled && row.plugin.runtime_status !== 'compile_failed'
+          "
           size="sm"
-          :disabled="busy"
+          :disabled="busy || row.plugin.runtime_status === 'compile_failed'"
           :label="
             t('taskPlugins.enablePluginAria', { key: row.plugin.meta.key })
           "
@@ -343,7 +345,9 @@ function channelSummary(plugin: TaskPluginListItem) {
       :title="t('taskPlugins.inUseTitle')"
       destructive
       :loading="busy"
-      :hide-confirm="blockedAction === 'delete'"
+      :hide-confirm="
+        blockedAction === 'delete' || blockedUsage?.in_flight_count === 0
+      "
       :confirm-text="t('taskPlugins.forceOperation')"
       @cancel="!busy && ((deleteTarget = null), closeBlocked())"
       @confirm="forceDisable"

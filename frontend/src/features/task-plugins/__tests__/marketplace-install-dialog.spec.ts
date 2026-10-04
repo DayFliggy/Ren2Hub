@@ -60,12 +60,20 @@ function target(
   }
 }
 
-async function open(sha256: string, installState: InstallState) {
+async function open(
+  sha256: string,
+  installState: InstallState,
+  previewMeta: Record<string, unknown> = {
+    key: 'fixture',
+    version: '2.0.0',
+    models: ['m1'],
+  }
+) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(
     async () => new Response(source)
   )
   vi.mocked(pluginApi.previewTaskPlugin).mockResolvedValue({
-    meta: { key: 'fixture', models: ['m1'] },
+    meta: previewMeta,
     unresolved: [],
     source_hash: digest,
   })
@@ -162,5 +170,16 @@ describe('marketplace install dialog', () => {
       .trigger('click')
     await flushPromises()
     expect(pluginApi.installMarketplacePlugin).toHaveBeenCalledOnce()
+  })
+
+  it('blocks a verified source when its metadata identity differs from the index', async () => {
+    await open(
+      digest,
+      { status: 'not_installed' },
+      { key: 'other-plugin', version: '2.0.0' }
+    )
+    expect(wrapper!.text()).toContain('does not match the marketplace index')
+    expect(button('Install and enable').attributes('disabled')).toBeDefined()
+    expect(pluginApi.installMarketplacePlugin).not.toHaveBeenCalled()
   })
 })

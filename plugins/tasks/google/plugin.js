@@ -144,7 +144,7 @@ function converted(ctx) {
   const req = ctx.requestBody || {};
   const metadata = Object.assign({}, req.metadata || {});
   const params = Object.assign({}, metadata);
-  if (Number(req.duration) > 0) params.durationSeconds = Number(req.duration);
+  if (Number(utils.decimal.bounded(req.duration, 0, 3600, true)) > 0) params.durationSeconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
   if (!params.resolution && req.size) params.resolution = resolutionForSize(req.size);
   if (!params.aspectRatio && req.size) params.aspectRatio = aspectForSize(req.size);
   if (params.resolution) params.resolution = String(params.resolution).toLowerCase();
@@ -235,8 +235,7 @@ export function parseSubmitResponse(ctx, resp) {
 export function extractUsage(ctx) {
   const req = ctx.requestBody || {};
   const metadata = req.metadata || {};
-  let seconds = Number(req.duration);
-  if (!Number.isFinite(seconds) || seconds <= 0) seconds = 8;
+  const seconds = utils.decimal.bounded(req.duration === undefined ? 8 : req.duration, 0, 3600, false);
   const resolution = String(metadata.resolution || resolutionForSize(req.size) || "720p").toLowerCase();
   return { seconds: seconds, resolution: resolution };
 }
@@ -401,12 +400,12 @@ protocols.openai_video = {
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
         req.metadata = parsed;
       }
-      if (req.seconds !== undefined) req.seconds = Number(req.seconds);
-      else if (req.duration !== undefined) req.seconds = Number(req.duration);
+      if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
+      else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
     }
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
     if (seconds !== undefined) {
-      const n = Number(seconds);
+      const n = Number(utils.decimal.bounded(seconds, 0, 3600, true));
       if (n !== 4 && n !== 6 && n !== 8) throw new Error("seconds must be one of 4, 6, or 8");
       req.duration = n;
     }

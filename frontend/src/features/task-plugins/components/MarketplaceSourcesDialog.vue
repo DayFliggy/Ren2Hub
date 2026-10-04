@@ -28,8 +28,16 @@ const draft = ref(
   props.sources.map((source) => ({ ...source, rowId: ++nextRowId }))
 )
 const saving = ref(false)
+function isHttpsUrl(value: string) {
+  try {
+    const url = new URL(value.trim())
+    return url.protocol === 'https:' && !url.username && !url.password
+  } catch {
+    return false
+  }
+}
 const invalidRow = computed(() =>
-  draft.value.some((row) => !row.name.trim() || !row.index_url.trim())
+  draft.value.some((row) => !row.name.trim() || !isHttpsUrl(row.index_url))
 )
 
 async function save() {
@@ -63,6 +71,13 @@ async function save() {
     <div class="space-y-3">
       <p v-if="!draft.length" class="text-sm text-[var(--text-tertiary)]">
         {{ t('taskPlugins.noSources') }}
+      </p>
+      <p
+        v-if="invalidRow"
+        role="alert"
+        class="text-sm text-[var(--status-danger-text)]"
+      >
+        {{ t('taskPlugins.httpsSourceRequired') }}
       </p>
       <div
         v-for="(row, index) in draft"

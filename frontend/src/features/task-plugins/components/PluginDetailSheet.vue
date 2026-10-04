@@ -3,7 +3,7 @@
 // overview, billing parameters, source, version history, source diff, sandbox.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RotateCcw } from 'lucide-vue-next'
+import { RotateCcw, X } from 'lucide-vue-next'
 
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
@@ -145,6 +145,17 @@ const compareOptions = computed(() =>
     presentation="drawer"
     @close="emit('close')"
   >
+    <div class="mb-2 flex justify-end">
+      <ConsoleButton
+        variant="ghost"
+        size="sm"
+        :aria-label="t('common.close')"
+        @click="emit('close')"
+      >
+        <X :size="16" aria-hidden="true" />
+        {{ t('common.close') }}
+      </ConsoleButton>
+    </div>
     <div class="mb-4 space-y-2">
       <div class="flex min-w-0 items-center gap-2">
         <PluginIcon

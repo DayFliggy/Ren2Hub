@@ -42,6 +42,7 @@ const index = ref<MarketplaceIndex | null>(null)
 const indexLoading = ref(false)
 const indexError = ref('')
 const sourcesOpen = ref(false)
+const sourcesLoading = ref(false)
 const installTarget = ref<MarketplaceInstallTarget | null>(null)
 let controller: AbortController | undefined
 
@@ -62,12 +63,22 @@ const missingHashes = computed(() =>
 
 async function loadSources() {
   sourcesError.value = ''
+  sourcesLoading.value = true
   try {
     sources.value = await listMarketplaceSources()
   } catch (error) {
-    sources.value = []
+    // Keep the source list unavailable so the management dialog cannot turn
+    // a transient read failure into an empty replacement on save.
+    sources.value = null
     sourcesError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    sourcesLoading.value = false
   }
+}
+
+async function openSources() {
+  await loadSources()
+  if (!sourcesError.value && sources.value !== null) sourcesOpen.value = true
 }
 
 async function loadIndex() {
@@ -130,7 +141,8 @@ function onInstalled() {
         <ConsoleButton
           variant="secondary"
           size="sm"
-          @click="sourcesOpen = true"
+          :disabled="sourcesLoading"
+          @click="openSources"
         >
           <Settings2 :size="14" aria-hidden="true" />
           {{ t('taskPlugins.manageSources') }}
@@ -153,7 +165,7 @@ function onInstalled() {
         :title="t('taskPlugins.noSources')"
         :hint="t('taskPlugins.addIndexHint')"
       />
-      <ConsoleButton @click="sourcesOpen = true">
+      <ConsoleButton :disabled="sourcesLoading" @click="openSources">
         {{ t('taskPlugins.manageSources') }}
       </ConsoleButton>
     </div>

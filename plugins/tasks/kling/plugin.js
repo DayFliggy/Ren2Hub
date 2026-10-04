@@ -150,25 +150,22 @@ function perSecondRate(model, mode) {
 }
 
 function estimateUnits(model, mode, durationSeconds) {
-  return perSecondRate(model, mode) * durationSeconds;
+  return utils.decimal.multiply(perSecondRate(model, mode), durationSeconds);
 }
 
 // Official current pages list 3–15s for new models; old-model duration "5"|"10"
 // is unverifiable (research 2026-08-27). Keep permissive positive integers up to
 // the host task duration bound.
 function validateKlingDuration(value) {
-  const n = Number(value);
+  const n = Number(utils.decimal.bounded(value, 1, 3600, true));
   if (!Number.isInteger(n) || n <= 0 || n > 3600) throw new Error("seconds must be a positive integer at most 3600");
   return n;
 }
 
 function outboundDuration(req) {
-  const n = Number(req && req.duration);
-  if (Number.isFinite(n) && n > 0) return n;
   const metadata = (req && req.metadata) || {};
-  const fromMeta = Number(metadata.duration);
-  if (Number.isFinite(fromMeta) && fromMeta > 0) return fromMeta;
-  return 5;
+  const raw = req && req.duration !== undefined ? req.duration : metadata.duration;
+  return raw === undefined ? 5 : Number(utils.decimal.bounded(raw, 1, 3600, true));
 }
 
 function outboundMode(req, model) {
@@ -422,8 +419,8 @@ export const protocols = {
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
           req.metadata = parsed;
         }
-        if (req.seconds !== undefined) req.seconds = Number(req.seconds);
-        else if (req.duration !== undefined) req.seconds = Number(req.duration);
+        if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
+        else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
       }
       const seconds = req.seconds === undefined ? req.duration : req.seconds;
       if (seconds !== undefined) req.duration = validateKlingDuration(seconds);

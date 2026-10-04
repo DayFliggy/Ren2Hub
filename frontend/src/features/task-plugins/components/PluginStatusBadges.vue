@@ -70,4 +70,10 @@ const runtime = computed(() => {
     :title="plugin.runtime_error || undefined"
     >{{ runtime.label }}</StatusChip
   >
+  <p
+    v-if="part === 'runtime' && plugin.runtime_error"
+    class="mt-1 max-w-full break-words text-xs text-[var(--status-danger-text)]"
+  >
+    {{ plugin.runtime_error }}
+  </p>
 </template>

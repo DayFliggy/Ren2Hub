@@ -102,9 +102,11 @@ const label = 'select-none text-[11px] font-medium text-[var(--text-tertiary)]'
     >
       <span :class="label">{{ t('taskPlugins.enabled') }}</span>
       <ConsoleToggle
-        :model-value="plugin.enabled"
+        :model-value="
+          plugin.enabled && plugin.runtime_status !== 'compile_failed'
+        "
         size="sm"
-        :disabled="busy"
+        :disabled="busy || plugin.runtime_status === 'compile_failed'"
         :label="t('taskPlugins.enablePluginAria', { key: plugin.meta.key })"
         @update:model-value="emit('toggle', $event)"
       />

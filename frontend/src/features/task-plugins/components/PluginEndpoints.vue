@@ -105,9 +105,11 @@ const chip =
         >
           <span :class="method">{{ endpoint.method }}</span>
           <div class="min-w-0 space-y-1.5 pt-1">
-            <span class="block break-all font-mono text-xs">{{
-              endpoint.path
-            }}</span>
+            <span
+              class="block max-w-full overflow-x-auto whitespace-nowrap font-mono text-xs"
+              :title="endpoint.path"
+              >{{ endpoint.path }}</span
+            >
             <div class="flex flex-wrap items-center gap-1.5">
               <span class="text-xs text-[var(--text-tertiary)]">{{
                 endpoint.method === 'POST'
@@ -145,9 +147,11 @@ const chip =
         >
           <span :class="method">{{ route.method }}</span>
           <div class="min-w-0 space-y-1.5 pt-1">
-            <span class="block break-all font-mono text-xs">{{
-              route.path
-            }}</span>
+            <span
+              class="block max-w-full overflow-x-auto whitespace-nowrap font-mono text-xs"
+              :title="route.path"
+              >{{ route.path }}</span
+            >
             <div class="flex flex-wrap items-center gap-1.5">
               <span class="font-mono text-[11px] text-[var(--text-tertiary)]">{{
                 route.type

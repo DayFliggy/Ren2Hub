@@ -292,6 +292,29 @@ func decimalHelpers(runtime *moejs.Runtime) map[string]any {
 			}
 			return moejs.String(value.String()), nil
 		}),
+		// number converts an exact decimal back to a JavaScript number only
+		// when that round trip preserves the decimal text. Callers use this for
+		// legacy provider facts whose wire contract expects ordinary numbers;
+		// long or inexact decimals remain text and never get rounded.
+		"number": runtime.Function("number", 1, func(r *moejs.Realm, _ moejs.Value, args []moejs.Value) (moejs.Value, error) {
+			d, err := decimalArg(r, moejs.Arg(args, 0))
+			if err != nil {
+				return moejs.Undefined(), err
+			}
+			n, err := strconv.ParseFloat(d.String(), 64)
+			if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+				return moejs.String(d.String()), nil
+			}
+			exact, err := exactNumber(n)
+			if err != nil {
+				return moejs.String(d.String()), nil
+			}
+			candidate, err := pluginDecimal(exact)
+			if err != nil || !candidate.Equal(d) {
+				return moejs.String(d.String()), nil
+			}
+			return moejs.Number(n), nil
+		}),
 		"add": binary("add", func(left, right decimal.Decimal) (decimal.Decimal, error) {
 			return left.Add(right), nil
 		}),
