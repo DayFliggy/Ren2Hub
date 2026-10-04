@@ -158,6 +158,11 @@ func SelectRequestChannel(c *gin.Context, modelName string, specificChannelID in
 	if preferred, ok := service.GetPreferredChannelByAffinity(c, modelName, ""); ok {
 		input.PreferredChannelID = preferred
 	}
+	if limit, enabled, limitErr := service.GatewayMaxChannelRatio(c.Request.Context()); limitErr != nil {
+		logger.LogWarn(c, fmt.Sprintf("gateway price ceiling unavailable: %v", limitErr))
+	} else {
+		input.MaxChannelRatio, input.MaxChannelRatioEnabled = limit, enabled
+	}
 	c.Set(service.RouteLiveSelectionRequiredContextKey, true)
 	selection, err := service.SelectLiveTokenRoute(input)
 	if err != nil {

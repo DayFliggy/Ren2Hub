@@ -50,14 +50,16 @@ func UpdateGatewayConfig(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "code": "VALIDATION_ERROR"})
 		return
 	}
-	for _, key := range []string{"total_queue_size", "retry_budget_enabled", "retry_budget_percent", "retry_budget_burst"} {
+	for _, key := range []string{"total_queue_size", "retry_budget_enabled", "retry_budget_percent", "retry_budget_burst", "max_channel_ratio"} {
 		if value, exists := fields[key]; exists && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "code": "VALIDATION_ERROR"})
 			return
 		}
 	}
 	// Only the new fields inherit on omission; the optimistic version is mandatory.
-	config = model.GatewayConfig{TotalQueueSize: config.TotalQueueSize, RetryBudgetEnabled: config.RetryBudgetEnabled, RetryBudgetPercent: config.RetryBudgetPercent, RetryBudgetBurst: config.RetryBudgetBurst}
+	// max_channel_ratio must be carried over explicitly, otherwise an unrelated
+	// configuration update would silently disable the price ceiling.
+	config = model.GatewayConfig{TotalQueueSize: config.TotalQueueSize, RetryBudgetEnabled: config.RetryBudgetEnabled, RetryBudgetPercent: config.RetryBudgetPercent, RetryBudgetBurst: config.RetryBudgetBurst, MaxChannelRatio: config.MaxChannelRatio}
 	encoded, encodeErr := common.Marshal(fields)
 	if encodeErr != nil {
 		writeGatewayAPIError(c, encodeErr)

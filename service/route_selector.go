@@ -11,7 +11,7 @@ var ErrRouteSelectionUnavailable = errors.New("no eligible route candidate")
 const (
 	MaxRouteCandidateChannels             = 64
 	RouteCandidateFilterHealthUnavailable = "health_unavailable"
-	AdmissionStateNotAttempted           = "not_attempted"
+	AdmissionStateNotAttempted            = "not_attempted"
 )
 
 // RouteSelectionCandidate is the transport-neutral candidate passed from
@@ -42,6 +42,11 @@ type RouteSelectionCandidate struct {
 	HealthEpoch       int64
 	CatalogVersion    string
 	LoadRatio         float64
+	ErrorBand         RouteRankBand
+	ErrorBandKnown    bool
+	TTFTBand          RouteRankBand
+	TTFTBandKnown     bool
+	HealthFactor      float64
 }
 
 type RouteSelectionInput struct {
@@ -141,13 +146,19 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 					QuotaKnown:        candidate.QuotaKnown,
 					Sticky:            candidate.Sticky, HealthUsable: candidate.HealthUsable,
 					LoadRatio: candidate.LoadRatio,
+					ErrorBand: candidate.ErrorBand, ErrorBandKnown: candidate.ErrorBandKnown,
+					TTFTBand: candidate.TTFTBand, TTFTBandKnown: candidate.TTFTBandKnown,
+					HealthFactor: candidate.HealthFactor,
 				})
 			}
 			scoredCandidates := OrderAutoRouteCandidates(scored, input.RequestID)
 			if len(scoredCandidates) > 0 {
 				result.Decision.ScoredPreferredChannelID = scoredCandidates[0].Candidate.ChannelID
 			}
-			result.Decision.ScoringMode = "live"
+			// "live" means the ordering consumed observed runtime health, load,
+			// and latency bands, not only a weighted permutation. Keep this label
+			// tied to what the comparator actually reads.
+			result.Decision.ScoringMode = "live_health"
 			result.Decision.DynamicScoreApplied = true
 			orderedCandidates = scoredCandidates
 			appendRouteDecisionCandidatesWithScores(&result.Decision, candidates, scoredCandidates)
@@ -175,8 +186,8 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 				ChannelID: candidate.ChannelID, Priority: candidate.Priority,
 				Position: candidate.Position, Weight: candidate.Weight,
 				SnapshotVersion: candidate.SnapshotVersion, CatalogVersion: candidate.CatalogVersion,
-				HealthEpoch: candidate.HealthEpoch,
-				AdmissionState:  AdmissionStateNotAttempted,
+				HealthEpoch:    candidate.HealthEpoch,
+				AdmissionState: AdmissionStateNotAttempted,
 			})
 		}
 	}

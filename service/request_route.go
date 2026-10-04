@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/reasoning"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -149,6 +150,20 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 			if currentExists {
 				capability = current
 			}
+			// The price factor compares the channel's configured ratio against a
+			// system ceiling. The model-level price is only frozen later at
+			// QualifyPublishedPrice, so the channel ratio is the only price
+			// signal that exists while candidates are being qualified.
+			priceEligible, priceKnown := true, false
+			if input.MaxChannelRatioEnabled {
+				priceKnown = true
+				ratio, ratioErr := channelRatio(channel)
+				if ratioErr != nil {
+					priceEligible = false
+				} else {
+					priceEligible = ratio.LessThanOrEqual(input.MaxChannelRatio)
+				}
+			}
 			filtered := filterRouteCapability(routeCapabilityFilterInput{
 				Capability: capability, SnapshotVersion: capability.SnapshotVersion,
 				ChannelStatus: channel.Status, ChannelType: channel.Type,
@@ -157,6 +172,7 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 				TokenLimitEnabled: input.TokenModelLimitEnabled, TokenLimit: input.TokenModelLimit,
 				RequestPath: input.RequestPath, EndpointType: endpointTypeForTaskRequest(input.RequestPath, input.ExpectedTaskPluginKey),
 				Entitled: entitled, RequireSnapshot: true, RequireEndpoint: true,
+				PriceEligible: priceEligible, PriceEligibilityKnown: priceKnown,
 				Advanced: indexed.Advanced,
 			})
 			if !currentExists {
@@ -254,4 +270,18 @@ func SelectLiveTokenRoute(input LiveRouteRequest) (LiveRouteSelection, error) {
 		selection.Retry = RouteLiveRetryPolicy{Mode: "auto", MaxSameResourceAttempts: DefaultSameChannelAttempts, MaxFailoverAttempts: DefaultFailoverAttempts}
 	}
 	return selection, err
+}
+
+// channelRatio reads the channel's configured price ratio through the same
+// validated accessor used by admission, so an invalid ratio fails the price
+// qualification instead of being compared as zero.
+func channelRatio(channel *model.Channel) (decimal.Decimal, error) {
+	if channel == nil {
+		return decimal.Zero, errors.New("channel is required")
+	}
+	_, ratio, err := channel.RoutingSettings()
+	if err != nil {
+		return decimal.Zero, err
+	}
+	return decimal.NewFromString(ratio)
 }

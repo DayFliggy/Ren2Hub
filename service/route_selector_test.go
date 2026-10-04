@@ -97,7 +97,7 @@ func TestSelectTokenRouteAutoUsesPriorityLayerAndBoundedTopK(t *testing.T) {
 	assert.ElementsMatch(t, []int{2, 3}, channelIDs(result.Candidates[:2]))
 	assert.Equal(t, 1, result.Candidates[2].ChannelID)
 	assert.Equal(t, result.Candidates[0].ChannelID, result.Decision.SelectedChannelID)
-	assert.Equal(t, "live", result.Decision.ScoringMode)
+	assert.Equal(t, "live_health", result.Decision.ScoringMode)
 	assert.True(t, result.Decision.DynamicScoreApplied)
 	for _, candidate := range result.Decision.Candidates {
 		if candidate.FilterReason == "" {
@@ -128,7 +128,7 @@ func TestSelectTokenRouteScoringRespectsObservedLoad(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []int{2, 1}, channelIDs(liveResult.Candidates))
 	assert.Equal(t, 2, liveResult.Decision.SelectedChannelID)
-	assert.Equal(t, "live", liveResult.Decision.ScoringMode)
+	assert.Equal(t, "live_health", liveResult.Decision.ScoringMode)
 	assert.True(t, liveResult.Decision.DynamicScoreApplied)
 }
 

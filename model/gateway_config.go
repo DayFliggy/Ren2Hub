@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/relaycapability"
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -43,22 +44,40 @@ type GatewayAdmissionOverride struct {
 }
 
 type GatewayConfig struct {
-	TotalQueueSize     int                                 `json:"total_queue_size"`
-	RetryBudgetEnabled bool                                `json:"retry_budget_enabled"`
-	RetryBudgetPercent int                                 `json:"retry_budget_percent"`
-	RetryBudgetBurst   int                                 `json:"retry_budget_burst"`
-	Version            int64                               `json:"version"`
-	UserConcurrency    int                                 `json:"user_concurrency"`
-	WaitMS             int                                 `json:"wait_ms"`
-	UserQueueSize      int                                 `json:"user_queue_size"`
-	ChannelQueueSize   int                                 `json:"channel_queue_size"`
-	Groups             map[string]GatewayAdmissionOverride `json:"groups"`
-	ChannelRates       map[int]GatewayProviderRateLimit    `json:"channel_rates"`
-	CredentialRates    map[string]GatewayProviderRateLimit `json:"credential_rates"`
+	TotalQueueSize     int   `json:"total_queue_size"`
+	RetryBudgetEnabled bool  `json:"retry_budget_enabled"`
+	RetryBudgetPercent int   `json:"retry_budget_percent"`
+	RetryBudgetBurst   int   `json:"retry_budget_burst"`
+	Version            int64 `json:"version"`
+	UserConcurrency    int   `json:"user_concurrency"`
+	WaitMS             int   `json:"wait_ms"`
+	UserQueueSize      int   `json:"user_queue_size"`
+	ChannelQueueSize   int   `json:"channel_queue_size"`
+	// MaxChannelRatio is the channel price ratio ceiling applied when
+	// automatic routing qualifies candidates. Empty means the price factor is
+	// disabled, so the default never drops an existing channel from routing.
+	MaxChannelRatio string                              `json:"max_channel_ratio"`
+	Groups          map[string]GatewayAdmissionOverride `json:"groups"`
+	ChannelRates    map[int]GatewayProviderRateLimit    `json:"channel_rates"`
+	CredentialRates map[string]GatewayProviderRateLimit `json:"credential_rates"`
 }
 
 func DefaultGatewayConfig() GatewayConfig {
-	return GatewayConfig{Version: 1, UserConcurrency: 10, WaitMS: 5000, UserQueueSize: 20, ChannelQueueSize: 20, TotalQueueSize: 1024, RetryBudgetEnabled: true, RetryBudgetPercent: 10, RetryBudgetBurst: 20, Groups: map[string]GatewayAdmissionOverride{}, ChannelRates: map[int]GatewayProviderRateLimit{}, CredentialRates: map[string]GatewayProviderRateLimit{}}
+	return GatewayConfig{Version: 1, UserConcurrency: 10, WaitMS: 5000, UserQueueSize: 20, ChannelQueueSize: 20, TotalQueueSize: 1024, RetryBudgetEnabled: true, RetryBudgetPercent: 10, RetryBudgetBurst: 20, MaxChannelRatio: "", Groups: map[string]GatewayAdmissionOverride{}, ChannelRates: map[int]GatewayProviderRateLimit{}, CredentialRates: map[string]GatewayProviderRateLimit{}}
+}
+
+// MaxRatioLimit returns the configured ceiling and whether the price factor is
+// enabled. An empty value disables the factor rather than defaulting to a
+// boundary that would silently exclude high-ratio channels.
+func (config GatewayConfig) MaxRatioLimit() (decimal.Decimal, bool, error) {
+	if strings.TrimSpace(config.MaxChannelRatio) == "" {
+		return decimal.Zero, false, nil
+	}
+	ratio, err := ParseRouteMaxRatio(config.MaxChannelRatio)
+	if err != nil {
+		return decimal.Zero, false, err
+	}
+	return ratio, true, nil
 }
 
 func (config GatewayConfig) Validate() error {
@@ -70,6 +89,9 @@ func (config GatewayConfig) Validate() error {
 	}
 	if len(config.Groups) > 10000 || len(config.ChannelRates) > 10000 || len(config.CredentialRates) > 10000 {
 		return errors.New("too many gateway configuration overrides")
+	}
+	if _, _, err := config.MaxRatioLimit(); err != nil {
+		return err
 	}
 	for name, override := range config.Groups {
 		if strings.TrimSpace(name) != name || name == "" || len(name) > 64 {
@@ -304,7 +326,7 @@ func migrateGatewayDefaults(db *gorm.DB) error {
 			return errors.New("gateway configuration must be an object")
 		}
 		changed := false
-		for key, value := range map[string]string{"total_queue_size": "1024", "retry_budget_enabled": "true", "retry_budget_percent": "10", "retry_budget_burst": "20"} {
+		for key, value := range map[string]string{"total_queue_size": "1024", "retry_budget_enabled": "true", "retry_budget_percent": "10", "retry_budget_burst": "20", "max_channel_ratio": "\"\""} {
 			if _, exists := fields[key]; !exists {
 				fields[key] = json.RawMessage(value)
 				changed = true

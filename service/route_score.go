@@ -26,6 +26,11 @@ type RouteScoreCandidate struct {
 	Sticky            bool
 	HealthUsable      bool
 	LoadRatio         float64
+	ErrorBand         RouteRankBand
+	ErrorBandKnown    bool
+	TTFTBand          RouteRankBand
+	TTFTBandKnown     bool
+	HealthFactor      float64
 }
 
 type RouteScoreBreakdown struct {
@@ -35,6 +40,9 @@ type RouteScoreBreakdown struct {
 	LoadBucket        int      `json:"load_bucket"`
 	Sticky            bool     `json:"sticky"`
 	SelectionRank     float64  `json:"selection_rank"`
+	ErrorBand         *int     `json:"error_band,omitempty"`
+	TTFTBand          *int     `json:"ttft_band,omitempty"`
+	HealthFactor      float64  `json:"health_factor"`
 	ErrorRate         *float64 `json:"error_rate,omitempty"`
 	LatencyMS         *float64 `json:"latency_ms,omitempty"`
 	TTFTMS            *float64 `json:"ttft_ms,omitempty"`
@@ -47,9 +55,11 @@ type ScoredRouteCandidate struct {
 	Breakdown RouteScoreBreakdown
 }
 
-// OrderAutoRouteCandidates keeps priority and ten-percent load buckets hard.
-// Weighted rendezvous gives each request a stable permutation without shared
-// random state; a zero configured weight still receives a minimum share of one.
+// OrderAutoRouteCandidates keeps priority as an absolute layer and then orders
+// inside it by observed health, load, and time to first token before falling
+// back to the weighted rendezvous permutation. A degraded channel therefore
+// loses to a healthy peer at the same priority but never crosses a priority
+// boundary the administrator set.
 func OrderAutoRouteCandidates(candidates []RouteScoreCandidate, requestID string) []ScoredRouteCandidate {
 	ordered := ScoreRouteCandidates(candidates)
 	for index := range ordered {
@@ -63,8 +73,20 @@ func OrderAutoRouteCandidates(candidates []RouteScoreCandidate, requestID string
 		if left.Candidate.Priority != right.Candidate.Priority {
 			return left.Candidate.Priority > right.Candidate.Priority
 		}
+		if left.Candidate.ErrorBandKnown != right.Candidate.ErrorBandKnown {
+			return left.Candidate.ErrorBandKnown
+		}
+		if left.Candidate.ErrorBandKnown && left.Candidate.ErrorBand != right.Candidate.ErrorBand {
+			return left.Candidate.ErrorBand < right.Candidate.ErrorBand
+		}
 		if left.Breakdown.LoadBucket != right.Breakdown.LoadBucket {
 			return left.Breakdown.LoadBucket < right.Breakdown.LoadBucket
+		}
+		if left.Candidate.TTFTBandKnown != right.Candidate.TTFTBandKnown {
+			return left.Candidate.TTFTBandKnown
+		}
+		if left.Candidate.TTFTBandKnown && left.Candidate.TTFTBand != right.Candidate.TTFTBand {
+			return left.Candidate.TTFTBand < right.Candidate.TTFTBand
 		}
 		if left.Candidate.Sticky != right.Candidate.Sticky {
 			return left.Candidate.Sticky
@@ -77,9 +99,10 @@ func OrderAutoRouteCandidates(candidates []RouteScoreCandidate, requestID string
 	return ordered
 }
 
-// ScoreRouteCandidates attaches raw observations in static priority order.
-// Only OrderAutoRouteCandidates applies load buckets and weighted selection;
-// latency and health samples are observations, not additive routing scores.
+// ScoreRouteCandidates attaches observations in static priority order. Bands
+// and the load bucket are hard comparison keys applied by
+// OrderAutoRouteCandidates; latency and error rates remain observations so the
+// decision record stays explainable.
 func ScoreRouteCandidates(candidates []RouteScoreCandidate) []ScoredRouteCandidate {
 	result := make([]ScoredRouteCandidate, 0, len(candidates))
 	for _, candidate := range StaticPriorityLayer(candidates) {
@@ -89,10 +112,28 @@ func ScoreRouteCandidates(candidates []RouteScoreCandidate) []ScoredRouteCandida
 }
 
 func scoreRouteCandidate(candidate RouteScoreCandidate) RouteScoreBreakdown {
+	healthFactor := candidate.HealthFactor
+	if healthFactor <= 0 {
+		healthFactor = 1
+	}
 	breakdown := RouteScoreBreakdown{
-		PriorityLayer: candidate.Priority, EffectiveWeight: max(candidate.Weight, 1),
-		LoadRatio: candidate.LoadRatio, LoadBucket: int(math.Floor(max(candidate.LoadRatio, 0) * 10)),
-		Sticky: candidate.Sticky,
+		PriorityLayer: candidate.Priority,
+		// Health scales the configured weight instead of replacing it: a
+		// degraded channel keeps a smaller but nonzero share of its layer.
+		EffectiveWeight: int(math.Round(float64(max(candidate.Weight, 1)) * healthFactor)),
+		LoadRatio:       candidate.LoadRatio, LoadBucket: int(math.Floor(max(candidate.LoadRatio, 0) * 20)),
+		Sticky: candidate.Sticky, HealthFactor: healthFactor,
+	}
+	if breakdown.EffectiveWeight < 1 {
+		breakdown.EffectiveWeight = 1
+	}
+	if candidate.ErrorBandKnown {
+		band := int(candidate.ErrorBand)
+		breakdown.ErrorBand = &band
+	}
+	if candidate.TTFTBandKnown {
+		band := int(candidate.TTFTBand)
+		breakdown.TTFTBand = &band
 	}
 	if candidate.ErrorRateKnown {
 		breakdown.ErrorRate = &candidate.ErrorRate

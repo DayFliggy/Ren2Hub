@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,6 +26,29 @@ func TestGatewayConfigEnforcesWaitAndUserQueueBoundsAtEverySource(t *testing.T) 
 	}
 	require.NoError(t, (GatewayAdmissionOverride{}).Validate())
 	require.NoError(t, (GatewayAdmissionOverride{Concurrency: common.GetPointer(0), WaitMS: common.GetPointer(0), QueueSize: common.GetPointer(0)}).Validate())
+}
+
+func TestGatewayConfigPriceCeilingIsOptIn(t *testing.T) {
+	config := DefaultGatewayConfig()
+	// The default must not exclude any channel from automatic routing.
+	limit, enabled, err := config.MaxRatioLimit()
+	require.NoError(t, err)
+	assert.False(t, enabled)
+	assert.True(t, limit.IsZero())
+
+	config.MaxChannelRatio = "1.5"
+	limit, enabled, err = config.MaxRatioLimit()
+	require.NoError(t, err)
+	require.True(t, enabled)
+	assert.True(t, limit.Equal(decimal.RequireFromString("1.5")))
+	require.NoError(t, config.Validate())
+
+	for _, invalid := range []string{"0", "-1", "abc", "1e-30", "1001"} {
+		config.MaxChannelRatio = invalid
+		require.Error(t, config.Validate(), invalid)
+		_, _, err = config.MaxRatioLimit()
+		require.Error(t, err, invalid)
+	}
 }
 
 func TestGatewayConfigUpgradePreservesExplicitValues(t *testing.T) {
@@ -62,7 +86,7 @@ func TestGatewayConfigUpgradePreservesExplicitValues(t *testing.T) {
 			}{
 				{"legacy_missing", `{"version":7,"user_concurrency":0,"wait_ms":0,"user_queue_size":0,"channel_queue_size":0}`, 8, 1024, true},
 				{"partial_explicit_zero", `{"version":7,"user_concurrency":0,"wait_ms":0,"user_queue_size":0,"channel_queue_size":0,"total_queue_size":0,"retry_budget_enabled":false}`, 8, 0, false},
-				{"already_current", `{"version":7,"user_concurrency":0,"wait_ms":0,"user_queue_size":0,"channel_queue_size":0,"total_queue_size":0,"retry_budget_enabled":false,"retry_budget_percent":10,"retry_budget_burst":20}`, 7, 0, false},
+				{"already_current", `{"version":7,"user_concurrency":0,"wait_ms":0,"user_queue_size":0,"channel_queue_size":0,"total_queue_size":0,"retry_budget_enabled":false,"retry_budget_percent":10,"retry_budget_burst":20,"max_channel_ratio":""}`, 7, 0, false},
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					require.NoError(t, db.Where(map[string]any{"key": GatewayConfigKey}).Delete(&Option{}).Error)

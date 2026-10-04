@@ -23,6 +23,17 @@ var (
 	ErrLiveRouteCandidateInvalid   = errors.New("live route candidate failed final qualification")
 )
 
+// GatewayMaxChannelRatio exposes the configured channel price ceiling for
+// automatic routing. An unset ceiling reports enabled=false so the price
+// factor stays off rather than excluding every channel.
+func GatewayMaxChannelRatio(ctx context.Context) (decimal.Decimal, bool, error) {
+	config, err := model.GetGatewayConfigContext(ctx)
+	if err != nil {
+		return decimal.Zero, false, err
+	}
+	return config.MaxRatioLimit()
+}
+
 const RouteFilterKeyUnavailable = "key_unavailable"
 
 // RouteLiveSelectionRequiredContextKey marks requests that require a route
@@ -334,9 +345,13 @@ type LiveRouteRequest struct {
 	TokenModelLimit            map[string]bool
 	PriceEligibilityKnown      bool
 	PriceEligible              bool
-	SecurityEligibilityKnown   bool
-	SecurityAllowed            bool
-	PreferredChannelID         int
+	// MaxChannelRatio is the configured channel price ratio ceiling. The zero
+	// value leaves the price factor disabled.
+	MaxChannelRatio          decimal.Decimal
+	MaxChannelRatioEnabled   bool
+	SecurityEligibilityKnown bool
+	SecurityAllowed          bool
+	PreferredChannelID       int
 }
 
 type LiveRouteSelection struct {
@@ -582,6 +597,12 @@ func applyLiveHealth(ctx context.Context, candidates []RouteSelectionCandidate, 
 		candidates[index].LatencyKnown = metrics.LatencyKnown
 		candidates[index].TTFTMS = metrics.TTFTMS
 		candidates[index].TTFTKnown = metrics.TTFTKnown
+		// Ranking bands come from the channel-scoped row only. Key-scoped rows
+		// are written by failure-only paths and cannot express a rate.
+		rank := RouteHealthRankingMetrics(health)
+		candidates[index].ErrorBand, candidates[index].ErrorBandKnown = rank.ErrorBand, rank.ErrorBandKnown
+		candidates[index].TTFTBand, candidates[index].TTFTBandKnown = rank.TTFTBand, rank.TTFTBandKnown
+		candidates[index].HealthFactor = RouteRankHealthFactor(rank)
 		eligibleChannels[channel.Id] = channel
 	}
 	loads, err := LoadRouteChannelLoads(ctx, eligibleChannels)

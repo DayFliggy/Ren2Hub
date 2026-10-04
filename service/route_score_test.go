@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -92,6 +93,106 @@ func TestScoreRouteCandidatesKeepsMetricsObservational(t *testing.T) {
 		scored[1].Candidate.ChannelID,
 		scored[2].Candidate.ChannelID,
 	})
+}
+
+// A degraded channel must lose to a healthy peer inside the same priority
+// layer, because the implicit weight permutation can otherwise select it on
+// luck. Priority itself stays absolute.
+func TestOrderAutoRouteCandidatesPrefersHealthyPeerWithinPriority(t *testing.T) {
+	scored := OrderAutoRouteCandidates([]RouteScoreCandidate{
+		{ChannelID: 1, Priority: 10, Weight: 1, HealthUsable: true, ErrorBand: RouteRankBandCritical, ErrorBandKnown: true},
+		{ChannelID: 2, Priority: 10, Weight: 1, HealthUsable: true, ErrorBand: RouteRankBandGood, ErrorBandKnown: true},
+	}, "request-1")
+	require.Len(t, scored, 2)
+	assert.Equal(t, 2, scored[0].Candidate.ChannelID)
+	assert.Equal(t, 1, scored[1].Candidate.ChannelID)
+
+	// The same degraded channel outranks a healthy lower priority layer.
+	scored = OrderAutoRouteCandidates([]RouteScoreCandidate{
+		{ChannelID: 1, Priority: 20, Weight: 1, HealthUsable: true, ErrorBand: RouteRankBandCritical, ErrorBandKnown: true},
+		{ChannelID: 2, Priority: 10, Weight: 1, HealthUsable: true, ErrorBand: RouteRankBandGood, ErrorBandKnown: true},
+	}, "request-1")
+	require.Len(t, scored, 2)
+	assert.Equal(t, 1, scored[0].Candidate.ChannelID)
+}
+
+// A channel without the minimum sample carries no band, so it is never
+// reordered on the strength of an unrepresentative observation.
+func TestRouteHealthRankingMetricsRequiresMinimumSample(t *testing.T) {
+	insufficient := model.ChannelHealth{ID: 1, ObservedRequests: RouteRankMinimumSamples - 1, ObservedFailures: RouteRankMinimumSamples - 1}
+	rank := RouteHealthRankingMetrics(insufficient)
+	assert.False(t, rank.ErrorBandKnown)
+	assert.False(t, rank.TTFTBandKnown)
+	assert.Equal(t, 1.0, RouteRankHealthFactor(rank))
+
+	critical := model.ChannelHealth{ID: 1, ObservedRequests: 100, ObservedFailures: 40, TTFTObservationCnt: 100, TTFTSumMS: 2_000_000}
+	rank = RouteHealthRankingMetrics(critical)
+	require.True(t, rank.ErrorBandKnown)
+	assert.Equal(t, RouteRankBandCritical, rank.ErrorBand)
+	require.True(t, rank.TTFTBandKnown)
+	assert.Equal(t, RouteRankBandCritical, rank.TTFTBand)
+	assert.Equal(t, 0.5, RouteRankHealthFactor(rank))
+
+	healthy := model.ChannelHealth{ID: 1, ObservedRequests: 100, ObservedFailures: 1, TTFTObservationCnt: 100, TTFTSumMS: 100_000}
+	rank = RouteHealthRankingMetrics(healthy)
+	require.True(t, rank.ErrorBandKnown)
+	assert.Equal(t, RouteRankBandGood, rank.ErrorBand)
+	assert.Equal(t, RouteRankBandGood, rank.TTFTBand)
+	assert.Equal(t, 1.0, RouteRankHealthFactor(rank))
+}
+
+// Key-scoped rows are written by failure-only paths, so their counters cannot
+// express a rate and must not produce a band.
+func TestRouteHealthRankingMetricsIgnoresKeyScopedRows(t *testing.T) {
+	rank := RouteHealthRankingMetrics(model.ChannelHealth{
+		ID: 1, KeyScope: "key:abc", ObservedRequests: 500, ObservedFailures: 500,
+	})
+	assert.False(t, rank.ErrorBandKnown)
+	assert.False(t, rank.TTFTBandKnown)
+}
+
+func TestRouteHealthRankingMetricsBoundsErrorAndTTFTBands(t *testing.T) {
+	cases := []struct {
+		name     string
+		requests int64
+		failures int64
+		wantBand RouteRankBand
+	}{
+		{name: "at warning floor", requests: 100, failures: 5, wantBand: RouteRankBandWarning},
+		{name: "below warning floor", requests: 100, failures: 4, wantBand: RouteRankBandGood},
+		{name: "at critical floor", requests: 100, failures: 20, wantBand: RouteRankBandCritical},
+		{name: "all failing", requests: 100, failures: 100, wantBand: RouteRankBandCritical},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			rank := RouteHealthRankingMetrics(model.ChannelHealth{ID: 1, ObservedRequests: testCase.requests, ObservedFailures: testCase.failures})
+			require.True(t, rank.ErrorBandKnown)
+			assert.Equal(t, testCase.wantBand, rank.ErrorBand)
+		})
+	}
+}
+
+// Health scales the configured weight rather than replacing it, so a degraded
+// channel keeps a reduced but nonzero share of its layer.
+func TestScoreRouteCandidatesScalesWeightByHealth(t *testing.T) {
+	scored := ScoreRouteCandidates([]RouteScoreCandidate{
+		{ChannelID: 1, Priority: 10, Weight: 100, HealthUsable: true, HealthFactor: 1},
+		{ChannelID: 2, Priority: 10, Weight: 100, HealthUsable: true, HealthFactor: 0.5},
+	})
+	require.Len(t, scored, 2)
+	weights := map[int]int{}
+	for _, candidate := range scored {
+		weights[candidate.Candidate.ChannelID] = candidate.Breakdown.EffectiveWeight
+	}
+	assert.Equal(t, 100, weights[1])
+	assert.Equal(t, 50, weights[2])
+
+	// A degraded channel never loses its minimum share.
+	scored = ScoreRouteCandidates([]RouteScoreCandidate{
+		{ChannelID: 3, Priority: 10, Weight: 1, HealthUsable: true, HealthFactor: 0.5},
+	})
+	require.Len(t, scored, 1)
+	assert.Equal(t, 1, scored[0].Breakdown.EffectiveWeight)
 }
 
 func TestOrderManualRouteCandidatesKeepsPositionAheadOfWeight(t *testing.T) {

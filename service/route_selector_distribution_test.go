@@ -17,7 +17,24 @@ func TestAutoRouteOrderUsesPriorityThenLoadBucket(t *testing.T) {
 	ordered := OrderAutoRouteCandidates(candidates, "bucket-request")
 	require.Len(t, ordered, 3)
 	assert.Equal(t, []int{1, 3, 2}, []int{ordered[0].Candidate.ChannelID, ordered[1].Candidate.ChannelID, ordered[2].Candidate.ChannelID})
-	assert.Equal(t, 1, ordered[1].Breakdown.LoadBucket)
+	// Load buckets are 5% wide, so 10% load is bucket 2.
+	assert.Equal(t, 2, ordered[1].Breakdown.LoadBucket)
+	assert.Equal(t, 4, ordered[2].Breakdown.LoadBucket)
+}
+
+// A five-percent bucket separates occupancies that the previous ten-percent
+// bucket collapsed, so a lightly loaded peer is not left to the weighted
+// permutation against a noticeably busier one.
+func TestAutoRouteOrderSeparatesNearbyLoadBuckets(t *testing.T) {
+	candidates := []RouteScoreCandidate{
+		{ChannelID: 1, Priority: 10, Weight: 1, LoadRatio: .11, HealthUsable: true},
+		{ChannelID: 2, Priority: 10, Weight: 1, LoadRatio: .19, HealthUsable: true},
+	}
+	ordered := OrderAutoRouteCandidates(candidates, "nearby-load")
+	require.Len(t, ordered, 2)
+	assert.Equal(t, 2, ordered[0].Breakdown.LoadBucket)
+	assert.Equal(t, 3, ordered[1].Breakdown.LoadBucket)
+	assert.Equal(t, 1, ordered[0].Candidate.ChannelID)
 }
 
 func TestAutoRouteOrderIsStableWeightedAndGivesZeroMinimumShare(t *testing.T) {

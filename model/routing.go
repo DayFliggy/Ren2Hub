@@ -140,6 +140,10 @@ type UserChannelEntitlement struct {
 	Reason    string `json:"reason" gorm:"type:varchar(255)"`
 }
 
+// ChannelHealth carries two distinct kinds of state. State/FailureCount/
+// CooldownUntil drive the binary admission gate, while the observation
+// counters below feed the ranking bands. FailureCount is consecutive and is
+// reset by any success, so it cannot express a rate.
 type ChannelHealth struct {
 	ID                  int    `json:"id"`
 	ChannelID           int    `json:"channel_id" gorm:"uniqueIndex:channel_health_scope;not null"`
@@ -153,7 +157,15 @@ type ChannelHealth struct {
 	ProbeExpiresAt      int64  `json:"-" gorm:"bigint"`
 	LastLatencyMS       int64  `json:"last_latency_ms"`
 	FirstTokenLatencyMS int64  `json:"first_token_latency_ms"`
-	UpdatedAt           int64  `json:"updated_at" gorm:"bigint;not null"`
+	// Cumulative observation counters for ranking. They are monotonic until the
+	// row is pruned, so a long-lived healthy channel cannot be reclassified by
+	// a single failure, and a channel without the minimum sample stays unknown
+	// instead of being scored as perfect.
+	ObservedRequests   int64 `json:"observed_requests" gorm:"column:observed_requests;bigint;not null;default:0"`
+	ObservedFailures   int64 `json:"observed_failures" gorm:"column:observed_failures;bigint;not null;default:0"`
+	TTFTSumMS          int64 `json:"ttft_sum_ms" gorm:"column:ttft_sum_ms;bigint;not null;default:0"`
+	TTFTObservationCnt int64 `json:"ttft_observation_count" gorm:"column:ttft_observation_count;bigint;not null;default:0"`
+	UpdatedAt          int64 `json:"updated_at" gorm:"bigint;not null"`
 }
 
 func (p *UserRouteProfile) Normalize(now time.Time) {

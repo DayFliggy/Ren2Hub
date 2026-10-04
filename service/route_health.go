@@ -244,6 +244,90 @@ type RouteHealthScoreMetrics struct {
 	TTFTKnown      bool
 }
 
+// Ranking band thresholds. A single source keeps the observed band, the
+// filter floor, and the weight factor from drifting apart, which is a failure
+// mode the reference implementation exhibits with duplicated defaults.
+const (
+	// RouteRankMinimumSamples gates both bands. Below it a channel is unknown
+	// rather than assumed perfect, so a cold or newly added channel is neither
+	// rewarded nor punished by an unrepresentative sample.
+	RouteRankMinimumSamples = 50
+	RouteRankErrorWarning   = 0.05
+	RouteRankErrorCritical  = 0.20
+	RouteRankTTFTTargetMS   = 3000
+	RouteRankTTFTCriticalMS = 10000
+)
+
+// RouteRankBand is an ordinal health band. Bands keep priority authoritative:
+// they are compared only inside one priority layer, so a degraded high
+// priority channel is still preferred over a healthy lower priority one.
+type RouteRankBand int
+
+const (
+	RouteRankBandGood RouteRankBand = iota
+	RouteRankBandWarning
+	RouteRankBandCritical
+)
+
+// RouteHealthRankMetrics carries the ordinal bands used for ordering. Unknown
+// bands mean "insufficient observation", not "healthy".
+type RouteHealthRankMetrics struct {
+	ErrorBand      RouteRankBand
+	ErrorBandKnown bool
+	TTFTBand       RouteRankBand
+	TTFTBandKnown  bool
+}
+
+// RouteHealthRankingMetrics derives ranking bands from cumulative counters.
+// Callers must pass a channel-scoped row (key_scope ""): key-scoped rows are
+// written by failure-only paths and would report an inflated error rate.
+func RouteHealthRankingMetrics(health model.ChannelHealth) RouteHealthRankMetrics {
+	metrics := RouteHealthRankMetrics{}
+	if health.ID == 0 || health.KeyScope != "" {
+		return metrics
+	}
+	if health.ObservedRequests >= RouteRankMinimumSamples {
+		rate := float64(health.ObservedFailures) / float64(health.ObservedRequests)
+		metrics.ErrorBand, metrics.ErrorBandKnown = rankBandForValue(rate, RouteRankErrorWarning, RouteRankErrorCritical), true
+	}
+	if health.TTFTObservationCnt >= RouteRankMinimumSamples {
+		average := float64(health.TTFTSumMS) / float64(health.TTFTObservationCnt)
+		metrics.TTFTBand, metrics.TTFTBandKnown = rankBandForValue(average, RouteRankTTFTTargetMS, RouteRankTTFTCriticalMS), true
+	}
+	return metrics
+}
+
+// rankBandForValue maps a measured value onto a band. Lower is better, so the
+// warning floor is the first boundary and the critical floor the second.
+func rankBandForValue(value, warning, critical float64) RouteRankBand {
+	if value >= critical {
+		return RouteRankBandCritical
+	}
+	if value >= warning {
+		return RouteRankBandWarning
+	}
+	return RouteRankBandGood
+}
+
+// RouteRankHealthFactor is the soft weight multiplier applied inside a
+// priority and load layer. A degraded channel keeps a reduced share instead of
+// being excluded, which is what separates weighting from filtering.
+func RouteRankHealthFactor(metrics RouteHealthRankMetrics) float64 {
+	const degraded = 0.5
+	factor := 1.0
+	if metrics.ErrorBandKnown && metrics.ErrorBand == RouteRankBandCritical {
+		factor = degraded
+	} else if metrics.ErrorBandKnown && metrics.ErrorBand == RouteRankBandWarning {
+		factor = 0.8
+	}
+	if metrics.TTFTBandKnown && metrics.TTFTBand == RouteRankBandCritical && factor > degraded {
+		factor = degraded
+	} else if metrics.TTFTBandKnown && metrics.TTFTBand == RouteRankBandWarning && factor > 0.8 {
+		factor = 0.8
+	}
+	return factor
+}
+
 // RouteHealthScoringMetrics keeps absence distinct from a measured perfect
 // value. A missing health row is neutral input for scoring, not zero latency
 // or a proven zero error rate.
@@ -287,6 +371,8 @@ func PersistRouteHealthSuccessWithMetrics(ctx context.Context, channelID int, re
 		}
 		if ttftMS > 0 {
 			health.FirstTokenLatencyMS = ttftMS
+			health.TTFTSumMS += ttftMS
+			health.TTFTObservationCnt++
 		}
 		return ObserveRouteHealthSuccess(health, now)
 	})
@@ -530,6 +616,10 @@ func ObserveRouteHealthFailureWithRetryAfter(health model.ChannelHealth, policy 
 	policy = policy.normalized()
 	health.Normalize(now)
 	health.FailureCount++
+	// Ranking counters are cumulative and keyed to the same row as the gate.
+	// Recording them here keeps one write path for both concerns.
+	health.ObservedRequests++
+	health.ObservedFailures++
 	// A provider Retry-After is an explicit shared cooldown signal. It must
 	// fence concurrent requests even before the local consecutive-failure
 	// threshold is reached.
@@ -549,6 +639,7 @@ func ObserveRouteHealthFailureWithRetryAfter(health model.ChannelHealth, policy 
 
 func ObserveRouteHealthSuccess(health model.ChannelHealth, now time.Time) model.ChannelHealth {
 	health.Normalize(now)
+	health.ObservedRequests++
 	stateChanged := health.State != model.RouteHealthStateClosed || health.FailureCount != 0 || health.CooldownUntil != 0
 	health.State = model.RouteHealthStateClosed
 	health.FailureCount = 0
