@@ -144,7 +144,7 @@ function converted(ctx) {
   const req = ctx.requestBody || {};
   const metadata = Object.assign({}, req.metadata || {});
   const params = Object.assign({}, metadata);
-  if (Number(utils.decimal.bounded(req.duration, 0, 3600, true)) > 0) params.durationSeconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+  if (Number(req.duration) > 0) params.durationSeconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
   if (!params.resolution && req.size) params.resolution = resolutionForSize(req.size);
   if (!params.aspectRatio && req.size) params.aspectRatio = aspectForSize(req.size);
   if (params.resolution) params.resolution = String(params.resolution).toLowerCase();

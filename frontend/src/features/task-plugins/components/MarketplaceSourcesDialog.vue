@@ -39,6 +39,11 @@ function isHttpsUrl(value: string) {
 const invalidRow = computed(() =>
   draft.value.some((row) => !row.name.trim() || !isHttpsUrl(row.index_url))
 )
+// An empty draft has no invalid row, but the server rejects it: the stored "[]"
+// would make the market permanently empty with no way back to the builtin
+// defaults.
+const emptyDraft = computed(() => draft.value.length === 0)
+const cannotSave = computed(() => invalidRow.value || emptyDraft.value)
 
 async function save() {
   saving.value = true
@@ -73,11 +78,15 @@ async function save() {
         {{ t('taskPlugins.noSources') }}
       </p>
       <p
-        v-if="invalidRow"
+        v-if="invalidRow || emptyDraft"
         role="alert"
         class="text-sm text-[var(--status-danger-text)]"
       >
-        {{ t('taskPlugins.httpsSourceRequired') }}
+        {{
+          emptyDraft
+            ? t('taskPlugins.sourcesRequired')
+            : t('taskPlugins.httpsSourceRequired')
+        }}
       </p>
       <div
         v-for="(row, index) in draft"
@@ -149,7 +158,7 @@ async function save() {
         >
           {{ t('common.cancel') }}
         </ConsoleButton>
-        <ConsoleButton :disabled="invalidRow" :loading="saving" @click="save">
+        <ConsoleButton :disabled="cannotSave" :loading="saving" @click="save">
           {{ saving ? t('taskPlugins.saving') : t('taskPlugins.save') }}
         </ConsoleButton>
       </div>

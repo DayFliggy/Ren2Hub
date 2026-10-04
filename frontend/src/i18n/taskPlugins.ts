@@ -232,6 +232,9 @@ export const taskPluginMessages = {
     identityMismatch: '源码中的插件 key 或版本与市场索引不一致，已阻止安装。',
     unsupported: '该插件要求更高版本的任务插件 API，已阻止安装。',
     httpsSourceRequired: '市场源必须使用 HTTPS URL。',
+    // Ren2Hub: an empty source list would persist as a deliberate empty market
+    // and stop the builtin defaults from applying, so it cannot be saved.
+    sourcesRequired: '至少需要保留一个市场源。',
     neverForce:
       '市场安装绝不会强制跳过冲突。请先在任务插件页面处理冲突，然后重新安装。',
     installedToast: '已安装 {name} v{version}',
@@ -537,6 +540,9 @@ export const taskPluginMessages = {
     unsupported:
       'This plugin requires a newer Task Plugin API version. Installation was blocked.',
     httpsSourceRequired: 'Marketplace sources must use HTTPS URLs.',
+    // Ren2Hub: an empty source list would persist as a deliberate empty market
+    // and stop the builtin defaults from applying, so it cannot be saved.
+    sourcesRequired: 'Keep at least one marketplace source.',
     neverForce:
       'Marketplace installs never force past a conflict. Resolve it on the task plugins page, then install again.',
     installedToast: 'Installed {name} v{version}',

@@ -645,6 +645,14 @@ func UpdateTaskPluginMarketplaceSources(c *gin.Context) {
 	if sources == nil {
 		sources = []setting.TaskPluginMarketplaceSource{}
 	}
+	// An empty list is not a configuration: it persists as "[]", which is
+	// indistinguishable from a deliberate empty market and stops the builtin
+	// defaults from applying (setting.GetTaskPluginMarketplaceSources returns
+	// the stored empty slice). Require at least one source.
+	if len(sources) == 0 {
+		common.ApiErrorMsg(c, "at least one marketplace source is required")
+		return
+	}
 	for i := range sources {
 		name := strings.TrimSpace(sources[i].Name)
 		indexURL := strings.TrimSpace(sources[i].IndexURL)

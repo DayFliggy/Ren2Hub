@@ -203,7 +203,7 @@ export function buildSubmitRequest(ctx) {
   const req = ctx.requestBody || {},
     metadata = Object.assign({}, req.metadata || {}),
     model = ctx.upstreamModel || "veo-3.0-generate-001";
-  if (Number(utils.decimal.bounded(req.duration, 0, 3600, true)) > 0) metadata.durationSeconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+  if (Number(req.duration) > 0) metadata.durationSeconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
   if (!metadata.resolution && req.size) metadata.resolution = resolution(req.size);
   if (!metadata.aspectRatio && req.size) metadata.aspectRatio = aspect(req.size);
   if (metadata.resolution) metadata.resolution = String(metadata.resolution).toLowerCase();
