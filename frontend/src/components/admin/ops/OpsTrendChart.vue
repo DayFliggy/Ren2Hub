@@ -4,17 +4,29 @@ import { useI18n } from 'vue-i18n'
 import { useEChart } from '@/charts/useEChart'
 import { areaGradient, lineMood } from '@/charts/themePreset'
 
+/** Palette role of a series; the CSS token keeps the legend in step with the canvas. */
+const SERIES_COLORS = {
+  accent: 'var(--accent)',
+  signal: 'var(--signal)',
+  glow: 'var(--glow)',
+  support: 'var(--support)',
+  info: 'var(--status-info)',
+  warning: 'var(--status-warning)',
+  danger: 'var(--status-danger)',
+} as const
+
 export interface OpsTrendSeries {
   name: string
   /** Index into the live chart palette; follows the theme. */
-  color: 'accent' | 'signal' | 'support' | 'info' | 'warning' | 'danger'
+  color: keyof typeof SERIES_COLORS
   points: Array<{ ts: number; value: number | null }>
 }
 
 /**
  * Crisp time-series chart for the ops monitor. A missing bucket (a gap longer
  * than 1.5 buckets) breaks the line instead of being interpolated, and an
- * optional threshold renders as a dashed reference line.
+ * optional threshold renders as a dashed reference line. Several series get a
+ * legend and plain lines, because stacked area fills hide each other.
  */
 const props = withDefaults(
   defineProps<{
@@ -26,9 +38,11 @@ const props = withDefaults(
     kind?: 'line' | 'bar'
     unit?: string
     threshold?: number | null
+    /** Fixed y-axis ceiling, e.g. 100 for percentages; auto-scaled when null. */
+    max?: number | null
     height?: number
   }>(),
-  { kind: 'line', unit: '', threshold: null, height: 140 }
+  { kind: 'line', unit: '', threshold: null, max: null, height: 140 }
 )
 const { locale } = useI18n()
 const el = ref<HTMLElement | null>(null)
@@ -70,38 +84,43 @@ useEChart(
       hour: '2-digit',
       minute: '2-digit',
     })
-    const lines = props.series.map((line) => ({
-      name: line.name,
-      type: props.kind,
-      data: withGaps(line.points, props.bucketSeconds),
-      showSymbol: false,
-      symbol: 'circle',
-      symbolSize: 4,
-      smooth: mood.line.smooth,
-      connectNulls: false,
-      itemStyle: { color: palette[line.color] },
-      lineStyle: { width: 1.75, color: palette[line.color] },
-      ...(props.kind === 'line'
-        ? {
-            areaStyle: {
-              color: {
-                type: 'linear' as const,
-                x: 0,
-                y: 0,
-                x2: 0,
-                y2: 1,
-                colorStops: areaGradient(palette, palette[line.color]),
-              },
-            },
-          }
-        : {
-            barMaxWidth: 10,
-            itemStyle: {
-              color: palette[line.color],
-              borderRadius: mood.barRadius,
-            },
-          }),
-    }))
+    const filled = props.kind === 'line' && props.series.length === 1
+    const lines = props.series.map((line) => {
+      const color = palette[line.color]
+      const shape =
+        props.kind === 'bar'
+          ? {
+              barMaxWidth: 10,
+              itemStyle: { color, borderRadius: mood.barRadius },
+            }
+          : filled
+            ? {
+                areaStyle: {
+                  color: {
+                    type: 'linear' as const,
+                    x: 0,
+                    y: 0,
+                    x2: 0,
+                    y2: 1,
+                    colorStops: areaGradient(palette, color),
+                  },
+                },
+              }
+            : {}
+      return {
+        name: line.name,
+        type: props.kind,
+        data: withGaps(line.points, props.bucketSeconds),
+        showSymbol: false,
+        symbol: 'circle',
+        symbolSize: 4,
+        smooth: mood.line.smooth,
+        connectNulls: false,
+        itemStyle: { color },
+        lineStyle: { width: 1.75, color },
+        ...shape,
+      }
+    })
     const threshold =
       props.threshold && props.threshold > 0
         ? [
@@ -149,6 +168,10 @@ useEChart(
       yAxis: {
         type: 'value',
         min: 0,
+        // A fixed ceiling gets even quarter ticks, so its top value is labelled.
+        ...(props.max === null
+          ? {}
+          : { max: props.max, interval: props.max / 4 }),
         splitNumber: 3,
         axisLabel: {
           color: palette.textTertiary,
@@ -160,13 +183,27 @@ useEChart(
       series: [...lines, ...threshold],
     }
   },
-  [() => props.series, () => props.threshold, () => props.range, locale]
+  [
+    () => props.series,
+    () => props.threshold,
+    () => props.range,
+    () => props.max,
+    locale,
+  ]
 )
 </script>
 
 <template>
   <figure class="ops-chart">
     <figcaption class="sr-only">{{ label }}: {{ summary }}</figcaption>
+    <ul v-if="series.length > 1" class="ops-legend" aria-hidden="true">
+      <li v-for="line in series" :key="line.name">
+        <span
+          class="ops-dot"
+          :style="{ background: SERIES_COLORS[line.color] }"
+        />{{ line.name }}
+      </li>
+    </ul>
     <div ref="el" :style="{ height: `${height}px` }" aria-hidden="true" />
   </figure>
 </template>

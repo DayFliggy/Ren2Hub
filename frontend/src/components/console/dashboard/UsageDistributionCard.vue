@@ -3,13 +3,19 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
+import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import UsageHeatmapGrid from '@/components/console/dashboard/UsageHeatmapGrid.vue'
 import UsageSegmentBar from '@/components/console/dashboard/UsageSegmentBar.vue'
 import type { UsageDistributionPoint } from '@/composables/useUsageDistribution'
 import { quotaForChart } from '@/utils/quota'
-import { formatCompact, formatNumber, formatMoney } from '@/utils/format'
 import {
+  USAGE_TOP_DAY_LIMIT,
   buildUsageDistributionView,
+  formatUsageDate,
+  formatUsageMetric,
+  usageHeatStyle,
+  usageWeekdayLabels,
   type UsageDistributionMetric,
   type UsageDistributionPeriod,
 } from '@/utils/usageDistribution'
@@ -38,18 +44,14 @@ const view = computed(() =>
 )
 
 const periodOptions = computed(() => [
-  { key: 'month' as const, label: t('dashboard.distribution.periodMonth') },
-  { key: 'quarter' as const, label: t('dashboard.distribution.periodQuarter') },
-  { key: 'year' as const, label: t('dashboard.distribution.periodYear') },
+  { value: 'month', label: t('dashboard.distribution.periodMonth') },
+  { value: 'quarter', label: t('dashboard.distribution.periodQuarter') },
+  { value: 'year', label: t('dashboard.distribution.periodYear') },
 ])
-
 const metricOptions = computed(() => [
-  {
-    key: 'requests' as const,
-    label: t('dashboard.distribution.metricRequests'),
-  },
-  { key: 'consume' as const, label: t('dashboard.distribution.metricConsume') },
-  { key: 'tokens' as const, label: t('dashboard.distribution.metricTokens') },
+  { value: 'requests', label: t('dashboard.distribution.metricRequests') },
+  { value: 'consume', label: t('dashboard.distribution.metricConsume') },
+  { value: 'tokens', label: t('dashboard.distribution.metricTokens') },
 ])
 
 const metricColor = computed(() => {
@@ -62,52 +64,20 @@ const periodLabel = computed(() =>
   t(`dashboard.distribution.periodSummary.${period.value}`)
 )
 const metricLabel = computed(
-  () => metricOptions.value.find((option) => option.key === metric.value)!.label
+  () =>
+    metricOptions.value.find((option) => option.value === metric.value)!.label
 )
 
 function formatMetric(value: number): string {
-  if (metric.value === 'consume') return formatMoney(value)
-  if (metric.value === 'tokens') return formatCompact(Math.round(value))
-  return formatNumber(Math.round(value))
+  return formatUsageMetric(metric.value, value)
 }
 
-function formatDate(date: string): string {
-  const [year, month, day] = date.split('-').map(Number)
-  return new Intl.DateTimeFormat(locale.value, {
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(year!, month! - 1, day))
-}
-
-function intensityStyle(level: 0 | 1 | 2 | 3 | 4 | 5) {
-  if (level === 0) {
-    return {
-      background: 'var(--surface-muted)',
-      borderColor: 'var(--border-subtle)',
-    }
-  }
-  const amount = [0, 20, 34, 50, 68, 88][level]
-  return {
-    background: `color-mix(in srgb, ${metricColor.value} ${amount}%, var(--surface-solid))`,
-    borderColor: `color-mix(in srgb, ${metricColor.value} ${Math.min(96, amount + 8)}%, var(--border-subtle))`,
-  }
-}
-
-const weekdays = computed(() => {
-  const monday = new Date(2024, 0, 1)
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(monday)
-    date.setDate(date.getDate() + index)
-    return new Intl.DateTimeFormat(locale.value, { weekday: 'narrow' }).format(
-      date
-    )
-  })
-})
+const weekdays = computed(() => usageWeekdayLabels(locale.value))
 
 const topSegments = computed(() =>
   view.value.topDays.map((day, index) => ({
     key: day.date,
-    label: formatDate(day.date),
+    label: formatUsageDate(day.date, locale.value),
     value: day.value,
     displayValue: formatMetric(day.value),
     intensity: [90, 68, 46][index]!,
@@ -144,19 +114,16 @@ const weekdaySummary = computed(() => {
 
 <template>
   <ConsoleCard stretch data-usage-distribution>
-    <div v-if="loading" class="flex flex-col gap-3" data-usage-loading>
-      <div class="flex flex-wrap justify-between gap-4">
-        <div
-          class="h-12 w-52 animate-pulse rounded-xl bg-[var(--surface-muted)]"
-        />
-        <div
-          class="h-10 w-72 animate-pulse rounded-xl bg-[var(--surface-muted)]"
-        />
+    <div v-if="loading" class="flex grow flex-col" data-usage-loading>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <SkeletonBlock class="h-12 w-40" rounded="xl" />
+        <SkeletonBlock class="h-11 w-72 sm:h-10" rounded="xl" />
       </div>
-      <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_13rem]">
-        <div class="h-48 animate-pulse rounded-xl bg-[var(--surface-muted)]" />
-        <div class="h-48 animate-pulse rounded-xl bg-[var(--surface-muted)]" />
-      </div>
+      <SkeletonBlock
+        class="usage-stage mt-3 h-64 grow lg:h-auto"
+        rounded="xl"
+      />
+      <SkeletonBlock class="mt-3 h-5" rounded="md" />
     </div>
 
     <div v-else class="flex grow flex-col" data-usage-content>
@@ -174,65 +141,30 @@ const weekdaySummary = computed(() => {
           </p>
         </div>
 
-        <div
-          class="grid w-full gap-2 min-[360px]:grid-cols-2 sm:w-auto sm:justify-items-end"
-        >
-          <div
-            class="grid grid-cols-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-0.5 text-[10px] sm:text-xs"
-            :aria-label="t('dashboard.distribution.periodControl')"
-          >
-            <button
-              v-for="option in periodOptions"
-              :key="option.key"
-              type="button"
-              class="min-w-0 rounded-lg px-1 py-1.5 font-medium transition-all focus-ring sm:px-2"
-              :class="
-                period === option.key
-                  ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-sm'
-                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
-              "
-              :aria-pressed="period === option.key"
-              :data-usage-period="option.key"
-              @click="period = option.key"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-          <div
-            class="grid grid-cols-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-0.5 text-[10px] sm:text-xs"
-            :aria-label="t('dashboard.distribution.metricControl')"
-          >
-            <button
-              v-for="option in metricOptions"
-              :key="option.key"
-              type="button"
-              class="min-w-0 rounded-lg px-1 py-1.5 font-medium transition-all focus-ring sm:px-2"
-              :class="
-                metric === option.key
-                  ? 'bg-[var(--surface-solid)] text-[var(--text-primary)] shadow-sm'
-                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
-              "
-              :aria-pressed="metric === option.key"
-              :data-usage-metric="option.key"
-              @click="metric = option.key"
-            >
-              {{ option.label }}
-            </button>
-          </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <SegmentedToggle
+            :model-value="period"
+            :options="periodOptions"
+            :label="t('dashboard.distribution.periodControl')"
+            size="sm"
+            @update:model-value="period = $event as UsageDistributionPeriod"
+          />
+          <SegmentedToggle
+            :model-value="metric"
+            :options="metricOptions"
+            :label="t('dashboard.distribution.metricControl')"
+            size="sm"
+            @update:model-value="metric = $event as UsageDistributionMetric"
+          />
         </div>
       </div>
 
       <div
-        class="gap-3"
-        :class="[
-          period === 'quarter' ? 'mt-0' : 'mt-3',
-          period === 'year'
-            ? 'grid grow content-center'
-            : 'grid grow content-center lg:grid-cols-[minmax(0,1fr)_17rem]',
-        ]"
+        class="usage-stage mt-3 grid grow content-center gap-3"
+        :class="{ 'lg:grid-cols-[auto_minmax(0,1fr)]': period !== 'year' }"
+        data-usage-stage
       >
         <UsageHeatmapGrid
-          class="min-w-0 self-center"
           :view="view"
           :period="period"
           :metric="metric"
@@ -242,15 +174,21 @@ const weekdaySummary = computed(() => {
         />
 
         <aside
-          v-if="period !== 'year'"
-          class="grid gap-3 border-t border-[var(--border-subtle)] pt-3 min-[360px]:grid-cols-2 lg:flex lg:flex-col lg:justify-center lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0"
-          data-usage-analytics="side"
+          class="grid gap-3 border-t border-[var(--border-subtle)] pt-3 min-[360px]:grid-cols-2"
+          :class="
+            period === 'year'
+              ? 'lg:gap-6 lg:pt-2'
+              : 'lg:flex lg:max-w-[22rem] lg:flex-col lg:justify-center lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0'
+          "
+          :data-usage-analytics="period === 'year' ? 'bottom' : 'side'"
         >
           <UsageSegmentBar
             :title="t('dashboard.distribution.topDays')"
             :segments="topSegments"
             :color="metricColor"
             :empty-label="t('dashboard.stats.noData')"
+            :reserved-rows="USAGE_TOP_DAY_LIMIT"
+            :compact="period === 'year'"
             layout="ranked"
           />
           <UsageSegmentBar
@@ -259,38 +197,14 @@ const weekdaySummary = computed(() => {
             :color="metricColor"
             :empty-label="t('dashboard.stats.noData')"
             :summary="weekdaySummary"
+            :compact="period === 'year'"
             layout="rhythm"
           />
         </aside>
       </div>
 
       <div
-        v-if="period === 'year'"
-        class="mt-2 grid gap-3 border-t border-[var(--border-subtle)] pt-2 min-[360px]:grid-cols-2"
-        data-usage-analytics="bottom"
-      >
-        <UsageSegmentBar
-          :title="t('dashboard.distribution.topDays')"
-          :segments="topSegments"
-          :color="metricColor"
-          :empty-label="t('dashboard.stats.noData')"
-          minimal
-          layout="ranked"
-        />
-        <UsageSegmentBar
-          :title="t('dashboard.distribution.weekdayRhythm')"
-          :segments="weekdaySegments"
-          :color="metricColor"
-          :empty-label="t('dashboard.stats.noData')"
-          :summary="weekdaySummary"
-          minimal
-          layout="rhythm"
-        />
-      </div>
-
-      <div
-        class="-mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-2 text-[10px] text-[var(--text-tertiary)]"
-        :class="period === 'quarter' ? 'mt-0' : 'mt-3'"
+        class="-mb-2 mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-2 text-[10px] text-[var(--text-tertiary)]"
         data-usage-footer
       >
         <div class="flex items-center gap-1.5">
@@ -299,7 +213,7 @@ const weekdaySummary = computed(() => {
             v-for="level in [0, 1, 2, 3, 4, 5] as const"
             :key="level"
             class="size-2.5 rounded-sm border"
-            :style="intensityStyle(level)"
+            :style="usageHeatStyle(level, metricColor)"
           />
           <span>{{ t('dashboard.distribution.more') }}</span>
         </div>
@@ -318,3 +232,16 @@ const weekdaySummary = computed(() => {
     </div>
   </ConsoleCard>
 </template>
+
+<style scoped>
+/*
+ * From lg the overview row aligns this card with BalanceCard, so the stage
+ * reserves one height that every period fits inside (month 162px, quarter
+ * 159px, year 163px at most); surplus row height is centred by the grid.
+ */
+@media (min-width: 1024px) {
+  .usage-stage {
+    min-height: 170px;
+  }
+}
+</style>

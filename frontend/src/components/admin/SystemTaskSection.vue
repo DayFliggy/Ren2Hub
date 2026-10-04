@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Info, ListChecks, RefreshCw } from 'lucide-vue-next'
+import { ref, useId } from 'vue'
+import { ChevronDown, Info, ListChecks, RefreshCw } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import type { SystemTask } from '@/api/systemManagement'
 import IconButton from '@/components/common/IconButton.vue'
@@ -7,7 +8,7 @@ import StatusChip from '@/components/common/StatusChip.vue'
 import { systemManagementMessages } from '@/i18n/systemManagement'
 import { formatRelative, formatTimestamp } from '@/utils/opsFormat'
 
-defineProps<{
+const props = defineProps<{
   title: string
   emptyText: string
   tasks: SystemTask[]
@@ -16,7 +17,11 @@ defineProps<{
   error: string
   updatedAt: number
   total?: number
+  /** Starts folded to its header; actions act on hidden filters, so they wait. */
+  collapsible?: boolean
 }>()
+const open = ref(!props.collapsible)
+const bodyId = useId()
 const emit = defineEmits<{ refresh: []; details: [task: SystemTask] }>()
 const { t, te, locale } = useI18n({
   useScope: 'local',
@@ -38,93 +43,112 @@ const tones = {
         }}<span class="task-count">{{ total ?? tasks.length }}</span>
       </h2>
       <div class="task-actions">
-        <slot name="actions" />
+        <slot v-if="open" name="actions" />
         <IconButton
           :label="loading ? t('refreshing') : t('refresh')"
           :disabled="loading"
           @click="emit('refresh')"
           ><RefreshCw :size="16"
         /></IconButton>
+        <button
+          v-if="collapsible"
+          type="button"
+          class="task-toggle focus-ring"
+          :aria-expanded="open"
+          :aria-controls="bodyId"
+          @click="open = !open"
+        >
+          {{ open ? t('collapse') : t('expand')
+          }}<ChevronDown
+            :size="15"
+            class="task-toggle-icon"
+            :class="{ 'task-toggle-icon--open': open }"
+            aria-hidden="true"
+          />
+        </button>
       </div>
     </header>
-    <slot name="filters" />
+    <!-- A failed load stays visible even while the section is folded. -->
     <div v-if="error" class="task-error" role="alert">
       <p>{{ error }}</p>
       <button type="button" :disabled="loading" @click="emit('refresh')">
         {{ t('retry') }}
       </button>
     </div>
-    <p v-if="loading && !loaded" class="task-empty" role="status">
-      {{ t('loading') }}
-    </p>
-    <p v-else-if="!tasks.length && !error" class="task-empty">
-      {{ emptyText }}
-    </p>
-    <div v-if="tasks.length" class="admin-table-scroll">
-      <table class="admin-table task-table">
-        <thead>
-          <tr>
-            <th>{{ t('type') }}</th>
-            <th>{{ t('status') }}</th>
-            <th>{{ t('progress') }}</th>
-            <th>{{ t('executor') }}</th>
-            <th>{{ t('updated') }}</th>
-            <th>{{ t('details') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="task in tasks" :key="task.task_id">
-            <td :data-label="t('type')">
-              <div class="task-name">
-                <strong>{{ te(task.type) ? t(task.type) : task.type }}</strong
-                ><code>{{ task.type }}</code>
-              </div>
-            </td>
-            <td :data-label="t('status')">
-              <StatusChip :tone="tones[task.status]">{{
-                t(task.status)
-              }}</StatusChip>
-            </td>
-            <td :data-label="t('progress')">
-              <div class="task-progress">
-                <progress
-                  v-if="task.progress !== null"
-                  :value="task.progress"
-                  max="100"
-                  :aria-label="t('progress')"
-                  :class="`task-progress--${tones[task.status]}`"
-                /><span>{{
-                  task.progress === null ? '-' : `${task.progress}%`
-                }}</span>
-              </div>
-            </td>
-            <td :data-label="t('executor')">
-              <code>{{ task.locked_by || '-' }}</code>
-            </td>
-            <td
-              :data-label="t('updated')"
-              :title="formatTimestamp(task.updated_at, locale)"
-            >
-              {{ formatRelative(task.updated_at, updatedAt, locale) }}
-            </td>
-            <td :data-label="t('details')">
-              <div class="task-detail">
-                <span
-                  v-if="task.error"
-                  class="admin-error task-error-summary"
-                  >{{ task.error }}</span
-                ><IconButton
-                  :label="t('taskDetails')"
-                  @click="emit('details', task)"
-                  ><Info :size="16"
-                /></IconButton>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-show="open" :id="bodyId">
+      <slot name="filters" />
+      <p v-if="loading && !loaded" class="task-empty" role="status">
+        {{ t('loading') }}
+      </p>
+      <p v-else-if="!tasks.length && !error" class="task-empty">
+        {{ emptyText }}
+      </p>
+      <div v-if="tasks.length" class="admin-table-scroll">
+        <table class="admin-table task-table">
+          <thead>
+            <tr>
+              <th>{{ t('type') }}</th>
+              <th>{{ t('status') }}</th>
+              <th>{{ t('progress') }}</th>
+              <th>{{ t('executor') }}</th>
+              <th>{{ t('updated') }}</th>
+              <th>{{ t('details') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="task in tasks" :key="task.task_id">
+              <td :data-label="t('type')">
+                <div class="task-name">
+                  <strong>{{ te(task.type) ? t(task.type) : task.type }}</strong
+                  ><code>{{ task.type }}</code>
+                </div>
+              </td>
+              <td :data-label="t('status')">
+                <StatusChip :tone="tones[task.status]">{{
+                  t(task.status)
+                }}</StatusChip>
+              </td>
+              <td :data-label="t('progress')">
+                <div class="task-progress">
+                  <progress
+                    v-if="task.progress !== null"
+                    :value="task.progress"
+                    max="100"
+                    :aria-label="t('progress')"
+                    :class="`task-progress--${tones[task.status]}`"
+                  /><span>{{
+                    task.progress === null ? '-' : `${task.progress}%`
+                  }}</span>
+                </div>
+              </td>
+              <td :data-label="t('executor')">
+                <code>{{ task.locked_by || '-' }}</code>
+              </td>
+              <td
+                :data-label="t('updated')"
+                :title="formatTimestamp(task.updated_at, locale)"
+              >
+                {{ formatRelative(task.updated_at, updatedAt, locale) }}
+              </td>
+              <td :data-label="t('details')">
+                <div class="task-detail">
+                  <span
+                    v-if="task.error"
+                    class="admin-error task-error-summary"
+                    >{{ task.error }}</span
+                  ><IconButton
+                    :label="t('taskDetails')"
+                    @click="emit('details', task)"
+                    ><Info :size="16"
+                  /></IconButton>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <slot name="footer" />
     </div>
-    <slot name="footer" />
   </section>
 </template>
 
@@ -155,8 +179,38 @@ const tones = {
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
+.task-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+  border-radius: var(--shape-control, 8px);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.task-toggle:hover {
+  background: var(--state-hover-layer);
+}
+.task-toggle-icon {
+  transition: transform 0.15s ease;
+}
+.task-toggle-icon--open {
+  transform: rotate(180deg);
+}
+@media (min-width: 640px) {
+  .task-toggle {
+    min-height: 2rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-toggle-icon {
+    transition: none;
+  }
+}
 .task-empty {
-  padding: 2rem 1rem;
+  padding: 1rem;
   text-align: center;
   color: var(--text-secondary);
   font-size: 0.875rem;

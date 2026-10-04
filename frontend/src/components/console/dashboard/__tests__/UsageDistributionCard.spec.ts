@@ -56,18 +56,33 @@ function render(overrides: Record<string, unknown> = {}) {
   })
 }
 
+type Wrapper = ReturnType<typeof render>
+
+function radio(wrapper: Wrapper, group: string, label: string) {
+  const option = wrapper
+    .get(`[role="radiogroup"][aria-label="${group}"]`)
+    .findAll('[role="radio"]')
+    .find((entry) => entry.text() === label)
+  if (!option) throw new Error(`missing ${group} option ${label}`)
+  return option
+}
+
+const period = (wrapper: Wrapper, label: string) =>
+  radio(wrapper, '统计周期', label)
+const metric = (wrapper: Wrapper, label: string) =>
+  radio(wrapper, '分布指标', label)
+
 describe('UsageDistributionCard', () => {
   it('defaults to month and calls with one roving grid focus', () => {
     const wrapper = render()
 
+    expect(period(wrapper, '月').attributes('aria-checked')).toBe('true')
+    expect(metric(wrapper, '调用').attributes('aria-checked')).toBe('true')
     expect(
-      wrapper.get('[data-usage-period="month"]').attributes('aria-pressed')
-    ).toBe('true')
-    expect(
-      wrapper.get('[data-usage-metric="requests"]').attributes('aria-pressed')
-    ).toBe('true')
-    expect(wrapper.findAll('[data-usage-period]')).toHaveLength(3)
+      wrapper.findAll('[aria-label="统计周期"] [role="radio"]')
+    ).toHaveLength(3)
     expect(wrapper.findAll('[data-usage-date]')).toHaveLength(30)
+    expect(wrapper.findAll('[data-usage-placeholder]')).toHaveLength(12)
     expect(wrapper.find('[data-usage-layout="month"]').exists()).toBe(true)
     expect(wrapper.get('[data-usage-footer]').text()).toContain('活跃 30 天')
     expect(
@@ -77,12 +92,39 @@ describe('UsageDistributionCard', () => {
     ).toHaveLength(1)
   })
 
+  it('keeps six calendar weeks when the month spans only five', () => {
+    vi.setSystemTime(new Date(2026, 6, 26, 12))
+    const wrapper = render()
+
+    expect(wrapper.findAll('[data-usage-date]')).toHaveLength(30)
+    const placeholders = wrapper.findAll('[data-usage-placeholder]')
+    expect(placeholders).toHaveLength(12)
+    expect(placeholders.at(-1)!.attributes('style')).toContain('grid-row: 6')
+  })
+
+  it('formats fractional spend in the total, cells and analytics', async () => {
+    const wrapper = render({
+      points: [
+        { date: '2026-07-27', requests: 1, consume: '1480000', tokens: 1 },
+      ],
+    })
+    await metric(wrapper, '消费').trigger('click')
+
+    expect(wrapper.get('[data-usage-total]').text()).toBe('$2.96')
+    expect(
+      wrapper.get('[data-usage-date="2026-07-27"]').attributes('aria-label')
+    ).toContain('$2.96')
+    expect(wrapper.get('[data-usage-segment-bar="ranked"]').text()).toContain(
+      '$2.96'
+    )
+  })
+
   it('switches period and metric without replacing the card', async () => {
     const wrapper = render()
     const original = wrapper.get('[data-usage-distribution]').element
 
-    await wrapper.get('[data-usage-period="quarter"]').trigger('click')
-    await wrapper.get('[data-usage-metric="consume"]').trigger('click')
+    await period(wrapper, '季').trigger('click')
+    await metric(wrapper, '消费').trigger('click')
 
     expect(wrapper.get('[data-usage-distribution]').element).toBe(original)
     expect(wrapper.findAll('[data-usage-date]')).toHaveLength(91)
@@ -93,7 +135,7 @@ describe('UsageDistributionCard', () => {
 
   it('uses side analytics for quarter and bottom analytics for year', async () => {
     const wrapper = render()
-    await wrapper.get('[data-usage-period="quarter"]').trigger('click')
+    await period(wrapper, '季').trigger('click')
 
     expect(wrapper.findAll('[data-usage-date]')).toHaveLength(91)
     expect(wrapper.find('[data-usage-layout="quarter"]').exists()).toBe(true)
@@ -105,26 +147,23 @@ describe('UsageDistributionCard', () => {
       '星期节律'
     )
 
-    await wrapper.get('[data-usage-period="year"]').trigger('click')
+    await period(wrapper, '年').trigger('click')
 
     expect(wrapper.findAll('[data-usage-date]')).toHaveLength(364)
     expect(wrapper.find('[data-usage-layout="year"]').exists()).toBe(true)
     expect(wrapper.get('[data-usage-content]').classes()).toContain('grow')
     expect(
-      wrapper.get('[data-usage-scroll]').attributes('data-usage-draggable')
-    ).toBe('true')
-    expect(
       wrapper.findAll('[data-usage-month]').map((label) => label.text())
     ).toEqual(expect.arrayContaining(['1月', '2月', '3月']))
-    expect(wrapper.find('[data-usage-analytics="bottom"]').exists()).toBe(true)
-    expect(wrapper.get('[data-usage-analytics="bottom"]').text().trim()).toBe(
-      ''
-    )
-    expect(wrapper.findAll('[data-usage-segment-minimal="true"]')).toHaveLength(
+    const bottom = wrapper.get('[data-usage-analytics="bottom"]')
+    expect(bottom.text()).toContain('本段最活跃')
+    expect(bottom.text()).toContain('星期节律')
+    expect(bottom.findAll('[data-usage-segment-compact="true"]')).toHaveLength(
       2
     )
-    expect(wrapper.get('[data-usage-scroll]').classes()).toContain(
-      'overflow-x-auto'
+    // Compact bars drop their details only where the band sits below the grid.
+    expect(bottom.get('[data-usage-segment-details]').classes()).toContain(
+      'lg:hidden'
     )
 
     const segment = wrapper.get(
@@ -186,5 +225,19 @@ describe('UsageDistributionCard', () => {
     expect(empty.find('[data-usage-layout="month"]').exists()).toBe(true)
     expect(empty.findAll('[data-usage-date]')).toHaveLength(30)
     expect(empty.get('[data-usage-footer]').text()).toContain('活跃 0 天')
+  })
+
+  it('keeps analytics slots in place without data', () => {
+    const wrapper = render({ points: [] })
+    const ranked = wrapper.get('[data-usage-segment-bar="ranked"]')
+    const rhythm = wrapper.get('[data-usage-segment-bar="rhythm"]')
+
+    expect(ranked.findAll('[data-usage-segment-placeholder]')).toHaveLength(3)
+    expect(rhythm.findAll('[data-usage-segment-labels] > span').length).toBe(7)
+    expect(
+      wrapper
+        .findAll('[data-usage-segment-summary]')
+        .map((summary) => summary.text())
+    ).toEqual(['暂无数据', '暂无数据'])
   })
 })

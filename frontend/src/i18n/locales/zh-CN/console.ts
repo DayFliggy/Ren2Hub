@@ -509,6 +509,7 @@ export default {
       metricControl: '分布指标',
       gridLabel: '{period}{metric}热力分布',
       cellLabel: '{date}，{metric} {value}',
+      dragHint: '拖动查看更早',
       topDays: '本段最活跃',
       weekdayRhythm: '星期节律',
       weekdayPeak: '最高 {weekday} {value}',

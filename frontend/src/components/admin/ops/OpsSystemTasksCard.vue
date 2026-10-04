@@ -264,6 +264,8 @@ async function cleanLogs() {
       :empty-text="t('emptyHistory')"
       :tasks="historyTasks"
       :total="historyTotal"
+      collapsible
+      data-ops-task-history
       :loading="history.loading.value"
       :loaded="history.data.value !== null"
       :error="history.error.value"

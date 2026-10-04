@@ -1,58 +1,108 @@
-import { expect, test } from '@playwright/test'
+import { test as base, expect, type Locator, type Page } from '@playwright/test'
 
 import {
   assertInteractiveCentersVisible,
   assertNoHorizontalOverflow,
   configureStablePage,
   waitForStablePage,
+  type VisualTheme,
 } from './fixtures'
 
-test.beforeEach(async ({ page }) => {
-  await configureStablePage(page, { theme: 'dark', authenticated: true })
+const test = base.extend<{
+  dashboardTheme: VisualTheme
+  emptyAccount: boolean
+}>({
+  dashboardTheme: ['dark', { option: true }],
+  emptyAccount: [false, { option: true }],
+})
+
+const PERIOD_LABELS = { month: '月', quarter: '季', year: '年' } as const
+type Period = keyof typeof PERIOD_LABELS
+const PERIODS = Object.keys(PERIOD_LABELS) as Period[]
+
+function periodOption(card: Locator, period: Period): Locator {
+  return card
+    .getByRole('radiogroup', { name: '统计周期' })
+    .getByRole('radio', { name: PERIOD_LABELS[period], exact: true })
+}
+
+function metricOption(card: Locator, label: string): Locator {
+  return card
+    .getByRole('radiogroup', { name: '分布指标' })
+    .getByRole('radio', { name: label, exact: true })
+}
+
+test.beforeEach(async ({ page, dashboardTheme, emptyAccount }) => {
+  await configureStablePage(page, {
+    theme: dashboardTheme,
+    authenticated: true,
+    user: emptyAccount ? { used_quota: '0' } : {},
+  })
+  if (emptyAccount) {
+    // Registered after the fixture routes, so it takes precedence.
+    await page.route(
+      /\/api\/next\/dashboard\/distribution(?:\?.*)?$/,
+      (route) =>
+        route.fulfill({ json: { success: true, message: '', data: [] } })
+    )
+  }
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
   await waitForStablePage(page)
 })
 
-test('usage heatmap keeps year navigation inside the card', async ({
+test('usage heatmap fits the year on desktop and drags on phones', async ({
   page,
 }) => {
   const card = page.locator('[data-usage-distribution]')
   await expect(card).toBeVisible()
-  await card.locator('[data-usage-period="year"]').click()
-  await card.locator('[data-usage-metric="tokens"]').click()
+  await periodOption(card, 'year').click()
+  await metricOption(card, 'Token').click()
 
-  await expect(card.locator('[data-usage-period="year"]')).toHaveAttribute(
-    'aria-pressed',
+  await expect(periodOption(card, 'year')).toHaveAttribute(
+    'aria-checked',
     'true'
   )
-  await expect(card.locator('[data-usage-metric="tokens"]')).toHaveAttribute(
-    'aria-pressed',
+  await expect(metricOption(card, 'Token')).toHaveAttribute(
+    'aria-checked',
     'true'
   )
   await expect(card.locator('[data-usage-date]')).toHaveCount(364)
-  await expect
-    .poll(() =>
-      card.locator('[data-usage-scroll]').evaluate((element) => ({
-        left: element.scrollLeft,
-        overflow: element.scrollWidth - element.clientWidth,
-      }))
+  const scroll = card.locator('[data-usage-scroll]')
+  expect(
+    await scroll.evaluate(
+      (element) => element.scrollWidth - element.clientWidth
     )
-    .toMatchObject({ left: expect.any(Number), overflow: expect.any(Number) })
-  const scroll = await card
-    .locator('[data-usage-scroll]')
-    .evaluate((element) => ({
-      left: element.scrollLeft,
-      overflow: element.scrollWidth - element.clientWidth,
-    }))
-  expect(scroll.overflow).toBeGreaterThanOrEqual(0)
+  ).toBeLessThanOrEqual(1)
+  await expect(card.locator('[data-usage-draggable]')).toHaveCount(0)
+  await expect(card.locator('[data-usage-drag-hint]')).toHaveCount(0)
   const monthLabels = await card.locator('[data-usage-month]').allTextContents()
   expect(monthLabels).toEqual(expect.arrayContaining(['1月', '2月', '3月']))
-  await expect(card.locator('[data-usage-draggable="true"]')).toBeVisible()
+  const labelBoxes = await card
+    .locator('[data-usage-month]')
+    .evaluateAll((labels) =>
+      labels.map((label) => label.getBoundingClientRect())
+    )
+  labelBoxes.slice(1).forEach((box, index) => {
+    expect(box.left, 'month labels overlap').toBeGreaterThanOrEqual(
+      labelBoxes[index]!.right
+    )
+  })
+  await assertInteractiveCentersVisible(page)
 
+  await page.setViewportSize({ width: 390, height: 844 })
+  await periodOption(card, 'month').click()
+  await periodOption(card, 'year').click()
   const dragTarget = card.locator('[data-usage-draggable="true"]')
+  await expect(dragTarget).toBeVisible()
+  await expect(card.locator('[data-usage-drag-hint]')).toContainText(
+    '拖动查看更早'
+  )
+  await expect(card.locator('[data-usage-scroll-fade="start"]')).toHaveCount(1)
+
   const dragBox = await dragTarget.boundingBox()
   if (!dragBox) throw new Error('year drag area missing')
   const beforeDrag = await dragTarget.evaluate((element) => element.scrollLeft)
+  expect(beforeDrag).toBeGreaterThan(0)
   await page.mouse.move(
     dragBox.x + dragBox.width / 2,
     dragBox.y + dragBox.height / 2
@@ -66,55 +116,49 @@ test('usage heatmap keeps year navigation inside the card', async ({
   await page.mouse.up()
   const afterDrag = await dragTarget.evaluate((element) => element.scrollLeft)
   expect(afterDrag).toBeLessThan(beforeDrag)
-  const layout = await card.evaluate((element) => {
-    const grid = element.querySelector('.usage-dense-grid')
-    const footer = element.querySelector('[data-usage-footer]')
-    if (!grid || !footer) throw new Error('year layout missing')
-    const cardRect = element.getBoundingClientRect()
-    const gridRect = grid.getBoundingClientRect()
-    const footerRect = footer.getBoundingClientRect()
-    return {
-      gridHeight: gridRect.height,
-      footerBottomGap: cardRect.bottom - footerRect.bottom,
-    }
-  })
-  expect(layout.gridHeight).toBeGreaterThanOrEqual(110)
-  expect(layout.footerBottomGap).toBeLessThan(20)
+  await expect(card.locator('[data-usage-scroll-fade="end"]')).toHaveCount(1)
   await assertNoHorizontalOverflow(page)
-  await assertInteractiveCentersVisible(page)
 })
 
 test('usage heatmap exposes three compact periods', async ({ page }) => {
   const card = page.locator('[data-usage-distribution]')
   const expected = { month: 30, quarter: 91, year: 364 }
 
-  await expect(card.locator('[data-usage-period="month"]')).toHaveAttribute(
-    'aria-pressed',
+  await expect(periodOption(card, 'month')).toHaveAttribute(
+    'aria-checked',
     'true'
   )
 
   for (const [period, count] of Object.entries(expected)) {
-    await card.locator(`[data-usage-period="${period}"]`).click()
+    await periodOption(card, period as Period).click()
     await expect(card.locator('[data-usage-date]')).toHaveCount(count)
     await expect(card.locator(`[data-usage-layout="${period}"]`)).toBeVisible()
 
-    const scroll = await card
-      .locator('[data-usage-scroll]')
-      .evaluate((element) => element.scrollWidth - element.clientWidth)
-    if (period === 'year') {
-      expect(scroll).toBeGreaterThanOrEqual(0)
-      const analytics = card.locator('[data-usage-analytics="bottom"]')
-      await expect(analytics).toBeVisible()
-      await expect(
-        analytics.locator('[data-usage-segment-minimal="true"]')
-      ).toHaveCount(2)
-      expect((await analytics.textContent())?.trim()).toBe('')
+    if (period === 'month') {
+      // Out-of-range calendar slots keep the six-week grid without counting.
+      await expect(card.locator('[data-usage-placeholder]')).toHaveCount(12)
+      await expect(card.locator('[data-usage-scroll]')).toHaveCount(0)
     } else {
-      expect(scroll).toBe(0)
-      const analytics = card.locator('[data-usage-analytics="side"]')
-      await expect(analytics).toBeVisible()
-      await expect(analytics).toContainText('本段最活跃')
-      await expect(analytics).toContainText('星期节律')
+      const scroll = await card
+        .locator('[data-usage-scroll]')
+        .evaluate((element) => element.scrollWidth - element.clientWidth)
+      expect(scroll, `${period} overflow`).toBeLessThanOrEqual(1)
+    }
+
+    const side = period !== 'year'
+    const analytics = card.locator(
+      `[data-usage-analytics="${side ? 'side' : 'bottom'}"]`
+    )
+    await expect(analytics).toBeVisible()
+    await expect(analytics).toContainText('本段最活跃')
+    await expect(analytics).toContainText('星期节律')
+    if (!side) {
+      await expect(
+        analytics.locator('[data-usage-segment-compact="true"]')
+      ).toHaveCount(2)
+      await expect(
+        analytics.locator('[data-usage-segment-details]')
+      ).toBeHidden()
     }
   }
 })
@@ -123,7 +167,7 @@ test('month calendar keeps roomy desktop cells and compact mobile cells', async 
   page,
 }) => {
   const card = page.locator('[data-usage-distribution]')
-  await card.locator('[data-usage-period="month"]').click()
+  await periodOption(card, 'month').click()
 
   const desktopCell = await card
     .locator('.usage-month-cell')
@@ -132,7 +176,7 @@ test('month calendar keeps roomy desktop cells and compact mobile cells', async 
       const rect = element.getBoundingClientRect()
       return { width: rect.width, height: rect.height }
     })
-  expect(desktopCell).toEqual({ width: 42, height: 24 })
+  expect(desktopCell).toEqual({ width: 42, height: 22 })
 
   await page.setViewportSize({ width: 390, height: 844 })
   const mobileCell = await card
@@ -142,7 +186,7 @@ test('month calendar keeps roomy desktop cells and compact mobile cells', async 
       const rect = element.getBoundingClientRect()
       return { width: rect.width, height: rect.height }
     })
-  expect(mobileCell).toEqual({ width: 32, height: 24 })
+  expect(mobileCell).toEqual({ width: 32, height: 22 })
   await assertNoHorizontalOverflow(page)
 })
 
@@ -150,7 +194,7 @@ test('quarter heatmap and side analytics use the expanded desktop layout', async
   page,
 }) => {
   const card = page.locator('[data-usage-distribution]')
-  await card.locator('[data-usage-period="quarter"]').click()
+  await periodOption(card, 'quarter').click()
 
   const desktop = await card.evaluate((element) => {
     const cell = element.querySelector('.usage-dense-cell')
@@ -163,11 +207,10 @@ test('quarter heatmap and side analytics use the expanded desktop layout', async
       analyticsWidth: analytics.getBoundingClientRect().width,
     }
   })
-  expect(desktop).toEqual({
-    cellWidth: 21,
-    cellHeight: 21,
-    analyticsWidth: 272,
-  })
+  expect(desktop.cellWidth).toBe(19)
+  expect(desktop.cellHeight).toBe(19)
+  // The analytics column is capped so surplus width sits at the card edge.
+  expect(desktop.analyticsWidth).toBeLessThanOrEqual(352)
 
   await page.setViewportSize({ width: 390, height: 844 })
   const mobileCell = await card
@@ -177,19 +220,23 @@ test('quarter heatmap and side analytics use the expanded desktop layout', async
       const rect = element.getBoundingClientRect()
       return { width: rect.width, height: rect.height }
     })
-  expect(mobileCell).toEqual({ width: 18, height: 18 })
+  expect(mobileCell.width).toBe(mobileCell.height)
+  expect(mobileCell.width).toBeGreaterThanOrEqual(14)
+  expect(
+    await card
+      .locator('[data-usage-scroll]')
+      .evaluate((element) => element.scrollWidth - element.clientWidth)
+  ).toBeLessThanOrEqual(1)
   await assertNoHorizontalOverflow(page)
 })
 
-test('usage period switching keeps the overview row height stable', async ({
-  page,
-}) => {
+async function expectStableOverviewRow(page: Page) {
   const distribution = page.locator('[data-usage-distribution]')
   const heights: number[] = []
   const measurements: Array<Record<string, number | string>> = []
 
-  for (const period of ['month', 'quarter', 'year']) {
-    await distribution.locator(`[data-usage-period="${period}"]`).click()
+  for (const period of PERIODS) {
+    await periodOption(distribution, period).click()
     await expect(
       distribution.locator(`[data-usage-layout="${period}"]`)
     ).toBeVisible()
@@ -209,10 +256,10 @@ test('usage period switching keeps the overview row height stable', async ({
           distributionCard
             .querySelector('[data-usage-content]')
             ?.getBoundingClientRect().height ?? 0,
-        main:
+        stage:
           distributionCard
-            .querySelector('[data-usage-layout]')
-            ?.parentElement?.getBoundingClientRect().height ?? 0,
+            .querySelector('[data-usage-stage]')
+            ?.getBoundingClientRect().height ?? 0,
         heatmap:
           distributionCard
             .querySelector('[data-usage-layout]')
@@ -240,6 +287,32 @@ test('usage period switching keeps the overview row height stable', async ({
     Math.max(...heights) - Math.min(...heights),
     `period measurements: ${JSON.stringify(measurements)}`
   ).toBeLessThan(1)
+}
+
+for (const width of [1280, 1440, 1680]) {
+  test(`usage period switching keeps the overview row stable at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await expectStableOverviewRow(page)
+  })
+}
+
+test.describe('empty account by day', () => {
+  test.use({ dashboardTheme: 'light', emptyAccount: true })
+
+  // Without the balance usage meter the distribution card sets the row height,
+  // so any period-dependent content height would move the whole row.
+  test('usage period switching keeps the empty overview row stable', async ({
+    page,
+  }) => {
+    const distribution = page.locator('[data-usage-distribution]')
+    await expect(distribution.locator('[data-usage-footer]')).toContainText(
+      '活跃 0 天'
+    )
+    await expect(page.locator('[data-balance-usage-meter]')).toHaveCount(0)
+    await expectStableOverviewRow(page)
+  })
 })
 
 test('balance summary distributes extra row height without a dead gap', async ({
@@ -249,8 +322,8 @@ test('balance summary distributes extra row height without a dead gap', async ({
   const distribution = page.locator('[data-usage-distribution]')
   const balance = page.locator('[data-balance-card]')
 
-  for (const period of ['month', 'quarter', 'year']) {
-    await distribution.locator(`[data-usage-period="${period}"]`).click()
+  for (const period of PERIODS) {
+    await periodOption(distribution, period).click()
     await expect(
       distribution.locator(`[data-usage-layout="${period}"]`)
     ).toBeVisible()
@@ -296,9 +369,11 @@ test('usage distribution stays compact and contained on mobile', async ({
 }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   const card = page.locator('[data-usage-distribution]')
+  const heights: number[] = []
 
-  for (const period of ['month', 'quarter', 'year']) {
-    await card.locator(`[data-usage-period="${period}"]`).click()
+  for (const period of PERIODS) {
+    await periodOption(card, period).click()
+    await expect(card.locator(`[data-usage-layout="${period}"]`)).toBeVisible()
     const metrics = await card.evaluate((element) => {
       const rect = element.getBoundingClientRect()
       const scroll = element.querySelector('[data-usage-scroll]')
@@ -313,7 +388,13 @@ test('usage distribution stays compact and contained on mobile', async ({
     expect(metrics.height, `${period} card height`).toBeLessThanOrEqual(500)
     expect(metrics.overflow).toBe(0)
     if (period === 'year') expect(metrics.heatmapOverflow).toBeGreaterThan(0)
+    heights.push(metrics.height)
   }
+
+  // Stacked cards below would jump if the period changed this card's height.
+  expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1)
+  const touchTarget = await periodOption(card, 'year').boundingBox()
+  expect(touchTarget?.height).toBeGreaterThanOrEqual(44)
 })
 
 test('usage heatmap exposes one roving cell and moves by date', async ({

@@ -19,18 +19,22 @@ const { t, locale } = useI18n({
   messages: opsMonitorMessages,
 })
 const storage = computed(() => props.overview?.storage ?? null)
-const databases = computed(() => [
-  {
+// A log store shared with the main database is noted on the main card instead
+// of taking a card of its own.
+const logShared = computed(() => storage.value?.log_database === null)
+const databases = computed(() => {
+  const main = {
     key: 'database',
     label: t('storage.database'),
     probe: storage.value?.database ?? null,
-  },
-  {
-    key: 'log_database',
-    label: t('storage.logDatabase'),
-    probe: storage.value?.log_database ?? null,
-  },
-])
+  }
+  const log = storage.value?.log_database
+  if (!log) return [main]
+  return [
+    main,
+    { key: 'log_database', label: t('storage.logDatabase'), probe: log },
+  ]
+})
 const metricStatus = (status: OpsStatus) =>
   status === 'warning' || status === 'critical' ? status : null
 const poolLimit = (probe: OpsDatabaseProbe) =>
@@ -63,17 +67,19 @@ const poolLimit = (probe: OpsDatabaseProbe) =>
           t(`status.${item.probe.status}`)
         }}</StatusChip>
       </template>
-      <p v-if="!item.probe" class="ops-empty">
-        {{ t('storage.sharedLogDatabase') }}
-      </p>
-      <template v-else>
+      <template v-if="item.probe">
         <p class="ops-storage-kind">
           <code>{{ item.probe.kind }}</code
           ><span v-if="item.probe.error" class="ops-storage-error">{{
             t(`errors.${item.probe.error}`)
-          }}</span>
+          }}</span
+          ><span
+            v-if="item.key === 'database' && logShared"
+            data-ops-log-shared
+            >{{ t('storage.sharedLogDatabase') }}</span
+          >
         </p>
-        <dl class="ops-metric-grid ops-metric-grid--3">
+        <dl class="ops-metric-grid ops-metric-grid--fit">
           <OpsMetric
             :label="t('storage.latency')"
             v-bind="formatLatencyMs(item.probe.latency_ms, locale)"
@@ -126,7 +132,7 @@ const poolLimit = (probe: OpsDatabaseProbe) =>
               t(`errors.${storage.redis.error}`)
             }}</span>
           </p>
-          <dl class="ops-metric-grid ops-metric-grid--3">
+          <dl class="ops-metric-grid ops-metric-grid--fit">
             <OpsMetric
               :label="t('storage.latency')"
               v-bind="formatLatencyMs(storage.redis.latency_ms, locale)"

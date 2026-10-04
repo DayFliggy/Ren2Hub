@@ -1,29 +1,12 @@
-/* Ops monitor. Status colour stays dot-sized; surfaces stay semantic. */
+/* Ops monitor. Status colour stays dot-sized; surfaces stay semantic.
+   Source order is the reading order on every width: status, requests and
+   upstream, then the runtime band (load, resources, storage), then tasks. */
 .ops-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
-}
-/* Narrow screens read the most actionable sections first. */
-.ops-area--header {
-  order: 0;
-}
-.ops-area--quality {
-  order: 1;
-}
-.ops-area--upstream {
-  order: 2;
-}
-.ops-area--infrastructure {
-  order: 3;
-}
-.ops-area--tasks {
-  order: 4;
-}
-.ops-area--billing {
-  order: 5;
 }
 .ops-area {
   min-width: 0;
@@ -32,48 +15,39 @@
   .ops-page {
     grid-template-columns: repeat(12, minmax(0, 1fr));
   }
-  .ops-area {
-    order: 0;
-  }
-  .ops-area--header,
-  .ops-area--infrastructure,
-  .ops-area--full {
-    grid-column: span 12;
+  .ops-area--quality {
+    grid-column: span 8;
   }
   .ops-area--upstream {
     grid-column: span 4;
   }
-  .ops-area--quality {
-    grid-column: span 8;
+  .ops-area--resources {
+    grid-column: span 7;
   }
-  .ops-area--tasks {
-    grid-column: span 12;
-  }
-  .ops-area--billing {
+  .ops-area--storage {
     grid-column: span 5;
+  }
+  /* Last, so a quality card without its upstream neighbour spans the row. */
+  .ops-area--full {
+    grid-column: span 12;
   }
 }
 
-.ops-area--infrastructure {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
-  min-width: 0;
+/* The window toggle sits on the band it controls, not in the page header. */
+.ops-runtime-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-top: 0.5rem;
 }
-.ops-subarea {
-  min-width: 0;
-}
-@media (min-width: 1280px) {
-  .ops-area--infrastructure {
-    grid-template-columns: minmax(0, 7fr) minmax(18rem, 5fr);
-  }
+.ops-runtime-heading > .section-heading {
+  flex: 1 1 8rem;
 }
 
 .ops-header {
   display: grid;
   gap: 0.75rem;
-  padding-bottom: 0.875rem;
-  border-bottom: 1px var(--row-divider-style, dashed) var(--border-default);
 }
 .ops-header-top {
   display: flex;
@@ -88,16 +62,15 @@
   gap: 0.875rem;
   min-width: 0;
 }
-.ops-hud-health {
+.ops-health {
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
 }
-.ops-hud-score {
+.ops-health-score {
   font-size: 0.8125rem;
   font-weight: 800;
-  font-family: var(--font-mono, monospace);
   line-height: 1;
 }
 .ops-header-title-block {
@@ -121,85 +94,6 @@
   color: var(--text-tertiary);
   margin: 0;
 }
-.ops-hud-telemetry {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.375rem 0.75rem;
-  border-radius: var(--sketch-border-radius-sm, 8px);
-  background: var(--surface-muted);
-  border: 1px solid var(--border-subtle);
-  box-shadow: 1px 1px 0 rgba(56, 55, 43, 0.05);
-}
-.ops-hud-pulse-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--accent-text);
-}
-.ops-live-pulse-dot {
-  position: relative;
-  display: inline-block;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 9999px;
-  background: var(--glow-strong, #5f7d47);
-}
-.ops-live-pulse-dot::after {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: 9999px;
-  background: var(--glow, #7fa463);
-  opacity: 0.6;
-  animation: ops-pulse-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-@keyframes ops-pulse-ping {
-  75%,
-  100% {
-    transform: scale(2);
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ops-live-pulse-dot::after {
-    animation: none;
-  }
-}
-.ops-hud-metrics {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-.ops-hud-metric {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.3125rem;
-}
-.ops-hud-kpi-label {
-  font-size: 0.6875rem;
-  color: var(--text-tertiary);
-}
-.ops-hud-kpi-value {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-family: var(--font-mono, monospace);
-}
-.ops-hud-divider {
-  width: 1px;
-  height: 0.75rem;
-  background: var(--border-subtle);
-}
-.ops-refresh-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-}
 .ops-countdown-badge {
   display: inline-flex;
   align-items: center;
@@ -207,7 +101,6 @@
   border-radius: 9999px;
   font-size: 0.6875rem;
   font-weight: 600;
-  font-family: var(--font-mono, monospace);
   background: var(--surface-muted);
   color: var(--text-secondary);
   border: 1px solid var(--border-subtle);
@@ -216,7 +109,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.375rem 0.5rem;
 }
 .ops-window {
   display: flex;
@@ -249,39 +142,9 @@
 .ops-reason--ok {
   color: var(--text-tertiary);
 }
-.ops-diagnostics {
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 0.625rem;
-}
-.ops-diagnostics > summary {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  cursor: pointer;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  font-weight: 600;
-  list-style: none;
-}
-.ops-diagnostics > summary::-webkit-details-marker {
-  display: none;
-}
-.ops-diagnostics > summary::before {
-  content: '+';
-  display: inline-grid;
-  place-items: center;
-  width: 1rem;
-  height: 1rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: 9999px;
+.ops-reason--muted {
   color: var(--text-tertiary);
-  font-family: var(--font-mono, monospace);
-}
-.ops-diagnostics[open] > summary::before {
-  content: '-';
-}
-.ops-diagnostics > .ops-metric-grid {
-  margin-top: 0.75rem;
+  font-size: 0.75rem;
 }
 .ops-dot {
   display: inline-block;
@@ -333,6 +196,15 @@
   align-content: start;
   gap: 0.875rem;
   min-width: 0;
+}
+/* Cards change width with the grid row they sit in, not with the viewport,
+   so their inner grids follow the card's own width. */
+.ops-card {
+  container-type: inline-size;
+}
+/* A long label or a narrow column must never break a status chip. */
+.ops-card [data-handdrawn='chip'] {
+  white-space: nowrap;
 }
 .ops-card-stale {
   opacity: 0.6;
@@ -390,20 +262,6 @@
   font-size: 0.8125rem;
   overflow-wrap: anywhere;
 }
-.ops-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  min-height: 2rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--accent-text);
-  white-space: nowrap;
-}
-.ops-link:hover {
-  text-decoration: underline;
-}
-
 .ops-metric-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -414,6 +272,12 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .ops-metric-grid--4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+/* Four readings: one row once the card is wide enough, otherwise 2 × 2. */
+@container (min-width: 24rem) {
+  .ops-metric-grid--fit {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
@@ -518,70 +382,14 @@
 .ops-trend-title > [data-handdrawn='chip'] {
   margin-left: 0.5rem;
 }
-.ops-trend-pair {
-  display: grid;
-  gap: 1rem;
-}
-@media (min-width: 768px) {
-  .ops-trend-pair {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 .ops-chart {
   min-width: 0;
 }
-.ops-wait-chart {
-  height: 120px;
-}
-.ops-gateway-kpis {
-  display: grid;
-  gap: 1rem;
-  align-items: center;
-}
-@media (min-width: 768px) {
-  .ops-gateway-kpis {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-}
-.ops-success {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-.ops-queue-progress-bar {
-  display: grid;
-  gap: 0.25rem;
-  padding: 0.5rem 0.75rem;
-  background: var(--surface-muted);
-  border-radius: var(--sketch-border-radius-sm, 6px);
-  border: 1px solid var(--border-subtle);
-}
-.ops-queue-progress-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.6875rem;
-  color: var(--text-secondary);
-}
-.ops-queue-progress-track {
-  height: 6px;
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  border-radius: 9999px;
-  overflow: hidden;
-}
-.ops-queue-progress-fill {
-  height: 100%;
-  border-radius: 9999px;
-  transition: width 0.3s var(--ease-spring-smooth, ease);
-}
-.ops-queue-table,
 .ops-model-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.75rem;
 }
-.ops-queue-table th,
-.ops-queue-table td,
 .ops-model-table th,
 .ops-model-table td {
   padding: 0.375rem 0.25rem;
@@ -589,12 +397,10 @@
   text-align: right;
   white-space: nowrap;
 }
-.ops-queue-table th:first-child,
 .ops-model-table th:first-child {
   text-align: left;
   font-weight: 500;
 }
-.ops-queue-table thead th,
 .ops-model-table thead th {
   font-weight: 500;
   color: var(--text-tertiary);
@@ -621,43 +427,6 @@
   display: block;
   height: 100%;
   background: var(--signal);
-}
-.ops-details summary {
-  display: flex;
-  align-items: center;
-  min-height: 2.25rem;
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  border-radius: 0.5rem;
-  list-style: none;
-}
-.ops-details summary::-webkit-details-marker {
-  display: none;
-}
-/* A flex summary loses the native marker, so draw the disclosure chevron. */
-.ops-details summary::before {
-  content: '';
-  flex: none;
-  width: 0.4rem;
-  height: 0.4rem;
-  margin: 0 0.5rem 0 0.15rem;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(-45deg);
-  transition: transform 0.15s ease;
-}
-.ops-details[open] summary::before {
-  transform: rotate(45deg);
-}
-.ops-details[open] summary {
-  margin-bottom: 0.5rem;
-}
-@media (prefers-reduced-motion: reduce) {
-  .ops-details summary::before {
-    transition: none;
-  }
 }
 
 .ops-strip {
@@ -751,7 +520,6 @@
 /* A long channel name truncates; the state chip keeps its one-line width. */
 .ops-cooling-head > :last-child {
   flex: none;
-  white-space: nowrap;
 }
 .ops-cooling-meta {
   display: flex;
@@ -765,22 +533,96 @@
   overflow-wrap: anywhere;
 }
 
+/* Stores share the row on narrow layouts and stack beside the resources card
+   on wide ones; rows split the column height evenly. */
 .ops-storage {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  grid-auto-rows: 1fr;
   gap: 1rem;
 }
-@media (min-width: 900px) {
+@media (min-width: 1280px) {
   .ops-storage {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 .ops-storage-kind {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.25rem 0.75rem;
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+.ops-storage-kind > [data-ops-log-shared] {
+  color: var(--text-tertiary);
+}
+
+/* Gateway load: stacked, 2 × 2 on a mid-width card, one row when wide. */
+.ops-gateway-grid {
+  display: grid;
+  gap: 1.25rem 1.5rem;
+}
+@container (min-width: 36rem) {
+  .ops-gateway-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (min-width: 66rem) {
+  .ops-gateway-grid {
+    grid-template-columns: 1fr 1fr 1.4fr 0.8fr;
+  }
+}
+.ops-histogram {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+  align-items: end;
+}
+.ops-histogram li {
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.ops-histogram-track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 4.5rem;
+  border-bottom: 1px solid var(--border-default);
+}
+.ops-histogram-track > span {
+  display: block;
+  width: 100%;
+  border-radius: 2px 2px 0 0;
+  background: var(--signal);
+}
+.ops-histogram-count,
+.ops-histogram-label {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 0.625rem;
+  color: var(--text-tertiary);
+}
+.ops-histogram-count {
+  color: var(--text-secondary);
+}
+.ops-counter-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.375rem 0;
+  border-bottom: 1px var(--row-divider-style, dashed) var(--border-subtle);
+  font-size: 0.75rem;
+}
+.ops-counter-list dt {
+  color: var(--text-secondary);
+}
+.ops-counter-list dd {
+  font-weight: 600;
 }
 .ops-storage-error {
   font-weight: 600;

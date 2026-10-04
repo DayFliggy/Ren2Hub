@@ -2,22 +2,25 @@ import { onScopeDispose, ref, watch, type Ref } from 'vue'
 
 /**
  * Tracks whether a horizontally scrollable container still hides content past
- * its right edge. The container is followed through its ref rather than bound
- * once at mount: tables render behind loading branches and are replaced when
- * their data reloads, so the element that exists at mount is rarely the one
- * the user scrolls.
+ * its left or right edge. The container is followed through its ref rather
+ * than bound once at mount: tables render behind loading branches and are
+ * replaced when their data reloads, so the element that exists at mount is
+ * rarely the one the user scrolls.
  */
 export function useTableScrollFade(containerRef: Ref<HTMLElement | null>) {
+  const canScrollLeft = ref(false)
   const canScrollRight = ref(false)
 
   function updateScrollFade() {
     const el = containerRef.value
     if (!el) {
+      canScrollLeft.value = false
       canScrollRight.value = false
       return
     }
     const hasOverflow = el.scrollWidth > el.clientWidth + 1
     const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
+    canScrollLeft.value = hasOverflow && el.scrollLeft > 1
     canScrollRight.value = hasOverflow && !atEnd
   }
 
@@ -54,6 +57,7 @@ export function useTableScrollFade(containerRef: Ref<HTMLElement | null>) {
   })
 
   return {
+    canScrollLeft,
     canScrollRight,
     updateScrollFade,
   }

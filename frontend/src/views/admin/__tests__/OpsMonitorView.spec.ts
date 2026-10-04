@@ -133,6 +133,17 @@ describe('ops monitor access', () => {
     ).toEqual(['All types', 'Batch channel test', 'Gateway state cleanup'])
     expect(view.find('[data-ops-section="billing"]').exists()).toBe(false)
   })
+
+  it('folds task history until Root expands it', async () => {
+    const view = await render(100)
+    const history = view.get('[data-ops-task-history]')
+    const toggle = history.get('button[aria-expanded]')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(history.text()).not.toContain('Clean up task history')
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(history.text()).toContain('Clean up task history')
+  })
 })
 
 describe('ops monitor data states', () => {
@@ -144,7 +155,9 @@ describe('ops monitor data states', () => {
   it('renders unmeasured readings as "--" instead of zero', async () => {
     const view = await render(10)
     expect(view.get('[data-ops-gauge="cpu"]').text()).toContain('--')
-    expect(view.get('[data-ops-success-rate]').text()).toContain('--')
+    const kpis = view.get('[data-ops-kpis]').text()
+    expect(kpis).toContain('--')
+    expect(kpis).toContain('Fewer than 15 samples')
     expect(view.get('[data-ops-storage="redis"]').text()).toContain(
       'Probe timed out'
     )
@@ -152,7 +165,7 @@ describe('ops monitor data states', () => {
 
   it('names graded problems in the header, critical first', async () => {
     const view = await render(10)
-    const reasons = view.get('[data-ops-reasons]').findAll('li')
+    const reasons = view.get('[data-ops-reasons]').findAll('[data-ops-reason]')
     expect(reasons.map((item) => item.find('strong').text())).toEqual([
       'Redis',
       'Master node',
@@ -160,6 +173,61 @@ describe('ops monitor data states', () => {
     expect(
       view.get('[data-ops-overall-status]').attributes('data-status')
     ).toBe('warning')
+  })
+
+  it('names unmeasured checks instead of calling an idle instance fully checked', async () => {
+    vi.mocked(opsMonitorApi.overview).mockResolvedValue(
+      parseOpsOverview({
+        ...overviewFixture(),
+        status: 'ok',
+        health_score: 100,
+        checks: [
+          { key: 'cpu', status: 'ok', value: 12.5, threshold: 90 },
+          { key: 'success_rate', status: 'unknown' },
+        ],
+      })
+    )
+    const view = await render(10)
+    const reasons = view.get('[data-ops-reasons]').text()
+    expect(reasons).toContain('Measured checks passing')
+    expect(reasons).not.toContain('All checks passing')
+    expect(view.get('[data-ops-unmeasured]').text()).toContain('Success rate')
+  })
+
+  it('does not call an instance without channels healthy', async () => {
+    vi.mocked(opsMonitorApi.channels).mockResolvedValue(
+      parseOpsChannels({
+        channels: {
+          total: 0,
+          enabled: 0,
+          manually_disabled: 0,
+          auto_disabled: 0,
+        },
+        breakers: { closed: 0, open: 0, half_open: 0 },
+        unhealthy: [],
+      })
+    )
+    const view = await render(10, true)
+    const upstream = view.get('[data-ops-section="upstream"]').text()
+    expect(upstream).toContain('No upstream channels configured')
+    expect(upstream).not.toContain('All upstream channels are healthy')
+  })
+
+  it('shows queue waits per bucket, not the cumulative counts', async () => {
+    const view = await render(10)
+    const counts = view
+      .get('[data-ops-waits]')
+      .findAll('.ops-histogram-count')
+      .map((item) => item.text())
+    expect(counts).toEqual(['1', '1', '0', '1', '0', '0', '0', '1'])
+  })
+
+  it('notes a shared log store on the main database card', async () => {
+    const view = await render(10)
+    expect(view.find('[data-ops-storage="log_database"]').exists()).toBe(false)
+    expect(
+      view.get('[data-ops-storage="database"] [data-ops-log-shared]').text()
+    ).toBe('Logs share the main database')
   })
 
   it('keeps earlier data visible only behind an explicit stale marker', async () => {

@@ -1,6 +1,9 @@
+import { formatCompact, formatMoney, formatNumber } from '@/utils/format'
+
 export interface UsageDistributionPoint {
   date: string
   requests: number
+  /** Spend in USD; callers convert API quota strings before building a view. */
   consume: number
   tokens: number
 }
@@ -39,6 +42,11 @@ const PERIOD_DAYS: Record<UsageDistributionPeriod, number> = {
   quarter: 91,
   year: 364,
 }
+
+/** Ranked analytics always reserve this many rows so the card height is fixed. */
+export const USAGE_TOP_DAY_LIMIT = 3
+
+const HEAT_MIX = [0, 20, 34, 50, 68, 88] as const
 
 function localDateKey(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -156,7 +164,7 @@ export function buildUsageDistributionView(
     total: values.reduce((sum, value) => sum + value, 0),
     activeDays: active.length,
     peak: ranked[0] ?? null,
-    topDays: ranked.slice(0, 3),
+    topDays: ranked.slice(0, USAGE_TOP_DAY_LIMIT),
     weekdays,
     rangeStart: localDateKey(rangeStart),
     rangeEnd: localDateKey(rangeEnd),
@@ -165,4 +173,47 @@ export function buildUsageDistributionView(
 
 export function shiftUsageDate(dateKey: string, days: number): string {
   return localDateKey(addDays(fromDateKey(dateKey), days))
+}
+
+/** One formatter for totals, cells, tooltips and analytics of every metric. */
+export function formatUsageMetric(
+  metric: UsageDistributionMetric,
+  value: number
+): string {
+  if (metric === 'consume') return formatMoney(value)
+  if (metric === 'tokens') return formatCompact(Math.round(value))
+  return formatNumber(Math.round(value))
+}
+
+export function formatUsageDate(dateKey: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+  }).format(fromDateKey(dateKey))
+}
+
+/** Narrow weekday names, Monday first, matching the grid's week layout. */
+export function usageWeekdayLabels(locale: string): string[] {
+  const format = new Intl.DateTimeFormat(locale, { weekday: 'narrow' })
+  return Array.from({ length: 7 }, (_, index) =>
+    format.format(new Date(2024, 0, 1 + index))
+  )
+}
+
+/** Cell and legend colour for one intensity level of the active metric. */
+export function usageHeatStyle(
+  level: UsageHeatmapCell['level'],
+  color: string
+): { background: string; borderColor: string } {
+  if (level === 0) {
+    return {
+      background: 'var(--surface-muted)',
+      borderColor: 'var(--border-subtle)',
+    }
+  }
+  const amount = HEAT_MIX[level]
+  return {
+    background: `color-mix(in srgb, ${color} ${amount}%, var(--surface-solid))`,
+    borderColor: `color-mix(in srgb, ${color} ${Math.min(96, amount + 8)}%, var(--border-subtle))`,
+  }
 }

@@ -532,6 +532,7 @@ export default {
       metricControl: 'Distribution metric',
       gridLabel: '{period} {metric} heatmap',
       cellLabel: '{date}, {metric} {value}',
+      dragHint: 'Drag to see earlier weeks',
       topDays: 'Most active',
       weekdayRhythm: 'Weekday rhythm',
       weekdayPeak: 'Highest {weekday} {value}',

@@ -10,6 +10,7 @@ export interface ChartPalette {
   signal: string
   signalStrong: string
   support: string
+  glow: string
   success: string
   warning: string
   danger: string
@@ -54,6 +55,10 @@ export function chartPalette(): ChartPalette {
   const isDark =
     document.documentElement.dataset.theme === 'dark' ||
     document.documentElement.classList.contains('dark')
+  const glow = normalizeOpaqueColor(
+    resolveToken('--glow'),
+    isDark ? '#8ec8aa' : '#7fa463'
+  )
   const p: ChartPalette = {
     accent: normalizeOpaqueColor(resolveToken('--accent'), '#d8984c'),
     signal: normalizeOpaqueColor(resolveToken('--signal'), '#74765a'),
@@ -62,6 +67,7 @@ export function chartPalette(): ChartPalette {
       '#5c5e45'
     ),
     support: normalizeOpaqueColor(resolveToken('--support'), '#cfaf6b'),
+    glow,
     success: normalizeOpaqueColor(resolveToken('--status-success'), '#64764b'),
     warning: normalizeOpaqueColor(resolveToken('--status-warning'), '#a87b2a'),
     danger: normalizeOpaqueColor(resolveToken('--status-danger'), '#9d3017'),
@@ -90,10 +96,6 @@ export function chartPalette(): ChartPalette {
       : 'transparent',
     series: [],
   }
-  const glow = normalizeOpaqueColor(
-    resolveToken('--glow'),
-    isDark ? '#8ec8aa' : '#7fa463'
-  )
   p.series = isDark
     ? [
         p.accent,

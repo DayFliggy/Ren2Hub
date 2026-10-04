@@ -15,9 +15,15 @@ const props = withDefaults(
     emptyLabel: string
     summary?: string
     layout?: 'ranked' | 'rhythm'
-    minimal?: boolean
+    /** Ranked rows kept in the layout even when fewer days are active. */
+    reservedRows?: number
+    /**
+     * Title and track only from the lg breakpoint, where the year view shows
+     * the bars as one band; narrower cards stack the full details.
+     */
+    compact?: boolean
   }>(),
-  { summary: '', layout: 'ranked', minimal: false }
+  { summary: '', layout: 'ranked', reservedRows: 0, compact: false }
 )
 
 const root = ref<HTMLElement | null>(null)
@@ -35,6 +41,9 @@ const visibleSegments = computed(() =>
 )
 const total = computed(() =>
   visibleSegments.value.reduce((sum, segment) => sum + segment.value, 0)
+)
+const placeholderRows = computed(() =>
+  Math.max(0, props.reservedRows - props.segments.length)
 )
 
 function segmentStyle(segment: (typeof props.segments)[number]): CSSProperties {
@@ -124,10 +133,9 @@ watch(
     ref="root"
     class="relative min-w-0"
     :data-usage-segment-bar="layout"
-    :data-usage-segment-minimal="minimal || undefined"
+    :data-usage-segment-compact="compact || undefined"
   >
     <div
-      v-if="!minimal"
       class="flex min-w-0 items-center justify-between gap-2"
       data-usage-segment-title
     >
@@ -135,84 +143,89 @@ watch(
         {{ title }}
       </h3>
       <span
-        v-if="summary"
+        v-if="summary || !visibleSegments.length"
         class="truncate text-right text-[9px] tabular-nums text-[var(--text-tertiary)]"
+        data-usage-segment-summary
       >
-        {{ summary }}
+        {{ visibleSegments.length ? summary : emptyLabel }}
       </span>
     </div>
 
-    <template v-if="visibleSegments.length">
+    <!-- Track, rows and labels stay in place without data so heights match. -->
+    <div
+      class="mt-1 flex h-2 overflow-hidden rounded-full bg-[var(--surface-muted)]"
+      role="group"
+      :aria-label="title"
+    >
+      <button
+        v-for="segment in visibleSegments"
+        :key="segment.key"
+        type="button"
+        class="h-full min-w-px border-r border-[var(--surface-solid)] transition-[filter] last:border-r-0 hover:brightness-110 focus-ring"
+        :style="segmentStyle(segment)"
+        :tabindex="focusKey === segment.key ? 0 : -1"
+        :aria-label="`${segment.label} ${segment.displayValue}`"
+        :aria-describedby="tooltip?.key === segment.key ? tooltipId : undefined"
+        :data-usage-segment="segment.key"
+        :data-usage-segment-share="
+          total ? (segment.value / total).toFixed(6) : '0'
+        "
+        @focus="onSegmentFocus($event, segment)"
+        @blur="hideTooltip(segment.key)"
+        @mouseenter="showTooltip($event, segment)"
+        @mouseleave="hideTooltip(segment.key)"
+        @keydown="onKeydown($event, segment.key)"
+      />
+    </div>
+
+    <div
+      v-if="layout === 'ranked'"
+      class="mt-1 space-y-0.5"
+      :class="{ 'lg:hidden': compact }"
+      data-usage-segment-details
+    >
       <div
-        class="flex overflow-hidden rounded-full bg-[var(--surface-muted)]"
-        :class="minimal ? 'h-2.5' : 'mt-1 h-2'"
-        role="group"
-        :aria-label="title"
+        v-for="segment in segments"
+        :key="segment.key"
+        class="grid grid-cols-[0.45rem_minmax(0,1fr)_auto] items-center gap-1.5 text-[9px]"
       >
-        <button
-          v-for="segment in visibleSegments"
-          :key="segment.key"
-          type="button"
-          class="h-full min-w-px border-r border-[var(--surface-solid)] transition-[filter] last:border-r-0 hover:brightness-110 focus-ring"
-          :style="segmentStyle(segment)"
-          :tabindex="focusKey === segment.key ? 0 : -1"
-          :aria-label="`${segment.label} ${segment.displayValue}`"
-          :aria-describedby="
-            tooltip?.key === segment.key ? tooltipId : undefined
-          "
-          :data-usage-segment="segment.key"
-          :data-usage-segment-share="
-            total ? (segment.value / total).toFixed(6) : '0'
-          "
-          @focus="onSegmentFocus($event, segment)"
-          @blur="hideTooltip(segment.key)"
-          @mouseenter="showTooltip($event, segment)"
-          @mouseleave="hideTooltip(segment.key)"
-          @keydown="onKeydown($event, segment.key)"
+        <span
+          class="size-1.5 rounded-sm"
+          :style="{
+            background: `color-mix(in srgb, ${color} ${segment.intensity}%, var(--surface-solid))`,
+          }"
+          aria-hidden="true"
         />
-      </div>
-
-      <div
-        v-if="!minimal && layout === 'ranked'"
-        class="mt-1 space-y-0.5"
-        data-usage-segment-details
-      >
-        <div
-          v-for="segment in segments"
-          :key="segment.key"
-          class="grid grid-cols-[0.45rem_minmax(0,1fr)_auto] items-center gap-1.5 text-[9px]"
-        >
-          <span
-            class="size-1.5 rounded-sm"
-            :style="{
-              background: `color-mix(in srgb, ${color} ${segment.intensity}%, var(--surface-solid))`,
-            }"
-            aria-hidden="true"
-          />
-          <span class="truncate text-[var(--text-secondary)]">
-            {{ segment.label }}
-          </span>
-          <span class="font-mono tabular-nums text-[var(--text-primary)]">
-            {{ segment.displayValue }}
-          </span>
-        </div>
-      </div>
-
-      <div
-        v-else-if="!minimal"
-        class="mt-1 grid grid-cols-7 gap-0.5 text-center text-[9px] text-[var(--text-tertiary)]"
-        data-usage-segment-labels
-        aria-hidden="true"
-      >
-        <span v-for="segment in segments" :key="segment.key" class="truncate">
+        <span class="truncate text-[var(--text-secondary)]">
           {{ segment.label }}
         </span>
+        <span class="font-mono tabular-nums text-[var(--text-primary)]">
+          {{ segment.displayValue }}
+        </span>
       </div>
-    </template>
+      <div
+        v-for="index in placeholderRows"
+        :key="`placeholder-${index}`"
+        class="grid grid-cols-[0.45rem_minmax(0,1fr)_auto] items-center gap-1.5 text-[9px] text-[var(--text-tertiary)]"
+        aria-hidden="true"
+        data-usage-segment-placeholder
+      >
+        <span class="size-1.5 rounded-sm bg-[var(--surface-muted)]" />
+        <span>--</span>
+      </div>
+    </div>
 
-    <p v-else class="mt-2 text-[10px] text-[var(--text-tertiary)]">
-      {{ emptyLabel }}
-    </p>
+    <div
+      v-else
+      class="mt-1 grid grid-cols-7 gap-0.5 text-center text-[9px] text-[var(--text-tertiary)]"
+      :class="{ 'lg:hidden': compact }"
+      data-usage-segment-labels
+      aria-hidden="true"
+    >
+      <span v-for="segment in segments" :key="segment.key" class="truncate">
+        {{ segment.label }}
+      </span>
+    </div>
 
     <div
       v-if="tooltip"

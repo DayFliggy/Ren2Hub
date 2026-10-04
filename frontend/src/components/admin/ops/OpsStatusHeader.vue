@@ -2,16 +2,11 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { AlertTriangle, Maximize2, Minimize2, RefreshCw } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-import {
-  OPS_WINDOWS,
-  type OpsCheck,
-  type OpsOverview,
-  type OpsWindow,
-} from '@/api/opsMonitor'
+import type { OpsCheck, OpsOverview } from '@/api/opsMonitor'
 import ConsoleButton from '@/components/common/ConsoleButton.vue'
 import IconButton from '@/components/common/IconButton.vue'
-import SegmentedToggle from '@/components/common/SegmentedToggle.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
+import StatTileGrid from '@/components/common/StatTileGrid.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import MiniRing from '@/components/console/dashboard/MiniRing.vue'
 import { opsMonitorMessages } from '@/i18n/opsMonitor'
@@ -35,16 +30,11 @@ const props = withDefaults(
   }>(),
   { refreshIntervalSeconds: 30 }
 )
-const selectedWindow = defineModel<OpsWindow>('window', { required: true })
 const emit = defineEmits<{ refresh: [] }>()
 const { t, locale } = useI18n({
   useScope: 'local',
   messages: opsMonitorMessages,
 })
-
-const windowOptions = computed(() =>
-  OPS_WINDOWS.map((value) => ({ value, label: t(`window.${value}`) }))
-)
 
 const healthScore = computed(() => props.overview?.health_score ?? null)
 
@@ -119,6 +109,17 @@ const reasons = computed(() =>
         Number(b.status === 'critical') - Number(a.status === 'critical')
     )
 )
+// Unmeasured checks are named, so a quiet instance never reads as fully checked.
+const unmeasured = computed(() => {
+  const names = (props.overview?.checks ?? [])
+    .filter((check) => check.status === 'unknown')
+    .map((check) => t(`checks.${check.key}`))
+  if (!names.length) return ''
+  return new Intl.ListFormat(locale.value, {
+    style: 'narrow',
+    type: 'unit',
+  }).format(names)
+})
 /** Check values carry the unit of their key. */
 function checkValue(check: OpsCheck, value: number): string {
   if (check.key === 'admission')
@@ -144,6 +145,49 @@ function checkDetail(check: OpsCheck): string {
   if (check.threshold === 0) return `${value} · ${t('disabledLimit')}`
   return `${value} / ${checkValue(check, check.threshold)}`
 }
+
+/** The API reports per-minute rates; the header reads them per second. */
+function perSecond(perMinute: number | null): string {
+  if (perMinute === null) return '--'
+  return `${formatRate(perMinute / 60, locale.value)}${t('gateway.perSecond')}`
+}
+
+const tiles = computed(() => {
+  const gateway = props.overview?.gateway
+  if (!gateway) return []
+  const admission = gateway.admission
+  const success = formatPercent(gateway.success_rate, locale.value)
+  return [
+    {
+      label: t('kpi.inFlight'),
+      value: formatCount(admission.in_flight, locale.value),
+      sub: t('kpi.queued', {
+        queued: formatCount(admission.queued, locale.value),
+        limit: formatCount(admission.total_queue_size, locale.value),
+      }),
+    },
+    {
+      label: t('kpi.granted'),
+      value: perSecond(gateway.granted_per_minute),
+      sub: t('kpi.grantedSub', {
+        total: formatCount(admission.granted_total, locale.value),
+      }),
+    },
+    {
+      label: t('kpi.rejected'),
+      value: perSecond(gateway.rejected_per_minute),
+      sub: t('kpi.rejectedSub'),
+    },
+    {
+      label: t('kpi.successRate'),
+      value: gateway.success_rate === null ? '--' : `${success.value}%`,
+      sub:
+        gateway.success_rate === null
+          ? t('kpi.noSamples')
+          : t('kpi.successRateSub'),
+    },
+  ]
+})
 </script>
 
 <template>
@@ -155,7 +199,7 @@ function checkDetail(check: OpsCheck): string {
   >
     <div class="ops-header-top">
       <div class="ops-header-heading">
-        <div v-if="overview" class="ops-hud-health" aria-hidden="true">
+        <div v-if="overview" class="ops-health" aria-hidden="true">
           <MiniRing
             :percent="healthScore ?? 0"
             :color="healthColor"
@@ -163,7 +207,10 @@ function checkDetail(check: OpsCheck): string {
             :stroke-width="4.5"
             :indeterminate="healthScore === null"
           >
-            <span class="ops-hud-score" :style="{ color: healthColor }">
+            <span
+              class="ops-health-score font-mono"
+              :style="{ color: healthColor }"
+            >
               {{ healthScore !== null ? healthScore : '--' }}
             </span>
           </MiniRing>
@@ -184,77 +231,19 @@ function checkDetail(check: OpsCheck): string {
         </div>
       </div>
 
-      <!-- Realtime Telemetry HUD (Sub2API-inspired live pulse stats) -->
-      <div
-        v-if="overview"
-        class="ops-hud-telemetry"
-        role="region"
-        :aria-label="t('hud.livePulse')"
-      >
-        <div class="ops-hud-pulse-tag">
-          <span class="ops-live-pulse-dot" aria-hidden="true" />
-          <span>{{ t('hud.livePulse') }}</span>
-        </div>
-        <div class="ops-hud-metrics">
-          <div class="ops-hud-metric">
-            <span class="ops-hud-kpi-label">{{
-              t('hud.activeConcurrency')
-            }}</span>
-            <span class="ops-hud-kpi-value">{{
-              formatCount(overview.gateway.admission.in_flight, locale)
-            }}</span>
-          </div>
-          <div class="ops-hud-divider" aria-hidden="true" />
-          <div class="ops-hud-metric">
-            <span class="ops-hud-kpi-label">{{ t('hud.grantedRate') }}</span>
-            <span class="ops-hud-kpi-value">
-              {{
-                overview.gateway.granted_per_minute !== null
-                  ? `${formatRate(overview.gateway.granted_per_minute / 60, locale)}/s`
-                  : '--'
-              }}
-            </span>
-          </div>
-          <div class="ops-hud-divider" aria-hidden="true" />
-          <div class="ops-hud-metric" data-ops-success-rate>
-            <span class="ops-hud-kpi-label">{{
-              t('gateway.successRate')
-            }}</span>
-            <span class="ops-hud-kpi-value">
-              {{
-                overview.gateway.success_rate !== null
-                  ? `${formatPercent(overview.gateway.success_rate, locale).value}%`
-                  : '--'
-              }}
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div class="ops-header-controls">
-        <div class="ops-window">
-          <SegmentedToggle
-            v-model="selectedWindow"
-            :options="windowOptions"
-            :label="t('window.label')"
-            size="sm"
-          />
-          <span class="ops-window-note">{{ t('window.note') }}</span>
-        </div>
-        <div class="ops-refresh-group">
-          <span class="ops-updated" aria-live="polite">{{
-            updatedAt
-              ? t('updatedAt', { time: formatClock(updatedAt, locale) })
-              : t('neverLoaded')
-          }}</span>
-          <span
-            v-if="!loading && updatedAt"
-            class="ops-countdown-badge"
-            :title="t('hud.autoRefresh', { seconds: countdown })"
-          >
-            {{ countdown }}s
-          </span>
-        </div>
+        <span class="ops-updated" aria-live="polite">{{
+          updatedAt
+            ? t('updatedAt', { time: formatClock(updatedAt, locale) })
+            : t('neverLoaded')
+        }}</span>
+        <span
+          v-if="!loading && updatedAt"
+          class="ops-countdown-badge font-mono"
+          :title="t('hud.autoRefresh', { seconds: countdown })"
+        >
+          {{ countdown }}s
+        </span>
         <IconButton
           :label="loading ? t('refreshing') : t('refresh')"
           :disabled="loading"
@@ -305,7 +294,12 @@ function checkDetail(check: OpsCheck): string {
         :class="{ 'ops-card-stale': Boolean(error) }"
         data-ops-reasons
       >
-        <li v-for="check in reasons" :key="check.key" class="ops-reason">
+        <li
+          v-for="check in reasons"
+          :key="check.key"
+          class="ops-reason"
+          data-ops-reason
+        >
           <span
             class="ops-dot"
             :style="{ background: STATUS_COLORS[check.status] }"
@@ -318,70 +312,22 @@ function checkDetail(check: OpsCheck): string {
           v-if="!reasons.length && overview.status === 'ok'"
           class="ops-reason ops-reason--ok"
         >
-          {{ t('allChecksOk') }}
+          {{ unmeasured ? t('allMeasuredOk') : t('allChecksOk') }}
+        </li>
+        <li
+          v-if="unmeasured"
+          class="ops-reason ops-reason--muted"
+          data-ops-unmeasured
+        >
+          {{ t('unmeasured', { items: unmeasured }) }}
         </li>
       </ul>
-      <details
-        class="ops-diagnostics"
+      <StatTileGrid
+        :tiles="tiles"
+        :columns="4"
         :class="{ 'ops-card-stale': Boolean(error) }"
-      >
-        <summary class="focus-ring">
-          {{ t('diagnostics.title') }}
-          <span class="ops-scope">{{ t('scope.process') }}</span>
-        </summary>
-        <dl class="ops-metric-grid ops-metric-grid--3">
-          <div class="ops-metric">
-            <dt class="ops-metric-label">{{ t('gateway.queued') }}</dt>
-            <dd class="ops-metric-value">
-              {{ formatCount(overview.gateway.admission.queued, locale) }}
-            </dd>
-          </div>
-          <div class="ops-metric">
-            <dt class="ops-metric-label">{{ t('gateway.queueFull') }}</dt>
-            <dd class="ops-metric-value">
-              {{
-                formatCount(overview.gateway.admission.queue_full_total, locale)
-              }}
-            </dd>
-          </div>
-          <div class="ops-metric">
-            <dt class="ops-metric-label">{{ t('gateway.waitTimeout') }}</dt>
-            <dd class="ops-metric-value">
-              {{
-                formatCount(
-                  overview.gateway.admission.wait_timeout_total,
-                  locale
-                )
-              }}
-            </dd>
-          </div>
-          <div class="ops-metric">
-            <dt class="ops-metric-label">{{ t('gateway.retryRejected') }}</dt>
-            <dd class="ops-metric-value">
-              {{
-                formatCount(
-                  overview.gateway.retry_budget.rejected_total,
-                  locale
-                )
-              }}
-            </dd>
-          </div>
-          <div class="ops-metric">
-            <dt class="ops-metric-label">{{ t('gateway.canceled') }}</dt>
-            <dd class="ops-metric-value">
-              {{
-                formatCount(overview.gateway.admission.canceled_total, locale)
-              }}
-            </dd>
-          </div>
-          <div class="ops-metric">
-            <dt class="ops-metric-label">{{ t('gateway.pools') }}</dt>
-            <dd class="ops-metric-value">
-              {{ formatCount(overview.gateway.admission.pools, locale) }}
-            </dd>
-          </div>
-        </dl>
-      </details>
+        data-ops-kpis
+      />
     </template>
     <div
       v-else-if="!error"
@@ -390,7 +336,7 @@ function checkDetail(check: OpsCheck): string {
       :aria-label="t('loading')"
     >
       <SkeletonBlock rounded="lg" class="h-7" />
-      <SkeletonBlock rounded="lg" class="h-10" />
+      <SkeletonBlock rounded="lg" class="h-20" />
     </div>
   </section>
 </template>

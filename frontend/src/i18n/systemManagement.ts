@@ -2,6 +2,8 @@ export const systemManagementMessages = {
   'zh-CN': {
     activeTasks: '活动任务',
     historyTasks: '任务历史',
+    expand: '展开',
+    collapse: '收起',
     filterType: '筛选任务类型',
     filterStatus: '筛选任务状态',
     allTypes: '全部类型',
@@ -55,6 +57,8 @@ export const systemManagementMessages = {
   en: {
     activeTasks: 'Active Tasks',
     historyTasks: 'Task History',
+    expand: 'Expand',
+    collapse: 'Collapse',
     filterType: 'Filter task type',
     filterStatus: 'Filter task status',
     allTypes: 'All types',

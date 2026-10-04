@@ -103,9 +103,10 @@ const trend = computed(() => {
         color: 'signal' as const,
         points: line('memory'),
       },
+      // Day theme gives info and signal the same olive; glow keeps disk distinct.
       {
         name: t('resources.disk'),
-        color: 'info' as const,
+        color: 'glow' as const,
         points: line('disk'),
       },
     ],
@@ -227,6 +228,7 @@ const trend = computed(() => {
           :bucket-seconds="trend.bucketSeconds"
           :range="trend.range"
           unit="%"
+          :max="100"
           :height="120"
         />
       </div>

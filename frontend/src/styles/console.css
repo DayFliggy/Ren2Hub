@@ -139,6 +139,12 @@ html.dark .checkbox-round {
   z-index: 20;
 }
 
+.table-scroll-fade--start {
+  right: auto;
+  left: 0;
+  background: linear-gradient(to right, var(--table-fade-surface), transparent);
+}
+
 html.dark [data-surface-variant='default'] .table-scroll-fade {
   --table-fade-surface: var(--surface-container-low);
 }

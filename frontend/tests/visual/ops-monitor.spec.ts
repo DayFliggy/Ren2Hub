@@ -13,7 +13,7 @@ const SECTIONS = [
   'status',
   'quality',
   'upstream',
-  'infrastructure',
+  'gateway',
   'resources',
   'storage',
   'tasks',
@@ -116,14 +116,23 @@ for (const theme of ['light', 'dark'] as const) {
         const tops = boxes.map((box) => box!.y)
         expect(tops).toEqual([...tops].sort((a, b) => a - b))
       } else {
-        const [status, quality, , infrastructure, resources, , tasks] = boxes
+        const [status, quality, upstream, gateway, resources, storage, tasks] =
+          boxes
         // Header and request quality fit the first screen.
         expect(status!.y).toBeLessThan(quality!.y)
-        expect(resources!.y).toBeGreaterThan(quality!.y)
-        expect(infrastructure!.y).toBeGreaterThan(quality!.y)
+        expect(upstream!.x).toBeGreaterThan(quality!.x)
+        expect(gateway!.y).toBeGreaterThan(quality!.y)
+        expect(resources!.y).toBeGreaterThan(gateway!.y)
+        // Stores stack beside the resources card instead of squeezing into it.
+        expect(storage!.x).toBeGreaterThan(resources!.x)
+        expect(storage!.y).toBe(resources!.y)
         expect(tasks!.width).toBeGreaterThan(quality!.width)
-        await expect(section(page, 'infrastructure')).toBeVisible()
       }
+      // Task history starts folded to its header.
+      const history = page.locator('[data-ops-task-history]')
+      await expect(history.locator('table')).toBeHidden()
+      await history.getByRole('button', { name: '展开' }).click()
+      await expect(history.getByText('清理任务历史')).toBeVisible()
 
       await page.screenshot({ path: testInfo.outputPath('ops-top.png') })
       await page
@@ -229,7 +238,7 @@ test('empty states read as healthy instead of zero-filled', async ({
   )
   await page.goto('/ops')
   await expect(section(page, 'upstream')).toContainText('所有上游通道正常')
-  await expect(section(page, 'quality')).toContainText('请求日志未启用')
+  await expect(section(page, 'quality')).toContainText('性能指标未启用')
   await expect(section(page, 'tasks')).toContainText('没有已注册的系统任务')
   await expect(section(page, 'tasks')).toContainText('暂无等待或运行中的任务')
   await expect(section(page, 'billing')).toHaveCount(0)
@@ -311,6 +320,56 @@ test('a mass breaker event scrolls inside the upstream card', async ({
   expect(size.scroll).toBeGreaterThan(size.client)
   await assertNoHorizontalOverflow(page)
 })
+
+test('an instance without channels is not reported healthy', async ({
+  page,
+}) => {
+  await configureStablePage(page, { theme: 'light' })
+  await mockOps(page)
+  await page.route(/\/api\/ops\/channels/, (route) =>
+    route.fulfill(
+      ok({
+        channels: {
+          total: 0,
+          enabled: 0,
+          manually_disabled: 0,
+          auto_disabled: 0,
+        },
+        breakers: { closed: 0, open: 0, half_open: 0 },
+        unhealthy: [],
+      })
+    )
+  )
+  await page.goto('/ops')
+  await expect(section(page, 'upstream')).toContainText('尚未配置上游渠道')
+  await expect(section(page, 'upstream')).not.toContainText('所有上游通道正常')
+})
+
+// 1280px is the narrowest two-column layout, where stores used to collapse.
+for (const width of [1280, 1440]) {
+  test(`store readings fit their cards at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await configureStablePage(page, { theme: 'light' })
+    await mockOps(page)
+    await page.goto('/ops')
+    const stores = page.locator('[data-ops-storage]')
+    await expect(stores).toHaveCount(3)
+    const problems = await stores.evaluateAll((cards) =>
+      cards.flatMap((card) => [
+        ...Array.from(card.querySelectorAll('.ops-metric-value'))
+          .filter((value) => value.scrollWidth > value.clientWidth + 1)
+          .map((value) => `truncated: ${value.textContent?.trim()}`),
+        ...Array.from(card.querySelectorAll('.ops-metric-label'))
+          .filter((label) => label.getBoundingClientRect().height > 24)
+          .map((label) => `wrapped: ${label.textContent?.trim()}`),
+        ...Array.from(card.querySelectorAll('[data-handdrawn="chip"]'))
+          .filter((chip) => chip.getBoundingClientRect().height > 28)
+          .map((chip) => `chip: ${chip.textContent?.trim()}`),
+      ])
+    )
+    expect(problems).toEqual([])
+  })
+}
 
 test('the window selector only reloads the overview trends', async ({
   page,

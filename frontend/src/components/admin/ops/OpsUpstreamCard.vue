@@ -39,11 +39,18 @@ const latency = (value: number | null) => {
     data-ops-section="upstream"
     @retry="feed.refresh"
   >
-    <template v-if="report">
+    <p
+      v-if="report && report.channels.total === 0"
+      class="ops-empty"
+      data-ops-empty
+    >
+      {{ t('upstream.noChannels') }}
+    </p>
+    <template v-else-if="report">
       <p class="ops-trend-title">{{ t('upstream.channels') }}</p>
-      <dl class="ops-metric-grid ops-metric-grid--4">
+      <dl class="ops-metric-grid ops-metric-grid--fit">
         <OpsMetric
-          :label="t('upstream.channels')"
+          :label="t('upstream.total')"
           :value="formatCount(report.channels.total, locale)"
           size="sm"
         />
@@ -64,7 +71,7 @@ const latency = (value: number | null) => {
           size="sm"
         />
       </dl>
-      <div v-if="report.channels.total > 0" class="ops-channel-progress">
+      <div class="ops-channel-progress">
         <div class="ops-channel-progress-bar">
           <div
             class="ops-channel-fill ops-channel-fill--enabled"

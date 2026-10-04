@@ -10,9 +10,13 @@ import {
 } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { formatCompact, formatNumber, formatQuota } from '@/utils/format'
+import { useTableScrollFade } from '@/composables/useTableScrollFade'
 import {
+  formatUsageDate,
+  formatUsageMetric,
   shiftUsageDate,
+  usageHeatStyle,
+  usageWeekdayLabels,
   type UsageDistributionMetric,
   type UsageDistributionPeriod,
   type UsageDistributionView,
@@ -27,6 +31,9 @@ const props = defineProps<{
   periodLabel: string
   metricLabel: string
 }>()
+
+/** The month calendar always reserves six weeks so its height never jumps. */
+const MONTH_SLOTS = 42
 
 const { t, locale } = useI18n()
 const root = ref<HTMLElement | null>(null)
@@ -44,16 +51,17 @@ let dragStartX = 0
 let dragStartScroll = 0
 let suppressClick = false
 
-const weekdays = computed(() => {
-  const monday = new Date(2024, 0, 1)
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(monday)
-    date.setDate(date.getDate() + index)
-    return new Intl.DateTimeFormat(locale.value, { weekday: 'narrow' }).format(
-      date
-    )
+const { canScrollLeft, canScrollRight, updateScrollFade } =
+  useTableScrollFade(scroller)
+const canDrag = computed(() => canScrollLeft.value || canScrollRight.value)
+
+const weekdays = computed(() => usageWeekdayLabels(locale.value))
+const gridLabel = computed(() =>
+  t('dashboard.distribution.gridLabel', {
+    period: props.periodLabel,
+    metric: props.metricLabel,
   })
-})
+)
 
 const visibleCells = computed(() => {
   return props.view.cells.flatMap((cell, index) => {
@@ -72,8 +80,17 @@ const visibleCells = computed(() => {
   })
 })
 
-const calendarRows = computed(() => Math.ceil(props.view.cells.length / 7))
-
+// Grid positions outside the 30-day range (leading days, the rest of this
+// week and the padded sixth week) render as quiet, non-interactive slots.
+const monthPlaceholders = computed(() =>
+  Array.from({ length: MONTH_SLOTS }, (_, index) => index).flatMap((index) => {
+    const cell = props.view.cells[index]
+    if (cell?.inRange && !cell.future) return []
+    return [
+      { key: index, column: (index % 7) + 1, row: Math.floor(index / 7) + 1 },
+    ]
+  })
+)
 const monthMarkers = computed(() => {
   const weeks = Array.from({ length: props.view.weekCount }, (_, index) =>
     props.view.cells.slice(index * 7, index * 7 + 7)
@@ -95,54 +112,34 @@ const monthMarkers = computed(() => {
     ]
   })
 
-  return markers.map((marker, index) => ({
-    ...marker,
-    span:
-      (markers[index + 1]?.column ?? props.view.weekCount + 1) - marker.column,
-  }))
+  return (
+    markers
+      .map((marker, index) => ({
+        ...marker,
+        span:
+          (markers[index + 1]?.column ?? props.view.weekCount + 1) -
+          marker.column,
+      }))
+      // Fitted year cells are ~10px wide: a partial month at either edge with
+      // a one-week span would collide with its neighbour or overflow the grid.
+      .filter((marker) => marker.span >= 2)
+  )
 })
 
-function formatMetric(value: number): string {
-  if (props.metric === 'consume') return formatQuota(value)
-  if (props.metric === 'tokens') return formatCompact(Math.round(value))
-  return formatNumber(Math.round(value))
-}
-
-function fromDateKey(date: string): Date {
-  const [year, month, day] = date.split('-').map(Number)
-  return new Date(year!, month! - 1, day)
-}
-
-function formatDate(date: string): string {
-  return new Intl.DateTimeFormat(locale.value, {
-    month: 'short',
-    day: 'numeric',
-  }).format(fromDateKey(date))
-}
-
 function dayNumber(date: string): number {
-  return fromDateKey(date).getDate()
+  return Number(date.slice(8))
 }
 
 function denseWeekdayLabel(index: number): string {
   if (props.period !== 'year') return weekdays.value[index]!
-  return index % 2 === 0 || index === 6 ? weekdays.value[index]! : ''
+  return index % 2 === 0 ? weekdays.value[index]! : ''
 }
 
 function cellStyle(cell: UsageHeatmapCell): CSSProperties {
-  if (cell.level === 0) {
-    return {
-      background: 'var(--surface-muted)',
-      borderColor: 'var(--border-subtle)',
-      color: 'var(--heatmap-soft-foreground)',
-    }
-  }
-  const amount = [0, 20, 34, 50, 68, 88][cell.level]
   const useStrongForeground =
     props.metric === 'requests' ? cell.level >= 5 : cell.level >= 3
   return {
-    background: `color-mix(in srgb, ${props.metricColor} ${amount}%, var(--surface-solid))`,
-    borderColor: `color-mix(in srgb, ${props.metricColor} ${Math.min(96, amount + 8)}%, var(--border-subtle))`,
+    ...usageHeatStyle(cell.level, props.metricColor),
     color: useStrongForeground
       ? 'var(--heatmap-strong-foreground)'
       : 'var(--heatmap-soft-foreground)',
@@ -151,12 +148,11 @@ function cellStyle(cell: UsageHeatmapCell): CSSProperties {
 
 function cellLabel(cell: UsageHeatmapCell): string {
   return t('dashboard.distribution.cellLabel', {
-    date: formatDate(cell.date),
+    date: formatUsageDate(cell.date, locale.value),
     metric: props.metricLabel,
-    value: formatMetric(cell.value),
+    value: formatUsageMetric(props.metric, cell.value),
   })
 }
-
 function showTooltip(event: FocusEvent | MouseEvent, cell: UsageHeatmapCell) {
   if (!root.value) return
   const target = event.currentTarget as HTMLElement
@@ -215,8 +211,10 @@ function onCellKeydown(event: KeyboardEvent, cell: UsageHeatmapCell) {
 async function alignLatest() {
   await nextTick()
   if (scroller.value) scroller.value.scrollLeft = scroller.value.scrollWidth
+  // Content width changes on period switches do not resize the scroller, and
+  // a clamped scrollLeft does not always emit a scroll event.
+  updateScrollFade()
 }
-
 function onScrollPointerDown(event: PointerEvent) {
   const target = event.currentTarget as HTMLElement
   if (event.button !== 0 || target.scrollWidth <= target.clientWidth) return
@@ -267,130 +265,152 @@ watch(
 
 onMounted(() => void alignLatest())
 </script>
-
 <template>
-  <div ref="root" class="relative min-w-0" :data-usage-layout="period">
-    <div
-      v-if="period === 'month'"
-      ref="scroller"
-      class="subtle-scroll min-w-0 overflow-x-auto pb-1"
-      data-usage-scroll
-    >
-      <div class="usage-month-calendar">
-        <div class="usage-calendar-weekdays" aria-hidden="true">
-          <span v-for="weekday in weekdays" :key="weekday">{{ weekday }}</span>
-        </div>
-        <div
-          class="usage-month-grid"
-          :style="{ '--usage-calendar-rows': calendarRows } as CSSProperties"
-          role="group"
-          :aria-label="
-            t('dashboard.distribution.gridLabel', {
-              period: periodLabel,
-              metric: metricLabel,
-            })
-          "
-        >
-          <button
-            v-for="{ cell, column, row } in visibleCells"
-            :key="cell.date"
-            type="button"
-            class="usage-month-cell focus-ring"
-            :style="[cellStyle(cell), { gridColumn: column, gridRow: row }]"
-            :tabindex="focusDate === cell.date ? 0 : -1"
-            :aria-label="cellLabel(cell)"
-            :aria-describedby="
-              tooltip?.date === cell.date ? tooltipId : undefined
-            "
-            :data-usage-date="cell.date"
-            :data-usage-level="cell.level"
-            @focus="onCellFocus($event, cell)"
-            @blur="hideTooltip(cell.date)"
-            @mouseenter="showTooltip($event, cell)"
-            @mouseleave="hideTooltip(cell.date)"
-            @keydown="onCellKeydown($event, cell)"
-          >
-            {{ dayNumber(cell.date) }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div v-else class="flex min-w-0 gap-2">
-      <div
-        class="usage-dense-weekdays mt-[22px] grid shrink-0 text-center text-[9px] text-[var(--text-tertiary)]"
-        :data-period="period"
-        aria-hidden="true"
-      >
-        <span v-for="(_, index) in weekdays" :key="index">
-          {{ denseWeekdayLabel(index) }}
+  <div
+    ref="root"
+    class="usage-heatmap relative min-w-0"
+    :data-usage-layout="period"
+  >
+    <div v-if="period === 'month'" class="usage-month-calendar">
+      <div class="usage-calendar-weekdays" aria-hidden="true">
+        <span v-for="(weekday, index) in weekdays" :key="index">
+          {{ weekday }}
         </span>
       </div>
-      <div
-        ref="scroller"
-        class="subtle-scroll min-w-0 flex-1 overflow-x-auto pb-1"
-        :class="{
-          'usage-drag-scroll': period === 'year',
-          'is-dragging': period === 'year' && dragging,
-        }"
-        data-usage-scroll
-        :data-usage-draggable="period === 'year' || undefined"
-        @pointerdown="onScrollPointerDown"
-        @pointermove="onScrollPointerMove"
-        @pointerup="onScrollPointerEnd"
-        @pointercancel="onScrollPointerEnd"
-        @click.capture="onScrollClickCapture"
-      >
-        <div
-          class="usage-dense-content"
-          :data-period="period"
-          :style="{ '--usage-weeks': view.weekCount } as CSSProperties"
+      <div class="usage-month-grid" role="group" :aria-label="gridLabel">
+        <button
+          v-for="{ cell, column, row } in visibleCells"
+          :key="cell.date"
+          type="button"
+          class="usage-month-cell focus-ring"
+          :style="[cellStyle(cell), { gridColumn: column, gridRow: row }]"
+          :tabindex="focusDate === cell.date ? 0 : -1"
+          :aria-label="cellLabel(cell)"
+          :aria-describedby="
+            tooltip?.date === cell.date ? tooltipId : undefined
+          "
+          :data-usage-date="cell.date"
+          :data-usage-level="cell.level"
+          @focus="onCellFocus($event, cell)"
+          @blur="hideTooltip(cell.date)"
+          @mouseenter="showTooltip($event, cell)"
+          @mouseleave="hideTooltip(cell.date)"
+          @keydown="onCellKeydown($event, cell)"
         >
-          <div class="usage-dense-months mb-1.5" aria-hidden="true">
-            <span
-              v-for="marker in monthMarkers"
-              :key="marker.key"
-              class="whitespace-nowrap pl-0.5 text-[9px] text-[var(--text-tertiary)]"
-              :style="{
-                gridColumn: `${marker.column} / span ${marker.span}`,
-              }"
-              :data-usage-month="marker.label"
-            >
-              {{ marker.label }}
-            </span>
+          {{ dayNumber(cell.date) }}
+        </button>
+        <span
+          v-for="placeholder in monthPlaceholders"
+          :key="`placeholder-${placeholder.key}`"
+          class="usage-month-placeholder"
+          :style="{ gridColumn: placeholder.column, gridRow: placeholder.row }"
+          aria-hidden="true"
+          data-usage-placeholder
+        />
+      </div>
+    </div>
+    <div
+      v-else
+      class="usage-dense"
+      :data-period="period"
+      :style="{ '--usage-weeks': view.weekCount } as CSSProperties"
+    >
+      <div class="flex min-w-0 gap-[var(--usage-label-gap)]">
+        <div class="usage-dense-weekdays" aria-hidden="true">
+          <span v-for="(_, index) in weekdays" :key="index">
+            {{ denseWeekdayLabel(index) }}
+          </span>
+        </div>
+        <div class="relative -m-1 min-w-0 flex-1">
+          <div
+            ref="scroller"
+            class="usage-dense-scroll overflow-x-auto p-1"
+            :class="{ 'is-draggable': canDrag, 'is-dragging': dragging }"
+            data-usage-scroll
+            :data-usage-draggable="canDrag || undefined"
+            @pointerdown="onScrollPointerDown"
+            @pointermove="onScrollPointerMove"
+            @pointerup="onScrollPointerEnd"
+            @pointercancel="onScrollPointerEnd"
+            @click.capture="onScrollClickCapture"
+          >
+            <div class="usage-dense-content">
+              <div class="usage-dense-months" aria-hidden="true">
+                <span
+                  v-for="marker in monthMarkers"
+                  :key="marker.key"
+                  class="usage-dense-month"
+                  :style="{
+                    gridColumn: `${marker.column} / span ${marker.span}`,
+                  }"
+                  :data-usage-month="marker.label"
+                >
+                  {{ marker.label }}
+                </span>
+              </div>
+              <div
+                class="usage-dense-grid"
+                role="group"
+                :aria-label="gridLabel"
+              >
+                <button
+                  v-for="{ cell, column, row } in visibleCells"
+                  :key="cell.date"
+                  type="button"
+                  class="usage-dense-cell focus-ring"
+                  :style="[
+                    cellStyle(cell),
+                    { gridColumn: column, gridRow: row },
+                  ]"
+                  :tabindex="focusDate === cell.date ? 0 : -1"
+                  :aria-label="cellLabel(cell)"
+                  :aria-describedby="
+                    tooltip?.date === cell.date ? tooltipId : undefined
+                  "
+                  :data-usage-date="cell.date"
+                  :data-usage-level="cell.level"
+                  @focus="onCellFocus($event, cell)"
+                  @blur="hideTooltip(cell.date)"
+                  @mouseenter="showTooltip($event, cell)"
+                  @mouseleave="hideTooltip(cell.date)"
+                  @keydown="onCellKeydown($event, cell)"
+                />
+              </div>
+            </div>
           </div>
           <div
-            class="usage-dense-grid"
-            role="grid"
-            :aria-label="
-              t('dashboard.distribution.gridLabel', {
-                period: periodLabel,
-                metric: metricLabel,
-              })
-            "
-          >
-            <button
-              v-for="{ cell, column, row } in visibleCells"
-              :key="cell.date"
-              type="button"
-              class="usage-dense-cell focus-ring"
-              :style="[cellStyle(cell), { gridColumn: column, gridRow: row }]"
-              :tabindex="focusDate === cell.date ? 0 : -1"
-              :aria-label="cellLabel(cell)"
-              :aria-describedby="
-                tooltip?.date === cell.date ? tooltipId : undefined
-              "
-              :data-usage-date="cell.date"
-              :data-usage-level="cell.level"
-              @focus="onCellFocus($event, cell)"
-              @blur="hideTooltip(cell.date)"
-              @mouseenter="showTooltip($event, cell)"
-              @mouseleave="hideTooltip(cell.date)"
-              @keydown="onCellKeydown($event, cell)"
-            />
-          </div>
+            v-if="canScrollLeft"
+            class="table-scroll-fade table-scroll-fade--start"
+            data-usage-scroll-fade="start"
+            aria-hidden="true"
+          />
+          <div
+            v-if="canScrollRight"
+            class="table-scroll-fade"
+            data-usage-scroll-fade="end"
+            aria-hidden="true"
+          />
         </div>
       </div>
+      <p
+        v-if="canDrag"
+        class="usage-drag-hint"
+        aria-hidden="true"
+        data-usage-drag-hint
+      >
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          aria-hidden="true"
+        >
+          <path d="m15 18-6-6 6-6" />
+        </svg>
+        {{ t('dashboard.distribution.dragHint') }}
+      </p>
     </div>
 
     <div
@@ -406,11 +426,33 @@ onMounted(() => void alignLatest())
 </template>
 
 <style scoped>
-.usage-month-calendar {
+/*
+ * Height contract. Below lg every period stacks the heatmap above the same
+ * analytics block, so the root reserves the six-week month calendar height and
+ * dense periods centre inside it. From lg the card stage owns the height (see
+ * UsageDistributionCard) and the root shrinks to its content.
+ */
+.usage-heatmap {
   --usage-calendar-width: 32px;
-  --usage-calendar-height: 24px;
+  --usage-calendar-height: 22px;
   --usage-calendar-column-gap: 3px;
   --usage-calendar-row-gap: 3px;
+  --usage-calendar-header: 15px;
+  display: flex;
+  min-height: calc(
+    var(--usage-calendar-header) + 6 * var(--usage-calendar-height) + 5 *
+      var(--usage-calendar-row-gap)
+  );
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Dense cells are sized from the card width (cqi), never from their column. */
+.usage-heatmap:not([data-usage-layout='month']) {
+  container-type: inline-size;
+}
+
+.usage-month-calendar {
   width: calc(
     7 * var(--usage-calendar-width) + 6 * var(--usage-calendar-column-gap)
   );
@@ -424,28 +466,27 @@ onMounted(() => void alignLatest())
 }
 
 .usage-calendar-weekdays {
-  margin-bottom: 4px;
+  height: var(--usage-calendar-header);
   text-align: center;
   font-size: 9px;
+  line-height: 11px;
   color: var(--text-tertiary);
 }
-
 .usage-month-grid {
-  grid-template-rows: repeat(
-    var(--usage-calendar-rows),
-    var(--usage-calendar-height)
-  );
+  grid-template-rows: repeat(6, var(--usage-calendar-height));
   row-gap: var(--usage-calendar-row-gap);
+}
+
+.usage-month-cell,
+.usage-month-placeholder {
+  border: 1px solid;
+  border-radius: 6px;
 }
 
 .usage-month-cell {
   display: flex;
-  width: var(--usage-calendar-width);
-  height: var(--usage-calendar-height);
   align-items: flex-start;
   justify-content: flex-start;
-  border: 1px solid;
-  border-radius: 6px;
   padding: 3px 5px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 9px;
@@ -456,45 +497,79 @@ onMounted(() => void alignLatest())
     background-color 120ms ease;
 }
 
-.usage-dense-content {
-  --usage-cell-size: 18px;
+.usage-month-placeholder {
+  border-style: dashed;
+  border-color: var(--border-subtle);
+}
+
+.usage-dense {
+  --usage-label-width: 12px;
+  --usage-label-gap: 6px;
   --usage-gap: 2px;
-  width: calc(
-    var(--usage-weeks) * (var(--usage-cell-size) + var(--usage-gap)) -
-      var(--usage-gap)
+  --usage-axis-height: 14px;
+  /* Cell size that fills the card width exactly with every week visible. */
+  --usage-fit-cell: calc(
+    (
+        100cqi - var(--usage-label-width) - var(--usage-label-gap) -
+          (var(--usage-weeks) - 1) * var(--usage-gap)
+      ) /
+      var(--usage-weeks)
   );
+  --usage-cell-size: clamp(14px, var(--usage-fit-cell), 19px);
 }
 
-.usage-dense-content[data-period='year'] {
-  --usage-cell-size: 10px;
-  --usage-gap: 2px;
-}
-
-.usage-dense-months,
-.usage-dense-grid {
-  display: grid;
-  grid-template-columns: repeat(var(--usage-weeks), var(--usage-cell-size));
-  gap: var(--usage-gap);
-}
-
-.usage-dense-grid {
-  grid-template-rows: repeat(7, var(--usage-cell-size));
+/* Phones keep year cells readable and pan through the weeks instead. */
+.usage-dense[data-period='year'] {
+  --usage-cell-size: 14px;
 }
 
 .usage-dense-weekdays {
-  grid-template-rows: repeat(7, 18px);
-  gap: 2px;
-}
-
-.usage-dense-weekdays[data-period='year'] {
-  grid-template-rows: repeat(7, 10px);
-  gap: 2px;
+  display: grid;
+  width: var(--usage-label-width);
+  flex: none;
+  grid-template-rows: repeat(7, var(--usage-cell-size));
+  gap: var(--usage-gap);
+  padding-top: calc(var(--usage-axis-height) + var(--usage-gap));
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-tertiary);
 }
 
 .usage-dense-weekdays > span {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.usage-dense-content {
+  width: calc(
+    var(--usage-weeks) * (var(--usage-cell-size) + var(--usage-gap)) -
+      var(--usage-gap)
+  );
+}
+
+.usage-dense-months,
+.usage-dense-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--usage-weeks), var(--usage-cell-size));
+  column-gap: var(--usage-gap);
+}
+
+.usage-dense-months {
+  height: var(--usage-axis-height);
+  margin-bottom: var(--usage-gap);
+}
+
+.usage-dense-month {
+  padding-left: 2px;
+  font-size: 9px;
+  line-height: 11px;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+}
+
+.usage-dense-grid {
+  grid-template-rows: repeat(7, var(--usage-cell-size));
+  row-gap: var(--usage-gap);
 }
 
 .usage-dense-cell {
@@ -509,23 +584,38 @@ onMounted(() => void alignLatest())
     background-color 120ms ease;
 }
 
-.usage-dense-content[data-period='year'] .usage-dense-cell {
+.usage-dense[data-period='year'] .usage-dense-cell {
   border-radius: 3px;
 }
 
-.usage-drag-scroll {
-  cursor: grab;
+/* The 4px padding keeps focus rings and hover lift inside the scroll clip. */
+.usage-dense-scroll {
   scrollbar-width: none;
+}
+
+.usage-dense-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.usage-dense-scroll.is-draggable {
+  cursor: grab;
   touch-action: pan-y;
   user-select: none;
 }
 
-.usage-drag-scroll::-webkit-scrollbar {
-  display: none;
+.usage-dense-scroll.is-dragging {
+  cursor: grabbing;
 }
 
-.usage-drag-scroll.is-dragging {
-  cursor: grabbing;
+.usage-drag-hint {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 4px;
+  padding-left: calc(var(--usage-label-width) + var(--usage-label-gap));
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--text-tertiary);
 }
 
 .usage-month-cell:hover,
@@ -538,49 +628,50 @@ onMounted(() => void alignLatest())
 }
 
 @media (max-width: 359px) {
-  .usage-month-calendar {
+  .usage-heatmap {
     --usage-calendar-width: 30px;
-    --usage-calendar-height: 23px;
-    --usage-calendar-column-gap: 3px;
-    --usage-calendar-row-gap: 3px;
   }
 }
 
 @media (min-width: 640px) {
-  .usage-month-calendar {
+  .usage-heatmap {
     --usage-calendar-width: 42px;
-    --usage-calendar-height: 24px;
     --usage-calendar-column-gap: 5px;
-    --usage-calendar-row-gap: 3px;
   }
 
-  .usage-calendar-weekdays {
-    margin-bottom: 4px;
-    font-size: 9px;
+  .usage-month-cell,
+  .usage-month-placeholder {
+    border-radius: 7px;
   }
 
   .usage-month-cell {
-    border-radius: 7px;
     padding: 4px 6px;
     font-size: 10px;
+  }
+
+  /* Tablets fit the whole year unless cells would drop below 10px. */
+  .usage-dense[data-period='year'] {
+    --usage-cell-size: clamp(10px, var(--usage-fit-cell), 14px);
   }
 }
 
 @media (min-width: 1024px) {
-  .usage-dense-content[data-period='quarter'] {
-    --usage-cell-size: 21px;
+  .usage-heatmap {
+    min-height: 0;
   }
 
-  .usage-dense-weekdays[data-period='quarter'] {
-    grid-template-rows: repeat(7, 21px);
+  /* Quarter sits beside the analytics column at a fixed size. */
+  .usage-heatmap[data-usage-layout='quarter'] {
+    container-type: normal;
   }
 
-  .usage-dense-content[data-period='year'] {
-    --usage-cell-size: 14px;
+  .usage-dense[data-period='quarter'] {
+    --usage-cell-size: 19px;
   }
 
-  .usage-dense-weekdays[data-period='year'] {
-    grid-template-rows: repeat(7, 14px);
+  /* Year spans the stage: every week fits, capped by the stage height. */
+  .usage-dense[data-period='year'] {
+    --usage-cell-size: min(var(--usage-fit-cell), 12px);
   }
 }
 </style>

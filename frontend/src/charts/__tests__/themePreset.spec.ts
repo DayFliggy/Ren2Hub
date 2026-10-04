@@ -9,6 +9,7 @@ function palette(isDark: boolean): ChartPalette {
     signal: '#74765a',
     signalStrong: '#5c5e45',
     support: '#cfaf6b',
+    glow: '#7fa463',
     success: '#64764b',
     warning: '#a87b2a',
     danger: '#9d3017',
