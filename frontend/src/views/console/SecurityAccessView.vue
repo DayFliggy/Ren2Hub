@@ -989,7 +989,7 @@ onBeforeUnmount(() => {
         <!-- 04 账户操作 (危险区域) -->
         <ConsoleCard
           :padded="false"
-          class="overflow-hidden border-[var(--status-danger-soft)]"
+          class="overflow-hidden border border-[var(--status-danger)]"
         >
           <SettingsSectionHeading
             index="03"

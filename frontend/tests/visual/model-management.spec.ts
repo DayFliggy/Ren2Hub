@@ -82,6 +82,7 @@ async function data(page: Page) {
           conflicts: [
             {
               model_name: 'gpt-local',
+              local_version: 'local-v1',
               fields: [
                 {
                   field: 'description',

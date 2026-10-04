@@ -791,5 +791,11 @@ onBeforeUnmount(() => {
   .pricing-workspace {
     grid-template-columns: minmax(0, 1fr);
   }
+  .pricing-summary {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 </style>

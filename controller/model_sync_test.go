@@ -60,8 +60,9 @@ type syncTestPreview struct {
 	Data    struct {
 		Missing   []string `json:"missing"`
 		Conflicts []struct {
-			ModelName string `json:"model_name"`
-			Fields    []struct {
+			ModelName    string `json:"model_name"`
+			LocalVersion string `json:"local_version"`
+			Fields       []struct {
 				Field string `json:"field"`
 			} `json:"fields"`
 		} `json:"conflicts"`
@@ -273,8 +274,8 @@ func TestSyncUpstreamOverwriteAppliesOnlySelectedFields(t *testing.T) {
 		"source_version": preview.Data.Source.Version,
 		"locale":         "en",
 		"overwrite": []map[string]any{
-			{"model_name": "kept", "fields": []string{"description"}},
-			{"model_name": "pinned", "fields": []string{"description"}},
+			{"model_name": "kept", "fields": []string{"description"}, "local_version": preview.Data.Conflicts[0].LocalVersion},
+			{"model_name": "pinned", "fields": []string{"description"}, "local_version": "pinned-version"},
 		},
 	}))
 	require.Equal(t, http.StatusOK, status)
@@ -293,6 +294,34 @@ func TestSyncUpstreamOverwriteAppliesOnlySelectedFields(t *testing.T) {
 	var vendorNames []string
 	require.NoError(t, db.Model(&model.Vendor{}).Pluck("name", &vendorNames).Error)
 	assert.Equal(t, []string{"Local Vendor"}, vendorNames, "a description-only overwrite never creates vendors")
+}
+
+func TestSyncUpstreamRejectsLocalMetadataChangesAfterPreview(t *testing.T) {
+	router, upstream, db := setupModelSyncTest(t, []string{"kept"})
+	local := &model.Model{ModelName: "kept", Description: "old", Status: 1, SyncOfficial: 1}
+	require.NoError(t, local.Insert())
+	upstream.set([]map[string]any{{
+		"model_name": "kept", "description": "new", "status": 1,
+	}}, []map[string]any{})
+	preview := previewModelSync(t, router)
+	require.Len(t, preview.Data.Conflicts, 1)
+	require.NoError(t, db.Model(&model.Model{}).Where("id = ?", local.Id).Update("description", "edited locally").Error)
+
+	status, result := applyModelSync(t, router, syncBody(t, map[string]any{
+		"locale":         "en",
+		"source_version": preview.Data.Source.Version,
+		"overwrite": []map[string]any{{
+			"model_name":    "kept",
+			"fields":        []string{"description"},
+			"local_version": preview.Data.Conflicts[0].LocalVersion,
+		}},
+	}))
+	require.Equal(t, http.StatusConflict, status)
+	assert.False(t, result.Success)
+	assert.Equal(t, "METADATA_LOCAL_CHANGED", result.Code)
+	var got model.Model
+	require.NoError(t, db.Where("id = ?", local.Id).First(&got).Error)
+	assert.Equal(t, "edited locally", got.Description)
 }
 
 func TestSyncUpstreamReportsModelsWhoseVendorCannotBeResolved(t *testing.T) {

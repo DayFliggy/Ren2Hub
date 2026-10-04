@@ -87,6 +87,9 @@ var (
 type overwriteField struct {
 	ModelName string   `json:"model_name"`
 	Fields    []string `json:"fields"`
+	// LocalVersion is the fingerprint returned by preview. It prevents a
+	// metadata edit made after preview from being silently overwritten.
+	LocalVersion string `json:"local_version"`
 }
 
 type syncRequest struct {
@@ -117,6 +120,9 @@ func (req *syncRequest) validate() error {
 	for _, ow := range req.Overwrite {
 		if strings.TrimSpace(ow.ModelName) == "" || len(ow.Fields) == 0 {
 			return errors.New("覆盖项必须包含模型名称和字段")
+		}
+		if strings.TrimSpace(ow.LocalVersion) == "" {
+			return errors.New("覆盖项缺少本地资料版本，请先预览")
 		}
 		for _, field := range ow.Fields {
 			if !syncOverwriteFields[field] {
@@ -410,6 +416,33 @@ func SyncUpstreamModels(c *gin.Context) {
 		missingSet[name] = true
 	}
 
+	// Check every selected local record before creating anything. A conflict
+	// must leave the whole request untouched, including requested creations.
+	for _, ow := range req.Overwrite {
+		if _, ok := modelByName[ow.ModelName]; !ok {
+			continue
+		}
+		var local model.Model
+		if err := model.DB.Where("model_name = ?", ow.ModelName).First(&local).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				common.ApiError(c, err)
+				return
+			}
+			continue
+		}
+		if local.SyncOfficial == 0 {
+			continue
+		}
+		if got := modelMetadataFingerprint(local); got != ow.LocalVersion {
+			c.JSON(http.StatusConflict, gin.H{
+				"success": false,
+				"message": "本地资料已变化，请重新预览",
+				"code":    "METADATA_LOCAL_CHANGED",
+			})
+			return
+		}
+	}
+
 	// 3) 创建请求所列、当前仍缺失且上游存在的模型
 	createdModels := 0
 	createdVendors := 0
@@ -541,6 +574,26 @@ func containsField(fields []string, key string) bool {
 	return false
 }
 
+// modelMetadataFingerprint covers every local field that a metadata sync can
+// observe or overwrite. The encoded map is deterministic through the common
+// JSON wrapper, so the value can safely round-trip through the preview UI.
+func modelMetadataFingerprint(mi model.Model) string {
+	encoded, err := common.Marshal([]any{
+		mi.ModelName,
+		mi.Description,
+		mi.Icon,
+		mi.Tags,
+		mi.VendorID,
+		mi.Status,
+		mi.SyncOfficial,
+		mi.NameRule,
+	})
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(encoded))
+}
+
 func coalesce(a, b string) string {
 	if strings.TrimSpace(a) != "" {
 		return a
@@ -625,8 +678,9 @@ func SyncUpstreamPreview(c *gin.Context) {
 		Upstream interface{} `json:"upstream"`
 	}
 	type conflictItem struct {
-		ModelName string          `json:"model_name"`
-		Fields    []conflictField `json:"fields"`
+		ModelName    string          `json:"model_name"`
+		LocalVersion string          `json:"local_version"`
+		Fields       []conflictField `json:"fields"`
 	}
 
 	var conflicts []conflictItem
@@ -657,7 +711,11 @@ func SyncUpstreamPreview(c *gin.Context) {
 			fields = append(fields, conflictField{Field: "status", Local: local.Status, Upstream: up.Status})
 		}
 		if len(fields) > 0 {
-			conflicts = append(conflicts, conflictItem{ModelName: local.ModelName, Fields: fields})
+			conflicts = append(conflicts, conflictItem{
+				ModelName:    local.ModelName,
+				LocalVersion: modelMetadataFingerprint(local),
+				Fields:       fields,
+			})
 		}
 	}
 

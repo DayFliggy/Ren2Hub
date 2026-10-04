@@ -195,6 +195,7 @@ export interface SyncPreview {
   missing: string[]
   conflicts: {
     model_name: string
+    local_version: string
     fields: {
       field: string
       local: string | number
@@ -218,6 +219,7 @@ export function parseSyncPreview(
       const conflict = record(item, endpoint)
       return {
         model_name: requiredString(conflict.model_name, endpoint, false),
+        local_version: requiredString(conflict.local_version, endpoint, false),
         fields: array(conflict.fields, endpoint, (item) => {
           const field = record(item, endpoint)
           if (
@@ -241,7 +243,11 @@ export function parseSyncPreview(
 export interface SyncRequest {
   source_version: string
   create_models: string[]
-  overwrite: { model_name: string; fields: string[] }[]
+  overwrite: {
+    model_name: string
+    fields: string[]
+    local_version: string
+  }[]
 }
 export interface SyncResult {
   created_models: number
@@ -255,6 +261,14 @@ export function isMetadataSourceChanged(cause: unknown): boolean {
     cause instanceof ApiError &&
     cause.status === 409 &&
     cause.code === 'METADATA_SOURCE_CHANGED'
+  )
+}
+/** The selected local metadata changed after the preview. */
+export function isMetadataLocalChanged(cause: unknown): boolean {
+  return (
+    cause instanceof ApiError &&
+    cause.status === 409 &&
+    cause.code === 'METADATA_LOCAL_CHANGED'
   )
 }
 export const metadataApi = {

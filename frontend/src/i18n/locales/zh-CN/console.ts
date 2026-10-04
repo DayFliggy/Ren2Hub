@@ -1282,6 +1282,10 @@ export default {
     apiAddressPlaceholder: '留空使用默认',
     apiAddressDesc:
       '自定义 API 基础 URL。对于官方渠道，New API 具有内置地址。仅针对第三方代理站点或特殊端点填写此项。请勿添加 /v1 或尾部斜杠。',
+    apiAddressRequired: 'API 地址 *',
+    apiAddressRequiredPlaceholder: '填写插件上游 API 基础 URL',
+    apiAddressRequiredDesc:
+      '任务插件渠道必须填写插件实际请求的上游 API 基础 URL，请勿添加 /v1 或尾部斜杠。',
     addMode: '添加模式',
     addModeSingle: '单密钥',
     addModeMulti: '批量密钥',

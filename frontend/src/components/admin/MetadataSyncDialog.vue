@@ -11,6 +11,7 @@ import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import {
+  isMetadataLocalChanged,
   isMetadataSourceChanged,
   metadataApi,
   type SyncPreview,
@@ -62,6 +63,7 @@ const loadError = ref('')
 const syncError = ref('')
 // The upstream catalog changed after the preview; the selection was discarded.
 const sourceChanged = ref(false)
+const localChanged = ref(false)
 let controller: AbortController | undefined
 
 const languageOptions = computed(() => [
@@ -120,6 +122,7 @@ const overwrite = computed(() =>
   chosenUpdates.value
     .map((item) => ({
       model_name: item.model_name,
+      local_version: item.local_version,
       fields: item.fields
         .map((field) => field.field)
         .filter((field) => selection.value[item.model_name].includes(field)),
@@ -167,6 +170,7 @@ function reset() {
   loadError.value = ''
   syncError.value = ''
   sourceChanged.value = false
+  localChanged.value = false
 }
 async function load() {
   controller?.abort()
@@ -205,13 +209,14 @@ async function synchronize() {
     step.value = 3
     emit('saved')
   } catch (cause) {
-    if (!isMetadataSourceChanged(cause)) {
+    if (!isMetadataSourceChanged(cause) && !isMetadataLocalChanged(cause)) {
       syncError.value = messageOf(cause)
       return
     }
     // Nothing was written; the old selection no longer matches the upstream.
     reset()
-    sourceChanged.value = true
+    if (isMetadataLocalChanged(cause)) localChanged.value = true
+    else sourceChanged.value = true
   } finally {
     saving.value = false
   }
@@ -368,16 +373,16 @@ function display(field: string, value: string | number) {
         </ConsoleButton>
       </div>
       <div
-        v-else-if="sourceChanged"
+        v-else-if="sourceChanged || localChanged"
         class="flex flex-col items-center justify-center px-6 py-8 text-center"
         role="alert"
       >
         <AlertTriangle :size="28" class="text-[var(--status-warning-text)]" />
         <p class="mt-3 font-semibold text-[var(--text-primary)]">
-          {{ t('sourceChangedTitle') }}
+          {{ t(localChanged ? 'localChangedTitle' : 'sourceChangedTitle') }}
         </p>
         <p class="mt-1 max-w-md text-sm text-[var(--text-tertiary)]">
-          {{ t('sourceChangedHint') }}
+          {{ t(localChanged ? 'localChangedHint' : 'sourceChangedHint') }}
         </p>
         <ConsoleButton class="mt-5" variant="secondary" @click="load">
           {{ t('previewAgain') }}

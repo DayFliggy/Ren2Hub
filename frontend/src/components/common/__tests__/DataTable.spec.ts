@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 
 import DataTable from '@/components/common/DataTable.vue'
 import i18n from '@/i18n'
@@ -22,6 +23,25 @@ describe('DataTable keyboard rows', () => {
     expect(
       wrapper.get('.data-table-body-viewport table').attributes('style')
     ).toContain('min-width: 1000px')
+  })
+
+  it('keeps scroll position when only a row value changes', async () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [{ key: 'name', label: 'Name' }],
+        rows: [{ id: 1, name: 'Alpha' }],
+        rowKey: 'id',
+      },
+      global: { plugins: [i18n] },
+    })
+    const body = wrapper.get('.data-table-body-viewport').element as HTMLElement
+    const scrollTo = vi.fn()
+    body.scrollTo = scrollTo
+    await wrapper.setProps({ rows: [{ id: 1, name: 'Edited' }] })
+    expect(scrollTo).not.toHaveBeenCalled()
+    await wrapper.setProps({ rows: [{ id: 2, name: 'New row' }] })
+    await nextTick()
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 })
   })
 
   it('applies optional per-row visual classes', () => {

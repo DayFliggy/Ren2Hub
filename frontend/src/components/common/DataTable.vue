@@ -415,9 +415,16 @@ async function resetBodyAndMeasure() {
   scheduleMeasure()
 }
 
+// Re-rendering row values (for example while editing a pricing draft) should
+// preserve the user's scroll position. Only a row identity/order change makes
+// the current viewport invalid.
+const rowIdentity = computed(() =>
+  props.rows.map((row) => String(row[props.rowKey])).join('\u0000')
+)
+
 watch(
   [
-    () => props.rows,
+    rowIdentity,
     () => props.columns,
     () => props.loading,
     () => props.skeletonRows,

@@ -93,6 +93,7 @@
   font-size: 0.75rem;
   color: var(--text-tertiary);
   margin: 0;
+  overflow-wrap: anywhere;
 }
 .ops-countdown-badge {
   display: inline-flex;
@@ -152,6 +153,21 @@
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 9999px;
+}
+@media (max-width: 639px) {
+  .ops-header-top {
+    align-items: flex-start;
+  }
+  .ops-header-heading {
+    flex: 1 1 100%;
+  }
+  .ops-header-title-block {
+    flex: 1;
+  }
+  .ops-header-controls {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 .ops-scope {
   display: inline-flex;

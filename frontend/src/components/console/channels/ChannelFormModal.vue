@@ -451,6 +451,7 @@ const valid = computed(
     validAdvancedConfig.value &&
     validOverrides.value &&
     form.name.trim().length > 0 &&
+    (form.type !== 61 || form.baseUrl.trim().length > 0) &&
     (props.editing !== null || form.key.trim().length > 0) &&
     (props.editing !== null || modelTags.value.length > 0) &&
     Number.isSafeInteger(form.type) &&
@@ -843,13 +844,25 @@ async function submit() {
         <div class="channel-form-section-body">
           <!-- API address -->
           <FormField
-            :label="t('channels.apiAddress')"
-            :hint="t('channels.apiAddressDesc')"
+            :label="
+              form.type === 61
+                ? t('channels.apiAddressRequired')
+                : t('channels.apiAddress')
+            "
+            :hint="
+              form.type === 61
+                ? t('channels.apiAddressRequiredDesc')
+                : t('channels.apiAddressDesc')
+            "
           >
             <TextInput
               v-model="form.baseUrl"
               name="admin-channel-base-url"
-              :placeholder="t('channels.apiAddressPlaceholder')"
+              :placeholder="
+                form.type === 61
+                  ? t('channels.apiAddressRequiredPlaceholder')
+                  : t('channels.apiAddressPlaceholder')
+              "
               autocomplete="url"
             />
             <p

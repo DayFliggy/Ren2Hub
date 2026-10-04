@@ -1324,6 +1324,10 @@ export default {
     apiAddressPlaceholder: 'Leave blank for default',
     apiAddressDesc:
       'Custom API base URL. For official channels, New API has a built-in address. Only fill in for third-party proxies or special endpoints. Do not add /v1 or trailing slashes.',
+    apiAddressRequired: 'API address *',
+    apiAddressRequiredPlaceholder: 'Enter the plugin upstream API base URL',
+    apiAddressRequiredDesc:
+      'Task plugin channels must provide the upstream API base URL used by the plugin. Do not add /v1 or a trailing slash.',
     addMode: 'Add mode',
     addModeSingle: 'Single key',
     addModeMulti: 'Batch keys',

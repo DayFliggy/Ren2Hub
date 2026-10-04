@@ -39,6 +39,7 @@ const preview = {
   conflicts: [
     {
       model_name: 'existing-model',
+      local_version: 'local-v1',
       fields: [
         { field: 'description', local: 'before', upstream: 'after' },
         { field: 'icon', local: 'Old', upstream: 'New' },
@@ -87,7 +88,13 @@ describe('metadata sync wizard', () => {
     expect(mocks.sync).toHaveBeenCalledWith('official', 'en', {
       source_version: 'catalog-v1',
       create_models: ['new-model'],
-      overwrite: [{ model_name: 'existing-model', fields: ['description'] }],
+      overwrite: [
+        {
+          model_name: 'existing-model',
+          fields: ['description'],
+          local_version: 'local-v1',
+        },
+      ],
     })
     expect(wrapper.text()).toContain('Metadata sync completed')
     expect(wrapper.text()).toContain('1 models created, 1 models updated')

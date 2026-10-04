@@ -546,6 +546,10 @@ router.beforeEach(async (to) => {
   } else if (to.meta.messageDomain) {
     await loadMessageDomain(to.meta.messageDomain)
   }
+  // SecurityAccessView uses the auth domain for password fields. The route is
+  // reachable directly, so its lazy auth messages must be present before the
+  // first render rather than relying on a previous sign-in visit.
+  if (to.name === 'security') await loadMessageDomain('auth')
 
   if (!to.meta.requiresAuth && !to.meta.guestOnly) return true
 

@@ -104,7 +104,9 @@ describe('admin management contracts', () => {
     const plan = {
       source_version: 'catalog-v1',
       create_models: ['a'],
-      overwrite: [{ model_name: 'b', fields: ['description'] }],
+      overwrite: [
+        { model_name: 'b', fields: ['description'], local_version: 'local-v1' },
+      ],
     }
     await metadataApi.sync('official', 'en', plan)
     expect(client.post).toHaveBeenCalledWith('/api/models/sync_upstream', {

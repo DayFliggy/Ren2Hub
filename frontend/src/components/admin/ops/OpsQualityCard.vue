@@ -78,8 +78,14 @@ const stripSummary = computed(() => {
 const trend = computed(() => {
   const series = report.value?.series ?? []
   if (!series.length || !report.value) return null
+  // Each hourly reading represents a bucket, so include half a bucket on both
+  // sides. This keeps the bar centers aligned with the health strip cells.
+  const halfBucket = report.value.bucket_seconds / 2
   return {
-    range: [series[0]!.ts, series.at(-1)!.ts] as [number, number],
+    range: [series[0]!.ts - halfBucket, series.at(-1)!.ts + halfBucket] as [
+      number,
+      number,
+    ],
     bucketSeconds: report.value.bucket_seconds,
     series: [
       {

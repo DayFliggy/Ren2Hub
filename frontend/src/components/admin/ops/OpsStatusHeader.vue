@@ -117,13 +117,13 @@ const unmeasured = computed(() => {
   if (!names.length) return ''
   return new Intl.ListFormat(locale.value, {
     style: 'narrow',
-    type: 'unit',
+    type: 'conjunction',
   }).format(names)
 })
 /** Check values carry the unit of their key. */
 function checkValue(check: OpsCheck, value: number): string {
   if (check.key === 'admission')
-    return `${formatRate(value / 60, locale.value)}${t('gateway.perSecond')}`
+    return `${formatRate(value / 60, locale.value)} ${t('gateway.perSecond')}`
   if (
     check.key === 'database' ||
     check.key === 'log_database' ||
@@ -149,7 +149,7 @@ function checkDetail(check: OpsCheck): string {
 /** The API reports per-minute rates; the header reads them per second. */
 function perSecond(perMinute: number | null): string {
   if (perMinute === null) return '--'
-  return `${formatRate(perMinute / 60, locale.value)}${t('gateway.perSecond')}`
+  return `${formatRate(perMinute / 60, locale.value)} ${t('gateway.perSecond')}`
 }
 
 const tiles = computed(() => {

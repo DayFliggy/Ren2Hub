@@ -72,6 +72,9 @@ const zh = {
   sourceChangedTitle: '上游资料已变化',
   sourceChangedHint:
     '预览之后上游资料有更新，本次未做任何修改。请重新预览后再应用。',
+  localChangedTitle: '本地资料已变化',
+  localChangedHint:
+    '预览之后本地资料有修改，本次未做任何修改。请重新预览并确认最新内容。',
   previewAgain: '重新预览',
   syncCompleted: '资料同步完成',
   syncSummary:
@@ -176,6 +179,9 @@ const en: Record<keyof typeof zh, string> = {
   sourceChangedTitle: 'Upstream metadata changed',
   sourceChangedHint:
     'The upstream metadata was updated after this preview, so nothing was changed. Preview again before applying.',
+  localChangedTitle: 'Local metadata changed',
+  localChangedHint:
+    'Local metadata changed after this preview, so nothing was changed. Preview again and review the latest values.',
   previewAgain: 'Preview again',
   syncCompleted: 'Metadata sync completed',
   syncSummary:
