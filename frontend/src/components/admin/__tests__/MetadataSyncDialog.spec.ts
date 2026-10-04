@@ -2,10 +2,15 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TablePagination from '@/components/common/TablePagination.vue'
+import { ApiError } from '@/api/types'
 import MetadataSyncDialog from '../MetadataSyncDialog.vue'
 
 const mocks = vi.hoisted(() => ({ preview: vi.fn(), sync: vi.fn() }))
-vi.mock('@/api/adminManagement', () => ({ metadataApi: mocks }))
+// Keep the real conflict predicate so the dialog sees the backend contract.
+vi.mock('@/api/adminManagement', async (original) => ({
+  ...(await original<typeof import('@/api/adminManagement')>()),
+  metadataApi: mocks,
+}))
 function mountDialog() {
   return mount(MetadataSyncDialog, {
     props: { open: true },
@@ -29,6 +34,7 @@ async function click(wrapper: VueWrapper, text: string) {
   await flushPromises()
 }
 const preview = {
+  version: 'catalog-v1',
   missing: ['new-model'],
   conflicts: [
     {
@@ -78,9 +84,11 @@ describe('metadata sync wizard', () => {
     expect(wrapper.text()).toContain('1 fields will be overwritten across 1')
     expect(mocks.sync).not.toHaveBeenCalled()
     await click(wrapper, 'Apply 2 model changes')
-    expect(mocks.sync).toHaveBeenCalledWith('official', 'en', [
-      { model_name: 'existing-model', fields: ['description'] },
-    ])
+    expect(mocks.sync).toHaveBeenCalledWith('official', 'en', {
+      source_version: 'catalog-v1',
+      create_models: ['new-model'],
+      overwrite: [{ model_name: 'existing-model', fields: ['description'] }],
+    })
     expect(wrapper.text()).toContain('Metadata sync completed')
     expect(wrapper.text()).toContain('1 models created, 1 models updated')
     expect(wrapper.emitted('saved')).toHaveLength(1)
@@ -93,7 +101,11 @@ describe('metadata sync wizard', () => {
     await click(wrapper, 'Preview selected changes')
     await click(wrapper, 'Review confirmation')
     await click(wrapper, 'Apply 1 model changes')
-    expect(mocks.sync).toHaveBeenCalledWith('official', 'en', [])
+    expect(mocks.sync).toHaveBeenCalledWith('official', 'en', {
+      source_version: 'catalog-v1',
+      create_models: ['new-model'],
+      overwrite: [],
+    })
     expect(wrapper.get('[role="alert"]').text()).toContain(
       'upstream unavailable'
     )
@@ -101,6 +113,50 @@ describe('metadata sync wizard', () => {
       'Confirm changes'
     )
     expect(wrapper.emitted('saved')).toBeUndefined()
+    wrapper.unmount()
+  })
+  it('discards a stale preview on 409 and offers a fresh one', async () => {
+    mocks.sync.mockRejectedValueOnce(
+      new ApiError('上游资料已变化，请重新预览', {
+        status: 409,
+        code: 'METADATA_SOURCE_CHANGED',
+      })
+    )
+    const wrapper = mountDialog()
+    await click(wrapper, 'Load metadata preview')
+    await click(wrapper, 'Preview selected changes')
+    await click(wrapper, 'Review confirmation')
+    await click(wrapper, 'Apply 1 model changes')
+    expect(wrapper.get('[aria-current="step"]').text()).toContain(
+      'Select models'
+    )
+    const alert = wrapper.get('[role="alert"]')
+    expect(alert.text()).toContain('Upstream metadata changed')
+    expect(wrapper.text()).not.toContain('new-model')
+    expect(wrapper.emitted('saved')).toBeUndefined()
+    await alert.get('button').trigger('click')
+    await flushPromises()
+    expect(mocks.preview).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('new-model')
+    wrapper.unmount()
+  })
+  it('keeps the confirm step for a 409 that is not a catalog change', async () => {
+    mocks.sync.mockRejectedValueOnce(
+      new ApiError('session changed', {
+        status: 409,
+        code: 'AUTH_SESSION_CHANGED',
+      })
+    )
+    const wrapper = mountDialog()
+    await click(wrapper, 'Load metadata preview')
+    await click(wrapper, 'Preview selected changes')
+    await click(wrapper, 'Review confirmation')
+    await click(wrapper, 'Apply 1 model changes')
+    expect(wrapper.get('[aria-current="step"]').text()).toContain(
+      'Confirm changes'
+    )
+    expect(wrapper.get('[role="alert"]').text()).toContain('session changed')
     wrapper.unmount()
   })
   it('names a failed preview and retries it', async () => {

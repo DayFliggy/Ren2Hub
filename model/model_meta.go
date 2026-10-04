@@ -45,6 +45,22 @@ type Model struct {
 	MatchedCount  int      `json:"matched_count,omitempty" gorm:"-"`
 }
 
+// MatchesName applies the record's name_rule to a concrete channel model name,
+// with the same prefix/contains/suffix semantics as pricing metadata
+// resolution. Unknown rules fall back to an exact name comparison.
+func (mi *Model) MatchesName(name string) bool {
+	switch mi.NameRule {
+	case NameRulePrefix:
+		return strings.HasPrefix(name, mi.ModelName)
+	case NameRuleSuffix:
+		return strings.HasSuffix(name, mi.ModelName)
+	case NameRuleContains:
+		return strings.Contains(name, mi.ModelName)
+	default:
+		return name == mi.ModelName
+	}
+}
+
 func (mi *Model) Insert() error {
 	if mi.Capabilities != nil {
 		if err := mi.Capabilities.Validate(); err != nil {

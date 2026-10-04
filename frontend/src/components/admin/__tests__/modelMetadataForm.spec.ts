@@ -1,10 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   parseMetadataEndpoints,
+  parseMetadataTags,
   serializeMetadataEndpoints,
   runMetadataBatch,
   endpointTemplates,
 } from '../modelMetadataForm'
+
+describe('model metadata tags', () => {
+  // The drawer saves tags joined by commas; reopening must read them back.
+  it.each([[['vision', 'chat']], [['[beta]']], [['["a"', '"b"]']], [[]]])(
+    'reads saved tags %j back unchanged',
+    (tags) => {
+      expect(parseMetadataTags(tags.join(','))).toEqual(tags)
+    }
+  )
+})
 
 describe('model metadata endpoint editing', () => {
   it('round trips endpoint maps and resolves historical inferred type lists', () => {

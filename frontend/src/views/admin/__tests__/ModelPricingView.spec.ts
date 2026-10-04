@@ -3,7 +3,11 @@ import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
-import { PRICING_KEYS, type ModelPricingConfig } from '@/api/pricingConfig'
+import {
+  PRICING_KEYS,
+  type ModelPricingConfig,
+  type PricingValues,
+} from '@/api/pricingConfig'
 import TablePagination from '@/components/common/TablePagination.vue'
 import ModelManagementView from '../ModelManagementView.vue'
 import ModelPricingView from '../ModelPricingView.vue'
@@ -11,6 +15,7 @@ import ModelPricingView from '../ModelPricingView.vue'
 const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   save: vi.fn(),
+  preview: vi.fn(),
   loadSettings: vi.fn(),
   saveOptions: vi.fn(),
   rawValue: vi.fn(),
@@ -19,7 +24,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/api/client', () => ({ api: { get: mocks.get } }))
 vi.mock('@/api/pricingConfig', async (original) => ({
   ...(await original<typeof import('@/api/pricingConfig')>()),
-  pricingConfigApi: { load: mocks.load, save: mocks.save },
+  pricingConfigApi: {
+    load: mocks.load,
+    save: mocks.save,
+    preview: mocks.preview,
+  },
 }))
 vi.mock('@/composables/useSystemSettings', () => ({
   useSystemSettings: () => ({
@@ -35,13 +44,17 @@ vi.mock('@/api/adminManagement', () => ({
 }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ isRoot: true }) }))
 
-function config(price = 1, names: string[] = ['model-a']): ModelPricingConfig {
+function config(
+  price = 1,
+  names: string[] = ['model-a'],
+  pricing: PricingValues = { ModelPrice: price }
+): ModelPricingConfig {
   return {
     entries: names.map((model_name) => ({
       model_name,
       version: 'v1',
-      configured: { ModelPrice: price },
-      effective: { ModelPrice: price },
+      configured: pricing,
+      effective: pricing,
     })),
     empty_version: 'empty',
     options: Object.fromEntries(
@@ -49,8 +62,12 @@ function config(price = 1, names: string[] = ['model-a']): ModelPricingConfig {
     ) as ModelPricingConfig['options'],
   }
 }
+const tiered = (expression: string): PricingValues => ({
+  'billing_setting.billing_mode': 'tiered_expr',
+  'billing_setting.billing_expr': expression,
+})
 
-async function setup(embedded = false) {
+async function setup(embedded = false, stubEditor = true) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -74,7 +91,7 @@ async function setup(embedded = false) {
           createI18n({ legacy: false, locale: 'en', messages: { en: {} } }),
         ],
         stubs: {
-          ModelPricingEditor: true,
+          ModelPricingEditor: stubEditor,
           PriceFetchDialog: true,
           MetadataSyncDialog: true,
           MissingModelsDialog: true,
@@ -92,10 +109,19 @@ function button(wrapper: VueWrapper, text: string) {
   if (!found) throw new Error(`Missing button: ${text}`)
   return found
 }
+function field(wrapper: VueWrapper, scope: string, name: string) {
+  const found = wrapper.findAll(`${scope} label`).find((item) => {
+    const caption = item.find('span')
+    return caption.exists() && caption.text() === name
+  })
+  if (!found) throw new Error(`Missing field: ${name}`)
+  return found.get('input')
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.load.mockResolvedValue(config())
+  mocks.preview.mockResolvedValue({ effective: {} })
   mocks.get.mockResolvedValue(['model-a'])
   mocks.loadSettings.mockResolvedValue(true)
   mocks.rawValue.mockImplementation(
@@ -221,6 +247,82 @@ describe('pricing workspace draft lifecycle', () => {
     expect(saves()).toHaveLength(0)
     expect(button(wrapper, 'Reload pricing').exists()).toBe(true)
     wrapper.unmount()
+  })
+
+  it('saves visual tier and request rule edits from the header without a separate apply', async () => {
+    mocks.load.mockResolvedValue(
+      config(1, ['model-a'], tiered('tier("base", p * 2 + c * 4)'))
+    )
+    const wrapper = await setup(false, false)
+    await button(wrapper, 'model-a').trigger('click')
+    await button(wrapper, 'Visual tiers').trigger('click')
+    await wrapper.get('.price-tier-line input').setValue('3')
+    await button(wrapper, 'Add multiplier rule').trigger('click')
+    await field(wrapper, '.price-rule', 'Field path').setValue('service_tier')
+    await field(wrapper, '.price-rule', 'Value').setValue('priority')
+    await field(wrapper, '.price-rule', 'Multiplier').setValue('2')
+    expect(wrapper.text()).toContain('Unsaved prices')
+    // The page header save is the first of the two save buttons.
+    await button(wrapper, 'Save model prices').trigger('click')
+    await flushPromises()
+    expect(mocks.save).toHaveBeenCalledWith([
+      expect.objectContaining({
+        model_name: 'model-a',
+        pricing: tiered(
+          '(tier("base", p * 3 + c * 4)) * (param("service_tier") == "priority" ? 2 : 1)'
+        ),
+      }),
+    ])
+    expect(wrapper.text()).toContain('Model prices saved')
+    wrapper.unmount()
+  })
+
+  it('guards an invalid visual tier edit and refuses to report it saved', async () => {
+    mocks.load.mockResolvedValue(
+      config(1, ['model-a'], tiered('tier("base", p * 2 + c * 4)'))
+    )
+    const wrapper = await setup(false, false)
+    await button(wrapper, 'model-a').trigger('click')
+    await button(wrapper, 'Visual tiers').trigger('click')
+    await wrapper.get('.price-tier-line input').setValue('')
+    expect(wrapper.text()).toContain('Unsaved prices')
+    const leave = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(leave)
+    expect(leave.defaultPrevented).toBe(true)
+    await button(wrapper, 'Save model prices').trigger('click')
+    await flushPromises()
+    expect(mocks.save).not.toHaveBeenCalled()
+    expect(wrapper.get('.pricing-editor [role="alert"]').text()).toContain(
+      'Enter a finite, non-negative price.'
+    )
+    expect(wrapper.text()).not.toContain('Model prices saved')
+    wrapper.unmount()
+  })
+
+  it('reports a save whose refresh failed and requires a reload before saving again', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const wrapper = await setup()
+    await button(wrapper, 'Delete').trigger('click')
+    mocks.load.mockRejectedValueOnce(new Error('network down'))
+    await button(wrapper, 'Save model prices').trigger('click')
+    await flushPromises()
+    expect(mocks.save).toHaveBeenCalledTimes(1)
+    const alert = wrapper.get('[role="alert"]').text()
+    expect(alert).toContain('Prices saved, but refreshing failed')
+    expect(alert).toContain('network down')
+    expect(wrapper.text()).not.toContain('Unsaved prices')
+    expect(
+      button(wrapper, 'Save model prices').element.matches(':disabled')
+    ).toBe(true)
+    await button(wrapper, 'Reload pricing').trigger('click')
+    await flushPromises()
+    expect(confirm).not.toHaveBeenCalled()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(
+      button(wrapper, 'Save model prices').element.matches(':disabled')
+    ).toBe(false)
+    wrapper.unmount()
+    confirm.mockRestore()
   })
 
   it('keeps earlier pages selected when the header selects another page', async () => {

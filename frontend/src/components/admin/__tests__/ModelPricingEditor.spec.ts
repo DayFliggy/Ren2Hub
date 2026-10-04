@@ -21,6 +21,89 @@ function setup(pricing: PricingValues = {}) {
     },
   })
 }
+type EditorWrapper = ReturnType<typeof setup>
+function button(wrapper: EditorWrapper, text: string) {
+  const found = wrapper.findAll('button').find((item) => item.text() === text)
+  if (!found) throw new Error(`Missing button: ${text}`)
+  return found
+}
+function field(wrapper: EditorWrapper, scope: string, name: string) {
+  const found = wrapper.findAll(`${scope} label`).find((item) => {
+    const caption = item.find('span')
+    return caption.exists() && caption.text() === name
+  })
+  if (!found) throw new Error(`Missing field: ${name}`)
+  return found.get('input')
+}
+const tiered = (expression: string): PricingValues => ({
+  'billing_setting.billing_mode': 'tiered_expr',
+  'billing_setting.billing_expr': expression,
+})
+describe('expression editor drafts', () => {
+  it('applies the base tier preset once its blank prices are entered', async () => {
+    const wrapper = setup()
+    await button(wrapper, 'Add a base tier').trigger('click')
+    const prices = wrapper.findAll('.price-tier-line input')
+    await prices[0]!.setValue('2')
+    await prices[1]!.setValue('4')
+    expect(wrapper.vm.dirty()).toBe(true)
+    expect(wrapper.vm.commit()?.pricing).toEqual(
+      tiered('tier("base", p * 2 + c * 4)')
+    )
+    wrapper.unmount()
+  })
+  it('drops a stale visual error once valid source is entered', async () => {
+    const wrapper = setup()
+    await button(wrapper, 'Add a base tier').trigger('click')
+    // Blank preset prices are not free; saving must stop with an error.
+    expect(wrapper.vm.commit()).toBeNull()
+    await button(wrapper, 'Expression source').trigger('click')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    await wrapper.get('.price-expression textarea').setValue('p * 2')
+    expect(wrapper.vm.commit()?.pricing).toEqual(tiered('p * 2'))
+    wrapper.unmount()
+  })
+  it('opens another model with a fresh expression editor', async () => {
+    const wrapper = setup(tiered('tier("base", p * 2 + c * 4)'))
+    await button(wrapper, 'Visual tiers').trigger('click')
+    await wrapper.get('.price-tier-line input').setValue('')
+    expect(wrapper.vm.dirty()).toBe(true)
+    await wrapper.setProps({
+      modelName: 'other-model',
+      pricing: tiered('p * 5'),
+    })
+    expect(wrapper.get('.price-expression textarea').element).toHaveProperty(
+      'value',
+      'p * 5'
+    )
+    expect(wrapper.vm.dirty()).toBe(false)
+    expect(wrapper.vm.commit()?.pricing).toEqual(tiered('p * 5'))
+    wrapper.unmount()
+  })
+  it('keeps a changed price dimension in the visual tier', async () => {
+    const wrapper = setup(tiered('v1:tier("base", p * 2 + c * 4)'))
+    await button(wrapper, 'Visual tiers').trigger('click')
+    // Opening the visual editor alone must not rewrite the saved expression.
+    expect(wrapper.vm.dirty()).toBe(false)
+    await wrapper.findAll('.price-tier-line select')[1]!.setValue('cr')
+    expect(wrapper.vm.commit()?.pricing).toEqual(
+      tiered('v1:tier("base", p * 2 + cr * 4)')
+    )
+    wrapper.unmount()
+  })
+  it('stops the editor save on an incomplete request rule', async () => {
+    const wrapper = setup(tiered('p * 2'))
+    await button(wrapper, 'Add multiplier rule').trigger('click')
+    await field(wrapper, '.price-rule', 'Field path').setValue('service_tier')
+    expect(wrapper.vm.dirty()).toBe(true)
+    await button(wrapper, 'Save model prices').trigger('click')
+    expect(wrapper.emitted('save')).toBeUndefined()
+    expect(
+      wrapper.get('.pricing-editor-scroll > [role="alert"]').text()
+    ).toContain('Complete condition paths, values, and valid multipliers.')
+    wrapper.unmount()
+  })
+})
 describe('manual model price editor', () => {
   it('keeps its own save action and saves only a committed draft', async () => {
     const wrapper = setup()

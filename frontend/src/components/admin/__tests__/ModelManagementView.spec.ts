@@ -8,6 +8,7 @@ import VendorDrawer from '@/components/admin/VendorDrawer.vue'
 import VendorsSection from '@/components/admin/VendorsSection.vue'
 import ModelMetadataDrawer from '@/components/admin/ModelMetadataDrawer.vue'
 import ModelsSection from '@/components/admin/ModelsSection.vue'
+import ActionMenu from '@/components/common/ActionMenu.vue'
 
 const mocks = vi.hoisted(() => ({
   models: vi.fn(),
@@ -304,6 +305,28 @@ describe('model management sections', () => {
     expect(wrapper.get('[role="alert"]').text()).toContain(
       'model-2: permission denied'
     )
+    wrapper.unmount()
+  })
+  it('keeps the other selected rows after a single-row action', async () => {
+    const { wrapper } = await setup()
+    const checkbox = (id: number) =>
+      wrapper.get(`input[aria-label="Select model-${id}"]`)
+    const hideRow = async (index: number) => {
+      wrapper.findAllComponents(ActionMenu)[index]!.vm.$emit('select', 'hide')
+      await flushPromises()
+    }
+    // The page-header menu comes first; row menus follow in row order.
+    await checkbox(2).setValue(true)
+    await hideRow(1)
+    expect(mocks.setModelStatus).toHaveBeenCalledWith(1, 0)
+    expect(checkbox(2).element).toHaveProperty('checked', true)
+
+    await checkbox(2).setValue(false)
+    await checkbox(1).setValue(true)
+    await hideRow(2)
+    expect(mocks.setModelStatus).toHaveBeenLastCalledWith(2, 0)
+    expect(checkbox(1).element).toHaveProperty('checked', true)
+    expect(checkbox(2).element).toHaveProperty('checked', false)
     wrapper.unmount()
   })
   it('switches to the vendors section without dropping the query', async () => {

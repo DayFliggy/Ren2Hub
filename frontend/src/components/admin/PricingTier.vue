@@ -57,7 +57,11 @@ function branch() {
         >
           <label class="admin-field"
             ><span>{{ t('quantity') }}</span
-            ><select v-model="price.variable">
+            ><!-- The serializer reuses an origin's source text, including its
+            variable; a changed dimension must be written as a new term. --><select
+              v-model="price.variable"
+              @change="price.origin = undefined"
+            >
               <option
                 v-for="variable in [
                   'p',

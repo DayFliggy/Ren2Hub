@@ -21,45 +21,99 @@ import {
 } from '@/features/pricing/lib/billing-expr'
 import { isDecimal } from '@/utils/decimal'
 import PricingTier from './PricingTier.vue'
+// As in NewAPI's tiered editor, every edit that serializes is written to the
+// expression at once. An incomplete draft keeps the last valid expression and
+// is exposed as `issue`; the host counts it as unsaved and refuses to save it.
 const model = defineModel<string>({ required: true })
 const { t } = useI18n({ useScope: 'local', messages: modelPricingMessages })
-const mode = ref('source'),
+// Compilable frame for the preset tier; its blank prices must still be entered.
+const PRESET_SOURCE = 'tier("base", p * 0 + c * 0)'
+const mode = ref<'source' | 'visual'>('source'),
   document = ref<VisualBillingDocument | null>(null)
 const rules = ref<RequestRuleGroup[]>([]),
   ruleSource = ref(''),
   base = ref(''),
-  error = ref('')
-let emitted = ''
+  rulesInvalid = ref(false)
 watch(
   model,
   (value) => {
-    if (value === emitted) return
+    // A value this editor wrote itself keeps the live draft and its inputs.
+    if (value === combineBillingExpr(base.value, ruleSource.value)) return
     const split = splitBillingExprAndRequestRules(value)
     base.value = split.billingExpr
     ruleSource.value = split.requestRuleExpr
     document.value = parseVisualBillingDocument(split.billingExpr)
     rules.value = tryParseRequestRuleExpr(split.requestRuleExpr) ?? []
+    if (!document.value) mode.value = 'source'
   },
   { immediate: true }
 )
 const opaqueRules = computed(
   () => ruleSource.value && !tryParseRequestRuleExpr(ruleSource.value)
 )
-function applyVisual() {
-  error.value = ''
-  if (!document.value) return
-  const serialized = serializeVisualBillingDocument(document.value)
-  if (!serialized.ok) {
-    error.value = serialized.issues.map((issue) => issue.message).join('; ')
-    return
-  }
-  base.value = serialized.source
-  emitted = combineBillingExpr(base.value, ruleSource.value)
-  model.value = emitted
+const visual = computed(() =>
+  mode.value === 'visual' && document.value
+    ? serializeVisualBillingDocument(document.value)
+    : null
+)
+watch(visual, (result) => {
+  if (!result?.ok || result.source === base.value) return
+  base.value = result.source
+  model.value = combineBillingExpr(base.value, ruleSource.value)
+})
+watch(
+  rules,
+  (next, previous) => {
+    // A replaced list was just read from the expression; only edits of the
+    // current list are drafts to check and write.
+    if (next !== previous) {
+      rulesInvalid.value = false
+      return
+    }
+    rulesInvalid.value = next.some(
+      (rule) =>
+        !isDecimal(rule.multiplier) ||
+        !rule.conditions.length ||
+        rule.conditions.some(
+          (condition) =>
+            (condition.mode !== 'exists' &&
+              condition.mode !== 'range' &&
+              !condition.value.trim()) ||
+            // The builder silently omits a condition it cannot express, such
+            // as an empty path, an out-of-range time or a non-numeric bound.
+            !buildRequestRuleExpr([
+              { conditions: [condition], multiplier: rule.multiplier },
+            ])
+        )
+    )
+    if (rulesInvalid.value) return
+    ruleSource.value = buildRequestRuleExpr(next)
+    model.value = combineBillingExpr(base.value, ruleSource.value)
+  },
+  { deep: true }
+)
+const issue = computed(() => {
+  const messages = new Set<string>()
+  const result = visual.value
+  if (result && !result.ok)
+    for (const item of result.issues) messages.add(item.message)
+  if (rulesInvalid.value) messages.add(t('requestRuleInvalid'))
+  return [...messages].join('; ')
+})
+function showSource() {
+  // Leaving visual mode drops an unserializable draft; the expression keeps
+  // its last valid value, and the next visual session starts from it.
+  mode.value = 'source'
+  document.value = parseVisualBillingDocument(base.value)
+}
+function changeRuleSource(event: Event) {
+  ruleSource.value = (event.target as HTMLTextAreaElement).value
+  rules.value = tryParseRequestRuleExpr(ruleSource.value) ?? rules.value
+  model.value = combineBillingExpr(base.value, ruleSource.value)
 }
 function addBase() {
   document.value = {
-    source: '',
+    source: PRESET_SOURCE,
     root: {
       id: visualNodeId(),
       kind: 'tier',
@@ -74,29 +128,6 @@ function addBase() {
   }
   mode.value = 'visual'
 }
-function applyRules() {
-  error.value = ''
-  if (
-    rules.value.some(
-      (rule) =>
-        !isDecimal(rule.multiplier) ||
-        !rule.conditions.length ||
-        rule.conditions.some(
-          (condition) =>
-            (condition.source !== 'time' && !condition.path.trim()) ||
-            (condition.mode !== 'exists' &&
-              condition.mode !== 'range' &&
-              !condition.value.trim())
-        )
-    )
-  ) {
-    error.value = t('requestRuleInvalid')
-    return
-  }
-  ruleSource.value = buildRequestRuleExpr(rules.value)
-  emitted = combineBillingExpr(base.value, ruleSource.value)
-  model.value = emitted
-}
 function changeSource(rule: RequestRuleGroup, index: number, event: Event) {
   const source = (event.target as HTMLSelectElement).value
   rule.conditions[index] =
@@ -107,12 +138,7 @@ function changeSource(rule: RequestRuleGroup, index: number, event: Event) {
           source: source === 'header' ? 'header' : 'param',
         }
 }
-defineExpose({
-  validate: () => {
-    if (mode.value === 'visual') applyVisual()
-    if (error.value) throw new Error(error.value)
-  },
-})
+defineExpose({ issue })
 </script>
 <template>
   <section class="price-expression">
@@ -121,7 +147,7 @@ defineExpose({
         variant="ghost"
         size="sm"
         :aria-pressed="mode === 'source'"
-        @click="mode = 'source'"
+        @click="showSource"
         >{{ t('exprSource') }}</ConsoleButton
       ><ConsoleButton
         variant="ghost"
@@ -147,28 +173,16 @@ defineExpose({
         :placeholder="t('exprRequired')"
       />
     </label>
-    <template v-else-if="document"
-      ><PricingTier v-model="document.root" /><ConsoleButton
-        variant="secondary"
-        size="sm"
-        @click="applyVisual"
-        >{{ t('apply') }}</ConsoleButton
-      ></template
-    >
+    <PricingTier v-else-if="document" v-model="document.root" />
     <p v-if="model && !document" class="admin-muted">{{ t('exprAdvanced') }}</p>
-    <p v-if="error" class="admin-error" role="alert">{{ error }}</p>
+    <p v-if="issue" class="admin-error" role="alert">{{ issue }}</p>
     <details>
       <summary>{{ t('rules') }}</summary>
       <p class="admin-muted">{{ t('paramsHint') }}</p>
       <label v-if="opaqueRules" class="admin-field"
         ><span>{{ t('conditionsRaw') }}</span
-        ><textarea v-model="ruleSource" rows="3" /><ConsoleButton
-          variant="secondary"
-          size="sm"
-          @click="model = combineBillingExpr(base, ruleSource)"
-          >{{ t('apply') }}</ConsoleButton
-        ></label
-      >
+        ><textarea :value="ruleSource" rows="3" @input="changeRuleSource" />
+      </label>
       <template v-else>
         <div
           v-for="(rule, ruleIndex) in rules"
@@ -282,9 +296,7 @@ defineExpose({
             size="sm"
             @click="rules.push(createEmptyRuleGroup())"
             >{{ t('addRule') }}</ConsoleButton
-          ><ConsoleButton variant="secondary" size="sm" @click="applyRules">{{
-            t('apply')
-          }}</ConsoleButton>
+          >
         </div>
       </template>
     </details>

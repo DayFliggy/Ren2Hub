@@ -69,6 +69,9 @@ const zh = {
   planOverwrite: '将覆盖 {models} 个模型的 {fields} 个字段',
   importNote: '导入元信息不会添加渠道、开放模型访问或配置价格。',
   syncFailed: '资料同步失败',
+  sourceChangedTitle: '上游资料已变化',
+  sourceChangedHint:
+    '预览之后上游资料有更新，本次未做任何修改。请重新预览后再应用。',
   previewAgain: '重新预览',
   syncCompleted: '资料同步完成',
   syncSummary:
@@ -170,6 +173,9 @@ const en: Record<keyof typeof zh, string> = {
   importNote:
     'Importing metadata does not add channels, enable model access, or configure prices.',
   syncFailed: 'Metadata sync failed',
+  sourceChangedTitle: 'Upstream metadata changed',
+  sourceChangedHint:
+    'The upstream metadata was updated after this preview, so nothing was changed. Preview again before applying.',
   previewAgain: 'Preview again',
   syncCompleted: 'Metadata sync completed',
   syncSummary:

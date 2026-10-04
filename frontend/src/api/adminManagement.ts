@@ -1,4 +1,5 @@
 import { api } from './client'
+import { ApiError } from './types'
 import { parseModelEndpoints } from '@/utils/modelEndpoints'
 import { parseModelCapabilities, type ModelCapabilities } from './modelManifest'
 import {
@@ -189,6 +190,8 @@ export function parsePrefillGroup(
 }
 
 export interface SyncPreview {
+  /** Upstream catalog version; an apply request must echo it back. */
+  version: string
   missing: string[]
   conflicts: {
     model_name: string
@@ -205,6 +208,11 @@ export function parseSyncPreview(
 ): SyncPreview {
   const data = record(value, endpoint)
   return {
+    version: requiredString(
+      record(data.source, endpoint).version,
+      endpoint,
+      false
+    ),
     missing: parseStringArray(data.missing ?? [], endpoint),
     conflicts: array(data.conflicts ?? [], endpoint, (item) => {
       const conflict = record(item, endpoint)
@@ -229,11 +237,25 @@ export function parseSyncPreview(
     }),
   }
 }
+/** The changes chosen from one preview; the backend applies nothing else. */
+export interface SyncRequest {
+  source_version: string
+  create_models: string[]
+  overwrite: { model_name: string; fields: string[] }[]
+}
 export interface SyncResult {
   created_models: number
   updated_models: number
   created_vendors: number
   skipped_models: string[]
+}
+/** The upstream catalog changed after the preview; the apply wrote nothing. */
+export function isMetadataSourceChanged(cause: unknown): boolean {
+  return (
+    cause instanceof ApiError &&
+    cause.status === 409 &&
+    cause.code === 'METADATA_SOURCE_CHANGED'
+  )
 }
 export const metadataApi = {
   async models(params: Record<string, unknown>, signal?: AbortSignal) {
@@ -322,11 +344,11 @@ export const metadataApi = {
   async sync(
     source: string,
     locale: string,
-    overwrite: { model_name: string; fields: string[] }[]
+    request: SyncRequest
   ): Promise<SyncResult> {
     const endpoint = '/api/models/sync_upstream'
     const data = record(
-      await api.post(endpoint, { source, locale, overwrite }),
+      await api.post(endpoint, { source, locale, ...request }),
       endpoint
     )
     return {

@@ -77,6 +77,8 @@ const json = ref(pricingJSON({})),
   clearOpen = ref(false)
 const toolsDirty = ref(false)
 const ready = ref(false)
+// Set when a save was accepted but its refresh failed; cleared by a load.
+const reloadRequired = ref(false)
 const toolsRevision = ref(0)
 const page = ref(1),
   pageSize = ref(20),
@@ -95,16 +97,19 @@ const siteCurrency = computed(() =>
 const exchangeRate = computed(() =>
   String(settings.rawValue('general_setting.custom_currency_exchange_rate', 1))
 )
-const dirty = computed(
-  () =>
-    toolsDirty.value ||
+const dirty = computed(() => {
+  if (toolsDirty.value) return true
+  // The saved draft only differs from the stale baseline until it reloads.
+  if (reloadRequired.value) return false
+  return (
     editorDirty.value ||
     (baseline.value
       ? pricingChanges(baseline.value, draft.value).length > 0
       : false) ||
     (mode.value === 'json' &&
       JSON.stringify(json.value) !== JSON.stringify(pricingJSON(draft.value)))
-)
+  )
+})
 const rows = computed(() => {
   const names =
     tab.value === 'unset'
@@ -225,6 +230,7 @@ async function load(forceSettings = false) {
     enabledModels.value = names
     json.value = pricingJSON(draft.value)
     editorDirty.value = false
+    reloadRequired.value = false
     expose.value = ['true', '1'].includes(
       String(settings.rawValue('ExposeRatioEnabled', false))
     )
@@ -286,11 +292,13 @@ async function save() {
   message.value = ''
   if (!commitOpen()) return
   saving.value = true
+  let persisted = false
   try {
     if (mode.value === 'json') draft.value = parsePricingJSON(json.value)
     const changes = pricingChanges(baseline.value, draft.value)
     for (const change of changes) validatePricing(change.pricing)
     if (changes.length) await pricingConfigApi.save(changes)
+    persisted = true
     const config = await pricingConfigApi.load()
     baseline.value = config
     draft.value = initialPricingDraft(config)
@@ -299,7 +307,22 @@ async function save() {
     revision.value++
     message.value = t('saved')
   } catch (cause) {
-    error.value = `${t('conflict')} ${cause instanceof Error ? (te(cause.message) ? t(cause.message) : cause.message) : String(cause)}`
+    const reason =
+      cause instanceof Error
+        ? te(cause.message)
+          ? t(cause.message)
+          : cause.message
+        : String(cause)
+    if (!persisted) {
+      error.value = `${t('conflict')} ${reason}`
+      return
+    }
+    // The server holds this draft, but the page still has the old versions;
+    // another save would conflict, so only a reload may continue.
+    reloadRequired.value = true
+    ready.value = false
+    editorDirty.value = false
+    error.value = `${t('savedReloadFailed')} ${reason}`
   } finally {
     saving.value = false
   }

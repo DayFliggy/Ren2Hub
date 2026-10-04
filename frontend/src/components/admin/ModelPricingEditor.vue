@@ -78,8 +78,11 @@ const currency = ref('USD'),
 const preview = ref<PricingPreview | null>(null),
   previewError = ref('')
 const expressionEditor = ref<InstanceType<
-  typeof PricingExpressionEditor
-> | null>(null)
+    typeof PricingExpressionEditor
+  > | null>(null),
+  // Each hydration mounts a fresh expression editor, so no draft, mode or
+  // error carries over to another model or a reloaded price.
+  hydration = ref(0)
 const usage = ref('{"p":1000,"c":1000,"len":1000}'),
   params = ref('{}'),
   headers = ref('{}'),
@@ -142,6 +145,10 @@ function formSnapshot() {
     pluginExpressions.value,
   ])
 }
+// An expression draft that cannot be written yet is an unsaved edit as well.
+function dirty() {
+  return baseline !== formSnapshot() || Boolean(expressionEditor.value?.issue)
+}
 function captureDefaultBaseline() {
   defaultBaseline = defaultPricingSnapshot()
   baseline = JSON.stringify([
@@ -170,6 +177,7 @@ watch(
     )
     currency.value = 'USD'
     plugin.value = ''
+    hydration.value++
     error.value = ''
     simulation.value = ''
     preview.value = null
@@ -187,6 +195,8 @@ watch(schema, () => {
   taskMultiplier.value = ''
 })
 function build(): PricingValues {
+  const issue = expressionEditor.value?.issue
+  if (issue) throw new Error(issue)
   const plugins = Object.fromEntries(
     Object.entries(pluginExpressions.value).filter(([, value]) => value.trim())
   )
@@ -229,10 +239,9 @@ function build(): PricingValues {
 function commit(): { name: string; pricing: PricingValues } | null {
   error.value = ''
   try {
-    expressionEditor.value?.validate()
     if (!name.value.trim()) throw new Error('unknownModel')
     const pricing =
-      baseline === formSnapshot() && Object.keys(props.pricing).length
+      !dirty() && Object.keys(props.pricing).length
         ? clonePricing(props.pricing)
         : build()
     validatePricing(pricing)
@@ -244,9 +253,16 @@ function commit(): { name: string; pricing: PricingValues } | null {
     return null
   }
 }
+watch(dirty, (value) => emit('dirty', value))
+// A commit error describes the draft it rejected, so any later change of the
+// draft or of its expression issue clears it.
+watch(
+  () => expressionEditor.value?.issue ?? '',
+  () => (error.value = '')
+)
 watch([formSnapshot, plugin], () => {
   if (hydrating) return
-  emit('dirty', baseline !== formSnapshot())
+  error.value = ''
   preview.value = null
   previewError.value = ''
   simulation.value = ''
@@ -445,7 +461,7 @@ onBeforeUnmount(() => {
   clearTimeout(previewTimer)
   previewController?.abort()
 })
-defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
+defineExpose({ commit, dirty })
 </script>
 <template>
   <section class="pricing-editor" :aria-label="t('edit')">
@@ -563,7 +579,7 @@ defineExpose({ commit, dirty: () => baseline !== formSnapshot() })
         </p>
         <p v-if="plugin" class="admin-muted">{{ t('inherited') }}</p>
         <PricingExpressionEditor
-          :key="plugin"
+          :key="`${hydration}:${plugin}`"
           ref="expressionEditor"
           v-model="activeExpression"
         />

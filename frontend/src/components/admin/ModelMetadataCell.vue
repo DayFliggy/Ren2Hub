@@ -39,13 +39,7 @@ const { t, locale } = useI18n({
 const RULES = ['exact', 'prefix', 'contains', 'suffix'] as const
 const tagsOpen = ref(false)
 
-const tags = computed(() => {
-  try {
-    return parseMetadataTags(props.row.tags)
-  } catch {
-    return [props.row.tags]
-  }
-})
+const tags = computed(() => parseMetadataTags(props.row.tags))
 // Only explicitly configured endpoints are "custom"; the API returns a plain
 // type array when it inferred them from channels.
 const endpointKeys = computed(() => {

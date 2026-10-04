@@ -130,7 +130,7 @@ const zh = {
   toolName: '工具名称',
   toolSave: '保存工具价格',
   newTier: '基础',
-  paramsHint: '请求条件按顺序乘以倍率；不填写条件不会生成规则。',
+  paramsHint: '请求条件按顺序乘以倍率；未填完整的规则会阻止保存。',
   current: '当前',
   candidate: '候选',
   diffadded: '新增',
@@ -139,6 +139,7 @@ const zh = {
   diffUnset: '未设置',
   total: '共 {count} 项',
   conflict: '保存失败，草稿已保留。重新加载前请核对服务端变化。',
+  savedReloadFailed: '价格已保存，但刷新失败，请重新加载后再编辑。',
   required: '必填',
   addTaskPrice: '生成任务计价草稿',
   unit: '单位',
@@ -357,7 +358,8 @@ const en: Record<keyof typeof zh, string> = {
   toolName: 'Tool name',
   toolSave: 'Save tool prices',
   newTier: 'base',
-  paramsHint: 'Matching request rules multiply prices in order.',
+  paramsHint:
+    'Matching request rules multiply prices in order. An incomplete rule blocks saving.',
   current: 'Current',
   candidate: 'Candidate',
   diffadded: 'Added',
@@ -367,6 +369,8 @@ const en: Record<keyof typeof zh, string> = {
   total: '{count} items',
   conflict:
     'Saving failed; your draft is preserved. Review server changes before reloading.',
+  savedReloadFailed:
+    'Prices saved, but refreshing failed. Reload pricing before editing again.',
   required: 'Required',
   addTaskPrice: 'Generate task pricing draft',
   unit: 'Unit',

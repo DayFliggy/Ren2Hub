@@ -11,6 +11,7 @@ import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import StatusChip from '@/components/common/StatusChip.vue'
 import TablePagination from '@/components/common/TablePagination.vue'
 import {
+  isMetadataSourceChanged,
   metadataApi,
   type SyncPreview,
   type SyncResult,
@@ -19,8 +20,10 @@ import { modelMetadataSyncMessages } from '@/i18n/modelMetadataSync'
 
 type Conflict = SyncPreview['conflicts'][number]
 type ConflictField = Conflict['fields'][number]
-// Ren2Hub's sync always creates every missing model the upstream knows, so
-// only `update` candidates carry a selection; `create` rows are informational.
+// The apply request lists every previewed missing model with the preview's
+// catalog version; the backend creates only those and rejects a stale
+// preview. So only `update` candidates carry a selection; `create` rows are
+// informational.
 type Candidate =
   | { kind: 'create'; model_name: string }
   | { kind: 'update'; model_name: string; fields: ConflictField[] }
@@ -57,6 +60,8 @@ const loading = ref(false)
 const saving = ref(false)
 const loadError = ref('')
 const syncError = ref('')
+// The upstream catalog changed after the preview; the selection was discarded.
+const sourceChanged = ref(false)
 let controller: AbortController | undefined
 
 const languageOptions = computed(() => [
@@ -161,6 +166,7 @@ function reset() {
   pageSize.value = 20
   loadError.value = ''
   syncError.value = ''
+  sourceChanged.value = false
 }
 async function load() {
   controller?.abort()
@@ -168,6 +174,7 @@ async function load() {
   controller = current
   loading.value = true
   loadError.value = ''
+  sourceChanged.value = false
   preview.value = null
   selection.value = {}
   page.value = 1
@@ -185,19 +192,26 @@ async function load() {
   }
 }
 async function synchronize() {
-  if (saving.value || !planCount.value) return
+  const plan = preview.value
+  if (saving.value || !planCount.value || !plan) return
   saving.value = true
   syncError.value = ''
   try {
-    result.value = await metadataApi.sync(
-      SOURCE,
-      language.value,
-      overwrite.value
-    )
+    result.value = await metadataApi.sync(SOURCE, language.value, {
+      source_version: plan.version,
+      create_models: plan.missing,
+      overwrite: overwrite.value,
+    })
     step.value = 3
     emit('saved')
   } catch (cause) {
-    syncError.value = messageOf(cause)
+    if (!isMetadataSourceChanged(cause)) {
+      syncError.value = messageOf(cause)
+      return
+    }
+    // Nothing was written; the old selection no longer matches the upstream.
+    reset()
+    sourceChanged.value = true
   } finally {
     saving.value = false
   }
@@ -351,6 +365,22 @@ function display(field: string, value: string | number) {
         </p>
         <ConsoleButton class="mt-5" variant="secondary" @click="load">
           {{ t('retry') }}
+        </ConsoleButton>
+      </div>
+      <div
+        v-else-if="sourceChanged"
+        class="flex flex-col items-center justify-center px-6 py-8 text-center"
+        role="alert"
+      >
+        <AlertTriangle :size="28" class="text-[var(--status-warning-text)]" />
+        <p class="mt-3 font-semibold text-[var(--text-primary)]">
+          {{ t('sourceChangedTitle') }}
+        </p>
+        <p class="mt-1 max-w-md text-sm text-[var(--text-tertiary)]">
+          {{ t('sourceChangedHint') }}
+        </p>
+        <ConsoleButton class="mt-5" variant="secondary" @click="load">
+          {{ t('previewAgain') }}
         </ConsoleButton>
       </div>
       <template v-else-if="preview">

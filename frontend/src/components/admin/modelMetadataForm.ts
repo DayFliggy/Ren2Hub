@@ -79,22 +79,8 @@ export function serializeMetadataEndpoints(
   }
 }
 
+/** Tags are stored comma-separated, as NewAPI writes them and the drawer saves them. */
 export function parseMetadataTags(value: string): string[] {
-  if (!value.trim()) return []
-  if (value.trim().startsWith('[')) {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(value)
-    } catch (cause) {
-      throw new Error('invalidTags', { cause })
-    }
-    if (
-      !Array.isArray(parsed) ||
-      !parsed.every((item) => typeof item === 'string')
-    )
-      throw new Error('invalidTags')
-    return parsed
-  }
   return value
     .split(',')
     .map((item) => item.trim())

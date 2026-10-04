@@ -13,12 +13,18 @@ export const adminRoutes: RouteRecordRaw[] = [
     },
   },
   // NewAPI model management: "Models" and "Vendors" sections of one page.
+  // All sections share the wide admin layout used by the other admin lists.
   {
     path: '/models/metadata',
     name: 'models-admin',
     component: () => import('@/views/admin/ModelManagementView.vue'),
     props: { section: 'metadata' },
-    meta: { requiresAdmin: true, feature: 'admin', protected: true },
+    meta: {
+      wide: true,
+      requiresAdmin: true,
+      feature: 'admin',
+      protected: true,
+    },
   },
   {
     path: '/models/vendors',
@@ -26,6 +32,7 @@ export const adminRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/ModelManagementView.vue'),
     props: { section: 'vendors' },
     meta: {
+      wide: true,
       requiresAdmin: true,
       feature: 'admin',
       protected: true,
@@ -38,6 +45,7 @@ export const adminRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/admin/ModelManagementView.vue'),
     props: { section: 'pricing' },
     meta: {
+      wide: true,
       requiresAdmin: true,
       requiresRoot: true,
       feature: 'admin',

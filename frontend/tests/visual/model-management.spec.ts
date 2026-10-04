@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { PRICING_KEYS } from '../../src/api/pricingConfig'
 import { assertNoHorizontalOverflow, configureStablePage } from './fixtures'
 
 const model = {
@@ -90,6 +91,7 @@ async function data(page: Page) {
               ],
             },
           ],
+          source: { version: 'preview-v1' },
         },
       },
     })
@@ -450,6 +452,52 @@ test('a pending model save blocks browser history and closes only after success'
   await page.goBack()
   await expect(page).toHaveURL(/\/keys$/)
   expect(confirmations).toEqual([])
+  expect(failures).toEqual([])
+})
+
+test('every model management section uses the wide admin layout', async ({
+  page,
+}) => {
+  const failures = await setupPage(page, {
+    language: 'en',
+    theme: 'light',
+    mobile: false,
+  })
+  // At 1920px the default 1200px content cap would bind; admin lists use 1400px.
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  const pricing = { ModelPrice: '0.2' }
+  await page.route('**/api/option/model_pricing**', (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          entries: [
+            {
+              model_name: 'gpt-local',
+              version: 'v1',
+              configured: pricing,
+              effective: pricing,
+            },
+          ],
+          options: Object.fromEntries(PRICING_KEYS.map((key) => [key, '{}'])),
+          empty_version: 'empty',
+        },
+      },
+    })
+  )
+  const content = page.locator('[data-console-scroll-zone] main > div')
+  for (const path of [
+    '/models/metadata',
+    '/models/vendors',
+    '/models/pricing',
+  ]) {
+    await page.goto(path)
+    await expect(page.locator('#model-management-panel')).toBeVisible()
+    await expect
+      .poll(async () => Math.round((await content.boundingBox())?.width ?? 0))
+      .toBe(1400)
+    await assertNoHorizontalOverflow(page)
+  }
   expect(failures).toEqual([])
 })
 

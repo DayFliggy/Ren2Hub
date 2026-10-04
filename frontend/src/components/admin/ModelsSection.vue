@@ -215,8 +215,10 @@ async function mutate(
         ? metadataApi.deleteModel(row.id)
         : metadataApi.setModelStatus(row.id, action === 'show' ? 1 : 0)
     )
-    // Failed rows stay selected so the action can be retried.
-    selection.value = result.failed.map((failure) => failure.row.id)
+    // Only succeeded rows leave the selection: failed bulk rows stay selected
+    // for a retry, and a single-row action keeps the user's other picks.
+    const succeeded = new Set(result.succeeded)
+    selection.value = selection.value.filter((id) => !succeeded.has(id))
     failures.value = result.failed.map((failure) => ({
       name: failure.row.model_name,
       message: failure.message,
