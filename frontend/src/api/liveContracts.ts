@@ -24,6 +24,7 @@ import {
   requiredNumber,
   requiredString,
 } from './contracts'
+import { safeExternalUrl, safeImageUrl } from '@/utils/safeUrl'
 import { ApiError, type PageResult } from './types'
 import { parseConversionPolicy } from './gateway'
 
@@ -684,18 +685,6 @@ function boundedList(value: unknown): unknown[] {
   return value
 }
 
-function webUrl(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' || url.protocol === 'http:'
-      ? url.href
-      : undefined
-  } catch {
-    return undefined
-  }
-}
-
 function optionalText(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined
 }
@@ -711,10 +700,10 @@ function optionalSeconds(value: unknown): number | undefined {
  * audio URL is required and must be http(s); display fields from that
  * snapshot are best effort and dropped when they have an unexpected type.
  */
-function parseTaskAudioClip(value: unknown): TaskAudioClip {
-  if (!isRecord(value)) invalidResponse(TASK_ARTIFACTS_ENDPOINT)
-  const audioUrl = webUrl(value.audio_url)
-  if (!audioUrl) invalidResponse(TASK_ARTIFACTS_ENDPOINT)
+function parseTaskAudioClip(value: unknown): TaskAudioClip | null {
+  if (!isRecord(value)) return null
+  const audioUrl = safeExternalUrl(value.audio_url)
+  if (!audioUrl) return null
   const metadata = isRecord(value.metadata) ? value.metadata : {}
   return {
     audio_url: audioUrl,
@@ -724,8 +713,16 @@ function parseTaskAudioClip(value: unknown): TaskAudioClip {
     tags: optionalText(value.tags) ?? optionalText(metadata.tags),
     duration:
       optionalSeconds(value.duration) ?? optionalSeconds(metadata.duration),
-    image_url: webUrl(value.image_url) ?? webUrl(value.image_large_url),
+    image_url:
+      safeImageUrl(value.image_url) ??
+      safeImageUrl(value.image_large_url) ??
+      undefined,
   }
+}
+
+function boundedAudioClipList(value: unknown): unknown[] {
+  if (!Array.isArray(value)) invalidResponse(TASK_ARTIFACTS_ENDPOINT)
+  return value.slice(0, MAX_TASK_ARTIFACTS)
 }
 
 export function parseTaskArtifactsResult(value: unknown): TaskArtifactsResult {
@@ -743,8 +740,8 @@ export function parseTaskArtifactsResult(value: unknown): TaskArtifactsResult {
       value.legacy_content_url
     )
   if (value.legacy_audio_clips !== undefined)
-    result.legacy_audio_clips = boundedList(value.legacy_audio_clips).map(
-      parseTaskAudioClip
-    )
+    result.legacy_audio_clips = boundedAudioClipList(value.legacy_audio_clips)
+      .map(parseTaskAudioClip)
+      .filter((clip): clip is TaskAudioClip => clip !== null)
   return result
 }

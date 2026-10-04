@@ -149,7 +149,7 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(page.getByText('已完成', { exact: true })).toBeVisible()
       await expect(page.getByText('待支付', { exact: true })).toHaveCount(0)
       await expect(
-        page.getByText('10201314 quota', { exact: true })
+        page.getByText('$10.00', { exact: true }).first()
       ).toBeVisible()
       expect(unexpectedTopupWrites).toEqual([])
       await assertNoHorizontalOverflow(page)

@@ -647,9 +647,9 @@ describe('task artifacts contract', () => {
         {
           clip_id: 'clip-1',
           title: 'Song',
-          audio_url: 'https://cdn.example.com/song.mp3',
+          audio_url: '/song.mp3',
           image_url: 'javascript:alert(1)',
-          image_large_url: 'https://cdn.example.com/cover.png',
+          image_large_url: '/cover.png',
           metadata: { tags: 'pop', duration: 125.4 },
         },
       ],
@@ -667,13 +667,13 @@ describe('task artifacts contract', () => {
     expect(result.legacy_content_url).toBe(contentUrl('video'))
     expect(result.legacy_audio_clips).toEqual([
       {
-        audio_url: 'https://cdn.example.com/song.mp3',
+        audio_url: 'http://localhost:3000/song.mp3',
         clip_id: 'clip-1',
         id: undefined,
         title: 'Song',
         tags: 'pop',
         duration: 125.4,
-        image_url: 'https://cdn.example.com/cover.png',
+        image_url: 'http://localhost:3000/cover.png',
       },
     ])
   })
@@ -707,10 +707,28 @@ describe('task artifacts contract', () => {
       { task_id: 't', artifacts: [item, item] },
       { task_id: 't', artifacts: [{ ...item, mime_type: 'text/plain\r\nx' }] },
       { task_id: 't', artifacts: Array.from({ length: 65 }, () => item) },
-      { task_id: 't', artifacts: [], legacy_audio_clips: [{ title: 'x' }] },
+      { task_id: 't', artifacts: [], legacy_audio_clips: 'not-a-list' },
     ]
     for (const response of responses) {
       expectInvalidResponse(() => parseTaskArtifactsResult(response))
     }
+  })
+
+  it('drops unsafe clips individually and caps the legacy list at 64 items', () => {
+    const clips = [
+      { audio_url: 'javascript:alert(1)', title: 'unsafe' },
+      ...Array.from({ length: 65 }, (_, index) => ({
+        audio_url: `/audio-${index}.mp3`,
+        title: `clip-${index}`,
+      })),
+    ]
+    const result = parseTaskArtifactsResult({
+      task_id: 't',
+      artifacts: [],
+      legacy_audio_clips: clips,
+    })
+    expect(result.legacy_audio_clips).toHaveLength(63)
+    expect(result.legacy_audio_clips?.[0]?.title).toBe('clip-0')
+    expect(result.legacy_audio_clips?.at(-1)?.title).toBe('clip-62')
   })
 })

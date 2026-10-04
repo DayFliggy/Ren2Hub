@@ -815,6 +815,13 @@ func pollFailureReason(class string, statusCode int) string {
 // the user. The stored reason omits provider detail, which can carry URLs
 // or credentials; the returned error keeps it for server logs only.
 func failTaskPolls(ctx context.Context, tasks []*model.Task, class string, statusCode int, cause error) error {
+	// The host may cancel a polling pass when its system-task lease is lost or
+	// the runner is shutting down. That is control flow, not a provider poll
+	// failure: leave the task's consecutive-failure counter untouched so the
+	// next owner can retry it normally.
+	if ctx != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
 	reason := pollFailureReason(class, statusCode)
 	var result error
 	for _, task := range tasks {

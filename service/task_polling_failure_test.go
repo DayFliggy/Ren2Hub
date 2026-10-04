@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -131,6 +132,21 @@ func TestPollProviderErrorReportingRunningJobCountsAsFailure(t *testing.T) {
 	stored := reloadTask(t, task.ID)
 	assert.EqualValues(t, model.TaskStatusInProgress, stored.Status)
 	assert.Equal(t, 1, stored.PrivateData.PollFailures)
+}
+
+func TestPollCancellationDoesNotCountAsProviderFailure(t *testing.T) {
+	truncate(t)
+	task := seedFailurePollTask(t, 507, 507)
+	task.PrivateData.PollFailures = 2
+	require.NoError(t, model.DB.Model(task).Update("private_data", task.PrivateData).Error)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := failTaskPolls(ctx, []*model.Task{task}, pollClassTransient, http.StatusServiceUnavailable, errors.New("runner stopped"))
+	require.ErrorIs(t, err, context.Canceled)
+	stored := reloadTask(t, task.ID)
+	assert.EqualValues(t, model.TaskStatusInProgress, stored.Status)
+	assert.Equal(t, 2, stored.PrivateData.PollFailures)
 }
 
 // A running immediate result is accepted as an asynchronous task: the

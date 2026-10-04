@@ -83,6 +83,32 @@ for (const theme of ['light', 'dark'] as const)
         emailRemoved = true
         return route.fulfill({ json: { success: true } })
       })
+      await page.route('**/api/verify/methods?*', (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: {
+              scope: 'admin.user.change',
+              methods: [{ method: '2fa', available: true }],
+              oauth_providers: [],
+              password_encryption_enabled: false,
+            },
+          },
+        })
+      )
+      await page.route('**/api/verify', (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: {
+              proof_token: 'visual-proof',
+              expires_at: Math.floor(Date.now() / 1000) + 300,
+              method: '2fa',
+              scope: 'admin.user.change',
+            },
+          },
+        })
+      )
       await page.goto('/users')
       await page.locator('[aria-label="编辑用户"]:visible').first().click()
       await page.locator('[data-admin-bindings]').click()
@@ -111,6 +137,12 @@ for (const theme of ['light', 'dark'] as const)
       await confirmation
         .getByRole('button', { name: '解绑', exact: true })
         .click()
+      const verification = page.getByRole('dialog', { name: '验证身份' })
+      await expect(verification).toBeVisible()
+      await verification.getByRole('textbox').fill('123456')
+      await verification
+        .getByRole('button', { name: '确认', exact: true })
+        .click()
       await expect(confirmation).toHaveCount(0)
       await expect(
         bindings.getByRole('button', { name: '解绑 GitHub', exact: true })
@@ -121,6 +153,11 @@ for (const theme of ['light', 'dark'] as const)
         .click()
       await confirmation
         .getByRole('button', { name: '解绑', exact: true })
+        .click()
+      await expect(verification).toBeVisible()
+      await verification.getByRole('textbox').fill('123456')
+      await verification
+        .getByRole('button', { name: '确认', exact: true })
         .click()
       await expect(confirmation).toHaveCount(0)
       await page.keyboard.press('Escape')

@@ -131,6 +131,7 @@ defineExpose({ request })
     :open="open"
     :title="t('security.verifyTitle')"
     size="sm"
+    :z-index="110"
     :close-disabled="busy"
     @close="cancel"
   >

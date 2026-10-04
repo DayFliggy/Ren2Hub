@@ -6,6 +6,7 @@ import { Copy, ExternalLink } from 'lucide-vue-next'
 import StatusChip from '@/components/common/StatusChip.vue'
 import { useToast } from '@/composables/useToast'
 import type { TaskAudioClip } from '@/types/console'
+import { safeExternalUrl, safeImageUrl } from '@/utils/safeUrl'
 
 const props = defineProps<{ clip: TaskAudioClip }>()
 
@@ -14,6 +15,8 @@ const toast = useToast()
 
 const playbackFailed = ref(false)
 const imageFailed = ref(false)
+const audioUrl = computed(() => safeExternalUrl(props.clip.audio_url))
+const imageUrl = computed(() => safeImageUrl(props.clip.image_url))
 
 const title = computed(() => props.clip.title || t('relayLogs.untitled'))
 const duration = computed(() => {
@@ -25,7 +28,11 @@ const duration = computed(() => {
 
 async function copyAudioUrl(): Promise<void> {
   try {
-    await navigator.clipboard.writeText(props.clip.audio_url)
+    if (!audioUrl.value) {
+      toast.error(t('relayLogs.audioFailed'))
+      return
+    }
+    await navigator.clipboard.writeText(audioUrl.value)
     toast.success(t('common.copied'))
   } catch {
     toast.error(t('common.copyFailed'))
@@ -39,8 +46,8 @@ async function copyAudioUrl(): Promise<void> {
     data-task-audio-clip
   >
     <img
-      v-if="clip.image_url && !imageFailed"
-      :src="clip.image_url"
+      v-if="imageUrl && !imageFailed"
+      :src="imageUrl"
       :alt="title"
       class="size-20 shrink-0 rounded-lg object-cover"
       @error="imageFailed = true"
@@ -65,7 +72,7 @@ async function copyAudioUrl(): Promise<void> {
           {{ t('relayLogs.audioFailed') }}
         </span>
         <a
-          :href="clip.audio_url"
+          :href="audioUrl || undefined"
           target="_blank"
           rel="noopener noreferrer"
           class="focus-ring inline-flex items-center gap-1 rounded-md border border-[var(--border-default)] px-2 py-1 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
@@ -84,7 +91,7 @@ async function copyAudioUrl(): Promise<void> {
       </div>
       <audio
         v-else
-        :src="clip.audio_url"
+        :src="audioUrl || undefined"
         controls
         preload="none"
         class="h-9 w-full"

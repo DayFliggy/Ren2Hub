@@ -10,11 +10,36 @@ for (const theme of ['light', 'dark'] as const)
       await page.addInitScript(() =>
         localStorage.setItem('ren2hub_locale', 'en')
       )
-      await page.route('**/api/user/models', (route) =>
+      await page.route('**/api/user/model-manifest', (route) =>
         route.fulfill({
           json: {
             success: true,
-            data: ['priced-model', 'expression-model', 'invalid-model'],
+            data: {
+              schema_version: 1,
+              models: [
+                {
+                  id: 'priced-model',
+                  visible: true,
+                  supported_endpoint_types: ['openai'],
+                  price_configured: true,
+                  price_version: 'visual-v1',
+                },
+                {
+                  id: 'expression-model',
+                  visible: true,
+                  supported_endpoint_types: ['openai'],
+                  price_configured: true,
+                  price_version: 'visual-v1',
+                },
+                {
+                  id: 'invalid-model',
+                  visible: true,
+                  supported_endpoint_types: ['openai'],
+                  price_configured: true,
+                  price_version: 'visual-v1',
+                },
+              ],
+            },
           },
         })
       )

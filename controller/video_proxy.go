@@ -86,6 +86,14 @@ func VideoProxy(c *gin.Context) {
 		videoProxyError(c, http.StatusNotFound, "artifact_not_found", "Video artifact not found")
 		return
 	}
+	// Data URIs were stored by an old pre-plugin path. They are not an
+	// upstream-hosted artifact and cannot be retrieved again after migration;
+	// preserve the provider's gone semantics instead of decoding a potentially
+	// huge inline payload from a legacy row.
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(task.GetResultURL())), "data:") {
+		videoProxyError(c, http.StatusGone, "artifact_gone", "Video artifact is no longer available")
+		return
+	}
 	descriptor := &relaychannel.TaskContentRequest{URL: task.GetResultURL(), Method: c.Request.Method, Credentialless: true}
 	if err := proxyTaskMedia(c, task, descriptor); err != nil {
 		writeTaskMediaProxyError(c, err)

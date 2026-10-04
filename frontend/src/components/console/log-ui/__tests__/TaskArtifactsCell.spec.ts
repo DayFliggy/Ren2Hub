@@ -163,8 +163,8 @@ describe('TaskArtifactsCell', () => {
       task_id: 'task-public',
       artifacts: [],
       legacy_audio_clips: [
-        { audio_url: 'https://cdn.example.com/a.mp3', title: 'First' },
-        { audio_url: 'https://cdn.example.com/b.mp3' },
+        { audio_url: '/a.mp3', title: 'First' },
+        { audio_url: '/b.mp3' },
       ],
     })
     const cell = render(task({ platform: 'suno' }))
@@ -177,7 +177,7 @@ describe('TaskArtifactsCell', () => {
     const clips = dialog().querySelectorAll('[data-task-audio-clip]')
     expect(clips).toHaveLength(2)
     expect(clips[0].querySelector('audio')?.getAttribute('src')).toBe(
-      'https://cdn.example.com/a.mp3'
+      'http://localhost:3000/a.mp3'
     )
     expect(clips[1].textContent).toContain('Untitled')
   })

@@ -35,6 +35,7 @@ const props = withDefaults(
     size?: 'sm' | 'md' | 'lg' | 'xl'
     closeDisabled?: boolean
     presentation?: 'modal' | 'drawer'
+    zIndex?: number
   }>(),
   {
     title: '',
@@ -43,6 +44,7 @@ const props = withDefaults(
     size: 'md',
     closeDisabled: false,
     presentation: 'modal',
+    zIndex: 90,
   }
 )
 
@@ -163,7 +165,8 @@ onBeforeUnmount(() => {
       <div
         v-if="open"
         ref="dialog"
-        class="fixed inset-0 z-[90] flex"
+        class="fixed inset-0 flex"
+        :style="{ zIndex }"
         :class="
           presentation === 'drawer'
             ? 'items-stretch justify-end'
