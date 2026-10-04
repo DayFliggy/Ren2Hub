@@ -4,7 +4,7 @@
 
 ## 2026-10-03 任务插件回归 NewAPI JS 插件系统
 
-用户选定方案 A：任务插件运行时改用上游 moejs，代码尽量与上游一致，便于后续同步和吸收。Ren2Hub 的插件系统来自 `583ef2d52`，是按 NewAPI rc.40（`0aec08fee`）手工压缩移植的单父提交，与上游 merge-base 为 `0ab020206`，没有任何上游插件提交是本地祖先，因此本批按文件比较收敛，不做 merge。窗口为插件引入提交 `eb48396d5` 至 `1a4166d8e8ba9802d2ca56fe8ecf0ed5404e80d5`，触及插件路径的上游提交共 43 个；"rc.40 已包含"不等于本地已吸收，`9df450fe5` 的有界轮询失败就在移植中丢失。本批基于 `10ccd9a2f`，`candidate_sha=null`，未取得提交、推送或部署授权。
+用户选定方案 A：任务插件运行时改用上游 moejs，代码尽量与上游一致，便于后续同步和吸收。Ren2Hub 的插件系统来自 `583ef2d52`，是按 NewAPI rc.40（`0aec08fee`）手工压缩移植的单父提交，与上游 merge-base 为 `0ab020206`，没有任何上游插件提交是本地祖先，因此本批按文件比较收敛，不做 merge。窗口为插件引入提交 `eb48396d5` 至 `1a4166d8e8ba9802d2ca56fe8ecf0ed5404e80d5`，触及插件路径的上游提交共 43 个；"rc.40 已包含"不等于本地已吸收，`9df450fe5` 的有界轮询失败就在移植中丢失。本批基于 `10ccd9a2f`，候选提交为 `8c947e252`；服务器推送、候选环境和部署仍待执行。
 
 保留的本地合同：提交只预留、终态按冻结 Quote/Usage/Charge 结算；立即结果经 `PersistImmediateTask` 原子落库；请求发出后不重放；凭据按 ID 绑定，不存明文 key；锁顺序 recovery → task → wallet → Token；执行源按 `TaskPluginRef{Key,Version,SourceHash}` 固定；继续不吸收上游 `tryRealtimeFetch` 与提交即结算。
 
@@ -31,7 +31,7 @@
 | NewAPI `web/src/features/usage-logs/components/task-artifacts.tsx`、`lib/task-artifacts.ts` | 界面/数据隔离 / P2 / 已吸收 | 任务日志结果列按需请求 `GET /api/task/:task_id/artifacts`，只接受宿主签名地址（固定内容路径和唯一 43 位 `access`）；`result_discarded` 不发请求，`artifact_not_found` 显示空态，其他错误可重试。签名地址不缓存；旧 Suno 片段统一走 `safeExternalUrl`，坏片段单独丢弃后最多展示 64 个，媒体补可访问名称，视觉覆盖日夜主题；旧 data URI 视频返回 410 | `go test -timeout 60s -run 'TestDashboardTaskArtifacts|TestVideoContent' ./controller/`；vitest `TaskArtifactsCell`/`taskArtifacts`/`liveContracts`；Playwright `task-log-artifacts` light/dark × desktop/mobile | 无 |
 | NewAPI 管理员任务日志插件列（`task-logs-columns.tsx`） | 界面 / P3 / 延期 | 本地日志页统一读取 `/self`，`/api/task/self` 与上游一样不带 `admin_info`/`root_info`；没有管理员全站任务日志页，插件列不可达，故不吸收 | — | 立项管理员全站任务日志时一并吸收插件列与筛选 |
 
-2026-10-04 审计修复验收（工作树基于 `10ccd9a2f`，`candidate_sha=null`）：`go build ./...`、`go mod verify`、RelayKit `GOWORK=off go test ./...`、`node scripts/test-go.mjs` 全部通过；本机未设置 MySQL 5.7/PostgreSQL 15 的 `TEST_*`、`BILLING_TEST_*`、`GATEWAY_STARTUP_*` DSN，因此三库合同矩阵未执行，候选环境补跑。前端 typecheck、lint、format、build 和 Vitest 182 文件/1036 用例通过；Playwright 332 项中 324 通过、8 跳过，原先 `admin-bindings`、`epay-wallet`、`pricing-partial` 的 12 项失败已修复。任务插件计费、任务产物、渠道可服务口径、模型同步冲突、路由诊断和生命周期定向回归均通过。空库冒烟、10ccd9a2f 建库后的升级启动、真实供应商调用、常驻服务在途固定任务重启和服务器候选仍待候选/部署阶段验证。
+2026-10-04 审计修复验收（Ren2Hub 候选提交 `8c947e252`，根工作区尚未更新 gitlink）：`go build ./...`、`go mod verify`、RelayKit `GOWORK=off go test ./...`、`node scripts/test-go.mjs` 全部通过；本机未设置 MySQL 5.7/PostgreSQL 15 的 `TEST_*`、`BILLING_TEST_*`、`GATEWAY_STARTUP_*` DSN，因此三库合同矩阵未执行，候选环境补跑。前端 typecheck、lint、format、build 和 Vitest 182 文件/1036 用例通过；Playwright 332 项中 324 通过、8 跳过，原先 `admin-bindings`、`epay-wallet`、`pricing-partial` 的 12 项失败已修复。任务插件计费、任务产物、渠道可服务口径、模型同步冲突、路由诊断和生命周期定向回归均通过。空库冒烟、10ccd9a2f 建库后的升级启动、真实供应商调用、常驻服务在途固定任务重启和服务器候选仍待候选/部署阶段验证。
 
 ## 2026-10-02 Codex 订阅渠道退役
 
@@ -45,7 +45,7 @@
 | Sub2API `d6adebd22de00478cd021119ba755f37bcb94fb5` 窗口参考 | 运维 / P2 / 刻意不吸收（撤下既有实现） | 原窗口只有 Codex 订阅供应商，本轮随渠道删除；保留将来适配的认证、隔离、退避和非账务边界说明，不保留无实现的 API | `node tests/upstream-sync/smoke.mjs <本轮二进制>` 通过：退役创建不落库、7 条旧路由 404/零发送，正常 Chat/Claude/Responses 共 3 次本地上游请求且唯一结算 | 不引入新供应商认证替代被删除链路；未来窗口须独立立项 |
 | Ren2Hub 标准 OpenAI 现有合同 | 协议 / P1 / 已吸收（等价保留） | SDK fixture 改用 type 1、标准 API Key 和 `/v1/responses`；客户端参数保留、Chat 成功、状态归属、凭据调序/撤销及中断合同继续保护 | `go test -p 4 -timeout 60s ./router -run '^TestGatewayOfficialCodexSDK$' -count=1 -v` 已通过 Python/Node 两语言 24 场景、0 SKIP；OpenAI SDK 3.13.0 / 7.15.0 | 不能把订阅渠道的拒绝行为迁入标准 OpenAI；`TestStandardOpenAICodexCompactAndWebSocket` 实际 HTTP/WS 与结算回归已通过 |
 
-本批交付边界为本地代码、合同与测试，`candidate_sha=null`；未取得本批提交、推送、远端部署或数据重建授权。运行结果只按实际检查补记，历史通过、SKIP 或静态检查不能替代本次运行证据。
+本批已形成 Ren2Hub 候选提交 `8c947e252`；服务器推送、远端部署和数据重建仍未执行。运行结果只按实际检查补记，历史通过、SKIP 或静态检查不能替代本次运行证据。
 
 本轮本地验证已完成：主模块 `node scripts/test-go.mjs -p 4`（后端每次 60 秒）、最终增量回归、独立 RelayKit 测试/构建、Go 全模块构建、前端全检查、双语言 SDK、隔离两库及新二进制空库冒烟通过。未启用的其他外部集成不计作通过。执行记录、环境差异、保留内容和待提交范围见[退役验证记录](../../../docs/reviews/REN2HUB_CODEX_CHANNEL_RETIREMENT_2026-10-02.md)。
 
