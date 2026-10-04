@@ -304,7 +304,10 @@ func getTaskForArtifactRequest(c *gin.Context, taskID string) (*model.Task, bool
 }
 
 func taskFailReasonIsLegacyResultURL(value string) bool {
-	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
+	value = strings.TrimSpace(value)
+	return len(value) >= len("https://") && strings.EqualFold(value[:len("https://")], "https://") ||
+		len(value) >= len("http://") && strings.EqualFold(value[:len("http://")], "http://") ||
+		len(value) >= len("data:") && strings.EqualFold(value[:len("data:")], "data:")
 }
 
 func writeTaskArtifactProjectionError(c *gin.Context, err error) {

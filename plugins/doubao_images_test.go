@@ -84,7 +84,7 @@ func TestDoubaoOpenAIImagesJSONUsesSharedNativeValidation(t *testing.T) {
 		{"flash rejects 4K", "generate", seedreamFlash, map[string]any{"prompt": "cat", "size": "4K"}, "size must be one of"},
 		{"flash rejects groups", "generate", seedreamFlash, map[string]any{"prompt": "cat", "sequential_image_generation": "auto"}, "not supported by this model"},
 		{"lite rejects low tier", "generate", "doubao-seedream-5-0-lite-260128", map[string]any{"prompt": "cat", "size": "1K"}, "size must be one of"},
-		{"group count is bounded", "generate", "doubao-seedream-4-5-251128", map[string]any{"prompt": "cat", "sequential_image_generation": "auto", "sequential_image_generation_options": map[string]any{"max_images": 16}}, "outside declared bounds"},
+		{"group count is bounded", "generate", "doubao-seedream-4-5-251128", map[string]any{"prompt": "cat", "sequential_image_generation": "auto", "sequential_image_generation_options": map[string]any{"max_images": 16}}, "max_images must be an integer between 1 and 15"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			body := map[string]any{"model": test.model}

@@ -7,7 +7,7 @@ export const meta = {
     en: "Google Veo video generation on Vertex AI (text-to-video and image-to-video)",
     zh: "Google Veo 视频生成（文生视频、图生视频），Vertex AI 版本",
   },
-  version: "1.0.2",
+  version: "1.0.2+ren2hub.1",
   channelTypes: [41],
   author: { name: "QuantumNous" },
   models: ["veo-3.0-generate-001", "veo-3.0-fast-generate-001", "veo-3.1-generate-preview", "veo-3.1-fast-generate-preview"],
@@ -109,7 +109,9 @@ function aspect(size) {
   return !p || p[0] <= 0 || p[1] <= 0 ? "16:9" : p[1] > p[0] ? "9:16" : "16:9";
 }
 function duration(req) {
-  return req.duration === undefined ? 8 : Number(utils.decimal.bounded(req.duration, 1, 3600, true));
+  let n = Number(req.duration);
+  if (!Number.isFinite(n) || n <= 0) n = 8;
+  return n;
 }
 
 function normalizeVideoRequest(input, files) {
@@ -166,6 +168,7 @@ function normalizeVideoRequest(input, files) {
   delete req.image;
   return req;
 }
+
 function region(ctx, model) {
   const setting = ctx.userSetting || {};
   const configured = setting.vertexRegion || setting.apiVersion || "global";
@@ -202,7 +205,7 @@ export function buildSubmitRequest(ctx) {
   const req = ctx.requestBody || {},
     metadata = Object.assign({}, req.metadata || {}),
     model = ctx.upstreamModel || "veo-3.0-generate-001";
-  if (Number(utils.decimal.bounded(req.duration, 0, 3600, true)) > 0) metadata.durationSeconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+  if (Number(req.duration) > 0) metadata.durationSeconds = Number(req.duration);
   if (!metadata.resolution && req.size) metadata.resolution = resolution(req.size);
   if (!metadata.aspectRatio && req.size) metadata.aspectRatio = aspect(req.size);
   if (metadata.resolution) metadata.resolution = String(metadata.resolution).toLowerCase();
@@ -419,12 +422,12 @@ protocols.openai_video = {
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
         req.metadata = parsed;
       }
-      if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
-      else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+      if (req.seconds !== undefined) req.seconds = Number(req.seconds);
+      else if (req.duration !== undefined) req.seconds = Number(req.duration);
     }
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
     if (seconds !== undefined) {
-      const n = Number(utils.decimal.bounded(seconds, 0, 3600, true));
+      const n = Number(seconds);
       if (n !== 4 && n !== 6 && n !== 8) throw new Error("seconds must be one of 4, 6, or 8");
       req.duration = n;
     }

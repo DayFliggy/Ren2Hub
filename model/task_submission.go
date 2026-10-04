@@ -3,6 +3,8 @@ package model
 import (
 	"context"
 	"errors"
+	"fmt"
+
 	"github.com/QuantumNous/new-api/common"
 
 	"gorm.io/gorm"
@@ -44,6 +46,55 @@ func TaskSubmissionReady(ctx context.Context, task *Task) (bool, error) {
 	if err := DB.WithContext(ctx).Where("request_id = ?", task.PrivateData.SubmissionRequestID).First(&recovery).Error; err != nil {
 		return false, err
 	}
+	return taskSubmissionMatches(task, &recovery)
+}
+
+// TaskSubmissionsReady applies TaskSubmissionReady to a polling batch with
+// one recovery query per chunk instead of one per task. Tasks whose recovery
+// is missing or inconsistent are left out and reported in the returned error.
+func TaskSubmissionsReady(ctx context.Context, tasks []*Task) ([]*Task, error) {
+	const chunk = 500
+	recoveries := make(map[string]*BillingRecovery, len(tasks))
+	for start := 0; start < len(tasks); start += chunk {
+		ids := make([]string, 0, chunk)
+		for _, task := range tasks[start:min(start+chunk, len(tasks))] {
+			if task.PrivateData.SubmissionRequestID != "" {
+				ids = append(ids, task.PrivateData.SubmissionRequestID)
+			}
+		}
+		if len(ids) == 0 {
+			continue
+		}
+		var rows []*BillingRecovery
+		if err := DB.WithContext(ctx).Where("request_id IN ?", ids).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			recoveries[row.RequestID] = row
+		}
+	}
+	ready := make([]*Task, 0, len(tasks))
+	var result error
+	for _, task := range tasks {
+		requestID := task.PrivateData.SubmissionRequestID
+		recovery := recoveries[requestID]
+		if requestID == "" || recovery == nil {
+			result = errors.Join(result, fmt.Errorf("task %s: submission accounting unavailable", task.TaskID))
+			continue
+		}
+		ok, err := taskSubmissionMatches(task, recovery)
+		if err != nil {
+			result = errors.Join(result, fmt.Errorf("task %s: %w", task.TaskID, err))
+			continue
+		}
+		if ok {
+			ready = append(ready, task)
+		}
+	}
+	return ready, result
+}
+
+func taskSubmissionMatches(task *Task, recovery *BillingRecovery) (bool, error) {
 	if recovery.UserID != task.UserId || recovery.TokenID != task.PrivateData.TokenId {
 		return false, ErrBillingRecoveryStateConflict
 	}

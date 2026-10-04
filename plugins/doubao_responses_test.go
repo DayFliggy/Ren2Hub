@@ -376,9 +376,9 @@ func TestDoubaoSeedanceUsageFacts(t *testing.T) {
 			resolution string
 			want       map[string]any
 		}{
-			{mini20, "1080p", map[string]any{"tokens": "90000"}},
-			{v25, "4k", map[string]any{"tokens": "90000"}},
-			{v20, "4k", map[string]any{"tokens": "90000", "resolution": "4k"}},
+			{mini20, "1080p", map[string]any{"tokens": float64(90000)}},
+			{v25, "4k", map[string]any{"tokens": float64(90000)}},
+			{v20, "4k", map[string]any{"tokens": float64(90000), "resolution": "4k"}},
 		} {
 			queryContext := map[string]any{"model": tc.model, "upstreamModel": tc.model, "action": "text_to_video"}
 			body := map[string]any{
@@ -424,7 +424,7 @@ func TestDoubaoImageValidation(t *testing.T) {
 		{"5.0 pro rejects sequential_image_generation even when disabled", pro, map[string]any{"prompt": "a cat", "sequential_image_generation": "disabled"}, "sequential_image_generation is not supported"},
 		{"sequential_image_generation is an enum", lite, map[string]any{"prompt": "a cat", "sequential_image_generation": "on"}, "must be auto or disabled"},
 		{"sequential options must be an object", lite, map[string]any{"prompt": "a cat", "sequential_image_generation": "auto", "sequential_image_generation_options": 3}, "sequential_image_generation_options must be an object"},
-		{"max_images is bounded", lite, map[string]any{"prompt": "a cat", "sequential_image_generation": "auto", "sequential_image_generation_options": map[string]any{"max_images": 16}}, "outside declared bounds"},
+		{"max_images is bounded", lite, map[string]any{"prompt": "a cat", "sequential_image_generation": "auto", "sequential_image_generation_options": map[string]any{"max_images": 16}}, "max_images must be an integer between 1 and 15"},
 		{"reference images are bounded", pro, map[string]any{"prompt": "a cat", "image": manyReferences}, "at most 10 reference images"},
 		{"fast prompt optimization is unsupported on 5.0 lite", lite, map[string]any{"prompt": "a cat", "optimize_prompt_options": map[string]any{"mode": "fast"}}, "mode fast is not supported"},
 		{"fast prompt optimization is unsupported on 4.5", v45, map[string]any{"prompt": "a cat", "optimize_prompt_options": map[string]any{"mode": "fast"}}, "mode fast is not supported"},
@@ -576,10 +576,6 @@ func TestDoubaoImageResults(t *testing.T) {
 		for _, count := range []any{-1, 1.5, 15, "2"} {
 			payload := map[string]any{"data": []any{map[string]any{"url": first, "size": "1424x800"}}, "usage": map[string]any{"generated_images": 1, "input_images": count}}
 			value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", queryContext, map[string]any{"status": "SUCCESS"}, payload)
-			if count == 1.5 {
-				require.Error(t, err, "fractional floating input cannot become billing evidence")
-				continue
-			}
 			require.NoError(t, err)
 			assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(0), "images_above_1_5k": float64(1)}, alibabaObject(t, value), "input_images %v", count)
 		}

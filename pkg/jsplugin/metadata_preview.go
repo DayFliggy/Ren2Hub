@@ -3,39 +3,39 @@ package jsplugin
 import (
 	"fmt"
 	"math"
-	"reflect"
 
-	"github.com/grafana/sobek/ast"
-	"github.com/grafana/sobek/file"
-	"github.com/grafana/sobek/parser"
-	"github.com/grafana/sobek/token"
+	"github.com/Calcium-Ion/moejs/syntax"
 )
 
 // PreviewMetadata reads literals and local constants whose containers cannot
 // escape or be mutated. Calls, computed properties and getters stay unresolved.
 // No module instance is created and no plugin JavaScript is executed.
 func PreviewMetadata(source string) (map[string]any, []string, error) {
-	program, err := parser.ParseFile(nil, "preview.js", source, 0, parser.IsModule, parser.WithDisableSourceMaps)
+	module, err := syntax.ParseModule("preview.js", source, syntax.Options{})
 	if err != nil {
 		return nil, nil, fmt.Errorf("plugin syntax is invalid: %w", err)
 	}
-	var object *ast.ObjectLiteral
-	for _, entry := range program.Body {
-		export, ok := entry.(*ast.ExportDeclaration)
-		if !ok || export.LexicalDeclaration == nil || export.LexicalDeclaration.Token != token.CONST {
+	var object *syntax.ObjectLit
+	for _, statement := range module.Body {
+		export, ok := statement.(*syntax.ExportDecl)
+		if !ok {
 			continue
 		}
-		for _, binding := range export.LexicalDeclaration.List {
-			identifier, ok := binding.Target.(*ast.Identifier)
-			if ok && identifier.Name.String() == "meta" {
-				object, _ = binding.Initializer.(*ast.ObjectLiteral)
+		declaration, ok := export.Decl.(*syntax.VarDecl)
+		if !ok || declaration.Kind != syntax.DeclConst {
+			continue
+		}
+		for _, declarator := range declaration.Decls {
+			identifier, ok := declarator.Target.(*syntax.Ident)
+			if ok && identifier.Name == "meta" {
+				object, _ = declarator.Init.(*syntax.ObjectLit)
 			}
 		}
 	}
 	if object == nil {
 		return nil, nil, fmt.Errorf("preview requires an exported literal meta object")
 	}
-	constants, metaUnsafe := previewConstants(program, object)
+	constants, metaUnsafe := previewConstants(module, object)
 	if metaUnsafe {
 		return map[string]any{}, []string{"meta"}, nil
 	}
@@ -43,30 +43,24 @@ func PreviewMetadata(source string) (map[string]any, []string, error) {
 	unresolved := []string{}
 	// A spread or computed property can overwrite even literal identity
 	// fields. Do not present any field as resolved in that case.
-	for _, property := range object.Value {
-		keyed, ok := property.(*ast.PropertyKeyed)
-		if !ok || keyed.Computed {
+	for _, property := range object.Props {
+		if !previewKeyed(property) {
 			return result, []string{"meta"}, nil
 		}
 	}
-	for _, property := range object.Value {
-		keyed, ok := property.(*ast.PropertyKeyed)
-		if !ok || keyed.Computed {
-			unresolved = append(unresolved, "computed/spread/getter")
-			continue
-		}
-		name, ok := literalPropertyName(keyed.Key)
+	for _, property := range object.Props {
+		name, ok := literalPropertyName(property.Key)
 		if !ok {
 			unresolved = append(unresolved, "computed")
 			continue
 		}
-		if keyed.Kind != ast.PropertyKindValue {
+		if property.Kind != syntax.PropInit {
 			delete(result, name)
 			unresolved = append(unresolved, name)
 			continue
 		}
 		budget := 4096
-		value, ok := previewLiteral(keyed.Value, 0, &budget, constants)
+		value, ok := previewLiteral(property.Value, 0, &budget, constants)
 		if !ok {
 			delete(result, name)
 			unresolved = append(unresolved, name)
@@ -77,46 +71,65 @@ func PreviewMetadata(source string) (map[string]any, []string, error) {
 	return result, unresolved, nil
 }
 
-func literalPropertyName(value ast.Expression) (string, bool) {
+// previewKeyed reports a property with a literal key: key: value, a method,
+// a getter or a setter. Spreads, shorthands and computed keys are not.
+func previewKeyed(property *syntax.Property) bool {
+	if property.Computed {
+		return false
+	}
+	switch property.Kind {
+	case syntax.PropInit, syntax.PropMethod, syntax.PropGetter, syntax.PropSetter:
+		return true
+	}
+	return false
+}
+
+func literalPropertyName(value syntax.Expr) (string, bool) {
 	switch item := value.(type) {
-	case *ast.Identifier:
-		return item.Name.String(), true
-	case *ast.StringLiteral:
-		return item.Value.String(), true
+	case *syntax.Ident:
+		return item.Name, true
+	case *syntax.StringLit:
+		return item.Value, true
 	}
 	return "", false
 }
 
-func previewLiteral(expression ast.Expression, depth int, budget *int, constants map[string]ast.Expression) (any, bool) {
+func previewLiteral(expression syntax.Expr, depth int, budget *int, constants map[string]syntax.Expr) (any, bool) {
 	*budget--
 	if depth > 32 || *budget < 0 {
 		return nil, false
 	}
 	switch value := expression.(type) {
-	case *ast.Identifier:
-		initializer, ok := constants[value.Name.String()]
-		if !ok || initializer.Idx0() >= value.Idx0() {
+	case *syntax.Ident:
+		initializer, ok := constants[value.Name]
+		if !ok {
+			return nil, false
+		}
+		if start, _ := initializer.Range(); start >= value.Pos {
 			return nil, false
 		}
 		return previewLiteral(initializer, depth+1, budget, constants)
-	case *ast.StringLiteral:
-		return value.Value.String(), true
-	case *ast.NumberLiteral:
-		switch number := value.Value.(type) {
-		case int64:
-			return number, true
-		case float64:
-			return number, !math.IsNaN(number) && !math.IsInf(number, 0)
-		case int:
-			return number, true
-		}
-	case *ast.BooleanLiteral:
+	case *syntax.StringLit:
 		return value.Value, true
-	case *ast.NullLiteral:
+	case *syntax.NumberLit:
+		number := value.Value
+		if math.IsNaN(number) || math.IsInf(number, 0) {
+			return nil, false
+		}
+		if math.Trunc(number) == number && math.Abs(number) <= float64(maxSafeInteger) {
+			return int64(number), true
+		}
+		return number, true
+	case *syntax.BoolLit:
+		return value.Value, true
+	case *syntax.NullLit:
 		return nil, true
-	case *ast.ArrayLiteral:
-		result := make([]any, 0, len(value.Value))
-		for _, item := range value.Value {
+	case *syntax.ArrayLit:
+		result := make([]any, 0, len(value.Elems))
+		for _, item := range value.Elems {
+			if item == nil {
+				return nil, false
+			}
 			parsed, ok := previewLiteral(item, depth+1, budget, constants)
 			if !ok {
 				return nil, false
@@ -124,11 +137,10 @@ func previewLiteral(expression ast.Expression, depth int, budget *int, constants
 			result = append(result, parsed)
 		}
 		return result, true
-	case *ast.ObjectLiteral:
+	case *syntax.ObjectLit:
 		result := map[string]any{}
-		for _, item := range value.Value {
-			property, ok := item.(*ast.PropertyKeyed)
-			if !ok || property.Computed || property.Kind != ast.PropertyKindValue {
+		for _, property := range value.Props {
+			if property.Computed || property.Kind != syntax.PropInit {
 				return nil, false
 			}
 			name, ok := literalPropertyName(property.Key)
@@ -146,41 +158,41 @@ func previewLiteral(expression ast.Expression, depth int, budget *int, constants
 	return nil, false
 }
 
-func previewConstants(program *ast.Program, meta *ast.ObjectLiteral) (map[string]ast.Expression, bool) {
-	constants := map[string]ast.Expression{}
-	definitions := map[string]file.Idx{}
-	owners := map[file.Idx]string{}
+func previewConstants(module *syntax.Module, meta *syntax.ObjectLit) (map[string]syntax.Expr, bool) {
+	constants := map[string]syntax.Expr{}
+	definitions := map[string]*syntax.Ident{}
+	owners := map[syntax.Node]string{}
 	dependencies := map[string]map[string]bool{}
 	unsafe := map[string]bool{}
-	for _, statement := range program.Body {
-		declaration, ok := statement.(*ast.LexicalDeclaration)
-		if !ok || declaration.Token != token.CONST {
+	for _, statement := range module.Body {
+		declaration, ok := statement.(*syntax.VarDecl)
+		if !ok || declaration.Kind != syntax.DeclConst {
 			continue
 		}
-		for _, binding := range declaration.List {
-			identifier, ok := binding.Target.(*ast.Identifier)
-			if !ok || binding.Initializer == nil {
+		for _, declarator := range declaration.Decls {
+			identifier, ok := declarator.Target.(*syntax.Ident)
+			if !ok || declarator.Init == nil {
 				continue
 			}
-			name := identifier.Name.String()
+			name := identifier.Name
 			if constants[name] != nil {
 				unsafe[name] = true
 			}
-			constants[name], definitions[name] = binding.Initializer, identifier.Idx
-			owners[binding.Initializer.Idx0()] = name
+			constants[name], definitions[name] = declarator.Init, identifier
+			owners[declarator.Init] = name
 			dependencies[name] = map[string]bool{}
 		}
 	}
-	previewWalkAST(reflect.ValueOf(program), nil, func(node any, parents []any) bool {
-		if exported, ok := node.(*ast.ExportSpecifier); ok {
-			unsafe[exported.IdentifierName.String()] = true
+	syntax.Walk(&previewVisitor{visit: func(node syntax.Node, parents []syntax.Node) bool {
+		if exported, ok := node.(*syntax.ExportSpec); ok {
+			unsafe[exported.Local.Name] = true
 			return false
 		}
-		identifier, ok := node.(*ast.Identifier)
+		identifier, ok := node.(*syntax.Ident)
 		if !ok {
 			return true
 		}
-		name := identifier.Name.String()
+		name := identifier.Name
 		if name != "meta" && constants[name] == nil {
 			return false
 		}
@@ -188,60 +200,32 @@ func previewConstants(program *ast.Program, meta *ast.ObjectLiteral) (map[string
 			return false
 		}
 		parent := parents[len(parents)-1]
-		if property, ok := parent.(*ast.PropertyKeyed); ok && property.Key == identifier && !property.Computed {
+		if previewPropertyName(parent, identifier) {
 			return false
 		}
-		if dot, ok := parent.(*ast.DotExpression); ok && &dot.Identifier == identifier {
-			return false
-		}
-		if binding, ok := parent.(*ast.Binding); ok && binding.Target == identifier {
-			if name == "meta" && binding.Initializer == meta {
+		if declarator, ok := parent.(*syntax.Declarator); ok && declarator.Target == identifier {
+			if name == "meta" && declarator.Init == meta {
 				return false
 			}
-			if definitions[name] != identifier.Idx {
+			if definitions[name] != identifier {
 				unsafe[name] = true
 			}
 			return false
 		}
-		var container ast.Node = identifier
-		for i := len(parents) - 1; i >= 0; i-- {
-			switch enclosing := parents[i].(type) {
-			case *ast.ArrayLiteral:
-				container = enclosing
-			case *ast.PropertyKeyed:
-				if enclosing.Value != container || i == 0 {
-					break
-				}
-				object, ok := parents[i-1].(*ast.ObjectLiteral)
-				if !ok {
-					break
-				}
-				container = object
-				i--
-			default:
-				i = -1
-			}
-		}
+		container := previewContainer(identifier, parents)
 		if container == meta {
 			return false
 		}
-		if owner := owners[container.Idx0()]; owner != "" {
+		if owner := owners[container]; owner != "" {
 			dependencies[owner][name] = true
 			return false
 		}
-		if _, array := constants[name].(*ast.ArrayLiteral); array {
-			if dot, ok := parent.(*ast.DotExpression); ok && dot.Left == identifier && len(parents) > 1 {
-				if call, ok := parents[len(parents)-2].(*ast.CallExpression); ok && call.Callee == dot {
-					switch dot.Identifier.Name.String() {
-					case "includes", "indexOf", "lastIndexOf":
-						return false
-					}
-				}
-			}
+		if _, array := constants[name].(*syntax.ArrayLit); array && previewReadOnlyArrayCall(identifier, parents) {
+			return false
 		}
 		unsafe[name] = true
 		return false
-	})
+	}}, module)
 	for changed := true; changed; {
 		changed = false
 		for name := range unsafe {
@@ -258,45 +242,82 @@ func previewConstants(program *ast.Program, meta *ast.ObjectLiteral) (map[string
 	return constants, unsafe["meta"]
 }
 
-// The parser's AST has no public visitor. Traverse syntax fields without
-// consulting runtime values; DeclarationList only duplicates existing nodes.
-func previewWalkAST(value reflect.Value, parents []any, visit func(any, []any) bool) {
-	if !value.IsValid() {
-		return
+// previewPropertyName reports an identifier that only names a property: a
+// literal object or pattern key, or the name after a dot.
+func previewPropertyName(parent syntax.Node, identifier *syntax.Ident) bool {
+	switch node := parent.(type) {
+	case *syntax.Property:
+		return node.Key == identifier && !node.Computed && node.Kind != syntax.PropShorthand
+	case *syntax.PatternProp:
+		return node.Key == identifier && !node.Computed
+	case *syntax.MemberExpr:
+		return node.Prop == identifier && !node.Computed
 	}
-	if value.Kind() == reflect.Interface {
-		if !value.IsNil() {
-			previewWalkAST(value.Elem(), parents, visit)
-		}
-		return
-	}
-	if value.Kind() == reflect.Pointer {
-		if value.IsNil() || value.Elem().Kind() != reflect.Struct {
-			return
-		}
-		if !visit(value.Interface(), parents) {
-			return
-		}
-		parents = append(append([]any(nil), parents...), value.Interface())
-		value = value.Elem()
-	}
-	if value.Kind() == reflect.Struct {
-		if value.Type().PkgPath() != "github.com/grafana/sobek/ast" {
-			return
-		}
-		for i := 0; i < value.NumField(); i++ {
-			if value.Type().Field(i).Name == "DeclarationList" {
-				continue
+	return false
+}
+
+// previewContainer climbs from a reference through the array elements and
+// key: value properties holding it to the outermost literal containing it.
+func previewContainer(identifier *syntax.Ident, parents []syntax.Node) syntax.Node {
+	var container syntax.Node = identifier
+	for i := len(parents) - 1; i >= 0; i-- {
+		switch enclosing := parents[i].(type) {
+		case *syntax.ArrayLit:
+			container = enclosing
+		case *syntax.Property:
+			// Shorthands and spreads hold the reference itself, not a copy.
+			if enclosing.Value != container || enclosing.Kind != syntax.PropInit || i == 0 {
+				return container
 			}
-			child := value.Field(i)
-			if child.Kind() == reflect.Struct && child.CanAddr() {
-				child = child.Addr()
+			object, ok := parents[i-1].(*syntax.ObjectLit)
+			if !ok {
+				return container
 			}
-			previewWalkAST(child, parents, visit)
-		}
-	} else if value.Kind() == reflect.Slice {
-		for i := 0; i < value.Len(); i++ {
-			previewWalkAST(value.Index(i), parents, visit)
+			container = object
+			i--
+		default:
+			return container
 		}
 	}
+	return container
+}
+
+// previewReadOnlyArrayCall reports NAME.includes(...), NAME.indexOf(...) or
+// NAME.lastIndexOf(...), which read an array without changing or exposing it.
+func previewReadOnlyArrayCall(identifier *syntax.Ident, parents []syntax.Node) bool {
+	if len(parents) < 2 {
+		return false
+	}
+	member, ok := parents[len(parents)-1].(*syntax.MemberExpr)
+	if !ok || member.Object != identifier || member.Computed {
+		return false
+	}
+	call, ok := parents[len(parents)-2].(*syntax.CallExpr)
+	if !ok || call.Callee != member {
+		return false
+	}
+	method, ok := member.Prop.(*syntax.Ident)
+	if !ok {
+		return false
+	}
+	switch method.Name {
+	case "includes", "indexOf", "lastIndexOf":
+		return true
+	}
+	return false
+}
+
+// previewVisitor walks the syntax tree with the chain of enclosing nodes;
+// visit returns false to skip a node's children.
+type previewVisitor struct {
+	parents []syntax.Node
+	visit   func(node syntax.Node, parents []syntax.Node) bool
+}
+
+func (v *previewVisitor) Visit(node syntax.Node) syntax.Visitor {
+	if !v.visit(node, v.parents) {
+		return nil
+	}
+	parents := append(append([]syntax.Node(nil), v.parents...), node)
+	return &previewVisitor{parents: parents, visit: v.visit}
 }

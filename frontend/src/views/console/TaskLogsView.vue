@@ -25,10 +25,11 @@ import {
   relayTaskDurationSeconds,
   relayTaskStatusMeta,
 } from '@/components/console/log-ui/relayTaskStatus'
+import TaskArtifactsCell from '@/components/console/log-ui/TaskArtifactsCell.vue'
+import { taskPreviewMode } from '@/components/console/log-ui/taskArtifacts'
 import { useLatestRequest } from '@/composables/useLatestRequest'
 import { useToast } from '@/composables/useToast'
 import { formatQuota, formatTime } from '@/utils/format'
-import { safeExternalUrl } from '@/utils/safeUrl'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -133,19 +134,6 @@ function formatDuration(row: RelayTaskLogItem): string {
     'seconds'
   )
   return seconds === null ? '-' : `${seconds.toFixed(0)}s`
-}
-
-function resultUrl(row: RelayTaskLogItem): string | null {
-  return safeExternalUrl(row.result_url)
-}
-
-async function copyResultUrl(row: RelayTaskLogItem): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(row.result_url)
-    toast.success(t('common.copied'))
-  } catch {
-    toast.error(t('common.copyFailed'))
-  }
 }
 </script>
 
@@ -257,24 +245,7 @@ async function copyResultUrl(row: RelayTaskLogItem): Promise<void> {
           >
             {{ (row as RelayTaskLogItem).fail_reason }}
           </button>
-          <a
-            v-else-if="resultUrl(row as RelayTaskLogItem)"
-            :href="resultUrl(row as RelayTaskLogItem) ?? undefined"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-xs text-[var(--accent-text)] underline-offset-2 hover:underline"
-          >
-            {{ t('relayLogs.viewResult') }}
-          </a>
-          <button
-            v-else-if="(row as RelayTaskLogItem).result_url"
-            type="button"
-            class="text-xs text-[var(--text-secondary)] underline-offset-2 hover:underline"
-            @click="copyResultUrl(row as RelayTaskLogItem)"
-          >
-            {{ t('relayLogs.copyResultLink') }}
-          </button>
-          <span v-else class="text-xs text-[var(--text-tertiary)]">-</span>
+          <TaskArtifactsCell v-else :task="row as RelayTaskLogItem" />
         </template>
         <template #cell-cost="{ row }">
           <span
@@ -344,24 +315,11 @@ async function copyResultUrl(row: RelayTaskLogItem): Promise<void> {
               {{ formatQuota(row.quota) }}
             </span>
           </div>
-          <div v-if="row.result_url && !row.fail_reason" class="mt-2">
-            <a
-              v-if="resultUrl(row)"
-              :href="resultUrl(row) ?? undefined"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-xs text-[var(--accent-text)] underline-offset-2 hover:underline"
-            >
-              {{ t('relayLogs.viewResult') }}
-            </a>
-            <button
-              v-else
-              type="button"
-              class="text-xs text-[var(--text-secondary)] underline-offset-2 hover:underline"
-              @click="copyResultUrl(row)"
-            >
-              {{ t('relayLogs.copyResultLink') }}
-            </button>
+          <div
+            v-if="!row.fail_reason && taskPreviewMode(row) !== 'none'"
+            class="mt-2"
+          >
+            <TaskArtifactsCell :task="row" />
           </div>
         </article>
       </div>

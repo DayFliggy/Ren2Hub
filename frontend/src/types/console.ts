@@ -454,8 +454,11 @@ export interface DrawingLogItem {
   finish_time: number
 }
 
-/** One row from /api/task/self. Timestamps are in seconds. */
-export interface RelayTaskLogItem {
+/**
+ * One row from /api/task/self. Timestamps are in seconds. Results are not
+ * part of the row; they are read on demand from /api/task/:task_id/artifacts.
+ */
+export type RelayTaskLogItem = {
   id: number
   task_id: string
   platform: string
@@ -463,10 +466,41 @@ export interface RelayTaskLogItem {
   status: RelayTaskStatus
   progress: string
   fail_reason: string
-  result_url: string
   quota: string
   submit_time: number
   finish_time: number
+  /** A pre-plugin video task whose result is served as a legacy artifact. */
+  legacy_video_available: boolean
+  /** A synchronous result returned inline and never persisted. */
+  result_discarded: boolean
+}
+
+export type TaskArtifactType = 'image' | 'video' | 'audio' | 'file'
+
+export interface TaskArtifact {
+  key: string
+  type: TaskArtifactType
+  mime_type?: string
+  /** Signed absolute URL; usable directly as a media src or download link. */
+  content_url: string
+}
+
+/** One clip from a pre-plugin Suno task's persisted snapshot. */
+export interface TaskAudioClip {
+  audio_url: string
+  clip_id?: string
+  id?: string
+  title?: string
+  tags?: string
+  duration?: number
+  image_url?: string
+}
+
+export interface TaskArtifactsResult {
+  task_id: string
+  artifacts: TaskArtifact[]
+  legacy_content_url?: string
+  legacy_audio_clips?: TaskAudioClip[]
 }
 
 /* ---------------- model plaza (market) ---------------- */

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  AlertCircle,
   BookOpen,
   ChevronDown,
   ChevronUp,
@@ -14,7 +15,13 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError } from '@/api/types'
-import { taskPluginsApi, type PluginMeta } from '@/api/taskPlugins'
+import {
+  assessBaseUrlTrust,
+  nextTaskPluginBaseUrl,
+  normalizeBaseUrlValue,
+} from '@/features/channels/lib/task-plugin-base-url'
+import { getTaskPluginOptions } from '@/features/task-plugins/api'
+import type { TaskPluginOption } from '@/features/task-plugins/types'
 import { metadataApi, type PrefillGroup } from '@/api/adminManagement'
 import { appendModelNames } from '@/utils/modelEndpoints'
 import { compareDecimal, isDecimal } from '@/utils/decimal'
@@ -121,7 +128,7 @@ const validAdvancedConfig = computed(() => {
     return false
   }
 })
-const pluginOptions = ref<PluginMeta[]>([])
+const pluginOptions = ref<TaskPluginOption[]>([])
 const pluginKeys = ref<string[]>([])
 const pluginError = ref('')
 let pluginOptionsRequest: AbortController | null = null
@@ -144,7 +151,7 @@ watch(
     pluginOptionsRequest = request
     pluginError.value = ''
     try {
-      const items = await taskPluginsApi.options(request.signal)
+      const items = await getTaskPluginOptions(request.signal)
       if (!request.signal.aborted) pluginOptions.value = items
     } catch (cause) {
       if (!request.signal.aborted)
@@ -155,6 +162,34 @@ watch(
   { immediate: true }
 )
 onBeforeUnmount(() => pluginOptionsRequest?.abort())
+
+// Upstream channel drawer: binding a task plugin proposes its default base URL
+// without overwriting a hand-typed one, and flags plain HTTP / private hosts.
+const boundTaskPlugin = computed(() =>
+  form.type === 61
+    ? pluginOptions.value.find((item) => item.key === pluginKeys.value[0])
+    : undefined
+)
+const taskPluginBaseUrlTrust = computed(() =>
+  form.type === 61 ? assessBaseUrlTrust(form.baseUrl) : null
+)
+// The key bound before the current change; set where a channel loads, so
+// loading is never treated as a change.
+let boundKeyBeforeChange: string | undefined
+function selectPluginKeys() {
+  if (form.type !== 61) return
+  pluginKeys.value = pluginKeys.value.slice(-1)
+  const previous = pluginOptions.value.find(
+    (item) => item.key === boundKeyBeforeChange
+  )
+  const baseUrl = nextTaskPluginBaseUrl(
+    form.baseUrl,
+    previous?.baseUrl,
+    boundTaskPlugin.value?.baseUrl
+  )
+  if (baseUrl !== null) form.baseUrl = baseUrl
+  boundKeyBeforeChange = pluginKeys.value[0]
+}
 
 // ── Type search dropdown ───────────────────────────────────────────────────
 const typeSearch = ref('')
@@ -498,6 +533,7 @@ watch(
       pluginKeys.value = []
       settingsError.value = t('channels.invalidStoredSettings')
     }
+    boundKeyBeforeChange = pluginKeys.value[0]
     // parse mapping
     modelMappingJson.value = form.modelMapping
     try {
@@ -644,7 +680,7 @@ async function submit() {
           multiple
           :size="Math.min(5, Math.max(2, availablePlugins.length))"
           class="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-solid)] p-2"
-          @change="form.type === 61 && (pluginKeys = pluginKeys.slice(-1))"
+          @change="selectPluginKeys"
         >
           <option
             v-for="plugin in availablePlugins"
@@ -816,6 +852,59 @@ async function submit() {
               :placeholder="t('channels.apiAddressPlaceholder')"
               autocomplete="url"
             />
+            <p
+              v-if="form.type === 61 && canBindPlugin && boundTaskPlugin"
+              class="mt-1.5 flex flex-wrap items-center gap-x-1 text-xs text-[var(--text-tertiary)]"
+            >
+              <template v-if="boundTaskPlugin.baseUrl">
+                <span>{{ t('taskPlugins.pluginDefault') }}:</span>
+                <span class="break-all font-mono">{{
+                  boundTaskPlugin.baseUrl
+                }}</span>
+                <button
+                  v-if="
+                    normalizeBaseUrlValue(form.baseUrl) !==
+                    normalizeBaseUrlValue(boundTaskPlugin.baseUrl)
+                  "
+                  type="button"
+                  class="text-[var(--accent-text)] underline focus-ring"
+                  @click="form.baseUrl = boundTaskPlugin.baseUrl"
+                >
+                  {{ t('taskPlugins.useDefault') }}
+                </button>
+              </template>
+              <span v-else>{{ t('taskPlugins.baseUrlRequired') }}</span>
+            </p>
+            <p
+              v-if="
+                taskPluginBaseUrlTrust?.plainHttp ||
+                taskPluginBaseUrlTrust?.privateHost
+              "
+              role="status"
+              class="mt-2 flex gap-2 rounded-lg border border-[var(--status-warning)]/25 bg-[var(--status-warning-soft)] px-3 py-2 text-xs text-[var(--status-warning-text)]"
+            >
+              <AlertCircle
+                :size="14"
+                class="mt-0.5 shrink-0"
+                aria-hidden="true"
+              />
+              <span
+                >{{
+                  taskPluginBaseUrlTrust?.plainHttp
+                    ? t('taskPlugins.plainHttp')
+                    : ''
+                }}{{
+                  taskPluginBaseUrlTrust?.plainHttp &&
+                  taskPluginBaseUrlTrust?.privateHost
+                    ? ' '
+                    : ''
+                }}{{
+                  taskPluginBaseUrlTrust?.privateHost
+                    ? t('taskPlugins.privateHost')
+                    : ''
+                }}</span
+              >
+            </p>
           </FormField>
 
           <!-- Add mode selector (batch keys apply to creation only) -->

@@ -392,8 +392,8 @@ func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQ
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
 
-	// 获取数据
-	err = query.Omit("channel_id").Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
+	// Lists never carry the provider snapshot; results are read through artifacts.
+	err = query.Omit("channel_id", "data").Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
 	if err != nil {
 		return nil
 	}
@@ -437,8 +437,8 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
 
-	// 获取数据
-	err = query.Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
+	// Lists never carry the provider snapshot; results are read through artifacts.
+	err = query.Omit("data").Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
 	if err != nil {
 		return nil
 	}
@@ -446,10 +446,12 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 	return tasks
 }
 
+// Status alone decides whether a task is terminal. A provider may report
+// "100%" while the job is still running; filtering on progress would stop
+// polling and the timeout sweep from ever releasing that reservation.
 func GetTimedOutUnfinishedTasks(cutoffUnix int64, limit int) []*Task {
 	var tasks []*Task
-	err := DB.Where("progress != ?", "100%").
-		Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).
+	err := DB.Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).
 		Where("submit_time < ?", cutoffUnix).
 		Order("submit_time").
 		Limit(limit).
@@ -463,8 +465,7 @@ func GetTimedOutUnfinishedTasks(cutoffUnix int64, limit int) []*Task {
 func GetAllUnFinishSyncTasks(limit int) []*Task {
 	var tasks []*Task
 	var err error
-	// get all tasks progress is not 100%
-	err = DB.Where("progress != ?", "100%").Where("status != ?", TaskStatusFailure).Where("status != ?", TaskStatusSuccess).Limit(limit).Order("id").Find(&tasks).Error
+	err = DB.Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).Limit(limit).Order("id").Find(&tasks).Error
 	if err != nil {
 		return nil
 	}
@@ -478,9 +479,7 @@ func GetAllUnFinishSyncTasks(limit int) []*Task {
 func HasUnfinishedSyncTasks() bool {
 	var id int64
 	err := DB.Model(&Task{}).
-		Where("progress != ?", "100%").
-		Where("status != ?", TaskStatusFailure).
-		Where("status != ?", TaskStatusSuccess).
+		Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).
 		Limit(1).
 		Pluck("id", &id).Error
 	return err == nil && id != 0
@@ -563,6 +562,8 @@ func (Task *Task) Update() error {
 	return err
 }
 
+var taskPollColumns = []string{"status", "progress", "submit_time", "start_time", "finish_time", "fail_reason", "data", "private_data", "updated_at"}
+
 func (t *Task) UpdateQuota() error {
 	return DB.Model(t).Update("quota", t.Quota).Error
 }
@@ -573,11 +574,13 @@ func (t *Task) UpdateQuota() error {
 // reports changed rows rather than matched rows, so a same-value no-op update
 // can also return false even when the status predicate still matched.
 //
-// Uses Model().Select("*").Updates() instead of Save() because GORM's Save
+// Uses Model().Select(...).Updates() instead of Save() because GORM's Save
 // falls back to INSERT ON CONFLICT when the WHERE-guarded UPDATE matches
-// zero rows, which silently bypasses the CAS guard.
+// zero rows, which silently bypasses the CAS guard. Only the columns polling
+// owns are written, so a stale in-memory copy cannot overwrite quota or
+// ownership columns that billing and submission manage.
 func (t *Task) UpdateWithStatus(fromStatus TaskStatus) (bool, error) {
-	result := DB.Model(t).Where("status = ?", fromStatus).Select("*").Updates(t)
+	result := DB.Model(t).Where("status = ?", fromStatus).Select(taskPollColumns).Updates(t)
 	if result.Error != nil {
 		return false, result.Error
 	}

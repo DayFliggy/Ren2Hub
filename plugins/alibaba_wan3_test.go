@@ -73,7 +73,7 @@ func TestAlibabaWan3(t *testing.T) {
 
 		value, callErr = plugin.Engine.Call(t.Context(), "extractUsage", usageCtx("facts", body))
 		require.NoError(t, callErr)
-		assert.Equal(t, map[string]any{"seconds": "30", "resolution": "1080P"}, roundTrip(t, value))
+		assert.Equal(t, map[string]any{"seconds": float64(30), "resolution": "1080P"}, roundTrip(t, value))
 
 		_, callErr = plugin.Engine.Call(t.Context(), "buildSubmitRequest", submitCtx("wan2.7-t2v", "wan2.7-t2v", map[string]any{"model": "wan2.7-t2v", "prompt": "a cat", "auto_duration": true}))
 		require.ErrorContains(t, callErr, "only supported by wan3.0")
@@ -130,6 +130,6 @@ func TestAlibabaWan3(t *testing.T) {
 			"output": map[string]any{"task_status": "SUCCEEDED", "duration": 5, "resolution": "1080p"},
 		})
 		require.NoError(t, callErr)
-		assert.Equal(t, map[string]any{"seconds": "5", "resolution": "1080P"}, roundTrip(t, value))
+		assert.Equal(t, map[string]any{"seconds": float64(5), "resolution": "1080P"}, roundTrip(t, value))
 	})
 }

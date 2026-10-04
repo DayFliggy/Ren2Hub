@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
+	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 )
@@ -289,6 +290,27 @@ func FinalizeImmediateTaskSubmission(ctx context.Context, c *gin.Context, info *
 		session.stopRecoveryHeartbeat()
 	}
 	return true, deliverTaskCompletion(ctx, task, quota)
+}
+
+// ApplyRunningImmediateResult stores the provider state of an immediate
+// result that is not terminal yet, as upstream does; the task is then
+// accepted asynchronously and polled. An unrecognized status keeps the
+// initial state for polling to resolve.
+func ApplyRunningImmediateResult(task *model.Task, result *relaycommon.TaskInfo) {
+	if result == nil {
+		return
+	}
+	switch model.TaskStatus(result.Status) {
+	case model.TaskStatusSubmitted:
+		task.Status, task.Progress = model.TaskStatusSubmitted, taskcommon.ProgressSubmitted
+	case model.TaskStatusQueued:
+		task.Status, task.Progress = model.TaskStatusQueued, taskcommon.ProgressQueued
+	case model.TaskStatusInProgress:
+		task.Status, task.Progress = model.TaskStatusInProgress, taskcommon.ProgressInProgress
+	}
+	if result.PluginState != nil {
+		task.PrivateData.PluginState = result.PluginState
+	}
 }
 
 func applyImmediateTaskResult(task *model.Task, result *relaycommon.TaskInfo) error {

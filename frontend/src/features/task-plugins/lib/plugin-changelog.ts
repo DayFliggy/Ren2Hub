@@ -18,12 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Lexer, type MarkedToken, type Token } from 'marked'
 import { parseDocument } from 'yaml'
-import { marketSourceURL, type MarketPlugin } from './taskPlugins'
-
-const DEFAULT_MARKETPLACE_INDEX_URL =
-  'https://www.newapi.ai/api/v1/plugins/index.json'
-const GITHUB_MARKETPLACE_INDEX_URL =
-  'https://raw.githubusercontent.com/QuantumNous/new-api-plugins/main/index.json'
+import type { MarketplacePlugin } from '../types'
+import {
+  DEFAULT_MARKETPLACE_INDEX_URL,
+  GITHUB_MARKETPLACE_INDEX_URL,
+  resolvePluginSourceUrl,
+} from './marketplace'
 
 export const CHANGELOG_CATEGORIES = [
   'Added',
@@ -98,12 +98,12 @@ export function changelogLocale(language: string): string {
 /** Resolve the sidecar for an index-registered version, including the official proxy index. */
 export function resolvePluginChangelogUrl(
   indexUrl: string,
-  plugin: MarketPlugin,
+  plugin: MarketplacePlugin,
   version: string
 ): string | null {
   const entry = plugin.versions.find((entry) => entry.version === version)
   if (!entry) return null
-  const source = marketSourceURL(indexUrl, entry.path)
+  const source = resolvePluginSourceUrl(indexUrl, entry.path)
   if (!source) return null
   const url = new URL(source)
   if (url.username || url.password || !url.pathname.endsWith('/plugin.js')) {
@@ -303,7 +303,7 @@ async function fetchChangelogFile(
 
 export async function fetchPluginChangelog(options: {
   indexUrl: string
-  plugin: MarketPlugin
+  plugin: MarketplacePlugin
   version: string
   language: string
   signal: AbortSignal
@@ -352,4 +352,59 @@ export async function fetchPluginChangelog(options: {
     }
   }
   return canonical.document
+}
+
+/** Inline content of one validated changelog entry, rendered without HTML. */
+export type ChangelogInline =
+  | { type: 'text'; text: string }
+  | { type: 'code'; text: string }
+  | { type: 'break' }
+  | { type: 'strong' | 'em' | 'del'; children: ChangelogInline[] }
+  | { type: 'link'; href: string; children: ChangelogInline[] }
+
+function inlineNodes(tokens: Token[]): ChangelogInline[] {
+  return (tokens as MarkedToken[]).flatMap((token): ChangelogInline[] => {
+    switch (token.type) {
+      case 'text':
+        return token.tokens
+          ? inlineNodes(token.tokens)
+          : [{ type: 'text', text: token.text }]
+      case 'escape':
+        return [{ type: 'text', text: token.text }]
+      case 'codespan':
+        return [{ type: 'code', text: token.text }]
+      case 'br':
+        return [{ type: 'break' }]
+      case 'strong':
+      case 'em':
+      case 'del':
+        return [{ type: token.type, children: inlineNodes(token.tokens) }]
+      case 'link':
+        // Only absolute http(s) links stay clickable.
+        return /^https?:\/\//i.test(token.href)
+          ? [
+              {
+                type: 'link',
+                href: token.href,
+                children: inlineNodes(token.tokens),
+              },
+            ]
+          : [{ type: 'text', text: token.text }]
+      default:
+        return [{ type: 'text', text: token.raw }]
+    }
+  })
+}
+
+/** Splits a validated section list into its entries' inline content. */
+export function changelogEntries(markdown: string): ChangelogInline[][] {
+  const list = Lexer.lex(markdown, { gfm: true }).find(
+    (token) => token.type === 'list'
+  ) as Extract<MarkedToken, { type: 'list' }> | undefined
+  return (list?.items ?? []).map((item) => {
+    const block = item.tokens.find(
+      (token) => token.type === 'text' || token.type === 'paragraph'
+    ) as { tokens?: Token[] } | undefined
+    return inlineNodes(block?.tokens ?? [])
+  })
 }

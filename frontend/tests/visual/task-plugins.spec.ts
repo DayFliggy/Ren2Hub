@@ -73,16 +73,27 @@ for (const theme of ['light', 'dark'] as const) {
         else if (path.endsWith('/versions'))
           data = [
             {
+              id: 1,
               key: 'fixture',
+              api_version: 1,
               version: '1.0.0',
               active: true,
+              enabled: true,
               factory: false,
+              created_at: 1,
+              remark: '',
               source: 'export const meta = {};',
               source_hash: 'a'.repeat(64),
             },
           ]
         else if (path.endsWith('/preview'))
-          data = { meta, source_hash: 'a'.repeat(64) }
+          data = { meta, source_hash: 'a'.repeat(64), unresolved: [] }
+        else if (path === '/api/plugin/task/fixture')
+          data = {
+            meta,
+            source: 'export const meta = {};',
+            layer: 'override',
+          }
         await route.fulfill({ json: { success: true, data } })
       })
       const englishNotes =
@@ -118,42 +129,46 @@ for (const theme of ['light', 'dark'] as const) {
       await page.goto('/task-plugins')
       await waitForStablePage(page)
       await expect(
-        page.getByText('Fixture Driver', { exact: false })
+        page.getByText('Fixture Driver', { exact: false }).first()
       ).toBeVisible()
-      await expect(page.getByText('FD', { exact: true })).toBeVisible()
-      await page.getByRole('button', { name: '版本与源码' }).click()
-      await expect(page.getByText('fixture · 版本与源码')).toBeVisible()
-      await expect(page.getByRole('button', { name: '删除版本' })).toHaveCount(
-        0
-      )
-      await page.getByRole('tab', { name: '源码与预览' }).click()
-      await page.locator('textarea').fill('export const meta = {};')
+      await expect(page.getByText('FD', { exact: true }).first()).toBeVisible()
+      // Row menu → details sheet with the upstream tabs.
+      await page.getByRole('button', { name: '打开菜单' }).first().click()
+      await page.getByRole('menuitem', { name: '详情' }).click()
+      const sheet = page.getByRole('dialog', { name: 'Fixture Driver' })
+      for (const tab of [
+        '概览',
+        '计费参数',
+        '插件源码',
+        '版本历史',
+        '源码差异',
+        '插件沙盒',
+      ])
+        await expect(sheet.getByRole('tab', { name: tab })).toBeVisible()
+      await sheet.getByRole('tab', { name: '版本历史' }).click()
       await expect(
-        page.getByRole('button', { name: '保存版本' })
+        sheet.getByRole('button', { name: '激活 / 回滚' })
       ).toBeDisabled()
-      await page.getByRole('button', { name: '验证并预览' }).click()
-      await expect(page.getByRole('button', { name: '保存版本' })).toBeEnabled()
-      await page
-        .locator('textarea')
-        .fill('export const meta = { version: "2" };')
-      await expect(
-        page.getByRole('button', { name: '保存版本' })
-      ).toBeDisabled()
+      await assertNoHorizontalOverflow(page)
+      await page.keyboard.press('Escape')
+
+      // Marketplace: the index hash does not match the served source.
       await page.getByRole('tab', { name: '插件市场', exact: true }).click()
-      await page.getByRole('button', { name: '加载市场', exact: true }).click()
       await expect(
         page.getByText('图片与视频任务', { exact: true })
       ).toBeVisible()
-      await page.getByRole('button', { name: '更新记录', exact: true }).click()
-      const changelog = page.getByRole('dialog', {
-        name: '更新记录',
-        exact: true,
-      })
+      await page.getByRole('button', { name: '安装', exact: true }).click()
+      const install = page.getByRole('dialog', { name: '安装 Fixture Driver' })
+      await expect(install.getByText('完整性校验失败')).toBeVisible()
       await expect(
-        changelog.getByText('- 修复示例处理。', { exact: true })
+        install.getByRole('button', { name: '安装并启用' })
+      ).toBeDisabled()
+      await install.getByRole('tab', { name: '更新日志' }).click()
+      await expect(
+        install.getByText('修复示例处理。', { exact: true })
       ).toBeVisible()
       await assertNoHorizontalOverflow(page)
-      await changelog.getByRole('button', { name: '关闭', exact: true }).click()
+      await install.getByRole('button', { name: '取消', exact: true }).click()
       await assertNoHorizontalOverflow(page)
     })
   }

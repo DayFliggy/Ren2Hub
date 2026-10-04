@@ -36,18 +36,6 @@ const IMAGE_MODELS = {
     tools: false,
     fastPromptMode: true,
   },
-  "doubao-seedream-5-0-lite-260128": {
-    presets: ["2K", "3K", "4K"],
-    minPixels: 3686400,
-    maxPixels: 16777216,
-    maxReferenceImages: 14,
-    sequential: true,
-    layers: false,
-    outputFormat: true,
-    background: false,
-    tools: true,
-    fastPromptMode: false,
-  },
   "doubao-seedream-5-0-flash-260915": {
     presets: ["1K", "1.5K", "2K"],
     minPixels: 921600,
@@ -58,6 +46,18 @@ const IMAGE_MODELS = {
     outputFormat: true,
     background: true,
     tools: false,
+    fastPromptMode: false,
+  },
+  "doubao-seedream-5-0-lite-260128": {
+    presets: ["2K", "3K", "4K"],
+    minPixels: 3686400,
+    maxPixels: 16777216,
+    maxReferenceImages: 14,
+    sequential: true,
+    layers: false,
+    outputFormat: true,
+    background: false,
+    tools: true,
     fastPromptMode: false,
   },
   "doubao-seedream-5-0-260128": {
@@ -122,6 +122,7 @@ const IMAGE_TIER_MAX_PIXELS = 2610000;
 const MAX_IMAGE_OUTPUTS = 17;
 // Documented reference-image ceiling across Seedream models; bounds usage.input_images.
 const MAX_REFERENCE_IMAGES = 14;
+// Documented per-image size ceiling for reference images.
 const MAX_INPUT_IMAGE_BYTES = 31457280;
 // Base64 references must be `data:image/<lowercase format>;base64,<payload>`.
 const IMAGE_DATA_URI = /^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/]+={0,2}$/;
@@ -177,49 +178,43 @@ const IMAGE_USAGE_SCHEMA = {
   },
 };
 
+// Models whose smallest output exceeds IMAGE_TIER_MAX_PIXELS only ever produce
+// images above 1.5K, so their pricing has a single output tier.
 function hasLowerImageTier(profile) {
   return profile.minPixels <= IMAGE_TIER_MAX_PIXELS;
 }
 
-// Editor metadata advertises only the capabilities of this model. Released
-// facts omitted here remain explicit compatibility fields for old prices.
+// Usage facts for one Seedream capability profile: the pricing table then
+// lists the lower tier and layer decomposition only for models that offer them.
+// Remaining fields keep their released keys.
 function seedreamUsageSchema(profile) {
   const schema = {};
   if (hasLowerImageTier(profile)) {
     schema.images_up_to_1_5k = IMAGE_USAGE_SCHEMA.images_up_to_1_5k;
     schema.images_above_1_5k = IMAGE_USAGE_SCHEMA.images_above_1_5k;
   } else {
-    schema.images_above_1_5k = Object.assign({}, IMAGE_USAGE_SCHEMA.images_above_1_5k, {
-      description: { en: "Image generation unit price", zh: "图片生成单价" },
-    });
+    schema.images_above_1_5k = { ...IMAGE_USAGE_SCHEMA.images_above_1_5k, description: { en: "Image generation unit price", zh: "图片生成单价" } };
   }
   schema.input_images = IMAGE_USAGE_SCHEMA.input_images;
   if (profile.layers) schema.layer_decomposition = IMAGE_USAGE_SCHEMA.layer_decomposition;
   return schema;
 }
 
-function seedreamUsageProfiles() {
-  return Object.keys(IMAGE_MODELS).map((model) => {
-    const profile = IMAGE_MODELS[model];
-    const schema = seedreamUsageSchema(profile);
-    const compatibilitySchema = {};
-    for (const key of Object.keys(IMAGE_USAGE_SCHEMA)) {
-      if (!Object.prototype.hasOwnProperty.call(schema, key)) compatibilitySchema[key] = IMAGE_USAGE_SCHEMA[key];
-    }
-    const examples = [{ label: "2K · 1 张", facts: { images_up_to_1_5k: 0, images_above_1_5k: 1, input_images: 0, layer_decomposition: false } }];
-    if (hasLowerImageTier(profile)) examples.push({ label: "1K · 1 张 · 2 张参考图", facts: { images_up_to_1_5k: 1, images_above_1_5k: 0, input_images: 2, layer_decomposition: false } });
-    else examples.push({ label: "2K · 1 张 · 2 张参考图", facts: { images_up_to_1_5k: 0, images_above_1_5k: 1, input_images: 2, layer_decomposition: false } });
-    if (profile.sequential) examples.push({ label: "2K · 4 张组图", facts: { images_up_to_1_5k: 0, images_above_1_5k: 4, input_images: 0, layer_decomposition: false } });
-    if (profile.layers) examples.push({ label: "图层拆分 · 2K 底图 + 4 层 1.5K", facts: { images_up_to_1_5k: 4, images_above_1_5k: 1, input_images: 1, layer_decomposition: true } });
-    return {
-      models: [model], schema: schema, compatibilitySchema: compatibilitySchema,
-      examples: examples.map((example) => {
-        const facts = {};
-        for (const key of Object.keys(schema)) facts[key] = example.facts[key];
-        return { label: example.label, facts: facts };
-      }),
-    };
-  });
+// Image facts always carry all four released keys, so expressions saved
+// before the per-model profiles keep their charge.
+function seedreamUsageFacts(lower, higher, inputImages, layered) {
+  return { images_up_to_1_5k: lower, images_above_1_5k: higher, input_images: inputImages, layer_decomposition: layered };
+}
+
+function seedreamUsageExamples(profile) {
+  const examples = [{ label: "2K · 1 张", facts: seedreamUsageFacts(0, 1, 0, false) }];
+  if (hasLowerImageTier(profile)) examples.push({ label: "1K · 1 张 · 2 张参考图", facts: seedreamUsageFacts(1, 0, 2, false) });
+  else examples.push({ label: "2K · 1 张 · 2 张参考图", facts: seedreamUsageFacts(0, 1, 2, false) });
+  if (profile.sequential) examples.push({ label: "2K · 4 张组图", facts: seedreamUsageFacts(0, 4, 0, false) });
+  if (profile.layers) examples.push({ label: "图层拆分 · 2K 底图 + 4 层 1.5K", facts: seedreamUsageFacts(4, 1, 1, true) });
+  // Examples are complete vectors over the profile schema alone.
+  const keys = Object.keys(seedreamUsageSchema(profile));
+  return examples.map((example) => ({ label: example.label, facts: Object.fromEntries(keys.map((key) => [key, example.facts[key]])) }));
 }
 
 // Usage facts for one Seedance capability profile: the pricing table then
@@ -272,30 +267,37 @@ function seedanceUsageExamples(profile) {
   if (profile.videoInput) specs.push({ label: "720p · 5s (+4s 输入视频)", resolution: "720p", seconds: 9, video_input: "video" });
   if (profile.audio) specs.push({ label: "720p · 5s · 无声", resolution: "720p", seconds: 5, generate_audio: false });
   return specs.map((spec) => {
-    const facts = { tokens: estimateTokens(spec.seconds, spec.resolution), resolution: spec.resolution };
+    const facts = { tokens: Math.round(estimateTokens(spec.seconds, spec.resolution)), resolution: spec.resolution };
     if (profile.videoInput) facts.video_input = spec.video_input || "none";
     if (profile.audio) facts.generate_audio = spec.generate_audio !== false;
     return { label: spec.label, facts: facts };
   });
 }
 
-// One usage profile per distinct capability shape.
-function seedanceUsageProfiles() {
+// One usage profile per distinct pricing shape of a capability table: models
+// whose schema and examples are identical share a profile.
+function capabilityUsageProfiles(models, usageSchema, usageExamples, fullSchema) {
   const profiles = [];
-  for (const model of Object.keys(VIDEO_MODELS)) {
-    const capability = VIDEO_MODELS[model];
-    const shape = capability.resolutions.join("/") + (capability.videoInput ? "+video" : "") + (capability.audio ? "+audio" : "");
+  for (const model of Object.keys(models)) {
+    const schema = usageSchema(models[model]);
+    const examples = usageExamples(models[model]);
+    const shape = JSON.stringify([schema, examples]);
     let profile = profiles.find((entry) => entry.shape === shape);
     if (!profile) {
-      profile = { shape: shape, models: [], schema: seedanceUsageSchema(capability), examples: seedanceUsageExamples(capability) };
+      profile = { shape: shape, models: [], schema: schema, examples: examples };
       profiles.push(profile);
     }
     profile.models.push(model);
   }
-  return profiles.map((profile) => ({
-    models: profile.models, schema: profile.schema, examples: profile.examples,
-    compatibilitySchema: profile.schema.video_input ? {} : { video_input: seedanceUsageSchema(DEFAULT_VIDEO_PROFILE).video_input },
-  }));
+  // Facts outside a profile's own schema stay declared for execution as
+  // compatibility fields without being advertised.
+  return profiles.map((profile) => {
+    const compatibilitySchema = {};
+    for (const key of Object.keys(fullSchema)) {
+      if (!Object.prototype.hasOwnProperty.call(profile.schema, key)) compatibilitySchema[key] = fullSchema[key];
+    }
+    return { models: profile.models, schema: profile.schema, compatibilitySchema: compatibilitySchema, examples: profile.examples };
+  });
 }
 
 export const meta = {
@@ -307,7 +309,7 @@ export const meta = {
     en: "Volcengine Doubao Seedance video generation and Seedream image generation",
     zh: "火山引擎豆包 Seedance 视频生成与 Seedream 图片生成",
   },
-  version: "1.2.1",
+  version: "1.2.1+ren2hub.1",
   author: { name: "QuantumNous" },
   channelTypes: [54, 45], // VolcEngine-type channels serve Ark video models with the same wire format
   models: Object.keys(VIDEO_MODELS).concat(Object.keys(IMAGE_MODELS)),
@@ -315,7 +317,9 @@ export const meta = {
   upstreams: ["vendor", "new_api"],
   usageSchema: seedanceUsageSchema(DEFAULT_VIDEO_PROFILE),
   usageExamples: seedanceUsageExamples(DEFAULT_VIDEO_PROFILE),
-  usageProfiles: seedanceUsageProfiles().concat(seedreamUsageProfiles()),
+  usageProfiles: capabilityUsageProfiles(VIDEO_MODELS, seedanceUsageSchema, seedanceUsageExamples, seedanceUsageSchema(DEFAULT_VIDEO_PROFILE)).concat(
+    capabilityUsageProfiles(IMAGE_MODELS, seedreamUsageSchema, seedreamUsageExamples, IMAGE_USAGE_SCHEMA)
+  ),
   routes: [
     { method: "POST", path: "/doubao/api/v3/contents/generations/tasks", type: "submit", decode: "createTask", render: "taskCreated" },
     { method: "GET", path: "/doubao/api/v3/contents/generations/tasks/:task_id", type: "query", render: "taskStatus" },
@@ -436,9 +440,25 @@ function resolutionMaxPixels(resolution) {
 
 function estimateTokens(seconds, resolution) {
   const dims = resolutionMaxPixels(resolution);
-  return utils.decimal.divide(utils.decimal.multiply(utils.decimal.multiply(utils.decimal.multiply(seconds, dims[0]), dims[1]), 24), 1024);
+  return (seconds * dims[0] * dims[1] * 24) / 1024;
 }
 
+function videoInputRatio(model, resolution, content) {
+  const video = hasVideo(content);
+  const res = trimmed(resolution).toLowerCase();
+  if (model === "doubao-seedance-2-5-260628") {
+    if (res === "1080p") return video ? 7.0 / 10.7 : 11.7 / 10.7;
+    return video ? 42 / 70 : 1;
+  }
+  if (model === "doubao-seedance-2-0-260128") {
+    if (res === "1080p") return video ? 31 / 46 : 51 / 46;
+    if (res === "4k") return video ? 16 / 46 : 26 / 46;
+    return video ? 28 / 46 : 1;
+  }
+  if (model === "doubao-seedance-2-0-fast-260128") return video ? 22 / 37 : 1;
+  if (model === "doubao-seedance-2-0-mini-260615") return video ? 14 / 23 : 1;
+  return 1;
+}
 
 // Channel model mapping may send a declared Seedream model to an Ark endpoint
 // ID; the declared name the client sent still describes that endpoint.
@@ -523,7 +543,8 @@ function convertImage(ctx) {
   if (!layered && !trimmed(body.prompt)) throw new Error("prompt is required");
   const images = body.image === undefined ? [] : Array.isArray(body.image) ? body.image : [body.image];
   for (const image of images) {
-    // The host validates and resolves uploaded file placeholders before send.
+    // Multipart uploads stay host file placeholders until submit, when the host
+    // inlines them as data:image/<format>;base64 URLs.
     if (image && typeof image === "object" && typeof image.__fileRef === "string" && image.encoding === "dataUrl") continue;
     const value = typeof image === "string" ? trimmed(image) : "";
     if (!/^https?:\/\//i.test(value) && !IMAGE_DATA_URI.test(value))
@@ -542,9 +563,9 @@ function convertImage(ctx) {
     if (body.output_format !== "png" && body.output_format !== "jpeg") throw new Error("output_format must be png or jpeg");
     if (!profile.outputFormat) throw new Error("output_format is not supported by this model");
   }
-  // The API reference lists `background` for 5.0 pro only, but a live probe
-  // showed lite accepting and ignoring it, so other models forward the value
-  // and only pro's documented combination rules are enforced locally.
+  // The API reference lists `background` for 5.0 pro and flash only, but a live
+  // probe showed lite accepting and ignoring it, so other models forward the
+  // value and only pro and flash's documented combination rules are enforced locally.
   if (body.background !== undefined) {
     if (body.background !== "opaque" && body.background !== "transparent") throw new Error("background must be opaque or transparent");
     if (profile.background && body.background === "transparent" && images.length !== 1)
@@ -567,34 +588,25 @@ function convertImage(ctx) {
   if (sequential !== undefined && sequential !== "auto" && sequential !== "disabled") throw new Error("sequential_image_generation must be auto or disabled");
   if (sequential !== undefined && !profile.sequential) throw new Error("sequential_image_generation is not supported by this model");
   const options = objectValue(body.sequential_image_generation_options, "sequential_image_generation_options");
-  if (options.max_images !== undefined && !Number.isInteger(options.max_images))
-    throw new Error("max_images must be an integer between 1 and 15");
+  let maxImages = 15;
+  if (options.max_images !== undefined) {
+    if (!Number.isInteger(options.max_images) || options.max_images < 1 || options.max_images > 15)
+      throw new Error("max_images must be an integer between 1 and 15");
+    maxImages = options.max_images;
+  }
   const size = imageSize(body.size, profile, layered);
   if (size.size !== undefined) body.size = size.size;
-  return {
-    body: body,
-    action: images.length ? "image_to_image" : "text_to_image",
-    facts: imageQuantityFacts(body, size.pixels),
-  };
-}
-
-function imageQuantityFacts(body, pixels) {
-  const layered = body.layer_decomposition === true;
-  const images = body.image === undefined ? [] : Array.isArray(body.image) ? body.image : [body.image];
-  const options = objectValue(body.sequential_image_generation_options, "sequential_image_generation_options");
-  const maxImages = options.max_images === undefined ? 15 : Number(utils.decimal.bounded(options.max_images, 1, 15, true));
   // Submit-time estimate; extractUsageOnComplete overlays the per-image tiers
   // from data[].size and usage.input_images. Unknown output sizes (`auto`)
   // reserve the higher tier.
   let imageCount = 1;
   if (layered) imageCount = MAX_IMAGE_OUTPUTS;
-  else if (body.sequential_image_generation === "auto") imageCount = Math.max(1, Math.min(maxImages, 15 - images.length)); // reference + generated images ≤ 15
-  const higherTier = pixels === null || pixels > IMAGE_TIER_MAX_PIXELS;
+  else if (sequential === "auto") imageCount = Math.max(1, Math.min(maxImages, 15 - images.length)); // reference + generated images ≤ 15
+  const higherTier = size.pixels === null || size.pixels > IMAGE_TIER_MAX_PIXELS;
   return {
-    images_up_to_1_5k: higherTier ? 0 : imageCount,
-    images_above_1_5k: higherTier ? imageCount : 0,
-    input_images: images.length,
-    layer_decomposition: layered,
+    body: body,
+    action: images.length ? "image_to_image" : "text_to_image",
+    facts: seedreamUsageFacts(higherTier ? 0 : imageCount, higherTier ? imageCount : 0, images.length, layered),
   };
 }
 
@@ -615,7 +627,7 @@ function imageURLEntries(body) {
 // never entries: failed group members carry only `error`. A
 // usage.generated_images count that is fractional, negative, oversized or
 // inconsistent with the delivered payloads means the response is not
-// understood; the host settles at the attempt's frozen estimate.
+// understood; the host then keeps the reservation instead of settling on a guess.
 function imagePayloads(body) {
   const payloads = imageEntries(body).filter((item) => trimmed(item.url) || trimmed(item.b64_json));
   if (payloads.length > MAX_IMAGE_OUTPUTS) throw new Error("too many output images");
@@ -627,28 +639,34 @@ function imagePayloads(body) {
 
 // Completion facts. Each successful image is counted at its own pixel tier from
 // data[].size (official pricing bills layers individually). Payloads without a
-// parseable size keep the frozen estimate on multi-tier models; single-tier
-// models count delivered payloads even without a size. usage.input_images is
-// accepted only as a bounded integer and is never inferred from the request.
+// parseable size keep the submit-time tier estimate, except on single-tier
+// models where every payload is the upper tier; usage.input_images replaces
+// the estimated reference count only when it is a bounded integer.
 function imageUsage(body, profile) {
   const usage = body.usage || {};
   const payloads = imagePayloads(body);
   const facts = {};
-  let lower = 0,
-    higher = 0,
-    sized = true;
-  for (const item of hasLowerImageTier(profile) ? payloads : []) {
-    const dims = imageSizePixels(item.size);
-    if (!dims) {
-      sized = false;
-      break;
+  if (hasLowerImageTier(profile)) {
+    let lower = 0,
+      higher = 0,
+      sized = true;
+    for (const item of payloads) {
+      const dims = imageSizePixels(item.size);
+      if (!dims) {
+        sized = false;
+        break;
+      }
+      if (dims.pixels > IMAGE_TIER_MAX_PIXELS) higher += 1;
+      else lower += 1;
     }
-    if (dims.pixels > IMAGE_TIER_MAX_PIXELS) higher += 1;
-    else lower += 1;
-  }
-  if (sized) {
-    facts.images_up_to_1_5k = lower;
-    facts.images_above_1_5k = hasLowerImageTier(profile) ? higher : payloads.length;
+    if (sized) {
+      facts.images_up_to_1_5k = lower;
+      facts.images_above_1_5k = higher;
+    }
+  } else {
+    // Released prices read both tiers; a single-tier model reports zero below 1.5K.
+    facts.images_up_to_1_5k = 0;
+    facts.images_above_1_5k = payloads.length;
   }
   if (Number.isInteger(usage.input_images) && usage.input_images >= 0 && usage.input_images <= MAX_REFERENCE_IMAGES) facts.input_images = usage.input_images;
   return facts;
@@ -835,25 +853,46 @@ export function parseSubmitResponse(ctx, resp) {
 
 export function extractUsage(ctx) {
   if (imageTask(ctx)) {
-    const req = ctx.requestBody || {};
-    const size = imageSize(req.size, imageProfile(ctx), req.layer_decomposition === true);
-    return imageQuantityFacts(req, size.pixels);
+    const facts = convertImage(ctx).facts;
+    // Legacy per-call pricing multiplies the price by every ratio returned
+    // here, so the reservation ratio is the total requested output count
+    // alone; task expressions read the tiered facts and the reference count.
+    if (ctx.usagePurpose === "billing_ratios") return { image_count: facts.images_up_to_1_5k + facts.images_above_1_5k };
+    return facts;
   }
   const req = ctx.requestBody || {};
   const metadata = req.metadata || {};
-  const raw = req.seconds !== undefined ? req.seconds : req.duration !== undefined ? req.duration : metadata.duration;
-  let seconds;
-  if (raw !== undefined) seconds = utils.decimal.bounded(raw, 0, 3600, false);
-  else if (metadata.frames !== undefined) seconds = utils.decimal.divide(utils.decimal.bounded(metadata.frames, 1, 86400, true), 24);
-  else seconds = "15";
+  if (ctx.usagePurpose === "billing_ratios") {
+    const ratio = videoInputRatio(ctx.upstreamModel || ctx.model, metadata.resolution, metadata.content);
+    return ratio === 1 ? null : { video_input_ratio: ratio };
+  }
+  let seconds = Number(req.seconds || req.duration || metadata.duration || 0);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    const frames = Number(metadata.frames);
+    seconds = Number.isFinite(frames) && frames > 0 ? Math.floor(frames / 24) : 15;
+  }
+  if (seconds <= 0) seconds = 5;
+  seconds = Math.min(seconds, 3600);
   const profile = videoProfile(ctx);
   const resolution = videoResolution(ctx);
   const facts = { tokens: estimateTokens(seconds, resolution), resolution: resolution };
+  // Every model reports video_input, including those whose profile omits it:
+  // expressions saved when all Seedance models declared the field then keep
+  // matching their no-video tier.
   facts.video_input = hasVideo(metadata.content) ? "video" : "none";
   if (profile.audio) facts.generate_audio = metadata.generate_audio !== false;
   return facts;
 }
 
+export function extractUsageOnSubmit(ctx, body) {
+  // Only legacy per-call pricing calls this hook, and the host multiplies the
+  // price by every ratio it returns, so a synchronous image result settles on
+  // the delivered output count alone. Task expressions settle the tiered
+  // facts through extractUsageOnComplete instead.
+  if (!imageTask(ctx)) return null;
+  const count = imagePayloads(body || {}).length;
+  return count ? { image_count: count } : {};
+}
 
 export function buildQueryRequest(ctx) {
   return {
@@ -867,6 +906,8 @@ export function parseTaskResult(ctx, body) {
   if (body.status === "pending" || body.status === "queued") return { status: "QUEUED", progress: "10%" };
   if (body.status === "processing" || body.status === "running") return { status: "IN_PROGRESS", progress: "50%" };
   if (body.status === "succeeded") {
+    // Ren2Hub: Seedance settles from the declared tokens fact; generic token
+    // counters are not reported for plugin tasks.
     const result = { status: "SUCCESS", progress: "100%", url: body.content && body.content.video_url ? body.content.video_url : "" };
     return result;
   }
@@ -924,8 +965,9 @@ export function extractUsageOnComplete(task, taskResult, body) {
   if (!body || body.status !== "succeeded") return {};
   const facts = {};
   const usage = body.usage || {};
-  const tokens = usage.completion_tokens !== undefined ? usage.completion_tokens : usage.total_tokens;
-  if (tokens !== undefined) facts.tokens = utils.decimal.bounded(tokens, 0, 2147483647, true);
+  let tokens = Number(usage.completion_tokens);
+  if (!Number.isFinite(tokens) || tokens <= 0) tokens = Number(usage.total_tokens);
+  if (Number.isFinite(tokens) && tokens > 0) facts.tokens = tokens;
   const content = body.content || {};
   const resolution = trimmed(content.resolution || body.resolution).toLowerCase();
   if (videoProfile(task).resolutions.includes(resolution)) facts.resolution = resolution;
@@ -1020,6 +1062,9 @@ export const protocols = {
       };
     },
   },
+  // OpenAI Images API. The host pins ctx.model, returns the synchronous result
+  // inline and owns response_format. Requests map onto the same Ark body as the
+  // native route, so validation and usage facts are identical.
   openai_image: {
     decodeRequest: function (ctx) {
       const model = trimmed(ctx.model);
@@ -1116,7 +1161,7 @@ protocols.openai_video = {
       if (!ctx.body.value || Array.isArray(ctx.body.value)) throw new Error("JSON object required");
       const req = ctx.body.value;
       const seconds = req.seconds === undefined ? req.duration : req.seconds;
-      if (seconds !== undefined && (!Number.isFinite(Number(utils.decimal.bounded(seconds, 0, 3600, true))) || Number(utils.decimal.bounded(seconds, 0, 3600, true)) <= 0 || Number(utils.decimal.bounded(seconds, 0, 3600, true)) > 3600))
+      if (seconds !== undefined && (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0 || Number(seconds) > 3600))
         throw new Error("seconds must be between 1 and 3600");
       return {
         kind: "submit",
@@ -1146,10 +1191,10 @@ protocols.openai_video = {
       req.metadata = parsed;
     }
     if ((ctx.body.files || []).length) throw new Error("Doubao requires image and video references to be URLs inside metadata.content");
-    if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
-    else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+    if (req.seconds !== undefined) req.seconds = Number(req.seconds);
+    else if (req.duration !== undefined) req.seconds = Number(req.duration);
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
-    if (seconds !== undefined && (!Number.isFinite(Number(utils.decimal.bounded(seconds, 0, 3600, true))) || Number(utils.decimal.bounded(seconds, 0, 3600, true)) <= 0 || Number(utils.decimal.bounded(seconds, 0, 3600, true)) > 3600))
+    if (seconds !== undefined && (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0 || Number(seconds) > 3600))
       throw new Error("seconds must be between 1 and 3600");
     return {
       kind: "submit",

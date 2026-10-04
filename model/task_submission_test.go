@@ -60,3 +60,35 @@ func TestAcceptedTaskAndAccountingCommitTogether(t *testing.T) {
 		assert.ErrorIs(t, prepareTaskAcceptedBillingTx(db, "task-txn", changed), ErrBillingEventConflict)
 	})
 }
+
+// The batched check keeps TaskSubmissionReady's rules: only an accepted
+// submission whose recovery belongs to the same owner is polled.
+func TestTaskSubmissionsReadyMatchesPerTaskRules(t *testing.T) {
+	withTaskBillingDatabases(t, func(t *testing.T, db *gorm.DB) {
+		for _, row := range []BillingRecovery{
+			{RequestID: "ready", UserID: 1, TokenID: 2, Status: BillingRecoveryStatusActive, ConsumptionState: BillingRecoveryStateTaskPending},
+			{RequestID: "other-owner", UserID: 9, TokenID: 2, Status: BillingRecoveryStatusActive, ConsumptionState: BillingRecoveryStateTaskPending},
+			{RequestID: "settled", UserID: 1, TokenID: 2, Status: BillingRecoveryStatusSettled, ConsumptionState: BillingRecoveryStateTaskPending},
+		} {
+			require.NoError(t, db.Create(&row).Error)
+		}
+		task := func(id, requestID string) *Task {
+			return &Task{TaskID: id, UserId: 1, PrivateData: TaskPrivateData{TokenId: 2, SubmissionRequestID: requestID}}
+		}
+		tasks := []*Task{task("a", "ready"), task("b", "other-owner"), task("c", "settled"), task("d", "missing"), task("e", "")}
+
+		ready, err := TaskSubmissionsReady(context.Background(), tasks)
+		require.Len(t, ready, 1)
+		assert.Equal(t, "a", ready[0].TaskID)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrBillingRecoveryStateConflict)
+		for _, id := range []string{"task b", "task d", "task e"} {
+			assert.Contains(t, err.Error(), id)
+		}
+		assert.NotContains(t, err.Error(), "task c")
+		for _, item := range tasks[:3] {
+			single, _ := TaskSubmissionReady(context.Background(), item)
+			assert.Equal(t, item.TaskID == "a", single)
+		}
+	})
+}

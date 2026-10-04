@@ -1724,22 +1724,27 @@ func TestTaskSubmitStreamIdleTimeout(t *testing.T) {
 }
 
 func TestPluginJSONValuesPreserveCodecNormalizationAndIsolation(t *testing.T) {
-	for _, value := range []any{
-		map[string]any{"units": int64(3), "nested": []any{true, "<image> / 图像", math.Copysign(0, -1), nil}},
-		map[string]any{"empty": []any{}, "null": []any(nil), "object": map[string]any(nil)},
-		map[string]any{"large": int64(math.MaxInt64), "invalid UTF-8": string([]byte{0xff, 0xfe})},
-		map[string]any{string([]byte{0xff}): "invalid key"},
-		map[string]any{"bytes": []byte{0, 1, 255}, "number": json.Number("9007199254740993")},
-		json.RawMessage(`{"units":2,"enabled":false}`),
-		struct {
+	for _, tc := range []struct {
+		value any
+		plain bool
+	}{
+		{map[string]any{"units": int64(3), "nested": []any{true, "<image> / 图像", math.Copysign(0, -1), nil}}, true},
+		{map[string]any{"empty": []any{}, "object": map[string]any(nil)}, true},
+		{map[string]any{"null": []any(nil)}, false},
+		{map[string]any{"large": int64(math.MaxInt64), "invalid UTF-8": string([]byte{0xff, 0xfe})}, false},
+		{map[string]any{string([]byte{0xff}): "invalid key"}, false},
+		{map[string]any{"bytes": []byte{0, 1, 255}, "number": json.Number("9007199254740993")}, false},
+		{json.RawMessage(`{"units":2,"enabled":false}`), false},
+		{struct {
 			Units int `json:"units"`
-		}{Units: 0},
+		}{Units: 0}, false},
 	} {
-		encoded, err := common.Marshal(value)
+		encoded, err := common.Marshal(tc.value)
 		require.NoError(t, err)
 		var expected any
 		require.NoError(t, common.Unmarshal(encoded, &expected))
-		assert.Equal(t, expected, jsonValue(value))
+		assert.Equal(t, expected, jsonValue(tc.value))
+		assert.Equal(t, tc.plain, isPlainJSONValue(tc.value, 0))
 	}
 	source := map[string]any{"items": []any{map[string]any{"label": "original"}}}
 	copy := jsonValue(source).(map[string]any)

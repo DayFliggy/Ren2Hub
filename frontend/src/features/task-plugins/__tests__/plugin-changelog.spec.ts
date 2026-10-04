@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchPluginChangelog, parsePluginChangelog } from '../pluginChangelog'
+import {
+  fetchPluginChangelog,
+  parsePluginChangelog,
+} from '../lib/plugin-changelog'
 import { localizedText } from '@/utils/localizedText'
-import type { MarketPlugin } from '../taskPlugins'
+import type { MarketplacePlugin } from '../types'
 
-const plugin: MarketPlugin = {
+const indexUrl = 'https://plugins.example/index.json'
+const plugin: MarketplacePlugin = {
   key: 'fixture',
   name: 'Fixture',
   description: '',
@@ -15,8 +19,6 @@ const plugin: MarketPlugin = {
       sha256: 'a'.repeat(64),
     },
   ],
-  indexURL: 'https://plugins.example/index.json',
-  sourceName: 'Fixture',
 }
 const source = 'https://plugins.example/fixture/1.0.0/CHANGELOG.md'
 function notes(locale = 'en', body = '- Fixed request handling.') {
@@ -34,7 +36,7 @@ describe('plugin changelog integrity and localization', () => {
       .mockResolvedValueOnce(new Response(notes()))
       .mockResolvedValueOnce(new Response(notes('zh-CN', '- 修复请求处理。')))
     const entry = await fetchPluginChangelog({
-      indexUrl: plugin.indexURL,
+      indexUrl,
       plugin,
       version: '1.0.0',
       language: 'zh-CN',
@@ -52,7 +54,7 @@ describe('plugin changelog integrity and localization', () => {
       .mockResolvedValueOnce(new Response(notes()))
       .mockResolvedValueOnce(new Response('', { status: 404 }))
     const entry = await fetchPluginChangelog({
-      indexUrl: plugin.indexURL,
+      indexUrl,
       plugin,
       version: '1.0.0',
       language: 'zh-CN',

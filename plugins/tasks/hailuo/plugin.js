@@ -62,7 +62,7 @@ export const meta = {
     en: "MiniMax Hailuo video generation (text-to-video, image-to-video, and MiniMax-H3 multimodal reference)",
     zh: "MiniMax 海螺视频生成（文生视频、图生视频、MiniMax-H3 多模态参考生视频）",
   },
-  version: "1.2.1",
+  version: "1.2.0+ren2hub.1",
   author: { name: "QuantumNous" },
   channelTypes: [35],
   models: [
@@ -160,8 +160,9 @@ function resolutionFor(size, model) {
 }
 
 function outboundDuration(req) {
-  if (!req || req.duration === undefined) return 6;
-  return Number(utils.decimal.bounded(req.duration, 1, 3600, true));
+  const n = Number(req && req.duration);
+  if (Number.isFinite(n) && n > 0) return n;
+  return 6;
 }
 
 function outboundResolution(req, model) {
@@ -206,7 +207,7 @@ function isH3(model) {
 function h3Duration(req) {
   const raw = req.duration;
   if (raw === undefined || raw === null || raw === "") return H3_DEFAULT_DURATION;
-  const seconds = Number(utils.decimal.bounded(raw, H3_MIN_DURATION, H3_MAX_DURATION, true));
+  const seconds = Number(raw);
   if (!Number.isInteger(seconds) || seconds < H3_MIN_DURATION || seconds > H3_MAX_DURATION) {
     throw new Error(H3_MODEL + " duration must be an integer between " + H3_MIN_DURATION + " and " + H3_MAX_DURATION + " seconds");
   }
@@ -497,6 +498,7 @@ export function parseSubmitResponse(ctx, resp) {
 }
 
 export function extractUsage(ctx) {
+  if (ctx.usagePurpose === "billing_ratios") return null;
   const req = ctx.requestBody || {};
   const model = ctx.upstreamModel || req.model;
   if (isH3(model)) {
@@ -758,11 +760,11 @@ protocols.openai_video = {
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
         req.metadata = parsed;
       }
-      if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
-      else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+      if (req.seconds !== undefined) req.seconds = Number(req.seconds);
+      else if (req.duration !== undefined) req.seconds = Number(req.duration);
     }
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
-    if (seconds !== undefined) req.duration = Number(utils.decimal.bounded(seconds, 0, 3600, true));
+    if (seconds !== undefined) req.duration = Number(seconds);
     if (hasInputReferenceFile) {
       req.metadata = Object.assign({}, req.metadata || {}, {
         first_frame_image: { __fileRef: "request_file:input_reference", encoding: "dataUrl", maxBytes: 20971520 },
@@ -775,7 +777,7 @@ protocols.openai_video = {
       }
     }
     const hasImage = hasHailuoImage(req, hasInputReferenceFile);
-    const duration = req.duration === undefined ? undefined : Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+    const duration = req.duration === undefined ? undefined : Number(req.duration);
     const comboModel = ctx.upstreamModel || ctx.model;
     validateHailuoCombo(comboModel, duration, outboundResolution(req, comboModel), hasImage);
     return {

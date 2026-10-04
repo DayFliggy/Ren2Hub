@@ -5,6 +5,10 @@ import type {
   AuditLogCategory,
   AuditLogItem,
   RelayTaskLogItem,
+  TaskArtifact,
+  TaskArtifactType,
+  TaskArtifactsResult,
+  TaskAudioClip,
   TokenSummary,
 } from '@/types/console'
 
@@ -589,14 +593,158 @@ function parseRelayTaskLog(value: unknown, endpoint: string): RelayTaskLogItem {
     status: requiredString(value.status ?? '', endpoint),
     progress: requiredString(value.progress ?? '', endpoint),
     fail_reason: requiredString(value.fail_reason ?? '', endpoint),
-    result_url: requiredString(value.result_url ?? '', endpoint),
     quota: requiredQuota(value.quota, endpoint),
     submit_time: requiredInteger(value.submit_time ?? 0, endpoint),
     finish_time: requiredInteger(value.finish_time ?? 0, endpoint),
+    // Both flags are omitempty on the wire, so absence means false.
+    legacy_video_available: requiredBoolean(
+      value.legacy_video_available ?? false,
+      endpoint
+    ),
+    result_discarded: requiredBoolean(
+      value.result_discarded ?? false,
+      endpoint
+    ),
   }
 }
 
 export function parseTaskLogPage(value: unknown): PageResult<RelayTaskLogItem> {
   const endpoint = '/api/task/self'
   return parsePage(value, endpoint, parseRelayTaskLog)
+}
+
+const TASK_ARTIFACTS_ENDPOINT = '/api/task/:task_id/artifacts'
+const TASK_ARTIFACT_TYPES = new Set<string>(['image', 'video', 'audio', 'file'])
+const TASK_ARTIFACT_KEY = /^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/
+const TASK_ARTIFACT_CONTENT_PATH =
+  /\/v1\/tasks\/[^/]+\/artifacts\/[^/]+\/content$/
+// base64url (no padding) of an HMAC-SHA256 digest.
+const TASK_ARTIFACT_ACCESS = /^[A-Za-z0-9_-]{43}$/
+const MAX_TASK_ARTIFACTS = 64
+
+function isTaskArtifactType(value: string): value is TaskArtifactType {
+  return TASK_ARTIFACT_TYPES.has(value)
+}
+
+/**
+ * Signed content URLs are rendered straight into media src and download
+ * links, so only the exact gateway shape is accepted: absolute http(s), no
+ * userinfo or fragment, the artifact content path, and a sole access token.
+ */
+function parseArtifactContentUrl(value: unknown): string {
+  const endpoint = TASK_ARTIFACTS_ENDPOINT
+  if (typeof value !== 'string' || !/^https?:\/\//i.test(value))
+    invalidResponse(endpoint)
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f\\#\s]/.test(value)) invalidResponse(endpoint)
+  const authority = value.slice(value.indexOf('//') + 2).split('/')[0]
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    invalidResponse(endpoint)
+  }
+  const access = url.searchParams.get('access')
+  if (
+    !url.hostname ||
+    authority.includes('@') ||
+    !TASK_ARTIFACT_CONTENT_PATH.test(url.pathname) ||
+    access === null ||
+    !TASK_ARTIFACT_ACCESS.test(access) ||
+    url.search !== `?access=${access}`
+  )
+    invalidResponse(endpoint)
+  return value
+}
+
+function parseTaskArtifact(value: unknown): TaskArtifact {
+  const endpoint = TASK_ARTIFACTS_ENDPOINT
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const key = requiredString(value.key, endpoint)
+  const type = requiredString(value.type, endpoint)
+  if (!TASK_ARTIFACT_KEY.test(key) || !isTaskArtifactType(type))
+    invalidResponse(endpoint)
+  const artifact: TaskArtifact = {
+    key,
+    type,
+    content_url: parseArtifactContentUrl(value.content_url),
+  }
+  if (value.mime_type !== undefined) {
+    const mimeType = requiredString(value.mime_type, endpoint).trim()
+    if (mimeType.length > 255 || /[\r\n]/.test(mimeType))
+      invalidResponse(endpoint)
+    if (mimeType) artifact.mime_type = mimeType
+  }
+  return artifact
+}
+
+function boundedList(value: unknown): unknown[] {
+  if (!Array.isArray(value) || value.length > MAX_TASK_ARTIFACTS)
+    invalidResponse(TASK_ARTIFACTS_ENDPOINT)
+  return value
+}
+
+function webUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+      ? url.href
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function optionalText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined
+}
+
+function optionalSeconds(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : undefined
+}
+
+/**
+ * Legacy Suno clips are a passthrough of the stored upstream snapshot. The
+ * audio URL is required and must be http(s); display fields from that
+ * snapshot are best effort and dropped when they have an unexpected type.
+ */
+function parseTaskAudioClip(value: unknown): TaskAudioClip {
+  if (!isRecord(value)) invalidResponse(TASK_ARTIFACTS_ENDPOINT)
+  const audioUrl = webUrl(value.audio_url)
+  if (!audioUrl) invalidResponse(TASK_ARTIFACTS_ENDPOINT)
+  const metadata = isRecord(value.metadata) ? value.metadata : {}
+  return {
+    audio_url: audioUrl,
+    clip_id: optionalText(value.clip_id),
+    id: optionalText(value.id),
+    title: optionalText(value.title),
+    tags: optionalText(value.tags) ?? optionalText(metadata.tags),
+    duration:
+      optionalSeconds(value.duration) ?? optionalSeconds(metadata.duration),
+    image_url: webUrl(value.image_url) ?? webUrl(value.image_large_url),
+  }
+}
+
+export function parseTaskArtifactsResult(value: unknown): TaskArtifactsResult {
+  const endpoint = TASK_ARTIFACTS_ENDPOINT
+  if (!isRecord(value)) invalidResponse(endpoint)
+  const artifacts = boundedList(value.artifacts).map(parseTaskArtifact)
+  if (new Set(artifacts.map((item) => item.key)).size !== artifacts.length)
+    invalidResponse(endpoint)
+  const result: TaskArtifactsResult = {
+    task_id: requiredString(value.task_id, endpoint),
+    artifacts,
+  }
+  if (value.legacy_content_url !== undefined)
+    result.legacy_content_url = parseArtifactContentUrl(
+      value.legacy_content_url
+    )
+  if (value.legacy_audio_clips !== undefined)
+    result.legacy_audio_clips = boundedList(value.legacy_audio_clips).map(
+      parseTaskAudioClip
+    )
+  return result
 }

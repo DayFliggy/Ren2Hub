@@ -179,44 +179,49 @@ for (const theme of ['light', 'dark'] as const) {
       })
       await page.goto('/task-plugins')
       await waitForStablePage(page)
-      await page.getByRole('button', { name: '停用', exact: true }).click()
-      await expect(page.getByRole('dialog')).toBeVisible()
+      const toggle = page.getByRole('switch', { name: '启用插件 fixture' })
+      const confirmDisable = () =>
+        page
+          .getByRole('dialog', { name: '禁用插件？' })
+          .getByRole('button', { name: '禁用', exact: true })
+          .click()
+
+      await toggle.click()
+      await expect(
+        page.getByRole('dialog', { name: '禁用插件？' })
+      ).toBeVisible()
       await page.getByRole('button', { name: '取消', exact: true }).click()
       expect(mutations).toHaveLength(0)
-      await page.getByRole('button', { name: '停用', exact: true }).click()
-      await page.getByRole('button', { name: '确认停用', exact: true }).click()
-      await expect(
-        page.getByRole('button', { name: '启用', exact: true })
-      ).toBeVisible()
+      await toggle.click()
+      await confirmDisable()
+      await expect(toggle).toHaveAttribute('aria-checked', 'false')
       expect(mutations).toEqual([{ query: '', body: { enabled: false } }])
 
       enabled = true
       mode = 'bound'
-      await page.getByRole('button', { name: '刷新', exact: true }).click()
-      await page.getByRole('button', { name: '停用', exact: true }).click()
-      await page.getByRole('button', { name: '确认停用', exact: true }).click()
+      await page.reload()
+      await waitForStablePage(page)
+      await toggle.click()
+      await confirmDisable()
       const dialog = page.getByRole('dialog', { name: '插件仍在使用中' })
-      await expect(dialog.getByText('Shared gateway (#8)')).toBeVisible()
+      await expect(dialog.getByText('#8 Shared gateway')).toBeVisible()
       await expect(
         dialog.getByText(
           'New API：仅解除当前插件绑定，其他插件和普通流量继续可用。'
         )
       ).toBeVisible()
       await assertNoHorizontalOverflow(page)
-      await page.screenshot({
+      await dialog.screenshot({
         path: testInfo.outputPath('cascade-confirmation.png'),
-        fullPage: true,
       })
-      await page.getByRole('button', { name: '取消', exact: true }).click()
+      await dialog.getByRole('button', { name: '取消', exact: true }).click()
       expect(mutations).toHaveLength(2)
-      await page.getByRole('button', { name: '停用', exact: true }).click()
-      await page.getByRole('button', { name: '确认停用', exact: true }).click()
-      await page
-        .getByRole('button', { name: '级联停用渠道', exact: true })
+      await toggle.click()
+      await confirmDisable()
+      await dialog
+        .getByRole('button', { name: '级联禁用渠道', exact: true })
         .click()
-      await expect(
-        page.getByRole('button', { name: '启用', exact: true })
-      ).toBeVisible()
+      await expect(toggle).toHaveAttribute('aria-checked', 'false')
       expect(mutations.at(-1)).toEqual({
         query: '?cascade=true',
         body: { enabled: false },
@@ -224,17 +229,20 @@ for (const theme of ['light', 'dark'] as const) {
 
       enabled = true
       mode = 'pending'
-      await page.getByRole('button', { name: '刷新', exact: true }).click()
-      await page.getByRole('button', { name: '停用', exact: true }).click()
-      await page.getByRole('button', { name: '确认停用', exact: true }).click()
-      await expect(dialog.getByText('未完成任务：2')).toBeVisible()
+      await page.reload()
+      await waitForStablePage(page)
+      await toggle.click()
+      await confirmDisable()
       await expect(
-        page.getByRole('button', { name: '级联停用渠道', exact: true })
-      ).toBeDisabled()
-      await page.getByRole('button', { name: '强制停用', exact: true }).click()
-      await expect(
-        page.getByRole('button', { name: '启用', exact: true })
+        dialog.getByText('2 个在途任务', { exact: false })
       ).toBeVisible()
+      await expect(
+        dialog.getByRole('button', { name: '级联禁用渠道', exact: true })
+      ).toBeDisabled()
+      await dialog
+        .getByRole('button', { name: '强制操作', exact: true })
+        .click()
+      await expect(toggle).toHaveAttribute('aria-checked', 'false')
       expect(mutations.at(-1)).toEqual({
         query: '?cascade=true&force=true',
         body: { enabled: false },
@@ -242,18 +250,15 @@ for (const theme of ['light', 'dark'] as const) {
 
       enabled = true
       mode = 'error'
-      await page.getByRole('button', { name: '刷新', exact: true }).click()
-      await page.getByRole('button', { name: '停用', exact: true }).click()
-      await page.getByRole('button', { name: '确认停用', exact: true }).click()
-      await expect(page.getByRole('dialog').getByRole('alert')).toHaveText(
-        'Fixture database unavailable'
-      )
+      await page.reload()
+      await waitForStablePage(page)
+      await toggle.click()
+      await confirmDisable()
+      // Upstream reports a non-usage failure through the toast and keeps the
+      // switch unchanged.
+      await expect(page.getByText('Fixture database unavailable')).toBeVisible()
+      await expect(toggle).toHaveAttribute('aria-checked', 'true')
       await assertNoHorizontalOverflow(page)
-      await page.keyboard.press('Escape')
-      await expect(page.getByRole('dialog')).toHaveCount(0)
-      await expect(
-        page.getByRole('button', { name: '停用', exact: true })
-      ).toBeFocused()
     })
   }
 }

@@ -7,7 +7,7 @@ export const meta = {
     en: "Kuaishou Kling video generation (text-to-video and image-to-video)",
     zh: "快手可灵视频生成（文生视频、图生视频）",
   },
-  version: "1.1.1",
+  version: "1.1.0+ren2hub.1",
   author: { name: "QuantumNous" },
   channelTypes: [50],
   models: ["kling-v1", "kling-v1-6", "kling-v2-master"],
@@ -23,7 +23,7 @@ export const meta = {
   },
   usageExamples: [
     { label: "v1 std 5s", facts: { units: 1 } },
-    { label: "v1 pro 5s", facts: { units: "3.5" } },
+    { label: "v1 pro 5s", facts: { units: 3.5 } },
     { label: "v1-6 std 5s", facts: { units: 2 } },
     { label: "v1-6 pro 10s", facts: { units: 7 } },
     { label: "v2-master pro 5s", facts: { units: 10 } },
@@ -40,9 +40,9 @@ export const meta = {
 // Official unit consumption (units per output video second), not a currency price.
 // Source: https://kling.ai/dev/pricing
 const UNITS_PER_SECOND = {
-  "kling-v1": { std: "0.2", pro: "0.7" },
-  "kling-v1-6": { std: "0.4", pro: "0.7" },
-  "kling-v2-master": { pro: "2.0" },
+  "kling-v1": { std: 0.2, pro: 0.7 },
+  "kling-v1-6": { std: 0.4, pro: 0.7 },
+  "kling-v2-master": { pro: 2.0 },
 };
 
 function trimmed(value) {
@@ -150,22 +150,25 @@ function perSecondRate(model, mode) {
 }
 
 function estimateUnits(model, mode, durationSeconds) {
-  return utils.decimal.multiply(perSecondRate(model, mode), durationSeconds);
+  return perSecondRate(model, mode) * durationSeconds;
 }
 
 // Official current pages list 3–15s for new models; old-model duration "5"|"10"
 // is unverifiable (research 2026-08-27). Keep permissive positive integers up to
 // the host task duration bound.
 function validateKlingDuration(value) {
-  const n = Number(utils.decimal.bounded(value, 1, 3600, true));
+  const n = Number(value);
   if (!Number.isInteger(n) || n <= 0 || n > 3600) throw new Error("seconds must be a positive integer at most 3600");
   return n;
 }
 
 function outboundDuration(req) {
+  const n = Number(req && req.duration);
+  if (Number.isFinite(n) && n > 0) return n;
   const metadata = (req && req.metadata) || {};
-  const raw = req && req.duration !== undefined ? req.duration : metadata.duration;
-  return raw === undefined ? 5 : Number(utils.decimal.bounded(raw, 1, 3600, true));
+  const fromMeta = Number(metadata.duration);
+  if (Number.isFinite(fromMeta) && fromMeta > 0) return fromMeta;
+  return 5;
 }
 
 function outboundMode(req, model) {
@@ -268,6 +271,7 @@ export function parseSubmitResponse(ctx, resp) {
 }
 
 export function extractUsage(ctx) {
+  if (ctx.usagePurpose === "billing_ratios") return null;
   const req = ctx.requestBody || {};
   const model = submitModel(ctx, req);
   const duration = outboundDuration(req);
@@ -418,8 +422,8 @@ export const protocols = {
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
           req.metadata = parsed;
         }
-        if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
-        else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+        if (req.seconds !== undefined) req.seconds = Number(req.seconds);
+        else if (req.duration !== undefined) req.seconds = Number(req.duration);
       }
       const seconds = req.seconds === undefined ? req.duration : req.seconds;
       if (seconds !== undefined) req.duration = validateKlingDuration(seconds);

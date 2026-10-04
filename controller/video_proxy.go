@@ -9,7 +9,6 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
-	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -31,23 +30,15 @@ func VideoProxy(c *gin.Context) {
 		return
 	}
 
-	userID := c.GetInt("id")
-	task, exists, err := model.GetByTaskId(userID, taskID)
+	// Same ownership, token and model rules as the artifact endpoints.
+	task, exists, err := getTaskForArtifactRequest(c, taskID)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to query task %s: %s", taskID, err.Error()))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to query task")
 		return
 	}
-	if !exists || task == nil {
+	if !exists || task == nil || !task.ResultRetrievable() {
 		videoProxyError(c, http.StatusNotFound, "invalid_request_error", "Task not found")
-		return
-	}
-	if !task.ResultRetrievable() || (c.GetInt("token_id") > 0 && c.GetInt("token_id") != task.PrivateData.TokenId) {
-		videoProxyError(c, http.StatusNotFound, "invalid_request_error", "Task not found")
-		return
-	}
-	if err := service.TokenModelPermissionError(c, service.StoredTaskModelName(task)); err != nil {
-		videoProxyError(c, err.StatusCode, "permission_error", err.Error())
 		return
 	}
 
@@ -89,8 +80,16 @@ func VideoProxy(c *gin.Context) {
 		videoProxyError(c, http.StatusNotFound, "artifact_not_found", "Video artifact not found")
 		return
 	}
-
-	videoProxyError(c, http.StatusServiceUnavailable, "task_state_unavailable", "Task has no immutable plugin execution")
+	// A pre-plugin video task stored a public result URL; fetch it without
+	// provider credentials, as the legacy artifact route does.
+	if !legacyVideoAvailable(task) {
+		videoProxyError(c, http.StatusNotFound, "artifact_not_found", "Video artifact not found")
+		return
+	}
+	descriptor := &relaychannel.TaskContentRequest{URL: task.GetResultURL(), Method: c.Request.Method, Credentialless: true}
+	if err := proxyTaskMedia(c, task, descriptor); err != nil {
+		writeTaskMediaProxyError(c, err)
+	}
 }
 
 func writeVideoDataURL(c *gin.Context, dataURL string) error {

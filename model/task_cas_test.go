@@ -268,3 +268,43 @@ func TestUpdateWithStatus_ConcurrentWinner(t *testing.T) {
 	}
 	assert.Equal(t, 1, winCount, "exactly one goroutine should win the CAS")
 }
+
+func TestUpdateWithStatus_KeepsBillingAndOwnershipColumns(t *testing.T) {
+	withTaskBillingDatabases(t, func(t *testing.T, _ *gorm.DB) {
+		task := &Task{TaskID: "task_cas_scope", UserId: 7, ChannelId: 3, Quota: 1000, Status: TaskStatusInProgress, Data: json.RawMessage(`{}`)}
+		insertTask(t, task)
+		// Settlement moved quota after this poller loaded its copy.
+		require.NoError(t, DB.Model(&Task{}).Where("id = ?", task.ID).Update("quota", 400).Error)
+
+		stale := *task
+		stale.UserId, stale.ChannelId, stale.Quota = 0, 0, 1000
+		stale.Progress = "60%"
+		won, err := stale.UpdateWithStatus(TaskStatusInProgress)
+		require.NoError(t, err)
+		assert.True(t, won)
+
+		var reloaded Task
+		require.NoError(t, DB.First(&reloaded, task.ID).Error)
+		assert.Equal(t, "60%", reloaded.Progress)
+		assert.EqualValues(t, 400, reloaded.Quota)
+		assert.Equal(t, 7, reloaded.UserId)
+		assert.Equal(t, 3, reloaded.ChannelId)
+	})
+}
+
+func TestUnfinishedTaskQueries_IgnoreReportedProgress(t *testing.T) {
+	withTaskBillingDatabases(t, func(t *testing.T, _ *gorm.DB) {
+		running := &Task{TaskID: "task_running_full", Status: TaskStatusInProgress, Progress: "100%", SubmitTime: 100, Data: json.RawMessage(`{}`)}
+		done := &Task{TaskID: "task_done", Status: TaskStatusSuccess, Progress: "100%", SubmitTime: 100, Data: json.RawMessage(`{}`)}
+		insertTask(t, running)
+		insertTask(t, done)
+
+		assert.True(t, HasUnfinishedSyncTasks())
+		unfinished := GetAllUnFinishSyncTasks(10)
+		require.Len(t, unfinished, 1)
+		assert.Equal(t, running.TaskID, unfinished[0].TaskID)
+		timedOut := GetTimedOutUnfinishedTasks(200, 10)
+		require.Len(t, timedOut, 1)
+		assert.Equal(t, running.TaskID, timedOut[0].TaskID)
+	})
+}

@@ -9,6 +9,7 @@ import {
   parsePricingModels,
   parsePricingModelsPartial,
   parseRedeemedQuota,
+  parseTaskArtifactsResult,
   parseTaskLogPage,
   parseTokenPage,
   parseTopupInfo,
@@ -542,49 +543,68 @@ describe('live API contracts', () => {
     )
   })
 
-  it('parses relay task logs including optional result URLs', () => {
+  it('parses relay task logs without result payloads and with omitempty result flags', () => {
     const page = parseTaskLogPage({
       page: 1,
       page_size: 20,
-      total: 2,
+      total: 3,
       items: [
         {
           id: 9,
-          task_id: 'suno-abc',
-          platform: 'suno',
-          action: 'MUSIC',
+          task_id: 'kling-abc',
+          platform: 'kling',
+          action: 'VIDEO',
           status: 'SUCCESS',
           progress: '100%',
           fail_reason: '',
-          result_url: 'https://cdn.example.com/song.mp3',
+          result_url: '',
           quota: '12000',
           submit_time: 1_700_000_000,
           finish_time: 1_700_000_090,
+          legacy_video_available: true,
         },
         {
           id: 10,
-          task_id: 'kling-def',
+          task_id: 'sync-def',
+          platform: 'doubao',
+          action: 'IMAGE',
+          status: 'SUCCESS',
+          progress: '100%',
+          quota: '0',
+          submit_time: 1_700_000_100,
+          result_discarded: true,
+        },
+        {
+          id: 11,
+          task_id: 'kling-ghi',
           platform: 'kling',
           action: 'VIDEO',
           status: 'FAILURE',
           progress: '0%',
           fail_reason: 'upstream timeout',
           quota: '0',
-          submit_time: 1_700_000_100,
+          submit_time: 1_700_000_200,
           finish_time: 0,
         },
       ],
     })
 
     expect(page.items[0]).toMatchObject({
-      task_id: 'suno-abc',
-      platform: 'suno',
-      result_url: 'https://cdn.example.com/song.mp3',
+      task_id: 'kling-abc',
+      legacy_video_available: true,
+      result_discarded: false,
     })
+    expect(page.items[0]).not.toHaveProperty('result_url')
+    expect(page.items[0]).not.toHaveProperty('data')
     expect(page.items[1]).toMatchObject({
+      legacy_video_available: false,
+      result_discarded: true,
+    })
+    expect(page.items[2]).toMatchObject({
       status: 'FAILURE',
       fail_reason: 'upstream timeout',
-      result_url: '',
+      legacy_video_available: false,
+      result_discarded: false,
     })
     expectInvalidResponse(() =>
       parseTaskLogPage({
@@ -594,5 +614,103 @@ describe('live API contracts', () => {
         items: [{ task_id: 'missing-id' }],
       })
     )
+    expectInvalidResponse(() =>
+      parseTaskLogPage({
+        page: 1,
+        page_size: 20,
+        total: 1,
+        items: [{ id: 1, quota: '0', result_discarded: 'yes' }],
+      })
+    )
+  })
+})
+
+const access = 'A'.repeat(42) + '_'
+const contentUrl = (key: string) =>
+  `https://gateway.example/v1/tasks/task_1/artifacts/${key}/content?access=${access}`
+
+describe('task artifacts contract', () => {
+  it('parses plugin artifacts, the legacy video URL and legacy Suno clips', () => {
+    const result = parseTaskArtifactsResult({
+      task_id: 'task_1',
+      artifacts: [
+        {
+          key: 'video-1',
+          type: 'video',
+          mime_type: ' video/mp4 ',
+          content_url: contentUrl('video-1'),
+        },
+        { key: 'cover', type: 'image', content_url: contentUrl('cover') },
+      ],
+      legacy_content_url: contentUrl('video'),
+      legacy_audio_clips: [
+        {
+          clip_id: 'clip-1',
+          title: 'Song',
+          audio_url: 'https://cdn.example.com/song.mp3',
+          image_url: 'javascript:alert(1)',
+          image_large_url: 'https://cdn.example.com/cover.png',
+          metadata: { tags: 'pop', duration: 125.4 },
+        },
+      ],
+    })
+
+    expect(result.artifacts).toEqual([
+      {
+        key: 'video-1',
+        type: 'video',
+        mime_type: 'video/mp4',
+        content_url: contentUrl('video-1'),
+      },
+      { key: 'cover', type: 'image', content_url: contentUrl('cover') },
+    ])
+    expect(result.legacy_content_url).toBe(contentUrl('video'))
+    expect(result.legacy_audio_clips).toEqual([
+      {
+        audio_url: 'https://cdn.example.com/song.mp3',
+        clip_id: 'clip-1',
+        id: undefined,
+        title: 'Song',
+        tags: 'pop',
+        duration: 125.4,
+        image_url: 'https://cdn.example.com/cover.png',
+      },
+    ])
+  })
+
+  it('rejects content URLs that are not signed gateway artifact URLs', () => {
+    const invalid = [
+      `javascript:alert(1)//v1/tasks/t/artifacts/a/content?access=${access}`,
+      `https://user@gateway.example/v1/tasks/t/artifacts/a/content?access=${access}`,
+      `https://gateway.example/v1/tasks/t/artifacts/a/content?access=${access}#x`,
+      `https://gateway.example/v1/tasks/t/artifacts/a/content?access=${access}&x=1`,
+      'https://gateway.example/v1/tasks/t/artifacts/a/content?access=short',
+      `https://gateway.example/v1/tasks/t/other?access=${access}`,
+      `/v1/tasks/t/artifacts/a/content?access=${access}`,
+    ]
+    for (const url of invalid) {
+      expectInvalidResponse(() =>
+        parseTaskArtifactsResult({
+          task_id: 't',
+          artifacts: [{ key: 'a', type: 'file', content_url: url }],
+        })
+      )
+    }
+  })
+
+  it('rejects malformed artifact lists', () => {
+    const item = { key: 'a', type: 'file', content_url: contentUrl('a') }
+    const responses = [
+      { task_id: 't' },
+      { task_id: 't', artifacts: [{ ...item, type: 'archive' }] },
+      { task_id: 't', artifacts: [{ ...item, key: '../a' }] },
+      { task_id: 't', artifacts: [item, item] },
+      { task_id: 't', artifacts: [{ ...item, mime_type: 'text/plain\r\nx' }] },
+      { task_id: 't', artifacts: Array.from({ length: 65 }, () => item) },
+      { task_id: 't', artifacts: [], legacy_audio_clips: [{ title: 'x' }] },
+    ]
+    for (const response of responses) {
+      expectInvalidResponse(() => parseTaskArtifactsResult(response))
+    }
   })
 })

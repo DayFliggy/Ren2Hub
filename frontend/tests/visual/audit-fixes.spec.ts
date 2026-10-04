@@ -276,7 +276,7 @@ for (const theme of ['light', 'dark'] as const)
               },
             ]
           : path.endsWith('/preview')
-            ? { meta, source_hash: hash }
+            ? { meta, source_hash: hash, unresolved: [] }
             : path.endsWith('/runtime/status')
               ? {
                   current_generation: 1,
@@ -312,7 +312,6 @@ for (const theme of ['light', 'dark'] as const)
       })
       await page.goto('/task-plugins')
       await page.getByRole('tab', { name: '插件市场', exact: true }).click()
-      await page.getByRole('button', { name: '加载市场', exact: true }).click()
       await expect(
         page.getByRole('heading', { name: meta.name, exact: true })
       ).toBeVisible()
@@ -320,8 +319,10 @@ for (const theme of ['light', 'dark'] as const)
       await page.screenshot({
         path: info.outputPath('market-icon-fallback.png'),
       })
-      await page.getByRole('button', { name: '导入源码', exact: true }).click()
-      await expect(page.locator('textarea').first()).toHaveValue(source)
+      await page.getByRole('button', { name: '安装', exact: true }).click()
+      await expect(
+        page.getByText('文件校验通过', { exact: true })
+      ).toBeVisible()
       const requests = await page.evaluate(
         () =>
           (

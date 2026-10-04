@@ -1,78 +1,45 @@
 package jsplugin
 
+// Ren2Hub extension: the exact usage boundary and the utils.decimal and
+// utils.json.parseNumbers helpers. Upstream NewAPI has none of this; its
+// usage hooks return plain JavaScript numbers.
+
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/grafana/sobek"
-	"github.com/shopspring/decimal"
 	"math"
 	"strconv"
+	"strings"
+
+	"github.com/Calcium-Ion/moejs"
+	"github.com/Calcium-Ion/moejs/engine"
+	"github.com/QuantumNous/new-api/common"
+	"github.com/shopspring/decimal"
 )
 
 const maxSafeInteger = int64(1<<53 - 1)
 
-// ExactUsageValue is the JS billing boundary: fractional values must retain
-// their source decimal text, while JS numbers are accepted only as safe integers.
+// maxExactNumberDigits is the most significant digits a JavaScript number may
+// carry at the usage boundary. Any decimal of at most 15 significant digits
+// survives a round trip through float64, so such a number names exactly the
+// decimal its shortest form shows; longer forms are usually arithmetic noise
+// (0.1+0.2 = 0.30000000000000004) and are rejected instead of rounded.
+const maxExactNumberDigits = 15
+
+// ExactUsageValue is the JS billing boundary. Safe integers become int64,
+// non-integer numbers become their shortest decimal text when it has at most
+// 15 significant digits, and decimal strings pass through. Anything else is
+// an error: the boundary never rounds.
 func ExactUsageValue(value any) (any, error) {
 	return exactUsageValue(value, 0)
 }
 
-// Protocol context can contain fractional settings unrelated to metering. Keep
-// these properties lazy: an unused setting must not reject the request, while
-// a usage hook that reads an imprecise number must fail before doing arithmetic.
-func usageArgumentValue(runtime *sobek.Runtime, value any, depth int) (sobek.Value, error) {
-	if depth > 64 {
-		return nil, fmt.Errorf("plugin billing JSON exceeds nesting limit")
+func exactUsageResult(key, version, hook string, result any) (any, error) {
+	exact, err := ExactUsageValue(result)
+	if err != nil {
+		return nil, fmt.Errorf("plugin %s@%s hook %s returned inexact usage: %w", key, version, hook, err)
 	}
-	exact, err := ExactUsageValue(value)
-	if err == nil {
-		return runtime.ToValue(exact), nil
-	}
-	var object *sobek.Object
-	var properties map[string]any
-	switch typed := value.(type) {
-	case map[string]any:
-		object, properties = runtime.NewObject(), typed
-	case []any:
-		object = runtime.NewArray()
-		properties = make(map[string]any, len(typed))
-		for index, item := range typed {
-			properties[strconv.Itoa(index)] = item
-		}
-		if err := object.Set("length", len(typed)); err != nil {
-			return nil, err
-		}
-	case []map[string]any:
-		items := make([]any, len(typed))
-		for index, item := range typed {
-			items[index] = item
-		}
-		return usageArgumentValue(runtime, items, depth)
-	default:
-		return nil, err
-	}
-	for name, item := range properties {
-		getter := runtime.ToValue(func(sobek.FunctionCall) sobek.Value {
-			converted, err := usageArgumentValue(runtime, item, depth+1)
-			if err != nil {
-				panic(runtime.NewTypeError("plugin billing input requires preserved decimal text or a safe integer"))
-			}
-			if err := object.DefineDataProperty(name, converted, sobek.FLAG_TRUE, sobek.FLAG_TRUE, sobek.FLAG_TRUE); err != nil {
-				panic(runtime.NewTypeError(err.Error()))
-			}
-			return converted
-		})
-		setter := runtime.ToValue(func(call sobek.FunctionCall) sobek.Value {
-			if err := object.DefineDataProperty(name, call.Argument(0), sobek.FLAG_TRUE, sobek.FLAG_TRUE, sobek.FLAG_TRUE); err != nil {
-				panic(runtime.NewTypeError(err.Error()))
-			}
-			return sobek.Undefined()
-		})
-		if err := object.DefineAccessorProperty(name, getter, setter, sobek.FLAG_TRUE, sobek.FLAG_TRUE); err != nil {
-			return nil, err
-		}
-	}
-	return object, nil
+	return exact, nil
 }
 
 func exactUsageValue(value any, depth int) (any, error) {
@@ -92,20 +59,11 @@ func exactUsageValue(value any, depth int) (any, error) {
 		}
 		return string(v), nil
 	case int:
-		if int64(v) < -maxSafeInteger || int64(v) > maxSafeInteger {
-			return nil, fmt.Errorf("unsafe plugin integer")
-		}
-		return int64(v), nil
+		return exactInteger(int64(v))
 	case int64:
-		if v < -maxSafeInteger || v > maxSafeInteger {
-			return nil, fmt.Errorf("unsafe plugin integer")
-		}
-		return v, nil
+		return exactInteger(v)
 	case float64:
-		if math.IsNaN(v) || math.IsInf(v, 0) || math.Trunc(v) != v || v < -float64(maxSafeInteger) || v > float64(maxSafeInteger) {
-			return nil, fmt.Errorf("plugin billing requires decimal text or a safe integer")
-		}
-		return int64(v), nil
+		return exactNumber(v)
 	case map[string]any:
 		result := make(map[string]any, len(v))
 		for key, item := range v {
@@ -154,6 +112,101 @@ func exactUsageValue(value any, depth int) (any, error) {
 		return nil, fmt.Errorf("unsupported plugin billing scalar")
 	}
 }
+
+func exactInteger(v int64) (any, error) {
+	if v < -maxSafeInteger || v > maxSafeInteger {
+		return nil, fmt.Errorf("unsafe plugin integer")
+	}
+	return v, nil
+}
+
+// exactNumber applies the numeric policy to one JavaScript number.
+func exactNumber(v float64) (any, error) {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return nil, fmt.Errorf("plugin billing numbers must be finite")
+	}
+	if math.Trunc(v) == v {
+		if math.Abs(v) > float64(maxSafeInteger) {
+			return nil, fmt.Errorf("unsafe plugin integer")
+		}
+		return int64(v), nil
+	}
+	shortest := strconv.FormatFloat(v, 'e', -1, 64)
+	mantissa, _, _ := strings.Cut(strings.TrimPrefix(shortest, "-"), "e")
+	if digits := len(strings.Replace(mantissa, ".", "", 1)); digits > maxExactNumberDigits {
+		return nil, fmt.Errorf("plugin billing number %s has %d significant digits; return decimal text instead", strconv.FormatFloat(v, 'g', -1, 64), digits)
+	}
+	// The 'f' form has the same digits without an exponent.
+	return strconv.FormatFloat(v, 'f', -1, 64), nil
+}
+
+// usageArgument prepares a usage-hook argument. Source JSON numbers decoded
+// as json.Number reach the hook as numbers only when the usage boundary would
+// return exactly that decimal again; any other source text stays a string, so
+// the host never rounds a value before the hook reads it. changed is false
+// when the value holds no json.Number, so it is passed on without a copy.
+func usageArgument(value any, depth int) (converted any, changed bool) {
+	if depth > maxPluginValueDepth {
+		return value, false
+	}
+	switch v := value.(type) {
+	case json.Number:
+		return jsonNumberArgument(v), true
+	case map[string]any:
+		var copied map[string]any
+		for key, item := range v {
+			if next, itemChanged := usageArgument(item, depth+1); itemChanged {
+				if copied == nil {
+					copied = make(map[string]any, len(v))
+					for k, original := range v {
+						copied[k] = original
+					}
+				}
+				copied[key] = next
+			}
+		}
+		if copied == nil {
+			return value, false
+		}
+		return copied, true
+	case []any:
+		var copied []any
+		for index, item := range v {
+			if next, itemChanged := usageArgument(item, depth+1); itemChanged {
+				if copied == nil {
+					copied = append([]any(nil), v...)
+				}
+				copied[index] = next
+			}
+		}
+		if copied == nil {
+			return value, false
+		}
+		return copied, true
+	}
+	return value, false
+}
+
+func jsonNumberArgument(n json.Number) any {
+	source, err := decimal.NewFromString(string(n))
+	if err != nil {
+		return string(n)
+	}
+	number, err := strconv.ParseFloat(string(n), 64)
+	if err != nil {
+		return string(n)
+	}
+	exact, err := exactNumber(number)
+	if err != nil {
+		return string(n)
+	}
+	boundary, err := decimal.NewFromString(fmt.Sprint(exact))
+	if err != nil || !boundary.Equal(source) {
+		return string(n)
+	}
+	return number
+}
+
 func pluginDecimal(value any) (decimal.Decimal, error) {
 	var text string
 	switch v := value.(type) {
@@ -166,13 +219,13 @@ func pluginDecimal(value any) (decimal.Decimal, error) {
 	case int64:
 		text = strconv.FormatInt(v, 10)
 	case float64:
-		exact, err := ExactUsageValue(v)
+		exact, err := exactNumber(v)
 		if err != nil {
 			return decimal.Zero, err
 		}
-		text = strconv.FormatInt(exact.(int64), 10)
+		text = fmt.Sprint(exact)
 	default:
-		return decimal.Zero, fmt.Errorf("plugin decimal requires decimal text or a safe integer")
+		return decimal.Zero, fmt.Errorf("plugin decimal requires decimal text or an exact number")
 	}
 	if len(text) == 0 || len(text) > 128 {
 		return decimal.Zero, fmt.Errorf("invalid plugin decimal")
@@ -183,64 +236,100 @@ func pluginDecimal(value any) (decimal.Decimal, error) {
 	}
 	return d, nil
 }
-func decimalHelpers() map[string]any {
+
+// decimalArg reads one utils.decimal operand: decimal text or a number the
+// usage boundary accepts.
+func decimalArg(r *moejs.Realm, value moejs.Value) (decimal.Decimal, error) {
+	exported, err := r.ToGoStrict(value)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	return pluginDecimal(exported)
+}
+
+func decimalHelpers(runtime *moejs.Runtime) map[string]any {
+	binary := func(name string, operate func(left, right decimal.Decimal) (decimal.Decimal, error)) moejs.Value {
+		return runtime.Function(name, 2, func(r *moejs.Realm, _ moejs.Value, args []moejs.Value) (moejs.Value, error) {
+			left, err := decimalArg(r, moejs.Arg(args, 0))
+			if err != nil {
+				return moejs.Undefined(), err
+			}
+			right, err := decimalArg(r, moejs.Arg(args, 1))
+			if err != nil {
+				return moejs.Undefined(), err
+			}
+			result, err := operate(left, right)
+			if err != nil {
+				return moejs.Undefined(), err
+			}
+			if result.Exponent() < -72 || result.Exponent() > 72 || len(result.Coefficient().String()) > 256 {
+				return moejs.Undefined(), fmt.Errorf("plugin decimal exceeds arithmetic bounds")
+			}
+			return moejs.String(result.String()), nil
+		})
+	}
 	return map[string]any{
-		"string": func(value any) (string, error) {
-			d, err := pluginDecimal(value)
+		"string": runtime.Function("string", 1, func(r *moejs.Realm, _ moejs.Value, args []moejs.Value) (moejs.Value, error) {
+			d, err := decimalArg(r, moejs.Arg(args, 0))
 			if err != nil {
-				return "", err
+				return moejs.Undefined(), err
 			}
-			return d.String(), nil
-		},
-		"bounded": func(value, minimum, maximum any, integer bool) (string, error) {
-			d, err := pluginDecimal(value)
-			if err != nil {
-				return "", err
+			return moejs.String(d.String()), nil
+		}),
+		"bounded": runtime.Function("bounded", 4, func(r *moejs.Realm, _ moejs.Value, args []moejs.Value) (moejs.Value, error) {
+			bounds := make([]decimal.Decimal, 3)
+			for index := range bounds {
+				d, err := decimalArg(r, moejs.Arg(args, index))
+				if err != nil {
+					return moejs.Undefined(), err
+				}
+				bounds[index] = d
 			}
-			low, err := pluginDecimal(minimum)
-			if err != nil {
-				return "", err
+			value, low, high := bounds[0], bounds[1], bounds[2]
+			integer := engine.ToBoolean(moejs.Arg(args, 3))
+			if value.LessThan(low) || value.GreaterThan(high) || (integer && !value.IsInteger()) {
+				return moejs.Undefined(), fmt.Errorf("plugin usage is outside declared bounds")
 			}
-			high, err := pluginDecimal(maximum)
-			if err != nil {
-				return "", err
+			return moejs.String(value.String()), nil
+		}),
+		"add": binary("add", func(left, right decimal.Decimal) (decimal.Decimal, error) {
+			return left.Add(right), nil
+		}),
+		"multiply": binary("multiply", func(left, right decimal.Decimal) (decimal.Decimal, error) {
+			return left.Mul(right), nil
+		}),
+		"divide": binary("divide", func(left, right decimal.Decimal) (decimal.Decimal, error) {
+			if right.IsZero() {
+				return decimal.Zero, fmt.Errorf("plugin division by zero")
 			}
-			if d.LessThan(low) || d.GreaterThan(high) || (integer && !d.IsInteger()) {
-				return "", fmt.Errorf("plugin usage is outside declared bounds")
-			}
-			return d.String(), nil
-		},
-		"add":      func(a, b any) (string, error) { return decimalOperation(a, b, "+") },
-		"multiply": func(a, b any) (string, error) { return decimalOperation(a, b, "*") },
-		"divide":   func(a, b any) (string, error) { return decimalOperation(a, b, "/") },
+			return left.DivRound(right, 36), nil
+		}),
 	}
 }
-func decimalOperation(a, b any, operator string) (string, error) {
-	left, err := pluginDecimal(a)
-	if err != nil {
-		return "", err
-	}
-	right, err := pluginDecimal(b)
-	if err != nil {
-		return "", err
-	}
-	var result decimal.Decimal
-	switch operator {
-	case "+":
-		result = left.Add(right)
-	case "*":
-		result = left.Mul(right)
-	case "/":
-		if right.IsZero() {
-			return "", fmt.Errorf("plugin division by zero")
+
+// parseNumbersHelper is utils.json.parseNumbers: JSON.parse that keeps
+// numbers the usage boundary cannot carry exactly as decimal text.
+func parseNumbersHelper(runtime *moejs.Runtime) moejs.Value {
+	return runtime.Function("parseNumbers", 1, func(r *moejs.Realm, _ moejs.Value, args []moejs.Value) (moejs.Value, error) {
+		source, err := stringValue(r, moejs.Arg(args, 0))
+		if err != nil {
+			return moejs.Undefined(), err
 		}
-		result = left.DivRound(right, 36)
-	}
-	if result.Exponent() < -72 || result.Exponent() > 72 || len(result.Coefficient().String()) > 256 {
-		return "", fmt.Errorf("plugin decimal exceeds arithmetic bounds")
-	}
-	return result.String(), nil
+		if len(source) > MaxJSONToolBytes {
+			return moejs.Undefined(), fmt.Errorf("JSON exceeds tool size limit")
+		}
+		var value any
+		if err := common.DecodeJsonNumbers(strings.NewReader(source), &value); err != nil {
+			return moejs.Undefined(), err
+		}
+		exact, err := ExactUsageValue(value)
+		if err != nil {
+			return moejs.Undefined(), err
+		}
+		return r.FromGo(exact)
+	})
 }
+
 func isUsageHook(name string) bool {
 	return name == "extractUsage" || name == "extractUsageOnSubmit" || name == "extractUsageOnComplete"
 }

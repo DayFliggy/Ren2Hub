@@ -1476,6 +1476,11 @@ func CopyChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	// A copy binds the same plugins, so it needs the permission AddChannel requires.
+	if (origin.Type == constant.ChannelTypeTaskPlugin || len(origin.GetSetting().TaskPluginBindings()) > 0) &&
+		!middleware.RequireCurrentUserPermission(c, authz.TaskPluginBind) {
+		return
+	}
 
 	// clone channel
 	clone := *origin // shallow copy is sufficient as we will overwrite primitives

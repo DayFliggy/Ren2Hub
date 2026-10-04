@@ -9,7 +9,24 @@ export type MutableJSON<T> = T extends readonly (infer Item)[] ? MutableJSON<Ite
 export interface HostUtils {
   hasCapability(name: string): boolean;
   /** Independent native JS containers; at most 1 MiB encoded JSON, depth 32 and 32,768 nodes. */
-  json: {clone<T extends JSONValue>(value: T): MutableJSON<T>};
+  json: {
+    clone<T extends JSONValue>(value: T): MutableJSON<T>;
+    /** Ren2Hub extension. JSON.parse for billing sources: safe integers stay numbers, every other number becomes its source decimal text. */
+    parseNumbers(text: string): JSONValue;
+  };
+  /**
+   * Ren2Hub extension: exact decimal arithmetic for usage facts. Operands are decimal text or
+   * numbers accepted by the usage boundary; results are decimal text. bounded throws
+   * "plugin usage is outside declared bounds" instead of clamping or rounding.
+   */
+  decimal: {
+    string(value: DecimalInput): string;
+    bounded(value: DecimalInput, minimum: DecimalInput, maximum: DecimalInput, integer?: boolean): string;
+    add(left: DecimalInput, right: DecimalInput): string;
+    multiply(left: DecimalInput, right: DecimalInput): string;
+    /** Rounded to 36 decimal places; division by zero throws. */
+    divide(left: DecimalInput, right: DecimalInput): string;
+  };
   unixNow(): number;
   uuid(): string;
   hmacSHA256(message: string, secret: string): string;
@@ -17,8 +34,23 @@ export interface HostUtils {
   base64(value: string): string;
   base64URL(value: string): string;
   base64URLDecode(value: string): string;
-  volcSignV4(request: {method: string; url: string; headers?: Record<string, string>; body?: string; accessKey: string; secretKey: string; region?: string; service?: string; timestamp?: number}): Record<string, string>;
+  /**
+   * Field names are PascalCase, as the runtime reads them and the jimeng builtin passes them.
+   * Upstream NewAPI declares camelCase names here, but its runtime ignores them, so a camelCase
+   * request fails with "invalid Volcengine signing URL". Region defaults to cn-north-1, Service to cv.
+   */
+  volcSignV4(request: {Method: string; URL: string; Headers?: Record<string, string>; Body?: string; AccessKey: string; SecretKey: string; Region?: string; Service?: string; Timestamp?: number}): Record<string, string>;
 }
+/** Decimal text such as "3.5" or "1e1", or a number accepted by the usage boundary. */
+export type DecimalInput = string | number;
+/**
+ * Ren2Hub usage boundary for extractUsage, extractUsageOnSubmit and extractUsageOnComplete.
+ * Returned numbers must be safe integers or non-integers whose shortest form has at most 15
+ * significant digits (0.1 + 0.2 is rejected); the host never rounds. Return decimal text for
+ * other values. Source JSON numbers reach these hooks as numbers only when that boundary returns
+ * the same decimal; any other source number arrives as its decimal text.
+ */
+export type UsageFactValue = string | number | boolean;
 declare global {const utils: HostUtils;}
 export type FileReference = Readonly<{ref: string; field: string; filename: string; mimeType: string; size: number}>;
 export type FilePlaceholder = Readonly<{__fileRef: string; encoding: "base64" | "dataUrl"; mimeType?: string; maxBytes?: number}>;
@@ -90,9 +122,9 @@ export declare function buildQueryRequest(ctx: TaskQueryContext): RequestDescrip
 export declare function buildBatchQueryRequest(ctx: BatchQueryContext, tasks: readonly TaskQueryContext[]): RequestDescriptor;
 export declare function parseTaskResult(ctx: TaskQueryContext, body: unknown, response: HookHTTPResponse): NormalizedTaskResult;
 export declare function parseBatchResult(ctx: BatchQueryContext, body: unknown, response: HookHTTPResponse): readonly (NormalizedTaskResult & {taskId: string; data?: unknown; state?: unknown})[];
-export declare function extractUsage(ctx: DriverContext & {usagePurpose?: "facts" | "billing_ratios"}): Readonly<Record<string, string | number | boolean>> | null;
-export declare function extractUsageOnSubmit(ctx: DriverContext, taskData: unknown): Readonly<Record<string, string | number | boolean>> | null;
-export declare function extractUsageOnComplete(task: TaskQueryContext, result: CompletionHookResult, data: unknown): Readonly<Record<string, string | number | boolean>> | null;
+export declare function extractUsage(ctx: DriverContext & {usagePurpose?: "facts" | "billing_ratios"}): Readonly<Record<string, UsageFactValue>> | null;
+export declare function extractUsageOnSubmit(ctx: DriverContext, taskData: unknown): Readonly<Record<string, UsageFactValue>> | null;
+export declare function extractUsageOnComplete(task: TaskQueryContext, result: CompletionHookResult, data: unknown): Readonly<Record<string, UsageFactValue>> | null;
 export interface ArtifactTaskContext {taskId: string; status: string; action: string; data: unknown; state: unknown; producerVersion: string}
 export declare function listArtifacts(task: ArtifactTaskContext): readonly TaskArtifact[];
 export interface ArtifactContentContext extends ArtifactTaskContext {artifactKey: string; upstreamTaskId: string; baseUrl: string; apiKey?: string; authHeader: string; auth?: unknown; upstream: UpstreamContext; clientRequest: {method: "GET" | "HEAD"; headers: Readonly<Record<string, string>>}}

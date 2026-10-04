@@ -285,9 +285,9 @@ func TestHailuoH3RejectsOutOfContractRequests(t *testing.T) {
 		request map[string]any
 		wantErr string
 	}{
-		{"duration below the minimum", map[string]any{"prompt": "p", "duration": 3}, "outside declared bounds"},
-		{"duration above the maximum", map[string]any{"prompt": "p", "duration": 16}, "outside declared bounds"},
-		{"fractional duration", map[string]any{"prompt": "p", "duration": 5.5}, "decimal text or a safe integer"},
+		{"duration below the minimum", map[string]any{"prompt": "p", "duration": 3}, "duration must be an integer between 4 and 15 seconds"},
+		{"duration above the maximum", map[string]any{"prompt": "p", "duration": 16}, "duration must be an integer between 4 and 15 seconds"},
+		{"fractional duration", map[string]any{"prompt": "p", "duration": 5.5}, "duration must be an integer between 4 and 15 seconds"},
 		{"unsupported resolution", map[string]any{"prompt": "p", "size": "1080P"}, "resolution must be 768P or 2K"},
 		{"unknown ratio", map[string]any{"prompt": "p", "metadata": map[string]any{"ratio": "16:10"}}, "ratio must be one of"},
 		{"adaptive ratio without a visual input", map[string]any{"prompt": "p", "metadata": map[string]any{"ratio": "adaptive"}}, "ratio adaptive requires an image or video input"},

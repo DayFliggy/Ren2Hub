@@ -121,14 +121,11 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 	allTasks := model.GetAllUnFinishSyncTasks(constant.TaskQueryLimit)
 	summary.UnfinishedTasks = len(allTasks)
 	platformTask := make(map[constant.TaskPlatform][]*model.Task)
-	for _, t := range allTasks {
-		ready, err := model.TaskSubmissionReady(ctx, t)
-		if err != nil {
-			logger.LogError(ctx, fmt.Sprintf("task submission accounting lookup failed (task_id=%s): %v", t.TaskID, err))
-		}
-		if !ready {
-			continue
-		}
+	readyTasks, err := model.TaskSubmissionsReady(ctx, allTasks)
+	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("task submission accounting lookup failed: %v", err))
+	}
+	for _, t := range readyTasks {
 		platformTask[t.Platform] = append(platformTask[t.Platform], t)
 	}
 
@@ -452,14 +449,25 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 		return fmt.Errorf("video adaptor not found")
 	}
 	disablePollingSleep := cacheGetChannel.GetOtherSettings().DisableTaskPollingSleep
-	for i, taskId := range taskIds {
+	batches, singles := groupBatchPolls(ctx, cacheGetChannel, taskIds, taskM)
+	requests := len(batches) + len(singles)
+	for i := 0; i < requests; i++ {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if err := updateVideoSingleTask(ctx, adaptor, cacheGetChannel, taskId, taskM); err != nil {
-			logger.LogError(ctx, fmt.Sprintf("Failed to update video task %s: %s", taskId, err.Error()))
+		var err error
+		label := ""
+		if i < len(batches) {
+			label = fmt.Sprintf("batch of %d", len(batches[i].ids))
+			err = updateVideoBatchTasks(ctx, cacheGetChannel, batches[i], taskM)
+		} else {
+			label = singles[i-len(batches)]
+			err = updateVideoSingleTask(ctx, adaptor, cacheGetChannel, label, taskM)
 		}
-		if disablePollingSleep || i == len(taskIds)-1 {
+		if err != nil {
+			logger.LogError(ctx, fmt.Sprintf("Failed to update video task %s: %s", label, err.Error()))
+		}
+		if disablePollingSleep || i == requests-1 {
 			continue
 		}
 
@@ -522,84 +530,97 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	} else {
 		resp, err = adaptor.FetchTask(baseURL, key, map[string]any{"task_id": task.GetUpstreamTaskID(), "action": task.Action}, proxy)
 	}
+	if err == nil && resp == nil {
+		err = errors.New("empty task polling response")
+	}
 	if err != nil {
-		return fmt.Errorf("fetchTask failed for task %s: %w", taskId, err)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return failTaskPolls(ctx, []*model.Task{task}, pollClassTransport, 0, err)
 	}
-	if resp == nil {
-		return errors.New("empty task polling response")
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("task polling returned HTTP %d", resp.StatusCode)
-	}
-	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20+1))
+	responseBody, err := readTaskPollBody(resp)
 	if err != nil {
-		return fmt.Errorf("readAll failed for task %s: %w", taskId, err)
+		return failTaskPolls(ctx, []*model.Task{task}, pollClassTransport, resp.StatusCode, err)
 	}
-	if len(responseBody) > 8<<20 {
-		return errors.New("task polling response exceeds 8 MiB")
-	}
-
 	logger.LogDebug(ctx, "updateVideoSingleTask response: %s", responseBody)
+	switch class := classifyPollHTTP(resp.StatusCode); class {
+	case pollClassNotFound, pollClassAuth, pollClassTransient:
+		return failTaskPolls(ctx, []*model.Task{task}, class, resp.StatusCode, errors.New("provider rejected the poll"))
+	}
+	outcome, err := parseTaskPollResult(adaptor, task, resp, responseBody)
+	if err != nil {
+		return failTaskPolls(ctx, []*model.Task{task}, pollClassHookError, resp.StatusCode, err)
+	}
+	return applyTaskPollResult(ctx, adaptor, task, resp.StatusCode, outcome)
+}
 
-	snap := task.Snapshot()
-
-	taskResult := &relaycommon.TaskInfo{}
-	// try parse as New API response format
-	var responseItems taskdto.TaskResponse[model.Task]
+// parseTaskPollResult lets the adaptor interpret one provider response; the
+// returned payload is what the task stores. Batch adaptors parse a
+// single-task request through their batch hook.
+func parseTaskPollResult(adaptor TaskPollingAdaptor, task *model.Task, resp *http.Response, responseBody []byte) (*taskPollOutcome, error) {
 	if batch, ok := adaptor.(BatchTaskPollingAdaptor); ok && batch.FetchMode() == "batch" {
-		results, parseErr := batch.ParseBatchResult([]*model.Task{task}, resp, responseBody)
-		if parseErr != nil {
-			return parseErr
+		results, err := batch.ParseBatchResult([]*model.Task{task}, resp, responseBody)
+		if err != nil {
+			return nil, err
 		}
 		result := results[task.GetUpstreamTaskID()]
 		if result == nil {
-			return errors.New("batch polling omitted requested task")
+			return nil, errors.New("batch polling omitted requested task")
 		}
-		taskResult = &result.TaskInfo
-		if result.SubmitTime > 0 {
-			task.SubmitTime = result.SubmitTime
-		}
-		if result.StartTime > 0 {
-			task.StartTime = result.StartTime
-		}
-		if result.FinishTime > 0 {
-			taskResult.FinishTime = result.FinishTime
-		}
-		if result.Data != nil {
-			if data, encodeErr := common.Marshal(result.Data); encodeErr == nil {
-				responseBody = data
-			} else {
-				return encodeErr
-			}
-		}
-	} else if pinned, ok := adaptor.(PinnedTaskPollingAdaptor); ok {
-		taskResult, err = pinned.ParseTaskResultForTask(task, resp, responseBody)
-		if err != nil {
-			return err
-		}
-	} else if err = common.Unmarshal(responseBody, &responseItems); err == nil && responseItems.IsSuccess() {
-		logger.LogDebug(ctx, "updateVideoSingleTask parsed as new api response format: %+v", responseItems)
-		t := responseItems.Data
-		taskResult.TaskID = t.TaskID
-		taskResult.Status = string(t.Status)
-		taskResult.Url = t.GetResultURL()
-		taskResult.Progress = t.Progress
-		taskResult.Reason = t.FailReason
-		taskResult.FinishTime = t.FinishTime
-	} else if taskResult, err = adaptor.ParseTaskResult(responseBody); err != nil {
-		return fmt.Errorf("parseTaskResult failed for task %s: %w", taskId, err)
+		return batchTaskOutcome(result, responseBody)
 	}
+	if pinned, ok := adaptor.(PinnedTaskPollingAdaptor); ok {
+		taskResult, err := pinned.ParseTaskResultForTask(task, resp, responseBody)
+		if err != nil {
+			return nil, err
+		}
+		return &taskPollOutcome{info: taskResult, data: responseBody}, nil
+	}
+	// try parse as New API response format
+	var responseItems taskdto.TaskResponse[model.Task]
+	if err := common.Unmarshal(responseBody, &responseItems); err == nil && responseItems.IsSuccess() {
+		t := responseItems.Data
+		return &taskPollOutcome{info: &relaycommon.TaskInfo{TaskID: t.TaskID, Status: string(t.Status), Url: t.GetResultURL(),
+			Progress: t.Progress, Reason: t.FailReason, FinishTime: t.FinishTime}, data: responseBody}, nil
+	}
+	taskResult, err := adaptor.ParseTaskResult(responseBody)
+	if err != nil {
+		return nil, err
+	}
+	return &taskPollOutcome{info: taskResult, data: responseBody}, nil
+}
 
-	if taskResult == nil || taskResult.Status == "" {
-		return errors.New("task polling response has no explicit job status")
+// applyTaskPollResult validates one parsed provider result and advances the
+// task. Results the host cannot trust count toward TASK_POLL_MAX_FAILURES
+// instead of ending the task at once.
+func applyTaskPollResult(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, statusCode int, outcome *taskPollOutcome) error {
+	taskResult := outcome.info
+	if taskResult == nil || !knownPollStatus(model.TaskStatus(taskResult.Status)) {
+		return failTaskPolls(ctx, []*model.Task{task}, pollClassUnrecognized, statusCode, errors.New("task polling response has no recognized job status"))
 	}
 	if taskResult.TaskID != "" && taskResult.TaskID != task.GetUpstreamTaskID() {
-		return errors.New("task polling response ID does not match the requested task")
+		return failTaskPolls(ctx, []*model.Task{task}, pollClassUnrecognized, statusCode, errors.New("task polling response ID does not match the requested task"))
 	}
-	task.Data = redactVideoResponseBody(responseBody)
+	terminal := taskResult.Status == model.TaskStatusSuccess || taskResult.Status == model.TaskStatusFailure
+	if !terminal && classifyPollHTTP(statusCode) == pollClassOtherClient {
+		return failTaskPolls(ctx, []*model.Task{task}, pollClassUnrecognized, statusCode, errors.New("provider error response reported a running job"))
+	}
+	snap := task.Snapshot()
+	if outcome.submitTime > 0 {
+		task.SubmitTime = outcome.submitTime
+	}
+	if outcome.startTime > 0 {
+		task.StartTime = outcome.startTime
+	}
+	if outcome.data != nil {
+		task.Data = redactVideoResponseBody(outcome.data)
+	}
 	if taskResult.PluginState != nil {
 		task.PrivateData.PluginState = taskResult.PluginState
+	}
+	if !terminal {
+		task.PrivateData.PollFailures = 0
 	}
 
 	logger.LogDebug(ctx, "updateVideoSingleTask taskResult: %+v", taskResult)
@@ -633,7 +654,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
 		}
 	case model.TaskStatusFailure:
-		logger.LogJson(ctx, fmt.Sprintf("Task %s failed", taskId), task)
+		logger.LogJson(ctx, fmt.Sprintf("Task %s failed", task.TaskID), task)
 		task.Status = model.TaskStatusFailure
 		task.Progress = taskcommon.ProgressComplete
 		if task.FinishTime == 0 {
@@ -642,10 +663,10 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		task.FailReason = taskResult.Reason
 		logger.LogInfo(ctx, fmt.Sprintf("Task %s failed: %s", task.TaskID, task.FailReason))
 		taskResult.Progress = taskcommon.ProgressComplete
-	default:
-		return fmt.Errorf("unknown task status %s for task %s", taskResult.Status, task.TaskID)
 	}
-	if taskResult.Progress != "" {
+	// Only a terminal status completes a task; a provider's "100%" on a
+	// running job keeps the status-derived progress.
+	if taskResult.Progress != "" && (terminal || taskResult.Progress != taskcommon.ProgressComplete) {
 		task.Progress = taskResult.Progress
 	}
 
@@ -705,4 +726,233 @@ func truncateBase64(s string) string {
 		return s
 	}
 	return s[:maxKeep] + "..."
+}
+
+const (
+	pollClassOK           = "ok"
+	pollClassOtherClient  = "other_client"
+	pollClassNotFound     = "not_found"
+	pollClassAuth         = "auth"
+	pollClassTransient    = "transient"
+	pollClassUnrecognized = "unrecognized"
+	pollClassHookError    = "hook_error"
+	pollClassTransport    = "transport_error"
+)
+
+// taskPollOutcome is one parsed provider result plus the payload the task
+// stores; nil data keeps the stored payload.
+type taskPollOutcome struct {
+	info                  *relaycommon.TaskInfo
+	data                  []byte
+	submitTime, startTime int64
+}
+
+func batchTaskOutcome(result *BatchTaskResult, fallback []byte) (*taskPollOutcome, error) {
+	info := result.TaskInfo
+	if result.FinishTime > 0 {
+		info.FinishTime = result.FinishTime
+	}
+	outcome := &taskPollOutcome{info: &info, data: fallback, submitTime: result.SubmitTime, startTime: result.StartTime}
+	if result.Data != nil {
+		data, err := common.Marshal(result.Data)
+		if err != nil {
+			return nil, err
+		}
+		outcome.data = data
+	}
+	return outcome, nil
+}
+
+func readTaskPollBody(resp *http.Response) ([]byte, error) {
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > 8<<20 {
+		return nil, errors.New("task polling response exceeds 8 MiB")
+	}
+	return body, nil
+}
+
+func classifyPollHTTP(statusCode int) string {
+	switch {
+	case statusCode >= 200 && statusCode < 300:
+		return pollClassOK
+	case statusCode == http.StatusNotFound || statusCode == http.StatusGone:
+		return pollClassNotFound
+	case statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden:
+		return pollClassAuth
+	case statusCode == http.StatusTooManyRequests || statusCode >= 500:
+		return pollClassTransient
+	case statusCode >= 400 && statusCode < 500:
+		return pollClassOtherClient
+	default:
+		return pollClassTransient
+	}
+}
+
+func knownPollStatus(status model.TaskStatus) bool {
+	switch status {
+	case model.TaskStatusNotStart, model.TaskStatusSubmitted, model.TaskStatusQueued, model.TaskStatusInProgress, model.TaskStatusSuccess, model.TaskStatusFailure:
+		return true
+	default:
+		return false
+	}
+}
+
+func pollFailureReason(class string, statusCode int) string {
+	if statusCode > 0 {
+		return fmt.Sprintf("poll failed: %s (HTTP %d)", class, statusCode)
+	}
+	return "poll failed: " + class
+}
+
+// failTaskPolls applies one failed poll to each task and returns the failure
+// for the caller's log. A missing upstream task ends at once; other classes
+// count toward TASK_POLL_MAX_FAILURES (0 disables the cutoff, leaving the
+// timeout sweep). Both endings release the reservation: no output reached
+// the user. The stored reason omits provider detail, which can carry URLs
+// or credentials; the returned error keeps it for server logs only.
+func failTaskPolls(ctx context.Context, tasks []*model.Task, class string, statusCode int, cause error) error {
+	reason := pollFailureReason(class, statusCode)
+	var result error
+	for _, task := range tasks {
+		if class != pollClassNotFound {
+			task.PrivateData.PollFailures++
+		}
+		if class == pollClassNotFound || (constant.TaskPollMaxFailures > 0 && task.PrivateData.PollFailures >= constant.TaskPollMaxFailures) {
+			result = errors.Join(result, failTaskWithoutResult(ctx, task, reason))
+			continue
+		}
+		if _, err := task.UpdateWithStatus(task.Status); err != nil {
+			result = errors.Join(result, err)
+		}
+	}
+	return errors.Join(fmt.Errorf("%s: %s", reason, common.MaskSensitiveInfo(cause.Error())), result)
+}
+
+type batchPollGroup struct {
+	adaptor BatchTaskPollingAdaptor
+	key     string
+	ids     []string
+}
+
+// groupBatchPolls gathers plugin tasks whose pinned plugin polls in batch
+// mode and that share one plugin version and credential, so each group is
+// one provider request. Everything else polls one task at a time.
+func groupBatchPolls(ctx context.Context, ch *model.Channel, taskIds []string, taskM map[string]*model.Task) ([]*batchPollGroup, []string) {
+	var groups []*batchPollGroup
+	index := make(map[string]*batchPollGroup)
+	var singles []string
+	for _, taskID := range taskIds {
+		task := taskM[taskID]
+		adaptor, key, ok := batchPollTarget(ctx, ch, task)
+		if !ok {
+			singles = append(singles, taskID)
+			continue
+		}
+		ref := task.PrivateData.PluginRef
+		groupKey := ref.Key + "@" + ref.Version + ":" + ref.SourceHash + "\x00" + key
+		group := index[groupKey]
+		if group == nil {
+			group = &batchPollGroup{adaptor: adaptor, key: key}
+			index[groupKey] = group
+			groups = append(groups, group)
+		}
+		group.ids = append(group.ids, taskID)
+	}
+	batches := make([]*batchPollGroup, 0, len(groups))
+	for _, group := range groups {
+		if len(group.ids) == 1 {
+			singles = append(singles, group.ids[0])
+			continue
+		}
+		batches = append(batches, group)
+	}
+	return batches, singles
+}
+
+// batchPollTarget resolves a task's pinned batch adaptor and credential.
+// Resolution errors send the task to the single-task path, which reports them.
+func batchPollTarget(ctx context.Context, ch *model.Channel, task *model.Task) (BatchTaskPollingAdaptor, string, bool) {
+	if task == nil || task.PrivateData.PluginRef == nil || GetPinnedTaskAdaptorFunc == nil {
+		return nil, "", false
+	}
+	pinned, err := GetPinnedTaskAdaptorFunc(task)
+	if err != nil {
+		return nil, "", false
+	}
+	batch, ok := pinned.(BatchTaskPollingAdaptor)
+	if !ok || batch.FetchMode() != "batch" {
+		return nil, "", false
+	}
+	key, _, err := model.ResolveTaskCredential(ctx, ch, task)
+	if err != nil {
+		return nil, "", false
+	}
+	return batch, key, true
+}
+
+// updateVideoBatchTasks polls one batch group with a single provider request.
+// A request-level failure applies to every task in the group, as upstream.
+func updateVideoBatchTasks(ctx context.Context, ch *model.Channel, group *batchPollGroup, taskM map[string]*model.Task) error {
+	current, err := model.GetChannelById(ch.Id, true)
+	if err != nil {
+		return err
+	}
+	baseURL := constant.ChannelBaseURLs[current.Type]
+	if current.GetBaseURL() != "" {
+		baseURL = current.GetBaseURL()
+	}
+	tasks := make([]*model.Task, 0, len(group.ids))
+	for _, id := range group.ids {
+		tasks = append(tasks, taskM[id])
+	}
+	adaptor := group.adaptor
+	if aware, ok := adaptor.(interface{ SetTaskContext(context.Context) }); ok {
+		aware.SetTaskContext(ctx)
+	}
+	adaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+		ChannelId: current.Id, ChannelType: current.Type, ChannelBaseUrl: baseURL,
+		ApiKey: group.key, ChannelSetting: current.GetSetting(),
+	}})
+	resp, err := adaptor.FetchBatchTasks(baseURL, group.key, tasks, current.GetSetting().Proxy)
+	if err == nil && resp == nil {
+		err = errors.New("empty task polling response")
+	}
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return failTaskPolls(ctx, tasks, pollClassTransport, 0, err)
+	}
+	responseBody, err := readTaskPollBody(resp)
+	if err != nil {
+		return failTaskPolls(ctx, tasks, pollClassTransport, resp.StatusCode, err)
+	}
+	switch class := classifyPollHTTP(resp.StatusCode); class {
+	case pollClassNotFound, pollClassAuth, pollClassTransient:
+		return failTaskPolls(ctx, tasks, class, resp.StatusCode, errors.New("provider rejected the poll"))
+	}
+	results, err := adaptor.ParseBatchResult(tasks, resp, responseBody)
+	if err != nil {
+		return failTaskPolls(ctx, tasks, pollClassHookError, resp.StatusCode, err)
+	}
+	var result error
+	for _, task := range tasks {
+		item := results[task.GetUpstreamTaskID()]
+		if item == nil {
+			result = errors.Join(result, failTaskPolls(ctx, []*model.Task{task}, pollClassUnrecognized, resp.StatusCode, errors.New("batch polling omitted requested task")))
+			continue
+		}
+		// The shared body holds other tasks' results, so a task without its
+		// own data keeps what it stored.
+		outcome, err := batchTaskOutcome(item, nil)
+		if err == nil {
+			err = applyTaskPollResult(ctx, adaptor, task, resp.StatusCode, outcome)
+		}
+		result = errors.Join(result, err)
+	}
+	return result
 }

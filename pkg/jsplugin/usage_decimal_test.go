@@ -10,55 +10,113 @@ import (
 	"testing"
 )
 
-func TestUsageHooksPreserveDecimalTextAndRejectFloatingArithmetic(t *testing.T) {
-	engine, err := Compile(`export function extractUsage(ctx){return {seconds:utils.decimal.add(ctx.a,ctx.b)};} export function extractUsageOnComplete(ctx){return {seconds:ctx.value};} export function ordinary(ctx){return ctx.value;}`, Options{})
+func TestUsageBoundaryAcceptsOnlyExactNumbers(t *testing.T) {
+	engine, err := Compile(`export function extractUsageOnComplete(ctx){return {seconds:ctx.value};} export function ordinary(ctx){return ctx.value;}`, Options{})
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		value any
+		want  any
+	}{
+		{1.5, "1.5"},
+		{0.3, "0.3"},
+		{-2.25, "-2.25"},
+		{1e-7, "0.0000001"},
+		{float64(5), int64(5)},
+		{int64(1<<53 - 1), int64(1<<53 - 1)},
+		{"7.500000000000000001", "7.500000000000000001"},
+	} {
+		value, err := engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{"value": tc.value})
+		require.NoError(t, err, "%v", tc.value)
+		assert.Equal(t, map[string]any{"seconds": tc.want}, value, "%v", tc.value)
+	}
+	// Go folds constant expressions exactly, so build the float64 sum at run time.
+	tenth, fifth, three := 0.1, 0.2, 3.0
+	noisy := tenth + fifth
+	for _, value := range []any{math.NaN(), math.Inf(1), int64(1 << 53), float64(1 << 53), noisy, 1 / three} {
+		_, err = engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{"value": value})
+		require.Error(t, err, "%v", value)
+	}
+	// Ordinary hooks are outside the billing boundary.
+	value, err := engine.Call(t.Context(), "ordinary", map[string]any{"value": noisy})
+	require.NoError(t, err)
+	assert.Equal(t, noisy, value)
+	for body, message := range map[string]string{
+		`return {seconds:0.1+0.2};`:          "17 significant digits",
+		`return {seconds:9007199254740992};`: "unsafe plugin integer",
+		`return {seconds:1/3};`:              "significant digits",
+	} {
+		engine, err := Compile(`export function extractUsage(){`+body+`}`, Options{})
+		require.NoError(t, err)
+		_, err = engine.Call(t.Context(), "extractUsage")
+		require.ErrorContains(t, err, message, body)
+		require.ErrorContains(t, err, "inexact usage", body)
+	}
+}
+
+func TestUsageHooksSeeSourceDecimalsWithoutHostRounding(t *testing.T) {
+	engine, err := Compile(`
+export function extractUsage(ctx){return {seconds:utils.decimal.add(ctx.a,ctx.b)};}
+export function extractUsageOnComplete(ctx, _result, body){return {kinds:[typeof body.short, typeof body.long, typeof body.huge], seconds:body.short*2};}
+`, Options{})
 	require.NoError(t, err)
 	value, err := engine.Call(t.Context(), "extractUsage", map[string]any{"a": json.Number("0.100000000000000001"), "b": json.Number("0.2")})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"seconds": "0.300000000000000001"}, value)
-	for _, value := range []any{0.3, math.NaN(), math.Inf(1), int64(1 << 53), float64(1 << 53)} {
-		_, err = engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{"value": value})
-		require.Error(t, err)
-	}
-	value, err = engine.Call(t.Context(), "ordinary", map[string]any{"value": 0.3})
+	// A source number reaches the hook as a number only when the boundary
+	// would return that same decimal; other source text stays a string.
+	body := map[string]any{"short": json.Number("2.5"), "long": json.Number("3.500000000000000001"), "huge": json.Number("9007199254740993")}
+	value, err = engine.Call(t.Context(), "extractUsageOnComplete", nil, nil, body)
 	require.NoError(t, err)
-	assert.Equal(t, 0.3, value)
-	for _, body := range []string{`return {seconds:0.1+0.2};`, `return {seconds:9007199254740992};`, `return {seconds:utils.decimal.string(0.3)};`} {
-		engine, err := Compile(`export function extractUsage(){`+body+`}`, Options{})
-		require.NoError(t, err)
-		_, err = engine.Call(t.Context(), "extractUsage")
-		require.Error(t, err)
-	}
+	assert.Equal(t, map[string]any{"kinds": []any{"number", "string", "string"}, "seconds": int64(5)}, value)
 }
 
-func TestUsageHooksIgnoreUnrelatedSettingsButCannotReadImpreciseNumbers(t *testing.T) {
+func TestUsageHooksIgnoreUnrelatedSettingsButRejectInexactArithmetic(t *testing.T) {
 	engine, err := Compile(`
 export function extractUsage(ctx){return {clips:ctx.request.count};}
-export function extractUsageOnComplete(ctx){return {clips:ctx.request.offset*10};}
+export function extractUsageOnComplete(ctx){return {seconds:ctx.request.offset*3};}
 `, Options{})
 	require.NoError(t, err)
-	input := map[string]any{"request": map[string]any{"count": int64(2), "offset": 0.3, "unrelated": []any{map[string]any{"temperature": 0.7}}}}
+	input := map[string]any{"request": map[string]any{"count": int64(2), "offset": 0.1, "unrelated": []any{map[string]any{"temperature": 0.7}}}}
 	value, err := engine.Call(t.Context(), "extractUsage", input)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"clips": int64(2)}, value)
+	// 0.1*3 is 0.30000000000000004: billing it as 0.3 would round silently.
 	_, err = engine.Call(t.Context(), "extractUsageOnComplete", input)
-	require.ErrorContains(t, err, "preserved decimal text", "rounding an imprecise input into a safe integer cannot authorize billing")
+	require.ErrorContains(t, err, "significant digits")
 	// A subsequent use of the pooled runtime retains the same boundary.
 	_, err = engine.Call(t.Context(), "extractUsageOnComplete", input)
 	require.Error(t, err)
 }
 
+func TestDynamicCodeIsDisabledInsideHooks(t *testing.T) {
+	for name, body := range map[string]string{
+		"eval":                 `return eval("1");`,
+		"indirect eval":        `return (0, eval)("1");`,
+		"Function":             `return Function("return 1")();`,
+		"new Function":         `return new Function("return 1")();`,
+		"function constructor": `return (function(){}).constructor("return 1")();`,
+	} {
+		engine, err := Compile(`export function run() { `+body+` }`, Options{Key: "dynamic"})
+		require.NoError(t, err, name)
+		_, err = engine.Call(t.Context(), "run")
+		var hookErr *HookError
+		require.ErrorAs(t, err, &hookErr, name)
+		assert.ErrorContains(t, err, "EvalError", name)
+	}
+}
+
 func TestFactoryCompletionFactsUseExactProviderUnits(t *testing.T) {
 	for _, tc := range []struct {
-		name        string
-		task, body  map[string]any
-		field, want string
+		name       string
+		task, body map[string]any
+		field      string
+		want       any
 	}{
 		{"vidu", nil, map[string]any{"credits": json.Number("3.500000000000000001")}, "credits", "3.500000000000000001"},
 		{"kling", nil, map[string]any{"data": map[string]any{"final_unit_deduction": json.Number("3.500000000000000001")}}, "units", "3.500000000000000001"},
 		{"sora", nil, map[string]any{"seconds": json.Number("4.000000000000000001")}, "seconds", "4.000000000000000001"},
 		{"alibaba", map[string]any{"upstreamModel": "wan3.0-video"}, map[string]any{"usage": map[string]any{"input_video_duration": json.Number("0.1"), "output_video_duration": json.Number("0.2")}}, "seconds", "0.3"},
-		{"doubao", map[string]any{"upstreamModel": "doubao-seedance-2-0-260128"}, map[string]any{"status": "succeeded", "usage": map[string]any{"completion_tokens": json.Number("1001")}}, "tokens", "1001"},
+		{"doubao", map[string]any{"upstreamModel": "doubao-seedance-2-0-260128"}, map[string]any{"status": "succeeded", "usage": map[string]any{"completion_tokens": json.Number("1001")}}, "tokens", int64(1001)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			source, err := os.ReadFile(filepath.Join("..", "..", "plugins", "tasks", tc.name, "plugin.js"))

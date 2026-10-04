@@ -189,7 +189,9 @@ func TestGatewayDoubaoClientCancellationAndPluginUpdateKeepFrozenAttempt(t *test
 		_, restoreErr := jsplugin.DefaultRegistry.RegisterFactory(source, jsplugin.Options{Key: "doubao"})
 		require.NoError(t, restoreErr)
 	})
-	_, err = jsplugin.DefaultRegistry.RegisterFactory(strings.Replace(source, `version: "1.2.1"`, `version: "1.2.2"`, 1), jsplugin.Options{Key: "doubao"})
+	factory, err := jsplugin.CompilePlugin(source, jsplugin.Options{})
+	require.NoError(t, err)
+	_, err = jsplugin.DefaultRegistry.RegisterFactory(strings.Replace(source, `version: "`+factory.Meta.Version+`"`, `version: "9.9.2"`, 1), jsplugin.Options{Key: "doubao"})
 	require.NoError(t, err)
 	require.NoError(t, setGatewayModelPrice(gatewaySeedreamModel, model.PricingValues{"ModelPrice": "9"}))
 	cancel()
@@ -204,7 +206,7 @@ func TestGatewayDoubaoClientCancellationAndPluginUpdateKeepFrozenAttempt(t *test
 		return model.DB.First(&recovery, "request_id = ?", task.PrivateData.SubmissionRequestID).Error == nil && recovery.Status == model.BillingRecoveryStatusSettled
 	}, 5*time.Second, 10*time.Millisecond)
 	task := assertGatewayDoubaoSettledOnce(t, 10000)
-	assert.Equal(t, "1.2.1", task.PrivateData.PluginRef.Version)
+	assert.Equal(t, factory.Meta.Version, task.PrivateData.PluginRef.Version)
 	assert.Equal(t, `u("images_above_1_5k") * 0.01`, task.PrivateData.BillingContext.Quote.PriceVersion.Expression)
 	assert.EqualValues(t, 1, sends.Load())
 }
@@ -244,7 +246,10 @@ func TestGatewayDoubaoImmediatePersistenceFailureUsesFrozenEstimate(t *testing.T
 	assert.EqualValues(t, 1, count)
 }
 
-func TestGatewayDoubaoImmediateDeliveryFailureKeepsCommittedSettlement(t *testing.T) {
+// A committed immediate result is returned even when funds delivery fails;
+// billing recovery settles it once, so the client is never charged for a
+// result it did not receive.
+func TestGatewayDoubaoImmediateDeliveryFailureReturnsResultAndKeepsSettlement(t *testing.T) {
 	var sends atomic.Int32
 	base, key := setupGatewayDoubaoImage(t, func(w http.ResponseWriter, r *http.Request) {
 		sends.Add(1)
@@ -259,8 +264,8 @@ func TestGatewayDoubaoImmediateDeliveryFailureKeepsCommittedSettlement(t *testin
 	}))
 	t.Cleanup(func() { model.DB.Callback().Update().Remove(callback) })
 	status, body := postGatewayTask(t, base, key, "/v1/images/generations", fmt.Sprintf(`{"model":%q,"prompt":"pending delivery"}`, gatewaySeedreamModel))
-	require.Equal(t, http.StatusServiceUnavailable, status, body)
-	assert.Contains(t, body, "task_completion_pending")
+	require.Equal(t, http.StatusOK, status, body)
+	assert.Contains(t, body, "https://cdn.example/one.png")
 	require.NoError(t, model.DB.Callback().Update().Remove(callback))
 	var task model.Task
 	require.NoError(t, model.DB.First(&task).Error)
@@ -327,8 +332,12 @@ func TestGatewayNativeRetentionOnlyDiscardsImmediateResults(t *testing.T) {
 			source, err := plugins.Source("doubao")
 			require.NoError(t, err)
 			if !immediate {
-				modified := strings.Replace(source, `version: "1.2.1"`, `version: "1.2.3"`, 1)
-				modified = strings.Replace(modified, `return { taskId: taskId, taskData: body, immediate: { status: "SUCCESS", progress: "100%", url: trimmed(urls[0].url) } };`, `return { taskId: taskId, taskData: body };`, 1)
+				factory, err := jsplugin.CompilePlugin(source, jsplugin.Options{})
+				require.NoError(t, err)
+				modified := strings.Replace(source, `version: "`+factory.Meta.Version+`"`, `version: "9.9.3"`, 1)
+				immediateReturn := `return { taskId: taskId, taskData: body, immediate: { status: "SUCCESS", progress: "100%", url: trimmed(urls[0].url) } };`
+				require.Contains(t, modified, immediateReturn)
+				modified = strings.Replace(modified, immediateReturn, `return { taskId: taskId, taskData: body };`, 1)
 				plugin, err := jsplugin.DefaultRegistry.RegisterFactory(modified, jsplugin.Options{Key: "doubao"})
 				require.NoError(t, err)
 				t.Cleanup(func() {

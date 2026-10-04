@@ -7,7 +7,7 @@ export const meta = {
     en: "OpenAI Sora video generation (text-to-video, image-to-video, and remix)",
     zh: "OpenAI Sora 视频生成（文生视频、图生视频、remix）",
   },
-  version: "1.1.1",
+  version: "1.1.0+ren2hub.1",
   channelTypes: [55, 1], // OpenAI-type channels natively serve sora with the same wire format
   author: { name: "QuantumNous" },
   models: ["sora-2", "sora-2-pro"],
@@ -127,8 +127,9 @@ export function parseSubmitResponse(ctx, resp) {
 export function extractUsage(ctx) {
   if (ctx.action === "remix") return {};
   const req = ctx.requestBody || {};
-  const raw = req.seconds !== undefined ? req.seconds : req.duration !== undefined ? req.duration : 4;
-  return { seconds: utils.decimal.bounded(raw, 0, 3600, false), size: req.size || "720x1280" };
+  let seconds = Number(req.seconds || req.duration || 4);
+  if (!Number.isFinite(seconds) || seconds <= 0) seconds = 4;
+  return { seconds: Math.min(seconds, 3600), size: req.size || "720x1280" };
 }
 
 export function extractUsageOnComplete(task, taskResult, body) {
@@ -265,7 +266,7 @@ protocols.openai_video = {
       if (!ctx.body.value || Array.isArray(ctx.body.value)) throw new Error("JSON object required");
       const req = ctx.body.value;
       const seconds = req.seconds === undefined ? req.duration : req.seconds;
-      if (seconds !== undefined && (!Number.isFinite(Number(utils.decimal.bounded(seconds, 0, 3600, true))) || Number(utils.decimal.bounded(seconds, 0, 3600, true)) <= 0 || Number(utils.decimal.bounded(seconds, 0, 3600, true)) > 3600))
+      if (seconds !== undefined && (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0 || Number(seconds) > 3600))
         throw new Error("seconds must be between 1 and 3600");
       return {
         kind: "submit",
@@ -300,10 +301,10 @@ protocols.openai_video = {
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
       req.metadata = parsed;
     }
-    if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
-    else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+    if (req.seconds !== undefined) req.seconds = Number(req.seconds);
+    else if (req.duration !== undefined) req.seconds = Number(req.duration);
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
-    if (seconds !== undefined && (!Number.isFinite(Number(utils.decimal.bounded(seconds, 0, 3600, true))) || Number(utils.decimal.bounded(seconds, 0, 3600, true)) <= 0 || Number(utils.decimal.bounded(seconds, 0, 3600, true)) > 3600))
+    if (seconds !== undefined && (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0 || Number(seconds) > 3600))
       throw new Error("seconds must be between 1 and 3600");
     return {
       kind: "submit",

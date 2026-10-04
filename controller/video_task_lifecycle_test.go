@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -161,4 +162,96 @@ func TestVideoContentUsesOriginalTaskCredential(t *testing.T) {
 			})
 		}
 	}
+}
+
+// A pre-plugin video task stored a public result URL. The OpenAI video
+// content route serves it without provider credentials, and only to its owner.
+func TestVideoContentServesLegacyResultURLToOwner(t *testing.T) {
+	db := setupVideoTaskLifecycle(t)
+	fetchSettings := system_setting.GetFetchSetting()
+	previousProtection := fetchSettings.EnableSSRFProtection
+	fetchSettings.EnableSSRFProtection = false
+	t.Cleanup(func() { fetchSettings.EnableSSRFProtection = previousProtection })
+	var sends atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sends.Add(1)
+		assert.Empty(t, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "video/mp4")
+		_, _ = io.WriteString(w, "legacy-video")
+	}))
+	defer upstream.Close()
+	channel := &model.Channel{Type: constant.ChannelTypeKling, Name: "legacy-video", Key: "sk-legacy", Status: common.ChannelStatusEnabled}
+	require.NoError(t, db.Create(channel).Error)
+	task := &model.Task{TaskID: "task_legacy_video", UserId: 1, ChannelId: channel.Id, Platform: constant.TaskPlatform(fmt.Sprint(constant.ChannelTypeKling)),
+		Action: constant.TaskActionTextToVideo, Status: model.TaskStatusSuccess, Progress: "100%", Properties: model.Properties{OriginModelName: "video-fixture"}}
+	task.PrivateData.ResultURL = upstream.URL + "/legacy.mp4"
+	require.NoError(t, db.Create(task).Error)
+
+	request := func(userID int) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodGet, "/v1/videos/"+task.TaskID+"/content", nil)
+		c.Params = gin.Params{{Key: "task_id", Value: task.TaskID}}
+		c.Set("id", userID)
+		VideoProxy(c)
+		return recorder
+	}
+
+	assert.Equal(t, http.StatusNotFound, request(2).Code)
+	assert.Zero(t, sends.Load())
+	recorder := request(1)
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	assert.Equal(t, "legacy-video", recorder.Body.String())
+	assert.EqualValues(t, 1, sends.Load())
+}
+
+// Task lists no longer carry results, so the dashboard reads them from
+// GET /api/task/:task_id/artifacts: only the owner, and only signed host URLs
+// or preview fields, never the stored provider URL or the full snapshot.
+func TestDashboardTaskArtifactsServeOwnerResultsOnly(t *testing.T) {
+	db := setupVideoTaskLifecycle(t)
+	previousAddress := system_setting.TaskPublicAddress
+	system_setting.TaskPublicAddress = "https://gateway.example"
+	t.Cleanup(func() { system_setting.TaskPublicAddress = previousAddress })
+	video := &model.Task{TaskID: "task_dash_video", UserId: 1, Platform: constant.TaskPlatform(fmt.Sprint(constant.ChannelTypeKling)),
+		Action: constant.TaskActionTextToVideo, Status: model.TaskStatusSuccess}
+	video.PrivateData.ResultURL = "https://provider.example/private.mp4"
+	music := &model.Task{TaskID: "task_dash_music", UserId: 1, Platform: constant.TaskPlatformSuno, Action: constant.SunoActionMusic, Status: model.TaskStatusSuccess,
+		Data: []byte(`[{"id":"clip-1","audio_url":"https://cdn.example/a.mp3","title":"One","prompt":"private prompt"},{"id":"clip-2"}]`)}
+	require.NoError(t, db.Create(video).Error)
+	require.NoError(t, db.Create(music).Error)
+
+	request := func(userID int, taskID string) (int, map[string]any) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/task/"+taskID+"/artifacts", nil)
+		c.Params = gin.Params{{Key: "task_id", Value: taskID}}
+		c.Set("id", userID)
+		c.Set("role", common.RoleCommonUser)
+		GetDashboardTaskArtifacts(c)
+		var body struct {
+			Data map[string]any `json:"data"`
+		}
+		if recorder.Code == http.StatusOK {
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &body))
+		}
+		return recorder.Code, body.Data
+	}
+
+	code, _ := request(2, video.TaskID)
+	assert.Equal(t, http.StatusNotFound, code)
+	code, data := request(1, video.TaskID)
+	require.Equal(t, http.StatusOK, code)
+	assert.Equal(t, "https://gateway.example/v1/tasks/task_dash_video/artifacts/video/content", strings.Split(data["legacy_content_url"].(string), "?")[0])
+	assert.NotContains(t, fmt.Sprint(data), "provider.example")
+
+	code, data = request(1, music.TaskID)
+	require.Equal(t, http.StatusOK, code)
+	clips := data["legacy_audio_clips"].([]any)
+	require.Len(t, clips, 1)
+	clip := clips[0].(map[string]any)
+	assert.Equal(t, "https://cdn.example/a.mp3", clip["audio_url"])
+	assert.Equal(t, "One", clip["title"])
+	assert.NotContains(t, clip, "prompt")
+	assert.Nil(t, data["legacy_content_url"])
 }

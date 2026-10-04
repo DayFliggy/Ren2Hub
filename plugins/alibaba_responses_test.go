@@ -106,7 +106,7 @@ func TestAlibabaResponsesProtocol(t *testing.T) {
 		require.NoError(t, marshalErr)
 		var facts map[string]any
 		require.NoError(t, common.Unmarshal(encoded, &facts))
-		assert.Equal(t, map[string]any{"seconds": "10", "resolution": "1080P"}, facts)
+		assert.Equal(t, map[string]any{"seconds": float64(10), "resolution": "1080P"}, facts)
 	})
 
 	t.Run("parses text input and options", func(t *testing.T) {
