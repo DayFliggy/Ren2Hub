@@ -204,7 +204,11 @@ defineExpose({ request })
       >
         {{ t('security.unavailable') }}
       </p>
-      <p v-if="error" role="alert" class="text-sm text-[var(--danger-text)]">
+      <p
+        v-if="error"
+        role="alert"
+        class="text-sm text-[var(--status-danger-text)]"
+      >
         {{ error }}
       </p>
       <ConsoleButton

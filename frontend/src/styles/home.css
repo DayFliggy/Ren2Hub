@@ -110,12 +110,10 @@ html.light .landing-shell .signal-console__rail {
     'Ren2HomeStamp', 'Ren2JetBrainsMono', ui-monospace, monospace;
   --hero-copy-overlay: var(--home-hero-copy-overlay);
   --surface-overlay: rgba(246, 243, 235, 0.96);
-  --text-tertiary: #827e66;
 }
 
 html.dark .landing-shell {
   --surface-overlay: var(--surface-container-highest);
-  --text-tertiary: var(--text-tertiary-base);
 }
 
 html.dark .landing-shell .hero-title {
@@ -224,7 +222,6 @@ html.dark .landing-shell .signal-dot-matrix {
 .mobile-nav-drawer {
   font-family: 'Ren2Inter', 'Ren2NotoSansSC', system-ui, sans-serif;
   --surface-overlay: rgba(246, 243, 235, 0.96);
-  --text-tertiary: #827e66;
 }
 
 /* Homepage showcase: continuous full-width bands, with controls as the only
@@ -1293,7 +1290,6 @@ html.dark .runtime-flap::after {
 
 html.dark .mobile-nav-drawer {
   --surface-overlay: var(--surface-container-highest);
-  --text-tertiary: var(--text-tertiary-base);
 }
 
 .landing-shell .hero-copy-glow {

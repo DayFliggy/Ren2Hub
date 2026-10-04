@@ -83,7 +83,7 @@ onBeforeUnmount(() => {
         :key="option"
         type="button"
         class="block w-full px-4 py-2 text-left text-sm text-[var(--text-primary)] transition-colors hover:bg-[var(--state-hover-layer)]"
-        @mousedown.prevent="add(option)"
+        @pointerdown.prevent="add(option)"
       >
         {{ option }}
       </button>

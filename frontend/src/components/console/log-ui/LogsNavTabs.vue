@@ -42,7 +42,7 @@ const tabs = [
         )"
         :key="tab.key"
         :to="{ name: tab.routeName }"
-        class="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+        class="flex min-h-11 shrink-0 items-center rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-ring sm:min-h-8"
         :class="
           active === tab.key
             ? 'bg-[var(--accent-soft)] text-[var(--accent-text)] font-semibold shadow-xs'

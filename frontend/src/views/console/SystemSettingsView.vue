@@ -51,7 +51,7 @@ onMounted(() => load())
               :to="{ name: tab.key, params: { section: tab.section } }"
               role="tab"
               :aria-selected="activeTab === tab.key"
-              class="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all sm:text-sm focus-ring"
+              class="flex min-h-11 shrink-0 items-center rounded-lg px-3 py-1.5 text-xs font-medium transition-all focus-ring sm:min-h-8 sm:text-sm"
               :class="
                 activeTab === tab.key
                   ? 'bg-[var(--accent-soft)] font-semibold text-[var(--accent-text)] shadow-xs'

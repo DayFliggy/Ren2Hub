@@ -35,7 +35,7 @@ const toneVar: Record<ToastType, string> = {
         </p>
         <button
           type="button"
-          class="text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)]"
+          class="-m-2 flex h-11 w-11 shrink-0 items-center justify-center rounded text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)] focus-ring sm:h-6 sm:w-6"
           :aria-label="t('common.close')"
           @click="dismiss(toast.id)"
         >

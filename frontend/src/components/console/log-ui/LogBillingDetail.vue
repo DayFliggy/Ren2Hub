@@ -136,7 +136,7 @@ const upstreamModel = computed(() => observation.value.upstream)
           class="break-words rounded p-2"
           :class="
             rule.matched
-              ? 'bg-[var(--accent-muted)]'
+              ? 'bg-[var(--accent-soft)]'
               : 'text-[var(--text-tertiary)]'
           "
         >

@@ -16,7 +16,7 @@ function palette(isDark: boolean): ChartPalette {
     info: '#74765a',
     textPrimary: '#38372b',
     textSecondary: '#5c5946',
-    textTertiary: '#827e66',
+    textTertiary: '#6c6955',
     borderSubtle: 'rgba(56,55,43,.08)',
     chartGrid: 'rgba(152,164,192,.08)',
     surfaceSolid: '#fffdf8',

@@ -82,7 +82,7 @@ export function chartPalette(): ChartPalette {
     ),
     textTertiary: normalizeOpaqueColor(
       resolveToken('--text-tertiary'),
-      '#827e66'
+      '#6c6955'
     ),
     borderSubtle: resolveToken('--border-subtle', 'rgba(56,55,43,.08)'),
     chartGrid: resolveToken('--chart-grid-line', 'rgba(56,55,43,.08)'),

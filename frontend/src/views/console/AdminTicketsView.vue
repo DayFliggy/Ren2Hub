@@ -399,7 +399,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer))
     </PageBreadcrumb>
 
     <div
-      class="flex h-[calc(100dvh-13.5rem)] min-h-[580px] overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] shadow-[var(--card-shadow)]"
+      class="flex h-[calc(100dvh-13.5rem)] min-h-0 overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] shadow-[var(--card-shadow)] lg:min-h-[580px]"
       data-handdrawn="surface"
     >
       <aside

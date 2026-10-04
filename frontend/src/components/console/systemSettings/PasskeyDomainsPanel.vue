@@ -89,7 +89,11 @@ async function submit(previewOnly: boolean) {
         }}</label
       >
     </div>
-    <p v-if="error" role="alert" class="text-sm text-[var(--danger-text)]">
+    <p
+      v-if="error"
+      role="alert"
+      class="text-sm text-[var(--status-danger-text)]"
+    >
       {{ error }}
     </p>
     <div class="flex flex-wrap gap-3">

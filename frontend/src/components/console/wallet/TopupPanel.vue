@@ -407,7 +407,7 @@ onUnmounted(() => {
         <p
           v-if="invalidAmount || balanceProjection.invalid"
           role="alert"
-          class="mt-2 text-xs text-[var(--danger-text)]"
+          class="mt-2 text-xs text-[var(--status-danger-text)]"
         >
           {{ t('wallet.invalidTopupAmount') }}
         </p>
@@ -418,7 +418,7 @@ onUnmounted(() => {
         <p
           v-if="configStates.epay === 'failed'"
           role="alert"
-          class="mt-2 text-xs text-[var(--danger-text)]"
+          class="mt-2 text-xs text-[var(--status-danger-text)]"
         >
           {{ t('wallet.epayMethodsLoadFailed') }}
           <ConsoleButton
@@ -432,7 +432,7 @@ onUnmounted(() => {
         <p
           v-if="configStates.gmpay === 'failed'"
           role="alert"
-          class="mt-2 text-xs text-[var(--danger-text)]"
+          class="mt-2 text-xs text-[var(--status-danger-text)]"
         >
           {{ t('wallet.gmpayMethodsLoadFailed') }}
           <ConsoleButton
@@ -496,7 +496,7 @@ onUnmounted(() => {
       <div
         v-if="quoteError"
         role="alert"
-        class="mt-3 text-xs text-[var(--danger-text)]"
+        class="mt-3 text-xs text-[var(--status-danger-text)]"
       >
         <p>{{ quoteError }}</p>
         <ConsoleButton

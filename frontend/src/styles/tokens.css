@@ -192,6 +192,10 @@
   --font-display:
     'Ren2NotoSerifSC', 'Noto Serif SC', 'Source Han Serif SC', 'STZhongsong',
     'SimSun', Georgia, serif;
+  /* 等宽字型：账本标签、代号与数值列使用；与 tailwind fontFamily.mono 同源。 */
+  --font-mono:
+    'Ren2JetBrainsMono', 'JetBrains Mono', 'IBM Plex Mono', ui-monospace,
+    'SFMono-Regular', Menlo, monospace;
   --surface-tile: #f6e8c9;
   --border-dashed-color: rgba(56, 55, 43, 0.24);
   /* 静态纸纹噪点：作为 background-image 叠在页面底色上，无层级成本。 */

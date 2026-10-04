@@ -194,6 +194,7 @@ export class MapScene {
   private running = false
   private disposed = false
   private lastFrame = 0
+  private reducedQuery?: MediaQueryList
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -203,7 +204,9 @@ export class MapScene {
     const ctx = canvas.getContext('2d', { alpha: false })
     if (!ctx) throw new Error('MapScene: 2D canvas context unavailable')
     this.ctx = ctx
-    this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    this.reducedQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    this.reduced = this.reducedQuery.matches
+    this.reducedQuery.addEventListener('change', this.onReducedMotionChange)
     this.theme = getCanvasTheme(initialTheme)
     this.map = new WorldMap(this.reduced, this.theme)
     this.rain = new CharRain(this.ctx, this.reduced)
@@ -226,6 +229,19 @@ export class MapScene {
     for (const ripple of this.ripples)
       if (ripple.themed) ripple.color = next.accent
     this.draw()
+  }
+
+  /* 运行中跟随系统「减弱动态效果」：开启时停循环并补一帧静态，
+     关闭时恢复 rAF。不进构造快照，避免设置切换后必须刷新页面。 */
+  private onReducedMotionChange = (event: MediaQueryListEvent) => {
+    if (this.disposed) return
+    this.reduced = event.matches
+    if (this.reduced) {
+      this.stop()
+      this.draw()
+      return
+    }
+    if (!this.running) this.start()
   }
 
   async init(): Promise<void> {
@@ -1302,7 +1318,9 @@ export class MapScene {
     this.running = true
     // Reset the wall-clock anchor on resume. `sceneTimeMs` remains untouched,
     // so document visibility/intersection pauses freeze instead of skipping.
+    // 同时清零固定步进的残量，否则长时间暂停后首帧会补跳若干步。
     this.lastFrame = performance.now()
+    this.frameAccumulator = 0
     this.draw()
     if (this.reduced) return
     this.raf = requestAnimationFrame(this.frame)
@@ -1317,6 +1335,8 @@ export class MapScene {
   dispose() {
     if (this.disposed) return
     this.disposed = true
+    this.reducedQuery?.removeEventListener('change', this.onReducedMotionChange)
+    this.reducedQuery = undefined
     this.resetEdgeBoost()
     this.stop()
     for (const group of this.groups) this.terminateGroupArtifacts(group)

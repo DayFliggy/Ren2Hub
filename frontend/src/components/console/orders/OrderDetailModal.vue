@@ -253,7 +253,7 @@ function paymentRailLabel(method: string): string {
         {{ t('orders.gmpay.loading') }}
       </p>
       <div v-else-if="evidenceFailed" class="mt-3">
-        <p role="alert" class="text-sm text-[var(--status-error-text)]">
+        <p role="alert" class="text-sm text-[var(--status-danger-text)]">
           {{ t('orders.gmpay.loadFailed') }}
         </p>
         <ConsoleButton

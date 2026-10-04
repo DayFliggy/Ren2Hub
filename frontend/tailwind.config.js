@@ -68,28 +68,12 @@ export default {
         ],
       },
       animation: {
-        marquee: 'marquee 42s linear infinite',
-        sheen: 'sheen 3.6s ease-in-out infinite',
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        float: 'float 7s ease-in-out infinite',
         'fade-in': 'fadeIn 0.6s ease-out both',
         'rise-in': 'riseIn 0.7s cubic-bezier(0.2, 0.6, 0.2, 1) both',
         'scale-in': 'scaleIn 0.24s cubic-bezier(0.2, 0.6, 0.2, 1) both',
-        blink: 'blink 1s step-end infinite',
       },
       keyframes: {
-        marquee: {
-          '0%': { transform: 'translateX(0)' },
-          '100%': { transform: 'translateX(-50%)' },
-        },
-        sheen: {
-          '0%': { transform: 'translateX(-120%) skewX(-12deg)' },
-          '60%, 100%': { transform: 'translateX(240%) skewX(-12deg)' },
-        },
-        float: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-6px)' },
-        },
         fadeIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
@@ -101,10 +85,6 @@ export default {
         scaleIn: {
           '0%': { opacity: '0', transform: 'scale(0.96) translateY(8px)' },
           '100%': { opacity: '1', transform: 'scale(1) translateY(0)' },
-        },
-        blink: {
-          '0%, 50%': { opacity: '1' },
-          '51%, 100%': { opacity: '0' },
         },
       },
       backdropBlur: {
