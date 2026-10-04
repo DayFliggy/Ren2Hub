@@ -70,6 +70,22 @@ export function extractUsageOnComplete(ctx, _result, body){return {kinds:[typeof
 	assert.Equal(t, map[string]any{"kinds": []any{"number", "string", "string"}, "seconds": int64(5)}, value)
 }
 
+func TestUsageDecimalMultiplyPreservesExactProducts(t *testing.T) {
+	engine, err := Compile(`
+export function extractUsage(){
+  return {
+    fractional: utils.decimal.multiply("0.2", "3.5"),
+    repeating: utils.decimal.multiply("0.1", "0.2"),
+  };
+}
+`, Options{})
+	require.NoError(t, err)
+
+	value, err := engine.Call(t.Context(), "extractUsage")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"fractional": "0.7", "repeating": "0.02"}, value)
+}
+
 func TestUsageHooksIgnoreUnrelatedSettingsButRejectInexactArithmetic(t *testing.T) {
 	engine, err := Compile(`
 export function extractUsage(ctx){return {clips:ctx.request.count};}

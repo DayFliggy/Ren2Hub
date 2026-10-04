@@ -21,6 +21,7 @@ import {
   previewTaskPlugin,
 } from '../api'
 import {
+  DEFAULT_MARKETPLACE_INDEX_URL,
   findMarketplaceVersion,
   replaceConfirmationReason,
   resolvePluginSourceUrl,
@@ -275,7 +276,10 @@ async function install() {
     :subtitle="
       t('taskPlugins.fromSource', {
         key: plugin.key,
-        source: target.source.name,
+        source:
+          target.source.index_url === DEFAULT_MARKETPLACE_INDEX_URL
+            ? t('taskPlugins.official')
+            : target.source.name,
       })
     "
     size="lg"

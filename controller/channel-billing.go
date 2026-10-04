@@ -525,7 +525,7 @@ func updateAllChannelsBalance() error {
 		return err
 	}
 	for _, channel := range channels {
-		if constant.IsRetiredChannelType(channel.Type) || channel.Status != common.ChannelStatusEnabled {
+		if !channel.IsServable() {
 			continue
 		}
 		if channel.ChannelInfo.IsMultiKey {

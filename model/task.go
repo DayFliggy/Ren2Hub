@@ -300,7 +300,7 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 // BindCredential runs before submission so later channel edits cannot change
 // the owner recorded for an accepted upstream task.
 func (p *TaskPrivateData) BindCredential(ctx context.Context, channel *Channel, key string) error {
-	if channel == nil || channel.Status != common.ChannelStatusEnabled {
+	if channel == nil || !channel.IsServable() {
 		return ErrGatewayStateUnavailable
 	}
 	credential, err := EnsureGatewayCredential(ctx, channel.Id, key)
@@ -327,7 +327,7 @@ func ResolveTaskCredential(ctx context.Context, channel *Channel, task *Task) (s
 	}
 	if task != nil && (task.PrivateData.CredentialVersion != 0 || task.PrivateData.CredentialID != "" || task.PrivateData.EndpointID != "") {
 		binding := task.PrivateData
-		if channel == nil || task.ChannelId != channel.Id || channel.Status != common.ChannelStatusEnabled ||
+		if channel == nil || task.ChannelId != channel.Id || !channel.IsServable() ||
 			binding.CredentialVersion != 1 || binding.CredentialID == "" || binding.EndpointID != channel.GatewayEndpointID() {
 			return "", 0, ErrGatewayStateUnavailable
 		}

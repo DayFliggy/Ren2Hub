@@ -61,7 +61,7 @@ func TestRetiredChannelCannotBeSavedInManualRouteGroup(t *testing.T) {
 	assert.ErrorIs(t, ValidatePlatformChannelEntitlement(userID, 57), constant.ErrRetiredChannelType)
 }
 
-func TestRetiredChannelRoutePreviewReportsRetiredReason(t *testing.T) {
+func TestRetiredChannelRoutePreviewReportsActualFilterReason(t *testing.T) {
 	db := setupRouteProfileTest(t)
 	userID, tokenID, activeChannelID := seedRouteProfileFixture(t, db)
 	retiredChannelID := seedRoutePreviewChannel(t, db, activeChannelID+1)
@@ -90,8 +90,15 @@ func TestRetiredChannelRoutePreviewReportsRetiredReason(t *testing.T) {
 		assert.Equal(t, []int{activeChannelID}, preview.CandidateChannelIDs, phase)
 		encoded, err := common.Marshal(findRoutePreviewEntry(t, preview, retiredChannelID))
 		require.NoError(t, err)
-		assert.Contains(t, string(encoded), `"filter_reason":"channel_type_retired"`, phase)
-		assert.Equal(t, 1, preview.FilterReasonCounts["channel_type_retired"], phase)
+		// The retired row is excluded from routing, but diagnostics preserve the
+		// concrete reason from the actual qualification path instead of replacing
+		// every phase with a retired-type special case.
+		wantReason := "key_unavailable"
+		if phase == "rebuilt index" {
+			wantReason = "channel_type_retired"
+		}
+		assert.Contains(t, string(encoded), `"filter_reason":"`+wantReason+`"`, phase)
+		assert.Equal(t, 1, preview.FilterReasonCounts[wantReason], phase)
 	}
 }
 

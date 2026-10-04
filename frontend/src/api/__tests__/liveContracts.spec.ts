@@ -727,8 +727,8 @@ describe('task artifacts contract', () => {
       artifacts: [],
       legacy_audio_clips: clips,
     })
-    expect(result.legacy_audio_clips).toHaveLength(63)
+    expect(result.legacy_audio_clips).toHaveLength(64)
     expect(result.legacy_audio_clips?.[0]?.title).toBe('clip-0')
-    expect(result.legacy_audio_clips?.at(-1)?.title).toBe('clip-62')
+    expect(result.legacy_audio_clips?.at(-1)?.title).toBe('clip-63')
   })
 })

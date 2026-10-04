@@ -92,6 +92,7 @@ async function copyAudioUrl(): Promise<void> {
       <audio
         v-else
         :src="audioUrl || undefined"
+        :aria-label="title"
         controls
         preload="none"
         class="h-9 w-full"

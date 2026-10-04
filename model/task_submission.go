@@ -55,6 +55,7 @@ func TaskSubmissionReady(ctx context.Context, task *Task) (bool, error) {
 func TaskSubmissionsReady(ctx context.Context, tasks []*Task) ([]*Task, error) {
 	const chunk = 500
 	recoveries := make(map[string]*BillingRecovery, len(tasks))
+	var result error
 	for start := 0; start < len(tasks); start += chunk {
 		ids := make([]string, 0, chunk)
 		for _, task := range tasks[start:min(start+chunk, len(tasks))] {
@@ -67,14 +68,16 @@ func TaskSubmissionsReady(ctx context.Context, tasks []*Task) ([]*Task, error) {
 		}
 		var rows []*BillingRecovery
 		if err := DB.WithContext(ctx).Where("request_id IN ?", ids).Find(&rows).Error; err != nil {
-			return nil, err
+			// A failed chunk must not hide tasks from other chunks. The caller
+			// can retry this subset on the next polling pass.
+			result = errors.Join(result, fmt.Errorf("submission recovery chunk %d: %w", start/chunk, err))
+			continue
 		}
 		for _, row := range rows {
 			recoveries[row.RequestID] = row
 		}
 	}
 	ready := make([]*Task, 0, len(tasks))
-	var result error
 	for _, task := range tasks {
 		requestID := task.PrivateData.SubmissionRequestID
 		recovery := recoveries[requestID]

@@ -297,7 +297,14 @@ async function save() {
     if (mode.value === 'json') draft.value = parsePricingJSON(json.value)
     const changes = pricingChanges(baseline.value, draft.value)
     for (const change of changes) validatePricing(change.pricing)
-    if (changes.length) await pricingConfigApi.save(changes)
+    if (!changes.length) {
+      // A commit can normalize an editor draft back to the loaded baseline.
+      // There is nothing to persist or report in that case.
+      editorDirty.value = false
+      json.value = pricingJSON(draft.value)
+      return
+    }
+    await pricingConfigApi.save(changes)
     persisted = true
     const config = await pricingConfigApi.load()
     baseline.value = config

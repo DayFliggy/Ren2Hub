@@ -171,7 +171,7 @@ func ValidateGatewayStateOwner(c *gin.Context, channelID int) (string, int, erro
 	if err := model.DB.WithContext(c.Request.Context()).First(&channel, channelID).Error; err != nil {
 		return "", 0, model.ErrGatewayStateUnavailable
 	}
-	if constant.IsRetiredChannelType(channel.Type) || channel.Status != common.ChannelStatusEnabled || binding.EndpointID != channel.GatewayEndpointID() {
+	if !channel.IsServable() || binding.EndpointID != channel.GatewayEndpointID() {
 		return "", 0, model.ErrGatewayStateUnavailable
 	}
 	return model.ResolveGatewayCredential(c.Request.Context(), &channel, binding.CredentialID)

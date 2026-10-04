@@ -720,9 +720,9 @@ function parseTaskAudioClip(value: unknown): TaskAudioClip | null {
   }
 }
 
-function boundedAudioClipList(value: unknown): unknown[] {
+function audioClipList(value: unknown): unknown[] {
   if (!Array.isArray(value)) invalidResponse(TASK_ARTIFACTS_ENDPOINT)
-  return value.slice(0, MAX_TASK_ARTIFACTS)
+  return value
 }
 
 export function parseTaskArtifactsResult(value: unknown): TaskArtifactsResult {
@@ -739,9 +739,18 @@ export function parseTaskArtifactsResult(value: unknown): TaskArtifactsResult {
     result.legacy_content_url = parseArtifactContentUrl(
       value.legacy_content_url
     )
-  if (value.legacy_audio_clips !== undefined)
-    result.legacy_audio_clips = boundedAudioClipList(value.legacy_audio_clips)
-      .map(parseTaskAudioClip)
-      .filter((clip): clip is TaskAudioClip => clip !== null)
+  if (value.legacy_audio_clips !== undefined) {
+    // Invalid clips are discarded individually before applying the display
+    // limit. Stop as soon as 64 valid clips are collected so an oversized
+    // upstream snapshot cannot force a full parse of every trailing entry.
+    const clips: TaskAudioClip[] = []
+    for (const raw of audioClipList(value.legacy_audio_clips)) {
+      const clip = parseTaskAudioClip(raw)
+      if (!clip) continue
+      clips.push(clip)
+      if (clips.length === MAX_TASK_ARTIFACTS) break
+    }
+    result.legacy_audio_clips = clips
+  }
   return result
 }

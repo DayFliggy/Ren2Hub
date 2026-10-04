@@ -46,9 +46,10 @@ func WhereChannelServable(query *gorm.DB) *gorm.DB {
 }
 
 // WhereChannelUnservable is the exact complement of WhereChannelServable.
-// IN (NULL) never matches, so an empty retired list leaves only the status test.
+// Treat a nullable legacy status as unavailable; an empty retired list leaves
+// only the status test because GORM's IN (NULL) branch never matches.
 func WhereChannelUnservable(query *gorm.DB) *gorm.DB {
-	return query.Where("(channels.status <> ? OR channels.type IN ?)", common.ChannelStatusEnabled, constant.RetiredChannelTypes())
+	return query.Where("(channels.status IS NULL OR channels.status <> ? OR channels.type IN ?)", common.ChannelStatusEnabled, constant.RetiredChannelTypes())
 }
 
 // excludeChannelTypes adds no condition for an empty list. GORM renders an empty

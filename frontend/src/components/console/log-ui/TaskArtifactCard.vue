@@ -94,6 +94,7 @@ function retryMedia(): void {
       <video
         v-else-if="artifact.type === 'video'"
         :src="artifact.content_url"
+        :aria-label="`${t(LABEL_KEYS[artifact.type])}: ${artifact.key}`"
         controls
         preload="metadata"
         class="max-h-[60vh] w-full rounded-md bg-black"
@@ -102,6 +103,7 @@ function retryMedia(): void {
       <audio
         v-else
         :src="artifact.content_url"
+        :aria-label="`${t(LABEL_KEYS[artifact.type])}: ${artifact.key}`"
         controls
         preload="none"
         class="w-full"

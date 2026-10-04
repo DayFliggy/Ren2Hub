@@ -249,6 +249,17 @@ describe('pricing workspace draft lifecycle', () => {
     wrapper.unmount()
   })
 
+  it('does not report a save when the pricing draft has no changes', async () => {
+    const wrapper = await setup()
+    const loadCalls = mocks.load.mock.calls.length
+    await button(wrapper, 'Save model prices').trigger('click')
+    await flushPromises()
+    expect(mocks.save).not.toHaveBeenCalled()
+    expect(mocks.load).toHaveBeenCalledTimes(loadCalls)
+    expect(wrapper.text()).not.toContain('Model prices saved')
+    wrapper.unmount()
+  })
+
   it('saves visual tier and request rule edits from the header without a separate apply', async () => {
     mocks.load.mockResolvedValue(
       config(1, ['model-a'], tiered('tier("base", p * 2 + c * 4)'))

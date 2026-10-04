@@ -443,6 +443,16 @@ function estimateTokens(seconds, resolution) {
   return utils.decimal.divide(utils.decimal.multiply(utils.decimal.multiply(utils.decimal.multiply(seconds, dims[0]), dims[1]), 24), 1024);
 }
 
+// Ark's optional frame metadata is a source frame count, not a fractional
+// duration. Keep the historical whole-second estimate (and its five-second
+// fallback for fewer than one second) while doing the division from exact
+// decimal text so the billing boundary never rounds the frame count first.
+function frameDuration(frames) {
+  const bounded = utils.decimal.bounded(frames, 1, 86400, true);
+  const seconds = Number.parseInt(utils.decimal.divide(bounded, 24), 10);
+  return seconds > 0 ? seconds : 5;
+}
+
 function videoInputRatio(model, resolution, content) {
   const video = hasVideo(content);
   const res = trimmed(resolution).toLowerCase();
@@ -869,7 +879,7 @@ export function extractUsage(ctx) {
   const raw = req.seconds !== undefined ? req.seconds : req.duration !== undefined ? req.duration : metadata.duration;
   let seconds;
   if (raw !== undefined) seconds = utils.decimal.bounded(raw, 0, 3600, false);
-  else if (metadata.frames !== undefined) seconds = utils.decimal.divide(utils.decimal.bounded(metadata.frames, 1, 86400, true), 24);
+  else if (metadata.frames !== undefined) seconds = frameDuration(metadata.frames);
   else seconds = "15";
   const profile = videoProfile(ctx);
   const resolution = videoResolution(ctx);

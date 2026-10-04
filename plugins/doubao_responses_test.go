@@ -393,6 +393,34 @@ func TestDoubaoSeedanceUsageFacts(t *testing.T) {
 	})
 }
 
+func TestDoubaoUsagePreservesFractionalDurationsAndRoundsFrameMetadata(t *testing.T) {
+	_, plugin := newDoubaoPlugin(t)
+	const model = "doubao-seedance-2-0-260128"
+
+	for _, tc := range []struct {
+		name     string
+		metadata map[string]any
+		want     float64
+	}{
+		{name: "fractional seconds", metadata: map[string]any{"duration": 2.5}, want: 54000},
+		{name: "121 frames is five seconds", metadata: map[string]any{"frames": 121}, want: 108000},
+		{name: "241 frames is ten seconds", metadata: map[string]any{"frames": 241}, want: 216000},
+		{name: "subsecond frame fallback", metadata: map[string]any{"frames": 23}, want: 108000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			metadata := map[string]any{"resolution": "720p"}
+			maps.Copy(metadata, tc.metadata)
+			value, err := plugin.Engine.Call(t.Context(), "extractUsage", map[string]any{
+				"model":         model,
+				"upstreamModel": model,
+				"requestBody":   map[string]any{"metadata": metadata},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, alibabaObject(t, value)["tokens"])
+		})
+	}
+}
+
 func keysOf(schema map[string]jsplugin.UsageFieldSchema) []string {
 	keys := make([]string, 0, len(schema))
 	for key := range schema {

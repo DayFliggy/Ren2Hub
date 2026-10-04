@@ -524,7 +524,7 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		if err != nil {
 			return nil, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 		}
-		if channel.Status != common.ChannelStatusEnabled {
+		if !channel.IsServable() {
 			markLiveRouteCandidateFiltered(c, candidate.ChannelID, service.RouteFilterChannelDisabled)
 			continue
 		}

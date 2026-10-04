@@ -894,7 +894,7 @@ async function submit() {
                 taskPluginBaseUrlTrust?.privateHost
               "
               role="status"
-              class="mt-2 flex gap-2 rounded-lg border border-[var(--status-warning)]/25 bg-[var(--status-warning-soft)] px-3 py-2 text-xs text-[var(--status-warning-text)]"
+              class="mt-2 flex gap-2 rounded-lg border border-[var(--status-warning)] bg-[var(--status-warning-soft)] px-3 py-2 text-xs text-[var(--status-warning-text)]"
             >
               <AlertCircle
                 :size="14"

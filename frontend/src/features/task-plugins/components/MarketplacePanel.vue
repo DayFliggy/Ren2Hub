@@ -13,6 +13,7 @@ import StatusChip from '@/components/common/StatusChip.vue'
 
 import { listMarketplaceSources } from '../api'
 import {
+  DEFAULT_MARKETPLACE_INDEX_URL,
   deriveInstallState,
   fetchMarketplaceIndex,
   indexHasIntegrityHashes,
@@ -54,7 +55,13 @@ const selected = computed(
 const sourceOptions = computed(() =>
   (sources.value ?? []).map((source) => ({
     value: source.index_url,
-    label: source.name,
+    // The built-in source names come from the server as English identifiers.
+    // Keep custom names editable while presenting the defaults in the active
+    // console language.
+    label:
+      source.index_url === DEFAULT_MARKETPLACE_INDEX_URL
+        ? t('taskPlugins.official')
+        : source.name,
   }))
 )
 const missingHashes = computed(() =>
@@ -184,7 +191,12 @@ function onInstalled() {
     <section v-if="selected" class="space-y-3" data-marketplace-source>
       <div class="flex flex-wrap items-center gap-2">
         <h3 class="text-sm font-semibold">
-          {{ index?.name || selected.name }}
+          {{
+            index?.name ||
+            (selected.index_url === DEFAULT_MARKETPLACE_INDEX_URL
+              ? t('taskPlugins.official')
+              : selected.name)
+          }}
         </h3>
         <StatusChip
           v-if="isDefaultMarketplaceSource(selected.index_url)"

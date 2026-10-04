@@ -972,7 +972,7 @@ func performChannelTests(ctx context.Context, channels []*model.Channel, testUse
 		})
 	for completed := range results {
 		channel, result, milliseconds := completed.channel, completed.result, completed.milliseconds
-		isChannelEnabled := channel.Status == common.ChannelStatusEnabled
+		isChannelEnabled := channel.IsServable()
 		if ctx.Err() != nil {
 			continue // Join active probes without treating cancellation as channel failure.
 		}
@@ -1053,7 +1053,7 @@ func runChannelTestTask(ctx context.Context, mode string, notify bool, report fu
 func selectChannelsForAutomaticTest(channels []*model.Channel, mode string) []*model.Channel {
 	selected := make([]*model.Channel, 0, len(channels))
 	for _, channel := range channels {
-		if constant.IsRetiredChannelType(channel.Type) || channel.Status == common.ChannelStatusManuallyDisabled {
+		if !channel.IsServable() && channel.Status != common.ChannelStatusAutoDisabled {
 			continue
 		}
 		if mode == operation_setting.ChannelTestModeAutoBanOnly && !channel.GetAutoBan() {
