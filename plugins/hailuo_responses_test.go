@@ -3,6 +3,7 @@ package plugins_test
 import (
 	"maps"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel"
 	taskplugin "github.com/QuantumNous/new-api/relay/channel/task/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -90,18 +92,23 @@ func TestHailuoUsageProfilesPerModel(t *testing.T) {
 	assert.ElementsMatch(t, plugin.Meta.Models, profiled, "every declared model must select a usage profile")
 
 	t.Run("submission reports only selected profile facts", func(t *testing.T) {
-		// Upstream extractUsage returns input_images and input_video_seconds for
-		// all models, but legacy model profiles declare only seconds/resolution.
-		// The adaptor filters to profile-declared fields, so we test the plugin directly.
-		value, err := plugin.Engine.Call(t.Context(), "extractUsage", map[string]any{
-			"requestBody":   map[string]any{"model": "MiniMax-Hailuo-2.3", "prompt": "p", "duration": 10},
-			"upstreamModel": "MiniMax-Hailuo-2.3",
-			"usagePurpose":  "facts",
-		})
+		info := &relaycommon.RelayInfo{
+			ChannelMeta:     &relaycommon.ChannelMeta{ApiKey: "test-ak", ChannelBaseUrl: "https://api.minimax.example", UpstreamModelName: "MiniMax-Hailuo-2.3"},
+			OriginModelName: "MiniMax-Hailuo-2.3",
+			TaskRelayInfo:   &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"},
+		}
+		adaptor := taskplugin.New(plugin)
+		adaptor.Init(info)
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+		c.Set("task_request", map[string]any{"model": "MiniMax-Hailuo-2.3", "prompt": "p", "duration": 10, "resolution": "768P"})
+		require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+
+		facts, err := adaptor.ExtractUsageFactsValidated(c, info)
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{
-			"seconds": int64(10), "resolution": "768P", "input_images": int64(0), "input_video_seconds": int64(0),
-		}, value)
+			"seconds": "10", "resolution": "768P",
+		}, facts)
 	})
 }
 
@@ -461,7 +468,7 @@ func TestHailuoExtractUsageFacts(t *testing.T) {
 			"seconds": float64(5), "resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(15),
 		}},
 		{"legacy model", "MiniMax-Hailuo-2.3", map[string]any{"prompt": "p", "duration": 10}, map[string]any{
-			"seconds": float64(10), "resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(0),
+			"seconds": float64(10), "resolution": "768P",
 		}},
 	}
 	for _, testCase := range testCases {
@@ -477,24 +484,25 @@ func TestHailuoExtractUsageFacts(t *testing.T) {
 func TestHailuoH3CompletionUsageFacts(t *testing.T) {
 	plugin := loadHailuoPlugin(t)
 	testCases := []struct {
-		name string
-		body string
-		want map[string]any
+		name    string
+		body    string
+		want    map[string]any
+		invalid bool
 	}{
 		{
 			name: "actual usage replaces submission estimates",
 			body: `{"task":{"id":"1","status":"succeeded","resolution":"2K","usage":{"output_seconds":5,"input_seconds":7.5,"input_image_count":6}}}`,
-			want: map[string]any{"seconds": float64(5), "resolution": "2K", "input_images": float64(6), "input_video_seconds": "7.5"},
+			want: map[string]any{"seconds": "5", "resolution": "2K", "input_images": "6", "input_video_seconds": "7.5"},
 		},
 		{
 			name: "zero actual usage is retained for settlement",
 			body: `{"task":{"id":"1","status":"succeeded","resolution":"768P","usage":{"output_seconds":4,"input_seconds":0,"input_image_count":0}}}`,
-			want: map[string]any{"seconds": float64(4), "resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(0)},
+			want: map[string]any{"seconds": "4", "resolution": "768P", "input_images": "0", "input_video_seconds": "0"},
 		},
 		{
-			name: "upstream silently skips zero output keeps reservation",
-			body: `{"task":{"id":"1","status":"succeeded","resolution":"768P","usage":{"output_seconds":0,"input_seconds":0,"input_image_count":0}}}`,
-			want: map[string]any{"resolution": "768P", "input_images": float64(0), "input_video_seconds": float64(0)},
+			name:    "zero output cannot erase the submission reservation",
+			body:    `{"task":{"id":"1","status":"succeeded","resolution":"768P","usage":{"output_seconds":0,"input_seconds":0,"input_image_count":0}}}`,
+			invalid: true,
 		},
 		{
 			name: "missing usage leaves submission estimates untouched",
@@ -502,9 +510,9 @@ func TestHailuoH3CompletionUsageFacts(t *testing.T) {
 			want: map[string]any{"resolution": "768P"},
 		},
 		{
-			name: "upstream silently skips out of contract values keeps valid ones",
-			body: `{"task":{"id":"1","status":"succeeded","resolution":"2K","usage":{"output_seconds":16,"input_seconds":16,"input_image_count":10}}}`,
-			want: map[string]any{"resolution": "2K"},
+			name:    "out of contract usage cannot become a billing multiplier",
+			body:    `{"task":{"id":"1","status":"succeeded","resolution":"2K","usage":{"output_seconds":16,"input_seconds":16,"input_image_count":10}}}`,
+			invalid: true,
 		},
 	}
 	for _, testCase := range testCases {
@@ -512,6 +520,10 @@ func TestHailuoH3CompletionUsageFacts(t *testing.T) {
 			var body any
 			require.NoError(t, common.DecodeJsonNumbers(strings.NewReader(testCase.body), &body))
 			value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", nil, nil, body)
+			if testCase.invalid {
+				require.Error(t, err)
+				return
+			}
 			require.NoError(t, err)
 			encoded, err := common.Marshal(value)
 			require.NoError(t, err)
@@ -527,7 +539,6 @@ func TestHailuoH3CompletionUsageFacts(t *testing.T) {
 			`{"task":{"id":"1","status":"succeeded","resolution":"2K","usage":{"output_seconds":5,"input_seconds":7.5,"input_image_count":6}}}`,
 		))
 		require.NoError(t, err)
-		// Adaptor layer converts plugin number output to decimal string for settlement
 		assert.Equal(t, map[string]any{
 			"seconds": "5", "resolution": "2K", "input_images": "6", "input_video_seconds": "7.5",
 		}, result.UsageFacts)

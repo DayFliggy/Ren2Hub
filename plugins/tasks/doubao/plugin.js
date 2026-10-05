@@ -267,7 +267,7 @@ function seedanceUsageExamples(profile) {
   if (profile.videoInput) specs.push({ label: "720p · 5s (+4s 输入视频)", resolution: "720p", seconds: 9, video_input: "video" });
   if (profile.audio) specs.push({ label: "720p · 5s · 无声", resolution: "720p", seconds: 5, generate_audio: false });
   return specs.map((spec) => {
-    const facts = { tokens: Math.round(estimateTokens(spec.seconds, spec.resolution)), resolution: spec.resolution };
+    const facts = { tokens: utils.decimal.number(estimateTokens(spec.seconds, spec.resolution)), resolution: spec.resolution };
     if (profile.videoInput) facts.video_input = spec.video_input || "none";
     if (profile.audio) facts.generate_audio = spec.generate_audio !== false;
     return { label: spec.label, facts: facts };
@@ -276,7 +276,7 @@ function seedanceUsageExamples(profile) {
 
 // One usage profile per distinct pricing shape of a capability table: models
 // whose schema and examples are identical share a profile.
-function capabilityUsageProfiles(models, usageSchema, usageExamples) {
+function capabilityUsageProfiles(models, usageSchema, usageExamples, fullSchema) {
   const profiles = [];
   for (const model of Object.keys(models)) {
     const schema = usageSchema(models[model]);
@@ -289,7 +289,15 @@ function capabilityUsageProfiles(models, usageSchema, usageExamples) {
     }
     profile.models.push(model);
   }
-  return profiles.map((profile) => ({ models: profile.models, schema: profile.schema, examples: profile.examples }));
+  // Facts outside a profile's own schema stay declared for execution as
+  // compatibility fields without being advertised.
+  return profiles.map((profile) => {
+    const compatibilitySchema = {};
+    for (const key of Object.keys(fullSchema)) {
+      if (!Object.prototype.hasOwnProperty.call(profile.schema, key)) compatibilitySchema[key] = fullSchema[key];
+    }
+    return { models: profile.models, schema: profile.schema, compatibilitySchema: compatibilitySchema, examples: profile.examples };
+  });
 }
 
 export const meta = {
@@ -301,7 +309,7 @@ export const meta = {
     en: "Volcengine Doubao Seedance video generation and Seedream image generation",
     zh: "火山引擎豆包 Seedance 视频生成与 Seedream 图片生成",
   },
-  version: "1.2.1+ren2hub",
+  version: "1.2.1+ren2hub.1",
   author: { name: "QuantumNous" },
   channelTypes: [54, 45], // VolcEngine-type channels serve Ark video models with the same wire format
   models: Object.keys(VIDEO_MODELS).concat(Object.keys(IMAGE_MODELS)),
@@ -309,8 +317,8 @@ export const meta = {
   upstreams: ["vendor", "new_api"],
   usageSchema: seedanceUsageSchema(DEFAULT_VIDEO_PROFILE),
   usageExamples: seedanceUsageExamples(DEFAULT_VIDEO_PROFILE),
-  usageProfiles: capabilityUsageProfiles(VIDEO_MODELS, seedanceUsageSchema, seedanceUsageExamples).concat(
-    capabilityUsageProfiles(IMAGE_MODELS, seedreamUsageSchema, seedreamUsageExamples)
+  usageProfiles: capabilityUsageProfiles(VIDEO_MODELS, seedanceUsageSchema, seedanceUsageExamples, seedanceUsageSchema(DEFAULT_VIDEO_PROFILE)).concat(
+    capabilityUsageProfiles(IMAGE_MODELS, seedreamUsageSchema, seedreamUsageExamples, IMAGE_USAGE_SCHEMA)
   ),
   routes: [
     { method: "POST", path: "/doubao/api/v3/contents/generations/tasks", type: "submit", decode: "createTask", render: "taskCreated" },
@@ -432,7 +440,17 @@ function resolutionMaxPixels(resolution) {
 
 function estimateTokens(seconds, resolution) {
   const dims = resolutionMaxPixels(resolution);
-  return (seconds * dims[0] * dims[1] * 24) / 1024;
+  return utils.decimal.divide(utils.decimal.multiply(utils.decimal.multiply(utils.decimal.multiply(seconds, dims[0]), dims[1]), 24), 1024);
+}
+
+// Ark's optional frame metadata is a source frame count, not a fractional
+// duration. Keep the historical whole-second estimate (and its five-second
+// fallback for fewer than one second) while doing the division from exact
+// decimal text so the billing boundary never rounds the frame count first.
+function frameDuration(frames) {
+  const bounded = utils.decimal.bounded(frames, 1, 86400, true);
+  const seconds = Number.parseInt(utils.decimal.divide(bounded, 24), 10);
+  return seconds > 0 ? seconds : 5;
 }
 
 function videoInputRatio(model, resolution, content) {
@@ -656,6 +674,8 @@ function imageUsage(body, profile) {
       facts.images_above_1_5k = higher;
     }
   } else {
+    // Released prices read both tiers; a single-tier model reports zero below 1.5K.
+    facts.images_up_to_1_5k = 0;
     facts.images_above_1_5k = payloads.length;
   }
   if (Number.isInteger(usage.input_images) && usage.input_images >= 0 && usage.input_images <= MAX_REFERENCE_IMAGES) facts.input_images = usage.input_images;
@@ -856,16 +876,14 @@ export function extractUsage(ctx) {
     const ratio = videoInputRatio(ctx.upstreamModel || ctx.model, metadata.resolution, metadata.content);
     return ratio === 1 ? null : { video_input_ratio: ratio };
   }
-  let seconds = Number(req.seconds || req.duration || metadata.duration || 0);
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    const frames = Number(metadata.frames);
-    seconds = Number.isFinite(frames) && frames > 0 ? Math.floor(frames / 24) : 15;
-  }
-  if (seconds <= 0) seconds = 5;
-  seconds = Math.min(seconds, 3600);
+  const raw = req.seconds !== undefined ? req.seconds : req.duration !== undefined ? req.duration : metadata.duration;
+  let seconds;
+  if (raw !== undefined) seconds = utils.decimal.bounded(raw, 0, 3600, false);
+  else if (metadata.frames !== undefined) seconds = frameDuration(metadata.frames);
+  else seconds = "15";
   const profile = videoProfile(ctx);
   const resolution = videoResolution(ctx);
-  const facts = { tokens: estimateTokens(seconds, resolution), resolution: resolution };
+  const facts = { tokens: utils.decimal.number(estimateTokens(seconds, resolution)), resolution: resolution };
   // Every model reports video_input, including those whose profile omits it:
   // expressions saved when all Seedance models declared the field then keep
   // matching their no-video tier.
@@ -896,12 +914,9 @@ export function parseTaskResult(ctx, body) {
   if (body.status === "pending" || body.status === "queued") return { status: "QUEUED", progress: "10%" };
   if (body.status === "processing" || body.status === "running") return { status: "IN_PROGRESS", progress: "50%" };
   if (body.status === "succeeded") {
+    // Ren2Hub: Seedance settles from the declared tokens fact; generic token
+    // counters are not reported for plugin tasks.
     const result = { status: "SUCCESS", progress: "100%", url: body.content && body.content.video_url ? body.content.video_url : "" };
-    const usage = body.usage || {};
-    const completionTokens = Number(usage.completion_tokens || 0);
-    const totalTokens = Number(usage.total_tokens || 0);
-    if (Number.isFinite(completionTokens) && completionTokens > 0) result.completionTokens = completionTokens;
-    if (Number.isFinite(totalTokens) && totalTokens > 0) result.totalTokens = totalTokens;
     return result;
   }
   if (body.status === "failed" || body.status === "expired" || body.status === "cancelled") {
@@ -958,9 +973,11 @@ export function extractUsageOnComplete(task, taskResult, body) {
   if (!body || body.status !== "succeeded") return {};
   const facts = {};
   const usage = body.usage || {};
-  let tokens = Number(usage.completion_tokens);
-  if (!Number.isFinite(tokens) || tokens <= 0) tokens = Number(usage.total_tokens);
-  if (Number.isFinite(tokens) && tokens > 0) facts.tokens = tokens;
+  const tokens = usage.completion_tokens !== undefined ? usage.completion_tokens : usage.total_tokens;
+  if (tokens !== undefined) {
+    const bounded = utils.decimal.bounded(tokens, 0, 2147483647, true);
+    facts.tokens = typeof tokens === "number" ? utils.decimal.number(bounded) : bounded;
+  }
   const content = body.content || {};
   const resolution = trimmed(content.resolution || body.resolution).toLowerCase();
   if (videoProfile(task).resolutions.includes(resolution)) facts.resolution = resolution;
@@ -1154,7 +1171,7 @@ protocols.openai_video = {
       if (!ctx.body.value || Array.isArray(ctx.body.value)) throw new Error("JSON object required");
       const req = ctx.body.value;
       const seconds = req.seconds === undefined ? req.duration : req.seconds;
-      if (seconds !== undefined && (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0 || Number(seconds) > 3600))
+      if (seconds !== undefined && (!Number.isFinite(Number(utils.decimal.bounded(seconds, 0, 3600, true))) || Number(utils.decimal.bounded(seconds, 0, 3600, true)) <= 0 || Number(utils.decimal.bounded(seconds, 0, 3600, true)) > 3600))
         throw new Error("seconds must be between 1 and 3600");
       return {
         kind: "submit",
@@ -1184,10 +1201,10 @@ protocols.openai_video = {
       req.metadata = parsed;
     }
     if ((ctx.body.files || []).length) throw new Error("Doubao requires image and video references to be URLs inside metadata.content");
-    if (req.seconds !== undefined) req.seconds = Number(req.seconds);
-    else if (req.duration !== undefined) req.seconds = Number(req.duration);
+    if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
+    else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
-    if (seconds !== undefined && (!Number.isFinite(Number(seconds)) || Number(seconds) <= 0 || Number(seconds) > 3600))
+    if (seconds !== undefined && (!Number.isFinite(Number(utils.decimal.bounded(seconds, 0, 3600, true))) || Number(utils.decimal.bounded(seconds, 0, 3600, true)) <= 0 || Number(utils.decimal.bounded(seconds, 0, 3600, true)) > 3600))
       throw new Error("seconds must be between 1 and 3600");
     return {
       kind: "submit",

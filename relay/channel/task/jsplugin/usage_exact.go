@@ -148,9 +148,7 @@ func (a *TaskAdaptor) validatedCompletionUsageFacts(facts any, models ...string)
 	for key, value := range values {
 		field, declared := schema[key]
 		if !declared {
-			// Upstream plugins may return fields not in the model's profile schema.
-			// Silently skip undeclared fields rather than rejecting the entire result.
-			continue
+			return nil, fmt.Errorf("plugin usage field has no declared unit")
 		}
 		normalized, err := normalizePluginUsage(value, field)
 		if err != nil {

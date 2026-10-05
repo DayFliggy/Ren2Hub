@@ -84,14 +84,14 @@ func TestVertexAIResponsesProtocol(t *testing.T) {
 		resolved := decodeMap(t, callProtocol(t, "decodeRequest", map[string]any{"model": requestBody["model"], "body": map[string]any{"kind": "json", "value": requestBody}}))
 		assert.Equal(t, "veo-3.1-fast-generate-preview", resolved["model"])
 		assert.Equal(t, "image_to_video", resolved["action"])
-		// Upstream no longer outputs top-level resolution or metadata.durationSeconds
 		assert.Equal(t, map[string]any{
-			"model":    "veo-3.1-fast-generate-preview",
-			"prompt":   "animate this frame",
-			"images":   []any{"data:image/png;base64,aGVsbG8="},
-			"duration": float64(8),
-			"size":     "1920x1080",
-			"metadata": map[string]any{"resolution": "1080P"},
+			"model":      "veo-3.1-fast-generate-preview",
+			"prompt":     "animate this frame",
+			"images":     []any{"data:image/png;base64,aGVsbG8="},
+			"duration":   float64(8),
+			"size":       "1920x1080",
+			"metadata":   map[string]any{"durationSeconds": float64(8), "resolution": "1080p"},
+			"resolution": "1080p",
 		}, resolved["requestBody"])
 	})
 
