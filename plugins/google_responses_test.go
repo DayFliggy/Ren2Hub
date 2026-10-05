@@ -22,7 +22,7 @@ func TestGoogleResponsesProtocol(t *testing.T) {
 			"images":   []any{"data:image/png;base64,aGVsbG8="},
 			"duration": float64(8),
 			"size":     "1280x720",
-			"metadata": map[string]any{"durationSeconds": float64(8), "resolution": "720p"},
+			"metadata": map[string]any{},
 		},
 		wantUsageKeys:  []string{"resolution", "seconds"},
 		wantVendorName: "gemini",

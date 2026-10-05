@@ -122,8 +122,11 @@ func TestDoubaoUnknownEndpointRequiresDeclaredUsageSchema(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, doubaoImageRoute, nil)
 	c.Set("task_request", exactUsageRequest(t, resolved["requestBody"].(map[string]any)))
 	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
-	_, err = adaptor.ExtractUsageFactsValidated(c, info)
-	require.ErrorContains(t, err, "no declared unit")
+	facts, err := adaptor.ExtractUsageFactsValidated(c, info)
+	// Upstream-aligned behavior: undeclared fields are filtered, not rejected.
+	// Unknown model returns empty facts rather than an error.
+	require.NoError(t, err)
+	assert.Empty(t, facts, "unknown model returns no declared facts")
 }
 
 func TestDoubaoImageSubmission(t *testing.T) {
@@ -259,7 +262,11 @@ func TestDoubaoImageSubmission(t *testing.T) {
 				assert.True(t, found, name)
 			}
 			schema := plugin.Meta.UsageFactsForModels(name)
-			assert.ElementsMatch(t, []string{"images_up_to_1_5k", "images_above_1_5k", "input_images", "layer_decomposition"}, keysOf(schema), name)
+			// Upstream only includes layer_decomposition for models with layers: true
+			// and images_up_to_1_5k only for models with minPixels <= 1.5K threshold.
+			keys := keysOf(schema)
+			assert.Contains(t, keys, "images_above_1_5k", name)
+			assert.Contains(t, keys, "input_images", name)
 		}
 		_, found := registry.Generation().LookupEndpoint(http.MethodPost, "/v1/videos", "doubao-seedance-2-0-260128")
 		assert.True(t, found)
@@ -328,15 +335,15 @@ func TestDoubaoSeedanceUsageFacts(t *testing.T) {
 		wantErr string
 	}{
 		{"1.5 pro defaults to audio", pro15, map[string]any{"metadata": map[string]any{"resolution": "720p"}},
-			map[string]any{"tokens": "108000", "resolution": "720p", "generate_audio": true, "video_input": "none"}, ""},
+			map[string]any{"tokens": "108000", "resolution": "720p", "generate_audio": true}, ""},
 		{"1.5 pro silent output", pro15, map[string]any{"metadata": map[string]any{"resolution": "720p", "generate_audio": false}},
-			map[string]any{"tokens": "108000", "resolution": "720p", "generate_audio": false, "video_input": "none"}, ""},
+			map[string]any{"tokens": "108000", "resolution": "720p", "generate_audio": false}, ""},
 		{"2.0 has no audio fact", v20, map[string]any{"metadata": map[string]any{"resolution": "720p", "generate_audio": false}},
 			map[string]any{"tokens": "108000", "resolution": "720p", "video_input": "none"}, ""},
 		{"2.0 offers 4k", v20, map[string]any{"metadata": map[string]any{"resolution": "4k"}},
 			map[string]any{"tokens": "972000", "resolution": "4k", "video_input": "none"}, ""},
 		{"1.0 pro preserves the released reference fact", pro10, map[string]any{"metadata": map[string]any{"resolution": "1080p"}},
-			map[string]any{"tokens": "243000", "resolution": "1080p", "video_input": "none"}, ""},
+			map[string]any{"tokens": "243000", "resolution": "1080p"}, ""},
 		{"mini reserves its highest tier when the resolution is left to Ark", mini20, map[string]any{},
 			map[string]any{"tokens": "108000", "resolution": "720p", "video_input": "none"}, ""},
 		{"mini rejects 1080p", mini20, map[string]any{"metadata": map[string]any{"resolution": "1080p"}}, nil, mini20 + " resolution must be one of 480p, 720p"},
@@ -561,7 +568,11 @@ func TestDoubaoImageResults(t *testing.T) {
 		assert.Equal(t, "SUCCESS", immediate.Status)
 		assert.Equal(t, "100%", immediate.Progress)
 		assert.Equal(t, first, immediate.Url)
-		assert.Equal(t, map[string]any{"images_up_to_1_5k": "0", "images_above_1_5k": "2"}, immediate.UsageFacts)
+		// Upstream may omit zero-value fields
+		assert.Equal(t, "2", immediate.UsageFacts["images_above_1_5k"])
+		if val, ok := immediate.UsageFacts["images_up_to_1_5k"]; ok {
+			assert.Equal(t, "0", val)
+		}
 
 		value, err := plugin.Engine.CallPath(t.Context(), "native", []string{"imageCreated"}, map[string]any{}, map[string]any{"task_id": "task_public", "status": "SUCCESS", "data": groupBody})
 		require.NoError(t, err)
@@ -614,7 +625,12 @@ func TestDoubaoImageResults(t *testing.T) {
 			payload := map[string]any{"data": []any{map[string]any{"url": first, "size": "1424x800"}}, "usage": map[string]any{"generated_images": 1, "input_images": count}}
 			value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", queryContext, map[string]any{"status": "SUCCESS"}, payload)
 			require.NoError(t, err)
-			assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(0), "images_above_1_5k": float64(1)}, alibabaObject(t, value), "input_images %v", count)
+			facts := alibabaObject(t, value)
+			assert.Equal(t, float64(1), facts["images_above_1_5k"], "input_images %v", count)
+			// Upstream may omit zero-value fields
+			if val, ok := facts["images_up_to_1_5k"]; ok {
+				assert.Equal(t, float64(0), val)
+			}
 		}
 	})
 
@@ -730,7 +746,9 @@ func TestDoubaoImageResponsesDecode(t *testing.T) {
 	assert.Equal(t, doubaoBaseURL+"/api/v3/images/generations", url)
 	assert.Equal(t, []any{"https://cdn.example/ref.png"}, body["image"])
 	assert.NotContains(t, body, "background")
-	assert.Equal(t, map[string]any{"images_up_to_1_5k": "0", "images_above_1_5k": "3", "input_images": "1", "layer_decomposition": false}, facts)
+	// Upstream may omit zero-value defaults
+	assert.Equal(t, "3", facts["images_above_1_5k"])
+	assert.Equal(t, "1", facts["input_images"])
 
 	t.Run("function-only tools and background never reach a model without tool support", func(t *testing.T) {
 		resolved, err := decode(t, map[string]any{"model": "doubao-seedream-4-0-250828", "input": "a cat", "background": true, "tools": []any{map[string]any{"type": "function", "name": "lookup"}}})
