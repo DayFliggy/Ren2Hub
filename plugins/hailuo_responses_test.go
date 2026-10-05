@@ -41,7 +41,7 @@ func TestHailuoResponsesProtocol(t *testing.T) {
 			"metadata": map[string]any{"first_frame_image": "https://cdn.example/frame.png"},
 		},
 		wantUsageKeys:       []string{"input_images", "input_video_seconds", "resolution", "seconds"},
-		wantSubmitUsageKeys: []string{"input_images", "input_video_seconds", "resolution", "seconds"},
+		wantSubmitUsageKeys: []string{"resolution", "seconds"},
 		wantVendorName:      "hailuo",
 	})
 }
