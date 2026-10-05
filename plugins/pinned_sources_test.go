@@ -27,25 +27,35 @@ func pinnedPlugin(t *testing.T, key string) (*jsplugin.LoadedPlugin, string) {
 	return plugin, string(source)
 }
 
+// Every deployed release stores its factory rows permanently, and startup
+// refuses a key and version whose stored source differs. Each pinned-<sha>
+// directory holds the byte copies shipped by one deployed release.
 func TestReleasedFactorySourcesCompileAndKeepTheirIdentity(t *testing.T) {
-	entries, err := os.ReadDir(pinnedSourceDir)
+	releases, err := filepath.Glob("testdata/pinned-*")
 	require.NoError(t, err)
-	require.Len(t, entries, 10)
-	for _, entry := range entries {
-		key := strings.TrimSuffix(entry.Name(), ".js")
-		t.Run(key, func(t *testing.T) {
-			plugin, source := pinnedPlugin(t, key)
-			assert.Equal(t, key, plugin.Meta.Key)
+	require.NotEmpty(t, releases)
+	for _, release := range releases {
+		entries, err := os.ReadDir(release)
+		require.NoError(t, err)
+		require.Len(t, entries, 10)
+		for _, entry := range entries {
+			key := strings.TrimSuffix(entry.Name(), ".js")
+			t.Run(filepath.Base(release)+"/"+key, func(t *testing.T) {
+				released, err := os.ReadFile(filepath.Join(release, entry.Name()))
+				require.NoError(t, err)
+				plugin, err := jsplugin.CompilePlugin(string(released), jsplugin.Options{})
+				require.NoError(t, err)
+				assert.Equal(t, key, plugin.Meta.Key)
 
-			// The registry refuses one key and version with two sources.
-			current, err := builtinplugins.Source(key)
-			require.NoError(t, err)
-			currentPlugin, err := jsplugin.CompilePlugin(current, jsplugin.Options{})
-			require.NoError(t, err)
-			if currentPlugin.Meta.Version == plugin.Meta.Version {
-				assert.Equal(t, source, current, "released version %s was republished with different source", plugin.Meta.Version)
-			}
-		})
+				current, err := builtinplugins.Source(key)
+				require.NoError(t, err)
+				currentPlugin, err := jsplugin.CompilePlugin(current, jsplugin.Options{})
+				require.NoError(t, err)
+				if currentPlugin.Meta.Version == plugin.Meta.Version {
+					assert.Equal(t, string(released), current, "released version %s was republished with different source", plugin.Meta.Version)
+				}
+			})
+		}
 	}
 }
 

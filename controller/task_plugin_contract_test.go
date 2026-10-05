@@ -57,9 +57,10 @@ func TestTaskPluginSyncReusesHashAndSuppressesDisabledFactory(t *testing.T) {
 	})
 	factory, err := plugins.Source("sunoapi")
 	require.NoError(t, err)
-	_, err = jsplugin.DefaultRegistry.RegisterFactory(factory, jsplugin.Options{})
+	loaded, err := jsplugin.DefaultRegistry.RegisterFactory(factory, jsplugin.Options{})
 	require.NoError(t, err)
-	source := strings.Replace(factory, `version: "1.1.0"`, `version: "2.0.0"`, 1)
+	source := strings.Replace(factory, fmt.Sprintf("version: %q", loaded.Meta.Version), `version: "2.0.0"`, 1)
+	require.NotEqual(t, factory, source, "override fixture must carry a new version")
 	plugin := model.TaskPlugin{Key: "sunoapi", Version: "2.0.0", APIVersion: 1, Enabled: true, Source: model.LongText(source), SourceHash: fmt.Sprintf("%x", sha256.Sum256([]byte(source)))}
 	require.NoError(t, model.SaveTaskPlugin(&plugin))
 	queries := 0
