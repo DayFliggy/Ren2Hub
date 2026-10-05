@@ -7,7 +7,7 @@ export const meta = {
     en: "Kuaishou Kling video generation (text-to-video and image-to-video)",
     zh: "快手可灵视频生成（文生视频、图生视频）",
   },
-  version: "1.1.0+ren2hub.1",
+  version: "1.1.0+ren2hub",
   author: { name: "QuantumNous" },
   channelTypes: [50],
   models: ["kling-v1", "kling-v1-6", "kling-v2-master"],
@@ -150,22 +150,25 @@ function perSecondRate(model, mode) {
 }
 
 function estimateUnits(model, mode, durationSeconds) {
-  return utils.decimal.multiply(perSecondRate(model, mode), durationSeconds);
+  return perSecondRate(model, mode) * durationSeconds;
 }
 
 // Official current pages list 3–15s for new models; old-model duration "5"|"10"
 // is unverifiable (research 2026-08-27). Keep permissive positive integers up to
 // the host task duration bound.
 function validateKlingDuration(value) {
-  const n = Number(utils.decimal.bounded(value, 1, 3600, true));
+  const n = Number(value);
   if (!Number.isInteger(n) || n <= 0 || n > 3600) throw new Error("seconds must be a positive integer at most 3600");
   return n;
 }
 
 function outboundDuration(req) {
+  const n = Number(req && req.duration);
+  if (Number.isFinite(n) && n > 0) return n;
   const metadata = (req && req.metadata) || {};
-  const raw = req && req.duration !== undefined ? req.duration : metadata.duration;
-  return raw === undefined ? 5 : Number(utils.decimal.bounded(raw, 1, 3600, true));
+  const fromMeta = Number(metadata.duration);
+  if (Number.isFinite(fromMeta) && fromMeta > 0) return fromMeta;
+  return 5;
 }
 
 function outboundMode(req, model) {
@@ -292,6 +295,11 @@ export function parseTaskResult(ctx, body) {
   const videos = status === "SUCCESS" && data.task_result && data.task_result.videos ? data.task_result.videos : [];
   const result = { code: body.code || 0, taskId: data.task_id, status: status, reason: data.task_status_msg || "" };
   if (videos.length && videos[0].url) result.url = videos[0].url;
+  const units = Number.parseFloat(data.final_unit_deduction || "");
+  if (Number.isFinite(units) && units > 0) {
+    result.completionTokens = Math.ceil(units);
+    result.totalTokens = Math.ceil(units);
+  }
   return result;
 }
 
@@ -320,8 +328,17 @@ export function buildContentRequest(ctx) {
 
 export function extractUsageOnComplete(_task, _taskResult, body) {
   const data = (body && body.data) || {};
-  if (!Object.prototype.hasOwnProperty.call(data, "final_unit_deduction")) return null;
-  return { units: utils.decimal.bounded(data.final_unit_deduction, 0, 2147483647, false) };
+  if (
+    !Object.prototype.hasOwnProperty.call(data, "final_unit_deduction") ||
+    data.final_unit_deduction === undefined ||
+    data.final_unit_deduction === null ||
+    data.final_unit_deduction === ""
+  ) {
+    return null;
+  }
+  const units = Number.parseFloat(data.final_unit_deduction);
+  if (!Number.isFinite(units)) return null;
+  return { units: units };
 }
 
 export const protocols = {
@@ -419,8 +436,8 @@ export const protocols = {
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
           req.metadata = parsed;
         }
-        if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
-        else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+        if (req.seconds !== undefined) req.seconds = Number(req.seconds);
+        else if (req.duration !== undefined) req.seconds = Number(req.duration);
       }
       const seconds = req.seconds === undefined ? req.duration : req.seconds;
       if (seconds !== undefined) req.duration = validateKlingDuration(seconds);

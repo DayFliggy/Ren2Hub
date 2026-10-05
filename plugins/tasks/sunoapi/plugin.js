@@ -9,7 +9,7 @@ export const meta = {
     en: "SunoAPI project music and lyrics generation",
     zh: "SunoAPI 项目 音乐与歌词生成",
   },
-  version: "1.1.0+ren2hub.1",
+  version: "1.1.0+ren2hub",
   author: { name: "QuantumNous" },
   channelTypes: [36],
   models: ["suno_music", "suno_lyrics"],
@@ -77,25 +77,14 @@ function actionName(ctx) {
 
 function decodeNativeSubmit(ctx) {
   if (!ctx.body || ctx.body.kind !== "json") throw new Error("JSON body required");
-  if (!ctx.body.value || typeof ctx.body.value !== "object" || Array.isArray(ctx.body.value)) throw new Error("JSON object required");
   const action = actionName(ctx);
   if (action !== "MUSIC" && action !== "LYRICS") throw new Error("invalid_action");
-  const intent = {
+  return {
     kind: "submit",
     model: action === "MUSIC" ? "suno_music" : "suno_lyrics",
     action: action,
     requestBody: ctx.body.value,
   };
-  const origins = continuationOrigins(ctx.body.value, action);
-  if (origins.length) intent.originTaskIds = origins;
-  return intent;
-}
-
-function continuationOrigins(body, action) {
-  const task = trimmed(body.task_id), clip = trimmed(body.continue_clip_id);
-  if (!task && !clip) return [];
-  if (action !== "MUSIC" || !task || !clip) throw new Error("music continuation requires task_id and continue_clip_id");
-  return [task];
 }
 
 function decodeNativeBatch(ctx) {
@@ -108,14 +97,6 @@ function validateAndNormalize(ctx) {
   const body = Object.assign({}, ctx.requestBody || {});
   if (body.make_instrumental === undefined) body.make_instrumental = false;
   const action = actionName(ctx);
-  const origins = continuationOrigins(body, action);
-  if (origins.length) {
-    const origin = (ctx.originTasks || []).find(function (task) { return task.taskId === origins[0]; });
-    if (!origin || String(origin.action).toUpperCase() !== "MUSIC") throw new Error("invalid continuation origin");
-    if (origin.status !== "SUCCESS" || !Array.isArray(origin.data)) throw new Error("continuation origin is unavailable");
-    if (!origin.data.some(function (song) { return song && song.id === body.continue_clip_id; })) throw new Error("unknown continuation clip");
-    body.task_id = origin.upstreamTaskId;
-  }
   if (action === "MUSIC") {
     if (!body.mv) body.mv = "chirp-v3-0";
   } else if (action === "LYRICS") {
@@ -153,6 +134,7 @@ export function parseSubmitResponse(ctx, resp) {
 }
 
 export function extractUsage(ctx) {
+  if (ctx.usagePurpose === "billing_ratios") return null;
   const model = trimmed(ctx.upstreamModel || ctx.model || (ctx.requestBody || {}).model).toLowerCase();
   const action = actionName(ctx).toLowerCase() || (model === "suno_lyrics" ? "lyrics" : "music");
   return { clips: action === "lyrics" ? 1 : 2, action: action };
@@ -179,7 +161,7 @@ export function buildQueryRequest(ctx) {
 
 export function parseBatchResult(ctx, body) {
   if (body.code !== "success") throw new Error(String(body.message || ""));
-  return (body.data || []).map(function (item, index) {
+  return (body.data || []).map(function (item) {
     return {
       taskId: item.task_id || "",
       action: item.action || "",
@@ -189,7 +171,6 @@ export function parseBatchResult(ctx, body) {
       startTime: item.start_time || 0,
       finishTime: item.finish_time || 0,
       data: item.data,
-      usagePath: ["data", index, "data"],
     };
   });
 }
@@ -309,15 +290,11 @@ export const protocols = {
       if (declared === "suno_lyrics") {
         if (!trimmed(requestBody.prompt)) requestBody.prompt = input || trimmed(req.prompt);
         if (!trimmed(requestBody.prompt)) throw new Error("input is required");
-        continuationOrigins(requestBody, "LYRICS");
         return { kind: "submit", model: ctx.model, action: "LYRICS", requestBody: requestBody };
       }
       if (!trimmed(requestBody.gpt_description_prompt)) requestBody.gpt_description_prompt = input || trimmed(req.prompt);
       if (!trimmed(requestBody.gpt_description_prompt) && !trimmed(requestBody.prompt)) throw new Error("input is required");
-      const intent = { kind: "submit", model: ctx.model, action: "MUSIC", requestBody: requestBody };
-      const origins = continuationOrigins(requestBody, "MUSIC");
-      if (origins.length) intent.originTaskIds = origins;
-      return intent;
+      return { kind: "submit", model: ctx.model, action: "MUSIC", requestBody: requestBody };
     },
     renderEvents: function (ctx, task, previousState) {
       const status = String(task.status || "UNKNOWN").toUpperCase();

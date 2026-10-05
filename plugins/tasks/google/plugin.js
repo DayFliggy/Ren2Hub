@@ -7,7 +7,7 @@ export const meta = {
     en: "Google Veo video generation on the Gemini API (text-to-video and image-to-video)",
     zh: "Google Veo 视频生成（文生视频、图生视频），Gemini API 版本",
   },
-  version: "1.0.2+ren2hub.1",
+  version: "1.0.2+ren2hub",
   author: { name: "QuantumNous" },
   channelTypes: [24],
   models: ["veo-3.0-generate-001", "veo-3.0-fast-generate-001", "veo-3.1-generate-preview", "veo-3.1-fast-generate-preview"],
@@ -144,7 +144,7 @@ function converted(ctx) {
   const req = ctx.requestBody || {};
   const metadata = Object.assign({}, req.metadata || {});
   const params = Object.assign({}, metadata);
-  if (Number(req.duration) > 0) params.durationSeconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+  if (Number(req.duration) > 0) params.durationSeconds = Number(req.duration);
   if (!params.resolution && req.size) params.resolution = resolutionForSize(req.size);
   if (!params.aspectRatio && req.size) params.aspectRatio = aspectForSize(req.size);
   if (params.resolution) params.resolution = String(params.resolution).toLowerCase();
@@ -153,55 +153,6 @@ function converted(ctx) {
   const image = imageInput((req.images || [])[0], ctx.files);
   if (image) instance.image = image;
   return { body: { instances: [instance], parameters: params }, action: image ? "image_to_video" : "text_to_video" };
-}
-
-function normalizeVideoRequest(input, files) {
-  const req = Object.assign({}, input);
-  if (req.metadata !== undefined && (!req.metadata || typeof req.metadata !== "object" || Array.isArray(req.metadata))) throw new Error("metadata must be an object");
-  const metadata = {}, seen = {};
-  const names = {durationseconds:"durationSeconds",samplecount:"sampleCount",numberofvideos:"numberOfVideos",resolution:"resolution",generateaudio:"generateAudio"};
-  for (const key of Object.keys(req.metadata || {})) {
-    const name = names[key.toLowerCase()] || key;
-    if (seen[name]) throw new Error("duplicate video parameter aliases");
-    seen[name] = true;
-    metadata[name] = req.metadata[key];
-  }
-  for (const key of ["seconds", "duration"]) {
-    if (req[key] !== undefined && ![4,6,8].includes(Number(req[key]))) throw new Error("seconds must be one of 4, 6, or 8");
-  }
-  const seconds = Number(metadata.durationSeconds !== undefined ? metadata.durationSeconds : req.seconds !== undefined ? req.seconds : req.duration !== undefined ? req.duration : 8);
-  if (![4,6,8].includes(seconds)) throw new Error("durationSeconds must be one of 4, 6, or 8");
-  for (const key of ["sampleCount", "numberOfVideos"]) {
-    if (metadata[key] !== undefined && Number(metadata[key]) !== 1) throw new Error("video generation supports one output");
-    delete metadata[key];
-  }
-  const resolution = String(req.resolution !== undefined ? req.resolution : metadata.resolution !== undefined ? metadata.resolution : resolutionForSize(req.size)).toLowerCase();
-  if (!["720p","1080p","4k"].includes(resolution)) throw new Error("unsupported video resolution");
-  if (metadata.generateAudio !== undefined && typeof metadata.generateAudio !== "boolean") throw new Error("generateAudio must be a boolean");
-  metadata.durationSeconds = seconds;
-  metadata.resolution = resolution;
-  req.duration = seconds;
-  req.resolution = resolution;
-  req.metadata = metadata;
-  if (req.images !== undefined && !Array.isArray(req.images)) throw new Error("images must be an array");
-  const images = (req.images || []).slice();
-  for (const value of [req.input_reference, req.image]) {
-    if (value !== undefined && value !== "") images.push(value);
-  }
-  if (images.length > 1) throw new Error("video input image must use a single source");
-  if (images.length) {
-    const value = images[0];
-    if (value && typeof value === "object" && value.__fileRef) {
-      if (!files.some(function(file) { return file.field === "input_reference"; })) throw new Error("input_reference file is missing");
-    } else {
-      const image = imageInput(value);
-      if (!image || !/^image\/(png|jpeg|gif|webp)$/.test(image.inlineData.mimeType) || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(image.inlineData.data)) throw new Error("invalid input image");
-    }
-    req.images = images;
-  }
-  delete req.input_reference;
-  delete req.image;
-  return req;
 }
 
 function version(ctx) {
@@ -235,7 +186,8 @@ export function parseSubmitResponse(ctx, resp) {
 export function extractUsage(ctx) {
   const req = ctx.requestBody || {};
   const metadata = req.metadata || {};
-  const seconds = utils.decimal.bounded(req.duration === undefined ? 8 : req.duration, 0, 3600, false);
+  let seconds = Number(req.duration);
+  if (!Number.isFinite(seconds) || seconds <= 0) seconds = 8;
   const resolution = String(metadata.resolution || resolutionForSize(req.size) || "720p").toLowerCase();
   return { seconds: seconds, resolution: resolution };
 }
@@ -313,7 +265,7 @@ export const protocols = {
       if (Object.prototype.hasOwnProperty.call(req, "seconds")) requestBody.duration = req.seconds;
       else if (Object.prototype.hasOwnProperty.call(req, "duration")) requestBody.duration = req.duration;
       if (Object.prototype.hasOwnProperty.call(req, "size")) requestBody.size = req.size;
-      return { kind: "submit", model: model, action: images.length ? "image_to_video" : "text_to_video", requestBody: normalizeVideoRequest(requestBody, []) };
+      return { kind: "submit", model: model, action: images.length ? "image_to_video" : "text_to_video", requestBody: requestBody };
     },
     renderEvents: function (ctx, task, previousState) {
       const status = String(task.status || "UNKNOWN").toUpperCase();
@@ -400,12 +352,12 @@ protocols.openai_video = {
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be a JSON object string");
         req.metadata = parsed;
       }
-      if (req.seconds !== undefined) req.seconds = Number(utils.decimal.bounded(req.seconds, 0, 3600, true));
-      else if (req.duration !== undefined) req.seconds = Number(utils.decimal.bounded(req.duration, 0, 3600, true));
+      if (req.seconds !== undefined) req.seconds = Number(req.seconds);
+      else if (req.duration !== undefined) req.seconds = Number(req.duration);
     }
     const seconds = req.seconds === undefined ? req.duration : req.seconds;
     if (seconds !== undefined) {
-      const n = Number(utils.decimal.bounded(seconds, 0, 3600, true));
+      const n = Number(seconds);
       if (n !== 4 && n !== 6 && n !== 8) throw new Error("seconds must be one of 4, 6, or 8");
       req.duration = n;
     }
@@ -415,14 +367,12 @@ protocols.openai_video = {
       if (resolution !== "720p" && resolution !== "1080p" && resolution !== "4k") throw new Error("resolution must be one of 720p, 1080p, or 4k");
     }
     if (hasInputReferenceFile) {
-      if ((req.images && req.images.length) || req.input_reference || req.image) throw new Error("video input image must use a single source");
       req.images = [{ __fileRef: "request_file:input_reference", encoding: "base64", maxBytes: 20971520 }];
     }
-    req = normalizeVideoRequest(req, ctx.body.files || []);
     return {
       kind: "submit",
       model: ctx.model,
-      action: req.images && req.images.length ? "image_to_video" : "text_to_video",
+      action: hasInputReferenceFile || req.input_reference || req.image ? "image_to_video" : "text_to_video",
       requestBody: Object.assign({}, req, { model: ctx.model }),
     };
   },
