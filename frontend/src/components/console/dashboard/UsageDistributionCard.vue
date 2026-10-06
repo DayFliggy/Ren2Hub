@@ -63,6 +63,27 @@ const metricColor = computed(() => {
 const periodLabel = computed(() =>
   t(`dashboard.distribution.periodSummary.${period.value}`)
 )
+
+// From lg, month and quarter sit beside the analytics column. Quarter cells
+// stretch, so its heatmap track grows to the cell cap before the analytics
+// column takes the rest and ends flush with the card's right edge.
+const stageColumns = computed(() => {
+  if (period.value === 'month') return 'lg:grid-cols-[auto_minmax(0,1fr)]'
+  if (period.value === 'quarter') {
+    return 'lg:grid-cols-[minmax(0,max-content)_minmax(14rem,1fr)]'
+  }
+  return ''
+})
+
+const analyticsClasses = computed(() => {
+  if (period.value === 'year') return 'lg:gap-6 lg:pt-2'
+  const side =
+    'lg:flex lg:max-w-[22rem] lg:flex-col lg:justify-center lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0'
+  // Past the cell cap the surplus opens before the divider, never after it.
+  return period.value === 'quarter'
+    ? `${side} lg:w-full lg:justify-self-end`
+    : side
+})
 const metricLabel = computed(
   () =>
     metricOptions.value.find((option) => option.value === metric.value)!.label
@@ -161,7 +182,7 @@ const weekdaySummary = computed(() => {
 
       <div
         class="usage-stage mt-3 grid grow content-center gap-3"
-        :class="{ 'lg:grid-cols-[auto_minmax(0,1fr)]': period !== 'year' }"
+        :class="stageColumns"
         data-usage-stage
       >
         <UsageHeatmapGrid
@@ -175,11 +196,7 @@ const weekdaySummary = computed(() => {
 
         <aside
           class="grid gap-3 border-t border-[var(--border-subtle)] pt-3 min-[360px]:grid-cols-2"
-          :class="
-            period === 'year'
-              ? 'lg:gap-6 lg:pt-2'
-              : 'lg:flex lg:max-w-[22rem] lg:flex-col lg:justify-center lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0'
-          "
+          :class="analyticsClasses"
           :data-usage-analytics="period === 'year' ? 'bottom' : 'side'"
         >
           <UsageSegmentBar
@@ -237,7 +254,7 @@ const weekdaySummary = computed(() => {
 /*
  * From lg the overview row aligns this card with BalanceCard, so the stage
  * reserves one height that every period fits inside (month 162px, quarter
- * 159px, year 163px at most); surplus row height is centred by the grid.
+ * 154px, year 163px at most); surplus row height is centred by the grid.
  */
 @media (min-width: 1024px) {
   .usage-stage {

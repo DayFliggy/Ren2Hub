@@ -190,27 +190,61 @@ test('month calendar keeps roomy desktop cells and compact mobile cells', async 
   await assertNoHorizontalOverflow(page)
 })
 
-test('quarter heatmap and side analytics use the expanded desktop layout', async ({
+function quarterGeometry(card: Locator) {
+  return card.evaluate((element) => {
+    const cells = [...element.querySelectorAll('.usage-dense-cell')].map(
+      (cell) => cell.getBoundingClientRect()
+    )
+    const grid = element.querySelector('.usage-dense-content')
+    const analytics = element.querySelector('[data-usage-analytics]')
+    const content = element.querySelector('[data-usage-content]')
+    if (!cells[0] || !grid || !analytics || !content) {
+      throw new Error('quarter layout missing')
+    }
+    const sorted = (values: number[]) =>
+      [...new Set(values.map((value) => Math.round(value * 10) / 10))].sort(
+        (left, right) => left - right
+      )
+    const lefts = sorted(cells.map((cell) => cell.left))
+    const tops = sorted(cells.map((cell) => cell.top))
+    const first = cells[0]
+    const gridRect = grid.getBoundingClientRect()
+    const analyticsRect = analytics.getBoundingClientRect()
+    return {
+      cellWidth: first.width,
+      cellHeight: first.height,
+      columnGap: lefts[1]! - lefts[0]! - first.width,
+      rowGap: tops[1]! - tops[0]! - first.height,
+      gridToAnalytics: analyticsRect.left - gridRect.right,
+      analyticsWidth: analyticsRect.width,
+      analyticsRightInset:
+        content.getBoundingClientRect().right - analyticsRect.right,
+    }
+  })
+}
+
+test('quarter heatmap fills the width beside right-aligned analytics', async ({
   page,
 }) => {
   const card = page.locator('[data-usage-distribution]')
   await periodOption(card, 'quarter').click()
 
-  const desktop = await card.evaluate((element) => {
-    const cell = element.querySelector('.usage-dense-cell')
-    const analytics = element.querySelector('[data-usage-analytics="side"]')
-    if (!cell || !analytics) throw new Error('quarter layout missing')
-    const cellRect = cell.getBoundingClientRect()
-    return {
-      cellWidth: cellRect.width,
-      cellHeight: cellRect.height,
-      analyticsWidth: analytics.getBoundingClientRect().width,
-    }
-  })
-  expect(desktop.cellWidth).toBe(19)
-  expect(desktop.cellHeight).toBe(19)
-  // The analytics column is capped so surplus width sits at the card edge.
-  expect(desktop.analyticsWidth).toBeLessThanOrEqual(352)
+  const desktop = await quarterGeometry(card)
+  expect(desktop.cellHeight).toBe(16)
+  expect(desktop.cellWidth).toBeGreaterThan(desktop.cellHeight)
+  expect(desktop.columnGap).toBeCloseTo(5, 0)
+  expect(desktop.rowGap).toBeCloseTo(4, 0)
+  // Below the cell cap the weeks reach the stage gap before the divider.
+  expect(desktop.gridToAnalytics).toBeLessThanOrEqual(13)
+  expect(Math.abs(desktop.analyticsRightInset)).toBeLessThan(1)
+
+  // Past the cap the cells stop at twice their height and the analytics
+  // column still ends at the card edge instead of leaving a gap after it.
+  await page.setViewportSize({ width: 1279, height: 900 })
+  const capped = await quarterGeometry(card)
+  expect(capped.cellWidth).toBe(32)
+  expect(capped.analyticsWidth).toBeLessThanOrEqual(352)
+  expect(Math.abs(capped.analyticsRightInset)).toBeLessThan(1)
 
   await page.setViewportSize({ width: 390, height: 844 })
   const mobileCell = await card
@@ -220,8 +254,8 @@ test('quarter heatmap and side analytics use the expanded desktop layout', async
       const rect = element.getBoundingClientRect()
       return { width: rect.width, height: rect.height }
     })
-  expect(mobileCell.width).toBe(mobileCell.height)
-  expect(mobileCell.width).toBeGreaterThanOrEqual(14)
+  expect(mobileCell.height).toBe(14)
+  expect(mobileCell.width).toBeGreaterThanOrEqual(mobileCell.height)
   expect(
     await card
       .locator('[data-usage-scroll]')
