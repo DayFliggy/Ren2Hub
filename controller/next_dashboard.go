@@ -82,8 +82,16 @@ type nextDashboardBandwidthSeries struct {
 	Down []float64 `json:"down"`
 }
 
+type nextDashboardLoadAverage struct {
+	One     float64 `json:"one"`
+	Five    float64 `json:"five"`
+	Fifteen float64 `json:"fifteen"`
+}
+
 type nextDashboardSystemStatus struct {
 	CPUPercent        *float64                      `json:"cpu_percent"`
+	CPUCores          *int                          `json:"cpu_cores"`
+	LoadAverage       *nextDashboardLoadAverage     `json:"load_average"`
 	MemoryUsedGB      *float64                      `json:"memory_used_gb"`
 	MemoryTotalGB     *float64                      `json:"memory_total_gb"`
 	BandwidthUpMbps   *float64                      `json:"bandwidth_up_mbps"`
@@ -332,6 +340,17 @@ func buildNextDashboardSystemStatus(status common.SystemStatus, successRate *flo
 	}
 	if status.CPUAvailable {
 		response.CPUPercent = float64Pointer(status.CPUUsage)
+	}
+	if status.CPUCores > 0 {
+		cores := status.CPUCores
+		response.CPUCores = &cores
+	}
+	if status.LoadAvailable {
+		response.LoadAverage = &nextDashboardLoadAverage{
+			One:     status.LoadAverage.One,
+			Five:    status.LoadAverage.Five,
+			Fifteen: status.LoadAverage.Fifteen,
+		}
 	}
 	if status.MemoryAvailable {
 		response.MemoryUsedGB = bytesToGBPointer(status.MemoryUsedBytes)

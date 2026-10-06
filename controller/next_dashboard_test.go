@@ -227,6 +227,8 @@ func TestNextDashboardSystemStatusLeavesUnavailableFieldsNull(t *testing.T) {
 		NextGetDashboardSystemStatus,
 	))
 	assert.Nil(t, response.CPUPercent)
+	assert.Nil(t, response.CPUCores)
+	assert.Nil(t, response.LoadAverage)
 	assert.Nil(t, response.MemoryUsedGB)
 	assert.Nil(t, response.BandwidthUpMbps)
 	assert.Nil(t, response.BandwidthSeries)
@@ -263,6 +265,30 @@ func TestBuildNextDashboardSystemStatusReturnsAvailableApplicationTraffic(t *tes
 	assert.EqualValues(t, []float64{0, 1.25}, response.BandwidthSeries.Up)
 	assert.EqualValues(t, []float64{0, 6.5}, response.BandwidthSeries.Down)
 	assert.EqualValues(t, &successRate, response.APISuccessRate)
+}
+
+func TestBuildNextDashboardSystemStatusReportsCPUCapacityAndLoad(t *testing.T) {
+	response := buildNextDashboardSystemStatus(common.SystemStatus{
+		CPUUsage:      12.5,
+		CPUAvailable:  true,
+		CPUCores:      4,
+		LoadAverage:   common.LoadAverage{One: 0.38, Five: 0.2, Fifteen: 0.18},
+		LoadAvailable: true,
+	}, nil)
+
+	// The console reads these exact keys; a renamed tag would silently blank the cells.
+	body, err := common.Marshal(response)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `"cpu_cores":4`)
+	assert.Contains(t, string(body), `"load_average":{"one":0.38,"five":0.2,"fifteen":0.18}`)
+
+	unavailable := buildNextDashboardSystemStatus(common.SystemStatus{
+		CPUUsage:     12.5,
+		CPUAvailable: true,
+		LoadAverage:  common.LoadAverage{One: 9},
+	}, nil)
+	assert.Nil(t, unavailable.CPUCores)
+	assert.Nil(t, unavailable.LoadAverage)
 }
 
 func TestNextAdminDashboardRoutesExposeOnlyPersistedMetrics(t *testing.T) {

@@ -7,6 +7,12 @@ import (
 	"unsafe"
 )
 
+// sampleLoadAverage reports no load average: Windows has no kernel run-queue
+// average, and gopsutil's emulation starts a goroutine that cannot be stopped.
+func sampleLoadAverage() (LoadAverage, bool) {
+	return LoadAverage{}, false
+}
+
 // GetDiskSpaceInfo 获取缓存目录所在磁盘的空间信息 (Windows)
 func GetDiskSpaceInfo() DiskSpaceInfo {
 	info := DiskSpaceInfo{}

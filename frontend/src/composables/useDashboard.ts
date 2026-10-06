@@ -50,6 +50,10 @@ export interface TokenTrendPoint {
 
 export interface SystemMetrics {
   cpu_percent: number | null
+  /** Host logical CPUs — the scale a load average is read against. */
+  cpu_cores: number | null
+  /** Host run-queue averages over 1 / 5 / 15 minutes; null off Unix hosts. */
+  load_average: { one: number; five: number; fifteen: number } | null
   memory_used_gb: number | null
   memory_total_gb: number | null
   bandwidth_up_mbps: number | null

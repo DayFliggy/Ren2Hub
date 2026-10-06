@@ -5,6 +5,9 @@ import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 
 import ConsoleCard from '@/components/common/ConsoleCard.vue'
+import CpuLoadCells, {
+  type CpuLoadCell,
+} from '@/components/console/dashboard/CpuLoadCells.vue'
 import MiniRing from '@/components/console/dashboard/MiniRing.vue'
 import MiniSparkline from '@/components/console/dashboard/MiniSparkline.vue'
 import PrecisionTickDial from '@/components/console/dashboard/PrecisionTickDial.vue'
@@ -158,6 +161,44 @@ function normalizeSeries(
   return up.length >= 2 ? { up, down } : undefined
 }
 
+function cpuCoreCount(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : null
+}
+
+/** Two decimals as uptime prints them; fewer once the figure grows, so a
+ * reading still fits the stretched cell. */
+function formatLoad(value: number): string {
+  if (value >= 100) return value.toFixed(0)
+  if (value >= 10) return value.toFixed(1)
+  return value.toFixed(2)
+}
+
+/** 1 / 5 / 15 min cells, each measured against the core count with the same
+ * four-tier colours as CPU usage. */
+function buildLoadCells(
+  load: SystemMetrics['load_average'] | undefined,
+  cores: number | null
+): CpuLoadCell[] {
+  const readings = [load?.one, load?.five, load?.fifteen]
+  return [1, 5, 15].map((minutes, index) => {
+    const value = finiteNonNegative(readings[index])
+    if (value === null) {
+      const color = 'var(--text-tertiary)'
+      return { minutes, value: null, fill: null, color, overloaded: false }
+    }
+    const fill = cores === null ? null : value / cores
+    return {
+      minutes,
+      value: formatLoad(value),
+      fill,
+      color: resourceLoadColor(fill === null ? null : fill * 100),
+      overloaded: fill !== null && fill > 1,
+    }
+  })
+}
+
 interface MetricTile {
   key: 'cpu' | 'memory' | 'bandwidth' | 'disk'
   label: string
@@ -168,6 +209,8 @@ interface MetricTile {
   bandwidth?: { up: string; down: string }
   memory?: { used: string; total: string }
   disk?: { used: string; total: string }
+  /** CPU only: host load per averaging window and the core count it scales to. */
+  load?: { cells: CpuLoadCell[]; cores: number | null }
   /** 0-100 usage against a ceiling; null when the metric is unavailable. */
   percent: number | null
   /** Shared-scale throughput history, for metrics with no ceiling. */
@@ -182,6 +225,7 @@ const tiles = computed<MetricTile[]>(() => {
   const diskUsed = finiteNonNegative(metrics?.disk_used_gb)
   const diskTotal = finiteNonNegative(metrics?.disk_total_gb)
   const cpuPercent = clampPercent(metrics?.cpu_percent)
+  const cpuCores = cpuCoreCount(metrics?.cpu_cores)
   const memoryPercent = ratioPercent(memoryUsed, memoryTotal)
   const diskPercent = ratioPercent(diskUsed, diskTotal)
   const bandwidthUp = finiteNonNegative(metrics?.bandwidth_up_mbps)
@@ -201,6 +245,10 @@ const tiles = computed<MetricTile[]>(() => {
       icon: 'M4 4h16v16H4zM9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3M9 9h6v6H9z',
       value: cpuPercent === null ? '--' : formatMetric(cpuPercent),
       unit: cpuPercent === null ? '' : '%',
+      load: {
+        cells: buildLoadCells(metrics?.load_average, cpuCores),
+        cores: cpuCores,
+      },
       percent: cpuPercent,
       color: resourceLoadColor(cpuPercent),
     },
@@ -255,19 +303,21 @@ const tiles = computed<MetricTile[]>(() => {
   ]
 })
 
-/** Semicircle geometry for the CPU tile. */
+/**
+ * Semicircle geometry for the CPU tile; null while CPU usage is unknown. The
+ * needle stops well short of the arc's inner edge (radius 22) so it never
+ * touches the progress cap.
+ */
+const CPU_NEEDLE_LENGTH = 18
+
 const cpuGauge = computed(() => {
   const percent = tiles.value[0]?.percent ?? null
-  const arcLength = Math.PI * 24
-  if (percent === null) {
-    return { percent: null, dashOffset: arcLength, needleX: 12, needleY: 32 }
-  }
+  if (percent === null) return null
   const angle = Math.PI - (percent / 100) * Math.PI
   return {
-    percent,
-    dashOffset: arcLength * (1 - percent / 100),
-    needleX: 32 + 20 * Math.cos(angle),
-    needleY: 32 - 20 * Math.sin(angle),
+    dashOffset: Math.PI * 24 * (1 - percent / 100),
+    needleX: 32 + CPU_NEEDLE_LENGTH * Math.cos(angle),
+    needleY: 32 - CPU_NEEDLE_LENGTH * Math.sin(angle),
   }
 })
 
@@ -362,7 +412,7 @@ const successColor = computed(() => rateColor(successRate.value))
           data-system-status-tile
           :data-metric="tile.key"
         >
-          <div class="flex items-center justify-between gap-1">
+          <div class="flex min-h-5 items-center justify-between gap-1">
             <p
               class="flex min-w-0 items-center gap-1 text-[11px] text-[var(--text-tertiary)]"
             >
@@ -389,9 +439,13 @@ const successColor = computed(() => rateColor(successRate.value))
               </svg>
               <span class="truncate">{{ tile.label }}</span>
             </p>
+            <!-- CPU's headline is already the percentage; a rounded badge would
+                 repeat it and could disagree with it (4.6% vs 5%). Its slot holds
+                 the load cells instead. -->
             <span
-              v-if="tile.percent !== null"
+              v-if="tile.percent !== null && tile.key !== 'cpu'"
               class="shrink-0 rounded-md px-1 py-0.5 font-mono text-[10px] font-semibold tabular-nums sm:px-1.5"
+              data-percent-badge
               :style="{
                 color: tile.color,
                 background: `color-mix(in srgb, ${tile.color} 14%, transparent)`,
@@ -399,6 +453,11 @@ const successColor = computed(() => rateColor(successRate.value))
             >
               {{ Math.round(tile.percent) }}%
             </span>
+            <CpuLoadCells
+              v-else-if="tile.load"
+              :cells="tile.load.cells"
+              :cores="tile.load.cores"
+            />
           </div>
 
           <div
@@ -406,16 +465,19 @@ const successColor = computed(() => rateColor(successRate.value))
             class="mt-auto flex items-end justify-between gap-1.5 pt-0.5"
             data-cpu-gauge
           >
-            <p class="flex min-w-0 items-baseline gap-0.5 whitespace-nowrap">
+            <p
+              class="flex min-w-0 items-baseline gap-0.5 whitespace-nowrap font-mono sm:gap-1"
+            >
               <span
-                class="display-number whitespace-nowrap text-xl leading-none tabular-nums sm:text-2xl"
+                class="display-number whitespace-nowrap text-lg leading-none sm:text-2xl"
                 :style="{ color: tile.color }"
+                data-metric-value
               >
                 {{ tile.value }}
               </span>
               <span
                 v-if="tile.unit"
-                class="text-[10px] text-[var(--text-tertiary)]"
+                class="text-[10px] font-medium text-[var(--text-tertiary)]"
               >
                 {{ tile.unit }}
               </span>
@@ -432,27 +494,40 @@ const successColor = computed(() => rateColor(successRate.value))
                 stroke-width="4"
                 stroke-linecap="round"
               />
+              <!-- The coloured arc carries the reading; the needle and pivot stay
+                   secondary so they do not outweigh a low-load arc. -->
+              <template v-if="cpuGauge">
+                <path
+                  d="M8 32a24 24 0 0 1 48 0"
+                  :stroke="tile.color"
+                  stroke-width="4"
+                  stroke-linecap="round"
+                  :stroke-dasharray="Math.PI * 24"
+                  :stroke-dashoffset="cpuGauge.dashOffset"
+                  data-cpu-gauge-active
+                />
+                <line
+                  x1="32"
+                  y1="32"
+                  :x2="cpuGauge.needleX"
+                  :y2="cpuGauge.needleY"
+                  stroke="var(--text-secondary)"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  data-cpu-gauge-needle
+                />
+                <circle cx="32" cy="32" r="2.25" fill="var(--text-secondary)" />
+              </template>
+              <!-- Same unknown-state language as the disk ring: dashed, no pivot. -->
               <path
-                v-if="cpuGauge.percent !== null"
+                v-else
                 d="M8 32a24 24 0 0 1 48 0"
                 :stroke="tile.color"
                 stroke-width="4"
-                stroke-linecap="round"
-                :stroke-dasharray="Math.PI * 24"
-                :stroke-dashoffset="cpuGauge.dashOffset"
-                data-cpu-gauge-active
+                stroke-dasharray="3 4"
+                opacity="0.7"
+                data-cpu-gauge-unknown
               />
-              <line
-                v-if="cpuGauge.percent !== null"
-                x1="32"
-                y1="32"
-                :x2="cpuGauge.needleX"
-                :y2="cpuGauge.needleY"
-                stroke="var(--text-primary)"
-                stroke-width="2.2"
-                stroke-linecap="round"
-              />
-              <circle cx="32" cy="32" r="3" fill="var(--text-primary)" />
             </svg>
           </div>
 
@@ -462,8 +537,9 @@ const successColor = computed(() => rateColor(successRate.value))
               class="mt-auto flex items-baseline gap-0.5 font-mono leading-none whitespace-nowrap pt-0.5 sm:gap-1"
             >
               <span
-                class="text-lg font-bold leading-none tabular-nums tracking-tight sm:text-2xl"
+                class="display-number text-lg leading-none sm:text-2xl"
                 :style="{ color: tile.color }"
+                data-metric-value
               >
                 {{ tile.memory.used }}
               </span>
@@ -562,8 +638,9 @@ const successColor = computed(() => rateColor(successRate.value))
             <div v-if="tile.disk" class="flex min-w-0 flex-col justify-center">
               <div class="flex items-baseline gap-0.5 leading-none sm:gap-1">
                 <span
-                  class="font-mono text-lg font-bold leading-none tabular-nums tracking-tight sm:text-2xl"
+                  class="display-number font-mono text-lg leading-none sm:text-2xl"
                   :style="{ color: tile.color }"
+                  data-metric-value
                 >
                   {{ tile.disk.used }}
                 </span>

@@ -32,6 +32,62 @@ async function expectMetricValuesToFit(card: Locator): Promise<void> {
   }
 }
 
+/** Hovering a load cell stretches it to show its figure; leaving restores it. */
+async function expectLoadCellsStretchOnHover(card: Locator): Promise<void> {
+  const tile = card.locator('[data-metric="cpu"]')
+  const cells = tile.locator('[data-cpu-load] [data-minutes]')
+  await expect(cells).toHaveCount(3)
+  const first = cells.first()
+  const width = () => first.evaluate((el) => el.getBoundingClientRect().width)
+  const restWidth = await width()
+
+  await first.hover()
+  await expect.poll(width).toBeGreaterThan(restWidth + 16)
+  const value = first.locator('.cpu-load__value')
+  await expect(value).toHaveText('12.3')
+  await expect
+    .poll(() => value.evaluate((el) => getComputedStyle(el).opacity))
+    .toBe('1')
+  // The stretched cell keeps clear of the label and inside the tile padding.
+  const fits = await tile.evaluate((node) => {
+    const tileRect = node.getBoundingClientRect()
+    const padding = parseFloat(getComputedStyle(node).paddingRight)
+    const label = node.querySelector('p')!.getBoundingClientRect()
+    const group = node.querySelector('[data-cpu-load]')!.getBoundingClientRect()
+    const cell = node.querySelector('[data-minutes]') as HTMLElement
+    const figure = cell.querySelector('.cpu-load__value') as HTMLElement
+    return (
+      group.left >= label.right + 4 &&
+      group.right <= tileRect.right - padding + 0.5 &&
+      figure.scrollWidth <= cell.clientWidth
+    )
+  })
+  expect(fits).toBe(true)
+
+  await card.page().mouse.move(0, 0)
+  await expect.poll(width).toBe(restWidth)
+}
+
+/** CPU, memory and disk headlines share one face, size and theme-driven weight. */
+async function expectUnifiedHeadlineNumbers(card: Locator): Promise<void> {
+  const result = await card
+    .locator('[data-metric-value]')
+    .evaluateAll((nodes) => ({
+      styles: nodes.map((node) => {
+        const style = getComputedStyle(node)
+        return [style.fontFamily, style.fontWeight, style.fontSize].join('|')
+      }),
+      weights: nodes.map((node) => getComputedStyle(node).fontWeight),
+      themeWeight: getComputedStyle(document.documentElement)
+        .getPropertyValue('--display-number-weight')
+        .trim(),
+    }))
+  expect(result.styles).toHaveLength(3)
+  expect(new Set(result.styles).size).toBe(1)
+  expect(result.styles[0]).toContain('JetBrainsMono')
+  expect(result.weights[0]).toBe(result.themeWeight)
+}
+
 async function expectStableTileHeights(card: Locator): Promise<void> {
   const heights = await card
     .locator('[data-system-status-tile]')
@@ -61,6 +117,8 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
     await expect(card).toContainText('↓420 bps')
     await expectMetricValuesToFit(card)
     await expectStableTileHeights(card)
+    await expectUnifiedHeadlineNumbers(card)
+    await expectLoadCellsStretchOnHover(card)
     await assertNoHorizontalOverflow(page)
 
     await page.setViewportSize({ width: 390, height: 844 })
@@ -70,6 +128,8 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
     await expect(card).toContainText('↓420 bps')
     await expectMetricValuesToFit(card)
     await expectStableTileHeights(card)
+    await expectUnifiedHeadlineNumbers(card)
+    await expectLoadCellsStretchOnHover(card)
     await assertNoHorizontalOverflow(page)
   })
 }

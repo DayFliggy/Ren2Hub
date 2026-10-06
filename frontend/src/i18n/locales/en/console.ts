@@ -485,6 +485,11 @@ export default {
       title: 'System status',
       apiService: 'API service',
       cpu: 'CPU',
+      loadAverage: 'Load average',
+      loadCell:
+        '{minutes}-minute load average {value} across {cores} core | {minutes}-minute load average {value} across {cores} cores',
+      loadCellNoCores: '{minutes}-minute load average {value}',
+      loadCellUnknown: '{minutes}-minute load average unavailable',
       memory: 'Memory',
       bandwidth: 'App traffic',
       disk: 'Disk',

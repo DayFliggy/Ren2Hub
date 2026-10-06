@@ -585,6 +585,8 @@ export async function configureStablePage(
       '/api/next/dashboard/system-status',
       {
         cpu_percent: 4.627766599,
+        cpu_cores: 4,
+        load_average: { one: 12.34, five: 10.08, fifteen: 9.876 },
         memory_used_gb: 5.2,
         memory_total_gb: 16,
         bandwidth_up_mbps: 0.45,

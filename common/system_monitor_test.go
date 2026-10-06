@@ -1,12 +1,38 @@
 package common
 
 import (
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestUpdateSystemStatusSamplesCPUCoresAndPlatformLoad(t *testing.T) {
+	original := GetPerformanceMonitorConfig()
+	t.Cleanup(func() {
+		SetPerformanceMonitorConfig(original)
+		resetSystemMonitorState()
+	})
+	SetPerformanceMonitorConfig(PerformanceMonitorConfig{
+		Enabled:         true,
+		CPUThreshold:    original.CPUThreshold,
+		MemoryThreshold: original.MemoryThreshold,
+		DiskThreshold:   original.DiskThreshold,
+	})
+
+	updateSystemStatus()
+	status := GetSystemStatus()
+
+	assert.Positive(t, status.CPUCores)
+	// Windows has no kernel load average; reporting zeros there would read as idle.
+	assert.Equal(t, runtime.GOOS != "windows", status.LoadAvailable)
+	if status.LoadAvailable {
+		assert.GreaterOrEqual(t, status.LoadAverage.One, 0.0)
+		assert.GreaterOrEqual(t, status.LoadAverage.Fifteen, 0.0)
+	}
+}
 
 func TestPerformanceMonitorToggleResetsCachedStateAndBandwidthBaseline(t *testing.T) {
 	original := GetPerformanceMonitorConfig()

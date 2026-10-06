@@ -26,11 +26,24 @@ func DiskSpacePath() string {
 	return os.TempDir()
 }
 
+// LoadAverage is the kernel run-queue average over 1, 5 and 15 minutes.
+type LoadAverage struct {
+	One     float64
+	Five    float64
+	Fifteen float64
+}
+
 // SystemStatus is the latest sampled host state. Availability flags prevent a
 // zero-valued failed sample from being presented as a real measurement.
+// CPU usage, core count and load average are host-wide: /proc/stat,
+// /proc/cpuinfo and /proc/loadavg are not namespaced, so a container reports
+// its host's figures rather than its own cgroup share.
 type SystemStatus struct {
 	CPUUsage         float64
 	CPUAvailable     bool
+	CPUCores         int
+	LoadAverage      LoadAverage
+	LoadAvailable    bool
 	MemoryUsage      float64
 	MemoryAvailable  bool
 	MemoryUsedBytes  uint64
@@ -99,6 +112,10 @@ func updateSystemStatus() {
 		status.CPUUsage = percents[0]
 		status.CPUAvailable = true
 	}
+	if cores, err := cpu.Counts(true); err == nil && cores > 0 {
+		status.CPUCores = cores
+	}
+	status.LoadAverage, status.LoadAvailable = sampleLoadAverage()
 
 	if memInfo, err := mem.VirtualMemory(); err == nil {
 		status.MemoryUsage = memInfo.UsedPercent

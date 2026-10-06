@@ -20,6 +20,8 @@ beforeEach(async () => {
 function metrics(): SystemMetrics {
   return {
     cpu_percent: 34,
+    cpu_cores: 4,
+    load_average: { one: 0.38, five: 0.2, fifteen: 0.18 },
     memory_used_gb: 5.2,
     memory_total_gb: 16,
     bandwidth_up_mbps: 2.1,
@@ -85,6 +87,8 @@ describe('SystemStatusCard', () => {
       props: {
         metrics: {
           cpu_percent: null,
+          cpu_cores: null,
+          load_average: null,
           memory_used_gb: null,
           memory_total_gb: null,
           bandwidth_up_mbps: null,
@@ -165,6 +169,91 @@ describe('SystemStatusCard', () => {
     expect(bandwidth!.find('.pencil-progress').exists()).toBe(false)
     expect(bandwidth!.find('[data-bandwidth-sparkline]').exists()).toBe(true)
     expect(bandwidth!.find('[data-bandwidth-icon]').exists()).toBe(true)
+  })
+
+  it('shows the CPU reading once instead of repeating it in a rounded badge', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(SystemStatusCard, {
+      props: { metrics: { ...metrics(), cpu_percent: 4.627766599 } },
+      global: { plugins: [pinia, i18n] },
+    })
+
+    const [cpu, memory, , disk] = wrapper.findAll('[data-system-status-tile]')
+    expect(cpu!.find('[data-percent-badge]').exists()).toBe(false)
+    expect(cpu!.text().match(/%/g)).toHaveLength(1)
+    expect(cpu!.text()).toContain('4.6%')
+    // Memory and disk headlines are in GB, so their percentage badge adds information.
+    expect(memory!.find('[data-percent-badge]').exists()).toBe(true)
+    expect(disk!.find('[data-percent-badge]').exists()).toBe(true)
+  })
+
+  it('colours each load cell by its share of the host cores', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(SystemStatusCard, {
+      props: {
+        metrics: {
+          ...metrics(),
+          load_average: { one: 6, five: 2.5, fifteen: 0.4 },
+        },
+      },
+      global: { plugins: [pinia, i18n] },
+    })
+
+    const cpu = wrapper.findAll('[data-system-status-tile]')[0]!
+    const cells = cpu.findAll('[data-cpu-load] [data-minutes]')
+    expect(cells).toHaveLength(3)
+    // 6 / 4 queues work, 2.5 / 4 = 62.5% sits in the attention tier, 0.4 / 4 is normal.
+    expect(cells[0]!.attributes('style')).toContain(
+      '--tier: var(--status-danger)'
+    )
+    expect(cells[0]!.find('.cpu-load__value--over').text()).toBe('6.00')
+    expect(cells[1]!.attributes('style')).toContain('--tier: var(--accent)')
+    expect(cells[2]!.attributes('style')).toContain('--tier: var(--glow)')
+    expect(cells[2]!.text()).toBe('0.40')
+  })
+
+  it('marks load windows unknown instead of drawing zero load', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(SystemStatusCard, {
+      props: {
+        metrics: {
+          ...metrics(),
+          cpu_cores: 2.5,
+          load_average: { one: 0.4, five: Number.NaN, fifteen: 0.1 },
+        },
+      },
+      global: { plugins: [pinia, i18n] },
+    })
+
+    const cells = wrapper.findAll('[data-cpu-load] [data-minutes]')
+    // A fractional core count is invalid, so no cell claims a share of capacity.
+    expect(wrapper.findAll('[data-cpu-load-fill]')).toHaveLength(0)
+    expect(cells[0]!.attributes('aria-label')).toBe(
+      '1-minute load average 0.40'
+    )
+    expect(cells[1]!.attributes('data-unknown')).toBe('')
+    expect(cells[1]!.text()).toBe('--')
+  })
+
+  it('draws an unknown CPU gauge without a needle or pivot', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(SystemStatusCard, {
+      props: { metrics: { ...metrics(), cpu_percent: null } },
+      global: { plugins: [pinia, i18n] },
+    })
+
+    const gauge = wrapper
+      .findAll('[data-system-status-tile]')[0]!
+      .find('[data-cpu-gauge]')
+    expect(gauge.text()).toContain('--')
+    expect(gauge.find('[data-cpu-gauge-unknown]').exists()).toBe(true)
+    expect(gauge.find('[data-cpu-gauge-active]').exists()).toBe(false)
+    expect(gauge.find('[data-cpu-gauge-needle]').exists()).toBe(false)
+    expect(gauge.find('circle').exists()).toBe(false)
   })
 
   it('charts both bandwidth directions on one shared scale', () => {
