@@ -29,7 +29,7 @@
 
 ## 验证证据
 
-本机证据根为 `%LOCALAPPDATA%/RenAI/AuditRuns/20261002-audit-fixes-1e738bd7`。其中测试数据库环境文件是私密执行材料，报告不复制连接信息。
+本机证据根为 `%LOCALAPPDATA%/RenAI/AuditRuns/20261002-audit-fixes-1e738bd7`，已于 2026-10-06 删除，不再可访问。其中测试数据库环境文件是私密执行材料，报告不复制连接信息。
 
 | 范围 | 结果与证据 |
 | --- | --- |
