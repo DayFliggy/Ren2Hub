@@ -120,6 +120,31 @@ func TestBaseModelNameStripsModifiers(t *testing.T) {
 	require.Equal(t, "qwen3-max", BaseModelName("qwen3-max@thinking:on@temperature:0.2"))
 }
 
+// The routing, mapping and billing base name follows the provider's suffix
+// adapter toggle for effort suffixes as well as thinking suffixes (NewAPI
+// c6bac617): a disabled adapter keeps the literal model name.
+func TestBaseModelNameFollowsSuffixAdapterToggles(t *testing.T) {
+	claude, gemini := model_setting.GetClaudeSettings(), model_setting.GetGeminiSettings()
+	claudeEnabled, geminiEnabled := claude.ThinkingAdapterEnabled, gemini.ThinkingAdapterEnabled
+	t.Cleanup(func() { claude.ThinkingAdapterEnabled, gemini.ThinkingAdapterEnabled = claudeEnabled, geminiEnabled })
+	for _, test := range []struct {
+		name            string
+		enabled         bool
+		model, wantBase string
+	}{
+		{"gemini effort, adapter off", false, "gemini-2.5-flash-high", "gemini-2.5-flash-high"},
+		{"gemini thinking, adapter off", false, "gemini-2.5-flash-thinking", "gemini-2.5-flash-thinking"},
+		{"gemini effort, adapter on", true, "gemini-2.5-flash-high", "gemini-2.5-flash"},
+		{"claude effort, adapter off", false, "claude-sonnet-4-5-low", "claude-sonnet-4-5-low"},
+		{"claude effort, adapter on", true, "claude-sonnet-4-5-low", "claude-sonnet-4-5"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			claude.ThinkingAdapterEnabled, gemini.ThinkingAdapterEnabled = test.enabled, test.enabled
+			assert.Equal(t, test.wantBase, BaseModelName(test.model))
+		})
+	}
+}
+
 func TestExemptAtNameIsOpaqueForBillingIdentity(t *testing.T) {
 	settings := model_setting.GetGlobalSettings()
 	original := append([]string(nil), settings.ThinkingModelBlacklist...)
