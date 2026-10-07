@@ -348,6 +348,9 @@ func UnlockOrder(tradeNo string) {
 func EpayNotify(c *gin.Context) {
 	params, err := epay.ParseNotification(c.Request)
 	if err != nil {
+		// Parameter values are never logged; a rejected genuine callback leaves
+		// the order pending for administrator reconciliation.
+		logger.LogWarn(c.Request.Context(), "易支付回调解析拒绝 method="+c.Request.Method+" reason="+err.Error())
 		c.String(http.StatusBadRequest, "fail")
 		return
 	}

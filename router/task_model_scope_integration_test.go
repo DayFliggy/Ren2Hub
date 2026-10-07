@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,7 +39,9 @@ func TestTaskReadsHonorTokenModelLimitsAcrossProtocols(t *testing.T) {
 			require.NoError(t, db.Create(token).Error)
 			channel := &model.Channel{Type: constant.ChannelTypeMidjourney, Status: common.ChannelStatusEnabled, Key: "test-key", Name: "scope", Models: "mj_imagine", Group: "default"}
 			require.NoError(t, db.Create(channel).Error)
-			version, err := model.GetTaskPluginVersion("sunoapi", "1.1.0")
+			sunoapi, found := jsplugin.DefaultRegistry.Get("sunoapi")
+			require.True(t, found)
+			version, err := model.GetTaskPluginVersion("sunoapi", sunoapi.Meta.Version)
 			require.NoError(t, err)
 			require.NoError(t, db.Create(&model.Task{UserId: user.Id, TaskID: "task-scope", Platform: constant.TaskPlatform("sunoapi"), Action: "MUSIC", Status: model.TaskStatusSuccess, Properties: model.Properties{OriginModelName: "suno_music"}, PrivateData: model.TaskPrivateData{TokenId: token.Id, PluginRef: &model.TaskPluginRef{Key: version.Key, Version: version.Version, SourceHash: version.SourceHash}}}).Error)
 			require.NoError(t, db.Create(&model.Midjourney{UserId: user.Id, MjId: "task-scope", Action: constant.MjActionImagine, Prompt: "protected", ChannelId: channel.Id, Status: "SUCCESS", PrivateData: model.TaskPrivateData{TokenId: token.Id}}).Error)
