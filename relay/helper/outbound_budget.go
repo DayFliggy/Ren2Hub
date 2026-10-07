@@ -12,7 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/tokenkit"
 )
 
 // OutboundTokenBudget is an estimate of the serialized attempt, after all
@@ -176,7 +176,7 @@ func AnalyzeOutboundTokenBudget(info *relaycommon.RelayInfo, body io.Reader) (*O
 		}
 		// Counting the wire input also includes tool history and JSON schemas that
 		// the older DTO token metadata omits. CountToken never disables admission.
-		budget.InputTokens = service.CountTextToken(string(encoded), info.UpstreamModelName)
+		budget.InputTokens = tokenkit.Count(info.UpstreamModelName, string(encoded))
 	}
 	return budget, nil
 }

@@ -8,7 +8,7 @@ This is an AI API gateway/proxy built with Go. It aggregates 40+ upstream AI pro
 
 ## Tech Stack
 
-- **Backend**: Go 1.25.1+, Gin web framework, GORM v2 ORM
+- **Backend**: Go 1.26 for the root module and `tokenkit/`, Go 1.25.1 for `relaykit/` (see each module’s `go.mod`), Gin web framework, GORM v2 ORM
 - **Primary Vue frontend (`frontend/`)**: Vue 3.5, Vite 8, TypeScript, Pinia, Vue Router, Vue I18n, Tailwind CSS, ECharts, Axios, Vitest
 - **Databases**: SQLite, MySQL, PostgreSQL (all three must be supported)
 - **Cache**: Redis (go-redis) + in-memory cache
@@ -35,6 +35,8 @@ types/         — Type definitions (relay formats, file sources, errors)
 i18n/          — Backend internationalization (go-i18n, en/zh)
 oauth/         — OAuth provider implementations
 pkg/           — Internal packages (cachex, billingexpr)
+relaykit/      — Independent Go module for protocol DTOs and conversions; transport, authentication, database access, and billing stay in the host
+tokenkit/      — Independent Go module for text and image token counting and estimation; request parsing, file loading, and billing stay in the host
 frontend/      — The only web application, served at `/`; Docker builds it and Go embeds `frontend/embed-dist`
   src/api/         — Same-origin HTTP transport, authentication, and validated API contracts
   src/canvas/      — Landing-page routing scene and animation engine
@@ -79,10 +81,10 @@ frontend/      — The only web application, served at `/`; Docker builds it and
 
 ### Backend Rules
 
-**relaykit module independence:** The `relaykit/` Go module MUST remain independently buildable.
+**relaykit and tokenkit module independence:** The `relaykit/` and `tokenkit/` Go modules MUST remain independently buildable.
 
-- Code under `relaykit/` MUST NOT import or depend on packages from the root `new-api` module, or rely on root-only configuration, generated files, or workspace wiring.
-- Any change affecting `relaykit/` or its public APIs MUST be verified with `cd relaykit && GOWORK=off go build ./...`; a successful root-module build is not sufficient.
+- Code under `relaykit/` or `tokenkit/` MUST NOT import or depend on packages from the root `new-api` module, or rely on root-only configuration, generated files, or workspace wiring. `tokenkit/` also MUST NOT depend on `relaykit/`.
+- Any change affecting `relaykit/`, `tokenkit/`, or their public APIs MUST be verified with `GOWORK=off go build ./...` inside that module; a successful root-module build is not sufficient.
 
 **JSON package:** All JSON marshal/unmarshal operations MUST use the wrapper functions in `common/json.go`:
 

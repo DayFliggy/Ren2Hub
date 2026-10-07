@@ -17,7 +17,6 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +24,6 @@ import (
 
 func TestGatewayLegacyAdaptorResponseMatrix(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service.InitTokenEncoders()
 	for _, tc := range []struct {
 		channelType int
 		key         string

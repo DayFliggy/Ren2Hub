@@ -18,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/tokenkit"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/tidwall/gjson"
@@ -458,7 +459,7 @@ func realtimeOutputItemsUsage(info *relaycommon.RelayInfo, items []gjson.Result)
 				hasOutput = true
 			}
 		}
-		textUsage := &dto.RealtimeUsage{OutputTokenDetails: dto.OutputTokenDetails{TextTokens: service.CountTextToken(text.String(), info.UpstreamModelName)}}
+		textUsage := &dto.RealtimeUsage{OutputTokenDetails: dto.OutputTokenDetails{TextTokens: tokenkit.Count(info.UpstreamModelName, text.String())}}
 		var err error
 		usage, err = service.AddRealtimeUsage(usage, textUsage)
 		if err != nil {
