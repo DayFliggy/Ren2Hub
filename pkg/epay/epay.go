@@ -92,12 +92,25 @@ func NormalizeGatewayURL(raw string) (string, error) {
 
 // Sign preserves the EasyPay convention: sort nonempty values, omit sign and
 // sign_type, and hash the unescaped concatenation followed by the merchant key.
-func Sign(params map[string]string, key string) string {
+// Parameters that would make that concatenation ambiguous are rejected.
+func Sign(params map[string]string, key string) (string, error) {
+	digest, err := signatureDigest(params, key)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(digest[:]), nil
+}
+
+func signatureDigest(params map[string]string, key string) ([md5.Size]byte, error) {
 	keys := make([]string, 0, len(params))
 	for name, value := range params {
-		if name != "sign" && name != "sign_type" && value != "" {
-			keys = append(keys, name)
+		if name == "sign" || name == "sign_type" || value == "" {
+			continue
 		}
+		if ambiguousSigningPair(name, value) {
+			return [md5.Size]byte{}, ErrInvalidParameters
+		}
+		keys = append(keys, name)
 	}
 	sort.Strings(keys)
 	var message strings.Builder
@@ -110,8 +123,16 @@ func Sign(params map[string]string, key string) string {
 		message.WriteString(params[name])
 	}
 	message.WriteString(key)
-	digest := md5.Sum([]byte(message.String()))
-	return hex.EncodeToString(digest[:])
+	return md5.Sum([]byte(message.String())), nil
+}
+
+// ambiguousSigningPair reports whether a pair could let two different
+// parameter sets share one unescaped signing string. The string splits on '&'
+// and each pair at its first '=', so keys must be nonempty without '&' or '='
+// and values must not contain '&'; an '=' inside a value stays unambiguous.
+// These are the go-epay v0.0.5 rules.
+func ambiguousSigningPair(name, value string) bool {
+	return name == "" || strings.ContainsAny(name, "&=") || strings.Contains(value, "&")
 }
 
 func ParseNotification(request *http.Request) (map[string]string, error) {
@@ -172,10 +193,17 @@ func validateNotificationParameters(params map[string]string) error {
 	}
 	total := 0
 	for name, value := range params {
-		if name == "" || len(name) > maxKeyBytes || len(value) > maxValueBytes || !utf8.ValidString(name) || !utf8.ValidString(value) || strings.ContainsAny(name+value, "\x00\r\n") {
+		if ambiguousSigningPair(name, value) || len(name) > maxKeyBytes || len(value) > maxValueBytes || !utf8.ValidString(name) || !utf8.ValidString(value) || strings.ContainsAny(name+value, "\x00\r\n") {
 			return ErrInvalidParameters
 		}
 		total += len(name) + len(value) + 2
+	}
+	// Only BuildPurchase signs these fields and a genuine notification never
+	// carries them; rejecting them, even when empty, blocks purchase replays.
+	for _, name := range []string{"device", "notify_url", "return_url"} {
+		if _, ok := params[name]; ok {
+			return ErrInvalidParameters
+		}
 	}
 	if total-1 > MaxNotificationBytes {
 		return ErrInvalidParameters
@@ -211,8 +239,11 @@ func VerifyNotification(params map[string]string, config Config) (*Payment, erro
 	if err != nil || len(signature) != md5.Size {
 		return nil, ErrInvalidSignature
 	}
-	expected, _ := hex.DecodeString(Sign(params, config.Key))
-	if subtle.ConstantTimeCompare(signature, expected) != 1 {
+	expected, err := signatureDigest(params, config.Key)
+	if err != nil {
+		return nil, err
+	}
+	if subtle.ConstantTimeCompare(signature, expected[:]) != 1 {
 		return nil, ErrInvalidSignature
 	}
 	if params["pid"] != config.MerchantID {
@@ -287,9 +318,11 @@ func BuildPurchase(config Config, purchase Purchase) (string, map[string]string,
 	if purchase.AmountMinor <= 0 || !validIdentifier(purchase.OrderNo) || !validIdentifier(purchase.Method) || purchase.Name == "" || len(purchase.Name) > maxValueBytes {
 		return "", nil, ErrInvalidParameters
 	}
+	// Callback URLs are signed verbatim; a query or fragment could carry
+	// notification fields such as trade_status into the purchase signature.
 	for _, raw := range []string{purchase.NotifyURL, purchase.ReturnURL} {
 		u, err := url.Parse(raw)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(raw, "#") {
 			return "", nil, ErrInvalidParameters
 		}
 	}
@@ -298,7 +331,11 @@ func BuildPurchase(config Config, purchase Purchase) (string, map[string]string,
 		"notify_url": purchase.NotifyURL, "return_url": purchase.ReturnURL, "name": purchase.Name,
 		"money": FormatMoney(purchase.AmountMinor), "device": "pc", "sign_type": "MD5",
 	}
-	params["sign"] = Sign(params, config.Key)
+	sign, err := Sign(params, config.Key)
+	if err != nil {
+		return "", nil, err
+	}
+	params["sign"] = sign
 	return base + "/submit.php", params, nil
 }
 

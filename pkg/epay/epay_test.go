@@ -1,6 +1,8 @@
 package epay
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -12,13 +14,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func notificationValues() url.Values {
+func signForTest(t *testing.T, params map[string]string, key string) string {
+	t.Helper()
+	sign, err := Sign(params, key)
+	require.NoError(t, err)
+	return sign
+}
+
+// rawSignForTest signs a message exactly as written, bypassing Sign's
+// ambiguity checks, to reproduce signatures an attacker could reuse.
+func rawSignForTest(message, key string) string {
+	digest := md5.Sum([]byte(message + key))
+	return hex.EncodeToString(digest[:])
+}
+
+// The extension is an unknown gateway field. Its '=' and literal "%26" are
+// unambiguous in the signing string and must still be accepted and signed.
+func notificationValues(t *testing.T) url.Values {
 	params := map[string]string{
 		"pid": "1001", "trade_no": "gateway-123", "out_trade_no": "order-456",
 		"type": "alipay", "money": "10.20", "trade_status": StatusTradeSuccess,
-		"sign_type": "MD5", "name": "充值", "extension": "a & b = c",
+		"sign_type": "MD5", "name": "充值", "extension": "a = b %26 c",
 	}
-	params["sign"] = Sign(params, "test-secret")
+	params["sign"] = signForTest(t, params, "test-secret")
 	values := make(url.Values)
 	for name, value := range params {
 		values.Set(name, value)
@@ -26,18 +44,160 @@ func notificationValues() url.Values {
 	return values
 }
 
+func notificationParams(values url.Values) map[string]string {
+	params := make(map[string]string, len(values))
+	for name := range values {
+		params[name] = values.Get(name)
+	}
+	return params
+}
+
+func notificationRequest(method string, values url.Values) *http.Request {
+	if method == http.MethodGet {
+		return httptest.NewRequest(method, "/notify?"+values.Encode(), nil)
+	}
+	request := httptest.NewRequest(method, "/notify", strings.NewReader(values.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return request
+}
+
 func TestSignProtocolCompatibility(t *testing.T) {
 	params := map[string]string{"b": "2", "a": "1", "empty": "", "sign": "old-sign", "sign_type": "MD5"}
-	assert.Equal(t, "8d9f51949e440aa629fd1a035708473a", Sign(params, "secret"))
+	assert.Equal(t, "8d9f51949e440aa629fd1a035708473a", signForTest(t, params, "secret"))
 	assert.Equal(t, "old-sign", params["sign"], "signing must not mutate input")
 	assert.Len(t, params, 5)
+	// Pairs left out of the signing string cannot make it ambiguous.
+	assert.Equal(t, "8d9f51949e440aa629fd1a035708473a", signForTest(t, map[string]string{"a": "1", "b": "2", "x&y=": "", "sign": "a&b"}, "secret"))
+	assert.Equal(t, rawSignForTest("a=b=c", "secret"), signForTest(t, map[string]string{"a": "b=c"}, "secret"), "'=' inside a value keeps one meaning")
+	for _, params := range []map[string]string{
+		{"a=b": "c"},
+		{"a&b": "1"},
+		{"": "1"},
+		{"a": "1&b=2"},
+	} {
+		sign, err := Sign(params, "secret")
+		assert.ErrorIs(t, err, ErrInvalidParameters, params)
+		assert.Empty(t, sign)
+	}
+}
+
+func TestNotificationRejectsAmbiguousSigningInput(t *testing.T) {
+	config := Config{MerchantID: "1001", Key: "test-secret"}
+	base := map[string]string{"pid": "1001", "trade_no": "gateway-1", "type": "alipay", "money": "1.00", "trade_status": StatusTradeSuccess, "sign_type": "MD5"}
+	// The first two splits shared one valid signing string before this check,
+	// as in the go-epay v0.0.5 regression. Every case must fail on parameter
+	// shape, not on a signature mismatch.
+	shared := rawSignForTest("money=1.00&name=item&out_trade_no=other&out_trade_no=order&pid=1001&trade_no=gateway-1&trade_status=TRADE_SUCCESS&type=alipay", config.Key)
+	for _, test := range []struct {
+		name   string
+		fields map[string]string
+	}{
+		{"separator in product name", map[string]string{"name": "item&out_trade_no=other", "out_trade_no": "order"}},
+		{"separator in order number", map[string]string{"name": "item", "out_trade_no": "other&out_trade_no=order"}},
+		{"status smuggled in extension", map[string]string{"out_trade_no": "order", "param": "x&trade_status=TRADE_SUCCESS"}},
+		{"equals in key", map[string]string{"out_trade_no": "order", "name=item": "x"}},
+		{"ampersand in key", map[string]string{"out_trade_no": "order", "name&x": "item"}},
+		{"ampersand in empty-valued key", map[string]string{"out_trade_no": "order", "x&trade_status": ""}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			params := make(map[string]string)
+			for name, value := range base {
+				params[name] = value
+			}
+			for name, value := range test.fields {
+				params[name] = value
+			}
+			params["sign"] = shared
+			values := make(url.Values)
+			for name, value := range params {
+				values.Set(name, value)
+			}
+			for _, method := range []string{http.MethodGet, http.MethodPost} {
+				_, err := ParseNotification(notificationRequest(method, values))
+				assert.ErrorIs(t, err, ErrInvalidParameters, method)
+			}
+			payment, err := VerifyNotification(params, config)
+			assert.ErrorIs(t, err, ErrInvalidParameters)
+			assert.Nil(t, payment)
+		})
+	}
+}
+
+func TestPurchaseSignatureCannotBeReplayedAsNotification(t *testing.T) {
+	config := Config{GatewayURL: "https://pay.example", MerchantID: "1001", Key: "test-secret"}
+	_, purchase, err := BuildPurchase(config, Purchase{OrderNo: "order-1", Method: "alipay", Name: "TUC10", NotifyURL: "https://shop.example/api/user/epay/notify", ReturnURL: "https://shop.example/usage-logs", AmountMinor: 1000})
+	require.NoError(t, err)
+	for _, test := range []struct {
+		name   string
+		edit   func(map[string]string)
+		reject error
+	}{
+		{"verbatim purchase form", func(map[string]string) {}, ErrInvalidParameters},
+		{"purchase form with notification fields", func(params map[string]string) {
+			params["trade_no"], params["trade_status"] = "forged", StatusTradeSuccess
+		}, ErrInvalidParameters},
+		// Dropping the purchase-only fields changes the signed string.
+		{"purchase-only fields stripped", func(params map[string]string) {
+			params["trade_no"], params["trade_status"] = "forged", StatusTradeSuccess
+			delete(params, "device")
+			delete(params, "notify_url")
+			delete(params, "return_url")
+		}, ErrInvalidSignature},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			params := make(map[string]string)
+			for name, value := range purchase {
+				params[name] = value
+			}
+			test.edit(params)
+			if test.reject == ErrInvalidParameters {
+				values := make(url.Values)
+				for name, value := range params {
+					values.Set(name, value)
+				}
+				for _, method := range []string{http.MethodGet, http.MethodPost} {
+					_, err := ParseNotification(notificationRequest(method, values))
+					assert.ErrorIs(t, err, ErrInvalidParameters, method)
+				}
+			}
+			payment, err := VerifyNotification(params, config)
+			assert.ErrorIs(t, err, test.reject)
+			assert.Nil(t, payment)
+		})
+	}
+}
+
+func TestNotificationRejectsPurchaseOnlyFields(t *testing.T) {
+	config := Config{MerchantID: "1001", Key: "test-secret"}
+	for _, field := range []struct{ name, value string }{
+		{"device", "pc"}, {"device", ""},
+		{"notify_url", "https://shop.example/api/user/epay/notify"}, {"notify_url", ""},
+		{"return_url", "https://shop.example/usage-logs"}, {"return_url", ""},
+	} {
+		t.Run(field.name+"="+field.value, func(t *testing.T) {
+			// A merchant-key signature proves the rejection is by field, not signature.
+			params := notificationParams(notificationValues(t))
+			params[field.name] = field.value
+			params["sign"] = signForTest(t, params, config.Key)
+			values := make(url.Values)
+			for name, value := range params {
+				values.Set(name, value)
+			}
+			for _, method := range []string{http.MethodGet, http.MethodPost} {
+				_, err := ParseNotification(notificationRequest(method, values))
+				assert.ErrorIs(t, err, ErrInvalidParameters, method)
+			}
+			_, err := VerifyNotification(params, config)
+			assert.ErrorIs(t, err, ErrInvalidParameters)
+		})
+	}
 }
 
 func TestNotificationRoundTripAndSignedExtension(t *testing.T) {
 	config := Config{MerchantID: "1001", Key: "test-secret"}
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
 		t.Run(method, func(t *testing.T) {
-			values := notificationValues()
+			values := notificationValues(t)
 			var request *http.Request
 			if method == http.MethodGet {
 				request = httptest.NewRequest(method, "/notify?"+values.Encode(), nil)
@@ -58,16 +218,16 @@ func TestNotificationRoundTripAndSignedExtension(t *testing.T) {
 }
 
 func TestNotificationRejectsInvalidInputBeforeSignature(t *testing.T) {
-	valid := notificationValues().Encode()
-	tooMany := notificationValues()
+	valid := notificationValues(t).Encode()
+	tooMany := notificationValues(t)
 	for i := 0; i < 33; i++ {
 		tooMany.Set(strings.Repeat("x", i+1), "1")
 	}
-	longKey := notificationValues()
+	longKey := notificationValues(t)
 	longKey.Set(strings.Repeat("k", 65), "1")
-	longValue := notificationValues()
+	longValue := notificationValues(t)
 	longValue.Set("extra", strings.Repeat("v", 4097))
-	missing := notificationValues()
+	missing := notificationValues(t)
 	missing.Del("pid")
 	for _, test := range []struct{ name, raw string }{
 		{"duplicate", valid + "&pid=1001"},
@@ -104,13 +264,13 @@ func TestNotificationRejectsInvalidInputBeforeSignature(t *testing.T) {
 }
 
 func TestNotificationAcceptsExactLimits(t *testing.T) {
-	values := notificationValues()
+	values := notificationValues(t)
 	for len(values) < 32 {
 		values.Set(strings.Repeat("k", len(values)+1), "v")
 	}
 	_, err := ParseNotification(httptest.NewRequest(http.MethodGet, "/notify?"+values.Encode(), nil))
 	require.NoError(t, err, "the field limit is inclusive")
-	values = notificationValues()
+	values = notificationValues(t)
 	for _, key := range []string{"large1", "large2", "large3"} {
 		values.Set(key, strings.Repeat("v", 4096))
 	}
@@ -145,14 +305,14 @@ func TestVerifyNotificationRejectsInvalidClaims(t *testing.T) {
 		{"unknown status", "trade_status", "PAID", true, ErrInvalidParameters},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			values := notificationValues()
+			values := notificationValues(t)
 			params := make(map[string]string)
 			for key := range values {
 				params[key] = values.Get(key)
 			}
 			params[test.field] = test.value
 			if test.resign {
-				params["sign"] = Sign(params, "test-secret")
+				params["sign"] = signForTest(t, params, "test-secret")
 			}
 			_, err := VerifyNotification(params, Config{MerchantID: "1001", Key: "test-secret"})
 			assert.ErrorIs(t, err, test.want)
@@ -164,11 +324,11 @@ func TestNotificationPaymentMethodFitsStoredOrder(t *testing.T) {
 	for _, size := range []int{71, 72} {
 		t.Run(strings.Repeat("m", size), func(t *testing.T) {
 			params := make(map[string]string)
-			for name, values := range notificationValues() {
+			for name, values := range notificationValues(t) {
 				params[name] = values[0]
 			}
 			params["type"] = strings.Repeat("m", size)
-			params["sign"] = Sign(params, "test-secret")
+			params["sign"] = signForTest(t, params, "test-secret")
 			values := make(url.Values)
 			for name, value := range params {
 				values.Set(name, value)
@@ -228,6 +388,41 @@ func TestNormalizeGatewayAndBuildPurchase(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "https://example.com/pay/submit.php", endpoint)
 	assert.Equal(t, "1.23", params["money"])
-	assert.Equal(t, Sign(params, config.Key), params["sign"])
+	assert.Equal(t, signForTest(t, params, config.Key), params["sign"])
 	assert.NotContains(t, params, "key")
+}
+
+func TestBuildPurchaseRejectsSmuggledCallbackFields(t *testing.T) {
+	config := Config{GatewayURL: "https://pay.example", MerchantID: "1001", Key: "test-secret"}
+	valid := Purchase{OrderNo: "order-1", Method: "alipay", Name: "TUC10", NotifyURL: "https://shop.example/api/user/epay/notify", ReturnURL: "https://shop.example/usage-logs", AmountMinor: 1000}
+	_, _, err := BuildPurchase(config, valid)
+	require.NoError(t, err)
+	for _, suffix := range []string{
+		"?trade_status=TRADE_SUCCESS",
+		"?order=1&trade_no=forged&trade_status=TRADE_SUCCESS",
+		"?",
+		"#trade_status=TRADE_SUCCESS",
+		"#",
+		"&trade_status=TRADE_SUCCESS",
+	} {
+		for _, field := range []string{"notify_url", "return_url"} {
+			t.Run(field+suffix, func(t *testing.T) {
+				purchase := valid
+				if field == "notify_url" {
+					purchase.NotifyURL += suffix
+				} else {
+					purchase.ReturnURL += suffix
+				}
+				endpoint, params, err := BuildPurchase(config, purchase)
+				assert.ErrorIs(t, err, ErrInvalidParameters)
+				assert.Empty(t, endpoint)
+				assert.Nil(t, params)
+			})
+		}
+	}
+	purchase := valid
+	purchase.Name = "TUC10&trade_status=TRADE_SUCCESS"
+	_, params, err := BuildPurchase(config, purchase)
+	assert.ErrorIs(t, err, ErrInvalidParameters, "every signed purchase value is checked")
+	assert.Nil(t, params)
 }

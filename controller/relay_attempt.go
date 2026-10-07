@@ -572,7 +572,8 @@ func writeRelayStreamFailure(c *gin.Context, format types.RelayFormat, apiErr *t
 		event, payload["type"] = "error", "error"
 		errorValue["type"] = "api_error"
 	} else if format == types.RelayFormatOpenAIResponses {
-		event, payload["type"] = "error", "error"
+		// OpenAI Responses error events always carry param, null when no request field is at fault.
+		event, payload["type"], payload["param"] = "error", "error", nil
 		payload["message"], payload["code"], payload["sequence_number"] = apiErr.MaskSensitiveError(), "stream_interrupted", c.GetInt("gateway_stream_sequence")+1
 	} else if format == types.RelayFormatGemini {
 		payload["error"] = map[string]any{"code": http.StatusBadGateway, "message": apiErr.MaskSensitiveError(), "status": "INTERNAL"}

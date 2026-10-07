@@ -151,6 +151,44 @@ func TestVueStaticAssets(t *testing.T) {
 	}
 }
 
+func TestVueStaticAssetsDoNotConsumeWebRateLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("FRONTEND_BASE_URL", "")
+	previousMaster, previousRedis, previousAPI := common.IsMasterNode, common.RedisEnabled, common.GlobalApiRateLimitEnable
+	previousWeb, previousWebNum, previousWebDuration := common.GlobalWebRateLimitEnable, common.GlobalWebRateLimitNum, common.GlobalWebRateLimitDuration
+	common.IsMasterNode, common.RedisEnabled, common.GlobalApiRateLimitEnable = true, false, false
+	common.GlobalWebRateLimitEnable, common.GlobalWebRateLimitNum, common.GlobalWebRateLimitDuration = true, 3, 60
+	t.Cleanup(func() {
+		common.IsMasterNode, common.RedisEnabled, common.GlobalApiRateLimitEnable = previousMaster, previousRedis, previousAPI
+		common.GlobalWebRateLimitEnable, common.GlobalWebRateLimitNum, common.GlobalWebRateLimitDuration = previousWeb, previousWebNum, previousWebDuration
+	})
+	engine := gin.New()
+	SetRouter(engine, testWebAssets("vue-index"))
+	get := func(path string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		// A client address no other test uses keeps the in-memory window isolated.
+		request.RemoteAddr = "198.51.100.77:4321"
+		engine.ServeHTTP(recorder, request)
+		return recorder
+	}
+
+	// A cold page load fetches many build files; none of them spends the page budget.
+	for range 10 {
+		for _, path := range []string{"/assets/app-AbCd1234.js", "/assets/_plugin-vue_export-helper-BDNMzG2s.js", "/logo.png"} {
+			require.Equal(t, http.StatusOK, get(path).Code, path)
+		}
+	}
+	assert.Equal(t, http.StatusOK, get("/").Code)
+	assert.Equal(t, http.StatusNotFound, get("/assets/missing-AbCd1234.js").Code)
+	assert.Equal(t, http.StatusOK, get("/console/keys").Code)
+	limited := get("/console/keys")
+	assert.Equal(t, http.StatusTooManyRequests, limited.Code, "SPA pages and missing static paths share the web budget")
+	assert.Equal(t, "60", limited.Header().Get("Retry-After"))
+	assert.Equal(t, http.StatusTooManyRequests, get("/assets/missing.js").Code)
+	assert.Equal(t, http.StatusOK, get("/assets/app-AbCd1234.js").Code, "existing build files stay available after the page budget is spent")
+}
+
 func TestVueExternalFrontend(t *testing.T) {
 	for _, master := range []bool{false, true} {
 		t.Run(map[bool]string{false: "worker", true: "master"}[master], func(t *testing.T) {

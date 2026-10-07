@@ -92,7 +92,7 @@ func TestEpayInvalidCurrentCallbackDoesNotBlockFrozenSettlement(t *testing.T) {
 	setEpayTestOption(t, db, "CustomCallbackAddress", "https://wallet.example.test/old/path")
 	_, err = LoadEpayConfig(ctx)
 	require.Error(t, err)
-	require.NoError(t, SettleEpayNotification(ctx, epayTestNotification(order, "frozen-origin-receipt", "test-only-key"), ""))
+	require.NoError(t, SettleEpayNotification(ctx, epayTestNotification(t, order, "frozen-origin-receipt", "test-only-key"), ""))
 	var user model.User
 	require.NoError(t, db.First(&user, 1).Error)
 	assert.EqualValues(t, 5_000_000, user.Quota)

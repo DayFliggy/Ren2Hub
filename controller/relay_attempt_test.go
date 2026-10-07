@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,6 +53,31 @@ func TestRelayAttemptDisconnectedWriterIsClientFailure(t *testing.T) {
 	assert.False(t, classification.MarkChannelModel)
 	assert.False(t, classification.MarkKey)
 	assert.False(t, classification.Failoverable)
+}
+
+// An interrupted Responses stream ends with the OpenAI error event shape
+// (type, code, message, param, sequence_number), as AxonHub ac7f488 emits it.
+func TestWriteRelayStreamFailureResponsesErrorEvent(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Set("gateway_stream_sequence", 41)
+	apiErr := types.NewOpenAIError(errors.New("upstream connection reset"), types.ErrorCodeBadResponse, http.StatusBadGateway)
+
+	writeRelayStreamFailure(c, types.RelayFormatOpenAIResponses, apiErr)
+
+	body := recorder.Body.String()
+	require.True(t, strings.HasPrefix(body, "event: error\ndata: "), body)
+	require.True(t, strings.HasSuffix(body, "\n\n"), body)
+	var event map[string]any
+	require.NoError(t, common.UnmarshalJsonStr(strings.TrimSuffix(strings.TrimPrefix(body, "event: error\ndata: "), "\n\n"), &event))
+	assert.Equal(t, "error", event["type"])
+	assert.Equal(t, "stream_interrupted", event["code"])
+	assert.Equal(t, apiErr.MaskSensitiveError(), event["message"])
+	require.Contains(t, event, "param")
+	assert.Nil(t, event["param"])
+	assert.Equal(t, float64(42), event["sequence_number"], "the error follows the last relayed sequence number")
+	assert.True(t, c.GetBool("gateway_stream_error_sent"))
 }
 
 type failedStreamWriter struct{ gin.ResponseWriter }

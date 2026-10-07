@@ -65,7 +65,9 @@ func TestEpayGatewayRetriesAfterSettlementFailure(t *testing.T) {
 				"pid": "1", "out_trade_no": order.Order.TradeNo, "trade_no": "gateway-retry",
 				"type": "alipay", "money": order.Quote.PayAmount, "trade_status": epay.StatusTradeSuccess, "sign_type": "MD5",
 			}
-			params["sign"] = epay.Sign(params, "test-key")
+			sign, err := epay.Sign(params, "test-key")
+			require.NoError(t, err)
+			params["sign"] = sign
 			form := url.Values{}
 			for key, value := range params {
 				form.Set(key, value)
@@ -140,6 +142,47 @@ func TestEpayGatewayRetriesAfterSettlementFailure(t *testing.T) {
 			assert.EqualValues(t, 1, count)
 		})
 	}
+}
+
+func TestEpayNotifyRejectsReplayedPurchaseForm(t *testing.T) {
+	db := setupEpayControllerTestDB(t)
+	order, err := service.CreateEpayTopUp(context.Background(), 1, service.EpayQuoteRequest{Amount: 1, AmountUnit: "USD", PaymentMethod: "alipay"})
+	require.NoError(t, err)
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/api/user/epay/notify", EpayNotify)
+	notify := func(params map[string]string) string {
+		form := url.Values{}
+		for key, value := range params {
+			form.Set(key, value)
+		}
+		request := httptest.NewRequest(http.MethodPost, "/api/user/epay/notify", strings.NewReader(form.Encode()))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		response := httptest.NewRecorder()
+		engine.ServeHTTP(response, request)
+		return response.Body.String()
+	}
+	// The payer's browser receives this signed form; adding notification
+	// fields to it must not turn the purchase signature into a payment proof.
+	replay := map[string]string{"trade_no": "forged", "trade_status": epay.StatusTradeSuccess}
+	for key, value := range order.Params {
+		replay[key] = value
+	}
+	assert.Equal(t, "fail", notify(order.Params))
+	assert.Equal(t, "fail", notify(replay))
+	var user model.User
+	require.NoError(t, db.First(&user, 1).Error)
+	assert.Equal(t, common.Quota(7), user.Quota)
+
+	genuine := map[string]string{
+		"pid": "1", "out_trade_no": order.Order.TradeNo, "trade_no": "gateway-genuine", "type": "alipay",
+		"money": order.Quote.PayAmount, "trade_status": epay.StatusTradeSuccess, "sign_type": "MD5", "endtime": "2026-10-07 12:00:00",
+	}
+	genuine["sign"], err = epay.Sign(genuine, "test-key")
+	require.NoError(t, err)
+	assert.Equal(t, "success", notify(genuine), "an unknown gateway field still takes part in verification")
+	require.NoError(t, db.First(&user, 1).Error)
+	assert.Equal(t, common.Quota(500007), user.Quota)
 }
 
 func TestAdminEpayCompletionAuditIdentifiesOrderAndOperator(t *testing.T) {
