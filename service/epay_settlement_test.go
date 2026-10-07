@@ -50,9 +50,12 @@ func setEpayTestOption(t *testing.T, db *gorm.DB, key, value string) {
 	require.NoError(t, db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&model.Option{Key: key, Value: value}).Error)
 }
 
-func epayTestNotification(order *EpayCreatedOrder, tradeNo, key string) map[string]string {
+func epayTestNotification(t *testing.T, order *EpayCreatedOrder, tradeNo, key string) map[string]string {
+	t.Helper()
 	params := map[string]string{"pid": "1", "out_trade_no": order.Order.TradeNo, "trade_no": tradeNo, "type": "alipay", "money": order.Quote.PayAmount, "trade_status": epay.StatusTradeSuccess, "sign_type": "MD5"}
-	params["sign"] = epay.Sign(params, key)
+	sign, err := epay.Sign(params, key)
+	require.NoError(t, err)
+	params["sign"] = sign
 	return params
 }
 
@@ -75,7 +78,9 @@ func TestEpayOrderCreationFreezesQuoteAndMerchant(t *testing.T) {
 	order, err := CreateEpayTopUp(ctx, 1, request)
 	require.NoError(t, err)
 	assert.Equal(t, "10.95", order.Params["money"])
-	assert.Equal(t, order.Params["sign"], epay.Sign(order.Params, "test-only-key"))
+	sign, err := epay.Sign(order.Params, "test-only-key")
+	require.NoError(t, err)
+	assert.Equal(t, order.Params["sign"], sign)
 	_, snapshot, merchant, err := model.GetEpayOrder(ctx, order.Order.TradeNo)
 	require.NoError(t, err)
 	assert.EqualValues(t, 750000, snapshot.ExpectedQuota)
@@ -84,8 +89,8 @@ func TestEpayOrderCreationFreezesQuoteAndMerchant(t *testing.T) {
 	setEpayTestOption(t, db, "EpayKey", "rotated-key")
 	setEpayTestOption(t, db, "PayMethods", "[]")
 	setEpayTestOption(t, db, "general_setting.quota_display_type", "USD")
-	require.Error(t, SettleEpayNotification(ctx, epayTestNotification(order, "gateway-1", "rotated-key"), ""))
-	callback := epayTestNotification(order, "gateway-1", "test-only-key")
+	require.Error(t, SettleEpayNotification(ctx, epayTestNotification(t, order, "gateway-1", "rotated-key"), ""))
+	callback := epayTestNotification(t, order, "gateway-1", "test-only-key")
 	require.NoError(t, SettleEpayNotification(ctx, callback, ""))
 	require.NoError(t, SettleEpayNotification(ctx, callback, ""))
 	var user model.User
@@ -163,7 +168,7 @@ func TestEpaySettlementRejectsNoncanonicalStoredSwitch(t *testing.T) {
 			enabled, err := EpaySettlementEnabled(ctx)
 			require.Error(t, err)
 			assert.False(t, enabled)
-			require.Error(t, SettleEpayNotification(ctx, epayTestNotification(order, "invalid-switch", "test-only-key"), ""))
+			require.Error(t, SettleEpayNotification(ctx, epayTestNotification(t, order, "invalid-switch", "test-only-key"), ""))
 			var user model.User
 			require.NoError(t, db.First(&user, 1).Error)
 			assert.Zero(t, user.Quota)
@@ -186,7 +191,7 @@ func TestEpaySettlementSwitchDefaultsAndPauseResume(t *testing.T) {
 	assert.True(t, enabled)
 	order, err := CreateEpayTopUp(ctx, 1, EpayQuoteRequest{Amount: 10, AmountUnit: "USD", PaymentMethod: "alipay"})
 	require.NoError(t, err)
-	callback := epayTestNotification(order, "paused-receipt", "test-only-key")
+	callback := epayTestNotification(t, order, "paused-receipt", "test-only-key")
 	setEpayTestOption(t, db, "payment_setting.epay_settlement_enabled", "false")
 	enabled, err = EpaySettlementEnabled(ctx)
 	require.NoError(t, err)

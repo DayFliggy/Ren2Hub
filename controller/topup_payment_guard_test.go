@@ -165,7 +165,9 @@ func TestEpayWebhookRejectsArchivedPlanWalletCredit(t *testing.T) {
 				"pid": "1", "out_trade_no": tc.reference, "type": "alipay",
 				"trade_no": "provider-order", "trade_status": epay.StatusTradeSuccess, "money": "2.00", "sign_type": "MD5",
 			}
-			params["sign"] = epay.Sign(params, "test-key")
+			sign, err := epay.Sign(params, "test-key")
+			require.NoError(t, err)
+			params["sign"] = sign
 			form := url.Values{}
 			for key, value := range params {
 				form.Set(key, value)
