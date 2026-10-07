@@ -382,11 +382,13 @@ const successColor = computed(() => rateColor(successRate.value))
     <template #action>
       <div class="flex items-center gap-2">
         <div class="text-right">
-          <p class="text-[11px] leading-none text-[var(--text-tertiary)]">
+          <p
+            class="success-rate-label text-[11px] leading-none text-[var(--text-tertiary)]"
+          >
             {{ t('dashboard.systemStatus.successRate') }}
           </p>
           <p
-            class="mt-1 text-sm font-bold leading-none tabular-nums"
+            class="success-rate-value text-sm font-bold leading-none tabular-nums"
             :style="{ color: successColor }"
           >
             {{ successRate === null ? '--' : `${formatMetric(successRate)}%` }}
@@ -408,7 +410,8 @@ const successColor = computed(() => rateColor(successRate.value))
         <div
           v-for="tile in tiles"
           :key="tile.key"
-          class="group relative flex h-[88px] min-w-0 flex-col overflow-hidden rounded-xl bg-[var(--surface-muted)] px-2.5 py-1.5 transition-colors duration-300 hover:bg-[var(--surface-hover)] sm:h-[92px] sm:px-3 sm:py-2"
+          class="group relative flex h-[88px] min-w-0 flex-col rounded-xl bg-[var(--surface-muted)] px-2.5 py-1.5 transition-colors duration-300 hover:bg-[var(--surface-hover)] sm:h-[92px] sm:px-3 sm:py-2"
+          :class="{ 'overflow-hidden': tile.key !== 'cpu' }"
           data-system-status-tile
           :data-metric="tile.key"
         >
@@ -717,3 +720,49 @@ const successColor = computed(() => rateColor(successRate.value))
     </div>
   </ConsoleCard>
 </template>
+
+<style scoped>
+/* The card width comes from the dashboard grid, not the viewport, so the
+   header adapts to the card. */
+[data-system-status-card] {
+  container-type: inline-size;
+}
+
+/* An absolutely positioned label drops this margin with it. */
+.success-rate-label {
+  margin-bottom: 4px;
+}
+
+/* A tight header first drops the caption from the layout, keeping it readable
+   to assistive technology, then the decorative dial; the rate always shows.
+   Breakpoints are the measured card widths each layout needs, with slack:
+   Chinese 289px with the caption; English 362px, 320px without the caption
+   and 274px without the dial. */
+@container (max-width: 299px) {
+  .success-rate-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@container (max-width: 365px) {
+  .success-rate-label:lang(en) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@container (max-width: 323px) {
+  [data-success-rate-ring]:lang(en) {
+    display: none;
+  }
+}
+</style>

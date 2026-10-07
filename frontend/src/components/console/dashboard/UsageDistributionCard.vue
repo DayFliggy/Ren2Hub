@@ -77,12 +77,9 @@ const stageColumns = computed(() => {
 
 const analyticsClasses = computed(() => {
   if (period.value === 'year') return 'lg:gap-6 lg:pt-2'
-  const side =
-    'lg:flex lg:max-w-[22rem] lg:flex-col lg:justify-center lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0'
-  // Past the cell cap the surplus opens before the divider, never after it.
-  return period.value === 'quarter'
-    ? `${side} lg:w-full lg:justify-self-end`
-    : side
+  // Month and quarter both end flush with the card's right edge; surplus
+  // width opens before the divider, never after it.
+  return 'lg:flex lg:w-full lg:max-w-[22rem] lg:flex-col lg:justify-center lg:justify-self-end lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0'
 })
 const metricLabel = computed(
   () =>

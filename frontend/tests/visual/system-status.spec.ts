@@ -32,40 +32,98 @@ async function expectMetricValuesToFit(card: Locator): Promise<void> {
   }
 }
 
-/** Hovering a load cell stretches it to show its figure; leaving restores it. */
-async function expectLoadCellsStretchOnHover(card: Locator): Promise<void> {
+/**
+ * Hovering the CPU load cells reveals a readout with all three load values. It
+ * stays open while the pointer moves onto it, Escape dismisses it in place
+ * (WCAG 1.4.13), and it stays within the card.
+ */
+async function expectLoadReadoutOnInteraction(card: Locator): Promise<void> {
+  const page = card.page()
   const tile = card.locator('[data-metric="cpu"]')
-  const cells = tile.locator('[data-cpu-load] [data-minutes]')
-  await expect(cells).toHaveCount(3)
-  const first = cells.first()
-  const width = () => first.evaluate((el) => el.getBoundingClientRect().width)
-  const restWidth = await width()
+  await expect(tile.locator('[data-cpu-load] [data-minutes]')).toHaveCount(3)
 
-  await first.hover()
-  await expect.poll(width).toBeGreaterThan(restWidth + 16)
-  const value = first.locator('.cpu-load__value')
-  await expect(value).toHaveText('12.3')
-  await expect
-    .poll(() => value.evaluate((el) => getComputedStyle(el).opacity))
-    .toBe('1')
-  // The stretched cell keeps clear of the label and inside the tile padding.
+  const trigger = tile.locator('.cpu-load__trigger')
+  const readout = tile.locator('[data-load-readout]')
+  const opacity = () => readout.evaluate((el) => getComputedStyle(el).opacity)
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+  await trigger.hover()
+  await expect.poll(opacity).toBe('1')
+  await expect(
+    readout.locator('[data-load-window]').first().locator('.cpu-load__figure')
+  ).toHaveText('12.3')
+
   const fits = await tile.evaluate((node) => {
-    const tileRect = node.getBoundingClientRect()
-    const padding = parseFloat(getComputedStyle(node).paddingRight)
-    const label = node.querySelector('p')!.getBoundingClientRect()
-    const group = node.querySelector('[data-cpu-load]')!.getBoundingClientRect()
-    const cell = node.querySelector('[data-minutes]') as HTMLElement
-    const figure = cell.querySelector('.cpu-load__value') as HTMLElement
+    const cardRect = node
+      .closest('[data-system-status-card]')!
+      .getBoundingClientRect()
+    const readoutRect = node
+      .querySelector('[data-load-readout]')!
+      .getBoundingClientRect()
     return (
-      group.left >= label.right + 4 &&
-      group.right <= tileRect.right - padding + 0.5 &&
-      figure.scrollWidth <= cell.clientWidth
+      readoutRect.left >= cardRect.left - 2 &&
+      readoutRect.right <= cardRect.right + 2 &&
+      readoutRect.bottom <= cardRect.bottom + 2
     )
   })
   expect(fits).toBe(true)
 
-  await card.page().mouse.move(0, 0)
-  await expect.poll(width).toBe(restWidth)
+  await readout.hover()
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  await page.keyboard.press('Escape')
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  await expect.poll(opacity).toBe('0')
+  await page.mouse.move(0, 0)
+}
+
+/** The tap target for the CPU load cells meets the 44×44px minimum. */
+async function expectMinimumTapTarget(card: Locator): Promise<void> {
+  const size = await card
+    .locator('[data-metric="cpu"] .cpu-load__trigger')
+    .evaluate((button) => {
+      const target = getComputedStyle(button, '::before')
+      return [parseFloat(target.width), parseFloat(target.height)]
+    })
+  expect(size[0]).toBeGreaterThanOrEqual(44)
+  expect(size[1]).toBeGreaterThanOrEqual(44)
+}
+
+/** Keyboard focus on the load trigger draws the shared focus outline. */
+async function expectKeyboardFocusRing(card: Locator): Promise<void> {
+  const trigger = card.locator('[data-metric="cpu"] .cpu-load__trigger')
+  await trigger.focus()
+  await card.page().keyboard.press('Shift+Tab')
+  await card.page().keyboard.press('Tab')
+  await expect(trigger).toBeFocused()
+  const outline = await trigger.evaluate((button) => {
+    const style = getComputedStyle(button)
+    return [style.outlineStyle, parseFloat(style.outlineWidth)] as const
+  })
+  expect(outline[0]).toBe('solid')
+  expect(outline[1]).toBeGreaterThanOrEqual(2)
+  await trigger.blur()
+}
+
+/**
+ * The header keeps its title whole and the rate on screen at every card width;
+ * a tight header drops only the caption, which stays in the accessibility tree.
+ */
+async function expectHeaderFits(card: Locator): Promise<void> {
+  const header = await card.evaluate((node) => {
+    const title = node.querySelector('h2')!
+    const label = node.querySelector('.success-rate-label')!
+    const value = node.querySelector('.success-rate-value')!
+    const labelRect = label.getBoundingClientRect()
+    return {
+      titleClipped: title.scrollWidth > title.clientWidth,
+      labelLines: labelRect.width > 1 ? Math.round(labelRect.height / 11) : 0,
+      valueWidth: value.getBoundingClientRect().width,
+    }
+  })
+  expect(header.titleClipped).toBe(false)
+  expect(header.labelLines).toBeLessThanOrEqual(1)
+  expect(header.valueWidth).toBeGreaterThan(0)
+  await expect(card.getByText(/API/)).toHaveCount(1)
 }
 
 /** CPU, memory and disk headlines share one face, size and theme-driven weight. */
@@ -118,7 +176,10 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
     await expectMetricValuesToFit(card)
     await expectStableTileHeights(card)
     await expectUnifiedHeadlineNumbers(card)
-    await expectLoadCellsStretchOnHover(card)
+    await expectLoadReadoutOnInteraction(card)
+    await expectMinimumTapTarget(card)
+    await expectKeyboardFocusRing(card)
+    await expectHeaderFits(card)
     await assertNoHorizontalOverflow(page)
 
     await page.setViewportSize({ width: 390, height: 844 })
@@ -129,7 +190,28 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
     await expectMetricValuesToFit(card)
     await expectStableTileHeights(card)
     await expectUnifiedHeadlineNumbers(card)
-    await expectLoadCellsStretchOnHover(card)
+    await expectLoadReadoutOnInteraction(card)
+    await expectMinimumTapTarget(card)
+    await expectHeaderFits(card)
+    await assertNoHorizontalOverflow(page)
+  })
+}
+
+// English needs the widest header. The card width follows the dashboard grid,
+// so a 1280 desktop is as tight as a phone.
+for (const width of [320, 390, 1280, 1366, 1440]) {
+  test(`system status header fits in English at ${width}px`, async ({
+    page,
+  }) => {
+    await configureStablePage(page, { theme: 'light', authenticated: true })
+    await page.addInitScript(() => localStorage.setItem('ren2hub_locale', 'en'))
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await waitForStablePage(page)
+
+    const card = page.locator('[data-system-status-card]')
+    await expect(card).toContainText('System status')
+    await expectHeaderFits(card)
     await assertNoHorizontalOverflow(page)
   })
 }

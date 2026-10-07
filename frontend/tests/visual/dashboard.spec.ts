@@ -246,6 +246,23 @@ test('quarter heatmap fills the width beside right-aligned analytics', async ({
   expect(capped.analyticsWidth).toBeLessThanOrEqual(352)
   expect(Math.abs(capped.analyticsRightInset)).toBeLessThan(1)
 
+  // Month shares the right-aligned analytics column, so switching periods
+  // keeps its right edge on the card edge.
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 })
+    await periodOption(card, 'month').click()
+    const monthRightInset = await card.evaluate((element) => {
+      const analytics = element.querySelector('[data-usage-analytics]')!
+      const content = element.querySelector('[data-usage-content]')!
+      return (
+        content.getBoundingClientRect().right -
+        analytics.getBoundingClientRect().right
+      )
+    })
+    expect(Math.abs(monthRightInset), `month at ${width}`).toBeLessThan(1)
+    await periodOption(card, 'quarter').click()
+  }
+
   await page.setViewportSize({ width: 390, height: 844 })
   const mobileCell = await card
     .locator('.usage-dense-cell')

@@ -3,12 +3,23 @@
 package common
 
 import (
+	"fmt"
+
 	"github.com/shirou/gopsutil/load"
 	"golang.org/x/sys/unix"
 )
 
 // sampleLoadAverage reads the kernel load average (/proc/loadavg on Linux).
-func sampleLoadAverage() (LoadAverage, bool) {
+// gopsutil v3.21 indexes the file's fields without a length check, so a
+// truncated file panics; the sample is reported unavailable instead of taking
+// down the process from its background worker.
+func sampleLoadAverage() (average LoadAverage, available bool) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			SysError(fmt.Sprintf("load average sample failed: %v", recovered))
+			average, available = LoadAverage{}, false
+		}
+	}()
 	avg, err := load.Avg()
 	if err != nil {
 		return LoadAverage{}, false

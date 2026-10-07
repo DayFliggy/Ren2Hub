@@ -26,7 +26,9 @@ func DiskSpacePath() string {
 	return os.TempDir()
 }
 
-// LoadAverage is the kernel run-queue average over 1, 5 and 15 minutes.
+// LoadAverage is the kernel load average over 1, 5 and 15 minutes. On Linux it
+// counts runnable tasks and tasks in uninterruptible (usually I/O) sleep, so a
+// stalled disk or network filesystem raises it without busy CPUs.
 type LoadAverage struct {
 	One     float64
 	Five    float64

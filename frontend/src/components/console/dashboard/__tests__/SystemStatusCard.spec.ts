@@ -208,10 +208,16 @@ describe('SystemStatusCard', () => {
     expect(cells[0]!.attributes('style')).toContain(
       '--tier: var(--status-danger)'
     )
-    expect(cells[0]!.find('.cpu-load__value--over').text()).toBe('6.00')
     expect(cells[1]!.attributes('style')).toContain('--tier: var(--accent)')
     expect(cells[2]!.attributes('style')).toContain('--tier: var(--glow)')
-    expect(cells[2]!.text()).toBe('0.40')
+    const figures = cpu.findAll('[data-load-readout] .cpu-load__figure')
+    expect(figures.map((figure) => figure.text())).toEqual([
+      '6.00',
+      '2.50',
+      '0.40',
+    ])
+    expect(figures[0]!.classes()).toContain('cpu-load__figure--over')
+    expect(figures[2]!.classes()).not.toContain('cpu-load__figure--over')
   })
 
   it('marks load windows unknown instead of drawing zero load', () => {
@@ -230,12 +236,13 @@ describe('SystemStatusCard', () => {
 
     const cells = wrapper.findAll('[data-cpu-load] [data-minutes]')
     // A fractional core count is invalid, so no cell claims a share of capacity.
-    expect(wrapper.findAll('[data-cpu-load-fill]')).toHaveLength(0)
-    expect(cells[0]!.attributes('aria-label')).toBe(
-      '1-minute load average 0.40'
-    )
+    for (const cell of cells) {
+      expect(cell.attributes('style')).toContain('--fill-height: 0%')
+    }
     expect(cells[1]!.attributes('data-unknown')).toBe('')
-    expect(cells[1]!.text()).toBe('--')
+    const figures = wrapper.findAll('[data-load-readout] .cpu-load__figure')
+    expect(figures[0]!.text()).toBe('0.40')
+    expect(figures[1]!.text()).toContain('--')
   })
 
   it('draws an unknown CPU gauge without a needle or pivot', () => {

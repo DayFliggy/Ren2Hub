@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { onClickOutside, onKeyStroke } from '@vueuse/core'
 
 export interface CpuLoadCell {
   /** Averaging window: 1, 5 or 15 minutes. */
@@ -15,8 +17,8 @@ export interface CpuLoadCell {
 }
 
 /**
- * Three load cells (1 / 5 / 15 min) without text. Hovering or focusing a
- * cell stretches it to reveal its figure; leaving springs it back.
+ * Three load cells (1/5/15 min) as a single 44×44 tap target. Click or hover
+ * reveals a popover showing all load values with core count.
  */
 const props = defineProps<{
   cells: CpuLoadCell[]
@@ -28,22 +30,34 @@ const { t } = useI18n()
 /** Newer windows read stronger, matching the left-to-right order. */
 const STRENGTH = [1, 0.75, 0.55]
 
-function cellLabel(cell: CpuLoadCell): string {
-  const minutes = cell.minutes
-  if (cell.value === null) {
-    return t('dashboard.systemStatus.loadCellUnknown', { minutes })
-  }
-  if (props.cores === null) {
-    return t('dashboard.systemStatus.loadCellNoCores', {
-      minutes,
-      value: cell.value,
-    })
-  }
-  return t(
-    'dashboard.systemStatus.loadCell',
-    { minutes, value: cell.value, cores: props.cores },
-    props.cores
-  )
+const open = ref(false)
+const root = ref<HTMLElement>()
+
+onClickOutside(root, () => {
+  open.value = false
+})
+
+onKeyStroke('Escape', () => {
+  open.value = false
+})
+
+// Hover is tracked on the wrapper, which also contains the readout, so the
+// pointer can move onto the readout without closing it (WCAG 1.4.13). Touch
+// and pen taps are left to the click toggle.
+function handlePointerEnter(event: PointerEvent) {
+  if (event.pointerType === 'mouse') open.value = true
+}
+
+function handlePointerLeave(event: PointerEvent) {
+  if (event.pointerType === 'mouse') open.value = false
+}
+
+// A mouse click while hovering keeps the readout open instead of toggling it
+// shut under the pointer; keyboard and touch activation toggle.
+function handleClick(event: MouseEvent) {
+  // Browsers dispatch click as a PointerEvent; keyboard clicks report no type.
+  const isMouse = (event as PointerEvent).pointerType === 'mouse'
+  open.value = isMouse || !open.value
 }
 
 /** A measured non-zero load keeps a sliver so it does not read as empty. */
@@ -51,53 +65,131 @@ function fillHeight(fill: number): string {
   if (fill <= 0) return '0%'
   return `${Math.max(8, Math.min(1, fill) * 100)}%`
 }
+
+function buttonLabel(): string {
+  const windows = props.cells
+    .map((c) =>
+      c.value === null
+        ? t('dashboard.systemStatus.loadWindowUnknown', { minutes: c.minutes })
+        : t('dashboard.systemStatus.loadWindow', {
+            minutes: c.minutes,
+            value: c.value,
+          })
+    )
+    .join(t('dashboard.systemStatus.loadSeparator'))
+  if (props.cores === null) {
+    return t('dashboard.systemStatus.loadSummary', { windows })
+  }
+  const coreLabel = t(
+    'dashboard.systemStatus.loadCores',
+    { n: props.cores.toString() },
+    props.cores
+  )
+  return t('dashboard.systemStatus.loadSummaryCores', {
+    windows,
+    cores: coreLabel,
+  })
+}
 </script>
 
 <template>
   <span
+    ref="root"
     class="cpu-load"
-    role="group"
-    :aria-label="t('dashboard.systemStatus.loadAverage')"
     data-cpu-load
+    @pointerenter="handlePointerEnter"
+    @pointerleave="handlePointerLeave"
   >
-    <span
-      v-for="(cell, index) in cells"
-      :key="cell.minutes"
-      class="cpu-load__cell"
-      role="img"
-      tabindex="0"
-      :aria-label="cellLabel(cell)"
-      :data-minutes="cell.minutes"
-      :data-unknown="cell.value === null ? '' : undefined"
-      :style="{ '--tier': cell.color, '--strength': STRENGTH[index] ?? 1 }"
+    <button
+      class="cpu-load__trigger focus-ring"
+      type="button"
+      :aria-label="buttonLabel()"
+      :aria-expanded="open"
+      @click="handleClick"
     >
       <span
-        v-if="cell.fill !== null"
-        class="cpu-load__fill"
-        :style="{ height: fillHeight(cell.fill) }"
-        data-cpu-load-fill
-      />
-      <span
-        class="cpu-load__value"
-        :class="{ 'cpu-load__value--over': cell.overloaded }"
-        aria-hidden="true"
+        v-for="(cell, index) in cells"
+        :key="cell.minutes"
+        class="cpu-load__cell"
+        :data-minutes="cell.minutes"
+        :data-unknown="cell.value === null ? '' : undefined"
+        :style="{
+          '--tier': cell.color,
+          '--strength': STRENGTH[index] ?? 1,
+          '--fill-height': cell.fill !== null ? fillHeight(cell.fill) : '0%',
+        }"
       >
-        {{ cell.value ?? '--' }}
+        <span class="cpu-load__fill" data-cpu-load-fill />
       </span>
-    </span>
+    </button>
+
+    <div
+      class="cpu-load__readout"
+      :class="{ 'cpu-load__readout--open': open }"
+      data-load-readout
+      aria-hidden="true"
+    >
+      <p v-if="cores !== null" class="cpu-load__header">
+        {{ t('dashboard.systemStatus.loadAverage') }} ·
+        {{
+          t('dashboard.systemStatus.loadCores', { n: cores.toString() }, cores)
+        }}
+      </p>
+      <dl class="cpu-load__values">
+        <div
+          v-for="cell in cells"
+          :key="cell.minutes"
+          class="cpu-load__value-col"
+          :data-load-window="cell.minutes"
+        >
+          <dt class="cpu-load__caption">
+            {{
+              t('dashboard.systemStatus.loadCaption', { minutes: cell.minutes })
+            }}
+          </dt>
+          <dd
+            class="cpu-load__figure"
+            :class="{ 'cpu-load__figure--over': cell.overloaded }"
+          >
+            <template v-if="cell.value !== null">{{ cell.value }}</template>
+            <template v-else>
+              --<span class="sr-only">{{
+                t('dashboard.systemStatus.loadUnavailable')
+              }}</span>
+            </template>
+          </dd>
+        </div>
+      </dl>
+    </div>
   </span>
 </template>
+
 <style scoped>
 .cpu-load {
+  position: relative;
   display: inline-flex;
-  height: 16px;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 3px;
 }
 
-/* Leaving uses the bouncy spring, whose overshoot is the rebound; the global
-   reduced-motion rule turns every transition here off. */
+.cpu-load__trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Extends the tap target to 44×44px while keeping cells visually 8×16. */
+.cpu-load__trigger::before {
+  content: '';
+  position: absolute;
+  inset: -8px -7px -20px -7px;
+  border-radius: var(--shape-control);
+}
+
 .cpu-load__cell {
   position: relative;
   display: inline-flex;
@@ -105,28 +197,13 @@ function fillHeight(fill: number): string {
   height: 16px;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
   border-radius: 3px;
   background: color-mix(in srgb, var(--text-primary) 12%, transparent);
-  outline: none;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    width 460ms var(--ease-spring-bouncy),
-    background-color 200ms ease;
+  transition: background-color 200ms ease;
 }
 
-.cpu-load__cell:hover,
-.cpu-load__cell:focus-visible {
-  width: 32px;
-  background: color-mix(in srgb, var(--tier) 16%, transparent);
-  transition:
-    width 260ms var(--ease-spring-snappy),
-    background-color 200ms ease;
-}
-
-.cpu-load__cell:focus-visible {
-  outline: 1.5px solid var(--tier);
-  outline-offset: 1px;
+.cpu-load__trigger[aria-expanded='true'] .cpu-load__cell {
+  background: color-mix(in srgb, var(--tier) 12%, transparent);
 }
 
 .cpu-load__cell[data-unknown] {
@@ -138,40 +215,81 @@ function fillHeight(fill: number): string {
   position: absolute;
   right: 0;
   bottom: 0;
-  left: 0;
-  border-radius: inherit;
+  width: 8px;
+  height: 16px;
+  border-radius: 3px;
   background: var(--tier);
+  clip-path: inset(calc(100% - var(--fill-height, 0%)) 0 0 0);
   opacity: var(--strength);
   transition:
-    height 500ms var(--ease-spring-smooth),
+    clip-path 500ms var(--ease-spring-smooth),
     opacity 200ms ease;
 }
 
-.cpu-load__cell:hover .cpu-load__fill,
-.cpu-load__cell:focus-visible .cpu-load__fill {
-  opacity: 0.28;
-}
-
-.cpu-load__value {
-  position: relative;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: var(--text-primary);
+.cpu-load__readout {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.94) translateY(-4px);
+  min-width: 160px;
+  padding: 10px 12px 11px;
+  background: var(--surface-overlay);
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--shape-overlay);
+  box-shadow: var(--elevation-2);
   opacity: 0;
-  transition: opacity 120ms ease;
+  transform-origin: top center;
+  transition:
+    opacity 180ms var(--ease-spring-snappy),
+    transform 180ms var(--ease-spring-snappy);
+  visibility: hidden;
+  z-index: 10;
 }
 
-.cpu-load__value--over {
-  color: var(--status-danger);
-}
-
-.cpu-load__cell:hover .cpu-load__value,
-.cpu-load__cell:focus-visible .cpu-load__value {
+.cpu-load__readout--open {
   opacity: 1;
-  transition-delay: 90ms;
+  transform: translateX(-50%) scale(1) translateY(0);
+  visibility: visible;
+}
+
+.cpu-load__header {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.cpu-load__values {
+  display: flex;
+  gap: 14px;
+  margin: 0;
+}
+
+.cpu-load__value-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cpu-load__caption {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.cpu-load__figure {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.cpu-load__figure--over {
+  color: var(--status-danger-text);
 }
 </style>
