@@ -53,6 +53,32 @@ func TestUsageBoundaryAcceptsOnlyExactNumbers(t *testing.T) {
 	}
 }
 
+// CallInto would store a usage result without exactUsageResult, so a usage
+// hook must be refused before it runs; ordinary hooks still decode.
+func TestUsageHooksCannotBeDecodedIntoGoValues(t *testing.T) {
+	engine, err := Compile(`
+let runs = 0;
+export function extractUsage() { runs++; return {seconds: 0.1 + 0.2}; }
+export function extractUsageOnSubmit() { runs++; return {seconds: 0.1 + 0.2}; }
+export function extractUsageOnComplete() { runs++; return {seconds: 0.1 + 0.2}; }
+export function ordinary() { return {seconds: 1.5, runs}; }
+`, Options{Key: "usage-into", Version: "1.0.0"})
+	require.NoError(t, err)
+	for _, hook := range []string{"extractUsage", "extractUsageOnSubmit", "extractUsageOnComplete"} {
+		var decoded map[string]any
+		err = engine.CallInto(t.Context(), &decoded, hook)
+		require.EqualError(t, err, "plugin usage-into@1.0.0 hook "+hook+" returns usage and cannot be decoded into a Go value", hook)
+		assert.Nil(t, decoded, hook)
+	}
+	var ordinary struct {
+		Seconds float64 `json:"seconds"`
+		Runs    int     `json:"runs"`
+	}
+	require.NoError(t, engine.CallInto(t.Context(), &ordinary, "ordinary"))
+	assert.Equal(t, 1.5, ordinary.Seconds)
+	assert.Zero(t, ordinary.Runs, "a refused usage hook must not run")
+}
+
 func TestUsageHooksSeeSourceDecimalsWithoutHostRounding(t *testing.T) {
 	engine, err := Compile(`
 export function extractUsage(ctx){return {seconds:utils.decimal.add(ctx.a,ctx.b)};}

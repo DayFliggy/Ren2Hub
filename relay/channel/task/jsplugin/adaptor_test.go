@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"math"
 	"mime/multipart"
@@ -664,13 +665,22 @@ func TestTaskAdaptorPreservesSoraVideoResponseFields(t *testing.T) {
 }
 
 func TestTaskAdaptorRejectsNonObjectOpenAIVideoRendererOutput(t *testing.T) {
-	for _, value := range []string{"null", "[]", `"video"`, "42", "false"} {
+	for value, message := range map[string]string{
+		"null":           "plugin returned an invalid OpenAI video object",
+		"undefined":      "plugin returned an invalid OpenAI video object",
+		"[]":             "plugin returned an invalid OpenAI video object",
+		`"video"`:        "plugin returned an invalid OpenAI video object",
+		"42":             "plugin returned an invalid OpenAI video object",
+		"false":          "plugin returned an invalid OpenAI video object",
+		"{seconds: NaN}": "json: unsupported value: NaN",
+		"[Infinity]":     "json: unsupported value: +Inf",
+	} {
 		t.Run(value, func(t *testing.T) {
 			source := strings.Replace(mockPlugin, `return {id: task.task_id, status: "completed"};`, "return "+value+";", 1)
 			plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
 			require.NoError(t, err)
 			_, err = New(plugin).ConvertToOpenAIVideo(&model.Task{TaskID: "task_public"})
-			require.ErrorContains(t, err, "invalid OpenAI video object")
+			require.EqualError(t, err, message)
 		})
 	}
 }
@@ -1750,6 +1760,86 @@ func TestPluginJSONValuesPreserveCodecNormalizationAndIsolation(t *testing.T) {
 	copy := jsonValue(source).(map[string]any)
 	copy["items"].([]any)[0].(map[string]any)["label"] = "changed"
 	assert.Equal(t, "original", source["items"].([]any)[0].(map[string]any)["label"])
+}
+
+func TestRequestDescriptorDecodingMatchesCodec(t *testing.T) {
+	engine, err := pluginruntime.Compile(`
+class Descriptor { constructor() { this.url = "u"; this.method = "PUT"; } }
+let deep = "leaf";
+for (let i = 0; i < 70; i++) deep = [deep];
+const results = {
+  "plain body": () => ({url: "https://provider.example/submit", method: "POST", headers: {"X-Plugin": "submit"}, body: {
+    units: 3, large: 2 ** 60, zero: -0, text: "<image> &   图像", missing: undefined,
+    items: [null, true, 1.5, {}, [], undefined],
+  }}),
+  "argument body": (arg) => ({url: "u", body: arg}),
+  "argument headers": (arg) => ({url: "u", headers: arg.headers}),
+  "changed argument body": (arg) => { arg.units = 4; return {url: "u", body: arg}; },
+  "string body": () => ({url: "u", body: '{"raw":true}'}),
+  "null body": () => ({url: "u", body: null}),
+  "undefined body": () => ({url: "u", body: undefined}),
+  "no body": () => ({url: "u", credentialless: true}),
+  "class instance": () => new Descriptor(),
+  "null prototype": () => Object.assign(Object.create(null), {url: "u", body: {a: 1}}),
+  "getter body": () => ({url: "u", get body() { return {from: "getter"}; }}),
+  "date body": () => ({url: "u", body: {at: new Date(0)}}),
+  "typed array body": () => ({url: "u", body: new Uint8Array([0, 1, 255])}),
+  "deep body": () => ({url: "u", body: deep}),
+  "capitalized body key": () => ({url: "u", Body: {from: "Body"}}),
+  "body and capitalized body": () => ({url: "u", body: {from: "body"}, Body: {from: "Body"}, BODY: "upper"}),
+  "case-insensitive other field": () => ({URL: "u", Method: "PUT", body: "text"}),
+  "NaN body": () => ({url: "u", body: {ratio: NaN}}),
+  "infinite method": () => ({url: "u", method: Infinity, body: {}}),
+  "cyclic body": () => { const body = {}; body.self = body; return {url: "u", body}; },
+  "invalid header": () => ({url: "u", headers: {x: 1}, body: {}}),
+  "invalid parts": () => ({url: "u", parts: "none", body: {}}),
+  "not an object": () => "descriptor",
+  "throwing getter": () => ({url: "u", get body() { throw new Error("getter failed"); }}),
+};
+export function build(name, arg) { return results[name](arg); }
+`, pluginruntime.Options{})
+	require.NoError(t, err)
+	argument := func() map[string]any {
+		return map[string]any{
+			"units": int64(3), "large": int64(math.MaxInt64), "zero": math.Copysign(0, -1),
+			"headers": map[string]any{"X-Plugin": "submit"},
+			"items":   []any{nil, true, 1.5, map[string]any{"label": "original"}, []any{}},
+		}
+	}
+	for _, name := range []string{
+		"plain body", "argument body", "argument headers", "changed argument body", "string body", "null body",
+		"undefined body", "no body", "class instance", "null prototype", "getter body", "date body",
+		"typed array body", "deep body", "capitalized body key", "body and capitalized body",
+		"case-insensitive other field", "NaN body", "infinite method", "cyclic body", "invalid header",
+		"invalid parts", "not an object", "throwing getter",
+	} {
+		var expected requestDescriptor
+		value, expectedErr := engine.Call(t.Context(), "build", name, argument())
+		hookFailed := expectedErr != nil
+		if !hookFailed {
+			expectedErr = convert(value, &expected)
+		}
+		var decoded requestDescriptor
+		err := engine.CallInto(t.Context(), &decoded, "build", name, argument())
+		if expectedErr != nil {
+			require.EqualError(t, err, expectedErr.Error(), name)
+			var invalid *pluginruntime.ResultError
+			assert.Equal(t, !hookFailed, errors.As(err, &invalid), name)
+			continue
+		}
+		require.NoError(t, err, name)
+		assert.Equal(t, expected, decoded, name)
+		expectedJSON, err := common.Marshal(expected)
+		require.NoError(t, err, name)
+		decodedJSON, err := common.Marshal(decoded)
+		require.NoError(t, err, name)
+		assert.Equal(t, string(expectedJSON), string(decodedJSON), name)
+	}
+	source := argument()
+	var decoded requestDescriptor
+	require.NoError(t, engine.CallInto(t.Context(), &decoded, "build", "argument body", source))
+	decoded.Body.(map[string]any)["items"].([]any)[3].(map[string]any)["label"] = "changed"
+	assert.Equal(t, "original", source["items"].([]any)[3].(map[string]any)["label"])
 }
 
 func TestTaskSubmitHooksReceiveIndependentRequestSnapshots(t *testing.T) {
