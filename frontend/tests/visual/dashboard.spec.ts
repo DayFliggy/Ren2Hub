@@ -4,6 +4,10 @@ import {
   assertInteractiveCentersVisible,
   assertNoHorizontalOverflow,
   configureStablePage,
+  contrastRatio,
+  measureLuminance,
+  minTextContrast,
+  visualDateKey,
   waitForStablePage,
   type VisualTheme,
 } from './fixtures'
@@ -447,6 +451,126 @@ test('usage distribution stays compact and contained on mobile', async ({
   const touchTarget = await periodOption(card, 'year').boundingBox()
   expect(touchTarget?.height).toBeGreaterThanOrEqual(44)
 })
+
+// A tablet-wide card puts the analytics beside the month calendar instead of
+// leaving half the stage empty, and every period keeps one card height.
+for (const width of [640, 768, 1024]) {
+  test(`usage analytics sit beside the month calendar at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const card = page.locator('[data-usage-distribution]')
+    const heights: number[] = []
+
+    for (const period of PERIODS) {
+      await periodOption(card, period).click()
+      await expect(
+        card.locator(`[data-usage-layout="${period}"]`)
+      ).toBeVisible()
+      const layout = await card.evaluate((element) => {
+        const rect = (selector: string) =>
+          element.querySelector(selector)!.getBoundingClientRect()
+        const scroll = element.querySelector('[data-usage-scroll]')
+        return {
+          height: element.getBoundingClientRect().height,
+          heatmapRight: rect('[data-usage-layout]').right,
+          analyticsLeft: rect('[data-usage-analytics]').left,
+          heatmapOverflow: scroll ? scroll.scrollWidth - scroll.clientWidth : 0,
+        }
+      })
+      if (period === 'month') {
+        expect(layout.analyticsLeft).toBeGreaterThan(layout.heatmapRight)
+      }
+      expect(layout.heatmapOverflow, `${period} pans`).toBeLessThanOrEqual(1)
+      heights.push(layout.height)
+    }
+
+    expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1)
+    await assertNoHorizontalOverflow(page)
+  })
+}
+
+test('weekday labels stay under their rhythm slots when weekends are quiet', async ({
+  page,
+}) => {
+  const quietWeekends = Array.from({ length: 366 }, (_, index) => {
+    const date = visualDateKey(365 - index)
+    const day = new Date(`${date}T00:00:00`).getDay()
+    const weekend = day === 0 || day === 6
+    return {
+      date,
+      requests: weekend ? 0 : 900 + ((index * 37) % 400),
+      consume: weekend ? '0' : String(120_000 + index),
+      tokens: weekend ? 0 : 400_000 + index,
+    }
+  })
+  await page.route(/\/api\/next\/dashboard\/distribution(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { success: true, message: '', data: quietWeekends } })
+  )
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await waitForStablePage(page)
+
+  const card = page.locator('[data-usage-distribution]')
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 })
+    const drift = await card
+      .locator('[data-usage-segment-bar="rhythm"]')
+      .evaluate((bar) => {
+        const center = (element: Element) => {
+          const rect = element.getBoundingClientRect()
+          return rect.left + rect.width / 2
+        }
+        const slots = [...bar.querySelectorAll('[data-usage-segment]')]
+        const labels = [
+          ...bar.querySelectorAll('[data-usage-segment-labels] > span'),
+        ]
+        if (slots.length !== 7 || labels.length !== 7) {
+          throw new Error(`${slots.length} slots, ${labels.length} labels`)
+        }
+        return Math.max(
+          ...slots.map((slot, index) =>
+            Math.abs(center(slot) - center(labels[index]!))
+          )
+        )
+      })
+    expect(drift, `label drift at ${width}px`).toBeLessThanOrEqual(2)
+  }
+})
+
+for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
+  test.describe(`heatmap ramp by ${theme === 'light' ? 'day' : 'night'}`, () => {
+    test.use({ dashboardTheme: theme })
+
+    // Day numbers stay readable on every level, and neighbouring levels of
+    // the ramp remain distinguishable for each metric.
+    test('day numbers and ramp levels stay legible for each metric', async ({
+      page,
+    }) => {
+      const card = page.locator('[data-usage-distribution]')
+      for (const metric of ['调用', '消费', 'Token']) {
+        await metricOption(card, metric).click()
+        expect(
+          await minTextContrast(card.locator('.usage-month-cell')),
+          `${metric} day numbers`
+        ).toBeGreaterThanOrEqual(4.5)
+
+        const levels = await measureLuminance(
+          card.locator('[data-usage-footer] span.border')
+        )
+        expect(levels).toHaveLength(6)
+        for (let level = 1; level < levels.length; level += 1) {
+          expect(
+            contrastRatio(
+              levels[level]!.background,
+              levels[level - 1]!.background
+            ),
+            `${metric} level ${level - 1} to ${level}`
+          ).toBeGreaterThanOrEqual(1.15)
+        }
+      }
+    })
+  })
+}
 
 test('usage heatmap exposes one roving cell and moves by date', async ({
   page,

@@ -409,6 +409,31 @@ describe('SystemStatusCard', () => {
     expect(bandwidth.find('[data-bandwidth-sparkline]').exists()).toBe(false)
   })
 
+  it('reads storage in one unit with at most three significant figures', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(SystemStatusCard, {
+      props: {
+        metrics: {
+          ...metrics(),
+          memory_used_gb: 62.8,
+          memory_total_gb: 125.7,
+          disk_used_gb: 1843.2,
+          disk_total_gb: 3726,
+        },
+      },
+      global: { plugins: [pinia, i18n] },
+    })
+
+    const memory = wrapper.get('[data-metric="memory"]').text()
+    const disk = wrapper.get('[data-metric="disk"]').text()
+    expect(memory.replace(/\s+/g, '')).toContain('62.8/126GB')
+    expect(disk).toContain('1.8')
+    expect(disk).toContain('3.6')
+    expect(disk).toContain('TB')
+    expect(disk).not.toContain('GB')
+  })
+
   it('uses the Chinese app traffic label', async () => {
     await setLocale('zh-CN')
     const pinia = createPinia()

@@ -1,4 +1,9 @@
-import { expect, type ConsoleMessage, type Page } from '@playwright/test'
+import {
+  expect,
+  type ConsoleMessage,
+  type Locator,
+  type Page,
+} from '@playwright/test'
 
 import {
   opsBillingMetrics,
@@ -37,7 +42,7 @@ const VISUAL_HOURLY_REQUESTS = [
   32, 26, 21, 15,
 ]
 
-function visualDateKey(daysAgo: number): string {
+export function visualDateKey(daysAgo: number): string {
   return new Date(FIXED_NOW - daysAgo * DAY_MS).toISOString().slice(0, 10)
 }
 
@@ -1359,6 +1364,70 @@ export async function assertNoHorizontalOverflow(page: Page): Promise<void> {
   }))
   expect(overflow.html).toBeLessThanOrEqual(1)
   expect(overflow.body).toBeLessThanOrEqual(1)
+}
+
+/**
+ * Relative luminance of each matched element's background and of its text,
+ * with the background composited from the element's own and its ancestors'
+ * background colours (background images are ignored).
+ */
+export async function measureLuminance(
+  locator: Locator
+): Promise<Array<{ background: number; text: number }>> {
+  const measured = await locator.evaluateAll((elements) => {
+    const context = document.createElement('canvas').getContext('2d')!
+    const paint = (colors: string[]) => {
+      context.clearRect(0, 0, 1, 1)
+      for (const color of colors) {
+        context.fillStyle = color
+        context.fillRect(0, 0, 1, 1)
+      }
+      return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)]
+    }
+    const luminance = (rgb: number[]) => {
+      const [r, g, b] = rgb.map((channel) => {
+        const value = channel / 255
+        return value <= 0.04045
+          ? value / 12.92
+          : ((value + 0.055) / 1.055) ** 2.4
+      })
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!
+    }
+    const page = getComputedStyle(document.documentElement)
+      .getPropertyValue('--page-background')
+      .trim()
+    return elements.map((element) => {
+      const layers: string[] = []
+      for (
+        let node: Element | null = element;
+        node;
+        node = node.parentElement
+      ) {
+        layers.unshift(getComputedStyle(node).backgroundColor)
+      }
+      const background = paint([page, ...layers])
+      const text = paint([
+        `rgb(${background.join(',')})`,
+        getComputedStyle(element).color,
+      ])
+      return { background: luminance(background), text: luminance(text) }
+    })
+  })
+  expect(measured.length, 'no elements to measure').toBeGreaterThan(0)
+  return measured
+}
+
+/** WCAG contrast ratio between two relative luminances. */
+export function contrastRatio(first: number, second: number): number {
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05)
+}
+
+/** Lowest text contrast among the matched elements. */
+export async function minTextContrast(locator: Locator): Promise<number> {
+  const measured = await measureLuminance(locator)
+  return Math.min(
+    ...measured.map(({ background, text }) => contrastRatio(background, text))
+  )
 }
 
 export async function assertInteractiveCentersVisible(

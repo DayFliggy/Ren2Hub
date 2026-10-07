@@ -54,32 +54,29 @@ const metricOptions = computed(() => [
   { value: 'tokens', label: t('dashboard.distribution.metricTokens') },
 ])
 
-const metricColor = computed(() => {
-  if (metric.value === 'consume') return 'var(--accent)'
-  if (metric.value === 'tokens') return 'var(--support)'
-  return 'var(--signal)'
-})
+const metricColor = computed(() => `var(--heatmap-${metric.value})`)
 
 const periodLabel = computed(() =>
   t(`dashboard.distribution.periodSummary.${period.value}`)
 )
 
-// From lg, month and quarter sit beside the analytics column. Quarter cells
+// From sm, month and quarter sit beside the analytics column, so a tablet-wide
+// card has no empty half beside the fixed-width month calendar. Quarter cells
 // stretch, so its heatmap track grows to the cell cap before the analytics
 // column takes the rest and ends flush with the card's right edge.
 const stageColumns = computed(() => {
-  if (period.value === 'month') return 'lg:grid-cols-[auto_minmax(0,1fr)]'
+  if (period.value === 'month') return 'sm:grid-cols-[auto_minmax(0,1fr)]'
   if (period.value === 'quarter') {
-    return 'lg:grid-cols-[minmax(0,max-content)_minmax(14rem,1fr)]'
+    return 'sm:grid-cols-[minmax(0,max-content)_minmax(14rem,1fr)]'
   }
   return ''
 })
 
 const analyticsClasses = computed(() => {
-  if (period.value === 'year') return 'lg:gap-6 lg:pt-2'
+  if (period.value === 'year') return 'sm:gap-6 sm:pt-1'
   // Month and quarter both end flush with the card's right edge; surplus
   // width opens before the divider, never after it.
-  return 'lg:flex lg:w-full lg:max-w-[22rem] lg:flex-col lg:justify-center lg:justify-self-end lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0'
+  return 'sm:flex sm:w-full sm:max-w-[22rem] sm:flex-col sm:justify-center sm:justify-self-end sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0'
 })
 const metricLabel = computed(
   () =>
@@ -91,6 +88,7 @@ function formatMetric(value: number): string {
 }
 
 const weekdays = computed(() => usageWeekdayLabels(locale.value))
+const weekdayNames = computed(() => usageWeekdayLabels(locale.value, 'short'))
 
 const topSegments = computed(() =>
   view.value.topDays.map((day, index) => ({
@@ -124,9 +122,16 @@ const weekdaySummary = computed(() => {
   const peak = peakWeekday.value
   if (!peak || peak.value <= 0) return ''
   return t('dashboard.distribution.weekdayPeak', {
-    weekday: weekdays.value[peak.weekday],
+    weekday: weekdayNames.value[peak.weekday],
     value: formatMetric(peak.value),
   })
+})
+
+/** The year band hides the ranked rows, so its title names the busiest day. */
+const topDaySummary = computed(() => {
+  const top = topSegments.value[0]
+  if (period.value !== 'year' || !top) return ''
+  return `${top.label} ${top.displayValue}`
 })
 </script>
 
@@ -201,6 +206,7 @@ const weekdaySummary = computed(() => {
             :segments="topSegments"
             :color="metricColor"
             :empty-label="t('dashboard.stats.noData')"
+            :summary="topDaySummary"
             :reserved-rows="USAGE_TOP_DAY_LIMIT"
             :compact="period === 'year'"
             layout="ranked"
@@ -249,11 +255,11 @@ const weekdaySummary = computed(() => {
 
 <style scoped>
 /*
- * From lg the overview row aligns this card with BalanceCard, so the stage
- * reserves one height that every period fits inside (month 162px, quarter
- * 154px, year 163px at most); surplus row height is centred by the grid.
+ * From sm every period fits one stage height (month 162px, quarter 154px, year
+ * within it), so switching periods keeps the card height; from xl this also
+ * aligns the overview row with BalanceCard. Surplus row height is centred.
  */
-@media (min-width: 1024px) {
+@media (min-width: 640px) {
   .usage-stage {
     min-height: 170px;
   }

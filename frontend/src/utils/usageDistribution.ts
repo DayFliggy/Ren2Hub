@@ -46,8 +46,6 @@ const PERIOD_DAYS: Record<UsageDistributionPeriod, number> = {
 /** Ranked analytics always reserve this many rows so the card height is fixed. */
 export const USAGE_TOP_DAY_LIMIT = 3
 
-const HEAT_MIX = [0, 20, 34, 50, 68, 88] as const
-
 function localDateKey(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
@@ -192,28 +190,41 @@ export function formatUsageDate(dateKey: string, locale: string): string {
   }).format(fromDateKey(dateKey))
 }
 
-/** Narrow weekday names, Monday first, matching the grid's week layout. */
-export function usageWeekdayLabels(locale: string): string[] {
-  const format = new Intl.DateTimeFormat(locale, { weekday: 'narrow' })
+/**
+ * Weekday names, Monday first, matching the grid's week layout. Narrow names
+ * label columns; short names stand alone in text, where "T" would be ambiguous.
+ */
+export function usageWeekdayLabels(
+  locale: string,
+  width: 'narrow' | 'short' = 'narrow'
+): string[] {
+  const format = new Intl.DateTimeFormat(locale, { weekday: width })
   return Array.from({ length: 7 }, (_, index) =>
     format.format(new Date(2024, 0, 1 + index))
   )
 }
 
-/** Cell and legend colour for one intensity level of the active metric. */
+/**
+ * Cell and legend colours for one intensity level of the active metric. The
+ * theme owns the ramp: tokens.css sets each level's mix and the day-number
+ * colour that stays readable on it.
+ */
 export function usageHeatStyle(
   level: UsageHeatmapCell['level'],
   color: string
-): { background: string; borderColor: string } {
+): { background: string; borderColor: string; color: string } {
+  const foreground = `var(--heatmap-foreground-${level})`
   if (level === 0) {
     return {
       background: 'var(--surface-muted)',
       borderColor: 'var(--border-subtle)',
+      color: foreground,
     }
   }
-  const amount = HEAT_MIX[level]
+  const amount = `var(--heatmap-mix-${level})`
   return {
-    background: `color-mix(in srgb, ${color} ${amount}%, var(--surface-solid))`,
-    borderColor: `color-mix(in srgb, ${color} ${Math.min(96, amount + 8)}%, var(--border-subtle))`,
+    background: `color-mix(in srgb, ${color} ${amount}, var(--surface-solid))`,
+    borderColor: `color-mix(in srgb, ${color} ${amount}, var(--border-default))`,
+    color: foreground,
   }
 }

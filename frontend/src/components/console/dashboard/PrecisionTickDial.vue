@@ -30,11 +30,14 @@ const isUnknown = computed(() => props.percent === null)
 const clampedPercent = computed(() =>
   props.percent === null ? 0 : Math.min(100, Math.max(0, props.percent))
 )
-const activeTickCount = computed(() =>
-  isUnknown.value
-    ? 0
-    : Math.round((clampedPercent.value / 100) * props.tickCount)
-)
+/** Only 100% fills the ring, so 99.7% never reads as a perfect rate. */
+const activeTickCount = computed(() => {
+  if (isUnknown.value) return 0
+  const ticks = Math.round((clampedPercent.value / 100) * props.tickCount)
+  return clampedPercent.value < 100
+    ? Math.min(props.tickCount - 1, ticks)
+    : ticks
+})
 
 const ticks = computed<TickGeometry[]>(() => {
   const count = props.tickCount

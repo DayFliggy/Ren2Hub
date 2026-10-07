@@ -161,10 +161,15 @@ describe('UsageDistributionCard', () => {
     expect(bottom.findAll('[data-usage-segment-compact="true"]')).toHaveLength(
       2
     )
-    // Compact bars drop their details only where the band sits below the grid.
+    // From sm the band drops the ranked rows and names the busiest day instead.
     expect(bottom.get('[data-usage-segment-details]').classes()).toContain(
-      'lg:hidden'
+      'sm:hidden'
     )
+    expect(
+      bottom
+        .get('[data-usage-segment-bar="ranked"] [data-usage-segment-summary]')
+        .text()
+    ).toContain('365')
 
     const segment = wrapper.get(
       '[data-usage-analytics="bottom"] [data-usage-segment]'
@@ -199,6 +204,23 @@ describe('UsageDistributionCard', () => {
     expect(
       (document.activeElement as HTMLElement).dataset.usageSegment
     ).not.toBe(start)
+  })
+
+  it('keeps a rhythm slot under each weekday label, idle days included', () => {
+    const weekdaysOnly = points().map((point) => {
+      const day = new Date(`${point.date}T00:00:00`).getDay()
+      return day === 0 || day === 6 ? { ...point, requests: 0 } : point
+    })
+    const rhythm = render({ points: weekdaysOnly }).get(
+      '[data-usage-segment-bar="rhythm"]'
+    )
+    const segments = rhythm.findAll('[data-usage-segment]')
+
+    expect(
+      segments.map((segment) => segment.attributes('data-usage-segment'))
+    ).toEqual(['0', '1', '2', '3', '4', '5', '6'])
+    expect(segments[5]!.attributes('data-usage-segment-share')).toBe('0.000000')
+    expect(rhythm.findAll('[data-usage-segment-labels] > span')).toHaveLength(7)
   })
 
   it('moves month focus by day with horizontal arrow keys', async () => {

@@ -135,17 +135,6 @@ function denseWeekdayLabel(index: number): string {
   return index % 2 === 0 ? weekdays.value[index]! : ''
 }
 
-function cellStyle(cell: UsageHeatmapCell): CSSProperties {
-  const useStrongForeground =
-    props.metric === 'requests' ? cell.level >= 5 : cell.level >= 3
-  return {
-    ...usageHeatStyle(cell.level, props.metricColor),
-    color: useStrongForeground
-      ? 'var(--heatmap-strong-foreground)'
-      : 'var(--heatmap-soft-foreground)',
-  }
-}
-
 function cellLabel(cell: UsageHeatmapCell): string {
   return t('dashboard.distribution.cellLabel', {
     date: formatUsageDate(cell.date, locale.value),
@@ -283,7 +272,10 @@ onMounted(() => void alignLatest())
           :key="cell.date"
           type="button"
           class="usage-month-cell focus-ring"
-          :style="[cellStyle(cell), { gridColumn: column, gridRow: row }]"
+          :style="[
+            usageHeatStyle(cell.level, metricColor),
+            { gridColumn: column, gridRow: row },
+          ]"
           :tabindex="focusDate === cell.date ? 0 : -1"
           :aria-label="cellLabel(cell)"
           :aria-describedby="
@@ -359,7 +351,7 @@ onMounted(() => void alignLatest())
                   type="button"
                   class="usage-dense-cell focus-ring"
                   :style="[
-                    cellStyle(cell),
+                    usageHeatStyle(cell.level, metricColor),
                     { gridColumn: column, gridRow: row },
                   ]"
                   :tabindex="focusDate === cell.date ? 0 : -1"
@@ -427,9 +419,9 @@ onMounted(() => void alignLatest())
 
 <style scoped>
 /*
- * Height contract. Below lg every period stacks the heatmap above the same
+ * Height contract. Below sm every period stacks the heatmap above the same
  * analytics block, so the root reserves the six-week month calendar height and
- * dense periods centre inside it. From lg the card stage owns the height (see
+ * dense periods centre inside it. From sm the card stage owns the height (see
  * UsageDistributionCard) and the root shrinks to its content.
  */
 .usage-heatmap {
@@ -655,6 +647,7 @@ onMounted(() => void alignLatest())
   .usage-heatmap {
     --usage-calendar-width: 42px;
     --usage-calendar-column-gap: 5px;
+    min-height: 0;
   }
 
   .usage-month-cell,
@@ -677,18 +670,8 @@ onMounted(() => void alignLatest())
     --usage-columns: repeat(var(--usage-weeks), minmax(12px, 32px));
   }
 
-  /* Tablets fit the whole year unless cells would drop below 10px. */
-  .usage-dense[data-period='year'] {
-    --usage-cell-size: clamp(10px, var(--usage-fit-cell), 14px);
-  }
-}
-
-@media (min-width: 1024px) {
-  .usage-heatmap {
-    min-height: 0;
-  }
-
-  /* Year spans the stage: every week fits, capped by the stage height. */
+  /* Year spans the stage with every week visible (about 8px cells on a 640px
+     tablet), capped by the stage height; only phones pan through the weeks. */
   .usage-dense[data-period='year'] {
     --usage-cell-size: min(var(--usage-fit-cell), 12px);
   }

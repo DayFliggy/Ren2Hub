@@ -50,4 +50,13 @@ describe('PrecisionTickDial', () => {
     expect(wrapper.findAll('.tick-active')).toHaveLength(20)
     expect(wrapper.findAll('.tick-inactive')).toHaveLength(0)
   })
+
+  it('leaves the last tick dark for any rate below 100 percent', () => {
+    const wrapper = mount(PrecisionTickDial, {
+      props: { percent: 99.7, color: 'var(--glow)', size: 38 },
+    })
+
+    expect(wrapper.findAll('.tick-active')).toHaveLength(19)
+    expect(wrapper.findAll('.tick-inactive')).toHaveLength(1)
+  })
 })

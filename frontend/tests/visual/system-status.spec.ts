@@ -2,6 +2,7 @@ import { expect, type Locator, test } from '@playwright/test'
 
 import {
   assertNoHorizontalOverflow,
+  minTextContrast,
   configureStablePage,
   waitForStablePage,
   type VisualTheme,
@@ -214,4 +215,100 @@ for (const width of [320, 390, 1280, 1366, 1440]) {
     await expectHeaderFits(card)
     await assertNoHorizontalOverflow(page)
   })
+}
+
+// The fixture's 16 GB / 512 GB host hides overflow; these are a real server's
+// readings and the widest figures each tile can show.
+const SERVER_READINGS = {
+  realistic: {
+    cpu_percent: 45.6,
+    memory_used_gb: 62.8,
+    memory_total_gb: 125.7,
+    disk_used_gb: 1843.2,
+    disk_total_gb: 3726,
+  },
+  widest: {
+    cpu_percent: 100,
+    memory_used_gb: 87.4,
+    memory_total_gb: 94.2,
+    disk_used_gb: 401.5,
+    disk_total_gb: 476.9,
+  },
+}
+
+/** Every figure stays inside its tile and clear of the CPU gauge and disk ring. */
+async function expectReadingsInsideTiles(card: Locator): Promise<void> {
+  const layout = await card.evaluate((node) => {
+    const rect = (element: Element) => element.getBoundingClientRect()
+    const tiles = [
+      ...node.querySelectorAll<HTMLElement>('[data-system-status-tile]'),
+    ]
+    const overflow = tiles.map((tile) => {
+      const right =
+        rect(tile).right - parseFloat(getComputedStyle(tile).paddingRight)
+      const parts = [...tile.querySelectorAll('span, p, svg')].filter(
+        (part) => !part.closest('[data-load-readout]') && rect(part).width > 0
+      )
+      return Math.max(...parts.map((part) => rect(part).right - right))
+    })
+    const cpu = node.querySelector('[data-cpu-gauge]')!
+    const disk = node.querySelector('[data-disk-gauge]')!
+    const diskText = [...disk.firstElementChild!.querySelectorAll('span')]
+    return {
+      overflow: Math.max(...overflow),
+      cpuGap:
+        rect(cpu.lastElementChild!).left - rect(cpu.firstElementChild!).right,
+      diskGap:
+        rect(disk.lastElementChild!).left -
+        Math.max(...diskText.map((part) => rect(part).right)),
+    }
+  })
+  expect(layout.overflow).toBeLessThanOrEqual(0.5)
+  expect(layout.cpuGap).toBeGreaterThanOrEqual(2)
+  expect(layout.diskGap).toBeGreaterThanOrEqual(2)
+}
+
+for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
+  for (const [name, readings] of Object.entries(SERVER_READINGS)) {
+    test(`${name} server readings fit their tiles and stay legible in ${theme} theme`, async ({
+      page,
+    }) => {
+      await configureStablePage(page, { theme, authenticated: true })
+      await page.route(
+        /\/api\/next\/dashboard\/system-status(?:\?.*)?$/,
+        (route) =>
+          route.fulfill({
+            json: {
+              success: true,
+              message: '',
+              data: {
+                cpu_cores: 16,
+                load_average: { one: 7.2, five: 6.8, fifteen: 6.1 },
+                bandwidth_up_mbps: 48.6,
+                bandwidth_down_mbps: 312.4,
+                api_success_rate: 99.7,
+                bandwidth_series: null,
+                ...readings,
+              },
+            },
+          })
+      )
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+      await waitForStablePage(page)
+      const card = page.locator('[data-system-status-card]')
+      if (name === 'realistic') {
+        await expect(card.locator('[data-metric="disk"]')).toContainText('TB')
+      }
+
+      // 1280-1366 is the three-column grid, where the card is at its narrowest.
+      for (const width of [320, 390, 1280, 1366, 1440, 1920]) {
+        await page.setViewportSize({ width, height: 900 })
+        await expectReadingsInsideTiles(card)
+      }
+      const figures = card.locator(
+        '[data-metric-value], [data-percent-badge], [data-bandwidth-direction], .success-rate-value, [data-status-reachable] > span:last-child'
+      )
+      expect(await minTextContrast(figures)).toBeGreaterThanOrEqual(4.5)
+    })
+  }
 }

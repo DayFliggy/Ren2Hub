@@ -24,10 +24,12 @@ const metricsAvailable = computed(
   () => props.metrics !== null && props.metrics !== undefined
 )
 
+/** The dot and tint use the fill; the label uses the matching text token. */
 const apiState = computed(() => {
   if (phase.value === 'loading') {
     return {
       color: 'var(--status-info)',
+      textColor: 'var(--status-info-text)',
       label: t('dashboard.loading'),
       pulse: false,
     }
@@ -35,6 +37,7 @@ const apiState = computed(() => {
   if (phase.value === 'error') {
     return {
       color: 'var(--status-danger)',
+      textColor: 'var(--status-danger-text)',
       label: t('dashboard.offline'),
       pulse: false,
     }
@@ -46,6 +49,7 @@ const apiState = computed(() => {
   ) {
     return {
       color: 'var(--status-success)',
+      textColor: 'var(--status-success-text)',
       label: t('dashboard.online'),
       pulse: true,
     }
@@ -57,12 +61,14 @@ const apiState = computed(() => {
   ) {
     return {
       color: 'var(--status-warning)',
+      textColor: 'var(--status-warning-text)',
       label: t('dashboard.degraded'),
       pulse: false,
     }
   }
   return {
     color: 'var(--text-tertiary)',
+    textColor: 'var(--text-tertiary)',
     label: t('dashboard.unknown'),
     pulse: false,
   }
@@ -96,26 +102,54 @@ function ratioPercent(
 }
 
 /**
- * 统一 4 档资源负载语义色彩梯度 (CPU / 内存 / 磁盘):
- * - <= 60%: 正常 (var(--glow))
- * - 60% ~ 75%: 关注 (var(--accent))
- * - 75% ~ 90%: 警告 (var(--status-warning))
- * - > 90%: 危险 (var(--status-danger))
+ * A load tier's fill for gauges, rings and segments, and its text colour. The
+ * fills are too light for text on the day theme, so figures use the -text
+ * tokens, which keep 4.5:1 in both themes.
  */
-function resourceLoadColor(percent: number | null): string {
-  if (percent === null) return 'var(--text-tertiary)'
-  if (percent > 90) return 'var(--status-danger)'
-  if (percent > 75) return 'var(--status-warning)'
-  if (percent > 60) return 'var(--accent)'
-  return 'var(--glow)'
+interface Tone {
+  fill: string
+  text: string
+}
+
+const UNKNOWN_TONE: Tone = {
+  fill: 'var(--text-tertiary)',
+  text: 'var(--text-tertiary)',
+}
+const NORMAL_TONE: Tone = {
+  fill: 'var(--glow)',
+  text: 'var(--status-success-text)',
+}
+const NOTICE_TONE: Tone = { fill: 'var(--accent)', text: 'var(--accent-text)' }
+const WARNING_TONE: Tone = {
+  fill: 'var(--status-warning)',
+  text: 'var(--status-warning-text)',
+}
+const DANGER_TONE: Tone = {
+  fill: 'var(--status-danger)',
+  text: 'var(--status-danger-text)',
+}
+
+/**
+ * 统一 4 档资源负载语义色彩梯度 (CPU / 内存 / 磁盘):
+ * - <= 60%: 正常
+ * - 60% ~ 75%: 关注
+ * - 75% ~ 90%: 警告
+ * - > 90%: 危险
+ */
+function resourceLoadTone(percent: number | null): Tone {
+  if (percent === null) return UNKNOWN_TONE
+  if (percent > 90) return DANGER_TONE
+  if (percent > 75) return WARNING_TONE
+  if (percent > 60) return NOTICE_TONE
+  return NORMAL_TONE
 }
 
 /** Success rate reads the other way round — high is good. */
-function rateColor(percent: number | null): string {
-  if (percent === null) return 'var(--text-tertiary)'
-  if (percent >= 99) return 'var(--glow)'
-  if (percent >= 95) return 'var(--status-warning)'
-  return 'var(--status-danger)'
+function rateTone(percent: number | null): Tone {
+  if (percent === null) return UNKNOWN_TONE
+  if (percent >= 99) return NORMAL_TONE
+  if (percent >= 95) return WARNING_TONE
+  return DANGER_TONE
 }
 
 function formatMetric(value: number): string {
@@ -132,9 +166,23 @@ function formatBandwidth(valueMbps: number): string {
   return `${formatMetric(safeValue * 1_000_000)} bps`
 }
 
-function formatStorage(value: number | null | undefined): string {
-  const safeValue = finiteNonNegative(value)
-  return safeValue === null ? '--' : formatMetric(safeValue)
+/**
+ * Used and total in one unit with at most three significant figures, so the
+ * reading fits its tile. The API reports binary GB, so a TB is 1024 of them.
+ */
+function storageReading(
+  used: number | null,
+  total: number | null
+): MetricTile['storage'] {
+  if (used === null || total === null) return undefined
+  const scale = total >= 1000 ? 1024 : 1
+  const format = (value: number) =>
+    value >= 100 ? String(Math.round(value)) : formatMetric(value)
+  return {
+    used: format(used / scale),
+    total: format(total / scale),
+    unit: scale === 1 ? 'GB' : 'TB',
+  }
 }
 
 function normalizeSeries(
@@ -193,7 +241,7 @@ function buildLoadCells(
       minutes,
       value: formatLoad(value),
       fill,
-      color: resourceLoadColor(fill === null ? null : fill * 100),
+      color: resourceLoadTone(fill === null ? null : fill * 100).fill,
       overloaded: fill !== null && fill > 1,
     }
   })
@@ -204,18 +252,19 @@ interface MetricTile {
   label: string
   /** lucide 24x24 path data */
   icon?: string
+  /** CPU headline, or the placeholder of a tile without data. */
   value: string
   unit: string
   bandwidth?: { up: string; down: string }
-  memory?: { used: string; total: string }
-  disk?: { used: string; total: string }
+  /** Memory and disk: used and total in one unit. */
+  storage?: { used: string; total: string; unit: string }
   /** CPU only: host load per averaging window and the core count it scales to. */
   load?: { cells: CpuLoadCell[]; cores: number | null }
   /** 0-100 usage against a ceiling; null when the metric is unavailable. */
   percent: number | null
   /** Shared-scale throughput history, for metrics with no ceiling. */
   series?: { down: number[]; up: number[] }
-  color: string
+  tone: Tone
 }
 
 const tiles = computed<MetricTile[]>(() => {
@@ -250,26 +299,17 @@ const tiles = computed<MetricTile[]>(() => {
         cores: cpuCores,
       },
       percent: cpuPercent,
-      color: resourceLoadColor(cpuPercent),
+      tone: resourceLoadTone(cpuPercent),
     },
     {
       key: 'memory',
       label: t('dashboard.systemStatus.memory'),
       icon: 'M3 7h18v10H3zM7 7v10M11 7v10M15 7v10M5 17v3M19 17v3',
-      value:
-        memoryUsed === null || memoryTotal === null
-          ? '--'
-          : `${formatStorage(memoryUsed)} / ${formatStorage(memoryTotal)}`,
-      unit: memoryUsed === null || memoryTotal === null ? '' : 'GB',
-      memory:
-        memoryUsed !== null && memoryTotal !== null
-          ? {
-              used: formatStorage(memoryUsed),
-              total: formatStorage(memoryTotal),
-            }
-          : undefined,
+      value: '--',
+      unit: '',
+      storage: storageReading(memoryUsed, memoryTotal),
       percent: memoryPercent,
-      color: resourceLoadColor(memoryPercent),
+      tone: resourceLoadTone(memoryPercent),
     },
     {
       key: 'bandwidth',
@@ -279,26 +319,17 @@ const tiles = computed<MetricTile[]>(() => {
       bandwidth,
       percent: null,
       series: normalizeSeries(metrics?.bandwidth_series),
-      color: 'var(--signal)',
+      tone: resourceLoadTone(null),
     },
     {
       key: 'disk',
       label: t('dashboard.systemStatus.disk'),
       icon: 'M22 12H2M5.5 16h.01M9.5 16h.01M5.45 5h13.1a2 2 0 0 1 1.79 1.11L22 12v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5l1.66-5.89A2 2 0 0 1 5.45 5z',
-      value:
-        diskUsed === null || diskTotal === null
-          ? '--'
-          : `${formatStorage(diskUsed)} / ${formatStorage(diskTotal)}`,
-      unit: diskUsed === null || diskTotal === null ? '' : 'GB',
-      disk:
-        diskUsed !== null && diskTotal !== null
-          ? {
-              used: formatStorage(diskUsed),
-              total: formatStorage(diskTotal),
-            }
-          : undefined,
+      value: '--',
+      unit: '',
+      storage: storageReading(diskUsed, diskTotal),
       percent: diskPercent,
-      color: resourceLoadColor(diskPercent),
+      tone: resourceLoadTone(diskPercent),
     },
   ]
 })
@@ -321,10 +352,11 @@ const cpuGauge = computed(() => {
   }
 })
 
+/** Full segments glow at night only (see the style block). */
 function memorySegmentStyle(
   percent: number | null,
   index: number,
-  color = 'var(--glow)'
+  color: string
 ) {
   const fill =
     percent === null ? 0 : Math.min(1, Math.max(0, percent / 10 - index))
@@ -334,10 +366,7 @@ function memorySegmentStyle(
       ? color
       : 'color-mix(in srgb, var(--text-primary) 12%, transparent)',
     opacity: isFilled ? (fill >= 1 ? 1 : 0.6) : 1,
-    boxShadow:
-      fill >= 1
-        ? `0 0 8px color-mix(in srgb, ${color} 45%, transparent)`
-        : 'none',
+    '--segment-glow': fill >= 1 ? color : 'transparent',
   }
 }
 
@@ -345,7 +374,7 @@ function memorySegmentStyle(
 const successRate = computed(() =>
   clampPercent(props.metrics?.api_success_rate)
 )
-const successColor = computed(() => rateColor(successRate.value))
+const successTone = computed(() => rateTone(successRate.value))
 </script>
 
 <template>
@@ -359,7 +388,7 @@ const successColor = computed(() => rateColor(successRate.value))
           class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold"
           :style="{
             background: `color-mix(in srgb, ${apiState.color} 14%, transparent)`,
-            color: apiState.color,
+            color: apiState.textColor,
           }"
           :data-status-reachable="statusReachable"
         >
@@ -389,14 +418,14 @@ const successColor = computed(() => rateColor(successRate.value))
           </p>
           <p
             class="success-rate-value text-sm font-bold leading-none tabular-nums"
-            :style="{ color: successColor }"
+            :style="{ color: successTone.text }"
           >
             {{ successRate === null ? '--' : `${formatMetric(successRate)}%` }}
           </p>
         </div>
         <PrecisionTickDial
           :percent="successRate"
-          :color="successColor"
+          :color="successTone.fill"
           :size="38"
         />
       </div>
@@ -450,8 +479,8 @@ const successColor = computed(() => rateColor(successRate.value))
               class="shrink-0 rounded-md px-1 py-0.5 font-mono text-[10px] font-semibold tabular-nums sm:px-1.5"
               data-percent-badge
               :style="{
-                color: tile.color,
-                background: `color-mix(in srgb, ${tile.color} 14%, transparent)`,
+                color: tile.tone.text,
+                background: `color-mix(in srgb, ${tile.tone.fill} 14%, transparent)`,
               }"
             >
               {{ Math.round(tile.percent) }}%
@@ -463,17 +492,18 @@ const successColor = computed(() => rateColor(successRate.value))
             />
           </div>
 
+          <!-- The figure keeps its width; the decorative gauge shrinks first. -->
           <div
             v-if="tile.key === 'cpu'"
             class="mt-auto flex items-end justify-between gap-1.5 pt-0.5"
             data-cpu-gauge
           >
             <p
-              class="flex min-w-0 items-baseline gap-0.5 whitespace-nowrap font-mono sm:gap-1"
+              class="flex shrink-0 items-baseline gap-0.5 whitespace-nowrap font-mono sm:gap-1"
             >
               <span
-                class="display-number whitespace-nowrap text-lg leading-none sm:text-2xl"
-                :style="{ color: tile.color }"
+                class="display-number status-headline whitespace-nowrap leading-none"
+                :style="{ color: tile.tone.text }"
                 data-metric-value
               >
                 {{ tile.value }}
@@ -486,7 +516,7 @@ const successColor = computed(() => rateColor(successRate.value))
               </span>
             </p>
             <svg
-              class="h-8 w-14 shrink-0 sm:h-9 sm:w-16"
+              class="h-auto w-16 min-w-10 shrink"
               viewBox="0 0 64 38"
               fill="none"
               aria-hidden="true"
@@ -502,7 +532,7 @@ const successColor = computed(() => rateColor(successRate.value))
               <template v-if="cpuGauge">
                 <path
                   d="M8 32a24 24 0 0 1 48 0"
-                  :stroke="tile.color"
+                  :stroke="tile.tone.fill"
                   stroke-width="4"
                   stroke-linecap="round"
                   :stroke-dasharray="Math.PI * 24"
@@ -525,7 +555,7 @@ const successColor = computed(() => rateColor(successRate.value))
               <path
                 v-else
                 d="M8 32a24 24 0 0 1 48 0"
-                :stroke="tile.color"
+                :stroke="tile.tone.fill"
                 stroke-width="4"
                 stroke-dasharray="3 4"
                 opacity="0.7"
@@ -536,15 +566,15 @@ const successColor = computed(() => rateColor(successRate.value))
 
           <template v-else-if="tile.key === 'memory'">
             <div
-              v-if="tile.memory"
+              v-if="tile.storage"
               class="mt-auto flex items-baseline gap-0.5 font-mono leading-none whitespace-nowrap pt-0.5 sm:gap-1"
             >
               <span
-                class="display-number text-lg leading-none sm:text-2xl"
-                :style="{ color: tile.color }"
+                class="display-number status-headline leading-none"
+                :style="{ color: tile.tone.text }"
                 data-metric-value
               >
-                {{ tile.memory.used }}
+                {{ tile.storage.used }}
               </span>
               <span
                 class="text-[10px] font-normal text-[var(--text-tertiary)] opacity-40 sm:text-xs"
@@ -554,13 +584,10 @@ const successColor = computed(() => rateColor(successRate.value))
               <span
                 class="text-[11px] font-semibold tabular-nums text-[var(--text-secondary)] sm:text-[13px]"
               >
-                {{ tile.memory.total }}
+                {{ tile.storage.total }}
               </span>
-              <span
-                v-if="tile.unit"
-                class="text-[10px] font-medium text-[var(--text-tertiary)]"
-              >
-                {{ tile.unit }}
+              <span class="text-[10px] font-medium text-[var(--text-tertiary)]">
+                {{ tile.storage.unit }}
               </span>
             </div>
             <p
@@ -569,15 +596,9 @@ const successColor = computed(() => rateColor(successRate.value))
             >
               <span
                 class="text-base font-bold leading-tight tabular-nums"
-                :style="{ color: tile.color }"
+                :style="{ color: tile.tone.text }"
               >
                 {{ tile.value }}
-              </span>
-              <span
-                v-if="tile.unit"
-                class="text-[10px] text-[var(--text-tertiary)]"
-              >
-                {{ tile.unit }}
               </span>
             </p>
             <div
@@ -588,8 +609,10 @@ const successColor = computed(() => rateColor(successRate.value))
               <span
                 v-for="index in 10"
                 :key="index"
-                class="min-w-0 rounded-sm transition-[background,opacity,box-shadow] duration-500"
-                :style="memorySegmentStyle(tile.percent, index - 1, tile.color)"
+                class="memory-segment min-w-0 rounded-sm transition-[background,opacity,box-shadow] duration-500"
+                :style="
+                  memorySegmentStyle(tile.percent, index - 1, tile.tone.fill)
+                "
               />
             </div>
           </template>
@@ -603,14 +626,14 @@ const successColor = computed(() => rateColor(successRate.value))
                   <span
                     data-bandwidth-direction="up"
                     class="shrink-0 whitespace-nowrap"
-                    style="color: var(--accent)"
+                    style="color: var(--accent-text)"
                   >
                     ↑{{ tile.bandwidth.up }}
                   </span>
                   <span
                     data-bandwidth-direction="down"
                     class="shrink-0 whitespace-nowrap"
-                    style="color: var(--glow)"
+                    style="color: var(--status-success-text)"
                   >
                     ↓{{ tile.bandwidth.down }}
                   </span>
@@ -638,21 +661,22 @@ const successColor = computed(() => rateColor(successRate.value))
             class="mt-auto flex items-center justify-between gap-1.5 pb-0.5"
             data-disk-gauge
           >
-            <div v-if="tile.disk" class="flex min-w-0 flex-col justify-center">
+            <div
+              v-if="tile.storage"
+              class="flex min-w-0 flex-col justify-center"
+            >
               <div class="flex items-baseline gap-0.5 leading-none sm:gap-1">
                 <span
-                  class="display-number font-mono text-lg leading-none sm:text-2xl"
-                  :style="{ color: tile.color }"
+                  class="display-number status-headline font-mono leading-none"
+                  :style="{ color: tile.tone.text }"
                   data-metric-value
                 >
-                  {{ tile.disk.used }}
+                  {{ tile.storage.used }}
                 </span>
                 <span
-                  v-if="tile.unit"
-                  class="font-mono text-[10px] font-semibold sm:text-[11px]"
-                  :style="{ color: tile.color }"
+                  class="font-mono text-[10px] font-medium text-[var(--text-tertiary)]"
                 >
-                  {{ tile.unit }}
+                  {{ tile.storage.unit }}
                 </span>
               </div>
               <div
@@ -660,9 +684,9 @@ const successColor = computed(() => rateColor(successRate.value))
               >
                 <span class="opacity-50">/</span>
                 <span class="tabular-nums text-[var(--text-secondary)]">
-                  {{ tile.disk.total }}
+                  {{ tile.storage.total }}
                 </span>
-                <span class="opacity-80">{{ tile.unit }}</span>
+                <span class="opacity-80">{{ tile.storage.unit }}</span>
               </div>
             </div>
             <p
@@ -671,20 +695,14 @@ const successColor = computed(() => rateColor(successRate.value))
             >
               <span
                 class="text-base font-bold leading-tight tabular-nums"
-                :style="{ color: tile.color }"
+                :style="{ color: tile.tone.text }"
               >
                 {{ tile.value }}
-              </span>
-              <span
-                v-if="tile.unit"
-                class="text-[10px] text-[var(--text-tertiary)]"
-              >
-                {{ tile.unit }}
               </span>
             </p>
             <MiniRing
               :percent="tile.percent ?? 0"
-              :color="tile.color"
+              :color="tile.tone.fill"
               :size="32"
               :indeterminate="tile.percent === null"
             />
@@ -726,6 +744,25 @@ const successColor = computed(() => rateColor(successRate.value))
    header adapts to the card. */
 [data-system-status-card] {
   container-type: inline-size;
+}
+
+/* Tile figures size by card width too: in the three-column desktop grid the
+   card is narrower than on a phone. The longest readings ("87.4 / 94.2 GB",
+   "45.6 %" beside a 40px gauge) fit 24px only from a 344px card. */
+.status-headline {
+  font-size: 1.125rem;
+}
+
+@container (min-width: 344px) {
+  .status-headline {
+    font-size: 1.5rem;
+  }
+}
+
+/* Glow is a night-theme accent; day tiles stay flat. Vue keeps only the
+   :global() part of a selector, so the whole selector sits inside it. */
+:global(html.dark .memory-segment) {
+  box-shadow: 0 0 8px color-mix(in srgb, var(--segment-glow) 45%, transparent);
 }
 
 /* An absolutely positioned label drops this margin with it. */

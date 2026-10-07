@@ -73,8 +73,23 @@
   --text-secondary: #5c5946;
   --text-tertiary: #6c6955;
   --text-tertiary-base: #6c6955;
-  --heatmap-soft-foreground: var(--text-primary);
-  --heatmap-strong-foreground: #26251c;
+  /* 热力图色阶：第 N 档把指标色按 --heatmap-mix-N 混入卡面，日期数字取
+     --heatmap-foreground-N。日间用深色指标色拉开相邻档（≥1.17:1），只有第 5 档
+     翻成浅字；每档日期数字对底色 ≥4.5:1。调整任一值须重算这两项。 */
+  --heatmap-requests: var(--signal-strong);
+  --heatmap-consume: #9c5a1e;
+  --heatmap-tokens: #1d6f66;
+  --heatmap-mix-1: 16%;
+  --heatmap-mix-2: 30%;
+  --heatmap-mix-3: 44%;
+  --heatmap-mix-4: 58%;
+  --heatmap-mix-5: 94%;
+  --heatmap-foreground-0: var(--text-primary);
+  --heatmap-foreground-1: var(--text-primary);
+  --heatmap-foreground-2: var(--text-primary);
+  --heatmap-foreground-3: var(--text-primary);
+  --heatmap-foreground-4: var(--text-primary);
+  --heatmap-foreground-5: #fffdf8;
   --text-inverse: #f6f3eb;
   --border-default: rgba(56, 55, 43, 0.14);
   --border-subtle: rgba(56, 55, 43, 0.08);
@@ -354,8 +369,21 @@ html.dark {
   --text-secondary: #c4ccdc;
   --text-tertiary: #b8c1d3;
   --text-tertiary-base: #b8c1d3;
-  --heatmap-soft-foreground: #f4f6fb;
-  --heatmap-strong-foreground: #080b10;
+  /* 夜间指标色同为高亮度，第 3 档起转为深字。 */
+  --heatmap-requests: var(--signal-bright);
+  --heatmap-consume: var(--accent);
+  --heatmap-tokens: var(--support);
+  --heatmap-mix-1: 18%;
+  --heatmap-mix-2: 34%;
+  --heatmap-mix-3: 56%;
+  --heatmap-mix-4: 74%;
+  --heatmap-mix-5: 92%;
+  --heatmap-foreground-0: #f4f6fb;
+  --heatmap-foreground-1: #f4f6fb;
+  --heatmap-foreground-2: #f4f6fb;
+  --heatmap-foreground-3: #080b10;
+  --heatmap-foreground-4: #080b10;
+  --heatmap-foreground-5: #080b10;
   --text-inverse: #262a34;
   --border-default: rgba(152, 164, 192, 0.13);
   --border-subtle: rgba(152, 164, 192, 0.07);

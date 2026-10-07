@@ -18,8 +18,8 @@ const props = withDefaults(
     /** Ranked rows kept in the layout even when fewer days are active. */
     reservedRows?: number
     /**
-     * Title and track only from the lg breakpoint, where the year view shows
-     * the bars as one band; narrower cards stack the full details.
+     * From the sm breakpoint the year view shows the bars as one band, so the
+     * ranked rows give way to the summary; narrower cards stack the details.
      */
     compact?: boolean
   }>(),
@@ -39,6 +39,16 @@ const tooltip = ref<{
 const visibleSegments = computed(() =>
   props.segments.filter((segment) => segment.value > 0)
 )
+/**
+ * Ranked bars show each active day's share. The rhythm keeps all seven days in
+ * equal slots, shaded by value, so each sits above its weekday label.
+ */
+const trackSegments = computed(() => {
+  if (props.layout === 'ranked' || !visibleSegments.value.length) {
+    return visibleSegments.value
+  }
+  return props.segments
+})
 const total = computed(() =>
   visibleSegments.value.reduce((sum, segment) => sum + segment.value, 0)
 )
@@ -47,9 +57,14 @@ const placeholderRows = computed(() =>
 )
 
 function segmentStyle(segment: (typeof props.segments)[number]): CSSProperties {
+  const background =
+    segment.value > 0
+      ? `color-mix(in srgb, ${props.color} ${segment.intensity}%, var(--surface-solid))`
+      : 'transparent'
+  if (props.layout === 'rhythm') return { flex: '1 1 0%', background }
   return {
     width: `${total.value ? (segment.value / total.value) * 100 : 0}%`,
-    background: `color-mix(in srgb, ${props.color} ${segment.intensity}%, var(--surface-solid))`,
+    background,
   }
 }
 
@@ -95,7 +110,7 @@ async function focusSegment(key: string) {
 }
 
 function onKeydown(event: KeyboardEvent, key: string) {
-  const segments = visibleSegments.value
+  const segments = trackSegments.value
   const current = segments.findIndex((segment) => segment.key === key)
   if (current < 0) return
 
@@ -117,7 +132,7 @@ function onKeydown(event: KeyboardEvent, key: string) {
 }
 
 watch(
-  visibleSegments,
+  trackSegments,
   (segments) => {
     if (!segments.some((segment) => segment.key === focusKey.value)) {
       focusKey.value = segments[0]?.key ?? ''
@@ -142,9 +157,14 @@ watch(
       <h3 class="truncate text-[11px] font-medium text-[var(--text-tertiary)]">
         {{ title }}
       </h3>
+      <!-- A compact ranked summary stands in for the rows it hides from sm. -->
       <span
         v-if="summary || !visibleSegments.length"
         class="truncate text-right text-[9px] tabular-nums text-[var(--text-tertiary)]"
+        :class="{
+          'max-sm:hidden':
+            compact && layout === 'ranked' && visibleSegments.length,
+        }"
         data-usage-segment-summary
       >
         {{ visibleSegments.length ? summary : emptyLabel }}
@@ -158,7 +178,7 @@ watch(
       :aria-label="title"
     >
       <button
-        v-for="segment in visibleSegments"
+        v-for="segment in trackSegments"
         :key="segment.key"
         type="button"
         class="h-full min-w-px border-r border-[var(--surface-solid)] transition-[filter] last:border-r-0 hover:brightness-110 focus-ring"
@@ -181,7 +201,7 @@ watch(
     <div
       v-if="layout === 'ranked'"
       class="mt-1 space-y-0.5"
-      :class="{ 'lg:hidden': compact }"
+      :class="{ 'sm:hidden': compact }"
       data-usage-segment-details
     >
       <div
@@ -215,10 +235,11 @@ watch(
       </div>
     </div>
 
+    <!-- The year band keeps its labels inside the shared stage height. -->
     <div
       v-else
-      class="mt-1 grid grid-cols-7 gap-0.5 text-center text-[9px] text-[var(--text-tertiary)]"
-      :class="{ 'lg:hidden': compact }"
+      class="grid grid-cols-7 text-center text-[9px] text-[var(--text-tertiary)]"
+      :class="compact ? 'mt-0.5 leading-none' : 'mt-1'"
       data-usage-segment-labels
       aria-hidden="true"
     >
