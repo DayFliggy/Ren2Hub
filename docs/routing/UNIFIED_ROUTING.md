@@ -4,7 +4,7 @@
 
 ## 路由和权限
 
-`middleware.Distribute` 和协议阶段切换统一调用 `SelectLiveTokenRoute`。自动模式先检查模型能力和健康资格，再按优先级、负载桶、软亲和和稳定加权顺序选渠；手动模式使用 Token 的 Profile、活动 Group、Entry 顺序与 Policy。没有 Profile 的已有 Token 使用自动模式；手动 Profile 没有启用的活动组时拒绝请求。
+`middleware.Distribute` 和协议阶段切换统一调用 `SelectLiveTokenRoute`。自动模式先检查模型能力和健康资格，再按优先级、错误率档、负载桶、首字延迟档、软亲和和稳定加权顺序选渠；手动模式使用 Token 的 Profile、活动 Group、Entry 顺序与 Policy。没有 Profile 的已有 Token 使用自动模式；手动 Profile 没有启用的活动组时拒绝请求。
 
 Token 的所有权、启停、到期、额度、IP 和模型限制继续生效。旧 `Group`、`AutoGroups`、`CrossGroupRetry` 字段、业务组权限、组间价格和旧随机选择器退出运行路径。账号分类仍可用于充值和账号限流，但不授权模型或决定 Relay 价格。
 
@@ -40,7 +40,7 @@ Token 的所有权、启停、到期、额度、IP 和模型限制继续生效�
 
 最终复核还使用当前 Token 的 IP 白名单和本次客户端 IP。排队期间收窄范围后不能按旧鉴权继续发送，也不能通过换渠道恢复已撤销的 Token 权限。原生引用 encrypted_index 纳入既有状态摘要归属检查，不记录引用原文。
 
-权限、Token 模型权限、状态绑定、原任务渠道、模型能力、转换策略与价格资格始终先于负载优化。自动动态排序保持 `priority → 10% 负载桶 → 软亲和 → RequestID 稳定加权顺序`；关闭动态排序时保持静态顺序。手动路由 position 是硬边界；负载均衡仅在首个合格 position 层加权选择，不跨层重排。
+权限、Token 模型权限、状态绑定、原任务渠道、模型能力、转换策略与价格资格始终先于负载优化。自动动态排序为 `priority → 错误率档 → 5% 负载桶 → 首字延迟档 → 软亲和 → RequestID 稳定加权顺序`，实现见 `service/route_score.go` 的 `OrderAutoRouteCandidates`；关闭动态排序时保持静态顺序。priority 是绝对分层，其余键只在同一 priority 内比较。错误率档和首字延迟档只读渠道级健康行（Key 级行由失败路径写入，比率会偏高），样本达到 50 次才分档：错误率 5% 起为 warning、20% 起为 critical，平均首字延迟 3 秒起为 warning、10 秒起为 critical；阈值只在 `service/route_health.go` 维护。稳定加权使用配置权重乘健康系数，warning 为 0.8、critical 为 0.5，两项取较低值，降级渠道保留较小份额而不被排除。手动路由 position 是硬边界；负载均衡仅在首个合格 position 层加权选择，不跨层重排。
 
 先立即尝试允许候选，全部繁忙后最多进入一个渠道队列。扫描期间变为空闲的候选可重新立即获取；池已回收且快照容量为零不代表不可用，最终仍由 manager 授槽。排队只比较仍合格、未冷却、队列未满的繁忙候选：自动动态模式在相同 priority 和负载桶内、手动负载均衡在相同 position 内按 `queued / effective_capacity` 较小者优先，平局保留原顺序。静态和非负载均衡手动模式保留原顺序。
 
