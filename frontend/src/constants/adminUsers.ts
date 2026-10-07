@@ -18,6 +18,7 @@ export const ADMIN_USER_OPTIONAL_FIELDS = [
   'id',
   'status',
   'role',
+  'group',
   'quota',
   'invite',
   'lastLogin',
@@ -32,8 +33,10 @@ export const ADMIN_USER_DEFAULT_VISIBLE_FIELDS: AdminUserOptionalField[] =
     (field) => field !== 'id' && field !== 'createdTime'
   )
 
+// v2: the group column joined the defaults, so a new key lets it appear on
+// browsers that already stored a field selection.
 export const ADMIN_USER_VISIBLE_FIELDS_STORAGE_KEY =
-  'ren2hub_admin_user_visible_fields'
+  'ren2hub_admin_user_visible_fields_v2'
 
 export function sanitizeAdminUserVisibleFields(
   fields: readonly string[]

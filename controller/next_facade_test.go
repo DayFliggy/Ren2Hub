@@ -147,8 +147,21 @@ func TestNextAdminOrdersExposeProvidersAndEpayCNYStats(t *testing.T) {
 	require.Len(t, stats.PaymentShare, 2)
 }
 
+// initNextAdminUserColumns resolves the quoted reserved-word columns
+// (commonGroupCol) for the fixture database type, as startup does. A slave node
+// skips the log migrations InitLogDB would otherwise run.
+func initNextAdminUserColumns(t *testing.T) {
+	t.Helper()
+	previousMaster := common.IsMasterNode
+	common.IsMasterNode = false
+	t.Cleanup(func() { common.IsMasterNode = previousMaster })
+	t.Setenv("LOG_SQL_DSN", "")
+	require.NoError(t, model.InitLogDB())
+}
+
 func TestNextAdminUsersApplyFiltersAndReturnFacetCounts(t *testing.T) {
 	db := setupManageUserTestDB(t)
+	initNextAdminUserColumns(t)
 	users := []model.User{
 		{Username: "enabled-user", Password: "password", AffCode: "enabled-aff", Role: common.RoleCommonUser, Status: common.UserStatusEnabled},
 		{Username: "disabled-admin", Password: "password", AffCode: "disabled-aff", Role: common.RoleAdminUser, Status: common.UserStatusDisabled},
@@ -173,6 +186,51 @@ func TestNextAdminUsersApplyFiltersAndReturnFacetCounts(t *testing.T) {
 	assert.Equal(t, 1, page.RoleCounts["100"])
 	assert.Equal(t, 2, page.StatusCounts["enabled"])
 	assert.Equal(t, 1, page.StatusCounts["disabled"])
+}
+
+func TestNextAdminUsersFilterByGroup(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	initNextAdminUserColumns(t)
+	require.NoError(t, db.Create(&[]model.User{
+		{Username: "default-user", Password: "password", AffCode: "default-aff", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default"},
+		{Username: "premium-user", Password: "password", AffCode: "premium-aff", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "premium"},
+		{Username: "premium-off", Password: "password", AffCode: "premium-off-aff", Role: common.RoleCommonUser, Status: common.UserStatusDisabled, Group: "premium"},
+	}).Error)
+
+	type userPage struct {
+		Items       []nextAdminUserDTO `json:"items"`
+		Total       int                `json:"total"`
+		GroupCounts map[string]int     `json:"group_counts"`
+	}
+	page := decodeNextResponse[userPage](t, performNextGet(
+		t, "/api/next/admin/users?group=premium&status=enabled&p=1&page_size=20", NextListAdminUsers,
+	))
+	require.Len(t, page.Items, 1)
+	assert.Equal(t, "premium-user", page.Items[0].Username)
+	assert.Equal(t, "premium", page.Items[0].Group)
+	assert.Equal(t, 1, page.Total)
+	// Group options come from the users table under the keyword, not the
+	// selected filters, so switching groups never hides the other options.
+	assert.Equal(t, map[string]int{"default": 1, "premium": 2}, page.GroupCounts)
+
+	all := decodeNextResponse[userPage](t, performNextGet(
+		t, "/api/next/admin/users?group=&p=1&page_size=20", NextListAdminUsers,
+	))
+	assert.Equal(t, 3, all.Total)
+
+	unknown := decodeNextResponse[userPage](t, performNextGet(
+		t, "/api/next/admin/users?group=vip&p=1&page_size=20", NextListAdminUsers,
+	))
+	assert.Equal(t, 0, unknown.Total)
+	assert.Empty(t, unknown.Items)
+
+	invalid := performNextGet(
+		t, "/api/next/admin/users?group="+strings.Repeat("g", model.MaxUserGroupLength+1), NextListAdminUsers,
+	)
+	var invalidResponse nextTestResponse[userPage]
+	require.NoError(t, common.Unmarshal(invalid.Body.Bytes(), &invalidResponse))
+	assert.False(t, invalidResponse.Success)
+	assert.Contains(t, invalid.Body.String(), "VALIDATION_ERROR")
 }
 
 func TestNextAdminChannelsApplyRealFiltersAndCounts(t *testing.T) {

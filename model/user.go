@@ -410,6 +410,37 @@ func GetAllUsers(pageInfo *common.PageInfo, sortOptions ...UserSortOptions) (use
 	return users, total, nil
 }
 
+// MaxUserGroupLength matches the users.group column size.
+const MaxUserGroupLength = 64
+
+// WhereUserGroup narrows a user query to one account group.
+func WhereUserGroup(query *gorm.DB, group string) *gorm.DB {
+	return query.Where(commonGroupCol+" = ?", group)
+}
+
+// CountUsersByGroup returns the number of users per non-empty account group in
+// query. Groups only classify accounts for top-up and gateway admission; they do
+// not authorize models or set relay prices.
+func CountUsersByGroup(query *gorm.DB) (map[string]int, error) {
+	type groupCount struct {
+		Value string
+		Count int
+	}
+	rows := make([]groupCount, 0)
+	err := query.Where(commonGroupCol+" <> ?", "").
+		Select(commonGroupCol + " AS value, COUNT(*) AS count").
+		Clauses(clause.GroupBy{Columns: []clause.Column{{Name: commonGroupCol, Raw: true}}}).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[string]int, len(rows))
+	for _, row := range rows {
+		counts[row.Value] = row.Count
+	}
+	return counts, nil
+}
+
 func SearchUsers(keyword string, group string, role *int, status *int, startIdx int, num int, sortOptions ...UserSortOptions) ([]*User, int64, error) {
 	var users []*User
 	var total int64
@@ -443,7 +474,7 @@ func SearchUsers(keyword string, group string, role *int, status *int, startIdx 
 
 	query = query.Where("("+likeCondition+")", likeArgs...)
 	if group != "" {
-		query = query.Where(commonGroupCol+" = ?", group)
+		query = WhereUserGroup(query, group)
 	}
 	if role != nil {
 		query = query.Where("role = ?", *role)

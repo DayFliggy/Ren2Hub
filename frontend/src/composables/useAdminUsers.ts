@@ -41,11 +41,13 @@ export function useAdminUsers(
   const total = ref(0)
   const roleCounts = ref<Record<string, number>>({})
   const statusCounts = ref<Record<string, number>>({})
+  const groupCounts = ref<Record<string, number>>({})
   const page = ref(1)
   const pageSize = ref(20)
   const keyword = ref('')
   const role = ref('')
   const status = ref('')
+  const group = ref('')
   const sortBy = ref<AdminUserSortBy>('id')
   const sortOrder = ref<AdminUserSortOrder>('desc')
   const loading = ref(true)
@@ -140,6 +142,7 @@ export function useAdminUsers(
           page_size: pageSize.value,
           role: role.value || undefined,
           status: status.value || undefined,
+          group: group.value || undefined,
           sort_by: sortBy.value,
           sort_order: sortOrder.value,
           keyword: trimmed || undefined,
@@ -163,6 +166,7 @@ export function useAdminUsers(
     total.value = result.value.total
     roleCounts.value = result.value.role_counts
     statusCounts.value = result.value.status_counts
+    groupCounts.value = result.value.group_counts
     initialError.value = ''
   }
 
@@ -176,7 +180,7 @@ export function useAdminUsers(
     window.clearTimeout(searchTimer)
     searchTimer = window.setTimeout(reloadFromFirstPage, 300)
   })
-  watch([role, status, sortBy, sortOrder], reloadFromFirstPage)
+  watch([role, status, group, sortBy, sortOrder], reloadFromFirstPage)
   watch(pageSize, reloadFromFirstPage)
   watch(page, () => void load())
 
@@ -397,11 +401,13 @@ export function useAdminUsers(
     total,
     roleCounts,
     statusCounts,
+    groupCounts,
     page,
     pageSize,
     keyword,
     role,
     status,
+    group,
     sortBy,
     sortOrder,
     loading,

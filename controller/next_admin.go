@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -25,6 +26,7 @@ type nextAdminUserDTO struct {
 	Email          string       `json:"email"`
 	Role           int          `json:"role"`
 	Status         int          `json:"status"`
+	Group          string       `json:"group"`
 	Quota          common.Quota `json:"available_quota"`
 	ReservedQuota  common.Quota `json:"reserved_quota"`
 	QuotaVersion   int64        `json:"quota_version"`
@@ -76,7 +78,7 @@ func validateNextAdminUserWrite(request *nextAdminUserWriteRequest, creating boo
 func buildNextAdminUserDTO(user *model.User) nextAdminUserDTO {
 	return nextAdminUserDTO{
 		ID: user.Id, Username: user.Username, DisplayName: user.DisplayName,
-		Email: user.Email, Role: user.Role, Status: user.Status, Quota: user.Quota, ReservedQuota: user.ReservedQuota, QuotaVersion: user.QuotaVersion,
+		Email: user.Email, Role: user.Role, Status: user.Status, Group: user.Group, Quota: user.Quota, ReservedQuota: user.ReservedQuota, QuotaVersion: user.QuotaVersion,
 		UsedQuota: user.UsedQuota, RequestCount: user.RequestCount,
 		InvitedCount: user.AffCount, AffiliateQuota: user.AffQuota,
 		InviterID: user.InviterId, CreatedTime: user.CreatedAt, LastLoginTime: user.LastLoginAt,
@@ -225,6 +227,11 @@ func NextDeleteAdminUsersBatch(c *gin.Context) {
 func NextListAdminUsers(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	keyword := strings.TrimSpace(c.Query("keyword"))
+	group := strings.TrimSpace(c.Query("group"))
+	if !utf8.ValidString(group) || utf8.RuneCountInString(group) > model.MaxUserGroupLength {
+		nextBusinessError(c, "invalid user group", "VALIDATION_ERROR")
+		return
+	}
 	baseQuery := func() *gorm.DB {
 		query := model.DB.Model(&model.User{})
 		if keyword == "" {
@@ -266,8 +273,16 @@ func NextListAdminUsers(c *gin.Context) {
 			statusCounts["disabled"] += row.Count
 		}
 	}
+	groupCounts, err := model.CountUsersByGroup(baseQuery())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 
 	query := baseQuery()
+	if group != "" {
+		query = model.WhereUserGroup(query, group)
+	}
 	if value, err := strconv.Atoi(c.Query("role")); err == nil {
 		query = query.Where("role = ?", value)
 	}
@@ -305,6 +320,7 @@ func NextListAdminUsers(c *gin.Context) {
 	common.ApiSuccess(c, gin.H{
 		"items": items, "total": total, "page": pageInfo.GetPage(),
 		"page_size": pageInfo.GetPageSize(), "role_counts": roleCounts, "status_counts": statusCounts,
+		"group_counts": groupCounts,
 	})
 }
 

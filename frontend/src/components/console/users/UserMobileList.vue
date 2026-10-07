@@ -132,6 +132,16 @@ const { t, locale } = useI18n()
               </StatusChip>
             </dd>
           </div>
+          <div v-if="visibleFields.includes('group')" class="min-w-0">
+            <dt class="text-[var(--text-tertiary)]">{{ t('users.group') }}</dt>
+            <dd class="mt-1.5 min-w-0">
+              <StatusChip>
+                <span class="max-w-[8rem] truncate" :title="user.group">
+                  {{ user.group || t('users.noGroup') }}
+                </span>
+              </StatusChip>
+            </dd>
+          </div>
           <div v-if="visibleFields.includes('lastLogin')" class="min-w-0">
             <dt class="text-[var(--text-tertiary)]">
               {{ t('users.lastLogin') }}

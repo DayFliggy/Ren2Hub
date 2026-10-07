@@ -804,6 +804,7 @@ export async function configureStablePage(
             email: 'visual.member@example.test',
             role: 1,
             status: 1,
+            group: 'default',
             available_quota: '2500000',
             reserved_quota: '0',
             quota_version: 1,
@@ -821,6 +822,7 @@ export async function configureStablePage(
         page_size: 20,
         role_counts: { '1': 1 },
         status_counts: { '1': 1 },
+        group_counts: { default: 1 },
       },
     ],
     [

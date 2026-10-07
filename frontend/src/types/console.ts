@@ -169,6 +169,8 @@ export interface AdminUser extends Record<string, unknown> {
   email: string
   role: AdminUserRole
   status: AdminUserStatus
+  /** Account group: classifies top-up ratios and gateway admission limits. */
+  group: string
   available_quota: string
   reserved_quota: string
   used_quota: string
@@ -207,6 +209,8 @@ export interface AdminUserPage {
   page_size: number
   role_counts: Record<string, number>
   status_counts: Record<string, number>
+  /** Users per non-empty account group under the current keyword. */
+  group_counts: Record<string, number>
 }
 
 export interface AdminAffiliateUser {

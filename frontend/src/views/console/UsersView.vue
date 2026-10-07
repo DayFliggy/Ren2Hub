@@ -72,11 +72,13 @@ const {
   total,
   roleCounts,
   statusCounts,
+  groupCounts,
   page,
   pageSize,
   keyword,
   role,
   status,
+  group,
   sortBy,
   sortOrder,
   loading,
@@ -194,6 +196,12 @@ const allColumns = computed<
     optional: 'status',
   },
   { key: 'role', label: t('users.role'), width: '116px', optional: 'role' },
+  {
+    key: 'group',
+    label: t('users.group'),
+    width: '120px',
+    optional: 'group',
+  },
   { key: 'quota', label: t('users.quota'), width: '132px', optional: 'quota' },
   {
     key: 'invite',
@@ -258,6 +266,16 @@ const statusOptions = computed(() => [
     label: `${t('users.statusDisabled')} (${statusCounts.value.disabled ?? 0})`,
     tone: 'danger' as const,
   },
+])
+
+const groupOptions = computed(() => [
+  { value: '', label: t('users.allGroups') },
+  ...Object.keys(groupCounts.value)
+    .sort((left, right) => left.localeCompare(right))
+    .map((name) => ({
+      value: name,
+      label: `${name} (${groupCounts.value[name]})`,
+    })),
 ])
 
 const sortOptions = computed(() =>
@@ -419,7 +437,9 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
           name="admin-user-search"
           class="w-full xl:w-72"
         />
-        <div class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 xl:flex-1">
+        <div
+          class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:flex-1 xl:grid-cols-4"
+        >
           <FilterSelect
             v-model="role"
             :options="roleOptions"
@@ -430,6 +450,12 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
             v-model="status"
             :options="statusOptions"
             :label="t('users.statusFilter')"
+            class="w-full"
+          />
+          <FilterSelect
+            v-model="group"
+            :options="groupOptions"
+            :label="t('users.groupFilter')"
             class="w-full"
           />
           <div class="flex min-w-0 gap-2">
@@ -613,6 +639,16 @@ async function runBulkStatus(action: 'enable' | 'disable'): Promise<void> {
           <template #cell-role="{ row }">
             <StatusChip :tone="adminUserRoleTone((row as AdminUser).role)">
               {{ t(adminUserRoleLabelKey((row as AdminUser).role)) }}
+            </StatusChip>
+          </template>
+          <template #cell-group="{ row }">
+            <StatusChip>
+              <span
+                class="max-w-[96px] truncate"
+                :title="(row as AdminUser).group || t('users.noGroup')"
+              >
+                {{ (row as AdminUser).group || t('users.noGroup') }}
+              </span>
             </StatusChip>
           </template>
           <template #cell-quota="{ row }">
