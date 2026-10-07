@@ -1389,9 +1389,11 @@ export default {
     searchPlaceholder: '搜索用户名、昵称、邮箱或 ID',
     roleFilter: '用户角色',
     statusFilter: '用户状态',
+    groupFilter: '用户分组',
     sortLabel: '排序字段',
     allRoles: '全部角色',
     allStatuses: '全部状态',
+    allGroups: '全部分组',
     sortAscending: '升序排列',
     sortDescending: '降序排列',
     fieldSettings: '字段设置',
@@ -1403,6 +1405,8 @@ export default {
     email: '邮箱',
     status: '状态',
     role: '角色',
+    group: '用户分组',
+    noGroup: '未分组',
     quota: '额度',
     invite: '邀请',
     lastLogin: '最后活跃',
@@ -2996,8 +3000,11 @@ export default {
       claudeDefaultMaxTokens: '默认 max_tokens',
       claudeDefaultMaxTokensDesc:
         '为 Claude 请求设置默认的 max_tokens（0 为不设置）',
-      claudeThinkingAdapter: '思考适配器',
-      claudeThinkingAdapterDesc: '自动为支持扩展思考的模型注入 budget_tokens',
+      claudeThinkingAdapter: '思考后缀适配器',
+      claudeThinkingAdapterDesc:
+        '将带 -thinking、-nothinking 以及 -high 等推理强度后缀的请求适配为 Anthropic 原生思考请求，并保持计费可预测。关闭后模型名原样发送给上游。',
+      geminiThinkingAdapterDesc:
+        "支持 -thinking、-thinking-{'{'}budget{'}'}、-nothinking 以及 -high 等推理强度后缀，同时路由到正确的 Gemini 变体。关闭后模型名原样发送给上游。",
     },
     security: {
       title: '安全与限制',

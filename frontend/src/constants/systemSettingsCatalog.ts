@@ -679,7 +679,13 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
         fields: [
           keyValue('gemini.safety_settings', 'Gemini 安全策略'),
           json('claude.default_max_tokens', 'Claude 默认 max_tokens'),
-          toggle('claude.thinking_adapter_enabled', 'Claude 思考适配器'),
+          {
+            ...toggle(
+              'claude.thinking_adapter_enabled',
+              'Claude 思考后缀适配器'
+            ),
+            descriptionKey: 'systemSettings.models.claudeThinkingAdapterDesc',
+          },
           number(
             'claude.thinking_adapter_budget_tokens_percentage',
             'Claude 思考预算比例',
@@ -688,7 +694,13 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
           json('claude.model_headers_settings', 'Claude 模型请求头覆盖', '{}'),
           json('gemini.version_settings', 'Gemini 版本覆盖', '{}'),
           list('gemini.supported_imagine_models', 'Gemini Imagine 模型', '[]'),
-          toggle('gemini.thinking_adapter_enabled', 'Gemini 思考适配器'),
+          {
+            ...toggle(
+              'gemini.thinking_adapter_enabled',
+              'Gemini 思考后缀适配器'
+            ),
+            descriptionKey: 'systemSettings.models.geminiThinkingAdapterDesc',
+          },
           number(
             'gemini.thinking_adapter_budget_tokens_percentage',
             'Gemini 思考预算比例',
