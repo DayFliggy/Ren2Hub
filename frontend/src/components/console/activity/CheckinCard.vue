@@ -322,11 +322,11 @@ const weekLabel = computed(() => {
 </template>
 
 <style scoped>
-:global(html.dark) .checkin-stamp {
+html.dark .checkin-stamp {
   transform: none;
 }
 
-:global(html.dark) .checkin-perforation {
+html.dark .checkin-perforation {
   border-bottom-style: solid;
 }
 </style>

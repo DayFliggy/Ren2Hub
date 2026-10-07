@@ -759,9 +759,8 @@ const successTone = computed(() => rateTone(successRate.value))
   }
 }
 
-/* Glow is a night-theme accent; day tiles stay flat. Vue keeps only the
-   :global() part of a selector, so the whole selector sits inside it. */
-:global(html.dark .memory-segment) {
+/* Glow is a night-theme accent; day tiles stay flat. */
+html.dark .memory-segment {
   box-shadow: 0 0 8px color-mix(in srgb, var(--segment-glow) 45%, transparent);
 }
 

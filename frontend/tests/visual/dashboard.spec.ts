@@ -638,14 +638,17 @@ test('KPI dividers are solid at night and dashed ledger rules by day', async ({
     cells.evaluateAll((all) =>
       all.map((cell) => getComputedStyle(cell).borderLeftStyle)
     )
+  // Set the theme class the way useTheme does; the dividers key off it only,
+  // so the result does not depend on the theme this run started in.
+  const showTheme = (theme: VisualTheme) =>
+    page.evaluate((next) => {
+      document.documentElement.classList.remove('dark', 'light')
+      document.documentElement.classList.add(next)
+    }, theme)
 
+  await showTheme('dark')
   expect(new Set(await dividerStyles())).toEqual(new Set(['solid']))
-
-  // Flip the theme class the way useTheme does; the dividers key off it only.
-  await page.evaluate(() => {
-    document.documentElement.classList.remove('dark')
-    document.documentElement.classList.add('light')
-  })
+  await showTheme('light')
   expect(new Set(await dividerStyles())).toEqual(new Set(['dashed']))
 })
 

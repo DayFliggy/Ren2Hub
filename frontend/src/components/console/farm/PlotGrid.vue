@@ -96,7 +96,7 @@ const stageColor = computed(() => (stage: FarmPlot['stage']) => {
 </template>
 
 <style scoped>
-:global(html.dark) .farm-plot-tile {
+html.dark .farm-plot-tile {
   border-style: solid;
 }
 </style>

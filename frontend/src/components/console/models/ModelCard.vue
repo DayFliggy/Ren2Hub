@@ -423,8 +423,8 @@ async function copyName() {
   box-shadow: var(--card-shadow-hover);
 }
 
-:global(html[data-theme='dark']) .model-card,
-:global(html[data-theme='dark']) .model-card:hover {
+html.dark .model-card,
+html.dark .model-card:hover {
   box-shadow: none;
 }
 </style>
