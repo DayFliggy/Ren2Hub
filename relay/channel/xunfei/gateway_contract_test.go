@@ -19,7 +19,6 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +41,6 @@ func (w *xunfeiSignalWriter) Write(data []byte) (int, error) {
 
 func TestXunfeiGatewayTransport(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service.InitTokenEncoders()
 	for _, mode := range []string{"json", "stream", "truncated_json", "truncated_stream", "provider_error", "malformed", "cancelled", "admission_rejected"} {
 		t.Run(mode, func(t *testing.T) {
 			stream := mode != "json" && mode != "truncated_json"

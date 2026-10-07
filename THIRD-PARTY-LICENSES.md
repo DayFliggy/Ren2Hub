@@ -8,7 +8,7 @@ Transitive dependencies should be audited before a final external release.
 
 Inventory basis: Go versions come from direct `require` entries; npm versions are resolved by `frontend/bun.lock` and `electron/package-lock.json`. Frontend license identifiers were checked against installed package metadata; Electron identifiers come from its lockfile. New Go entries were checked against the corresponding `LICENSE` or `COPYING` files in the local module cache; unchanged packages retain the existing inventory classification.
 
-The local `github.com/QuantumNous/new-api/relaykit` replacement is first-party source and is excluded from the third-party inventory. It uses direct third-party modules already listed below. Development and test tools are listed separately from production dependencies. The inventory does not replace package-specific license texts and notices; retain those supplied with each distributed dependency.
+The local `github.com/QuantumNous/new-api/relaykit` and `github.com/QuantumNous/new-api/tokenkit` replacements are first-party source and are excluded from the third-party inventory. They use direct third-party modules already listed below. Development and test tools are listed separately from production dependencies. The inventory does not replace package-specific license texts and notices; retain those supplied with each distributed dependency.
 
 ## Dependency Inventory
 
@@ -64,7 +64,7 @@ The local `github.com/QuantumNous/new-api/relaykit` replacement is first-party s
 | backend  | production  | Go        | `github.com/thanhpk/randstr`                          | `v1.0.6`                             | MIT                                          |
 | backend  | production  | Go        | `github.com/tidwall/gjson`                            | `v1.19.0`                            | MIT                                          |
 | backend  | production  | Go        | `github.com/tidwall/sjson`                            | `v1.2.5`                             | MIT                                          |
-| backend  | production  | Go        | `github.com/tiktoken-go/tokenizer`                    | `v0.6.2`                             | MIT                                          |
+| backend  | production  | Go        | `github.com/tiktoken-go/tokenizer`                    | `v0.8.1`                             | MIT                                          |
 | backend  | production  | Go        | `github.com/waffo-com/waffo-go`                       | `v1.3.2`                             | MIT                                          |
 | backend  | production  | Go        | `github.com/waffo-com/waffo-pancake-sdk-go`           | `v0.3.1`                             | MIT                                          |
 | backend  | production  | Go        | `github.com/yapingcat/gomedia`                        | `v0.0.0-20240906162731-17feea57090c` | MIT                                          |

@@ -45,6 +45,8 @@ test:
 	@node scripts/test-go.mjs
 	@echo "Testing relaykit Go module..."
 	@cd relaykit && GOWORK=off go test -timeout 60s ./...
+	@echo "Testing tokenkit Go module..."
+	@cd tokenkit && GOWORK=off go test -timeout 60s ./...
 
 reset-setup:
 	@echo "Resetting local setup wizard state..."

@@ -6,13 +6,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -94,12 +92,9 @@ func TestListModelsSupportsOpenAIAndGeminiAuthentication(t *testing.T) {
 	}
 }
 
-var relayTestTokenEncoders sync.Once
-
 func setupRelayRouterTestDB(t *testing.T) {
 	t.Helper()
 	t.Setenv("CRYPTO_SECRET", "router-billing-evidence-fixture-secret")
-	relayTestTokenEncoders.Do(service.InitTokenEncoders)
 
 	gin.SetMode(gin.TestMode)
 	originalIsMasterNode := common.IsMasterNode

@@ -15,7 +15,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/tokenkit"
 )
 
 // FinalAudioPriceMeta freezes the final provider input. Character counts are
@@ -60,7 +60,7 @@ func FinalAudioPriceMeta(info *relaycommon.RelayInfo, body io.Reader) (*types.To
 	info.BillingCharacterCount = utf8.RuneCountInString(input)
 	tokens := info.BillingCharacterCount
 	if meta.TokenType != types.TokenTypeTextNumber {
-		tokens = service.CountTextToken(input, info.BillingModelName())
+		tokens = tokenkit.Count(info.BillingModelName(), input)
 	}
 	return meta, tokens, nil
 }

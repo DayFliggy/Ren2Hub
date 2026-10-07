@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/tokenkit"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
@@ -322,7 +323,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 	if missingCompletion {
 		for _, choice := range simpleResponse.Choices {
-			simpleResponse.Usage.CompletionTokens += service.CountTextToken(choice.Message.StringContent()+choice.Message.GetReasoningContent(), info.UpstreamModelName)
+			simpleResponse.Usage.CompletionTokens += tokenkit.Count(info.UpstreamModelName, choice.Message.StringContent()+choice.Message.GetReasoningContent())
 		}
 	}
 	if missingPrompt || missingCompletion {

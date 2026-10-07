@@ -16,7 +16,6 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +26,6 @@ import (
 // request conversion. This covers host wiring, not provider authentication.
 func TestGatewayStandardAdaptorResponseMatrix(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service.InitTokenEncoders()
 	cases := 0
 	for channelType := 1; channelType < constant.ChannelTypeDummy; channelType++ {
 		apiType, found := common.ChannelType2APIType(channelType)

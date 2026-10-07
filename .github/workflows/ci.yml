@@ -35,6 +35,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             relaykit/go.sum
+            tokenkit/go.sum
 
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -57,6 +58,10 @@ jobs:
         working-directory: relaykit
         run: go vet ./...
 
+      - name: Vet tokenkit independently
+        working-directory: tokenkit
+        run: go vet ./...
+
       - name: Build root module
         run: go build ./...
 
@@ -64,7 +69,11 @@ jobs:
         working-directory: relaykit
         run: go build ./...
 
-      - name: Test root and relaykit modules
+      - name: Build tokenkit independently
+        working-directory: tokenkit
+        run: go build ./...
+
+      - name: Test root, relaykit, and tokenkit modules
         run: make test
 
   routing-integration:
@@ -130,6 +139,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             relaykit/go.sum
+            tokenkit/go.sum
 
       - name: Run routing migration integration
         run: go test ./model -run '^TestRoutingDatabaseIntegration$' -timeout 60s -count=1

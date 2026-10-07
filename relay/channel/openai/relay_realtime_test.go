@@ -18,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/tokenkit"
 	hosttypes "github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -264,7 +265,7 @@ func TestRealtimeDeliveredItemsRemainBillableBeforeResponseDone(t *testing.T) {
 	require.NoError(t, target.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second)))
 	result := awaitRealtimeResult(t, done)
 	require.NotNil(t, result.err)
-	expected := service.CountTextToken(`square{"value":7}`, "realtime-test-model") + service.CountTextToken("independent output", "realtime-test-model")
+	expected := tokenkit.Count("realtime-test-model", `square{"value":7}`) + tokenkit.Count("realtime-test-model", "independent output")
 	assert.Equal(t, expected, result.usage.OutputTokens, "count both delivered items without counting duplicate item.done")
 }
 

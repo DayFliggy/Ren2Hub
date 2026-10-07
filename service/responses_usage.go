@@ -6,6 +6,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
+	"github.com/QuantumNous/new-api/tokenkit"
 )
 
 // ResponsesUsageAccumulator collects provider facts until the stream owner
@@ -87,7 +88,7 @@ func (a *ResponsesUsageAccumulator) Finish() *dto.Usage {
 	}
 	estimated := false
 	if !a.terminalUsage && a.usage.CompletionTokens == 0 && a.outputText.Len() > 0 {
-		a.usage.CompletionTokens = CountTextToken(a.outputText.String(), a.info.UpstreamModelName)
+		a.usage.CompletionTokens = tokenkit.Count(a.info.UpstreamModelName, a.outputText.String())
 		a.usage.OutputTokens = a.usage.CompletionTokens
 		a.usage.UsageSource = "estimated_partial"
 		estimated = true
