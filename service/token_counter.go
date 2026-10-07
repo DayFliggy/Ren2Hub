@@ -20,26 +20,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func getImageToken(c *gin.Context, fileMeta *types.FileMeta, model string, stream bool) (int, error) {
+// getImageToken estimates one image. fetchFiles is EstimateRequestToken's
+// single download policy: when it is off, URL images assume a typical size so
+// the estimate never downloads, while inline data is decoded locally.
+func getImageToken(c *gin.Context, fileMeta *types.FileMeta, model string, fetchFiles bool) (int, error) {
 	if fileMeta == nil || fileMeta.Source == nil {
 		return 0, fmt.Errorf("image_url_is_nil")
 	}
 
 	img := tokenkit.Image{Detail: fileMeta.Detail}
-	// Reading the size may download a URL image through the protected fetch
-	// path; operators can turn that off, and the estimate then assumes a
-	// typical image size.
-	measure := constant.GetMediaToken && (stream || constant.GetMediaTokenNotStream)
-	if !measure || !tokenkit.ImageNeedsSize(model, img.Detail) {
+	if !tokenkit.ImageNeedsSize(model, img.Detail) || (fileMeta.Source.IsURL() && !fetchFiles) {
 		return tokenkit.ImageTokens(model, img), nil
 	}
 
 	config, format, err := GetImageConfig(c, fileMeta.Source)
 	if err != nil {
 		return 0, err
-	}
-	if (config.Width == 0 || config.Height == 0) && format == "" {
-		return 0, fmt.Errorf("fail to decode image config: %s", fileMeta.GetIdentifier())
 	}
 	// tokenkit bounds side lengths and the patch count, so HEIF uint32
 	// dimensions cannot overflow the estimate.
@@ -148,7 +144,7 @@ func EstimateRequestToken(c *gin.Context, meta *types.TokenCountMeta, info *rela
 	for i, file := range meta.Files {
 		switch file.FileType {
 		case types.FileTypeImage:
-			token, err := getImageToken(c, file, model, info.IsStream)
+			token, err := getImageToken(c, file, model, shouldFetchFiles)
 			if err != nil {
 				return 0, fmt.Errorf("error counting image token, media index[%d], identifier[%s], err: %v", i, file.GetIdentifier(), err)
 			}

@@ -342,7 +342,25 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 					texts = append(texts, media.GetStringContent())
 					break
 				}
-				for _, part := range media.ParseMediaContent() {
+				parts, _ := media.Content.([]any)
+				if parts == nil && media.Content != nil {
+					b, _ := kitutil.Marshal(media.Content)
+					texts = append(texts, string(b))
+				}
+				for _, raw := range parts {
+					// Decode each block on its own: one block the media shape cannot
+					// hold (e.g. search_result with a string source) must still be
+					// counted instead of dropping the whole tool result.
+					part, err := kitutil.Any2Type[ClaudeMediaMessage](raw)
+					if err != nil {
+						b, _ := kitutil.Marshal(raw)
+						texts = append(texts, string(b))
+						continue
+					}
+					if part.Source != nil && part.Source.Type == "text" {
+						texts = append(texts, kitutil.Interface2String(part.Source.Data))
+						continue
+					}
 					if source := part.ToFileSource(); source != nil {
 						fileType := types.FileTypeFile
 						if part.Type == "image" {
@@ -352,7 +370,7 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 					} else if part.Type == "text" {
 						texts = append(texts, part.GetText())
 					} else {
-						b, _ := kitutil.Marshal(part)
+						b, _ := kitutil.Marshal(raw)
 						texts = append(texts, string(b))
 					}
 				}

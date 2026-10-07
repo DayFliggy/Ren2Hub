@@ -138,20 +138,32 @@ func TestResponsesToolMediaGeminiRejectsUnrepresentableMedia(t *testing.T) {
 	for _, test := range []struct {
 		name, output string
 		planRejects  bool
+		itemType     string
 	}{
-		{"audio", `[{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav"}}]`, true},
-		{"video_file", `[{"type":"input_file","file_data":"data:video/mp4;base64,AAAA"}]`, true},
-		{"unsupported_mime", `[{"type":"input_file","file_data":"data:application/zip;base64,UEsDBA=="}]`, true},
-		{"unknown_sibling", `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, true},
-		{"owned_file", `[{"type":"input_file","file_url":"gs://bucket/one.pdf"}]`, true},
+		{"audio", `[{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav"}}]`, true, ""},
+		{"video_file", `[{"type":"input_file","file_data":"data:video/mp4;base64,AAAA"}]`, true, ""},
+		{"unsupported_mime", `[{"type":"input_file","file_data":"data:application/zip;base64,UEsDBA=="}]`, true, ""},
+		// Valid Gemini Blob types outside the documented function-response list.
+		{"csv_tool_document", `[{"type":"input_file","file_data":"data:text/csv;base64,YSxi"}]`, true, ""},
+		{"gif_tool_image", `[{"type":"input_file","file_data":"data:image/gif;base64,R0lGOA=="}]`, true, ""},
+		{"unknown_sibling", `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, true, ""},
+		{"custom_tool_unknown_sibling", `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, true, "custom_tool_call_output"},
+		{"owned_file", `[{"type":"input_file","file_url":"gs://bucket/one.pdf"}]`, true, ""},
 		// The planner cannot see the resolved MIME type of a URL without a
 		// download, so the converter rejects it when it fails to load or
 		// resolves to audio.
-		{"unloadable_url", `[{"type":"input_image","image_url":"https://example.test/screen.png"}]`, false},
+		{"unloadable_url", `[{"type":"input_image","image_url":"https://example.test/screen.png"}]`, false, ""},
+		// A single part object is not the documented list shape; the converter
+		// must not fall back to a response map that would hold it as text.
+		{"single_object", `{"type":"input_image","image_url":"data:image/png;base64,YWJj"}`, false, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			callType, outputType := "function_call", "function_call_output"
+			if test.itemType == "custom_tool_call_output" {
+				callType, outputType = "custom_tool_call", "custom_tool_call_output"
+			}
 			var req dto.OpenAIResponsesRequest
-			require.NoError(t, kitutil.Unmarshal([]byte(`{"model":"gemini-3-pro-preview","input":[{"type":"function_call","call_id":"call_1","name":"read","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":`+test.output+`}]}`), &req))
+			require.NoError(t, kitutil.Unmarshal([]byte(`{"model":"gemini-3-pro-preview","input":[{"type":"`+callType+`","call_id":"call_1","name":"read","arguments":"{}","input":"{}"},{"type":"`+outputType+`","call_id":"call_1","output":`+test.output+`}]}`), &req))
 			requirements, err := AnalyzeRequest(&req)
 			require.NoError(t, err)
 			for _, policy := range []types.ConversionLossPolicy{types.ConversionLossPolicySafe, types.ConversionLossPolicyStrict, types.ConversionLossPolicyAllow} {

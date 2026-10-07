@@ -186,6 +186,9 @@ func planMediaConversion(req RequestRequirements, target types.RelayFormat) ([]t
 			// Gemini tool results carry images and documents, never audio or video.
 			audioVideo := slices.Contains([]string{"audio", "video"}, media.Kind) || slices.Contains([]string{"audio", "video"}, mediaKind(media.MIMEType))
 			canConvert = canConvert && !(target == types.RelayFormatGemini && audioVideo)
+			if target == types.RelayFormatGemini && media.MIMEType != "" {
+				canConvert = canConvert && sharedgemini.IsSupportedToolResultMimeType(media.MIMEType)
+			}
 		}
 		if media.Kind == "image" {
 			canConvert = canConvert && (media.MIMEType == "" || strings.HasPrefix(media.MIMEType, "image/"))

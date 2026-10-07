@@ -321,16 +321,23 @@ func responsesFunctionOutputItemToGeminiPart(c context.Context, item map[string]
 // and returns its images and documents, in order, as inlineData parts;
 // stringifying them would hand base64 media to the upstream text tokenizer.
 // Media Gemini cannot carry for a tool result fails the conversion instead of
-// being dropped. Every other payload shape keeps the historical response map;
-// planning rejects arrays that mix media with unknown parts before this runs.
+// being dropped. A payload without media keeps the historical response map;
+// media anywhere else (a single part object, or beside an unknown part) also
+// fails, so this converter never relies on planning to stop stringified media.
 func responsesToolOutputToGemini(c context.Context, value any) (map[string]any, []dto.GeminiPart, error) {
 	rawParts, ok := value.([]any)
 	if !ok || len(rawParts) == 0 {
+		if responsesToolOutputHasMedia(value) {
+			return nil, nil, fmt.Errorf("tool output media must be a list of content parts")
+		}
 		return GeminiResponseMap(value), nil, nil
 	}
 	for _, rawPart := range rawParts {
 		part, isMap := rawPart.(map[string]any)
 		if !isMap || !slices.Contains([]string{"input_text", "output_text", "text", "input_image", "input_file", "input_audio", "input_video"}, strings.TrimSpace(kitutil.Interface2String(part["type"]))) {
+			if responsesToolOutputHasMedia(value) {
+				return nil, nil, fmt.Errorf("tool output mixes media with parts gemini cannot represent")
+			}
 			return GeminiResponseMap(value), nil, nil
 		}
 	}
@@ -354,9 +361,10 @@ func responsesToolOutputToGemini(c context.Context, value any) (map[string]any, 
 		if len(parts) == 0 {
 			return nil, nil, fmt.Errorf("tool output %s part has no media source", partType)
 		}
-		// Gemini documents no audio or video in multimodal function responses.
+		// Gemini documents only images, PDF and plain text in function
+		// responses; audio, video and other inline types fail before send.
 		mimeType := strings.ToLower(parts[0].InlineData.MimeType)
-		if strings.HasPrefix(mimeType, "audio/") || strings.HasPrefix(mimeType, "video/") {
+		if !sharedgemini.IsSupportedToolResultMimeType(mimeType) {
 			return nil, nil, fmt.Errorf("gemini tool results cannot carry %s content", mimeType)
 		}
 		media = append(media, parts...)
@@ -407,4 +415,29 @@ func responsesGeminiRole(item map[string]any) string {
 	default:
 		return "user"
 	}
+}
+
+// responsesToolOutputHasMedia reports whether a tool output payload carries a
+// media part anywhere, so a shape the converter cannot map never falls back to
+// a response map that would hold the media as text.
+func responsesToolOutputHasMedia(value any) bool {
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			if responsesToolOutputHasMedia(item) {
+				return true
+			}
+		}
+	case map[string]any:
+		switch strings.TrimSpace(kitutil.Interface2String(typed["type"])) {
+		case "input_image", "input_file", "input_audio", "input_video":
+			return true
+		}
+		for _, nested := range typed {
+			if responsesToolOutputHasMedia(nested) {
+				return true
+			}
+		}
+	}
+	return false
 }

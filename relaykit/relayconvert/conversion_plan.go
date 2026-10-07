@@ -492,7 +492,7 @@ func (r *RequestRequirements) inspectContentContext(value any, path string, tool
 		}
 		for _, field := range []string{"content", "output", "parts", "source", "image_url", "file", "input_audio", "tool_calls", "function", "functionResponse", "citations", "annotations", "url_citation"} {
 			if nested, ok := value[field]; ok {
-				r.inspectContentContext(nested, path+"."+field, toolResult || kind == "tool_result" || kind == "function_call_output" || field == "functionResponse")
+				r.inspectContentContext(nested, path+"."+field, toolResult || kind == "tool_result" || kind == "function_call_output" || kind == "custom_tool_call_output" || field == "functionResponse")
 			}
 		}
 	}
