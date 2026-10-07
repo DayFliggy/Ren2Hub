@@ -304,3 +304,32 @@ func mediaTestConvertedPart(t *testing.T, request any) map[string]any {
 	require.Len(t, parts, 1)
 	return parts[0].(map[string]any)
 }
+
+// The Gemini Blob reference lists GIF, AVIF, audio/*, video/* and text
+// documents as inline data; ordinary messages carrying them convert, while
+// types outside the list are still rejected before send.
+func TestGeminiInlineMimeAllowlistFollowsBlobReference(t *testing.T) {
+	SetMediaResolver(MediaResolver{GetBase64Data: func(_ context.Context, source types.FileSource, _ ...string) (string, string, error) {
+		header, data, _ := strings.Cut(source.GetRawData(), ",")
+		return data, strings.TrimSuffix(strings.TrimPrefix(header, "data:"), ";base64"), nil
+	}})
+	t.Cleanup(func() { SetMediaResolver(goldenMediaResolver()) })
+	for _, mimeType := range []string{"image/gif", "image/avif", "audio/ogg", "video/webm", "text/markdown", "application/zip"} {
+		t.Run(mimeType, func(t *testing.T) {
+			request := &dto.OpenAIResponsesRequest{Model: "test", Input: []byte(`[{"role":"user","content":[{"type":"input_file","file_data":"data:` + mimeType + `;base64,AAAA"}]}]`)}
+			requirements, err := AnalyzeRequest(request)
+			require.NoError(t, err)
+			plan, err := PlanConversion(requirements, types.RelayFormatGemini, types.ConversionLossPolicyAllow)
+			if mimeType == "application/zip" {
+				require.Error(t, err)
+				assert.Equal(t, "media_conversion_unavailable", plan.Diagnostics[0].Code)
+				return
+			}
+			require.NoError(t, err)
+			result, err := ExecuteConversionPlan(context.Background(), nil, plan, request)
+			require.NoError(t, err)
+			converted := result.Value.(*dto.GeminiChatRequest)
+			assert.Equal(t, []dto.GeminiPart{{InlineData: &dto.GeminiInlineData{MimeType: mimeType, Data: "AAAA"}}}, converted.Contents[0].Parts)
+		})
+	}
+}

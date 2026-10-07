@@ -2,6 +2,7 @@ package relayconvert
 
 import (
 	"net/url"
+	"slices"
 	"strings"
 
 	sharedgemini "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/shared/gemini"
@@ -179,14 +180,12 @@ func planMediaConversion(req RequestRequirements, target types.RelayFormat) ([]t
 	for _, media := range req.Media {
 		canConvert := media.SourceKind == "inline" || media.SourceKind == "url"
 		if media.ToolResult && media.SourceKind != "owned" {
-			if req.Format == types.RelayFormatOpenAIResponses && target == types.RelayFormatGemini {
-				diagnostic := types.ConversionDiagnostic{Code: "media_conversion_unavailable", Path: media.Path,
-					Message: "the Responses to Gemini converter cannot preserve tool result media as a media part", Severity: types.ConversionDiagnosticError, From: req.Format, To: target}
-				return []types.ConversionDiagnostic{diagnostic}, &types.ConversionLossError{Diagnostics: []types.ConversionDiagnostic{diagnostic}}
-			}
 			// Chat tool content and Gemini function-response parts have no media
 			// conversion path; native forwarding retains their original semantics.
 			canConvert = canConvert && req.Format != types.RelayFormatOpenAI && req.Format != types.RelayFormatGemini
+			// Gemini tool results carry images and documents, never audio or video.
+			audioVideo := slices.Contains([]string{"audio", "video"}, media.Kind) || slices.Contains([]string{"audio", "video"}, mediaKind(media.MIMEType))
+			canConvert = canConvert && !(target == types.RelayFormatGemini && audioVideo)
 		}
 		if media.Kind == "image" {
 			canConvert = canConvert && (media.MIMEType == "" || strings.HasPrefix(media.MIMEType, "image/"))
@@ -205,8 +204,7 @@ func planMediaConversion(req RequestRequirements, target types.RelayFormat) ([]t
 					(media.Kind != "document" || media.SourceKind == "inline")
 			case types.RelayFormatGemini:
 				if media.MIMEType != "" {
-					_, supported := sharedgemini.SupportedMimeTypes[media.MIMEType]
-					canConvert = canConvert && supported
+					canConvert = canConvert && sharedgemini.IsSupportedMimeType(media.MIMEType)
 				}
 			case types.RelayFormatClaude:
 				canConvert = canConvert && media.Kind == "document" && media.MIMEType == "application/pdf"
