@@ -140,13 +140,16 @@ test.describe('gateway isolated backend', () => {
         expect((await (await inherited).json()).data.concurrency).toBeNull()
         await page.goto('/system-settings/models/vendor')
         await expect(
-          page.getByRole('switch', { name: 'Gemini 思考适配器', exact: true })
+          page.getByRole('switch', {
+            name: 'Gemini 思考后缀适配器',
+            exact: true,
+          })
         ).toBeVisible()
         await expect(
-          page.getByText('Gemini 思考适配器', { exact: true })
+          page.getByText('Gemini 思考后缀适配器', { exact: true })
         ).toBeVisible()
         await page
-          .getByText('Gemini 思考适配器', { exact: true })
+          .getByText('Gemini 思考后缀适配器', { exact: true })
           .scrollIntoViewIfNeeded()
         await expect(
           page.getByRole('switch', {

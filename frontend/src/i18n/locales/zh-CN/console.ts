@@ -3000,8 +3000,11 @@ export default {
       claudeDefaultMaxTokens: '默认 max_tokens',
       claudeDefaultMaxTokensDesc:
         '为 Claude 请求设置默认的 max_tokens（0 为不设置）',
-      claudeThinkingAdapter: '思考适配器',
-      claudeThinkingAdapterDesc: '自动为支持扩展思考的模型注入 budget_tokens',
+      claudeThinkingAdapter: '思考后缀适配器',
+      claudeThinkingAdapterDesc:
+        '将带 -thinking、-nothinking 以及 -high 等推理强度后缀的请求适配为 Anthropic 原生思考请求，并保持计费可预测。关闭后模型名原样发送给上游。',
+      geminiThinkingAdapterDesc:
+        "支持 -thinking、-thinking-{'{'}budget{'}'}、-nothinking 以及 -high 等推理强度后缀，同时路由到正确的 Gemini 变体。关闭后模型名原样发送给上游。",
     },
     security: {
       title: '安全与限制',

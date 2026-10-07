@@ -3108,9 +3108,11 @@ export default {
       claudeDefaultMaxTokens: 'Default max_tokens',
       claudeDefaultMaxTokensDesc:
         'Default max_tokens for Claude requests (0 = not set)',
-      claudeThinkingAdapter: 'Thinking Adapter',
+      claudeThinkingAdapter: 'Thinking Suffix Adapter',
       claudeThinkingAdapterDesc:
-        'Auto-inject budget_tokens for models that support extended thinking',
+        'Adapt -thinking, -nothinking, and effort suffixes such as -high to Anthropic native thinking behavior while keeping billing predictable. When off, model names are sent upstream unchanged.',
+      geminiThinkingAdapterDesc:
+        "Supports -thinking, -thinking-{'{'}budget{'}'}, -nothinking, and effort suffixes such as -high while routing to the correct Gemini variant. When off, model names are sent upstream unchanged.",
     },
     security: {
       title: 'Security & Limits',
