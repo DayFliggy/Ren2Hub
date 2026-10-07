@@ -2,6 +2,8 @@ package oairesponses
 
 import (
 	"fmt"
+	"path"
+	"slices"
 	"strings"
 
 	"context"
@@ -122,6 +124,11 @@ func OpenAIResponsesRequestToGeminiChat(c context.Context, req *dto.OpenAIRespon
 		return nil, err
 	}
 	callNames := make(map[string]string)
+	// Multimodal function responses (media in functionResponse.parts) are
+	// documented for Gemini 3. Gemini 1.x and 2.x get tool media as ordinary
+	// inlineData parts after the function responses of the same turn.
+	modelID := path.Base(strings.ToLower(upstreamModelName))
+	toolMediaInFunctionResponse := !strings.HasPrefix(modelID, "gemini-1.") && !strings.HasPrefix(modelID, "gemini-2.")
 	for _, item := range inputItems {
 		itemType := strings.TrimSpace(kitutil.Interface2String(item["type"]))
 		switch itemType {
@@ -136,11 +143,13 @@ func OpenAIResponsesRequestToGeminiChat(c context.Context, req *dto.OpenAIRespon
 			}
 			appendGeminiContentPart(geminiRequest, "model", part)
 		case ResponsesInputTypeFunctionCallOutput, ResponsesInputTypeCustomToolOutput:
-			part, err := responsesFunctionOutputItemToGeminiPart(item, callNames)
+			part, media, err := responsesFunctionOutputItemToGeminiPart(c, item, callNames, toolMediaInFunctionResponse)
 			if err != nil {
 				return nil, err
 			}
 			appendGeminiContentPart(geminiRequest, "user", part)
+			turn := &geminiRequest.Contents[len(geminiRequest.Contents)-1]
+			turn.Parts = append(turn.Parts, media...)
 		default:
 			role := responsesGeminiRole(item)
 			parts, err := responsesInputContentToGeminiParts(c, item["content"])
@@ -230,7 +239,7 @@ func responsesContentPartToGeminiParts(c context.Context, part map[string]any) (
 		if err != nil {
 			return nil, fmt.Errorf("get file data from '%s' failed: %w", source.GetIdentifier(), err)
 		}
-		if _, ok := sharedgemini.SupportedMimeTypes[strings.ToLower(mimeType)]; !ok {
+		if !sharedgemini.IsSupportedMimeType(mimeType) {
 			return nil, fmt.Errorf("mime type is not supported by Gemini: '%s', url: '%s', supported types are: %v", mimeType, source.GetIdentifier(), sharedgemini.SupportedMimeTypesList())
 		}
 		return []dto.GeminiPart{
@@ -269,43 +278,116 @@ func responsesFunctionCallItemToGeminiPart(item map[string]any, itemType string)
 	}, callID, nil
 }
 
-func responsesFunctionOutputItemToGeminiPart(item map[string]any, callNames map[string]string) (dto.GeminiPart, error) {
+// responsesFunctionOutputItemToGeminiPart returns the functionResponse part
+// and, unless mediaInParts puts them into functionResponse.parts, the tool
+// media the caller sends as separate parts after the turn's function
+// responses.
+func responsesFunctionOutputItemToGeminiPart(c context.Context, item map[string]any, callNames map[string]string, mediaInParts bool) (dto.GeminiPart, []dto.GeminiPart, error) {
 	callID := CallID(item)
 	name := strings.TrimSpace(kitutil.Interface2String(item["name"]))
 	if name == "" {
 		name = callNames[callID]
 	}
+	output, media, err := responsesToolOutputToGemini(c, item["output"])
+	if err != nil {
+		return dto.GeminiPart{}, nil, err
+	}
 	response := &dto.GeminiFunctionResponse{
 		Name:     name,
-		Response: GeminiResponseMap(item["output"]),
+		Response: output,
+	}
+	if mediaInParts && len(media) > 0 {
+		parts, err := kitutil.Marshal(media)
+		if err != nil {
+			return dto.GeminiPart{}, nil, fmt.Errorf("failed to marshal function response parts: %w", err)
+		}
+		response.Parts = parts
+		media = nil
 	}
 	if callID != "" {
 		id, err := kitutil.Marshal(callID)
 		if err != nil {
-			return dto.GeminiPart{}, fmt.Errorf("failed to marshal function response ID: %w", err)
+			return dto.GeminiPart{}, nil, fmt.Errorf("failed to marshal function response ID: %w", err)
 		}
 		response.ID = id
 	}
 	return dto.GeminiPart{
 		FunctionResponse: response,
-	}, nil
+	}, media, nil
+}
+
+// responsesToolOutputToGemini maps a function_call_output payload onto a Gemini
+// functionResponse. A Responses content-part array keeps its text in response
+// and returns its images and documents, in order, as inlineData parts;
+// stringifying them would hand base64 media to the upstream text tokenizer.
+// Media Gemini cannot carry for a tool result fails the conversion instead of
+// being dropped. Every other payload shape keeps the historical response map;
+// planning rejects arrays that mix media with unknown parts before this runs.
+func responsesToolOutputToGemini(c context.Context, value any) (map[string]any, []dto.GeminiPart, error) {
+	rawParts, ok := value.([]any)
+	if !ok || len(rawParts) == 0 {
+		return GeminiResponseMap(value), nil, nil
+	}
+	for _, rawPart := range rawParts {
+		part, isMap := rawPart.(map[string]any)
+		if !isMap || !slices.Contains([]string{"input_text", "output_text", "text", "input_image", "input_file", "input_audio", "input_video"}, strings.TrimSpace(kitutil.Interface2String(part["type"]))) {
+			return GeminiResponseMap(value), nil, nil
+		}
+	}
+
+	texts := make([]string, 0, len(rawParts))
+	media := make([]dto.GeminiPart, 0, len(rawParts))
+	for _, rawPart := range rawParts {
+		part := rawPart.(map[string]any)
+		partType := strings.TrimSpace(kitutil.Interface2String(part["type"]))
+		switch partType {
+		case "input_text", "output_text", "text":
+			if text := kitutil.Interface2String(part["text"]); text != "" {
+				texts = append(texts, text)
+			}
+			continue
+		}
+		parts, err := responsesContentPartToGeminiParts(c, part)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(parts) == 0 {
+			return nil, nil, fmt.Errorf("tool output %s part has no media source", partType)
+		}
+		// Gemini documents no audio or video in multimodal function responses.
+		mimeType := strings.ToLower(parts[0].InlineData.MimeType)
+		if strings.HasPrefix(mimeType, "audio/") || strings.HasPrefix(mimeType, "video/") {
+			return nil, nil, fmt.Errorf("gemini tool results cannot carry %s content", mimeType)
+		}
+		media = append(media, parts...)
+	}
+	if len(texts) == 0 {
+		return map[string]any{}, media, nil
+	}
+	return GeminiResponseMap(strings.Join(texts, "\n")), media, nil
 }
 
 func appendGeminiContentPart(req *dto.GeminiChatRequest, role string, part dto.GeminiPart) {
 	if len(req.Contents) > 0 && req.Contents[len(req.Contents)-1].Role == role {
-		if role == "model" && part.FunctionCall != nil {
-			parts := req.Contents[len(req.Contents)-1].Parts
-			insertAt := 0
+		parts := req.Contents[len(req.Contents)-1].Parts
+		insertAt := len(parts)
+		switch {
+		case role == "model" && part.FunctionCall != nil:
+			insertAt = 0
 			for insertAt < len(parts) && parts[insertAt].FunctionCall != nil {
 				insertAt++
 			}
-			parts = append(parts, dto.GeminiPart{})
-			copy(parts[insertAt+1:], parts[insertAt:])
-			parts[insertAt] = part
-			req.Contents[len(req.Contents)-1].Parts = parts
-			return
+		case part.FunctionResponse != nil:
+			// Tool media sent as separate parts stay after every function
+			// response of the turn, so a later response goes before them.
+			for i := len(parts) - 1; i >= 0; i-- {
+				if parts[i].FunctionResponse != nil {
+					insertAt = i + 1
+					break
+				}
+			}
 		}
-		req.Contents[len(req.Contents)-1].Parts = append(req.Contents[len(req.Contents)-1].Parts, part)
+		req.Contents[len(req.Contents)-1].Parts = slices.Insert(parts, insertAt, part)
 		return
 	}
 	req.Contents = append(req.Contents, dto.GeminiChatContent{
