@@ -542,9 +542,13 @@ func ResponsesArgumentsString(arguments json.RawMessage) string {
 }
 
 type ResponsesOutputContent struct {
-	Type        string `json:"type"`
-	Text        string `json:"text"`
-	Annotations []any  `json:"annotations"`
+	Type string `json:"type"`
+	Text string `json:"text"`
+	// Refusal carries a type=refusal content part. Responses delivers model
+	// refusals here rather than in Text, so a converter that reads only Text
+	// would report an empty assistant message.
+	Refusal     *string `json:"refusal,omitempty"`
+	Annotations []any   `json:"annotations"`
 }
 
 type ResponsesReasoningSummaryPart struct {
@@ -585,6 +589,7 @@ type ResponsesStreamResponse struct {
 	Input           *string                  `json:"input,omitempty"`
 	Name            string                   `json:"name,omitempty"`
 	Text            *string                  `json:"text,omitempty"`
+	Refusal         *string                  `json:"refusal,omitempty"`
 	Item            *ResponsesOutput         `json:"item,omitempty"`
 	SequenceNumber  *int                     `json:"sequence_number,omitempty"`
 	Annotation      json.RawMessage          `json:"annotation,omitempty"`

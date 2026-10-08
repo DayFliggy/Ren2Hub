@@ -18,6 +18,8 @@ const (
 	responsesEventError                     = "response.error"
 	responsesEventOutputTextDelta           = "response.output_text.delta"
 	responsesEventOutputTextAnnotationAdded = "response.output_text.annotation.added"
+	responsesEventRefusalDelta              = "response.refusal.delta"
+	responsesEventRefusalDone               = "response.refusal.done"
 	responsesEventOutputItemAdded           = "response.output_item.added"
 	responsesEventOutputItemDone            = "response.output_item.done"
 	responsesEventFunctionArgsDelta         = "response.function_call_arguments.delta"
@@ -63,6 +65,7 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 
 	text := ExtractOutputTextFromResponses(resp)
 	reasoning := ExtractReasoningTextFromResponses(resp)
+	refusal := ExtractRefusalFromResponses(resp)
 
 	usage := UsageFromResponsesUsage(resp.Usage)
 
@@ -103,6 +106,11 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 	msg := dto.Message{
 		Role:    "assistant",
 		Content: text,
+	}
+	if refusal != "" {
+		// A refusal has no Chat text equivalent; the Chat refusal field is the
+		// public shape, and OpenAI leaves content empty on refusal-only turns.
+		msg.Refusal = kitutil.GetPointer(refusal)
 	}
 	if annotations, err := responsesAnnotationsToChat(resp); err != nil {
 		return nil, nil, err
@@ -291,6 +299,31 @@ func ExtractReasoningTextFromResponses(resp *dto.OpenAIResponsesResponse) string
 			continue
 		}
 		appendSeparatedText(&sb, reasoningOutputText(&out))
+	}
+	return sb.String()
+}
+
+// ExtractRefusalFromResponses returns the concatenated refusal content parts of
+// assistant message outputs. Refusals arrive as type=refusal parts instead of
+// output_text, so text extraction alone loses them.
+func ExtractRefusalFromResponses(resp *dto.OpenAIResponsesResponse) string {
+	if resp == nil || len(resp.Output) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	for _, out := range resp.Output {
+		if out.Type != responsesOutputTypeMessage {
+			continue
+		}
+		if out.Role != "" && out.Role != "assistant" {
+			continue
+		}
+		for _, c := range out.Content {
+			if c.Type == "refusal" && c.Refusal != nil && *c.Refusal != "" {
+				sb.WriteString(*c.Refusal)
+			}
+		}
 	}
 	return sb.String()
 }
