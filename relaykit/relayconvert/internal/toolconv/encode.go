@@ -59,12 +59,14 @@ func attachOpenAIChatRequest(request any, set Set) (any, []types.ConversionDiagn
 			if definition.Function == nil {
 				continue
 			}
+			parameters, schemaDiagnostics := jsonSchemaParameters(index, definition.Function)
+			diagnostics = append(diagnostics, schemaDiagnostics...)
 			target.Tools = append(target.Tools, dto.ToolCallRequest{
 				Type: "function",
 				Function: dto.FunctionRequest{
 					Name:        definition.Function.Name,
 					Description: definition.Function.Description,
-					Parameters:  definition.Function.Parameters,
+					Parameters:  parameters,
 					Strict:      definition.Function.Strict,
 				},
 			})
@@ -111,6 +113,25 @@ func attachOpenAIChatRequest(request any, set Set) (any, []types.ConversionDiagn
 	diagnostics = append(diagnostics, choiceDiagnostics...)
 	diagnostics = append(diagnostics, unsupportedHostedHistoryDiagnostics(types.RelayFormatOpenAI, set.History)...)
 	return target, diagnostics, nil
+}
+
+// jsonSchemaParameters returns function parameters as JSON Schema for a
+// non-Gemini target, rewriting Gemini's OpenAPI schema subset. Chat, Claude,
+// and Responses build their tool declarations here, so all three targets
+// share this rewrite instead of repeating it per converter.
+func jsonSchemaParameters(index int, function *Function) (any, []types.ConversionDiagnostic) {
+	if !function.OpenAPISchema {
+		return function.Parameters, nil
+	}
+	parameters, dropped := sharedgemini.OpenAPISchemaToJSONSchema(function.Parameters)
+	if len(dropped) == 0 {
+		return parameters, nil
+	}
+	return parameters, []types.ConversionDiagnostic{presentationLoss(
+		fmt.Sprintf("tools[%d]", index),
+		"gemini_schema_keyword_dropped",
+		fmt.Sprintf("JSON Schema has no equivalent for Gemini schema keywords %s; they were dropped", strings.Join(dropped, ", ")),
+	)}
 }
 
 // responsesCustomTool is a Responses custom (freeform) tool sent upstream as
@@ -280,11 +301,13 @@ func attachOpenAIResponsesRequest(request any, set Set) (any, []types.Conversion
 			if definition.Function == nil {
 				continue
 			}
+			parameters, schemaDiagnostics := jsonSchemaParameters(index, definition.Function)
+			diagnostics = append(diagnostics, schemaDiagnostics...)
 			tool := map[string]any{
 				"type":        "function",
 				"name":        definition.Function.Name,
 				"description": definition.Function.Description,
-				"parameters":  definition.Function.Parameters,
+				"parameters":  parameters,
 			}
 			if definition.Function.Strict != nil {
 				tool["strict"] = *definition.Function.Strict
@@ -381,7 +404,9 @@ func attachClaudeRequest(request any, set Set, options *convmeta.Options) (any, 
 			if definition.Function == nil {
 				continue
 			}
-			inputSchema, err := functionParametersMap(definition.Function.Parameters)
+			parameters, schemaDiagnostics := jsonSchemaParameters(index, definition.Function)
+			diagnostics = append(diagnostics, schemaDiagnostics...)
+			inputSchema, err := functionParametersMap(parameters)
 			if err != nil {
 				return nil, diagnostics, fmt.Errorf("tools[%d].input_schema: %w", index, err)
 			}

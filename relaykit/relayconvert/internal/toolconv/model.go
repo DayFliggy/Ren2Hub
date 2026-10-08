@@ -33,6 +33,10 @@ type Function struct {
 	Description string
 	Parameters  any
 	Strict      *bool
+	// OpenAPISchema marks Parameters written in Gemini's OpenAPI schema
+	// subset (uppercase type names, nullable, propertyOrdering) rather than
+	// JSON Schema.
+	OpenAPISchema bool
 }
 
 type ApproximateLocation struct {

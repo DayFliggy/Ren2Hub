@@ -428,9 +428,10 @@ func decodeGeminiDefinitions(raw json.RawMessage) ([]Definition, error) {
 				Name:      strings.TrimSpace(kitutil.Interface2String(function["name"])),
 				Raw:       functionRaw,
 				Function: &Function{
-					Name:        strings.TrimSpace(kitutil.Interface2String(function["name"])),
-					Description: kitutil.Interface2String(function["description"]),
-					Parameters:  parameters,
+					Name:          strings.TrimSpace(kitutil.Interface2String(function["name"])),
+					Description:   kitutil.Interface2String(function["description"]),
+					Parameters:    parameters,
+					OpenAPISchema: function["parameters"] != nil,
 				},
 			})
 		}
