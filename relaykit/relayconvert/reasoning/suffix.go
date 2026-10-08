@@ -153,7 +153,7 @@ func ParseClaudeModelSuffix(modelName string, allowSuffixAlias bool) (string, In
 }
 
 func isKnownClaudeModel(modelName string) bool {
-	baseModel, _, _ := TrimEffortSuffixWithSuffixes(modelName, []string{"-max", "-xhigh", "-high", "-medium", "-low", "-minimal", "-none"})
+	baseModel, _, _ := TrimEffortSuffixWithSuffixes(canonicalClaudeModelID(modelName), []string{"-max", "-xhigh", "-high", "-medium", "-low", "-minimal", "-none"})
 	if marker := strings.LastIndex(baseModel, "-thinking-"); marker >= 0 {
 		baseModel = baseModel[:marker]
 	} else {

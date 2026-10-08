@@ -43,7 +43,7 @@ type claudeCapabilities struct {
 }
 
 func claudeCapabilitiesFor(model string) claudeCapabilities {
-	model = strings.ToLower(model)
+	model = canonicalClaudeModelID(model)
 	capabilities := claudeCapabilities{supportsManual: true, supportsDisable: true, defaultEffort: EffortHigh}
 
 	switch {
