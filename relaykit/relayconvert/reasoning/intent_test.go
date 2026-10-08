@@ -328,3 +328,67 @@ func TestClaudeModelDefaultEffortWhenClientSetsNone(t *testing.T) {
 		}
 	}
 }
+
+// A disable intent must render a thinking mode each model accepts:
+// {"type":"disabled"} is a 400 on Claude Opus 5.5 (at every effort) and on
+// Claude Sonnet 5.5, which turns thinking off with between_tools instead.
+// Models that accept disabled keep it without a diagnostic.
+func TestClaudeDisableIntentRendersAcceptedThinkingMode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		model           string
+		wantThinking    string
+		wantOutput      Effort
+		wantEffective   Effort
+		wantDiagnostics []string
+	}{
+		{model: "claude-opus-5-5", wantThinking: "adaptive", wantOutput: EffortLow, wantEffective: EffortLow, wantDiagnostics: []string{"claude_thinking_disable_unsupported"}},
+		{model: "claude-sonnet-5-5", wantThinking: "between_tools", wantEffective: EffortNone, wantDiagnostics: []string{"claude_thinking_disable_as_between_tools"}},
+		{model: "claude-fable-5-1", wantThinking: "adaptive", wantEffective: EffortHigh, wantDiagnostics: []string{"claude_thinking_disable_unsupported"}},
+		{model: "claude-opus-5", wantThinking: "disabled", wantEffective: EffortNone},
+		{model: "claude-sonnet-5", wantThinking: "disabled", wantEffective: EffortNone},
+		{model: "claude-opus-4-8", wantThinking: "disabled", wantEffective: EffortNone},
+		{model: "claude-sonnet-4-5", wantThinking: "disabled", wantEffective: EffortNone},
+	}
+	maxTokens := uint(4096)
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			t.Parallel()
+
+			rendered, err := RenderClaude(tt.model, Intent{Mode: ModeDisabled, Effort: EffortNone, IncludeThoughts: boolPtr(true)}, &maxTokens, 0)
+			require.NoError(t, err)
+			require.NotNil(t, rendered.Thinking)
+			assert.Equal(t, tt.wantThinking, rendered.Thinking.Type)
+			assert.Equal(t, tt.wantOutput, rendered.OutputEffort)
+			assert.Equal(t, tt.wantEffective, rendered.EffectiveEffort)
+			assert.Equal(t, tt.wantDiagnostics, diagnosticCodes(rendered.Diagnostics))
+			for _, diagnostic := range rendered.Diagnostics {
+				assert.Equal(t, types.ConversionDiagnosticWarning, diagnostic.Severity)
+			}
+			if tt.wantThinking == "between_tools" {
+				// between_tools takes no other thinking field.
+				assert.Empty(t, rendered.Thinking.Display)
+				assert.Nil(t, rendered.Thinking.BudgetTokens)
+			}
+		})
+	}
+}
+
+func TestClaudeRejectsForcedToolChoiceFollowsModelGeneration(t *testing.T) {
+	t.Parallel()
+
+	for model, want := range map[string]bool{
+		"claude-opus-5-5":   true,
+		"claude-sonnet-5-5": true,
+		"claude-fable-5-1":  true,
+		"claude-mythos-5-1": true,
+		"claude-fable-5":    false,
+		"claude-opus-5":     false,
+		"claude-sonnet-5":   false,
+		"claude-opus-4-8":   false,
+		"claude-sonnet-4-5": false,
+	} {
+		assert.Equal(t, want, ClaudeRejectsForcedToolChoice(model), model)
+	}
+}
