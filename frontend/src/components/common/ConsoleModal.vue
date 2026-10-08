@@ -26,7 +26,10 @@ function unlockBodyScroll(): void {
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 
-import { isTopmostModalDialog } from '@/utils/modalStack'
+import {
+  isTopmostModalDialog,
+  markModalDialogClosing,
+} from '@/utils/modalStack'
 
 const props = withDefaults(
   defineProps<{
@@ -135,6 +138,7 @@ watch(
         ;(els[0] ?? panel.value)?.focus()
       })
     } else {
+      markModalDialogClosing(dialog.value)
       releaseScrollLock()
       window.removeEventListener('keydown', onKeydown)
       const restoreTarget = previouslyFocused

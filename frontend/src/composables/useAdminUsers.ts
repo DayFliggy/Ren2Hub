@@ -166,7 +166,8 @@ export function useAdminUsers(
     total.value = result.value.total
     roleCounts.value = result.value.role_counts
     statusCounts.value = result.value.status_counts
-    groupCounts.value = result.value.group_counts
+    // Backends from before the group filter omit group_counts.
+    groupCounts.value = result.value.group_counts ?? {}
     initialError.value = ''
   }
 
