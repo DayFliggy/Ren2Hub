@@ -67,7 +67,7 @@ Nova 保留 system/user/assistant 文本、多段文本和已实现的采样上�
 
 思考签名按供应商状态处理，不再为跨协议历史填入绕过标记，旧配置开关不生效。完整工具历史可按已登记路径转换；需要真实签名的供应商功能必须保留原生签名及其归属，不能把无状态转换称为具有完整推理连续性。Google 对签名的定义参见 [Thinking guide](https://ai.google.dev/gemini-api/docs/thinking)，2026-09-13 核对。
 
-四入口的思考预算、effort 和 summary 按实际转换能力判断。转换后预算含义不等价或控制字段被丢弃时，`safe/strict` 拒绝，`allow` 记录降级；Chat 与 Responses 之间可保真的 effort 在 `strict` 下仍可通过。配置化搜索的已识别语义差异同样产生诊断。11 个独立计划场景和 15 组 HTTP 回归覆盖规划与最终发送边界，不能由基础 SDK 文本路径推导所有搜索或推理特性。
+四入口的思考预算、effort 和 summary 按实际转换能力换算，换算后渲染为目标协议的推理字段。只有需要改写的输入（预算低于 -1、预算与思考模式或 effort 互相矛盾、思考类型被强制改写、目标模型不支持关闭思考等）产生 warning 诊断，`strict` 据此拒绝，`safe` 与 `allow` 放行；`RejectConversionLoss` 在 `safe` 下只拒绝 error 级诊断。`TestGatewayReasoningAndSearchPolicyBeforeBilling` 断言 Claude 思考、Gemini 零预算、Chat/Responses effort 跨协议换算在三种策略下都会发送。配置化搜索的已识别语义差异产生诊断，`strict` 下发送前拒绝。11 个独立计划场景和 15 组 HTTP 回归覆盖规划与最终发送边界，不能由基础 SDK 文本路径推导所有搜索或推理特性。
 
 Vertex Gemini 启用现有 `RemoveFunctionResponseIdEnabled` 时，四种入站协议共用同一工具历史投影。`safe/allow` 仅在移除调用和结果 ID 后仍能按名称唯一关联时放行，并记录 `tool_ids_projected_to_names`；`strict` 拒绝这项可识别损失。无效历史或必须依赖 ID 才能消歧的同名并行调用在所有策略下拒绝，`allow` 也不能伪造关联。关闭该设置时不追加无 ID 投影或对应诊断。预览与执行共用不含原始提示词、参数或结果的 `ToolIdentityRequirements`；12 条 HTTP 回归确认四协议 × 三策略的歧义历史均在发送和预扣前拒绝。
 
