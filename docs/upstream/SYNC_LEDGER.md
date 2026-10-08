@@ -4,7 +4,7 @@
 
 ## 2026-10-09 moejs alpha.6 与上游增量（第六批）
 
-用户批准下载 moejs 与 fetch 参考仓库，并决定 AUDIT1009-01/02 只记录、暂不处理。fetch 后窗口：NewAPI `6370b29424168039e94d40d610191e7d2e65dbf4` → `7aa3531ef4c247ad4891c06cc8ed9d0ffb73fecc`（1 个提交；`v1.0.0-rc.42` 指向 `6370b2942`），Sub2API 无新提交（`5fc0e486c`），AxonHub `b8bb3421` → `e863c6fe1942deddd0f6e471fa003c430e5314f0`（1 个提交）。本批基于 Ren2Hub `cee29981a`。
+用户批准下载 moejs 与 fetch 参考仓库，AUDIT1009-01/02 标记为等待上游 NewAPI 修复。fetch 后窗口：NewAPI `6370b29424168039e94d40d610191e7d2e65dbf4` → `7aa3531ef4c247ad4891c06cc8ed9d0ffb73fecc`（1 个提交；`v1.0.0-rc.42` 指向 `6370b2942`），Sub2API 无新提交（`5fc0e486c`），AxonHub `b8bb3421` → `e863c6fe1942deddd0f6e471fa003c430e5314f0`（1 个提交）。本批基于 Ren2Hub `cee29981a`。
 
 | source_project / source_ref | category / priority / status | local_scope / contract | test_commands / validation | risk / follow_up |
 | --- | --- | --- | --- | --- |
@@ -12,7 +12,7 @@
 | NewAPI `6370b2942` | 插件 / P3 / 延期 | `json-order@1` 不再受下载阻塞，但仍无插件使用，冲突面最大（`engine.go`、本地 `BindTaskPluginEndpointToChannel`、中文 `v1.md`），继续延期 | — | 接入时用量钩子守卫须先于调用槽并覆盖 `CallJSONInto` |
 | NewAPI `7aa3531ef` | 插件 / P2 / 已吸收 | 多部件提交重建正文后，宿主用重建得到的 `Content-Type`（含新边界）覆盖插件给出的值；本地同样存在边界与正文不匹配的问题 | `TestTaskAdaptorBuildsMultipartFromOpaqueFileReference`（修复前失败） | 无 |
 | AxonHub `e863c6fe` | 协议 / — / 不适用 | 修复 Codex 私有 `additional_tools` 输入项的转发，本地 Codex 订阅渠道已退役 | — | 无 |
-| 本地 AUDIT1009-01/02 | — / 用户决定暂不处理 | tokenkit 组合附加符号二次方计数；`enterpriseWebSearch` 与 alpha 搜索发送前定价、拒答转 Gemini 丢弃。见第五批与路线图 | — | 风险不变，复评由用户发起 |
+| 本地 AUDIT1009-01/02 | — / 等待上游 NewAPI 修复（2026-10-09 用户决定） | tokenkit 组合附加符号二次方计数；`enterpriseWebSearch` 与 alpha 搜索发送前定价、拒答转 Gemini 丢弃。见第五批与路线图 | — | 风险不变；NewAPI 修复后按其实现同步，不提前做本地修复 |
 
 下一轮从 NewAPI `7aa3531ef`、Sub2API `5fc0e486c`、AxonHub `e863c6fe` 比较。
 
@@ -29,7 +29,7 @@
 | NewAPI `users-table.tsx` | 界面 / P3 / 已修复 | 管理员用户列表在接口未返回 `group_counts` 时按空对象处理，与 NewAPI 对缺失列表用 `?? []` 兜底一致；`role_counts`、`status_counts` 后端始终返回，未改 | Vitest `UsersView.spec.ts`（修复前页面抛错） | 无 |
 | Sub2API `e0019da46`（`BaseDialog` 关闭即出栈） | 界面 / P4 / 已修复 | 对话框 `open` 变 false 时立即标记 `data-dialog-closing`，最上层判断跳过它，保留按 z-index 与 DOM 顺序判断的规则；`ConsoleModal`、图片灯箱和移动导航抽屉都标记 | Vitest `ConsoleModal.spec.ts` 两组（关闭过渡中下层收到 Esc，修复前失败；过渡中重新打开仍生效）；前端全量 1062 项 | 仅 jsdom 验证 |
 | NewAPI `service/responses_usage.go` | 计费 / — / 对齐，只改说明 | 流式在 `output_item.done` 确认的网页、文件、函数调用在任何终态都计入，与 NewAPI 一致；更正代码注释与第三批账本中"只在 completed 计入"的说法，扣费不变 | — | 无 |
-| 本地遗留（无参考修复，先不改） | — / 保持与 NewAPI 一致 | ① tokenkit 组合附加符号（`\p{M}`）被归为字母类，"两个感叹号加一个组合重音符"（U+0301）反复出现可绕过 1024 字节分段，计数随长度平方增长（128 KiB 约 5 s），NewAPI 同一代码同样存在，Sub2API/AxonHub 无对应限制；`tokenizer.go` 注释的"线性"说法对这类输入不成立。② Gemini `enterpriseWebSearch` 与 `/v1/alpha/search` 计费但发送前不要求定价，未定价时结算回落到冻结估算；NewAPI 依靠预置价格，本地不预置。③ Responses 拒答转 Gemini（请求历史与响应两个方向）被丢弃，三个项目都没有映射。④ 供应商计数读到 `null` 时按 0 处理，与 NewAPI 相同 | — | ① 任何持有 Token 的用户都可在 gpt/o 系列预扣前占用一个 CPU 核，需另行决定 |
+| 本地遗留（无参考修复，先不改） | — / 保持与 NewAPI 一致，等待上游 NewAPI 修复 | ① tokenkit 组合附加符号（`\p{M}`）被归为字母类，"两个感叹号加一个组合重音符"（U+0301）反复出现可绕过 1024 字节分段，计数随长度平方增长（128 KiB 约 5 s），NewAPI 同一代码同样存在，Sub2API/AxonHub 无对应限制；`tokenizer.go` 注释的"线性"说法对这类输入不成立。② Gemini `enterpriseWebSearch` 与 `/v1/alpha/search` 计费但发送前不要求定价，未定价时结算回落到冻结估算；NewAPI 依靠预置价格，本地不预置。③ Responses 拒答转 Gemini（请求历史与响应两个方向）被丢弃，三个项目都没有映射。④ 供应商计数读到 `null` 时按 0 处理，与 NewAPI 相同 | — | ① 任何持有 Token 的用户都可在 gpt/o 系列预扣前占用一个 CPU 核，需另行决定 |
 
 保留的本地偏离补记：Gemini 跨协议历史不合成思考签名绕过值（`relaykit/relayconvert/internal/shared/gemini/request.go` 的四个函数恒返回 false，`583ef2d52` 引入，见 `docs/routing/GATEWAY_API.md`），NewAPI 仍按 `FunctionCallThoughtSignatureEnabled` 填入；以后合并 relaykit 时须保留。下一轮仍从 NewAPI `6370b2942`、Sub2API `5fc0e486c`、AxonHub `b8bb3421` 比较。
 
