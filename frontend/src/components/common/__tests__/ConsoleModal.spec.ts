@@ -74,6 +74,56 @@ describe('ConsoleModal', () => {
     trigger.remove()
   })
 
+  it('gives keys to the dialog painted on top, not the last one in the DOM', async () => {
+    // Mirrors the security proof (z-index 110) mounted before a form modal
+    // whose close is disabled while it waits for that proof.
+    const proof = mount(ConsoleModal, {
+      attachTo: document.body,
+      props: { open: false, title: 'Proof', zIndex: 110 },
+      slots: {
+        default:
+          '<button class="proof-first">Verify</button><button class="proof-last">Cancel</button>',
+      },
+    })
+    const form = mount(ConsoleModal, {
+      attachTo: document.body,
+      props: { open: false, title: 'Form', closeDisabled: true },
+      slots: { default: '<button class="form-action">Save</button>' },
+    })
+    try {
+      await form.setProps({ open: true })
+      await proof.setProps({ open: true })
+      await nextTick()
+
+      const [proofDialog, formDialog] =
+        document.body.querySelectorAll<HTMLElement>(
+          '[role="dialog"][aria-modal="true"]'
+        )
+      expect(proofDialog?.textContent).toContain('Proof')
+      expect(formDialog?.textContent).toContain('Form')
+      const proofFirst =
+        proofDialog!.querySelector<HTMLElement>('.proof-first')!
+      const proofLast = proofDialog!.querySelector<HTMLElement>('.proof-last')!
+      expect(document.activeElement).toBe(proofFirst)
+
+      proofLast.focus()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab' }))
+      expect(document.activeElement).toBe(proofFirst)
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true })
+      )
+      expect(document.activeElement).toBe(proofLast)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      expect(proof.emitted('close')).toHaveLength(1)
+      expect(form.emitted('close')).toBeUndefined()
+    } finally {
+      // Unmount even on failure: open modals hold the shared scroll lock.
+      proof.unmount()
+      form.unmount()
+    }
+  })
+
   it('blocks Escape and backdrop dismissal while closing is disabled', async () => {
     const wrapper = mount(ConsoleModal, {
       attachTo: document.body,

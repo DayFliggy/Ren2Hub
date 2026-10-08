@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, useId } from 'vue'
+import { computed, nextTick, ref, useId, watch } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 
 export interface SelectOption {
@@ -109,6 +109,7 @@ function toggle() {
 }
 
 function select(opt: SelectOption) {
+  if (props.disabled) return
   model.value = opt.value
   closeMenu()
 }
@@ -170,6 +171,12 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+watch(
+  () => props.disabled,
+  (disabled) => {
+    if (disabled) closeMenu()
+  }
+)
 onClickOutside(root, closeMenu)
 </script>
 

@@ -4,7 +4,8 @@
       <div
         v-if="open"
         id="mobile-navigation-drawer"
-        class="mobile-nav-drawer fixed inset-0 z-[80] flex justify-end"
+        class="mobile-nav-drawer fixed inset-0 flex justify-end"
+        style="z-index: 80"
         data-hero-canvas-boundary
         data-handdrawn-scope="mobile-navigation"
         @keydown="onKeydown"
