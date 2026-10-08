@@ -421,15 +421,17 @@ func inspectOpenAIResponsesStreamResponse(response *dto.ResponsesStreamResponse,
 	return []types.ConversionDiagnostic{responsesRefusalReduced("refusal")}
 }
 
-// responsesRefusalPaths locates the non-empty refusal parts of Responses
-// message outputs, which a Claude target can only deliver as text.
+// responsesRefusalPaths locates the non-empty refusal parts of assistant
+// Responses message outputs, which a Claude target can only deliver as text.
+// Other roles are dropped by the converter and carry no refusal to reduce.
 func responsesRefusalPaths(outputs []dto.ResponsesOutput) []string {
 	var paths []string
 	for outputIndex := range outputs {
-		if outputs[outputIndex].Type != "message" {
+		output := &outputs[outputIndex]
+		if output.Type != "message" || output.Role != "" && output.Role != "assistant" {
 			continue
 		}
-		for contentIndex, content := range outputs[outputIndex].Content {
+		for contentIndex, content := range output.Content {
 			if content.Type == "refusal" && content.Refusal != nil && *content.Refusal != "" {
 				paths = append(paths, fmt.Sprintf("output[%d].content[%d].refusal", outputIndex, contentIndex))
 			}

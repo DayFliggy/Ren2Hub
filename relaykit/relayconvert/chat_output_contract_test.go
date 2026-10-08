@@ -123,3 +123,20 @@ func TestChatStreamDTOAndNativeRoutePreserveOutputFields(t *testing.T) {
 	_, err = ConvertStreamResponseChunk(context.Background(), nil, state, &response)
 	require.ErrorContains(t, err, "choices[0].delta")
 }
+
+// The Claude converter drops non-assistant messages, so a refusal part on one
+// is not a reduced refusal and must not fail a strict request.
+func TestResponsesRefusalOnNonAssistantMessageRaisesNoDiagnostic(t *testing.T) {
+	refusal := "not mine"
+	response := &dto.OpenAIResponsesResponse{ID: "resp_1", Status: []byte(`"completed"`), Output: []dto.ResponsesOutput{
+		{Type: "message", ID: "msg_0", Role: "user", Content: []dto.ResponsesOutputContent{{Type: "refusal", Refusal: &refusal}}},
+		{Type: "message", ID: "msg_1", Role: "assistant", Content: []dto.ResponsesOutputContent{{Type: "output_text", Text: "ok"}}},
+	}}
+	info := &convmeta.Values{Options: &convmeta.Options{ConversionPolicy: types.ConversionLossPolicyStrict}}
+	result, err := ConvertResponse(context.Background(), info, types.RelayFormatClaude, response)
+	require.NoError(t, err)
+	assert.Empty(t, result.Diagnostics)
+	claude, ok := result.Value.(*dto.ClaudeResponse)
+	require.True(t, ok)
+	assert.NotEqual(t, "refusal", claude.StopReason)
+}
