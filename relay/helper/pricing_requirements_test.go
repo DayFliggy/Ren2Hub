@@ -3,6 +3,7 @@ package helper
 import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -45,6 +46,44 @@ func TestGoogleMapsRequiresItsOwnUsageContract(t *testing.T) {
 		_, err := PricingRequirementsFromBody(info, []byte(body))
 		require.ErrorContains(t, err, "missing_usage_contract")
 		require.ErrorContains(t, err, "tool:google_maps")
+	}
+}
+
+// useToolPrices installs operator tool prices (tool_price_setting.prices) for
+// one test and restores the empty default afterwards.
+func useToolPrices(t *testing.T, prices string) {
+	t.Helper()
+	require.NoError(t, operation_setting.LoadToolPricesFromJSONString(prices))
+	t.Cleanup(func() { require.NoError(t, operation_setting.LoadToolPricesFromJSONString(`{}`)) })
+}
+
+// Anthropic bills web_fetch, code_execution and tool_search from
+// usage.server_tool_use, so a Claude wire request declaring one is refused
+// before reservation until the operator prices it; an explicit zero is a price.
+func TestClaudeServerToolsRequireTheirOwnPrice(t *testing.T) {
+	for _, tool := range []struct{ kind, key string }{
+		{"web_fetch_20250910", "web_fetch"},
+		{"code_execution_20250825", "code_execution"},
+		{"tool_search_tool_regex_20251119", "tool_search"},
+	} {
+		t.Run(tool.key, func(t *testing.T) {
+			c, info := pricingFixture(t, "claude-test", model.PricingValues{"ModelRatio": "0.5", "CompletionRatio": "2"})
+			info.RelayFormat = types.RelayFormatClaude
+			body := []byte(`{"tools":[{"type":"` + tool.kind + `","name":"` + tool.key + `"}]}`)
+			require.NoError(t, FreezeOutboundBillingAttributes(info, body))
+			_, err := ModelPriceHelper(c, info, 10, &types.TokenCountMeta{MaxTokens: 5})
+			require.ErrorContains(t, err, `missing_price_dimension: dimension "tool:`+tool.key+`"`)
+			require.Nil(t, info.PriceData.Quote)
+
+			useToolPrices(t, `{"`+tool.key+`":0}`)
+			_, err = ModelPriceHelper(c, info, 10, &types.TokenCountMeta{MaxTokens: 5})
+			require.NoError(t, err)
+
+			// The OpenAI hosted code tool keeps its own refusal.
+			info.RelayFormat = types.RelayFormatOpenAIResponses
+			_, err = PricingRequirementsFromBody(info, []byte(`{"tools":[{"type":"code_interpreter"}]}`))
+			require.ErrorContains(t, err, "missing_usage_contract")
+		})
 	}
 }
 

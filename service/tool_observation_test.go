@@ -13,9 +13,9 @@ func TestResponsesToolCallsDeduplicateTerminalSnapshots(t *testing.T) {
 	item := dto.ResponsesOutput{ID: "search-one", Type: dto.BuildInCallWebSearchCall, Status: "completed"}
 	index := 0
 	event := &dto.ResponsesStreamResponse{Type: dto.ResponsesOutputTypeItemDone, Item: &item, OutputIndex: &index}
-	acc.Observe(event)
-	acc.Observe(event)
-	acc.Observe(&dto.ResponsesStreamResponse{Type: "response.completed", Response: &dto.OpenAIResponsesResponse{Output: []dto.ResponsesOutput{item}}})
+	acc.Observe(event, nil)
+	acc.Observe(event, nil)
+	acc.Observe(&dto.ResponsesStreamResponse{Type: "response.completed", Response: &dto.OpenAIResponsesResponse{Output: []dto.ResponsesOutput{item}}}, nil)
 	require.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolWebSearchPreview].CallCount)
 	require.False(t, info.BillingToolUsageInvalid)
 }

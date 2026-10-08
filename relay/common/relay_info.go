@@ -207,6 +207,26 @@ type RelayInfo struct {
 	GeminiConvertState *convmeta.GeminiConvertInfo
 	ResponsesTools     *convmeta.ResponsesToolState
 
+	// VendorToolUsage reads the upstream's own billed tool counts from a raw
+	// response body (non-stream) or the raw terminal stream frame. The channel
+	// adaptor's Init sets it for upstreams whose usage extension names a billed
+	// count; it stays nil for everyone else. Keys are tool-price keys. A zero
+	// value suppresses the protocol items counted under that key.
+	VendorToolUsage func(raw []byte) map[string]int `json:"-"`
+	// VendorToolPriceKeys maps a declared hosted tool type prefix to the extra
+	// price keys VendorToolUsage or WebSearchBillingKey can bill for it. The
+	// adaptor's Init sets it together with them, so the final wire request is
+	// refused before send until every key that can bill is priced.
+	VendorToolPriceKeys map[string][]string `json:"-"`
+	// WebSearchBillingKey overrides the tool-price key the Claude handler uses
+	// for usage.server_tool_use.web_search_requests. Set by a channel adaptor
+	// whose Anthropic-compatible endpoint bills search under its own price
+	// list; empty keeps the protocol default web_search.
+	WebSearchBillingKey string `json:"-"`
+	// vendorToolKeys are the BuiltInTools keys ApplyVendorToolUsage created
+	// during the current channel attempt.
+	vendorToolKeys []string
+
 	// convOptions caches the converter settings snapshot (see ConvOptions).
 	convOptions *convmeta.Options
 
@@ -279,6 +299,17 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	// Channel identity feeds the converter options snapshot (e.g.
 	// OpenRouterDialect); drop the cache so a cross-channel retry rebuilds it.
 	info.convOptions = nil
+	// The adaptor Init of this attempt sets the vendor billing hooks again.
+	// ResetAttemptState only zeroes counts, so the keys a previous vendor
+	// reported are removed here; a leftover web_search_preview key would steer
+	// resolveWebSearchToolName on the next channel.
+	info.VendorToolUsage, info.VendorToolPriceKeys, info.WebSearchBillingKey = nil, nil, ""
+	if info.ResponsesUsageInfo != nil {
+		for _, name := range info.vendorToolKeys {
+			delete(info.ResponsesUsageInfo.BuiltInTools, name)
+		}
+	}
+	info.vendorToolKeys = nil
 	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || channelMeta.ChannelSetting.PassThroughBodyEnabled {
 		info.ReasoningEffort = ""
 	} else {

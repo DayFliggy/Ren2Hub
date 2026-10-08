@@ -25,7 +25,9 @@ func NewResponsesUsageAccumulator(info *relaycommon.RelayInfo) *ResponsesUsageAc
 	return &ResponsesUsageAccumulator{info: info, usage: &dto.Usage{UsageSource: "missing"}}
 }
 
-func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse) {
+// Observe feeds one decoded stream event. raw is the same event's wire bytes;
+// the vendor tool-usage reader runs on it at terminal events.
+func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse, raw []byte) {
 	if a == nil || event == nil || a.finished {
 		return
 	}
@@ -46,20 +48,27 @@ func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse) 
 				observation.Terminal = "completed"
 			}
 		}
-		if a.imageCommitted {
-			return
-		}
-		failed := event.Type != "response.completed" && event.Type != "response.done"
-		if failed || (event.Response != nil && relaycommon.IsNonBillableResponsesStatus(event.Response.Status)) {
-			a.imageCounter.Reset()
-		} else if event.Response != nil {
-			for i := range event.Response.Output {
-				a.imageCounter.Observe(&event.Response.Output[i], &i)
-				a.info.ObserveBillableToolCall(&event.Response.Output[i], &i)
+		if !a.imageCommitted {
+			// Images that completed before any terminal, failed ones included,
+			// were delivered and stay billable; the counter still skips
+			// unfinished image items. Other tool calls bill only on a completed
+			// response.
+			completed := (event.Type == "response.completed" || event.Type == "response.done") &&
+				(event.Response == nil || !relaycommon.IsNonBillableResponsesStatus(event.Response.Status))
+			if event.Response != nil {
+				for i := range event.Response.Output {
+					a.imageCounter.Observe(&event.Response.Output[i], &i)
+					if completed {
+						a.info.ObserveBillableToolCall(&event.Response.Output[i], &i)
+					}
+				}
 			}
+			a.imageCounter.Commit(a.info)
+			a.imageCommitted = true
 		}
-		a.imageCounter.Commit(a.info)
-		a.imageCommitted = true
+		// Vendor counts are cumulative on the terminal event and replace the
+		// tool items counted above and from output_item.done.
+		a.info.ApplyVendorToolUsage(raw)
 	case "response.output_text.delta":
 		a.outputText.WriteString(event.Delta)
 	case dto.ResponsesOutputTypeItemDone:
@@ -82,6 +91,8 @@ func (a *ResponsesUsageAccumulator) Finish() *dto.Usage {
 		return a.usage
 	}
 	a.finished = true
+	// A final image item can already have reached the client before the stream
+	// disconnects, so completed image usage is retained even without a terminal.
 	if !a.imageCommitted {
 		a.imageCounter.Commit(a.info)
 		a.imageCommitted = true

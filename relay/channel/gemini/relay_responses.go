@@ -19,7 +19,7 @@ func GeminiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 		return nil, apiErr
 	}
 	info.ObserveResponseModel(gjson.GetBytes(responseBody, "modelVersion").Str)
-	markGeminiGoogleSearchCall(c, response)
+	markGeminiGoogleSearchCall(info, response)
 	usage := buildUsageFromGeminiResponse(c, info, response)
 	converted, err := relayconvert.ConvertResponse(c, info, types.RelayFormatOpenAIResponses, response)
 	if err != nil {

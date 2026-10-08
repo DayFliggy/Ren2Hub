@@ -75,24 +75,28 @@ func TestResponsesDetailedUsageJSONAndStream(t *testing.T) {
 	}
 }
 
+// A completed image_generation item reached the client before the stream
+// ended, so it bills once however the stream ends: duplicated in a completed
+// terminal, after a failed, incomplete, cancelled or error terminal, or
+// without a terminal at all.
 func TestResponsesImageAccountingOnStreamTermination(t *testing.T) {
 	item := `{"type":"image_generation_call","id":"image_1","status":"completed","result":"image-data"}`
 	completedImage := `{"type":"response.output_item.done","output_index":0,"item":` + item + `}`
 	tests := []struct {
 		name      string
 		tail      []string
-		wantCount int
 		wantError bool
 	}{
-		{"unexpected_eof", nil, 1, true},
-		{"completed_duplicate", []string{completedImage, `{"type":"response.completed","response":{"status":"completed","output":[` + item + `]}}`}, 1, false},
-		{"failed", []string{`{"type":"response.failed","response":{"status":"failed"}}`}, 0, true},
-		{"incomplete", []string{`{"type":"response.incomplete","response":{"status":"incomplete"}}`}, 0, false},
-		{"cancelled", []string{`{"type":"response.cancelled","response":{"status":"cancelled"}}`}, 0, true},
-		{"canceled", []string{`{"type":"response.canceled","response":{"status":"canceled"}}`}, 0, true},
-		{"error", []string{`{"type":"error","message":"upstream failed"}`}, 0, true},
-		{"response_error", []string{`{"type":"response.error","message":"upstream failed"}`}, 0, true},
-		{"malformed_tail", []string{`{"type":`}, 1, true},
+		{"unexpected_eof", nil, true},
+		{"completed_duplicate", []string{completedImage, `{"type":"response.completed","response":{"status":"completed","output":[` + item + `]}}`}, false},
+		{"failed", []string{`{"type":"response.failed","response":{"status":"failed"}}`}, true},
+		{"incomplete", []string{`{"type":"response.incomplete","response":{"status":"incomplete"}}`}, false},
+		{"incomplete_snapshot", []string{`{"type":"response.incomplete","response":{"status":"incomplete","output":[` + item + `]}}`}, false},
+		{"cancelled", []string{`{"type":"response.cancelled","response":{"status":"cancelled"}}`}, true},
+		{"canceled", []string{`{"type":"response.canceled","response":{"status":"canceled"}}`}, true},
+		{"error", []string{`{"type":"error","message":"upstream failed"}`}, true},
+		{"response_error", []string{`{"type":"response.error","message":"upstream failed"}`}, true},
+		{"malformed_tail", []string{`{"type":`}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -104,7 +108,7 @@ func TestResponsesImageAccountingOnStreamTermination(t *testing.T) {
 			}
 			assert.Contains(t, w.Body.String(), "image-data")
 			require.NotNil(t, info.ResponsesUsageInfo)
-			assert.Equal(t, tt.wantCount, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
+			assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 			assert.True(t, info.HasValidOutput())
 		})
 	}
