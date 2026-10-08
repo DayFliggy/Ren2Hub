@@ -176,13 +176,19 @@ func recordClaudeServerToolUse(info *relaycommon.RelayInfo, serverToolUse *dto.C
 	if info == nil || serverToolUse == nil {
 		return
 	}
+	if count := serverToolUse.WebSearchRequests; count > 0 {
+		info.SetBillableToolCount(cmp.Or(info.WebSearchBillingKey, dto.BuildInToolWebSearch), count)
+	}
+	// web_search_20260209 and web_fetch_20260209 run code execution under the
+	// hood without a declared code_execution tool. These counts bill only when
+	// the frozen quote prices the key, which a declared tool requires before
+	// send; undeclared internal use is not a product the client chose.
 	for name, count := range map[string]int{
-		cmp.Or(info.WebSearchBillingKey, dto.BuildInToolWebSearch): serverToolUse.WebSearchRequests,
 		"web_fetch":      serverToolUse.WebFetchRequests,
 		"code_execution": serverToolUse.CodeExecutionRequests,
 		"tool_search":    serverToolUse.ToolSearchRequests,
 	} {
-		if count > 0 {
+		if count > 0 && info.QuotePricesTool(name) {
 			info.SetBillableToolCount(name, count)
 		}
 	}

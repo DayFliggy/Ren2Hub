@@ -58,16 +58,24 @@ func (info *RelayInfo) CountBillableToolCall(itemType string, functionName strin
 		if _, reserved := reservedBillableToolNames[functionName]; reserved {
 			return
 		}
-		if info.PriceData.Quote == nil {
-			return
-		}
-		for _, price := range info.PriceData.Quote.PriceVersion.Prices {
-			if price.Quantity == "tool:"+functionName {
-				info.incrementBillableToolCall(functionName)
-				return
-			}
+		if info.QuotePricesTool(functionName) {
+			info.incrementBillableToolCall(functionName)
 		}
 	}
+}
+
+// QuotePricesTool reports whether the frozen quote carries a price for the
+// tool key, including an explicit zero.
+func (info *RelayInfo) QuotePricesTool(name string) bool {
+	if info == nil || info.PriceData.Quote == nil {
+		return false
+	}
+	for _, price := range info.PriceData.Quote.PriceVersion.Prices {
+		if price.Quantity == "tool:"+name {
+			return true
+		}
+	}
+	return false
 }
 
 // ObserveBillableToolCall records a confirmed output item once across item.done

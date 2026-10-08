@@ -74,11 +74,15 @@ func TestCountClaudeStreamBillableToolsSetsWebSearchRequests(t *testing.T) {
 }
 
 // usage.server_tool_use counts bill under each server tool's own key, and a
-// later cumulative message_delta replaces the earlier report.
+// later cumulative message_delta replaces the earlier report. web_fetch,
+// code_execution and tool_search bill only when the frozen quote prices them:
+// web_search_20260209 runs code execution internally without a declared tool.
 func TestClaudeServerToolUseKeys(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	priced := []string{"web_fetch", "code_execution", "tool_search"}
 	info := &relaycommon.RelayInfo{OriginModelName: "claude-3-7-sonnet", RelayFormat: types.RelayFormatClaude}
+	info.PriceData.Quote = claudeToolQuote(t, info.OriginModelName, priced...)
 	countClaudeStreamBillableTools(info, &dto.ClaudeResponse{
 		Type:  "message_delta",
 		Usage: &dto.ClaudeUsage{ServerToolUse: &dto.ClaudeServerToolUse{WebSearchRequests: 1, WebFetchRequests: 1}},
@@ -91,18 +95,41 @@ func TestClaudeServerToolUseKeys(t *testing.T) {
 	assert.Equal(t, want, claudeToolCounts(info))
 
 	nonStream := &relaycommon.RelayInfo{OriginModelName: "claude-3-7-sonnet", RelayFormat: types.RelayFormatClaude}
+	nonStream.PriceData.Quote = claudeToolQuote(t, nonStream.OriginModelName, priced...)
 	data := []byte(`{"type":"message","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":1,"output_tokens":1,"server_tool_use":{"web_search_requests":1,"web_fetch_requests":2,"code_execution_requests":3,"tool_search_requests":4}}}`)
 	require.Nil(t, HandleClaudeResponseData(c, nonStream, &ClaudeResponseInfo{Usage: &dto.Usage{}}, nil, data))
 	assert.Equal(t, want, claudeToolCounts(nonStream))
 
+	// Dynamic-filtering web search reports internal code execution; with no
+	// code_execution price it is not billed and cannot fail settlement.
+	internal := &relaycommon.RelayInfo{OriginModelName: "claude-opus-5-5", RelayFormat: types.RelayFormatClaude}
+	internal.PriceData.Quote = claudeToolQuote(t, internal.OriginModelName)
+	countClaudeStreamBillableTools(internal, &dto.ClaudeResponse{
+		Type:  "message_delta",
+		Usage: &dto.ClaudeUsage{ServerToolUse: &dto.ClaudeServerToolUse{WebSearchRequests: 2, CodeExecutionRequests: 5}},
+	})
+	assert.Equal(t, map[string]int{"web_search": 2}, claudeToolCounts(internal))
+
 	// A channel whose Anthropic-compatible endpoint bills search under its own
 	// price key re-keys web_search_requests only.
 	vendor := &relaycommon.RelayInfo{OriginModelName: "qwen3.8-flash", WebSearchBillingKey: "search_strategy_agent"}
+	vendor.PriceData.Quote = claudeToolQuote(t, vendor.OriginModelName, priced...)
 	countClaudeStreamBillableTools(vendor, &dto.ClaudeResponse{
 		Type:  "message_delta",
 		Usage: &dto.ClaudeUsage{ServerToolUse: &dto.ClaudeServerToolUse{WebSearchRequests: 2, WebFetchRequests: 1}},
 	})
 	assert.Equal(t, map[string]int{"search_strategy_agent": 2, "web_fetch": 1}, claudeToolCounts(vendor))
+}
+
+func claudeToolQuote(t *testing.T, model string, tools ...string) *billing.Quote {
+	t.Helper()
+	prices := make([]billing.UnitPrice, 0, len(tools))
+	for _, tool := range tools {
+		prices = append(prices, billing.UnitPrice{Quantity: "tool:" + tool, Unit: "per_thousand_calls", Price: "1"})
+	}
+	quote, err := billing.NewQuote(billing.PriceVersion{Model: model, Mode: billing.ModePerCall, Pricing: billing.PricingValues{"ModelPrice": "0"}, Prices: prices}, "1", nil, time.Unix(1700000000, 0))
+	require.NoError(t, err)
+	return quote
 }
 
 func claudeToolCounts(info *relaycommon.RelayInfo) map[string]int {
