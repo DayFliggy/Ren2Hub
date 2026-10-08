@@ -15,6 +15,7 @@ import (
 	sharedgemini "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/shared/gemini"
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/reasoning"
+	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
 func OpenAIResponsesRequestToGeminiChat(c context.Context, req *dto.OpenAIResponsesRequest, info convmeta.Meta) (*dto.GeminiChatRequest, error) {
@@ -328,7 +329,7 @@ func responsesToolOutputToGemini(c context.Context, value any) (map[string]any, 
 	rawParts, ok := value.([]any)
 	if !ok || len(rawParts) == 0 {
 		if responsesToolOutputHasMedia(value) {
-			return nil, nil, fmt.Errorf("tool output media must be a list of content parts")
+			return nil, nil, fmt.Errorf("%w: tool output media must be a list of content parts", types.ErrInvalidRequest)
 		}
 		return GeminiResponseMap(value), nil, nil
 	}
@@ -336,7 +337,7 @@ func responsesToolOutputToGemini(c context.Context, value any) (map[string]any, 
 		part, isMap := rawPart.(map[string]any)
 		if !isMap || !slices.Contains([]string{"input_text", "output_text", "text", "input_image", "input_file", "input_audio", "input_video"}, strings.TrimSpace(kitutil.Interface2String(part["type"]))) {
 			if responsesToolOutputHasMedia(value) {
-				return nil, nil, fmt.Errorf("tool output mixes media with parts gemini cannot represent")
+				return nil, nil, fmt.Errorf("%w: tool output mixes media with parts gemini cannot represent", types.ErrInvalidRequest)
 			}
 			return GeminiResponseMap(value), nil, nil
 		}
@@ -359,13 +360,13 @@ func responsesToolOutputToGemini(c context.Context, value any) (map[string]any, 
 			return nil, nil, err
 		}
 		if len(parts) == 0 {
-			return nil, nil, fmt.Errorf("tool output %s part has no media source", partType)
+			return nil, nil, fmt.Errorf("%w: tool output %s part has no media source", types.ErrInvalidRequest, partType)
 		}
 		// Gemini documents only images, PDF and plain text in function
 		// responses; audio, video and other inline types fail before send.
 		mimeType := strings.ToLower(parts[0].InlineData.MimeType)
 		if !sharedgemini.IsSupportedToolResultMimeType(mimeType) {
-			return nil, nil, fmt.Errorf("gemini tool results cannot carry %s content", mimeType)
+			return nil, nil, fmt.Errorf("%w: gemini tool results cannot carry %s content", types.ErrInvalidRequest, mimeType)
 		}
 		media = append(media, parts...)
 	}

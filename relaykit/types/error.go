@@ -11,6 +11,12 @@ import (
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 )
 
+// ErrInvalidRequest marks a request conversion that failed because the client
+// sent a body the target protocol cannot accept, so the host answers 400
+// instead of reporting a gateway fault. Wrap it with %w (AxonHub
+// transformer.ErrInvalidRequest).
+var ErrInvalidRequest = errors.New("invalid request")
+
 type OpenAIError struct {
 	Message  string          `json:"message"`
 	Type     string          `json:"type"`

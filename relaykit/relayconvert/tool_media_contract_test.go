@@ -180,6 +180,11 @@ func TestResponsesToolMediaGeminiRejectsUnrepresentableMedia(t *testing.T) {
 				if result != nil {
 					assert.Nil(t, result.Value)
 				}
+				// A malformed client tool output is the client's request
+				// error, so the host can answer 400 rather than 500.
+				if test.name == "single_object" {
+					assert.ErrorIs(t, err, types.ErrInvalidRequest)
+				}
 			}
 		})
 	}
