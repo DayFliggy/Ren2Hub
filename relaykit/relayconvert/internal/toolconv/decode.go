@@ -13,10 +13,13 @@ import (
 
 const maxClaudeWebSearchUses = 1000
 
-func ExtractRequest(format types.RelayFormat, request any) (any, Set, error) {
+// ExtractRequest separates tool declarations from the request. The target is
+// needed only to project legacy Chat function history, whose call identifiers
+// depend on whether the target correlates results by id or by name.
+func ExtractRequest(format types.RelayFormat, target types.RelayFormat, request any) (any, Set, error) {
 	switch format {
 	case types.RelayFormatOpenAI:
-		return extractOpenAIChatRequest(request)
+		return extractOpenAIChatRequest(request, target)
 	case types.RelayFormatOpenAIResponses:
 		return extractOpenAIResponsesRequest(request)
 	case types.RelayFormatClaude:
@@ -28,7 +31,7 @@ func ExtractRequest(format types.RelayFormat, request any) (any, Set, error) {
 	}
 }
 
-func extractOpenAIChatRequest(request any) (any, Set, error) {
+func extractOpenAIChatRequest(request any, target types.RelayFormat) (any, Set, error) {
 	source, ok := request.(*dto.GeneralOpenAIRequest)
 	if !ok {
 		value, valueOK := request.(dto.GeneralOpenAIRequest)
@@ -114,7 +117,12 @@ func extractOpenAIChatRequest(request any) (any, Set, error) {
 		set.Choice = legacyChoice
 	}
 
+	messages, err := PairLegacyFunctionHistory(source.Messages, target)
+	if err != nil {
+		return nil, Set{}, err
+	}
 	clone := *source
+	clone.Messages = messages
 	clone.Tools = nil
 	clone.ToolChoice = nil
 	clone.WebSearchOptions = nil

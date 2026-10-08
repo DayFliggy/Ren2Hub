@@ -14,7 +14,7 @@ func (a *ResponsesBufferedAccumulator) Err() error { return a.err }
 // The legacy unindexed text path remains available for compatible providers.
 func (a *ResponsesBufferedAccumulator) rememberIndexedEvent(event *dto.ResponsesStreamResponse) bool {
 	switch event.Type {
-	case "response.output_item.added", "response.output_item.done", "response.function_call_arguments.delta", "response.custom_tool_call_input.delta", "response.function_call_arguments.done", "response.custom_tool_call_input.done", "response.output_text.delta", "response.output_text.done", "response.output_text.annotation.added", "response.content_part.added", "response.content_part.done", "response.reasoning_summary_text.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.done", "response.reasoning_text.done", "response.reasoning_summary_part.added", "response.reasoning_summary_part.done":
+	case "response.output_item.added", "response.output_item.done", "response.function_call_arguments.delta", "response.custom_tool_call_input.delta", "response.function_call_arguments.done", "response.custom_tool_call_input.done", "response.output_text.delta", "response.output_text.done", "response.output_text.annotation.added", "response.refusal.delta", "response.refusal.done", "response.content_part.added", "response.content_part.done", "response.reasoning_summary_text.delta", "response.reasoning_text.delta", "response.reasoning_summary_text.done", "response.reasoning_text.done", "response.reasoning_summary_part.added", "response.reasoning_summary_part.done":
 	default:
 		return false
 	}
@@ -118,7 +118,7 @@ func (a *ResponsesBufferedAccumulator) rememberIndexedEvent(event *dto.Responses
 			item.Arguments, a.err = kitutil.Marshal(*event.Arguments)
 		}
 		return true
-	case "response.output_text.delta", "response.output_text.done", "response.output_text.annotation.added", "response.content_part.added", "response.content_part.done":
+	case "response.output_text.delta", "response.output_text.done", "response.output_text.annotation.added", "response.refusal.delta", "response.refusal.done", "response.content_part.added", "response.content_part.done":
 		item.Type, item.Role = "message", "assistant"
 		partIndex := 0
 		if event.ContentIndex != nil {
@@ -134,6 +134,18 @@ func (a *ResponsesBufferedAccumulator) rememberIndexedEvent(event *dto.Responses
 		part := &item.Content[partIndex]
 		if event.Type == "response.output_text.delta" {
 			part.Text += event.Delta
+		}
+		if event.Type == "response.refusal.delta" {
+			part.Type = "refusal"
+			refusal := event.Delta
+			if part.Refusal != nil {
+				refusal = *part.Refusal + refusal
+			}
+			part.Refusal = &refusal
+		}
+		if event.Type == "response.refusal.done" && event.Refusal != nil {
+			part.Type = "refusal"
+			part.Refusal = event.Refusal
 		}
 		if event.Text != nil {
 			part.Text = *event.Text
@@ -257,8 +269,11 @@ func mergeBufferedContent(target, previous *dto.ResponsesOutput) {
 		if target.Content[i].Text == "" {
 			target.Content[i].Text = part.Text
 		}
-		if target.Content[i].Type == "" {
+		if target.Content[i].Type == "" || target.Content[i].Type == "output_text" && part.Type == "refusal" {
 			target.Content[i].Type = part.Type
+		}
+		if target.Content[i].Refusal == nil {
+			target.Content[i].Refusal = part.Refusal
 		}
 		target.Content[i].Annotations = mergeBufferedAnnotations(target.Content[i].Annotations, part.Annotations)
 	}

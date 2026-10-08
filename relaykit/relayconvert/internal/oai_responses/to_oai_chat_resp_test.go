@@ -619,3 +619,50 @@ func mustStreamChunks(t *testing.T, state *ResponsesToChatStreamState, event *dt
 	require.NoError(t, err)
 	return chunks
 }
+
+// A Responses refusal arrives as a type=refusal content part, not as output
+// text. Chat clients must receive it in the refusal field on every transport
+// instead of an empty assistant message with a normal stop.
+func TestResponsesRefusalReachesChatRefusalField(t *testing.T) {
+	refusalText := "I can't help with that."
+	refusalOutput := []dto.ResponsesOutput{{
+		Type: responsesOutputTypeMessage, Role: "assistant",
+		Content: []dto.ResponsesOutputContent{{Type: "refusal", Refusal: &refusalText}},
+	}}
+
+	t.Run("non-streaming", func(t *testing.T) {
+		response, _, err := ResponsesResponseToChatCompletionsResponse(&dto.OpenAIResponsesResponse{Status: []byte(`"completed"`), Output: refusalOutput}, "chatcmpl-refusal")
+		require.NoError(t, err)
+		require.Len(t, response.Choices, 1)
+		require.NotNil(t, response.Choices[0].Message.Refusal)
+		assert.Equal(t, refusalText, *response.Choices[0].Message.Refusal)
+	})
+
+	for _, sentDelta := range []bool{true, false} {
+		name := "streaming terminal snapshot only"
+		if sentDelta {
+			name = "streaming deltas"
+		}
+		t.Run(name, func(t *testing.T) {
+			state := newTestResponsesStreamState()
+			var chunks []dto.ChatCompletionsStreamResponse
+			if sentDelta {
+				chunks = append(chunks, mustStreamChunks(t, state, &dto.ResponsesStreamResponse{Type: responsesEventRefusalDelta, Delta: refusalText})...)
+				chunks = append(chunks, mustStreamChunks(t, state, &dto.ResponsesStreamResponse{Type: responsesEventRefusalDone, Refusal: &refusalText})...)
+			}
+			chunks = append(chunks, mustStreamChunks(t, state, &dto.ResponsesStreamResponse{
+				Type:     responsesEventCompleted,
+				Response: &dto.OpenAIResponsesResponse{Status: []byte(`"completed"`), Output: refusalOutput},
+			})...)
+			var refusal strings.Builder
+			for _, chunk := range chunks {
+				for _, choice := range chunk.Choices {
+					if choice.Delta.Refusal != nil {
+						refusal.WriteString(*choice.Delta.Refusal)
+					}
+				}
+			}
+			assert.Equal(t, refusalText, refusal.String(), "the refusal must be delivered exactly once")
+		})
+	}
+}

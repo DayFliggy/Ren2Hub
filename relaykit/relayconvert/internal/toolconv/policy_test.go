@@ -35,7 +35,7 @@ func hasDiagnosticCode(diagnostics []types.ConversionDiagnostic, code string) bo
 func TestDefaultPolicyAllowsGeminiCodeExecutionToOpenAI(t *testing.T) {
 	t.Parallel()
 
-	_, set, err := ExtractRequest(types.RelayFormatGemini, geminiCodeExecutionRequest(t))
+	_, set, err := ExtractRequest(types.RelayFormatGemini, types.RelayFormatOpenAI, geminiCodeExecutionRequest(t))
 	require.NoError(t, err)
 	target := &dto.GeneralOpenAIRequest{
 		Model:    "gpt-4o",
@@ -81,7 +81,7 @@ func TestResponsePhaseNeverRejectsEvenUnderStrictPolicy(t *testing.T) {
 func TestSafePolicyRejectsRequestPhaseHostedToolLoss(t *testing.T) {
 	t.Parallel()
 
-	_, set, err := ExtractRequest(types.RelayFormatGemini, geminiCodeExecutionRequest(t))
+	_, set, err := ExtractRequest(types.RelayFormatGemini, types.RelayFormatOpenAI, geminiCodeExecutionRequest(t))
 	require.NoError(t, err)
 	target := &dto.GeneralOpenAIRequest{
 		Model:    "gpt-4o",

@@ -166,6 +166,9 @@ func AnalyzeRequest(request any) (RequestRequirements, error) {
 	if err := req.inspectProjectionSemantics(payload); err != nil {
 		return RequestRequirements{}, err
 	}
+	if err := req.inspectLegacyFunctionHistory(request); err != nil {
+		return RequestRequirements{}, err
+	}
 	req.NativeRequired = len(req.NativeState) != 0
 	req.ToolIdentity = analyzeToolIdentity(request)
 	return req, nil

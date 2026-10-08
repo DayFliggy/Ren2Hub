@@ -24,6 +24,7 @@ type ResponsesToChatStreamState struct {
 	sentStart                  bool
 	finalized                  bool
 	hasSentText                bool
+	hasSentRefusal             bool
 	sentAnnotationCount        int
 	sawToolCall                bool
 	hasSentReasoning           bool
@@ -130,6 +131,15 @@ func ResponsesStreamEventToChatChunks(event *dto.ResponsesStreamResponse, state 
 			}
 		}
 		return state.annotationDelta(annotation)
+	case responsesEventRefusalDelta:
+		if event.Delta == "" {
+			return nil, nil
+		}
+		return state.refusalDelta(event.Delta), nil
+	case responsesEventRefusalDone:
+		// The refusal text already arrived through deltas; the done event only
+		// repeats the accumulated value.
+		return nil, nil
 	case responsesEventOutputItemAdded, responsesEventOutputItemDone:
 		if event.Item == nil || !isResponsesToolOutputType(event.Item.Type) {
 			return nil, nil
@@ -207,6 +217,18 @@ func (s *ResponsesToChatStreamState) textDelta(delta string) []dto.ChatCompletio
 	return chunks
 }
 
+func (s *ResponsesToChatStreamState) refusalDelta(delta string) []dto.ChatCompletionsStreamResponse {
+	if delta == "" {
+		return nil
+	}
+	s.hasSentRefusal = true
+	chunks := s.ensureStart()
+	chunks = append(chunks, s.makeChunk(dto.ChatCompletionsStreamResponseChoiceDelta{
+		Refusal: &delta,
+	}, nil))
+	return chunks
+}
+
 func (s *ResponsesToChatStreamState) terminalOutputChunks(response *dto.OpenAIResponsesResponse) ([]dto.ChatCompletionsStreamResponse, error) {
 	if s == nil || response == nil || len(response.Output) == 0 {
 		return nil, nil
@@ -215,18 +237,28 @@ func (s *ResponsesToChatStreamState) terminalOutputChunks(response *dto.OpenAIRe
 	var chunks []dto.ChatCompletionsStreamResponse
 	hadSentText := s.hasSentText
 	hadSentReasoning := s.hasSentReasoning
+	hadSentRefusal := s.hasSentRefusal
 	annotationOffset := 0
 	for i := range response.Output {
 		out := &response.Output[i]
 		switch {
-		case out.Type == responsesOutputTypeMessage && !hadSentText:
+		case out.Type == responsesOutputTypeMessage && (!hadSentText || !hadSentRefusal):
 			var text strings.Builder
+			var refusal strings.Builder
 			for _, c := range out.Content {
 				if c.Type == "output_text" && c.Text != "" {
 					text.WriteString(c.Text)
 				}
+				if c.Type == "refusal" && c.Refusal != nil && *c.Refusal != "" {
+					refusal.WriteString(*c.Refusal)
+				}
 			}
-			chunks = append(chunks, s.textDelta(text.String())...)
+			if !hadSentText {
+				chunks = append(chunks, s.textDelta(text.String())...)
+			}
+			if !hadSentRefusal {
+				chunks = append(chunks, s.refusalDelta(refusal.String())...)
+			}
 			annotationChunks, err := s.remainingAnnotationChunks(out, annotationOffset)
 			if err != nil {
 				return nil, err
@@ -700,6 +732,7 @@ type ResponsesBufferedAccumulator struct {
 	inputBytes           int64
 	maxInputBytes        int64
 	text                 strings.Builder
+	refusal              strings.Builder
 	reasoning            strings.Builder
 	tools                []*responsesBufferedTool
 	outputIndexToToolIdx map[int]int
@@ -773,6 +806,8 @@ func (a *ResponsesBufferedAccumulator) ProcessEvent(event *dto.ResponsesStreamRe
 	switch event.Type {
 	case responsesEventOutputTextDelta:
 		a.text.WriteString(event.Delta)
+	case responsesEventRefusalDelta:
+		a.refusal.WriteString(event.Delta)
 	case responsesEventReasoningSummaryDelta, responsesEventReasoningTextDelta:
 		a.reasoning.WriteString(event.Delta)
 	case responsesEventOutputItemAdded, responsesEventOutputItemDone:
@@ -823,13 +858,19 @@ func (a *ResponsesBufferedAccumulator) BuildOutput() []dto.ResponsesOutput {
 			},
 		})
 	}
-	if a.text.Len() > 0 {
+	if a.text.Len() > 0 || a.refusal.Len() > 0 {
+		content := make([]dto.ResponsesOutputContent, 0, 2)
+		if a.text.Len() > 0 {
+			content = append(content, dto.ResponsesOutputContent{Type: "output_text", Text: a.text.String()})
+		}
+		if a.refusal.Len() > 0 {
+			refusal := a.refusal.String()
+			content = append(content, dto.ResponsesOutputContent{Type: "refusal", Refusal: &refusal})
+		}
 		out = append(out, dto.ResponsesOutput{
-			Type: responsesOutputTypeMessage,
-			Role: "assistant",
-			Content: []dto.ResponsesOutputContent{
-				{Type: "output_text", Text: a.text.String()},
-			},
+			Type:    responsesOutputTypeMessage,
+			Role:    "assistant",
+			Content: content,
 		})
 	}
 	indexes := make([]int, 0, len(a.items))

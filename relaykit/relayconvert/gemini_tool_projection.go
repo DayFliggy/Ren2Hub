@@ -1,13 +1,14 @@
 package relayconvert
 
 import (
-"context"
+	"context"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	claudemessages "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/claude_messages"
 	geminichat "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/gemini_chat"
 	oaichat "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/oai_chat"
 	oairesponses "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/oai_responses"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/internal/toolconv"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/types"
 )
@@ -85,7 +86,14 @@ func analyzeToolIdentity(request any) *ToolIdentityRequirements {
 	case *dto.GeminiChatRequest:
 		return analyzeGeminiToolIdentity(request)
 	case *dto.GeneralOpenAIRequest:
-		chat = request
+		if request == nil {
+			return &ToolIdentityRequirements{InvalidHistory: true}
+		}
+		// Analyse the history the Gemini converter receives: legacy function
+		// pairs become name-matched tool exchanges without identifiers.
+		var messages []dto.Message
+		messages, err = toolconv.PairLegacyFunctionHistory(request.Messages, types.RelayFormatGemini)
+		chat = &dto.GeneralOpenAIRequest{Messages: messages}
 	case *dto.ClaudeRequest:
 		if request == nil {
 			return &ToolIdentityRequirements{InvalidHistory: true}
