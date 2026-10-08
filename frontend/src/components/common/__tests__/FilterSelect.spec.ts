@@ -30,6 +30,23 @@ describe('hand-drawn filter controls', () => {
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['ready'])
   })
 
+  it('closes an open single-select menu and ignores picks once disabled', async () => {
+    const wrapper = mount(FilterSelect, {
+      props: { modelValue: 'all', options, label: 'Status' },
+      global: { plugins: [i18n] },
+    })
+
+    const trigger = wrapper.get('[role="combobox"]')
+    await trigger.trigger('click')
+    const option = wrapper.findAll('[role="option"]')[1]!
+    expect(trigger.attributes('aria-expanded')).toBe('true')
+
+    await wrapper.setProps({ disabled: true })
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    await option.trigger('click')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  })
+
   it('marks the multi-select trigger and menu without changing its ARIA model', async () => {
     const wrapper = mount(MultiFilterSelect, {
       props: {
