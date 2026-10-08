@@ -34,7 +34,7 @@ func geminiFunctionSchemaRequest(t *testing.T, parameters string) *dto.GeminiCha
 // target and returns the parameters the target received.
 func attachGeminiFunctionSchema(t *testing.T, parameters string, target types.RelayFormat) (map[string]any, []types.ConversionDiagnostic) {
 	t.Helper()
-	_, set, err := ExtractRequest(types.RelayFormatGemini, geminiFunctionSchemaRequest(t, parameters))
+	_, set, err := ExtractRequest(types.RelayFormatGemini, target, geminiFunctionSchemaRequest(t, parameters))
 	require.NoError(t, err)
 
 	var request any
@@ -202,7 +202,7 @@ func TestGeminiTargetKeepsTheOpenAPISchemaSubset(t *testing.T) {
 	t.Parallel()
 
 	const parameters = `{"type": "OBJECT", "properties": {"city": {"type": "STRING"}}, "propertyOrdering": ["city"]}`
-	_, set, err := ExtractRequest(types.RelayFormatGemini, geminiFunctionSchemaRequest(t, parameters))
+	_, set, err := ExtractRequest(types.RelayFormatGemini, types.RelayFormatGemini, geminiFunctionSchemaRequest(t, parameters))
 	require.NoError(t, err)
 	out, diagnostics, err := AttachRequest(types.RelayFormatGemini, &dto.GeminiChatRequest{}, set, &convmeta.Options{})
 	require.NoError(t, err)
@@ -226,7 +226,7 @@ func TestStrictToolPolicyRejectsTheDroppedGeminiSchemaKeywords(t *testing.T) {
 	t.Parallel()
 
 	const parameters = `{"type": "OBJECT", "properties": {"city": {"type": "STRING"}}, "propertyOrdering": ["city"]}`
-	_, set, err := ExtractRequest(types.RelayFormatGemini, geminiFunctionSchemaRequest(t, parameters))
+	_, set, err := ExtractRequest(types.RelayFormatGemini, types.RelayFormatOpenAI, geminiFunctionSchemaRequest(t, parameters))
 	require.NoError(t, err)
 
 	target := func() *dto.GeneralOpenAIRequest {
