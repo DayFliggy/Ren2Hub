@@ -2,17 +2,20 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { isTopmostModalDialog } from '@/utils/modalStack'
 import { safeImageUrl } from '@/utils/safeUrl'
 
 const props = defineProps<{ open: boolean; url: string }>()
 const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
+const dialog = ref<HTMLElement | null>(null)
 const closeButton = ref<HTMLButtonElement | null>(null)
 const safeUrl = computed(() => safeImageUrl(props.url))
 let previouslyFocused: HTMLElement | null = null
 let previousBodyOverflow = ''
 
 function onKeydown(e: KeyboardEvent) {
+  if (!isTopmostModalDialog(dialog.value)) return
   if (e.key === 'Escape') {
     e.preventDefault()
     emit('close')
@@ -60,7 +63,9 @@ onBeforeUnmount(() => {
     <Transition name="lightbox">
       <div
         v-if="open"
-        class="fixed inset-0 z-[95] flex items-center justify-center p-6"
+        ref="dialog"
+        class="fixed inset-0 flex items-center justify-center p-6"
+        style="z-index: 95"
         role="dialog"
         aria-modal="true"
         :aria-label="t('common.imagePreview')"

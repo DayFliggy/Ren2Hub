@@ -26,6 +26,8 @@ function unlockBodyScroll(): void {
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 
+import { isTopmostModalDialog } from '@/utils/modalStack'
+
 const props = withDefaults(
   defineProps<{
     open: boolean
@@ -77,7 +79,7 @@ function focusableEls(): HTMLElement[] {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (!props.open || !isTopmostDialog()) return
+  if (!props.open || !isTopmostModalDialog(dialog.value)) return
   if (e.key === 'Escape') {
     e.preventDefault()
     requestClose()
@@ -106,13 +108,6 @@ function onKeydown(e: KeyboardEvent) {
 
 function requestClose(): void {
   if (!props.closeDisabled) emit('close')
-}
-
-function isTopmostDialog(): boolean {
-  const dialogs = document.querySelectorAll<HTMLElement>(
-    '[role="dialog"][aria-modal="true"]'
-  )
-  return dialogs.item(dialogs.length - 1) === dialog.value
 }
 
 function acquireScrollLock(): void {
