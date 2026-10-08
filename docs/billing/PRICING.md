@@ -54,6 +54,8 @@ Token 表达式以 `tier("base", p * 2.5 + c * 10 + cr * 0.25)` 为例，`fixed(
 
 部分渠道按供应商自己的计数和价格键计费，渠道适配器在初始化时声明读取器和对应价格键，声明相应托管工具时这些键同样须在发送前定价：Azure Responses 的网页搜索按 `tool_usage.web_search.num_requests` 计 `bing_web_search`；xAI Responses 按 `server_side_tool_usage_details` 计 `web_search`（用 `web_search:grok*` 覆盖定价）、`x_search_posts`、`x_search_profiles`；百炼 Responses 与 Anthropic 兼容端点计 `search_strategy_agent`。供应商报告的次数替换同一键下按协议条目统计的次数，报告为零即不收该键。Claude `server_tool_use` 中的 `web_fetch`、`code_execution`、`tool_search` 仅在冻结报价为该键定价时计入，Claude 线格式声明这些工具时须定价；动态过滤网页搜索内部使用的代码执行在未定价时不计费。上述键及协议内置工具键是保留名，客户端同名函数不按其计费。结算时单个工具的调用次数封顶 10,000 并记录警告；Responses 图片数量超过 128 仍视为无效用量，改按冻结估算结算。已完成的 `image_generation` 输出在 failed、incomplete、cancelled 或 error 终态同样计费。
 
+Gemini Google 搜索 grounding 按一次响应内去重后的非空查询数（网页与图片搜索，跨流式帧和全部候选）计 `google_search`；响应带任一查询时另记一次 `google_search_grounded_prompt`，但只在冻结报价为该键定价时计入。Google 对 Gemini 3 按查询、对 Gemini 2.5 及更早按 grounding 次数计费：运营可为 `google_search_grounded_prompt:gemini-2.5*` 等前缀定价，并把同前缀的 `google_search` 设为 0。Google 不在响应中报告计费次数，去重查询数是可得的最佳证据，不保证与账单一致；客户端同名函数不按这两个键计费。
+
 渠道售价系数仍为 Decimal 字符串，在模型费用与工具附加费合计后应用一次。没有独立渠道模型价格。表达式和 `OtherRatios` 不得再次叠加相同的渠道系数、图片数量或尺寸质量系数。预扣倍率只影响 token 预估分支，不改变实际结算或按次分支。
 
 | 计算分支 | 转为 quota 的规则 |
