@@ -10,6 +10,10 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
 
+// GoogleSearchGroundedPromptTool bills Gemini 2.5-and-older Google Search
+// grounding, charged once per grounded prompt.
+const GoogleSearchGroundedPromptTool = "google_search_grounded_prompt"
+
 // reservedBillableToolNames are the price keys of hosted tools: protocol
 // built-ins, Anthropic server tools reported in usage.server_tool_use and the
 // vendor search counts read from upstream usage. A client function or tool_use
@@ -20,6 +24,7 @@ var reservedBillableToolNames = map[string]struct{}{
 	dto.BuildInToolWebSearch:        {},
 	dto.BuildInToolFileSearch:       {},
 	dto.BuildInToolGoogleSearch:     {},
+	GoogleSearchGroundedPromptTool:  {},
 	dto.BuildInToolImageGeneration:  {},
 	"web_fetch":                     {},
 	"code_execution":                {},

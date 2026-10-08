@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -84,19 +85,61 @@ func geminiResponseUsageText(response *dto.GeminiChatResponse) string {
 	return text.String()
 }
 
-// markGeminiGoogleSearchCall bills one google_search call when any candidate
-// was grounded. Google bills per grounded prompt and reports no call count, so
-// repeated grounded frames stay at one.
-func markGeminiGoogleSearchCall(info *relaycommon.RelayInfo, response *dto.GeminiChatResponse) {
-	if info == nil || response == nil {
+// geminiGroundingCounter accumulates Google Search grounding across one
+// upstream response (every stream frame and candidate). Gemini 3 bills each
+// unique non-empty search query ("we ignore the empty web search queries when
+// counting unique queries", ai.google.dev/gemini-api/docs/google-search);
+// Gemini 2.5 and older bill once per grounded prompt, counted here when the
+// response carries any search query. Image-search queries count like
+// web-search queries; Google documents no separate rule. Google documents no
+// response field holding the billed count, so the unique query set is the best
+// available evidence, not a guaranteed match.
+type geminiGroundingCounter struct {
+	queries map[string]struct{}
+}
+
+func (g *geminiGroundingCounter) observe(response *dto.GeminiChatResponse) {
+	if response == nil {
 		return
 	}
 	for _, candidate := range response.Candidates {
-		if candidate.GroundingMetadata != nil && len(candidate.GroundingMetadata.WebSearchQueries) > 0 {
-			info.SetBillableToolCount(dto.BuildInToolGoogleSearch, 1)
-			return
+		metadata := candidate.GroundingMetadata
+		if metadata == nil {
+			continue
+		}
+		for _, query := range slices.Concat(metadata.WebSearchQueries, metadata.ImageSearchQueries) {
+			query = strings.TrimSpace(query)
+			if query == "" {
+				continue
+			}
+			if g.queries == nil {
+				g.queries = make(map[string]struct{})
+			}
+			g.queries[query] = struct{}{}
 		}
 	}
+}
+
+// commit records google_search as the unique query count. Ren2Hub seeds no
+// tool prices, so the grounded-prompt key bills only when the frozen quote
+// prices it: an operator prices google_search_grounded_prompt (for example
+// with a gemini-2.5* prefix) and sets google_search to 0 for the models
+// Google bills per grounded prompt.
+func (g *geminiGroundingCounter) commit(info *relaycommon.RelayInfo) {
+	if info == nil || len(g.queries) == 0 {
+		return
+	}
+	info.SetBillableToolCount(dto.BuildInToolGoogleSearch, len(g.queries))
+	if info.QuotePricesTool(relaycommon.GoogleSearchGroundedPromptTool) {
+		info.SetBillableToolCount(relaycommon.GoogleSearchGroundedPromptTool, 1)
+	}
+}
+
+// countGeminiResponseGrounding bills the grounding of one non-stream response.
+func countGeminiResponseGrounding(info *relaycommon.RelayInfo, response *dto.GeminiChatResponse) {
+	var grounding geminiGroundingCounter
+	grounding.observe(response)
+	grounding.commit(info)
 }
 
 func buildUsageFromGeminiResponse(c *gin.Context, info *relaycommon.RelayInfo, response *dto.GeminiChatResponse) dto.Usage {
@@ -168,6 +211,7 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	var imageCount int
 	var hasBillableUsageMetadata bool
 	var sawOutput, sawTerminal bool
+	var grounding geminiGroundingCounter
 	responseText := strings.Builder{}
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
@@ -185,7 +229,9 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			sawTerminal = sawTerminal || (candidate.FinishReason != nil && geminiKnownFinishReason(*candidate.FinishReason))
 		}
 
-		markGeminiGoogleSearchCall(info, geminiResponse)
+		// Commit on every frame so a client abort keeps the queries seen so far.
+		grounding.observe(geminiResponse)
+		grounding.commit(info)
 
 		// 统计图片数量
 		for _, candidate := range geminiResponse.Candidates {
@@ -244,7 +290,7 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 		return nil, apiErr
 	}
 	info.ObserveResponseModel(gjson.GetBytes(responseBody, "modelVersion").Str)
-	markGeminiGoogleSearchCall(info, geminiResponse)
+	countGeminiResponseGrounding(info, geminiResponse)
 	usage := buildUsageFromGeminiResponse(c, info, geminiResponse)
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI, types.RelayFormatClaude:
