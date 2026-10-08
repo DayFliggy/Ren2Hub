@@ -440,6 +440,95 @@ func TestNormalizeCacheCreationSplit(t *testing.T) {
 	assert.Equal(t, 1, cache1h)
 }
 
+// The terminal message_delta must carry the real counts whether they arrive on
+// the finish_reason chunk or only on a later choices-less usage-only chunk.
+// Some providers attach a zeroed usage object to every chunk, including the
+// finish chunk, and report real counts only at the end (AxonHub 81e519e9).
+func TestStreamResponseOpenAI2ClaudeTerminalUsesRealCounts(t *testing.T) {
+	realUsage := func() *dto.Usage {
+		return &dto.Usage{
+			PromptTokens: 338678, CompletionTokens: 5795, TotalTokens: 344473,
+			PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 100},
+		}
+	}
+	textChunk := func(usage *dto.Usage) *dto.ChatCompletionsStreamResponse {
+		return &dto.ChatCompletionsStreamResponse{
+			Id: "chatcmpl_1", Model: "gpt-test",
+			Choices: []dto.ChatCompletionsStreamResponseChoice{{Delta: dto.ChatCompletionsStreamResponseChoiceDelta{Content: ptr("Hi")}}},
+			Usage:   usage,
+		}
+	}
+	finishChunk := func(usage *dto.Usage) *dto.ChatCompletionsStreamResponse {
+		return &dto.ChatCompletionsStreamResponse{
+			Id: "chatcmpl_1", Model: "gpt-test",
+			Choices: []dto.ChatCompletionsStreamResponseChoice{{FinishReason: ptr("stop")}},
+			Usage:   usage,
+		}
+	}
+	usageOnlyChunk := func(usage *dto.Usage) *dto.ChatCompletionsStreamResponse {
+		return &dto.ChatCompletionsStreamResponse{
+			Id: "chatcmpl_1", Model: "gpt-test",
+			Choices: []dto.ChatCompletionsStreamResponseChoice{},
+			Usage:   usage,
+		}
+	}
+
+	tests := []struct {
+		name   string
+		chunks []*dto.ChatCompletionsStreamResponse
+	}{
+		{
+			name:   "zero usage on finish then usage-only chunk",
+			chunks: []*dto.ChatCompletionsStreamResponse{textChunk(&dto.Usage{}), finishChunk(&dto.Usage{}), usageOnlyChunk(realUsage())},
+		},
+		{
+			name: "prompt-only first frame, finish without usage, then usage-only chunk",
+			chunks: []*dto.ChatCompletionsStreamResponse{
+				textChunk(&dto.Usage{PromptTokens: 338678, TotalTokens: 338678, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 100}}),
+				finishChunk(nil),
+				usageOnlyChunk(realUsage()),
+			},
+		},
+		{
+			name:   "finish chunk carries usage without usage-only chunk",
+			chunks: []*dto.ChatCompletionsStreamResponse{textChunk(nil), finishChunk(realUsage())},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &convmeta.Values{EstimatePromptTokens: 7}
+			var events []*dto.ClaudeResponse
+			for _, chunk := range tt.chunks {
+				events = append(events, StreamResponseOpenAI2Claude(chunk, info)...)
+			}
+			// The host always finalizes after a clean end of stream.
+			events = append(events, FinalizeStreamResponseOpenAI2Claude(info)...)
+
+			var deltas []*dto.ClaudeResponse
+			stops := 0
+			for _, event := range events {
+				switch event.Type {
+				case "message_delta":
+					deltas = append(deltas, event)
+				case "message_stop":
+					stops++
+				}
+			}
+			require.Len(t, deltas, 1)
+			assert.Equal(t, 1, stops)
+			assert.Equal(t, "message_stop", events[len(events)-1].Type)
+			require.NotNil(t, deltas[0].Delta)
+			require.NotNil(t, deltas[0].Delta.StopReason)
+			assert.Equal(t, "end_turn", *deltas[0].Delta.StopReason)
+			require.NotNil(t, deltas[0].Usage)
+			// Claude reports cache reads separately from input_tokens.
+			assert.Equal(t, 338578, deltas[0].Usage.InputTokens)
+			assert.Equal(t, 100, deltas[0].Usage.CacheReadInputTokens)
+			assert.Equal(t, 5795, deltas[0].Usage.OutputTokens)
+		})
+	}
+}
+
 func ptr[T any](value T) *T {
 	return &value
 }

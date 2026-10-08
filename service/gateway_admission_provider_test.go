@@ -78,6 +78,29 @@ func TestGatewayProviderRenewAndSharedRetryAfter(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// A provider scope must not inherit a year-long cooldown from an absurd
+// Retry-After header. ParseRetryAfter caps it, and the scope frees up at the cap.
+func TestGatewayProviderRateCapsAbsurdRetryAfter(t *testing.T) {
+	server := useRoutePlanningRedis(t)
+	ctx := context.Background()
+	now := time.Unix(1200, 0)
+	server.SetTime(now)
+	scope := []GatewayProviderRateScope{{ID: "credential:capped", TPM: 100}}
+	first, err := ReserveGatewayProviderRate(ctx, common.RDB, scope, 10)
+	require.NoError(t, err)
+	retryAfter, ok := ParseRetryAfter("31536000", now)
+	require.True(t, ok)
+	require.Equal(t, RouteRetryAfterCap, retryAfter)
+	require.NoError(t, FinishGatewayProviderRate(ctx, common.RDB, first, 1, true, true, retryAfter))
+
+	server.SetTime(now.Add(RouteRetryAfterCap - time.Second))
+	_, err = ReserveGatewayProviderRate(ctx, common.RDB, scope, 1)
+	require.ErrorIs(t, err, ErrGatewayProviderRateLimit, "the capped cooldown still fences the scope")
+	server.SetTime(now.Add(RouteRetryAfterCap))
+	_, err = ReserveGatewayProviderRate(ctx, common.RDB, scope, 1)
+	require.NoError(t, err, "the capped cooldown must release the scope")
+}
+
 func TestGatewayProviderRateMemoryFallback(t *testing.T) {
 	ctx := context.Background()
 	scope := []GatewayProviderRateScope{{ID: "memory-test:" + t.Name(), RPM: 1, TPM: 100}}

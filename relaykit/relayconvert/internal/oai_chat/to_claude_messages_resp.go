@@ -393,10 +393,13 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 
 		if doneChunk || state.Done {
 			oaiUsage := clientVisibleClaudeStreamUsage(state, openAIResponse.Usage)
-			if oaiUsage == nil {
-				// Some upstreams emit finish_reason first, then send a final usage-only chunk.
-				// Keep content blocks open until usage is available so the terminal message_delta
-				// can carry both usage and the final stop reason.
+			if !dto.HasOpenAIUsageTokens(openAIResponse.Usage) {
+				// The finish chunk is terminal only when it reports real counts itself.
+				// Some upstreams emit finish_reason without usage, or with a zeroed
+				// placeholder usage, and send the real counts in a later usage-only
+				// chunk. Keep content blocks open until then so the terminal
+				// message_delta carries both usage and the final stop reason; a clean
+				// end of stream finalizes with the accumulated usage.
 				return claudeResponses
 			}
 			appendStopOpenBlocks()

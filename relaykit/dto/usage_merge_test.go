@@ -13,10 +13,50 @@ func TestGeminiCumulativeDetailsDoNotAccumulateTwice(t *testing.T) {
 	assert.Equal(t, 3, result.PromptTokensDetails[0].TokenCount)
 }
 
-func TestUsageMergePreservesExplicitZeroOutputModality(t *testing.T) {
-	result := MergeUsageNonZero(&Usage{CompletionTokenDetails: OutputTokenDetails{ImageTokens: 5}}, &Usage{OutputTokensDetails: &OutputTokenDetails{}})
-	require.NotNil(t, result.OutputTokensDetails)
-	assert.Zero(t, result.CompletionTokenDetails.ImageTokens)
+// output_tokens_details uses plain integers, so a snapshot cannot tell an
+// explicit zero from an omitted field. Streaming counts are cumulative: a later
+// zero or partial detail snapshot must not erase earlier positive counts, and
+// both detail aliases must stay in agreement.
+func TestUsageMergeOutputDetailsLaterNonZeroWins(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  *Usage
+		incoming *Usage
+		want     OutputTokenDetails
+	}{
+		{
+			name:     "zero detail snapshot keeps earlier reasoning",
+			current:  &Usage{CompletionTokens: 50, CompletionTokenDetails: OutputTokenDetails{ReasoningTokens: 40, TextTokens: 10}, OutputTokensDetails: &OutputTokenDetails{ReasoningTokens: 40, TextTokens: 10}},
+			incoming: &Usage{OutputTokensDetails: &OutputTokenDetails{}},
+			want:     OutputTokenDetails{ReasoningTokens: 40, TextTokens: 10},
+		},
+		{
+			name:     "partial detail snapshot keeps unreported modality",
+			current:  &Usage{CompletionTokenDetails: OutputTokenDetails{ReasoningTokens: 40, TextTokens: 10}, OutputTokensDetails: &OutputTokenDetails{ReasoningTokens: 40, TextTokens: 10}},
+			incoming: &Usage{OutputTokensDetails: &OutputTokenDetails{ReasoningTokens: 45}},
+			want:     OutputTokenDetails{ReasoningTokens: 45, TextTokens: 10},
+		},
+		{
+			name:     "first native details join earlier chat details",
+			current:  &Usage{CompletionTokenDetails: OutputTokenDetails{ImageTokens: 5}},
+			incoming: &Usage{OutputTokensDetails: &OutputTokenDetails{ReasoningTokens: 40}},
+			want:     OutputTokenDetails{ReasoningTokens: 40, ImageTokens: 5},
+		},
+		{
+			name:     "zero native snapshot keeps earlier chat details",
+			current:  &Usage{CompletionTokenDetails: OutputTokenDetails{ImageTokens: 5}},
+			incoming: &Usage{OutputTokensDetails: &OutputTokenDetails{}},
+			want:     OutputTokenDetails{ImageTokens: 5},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := MergeUsageNonZero(tt.current, tt.incoming)
+			require.NotNil(t, result.OutputTokensDetails)
+			assert.Equal(t, tt.want, *result.OutputTokensDetails)
+			assert.Equal(t, tt.want, result.CompletionTokenDetails)
+		})
+	}
 }
 
 func TestMergeGeminiUsageMetadataStreamDetailsAreCumulativeSnapshots(t *testing.T) {

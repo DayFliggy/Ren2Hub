@@ -58,23 +58,18 @@ func MergeUsageNonZero(current *Usage, incoming *Usage) *Usage {
 		}
 	}
 
-	if incoming.CompletionTokenDetails.TextTokens > 0 {
-		current.CompletionTokenDetails.TextTokens = incoming.CompletionTokenDetails.TextTokens
-	}
-	if incoming.CompletionTokenDetails.AudioTokens > 0 {
-		current.CompletionTokenDetails.AudioTokens = incoming.CompletionTokenDetails.AudioTokens
-	}
-	if incoming.CompletionTokenDetails.ImageTokens > 0 {
-		current.CompletionTokenDetails.ImageTokens = incoming.CompletionTokenDetails.ImageTokens
-	}
-	if incoming.CompletionTokenDetails.ReasoningTokens > 0 {
-		current.CompletionTokenDetails.ReasoningTokens = incoming.CompletionTokenDetails.ReasoningTokens
-	}
-
+	mergeOutputTokenDetails(&current.CompletionTokenDetails, incoming.CompletionTokenDetails)
 	if incoming.OutputTokensDetails != nil {
-		details := *incoming.OutputTokensDetails
-		current.OutputTokensDetails = &details
-		current.CompletionTokenDetails = details
+		// output_tokens_details is the native alias of completion_tokens_details.
+		// Its plain integers cannot tell an explicit zero from an omitted field,
+		// so it follows the same later-non-zero rule, and both aliases keep
+		// the same merged counts.
+		if current.OutputTokensDetails == nil {
+			details := current.CompletionTokenDetails
+			current.OutputTokensDetails = &details
+		}
+		mergeOutputTokenDetails(current.OutputTokensDetails, *incoming.OutputTokensDetails)
+		mergeOutputTokenDetails(&current.CompletionTokenDetails, *incoming.OutputTokensDetails)
 	}
 	if incoming.UsageSemantic != "" {
 		current.UsageSemantic = incoming.UsageSemantic
@@ -293,6 +288,21 @@ func mergeGeminiTokenDetails(current []GeminiPromptTokensDetails, incoming []Gem
 		}
 	}
 	return merged
+}
+
+func mergeOutputTokenDetails(current *OutputTokenDetails, incoming OutputTokenDetails) {
+	if incoming.TextTokens > 0 {
+		current.TextTokens = incoming.TextTokens
+	}
+	if incoming.AudioTokens > 0 {
+		current.AudioTokens = incoming.AudioTokens
+	}
+	if incoming.ImageTokens > 0 {
+		current.ImageTokens = incoming.ImageTokens
+	}
+	if incoming.ReasoningTokens > 0 {
+		current.ReasoningTokens = incoming.ReasoningTokens
+	}
 }
 
 func mergeInputTokenDetails(current *InputTokenDetails, incoming InputTokenDetails) {
