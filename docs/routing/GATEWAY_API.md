@@ -169,6 +169,8 @@ Chat 的 `content[].file.file_id`、Responses 的 `input_file.file_id` 与 Claud
 
 参数覆盖后的最终 JSON 会重新检查状态引用，不能通过覆盖注入未知状态或跨 Token 状态。Responses `prompt` 引用域目前仅登记 OpenAI 类型的原生 Responses 渠道；协议兼容渠道不自动继承该引用域。预览诊断为 `reference_domain_unsupported`，执行中的覆盖注入也会被拒绝。客户端只收到统一状态错误，内部存储故障保留在服务端日志。
 
+参数覆盖的条件 `mode` 支持 `full`、`prefix`、`suffix`、`contains`、`regex`、`gt`、`gte`、`lt`、`lte`。`regex` 使用 Go RE2 语法（线性时间匹配，支持 `(?i)` 等内联标志），模式必须是字符串，非法模式在请求时报错；与其他文本比较一样，取值按字符串匹配，键不存在时遵循 `pass_missing_key` 且不编译模式。
+
 Gemini 转换器不再自动填入思考签名绕过标记，`allow` 也不会合成供应商状态。旧 `gemini.function_call_thought_signature_enabled` 配置仍可读取但不再生效，控制台已移除该开关；RelayKit 同名选项仅保留源码兼容。供应商返回的真实签名仍按原生协议与绑定身份处理。
 
 `gateway_state_cleanup` 系统任务每 5 分钟删除最多 1000 条过期绑定，复用数据库任务租约，单次预算 5 秒。清理延迟不影响权限：查找时直接拒绝过期记录。任务只清理网关状态元数据，不操作账单、异步任务记录或完整会话。
