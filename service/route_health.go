@@ -580,21 +580,38 @@ func RouteBackoff(attempt int, retryAfter, remaining time.Duration, random01 flo
 	return delay
 }
 
+// RouteRetryAfterCap bounds every Retry-After this gateway accepts. The value
+// becomes an explicit cooldown on the channel x model health row and on the
+// provider rate-limit scope, and neither has a manual clear entry point, so an
+// absurd upstream or CDN value must not park a route for days.
+//
+// Five minutes matches the longest cooldown the local health policies apply
+// (key and capability failures; the default policy uses thirty seconds). When a
+// capped cooldown ends, one half-open probe is admitted; if the provider is
+// still limiting, its next Retry-After re-arms the cooldown, so a longer real
+// wait costs at most one probe per window. Within the cap, Retry-After remains
+// a lower bound that callers never shorten.
+const RouteRetryAfterCap = 5 * time.Minute
+
 // ParseRetryAfter accepts the RFC 9110 delta-seconds and HTTP-date forms.
-// Invalid or negative values are ignored; the caller applies the remaining
-// request deadline as the final upper bound.
+// Invalid or negative values are ignored; every usable value is capped by
+// RouteRetryAfterCap, and the caller applies the remaining request deadline as
+// the final upper bound.
 func ParseRetryAfter(value string, now time.Time) (time.Duration, bool) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return 0, false
 	}
-	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
+	seconds, err := strconv.ParseInt(value, 10, 64)
+	if err == nil || errors.Is(err, strconv.ErrRange) {
+		// strconv saturates on range overflow: a too-large positive digit string
+		// reports MaxInt64, a too-large negative reports MinInt64. Both keep the
+		// sign of the original value, which is all this branch needs.
 		if seconds < 0 {
 			return 0, false
 		}
-		maxDurationSeconds := int64((time.Duration(1<<63 - 1)) / time.Second)
-		if seconds > maxDurationSeconds {
-			return 0, false
+		if seconds >= int64(RouteRetryAfterCap/time.Second) {
+			return RouteRetryAfterCap, true
 		}
 		return time.Duration(seconds) * time.Second, true
 	}
@@ -605,7 +622,11 @@ func ParseRetryAfter(value string, now time.Time) (time.Duration, bool) {
 	if when.Before(now) {
 		return 0, true
 	}
-	return when.Sub(now), true
+	until := when.Sub(now)
+	if until > RouteRetryAfterCap {
+		return RouteRetryAfterCap, true
+	}
+	return until, true
 }
 
 func ObserveRouteHealthFailure(health model.ChannelHealth, policy RouteHealthPolicy, now time.Time) model.ChannelHealth {

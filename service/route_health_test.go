@@ -93,7 +93,12 @@ func TestParseRetryAfterAndDeadlineClipping(t *testing.T) {
 	}{
 		{name: "empty", value: "", ok: false},
 		{name: "seconds", value: "3", want: 3 * time.Second, ok: true},
+		{name: "normal long seconds", value: "120", want: 120 * time.Second, ok: true},
+		{name: "cap boundary seconds", value: "300", want: RouteRetryAfterCap, ok: true},
+		{name: "huge seconds", value: "31536000", want: RouteRetryAfterCap, ok: true},
+		{name: "overflow seconds", value: "99999999999999999999", want: RouteRetryAfterCap, ok: true},
 		{name: "http date", value: now.Add(2 * time.Second).Format(http.TimeFormat), want: 2 * time.Second, ok: true},
+		{name: "far future date", value: now.Add(365 * 24 * time.Hour).Format(http.TimeFormat), want: RouteRetryAfterCap, ok: true},
 		{name: "expired date", value: now.Add(-time.Second).Format(http.TimeFormat), ok: true},
 		{name: "negative", value: "-1", ok: false},
 		{name: "invalid", value: "not-a-date", ok: false},
@@ -116,6 +121,47 @@ func TestRetryAfterOpensSharedChannelCooldownBeforeFailureThreshold(t *testing.T
 	assert.Equal(t, model.RouteHealthStateOpen, health.State)
 	assert.Equal(t, int64(1120), health.CooldownUntil)
 	assert.False(t, CanUseRouteHealth(health, now.Add(time.Second)))
+}
+
+// A single absurd Retry-After must not park a channel x model row for a year.
+// The capped value still fences concurrent requests, and the route becomes
+// selectable again once the capped cooldown elapses.
+func TestRetryAfterCapBoundsCooldownAndRouteRecovers(t *testing.T) {
+	now := time.Unix(1000, 0)
+	policy := DefaultRouteHealthPolicy()
+	for _, value := range []string{"31536000", now.Add(365 * 24 * time.Hour).Format(http.TimeFormat)} {
+		t.Run(value, func(t *testing.T) {
+			retryAfter, ok := ParseRetryAfter(value, now)
+			require.True(t, ok)
+			require.Equal(t, RouteRetryAfterCap, retryAfter)
+
+			health := ObserveRouteHealthFailureWithRetryAfter(model.ChannelHealth{ChannelID: 7, Model: "gpt-5"}, policy, now, retryAfter)
+			assert.Equal(t, model.RouteHealthStateOpen, health.State)
+			assert.Equal(t, now.Add(RouteRetryAfterCap).Unix(), health.CooldownUntil)
+			assert.False(t, CanUseRouteHealth(health, now), "a provider Retry-After must fence concurrent requests immediately")
+			assert.False(t, CanUseRouteHealth(health, now.Add(RouteRetryAfterCap-time.Second)))
+			assert.True(t, CanUseRouteHealth(health, now.Add(RouteRetryAfterCap)), "the capped cooldown must end")
+
+			recovered := ObserveRouteHealthSuccess(EnterRouteHealthHalfOpen(health, now.Add(RouteRetryAfterCap)), now.Add(RouteRetryAfterCap))
+			assert.Equal(t, model.RouteHealthStateClosed, recovered.State)
+			assert.True(t, CanUseRouteHealth(recovered, now.Add(RouteRetryAfterCap)))
+		})
+	}
+}
+
+// A past HTTP-date still means "no cooldown" and must not reopen a closed row.
+func TestRetryAfterPastDateKeepsChannelUsable(t *testing.T) {
+	// http.TimeFormat carries a literal "GMT", so the value must be formatted
+	// from a UTC instant; a local-time instant would read as a future date.
+	now := time.Date(2026, time.August, 25, 12, 0, 0, 0, time.UTC)
+	retryAfter, ok := ParseRetryAfter(now.Add(-time.Minute).Format(http.TimeFormat), now)
+	require.True(t, ok)
+	require.Zero(t, retryAfter)
+
+	health := ObserveRouteHealthFailureWithRetryAfter(model.ChannelHealth{ChannelID: 8, Model: "gpt-5"}, DefaultRouteHealthPolicy(), now, retryAfter)
+	assert.Equal(t, model.RouteHealthStateClosed, health.State)
+	assert.Zero(t, health.CooldownUntil)
+	assert.True(t, CanUseRouteHealth(health, now))
 }
 
 func TestRouteHealthMetricsAndKeyScopeAreSeparated(t *testing.T) {
