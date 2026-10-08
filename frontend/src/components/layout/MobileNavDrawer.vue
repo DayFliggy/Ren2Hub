@@ -194,6 +194,7 @@ import { useI18n } from 'vue-i18n'
 import StatusDot from '@/components/common/StatusDot.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import { useAppStore } from '@/stores'
+import { markModalDialogClosing } from '@/utils/modalStack'
 
 const props = defineProps<{
   open: boolean
@@ -284,7 +285,10 @@ function onKeydown(event: KeyboardEvent) {
 watch(
   () => props.open,
   (isOpen) => {
-    if (!isOpen) return
+    if (!isOpen) {
+      markModalDialogClosing(panel.value)
+      return
+    }
     nextTick(() => closeButton.value?.focus())
   },
   { immediate: true }

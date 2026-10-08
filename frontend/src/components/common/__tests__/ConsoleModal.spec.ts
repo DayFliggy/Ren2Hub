@@ -4,6 +4,23 @@ import { mount } from '@vue/test-utils'
 
 import ConsoleModal from '@/components/common/ConsoleModal.vue'
 
+const StackedModals = defineComponent({
+  components: { ConsoleModal },
+  setup() {
+    const outerOpen = ref(true)
+    const innerOpen = ref(true)
+    return { outerOpen, innerOpen }
+  },
+  template: `
+    <ConsoleModal :open="outerOpen" title="Outer" @close="outerOpen = false">
+      <button class="outer-action">Outer action</button>
+    </ConsoleModal>
+    <ConsoleModal :open="innerOpen" title="Inner" @close="innerOpen = false">
+      <button class="inner-action">Inner action</button>
+    </ConsoleModal>
+  `,
+})
+
 describe('ConsoleModal', () => {
   it('has an accessible name, traps initial focus and restores the trigger', async () => {
     const trigger = document.createElement('button')
@@ -37,23 +54,7 @@ describe('ConsoleModal', () => {
     document.body.append(trigger)
     trigger.focus()
 
-    const host = defineComponent({
-      components: { ConsoleModal },
-      setup() {
-        const outerOpen = ref(true)
-        const innerOpen = ref(true)
-        return { outerOpen, innerOpen }
-      },
-      template: `
-        <ConsoleModal :open="outerOpen" title="Outer" @close="outerOpen = false">
-          <button class="outer-action">Outer action</button>
-        </ConsoleModal>
-        <ConsoleModal :open="innerOpen" title="Inner" @close="innerOpen = false">
-          <button class="inner-action">Inner action</button>
-        </ConsoleModal>
-      `,
-    })
-    const wrapper = mount(host, { attachTo: document.body })
+    const wrapper = mount(StackedModals, { attachTo: document.body })
     await nextTick()
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
@@ -72,6 +73,43 @@ describe('ConsoleModal', () => {
 
     wrapper.unmount()
     trigger.remove()
+  })
+
+  it('hands keys to the dialog below while the closed one is still leaving', async () => {
+    const wrapper = mount(StackedModals, { attachTo: document.body })
+    try {
+      await nextTick()
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      await nextTick()
+      expect(wrapper.vm.innerOpen).toBe(false)
+      // The inner dialog is still in its leave transition, on top of the outer.
+      expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(2)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      await nextTick()
+      expect(wrapper.vm.outerOpen).toBe(false)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it('handles keys again when reopened during its leave transition', async () => {
+    const wrapper = mount(ConsoleModal, {
+      attachTo: document.body,
+      props: { open: true, title: 'Reopened' },
+    })
+    try {
+      await nextTick()
+      await wrapper.setProps({ open: false })
+      await wrapper.setProps({ open: true })
+      await nextTick()
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      expect(wrapper.emitted('close')).toHaveLength(1)
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('gives keys to the dialog painted on top, not the last one in the DOM', async () => {

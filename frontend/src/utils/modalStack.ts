@@ -1,4 +1,15 @@
-const MODAL_DIALOG = '[role="dialog"][aria-modal="true"]'
+const CLOSING = 'data-dialog-closing'
+const MODAL_DIALOG = `[role="dialog"][aria-modal="true"]:not([${CLOSING}])`
+
+/**
+ * Takes a dialog out of the stack as soon as it is closed. Its element stays
+ * in the DOM for the leave transition and would otherwise keep Escape and Tab
+ * from the dialog underneath until the animation ends. Reopening mounts a new
+ * element, so the mark never needs clearing.
+ */
+export function markModalDialogClosing(dialog: Element | null): void {
+  dialog?.setAttribute(CLOSING, '')
+}
 
 /**
  * z-index of the stacking layer a dialog paints in: its own value, or that of

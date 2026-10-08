@@ -2,7 +2,10 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { isTopmostModalDialog } from '@/utils/modalStack'
+import {
+  isTopmostModalDialog,
+  markModalDialogClosing,
+} from '@/utils/modalStack'
 import { safeImageUrl } from '@/utils/safeUrl'
 
 const props = defineProps<{ open: boolean; url: string }>()
@@ -43,6 +46,7 @@ watch(
       return
     }
 
+    markModalDialogClosing(dialog.value)
     document.body.style.overflow = previousBodyOverflow
     window.removeEventListener('keydown', onKeydown)
     const restoreTarget = previouslyFocused

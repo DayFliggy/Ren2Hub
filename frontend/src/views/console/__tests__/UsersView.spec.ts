@@ -58,10 +58,10 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function renderUsers() {
+async function renderUsers(response: unknown = page) {
   const get = vi
     .spyOn(api, 'get')
-    .mockImplementation(async () => structuredClone(page) as never)
+    .mockImplementation(async () => structuredClone(response) as never)
   wrapper = mount(UsersView, {
     attachTo: document.body,
     global: { plugins: [i18n] },
@@ -105,6 +105,18 @@ describe('UsersView group filter', () => {
 
     await chooseGroup(/^All groups$/)
     expect(lastListParams(get).group).toBeUndefined()
+  })
+
+  it('offers only all groups when the response has no group counts', async () => {
+    // A backend from before the group filter omits group_counts.
+    const { group_counts: _omitted, ...legacyPage } = page
+    await renderUsers(legacyPage)
+    expect(wrapper!.text()).toContain('premium-user')
+
+    await wrapper!.get('button[aria-label="User Group"]').trigger('click')
+    expect(
+      wrapper!.findAll('[role="option"]').map((item) => item.text())
+    ).toEqual(['All groups'])
   })
 
   it('shows the account group of each user in the table', async () => {
