@@ -195,23 +195,21 @@ func collectBillingQuantities(ctx *gin.Context, info *relaycommon.RelayInfo, usa
 	}
 	if info.ResponsesUsageInfo != nil {
 		for name, tool := range info.ResponsesUsageInfo.BuiltInTools {
-			if tool != nil {
-				if err := add(name, tool.CallCount); err != nil {
-					return err
-				}
+			if tool == nil {
+				continue
+			}
+			count := tool.CallCount
+			if count > relaycommon.MaxBillableToolCallCount {
+				logger.LogWarn(ctx, fmt.Sprintf("tool surcharge call count clamped: tool=%s count=%d", name, count))
+				count = relaycommon.MaxBillableToolCallCount
+			}
+			if err := add(name, count); err != nil {
+				return err
 			}
 		}
 	}
 	if info.RelayMode != relayconstant.RelayModeResponses && strings.HasSuffix(info.BillingModelName(), "search-preview") {
 		if err := add(dto.BuildInToolWebSearchPreview, 1); err != nil {
-			return err
-		}
-	}
-	if err := add(dto.BuildInToolWebSearch, ctx.GetInt("claude_web_search_requests")); err != nil {
-		return err
-	}
-	if ctx.GetBool("gemini_google_search_call") {
-		if err := add(dto.BuildInToolGoogleSearch, 1); err != nil {
 			return err
 		}
 	}

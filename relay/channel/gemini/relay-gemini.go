@@ -84,13 +84,16 @@ func geminiResponseUsageText(response *dto.GeminiChatResponse) string {
 	return text.String()
 }
 
-func markGeminiGoogleSearchCall(c *gin.Context, response *dto.GeminiChatResponse) {
-	if c == nil || response == nil {
+// markGeminiGoogleSearchCall bills one google_search call when any candidate
+// was grounded. Google bills per grounded prompt and reports no call count, so
+// repeated grounded frames stay at one.
+func markGeminiGoogleSearchCall(info *relaycommon.RelayInfo, response *dto.GeminiChatResponse) {
+	if info == nil || response == nil {
 		return
 	}
 	for _, candidate := range response.Candidates {
 		if candidate.GroundingMetadata != nil && len(candidate.GroundingMetadata.WebSearchQueries) > 0 {
-			c.Set("gemini_google_search_call", true)
+			info.SetBillableToolCount(dto.BuildInToolGoogleSearch, 1)
 			return
 		}
 	}
@@ -182,7 +185,7 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			sawTerminal = sawTerminal || (candidate.FinishReason != nil && geminiKnownFinishReason(*candidate.FinishReason))
 		}
 
-		markGeminiGoogleSearchCall(c, geminiResponse)
+		markGeminiGoogleSearchCall(info, geminiResponse)
 
 		// 统计图片数量
 		for _, candidate := range geminiResponse.Candidates {
@@ -241,7 +244,7 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 		return nil, apiErr
 	}
 	info.ObserveResponseModel(gjson.GetBytes(responseBody, "modelVersion").Str)
-	markGeminiGoogleSearchCall(c, geminiResponse)
+	markGeminiGoogleSearchCall(info, geminiResponse)
 	usage := buildUsageFromGeminiResponse(c, info, geminiResponse)
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI, types.RelayFormatClaude:

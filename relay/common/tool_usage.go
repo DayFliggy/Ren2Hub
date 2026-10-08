@@ -10,13 +10,29 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
 
+// reservedBillableToolNames are the price keys of hosted tools: protocol
+// built-ins, Anthropic server tools reported in usage.server_tool_use and the
+// vendor search counts read from upstream usage. A client function or tool_use
+// with the same name is never counted under them. The set is static and never
+// derived from operator prices.
 var reservedBillableToolNames = map[string]struct{}{
 	dto.BuildInToolWebSearchPreview: {},
 	dto.BuildInToolWebSearch:        {},
 	dto.BuildInToolFileSearch:       {},
 	dto.BuildInToolGoogleSearch:     {},
 	dto.BuildInToolImageGeneration:  {},
+	"web_fetch":                     {},
+	"code_execution":                {},
+	"tool_search":                   {},
+	"bing_web_search":               {},
+	"x_search_posts":                {},
+	"x_search_profiles":             {},
+	"search_strategy_agent":         {},
 }
+
+// MaxBillableToolCallCount bounds every tool count at settlement, whatever its
+// source, before it becomes a surcharge multiplier.
+const MaxBillableToolCallCount = 10_000
 
 type billableToolIdentity struct {
 	id, callID, kind, name string
@@ -28,14 +44,7 @@ func (info *RelayInfo) CountBillableToolCall(itemType string, functionName strin
 	if info == nil {
 		return
 	}
-	if info.ResponsesUsageInfo == nil {
-		info.ResponsesUsageInfo = &ResponsesUsageInfo{
-			BuiltInTools: make(map[string]*BuildInToolInfo),
-		}
-	}
-	if info.ResponsesUsageInfo.BuiltInTools == nil {
-		info.ResponsesUsageInfo.BuiltInTools = make(map[string]*BuildInToolInfo)
-	}
+	info.ensureBuiltInTools()
 
 	switch itemType {
 	case dto.BuildInCallWebSearchCall:
@@ -121,6 +130,35 @@ func (info *RelayInfo) ObserveBillableToolCall(item *dto.ResponsesOutput, index 
 	}
 	if !seen {
 		info.CountBillableToolCall(item.Type, item.Name)
+	}
+}
+
+// SetBillableToolCount records an upstream-reported count for one tool-price
+// key, replacing whatever per-item counting produced for the same key. Zero is
+// a valid value: a vendor field that reports zero suppresses the protocol items
+// counted under that key. Negative counts are ignored.
+func (info *RelayInfo) SetBillableToolCount(name string, count int) {
+	if info == nil || name == "" {
+		return
+	}
+	if count < 0 {
+		common.SysError(fmt.Sprintf("billable tool count ignored: tool=%s count=%d", name, count))
+		return
+	}
+	info.ensureBuiltInTools()
+	if existing, ok := info.ResponsesUsageInfo.BuiltInTools[name]; ok && existing != nil {
+		existing.CallCount = count
+		return
+	}
+	info.ResponsesUsageInfo.BuiltInTools[name] = &BuildInToolInfo{ToolName: name, CallCount: count}
+}
+
+func (info *RelayInfo) ensureBuiltInTools() {
+	if info.ResponsesUsageInfo == nil {
+		info.ResponsesUsageInfo = &ResponsesUsageInfo{}
+	}
+	if info.ResponsesUsageInfo.BuiltInTools == nil {
+		info.ResponsesUsageInfo.BuiltInTools = make(map[string]*BuildInToolInfo)
 	}
 }
 
@@ -221,14 +259,7 @@ func (c *ImageGenerationCallCounter) Commit(info *RelayInfo) {
 	if info == nil {
 		return
 	}
-	if info.ResponsesUsageInfo == nil {
-		info.ResponsesUsageInfo = &ResponsesUsageInfo{
-			BuiltInTools: make(map[string]*BuildInToolInfo),
-		}
-	}
-	if info.ResponsesUsageInfo.BuiltInTools == nil {
-		info.ResponsesUsageInfo.BuiltInTools = make(map[string]*BuildInToolInfo)
-	}
+	info.ensureBuiltInTools()
 
 	count := 0
 	if c != nil {

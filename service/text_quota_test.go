@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -76,9 +77,9 @@ func TestTextQuoteCacheOverlapCannotCredit(t *testing.T) {
 
 func TestTextToolQuoteBillsZeroTokenUsageAndFrozenPrices(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Set("claude_web_search_requests", 2)
 	info := quotedTextInfo(t, billing.PricingValues{"ModelPrice": 0.0}, billing.UnitPrice{Quantity: "tool:web_search", Unit: "per_thousand_calls", Price: "10"}, billing.UnitPrice{Quantity: "tool:google_search", Unit: "per_call", Price: "0.014"})
-	ctx.Set("gemini_google_search_call", true)
+	info.SetBillableToolCount(dto.BuildInToolWebSearch, 2)
+	info.SetBillableToolCount(dto.BuildInToolGoogleSearch, 1)
 	summary := calculateTextQuotaSummary(ctx, info, &dto.Usage{})
 	require.NoError(t, summary.PricingError)
 	assert.Equal(t, 17000, summary.Quota)
@@ -92,6 +93,21 @@ func TestTextToolQuoteBillsZeroTokenUsageAndFrozenPrices(t *testing.T) {
 	info.RelayMode = relayconstant.RelayModeChatCompletions
 	summary = calculateTextQuotaSummary(ctx, info, &dto.Usage{})
 	require.ErrorContains(t, summary.PricingError, "missing price")
+}
+
+// Every recorded tool count is bounded by MaxBillableToolCallCount at
+// settlement, whatever recorded it.
+func TestTextToolQuoteClampsCallCount(t *testing.T) {
+	for recorded, billed := range map[int]string{5: "5", 10_000: "10000", 10_005: "10000"} {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		info := quotedTextInfo(t, billing.PricingValues{"ModelPrice": 0.0}, billing.UnitPrice{Quantity: "tool:web_search", Unit: "per_thousand_calls", Price: "10"})
+		info.SetBillableToolCount(dto.BuildInToolWebSearch, recorded)
+		summary := calculateTextQuotaSummary(ctx, info, &dto.Usage{})
+		require.NoError(t, summary.PricingError, recorded)
+		assert.Equal(t, billed, info.PriceData.Usage.Quantities["tool:web_search"], recorded)
+		require.Len(t, summary.ToolSurchargeItems, 1)
+		assert.Equal(t, billed, strconv.Itoa(summary.ToolSurchargeItems[0].Count), recorded)
+	}
 }
 
 func TestTextQuoteRejectsNegativeCacheBeforeDisplayNormalization(t *testing.T) {

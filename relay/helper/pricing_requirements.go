@@ -48,6 +48,7 @@ func PricingRequirementsFromBody(info *relaycommon.RelayInfo, body []byte) (bill
 		dimensions["ai"], dimensions["ao"] = true, true
 	}
 	tools, _ := payload["tools"].([]any)
+	claudeWire := info.GetFinalRequestRelayFormat() == types.RelayFormatClaude
 	for _, raw := range tools {
 		tool, ok := raw.(map[string]any)
 		if !ok {
@@ -63,6 +64,15 @@ func PricingRequirementsFromBody(info *relaycommon.RelayInfo, body []byte) (bill
 			dimensions["tool:"+kind] = true
 		case kind == "code_interpreter", kind == "computer_use_preview", kind == "computer":
 			return required, &billing.PricingError{Code: "missing_usage_contract", Dimension: "tool:" + kind}
+		}
+		// Anthropic reports these server tools in usage.server_tool_use, and the
+		// Claude handler bills each count under the tool's own key.
+		if claudeWire {
+			for _, name := range []string{"web_fetch", "code_execution", "tool_search"} {
+				if strings.HasPrefix(kind, name) {
+					dimensions["tool:"+name] = true
+				}
+			}
 		}
 		for _, name := range []string{"googleSearch", "google_search", "googleSearchRetrieval", "google_search_retrieval"} {
 			if _, present := tool[name]; present {
