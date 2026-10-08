@@ -2,6 +2,24 @@
 
 本账本的实施/验证段记录提交授权前的本地验收快照；其中 `candidate_sha=null` 指该快照。后续源码提交、服务器候选和正式切换由工作区服务器档案与实际发布记录另行追踪，不能把本地通过解释为已经部署。
 
+## 2026-10-08 三来源增量同步（第四批）
+
+用户批准 Gemini 计费改动并授权更新账本与路线图。窗口：NewAPI `45094bdf41fb13a5d24bd3e8eb3fdfec6241c59f` → `6370b29424168039e94d40d610191e7d2e65dbf4`（7 个提交）、Sub2API `745ff1d3ca79a7f39520f627f6aa44d778a11580` → `5fc0e486c3f6a8a191b8bd140f39b60457f611cf`（17 个修复及其合并）、AxonHub `81e519e914437b4b94f758b2d6d78f94468f64e4` → `b8bb3421e1fe946cfc4f0d86e8412098738f2793`（1 个，System One 渠道测试，无本地对应）。本批基于 Ren2Hub `0446ea195`。
+
+| source_project / source_ref | category / priority / status | local_scope / contract | test_commands / validation | risk / follow_up |
+| --- | --- | --- | --- | --- |
+| NewAPI `d10f11fff` | 计费 / P2 / 已吸收（改变扣费，本地改写） | Gemini grounding 按一次响应内去重后的非空网页与图片搜索查询数计 `google_search`（跨流式帧与全部候选，流式每帧提交，客户端中断保留已见查询）；原生、Chat、Responses 三个非流式入口共用同一计数。上游另记 `google_search_grounded_prompt` 并以预置价格按模型代际选择计费键；本地不预置价格，该键仅在冻结报价定价时计入，未定价不会让结算失败，且列为保留名。`relaykit/dto` 增加 `imageSearchQueries` | `go test -timeout 60s ./relay/channel/gemini/`（`TestGeminiHandlersCountGroundingQueries` 9 组，含未定价不计入） | 已为 `google_search` 定价的 Gemini 2.5 渠道从每次响应 1 次变为按查询数计费；按次计费需为 `google_search_grounded_prompt:gemini-2.5*` 定价并把同前缀 `google_search` 设为 0。查询数不保证与 Google 账单一致 |
+| NewAPI `04c597bf6` | 渠道 / P3 / 已吸收 | 参数覆盖条件新增 `regex`（Go RE2，按条件懒编译，键不存在时不编译，非字符串或非法模式报错）；条件判断块与上游基线一致，原样移植。本地控制台以原始 JSON 编辑参数覆盖，无界面改动，`docs/routing/GATEWAY_API.md` 列出条件模式 | `-run 'Override\|Condition' ./relay/common/`（`TestApplyParamOverrideConditionRegex` 19 组，修复前失败） | 无 |
+| NewAPI `0cce21db0` | 插件 / P2 / 已吸收 | 用量键替换器只建一次；同一来源对象的规范化请求体在钩子间复用。用量钩子仍经 `submitUsageContext` 取得新规范化的请求值 | `go test -timeout 60s ./relay/channel/task/jsplugin/ ./plugins/ ./pkg/jsplugin/` | 无 |
+| NewAPI `192802ee0` | 构建 / P3 / 已吸收 | Dockerfile、release 与 Electron 构建以 `-pgo=<moejs>/default.pgo` 编译；alpha.5 已带该文件，本地版本注入与构建参数不变 | 本地 `go build -pgo=...` 通过且 `go version -m` 记录 `-pgo`；服务器镜像构建 | 构建时间与运行收益未测 |
+| NewAPI `b23471112`、`6370b2942` | 插件 / P2–P3 / 延期 | moejs alpha.6 未在本机模块缓存，需另行批准联网下载，并核对 `metadata_preview.go` 语法树接口、数值转换和 `usage_decimal.go` 辅助函数；`json-order@1` 依赖 alpha.6，冲突面最大且无插件使用。移植时用量钩子守卫须在获取调用槽之前并覆盖 `CallJSONInto`，本地 `BindTaskPluginEndpointToChannel` 每次解码都要重设请求原文 | — | 见路线图 |
+| NewAPI `bc8235792` | 测试 / — / 刻意不吸收 | 上游把 relaykit 转换测试移出仓库；被删测试保护 Gemini 工具媒体、Opus 5.5 默认 effort 与后缀别名等本地合同，继续保留 | — | 无 |
+| Sub2API `e0019da46` | 前端 / P2 / 已修复（本地设计） | 叠放弹窗按 z-index 判断最上层（同层取后出现的节点），不再只看 DOM 顺序；修复用户管理页安全验证弹窗挂载早于用户表单时 Esc 无效、Tab 焦点跳入被遮挡表单 | Vitest `ConsoleModal.spec.ts`（先挂载高层弹窗、后打开，Esc 与 Tab 只归它，修复前失败）；Playwright `admin-bindings` 4 项 | 共用判断放在 `utils/modalStack.ts`，图片灯箱接入同一判断；`MobileNavDrawer`、灯箱改为内联 z-index。弹窗关闭动画 200ms 内仍计入候选，旧逻辑同样存在，未处理 |
+| Sub2API `8167d85b3` | 前端 / P3 / 已修复 | `FilterSelect` 被禁用时收起已展开菜单，禁用状态下选择无效，与 `ActionMenu` 一致 | Vitest `FilterSelect.spec.ts`（禁用后收起、选择无效，修复前失败）；前端全量 Vitest 1059 项、lint、format、typecheck 与构建通过 | 本机 `bun run` 下 vue-tsc 失败属环境问题（Bun 1.3.14 运行时），改用 Node 执行同一脚本通过 |
+| Sub2API 其余 15 项 | — / 不吸收 | 推理签名恢复：本地签名状态绑定原渠道与 Key，跨渠道拒绝，上游错误按输入错误处理；健康评分样本下限本地已有 50；其余为本地没有对应页面或已有等价守卫的前端竞态修复 | — | 无 |
+
+上一批保留的本地偏离继续有效。下一轮从 NewAPI `6370b2942`、Sub2API `5fc0e486c`、AxonHub `b8bb3421` 比较。
+
 ## 2026-10-08 遗留问题修复（第三批）
 
 用户要求以 NewAPI 上游实现为主、AxonHub 为辅修复前两批遗留问题，并批准会改变扣费的工具计费与 xAI 插件。窗口不变：NewAPI `bb28f2cc` → `45094bdf`、Sub2API 止于 `745ff1d3`、AxonHub 止于 `81e519e9`。本批基于 Ren2Hub `7363f3eaf`。生产只读核查：当前没有任何渠道、阿里渠道日志和已保存的工具价格，本批计费变化不影响现有流量。
