@@ -38,7 +38,7 @@ COPY --from=frontend-builder /build/frontend/embed-dist ./frontend/embed-dist
 RUN go test -timeout 60s -run '^TestProductionEmbeddedAssetGraph$' .
 RUN version="${APP_VERSION:-$(cat VERSION)}" \
     && test -n "$version" \
-    && go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$version'" -o new-api
+    && go build -pgo="$(go list -m -f '{{.Dir}}' github.com/Calcium-Ion/moejs)/default.pgo" -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$version'" -o new-api
 
 FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
 

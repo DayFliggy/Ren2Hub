@@ -22,25 +22,25 @@ cd ..
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "Building for macOS..."
-    CGO_ENABLED=1 go build -ldflags="-s -w -X github.com/QuantumNous/new-api/common.Version=$version" -o new-api
+    CGO_ENABLED=1 go build -pgo="$(go list -m -f '{{.Dir}}' github.com/Calcium-Ion/moejs)/default.pgo" -ldflags="-s -w -X github.com/QuantumNous/new-api/common.Version=$version" -o new-api
     cd electron
     bun install --frozen-lockfile
     bun run build:mac -- --publish never
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     echo "Building for Linux..."
-    CGO_ENABLED=1 go build -ldflags="-s -w -X github.com/QuantumNous/new-api/common.Version=$version" -o new-api
+    CGO_ENABLED=1 go build -pgo="$(go list -m -f '{{.Dir}}' github.com/Calcium-Ion/moejs)/default.pgo" -ldflags="-s -w -X github.com/QuantumNous/new-api/common.Version=$version" -o new-api
     cd electron
     bun install --frozen-lockfile
     bun run build:linux -- --publish never
 elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
     echo "Building for Windows..."
-    CGO_ENABLED=1 go build -ldflags="-s -w -X github.com/QuantumNous/new-api/common.Version=$version" -o new-api.exe
+    CGO_ENABLED=1 go build -pgo="$(go list -m -f '{{.Dir}}' github.com/Calcium-Ion/moejs)/default.pgo" -ldflags="-s -w -X github.com/QuantumNous/new-api/common.Version=$version" -o new-api.exe
     cd electron
     bun install --frozen-lockfile
     bun run build:win -- --publish never
 else
     echo "Unknown OS, building for current platform..."
-    CGO_ENABLED=1 go build -ldflags="-s -w -X github.com/QuantumNous/new-api/common.Version=$version" -o new-api
+    CGO_ENABLED=1 go build -pgo="$(go list -m -f '{{.Dir}}' github.com/Calcium-Ion/moejs)/default.pgo" -ldflags="-s -w -X github.com/QuantumNous/new-api/common.Version=$version" -o new-api
     cd electron
     bun install --frozen-lockfile
     bun run build -- --publish never
