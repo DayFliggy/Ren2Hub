@@ -6,7 +6,7 @@ RenAI 工作区的服务器部署使用工作区 `deploy/ren2hub/` 与对应部�
 
 ## 首次启动
 
-使用 Docker Engine 和 Docker Compose v2，在当前 Ren2Hub 源码目录执行。先确认 `relaykit/` 源码完整，构建需要访问 Docker 镜像和包依赖服务。
+使用 Docker Engine 和 Docker Compose v2，在当前 Ren2Hub 源码目录执行。先确认 `relaykit/` 和 `tokenkit/` 源码完整，构建需要访问 Docker 镜像和包依赖服务。
 
 1. 确认目标是空库，或已有 schema 5 且 `EvidenceKeyID` 匹配的 `billing_schemas` 标记。旧账务库会被启动守卫拒绝，不会迁移或清空；首次采用当前格式应使用独立新库并保留旧库。以 `.env.example` 为模板创建本地 `.env`，分别为 `POSTGRES_PASSWORD`、`REDIS_PASSWORD`、`SESSION_SECRET`、`CRYPTO_SECRET` 填入独立随机值，例如每项执行一次 `openssl rand -hex 32`。空值会使 Compose 在启动前报错。`CRYPTO_SECRET` 用于加密账务重放，初始化后必须稳定保存并随数据库备份，不能在重启或更新时重新生成。不要把 `.env` 提交到 Git。
 2. 新库默认用户名为 `root`，数据库名为 `new-api`；名称相同不代表旧账务数据兼容。可用 `POSTGRES_USER` 和 `POSTGRES_DB` 指定新库身份。密码建议使用十六进制；如需沿用含 URL 保留字符的口令，应在 Compose 的 `SQL_DSN` / `REDIS_CONN_STRING` 中填写编码后的连接字符串，而数据库与 Redis 的实际口令保持原值。

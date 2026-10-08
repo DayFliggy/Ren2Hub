@@ -25,7 +25,7 @@
 
 启动看 `main.go`；普通 API 从 `router/` 进入 `controller/`，再跟进 `service/` 与 `model/`。这是职责分层，不要求每个控制器必须经过 Service。
 
-AI 请求按 `router/relay-router.go` → 鉴权/限流 → `middleware/gateway_admission.go` → `middleware/distributor.go` → `service/request_route.go` → `controller/relay.go` 阅读。宿主在 `relay/` 发送请求和处理传输，`relaykit/` 负责协议语义；后台作业从 `controller/system_task_handlers.go` 进入系统任务框架。
+AI 请求按 `router/relay-router.go` → 鉴权/限流 → `middleware/gateway_admission.go` → `middleware/distributor.go` → `service/request_route.go` → `controller/relay.go` 阅读。宿主在 `relay/` 发送请求和处理传输，`relaykit/` 负责协议语义，`tokenkit/` 负责文本与图片的 token 计数和估算（两者都是独立模块，不依赖主模块）；后台作业从 `controller/system_task_handlers.go` 进入系统任务框架。
 
 Vue 从 `frontend/src/router/`、`frontend/src/stores/app.ts` 和 `frontend/src/api/` 核对页面、能力状态与真实 API。后端入口存在不代表当前 UI 开放。当前账务格式为 schema 5，仅接受空库初始化或版本、密钥指纹均匹配的 `billing_schemas` 数据库；价格合同为 4，计算器为 `newapi-c71eefbc-v1`。不能把旧计费数据库直接接给新代码。模型定价只从 `model_pricing` 保存，公开接口恢复 NewAPI 模型行；五源价格获取只填入前端草稿。请求求值上下文加密保存供重放，日志和 API 不暴露明文或证据密文。
 

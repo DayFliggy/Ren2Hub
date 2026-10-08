@@ -16,6 +16,7 @@
 | 进程退出 | `go test -timeout 60s ./service -run '^TestBillingProcessExitRecovery$' -count=1` | 子进程在预留事务中、预留后、投递保护后、结算意图后、资金提交后、日志写入后退出，恢复执行两次检查幂等；只证明 SQLite 文件库 |
 | ClickHouse 日志 | `go test -timeout 60s ./model -run '^TestBillingAmbiguousClickHouseWriteIsConfirmedBeforeRetry$' -count=1` | 用隔离 SQL 存储模拟该分支，证明未知写入不会盲目重发；不证明真实 ClickHouse 驱动或服务 |
 | RelayKit | 在 `relaykit/` 以 `GOWORK=off` 运行 `go test -timeout 60s ./...` 和 `go build ./...` | 独立模块，改动 RelayKit 时才需要重跑 |
+| TokenKit | 在 `tokenkit/` 以 `GOWORK=off` 运行 `go test -timeout 60s ./...` 和 `go build ./...` | 独立模块，改动计数或估算时才需要重跑；估算口径变化会改变预扣与 TPM 预留，不改变已确认用量的结算 |
 | 前端 | 在 `frontend/` 运行 `bun run test:run`、`bun run typecheck`、`bun run lint`、`bun run build`；界面检查用 `bun run test:visual` | 浏览器用例使用模拟 API，只证明界面与请求契约；账务页面说明见[前端账务说明](../../frontend/docs/BILLING.md) |
 
 计价与证据验收须覆盖 NewAPI 倍率、按次、表达式各自的舍入规则，显式零与缺价、工具缺价与最长前缀零覆盖、渠道系数仅一次、动态 `param/header/time` 的真实输入及重放。修改请求、真实 attempt、配置、阶段、用量或密文应验证失败且不扣款；相同费用但证据不同也不得通过。公开 API、管理详情及日志不得返回输入明文或证据密文。前端获取五源、选择单源填草稿与明确保存分别验收，抓取和预览不能写配置。

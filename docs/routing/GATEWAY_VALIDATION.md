@@ -21,7 +21,7 @@ go vet -p 4 ./...
 go build ./...
 ```
 
-涉及 RelayKit 或公共契约时，进入 `relaykit` 设置 `GOWORK=off`，单独运行 `go test ./... -timeout 60s` 和 `go build ./...`，随后恢复环境。主模块全量入口为 `node scripts/test-go.mjs -count=1`，controller 按仓库脚本分批，单批仍为 60 秒。同代码和环境已通过的包不必因其他包结束而重复运行。
+涉及 RelayKit、TokenKit 或公共契约时，进入对应模块目录设置 `GOWORK=off`，单独运行 `go test ./... -timeout 60s` 和 `go build ./...`，随后恢复环境。主模块全量入口为 `node scripts/test-go.mjs -count=1`，controller 按仓库脚本分批，单批仍为 60 秒。同代码和环境已通过的包不必因其他包结束而重复运行。
 
 协议、原生 Responses WebSocket、逐路由透传、响应模型和 Claude effort 回归按下列命令拆分执行，避免把多个测试集塞进同一 60 秒包预算：
 
