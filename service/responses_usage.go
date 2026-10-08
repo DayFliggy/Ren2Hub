@@ -49,13 +49,17 @@ func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse) 
 		if a.imageCommitted {
 			return
 		}
-		failed := event.Type != "response.completed" && event.Type != "response.done"
-		if failed || (event.Response != nil && relaycommon.IsNonBillableResponsesStatus(event.Response.Status)) {
-			a.imageCounter.Reset()
-		} else if event.Response != nil {
+		// Images that completed before any terminal, failed ones included, were
+		// delivered and stay billable; the counter still skips unfinished image
+		// items. Other tool calls bill only on a completed response.
+		completed := (event.Type == "response.completed" || event.Type == "response.done") &&
+			(event.Response == nil || !relaycommon.IsNonBillableResponsesStatus(event.Response.Status))
+		if event.Response != nil {
 			for i := range event.Response.Output {
 				a.imageCounter.Observe(&event.Response.Output[i], &i)
-				a.info.ObserveBillableToolCall(&event.Response.Output[i], &i)
+				if completed {
+					a.info.ObserveBillableToolCall(&event.Response.Output[i], &i)
+				}
 			}
 		}
 		a.imageCounter.Commit(a.info)
@@ -82,6 +86,8 @@ func (a *ResponsesUsageAccumulator) Finish() *dto.Usage {
 		return a.usage
 	}
 	a.finished = true
+	// A final image item can already have reached the client before the stream
+	// disconnects, so completed image usage is retained even without a terminal.
 	if !a.imageCommitted {
 		a.imageCounter.Commit(a.info)
 		a.imageCommitted = true

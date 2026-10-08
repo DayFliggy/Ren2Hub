@@ -236,15 +236,6 @@ func (c *ImageGenerationCallCounter) Observe(item *dto.ResponsesOutput, outputIn
 	c.count++
 }
 
-// Reset clears pending observations (used when a terminal response fails).
-func (c *ImageGenerationCallCounter) Reset() {
-	if c == nil {
-		return
-	}
-	c.seen = nil
-	c.count = 0
-}
-
 // Count returns the deduplicated completed image output count.
 func (c *ImageGenerationCallCounter) Count() int {
 	if c == nil {
@@ -279,8 +270,9 @@ func (c *ImageGenerationCallCounter) Commit(info *RelayInfo) {
 	}
 }
 
-// IsNonBillableResponsesStatus reports terminal response statuses that must not
-// bill pending image_generation observations.
+// IsNonBillableResponsesStatus reports response statuses that do not complete
+// the request. A terminal with such a status does not confirm completed usage
+// and bills no tool call except image_generation outputs that completed.
 func IsNonBillableResponsesStatus(status []byte) bool {
 	if len(status) == 0 {
 		return false

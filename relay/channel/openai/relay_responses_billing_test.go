@@ -154,7 +154,9 @@ func TestOaiResponsesHandlerCountsCompletedImageGenerationOutputs(t *testing.T) 
 	assert.False(t, c.GetBool("image_generation_call"))
 }
 
-func TestOaiResponsesHandlerIncompleteStatusCommitsZeroImageGeneration(t *testing.T) {
+// An incomplete response is still forwarded, so its completed image outputs
+// were delivered and bill.
+func TestOaiResponsesHandlerCountsImageGenerationOnIncompleteStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	body, err := common.Marshal(dto.OpenAIResponsesResponse{
@@ -190,7 +192,8 @@ func TestOaiResponsesHandlerIncompleteStatusCommitsZeroImageGeneration(t *testin
 
 	_, apiErr := OaiResponsesHandler(c, info, resp)
 	require.Nil(t, apiErr)
-	assert.Equal(t, 0, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
+	assert.Contains(t, w.Body.String(), "base64-a")
+	assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 }
 
 func runResponsesImageBillingStream(t *testing.T, events ...string) *relaycommon.RelayInfo {
@@ -245,14 +248,14 @@ func TestOaiResponsesStreamHandlerDeduplicatesCompletedImageOutput(t *testing.T)
 	assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 }
 
-func TestOaiResponsesStreamHandlerDiscardsImageOutputOnIncomplete(t *testing.T) {
+func TestOaiResponsesStreamHandlerCountsImageOutputOnIncomplete(t *testing.T) {
 	info := runResponsesImageBillingStream(
 		t,
 		`{"type":"response.output_item.done","output_index":0,"item":{"type":"image_generation_call","id":"img_1","status":"completed","result":"base64-a"}}`,
 		`{"type":"response.incomplete","response":{"status":"incomplete"}}`,
 	)
 
-	assert.Equal(t, 0, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
+	assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 }
 
 func TestOaiResponsesStreamHandlerDoesNotCountPartialImageEvent(t *testing.T) {

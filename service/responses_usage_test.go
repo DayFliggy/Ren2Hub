@@ -48,6 +48,44 @@ func TestResponsesUsageFinishIsIdempotent(t *testing.T) {
 	assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 }
 
+// An image that completed before any terminal was delivered and bills once,
+// whatever the terminal says. Other tool calls in the terminal snapshot bill
+// only on a completed response, and unfinished image items never bill.
+func TestResponsesTerminalImageBilling(t *testing.T) {
+	image := dto.ResponsesOutput{ID: "image-1", Type: dto.ResponsesOutputTypeImageGenerationCall, Status: "completed", Result: "image-data"}
+	for _, terminal := range []struct {
+		eventType, status string
+		wantSearches      int
+	}{
+		{"response.completed", "completed", 1},
+		{"response.completed", "incomplete", 0},
+		{"response.incomplete", "incomplete", 0},
+		{"response.failed", "failed", 0},
+		{"response.cancelled", "cancelled", 0},
+	} {
+		t.Run(terminal.eventType+"/"+terminal.status, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.1"}}
+			accounting := NewResponsesUsageAccumulator(info)
+			accounting.Observe(&dto.ResponsesStreamResponse{Type: dto.ResponsesOutputTypeItemDone, Item: &image})
+			accounting.Observe(&dto.ResponsesStreamResponse{Type: terminal.eventType, Response: &dto.OpenAIResponsesResponse{
+				Status: []byte(`"` + terminal.status + `"`),
+				Output: []dto.ResponsesOutput{
+					image,
+					{ID: "image-2", Type: dto.ResponsesOutputTypeImageGenerationCall, Status: "in_progress", Result: "partial-data"},
+					{ID: "search-1", Type: dto.BuildInCallWebSearchCall, Status: "completed"},
+				},
+			}})
+			accounting.Finish()
+			assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
+			searches := 0
+			if tool := info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolWebSearchPreview]; tool != nil {
+				searches = tool.CallCount
+			}
+			assert.Equal(t, terminal.wantSearches, searches)
+		})
+	}
+}
+
 func TestResponsesUsageEstimateRefreshesNativeBillingSnapshot(t *testing.T) {
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-4o"}}
 	accounting := NewResponsesUsageAccumulator(info)

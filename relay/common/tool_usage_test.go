@@ -327,20 +327,6 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 			wantCount: 1,
 		},
 		{
-			name: "output_item.done plus incomplete equals zero",
-			observe: func(c *ImageGenerationCallCounter) {
-				idx := 0
-				c.Observe(&dto.ResponsesOutput{
-					Type:   dto.ResponsesOutputTypeImageGenerationCall,
-					ID:     "img_1",
-					Status: "completed",
-					Result: "base64-a",
-				}, &idx)
-				c.Reset()
-			},
-			wantCount: 0,
-		},
-		{
 			name: "partial event equals zero",
 			observe: func(c *ImageGenerationCallCounter) {
 				idx := 0
