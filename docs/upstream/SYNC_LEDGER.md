@@ -2,6 +2,27 @@
 
 本账本的实施/验证段记录提交授权前的本地验收快照；其中 `candidate_sha=null` 指该快照。后续源码提交、服务器候选和正式切换由工作区服务器档案与实际发布记录另行追踪，不能把本地通过解释为已经部署。
 
+## 2026-10-08 三来源增量同步（第二批）
+
+用户授权结合两轮研究同步 NewAPI 并吸收 Sub2API、AxonHub。窗口：NewAPI `bb28f2ccad3f6286a9dc4a0ad9e20f571f57533b` → `45094bdf41fb13a5d24bd3e8eb3fdfec6241c59f`（4 个提交）、Sub2API `3f1a2ea0a760730e3bc528105c00b4ee4f23e469` → `745ff1d3ca79a7f39520f627f6aa44d778a11580`（90 个提交）、AxonHub `5c78997798b40e44788c38bd6720c0b9c156f26b` → `81e519e914437b4b94f758b2d6d78f94468f64e4`（8 个提交），均无 P0/P1。本批基于 Ren2Hub `36b657611`，只吸收不改变扣费的缺陷修复；会改变扣费的工具计费项留在路线图队列等待批准。
+
+| source_project / source_ref | category / priority / status | local_scope / contract | test_commands / validation | risk / follow_up |
+| --- | --- | --- | --- | --- |
+| NewAPI `0a03088e0` | 协议 / P2 / 已吸收（改写诊断级别） | `reasoning/claude.go` 为 Opus 5.5、Sonnet 5.5 单独建能力行：关闭思考时 Sonnet 5.5 发 `between_tools`、Opus 5.5 发 adaptive 加 `low`，其余模型仍发 `disabled`；`toolconv/encode.go` 在 Fable 5.1、Mythos 5.1、Opus 5.5、Sonnet 5.5 及渲染为手动思考时把非 Claude 源的强制 `tool_choice` 降为 `auto`。诊断用 warning 而非上游的 error：本地默认策略为 safe，error 会让默认请求失败；safe 放行、strict 拒绝 | `cd relaykit && GOWORK=off go test ./...`（含 `claude_rejected_controls_test.go`、`intent_test.go` 逐模型表）；`-run 'TestGateway.*(Claude|Reasoning|ToolMedia|Effort)' ./router/` | toolconv 只按 `target.Model` 前缀查能力表，带命名空间或渠道别名的模型名不会降级；未调用真实 API |
+| NewAPI `0a03088e0`（schema 部分） | 协议 / P2 / 已吸收 | Gemini 函数参数带 `OpenAPISchema` 标记，共享编码步骤为 Chat/Claude/Responses 改写为 JSON Schema，丢弃项给 `gemini_schema_keyword_dropped` warning；Gemini 目标不变。本地探针曾确认 `OBJECT`、`nullable`、`propertyOrdering` 原样发往非 Gemini 目标 | `toolconv/schema_test.go` 5 组（含 strict 拒绝、Gemini 目标不变） | `example`→`examples`、`format` 保留按 Gemini 注释处理；`strict:true` 函数工具对联合类型的接受度未在线核实 |
+| NewAPI `0a03088e0`（其余部分） | 协议/计费 / P2–P3 / 刻意不吸收或延期 | 上游对目标不能承载的媒体改为丢弃并给诊断，与本地"任何策略都不得丢弃媒体"冲突，保留本地拒绝；转换流失败后上游追加 JSON 错误体，本地已按已交付输出结算并只发一次 `stream_interrupted` 事件（探针确认），不采纳；Codex namespace 平铺延期 | 本地探针（未提交）验证转换流失败计费与单次错误事件 | 吸收后续上游媒体改动时必须保留本地拒绝 |
+| AxonHub `d6e00c00` | 协议 / P2 / 已吸收 | 阿里 `requestOpenAI2Ali` 读取宿主已解析的 `RelayInfo.ReasoningEffort`：为 none 时发 `enable_thinking:false` 并去掉 `reasoning_effort`；保留客户端显式值；关闭意图与显式 `enable_thinking:true` 同时出现时返回客户端错误 | `go test -timeout 60s ./relay/channel/ali/`（`TestRequestOpenAI2AliDisabledThinking`） | 百炼对 `reasoning_effort` 的实际处理未在线核实；生产暂无阿里 Responses 流量证据 |
+| Sub2API Retry-After 系列（opencode 提交） | 可用性 / P2 / 已吸收（本地设计） | `ParseRetryAfter` 是唯一解析入口，秒数与 HTTP 日期都封顶为 `RouteRetryAfterCap`（5 分钟，等于本地最长健康冷却）；健康行与 Provider 范围共用；过去日期不设冷却，负数与无法解析的值忽略；超出整数范围的正值按封顶处理 | `-run 'TestParseRetryAfter|TestRetryAfter|TestGatewayProviderRateCapsAbsurdRetryAfter' ./service/` | 供应商若确实要求更长等待，每 5 分钟会多一次探测 429 |
+| AxonHub `81e519e9` | 协议 / P3 / 已吸收（真实缺陷） | Chat→Claude 流中 finish 块只有自带真实计数时才结束消息，否则等待仅含用量的块或正常结束；宿主 `OaiStreamHandler` 路径本身不受影响，缺陷在 relaykit 对外转换接口 | `GOWORK=off go test ./relayconvert/internal/oai_chat/` | 无 |
+| 本地缺陷（`usage_merge.go`） | 计量 / P3 / 已修复 | `output_tokens_details` 改按"后到非零值覆盖、零值不擦除"合并，两个别名字段保持一致；此前零值快照会清空已有 reasoning token。原测试 `TestUsageMergePreservesExplicitZeroOutputModality` 锁定的旧行为与函数注释矛盾、上游也不如此合并，已由表驱动测试替换 | `GOWORK=off go test -run TestUsageMerge ./dto/` | 宿主 `relay-openai.go` 仍按最后一个带用量的块整体替换，规则不同但互不影响 |
+| Sub2API apicompat（refusal） | 协议 / P2 / 已吸收 | Responses 拒答在非流式、流式、缓冲三条路径转为 Chat `refusal` 字段，只交付一次 | `TestResponsesRefusalReachesChatRefusalField` | 转 Claude 方向的拒答损失诊断未实现，延期 |
+| Sub2API `412718edf` | 协议 / P2 / 已吸收 | `ClaudeMediaMessage` 对 `type=="thinking"` 始终输出 `thinking` 与 `signature` 键（未知签名为空串），其他块逐字节不变；两个响应 golden 各多一行 | `relaykit/dto/claude_thinking_signature_test.go`、`relayconvert/claude_thinking_signature_test.go` | 无 |
+| Sub2API apicompat（legacy function_call） | 协议 / P3 / 已吸收（本地设计） | `dto.Message` 增加 `function_call`；旧版调用与紧随的同名结果配对为工具调用与结果，Claude/Responses 用稳定的 `call_legacy_N`，Gemini 按名匹配；无法配对给 error 诊断（safe/strict 拒绝）；缺 `name` 或无效 JSON 在分析阶段返回 400 | `legacy_function_history_test.go`；本地探针确认原生 Chat 配对历史正常转发、缺名返回 400 且不发送 | 原生 Chat 现在会把历史里的 `function_call` 转发上游，此前解码时被静默丢弃 |
+
+延期或不吸收（见路线图 SYNC1008-05/07/08）：供应商上报搜索次数计费与失败终态图片计费（会改变扣费，待批准）；Codex namespace 平铺；xAI Grok Imagine 插件（被审核拦截也计费，需产品决定）；智谱/DashScope 渠道级搜索编码；`45094bdf4`（React 专属）；Sub2API 界面竞态（本地已有等价守卫或无对应页面）；AxonHub Decisions API、Codex 窗口、Antigravity。
+
+上一批的四项本地偏离（tokenkit `/\n` 分段、图片取文件策略、Claude `tool_result` 逐块解码、Gemini 工具媒体拒绝而非丢弃）在 NewAPI `45094bdf` 仍未修复，继续保留。合并时修正：Gemini schema 测试与 legacy 配对改动并行，`ExtractRequest` 新增目标参数后补齐调用。下一轮从三个目标 SHA 继续比较。
+
 ## 2026-10-07 三来源增量同步
 
 用户授权本批同步 NewAPI 更新并吸收 Sub2API、AxonHub 的有益部分。窗口按上轮基线锁定：NewAPI `1a4166d8e8ba9802d2ca56fe8ecf0ed5404e80d5` → `bb28f2ccad3f6286a9dc4a0ad9e20f571f57533b`（8 个提交）、Sub2API `458b92abd4b0b09d123d4c6727dd8d59060bd883` → `3f1a2ea0a760730e3bc528105c00b4ee4f23e469`（v0.2.14，14 个提交）、AxonHub `2bf8e2c916412df72252ac1514591dc47f692d7e` → `5c78997798b40e44788c38bd6720c0b9c156f26b`（11 个提交）；三个基线均为目标祖先，未截断。Release API 返回 403，采集保持 incomplete。本批基于 Ren2Hub `801b5457f`，参考仓库只读。三个窗口未发现 P0；Sub2API 的易支付伪造回调、初装可猜凭据与删 Key 结算，以及 AxonHub 的 IPv4 映射地址，在本地均无可利用路径。

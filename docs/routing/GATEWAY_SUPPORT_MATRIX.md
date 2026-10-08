@@ -69,6 +69,12 @@ Nova 保留 system/user/assistant 文本、多段文本和已实现的采样上�
 
 四入口的思考预算、effort 和 summary 按实际转换能力换算，换算后渲染为目标协议的推理字段。只有需要改写的输入（预算低于 -1、预算与思考模式或 effort 互相矛盾、思考类型被强制改写、目标模型不支持关闭思考等）产生 warning 诊断，`strict` 据此拒绝，`safe` 与 `allow` 放行；`RejectConversionLoss` 在 `safe` 下只拒绝 error 级诊断。`TestGatewayReasoningAndSearchPolicyBeforeBilling` 断言 Claude 思考、Gemini 零预算、Chat/Responses effort 跨协议换算在三种策略下都会发送。配置化搜索的已识别语义差异产生诊断，`strict` 下发送前拒绝。11 个独立计划场景和 15 组 HTTP 回归覆盖规划与最终发送边界，不能由基础 SDK 文本路径推导所有搜索或推理特性。
 
+Claude 目标的关闭思考意图按模型能力渲染：Opus 5、Sonnet 5、Opus 4.8 及更早模型发送 `{"type":"disabled"}`；Sonnet 5.5 不接受 `disabled`，改发不带其他字段的 `{"type":"between_tools"}`；Opus 5.5 无法关闭思考，改发 adaptive 并以 `low` effort 运行。两种改写都给出 warning 诊断（`claude_thinking_disable_as_between_tools`、`claude_thinking_disable_unsupported`）。非 Claude 源协议转来的强制 `tool_choice`（`required` 或具名工具）在 Fable 5.1、Mythos 5.1、Opus 5.5、Sonnet 5.5 上，以及渲染结果为手动扩展思考时，改为 `auto` 并给出 `forced_tool_choice_downgraded` warning，因为这些情况下 Claude 会直接返回 400；原生 Claude 请求不改写。依据 Anthropic Messages API 文档，2026-10-08 核对；回归为 `claude_rejected_controls_test.go`。
+
+Responses 的拒答（`type=refusal` 内容块与 `response.refusal.*` 流事件）在非流式、流式和缓冲三条路径上转为 Chat 的 `refusal` 字段，同时出现增量与终态快照时只交付一次。转换生成的 Claude `thinking` 块始终带 `signature` 键，未知签名时为空串，不伪造供应商签名。Chat 历史中的旧版 `function_call` 与紧随其后的同名 `role:"function"` 结果配对为工具调用和工具结果：转 Claude、Responses 时生成按消息顺序稳定、避开客户端已有 ID 的 `call_legacy_N`，转 Gemini 时按名称匹配不生成 ID；无法配对的调用或结果给出 error 级诊断（`legacy_function_call_unpaired`、`legacy_function_result_unpaired`），`safe` 与 `strict` 发送前拒绝，`allow` 省略未应答的调用。缺少 `name` 或 JSON 无效的旧版调用在请求分析阶段返回 400，原生 Chat 转发也不例外。
+
+Gemini `functionDeclarations[].parameters` 使用 OpenAPI 子集；转给 Chat、Claude、Responses 时由共享的工具编码步骤改写为 JSON Schema（类型小写、`nullable` 转为 null 类型、`example` 转为 `examples`、int64 边界转为数字），没有等价写法的关键字（如 `propertyOrdering`）丢弃并给出 `gemini_schema_keyword_dropped` warning，`strict` 拒绝。转 Gemini 的方向保持原样。
+
 Vertex Gemini 启用现有 `RemoveFunctionResponseIdEnabled` 时，四种入站协议共用同一工具历史投影。`safe/allow` 仅在移除调用和结果 ID 后仍能按名称唯一关联时放行，并记录 `tool_ids_projected_to_names`；`strict` 拒绝这项可识别损失。无效历史或必须依赖 ID 才能消歧的同名并行调用在所有策略下拒绝，`allow` 也不能伪造关联。关闭该设置时不追加无 ID 投影或对应诊断。预览与执行共用不含原始提示词、参数或结果的 `ToolIdentityRequirements`；12 条 HTTP 回归确认四协议 × 三策略的歧义历史均在发送和预扣前拒绝。
 
 OpenAI `n > 1` 或 Gemini `generationConfig.candidateCount > 1`（含既有 `candidate_count` 别名）产生 `multiple_candidates` 要求。目标 Claude 或 Responses 不能表达多个独立回答，所有策略均在规划阶段以 `multiple_candidates_unsupported` 拒绝；原生 Chat/Gemini 保留各自的多候选能力。依据为 RelayKit 的 `TestMultipleCandidatesRequireRepresentableTarget`，不以截取首个回答代替正确转换。
