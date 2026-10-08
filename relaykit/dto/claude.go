@@ -49,6 +49,32 @@ type ClaudeMediaMessage struct {
 	ToolUseId string `json:"tool_use_id,omitempty"`
 }
 
+// MarshalJSON keeps the Anthropic thinking-block wire shape: thinking and
+// signature are always present (signature is "" on content_block_start), and
+// strict clients reject a thinking block without the signature key. An empty
+// signature states that no provider signature is known; converters never
+// fabricate one. Every other block type keeps its omitempty encoding.
+func (c ClaudeMediaMessage) MarshalJSON() ([]byte, error) {
+	type claudeMediaMessage ClaudeMediaMessage
+	if c.Type != "thinking" {
+		return kitutil.Marshal(claudeMediaMessage(c))
+	}
+	thinking := ""
+	if c.Thinking != nil {
+		thinking = *c.Thinking
+	}
+	// The overridden fields are cleared in the embedded copy so the result does
+	// not depend on how the installed codec resolves duplicate keys.
+	rest := claudeMediaMessage(c)
+	rest.Type, rest.Thinking, rest.Signature = "", nil, ""
+	return kitutil.Marshal(struct {
+		Type      string `json:"type"`
+		Thinking  string `json:"thinking"`
+		Signature string `json:"signature"`
+		claudeMediaMessage
+	}{Type: c.Type, Thinking: thinking, Signature: c.Signature, claudeMediaMessage: rest})
+}
+
 func (c *ClaudeMediaMessage) SetText(s string) {
 	c.Text = &s
 }
