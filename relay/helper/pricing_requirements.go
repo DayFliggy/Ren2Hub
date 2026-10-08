@@ -59,7 +59,12 @@ func PricingRequirementsFromBody(info *relaycommon.RelayInfo, body []byte) (bill
 		case strings.HasPrefix(kind, "web_search_preview"):
 			dimensions["tool:"+dto.BuildInToolWebSearchPreview] = true
 		case strings.HasPrefix(kind, "web_search"):
-			dimensions["tool:"+dto.BuildInToolWebSearch] = true
+			// A channel that bills web search under its own key (DashScope's
+			// Anthropic endpoint) never bills web_search; VendorToolPriceKeys
+			// requires the key it does bill.
+			if info.WebSearchBillingKey == "" {
+				dimensions["tool:"+dto.BuildInToolWebSearch] = true
+			}
 		case kind == "file_search", kind == "image_generation":
 			dimensions["tool:"+kind] = true
 		case kind == "code_interpreter", kind == "computer_use_preview", kind == "computer":

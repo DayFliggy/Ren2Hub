@@ -2,6 +2,7 @@ package helper
 
 import (
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/stretchr/testify/require"
@@ -85,6 +86,22 @@ func TestClaudeServerToolsRequireTheirOwnPrice(t *testing.T) {
 			require.ErrorContains(t, err, "missing_usage_contract")
 		})
 	}
+}
+
+// A channel that bills web search under its own key requires that key, not
+// the protocol web_search key it never bills.
+func TestWebSearchBillingKeyReplacesProtocolRequirement(t *testing.T) {
+	info := &relaycommon.RelayInfo{RelayFormat: types.RelayFormatClaude}
+	body := []byte(`{"tools":[{"type":"web_search_20250305","name":"web_search"}]}`)
+	required, err := PricingRequirementsFromBody(info, body)
+	require.NoError(t, err)
+	require.Equal(t, []string{"tool:web_search"}, required.Dimensions)
+
+	info.WebSearchBillingKey = "search_strategy_agent"
+	info.VendorToolPriceKeys = map[string][]string{"web_search": {"search_strategy_agent"}}
+	required, err = PricingRequirementsFromBody(info, body)
+	require.NoError(t, err)
+	require.Equal(t, []string{"tool:search_strategy_agent"}, required.Dimensions)
 }
 
 func TestRealtimeFixedRequestPriceQualifiesWithoutSeparateTokenPrices(t *testing.T) {

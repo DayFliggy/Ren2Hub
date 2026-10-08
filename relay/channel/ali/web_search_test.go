@@ -106,9 +106,11 @@ func TestConvertClaudeRequestWebSearchEntrypoint(t *testing.T) {
 			assert.Equal(t, wantKey, info.WebSearchBillingKey, model)
 			required, err := relayhelper.PricingRequirementsFromBody(info, []byte(`{"tools":[`+searchTool+`]}`))
 			require.NoError(t, err)
+			// The Anthropic endpoint bills search only under its own key, so
+			// that key replaces the protocol web_search requirement.
 			want := []string{"tool:web_search"}
 			if wantKey != "" {
-				want = []string{"tool:search_strategy_agent", "tool:web_search"}
+				want = []string{"tool:search_strategy_agent"}
 			}
 			assert.Equal(t, want, required.Dimensions, model)
 		}
