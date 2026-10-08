@@ -2,6 +2,20 @@
 
 本账本的实施/验证段记录提交授权前的本地验收快照；其中 `candidate_sha=null` 指该快照。后续源码提交、服务器候选和正式切换由工作区服务器档案与实际发布记录另行追踪，不能把本地通过解释为已经部署。
 
+## 2026-10-09 moejs alpha.6 与上游增量（第六批）
+
+用户批准下载 moejs 与 fetch 参考仓库，并决定 AUDIT1009-01/02 只记录、暂不处理。fetch 后窗口：NewAPI `6370b29424168039e94d40d610191e7d2e65dbf4` → `7aa3531ef4c247ad4891c06cc8ed9d0ffb73fecc`（1 个提交；`v1.0.0-rc.42` 指向 `6370b2942`），Sub2API 无新提交（`5fc0e486c`），AxonHub `b8bb3421` → `e863c6fe1942deddd0f6e471fa003c430e5314f0`（1 个提交）。本批基于 Ren2Hub `cee29981a`。
+
+| source_project / source_ref | category / priority / status | local_scope / contract | test_commands / validation | risk / follow_up |
+| --- | --- | --- | --- | --- |
+| NewAPI `b23471112` | 插件 / P2 / 已吸收 | moejs 升到 `v0.1.0-alpha.6`，`go.sum` 与上游同样只新增两行，`h1:gbB/aEx2…` 与上游一致、`go mod verify` 通过。下载前列出的本地检查：`metadata_preview.go` 使用的语法树接口可编译；用量十进制边界、沙箱与固定源码测试通过；alpha.6 的 `FromGo` 会把结构体和 `json.RawMessage` 经 `json.Marshal` 转换，本地 `pluginValue` 已先用宿主编解码转换非基础类型，路径不变 | `go test -timeout 120s ./pkg/jsplugin/... ./relay/channel/task/jsplugin/... ./plugins/...` | alpha.6 新增可选内存上限接口，本地与上游都未启用，原"moejs 无硬内存上限"风险不变 |
+| NewAPI `6370b2942` | 插件 / P3 / 延期 | `json-order@1` 不再受下载阻塞，但仍无插件使用，冲突面最大（`engine.go`、本地 `BindTaskPluginEndpointToChannel`、中文 `v1.md`），继续延期 | — | 接入时用量钩子守卫须先于调用槽并覆盖 `CallJSONInto` |
+| NewAPI `7aa3531ef` | 插件 / P2 / 已吸收 | 多部件提交重建正文后，宿主用重建得到的 `Content-Type`（含新边界）覆盖插件给出的值；本地同样存在边界与正文不匹配的问题 | `TestTaskAdaptorBuildsMultipartFromOpaqueFileReference`（修复前失败） | 无 |
+| AxonHub `e863c6fe` | 协议 / — / 不适用 | 修复 Codex 私有 `additional_tools` 输入项的转发，本地 Codex 订阅渠道已退役 | — | 无 |
+| 本地 AUDIT1009-01/02 | — / 用户决定暂不处理 | tokenkit 组合附加符号二次方计数；`enterpriseWebSearch` 与 alpha 搜索发送前定价、拒答转 Gemini 丢弃。见第五批与路线图 | — | 风险不变，复评由用户发起 |
+
+下一轮从 NewAPI `7aa3531ef`、Sub2API `5fc0e486c`、AxonHub `e863c6fe` 比较。
+
 ## 2026-10-09 四批审计问题修复（第五批）
 
 审计 2026-10-07/08 四批同步后修复查出的问题。用户规则：NewAPI 有处理就对齐；没有则以 Sub2API 或 AxonHub 的相关修复为依据做最小本地修复；三者都没有或方案不适用则先不改，保持与 NewAPI 一致。参考版本不变（NewAPI `6370b2942`、Sub2API `5fc0e486c`、AxonHub `b8bb3421`），本批基于 Ren2Hub `67283b26c`，不改变已定价请求的扣费。
