@@ -460,6 +460,10 @@ type Message struct {
 	Reasoning        *string         `json:"reasoning,omitempty"`
 	ToolCalls        json.RawMessage `json:"tool_calls,omitempty"`
 	ToolCallId       string          `json:"tool_call_id,omitempty"`
+	// FunctionCall is the legacy assistant call that predates tool_calls. It
+	// has no call identifier; the following role=function message answers it
+	// by name.
+	FunctionCall json.RawMessage `json:"function_call,omitempty"`
 	// Tools carries Kimi K3 dynamic tool loading declarations on a system message.
 	// Same shape as the top-level tools array; passthrough-only for OpenAI-compatible upstreams.
 	Tools json.RawMessage `json:"tools,omitempty"`

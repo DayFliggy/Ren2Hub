@@ -9,6 +9,7 @@ import (
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	sharedgemini "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/shared/gemini"
+	"github.com/QuantumNous/new-api/relaykit/relayconvert/internal/toolconv"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/types"
 )
@@ -305,6 +306,29 @@ func (r *RequestRequirements) inspectToolSchema(schema any, path string) error {
 
 func (r *RequestRequirements) projectionLoss(code, path, message string, target types.RelayFormat) {
 	r.Diagnostics = append(r.Diagnostics, types.ConversionDiagnostic{Code: code, Path: path, Message: message, Severity: types.ConversionDiagnosticError, From: r.Format, To: target})
+}
+
+// inspectLegacyFunctionHistory declares legacy Chat function calls and results
+// that conversion cannot pair. Paired history converts as a tool exchange.
+func (r *RequestRequirements) inspectLegacyFunctionHistory(request any) error {
+	var messages []dto.Message
+	switch request := request.(type) {
+	case *dto.GeneralOpenAIRequest:
+		if request != nil {
+			messages = request.Messages
+		}
+	case dto.GeneralOpenAIRequest:
+		messages = request.Messages
+	}
+	diagnostics, err := toolconv.LegacyFunctionHistoryDiagnostics(messages)
+	if err != nil {
+		return err
+	}
+	for _, diagnostic := range diagnostics {
+		diagnostic.From = r.Format
+		r.Diagnostics = append(r.Diagnostics, diagnostic)
+	}
+	return nil
 }
 
 func (r *RequestRequirements) inspectSchemaProjection(original, converted any, path string, depth int) error {

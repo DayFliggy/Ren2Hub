@@ -277,7 +277,7 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 		}
 	}
 	c, diagnosticCollector := convdiag.WithCollector(c)
-	current, tools, err := toolconv.ExtractRequest(from, request)
+	current, tools, err := toolconv.ExtractRequest(from, target, request)
 	if err != nil {
 		return nil, err
 	}
