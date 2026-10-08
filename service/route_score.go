@@ -73,20 +73,16 @@ func OrderAutoRouteCandidates(candidates []RouteScoreCandidate, requestID string
 		if left.Candidate.Priority != right.Candidate.Priority {
 			return left.Candidate.Priority > right.Candidate.Priority
 		}
-		if left.Candidate.ErrorBandKnown != right.Candidate.ErrorBandKnown {
-			return left.Candidate.ErrorBandKnown
-		}
-		if left.Candidate.ErrorBandKnown && left.Candidate.ErrorBand != right.Candidate.ErrorBand {
-			return left.Candidate.ErrorBand < right.Candidate.ErrorBand
+		leftError, rightError := comparableRankBand(left.Candidate.ErrorBand, left.Candidate.ErrorBandKnown), comparableRankBand(right.Candidate.ErrorBand, right.Candidate.ErrorBandKnown)
+		if leftError != rightError {
+			return leftError < rightError
 		}
 		if left.Breakdown.LoadBucket != right.Breakdown.LoadBucket {
 			return left.Breakdown.LoadBucket < right.Breakdown.LoadBucket
 		}
-		if left.Candidate.TTFTBandKnown != right.Candidate.TTFTBandKnown {
-			return left.Candidate.TTFTBandKnown
-		}
-		if left.Candidate.TTFTBandKnown && left.Candidate.TTFTBand != right.Candidate.TTFTBand {
-			return left.Candidate.TTFTBand < right.Candidate.TTFTBand
+		leftTTFT, rightTTFT := comparableRankBand(left.Candidate.TTFTBand, left.Candidate.TTFTBandKnown), comparableRankBand(right.Candidate.TTFTBand, right.Candidate.TTFTBandKnown)
+		if leftTTFT != rightTTFT {
+			return leftTTFT < rightTTFT
 		}
 		if left.Candidate.Sticky != right.Candidate.Sticky {
 			return left.Candidate.Sticky
@@ -97,6 +93,17 @@ func OrderAutoRouteCandidates(candidates []RouteScoreCandidate, requestID string
 		return left.Candidate.ChannelID < right.Candidate.ChannelID
 	})
 	return ordered
+}
+
+// comparableRankBand ranks an unobserved band with good ones. A cold channel
+// below the sample floor must compete on load and weight; ordering it after
+// known bands would starve it of first attempts, and it could then never
+// collect the samples that make its band known.
+func comparableRankBand(band RouteRankBand, known bool) RouteRankBand {
+	if !known {
+		return RouteRankBandGood
+	}
+	return band
 }
 
 // ScoreRouteCandidates attaches observations in static priority order. Bands

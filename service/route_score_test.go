@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -113,6 +114,34 @@ func TestOrderAutoRouteCandidatesPrefersHealthyPeerWithinPriority(t *testing.T) 
 		{ChannelID: 2, Priority: 10, Weight: 1, HealthUsable: true, ErrorBand: RouteRankBandGood, ErrorBandKnown: true},
 	}, "request-1")
 	require.Len(t, scored, 2)
+	assert.Equal(t, 1, scored[0].Candidate.ChannelID)
+}
+
+// A channel below the sample floor competes as a healthy peer: it takes its
+// weight share of first attempts so its band can become known, it outranks a
+// known critical peer, and priority still bounds it.
+func TestOrderAutoRouteCandidatesGivesColdChannelItsWeightShare(t *testing.T) {
+	candidates := []RouteScoreCandidate{
+		{ChannelID: 1, Priority: 10, Weight: 1, HealthUsable: true, ErrorBand: RouteRankBandGood, ErrorBandKnown: true, TTFTBand: RouteRankBandGood, TTFTBandKnown: true},
+		{ChannelID: 2, Priority: 10, Weight: 1, HealthUsable: true},
+	}
+	counts := map[int]int{}
+	for index := range 1000 {
+		ordered := OrderAutoRouteCandidates(candidates, fmt.Sprintf("cold-%d", index))
+		counts[ordered[0].Candidate.ChannelID]++
+	}
+	assert.InDelta(t, 500, counts[2], 50)
+
+	scored := OrderAutoRouteCandidates([]RouteScoreCandidate{
+		{ChannelID: 1, Priority: 10, Weight: 1, HealthUsable: true, ErrorBand: RouteRankBandCritical, ErrorBandKnown: true},
+		{ChannelID: 2, Priority: 10, Weight: 1, HealthUsable: true},
+	}, "request-1")
+	assert.Equal(t, 2, scored[0].Candidate.ChannelID)
+
+	scored = OrderAutoRouteCandidates([]RouteScoreCandidate{
+		{ChannelID: 1, Priority: 20, Weight: 1, HealthUsable: true, ErrorBand: RouteRankBandCritical, ErrorBandKnown: true},
+		{ChannelID: 2, Priority: 10, Weight: 1, HealthUsable: true},
+	}, "request-1")
 	assert.Equal(t, 1, scored[0].Candidate.ChannelID)
 }
 
