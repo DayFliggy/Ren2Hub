@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -357,11 +358,23 @@ func DeleteToken(c *gin.Context) {
 func UpdateToken(c *gin.Context) {
 	userId := c.GetInt("id")
 	statusOnly := c.Query("status_only")
+	var fields map[string]json.RawMessage
+	if err := c.ShouldBindJSON(&fields); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	request := tokenRequest{}
-	err := c.ShouldBindJSON(&request)
+	encoded, err := common.Marshal(fields)
+	if err == nil {
+		err = common.Unmarshal(encoded, &request)
+	}
 	if err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	present := make(map[string]bool, len(fields))
+	for field := range fields {
+		present[field] = true
 	}
 	token := request.Token
 	setTokenAuditParams(c, model.AuditFields{"id": token.Id, "name": token.Name, "status": token.Status, "operation_id": request.OperationID, "expected_version": request.ExpectedVersion})
@@ -374,7 +387,7 @@ func UpdateToken(c *gin.Context) {
 		return
 	}
 	token.UserId = userId
-	err = token.UpdateFromRequest(request.OperationID, request.ExpectedVersion, statusOnly != "")
+	err = token.UpdateFromRequest(request.OperationID, request.ExpectedVersion, statusOnly != "", present)
 	if err != nil {
 		if errors.Is(err, model.ErrBillingEventConflict) || errors.Is(err, model.ErrBillingVersionConflict) {
 			c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})

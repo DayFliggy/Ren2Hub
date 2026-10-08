@@ -28,7 +28,7 @@ func TestTokenSettingsUpdateClearsAllowIps(t *testing.T) {
 
 	empty := ""
 	update := Token{Id: token.Id, UserId: user.Id, Name: token.Name, ExpiredTime: token.ExpiredTime, RemainQuota: token.RemainQuota, UnlimitedQuota: token.UnlimitedQuota, AllowIps: &empty}
-	require.NoError(t, update.UpdateFromRequest("", nil, false))
+	require.NoError(t, update.UpdateFromRequest("", nil, false, map[string]bool{"name": true, "expired_time": true, "available_quota": true, "unlimited_quota": true, "allow_ips": true}))
 	assert.Empty(t, update.GetIpLimits())
 
 	afterUpdate, err := GetTokenByKey(token.Key, false)

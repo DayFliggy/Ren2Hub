@@ -346,34 +346,54 @@ func (token *Token) InsertWithRouteMode(mode string) error {
 func (token *Token) Update() error { return token.UpdateWithBudget("", nil) }
 
 func (token *Token) UpdateWithBudget(operationID string, expectedVersion *int64) error {
-	return token.updateWithBudget(operationID, expectedVersion, "snapshot")
+	return token.updateWithBudget(operationID, expectedVersion, "snapshot", nil)
 }
 
 // UpdateFromRequest fingerprints only fields controlled by the HTTP command.
 // Later changes to untouched metadata or balances cannot invalidate its replay.
-func (token *Token) UpdateFromRequest(operationID string, expectedVersion *int64, statusOnly bool) error {
+// present names the JSON fields the request carried: an omitted setting or
+// budget field keeps its stored value, and only an explicit value (including
+// "" or null) changes it.
+func (token *Token) UpdateFromRequest(operationID string, expectedVersion *int64, statusOnly bool, present map[string]bool) error {
 	mode := "settings"
 	if statusOnly {
 		mode = "status"
+		if !present["status"] {
+			return errors.New("status is required")
+		}
 	}
-	return token.updateWithBudget(operationID, expectedVersion, mode)
+	return token.updateWithBudget(operationID, expectedVersion, mode, present)
 }
 
-func (token *Token) updateWithBudget(operationID string, expectedVersion *int64, mode string) error {
+func (token *Token) updateWithBudget(operationID string, expectedVersion *int64, mode string, present map[string]bool) error {
 	metadata := map[string]any{
 		"name": token.Name, "status": token.Status, "expired_time": token.ExpiredTime,
 		"model_limits_enabled": token.ModelLimitsEnabled, "model_limits": token.ModelLimits,
 		"allow_ips": token.AllowIps, "conversion_policy": token.ConversionPolicy,
 	}
-	available, unlimited := token.RemainQuota, token.UnlimitedQuota
+	// Nil budget targets mean "keep the stored value"; a pointer marshals like
+	// its value, so fingerprints of full requests are unchanged.
+	available, unlimited := &token.RemainQuota, &token.UnlimitedQuota
 	if mode == "settings" {
 		delete(metadata, "status")
 		if token.ConversionPolicy == "" {
 			delete(metadata, "conversion_policy")
 		}
+		for field := range metadata {
+			if !present[field] {
+				delete(metadata, field)
+			}
+		}
+		if !present["available_quota"] {
+			available = nil
+		}
+		if !present["unlimited_quota"] {
+			unlimited = nil
+		}
 	} else if mode == "status" {
 		metadata = map[string]any{"status": token.Status}
-		available, unlimited = 0, false
+		zeroQuota, noUnlimited := common.Quota(0), false
+		available, unlimited = &zeroQuota, &noUnlimited
 	}
 	err := BillingTransaction(nil, func(tx *gorm.DB) error {
 		var user User
@@ -388,9 +408,12 @@ func (token *Token) updateWithBudget(operationID string, expectedVersion *int64,
 			return errors.New("token owner mismatch")
 		}
 		token.Key = current.Key
-		targetAvailable, targetUnlimited := token.RemainQuota, token.UnlimitedQuota
-		if mode == "status" {
-			targetAvailable, targetUnlimited = current.RemainQuota, current.UnlimitedQuota
+		targetAvailable, targetUnlimited := current.RemainQuota, current.UnlimitedQuota
+		if mode != "status" && available != nil {
+			targetAvailable = *available
+		}
+		if mode != "status" && unlimited != nil {
+			targetUnlimited = *unlimited
 		}
 		budgetChanged := current.RemainQuota != targetAvailable || current.UnlimitedQuota != targetUnlimited
 		if operationID != "" {
@@ -399,8 +422,8 @@ func (token *Token) updateWithBudget(operationID string, expectedVersion *int64,
 			}
 			fingerprint, err := billingEventFingerprint(struct {
 				TokenID   int
-				Available common.Quota
-				Unlimited bool
+				Available *common.Quota
+				Unlimited *bool
 				Version   int64
 				Metadata  map[string]any
 				Mode      string

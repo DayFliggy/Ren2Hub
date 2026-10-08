@@ -536,6 +536,55 @@ func TestUpdateIndebtedTokenMetadataPreservesDebt(t *testing.T) {
 	require.EqualValues(t, -5, token.RemainQuota)
 }
 
+// A settings PUT changes only the fields it carries. An API client that omits
+// allow_ips, model limits or expired_time must not lift the IP allowlist,
+// widen the model restriction or expire the token; "" still clears the list.
+func TestUpdateTokenKeepsOmittedSettings(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	token := seedToken(t, db, 1, "restricted", "omitted-settings-key")
+	require.NoError(t, db.Model(token).Updates(map[string]any{
+		"allow_ips": "192.0.2.10", "model_limits_enabled": true, "model_limits": "gpt-5", "expired_time": int64(4102444800),
+	}).Error)
+	update := func(body map[string]any) {
+		t.Helper()
+		body["id"] = token.Id
+		ctx, recorder := newAuthenticatedContext(t, http.MethodPut, "/api/token/", body, 1)
+		UpdateToken(ctx)
+		require.True(t, decodeAPIResponse(t, recorder).Success, recorder.Body.String())
+		require.NoError(t, db.First(token, token.Id).Error)
+	}
+
+	update(map[string]any{"name": "renamed", "available_quota": "100", "unlimited_quota": true})
+	require.Equal(t, "renamed", token.Name)
+	require.NotNil(t, token.AllowIps)
+	require.Equal(t, "192.0.2.10", *token.AllowIps)
+	require.True(t, token.ModelLimitsEnabled)
+	require.Equal(t, "gpt-5", token.ModelLimits)
+	require.EqualValues(t, 4102444800, token.ExpiredTime)
+	require.True(t, token.UnlimitedQuota)
+	require.EqualValues(t, 100, token.RemainQuota)
+
+	update(map[string]any{"allow_ips": "198.51.100.0/24"})
+	require.NotNil(t, token.AllowIps)
+	require.Equal(t, "198.51.100.0/24", *token.AllowIps)
+	require.Equal(t, "renamed", token.Name)
+	require.True(t, token.UnlimitedQuota)
+
+	update(map[string]any{"allow_ips": ""})
+	require.Empty(t, token.GetIpLimits())
+	require.True(t, token.ModelLimitsEnabled)
+}
+
+func TestUpdateTokenStatusOnlyRequiresStatus(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	token := seedToken(t, db, 1, "status-token", "status-required-key")
+	ctx, recorder := newAuthenticatedContext(t, http.MethodPut, "/api/token/?status_only=true", map[string]any{"id": token.Id}, 1)
+	UpdateToken(ctx)
+	require.False(t, decodeAPIResponse(t, recorder).Success)
+	require.NoError(t, db.First(token, token.Id).Error)
+	require.Equal(t, common.TokenStatusEnabled, token.Status)
+}
+
 func TestUpdateTokenReplayDoesNotDependOnUntouchedState(t *testing.T) {
 	db := setupTokenControllerTestDB(t)
 	token := seedToken(t, db, 1, "original", "replay-controller-key")
