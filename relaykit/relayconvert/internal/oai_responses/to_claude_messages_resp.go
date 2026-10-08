@@ -26,6 +26,7 @@ func ResponsesResponseToClaudeMessagesResponse(resp *dto.OpenAIResponsesResponse
 		Usage: sharedclaude.UsageFromOpenAI(usage),
 	}
 	sawToolCall := false
+	sawRefusal := false
 	for index := range resp.Output {
 		output := resp.Output[index]
 		if output.Type == responsesOutputTypeMessage && output.Role != "" && output.Role != "assistant" {
@@ -41,14 +42,22 @@ func ResponsesResponseToClaudeMessagesResponse(resp *dto.OpenAIResponsesResponse
 			}
 		case responsesOutputTypeMessage:
 			for _, content := range output.Content {
-				if content.Type != "output_text" {
-					continue
+				switch content.Type {
+				case "output_text":
+					block := dto.ClaudeMediaMessage{Type: "text", Text: kitutil.GetPointer(content.Text)}
+					if citations := responsesAnnotationsToClaude(content.Annotations, content.Text); len(citations) > 0 {
+						block.Citations, _ = kitutil.Marshal(citations)
+					}
+					claudeResponse.Content = append(claudeResponse.Content, block)
+				case "refusal":
+					// Claude has no refusal content block; its public shape for a
+					// refusal is the explanation as text plus stop_reason refusal.
+					if content.Refusal == nil || *content.Refusal == "" {
+						continue
+					}
+					sawRefusal = true
+					claudeResponse.Content = append(claudeResponse.Content, dto.ClaudeMediaMessage{Type: "text", Text: kitutil.GetPointer(*content.Refusal)})
 				}
-				block := dto.ClaudeMediaMessage{Type: "text", Text: kitutil.GetPointer(content.Text)}
-				if citations := responsesAnnotationsToClaude(content.Annotations, content.Text); len(citations) > 0 {
-					block.Citations, _ = kitutil.Marshal(citations)
-				}
-				claudeResponse.Content = append(claudeResponse.Content, block)
 			}
 		case responsesOutputTypeFunctionCall, responsesOutputTypeCustomToolCall:
 			sawToolCall = true
@@ -67,7 +76,7 @@ func ResponsesResponseToClaudeMessagesResponse(resp *dto.OpenAIResponsesResponse
 	if len(claudeResponse.Content) == 0 {
 		claudeResponse.Content = []dto.ClaudeMediaMessage{{Type: "text", Text: kitutil.GetPointer("")}}
 	}
-	claudeResponse.StopReason = responsesClaudeStopReason(resp, sawToolCall)
+	claudeResponse.StopReason = responsesClaudeStopReason(resp, sawToolCall, sawRefusal)
 	return claudeResponse, usage, nil
 }
 
@@ -82,7 +91,12 @@ func responsesArgumentsToClaudeInput(arguments string) map[string]any {
 	return map[string]any{"input": arguments}
 }
 
-func responsesClaudeStopReason(resp *dto.OpenAIResponsesResponse, sawToolCall bool) string {
+func responsesClaudeStopReason(resp *dto.OpenAIResponsesResponse, sawToolCall bool, sawRefusal bool) string {
+	// A refusal explains why the turn ended, so it outranks the tool calls or
+	// output limit that may accompany it.
+	if sawRefusal {
+		return "refusal"
+	}
 	if finishReason, ok := ResponsesFinishReasonFromStatus(resp); ok {
 		return reasonmap.OpenAIFinishReasonToClaudeStopReason(finishReason)
 	}

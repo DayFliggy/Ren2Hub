@@ -37,9 +37,9 @@ func InspectResponse(from types.RelayFormat, to types.RelayFormat, response any)
 	case dto.OpenAIResponsesResponse:
 		diagnostics = inspectOpenAIResponsesResponse(&value, to)
 	case *dto.ResponsesStreamResponse:
-		diagnostics = inspectOpenAIResponsesStreamResponse(value)
+		diagnostics = inspectOpenAIResponsesStreamResponse(value, to)
 	case dto.ResponsesStreamResponse:
-		diagnostics = inspectOpenAIResponsesStreamResponse(&value)
+		diagnostics = inspectOpenAIResponsesStreamResponse(&value, to)
 	case *dto.GeminiChatResponse:
 		diagnostics = inspectGeminiResponse(value, to)
 	case dto.GeminiChatResponse:
@@ -281,6 +281,11 @@ func inspectOpenAIResponsesResponse(response *dto.OpenAIResponsesResponse, to ty
 		return nil
 	}
 	var diagnostics []types.ConversionDiagnostic
+	if to == types.RelayFormatClaude {
+		for _, path := range responsesRefusalPaths(response.Output) {
+			diagnostics = append(diagnostics, responsesRefusalReduced(path))
+		}
+	}
 	for index := range response.Output {
 		output := &response.Output[index]
 		if !isResponsesHostedOutput(output.Type) {
@@ -373,7 +378,7 @@ func inspectOpenAIResponsesResponse(response *dto.OpenAIResponsesResponse, to ty
 	return diagnostics
 }
 
-func inspectOpenAIResponsesStreamResponse(response *dto.ResponsesStreamResponse) []types.ConversionDiagnostic {
+func inspectOpenAIResponsesStreamResponse(response *dto.ResponsesStreamResponse, to types.RelayFormat) []types.ConversionDiagnostic {
 	if response == nil {
 		return nil
 	}
@@ -397,7 +402,48 @@ func inspectOpenAIResponsesStreamResponse(response *dto.ResponsesStreamResponse)
 			fmt.Sprintf("OpenAI Responses hosted-tool stream event %q has no semantic target-protocol mapping", eventType),
 		)}
 	}
-	return nil
+	if to != types.RelayFormatClaude {
+		return nil
+	}
+	// Deltas, item snapshots and the terminal snapshot repeat one refusal. The
+	// stable path lets stream de-duplication report it once.
+	refusal := eventType == "response.refusal.delta" && response.Delta != "" ||
+		eventType == "response.refusal.done" && response.Refusal != nil && *response.Refusal != ""
+	if response.Item != nil && len(responsesRefusalPaths([]dto.ResponsesOutput{*response.Item})) > 0 {
+		refusal = true
+	}
+	if response.Response != nil && len(responsesRefusalPaths(response.Response.Output)) > 0 {
+		refusal = true
+	}
+	if !refusal {
+		return nil
+	}
+	return []types.ConversionDiagnostic{responsesRefusalReduced("refusal")}
+}
+
+// responsesRefusalPaths locates the non-empty refusal parts of Responses
+// message outputs, which a Claude target can only deliver as text.
+func responsesRefusalPaths(outputs []dto.ResponsesOutput) []string {
+	var paths []string
+	for outputIndex := range outputs {
+		if outputs[outputIndex].Type != "message" {
+			continue
+		}
+		for contentIndex, content := range outputs[outputIndex].Content {
+			if content.Type == "refusal" && content.Refusal != nil && *content.Refusal != "" {
+				paths = append(paths, fmt.Sprintf("output[%d].content[%d].refusal", outputIndex, contentIndex))
+			}
+		}
+	}
+	return paths
+}
+
+func responsesRefusalReduced(path string) types.ConversionDiagnostic {
+	return responsePresentationLoss(
+		path,
+		"responses_refusal_reduced",
+		"Claude has no refusal content block; the refusal is delivered as a text block with stop_reason refusal",
+	)
 }
 
 func isResponsesHostedOutput(outputType string) bool {
