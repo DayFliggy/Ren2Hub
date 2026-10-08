@@ -302,8 +302,9 @@ func (c *ImageGenerationCallCounter) Commit(info *RelayInfo) {
 }
 
 // IsNonBillableResponsesStatus reports response statuses that do not complete
-// the request. A terminal with such a status does not confirm completed usage
-// and bills no tool call except image_generation outputs that completed.
+// the request. Such a terminal does not confirm completed usage, so its output
+// snapshot adds no tool calls; calls and images confirmed earlier in the
+// stream stay billed.
 func IsNonBillableResponsesStatus(status []byte) bool {
 	if len(status) == 0 {
 		return false

@@ -51,8 +51,10 @@ func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse, 
 		if !a.imageCommitted {
 			// Images that completed before any terminal, failed ones included,
 			// were delivered and stay billable; the counter still skips
-			// unfinished image items. Other tool calls bill only on a completed
-			// response.
+			// unfinished image items. Web, file and function calls already
+			// counted from output_item.done stay counted on every terminal, as
+			// in NewAPI; the terminal snapshot adds the ones not yet seen only
+			// when the response completed.
 			completed := (event.Type == "response.completed" || event.Type == "response.done") &&
 				(event.Response == nil || !relaycommon.IsNonBillableResponsesStatus(event.Response.Status))
 			if event.Response != nil {
