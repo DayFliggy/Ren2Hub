@@ -62,14 +62,14 @@ func MergeUsageNonZero(current *Usage, incoming *Usage) *Usage {
 	if incoming.OutputTokensDetails != nil {
 		// output_tokens_details is the native alias of completion_tokens_details.
 		// Its plain integers cannot tell an explicit zero from an omitted field,
-		// so it follows the same later-non-zero rule, and both aliases keep
-		// the same merged counts.
-		if current.OutputTokensDetails == nil {
-			details := current.CompletionTokenDetails
-			current.OutputTokensDetails = &details
-		}
-		mergeOutputTokenDetails(current.OutputTokensDetails, *incoming.OutputTokensDetails)
+		// so it follows the same later-non-zero rule.
 		mergeOutputTokenDetails(&current.CompletionTokenDetails, *incoming.OutputTokensDetails)
+	}
+	// Both aliases carry the same merged counts whichever one the incoming
+	// usage reported, as NewAPI's ApplyResponsesUsage keeps them.
+	if current.CompletionTokenDetails != (OutputTokenDetails{}) {
+		details := current.CompletionTokenDetails
+		current.OutputTokensDetails = &details
 	}
 	if incoming.UsageSemantic != "" {
 		current.UsageSemantic = incoming.UsageSemantic

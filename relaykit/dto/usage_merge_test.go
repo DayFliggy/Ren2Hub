@@ -48,6 +48,13 @@ func TestUsageMergeOutputDetailsLaterNonZeroWins(t *testing.T) {
 			incoming: &Usage{OutputTokensDetails: &OutputTokenDetails{}},
 			want:     OutputTokenDetails{ImageTokens: 5},
 		},
+		{
+			// A later chat-style snapshot must not leave the native alias stale.
+			name:     "chat details update an existing native alias",
+			current:  &Usage{CompletionTokenDetails: OutputTokenDetails{ReasoningTokens: 40}, OutputTokensDetails: &OutputTokenDetails{ReasoningTokens: 40}},
+			incoming: &Usage{CompletionTokenDetails: OutputTokenDetails{ReasoningTokens: 60, TextTokens: 5}},
+			want:     OutputTokenDetails{ReasoningTokens: 60, TextTokens: 5},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
