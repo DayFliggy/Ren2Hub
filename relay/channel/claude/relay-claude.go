@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"cmp"
 	"io"
 	"net/http"
 	"strings"
@@ -169,16 +170,17 @@ func countClaudeStreamBillableTools(info *relaycommon.RelayInfo, claudeResponse 
 
 // recordClaudeServerToolUse bills the server tool requests Anthropic reports
 // in usage.server_tool_use. A declared web_fetch, code_execution or tool_search
-// tool requires its own price before send (helper.PricingRequirementsFromBody).
+// tool requires its own price before send (helper.PricingRequirementsFromBody);
+// a channel that bills search under its own key sets WebSearchBillingKey.
 func recordClaudeServerToolUse(info *relaycommon.RelayInfo, serverToolUse *dto.ClaudeServerToolUse) {
 	if info == nil || serverToolUse == nil {
 		return
 	}
 	for name, count := range map[string]int{
-		dto.BuildInToolWebSearch: serverToolUse.WebSearchRequests,
-		"web_fetch":              serverToolUse.WebFetchRequests,
-		"code_execution":         serverToolUse.CodeExecutionRequests,
-		"tool_search":            serverToolUse.ToolSearchRequests,
+		cmp.Or(info.WebSearchBillingKey, dto.BuildInToolWebSearch): serverToolUse.WebSearchRequests,
+		"web_fetch":      serverToolUse.WebFetchRequests,
+		"code_execution": serverToolUse.CodeExecutionRequests,
+		"tool_search":    serverToolUse.ToolSearchRequests,
 	} {
 		if count > 0 {
 			info.SetBillableToolCount(name, count)

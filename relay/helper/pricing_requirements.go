@@ -74,6 +74,14 @@ func PricingRequirementsFromBody(info *relaycommon.RelayInfo, body []byte) (bill
 				}
 			}
 		}
+		// The channel bills this hosted tool under its own price keys as well.
+		for prefix, keys := range info.VendorToolPriceKeys {
+			if strings.HasPrefix(kind, prefix) {
+				for _, key := range keys {
+					dimensions["tool:"+key] = true
+				}
+			}
+		}
 		for _, name := range []string{"googleSearch", "google_search", "googleSearchRetrieval", "google_search_retrieval"} {
 			if _, present := tool[name]; present {
 				dimensions["tool:"+dto.BuildInToolGoogleSearch] = true

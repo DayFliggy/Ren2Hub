@@ -2,11 +2,13 @@ package common
 
 import (
 	"github.com/QuantumNous/new-api/pkg/billing"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -131,6 +133,39 @@ func TestSetBillableToolCount(t *testing.T) {
 			assert.Equal(t, tt.want, builtInToolCounts(info))
 		})
 	}
+}
+
+// Vendor counts replace protocol items for the keys the reader names, and the
+// reader belongs to one channel attempt: InitChannelMeta for the next attempt
+// drops the hooks and the keys the reader created, so the declared web_search
+// key steers web_search_call items on the next channel again.
+func TestVendorToolUsageBelongsToOneChannelAttempt(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/responses", nil)
+	info := &RelayInfo{OriginModelName: "gpt-5.1", StartTime: time.Now(), ResponsesUsageInfo: &ResponsesUsageInfo{BuiltInTools: map[string]*BuildInToolInfo{
+		dto.BuildInToolWebSearch: {ToolName: dto.BuildInToolWebSearch},
+	}}}
+	info.CountBillableToolCall(dto.BuildInCallWebSearchCall, "")
+	info.ApplyVendorToolUsage([]byte(`{"tool_usage":{}}`))
+	assert.Equal(t, map[string]int{dto.BuildInToolWebSearch: 1}, builtInToolCounts(info), "no reader, no change")
+
+	info.VendorToolUsage = func([]byte) map[string]int {
+		return map[string]int{"bing_web_search": 5, dto.BuildInToolWebSearch: 0, dto.BuildInToolWebSearchPreview: 0}
+	}
+	info.VendorToolPriceKeys = map[string][]string{dto.BuildInToolWebSearch: {"bing_web_search"}}
+	info.WebSearchBillingKey = "search_strategy_agent"
+	info.ApplyVendorToolUsage([]byte(`{"tool_usage":{}}`))
+	assert.Equal(t, map[string]int{"bing_web_search": 5, dto.BuildInToolWebSearch: 0, dto.BuildInToolWebSearchPreview: 0}, builtInToolCounts(info))
+
+	require.NoError(t, info.ResetAttemptState())
+	info.InitChannelMeta(c)
+	assert.Nil(t, info.VendorToolUsage)
+	assert.Nil(t, info.VendorToolPriceKeys)
+	assert.Empty(t, info.WebSearchBillingKey)
+	assert.Equal(t, map[string]int{dto.BuildInToolWebSearch: 0}, builtInToolCounts(info))
+	info.CountBillableToolCall(dto.BuildInCallWebSearchCall, "")
+	assert.Equal(t, map[string]int{dto.BuildInToolWebSearch: 1}, builtInToolCounts(info))
 }
 
 func builtInToolCounts(info *RelayInfo) map[string]int {

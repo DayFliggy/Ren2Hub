@@ -72,8 +72,8 @@ func TestBinaryAudioPerCallSettlementRequiresCompleteTransport(t *testing.T) {
 func TestResponsesTerminalZeroIsActualAndPartialCannotHideInSidecar(t *testing.T) {
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "test"}}
 	a := NewResponsesUsageAccumulator(info)
-	a.Observe(&dto.ResponsesStreamResponse{Type: "response.output_text.delta", Delta: "text"})
-	a.Observe(&dto.ResponsesStreamResponse{Type: "response.completed", Response: &dto.OpenAIResponsesResponse{Status: []byte(`"completed"`), Usage: &dto.Usage{}}})
+	a.Observe(&dto.ResponsesStreamResponse{Type: "response.output_text.delta", Delta: "text"}, nil)
+	a.Observe(&dto.ResponsesStreamResponse{Type: "response.completed", Response: &dto.OpenAIResponsesResponse{Status: []byte(`"completed"`), Usage: &dto.Usage{}}}, nil)
 	usage := a.Finish()
 	require.NotNil(t, usage)
 	assert.Zero(t, usage.CompletionTokens)

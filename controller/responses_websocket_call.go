@@ -421,7 +421,7 @@ func (s *responsesWSSession) readCall(c *gin.Context, state *responsesWSCallStat
 				}
 				controlSent = true
 			}
-			accumulator.Observe(&event.ResponsesStreamResponse)
+			accumulator.Observe(&event.ResponsesStreamResponse, incoming.body)
 			termination := relayconvert.TerminationFromResponse(&event.ResponsesStreamResponse)
 			if termination.IsTerminal() {
 				c.Set("response_termination", termination)

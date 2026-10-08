@@ -25,7 +25,7 @@ func TestResponsesUsagePresenceSurvivesConversionAndTerminal(t *testing.T) {
 			require.NoError(t, common.Unmarshal([]byte(`{"type":"response.completed","response":{"usage":`+test.raw+`}}`), &event))
 			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
 			accounting := NewResponsesUsageAccumulator(info)
-			accounting.Observe(&event)
+			accounting.Observe(&event, nil)
 			facts := NormalizedBillingUsage(accounting.Finish(), "openai")
 			require.Equal(t, test.complete, facts.Complete)
 		})
@@ -35,15 +35,15 @@ func TestResponsesUsagePresenceSurvivesConversionAndTerminal(t *testing.T) {
 func TestResponsesUsageFinishIsIdempotent(t *testing.T) {
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-4o"}}
 	accounting := NewResponsesUsageAccumulator(info)
-	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.output_item.done", Item: &dto.ResponsesOutput{Type: dto.ResponsesOutputTypeImageGenerationCall, ID: "image_1", Status: "completed", Result: "image"}})
-	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.output_text.delta", Delta: "The generated image is ready."})
+	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.output_item.done", Item: &dto.ResponsesOutput{Type: dto.ResponsesOutputTypeImageGenerationCall, ID: "image_1", Status: "completed", Result: "image"}}, nil)
+	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.output_text.delta", Delta: "The generated image is ready."}, nil)
 	usage := accounting.Finish()
 	require.Positive(t, usage.CompletionTokens)
 	assert.Equal(t, "estimated_partial", usage.UsageSource)
 	require.NotNil(t, usage.BillingUsage)
 	assert.True(t, usage.BillingUsage.Estimated)
 	assert.Equal(t, usage.CompletionTokens, effectiveBillingUsage(usage).CompletionTokens)
-	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.failed"})
+	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.failed"}, nil)
 	assert.Same(t, usage, accounting.Finish())
 	assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 }
@@ -66,7 +66,7 @@ func TestResponsesTerminalImageBilling(t *testing.T) {
 		t.Run(terminal.eventType+"/"+terminal.status, func(t *testing.T) {
 			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.1"}}
 			accounting := NewResponsesUsageAccumulator(info)
-			accounting.Observe(&dto.ResponsesStreamResponse{Type: dto.ResponsesOutputTypeItemDone, Item: &image})
+			accounting.Observe(&dto.ResponsesStreamResponse{Type: dto.ResponsesOutputTypeItemDone, Item: &image}, nil)
 			accounting.Observe(&dto.ResponsesStreamResponse{Type: terminal.eventType, Response: &dto.OpenAIResponsesResponse{
 				Status: []byte(`"` + terminal.status + `"`),
 				Output: []dto.ResponsesOutput{
@@ -74,7 +74,7 @@ func TestResponsesTerminalImageBilling(t *testing.T) {
 					{ID: "image-2", Type: dto.ResponsesOutputTypeImageGenerationCall, Status: "in_progress", Result: "partial-data"},
 					{ID: "search-1", Type: dto.BuildInCallWebSearchCall, Status: "completed"},
 				},
-			}})
+			}}, nil)
 			accounting.Finish()
 			assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 			searches := 0
@@ -89,8 +89,8 @@ func TestResponsesTerminalImageBilling(t *testing.T) {
 func TestResponsesUsageEstimateRefreshesNativeBillingSnapshot(t *testing.T) {
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-4o"}}
 	accounting := NewResponsesUsageAccumulator(info)
-	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.created", Response: &dto.OpenAIResponsesResponse{Usage: &dto.Usage{InputTokens: 100, InputTokensDetails: &dto.InputTokenDetails{CachedTokens: 10, AudioTokens: 2}}}})
-	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.output_text.delta", Delta: "An interrupted response with a real output."})
+	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.created", Response: &dto.OpenAIResponsesResponse{Usage: &dto.Usage{InputTokens: 100, InputTokensDetails: &dto.InputTokenDetails{CachedTokens: 10, AudioTokens: 2}}}}, nil)
+	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.output_text.delta", Delta: "An interrupted response with a real output."}, nil)
 	usage := accounting.Finish()
 	require.Positive(t, usage.CompletionTokens)
 	require.NotNil(t, usage.BillingUsage)
@@ -106,8 +106,8 @@ func TestResponsesUsagePreservesAuthoritativeForeignBillingSnapshot(t *testing.T
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-4o"}}
 	accounting := NewResponsesUsageAccumulator(info)
 	authoritative := dto.NewClaudeMessagesBillingUsage(&dto.ClaudeUsage{InputTokens: 10, OutputTokens: 12, CacheReadInputTokens: 20})
-	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.created", Response: &dto.OpenAIResponsesResponse{Usage: &dto.Usage{InputTokens: 30, BillingUsage: authoritative}}})
-	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.output_text.delta", Delta: "converted output"})
+	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.created", Response: &dto.OpenAIResponsesResponse{Usage: &dto.Usage{InputTokens: 30, BillingUsage: authoritative}}}, nil)
+	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.output_text.delta", Delta: "converted output"}, nil)
 	usage := accounting.Finish()
 	assert.Equal(t, authoritative, usage.BillingUsage)
 	assert.NotSame(t, authoritative, usage.BillingUsage)

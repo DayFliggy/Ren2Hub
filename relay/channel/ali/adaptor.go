@@ -72,6 +72,7 @@ func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dt
 
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayInfo, req *dto.ClaudeRequest) (any, error) {
 	if supportsAliAnthropicMessages(info.UpstreamModelName) {
+		ensureAnthropicWebSearchEntrypoint(req)
 		return req, nil
 	}
 
@@ -92,6 +93,14 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
 	a.IsSyncImageModel = isSyncImageModel(info.UpstreamModelName) &&
 		(info.RelayMode != constant.RelayModeImagesEdits || !isWanModel(info.UpstreamModelName))
+	if info.RelayMode == constant.RelayModeResponses {
+		info.VendorToolUsage = aliResponsesToolUsage
+		info.VendorToolPriceKeys = aliWebSearchToolPriceKeys
+	}
+	if info.RelayFormat == types.RelayFormatClaude && supportsAliAnthropicMessages(info.UpstreamModelName) {
+		info.WebSearchBillingKey = aliSearchAgentKey
+		info.VendorToolPriceKeys = aliWebSearchToolPriceKeys
+	}
 }
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
@@ -110,7 +119,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		case constant.RelayModeRerank:
 			fullRequestURL = fmt.Sprintf("%s/api/v1/services/rerank/text-rerank/text-rerank", info.ChannelBaseUrl)
 		case constant.RelayModeResponses:
-			fullRequestURL = fmt.Sprintf("%s/api/v2/apps/protocols/compatible-mode/v1/responses", info.ChannelBaseUrl)
+			fullRequestURL = fmt.Sprintf("%s/compatible-mode/v1/responses", info.ChannelBaseUrl)
 		case constant.RelayModeImagesGenerations:
 			if isSyncImageModel(info.UpstreamModelName) {
 				fullRequestURL = fmt.Sprintf("%s/api/v1/services/aigc/multimodal-generation/generation", info.ChannelBaseUrl)

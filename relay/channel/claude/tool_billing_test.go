@@ -94,6 +94,15 @@ func TestClaudeServerToolUseKeys(t *testing.T) {
 	data := []byte(`{"type":"message","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":1,"output_tokens":1,"server_tool_use":{"web_search_requests":1,"web_fetch_requests":2,"code_execution_requests":3,"tool_search_requests":4}}}`)
 	require.Nil(t, HandleClaudeResponseData(c, nonStream, &ClaudeResponseInfo{Usage: &dto.Usage{}}, nil, data))
 	assert.Equal(t, want, claudeToolCounts(nonStream))
+
+	// A channel whose Anthropic-compatible endpoint bills search under its own
+	// price key re-keys web_search_requests only.
+	vendor := &relaycommon.RelayInfo{OriginModelName: "qwen3.8-flash", WebSearchBillingKey: "search_strategy_agent"}
+	countClaudeStreamBillableTools(vendor, &dto.ClaudeResponse{
+		Type:  "message_delta",
+		Usage: &dto.ClaudeUsage{ServerToolUse: &dto.ClaudeServerToolUse{WebSearchRequests: 2, WebFetchRequests: 1}},
+	})
+	assert.Equal(t, map[string]int{"search_strategy_agent": 2, "web_fetch": 1}, claudeToolCounts(vendor))
 }
 
 func claudeToolCounts(info *relaycommon.RelayInfo) map[string]int {

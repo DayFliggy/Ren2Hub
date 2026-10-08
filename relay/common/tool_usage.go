@@ -153,6 +153,24 @@ func (info *RelayInfo) SetBillableToolCount(name string, count int) {
 	info.ResponsesUsageInfo.BuiltInTools[name] = &BuildInToolInfo{ToolName: name, CallCount: count}
 }
 
+// ApplyVendorToolUsage writes the vendor-billed counts of one upstream
+// response into BuiltInTools. Protocol items counted earlier for the same key
+// are replaced; keys the vendor does not mention are kept. Keys it creates
+// belong to the current channel attempt (see InitChannelMeta).
+func (info *RelayInfo) ApplyVendorToolUsage(raw []byte) {
+	if info == nil || info.VendorToolUsage == nil || len(raw) == 0 {
+		return
+	}
+	info.ensureBuiltInTools()
+	for name, count := range info.VendorToolUsage(raw) {
+		_, existed := info.ResponsesUsageInfo.BuiltInTools[name]
+		info.SetBillableToolCount(name, count)
+		if _, exists := info.ResponsesUsageInfo.BuiltInTools[name]; exists && !existed {
+			info.vendorToolKeys = append(info.vendorToolKeys, name)
+		}
+	}
+}
+
 func (info *RelayInfo) ensureBuiltInTools() {
 	if info.ResponsesUsageInfo == nil {
 		info.ResponsesUsageInfo = &ResponsesUsageInfo{}

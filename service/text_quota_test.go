@@ -95,6 +95,24 @@ func TestTextToolQuoteBillsZeroTokenUsageAndFrozenPrices(t *testing.T) {
 	require.ErrorContains(t, summary.PricingError, "missing price")
 }
 
+// Vendor readers write explicit zeros under the protocol search keys to
+// silence counted items. A zero count needs no price: settlement succeeds with
+// only the vendor key priced, and the zero keys never become quantities.
+func TestTextToolQuoteIgnoresZeroCountWithoutPrice(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := quotedTextInfo(t, billing.PricingValues{"ModelPrice": 0.0}, billing.UnitPrice{Quantity: "tool:bing_web_search", Unit: "per_thousand_calls", Price: "14"})
+	info.RelayMode = relayconstant.RelayModeResponses
+	info.SetBillableToolCount("bing_web_search", 5)
+	info.SetBillableToolCount(dto.BuildInToolWebSearch, 0)
+	info.SetBillableToolCount(dto.BuildInToolWebSearchPreview, 0)
+	summary := calculateTextQuotaSummary(ctx, info, &dto.Usage{})
+	require.NoError(t, summary.PricingError)
+	assert.Equal(t, 35000, summary.Quota)
+	assert.Equal(t, "5", info.PriceData.Usage.Quantities["tool:bing_web_search"])
+	assert.NotContains(t, info.PriceData.Usage.Quantities, "tool:web_search")
+	assert.NotContains(t, info.PriceData.Usage.Quantities, "tool:web_search_preview")
+}
+
 // Every recorded tool count is bounded by MaxBillableToolCallCount at
 // settlement, whatever recorded it.
 func TestTextToolQuoteClampsCallCount(t *testing.T) {

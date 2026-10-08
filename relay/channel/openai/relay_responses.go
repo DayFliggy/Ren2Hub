@@ -48,6 +48,8 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			info.ObserveBillableToolCall(&output, &i)
 		}
 	}
+	// Vendor counts replace the tool items counted above under the same keys.
+	info.ApplyVendorToolUsage(responseBody)
 
 	// Failed and cancelled responses returned above; completed images of an
 	// incomplete response were delivered and bill like any other.
@@ -75,7 +77,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			sr.Error(err)
 			return
 		}
-		accounting.Observe(&event)
+		accounting.Observe(&event, common.StringToByteSlice(data))
 		terminal := relayconvert.TerminationFromResponse(&event)
 		if terminal.IsTerminal() {
 			c.Set("response_termination", terminal)
