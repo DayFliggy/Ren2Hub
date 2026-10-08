@@ -2,6 +2,25 @@
 
 本账本的实施/验证段记录提交授权前的本地验收快照；其中 `candidate_sha=null` 指该快照。后续源码提交、服务器候选和正式切换由工作区服务器档案与实际发布记录另行追踪，不能把本地通过解释为已经部署。
 
+## 2026-10-08 遗留问题修复（第三批）
+
+用户要求以 NewAPI 上游实现为主、AxonHub 为辅修复前两批遗留问题，并批准会改变扣费的工具计费与 xAI 插件。窗口不变：NewAPI `bb28f2cc` → `45094bdf`、Sub2API 止于 `745ff1d3`、AxonHub 止于 `81e519e9`。本批基于 Ren2Hub `7363f3eaf`。生产只读核查：当前没有任何渠道、阿里渠道日志和已保存的工具价格，本批计费变化不影响现有流量。
+
+| source_project / source_ref | category / priority / status | local_scope / contract | test_commands / validation | risk / follow_up |
+| --- | --- | --- | --- | --- |
+| NewAPI `acb347a19`（工具计数） | 计费 / P2 / 已吸收（改变扣费） | `relay/common/tool_usage.go` 增加 `SetBillableToolCount`、`ApplyVendorToolUsage`、`QuotePricesTool`，保留字集合扩展为协议内置键加 `web_fetch`、`code_execution`、`tool_search`、`bing_web_search`、`x_search_posts`、`x_search_profiles`、`search_strategy_agent`（静态，不随运营价格变化）；结算时单个工具计数封顶 10,000 并记警告，图片仍按超过 128 判为无效；Claude `web_search` 与 Gemini `google_search` 计数从 gin 上下文移入 `BuiltInTools`，重试换渠道不再继承上一次尝试的搜索次数。不移植上游预置价格、`IsBuiltInToolPriceKey`、`GetToolPriceForModel`：本地价格起始为空、缺价发送前拒绝 | `go test -timeout 60s ./relay/common/ ./relay/helper/ ./service/ ./relay/channel/claude/ ./relay/channel/gemini/ ./relay/` | 客户端同名函数不再按保留键计费 |
+| NewAPI `acb347a19`（Claude 服务端工具） | 计费 / P2 / 已吸收（本地合同） | `server_tool_use` 的 `web_fetch`、`code_execution`、`tool_search` 次数按各自键计费，但仅在冻结报价为该键定价时计入；Claude 线格式声明这三类工具时发送前要求定价（明确 0 有效）。`web_search_20260209`/`web_fetch_20260209` 内部使用代码执行且官方要求不另声明，未定价的内部用量不计费也不会让结算失败 | `TestClaudeServerToolUseKeys`（含未定价内部 code_execution 不计入）；`pricing_requirements_test.go` | 运营为 `code_execution` 定价后，动态过滤搜索的内部代码执行也会计费，与上游一致 |
+| NewAPI `acb347a19`（图片终态） | 计费 / P2 / 已吸收（改变扣费） | 已完成的 `image_generation` 在流式 failed/incomplete/cancelled/error 终态与非流式 `incomplete` 也计费；未完成（`in_progress`/`partial`）仍不计；网页/文件/函数调用仍只在 completed 终态计入。保留本地去重别名、`in_progress` 排除与超过 128 判无效；删除 `ImageGenerationCallCounter.Reset` | `TestResponsesTerminalImageBilling`；`relay_responses_billing_test.go`；客户端断开用例不变 | 非流式 failed/cancelled 仍不转发、不计费 |
+| NewAPI `acb347a19`（供应商搜索计数） | 计费 / P2 / 已吸收（改变扣费） | Azure Responses 按 `tool_usage.web_search.num_requests` 计 `bing_web_search` 并把协议键置零；xAI Responses 按 `server_side_tool_usage_details` 计 `web_search`、`x_search_posts`、`x_search_profiles`；百炼 Responses 按 `usage.x_tools` 计 `search_strategy_agent`；百炼 Anthropic 兼容端点经 `WebSearchBillingKey` 计 `search_strategy_agent` 并补 `cc_entrypoint` 系统标记。本地新增 `VendorToolPriceKeys`：各供应商在读取器旁声明"声明的托管工具 → 额外价格键"，发送前一并要求定价；`InitChannelMeta` 清除钩子并删除上一渠道读取器新建的键。百炼 Responses 改为 `/compatible-mode/v1/responses` | `relay/channel/{openai,xai,ali}` 读取器与 URL 测试；`TestTextToolQuoteIgnoresZeroCountWithoutPrice` | 字段名取自上游原文，未用真实供应商响应核实 |
+| NewAPI `acb347a19`（其余） | 协议 / P3 / 延期 | 智谱与百炼 Chat 的 `WebSearchEncoder` 渠道级搜索编码（含强制搜索推断计数）、Advanced Custom 转 Responses、Moonshot Responses 透传未吸收：属于新能力，编码诊断在本地默认 safe 策略下会拒绝请求，需单独设计 | — | 见路线图 SYNC1008-08 |
+| NewAPI `0a532f7f7` | 插件 / P3 / 已吸收（源码未改） | 内置插件 `xai` `1.0.0` 与上游逐字节一致，承载 `grok-imagine-video` 系列；审核拦截和报告费用的失败按 `moderated: true` 收费。本地只用完成事实结算：xAI 结果不报告分辨率，读取分辨率或时长而完成事实缺失时按提交时冻结估算结算（编辑按预留 9 秒、延长按 15 秒输入、报告费用的失败按完整估算），可能高于上游合并提交事实后的金额 | `go test ./plugins/ ./pkg/jsplugin/ ./relay/channel/task/jsplugin/`；`router/gateway_xai_video_test.go` | 消除差异需要插件 `+ren2hub.1` 报告请求决定的事实，或放宽"不用提交事实补齐"的宿主合同，待决定；未调用真实 xAI |
+| 本地遗留（Responses 拒答转 Claude） | 协议 / P2 / 已修复 | 拒答转为 Claude text 块并设 `stop_reason: "refusal"`，优先于 tool_use、end_turn 与长度截断；流式增量与终态快照只交付一次；Claude 目标记 warning `responses_refusal_reduced`（safe/allow 放行、strict 拒绝），仅针对 assistant 消息。AxonHub 同样静默丢弃，无先例 | `TestResponsesRefusalReachesClaudeUnderConversionPolicy` 等，修复前均失败 | Responses 转 Gemini 仍丢弃拒答，留待后续 |
+| 本地遗留（Token 更新） | 安全 / P2 / 已修复 | 设置类 PUT 只写请求体携带的字段，漏传的 `allow_ips`、`model_limits_enabled`、`model_limits`、`expired_time`、名称与预算保持原值；`""`/`null` 仍清空；`status_only` 缺 `status` 拒绝。NewAPI 同样整条替换，AxonHub 漏传保留 | `-run 'Token' ./controller/`（`TestUpdateTokenKeepsOmittedSettings` 修复前白名单被清空）；`-run 'Token\|WalletIngress' ./model/` | 部分请求体的重放指纹与升级前不同；完整请求不变 |
+| 本地遗留（自动路由冷启动） | 路由 / P2 / 已修复 | 样本不足 50 的渠道按 good 比较，在同 priority 与负载桶内按权重获得首次尝试；此前已知档位一律排在未知之前，新渠道连 critical 渠道都排不过。NewAPI 按权重随机、AxonHub 零样本满分 | `TestOrderAutoRouteCandidatesGivesColdChannelItsWeightShare`（修复前 0/1000，修复后约 500） | 故障的新渠道在熔断前会承接其权重份额的首次尝试 |
+| AxonHub `d6e00c00` 后续（百炼 `reasoning_effort`） | 协议 / P3 / 未验证 | 生产没有阿里渠道，剥离路径当前不可达；百炼对非 none `reasoning_effort` 的实际行为仍未在线核实 | 生产只读查询 | 接入阿里渠道后用真实调用核实 |
+
+上一批保留的本地偏离（tokenkit `/\n` 分段、图片取文件策略、Claude `tool_result` 逐块解码、Gemini 工具媒体拒绝、Claude 改写诊断为 warning）继续保留。下一轮仍从 NewAPI `45094bdf`、Sub2API `745ff1d3`、AxonHub `81e519e9` 比较。
+
 ## 2026-10-08 三来源增量同步（第二批）
 
 用户授权结合两轮研究同步 NewAPI 并吸收 Sub2API、AxonHub。窗口：NewAPI `bb28f2ccad3f6286a9dc4a0ad9e20f571f57533b` → `45094bdf41fb13a5d24bd3e8eb3fdfec6241c59f`（4 个提交）、Sub2API `3f1a2ea0a760730e3bc528105c00b4ee4f23e469` → `745ff1d3ca79a7f39520f627f6aa44d778a11580`（90 个提交）、AxonHub `5c78997798b40e44788c38bd6720c0b9c156f26b` → `81e519e914437b4b94f758b2d6d78f94468f64e4`（8 个提交），均无 P0/P1。本批基于 Ren2Hub `36b657611`，只吸收不改变扣费的缺陷修复；会改变扣费的工具计费项留在路线图队列等待批准。
