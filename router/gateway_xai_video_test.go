@@ -19,8 +19,8 @@ import (
 
 // xAI bills a video its moderation blocks and a failed request that reports a
 // cost, so those tasks settle as charged on an xAI channel; any other failure
-// is refunded. Results that omit a fact the price reads settle the frozen
-// submission estimate.
+// is refunded. A result settles on its completion facts merged over the
+// frozen submit facts, so a fact the result omits keeps its requested value.
 func TestGatewayXAIVideoSettlesChargedModerationAndRefundsFailures(t *testing.T) {
 	const videoModel = "grok-imagine-video-1.5"
 	const expression = `u("moderated") == true ? tier("blocked", 0.05 + u("seconds") * 0) : ` +
@@ -58,14 +58,16 @@ func TestGatewayXAIVideoSettlesChargedModerationAndRefundsFailures(t *testing.T)
 		{"moderated output is charged at the blocked tier",
 			`{"status":"done","progress":100,"video":{"url":"","duration":8,"respect_moderation":false},"usage":{"cost_in_usd_ticks":11200000000}}`,
 			model.BillingRecoveryStatusSettled, 25000, true},
-		// The failure reports no length, so this price's blocked tier cannot
-		// read u("seconds") and the frozen estimate settles.
-		{"billed failure is charged",
+		// The failure reports no length; the blocked tier reads the requested
+		// seconds from the submit facts and charges the blocked fee only.
+		{"billed failure is charged at the blocked tier",
 			`{"status":"failed","error":{"code":"invalid_argument","message":"Content blocked by moderation"},"usage":{"cost_in_usd_ticks":500000000}}`,
-			model.BillingRecoveryStatusSettled, estimate, true},
-		{"delivered video without a reported resolution settles the estimate",
-			`{"status":"done","progress":100,"video":{"url":"https://vidgen.x.ai/v.mp4","duration":8,"respect_moderation":true},"usage":{"cost_in_usd_ticks":11200000000}}`,
-			model.BillingRecoveryStatusSettled, estimate, false},
+			model.BillingRecoveryStatusSettled, 25000, true},
+		// xAI reports no resolution; the requested 720p prices the delivered
+		// 6 seconds plus the input image (0.85 USD).
+		{"delivered video keeps the requested resolution",
+			`{"status":"done","progress":100,"video":{"url":"https://vidgen.x.ai/v.mp4","duration":6,"respect_moderation":true},"usage":{"cost_in_usd_ticks":8500000000}}`,
+			model.BillingRecoveryStatusSettled, 425000, false},
 		{"unbilled failure is refunded",
 			`{"status":"failed","error":{"code":"internal_error","message":"engine crashed"},"usage":{"cost_in_usd_ticks":0}}`,
 			model.BillingRecoveryStatusRefunded, 0, false},
