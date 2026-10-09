@@ -602,7 +602,6 @@ func applyLiveHealth(ctx context.Context, candidates []RouteSelectionCandidate, 
 		rank := RouteHealthRankingMetrics(health)
 		candidates[index].ErrorBand, candidates[index].ErrorBandKnown = rank.ErrorBand, rank.ErrorBandKnown
 		candidates[index].TTFTBand, candidates[index].TTFTBandKnown = rank.TTFTBand, rank.TTFTBandKnown
-		candidates[index].HealthFactor = RouteRankHealthFactor(rank)
 		eligibleChannels[channel.Id] = channel
 	}
 	loads, err := LoadRouteChannelLoads(ctx, eligibleChannels)

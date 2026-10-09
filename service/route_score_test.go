@@ -152,7 +152,6 @@ func TestRouteHealthRankingMetricsRequiresMinimumSample(t *testing.T) {
 	rank := RouteHealthRankingMetrics(insufficient)
 	assert.False(t, rank.ErrorBandKnown)
 	assert.False(t, rank.TTFTBandKnown)
-	assert.Equal(t, 1.0, RouteRankHealthFactor(rank))
 
 	critical := model.ChannelHealth{ID: 1, ObservedRequests: 100, ObservedFailures: 40, TTFTObservationCnt: 100, TTFTSumMS: 2_000_000}
 	rank = RouteHealthRankingMetrics(critical)
@@ -160,14 +159,12 @@ func TestRouteHealthRankingMetricsRequiresMinimumSample(t *testing.T) {
 	assert.Equal(t, RouteRankBandCritical, rank.ErrorBand)
 	require.True(t, rank.TTFTBandKnown)
 	assert.Equal(t, RouteRankBandCritical, rank.TTFTBand)
-	assert.Equal(t, 0.5, RouteRankHealthFactor(rank))
 
 	healthy := model.ChannelHealth{ID: 1, ObservedRequests: 100, ObservedFailures: 1, TTFTObservationCnt: 100, TTFTSumMS: 100_000}
 	rank = RouteHealthRankingMetrics(healthy)
 	require.True(t, rank.ErrorBandKnown)
 	assert.Equal(t, RouteRankBandGood, rank.ErrorBand)
 	assert.Equal(t, RouteRankBandGood, rank.TTFTBand)
-	assert.Equal(t, 1.0, RouteRankHealthFactor(rank))
 }
 
 // Key-scoped rows are written by failure-only paths, so their counters cannot
@@ -201,27 +198,24 @@ func TestRouteHealthRankingMetricsBoundsErrorAndTTFTBands(t *testing.T) {
 	}
 }
 
-// Health scales the configured weight rather than replacing it, so a degraded
-// channel keeps a reduced but nonzero share of its layer.
-func TestScoreRouteCandidatesScalesWeightByHealth(t *testing.T) {
-	scored := ScoreRouteCandidates([]RouteScoreCandidate{
-		{ChannelID: 1, Priority: 10, Weight: 100, HealthUsable: true, HealthFactor: 1},
-		{ChannelID: 2, Priority: 10, Weight: 100, HealthUsable: true, HealthFactor: 0.5},
-	})
-	require.Len(t, scored, 2)
-	weights := map[int]int{}
-	for _, candidate := range scored {
-		weights[candidate.Candidate.ChannelID] = candidate.Breakdown.EffectiveWeight
+// Health orders candidates through the hard band keys, so it never rescales
+// the configured weight: equally degraded peers keep their 1:3 ratio instead
+// of the 1:2 that rounding a 0.5 factor produced.
+func TestOrderAutoRouteCandidatesKeepsWeightRatioInsideDegradedBand(t *testing.T) {
+	candidates := []RouteScoreCandidate{
+		{ChannelID: 1, Priority: 10, Weight: 1, HealthUsable: true, ErrorBand: RouteRankBandCritical, ErrorBandKnown: true},
+		{ChannelID: 2, Priority: 10, Weight: 3, HealthUsable: true, ErrorBand: RouteRankBandCritical, ErrorBandKnown: true},
 	}
-	assert.Equal(t, 100, weights[1])
-	assert.Equal(t, 50, weights[2])
-
-	// A degraded channel never loses its minimum share.
-	scored = ScoreRouteCandidates([]RouteScoreCandidate{
-		{ChannelID: 3, Priority: 10, Weight: 1, HealthUsable: true, HealthFactor: 0.5},
-	})
-	require.Len(t, scored, 1)
-	assert.Equal(t, 1, scored[0].Breakdown.EffectiveWeight)
+	firsts := map[int]int{}
+	const samples = 4000
+	for request := range samples {
+		ordered := OrderAutoRouteCandidates(candidates, fmt.Sprintf("degraded-%d", request))
+		require.Len(t, ordered, 2)
+		assert.Equal(t, ordered[0].Candidate.Weight, ordered[0].Breakdown.EffectiveWeight)
+		firsts[ordered[0].Candidate.ChannelID]++
+	}
+	assert.InDelta(t, 0.25, float64(firsts[1])/samples, 0.04)
+	assert.InDelta(t, 0.75, float64(firsts[2])/samples, 0.04)
 }
 
 func TestOrderManualRouteCandidatesKeepsPositionAheadOfWeight(t *testing.T) {
@@ -233,4 +227,45 @@ func TestOrderManualRouteCandidatesKeepsPositionAheadOfWeight(t *testing.T) {
 	assert.Equal(t, []int{8, 7, 9}, []int{ordered[0].ChannelID, ordered[1].ChannelID, ordered[2].ChannelID})
 	ordered = OrderManualRouteCandidates(ordered, false)
 	assert.Equal(t, []int{7, 8, 9}, []int{ordered[0].ChannelID, ordered[1].ChannelID, ordered[2].ChannelID})
+}
+
+// Inside one tie group the configured weight follows NewAPI
+// (model/channel_cache.go GetRandomSatisfiedChannel): first attempts are
+// proportional to weight, a zero-weight channel gets none while a weighted peer
+// exists, and an all-zero group shares equally. Zero-weight channels stay in
+// the order as failover candidates.
+func TestOrderAutoRouteCandidatesFollowsNewAPIWeightSemantics(t *testing.T) {
+	cases := []struct {
+		name        string
+		weights     []int
+		wantShare   []float64
+		sampleCount int
+	}{
+		{name: "zero weight yields to a weighted peer", weights: []int{0, 100}, wantShare: []float64{0, 1}, sampleCount: 2000},
+		{name: "zero weight yields even to weight one", weights: []int{0, 1}, wantShare: []float64{0, 1}, sampleCount: 2000},
+		{name: "all zero weights share equally", weights: []int{0, 0}, wantShare: []float64{0.5, 0.5}, sampleCount: 2000},
+		{name: "positive weights stay proportional", weights: []int{1, 3}, wantShare: []float64{0.25, 0.75}, sampleCount: 4000},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			candidates := make([]RouteScoreCandidate, 0, len(testCase.weights))
+			for index, weight := range testCase.weights {
+				candidates = append(candidates, RouteScoreCandidate{ChannelID: index + 1, Priority: 10, Weight: weight, HealthUsable: true})
+			}
+			firsts := map[int]int{}
+			for request := range testCase.sampleCount {
+				ordered := OrderAutoRouteCandidates(candidates, fmt.Sprintf("weight-%d", request))
+				require.Len(t, ordered, len(candidates), "zero-weight channels remain failover candidates")
+				firsts[ordered[0].Candidate.ChannelID]++
+			}
+			for index, want := range testCase.wantShare {
+				if want == 0 {
+					assert.Zero(t, firsts[index+1], "channel %d", index+1)
+					continue
+				}
+				share := float64(firsts[index+1]) / float64(testCase.sampleCount)
+				assert.InDelta(t, want, share, 0.04, "channel %d", index+1)
+			}
+		})
+	}
 }

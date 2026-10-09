@@ -315,25 +315,6 @@ func rankBandForValue(value, warning, critical float64) RouteRankBand {
 	return RouteRankBandGood
 }
 
-// RouteRankHealthFactor is the soft weight multiplier applied inside a
-// priority and load layer. A degraded channel keeps a reduced share instead of
-// being excluded, which is what separates weighting from filtering.
-func RouteRankHealthFactor(metrics RouteHealthRankMetrics) float64 {
-	const degraded = 0.5
-	factor := 1.0
-	if metrics.ErrorBandKnown && metrics.ErrorBand == RouteRankBandCritical {
-		factor = degraded
-	} else if metrics.ErrorBandKnown && metrics.ErrorBand == RouteRankBandWarning {
-		factor = 0.8
-	}
-	if metrics.TTFTBandKnown && metrics.TTFTBand == RouteRankBandCritical && factor > degraded {
-		factor = degraded
-	} else if metrics.TTFTBandKnown && metrics.TTFTBand == RouteRankBandWarning && factor > 0.8 {
-		factor = 0.8
-	}
-	return factor
-}
-
 // RouteHealthScoringMetrics keeps absence distinct from a measured perfect
 // value. A missing health row is neutral input for scoring, not zero latency
 // or a proven zero error rate.

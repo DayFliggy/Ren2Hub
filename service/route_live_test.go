@@ -483,3 +483,32 @@ func TestAutoRouteAttemptsSupportBoundedSameChannelAndFailoverChoices(t *testing
 	_, _, found = selection.NextCandidateForError(2, 2, transient, RouteRetryCounters{TotalAttempts: 3})
 	assert.False(t, found)
 }
+
+// Error and TTFT bands are hard ordering keys, so the weight inside a tie group
+// must stay the administrator's value. A degraded weight-3 channel previously
+// reported round(3*0.5)=2, which also skewed its share against equally
+// degraded peers.
+func TestSelectLiveTokenRouteKeepsConfiguredWeightForDegradedChannel(t *testing.T) {
+	db := setupRouteProfileTest(t)
+	useRoutePlanningRedis(t)
+	userID, tokenID, channelID := seedRouteProfileFixture(t, db)
+	require.NoError(t, db.Model(&model.Channel{}).Where("id = ?", channelID).Update("weight", 3).Error)
+	publishRoutePreviewCapability(t, channelID, []string{string(constant.EndpointTypeOpenAI)}, model.RouteCapabilityStateEligible)
+	t.Cleanup(resetRouteCapabilityIndexForTest)
+	require.NoError(t, db.Create(&model.ChannelHealth{
+		ChannelID: channelID, Model: "gpt-test", KeyScope: "", State: model.RouteHealthStateClosed, HealthEpoch: 1,
+		ObservedRequests: 100, ObservedFailures: 40,
+	}).Error)
+
+	selection, err := SelectLiveTokenRoute(LiveRouteRequest{
+		Context: context.Background(), CapabilityEnabled: true, RequestID: "request-degraded-weight",
+		UserID: userID, TokenID: tokenID, RequestModel: "gpt-test", RequestPath: "/v1/chat/completions",
+	})
+	require.NoError(t, err)
+	require.Len(t, selection.Decision.Candidates, 1)
+	score := selection.Decision.Candidates[0].Score
+	require.NotNil(t, score)
+	require.NotNil(t, score.ErrorBand)
+	assert.Equal(t, int(RouteRankBandCritical), *score.ErrorBand)
+	assert.Equal(t, 3, score.EffectiveWeight)
+}
