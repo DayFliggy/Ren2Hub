@@ -338,34 +338,54 @@ func taskExpressionTestQuote(t *testing.T, expression string, schema *billingexp
 	return quote
 }
 
+// acceptedUsageTask persists an accepted wallet task whose attempt froze the
+// submit facts and their estimate under quote, as task submission does.
+func acceptedUsageTask(t *testing.T, quote *billing.Quote, submitted map[string]any, reserved int) *model.Task {
+	t.Helper()
+	truncate(t)
+	const id, balance = 961, 100000000
+	seedUser(t, id, balance)
+	seedChannel(t, id)
+	task := makeTask(id, id, reserved, 0, BillingSourceWallet)
+	task.PrivateData.BillingContext = &model.TaskBillingContext{Quote: quote, Usage: &billing.Usage{Estimated: true, EstimatedFacts: submitted}, OriginModelName: "test-model"}
+	acceptTestTask(t, task)
+	task.PrivateData.PluginRef = &model.TaskPluginRef{Key: "plugin", Version: "1.0.0", SourceHash: quote.Hash}
+	require.NoError(t, model.DB.Model(task).Update("private_data", task.PrivateData).Error)
+	return task
+}
+
+// Facts outside the frozen schema never price a task: it settles at its own
+// frozen estimate, labeled as such, rather than at a value made from them.
 func TestPluginTaskCompletionUsesOnlyFrozenSchemaFacts(t *testing.T) {
 	schema := &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{"seconds": {Type: "number", Unit: "second", Source: billingexpr.UsageCompletionFact, Required: true, Maximum: "300"}}}
 	quote := taskExpressionTestQuote(t, `tier("video", u("seconds") * 0.4)`, schema)
+	const estimateQuota = common.Quota(6000000)
 	for _, test := range []struct {
-		name    string
-		facts   map[string]any
-		quota   common.Quota
-		invalid bool
+		name     string
+		facts    map[string]any
+		quota    common.Quota
+		fallback bool
 	}{
 		{"actual ten seconds", map[string]any{"seconds": 10}, 2000000, false},
 		{"confirmed zero", map[string]any{"seconds": 0}, 0, false},
-		{"missing actual cannot use estimate", nil, 0, true},
-		{"undeclared completion fact", map[string]any{"seconds": 10, "unexpected": 1}, 0, true},
-		{"schema maximum", map[string]any{"seconds": 301}, 0, true},
+		{"missing actual cannot use estimate", nil, estimateQuota, true},
+		{"undeclared completion fact", map[string]any{"seconds": 10, "unexpected": 1}, estimateQuota, true},
+		{"schema maximum", map[string]any{"seconds": 301}, estimateQuota, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			estimate := &billing.Usage{Estimated: true, EstimatedFacts: map[string]any{"seconds": 30}}
-			task := &model.Task{Status: model.TaskStatusSuccess, PrivateData: model.TaskPrivateData{SubmissionRequestID: "task-fact-preview", PluginRef: &model.TaskPluginRef{Key: "plugin", Version: "1.0.0", SourceHash: "fixed"}, BillingContext: &model.TaskBillingContext{AttemptID: "task-fact-attempt", Quote: quote, Usage: estimate}}}
-			quota, _, _, err := taskCompletionQuota(nil, task, &relaycommon.TaskInfo{UsageFacts: test.facts})
-			if test.invalid {
-				require.Error(t, err)
-				assert.Nil(t, task.PrivateData.BillingContext.Charge)
-				return
-			}
+			task := acceptedUsageTask(t, quote, map[string]any{"seconds": "30"}, int(estimateQuota))
+			quota, reason, _, err := taskCompletionQuota(nil, task, &relaycommon.TaskInfo{UsageFacts: test.facts})
 			require.NoError(t, err)
 			assert.Equal(t, test.quota, quota)
-			assert.NotNil(t, task.PrivateData.BillingContext.Usage.Evidence)
-			assert.Equal(t, map[string]any{"seconds": 30}, estimate.EstimatedFacts)
+			usage := task.PrivateData.BillingContext.Usage
+			assert.Equal(t, test.fallback, billing.IsFrozenEstimateSource(usage.Source))
+			if test.fallback {
+				assert.Equal(t, "完成用量无法计价，按提交时估算结算", reason)
+				return
+			}
+			assert.Equal(t, "按冻结报价结算", reason)
+			assert.NotNil(t, usage.Evidence)
+			assert.Equal(t, map[string]any{"seconds": "30"}, usage.EstimatedFacts)
 		})
 	}
 }
@@ -392,7 +412,7 @@ func TestPluginTaskSchemaQuantityDoesNotRequireLegacyTokenCounters(t *testing.T)
 				expression = `u("quantity") * 400000 / 1000000`
 			}
 			quote := taskExpressionTestQuote(t, expression, &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{"quantity": {Type: "number", Unit: unit, Source: billingexpr.UsageCompletionFact, Required: true}}})
-			task := &model.Task{Status: model.TaskStatusSuccess, PrivateData: model.TaskPrivateData{SubmissionRequestID: "schema-quantity", PluginRef: &model.TaskPluginRef{Key: "plugin", Version: "1.0.0", SourceHash: "fixed"}, BillingContext: &model.TaskBillingContext{AttemptID: "schema-attempt", Quote: quote, Usage: &billing.Usage{Estimated: true}}}}
+			task := acceptedUsageTask(t, quote, map[string]any{"quantity": "10"}, 2000000)
 			quota, _, _, err := taskCompletionQuota(nil, task, &relaycommon.TaskInfo{UsageFacts: map[string]any{"quantity": 10}})
 			require.NoError(t, err)
 			assert.EqualValues(t, 2000000, quota)
@@ -421,6 +441,116 @@ func TestExplicitFreePluginDoesNotSuppressFailedUsageHooks(t *testing.T) {
 			assert.Equal(t, map[string]any{"seconds": 10}, facts)
 		})
 	}
+}
+
+// mergedFactsQuote prices seconds by resolution tier and halves silent output.
+// The submit facts (10 s, 720p, audio) reserve 3 USD.
+func mergedFactsQuote(t *testing.T) (*billing.Quote, map[string]any) {
+	t.Helper()
+	schema := &billingexpr.UsageSchema{Version: 1, Fields: map[string]billingexpr.UsageField{
+		"seconds":    {Type: "number", Unit: "second", Source: billingexpr.UsageCompletionFact, Maximum: "300"},
+		"resolution": {Type: "string", Enum: []string{"480p", "720p"}, Source: billingexpr.UsageCompletionFact},
+		"audio":      {Type: "boolean", Source: billingexpr.UsageCompletionFact},
+	}}
+	quote := taskExpressionTestQuote(t, `u("seconds") * (u("resolution") == "720p" ? 0.3 : 0.1) * (u("audio") == false ? 0.5 : 1)`, schema)
+	return quote, map[string]any{"seconds": "10", "resolution": "720p", "audio": true}
+}
+
+// As upstream EvaluateTaskCompletionUsage, each reported completion fact,
+// explicit zero and false included, replaces its submit fact; unreported
+// facts keep the frozen submit value instead of reading as missing.
+func TestTaskCompletionMergesCompletionFactsOverFrozenSubmitFacts(t *testing.T) {
+	quote, submitted := mergedFactsQuote(t)
+	for _, test := range []struct {
+		name  string
+		facts map[string]any
+		quota common.Quota
+	}{
+		{"actual seconds keep submitted tier and audio", map[string]any{"seconds": "4"}, 600000},
+		{"explicit false overrides submitted audio", map[string]any{"audio": false}, 750000},
+		{"explicit zero overrides submitted seconds", map[string]any{"seconds": "0"}, 0},
+		{"actual resolution overrides submitted tier", map[string]any{"resolution": "480p"}, 500000},
+		{"every reported fact overrides", map[string]any{"seconds": "6", "resolution": "480p", "audio": false}, 150000},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			task := acceptedUsageTask(t, quote, submitted, 1500000)
+			quota, reason, _, err := taskCompletionQuota(nil, task, &relaycommon.TaskInfo{UsageFacts: test.facts})
+			require.NoError(t, err)
+			assert.Equal(t, test.quota, quota)
+			assert.Equal(t, "按冻结报价结算", reason)
+			usage := task.PrivateData.BillingContext.Usage
+			assert.Equal(t, "task_completed", usage.Source)
+			assert.Equal(t, submitted, usage.EstimatedFacts)
+			assert.Equal(t, test.facts, usage.ActualFacts)
+			assert.NotNil(t, usage.Evidence)
+		})
+	}
+}
+
+// Merging never makes unusable completion evidence priceable: a hook error
+// or an absent completion report still settles at the frozen estimate.
+func TestUnpricedTaskCompletionStillSettlesFrozenEstimate(t *testing.T) {
+	quote, submitted := mergedFactsQuote(t)
+	for _, result := range []*relaycommon.TaskInfo{
+		{UsageFacts: map[string]any{"seconds": "4"}, UsageError: "plugin completion usage facts are invalid"},
+		{},
+	} {
+		t.Run(result.UsageError, func(t *testing.T) {
+			task := acceptedUsageTask(t, quote, submitted, 1500000)
+			quota, reason, _, err := taskCompletionQuota(nil, task, result)
+			require.NoError(t, err)
+			assert.EqualValues(t, 1500000, quota)
+			assert.Equal(t, "完成用量无法计价，按提交时估算结算", reason)
+			assert.True(t, billing.IsFrozenEstimateSource(task.PrivateData.BillingContext.Usage.Source))
+		})
+	}
+}
+
+// Submit facts are trusted only through the attempt estimate's own evidence.
+// Altered facts stop settlement explicitly; the task stays for a later pass
+// rather than settling at an estimate derived from the same altered row.
+func TestTamperedSubmitFactsStopTaskSettlement(t *testing.T) {
+	quote, submitted := mergedFactsQuote(t)
+	task := acceptedUsageTask(t, quote, submitted, 1500000)
+	var attempt model.BillingAttempt
+	require.NoError(t, model.DB.First(&attempt, "id = ?", task.PrivateData.BillingContext.AttemptID).Error)
+	var estimate billing.Usage
+	require.NoError(t, common.UnmarshalJsonStr(string(attempt.EstimateUsage), &estimate))
+	estimate.EstimatedFacts["seconds"] = "1"
+	tampered, err := common.Marshal(estimate)
+	require.NoError(t, err)
+	require.NoError(t, model.DB.Model(&attempt).Update("estimate_usage", string(tampered)).Error)
+
+	err = CompleteImmediateTask(context.Background(), task, &relaycommon.TaskInfo{Status: model.TaskStatusSuccess, UsageFacts: map[string]any{"audio": false}})
+	require.ErrorIs(t, err, billing.ErrEvaluationEvidence)
+	var persisted model.Task
+	require.NoError(t, model.DB.First(&persisted, task.ID).Error)
+	assert.NotEqual(t, model.TaskStatusSuccess, persisted.Status)
+	var recovery model.BillingRecovery
+	require.NoError(t, model.DB.First(&recovery, "request_id = ?", task.PrivateData.SubmissionRequestID).Error)
+	assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
+	assert.Equal(t, 100000000, getUserQuota(t, task.UserId)+int(task.Quota), "only the reservation is held")
+}
+
+// A repeated completion rebuilds the same merged usage from the immutable
+// attempt, so recovery replays the first evaluation and charges once.
+func TestRepeatedMergedTaskCompletionChargesOnce(t *testing.T) {
+	quote, submitted := mergedFactsQuote(t)
+	task := acceptedUsageTask(t, quote, submitted, 1500000)
+	result := &relaycommon.TaskInfo{Status: model.TaskStatusSuccess, UsageFacts: map[string]any{"audio": false}}
+	for range 2 {
+		require.NoError(t, CompleteImmediateTask(context.Background(), task, result))
+	}
+	var persisted model.Task
+	require.NoError(t, model.DB.First(&persisted, task.ID).Error)
+	assert.EqualValues(t, 750000, persisted.Quota)
+	usage := persisted.PrivateData.BillingContext.Usage
+	assert.Equal(t, submitted, usage.EstimatedFacts)
+	assert.Equal(t, map[string]any{"audio": false}, usage.ActualFacts)
+	assert.Equal(t, 100000000-750000, getUserQuota(t, task.UserId))
+	var count int64
+	require.NoError(t, model.DB.Model(&model.BillingEvent{}).Where("request_id = ? AND operation = ?", task.PrivateData.SubmissionRequestID, "settle").Count(&count).Error)
+	assert.EqualValues(t, 1, count)
 }
 
 func TestTaskCompletionUsageBoundariesPreserveFundsAndTerminalEvidence(t *testing.T) {

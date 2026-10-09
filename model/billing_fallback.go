@@ -77,15 +77,38 @@ func frozenBillingEstimateTx(tx *gorm.DB, recovery BillingRecovery, attemptID st
 // FrozenTaskBillingEstimate returns the submission estimate of an accepted
 // task. A successful task whose completion cannot be priced settles at it.
 func FrozenTaskBillingEstimate(requestID, attemptID string) (*billing.Usage, *billing.ChargeResult, error) {
+	_, usage, charge, err := taskAttemptEstimate(requestID, attemptID)
+	return usage, charge, err
+}
+
+// FrozenTaskUsageFacts returns the submit-time usage facts of an accepted
+// task. Their only source is the attempt's persisted estimate, accepted after
+// that estimate's own evidence replays, because the frozen quote was accepted
+// with exactly these facts. Completion settlement merges over them.
+func FrozenTaskUsageFacts(requestID, attemptID string) (map[string]any, error) {
+	attempt, usage, _, err := taskAttemptEstimate(requestID, attemptID)
+	if err != nil {
+		return nil, err
+	}
+	var quote billing.Quote
+	if err := common.UnmarshalJsonStr(attempt.Quote, &quote); err != nil {
+		return nil, billing.ErrEvaluationEvidence
+	}
+	if err := validateBillingAttemptEstimate(attempt, &quote); err != nil {
+		return nil, err
+	}
+	return usage.EstimatedFacts, nil
+}
+
+func taskAttemptEstimate(requestID, attemptID string) (BillingAttempt, *billing.Usage, *billing.ChargeResult, error) {
 	if DB == nil || requestID == "" || attemptID == "" {
-		return nil, nil, ErrBillingEstimateMissing
+		return BillingAttempt{}, nil, nil, ErrBillingEstimateMissing
 	}
 	var recovery BillingRecovery
 	if err := DB.Where("request_id = ?", requestID).First(&recovery).Error; err != nil {
-		return nil, nil, err
+		return BillingAttempt{}, nil, nil, err
 	}
-	_, usage, charge, err := frozenBillingEstimateTx(DB, recovery, attemptID)
-	return usage, charge, err
+	return frozenBillingEstimateTx(DB, recovery, attemptID)
 }
 
 // PrepareFrozenEstimateConsumption records a settlement intent for the

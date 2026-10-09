@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -169,13 +170,26 @@ func deliverTaskCompletion(ctx context.Context, task *model.Task, actualQuota co
 }
 
 // taskCompletionQuota never accepts an adaptor-computed monetary value. A
-// completed task consumes its accepted quote and the provider's usage facts;
-// when those facts cannot be priced it consumes its submission estimate.
+// completed task consumes its accepted quote and its usage facts: the frozen
+// submit facts overwritten key by key by the provider's completion facts.
+// When those facts cannot be priced it consumes its submission estimate.
 func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relaycommon.TaskInfo) (common.Quota, string, *common.QuotaClamp, error) {
 	if task.Status == model.TaskStatusFailure {
 		return 0, task.FailReason, nil, nil
 	}
-	quota, err := actualTaskCompletionQuota(task, result)
+	var submitted map[string]any
+	if snapshot := task.PrivateData.BillingContext; snapshot != nil && snapshot.Quote != nil && snapshot.Quote.PriceVersion.TaskUsage &&
+		result != nil && result.UsageError == "" && len(result.UsageFacts) > 0 {
+		facts, err := model.FrozenTaskUsageFacts(task.PrivateData.SubmissionRequestID, snapshot.AttemptID)
+		// Facts that fail verification keep the task for the next attempt
+		// instead of settling at the estimate derived from those same facts.
+		// An attempt that never persisted an estimate merges from nothing.
+		if err != nil && !errors.Is(err, model.ErrBillingEstimateMissing) {
+			return 0, "", nil, err
+		}
+		submitted = facts
+	}
+	quota, err := actualTaskCompletionQuota(task, result, submitted)
 	if err == nil {
 		return quota, "按冻结报价结算", nil, nil
 	}
@@ -186,7 +200,7 @@ func taskCompletionQuota(_ TaskPollingAdaptor, task *model.Task, result *relayco
 	return quota, "完成用量无法计价，按提交时估算结算", nil, nil
 }
 
-func actualTaskCompletionQuota(task *model.Task, result *relaycommon.TaskInfo) (common.Quota, error) {
+func actualTaskCompletionQuota(task *model.Task, result *relaycommon.TaskInfo, submitted map[string]any) (common.Quota, error) {
 	snapshot := task.PrivateData.BillingContext
 	if snapshot == nil || snapshot.Quote == nil || snapshot.Usage == nil {
 		return 0, fmt.Errorf("task %s has no frozen billing quote", task.TaskID)
@@ -212,9 +226,16 @@ func actualTaskCompletionQuota(task *model.Task, result *relaycommon.TaskInfo) (
 		if result == nil {
 			return 0, fmt.Errorf("plugin completion usage unavailable")
 		}
-		usage.ActualFacts = result.UsageFacts
+		// As upstream EvaluateTaskCompletionUsage: every reported completion
+		// fact, explicit zero and false included, replaces the submit fact.
+		// Without completion facts nothing is merged, so a price that reads
+		// a fact still settles at the frozen estimate.
+		merged := make(map[string]any, len(submitted)+len(result.UsageFacts))
+		maps.Copy(merged, submitted)
+		maps.Copy(merged, result.UsageFacts)
+		usage.EstimatedFacts, usage.ActualFacts = submitted, result.UsageFacts
 		var err error
-		input.Usage, err = TaskExpressionUsage(result.UsageFacts, version.UsageSchema)
+		input.Usage, err = TaskExpressionUsage(merged, version.UsageSchema)
 		if err != nil {
 			return 0, err
 		}

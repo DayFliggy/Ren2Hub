@@ -1,6 +1,7 @@
 package plugins_test
 
 import (
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -77,8 +78,8 @@ func TestXAIResponsesProtocol(t *testing.T) {
 // every FAILURE task in full, so a blocked video must settle as a charged
 // SUCCESS. The flow runs through the production adaptor, a price saved
 // through model_pricing, the frozen quote, and the settlement evaluator.
-// Ren2Hub settles on the completion facts alone: when a result omits a fact
-// the price reads, the host settles the frozen submission estimate instead.
+// Ren2Hub settles on the completion facts merged over the frozen submit
+// facts, so the requested resolution prices a result that does not report it.
 func TestXAIModeratedVideoKeepsItsCharge(t *testing.T) {
 	factoryPriceDatabase(t)
 	plugin := newXAIPlugin(t)
@@ -127,16 +128,18 @@ func TestXAIModeratedVideoKeepsItsCharge(t *testing.T) {
 		wantProgress string
 		wantReason   string
 		wantFacts    map[string]any
-		wantTier     string // empty when the facts cannot price the expression
+		wantTier     string
 		wantQuota    common.Quota
 		wantVideo    bool
 	}{
 		{name: "still rendering", httpStatus: http.StatusAccepted, body: ``, wantStatus: "IN_PROGRESS"},
 		{name: "progress", httpStatus: http.StatusOK, body: `{"status":"pending","progress":42}`, wantStatus: "IN_PROGRESS", wantProgress: "42%"},
 		{
-			name: "delivered video without a reported resolution settles the estimate", httpStatus: http.StatusOK,
+			// xAI reports no resolution; the requested 720p prices the
+			// delivered 6 seconds plus the input image.
+			name: "delivered video keeps the requested resolution", httpStatus: http.StatusOK,
 			body:       `{"status":"done","progress":100,"model":"grok-imagine-video-1.5","video":{"url":"https://vidgen.x.ai/v.mp4","duration":6,"respect_moderation":true},"usage":{"cost_in_usd_ticks":8500000000}}`,
-			wantStatus: "SUCCESS", wantFacts: map[string]any{"seconds": "6"}, wantVideo: true,
+			wantStatus: "SUCCESS", wantFacts: map[string]any{"seconds": "6"}, wantTier: "720p", wantQuota: 425000, wantVideo: true,
 		},
 		{
 			name: "moderated output is charged", httpStatus: http.StatusOK,
@@ -144,11 +147,11 @@ func TestXAIModeratedVideoKeepsItsCharge(t *testing.T) {
 			wantStatus: "SUCCESS", wantFacts: map[string]any{"seconds": "8", "moderated": true}, wantTier: "blocked", wantQuota: 25000,
 		},
 		{
-			// The failure reports no length, so this price's blocked tier
-			// cannot read u("seconds"); the task still settles, at the estimate.
+			// The failure reports no length; the blocked tier reads the
+			// requested seconds and charges the blocked fee only.
 			name: "failure xAI billed is charged", httpStatus: http.StatusOK,
 			body:       `{"status":"failed","error":{"code":"invalid_argument","message":"Content blocked by moderation"},"usage":{"cost_in_usd_ticks":500000000}}`,
-			wantStatus: "SUCCESS", wantFacts: map[string]any{"moderated": true},
+			wantStatus: "SUCCESS", wantFacts: map[string]any{"moderated": true}, wantTier: "blocked", wantQuota: 25000,
 		},
 		{
 			name: "unbilled failure is refunded", httpStatus: http.StatusOK,
@@ -189,15 +192,14 @@ func TestXAIModeratedVideoKeepsItsCharge(t *testing.T) {
 			}
 			assert.Empty(t, result.UsageError)
 			assert.Equal(t, tc.wantFacts, result.UsageFacts)
-			charge, err := evaluateFactoryCharge(t, prepared.Quote, result.UsageFacts)
-			if tc.wantTier == "" {
-				assert.Error(t, err, "a fact the price reads is missing, so the host settles the frozen estimate")
-			} else {
-				require.NoError(t, err)
-				require.NotNil(t, charge.Trace)
-				assert.Equal(t, tc.wantTier, charge.Trace.MatchedTier)
-				assert.Equal(t, tc.wantQuota, charge.FinalQuota)
-			}
+			// The host prices the completion facts over the frozen submit facts.
+			merged := maps.Clone(prepared.Usage.EstimatedFacts)
+			maps.Copy(merged, result.UsageFacts)
+			charge, err := evaluateFactoryCharge(t, prepared.Quote, merged)
+			require.NoError(t, err)
+			require.NotNil(t, charge.Trace)
+			assert.Equal(t, tc.wantTier, charge.Trace.MatchedTier)
+			assert.Equal(t, tc.wantQuota, charge.FinalQuota)
 
 			task.Status = model.TaskStatusSuccess
 			artifacts, err := adaptor.ListArtifacts(task)
