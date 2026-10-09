@@ -113,6 +113,43 @@ func TestTextToolQuoteIgnoresZeroCountWithoutPrice(t *testing.T) {
 	assert.NotContains(t, info.PriceData.Usage.Quantities, "tool:web_search_preview")
 }
 
+// Claude server tools and Gemini's grounded prompt are recorded whether or not
+// the client chose them (web_search_20260209 runs code execution internally).
+// They bill only when the frozen quote prices the key; an unpriced count is
+// dropped instead of failing settlement over to the frozen estimate.
+func TestTextToolQuoteBillsQuotePricedOnlyKeysWhenPriced(t *testing.T) {
+	keys := []string{"web_fetch", "code_execution", "tool_search", relaycommon.GoogleSearchGroundedPromptTool}
+	for _, priced := range []bool{false, true} {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		prices := []billing.UnitPrice{{Quantity: "tool:web_search", Unit: "per_thousand_calls", Price: "10"}}
+		if priced {
+			for _, key := range keys {
+				prices = append(prices, billing.UnitPrice{Quantity: "tool:" + key, Unit: "per_thousand_calls", Price: "10"})
+			}
+		}
+		info := quotedTextInfo(t, billing.PricingValues{"ModelPrice": 0.0}, prices...)
+		info.SetBillableToolCount(dto.BuildInToolWebSearch, 2)
+		for _, key := range keys {
+			info.SetBillableToolCount(key, 3)
+		}
+		summary := calculateTextQuotaSummary(ctx, info, &dto.Usage{})
+		require.NoError(t, summary.PricingError, priced)
+		assert.Equal(t, "2", info.PriceData.Usage.Quantities["tool:web_search"])
+		for _, key := range keys {
+			if priced {
+				assert.Equal(t, "3", info.PriceData.Usage.Quantities["tool:"+key], key)
+				continue
+			}
+			assert.NotContains(t, info.PriceData.Usage.Quantities, "tool:"+key)
+		}
+		wantQuota := 10_000
+		if priced {
+			wantQuota += 4 * 15_000
+		}
+		assert.Equal(t, wantQuota, summary.Quota, priced)
+	}
+}
+
 // Every recorded tool count is bounded by MaxBillableToolCallCount at
 // settlement, whatever recorded it.
 func TestTextToolQuoteClampsCallCount(t *testing.T) {

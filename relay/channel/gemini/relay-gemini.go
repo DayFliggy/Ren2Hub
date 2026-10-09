@@ -90,10 +90,11 @@ func geminiResponseUsageText(response *dto.GeminiChatResponse) string {
 // unique non-empty search query ("we ignore the empty web search queries when
 // counting unique queries", ai.google.dev/gemini-api/docs/google-search);
 // Gemini 2.5 and older bill once per grounded prompt, counted here when the
-// response carries any search query. Image-search queries count like
-// web-search queries; Google documents no separate rule. Google documents no
-// response field holding the billed count, so the unique query set is the best
-// available evidence, not a guaranteed match.
+// response carries any search query. Both quantities are recorded and the
+// tool price table decides which one costs money for a model. Image-search
+// queries count like web-search queries; Google documents no separate rule.
+// Google documents no response field holding the billed count, so the unique
+// query set is the best available evidence, not a guaranteed match.
 type geminiGroundingCounter struct {
 	queries map[string]struct{}
 }
@@ -120,19 +121,12 @@ func (g *geminiGroundingCounter) observe(response *dto.GeminiChatResponse) {
 	}
 }
 
-// commit records google_search as the unique query count. Ren2Hub seeds no
-// tool prices, so the grounded-prompt key bills only when the frozen quote
-// prices it: an operator prices google_search_grounded_prompt (for example
-// with a gemini-2.5* prefix) and sets google_search to 0 for the models
-// Google bills per grounded prompt.
 func (g *geminiGroundingCounter) commit(info *relaycommon.RelayInfo) {
-	if info == nil || len(g.queries) == 0 {
+	if len(g.queries) == 0 {
 		return
 	}
 	info.SetBillableToolCount(dto.BuildInToolGoogleSearch, len(g.queries))
-	if info.QuotePricesTool(relaycommon.GoogleSearchGroundedPromptTool) {
-		info.SetBillableToolCount(relaycommon.GoogleSearchGroundedPromptTool, 1)
-	}
+	info.SetBillableToolCount(relaycommon.GoogleSearchGroundedPromptTool, 1)
 }
 
 // countGeminiResponseGrounding bills the grounding of one non-stream response.

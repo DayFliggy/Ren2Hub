@@ -20,9 +20,9 @@ import (
 
 // Grounding bills the unique non-empty search queries of one response
 // (webSearchQueries and imageSearchQueries of every candidate, across every
-// stream frame) under google_search, and one grounded prompt when the frozen
-// quote prices that key. Ren2Hub seeds no tool prices, so an unpriced
-// grounded-prompt key must never reach settlement.
+// stream frame) under google_search, and one grounded prompt, as in NewAPI.
+// Both are recorded whatever the quote prices; settlement drops an unpriced
+// grounded prompt (service.collectBillingQuantities).
 func TestGeminiHandlersCountGroundingQueries(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	oldStreamingTimeout := constant.StreamingTimeout
@@ -67,10 +67,10 @@ func TestGeminiHandlersCountGroundingQueries(t *testing.T) {
 			want:         grounded(3),
 		},
 		{
-			name:         "unpriced grounded prompt is not recorded",
+			name:         "unpriced grounded prompt is still recorded",
 			promptPriced: false,
 			frames:       []string{`{"candidates":[{` + text + `,"groundingMetadata":{"webSearchQueries":["q1","q2"]}}]}`},
-			want:         map[string]int{dto.BuildInToolGoogleSearch: 2},
+			want:         grounded(2),
 		},
 		{
 			name:         "only empty queries",

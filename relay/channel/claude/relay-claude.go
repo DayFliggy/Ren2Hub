@@ -169,26 +169,19 @@ func countClaudeStreamBillableTools(info *relaycommon.RelayInfo, claudeResponse 
 }
 
 // recordClaudeServerToolUse bills the server tool requests Anthropic reports
-// in usage.server_tool_use. A declared web_fetch, code_execution or tool_search
-// tool requires its own price before send (helper.PricingRequirementsFromBody);
-// a channel that bills search under its own key sets WebSearchBillingKey.
+// in usage.server_tool_use. web_fetch, code_execution, and tool_search have no
+// built-in price and bill only once an operator prices them.
 func recordClaudeServerToolUse(info *relaycommon.RelayInfo, serverToolUse *dto.ClaudeServerToolUse) {
 	if info == nil || serverToolUse == nil {
 		return
 	}
-	if count := serverToolUse.WebSearchRequests; count > 0 {
-		info.SetBillableToolCount(cmp.Or(info.WebSearchBillingKey, dto.BuildInToolWebSearch), count)
-	}
-	// web_search_20260209 and web_fetch_20260209 run code execution under the
-	// hood without a declared code_execution tool. These counts bill only when
-	// the frozen quote prices the key, which a declared tool requires before
-	// send; undeclared internal use is not a product the client chose.
 	for name, count := range map[string]int{
+		cmp.Or(info.WebSearchBillingKey, dto.BuildInToolWebSearch): serverToolUse.WebSearchRequests,
 		"web_fetch":      serverToolUse.WebFetchRequests,
 		"code_execution": serverToolUse.CodeExecutionRequests,
 		"tool_search":    serverToolUse.ToolSearchRequests,
 	} {
-		if count > 0 && info.QuotePricesTool(name) {
+		if count > 0 {
 			info.SetBillableToolCount(name, count)
 		}
 	}

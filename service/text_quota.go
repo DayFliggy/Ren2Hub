@@ -181,6 +181,19 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	return summary
 }
 
+// quotePricedOnlyToolKeys are hosted-tool counts recorded whether or not the
+// client chose the product: web_search_20260209 runs code execution without a
+// declared code_execution tool, and Gemini grounding always records a grounded
+// prompt. Ren2Hub seeds no tool prices, so these keys bill only when the frozen
+// quote prices them; a declared Claude server tool must be priced before send
+// (helper.PricingRequirementsFromBody).
+var quotePricedOnlyToolKeys = map[string]bool{
+	"web_fetch":      true,
+	"code_execution": true,
+	"tool_search":    true,
+	relaycommon.GoogleSearchGroundedPromptTool: true,
+}
+
 func collectBillingQuantities(ctx *gin.Context, info *relaycommon.RelayInfo, usage *billing.Usage) error {
 	if info.BillingToolUsageInvalid {
 		return fmt.Errorf("tool usage is missing a stable identity")
@@ -195,7 +208,7 @@ func collectBillingQuantities(ctx *gin.Context, info *relaycommon.RelayInfo, usa
 	}
 	if info.ResponsesUsageInfo != nil {
 		for name, tool := range info.ResponsesUsageInfo.BuiltInTools {
-			if tool == nil {
+			if tool == nil || quotePricedOnlyToolKeys[name] && !info.QuotePricesTool(name) {
 				continue
 			}
 			count := tool.CallCount

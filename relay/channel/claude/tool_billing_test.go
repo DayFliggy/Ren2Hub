@@ -74,9 +74,9 @@ func TestCountClaudeStreamBillableToolsSetsWebSearchRequests(t *testing.T) {
 }
 
 // usage.server_tool_use counts bill under each server tool's own key, and a
-// later cumulative message_delta replaces the earlier report. web_fetch,
-// code_execution and tool_search bill only when the frozen quote prices them:
-// web_search_20260209 runs code execution internally without a declared tool.
+// later cumulative message_delta replaces the earlier report. Every reported
+// count is recorded, as in NewAPI; settlement drops unpriced web_fetch,
+// code_execution and tool_search (service.collectBillingQuantities).
 func TestClaudeServerToolUseKeys(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -100,15 +100,15 @@ func TestClaudeServerToolUseKeys(t *testing.T) {
 	require.Nil(t, HandleClaudeResponseData(c, nonStream, &ClaudeResponseInfo{Usage: &dto.Usage{}}, nil, data))
 	assert.Equal(t, want, claudeToolCounts(nonStream))
 
-	// Dynamic-filtering web search reports internal code execution; with no
-	// code_execution price it is not billed and cannot fail settlement.
+	// Dynamic-filtering web search reports internal code execution without a
+	// declared code_execution tool; the count is recorded even when unpriced.
 	internal := &relaycommon.RelayInfo{OriginModelName: "claude-opus-5-5", RelayFormat: types.RelayFormatClaude}
 	internal.PriceData.Quote = claudeToolQuote(t, internal.OriginModelName)
 	countClaudeStreamBillableTools(internal, &dto.ClaudeResponse{
 		Type:  "message_delta",
 		Usage: &dto.ClaudeUsage{ServerToolUse: &dto.ClaudeServerToolUse{WebSearchRequests: 2, CodeExecutionRequests: 5}},
 	})
-	assert.Equal(t, map[string]int{"web_search": 2}, claudeToolCounts(internal))
+	assert.Equal(t, map[string]int{"web_search": 2, "code_execution": 5}, claudeToolCounts(internal))
 
 	// A channel whose Anthropic-compatible endpoint bills search under its own
 	// price key re-keys web_search_requests only.
