@@ -71,4 +71,4 @@ src/
 
 `common` 和 `home` 语言包随首屏加载，`auth`、`console`、`lab`、`setup` 按路由和当前语言延迟加载。`public/` 保存直接发布的资源，`src/assets/` 保存构建管理的图片和自托管字体。`dist/`、`embed-dist/` 与 `output/` 分别是构建产物、Go 嵌入产物和本地测试输出。
 
-主题和样式约束见[主题文档](docs/THEMES.md)，金额精度与钱包界面见[计费界面契约](docs/BILLING.md)。
+主题和样式约束见[主题文档](docs/THEMES.md)，金额精度与钱包界面见[计费界面契约](docs/BILLING.md)，窄屏未解决的问题见[移动端待办](docs/MOBILE.md)。

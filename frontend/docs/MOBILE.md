@@ -1,0 +1,89 @@
+# 移动端待办
+
+范围是 Ren2Hub 前端在 ≤767px（Tailwind `md` 断点以下）的交互、组件、样式与视觉回归覆盖，判定基准是 `frontend/docs/THEMES.md`。下列条目按 Ren2Hub `05c631c2b` 源码核对，路径相对 `frontend/`，行号为该版本的当前行号。条目修复后从本页删除。
+
+## 功能不可用
+
+| 位置 | 问题 | 移动端后果 | 修法 |
+| --- | --- | --- | --- |
+| `src/components/common/ChipPicker.vue:41-47,61,76-79` | 选项已改 `@pointerdown.prevent`，但关闭仍靠 `@blur` 后 150ms 定时器，全文件无 `onClickOutside` | 滑动页面或点其他区域而输入框未失焦时面板残留；IME 场景下的 blur 时序仍需真机确认 | 关闭逻辑换 `onClickOutside(root, close)`（参照 `FilterSelect.vue:180`），保留 blur 仅处理键盘 Tab 离开 |
+| `src/components/console/ContactFloatBall.vue:54-59,63,238-245` | ≤480px 容器改 `position: static`，`z-50` 随之失效，但 `fixed inset-0 z-40` 全屏遮罩仍渲染 | 仪表盘展开联系方式后，遮罩盖在选项之上，点选项只会关闭面板 | 窄屏下不渲染遮罩、改用 `onClickOutside`，或保留容器定位上下文让 `z-50` 生效 |
+
+## 共享层
+
+| 位置 | 问题 | 移动端后果 | 修法 |
+| --- | --- | --- | --- |
+| `src/components/common/DataTable.vue:107,492,553` | 无窄屏模式，`minTableWidth` 默认 `720px`，表头表体 `table-fixed`；19 个消费方 | 390px 下只能横向拖动，一屏可见字段有限 | 增加 `mobileStrategy` 属性，取值 `scroll` 或 `card`；`card` 在 `md:hidden` 下复用 `base.css` 已有卡片样式。涉及全部消费方，先定方案 |
+| `src/components/common/DataTable.vue:695-729` | 横向滚动条 `scrollbar-color: transparent` 仅 `:hover` 显色；`useTableScrollFade` 与 `.table-scroll-fade` 只接在三张仪表盘卡片 | 触屏看不到“可横滑”提示 | `scroll` 分支接入 `useTableScrollFade`，窄屏常显滚动条 |
+| `src/views/console/TicketsView.vue:170-240` | 用户工单列表只有 DataTable，没有 `lg:hidden` 移动卡片（日志、密钥等页已双渲染） | 标题列被压窄，需横滑查看状态与时间 | 补移动卡片，或在 DataTable 定方案后改用 `card` 模式 |
+| `src/components/common/FilterSelect.vue:241`、`MultiFilterSelect.vue:198`、`DateRangePicker.vue:375`、`ChipPicker.vue:78`、`FieldVisibilityMenu.vue:103` | 下拉面板 `absolute` 定位，未 Teleport；已知被裁实例：`src/views/console/AdminTicketsView.vue:698`（祖先 `:665` 为 `overflow-y-auto`）、`src/components/console/PreferencesNotificationsPanel.vue:442`（祖先 `:204` 为 `overflow-hidden`） | 面板被滚动或裁切容器截断，选项不可见或不可点 | Teleport 到 body，复用 `ActionMenu.vue:46-66` 的视口夹取与向上翻转 |
+| `src/components/console/channels/ChannelMobileList.vue:244,271,286,447,484` | `h-7 w-7` 覆盖 `IconButton` 基类，28×28 | 渠道行唯一的刷新余额与测试入口难点中 | 删除覆盖类，用基类 `h-11 w-11 sm:h-8 sm:w-8` |
+| `src/components/console/channels/ChannelTestModal.vue:446,542` | 表格 `min-w-[720px]`，行内按钮 `h-7 w-7` | 需先横滑再命中 28px 按钮 | 按钮改基类尺寸；表格随 DataTable 方案处理 |
+| `src/views/console/TokenRoutingView.vue:638-647,766-795` | 分组删除按钮无 padding（约 16×16）；渠道行上移、下移、删除按钮为 `p-1`（约 24×24），且紧邻启用复选框 | 调整优先级与删除渠道容易误触 | 统一改 `IconButton` 或 `min-h-11 min-w-11`，`sm:` 起收缩 |
+| `src/components/console/tickets/TicketImageUploader.vue:101` | 删除按钮已在触屏常显，但移动端尺寸为 `h-8 w-8`（32×32） | 命中区低于 44px | 改 `h-11 w-11 sm:h-6 sm:w-6`，或用透明扩展命中区 |
+| `src/components/common/FilterSelect.vue:184` | `size="sm"` 为 32px、默认 40px，无移动端放大；`sm` 档注释写 36px 与实现不符 | 影响面最广，含 `AdminTicketsView.vue:451,457,463`、`src/views/admin/ModelPricingView.vue:544`、`TablePagination.vue:213` | 两档都改为 `h-11` 起步，`sm:` 收缩到 32/40；同步 `MultiFilterSelect.vue:149` |
+| `src/components/console/users/UserMobileList.vue:81`、`src/components/console/channels/ChannelMobileList.vue:314` | 行级选择框为裸 `<input class="checkbox-round">`，约 17px；组级全选已用 `<label>` 撑开 | 勾选单行难命中 | 外包 `<label>` 撑到 44px，与组级一致 |
+| `src/components/common/DateRangePicker.vue:352,526,533`、`MultiFilterSelect.vue:253` | 清除按钮 `h-7 w-7`，应用、重置按钮 `px-3 py-1.5 text-xs`，约 28–32px | 筛选清除与应用难点中 | 改 `min-h-11`，`sm:` 收缩 |
+| `src/views/console/AdminTicketsView.vue:613` | 返回队列按钮 `h-8 w-8`（32px） | 移动端从工单详情返回队列的唯一入口 | 改 `h-11 w-11 sm:h-8 sm:w-8` |
+| `src/components/common/ConsoleToggle.vue:121-130` | 移动端 `::after { inset: -10px -4px }` 扩展命中区，相邻开关间可能重叠 | 可能误点相邻开关，需真机确认 | 用容器行间距保证扩展区不重叠，或只扩纵向 |
+| `src/components/admin/ModelsSection.vue:502` | 44px 命中区写法（`min-h-[44px] min-w-[44px] -m-2.5 p-2.5`）只存在于此处 | 各移动列表各自手写尺寸，持续漏网 | 抽成共享类或组件，供上面各条复用 |
+| `src/components/common/LanguageSelector.vue:79`、`ConsoleModal.vue:53`、`src/components/console/UserMenu.vue:70` | z-index 无分层表，字面量散落（语言菜单 90、Modal 默认 90、用户菜单 40、topbar `z-[60]`） | 新增浮层只能凭猜测取值，容易互相压盖 | 在 `tokens.css` 落分层表（topbar 60 / drawer 80 / modal 90 / popover 100 / toast 200 / tooltip 300）并统一引用 |
+| `src/components/layout/AppNavbar.vue:173-205`、`src/components/common/ConsoleModal.vue:1-23`、`src/components/layout/ConsoleLayout.vue:47` | 两套滚动锁：抽屉用 `position: fixed` 并在解锁时 `Object.assign` 整体写回内联样式，Modal 用计数器改 `body.style.overflow`；`scroll-zone` 无 `overscroll-behavior: contain` | 两者同页共存时抽屉解锁会抹掉 Modal 的锁（目前分属公共页与控制台，尚未同页）；iOS 上 `overflow: hidden` 挡不住橡皮筋滚动 | 抽统一的 `useBodyScrollLock()`；`scroll-zone` 加 `overscroll-behavior: contain` |
+| `src/styles/base.css`；例 `ChipPicker.vue:70`、`TokenRoutingView.vue:657,751`、`src/components/console/tickets/TicketFormModal.vue:179`、`src/components/console/keys/KeyFormModal.vue:244` | `TextInput` 与 `SearchInput` 已在移动端用 16px，但 `base.css` 无全局兜底，仍有约 38 处手写 `input`/`select`/`textarea` 用 `text-sm` 或 `text-xs` | iOS Safari 聚焦这些控件时页面放大且不回弹 | `base.css` 加 `@media (max-width: 767px) { input, textarea, select { font-size: 16px } }` |
+| `src/components/console/ConsoleNavStrip.vue:67,124-129` | 侧边栏 `lg:flex` 起才出现，移动端只靠横向胶囊条；滚动条隐藏，无边缘渐变与 `snap-x` | 用户不知道条带可横滑，后段入口难发现 | 加两端渐隐与 `snap-x`，或用 `consoleNav` 分组数据补移动抽屉 |
+| `src/components/console/ConsoleNavStrip.vue:59` | `scrollIntoView({ inline: 'center' })` 无 `scroll-margin`，作用于整条滚动祖先链 | 将来给条带外套横向容器后会带动外层滚动 | 补 `scroll-margin`，或改为只滚动条带自身的 `scrollLeft` |
+| `src/components/common/ConsoleTabs.vue:45-46`、`src/styles/base.css:901-903` | 组件容器无 `overflow-x-auto`，只有日间 `[data-handdrawn='tabs']`（`base.css:579-581`）补了横滚，夜间分支缺失；`gap-7` | 夜间 360px 下多标签顶出容器 | 组件容器直接加 `overflow-x-auto`，标签 `shrink-0` |
+| `src/components/common/ConsoleModal.vue:190,242-244,259-262` | footer 为 `pb-6`，抽屉 `height: 100dvh`，系列内无 `env(safe-area-inset-*)` | iPhone 底部操作条与 Home 指示条重叠，抽屉顶部贴刘海 | footer 改 `pb-[max(1.5rem,env(safe-area-inset-bottom))]`，抽屉补顶部安全区 |
+| `src/components/common/ConsoleModal.vue:190` | 面板上限 `max-h-[calc(100dvh-2rem)]`，未读 `visualViewport` | 软键盘弹起时 footer 被键盘遮住或贴在键盘上沿 | 聚焦时读 `window.visualViewport.height` 写入上限（先例 `DataTable.vue:257-260,457-462`） |
+| `src/views/console/ChannelsView.vue:866-869`、`UsersView.vue:491-494`、`RedemptionView.vue:417-420` | 批量操作栏为静态文档流元素 | 勾选后需滚回顶部才能执行批量操作 | 移动端改 `sticky bottom-0 z-20` 并配底部安全区 |
+| `src/views/console/AdminTicketsView.vue:425,450` | 状态筛选 `grid-cols-4`、筛选器 `grid-cols-3` 无窄屏回落 | 标签被 `truncate` 成单字 | 改 `grid-cols-2 sm:grid-cols-4`、`grid-cols-2 sm:grid-cols-3` |
+| `src/features/task-plugins/components/PluginsTable.vue:52,185-199` | `isMobile`（≤639px）强制卡片视图并隐藏切换器，覆盖用户在 localStorage 的偏好 | 窄屏无法切回表格 | 保留 `SegmentedToggle`，窄屏表格横滚加提示 |
+| `src/components/console/ContactFloatBall.vue:34-48` | 硬编码 `#229ED9`、`#1AACEF`、`#ffffff` 与 `--surface-overlay` 混用 | 夜间配色与主题不一致 | 供应商品牌色保留，前景、底色改语义变量 |
+| `src/components/console/orders/OrderMobileList.vue:36-45` | 整页空态包在带边框的背景容器内，外层再有卡片 | 双层描边 | 删除外层容器，裸用 `EmptyState` |
+| `src/components/common/EmptyState.vue:29` | `px-6 py-16` | 移动端上下留白 128px，空态占满首屏 | 改 `py-10 sm:py-16` |
+| `src/components/common/TablePagination.vue:234,261` | `modal-footer` 变体翻页按钮 `h-10 w-10`，`default` 变体为 `h-11 w-11` | 弹窗内翻页低于 44px | 统一为 `h-11 w-11 sm:h-9 sm:w-9` |
+| `src/components/common/AppErrorBoundary.vue:66,75` | 全屏错误页两个操作按钮手写 `h-10` | 主操作低于 44px | 改用 `ConsoleButton` |
+| `src/components/common/ToastHost.vue:59-67` | 进入动画 `translateX(16px)`，移动端容器全宽 | 方向语义不符 | 移动端改 `translateY` |
+| `src/components/common/ConsoleToggle.vue:115-118` | `box-shadow: ... !important` 压过 `base.css:709-712` 夜间 `--focus-halo` | 夜间开关焦点光晕与全站不一致 | 去掉 `!important`，沿用全局 halo |
+| `src/components/admin/ModelPricingEditor.vue:822` | `box-shadow: 0 1px 3px rgba(0,0,0,0.08)` 硬编码 | 绕过语义令牌，夜间阴影不跟随主题 | 改 `var(--card-shadow)` 或 `var(--elevation-1)` |
+| `src/components/console/systemSettings/SystemSettingsMaintenanceActions.vue:202,214,226,244,256,268,280` | KPI 数值手写 `font-mono ... font-bold` | 违反 THEMES.md 大数字须用 `.display-number` 的约定 | 改 `.display-number` |
+| `src/views/console/ActivityView.vue:139`、`ModelsView.vue:172`、`AccountCenterView.vue:295` | 卡片栅格在 `md` 或 `sm` 起分栏，早于约定的 `lg` 两栏、`xl` 三栏 | 640–1023px 区间卡片过窄，与同类页面不一致 | 统一为 `lg:grid-cols-2`（`ModelsView` 骨架改 `lg:grid-cols-2 xl:grid-cols-3`） |
+| `src/views/console/InvoiceView.vue:329-331` | 驳回原因 `max-w-[160px] truncate`，全文只靠 `title` | 触屏无法查看完整驳回原因 | 移动端 `line-clamp-2` 或点击展开 |
+
+## 首页与公共页
+
+| 位置 | 问题 | 移动端后果 | 修法 |
+| --- | --- | --- | --- |
+| `src/views/HomeView.vue:58`、`src/composables/useImmersiveStage.ts:73` | 舞台条 `[touch-action:pan-x]` 禁止浏览器竖向滚动，进入沉浸只认下滑（`dy > 0`） | 首屏拇指区约 18% 屏高上滑无响应，页面滚不动 | 改回 `pan-y`，横滑转图交给 `HeroWorldMap` 的 `pending → claim` 状态机；下滑进入沉浸改点按或提高阈值 |
+| `src/canvas/MapScene.ts:319` | DPR 上限写死 2；窄屏只降元素数量，未降像素量 | 中低端手机首页帧率与发热偏高 | 按宽度分档（窄屏上限约 1.5），参考 `navigator.deviceMemory` 与 `hardwareConcurrency` |
+| `src/components/home/hero/HeroWorldMap.vue:352,378` | 只监听 `pagehide`，无 `pageshow` | 从 bfcache 返回首页后地图可能停帧，需真机确认 | 补 `pageshow` 调 `syncRunning()`，卸载时移除 |
+| `src/components/home/hero/HeroWorldMap.vue:63` | resize 防抖 180ms，不监听 `visualViewport` | 地址栏收放期间画布可能拉伸，需真机确认 | 挂 `visualViewport` resize，防抖降到 80–100ms 并 leading 执行一次 |
+| `src/composables/useScrolled.ts:8-10` | scroll 回调无 rAF 节流 | `AppNavbar` 切换 `backdrop-blur-xl` 首帧可能闪 | 参照 `HomeProgressDots.vue` 的 `scheduleFrame` |
+| `src/components/public/PublicPage.vue:13` | `min-h-[calc(100vh-6rem)]` | iOS 地址栏展开时 `100vh` 偏大，出现多余滚动 | 改 `100svh` |
+| `src/views/public/PublicDocumentView.vue:89,97`、`src/components/public/documentMarkup.ts:47` | iframe `h-[72vh]`；文档内边距固定 `20px` | 地址栏收放时高度跳动 | 改 `h-[72svh]`；内边距改 `clamp(16px, 4vw, 32px)` |
+| `src/views/public/PricingView.vue:132,144,150,188-200` | 三个原生 `<select>` 只有 `padding: 0.5rem`，无最小高度；筛选区 `flex-wrap` 与 `SearchInput` 混排 | 选择框约 42px，低于 44px；窄屏换行不等宽 | 加 `min-height: 44px`，窄屏改单列 |
+| `src/views/public/RankingsView.vue:99,122,189,223` | 表格 `min-w-[640px]` 横撑，长模型名 `break-words` 任意断行 | 需横滑，模型名被拆成多行 | ≤767px 卡片化或隐藏次要列；模型名改 `truncate` 加 `title` |
+| `src/components/layout/AuthLayout.vue:20,57` | `min-h-screen` + 表单列 `items-center`，无底部安全区 | iOS 键盘弹出遮挡提交按钮 | `min-h-[100svh]`、`items-start sm:items-center`，加底部安全区 |
+| `src/components/auth/TurnstileWidget.vue:52-62,97` | 渲染未指定 `size`，容器无宽度约束；默认 300×65 | 360px 下超出表单卡内容宽（约 272px） | 传 `size: 'flexible'`，或外层 `flex justify-center` 加 `[&_iframe]:max-w-full` |
+| `src/views/auth/SignInView.vue:293-300` | “返回密码登录”按钮 `text-xs`，无 padding，约 16px 高 | 两步验证时难以返回 | 加 `min-h-11 inline-flex items-center justify-center` |
+
+## 测试缺口
+
+| 位置 | 问题 | 移动端后果 | 修法 |
+| --- | --- | --- | --- |
+| `playwright.config.ts:23` | 全局 `reducedMotion: 'reduce'` | 动画、过渡与 Canvas 运行路径没有视觉回归覆盖 | 增加 `no-preference` 的移动端项目或用例 |
+| `tests/visual/` | 触控尺寸只在 `dashboard.spec.ts:452,725`、`system-status.spec.ts:80` 逐个断言，无通用断言 | 本页大量 28–40px 目标都不会被测试拦下 | 在 `fixtures.ts` 增加“移动视口内可交互元素不小于 44px”的通用断言，按需白名单 |
+| `tests/visual/` | 控制台移动用例只用 390 宽；320、360 只出现在 `home-showcase.spec.ts` | 窄屏溢出与截断（如工单筛选、标签条）无覆盖 | 控制台关键页补 320 与 360 视口 |
+| `tests/visual/fixtures.ts:1360-1369` | `assertNoHorizontalOverflow` 只查 `documentElement` 与 `body` | 内层滚动容器（`.data-table-body-viewport`、浮层面板）的截断与溢出检测不到 | 断言扩展到内层滚动容器，或对被裁浮层断言面板完整位于视口内 |
+| `tests/visual/` | 无移动端输入字号断言 | iOS 聚焦缩放回归无人发现 | 移动视口下断言可聚焦 `input`/`select`/`textarea` 计算字号不小于 16px |
+| 无 | 安全区、Canvas 帧率、`ChipPicker` 的 IME 与 blur 时序、`pageshow` 恢复、地址栏收放拉伸、`ConsoleToggle` 命中区重叠无法在桌面 Chromium 复现 | 这些条目只能靠真机定性 | 在 iOS Safari 与 Android Chrome 上实测并记录结论 |
+
+## 建议顺序
+
+1. 小改动先行：`ContactFloatBall` 窄屏遮罩修复；`base.css` 加移动端 16px 输入字号兜底。
+2. 共享层收口：统一 `useBodyScrollLock()`；`FilterSelect` 等五个浮层接 Teleport 与视口夹取，`ChipPicker` 同时换 `onClickOutside`；在 `tokens.css` 落 z-index 分层表；`ConsoleModal` 补安全区与键盘高度处理。
+3. 触控目标：抽出 44px 命中区共享类，按共享层表格逐项替换（`FilterSelect`、`ChannelMobileList`、`TokenRoutingView`、`DateRangePicker`、`TablePagination` 等）。
+4. DataTable 方案：先接 `useTableScrollFade` 与常显滚动条（低成本），再决定是否做 `card` 模式；`TicketsView` 随方案补移动形态。
+5. 首页：`touch-action` 改回 `pan-y` 并重设进入手势；Canvas 补 DPR 分档、`pageshow` 恢复与 `visualViewport` 监听。
+6. 页面级清理：批量操作栏 sticky、栅格断点、公共页 `svh`、认证页键盘与 Turnstile、其余令牌与样式项。
+7. 补齐视觉回归：通用 44px 断言、320/360 视口、内层溢出断言、输入字号断言、非 reduced 动画用例。

@@ -162,7 +162,7 @@ Build this Ren2Hub checkout using the [single-instance Docker guide](docs/instal
 - Password login and optional 2FA in the Vue interface
 - Short-lived Bearer access tokens, HttpOnly refresh cookies, and revocable device sessions
 - OAuth account binding and account security controls; module availability comes from the backend
-- Backend Passkey and third-party login APIs remain controlled by their respective settings. The Vue login page does not expose those login flows; see the [authentication contract](docs/authentication.md)
+- The Vue login page offers password, Passkey and configured OAuth sign-in according to the backend settings; see the [authentication contract](docs/authentication.md)
 - 🔍 Key quota query usage (with [new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool))
 
 ### 🚀 Advanced Features

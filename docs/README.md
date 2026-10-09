@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 开发与结构 | [项目约定](../AGENTS.md)、[公共常量](../constant/README.md) | 目录边界、独立模块、代码与验证要求 |
 | 安装与发布 | [Compose 安装](installation/DOCKER.md)、[宝塔环境](installation/BT.md)、[切换与回退](routing/GATEWAY_RELEASE.md) | 空库安装、单实例排空、持久化兼容性 |
-| Web 应用 | [前端说明](../frontend/README.md)、[页面路由](../frontend/ROUTING.md)、[主题](../frontend/docs/THEMES.md)、[计费界面](../frontend/docs/BILLING.md)、[术语表](translation-glossary.md) | Vue、同源 API、功能门控与中英文文案 |
+| Web 应用 | [前端说明](../frontend/README.md)、[页面路由](../frontend/ROUTING.md)、[主题](../frontend/docs/THEMES.md)、[计费界面](../frontend/docs/BILLING.md)、[移动端待办](../frontend/docs/MOBILE.md)、[术语表](translation-glossary.md) | Vue、同源 API、功能门控与中英文文案 |
 | 登录与会话 | [认证契约](authentication.md) | 浏览器登录、刷新会话、绑定、安全验证、Origin 与代理规则 |
 | 模型路由 | [统一路由](routing/UNIFIED_ROUTING.md)、[网关 API](routing/GATEWAY_API.md) | 自动/手动路由、本地 FIFO、资格重检、队列与故障转移、Responses WebSocket、Claude effort 计价、请求诊断 |
 | 协议和渠道 | [渠道接入类型](channel/TYPES.md)、[支持矩阵](routing/GATEWAY_SUPPORT_MATRIX.md)、[RelayKit](../relaykit/README.md)、[TokenKit](../tokenkit/README.md)、[渠道设置](channel/other_setting.md) | 实际实现的协议转换、token 计数与估算、供应商入口和边界 |

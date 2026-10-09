@@ -162,7 +162,7 @@
 - Vue 登录页提供密码登录与可选 2FA
 - 短期 Bearer Access Token、HttpOnly Refresh Cookie 与可撤销的设备会话
 - OAuth 账号绑定及账户安全管理，模块可用性由后端声明
-- 后端 Passkey 与第三方登录接口由各自设置控制；Vue 登录页未提供这些登录流程，详情见[认证契约](docs/authentication.md)
+- Vue 登录页按服务端设置提供密码、Passkey 和已配置的 OAuth 登录，详情见[认证契约](docs/authentication.md)
 - 🔍 Key 查询使用额度（配合 [new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool)）
 
 ### 🚀 高级功能

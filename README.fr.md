@@ -162,7 +162,7 @@ Construisez cette copie de Ren2Hub avec le [guide Docker à instance unique](doc
 - Connexion par mot de passe et 2FA facultative dans l'interface Vue
 - Jetons Bearer de courte durée, cookies de renouvellement HttpOnly et sessions d'appareil révocables
 - Liaison de comptes OAuth et paramètres de sécurité ; le backend déclare les modules disponibles
-- Les API de connexion Passkey et tierces restent contrôlées par leurs paramètres respectifs. La page de connexion Vue ne propose pas ces parcours ; voir le [contrat d'authentification](docs/authentication.md)
+- La page de connexion Vue propose le mot de passe, Passkey et les OAuth configurés selon les paramètres du serveur ; voir le [contrat d'authentification](docs/authentication.md)
 - 🔍 Requête de quota d'utilisation de clé (avec [new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool))
 
 ### 🚀 Fonctionnalités avancées

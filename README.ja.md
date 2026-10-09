@@ -162,7 +162,7 @@
 - Vue のログイン画面はパスワード認証と任意の 2FA に対応
 - 短期 Bearer Access Token、HttpOnly Refresh Cookie、取り消し可能なデバイスセッション
 - OAuth アカウント連携とアカウントのセキュリティ管理。利用可能な機能はバックエンドが宣言
-- バックエンドの Passkey・外部認証ログイン API は各設定に従います。Vue のログイン画面にはこれらの入口はありません。[認証契約](docs/authentication.md)を参照してください
+- Vue のログイン画面は、サーバー設定に応じてパスワード、Passkey、設定済みの OAuth でのログインを提供します。[認証契約](docs/authentication.md)を参照してください
 - 🔍 Key使用量クォータ照会（[new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool)と併用）
 
 
