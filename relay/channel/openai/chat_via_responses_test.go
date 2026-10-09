@@ -268,3 +268,31 @@ func requireOrderedSubstrings(t *testing.T, s string, parts ...string) {
 		offset += idx + len(part)
 	}
 }
+
+// A converted stream that fails after text reached the client bills the
+// delivered output. When the failure reports usage without the output side,
+// the missing half is estimated from the delivered text, as in NewAPI.
+func TestOaiResponsesToChatStreamFailureEstimatesMissingCompletion(t *testing.T) {
+	oldMode := gin.Mode()
+	gin.SetMode(gin.TestMode)
+	t.Cleanup(func() { gin.SetMode(oldMode) })
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
+
+	body := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-test","created_at":1710000000}}`,
+		`data: {"type":"response.output_text.delta","delta":"hello world, this is delivered text"}`,
+		`data: {"type":"response.failed","response":{"status":"failed","error":{"code":"server_error","message":"boom"},"usage":{"input_tokens":12,"output_tokens":0,"total_tokens":12}}}`,
+		``,
+	}, "\n\n")
+	c, recorder, resp, info := newResponsesChatTestContext(t, body, true)
+
+	usage, apiErr := OaiResponsesToChatStreamHandler(c, info, resp)
+	require.NotNil(t, apiErr, "the failed stream still reports its failure")
+	require.Contains(t, recorder.Body.String(), "hello world, this is delivered text")
+	require.NotNil(t, usage)
+	assert.Equal(t, 12, usage.PromptTokens, "the reported prompt side is kept")
+	assert.Positive(t, usage.CompletionTokens, "the delivered text must be billed")
+	assert.Equal(t, usage.PromptTokens+usage.CompletionTokens, usage.TotalTokens)
+}
