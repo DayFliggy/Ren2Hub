@@ -188,13 +188,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import StatusDot from '@/components/common/StatusDot.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import { useAppStore } from '@/stores'
-import { markModalDialogClosing } from '@/utils/modalStack'
+import { closeModalDialog, openModalDialog } from '@/utils/modalStack'
 
 const props = defineProps<{
   open: boolean
@@ -207,6 +207,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const { systemName, docsLink, showDocs, showPricing, phase } =
   storeToRefs(useAppStore())
+const stackEntry = Symbol('MobileNavDrawer')
 const panel = ref<HTMLElement | null>(null)
 const closeButton = ref<HTMLButtonElement | null>(null)
 
@@ -286,13 +287,16 @@ watch(
   () => props.open,
   (isOpen) => {
     if (!isOpen) {
-      markModalDialogClosing(panel.value)
+      closeModalDialog(stackEntry)
       return
     }
+    openModalDialog(stackEntry)
     nextTick(() => closeButton.value?.focus())
   },
   { immediate: true }
 )
+
+onBeforeUnmount(() => closeModalDialog(stackEntry))
 </script>
 
 <style scoped>

@@ -3,22 +3,23 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import {
+  closeModalDialog,
   isTopmostModalDialog,
-  markModalDialogClosing,
+  openModalDialog,
 } from '@/utils/modalStack'
 import { safeImageUrl } from '@/utils/safeUrl'
 
 const props = defineProps<{ open: boolean; url: string }>()
 const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
-const dialog = ref<HTMLElement | null>(null)
+const stackEntry = Symbol('TicketImageLightbox')
 const closeButton = ref<HTMLButtonElement | null>(null)
 const safeUrl = computed(() => safeImageUrl(props.url))
 let previouslyFocused: HTMLElement | null = null
 let previousBodyOverflow = ''
 
 function onKeydown(e: KeyboardEvent) {
-  if (!isTopmostModalDialog(dialog.value)) return
+  if (!isTopmostModalDialog(stackEntry)) return
   if (e.key === 'Escape') {
     e.preventDefault()
     emit('close')
@@ -41,12 +42,13 @@ watch(
       previouslyFocused = document.activeElement as HTMLElement | null
       previousBodyOverflow = document.body.style.overflow
       document.body.style.overflow = 'hidden'
+      openModalDialog(stackEntry)
       window.addEventListener('keydown', onKeydown)
       nextTick(() => closeButton.value?.focus())
       return
     }
 
-    markModalDialogClosing(dialog.value)
+    closeModalDialog(stackEntry)
     document.body.style.overflow = previousBodyOverflow
     window.removeEventListener('keydown', onKeydown)
     const restoreTarget = previouslyFocused
@@ -56,6 +58,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  closeModalDialog(stackEntry)
   document.body.style.overflow = previousBodyOverflow
   window.removeEventListener('keydown', onKeydown)
   if (previouslyFocused?.isConnected) previouslyFocused.focus()
@@ -67,7 +70,6 @@ onBeforeUnmount(() => {
     <Transition name="lightbox">
       <div
         v-if="open"
-        ref="dialog"
         class="fixed inset-0 flex items-center justify-center p-6"
         style="z-index: 95"
         role="dialog"

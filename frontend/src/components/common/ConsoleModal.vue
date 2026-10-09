@@ -27,8 +27,9 @@ function unlockBodyScroll(): void {
 import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 
 import {
+  closeModalDialog,
   isTopmostModalDialog,
-  markModalDialogClosing,
+  openModalDialog,
 } from '@/utils/modalStack'
 
 const props = withDefaults(
@@ -66,7 +67,7 @@ const widths = {
 
 const titleId = useId()
 const subtitleId = useId()
-const dialog = ref<HTMLElement | null>(null)
+const stackEntry = Symbol('ConsoleModal')
 const panel = ref<HTMLElement | null>(null)
 let previouslyFocused: HTMLElement | null = null
 let holdsScrollLock = false
@@ -82,7 +83,7 @@ function focusableEls(): HTMLElement[] {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (!props.open || !isTopmostModalDialog(dialog.value)) return
+  if (!props.open || !isTopmostModalDialog(stackEntry)) return
   if (e.key === 'Escape') {
     e.preventDefault()
     requestClose()
@@ -130,6 +131,7 @@ watch(
   (open) => {
     if (open) {
       acquireScrollLock()
+      openModalDialog(stackEntry)
       previouslyFocused = document.activeElement as HTMLElement | null
       window.addEventListener('keydown', onKeydown)
       // Move focus into the dialog once it has rendered.
@@ -138,7 +140,7 @@ watch(
         ;(els[0] ?? panel.value)?.focus()
       })
     } else {
-      markModalDialogClosing(dialog.value)
+      closeModalDialog(stackEntry)
       releaseScrollLock()
       window.removeEventListener('keydown', onKeydown)
       const restoreTarget = previouslyFocused
@@ -150,6 +152,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  closeModalDialog(stackEntry)
   releaseScrollLock()
   window.removeEventListener('keydown', onKeydown)
   const restoreTarget = previouslyFocused
@@ -163,7 +166,6 @@ onBeforeUnmount(() => {
     <Transition name="modal">
       <div
         v-if="open"
-        ref="dialog"
         class="fixed inset-0 flex"
         :style="{ zIndex }"
         :class="
