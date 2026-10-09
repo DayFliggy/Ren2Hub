@@ -407,7 +407,9 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 	}
 }
 
-func TestImageGenerationCallCounterRejectsOverLimit(t *testing.T) {
+// More than MaxImageN completed images bill as MaxImageN, as in NewAPI; the
+// request still settles its actual usage instead of the frozen estimate.
+func TestImageGenerationCallCounterCommitCapsAtMaxImageN(t *testing.T) {
 	t.Parallel()
 
 	counter := &ImageGenerationCallCounter{}
@@ -424,8 +426,8 @@ func TestImageGenerationCallCounterRejectsOverLimit(t *testing.T) {
 	info := &RelayInfo{}
 	counter.Commit(info)
 	require.Contains(t, info.ResponsesUsageInfo.BuiltInTools, dto.BuildInToolImageGeneration)
-	assert.True(t, info.BillingToolUsageInvalid)
-	assert.Equal(t, counter.Count(), info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
+	assert.False(t, info.BillingToolUsageInvalid)
+	assert.Equal(t, dto.MaxImageN, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 }
 
 func TestImageGenerationCallCounterCommitDoesNotBillDeclarationsAlone(t *testing.T) {

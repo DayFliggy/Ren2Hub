@@ -260,7 +260,7 @@ func (c *ImageGenerationCallCounter) Observe(item *dto.ResponsesOutput, outputIn
 	c.count++
 }
 
-// Count returns the deduplicated completed image output count.
+// Count returns the deduplicated completed image output count before commit capping.
 func (c *ImageGenerationCallCounter) Count() int {
 	if c == nil {
 		return 0
@@ -268,7 +268,7 @@ func (c *ImageGenerationCallCounter) Count() int {
 	return c.count
 }
 
-// Commit preserves completed-output counts and flags out-of-contract quantities.
+// Commit writes the capped completed-output count into RelayInfo once.
 // Request tool declarations alone must not become billable calls.
 func (c *ImageGenerationCallCounter) Commit(info *RelayInfo) {
 	if info == nil {
@@ -281,7 +281,7 @@ func (c *ImageGenerationCallCounter) Commit(info *RelayInfo) {
 		count = c.count
 	}
 	if count > dto.MaxImageN {
-		info.BillingToolUsageInvalid = true
+		count = dto.MaxImageN
 	}
 
 	if existing, ok := info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration]; ok && existing != nil {
