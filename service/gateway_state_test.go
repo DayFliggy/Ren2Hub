@@ -100,6 +100,15 @@ func TestGatewayStateReferenceExtractionDoesNotInspectToolArguments(t *testing.T
 	assert.Equal(t, []gatewayStateReference{{"signature", "opaque"}}, stateReferences(payload, false))
 }
 
+// The converter attaches a public bypass value to cross-protocol Gemini
+// history; it is not provider state and needs no binding, while a real
+// thought signature in the same request still does.
+func TestGatewayStateReferencesSkipGeminiThoughtSignatureBypass(t *testing.T) {
+	var payload map[string]any
+	require.NoError(t, common.Unmarshal([]byte(`{"contents":[{"role":"model","parts":[{"functionCall":{"name":"lookup","args":{}},"thoughtSignature":"context_engineering_is_the_way_to_go"},{"text":"done","thoughtSignature":"provider-issued"}]}]}`), &payload))
+	assert.Equal(t, []gatewayStateReference{{"thoughtSignature", "provider-issued"}}, stateReferences(payload, false))
+}
+
 func TestGatewayOpaqueStateReferenceKinds(t *testing.T) {
 	for _, test := range []struct {
 		body, kind, value string

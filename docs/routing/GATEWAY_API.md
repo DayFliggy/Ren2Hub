@@ -139,7 +139,7 @@ TPM 要求宿主登记可解析的最终请求格式。仅支持媒体任务、C
 
 Claude thinking/effort、Gemini thinkingConfig 与 Chat/Responses reasoning 通过共享推理意图转换，支持的结构不再统一视作不可移植。具体不支持的字段仍由转换器报告损失并按 Token 策略拒绝；`allow` 不会使未实现的媒体、命名空间或自由格式工具路径变得可执行。搜索配置按已实现目标结构保留，不能仅凭工具名称推断无损。协议合同及本地验收范围见 [rc.40 协议说明](../upstream/RC40_PROTOCOL_CONTRACT.md)。
 
-`request_requirements.media` 只记录媒体种类、MIME、来源类别、字段路径和图片 detail，不含 URL 或媒体内容。`media_conversion_unavailable` 表示当前转换器不能表达该媒体或输入形态，所有策略拒绝，不把音视频当作图片，也不丢掉文档后继续发送文本。Claude/Gemini 经 Chat 的当前非图片投影属于此类；Chat/Responses 的已实现媒体路径按实际字段结构执行。图片 detail 在 Chat/Responses 之间保留显式 `low/high/auto` 和缺省差异，计价端仍采用原默认规则；其他不能保留 detail 的目标产生损失诊断。
+`request_requirements.media` 只记录媒体种类、MIME、来源类别、字段路径和图片 detail，不含 URL 或媒体内容。`media_conversion_unavailable` 表示当前转换器不能表达该媒体或输入形态，所有策略拒绝，不把音视频当作图片，也不丢掉文档后继续发送文本。例外是 Responses 工具结果里的媒体直转 Gemini：规划阶段记录同一 error 诊断但不提前拒绝，转换器按 NewAPI 省略 Gemini 无法承载的媒体并给 `unsupported_media_type`，`safe`/`strict` 在发送前以 400 拒绝，`allow` 发送不含该媒体的工具结果。规划时不知道模型版本，按 `functionResponse.parts` 的窄列表判断，因此 Gemini 1.x/2.x 上的音视频工具媒体在 `safe` 下同样被拒绝，`allow` 时转换器会把它作为独立部件发送。Claude/Gemini 经 Chat 的当前非图片投影属于此类；Chat/Responses 的已实现媒体路径按实际字段结构执行。图片 detail 在 Chat/Responses 之间保留显式 `low/high/auto` 和缺省差异，计价端仍采用原默认规则；其他不能保留 detail 的目标产生损失诊断。
 
 Gemini 图片 `inlineData.data` 转换为 Chat/Responses/Claude 时接受标准和 URL-safe base64，解码校验后使用目标要求的标准编码。非法编码在发送前拒绝；原生 Gemini 保留客户端 SDK 的字节表示。
 
@@ -171,7 +171,7 @@ Chat 的 `content[].file.file_id`、Responses 的 `input_file.file_id` 与 Claud
 
 参数覆盖的条件 `mode` 支持 `full`、`prefix`、`suffix`、`contains`、`regex`、`gt`、`gte`、`lt`、`lte`。`regex` 使用 Go RE2 语法（线性时间匹配，支持 `(?i)` 等内联标志），模式必须是字符串，非法模式在请求时报错；与其他文本比较一样，取值按字符串匹配，键不存在时遵循 `pass_missing_key` 且不编译模式。
 
-Gemini 转换器不再自动填入思考签名绕过标记，`allow` 也不会合成供应商状态。旧 `gemini.function_call_thought_signature_enabled` 配置仍可读取但不再生效，控制台已移除该开关；RelayKit 同名选项仅保留源码兼容。供应商返回的真实签名仍按原生协议与绑定身份处理。
+其他协议转 Gemini 时，`gemini.function_call_thought_signature_enabled`（默认开启，与 NewAPI 一致，控制台“模型”设置中可关闭）为历史里每个模型轮次填入一个思考签名绕过值 `context_engineering_is_the_way_to_go`，优先放在第一个函数调用上，没有函数调用时放在第一个文本部件上；已有签名的部件不改写。Gemini 3 对缺少签名的函数调用返回 400，Google 文档允许对来自其他模型的历史使用绕过值，并说明这会降低模型效果。关闭后转换结果不带签名，含函数调用历史的 Gemini 3 请求会被供应商拒绝。绕过值是公开常量而非供应商状态，归属查询不为它建立或要求绑定，最终请求的状态复核也不拦截它。供应商返回的真实签名仍按原生协议与绑定身份处理；跨协议响应中的签名按 `provider_state_dropped` 丢弃，见支持矩阵。
 
 `gateway_state_cleanup` 系统任务每 5 分钟删除最多 1000 条过期绑定，复用数据库任务租约，单次预算 5 秒。清理延迟不影响权限：查找时直接拒绝过期记录。任务只清理网关状态元数据，不操作账单、异步任务记录或完整会话。
 

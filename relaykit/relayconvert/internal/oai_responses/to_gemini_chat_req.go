@@ -173,6 +173,11 @@ func OpenAIResponsesRequestToGeminiChat(c context.Context, req *dto.OpenAIRespon
 			}
 		}
 	}
+	geminiRequest.Contents = omitTrailingAssistantText(c, geminiRequest.Contents,
+		func(content dto.GeminiChatContent) bool { return content.Role == "user" },
+		func(content dto.GeminiChatContent) bool {
+			return content.Role == "model" && !slices.ContainsFunc(content.Parts, func(part dto.GeminiPart) bool { return part.FunctionCall != nil })
+		})
 
 	if len(systemTexts) > 0 {
 		geminiRequest.SystemInstructions = &dto.GeminiChatContent{
@@ -289,10 +294,7 @@ func responsesFunctionOutputItemToGeminiPart(c context.Context, item map[string]
 	if name == "" {
 		name = callNames[callID]
 	}
-	output, media, err := responsesToolOutputToGemini(c, item["output"])
-	if err != nil {
-		return dto.GeminiPart{}, nil, err
-	}
+	output, media := responsesToolOutputToGemini(c, item["output"], mediaInParts)
 	response := &dto.GeminiFunctionResponse{
 		Name:     name,
 		Response: output,
@@ -319,34 +321,37 @@ func responsesFunctionOutputItemToGeminiPart(c context.Context, item map[string]
 
 // responsesToolOutputToGemini maps a function_call_output payload onto a Gemini
 // functionResponse. A Responses content-part array keeps its text in response
-// and returns its images and documents, in order, as inlineData parts;
-// stringifying them would hand base64 media to the upstream text tokenizer.
-// Media Gemini cannot carry for a tool result fails the conversion instead of
-// being dropped. A payload without media keeps the historical response map;
-// media anywhere else (a single part object, or beside an unknown part) also
-// fails, so this converter never relies on planning to stop stringified media.
-func responsesToolOutputToGemini(c context.Context, value any) (map[string]any, []dto.GeminiPart, error) {
+// and returns its media as inlineData parts; stringifying them instead would
+// hand base64 media to the upstream text tokenizer. Multimodal function
+// responses (mediaInParts) carry only the documented image, PDF and plain-text
+// types; separate parts carry every type Gemini accepts. Media that cannot be
+// loaded or carried is omitted with an error diagnostic, so the conversion
+// policy decides whether the request is sent. A payload without media keeps
+// the historical response map; media in any other shape is omitted the same
+// way rather than written into that map as text.
+func responsesToolOutputToGemini(c context.Context, value any, mediaInParts bool) (map[string]any, []dto.GeminiPart) {
 	rawParts, ok := value.([]any)
 	if !ok || len(rawParts) == 0 {
-		if responsesToolOutputHasMedia(value) {
-			return nil, nil, fmt.Errorf("%w: tool output media must be a list of content parts", types.ErrInvalidRequest)
-		}
-		return GeminiResponseMap(value), nil, nil
+		return responsesUnstructuredToolOutputToGemini(c, value), nil
 	}
+	parts := make([]map[string]any, 0, len(rawParts))
 	for _, rawPart := range rawParts {
 		part, isMap := rawPart.(map[string]any)
-		if !isMap || !slices.Contains([]string{"input_text", "output_text", "text", "input_image", "input_file", "input_audio", "input_video"}, strings.TrimSpace(kitutil.Interface2String(part["type"]))) {
-			if responsesToolOutputHasMedia(value) {
-				return nil, nil, fmt.Errorf("%w: tool output mixes media with parts gemini cannot represent", types.ErrInvalidRequest)
-			}
-			return GeminiResponseMap(value), nil, nil
+		if !isMap {
+			return responsesUnstructuredToolOutputToGemini(c, value), nil
 		}
+		switch strings.TrimSpace(kitutil.Interface2String(part["type"])) {
+		case "input_text", "output_text", "text", "input_image", "input_file", "input_audio", "input_video":
+		default:
+			return responsesUnstructuredToolOutputToGemini(c, value), nil
+		}
+		parts = append(parts, part)
 	}
 
-	texts := make([]string, 0, len(rawParts))
-	media := make([]dto.GeminiPart, 0, len(rawParts))
-	for _, rawPart := range rawParts {
-		part := rawPart.(map[string]any)
+	texts := make([]string, 0, len(parts))
+	labels := make([]string, 0, len(parts))
+	media := make([]dto.GeminiPart, 0, len(parts))
+	for _, part := range parts {
 		partType := strings.TrimSpace(kitutil.Interface2String(part["type"]))
 		switch partType {
 		case "input_text", "output_text", "text":
@@ -355,25 +360,65 @@ func responsesToolOutputToGemini(c context.Context, value any) (map[string]any, 
 			}
 			continue
 		}
-		parts, err := responsesContentPartToGeminiParts(c, part)
-		if err != nil {
-			return nil, nil, err
+		kind := strings.TrimPrefix(partType, "input_")
+		if label := "[" + kind + "]"; !slices.Contains(labels, label) {
+			labels = append(labels, label)
 		}
-		if len(parts) == 0 {
-			return nil, nil, fmt.Errorf("%w: tool output %s part has no media source", types.ErrInvalidRequest, partType)
+		source := ContentPartToFileSource(part)
+		if source == nil {
+			addToolMediaOmitted(c, fmt.Sprintf("the %s part has no media source", kind))
+			continue
 		}
-		// Gemini documents only images, PDF and plain text in function
-		// responses; audio, video and other inline types fail before send.
-		mimeType := strings.ToLower(parts[0].InlineData.MimeType)
-		if !sharedgemini.IsSupportedToolResultMimeType(mimeType) {
-			return nil, nil, fmt.Errorf("%w: gemini tool results cannot carry %s content", types.ErrInvalidRequest, mimeType)
+		// The documented MIME list for multimodal function responses has no
+		// audio or video, and Gemini 3 ignores audio sent there.
+		reason := fmt.Sprintf("Gemini function responses cannot carry %s content", kind)
+		if !mediaInParts || kind == "image" || kind == "file" {
+			base64Data, mimeType, err := relaymedia.ResolveBase64Data(c, source, "formatting Responses tool output for Gemini")
+			switch {
+			case err != nil:
+				reason = fmt.Sprintf("the %s could not be loaded", kind)
+			case mediaInParts && sharedgemini.IsSupportedToolResultMimeType(mimeType),
+				!mediaInParts && sharedgemini.IsSupportedMimeType(mimeType):
+				media = append(media, dto.GeminiPart{InlineData: &dto.GeminiInlineData{MimeType: mimeType, Data: base64Data}})
+				continue
+			default:
+				reason = fmt.Sprintf("Gemini function responses cannot carry %s content", mimeType)
+			}
 		}
-		media = append(media, parts...)
+		addToolMediaOmitted(c, reason)
 	}
-	if len(texts) == 0 {
-		return map[string]any{}, media, nil
+
+	switch {
+	case len(texts) > 0:
+		return GeminiResponseMap(strings.Join(texts, "\n")), media
+	case len(media) > 0:
+		return map[string]any{}, media
+	default:
+		// Every media part was omitted; name what was there instead of
+		// sending the payload as text.
+		return GeminiResponseMap(strings.Join(labels, " ")), nil
 	}
-	return GeminiResponseMap(strings.Join(texts, "\n")), media, nil
+}
+
+// responsesUnstructuredToolOutputToGemini keeps a tool output that is not a
+// list of content parts as the historical response map. Media inside such a
+// payload has no documented placement, so the whole output is omitted with a
+// diagnostic instead of carrying base64 data as text.
+func responsesUnstructuredToolOutputToGemini(c context.Context, value any) map[string]any {
+	if !responsesToolOutputHasMedia(value) {
+		return GeminiResponseMap(value)
+	}
+	addToolMediaOmitted(c, "tool output media must be a list of text, image, file, audio or video parts")
+	return GeminiResponseMap("[tool output omitted]")
+}
+
+func addToolMediaOmitted(c context.Context, reason string) {
+	convdiag.Add(c, types.ConversionDiagnostic{
+		Code:     "unsupported_media_type",
+		Path:     "input.output",
+		Message:  reason + "; the part was omitted",
+		Severity: types.ConversionDiagnosticError,
+	})
 }
 
 func appendGeminiContentPart(req *dto.GeminiChatRequest, role string, part dto.GeminiPart) {

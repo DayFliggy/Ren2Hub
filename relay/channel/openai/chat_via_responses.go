@@ -306,6 +306,24 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	if (usage == nil || usage.TotalTokens == 0) && state.UsageText() != "" {
 		usage = service.ResponseText2Usage(c, state.UsageText(), info.UpstreamModelName, info.GetEstimatePromptTokens())
 		state.SetUsage(usage)
+	} else if streamErr != nil && state.UsageText() != "" && (usage.CompletionTokens == 0 || usage.PromptTokens == 0) {
+		// As in NewAPI's failed-after-output path, reported usage that omits
+		// the output or the prompt is completed from the estimate of the
+		// delivered output and the prompt.
+		estimate := service.ResponseText2Usage(c, state.UsageText(), info.UpstreamModelName, info.GetEstimatePromptTokens())
+		completed := *usage
+		if completed.CompletionTokens == 0 {
+			completed.CompletionTokens = estimate.CompletionTokens
+		}
+		if completed.PromptTokens == 0 {
+			completed.PromptTokens = estimate.PromptTokens
+		}
+		completed.TotalTokens = completed.PromptTokens + completed.CompletionTokens
+		if completed.BillingUsage != nil {
+			completed.BillingUsage = dto.CloneBillingUsageWithEstimatedCompletion(completed.BillingUsage, completed.CompletionTokens)
+		}
+		usage = &completed
+		state.SetUsage(usage)
 	}
 
 	if info.RelayFormat == types.RelayFormatClaude && info.ClaudeConvertInfo != nil {

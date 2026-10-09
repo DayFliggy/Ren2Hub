@@ -10,37 +10,17 @@ import (
 	"github.com/samber/lo"
 )
 
-// https://help.aliyun.com/document_detail/613695.html?spm=a2c4g.239470.0.0.1adb778fAdzP9w#341800c0f8w0r
+// https://help.aliyun.com/document_detail/613695.html?spm=a2c4g.2399480.0.0.1adb778fAdzP9w#341800c0f8w0r
 
 const EnableSearchModelSuffix = "-internet"
 
-// requestOpenAI2Ali renders the DashScope-native thinking controls.
-// resolvedEffort is RelayInfo.ReasoningEffort, the host's single resolved
-// reasoning intent for this attempt; DashScope reads enable_thinking instead of
-// the OpenAI reasoning_effort field, and Bailian rejects a disabling
-// reasoning_effort rather than turning thinking off.
-func requestOpenAI2Ali(request dto.GeneralOpenAIRequest, upstreamModelName string, resolvedEffort string) (*dto.GeneralOpenAIRequest, error) {
+func requestOpenAI2Ali(request dto.GeneralOpenAIRequest, upstreamModelName string) *dto.GeneralOpenAIRequest {
 	modelName := upstreamModelName
 	if modelName == "" {
 		modelName = request.Model
 	}
 	if !dto.IsQwenThinkingBudgetModel(modelName) {
 		request.ThinkingBudget = nil
-	}
-
-	if resolvedEffort == string(reasoning.EffortNone) {
-		if explicit, present := explicitEnableThinking(request.EnableThinking); present {
-			// Both controls are user-supplied and contradict each other; picking
-			// one silently would send something the client did not ask for.
-			if explicit {
-				return nil, reasoning.AsClientError(fmt.Errorf(
-					"reasoning_effort %q disables thinking, but the request sets enable_thinking to true", reasoning.EffortNone,
-				))
-			}
-		} else {
-			request.EnableThinking = json.RawMessage("false")
-		}
-		request.ReasoningEffort = ""
 	}
 
 	// DashScope rejects top_p at the 0 and 1 boundaries, so an explicit value is
@@ -57,7 +37,31 @@ func requestOpenAI2Ali(request dto.GeneralOpenAIRequest, upstreamModelName strin
 			request.TopP = lo.ToPtr(0.01)
 		}
 	}
-	return &request, nil
+	return &request
+}
+
+// renderAliDisabledThinking renders a disabling reasoning intent as the
+// DashScope-native switch. resolvedEffort is RelayInfo.ReasoningEffort, the
+// host's single resolved reasoning intent for this attempt; DashScope turns
+// thinking off with enable_thinking false and documents reasoning_effort only
+// for a few models, so the OpenAI field is removed (AxonHub d6e00c00).
+func renderAliDisabledThinking(request *dto.GeneralOpenAIRequest, resolvedEffort string) error {
+	if resolvedEffort != string(reasoning.EffortNone) {
+		return nil
+	}
+	if explicit, present := explicitEnableThinking(request.EnableThinking); present {
+		// Both controls are user-supplied and contradict each other; picking
+		// one silently would send something the client did not ask for.
+		if explicit {
+			return reasoning.AsClientError(fmt.Errorf(
+				"reasoning_effort %q disables thinking, but the request sets enable_thinking to true", reasoning.EffortNone,
+			))
+		}
+	} else {
+		request.EnableThinking = json.RawMessage("false")
+	}
+	request.ReasoningEffort = ""
+	return nil
 }
 
 // explicitEnableThinking reports the client's own enable_thinking switch and

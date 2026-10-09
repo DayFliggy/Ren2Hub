@@ -8,8 +8,8 @@
 
 | 语义合同       | 支持范围与拒绝边界                                                                                                                                                                                                                                                                                          |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 工具返回图片   | Claude ↔ Responses 保留结构化文本／图片顺序、调用 ID、URL 或内联来源；Claude／Responses 转 Chat 时将图片提升到工具结果之后的用户消息，文本仍留在工具结果中；Claude 转 Gemini 经 Chat 路径；Responses 直转 Gemini 时文本留在 `functionResponse.response`，图片与文档按原顺序经宿主媒体解析器转为 `inlineData`，Gemini 3 及未知模型放入 `functionResponse.parts`，Gemini 1.x／2.x 放在同轮全部函数结果之后，调用 ID 保留；工具媒体只接受函数结果文档所列的 PNG、JPEG、WebP、PDF 与纯文本，音视频、其他 MIME、单个对象形态、无法加载或归属供应商的来源发送前拒绝；无法保留的附加语义也发送前拒绝，`allow` 不能将媒体字符串化或丢弃 |
-| 工具文档与来源 | Claude 工具文档直转 Responses 保留 URL `file_url` 或内联 `file_data`，转 Chat／Gemini 拒绝；Responses 工具文档直转 Gemini 按上条转为 `inlineData`；工具媒体的类型、来源及目标能力均在规划时校验，包含未知块的混合结果不能退化为文本，所有策略均发送前拒绝无法保留的路径                                                                                            |
+| 工具返回图片   | Claude ↔ Responses 保留结构化文本／图片顺序、调用 ID、URL 或内联来源；Claude／Responses 转 Chat 时将图片提升到工具结果之后的用户消息，文本仍留在工具结果中；Claude 转 Gemini 经 Chat 路径；Responses 直转 Gemini 时文本留在 `functionResponse.response`，图片与文档按原顺序经宿主媒体解析器转为 `inlineData`，Gemini 3 及未知模型放入 `functionResponse.parts`，Gemini 1.x／2.x 放在同轮全部函数结果之后，调用 ID 保留；`functionResponse.parts` 只接受函数结果文档所列的 PNG、JPEG、WebP、PDF 与纯文本，Gemini 1.x／2.x 的独立部件接受 Gemini 支持的类型；无法承载、无法加载、缺少来源、单个对象形态或与未知块混合的工具媒体按 NewAPI 省略并给 error 诊断 `unsupported_media_type`，`safe`／`strict` 发送前拒绝，`allow` 发送不含该媒体的工具结果并记录损失，媒体不会写入文本；归属供应商的来源在所有策略下拒绝 |
+| 工具文档与来源 | Claude 工具文档直转 Responses 保留 URL `file_url` 或内联 `file_data`，转 Chat／Gemini 拒绝；Responses 工具文档直转 Gemini 按上条转为 `inlineData`；工具媒体的类型、来源及目标能力均在规划时校验，包含未知块的混合结果不能退化为文本；Responses 直转 Gemini 的工具媒体按上条由策略决定，其他无法保留的路径在所有策略下发送前拒绝                                                                                            |
 | 受限终态       | Responses 的 max_output_tokens/content_filter 在 JSON、SSE、SSE 缓冲 JSON 保留正文、usage 及对应原因，不计供应商故障                                                                                                                                                                                        |
 | 供应商暂停     | Claude 原生保留 pause_turn；无法表达的跨协议响应明确失败且不重放。跨协议请求 Claude 托管搜索因可预知的暂停风险发送前拒绝                                                                                                                                                                                    |
 | 搜索引用       | Gemini grounding、Chat／Responses URL annotations 保留可表达 URL、标题、文本范围和顺序；Claude 带加密状态的引用需原生路径。不能将普通 URL 注释伪造成 Claude 原生引用或来源摘录                                                                                                                              |
@@ -21,6 +21,8 @@ Responses 缓冲路径也保留独立 annotation、托管项及部分终态快�
 Responses 流式和缓冲共用同一输出项累计器。部分最终快照按输出身份合并，保留引用偏移；矛盾 incomplete 事件不借用 completed 状态，终态后不继续输出文本。Claude 搜索跨协议规划必须考虑原生引用与暂停能力，不仅检查输入工具是否能改名。原生引用的 encrypted_index 沿用既有状态摘要绑定和所有权复核。
 
 响应语义的无法实现项在所有策略下拒绝。`safe` 允许有诊断的纯展示损失，`strict` 拒绝所有已声明损失；`allow` 仅放宽已有实现声明的降级，不能伪造终态或绕过原生状态归属。文档／文件引用等没有等价目标表示的引用仍明确拒绝，不能由 URL 引用支持推导为所有引用均已支持。
+
+跨协议响应里的推理签名（Claude thinking 的 `signature`、Gemini 的 `thoughtSignature`）无法在目标协议续用，转换结果不含这些值，每个响应或每条流记录一次 warning `provider_state_dropped`：`safe` 与 `allow` 放行，`strict` 拒绝。同协议原生响应原样保留签名。加密的托管工具结果（`encrypted_content`）和引用位置（`encrypted_index`）属于可见答案的一部分，仍在所有策略下拒绝跨协议转换。
 
 Chat/Responses/Claude/Gemini 分别指 OpenAI Chat、OpenAI Responses、Anthropic Messages、generateContent。`转 X` 使用 RelayKit，`投影` 使用供应商专用数据结构，`拒绝` 指预扣和发送前拒绝。实际特性仍受策略、模型映射、权限和配置约束。
 
@@ -65,11 +67,13 @@ Nova 保留 system/user/assistant 文本、多段文本和已实现的采样上�
 
 顶层、typed 嵌套及已登记 RawMessage/any 协议外壳中的未知 JSON 字段记录路径，覆盖 `0/false/null`。`strict` 拒绝已识别的丢弃，`safe/allow` 记录一般扩展警告；工具控制和结构约束的已知损失在 `safe` 下拒绝。检查不把工具参数等业务字典当作协议字段，Schema 损失按实际 Gemini 投影比较，接受 DTO 已实现的 Gemini 别名。独立调用方只有解码后 DTO 时，无法恢复此前已被丢弃的原始字段。
 
-思考签名按供应商状态处理，不再为跨协议历史填入绕过标记，旧配置开关不生效。完整工具历史可按已登记路径转换；需要真实签名的供应商功能必须保留原生签名及其归属，不能把无状态转换称为具有完整推理连续性。Google 对签名的定义参见 [Thinking guide](https://ai.google.dev/gemini-api/docs/thinking)，2026-09-13 核对。
+跨协议历史转 Gemini 时，默认开启的 `gemini.function_call_thought_signature_enabled` 为每个模型轮次填入思考签名绕过值（与 NewAPI 相同），使 Gemini 3 接受来自其他协议的函数调用历史；关闭后这类请求会被 Gemini 3 以 400 拒绝。绕过值不是真实签名，不能把无状态转换称为具有完整推理连续性；需要真实签名的供应商功能仍须走原生协议并保留签名归属。Google 在 [Thought signatures](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures) 中说明 Gemini 3 对当前轮缺少签名的函数调用返回 400，从不带签名的模型迁移历史时可使用绕过值，但这是最后手段，会降低模型效果，2026-10-09 核对。
 
 四入口的思考预算、effort 和 summary 按实际转换能力换算，换算后渲染为目标协议的推理字段。只有需要改写的输入（预算低于 -1、预算与思考模式或 effort 互相矛盾、思考类型被强制改写、目标模型不支持关闭思考等）产生 warning 诊断，`strict` 据此拒绝，`safe` 与 `allow` 放行；`RejectConversionLoss` 在 `safe` 下只拒绝 error 级诊断。`TestGatewayReasoningAndSearchPolicyBeforeBilling` 断言 Claude 思考、Gemini 零预算、Chat/Responses effort 跨协议换算在三种策略下都会发送。配置化搜索的已识别语义差异产生诊断，`strict` 下发送前拒绝。11 个独立计划场景和 15 组 HTTP 回归覆盖规划与最终发送边界，不能由基础 SDK 文本路径推导所有搜索或推理特性。
 
 Claude 目标的关闭思考意图按模型能力渲染：Opus 5、Sonnet 5、Opus 4.8 及更早模型发送 `{"type":"disabled"}`；Sonnet 5.5 不接受 `disabled`，改发不带其他字段的 `{"type":"between_tools"}`；Opus 5.5 无法关闭思考，改发 adaptive 并以 `low` effort 运行。两种改写都给出 warning 诊断（`claude_thinking_disable_as_between_tools`、`claude_thinking_disable_unsupported`）。非 Claude 源协议转来的强制 `tool_choice`（`required` 或具名工具）在 Fable 5.1、Mythos 5.1、Opus 5.5、Sonnet 5.5 上，以及渲染结果为手动扩展思考时，改为 `auto` 并给出 `forced_tool_choice_downgraded` warning，因为这些情况下 Claude 会直接返回 400；原生 Claude 请求不改写。依据 Anthropic Messages API 文档，2026-10-08 核对；回归为 `claude_rejected_controls_test.go`。
+
+Responses 转 Claude 或 Gemini 时，最后一个用户消息或工具结果之后、不含工具调用的 assistant 轮次会被省略（与 NewAPI `e0483122c` 相同），因为目标协议会把它当作预填充续写，较新模型直接返回 400；给出 warning `trailing_assistant_omitted`，`safe` 与 `allow` 放行，`strict` 拒绝。以待回结果的工具调用结尾或只有 assistant 轮次的输入原样发送，Chat 与 Messages 请求保留预填充。
 
 Responses 的拒答（`type=refusal` 内容块与 `response.refusal.*` 流事件）在非流式、流式和缓冲三条路径上转为 Chat 的 `refusal` 字段，不产生诊断。转 Claude 时拒答文本按其与 `output_text` 的内容顺序输出为 `text` 块，`stop_reason` 为 `refusal`，优先于 `tool_use`、`end_turn` 和 `max_tokens`；Claude 没有拒答内容块，因此产生 `responses_refusal_reduced` warning 诊断（非流式路径为 `output[i].content[j].refusal`，流式统一为 `refusal` 并去重），`safe` 与 `allow` 放行，`strict` 拒绝。两种目标在同时出现增量与终态快照时都只交付一次。回归为 RelayKit 的 `TestResponsesRefusalReachesChatRefusalField` 与 `TestResponsesRefusalReachesClaudeUnderConversionPolicy`。转换生成的 Claude `thinking` 块始终带 `signature` 键，未知签名时为空串，不伪造供应商签名。Chat 历史中的旧版 `function_call` 与紧随其后的同名 `role:"function"` 结果配对为工具调用和工具结果：转 Claude、Responses 时生成按消息顺序稳定、避开客户端已有 ID 的 `call_legacy_N`，转 Gemini 时按名称匹配不生成 ID；无法配对的调用或结果给出 error 级诊断（`legacy_function_call_unpaired`、`legacy_function_result_unpaired`），`safe` 与 `strict` 发送前拒绝，`allow` 省略未应答的调用。缺少 `name` 或 JSON 无效的旧版调用在请求分析阶段返回 400，原生 Chat 转发也不例外。
 

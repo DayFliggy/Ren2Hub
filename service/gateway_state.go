@@ -87,6 +87,9 @@ func stateReferences(payload map[string]any, output bool) []gatewayStateReferenc
 				}
 			}
 			for _, name := range []string{"encrypted_content", "encrypted_index", "thoughtSignature", "signature"} {
+				if signature, _ := item[name].(string); name == "thoughtSignature" && relayconvert.IsThoughtSignatureBypass(signature) {
+					continue
+				}
 				add(name, item[name])
 			}
 			for _, name := range []string{"content", "parts", "message", "content_block", "delta", "item", "source", "file", "fileData", "file_data", "citations", "citation", "annotations", "url_citation"} {

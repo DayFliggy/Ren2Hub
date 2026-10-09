@@ -3005,6 +3005,8 @@ export default {
         '将带 -thinking、-nothinking 以及 -high 等推理强度后缀的请求适配为 Anthropic 原生思考请求，并保持计费可预测。关闭后模型名原样发送给上游。',
       geminiThinkingAdapterDesc:
         "支持 -thinking、-thinking-{'{'}budget{'}'}、-nothinking 以及 -high 等推理强度后缀，同时路由到正确的 Gemini 变体。关闭后模型名原样发送给上游。",
+      geminiThoughtSignatureDesc:
+        '其他协议转 Gemini 时，为历史中的每个模型轮次填入一个签名绕过值（优先放在第一个函数调用上）。Gemini 3 会拒绝没有思考签名的函数调用；Google 文档允许对来自其他模型的历史使用绕过值，并说明这会降低模型效果。',
     },
     security: {
       title: '安全与限制',

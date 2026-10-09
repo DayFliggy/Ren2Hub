@@ -32,6 +32,13 @@ func RequiresMediaOwnership(uri string) bool {
 		(strings.Contains(parsed.Path, "/files/") || strings.HasSuffix(parsed.Path, "/files"))
 }
 
+// IsThoughtSignatureBypass reports whether a Gemini thoughtSignature is the
+// public bypass value converters attach to cross-protocol history. It is not
+// provider-issued state, so it needs no ownership binding.
+func IsThoughtSignatureBypass(value string) bool {
+	return value == sharedgemini.ThoughtSignatureBypassValue
+}
+
 func mediaString(value any) string {
 	text, _ := value.(string)
 	return text
@@ -223,6 +230,12 @@ func planMediaConversion(req RequestRequirements, target types.RelayFormat) ([]t
 				diagnostic.Message = "provider-owned media requires the original protocol and owner"
 			}
 			diagnostics = append(diagnostics, diagnostic)
+			if media.ToolResult && media.SourceKind != "owned" && req.Format == types.RelayFormatOpenAIResponses && target == types.RelayFormatGemini {
+				// The direct converter omits tool media Gemini cannot carry with
+				// its own error diagnostic, so the policy decides: safe and
+				// strict reject before send, allow sends without the media.
+				continue
+			}
 			return diagnostics, &types.ConversionLossError{Diagnostics: diagnostics}
 		}
 		if media.Detail != "" && target != types.RelayFormatOpenAI && target != types.RelayFormatOpenAIResponses {

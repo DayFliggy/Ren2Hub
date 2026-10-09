@@ -3113,6 +3113,8 @@ export default {
         'Adapt -thinking, -nothinking, and effort suffixes such as -high to Anthropic native thinking behavior while keeping billing predictable. When off, model names are sent upstream unchanged.',
       geminiThinkingAdapterDesc:
         "Supports -thinking, -thinking-{'{'}budget{'}'}, -nothinking, and effort suffixes such as -high while routing to the correct Gemini variant. When off, model names are sent upstream unchanged.",
+      geminiThoughtSignatureDesc:
+        'When converting other protocols to Gemini, fill one signature-bypass value into each model turn of the history, on its first function call when it has one. Gemini 3 rejects function calls without a thought signature; Google documents the bypass for history from other models and notes that it lowers model quality.',
     },
     security: {
       title: 'Security & Limits',

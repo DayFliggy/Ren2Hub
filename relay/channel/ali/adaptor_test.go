@@ -159,3 +159,20 @@ func TestMappedAliImageModelUsesUpstreamProtocol(t *testing.T) {
 	assert.True(t, adaptor.IsSyncImageModel)
 	assert.IsType(t, &AliImageRequest{}, converted)
 }
+
+// The adaptor renders the host's resolved disabling intent as the native
+// switch after the shared NewAPI conversion.
+func TestConvertOpenAIRequestRendersDisabledThinking(t *testing.T) {
+	request := &dto.GeneralOpenAIRequest{Model: "qwen-plus", ReasoningEffort: "none"}
+	info := &relaycommon.RelayInfo{
+		ReasoningEffort: "none",
+		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "qwen-plus"},
+	}
+
+	convertedValue, err := (&Adaptor{}).ConvertOpenAIRequest(nil, info, request)
+	require.NoError(t, err)
+	encoded, err := common.Marshal(convertedValue)
+	require.NoError(t, err)
+	assert.Equal(t, "false", gjson.GetBytes(encoded, "enable_thinking").Raw)
+	assert.False(t, gjson.GetBytes(encoded, "reasoning_effort").Exists())
+}

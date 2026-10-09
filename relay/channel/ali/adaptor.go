@@ -187,7 +187,11 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 
 	switch info.RelayMode {
 	default:
-		return requestOpenAI2Ali(*request, info.UpstreamModelName, info.GetReasoningEffort())
+		aliReq := requestOpenAI2Ali(*request, info.UpstreamModelName)
+		if err := renderAliDisabledThinking(aliReq, info.GetReasoningEffort()); err != nil {
+			return nil, err
+		}
+		return aliReq, nil
 	}
 }
 

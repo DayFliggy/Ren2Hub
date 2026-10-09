@@ -384,8 +384,8 @@ func ConvertStreamResponseChunk(c context.Context, info convmeta.Meta, state *Re
 		}
 		return nil, err
 	}
-	diagnostics := toolconv.InspectStreamResponse(state.From, state.To, response)
-	if err := guardResponseConversion(state.From, state.To, response, info, diagnostics); err != nil {
+	diagnostics, err := guardResponseConversion(state.From, state.To, response, info, toolconv.InspectStreamResponse(state.From, state.To, response))
+	if err != nil {
 		state.conversionError = err
 		return nil, err
 	}
@@ -591,8 +591,8 @@ func executeResponseSteps(c context.Context, info convmeta.Meta, from types.Rela
 	if err := ValidateResponseTermination(from, target, termination); err != nil {
 		return nil, err
 	}
-	diagnostics := toolconv.InspectResponse(from, target, response)
-	if err := guardResponseConversion(from, target, response, info, diagnostics); err != nil {
+	diagnostics, err := guardResponseConversion(from, target, response, info, toolconv.InspectResponse(from, target, response))
+	if err != nil {
 		return nil, err
 	}
 	current, hostedResponse, err := toolconv.ExtractHostedResponse(from, response)
@@ -661,7 +661,7 @@ func executeResponseStep(c context.Context, info convmeta.Meta, spec ResponseCon
 		return nil, nil, ResponseStep{}, fmt.Errorf("response converter %q has no non-stream implementation", spec.ID)
 	}
 
-	if err := guardResponseConversion(spec.From, spec.To, response, info, nil); err != nil {
+	if _, err := guardResponseConversion(spec.From, spec.To, response, info, nil); err != nil {
 		return nil, nil, ResponseStep{}, err
 	}
 	value, usage, err := spec.Convert(c, info, response)
@@ -680,8 +680,8 @@ func executeStatelessStreamResponseSpec(c context.Context, info convmeta.Meta, f
 	if err := ValidateResponseTermination(from, target, termination); err != nil {
 		return nil, err
 	}
-	diagnostics := toolconv.InspectStreamResponse(from, target, response)
-	if err := guardResponseConversion(from, target, response, info, diagnostics); err != nil {
+	diagnostics, err := guardResponseConversion(from, target, response, info, toolconv.InspectStreamResponse(from, target, response))
+	if err != nil {
 		return nil, err
 	}
 	steps, err := expandResponseConverterSteps(spec)

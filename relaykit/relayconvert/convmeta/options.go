@@ -79,8 +79,8 @@ type GeminiOptions struct {
 	// ThinkingAdapterBudgetTokensPercentage sizes thinkingBudget as a fraction
 	// of maxOutputTokens when the adapter fires.
 	ThinkingAdapterBudgetTokensPercentage float64
-	// Deprecated: retained for source compatibility. Converters never synthesize
-	// provider-owned thought signatures, regardless of this value.
+	// FunctionCallThoughtSignatureEnabled attaches thoughtSignature bypass
+	// values to function-call parts.
 	FunctionCallThoughtSignatureEnabled bool
 	// SupportsImagine reports whether the model supports image generation
 	// (switches response modalities). Nil means "never".
