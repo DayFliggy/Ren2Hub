@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/gin-contrib/gzip"
+	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 )
 
@@ -73,21 +74,48 @@ func isBackendWebRequest(requestPath string) bool {
 	return len(parts) > 1 && parts[1] == "mj"
 }
 
+// frontendFiles narrows the embedded build to the files served as static
+// assets. Directories, the index page and paths outside the static extension
+// whitelist are not files here: they belong to the SPA fallback and count
+// against the web limiter. The upstream static limiter and precompression
+// both decide through this one Exists.
+type frontendFiles struct {
+	static.ServeFileSystem
+}
+
+func (files frontendFiles) Exists(_ string, requestPath string) bool {
+	requestPath = pathpkg.Clean("/" + strings.TrimLeft(requestPath, "/"))
+	if !isWebStaticRequest(requestPath) {
+		return false
+	}
+	file, err := files.Open(requestPath)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	return err == nil && !info.IsDir()
+}
+
 func SetWebRouter(router *gin.Engine, assets WebAssets) {
 	frontendBaseURL := strings.TrimRight(os.Getenv("FRONTEND_BASE_URL"), "/")
 	if common.IsMasterNode && frontendBaseURL != "" {
 		frontendBaseURL = ""
 		common.SysLog("FRONTEND_BASE_URL is ignored on master node")
 	}
-	buildFS, err := fs.Sub(assets.BuildFS, "frontend/embed-dist")
-	if err != nil {
-		panic(err)
-	}
-	publicStatic := http.FileServer(http.FS(buildFS))
+	frontendFS := frontendFiles{common.EmbedFolder(assets.BuildFS, "frontend/embed-dist")}
 	frontendReady := frontendBuildReady(assets.IndexPage)
-	webRateLimit := middleware.GlobalWebRateLimit()
+	webRateLimit := middleware.GlobalWebRateLimit(frontendFS)
+	serveFrontendFile := middleware.ServeFrontendFiles(frontendFS)
+	compress := gzip.Gzip(gzip.DefaultCompression)
+	// ServeFrontendFiles sends build files already compressed; pages, missing
+	// paths and backend 404s still go through the gzip middleware.
+	compressUnlessFrontendFile := func(c *gin.Context) {
+		if !frontendFS.Exists("/", c.Request.URL.Path) {
+			compress(c)
+		}
+	}
 
-	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	serveWeb := func(c *gin.Context) {
 		c.Set(middleware.RouteTagKey, "web")
 		c.Header("Cache-Control", "no-cache")
@@ -102,25 +130,17 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 			controller.RelayNotFound(c)
 			return
 		}
-		staticRequest := isWebStaticRequest(requestPath)
-		staticExists := false
-		if staticRequest {
-			file, err := fs.Stat(buildFS, strings.TrimPrefix(requestPath, "/"))
-			staticExists = err == nil && !file.IsDir()
-		}
-		if !staticExists {
-			webRateLimit(c)
-			if c.IsAborted() {
-				return
-			}
+		webRateLimit(c)
+		if c.IsAborted() {
+			return
 		}
 		if frontendBaseURL != "" {
 			target := (&url.URL{Path: requestPath, RawQuery: c.Request.URL.RawQuery}).String()
 			c.Redirect(http.StatusTemporaryRedirect, frontendBaseURL+target)
 			return
 		}
-		if staticRequest {
-			if !staticExists {
+		if isWebStaticRequest(requestPath) {
+			if !frontendFS.Exists("/", requestPath) {
 				c.Header("Cache-Control", "no-store")
 				controller.RelayNotFound(c)
 				return
@@ -128,7 +148,7 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 			if immutableWebAsset.MatchString(requestPath) {
 				c.Header("Cache-Control", "public, max-age=31536000, immutable")
 			}
-			publicStatic.ServeHTTP(c.Writer, c.Request)
+			serveFrontendFile(c)
 			return
 		}
 		if !frontendReady {
@@ -145,11 +165,11 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 	// Exact web roots prevent Gin's relay wildcard from issuing a trailing-slash
 	// redirect before the fallback runs; API trailing-slash behavior stays intact.
 	for _, path := range []string{"/", "/assets", "/assets/"} {
-		router.Any(path, serveWeb)
+		router.Any(path, compressUnlessFrontendFile, serveWeb)
 	}
 	for _, path := range retiredWebPathPrefixes {
-		router.Any(path, serveWeb)
-		router.Any(path+"/", serveWeb)
+		router.Any(path, compressUnlessFrontendFile, serveWeb)
+		router.Any(path+"/", compressUnlessFrontendFile, serveWeb)
 	}
-	router.NoRoute(serveWeb)
+	router.NoRoute(compressUnlessFrontendFile, serveWeb)
 }

@@ -30,7 +30,6 @@ type RouteScoreCandidate struct {
 	ErrorBandKnown    bool
 	TTFTBand          RouteRankBand
 	TTFTBandKnown     bool
-	HealthFactor      float64
 }
 
 type RouteScoreBreakdown struct {
@@ -42,7 +41,6 @@ type RouteScoreBreakdown struct {
 	SelectionRank     float64  `json:"selection_rank"`
 	ErrorBand         *int     `json:"error_band,omitempty"`
 	TTFTBand          *int     `json:"ttft_band,omitempty"`
-	HealthFactor      float64  `json:"health_factor"`
 	ErrorRate         *float64 `json:"error_rate,omitempty"`
 	LatencyMS         *float64 `json:"latency_ms,omitempty"`
 	TTFTMS            *float64 `json:"ttft_ms,omitempty"`
@@ -60,13 +58,19 @@ type ScoredRouteCandidate struct {
 // back to the weighted rendezvous permutation. A degraded channel therefore
 // loses to a healthy peer at the same priority but never crosses a priority
 // boundary the administrator set.
+//
+// Inside one tie group the weight follows NewAPI's GetRandomSatisfiedChannel:
+// first attempts are proportional to the configured weight, a zero-weight
+// channel gets none while a weighted peer exists, and an all-zero group shares
+// equally. Zero-weight channels rank after weighted ones and use rendezvous
+// weight 1 among themselves, so they remain ordered failover candidates.
 func OrderAutoRouteCandidates(candidates []RouteScoreCandidate, requestID string) []ScoredRouteCandidate {
 	ordered := ScoreRouteCandidates(candidates)
 	for index := range ordered {
 		candidate := ordered[index].Candidate
 		digest := sha256.Sum256([]byte(requestID + ":" + strconv.Itoa(candidate.ChannelID)))
 		uniform := (float64(binary.BigEndian.Uint64(digest[:8])>>11) + 1) / (float64(uint64(1)<<53) + 1)
-		ordered[index].Breakdown.SelectionRank = -math.Log(uniform) / float64(ordered[index].Breakdown.EffectiveWeight)
+		ordered[index].Breakdown.SelectionRank = -math.Log(uniform) / float64(max(ordered[index].Breakdown.EffectiveWeight, 1))
 	}
 	sort.Slice(ordered, func(i, j int) bool {
 		left, right := ordered[i], ordered[j]
@@ -86,6 +90,9 @@ func OrderAutoRouteCandidates(candidates []RouteScoreCandidate, requestID string
 		}
 		if left.Candidate.Sticky != right.Candidate.Sticky {
 			return left.Candidate.Sticky
+		}
+		if leftWeighted, rightWeighted := left.Breakdown.EffectiveWeight > 0, right.Breakdown.EffectiveWeight > 0; leftWeighted != rightWeighted {
+			return leftWeighted
 		}
 		if left.Breakdown.SelectionRank != right.Breakdown.SelectionRank {
 			return left.Breakdown.SelectionRank < right.Breakdown.SelectionRank
@@ -119,20 +126,13 @@ func ScoreRouteCandidates(candidates []RouteScoreCandidate) []ScoredRouteCandida
 }
 
 func scoreRouteCandidate(candidate RouteScoreCandidate) RouteScoreBreakdown {
-	healthFactor := candidate.HealthFactor
-	if healthFactor <= 0 {
-		healthFactor = 1
-	}
 	breakdown := RouteScoreBreakdown{
 		PriorityLayer: candidate.Priority,
-		// Health scales the configured weight instead of replacing it: a
-		// degraded channel keeps a smaller but nonzero share of its layer.
-		EffectiveWeight: int(math.Round(float64(max(candidate.Weight, 1)) * healthFactor)),
+		// The error and TTFT bands already order health as hard keys, so the
+		// weighted step keeps the administrator's weight unchanged.
+		EffectiveWeight: max(candidate.Weight, 0),
 		LoadRatio:       candidate.LoadRatio, LoadBucket: int(math.Floor(max(candidate.LoadRatio, 0) * 20)),
-		Sticky: candidate.Sticky, HealthFactor: healthFactor,
-	}
-	if breakdown.EffectiveWeight < 1 {
-		breakdown.EffectiveWeight = 1
+		Sticky: candidate.Sticky,
 	}
 	if candidate.ErrorBandKnown {
 		band := int(candidate.ErrorBand)

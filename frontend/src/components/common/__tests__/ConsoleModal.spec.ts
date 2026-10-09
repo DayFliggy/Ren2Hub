@@ -112,7 +112,7 @@ describe('ConsoleModal', () => {
     }
   })
 
-  it('gives keys to the dialog painted on top, not the last one in the DOM', async () => {
+  it('gives keys to the most recently opened dialog, not the last one in the DOM', async () => {
     // Mirrors the security proof (z-index 110) mounted before a form modal
     // whose close is disabled while it waits for that proof.
     const proof = mount(ConsoleModal, {
@@ -159,6 +159,35 @@ describe('ConsoleModal', () => {
       // Unmount even on failure: open modals hold the shared scroll lock.
       proof.unmount()
       form.unmount()
+    }
+  })
+
+  it('ranks dialogs by open order rather than z-index', async () => {
+    // The stack follows Sub2API's BaseDialog: whichever dialog opened last
+    // handles Escape, whatever z-index an older dialog declares.
+    const raised = mount(ConsoleModal, {
+      attachTo: document.body,
+      props: { open: false, title: 'Raised', zIndex: 110 },
+    })
+    const later = mount(ConsoleModal, {
+      attachTo: document.body,
+      props: { open: false, title: 'Later' },
+    })
+    try {
+      await raised.setProps({ open: true })
+      await later.setProps({ open: true })
+      await nextTick()
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      expect(later.emitted('close')).toHaveLength(1)
+      expect(raised.emitted('close')).toBeUndefined()
+
+      await later.setProps({ open: false })
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      expect(raised.emitted('close')).toHaveLength(1)
+    } finally {
+      raised.unmount()
+      later.unmount()
     }
   })
 

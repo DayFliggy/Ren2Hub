@@ -46,7 +46,6 @@ type RouteSelectionCandidate struct {
 	ErrorBandKnown    bool
 	TTFTBand          RouteRankBand
 	TTFTBandKnown     bool
-	HealthFactor      float64
 }
 
 type RouteSelectionInput struct {
@@ -148,7 +147,6 @@ func SelectTokenRoute(input RouteSelectionInput) (RouteSelectionResult, error) {
 					LoadRatio: candidate.LoadRatio,
 					ErrorBand: candidate.ErrorBand, ErrorBandKnown: candidate.ErrorBandKnown,
 					TTFTBand: candidate.TTFTBand, TTFTBandKnown: candidate.TTFTBandKnown,
-					HealthFactor: candidate.HealthFactor,
 				})
 			}
 			scoredCandidates := OrderAutoRouteCandidates(scored, input.RequestID)

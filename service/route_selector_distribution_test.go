@@ -37,9 +37,11 @@ func TestAutoRouteOrderSeparatesNearbyLoadBuckets(t *testing.T) {
 	assert.Equal(t, 1, ordered[0].Candidate.ChannelID)
 }
 
-func TestAutoRouteOrderIsStableWeightedAndGivesZeroMinimumShare(t *testing.T) {
+// Zero-weight semantics follow NewAPI and are covered by
+// TestOrderAutoRouteCandidatesFollowsNewAPIWeightSemantics.
+func TestAutoRouteOrderIsStableAndWeighted(t *testing.T) {
 	candidates := []RouteScoreCandidate{
-		{ChannelID: 1, Weight: 0, HealthUsable: true},
+		{ChannelID: 1, Weight: 1, HealthUsable: true},
 		{ChannelID: 2, Weight: 3, HealthUsable: true},
 	}
 	counts := map[int]int{}

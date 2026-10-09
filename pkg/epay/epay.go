@@ -1,10 +1,9 @@
-// Package epay implements the bounded, signed EasyPay payment protocol.
+// Package epay implements the bounded EasyPay payment envelope: notification
+// parsing and validation, exact money, gateway URLs and merchant checks.
+// Signing and signature verification are delegated to go-epay.
 package epay
 
 import (
-	"crypto/md5" // EasyPay's protocol requires MD5(message + merchant key).
-	"crypto/subtle"
-	"encoding/hex"
 	"errors"
 	"io"
 	"math"
@@ -12,10 +11,11 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	goepay "github.com/Calcium-Ion/go-epay/epay"
 )
 
 const (
@@ -90,47 +90,37 @@ func NormalizeGatewayURL(raw string) (string, error) {
 	return u.String(), nil
 }
 
-// Sign preserves the EasyPay convention: sort nonempty values, omit sign and
-// sign_type, and hash the unescaped concatenation followed by the merchant key.
-// Parameters that would make that concatenation ambiguous are rejected.
+// Sign returns the EasyPay MD5 signature computed by go-epay: nonempty values
+// sorted by key, sign and sign_type omitted, the unescaped concatenation
+// hashed with the merchant key. go-epay rejects parameters that would make that
+// concatenation ambiguous. params is not modified.
 func Sign(params map[string]string, key string) (string, error) {
-	digest, err := signatureDigest(params, key)
-	if err != nil {
-		return "", err
+	signing := make(map[string]string, len(params))
+	for name, value := range params {
+		signing[name] = value
 	}
-	return hex.EncodeToString(digest[:]), nil
+	signed, err := goepay.GenerateParamsWithError(signing, key)
+	if err != nil {
+		return "", signingError(err)
+	}
+	return signed["sign"], nil
 }
 
-func signatureDigest(params map[string]string, key string) ([md5.Size]byte, error) {
-	keys := make([]string, 0, len(params))
-	for name, value := range params {
-		if name == "sign" || name == "sign_type" || value == "" {
-			continue
-		}
-		if ambiguousSigningPair(name, value) {
-			return [md5.Size]byte{}, ErrInvalidParameters
-		}
-		keys = append(keys, name)
+// signingError keeps go-epay's parameter names out of callback logs and maps
+// its ambiguity rejection onto this package's error.
+func signingError(err error) error {
+	if errors.Is(err, goepay.ErrInvalidParams) {
+		return ErrInvalidParameters
 	}
-	sort.Strings(keys)
-	var message strings.Builder
-	for i, name := range keys {
-		if i != 0 {
-			message.WriteByte('&')
-		}
-		message.WriteString(name)
-		message.WriteByte('=')
-		message.WriteString(params[name])
-	}
-	message.WriteString(key)
-	return md5.Sum([]byte(message.String())), nil
+	return err
 }
 
 // ambiguousSigningPair reports whether a pair could let two different
 // parameter sets share one unescaped signing string. The string splits on '&'
 // and each pair at its first '=', so keys must be nonempty without '&' or '='
 // and values must not contain '&'; an '=' inside a value stays unambiguous.
-// These are the go-epay v0.0.5 rules.
+// These are the go-epay v0.0.5 rules, checked here again so a notification is
+// rejected while parsing, before any signature work.
 func ambiguousSigningPair(name, value string) bool {
 	return name == "" || strings.ContainsAny(name, "&=") || strings.Contains(value, "&")
 }
@@ -235,15 +225,12 @@ func VerifyNotification(params map[string]string, config Config) (*Payment, erro
 	if err := validateNotificationParameters(params); err != nil {
 		return nil, err
 	}
-	signature, err := hex.DecodeString(params["sign"])
-	if err != nil || len(signature) != md5.Size {
-		return nil, ErrInvalidSignature
-	}
-	expected, err := signatureDigest(params, config.Key)
+	client := goepay.Client{Config: &goepay.Config{PartnerID: config.MerchantID, Key: config.Key}}
+	verified, err := client.Verify(params)
 	if err != nil {
-		return nil, err
+		return nil, signingError(err)
 	}
-	if subtle.ConstantTimeCompare(signature, expected[:]) != 1 {
+	if !verified.VerifyStatus {
 		return nil, ErrInvalidSignature
 	}
 	if params["pid"] != config.MerchantID {

@@ -86,6 +86,7 @@ require (
 
 require (
 	github.com/Azure/go-ntlmssp v0.1.1
+	github.com/Calcium-Ion/go-epay v0.0.5
 	github.com/Calcium-Ion/moejs v0.1.0-alpha.6
 	github.com/alicebob/miniredis/v2 v2.38.0
 )

@@ -1,6 +1,8 @@
 package router
 
 import (
+	"compress/gzip"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -187,6 +189,82 @@ func TestVueStaticAssetsDoNotConsumeWebRateLimit(t *testing.T) {
 	assert.Equal(t, "60", limited.Header().Get("Retry-After"))
 	assert.Equal(t, http.StatusTooManyRequests, get("/assets/missing.js").Code)
 	assert.Equal(t, http.StatusOK, get("/assets/app-AbCd1234.js").Code, "existing build files stay available after the page budget is spent")
+}
+
+// Build files are served from a gzip encoding computed once per process, so the
+// router-wide gzip middleware must skip them; pages and unknown paths still go
+// through it. Each response is gzip-encoded exactly once and decodes to the
+// original bytes.
+func TestVueStaticAssetsAreCompressedOnce(t *testing.T) {
+	engine := newWebTestRouter(t, testWebAssets("vue-index"), "", true)
+	request := func(path string) *http.Response {
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+		engine.ServeHTTP(recorder, req)
+		return recorder.Result()
+	}
+	decodeOnce := func(t *testing.T, response *http.Response) string {
+		t.Helper()
+		require.Equal(t, "gzip", response.Header.Get("Content-Encoding"))
+		reader, err := gzip.NewReader(response.Body)
+		require.NoError(t, err)
+		decoded, err := io.ReadAll(reader)
+		require.NoError(t, err)
+		return string(decoded)
+	}
+
+	asset := request("/assets/app-AbCd1234.js")
+	require.Equal(t, http.StatusOK, asset.StatusCode)
+	assert.Equal(t, "public, max-age=31536000, immutable", asset.Header.Get("Cache-Control"))
+	assert.Equal(t, "Accept-Encoding", asset.Header.Get("Vary"))
+	assert.NotEmpty(t, asset.Header.Get("Content-Length"), "a precompressed body has a known length")
+	assert.Equal(t, "hashed-asset", decodeOnce(t, asset))
+
+	page := request("/console/keys")
+	require.Equal(t, http.StatusOK, page.StatusCode)
+	assert.Equal(t, "vue-index", decodeOnce(t, page))
+
+	image := request("/logo.png")
+	require.Equal(t, http.StatusOK, image.StatusCode)
+	assert.Empty(t, image.Header.Get("Content-Encoding"))
+	body, err := io.ReadAll(image.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "logo", string(body))
+}
+
+// Existing build files count against the separate static limiter when it is
+// enabled; it is disabled by default so they consume no budget at all.
+func TestVueStaticAssetsUseStaticRateLimitWhenEnabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("FRONTEND_BASE_URL", "")
+	previousMaster, previousRedis, previousAPI := common.IsMasterNode, common.RedisEnabled, common.GlobalApiRateLimitEnable
+	previousWeb, previousStatic := common.GlobalWebRateLimitEnable, common.GlobalStaticRateLimitEnable
+	previousStaticNum, previousStaticDuration := common.GlobalStaticRateLimitNum, common.GlobalStaticRateLimitDuration
+	common.IsMasterNode, common.RedisEnabled, common.GlobalApiRateLimitEnable = true, false, false
+	common.GlobalWebRateLimitEnable, common.GlobalStaticRateLimitEnable = false, true
+	common.GlobalStaticRateLimitNum, common.GlobalStaticRateLimitDuration = 2, 47
+	t.Cleanup(func() {
+		common.IsMasterNode, common.RedisEnabled, common.GlobalApiRateLimitEnable = previousMaster, previousRedis, previousAPI
+		common.GlobalWebRateLimitEnable, common.GlobalStaticRateLimitEnable = previousWeb, previousStatic
+		common.GlobalStaticRateLimitNum, common.GlobalStaticRateLimitDuration = previousStaticNum, previousStaticDuration
+	})
+	engine := gin.New()
+	SetRouter(engine, testWebAssets("vue-index"))
+	get := func(path string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.RemoteAddr = "198.51.100.78:4321"
+		engine.ServeHTTP(recorder, request)
+		return recorder
+	}
+
+	assert.Equal(t, http.StatusOK, get("/assets/app-AbCd1234.js").Code)
+	assert.Equal(t, http.StatusOK, get("/logo.png").Code)
+	limited := get("/assets/app-AbCd1234.js")
+	assert.Equal(t, http.StatusTooManyRequests, limited.Code)
+	assert.Equal(t, "47", limited.Header().Get("Retry-After"))
+	assert.Equal(t, http.StatusOK, get("/console/keys").Code, "pages use the web limiter, which is disabled here")
 }
 
 func TestVueExternalFrontend(t *testing.T) {
