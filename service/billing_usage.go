@@ -215,7 +215,10 @@ func usageFromOpenAIBillingUsage(billingUsage *dto.BillingUsage) *dto.Usage {
 	if usage.InputTokensDetails != nil {
 		usage.PromptTokensDetails = usage.InputTokensDetails.Clone()
 	}
-	if usage.OutputTokensDetails != nil {
+	// MergeUsageNonZero merges only completion_tokens_details, as in NewAPI,
+	// so the output_tokens_details alias of a merged snapshot can be stale.
+	// The alias is read only when the snapshot carries no merged details.
+	if usage.OutputTokensDetails != nil && usage.CompletionTokenDetails == (dto.OutputTokenDetails{}) {
 		usage.CompletionTokenDetails = *usage.OutputTokensDetails
 	}
 	if usage.PromptTokens == 0 && usage.InputTokens > 0 {

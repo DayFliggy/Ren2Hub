@@ -362,44 +362,7 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 					texts = append(texts, string(b))
 				}
 			case "tool_result":
-				// Count tool output as the text the model reads; JSON-encoding it
-				// would escape newlines and quotes and count image base64 as text.
-				if media.IsStringContent() {
-					texts = append(texts, media.GetStringContent())
-					break
-				}
-				parts, _ := media.Content.([]any)
-				if parts == nil && media.Content != nil {
-					b, _ := kitutil.Marshal(media.Content)
-					texts = append(texts, string(b))
-				}
-				for _, raw := range parts {
-					// Decode each block on its own: one block the media shape cannot
-					// hold (e.g. search_result with a string source) must still be
-					// counted instead of dropping the whole tool result.
-					part, err := kitutil.Any2Type[ClaudeMediaMessage](raw)
-					if err != nil {
-						b, _ := kitutil.Marshal(raw)
-						texts = append(texts, string(b))
-						continue
-					}
-					if part.Source != nil && part.Source.Type == "text" {
-						texts = append(texts, kitutil.Interface2String(part.Source.Data))
-						continue
-					}
-					if source := part.ToFileSource(); source != nil {
-						fileType := types.FileTypeFile
-						if part.Type == "image" {
-							fileType = types.FileTypeImage
-						}
-						fileMeta = append(fileMeta, &types.FileMeta{FileType: fileType, Source: source})
-					} else if part.Type == "text" {
-						texts = append(texts, part.GetText())
-					} else {
-						b, _ := kitutil.Marshal(raw)
-						texts = append(texts, string(b))
-					}
-				}
+				texts, fileMeta = appendToolResultTokenInput(texts, fileMeta, &media)
 			}
 		}
 	}
@@ -440,6 +403,49 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	tokenCountMeta.CombineText = strings.Join(texts, "\n")
 	tokenCountMeta.Files = fileMeta
 	return &tokenCountMeta
+}
+
+// appendToolResultTokenInput adds what the model reads from one tool_result
+// to the token-count input; the same text feeds the sensitive-word check.
+// Output is counted as text, not JSON-encoded, which would escape newlines
+// and quotes and count image base64 as text. Ren2Hub-local: blocks are
+// decoded one by one, so a block the media shape cannot hold (e.g.
+// search_result with a string source) is counted as its raw JSON instead of
+// dropping the whole tool result, and a plain-text document counts as text.
+func appendToolResultTokenInput(texts []string, files []*types.FileMeta, result *ClaudeMediaMessage) ([]string, []*types.FileMeta) {
+	if result.IsStringContent() {
+		return append(texts, result.GetStringContent()), files
+	}
+	parts, _ := result.Content.([]any)
+	if parts == nil && result.Content != nil {
+		b, _ := kitutil.Marshal(result.Content)
+		texts = append(texts, string(b))
+	}
+	for _, raw := range parts {
+		part, err := kitutil.Any2Type[ClaudeMediaMessage](raw)
+		if err != nil {
+			b, _ := kitutil.Marshal(raw)
+			texts = append(texts, string(b))
+			continue
+		}
+		if part.Source != nil && part.Source.Type == "text" {
+			texts = append(texts, kitutil.Interface2String(part.Source.Data))
+			continue
+		}
+		if source := part.ToFileSource(); source != nil {
+			fileType := types.FileTypeFile
+			if part.Type == "image" {
+				fileType = types.FileTypeImage
+			}
+			files = append(files, &types.FileMeta{FileType: fileType, Source: source})
+		} else if part.Type == "text" {
+			texts = append(texts, part.GetText())
+		} else {
+			b, _ := kitutil.Marshal(raw)
+			texts = append(texts, string(b))
+		}
+	}
+	return texts, files
 }
 
 func (c *ClaudeRequest) IsStream(ctx *http.Request) bool {

@@ -564,3 +564,57 @@ func TestGeminiStreamHandlerEmptyUsageMetadataBuildsEstimatedBillingUsage(t *tes
 	require.Equal(t, usage.CompletionTokens, usage.BillingUsage.GeminiUsageMetadata.CandidatesTokenCount)
 	require.True(t, common.GetContextKeyBool(c, constant.ContextKeyLocalCountTokens))
 }
+
+// Every Gemini stream frame carries a usageMetadata snapshot, but a later
+// frame may omit fields an earlier one reported. As in NewAPI, the stream
+// accumulates the snapshots so an omitted prompt count and its modality
+// details are not replaced by the local estimate.
+func TestGeminiStreamHandlerAccumulatesUsageMetadataAcrossFrames(t *testing.T) {
+	oldStreamingTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 300
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldStreamingTimeout
+	})
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-flash:streamGenerateContent", nil)
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gemini-2.5-flash",
+		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "gemini-2.5-flash"},
+	}
+	info.SetEstimatePromptTokens(20)
+
+	frame := func(text string, finish bool, metadata dto.GeminiUsageMetadata) string {
+		response := dto.GeminiChatResponse{
+			Candidates:    []dto.GeminiChatCandidate{{Content: dto.GeminiChatContent{Role: "model", Parts: []dto.GeminiPart{{Text: text}}}}},
+			UsageMetadata: metadata,
+		}
+		if finish {
+			stop := "STOP"
+			response.Candidates[0].FinishReason = &stop
+		}
+		data, err := common.Marshal(response)
+		require.NoError(t, err)
+		return "data: " + string(data) + "\n\n"
+	}
+	body := frame("first", false, dto.GeminiUsageMetadata{
+		PromptTokenCount:     1000,
+		CandidatesTokenCount: 5,
+		TotalTokenCount:      1005,
+		PromptTokensDetails:  []dto.GeminiPromptTokensDetails{{Modality: "IMAGE", TokenCount: 900}, {Modality: "TEXT", TokenCount: 100}},
+	}) + frame(" second", true, dto.GeminiUsageMetadata{CandidatesTokenCount: 50, TotalTokenCount: 1050}) + "data: [DONE]\n\n"
+	resp := &http.Response{
+		Header: http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:   io.NopCloser(strings.NewReader(body)),
+	}
+
+	usage, newAPIError := geminiStreamHandler(c, info, resp, func(string, *dto.GeminiChatResponse) bool { return true })
+	require.Nil(t, newAPIError)
+	require.NotNil(t, usage)
+	assert.Equal(t, 1000, usage.PromptTokens)
+	assert.Equal(t, 50, usage.CompletionTokens)
+	assert.Equal(t, 900, usage.PromptTokensDetails.ImageTokens)
+	require.NotNil(t, usage.BillingUsage)
+	require.NotNil(t, usage.BillingUsage.GeminiUsageMetadata)
+	assert.Equal(t, 1000, usage.BillingUsage.GeminiUsageMetadata.PromptTokenCount)
+}

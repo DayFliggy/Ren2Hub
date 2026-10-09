@@ -58,19 +58,19 @@ func MergeUsageNonZero(current *Usage, incoming *Usage) *Usage {
 		}
 	}
 
-	mergeOutputTokenDetails(&current.CompletionTokenDetails, incoming.CompletionTokenDetails)
-	if incoming.OutputTokensDetails != nil {
-		// output_tokens_details is the native alias of completion_tokens_details.
-		// Its plain integers cannot tell an explicit zero from an omitted field,
-		// so it follows the same later-non-zero rule.
-		mergeOutputTokenDetails(&current.CompletionTokenDetails, *incoming.OutputTokensDetails)
+	if incoming.CompletionTokenDetails.TextTokens > 0 {
+		current.CompletionTokenDetails.TextTokens = incoming.CompletionTokenDetails.TextTokens
 	}
-	// Both aliases carry the same merged counts whichever one the incoming
-	// usage reported, as NewAPI's ApplyResponsesUsage keeps them.
-	if current.CompletionTokenDetails != (OutputTokenDetails{}) {
-		details := current.CompletionTokenDetails
-		current.OutputTokensDetails = &details
+	if incoming.CompletionTokenDetails.AudioTokens > 0 {
+		current.CompletionTokenDetails.AudioTokens = incoming.CompletionTokenDetails.AudioTokens
 	}
+	if incoming.CompletionTokenDetails.ImageTokens > 0 {
+		current.CompletionTokenDetails.ImageTokens = incoming.CompletionTokenDetails.ImageTokens
+	}
+	if incoming.CompletionTokenDetails.ReasoningTokens > 0 {
+		current.CompletionTokenDetails.ReasoningTokens = incoming.CompletionTokenDetails.ReasoningTokens
+	}
+
 	if incoming.UsageSemantic != "" {
 		current.UsageSemantic = incoming.UsageSemantic
 	}
@@ -288,21 +288,6 @@ func mergeGeminiTokenDetails(current []GeminiPromptTokensDetails, incoming []Gem
 		}
 	}
 	return merged
-}
-
-func mergeOutputTokenDetails(current *OutputTokenDetails, incoming OutputTokenDetails) {
-	if incoming.TextTokens > 0 {
-		current.TextTokens = incoming.TextTokens
-	}
-	if incoming.AudioTokens > 0 {
-		current.AudioTokens = incoming.AudioTokens
-	}
-	if incoming.ImageTokens > 0 {
-		current.ImageTokens = incoming.ImageTokens
-	}
-	if incoming.ReasoningTokens > 0 {
-		current.ReasoningTokens = incoming.ReasoningTokens
-	}
 }
 
 func mergeInputTokenDetails(current *InputTokenDetails, incoming InputTokenDetails) {

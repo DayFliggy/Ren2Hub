@@ -20,16 +20,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// getImageToken estimates one image. fetchFiles is EstimateRequestToken's
-// single download policy: when it is off, URL images assume a typical size so
-// the estimate never downloads, while inline data is decoded locally.
-func getImageToken(c *gin.Context, fileMeta *types.FileMeta, model string, fetchFiles bool) (int, error) {
+func getImageToken(c *gin.Context, fileMeta *types.FileMeta, model string, stream bool) (int, error) {
 	if fileMeta == nil || fileMeta.Source == nil {
 		return 0, fmt.Errorf("image_url_is_nil")
 	}
 
 	img := tokenkit.Image{Detail: fileMeta.Detail}
-	if !tokenkit.ImageNeedsSize(model, img.Detail) || (fileMeta.Source.IsURL() && !fetchFiles) {
+	// Reading the size may download a URL image; operators can turn that off,
+	// and the estimate then assumes a typical image size.
+	measure := constant.GetMediaToken && (stream || constant.GetMediaTokenNotStream)
+	if !measure || !tokenkit.ImageNeedsSize(model, img.Detail) {
 		return tokenkit.ImageTokens(model, img), nil
 	}
 
@@ -37,8 +37,9 @@ func getImageToken(c *gin.Context, fileMeta *types.FileMeta, model string, fetch
 	if err != nil {
 		return 0, err
 	}
-	// tokenkit bounds side lengths and the patch count, so HEIF uint32
-	// dimensions cannot overflow the estimate.
+	if (config.Width == 0 || config.Height == 0) && format == "" {
+		return 0, fmt.Errorf("fail to decode image config: %s", fileMeta.GetIdentifier())
+	}
 	img.Width, img.Height = config.Width, config.Height
 	logger.LogDebug(c, "image token input: format=%s, width=%d, height=%d", format, img.Width, img.Height)
 	return tokenkit.ImageTokens(model, img), nil
@@ -144,7 +145,13 @@ func EstimateRequestToken(c *gin.Context, meta *types.TokenCountMeta, info *rela
 	for i, file := range meta.Files {
 		switch file.FileType {
 		case types.FileTypeImage:
-			token, err := getImageToken(c, file, model, shouldFetchFiles)
+			// Ren2Hub-local: a URL image is downloaded only under the single
+			// fetch decision above, so a Gemini-native request never fetches.
+			if file.IsURL() && !shouldFetchFiles {
+				tkm += tokenkit.ImageTokens(model, tokenkit.Image{Detail: file.Detail})
+				continue
+			}
+			token, err := getImageToken(c, file, model, info.IsStream)
 			if err != nil {
 				return 0, fmt.Errorf("error counting image token, media index[%d], identifier[%s], err: %v", i, file.GetIdentifier(), err)
 			}

@@ -50,3 +50,22 @@ func TestNormalizedUsageCalculatesProtocolCategoriesOnce(t *testing.T) {
 		})
 	}
 }
+
+// MergeUsageNonZero merges only completion_tokens_details, as in NewAPI, so a
+// merged Responses snapshot keeps the first snapshot's output_tokens_details.
+// Settlement must read the merged details, and fall back to the alias only
+// for a snapshot that carries no other details.
+func TestOpenAIBillingUsageOutputDetailsSurviveSnapshotMerge(t *testing.T) {
+	snapshot := func(outputTokens, imageTokens int) *dto.BillingUsage {
+		details := dto.OutputTokenDetails{TextTokens: 10, ImageTokens: imageTokens}
+		return dto.NewOpenAIResponsesBillingUsage(&dto.Usage{InputTokens: 100, OutputTokens: outputTokens, OutputTokensDetails: &details, CompletionTokenDetails: details})
+	}
+	merged := dto.MergeBillingUsageNonZero(snapshot(10, 0), snapshot(1050, 1040))
+	usage := NormalizedBillingUsage(&dto.Usage{BillingUsage: merged}, "openai")
+	assert.Equal(t, int64(1050), usage.OutputTokens)
+	assert.Equal(t, int64(1040), usage.ImageOutputTokens)
+
+	aliasOnly := dto.NewOpenAIResponsesBillingUsage(&dto.Usage{InputTokens: 100, OutputTokens: 50, OutputTokensDetails: &dto.OutputTokenDetails{ReasoningTokens: 40}})
+	usage = NormalizedBillingUsage(&dto.Usage{BillingUsage: aliasOnly}, "openai")
+	assert.Equal(t, int64(40), usage.ReasoningTokens)
+}

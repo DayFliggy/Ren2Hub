@@ -53,13 +53,15 @@ func TestCountBillableToolCallFunctionCallRequiresFrozenPrice(t *testing.T) {
 
 // Hosted-tool price keys bill hosted tools only: a client function or tool_use
 // with the same name is never counted, even when the frozen quote prices that
-// name. An operator price alone reserves nothing.
+// name. The reserved names are NewAPI's built-in price keys plus the
+// Anthropic server tools; an operator price alone reserves nothing.
 func TestCountBillableToolCallFunctionCallSkipsReservedNames(t *testing.T) {
 	wantBilled := map[string]bool{
 		dto.BuildInToolWebSearchPreview: false,
 		dto.BuildInToolWebSearch:        false,
 		dto.BuildInToolFileSearch:       false,
 		dto.BuildInToolGoogleSearch:     false,
+		GoogleSearchGroundedPromptTool:  false,
 		dto.BuildInToolImageGeneration:  false,
 		"web_fetch":                     false,
 		"code_execution":                false,
@@ -67,7 +69,14 @@ func TestCountBillableToolCallFunctionCallSkipsReservedNames(t *testing.T) {
 		"bing_web_search":               false,
 		"x_search_posts":                false,
 		"x_search_profiles":             false,
+		"search_std":                    false,
+		"search_pro":                    false,
+		"search_pro_sogou":              false,
+		"search_pro_quark":              false,
+		"search_strategy_turbo":         false,
+		"search_strategy_max":           false,
 		"search_strategy_agent":         false,
+		"search_strategy_agent_max":     false,
 		"lookup_order":                  true,
 	}
 	var prices []billing.UnitPrice
@@ -374,7 +383,10 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 			wantCount: 0,
 		},
 		{
-			name: "in_progress is not completed",
+			// Upstreams deliver final image results still labelled in_progress
+			// or generating (Sub2API f2ca16577 normalizes them to completed);
+			// the bytes reached the client, so the image bills, as in NewAPI.
+			name: "in_progress with final result counts",
 			observe: func(c *ImageGenerationCallCounter) {
 				idx := 0
 				c.Observe(&dto.ResponsesOutput{
@@ -384,7 +396,7 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 					Result: "base64-a",
 				}, &idx)
 			},
-			wantCount: 0,
+			wantCount: 1,
 		},
 	}
 
@@ -398,7 +410,9 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 	}
 }
 
-func TestImageGenerationCallCounterRejectsOverLimit(t *testing.T) {
+// More than MaxImageN completed images bill as MaxImageN, as in NewAPI; the
+// request still settles its actual usage instead of the frozen estimate.
+func TestImageGenerationCallCounterCommitCapsAtMaxImageN(t *testing.T) {
 	t.Parallel()
 
 	counter := &ImageGenerationCallCounter{}
@@ -415,8 +429,8 @@ func TestImageGenerationCallCounterRejectsOverLimit(t *testing.T) {
 	info := &RelayInfo{}
 	counter.Commit(info)
 	require.Contains(t, info.ResponsesUsageInfo.BuiltInTools, dto.BuildInToolImageGeneration)
-	assert.True(t, info.BillingToolUsageInvalid)
-	assert.Equal(t, counter.Count(), info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
+	assert.False(t, info.BillingToolUsageInvalid)
+	assert.Equal(t, dto.MaxImageN, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 }
 
 func TestImageGenerationCallCounterCommitDoesNotBillDeclarationsAlone(t *testing.T) {

@@ -8,31 +8,22 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
 
 // GoogleSearchGroundedPromptTool bills Gemini 2.5-and-older Google Search
 // grounding, charged once per grounded prompt.
 const GoogleSearchGroundedPromptTool = "google_search_grounded_prompt"
 
-// reservedBillableToolNames are the price keys of hosted tools: protocol
-// built-ins, Anthropic server tools reported in usage.server_tool_use and the
-// vendor search counts read from upstream usage. A client function or tool_use
-// with the same name is never counted under them. The set is static and never
-// derived from operator prices.
+// reservedBillableToolNames are hosted-tool keys without a built-in price
+// (Anthropic server tools reported in usage.server_tool_use). They and every
+// built-in hosted-tool price key (operation_setting.IsBuiltInToolPriceKey)
+// bill hosted tools; a client function or tool_use with the same name is
+// never counted under them.
 var reservedBillableToolNames = map[string]struct{}{
-	dto.BuildInToolWebSearchPreview: {},
-	dto.BuildInToolWebSearch:        {},
-	dto.BuildInToolFileSearch:       {},
-	dto.BuildInToolGoogleSearch:     {},
-	GoogleSearchGroundedPromptTool:  {},
-	dto.BuildInToolImageGeneration:  {},
-	"web_fetch":                     {},
-	"code_execution":                {},
-	"tool_search":                   {},
-	"bing_web_search":               {},
-	"x_search_posts":                {},
-	"x_search_profiles":             {},
-	"search_strategy_agent":         {},
+	"web_fetch":      {},
+	"code_execution": {},
+	"tool_search":    {},
 }
 
 // MaxBillableToolCallCount bounds every tool count at settlement, whatever its
@@ -60,12 +51,14 @@ func (info *RelayInfo) CountBillableToolCall(itemType string, functionName strin
 		if functionName == "" {
 			return
 		}
-		if _, reserved := reservedBillableToolNames[functionName]; reserved {
+		if _, reserved := reservedBillableToolNames[functionName]; reserved || operation_setting.IsBuiltInToolPriceKey(functionName) {
 			return
 		}
-		if info.QuotePricesTool(functionName) {
-			info.incrementBillableToolCall(functionName)
+		// Ren2Hub-local: the frozen quote, not the live price table, decides.
+		if !info.QuotePricesTool(functionName) {
+			return
 		}
+		info.incrementBillableToolCall(functionName)
 	}
 }
 
@@ -234,7 +227,7 @@ func (c *ImageGenerationCallCounter) Observe(item *dto.ResponsesOutput, outputIn
 		return
 	}
 	switch strings.ToLower(strings.TrimSpace(item.Status)) {
-	case "failed", "cancelled", "canceled", "incomplete", "partial", "in_progress":
+	case "failed", "cancelled", "canceled", "incomplete", "partial":
 		return
 	}
 
@@ -267,7 +260,7 @@ func (c *ImageGenerationCallCounter) Observe(item *dto.ResponsesOutput, outputIn
 	c.count++
 }
 
-// Count returns the deduplicated completed image output count.
+// Count returns the deduplicated completed image output count before commit capping.
 func (c *ImageGenerationCallCounter) Count() int {
 	if c == nil {
 		return 0
@@ -275,7 +268,7 @@ func (c *ImageGenerationCallCounter) Count() int {
 	return c.count
 }
 
-// Commit preserves completed-output counts and flags out-of-contract quantities.
+// Commit writes the capped completed-output count into RelayInfo once.
 // Request tool declarations alone must not become billable calls.
 func (c *ImageGenerationCallCounter) Commit(info *RelayInfo) {
 	if info == nil {
@@ -288,7 +281,7 @@ func (c *ImageGenerationCallCounter) Commit(info *RelayInfo) {
 		count = c.count
 	}
 	if count > dto.MaxImageN {
-		info.BillingToolUsageInvalid = true
+		count = dto.MaxImageN
 	}
 
 	if existing, ok := info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration]; ok && existing != nil {
