@@ -50,7 +50,8 @@ func TestResponsesUsageFinishIsIdempotent(t *testing.T) {
 
 // An image that completed before any terminal was delivered and bills once,
 // whatever the terminal says. Other tool calls in the terminal snapshot bill
-// only on a completed response, and unfinished image items never bill.
+// only on a completed response, and image items without a final result never
+// bill.
 func TestResponsesTerminalImageBilling(t *testing.T) {
 	image := dto.ResponsesOutput{ID: "image-1", Type: dto.ResponsesOutputTypeImageGenerationCall, Status: "completed", Result: "image-data"}
 	for _, terminal := range []struct {
@@ -71,7 +72,7 @@ func TestResponsesTerminalImageBilling(t *testing.T) {
 				Status: []byte(`"` + terminal.status + `"`),
 				Output: []dto.ResponsesOutput{
 					image,
-					{ID: "image-2", Type: dto.ResponsesOutputTypeImageGenerationCall, Status: "in_progress", Result: "partial-data"},
+					{ID: "image-2", Type: dto.ResponsesOutputTypeImageGenerationCall, Status: "in_progress"},
 					{ID: "search-1", Type: dto.BuildInCallWebSearchCall, Status: "completed"},
 				},
 			}}, nil)
@@ -84,6 +85,24 @@ func TestResponsesTerminalImageBilling(t *testing.T) {
 			assert.Equal(t, terminal.wantSearches, searches)
 		})
 	}
+}
+
+// Upstreams can deliver a final image still labelled in_progress on
+// output_item.done and in the completed snapshot (Sub2API f2ca16577). The
+// result reached the client, so it bills once, as in NewAPI.
+func TestResponsesStreamBillsDeliveredInProgressImage(t *testing.T) {
+	image := dto.ResponsesOutput{ID: "ig_1", Type: dto.ResponsesOutputTypeImageGenerationCall, Status: "in_progress", Result: "final-image"}
+	index := 0
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-5.5"}}
+	accounting := NewResponsesUsageAccumulator(info)
+	accounting.Observe(&dto.ResponsesStreamResponse{Type: dto.ResponsesOutputTypeItemDone, Item: &image, OutputIndex: &index}, nil)
+	accounting.Observe(&dto.ResponsesStreamResponse{Type: "response.completed", Response: &dto.OpenAIResponsesResponse{
+		Status: []byte(`"completed"`),
+		Output: []dto.ResponsesOutput{image},
+	}}, nil)
+	accounting.Finish()
+	require.Contains(t, info.ResponsesUsageInfo.BuiltInTools, dto.BuildInToolImageGeneration)
+	assert.Equal(t, 1, info.ResponsesUsageInfo.BuiltInTools[dto.BuildInToolImageGeneration].CallCount)
 }
 
 func TestResponsesUsageEstimateRefreshesNativeBillingSnapshot(t *testing.T) {

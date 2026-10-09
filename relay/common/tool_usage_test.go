@@ -383,7 +383,10 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 			wantCount: 0,
 		},
 		{
-			name: "in_progress is not completed",
+			// Upstreams deliver final image results still labelled in_progress
+			// or generating (Sub2API f2ca16577 normalizes them to completed);
+			// the bytes reached the client, so the image bills, as in NewAPI.
+			name: "in_progress with final result counts",
 			observe: func(c *ImageGenerationCallCounter) {
 				idx := 0
 				c.Observe(&dto.ResponsesOutput{
@@ -393,7 +396,7 @@ func TestImageGenerationCallCounterCompletedOutputs(t *testing.T) {
 					Result: "base64-a",
 				}, &idx)
 			},
-			wantCount: 0,
+			wantCount: 1,
 		},
 	}
 

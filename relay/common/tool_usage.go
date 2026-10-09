@@ -227,7 +227,7 @@ func (c *ImageGenerationCallCounter) Observe(item *dto.ResponsesOutput, outputIn
 		return
 	}
 	switch strings.ToLower(strings.TrimSpace(item.Status)) {
-	case "failed", "cancelled", "canceled", "incomplete", "partial", "in_progress":
+	case "failed", "cancelled", "canceled", "incomplete", "partial":
 		return
 	}
 
