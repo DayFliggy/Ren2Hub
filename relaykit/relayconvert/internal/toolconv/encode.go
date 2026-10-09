@@ -493,8 +493,18 @@ func attachClaudeRequest(request any, set Set, options *convmeta.Options) (any, 
 	}
 	normalizedChoice, allowedChoiceDiagnostics := narrowAllowedFunctionChoice(responsesCustomToolChoice(set.Choice, customTools), types.RelayFormatClaude)
 	diagnostics = append(diagnostics, allowedChoiceDiagnostics...)
-	normalizedChoice, downgradeDiagnostics := downgradeRejectedClaudeForcedChoice(normalizedChoice, target, set.Source)
-	diagnostics = append(diagnostics, downgradeDiagnostics...)
+	forced := normalizedChoice != nil && (normalizedChoice.Mode == ChoiceRequired || normalizedChoice.Mode == ChoiceNamed)
+	manualThinking := target.Thinking != nil && target.Thinking.Type == "enabled"
+	if forced && (manualThinking || reasoning.ClaudeRejectsForcedToolChoice(target.Model)) && set.Source != types.RelayFormatClaude {
+		downgraded := *normalizedChoice
+		downgraded.Mode = ChoiceAuto
+		normalizedChoice = &downgraded
+		// NewAPI reports this as a semantic loss under its default allow
+		// policy; a warning keeps the same outcome under the local default safe
+		// policy, while strict still rejects it.
+		diagnostics = append(diagnostics, presentationLoss("tool_choice", "forced_tool_choice_downgraded",
+			"Claude rejects forced tool use on this model or while manual extended thinking is enabled; tool_choice was sent as auto, so the model may answer without calling a tool"))
+	}
 	choice, choiceDiagnostics := encodeClaudeChoice(normalizedChoice, set.ParallelAllowed, set.Source)
 	target.ToolChoice = choice
 	diagnostics = append(diagnostics, choiceDiagnostics...)
@@ -1420,35 +1430,6 @@ func encodeOpenAIResponsesChoice(choice *Choice, source types.RelayFormat) (json
 	}
 	encoded, err := kitutil.Marshal(value)
 	return encoded, nil, err
-}
-
-// downgradeRejectedClaudeForcedChoice sends a converted forced tool_choice
-// ("any" or "tool") as "auto" when Claude would reject it with a 400: the
-// model removed forced tool use, or the rendered request uses manual extended
-// thinking. Native Claude requests keep the client's own choice. The warning
-// passes the safe policy, because the alternative is a guaranteed upstream
-// rejection, and is rejected by strict.
-func downgradeRejectedClaudeForcedChoice(choice *Choice, target *dto.ClaudeRequest, source types.RelayFormat) (*Choice, []types.ConversionDiagnostic) {
-	if source == types.RelayFormatClaude || choice == nil || (choice.Mode != ChoiceRequired && choice.Mode != ChoiceNamed) {
-		return choice, nil
-	}
-	reason := ""
-	switch {
-	case reasoning.ClaudeRejectsForcedToolChoice(target.Model):
-		reason = fmt.Sprintf("model %q rejects forced tool use", target.Model)
-	case target.Thinking != nil && target.Thinking.Type == "enabled":
-		reason = "Claude rejects forced tool use while manual extended thinking is enabled"
-	default:
-		return choice, nil
-	}
-	downgraded := *choice
-	downgraded.Mode = ChoiceAuto
-	return &downgraded, []types.ConversionDiagnostic{{
-		Code:     "forced_tool_choice_downgraded",
-		Path:     "tool_choice",
-		Message:  reason + "; tool_choice was sent as auto, so the model may answer without calling a tool",
-		Severity: types.ConversionDiagnosticWarning,
-	}}
 }
 
 func encodeClaudeChoice(choice *Choice, parallelAllowed *bool, source types.RelayFormat) (any, []types.ConversionDiagnostic) {
