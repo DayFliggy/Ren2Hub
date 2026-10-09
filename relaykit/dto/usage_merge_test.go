@@ -13,10 +13,12 @@ func TestGeminiCumulativeDetailsDoNotAccumulateTwice(t *testing.T) {
 	assert.Equal(t, 3, result.PromptTokensDetails[0].TokenCount)
 }
 
-// output_tokens_details uses plain integers, so a snapshot cannot tell an
+// completion_tokens_details uses plain integers, so a snapshot cannot tell an
 // explicit zero from an omitted field. Streaming counts are cumulative: a later
-// zero or partial detail snapshot must not erase earlier positive counts, and
-// both detail aliases must stay in agreement.
+// zero or partial detail snapshot must not erase earlier positive counts. The
+// output_tokens_details alias is not merged here, as in NewAPI; Responses
+// converters fill completion_tokens_details from it and the billing reader
+// resolves the alias.
 func TestUsageMergeOutputDetailsLaterNonZeroWins(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -26,41 +28,20 @@ func TestUsageMergeOutputDetailsLaterNonZeroWins(t *testing.T) {
 	}{
 		{
 			name:     "zero detail snapshot keeps earlier reasoning",
-			current:  &Usage{CompletionTokens: 50, CompletionTokenDetails: OutputTokenDetails{ReasoningTokens: 40, TextTokens: 10}, OutputTokensDetails: &OutputTokenDetails{ReasoningTokens: 40, TextTokens: 10}},
-			incoming: &Usage{OutputTokensDetails: &OutputTokenDetails{}},
+			current:  &Usage{CompletionTokens: 50, CompletionTokenDetails: OutputTokenDetails{ReasoningTokens: 40, TextTokens: 10}},
+			incoming: &Usage{CompletionTokens: 50},
 			want:     OutputTokenDetails{ReasoningTokens: 40, TextTokens: 10},
 		},
 		{
 			name:     "partial detail snapshot keeps unreported modality",
-			current:  &Usage{CompletionTokenDetails: OutputTokenDetails{ReasoningTokens: 40, TextTokens: 10}, OutputTokensDetails: &OutputTokenDetails{ReasoningTokens: 40, TextTokens: 10}},
-			incoming: &Usage{OutputTokensDetails: &OutputTokenDetails{ReasoningTokens: 45}},
+			current:  &Usage{CompletionTokenDetails: OutputTokenDetails{ReasoningTokens: 40, TextTokens: 10}},
+			incoming: &Usage{CompletionTokenDetails: OutputTokenDetails{ReasoningTokens: 45}},
 			want:     OutputTokenDetails{ReasoningTokens: 45, TextTokens: 10},
-		},
-		{
-			name:     "first native details join earlier chat details",
-			current:  &Usage{CompletionTokenDetails: OutputTokenDetails{ImageTokens: 5}},
-			incoming: &Usage{OutputTokensDetails: &OutputTokenDetails{ReasoningTokens: 40}},
-			want:     OutputTokenDetails{ReasoningTokens: 40, ImageTokens: 5},
-		},
-		{
-			name:     "zero native snapshot keeps earlier chat details",
-			current:  &Usage{CompletionTokenDetails: OutputTokenDetails{ImageTokens: 5}},
-			incoming: &Usage{OutputTokensDetails: &OutputTokenDetails{}},
-			want:     OutputTokenDetails{ImageTokens: 5},
-		},
-		{
-			// A later chat-style snapshot must not leave the native alias stale.
-			name:     "chat details update an existing native alias",
-			current:  &Usage{CompletionTokenDetails: OutputTokenDetails{ReasoningTokens: 40}, OutputTokensDetails: &OutputTokenDetails{ReasoningTokens: 40}},
-			incoming: &Usage{CompletionTokenDetails: OutputTokenDetails{ReasoningTokens: 60, TextTokens: 5}},
-			want:     OutputTokenDetails{ReasoningTokens: 60, TextTokens: 5},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := MergeUsageNonZero(tt.current, tt.incoming)
-			require.NotNil(t, result.OutputTokensDetails)
-			assert.Equal(t, tt.want, *result.OutputTokensDetails)
 			assert.Equal(t, tt.want, result.CompletionTokenDetails)
 		})
 	}
