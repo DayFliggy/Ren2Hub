@@ -51,11 +51,10 @@ func TestRequestOpenAI2AliTopP(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := requestOpenAI2Ali(dto.GeneralOpenAIRequest{
+			got := requestOpenAI2Ali(dto.GeneralOpenAIRequest{
 				Model: "qwen-plus",
 				TopP:  tt.topP,
-			}, "qwen-plus", "")
-			require.NoError(t, err)
+			}, "qwen-plus")
 
 			assert.Equal(t, tt.want, got.TopP)
 		})
@@ -109,16 +108,16 @@ func TestRequestOpenAI2AliDisabledThinking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := requestOpenAI2Ali(dto.GeneralOpenAIRequest{
+			got := requestOpenAI2Ali(dto.GeneralOpenAIRequest{
 				Model:           "qwen-plus",
 				ReasoningEffort: "high",
 				EnableThinking:  tt.enableThinking,
-			}, "qwen-plus", tt.resolvedEffort)
+			}, "qwen-plus")
+			err := renderAliDisabledThinking(got, tt.resolvedEffort)
 
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.True(t, reasoning.IsClientError(err))
-				assert.Nil(t, got)
 				return
 			}
 			require.NoError(t, err)
