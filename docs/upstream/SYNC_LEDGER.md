@@ -2,6 +2,37 @@
 
 本账本的实施/验证段记录提交授权前的本地验收快照；其中 `candidate_sha=null` 指该快照。后续源码提交、服务器候选和正式切换由工作区服务器档案与实际发布记录另行追踪，不能把本地通过解释为已经部署。
 
+## 2026-10-09 本地偏离回归上游与依赖安全升级（第七批）
+
+用户要求逐条复核本地偏离，能回归 NewAPI 的回归，NewAPI 有缺陷时采用 Sub2API、AxonHub 的做法，再结合 Ren2Hub 本地化；并批准三类扣费变化（插件结算合并提交事实、图片工具计数、估算回归）、三项协议变化（跨协议响应去签名、Gemini 签名绕过默认开启、工具媒体转 Gemini 回归上游）和依赖安全升级的联网下载。批次中 fetch 到 NewAPI 新提交一并吸收。窗口：NewAPI `7aa3531ef4c247ad4891c06cc8ed9d0ffb73fecc` → `e0483122c7d3693629f0e84473380a8c9506c56a`（1 个提交，即 `relaykit/v0.3.0`）；Sub2API 复核到 `3a6fd1c9db07203ca308aaba69e502bc1f35b307`（0.2.15）；AxonHub `e863c6fe1942deddd0f6e471fa003c430e5314f0` 无新提交。
+
+| source_project / source_ref | category / priority / status | local_scope / contract | test_commands / validation | risk / follow_up |
+| --- | --- | --- | --- | --- |
+| NewAPI `e0483122c` | 协议 / P2 / 已吸收 | Responses 转 Claude、Gemini 时去掉最后一条用户消息或工具结果之后、不含工具调用的 assistant 轮次，记 warning `trailing_assistant_omitted`（safe/allow 放行、strict 拒绝）；以待处理工具调用结尾或只有 assistant 轮次的输入原样发送 | 新增 Claude/Gemini 四种情形与 strict 拒绝用例，修复前 4 个"应省略"用例失败 | 上游未附测试 |
+| Sub2API `926441461`（钱包冷却部分） | 可用性 / P2 / 已吸收（改写） | `classifyProviderRouteError` 只在状态码已表明类别时采信错误文本：Key 文本只配 401/403，模型文本只配 404；结构化错误码在任何状态下照常分类。原先 400 回显 `invalid api key` 会冷却共享渠道×模型×Key 5 分钟 | `TestClassifyRouteErrorIgnoresEchoedTextOutsideMatchingStatus`，修复前 30 处断言失败 | NewAPI 无对应分类器 |
+| NewAPI `model/channel_cache.go` 权重语义 | 路由 / P3 / 已回归 | 去掉 `HealthFactor` 对权重的缩放（档位已是硬排序键，缩放只剩取整失真）；同档内正权重先于权重 0，权重 0 之间按 1 参与 rendezvous，全零组均分；决策 JSON 去掉 `health_factor` | `TestOrderAutoRouteCandidatesFollowsNewAPIWeightSemantics` 等，修复前权重 0 对权重 100 仍拿到 24/2000 首次尝试 | 权重 0 的渠道在有正权重同伴时只作故障转移候选 |
+| NewAPI `8ca26d81d` | 运行时 / P3 / 已回归 | 采用上游 `GlobalWebRateLimit(frontendFS)`、`ServeFrontendFiles`（与上游逐字节一致）和三个静态限流环境变量（默认关闭）；本地 `frontendFiles.Exists` 统一施加扩展名白名单并排除目录；gzip 改为对非构建文件条件压缩 | 上游两项测试、`TestVueStaticAssetsAreCompressedOnce`、静态限流开启用例；原 `TestVueStaticAssetsDoNotConsumeWebRateLimit` 保留 | `GLOBAL_WEB_RATE_LIMIT` 默认仍为 600（上游 120） |
+| NewAPI 依赖 `Calcium-Ion/go-epay` v0.0.5 | 支付 / P3 / 已回归（签名部分） | 签名与验签交给 go-epay；本地 `pkg/epay` 保留信封校验、金额精确解析、网关 URL、商户与订单快照核对，go-epay 错误文本不进入回调日志 | `TestNotificationRejectsUppercaseHexSignature`，`./pkg/epay/` 与支付相关 controller/service 用例 | 大写十六进制签名的通知改为拒绝，订单留待补单 |
+| Sub2API `e0019da46` `BaseDialog` | 前端 / P3 / 已吸收 | 叠放弹窗改按打开顺序判断最上层，关闭即出栈，不再读 z-index | `ConsoleModal.spec.ts` 新用例 | 账本此前把 z-index 规则归于 Sub2API 不准确，该规则是本地写法，已撤下 |
+| NewAPI `getImageToken` | 计量 / P2 / 已回归（批准的估算变化） | 恢复上游函数，接缝在调用处："URL 且不取文件"直接用典型尺寸；默认配置下非流式 base64 图片按典型尺寸估算 | `TestEstimateRequestTokenImageMeasurePolicy`，修复前 1568（上游 1373） | 只影响预扣与上游无用量时的估算结算 |
+| NewAPI `usage_merge.go` | 计量 / P3 / 已回归 | 合并函数恢复上游原文，别名在计费读取器处理（`CompletionTokenDetails` 全零才读 `OutputTokensDetails`） | `TestOpenAIBillingUsageOutputDetailsSurviveSnapshotMerge`，扣费不变 | 转换后的最终 Chat 用量块不再带 `output_tokens_details`，与上游一致 |
+| NewAPI Gemini 原生流式用量 | 计量 / P2 / 已回归（批准的扣费变化） | 每帧用 `MergeGeminiUsageMetadataNonZero` 累计，后续帧缺字段时保留前帧报告值 | `TestGeminiStreamHandlerAccumulatesUsageMetadataAcrossFrames`，修复前 prompt 20（应为 1000） | — |
+| NewAPI `IsBuiltInToolPriceKey` | 计费 / P3 / 已回归（形态） | 保留名改为上游同名函数加静态列表，补齐 7 个上游保留键；`reservedBillableToolNames` 缩回上游 3 个 | `TestCountBillableToolCallFunctionCallSkipsReservedNames` | 客户端同名函数不能再按这 7 个键计费 |
+| NewAPI Claude/Gemini 工具计数 | 计费 / P3 / 已回归 | 计数函数恢复上游原文；`web_fetch`、`code_execution`、`tool_search`、`google_search_grounded_prompt` 未定价不计入的过滤移到 `collectBillingQuantities` | `TestTextToolQuoteBillsQuotePricedOnlyKeysWhenPriced`，扣费不变 | — |
+| NewAPI 图片工具计数 | 计费 / P2 / 已回归（批准的扣费变化） | 超过 128 张截断为 128 照常结算；带最终结果的 `in_progress` 图片计费（Sub2API 记录过真实上游这样返回）；网页、文件、函数调用的 `in_progress` 仍不计 | `TestImageGenerationCallCounterCommitCapsAtMaxImageN`、`TestResponsesStreamBillsDeliveredInProgressImage` 等 | — |
+| NewAPI `EvaluateTaskCompletionUsage` | 插件计费 / P1 / 已回归（批准的扣费变化） | 结算以 attempt 行经 `validateBillingAttemptEstimate` 回放验证的 `EstimatedFacts` 为底，完成事实逐键覆盖（含显式 0/false）；验证失败明确报错、任务保留，不退回估算；完成事实为空或有 `UsageError` 时行为不变。修复原有缺陷：`u()` 缺失字段在比较中静默走默认分支，条件倍率从未生效 | `TestTaskCompletionMergesCompletionFactsOverFrozenSubmitFacts`、`TestTamperedSubmitFactsStopTaskSettlement`、`router/gateway_task_submit_facts_test.go`；修复前 doubao 参考视频 500000（应 300000）、无声 500000（应 250000）、z-image 改写 20000（应 40000）、xAI 带费审核 565000（应 25000） | 部署时在途任务按新规则结算；google、vertex-ai、jimeng、kling、sunoapi 不变 |
+| NewAPI `2ffc59590` | 插件文档 / P3 / 已吸收 | `v1.md` 补钩子参数只读、不在模块变量保留参数引用、宿主不修改已传入值 | 文档 | — |
+| 本地响应守卫 | 协议 / P1 / 已回归（批准） | 跨协议响应中的 Claude `signature`、Gemini `thoughtSignature` 不再整体拒绝，去掉后转换交付，记 warning `provider_state_dropped`；托管搜索与引用的 `encrypted_content`/`encrypted_index` 规则保留。原先 Gemini 3 函数调用和带思考的 Claude 响应转其他协议全部失败 | `provider_state_response_test.go`（两来源×三目标×流式/非流式×三策略） | 网关 opaque-state 用例不变 |
+| NewAPI Gemini 思考签名绕过 | 协议 / P2 / 已回归（批准） | 恢复上游四个函数、ConvOptions 接线、设置默认开启和控制台开关；网关出站状态复核跳过绕过值（`IsThoughtSignatureBypass`），真实签名仍须绑定 | `TestRelayInfoConvOptionsCarriesGeminiThoughtSignatureSetting`、golden、Vitest | Google 文档称绕过是最后手段 |
+| NewAPI `0a03088e0` 工具媒体转 Gemini | 协议 / P2 / 已回归（批准） | 移植上游 `responsesToolOutputToGemini`；上游两处静默路径改为 error 诊断；Responses 来源的工具媒体交给损失策略：allow 丢弃并记录，safe/strict 发送前拒绝；删除 `types.ErrInvalidRequest`；Claude/Chat 来源与非工具媒体仍在所有策略下拒绝 | relaykit 契约用例、router `TestGatewayResponsesToolMediaOnGemini` 矩阵 | allow 的 Token 改为丢弃媒体后发送并扣费 |
+| NewAPI 强制 `tool_choice` 写法、`requestOpenAI2Ali` | 协议 / P3 / 已回归（形态） | 恢复上游内联降级（条件加按模型判断，级别保持 warning）；`requestOpenAI2Ali` 与上游逐字节一致，关闭思考映射移到 `renderAliDisabledThinking` | 原有用例不改即通过 | 无行为变化 |
+| NewAPI `chat_via_responses.go` 部分用量估算 | 计量 / P2 / 已吸收（批准的估算变化） | 转换流失败且已有输出时，用估算补齐缺失的 completion 或 prompt；原先只带 prompt 用量时已交付文本按 0 计 | `TestOaiResponsesToChatStreamFailureEstimatesMissingCompletion` | — |
+| Go 1.26.9 与 x/net、x/text、x/image、websocket | 安全 / P1 / 已升级（批准下载） | govulncheck（库 2026-10-08）报根模块 37 个可达漏洞：标准库、x/net HTTP/2（GO-2026-6603/6610/6611/6612/6617）、x/text（GO-2026-5970/6629）、x/image（GO-2026-4961/5061/6222）、gorilla/websocket（GO-2026-6278）。构建镜像改 `golang:1.26.9-alpine`，x/net 0.60.0、x/text 0.42.0、x/image 0.45.0、websocket 1.5.3，x/crypto/sys/sync 随依赖；relaykit 保持上游 `go 1.25.1` | 升级后 govulncheck 可达漏洞 0；`go mod verify` | NewAPI 尚未升级，下次合并 `go.mod` 时保留本地版本 |
+
+保留的本地偏离（逐条核对后有缺陷证据或结构约束）：tokenkit 换行分段守卫（上游 1 MiB 约 6 分钟）、Claude `tool_result` 逐块解码（上游一块失败整段从估算与敏感词检查消失）、不预置工具价格（上游 8 个人民币键会按美元扣，约多收 7.3 倍）、静态保留名、`VendorToolPriceKeys` 发送前定价、图片哈希只作最后身份、非流式 failed/cancelled 不转发、重试换渠道清键、用量钩子数值边界、插件版本 `+ren2hub.N`、元数据预览、任务资金规则、视频内容解析失败明确报错、Retry-After 封顶 5 分钟、Token 更新按出现字段写入、Claude 模型名规范化、转换流失败只发一个 `stream_interrupted`、拒答映射、thinking 块 `signature` 键、旧版 `function_call` 配对、无名工具报错、`param: null` 与终态后传输错误判失败、百炼关闭思考、保留上游删除的转换测试、中文插件 API 文档，以及 Vue 控制台、钱包资金事件与冻结报价、统一选路、Codex 渠道退役等结构差异。协议级 `retainResult` 加载时拒绝与上游一致，不属于偏离。最终 Chat 用量块带 `usage_source`/`billing_usage` 与上游 DTO 一致。
+
+本地验收（`candidate_sha=null`，基于 `1277268d7`）：Go 全量非 controller 54 个包通过，router 包在 `-p=4` 下累计超过 60 秒超时（超时时用例刚开始，非挂起），单独运行 47 秒通过；controller 23 批通过；RelayKit 测试与 vet、TokenKit 测试通过；前端 lint、typecheck、format、构建与 Vitest 1064 项通过。本批只读取已有表结构，没有新增 SQL，三库矩阵由服务器 PG15 候选覆盖。
+
 ## 2026-10-09 moejs alpha.6 与上游增量（第六批）
 
 用户批准下载 moejs 与 fetch 参考仓库，AUDIT1009-01/02 标记为等待上游 NewAPI 修复。fetch 后窗口：NewAPI `6370b29424168039e94d40d610191e7d2e65dbf4` → `7aa3531ef4c247ad4891c06cc8ed9d0ffb73fecc`（1 个提交；`v1.0.0-rc.42` 指向 `6370b2942`），Sub2API 无新提交（`5fc0e486c`），AxonHub `b8bb3421` → `e863c6fe1942deddd0f6e471fa003c430e5314f0`（1 个提交）。本批基于 Ren2Hub `cee29981a`。
