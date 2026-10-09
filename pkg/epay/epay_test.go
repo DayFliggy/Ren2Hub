@@ -217,6 +217,20 @@ func TestNotificationRoundTripAndSignedExtension(t *testing.T) {
 	}
 }
 
+// go-epay compares the lowercase hex digest it computes with the received
+// value, so a signature that differs only in letter case is not the protocol's
+// signature and the notification is rejected.
+func TestNotificationRejectsUppercaseHexSignature(t *testing.T) {
+	config := Config{MerchantID: "1001", Key: "test-secret"}
+	params := notificationParams(notificationValues(t))
+	params["sign"] = strings.ToUpper(params["sign"])
+	require.NotEqual(t, params["sign"], strings.ToLower(params["sign"]), "fixture signature must contain hex letters")
+
+	payment, err := VerifyNotification(params, config)
+	assert.ErrorIs(t, err, ErrInvalidSignature)
+	assert.Nil(t, payment)
+}
+
 func TestNotificationRejectsInvalidInputBeforeSignature(t *testing.T) {
 	valid := notificationValues(t).Encode()
 	tooMany := notificationValues(t)

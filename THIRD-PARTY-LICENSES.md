@@ -14,6 +14,7 @@ The local `github.com/QuantumNous/new-api/relaykit` and `github.com/QuantumNous/
 
 | Area     | Scope       | Ecosystem | Dependency                                            | Version                              | License                                      |
 | -------- | ----------- | --------- | ----------------------------------------------------- | ------------------------------------ | -------------------------------------------- |
+| backend  | production  | Go        | `github.com/Calcium-Ion/go-epay`                      | `v0.0.5`                             | MIT                                          |
 | backend  | production  | Go        | `github.com/Calcium-Ion/moejs`                        | `v0.1.0-alpha.5`                     | Apache-2.0                                   |
 | backend  | production  | Go        | `github.com/abema/go-mp4`                             | `v1.4.1`                             | MIT                                          |
 | backend  | test        | Go        | `github.com/alicebob/miniredis/v2`                    | `v2.38.0`                            | MIT                                          |
