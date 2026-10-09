@@ -211,6 +211,7 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	var imageCount int
 	var hasBillableUsageMetadata bool
 	var sawOutput, sawTerminal bool
+	var accumulatedUsageMetadata *dto.GeminiUsageMetadata
 	var grounding geminiGroundingCounter
 	responseText := strings.Builder{}
 
@@ -245,7 +246,8 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 
 		// 更新使用量统计
 		if metadata := geminiResponse.GetUsageMetadata(); dto.HasGeminiUsageMetadataTokens(metadata) {
-			mappedUsage := buildUsageFromGeminiMetadata(metadata, info.GetEstimatePromptTokens())
+			accumulatedUsageMetadata = dto.MergeGeminiUsageMetadataNonZero(accumulatedUsageMetadata, metadata)
+			mappedUsage := buildUsageFromGeminiMetadata(accumulatedUsageMetadata, info.GetEstimatePromptTokens())
 			*usage = mappedUsage
 			hasBillableUsageMetadata = true
 		}
