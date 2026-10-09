@@ -1,6 +1,6 @@
 # Ren2Hub 文档入口
 
-本文索引当前源码的开发、接口和运维契约。主项目是 Go/Gin/GORM 网关、Vue 控制台与独立 RelayKit 模块；当前仅允许一个网关进程承接业务流量。钱包是唯一资金来源，Token 是附加消费限额。
+本文索引当前源码的开发、接口和运维契约。主项目是 Go/Gin/GORM 网关、Vue 控制台与独立的 RelayKit、TokenKit 模块；当前仅允许一个网关进程承接业务流量。钱包是唯一资金来源，Token 是附加消费限额。
 
 ## 现行文档
 
@@ -8,10 +8,12 @@
 | --- | --- | --- |
 | 开发与结构 | [项目约定](../AGENTS.md)、[公共常量](../constant/README.md) | 目录边界、独立模块、代码与验证要求 |
 | 安装与发布 | [Compose 安装](installation/DOCKER.md)、[宝塔环境](installation/BT.md)、[切换与回退](routing/GATEWAY_RELEASE.md) | 空库安装、单实例排空、持久化兼容性 |
-| Web 应用 | [前端说明](../frontend/README.md)、[页面路由](../frontend/ROUTING.md)、[术语表](translation-glossary.md) | Vue、同源 API、功能门控与中英文文案 |
+| Web 应用 | [前端说明](../frontend/README.md)、[页面路由](../frontend/ROUTING.md)、[主题](../frontend/docs/THEMES.md)、[计费界面](../frontend/docs/BILLING.md)、[术语表](translation-glossary.md) | Vue、同源 API、功能门控与中英文文案 |
 | 登录与会话 | [认证契约](authentication.md) | 浏览器登录、刷新会话、绑定、安全验证、Origin 与代理规则 |
-| 模型路由 | [统一路由](routing/UNIFIED_ROUTING.md)、[网关 API](routing/GATEWAY_API.md) | 自动/手动路由、本地 FIFO、资格重检、队列与故障转移 |
-| 协议和渠道 | [渠道接入类型](channel/TYPES.md)、[支持矩阵](routing/GATEWAY_SUPPORT_MATRIX.md)、[RelayKit](../relaykit/README.md)、[渠道设置](channel/other_setting.md) | 实际实现的协议转换、Responses WebSocket、供应商入口和边界 |
+| 模型路由 | [统一路由](routing/UNIFIED_ROUTING.md)、[网关 API](routing/GATEWAY_API.md) | 自动/手动路由、本地 FIFO、资格重检、队列与故障转移、Responses WebSocket、Claude effort 计价、请求诊断 |
+| 协议和渠道 | [渠道接入类型](channel/TYPES.md)、[支持矩阵](routing/GATEWAY_SUPPORT_MATRIX.md)、[RelayKit](../relaykit/README.md)、[TokenKit](../tokenkit/README.md)、[渠道设置](channel/other_setting.md) | 实际实现的协议转换、token 计数与估算、供应商入口和边界 |
+| 任务插件 | [插件 API](plugin-api/README.md)、[v1 合同](plugin-api/v1.md) | 插件 ABI、不可变执行版本、用量事实与冻结报价、产物访问 |
+| 上游同步 | [同步账本](upstream/SYNC_LEDGER.md) | NewAPI、Sub2API、AxonHub 当前基线，按领域列出的吸收状态、本地偏离与复评条件 |
 | 账务架构 | [实现边界](billing/IMPLEMENTATION.md)、[账务 API](billing/API.md)、[结算兜底与恢复](billing/RECOVERY.md) | 冻结报价、持久化预留、事件、原子结算与先计费兜底 |
 | 定价 | [模型定价与价格获取](billing/PRICING.md)、[计价接口](../pkg/billing/API.md)、[表达式](../pkg/billingexpr/expr.md) | NewAPI 配置、五源草稿、三模式计算、空默认与加密重放 |
 | 易支付充值 | [支付契约](billing/EPAY.md) | 报价、订单快照、商户版本、通知重试与管理员补单 |
@@ -37,7 +39,7 @@ RenAI 工作区 `reference-projects/` 是本地研究材料，不是运行依赖
 
 ## 历史追溯
 
-阶段报告、审计记录、上游集成证据和旧验收结果已从工作树移除，从 Git 历史读取。需要核对某次修复时，在 Ren2Hub 目录使用只读命令定位，不把旧状态当成当前部署结论：
+阶段报告、审计记录、逐批上游同步记录和旧验收结果不在工作树中，从 Git 历史读取。需要核对某次修复时，在 Ren2Hub 目录使用只读命令定位，不把旧状态当成当前部署结论：
 
 ```powershell
 git log --all -- docs/routing docs/billing docs/upstream

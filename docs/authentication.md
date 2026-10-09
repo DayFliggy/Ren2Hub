@@ -101,7 +101,7 @@ refresh/logout 的 Origin 防护与 Refresh Cookie 的 Secure 模式绑定：
 
 Secure 模式的 Origin 校验不信任客户端直接发送的 `X-Forwarded-Proto`。TLS 在反向代理终止时，应将面板的公开 HTTPS Origin 明确写入 `SESSION_COOKIE_TRUSTED_URL`。
 
-`SESSION_COOKIE_TRUSTED_URL` 现在具有明确的新语义：它是 refresh/logout Cookie 端点的可信 Origin 列表，不是 CORS 白名单。配置规则如下：
+`SESSION_COOKIE_TRUSTED_URL` 是 refresh/logout Cookie 端点的可信 Origin 列表，不是 CORS 白名单。配置规则如下：
 
 - 仅在 `SESSION_COOKIE_SECURE=true` 时配置；多个值用英文逗号分隔。
 - 每项必须是精确的 HTTPS Origin，例如 `https://panel.example.com` 或 `https://panel.example.com:8443`。
