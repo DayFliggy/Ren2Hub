@@ -230,6 +230,12 @@ func planMediaConversion(req RequestRequirements, target types.RelayFormat) ([]t
 				diagnostic.Message = "provider-owned media requires the original protocol and owner"
 			}
 			diagnostics = append(diagnostics, diagnostic)
+			if media.ToolResult && media.SourceKind != "owned" && req.Format == types.RelayFormatOpenAIResponses && target == types.RelayFormatGemini {
+				// The direct converter omits tool media Gemini cannot carry with
+				// its own error diagnostic, so the policy decides: safe and
+				// strict reject before send, allow sends without the media.
+				continue
+			}
 			return diagnostics, &types.ConversionLossError{Diagnostics: diagnostics}
 		}
 		if media.Detail != "" && target != types.RelayFormatOpenAI && target != types.RelayFormatOpenAIResponses {

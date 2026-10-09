@@ -1,8 +1,6 @@
 package relay
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -89,23 +87,6 @@ func TestUnknownModelModifierIsBadRequestWithoutRetry(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
 	assert.Equal(t, types.ErrorCodeConvertRequestFailed, apiErr.GetErrorCode())
 	assert.True(t, types.IsSkipRetryError(apiErr))
-}
-
-// A conversion that fails on a malformed client body is a client error.
-func TestInvalidRequestConversionIsBadRequestWithoutRetry(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
-	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}
-
-	apiErr := newConvertRequestFailedError(c, info, fmt.Errorf("%w: tool output media must be a list of content parts", types.ErrInvalidRequest))
-	require.NotNil(t, apiErr)
-	assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
-	assert.Equal(t, types.ErrorCodeConvertRequestFailed, apiErr.GetErrorCode())
-	assert.True(t, types.IsSkipRetryError(apiErr))
-
-	apiErr = newConvertRequestFailedError(c, info, errors.New("adapter failure"))
-	assert.NotEqual(t, http.StatusBadRequest, apiErr.StatusCode)
 }
 
 func hasHostDiagnosticCode(diagnostics []types.ConversionDiagnostic, code string) bool {

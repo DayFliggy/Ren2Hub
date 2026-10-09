@@ -124,9 +124,11 @@ func TestResponsesToolMediaReachesGeminiAsInlineData(t *testing.T) {
 	}
 }
 
-// Tool media Gemini cannot carry is rejected before send under every policy,
-// including allow; it is never dropped or stringified.
-func TestResponsesToolMediaGeminiRejectsUnrepresentableMedia(t *testing.T) {
+// Tool media Gemini cannot carry follows the NewAPI path: the converter omits
+// it with an error diagnostic, so the conversion policy decides. safe and
+// strict reject the request before send; allow sends it without the media and
+// records the loss. Media is never written into a text field.
+func TestResponsesToolMediaGeminiOmissionFollowsConversionPolicy(t *testing.T) {
 	SetMediaResolver(MediaResolver{GetBase64Data: func(_ context.Context, source types.FileSource, _ ...string) (string, string, error) {
 		header, data, isDataURL := strings.Cut(source.GetRawData(), ",")
 		if !isDataURL {
@@ -136,26 +138,29 @@ func TestResponsesToolMediaGeminiRejectsUnrepresentableMedia(t *testing.T) {
 	}})
 	t.Cleanup(func() { SetMediaResolver(goldenMediaResolver()) })
 	for _, test := range []struct {
-		name, output string
-		planRejects  bool
-		itemType     string
+		name, output, itemType string
+		// planned reports whether planning already sees the loss; the
+		// remaining cases are only known once the converter resolves media.
+		planned  bool
+		response map[string]any
 	}{
-		{"audio", `[{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav"}}]`, true, ""},
-		{"video_file", `[{"type":"input_file","file_data":"data:video/mp4;base64,AAAA"}]`, true, ""},
-		{"unsupported_mime", `[{"type":"input_file","file_data":"data:application/zip;base64,UEsDBA=="}]`, true, ""},
+		{name: "audio", output: `[{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav"}}]`, planned: true, response: map[string]any{"content": "[audio]"}},
+		{name: "video_file", output: `[{"type":"input_file","file_data":"data:video/mp4;base64,AAAA"}]`, planned: true, response: map[string]any{"content": "[file]"}},
+		{name: "unsupported_mime", output: `[{"type":"input_text","text":"zip"},{"type":"input_file","file_data":"data:application/zip;base64,UEsDBA=="}]`, planned: true, response: map[string]any{"content": "zip"}},
 		// Valid Gemini Blob types outside the documented function-response list.
-		{"csv_tool_document", `[{"type":"input_file","file_data":"data:text/csv;base64,YSxi"}]`, true, ""},
-		{"gif_tool_image", `[{"type":"input_file","file_data":"data:image/gif;base64,R0lGOA=="}]`, true, ""},
-		{"unknown_sibling", `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, true, ""},
-		{"custom_tool_unknown_sibling", `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, true, "custom_tool_call_output"},
-		{"owned_file", `[{"type":"input_file","file_url":"gs://bucket/one.pdf"}]`, true, ""},
+		{name: "csv_tool_document", output: `[{"type":"input_file","file_data":"data:text/csv;base64,YSxi"}]`, planned: true, response: map[string]any{"content": "[file]"}},
+		{name: "gif_tool_image", output: `[{"type":"input_file","file_data":"data:image/gif;base64,R0lGOA=="}]`, planned: true, response: map[string]any{"content": "[file]"}},
+		{name: "unknown_sibling", output: `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, planned: true, response: map[string]any{"content": "[tool output omitted]"}},
+		{name: "custom_tool_unknown_sibling", output: `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, itemType: "custom_tool_call_output", planned: true, response: map[string]any{"content": "[tool output omitted]"}},
 		// The planner cannot see the resolved MIME type of a URL without a
-		// download, so the converter rejects it when it fails to load or
-		// resolves to audio.
-		{"unloadable_url", `[{"type":"input_image","image_url":"https://example.test/screen.png"}]`, false, ""},
-		// A single part object is not the documented list shape; the converter
-		// must not fall back to a response map that would hold it as text.
-		{"single_object", `{"type":"input_image","image_url":"data:image/png;base64,YWJj"}`, false, ""},
+		// download; the converter omits media that fails to load.
+		{name: "unloadable_url", output: `[{"type":"input_text","text":"see"},{"type":"input_image","image_url":"https://example.test/screen.png"}]`, response: map[string]any{"content": "see"}},
+		// A single part object is not the documented list shape; NewAPI holds
+		// it in the response map as text, which would send base64 as text.
+		{name: "single_object", output: `{"type":"input_image","image_url":"data:image/png;base64,YWJj"}`, response: map[string]any{"content": "[tool output omitted]"}},
+		// A media part without a source is omitted with a diagnostic instead
+		// of being skipped silently.
+		{name: "missing_source", output: `[{"type":"input_text","text":"shot"},{"type":"input_image"}]`, planned: true, response: map[string]any{"content": "shot"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			callType, outputType := "function_call", "function_call_output"
@@ -167,25 +172,65 @@ func TestResponsesToolMediaGeminiRejectsUnrepresentableMedia(t *testing.T) {
 			requirements, err := AnalyzeRequest(&req)
 			require.NoError(t, err)
 			for _, policy := range []types.ConversionLossPolicy{types.ConversionLossPolicySafe, types.ConversionLossPolicyStrict, types.ConversionLossPolicyAllow} {
-				plan, err := PlanConversion(requirements, types.RelayFormatGemini, policy)
-				if test.planRejects {
-					require.Error(t, err, policy)
-					require.NotEmpty(t, plan.Diagnostics)
-					assert.Contains(t, []string{"media_conversion_unavailable", "native_state_required"}, plan.Diagnostics[0].Code)
-				} else {
-					require.NoError(t, err, policy)
+				meta := &convmeta.Values{Options: &convmeta.Options{ConversionPolicy: policy}, UpstreamModelName: "gemini-3-pro-preview", ChannelMetaAttached: true}
+				plan, planErr := PlanConversion(requirements, types.RelayFormatGemini, policy)
+				if test.planned {
+					require.NotEmpty(t, plan.Diagnostics, policy)
+					assert.Equal(t, "media_conversion_unavailable", plan.Diagnostics[0].Code, policy)
+					assert.Equal(t, types.ConversionDiagnosticError, plan.Diagnostics[0].Severity, policy)
 				}
-				result, err := ExecuteConversionPlan(context.Background(), &convmeta.Values{Options: &convmeta.Options{ConversionPolicy: policy}}, plan, &req)
-				require.Error(t, err, "%s must not send stringified or dropped media", policy)
-				if result != nil {
-					assert.Nil(t, result.Value)
+				if policy != types.ConversionLossPolicyAllow {
+					if test.planned {
+						var loss *types.ConversionLossError
+						require.ErrorAs(t, planErr, &loss, policy)
+						continue
+					}
+					require.NoError(t, planErr, policy)
+					_, err := ExecuteConversionPlan(context.Background(), meta, plan, &req)
+					var loss *types.ConversionLossError
+					require.ErrorAs(t, err, &loss, "%s must reject omitted media before send", policy)
+					assert.Equal(t, "unsupported_media_type", loss.Diagnostics[0].Code)
+					continue
 				}
-				// A malformed client tool output is the client's request
-				// error, so the host can answer 400 rather than 500.
-				if test.name == "single_object" {
-					assert.ErrorIs(t, err, types.ErrInvalidRequest)
+				require.NoError(t, planErr)
+				result, err := ExecuteConversionPlan(context.Background(), meta, plan, &req)
+				require.NoError(t, err)
+				assert.Contains(t, diagnosticCodes(result.Diagnostics), "unsupported_media_type")
+				gemini := result.Value.(*dto.GeminiChatRequest)
+				require.Len(t, gemini.Contents, 2)
+				require.Len(t, gemini.Contents[1].Parts, 1, "omitted media sends no inline part")
+				response := gemini.Contents[1].Parts[0].FunctionResponse
+				require.NotNil(t, response)
+				assert.Equal(t, test.response, response.Response)
+				assert.Empty(t, response.Parts)
+				encoded, err := kitutil.Marshal(gemini)
+				require.NoError(t, err)
+				for _, data := range []string{"YWJj", "UklGRg==", "UEsDBA==", "YSxi", "R0lGOA==", "AAAA"} {
+					assert.NotContains(t, string(encoded), data, "media must not reach a text field")
 				}
 			}
 		})
 	}
+}
+
+// Provider-owned media keeps its native-only rule under every policy.
+func TestResponsesToolMediaGeminiRejectsOwnedMediaUnderEveryPolicy(t *testing.T) {
+	var req dto.OpenAIResponsesRequest
+	require.NoError(t, kitutil.Unmarshal([]byte(`{"model":"gemini-3-pro-preview","input":[{"type":"function_call","call_id":"call_1","name":"read","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_file","file_url":"gs://bucket/one.pdf"}]}]}`), &req))
+	requirements, err := AnalyzeRequest(&req)
+	require.NoError(t, err)
+	for _, policy := range []types.ConversionLossPolicy{types.ConversionLossPolicySafe, types.ConversionLossPolicyStrict, types.ConversionLossPolicyAllow} {
+		_, err := PlanConversion(requirements, types.RelayFormatGemini, policy)
+		var loss *types.ConversionLossError
+		require.ErrorAs(t, err, &loss, policy)
+		assert.Equal(t, "native_state_required", loss.Diagnostics[0].Code)
+	}
+}
+
+func diagnosticCodes(diagnostics []types.ConversionDiagnostic) []string {
+	codes := make([]string, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		codes = append(codes, diagnostic.Code)
+	}
+	return codes
 }

@@ -16,7 +16,7 @@ func newConvertRequestFailedError(c *gin.Context, info *relaycommon.RelayInfo, e
 		info.RecordConversionDiagnostics(c, loss.Diagnostics)
 		return types.NewErrorWithStatusCode(err, types.ErrorCodeConvertRequestFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
-	if kitreasoning.IsClientError(err) || errors.Is(err, types.ErrInvalidRequest) {
+	if kitreasoning.IsClientError(err) {
 		return types.NewErrorWithStatusCode(err, types.ErrorCodeConvertRequestFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
 	return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())

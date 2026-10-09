@@ -16,11 +16,12 @@ import (
 )
 
 // Responses function_call_output media reaches a real Gemini channel as
-// inline data in call order, and media Gemini cannot carry is rejected before
-// any upstream request or charge under every conversion policy.
+// inline data in call order. Media Gemini cannot carry follows the conversion
+// policy: safe and strict reject before any upstream request or charge, allow
+// sends the tool result without the media.
 func TestGatewayResponsesToolMediaOnGemini(t *testing.T) {
 	const image = `{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgo="}`
-	const audio = `{"type":"input_audio","input_audio":{"data":"YWJj","format":"wav"}}`
+	const archive = `{"type":"input_file","filename":"logs.zip","file_data":"data:application/zip;base64,UEsDBA=="}`
 	for _, policy := range []string{"safe", "strict", "allow"} {
 		for _, rejected := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/reject=%t", policy, rejected), func(t *testing.T) {
@@ -38,7 +39,7 @@ func TestGatewayResponsesToolMediaOnGemini(t *testing.T) {
 				require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", 1).Update("conversion_policy", policy).Error)
 				media := image
 				if rejected {
-					media = audio
+					media = archive
 				}
 				body := `{"model":"gemini-2.5-flash","max_output_tokens":10,"input":[` +
 					`{"type":"function_call","call_id":"call_a","name":"shot","arguments":"{}"},` +
@@ -55,7 +56,7 @@ func TestGatewayResponsesToolMediaOnGemini(t *testing.T) {
 				require.NoError(t, err)
 
 				var user model.User
-				if rejected {
+				if rejected && policy != "allow" {
 					assert.Equal(t, http.StatusBadRequest, response.StatusCode, "%s", output)
 					assert.Zero(t, sends.Load(), "unrepresentable tool media must not open an upstream request")
 					awaitGatewayPermitsReleased(t)
@@ -68,8 +69,14 @@ func TestGatewayResponsesToolMediaOnGemini(t *testing.T) {
 				require.EqualValues(t, 1, sends.Load())
 				parts := gjson.GetBytes(upstream, "contents.#.parts|@flatten")
 				assert.True(t, strings.Contains(parts.Raw, `"functionResponse"`), "%s", upstream)
-				assert.Equal(t, "image/png", gjson.GetBytes(upstream, `contents.#.parts|@flatten|#(inlineData).inlineData.mimeType`).String(), "%s", upstream)
+				assert.Equal(t, "first", gjson.GetBytes(upstream, `contents.#.parts|@flatten|#(functionResponse).functionResponse.response.content`).String(), "%s", upstream)
 				assert.NotContains(t, string(upstream), "[image]", "media must never be stringified")
+				if rejected {
+					assert.False(t, gjson.GetBytes(upstream, `contents.#.parts|@flatten|#(inlineData)`).Exists(), "allow sends the result without the omitted media: %s", upstream)
+					assert.NotContains(t, string(upstream), "UEsDBA==", "omitted media must not reach a text field")
+				} else {
+					assert.Equal(t, "image/png", gjson.GetBytes(upstream, `contents.#.parts|@flatten|#(inlineData).inlineData.mimeType`).String(), "%s", upstream)
+				}
 				awaitGatewayPermitsReleased(t)
 				require.Eventually(t, func() bool {
 					return model.DB.First(&user, 1).Error == nil && user.UsedQuota > 0 && user.ReservedQuota == 0
