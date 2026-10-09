@@ -56,12 +56,18 @@ func ClassifyRouteError(status int, providerCode, message string, streamStarted 
 func classifyProviderRouteError(status int, providerCode, message string) RouteErrorClassification {
 	code := strings.ToLower(strings.TrimSpace(providerCode))
 	text := strings.ToLower(strings.TrimSpace(message))
+	// Providers echo request values in error messages ("Invalid value: '...'"),
+	// so message text only confirms a class the status already names. Otherwise
+	// any caller could cool a shared key or capability with a crafted field.
+	keyText := (status == 401 || status == 403) &&
+		(strings.Contains(text, "invalid api key") || strings.Contains(text, "incorrect api key"))
+	modelText := status == 404 &&
+		(strings.Contains(text, "model not found") || strings.Contains(text, "unsupported model") || strings.Contains(text, "invalid model"))
 	switch {
 	case strings.Contains(code, "invalid_api_key") || strings.Contains(code, "invalid_credential") ||
-		strings.Contains(code, "authentication_error") || strings.Contains(text, "invalid api key") ||
-		strings.Contains(text, "incorrect api key"):
+		strings.Contains(code, "authentication_error") || keyText:
 		return RouteErrorClassification{Class: RouteErrorKey, Retryable: true, Failoverable: true, MarkKey: true}
-	case strings.Contains(code, "model_not_found") || strings.Contains(code, "unsupported_model") || strings.Contains(code, "model_not_supported") || strings.Contains(code, "invalid_model") || strings.Contains(text, "model not found") || strings.Contains(text, "unsupported model") || strings.Contains(text, "invalid model"):
+	case strings.Contains(code, "model_not_found") || strings.Contains(code, "unsupported_model") || strings.Contains(code, "model_not_supported") || strings.Contains(code, "invalid_model") || modelText:
 		return RouteErrorClassification{Class: RouteErrorModel, Failoverable: true, MarkCapability: true}
 	case status == 400 || status == 422 || strings.Contains(code, "invalid_request"):
 		return RouteErrorClassification{Class: RouteErrorInput}

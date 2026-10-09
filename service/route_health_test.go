@@ -36,6 +36,45 @@ func TestClassifyRouteErrorSeparatesKeyModelAndStreamFailures(t *testing.T) {
 	assert.True(t, CanRouteFailover(ClassifyRouteError(503, "", "", false), false, false))
 }
 
+// Providers echo client-supplied values in request errors, for example
+// "Invalid value: '<value>'". Such text must not let one caller cool a shared
+// key or capability; message text counts only when the status already names
+// the failure class, while structured provider codes keep classifying at any
+// status.
+func TestClassifyRouteErrorIgnoresEchoedTextOutsideMatchingStatus(t *testing.T) {
+	keyTexts := []string{"Invalid value: 'invalid api key'. Supported values are: 'auto' and 'flex'.", "Incorrect API key provided in field 'user'"}
+	modelTexts := []string{"Invalid value: 'model not found'.", "Invalid value: 'unsupported model'.", "Invalid value: 'invalid model'."}
+	for _, status := range []int{400, 422, 429} {
+		for _, text := range append(append([]string{}, keyTexts...), modelTexts...) {
+			classification := ClassifyRouteError(status, "invalid_request_error", text, false)
+			assert.False(t, classification.MarkKey, "status %d text %q", status, text)
+			assert.False(t, classification.MarkCapability, "status %d text %q", status, text)
+			assert.NotEqual(t, RouteErrorKey, classification.Class, "status %d text %q", status, text)
+			assert.NotEqual(t, RouteErrorModel, classification.Class, "status %d text %q", status, text)
+		}
+	}
+
+	for _, status := range []int{401, 403} {
+		for _, text := range keyTexts {
+			classification := ClassifyRouteError(status, "", text, false)
+			assert.Equal(t, RouteErrorKey, classification.Class, "status %d text %q", status, text)
+			assert.True(t, classification.MarkKey, "status %d text %q", status, text)
+		}
+	}
+	for _, text := range modelTexts {
+		classification := ClassifyRouteError(404, "", text, false)
+		assert.Equal(t, RouteErrorModel, classification.Class, text)
+		assert.True(t, classification.MarkCapability, text)
+	}
+
+	for _, code := range []string{"invalid_api_key", "invalid_credential", "authentication_error"} {
+		assert.True(t, ClassifyRouteError(400, code, "", false).MarkKey, code)
+	}
+	for _, code := range []string{"model_not_found", "unsupported_model", "model_not_supported", "invalid_model"} {
+		assert.True(t, ClassifyRouteError(400, code, "", false).MarkCapability, code)
+	}
+}
+
 func TestClassifyRouteAdmissionFailureDoesNotAffectProviderHealth(t *testing.T) {
 	classification := ClassifyRouteError(http.StatusServiceUnavailable, AdmissionFailureCode, "route lease redis is unavailable", false)
 
