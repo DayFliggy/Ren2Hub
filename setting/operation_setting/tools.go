@@ -36,9 +36,39 @@ var toolPriceSetting = ToolPriceSetting{
 	Prices: make(map[string]float64),
 }
 
+// builtInToolNames are the hosted-tool price keys NewAPI's built-in price
+// seed covers. Ren2Hub seeds no prices, so the set is a static list of the
+// same names, never derived from operator configuration.
+var builtInToolNames = map[string]struct{}{
+	"web_search":                    {},
+	"web_search_preview":            {},
+	"file_search":                   {},
+	"google_search":                 {},
+	"google_search_grounded_prompt": {},
+	"image_generation":              {},
+	"search_std":                    {},
+	"search_pro":                    {},
+	"search_pro_sogou":              {},
+	"search_pro_quark":              {},
+	"search_strategy_turbo":         {},
+	"search_strategy_max":           {},
+	"search_strategy_agent":         {},
+	"search_strategy_agent_max":     {},
+	"bing_web_search":               {},
+	"x_search_posts":                {},
+	"x_search_profiles":             {},
+}
+
 func init() {
 	config.GlobalConfig.Register("tool_price_setting", &toolPriceSetting)
 	RebuildToolPriceIndex()
+}
+
+// IsBuiltInToolPriceKey reports whether name is a built-in hosted-tool price
+// key. Operator prices never count.
+func IsBuiltInToolPriceKey(name string) bool {
+	_, ok := builtInToolNames[name]
+	return ok
 }
 
 // ---------------------------------------------------------------------------

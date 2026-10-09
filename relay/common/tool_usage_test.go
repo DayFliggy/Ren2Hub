@@ -53,13 +53,15 @@ func TestCountBillableToolCallFunctionCallRequiresFrozenPrice(t *testing.T) {
 
 // Hosted-tool price keys bill hosted tools only: a client function or tool_use
 // with the same name is never counted, even when the frozen quote prices that
-// name. An operator price alone reserves nothing.
+// name. The reserved names are NewAPI's built-in price keys plus the
+// Anthropic server tools; an operator price alone reserves nothing.
 func TestCountBillableToolCallFunctionCallSkipsReservedNames(t *testing.T) {
 	wantBilled := map[string]bool{
 		dto.BuildInToolWebSearchPreview: false,
 		dto.BuildInToolWebSearch:        false,
 		dto.BuildInToolFileSearch:       false,
 		dto.BuildInToolGoogleSearch:     false,
+		GoogleSearchGroundedPromptTool:  false,
 		dto.BuildInToolImageGeneration:  false,
 		"web_fetch":                     false,
 		"code_execution":                false,
@@ -67,7 +69,14 @@ func TestCountBillableToolCallFunctionCallSkipsReservedNames(t *testing.T) {
 		"bing_web_search":               false,
 		"x_search_posts":                false,
 		"x_search_profiles":             false,
+		"search_std":                    false,
+		"search_pro":                    false,
+		"search_pro_sogou":              false,
+		"search_pro_quark":              false,
+		"search_strategy_turbo":         false,
+		"search_strategy_max":           false,
 		"search_strategy_agent":         false,
+		"search_strategy_agent_max":     false,
 		"lookup_order":                  true,
 	}
 	var prices []billing.UnitPrice
