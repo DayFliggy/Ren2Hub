@@ -16,7 +16,7 @@ bun run dev
 
 以上命令在 `frontend/` 执行。后端需单独启动；仓库根目录的 `make dev-api` 启动本地 Docker 后端、PostgreSQL 和 Redis，`make dev-web` 启动 Vite。开发服务器默认监听 `5175`，可通过 `VITE_DEV_PORT` 修改；`VITE_API_TARGET` 配置 `/api`、`/pg`、`/v1` 和 `/mj` 的代理目标，默认是 `http://localhost:3000`。
 
-运行时所有 API 都使用同源 HTTP。Access Token 只保存在浏览器内存中，刷新依赖 HttpOnly Cookie；API 层统一校验响应、处理刷新与会话切换，Pinia 保存跨页面身份和公开状态。Vue 登录页提供密码与 2FA 流程，OAuth 回调页面用于账号绑定，未提供 Passkey 或第三方登录入口；后端相应登录接口仍受各自设置控制，详情见[认证契约](../docs/authentication.md)。外部文档和图片默认只允许同源地址，可信外部资源通过逗号分隔的 `VITE_TRUSTED_EXTERNAL_ORIGINS` 声明来源。
+运行时所有 API 都使用同源 HTTP。Access Token 只保存在浏览器内存中，刷新依赖 HttpOnly Cookie；API 层统一校验响应、处理刷新与会话切换，Pinia 保存跨页面身份和公开状态。Vue 登录页依据服务端能力显示密码、Passkey 和已配置的 OAuth 登录，要求额外验证时进入 2FA challenge；OAuth 登录、绑定与二次验证经同一弹窗流程完成，`/oauth/:provider` 回调页把结果交回发起页。各登录方式仍受后端设置控制，详情见[认证契约](../docs/authentication.md)。外部文档和图片默认只允许同源地址，可信外部资源通过逗号分隔的 `VITE_TRUSTED_EXTERNAL_ORIGINS` 声明来源。
 
 ## 验证
 
