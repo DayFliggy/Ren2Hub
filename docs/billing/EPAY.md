@@ -50,13 +50,13 @@
 
 ## 异常处理与补单
 
-Ren2Hub 不主动向支付网关查询订单，不提供用户手动验付和后台查单恢复。原 `POST /api/next/wallet/topups/:order_no/verify` 返回 404，`epay_recovery` 不再注册或调度；订单列表、详情和页面刷新仅查询本站已保存状态。
+Ren2Hub 不主动向支付网关查询订单，不提供用户手动验付和后台查单恢复。`POST /api/next/wallet/topups/:order_no/verify` 返回 404，代码中没有 `epay_recovery` 系统任务；订单列表、详情和页面刷新仅查询本站已保存状态。
 
 通知丢失或处理失败时，由外部支付网关重试通知。回调参数、签名或金额无效、结算暂停、资金事务失败时返回 `fail`；合法成功通知完成入账或确认同一凭据已处理后返回 `success`。事务失败不留下部分余额、流水或成功凭据，网关可以再次发送同一通知。
 
 仍未入账的异常订单由管理员在外部网关复查，确认付款后使用现有补单入口，按冻结快照入账。补单后的合法通知可以补齐交易凭据；重复通知、重复补单及两者并发都不能重复充值或返利。没有收到有效通知、也未补单的订单继续保持 pending。
 
-查单客户端、订单检查租约与退避逻辑已移除。已有数据库中的旧检查列和系统任务历史不删除，新代码不再读写这些字段或执行旧恢复任务。
+代码中没有查单客户端、订单检查租约与退避逻辑。数据库中遗留的订单检查列和系统任务历史保留，代码不读写这些字段。
 
 ## 验证入口
 
@@ -69,6 +69,6 @@ go test ./controller -run TestEpayGatewayRetriesAfterSettlementFailure -v -timeo
 go test ./router -run TestRetiredEpayVerificationReturnsNotFound -v -timeout 60s
 ```
 
-三库测试使用独立测试数据库；MySQL/PostgreSQL 分别由 `GATEWAY_STARTUP_MYSQL_DSN`、`GATEWAY_STARTUP_POSTGRES_DSN` 指定。缺失环境时测试显式跳过，不能称为该数据库验收通过。回归覆盖回调失败后重试、暂停后恢复接收通知、管理员补单与重复通知、事务回滚和旧验付接口退休，不触发真实支付。
+三库测试使用独立测试数据库；MySQL/PostgreSQL 分别由 `GATEWAY_STARTUP_MYSQL_DSN`、`GATEWAY_STARTUP_POSTGRES_DSN` 指定。缺失环境时测试显式跳过，不能称为该数据库验收通过。回归覆盖回调失败后重试、暂停后恢复接收通知、管理员补单与重复通知、事务回滚和验付接口返回 404，不触发真实支付。
 
 这些测试只证明标准 MD5 表单和模拟通知，不证明任意网关的私有协议方言兼容，也不证明真实付款、网关通知重试或公网回调可达。执行结果和部署版本只由所属工作区服务器档案记录，旧的验证记录从 Git 历史读取。

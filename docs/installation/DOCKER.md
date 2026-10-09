@@ -43,6 +43,6 @@ curl --fail http://127.0.0.1:3000/api/status
 
 `docker-compose.dev.yml` 是独立的前端开发配置，保留 `make dev-api` / `make dev-web` 工作流。它只构建后端，占位前端由 Vite 开发服务替代；数据库口令是本地开发默认值，不能用于服务器部署。不要让开发栈和安装栈同时使用同一端口、数据或业务流量。
 
-`new-api.service` 的旧占位模板已移除。当前维护的安装入口是 Compose；自行使用 systemd 时，应明确服务用户、环境文件、数据路径与至少 130 秒的停止期限。
+仓库不提供 systemd 服务模板，维护的安装入口是 Compose；自行使用 systemd 时，应明确服务用户、环境文件、数据路径与至少 130 秒的停止期限。
 
 当前业务配置见[网关 API](../routing/GATEWAY_API.md)，路由行为见[统一路由](../routing/UNIFIED_ROUTING.md)，宝塔环境见[面板部署说明](BT.md)。

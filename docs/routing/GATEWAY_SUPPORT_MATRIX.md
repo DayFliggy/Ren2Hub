@@ -53,17 +53,17 @@ Chat/Responses/Claude/Gemini 分别指 OpenAI Chat、OpenAI Responses、Anthropi
 | Jina、MokaAI、Replicate、Jimeng                                            | 拒绝                   | 拒绝           | 拒绝                        | 拒绝           |
 | AdvancedCustom                                                             | 按显式路径和转换器配置 | 同左           | 同左                        | 同左           |
 
-ChatGPT Subscription (Codex) type 57 已退役，不再属于协议能力矩阵。标准 OpenAI 渠道的 Codex 模型属于上表 OpenAI 行，不因模型名包含 Codex 而进入订阅后端。生命周期与迁移说明见[渠道接入类型](../channel/TYPES.md)。
+ChatGPT Subscription (Codex) type 57 已退役，不属于协议能力矩阵。标准 OpenAI 渠道的 Codex 模型属于上表 OpenAI 行，不因模型名包含 Codex 而进入订阅后端。生命周期与迁移说明见[渠道接入类型](../channel/TYPES.md)。
 
 除 Nova 外，表内文本入口同时登记 JSON 和流式请求。登记不等于已完成全部响应语义验收。Tencent 纯单段 TokenHub Key 保留原生 Chat，未知或混合凭据采用 TC3 文本交集；AdvancedCustom 必须逐配置验证。
 
 Nova、Coze、Baidu、Cohere、Zhipu、Tencent TC3、Xunfei、PaLM 与 Dify 的投影登记了实际保留字段、消息角色和内容类型。`safe` 拒绝丢失工具定义/历史、未支持媒体、结构约束及未实现的输出上限；已登记的采样和元数据损失产生警告，`strict` 同时拒绝这些警告。`allow` 允许记录过的降级，但不能绕过原生状态、无法执行的消息顺序、输入验证和 TPM 能力限制。执行前会复核同一投影及所选策略。
 
-Cohere 保留历史 user 消息，Baidu 保留所有前导 system，旧 Zhipu 与讯飞不再插入虚构的对话。PaLM 输出其实际供应商 DTO，映射后的模型进入请求 URL。Dify 保留单轮文本和图片，多轮历史拼接会产生损失诊断；内联图片上传在准入和最终认证校验后执行，上传失败或取消不会继续生成，也不会因接受状态未知而重放。
+Cohere 保留历史 user 消息，Baidu 保留所有前导 system，旧 Zhipu 与讯飞不插入虚构的对话。PaLM 输出其实际供应商 DTO，映射后的模型进入请求 URL。Dify 保留单轮文本和图片，多轮历史拼接会产生损失诊断；内联图片上传在准入和最终认证校验后执行，上传失败或取消不会继续生成，也不会因接受状态未知而重放。
 
 Nova 保留 system/user/assistant 文本、多段文本和已实现的采样上限；system 映射到顶层 `system`。Coze 保留 user/assistant 文本历史，未实现系统消息、工具、媒体及结构输出，也不能可靠执行请求输出上限，因此不支持 TPM。参考 [Nova 请求结构](https://docs.aws.amazon.com/nova/latest/userguide/complete-request-schema.html) 与 [Coze 官方 SDK 的消息和创建接口](https://github.com/coze-dev/coze-py/blob/main/cozepy/chat/__init__.py)，2026-09-12 核对；回归不调用真实供应商。
 
-四种文本入口在转换前统一应用渠道系统提示词。Nova 会收到顶层系统提示；Coze 配置此字段时在预览和预扣前拒绝，`allow` 不放宽渠道要求。原生透传仍应用选定模型、提示词和参数覆盖，并保留原始消息上的扩展属性。AWS 不再重新读取未处理的原始请求。
+四种文本入口在转换前统一应用渠道系统提示词。Nova 会收到顶层系统提示；Coze 配置此字段时在预览和预扣前拒绝，`allow` 不放宽渠道要求。原生透传仍应用选定模型、提示词和参数覆盖，并保留原始消息上的扩展属性。AWS 不重新读取未处理的原始请求。
 
 顶层、typed 嵌套及已登记 RawMessage/any 协议外壳中的未知 JSON 字段记录路径，覆盖 `0/false/null`。`strict` 拒绝已识别的丢弃，`safe/allow` 记录一般扩展警告；工具控制和结构约束的已知损失在 `safe` 下拒绝。检查不把工具参数等业务字典当作协议字段，Schema 损失按实际 Gemini 投影比较，接受 DTO 已实现的 Gemini 别名。独立调用方只有解码后 DTO 时，无法恢复此前已被丢弃的原始字段。
 
@@ -137,7 +137,7 @@ SDK 版本锁文件位于 `tests/gateway-sdk`：Python OpenAI 3.13.0、Anthropic
 
 双工具回归通过 OpenAI/Anthropic SDK 内置流累积器和 Google SDK 内容事件验证：首帧同时出现两个调用、后续分片组成参数 `0` 与 `false`、工具结果逆序回传，检查 ID 或经验证的 Vertex 名称关联、最终值、usage 和唯一终止事件。Google 返回的完整函数参数来自网关转换和官方 SDK 解析，没有手写 SSE 累积器。云工具场景中的“往返”包括流式工具请求和提交结果后的最终响应，不等同于额外两个独立能力路径。
 
-新增 `verify_media.py` / `verify_media.mjs` 各调用官方 SDK 验证 7 条正常媒体路径和 1 条图片中断路径：Embedding 浮点/base64、图片 JSON/SSE、TTS PCM、STT JSON 与 multipart `stream=true`。中断必须由 SDK 抛错；没有使用手写 SSE 累积器替代 SDK。音频参数依据本地固定版本类型及 [OpenAI 转写文档](https://developers.openai.com/api/docs/guides/speech-to-text)、[语音生成参数](https://developers.openai.com/api/reference/cli/resources/audio/subresources/speech/methods/create) 核对。
+`verify_media.py` / `verify_media.mjs` 各调用官方 SDK 验证 7 条正常媒体路径和 1 条图片中断路径：Embedding 浮点/base64、图片 JSON/SSE、TTS PCM、STT JSON 与 multipart `stream=true`。中断必须由 SDK 抛错；没有使用手写 SSE 累积器替代 SDK。音频参数依据本地固定版本类型及 [OpenAI 转写文档](https://developers.openai.com/api/docs/guides/speech-to-text)、[语音生成参数](https://developers.openai.com/api/reference/cli/resources/audio/subresources/speech/methods/create) 核对。
 
 图片最终预算读取适配器与渠道覆盖后的 `n`、`parameters.n`、`sampleCount`、`batch_size` 或 `num_outputs`；multipart 也按实际发送字段处理。`FinalImagePriceMeta`（`relay/helper/image_budget.go`）同时用该最终请求体冻结 `service_tier`、`quality`、归一化尺寸与数量作为计价属性，渠道覆盖写入的档位不会在报价中丢失。该预算只证明可计费数量有界，不支持图片 TPM。JSON 转 SSE 表示网关包装已完成图片，不代表供应商原生提供渐进生成。Imagen 的既有 token 规则明确记为估算。Replicate 在上传前完成最终数量校验、准入和预扣，上传使用已验证的最终传输头；上传已接受或生成结果未知时不重放。
 

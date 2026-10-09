@@ -1,6 +1,6 @@
 # 用户鉴权与登录会话
 
-面板鉴权采用短期 Access Token、HttpOnly Refresh Cookie 与服务端登录会话控制面的组合。面板请求不再依赖 Gin session，也不再要求 `New-Api-User` 请求头。
+面板鉴权采用短期 Access Token、HttpOnly Refresh Cookie 与服务端登录会话控制面的组合。面板请求不使用 Gin session 或 `session` Cookie，也不要求 `New-Api-User` 请求头。
 
 ## 鉴权模型
 
@@ -82,7 +82,7 @@ Vue 登录入口依据服务端能力分别显示密码、Passkey 和已配置 O
 - `USER_SESSION_ISSUANCE_LIMIT`（默认 `100`）和 `USER_SESSION_ISSUANCE_WINDOW_SECONDS`（默认 `86400`）：统计窗口内该用户创建的所有 Session，包含已撤销和旧鉴权版本的记录。达到上限时返回 `429 AUTH_SESSION_ISSUANCE_LIMIT`。
 - 这两次计数与插入不加跨数据库锁；极端并发登录可能出现少量超额，但计数失败会拒绝签发，不会降级放行。
 
-升级时已经超过活跃上限的账户不会被自动下线或挤掉旧会话；限制只作用于后续的新 Session 签发。
+已经超过活跃上限的账户不会被自动下线或挤掉已有会话；限制只作用于新 Session 签发。
 
 `USER_SESSION_REVOKED_RETENTION_DAYS`（默认 `7`）控制 revoked 行的审计保留期。签发计数依赖窗口内的行仍存在，因此签发窗口不得超过 revoked 保留期。如果配置超出，启动时会记录告警并将实际窗口钳制到保留期，避免提前删除 revoked 行导致限流计数被低估。
 
@@ -128,7 +128,7 @@ SESSION_COOKIE_TRUSTED_URL=https://panel.example.com,https://admin.example.com
 
 ## 可信代理与 IP 限流
 
-Gin 默认会信任所有代理提供的客户端 IP 请求头。本项目改为兼顾常见反代拓扑和公网直连安全的三态配置：
+Gin 默认会信任所有代理提供的客户端 IP 请求头。本项目使用兼顾常见反代拓扑和公网直连安全的三态配置：
 
 - 未配置、空字符串或纯空白的 `TRUSTED_PROXIES` 默认信任 `127.0.0.0/8`、`::1`、`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16` 和 `fc00::/7`，并输出启动告警。该默认值覆盖同机 Nginx、Docker Compose 和常见内网反代；公网直连地址不在列表中，其伪造的 `X-Forwarded-For` 会被忽略。
 - `TRUSTED_PROXIES=none`（大小写不敏感且必须单独使用）启用严格直连模式，不信任任何代理，`ClientIP()` 只使用 TCP 直连地址。
@@ -136,7 +136,7 @@ Gin 默认会信任所有代理提供的客户端 IP 请求头。本项目改为
 
 Gin 只在请求的直连来源属于可信代理时解析客户端 IP 请求头，并从转发链右侧向左寻找首个非可信地址。因此常见 Nginx `$proxy_add_x_forwarded_for` 链中的公网客户端地址会阻止更左侧的伪造前缀生效。默认信任私网的残余风险是：能够从同一私网直接访问应用的其他机器或容器仍可伪造这些请求头；需要消除此风险时应使用 `none` 或配置精确代理地址。
 
-Redis 限流使用原子 Lua 固定窗口，替代旧的近似滑动窗口 List 实现。这是有意的语义变化：窗口边界两侧可分别打满一次，极短时间内通过量最高约为配置值的两倍。例如 `20 次/20 分钟` 在边界可通过约 40 次。帐户级 Session 上限和签发窗口继续控制数据库增长；如未来需要严格抑制边界突发，需单独迁移为 ZSET 滑动窗口。
+Redis 限流使用原子 Lua 固定窗口：窗口边界两侧可分别打满一次，极短时间内通过量最高约为配置值的两倍。例如 `20 次/20 分钟` 在边界可通过约 40 次。帐户级 Session 上限和签发窗口控制数据库增长；需要严格抑制边界突发时须改用 ZSET 滑动窗口。
 
 用户级模型请求限流通过 Redis 原子预留统一处理总次数和成功次数。每个逻辑请求只取得一个成功名额，在途请求续约，渠道重试复用该名额；请求结束后按实际输出结果确认或释放。失败流不能因 HTTP 200 被记作成功，预留维护失败会拒绝继续发送。开启该限流时 Redis 不可用返回 503，不回退到节点内计数。原生 Responses WS 对每次 `response.create` 分别执行同一合同。
 
@@ -144,7 +144,7 @@ Redis 限流使用原子 Lua 固定窗口，替代旧的近似滑动窗口 List 
 
 ## PAT 调用契约
 
-管理 PAT 使用独立 `personal_access_tokens` 表，明文为随机 `pat_` 凭据，只在创建响应展示一次；数据库保存 SHA-256 摘要、用户归属、名称、scopes、创建/最后使用/过期/撤销时间。每用户最多 20 枚有效 PAT，默认 30 天过期，显式过期时间必须在未来。旧 `User.AccessToken`、生成/轮换及原值校验路径已删除，没有双写或旧令牌宽限期。调用使用 `Authorization: Bearer <pat>`；`New-Api-User` 不参与鉴权。
+管理 PAT 使用独立 `personal_access_tokens` 表，明文为随机 `pat_` 凭据，只在创建响应展示一次；数据库保存 SHA-256 摘要、用户归属、名称、scopes、创建/最后使用/过期/撤销时间。每用户最多 20 枚有效 PAT，默认 30 天过期，显式过期时间必须在未来。用户行上没有访问令牌，也没有双写或单令牌宽限期。调用使用 `Authorization: Bearer <pat>`；`New-Api-User` 不参与鉴权。
 
 每个管理路由按 HTTP method 与注册路径明确声明 PAT scope；没有声明时即使 Root 的 PAT 也拒绝。每次调用将已授予 scope 与拥有者当前角色、资源权限求交集，用户禁用/删除、PAT 过期/撤销均拒绝。模型调用 Token 与管理 PAT 不互换。
 
@@ -164,7 +164,7 @@ Proof 绑定用户、认证身份（浏览器 Session 或 PAT）、用户鉴权�
 
 账户密码使用 Argon2id，新密码校验 8–128 个 Unicode 字符，不裁剪空格。已有 bcrypt 哈希保留兼容校验。登录传输加密默认关闭；`GET /api/user/login/encryption-key` 只读且 `no-store`。启用后使用带 `kid` 的 v2 RSA-OAEP + AES-GCM 混合信封，拒绝明文降级、错误密钥标识和损坏密文，后续登录验证仍绑定同一流程。
 
-PAT 管理位于账户安全页，仅允许浏览器会话。规范前缀为 `/api/user/self/personal-access-tokens`；首批 `/api/user/personal-access-tokens` 保留为同处理器、同权限的别名。旧单令牌 `/api/user/token*` 路由已移除。
+PAT 管理位于账户安全页，仅允许浏览器会话。规范前缀为 `/api/user/self/personal-access-tokens`，`/api/user/personal-access-tokens` 是同处理器、同权限的别名。没有 `/api/user/token*` 单令牌路由。
 
 | 方法与相对路径 | 请求与行为                                                                                                                                         |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -184,20 +184,18 @@ PATCH 省略字段保留原值；空名称、null/空 scopes、未知字段以�
 
 模型调用 Token 的创建总量检查与每小时创建窗口位于同一用户锁事务内。`token_setting.max_token_creates_per_hour` 默认 60，0 明确关闭，负数拒绝创建；成功创建后即使软删除也继续占用该小时次数。数量上限返回 `TOKEN_COUNT_LIMIT`，频率上限返回 HTTP 429 `TOKEN_CREATION_RATE_LIMIT`。失败事务不会留下 Token、预算事件或路由 Profile。
 
-邮箱验证码与密码重置沿用现有单实例验证存储，条目仅保存 SHA-256 摘要。每个验证码累计失败最多 5 次，校验和失败计数在同一锁内完成，第 5 次失败使该码失效；发送接口原有限速继续有效。密码重置在任何账户写入前原子校验并消费 token，并发或重放请求最多一个进入密码修改。数据库写入失败不会恢复已消费 token，用户需要重新申请链接；成功后的鉴权版本提升和浏览器会话撤销沿用现有事务。
+邮箱验证码与密码重置沿用现有单实例验证存储，条目仅保存 SHA-256 摘要。每个验证码累计失败最多 5 次，校验和失败计数在同一锁内完成，第 5 次失败使该码失效；发送接口另有限速。密码重置在任何账户写入前原子校验并消费 token，并发或重放请求最多一个进入密码修改。数据库写入失败不会恢复已消费 token，用户需要重新申请链接；成功后的鉴权版本提升和浏览器会话撤销沿用现有事务。
 
 登录、账号安全、管理操作、访问令牌请求和系统发放（签到、邀请奖励等）统一写入 `audit_logs`，控制台在日志子页 `/usage-logs/audit` 展示。`GET /api/audit/self` 只返回本人记录并去除管理员与请求元数据；`GET /api/audit` 查看全部账号，需要 `audit:read` 权限。非 Root 查看者看不到 Root 发起的事件和 `root_info`。读取时统一去除操作参数中疑似凭据的字段（如 password、secret、token、api_key、cookie）。旧 `logs` 表的管理、系统和登录记录（type 3/4/7）在启动迁移时一次性回填到 `audit_logs`，由 Option 标记保证幂等。
 
 ## 存储与兼容边界
 
-当前格式只接受空库初始化或匹配 `billing_schemas` 标记且已经采用新 PAT 表的安装。存在 `users.access_token` 的旧库会在任何初始化改表前被拒绝，不做数据迁移、列删除或数据库清空。资金 schema 仍为 5；新认证格式不改变资金计算器。下列历史认证兼容说明不构成整库升级支持，安装与回退以[发布契约](routing/GATEWAY_RELEASE.md)为准。
+当前格式只接受空库初始化或匹配 `billing_schemas` 标记且已经采用 PAT 表的安装。存在 `users.access_token` 列的数据库会在任何初始化改表前被拒绝，不做数据迁移、列删除或数据库清空。资金 schema 为 5，认证格式不影响资金计算器。安装与回退以[发布契约](routing/GATEWAY_RELEASE.md)为准。
 
-- 旧 `session` Cookie 不再使用；升级后现有面板登录会失效，用户需要重新登录。
-- 数据库迁移会新增 `user_sessions`、`auth_flows`、`external_identity_claims` 和 `users.auth_version`，并为已有用户初始化鉴权版本、回填 Telegram 账号唯一归属；若历史数据中同一 Telegram ID 已绑定多个用户，迁移会拒绝继续启动，需先消除歧义。
-- 数据库迁移会为 Session 签发计数和分批清理新增索引；已有 `user_sessions` 很大时应为首次启动预留维护窗口。
-- `user_sessions.previous_refresh_hash` 会从定长 `char(64)` 迁移为 `varchar(64)`。应用会兼容读取历史定长字段留下的空格填充；迁移后的目标结构必须保持幂等，连续启动不应反复执行列类型变更。
-- 仅 master 节点定时清理过期登录会话、超过配置保留期的 revoked 会话和已过保留期的 AuthFlow。
-- 未配置 `TRUSTED_PROXIES` 时会兼容信任回环和常见私网代理；使用公网负载均衡器、`100.64.0.0/10`、链路本地地址或自定义 CNI 网段的部署仍需显式配置。需要严格忽略所有转发头时设置为 `none`。
-- Redis 限流从近似滑动窗口改为原子固定窗口，存在明确的边界双倍突发语义。
-- 用户级模型限流及网关准入使用当前预留合同；本次不兼容格式切换采用独立空库和已确认归属的缓存重建，不支持混合版本滚动运行。
-- 自建客户端应按 AuthBundle、`flow_token` 和 Security Proof 契约升级；管理脚本必须重新签发具有最小 scope 的新 PAT，旧单令牌不再接受。
+- 启动迁移创建 `user_sessions`、`auth_flows`、`external_identity_claims` 和 `users.auth_version`，为已有用户初始化鉴权版本并回填 Telegram 账号唯一归属；同一 Telegram ID 绑定多个用户时拒绝启动，需先消除歧义。
+- 迁移为 Session 签发计数和分批清理建立索引；`user_sessions` 很大时应为首次启动预留维护窗口。
+- `user_sessions.previous_refresh_hash` 为 `varchar(64)`，读取时去除定长列遗留的空格填充；迁移保持幂等，连续启动不反复执行列类型变更。
+- 只有 master 节点定时清理过期登录会话、超过保留期的 revoked 会话和已过保留期的 AuthFlow。
+- 使用公网负载均衡器、`100.64.0.0/10`、链路本地地址或自定义 CNI 网段的部署须显式配置 `TRUSTED_PROXIES`。
+- 用户级模型限流及网关准入使用当前预留合同，不支持新旧版本混合滚动运行。
+- 自建客户端按 AuthBundle、`flow_token` 和 Security Proof 契约接入；管理脚本使用具有最小 scope 的 PAT。

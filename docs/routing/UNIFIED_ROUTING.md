@@ -40,7 +40,7 @@ Token 的所有权、启停、到期、额度、IP 和模型限制继续生效�
 
 最终复核还使用当前 Token 的 IP 白名单和本次客户端 IP。排队期间收窄范围后不能按旧鉴权继续发送，也不能通过换渠道恢复已撤销的 Token 权限。原生引用 encrypted_index 纳入既有状态摘要归属检查，不记录引用原文。
 
-权限、Token 模型权限、状态绑定、原任务渠道、模型能力、转换策略与价格资格始终先于负载优化。自动动态排序为 `priority → 错误率档 → 5% 负载桶 → 首字延迟档 → 软亲和 → RequestID 稳定加权顺序`，实现见 `service/route_score.go` 的 `OrderAutoRouteCandidates`；关闭动态排序时保持静态顺序。priority 是绝对分层，其余键只在同一 priority 内比较。错误率档和首字延迟档只读渠道级健康行（Key 级行由失败路径写入，比率会偏高），样本达到 50 次才分档，样本不足的渠道按 good 参与比较，与健康同层渠道按负载和权重分配首次尝试，不会因样本少而永远拿不到流量；分档阈值为：错误率 5% 起为 warning、20% 起为 critical，平均首字延迟 3 秒起为 warning、10 秒起为 critical；阈值只在 `service/route_health.go` 维护。降级渠道在同一 priority 内排在健康渠道之后，仍保留为故障转移候选；稳定加权直接使用渠道配置权重，不再按健康档缩放，语义与 NewAPI `GetRandomSatisfiedChannel` 一致：同一比较组内首次尝试按权重比例分配，权重为 0 的渠道在组内存在正权重渠道时不获得首次尝试、排在正权重渠道之后，组内全部为 0 时平均分配。手动路由 position 是硬边界；负载均衡仅在首个合格 position 层加权选择，不跨层重排。
+权限、Token 模型权限、状态绑定、原任务渠道、模型能力、转换策略与价格资格始终先于负载优化。自动动态排序为 `priority → 错误率档 → 5% 负载桶 → 首字延迟档 → 软亲和 → RequestID 稳定加权顺序`，实现见 `service/route_score.go` 的 `OrderAutoRouteCandidates`；关闭动态排序时保持静态顺序。priority 是绝对分层，其余键只在同一 priority 内比较。错误率档和首字延迟档只读渠道级健康行（Key 级行由失败路径写入，比率会偏高），样本达到 50 次才分档，样本不足的渠道按 good 参与比较，与健康同层渠道按负载和权重分配首次尝试，不会因样本少而永远拿不到流量；分档阈值为：错误率 5% 起为 warning、20% 起为 critical，平均首字延迟 3 秒起为 warning、10 秒起为 critical；阈值只在 `service/route_health.go` 维护。降级渠道在同一 priority 内排在健康渠道之后，仍保留为故障转移候选；稳定加权直接使用渠道配置权重，不按健康档缩放，语义与 NewAPI `GetRandomSatisfiedChannel` 一致：同一比较组内首次尝试按权重比例分配，权重为 0 的渠道在组内存在正权重渠道时不获得首次尝试、排在正权重渠道之后，组内全部为 0 时平均分配。手动路由 position 是硬边界；负载均衡仅在首个合格 position 层加权选择，不跨层重排。
 
 先立即尝试允许候选，全部繁忙后最多进入一个渠道队列。扫描期间变为空闲的候选可重新立即获取；池已回收且快照容量为零不代表不可用，最终仍由 manager 授槽。排队只比较仍合格、未冷却、队列未满的繁忙候选：自动动态模式在相同 priority 和负载桶内、手动负载均衡在相同 position 内按 `queued / effective_capacity` 较小者优先，平局保留原顺序。静态和非负载均衡手动模式保留原顺序。
 
@@ -88,10 +88,10 @@ SSE 按事件空行组装多行 `data:`，支持 CRLF/LF/CR、注释、事件名
 - `/api/token/*` 返回 `type: auto | manual`，不返回旧分组字段。
 - `/api/routing/*` 管理 Profile、候选目录和静态预览；预览不发送请求、不预扣、不持有 Permit。
 - `POST /api/routing/tokens/:id/preview` 覆盖自动、手动及无 Profile 的旧 Token，旧 Profile 预览委托同一入口。预览复用实际静态资格及排序，输出快照标识、时间、配置版本和动态复核提示；加权顺序不是下一次请求承诺。
-- `/api/channel/` 管理实际容量和 Decimal 字符串渠道售价系数；模型定价通过 Root `GET/PATCH /api/option/model_pricing` 管理。独立 `/route-policy` 接口已移除。
-- `/api/pricing` 恢复 NewAPI 模型行，返回模型元数据、倍率或按次价格、表达式、插件变体和 `pricing_version`。空配置不补零，明确零价有效；可路由性仍由共同选择器核验。Root `POST /api/ratio_sync/fetch` 只返回五源价格候选，选单源填草稿后保存才生效，详见[定价说明](../billing/PRICING.md#公开展示与审计)。
+- `/api/channel/` 管理实际容量和 Decimal 字符串渠道售价系数；模型定价通过 Root `GET/PATCH /api/option/model_pricing` 管理。没有独立的 `/route-policy` 接口。
+- `/api/pricing` 返回 NewAPI 模型行，返回模型元数据、倍率或按次价格、表达式、插件变体和 `pricing_version`。空配置不补零，明确零价有效；可路由性仍由共同选择器核验。Root `POST /api/ratio_sync/fetch` 只返回五源价格候选，选单源填草稿后保存才生效，详见[定价说明](../billing/PRICING.md#公开展示与审计)。
 
-不再使用 TOKEN_PRIVATE_ROUTING_ENABLED、ROUTE_LIVE_*、ROUTE_SHADOW_* 或 ROUTE_SCORE_* 灰度开关。能力刷新任务继续使用 ROUTE_CAPABILITY_REFRESH_*；ROUTE_DECISION_EVENT_QUEUE_SIZE 控制有界决策日志队列。
+代码不读取 TOKEN_PRIVATE_ROUTING_ENABLED、ROUTE_LIVE_*、ROUTE_SHADOW_* 或 ROUTE_SCORE_* 灰度开关。能力刷新任务使用 ROUTE_CAPABILITY_REFRESH_*；ROUTE_DECISION_EVENT_QUEUE_SIZE 控制有界决策日志队列。
 
 `route_decision.attempts` 仅记录真实发送，序号对应 `upstream_attempts`；发送前的价格、转换和容量拒绝仍属于候选诊断。每次尝试记录 `sequence`、`channel_id`、`success`、`origin`、`latency_ms`、`acceptance`、`retry_permission`、`response_committed`，失败附稳定错误分类与状态，并可带 `termination` 和仅 code/path 的 `response_diagnostics`。`latency_ms` 包含本轮发送前准备，不是纯上游延迟；错误状态也不保证是供应商原始 HTTP 状态。
 

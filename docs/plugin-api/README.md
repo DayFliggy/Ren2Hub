@@ -1,6 +1,6 @@
 # Ren2Hub 任务插件 API v1
 
-本文档以固定上游快照 `d04c118c8803f49e0c9bab74dcf5b5efeab9464a` 为来源，按 Ren2Hub 的不可变版本、冻结报价和恢复合同调整。它描述当前本地实现；轮询固定执行版本、删除遵守持久化引用保护。模型价格另以 NewAPI `c71eefbc` 的倍率、按次和 Expr VM 为计算基础，通过 `model_pricing` 唯一配置入口保存，钱包和恢复仍由 Ren2Hub 处理。
+本文档描述 Ren2Hub 当前的任务插件宿主实现：运行时为上游 moejs `v0.1.0-alpha.6`，插件 ABI 来自上游 NewAPI，并按 Ren2Hub 的不可变版本、冻结报价和恢复合同调整；轮询固定执行版本、删除遵守持久化引用保护。模型价格另以 NewAPI `c71eefbc` 的倍率、按次和 Expr VM 为计算基础，通过 `model_pricing` 唯一配置入口保存，钱包和恢复仍由 Ren2Hub 处理。
 
 - [完整合同与运维边界](./v1.md)
 - [TypeScript 类型](./v1.d.ts)

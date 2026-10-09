@@ -34,9 +34,9 @@ RelayKit 是从 [new-api](https://github.com/QuantumNous/new-api) 中拆分出�
 
 | 专项能力 | 当前边界 |
 |---|---|
-| 工具结果图片 | Claude ↔ Responses 保留结构化文本、图片顺序和调用 ID；Claude／Responses 转 Chat 时将图片提升到工具结果之后的用户消息，文本留在工具结果中；Claude 转 Gemini 经 Chat 路径；Responses 直转 Gemini 将图片与文档按顺序转为 `inlineData`（Gemini 3 及未知模型放入 `functionResponse.parts`，1.x／2.x 放在同轮函数结果之后），只接受 PNG、JPEG、WebP、PDF 与纯文本，其他类型及不可表达来源拒绝；无法保留的附加语义仍拒绝 |
-| 工具媒体附加语义 | 重复／缺失 ID、无法表达的工具失败状态和未知内容块明确拒绝，非默认图片 detail 转 Gemini 时只产生诊断；除转 Gemini 内联数据经宿主媒体解析器加载外，不下载或上传媒体 |
-| 工具文档与来源 | Claude 工具文档直转 Responses 保留 URL `file_url` 或内联 `file_data`，转 Chat／Gemini 拒绝；Responses 工具文档可直转 Gemini 内联数据；所有工具媒体均检查类型、来源和目标能力，包含未知块的混合结果不能退化为文本，`allow` 也不能绕过 |
+| 工具结果图片 | Claude ↔ Responses 保留结构化文本、图片顺序和调用 ID；Claude／Responses 转 Chat 时将图片提升到工具结果之后的用户消息，文本留在工具结果中；Claude 转 Gemini 经 Chat 路径；Responses 直转 Gemini 将图片与文档按顺序转为 `inlineData`（Gemini 3 及未知模型放入 `functionResponse.parts`，只接受 PNG、JPEG、WebP、PDF 与纯文本；1.x／2.x 放在同轮函数结果之后）；无法承载的类型、来源或形态省略并给 error 诊断 `unsupported_media_type`，由损失策略决定：safe／strict 拒绝，allow 发送不含该媒体的工具结果，媒体不写入文本；供应商自有来源在所有策略下拒绝 |
+| 工具媒体附加语义 | 重复／缺失 ID、无法表达的工具失败状态明确拒绝；除 Responses 直转 Gemini 外，未知内容块明确拒绝；非默认图片 detail 转 Gemini 时只产生诊断；除转 Gemini 内联数据经宿主媒体解析器加载外，不下载或上传媒体 |
+| 工具文档与来源 | Claude 工具文档直转 Responses 保留 URL `file_url` 或内联 `file_data`，转 Chat／Gemini 拒绝；Responses 工具文档可直转 Gemini 内联数据；工具媒体均检查类型、来源和目标能力，包含未知块的混合结果不能退化为文本；除 Responses 直转 Gemini 按上行由策略决定外，`allow` 不能绕过 |
 | 引用 | 保留可表达的 URL、标题、范围和顺序；Claude 加密引用／搜索结果需原生路径。普通 URL 注释不能凭生成答案补造来源摘录或加密引用 |
 | 托管工具 | 保留可表达的搜索和 MCP 结构；Chat 内部执行轨迹省略会产生诊断，strict 拒绝；不能把托管工具伪造成客户端函数 |
 | Claude 消息级配置 | 原生保留 `messages[].output_config`；跨协议 safe/strict 拒绝，allow 返回 `claude_message_output_config_not_portable`，不近似映射成全局 effort |
@@ -51,9 +51,9 @@ Responses 流式和缓冲共用输出项累计器，部分最终快照按身份�
 
 `AnalyzeRequest` 和 `ConversionPlan` 区分旧 OpenAI completion、moderation、edit 操作。这些操作没有跨协议转换器，即使使用 `allow` 也会拒绝转换，不能因复用 `GeneralOpenAIRequest` 而视为 Chat。Responses 历史中的 `function_call.namespace` 与工具声明采用相同的身份语义：原生保留；跨协议在默认 `safe` 和 `strict` 下拒绝，`allow` 接受已登记降级并返回结构化损失诊断，不提供可逆 namespace 映射。
 
-## 安装
+`ClaudeRequest.ResolveEffectiveEffort() (string, bool, error)` 只读计算当前 user 回合生效的 effort：消息级设置等待其后的 user 激活，尾部未激活设置不覆盖当前值，缺省不推断模型默认值；返回值保留原文，调用方负责其属性规范化。`GetEfforts()` 只读取顶层配置。完整边界见[网关 API](../docs/routing/GATEWAY_API.md#claude-消息级-effort-与计价)。
 
-`ClaudeRequest.ResolveEffectiveEffort() (string, bool, error)` 只读计算当前 user 回合生效的 effort：消息级设置等待其后的 user 激活，尾部未激活设置不覆盖当前值，缺省不推断模型默认值；返回值保留原文，调用方负责其属性规范化。`GetEfforts()` 继续只读取顶层配置。完整边界见[网关 API](../docs/routing/GATEWAY_API.md#claude-消息级-effort-与计价)。
+## 安装
 
 RelayKit 要求 Go 1.25.1 或更高版本。
 

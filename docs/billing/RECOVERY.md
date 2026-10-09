@@ -35,4 +35,4 @@ SQL 日志使用事件 ID 唯一键。ClickHouse 先保存写入意图，结果�
 
 ## 运行边界
 
-schema 5 只允许空库安装或版本及 `EvidenceKeyID` 匹配的重复启动，必须保留显式配置的稳定 `CRYPTO_SECRET`。冻结估算与结算意图的重放依赖同一密钥和 Go 工具链；升级 Go 或回退版本前先排空网关并确认 `billing_recovery.pending` 为 0，否则无法重放的记录会停在积压中。启动还会检查旧数据：存在 `reconciliation_required` 等不支持的 `status`、退役的 `pricing_pending` / `pricing_collect`，或 `settled` / `refunded` 的 `consumption_state` 不是 `pending` / `completed` 时拒绝启动，不改资金或记录。须先用原版本完成这些记录后再升级；新版不重新开放人工对账，也不把旧状态自动解释为扣款或退款授权。当前受支持的在途记录继续由自动恢复处理。发布与回退遵循[单实例发布契约](../routing/GATEWAY_RELEASE.md)。
+schema 5 只允许空库安装或版本及 `EvidenceKeyID` 匹配的重复启动，必须保留显式配置的稳定 `CRYPTO_SECRET`。冻结估算与结算意图的重放依赖同一密钥和 Go 工具链；升级 Go 或回退版本前先排空网关并确认 `billing_recovery.pending` 为 0，否则无法重放的记录会停在积压中。启动还会检查旧数据：存在 `reconciliation_required` 等不支持的 `status`、退役的 `pricing_pending` / `pricing_collect`，或 `settled` / `refunded` 的 `consumption_state` 不是 `pending` / `completed` 时拒绝启动，不改资金或记录。须先用原版本完成这些记录再升级；当前版本不提供人工对账，也不把这些状态自动解释为扣款或退款授权。当前受支持的在途记录继续由自动恢复处理。发布与回退遵循[单实例发布契约](../routing/GATEWAY_RELEASE.md)。

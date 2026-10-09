@@ -50,8 +50,8 @@ go test -race -timeout 60s ./router -run '^TestGatewayResponsesWS(PreviousRespon
 | 检查                  | 环境变量                                                                                                                    |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | 配置与启动迁移三库    | `GATEWAY_STARTUP_MYSQL_DSN`、`GATEWAY_STARTUP_POSTGRES_DSN`                                                                 |
-| P2 模型/窗口/诊断三库 | `TEST_MYSQL_DSN`、`TEST_POSTGRES_DSN`；必须指向本轮新建的可丢弃实例/数据库                                                  |
-| PAT 与诊断控制器三库  | 另设 `TEST_SECURITY_DIALECT=sqlite                                                                                          | mysql | postgres`，逐方言运行；PostgreSQL DSN 使用 `postgresql://...` URL，夹具只接受回环地址并新建用例库 |
+| 模型目录与诊断三库    | `TEST_MYSQL_DSN`、`TEST_POSTGRES_DSN`；必须指向新建的可丢弃实例/数据库                                                      |
+| PAT 与诊断控制器三库  | 另设 `TEST_SECURITY_DIALECT` 为 `sqlite`、`mysql` 或 `postgres`，逐方言运行；PostgreSQL DSN 使用 `postgresql://...` URL，夹具只接受回环地址并新建用例库 |
 | 账务三库              | `BILLING_TEST_MYSQL_DSN`、`BILLING_TEST_POSTGRES_DSN`                                                                       |
 | 跨进程成功频率预留    | `GATEWAY_MULTIPROCESS_MYSQL_DSN`、`GATEWAY_MULTIPROCESS_REDIS_ADDR`                                                         |
 | 单实例及顺序重启      | `GATEWAY_APP_BINARY`、`GATEWAY_APP_MYSQL_DSN`、`GATEWAY_APP_REDIS_ADDR`；运行 `TestGatewayApplicationSingleInstanceRestart` |
@@ -74,27 +74,27 @@ bun run test:visual -- tests/visual/gateway.spec.ts
 
 浏览器场景覆盖桌面、移动端、明暗主题、Provider unavailable、draining、配置交互与横向溢出；截图在 `frontend/output`，须检查图像。API fixture 的浏览器测试不等同于真实后端验证。
 
-## P2 本地化专项
+## PAT、目录与诊断专项
 
 先运行以下定向合同，再执行受影响包的静态检查、构建和隔离二进制冒烟。三库变量缺失而 SKIP 的子测试仍未完成；不能由 SQLite 通过推断其他方言通过。
 
 ```powershell
-go test -timeout 60s ./controller -run '^Test(PAT|RequestDiagnostic|ProviderUsage)' -count=1
+go test -timeout 60s ./controller -run '^Test(PAT|RequestDiagnostic)' -count=1
 go test -race -timeout 60s ./common -run '^TestVerificationCode' -count=1
 go test -timeout 60s ./controller -run '^TestPasswordReset' -count=1
-go test -timeout 60s ./service -run '^Test(ProviderUsage|RequestDiagnostic)|Test.*(Manifest|ClientConfig)' -count=1
-go test -race -timeout 60s ./service -run '^Test(ProviderUsage|RequestDiagnostic|LocalAdmission)' -count=1
-go test -timeout 60s ./model -run '^Test(RequestDiagnostic|ProviderUsage|ModelCapabilities|TokenCreation|GatewayStartupMigrations)' -count=1
+go test -timeout 60s ./service -run '^TestRequestDiagnostic|Test.*(Manifest|ClientConfig)' -count=1
+go test -race -timeout 60s ./service -run '^Test(RequestDiagnostic|LocalAdmission)' -count=1
+go test -timeout 60s ./model -run '^Test(RequestDiagnostic|ModelCapabilities|TokenCreation|GatewayStartupMigrations)' -count=1
 go test -timeout 60s ./pkg/jsplugin ./plugins ./relay/channel/task/jsplugin -count=1
 go test -timeout 60s ./router -run '^TestGateway(Doubao|PlaygroundModelIdentity)' -count=1
-node tests/upstream-sync/smoke.mjs <本轮构建的可执行文件>
+node tests/upstream-sync/smoke.mjs <当前构建的可执行文件>
 ```
 
-PAT 回归验证目标 ID/scopes 绑定、Proof 替换和重放、动态撤权、过期/撤销、名称及权限的局部更新、失败无部分写入。窗口回归覆盖缓存不发请求、并发合并、60 秒冷却、429/退避、凭据轮换、可信刷新写库失败和停止后无后台 HTTP/写库。诊断回归覆盖排队与等待预算/上游/首输出的区分、用户及 Token 隔离、PAT 字段权限、队列满不阻塞请求、写库故障计数与 7 天清理。
+PAT 回归验证目标 ID/scopes 绑定、Proof 替换和重放、动态撤权、过期/撤销、名称及权限的局部更新、失败无部分写入。诊断回归覆盖排队与等待预算/上游/首输出的区分、用户及 Token 隔离、PAT 字段权限、队列满不阻塞请求、写库故障计数与 7 天清理。
 
-前端新增 PAT、能力编辑器、目录/导出、provider 窗口、日志时间线的 Vitest 和 `tests/visual/*p2*`、`tests/visual/request-diagnostics.spec.ts`。按完整前端检查顺序执行，浏览器覆盖四种主题/视口以及登出后的迟到响应、只读权限、未知值和 Token 0 提示。SDK 的两种语言分别真实执行基础、媒体、语义套件，不把安装依赖算作执行成功。
+前端覆盖 PAT、能力编辑器、目录/导出、日志时间线的 Vitest，以及 `tests/visual/pat-p2.spec.ts`、`tests/visual/catalog-p2.spec.ts`、`tests/visual/request-diagnostics.spec.ts`。按完整前端检查顺序执行，浏览器覆盖四种主题/视口以及登出后的迟到响应、只读权限、未知值和 Token 0 提示。SDK 的两种语言分别真实执行基础、媒体、语义套件，不把安装依赖算作执行成功。
 
-空库冒烟仅启动隔离 SQLite 和回环模拟上游，验证 PAT/目录/导出/窗口/诊断及三协议请求。用量窗口的 GET 不产生供应商请求，三次生成对应三次上游发送和三笔唯一结算，最终资金预留归零。真实供应商、远端候选环境及生产数据库均不由此证明。
+空库冒烟仅启动隔离 SQLite 和回环模拟上游，验证 PAT、目录、导出、诊断、type 57 创建拒绝及三协议请求；三次生成对应三次上游发送和三笔唯一结算，最终资金预留归零。真实供应商、远端候选环境及生产数据库均不由此证明。
 
 ## 必须断言的边界
 

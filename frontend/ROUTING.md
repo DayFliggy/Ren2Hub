@@ -22,12 +22,12 @@ Root 模型定价是模型管理的 `pricing` 分区，路径为 `/models/pricin
 ## 兼容边界
 
 - `src/router/legacyRoutes.ts` 集中转换旧书签、日志 tab 和设置 section，守卫保留 query/hash。未知页面落入 404，不将未知控制台路径当作首页。
-- 系统实例页已退休：`/system-info`、`/admin/system-info` 及其 `/console/` 旧前缀进入 `/ops`。
+- 系统实例页的旧路径 `/system-info`、`/admin/system-info` 及其 `/console/` 前缀进入 `/ops`。
 - 旧账号审计 `/audit` 进入 `/usage-logs/audit`；旧操作日志 `/usage-logs/operations`、`/logs/operations` 进入 `/usage-logs/audit?scope=all`。无 `audit:read` 权限时页面仍只读取本人记录。
-- `/next` 和 `/next/*` 已退休：Go 返回 HTTP 404，Vue 内部导航进入 404 页面，不再转换旧书签。
+- `/next` 和 `/next/*`：Go 返回 HTTP 404，Vue 内部导航进入 404 页面，不转换为其他页面。
 - `/api`、`/api/next`、Relay 和 `/dashboard/billing` 是后端命名空间，缺失接口返回 JSON 404。绝不清理 API 尾斜杠：`/api/models` 是用户目录，`/api/models/` 是管理 metadata。
-- 已退出的 Playground、Chat、Chat2Link、Chat Presets、模型部署及其旧前缀路径返回 404；Vue 内部导航也拒绝进入。
-- 本站订阅与套餐管理已移除：`/subscription`、`/plan-management`、`/plans` 及其 `/console/` 旧前缀路径进入标准 404，不再注册功能路由或请求订阅接口。
+- Playground、Chat、Chat2Link、Chat Presets、模型部署及其旧前缀路径返回 404；Vue 内部导航也拒绝进入。
+- 本站没有订阅与套餐管理：`/subscription`、`/plan-management`、`/plans` 及其 `/console/` 前缀路径进入标准 404，不注册功能路由，也不请求订阅接口。
 - 缺失 capability 按禁用处理；后端不可达时不挂载业务页面。服务端鉴权仍为最终权限边界。
 
 ## 构建与交付验证

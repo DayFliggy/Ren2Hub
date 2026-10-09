@@ -2,7 +2,7 @@
 
 该目录是 Ren2Hub 唯一的 Web 前端，使用 Vue 3、TypeScript、Vite、Vue Router、Pinia、Vue I18n、Axios、Tailwind CSS 和 ECharts。依赖版本以 [package.json](package.json) 和 [bun.lock](bun.lock) 为准，使用 Bun 安装和运行脚本。
 
-- Vue 应用直接挂载在网站根路径 `/`；旧 `/next` 和 `/next/*` 入口已移除，返回 404。
+- Vue 应用直接挂载在网站根路径 `/`；`/next` 和 `/next/*` 返回 404。
 - `bun run build` 先检查类型，再输出 `frontend/dist/`。仓库根目录的 `make build-web` 和 Docker 构建均通过 `scripts/prepare-frontend-embed.mjs` 校验并复制到 `frontend/embed-dist/`，再由 Go `embed` 打入最终二进制。
 - 首页、认证与已启用的 Console 模块统一调用同源真实后端 API。
 - 后端通过 `/api/status.frontend_capabilities` 声明模块状态；未启用模块必须保持禁用并由路由守卫 fail-closed。
@@ -42,7 +42,7 @@ Vitest 检查 `src/` 下的行为测试。`bun run test:visual` 运行本地 Pla
 - `/models/pricing`：Root 模型与工具定价、五源获取候选并回填草稿；空安装无价格，只有保存后生效，见[计费界面契约](docs/BILLING.md)
 - `/lab/*`：炼金室预留路由；后端 capability 未启用时拒绝访问
 
-旧 `/console/*`、`/auth/*` 和 NewAPI 历史书签统一转换为根路径并保留 query/hash。`/next` 前缀不再转换或加载业务页面。匿名访问转到 `/sign-in`，登录回跳由实际路由记录校验。页面使用相同 Console 布局；布局与语言包由 metadata 指定，不依赖 URL 前缀。
+旧 `/console/*`、`/auth/*` 和 NewAPI 历史书签统一转换为根路径并保留 query/hash。`/next` 前缀不转换也不加载业务页面。匿名访问转到 `/sign-in`，登录回跳由实际路由记录校验。页面使用相同 Console 布局；布局与语言包由 metadata 指定，不依赖 URL 前缀。
 
 `/api/next/*` 是已有业务 API 门面，保留接口契约；`/api/models` 和 `/api/models/` 的不同语义也保留。Playground、Chat、Chat2Link、Chat Presets 及旧前缀变体返回 404。详细矩阵与验证边界见 [路由约定](./ROUTING.md)。
 
@@ -67,7 +67,7 @@ src/
   __tests__/    全局测试设置
 ```
 
-当前暂缓接入炼金室、Token 农场、小游戏、开票和市场。本站订阅与套餐管理已移除，原页面路径返回 404；钱包充值继续保留。旧 Playground、Chat、Chat2Link 和 Chat Presets 路径已明确退休并返回 404。
+炼金室、Token 农场、小游戏、开票和市场暂未接入。本站没有订阅与套餐管理，相应路径返回 404；钱包充值照常提供。Playground、Chat、Chat2Link 和 Chat Presets 路径返回 404。
 
 `common` 和 `home` 语言包随首屏加载，`auth`、`console`、`lab`、`setup` 按路由和当前语言延迟加载。`public/` 保存直接发布的资源，`src/assets/` 保存构建管理的图片和自托管字体。`dist/`、`embed-dist/` 与 `output/` 分别是构建产物、Go 嵌入产物和本地测试输出。
 

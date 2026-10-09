@@ -18,13 +18,13 @@
 
 Root 可以管理所有用户；其他管理员只能查看和修改角色低于自己的用户。`/self` 始终读取登录用户，不接受用户 ID。凭据列表返回已通过可信路径登记的身份，不返回密钥、指纹或可变密钥索引；它不是当前启用密钥列表。
 
-`GET /api/gateway/metrics` 的 schema v2 增加 `route_decision_events_dropped_total`，表示本实例有界路由日志队列的累计丢弃数，进程重启后清零。
+`GET /api/gateway/metrics` 的 schema v2 包含 `route_decision_events_dropped_total`，表示本实例有界路由日志队列的累计丢弃数，进程重启后清零。
 
 ## Token 路由预览
 
 `POST /api/routing/tokens/:id/preview` 使用用户认证、Token 所有权检查、敏感接口限频和禁止缓存。请求为 `{ "model": "gpt-4o-mini", "path": "/v1/chat/completions", "request": { "model": "gpt-4o-mini", "messages": [{ "role": "user", "content": "示例" }] } }`；request 可省略，样本最多 1 MiB。正文模型必须匹配 model，Gemini 同时校验 URL 模型及生成操作。Compact 使用 `/v1/responses/compact` 和普通模型名，不支持 `-compact` 模型别名。
 
-沿用统一 success/data 包装。data 保留旧 Profile 预览字段，新增 `token_id`、`mode`（auto_lab/manual）、服务端生成的 `preview_id`、毫秒时间戳 `generated_at`；`profile_version` 为配置版本，无 Profile 时为 0。每条 entry 增加 `priority`、`score_breakdown`，继续提供 conversion_plan、diagnostics、filter_reason。自动候选没有 Entry，entry_id 为 0。
+沿用统一 success/data 包装。data 包含 Profile 预览字段，以及 `token_id`、`mode`（auto_lab/manual）、服务端生成的 `preview_id`、毫秒时间戳 `generated_at`；`profile_version` 为配置版本，无 Profile 时为 0。每条 entry 包含 `priority`、`score_breakdown`、conversion_plan、diagnostics、filter_reason。自动候选没有 Entry，entry_id 为 0。
 
 `candidate_channel_ids` 按当前资格和实际排序生成，`preferred_channel_id` 仅表示此快照首选。`runtime_recheck_required` 始终为 true，reasons 包括价格、实时额度、安全策略、准入容量、Provider 限制、配置版本、亲和及必要的状态归属。无 Profile 的预览不创建 Profile；不发送请求、不预扣、不持有 Permit、不占用健康探测。
 
@@ -32,7 +32,7 @@ Root 可以管理所有用户；其他管理员只能查看和修改角色低于
 
 ## 配置契约
 
-`PUT /config` 保留原有全量更新契约和乐观版本检查。新客户端先 GET 并保留所有字段；旧客户端省略 `total_queue_size` 和三个 `retry_budget_*` 字段时保留数据库当前值，显式 null 返回 400。`channel_rates` 按渠道 ID 配置，该渠道的所有模型共享额度。`credential_rates` 按稳定凭据 UUID 配置，同一渠道内使用该凭据的请求共享额度。两个范围原子准入。
+`PUT /config` 是全量更新并做乐观版本检查。客户端先 GET 并保留所有字段；请求省略 `total_queue_size` 和三个 `retry_budget_*` 字段时保留数据库当前值，显式 null 返回 400。`channel_rates` 按渠道 ID 配置，该渠道的所有模型共享额度。`credential_rates` 按稳定凭据 UUID 配置，同一渠道内使用该凭据的请求共享额度。两个范围原子准入。
 
 ```json
 {
@@ -55,7 +55,7 @@ Root 可以管理所有用户；其他管理员只能查看和修改角色低于
 
 并发范围为 0 至 1000000；累计等待毫秒为 0 至 5000；每用户队列长度为 0 至 20，渠道队列长度为 0 至 10000，默认 20。RPM、TPM 为 0 至 1000000000，0 表示该限制关闭。配置引用的渠道和凭据必须存在。版本不匹配返回 `409 CONFLICT`，客户端重新加载后再保存。
 
-新增字段：`total_queue_size` 范围 0–100000，0 禁止新增排队但不阻止立即获槽；`retry_budget_percent` 范围 1–100；`retry_budget_burst` 范围 1–10000；`retry_budget_enabled` 为布尔值。数据库缺失字段按上例补齐，仅实际补字段时版本增加一次，已有显式 0/false 保留。
+队列与重试字段：`total_queue_size` 范围 0–100000，0 禁止新增排队但不阻止立即获槽；`retry_budget_percent` 范围 1–100；`retry_budget_burst` 范围 1–10000；`retry_budget_enabled` 为布尔值。数据库缺失字段按上例补齐，仅实际补字段时版本增加一次，已有显式 0/false 保留。
 
 `PUT /users/:id` 的请求和成功 data 为 `{ concurrency: number|null, wait_ms: number|null, queue_size: number|null }`，替换该用户的三个覆盖字段。null 恢复继承；显式 0 保留其含义。该更新允许重复提交相同值。
 
@@ -90,7 +90,7 @@ rate 为 `{ rpm_used, tokens_used, tokens_reserved, cooldown_ms }`：RPM 统计�
 
 用户和渠道并发运行态来自同一进程内 manager，返回 `in_flight`、`queued`、`capacity`、`config_version`、`revision`、`started_at`（Unix 秒）、`draining`。查询不创建池、不占容量。Provider rate 只从 Redis 读取；渠道并发可读而 Provider 不可用时仍返回 200、真实本地计数及 `rate: null`、`rate_status: unavailable`；正常时 `rate_status: available`。独立凭据 rate 读取失败仍返回 503。未配置 Redis 时实际准入改用进程内预留，但这两个接口不暴露内存计数，分别固定返回 `unavailable` 和 503，见[Provider 额度预留](UNIFIED_ROUTING.md#provider-额度预留)。无效输入返回 `400 VALIDATION_ERROR`；资源不存在返回 `404 NOT_FOUND`；无权管理目标用户返回 `403 FORBIDDEN`。
 
-生成入口的用户准入在 OpenAI 错误对象中返回明确 `code`，包括 `gateway_capacity_exhausted`、`gateway_queue_full`、`gateway_wait_timeout`、`gateway_total_queue_full` 和 `gateway_draining`。诊断 message 分别标记 `user admission` 或 `process admission`；渠道尝试错误保留 `channel admission` 原因，路由日志记录对应渠道。客户端已取消或已提交响应时不再追加错误。
+生成入口的用户准入在 OpenAI 错误对象中返回明确 `code`，包括 `gateway_capacity_exhausted`、`gateway_queue_full`、`gateway_wait_timeout`、`gateway_total_queue_full` 和 `gateway_draining`。诊断 message 分别标记 `user admission` 或 `process admission`；渠道尝试错误保留 `channel admission` 原因，路由日志记录对应渠道。客户端已取消或已提交响应时不追加错误。
 
 TPM 要求宿主登记可解析的最终请求格式。仅支持媒体任务、Coze 及未登记旧投影的渠道或凭据不能配置 TPM，保存返回 `400 VALIDATION_ERROR`；RPM 不受此限制。运行时重新检查最终发送体：覆盖后的最大输出上限乘输出数量，加输入 JSON 估算；关闭 CountToken 不关闭准入计数。已登记的 Embedding 使用输入估算。未知扩展、无法估算的媒体/状态输入、非文本输出或缺少有效上限均不能伪装成有限预算。渠道类型变更后残留的无效 TPM 也在发送前拒绝。
 
@@ -101,7 +101,7 @@ TPM 要求宿主登记可解析的最终请求格式。仅支持媒体任务、C
 `GET /metrics` 复用 Root 鉴权和关键接口限流，建议低频采集。`counter_scope` 为 `instance`，`started_at` 为进程启动时间；重启后累计计数归零。本系统仅支持一个进程承接业务流量，`/runtime/*` 与指标读取同一个 manager。
 
 - `user_queue`、`channel_queue`：`active` 为本进程等待请求数；`entered_total`、`completed_total`、`failed_total` 为累计结果，`wait_ms_total` 为累计等待毫秒。取消计入失败并释放 active。
-- `schema_version: 2`；移除 `leases`。
+- `schema_version` 为 2，不含 `leases`。
 - `admission`：活动、等待、池数、总队列上限、授槽/释放累计数、队列满/进程队列满/取消/超时计数。`wait_duration_ms_buckets` 是累计毫秒桶，边界为 1、5、20、100、500、1000、5000、+Inf。守恒关系为 `granted_total - released_total == in_flight`。
 - `retry_budget`：enabled、available_hundredths、reserved、first_sends_total、retry_sends_total、rejected_total；余额以百分之一次发送为单位。
 - `attempt_maintenance`：active、checks_total、failures_total，仅维护健康探测及 Provider/逻辑频率预留，本地 Permit 不续期。
@@ -169,13 +169,13 @@ Compact 使用普通模型名和 `/v1/responses/compact` 原生端点。Claude `
 
 ## 视频与续作
 
-Gemini/Vertex Veo 先生成一份校验后的请求，发送与计费共用其时长、分辨率及单输出数量。时长优先级为 metadata `durationSeconds`、`duration`、`seconds`、默认 8 秒；网关安全上限为 3600 秒，实际模型可接受的时长仍由供应商限制。非法数值、冲突大小写别名、无效 metadata、`sampleCount` 非 1 返回 400，不预扣或发送。任务 DTO 不再静默忽略损坏的 duration 和 metadata。
+Gemini/Vertex Veo 先生成一份校验后的请求，发送与计费共用其时长、分辨率及单输出数量。时长优先级为 metadata `durationSeconds`、`duration`、`seconds`、默认 8 秒；网关安全上限为 3600 秒，实际模型可接受的时长仍由供应商限制。非法数值、冲突大小写别名、无效 metadata、`sampleCount` 非 1 返回 400，不预扣或发送。任务 DTO 遇到损坏的 duration 和 metadata 时报错，不静默忽略。
 
 Veo 图片仅接收单张 multipart `input_reference`、有效 base64 或 base64 data URI，最多 20 MiB；尚未实现的 URL 图片、读取失败、空或非法图片及冲突来源明确拒绝。解析失败不降级为纯文本视频。
 
 Suno 续作需要当前 Token 的公开 `task_id` 与该成功任务歌曲数组中的 `continue_clip_id`。网关锁定原渠道、稳定凭据及端点，只向上游发送对应的私有任务 ID。未知、跨 Token 或错误歌曲统一拒绝；处理中、旧记录缺少身份、原资源暂不可用返回 503，不改换其他渠道或 Key。视频结果下载复用同一任务凭据，轮询返回显式 ID 时必须与所查询任务一致；错误 ID 不更新状态和费用。
 
-Gemini/Vertex 视频在读取缓存下载地址前复核稳定凭据；不可用返回 `503 task_state_unavailable`。需要补查时，仅接受成功 HTTP、可解析且与原任务 ID 匹配的成功终态，否则返回 502，不再从错误正文提取备用 URL。补查及 Vertex OAuth 换取响应客户端取消；这些失败不会发起后续下载或改变任务费用。
+Gemini/Vertex 视频在读取缓存下载地址前复核稳定凭据；不可用返回 `503 task_state_unavailable`。需要补查时，仅接受成功 HTTP、可解析且与原任务 ID 匹配的成功终态，否则返回 502，不从错误正文提取备用 URL。补查及 Vertex OAuth 换取响应客户端取消；这些失败不会发起后续下载或改变任务费用。
 
 ## 状态保留
 
@@ -187,7 +187,7 @@ Gemini `fileData.fileUri` 中的 Google Files 资源地址及 `gs://` 私有资�
 
 Chat 的 `content[].file.file_id`、Responses 的 `input_file.file_id` 与 Claude 的 `document.source.file_id` 均归入 `file` 引用校验。原生 Chat 同样准备最终传输身份；已知绑定只允许在匹配的原资源域使用，未知或跨 Token 引用不发送。文件上传与初始文件管理接口仍未实现。
 
-绑定新增 `transport_id`，保存最终 URL、Host、账号范围和可能选择租户的自定义覆盖头的哈希，不保存请求头值或密钥。标准追踪头变化不改变归属。Gemini JSON/SSE 路径及 Responses/compact 路径按同一资源域核验；压缩输出的 encrypted_content 可用于原渠道后续 Responses 请求。缺少传输摘要的旧绑定返回 400，要求建立新会话，迁移不会推测旧请求的真实传输身份。
+绑定带 `transport_id`，保存最终 URL、Host、账号范围和可能选择租户的自定义覆盖头的哈希，不保存请求头值或密钥。标准追踪头变化不改变归属。Gemini JSON/SSE 路径及 Responses/compact 路径按同一资源域核验；压缩输出的 encrypted_content 可用于原渠道后续 Responses 请求。缺少传输摘要的旧绑定返回 400，要求建立新会话，迁移不会推测旧请求的真实传输身份。
 
 最终请求头中的认证必须与适配器使用的所选渠道凭据一致；静态或动态覆盖为另一凭据返回 400，且不发送、不预扣。`Bearer {api_key}` 等保持身份的覆盖仍可使用。实际密钥应配置在渠道 Key 中，避免绕过凭据级 RPM/TPM 和健康归属。Host、项目或租户变化导致旧状态返回 503；恢复到同一实际资源域后可重新尝试。人工替换 Key 使原绑定失效。
 
@@ -205,7 +205,7 @@ Chat 的 `content[].file.file_id`、Responses 的 `input_file.file_id` 与 Claud
 
 新日志使用 `admission_state`，读取器兼容历史 `lease_state`。重试额度耗尽在管理日志记录 `retry_budget_exhausted: true`，保留最后一个真实上游错误，不追加供应商健康处罚。
 
-`route_decision.attempts` 按真实发送顺序记录成功状态、稳定错误类别、归一化错误 HTTP 状态、来源、耗时、接受状态、重试许可和响应是否提交；发送前拒绝不生成 attempt。旧日志可以没有此字段。`latency_ms` 保持包含本轮准备的原语义，新增 `upstream_latency_ms` 才是实际发送至完成的测量值；缺证据时省略，不能把未知表示为零。成功 HTTP 码不作推断。内部观察保留渠道及稳定凭据 ID，但不记录凭据原文、供应商错误正文、请求体或请求头。
+`route_decision.attempts` 按真实发送顺序记录成功状态、稳定错误类别、归一化错误 HTTP 状态、来源、耗时、接受状态、重试许可和响应是否提交；发送前拒绝不生成 attempt。较早的日志可以没有此字段。`latency_ms` 包含本轮发送前准备，`upstream_latency_ms` 才是实际发送至完成的测量值；缺证据时省略，不能把未知表示为零。成功 HTTP 码不作推断。内部观察保留渠道及稳定凭据 ID，但不记录凭据原文、供应商错误正文、请求体或请求头。
 
 所有计价模式在发送前持久化消费保护和冻结估算；最终用量无法计价或写入失败时按冻结估算结算。任务、图片及其他有副作用的生成请求交付有效输出或任务已被接受时按证据结算，没有输出且没有任务 ID 时释放；上传重放仍受限制。状态处理见[结算兜底与恢复](../billing/RECOVERY.md)，数据格式与切换要求见[发布契约](GATEWAY_RELEASE.md)。
 
@@ -229,7 +229,7 @@ Codex 客户端导出使用标准 OpenAI Responses 协议，不依赖 ChatGPT �
 
 渠道编号及分类见[渠道接入类型](../channel/TYPES.md)。整数 57 保留为已退役的 ChatGPT Subscription (Codex) 渠道，不会重新分配，也不会自动转成 OpenAI。历史记录仍可由授权管理员读取和显式删除；新建、编辑、复制、测试、模型抓取、同步和路由均拒绝该类型。管理入口沿用原渠道错误 envelope，返回 HTTP 200、`success:false` 和稳定消息 `retired channel type`；生成请求的选路失败继续使用现有网关协议错误格式。列表显示退役状态，隐藏编辑、刷新、测试和用量操作。
 
-Codex 订阅的刷新、用量、额度重置路由及无其他供应商实现的 provider-usage 路由已撤下，不再注册；旧 URL 不能触发 OAuth 或上游请求。现有钱包、付款和业务订阅接口不属于这项渠道退役。迁移方式是管理员删除旧渠道后，用官方 API Key 新建标准 OpenAI 渠道；不能复用旧 OAuth JSON 作为 API Key。
+Codex 订阅的刷新、用量、额度重置路由及 provider-usage 路由不注册，这些 URL 不能触发 OAuth 或上游请求。钱包、付款和业务订阅接口不受渠道退役影响。迁移方式是管理员删除旧渠道后，用官方 API Key 新建标准 OpenAI 渠道；不能复用旧 OAuth JSON 作为 API Key。
 
 ## 渠道状态摘要
 
