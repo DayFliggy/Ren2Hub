@@ -31,17 +31,17 @@ go test -timeout 60s ./service ./controller ./router -run '^(TestResponsesWS|Tes
 go test -timeout 60s ./router -run '^TestGateway(ResponsesWS|UnsupportedTokenCount|ResponseTerminals|ToolImageHoist|ResponsesNamespace|GeminiPartial|ReasoningAndSearch)' -count=1
 go test -timeout 60s ./relay ./router ./model ./service -run '^Test(ResponseModel|UserLogResponseModel|GatewayResponsesWS|ResponsesUsage)' -count=1
 go test -timeout 60s ./controller -run '^Test(VLLMStatus|SGLangStatus|ParseVLLM)' -count=1
-go test -timeout 60s ./router -run '^Test(GatewayAdvancedCustomRoutePassthrough|InferenceChannelStatus|GatewayClaudeEffectiveEffortBilling|GatewayClaudeMessageOutputConfigConversionBeforeBilling)' -count=1
+go test -timeout 60s ./router -run '^Test(GatewayAdvancedCustomRoutePassthrough|InferenceChannelStatus|GatewayClaudeEffortProtocolAndIncomingParamBilling|GatewayClaudeMessageOutputConfigConversionBeforeBilling)' -count=1
 go test -timeout 60s ./service ./relay/common -run 'Test.*(Preview|PassThrough|Passthrough|ChannelMeta)' -count=1
 ```
 
 RelayKit 侧的 `TestClaudeResolveEffectiveEffort*` 与 `TestClaudeMessageOutputConfig*` 随上文 `GOWORK=off` 全量测试执行。WebSocket 的最小 race 名单须在具备 cgo 的环境运行，不能用普通并发测试代替：
 
 ```sh
-go test -race -timeout 60s ./router -run '^TestGatewayResponsesWS(PreviousResponseOwnership|ReconnectPreservesOnlySameOwner|RejectsChangedConnectionIdentity|KeepsUnknownUsageAndRejectsOverlappingCreate|RejectionHonorsSharedRetryBudget|ClientDisconnectPreservesUnknownUsage|DrainLifecycle)$' -count=1
+go test -race -timeout 60s ./router -run '^TestGatewayResponsesWS(PreviousResponseOwnership|ReconnectPreservesOnlySameOwner|RejectsChangedConnectionIdentity|SettlesObservedUsageAndRejectsOverlappingCreate|RejectionHonorsSharedRetryBudget|ClientDisconnectSettlesDeliveredOutput|DrainLifecycle)$' -count=1
 ```
 
-本地 httptest、SQLite、miniredis 和隔离子进程排空只证明相应边界；真实供应商、运行二进制及部署容器停机链路需要独立证据。协议与状态 API 字段见 [协议合同](../upstream/RC40_PROTOCOL_CONTRACT.md)。
+本地 httptest、SQLite、miniredis 和隔离子进程排空只证明相应边界；真实供应商、运行二进制及部署容器停机链路需要独立证据。协议与状态 API 字段见[网关 API](GATEWAY_API.md) 与[协议支持矩阵](GATEWAY_SUPPORT_MATRIX.md)。
 
 ## 本地依赖
 

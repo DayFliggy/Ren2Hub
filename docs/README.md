@@ -11,7 +11,7 @@
 | Web 应用 | [前端说明](../frontend/README.md)、[页面路由](../frontend/ROUTING.md)、[术语表](translation-glossary.md) | Vue、同源 API、功能门控与中英文文案 |
 | 登录与会话 | [认证契约](authentication.md) | 浏览器登录、刷新会话、绑定、安全验证、Origin 与代理规则 |
 | 模型路由 | [统一路由](routing/UNIFIED_ROUTING.md)、[网关 API](routing/GATEWAY_API.md) | 自动/手动路由、本地 FIFO、资格重检、队列与故障转移 |
-| 协议和渠道 | [渠道接入类型](channel/TYPES.md)、[支持矩阵](routing/GATEWAY_SUPPORT_MATRIX.md)、[rc.40 协议合同](upstream/RC40_PROTOCOL_CONTRACT.md)、[RelayKit](../relaykit/README.md)、[渠道设置](channel/other_setting.md) | 实际实现的协议转换、Responses WebSocket、供应商入口和边界 |
+| 协议和渠道 | [渠道接入类型](channel/TYPES.md)、[支持矩阵](routing/GATEWAY_SUPPORT_MATRIX.md)、[RelayKit](../relaykit/README.md)、[渠道设置](channel/other_setting.md) | 实际实现的协议转换、Responses WebSocket、供应商入口和边界 |
 | 账务架构 | [实现边界](billing/IMPLEMENTATION.md)、[账务 API](billing/API.md)、[结算兜底与恢复](billing/RECOVERY.md) | 冻结报价、持久化预留、事件、原子结算与先计费兜底 |
 | 定价 | [模型定价与价格获取](billing/PRICING.md)、[计价接口](../pkg/billing/API.md)、[表达式](../pkg/billingexpr/expr.md) | NewAPI 配置、五源草稿、三模式计算、空默认与加密重放 |
 | 易支付充值 | [支付契约](billing/EPAY.md) | 报价、订单快照、商户版本、通知重试与管理员补单 |

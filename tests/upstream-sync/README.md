@@ -19,4 +19,4 @@ node tests/upstream-sync/smoke.mjs "$env:TEMP\ren2hub-upstream-smoke.exe"
 
 结算断言等候已完成的钱包投影，必须精确扣除三次固定价格且预留清零，不能把 HTTP 200 或尚在结算当作完成。脚本中的登录是浏览器会话 API，真实浏览器交互另由 Playwright 覆盖。
 
-本脚本使用内置 Node 模块，不依赖新 npm 包；真实协议 SDK 验证仍使用 `tests/gateway-sdk/`。三数据库、权限与并发回归见 `docs/upstream/SYNC_LEDGER.md`，不能把本脚本的 SQLite 结果代替 MySQL/PostgreSQL 验证。
+本脚本使用内置 Node 模块，不依赖新 npm 包；真实协议 SDK 验证仍使用 `tests/gateway-sdk/`。三数据库、权限与并发回归的命令见 `docs/routing/GATEWAY_VALIDATION.md`，不能把本脚本的 SQLite 结果代替 MySQL/PostgreSQL 验证。

@@ -53,7 +53,7 @@ Responses 流式和缓冲共用输出项累计器，部分最终快照按身份�
 
 ## 安装
 
-`ClaudeRequest.ResolveEffectiveEffort() (string, bool, error)` 只读计算当前 user 回合生效的 effort：消息级设置等待其后的 user 激活，尾部未激活设置不覆盖当前值，缺省不推断模型默认值；返回值保留原文，调用方负责其属性规范化。`GetEfforts()` 继续只读取顶层配置。完整边界见[协议合同](../docs/upstream/RC40_PROTOCOL_CONTRACT.md)。
+`ClaudeRequest.ResolveEffectiveEffort() (string, bool, error)` 只读计算当前 user 回合生效的 effort：消息级设置等待其后的 user 激活，尾部未激活设置不覆盖当前值，缺省不推断模型默认值；返回值保留原文，调用方负责其属性规范化。`GetEfforts()` 继续只读取顶层配置。完整边界见[网关 API](../docs/routing/GATEWAY_API.md#claude-消息级-effort-与计价)。
 
 RelayKit 要求 Go 1.25.1 或更高版本。
 

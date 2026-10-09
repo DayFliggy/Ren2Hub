@@ -22,7 +22,7 @@ Root 可以管理所有用户；其他管理员只能查看和修改角色低于
 
 ## Token 路由预览
 
-`POST /api/routing/tokens/:id/preview` 使用用户认证、Token 所有权检查、敏感接口限频和禁止缓存。请求为 `{ "model": "gpt-4o-mini", "path": "/v1/chat/completions", "request": { "model": "gpt-4o-mini", "messages": [{ "role": "user", "content": "示例" }] } }`；request 可省略，样本最多 1 MiB。正文模型必须匹配 model，Gemini 同时校验 URL 模型及生成操作。Compact 使用 `/v1/responses/compact` 和普通模型名；旧 `-compact` 模型别名不再自动生成或剥离。
+`POST /api/routing/tokens/:id/preview` 使用用户认证、Token 所有权检查、敏感接口限频和禁止缓存。请求为 `{ "model": "gpt-4o-mini", "path": "/v1/chat/completions", "request": { "model": "gpt-4o-mini", "messages": [{ "role": "user", "content": "示例" }] } }`；request 可省略，样本最多 1 MiB。正文模型必须匹配 model，Gemini 同时校验 URL 模型及生成操作。Compact 使用 `/v1/responses/compact` 和普通模型名，不支持 `-compact` 模型别名。
 
 沿用统一 success/data 包装。data 保留旧 Profile 预览字段，新增 `token_id`、`mode`（auto_lab/manual）、服务端生成的 `preview_id`、毫秒时间戳 `generated_at`；`profile_version` 为配置版本，无 Profile 时为 0。每条 entry 增加 `priority`、`score_breakdown`，继续提供 conversion_plan、diagnostics、filter_reason。自动候选没有 Entry，entry_id 为 0。
 
@@ -137,11 +137,35 @@ TPM 要求宿主登记可解析的最终请求格式。仅支持媒体任务、C
 
 `tool_identity` 只记录 `explicit_ids`、`invalid_history`、`requires_ids` 三个事实，不包含调用 ID、参数或结果。Vertex 的无 ID 投影启用时，`tool_ids_projected_to_names` 表示可无歧义改按名称关联；strict 拒绝该损失。`invalid_tool_history` 和 `tool_identity_required` 在所有策略下拒绝。请求多候选答案转换至 Claude/Responses 时返回 `multiple_candidates_unsupported`，allow 也不把多份答案合并成一份。
 
-Claude thinking/effort、Gemini thinkingConfig 与 Chat/Responses reasoning 通过共享推理意图转换，支持的结构不再统一视作不可移植。具体不支持的字段仍由转换器报告损失并按 Token 策略拒绝；`allow` 不会使未实现的媒体、命名空间或自由格式工具路径变得可执行。搜索配置按已实现目标结构保留，不能仅凭工具名称推断无损。协议合同及本地验收范围见 [rc.40 协议说明](../upstream/RC40_PROTOCOL_CONTRACT.md)。
+Claude thinking/effort、Gemini thinkingConfig 与 Chat/Responses reasoning 通过共享推理意图转换，支持的结构按目标协议渲染。具体不支持的字段由转换器报告损失并按 Token 策略拒绝；`allow` 不会使未实现的媒体、命名空间或自由格式工具路径变得可执行。搜索配置按已实现目标结构保留，不能仅凭工具名称推断无损。逐项转换合同见[协议支持矩阵](GATEWAY_SUPPORT_MATRIX.md)。
 
 `request_requirements.media` 只记录媒体种类、MIME、来源类别、字段路径和图片 detail，不含 URL 或媒体内容。`media_conversion_unavailable` 表示当前转换器不能表达该媒体或输入形态，所有策略拒绝，不把音视频当作图片，也不丢掉文档后继续发送文本。例外是 Responses 工具结果里的媒体直转 Gemini：规划阶段记录同一 error 诊断但不提前拒绝，转换器按 NewAPI 省略 Gemini 无法承载的媒体并给 `unsupported_media_type`，`safe`/`strict` 在发送前以 400 拒绝，`allow` 发送不含该媒体的工具结果。规划时不知道模型版本，按 `functionResponse.parts` 的窄列表判断，因此 Gemini 1.x/2.x 上的音视频工具媒体在 `safe` 下同样被拒绝，`allow` 时转换器会把它作为独立部件发送。Claude/Gemini 经 Chat 的当前非图片投影属于此类；Chat/Responses 的已实现媒体路径按实际字段结构执行。图片 detail 在 Chat/Responses 之间保留显式 `low/high/auto` 和缺省差异，计价端仍采用原默认规则；其他不能保留 detail 的目标产生损失诊断。
 
 Gemini 图片 `inlineData.data` 转换为 Chat/Responses/Claude 时接受标准和 URL-safe base64，解码校验后使用目标要求的标准编码。非法编码在发送前拒绝；原生 Gemini 保留客户端 SDK 的字节表示。
+
+## Responses WebSocket 与 Compact
+
+标准 OpenAI 渠道支持 Codex 模型、Responses、Compact 和 Responses WebSocket。原生连接使用 `GET /v1/responses` 升级，要求渠道设置 `responses_websocket_enabled` 且能生成最终原生 Responses 目标。同一连接的每个 `response.create` 都重新检查 Token、渠道、模型、状态归属、准入和最终请求预算，并为该次生成建立冻结报价与账务预留；建立连接不等于授权后续所有生成。重叠的 `response.create` 被拒绝，不重复报价或发送。
+
+最终模型、凭据、请求头、端点、代理及渠道配置参与连接身份摘要，摘要不暴露密钥或原始请求头。同一 socket 的身份变化要求重连；新连接只有在身份和用户、Token、渠道、凭据、模型归属均匹配时才能继续旧 `previous_response_id`。更换凭据或端点不能通过重连接管旧状态，拒绝发生在报价和新上游握手之前。
+
+明确的供应商拒绝按共享重试预算处理。部分输出、客户端断连或缺少可靠用量时按观察到的用量估算结算，没有输出的失败生成释放预留，这些情况都不重放生成。失败的取消操作不把仍在运行的生成当作已取消；不完整的入站帧不产生供应商发送或预留。`response.failed`、`response.incomplete` 即使带用量也不代表正常完成，仍按是否交付有效输出决定结算或释放。排空期间拒绝新生成，活动生成可在期限内结束；超时关闭连接后，已交付有效输出的调用按观察用量或冻结估算结算，没有输出的调用释放预留。
+
+Compact 使用普通模型名和 `/v1/responses/compact` 原生端点。Claude `/v1/messages/count_tokens`、Gemini `/v1/models/:model:countTokens` 与 `/v1beta/models/:model:countTokens` 没有实现，在鉴权和选路前返回 404，不进入生成、报价或预留。
+
+## Claude 消息级 effort 与计价
+
+`ClaudeRequest.ResolveEffectiveEffort()` 只读解析顶层 `output_config` 和消息序列：system 消息中的 effort 从其后第一个 user 回合开始生效并持续；连续等待中的设置以最后一次为准，末尾没有 user 的配置不影响当前回合。缺省、空对象和配置对象 null 不重置已有值；明确的 effort 必须是非空字符串，非法结构或非 system 角色设置 effort 返回带路径的错误，不回显原始值。解析不改变消息、缓存前缀或原始 JSON，不推断模型默认值；`GetEfforts()` 只读取顶层配置。
+
+原生 Claude、AWS、Vertex 消息体保留配置，beta 能力由客户端或管理员请求头提供，不自动注入。发送前从最终协议和参数覆盖后的实际请求冻结 `effort` 属性并写入消费日志；尚未生效的尾部配置不参与计价，删除和重试不沿用旧属性；旧报价与已接受请求的结算不重新解释。Claude 输入跨协议后按真实目标请求计价，不把已丢失的源配置带入报价。
+
+最终请求为 Claude 格式时，`ApplyParamOverrideWithRelayInfo` 在参数覆盖后重新解析当前回合 effort（`relay/common/override.go`）。覆盖产生的非法 effort 返回 HTTP 400 `channel:param_override_invalid`，不重试、不发送、不预扣；其他覆盖错误保留原有分类。计价属性按实际协议解析：`FreezeOutboundBillingAttributes` 依最终发送协议，`BuildBillingExprRequestInputFromRequest`（`relay/helper/billing_expr_request.go`）依 DTO 类型；只有 Claude 格式使用 `ResolveEffectiveEffort()`，其他协议读取各自的 effort 字段，effort 统一转为小写。显式 `thinking.type` 和 `budget_tokens` 等预算字段进入冻结属性：预算 0 为 `thinking=off`，正数为 `on`，-1 为 `adaptive` 且不保留预算值，显式 `type` 优先于预算推导；没有显式 thinking 时由 effort 推导，`none` 为 off，其余为 on。
+
+跨协议出现任意消息级 `output_config`（包括空对象和 null）时产生 `claude_message_output_config_not_portable`，路径为 `messages[i].output_config`，诊断不含正文或配置值。原生保留；safe 与 strict 拒绝转换，allow 记录损失并按既有转换发送，不把消息级配置提升为全局 effort。规划、预览、直接转换以及经过其他协议再回到 Claude 的多步路径采用同一损失保护。
+
+## 高级自定义渠道透传
+
+高级自定义渠道的逐路由 `pass_through_body_enabled` 只在匹配请求路径、模型且该路由支持请求体透传时生效，预览和执行共用匹配逻辑。透传保留未识别扩展字段及 `0`、`false`、`null`，仍执行宿主模型映射和最终参数检查。需要改写请求体的转换器不能开启透传；只转换响应的 SGLang rerank 路由可以保留请求体。
 
 ## 视频与续作
 
@@ -185,11 +209,15 @@ Chat 的 `content[].file.file_id`、Responses 的 `input_file.file_id` 与 Claud
 
 所有计价模式在发送前持久化消费保护和冻结估算；最终用量无法计价或写入失败时按冻结估算结算。任务、图片及其他有副作用的生成请求交付有效输出或任务已被接受时按证据结算，没有输出且没有任务 ID 时释放；上传重放仍受限制。状态处理见[结算兜底与恢复](../billing/RECOVERY.md)，数据格式与切换要求见[发布契约](GATEWAY_RELEASE.md)。
 
+消费日志的 `other.response_model_name` 来自上游真实 JSON、SSE 或 WebSocket 事件中的模型声明，在协议输出改写之前捕获；`model_name` 是请求与计价模型，`other.upstream_model_name` 是真实上游请求模型。响应模型只用于诊断，不改变路由或价格；上游没有声明，或声明与请求模型相同且无需映射时可以省略。界面按忽略大小写的前后缀兼容规则派生差异，不存储第二个 mismatch 字段。重试重置观测，第一份实质差异不被后续普通帧覆盖。用户日志投影限制字段长度并拒绝控制字符。
+
 ## 模型 manifest 与客户端配置
 
 `GET /api/user/model-manifest?token_id=...` 返回版本为 1 的权限过滤目录。省略 Token 时使用当前用户资格；指定 Token 必须属于当前用户且仍启用、未过期。模型集合由现有 Token 模型权限、渠道状态、手动路由、能力快照和价格资格共同计算，不存第二份目录。`GET /api/user/models` 继续返回名称数组；模型市场和 `/v1/models` 使用同一 manifest 决定集合，后者只投影 OpenAI 兼容字段。
 
 manifest 每项包含 `id`、`visible`、`supported_endpoint_types`、可选 `capabilities`、`price_configured` 和 `price_version`。能力卡的 null、false、空数组含义不同：未知不等于禁止，也不意味着已证明支持。元数据编辑器省略字段不清空；明确清空按模型能力合同执行。能力卡不修改价格、冻结报价或路由能力真相源，不导入默认供应商目录与价格。
+
+模型元数据的 `capabilities` 以 TEXT 保存 JSON，字段为 `reasoning_efforts`、`input_modalities`、`output_modalities`（各最多 32 个不重复的非空值）、`context_limit`、`output_limit`（正整数）、`tool_call`、`source` 和服务端写入的 `updated_at`。null 表示未知，空列表和 false 是明确事实。旧元数据客户端省略能力卡不会清空它；显式空对象清空已知事实。
 
 价格资格在实际端点、协议绑定和渠道执行器确定后计算。原生端点使用空插件作用域；插件端点复用该插件的用量 schema 和报价解析器，不能拿其他插件表达式代替。显式不兼容插件表达式拒绝该端点，不能退回原生价格掩盖。现有报价器允许的全局按次价格后备及显式允许未配置价格模型的设置保留；不额外引入另一套定价规则。协议声明的模型子集与别名使用请求中间件的同一索引。
 
@@ -216,3 +244,11 @@ Codex 订阅的刷新、用量、额度重置路由及无其他供应商实现�
 诊断为独立无正文投影，默认保留 7 天，读取时立即过滤过期数据，后台每批最多清理 1000 行。本人只见脱敏字段；管理员的内部渠道/凭据标识还受当前 `ChannelRead` 和 PAT `channels:read` 交集约束。`ops:read` 本身不会授予这些字段。缺失或已过期的详情返回 `404 REQUEST_DIAGNOSTIC_UNAVAILABLE`；数据库故障返回错误，不伪装为空结果。
 
 `attempt_id` 对应真实发送，未发送候选不形成 attempt；`send_started_at`、`first_output_at`、`finished_at` 为 Unix 毫秒，缺失首个有效输出时不生成 TTFT。`ttft_ms` 从实际发送到首个有效语义输出，不把 HTTP 头、SSE 心跳或空前导帧视作输出。`queue_ms` 与 `user_queue_ms` 来自真实等待队列计时；`wait_ms` 是共享等待预算的消耗，不能解释为纯排队耗时。投影沿用有界观察队列，丢弃与存储失败独立计数，不阻塞发送/结算，不进入资金事务，也不删除消费日志或资金流水。
+
+## vLLM 与 SGLang 状态
+
+`GET /api/channel/:id/vllm/status` 与 `GET /api/channel/:id/sglang/status` 要求管理员身份和 `channel.read`，响应禁止缓存。目标只来自保存的对应类型渠道，查询参数不能提供 URL 或密钥。请求沿用渠道的代理和请求头边界，允许自托管私网；禁止重定向，只执行四个固定 GET，不启动或停止推理进程。
+
+vLLM 读取 `/health`、`/version`、`/v1/models`、`/metrics`；SGLang 把版本路径换为 `/server_info`。整体期限 10 秒，每个正文最多 4 MiB。一个端点失败仍返回其他结果；错误值只有 `request_failed`、`http_error`、`response_too_large`、`invalid_response`，不回显上游错误正文、端点或凭据。SGLang 的服务信息只投影 `version`，不返回启动配置。
+
+成功 envelope 的 `data` 包含 `sampled_at`（毫秒）、`endpoints`（路径到 status/error）、`version`、`models`（id/root/max_model_len）、`metrics`（name/labels/value）和 `raw_metrics`。指标保留对应引擎前缀与 `process_start_time_seconds`，排除 histogram bucket、负值、NaN 和无穷值，保留 sum/count 和不同 labels 的独立序列。`raw_metrics` 只返回给上述授权管理员，不写日志。真实推理服务测试需配置 `NEW_API_VLLM_TEST_URL` 和可选的 `NEW_API_VLLM_TEST_KEY`，缺少环境变量时的跳过不算通过。
