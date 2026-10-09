@@ -619,7 +619,7 @@ func TestAdaptorResponsesToGeminiUsesResponsesBridge(t *testing.T) {
 	assert.NotContains(t, got, `"candidates"`)
 }
 
-func TestAdaptorResponsesToGeminiDoesNotSynthesizeThoughtSignature(t *testing.T) {
+func TestAdaptorResponsesToGeminiAddsThoughtSignatureForFunctionCallHistory(t *testing.T) {
 	geminiSettings := model_setting.GetGeminiSettings()
 	originalThoughtSignatureEnabled := geminiSettings.FunctionCallThoughtSignatureEnabled
 	geminiSettings.FunctionCallThoughtSignatureEnabled = true
@@ -674,7 +674,7 @@ func TestAdaptorResponsesToGeminiDoesNotSynthesizeThoughtSignature(t *testing.T)
 	require.Len(t, geminiReq.Contents, 3)
 	require.Len(t, geminiReq.Contents[1].Parts, 1)
 	require.NotNil(t, geminiReq.Contents[1].Parts[0].FunctionCall)
-	assert.Empty(t, geminiReq.Contents[1].Parts[0].ThoughtSignature, "legacy settings cannot synthesize provider state")
+	assert.NotEmpty(t, geminiReq.Contents[1].Parts[0].ThoughtSignature)
 	require.Len(t, geminiReq.Contents[2].Parts, 1)
 	require.NotNil(t, geminiReq.Contents[2].Parts[0].FunctionResponse)
 	assert.Empty(t, geminiReq.Contents[2].Parts[0].ThoughtSignature)

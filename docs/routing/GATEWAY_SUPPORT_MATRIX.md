@@ -67,7 +67,7 @@ Nova 保留 system/user/assistant 文本、多段文本和已实现的采样上�
 
 顶层、typed 嵌套及已登记 RawMessage/any 协议外壳中的未知 JSON 字段记录路径，覆盖 `0/false/null`。`strict` 拒绝已识别的丢弃，`safe/allow` 记录一般扩展警告；工具控制和结构约束的已知损失在 `safe` 下拒绝。检查不把工具参数等业务字典当作协议字段，Schema 损失按实际 Gemini 投影比较，接受 DTO 已实现的 Gemini 别名。独立调用方只有解码后 DTO 时，无法恢复此前已被丢弃的原始字段。
 
-思考签名按供应商状态处理，不再为跨协议历史填入绕过标记，旧配置开关不生效。完整工具历史可按已登记路径转换；需要真实签名的供应商功能必须保留原生签名及其归属，不能把无状态转换称为具有完整推理连续性。Google 对签名的定义参见 [Thinking guide](https://ai.google.dev/gemini-api/docs/thinking)，2026-09-13 核对。
+跨协议历史转 Gemini 时，默认开启的 `gemini.function_call_thought_signature_enabled` 为每个模型轮次填入思考签名绕过值（与 NewAPI 相同），使 Gemini 3 接受来自其他协议的函数调用历史；关闭后这类请求会被 Gemini 3 以 400 拒绝。绕过值不是真实签名，不能把无状态转换称为具有完整推理连续性；需要真实签名的供应商功能仍须走原生协议并保留签名归属。Google 在 [Thought signatures](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures) 中说明 Gemini 3 对当前轮缺少签名的函数调用返回 400，从不带签名的模型迁移历史时可使用绕过值，但这是最后手段，会降低模型效果，2026-10-09 核对。
 
 四入口的思考预算、effort 和 summary 按实际转换能力换算，换算后渲染为目标协议的推理字段。只有需要改写的输入（预算低于 -1、预算与思考模式或 effort 互相矛盾、思考类型被强制改写、目标模型不支持关闭思考等）产生 warning 诊断，`strict` 据此拒绝，`safe` 与 `allow` 放行；`RejectConversionLoss` 在 `safe` 下只拒绝 error 级诊断。`TestGatewayReasoningAndSearchPolicyBeforeBilling` 断言 Claude 思考、Gemini 零预算、Chat/Responses effort 跨协议换算在三种策略下都会发送。配置化搜索的已识别语义差异产生诊断，`strict` 下发送前拒绝。11 个独立计划场景和 15 组 HTTP 回归覆盖规划与最终发送边界，不能由基础 SDK 文本路径推导所有搜索或推理特性。
 

@@ -2,6 +2,7 @@ package model_setting
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/config"
@@ -25,9 +26,8 @@ type GeminiSettings struct {
 	SupportedImagineModels                []string          `json:"supported_imagine_models"`
 	ThinkingAdapterEnabled                bool              `json:"thinking_adapter_enabled"`
 	ThinkingAdapterBudgetTokensPercentage float64           `json:"thinking_adapter_budget_tokens_percentage"`
-	// Deprecated: accepted when loading old configuration, but never used to create signatures.
-	FunctionCallThoughtSignatureEnabled bool `json:"function_call_thought_signature_enabled"`
-	RemoveFunctionResponseIdEnabled     bool `json:"remove_function_response_id_enabled"`
+	FunctionCallThoughtSignatureEnabled   bool              `json:"function_call_thought_signature_enabled"`
+	RemoveFunctionResponseIdEnabled       bool              `json:"remove_function_response_id_enabled"`
 }
 
 // 默认配置
@@ -50,6 +50,7 @@ var defaultGeminiSettings = GeminiSettings{
 	},
 	ThinkingAdapterEnabled:                false,
 	ThinkingAdapterBudgetTokensPercentage: 0.6,
+	FunctionCallThoughtSignatureEnabled:   true,
 	RemoveFunctionResponseIdEnabled:       true,
 }
 
@@ -108,10 +109,5 @@ func GetGeminiVersionSetting(key string) string {
 }
 
 func IsGeminiModelSupportImagine(model string) bool {
-	for _, v := range geminiSettings.SupportedImagineModels {
-		if v == model {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(geminiSettings.SupportedImagineModels, model)
 }

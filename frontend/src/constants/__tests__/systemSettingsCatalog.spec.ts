@@ -126,4 +126,14 @@ describe('system settings catalog', () => {
         )
     ).toBe(false)
   })
+  it('exposes the Gemini thought-signature bypass enabled by default', () => {
+    const field = SYSTEM_SETTINGS_DOMAINS.flatMap((domain) =>
+      domain.sections.flatMap((section) => section.fields)
+    ).find(
+      (candidate) =>
+        candidate.key === 'gemini.function_call_thought_signature_enabled'
+    )
+    expect(field?.kind).toBe('boolean')
+    expect(field?.defaultValue).toBe(true)
+  })
 })

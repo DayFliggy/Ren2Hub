@@ -706,6 +706,14 @@ export const SYSTEM_SETTINGS_DOMAINS: readonly SystemSettingsDomain[] = [
             'Gemini 思考预算比例',
             0.6
           ),
+          {
+            ...toggle(
+              'gemini.function_call_thought_signature_enabled',
+              'Gemini 函数调用思考签名',
+              true
+            ),
+            descriptionKey: 'systemSettings.models.geminiThoughtSignatureDesc',
+          },
           toggle(
             'gemini.remove_function_response_id_enabled',
             '移除 Gemini 函数响应 ID'

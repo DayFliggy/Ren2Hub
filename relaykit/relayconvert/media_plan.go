@@ -32,6 +32,13 @@ func RequiresMediaOwnership(uri string) bool {
 		(strings.Contains(parsed.Path, "/files/") || strings.HasSuffix(parsed.Path, "/files"))
 }
 
+// IsThoughtSignatureBypass reports whether a Gemini thoughtSignature is the
+// public bypass value converters attach to cross-protocol history. It is not
+// provider-issued state, so it needs no ownership binding.
+func IsThoughtSignatureBypass(value string) bool {
+	return value == sharedgemini.ThoughtSignatureBypassValue
+}
+
 func mediaString(value any) string {
 	text, _ := value.(string)
 	return text

@@ -596,7 +596,7 @@ func TestConvertRequestResponsesToGeminiUsesDirectConverter(t *testing.T) {
 		}),
 	}
 
-	info.Options = &convmeta.Options{ConversionPolicy: types.ConversionLossPolicyAllow}
+	info.Options = &convmeta.Options{ConversionPolicy: types.ConversionLossPolicyAllow, Gemini: convmeta.GeminiOptions{FunctionCallThoughtSignatureEnabled: true}}
 	result, err := ConvertRequest(nil, info, types.RelayFormatGemini, req)
 
 	require.NoError(t, err)
@@ -648,7 +648,7 @@ func TestConvertRequestResponsesToGeminiUsesDirectConverter(t *testing.T) {
 	require.NotNil(t, functionCall)
 	assert.Equal(t, "lookup", functionCall.FunctionName)
 	assert.Equal(t, map[string]any{"q": "x"}, functionCall.Arguments)
-	assert.Empty(t, geminiReq.Contents[0].Parts[0].ThoughtSignature)
+	assert.Equal(t, thoughtSignatureBypassJSON, string(geminiReq.Contents[0].Parts[0].ThoughtSignature))
 	assert.Equal(t, "I will call.", geminiReq.Contents[0].Parts[1].Text)
 
 	assert.Equal(t, "user", geminiReq.Contents[1].Role)
@@ -693,7 +693,7 @@ func TestConvertRequestResponsesToGeminiSkipsThoughtSignatureWhenDisabled(t *tes
 	assert.Empty(t, geminiReq.Contents[0].Parts[0].ThoughtSignature)
 }
 
-func TestConvertRequestOpenAIChatToGeminiDoesNotSynthesizeThoughtSignature(t *testing.T) {
+func TestConvertRequestOpenAIChatToGeminiAddsThoughtSignatureBypass(t *testing.T) {
 	assistantMessage := dto.Message{Role: "assistant", Content: ""}
 	assistantMessage.SetToolCalls([]dto.ToolCallRequest{
 		{
@@ -739,7 +739,7 @@ func TestConvertRequestOpenAIChatToGeminiDoesNotSynthesizeThoughtSignature(t *te
 	assert.Equal(t, "model", geminiReq.Contents[1].Role)
 	require.Len(t, geminiReq.Contents[1].Parts, 1)
 	require.NotNil(t, geminiReq.Contents[1].Parts[0].FunctionCall)
-	assert.Empty(t, geminiReq.Contents[1].Parts[0].ThoughtSignature, "a legacy option cannot fabricate provider state")
+	assert.Equal(t, thoughtSignatureBypassJSON, string(geminiReq.Contents[1].Parts[0].ThoughtSignature))
 }
 
 func TestConvertRequestViaResponsesToGeminiStillUsesDirectSteps(t *testing.T) {
@@ -875,3 +875,7 @@ func inputContentText(t *testing.T, item map[string]any) string {
 	require.True(t, ok)
 	return text
 }
+
+// thoughtSignatureBypassJSON is the bypass value the Gemini thought-signature
+// option attaches to converted history, as encoded on the wire.
+const thoughtSignatureBypassJSON = `"context_engineering_is_the_way_to_go"`

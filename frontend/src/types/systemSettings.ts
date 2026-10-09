@@ -137,6 +137,7 @@ export interface ModelSettings {
   'gemini.supported_imagine_models': string
   'gemini.thinking_adapter_enabled': boolean
   'gemini.thinking_adapter_budget_tokens_percentage': number
+  'gemini.function_call_thought_signature_enabled': boolean
   'gemini.remove_function_response_id_enabled': boolean
   'claude.model_headers_settings': string
   'claude.default_max_tokens': string
@@ -336,6 +337,7 @@ export const SYSTEM_SETTINGS_DEFAULTS: AllSystemSettings = {
   'gemini.supported_imagine_models': '[]',
   'gemini.thinking_adapter_enabled': false,
   'gemini.thinking_adapter_budget_tokens_percentage': 0.6,
+  'gemini.function_call_thought_signature_enabled': true,
   'gemini.remove_function_response_id_enabled': true,
   'claude.model_headers_settings': '{}',
   'claude.default_max_tokens': '{}',
