@@ -218,3 +218,22 @@ func TestMidjourneyPollHonorsChannelTLSInsecureSkipVerify(t *testing.T) {
 	assert.Equal(t, "SUBMITTED", verifying.Status)
 	assert.Equal(t, "SUCCESS", skipping.Status)
 }
+
+// A Midjourney job the gateway gives up stores a fixed fail reason from
+// constant.TaskFailReasons, which the web console translates by exact match.
+func TestMidjourneyUnfinishableReasonIsAGatewayFailReason(t *testing.T) {
+	previous := constant.TaskTimeoutMinutes
+	constant.TaskTimeoutMinutes = 10
+	t.Cleanup(func() { constant.TaskTimeoutMinutes = previous })
+	now := time.Now().UnixMilli()
+	for _, tc := range []struct {
+		task model.Midjourney
+		want string
+	}{
+		{model.Midjourney{SubmitTime: now}, constant.TaskFailReasonMissingUpstreamID},
+		{model.Midjourney{MjId: "mj-1", SubmitTime: now - 11*60*1000}, constant.TaskFailReasonTimedOut},
+		{model.Midjourney{MjId: "mj-2", SubmitTime: now}, ""},
+	} {
+		assert.Equal(t, tc.want, midjourneyUnfinishableReason(&tc.task), tc.task.MjId)
+	}
+}

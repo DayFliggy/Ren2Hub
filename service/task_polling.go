@@ -73,7 +73,7 @@ func sweepTimedOutTasks(ctx context.Context) {
 	}
 
 	for _, task := range tasks {
-		if err := failTaskWithoutResult(ctx, task, "任务超时，未返回结果"); err != nil {
+		if err := failTaskWithoutResult(ctx, task, constant.TaskFailReasonTimedOut); err != nil {
 			logger.LogError(ctx, fmt.Sprintf("task timeout release failed (task_id=%s): %v", task.TaskID, err))
 		}
 	}
@@ -87,7 +87,7 @@ func failTaskWithoutResult(ctx context.Context, task *model.Task, reason string)
 	if task.FinishTime == 0 {
 		task.FinishTime = time.Now().Unix()
 	}
-	_, err := completeTaskBilling(ctx, task, from, 0, reason)
+	_, err := completeTaskBilling(ctx, task, from, 0, nil)
 	return err
 }
 
@@ -184,7 +184,7 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 		owners := make(map[owner][]*model.Task)
 		for _, task := range tasks {
 			if task.GetUpstreamTaskID() == "" {
-				if err := failTaskWithoutResult(ctx, task, "缺少上游任务标识"); err != nil {
+				if err := failTaskWithoutResult(ctx, task, constant.TaskFailReasonMissingUpstreamID); err != nil {
 					logger.LogError(ctx, fmt.Sprintf("task release failed (task_id=%s): %v", task.TaskID, err))
 				}
 				continue
@@ -394,7 +394,7 @@ func pollSunoCredentialGroup(ctx context.Context, adaptor TaskPollingAdaptor, ch
 		var won bool
 		var err error
 		if task.Status == model.TaskStatusFailure {
-			won, err = completeTaskBilling(ctx, task, prevStatus, 0, task.FailReason)
+			won, err = completeTaskBilling(ctx, task, prevStatus, 0, nil)
 		} else {
 			won, err = task.UpdateWithStatus(prevStatus)
 		}
@@ -827,7 +827,9 @@ func knownPollStatus(status model.TaskStatus) bool {
 	}
 }
 
-func pollFailureReason(class string, statusCode int) string {
+// pollFailureLogText names a failed poll for the server log; the stored fail
+// reason of a task given up is a fixed sentence without class or status.
+func pollFailureLogText(class string, statusCode int) string {
 	if statusCode > 0 {
 		return fmt.Sprintf("poll failed: %s (HTTP %d)", class, statusCode)
 	}
@@ -838,8 +840,10 @@ func pollFailureReason(class string, statusCode int) string {
 // for the caller's log. A missing upstream task ends at once; other classes
 // count toward TASK_POLL_MAX_FAILURES (0 disables the cutoff, leaving the
 // timeout sweep). Both endings release the reservation: no output reached
-// the user. The stored reason omits provider detail, which can carry URLs
-// or credentials; the returned error keeps it for server logs only.
+// the user. The stored reason is a fixed sentence from
+// constant.TaskFailReasons; the class, the HTTP status and the provider
+// detail, which can carry URLs or credentials, stay in the returned error for
+// server logs only.
 func failTaskPolls(ctx context.Context, tasks []*model.Task, class string, statusCode int, cause error) error {
 	// The host may cancel a polling pass when its system-task lease is lost or
 	// the runner is shutting down. That is control flow, not a provider poll
@@ -848,7 +852,10 @@ func failTaskPolls(ctx context.Context, tasks []*model.Task, class string, statu
 	if ctx != nil && ctx.Err() != nil {
 		return ctx.Err()
 	}
-	reason := pollFailureReason(class, statusCode)
+	reason := constant.TaskFailReasonPollGaveUp
+	if class == pollClassNotFound {
+		reason = constant.TaskFailReasonUpstreamNotFound
+	}
 	var result error
 	for _, task := range tasks {
 		if class != pollClassNotFound {
@@ -862,7 +869,7 @@ func failTaskPolls(ctx context.Context, tasks []*model.Task, class string, statu
 			result = errors.Join(result, err)
 		}
 	}
-	return errors.Join(fmt.Errorf("%s: %s", reason, common.MaskSensitiveInfo(cause.Error())), result)
+	return errors.Join(fmt.Errorf("%s: %s", pollFailureLogText(class, statusCode), common.MaskSensitiveInfo(cause.Error())), result)
 }
 
 type batchPollGroup struct {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/gin-gonic/gin"
@@ -523,7 +524,10 @@ func TestCollectPendingUpstreamModelChangesFromModels_WithIgnoredRegexPatterns(t
 	require.Equal(t, []string{}, pendingRemoveModels)
 }
 
+// The notice is rendered in each recipient's saved language; details beyond
+// the display limits are summarized as omitted.
 func TestBuildUpstreamModelUpdateTaskNotificationContent_OmitOverflowDetails(t *testing.T) {
+	require.NoError(t, i18n.Init())
 	channelSummaries := make([]upstreamModelUpdateChannelSummary, 0, 12)
 	for i := 0; i < 12; i++ {
 		channelSummaries = append(channelSummaries, upstreamModelUpdateChannelSummary{
@@ -532,30 +536,39 @@ func TestBuildUpstreamModelUpdateTaskNotificationContent_OmitOverflowDetails(t *
 			RemoveCount: i,
 		})
 	}
+	build := func(lang string) string {
+		return buildUpstreamModelUpdateTaskNotificationContent(
+			lang,
+			24,
+			12,
+			56,
+			21,
+			9,
+			[]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+			channelSummaries,
+			[]string{
+				"gpt-4.1", "gpt-4.1-mini", "o3", "o4-mini", "gemini-2.5-pro", "claude-3.7-sonnet",
+				"qwen-max", "deepseek-r1", "llama-3.3-70b", "mistral-large", "command-r-plus", "doubao-pro-32k",
+				"hunyuan-large",
+			},
+			[]string{
+				"gpt-3.5-turbo", "claude-2.1", "gemini-1.5-pro", "mixtral-8x7b", "qwen-plus", "glm-4",
+				"yi-large", "moonshot-v1", "doubao-lite",
+			},
+		)
+	}
 
-	content := buildUpstreamModelUpdateTaskNotificationContent(
-		24,
-		12,
-		56,
-		21,
-		9,
-		[]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
-		channelSummaries,
-		[]string{
-			"gpt-4.1", "gpt-4.1-mini", "o3", "o4-mini", "gemini-2.5-pro", "claude-3.7-sonnet",
-			"qwen-max", "deepseek-r1", "llama-3.3-70b", "mistral-large", "command-r-plus", "doubao-pro-32k",
-			"hunyuan-large",
-		},
-		[]string{
-			"gpt-3.5-turbo", "claude-2.1", "gemini-1.5-pro", "mixtral-8x7b", "qwen-plus", "glm-4",
-			"yi-large", "moonshot-v1", "doubao-lite",
-		},
-	)
+	chinese := build(i18n.LangZhCN)
+	require.Contains(t, chinese, "上游模型巡检摘要：检测渠道 24 个，发现变更 12 个，新增 56 个，删除 21 个，自动同步新增 9 个，失败 12 个。")
+	require.Contains(t, chinese, "其余 4 个渠道已省略")
+	require.Contains(t, chinese, "其余 1 个已省略")
+	require.Contains(t, chinese, "失败渠道 ID（展示 10/12）：1, 2, 3, 4, 5, 6, 7, 8, 9, 10（其余 2 个已省略）")
 
-	require.Contains(t, content, "其余 4 个渠道已省略")
-	require.Contains(t, content, "其余 1 个已省略")
-	require.Contains(t, content, "失败渠道 ID（展示 10/12）")
-	require.Contains(t, content, "其余 2 个已省略")
+	english := build("")
+	require.Contains(t, english, "Upstream model check summary: 24 channels checked, 12 changed, 56 models added, 21 models removed, 9 added automatically, 12 failed.")
+	require.Contains(t, english, "\n- 4 more channels omitted")
+	require.Contains(t, english, " (1 more omitted)")
+	require.Contains(t, english, "Failed channel IDs (showing 10/12): 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 (2 more omitted)")
 }
 
 func TestShouldSendUpstreamModelUpdateNotification(t *testing.T) {

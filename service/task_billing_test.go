@@ -201,6 +201,8 @@ func countLogs(t *testing.T) int64 {
 	return count
 }
 
+// completeTestTask finishes a task: a completed one logs reason as how it was
+// priced, a failed one logs reason as its fail reason.
 func completeTestTask(t *testing.T, ctx context.Context, task *model.Task, status model.TaskStatus, actualQuota int, reason string) error {
 	t.Helper()
 	if task.PrivateData.SubmissionRequestID == "" {
@@ -215,7 +217,13 @@ func completeTestTask(t *testing.T, ctx context.Context, task *model.Task, statu
 		require.EqualValues(t, actualQuota, charge.FinalQuota)
 		task.PrivateData.BillingContext.Usage, task.PrivateData.BillingContext.Charge = &usage, charge
 	}
-	_, err := completeTaskBilling(ctx, task, fromStatus, common.Quota(actualQuota), reason)
+	var settlement *common.Message
+	if status == model.TaskStatusSuccess {
+		settlement = common.NewMessage(reason)
+	} else {
+		task.FailReason = reason
+	}
+	_, err := completeTaskBilling(ctx, task, fromStatus, common.Quota(actualQuota), settlement)
 	return err
 }
 
@@ -380,10 +388,10 @@ func TestPluginTaskCompletionUsesOnlyFrozenSchemaFacts(t *testing.T) {
 			usage := task.PrivateData.BillingContext.Usage
 			assert.Equal(t, test.fallback, billing.IsFrozenEstimateSource(usage.Source))
 			if test.fallback {
-				assert.Equal(t, "完成用量无法计价，按提交时估算结算", reason)
+				assert.Equal(t, common.NewMessage("Completion usage could not be priced, settled at the submission estimate"), reason)
 				return
 			}
-			assert.Equal(t, "按冻结报价结算", reason)
+			assert.Equal(t, common.NewMessage("Settled at the frozen quote"), reason)
 			assert.NotNil(t, usage.Evidence)
 			assert.Equal(t, map[string]any{"seconds": "30"}, usage.EstimatedFacts)
 		})
@@ -477,7 +485,7 @@ func TestTaskCompletionMergesCompletionFactsOverFrozenSubmitFacts(t *testing.T) 
 			quota, reason, _, err := taskCompletionQuota(nil, task, &relaycommon.TaskInfo{UsageFacts: test.facts})
 			require.NoError(t, err)
 			assert.Equal(t, test.quota, quota)
-			assert.Equal(t, "按冻结报价结算", reason)
+			assert.Equal(t, common.NewMessage("Settled at the frozen quote"), reason)
 			usage := task.PrivateData.BillingContext.Usage
 			assert.Equal(t, "task_completed", usage.Source)
 			assert.Equal(t, submitted, usage.EstimatedFacts)
@@ -500,7 +508,7 @@ func TestUnpricedTaskCompletionStillSettlesFrozenEstimate(t *testing.T) {
 			quota, reason, _, err := taskCompletionQuota(nil, task, result)
 			require.NoError(t, err)
 			assert.EqualValues(t, 1500000, quota)
-			assert.Equal(t, "完成用量无法计价，按提交时估算结算", reason)
+			assert.Equal(t, common.NewMessage("Completion usage could not be priced, settled at the submission estimate"), reason)
 			assert.True(t, billing.IsFrozenEstimateSource(task.PrivateData.BillingContext.Usage.Source))
 		})
 	}
@@ -616,4 +624,49 @@ func TestTaskCompletionUsageBoundariesPreserveFundsAndTerminalEvidence(t *testin
 			assert.EqualValues(t, 1, metric.SuccessCount)
 		})
 	}
+}
+
+// A completed task's consumption log stores how it was priced as
+// content_parts, which the web console renders in the viewer's language;
+// content keeps the English text. A failed task's log carries its fail reason
+// as written, with no content_parts.
+func TestTaskCompletionLogContent(t *testing.T) {
+	quote, submitted := mergedFactsQuote(t)
+	for _, test := range []struct {
+		name    string
+		result  *relaycommon.TaskInfo
+		content string
+	}{
+		{"priced", &relaycommon.TaskInfo{UsageFacts: map[string]any{"seconds": "4"}}, "Settled at the frozen quote"},
+		{"unpriced", &relaycommon.TaskInfo{}, "Completion usage could not be priced, settled at the submission estimate"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			task := acceptedUsageTask(t, quote, submitted, 1500000)
+			from := task.Status
+			task.Status, task.Progress = model.TaskStatusSuccess, "100%"
+			require.NoError(t, settleTaskResult(context.Background(), task, from, test.result))
+			require.NoError(t, model.ApplyBillingRecoveryConsumption(task.PrivateData.SubmissionRequestID))
+
+			log := getLastLog(t)
+			require.NotNil(t, log)
+			assert.Equal(t, test.content, log.Content)
+			var other map[string]any
+			require.NoError(t, common.UnmarshalJsonStr(log.Other, &other))
+			assert.Equal(t, []any{map[string]any{"key": test.content}}, other["content_parts"])
+			assert.Equal(t, test.content, other["reason"])
+		})
+	}
+
+	t.Run("failed", func(t *testing.T) {
+		task := acceptedUsageTask(t, quote, submitted, 1500000)
+		require.NoError(t, failTaskWithoutResult(context.Background(), task, "upstream said no"))
+		require.NoError(t, model.ApplyBillingRecoveryConsumption(task.PrivateData.SubmissionRequestID))
+		log := getLastLog(t)
+		require.NotNil(t, log)
+		assert.Equal(t, "upstream said no", log.Content)
+		var other map[string]any
+		require.NoError(t, common.UnmarshalJsonStr(log.Other, &other))
+		assert.NotContains(t, other, "content_parts")
+		assert.Equal(t, "upstream said no", other["reason"])
+	})
 }

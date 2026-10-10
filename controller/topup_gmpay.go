@@ -239,13 +239,13 @@ func NextCreateGmpayTopUp(c *gin.Context) {
 	}
 	order, orderErr := createGmpayTopUpOrder(c, c.GetInt("id"), req.Amount, req.PaymentMethod, req.AmountUnit, req.QuoteFingerprint)
 	if orderErr != nil {
-		nextBusinessError(c, orderErr.Message, orderErr.Code)
+		nextBusinessError(c, errors.New(orderErr.Message), orderErr.Code)
 		return
 	}
 	paymentURL, err := gmpay.ValidatePaymentURL(order.PaymentURL)
 	if err != nil {
 		logger.LogError(c.Request.Context(), "GMPay 收银台地址无效 trade_no="+order.Order.TradeNo)
-		nextBusinessError(c, "创建支付订单失败", "INTERNAL_ERROR")
+		nextBusinessError(c, errors.New("创建支付订单失败"), "INTERNAL_ERROR")
 		return
 	}
 	common.ApiSuccess(c, gin.H{
@@ -268,17 +268,17 @@ func NextCreateGmpayTopUp(c *gin.Context) {
 func NextQuoteGmpayTopUp(c *gin.Context) {
 	var request service.GmpayQuoteRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		nextBusinessError(c, "参数错误", "VALIDATION_ERROR")
+		nextBusinessError(c, errors.New("参数错误"), "VALIDATION_ERROR")
 		return
 	}
 	quote, _, err := service.QuoteGmpay(c.Request.Context(), c.GetInt("id"), request)
 	if err != nil {
 		var business *service.GmpayError
 		if errors.As(err, &business) {
-			nextBusinessError(c, business.Message, business.Code)
+			nextBusinessError(c, errors.New(business.Message), business.Code)
 			return
 		}
-		nextBusinessError(c, "支付操作失败，请稍后重试", "PAYMENT_ERROR")
+		nextBusinessError(c, errors.New("支付操作失败，请稍后重试"), "PAYMENT_ERROR")
 		return
 	}
 	common.ApiSuccess(c, quote)

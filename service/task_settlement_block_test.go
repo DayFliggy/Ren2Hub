@@ -125,7 +125,7 @@ func TestTimedOutTaskWithoutResultStillReleasesBesideBlockedTask(t *testing.T) {
 	var released, held model.Task
 	require.NoError(t, model.DB.First(&released, plain.ID).Error)
 	assert.EqualValues(t, model.TaskStatusFailure, released.Status)
-	assert.Equal(t, "任务超时，未返回结果", released.FailReason)
+	assert.Equal(t, constant.TaskFailReasonTimedOut, released.FailReason)
 	assert.Zero(t, released.Quota)
 	require.NoError(t, model.DB.First(&held, blocked.ID).Error)
 	assert.Equal(t, model.TaskSettlementBlockedEvidence, held.SettlementBlock)

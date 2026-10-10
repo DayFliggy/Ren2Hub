@@ -196,9 +196,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 					Observation: usage.Observation,
 					InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens,
 					InputTokenDetails: usage.PromptTokensDetails, OutputTokenDetails: usage.CompletionTokenDetails,
-				}, strings.Join(relayInfo.ResponseUsageLogContent, ", "))
+				}, relayInfo.ResponseUsageLogContent)
 			} else if relayInfo.ResponseUsageKind == "audio" {
-				service.PostAudioConsumeQuota(c, relayInfo, relayInfo.ResponseUsage, strings.Join(relayInfo.ResponseUsageLogContent, ", "))
+				service.PostAudioConsumeQuota(c, relayInfo, relayInfo.ResponseUsage, relayInfo.ResponseUsageLogContent)
 			} else {
 				service.PostTextConsumeQuota(c, relayInfo, relayInfo.ResponseUsage, relayInfo.ResponseUsageLogContent)
 			}

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"math"
 	"sort"
 	"strconv"
@@ -121,7 +122,7 @@ func dashboardTimezoneOffset(c *gin.Context) (int, *time.Location, bool) {
 	if raw := strings.TrimSpace(c.Query("tz_offset")); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed < -720 || parsed > 840 {
-			nextBusinessError(c, "invalid timezone offset", "VALIDATION_ERROR")
+			nextBusinessError(c, errors.New("invalid timezone offset"), "VALIDATION_ERROR")
 			return 0, nil, false
 		}
 		offset = parsed
@@ -143,23 +144,23 @@ func parseDashboardRange(c *gin.Context, now time.Time, location *time.Location)
 	case "custom":
 		customStart, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(c.Query("start")), location)
 		if err != nil {
-			nextBusinessError(c, "invalid dashboard date range", "VALIDATION_ERROR")
+			nextBusinessError(c, errors.New("invalid dashboard date range"), "VALIDATION_ERROR")
 			return 0, 0, false
 		}
 		customEnd, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(c.Query("end")), location)
 		if err != nil || customEnd.Before(customStart) {
-			nextBusinessError(c, "invalid dashboard date range", "VALIDATION_ERROR")
+			nextBusinessError(c, errors.New("invalid dashboard date range"), "VALIDATION_ERROR")
 			return 0, 0, false
 		}
 		start = customStart
 		endTimestamp = customEnd.AddDate(0, 0, 1).Unix()
 	default:
-		nextBusinessError(c, "invalid dashboard range", "VALIDATION_ERROR")
+		nextBusinessError(c, errors.New("invalid dashboard range"), "VALIDATION_ERROR")
 		return 0, 0, false
 	}
 	startTimestamp := start.Unix()
 	if endTimestamp <= startTimestamp || endTimestamp-startTimestamp > dashboardMaxDays*dashboardDaySeconds {
-		nextBusinessError(c, "invalid dashboard date range", "VALIDATION_ERROR")
+		nextBusinessError(c, errors.New("invalid dashboard date range"), "VALIDATION_ERROR")
 		return 0, 0, false
 	}
 	return startTimestamp, endTimestamp, true
