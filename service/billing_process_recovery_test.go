@@ -55,6 +55,10 @@ func TestBillingProcessExitRecovery(t *testing.T) {
 				// The request may have reached the provider; it settles at its frozen estimate.
 				available, reserved, used = 80, 0, 20
 				assert.Equal(t, model.BillingRecoveryStateCompleted, recovery.ConsumptionState)
+				var log model.Log
+				require.NoError(t, db.Where("request_id = ?", "crash").First(&log).Error)
+				assert.Equal(t, "Settled by recovery at the pre-send estimate", log.Content)
+				assert.Contains(t, log.Other, `"content_parts":[{"key":"Settled by recovery at the pre-send estimate"}]`)
 			}
 			assert.Equal(t, []common.Quota{available, reserved, used}, []common.Quota{user.Quota, user.ReservedQuota, user.UsedQuota})
 			assert.Equal(t, []common.Quota{available, reserved, used}, []common.Quota{token.RemainQuota, token.ReservedQuota, token.UsedQuota})

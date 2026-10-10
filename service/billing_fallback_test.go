@@ -95,6 +95,9 @@ func TestUnpricedFinalUsageSettlesAtBestPersistedEvidence(t *testing.T) {
 				adminInfo, ok := other["admin_info"].(map[string]any)
 				require.True(t, ok)
 				assert.Equal(t, test.reason, adminInfo["billing_fallback_reason"])
+				// The console renders content_parts in the viewer's language.
+				assert.Equal(t, "Settled at the pre-send estimate", logs[0].Content)
+				assert.Equal(t, []any{map[string]any{"key": "Settled at the pre-send estimate"}}, other["content_parts"])
 			}
 			backlog, err := model.ReadBillingRecoveryBacklog(context.Background(), time.Now().Unix()+1)
 			require.NoError(t, err)

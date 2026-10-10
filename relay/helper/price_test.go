@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
@@ -78,9 +79,13 @@ func TestModelPricingEmptyAndExplicitZero(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, price.Quota)
 	assert.NotNil(t, price.Usage.Evidence)
+	require.NoError(t, i18n.Init())
 	info.OriginModelName = "missing"
 	_, err = ModelPriceHelper(c, info, 10, nil)
-	require.ErrorContains(t, err, "not configured")
+	require.EqualError(t, err, "Model missing has not been priced by the administrator yet. Please contact the site administrator to enable this model.")
+	c.Request.Header.Set("Accept-Language", "zh-CN")
+	_, err = ModelPriceHelper(c, info, 10, nil)
+	require.ErrorContains(t, err, "模型 missing 的价格尚未由管理员配置")
 }
 func TestModelPricingEstimatesInputOnlyAndReplaysEncryptedProbe(t *testing.T) {
 	c, info := pricingFixture(t, "model", model.PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": `p * float(param(header("x-path")) ?? 1) + c * 8`})

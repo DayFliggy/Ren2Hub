@@ -32,7 +32,7 @@ func sanitizeChannelStatusReason(reason string) string {
 			Error   json.RawMessage `json:"error"`
 		}
 		if common.Unmarshal([]byte(reason), &envelope) != nil {
-			return "上游错误响应无法解析，原始正文已隐藏"
+			return "The upstream error response could not be parsed; its body is hidden"
 		}
 		var nested struct {
 			Message string `json:"message"`
@@ -43,14 +43,14 @@ func sanitizeChannelStatusReason(reason string) string {
 			reason = envelope.Message
 		}
 		if reason == "" {
-			return "上游错误响应未包含可展示的消息，原始正文已隐藏"
+			return "The upstream error response has no displayable message; its body is hidden"
 		}
 	}
 	if at := strings.IndexAny(reason, "{["); at >= 0 {
-		reason = reason[:at] + " [上游响应正文已隐藏]"
+		reason = reason[:at] + " [upstream response body hidden]"
 	}
 	for _, pattern := range channelStatusSecrets {
-		reason = pattern.ReplaceAllString(reason, "[已隐藏]")
+		reason = pattern.ReplaceAllString(reason, "[hidden]")
 	}
 	reason = common.MaskSensitiveInfo(reason)
 	reason = strings.Map(func(r rune) rune {

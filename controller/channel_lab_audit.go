@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
@@ -47,13 +46,13 @@ type channelLabAuditRequest struct {
 
 func normalizeChannelIDs(ids []int) ([]int, error) {
 	if len(ids) == 0 {
-		return nil, fmt.Errorf("channel ids are required")
+		return nil, common.NewMessage("Channel IDs are required")
 	}
 	seen := make(map[int]struct{}, len(ids))
 	result := make([]int, 0, len(ids))
 	for _, id := range ids {
 		if id <= 0 {
-			return nil, fmt.Errorf("channel id must be positive")
+			return nil, common.NewMessage("Channel IDs must be positive")
 		}
 		if _, exists := seen[id]; exists {
 			continue
@@ -188,7 +187,7 @@ func recordChannelLabAudit(c *gin.Context, action string, ids []int) error {
 func RecordChannelLabAudit(c *gin.Context) {
 	var request channelLabAuditRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		common.ApiErrorMsg(c, "invalid lab audit request")
+		common.ApiErrorT(c, "Invalid lab audit request")
 		return
 	}
 	var permission = authz.ChannelOperate
@@ -198,7 +197,7 @@ func RecordChannelLabAudit(c *gin.Context) {
 	if request.Action != channelLabBalanceAuditAction &&
 		request.Action != channelLabModelTestAuditAction &&
 		request.Action != channelLabDeleteAuditAction {
-		common.ApiErrorMsg(c, "invalid lab audit action")
+		common.ApiErrorT(c, "Invalid lab audit action")
 		return
 	}
 	if !middleware.RequireCurrentUserPermission(c, permission) {

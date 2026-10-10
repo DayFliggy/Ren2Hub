@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/gin-gonic/gin"
@@ -54,10 +55,7 @@ func TokenModelPermissionError(c *gin.Context, modelName string) *types.NewAPIEr
 	if modelName != "" && tokenAllowsRouteModel(limits, modelName) {
 		return nil
 	}
-	message := common.TranslateMessage(c, "distributor.token_model_forbidden", map[string]any{"Model": modelName})
-	if message == "" {
-		message = "token model permission denied"
-	}
+	message := common.TranslateMessage(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": modelName})
 	return types.NewErrorWithStatusCode(errors.New(message), types.ErrorCode("token_model_forbidden"), http.StatusForbidden, types.ErrOptionWithSkipRetry())
 }
 

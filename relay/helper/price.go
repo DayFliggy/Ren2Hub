@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billing"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
@@ -71,8 +72,8 @@ func PinBillingPrice(c *gin.Context, info *relaycommon.RelayInfo) error {
 	return nil
 }
 
-func modelPriceNotConfiguredError(modelName string, _ int) error {
-	return fmt.Errorf("模型 %s 尚未发布明确单价或计费表达式 / Model price is not configured", modelName)
+func modelPriceNotConfiguredError(c *gin.Context, modelName string) error {
+	return errors.New(i18n.T(c, i18n.MsgRelayModelPriceNotConfigured, map[string]any{"Model": modelName}))
 }
 
 func HandleChannelRatio(ctx *gin.Context, info *relaycommon.RelayInfo) string {
@@ -147,7 +148,7 @@ func modelPriceWithFacts(c *gin.Context, info *relaycommon.RelayInfo, promptToke
 		}
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return hosttypes.PriceData{}, modelPriceNotConfiguredError(info.BillingModelName(), info.UserId)
+				return hosttypes.PriceData{}, modelPriceNotConfiguredError(c, info.BillingModelName())
 			}
 			return hosttypes.PriceData{}, err
 		}
@@ -283,7 +284,7 @@ func QualifyPublishedPrice(c *gin.Context, info *relaycommon.RelayInfo) (string,
 		return "", err
 	}
 	if version == nil {
-		return "", modelPriceNotConfiguredError(info.BillingModelName(), info.UserId)
+		return "", modelPriceNotConfiguredError(c, info.BillingModelName())
 	}
 	ratio := HandleChannelRatio(c, info)
 	return model.NormalizeChannelRatio(ratio, false)
