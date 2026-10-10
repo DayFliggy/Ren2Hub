@@ -27,12 +27,14 @@ func TestUpdateOptionRejectsNonFiniteAffiliateCap(t *testing.T) {
 
 			assert.Equal(t, http.StatusOK, response.Code)
 			var payload struct {
-				Success bool   `json:"success"`
-				Message string `json:"message"`
+				Success    bool   `json:"success"`
+				Message    string `json:"message"`
+				MessageKey string `json:"message_key"`
 			}
 			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &payload))
 			assert.False(t, payload.Success)
-			assert.Contains(t, payload.Message, "有限数值")
+			assert.Equal(t, "The rebate cap per invitee must be a finite non-negative number", payload.MessageKey)
+			assert.Equal(t, payload.MessageKey, payload.Message)
 		})
 	}
 }

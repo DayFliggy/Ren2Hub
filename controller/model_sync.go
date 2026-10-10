@@ -115,18 +115,18 @@ var syncOverwriteFields = map[string]bool{
 // catalog version and name known fields for every overwritten model.
 func (req *syncRequest) validate() error {
 	if strings.TrimSpace(req.SourceVersion) == "" {
-		return errors.New("缺少上游资料版本，请先预览")
+		return common.NewMessage("The upstream metadata version is missing. Preview first.")
 	}
 	for _, ow := range req.Overwrite {
 		if strings.TrimSpace(ow.ModelName) == "" || len(ow.Fields) == 0 {
-			return errors.New("覆盖项必须包含模型名称和字段")
+			return common.NewMessage("Each overwrite item must include a model name and fields")
 		}
 		if strings.TrimSpace(ow.LocalVersion) == "" {
-			return errors.New("覆盖项缺少本地资料版本，请先预览")
+			return common.NewMessage("An overwrite item is missing the local metadata version. Preview first.")
 		}
 		for _, field := range ow.Fields {
 			if !syncOverwriteFields[field] {
-				return fmt.Errorf("不支持覆盖字段: %s", field)
+				return common.NewMessage("Unsupported overwrite field: {{field}}", map[string]any{"field": field})
 			}
 		}
 	}
@@ -311,12 +311,12 @@ func fetchUpstreamCatalog(ctx context.Context, locale string) (upstreamCatalog, 
 	}()
 	wg.Wait()
 	if modelsErr != nil {
-		return catalog, fmt.Errorf("获取上游模型失败: %w", modelsErr)
+		return catalog, common.NewMessage("Failed to fetch upstream models: {{error}}", map[string]any{"error": modelsErr.Error()})
 	}
 	// Vendor rows feed created vendors and the version; a partial catalog would
 	// silently create vendors without upstream details.
 	if vendorsErr != nil {
-		return catalog, fmt.Errorf("获取上游供应商失败: %w", vendorsErr)
+		return catalog, common.NewMessage("Failed to fetch upstream vendors: {{error}}", map[string]any{"error": vendorsErr.Error()})
 	}
 
 	catalog.VendorByName = make(map[string]upstreamVendor)
@@ -383,22 +383,22 @@ func ensureVendorID(vendorName string, vendorByName map[string]upstreamVendor, v
 func SyncUpstreamModels(c *gin.Context) {
 	var req syncRequest
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请求格式错误: " + err.Error()})
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid metadata sync request format: {{error}}", map[string]any{"error": err.Error()}))
 		return
 	}
 	if err := req.validate(); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		common.ApiErrorStatus(c, http.StatusBadRequest, err)
 		return
 	}
 
 	// 1) 拉取上游目录并校验版本
 	catalog, err := fetchUpstreamCatalog(c.Request.Context(), req.Locale)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error(), "locale": req.Locale, "source_urls": gin.H{"models_url": catalog.ModelsURL, "vendors_url": catalog.VendorsURL}})
+		common.ApiErrorStatus(c, http.StatusOK, err, gin.H{"locale": req.Locale, "source_urls": gin.H{"models_url": catalog.ModelsURL, "vendors_url": catalog.VendorsURL}})
 		return
 	}
 	if catalog.Version != req.SourceVersion {
-		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "上游资料已变化，请重新预览", "code": "METADATA_SOURCE_CHANGED"})
+		common.ApiErrorStatus(c, http.StatusConflict, common.NewMessage("The upstream metadata has changed. Preview again."), gin.H{"code": "METADATA_SOURCE_CHANGED"})
 		return
 	}
 	vendorByName := catalog.VendorByName
@@ -407,8 +407,8 @@ func SyncUpstreamModels(c *gin.Context) {
 	// 2) 获取当前缺失模型列表
 	missing, err := model.GetMissingModels()
 	if err != nil {
-		common.SysError("failed to get missing models: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "获取模型列表失败，请稍后重试"})
+		common.SysError(common.LogText("failed to get missing models: %s", err.Error()))
+		common.ApiErrorT(c, "Failed to get the model list. Please try again later.")
 		return
 	}
 	missingSet := make(map[string]bool, len(missing))
@@ -434,11 +434,7 @@ func SyncUpstreamModels(c *gin.Context) {
 			continue
 		}
 		if got := modelMetadataFingerprint(local); got != ow.LocalVersion {
-			c.JSON(http.StatusConflict, gin.H{
-				"success": false,
-				"message": "本地资料已变化，请重新预览",
-				"code":    "METADATA_LOCAL_CHANGED",
-			})
+			common.ApiErrorStatus(c, http.StatusConflict, common.NewMessage("The local metadata has changed. Preview again."), gin.H{"code": "METADATA_LOCAL_CHANGED"})
 			return
 		}
 	}
@@ -464,7 +460,7 @@ func SyncUpstreamModels(c *gin.Context) {
 
 		vendorID, err := ensureVendorID(up.VendorName, vendorByName, vendorIDCache, &createdVendors)
 		if err != nil {
-			common.SysError(fmt.Sprintf("metadata sync: create model %s: %v", name, err))
+			common.SysError(common.LogText("metadata sync: create model %s: %v", name, err))
 			skipped = append(skipped, name)
 			continue
 		}
@@ -480,7 +476,7 @@ func SyncUpstreamModels(c *gin.Context) {
 			NameRule:     up.NameRule,
 		}
 		if err := mi.Insert(); err != nil {
-			common.SysError(fmt.Sprintf("metadata sync: create model %s: %v", name, err))
+			common.SysError(common.LogText("metadata sync: create model %s: %v", name, err))
 			skipped = append(skipped, name)
 			continue
 		}
@@ -499,7 +495,7 @@ func SyncUpstreamModels(c *gin.Context) {
 		var local model.Model
 		if err := model.DB.Where("model_name = ?", ow.ModelName).First(&local).Error; err != nil {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				common.SysError(fmt.Sprintf("metadata sync: load model %s: %v", ow.ModelName, err))
+				common.SysError(common.LogText("metadata sync: load model %s: %v", ow.ModelName, err))
 			}
 			skipped = append(skipped, ow.ModelName)
 			continue
@@ -515,7 +511,7 @@ func SyncUpstreamModels(c *gin.Context) {
 		if containsField(ow.Fields, "vendor") {
 			vendorID, err := ensureVendorID(up.VendorName, vendorByName, vendorIDCache, &createdVendors)
 			if err != nil {
-				common.SysError(fmt.Sprintf("metadata sync: overwrite model %s: %v", ow.ModelName, err))
+				common.SysError(common.LogText("metadata sync: overwrite model %s: %v", ow.ModelName, err))
 				skipped = append(skipped, ow.ModelName)
 				continue
 			}
@@ -537,7 +533,7 @@ func SyncUpstreamModels(c *gin.Context) {
 			updates["status"] = chooseStatus(up.Status, local.Status)
 		}
 		if err := model.DB.Model(&model.Model{}).Where("id = ?", local.Id).Updates(updates).Error; err != nil {
-			common.SysError(fmt.Sprintf("metadata sync: overwrite model %s: %v", ow.ModelName, err))
+			common.SysError(common.LogText("metadata sync: overwrite model %s: %v", ow.ModelName, err))
 			skipped = append(skipped, ow.ModelName)
 			continue
 		}
@@ -617,7 +613,7 @@ func SyncUpstreamPreview(c *gin.Context) {
 	locale := c.Query("locale")
 	catalog, err := fetchUpstreamCatalog(c.Request.Context(), locale)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error(), "locale": locale, "source_urls": gin.H{"models_url": catalog.ModelsURL, "vendors_url": catalog.VendorsURL}})
+		common.ApiErrorStatus(c, http.StatusOK, err, gin.H{"locale": locale, "source_urls": gin.H{"models_url": catalog.ModelsURL, "vendors_url": catalog.VendorsURL}})
 		return
 	}
 	modelByName := catalog.ModelByName

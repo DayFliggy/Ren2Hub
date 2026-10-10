@@ -3,10 +3,10 @@ package controller
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
@@ -20,11 +20,8 @@ func GetHomeRequestMetrics(c *gin.Context) {
 		if errors.Is(err, context.Canceled) {
 			return
 		}
-		logger.LogError(c.Request.Context(), fmt.Sprintf("home request metrics query failed: %v", err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"message": "home request metrics unavailable",
-		})
+		logger.LogError(c.Request.Context(), common.LogText("home request metrics query failed: %v", err))
+		common.ApiErrorStatus(c, http.StatusInternalServerError, common.NewMessage("home request metrics unavailable"))
 		return
 	}
 

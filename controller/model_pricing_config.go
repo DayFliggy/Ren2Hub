@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"net/http"
 	"strconv"
@@ -64,7 +63,7 @@ func PreviewModelPricingConversion(c *gin.Context) {
 		Pricing   model.PricingValues `json:"pricing"`
 	}
 	if err := decodeModelPriceRequest(c, &request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		common.ApiErrorStatus(c, http.StatusBadRequest, err)
 		return
 	}
 	preview, err := model.PreviewModelPricingConversion(request.ModelName, request.Pricing)
@@ -82,7 +81,7 @@ func PreviewModelPricing(c *gin.Context) {
 		Pricing   model.PricingValues `json:"pricing"`
 	}
 	if err := decodeModelPriceRequest(c, &request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		common.ApiErrorStatus(c, http.StatusBadRequest, err)
 		return
 	}
 	preview, err := model.PreviewModelPricing(request.ModelName, request.Pricing)
@@ -102,7 +101,7 @@ func UpdateModelPricingConfig(c *gin.Context) {
 		Changes []model.ModelPricingChange `json:"changes"`
 	}
 	if err := decodeModelPriceRequest(c, &request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		common.ApiErrorStatus(c, http.StatusBadRequest, err)
 		return
 	}
 	if err := model.UpdateModelPricing(request.Changes); err != nil {
@@ -110,7 +109,7 @@ func UpdateModelPricingConfig(c *gin.Context) {
 		if errors.Is(err, model.ErrModelPricingConflict) {
 			status = http.StatusConflict
 		}
-		c.JSON(status, gin.H{"success": false, "message": err.Error()})
+		common.ApiErrorStatus(c, status, err)
 		return
 	}
 	names := make([]string, 0, len(request.Changes))
@@ -136,12 +135,12 @@ type modelPricingSimulationRequest struct {
 func SimulateModelPricing(c *gin.Context) {
 	var request modelPricingSimulationRequest
 	if err := decodeModelPriceRequest(c, &request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid pricing simulation request"})
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("invalid pricing simulation request"))
 		return
 	}
 	charge, err := simulateModelPricing(request)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		common.ApiErrorStatus(c, http.StatusBadRequest, err)
 		return
 	}
 	// Evaluation inputs and encrypted replay evidence are intentionally omitted.
@@ -150,14 +149,14 @@ func SimulateModelPricing(c *gin.Context) {
 
 func simulateModelPricing(request modelPricingSimulationRequest) (*billing.ChargeResult, error) {
 	if request.Usage == nil {
-		return nil, errors.New("simulation usage is required")
+		return nil, common.NewMessage("simulation usage is required")
 	}
 	instant := time.Now().UTC()
 	if request.Time != "" {
 		var err error
 		instant, err = time.Parse(time.RFC3339Nano, request.Time)
 		if err != nil {
-			return nil, errors.New("simulation time must use RFC3339 with a timezone")
+			return nil, common.NewMessage("simulation time must use RFC3339 with a timezone")
 		}
 	}
 	effective, err := model.PreviewModelPricing(request.ModelName, request.Pricing)
@@ -176,7 +175,7 @@ func simulateModelPricing(request modelPricingSimulationRequest) (*billing.Charg
 		}
 	}
 	if len(plugins) > 1 && request.PluginKey == "" {
-		return nil, errors.New("plugin_key is required to simulate a shared task model")
+		return nil, common.NewMessage("plugin_key is required to simulate a shared task model")
 	}
 	var selected *jsplugin.LoadedPlugin
 	for _, plugin := range plugins {
@@ -186,7 +185,7 @@ func simulateModelPricing(request modelPricingSimulationRequest) (*billing.Charg
 		}
 	}
 	if request.PluginKey != "" && selected == nil {
-		return nil, errors.New("selected plugin does not serve this model")
+		return nil, common.NewMessage("selected plugin does not serve this model")
 	}
 	var schema *billingexpr.UsageSchema
 	taskUsage := false
@@ -228,11 +227,11 @@ func simulateModelPricing(request modelPricingSimulationRequest) (*billing.Charg
 		for name, value := range request.Usage {
 			field, exists := schema.Fields[name]
 			if !exists {
-				return nil, fmt.Errorf("undeclared task usage field: %s", name)
+				return nil, common.NewMessage("undeclared task usage field: {{field}}", map[string]any{"field": name})
 			}
 			normalized, err := billingexpr.NormalizeUsageValue(field, value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid task usage field: %s", name)
+				return nil, common.NewMessage("invalid task usage field: {{field}}", map[string]any{"field": name})
 			}
 			facts[name] = normalized
 		}
@@ -247,7 +246,7 @@ func simulateModelPricing(request modelPricingSimulationRequest) (*billing.Charg
 	}
 	cipher, err := billing.NewEvidenceCipher([]byte(common.CryptoSecret))
 	if err != nil {
-		return nil, errors.New("simulation encryption is not configured")
+		return nil, common.NewMessage("simulation encryption is not configured")
 	}
 	identity := uuid.NewString()
 	_, charge, err := cipher.Evaluate(quote, usage, input, billing.EvidenceBinding{RequestID: identity, AttemptID: identity, ConfigHash: billing.PricingConfigHash(quote), Phase: "preview"})
@@ -259,11 +258,11 @@ func applySimulationUsage(values map[string]any, usage *billing.Usage, input *bi
 	for key, raw := range values {
 		number, ok := raw.(json.Number)
 		if !ok {
-			return fmt.Errorf("%s must be an integer token quantity", key)
+			return common.NewMessage("{{field}} must be an integer token quantity", map[string]any{"field": key})
 		}
 		value, err := number.Int64()
 		if err != nil || value < 0 || value > math.MaxInt32 {
-			return fmt.Errorf("%s must be an integer between 0 and %d", key, math.MaxInt32)
+			return common.NewMessage("{{field}} must be an integer between 0 and {{max}}", map[string]any{"field": key, "max": math.MaxInt32})
 		}
 		if field, exists := fields[key]; exists {
 			*field = value
@@ -276,13 +275,13 @@ func applySimulationUsage(values map[string]any, usage *billing.Usage, input *bi
 			usage.AudioCacheReadTokens = &value
 		case "image_count":
 			if value < 1 || value > dto.MaxImageN {
-				return fmt.Errorf("image_count must be between 1 and %d", dto.MaxImageN)
+				return common.NewMessage("image_count must be between 1 and {{max}}", map[string]any{"max": dto.MaxImageN})
 			}
 			count := int(value)
 			input.ImageCount = &count
 			usage.Quantities = map[string]string{"images": strconv.FormatInt(value, 10)}
 		default:
-			return fmt.Errorf("unknown token usage field: %s", key)
+			return common.NewMessage("unknown token usage field: {{field}}", map[string]any{"field": key})
 		}
 	}
 	if _, exists := values["len"]; !exists {
