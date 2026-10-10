@@ -110,20 +110,20 @@ func sanitizeLikePattern(input string) (string, error) {
 func validateLikePattern(input string) error {
 	// 1. 连续的 % 直接拒绝
 	if strings.Contains(input, "%%") {
-		return errors.New("搜索模式中不允许包含连续的 % 通配符")
+		return common.NewMessage("The search pattern cannot contain consecutive % wildcards")
 	}
 
 	// 2. 统计 % 数量，不得超过 2
 	count := strings.Count(input, "%")
 	if count > 2 {
-		return errors.New("搜索模式中最多允许包含 2 个 % 通配符")
+		return common.NewMessage("The search pattern can contain at most 2 % wildcards")
 	}
 
 	// 3. 含 % 时，去掉 % 后关键词长度必须 >= 2
 	if count > 0 {
 		stripped := strings.ReplaceAll(input, "%", "")
 		if len(stripped) < 2 {
-			return errors.New("使用模糊搜索时，关键词长度至少为 2 个字符")
+			return common.NewMessage("Fuzzy search keywords must be at least 2 characters long")
 		}
 	}
 
@@ -151,11 +151,11 @@ func SearchUserTokens(userId int, keyword string, token string, offset int, limi
 	if hasFuzzy {
 		count, err := CountUserTokens(userId)
 		if err != nil {
-			common.SysLog("failed to count user tokens: " + err.Error())
-			return nil, 0, errors.New("获取令牌数量失败")
+			common.SysLog(common.LogText("failed to count user tokens: %s", err.Error()))
+			return nil, 0, common.NewMessage("Failed to get the token count")
 		}
 		if int(count) > maxTokens {
-			return nil, 0, errors.New("令牌数量超过上限，仅允许精确搜索，请勿使用 % 通配符")
+			return nil, 0, common.NewMessage("Token count exceeds the limit. Only exact search is allowed, do not use the % wildcard")
 		}
 	}
 
@@ -180,15 +180,15 @@ func SearchUserTokens(userId int, keyword string, token string, offset int, limi
 	// 先查匹配总数（用于分页，受 maxTokens 上限保护，避免全表 COUNT）
 	err = baseQuery.Limit(maxTokens).Count(&total).Error
 	if err != nil {
-		common.SysError("failed to count search tokens: " + err.Error())
-		return nil, 0, errors.New("搜索令牌失败")
+		common.SysError(common.LogText("failed to count search tokens: %s", err.Error()))
+		return nil, 0, common.NewMessage("Failed to search tokens")
 	}
 
 	// 再分页查数据
 	err = baseQuery.Order("id desc").Offset(offset).Limit(limit).Find(&tokens).Error
 	if err != nil {
-		common.SysError("failed to search tokens: " + err.Error())
-		return nil, 0, errors.New("搜索令牌失败")
+		common.SysError(common.LogText("failed to search tokens: %s", err.Error()))
+		return nil, 0, common.NewMessage("Failed to search tokens")
 	}
 	return tokens, total, nil
 }
@@ -209,7 +209,7 @@ func ValidateUserToken(key string) (token *Token, err error) {
 				token.Status = common.TokenStatusExpired
 				err := token.SelectUpdate()
 				if err != nil {
-					common.SysLog("failed to update token status" + err.Error())
+					common.SysLog(common.LogText("failed to update token status%s", err.Error()))
 				}
 			}
 			return token, ErrTokenInvalid
@@ -219,7 +219,7 @@ func ValidateUserToken(key string) (token *Token, err error) {
 
 		return token, nil
 	}
-	common.SysLog("ValidateUserToken: failed to get token: " + err.Error())
+	common.SysLog(common.LogText("ValidateUserToken: failed to get token: %s", err.Error()))
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrTokenInvalid
 	}
@@ -228,7 +228,7 @@ func ValidateUserToken(key string) (token *Token, err error) {
 
 func GetTokenByIds(id int, userId int) (*Token, error) {
 	if id == 0 || userId == 0 {
-		return nil, errors.New("id 或 userId 为空！")
+		return nil, common.NewMessage("Token ID or user ID is empty")
 	}
 	token := Token{Id: id, UserId: userId}
 	var err error = nil
@@ -238,7 +238,7 @@ func GetTokenByIds(id int, userId int) (*Token, error) {
 
 func GetTokenById(id int) (*Token, error) {
 	if id == 0 {
-		return nil, errors.New("id 为空！")
+		return nil, errors.New("token id is empty")
 	}
 	token := Token{Id: id}
 	var err error = nil
@@ -268,7 +268,7 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 		// 冷缓存时用数据库快照初始化；已存在的哈希只刷新 TTL，
 		// 避免快照覆盖 Redis 中已被原子预扣的余额。初始化失败不影响本次读取。
 		if _, cacheErr := cacheInitToken(*token); cacheErr != nil {
-			common.SysLog("failed to init token cache: " + cacheErr.Error())
+			common.SysLog(common.LogText("failed to init token cache: %s", cacheErr.Error()))
 		}
 	}
 	return token, nil
@@ -440,7 +440,7 @@ func (token *Token) updateWithBudget(operationID string, expectedVersion *int64,
 				return nil
 			}
 			if current.ReservedQuota > 0 && current.UnlimitedQuota != targetUnlimited {
-				return errors.New("cannot change token budget policy while reservations are active")
+				return common.NewMessage("Cannot change the token budget policy while reservations are active")
 			}
 			if current.QuotaVersion != *expectedVersion {
 				return ErrBillingEventConflict
@@ -468,10 +468,10 @@ func (token *Token) updateWithBudget(operationID string, expectedVersion *int64,
 		}
 		if mode == "status" && token.Status == common.TokenStatusEnabled {
 			if current.ExpiredTime != -1 && current.ExpiredTime <= common.GetTimestamp() {
-				return errors.New("expired token cannot be enabled")
+				return common.NewMessage("Token has expired and cannot be enabled. Please modify the expiration time or set it to never expire")
 			}
 			if current.Status == common.TokenStatusExhausted && current.RemainQuota <= 0 && !current.UnlimitedQuota {
-				return errors.New("exhausted token cannot be enabled")
+				return common.NewMessage("Token quota is exhausted and cannot be enabled. Please modify the remaining quota or set it to unlimited")
 			}
 		}
 		return tx.Model(token).Updates(metadata).Error
@@ -480,14 +480,14 @@ func (token *Token) updateWithBudget(operationID string, expectedVersion *int64,
 		return err
 	}
 	if err := invalidateTokenCacheForMutation(token.Key); err != nil {
-		common.SysError("token cache invalidation failed: " + err.Error())
+		common.SysError(common.LogText("token cache invalidation failed: %s", err.Error()))
 	}
 	return DB.First(token, token.Id).Error
 }
 
 func (token *Token) SelectUpdate() (err error) {
 	if cacheErr := invalidateTokenCacheForMutation(token.Key); cacheErr != nil {
-		common.SysLog("failed to invalidate token cache before status update: " + cacheErr.Error())
+		common.SysLog(common.LogText("failed to invalidate token cache before status update: %s", cacheErr.Error()))
 	}
 	// This can update zero values
 	return DB.Model(token).Select("accessed_time", "status").Updates(token).Error
@@ -507,7 +507,7 @@ func (token *Token) Delete() error {
 			return errors.New("token owner mismatch")
 		}
 		if current.ReservedQuota != 0 {
-			return errors.New("token has active reservations")
+			return common.NewMessage("Token has active reservations")
 		}
 		if err := ensureNoActiveAccountBillingTx(tx, token.UserId, token.Id); err != nil {
 			return err
@@ -553,7 +553,7 @@ func DisableModelLimits(tokenId int) error {
 func DeleteTokenById(id int, userId int) (err error) {
 	// Why we need userId here? In case user want to delete other's token.
 	if id == 0 || userId == 0 {
-		return errors.New("id 或 userId 为空！")
+		return common.NewMessage("Token ID or user ID is empty")
 	}
 	token := Token{Id: id, UserId: userId}
 	err = DB.Where(token).First(&token).Error
@@ -573,7 +573,7 @@ func CountUserTokens(userId int) (int64, error) {
 // BatchDeleteTokens 删除指定用户的一组令牌，返回成功删除数量
 func BatchDeleteTokens(ids []int, userId int) (int, error) {
 	if len(ids) == 0 {
-		return 0, errors.New("ids 不能为空！")
+		return 0, common.NewMessage("Token IDs cannot be empty")
 	}
 
 	tx := DB.Begin()
@@ -598,11 +598,11 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 		}
 		if token.ReservedQuota != 0 {
 			tx.Rollback()
-			return 0, errors.New("token has active reservations")
+			return 0, common.NewMessage("Token has active reservations")
 		}
 	}
 	if err := invalidateTokensCache(tokens); err != nil {
-		common.SysLog("failed to invalidate token cache before batch delete: " + err.Error())
+		common.SysLog(common.LogText("failed to invalidate token cache before batch delete: %s", err.Error()))
 	}
 
 	if err := tx.Where("user_id = ? AND id IN (?)", userId, ids).Delete(&Token{}).Error; err != nil {
@@ -633,7 +633,7 @@ func InvalidateUserTokensCache(userId int) error {
 		return nil
 	}
 	if userId <= 0 {
-		return errors.New("userId 无效")
+		return errors.New("invalid user id")
 	}
 	var tokens []Token
 	if err := DB.Unscoped().

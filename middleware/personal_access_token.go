@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
@@ -38,7 +39,7 @@ func authorizePATRoute(c *gin.Context, user *model.UserBase) bool {
 		}
 	}
 	if !allowed {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": "PAT_SCOPE_DENIED", "message": "Personal access token scope does not permit this route."})
+		abortWithWebMessage(c, http.StatusForbidden, "PAT_SCOPE_DENIED", common.NewMessage("Personal access token scope does not permit this route."))
 		return false
 	}
 	return true
@@ -47,7 +48,7 @@ func authorizePATRoute(c *gin.Context, user *model.UserBase) bool {
 func BrowserSessionOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if _, ok := GetSessionAuthIdentity(c); !ok {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": "BROWSER_SESSION_REQUIRED", "message": "A browser session is required."})
+			abortWithWebMessage(c, http.StatusForbidden, "BROWSER_SESSION_REQUIRED", common.NewMessage("A browser session is required."))
 			return
 		}
 		c.Next()

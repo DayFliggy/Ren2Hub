@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
@@ -96,7 +97,7 @@ func GetUserLogs(c *gin.Context) {
 	upstreamRequestId := c.Query("upstream_request_id")
 	keyword := strings.TrimSpace(c.Query("keyword"))
 	if len(keyword) > 128 {
-		common.ApiErrorMsg(c, "keyword is too long")
+		common.ApiErrorT(c, "Keyword is too long")
 		return
 	}
 	logs, total, err := model.GetUserLogs(userId, logType, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, upstreamRequestId, keyword)
@@ -112,27 +113,18 @@ func GetUserLogs(c *gin.Context) {
 
 // Deprecated: SearchAllLogs 已废弃，前端未使用该接口。
 func SearchAllLogs(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"success": false,
-		"message": "该接口已废弃",
-	})
+	common.ApiErrorT(c, "This API is deprecated")
 }
 
 // Deprecated: SearchUserLogs 已废弃，前端未使用该接口。
 func SearchUserLogs(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"success": false,
-		"message": "该接口已废弃",
-	})
+	common.ApiErrorT(c, "This API is deprecated")
 }
 
 func GetLogByKey(c *gin.Context) {
 	tokenId := c.GetInt("token_id")
 	if tokenId == 0 {
-		c.JSON(200, gin.H{
-			"success": false,
-			"message": "无效的令牌",
-		})
+		common.ApiErrorI18n(c, i18n.MsgTokenInvalid)
 		return
 	}
 	logs, err := model.GetLogByTokenId(tokenId)
