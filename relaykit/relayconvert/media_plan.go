@@ -2,7 +2,6 @@ package relayconvert
 
 import (
 	"net/url"
-	"slices"
 	"strings"
 
 	sharedgemini "github.com/QuantumNous/new-api/relaykit/relayconvert/internal/shared/gemini"
@@ -190,17 +189,17 @@ func (r *RequestRequirements) inspectMedia(part map[string]any, path string) {
 func planMediaConversion(req RequestRequirements, target types.RelayFormat) ([]types.ConversionDiagnostic, error) {
 	var diagnostics []types.ConversionDiagnostic
 	for _, media := range req.Media {
+		// The direct Responses-to-Gemini converter knows the model version, so it
+		// decides on tool media: it carries what that Gemini version accepts and
+		// omits the rest with an unsupported_media_type error diagnostic, which
+		// safe and strict reject before send and allow records.
+		convertedByGemini := media.ToolResult && media.SourceKind != "owned" &&
+			req.Format == types.RelayFormatOpenAIResponses && target == types.RelayFormatGemini
 		canConvert := media.SourceKind == "inline" || media.SourceKind == "url"
 		if media.ToolResult && media.SourceKind != "owned" {
 			// Chat tool content and Gemini function-response parts have no media
 			// conversion path; native forwarding retains their original semantics.
 			canConvert = canConvert && req.Format != types.RelayFormatOpenAI && req.Format != types.RelayFormatGemini
-			// Gemini tool results carry images and documents, never audio or video.
-			audioVideo := slices.Contains([]string{"audio", "video"}, media.Kind) || slices.Contains([]string{"audio", "video"}, mediaKind(media.MIMEType))
-			canConvert = canConvert && !(target == types.RelayFormatGemini && audioVideo)
-			if target == types.RelayFormatGemini && media.MIMEType != "" {
-				canConvert = canConvert && sharedgemini.IsSupportedToolResultMimeType(media.MIMEType)
-			}
 		}
 		if media.Kind == "image" {
 			canConvert = canConvert && (media.MIMEType == "" || strings.HasPrefix(media.MIMEType, "image/"))
@@ -227,7 +226,7 @@ func planMediaConversion(req RequestRequirements, target types.RelayFormat) ([]t
 				canConvert = false
 			}
 		}
-		if !canConvert {
+		if !canConvert && !convertedByGemini {
 			diagnostic := types.ConversionDiagnostic{Code: "media_conversion_unavailable", Path: media.Path,
 				Message: "the selected converter cannot preserve this media type or source", Severity: types.ConversionDiagnosticError, From: req.Format, To: target}
 			if media.SourceKind == "owned" {
@@ -235,12 +234,6 @@ func planMediaConversion(req RequestRequirements, target types.RelayFormat) ([]t
 				diagnostic.Message = "provider-owned media requires the original protocol and owner"
 			}
 			diagnostics = append(diagnostics, diagnostic)
-			if media.ToolResult && media.SourceKind != "owned" && req.Format == types.RelayFormatOpenAIResponses && target == types.RelayFormatGemini {
-				// The direct converter omits tool media Gemini cannot carry with
-				// its own error diagnostic, so the policy decides: safe and
-				// strict reject before send, allow sends without the media.
-				continue
-			}
 			return diagnostics, &types.ConversionLossError{Diagnostics: diagnostics}
 		}
 		if media.Detail != "" && target != types.RelayFormatOpenAI && target != types.RelayFormatOpenAIResponses {

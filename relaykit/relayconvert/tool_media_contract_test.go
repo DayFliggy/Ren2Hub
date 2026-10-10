@@ -139,19 +139,16 @@ func TestResponsesToolMediaGeminiOmissionFollowsConversionPolicy(t *testing.T) {
 	t.Cleanup(func() { SetMediaResolver(goldenMediaResolver()) })
 	for _, test := range []struct {
 		name, output, itemType string
-		// planned reports whether planning already sees the loss; the
-		// remaining cases are only known once the converter resolves media.
-		planned  bool
-		response map[string]any
+		response               map[string]any
 	}{
-		{name: "audio", output: `[{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav"}}]`, planned: true, response: map[string]any{"content": "[audio]"}},
-		{name: "video_file", output: `[{"type":"input_file","file_data":"data:video/mp4;base64,AAAA"}]`, planned: true, response: map[string]any{"content": "[file]"}},
-		{name: "unsupported_mime", output: `[{"type":"input_text","text":"zip"},{"type":"input_file","file_data":"data:application/zip;base64,UEsDBA=="}]`, planned: true, response: map[string]any{"content": "zip"}},
+		{name: "audio", output: `[{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav"}}]`, response: map[string]any{"content": "[audio]"}},
+		{name: "video_file", output: `[{"type":"input_file","file_data":"data:video/mp4;base64,AAAA"}]`, response: map[string]any{"content": "[file]"}},
+		{name: "unsupported_mime", output: `[{"type":"input_text","text":"zip"},{"type":"input_file","file_data":"data:application/zip;base64,UEsDBA=="}]`, response: map[string]any{"content": "zip"}},
 		// Valid Gemini Blob types outside the documented function-response list.
-		{name: "csv_tool_document", output: `[{"type":"input_file","file_data":"data:text/csv;base64,YSxi"}]`, planned: true, response: map[string]any{"content": "[file]"}},
-		{name: "gif_tool_image", output: `[{"type":"input_file","file_data":"data:image/gif;base64,R0lGOA=="}]`, planned: true, response: map[string]any{"content": "[file]"}},
-		{name: "unknown_sibling", output: `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, planned: true, response: map[string]any{"content": "[tool output omitted]"}},
-		{name: "custom_tool_unknown_sibling", output: `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, itemType: "custom_tool_call_output", planned: true, response: map[string]any{"content": "[tool output omitted]"}},
+		{name: "csv_tool_document", output: `[{"type":"input_file","file_data":"data:text/csv;base64,YSxi"}]`, response: map[string]any{"content": "[file]"}},
+		{name: "gif_tool_image", output: `[{"type":"input_file","file_data":"data:image/gif;base64,R0lGOA=="}]`, response: map[string]any{"content": "[file]"}},
+		{name: "unknown_sibling", output: `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, response: map[string]any{"content": "[tool output omitted]"}},
+		{name: "custom_tool_unknown_sibling", output: `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, itemType: "custom_tool_call_output", response: map[string]any{"content": "[tool output omitted]"}},
 		// The planner cannot see the resolved MIME type of a URL without a
 		// download; the converter omits media that fails to load.
 		{name: "unloadable_url", output: `[{"type":"input_text","text":"see"},{"type":"input_image","image_url":"https://example.test/screen.png"}]`, response: map[string]any{"content": "see"}},
@@ -160,7 +157,7 @@ func TestResponsesToolMediaGeminiOmissionFollowsConversionPolicy(t *testing.T) {
 		{name: "single_object", output: `{"type":"input_image","image_url":"data:image/png;base64,YWJj"}`, response: map[string]any{"content": "[tool output omitted]"}},
 		// A media part without a source is omitted with a diagnostic instead
 		// of being skipped silently.
-		{name: "missing_source", output: `[{"type":"input_text","text":"shot"},{"type":"input_image"}]`, planned: true, response: map[string]any{"content": "shot"}},
+		{name: "missing_source", output: `[{"type":"input_text","text":"shot"},{"type":"input_image"}]`, response: map[string]any{"content": "shot"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			callType, outputType := "function_call", "function_call_output"
@@ -173,26 +170,18 @@ func TestResponsesToolMediaGeminiOmissionFollowsConversionPolicy(t *testing.T) {
 			require.NoError(t, err)
 			for _, policy := range []types.ConversionLossPolicy{types.ConversionLossPolicySafe, types.ConversionLossPolicyStrict, types.ConversionLossPolicyAllow} {
 				meta := &convmeta.Values{Options: &convmeta.Options{ConversionPolicy: policy}, UpstreamModelName: "gemini-3-pro-preview", ChannelMetaAttached: true}
+				// Planning leaves the decision to the converter, which knows the
+				// Gemini version; it reports the loss once, as unsupported_media_type.
 				plan, planErr := PlanConversion(requirements, types.RelayFormatGemini, policy)
-				if test.planned {
-					require.NotEmpty(t, plan.Diagnostics, policy)
-					assert.Equal(t, "media_conversion_unavailable", plan.Diagnostics[0].Code, policy)
-					assert.Equal(t, types.ConversionDiagnosticError, plan.Diagnostics[0].Severity, policy)
-				}
+				require.NoError(t, planErr, policy)
+				assert.NotContains(t, diagnosticCodes(plan.Diagnostics), "media_conversion_unavailable", policy)
 				if policy != types.ConversionLossPolicyAllow {
-					if test.planned {
-						var loss *types.ConversionLossError
-						require.ErrorAs(t, planErr, &loss, policy)
-						continue
-					}
-					require.NoError(t, planErr, policy)
 					_, err := ExecuteConversionPlan(context.Background(), meta, plan, &req)
 					var loss *types.ConversionLossError
 					require.ErrorAs(t, err, &loss, "%s must reject omitted media before send", policy)
 					assert.Equal(t, "unsupported_media_type", loss.Diagnostics[0].Code)
 					continue
 				}
-				require.NoError(t, planErr)
 				result, err := ExecuteConversionPlan(context.Background(), meta, plan, &req)
 				require.NoError(t, err)
 				assert.Contains(t, diagnosticCodes(result.Diagnostics), "unsupported_media_type")
@@ -233,4 +222,47 @@ func diagnosticCodes(diagnostics []types.ConversionDiagnostic) []string {
 		codes = append(codes, diagnostic.Code)
 	}
 	return codes
+}
+
+// Gemini 1.x and 2.x take tool media as ordinary parts after the turn's
+// function responses, so audio and video that Gemini accepts reach them
+// under every policy without a loss diagnostic. Gemini 3 carries tool media
+// inside functionResponse.parts, which has no audio or video, so the same
+// request is rejected before send under safe.
+func TestResponsesToolAudioVideoFollowsTheGeminiVersion(t *testing.T) {
+	SetMediaResolver(MediaResolver{GetBase64Data: func(_ context.Context, source types.FileSource, _ ...string) (string, string, error) {
+		header, data, isDataURL := strings.Cut(source.GetRawData(), ",")
+		if !isDataURL {
+			return source.GetRawData(), "audio/wav", nil
+		}
+		return data, strings.TrimSuffix(strings.TrimPrefix(header, "data:"), ";base64"), nil
+	}})
+	t.Cleanup(func() { SetMediaResolver(goldenMediaResolver()) })
+	const output = `[{"type":"input_text","text":"clip"},{"type":"input_audio","input_audio":{"data":"UklGRg==","format":"wav"}},{"type":"input_file","file_data":"data:video/mp4;base64,AAAA"}]`
+	decode := func(model string) *dto.OpenAIResponsesRequest {
+		var req dto.OpenAIResponsesRequest
+		require.NoError(t, kitutil.Unmarshal([]byte(`{"model":"`+model+`","input":[{"type":"function_call","call_id":"call_1","name":"record","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":`+output+`}]}`), &req))
+		return &req
+	}
+	for _, policy := range []types.ConversionLossPolicy{types.ConversionLossPolicySafe, types.ConversionLossPolicyStrict, types.ConversionLossPolicyAllow} {
+		t.Run("gemini-2.5-flash/"+string(policy), func(t *testing.T) {
+			meta := &convmeta.Values{Options: &convmeta.Options{ConversionPolicy: policy}, UpstreamModelName: "gemini-2.5-flash", ChannelMetaAttached: true}
+			result, err := ConvertRequest(context.Background(), meta, types.RelayFormatGemini, decode("gemini-2.5-flash"))
+			require.NoError(t, err)
+			assert.NotContains(t, diagnosticCodes(result.Diagnostics), "media_conversion_unavailable")
+			assert.NotContains(t, diagnosticCodes(result.Diagnostics), "unsupported_media_type")
+			gemini := result.Value.(*dto.GeminiChatRequest)
+			turn, err := kitutil.Marshal(gemini.Contents[1].Parts)
+			require.NoError(t, err)
+			assert.JSONEq(t, `[
+				{"functionResponse":{"name":"record","response":{"content":"clip"},"id":"call_1"}},
+				{"inlineData":{"mimeType":"audio/wav","data":"UklGRg=="}},
+				{"inlineData":{"mimeType":"video/mp4","data":"AAAA"}}]`, string(turn))
+		})
+	}
+	meta := &convmeta.Values{Options: &convmeta.Options{ConversionPolicy: types.ConversionLossPolicySafe}, UpstreamModelName: "gemini-3-pro-preview", ChannelMetaAttached: true}
+	_, err := ConvertRequest(context.Background(), meta, types.RelayFormatGemini, decode("gemini-3-pro-preview"))
+	var loss *types.ConversionLossError
+	require.ErrorAs(t, err, &loss)
+	assert.Equal(t, []string{"unsupported_media_type", "unsupported_media_type"}, diagnosticCodes(loss.Diagnostics))
 }
