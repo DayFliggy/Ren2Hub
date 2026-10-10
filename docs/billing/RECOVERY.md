@@ -11,7 +11,7 @@
 3. 用量无法表达价格或计价失败：按该次尝试发送前持久化的冻结估算结算，日志路径为 `frozen_estimate`，`admin_info.billing_fallback_reason` 记录固定原因码。包括按次或图片计数价格缺少确认完成、Token 价格只有时长或字符计数、表达式出错、用量非法、金额超过单请求上限，以及消费证据无法落库。
 4. 请求以错误结束：已交付有效输出或异步任务已被接受时按第 2、3 步结算；没有输出且没有任务 ID 时释放预留，包括发送后的 5xx、超时与连接重置。
 
-Realtime 会话保存累计用量快照；会话无法给出最终计价时，优先按最近一次累计快照结算，再退回冻结估算。异步任务成功但完成用量无法计价时按提交时估算结算；明确失败、上游返回任务不存在（404/410）、连续轮询失败达到上限、轮询超时或缺少上游任务 ID 时标记失败并释放。立即返回的终态结果在资金意图落库后即交付给客户端，即使随后的资金投递失败，也由恢复任务补完，不要求客户端重试。Midjourney 的上传与已完成提交经同一终态流程立即结算，超时规则与其他任务相同。
+Realtime 会话保存累计用量快照；会话无法给出最终计价时，优先按最近一次累计快照结算，再退回冻结估算。异步任务成功但完成用量无法计价时按提交时估算结算；成功结果的 attempt 证据无法验证（解密、回放或金额不符，例如 Go 工具链变化后含时间值的证据）时，任务保持未终结并保存供应商结果，原因码 `billing_evidence_unverifiable`，预留不释放、不退回估算、不再轮询供应商、超时清扫跳过，每轮轮询从保存的结果重试结算；立即结果同样保存为该状态并向客户端返回 503 `task_settlement_blocked`，不交付未结算的结果。明确失败、上游返回任务不存在（404/410）、连续轮询失败达到上限、轮询超时或缺少上游任务 ID 时标记失败并释放。立即返回的终态结果在资金意图落库后即交付给客户端，即使随后的资金投递失败，也由恢复任务补完，不要求客户端重试。Midjourney 的上传与已完成提交经同一终态流程立即结算，超时规则与其他任务相同。
 
 ## 恢复任务
 
@@ -27,7 +27,7 @@ Realtime 会话保存累计用量快照；会话无法给出最终计价时，�
 
 ## 观察与处置
 
-Root 通过 `GET /api/gateway/metrics` 查看 `billing.settlements_total`（`confirmed`、`estimated`、`frozen_estimate` 计数，进程级）和 `billing_recovery`（超时未结束记录数与最早更新时间）。积压持续不降表示恢复失败，原因在服务日志的 `billing fallback remains pending` 或 `billing consumption remains pending`。缓存、日志与统计不能作为余额来源；故障排查可读取事件与状态，不得直接 UPDATE 余额修账，调账使用管理员差额事件。
+Root 通过 `GET /api/gateway/metrics` 查看 `billing.settlements_total`（`confirmed`、`estimated`、`frozen_estimate` 计数，进程级）和 `billing_recovery`：`pending` 与 `oldest_updated_at` 是超过 300 秒未更新的未结束记录数与最早更新时间；`open` 是全部未结束记录数，不看更新时间，包含进行中的请求和已受理但未到终态的异步任务；`task_settlement_blocked` 是因证据无法验证而保存结果、保持预留的异步任务数。积压持续不降表示恢复失败，原因在服务日志的 `billing fallback remains pending` 或 `billing consumption remains pending`。缓存、日志与统计不能作为余额来源；故障排查可读取事件与状态，不得直接 UPDATE 余额修账，调账使用管理员差额事件。
 
 结算计数由资金事务成功后的同一出口更新，普通请求、异步任务、Midjourney 与恢复采用相同规则。重复结算、释放和回滚不增加计数，资金已提交后投递失败仍计一次。计数是进程内观测：进程退出或提交结果不明的边界可能丢失一次观测，不替代持久化资金事件。表达式失败保留固定原因码，服务日志不记录可能包含请求正文或头值的原始异常。
 
@@ -35,4 +35,4 @@ SQL 日志使用事件 ID 唯一键。ClickHouse 先保存写入意图，结果�
 
 ## 运行边界
 
-schema 5 只允许空库安装或版本及 `EvidenceKeyID` 匹配的重复启动，必须保留显式配置的稳定 `CRYPTO_SECRET`。冻结估算与结算意图的重放依赖同一密钥和 Go 工具链；升级 Go 或回退版本前先排空网关并确认 `billing_recovery.pending` 为 0，否则无法重放的记录会停在积压中。启动还会检查旧数据：存在 `reconciliation_required` 等不支持的 `status`、退役的 `pricing_pending` / `pricing_collect`，或 `settled` / `refunded` 的 `consumption_state` 不是 `pending` / `completed` 时拒绝启动，不改资金或记录。须先用原版本完成这些记录再升级；当前版本不提供人工对账，也不把这些状态自动解释为扣款或退款授权。当前受支持的在途记录继续由自动恢复处理。发布与回退遵循[单实例发布契约](../routing/GATEWAY_RELEASE.md)。
+schema 5 只允许空库安装或版本及 `EvidenceKeyID` 匹配的重复启动，必须保留显式配置的稳定 `CRYPTO_SECRET`。冻结估算与结算意图的重放依赖同一密钥和 Go 工具链。镜像在 `/etc/ren2hub/go-version` 记录构建所用的 Go 版本，可用 `docker run --rm --entrypoint cat <镜像> /etc/ren2hub/go-version` 读取。目标镜像与运行镜像的 Go 版本不同的升级或回退，须先停止受理新请求和新任务，等已受理的异步任务全部到终态，再确认 `billing_recovery.open` 为 0；`pending` 只统计超过 300 秒未更新的记录，看不到刚受理的请求和任务，不能作为这一门槛。证据含时间值的在途任务在另一个工具链上无法结算，会停在 `task_settlement_blocked`。启动还会检查旧数据：存在 `reconciliation_required` 等不支持的 `status`、退役的 `pricing_pending` / `pricing_collect`，或 `settled` / `refunded` 的 `consumption_state` 不是 `pending` / `completed` 时拒绝启动，不改资金或记录。须先用原版本完成这些记录再升级；当前版本不提供人工对账，也不把这些状态自动解释为扣款或退款授权。当前受支持的在途记录继续由自动恢复处理。发布与回退遵循[单实例发布契约](../routing/GATEWAY_RELEASE.md)。

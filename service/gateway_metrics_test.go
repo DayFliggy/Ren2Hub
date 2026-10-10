@@ -25,7 +25,7 @@ func TestGatewayMetricsShareRecoveryPredicateAndLatchStateFailure(t *testing.T) 
 	previous := model.DB
 	model.DB = db
 	t.Cleanup(func() { model.DB = previous; sqlDB, _ := db.DB(); assert.NoError(t, sqlDB.Close()) })
-	require.NoError(t, db.AutoMigrate(&model.BillingRecovery{}))
+	require.NoError(t, db.AutoMigrate(&model.BillingRecovery{}, &model.Task{}, &model.Midjourney{}))
 	stale := time.Now().Add(-2 * BillingRecoveryStaleAfter()).Unix()
 	for _, row := range []model.BillingRecovery{
 		{RequestID: "active-stale", Status: model.BillingRecoveryStatusActive, UpdatedAt: stale},
@@ -47,6 +47,8 @@ func TestGatewayMetricsShareRecoveryPredicateAndLatchStateFailure(t *testing.T) 
 	assert.Equal(t, "database", before.RecoveryScope)
 	assert.Equal(t, int64(6), before.Recovery.Pending)
 	assert.Equal(t, stale, before.Recovery.OldestUpdated)
+	// The upgrade gate also sees the live request the stale backlog hides.
+	assert.Equal(t, int64(7), before.Recovery.Open)
 	assert.ElementsMatch(t, []string{billing.SettlementConfirmed, billing.SettlementEstimated, billing.SettlementFrozenEstimate}, slices.Collect(maps.Keys(before.Billing.Settlements)))
 	rows, err := model.ListStaleBillingRecoveries(time.Now().Add(-BillingRecoveryStaleAfter()).Unix(), 100)
 	require.NoError(t, err)

@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
@@ -50,6 +51,14 @@ func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, tot
 		if err != nil || !ready {
 			if err != nil {
 				pollErrors = append(pollErrors, fmt.Errorf("Midjourney submission accounting (row_id=%d): %w", task.Id, err))
+			}
+			continue
+		}
+		if task.SettlementBlock != "" {
+			// The provider result is held; settle it again instead of polling,
+			// and never release it as unfinished.
+			if err := retryBlockedMidjourney(ctx, task); err != nil {
+				pollErrors = append(pollErrors, fmt.Errorf("settlement-blocked Midjourney task (row_id=%d): %w", task.Id, err))
 			}
 			continue
 		}
@@ -236,7 +245,10 @@ func applyMidjourneyTaskUpdate(ctx context.Context, task *model.Midjourney, upda
 	next.Properties, next.Buttons, next.VideoUrls = string(properties), string(buttons), string(videos)
 	if next.Status == "SUCCESS" || next.Status == "FAILURE" {
 		next.Progress = "100%"
-		_, err := service.CompleteMidjourneyBilling(ctx, &next, from)
+		won, err := service.CompleteMidjourneyBilling(ctx, &next, from)
+		if !won && next.Status == "SUCCESS" && model.IsBillingEvidenceUnverifiable(err) {
+			return holdBlockedMidjourney(ctx, task, from, update, err)
+		}
 		return err
 	}
 	// Status guards the provider update while financial and ownership metadata
@@ -247,6 +259,32 @@ func applyMidjourneyTaskUpdate(ctx context.Context, task *model.Midjourney, upda
 			"submit_time": next.SubmitTime, "start_time": next.StartTime, "finish_time": next.FinishTime,
 			"image_url": next.ImageUrl, "video_url": next.VideoUrl, "video_urls": next.VideoUrls,
 			"buttons": next.Buttons, "properties": next.Properties}).Error
+}
+
+// holdBlockedMidjourney keeps a successful provider update whose settlement
+// evidence cannot be verified on the job, with its reservation held, so the
+// next polling pass settles it again instead of releasing it as unfinished.
+func holdBlockedMidjourney(ctx context.Context, task *model.Midjourney, from string, update dto.MidjourneyDto, cause error) error {
+	held, err := common.Marshal(update)
+	if err != nil {
+		return errors.Join(cause, err)
+	}
+	newly, err := model.PersistMidjourneySettlementBlock(ctx, task, from, held)
+	if err != nil {
+		return errors.Join(cause, err)
+	}
+	if newly {
+		logger.LogError(ctx, fmt.Sprintf("Midjourney settlement blocked, result held (row_id=%d, reason=%s): %v", task.Id, model.TaskSettlementBlockedEvidence, cause))
+	}
+	return nil
+}
+
+func retryBlockedMidjourney(ctx context.Context, task *model.Midjourney) error {
+	var update dto.MidjourneyDto
+	if err := common.Unmarshal(task.PrivateData.BlockedResult, &update); err != nil {
+		return fmt.Errorf("held Midjourney result is unreadable: %w", err)
+	}
+	return applyMidjourneyTaskUpdate(ctx, task, update)
 }
 
 func GetAllMidjourney(c *gin.Context) {

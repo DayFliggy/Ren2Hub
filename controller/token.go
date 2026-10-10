@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -374,6 +375,12 @@ func UpdateToken(c *gin.Context) {
 	}
 	present := make(map[string]bool, len(fields))
 	for field := range fields {
+		if known := tokenRequestFieldCase(field); known != "" && known != field {
+			// encoding/json would decode the value case-insensitively while
+			// the presence check is exact, so the setting would be dropped.
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": fmt.Sprintf("unknown field %q; use %q", field, known)})
+			return
+		}
 		present[field] = true
 	}
 	token := request.Token
@@ -398,6 +405,41 @@ func UpdateToken(c *gin.Context) {
 	}
 	common.SetContextKey(c, "token_audit_succeeded", true)
 	writeTokenResponse(c, &token)
+}
+
+// tokenRequestFields are the JSON names a token update decodes, taken from the
+// request type so the list cannot drift from it.
+var tokenRequestFields = jsonFieldNames(reflect.TypeOf(tokenRequest{}))
+
+// tokenRequestFieldCase returns the declared name that matches field ignoring
+// case, or "" for a field the request does not declare.
+func tokenRequestFieldCase(field string) string {
+	for _, name := range tokenRequestFields {
+		if strings.EqualFold(name, field) {
+			return name
+		}
+	}
+	return ""
+}
+
+func jsonFieldNames(t reflect.Type) []string {
+	var names []string
+	for i := range t.NumField() {
+		field := t.Field(i)
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		if field.Anonymous && name == "" && field.Type.Kind() == reflect.Struct {
+			names = append(names, jsonFieldNames(field.Type)...)
+			continue
+		}
+		if !field.IsExported() || name == "-" {
+			continue
+		}
+		if name == "" {
+			name = field.Name
+		}
+		names = append(names, name)
+	}
+	return names
 }
 
 func validTokenConversionPolicy(policy string) bool {

@@ -34,6 +34,8 @@ type Midjourney struct {
 	// The original task table remains the owner of Midjourney jobs. No raw key
 	// is written here; private metadata references the stable credential.
 	PrivateData TaskPrivateData `json:"-" gorm:"type:json"`
+	// SettlementBlock has the same meaning as Task.SettlementBlock.
+	SettlementBlock string `json:"-" gorm:"type:varchar(64);index"`
 }
 
 // TaskQueryParams 用于包含所有搜索条件的结构体，可以根据需求添加更多字段

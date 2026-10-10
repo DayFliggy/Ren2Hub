@@ -55,6 +55,10 @@ func persistTaskCompletionTx(tx *gorm.DB, task *Task, fromStatus TaskStatus, act
 	if current.Status != fromStatus || current.Status == TaskStatusSuccess || current.Status == TaskStatusFailure {
 		return false, nil
 	}
+	// A blocked task holds a successful provider result; no path may release it.
+	if current.SettlementBlock != "" && task.Status == TaskStatusFailure {
+		return false, ErrTaskSettlementBlocked
+	}
 	if current.UserId != task.UserId || current.ChannelId != task.ChannelId || current.Quota != task.Quota || current.Quota < 0 || current.Quota > common.MaxQuota ||
 		current.PrivateData.TokenId != consumption.Log.TokenId || consumption.Log.UserId != current.UserId || consumption.Log.ChannelId != current.ChannelId {
 		return false, ErrBillingRecoveryStateConflict
@@ -70,11 +74,12 @@ func persistTaskCompletionTx(tx *gorm.DB, task *Task, fromStatus TaskStatus, act
 	privateData.CompletionUsage = task.PrivateData.CompletionUsage
 	privateData.BillingContext = task.PrivateData.BillingContext
 	privateData.ResultDiscarded = task.PrivateData.ResultDiscarded
+	privateData.BlockedResult = nil
 	storedData, privateData := taskResultForStorage(task.Data, privateData)
 	result := tx.Model(&current).Where("status = ?", fromStatus).Updates(map[string]any{
 		"status": task.Status, "progress": task.Progress, "start_time": task.StartTime, "finish_time": task.FinishTime,
 		"submit_time": task.SubmitTime, "fail_reason": task.FailReason, "data": storedData,
-		"private_data": privateData, "updated_at": common.GetTimestamp(),
+		"private_data": privateData, "settlement_block": "", "updated_at": common.GetTimestamp(),
 	})
 	if result.Error != nil {
 		return false, result.Error

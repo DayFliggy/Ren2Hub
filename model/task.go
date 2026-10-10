@@ -72,6 +72,9 @@ type Task struct {
 	// 禁止返回给用户，内部可能包含key等隐私信息
 	PrivateData TaskPrivateData `json:"-" gorm:"column:private_data;type:json"`
 	Data        json.RawMessage `json:"data" gorm:"type:json"`
+	// SettlementBlock is empty unless a provider terminal result is held
+	// because its settlement cannot be verified (see task_settlement_block.go).
+	SettlementBlock string `json:"-" gorm:"type:varchar(64);index"`
 }
 
 func (t *Task) SetData(data any) {
@@ -136,6 +139,10 @@ type TaskPrivateData struct {
 	PollFailures        int                      `json:"poll_failures,omitempty"`
 	ResultDiscarded     bool                     `json:"result_discarded,omitempty"`
 	CompletionUsage     *TaskCompletionUsage     `json:"completion_usage,omitempty"`
+	// BlockedResult is the provider terminal result held while settlement is
+	// blocked, in the owning table's shape (TaskBlockedResult for tasks, the
+	// provider update for Midjourney). It is cleared when the task settles.
+	BlockedResult json.RawMessage `json:"blocked_result,omitempty"`
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
 	BillingSource  string              `json:"billing_source,omitempty"`  // 新任务使用 wallet；保留历史来源供结算时校验
 	TokenId        int                 `json:"token_id,omitempty"`        // 令牌 ID，用于令牌额度退款
@@ -449,9 +456,12 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 // Status alone decides whether a task is terminal. A provider may report
 // "100%" while the job is still running; filtering on progress would stop
 // polling and the timeout sweep from ever releasing that reservation.
+// A settlement-blocked task holds a provider result, so it is filtered here
+// rather than skipped later, where it could fill every page of the sweep.
 func GetTimedOutUnfinishedTasks(cutoffUnix int64, limit int) []*Task {
 	var tasks []*Task
 	err := DB.Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).
+		Where(settlementNotBlocked).
 		Where("submit_time < ?", cutoffUnix).
 		Order("submit_time").
 		Limit(limit).
@@ -465,7 +475,9 @@ func GetTimedOutUnfinishedTasks(cutoffUnix int64, limit int) []*Task {
 func GetAllUnFinishSyncTasks(limit int) []*Task {
 	var tasks []*Task
 	var err error
-	err = DB.Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).Limit(limit).Order("id").Find(&tasks).Error
+	// Settlement-blocked tasks already hold their provider result and are
+	// retried from it (GetSettlementBlockedTasks), never polled again.
+	err = DB.Where("status NOT IN ?", []string{TaskStatusFailure, TaskStatusSuccess}).Where(settlementNotBlocked).Limit(limit).Order("id").Find(&tasks).Error
 	if err != nil {
 		return nil
 	}

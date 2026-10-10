@@ -77,6 +77,9 @@ func ReadGatewayMetrics(ctx context.Context) (GatewayMetricsSnapshot, error) {
 	if err != nil {
 		return GatewayMetricsSnapshot{}, err
 	}
+	if backlog.SettlementBlocked, err = model.CountSettlementBlocked(ctx); err != nil {
+		return GatewayMetricsSnapshot{}, err
+	}
 	return GatewayMetricsSnapshot{
 		RouteDecisionEventsDropped: RouteDecisionEventsDropped(),
 		RouteDecisionStorageFailed: RouteDecisionStorageFailures(),

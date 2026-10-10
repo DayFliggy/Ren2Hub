@@ -507,25 +507,19 @@ func TestUnpricedTaskCompletionStillSettlesFrozenEstimate(t *testing.T) {
 }
 
 // Submit facts are trusted only through the attempt estimate's own evidence.
-// Altered facts stop settlement explicitly; the task stays for a later pass
-// rather than settling at an estimate derived from the same altered row.
+// Altered facts stop settlement explicitly: the task holds the result and its
+// reservation instead of settling at an estimate derived from the same row.
 func TestTamperedSubmitFactsStopTaskSettlement(t *testing.T) {
 	quote, submitted := mergedFactsQuote(t)
 	task := acceptedUsageTask(t, quote, submitted, 1500000)
-	var attempt model.BillingAttempt
-	require.NoError(t, model.DB.First(&attempt, "id = ?", task.PrivateData.BillingContext.AttemptID).Error)
-	var estimate billing.Usage
-	require.NoError(t, common.UnmarshalJsonStr(string(attempt.EstimateUsage), &estimate))
-	estimate.EstimatedFacts["seconds"] = "1"
-	tampered, err := common.Marshal(estimate)
-	require.NoError(t, err)
-	require.NoError(t, model.DB.Model(&attempt).Update("estimate_usage", string(tampered)).Error)
+	tamperAttemptEstimate(t, task)
 
-	err = CompleteImmediateTask(context.Background(), task, &relaycommon.TaskInfo{Status: model.TaskStatusSuccess, UsageFacts: map[string]any{"audio": false}})
-	require.ErrorIs(t, err, billing.ErrEvaluationEvidence)
+	err := CompleteImmediateTask(context.Background(), task, &relaycommon.TaskInfo{Status: model.TaskStatusSuccess, UsageFacts: map[string]any{"audio": false}})
+	require.NoError(t, err, "the held result is durable")
 	var persisted model.Task
 	require.NoError(t, model.DB.First(&persisted, task.ID).Error)
 	assert.NotEqual(t, model.TaskStatusSuccess, persisted.Status)
+	assert.Equal(t, model.TaskSettlementBlockedEvidence, persisted.SettlementBlock)
 	var recovery model.BillingRecovery
 	require.NoError(t, model.DB.First(&recovery, "request_id = ?", task.PrivateData.SubmissionRequestID).Error)
 	assert.Equal(t, model.BillingRecoveryStatusActive, recovery.Status)
