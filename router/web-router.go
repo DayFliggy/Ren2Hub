@@ -130,6 +130,10 @@ func SetWebRouter(router *gin.Engine, assets WebAssets) {
 			controller.RelayNotFound(c)
 			return
 		}
+		// The limiter and ServeFrontendFiles read the request path; its
+		// precompression cache is keyed by it, so slash variants of one build
+		// file must reach them as that file's single canonical path.
+		c.Request.URL.Path, c.Request.URL.RawPath = requestPath, ""
 		webRateLimit(c)
 		if c.IsAborted() {
 			return

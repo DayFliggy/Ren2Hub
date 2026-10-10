@@ -3,8 +3,10 @@ package router
 import (
 	"compress/gzip"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 
@@ -231,6 +233,89 @@ func TestVueStaticAssetsAreCompressedOnce(t *testing.T) {
 	body, err := io.ReadAll(image.Body)
 	require.NoError(t, err)
 	assert.Equal(t, "logo", string(body))
+}
+
+// contentReadCountingFS counts how many opened copies of one file have their
+// content read. The precompression cache reads a build file once per cache
+// entry, and every uncached response reads it again.
+type contentReadCountingFS struct {
+	fs.FS
+	name  string
+	reads *atomic.Int64
+}
+
+func (files contentReadCountingFS) Open(name string) (fs.File, error) {
+	file, err := files.FS.Open(name)
+	if err != nil || name != files.name {
+		return file, err
+	}
+	return &contentReadCountingFile{File: file, reads: files.reads}, nil
+}
+
+type contentReadCountingFile struct {
+	fs.File
+	reads *atomic.Int64
+	read  bool
+}
+
+func (file *contentReadCountingFile) Read(buffer []byte) (int, error) {
+	if !file.read {
+		file.read = true
+		file.reads.Add(1)
+	}
+	return file.File.Read(buffer)
+}
+
+func (file *contentReadCountingFile) Seek(offset int64, whence int) (int64, error) {
+	return file.File.(io.Seeker).Seek(offset, whence)
+}
+
+func serveWebRawPath(engine *gin.Engine, path string, acceptEncoding string) *httptest.ResponseRecorder {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.URL.Path = path
+	if acceptEncoding != "" {
+		request.Header.Set("Accept-Encoding", acceptEncoding)
+	}
+	engine.ServeHTTP(recorder, request)
+	return recorder
+}
+
+// Slash variants of one build file reach the precompressed cache as that
+// file's canonical path, so they share its single entry instead of each adding
+// one keyed by the raw path, which let unauthenticated requests grow memory
+// without bound.
+func TestVueStaticAssetSlashVariantsShareOneCacheEntry(t *testing.T) {
+	assets := testWebAssets("vue-index")
+	reads := &atomic.Int64{}
+	assets.BuildFS = contentReadCountingFS{FS: assets.BuildFS, name: "frontend/embed-dist/assets/app-AbCd1234.js", reads: reads}
+	engine := newWebTestRouter(t, assets, "", true)
+	for _, path := range []string{
+		"/assets/app-AbCd1234.js", "//assets/app-AbCd1234.js", "/assets//app-AbCd1234.js",
+		"/assets///app-AbCd1234.js", "/assets/app-AbCd1234.js/", "/assets/app-AbCd1234.js//",
+	} {
+		response := serveWebRawPath(engine, path, "gzip").Result()
+		require.Equal(t, http.StatusOK, response.StatusCode, path)
+		require.Equal(t, "gzip", response.Header.Get("Content-Encoding"), path)
+		assert.Equal(t, "public, max-age=31536000, immutable", response.Header.Get("Cache-Control"), path)
+		reader, err := gzip.NewReader(response.Body)
+		require.NoError(t, err, path)
+		body, err := io.ReadAll(reader)
+		require.NoError(t, err, path)
+		assert.Equal(t, "hashed-asset", string(body), path)
+	}
+	assert.Equal(t, int64(1), reads.Load(), "every variant is served from the one cache entry")
+
+	for _, path := range []string{"/assets/./app-AbCd1234.js", "/assets/../assets/app-AbCd1234.js", "//api/status", "/assets//missing.js"} {
+		recorder := serveWebRawPath(engine, path, "")
+		assert.Equal(t, http.StatusNotFound, recorder.Code, path)
+		assert.NotContains(t, recorder.Body.String(), "vue-index", path)
+	}
+	for _, path := range []string{"//console/keys", "/console//keys"} {
+		recorder := serveWebRawPath(engine, path, "")
+		assert.Equal(t, http.StatusOK, recorder.Code, path)
+		assert.Equal(t, "vue-index", recorder.Body.String(), path)
+	}
 }
 
 // Existing build files count against the separate static limiter when it is
