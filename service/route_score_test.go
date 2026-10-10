@@ -269,3 +269,27 @@ func TestOrderAutoRouteCandidatesFollowsNewAPIWeightSemantics(t *testing.T) {
 		})
 	}
 }
+
+// A zero-weight channel is a backup: load on its weighted peer does not hand
+// it first attempts, and neither does soft affinity. Only a worse error band
+// on the weighted peer does, because health is compared first.
+func TestOrderAutoRouteCandidatesKeepsZeroWeightBehindLoadedWeightedPeer(t *testing.T) {
+	for _, load := range []float64{0.05, 0.5, 0.95} {
+		candidates := []RouteScoreCandidate{
+			{ChannelID: 1, Priority: 10, Weight: 100, HealthUsable: true, LoadRatio: load},
+			{ChannelID: 2, Priority: 10, Weight: 0, HealthUsable: true, Sticky: true},
+		}
+		for request := range 500 {
+			ordered := OrderAutoRouteCandidates(candidates, fmt.Sprintf("loaded-%d", request))
+			require.Len(t, ordered, 2)
+			require.Equal(t, 1, ordered[0].Candidate.ChannelID, "load %.2f request %d", load, request)
+			require.Equal(t, 2, ordered[1].Candidate.ChannelID, "the zero-weight channel stays a failover candidate")
+		}
+	}
+
+	ordered := OrderAutoRouteCandidates([]RouteScoreCandidate{
+		{ChannelID: 1, Priority: 10, Weight: 100, HealthUsable: true, ErrorBand: RouteRankBandCritical, ErrorBandKnown: true},
+		{ChannelID: 2, Priority: 10, Weight: 0, HealthUsable: true},
+	}, "degraded-weighted-peer")
+	assert.Equal(t, 2, ordered[0].Candidate.ChannelID)
+}

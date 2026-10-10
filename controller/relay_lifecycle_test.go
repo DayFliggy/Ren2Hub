@@ -117,10 +117,13 @@ func TestRouteQueueSelectionKeepsPolicyBoundariesAndOneQueue(t *testing.T) {
 		dynamic, balance       bool
 		priority               int64
 		bucket, position, want int
+		firstWeight, weight    int
 	}{
 		{name: "auto same layer", source: service.RouteSourceAutoLab, dynamic: true, want: 1},
 		{name: "auto priority boundary", source: service.RouteSourceAutoLab, dynamic: true, priority: 1, want: 0},
 		{name: "auto bucket boundary", source: service.RouteSourceAutoLab, dynamic: true, bucket: 1, want: 0},
+		{name: "auto zero weight stays behind a weighted peer", source: service.RouteSourceAutoLab, dynamic: true, firstWeight: 100, want: 0},
+		{name: "auto weighted peers share a layer", source: service.RouteSourceAutoLab, dynamic: true, firstWeight: 100, weight: 1, want: 1},
 		{name: "auto static", source: service.RouteSourceAutoLab, want: 0},
 		{name: "manual balanced", source: service.RouteSourceManual, balance: true, want: 1},
 		{name: "manual position", source: service.RouteSourceManual, balance: true, position: 1, want: 0},
@@ -132,8 +135,8 @@ func TestRouteQueueSelectionKeepsPolicyBoundariesAndOneQueue(t *testing.T) {
 			ctx := service.WithGatewayAdmissionContext(context.Background(), policy, service.NewGatewayWaitBudget(time.Second))
 			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(ctx)
 			c.Set("route_live_selection", service.LiveRouteSelection{Source: test.source, ManualLoadBalance: test.balance, Decision: service.RouteDecision{DynamicScoreApplied: test.dynamic}, Attempts: []service.RouteDecisionCandidate{
-				{ChannelID: 7701, RequestModel: "test", FilterReason: "capacity_exhausted", Score: &service.RouteScoreBreakdown{}},
-				{ChannelID: 7702, RequestModel: "test", FilterReason: "capacity_exhausted", Priority: test.priority, Position: test.position, Score: &service.RouteScoreBreakdown{LoadBucket: test.bucket}},
+				{ChannelID: 7701, RequestModel: "test", FilterReason: "capacity_exhausted", Score: &service.RouteScoreBreakdown{EffectiveWeight: test.firstWeight}},
+				{ChannelID: 7702, RequestModel: "test", FilterReason: "capacity_exhausted", Priority: test.priority, Position: test.position, Score: &service.RouteScoreBreakdown{LoadBucket: test.bucket, EffectiveWeight: test.weight}},
 			}})
 			index, selected := queueBusyLiveRouteCandidate(c)
 			require.True(t, selected)
