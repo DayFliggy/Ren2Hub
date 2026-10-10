@@ -268,42 +268,71 @@ func frozenTaskCompletionQuota(task *model.Task) (common.Quota, error) {
 	return charge.FinalQuota, nil
 }
 
+// settleTaskResult prices a provider terminal result already applied to task
+// and commits it with its accounting intent. When the attempt's billing
+// evidence cannot be verified, the result is held on the still non-terminal
+// task instead: the reservation stays held and neither the frozen estimate nor
+// the timeout sweep ends the task.
+func settleTaskResult(ctx context.Context, task *model.Task, from model.TaskStatus, result *relaycommon.TaskInfo) error {
+	quota, reason, clamp, err := taskCompletionQuota(nil, task, result)
+	won := false
+	if err == nil {
+		won, err = completeTaskBilling(ctx, task, from, quota, reason, clamp)
+	}
+	if won || task.Status != model.TaskStatusSuccess || !model.IsBillingEvidenceUnverifiable(err) {
+		return err
+	}
+	newly, holdErr := model.PersistTaskSettlementBlock(ctx, task, from, heldTaskResult(task))
+	if holdErr != nil {
+		return errors.Join(err, holdErr)
+	}
+	if newly {
+		logger.LogError(ctx, fmt.Sprintf("task settlement blocked, result held (task_id=%s, reason=%s): %v", task.TaskID, model.TaskSettlementBlockedEvidence, err))
+	}
+	return nil
+}
+
+func heldTaskResult(task *model.Task) model.TaskBlockedResult {
+	return model.TaskBlockedResult{Status: task.Status, Progress: task.Progress, FailReason: task.FailReason,
+		FinishTime: task.FinishTime, ResultURL: task.PrivateData.ResultURL, Data: task.Data}
+}
+
 // CompleteImmediateTask uses exactly the same durable terminal accounting as
-// polling, including the submission-estimate fallback.
+// polling, including the submission-estimate fallback and the blocked hold.
 func CompleteImmediateTask(ctx context.Context, task *model.Task, result *relaycommon.TaskInfo) error {
 	from := task.Status
 	if err := applyImmediateTaskResult(task, result); err != nil {
 		return err
 	}
-	quota, reason, clamp, err := taskCompletionQuota(nil, task, result)
-	if err != nil {
-		return err
-	}
-	_, err = completeTaskBilling(ctx, task, from, quota, reason, clamp)
-	return err
+	return settleTaskResult(ctx, task, from, result)
 }
 
 // FinalizeImmediateTaskSubmission atomically saves the accepted terminal job,
 // its completion usage and the verified accounting intent. The bool reports
-// durable ownership even when delivery subsequently fails.
+// durable ownership even when delivery subsequently fails. A result whose
+// settlement is blocked is saved as an accepted task holding it and reported
+// as model.ErrTaskSettlementBlocked; it must not be delivered inline.
 func FinalizeImmediateTaskSubmission(ctx context.Context, c *gin.Context, info *relaycommon.RelayInfo, task *model.Task, result *relaycommon.TaskInfo) (bool, error) {
 	submission, err := prepareTaskSubmission(c, info, task)
 	if err != nil {
 		return false, err
 	}
-	from := task.Status
+	prior := *task
 	if err := applyImmediateTaskResult(task, result); err != nil {
 		return false, err
 	}
 	quota, reason, clamp, err := taskCompletionQuota(nil, task, result)
-	if err != nil {
-		return false, err
+	committed := false
+	if err == nil {
+		var completion model.BillingConsumption
+		completion, err = taskCompletionConsumption(task, quota, reason, clamp)
+		if err == nil {
+			committed, err = model.PersistImmediateTask(ctx, task, prior.Status, quota, submission, completion)
+		}
 	}
-	completion, err := taskCompletionConsumption(task, quota, reason, clamp)
-	if err != nil {
-		return false, err
+	if !committed && task.Status == model.TaskStatusSuccess && model.IsBillingEvidenceUnverifiable(err) {
+		return holdBlockedImmediateTask(ctx, info, task, prior, submission, err)
 	}
-	committed, err := model.PersistImmediateTask(ctx, task, from, quota, submission, completion)
 	if err != nil || !committed {
 		return false, err
 	}
@@ -311,6 +340,25 @@ func FinalizeImmediateTaskSubmission(ctx context.Context, c *gin.Context, info *
 		session.stopRecoveryHeartbeat()
 	}
 	return true, deliverTaskCompletion(ctx, task, quota)
+}
+
+// holdBlockedImmediateTask saves an immediate result whose settlement is
+// blocked as an accepted task in its pre-result state that holds the result.
+// Nothing was delivered inline, so a route that discards results after inline
+// delivery keeps this one for retrieval once settlement succeeds.
+func holdBlockedImmediateTask(ctx context.Context, info *relaycommon.RelayInfo, task *model.Task, prior model.Task, submission model.BillingConsumption, cause error) (bool, error) {
+	held := heldTaskResult(task)
+	task.Status, task.Progress, task.FinishTime, task.FailReason = prior.Status, prior.Progress, prior.FinishTime, prior.FailReason
+	task.Data, task.PrivateData.ResultURL, task.PrivateData.ResultDiscarded = nil, "", false
+	task.PrivateData.BillingContext.Usage, task.PrivateData.BillingContext.Charge = info.PriceData.Usage, nil
+	if err := model.PersistBlockedImmediateTask(ctx, task, submission, held); err != nil {
+		return false, errors.Join(cause, err)
+	}
+	if session, ok := info.Billing.(*BillingSession); ok {
+		session.stopRecoveryHeartbeat()
+	}
+	logger.LogError(ctx, fmt.Sprintf("task settlement blocked, result held (task_id=%s, reason=%s): %v", task.TaskID, model.TaskSettlementBlockedEvidence, cause))
+	return true, model.ErrTaskSettlementBlocked
 }
 
 // ApplyRunningImmediateResult stores the provider state of an immediate

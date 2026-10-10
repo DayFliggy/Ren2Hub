@@ -41,12 +41,17 @@ func PersistMidjourneyCompletion(ctx context.Context, task *Midjourney, fromStat
 		if current.PrivateData.SubmissionRequestID != task.PrivateData.SubmissionRequestID {
 			return ErrBillingRecoveryStateConflict
 		}
+		// A blocked job holds a successful provider result; no path may release it.
+		if current.SettlementBlock != "" && task.Status == "FAILURE" {
+			return ErrTaskSettlementBlocked
+		}
 		if current.UserId != task.UserId || current.ChannelId != task.ChannelId || current.MjId != task.MjId ||
 			current.Quota != task.Quota || current.Quota < 0 || current.Quota > common.MaxQuota ||
 			consumption.Log.UserId != current.UserId || consumption.Log.ChannelId != current.GetBillingChannelId() {
 			return ErrBillingRecoveryStateConflict
 		}
 		privateData := current.PrivateData
+		privateData.BlockedResult = nil
 		actualQuota := common.Quota(0)
 		if task.Status == "SUCCESS" {
 			if consumption.Charge == nil || consumption.Usage == nil {
@@ -72,7 +77,7 @@ func PersistMidjourneyCompletion(ctx context.Context, task *Midjourney, fromStat
 			"finish_time": task.FinishTime, "submit_time": task.SubmitTime, "fail_reason": task.FailReason,
 			"prompt_en": task.PromptEn, "description": task.Description, "state": task.State,
 			"image_url": task.ImageUrl, "video_url": task.VideoUrl, "video_urls": task.VideoUrls,
-			"buttons": task.Buttons, "properties": task.Properties, "private_data": privateData,
+			"buttons": task.Buttons, "properties": task.Properties, "private_data": privateData, "settlement_block": "",
 		})
 		if result.Error != nil {
 			return result.Error

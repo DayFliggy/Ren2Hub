@@ -321,6 +321,10 @@ func staleBillingRecoveries(db *gorm.DB, cutoff int64) *gorm.DB {
 type BillingRecoveryBacklog struct {
 	Pending       int64 `json:"pending"`
 	OldestUpdated int64 `json:"oldest_updated_at"`
+	// SettlementBlocked counts async jobs holding a provider result whose
+	// settlement evidence cannot be verified; each keeps its reservation.
+	// ReadGatewayMetrics fills it from the task tables (CountSettlementBlocked).
+	SettlementBlocked int64 `json:"task_settlement_blocked"`
 }
 
 func ReadBillingRecoveryBacklog(ctx context.Context, cutoff int64) (BillingRecoveryBacklog, error) {

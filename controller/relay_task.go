@@ -292,6 +292,13 @@ func executeTaskSubmission(c *gin.Context, relayInfo *relaycommon.RelayInfo) (*t
 			persistErr = service.FinalizeTaskSubmission(c, relayInfo, task)
 			durable = persistErr == nil
 		}
+		if durable && errors.Is(persistErr, model.ErrTaskSettlementBlocked) {
+			// The job is saved with its reservation held, but its result is
+			// delivered only after settlement; the task ID retrieves it then.
+			taskErr = service.TaskErrorWrapperLocal(fmt.Errorf("task %s completed, but its billing cannot be settled yet; retrieve the result with this task ID later and do not resubmit", task.TaskID), "task_settlement_blocked", http.StatusServiceUnavailable)
+			taskErr.NoRetry = true
+			return nil, taskErr
+		}
 		if durable {
 			// The job and its accounting intent are committed; a pending
 			// delivery is finished by billing recovery, so the client still

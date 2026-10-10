@@ -25,7 +25,7 @@ func TestGatewayMetricsShareRecoveryPredicateAndLatchStateFailure(t *testing.T) 
 	previous := model.DB
 	model.DB = db
 	t.Cleanup(func() { model.DB = previous; sqlDB, _ := db.DB(); assert.NoError(t, sqlDB.Close()) })
-	require.NoError(t, db.AutoMigrate(&model.BillingRecovery{}))
+	require.NoError(t, db.AutoMigrate(&model.BillingRecovery{}, &model.Task{}, &model.Midjourney{}))
 	stale := time.Now().Add(-2 * BillingRecoveryStaleAfter()).Unix()
 	for _, row := range []model.BillingRecovery{
 		{RequestID: "active-stale", Status: model.BillingRecoveryStatusActive, UpdatedAt: stale},

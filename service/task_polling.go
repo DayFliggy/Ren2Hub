@@ -91,6 +91,38 @@ func failTaskWithoutResult(ctx context.Context, task *model.Task, reason string)
 	return err
 }
 
+// retrySettlementBlockedTasks settles held provider results again without
+// polling the provider. A task whose evidence still cannot be verified stays
+// blocked and moves to the back of the retry order.
+func retrySettlementBlockedTasks(ctx context.Context) {
+	tasks, err := model.GetSettlementBlockedTasks(ctx, constant.TaskQueryLimit)
+	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("settlement-blocked task lookup failed: %v", err))
+		return
+	}
+	for _, task := range tasks {
+		if ctx.Err() != nil {
+			return
+		}
+		var held model.TaskBlockedResult
+		if err := common.Unmarshal(task.PrivateData.BlockedResult, &held); err != nil {
+			logger.LogError(ctx, fmt.Sprintf("held task result is unreadable (task_id=%s): %v", task.TaskID, err))
+			continue
+		}
+		from := task.Status
+		task.Status, task.Progress, task.FailReason, task.FinishTime = held.Status, held.Progress, held.FailReason, held.FinishTime
+		task.PrivateData.ResultURL, task.Data = held.ResultURL, held.Data
+		var result *relaycommon.TaskInfo
+		if usage := task.PrivateData.CompletionUsage; usage != nil {
+			result = &relaycommon.TaskInfo{Status: string(held.Status), Url: held.ResultURL, CompletionTokens: usage.CompletionTokens,
+				TotalTokens: usage.TotalTokens, UsageFacts: usage.Facts, UsageError: usage.Error}
+		}
+		if err := settleTaskResult(ctx, task, from, result); err != nil {
+			logger.LogError(ctx, fmt.Sprintf("settlement-blocked task retry failed (task_id=%s): %v", task.TaskID, err))
+		}
+	}
+}
+
 // TaskPollSummary is the result recorded on an async_task_poll system task row,
 // summarizing one polling pass.
 type TaskPollSummary struct {
@@ -118,6 +150,7 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 		logger.LogError(ctx, fmt.Sprintf("task result metrics recovery failed: %v", err))
 	}
 	sweepTimedOutTasks(ctx)
+	retrySettlementBlockedTasks(ctx)
 	allTasks := model.GetAllUnFinishSyncTasks(constant.TaskQueryLimit)
 	summary.UnfinishedTasks = len(allTasks)
 	platformTask := make(map[constant.TaskPlatform][]*model.Task)
@@ -352,18 +385,16 @@ func pollSunoCredentialGroup(ctx context.Context, adaptor TaskPollingAdaptor, ch
 		}
 		task.Data = responseItem.Data
 
+		if task.Status == model.TaskStatusSuccess {
+			if err := settleTaskResult(ctx, task, prevStatus, nil); err != nil {
+				logger.LogError(ctx, fmt.Sprintf("Suno task %s billing remains pending: %v", task.TaskID, err))
+			}
+			continue
+		}
 		var won bool
 		var err error
-		if task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure {
-			var actualQuota common.Quota
-			if !isFailure {
-				actualQuota, _, _, err = taskCompletionQuota(nil, task, nil)
-				if err != nil {
-					logger.LogError(ctx, fmt.Sprintf("Suno task %s billing remains pending: %v", task.TaskID, err))
-					continue
-				}
-			}
-			won, err = completeTaskBilling(ctx, task, prevStatus, actualQuota, task.FailReason)
+		if task.Status == model.TaskStatusFailure {
+			won, err = completeTaskBilling(ctx, task, prevStatus, 0, task.FailReason)
 		} else {
 			won, err = task.UpdateWithStatus(prevStatus)
 		}
@@ -676,12 +707,7 @@ func applyTaskPollResult(ctx context.Context, adaptor TaskPollingAdaptor, task *
 			task.FinishTime = taskResult.FinishTime
 		}
 		task.PrivateData.CompletionUsage = &model.TaskCompletionUsage{CompletionTokens: taskResult.CompletionTokens, TotalTokens: taskResult.TotalTokens, Facts: taskResult.UsageFacts, Error: taskResult.UsageError}
-		quota, reason, clamp, err := taskCompletionQuota(adaptor, task, taskResult)
-		if err != nil {
-			return err
-		}
-		_, err = completeTaskBilling(ctx, task, snap.Status, quota, reason, clamp)
-		return err
+		return settleTaskResult(ctx, task, snap.Status, taskResult)
 	} else if !snap.Equal(task.Snapshot()) {
 		if _, err := task.UpdateWithStatus(snap.Status); err != nil {
 			logger.LogError(ctx, fmt.Sprintf("Failed to update task %s: %s", task.TaskID, err.Error()))
