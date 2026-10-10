@@ -76,7 +76,12 @@ func attachOpenAIChatRequest(request any, set Set) (any, []types.ConversionDiagn
 				diagnostics = append(diagnostics, geminiNativeWebSearchDiagnostics(index, definition, types.RelayFormatOpenAI)...)
 			}
 			if target.WebSearchOptions != nil {
-				return nil, diagnostics, fmt.Errorf("tools[%d]: multiple hosted web-search definitions cannot be represented by Chat Completions", index)
+				diagnostics = append(diagnostics, semanticLoss(
+					fmt.Sprintf("tools[%d]", index),
+					"duplicate_hosted_web_search",
+					"Chat Completions carries one hosted web search; this definition was dropped",
+				))
+				continue
 			}
 			options := &dto.WebSearchOptions{}
 			if definition.WebSearch != nil {

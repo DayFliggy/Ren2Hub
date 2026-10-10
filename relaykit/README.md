@@ -39,7 +39,7 @@ RelayKit 是从 [new-api](https://github.com/QuantumNous/new-api) 中拆分出�
 | 工具文档与来源 | Claude 工具文档直转 Responses 保留 URL `file_url` 或内联 `file_data`，转 Chat／Gemini 拒绝；Responses 工具文档可直转 Gemini 内联数据；工具媒体均检查类型、来源和目标能力，包含未知块的混合结果不能退化为文本；除 Responses 直转 Gemini 按上行由策略决定外，`allow` 不能绕过 |
 | 无工具时的工具控制 | 目标请求没有函数工具时不发送 `tool_choice`／`parallel_tool_calls`，给 warning `tool_choice_without_tools`；strict 拒绝 |
 | 引用 | 保留可表达的 URL、标题、范围和顺序；Claude 加密引用／搜索结果需原生路径。普通 URL 注释不能凭生成答案补造来源摘录或加密引用 |
-| 托管工具 | 保留可表达的搜索和 MCP 结构；Chat 内部执行轨迹省略会产生诊断，strict 拒绝；不能把托管工具伪造成客户端函数 |
+| 托管工具 | 保留可表达的搜索和 MCP 结构；Chat 内部执行轨迹省略会产生诊断，strict 拒绝；转 Chat 时多出的托管搜索定义给 error 诊断 `duplicate_hosted_web_search`，allow 只保留第一个；不能把托管工具伪造成客户端函数 |
 | Claude 消息级配置 | 原生保留 `messages[].output_config`；跨协议 safe/strict 拒绝，allow 返回 `claude_message_output_config_not_portable`，不近似映射成全局 effort |
 | 多候选 | Chat／Gemini 逐候选判断终态；不能把多份答案合并为 Responses／Claude 单份答案 |
 | 暂停与未知终态 | 原生保留；跨协议不能表达时失败，不伪造完成、不自动续跑 |
