@@ -294,6 +294,21 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 	current, toolDiagnostics, err := toolconv.AttachRequest(target, current, tools, convmeta.OptionsOf(info))
 	diagnostics := append(plan.Diagnostics, diagnosticCollector.Diagnostics()...)
 	diagnostics = append(diagnostics, toolDiagnostics...)
+	policy := convmeta.OptionsOf(info).EffectiveConversionPolicy()
+	if claudeRequest, ok := current.(*dto.ClaudeRequest); ok && policy == types.ConversionLossPolicyStrict &&
+		from != types.RelayFormatClaude && claudeRequest.Thinking != nil && claudeRequest.Thinking.Type == "enabled" {
+		// Manual extended thinking always returns signed thinking blocks, and
+		// the response guard drops those signatures as provider_state_dropped.
+		// Strict would reject that response only after the upstream billed it,
+		// so reject the request before send. Safe and allow keep reporting the
+		// loss from the response when signatures actually arrive.
+		diagnostics = append(diagnostics, types.ConversionDiagnostic{
+			Code:     "provider_state_dropped",
+			Path:     "thinking",
+			Message:  "manual extended thinking returns Claude reasoning signatures that cannot cross protocols",
+			Severity: types.ConversionDiagnosticWarning,
+		})
+	}
 	for i := range diagnostics {
 		if diagnostics[i].From == "" {
 			diagnostics[i].From = from
@@ -303,7 +318,7 @@ func executeRequestSteps(c context.Context, info convmeta.Meta, from types.Relay
 		}
 	}
 	if err == nil {
-		err = types.RejectConversionLoss(convmeta.OptionsOf(info).EffectiveConversionPolicy(), diagnostics)
+		err = types.RejectConversionLoss(policy, diagnostics)
 	}
 	if err != nil {
 		return &RequestResult{

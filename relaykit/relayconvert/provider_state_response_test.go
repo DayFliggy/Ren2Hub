@@ -2,6 +2,7 @@ package relayconvert
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -216,5 +217,55 @@ func TestCrossProtocolResponseDropsRedactedThinking(t *testing.T) {
 				assert.Equal(t, 1, countDiagnostics(state.Diagnostics(), "provider_state_dropped"))
 			})
 		}
+	}
+}
+
+// Manual extended thinking always returns signed thinking blocks, which a
+// cross-protocol response must drop. Strict rejects that request before send
+// rather than after the upstream has billed the response. Adaptive thinking,
+// native Claude requests and the safe and allow policies still send it.
+func TestStrictRejectsCrossProtocolManualThinkingBeforeSend(t *testing.T) {
+	const (
+		chatBody      = `{"model":"%s","max_tokens":4096,"messages":[{"role":"user","content":"hello"}],"reasoning_effort":"high"}`
+		responsesBody = `{"model":"%s","max_output_tokens":4096,"input":"hello","reasoning":{"effort":"high"}}`
+		claudeBody    = `{"model":"%s","max_tokens":4096,"messages":[{"role":"user","content":"hello"}],"thinking":{"type":"enabled","budget_tokens":2048}}`
+		manualModel   = "claude-3-7-sonnet-20250219"
+	)
+	cases := []struct {
+		name     string
+		request  any
+		body     string
+		model    string
+		policy   types.ConversionLossPolicy
+		thinking string
+		rejected bool
+	}{
+		{"chat manual strict", &dto.GeneralOpenAIRequest{}, chatBody, manualModel, types.ConversionLossPolicyStrict, "enabled", true},
+		{"responses manual strict", &dto.OpenAIResponsesRequest{}, responsesBody, manualModel, types.ConversionLossPolicyStrict, "enabled", true},
+		{"chat adaptive strict", &dto.GeneralOpenAIRequest{}, chatBody, "claude-opus-5-5", types.ConversionLossPolicyStrict, "adaptive", false},
+		{"chat manual safe", &dto.GeneralOpenAIRequest{}, chatBody, manualModel, types.ConversionLossPolicySafe, "enabled", false},
+		{"chat manual allow", &dto.GeneralOpenAIRequest{}, chatBody, manualModel, types.ConversionLossPolicyAllow, "enabled", false},
+		{"claude manual strict", &dto.ClaudeRequest{}, claudeBody, manualModel, types.ConversionLossPolicyStrict, "enabled", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, kitutil.Unmarshal([]byte(fmt.Sprintf(tc.body, tc.model)), tc.request))
+			info := &convmeta.Values{Options: &convmeta.Options{ConversionPolicy: tc.policy}, UpstreamModelName: tc.model, ChannelMetaAttached: true}
+			result, err := ConvertRequest(context.Background(), info, types.RelayFormatClaude, tc.request)
+			if tc.rejected {
+				var loss *types.ConversionLossError
+				require.ErrorAs(t, err, &loss)
+				require.Len(t, loss.Diagnostics, 1)
+				assert.Equal(t, "provider_state_dropped", loss.Diagnostics[0].Code)
+				assert.Equal(t, "thinking", loss.Diagnostics[0].Path)
+				return
+			}
+			require.NoError(t, err)
+			claudeRequest, ok := result.Value.(*dto.ClaudeRequest)
+			require.True(t, ok)
+			require.NotNil(t, claudeRequest.Thinking)
+			assert.Equal(t, tc.thinking, claudeRequest.Thinking.Type)
+			assert.Zero(t, countDiagnostics(result.Diagnostics, "provider_state_dropped"))
+		})
 	}
 }
