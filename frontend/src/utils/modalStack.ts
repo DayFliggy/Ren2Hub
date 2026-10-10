@@ -22,3 +22,28 @@ export function closeModalDialog(dialog: symbol): void {
 export function isTopmostModalDialog(dialog: symbol): boolean {
   return openDialogs.at(-1) === dialog
 }
+
+/**
+ * Body scroll lock shared by every overlay. A per-overlay snapshot restores
+ * "hidden" when overlays close out of order and freezes the page, so only the
+ * first holder snapshots the overflow and only the last release restores it.
+ * Each holder releases only a lock it took, once.
+ */
+const scrollLockHolders = new Set<symbol>()
+let scrollLockOverflow = ''
+
+export function lockBodyScroll(holder: symbol): void {
+  if (scrollLockHolders.has(holder)) return
+  if (scrollLockHolders.size === 0) {
+    scrollLockOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+  }
+  scrollLockHolders.add(holder)
+}
+
+export function unlockBodyScroll(holder: symbol): void {
+  if (!scrollLockHolders.delete(holder)) return
+  if (scrollLockHolders.size === 0) {
+    document.body.style.overflow = scrollLockOverflow
+  }
+}

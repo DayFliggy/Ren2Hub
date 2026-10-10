@@ -5,7 +5,9 @@ import { useI18n } from 'vue-i18n'
 import {
   closeModalDialog,
   isTopmostModalDialog,
+  lockBodyScroll,
   openModalDialog,
+  unlockBodyScroll,
 } from '@/utils/modalStack'
 import { safeImageUrl } from '@/utils/safeUrl'
 
@@ -16,7 +18,6 @@ const stackEntry = Symbol('TicketImageLightbox')
 const closeButton = ref<HTMLButtonElement | null>(null)
 const safeUrl = computed(() => safeImageUrl(props.url))
 let previouslyFocused: HTMLElement | null = null
-let previousBodyOverflow = ''
 
 function onKeydown(e: KeyboardEvent) {
   if (!isTopmostModalDialog(stackEntry)) return
@@ -40,8 +41,9 @@ watch(
         return
       }
       previouslyFocused = document.activeElement as HTMLElement | null
-      previousBodyOverflow = document.body.style.overflow
-      document.body.style.overflow = 'hidden'
+      // The shared lock: a modal underneath keeps the page locked after the
+      // image closes, and this lightbox never restores a lock it did not take.
+      lockBodyScroll(stackEntry)
       openModalDialog(stackEntry)
       window.addEventListener('keydown', onKeydown)
       nextTick(() => closeButton.value?.focus())
@@ -49,7 +51,7 @@ watch(
     }
 
     closeModalDialog(stackEntry)
-    document.body.style.overflow = previousBodyOverflow
+    unlockBodyScroll(stackEntry)
     window.removeEventListener('keydown', onKeydown)
     const restoreTarget = previouslyFocused
     previouslyFocused = null
@@ -59,7 +61,7 @@ watch(
 
 onBeforeUnmount(() => {
   closeModalDialog(stackEntry)
-  document.body.style.overflow = previousBodyOverflow
+  unlockBodyScroll(stackEntry)
   window.removeEventListener('keydown', onKeydown)
   if (previouslyFocused?.isConnected) previouslyFocused.focus()
 })
