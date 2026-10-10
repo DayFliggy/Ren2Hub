@@ -22,6 +22,31 @@ const StackedModals = defineComponent({
 })
 
 describe('ConsoleModal', () => {
+  it('leaves an Escape that a menu inside it already handled to that menu', async () => {
+    const wrapper = mount(ConsoleModal, {
+      attachTo: document.body,
+      props: { open: true, title: 'Edit channel' },
+      slots: { default: '<button class="inner">Inner</button>' },
+    })
+    try {
+      await nextTick()
+      const handled = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        cancelable: true,
+      })
+      handled.preventDefault()
+      window.dispatchEvent(handled)
+      expect(wrapper.emitted('close')).toBeUndefined()
+
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+      )
+      expect(wrapper.emitted('close')).toHaveLength(1)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
   it('has an accessible name, traps initial focus and restores the trigger', async () => {
     const trigger = document.createElement('button')
     document.body.append(trigger)

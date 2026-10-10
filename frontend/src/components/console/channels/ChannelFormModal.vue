@@ -226,6 +226,15 @@ function closeTypeDropdown() {
   typeSearch.value = ''
 }
 
+// Escape closes an open type list only; the dialog stays open. With the list
+// closed it reaches the dialog as usual.
+function onTypeDropdownEscape(event: KeyboardEvent) {
+  if (!typeDropdownOpen.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  closeTypeDropdown()
+}
+
 // ── Form state ─────────────────────────────────────────────────────────────
 const form = reactive({
   name: '',
@@ -726,7 +735,7 @@ async function submit() {
                 <span class="text-[var(--status-danger)]">*</span>
               </p>
               <!-- Custom searchable type selector -->
-              <div class="relative" @keydown.esc="closeTypeDropdown">
+              <div class="relative" @keydown.esc="onTypeDropdownEscape">
                 <button
                   type="button"
                   class="flex h-10 w-full items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-solid)] px-3 text-left text-sm focus-ring"
