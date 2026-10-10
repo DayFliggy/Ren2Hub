@@ -34,14 +34,16 @@ function contentParts(other: LogItem['other']): ContentPart[] | null {
 /**
  * Log content in the viewer's language. The backend stores it as
  * other.content_parts (English source keys and params) and keeps the English
- * text in content, which rows written before content_parts still show.
+ * text in content. A row without content_parts, such as a task refund whose
+ * content is the fail reason, translates content only when it is a fixed
+ * gateway sentence; older rows and provider text are shown as written.
  */
 export function logContentText(
   log: Pick<LogItem, 'content' | 'other'>,
   locale: LocaleCode
 ): string {
   const parts = contentParts(log.other)
-  if (!parts) return log.content
+  if (!parts) return translateServerText(locale, log.content)
   return parts
     .map((part) => renderServerMessage(locale, part.key, part.params))
     .join(', ')
