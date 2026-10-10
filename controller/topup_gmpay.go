@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,12 +23,12 @@ import (
 func GmpayNotify(c *gin.Context) {
 	params, err := gmpay.ParseNotification(c.Request)
 	if err != nil {
-		logger.LogWarn(c.Request.Context(), "GMPay 回调解析失败 reason="+service.GmpayFailureCode(err))
+		logger.LogWarn(c.Request.Context(), common.LogText("GMPay callback parse failed reason=%s", service.GmpayFailureCode(err)))
 		c.String(http.StatusBadRequest, "fail")
 		return
 	}
 	if err = service.SettleGmpayNotification(c.Request.Context(), params, c.ClientIP()); err != nil {
-		logger.LogWarn(c.Request.Context(), "GMPay 回调拒绝 reason="+service.GmpayFailureCode(err))
+		logger.LogWarn(c.Request.Context(), common.LogText("GMPay callback rejected reason=%s", service.GmpayFailureCode(err)))
 		c.String(http.StatusOK, "fail")
 		return
 	}
@@ -58,10 +57,10 @@ func createGmpayTopUpOrder(c *gin.Context, userID int, amount int64, method stri
 		if errors.As(err, &business) {
 			return nil, business
 		}
-		logger.LogError(requestContext, "GMPay 创建订单失败")
-		return nil, &service.GmpayError{Code: "INTERNAL_ERROR", Message: "创建支付订单失败"}
+		logger.LogError(requestContext, common.LogText("GMPay failed to create order"))
+		return nil, &service.GmpayError{Code: "INTERNAL_ERROR", Message: common.NewMessage("Failed to create the payment order")}
 	}
-	logger.LogInfo(requestContext, fmt.Sprintf("GMPay 订单创建成功 user_id=%d trade_no=%s", userID, result.Order.TradeNo))
+	logger.LogInfo(requestContext, common.LogText("GMPay order created user_id=%d trade_no=%s", userID, result.Order.TradeNo))
 	return result, nil
 }
 
@@ -70,20 +69,20 @@ func createGmpayTopUpOrder(c *gin.Context, userID int, amount int64, method stri
 func RequestGmpayAmount(c *gin.Context) {
 	var request service.GmpayQuoteRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		paymentError(c, common.NewMessage("Invalid parameters"))
 		return
 	}
 	if strings.TrimSpace(request.PaymentMethod) == "" {
 		config, err := service.LoadGmpayConfig(c.Request.Context())
 		if err != nil || len(config.Assets) == 0 {
-			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "支付方式不可用"})
+			paymentError(c, common.NewMessage("Payment method is unavailable"))
 			return
 		}
 		request.PaymentMethod = service.GmpayMethodID(config.Assets[0])
 	}
 	quote, _, err := service.QuoteGmpay(c.Request.Context(), c.GetInt("id"), request)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": err.Error()})
+		paymentError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": quote.PayAmount})
@@ -102,18 +101,18 @@ type GmpayRequest struct {
 func RequestGmpay(c *gin.Context) {
 	var req GmpayRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		paymentError(c, common.NewMessage("Invalid parameters"))
 		return
 	}
 	order, orderErr := createGmpayTopUpOrder(c, c.GetInt("id"), req.Amount, req.PaymentMethod, req.AmountUnit, req.QuoteFingerprint)
 	if orderErr != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": orderErr.Message})
+		paymentError(c, orderErr)
 		return
 	}
 	paymentURL, err := gmpay.ValidatePaymentURL(order.PaymentURL)
 	if err != nil {
-		logger.LogError(c.Request.Context(), "GMPay 收银台地址无效 trade_no="+order.Order.TradeNo)
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建支付订单失败"})
+		logger.LogError(c.Request.Context(), common.LogText("GMPay cashier URL is invalid trade_no=%s", order.Order.TradeNo))
+		paymentError(c, common.NewMessage("Failed to create the payment order"))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -150,18 +149,18 @@ type saveGmpayRequest struct {
 func ProbeGmpay(c *gin.Context) {
 	var req saveGmpayRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "参数错误"})
+		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
 	address := strings.TrimSpace(req.PayAddress)
 	if address == "" {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "请先填写网关地址"})
+		common.ApiErrorT(c, "Enter the gateway address first")
 		return
 	}
 	assets, err := service.GmpayGatewayIsReachable(c.Request.Context(), address)
 	if err != nil {
-		logger.LogError(c.Request.Context(), "GMPay 网关探测失败 error="+err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无法连接网关或网关未返回可用资产"})
+		logger.LogError(c.Request.Context(), common.LogText("GMPay gateway probe failed error=%s", err.Error()))
+		common.ApiErrorT(c, "Cannot reach the gateway, or the gateway returned no available assets")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "success", "data": gin.H{"supported_assets": assets}})
@@ -173,14 +172,14 @@ func ProbeGmpay(c *gin.Context) {
 func SaveGmpay(c *gin.Context) {
 	var req saveGmpayRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "参数错误"})
+		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
 	if err := service.SaveGmpayConfig(
 		c.Request.Context(), req.PayAddress, req.MerchantID, req.SecretKey, req.Assets, req.Price, req.MinTopUp, req.GroupRatio,
 	); err != nil {
-		logger.LogError(c.Request.Context(), "GMPay 保存配置失败 error="+err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "保存配置失败"})
+		logger.LogError(c.Request.Context(), common.LogText("GMPay failed to save config error=%s", err.Error()))
+		common.ApiErrorT(c, "Failed to save configuration")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "success", "data": gin.H{
@@ -197,18 +196,18 @@ func SaveGmpay(c *gin.Context) {
 func NextGetGmpayTopUpConfig(c *gin.Context) {
 	config, err := service.LoadGmpayConfig(c.Request.Context())
 	if err != nil {
-		common.ApiErrorMsg(c, "读取支付配置失败")
+		common.ApiErrorT(c, "Failed to read the payment configuration")
 		return
 	}
 	settlementEnabled, err := service.GmpaySettlementEnabled(c.Request.Context())
 	if err != nil {
-		common.ApiErrorMsg(c, "读取支付结算配置失败")
+		common.ApiErrorT(c, "Failed to read the payment settlement configuration")
 		return
 	}
 	methods := []map[string]string{}
 	if config.Enabled() {
 		if methods, err = config.GmpayMethods(); err != nil {
-			common.ApiErrorMsg(c, "支付方式配置无效")
+			common.ApiErrorT(c, "Invalid payment method configuration")
 			return
 		}
 	}
@@ -239,13 +238,13 @@ func NextCreateGmpayTopUp(c *gin.Context) {
 	}
 	order, orderErr := createGmpayTopUpOrder(c, c.GetInt("id"), req.Amount, req.PaymentMethod, req.AmountUnit, req.QuoteFingerprint)
 	if orderErr != nil {
-		nextBusinessError(c, errors.New(orderErr.Message), orderErr.Code)
+		nextBusinessError(c, orderErr.Message, orderErr.Code)
 		return
 	}
 	paymentURL, err := gmpay.ValidatePaymentURL(order.PaymentURL)
 	if err != nil {
-		logger.LogError(c.Request.Context(), "GMPay 收银台地址无效 trade_no="+order.Order.TradeNo)
-		nextBusinessError(c, errors.New("创建支付订单失败"), "INTERNAL_ERROR")
+		logger.LogError(c.Request.Context(), common.LogText("GMPay cashier URL is invalid trade_no=%s", order.Order.TradeNo))
+		nextBusinessError(c, common.NewMessage("Failed to create the payment order"), "INTERNAL_ERROR")
 		return
 	}
 	common.ApiSuccess(c, gin.H{
@@ -268,17 +267,17 @@ func NextCreateGmpayTopUp(c *gin.Context) {
 func NextQuoteGmpayTopUp(c *gin.Context) {
 	var request service.GmpayQuoteRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		nextBusinessError(c, errors.New("参数错误"), "VALIDATION_ERROR")
+		nextBusinessError(c, common.NewMessage("Invalid parameters"), "VALIDATION_ERROR")
 		return
 	}
 	quote, _, err := service.QuoteGmpay(c.Request.Context(), c.GetInt("id"), request)
 	if err != nil {
 		var business *service.GmpayError
 		if errors.As(err, &business) {
-			nextBusinessError(c, errors.New(business.Message), business.Code)
+			nextBusinessError(c, business.Message, business.Code)
 			return
 		}
-		nextBusinessError(c, errors.New("支付操作失败，请稍后重试"), "PAYMENT_ERROR")
+		nextBusinessError(c, common.NewMessage("Payment operation failed. Please try again later."), "PAYMENT_ERROR")
 		return
 	}
 	common.ApiSuccess(c, quote)

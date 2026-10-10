@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
-	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"strconv"
@@ -173,7 +173,7 @@ type AmountRequest struct {
 // response while the order workflow stays single-sourced.
 type epayOrderError struct {
 	Code    string // PAYMENT_UNAVAILABLE / VALIDATION_ERROR / INTERNAL_ERROR
-	Message string
+	Message *common.Message
 }
 
 type epayOrderResult struct {
@@ -209,10 +209,10 @@ func createEpayTopUpOrder(c *gin.Context, userID int, amount int64, method strin
 		if errors.As(err, &business) {
 			return nil, &epayOrderError{Code: business.Code, Message: business.Message}
 		}
-		logger.LogError(requestContext, "易支付创建订单失败")
-		return nil, &epayOrderError{Code: "INTERNAL_ERROR", Message: "创建支付订单失败"}
+		logger.LogError(requestContext, common.LogText("Epay failed to create order"))
+		return nil, &epayOrderError{Code: "INTERNAL_ERROR", Message: common.NewMessage("Failed to create the payment order")}
 	}
-	logger.LogInfo(requestContext, fmt.Sprintf("易支付订单创建成功 user_id=%d trade_no=%s", userID, result.Order.TradeNo))
+	logger.LogInfo(requestContext, common.LogText("Epay order created user_id=%d trade_no=%s", userID, result.Order.TradeNo))
 	return &epayOrderResult{TradeNo: result.Order.TradeNo, Amount: result.Quote.Amount, PayMoney: result.Order.Money, Method: result.Quote.PaymentMethod, PayURL: result.URL, PayParams: result.Params, Quote: result.Quote}, nil
 }
 
@@ -244,10 +244,10 @@ func getMaxTopUpAmount() int64 {
 func validateCreditedQuota(quota decimal.Decimal) (common.Quota, error) {
 	value, err := common.WalletQuotaFromDecimal(quota)
 	if err != nil {
-		return 0, errors.New("充值额度超出系统可表示范围")
+		return 0, common.NewMessage("Top-up quota exceeds the range the system can represent")
 	}
 	if value <= 0 {
-		return 0, errors.New("充值额度必须大于 0")
+		return 0, common.NewMessage("Top-up quota must be greater than 0")
 	}
 	return value, nil
 }
@@ -259,9 +259,21 @@ func validateTopUpQuota(amount int64) (common.Quota, error) {
 	}
 	maxAmount := getMaxTopUpAmount()
 	if maxAmount > 0 && amount > maxAmount {
-		return 0, fmt.Errorf("单笔充值数量不能大于 %d", maxAmount)
+		return 0, common.NewMessage("Top-up amount cannot exceed {{max}}", map[string]any{"max": maxAmount})
 	}
-	return 0, errors.New("充值数量无效")
+	return 0, common.NewMessage("Invalid top-up amount")
+}
+
+// paymentError answers payment endpoints in their {"message": "error",
+// "data": text} shape. When err is or wraps a *common.Message, the response
+// also carries message_key and message_params for the web console.
+func paymentError(c *gin.Context, err error) {
+	body := gin.H{"message": "error", "data": err.Error()}
+	var message *common.Message
+	if errors.As(err, &message) {
+		maps.Copy(body, message.Fields())
+	}
+	c.JSON(http.StatusOK, body)
 }
 
 func rejectInvalidCreditedQuota(c *gin.Context, userId int, quota decimal.Decimal) bool {
@@ -270,7 +282,7 @@ func rejectInvalidCreditedQuota(c *gin.Context, userId int, quota decimal.Decima
 		err = model.ValidateTopUpQuotaCapacity(userId, creditedQuota)
 	}
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": err.Error()})
+		paymentError(c, err)
 		return true
 	}
 	return false
@@ -282,7 +294,7 @@ func rejectInvalidTopUpQuota(c *gin.Context, userId int, amount int64) bool {
 		err = model.ValidateTopUpQuotaCapacity(userId, creditedQuota)
 	}
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": err.Error()})
+		paymentError(c, err)
 		return true
 	}
 	return false
@@ -292,12 +304,12 @@ func RequestEpay(c *gin.Context) {
 	var req EpayRequest
 	err := c.ShouldBindJSON(&req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		paymentError(c, common.NewMessage("Invalid parameters"))
 		return
 	}
 	order, orderErr := createEpayTopUpOrder(c, c.GetInt("id"), req.Amount, req.PaymentMethod, req.AmountUnit, req.QuoteFingerprint)
 	if orderErr != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": orderErr.Message})
+		paymentError(c, orderErr.Message)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": order.PayParams, "url": order.PayURL})
@@ -350,7 +362,7 @@ func EpayNotify(c *gin.Context) {
 	if err != nil {
 		// Parameter values are never logged; a rejected genuine callback leaves
 		// the order pending for administrator reconciliation.
-		logger.LogWarn(c.Request.Context(), "易支付回调解析拒绝 method="+c.Request.Method+" reason="+err.Error())
+		logger.LogWarn(c.Request.Context(), common.LogText("Epay callback parse rejected method=%s reason=%s", c.Request.Method, err.Error()))
 		c.String(http.StatusBadRequest, "fail")
 		return
 	}
@@ -359,7 +371,7 @@ func EpayNotify(c *gin.Context) {
 		return
 	}
 	if err = service.SettleEpayNotification(c.Request.Context(), params, c.ClientIP()); err != nil {
-		logger.LogWarn(c.Request.Context(), "易支付回调拒绝 reason="+service.EpayFailureCode(err))
+		logger.LogWarn(c.Request.Context(), common.LogText("Epay callback rejected reason=%s", service.EpayFailureCode(err)))
 		c.String(http.StatusOK, "fail")
 		return
 	}
@@ -369,20 +381,20 @@ func EpayNotify(c *gin.Context) {
 func RequestAmount(c *gin.Context) {
 	var request service.EpayQuoteRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "参数错误"})
+		paymentError(c, common.NewMessage("Invalid parameters"))
 		return
 	}
 	if request.PaymentMethod == "" {
 		config, err := service.LoadEpayConfig(c.Request.Context())
 		if err != nil || len(config.Methods) == 0 {
-			c.JSON(http.StatusOK, gin.H{"message": "error", "data": "支付方式不可用"})
+			paymentError(c, common.NewMessage("Payment method is unavailable"))
 			return
 		}
 		request.PaymentMethod = config.Methods[0]["type"]
 	}
 	quote, _, err := service.QuoteEpay(c.Request.Context(), c.GetInt("id"), request)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": err.Error()})
+		paymentError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "success", "data": quote.PayAmount})
@@ -446,7 +458,7 @@ type AdminCompleteTopupRequest struct {
 func AdminCompleteTopUp(c *gin.Context) {
 	var req AdminCompleteTopupRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.TradeNo == "" {
-		common.ApiErrorMsg(c, "参数错误")
+		common.ApiErrorT(c, "Invalid parameters")
 		return
 	}
 

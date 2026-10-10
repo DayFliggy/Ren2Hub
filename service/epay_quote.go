@@ -20,12 +20,17 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// EpayError is a business rejection: a stable code for the client and a web
+// console message.
 type EpayError struct {
 	Code    string
-	Message string
+	Message *common.Message
 }
 
-func (err *EpayError) Error() string { return err.Message }
+func (err *EpayError) Error() string { return err.Message.Error() }
+
+// Unwrap exposes the message, so error responses carry its message_key.
+func (err *EpayError) Unwrap() error { return err.Message }
 
 type EpayConfig struct {
 	Merchant      epay.Config `json:"-"`
@@ -134,7 +139,7 @@ type EpayQuote struct {
 
 func BuildEpayQuote(config *EpayConfig, userID int, group string, request EpayQuoteRequest) (*EpayQuote, error) {
 	if !config.Enabled() {
-		return nil, &EpayError{"PAYMENT_UNAVAILABLE", "当前管理员未配置支付信息"}
+		return nil, &EpayError{"PAYMENT_UNAVAILABLE", common.NewMessage("Payment information has not been configured by administrator")}
 	}
 	method := strings.TrimSpace(strings.TrimPrefix(request.PaymentMethod, "epay:"))
 	var selected map[string]string
@@ -145,7 +150,7 @@ func BuildEpayQuote(config *EpayConfig, userID int, group string, request EpayQu
 		}
 	}
 	if selected == nil {
-		return nil, &EpayError{"PAYMENT_UNAVAILABLE", "支付方式不存在"}
+		return nil, &EpayError{"PAYMENT_UNAVAILABLE", common.NewMessage("Payment method does not exist")}
 	}
 	minimum, err := operation_setting.EpayMinimumUSD(config.MinTopUp, selected)
 	if err != nil {
@@ -159,7 +164,7 @@ func BuildEpayQuote(config *EpayConfig, userID int, group string, request EpayQu
 		}
 	}
 	if request.Amount <= 0 || (unit != "USD" && unit != "TOKENS") {
-		return nil, &EpayError{"VALIDATION_ERROR", "充值数量或单位无效"}
+		return nil, &EpayError{"VALIDATION_ERROR", common.NewMessage("Invalid top-up amount or unit")}
 	}
 	quota := decimal.NewFromInt(request.Amount)
 	if unit == "USD" {
@@ -167,10 +172,10 @@ func BuildEpayQuote(config *EpayConfig, userID int, group string, request EpayQu
 	}
 	expected, err := common.WalletQuotaFromDecimal(quota)
 	if err != nil {
-		return nil, &EpayError{"VALIDATION_ERROR", "充值额度超出系统可表示范围"}
+		return nil, &EpayError{"VALIDATION_ERROR", common.NewMessage("Top-up quota exceeds the range the system can represent")}
 	}
 	if expected < common.Quota(minimum*500000) {
-		return nil, &EpayError{"VALIDATION_ERROR", fmt.Sprintf("充值额度不能小于 %d USD", minimum)}
+		return nil, &EpayError{"VALIDATION_ERROR", common.NewMessage("Top-up quota cannot be less than {{min}} USD", map[string]any{"min": minimum})}
 	}
 	ratio, ok := config.Ratios[group]
 	if !ok {
@@ -188,7 +193,7 @@ func BuildEpayQuote(config *EpayConfig, userID int, group string, request EpayQu
 	}
 	minor := quota.Mul(decimal.RequireFromString("0.000002")).Mul(config.Price).Mul(ratio).Mul(discount).Round(2).Mul(decimal.NewFromInt(100))
 	if !minor.IsPositive() || minor.GreaterThan(decimal.NewFromInt(math.MaxInt64)) {
-		return nil, &EpayError{"VALIDATION_ERROR", "支付金额超出系统可表示范围"}
+		return nil, &EpayError{"VALIDATION_ERROR", common.NewMessage("Payment amount exceeds the range the system can represent")}
 	}
 	quote := &EpayQuote{Amount: request.Amount, AmountUnit: unit, PaymentMethod: method, AmountMinor: minor.IntPart(), Currency: "CNY", ExpectedQuota: expected, MinTopUp: minimum, UnitPrice: config.Price.String(), GroupRatio: ratio.String(), Discount: discount.String()}
 	quote.MinimumQuantity, quote.MinimumQuota = minimum, common.Quota(minimum*500000)
@@ -213,7 +218,7 @@ func QuoteEpay(ctx context.Context, userID int, request EpayQuoteRequest) (*Epay
 		return nil, nil, err
 	}
 	if !config.Enabled() {
-		return nil, nil, &EpayError{"PAYMENT_UNAVAILABLE", "当前管理员未配置支付信息"}
+		return nil, nil, &EpayError{"PAYMENT_UNAVAILABLE", common.NewMessage("Payment information has not been configured by administrator")}
 	}
 	var user model.User
 	if err = model.DB.WithContext(ctx).Select("id", "group").First(&user, userID).Error; err != nil {
@@ -225,7 +230,7 @@ func QuoteEpay(ctx context.Context, userID int, request EpayQuoteRequest) (*Epay
 	}
 	if err = model.ValidateTopUpQuotaCapacity(userID, quote.ExpectedQuota); err != nil {
 		if errors.Is(err, model.ErrTopUpQuotaLimitExceeded) {
-			return nil, nil, &EpayError{"VALIDATION_ERROR", "top-up quota limit exceeded"}
+			return nil, nil, &EpayError{"VALIDATION_ERROR", common.NewMessage("Top-up quota limit exceeded")}
 		}
 		return nil, nil, err
 	}
@@ -244,12 +249,12 @@ func CreateEpayTopUp(ctx context.Context, userID int, request EpayQuoteRequest) 
 	if err != nil {
 		var business *EpayError
 		if request.QuoteFingerprint != "" && errors.As(err, &business) && (business.Code == "PAYMENT_UNAVAILABLE" || business.Code == "VALIDATION_ERROR") {
-			return nil, &EpayError{"QUOTE_CHANGED", "报价已变化，请重新确认"}
+			return nil, &EpayError{"QUOTE_CHANGED", common.NewMessage("The quote has changed. Please confirm it again.")}
 		}
 		return nil, err
 	}
 	if request.QuoteFingerprint != "" && !hmac.Equal([]byte(request.QuoteFingerprint), []byte(quote.QuoteFingerprint)) {
-		return nil, &EpayError{"QUOTE_CHANGED", "报价已变化，请重新确认"}
+		return nil, &EpayError{"QUOTE_CHANGED", common.NewMessage("The quote has changed. Please confirm it again.")}
 	}
 	base, err := epay.NormalizeGatewayURL(config.Merchant.GatewayURL)
 	if err != nil {
