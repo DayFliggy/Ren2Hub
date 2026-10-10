@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -38,11 +39,11 @@ func ValidateInviteCode(c *gin.Context) {
 		Code string `json:"code"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || strings.TrimSpace(request.Code) == "" {
-		nextBusinessError(c, "邀请码不能为空", "VALIDATION_ERROR")
+		nextBusinessError(c, errors.New("邀请码不能为空"), "VALIDATION_ERROR")
 		return
 	}
 	if err := model.ValidateAffiliateCode(request.Code); err != nil {
-		nextBusinessError(c, err.Error(), "INVALID_INVITE_CODE")
+		nextBusinessError(c, err, "INVALID_INVITE_CODE")
 		return
 	}
 	common.ApiSuccess(c, gin.H{"valid": true, "attribution_days": 30})
@@ -174,12 +175,12 @@ func NextTransferInviteQuota(c *gin.Context) {
 		OperationID string       `json:"operation_id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || request.Amount <= 0 {
-		nextBusinessError(c, "invalid transfer amount", "VALIDATION_ERROR")
+		nextBusinessError(c, errors.New("invalid transfer amount"), "VALIDATION_ERROR")
 		return
 	}
 	transferred, balance, err := model.TransferAffiliateQuota(c.GetInt("id"), request.Amount, request.OperationID)
 	if err != nil {
-		nextBusinessError(c, err.Error(), "TRANSFER_FAILED")
+		nextBusinessError(c, err, "TRANSFER_FAILED")
 		return
 	}
 	user, err := model.GetUserById(c.GetInt("id"), true)
@@ -400,12 +401,12 @@ func NextGetActivities(c *gin.Context) {
 
 func NextCheckin(c *gin.Context) {
 	if !operation_setting.GetCheckinSetting().Enabled {
-		nextBusinessError(c, "签到功能未启用", "ACTIVITY_DISABLED")
+		nextBusinessError(c, errors.New("签到功能未启用"), "ACTIVITY_DISABLED")
 		return
 	}
 	checkin, err := model.UserCheckin(c.GetInt("id"))
 	if err != nil {
-		nextBusinessError(c, err.Error(), "CHECKIN_FAILED")
+		nextBusinessError(c, err, "CHECKIN_FAILED")
 		return
 	}
 	recordUserSystemAudit(c, c.GetInt("id"), "user.checkin", map[string]interface{}{
@@ -427,7 +428,7 @@ func NextClaimActivity(c *gin.Context) {
 		ActivityID int `json:"activity_id"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil || request.ActivityID != nextNewcomerActivityID {
-		nextBusinessError(c, "activity does not support claiming", "VALIDATION_ERROR")
+		nextBusinessError(c, errors.New("activity does not support claiming"), "VALIDATION_ERROR")
 		return
 	}
 	user, err := model.GetUserById(c.GetInt("id"), true)
@@ -441,11 +442,11 @@ func NextClaimActivity(c *gin.Context) {
 		return
 	}
 	if !allDone {
-		nextBusinessError(c, "complete all newcomer tasks before claiming", "TASKS_INCOMPLETE")
+		nextBusinessError(c, errors.New("complete all newcomer tasks before claiming"), "TASKS_INCOMPLETE")
 		return
 	}
 	if err := model.ClaimActivityReward(user.Id, nextNewcomerActivityKey, nextNewcomerReward); err != nil {
-		nextBusinessError(c, err.Error(), "CLAIM_FAILED")
+		nextBusinessError(c, err, "CLAIM_FAILED")
 		return
 	}
 	common.ApiSuccess(c, gin.H{"message": "领取成功", "reward": common.Quota(nextNewcomerReward)})

@@ -1,9 +1,12 @@
 package i18n
 
 import (
+	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
@@ -140,6 +143,82 @@ func TestSupportedLang(t *testing.T) {
 		got, ok := SupportedLang(tc.code)
 		assert.Equal(t, tc.ok, ok, tc.code)
 		assert.Equal(t, tc.want, got, tc.code)
+	}
+}
+
+// Web console responses carry the English source text as message_key plus its
+// params, and the web console translates them. The backend sends the same body
+// whatever language the request asks for.
+func TestWebConsoleMessageResponse(t *testing.T) {
+	require.NoError(t, Init())
+	for _, tc := range []struct {
+		name    string
+		respond func(c *gin.Context)
+		status  int
+		want    string
+	}{
+		{
+			name: "params",
+			respond: func(c *gin.Context) {
+				common.ApiError(c, common.NewMessage("Channel {{name}} (#{{id}}) does not exist", map[string]any{"name": "{{id}}", "id": 7}))
+			},
+			status: http.StatusOK,
+			want:   `{"success":false,"message":"Channel {{id}} (#7) does not exist","message_key":"Channel {{name}} (#{{id}}) does not exist","message_params":{"id":7,"name":"{{id}}"}}`,
+		},
+		{
+			name:    "no params",
+			respond: func(c *gin.Context) { common.ApiErrorT(c, "Invalid parameters") },
+			status:  http.StatusOK,
+			want:    `{"success":false,"message":"Invalid parameters","message_key":"Invalid parameters"}`,
+		},
+		{
+			name:    "plain error",
+			respond: func(c *gin.Context) { common.ApiError(c, errors.New("record not found")) },
+			status:  http.StatusOK,
+			want:    `{"success":false,"message":"record not found"}`,
+		},
+		{
+			name: "wrapped message",
+			respond: func(c *gin.Context) {
+				common.ApiError(c, fmt.Errorf("lookup: %w", common.NewMessage("Invalid parameters")))
+			},
+			status: http.StatusOK,
+			want:   `{"success":false,"message":"lookup: Invalid parameters","message_key":"Invalid parameters"}`,
+		},
+		{
+			name: "another status with a stable code",
+			respond: func(c *gin.Context) {
+				common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid parameters"), gin.H{"code": "VALIDATION_ERROR"})
+			},
+			status: http.StatusBadRequest,
+			want:   `{"success":false,"message":"Invalid parameters","message_key":"Invalid parameters","code":"VALIDATION_ERROR"}`,
+		},
+		{
+			name: "business error code",
+			respond: func(c *gin.Context) {
+				common.ApiErrorWithCode(c, errors.New("ticket not found"), "NOT_FOUND")
+			},
+			status: http.StatusOK,
+			want:   `{"success":false,"message":"ticket not found","code":"NOT_FOUND"}`,
+		},
+		{
+			name: "success",
+			respond: func(c *gin.Context) {
+				common.ApiSuccessT(c, "Saved {{count}} items", gin.H{"id": 1}, map[string]any{"count": 2})
+			},
+			status: http.StatusOK,
+			want:   `{"success":true,"message":"Saved 2 items","data":{"id":1},"message_key":"Saved {{count}} items","message_params":{"count":2}}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest("GET", "/api/channel/7", nil)
+			c.Request.Header.Set("Accept-Language", "zh-CN")
+			tc.respond(c)
+			assert.Equal(t, tc.status, recorder.Code)
+			assert.JSONEq(t, tc.want, recorder.Body.String())
+		})
 	}
 }
 
