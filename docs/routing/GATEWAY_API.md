@@ -181,7 +181,7 @@ Gemini/Vertex 视频在读取缓存下载地址前复核稳定凭据；不可用
 
 状态只保存归属、摘要和到期时间，默认最长 30 天。原生响应报告有效 `expires_at` 时采用更短期限，后续事件只能缩短，不能延长已有绑定。无效或已过期的供应商期限会阻止绑定输出。
 
-归属查询覆盖 response、conversation、Responses item_reference、encrypted_content、Claude signature/redacted_thinking、Gemini thoughtSignature/cachedContent、容器和文件引用。未知或不属于当前 Token 的引用拒绝；这不新增缓存、容器或 Files 产品 API。完整客户端历史中的普通工具参数不被当作网关状态。输出绑定失败不会暴露可续用标识或重发模型请求。
+归属查询覆盖 response、conversation、Responses item_reference、encrypted_content、Claude signature/redacted_thinking、Gemini thoughtSignature/cachedContent、容器和文件引用。Gemini 同时接受 proto 字段名，透传会原样转发，因此 `thought_signature`、`cached_content` 与驼峰写法按同一引用查询。未知或不属于当前 Token 的引用拒绝；这不新增缓存、容器或 Files 产品 API。完整客户端历史中的普通工具参数不被当作网关状态。输出绑定失败不会暴露可续用标识或重发模型请求。
 
 Gemini `fileData.fileUri` 中的 Google Files 资源地址及 `gs://` 私有资源归入 `file_uri`，使用同一 Token、渠道、稳定凭据和传输归属规则。原生响应暴露此类引用前建立绑定，未知或升级前未绑定资源要求新会话；普通公开 HTTP(S) 图片不因此增加状态依赖。仅保存 URI 摘要，预览不返回 URI 或媒体字节，不新增文件上传/管理 API。
 
