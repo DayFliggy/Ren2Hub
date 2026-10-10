@@ -147,8 +147,6 @@ func TestResponsesToolMediaGeminiOmissionFollowsConversionPolicy(t *testing.T) {
 		// Valid Gemini Blob types outside the documented function-response list.
 		{name: "csv_tool_document", output: `[{"type":"input_file","file_data":"data:text/csv;base64,YSxi"}]`, response: map[string]any{"content": "[file]"}},
 		{name: "gif_tool_image", output: `[{"type":"input_file","file_data":"data:image/gif;base64,R0lGOA=="}]`, response: map[string]any{"content": "[file]"}},
-		{name: "unknown_sibling", output: `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, response: map[string]any{"content": "[tool output omitted]"}},
-		{name: "custom_tool_unknown_sibling", output: `[{"type":"input_image","image_url":"data:image/png;base64,YWJj"},{"type":"refusal","refusal":"no"}]`, itemType: "custom_tool_call_output", response: map[string]any{"content": "[tool output omitted]"}},
 		// The planner cannot see the resolved MIME type of a URL without a
 		// download; the converter omits media that fails to load.
 		{name: "unloadable_url", output: `[{"type":"input_text","text":"see"},{"type":"input_image","image_url":"https://example.test/screen.png"}]`, response: map[string]any{"content": "see"}},
@@ -265,4 +263,38 @@ func TestResponsesToolAudioVideoFollowsTheGeminiVersion(t *testing.T) {
 	var loss *types.ConversionLossError
 	require.ErrorAs(t, err, &loss)
 	assert.Equal(t, []string{"unsupported_media_type", "unsupported_media_type"}, diagnosticCodes(loss.Diagnostics))
+}
+
+// A tool output that mixes text and media with a part Gemini has no
+// equivalent for loses only that part: allow sends the text and the media it
+// can carry with an unsupported_media_type diagnostic, and safe and strict
+// reject it before send. A list without media keeps NewAPI's response map.
+func TestResponsesToolOutputDropsOnlyUnrepresentablePartsForGemini(t *testing.T) {
+	const output = `[{"type":"input_text","text":"first"},{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgo="},{"type":"refusal","refusal":"no"},{"type":"input_text","text":"second"}]`
+	decode := func(output string) *dto.OpenAIResponsesRequest {
+		var req dto.OpenAIResponsesRequest
+		require.NoError(t, kitutil.Unmarshal([]byte(`{"model":"gemini-3-pro-preview","input":[{"type":"function_call","call_id":"call_1","name":"read","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":`+output+`}]}`), &req))
+		return &req
+	}
+	for _, policy := range []types.ConversionLossPolicy{types.ConversionLossPolicySafe, types.ConversionLossPolicyStrict} {
+		meta := &convmeta.Values{Options: &convmeta.Options{ConversionPolicy: policy}, UpstreamModelName: "gemini-3-pro-preview", ChannelMetaAttached: true}
+		_, err := ConvertRequest(context.Background(), meta, types.RelayFormatGemini, decode(output))
+		var loss *types.ConversionLossError
+		require.ErrorAs(t, err, &loss, policy)
+		assert.Equal(t, []string{"unsupported_media_type"}, diagnosticCodes(loss.Diagnostics), policy)
+	}
+
+	meta := &convmeta.Values{Options: &convmeta.Options{ConversionPolicy: types.ConversionLossPolicyAllow}, UpstreamModelName: "gemini-3-pro-preview", ChannelMetaAttached: true}
+	result, err := ConvertRequest(context.Background(), meta, types.RelayFormatGemini, decode(output))
+	require.NoError(t, err)
+	assert.Contains(t, diagnosticCodes(result.Diagnostics), "unsupported_media_type")
+	response := result.Value.(*dto.GeminiChatRequest).Contents[1].Parts[0].FunctionResponse
+	require.NotNil(t, response)
+	assert.Equal(t, map[string]any{"content": "first\nsecond"}, response.Response)
+	assert.JSONEq(t, `[{"inlineData":{"mimeType":"image/png","data":"aGVsbG8="}}]`, string(response.Parts))
+
+	result, err = ConvertRequest(context.Background(), meta, types.RelayFormatGemini, decode(`[{"type":"input_text","text":"plain"},{"type":"refusal","refusal":"no"}]`))
+	require.NoError(t, err)
+	assert.NotContains(t, diagnosticCodes(result.Diagnostics), "unsupported_media_type")
+	assert.Equal(t, map[string]any{"result": []any{map[string]any{"type": "input_text", "text": "plain"}, map[string]any{"type": "refusal", "refusal": "no"}}}, result.Value.(*dto.GeminiChatRequest).Contents[1].Parts[0].FunctionResponse.Response)
 }
