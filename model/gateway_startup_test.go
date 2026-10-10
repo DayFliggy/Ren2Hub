@@ -161,7 +161,12 @@ func gatewayStartupOpsQueries(t *testing.T, db *gorm.DB) {
 	}).Error)
 	backlog, err := ReadBillingRecoveryBacklog(context.Background(), 500)
 	require.NoError(t, err)
-	assert.Equal(t, BillingRecoveryBacklog{Pending: 1, OldestUpdated: 100}, backlog, "ops only counts overdue unfinished recovery")
+	assert.EqualValues(t, 1, backlog.Pending, "ops only counts overdue unfinished recovery")
+	assert.EqualValues(t, 100, backlog.OldestUpdated)
+	var open int64
+	require.NoError(t, db.Model(&BillingRecovery{}).Where("status = ?", BillingRecoveryStatusActive).Count(&open).Error)
+	assert.Equal(t, open, backlog.Open, "the open count includes recent records the stale backlog hides")
+	assert.Greater(t, backlog.Open, backlog.Pending)
 }
 
 func TestGatewayStartupResumesEmptyMarkerButRejectsUnmarkedData(t *testing.T) {
