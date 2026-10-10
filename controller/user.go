@@ -748,8 +748,15 @@ func UpdateSelf(c *gin.Context) {
 		return
 	}
 
-	// 检查是否是语言偏好更新请求
+	// 检查是否是语言偏好更新请求。只保存后端支持的语言（en、zh-CN、zh-TW），
+	// 别名存为规范值；UpdateUserSetting 同步刷新用户缓存，TokenAuth 立即读到新语言。
 	if language, langExists := requestData["language"]; langExists && !passwordRequested {
+		code, _ := language.(string)
+		lang, supported := i18n.SupportedLang(code)
+		if !supported {
+			common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Unsupported language"))
+			return
+		}
 		userId := c.GetInt("id")
 		user, err := model.GetUserById(userId, false)
 		if err != nil {
@@ -757,13 +764,8 @@ func UpdateSelf(c *gin.Context) {
 			return
 		}
 
-		// 获取当前用户设置
 		currentSetting := user.GetSetting()
-
-		// 更新language字段
-		if langStr, ok := language.(string); ok {
-			currentSetting.Language = langStr
-		}
+		currentSetting.Language = lang
 
 		if err := model.UpdateUserSetting(user.Id, currentSetting); err != nil {
 			common.ApiErrorI18n(c, i18n.MsgUpdateFailed)
