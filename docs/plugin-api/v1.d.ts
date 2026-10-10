@@ -1,5 +1,6 @@
 /** Ren2Hub API v1. Based on upstream d04c118c, adapted to the local immutable execution and billing contract. */
 export type JSONValue = null | boolean | number | string | readonly JSONValue[] | {readonly [key: string]: JSONValue};
+/** json-clone@1 and submit-sse-delta@1 are accepted for earlier hosts; new plugins need neither. */
 export type HostCapability = "json-clone@1" | "submit-sse-delta@1";
 /** Kinds of upstream a driver can address: the vendor API itself, or another New API gateway with the same plugin installed. */
 export type UpstreamKind = "vendor" | "new_api";
@@ -123,7 +124,7 @@ export type JSONChange =
   | {op: "set" | "append"; path: JSONPath; value: JSONValue}
   | {op: "appendText"; path: JSONPath; value: string};
 export interface SubmitEventDeltaResult {changes: readonly JSONChange[]; state: JSONValue; done: boolean}
-/** With submit-sse-delta@1, state is small control data; changes build the separate response body. */
+/** Used when the plugin declares submit-sse-delta@1 or exports it without parseSubmitEvent: state is small control data; changes build the separate response body. */
 export declare function parseSubmitEventDelta(ctx: DriverContext, event: SubmitEvent, previousState: JSONValue | null): SubmitEventDeltaResult;
 export declare function parseSubmitEvent(ctx: DriverContext, event: SubmitEvent, previousState: JSONValue | null): {state: JSONValue; done: boolean};
 export declare function parseSubmitResponse(ctx: DriverContext, response: UpstreamResponse): {taskId: string; taskData?: unknown; immediate?: NormalizedTaskResult; state?: unknown};
