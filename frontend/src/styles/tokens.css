@@ -90,6 +90,21 @@
   --heatmap-foreground-3: var(--text-primary);
   --heatmap-foreground-4: var(--text-primary);
   --heatmap-foreground-5: #fffdf8;
+  /* 系统负载五档色阶：空闲 ≤30% / 正常 ≤60% / 关注 ≤75% / 警告 ≤90% / 危险 >90%。
+     色相由青经绿、黄、橙单调走到红，彩度逐档升高，越严重越醒目。图形色对磁贴底
+     ≥3:1，-text 对磁贴底和 14% 徽章底 ≥4.5:1；任意两档图形色在常视、绿色盲、
+     红色盲模拟下 OKLab ΔE ≥6，相邻档文字色 ΔE ≥6，各档文字色与同页金额数字用的
+     --accent-text ΔE ≥5.5。正常档与全局状态绿同源。调整任一值须重算这几项。 */
+  --load-idle: #5d8992;
+  --load-idle-text: #3b656f;
+  --load-normal: var(--status-success);
+  --load-normal-text: var(--status-success-text);
+  --load-notice: #a08a25;
+  --load-notice-text: #736500;
+  --load-warning: #a85804;
+  --load-warning-text: #9d4c00;
+  --load-danger: var(--status-danger);
+  --load-danger-text: var(--status-danger-text);
   --text-inverse: #f6f3eb;
   --border-default: rgba(56, 55, 43, 0.14);
   --border-subtle: rgba(56, 55, 43, 0.08);
@@ -384,6 +399,17 @@ html.dark {
   --heatmap-foreground-3: #080b10;
   --heatmap-foreground-4: #080b10;
   --heatmap-foreground-5: #080b10;
+  /* 负载色阶夜间值（约束同日间）。正常档继承上面的状态绿别名；危险档用高彩度
+     珊瑚红，低彩度的状态红会让危险档比关注档还淡。关注档的黄偏离星辉金、文字
+     更浅，以免和 --accent-text 金色数字读成一类。 */
+  --load-idle: #78afbf;
+  --load-idle-text: #94c7d7;
+  --load-notice: #dfda6e;
+  --load-notice-text: #f0eca1;
+  --load-warning: #f2994e;
+  --load-warning-text: #fdb171;
+  --load-danger: #ed6863;
+  --load-danger-text: #fe9b93;
   --text-inverse: #262a34;
   --border-default: rgba(152, 164, 192, 0.13);
   --border-subtle: rgba(152, 164, 192, 0.07);

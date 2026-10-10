@@ -2,6 +2,7 @@ import { expect, type Locator, test } from '@playwright/test'
 
 import {
   assertNoHorizontalOverflow,
+  contrastRatio,
   minTextContrast,
   configureStablePage,
   waitForStablePage,
@@ -311,4 +312,161 @@ for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
       expect(await minTextContrast(figures)).toBeGreaterThanOrEqual(4.5)
     })
   }
+}
+
+/** Two readings that between them put CPU, memory and disk in all five tiers. */
+const TIER_READINGS = [
+  { cpu_percent: 18, memory_used_gb: 45, disk_used_gb: 700 },
+  { cpu_percent: 82, memory_used_gb: 95, disk_used_gb: 200 },
+]
+const LOAD_TIERS = ['idle', 'normal', 'notice', 'warning', 'danger']
+
+interface TierColours {
+  tier: string
+  tile: number[]
+  fill: number[]
+  text: number[]
+  /** --accent-text, the gold or brown that money figures use on the same page. */
+  accentText: number[]
+}
+
+/** Each tiered tile's gauge fill, figure and accent colours, composited on its tile. */
+async function readTierColours(card: Locator): Promise<TierColours[]> {
+  return card
+    .locator('[data-load-tier]:not([data-load-tier="unknown"])')
+    .evaluateAll((tiles) => {
+      const context = document.createElement('canvas').getContext('2d')!
+      const paint = (colors: string[]) => {
+        context.clearRect(0, 0, 1, 1)
+        for (const color of colors) {
+          context.fillStyle = color
+          context.fillRect(0, 0, 1, 1)
+        }
+        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)]
+      }
+      const root = getComputedStyle(document.documentElement)
+      const page = root.getPropertyValue('--page-background').trim()
+      const accentText = root.getPropertyValue('--accent-text').trim()
+      return tiles.map((tile) => {
+        const layers: string[] = []
+        for (let node: Element | null = tile; node; node = node.parentElement) {
+          layers.unshift(getComputedStyle(node).backgroundColor)
+        }
+        const tileRgb = paint([page, ...layers])
+        const base = `rgb(${tileRgb.join(',')})`
+        const gauge = tile.querySelector(
+          '[data-cpu-gauge-active], [data-memory-segments] > span, [data-disk-gauge] circle[stroke-linecap]'
+        )!
+        const fill = gauge.matches('span')
+          ? getComputedStyle(gauge).backgroundColor
+          : getComputedStyle(gauge).stroke
+        const text = getComputedStyle(
+          tile.querySelector('[data-metric-value]')!
+        )
+        return {
+          tier: tile.getAttribute('data-load-tier')!,
+          tile: tileRgb,
+          fill: paint([base, fill]),
+          text: paint([base, text.color]),
+          accentText: paint([base, accentText]),
+        }
+      })
+    })
+}
+
+function linearChannels(rgb: number[]): [number, number, number] {
+  return rgb.map((channel) => {
+    const value = channel / 255
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  }) as [number, number, number]
+}
+
+function relativeLuminance(rgb: number[]): number {
+  const [r, g, b] = linearChannels(rgb)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/** OKLab distance ×100; about 2 is the smallest difference people notice. */
+function oklabDistance(first: number[], second: number[]): number {
+  const oklab = (rgb: number[]) => {
+    const [r, g, b] = linearChannels(rgb)
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+    return [
+      0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+      1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+      0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+    ]
+  }
+  const [a, b] = [oklab(first), oklab(second)]
+  return Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!) * 100
+}
+
+/**
+ * Gauges reach 3:1 and figures 4.5:1 in every load tier, and neighbouring tiers
+ * stay clearly apart, so attention and warning cannot read as one colour again.
+ * No tier's figures may pass for the accent colour of money figures either.
+ */
+for (const theme of ['light', 'dark'] satisfies VisualTheme[]) {
+  test(`load tiers stay legible and distinct in ${theme} theme`, async ({
+    page,
+  }) => {
+    let reading = TIER_READINGS[0]!
+    await configureStablePage(page, { theme, authenticated: true })
+    await page.route(
+      /\/api\/next\/dashboard\/system-status(?:\?.*)?$/,
+      (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            message: '',
+            data: {
+              cpu_cores: 4,
+              load_average: { one: 3.4, five: 3.8, fifteen: 0.8 },
+              memory_total_gb: 100,
+              disk_total_gb: 1000,
+              bandwidth_up_mbps: 3.2,
+              bandwidth_down_mbps: 12.5,
+              api_success_rate: 99.7,
+              bandwidth_series: null,
+              ...reading,
+            },
+          },
+        })
+    )
+
+    const seen = new Map<string, TierColours>()
+    for (const next of TIER_READINGS) {
+      reading = next
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+      await waitForStablePage(page)
+      const card = page.locator('[data-system-status-card]')
+      await expect(card.locator('[data-load-tier]')).toHaveCount(4)
+      const figures = card.locator('[data-metric-value], [data-percent-badge]')
+      expect(await minTextContrast(figures)).toBeGreaterThanOrEqual(4.5)
+      for (const colours of await readTierColours(card)) {
+        const tile = relativeLuminance(colours.tile)
+        const fill = relativeLuminance(colours.fill)
+        expect(
+          contrastRatio(tile, fill),
+          `${colours.tier} gauge`
+        ).toBeGreaterThanOrEqual(3)
+        expect(
+          oklabDistance(colours.text, colours.accentText),
+          `${colours.tier} figure against --accent-text`
+        ).toBeGreaterThan(5.5)
+        seen.set(colours.tier, colours)
+      }
+    }
+
+    expect([...seen.keys()].sort()).toEqual([...LOAD_TIERS].sort())
+    for (let index = 1; index < LOAD_TIERS.length; index += 1) {
+      const lower = seen.get(LOAD_TIERS[index - 1]!)!
+      const higher = seen.get(LOAD_TIERS[index]!)!
+      const pair = `${lower.tier} → ${higher.tier}`
+      expect(oklabDistance(lower.fill, higher.fill), pair).toBeGreaterThan(6)
+      expect(oklabDistance(lower.text, higher.text), pair).toBeGreaterThan(6)
+    }
+  })
 }

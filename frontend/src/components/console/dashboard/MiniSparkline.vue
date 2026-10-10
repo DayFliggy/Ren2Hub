@@ -130,28 +130,28 @@ const geometry = computed(() => {
       vector-effect="non-scaling-stroke"
       class="drop-shadow-[0_1px_3px_var(--chart-line-glow)]"
     />
-    <!-- Line only for the second series: one shaded band is enough. -->
+    <!-- Line only for the second series: one shaded band is enough. Dashed, so
+         the two series differ by more than colour. -->
     <path
       v-if="geometry.secondaryLine"
       :d="geometry.secondaryLine"
       fill="none"
       :stroke="secondaryColor"
       stroke-width="1.8"
+      stroke-dasharray="3 2.5"
       stroke-linecap="round"
       stroke-linejoin="round"
       vector-effect="non-scaling-stroke"
       class="drop-shadow-[0_1px_3px_var(--chart-line-glow)]"
     />
-    <!--
-      Latest point with dynamic pulse beacon
-    -->
+    <!-- Latest point with a pulse beacon; it glows at night only. -->
     <circle
       :cx="geometry.last.x"
       :cy="geometry.last.y"
       r="2.5"
       :fill="color"
-      class="animate-pulse-slow"
-      :style="{ filter: `drop-shadow(0 0 5px ${color})` }"
+      class="sparkline-beacon animate-pulse-slow"
+      :style="{ '--beacon-color': color }"
     />
     <circle
       v-if="geometry.secondaryLast"
@@ -159,8 +159,15 @@ const geometry = computed(() => {
       :cy="geometry.secondaryLast.y"
       r="2.5"
       :fill="secondaryColor"
-      class="animate-pulse-slow"
-      :style="{ filter: `drop-shadow(0 0 5px ${secondaryColor})` }"
+      class="sparkline-beacon animate-pulse-slow"
+      :style="{ '--beacon-color': secondaryColor }"
     />
   </svg>
 </template>
+
+<style scoped>
+/* Chart glow is a night-theme accent, like --chart-line-glow; day stays flat. */
+html.dark .sparkline-beacon {
+  filter: drop-shadow(0 0 5px var(--beacon-color));
+}
+</style>

@@ -27,9 +27,6 @@ const props = defineProps<{
 
 const { t } = useI18n()
 
-/** Newer windows read stronger, matching the left-to-right order. */
-const STRENGTH = [1, 0.75, 0.55]
-
 const open = ref(false)
 const root = ref<HTMLElement>()
 
@@ -107,15 +104,16 @@ function buttonLabel(): string {
       :aria-expanded="open"
       @click="handleClick"
     >
+      <!-- Every window keeps its full tier colour; position and the readout
+           tell the windows apart, so fading older ones would blur the tiers. -->
       <span
-        v-for="(cell, index) in cells"
+        v-for="cell in cells"
         :key="cell.minutes"
         class="cpu-load__cell"
         :data-minutes="cell.minutes"
         :data-unknown="cell.value === null ? '' : undefined"
         :style="{
           '--tier': cell.color,
-          '--strength': STRENGTH[index] ?? 1,
           '--fill-height': cell.fill !== null ? fillHeight(cell.fill) : '0%',
         }"
       >
@@ -220,10 +218,7 @@ function buttonLabel(): string {
   border-radius: 3px;
   background: var(--tier);
   clip-path: inset(calc(100% - var(--fill-height, 0%)) 0 0 0);
-  opacity: var(--strength);
-  transition:
-    clip-path 500ms var(--ease-spring-smooth),
-    opacity 200ms ease;
+  transition: clip-path 500ms var(--ease-spring-smooth);
 }
 
 .cpu-load__readout {
@@ -290,6 +285,6 @@ function buttonLabel(): string {
 }
 
 .cpu-load__figure--over {
-  color: var(--status-danger-text);
+  color: var(--load-danger-text);
 }
 </style>

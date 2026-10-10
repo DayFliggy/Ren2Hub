@@ -108,11 +108,9 @@ const ticks = computed<TickGeometry[]>(() => {
   animation: tick-twinkle 2.4s ease-in-out infinite alternate;
 }
 
+/* Any glow belongs to the caller, which sets it with the gauges beside it. */
 .tick-active {
   opacity: 1;
-  filter: drop-shadow(
-    0 0 2px color-mix(in srgb, currentColor 45%, transparent)
-  );
 }
 
 .tick-inactive {

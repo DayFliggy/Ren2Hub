@@ -204,12 +204,14 @@ describe('SystemStatusCard', () => {
     const cpu = wrapper.findAll('[data-system-status-tile]')[0]!
     const cells = cpu.findAll('[data-cpu-load] [data-minutes]')
     expect(cells).toHaveLength(3)
-    // 6 / 4 queues work, 2.5 / 4 = 62.5% sits in the attention tier, 0.4 / 4 is normal.
+    // 6 / 4 queues work, 2.5 / 4 = 62.5% sits in the attention tier, 0.4 / 4 is idle.
     expect(cells[0]!.attributes('style')).toContain(
-      '--tier: var(--status-danger)'
+      '--tier: var(--load-danger)'
     )
-    expect(cells[1]!.attributes('style')).toContain('--tier: var(--accent)')
-    expect(cells[2]!.attributes('style')).toContain('--tier: var(--glow)')
+    expect(cells[1]!.attributes('style')).toContain(
+      '--tier: var(--load-notice)'
+    )
+    expect(cells[2]!.attributes('style')).toContain('--tier: var(--load-idle)')
     const figures = cpu.findAll('[data-load-readout] .cpu-load__figure')
     expect(figures.map((figure) => figure.text())).toEqual([
       '6.00',
@@ -218,6 +220,56 @@ describe('SystemStatusCard', () => {
     ])
     expect(figures[0]!.classes()).toContain('cpu-load__figure--over')
     expect(figures[2]!.classes()).not.toContain('cpu-load__figure--over')
+  })
+
+  it('splits resource load into five tiers at 30, 60, 75 and 90 percent', () => {
+    const cases: Array<[number, string]> = [
+      [0, 'idle'],
+      [30, 'idle'],
+      [30.1, 'normal'],
+      [60, 'normal'],
+      [60.1, 'notice'],
+      [75, 'notice'],
+      [75.1, 'warning'],
+      [90, 'warning'],
+      [90.1, 'danger'],
+    ]
+    for (const [percent, tier] of cases) {
+      const pinia = createPinia()
+      setActivePinia(pinia)
+      const wrapper = mount(SystemStatusCard, {
+        props: { metrics: { ...metrics(), cpu_percent: percent } },
+        global: { plugins: [pinia, i18n] },
+      })
+
+      const [cpu, , bandwidth] = wrapper.findAll('[data-system-status-tile]')
+      expect(cpu!.attributes('data-load-tier'), `${percent}%`).toBe(tier)
+      expect(cpu!.find('[data-cpu-gauge-active]').attributes('stroke')).toBe(
+        `var(--load-${tier})`
+      )
+      // Traffic has no ceiling, so it never takes a load tier.
+      expect(bandwidth!.attributes('data-load-tier')).toBe('unknown')
+      wrapper.unmount()
+    }
+  })
+
+  it('fills a partly used memory segment by its share instead of fading it', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(SystemStatusCard, {
+      props: {
+        metrics: { ...metrics(), memory_used_gb: 7.2, memory_total_gb: 16 },
+      },
+      global: { plugins: [pinia, i18n] },
+    })
+
+    // 45%: four full segments, half of the fifth, then empty track.
+    const segments = wrapper.findAll('[data-memory-segments] > span')
+    const styles = segments.map((segment) => segment.attributes('style') ?? '')
+    expect(styles[3]).toContain('background: var(--load-normal)')
+    expect(styles[4]).toContain('var(--load-normal) 50.0%')
+    expect(styles[5]).not.toContain('var(--load-normal)')
+    expect(styles.join(' ')).not.toContain('opacity')
   })
 
   it('marks load windows unknown instead of drawing zero load', () => {
